@@ -27,7 +27,7 @@ import {
 import {
   serializeFileCachePayload,
   serializeRuleSnapshot,
-} from "../../src/domain/worktree/logic/rule-snapshot-codec.js";
+} from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -106,7 +106,7 @@ function runnerDeps(
     sessionKkv: createMemorySessionKkv(),
     ...deps,
     eventBus: new SimpleEventBus(),
-    worktree: () =>
+    workplace: () =>
       ({
         scope: {
           kind: "session",
@@ -115,7 +115,7 @@ function runnerDeps(
         },
         renderDisplay: async () => "",
         buildListRows: async () => [],
-        materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
         evaluateRuleView: async () => ({
           rows: [],
           displayByPath: new Map(),

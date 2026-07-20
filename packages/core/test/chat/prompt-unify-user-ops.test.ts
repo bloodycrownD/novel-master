@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { wrapUserMessageForLlm } from "../../src/domain/chat/logic/wrap-user-message-for-llm.js";
-import { renderFileBlockBody } from "../../src/domain/worktree/logic/worktree-display.js";
+import { renderFileBlockBody } from "../../src/domain/workplace/logic/workplace-display.js";
 import { buildFileRefActionXml } from "../../src/domain/chat/logic/build-attachment-action-xml.js";
 import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
@@ -16,9 +16,9 @@ import {
   RULE_SNAPSHOT_CANON_KEY,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { serializeRuleSnapshot } from "../../src/domain/worktree/logic/rule-snapshot-codec.js";
+import { serializeRuleSnapshot } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { createWorktreeService } from "../../src/service/worktree/create-worktree-service.js";
+import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
 import {
   getNovelMasterTestContext,
@@ -161,14 +161,14 @@ describe("prompt unify user-ops (T-PR*)", () => {
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "prefix-body");
-    await createWorktreeService(ctx.conn, {
+    await createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
 
     const sk = createSessionKkvService(ctx.conn);
-    const wt = createWorktreeService(ctx.conn, {
+    const wt = createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -177,7 +177,7 @@ describe("prompt unify user-ops (T-PR*)", () => {
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
-        worktree: wt,
+        workplace: wt,
         vfs,
         layout: {
           workplace: true,
@@ -185,9 +185,9 @@ describe("prompt unify user-ops (T-PR*)", () => {
         },
       },
     );
-    assert.ok(out.worktreeDisplay.includes("<file "));
-    assert.ok(out.worktreeDisplay.includes("prefix-body"));
-    assert.ok(out.worktreeDisplay.includes("createdAt="));
+    assert.ok(out.workplaceDisplay.includes("<file "));
+    assert.ok(out.workplaceDisplay.includes("prefix-body"));
+    assert.ok(out.workplaceDisplay.includes("createdAt="));
     assert.deepEqual(out.prefixPaths, ["/note.md"]);
   });
 });

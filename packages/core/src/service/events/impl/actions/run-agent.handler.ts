@@ -24,7 +24,7 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
-import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { EventEmitContext } from "../../event-orchestrator.port.js";
 
@@ -34,7 +34,7 @@ export interface RunAgentHandlerDeps {
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
   readonly sessionKkv: SessionKkvService;
-  readonly worktree: (scope: VfsScope) => WorktreeService;
+  readonly workplace: (scope: VfsScope) => WorkplaceService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly eventBus: SimpleEventBus;

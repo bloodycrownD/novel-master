@@ -27,7 +27,7 @@ function systemOnlyEvaluation(systemContent: string) {
     dynamic: [],
   };
   const ctx: PromptRenderContext = {
-    worktreeDisplay: "",
+    workplaceDisplay: "",
     messages: [],
   };
   return {

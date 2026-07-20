@@ -9,7 +9,7 @@ import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/sessio
 import {
   workplaceAttachmentsFromRuleDelta,
   type WorkplaceLivePath,
-} from "@/domain/worktree/logic/diff-workplace-paths.js";
+} from "@/domain/workplace/logic/diff-workplace-paths.js";
 import { userOpsAttachmentsFromSummaries } from "./build-user-ops-attachment.js";
 import type { UserOpsActionSummary } from "./synthesize-user-vfs-flush-actions.js";
 

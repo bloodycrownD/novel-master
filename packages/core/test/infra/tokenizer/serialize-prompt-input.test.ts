@@ -32,7 +32,7 @@ describe("serializePromptLlmInput", () => {
         dynamic: [],
       },
       {
-        worktreeDisplay: "",
+        workplaceDisplay: "",
         messages,
       },
     );

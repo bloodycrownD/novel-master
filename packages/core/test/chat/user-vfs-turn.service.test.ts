@@ -16,7 +16,7 @@ import {
   SESSION_KKV_DOMAIN_USER_VFS_PENDING,
   USER_VFS_PENDING_QUEUE_KEY,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload } from "../../src/domain/worktree/logic/rule-snapshot-codec.js";
+import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 
 import { prepareUserVfsTurnForAgentRun } from "../../src/service/agent/logic/prepare-user-vfs-turn-for-agent-run.js";
 

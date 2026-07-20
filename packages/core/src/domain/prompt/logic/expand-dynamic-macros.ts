@@ -4,7 +4,7 @@
  * @module domain/prompt/logic/expand-dynamic-macros
  */
 
-import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import { formatLocalDateTime } from "@/infra/date-format.js";
 import { renderMacro } from "@/infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
@@ -12,7 +12,7 @@ import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
 /** dynamic 宏展开上下文。 */
 export interface DynamicMacroContext {
   readonly now?: Date;
-  readonly worktree?: WorktreeService;
+  readonly workplace?: WorkplaceService;
 }
 
 /**
@@ -24,8 +24,8 @@ export async function expandDynamicMacros(
 ): Promise<string> {
   const now = ctx.now ?? new Date();
   let filetree = "";
-  if (content.includes("$filetree") && ctx.worktree != null) {
-    filetree = await ctx.worktree.renderFileTree();
+  if (content.includes("$filetree") && ctx.workplace != null) {
+    filetree = await ctx.workplace.renderFileTree();
   }
   const root = {
     time: formatLocalDateTime(now),

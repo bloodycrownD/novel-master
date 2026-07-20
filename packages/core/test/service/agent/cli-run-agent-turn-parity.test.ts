@@ -110,7 +110,7 @@ function makeRuntime(
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
-        materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
         evaluateRuleView: async () => ({
           rows: [],
           displayByPath: new Map(),
@@ -333,7 +333,7 @@ describe("cli-run-agent-turn parity", () => {
         ({
           renderDisplay: async () => "",
           buildListRows: async () => [],
-          materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+          materializePersistBlock: async () => ({ workplaceDisplay: "" }),
           evaluateRuleView: async () => ({
             rows: [
               {

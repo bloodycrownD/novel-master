@@ -54,9 +54,9 @@
       "types": "./dist/public/vfs.d.ts",
       "import": "./dist/public/vfs.js"
     },
-    "./worktree": {
-      "types": "./dist/public/worktree.d.ts",
-      "import": "./dist/public/worktree.js"
+    "./workplace": {
+      "types": "./dist/public/workplace.d.ts",
+      "import": "./dist/public/workplace.js"
     },
     "./format": {
       "types": "./dist/public/format.d.ts",

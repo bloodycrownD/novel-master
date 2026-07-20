@@ -31,7 +31,7 @@ const MOCK_SESSION_ID = "test-session";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "worktree" | "savedModels"> &
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "workplace" | "savedModels"> &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
@@ -39,12 +39,12 @@ function runnerDeps(
     ...deps,
     eventBus: { publish: () => {}, subscribe: () => () => {} } as never,
     sessionKkv: createMemorySessionKkv(),
-    worktree: () =>
+    workplace: () =>
       ({
         scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
         renderDisplay: async () => "WT",
         buildListRows: async () => [],
-        materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
+        materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
       }) as never,
   };
 }

@@ -31,7 +31,7 @@ import {
   fileCacheKey,
   SESSION_KKV_DOMAIN_FILE_CACHE,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { serializeFileCachePayload } from "@/domain/worktree/logic/rule-snapshot-codec.js";
+import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 
 /** Registered builtin file tool names (insertion order). */

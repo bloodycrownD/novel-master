@@ -39,7 +39,7 @@ function fixtureParams(overrides?: {
       dynamic: [],
     },
     ctx: {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
       messages,
     },
   };

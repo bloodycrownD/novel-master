@@ -56,7 +56,7 @@ describe("buildPromptLlmInputFromLayout tool pairing", () => {
         dynamic: [],
       },
       {
-        worktreeDisplay: "",
+        workplaceDisplay: "",
         messages,
       },
     );

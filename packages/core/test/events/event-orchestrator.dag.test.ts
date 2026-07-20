@@ -75,7 +75,7 @@ function baseOrchestrator(
           messages: {} as never,
           agentRegistry: {} as never,
           modelRequests: {} as never,
-          worktree: () => ({}) as never,
+          workplace: () => ({}) as never,
           sessionVfs: () => ({}) as never,
           messageCheckpoint: {} as never,
           sessionKkv: {} as never,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createVfsService, isVfsError } from "@novel-master/core/vfs";
 
-import { createWorktreeService } from "@novel-master/core/worktree";
+import { createWorkplaceService } from "@novel-master/core/workplace";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -180,7 +180,7 @@ describe("VFS directory nodes", () => {
     const vfs = createVfsService(conn);
     const root = await prepareRoot(vfs);
     await vfs.mkdir(`${root}/empty`);
-    const wt = createWorktreeService(conn, { kind: "global" });
+    const wt = createWorkplaceService(conn, { kind: "global" });
     const rows = await wt.buildListRows();
     const logicalEmpty = root.replace(/^\/template/, "") + "/empty";
     assert.ok(

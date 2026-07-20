@@ -11,7 +11,7 @@ import { createProviderServices } from "@novel-master/core/provider";
 import { createRegexConfigService } from "@novel-master/core/regex";
 import { createSessionFsService } from "@novel-master/core/session-fs";
 import { createScopedVfsService } from "@novel-master/core/vfs";
-import { createWorktreeService } from "@novel-master/core/worktree";
+import { createWorkplaceService } from "@novel-master/core/workplace";
 import { getNovelMasterTestContext, novelMasterTestFixture } from "./helpers/novel-master-fixture.js";
 
 
@@ -49,7 +49,7 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(mainEntry.createRegexConfigService, undefined);
     assert.equal(mainEntry.createSessionFsService, undefined);
     assert.equal(mainEntry.createScopedVfsService, undefined);
-    assert.equal(mainEntry.createWorktreeService, undefined);
+    assert.equal(mainEntry.createWorkplaceService, undefined);
   });
 
   it("exports createKkvService and KkvError from @novel-master/core/kkv", async () => {
@@ -72,6 +72,6 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(typeof createRegexConfigService, "function");
     assert.equal(typeof createSessionFsService, "function");
     assert.equal(typeof createScopedVfsService, "function");
-    assert.equal(typeof createWorktreeService, "function");
+    assert.equal(typeof createWorkplaceService, "function");
   });
 });

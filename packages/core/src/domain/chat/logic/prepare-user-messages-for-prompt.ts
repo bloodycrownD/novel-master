@@ -19,8 +19,8 @@ import {
   parseFileCachePayload,
   parseRuleSnapshotJson,
   serializeFileCachePayload,
-} from "@/domain/worktree/logic/rule-snapshot-codec.js";
-import { renderFileBlockBody } from "@/domain/worktree/logic/worktree-display.js";
+} from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { messageBodyTextFromContent } from "../content/message-body-text.js";

@@ -114,7 +114,7 @@ describe("AgentRunner workplace assemble (retire capture)", () => {
 
     const vfs = mockVfs();
     const materializePersistBlock = mock.fn(async () => ({
-      worktreeDisplay: "would-change-if-recaptured",
+      workplaceDisplay: "would-change-if-recaptured",
     }));
 
     const model = createMockModel([
@@ -147,7 +147,7 @@ describe("AgentRunner workplace assemble (retire capture)", () => {
       eventBus: new SimpleEventBus(),
       sessionKkv,
       savedModels: noopSavedModelRepository(),
-      worktree: () =>
+      workplace: () =>
         ({
           scope: {
             kind: "session",

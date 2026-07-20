@@ -30,7 +30,7 @@ function message(role: string, content: string, seq: number): ChatMessage {
 describe("prompt assembly parity", () => {
   it("T2: serializePromptLlmInput equals formatPromptLlmInputForCliFromLayout", async () => {
     const ctx = {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
     };
     const serialized = await serializePromptLlmInput(layout, ctx);
@@ -40,14 +40,14 @@ describe("prompt assembly parity", () => {
 
   it("hidden messages excluded from chat segment", async () => {
     const fullCtx = {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
       messages: [
         message("user", "visible", 1),
         { ...message("assistant", "hidden", 2), hidden: true },
       ],
     };
     const hiddenCtx = {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
       messages: [message("user", "visible", 1)],
     };
     const full = await serializePromptLlmInput(layout, fullCtx);

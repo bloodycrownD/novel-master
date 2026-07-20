@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { buildPromptLlmInputFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
 
 const ctx = {
-  worktreeDisplay: "",
+  workplaceDisplay: "",
   messages: [],
 };
 

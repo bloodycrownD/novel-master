@@ -260,12 +260,12 @@ describe("event orchestrator (bus integration)", () => {
             };
           },
         } as never,
-        worktree: () =>
+        workplace: () =>
           ({
             scope: { kind: "session", projectId: "p1", sessionId: "s1" },
             renderDisplay: async () => "",
             buildListRows: async () => [],
-            materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+            materializePersistBlock: async () => ({ workplaceDisplay: "" }),
           }) as never,
         sessionVfs: () => ({}) as never,
         messageCheckpoint: {} as never,

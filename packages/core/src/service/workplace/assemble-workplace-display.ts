@@ -17,7 +17,7 @@ import {
 import {
   joinFileBlocks,
   renderFileBlock,
-} from "@/domain/worktree/logic/worktree-display.js";
+} from "@/domain/workplace/logic/workplace-display.js";
 import {
   parseFileCachePayload,
   parseRuleSnapshotJson,
@@ -25,15 +25,15 @@ import {
   serializeFileCachePayload,
   serializeRuleSnapshot,
   type RuleSnapshotEntry,
-} from "@/domain/worktree/logic/rule-snapshot-codec.js";
+} from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { normalizePromptSeenPath } from "@/domain/chat/logic/prompt-path-seen.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
-import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
 /** {@link assembleWorkplaceDisplay} 依赖。 */
 export interface AssembleWorkplaceDisplayDeps {
   readonly sessionKkv: SessionKkvService;
-  readonly worktree: WorktreeService;
+  readonly workplace: WorkplaceService;
   readonly vfs: VfsService;
 /** Agent layout；`workplace` 未开则短路返回空且不写 kkv。 */
   readonly layout: Pick<AgentPromptLayout, "workplace">;
@@ -41,11 +41,11 @@ export interface AssembleWorkplaceDisplayDeps {
 
 /** {@link assembleWorkplaceDisplay} 返回值。 */
 export interface AssembleWorkplaceDisplayResult {
-  /** 常驻前缀展示文本（给模型看的 worktree 块）。 */
-  readonly worktreeDisplay: string;
+  /** 常驻前缀展示文本（给模型看的 workplace 块）。 */
+  readonly workplaceDisplay: string;
   /**
    * S0：规则快照全部可见 path（filename/header/full），已规范化为 seen key。
-   * 无 worktree 块或快照为空时为 `[]`。
+   * 无 workplace 块或快照为空时为 `[]`。
    */
   readonly prefixPaths: string[];
 }
@@ -59,13 +59,10 @@ export function layoutHasWorkplace(
   return layout.workplace === true;
 }
 
-/** @deprecated 使用 {@link layoutHasWorkplace}。 */
-export const layoutHasWorktreeBlock = layoutHasWorkplace;
-
 /**
  * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
  *
- * 1. 无 worktree 块 → `{ worktreeDisplay: "", prefixPaths: [] }`，不触 kkv
+ * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [] }`，不触 kkv
  * 2. 读 `rule_snapshot`/`canon`；空 → 规则引擎 → 写快照
  * 3. 按 path/status 读 `file_cache`；miss → VFS → 写缓存
  * 4. `renderFileBlock` + `joinFileBlocks`；`prefixPaths` = 快照全部可见 path（规范化）
@@ -75,13 +72,13 @@ export async function assembleWorkplaceDisplay(
   deps: AssembleWorkplaceDisplayDeps,
 ): Promise<AssembleWorkplaceDisplayResult> {
   if (!layoutHasWorkplace(deps.layout)) {
-    return { worktreeDisplay: "", prefixPaths: [] };
+    return { workplaceDisplay: "", prefixPaths: [] };
   }
 
   const sessionId = scope.sessionId;
   const entries = await loadOrCreateRuleSnapshot(sessionId, deps);
   if (entries.length === 0) {
-    return { worktreeDisplay: "", prefixPaths: [] };
+    return { workplaceDisplay: "", prefixPaths: [] };
   }
 
   const prefixPaths: string[] = [];
@@ -99,7 +96,7 @@ export async function assembleWorkplaceDisplay(
     );
   }
   return {
-    worktreeDisplay: joinFileBlocks(blocks),
+    workplaceDisplay: joinFileBlocks(blocks),
     prefixPaths,
   };
 }
@@ -121,7 +118,7 @@ async function loadOrCreateRuleSnapshot(
     }
   }
 
-  const view = await deps.worktree.evaluateRuleView();
+  const view = await deps.workplace.evaluateRuleView();
   const entries = ruleViewToSnapshotEntries(view);
   await deps.sessionKkv.set(
     sessionId,

@@ -112,7 +112,7 @@ function makeRuntime(overrides: {
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
-        materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
         evaluateRuleView:
           overrides.evaluateRuleView ?? (async () => emptyRuleView()),
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,

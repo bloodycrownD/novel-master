@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import { createWorktreeService } from "../../src/service/worktree/create-worktree-service.js";
+import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { assembleWorkplaceDisplay } from "../../src/service/workplace/assemble-workplace-display.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -9,7 +9,7 @@ import {
   RULE_SNAPSHOT_CANON_KEY,
   fileCacheKey,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { parseFileCachePayload } from "../../src/domain/worktree/logic/rule-snapshot-codec.js";
+import { parseFileCachePayload } from "../../src/domain/workplace/logic/rule-snapshot-codec.js";
 import { createVfsTools } from "../../src/domain/tool/builtin/vfs-tools.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
@@ -36,7 +36,7 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "hello");
-    const wt = createWorktreeService(ctx.conn, {
+    const wt = createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -46,12 +46,12 @@ describe("assembleWorkplaceDisplay", () => {
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
-        worktree: wt,
+        workplace: wt,
         vfs,
         layout: layoutWithoutWorkplace(),
       },
     );
-    assert.equal(out.worktreeDisplay, "");
+    assert.equal(out.workplaceDisplay, "");
     assert.deepEqual(out.prefixPaths, []);
     assert.equal(
       await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY),
@@ -66,13 +66,13 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "hello-world");
-    await createWorktreeService(ctx.conn, {
+    await createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
 
-    const wt = createWorktreeService(ctx.conn, {
+    const wt = createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -81,13 +81,13 @@ describe("assembleWorkplaceDisplay", () => {
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
-        worktree: wt,
+        workplace: wt,
         vfs,
         layout: layoutWithWorkplace(),
       },
     );
-    assert.match(out.worktreeDisplay, /<file /);
-    assert.match(out.worktreeDisplay, /hello-world/);
+    assert.match(out.workplaceDisplay, /<file /);
+    assert.match(out.workplaceDisplay, /hello-world/);
     assert.deepEqual(out.prefixPaths, ["/note.md"]);
     assert.ok(
       (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
@@ -107,7 +107,7 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/note.md", "revived");
-    await createWorktreeService(ctx.conn, {
+    await createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -120,7 +120,7 @@ describe("assembleWorkplaceDisplay", () => {
       "[]",
     );
 
-    const wt = createWorktreeService(ctx.conn, {
+    const wt = createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -129,12 +129,12 @@ describe("assembleWorkplaceDisplay", () => {
       { kind: "session", projectId: project.id, sessionId: session.id },
       {
         sessionKkv: sk,
-        worktree: wt,
+        workplace: wt,
         vfs,
         layout: layoutWithWorkplace(),
       },
     );
-    assert.match(out.worktreeDisplay, /revived/);
+    assert.match(out.workplaceDisplay, /revived/);
     assert.deepEqual(out.prefixPaths, ["/note.md"]);
   });
   it("T-WP3: 二次 assemble 不重复 vfs.read", async () => {
@@ -144,7 +144,7 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const baseVfs = ctx.sessionVfs(project.id, session.id);
     await baseVfs.write("/once.md", "body");
-    await createWorktreeService(ctx.conn, {
+    await createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -160,14 +160,14 @@ describe("assembleWorkplaceDisplay", () => {
       },
     });
 
-    const wt = createWorktreeService(ctx.conn, {
+    const wt = createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
     const deps = {
       sessionKkv: sk,
-      worktree: wt,
+      workplace: wt,
       vfs: vfs as typeof baseVfs,
       layout: layoutWithWorkplace(),
     };
@@ -253,13 +253,13 @@ describe("assembleWorkplaceDisplay", () => {
     const sk = createSessionKkvService(ctx.conn);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/again.md", "v1");
-    await createWorktreeService(ctx.conn, {
+    await createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     }).setFileRule({ logicalPath: "/again.md", inclusionMode: "show" });
 
-    const wt = createWorktreeService(ctx.conn, {
+    const wt = createWorkplaceService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
@@ -271,7 +271,7 @@ describe("assembleWorkplaceDisplay", () => {
     };
     const deps = {
       sessionKkv: sk,
-      worktree: wt,
+      workplace: wt,
       vfs,
       layout: layoutWithWorkplace(),
     };
@@ -289,7 +289,7 @@ describe("assembleWorkplaceDisplay", () => {
 
     await vfs.replace("/again.md", "v1", "v2-after-clear");
     const out = await assembleWorkplaceDisplay(scope, deps);
-    assert.match(out.worktreeDisplay, /v2-after-clear/);
+    assert.match(out.workplaceDisplay, /v2-after-clear/);
     assert.deepEqual(out.prefixPaths, ["/again.md"]);
     assert.ok(
       (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=

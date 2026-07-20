@@ -31,7 +31,7 @@ const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "worktree" | "savedModels"> &
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "workplace" | "savedModels"> &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
@@ -39,12 +39,12 @@ function runnerDeps(
     ...deps,
     eventBus: new SimpleEventBus(),
     sessionKkv: createMemorySessionKkv(),
-    worktree: () =>
+    workplace: () =>
       ({
         scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
         renderDisplay: async () => "WT",
         buildListRows: async () => [],
-        materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
+        materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
       }) as never,
   };
 }
@@ -458,12 +458,12 @@ describe("AgentRunner", () => {
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
-      worktree: () =>
+      workplace: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
           renderDisplay: async () => "WT",
           buildListRows: async () => [],
-          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
+          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
 
@@ -613,12 +613,12 @@ describe("AgentRunner", () => {
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
-      worktree: () =>
+      workplace: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
           renderDisplay: async () => "WT",
           buildListRows: async () => [],
-          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
+          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
     await runner.run({
@@ -666,12 +666,12 @@ describe("AgentRunner", () => {
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
-      worktree: () =>
+      workplace: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
           renderDisplay: async () => "WT",
           buildListRows: async () => [],
-          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
+          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
     await runner.run({
@@ -738,12 +738,12 @@ describe("AgentRunner", () => {
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
-      worktree: () =>
+      workplace: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
           renderDisplay: async () => "WT",
           buildListRows: async () => [],
-          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
+          materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
     await runner.run({

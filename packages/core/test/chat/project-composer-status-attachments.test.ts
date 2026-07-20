@@ -16,7 +16,7 @@ import {
   replaceComposerStatusAttachments,
 } from "@/domain/chat/logic/project-composer-status-attachments.js";
 import { userOpsAttachmentsFromSummaries } from "@/domain/chat/logic/build-user-ops-attachment.js";
-import { workplaceAttachmentsFromRuleDelta } from "@/domain/worktree/logic/diff-workplace-paths.js";
+import { workplaceAttachmentsFromRuleDelta } from "@/domain/workplace/logic/diff-workplace-paths.js";
 import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import {

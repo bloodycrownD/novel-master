@@ -40,7 +40,7 @@ describe("buildPromptLlmInputFromLayout", () => {
   it("extracts system field, persist synthetic messages, and chat", async () => {
     const messages = [message("user", "{{literal}}", 1)];
     const input = await buildPromptLlmInputFromLayout(sampleLayout, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages,
       now: fixedNow,
     });
@@ -61,7 +61,7 @@ describe("buildPromptLlmInputFromLayout", () => {
       dynamic: [],
     };
     const input = await buildPromptLlmInputFromLayout(layout, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     });
@@ -81,7 +81,7 @@ describe("buildPromptLlmInputFromLayout", () => {
       dynamic: [],
     };
     const input = await buildPromptLlmInputFromLayout(layout, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
     });
@@ -99,7 +99,7 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
       persist: [],
       dynamic: [],
     };
-    const ctx = { worktreeDisplay: "WT", messages: [], now: fixedNow };
+    const ctx = { workplaceDisplay: "WT", messages: [], now: fixedNow };
     const segments = await buildPromptAssemblyFromLayout(layout, ctx);
     const wt = segments.find((s) => s.id === "prompt-workplace");
     const done = segments.find((s) => s.id === "prompt-workplace-done");
@@ -131,7 +131,7 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
       ],
     };
     const messages = [message("user", "hi", 1)];
-    const ctx = { worktreeDisplay: "WT", messages, now: fixedNow };
+    const ctx = { workplaceDisplay: "WT", messages, now: fixedNow };
     const input = await buildPromptLlmInputFromLayout(layout, ctx, {
       agentStepIndex: 0,
     });
@@ -165,7 +165,7 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
 describe("buildPromptPreviewSegmentsFromLayout", () => {
   it("segments join to the same text as formatPromptLlmInputForCliFromLayout", async () => {
     const messages = [message("user", "{{literal}}", 1)];
-    const ctx = { worktreeDisplay: "WT", messages, now: fixedNow };
+    const ctx = { workplaceDisplay: "WT", messages, now: fixedNow };
     const segments = await buildPromptPreviewSegmentsFromLayout(
       sampleLayout,
       ctx
@@ -194,7 +194,7 @@ describe("formatPromptLlmInputForCliFromLayout", () => {
   it("renders system + persist + chat in order", async () => {
     const messages = [message("user", "{{literal}}", 1)];
     const out = await formatPromptLlmInputForCliFromLayout(sampleLayout, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages,
       now: fixedNow,
     });
@@ -205,7 +205,7 @@ describe("formatPromptLlmInputForCliFromLayout", () => {
 describe("buildPromptAssemblyFromLayout", () => {
   it("includes system segment first", async () => {
     const segments = await buildPromptAssemblyFromLayout(sampleLayout, {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
       messages: [],
     });
     assert.equal(segments[0]!.source, "system");
@@ -244,7 +244,7 @@ describe("buildPromptAssemblyFromLayout", () => {
       dynamic: [],
     };
     const segments = await buildPromptAssemblyFromLayout(layout, {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
       messages,
     });
     const chat = segments.filter((s) => s.source === "message");
@@ -264,7 +264,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       dynamic: [],
     };
     const ctx = {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     };
@@ -293,7 +293,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     const input = await buildPromptLlmInputFromLayout(
       layout,
       {
-        worktreeDisplay: "",
+        workplaceDisplay: "",
         messages: [],
         now: fixedNow,
       },
@@ -304,7 +304,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     const segments = await buildPromptAssemblyFromLayout(
       layout,
       {
-        worktreeDisplay: "",
+        workplaceDisplay: "",
         messages: [],
       },
       { agentStepIndex: 0 }
@@ -322,7 +322,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       dynamic: [],
     };
     const ctx = {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     };
@@ -338,7 +338,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
   });
 
-  it("worktreeDisplay 空时不注入 worktree 双段（避免 OpenAI 缺 content）", async () => {
+  it("workplaceDisplay 空时不注入 worktree 双段（避免 OpenAI 缺 content）", async () => {
     const layout: AgentPromptLayout = {
       workplace: true,
       persistEnabled: false,
@@ -346,7 +346,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       dynamic: [],
     };
     const ctx = {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     };
@@ -354,7 +354,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     assert.equal(input.messages.length, 1);
     assert.equal(input.messages[0]!.id, "m1");
     const zones = computeLlmExportZonesFromLayout(layout, {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
     });
     assert.equal(zones.persistCount, 0);
   });
@@ -366,7 +366,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       persist: [],
       dynamic: [],
     };
-    const ctx = { worktreeDisplay: "WT", messages: [], now: fixedNow };
+    const ctx = { workplaceDisplay: "WT", messages: [], now: fixedNow };
     const input = await buildPromptLlmInputFromLayout(layout, ctx);
     assert.equal(input.messages[0]!.role, "user");
     assert.equal(input.messages[1]!.role, "assistant");

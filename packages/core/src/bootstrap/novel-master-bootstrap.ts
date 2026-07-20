@@ -16,7 +16,7 @@ import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
-import { WORKTREE_SCHEMA_STATEMENTS } from "./worktree/worktree-schema.js";
+import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
@@ -34,7 +34,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...SESSION_KKV_SCHEMA_STATEMENTS,
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
-  ...WORKTREE_SCHEMA_STATEMENTS,
+  ...WORKPLACE_SCHEMA_STATEMENTS,
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
   ...REGEX_SCHEMA_STATEMENTS,

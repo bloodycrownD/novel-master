@@ -10,12 +10,12 @@ import {
 import {
   assembleWorkplaceDisplay,
   layoutHasWorkplace,
-} from "@novel-master/core/worktree";
+} from "@novel-master/core/workplace";
 import { resolveAgentDefinitionFromStorage } from "../../src/config-forms/stored-config-validity/assess-agent-definition-wire.js";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import {
   createMemorySessionKkv,
-  mockWorktreeService,
+  mockWorkplaceService,
 } from "../helpers/prompt-layout-test-helpers.js";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
@@ -29,21 +29,21 @@ describe("Workplace C0 协议", () => {
     assert.equal(layoutHasWorkplace(layout), false);
 
     const sk = createMemorySessionKkv();
-    const wt = mockWorktreeService("WT");
+    const wt = mockWorkplaceService("WT");
     const out = await assembleWorkplaceDisplay(
       { kind: "session", projectId: "p", sessionId: "s" },
       {
         sessionKkv: sk,
-        worktree: wt,
+        workplace: wt,
         vfs: { read: async () => ({ content: "x", mtimeMs: 1 }) } as never,
         layout,
       },
     );
-    assert.equal(out.worktreeDisplay, "");
+    assert.equal(out.workplaceDisplay, "");
     assert.deepEqual(out.prefixPaths, []);
 
     const input = await buildPromptLlmInputFromLayout(layout, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
     });
@@ -58,7 +58,7 @@ describe("Workplace C0 协议", () => {
       dynamic: [],
     };
     const input = await buildPromptLlmInputFromLayout(layout, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
     });
@@ -111,7 +111,7 @@ describe("Workplace C0 协议", () => {
       dynamic: [],
     };
     const input = await buildPromptLlmInputFromLayout(layout, {
-      worktreeDisplay: "WT-BODY",
+      workplaceDisplay: "WT-BODY",
       messages: [],
       now: fixedNow,
     });
@@ -130,7 +130,7 @@ describe("Workplace C0 协议", () => {
       dynamic: [],
     };
     const segments = await buildPromptAssemblyFromLayout(layout, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
     });
@@ -185,14 +185,14 @@ describe("Workplace C0 协议", () => {
     assert.deepEqual(health.value.prompts.persist, []);
 
     const input = await buildPromptLlmInputFromLayout(health.value.prompts, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
     });
     assert.equal(input.messages.length, 0);
 
     const segments = await buildPromptAssemblyFromLayout(health.value.prompts, {
-      worktreeDisplay: "WT",
+      workplaceDisplay: "WT",
       messages: [],
       now: fixedNow,
     });

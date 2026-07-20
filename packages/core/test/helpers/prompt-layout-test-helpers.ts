@@ -2,7 +2,7 @@
  * Agent runner 测试用 sessionKkv / worktree mock。
  */
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
-import type { WorktreeService } from "@novel-master/core/worktree";
+import type { WorkplaceService } from "@novel-master/core/workplace";
 
 /** 进程内内存 {@link SessionKkvService}（单测用）。 */
 export function createMemorySessionKkv(): SessionKkvService {
@@ -46,7 +46,7 @@ export function createMemorySessionKkv(): SessionKkvService {
 
 /** @deprecated 使用 {@link createMemorySessionKkv} */
 export function mockWorktreeBlockStore(
-  _worktreeDisplay = "WT",
+  _workplaceDisplay = "WT",
   _projectId = "test-project",
   _sessionId = "test-session",
 ): SessionKkvService {
@@ -55,27 +55,27 @@ export function mockWorktreeBlockStore(
 
 /** @deprecated 使用 {@link createMemorySessionKkv} */
 export function mockWorktreeSnapshot(
-  worktreeDisplay = "WT",
+  workplaceDisplay = "WT",
 ): SessionKkvService {
-  return mockWorktreeBlockStore(worktreeDisplay);
+  return mockWorktreeBlockStore(workplaceDisplay);
 }
 
-/** 最小 WorktreeService mock（assemble 走 kkv；evaluateRuleView 仅兜底）。 */
-export function mockWorktreeService(
-  worktreeDisplay = "WT",
+/** 最小 WorkplaceService mock（assemble 走 kkv；evaluateRuleView 仅兜底）。 */
+export function mockWorkplaceService(
+  workplaceDisplay = "WT",
   projectId = "test-project",
   sessionId = "test-session",
-): WorktreeService {
+): WorkplaceService {
   return {
     scope: { kind: "session", projectId, sessionId },
-    renderDisplay: async () => worktreeDisplay,
+    renderDisplay: async () => workplaceDisplay,
     buildListRows: async () => [],
-    materializePersistBlock: async () => ({ worktreeDisplay }),
+    materializePersistBlock: async () => ({ workplaceDisplay }),
     evaluateRuleView: async () => ({
       rows: [],
       displayByPath: new Map(),
     }),
-  } as unknown as WorktreeService;
+  } as unknown as WorkplaceService;
 }
 
 /** 空 layout（仅运行时 chat）。 */

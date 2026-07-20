@@ -47,7 +47,7 @@
 | `./regex` | Regex 配置服务 |
 | `./session-fs` | Session 文件系统回滚门面与相关错误 |
 | `./vfs` | scoped VFS 服务与工具 |
-| `./worktree` | Worktree 与 front matter 解析（`parseMarkdownFrontMatter`） |
+| `./workplace` | Workplace 与 front matter 解析（`parseMarkdownFrontMatter`） |
 
 架构守卫：`public/*` 源文件 **禁止** 对 `config-forms` 的 import（`KNOWN_LEAKS` 为空）。
 
@@ -71,7 +71,7 @@
 | feature-flags（user VFS unified tool turn） | `@novel-master/core/feature-flags` | `@novel-master/core/provider` |
 | tokenizer 驱动注册 | `@novel-master/core/nmtp` | `@novel-master/core/provider` |
 | agent 编辑器块操作 | `@novel-master/core/config-forms/agent` | `@novel-master/core/prompt` |
-| front matter 解析 | `@novel-master/core/worktree` | `@novel-master/core/front-matter`（已删除 export） |
+| front matter 解析 | `@novel-master/core/workplace` | `@novel-master/core/front-matter`（已删除 export） |
 | message checkpoint | `@novel-master/core/message-checkpoint` | `@novel-master/core/session-fs` |
 | 遗留 PromptBlock 类型 | 内部 `domain/prompt/model/prompt-block.js` | `@novel-master/core/prompt` |
 

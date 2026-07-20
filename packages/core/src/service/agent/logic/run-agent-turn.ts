@@ -42,8 +42,8 @@ import type { MessageAttachment } from "@/domain/chat/model/message-attachment.s
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { ruleViewToSnapshotEntries } from "@/domain/worktree/logic/rule-snapshot-codec.js";
-import { workplaceAttachmentsFromRuleDelta } from "@/domain/worktree/logic/diff-workplace-paths.js";
+import { ruleViewToSnapshotEntries } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { workplaceAttachmentsFromRuleDelta } from "@/domain/workplace/logic/diff-workplace-paths.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -53,7 +53,7 @@ import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js"
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
-import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -94,7 +94,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
     getCurrentRegexGroupId(): Promise<string | null | undefined>;
   };
   sessionVfs(projectId: string, sessionId: string): VfsService;
-  worktree(scope: VfsScope): WorktreeService;
+  worktree(scope: VfsScope): WorkplaceService;
 }
 
 export class AgentTurnError extends Error {

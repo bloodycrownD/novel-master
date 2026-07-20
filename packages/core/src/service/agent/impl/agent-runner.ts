@@ -44,7 +44,7 @@ import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
-import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
@@ -71,7 +71,7 @@ export interface DefaultAgentRunnerDeps {
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
   readonly sessionKkv: SessionKkvService;
-  readonly worktree: (scope: VfsScope) => WorktreeService;
+  readonly workplace: (scope: VfsScope) => WorkplaceService;
   /**
    * mutating 工具并行 settled 后同步 checkpoint；失败会中断当前 agent run。
    * @remarks 在 append tool_results 之前 await，避免对话继续但无 checkpoint。
@@ -191,12 +191,12 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
-        const wt = this.deps.worktree(wtScope);
-        const { worktreeDisplay, prefixPaths } = await assembleWorkplaceDisplay(
+        const wt = this.deps.workplace(wtScope);
+        const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(
           wtScope,
           {
             sessionKkv: this.deps.sessionKkv,
-            worktree: wt,
+            workplace: wt,
             vfs: this.deps.toolCtx.vfs,
             layout: options.definition.prompts,
           },
@@ -218,10 +218,10 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const promptRenderCtx = {
-          worktreeDisplay,
+          workplaceDisplay,
           messages: visible,
           vfs: this.deps.toolCtx.vfs,
-          worktree: wt,
+          workplace: wt,
         };
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
@@ -266,7 +266,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const llmInput = promptInput;
         const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
           agentStepIndex: step,
-          worktreeDisplay,
+          workplaceDisplay,
         });
         const protocol = await inferLlmProtocolFromSavedModelId(
           options.savedModelId,

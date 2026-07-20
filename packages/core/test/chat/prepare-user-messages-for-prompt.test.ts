@@ -406,7 +406,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       dynamic: [] as const,
     };
     const input = await buildPromptLlmInputFromLayout(layout, {
-      worktreeDisplay: "",
+      workplaceDisplay: "",
       messages: realPromptPrepared,
     });
     const realPromptUser = input.messages.find((m) => m.id === stored.id);

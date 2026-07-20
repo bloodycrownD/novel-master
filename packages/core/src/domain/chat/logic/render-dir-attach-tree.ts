@@ -28,7 +28,7 @@ function utf8ByteLength(text: string): number {
 }
 
 /**
- * 根行标签：与 {@link worktreeFileTreeRootLabel} 口径一致——
+ * 根行标签：与 {@link workplaceFileTreeRootLabel} 口径一致——
  * `/` → `/`；其它 path → `basename/`（例 `/notes` → `notes/`）。
  */
 function attachDirTreeRootLabel(rootDir: string): string {

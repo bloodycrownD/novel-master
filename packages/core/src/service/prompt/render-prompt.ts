@@ -52,17 +52,17 @@ export interface PromptAssemblyOptions {
 /**
  * 计算 `buildPromptLlmInputFromLayout` 输出 messages 的三区边界。
  *
- * @remarks 传入 `worktreeDisplay` 时与注入逻辑一致：空串不算 workplace 双段。
+ * @remarks 传入 `workplaceDisplay` 时与注入逻辑一致：空串不算 workplace 双段。
  */
 export function computeLlmExportZonesFromLayout(
   layout: AgentPromptLayout,
-  options?: PromptAssemblyOptions & { readonly worktreeDisplay?: string }
+  options?: PromptAssemblyOptions & { readonly workplaceDisplay?: string }
 ): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
   const injectWorkplace =
     layout.workplace === true &&
-    (options?.worktreeDisplay === undefined ||
-      options.worktreeDisplay.trim() !== "");
+    (options?.workplaceDisplay === undefined ||
+      options.workplaceDisplay.trim() !== "");
   const textBlockCount = layout.persist.length;
   const persistCount =
     (injectWorkplace ? 2 : 0) +
@@ -113,7 +113,7 @@ function syntheticTemplateMessage(
 }
 
 function syntheticWorkplaceUserMessage(
-  worktreeDisplay: string,
+  workplaceDisplay: string,
   ctx: PromptRenderContext
 ): ChatMessage {
   return {
@@ -121,7 +121,7 @@ function syntheticWorkplaceUserMessage(
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
     role: "user",
-    content: textBlocks(worktreeDisplay),
+    content: textBlocks(workplaceDisplay),
     provider: null,
     raw: null,
     createdAtMs: 0,
@@ -154,10 +154,10 @@ function appendWorkplacePairIfPresent(
   if (layout.workplace !== true) {
     return;
   }
-  if (ctx.worktreeDisplay.trim() === "") {
+  if (ctx.workplaceDisplay.trim() === "") {
     return;
   }
-  messages.push(syntheticWorkplaceUserMessage(ctx.worktreeDisplay, ctx));
+  messages.push(syntheticWorkplaceUserMessage(ctx.workplaceDisplay, ctx));
   messages.push(syntheticWorkplaceDoneMessage(ctx));
 }
 
@@ -166,14 +166,14 @@ function appendWorkplacePairSegmentsIfPresent(
   ctx: PromptRenderContext,
   segments: PromptAssemblySegment[]
 ): void {
-  if (layout.workplace !== true || ctx.worktreeDisplay.trim() === "") {
+  if (layout.workplace !== true || ctx.workplaceDisplay.trim() === "") {
     return;
   }
   segments.push({
     id: "prompt-workplace",
     role: "user",
     title: "workplace",
-    body: ctx.worktreeDisplay,
+    body: ctx.workplaceDisplay,
     source: "template",
   });
   segments.push({
@@ -251,7 +251,7 @@ export async function buildPromptAssemblyFromLayout(
       }
       const expanded = await expandDynamicMacros(block.content, {
         now: ctx.now,
-        worktree: ctx.worktree,
+        workplace: ctx.workplace,
       });
       segments.push({
         id: `dynamic-${block.name}`,
@@ -294,7 +294,7 @@ export async function buildPromptLlmInputFromLayout(
       }
       const expanded = await expandDynamicMacros(block.content, {
         now: ctx.now,
-        worktree: ctx.worktree,
+        workplace: ctx.workplace,
       });
       messages.push(syntheticTemplateMessage(block, expanded, ctx));
     }
