@@ -1,9 +1,21 @@
 /**
  * Desktop PreviewPane 划词批注：入口门闩 + 选区 + 原文匹配下划线（尽力）。
+ * 纯算法在 `@novel-master/core/chat`；本文件保留 DOM wrap 壳。
  * 仅 mode==="read" 且 workspaceScope==="chat" 且非空 sessionId 启用。
  */
 
+import {
+  groupAnnotateIdsByOriginalText,
+  sortAnnotateTextsLongestFirst,
+} from "@novel-master/core/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
+
+export {
+  findAllOccurrences,
+  groupAnnotateIdsByOriginalText,
+  parseAnnotateIdsAttr,
+  sortAnnotateTextsLongestFirst,
+} from "@novel-master/core/chat";
 
 export const PREVIEW_ANNOTATE_MARK_CLASS = "preview-annotate-mark";
 export const PREVIEW_ANNOTATE_IDS_ATTR = "data-annotate-ids";
@@ -20,37 +32,6 @@ export function isPreviewAnnotateEnabled(
     typeof sessionId === "string" &&
     sessionId.length > 0
   );
-}
-
-/** 按 originalText 聚合 draft id（同文多条共用一处下划线点击）。 */
-export function groupAnnotateIdsByOriginalText(
-  drafts: readonly { readonly id: string; readonly originalText: string }[],
-): Map<string, string[]> {
-  const byText = new Map<string, string[]>();
-  for (const d of drafts) {
-    const text = d.originalText;
-    if (text.length === 0) {
-      continue;
-    }
-    const list = byText.get(text);
-    if (list == null) {
-      byText.set(text, [d.id]);
-    } else {
-      list.push(d.id);
-    }
-  }
-  return byText;
-}
-
-/** 解析 mark 上的 id 列表。 */
-export function parseAnnotateIdsAttr(raw: string | null | undefined): string[] {
-  if (raw == null || raw === "") {
-    return [];
-  }
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
 }
 
 /**
@@ -130,7 +111,7 @@ export function applyAnnotateHighlights(
 ): void {
   clearAnnotateHighlights(root);
   const byText = groupAnnotateIdsByOriginalText(drafts);
-  const texts = [...byText.keys()].sort((a, b) => b.length - a.length);
+  const texts = sortAnnotateTextsLongestFirst([...byText.keys()]);
   for (const text of texts) {
     const ids = byText.get(text);
     if (ids == null || ids.length === 0) {

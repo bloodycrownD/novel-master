@@ -57,16 +57,18 @@ describe("isPreviewAnnotateEnabled", () => {
 });
 
 describe("groupAnnotateIdsByOriginalText", () => {
-  it("同文聚合多 id；空原文跳过", () => {
+  it("同文聚合多 id；空原文与空 id 跳过", () => {
     const map = groupAnnotateIdsByOriginalText([
       { id: "a", originalText: "hello" },
       { id: "b", originalText: "hello" },
       { id: "c", originalText: "other" },
       { id: "d", originalText: "" },
+      { id: "", originalText: "skip" },
     ]);
     assert.deepEqual(map.get("hello"), ["a", "b"]);
     assert.deepEqual(map.get("other"), ["c"]);
     assert.equal(map.has(""), false);
+    assert.equal(map.has("skip"), false);
   });
 });
 
@@ -120,12 +122,13 @@ describe("readSelectionTextInContainer", () => {
 });
 
 describe("applyAnnotateHighlights order (source)", () => {
-  it("按 originalText 长度降序再 wrap", () => {
+  it("按 originalText 长度降序再 wrap（调 core sort）", () => {
     const src = readFileSync(
       path.join(__dirname, "..", "renderer", "layout", "preview-annotate.ts"),
       "utf8",
     );
-    assert.match(src, /b\.length\s*-\s*a\.length/);
+    assert.match(src, /sortAnnotateTextsLongestFirst/);
+    assert.match(src, /@novel-master\/core\/chat/);
   });
 });
 

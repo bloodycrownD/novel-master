@@ -1,77 +1,28 @@
 /**
  * 批注下划线：按 originalText 在 .doc-body 内尽力匹配高亮；重复片段全部高亮。
+ * 纯算法在 `@novel-master/core/chat`；本文件保留 DOM wrap 壳。
  * 同文多条批注共用一处 mark（data-annotate-ids）；长 needle 优先以免短串抢占。
  */
+
+import {
+  groupAnnotateIdsByOriginalText,
+  sortAnnotateTextsLongestFirst,
+} from '@novel-master/core/chat';
 
 export type AnnotateMark = {
   readonly id: string;
   readonly originalText: string;
 };
 
+export {
+  findAllOccurrences,
+  groupAnnotateIdsByOriginalText,
+  parseAnnotateIdsAttr,
+  sortAnnotateTextsLongestFirst,
+} from '@novel-master/core/chat';
+
 export const ANNOTATE_MARK_CLASS = 'annotate-mark';
 export const ANNOTATE_IDS_ATTR = 'data-annotate-ids';
-
-/** 非重叠查找 needle 在 haystack 中的全部起始下标（供单测）。 */
-export function findAllOccurrences(
-  haystack: string,
-  needle: string,
-): number[] {
-  if (needle.length === 0) {
-    return [];
-  }
-  const out: number[] = [];
-  let from = 0;
-  while (from <= haystack.length - needle.length) {
-    const at = haystack.indexOf(needle, from);
-    if (at < 0) {
-      break;
-    }
-    out.push(at);
-    from = at + needle.length;
-  }
-  return out;
-}
-
-/** 按 originalText 聚合 draft id（同文多条共用一处下划线点击）。 */
-export function groupAnnotateIdsByOriginalText(
-  drafts: readonly {readonly id: string; readonly originalText: string}[],
-): Map<string, string[]> {
-  const byText = new Map<string, string[]>();
-  for (const d of drafts) {
-    const text = d.originalText;
-    if (!text || !d.id) {
-      continue;
-    }
-    const list = byText.get(text);
-    if (list == null) {
-      byText.set(text, [d.id]);
-    } else {
-      list.push(d.id);
-    }
-  }
-  return byText;
-}
-
-/** 解析 mark 上的 id 列表。 */
-export function parseAnnotateIdsAttr(raw: string | null | undefined): string[] {
-  if (raw == null || raw === '') {
-    return [];
-  }
-  return raw
-    .split(',')
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
-}
-
-/**
- * 应用顺序：originalText 长度降序（长优先），重叠/嵌套时避免短针抢占。
- * 供单测断言。
- */
-export function sortAnnotateTextsLongestFirst(
-  texts: readonly string[],
-): string[] {
-  return [...texts].sort((a, b) => b.length - a.length);
-}
 
 /** 解开已有 mark，恢复纯文本节点。 */
 export function unwrapAnnotateMarks(root: ParentNode): void {

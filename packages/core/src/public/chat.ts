@@ -185,6 +185,12 @@ export {
   updateChatAnnotateDraft,
 } from '../domain/chat/logic/chat-annotate-draft-store.js';
 export {
+  findAllOccurrences,
+  groupAnnotateIdsByOriginalText,
+  parseAnnotateIdsAttr,
+  sortAnnotateTextsLongestFirst,
+} from '../domain/chat/logic/annotate-highlight.js';
+export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
 } from '../domain/chat/logic/user-vfs-turn-constants.js';
