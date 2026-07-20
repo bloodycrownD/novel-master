@@ -4,16 +4,16 @@
  * @module bootstrap/workplace/workplace-schema
  */
 
-/** Physical table name until C3 migration renames to workplace_*. */
-export const WORKPLACE_DIR_RULE_TABLE = "worktree_dir_rule";
-/** Physical table name until C3 migration renames to workplace_*. */
-export const WORKPLACE_FILE_RULE_TABLE = "worktree_file_rule";
-/** Physical index name until C3. */
-export const WORKPLACE_DIR_SCOPE_INDEX = "idx_worktree_dir_scope";
-/** Physical index name until C3. */
-export const WORKPLACE_FILE_SCOPE_INDEX = "idx_worktree_file_scope";
+/** Canonical table: directory inclusion rules. */
+export const WORKPLACE_DIR_RULE_TABLE = "workplace_dir_rule";
+/** Canonical table: file inclusion rules. */
+export const WORKPLACE_FILE_RULE_TABLE = "workplace_file_rule";
+/** Canonical index on dir rules by scope. */
+export const WORKPLACE_DIR_SCOPE_INDEX = "idx_workplace_dir_scope";
+/** Canonical index on file rules by scope. */
+export const WORKPLACE_FILE_SCOPE_INDEX = "idx_workplace_file_scope";
 
-/** Idempotent DDL for workplace dir/file rules (physical names still worktree_* until C3). */
+/** Idempotent DDL for workplace dir/file rules. */
 export const WORKPLACE_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS ${WORKPLACE_DIR_RULE_TABLE} (
     scope_key TEXT NOT NULL,

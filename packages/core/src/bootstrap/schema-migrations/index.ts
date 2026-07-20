@@ -13,11 +13,13 @@ import {
 } from "./schema-migrations-table.js";
 import { savedModelIdentityV1Migration } from "./saved-model-identity-v1.js";
 import { dropChatSessionUserVfsPendingV1Migration } from "./drop-chat-session-user-vfs-pending-v1.js";
+import { renameWorktreeTablesToWorkplaceV1Migration } from "./rename-worktree-tables-to-workplace-v1.js";
 
 /** 有序 migration 列表。 */
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   savedModelIdentityV1Migration,
   dropChatSessionUserVfsPendingV1Migration,
+  renameWorktreeTablesToWorkplaceV1Migration,
 ];
 
 /**
