@@ -50,7 +50,7 @@ export function scanAtPathAttachments(text: string): MessageAttachment[] {
 
 /**
  * 合并已有 chips / 选项附件与扫描结果；按 path 去重（先保留已有）。
- * user_ops（无 path）按出现顺序保留，不与 path 键冲突。
+ * user_ops 现有 path，与 workplace/attach 同走 path 键；仅缺 path 时回退 name 键。
  */
 export function mergeAttachmentsWithScannedAtPaths(
   text: string,
