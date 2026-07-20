@@ -32,7 +32,7 @@ import type {
 } from "../model/workplace-rule-view.js";
 
 /**
- * 评估工作树规则视图：纯规则 DFS，不算文件正文。
+ * 评估工作区规则视图：纯规则 DFS，不算文件正文。
  */
 export function evaluateWorkplaceRuleView(
   scope: WorkplaceScope,

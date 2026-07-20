@@ -134,7 +134,7 @@ export async function handleWorkplaceSetFileRule(
 }
 
 /**
- * 已退役的「工作树快照」IPC：改清空 session kkv，下次拼装重建常驻前缀。
+ * 已退役的「常驻工作区快照」IPC：改清空 session kkv，下次拼装重建常驻前缀。
  * UI 入口将在 Step 9 删除。
  */
 export async function handleWorkplaceCaptureSessionBlock(

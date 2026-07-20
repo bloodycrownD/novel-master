@@ -2548,10 +2548,10 @@
             html += '</select></label>';
             html += '<p class="agent-field-hint">仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。</p>';
             html += '<label class="agent-field"><span>内容</span><textarea data-block-field="content" rows="4">' + escapeHtml(block.content || '') + '</textarea></label>';
-            html += '<p class="agent-field-hint">宏：{{.worktree}} {{$time}} {{$week_cn}}</p>';
+            html += '<p class="agent-field-hint">宏：{{$filetree}} {{$time}} {{$week_cn}}</p>';
         } else if (blockType === 'abstract') {
             html += '<label class="agent-field"><span>内容</span><textarea data-block-field="content" rows="4">' + escapeHtml(block.content || '') + '</textarea></label>';
-            html += '<p class="agent-field-hint">无压缩摘要时不拼接；可用 {{.abstract}}、{{.worktree}}、{{$time}}、{{$week_cn}}</p>';
+            html += '<p class="agent-field-hint">无压缩摘要时不拼接；可用 {{.abstract}}、{{$filetree}}、{{$time}}、{{$week_cn}}</p>';
         } else {
             html += '<p class="agent-field-hint">chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。</p>';
         }
