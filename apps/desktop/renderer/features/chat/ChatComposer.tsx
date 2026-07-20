@@ -37,6 +37,10 @@ import {
   subscribeChatAnnotateDraft,
   unionComposerStatusWithAnnotate,
 } from "./chat-annotate-draft";
+import {
+  shouldClearComposerBodyAfterAgentStarted,
+  shouldClearComposerBodyOnUserMessageAppended,
+} from "./composer-body-clear";
 import { resolveComposerSendIntent } from "./composer-send-intent";
 import { FileReferencePicker } from "./FileReferencePicker";
 
@@ -157,19 +161,24 @@ export function ChatComposer({
     });
   }, [sessionId, onAttachmentsChange]);
 
-  // 仅 append 成功推送后清 annotate（禁止 started:true 清）。
+  // 仅 append 成功推送后清 annotate + 正文（禁止 started:true 清；B4 对齐 Mobile）。
   // 始终按 payload.sessionId 清 store，避免切会话后漏清、再回来重带旧批注。
   useEffect(() => {
     return onUserMessageAppended((payload) => {
       clearChatAnnotateDrafts(payload.sessionId);
-      if (payload.sessionId !== sessionId) {
+      if (
+        !shouldClearComposerBodyOnUserMessageAppended(
+          payload.sessionId,
+          sessionId,
+        )
+      ) {
         return;
       }
-      onAttachmentsChange(
-        attachmentsRef.current.filter((a) => a.action !== "annotate"),
-      );
+      onChange("");
+      // projected 一并清空；annotate store 已清，无需再 ∪
+      onAttachmentsChange([]);
     });
-  }, [sessionId, onAttachmentsChange]);
+  }, [sessionId, onAttachmentsChange, onChange]);
 
   useAutoResizeTextarea(textareaRef, value, 200);
 
@@ -282,11 +291,7 @@ export function ChatComposer({
   );
 
   const runAgent = useCallback(
-    async (
-      content: string,
-      allowResumeWithoutInput: boolean,
-      hasWorkplaceDelta: boolean,
-    ) => {
+    async (content: string, allowResumeWithoutInput: boolean) => {
       const modelCheck = await ipcPromptAgentMeta({ projectId, sessionId });
       if (
         modelCheck.ok &&
@@ -302,12 +307,8 @@ export function ChatComposer({
       beginUiRun();
 
       // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
-      // annotate：禁止在 started 清 store；仅清正文/ projected，再 ∪ annotate
-      const shouldClearComposer =
-        content.trim() !== "" ||
-        hasPendingUserOps ||
-        hasWorkplaceDelta;
-      const previousValue = attachmentsRef.current;
+      // B4：禁止 started:true 清正文/projected；append 推送后再清（对齐 Mobile）
+      // annotate：禁止在 started 清 store；reproject 时 ∪ store 保留至 append
       const annotateDrafts = listChatAnnotateDrafts(sessionId);
 
       const streamResult = await ipcPreferencesGetLlmStream();
@@ -328,20 +329,19 @@ export function ChatComposer({
         return false;
       }
 
-      if (shouldClearComposer) {
+      // B4：started 不清正文（契约由 shouldClearComposerBodyAfterAgentStarted 钉死）
+      if (shouldClearComposerBodyAfterAgentStarted()) {
         onChange("");
-        // 仅清 projected；annotate chip 经 reproject ∪ store 保留至 append 推送
-        onAttachmentsChange(
-          unionComposerStatusWithAnnotate([], sessionId),
-        );
       }
+
       await onMessagesChanged();
       const statusRes = await ipcSessionsProjectComposerStatus({ sessionId });
       if (statusRes.ok) {
+        // 用 live ref：若 append 已晚清 attachments，避免 stale previous 写回
         onAttachmentsChange(
           unionComposerStatusWithAnnotate(
             replaceComposerStatusAttachments(
-              shouldClearComposer ? [] : previousValue,
+              attachmentsRef.current,
               statusRes.data,
             ),
             sessionId,
@@ -353,7 +353,6 @@ export function ChatComposer({
     [
       abortUiRun,
       beginUiRun,
-      hasPendingUserOps,
       onMessagesChanged,
       onStreamReset,
       projectId,
@@ -381,7 +380,7 @@ export function ChatComposer({
       running,
     });
     const content = value.trim();
-    const { hasWorkplaceDelta, hasSendable, allowResumeWithoutInput } = intent;
+    const { hasSendable, allowResumeWithoutInput } = intent;
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
     }
@@ -395,7 +394,7 @@ export function ChatComposer({
       return;
     }
 
-    await runAgent(content, allowResumeWithoutInput, hasWorkplaceDelta);
+    await runAgent(content, allowResumeWithoutInput);
   };
 
   const confirmBridge = async () => {
@@ -413,10 +412,7 @@ export function ChatComposer({
       }
       await onMessagesChanged();
       setBridgePendingText(null);
-      const hasWorkplaceDelta = attachmentsRef.current.some(
-        a => a.source === "workplace",
-      );
-      await runAgent(content, false, hasWorkplaceDelta);
+      await runAgent(content, false);
     } finally {
       setBridgeBusy(false);
     }
