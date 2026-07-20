@@ -163,4 +163,64 @@ describe("workplace CLI e2e", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("T6 session display 走 assemble（含 path 与行号）", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-wt-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      const create = runNm(["project", "create", "--name", "P", "--db", dbPath]);
+      const projectId = create.stdout.trim();
+      runNm(
+        [
+          "project",
+          "vfs",
+          "write",
+          "/a.md",
+          "--project",
+          projectId,
+          "--db",
+          dbPath,
+        ],
+        { input: "hello\nworld" },
+      );
+      runNm([
+        "project",
+        "workplace",
+        "file",
+        "/a.md",
+        "--mode",
+        "show",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      const sess = runNm([
+        "session",
+        "create",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      const sessionId = sess.stdout.trim();
+      const display = runNm([
+        "session",
+        "workplace",
+        "display",
+        "--project",
+        projectId,
+        "--session",
+        sessionId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(display.status, 0, display.stderr);
+      assert.match(display.stdout, /<file path="/);
+      assert.match(display.stdout, /1\|hello/);
+      assert.match(display.stdout, /2\|world/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

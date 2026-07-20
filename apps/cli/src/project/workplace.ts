@@ -1,6 +1,9 @@
 /**
  * `nm project workplace` subcommands.
  *
+ * `display` 无 session → 调试 live materialize（`renderDisplay`），
+ * **不是**聊天前缀；见 `run-workplace` 模块头注释「display 双路径」。
+ *
  * @module project/workplace
  */
 

@@ -70,7 +70,12 @@ export interface WorkplaceService {
   /** 工作区列表行（委托 {@link materializeLiveView}）。 */
   buildListRows(): Promise<WorkplaceListRow[]>;
 
-  /** 持久 workplace 块（委托 {@link materializePersistBlock}）。 */
+  /**
+   * 持久 workplace 块（委托 {@link materializePersistBlock}：直读 VFS 的 live materialize）。
+   *
+   * **聊天常驻前缀**请用 {@link assembleWorkplaceDisplay}（session kkv），勿与本方法混用。
+   * CLI：仅 `vfs|project workplace display`（无 session）走此路径；`session workplace display` 走 assemble。
+   */
   renderDisplay(): Promise<string>;
 
   /** `{{$filetree}}` 宏树（委托 {@link materializeLiveView}）。 */

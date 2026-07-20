@@ -1,15 +1,46 @@
 /**
  * Shared `workplace` subcommand handler.
  *
+ * ## display 双路径（A1）
+ *
+ * - **有 session 上下文**（`nm session workplace display`）：走
+ *   {@link assembleWorkplaceDisplay}（session kkv `rule_snapshot` + `file_cache`），
+ *   与 Agent 常驻前缀 / `prompt render` 同源，避免 CLI 与聊天漂移。
+ * - **无 session**（`nm vfs|project workplace display`）：无 kkv 可写，只能走
+ *   `WorkplaceService.renderDisplay` → `materializePersistBlock`（直读 VFS 的
+ *   **调试 live materialize**）。此路径**不是**聊天前缀；规则改完后立刻反映盘面，
+ *   但不写/不读 file_cache，也与 Agent 前缀可能不一致。
+ *
  * @module workplace/run-workplace
  */
 
-import { type FillPolicy, type InclusionMode, type SortField, type SortOrder, type WorkplaceService } from "@novel-master/core/workplace";
+import {
+  assembleWorkplaceDisplay,
+  type FillPolicy,
+  type InclusionMode,
+  type SortField,
+  type SortOrder,
+  type WorkplaceService,
+} from "@novel-master/core/workplace";
+import type { SessionKkvService } from "@novel-master/core/session-kkv";
+import type { VfsService } from "@novel-master/core/vfs";
 import { parseCliArgs } from "../vfs/parse-args.js";
+
+/**
+ * Session 作用域下的 display 装配依赖（与聊天前缀同源）。
+ * 仅 `nm session workplace display` 传入；global/project 不得传。
+ */
+export interface WorkplaceDisplayAssembleContext {
+  readonly projectId: string;
+  readonly sessionId: string;
+  readonly sessionKkv: SessionKkvService;
+  readonly vfs: VfsService;
+}
 
 export async function runWorkplace(
   service: WorkplaceService,
   args: readonly string[],
+  assemble?: WorkplaceDisplayAssembleContext,
 ): Promise<void> {
   const { positional, flags } = parseCliArgs(args);
   const sub = positional[0];
@@ -31,7 +62,7 @@ export async function runWorkplace(
       return;
     }
     case "display": {
-      const text = await service.renderDisplay();
+      const text = await resolveWorkplaceDisplay(service, assemble);
       if (text.length > 0) {
         process.stdout.write(text);
         if (!text.endsWith("\n")) {
@@ -86,6 +117,32 @@ export async function runWorkplace(
         "Usage: workplace <display|dir|file|list> ...",
       );
   }
+}
+
+/**
+ * Session → assemble（聊天同源）；否则 → live materialize（调试盘面）。
+ */
+async function resolveWorkplaceDisplay(
+  service: WorkplaceService,
+  assemble: WorkplaceDisplayAssembleContext | undefined,
+): Promise<string> {
+  if (assemble == null) {
+    // 调试 live materialize：无 session kkv，与 Agent 常驻前缀不同源。
+    return service.renderDisplay();
+  }
+  const scope = {
+    kind: "session" as const,
+    projectId: assemble.projectId,
+    sessionId: assemble.sessionId,
+  };
+  // CLI 显式要看常驻正文时强制开 workplace（与 Mobile assembleWorkplaceForMobile 一致）。
+  const { workplaceDisplay } = await assembleWorkplaceDisplay(scope, {
+    sessionKkv: assemble.sessionKkv,
+    workplace: service,
+    vfs: assemble.vfs,
+    layout: { workplace: true },
+  });
+  return workplaceDisplay;
 }
 
 function parseSortField(value: string | true | undefined): SortField | undefined {
