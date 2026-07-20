@@ -1,6 +1,6 @@
 /**
- * 批注回合态草稿（App 模块级会话 Map → `runAgentTurn` 入参）。
- * 不写 `composer_draft_json`；Core 不持有 annotate store。
+ * 批注回合态草稿（→ `runAgentTurn` 入参）。
+ * 允许进程内 store API（`chat-annotate-draft-store`）；禁止写入 `composer_draft_json`。
  *
  * @module domain/chat/model/annotate-draft.schema
  */

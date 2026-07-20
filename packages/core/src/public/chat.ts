@@ -172,6 +172,19 @@ export {
 } from '../domain/chat/logic/composer-at-path.js';
 export type { AtPathRef } from '../domain/chat/logic/composer-at-path.js';
 export {
+  addChatAnnotateDraft,
+  chipsFromAnnotateStore,
+  clearChatAnnotateDrafts,
+  hasChatAnnotateDrafts,
+  listChatAnnotateDrafts,
+  removeChatAnnotateDraft,
+  removeChatAnnotateDraftsByPath,
+  resetChatAnnotateDraftStoreForTests,
+  subscribeChatAnnotateDraft,
+  unionComposerStatusWithAnnotate,
+  updateChatAnnotateDraft,
+} from '../domain/chat/logic/chat-annotate-draft-store.js';
+export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
 } from '../domain/chat/logic/user-vfs-turn-constants.js';
