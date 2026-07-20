@@ -1,11 +1,13 @@
 /**
  * Composer 状态 chip（不可叉）：workplace + user_ops（含 annotate 预览）。
  * 文件引用不再使用 attach chip（认正文 `@路径`）；userAttach 不进状态条。
+ * 判定 / partition 单点：`@novel-master/core/chat`。
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   formatStatusChipLabelFromAttachment,
+  partitionComposerChipAttachments,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -23,33 +25,6 @@ export type AttachmentDraftChipsProps = {
   /** 行容器透明。 */
   transparentRow?: boolean;
 };
-
-/** 是否为状态条附件（workplace / user_ops；不含 attach/userAttach）。 */
-export function isComposerStatusAttachment(a: MessageAttachment): boolean {
-  if (a.action === 'userAttach' || a.source === 'attach') {
-    return false;
-  }
-  return a.source === 'workplace' || a.source === 'user_ops';
-}
-
-/** 拆成状态 / attach（attach 仅兼容旧数据过滤，UI 不再渲染）。 */
-export function partitionComposerChipAttachments(
-  attachments: readonly MessageAttachment[],
-): {
-  readonly status: MessageAttachment[];
-  readonly attach: MessageAttachment[];
-} {
-  const status: MessageAttachment[] = [];
-  const attach: MessageAttachment[] = [];
-  for (const a of attachments) {
-    if (isComposerStatusAttachment(a)) {
-      status.push(a);
-    } else if (a.source === 'attach') {
-      attach.push(a);
-    }
-  }
-  return { status, attach };
-}
 
 /**
  * Chip 文案：中文二字 + `:` + path（Core `formatStatusChipLabelFromAttachment`）。

@@ -1,13 +1,11 @@
 /**
- * AttachmentDraftChips：状态 chip 文案与拆分；无 attach 可叉行（T-UI1 / T-ATD1 / T-CHIP1）。
+ * AttachmentDraftChips：状态 chip 文案与壳层 class（判定/partition 见 core T-X2-1）。
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attachmentChipClassName,
   formatAttachmentChipLabel,
-  isComposerStatusAttachment,
-  partitionComposerChipAttachments,
 } from "@/features/chat/AttachmentDraftChips";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 
@@ -93,72 +91,6 @@ test("T-CHIP1: rename 为「重命:<to>」", () => {
       }),
     ),
     "重命:/to.md",
-  );
-});
-
-test("T-ATD1: 仅状态 attachments → 仅 status，无 attach 可叉行", () => {
-  const items = [
-    attach({ source: "workplace", type: "text", path: "/w.md" }),
-    attach({ source: "user_ops", type: "text", path: "/u.md" }),
-  ];
-  const { status, attach: attachOnly } =
-    partitionComposerChipAttachments(items);
-  assert.deepEqual(
-    status.map((a) => a.source),
-    ["workplace", "user_ops"],
-  );
-  assert.equal(attachOnly.length, 0);
-  assert.ok(status.every(isComposerStatusAttachment));
-});
-
-test("T-ATD1: 混有历史 attach 时 partition 仍可拆出，但 UI 不再渲染 attach 行", () => {
-  const items = [
-    attach({ source: "workplace", type: "text", path: "/w.md" }),
-    attach({ source: "attach", type: "text", path: "/a.md" }),
-  ];
-  const { status, attach: attachOnly } =
-    partitionComposerChipAttachments(items);
-  assert.equal(status.length, 1);
-  assert.equal(attachOnly.length, 1);
-  assert.equal(attachOnly[0]?.source, "attach");
-});
-
-test("T-AT1: userAttach / attach 不进状态 chip", () => {
-  assert.equal(
-    isComposerStatusAttachment(
-      attach({
-        source: "attach",
-        type: "text",
-        path: "/a.md",
-        action: "userAttach",
-      }),
-    ),
-    false,
-  );
-  assert.equal(
-    isComposerStatusAttachment(
-      attach({
-        source: "user_ops",
-        type: "text",
-        path: "/a.md",
-        action: "userAttach",
-      }),
-    ),
-    false,
-  );
-});
-
-test("T-CHIP1/T-AN1: annotate 预览进状态 chip（isComposerStatusAttachment）", () => {
-  assert.equal(
-    isComposerStatusAttachment(
-      attach({
-        source: "user_ops",
-        type: "text",
-        path: "/c.md",
-        action: "annotate",
-      }),
-    ),
-    true,
   );
 });
 

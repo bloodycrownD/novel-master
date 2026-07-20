@@ -1,6 +1,8 @@
-import type { RollbackMode } from '@novel-master/core/chat';
+import {
+  isComposerStatusAttachment,
+  type RollbackMode,
+} from '@novel-master/core/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
-import { isComposerStatusAttachment } from './AttachmentDraftChips';
 
 export type ComposerDraftSnapshot = {
   readonly text: string;
