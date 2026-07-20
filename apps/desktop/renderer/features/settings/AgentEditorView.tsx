@@ -70,12 +70,17 @@ import {
 } from "./settings-ui";
 import { Switch } from "@/components/ui/Switch";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
+import { PromptMacroTextarea } from "./PromptMacroTextarea";
+import {
+  PROMPT_INSERTABLE_MACROS,
+  insertTextAtSelection,
+} from "./prompt-macro-input";
+import type { RefObject } from "react";
 
-const DYNAMIC_MACROS = [
-  { label: "$time", token: "{{$time}}" },
-  { label: "$week_cn", token: "{{$week_cn}}" },
-  { label: "$filetree", token: "{{$filetree}}" },
-] as const;
+/** 非当前编辑块共用的空 ref（芯片插入只针对聚焦块）。 */
+const inactiveDynamicTextareaRef: RefObject<HTMLTextAreaElement | null> = {
+  current: null,
+};
 
 type Nav = SettingsNavHandle;
 
@@ -91,19 +96,6 @@ function readAgentNameFromWire(raw: unknown, fallback: string): string {
     }
   }
   return fallback;
-}
-
-function insertAtCursor(
-  value: string,
-  insert: string,
-  textarea: HTMLTextAreaElement | null
-): string {
-  if (textarea == null) {
-    return value + insert;
-  }
-  const start = textarea.selectionStart ?? value.length;
-  const end = textarea.selectionEnd ?? value.length;
-  return value.slice(0, start) + insert + value.slice(end);
 }
 
 export function AgentEditorView({ nav }: { nav: Nav }) {
@@ -1070,22 +1062,20 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             </p>
                           ) : null}
                           <SettingsField label="内容">
-                            <textarea
-                              ref={
+                            <PromptMacroTextarea
+                              textareaRef={
                                 dynamicInsertIndex === index
                                   ? dynamicTextareaRef
-                                  : undefined
+                                  : inactiveDynamicTextareaRef
                               }
                               rows={4}
                               value={block.content}
                               onFocus={() => setDynamicInsertIndex(index)}
                               onKeyDown={handlePromptTextareaKeyDown}
-                              onChange={(e) =>
+                              onChange={(content) =>
                                 setDynamic((prev) =>
                                   prev.map((b, i) =>
-                                    i === index
-                                      ? { ...b, content: e.target.value }
-                                      : b
+                                    i === index ? { ...b, content } : b
                                   )
                                 )
                               }
@@ -1095,29 +1085,52 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             <span className="config-block-card__hint">
                               宏：
                             </span>
-                            {DYNAMIC_MACROS.map((macro) => (
+                            {PROMPT_INSERTABLE_MACROS.map((macro) => (
                               <button
                                 key={macro.token}
                                 type="button"
                                 className="config-dep-chip"
                                 onClick={() => {
                                   setDynamicInsertIndex(index);
+                                  const ta =
+                                    dynamicInsertIndex === index
+                                      ? dynamicTextareaRef.current
+                                      : null;
+                                  const selection =
+                                    ta != null
+                                      ? {
+                                          start:
+                                            ta.selectionStart ??
+                                            block.content.length,
+                                          end:
+                                            ta.selectionEnd ??
+                                            block.content.length,
+                                        }
+                                      : {
+                                          start: block.content.length,
+                                          end: block.content.length,
+                                        };
+                                  const { next, selection: nextSel } =
+                                    insertTextAtSelection(
+                                      block.content,
+                                      selection,
+                                      macro.token
+                                    );
                                   setDynamic((prev) =>
                                     prev.map((b, i) =>
-                                      i === index
-                                        ? {
-                                            ...b,
-                                            content: insertAtCursor(
-                                              b.content,
-                                              macro.token,
-                                              dynamicInsertIndex === index
-                                                ? dynamicTextareaRef.current
-                                                : null
-                                            ),
-                                          }
-                                        : b
+                                      i === index ? { ...b, content: next } : b
                                     )
                                   );
+                                  requestAnimationFrame(() => {
+                                    const el = dynamicTextareaRef.current;
+                                    if (el != null) {
+                                      el.focus();
+                                      el.setSelectionRange(
+                                        nextSel.start,
+                                        nextSel.end
+                                      );
+                                    }
+                                  });
                                 }}
                               >
                                 {macro.label}

@@ -4051,6 +4051,80 @@ html[data-theme="dark"] .chat-batch-bar {
   cursor: not-allowed;
 }
 
+/* Agent 动态区宏 tag（独立于 chat-composer，避免耦合） */
+.prompt-macro__input-stack {
+  position: relative;
+  width: 100%;
+}
+
+.prompt-macro__highlight {
+  width: 100%;
+  min-height: 96px;
+  overflow: auto;
+  padding: 8px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.config-block-card .prompt-macro__highlight {
+  background: var(--surface);
+}
+
+.prompt-macro__token {
+  color: var(--primary);
+  font-weight: 500;
+  background-color: var(--primary-muted);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.prompt-macro__input {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 8px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.prompt-macro__input--overlay {
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  caret-color: var(--text);
+  background: transparent;
+  overflow: auto;
+  resize: none;
+}
+
+.prompt-macro__input--overlay:focus {
+  outline: none;
+  border-color: var(--primary-ring);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
+.prompt-macro__input--overlay:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .chat-composer__typeahead {
   list-style: none;
   margin: 0;
