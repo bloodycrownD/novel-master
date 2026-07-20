@@ -160,7 +160,7 @@ export function ChatComposer({
     void (async () => {
       try {
         const session = await runtimeRef.current.sessions.get(sessionId);
-        const worktree = runtimeRef.current.worktree({
+        const worktree = runtimeRef.current.workplace({
           kind: 'session',
           projectId: session.projectId,
           sessionId,
@@ -228,7 +228,7 @@ export function ChatComposer({
       }
       try {
         const session = await rt.sessions.get(sessionId);
-        const worktree = rt.worktree({
+        const worktree = rt.workplace({
           kind: 'session',
           projectId: session.projectId,
           sessionId,
@@ -343,7 +343,7 @@ export function ChatComposer({
         // 发送 flush 后 pending 空 → 上条应空；以投影为准刷新 chip
         try {
           const session = await runtime.sessions.get(sessionId);
-          const worktree = runtime.worktree({
+          const worktree = runtime.workplace({
             kind: 'session',
             projectId: session.projectId,
             sessionId,

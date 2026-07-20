@@ -50,7 +50,7 @@ jest.mock('../src/components/ui/AppModal', () => {
 
 jest.mock('../src/hooks/useRuntime', () => {
   const runtime = {
-    worktree: () => ({
+    workplace: () => ({
       buildListRows: (...args: unknown[]) => mockBuildListRows(...args),
     }),
   };

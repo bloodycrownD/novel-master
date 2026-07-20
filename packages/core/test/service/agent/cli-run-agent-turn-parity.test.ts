@@ -106,7 +106,7 @@ function makeRuntime(
     userVfsTurn,
     sessionKkv: createSessionKkvService(ctx.conn),
     sessionVfs: (projectId, sessionId) => ctx.sessionVfs(projectId, sessionId),
-    worktree: (_scope) =>
+    workplace: (_scope) =>
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
@@ -115,7 +115,7 @@ function makeRuntime(
           rows: [],
           displayByPath: new Map(),
         }),
-      }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+      }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
   };
 }
 
@@ -329,7 +329,7 @@ describe("cli-run-agent-turn parity", () => {
     const base = makeRuntime(ctx, registry);
     const runtime: AgentTurnRuntimePort = {
       ...base,
-      worktree: (_scope) =>
+      workplace: (_scope) =>
         ({
           renderDisplay: async () => "",
           buildListRows: async () => [],
@@ -345,7 +345,7 @@ describe("cli-run-agent-turn parity", () => {
             ],
             displayByPath: new Map([["/visible.md", "full" as const]]),
           }),
-        }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+        }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     };
 
     await runUntilRunner(

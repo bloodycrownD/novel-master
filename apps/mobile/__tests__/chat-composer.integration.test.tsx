@@ -77,7 +77,7 @@ jest.mock('../src/hooks/useRuntime', () => ({
       setComposerDraftJson: async () => true,
       get: async () => ({ projectId: 'p' }),
     },
-    worktree: () => ({}),
+    workplace: () => ({}),
     appendToolTurnBridge: async () => undefined,
   }),
 }));

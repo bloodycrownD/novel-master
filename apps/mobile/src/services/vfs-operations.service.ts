@@ -94,7 +94,7 @@ async function cleanupWorktreeAfterVfsDelete(
   scope: VfsScope,
   path: string,
 ): Promise<void> {
-  const wt = runtime.worktree(scope);
+  const wt = runtime.workplace(scope);
   await wt.deleteRulesUnderLogicalPrefix(path);
 }
 

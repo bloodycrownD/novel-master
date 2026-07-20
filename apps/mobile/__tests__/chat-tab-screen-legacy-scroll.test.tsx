@@ -55,7 +55,7 @@ const mockRuntime: any = {
   },
   eventOrchestrator: {emit: jest.fn()},
   eventBus: new SimpleEventBus(),
-  worktree: jest.fn(() => ({})),
+  workplace: jest.fn(() => ({})),
   sessionVfs: jest.fn(() => ({})),
   projectVfs: jest.fn(() => ({})),
 };

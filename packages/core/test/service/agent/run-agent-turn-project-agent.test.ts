@@ -74,7 +74,7 @@ function makeRuntime(
     eventOrchestrator: {} as AgentTurnRuntimePort["eventOrchestrator"],
     sessionVfs: () =>
       ({} as ReturnType<AgentTurnRuntimePort["sessionVfs"]>),
-    worktree: () =>
+    workplace: () =>
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
@@ -83,7 +83,7 @@ function makeRuntime(
           rows: [],
           displayByPath: new Map(),
         }),
-      }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+      }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
       set: async () => undefined,

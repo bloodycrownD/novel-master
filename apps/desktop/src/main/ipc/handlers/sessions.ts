@@ -127,7 +127,7 @@ export async function handleSessionsProjectComposerStatus(
   try {
     const rt = await getDesktopRuntime();
     const session = await rt.sessions.get(req.sessionId);
-    const worktree = rt.worktree({
+    const worktree = rt.workplace({
       kind: "session",
       projectId: session.projectId,
       sessionId: req.sessionId,

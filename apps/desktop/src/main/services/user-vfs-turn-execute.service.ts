@@ -28,7 +28,7 @@ export async function executeSessionUserVfsOp(
     throw result.error;
   }
   const session = await rt.sessions.get(sessionId);
-  const worktree = rt.worktree({
+  const worktree = rt.workplace({
     kind: "session",
     projectId: session.projectId,
     sessionId,

@@ -45,7 +45,7 @@ import {
 } from "../../services/vfs-zip.service.js";
 import {
   getVfsForScope,
-  getWorktreeForScope,
+  getWorkplaceForScope,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 import {
@@ -209,7 +209,7 @@ export async function handleVfsDelete(
       await deleteVfsEntry(vfs, req.path, { recursive });
     }
 
-    const wt = getWorktreeForScope(rt, scope);
+    const wt = getWorkplaceForScope(rt, scope);
     await wt.deleteRulesUnderLogicalPrefix(req.path);
 
     pushWorkspaceMutated(req);

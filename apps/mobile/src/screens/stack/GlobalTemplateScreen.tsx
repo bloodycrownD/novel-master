@@ -39,7 +39,7 @@ export function GlobalTemplateScreen() {
       <VfsFileManager
         scope={{kind: 'global'}}
         vfs={runtime.globalVfs()}
-        workplace={runtime.worktree({kind: 'global'})}
+        workplace={runtime.workplace({kind: 'global'})}
         rootPath="/"
         onOpenFile={openFile}
       />

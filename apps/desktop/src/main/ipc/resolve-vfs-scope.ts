@@ -55,9 +55,9 @@ export function getVfsForScope(
   }
 }
 
-export function getWorktreeForScope(
+export function getWorkplaceForScope(
   rt: DesktopNovelMasterRuntime,
   scope: VfsScope,
 ) {
-  return rt.worktree(scope);
+  return rt.workplace(scope);
 }

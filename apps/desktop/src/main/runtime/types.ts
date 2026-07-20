@@ -71,7 +71,7 @@ export interface DesktopNovelMasterRuntime {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
-  worktree(scope: VfsScope): WorkplaceService;
+  workplace(scope: VfsScope): WorkplaceService;
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;

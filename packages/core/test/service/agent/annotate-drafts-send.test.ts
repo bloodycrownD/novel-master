@@ -92,13 +92,13 @@ function makeRuntime(overrides: {
     eventOrchestrator:
       {} as AgentTurnRuntimePort["eventOrchestrator"],
     sessionVfs: () => ({} as never),
-    worktree: () =>
+    workplace: () =>
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ workplaceDisplay: "" }),
         evaluateRuleView: async () => emptyRuleView(),
-      }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+      }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
       set: async () => undefined,

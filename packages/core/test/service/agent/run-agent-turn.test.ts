@@ -108,14 +108,14 @@ function makeRuntime(overrides: {
     ) => infer R
       ? R
       : never),
-    worktree: () =>
+    workplace: () =>
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ workplaceDisplay: "" }),
         evaluateRuleView:
           overrides.evaluateRuleView ?? (async () => emptyRuleView()),
-      }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+      }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
     sessionKkv: {
       get: async () => null,
       set: async () => undefined,

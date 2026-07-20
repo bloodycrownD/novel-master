@@ -54,7 +54,7 @@ export async function buildSessionPromptInput(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   };
-  const wt = runtime.worktree(wtScope);
+  const wt = runtime.workplace(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // assemble → prepare(S0)，与 agent-runner 同源。
   const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(

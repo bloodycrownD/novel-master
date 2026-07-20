@@ -26,9 +26,7 @@ export interface AssembleAgentRunnerDepsInput {
     | "eventBus"
     | "sessionKkv"
   > & {
-    /** Runtime 对外仍为 `worktree()`（C2 再改名）；事件轨 deps 已用 `workplace`。 */
-    readonly worktree?: AgentTurnRuntimePort["worktree"];
-    readonly workplace?: AgentTurnRuntimePort["worktree"];
+    readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly regexConfig?: RegexConfigService;
     readonly savedModelRepo?: SavedModelRepository;
     /** 事件轨 savedModels 别名。 */
@@ -59,7 +57,7 @@ export function assembleAgentRunnerDeps(
     regexConfig: input.runtime.regexConfig,
     eventBus: input.runtime.eventBus,
     sessionKkv: input.runtime.sessionKkv,
-    workplace: (input.runtime.workplace ?? input.runtime.worktree)!,
+    workplace: input.runtime.workplace,
     listAllSessionMessages: () =>
       input.runtime.messages.listBySession(input.toolCtx.sessionId),
   };

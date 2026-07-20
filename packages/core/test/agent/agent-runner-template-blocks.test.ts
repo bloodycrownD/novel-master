@@ -97,7 +97,7 @@ async function seedWorkplaceKkv(
 function runnerDeps(
   deps: Omit<
     CreateAgentRunnerDeps,
-    "eventBus" | "sessionKkv" | "worktree" | "savedModels"
+    "eventBus" | "sessionKkv" | "workplace" | "savedModels"
   > &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels" | "sessionKkv">>,
 ): CreateAgentRunnerDeps {

@@ -94,7 +94,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
     getCurrentRegexGroupId(): Promise<string | null | undefined>;
   };
   sessionVfs(projectId: string, sessionId: string): VfsService;
-  worktree(scope: VfsScope): WorkplaceService;
+  workplace(scope: VfsScope): WorkplaceService;
 }
 
 export class AgentTurnError extends Error {
@@ -184,7 +184,7 @@ async function materializeWorkplaceAttachments(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   };
-  const view = await runtime.worktree(wtScope).evaluateRuleView();
+  const view = await runtime.workplace(wtScope).evaluateRuleView();
   const live = ruleViewToSnapshotEntries(view);
   const cacheKeys = await runtime.sessionKkv.listKeys(
     scope.sessionId,

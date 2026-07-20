@@ -146,7 +146,7 @@ const getDirRule = jest.fn(async () => null);
 const setDirRule = jest.fn(async () => undefined);
 
 const mockRuntime = {
-  worktree: jest.fn(),
+  workplace: jest.fn(),
   sessionKkv: {
     clearSession: jest.fn(async () => undefined),
     listKeys: jest.fn(async () => []),

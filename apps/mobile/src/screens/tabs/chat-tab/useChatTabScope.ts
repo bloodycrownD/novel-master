@@ -352,7 +352,7 @@ export function useChatTabScope({
   const sessionWorktree = useMemo(
     () =>
       projectId != null && sessionId != null
-        ? runtime.worktree({
+        ? runtime.workplace({
             kind: 'session',
             projectId,
             sessionId,
@@ -367,7 +367,7 @@ export function useChatTabScope({
   const projectWorktree = useMemo(
     () =>
       projectId != null
-        ? runtime.worktree({kind: 'project', projectId})
+        ? runtime.workplace({kind: 'project', projectId})
         : null,
     [runtime, projectId],
   );

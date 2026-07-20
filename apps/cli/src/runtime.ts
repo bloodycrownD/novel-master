@@ -116,7 +116,7 @@ export interface NovelMasterRuntime {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
-  worktree(scope: VfsScope): WorkplaceService;
+  workplace(scope: VfsScope): WorkplaceService;
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
@@ -245,7 +245,7 @@ export async function createNovelMasterRuntime(
         projectId,
         sessionId,
       }),
-    worktree: (scope) => createWorkplaceService(conn, scope),
+    workplace: (scope) => createWorkplaceService(conn, scope),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

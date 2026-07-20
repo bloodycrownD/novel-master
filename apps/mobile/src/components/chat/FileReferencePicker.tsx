@@ -75,7 +75,7 @@ export function FileReferencePicker({
     setLoading(true);
     setError(undefined);
     try {
-      const wt = runtime.worktree({
+      const wt = runtime.workplace({
         kind: 'session',
         projectId,
         sessionId,

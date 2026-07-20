@@ -163,7 +163,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
         projectId,
         sessionId,
       }),
-    worktree: (scope: VfsScope) => createWorkplaceService(conn, scope),
+    workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

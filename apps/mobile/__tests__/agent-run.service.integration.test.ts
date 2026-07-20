@@ -38,7 +38,7 @@ function baseRuntime(overrides: Partial<any> = {}) {
       clearSession: async () => undefined,
       listKeys: async () => [],
     },
-    worktree: () => ({
+    workplace: () => ({
       materializePersistBlock: async () => ({ workplaceDisplay: '' }),
     }),
     modelRequests: {},

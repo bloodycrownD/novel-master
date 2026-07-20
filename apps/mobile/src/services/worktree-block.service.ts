@@ -24,9 +24,9 @@ export async function assembleWorkplaceForMobile(
   };
   const { workplaceDisplay } = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: runtime.sessionKkv,
-    workplace: runtime.worktree(wtScope),
+    workplace: runtime.workplace(wtScope),
     vfs: runtime.sessionVfs(scope.projectId, scope.sessionId),
-    layout: { persist: [{ type: 'worktree', name: 'canon' }] },
+    layout: { workplace: true },
   });
   return { workplaceDisplay, capturedAtMs: Date.now() };
 }

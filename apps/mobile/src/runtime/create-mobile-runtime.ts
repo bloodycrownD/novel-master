@@ -132,7 +132,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       createScopedVfsService(conn, { kind: 'project', projectId }),
     sessionVfs: (projectId, sessionId) =>
       createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
-    worktree: (scope: VfsScope) => createWorkplaceService(conn, scope),
+    workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

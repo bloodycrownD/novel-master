@@ -24,7 +24,7 @@ export async function runPrompt(
     NovelMasterRuntime,
     | "messages"
     | "scope"
-    | "worktree"
+    | "workplace"
     | "sessionKkv"
     | "sessionVfs"
     | "state"
@@ -65,7 +65,7 @@ export async function runPrompt(
   const vfs = rt.sessionVfs(projectId, sessionId);
   const { workplaceDisplay } = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: rt.sessionKkv,
-    workplace: rt.worktree(wtScope),
+    workplace: rt.workplace(wtScope),
     vfs,
     layout,
   });
