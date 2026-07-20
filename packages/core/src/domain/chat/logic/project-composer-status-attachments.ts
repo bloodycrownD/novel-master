@@ -5,6 +5,7 @@
  */
 
 import type { MessageAttachment } from "../model/message-attachment.schema.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import {
   workplaceAttachmentsFromRuleDelta,
@@ -18,6 +19,11 @@ export type ProjectComposerStatusAttachmentsDeps = {
   readonly sessionKkv: {
     listKeys(sessionId: string, domain: string): Promise<string[]>;
   };
+  /**
+   * 常驻工作区开关（与 assembleWorkplaceDisplay 同源）。
+   * `workplace !== true` 时不投影 workplace 差集；user_ops 仍投影。
+   */
+  readonly layout: Pick<AgentPromptLayout, "workplace">;
   /** live 规则可见 path；现网可由 evaluateRuleView → ruleViewToSnapshotEntries。 */
   readonly loadLiveWorkplacePaths: () => Promise<
     readonly WorkplaceLivePath[]
@@ -55,11 +61,16 @@ export function replaceComposerStatusAttachments(
 
 /**
  * session 真源 → Composer 状态条 `MessageAttachment[]`（workplace + user_ops）。
+ * 关常驻（`layout.workplace !== true`）时不加载/不投影 workplace 源。
  */
 export async function projectComposerStatusAttachments(
   sessionId: string,
   deps: ProjectComposerStatusAttachmentsDeps,
 ): Promise<MessageAttachment[]> {
+  if (deps.layout.workplace !== true) {
+    const userOpsActions = await deps.previewUserOpsActions(sessionId);
+    return buildComposerStatusAttachments([], [], userOpsActions);
+  }
   const [live, cacheKeys, userOpsActions] = await Promise.all([
     deps.loadLiveWorkplacePaths(),
     deps.sessionKkv.listKeys(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE),

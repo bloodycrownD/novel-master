@@ -1,6 +1,7 @@
 /**
  * Composer 状态条投影：组装 runtime deps → projectComposerStatusAttachments。
  */
+import { resolveAgentForProject } from '@novel-master/core/agent';
 import {
   projectComposerStatusAttachments,
   type MessageAttachment,
@@ -18,8 +19,14 @@ export async function projectComposerStatusForSession(
   workplace: WorkplaceService,
   sessionId: string,
 ): Promise<MessageAttachment[]> {
+  const session = await runtime.sessions.get(sessionId);
+  const { definition } = await resolveAgentForProject(
+    runtime,
+    session.projectId,
+  );
   return projectComposerStatusAttachments(sessionId, {
     sessionKkv: runtime.sessionKkv,
+    layout: definition.prompts,
     loadLiveWorkplacePaths: async () => {
       const view = await workplace.evaluateRuleView();
       return ruleViewToSnapshotEntries(view);

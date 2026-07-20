@@ -15,6 +15,8 @@
  * ## 契约
  * - App `attachments` 入参仅 `source===attach`；误传 workplace/`user_ops` 预览一律丢弃；
  *   `@` 扫描仍由 Core 合并；禁止 composer status 原样当 payload。
+ * - `prompts.workplace !== true` 时 materialize 返回空（与 assemble 前缀闸门一致；user_ops /
+ *   annotate / `@path` 不受影响）。
  * - `hasInput` / `shouldAppendNewUser` 在 materialize / annotateDrafts 非空时为真。
  * - 有 workplace 差集时禁止 `allowResumeWithoutInput` 纯 resume（差集=新输入）。
  * - 有 `annotateDrafts` 时本轮视 `allowResumeWithoutInput` 为 false（禁空续跑 re-append）。
@@ -174,11 +176,16 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
 /**
  * 与状态条 workplace 半边同源：evaluateRuleView → ruleViewToSnapshotEntries +
  * file_cache keys → workplaceAttachmentsFromRuleDelta。
+ * `layout.workplace !== true` 时短路空数组（关常驻不发规则差集）。
  */
 async function materializeWorkplaceAttachments(
   runtime: AgentTurnRuntimePort,
   scope: AgentTurnScope,
+  layout: Pick<AgentDefinition["prompts"], "workplace">,
 ): Promise<readonly MessageAttachment[]> {
+  if (layout.workplace !== true) {
+    return [];
+  }
   const wtScope: VfsScope = {
     kind: "session",
     projectId: scope.projectId,
@@ -226,8 +233,22 @@ export async function runAgentTurn(
     );
   }
 
+  // 先解析 Agent：materialize 须读 prompts.workplace（与 assemble 前缀闸门一致）
+  stage = "resolve-agent";
+  const definition =
+    options?.definitionOverride ??
+    (
+      await mapResolveError(() =>
+        resolveAgentForProject(runtime, scope.projectId),
+      )
+    ).definition;
+
   stage = "materialize-workplace";
-  const workplaceAtts = await materializeWorkplaceAttachments(runtime, scope);
+  const workplaceAtts = await materializeWorkplaceAttachments(
+    runtime,
+    scope,
+    definition.prompts,
+  );
   const hasWorkplaceDelta = workplaceAtts.length > 0;
 
   const hasPending =
@@ -262,13 +283,6 @@ export async function runAgentTurn(
     }
   }
 
-  const definition =
-    options?.definitionOverride ??
-    (
-      await mapResolveError(() =>
-        resolveAgentForProject(runtime, scope.projectId),
-      )
-    ).definition;
   stage = "resolve-model";
   const { savedModelId, workspaceModelId } = await mapResolveError(() =>
     resolveApplicationModelIdForRun(runtime, definition, options?.cliModelId),

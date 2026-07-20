@@ -153,6 +153,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
       sessionKkv: {
         listKeys: async () => [],
       },
+      layout: { workplace: true },
       loadLiveWorkplacePaths: async () => [
         { path: "/w.md", status: "full" },
       ],
@@ -178,6 +179,56 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         action: "write",
       },
     ]);
+  });
+
+  it("A7: workplace=false → 无 workplace 状态 chip；user_ops 仍投影", async () => {
+    let loadLiveCalled = false;
+    let listKeysCalled = false;
+    const out = await projectComposerStatusAttachments("sess-off", {
+      sessionKkv: {
+        listKeys: async () => {
+          listKeysCalled = true;
+          return [];
+        },
+      },
+      layout: { workplace: false },
+      loadLiveWorkplacePaths: async () => {
+        loadLiveCalled = true;
+        return [{ path: "/w.md", status: "full" }];
+      },
+      previewUserOpsActions: async () => [
+        { action: "write" as const, path: "/u.md" },
+      ],
+    });
+    assert.equal(loadLiveCalled, false, "关常驻不得 loadLiveWorkplacePaths");
+    assert.equal(listKeysCalled, false, "关常驻不得读 file_cache keys");
+    assert.deepEqual(out, [
+      {
+        name: "/u.md",
+        source: "user_ops",
+        type: "text",
+        content: null,
+        path: "/u.md",
+        action: "write",
+      },
+    ]);
+    assert.equal(
+      out.some((a) => a.source === "workplace"),
+      false,
+      "关常驻不得投影 workplace chip",
+    );
+  });
+
+  it("A7: layout.workplace 缺省 → 同 false，无 workplace chip", async () => {
+    const out = await projectComposerStatusAttachments("sess-default", {
+      sessionKkv: { listKeys: async () => [] },
+      layout: {},
+      loadLiveWorkplacePaths: async () => [
+        { path: "/w.md", status: "full" },
+      ],
+      previewUserOpsActions: async () => [],
+    });
+    assert.deepEqual(out, []);
   });
 
   it("T-SR2b: 落库含 source:workplace；prepare hydrate 后 workplace chip 清空", async () => {
@@ -250,6 +301,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     );
     const projected = await projectComposerStatusAttachments(session.id, {
       sessionKkv: sk,
+      layout: { workplace: true },
       loadLiveWorkplacePaths: async () => live,
       previewUserOpsActions: async () => [],
     });

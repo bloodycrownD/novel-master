@@ -1,6 +1,7 @@
 /**
  * Desktop Composer 状态条投影（main 进程）。
  */
+import { resolveAgentForProject } from "@novel-master/core/agent";
 import {
   projectComposerStatusAttachments,
   type MessageAttachment,
@@ -17,8 +18,11 @@ export async function projectComposerStatusForSession(
   workplace: WorkplaceService,
   sessionId: string,
 ): Promise<MessageAttachment[]> {
+  const session = await rt.sessions.get(sessionId);
+  const { definition } = await resolveAgentForProject(rt, session.projectId);
   return projectComposerStatusAttachments(sessionId, {
     sessionKkv: rt.sessionKkv,
+    layout: definition.prompts,
     loadLiveWorkplacePaths: async () => {
       const view = await workplace.evaluateRuleView();
       return ruleViewToSnapshotEntries(view);

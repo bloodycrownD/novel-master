@@ -49,6 +49,12 @@ const sampleDefinition: AgentDefinition = {
   model: "provider:model",
 };
 
+/** 开启常驻工作区：materialize / 差集用例用。 */
+const workplaceOnDefinition: AgentDefinition = {
+  ...sampleDefinition,
+  prompts: { persist: [], dynamic: [], workplace: true },
+};
+
 /** 空规则视图：materialize 无差集。 */
 function emptyRuleView() {
   return { rows: [] as const, displayByPath: new Map() };
@@ -554,6 +560,7 @@ describe("runAgentTurn", () => {
     });
     try {
       await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+        definitionOverride: workplaceOnDefinition,
         attachments: [
           {
             name: "preview-wp",
@@ -628,6 +635,7 @@ describe("runAgentTurn", () => {
     });
     try {
       await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+        definitionOverride: workplaceOnDefinition,
         allowResumeWithoutInput: true,
       });
     } catch {
@@ -669,6 +677,7 @@ describe("runAgentTurn", () => {
     });
     try {
       await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+        definitionOverride: workplaceOnDefinition,
         allowAssistantContinue: true,
         maxStepsOverride: 1,
       });
@@ -683,6 +692,39 @@ describe("runAgentTurn", () => {
       false,
       "不得新增空 user",
     );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("A7: workplace=false → 即便有规则差集也不 materialize", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    let evaluateCalled = false;
+    let appendCount = 0;
+    const runtime = makeRuntime({
+      evaluateRuleView: async () => {
+        evaluateCalled = true;
+        return ruleViewWithFile("/should-not-send.md");
+      },
+      listKeys: async () => [],
+      append: async () => {
+        appendCount += 1;
+        return { id: "m-a7" };
+      },
+    });
+    await assert.rejects(
+      () =>
+        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+          // sampleDefinition：workplace 缺省 false
+          definitionOverride: sampleDefinition,
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof AgentTurnError);
+        assert.equal(err.message, "消息不能为空");
+        return true;
+      },
+    );
+    assert.equal(evaluateCalled, false, "关常驻不得 evaluateRuleView");
+    assert.equal(appendCount, 0, "关常驻不得因差集 append");
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 

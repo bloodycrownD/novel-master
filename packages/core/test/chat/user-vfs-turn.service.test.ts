@@ -880,6 +880,7 @@ describe("UserVfsTurnService", () => {
 
     const statusDeps = {
       sessionKkv: ctx.sessionKkv,
+      layout: { workplace: true as const },
       loadLiveWorkplacePaths: async () => [] as const,
       previewUserOpsActions: (id: string) =>
         userVfsTurn.previewUserOpsActions(id),
