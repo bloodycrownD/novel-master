@@ -4,6 +4,12 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### 变更
+
+- **Agent 升级提示**：旧版配置中的 `type:worktree` 提示块升级后不再自动开启「常驻工作区」；若仍需该能力，请在 Agent 设置中手动打开「常驻工作区」开关
+
 ## [1.4.02] - 2026-07-20
 
 ### 修复
