@@ -16,6 +16,7 @@
     "format:check": "npm run format:check --workspaces --if-present",
     "test:core:fast": "npm run test:fast -w @novel-master/core",
     "check:workplace-rename": "node scripts/check-workplace-rename-gate.mjs",
+    "check:ct-ui-no-state": "node scripts/check-ct-ui-no-state.mjs",
     "clean": "npm run clean --workspaces --if-present",
     "link:cli": "npm run build -w @novel-master/cli && npm link -w @novel-master/cli",
     "mobile:start": "npm run start -w @novel-master/mobile",

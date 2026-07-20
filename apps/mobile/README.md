@@ -188,6 +188,20 @@ CT / RD 视图主写法为 **Preact + TSX**（不上 `htm` 主路径）；`code-
 
 **壳债 vs 刻意命令式（最短）：** CT 菜单 overlay（`#menu-backdrop` + `#context-menu`）已声明式——`MenuOverlay` 经 main `render` 到 `#menu-portal`（**壳债已清**）。流式 body 增量 `createElement` / `insertAdjacentHTML`（P0-2）为**非债**，禁止顺手 Preact 化。tool-invoking「生成中」条亦归 Preact（`StreamTail` → `ToolInvokingBar`）；runtime 只改 state 并 `renderRows`，禁止 bubble 内 createElement 插条。
 
+### E2：ui 禁值导入 state（新组件 / 既有渐进）
+
+Chat Transcript `webview/ui/**` 对 `runtime/state` 的纪律（对齐 post-1.3.14-large-debt-remediation）：
+
+| 规则 | 定案 |
+|------|------|
+| **初始 allowlist（值导入 `state`）** | `{StreamTail, RowList, MessageRow}` |
+| 路径 | `ui/stream/StreamTail.tsx`、`ui/render/RowList.tsx`、`ui/render/MessageRow.tsx`（含 StreamTail 内 `StreamBodyHost`，同文件） |
+| type-only | `import type { … } from '…/state'` **允许**（不占白名单） |
+| **新** `ui/**` 组件 | **禁止**值导入 `state`；经 props / runtime 门面拿数据 |
+| 门禁 | `npm run check:ct-ui-no-state`（根或 `-w @novel-master/mobile`）→ `scripts/check-ct-ui-no-state.mjs`；白名单外新直读 → exit 1 |
+
+既有三文件可渐进 props 化并缩小白名单（不挡本门禁开启）。勿把新直读加进白名单外文件。
+
 Spec: `.apm/kb/docs/Iterations/mobile-webview-preact-htm/spec.md` · 壳债：`features/webview-imperative-shell-debt/spec.md`
 
 **最短路径（改真源 → 真机生效）：**

@@ -5,6 +5,10 @@
  * 防 wipe：StreamBodyHost.shouldComponentUpdate === false，
  * 壳 re-render（相位条、bubble class）不得销毁 runtime 已写入的 body DOM。
  * 稳定 key 保证 thinking 段插入时 text host 不 remount。
+ *
+ * E2 allowlist：本文件（含 StreamBodyHost）可值导入 `state`；
+ * 新 ui 组件禁直读——见 apps/mobile/README.md「E2：ui 禁值导入 state」、
+ * scripts/check-ct-ui-no-state.mjs。
  */
 import { Component } from 'preact';
 import type { ComponentChildren } from 'preact';

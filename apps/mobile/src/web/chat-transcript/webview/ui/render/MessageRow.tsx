@@ -1,5 +1,8 @@
 /**
  * 普通消息行（user / assistant）。
+ *
+ * E2 allowlist：可值导入 `state`；新 ui 组件禁直读——
+ * 见 apps/mobile/README.md「E2：ui 禁值导入 state」、scripts/check-ct-ui-no-state.mjs。
  */
 import type { MessageRow as MessageRowModel } from '../../runtime/state/state';
 import { state } from '../../runtime/state/state';

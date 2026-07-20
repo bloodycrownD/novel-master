@@ -12,6 +12,7 @@
     "pretest": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 && npm run build:webview",
     "build:webview": "node scripts/build-webview.mjs",
     "build:webview:native": "node scripts/build-webview.mjs --copy-native",
+    "check:ct-ui-no-state": "node ../../scripts/check-ct-ui-no-state.mjs",
     "test": "jest",
     "prebuild": "npm run build -w @novel-master/core",
     "build": "tsc --noEmit -p tsconfig.build.json",

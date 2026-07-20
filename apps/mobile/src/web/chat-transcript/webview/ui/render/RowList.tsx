@@ -1,5 +1,8 @@
 /**
  * 行列表根：加载更早 / 消息行 / 流式尾 / 空态。
+ *
+ * E2 allowlist：可值导入 `state`；新 ui 组件禁直读——
+ * 见 apps/mobile/README.md「E2：ui 禁值导入 state」、scripts/check-ct-ui-no-state.mjs。
  */
 import type { ComponentChildren } from 'preact';
 import { state } from '../../runtime/state/state';
