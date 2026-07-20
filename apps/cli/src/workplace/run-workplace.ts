@@ -20,9 +20,13 @@ export async function runWorkplace(
       const rows = await service.buildListRows();
       console.log("kind\tpath\trule_state\tinclusion_mode\tdisplay_state");
       for (const row of rows) {
-        console.log(
-          `${row.kind}\t${row.path}\t${row.ruleState}\t${row.inclusionMode}\t${row.displayState}`,
-        );
+        if (row.kind === "dir") {
+          console.log(`${row.kind}\t${row.path}\t${row.ruleState}\t\t`);
+        } else {
+          console.log(
+            `${row.kind}\t${row.path}\t\t${row.inclusionMode}\t${row.displayState}`,
+          );
+        }
       }
       return;
     }
