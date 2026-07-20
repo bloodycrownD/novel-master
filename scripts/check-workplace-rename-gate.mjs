@@ -4,7 +4,7 @@
  * 禁止：
  * - `nm:worktree`
  * - `@novel-master/core/worktree`
- * - `worktree_dir_rule`（migration 旧名探测 / legacy fixture / 升级测除外）
+ * - `worktree_dir_rule` / `worktree_file_rule`（migration 旧名探测 / legacy fixture / 升级测除外）
  * - GUI（apps）内「工作树」指代本能力
  *
  * 要求仍存在：`workspace`、`$filetree`、`source:"workplace"`（或单引号变体）
@@ -43,8 +43,8 @@ const TEXT_EXT = new Set([
   ".html",
 ]);
 
-/** worktree_dir_rule 允许出现的相对路径（posix）。 */
-const WORKTREE_DIR_RULE_ALLOW = [
+/** worktree_dir_rule / worktree_file_rule 允许出现的相对路径（posix）。 */
+const WORKTREE_LEGACY_TABLE_ALLOW = [
   "packages/core/src/bootstrap/schema-migrations/rename-worktree-tables-to-workplace-v1.ts",
   "packages/core/test/bootstrap/helpers/legacy-db-fixtures.ts",
   "packages/core/test/bootstrap/schema-migrations.test.ts",
@@ -144,9 +144,15 @@ function main() {
       }
       if (
         text.includes("worktree_dir_rule") &&
-        !WORKTREE_DIR_RULE_ALLOW.includes(rel)
+        !WORKTREE_LEGACY_TABLE_ALLOW.includes(rel)
       ) {
         violations.push(`${rel}: 含 worktree_dir_rule（非允许探测/fixture）`);
+      }
+      if (
+        text.includes("worktree_file_rule") &&
+        !WORKTREE_LEGACY_TABLE_ALLOW.includes(rel)
+      ) {
+        violations.push(`${rel}: 含 worktree_file_rule（非允许探测/fixture）`);
       }
       if (rel.startsWith("apps/") && text.includes("工作树")) {
         violations.push(`${rel}: GUI 含「工作树」`);
@@ -173,7 +179,7 @@ function main() {
   console.log("workplace rename gate OK");
   console.log("  retained: workspace, $filetree, source:\"workplace\"");
   console.log(
-    "  forbidden absent: nm:worktree, @novel-master/core/worktree, worktree_dir_rule (non-allow), GUI 工作树",
+    "  forbidden absent: nm:worktree, @novel-master/core/worktree, worktree_dir_rule / worktree_file_rule (non-allow), GUI 工作树",
   );
 }
 

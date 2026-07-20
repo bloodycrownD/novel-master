@@ -157,13 +157,14 @@ export function ChatComposer({
     });
   }, [sessionId, onAttachmentsChange]);
 
-  // 仅 append 成功推送后清 annotate（禁止 started:true 清）
+  // 仅 append 成功推送后清 annotate（禁止 started:true 清）。
+  // 始终按 payload.sessionId 清 store，避免切会话后漏清、再回来重带旧批注。
   useEffect(() => {
     return onUserMessageAppended((payload) => {
+      clearChatAnnotateDrafts(payload.sessionId);
       if (payload.sessionId !== sessionId) {
         return;
       }
-      clearChatAnnotateDrafts(sessionId);
       onAttachmentsChange(
         attachmentsRef.current.filter((a) => a.action !== "annotate"),
       );

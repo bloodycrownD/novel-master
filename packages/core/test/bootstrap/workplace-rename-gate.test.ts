@@ -12,7 +12,7 @@ const repoRoot = join(here, "../../../..");
 const gateScript = join(repoRoot, "scripts/check-workplace-rename-gate.mjs");
 
 describe("T-R5 workplace rename gate", () => {
-  it("工程源码无 nm:worktree / core/worktree / 非允许 worktree_dir_rule / GUI 工作树", () => {
+  it("工程源码无 nm:worktree / core/worktree / 非允许 worktree_dir_rule|file_rule / GUI 工作树", () => {
     const result = spawnSync(process.execPath, [gateScript], {
       cwd: repoRoot,
       encoding: "utf8",
