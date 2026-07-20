@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import { buildUserOpsAttachmentFromEntry } from "@/domain/chat/logic/build-user-ops-attachment.js";
+import {
+  refreshUserVfsUnifiedToolTurnSnapshot,
+  resetUserVfsUnifiedToolTurnSnapshotForTests,
+} from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import { buildUserVfsSaveWriteActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import {
   AgentTurnError,
   runAgentTurn,
@@ -8,10 +14,16 @@ import {
 } from "@/service/agent/logic/run-agent-turn.js";
 import { prepareUserVfsTurnForAgentRun } from "@/service/agent/logic/prepare-user-vfs-turn-for-agent-run.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import {
-  refreshUserVfsUnifiedToolTurnSnapshot,
-  resetUserVfsUnifiedToolTurnSnapshotForTests,
-} from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+
+/** 与生产 flush 同源：`buildUserOpsAttachmentFromEntry`（含 path/action）。 */
+function flushWriteUserOpsAttachment(path: string, content = "") {
+  return buildUserOpsAttachmentFromEntry({
+    action: "write",
+    path,
+    xml: buildUserVfsSaveWriteActionXml(path, "new-file", content),
+  });
+}
+
 function mockUserVfsTurn(overrides: {
   readonly flushPendingUserVfsTurns?: UserVfsTurnService["flushPendingUserVfsTurns"];
   readonly hasPendingTurns?: UserVfsTurnService["hasPendingTurns"];
@@ -249,15 +261,7 @@ describe("runAgentTurn", () => {
           order.push("flush");
           return {
             flushed: true,
-            attachments: [
-              {
-                name: "write",
-                source: "user_ops",
-                type: "text",
-                content: '<action name="write">\n{"path":"/x.md","content":""}\n</action>',
-
-              },
-            ],
+            attachments: [flushWriteUserOpsAttachment("/x.md")],
           };
         },
       }),
@@ -521,10 +525,18 @@ describe("runAgentTurn", () => {
   it("T-SR1：丢弃预览 workplace/user_ops；materialize 落库 source:workplace；user_ops 来自 flush", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     let appendedOpts:
-      | { attachments?: readonly { source?: string; path?: string; content?: string | null }[] }
+      | {
+          attachments?: readonly {
+            source?: string;
+            path?: string;
+            content?: string | null;
+            action?: string;
+            name?: string;
+          }[];
+        }
       | undefined;
-    const flushContent =
-      '<action name="write">\n{"path":"/ops.md","content":""}\n</action>';
+    // 同 path 与 workplace 并存：直 concat 不去重
+    const flushAtt = flushWriteUserOpsAttachment("/delta.md");
     const runtime = makeRuntime({
       evaluateRuleView: async () => ruleViewWithFile("/delta.md"),
       listKeys: async () => [],
@@ -532,14 +544,7 @@ describe("runAgentTurn", () => {
         hasPendingTurns: async () => true,
         flushPendingUserVfsTurns: async () => ({
           flushed: true,
-          attachments: [
-            {
-              name: "write",
-              source: "user_ops",
-              type: "text",
-              content: flushContent,
-            },
-          ],
+          attachments: [flushAtt],
         }),
       }),
       append: async (_sid, _role, _content, opts) => {
@@ -587,7 +592,15 @@ describe("runAgentTurn", () => {
     );
     const ops = atts.filter((a) => a.source === "user_ops");
     assert.equal(ops.length, 1);
-    assert.equal(ops[0]?.content, flushContent);
+    assert.equal(ops[0]?.path, "/delta.md");
+    assert.equal(ops[0]?.action, "write");
+    assert.equal(ops[0]?.name, "/delta.md");
+    assert.equal(ops[0]?.content, flushAtt.content);
+    assert.ok(
+      atts.some((a) => a.source === "workplace" && a.path === "/delta.md") &&
+        atts.some((a) => a.source === "user_ops" && a.path === "/delta.md"),
+      "同 path workplace+user_ops 须并存",
+    );
     assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
@@ -699,19 +712,12 @@ describe("runAgentTurn", () => {
         hasPendingTurns: async () => true,
         flushPendingUserVfsTurns: async () => ({
           flushed: true,
-          attachments: [
-            {
-              name: "write",
-              source: "user_ops",
-              type: "text",
-              content: '<action name="write">\n{"path":"/x.md","content":""}\n</action>',
-            },
-          ],
+          attachments: [flushWriteUserOpsAttachment("/x.md")],
         }),
       }),
       append: async (_sid, _role, _content, opts) => {
         reAppendedAtts = opts?.attachments as
-          | readonly { source?: string; path?: string }[]
+          | readonly { source?: string; path?: string; action?: string }[]
           | undefined;
         return { id: "u-re" };
       },
@@ -748,7 +754,12 @@ describe("runAgentTurn", () => {
     const atts = reAppendedAtts ?? [];
     assert.ok(atts.some((a) => a.source === "attach" && a.path === "/prior.md"));
     assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
-    assert.ok(atts.some((a) => a.source === "user_ops"));
+    assert.ok(
+      atts.some(
+        (a) =>
+          a.source === "user_ops" && a.path === "/x.md" && a.action === "write",
+      ),
+    );
     assert.ok(
       atts.some((a) => a.source === "workplace" && a.path === "/delta.md"),
     );
