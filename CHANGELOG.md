@@ -6,9 +6,31 @@
 
 ## [Unreleased]
 
+## [1.4.03] - 2026-07-21
+
+### 新增
+
+- **Mobile 文件编辑器**：会话内 FileEditor 改为 WebView + CodeMirror；编辑聚焦双态更稳（语法高亮、大文件编辑体验贴近 Desktop）
+- **提示词宏编辑（Desktop / Mobile）**：动态区宏着色、原子删除；Desktop `PromptMacroTextarea` 叠层宏 Tag，编辑观感与 Mobile 对齐
+
 ### 变更
 
+- **「工作树」→「工作区」收口**：产品文案、CLI 子命令、IPC 与库表统一为 `workplace`；旧库自动 rename migration；示例与旧宏提示去掉「工作树」措辞
 - **Agent 升级提示**：旧版配置中的 `type:worktree` 提示块升级后不再自动开启「常驻工作区」；若仍需该能力，请在 Agent 设置中手动打开「常驻工作区」开关
+- **常驻工作区开关**：Agent 编辑器「常驻工作区」与 `input.workplace` 全量接线（双端顶卡共用）
+
+### 修复
+
+- **关闭常驻工作区**：不再 materialize 差集、也不再露出对应状态 chip，避免「开关已关仍像在用常驻区」
+- **未配置 Agent 时仍可改工作区规则**：状态条投影在无 Agent 时按「常驻关闭」处理，不再把规则保存打成失败
+- **Desktop Composer**：正文在 append 成功后再清空，避免发送失败却已清空输入
+- **Desktop 批注**：切会话后仍按 `sessionId` 清空批注草稿，避免串会话残留
+- **CLI**：session workplace 展示与 Agent 常驻前缀同源 assemble，避免 CLI 与 App 口径不一致
+- 若干 workplace 校验文案、chip 回滚判定、Mobile 构建等小项
+
+### 维护
+
+- Composer / 批注 / `@路径` / chip 判定等纯逻辑单点进 core，Desktop renderer 经 `@shared` 再导出并加 eslint 门禁；Mobile CT `ui` 禁新组件直读 `state`；用户无感
 
 ## [1.4.02] - 2026-07-20
 

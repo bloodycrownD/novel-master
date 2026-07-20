@@ -93,7 +93,7 @@ android {
             ?: 1
         def ciVersionName = findProperty("versionName")?.toString()
             ?: System.getenv("VERSION_NAME")
-            ?: "1.4.02"
+            ?: "1.4.03"
         versionCode ciVersionCode
         versionName ciVersionName
     }

@@ -1,6 +1,6 @@
 {
   "name": "@novel-master/desktop",
-  "version": "1.4.02",
+  "version": "1.4.03",
   "private": true,
   "type": "module",
   "main": "./dist/src/main/main.js",

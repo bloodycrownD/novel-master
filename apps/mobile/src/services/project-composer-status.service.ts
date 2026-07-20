@@ -1,7 +1,10 @@
 /**
  * Composer 状态条投影：组装 runtime deps → projectComposerStatusAttachments。
  */
-import { resolveAgentForProject } from '@novel-master/core/agent';
+import {
+  AgentRunResolveError,
+  resolveAgentForProject,
+} from '@novel-master/core/agent';
 import {
   projectComposerStatusAttachments,
   type MessageAttachment,
@@ -13,6 +16,9 @@ import {
 import { applyComposerStatusAttachmentsReplace } from '../storage/chat-composer-draft';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 
+/** 无可用 Agent 时视为关常驻：不投影 workplace 差集（规则保存仍须成功）。 */
+const LAYOUT_WORKPLACE_OFF = { workplace: false } as const;
+
 /** session 真源 → 状态条 attachments（workplace + user_ops）。 */
 export async function projectComposerStatusForSession(
   runtime: MobileNovelMasterRuntime,
@@ -20,13 +26,21 @@ export async function projectComposerStatusForSession(
   sessionId: string,
 ): Promise<MessageAttachment[]> {
   const session = await runtime.sessions.get(sessionId);
-  const { definition } = await resolveAgentForProject(
-    runtime,
-    session.projectId,
-  );
+  let layout: { readonly workplace?: boolean } = LAYOUT_WORKPLACE_OFF;
+  try {
+    const { definition } = await resolveAgentForProject(
+      runtime,
+      session.projectId,
+    );
+    layout = definition.prompts;
+  } catch (err) {
+    if (!(err instanceof AgentRunResolveError)) {
+      throw err;
+    }
+  }
   return projectComposerStatusAttachments(sessionId, {
     sessionKkv: runtime.sessionKkv,
-    layout: definition.prompts,
+    layout,
     loadLiveWorkplacePaths: async () => {
       const view = await workplace.evaluateRuleView();
       return ruleViewToSnapshotEntries(view);
