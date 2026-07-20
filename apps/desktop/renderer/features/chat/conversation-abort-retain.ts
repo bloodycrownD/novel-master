@@ -2,7 +2,7 @@ import type {
   AgentRunFinishedPayload,
   AgentStepCommittedPayload,
 } from "@shared/agent-event-types";
-import { shouldApplyTranscriptReload } from "@novel-master/core/agent";
+import { shouldApplyTranscriptReload } from "@shared/logic/agent";
 import { ipcMessagesAppend } from "@/ipc/client";
 import { flushAgentStepUi } from "./flush-run-ui";
 

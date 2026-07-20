@@ -1,8 +1,8 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import { resolveVfsToolFilePath } from "@novel-master/core/chat";
-import { resolveToolResultOk } from "@novel-master/core";
+import { resolveVfsToolFilePath } from "@shared/logic/chat";
+import { resolveToolResultOk } from "@shared/logic/root";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 export type ToolCallStatus = "success" | "error" | "pending" | "interrupted";

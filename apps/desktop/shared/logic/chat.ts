@@ -1,0 +1,72 @@
+/**
+ * Desktop renderer 对 `@novel-master/core/chat` 的具名薄再导出。
+ * 禁止 `export *`；禁止 create*Service 等 runtime 工厂。
+ *
+ * 类型优先用 `@shared/ipc-types` DTO（如 `ChatMessageDto` / `ContentBlockDto` /
+ * `AnnotateDraftDto` / `MessageAttachmentDto`）；下列 domain 类型供迁移过渡。
+ */
+
+export type {
+  AnnotateDraft,
+  AtPathRef,
+  ChatMessage,
+  ComposerSendIntent,
+  ComposerSendIntentAttachment,
+  ComposerSendIntentInput,
+  ContentBlock,
+  MessageAttachment,
+  MessageVisibilityBatchMode,
+  RollbackMode,
+  TailBatchMode,
+  TailBatchRow,
+  TranscriptSelectableRole,
+} from "@novel-master/core/chat";
+
+export {
+  addChatAnnotateDraft,
+  atPathTokensFromPickerSelection,
+  chipsFromAnnotateStore,
+  clearChatAnnotateDrafts,
+  computeHideRangeFromSelection,
+  computeShowRangeFromSelection,
+  computeTailBatchAffectedIds,
+  computeTailBatchRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
+  countScannedAtPathAttachments,
+  extractEditableTextFromMessage,
+  filterAtPathTypeaheadCandidates,
+  findActiveAtQuery,
+  findAllOccurrences,
+  formatComposerAtPathToken,
+  formatStatusChipLabelFromAttachment,
+  groupAnnotateIdsByOriginalText,
+  hasChatAnnotateDrafts,
+  hasToolResult,
+  isComposerStatusAttachment,
+  isPlainUserText,
+  isPlainUserUndoSendEligible,
+  isTailBatchRowSelectable,
+  isTranscriptRowSelectable,
+  listChatAnnotateDrafts,
+  parseAnnotateIdsAttr,
+  parseComposerDraftJson,
+  partitionComposerChipAttachments,
+  removeChatAnnotateDraft,
+  removeChatAnnotateDraftsByPath,
+  replaceActiveAtWithToken,
+  replaceComposerStatusAttachments,
+  resetChatAnnotateDraftStoreForTests,
+  resolveComposerSendIntent,
+  resolveRollbackConfirmMessage,
+  resolveVfsToolFilePath,
+  selectTailBatchEligibleIdsFromAnchor,
+  selectVisibilityBatchEligibleIdsFromAnchor,
+  serializeComposerDraftJson,
+  sortAnnotateTextsLongestFirst,
+  subscribeChatAnnotateDraft,
+  tailBatchDeleteAfterSeq,
+  TOOL_TURN_BRIDGE_TEXT,
+  transcriptSelectableRole,
+  unionComposerStatusWithAnnotate,
+  updateChatAnnotateDraft,
+} from "@novel-master/core/chat";
