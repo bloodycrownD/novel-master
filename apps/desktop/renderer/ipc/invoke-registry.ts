@@ -68,12 +68,12 @@ import {
   type VfsZipExportResult,
   type VfsZipImportResult,
   type VfsZipRequest,
-  type WorktreeBuildListRowsRequest,
-  type WorktreeGetDirRuleRequest,
-  type WorktreeCaptureSessionBlockRequest,
+  type WorkplaceBuildListRowsRequest,
+  type WorkplaceGetDirRuleRequest,
+  type WorkplaceCaptureSessionBlockRequest,
   type WorkplaceListRowDto,
-  type WorktreeSetDirRuleRequest,
-  type WorktreeSetFileRuleRequest,
+  type WorkplaceSetDirRuleRequest,
+  type WorkplaceSetFileRuleRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -179,31 +179,26 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke<AppUiGetResponse>(IPC_CHANNELS.APP_UI_GET, { key }),
     ipcAppUiSet: (key: string, value: string) =>
       invoke<IpcResult<void>>(IPC_CHANNELS.APP_UI_SET, { key, value }),
-    ipcWorktreeBuildListRows: withReq<
-      WorktreeBuildListRowsRequest,
+    ipcWorkplaceBuildListRows: withReq<
+      WorkplaceBuildListRowsRequest,
       IpcResult<WorkplaceListRowDto[]>
-    >(invoke, IPC_CHANNELS.WORKTREE_BUILD_LIST_ROWS),
-    ipcWorktreeSetDirRule: withReq<WorktreeSetDirRuleRequest, IpcResult<void>>(
+    >(invoke, IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS),
+    ipcWorkplaceSetDirRule: withReq<WorkplaceSetDirRuleRequest, IpcResult<void>>(
       invoke,
-      IPC_CHANNELS.WORKTREE_SET_DIR_RULE,
+      IPC_CHANNELS.WORKPLACE_SET_DIR_RULE,
     ),
-    ipcWorktreeSetFileRule: withReq<
-      WorktreeSetFileRuleRequest,
+    ipcWorkplaceSetFileRule: withReq<
+      WorkplaceSetFileRuleRequest,
       IpcResult<void>
-    >(invoke, IPC_CHANNELS.WORKTREE_SET_FILE_RULE),
-    ipcWorktreeGetDirRule: withReq<
-      WorktreeGetDirRuleRequest,
-      IpcResult<WorktreeSetDirRuleRequest | null>
-    >(invoke, IPC_CHANNELS.WORKTREE_GET_DIR_RULE),
-    ipcWorktreeCaptureSessionBlock: withReq<
-      WorktreeCaptureSessionBlockRequest,
+    >(invoke, IPC_CHANNELS.WORKPLACE_SET_FILE_RULE),
+    ipcWorkplaceGetDirRule: withReq<
+      WorkplaceGetDirRuleRequest,
+      IpcResult<WorkplaceSetDirRuleRequest | null>
+    >(invoke, IPC_CHANNELS.WORKPLACE_GET_DIR_RULE),
+    ipcWorkplaceCaptureSessionBlock: withReq<
+      WorkplaceCaptureSessionBlockRequest,
       IpcResult<void>
-    >(invoke, IPC_CHANNELS.WORKTREE_CAPTURE_SESSION_BLOCK),
-    /** @deprecated 使用 ipcWorktreeCaptureSessionBlock */
-    ipcWorktreeInvalidateSessionSnapshot: withReq<
-      WorktreeCaptureSessionBlockRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.WORKTREE_INVALIDATE_SESSION_SNAPSHOT),
+    >(invoke, IPC_CHANNELS.WORKPLACE_CAPTURE_SESSION_BLOCK),
     ipcVfsRead: withReq<VfsReadRequest, IpcResult<VfsReadResultDto>>(
       invoke,
       IPC_CHANNELS.VFS_READ,

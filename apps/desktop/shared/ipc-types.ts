@@ -50,13 +50,11 @@ export const IPC_CHANNELS = {
   VFS_ZIP_EXPORT: 'nm:vfs/zipExport',
   VFS_ZIP_IMPORT: 'nm:vfs/zipImport',
 
-  WORKTREE_BUILD_LIST_ROWS: 'nm:worktree/buildListRows',
-  WORKTREE_SET_DIR_RULE: 'nm:worktree/setDirRule',
-  WORKTREE_SET_FILE_RULE: 'nm:worktree/setFileRule',
-  WORKTREE_GET_DIR_RULE: 'nm:worktree/getDirRule',
-  WORKTREE_CAPTURE_SESSION_BLOCK: 'nm:worktree/captureSessionBlock',
-  /** @deprecated 使用 WORKTREE_CAPTURE_SESSION_BLOCK */
-  WORKTREE_INVALIDATE_SESSION_SNAPSHOT: 'nm:worktree/invalidateSessionSnapshot',
+  WORKPLACE_BUILD_LIST_ROWS: 'nm:workplace/buildListRows',
+  WORKPLACE_SET_DIR_RULE: 'nm:workplace/setDirRule',
+  WORKPLACE_SET_FILE_RULE: 'nm:workplace/setFileRule',
+  WORKPLACE_GET_DIR_RULE: 'nm:workplace/getDirRule',
+  WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
   PROJECTS_PULL_TEMPLATE: 'nm:projects/pullTemplate',
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
@@ -387,28 +385,28 @@ export type VfsReadResultDto = {
   readonly mtimeMs: number;
 };
 
-export type WorktreeRuleState = 'rule_on' | 'rule_off';
+export type WorkplaceRuleState = 'rule_on' | 'rule_off';
 
-export type WorktreeInclusionMode = 'auto' | 'show' | 'hide';
+export type WorkplaceInclusionMode = 'auto' | 'show' | 'hide';
 
-export type WorktreeDisplayState = 'hidden' | 'full' | 'header' | 'filename';
+export type WorkplaceDisplayState = 'hidden' | 'full' | 'header' | 'filename';
 
 export type WorkplaceListRowDto =
   | {
       readonly kind: 'dir';
       readonly path: string;
-      readonly ruleState: WorktreeRuleState;
+      readonly ruleState: WorkplaceRuleState;
     }
   | {
       readonly kind: 'file';
       readonly path: string;
-      readonly inclusionMode: WorktreeInclusionMode;
-      readonly displayState: WorktreeDisplayState;
+      readonly inclusionMode: WorkplaceInclusionMode;
+      readonly displayState: WorkplaceDisplayState;
     };
 
-export type WorktreeBuildListRowsRequest = VfsScopeRequest;
+export type WorkplaceBuildListRowsRequest = VfsScopeRequest;
 
-export type WorktreeSetDirRuleRequest = VfsScopeRequest & {
+export type WorkplaceSetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
   readonly ruleEnabled?: boolean;
   readonly sortField?: 'name' | 'created' | 'updated';
@@ -418,24 +416,20 @@ export type WorktreeSetDirRuleRequest = VfsScopeRequest & {
   readonly fillPolicy?: 'hidden' | 'filename' | 'header';
 };
 
-export type WorktreeSetFileRuleRequest = VfsScopeRequest & {
+export type WorkplaceSetFileRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
   readonly inclusionMode: 'auto' | 'show' | 'hide';
 };
 
-export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
+export type WorkplaceGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
 };
 
 /** 手动重置常驻工作区缓存（清空 session kkv，下次拼装重建）。 */
-export type WorktreeCaptureSessionBlockRequest = {
+export type WorkplaceCaptureSessionBlockRequest = {
   readonly projectId: string;
   readonly sessionId: string;
 };
-
-/** @deprecated 使用 WorktreeCaptureSessionBlockRequest */
-export type WorktreeInvalidateSessionSnapshotRequest =
-  WorktreeCaptureSessionBlockRequest;
 
 export type SessionFsRollbackRequest = {
   readonly projectId: string;

@@ -1,16 +1,16 @@
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
 import type {
   VfsScopeRequest,
-  WorktreeSetDirRuleRequest,
+  WorkplaceSetDirRuleRequest,
 } from "@shared/ipc-types";
 import {
   ipcVfsDelete,
   ipcVfsMkdir,
   ipcVfsRename,
   ipcVfsWrite,
-  ipcWorktreeGetDirRule,
-  ipcWorktreeSetDirRule,
-  ipcWorktreeSetFileRule,
+  ipcWorkplaceGetDirRule,
+  ipcWorkplaceSetDirRule,
+  ipcWorkplaceSetFileRule,
   vfsScope,
 } from "@/ipc/client";
 import { joinVfsPath } from "@/utils/vfs-path";
@@ -35,7 +35,7 @@ export async function saveFileInclusion(
   if (target.kind !== "row" || target.row.kind !== "file") {
     return { ok: false, message: "无效操作" };
   }
-  const result = await ipcWorktreeSetFileRule({
+  const result = await ipcWorkplaceSetFileRule({
     ...scopeRequestFromTarget(target, projectId, sessionId),
     logicalPath: target.row.path,
     inclusionMode,
@@ -60,7 +60,7 @@ export async function createWorkspaceEntry(
   if (!mkdirResult.ok) {
     return { ok: false, message: mkdirResult.error.message };
   }
-  const ruleResult = await ipcWorktreeSetDirRule(defaultDirRuleRequest(path, req));
+  const ruleResult = await ipcWorkplaceSetDirRule(defaultDirRuleRequest(path, req));
   return ruleResult.ok
     ? { ok: true }
     : { ok: false, message: ruleResult.error.message };
@@ -107,7 +107,7 @@ export async function deleteWorkspaceEntry(
 export function defaultDirRuleRequest(
   logicalPath: string,
   scope: VfsScopeRequest,
-): WorktreeSetDirRuleRequest {
+): WorkplaceSetDirRuleRequest {
   return {
     ...scope,
     logicalPath,
@@ -126,7 +126,7 @@ export function defaultDirRuleRequest(
 export function emptyDirRuleForm(
   logicalPath: string,
   scope: VfsScopeRequest,
-): WorktreeSetDirRuleRequest {
+): WorkplaceSetDirRuleRequest {
   return {
     ...scope,
     logicalPath,
@@ -143,12 +143,12 @@ export async function loadDirRuleForm(
   target: WorkspaceContextTarget,
   projectId: string | undefined,
   sessionId: string | undefined,
-): Promise<WorktreeSetDirRuleRequest | null> {
+): Promise<WorkplaceSetDirRuleRequest | null> {
   if (target.kind !== "row" || target.row.kind !== "dir") {
     return null;
   }
   const req = scopeRequestFromTarget(target, projectId, sessionId);
-  const result = await ipcWorktreeGetDirRule({
+  const result = await ipcWorkplaceGetDirRule({
     ...req,
     logicalPath: target.row.path,
   });
@@ -168,9 +168,9 @@ export async function loadDirRuleForm(
 }
 
 export async function saveDirRule(
-  input: WorktreeSetDirRuleRequest,
+  input: WorkplaceSetDirRuleRequest,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const result = await ipcWorktreeSetDirRule(input);
+  const result = await ipcWorkplaceSetDirRule(input);
   return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 
@@ -184,7 +184,7 @@ export async function setDirRuleEnabled(
     return { ok: false, message: "无效操作" };
   }
   const req = scopeRequestFromTarget(target, projectId, sessionId);
-  const result = await ipcWorktreeSetDirRule({
+  const result = await ipcWorkplaceSetDirRule({
     ...req,
     logicalPath: target.row.path,
     ruleEnabled: enabled,

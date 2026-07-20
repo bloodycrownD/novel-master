@@ -1,5 +1,5 @@
 /**
- * Worktree IPC：规则保存不 capture；差集经 composerAttachmentsSuggest；遗留 capture → clear kkv。
+ * Workplace IPC：规则保存不 capture；差集经 composerAttachmentsSuggest；遗留 capture → clear kkv。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -7,11 +7,11 @@ import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
 import {
-  handleWorktreeBuildListRows,
-  handleWorktreeCaptureSessionBlock,
-  handleWorktreeSetDirRule,
-  handleWorktreeSetFileRule,
-} from "../src/main/ipc/handlers/worktree.js";
+  handleWorkplaceBuildListRows,
+  handleWorkplaceCaptureSessionBlock,
+  handleWorkplaceSetDirRule,
+  handleWorkplaceSetFileRule,
+} from "../src/main/ipc/handlers/workplace.js";
 import {
   setComposerAttachmentsSuggestForwardTarget,
   notifyComposerAttachmentsSuggestToRenderer,
@@ -22,15 +22,15 @@ import {
   teardownDesktopDbTestEnv,
 } from "./desktop-db-test-env.js";
 
-describe("worktree ipc handlers", () => {
+describe("workplace ipc handlers", () => {
   let tempDir: string;
   let projectId: string;
   let sessionId: string;
 
   before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-worktree-"));
+    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-workplace-"));
 
-    const project = await handleProjectsCreate({ name: "worktree-ipc" });
+    const project = await handleProjectsCreate({ name: "workplace-ipc" });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -54,7 +54,7 @@ describe("worktree ipc handlers", () => {
   });
 
   it("session buildListRows 成功", async () => {
-    const result = await handleWorktreeBuildListRows({
+    const result = await handleWorkplaceBuildListRows({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -70,7 +70,7 @@ describe("worktree ipc handlers", () => {
     const rt = await getDesktopRuntime();
     const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
 
-    const result = await handleWorktreeSetDirRule({
+    const result = await handleWorkplaceSetDirRule({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -87,7 +87,7 @@ describe("worktree ipc handlers", () => {
     const rt = await getDesktopRuntime();
     const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
 
-    const result = await handleWorktreeSetFileRule({
+    const result = await handleWorkplaceSetFileRule({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -146,7 +146,7 @@ describe("worktree ipc handlers", () => {
       attachments: [],
     });
 
-    const result = await handleWorktreeSetDirRule({
+    const result = await handleWorkplaceSetDirRule({
       workspaceScope: "chat",
       projectId,
       sessionId,
@@ -175,7 +175,7 @@ describe("worktree ipc handlers", () => {
       } as never;
     });
 
-    const result = await handleWorktreeCaptureSessionBlock({
+    const result = await handleWorkplaceCaptureSessionBlock({
       projectId,
       sessionId,
     });

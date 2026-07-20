@@ -152,12 +152,12 @@ import {
   handleVfsZipImport,
 } from './handlers/vfs.js';
 import {
-  handleWorktreeBuildListRows,
-  handleWorktreeCaptureSessionBlock,
-  handleWorktreeGetDirRule,
-  handleWorktreeSetDirRule,
-  handleWorktreeSetFileRule,
-} from './handlers/worktree.js';
+  handleWorkplaceBuildListRows,
+  handleWorkplaceCaptureSessionBlock,
+  handleWorkplaceGetDirRule,
+  handleWorkplaceSetDirRule,
+  handleWorkplaceSetFileRule,
+} from './handlers/workplace.js';
 
 type NoArgHandler = () => unknown;
 type BoolHandler = (enabled: boolean) => unknown;
@@ -227,17 +227,13 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
   bindReq(IPC_CHANNELS.USER_VFS_HAS_PENDING, handleUserVfsHasPending);
 
-  bindReq(IPC_CHANNELS.WORKTREE_BUILD_LIST_ROWS, handleWorktreeBuildListRows);
-  bindReq(IPC_CHANNELS.WORKTREE_SET_DIR_RULE, handleWorktreeSetDirRule);
-  bindReq(IPC_CHANNELS.WORKTREE_SET_FILE_RULE, handleWorktreeSetFileRule);
-  bindReq(IPC_CHANNELS.WORKTREE_GET_DIR_RULE, handleWorktreeGetDirRule);
+  bindReq(IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS, handleWorkplaceBuildListRows);
+  bindReq(IPC_CHANNELS.WORKPLACE_SET_DIR_RULE, handleWorkplaceSetDirRule);
+  bindReq(IPC_CHANNELS.WORKPLACE_SET_FILE_RULE, handleWorkplaceSetFileRule);
+  bindReq(IPC_CHANNELS.WORKPLACE_GET_DIR_RULE, handleWorkplaceGetDirRule);
   bindReq(
-    IPC_CHANNELS.WORKTREE_CAPTURE_SESSION_BLOCK,
-    handleWorktreeCaptureSessionBlock,
-  );
-  bindReq(
-    IPC_CHANNELS.WORKTREE_INVALIDATE_SESSION_SNAPSHOT,
-    handleWorktreeCaptureSessionBlock,
+    IPC_CHANNELS.WORKPLACE_CAPTURE_SESSION_BLOCK,
+    handleWorkplaceCaptureSessionBlock,
   );
 
   bindReq(IPC_CHANNELS.MESSAGES_LIST, handleMessagesList);

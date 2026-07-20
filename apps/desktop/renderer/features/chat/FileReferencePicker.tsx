@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WorkplaceListRowDto } from '@shared/ipc-types';
-import { ipcWorktreeBuildListRows, vfsScope } from '@/ipc/client';
+import { ipcWorkplaceBuildListRows, vfsScope } from '@/ipc/client';
 import {
   isDirectChild,
   parentLogicalPath,
@@ -62,7 +62,7 @@ export function FileReferencePicker({
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
-    const result = await ipcWorktreeBuildListRows(
+    const result = await ipcWorkplaceBuildListRows(
       vfsScope('session', projectId, sessionId),
     );
     setLoading(false);

@@ -4,7 +4,7 @@ import type {
   WorkplaceListRowDto,
   WorkspacePanelScope,
 } from "@shared/ipc-types";
-import { ipcWorktreeBuildListRows, vfsScope } from "@/ipc/client";
+import { ipcWorkplaceBuildListRows, vfsScope } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import {
@@ -57,7 +57,7 @@ export function WorkspaceTree({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await ipcWorktreeBuildListRows(req);
+      const result = await ipcWorkplaceBuildListRows(req);
       if (result.ok) {
         setRows(result.data);
         onRowsLoaded?.(result.data);

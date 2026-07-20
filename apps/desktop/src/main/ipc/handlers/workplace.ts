@@ -1,21 +1,21 @@
 /**
- * Worktree IPC handlers — buildListRows, directory/file rules.
+ * Workplace IPC handlers — buildListRows, directory/file rules.
  *
- * @module ipc/handlers/worktree
+ * @module ipc/handlers/workplace
  */
 import type {
   IpcResult,
-  WorktreeBuildListRowsRequest,
-  WorktreeCaptureSessionBlockRequest,
-  WorktreeGetDirRuleRequest,
+  WorkplaceBuildListRowsRequest,
+  WorkplaceCaptureSessionBlockRequest,
+  WorkplaceGetDirRuleRequest,
   WorkplaceListRowDto,
-  WorktreeSetDirRuleRequest,
-  WorktreeSetFileRuleRequest,
+  WorkplaceSetDirRuleRequest,
+  WorkplaceSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
 import { type WorkplaceService } from "@novel-master/core/workplace";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
-  getWorktreeForScope,
+  getWorkplaceForScope,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 import {
@@ -30,7 +30,7 @@ import { projectComposerStatusForSession } from "../../services/project-composer
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
-): WorktreeSetDirRuleRequest["fillPolicy"] {
+): WorkplaceSetDirRuleRequest["fillPolicy"] {
   if (fillPolicy === "full") {
     return "hidden";
   }
@@ -44,16 +44,16 @@ function toIpcFillPolicy(
   return undefined;
 }
 
-async function loadWorktreeRows(
+async function loadWorkplaceRows(
   rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
-  req: WorktreeBuildListRowsRequest,
+  req: WorkplaceBuildListRowsRequest,
 ): Promise<WorkplaceListRowDto[]> {
   const scope = resolveVfsScopeFromRequest(req);
   if (scope.kind === "session") {
-    const wt = getWorktreeForScope(rt, scope);
+    const wt = getWorkplaceForScope(rt, scope);
     return wt.buildListRows();
   }
-  const wt = getWorktreeForScope(rt, scope);
+  const wt = getWorkplaceForScope(rt, scope);
   return wt.buildListRows();
 }
 
@@ -77,25 +77,25 @@ async function suggestWorkplaceAttachmentsAfterRuleChange(
   notifyComposerAttachmentsSuggestToRenderer({ sessionId, attachments });
 }
 
-export async function handleWorktreeBuildListRows(
-  req: WorktreeBuildListRowsRequest,
+export async function handleWorkplaceBuildListRows(
+  req: WorkplaceBuildListRowsRequest,
 ): Promise<IpcResult<WorkplaceListRowDto[]>> {
   try {
     const rt = await getDesktopRuntime();
-    const rows = await loadWorktreeRows(rt, req);
+    const rows = await loadWorkplaceRows(rt, req);
     return { ok: true, data: rows };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
 }
 
-export async function handleWorktreeSetDirRule(
-  req: WorktreeSetDirRuleRequest,
+export async function handleWorkplaceSetDirRule(
+  req: WorkplaceSetDirRuleRequest,
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
-    const wt = getWorktreeForScope(rt, scope);
+    const wt = getWorkplaceForScope(rt, scope);
     await wt.setDirRule({
       logicalPath: req.logicalPath,
       ruleEnabled: req.ruleEnabled,
@@ -114,13 +114,13 @@ export async function handleWorktreeSetDirRule(
   }
 }
 
-export async function handleWorktreeSetFileRule(
-  req: WorktreeSetFileRuleRequest,
+export async function handleWorkplaceSetFileRule(
+  req: WorkplaceSetFileRuleRequest,
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
-    const wt = getWorktreeForScope(rt, scope);
+    const wt = getWorkplaceForScope(rt, scope);
     await wt.setFileRule({
       logicalPath: req.logicalPath,
       inclusionMode: req.inclusionMode,
@@ -137,8 +137,8 @@ export async function handleWorktreeSetFileRule(
  * 已退役的「工作树快照」IPC：改清空 session kkv，下次拼装重建常驻前缀。
  * UI 入口将在 Step 9 删除。
  */
-export async function handleWorktreeCaptureSessionBlock(
-  req: WorktreeCaptureSessionBlockRequest,
+export async function handleWorkplaceCaptureSessionBlock(
+  req: WorkplaceCaptureSessionBlockRequest,
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
@@ -151,13 +151,13 @@ export async function handleWorktreeCaptureSessionBlock(
   }
 }
 
-export async function handleWorktreeGetDirRule(
-  req: WorktreeGetDirRuleRequest,
-): Promise<IpcResult<WorktreeSetDirRuleRequest | null>> {
+export async function handleWorkplaceGetDirRule(
+  req: WorkplaceGetDirRuleRequest,
+): Promise<IpcResult<WorkplaceSetDirRuleRequest | null>> {
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
-    const wt = getWorktreeForScope(rt, scope);
+    const wt = getWorkplaceForScope(rt, scope);
     const rule = await wt.getDirRule(req.logicalPath);
     if (rule == null) {
       return { ok: true, data: null };

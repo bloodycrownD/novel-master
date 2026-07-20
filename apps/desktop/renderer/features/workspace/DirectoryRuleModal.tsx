@@ -1,6 +1,6 @@
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
 import { useEffect, useState } from "react";
-import type { WorktreeSetDirRuleRequest } from "@shared/ipc-types";
+import type { WorkplaceSetDirRuleRequest } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/Switch";
 import { showToast } from "@/components/ui/show-toast";
@@ -12,9 +12,9 @@ import {
 } from "./workspace-actions";
 import type { WorkspaceContextTarget } from "./workspace-context";
 
-type SortField = NonNullable<WorktreeSetDirRuleRequest["sortField"]>;
-type SortOrder = NonNullable<WorktreeSetDirRuleRequest["sortOrder"]>;
-type FillPolicy = NonNullable<WorktreeSetDirRuleRequest["fillPolicy"]>;
+type SortField = NonNullable<WorkplaceSetDirRuleRequest["sortField"]>;
+type SortOrder = NonNullable<WorkplaceSetDirRuleRequest["sortOrder"]>;
+type FillPolicy = NonNullable<WorkplaceSetDirRuleRequest["fillPolicy"]>;
 type UiFillPolicy = Exclude<FillPolicy, "full">;
 
 const SORT_FIELDS: Array<{ value: SortField; label: string }> = [

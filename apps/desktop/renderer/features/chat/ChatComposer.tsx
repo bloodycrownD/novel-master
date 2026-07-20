@@ -15,7 +15,7 @@ import {
   ipcPreferencesGetLlmStream,
   ipcPromptAgentMeta,
   ipcSessionsProjectComposerStatus,
-  ipcWorktreeBuildListRows,
+  ipcWorkplaceBuildListRows,
   onComposerAttachmentsSuggest,
   onUserMessageAppended,
   vfsScope,
@@ -183,7 +183,7 @@ export function ChatComposer({
     }
     let cancelled = false;
     void (async () => {
-      const result = await ipcWorktreeBuildListRows(
+      const result = await ipcWorkplaceBuildListRows(
         vfsScope("session", projectId, sessionId),
       );
       if (cancelled || !result.ok) {
