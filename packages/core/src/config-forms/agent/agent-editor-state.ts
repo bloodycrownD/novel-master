@@ -128,7 +128,7 @@ export const PROMPT_REGION_LABELS = {
 } as const;
 
 export function blockTypeLabel(
-  type: EditorPersistPromptBlock["type"] | DynamicPromptBlock["type"]
+  _type: EditorPersistPromptBlock["type"] | DynamicPromptBlock["type"]
 ): string {
   return "文本";
 }
