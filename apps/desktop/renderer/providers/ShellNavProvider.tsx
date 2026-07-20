@@ -28,7 +28,7 @@ import type {
   ProjectDto,
   SessionDto,
   PreviewFileSelection,
-  WorktreeListRowDto,
+  WorkplaceListRowDto,
   WorkspaceMutatedPayload,
   WorkspacePanelScope,
 } from "@shared/ipc-types";
@@ -119,7 +119,7 @@ export interface ShellNavContextValue {
   /** 工作区树重载后，用 file 行校验 open tab 是否存在 */
   syncPreviewTabsFromFileRows: (
     scope: WorkspacePanelScope,
-    rows: WorktreeListRowDto[],
+    rows: WorkplaceListRowDto[],
   ) => void;
   clearPreviewFile: () => void;
   treeRefreshToken: number;
@@ -388,7 +388,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   );
 
   const syncPreviewTabsFromFileRows = useCallback(
-    (scope: WorkspacePanelScope, rows: WorktreeListRowDto[]) => {
+    (scope: WorkspacePanelScope, rows: WorkplaceListRowDto[]) => {
       setPreviewTabs((prev) => syncPreviewTabsWithFileRows(prev, rows, scope));
     },
     [],

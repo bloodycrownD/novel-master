@@ -39,7 +39,7 @@ function baseRuntime(overrides: Partial<any> = {}) {
       listKeys: async () => [],
     },
     worktree: () => ({
-      materializePersistBlock: async () => ({ worktreeDisplay: '' }),
+      materializePersistBlock: async () => ({ workplaceDisplay: '' }),
     }),
     modelRequests: {},
     compactionConditionEvaluator: undefined,

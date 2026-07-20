@@ -36,9 +36,9 @@ module.exports = {
       'packages/core/dist/public/events.js',
     ),
   '^@/(.*)$': '<rootDir>/src/$1',
-    '^@novel-master/core/worktree$': path.join(
+    '^@novel-master/core/workplace$': path.join(
       repoRoot,
-      'packages/core/dist/public/worktree.js',
+      'packages/core/dist/public/workplace.js',
     ),
     '^@novel-master/core/feature-flags$': path.join(
       repoRoot,

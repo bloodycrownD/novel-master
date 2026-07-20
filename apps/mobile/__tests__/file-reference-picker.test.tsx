@@ -1,14 +1,14 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import type {WorktreeListRow} from '@novel-master/core/worktree';
+import type {WorkplaceListRow} from '@novel-master/core/workplace';
 import {
   atPathTokensFromPickerSelection,
   FileReferencePicker,
   listPickerChildRows,
 } from '../src/components/chat/FileReferencePicker';
 
-const mockBuildListRows = jest.fn(async (): Promise<WorktreeListRow[]> => []);
+const mockBuildListRows = jest.fn(async (): Promise<WorkplaceListRow[]> => []);
 
 jest.mock('../src/errors/format-error', () => ({
   formatError: (err: unknown) => String(err),
@@ -59,7 +59,7 @@ jest.mock('../src/hooks/useRuntime', () => {
   };
 });
 
-const fixtureRows: WorktreeListRow[] = [
+const fixtureRows: WorkplaceListRow[] = [
   {kind: 'dir', path: '/', ruleState: 'rule_on'},
   {kind: 'dir', path: '/notes', ruleState: 'rule_on'},
   {

@@ -36,8 +36,8 @@ import { createMessageCheckpointService } from '@novel-master/core/message-check
 import { createSessionFsService } from '@novel-master/core/session-fs';
 import { createScopedVfsService, type VfsScope } from '@novel-master/core/vfs';
 import {
-  createWorktreeService,
-} from '@novel-master/core/worktree';
+  createWorkplaceService,
+} from '@novel-master/core/workplace';
 import { createKkvService } from '@novel-master/core/kkv';
 import { createSessionKkvService } from '@novel-master/core/session-kkv';
 import { createCompositeSecretStore } from '@novel-master/core/sksp';
@@ -96,7 +96,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktree: s => createWorktreeService(conn, s),
+      workplace: s => createWorkplaceService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
       messageCheckpoint: createMessageCheckpointService(conn),
@@ -132,7 +132,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       createScopedVfsService(conn, { kind: 'project', projectId }),
     sessionVfs: (projectId, sessionId) =>
       createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
-    worktree: (scope: VfsScope) => createWorktreeService(conn, scope),
+    worktree: (scope: VfsScope) => createWorkplaceService(conn, scope),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

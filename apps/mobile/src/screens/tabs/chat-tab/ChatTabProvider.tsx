@@ -15,7 +15,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { type ChatMessage } from '@novel-master/core/chat';
 import type { VfsService } from '@novel-master/core/vfs';
-import type { WorktreeService } from '@novel-master/core/worktree';
+import type { WorkplaceService } from '@novel-master/core/workplace';
 import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
 import type { MessageMenuAnchor } from '@/components/chat/MessageActionMenu';
 import type { VfsFileManagerHandle } from '@/components/vfs/VfsFileManager';
@@ -82,7 +82,7 @@ export type ChatTabContextValue = {
   readonly lastMessageIsPlainUserText: boolean;
   readonly draftRestoreToken: number;
   readonly sessionVfs: VfsService | null;
-  readonly sessionWorktree: WorktreeService | null;
+  readonly sessionWorktree: WorkplaceService | null;
   readonly vfsRefreshKey: number;
   readonly hasWorkspaceModel: boolean;
   readonly bumpWorktreeUiToken: () => void;

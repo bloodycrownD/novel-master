@@ -242,7 +242,7 @@ export function ChatConversationPanel({
                 key={`session-vfs-${vfsRefreshKey}`}
                 scope={sessionVfsScope!}
                 vfs={sessionVfs}
-                worktree={sessionWorktree}
+                workplace={sessionWorktree}
                 rootPath="/"
                 pullFromParent={{
                   scope: { kind: 'session', sessionId },

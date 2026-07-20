@@ -3,19 +3,19 @@
  * 不刷新规则快照、不 capture。
  */
 import type { MessageAttachment } from '@novel-master/core/chat';
-import type { WorktreeService } from '@novel-master/core/worktree';
+import type { WorkplaceService } from '@novel-master/core/workplace';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 import { applyComposerStatusAttachmentsReplace } from '../storage/chat-composer-draft';
 import { projectComposerStatusForSession } from './project-composer-status.service';
 
 export async function suggestWorkplaceAttachmentsToComposerDraft(
   runtime: MobileNovelMasterRuntime,
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   sessionId: string,
 ): Promise<MessageAttachment[]> {
   const attachments = await projectComposerStatusForSession(
     runtime,
-    worktree,
+    workplace,
     sessionId,
   );
   applyComposerStatusAttachmentsReplace({ sessionId, attachments });

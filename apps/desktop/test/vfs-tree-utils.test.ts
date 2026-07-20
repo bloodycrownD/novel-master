@@ -8,7 +8,7 @@ import {
   parentLogicalPath,
   vfsEntryStatusText,
 } from "@/features/workspace/vfs-tree-utils";
-import type { WorktreeListRowDto } from "@shared/ipc-types";
+import type { WorkplaceListRowDto } from "@shared/ipc-types";
 
 test("logicalPathSegments 拆分逻辑路径段", () => {
   const cases: Array<{ path: string; expected: string[] }> = [
@@ -55,17 +55,17 @@ test("parentLogicalPath / isDirectChild 与 Mobile 对齐", () => {
 });
 
 test("T-WEC15：vfsEntryStatusText 正向映射 enum 为中文标签", () => {
-  const dirOn: WorktreeListRowDto = {
+  const dirOn: WorkplaceListRowDto = {
     kind: "dir",
     path: "/notes",
     ruleState: "rule_on",
   };
-  const dirOff: WorktreeListRowDto = {
+  const dirOff: WorkplaceListRowDto = {
     kind: "dir",
     path: "/drafts",
     ruleState: "rule_off",
   };
-  const fileRow: WorktreeListRowDto = {
+  const fileRow: WorkplaceListRowDto = {
     kind: "file",
     path: "/a.md",
     inclusionMode: "show",

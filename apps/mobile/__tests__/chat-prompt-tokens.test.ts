@@ -73,7 +73,7 @@ describe('chat-prompt-tokens.service', () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'openai/gpt-4o'},
       layout: {persist: [], dynamic: []},
-      ctx: {worktreeDisplay: '', messages: []},
+      ctx: {workplaceDisplay: '', messages: []},
     });
     mockResolveApplicationModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('gemma');
@@ -98,7 +98,7 @@ describe('chat-prompt-tokens.service', () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {},
       layout: {persist: [], dynamic: []},
-      ctx: {worktreeDisplay: '', messages: []},
+      ctx: {workplaceDisplay: '', messages: []},
     });
     mockResolveApplicationModelId.mockReturnValue(undefined);
 

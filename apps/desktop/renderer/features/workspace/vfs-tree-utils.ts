@@ -3,8 +3,8 @@ import {
   displayStateLabel,
   inclusionModeLabel,
   ruleStateLabel,
-} from "@novel-master/core/worktree";
-import type { WorktreeListRowDto } from "@shared/ipc-types";
+} from "@novel-master/core/workplace";
+import type { WorkplaceListRowDto } from "@shared/ipc-types";
 
 /** `/notes/ch1.md` → [`notes`, `ch1.md`]（跳过空段） */
 export function logicalPathSegments(path: string): string[] {
@@ -99,7 +99,7 @@ export function pathDepth(path: string): number {
   return path.split("/").filter(Boolean).length;
 }
 
-export function vfsEntryStatusText(row: WorktreeListRowDto): string {
+export function vfsEntryStatusText(row: WorkplaceListRowDto): string {
   if (row.kind === "dir") {
     return ruleStateLabel(row.ruleState);
   }

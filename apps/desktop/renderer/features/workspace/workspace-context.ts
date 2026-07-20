@@ -1,4 +1,4 @@
-import type { WorktreeListRowDto, WorkspacePanelScope } from "@shared/ipc-types";
+import type { WorkplaceListRowDto, WorkspacePanelScope } from "@shared/ipc-types";
 
 export type WorkspaceContextTarget =
   | {
@@ -10,7 +10,7 @@ export type WorkspaceContextTarget =
   | {
       readonly kind: "row";
       readonly panelScope: WorkspacePanelScope;
-      readonly row: WorktreeListRowDto;
+      readonly row: WorkplaceListRowDto;
       readonly x: number;
       readonly y: number;
     };

@@ -1,6 +1,6 @@
 import type {
   PreviewFileSelection,
-  WorktreeListRowDto,
+  WorkplaceListRowDto,
   WorkspacePanelScope,
 } from "@shared/ipc-types";
 
@@ -9,7 +9,7 @@ import type {
  */
 export function syncPreviewTabsWithFileRows(
   tabs: PreviewFileSelection[],
-  rows: WorktreeListRowDto[],
+  rows: WorkplaceListRowDto[],
   scope: WorkspacePanelScope,
 ): PreviewFileSelection[] {
   const filePaths = new Set(

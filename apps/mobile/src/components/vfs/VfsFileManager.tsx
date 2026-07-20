@@ -30,9 +30,9 @@ import {
 
 import {
   type SetDirRuleInput,
-  type WorktreeListRow,
-  type WorktreeService,
-} from '@novel-master/core/worktree';
+  type WorkplaceListRow,
+  type WorkplaceService,
+} from '@novel-master/core/workplace';
 import { ParentDirIcon, ZipExportIcon, ZipImportIcon } from '../icons/TabIcons';
 import { BatchCheckbox } from '../batch/BatchCheckbox';
 import { VfsBatchHeader } from '../batch/VfsBatchHeader';
@@ -98,7 +98,7 @@ export type VfsFileManagerHandle = {
 export type VfsFileManagerProps = {
   scope: VfsScope;
   vfs: VfsService;
-  worktree: WorktreeService;
+  workplace: WorkplaceService;
   onOpenFile: (path: string) => void;
   rootPath?: string;
   pullFromParent?: {
@@ -123,7 +123,7 @@ export const VfsFileManager = forwardRef<
   {
     scope,
     vfs,
-    worktree,
+    workplace,
     onOpenFile,
     rootPath,
     pullFromParent,
@@ -220,24 +220,24 @@ export const VfsFileManager = forwardRef<
     onDirectoryChange?.();
   }, [currentPath, onDirectoryChange]);
 
-  const [worktreeRows, setWorktreeRows] = useState<WorktreeListRow[]>([]);
+  const [worktreeRows, setWorktreeRows] = useState<WorkplaceListRow[]>([]);
   const vfsRef = useRef(vfs);
-  const worktreeRef = useRef(worktree);
+  const workplaceRef = useRef(workplace);
   const scopeRef = useRef(scope);
   const reloadInFlightRef = useRef(false);
   vfsRef.current = vfs;
-  worktreeRef.current = worktree;
+  workplaceRef.current = workplace;
   scopeRef.current = scope;
 
   const fetchWorktreeRows = useCallback(async (): Promise<
-    WorktreeListRow[]
+    WorkplaceListRow[]
   > => {
-    const worktreeSvc = worktreeRef.current;
+    const worktreeSvc = workplaceRef.current;
     return worktreeSvc.buildListRows();
   }, []);
 
   const applyWorktreeRowsToVisibleList = useCallback(
-    (allRows: WorktreeListRow[]) => {
+    (allRows: WorkplaceListRow[]) => {
       setWorktreeRows(allRows);
       setRows(prev => remapDirectChildRows(prev, currentPath, allRows));
     },
@@ -255,7 +255,7 @@ export const VfsFileManager = forwardRef<
     }
     reloadInFlightRef.current = true;
     const vfsSvc = vfsRef.current;
-    const worktreeSvc = worktreeRef.current;
+    const worktreeSvc = workplaceRef.current;
     setLoading(true);
     try {
       const [listEntries, allRows, dirRule] = await Promise.all([
@@ -264,7 +264,7 @@ export const VfsFileManager = forwardRef<
         worktreeSvc.getDirRule(currentPath),
       ]);
       setWorktreeRows(allRows);
-      const metaByPath = new Map<string, WorktreeListRow>();
+      const metaByPath = new Map<string, WorkplaceListRow>();
       for (const row of allRows) {
         metaByPath.set(row.path, row);
       }
@@ -324,14 +324,14 @@ export const VfsFileManager = forwardRef<
       try {
         await suggestWorkplaceAttachmentsToComposerDraft(
           runtime,
-          worktree,
+          workplace,
           sessionId,
         );
       } catch {
         // 差集推送失败不阻断列表刷新
       }
     }
-  }, [reload, runtime, sessionId, worktree]);
+  }, [reload, runtime, sessionId, workplace]);
 
   useImperativeHandle(
     ref,
@@ -404,8 +404,8 @@ export const VfsFileManager = forwardRef<
       }
       try {
         const result = enabled
-          ? await batchSetDirRulesEnabled(worktree, paths, dirPathSet)
-          : await batchSetDirRulesDisabled(worktree, paths, dirPathSet);
+          ? await batchSetDirRulesEnabled(workplace, paths, dirPathSet)
+          : await batchSetDirRulesDisabled(workplace, paths, dirPathSet);
         vfsBatch.exit();
         await reloadAfterRuleChange();
         if (result.skipped > 0) {
@@ -421,7 +421,7 @@ export const VfsFileManager = forwardRef<
         showToast(toastMessage('操作失败', error));
       }
     },
-    [vfsBatch, worktree, dirPathSet, reloadAfterRuleChange, showToast],
+    [vfsBatch, workplace, dirPathSet, reloadAfterRuleChange, showToast],
   );
 
   const canGoUp = currentPath !== root;
@@ -479,13 +479,13 @@ export const VfsFileManager = forwardRef<
       }
       if (action === 'toggle-include' && meta) {
         if (menuRow.kind === 'file' && meta.kind === 'file') {
-          await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
+          await cycleFileInclusion(workplace, menuPath, meta.inclusionMode);
           await refreshVisibleRowsFromWorktree();
           if (sessionId != null) {
             try {
               await suggestWorkplaceAttachmentsToComposerDraft(
                 runtime,
-                worktree,
+                workplace,
                 sessionId,
               );
             } catch {
@@ -496,7 +496,7 @@ export const VfsFileManager = forwardRef<
         }
         if (menuRow.kind === 'dir') {
           const nextEnabled = await toggleDirRuleEnabled(
-            worktree,
+            workplace,
             menuPath,
             menuRow.ruleEnabled,
           );
@@ -524,7 +524,7 @@ export const VfsFileManager = forwardRef<
             try {
               await suggestWorkplaceAttachmentsToComposerDraft(
                 runtime,
-                worktree,
+                workplace,
                 sessionId,
               );
             } catch {
@@ -570,7 +570,7 @@ export const VfsFileManager = forwardRef<
                 } else {
                   await renameVfsDirectory(vfs, menuPath, newPath);
                 }
-                await migrateWorktreeDirRename(worktree, menuPath, newPath);
+                await migrateWorktreeDirRename(workplace, menuPath, newPath);
                 if (
                   currentPath === menuPath ||
                   currentPath.startsWith(`${menuPath}/`)
@@ -688,7 +688,7 @@ export const VfsFileManager = forwardRef<
           } else {
             await createVfsDirectory(vfs, path);
           }
-          await worktree.setDirRule(defaultDirRuleForm(path));
+          await workplace.setDirRule(defaultDirRuleForm(path));
           await reloadAfterRuleChange();
         },
       });
@@ -697,7 +697,7 @@ export const VfsFileManager = forwardRef<
     if (action === 'directory-rule') {
       void (async () => {
         try {
-          const existing = await worktree.getDirRule(currentPath);
+          const existing = await workplace.getDirRule(currentPath);
           const listRow = worktreeRows.find(
             r => r.path === currentPath && r.kind === 'dir',
           );
@@ -922,7 +922,7 @@ export const VfsFileManager = forwardRef<
         rootRuleLocked={currentPath === root}
         onClose={() => setDirRuleOpen(false)}
         onSave={async input => {
-          await worktree.setDirRule(input);
+          await workplace.setDirRule(input);
           setDirRuleInitial(input);
           await reloadAfterRuleChange();
         }}

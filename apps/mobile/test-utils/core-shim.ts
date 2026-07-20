@@ -37,12 +37,12 @@ export {
 export {
   sortDirPaths,
   sortFilesForDir,
-} from "../../../packages/core/dist/domain/worktree/logic/worktree-eval.js";
-export { DEFAULT_WORKTREE_DIR_RULE } from "../../../packages/core/dist/domain/worktree/logic/default-dir-rule.js";
+} from "../../../packages/core/dist/domain/workplace/logic/workplace-eval.js";
+export { DEFAULT_WORKPLACE_DIR_RULE } from "../../../packages/core/dist/domain/workplace/logic/default-dir-rule.js";
 export type {
-  WorktreeDirRule,
-  WorktreeListRow,
-} from "../../../packages/core/dist/domain/worktree/model/worktree-types.js";
+  WorkplaceDirRule,
+  WorkplaceListRow,
+} from "../../../packages/core/dist/domain/workplace/model/workplace-types.js";
 export { messageBodyText } from "../../../packages/core/dist/domain/chat/content/message-body-text.js";
 export { textBlocks } from "../../../packages/core/dist/domain/chat/content/text-blocks.js";
 export { ToolRegistry } from "../../../packages/core/dist/domain/tool/logic/tool-registry.js";

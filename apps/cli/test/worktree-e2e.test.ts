@@ -16,7 +16,7 @@ describe("worktree CLI e2e", () => {
       );
       runNm([
         "vfs",
-        "worktree",
+        "workplace",
         "file",
         "/t.md",
         "--mode",
@@ -121,7 +121,7 @@ describe("worktree CLI e2e", () => {
       );
       runNm([
         "vfs",
-        "worktree",
+        "workplace",
         "file",
         "/h.md",
         "--mode",
@@ -147,7 +147,7 @@ describe("worktree CLI e2e", () => {
       );
       runNm([
         "vfs",
-        "worktree",
+        "workplace",
         "file",
         "/d.md",
         "--mode",

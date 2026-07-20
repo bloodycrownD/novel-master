@@ -13,7 +13,7 @@ import {
   type PromptLlmInput,
   type PromptRenderContext,
 } from '@novel-master/core/prompt';
-import { assembleWorkplaceDisplay } from '@novel-master/core/worktree';
+import { assembleWorkplaceDisplay } from '@novel-master/core/workplace';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 import { applyActiveRegexChannel } from './regex-apply-channel';
 
@@ -57,11 +57,11 @@ export async function buildSessionPromptInput(
   const wt = runtime.worktree(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // assemble → prepare(S0)，与 agent-runner 同源。
-  const { worktreeDisplay, prefixPaths } = await assembleWorkplaceDisplay(
+  const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(
     wtScope,
     {
       sessionKkv: runtime.sessionKkv,
-      worktree: wt,
+      workplace: wt,
       vfs,
       layout: resolved.prompts,
     },
@@ -73,9 +73,9 @@ export async function buildSessionPromptInput(
     seenPaths: prefixPaths,
   });
   const ctx: PromptRenderContext = {
-    worktreeDisplay,
+    workplaceDisplay,
     messages,
-    worktree: wt,
+    workplace: wt,
     vfs,
   };
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);

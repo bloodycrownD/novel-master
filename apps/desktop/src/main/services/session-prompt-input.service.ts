@@ -4,7 +4,7 @@
 import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
 import { prepareUserMessagesForPrompt } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
-import { assembleWorkplaceDisplay } from "@novel-master/core/worktree";
+import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { applyActiveRegexChannel } from "./regex-apply-channel.service.js";
 
@@ -47,11 +47,11 @@ export async function buildSessionPromptInput(
   const wt = runtime.worktree(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // assemble → prepare(S0)，与 agent-runner 同源。
-  const { worktreeDisplay, prefixPaths } = await assembleWorkplaceDisplay(
+  const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(
     wtScope,
     {
       sessionKkv: runtime.sessionKkv,
-      worktree: wt,
+      workplace: wt,
       vfs,
       layout: resolved.prompts,
     },
@@ -63,9 +63,9 @@ export async function buildSessionPromptInput(
     seenPaths: prefixPaths,
   });
   const ctx: PromptRenderContext = {
-    worktreeDisplay,
+    workplaceDisplay,
     messages,
-    worktree: wt,
+    workplace: wt,
     vfs,
   };
   // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块

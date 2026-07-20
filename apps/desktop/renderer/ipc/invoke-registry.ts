@@ -71,7 +71,7 @@ import {
   type WorktreeBuildListRowsRequest,
   type WorktreeGetDirRuleRequest,
   type WorktreeCaptureSessionBlockRequest,
-  type WorktreeListRowDto,
+  type WorkplaceListRowDto,
   type WorktreeSetDirRuleRequest,
   type WorktreeSetFileRuleRequest,
 } from '@shared/ipc-types';
@@ -181,7 +181,7 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke<IpcResult<void>>(IPC_CHANNELS.APP_UI_SET, { key, value }),
     ipcWorktreeBuildListRows: withReq<
       WorktreeBuildListRowsRequest,
-      IpcResult<WorktreeListRowDto[]>
+      IpcResult<WorkplaceListRowDto[]>
     >(invoke, IPC_CHANNELS.WORKTREE_BUILD_LIST_ROWS),
     ipcWorktreeSetDirRule: withReq<WorktreeSetDirRuleRequest, IpcResult<void>>(
       invoke,

@@ -8,11 +8,11 @@ import type {
   WorktreeBuildListRowsRequest,
   WorktreeCaptureSessionBlockRequest,
   WorktreeGetDirRuleRequest,
-  WorktreeListRowDto,
+  WorkplaceListRowDto,
   WorktreeSetDirRuleRequest,
   WorktreeSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
-import { type WorktreeService } from "@novel-master/core/worktree";
+import { type WorkplaceService } from "@novel-master/core/workplace";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   getWorktreeForScope,
@@ -47,7 +47,7 @@ function toIpcFillPolicy(
 async function loadWorktreeRows(
   rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
   req: WorktreeBuildListRowsRequest,
-): Promise<WorktreeListRowDto[]> {
+): Promise<WorkplaceListRowDto[]> {
   const scope = resolveVfsScopeFromRequest(req);
   if (scope.kind === "session") {
     const wt = getWorktreeForScope(rt, scope);
@@ -63,7 +63,7 @@ async function loadWorktreeRows(
  */
 async function suggestWorkplaceAttachmentsAfterRuleChange(
   rt: DesktopNovelMasterRuntime,
-  wt: WorktreeService,
+  wt: WorkplaceService,
   sessionId: string | undefined,
 ): Promise<void> {
   if (sessionId == null || sessionId === "") {
@@ -79,7 +79,7 @@ async function suggestWorkplaceAttachmentsAfterRuleChange(
 
 export async function handleWorktreeBuildListRows(
   req: WorktreeBuildListRowsRequest,
-): Promise<IpcResult<WorktreeListRowDto[]>> {
+): Promise<IpcResult<WorkplaceListRowDto[]>> {
   try {
     const rt = await getDesktopRuntime();
     const rows = await loadWorktreeRows(rt, req);

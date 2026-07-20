@@ -3,7 +3,7 @@
  * 复用 worktree listRows IPC，不嵌 VfsFileManager。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { WorktreeListRowDto } from '@shared/ipc-types';
+import type { WorkplaceListRowDto } from '@shared/ipc-types';
 import { ipcWorktreeBuildListRows, vfsScope } from '@/ipc/client';
 import {
   isDirectChild,
@@ -27,9 +27,9 @@ function basename(path: string): string {
 
 /** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
 export function listPickerChildRows(
-  rows: readonly WorktreeListRowDto[],
+  rows: readonly WorkplaceListRowDto[],
   currentPath: string,
-): WorktreeListRowDto[] {
+): WorkplaceListRowDto[] {
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
@@ -52,7 +52,7 @@ export function FileReferencePicker({
   onClose,
   onConfirm,
 }: FileReferencePickerProps) {
-  const [rows, setRows] = useState<WorktreeListRowDto[]>([]);
+  const [rows, setRows] = useState<WorkplaceListRowDto[]>([]);
   const [currentPath, setCurrentPath] = useState('/');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedDirs, setSelectedDirs] = useState<Set<string>>(new Set());

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MessageAttachmentDto, WorktreeListRowDto } from "@shared/ipc-types";
+import type { MessageAttachmentDto, WorkplaceListRowDto } from "@shared/ipc-types";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
@@ -68,7 +68,7 @@ interface ChatComposerProps {
   onOpenSessionActions?: (anchor: HTMLElement) => void;
 }
 
-function rowsToAtPathRefs(rows: readonly WorktreeListRowDto[]): AtPathRef[] {
+function rowsToAtPathRefs(rows: readonly WorkplaceListRowDto[]): AtPathRef[] {
   return rows
     .filter((r) => r.path !== "/")
     .map((r) => ({
@@ -107,7 +107,7 @@ export function ChatComposer({
   const [bridgeBusy, setBridgeBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
-  const [typeaheadRows, setTypeaheadRows] = useState<WorktreeListRowDto[]>([]);
+  const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRowDto[]>([]);
 
   const checkModel = useCallback(async () => {
     const result = await ipcPromptAgentMeta({ projectId, sessionId });

@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { WorktreeListRow } from '@novel-master/core/worktree';
+import type { WorkplaceListRow } from '@novel-master/core/workplace';
 import { AppModal } from '@/components/ui/AppModal';
 import { useTheme } from '@/theme/ThemeProvider';
 import { formatError } from '@/errors/format-error';
@@ -37,9 +37,9 @@ function basename(path: string): string {
 
 /** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
 export function listPickerChildRows(
-  rows: readonly WorktreeListRow[],
+  rows: readonly WorkplaceListRow[],
   currentPath: string,
-): WorktreeListRow[] {
+): WorkplaceListRow[] {
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
@@ -64,7 +64,7 @@ export function FileReferencePicker({
 }: FileReferencePickerProps) {
   const { tokens } = useTheme();
   const runtime = useRuntime();
-  const [rows, setRows] = useState<WorktreeListRow[]>([]);
+  const [rows, setRows] = useState<WorkplaceListRow[]>([]);
   const [currentPath, setCurrentPath] = useState('/');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedDirs, setSelectedDirs] = useState<Set<string>>(new Set());

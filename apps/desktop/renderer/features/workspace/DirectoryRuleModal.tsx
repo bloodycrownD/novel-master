@@ -1,4 +1,4 @@
-import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
+import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
 import { useEffect, useState } from "react";
 import type { WorktreeSetDirRuleRequest } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
@@ -42,7 +42,7 @@ function normalizeFillPolicy(fillPolicy: FillPolicy | undefined): UiFillPolicy {
   ) {
     return fillPolicy;
   }
-  return DEFAULT_WORKTREE_DIR_RULE.fillPolicy;
+  return DEFAULT_WORKPLACE_DIR_RULE.fillPolicy;
 }
 
 function clampCount(raw: string): number {
@@ -78,7 +78,7 @@ export function DirectoryRuleModal({
   const [headCount, setHeadCount] = useState("0");
   const [tailCount, setTailCount] = useState("1000");
   const [fillPolicy, setFillPolicy] = useState<UiFillPolicy>(
-    DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
   );
 
   const logicalPath =

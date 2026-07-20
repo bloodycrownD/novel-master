@@ -45,8 +45,8 @@ import {
   type VfsScope,
 } from "@novel-master/core/vfs";
 import {
-  createWorktreeService,
-} from "@novel-master/core/worktree";
+  createWorkplaceService,
+} from "@novel-master/core/workplace";
 import { createKkvService } from "@novel-master/core/kkv";
 import { createSessionKkvService } from "@novel-master/core/session-kkv";
 import {
@@ -118,7 +118,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktree: (s) => createWorktreeService(conn, s),
+      workplace: (s) => createWorkplaceService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, {
           kind: "session",
@@ -163,7 +163,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
         projectId,
         sessionId,
       }),
-    worktree: (scope: VfsScope) => createWorktreeService(conn, scope),
+    worktree: (scope: VfsScope) => createWorkplaceService(conn, scope),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

@@ -27,6 +27,6 @@ describe('worktree-block.service', () => {
       projectId: 'p',
       sessionId: 's',
     });
-    expect(block.worktreeDisplay).toBe('');
+    expect(block.workplaceDisplay).toBe('');
   });
 });

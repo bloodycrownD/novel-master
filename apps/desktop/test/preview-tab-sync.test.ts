@@ -4,9 +4,9 @@ import {
   markPreviewTabsDeletedUnderPathInList,
   syncPreviewTabsWithFileRows,
 } from "@/features/workspace/preview-tab-sync";
-import type { WorktreeListRowDto } from "@shared/ipc-types";
+import type { WorkplaceListRowDto } from "@shared/ipc-types";
 
-const fileRow = (path: string): WorktreeListRowDto => ({
+const fileRow = (path: string): WorkplaceListRowDto => ({
   path,
   kind: "file",
   inclusionMode: "auto",

@@ -3,7 +3,7 @@
  *
  * @module services/worktree-block.service
  */
-import { assembleWorkplaceDisplay } from '@novel-master/core/worktree';
+import { assembleWorkplaceDisplay } from '@novel-master/core/workplace';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 import { refreshComposerStatusAfterSessionKkvCleared } from './project-composer-status.service';
 
@@ -22,13 +22,13 @@ export async function assembleWorkplaceForMobile(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   };
-  const { worktreeDisplay } = await assembleWorkplaceDisplay(wtScope, {
+  const { workplaceDisplay } = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: runtime.sessionKkv,
-    worktree: runtime.worktree(wtScope),
+    workplace: runtime.worktree(wtScope),
     vfs: runtime.sessionVfs(scope.projectId, scope.sessionId),
     layout: { persist: [{ type: 'worktree', name: 'canon' }] },
   });
-  return { worktreeDisplay, capturedAtMs: Date.now() };
+  return { workplaceDisplay, capturedAtMs: Date.now() };
 }
 
 /** 手动重置常驻工作区缓存：clear session kkv，并清 Composer 上条。 */
@@ -38,5 +38,5 @@ export async function clearSessionWorkplaceKkv(
 ) {
   await runtime.sessionKkv.clearSession(scope.sessionId);
   await refreshComposerStatusAfterSessionKkvCleared(runtime, scope);
-  return { worktreeDisplay: '', capturedAtMs: Date.now() };
+  return { workplaceDisplay: '', capturedAtMs: Date.now() };
 }

@@ -1,5 +1,5 @@
 /**
- * Maps {@link WorktreeListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
+ * Maps {@link WorkplaceListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
 import { type VfsListEntry } from '@novel-master/core/vfs';
 import {
@@ -7,8 +7,8 @@ import {
   inclusionModeLabel,
   type InclusionMode,
   type RuleState,
-  type WorktreeListRow,
-} from '@novel-master/core/worktree';
+  type WorkplaceListRow,
+} from '@novel-master/core/workplace';
 
 export type VfsBadgeTone = 'in' | 'follow' | 'muted';
 
@@ -55,7 +55,7 @@ export function entryName(path: string): string {
 
 /** Count file rows whose parent directory is `dirPath`. */
 export function countFilesInDir(
-  rows: readonly WorktreeListRow[],
+  rows: readonly WorkplaceListRow[],
   dirPath: string,
 ): number {
   return rows.filter(r => r.kind === 'file' && isDirectChild(dirPath, r.path))
@@ -98,7 +98,7 @@ function fileBadge(mode: InclusionMode): VfsRowBadge {
 
 /** Map a worktree row to vfs-fm subtitle + badge. */
 export function mapWorktreeRow(
-  row: WorktreeListRow,
+  row: WorkplaceListRow,
   childFileCount?: number,
 ): MappedVfsRow {
   const name = entryName(row.path);
@@ -161,7 +161,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
 export function remapDirectChildRows(
   rows: readonly MappedVfsRow[],
   parentPath: string,
-  allRows: readonly WorktreeListRow[],
+  allRows: readonly WorkplaceListRow[],
 ): MappedVfsRow[] {
   const metaByPath = new Map(allRows.map(r => [r.path, r]));
   return rows.map(row => {

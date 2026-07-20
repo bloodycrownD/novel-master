@@ -186,7 +186,7 @@ function renderSessionVfm(rootPath = '/') {
         sessionId: 's1',
       }}
       vfs={{ list } as any}
-      worktree={{ buildListRows, getDirRule, setDirRule } as any}
+      workplace={{ buildListRows, getDirRule, setDirRule } as any}
       onOpenFile={jest.fn()}
       rootPath={rootPath}
     />

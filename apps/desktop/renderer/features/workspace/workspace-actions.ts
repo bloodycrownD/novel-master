@@ -1,4 +1,4 @@
-import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
+import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
 import type {
   VfsScopeRequest,
   WorktreeSetDirRuleRequest,
@@ -111,11 +111,11 @@ export function defaultDirRuleRequest(
   return {
     ...scope,
     logicalPath,
-    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
-    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
-    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
-    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
-    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    sortField: DEFAULT_WORKPLACE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKPLACE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKPLACE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
     ruleEnabled: true,
   };
 }
@@ -130,11 +130,11 @@ export function emptyDirRuleForm(
   return {
     ...scope,
     logicalPath,
-    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
-    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
-    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
-    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
-    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    sortField: DEFAULT_WORKPLACE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKPLACE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKPLACE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
     ruleEnabled: false,
   };
 }

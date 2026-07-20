@@ -1,23 +1,23 @@
 /**
  * Order direct children of a VFS directory to match worktree DFS list semantics.
  */
-import type {WorktreeDirRule, WorktreeListRow} from '@novel-master/core/worktree';
-import {sortDirPaths, sortFilesForDir} from '@novel-master/core/worktree';
+import type {WorkplaceDirRule, WorkplaceListRow} from '@novel-master/core/workplace';
+import {sortDirPaths, sortFilesForDir} from '@novel-master/core/workplace';
 import {isDirectChild} from './vfs-row-mapper';
 
 export type OrderedDirectChildPathsParams = {
   readonly parentPath: string;
-  readonly rows: readonly WorktreeListRow[];
+  readonly rows: readonly WorkplaceListRow[];
   /** All candidate child paths (e.g. worktree dirs + vfs.list); orphans sorted at end. */
   readonly extraPaths: readonly string[];
-  readonly dirRule: WorktreeDirRule | null;
+  readonly dirRule: WorkplaceDirRule | null;
   readonly mtimeByPath?: ReadonlyMap<string, number>;
   /** VFS-only paths not present in {@link rows}; dirs vs files for orphan sort. */
   readonly kindByPath?: ReadonlyMap<string, 'dir' | 'file'>;
 };
 
 function rowKindAtPath(
-  rows: readonly WorktreeListRow[],
+  rows: readonly WorkplaceListRow[],
   path: string,
 ): 'dir' | 'file' | undefined {
   return rows.find(r => r.path === path)?.kind;
@@ -25,7 +25,7 @@ function rowKindAtPath(
 
 /**
  * Returns direct child paths under `parentPath` in the same order as
- * {@link WorktreeService.buildListRows} DFS (dirs before files at each level).
+ * {@link WorkplaceService.buildListRows} DFS (dirs before files at each level).
  * Paths only in `extraPaths` are appended after row-derived order, sorted with core
  * `sortDirPaths` / `sortFilesForDir` so directory rule changes affect orphans too.
  */

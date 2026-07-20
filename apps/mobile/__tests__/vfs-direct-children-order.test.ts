@@ -1,13 +1,13 @@
 import { orderedDirectChildPaths } from '../src/components/vfs/vfs-direct-children-order';
 import {
-  type WorktreeDirRule,
-  type WorktreeListRow,
-} from '@novel-master/core/worktree';
-import { DEFAULT_WORKTREE_DIR_RULE } from '@novel-master/core/worktree';
+  type WorkplaceDirRule,
+  type WorkplaceListRow,
+} from '@novel-master/core/workplace';
+import { DEFAULT_WORKPLACE_DIR_RULE } from '@novel-master/core/workplace';
 
 describe('orderedDirectChildPaths', () => {
   const parent = '/p';
-  const rows: WorktreeListRow[] = [
+  const rows: WorkplaceListRow[] = [
     {
       kind: 'dir',
       path: '/p',
@@ -57,12 +57,12 @@ describe('orderedDirectChildPaths', () => {
   });
 
   it('reverses orphan path order when sortOrder is desc', () => {
-    const ascRule: WorktreeDirRule = {
-      ...DEFAULT_WORKTREE_DIR_RULE,
+    const ascRule: WorkplaceDirRule = {
+      ...DEFAULT_WORKPLACE_DIR_RULE,
       sortOrder: 'asc',
     };
-    const descRule: WorktreeDirRule = {
-      ...DEFAULT_WORKTREE_DIR_RULE,
+    const descRule: WorkplaceDirRule = {
+      ...DEFAULT_WORKPLACE_DIR_RULE,
       sortOrder: 'desc',
     };
     const extraPaths = ['/p/orphan-a', '/p/orphan-b'];

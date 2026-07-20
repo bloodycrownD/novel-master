@@ -1,7 +1,7 @@
 /**
  * Mobile directory-rule fill policy: legacy `full` maps to `hidden` in UI.
  */
-import { type FillPolicy } from "@novel-master/core/worktree";
+import { type FillPolicy } from "@novel-master/core/workplace";
 
 /** Maps deprecated `full` to `hidden`; coalesces unknown values to `hidden`. */
 export function normalizeFillPolicyForMobile(

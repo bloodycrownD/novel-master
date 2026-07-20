@@ -20,7 +20,7 @@ import {
   TOOL_TURN_BRIDGE_TEXT,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-import type { WorktreeListRow } from '@novel-master/core/worktree';
+import type { WorkplaceListRow } from '@novel-master/core/workplace';
 
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -133,7 +133,7 @@ export function ChatComposer({
     useState<AbortController | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
-  const [typeaheadRows, setTypeaheadRows] = useState<WorktreeListRow[]>([]);
+  const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
   const inputRef = useRef<TextInput>(null);
   /** 程序化插入 @path（选择器 / typeahead）走 mentions 提交路径。 */
   const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);

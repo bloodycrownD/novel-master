@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
+import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
 import {
   emptyDirRuleForm,
   defaultDirRuleRequest,
@@ -14,7 +14,7 @@ test("emptyDirRuleForm 无持久化规则时 ruleEnabled 为 false", () => {
   });
   assert.equal(form.ruleEnabled, false);
   assert.equal(form.logicalPath, "/notes");
-  assert.equal(form.fillPolicy, DEFAULT_WORKTREE_DIR_RULE.fillPolicy);
+  assert.equal(form.fillPolicy, DEFAULT_WORKPLACE_DIR_RULE.fillPolicy);
 });
 
 test("defaultDirRuleRequest 新建目录持久化时 ruleEnabled 为 true", () => {

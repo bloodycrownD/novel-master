@@ -40,8 +40,8 @@ import type { MessageCheckpointService } from '@novel-master/core/message-checkp
 import type { SessionFsService } from '@novel-master/core/session-fs';
 import type { VfsScope, VfsService } from '@novel-master/core/vfs';
 import type {
-  WorktreeService,
-} from '@novel-master/core/worktree';
+  WorkplaceService,
+} from '@novel-master/core/workplace';
 import type { KkvService } from '@novel-master/core/kkv';
 import type { SessionKkvService } from '@novel-master/core/session-kkv';
 
@@ -71,7 +71,7 @@ export interface MobileNovelMasterRuntime {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
-  worktree(scope: VfsScope): WorktreeService;
+  worktree(scope: VfsScope): WorkplaceService;
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;

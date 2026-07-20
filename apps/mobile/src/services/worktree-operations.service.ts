@@ -6,25 +6,25 @@ import { type VfsScope } from '@novel-master/core/vfs';
 import {
   type InclusionMode,
   type SetDirRuleInput,
-  type WorktreeDirRule,
-  type WorktreeService,
-} from '@novel-master/core/worktree';
-import { DEFAULT_WORKTREE_DIR_RULE } from '@novel-master/core/worktree';
+  type WorkplaceDirRule,
+  type WorkplaceService,
+} from '@novel-master/core/workplace';
+import { DEFAULT_WORKPLACE_DIR_RULE } from '@novel-master/core/workplace';
 import { normalizeFillPolicyForMobile } from '../storage/fill-policy-mobile';
 
-function worktreeRootLogicalPath(_scope: VfsScope): string {
+function workplaceRootLogicalPath(_scope: VfsScope): string {
   return '/';
 }
 
-function isWorktreeRootPath(scope: VfsScope, logicalPath: string): boolean {
-  return logicalPath === worktreeRootLogicalPath(scope);
+function isWorkplaceRootPath(scope: VfsScope, logicalPath: string): boolean {
+  return logicalPath === workplaceRootLogicalPath(scope);
 }
 
 const INCLUSION_CYCLE: InclusionMode[] = ['auto', 'show', 'hide'];
 
 /** Cycle file inclusion auto → show → hide. */
 export async function cycleFileInclusion(
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   logicalPath: string,
   currentMode: InclusionMode,
 ): Promise<InclusionMode> {
@@ -32,20 +32,20 @@ export async function cycleFileInclusion(
     INCLUSION_CYCLE[
       (INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length
     ];
-  await worktree.setFileRule({ logicalPath, inclusionMode: next });
+  await workplace.setFileRule({ logicalPath, inclusionMode: next });
   return next;
 }
 
 /** Set directory rule enabled; root cannot be disabled. */
 export async function setDirRuleEnabled(
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   logicalPath: string,
   enabled: boolean,
 ): Promise<void> {
-  if (!enabled && isWorktreeRootPath(worktree.scope, logicalPath)) {
+  if (!enabled && isWorkplaceRootPath(workplace.scope, logicalPath)) {
     throw new Error('根目录规则不可关闭');
   }
-  await worktree.setDirRule({
+  await workplace.setDirRule({
     logicalPath,
     ruleEnabled: enabled,
   });
@@ -53,12 +53,12 @@ export async function setDirRuleEnabled(
 
 /** Toggle directory rule on/off; root directory cannot be disabled. */
 export async function toggleDirRuleEnabled(
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   logicalPath: string,
   currentlyEnabled: boolean,
 ): Promise<boolean> {
   const nextEnabled = !currentlyEnabled;
-  await setDirRuleEnabled(worktree, logicalPath, nextEnabled);
+  await setDirRuleEnabled(workplace, logicalPath, nextEnabled);
   return nextEnabled;
 }
 
@@ -66,7 +66,7 @@ export async function toggleDirRuleEnabled(
  * Batch enable/disable rules on selected directory rows; skips files and root when disabling.
  */
 export async function batchSetDirRulesEnabled(
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   paths: readonly string[],
   dirPaths: ReadonlySet<string>,
 ): Promise<{ applied: number; skipped: number }> {
@@ -78,7 +78,7 @@ export async function batchSetDirRulesEnabled(
       continue;
     }
     try {
-      await setDirRuleEnabled(worktree, path, true);
+      await setDirRuleEnabled(workplace, path, true);
       applied += 1;
     } catch {
       skipped += 1;
@@ -88,7 +88,7 @@ export async function batchSetDirRulesEnabled(
 }
 
 export async function batchSetDirRulesDisabled(
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   paths: readonly string[],
   dirPaths: ReadonlySet<string>,
 ): Promise<{ applied: number; skipped: number }> {
@@ -100,7 +100,7 @@ export async function batchSetDirRulesDisabled(
       continue;
     }
     try {
-      await setDirRuleEnabled(worktree, path, false);
+      await setDirRuleEnabled(workplace, path, false);
       applied += 1;
     } catch {
       skipped += 1;
@@ -110,7 +110,7 @@ export async function batchSetDirRulesDisabled(
 }
 
 /** Map persisted directory rule to sheet form input. */
-export function dirRuleToForm(rule: WorktreeDirRule): SetDirRuleInput {
+export function dirRuleToForm(rule: WorkplaceDirRule): SetDirRuleInput {
   return {
     logicalPath: rule.logicalPath,
     sortField: rule.sortField,
@@ -126,11 +126,11 @@ export function dirRuleToForm(rule: WorktreeDirRule): SetDirRuleInput {
 export function defaultDirRuleForm(logicalPath: string) {
   return {
     logicalPath,
-    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
-    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
-    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
-    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
-    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    sortField: DEFAULT_WORKPLACE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKPLACE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKPLACE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
     ruleEnabled: true,
   };
 }
@@ -139,18 +139,18 @@ export function defaultDirRuleForm(logicalPath: string) {
 export function emptyDirRuleForm(logicalPath: string) {
   return {
     logicalPath,
-    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
-    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
-    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
-    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
-    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    sortField: DEFAULT_WORKPLACE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKPLACE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKPLACE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
     ruleEnabled: false,
   };
 }
 
 /** Scope root path for navigation (unified logical `/` for all domains). */
-export function vfsScopeRootPath(scope: WorktreeService['scope']): string {
-  return worktreeRootLogicalPath(scope);
+export function vfsScopeRootPath(scope: WorkplaceService['scope']): string {
+  return workplaceRootLogicalPath(scope);
 }
 
 function pathUnderDir(dirPath: string, candidate: string): boolean {
@@ -162,11 +162,11 @@ function pathUnderDir(dirPath: string, candidate: string): boolean {
  * Old rule rows may remain until Core exposes delete; new paths get matching rules.
  */
 export async function migrateWorktreeDirRename(
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   oldDir: string,
   newDir: string,
 ): Promise<void> {
-  const rows = await worktree.buildListRows();
+  const rows = await workplace.buildListRows();
   for (const row of rows) {
     if (!pathUnderDir(oldDir, row.path)) {
       continue;
@@ -176,15 +176,15 @@ export async function migrateWorktreeDirRename(
         ? newDir
         : `${newDir}${row.path.slice(oldDir.length)}`;
     if (row.kind === 'dir') {
-      const rule = await worktree.getDirRule(row.path);
+      const rule = await workplace.getDirRule(row.path);
       if (rule != null) {
-        await worktree.setDirRule({
+        await workplace.setDirRule({
           ...dirRuleToForm(rule),
           logicalPath: targetPath,
         });
       }
     } else {
-      await worktree.setFileRule({
+      await workplace.setFileRule({
         logicalPath: targetPath,
         inclusionMode: row.inclusionMode,
       });

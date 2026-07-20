@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   VfsScopeRequest,
-  WorktreeListRowDto,
+  WorkplaceListRowDto,
   WorkspacePanelScope,
 } from "@shared/ipc-types";
 import { ipcWorktreeBuildListRows, vfsScope } from "@/ipc/client";
@@ -22,7 +22,7 @@ interface WorkspaceTreeProps {
   refreshToken: number;
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
   /** 列表重载成功后回调，用于同步预览 tab 删除态 */
-  onRowsLoaded?: (rows: WorktreeListRowDto[]) => void;
+  onRowsLoaded?: (rows: WorkplaceListRowDto[]) => void;
   /** Blank-area menu is handled on `.explorer-tree` in ExplorerPane. */
   onBlankContextMenu?: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
 }
@@ -43,7 +43,7 @@ export function WorkspaceTree({
 }: WorkspaceTreeProps) {
   const { projectId, sessionId, previewFile, selectPreviewFile, treeExpandRequest } =
     useShellNav();
-  const [rows, setRows] = useState<WorktreeListRowDto[]>([]);
+  const [rows, setRows] = useState<WorkplaceListRowDto[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
     () => new Set(["/"]),
   );

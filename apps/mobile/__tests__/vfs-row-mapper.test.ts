@@ -8,30 +8,30 @@ import {
   remapDirectChildRows,
   type MappedVfsRow,
 } from '../src/components/vfs/vfs-row-mapper';
-import { type WorktreeListRow } from '@novel-master/core/worktree';
+import { type WorkplaceListRow } from '@novel-master/core/workplace';
 
 describe('vfs-row-mapper', () => {
-  const dirRow: WorktreeListRow = {
+  const dirRow: WorkplaceListRow = {
     kind: 'dir',
     path: '/shared',
     ruleState: 'rule_on',
   };
 
-  const fileRowAuto: WorktreeListRow = {
+  const fileRowAuto: WorkplaceListRow = {
     kind: 'file',
     path: '/readme.md',
     inclusionMode: 'auto',
     displayState: 'full',
   };
 
-  const fileRowShow: WorktreeListRow = {
+  const fileRowShow: WorkplaceListRow = {
     kind: 'file',
     path: '/visible.md',
     inclusionMode: 'show',
     displayState: 'full',
   };
 
-  const fileRowHide: WorktreeListRow = {
+  const fileRowHide: WorkplaceListRow = {
     kind: 'file',
     path: '/hidden.md',
     inclusionMode: 'hide',
@@ -46,13 +46,13 @@ describe('vfs-row-mapper', () => {
   });
 
   it('remaps direct child file rows after inclusion change', () => {
-    const fileInShared: WorktreeListRow = {
+    const fileInShared: WorkplaceListRow = {
       kind: 'file',
       path: '/shared/readme.md',
       inclusionMode: 'auto',
       displayState: 'full',
     };
-    const siblingAuto: WorktreeListRow = {
+    const siblingAuto: WorkplaceListRow = {
       kind: 'file',
       path: '/shared/other.md',
       inclusionMode: 'auto',
@@ -63,7 +63,7 @@ describe('vfs-row-mapper', () => {
       mapWorktreeRow(siblingAuto),
       mapWorktreeRow(fileRowAuto),
     ];
-    const updatedMeta: WorktreeListRow[] = [
+    const updatedMeta: WorkplaceListRow[] = [
       { ...fileInShared, inclusionMode: 'show', displayState: 'full' },
       { ...siblingAuto, displayState: 'full' },
     ];
@@ -83,7 +83,7 @@ describe('vfs-row-mapper', () => {
   });
 
   it('maps directory rule off badge without count subtitle when zero files', () => {
-    const off: WorktreeListRow = { ...dirRow, ruleState: 'rule_off' };
+    const off: WorkplaceListRow = { ...dirRow, ruleState: 'rule_off' };
     const mapped = mapWorktreeRow(off, 0);
     expect(mapped.subtitle).toBe('');
     expect(mapped.badge).toEqual({ label: '关闭', tone: 'muted' });
@@ -107,7 +107,7 @@ describe('vfs-row-mapper', () => {
   });
 
   it('counts direct child files only', () => {
-    const rows: WorktreeListRow[] = [
+    const rows: WorkplaceListRow[] = [
       dirRow,
       fileRowAuto,
       {

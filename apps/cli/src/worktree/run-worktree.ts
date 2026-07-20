@@ -4,11 +4,11 @@
  * @module worktree/run-worktree
  */
 
-import { type FillPolicy, type InclusionMode, type SortField, type SortOrder, type WorktreeService } from "@novel-master/core/worktree";
+import { type FillPolicy, type InclusionMode, type SortField, type SortOrder, type WorkplaceService } from "@novel-master/core/workplace";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runWorktree(
-  service: WorktreeService,
+  service: WorkplaceService,
   args: readonly string[],
 ): Promise<void> {
   const { positional, flags } = parseCliArgs(args);

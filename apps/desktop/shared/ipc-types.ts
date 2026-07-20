@@ -393,7 +393,7 @@ export type WorktreeInclusionMode = 'auto' | 'show' | 'hide';
 
 export type WorktreeDisplayState = 'hidden' | 'full' | 'header' | 'filename';
 
-export type WorktreeListRowDto =
+export type WorkplaceListRowDto =
   | {
       readonly kind: 'dir';
       readonly path: string;

@@ -13,7 +13,7 @@ import { type ChatSession } from "@novel-master/core/chat";
 
 import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
 
-import { type WorktreeService } from "@novel-master/core/worktree";
+import { type WorkplaceService } from "@novel-master/core/workplace";
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
@@ -34,7 +34,7 @@ export type ChatSessionListPanelProps = {
   sessions: ChatSession[];
   vfsRefreshKey: number;
   projectVfs: VfsService | null;
-  projectWorktree: WorktreeService | null;
+  projectWorktree: WorkplaceService | null;
   sessionBatchActive: boolean;
   sessionBatchSelectedCount: number;
   onEnterSessionBatch: () => void;
@@ -118,7 +118,7 @@ function ChatSessionListPanelInner({
               key={`project-template-${vfsRefreshKey}`}
               scope={projectVfsScope!}
               vfs={projectVfs}
-              worktree={projectWorktree}
+              workplace={projectWorktree}
               rootPath="/"
               pullFromParent={projectPullFromParent}
               onOpenFile={path => onOpenFileEditor(path, 'project')}

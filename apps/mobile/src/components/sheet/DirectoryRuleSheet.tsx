@@ -1,5 +1,5 @@
 /**
- * Directory inclusion rule form → {@link WorktreeService.setDirRule}.
+ * Directory inclusion rule form → {@link WorkplaceService.setDirRule}.
  */
 import React, { useEffect, useState } from 'react';
 import {
@@ -12,12 +12,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  DEFAULT_WORKTREE_DIR_RULE,
+  DEFAULT_WORKPLACE_DIR_RULE,
   type FillPolicy,
   type SetDirRuleInput,
   type SortField,
   type SortOrder,
-} from '@novel-master/core/worktree';
+} from '@novel-master/core/workplace';
 import { FormSwitchRow } from '../form/FormSwitchRow';
 import { AppModal } from '../ui/AppModal';
 import { normalizeFillPolicyForMobile } from '../../storage/fill-policy-mobile';
@@ -61,19 +61,19 @@ export function DirectoryRuleSheet({
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const [sortField, setSortField] = useState<SortField>(
-    DEFAULT_WORKTREE_DIR_RULE.sortField,
+    DEFAULT_WORKPLACE_DIR_RULE.sortField,
   );
   const [sortOrder, setSortOrder] = useState<SortOrder>(
-    DEFAULT_WORKTREE_DIR_RULE.sortOrder,
+    DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
   );
   const [headCount, setHeadCount] = useState(
-    String(DEFAULT_WORKTREE_DIR_RULE.headCount),
+    String(DEFAULT_WORKPLACE_DIR_RULE.headCount),
   );
   const [tailCount, setTailCount] = useState(
-    String(DEFAULT_WORKTREE_DIR_RULE.tailCount),
+    String(DEFAULT_WORKPLACE_DIR_RULE.tailCount),
   );
   const [fillPolicy, setFillPolicy] = useState<FillPolicy>(
-    DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
   );
   const [ruleEnabled, setRuleEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -82,17 +82,17 @@ export function DirectoryRuleSheet({
     if (!visible) {
       return;
     }
-    setSortField(initial?.sortField ?? DEFAULT_WORKTREE_DIR_RULE.sortField);
-    setSortOrder(initial?.sortOrder ?? DEFAULT_WORKTREE_DIR_RULE.sortOrder);
+    setSortField(initial?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField);
+    setSortOrder(initial?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder);
     setHeadCount(
-      String(initial?.headCount ?? DEFAULT_WORKTREE_DIR_RULE.headCount),
+      String(initial?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount),
     );
     setTailCount(
-      String(initial?.tailCount ?? DEFAULT_WORKTREE_DIR_RULE.tailCount),
+      String(initial?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount),
     );
     setFillPolicy(
       normalizeFillPolicyForMobile(
-        initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+        initial?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
       ),
     );
     setRuleEnabled(rootRuleLocked ? true : initial?.ruleEnabled ?? false);

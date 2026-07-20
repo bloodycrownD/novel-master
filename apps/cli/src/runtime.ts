@@ -59,9 +59,9 @@ import {
   type VfsService,
 } from "@novel-master/core/vfs";
 import {
-  createWorktreeService,
-  type WorktreeService,
-} from "@novel-master/core/worktree";
+  createWorkplaceService,
+  type WorkplaceService,
+} from "@novel-master/core/workplace";
 import {
   createSessionKkvService,
   type SessionKkvService,
@@ -116,7 +116,7 @@ export interface NovelMasterRuntime {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
-  worktree(scope: VfsScope): WorktreeService;
+  worktree(scope: VfsScope): WorkplaceService;
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
@@ -205,7 +205,7 @@ export async function createNovelMasterRuntime(
       agentRegistry,
       modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktree: (s) => createWorktreeService(conn, s),
+      workplace: (s) => createWorkplaceService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
       messageCheckpoint: createMessageCheckpointService(conn),
@@ -245,7 +245,7 @@ export async function createNovelMasterRuntime(
         projectId,
         sessionId,
       }),
-    worktree: (scope) => createWorktreeService(conn, scope),
+    worktree: (scope) => createWorkplaceService(conn, scope),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

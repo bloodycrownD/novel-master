@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {splitMarkdownFrontMatter} from '@novel-master/core/worktree';
+import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';

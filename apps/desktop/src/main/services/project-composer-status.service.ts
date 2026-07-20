@@ -7,20 +7,20 @@ import {
 } from "@novel-master/core/chat";
 import {
   ruleViewToSnapshotEntries,
-  type WorktreeService,
-} from "@novel-master/core/worktree";
+  type WorkplaceService,
+} from "@novel-master/core/workplace";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
 /** session 真源 → 状态条 attachments（workplace + user_ops）。 */
 export async function projectComposerStatusForSession(
   rt: DesktopNovelMasterRuntime,
-  worktree: WorktreeService,
+  workplace: WorkplaceService,
   sessionId: string,
 ): Promise<MessageAttachment[]> {
   return projectComposerStatusAttachments(sessionId, {
     sessionKkv: rt.sessionKkv,
     loadLiveWorkplacePaths: async () => {
-      const view = await worktree.evaluateRuleView();
+      const view = await workplace.evaluateRuleView();
       return ruleViewToSnapshotEntries(view);
     },
     previewUserOpsActions: async (id) => {

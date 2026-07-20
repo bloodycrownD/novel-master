@@ -4,9 +4,9 @@ import {
   atPathTokensFromPickerSelection,
   listPickerChildRows,
 } from "@/features/chat/FileReferencePicker";
-import type { WorktreeListRowDto } from "@shared/ipc-types";
+import type { WorkplaceListRowDto } from "@shared/ipc-types";
 
-const fixtureRows: WorktreeListRowDto[] = [
+const fixtureRows: WorkplaceListRowDto[] = [
   { kind: "dir", path: "/", ruleState: "rule_on" },
   { kind: "dir", path: "/notes", ruleState: "rule_on" },
   {

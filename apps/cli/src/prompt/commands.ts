@@ -14,7 +14,7 @@ import {
 } from "@novel-master/core/provider";
 
 import { applyRegexChannelForLlm } from "@novel-master/core/regex";
-import { assembleWorkplaceDisplay } from "@novel-master/core/worktree";
+import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -63,13 +63,13 @@ export async function runPrompt(
   );
   const wtScope = { kind: "session" as const, projectId, sessionId };
   const vfs = rt.sessionVfs(projectId, sessionId);
-  const { worktreeDisplay } = await assembleWorkplaceDisplay(wtScope, {
+  const { workplaceDisplay } = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: rt.sessionKkv,
-    worktree: rt.worktree(wtScope),
+    workplace: rt.worktree(wtScope),
     vfs,
     layout,
   });
-  const ctx = { worktreeDisplay, messages, vfs };
+  const ctx = { workplaceDisplay, messages, vfs };
   const text = await formatPromptLlmInputForCliFromLayout(layout, ctx);
   if (text.length > 0) {
     process.stdout.write(text);
