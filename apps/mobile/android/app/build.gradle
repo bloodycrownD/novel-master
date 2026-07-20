@@ -154,7 +154,7 @@ android {
  */
 tasks.register("checkWebViewAssets") {
     doLast {
-        def packages = ["chat-transcript", "rich-document"]
+        def packages = ["chat-transcript", "rich-document", "code-editor"]
         def required = ["index.html", "app.js", "app.css"]
         def missing = []
         packages.each { pkg ->

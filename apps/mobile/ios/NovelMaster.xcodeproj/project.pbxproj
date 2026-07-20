@@ -197,7 +197,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\nSRC=\"${SRCROOT}/NovelMaster/WebViewDist\"\nDEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/WebViewDist\"\nif [ ! -d \"$SRC\" ]; then\n  echo \"error: WebViewDist missing at $SRC — run npm run build:webview:native (preios) first\" >&2\n  exit 1\nfi\nif [ ! -f \"$SRC/chat-transcript/index.html\" ] || [ ! -f \"$SRC/rich-document/index.html\" ]; then\n  echo \"error: WebViewDist incomplete under $SRC — run npm run build:webview:native\" >&2\n  exit 1\nfi\nrm -rf \"$DEST\"\nmkdir -p \"$DEST\"\ncp -R \"$SRC/\" \"$DEST/\"\necho \"Copied WebViewDist -> $DEST\"\n";
+			shellScript = "set -euo pipefail\nSRC=\"${SRCROOT}/NovelMaster/WebViewDist\"\nDEST=\"${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/WebViewDist\"\nif [ ! -d \"$SRC\" ]; then\n  echo \"error: WebViewDist missing at $SRC — run npm run build:webview:native (preios) first\" >&2\n  exit 1\nfi\nif [ ! -f \"$SRC/chat-transcript/index.html\" ] || [ ! -f \"$SRC/rich-document/index.html\" ] || [ ! -f \"$SRC/code-editor/index.html\" ]; then\n  echo \"error: WebViewDist incomplete under $SRC — run npm run build:webview:native\" >&2\n  exit 1\nfi\nrm -rf \"$DEST\"\nmkdir -p \"$DEST\"\ncp -R \"$SRC/\" \"$DEST/\"\necho \"Copied WebViewDist -> $DEST\"\n";
 		};
 		00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;

@@ -21,6 +21,7 @@
     "src/web/chat-transcript/webview/**/*.tsx",
     "src/web/rich-document/webview/**/*.ts",
     "src/web/rich-document/webview/**/*.tsx",
+    "src/web/code-editor/webview/**/*.ts",
     "src/web/shared/**/*.ts",
     "src/web/shared/**/*.tsx"
   ]

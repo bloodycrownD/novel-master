@@ -82,7 +82,6 @@ export function PromptMacroTextInput({
     <View style={styles.root}>
       <FormTextInput
         tokens={tokens}
-        value={value}
         onChangeText={handleChangeText}
         onSelectionChange={handleSelectionChange}
         selection={pendingSelection ?? undefined}
@@ -90,7 +89,8 @@ export function PromptMacroTextInput({
         placeholder={placeholder}
         autoCapitalize="none"
         autoCorrect={false}>
-        {segments.length === 0 ? null : (
+        {/* RN TextInput：value 与 children 互斥；由 children 着色，onChangeText 驱动纯文本 */}
+        {value.length === 0 ? null : (
           <Text>
             {segments.map((segment, index) =>
               segment.kind === 'macro' ? (

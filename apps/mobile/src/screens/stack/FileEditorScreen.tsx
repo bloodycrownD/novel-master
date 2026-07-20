@@ -1,15 +1,13 @@
 /**
  * Full-screen file editor: read VFS, save via scoped vfs.write (no checkpoint).
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Keyboard,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
@@ -26,6 +24,10 @@ import {
   isMarkdownPreviewPath,
 } from '../../components/vfs/FileMarkdownPreview';
 import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
+import {
+  CodeEditorWebView,
+  type CodeEditorWebViewHandle,
+} from '../../components/vfs/CodeEditorWebView';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {formatCharCount} from '@novel-master/core/format';
 
@@ -68,6 +70,7 @@ export function FileEditorScreen() {
   const [previewRenderKind, setPreviewRenderKind] = useState<
     'markdown' | 'txt'
   >('markdown');
+  const codeEditorRef = useRef<CodeEditorWebViewHandle>(null);
 
   const isDirty = content !== savedContent;
   useUnsavedGuard(isDirty);
@@ -173,23 +176,20 @@ export function FileEditorScreen() {
     }
   };
 
-  const enterBrowseMode = useCallback(() => {
+  const dismissEditor = useCallback(() => {
+    codeEditorRef.current?.blur();
     setEditorFocused(false);
     Keyboard.dismiss();
   }, []);
 
   const togglePreview = () => {
     if (!previewMode) {
-      enterBrowseMode();
+      dismissEditor();
     }
     setPreviewMode(prev => !prev);
   };
 
-  const handleEditorBlur = useCallback(() => {
-    enterBrowseMode();
-  }, [enterBrowseMode]);
-
-  // 进入编辑态时默认未聚焦，便于滑动浏览正文而不弹软键盘。
+  // 进入编辑态时默认未弹键盘，便于滑动浏览正文。
   useEffect(() => {
     if (!previewMode) {
       setEditorFocused(false);
@@ -228,15 +228,34 @@ export function FileEditorScreen() {
           </Text>
         </Pressable>
         {/* Show basename only; tail ellipsis when the filename is long. */}
-        <Text
-          style={[
-            styles.toolbarPath,
-            {color: isDirty ? tokens.danger : tokens.textSecondary},
-          ]}
-          numberOfLines={1}
-          ellipsizeMode="tail">
-          {isDirty ? '未保存' : vfsBasename(path)}
-        </Text>
+        {editorFocused && !previewMode ? (
+          <Pressable
+            testID="file-editor-dismiss-toolbar"
+            style={styles.toolbarPath}
+            onPress={dismissEditor}
+            accessibilityRole="button"
+            accessibilityLabel="收起键盘">
+            <Text
+              style={[
+                styles.toolbarPathText,
+                {color: isDirty ? tokens.danger : tokens.textSecondary},
+              ]}
+              numberOfLines={1}
+              ellipsizeMode="tail">
+              {isDirty ? '未保存' : vfsBasename(path)}
+            </Text>
+          </Pressable>
+        ) : (
+          <Text
+            style={[
+              styles.toolbarPath,
+              {color: isDirty ? tokens.danger : tokens.textSecondary},
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail">
+            {isDirty ? '未保存' : vfsBasename(path)}
+          </Text>
+        )}
         <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
           <Text style={{color: previewMode ? tokens.primary : tokens.textSecondary}}>
             {previewMode ? '编辑' : '预览'}
@@ -244,14 +263,30 @@ export function FileEditorScreen() {
         </Pressable>
       </View>
       {mtimeMs != null ? (
-        <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
-          <Text
-            style={[styles.statsText, {color: tokens.textSecondary}]}
-            numberOfLines={1}>
-            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
-            {isDirty ? ' · 编辑中未保存' : ''}
-          </Text>
-        </View>
+        editorFocused && !previewMode ? (
+          <Pressable
+            testID="file-editor-dismiss-stats"
+            style={[styles.statsRow, {borderBottomColor: tokens.border}]}
+            onPress={dismissEditor}
+            accessibilityRole="button"
+            accessibilityLabel="收起键盘">
+            <Text
+              style={[styles.statsText, {color: tokens.textSecondary}]}
+              numberOfLines={1}>
+              更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+              {isDirty ? ' · 编辑中未保存' : ''}
+            </Text>
+          </Pressable>
+        ) : (
+          <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
+            <Text
+              style={[styles.statsText, {color: tokens.textSecondary}]}
+              numberOfLines={1}>
+              更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+              {isDirty ? ' · 编辑中未保存' : ''}
+            </Text>
+          </View>
+        )
       ) : null}
       {previewMode ? (
         <SegmentedControl
@@ -277,44 +312,16 @@ export function FileEditorScreen() {
             sessionId={annotateEnabled ? sessionId : undefined}
           />
         </View>
-      ) : editorFocused ? (
-        <TextInput
-          testID="file-editor-input"
-          style={[
-            styles.editor,
-            {color: tokens.text, backgroundColor: tokens.surface},
-          ]}
-          multiline
-          scrollEnabled
-          showSoftInputOnFocus
-          autoFocus
-          value={content}
-          onChangeText={setContent}
-          onBlur={handleEditorBlur}
-          autoCapitalize="none"
-          autoCorrect={false}
-          textAlignVertical="top"
-        />
       ) : (
-        <ScrollView
-          testID="file-editor-browse-scroll"
-          style={[styles.browseScroll, {backgroundColor: tokens.surface}]}
-          contentContainerStyle={styles.browseContent}
-          keyboardShouldPersistTaps="handled">
-          <Pressable
-            testID="file-editor-browse-press"
-            onPress={() => setEditorFocused(true)}
-            accessibilityRole="button">
-            <Text
-              style={[
-                styles.editorText,
-                {color: tokens.text},
-                content.length === 0 ? styles.editorPlaceholder : null,
-              ]}>
-              {content.length > 0 ? content : '点击开始编辑…'}
-            </Text>
-          </Pressable>
-        </ScrollView>
+        <CodeEditorWebView
+          ref={codeEditorRef}
+          testID="file-editor-input"
+          value={content}
+          path={path}
+          onChange={setContent}
+          onFocusChange={setEditorFocused}
+          style={{flex: 1}}
+        />
       )}
     </View>
   );
@@ -338,6 +345,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexShrink: 1,
     minWidth: 0,
+    justifyContent: 'center',
+  },
+  toolbarPathText: {
     textAlign: 'center',
   },
   statsRow: {
@@ -346,25 +356,5 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   statsText: {fontSize: 12},
-  editor: {
-    flex: 1,
-    padding: 12,
-    fontFamily: 'monospace',
-    fontSize: 14,
-  },
-  editorText: {
-    fontFamily: 'monospace',
-    fontSize: 14,
-  },
-  editorPlaceholder: {
-    opacity: 0.5,
-  },
-  browseScroll: {
-    flex: 1,
-  },
-  browseContent: {
-    flexGrow: 1,
-    padding: 12,
-  },
   preview: {flex: 1, minHeight: 0, padding: 12},
 });

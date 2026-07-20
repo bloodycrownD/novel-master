@@ -1,0 +1,53 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  background: var(--editor-bg, var(--bg, #fff));
+  color: var(--text, #111);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  overflow: hidden;
+}
+#root {
+  height: 100%;
+  min-height: 0;
+}
+.cm-editor {
+  height: 100%;
+}
+.cm-scroller {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.cm-content {
+  padding: 8px 0;
+  caret-color: var(--primary, #007aff);
+}
+.cm-line {
+  padding: 0 4px 0 8px;
+}
+.cm-gutters {
+  background-color: var(--editor-gutter-bg, var(--surface, #f2f2f7));
+  color: var(--text-secondary, #666);
+  border: none;
+  border-right: 1px solid var(--editor-gutter-border, var(--border, #e5e5ea));
+}
+.cm-gutter.cm-lineNumbers .cm-gutterElement {
+  padding: 0 12px 0 8px;
+  min-width: 3em;
+  text-align: right;
+}
+.cm-activeLineGutter {
+  background-color: transparent;
+  color: var(--text-secondary, #666);
+}
+.cm-activeLine {
+  background-color: var(--editor-active-line, rgba(0, 0, 0, 0.04));
+}
+.cm-cursor, .cm-dropCursor {
+  border-left-width: 2px;
+  border-left-color: var(--primary, #007aff);
+}
+.cm-editor.cm-focused .cm-selectionBackground,
+.cm-selectionBackground {
+  background-color: var(--editor-selection, rgba(0, 122, 255, 0.25)) !important;
+}

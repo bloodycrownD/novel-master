@@ -1,10 +1,11 @@
 import React from 'react';
-import {describe, expect, it, jest, beforeEach} from '@jest/globals';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {FileEditorScreen} from '../src/screens/stack/FileEditorScreen';
 
 const mockDismiss = jest.fn();
 const mockShowToast = jest.fn();
+const mockCodeEditorBlur = jest.fn();
 
 const mockRead = jest.fn(async () => ({
   content: '# Hello\n\nworld',
@@ -46,6 +47,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
       background: '#fff',
       surface: '#f8f8f8',
       border: '#ddd',
+      borderLight: '#eee',
       text: '#111',
       textSecondary: '#666',
       primary: '#06c',
@@ -87,6 +89,28 @@ jest.mock('../src/components/ui/SegmentedControl', () => {
   };
 });
 
+jest.mock('../src/components/vfs/CodeEditorWebView', () => {
+  const mockReact = require('react');
+  return {
+    CodeEditorWebView: mockReact.forwardRef(
+      (
+        props: {
+          testID?: string;
+          value?: string;
+          path?: string;
+          onFocusChange?: (focused: boolean) => void;
+        },
+        ref: React.Ref<{blur: jest.Mock}>,
+      ) => {
+        mockReact.useImperativeHandle(ref, () => ({
+          blur: mockCodeEditorBlur,
+        }));
+        return mockReact.createElement('View', props);
+      },
+    ),
+  };
+});
+
 jest.mock('react-native', () => {
   const mockReact = require('react');
   return {
@@ -109,14 +133,6 @@ jest.mock('react-native', () => {
         {testID, onPress: disabled ? undefined : onPress, ...props},
         children,
       ),
-    ScrollView: ({
-      children,
-      testID,
-      ...props
-    }: {
-      children?: React.ReactNode;
-      testID?: string;
-    }) => mockReact.createElement('ScrollView', {testID, ...props}, children),
     StyleSheet: {
       hairlineWidth: 1,
       create: (s: object) => s,
@@ -127,8 +143,6 @@ jest.mock('react-native', () => {
     }: {
       children?: React.ReactNode;
     }) => mockReact.createElement('Text', props, children),
-    TextInput: (props: Record<string, unknown>) =>
-      mockReact.createElement('TextInput', props),
     View: ({
       children,
       testID,
@@ -188,12 +202,22 @@ async function switchToEditMode(
   });
 }
 
+async function focusEditor(
+  tree: TestRenderer.ReactTestRenderer,
+): Promise<void> {
+  const editor = tree.root.findByProps({testID: 'file-editor-input'});
+  await act(async () => {
+    editor.props.onFocusChange?.(true);
+  });
+}
+
 describe('FileEditorScreen', () => {
   beforeEach(() => {
     mockDismiss.mockClear();
     mockShowToast.mockClear();
     mockRead.mockClear();
     mockWrite.mockClear();
+    mockCodeEditorBlur.mockClear();
     mockRead.mockResolvedValue({
       content: '# Hello\n\nworld',
       version: 1,
@@ -201,56 +225,68 @@ describe('FileEditorScreen', () => {
     });
   });
 
-  it('T-F1: 进入编辑默认 browse，无可聚焦 input', async () => {
-    const tree = await renderLoadedScreen();
-    await switchToEditMode(tree);
-
-    expect(findOptionalByTestId(tree.root, 'file-editor-browse-scroll')).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'file-editor-browse-press')).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
-  it('T-F2: 点击 browse 区域后出现可编辑 input', async () => {
+  it('T-F1: 进入编辑态显示 CodeEditorWebView，非 TextInput', async () => {
     const tree = await renderLoadedScreen();
     await switchToEditMode(tree);
 
-    const browsePress = tree.root.findByProps({testID: 'file-editor-browse-press'});
-    await act(async () => {
-      browsePress.props.onPress();
-    });
-
-    const input = tree.root.findByProps({testID: 'file-editor-input'});
-    expect(input.props.multiline).toBe(true);
-    expect(input.props.value).toBe('# Hello\n\nworld');
+    const editor = tree.root.findByProps({testID: 'file-editor-input'});
+    expect(editor).toBeTruthy();
+    expect(findOptionalByTestId(tree.root, 'file-editor-browse-scroll')).toBeUndefined();
   });
 
-  it('T-F3: input blur 回 browse 并 dismiss 键盘', async () => {
+  it('T-F2: 编辑态 value 传入 CodeEditorWebView', async () => {
     const tree = await renderLoadedScreen();
     await switchToEditMode(tree);
 
-    const browsePress = tree.root.findByProps({testID: 'file-editor-browse-press'});
+    const editor = tree.root.findByProps({testID: 'file-editor-input'});
+    expect(editor.props.value).toBe('# Hello\n\nworld');
+    expect(editor.props.path).toBe('/notes/readme.md');
+  });
+
+  it('T-F3: 点击统计行收起键盘，编辑器仍挂载', async () => {
+    const tree = await renderLoadedScreen();
+    await switchToEditMode(tree);
+    await focusEditor(tree);
+    mockDismiss.mockClear();
+    mockCodeEditorBlur.mockClear();
+
+    const dismissStats = tree.root.findByProps({testID: 'file-editor-dismiss-stats'});
     await act(async () => {
-      browsePress.props.onPress();
+      dismissStats.props.onPress();
     });
 
-    const input = tree.root.findByProps({testID: 'file-editor-input'});
-    await act(async () => {
-      input.props.onBlur?.();
-    });
-
-    expect(findOptionalByTestId(tree.root, 'file-editor-browse-scroll')).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
+    expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
+    expect(mockCodeEditorBlur).toHaveBeenCalled();
     expect(mockDismiss).toHaveBeenCalled();
   });
 
-  it('T-F3: 切预览回 browse 并 dismiss 键盘', async () => {
+  it('T-F3: 点击工具栏标题收起键盘，编辑器仍挂载', async () => {
     const tree = await renderLoadedScreen();
     await switchToEditMode(tree);
+    await focusEditor(tree);
+    mockDismiss.mockClear();
+    mockCodeEditorBlur.mockClear();
 
-    const browsePress = tree.root.findByProps({testID: 'file-editor-browse-press'});
-    await act(async () => {
-      browsePress.props.onPress();
+    const dismissToolbar = tree.root.findByProps({
+      testID: 'file-editor-dismiss-toolbar',
     });
+    await act(async () => {
+      dismissToolbar.props.onPress();
+    });
+
+    expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
+    expect(mockCodeEditorBlur).toHaveBeenCalled();
+    expect(mockDismiss).toHaveBeenCalled();
+  });
+
+  it('T-F3: 切预览收起键盘', async () => {
+    const tree = await renderLoadedScreen();
+    await switchToEditMode(tree);
+    await focusEditor(tree);
     mockDismiss.mockClear();
 
     const previewBtn = findToolbarPressableByLabel(tree.root, '预览');
@@ -263,6 +299,19 @@ describe('FileEditorScreen', () => {
     expect(mockDismiss).toHaveBeenCalled();
   });
 
+  it('T-F3: 收起键盘不会卸载 CodeEditorWebView', async () => {
+    const tree = await renderLoadedScreen();
+    await switchToEditMode(tree);
+    await focusEditor(tree);
+
+    const dismissStats = tree.root.findByProps({testID: 'file-editor-dismiss-stats'});
+    await act(async () => {
+      dismissStats.props.onPress();
+    });
+
+    expect(tree.root.findByProps({testID: 'file-editor-input'})).toBeTruthy();
+  });
+
   it('T-F4: 预览分支仍可渲染', async () => {
     const tree = await renderLoadedScreen();
 
@@ -272,22 +321,12 @@ describe('FileEditorScreen', () => {
     expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
   });
 
-  it('T-F6: browse 无 TextInput；聚焦 input scrollEnabled 为 true', async () => {
+  it('T-F6: CodeEditorWebView 挂载；滚动由 Web 侧 CM 处理', async () => {
     const tree = await renderLoadedScreen();
     await switchToEditMode(tree);
 
-    const textInputsInBrowse = tree.root.findAll(
-      node => node.type === 'TextInput',
-    );
-    expect(textInputsInBrowse).toHaveLength(0);
-
-    const browsePress = tree.root.findByProps({testID: 'file-editor-browse-press'});
-    await act(async () => {
-      browsePress.props.onPress();
-    });
-
-    const input = tree.root.findByProps({testID: 'file-editor-input'});
-    expect(input.props.scrollEnabled).toBe(true);
-    expect(input.props.showSoftInputOnFocus).toBe(true);
+    const editor = tree.root.findByProps({testID: 'file-editor-input'});
+    expect(editor).toBeTruthy();
+    expect(editor.props.style).toEqual({flex: 1});
   });
 });

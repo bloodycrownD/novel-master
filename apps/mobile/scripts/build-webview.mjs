@@ -27,7 +27,7 @@ const webRoot = join(mobileRoot, 'src', 'web');
 const distRoot = join(mobileRoot, 'webview-dist');
 const copyNative = process.argv.includes('--copy-native');
 
-/** @type {{ id: string, entryRel: string, cssRel: string, htmlRel: string, richCssKey: 'CHAT_TRANSCRIPT_RICH_CSS' | 'RICH_DOCUMENT_RICH_CSS' }[]} */
+/** @type {{ id: string, entryRel: string, cssRel: string, htmlRel: string, richCssKey?: 'CHAT_TRANSCRIPT_RICH_CSS' | 'RICH_DOCUMENT_RICH_CSS' }[]} */
 const PACKAGES = [
   {
     id: 'chat-transcript',
@@ -42,6 +42,12 @@ const PACKAGES = [
     cssRel: 'rich-document/styles/document.css',
     htmlRel: 'rich-document/index.html',
     richCssKey: 'RICH_DOCUMENT_RICH_CSS',
+  },
+  {
+    id: 'code-editor',
+    entryRel: 'code-editor/webview/main.ts',
+    cssRel: 'code-editor/styles/editor.css',
+    htmlRel: 'code-editor/index.html',
   },
 ];
 
@@ -146,11 +152,14 @@ function copyDistToNativeSinks() {
  */
 async function buildPackage(pkg, richStyles) {
   const entryAbs = join(webRoot, pkg.entryRel);
-  const richCss = richStyles[pkg.richCssKey];
-  if (typeof richCss !== 'string' || !richCss) {
-    throw new Error(`缺少富文本 CSS：${pkg.richCssKey}`);
+  let css = readWeb(pkg.cssRel);
+  if (pkg.richCssKey) {
+    const richCss = richStyles[pkg.richCssKey];
+    if (typeof richCss !== 'string' || !richCss) {
+      throw new Error(`缺少富文本 CSS：${pkg.richCssKey}`);
+    }
+    css = injectCss(css, richCss);
   }
-  const css = injectCss(readWeb(pkg.cssRel), richCss);
   const html = readWeb(pkg.htmlRel);
   const outDir = join(distRoot, pkg.id);
   mkdirSync(outDir, { recursive: true });

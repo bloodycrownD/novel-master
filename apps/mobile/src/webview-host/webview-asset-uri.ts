@@ -5,7 +5,10 @@
 import { Platform } from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
-export type WebViewAssetPackageId = 'chat-transcript' | 'rich-document';
+export type WebViewAssetPackageId =
+  | 'chat-transcript'
+  | 'rich-document'
+  | 'code-editor';
 
 function blobFsDirs(): typeof ReactNativeBlobUtil.fs.dirs {
   const anyMod = ReactNativeBlobUtil as unknown as {
