@@ -27,9 +27,16 @@ import {
 } from "../../src/infra/llm-protocol/logic/registry.js";
 import {
   execLegacySavedModelTable,
+  execLegacyWorktreeRuleTables,
   LEGACY_DB_NOW_MS,
   seedLegacySavedModelRows,
+  seedLegacyWorktreeRuleRows,
 } from "./helpers/legacy-db-fixtures.js";
+import {
+  RENAME_WORKTREE_TABLES_TO_WORKPLACE_V1_ID,
+  renameWorktreeTablesToWorkplaceV1Up,
+} from "../../src/bootstrap/schema-migrations/rename-worktree-tables-to-workplace-v1.js";
+import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 
 const NOW_MS = LEGACY_DB_NOW_MS;
 
@@ -453,6 +460,161 @@ describe("saved-model-identity-v1 migration", () => {
       );
       const wire = JSON.parse(rows[0]!.prompts_json) as { model?: string };
       assert.match(wire.model ?? "", /^[0-9a-f-]{36}$/i);
+    } finally {
+      await conn.close();
+    }
+  });
+});
+
+async function tableNames(conn: TdbcConnection): Promise<Set<string>> {
+  const rows = await conn.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table'`,
+  );
+  return new Set(rows.map((row) => row.name));
+}
+
+async function indexNames(conn: TdbcConnection): Promise<Set<string>> {
+  const rows = await conn.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'`,
+  );
+  return new Set(rows.map((row) => row.name));
+}
+
+describe("rename-worktree-tables-to-workplace-v1（T-R4）", () => {
+  it("T-R4：legacy worktree_* 规则行 bootstrap 后落在 workplace_* 且 CRUD 正常", async () => {
+    const conn = await openMemoryConn();
+    const scopeKey = "project:legacy-wp";
+    try {
+      await execLegacyWorktreeRuleTables(conn);
+      await seedLegacyWorktreeRuleRows(conn, scopeKey);
+
+      await bootstrapNovelMaster(conn);
+
+      const tables = await tableNames(conn);
+      assert.equal(tables.has("worktree_dir_rule"), false);
+      assert.equal(tables.has("worktree_file_rule"), false);
+      assert.equal(tables.has("workplace_dir_rule"), true);
+      assert.equal(tables.has("workplace_file_rule"), true);
+      assert.equal(
+        await isSchemaMigrationApplied(
+          conn,
+          RENAME_WORKTREE_TABLES_TO_WORKPLACE_V1_ID,
+        ),
+        true,
+      );
+
+      const indexes = await indexNames(conn);
+      assert.equal(indexes.has("idx_workplace_dir_scope"), true);
+      assert.equal(indexes.has("idx_workplace_file_scope"), true);
+      assert.equal(indexes.has("idx_worktree_dir_scope"), false);
+      assert.equal(indexes.has("idx_worktree_file_scope"), false);
+
+      const repo = new SqliteWorkplaceRepository(conn);
+      const dirs = await repo.listDirRules(scopeKey);
+      const files = await repo.listFileRules(scopeKey);
+      assert.equal(dirs.length, 1);
+      assert.equal(dirs[0]!.logicalPath, "/");
+      assert.equal(files.length, 1);
+      assert.equal(files[0]!.logicalPath, "/readme.md");
+      assert.equal(files[0]!.inclusionMode, "force");
+
+      await repo.upsertFileRule({
+        scopeKey,
+        logicalPath: "/new.md",
+        inclusionMode: "auto",
+      });
+      const after = await repo.listFileRules(scopeKey);
+      assert.equal(after.length, 2);
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("T-R4：新库只建 workplace_*（无 worktree_*）且登记 migration", async () => {
+    const conn = await openMemoryConn();
+    try {
+      await bootstrapNovelMaster(conn);
+
+      const tables = await tableNames(conn);
+      assert.equal(tables.has("workplace_dir_rule"), true);
+      assert.equal(tables.has("workplace_file_rule"), true);
+      assert.equal(tables.has("worktree_dir_rule"), false);
+      assert.equal(tables.has("worktree_file_rule"), false);
+      assert.equal(
+        await isSchemaMigrationApplied(
+          conn,
+          RENAME_WORKTREE_TABLES_TO_WORKPLACE_V1_ID,
+        ),
+        true,
+      );
+
+      const dirCount = await conn.query<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM workplace_dir_rule`,
+      );
+      assert.equal(Number(dirCount[0]!.count), 0);
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("仅旧表：RENAME 到 workplace_*", async () => {
+    const conn = await openMemoryConn();
+    try {
+      await execLegacyWorktreeRuleTables(conn);
+      await seedLegacyWorktreeRuleRows(conn);
+
+      await conn.transaction(async (tx) => {
+        await renameWorktreeTablesToWorkplaceV1Up(tx);
+      });
+
+      const tables = await tableNames(conn);
+      assert.equal(tables.has("worktree_dir_rule"), false);
+      assert.equal(tables.has("workplace_dir_rule"), true);
+      const rows = await conn.query<{ logical_path: string }>(
+        `SELECT logical_path FROM workplace_dir_rule`,
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.logical_path, "/");
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("双表均有数据：fail-fast", async () => {
+    const conn = await openMemoryConn();
+    try {
+      await execLegacyWorktreeRuleTables(conn);
+      await seedLegacyWorktreeRuleRows(conn, "project:old");
+      await conn.execute(`
+        CREATE TABLE workplace_dir_rule (
+          scope_key TEXT NOT NULL,
+          logical_path TEXT NOT NULL,
+          rule_enabled INTEGER NOT NULL DEFAULT 1,
+          sort_field TEXT NOT NULL DEFAULT 'name',
+          sort_order TEXT NOT NULL DEFAULT 'asc',
+          head_count INTEGER NOT NULL DEFAULT 0,
+          tail_count INTEGER NOT NULL DEFAULT 1000,
+          fill_policy TEXT NOT NULL DEFAULT 'hidden',
+          PRIMARY KEY (scope_key, logical_path)
+        )
+      `);
+      await conn.execute(
+        `INSERT INTO workplace_dir_rule (
+          scope_key, logical_path, rule_enabled, sort_field, sort_order,
+          head_count, tail_count, fill_policy
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ["project:new", "/", 1, "name", "asc", 0, 1000, "hidden"],
+      );
+
+      await assert.rejects(
+        () =>
+          conn.transaction(async (tx) => {
+            await renameWorktreeTablesToWorkplaceV1Up(tx);
+          }),
+        (error: unknown) =>
+          error instanceof Error &&
+          error.message.includes("双表均有数据"),
+      );
     } finally {
       await conn.close();
     }

@@ -140,3 +140,55 @@ export async function execLegacySavedModelTable(conn: TdbcConnection): Promise<v
     )
   `);
 }
+
+/** pre-C3 worktree_* 规则表（物理旧名）。 */
+export async function execLegacyWorktreeRuleTables(
+  conn: TdbcConnection,
+): Promise<void> {
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS worktree_dir_rule (
+      scope_key TEXT NOT NULL,
+      logical_path TEXT NOT NULL,
+      rule_enabled INTEGER NOT NULL DEFAULT 1,
+      sort_field TEXT NOT NULL DEFAULT 'name',
+      sort_order TEXT NOT NULL DEFAULT 'asc',
+      head_count INTEGER NOT NULL DEFAULT 0,
+      tail_count INTEGER NOT NULL DEFAULT 1000,
+      fill_policy TEXT NOT NULL DEFAULT 'hidden',
+      PRIMARY KEY (scope_key, logical_path)
+    )
+  `);
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS worktree_file_rule (
+      scope_key TEXT NOT NULL,
+      logical_path TEXT NOT NULL,
+      inclusion_mode TEXT NOT NULL DEFAULT 'auto',
+      PRIMARY KEY (scope_key, logical_path)
+    )
+  `);
+  await conn.execute(
+    `CREATE INDEX IF NOT EXISTS idx_worktree_dir_scope ON worktree_dir_rule(scope_key)`,
+  );
+  await conn.execute(
+    `CREATE INDEX IF NOT EXISTS idx_worktree_file_scope ON worktree_file_rule(scope_key)`,
+  );
+}
+
+/** 向 legacy worktree_* 写入一条 dir + file 规则（T-R4）。 */
+export async function seedLegacyWorktreeRuleRows(
+  conn: TdbcConnection,
+  scopeKey = "project:legacy-wp",
+): Promise<void> {
+  await conn.execute(
+    `INSERT INTO worktree_dir_rule (
+      scope_key, logical_path, rule_enabled, sort_field, sort_order,
+      head_count, tail_count, fill_policy
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [scopeKey, "/", 1, "name", "asc", 0, 1000, "hidden"],
+  );
+  await conn.execute(
+    `INSERT INTO worktree_file_rule (scope_key, logical_path, inclusion_mode)
+     VALUES (?, ?, ?)`,
+    [scopeKey, "/readme.md", "force"],
+  );
+}
