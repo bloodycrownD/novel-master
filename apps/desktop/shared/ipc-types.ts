@@ -238,10 +238,30 @@ export type ProjectDeleteRequest = {
 /** 项目智能体策略模式。 */
 export type ProjectAgentModeDto = 'follow' | 'custom';
 
-/** 项目智能体配置（IPC 传输）。 */
+/**
+ * IPC 可序列化的 Agent 定义（与领域 AgentDefinition 同构的 plain object）。
+ * 禁 class / Map / 函数 / 不可克隆句柄。
+ */
+export type AgentDefinitionPlain = {
+  readonly name: string;
+  readonly prompts: unknown;
+  readonly model?: string;
+  readonly runtime?: {
+    readonly maxSteps?: number;
+    readonly doomLoopThreshold?: number;
+    readonly doomLoopCrossRoundWindow?: number;
+  };
+  readonly tools?: {
+    readonly allow?: readonly string[];
+    readonly deny?: readonly string[];
+  };
+};
+
+/** 项目智能体配置（IPC 传输；definition 为已评估 health）。 */
 export type ProjectAgentConfigDto = {
   readonly mode: ProjectAgentModeDto;
-  readonly definition?: unknown;
+  /** 有存储 definition 时附 assessed health；无草稿时省略。 */
+  readonly definition?: StoredConfigHealthDto<AgentDefinitionPlain>;
 };
 
 export type ProjectGetAgentConfigRequest = {
@@ -820,6 +840,14 @@ export type StoredConfigInvalidDto = {
   readonly storedSchemaVersion?: number;
 };
 
+/**
+ * 与 core `StoredConfigHealth<T>` 同构的 IPC discriminated union。
+ * `value` 须为可结构化克隆的 plain object。
+ */
+export type StoredConfigHealthDto<TValue extends object> =
+  | { readonly status: 'valid'; readonly value: TValue }
+  | ({ readonly status: 'invalid' } & StoredConfigInvalidDto);
+
 export type AgentRegistryListItemDto = {
   readonly agentId: string;
   readonly name: string;
@@ -835,8 +863,10 @@ export type AgentRegistryGetRequest = {
   readonly agentId: string;
 };
 
-/** Agent 原始 wire（供 renderer assess，不做 strict decode）。 */
-export type AgentRegistryGetResponse = {
+/**
+ * Agent get：main 侧 assess 后返回 health；附带原始 wire（invalid 时用于尽力读显示名）。
+ */
+export type AgentRegistryGetResponse = StoredConfigHealthDto<AgentDefinitionPlain> & {
   readonly wire: unknown;
 };
 
@@ -917,12 +947,16 @@ export type RegexSetCurrentRequest = {
   readonly groupId: string | null;
 };
 
-export type EventsGetConfigResponse = {
-  /** strict decode 结果；含未知 action 等无法解析时为 null。 */
-  readonly config: unknown | null;
-  /** KKV 原始 wire，供编辑器宽松加载。 */
-  readonly wire: unknown;
+/**
+ * IPC 可序列化的事件配置（与领域 EventsConfig 同构的 plain object）。
+ */
+export type EventsConfigPlain = {
+  readonly schemaVersion: 2;
+  readonly events: Readonly<Record<string, readonly unknown[]>>;
 };
+
+/** Events get：main 侧 assess 后返回 health（废止仅 wire 供 renderer assess）。 */
+export type EventsGetConfigResponse = StoredConfigHealthDto<EventsConfigPlain>;
 
 export type EventsSetConfigRequest = {
   readonly config: unknown;

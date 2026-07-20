@@ -5,6 +5,7 @@ import {
   IPC_CHANNELS,
   type AgentAbortRequest,
   type AgentListPickerResponse,
+  type AgentRegistryGetResponse,
   type AgentResolveCurrentResponse,
   type AgentRunRequest,
   type AgentSetCurrentRequest,
@@ -16,6 +17,7 @@ import {
   type BootstrapStatusResponse,
   type ChatMessageDto,
   type CompactionManualRequest,
+  type EventsGetConfigResponse,
   type IpcResult,
   type MessageAttachmentDto,
   type MessagesAppendRequest,
@@ -405,10 +407,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW,
     ),
     ipcAgentRegistryList: noArg(invoke, IPC_CHANNELS.AGENT_REGISTRY_LIST),
-    ipcAgentRegistryGet: withReq<{ agentId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.AGENT_REGISTRY_GET,
-    ),
+    ipcAgentRegistryGet: withReq<
+      { agentId: string },
+      IpcResult<AgentRegistryGetResponse>
+    >(invoke, IPC_CHANNELS.AGENT_REGISTRY_GET),
     ipcAgentRegistryUpsert: withReq<unknown, unknown>(
       invoke,
       IPC_CHANNELS.AGENT_REGISTRY_UPSERT,
@@ -467,7 +469,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.REGEX_SET_CURRENT,
     ),
-    ipcEventsGetConfig: noArg(invoke, IPC_CHANNELS.EVENTS_GET_CONFIG),
+    ipcEventsGetConfig: noArg<IpcResult<EventsGetConfigResponse>>(
+      invoke,
+      IPC_CHANNELS.EVENTS_GET_CONFIG,
+    ),
     ipcEventsSetConfig: withReq<{ config: unknown }, unknown>(
       invoke,
       IPC_CHANNELS.EVENTS_SET_CONFIG,

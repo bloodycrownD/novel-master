@@ -71,7 +71,7 @@ import {
   SettingsPanel,
   SettingsSection,
 } from "./settings-ui";
-import { deriveRegexGroupId } from "@novel-master/core/format";
+import { deriveRegexGroupId } from "@shared/logic/format";
 import {
   parseOptionalDepthInput,
   previewRegexReplacementOnly,
@@ -80,12 +80,11 @@ import {
   type RegexChannel,
   type RegexRuleDraftFields,
 } from "@/services/regex-test.service";
-import { REGEX_UI_LABELS } from "@novel-master/core/config-forms/shared";
+import { REGEX_UI_LABELS } from "@shared/logic/config-forms-shared";
 import {
   AGENT_LIST_LABELS,
-  assessAgentDefinitionWire,
   storedConfigInvalidReason,
-} from "@novel-master/core/config-forms/stored-config-validity";
+} from "@shared/logic/config-forms-stored-config-validity";
 import type { AgentRegistryListItemDto } from "@shared/ipc-types";
 
 type Nav = SettingsNavHandle;
@@ -613,13 +612,12 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         toastSettingsError(getRes.error.message);
         return;
       }
-      const health = assessAgentDefinitionWire(getRes.data.wire);
-      if (health.status !== "valid") {
+      if (getRes.data.status !== "valid") {
         toastSettingsError("配置已失效，请先修复后再复制");
         return;
       }
       const copyId = `agent-${Date.now()}`;
-      const def = health.value;
+      const def = getRes.data.value;
       const saveRes = await ipcAgentRegistryUpsert({
         agentId: copyId,
         definition: { ...def, name: `${def.name ?? row.name}-copy` },
@@ -692,12 +690,11 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       toastSettingsError(getRes.error.message);
       return;
     }
-    const health = assessAgentDefinitionWire(getRes.data.wire);
-    if (health.status !== "valid") {
+    if (getRes.data.status !== "valid") {
       toastSettingsError("配置已失效，请先修复后再重命名");
       return;
     }
-    const def = health.value;
+    const def = getRes.data.value;
     await ipcAgentRegistryUpsert({
       agentId: prompt.agentId,
       definition: { ...def, name },

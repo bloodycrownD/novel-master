@@ -6,13 +6,13 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import { type AgentDefinition } from "@novel-master/core/agent";
+import { type AgentDefinition } from "@shared/logic/agent";
 
 import {
   type DynamicPromptBlock,
   type PersistPromptBlock,
   type PersistTextPromptBlock,
-} from "@novel-master/core/prompt";
+} from "@shared/logic/prompt";
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
@@ -33,7 +33,7 @@ import {
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
   type ToolsMode,
-} from "@novel-master/core/config-forms/agent";
+} from "@shared/logic/config-forms-agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "@/components/ui/Button";
@@ -54,12 +54,14 @@ import {
   ipcProvidersList,
 } from "@/ipc/client";
 import {
-  assessAgentDefinitionWire,
   buildDefaultAgentDefinitionPreservingName,
   STORED_CONFIG_LABELS,
   storedConfigInvalidReason,
-  type StoredConfigHealth,
-} from "@novel-master/core/config-forms/stored-config-validity";
+} from "@shared/logic/config-forms-stored-config-validity";
+import type {
+  AgentDefinitionPlain,
+  StoredConfigHealthDto,
+} from "@shared/ipc-types";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsField,
@@ -123,7 +125,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [invalidHealth, setInvalidHealth] = useState<Extract<
-    StoredConfigHealth<AgentDefinition>,
+    StoredConfigHealthDto<AgentDefinitionPlain>,
     { status: "invalid" }
   > | null>(null);
   const [storedWire, setStoredWire] = useState<unknown | null>(null);
@@ -217,12 +219,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         return;
       }
       setStoredWire(agentRes.data.wire);
-      const health = assessAgentDefinitionWire(agentRes.data.wire);
-      if (health.status === "invalid") {
-        setInvalidHealth(health);
+      if (agentRes.data.status === "invalid") {
+        setInvalidHealth(agentRes.data);
         return;
       }
-      const def = health.value;
+      const def = agentRes.data.value as AgentDefinition;
       const promptForm = definitionToForm(def);
       setName(def.name ?? "");
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));

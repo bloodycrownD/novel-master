@@ -24,6 +24,7 @@ import {
   importAgentYamlWithDialog,
 } from "../../services/agent-yaml.service.js";
 import { formatIpcError } from "../ipc-error.js";
+import { toStoredConfigHealthDto } from "./stored-config-health-dto.js";
 import { BrowserWindow } from "electron";
 
 function parentWindow(): BrowserWindow | null {
@@ -114,7 +115,8 @@ export async function handleAgentRegistryGet(
         },
       };
     }
-    return { ok: true, data: { wire: raw } };
+    const health = toStoredConfigHealthDto(assessAgentDefinitionWire(raw));
+    return { ok: true, data: { ...health, wire: raw } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

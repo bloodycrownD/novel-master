@@ -2,6 +2,7 @@
  * Project CRUD IPC handlers.
  */
 import type { ProjectAgentConfigPatch } from "@novel-master/core/chat";
+import { resolveAgentDefinitionFromStorage } from "@novel-master/core/config-forms/stored-config-validity";
 import type {
   IpcResult,
   ProjectAgentConfigDto,
@@ -15,6 +16,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { toStoredConfigHealthDto } from "./stored-config-health-dto.js";
 
 function toDto(project: {
   id: string;
@@ -92,9 +94,13 @@ function toAgentConfigDto(config: {
   mode: "follow" | "custom";
   definition?: unknown;
 }): ProjectAgentConfigDto {
+  if (config.definition === undefined) {
+    return { mode: config.mode };
+  }
+  const health = resolveAgentDefinitionFromStorage(config.definition);
   return {
     mode: config.mode,
-    ...(config.definition !== undefined ? { definition: config.definition } : {}),
+    definition: toStoredConfigHealthDto(health) as ProjectAgentConfigDto["definition"],
   };
 }
 

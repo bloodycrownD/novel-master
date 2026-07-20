@@ -2,12 +2,8 @@
  * 项目智能体配置页：压缩配置式开关（关=跟随全局，开=项目专属）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type AgentDefinition } from "@novel-master/core/agent";
-import {
-  assessAgentDefinitionWire,
-  buildDefaultAgentDefinitionPreservingName,
-  resolveAgentDefinitionFromStorage,
-} from "@novel-master/core/config-forms/stored-config-validity";
+import { type AgentDefinition } from "@shared/logic/agent";
+import { buildDefaultAgentDefinitionPreservingName } from "@shared/logic/config-forms-stored-config-validity";
 import type { ProjectAgentModeDto } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/show-toast";
@@ -39,26 +35,12 @@ async function cloneGlobalAgentDefinition(): Promise<AgentDefinition> {
 
   if (currentRes.ok && currentRes.data.agentId) {
     const agentRes = await ipcAgentRegistryGet({ agentId: currentRes.data.agentId });
-    if (agentRes.ok) {
-      const health = assessAgentDefinitionWire(agentRes.data.wire);
-      if (health.status === "valid") {
-        return structuredClone(health.value);
-      }
+    if (agentRes.ok && agentRes.data.status === "valid") {
+      return structuredClone(agentRes.data.value as AgentDefinition);
     }
   }
 
   return buildDefaultAgentDefinitionPreservingName(fallbackName);
-}
-
-function definitionFromStored(stored: unknown): AgentDefinition | undefined {
-  if (stored == null) {
-    return undefined;
-  }
-  const health = resolveAgentDefinitionFromStorage(stored);
-  if (health.status === "valid") {
-    return health.value;
-  }
-  return undefined;
 }
 
 export function ProjectAgentConfigView({
@@ -97,8 +79,9 @@ export function ProjectAgentConfigView({
       }
 
       setMode(configRes.data.mode);
-      const storedDef = definitionFromStored(configRes.data.definition);
-      if (storedDef) {
+      const defHealth = configRes.data.definition;
+      if (defHealth?.status === "valid") {
+        const storedDef = defHealth.value as AgentDefinition;
         draftDefinitionRef.current = storedDef;
         setFormDefinition(storedDef);
       } else {

@@ -38,7 +38,7 @@ describe("projects agent-config IPC handlers", () => {
     }
   });
 
-  it("updateAgentConfig custom round-trip", async () => {
+  it("updateAgentConfig custom round-trip（assessed definition health）", async () => {
     const created = await handleProjectsCreate({ name: "Custom Agent" });
     assert.equal(created.ok, true);
     if (!created.ok) {
@@ -59,7 +59,10 @@ describe("projects agent-config IPC handlers", () => {
       return;
     }
     assert.equal(saved.data.mode, "custom");
-    assert.equal((saved.data.definition as { name?: string })?.name, "项目专属");
+    assert.equal(saved.data.definition?.status, "valid");
+    if (saved.data.definition?.status === "valid") {
+      assert.equal(saved.data.definition.value.name, "项目专属");
+    }
 
     const loaded = await handleProjectsGetAgentConfig({
       projectId: created.data.id,
@@ -67,11 +70,14 @@ describe("projects agent-config IPC handlers", () => {
     assert.equal(loaded.ok, true);
     if (loaded.ok) {
       assert.equal(loaded.data.mode, "custom");
-      assert.equal((loaded.data.definition as { name?: string })?.name, "项目专属");
+      assert.equal(loaded.data.definition?.status, "valid");
+      if (loaded.data.definition?.status === "valid") {
+        assert.equal(loaded.data.definition.value.name, "项目专属");
+      }
     }
   });
 
-  it("切回 follow 保留 definition 草稿", async () => {
+  it("切回 follow 保留 definition 草稿（assessed）", async () => {
     const created = await handleProjectsCreate({ name: "Follow Draft" });
     assert.equal(created.ok, true);
     if (!created.ok) {
@@ -95,7 +101,10 @@ describe("projects agent-config IPC handlers", () => {
     assert.equal(follow.ok, true);
     if (follow.ok) {
       assert.equal(follow.data.mode, "follow");
-      assert.equal((follow.data.definition as { name?: string })?.name, "草稿");
+      assert.equal(follow.data.definition?.status, "valid");
+      if (follow.data.definition?.status === "valid") {
+        assert.equal(follow.data.definition.value.name, "草稿");
+      }
     }
   });
 });

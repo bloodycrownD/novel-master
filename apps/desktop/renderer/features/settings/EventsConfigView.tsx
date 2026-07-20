@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { type EventActionNode, type EventActionType, type EventsConfig } from "@novel-master/core/events";
+import { type EventActionNode, type EventActionType, type EventsConfig } from "@shared/logic/events";
 import {
   ACTION_ADD_OPTIONS,
   DEFAULT_EVENTS_CONFIG,
@@ -15,14 +15,13 @@ import {
   newEventBlockId,
   validateEventConfigBlocks,
   type EventBlockDraft,
-} from "@novel-master/core/config-forms/events";
+} from "@shared/logic/config-forms-events";
 import {
-  assessEventsConfigWire,
   STORED_CONFIG_LABELS,
   storedConfigInvalidReason,
-  type StoredConfigHealth,
-} from "@novel-master/core/config-forms/stored-config-validity";
-import { REGEX_UI_LABELS } from "@novel-master/core/config-forms/shared";
+} from "@shared/logic/config-forms-stored-config-validity";
+import { REGEX_UI_LABELS } from "@shared/logic/config-forms-shared";
+import type { EventsConfigPlain, StoredConfigHealthDto } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { showToast } from "@/components/ui/show-toast";
@@ -268,7 +267,7 @@ export function EventsConfigView() {
   const [recovering, setRecovering] = useState(false);
   const [schemaVersion, setSchemaVersion] = useState<2>(2);
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
-  const [storedHealth, setStoredHealth] = useState<StoredConfigHealth<EventsConfig> | null>(
+  const [storedHealth, setStoredHealth] = useState<StoredConfigHealthDto<EventsConfigPlain> | null>(
     null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -291,10 +290,9 @@ export function EventsConfigView() {
         toastSettingsError(res.error.message);
         return;
       }
-      const health = assessEventsConfigWire(res.data.wire);
-      setStoredHealth(health);
-      if (health.status === "valid") {
-        applyValidConfig(health.value);
+      setStoredHealth(res.data);
+      if (res.data.status === "valid") {
+        applyValidConfig(res.data.value as EventsConfig);
       }
     } finally {
       setLoading(false);
@@ -357,9 +355,13 @@ export function EventsConfigView() {
     try {
       const res = await ipcEventsSetConfig({ config: DEFAULT_EVENTS_CONFIG });
       if (res.ok) {
-        const health = assessEventsConfigWire(DEFAULT_EVENTS_CONFIG);
-        setStoredHealth(health);
-        applyValidConfig(DEFAULT_EVENTS_CONFIG);
+        const getRes = await ipcEventsGetConfig();
+        if (getRes.ok) {
+          setStoredHealth(getRes.data);
+          if (getRes.data.status === "valid") {
+            applyValidConfig(getRes.data.value as EventsConfig);
+          }
+        }
         toastSettingsSuccess("已恢复默认并保存");
       } else {
         toastSettingsError(res.error.message);
@@ -379,9 +381,13 @@ export function EventsConfigView() {
       }
       const saveRes = await ipcEventsSetConfig({ config: DEFAULT_EVENTS_CONFIG });
       if (saveRes.ok) {
-        const health = assessEventsConfigWire(DEFAULT_EVENTS_CONFIG);
-        setStoredHealth(health);
-        applyValidConfig(DEFAULT_EVENTS_CONFIG);
+        const getRes = await ipcEventsGetConfig();
+        if (getRes.ok) {
+          setStoredHealth(getRes.data);
+          if (getRes.data.status === "valid") {
+            applyValidConfig(getRes.data.value as EventsConfig);
+          }
+        }
         toastSettingsSuccess("已清空旧配置并保存默认");
       } else {
         toastSettingsError(saveRes.error.message);

@@ -8,21 +8,16 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
+import { toStoredConfigHealthDto } from "./stored-config-health-dto.js";
 
-/** 读取事件配置 wire；decode 失败时 config 为 null，wire 原样返回。 */
+/** 读取事件配置：main 侧 assess，返回 StoredConfigHealthDto。 */
 export async function handleEventsGetConfig(): Promise<
   IpcResult<EventsGetConfigResponse>
 > {
   try {
     const rt = await getDesktopRuntime();
-    const wire = await rt.eventsConfig.getRawWire();
-    let config: unknown | null = null;
-    try {
-      config = await rt.eventsConfig.getConfig();
-    } catch {
-      config = null;
-    }
-    return { ok: true, data: { config, wire } };
+    const health = await rt.eventsConfig.assessStored();
+    return { ok: true, data: toStoredConfigHealthDto(health) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
