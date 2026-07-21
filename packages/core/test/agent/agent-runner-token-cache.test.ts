@@ -245,6 +245,60 @@ describe("AgentRunner session API prompt token cache", () => {
     assert.equal(resolved.source, "local");
   });
 
+  it("T-T5 (max_steps): max_steps → clear，resolve 回退 local（不保留旧 API）", async () => {
+    sessionApiPromptTokenCache.set(SESSION_ID, {
+      promptTokens: 7777,
+      updatedAt: Date.now(),
+    });
+
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "tu1",
+            name: "write",
+            input: { path: "/out.txt", content: "done" },
+          },
+        ],
+        raw: {},
+        usage: { promptTokens: 9999 },
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+    assert.equal(result.stopReason, "max_steps");
+    assert.equal(sessionApiPromptTokenCache.get(SESSION_ID), undefined);
+
+    const tokenRegistry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const resolved = await resolveCurrentPromptTokens(SESSION_ID, {
+      layout: { persist: [], dynamic: [] },
+      ctx: { workplaceDisplay: "", messages: [] },
+      savedModelId: RUN_MODEL_ID,
+      registry: tokenRegistry,
+    });
+    assert.equal(resolved.source, "local");
+  });
+
   it("T-T5b: FAILED/throw 后必 clear，resolve 回退 local", async () => {
     sessionApiPromptTokenCache.set(SESSION_ID, {
       promptTokens: 8888,
