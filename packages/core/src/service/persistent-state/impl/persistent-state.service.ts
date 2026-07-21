@@ -7,6 +7,7 @@
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import { isKkvError } from "@/errors/kkv-errors.js";
+import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentState } from "../persistent-state.port.js";
 import {
@@ -80,7 +81,7 @@ export class DefaultPersistentState implements PersistentState {
         { modelId: id },
       );
     }
-    return this.set(KEY_CURRENT_MODEL_ID, trimmed);
+    return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_MODEL_ID, trimmed);
   }
 
   resetCurrentModelId(): Promise<void> {
@@ -104,7 +105,7 @@ export class DefaultPersistentState implements PersistentState {
   }
 
   setCurrentAgentId(id: string): Promise<void> {
-    return this.set(KEY_CURRENT_AGENT_ID, id);
+    return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_AGENT_ID, id);
   }
 
   resetCurrentAgentId(): Promise<void> {
@@ -124,6 +125,18 @@ export class DefaultPersistentState implements PersistentState {
 
   private async set(key: string, value: string): Promise<void> {
     await this.kkv.set(MODULE, key, value);
+  }
+
+  /** 切换模型 / Agent 成功后，丢弃当前会话陈旧 API 占用缓存。 */
+  private async setAndInvalidatePromptTokenCache(
+    key: string,
+    value: string,
+  ): Promise<void> {
+    await this.set(key, value);
+    const sessionId = await this.getCurrentSessionId();
+    if (sessionId != null) {
+      sessionApiPromptTokenCache.invalidate(sessionId);
+    }
   }
 
   private async reset(key: string): Promise<void> {

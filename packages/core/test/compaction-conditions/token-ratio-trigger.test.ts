@@ -31,6 +31,7 @@ function systemOnlyEvaluation(systemContent: string) {
     messages: [],
   };
   return {
+    sessionId: "sess-token-ratio",
     modelContext: {
       workspaceModelId: "openai/gpt-4o",
       savedModelId: "openai/gpt-4o",

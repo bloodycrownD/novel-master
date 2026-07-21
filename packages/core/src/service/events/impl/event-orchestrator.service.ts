@@ -17,6 +17,7 @@ import {
   type SessionCompactionRequestedPayload,
   type SessionMessageReceivedPayload,
 } from "@/domain/events/model/event-types.js";
+import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import type {
   EventEmitContext,
   EventOrchestrator,
@@ -132,6 +133,7 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
       eventType === EVENT_SESSION_COMPACTION_REQUESTED
     ) {
       await this.deps.sessionKkv.clearSession(ctx.sessionId);
+      sessionApiPromptTokenCache.invalidate(ctx.sessionId);
     }
     return result;
   }

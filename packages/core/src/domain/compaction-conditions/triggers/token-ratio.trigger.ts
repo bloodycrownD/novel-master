@@ -5,7 +5,7 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import { countPromptLlmInput } from "@/infra/tokenizer/logic/count-prompt-llm-input.js";
+import { resolveCurrentPromptTokens } from "@/infra/tokenizer/logic/resolve-current-prompt-tokens.js";
 import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 import type {
@@ -43,13 +43,16 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
 
     const tokenizerOverride =
       await this.options.resolveTokenizerOverride(evaluation);
-    const { tokenCount } = await countPromptLlmInput({
-      layout: evaluation.layout,
-      ctx: evaluation.ctx,
-      savedModelId: evaluation.modelContext.savedModelId,
-      registry: this.tokenCounters,
-      tokenizerOverride,
-    });
+    const { tokenCount } = await resolveCurrentPromptTokens(
+      evaluation.sessionId,
+      {
+        layout: evaluation.layout,
+        ctx: evaluation.ctx,
+        savedModelId: evaluation.modelContext.savedModelId,
+        registry: this.tokenCounters,
+        tokenizerOverride,
+      },
+    );
     return tokenCount > effective;
   }
 }

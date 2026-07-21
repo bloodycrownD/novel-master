@@ -27,6 +27,7 @@ import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revisi
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
+import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -165,6 +166,7 @@ export class DefaultMessageService implements MessageService {
         message.sessionId,
       );
     });
+    sessionApiPromptTokenCache.invalidate(message.sessionId);
   }
 
   async updateContent(
@@ -179,7 +181,9 @@ export class DefaultMessageService implements MessageService {
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
-    return this.get(messageId);
+    const message = await this.get(messageId);
+    sessionApiPromptTokenCache.invalidate(message.sessionId);
+    return message;
   }
 
   async fork(sessionId: string, upToMessageId: string): Promise<ChatSession> {
@@ -246,17 +250,27 @@ export class DefaultMessageService implements MessageService {
   }
 
   async hide(messageId: string): Promise<void> {
+    const existing = await this.deps.messages.findById(messageId);
+    if (existing == null) {
+      throw chatNotFound("message", messageId);
+    }
     const updated = await this.deps.messages.updateHidden(messageId, true);
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
+    sessionApiPromptTokenCache.invalidate(existing.sessionId);
   }
 
   async show(messageId: string): Promise<void> {
+    const existing = await this.deps.messages.findById(messageId);
+    if (existing == null) {
+      throw chatNotFound("message", messageId);
+    }
     const updated = await this.deps.messages.updateHidden(messageId, false);
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
+    sessionApiPromptTokenCache.invalidate(existing.sessionId);
   }
 
   async hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
@@ -265,7 +279,16 @@ export class DefaultMessageService implements MessageService {
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
-    return this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, true);
+    const count = await this.deps.messages.updateHiddenRange(
+      sessionId,
+      fromSeq,
+      toSeq,
+      true,
+    );
+    if (count > 0) {
+      sessionApiPromptTokenCache.invalidate(sessionId);
+    }
+    return count;
   }
 
   async showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
@@ -274,6 +297,15 @@ export class DefaultMessageService implements MessageService {
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
-    return this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, false);
+    const count = await this.deps.messages.updateHiddenRange(
+      sessionId,
+      fromSeq,
+      toSeq,
+      false,
+    );
+    if (count > 0) {
+      sessionApiPromptTokenCache.invalidate(sessionId);
+    }
+    return count;
   }
 }

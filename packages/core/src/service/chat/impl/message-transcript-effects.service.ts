@@ -9,6 +9,7 @@ import {
   isSetFloorAnchorRole,
 } from '@/domain/chat/logic/message-set-floor-range.js';
 import { chatInvalidArgument, chatNotFound } from '@/errors/chat-errors.js';
+import { sessionApiPromptTokenCache } from '@/infra/tokenizer/logic/session-api-prompt-token-cache.js';
 import type { TdbcConnection } from '@/infra/tdbc/ports/connection.port.js';
 import {
   createTruncateTailDepsFromTx,
@@ -112,6 +113,7 @@ export class DefaultMessageTranscriptEffectsService
 
     // 置位成功：清空 session kkv，下次 assemble 按新可见域重建常驻前缀
     await this.deps.sessionKkv.clearSession(sessionId);
+    sessionApiPromptTokenCache.invalidate(sessionId);
 
     return { hiddenCount, shownCount };
   }

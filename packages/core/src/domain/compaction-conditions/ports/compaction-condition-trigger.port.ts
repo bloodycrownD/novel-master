@@ -17,6 +17,8 @@ export interface CompactionConditionModelContext {
 }
 
 export interface CompactionEvaluationContext {
+  /** 与展示共用的会话分桶键；runner 填入，禁止从 AgentSession 推断。 */
+  readonly sessionId: string;
   readonly modelContext: CompactionConditionModelContext;
   readonly promptInput: PromptLlmInput;
   readonly layout: AgentPromptLayout;
