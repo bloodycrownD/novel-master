@@ -80,9 +80,9 @@ import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
 import {
-  exportVfsBatch,
-  formatBatchReportToast,
-  importVfsBatch,
+  exportVfsFile,
+  formatFileIngestToast,
+  importVfsFile,
 } from '../../services/vfs-batch.service';
 import type { BatchIngestRawEntry } from '@novel-master/core/vfs';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -451,6 +451,7 @@ export const VfsFileManager = forwardRef<
         ]
       : [
           { label: '打开', action: 'open' },
+          { label: '导出', action: 'export-file' },
           { label: '状态变更', action: 'toggle-include' },
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
@@ -461,8 +462,7 @@ export const VfsFileManager = forwardRef<
     { label: '新建目录', action: 'create-directory' },
     { label: '新建文件', action: 'create-file' },
     { label: '导入 ZIP', action: 'import-zip' },
-    { label: '批量导入', action: 'import-batch' },
-    { label: '批量导出', action: 'export-batch' },
+    { label: '文件导入', action: 'import-file' },
     { label: '目录规则', action: 'directory-rule' },
     { label: '批量操作', action: 'batch' },
   ];
@@ -635,6 +635,18 @@ export const VfsFileManager = forwardRef<
           })
           .catch(err => showToast(toastMessage('导出失败', err)))
           .finally(() => setExportingZip(false));
+        return;
+      }
+      if (action === 'export-file') {
+        setExportingZip(true);
+        exportVfsFile(runtime, scope, menuPath)
+          .then(result => {
+            if (result === 'saved') {
+              showToast('文件已导出');
+            }
+          })
+          .catch(err => showToast(toastMessage('导出失败', err)))
+          .finally(() => setExportingZip(false));
       }
     } catch (error) {
       showToast(toastMessage('操作失败', error));
@@ -667,15 +679,15 @@ export const VfsFileManager = forwardRef<
     ]);
   }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
 
-  const handleImportBatch = useCallback(() => {
+  const handleImportFile = useCallback(() => {
     const runApply = (
       overwriteConfirmed: boolean,
-      preparedEntries?: readonly BatchIngestRawEntry[],
+      preparedEntry?: BatchIngestRawEntry,
     ) => {
-      importVfsBatch(runtime, scope, {
+      importVfsFile(runtime, scope, {
         targetDir: currentPath,
         overwriteConfirmed,
-        preparedEntries,
+        preparedEntry,
       })
         .then(async outcome => {
           if (outcome.status === 'cancelled') {
@@ -684,13 +696,13 @@ export const VfsFileManager = forwardRef<
           if (outcome.status === 'needs_confirm') {
             Alert.alert(
               '文件冲突',
-              `目标处已有 ${outcome.plan.conflicts.length} 个同名项。覆盖后不可撤销，是否继续？`,
+              `目标处已有「${outcome.conflictPath}」。覆盖后不可撤销，是否继续？`,
               [
                 { text: '取消', style: 'cancel' },
                 {
                   text: '覆盖',
                   style: 'destructive',
-                  onPress: () => runApply(true, outcome.plan.entries),
+                  onPress: () => runApply(true, outcome.entry),
                 },
               ],
             );
@@ -698,39 +710,13 @@ export const VfsFileManager = forwardRef<
           }
           await reloadVfsListOnly();
           showToast(
-            formatBatchReportToast(outcome.report, outcome.skippedBinary),
+            formatFileIngestToast(outcome.report, outcome.skippedBinary),
           );
         })
-        .catch(err => showToast(toastMessage('批量导入失败', err)));
+        .catch(err => showToast(toastMessage('文件导入失败', err)));
     };
     runApply(false);
   }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
-
-  const handleExportBatch = useCallback(() => {
-    const logicalPaths =
-      vfsBatch.active && vfsBatch.selectedCount > 0
-        ? [...vfsBatch.selectedIds]
-        : [currentPath];
-    setExportingZip(true);
-    exportVfsBatch(runtime, scope, { logicalPaths })
-      .then(result => {
-        if (result.status === 'saved') {
-          showToast(`已导出 ${result.savedCount} 个文件`);
-        } else if (result.savedCount > 0) {
-          showToast(`已保存 ${result.savedCount} 个文件（其余已取消）`);
-        }
-      })
-      .catch(err => showToast(toastMessage('批量导出失败', err)))
-      .finally(() => setExportingZip(false));
-  }, [
-    runtime,
-    scope,
-    currentPath,
-    vfsBatch.active,
-    vfsBatch.selectedCount,
-    vfsBatch.selectedIds,
-    showToast,
-  ]);
 
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
@@ -811,12 +797,8 @@ export const VfsFileManager = forwardRef<
       handleImportZip();
       return;
     }
-    if (action === 'import-batch') {
-      handleImportBatch();
-      return;
-    }
-    if (action === 'export-batch') {
-      handleExportBatch();
+    if (action === 'import-file') {
+      handleImportFile();
     }
   };
 

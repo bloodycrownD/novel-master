@@ -1,5 +1,5 @@
 /**
- * Mobile VFS 批量导入/导出：多选 pick → Core plan/apply；导出 saveDocuments 降级。
+ * Mobile VFS 单文件导入/导出（系统选择器对多文件/目录支持不稳定，故不做批量）。
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
@@ -12,6 +12,7 @@ import {
   type BatchIngestRawEntry,
   type BatchIngestWriter,
   type VfsScope,
+  type VfsService,
 } from '@novel-master/core/vfs';
 import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
 import {
@@ -64,6 +65,24 @@ function resolveTargetDir(targetDir?: string): string {
   return targetDir;
 }
 
+function basename(logicalPath: string): string {
+  const parts = logicalPath.split('/').filter(Boolean);
+  return parts[parts.length - 1] ?? 'file';
+}
+
+function resolveScopedVfs(
+  runtime: MobileNovelMasterRuntime,
+  scope: VfsScope,
+): VfsService {
+  if (scope.kind === 'global') {
+    return runtime.globalVfs();
+  }
+  if (scope.kind === 'project') {
+    return runtime.projectVfs(scope.projectId);
+  }
+  return runtime.sessionVfs(scope.projectId, scope.sessionId);
+}
+
 function createSessionBatchWriter(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,
@@ -98,19 +117,12 @@ function createSessionBatchWriter(
   };
 }
 
-export type BatchIngestPickPlan = {
-  readonly targetDir: string;
-  readonly entries: readonly BatchIngestRawEntry[];
-  readonly conflicts: ReadonlyArray<{readonly logicalPath: string; readonly reason: 'exists'}>;
-  readonly skippedBinary: readonly string[];
-  readonly writesCount: number;
-};
-
-export type BatchIngestOutcome =
+export type FileIngestOutcome =
   | {readonly status: 'cancelled'}
   | {
       readonly status: 'needs_confirm';
-      readonly plan: BatchIngestPickPlan;
+      readonly entry: BatchIngestRawEntry;
+      readonly conflictPath: string;
     }
   | {
       readonly status: 'applied';
@@ -118,52 +130,54 @@ export type BatchIngestOutcome =
       readonly skippedBinary: readonly string[];
     };
 
-async function readPickedFilesAsEntries(
-  files: ReadonlyArray<{uri: string; name: string | null}>,
-): Promise<BatchIngestRawEntry[]> {
-  const entries: BatchIngestRawEntry[] = [];
-  for (const file of files) {
-    const name = (file.name ?? 'unnamed').replace(/^\/+/, '');
-    const [copyResult] = await keepLocalCopy({
-      files: [{uri: file.uri, fileName: name}],
-      destination: 'cachesDirectory',
-    });
-    if (copyResult.status !== 'success') {
-      continue;
-    }
-    const fsPath = localUriToFsPath(copyResult.localUri);
-    const base64 = await blobFs().readFile(fsPath, 'base64');
-    entries.push({
-      relativePath: name,
-      kind: 'file',
-      bytes: base64ToBytes(base64),
-    });
+async function readPickedFileAsEntry(file: {
+  uri: string;
+  name: string | null;
+}): Promise<BatchIngestRawEntry> {
+  const name = (file.name ?? 'unnamed').replace(/^\/+/, '');
+  const [copyResult] = await keepLocalCopy({
+    files: [{uri: file.uri, fileName: name}],
+    destination: 'cachesDirectory',
+  });
+  if (copyResult.status !== 'success') {
+    throw new Error(copyResult.copyError ?? '无法读取所选文件');
   }
-  return entries;
+  const fsPath = localUriToFsPath(copyResult.localUri);
+  let base64: string;
+  try {
+    base64 = await blobFs().readFile(fsPath, 'base64');
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : '读取文件内容失败';
+    throw new Error(detail);
+  }
+  return {
+    relativePath: name,
+    kind: 'file',
+    bytes: base64ToBytes(base64),
+  };
 }
 
 /**
- * 批量导入：多选文件 → plan；有冲突且未确认则返回 needs_confirm。
- * 当前无选文件夹能力时仅多选文件（不假装导入目录）。
+ * 单文件导入：系统选一个文件 → 写入当前目录。
  */
-export async function importVfsBatch(
+export async function importVfsFile(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
   options: {
     readonly targetDir: string;
     readonly overwriteConfirmed?: boolean;
-    /** 冲突确认后再次调用时传入上次 plan 的 entries */
-    readonly preparedEntries?: readonly BatchIngestRawEntry[];
+    /** 冲突确认后再次调用时传入上次选中的 entry */
+    readonly preparedEntry?: BatchIngestRawEntry;
   },
-): Promise<BatchIngestOutcome> {
+): Promise<FileIngestOutcome> {
   const targetDir = resolveTargetDir(options.targetDir);
-  let entries = options.preparedEntries;
+  let entry = options.preparedEntry;
 
-  if (entries == null) {
+  if (entry == null) {
     let picked: ReadonlyArray<{uri: string; name: string | null}>;
     try {
       picked = await pick({
-        allowMultiSelection: true,
+        allowMultiSelection: false,
         type: [types.allFiles],
       });
     } catch (error) {
@@ -172,35 +186,21 @@ export async function importVfsBatch(
       }
       throw error;
     }
-    if (picked.length === 0) {
+    const file = picked[0];
+    if (file == null) {
       return {status: 'cancelled'};
     }
-    entries = await readPickedFilesAsEntries(picked);
-    if (entries.length === 0) {
-      return {
-        status: 'applied',
-        report: {written: [], skipped: [], failed: []},
-        skippedBinary: [],
-      };
-    }
+    entry = await readPickedFileAsEntry(file);
   }
 
   const batch = createVfsBatchIoService(runtime.conn);
-  const plan = await batch.planBatchIngest(scope, targetDir, entries);
+  const plan = await batch.planBatchIngest(scope, targetDir, [entry]);
 
   if (plan.conflicts.length > 0 && options.overwriteConfirmed !== true) {
     return {
       status: 'needs_confirm',
-      plan: {
-        targetDir,
-        entries,
-        conflicts: plan.conflicts.map(c => ({
-          logicalPath: c.logicalPath,
-          reason: c.reason,
-        })),
-        skippedBinary: [...plan.skippedBinary],
-        writesCount: plan.writes.length,
-      },
+      entry,
+      conflictPath: plan.conflicts[0]!.logicalPath,
     };
   }
 
@@ -225,121 +225,57 @@ export async function importVfsBatch(
   };
 }
 
-export type BatchExportResult =
-  | {readonly status: 'saved'; readonly savedCount: number}
-  | {readonly status: 'cancelled'; readonly savedCount: number};
-
 /**
- * 批量导出：planBatchExport → cache 物化 → saveDocuments（多文件优先，失败则逐文件）。
- * logicalPaths 为空时由调用方负责传入当前目录。
+ * 单文件导出：VFS 读文件 → saveDocuments 另存。
  */
-export async function exportVfsBatch(
+export async function exportVfsFile(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options: {readonly logicalPaths: readonly string[]},
-): Promise<BatchExportResult> {
-  if (options.logicalPaths.length === 0) {
-    throw new Error('没有可导出的路径');
-  }
-
-  const batch = createVfsBatchIoService(runtime.conn);
-  const plan = await batch.planBatchExport(scope, options.logicalPaths);
-  if (plan.files.length === 0) {
-    throw new Error('导出内容为空');
-  }
-
+  logicalPath: string,
+): Promise<'saved' | 'cancelled'> {
+  const vfs = resolveScopedVfs(runtime, scope);
+  const read = await vfs.read(logicalPath);
+  const fileName = basename(logicalPath);
   const fs = blobFs();
-  const stamp = Date.now();
-  const cacheRoot = `${fs.dirs.CacheDir}/vfs-batch-export-${stamp}`;
-  await fs.mkdir(cacheRoot);
+  const tmpPath = `${fs.dirs.CacheDir}/vfs-export-${Date.now()}-${fileName}`;
 
-  const writtenAbs: {abs: string; fileName: string; relativePath: string}[] =
-    [];
   try {
-    for (const file of plan.files) {
-      const parts = file.relativePath.split('/');
-      const fileName = parts[parts.length - 1] ?? 'file';
-      let dir = cacheRoot;
-      for (let i = 0; i < parts.length - 1; i++) {
-        dir = `${dir}/${parts[i]}`;
-        const exists = await fs.exists(dir);
-        if (!exists) {
-          await fs.mkdir(dir);
-        }
-      }
-      // 扁平文件名保留相对路径可辨：用 -- 连接
-      const flatName = file.relativePath.replace(/\//g, '--');
-      const abs = `${cacheRoot}/${flatName}`;
-      await fs.writeFile(abs, file.content, 'utf8');
-      writtenAbs.push({abs, fileName: flatName, relativePath: file.relativePath});
+    await fs.writeFile(tmpPath, read.content, 'utf8');
+    const [result] = await saveDocuments({
+      sourceUris: [toFileUri(tmpPath)],
+      mimeType: 'text/plain',
+      fileName,
+      copy: true,
+    });
+    if (result?.error) {
+      throw new Error(result.error);
     }
-
-    // 优先一次多文件 saveDocuments
-    try {
-      const results = await saveDocuments({
-        sourceUris: writtenAbs.map(w => toFileUri(w.abs)),
-        mimeType: 'text/plain',
-        fileName: writtenAbs[0]!.fileName,
-        copy: true,
-      });
-      const firstError = results.find(r => r?.error)?.error;
-      if (firstError) {
-        throw new Error(firstError);
-      }
-      return {status: 'saved', savedCount: writtenAbs.length};
-    } catch (multiErr) {
-      if (
-        isErrorWithCode(multiErr) &&
-        multiErr.code === errorCodes.OPERATION_CANCELED
-      ) {
-        return {status: 'cancelled', savedCount: 0};
-      }
-      // 降级：逐文件 saveDocuments
-      let savedCount = 0;
-      for (const item of writtenAbs) {
-        try {
-          const [result] = await saveDocuments({
-            sourceUris: [toFileUri(item.abs)],
-            mimeType: 'text/plain',
-            fileName: item.fileName,
-            copy: true,
-          });
-          if (result?.error) {
-            throw new Error(result.error);
-          }
-          savedCount += 1;
-        } catch (oneErr) {
-          if (
-            isErrorWithCode(oneErr) &&
-            oneErr.code === errorCodes.OPERATION_CANCELED
-          ) {
-            return {status: 'cancelled', savedCount};
-          }
-          throw oneErr;
-        }
-      }
-      return {status: 'saved', savedCount};
+    return 'saved';
+  } catch (error) {
+    if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+      return 'cancelled';
     }
+    throw error;
   } finally {
-    await fs.unlink(cacheRoot).catch(() => undefined);
+    await fs.unlink(tmpPath).catch(() => undefined);
   }
 }
 
-export function formatBatchReportToast(
+export function formatFileIngestToast(
   report: BatchApplyReport,
   skippedBinary: readonly string[],
 ): string {
-  const parts: string[] = [];
-  if (report.written.length > 0) {
-    parts.push(`已写入 ${report.written.length}`);
+  if (skippedBinary.length > 0) {
+    return '已跳过二进制文件';
   }
-  if (report.skipped.length > 0 || skippedBinary.length > 0) {
-    parts.push(
-      `跳过 ${report.skipped.length + skippedBinary.length}`,
-    );
+  if (report.written.length > 0) {
+    return '文件已导入';
   }
   if (report.failed.length > 0) {
-    parts.push(`失败 ${report.failed.length}`);
+    return `导入失败：${report.failed[0]?.message ?? '未知错误'}`;
   }
-  return parts.length > 0 ? `导入完成：${parts.join('，')}` : '导入完成';
+  if (report.skipped.length > 0) {
+    return '已跳过同名文件';
+  }
+  return '导入完成';
 }

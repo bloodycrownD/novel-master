@@ -108,6 +108,48 @@ function emptyReport(
   return { written: [], skipped, failed: [...failed] };
 }
 
+function relativePathPrefixes(rel: string): string[] {
+  const parts = rel.split("/").filter(Boolean);
+  const out: string[] = [];
+  for (let i = 1; i < parts.length; i++) {
+    out.push(parts.slice(0, i).join("/"));
+  }
+  return out;
+}
+
+function detectIngestTypeConflict(
+  rel: string,
+  kind: "file" | "directory",
+  pathKind: Map<string, "file" | "directory">,
+): string | null {
+  const existing = pathKind.get(rel);
+  if (existing != null && existing !== kind) {
+    return `path cannot be both file and directory: ${rel}`;
+  }
+
+  for (const prefix of relativePathPrefixes(rel)) {
+    if (pathKind.get(prefix) === "file") {
+      return `cannot place ${kind} under file: ${prefix}`;
+    }
+  }
+
+  if (kind === "file") {
+    for (const [p, k] of pathKind) {
+      if (k === "file" && p.startsWith(`${rel}/`)) {
+        return `cannot place file under file: ${rel}`;
+      }
+    }
+  } else {
+    for (const [p, k] of pathKind) {
+      if (k === "file" && p.startsWith(`${rel}/`)) {
+        return `cannot create directory over nested file: ${p}`;
+      }
+    }
+  }
+
+  return null;
+}
+
 function basenameOf(logical: string): string {
   const path = resolveLogicalPath(logical);
   if (path === "/") {
@@ -163,7 +205,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     const mkdirPaths: string[] = [];
     const conflicts: BatchConflict[] = [];
     const skippedBinary: string[] = [];
+    const typeConflicts: Array<{ logicalPath: string; message: string }> = [];
     const seenLogical = new Set<string>();
+    const pathKind = new Map<string, "file" | "directory">();
 
     for (const entry of entries) {
       const rel = normalizeBatchRelativePath(entry.relativePath);
@@ -171,6 +215,15 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
         skippedBinary.push(entry.relativePath);
         continue;
       }
+
+      const kind = entry.kind === "directory" ? "directory" : "file";
+      const typeConflict = detectIngestTypeConflict(rel, kind, pathKind);
+      if (typeConflict != null) {
+        const logical = joinTargetLogicalPath(target, rel);
+        typeConflicts.push({ logicalPath: logical, message: typeConflict });
+        continue;
+      }
+      pathKind.set(rel, kind);
 
       if (entry.kind === "directory") {
         const logical = joinTargetLogicalPath(target, rel);
@@ -204,7 +257,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       writes.push({ relativePath: rel, content: decoded });
     }
 
-    return { writes, mkdirPaths, conflicts, skippedBinary };
+    return { writes, mkdirPaths, conflicts, skippedBinary, typeConflicts };
   }
 
   async applyBatchIngest(
@@ -214,6 +267,13 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     options: BatchApplyOptions,
   ): Promise<BatchApplyReport> {
     const skippedBase = [...plan.skippedBinary];
+
+    if (plan.typeConflicts.length > 0) {
+      return emptyReport(
+        skippedBase,
+        plan.typeConflicts.map((c) => ({ path: c.logicalPath, message: c.message })),
+      );
+    }
 
     if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
       return emptyReport([
@@ -268,6 +328,17 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     writer: BatchIngestWriter,
   ): Promise<BatchApplyReport> {
     const skipped: string[] = [...plan.skippedBinary];
+
+    if (plan.typeConflicts.length > 0) {
+      return {
+        written: [],
+        skipped,
+        failed: plan.typeConflicts.map((c) => ({
+          path: c.logicalPath,
+          message: c.message,
+        })),
+      };
+    }
 
     if (plan.conflicts.length > 0 && !options.overwriteConfirmed) {
       for (const c of plan.conflicts) {

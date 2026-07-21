@@ -44,6 +44,12 @@ export interface BatchApplyReport {
   readonly failed: ReadonlyArray<{ readonly path: string; readonly message: string }>;
 }
 
+/** plan 阶段检测到的 file/directory 类型冲突。 */
+export interface BatchIngestTypeConflict {
+  readonly logicalPath: string;
+  readonly message: string;
+}
+
 /** planBatchIngest 结果。 */
 export interface BatchIngestPlan {
   readonly writes: readonly BatchIngestPlanEntry[];
@@ -52,6 +58,8 @@ export interface BatchIngestPlan {
   readonly conflicts: readonly BatchConflict[];
   /** 非法 UTF-8；相对路径形式，与输入 relativePath 对齐 */
   readonly skippedBinary: readonly string[];
+  /** 同批次内 file/dir 互斥路径冲突；apply 前须处理，不得静默写入 */
+  readonly typeConflicts: readonly BatchIngestTypeConflict[];
 }
 
 /** 导出规划中的单个文件。 */

@@ -136,6 +136,42 @@ describe("VfsBatchIoService", () => {
     await assert.rejects(() => vfs.read("/chap/b.md"));
   });
 
+  it("T-B7: plan detects same-path file/directory type conflict", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const batch = createVfsBatchIoService(ctx.conn);
+    const scope = { kind: "project" as const, projectId: project.id };
+    const plan = await batch.planBatchIngest(scope, "/", [
+      { kind: "file", relativePath: "foo", bytes: enc("file") },
+      { kind: "directory", relativePath: "foo" },
+    ]);
+    assert.equal(plan.typeConflicts.length, 1);
+    assert.match(plan.typeConflicts[0]!.message, /both file and directory/);
+    const report = await batch.applyBatchIngest(scope, "/", plan, {
+      overwriteConfirmed: false,
+    });
+    assert.deepEqual(report.written, []);
+    assert.equal(report.failed.length, 1);
+  });
+
+  it("T-B9: plan detects file-under-file type conflict", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const batch = createVfsBatchIoService(ctx.conn);
+    const scope = { kind: "project" as const, projectId: project.id };
+    const plan = await batch.planBatchIngest(scope, "/", [
+      { kind: "file", relativePath: "foo", bytes: enc("parent") },
+      { kind: "file", relativePath: "foo/bar.txt", bytes: enc("child") },
+    ]);
+    assert.equal(plan.typeConflicts.length, 1);
+    assert.match(plan.typeConflicts[0]!.message, /under file/);
+    const report = await batch.applyBatchIngest(scope, "/", plan, {
+      overwriteConfirmed: false,
+    });
+    assert.deepEqual(report.written, []);
+    assert.equal(report.failed.length, 1);
+  });
+
   it("T-B8: session writer keeps first success when second fails", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
