@@ -24,7 +24,7 @@ dependency:
    顶栏/页脚与压缩已统一为**本地**按模型「计数方式」计数；API 侧 usage 虽已解析进回合结果，**未**进入同一产品口径。用户希望尽量**一套计算引擎**：有 API 返回则用，没有则本地；禁止「展示一套、压缩另一套」。
 
 3. **工作区导入导出**  
-   既有 ZIP 为**整域全量替换**（见 `vfs-zip-io-agent-tool-policy` / `import-export-navigation-fix`）。用户需要升级为**目录子树** ZIP，并新增**非 ZIP 的批量导入/导出**；Desktop 以拖拽完成批量与树内移动，Mobile 以「更多 / 目录项菜单」接入。现网「批量操作」仅指多选删除/规则开关，**不是**本迭代的批量文件 IO。
+   既有 ZIP 为**整域全量替换**（见 `vfs-zip-io-agent-tool-policy` / `import-export-navigation-fix`）。用户需要升级为**目录子树** ZIP，并新增**非 ZIP 的文件 IO**：Desktop 以拖拽完成批量与树内移动；Mobile 以「更多 / 目录项 / 文件项菜单」接入，**单文件**非 ZIP + **目录级 ZIP**。现网「批量操作」仅指多选删除/规则开关，**不是**本迭代的文件 IO。
 
 ## 目标（含成功指标）
 
@@ -33,8 +33,8 @@ dependency:
 | 分叉/复制可回滚且规则连续 | fork / copy 后，源会话上的 inclusion 与目录排序在新会话仍生效；非首条回滚**不会**因空基线删光文件 |
 | Token 单引擎 | 聊天展示与压缩触发读取**同一套**占用结果；有可用 API `promptTokens` 时两端一致采用，否则一致回退本地 |
 | 子树 ZIP | 对当前/指定目录导入 ZIP 后，**仅该子树**与 ZIP 一致，域内兄弟路径保留 |
-| 批量 IO 可用 | Desktop 可拖入导入、拖出导出、树内移动；Mobile 可从更多菜单批量导入/导出 |
-| 入口清晰 | Mobile：更多 = 批量导入/导出 + 导入 ZIP；目录项 = 导出 ZIP。Desktop：目录右键含 ZIP；批量靠拖拽 |
+| 批量 IO 可用 | Desktop 可拖入导入、拖出导出、树内移动；Mobile 可单文件导入/导出，目录级走 ZIP |
+| 入口清晰 | Mobile：更多 = 导入文件 + 导入 ZIP；文件项 = 导出文件；目录项 = 导出 ZIP。Desktop：目录右键含 ZIP；批量靠拖拽 |
 
 **整体验收**：四个 feature 的验收清单全部通过，且不破坏既有整域语义的可迁移路径（若 CLI 仍保留整域参数，须在 feature PRD 写清；默认产品 UI 走子树）。
 
@@ -58,7 +58,7 @@ dependency:
 | 分叉快照与规则 | `features/fork-snapshot-and-rules` | fork / copy：挂当前活树快照 + 复制 session workplace 规则 |
 | Token API 统一口径 | `features/chat-token-api-overlay` | 展示与压缩同一引擎；优先 API usage，否则本地 |
 | 目录级 ZIP | `features/vfs-zip-directory` | 子树导入/导出 ZIP 与入口改挂 |
-| 批量导入导出 | `features/vfs-batch-io` | 非 ZIP 批量 IO；Desktop 拖拽三向；Mobile 菜单 |
+| 批量导入导出 | `features/vfs-batch-io` | Desktop 非 ZIP 批量 IO + 拖拽三向；Mobile 单文件 IO（目录见 ZIP） |
 
 ### 不包含范围
 
@@ -81,13 +81,13 @@ dependency:
 
 - [ ] 四个 feature 目录均有已确认的 `prd.md`，且无互相矛盾的范围声明  
 - [ ] 手工/自动化验收以各 feature「验收标准」为准；父级不重复列技术项  
-- [ ] 发布说明可向用户讲清：分叉更稳、token 更准、工作区可子树 ZIP + 批量拖入/导出  
+- [ ] 发布说明可向用户讲清：分叉更稳、token 更准、工作区可子树 ZIP + Desktop 批量拖入/导出 + Mobile 单文件/ZIP  
 
 ## 风险与待确认项
 
 | 项 | 说明 | 处理 |
 |----|------|------|
 | CLI 整域 ZIP | CLI 是否保留「整域」显式开关 | 写入 `vfs-zip-directory`；默认可与 UI 子树对齐或保留 flag |
-| 批量导出选目录（Mobile） | 系统选文件夹能力因平台而异 | **已定案**见 `vfs-batch-io`：无多选→导出当前目录全部；Android 无法选目录→`saveDocuments`（多文件/逐文件）为验收主路径 |
+| Mobile 文件 IO 平台限制 | 系统文件选择器无法 pick 文件夹 / 非 ZIP 目录批量 | **已定案**见 `vfs-batch-io`：Mobile 单文件 `pick`/`saveDocuments`；目录级仅 ZIP |
 | API usage 缺失 | 中转站不返回 usage | 统一回退本地；不新增配置项 |
 | 与 attachment-unified「fork 不拷 kkv」 | 本迭代复制规则表；kkv 是否重建 | feature PRD：规则表必拷；常驻前缀允许首次拼装重建 |
