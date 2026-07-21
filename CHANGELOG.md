@@ -6,7 +6,27 @@
 
 ## [Unreleased]
 
-## [1.4.03] - 2026-07-21
+### 新增
+
+- **会话分叉 / 复制更稳**：fork 与 session 复制共用合同——挂上分叉时刻的当前工作区快照，并复制会话级工作区规则（inclusion / 目录排序）；非首条回滚不再因空基线误删文件
+- **Token 占用单引擎**：聊天展示与压缩共用 `resolveCurrentPromptTokens`；有可用 API `promptTokens` 时优先采用，否则回退本地计数；Desktop 页脚在回合结束 / 消息变化 / Agent·模型设置变更后刷新
+- **目录级 ZIP**：导入/导出可针对指定子树（非整域）；CLI 增加 `--path`（默认 `/`）；Desktop 目录/空白右键导出，Mobile「更多」导入 ZIP、目录项导出 ZIP
+- **Desktop 工作区拖拽三向**：从本机拖入导入、拖出到本机导出、树内拖动移动；冲突覆盖前确认
+- **Mobile 单文件导入/导出**：当前目录「文件导入」、文件项「导出」；目录整包仍走 ZIP（平台多文件另存/多选不稳定，批量 IO 留后续迭代）
+
+### 修复
+
+- **Mobile / Desktop 大备份导入闪退**：约百兆 `.nmbackup` 不再整包读入 JS 再 base64 写回，改为路径级拷贝，避免 OOM
+- **Desktop Windows 拖出导出崩溃**：拖出图标禁止空 `nativeImage`，改用应用图标 / PNG 兜底，避免主进程硬崩
+- **Desktop 拖出导出体验**：物化/startDrag 失败改为 toast；prefetch 未完成时提示「导出准备中」；拖出结束后清理 staging，避免临时目录泄漏
+- **Desktop 空白区树内移动**：空白处可接收树内 MIME 拖放并移动到根目录
+- **Mobile 文件导入**：读文件失败不再假报「导入完成」；失败摘要使用真实错误文案
+- **批量写入类型冲突**：同路径 file/dir 冲突在规划阶段检出，避免错误写入
+- **Desktop Token 页脚**：在设置中切换模型/Agent 后占用数字同步刷新
+
+### 维护
+
+- Core / Desktop / Mobile 补齐分叉、Token 缓存、ZIP 子树、批量 IO 等相关自动化测试；CR fix-spec 与业务文档对齐 Mobile 单文件收窄
 
 ### 新增
 
