@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { EVENT_AGENT_RUN_FINISHED } from "@shared/agent-event-types";
 import type { AgentRunFinishedPayload } from "@shared/agent-event-types";
-import { onAgentStream } from "../ipc/client";
+import type { VfsScopeRequest, WorkspacePanelScope } from "@shared/ipc-types";
+import { onAgentStream, vfsScope } from "../ipc/client";
 import { WorkspaceHeaderActions } from "../features/workspace/WorkspaceHeaderActions";
 import {
   WorkspaceTree,
@@ -10,10 +11,24 @@ import {
 import { useShellNav } from "../providers/ShellNavProvider";
 import { workspaceTitleForScope } from "../state/nav-workspace";
 import { WorkspaceFooter } from "../features/chat/WorkspaceFooter";
+import { ConfirmModal } from "../components/ui/ConfirmModal";
+import {
+  confirmAndApplyBatchIngest,
+  handleTreeDrop,
+  type BatchIngestConfirmRequest,
+} from "../features/workspace/workspace-batch-dnd";
 
 interface ExplorerPaneProps {
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
   onBlankContextMenu: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
+}
+
+function scopeRequest(
+  panelScope: WorkspacePanelScope,
+  projectId?: string,
+  sessionId?: string,
+): VfsScopeRequest {
+  return vfsScope(panelScope, projectId, sessionId);
 }
 
 export function ExplorerPane({
@@ -32,6 +47,10 @@ export function ExplorerPane({
     reloadFooter,
   } = useShellNav();
   const title = workspaceTitleForScope(workspaceScope);
+  const [dropHighlightRoot, setDropHighlightRoot] = useState(false);
+  const [ingestConfirm, setIngestConfirm] =
+    useState<BatchIngestConfirmRequest | null>(null);
+  const [ingestBusy, setIngestBusy] = useState(false);
 
   // agent.run.finished → 刷新页脚 token（缓存已在 core 写好）
   useEffect(() => {
@@ -48,6 +67,35 @@ export function ExplorerPane({
       }
     });
   }, [sessionId, reloadFooter]);
+
+  const handleBlankDragOver = useCallback((e: React.DragEvent) => {
+    if ((e.target as HTMLElement).closest(".tree-node")) {
+      return;
+    }
+    if (Array.from(e.dataTransfer.types).includes("Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setDropHighlightRoot(true);
+    }
+  }, []);
+
+  const handleBlankDrop = useCallback(
+    async (e: React.DragEvent, panelScope: WorkspacePanelScope) => {
+      if ((e.target as HTMLElement).closest(".tree-node")) {
+        return;
+      }
+      e.preventDefault();
+      setDropHighlightRoot(false);
+      await handleTreeDrop({
+        scope: scopeRequest(panelScope, projectId, sessionId),
+        targetDir: "/",
+        dataTransfer: e.dataTransfer,
+        onNeedsConfirm: setIngestConfirm,
+        onMutated: notifyWorkspaceMutated,
+      });
+    },
+    [projectId, sessionId, notifyWorkspaceMutated],
+  );
 
   return (
     <>
@@ -72,7 +120,7 @@ export function ExplorerPane({
                 data-workspace-panel={scope}
               >
                 <div
-                  className="explorer-tree"
+                  className={`explorer-tree${dropHighlightRoot && visible ? " is-drop-target" : ""}`}
                   data-tree={scope}
                   id={`workspace-tree-${scope}`}
                   onPointerDown={(e) => {
@@ -82,6 +130,9 @@ export function ExplorerPane({
                     }
                     notifyWorkspaceMutated();
                   }}
+                  onDragOver={handleBlankDragOver}
+                  onDragLeave={() => setDropHighlightRoot(false)}
+                  onDrop={(e) => void handleBlankDrop(e, scope)}
                   onContextMenu={(e) => {
                     if ((e.target as HTMLElement).closest(".tree-node")) {
                       return;
@@ -126,6 +177,34 @@ export function ExplorerPane({
           )}
         </div>
       </section>
+      <ConfirmModal
+        open={ingestConfirm != null}
+        title="覆盖确认"
+        message={
+          ingestConfirm == null
+            ? ""
+            : `目标处已有 ${ingestConfirm.conflictCount} 个同名文件/目录。覆盖后不可撤销，是否继续？`
+        }
+        confirmLabel="覆盖"
+        danger
+        busy={ingestBusy}
+        onCancel={() => setIngestConfirm(null)}
+        onConfirm={async () => {
+          if (ingestConfirm == null) {
+            return;
+          }
+          setIngestBusy(true);
+          try {
+            await confirmAndApplyBatchIngest(
+              ingestConfirm,
+              notifyWorkspaceMutated,
+            );
+            setIngestConfirm(null);
+          } finally {
+            setIngestBusy(false);
+          }
+        }}
+      />
     </>
   );
 }
