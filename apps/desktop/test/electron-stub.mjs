@@ -16,3 +16,9 @@ export const app = {
     return name === "userData" ? "/tmp/novel-master-test-user-data" : "/tmp";
   },
 };
+
+export const nativeImage = {
+  createEmpty() {
+    return { isEmpty: () => true };
+  },
+};
