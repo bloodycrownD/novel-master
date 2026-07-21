@@ -37,9 +37,18 @@ export async function rebootstrapDesktopRuntime(): Promise<DesktopNovelMasterRun
   return getDesktopRuntime();
 }
 
+/**
+ * Drop the runtime handle without closing the DB.
+ * Call immediately before `closeDesktopConnection` during backup import so
+ * concurrent IPC cannot observe a closed `runtime.conn` (better-sqlite3 abort).
+ */
+export function clearDesktopRuntimeHandle(): void {
+  runtime = undefined;
+  initPromise = undefined;
+}
+
 /** Clears singleton state between integration tests (system Node host). */
 export async function resetDesktopRuntimeForTest(): Promise<void> {
   await closeDesktopConnection();
-  runtime = undefined;
-  initPromise = undefined;
+  clearDesktopRuntimeHandle();
 }

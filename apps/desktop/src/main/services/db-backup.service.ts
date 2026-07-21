@@ -19,9 +19,16 @@ import {
   closeDesktopConnection,
   getDesktopConnection,
 } from "../runtime/connection.js";
+import { clearDesktopRuntimeHandle } from "../runtime/desktop-runtime-singleton.js";
 import { resolveDbPath } from "../runtime/resolve-db-path.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
+
+/** Close live DB only after dropping the runtime handle (avoids stale conn use). */
+async function closeLiveDbForBackupImport(): Promise<void> {
+  clearDesktopRuntimeHandle();
+  await closeDesktopConnection();
+}
 
 const SQLITE_MAGIC = "SQLite format 3";
 const BACKUP_EXT = ".nmbackup";
