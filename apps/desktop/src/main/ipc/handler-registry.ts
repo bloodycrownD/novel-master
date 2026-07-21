@@ -231,7 +231,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
   bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, handleVfsBatchIngestFromPaths);
   bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);
-  // startDrag 须在 drag 流程中同步触发，使用 send 而非 invoke
+  // startDrag 须在 drag 流程中同步触发，使用 send 而非 invoke；失败经 VFS_START_DRAG_FAILED 回传
   ipcMain.on(
     IPC_CHANNELS.VFS_START_DRAG,
     (event, req: VfsStartDragRequest) => {

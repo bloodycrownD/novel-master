@@ -14,6 +14,7 @@ import { WorkspaceFooter } from "../features/chat/WorkspaceFooter";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
 import {
   confirmAndApplyBatchIngest,
+  ensureStartDragFailureToast,
   handleTreeDrop,
   type BatchIngestConfirmRequest,
 } from "../features/workspace/workspace-batch-dnd";
@@ -67,6 +68,8 @@ export function ExplorerPane({
       }
     });
   }, [sessionId, reloadFooter]);
+
+  useEffect(() => ensureStartDragFailureToast(), []);
 
   const handleBlankDragOver = useCallback((e: React.DragEvent) => {
     if ((e.target as HTMLElement).closest(".tree-node")) {

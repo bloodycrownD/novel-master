@@ -9,6 +9,7 @@ import {
   type WorkspaceMutatedPayload,
   type ComposerAttachmentsSuggestPayload,
   type AgentUserMessageAppendedPayload,
+  type VfsStartDragFailedPayload,
 } from '@shared/ipc-types';
 import { createInvokeClient } from './invoke-registry';
 
@@ -201,6 +202,16 @@ export function onUserMessageAppended(
 ): () => void {
   return bridge().on(
     IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
+    callback as (p: unknown) => void,
+  );
+}
+
+/** 订阅 main startDrag 失败（拖出导出 toast）。 */
+export function onVfsStartDragFailed(
+  callback: (payload: VfsStartDragFailedPayload) => void,
+): () => void {
+  return bridge().on(
+    IPC_CHANNELS.VFS_START_DRAG_FAILED,
     callback as (p: unknown) => void,
   );
 }

@@ -55,6 +55,8 @@ export const IPC_CHANNELS = {
   VFS_BATCH_EXPORT_STAGE: 'nm:vfs/batchExportStage',
   /** Main：webContents.startDrag（preload send，非 invoke） */
   VFS_START_DRAG: 'nm:vfs/startDrag',
+  /** Main → renderer：startDrag 失败（send 无回传，经事件 toast） */
+  VFS_START_DRAG_FAILED: 'nm:vfs/startDragFailed',
 
   WORKPLACE_BUILD_LIST_ROWS: 'nm:workplace/buildListRows',
   WORKPLACE_SET_DIR_RULE: 'nm:workplace/setDirRule',
@@ -444,6 +446,11 @@ export type VfsBatchExportStageResult = {
 
 export type VfsStartDragRequest = {
   readonly filePaths: readonly string[];
+};
+
+/** Main → renderer：startDrag 失败载荷（供 toast） */
+export type VfsStartDragFailedPayload = {
+  readonly message: string;
 };
 
 export type VfsListEntryDto = {

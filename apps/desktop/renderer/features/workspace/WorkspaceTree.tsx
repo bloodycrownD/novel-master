@@ -188,11 +188,8 @@ export function WorkspaceTree({
   const handleRowPointerDown = useCallback(
     (e: React.PointerEvent, row: WorkplaceListRowDto) => {
       e.stopPropagation();
-      void prefetchExportStage({ scope: req, logicalPath: row.path }).catch(
-        () => {
-          // prefetch 失败时 dragstart 会 toast
-        },
-      );
+      // 失败时 prefetchExportStage 内部已 toast
+      void prefetchExportStage({ scope: req, logicalPath: row.path });
     },
     [req],
   );

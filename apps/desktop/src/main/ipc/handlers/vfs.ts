@@ -19,11 +19,13 @@ import type {
   VfsRenameRequest,
   VfsScopeRequest,
   VfsStartDragRequest,
+  VfsStartDragFailedPayload,
   VfsWriteRequest,
   VfsZipExportResult,
   VfsZipImportResult,
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
+import { IPC_CHANNELS } from "../../../../shared/ipc-types.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 
 import {
@@ -339,7 +341,7 @@ export async function handleVfsBatchExportStage(
 
 /**
  * Preload 经 ipcRenderer.send 触发；须在 dragstart 流程中尽快调用 startDrag。
- * 失败时向 renderer 无法直接返回，由 renderer 侧先行 stage 校验。
+ * 失败经 VFS_START_DRAG_FAILED 推回 renderer toast（send 无 invoke 回传）。
  */
 export function handleVfsStartDrag(
   event: IpcMainEvent,
@@ -349,6 +351,12 @@ export function handleVfsStartDrag(
     startDragExport(event.sender, req.filePaths ?? []);
   } catch (err) {
     console.error("[vfs-batch] startDrag failed", err);
+    const payload: VfsStartDragFailedPayload = {
+      message: formatIpcError(err).message || "拖出失败",
+    };
+    if (!event.sender.isDestroyed()) {
+      event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
+    }
   }
 }
 

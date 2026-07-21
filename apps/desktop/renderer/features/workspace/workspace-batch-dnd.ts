@@ -3,6 +3,7 @@
  *
  * 拖出：pointerdown 预 stage → dragstart 同步 startDrag（避免 await 打断拖动手势）。
  * 回落到树内且路径属于 stagingRoot → 按原逻辑路径 move；外部 Files → ingest。
+ * 物化 / startDrag 失败 → toast（Spec Step 3）。
  */
 import type {
   VfsBatchApplyReportDto,
@@ -13,6 +14,7 @@ import {
   ipcVfsBatchExportStage,
   ipcVfsBatchIngestFromPaths,
   ipcVfsRename,
+  onVfsStartDragFailed,
 } from "@/ipc/client";
 import { showToast } from "@/components/ui/show-toast";
 import {
@@ -34,6 +36,23 @@ export type StagedExport = {
 
 let activeNativeDrag: ActiveNativeDrag | null = null;
 const stagedByPath = new Map<string, StagedExport>();
+/** prefetch 已失败的路径：dragstart 无 staged 时补 toast（避免与 prefetch toast 重复）。 */
+const failedStagePaths = new Set<string>();
+let startDragFailedUnsub: (() => void) | null = null;
+
+/** 订阅 main startDrag 失败事件（幂等）。 */
+export function ensureStartDragFailureToast(): () => void {
+  if (startDragFailedUnsub == null) {
+    startDragFailedUnsub = onVfsStartDragFailed((payload) => {
+      clearActiveNativeDrag();
+      showToast(payload.message || "拖出失败");
+    });
+  }
+  return () => {
+    startDragFailedUnsub?.();
+    startDragFailedUnsub = null;
+  };
+}
 
 export function getActiveNativeDrag(): ActiveNativeDrag | null {
   return activeNativeDrag;
@@ -93,28 +112,38 @@ export type BatchIngestConfirmRequest = {
   readonly conflictCount: number;
 };
 
-/** pointerdown 时预物化，供随后 dragstart 同步 startDrag。 */
+/** pointerdown 时预物化，供随后 dragstart 同步 startDrag。失败须 toast。 */
 export async function prefetchExportStage(options: {
   readonly scope: VfsScopeRequest;
   readonly logicalPath: string;
 }): Promise<void> {
-  const result = await ipcVfsBatchExportStage({
-    ...options.scope,
-    logicalPaths: [options.logicalPath],
-  });
-  if (!result.ok) {
+  try {
+    const result = await ipcVfsBatchExportStage({
+      ...options.scope,
+      logicalPaths: [options.logicalPath],
+    });
+    if (!result.ok) {
+      stagedByPath.delete(options.logicalPath);
+      failedStagePaths.add(options.logicalPath);
+      showToast(result.error.message || "导出物化失败");
+      return;
+    }
+    failedStagePaths.delete(options.logicalPath);
+    stagedByPath.set(options.logicalPath, {
+      logicalPaths: [options.logicalPath],
+      stagingRoot: result.data.stagingRoot,
+      filePaths: result.data.filePaths,
+    });
+  } catch (err) {
     stagedByPath.delete(options.logicalPath);
-    return;
+    failedStagePaths.add(options.logicalPath);
+    showToast(err instanceof Error ? err.message : "导出物化失败");
   }
-  stagedByPath.set(options.logicalPath, {
-    logicalPaths: [options.logicalPath],
-    stagingRoot: result.data.stagingRoot,
-    filePaths: result.data.filePaths,
-  });
 }
 
 /**
  * dragstart：若已 prefetch 则 preventDefault + startDrag；否则保留 HTML5 MIME 供树内移动。
+ * prefetch 已失败且无 staged → toast（不可静默）。
  */
 export function startPrefetchedNativeDrag(options: {
   readonly logicalPath: string;
@@ -122,6 +151,10 @@ export function startPrefetchedNativeDrag(options: {
 }): boolean {
   const staged = stagedByPath.get(options.logicalPath);
   if (staged == null) {
+    if (failedStagePaths.has(options.logicalPath)) {
+      // prefetch 已 toast；清除标记，避免重复提示
+      failedStagePaths.delete(options.logicalPath);
+    }
     return false;
   }
   options.dragEvent.preventDefault();
