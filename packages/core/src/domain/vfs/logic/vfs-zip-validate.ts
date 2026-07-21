@@ -8,8 +8,10 @@ import { vfsZipError } from "@/errors/vfs-zip-errors.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { assertLogicalPathAllowed } from "./vfs-path-mapper.js";
 import {
-  logicalFromZipDirectoryEntryName,
-  logicalFromZipEntryName,
+  assertZipEntriesNotDomainRootPrefixed,
+  logicalFromZipDirectoryEntryRelativeToDirectory,
+  logicalFromZipEntryRelativeToDirectory,
+  resolveZipDirectoryPath,
 } from "./vfs-zip-path.js";
 
 export const VFS_ZIP_MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
@@ -126,13 +128,19 @@ function assertLogicalAllowed(
 /**
  * Validates raw ZIP entries and returns files + explicit empty directories.
  * Does not touch the database.
+ *
+ * @param directoryPath - 导入目标目录（缺省 `/`）；entry 相对该目录。
  */
 export function validateVfsZipEntries(
   scope: VfsScope,
   entries: ReadonlyMap<string, Uint8Array>,
+  directoryPath?: string,
 ): VfsZipValidatedPayload {
+  const targetDir = resolveZipDirectoryPath(directoryPath);
   const fileEntries: Array<{ entryName: string; bytes: Uint8Array }> = [];
-  const directoryLogicals: string[] = [];
+  const directoryEntries: string[] = [];
+  /** 用于「带域根前缀」判定的相对路径（已去 leading `/`、目录去 trailing `/`） */
+  const relativeNamesForPrefixCheck: string[] = [];
   let totalBytes = 0;
 
   for (const [entryName, bytes] of entries) {
@@ -148,19 +156,34 @@ export function validateVfsZipEntries(
           `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)`,
         );
       }
-      const logical = logicalFromZipDirectoryEntryName(entryName);
-      assertLogicalAllowed(scope, logical, entryName);
-      if (!directoryLogicals.includes(logical)) {
-        directoryLogicals.push(logical);
+      if (dirKey.length > 0) {
+        relativeNamesForPrefixCheck.push(dirKey);
       }
+      directoryEntries.push(entryName);
       continue;
     }
     if (entryName.length === 0) {
       continue;
     }
     assertZipEntryNameAllowed(entryName);
+    relativeNamesForPrefixCheck.push(entryName);
     totalBytes += bytes.byteLength;
     fileEntries.push({ entryName, bytes });
+  }
+
+  // WHY: 带目标目录名错误嵌套必须在任何写库前硬失败，且不剥前缀。
+  assertZipEntriesNotDomainRootPrefixed(targetDir, relativeNamesForPrefixCheck);
+
+  const directoryLogicals: string[] = [];
+  for (const entryName of directoryEntries) {
+    const logical = logicalFromZipDirectoryEntryRelativeToDirectory(
+      entryName,
+      targetDir,
+    );
+    assertLogicalAllowed(scope, logical, entryName);
+    if (!directoryLogicals.includes(logical)) {
+      directoryLogicals.push(logical);
+    }
   }
 
   const entryCount = fileEntries.length + directoryLogicals.length;
@@ -179,7 +202,7 @@ export function validateVfsZipEntries(
 
   const files = new Map<string, string>();
   for (const { entryName, bytes } of fileEntries) {
-    const logical = logicalFromZipEntryName(entryName);
+    const logical = logicalFromZipEntryRelativeToDirectory(entryName, targetDir);
     if (files.has(logical) || directoryLogicals.includes(logical)) {
       throw vfsZipError("DUPLICATE_PATH", `duplicate logical path: ${logical}`);
     }

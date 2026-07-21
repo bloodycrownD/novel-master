@@ -24,6 +24,7 @@ export type { VfsZipErrorCode } from "../errors/vfs-zip-errors.js";
 export type {
   VfsZipIoService,
   VfsZipImportOptions,
+  ZipPathOptions,
 } from "../domain/vfs/ports/vfs-zip-io.port.js";
 export type {
   VfsService,

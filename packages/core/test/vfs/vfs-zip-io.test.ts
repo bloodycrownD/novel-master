@@ -409,4 +409,205 @@ describe("VfsZipIoService", () => {
     assert.equal((await vfs.read("/new.md")).content, "新内容");
   });
 
+  it("T-Z1: directoryPath 缺省 ≡ /，行为同旧整域替换", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz1-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/old.md", "old");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(scope, buildVfsZip(new Map([["new.md", "new"]])), {
+      confirmed: true,
+    });
+
+    await assert.rejects(() => vfs.read("/old.md"));
+    assert.equal((await vfs.read("/new.md")).content, "new");
+  });
+
+  it("T-Z2: 导出 /a 时 ZIP 无 /b 内容", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz2-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/a/foo.txt", "A");
+    await vfs.write("/b/bar.txt", "B");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    const bytes = await zipSvc.export(scope, { directoryPath: "/a" });
+    const names = Object.keys(unzipSync(bytes));
+    assert.ok(names.includes("foo.txt"), `got ${names.join(",")}`);
+    assert.ok(!names.includes("bar.txt"));
+    assert.ok(!names.some((n) => n.includes("b/")));
+  });
+
+  it("T-Z3: 导入 /a 后 /b 不变且 /a 与 ZIP 一致", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz3-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/a/old.txt", "old");
+    await vfs.write("/b/keep.txt", "keep");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(scope, buildVfsZip(new Map([["fresh.txt", "fresh"]])), {
+      confirmed: true,
+      directoryPath: "/a",
+    });
+
+    await assert.rejects(() => vfs.read("/a/old.txt"));
+    assert.equal((await vfs.read("/a/fresh.txt")).content, "fresh");
+    assert.equal((await vfs.read("/b/keep.txt")).content, "keep");
+  });
+
+  it("T-Z4: confirmed:false / 非法 UTF-8 → 子树与兄弟均不变", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz4-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/a/stay.txt", "stay-a");
+    await vfs.write("/b/stay.txt", "stay-b");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await assert.rejects(
+      () =>
+        zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
+          confirmed: false,
+          directoryPath: "/a",
+        }),
+      (e: unknown) => e instanceof VfsZipError && e.code === "NOT_CONFIRMED",
+    );
+
+    const invalidUtf8Zip = zipSync({
+      "bad.md": new Uint8Array([0xff, 0xfe, 0x80]),
+    });
+    await assert.rejects(
+      () =>
+        zipSvc.import(scope, invalidUtf8Zip, {
+          confirmed: true,
+          directoryPath: "/a",
+        }),
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_UTF8",
+    );
+
+    assert.equal((await vfs.read("/a/stay.txt")).content, "stay-a");
+    assert.equal((await vfs.read("/b/stay.txt")).content, "stay-b");
+  });
+
+  it("T-Z5: 恶意 ../ entry → 失败不删子树", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz5-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/a/keep.txt", "keep");
+    let deleteReached = false;
+    const zipSvc = createVfsZipIoService(ctx.conn, {
+      testHook: {
+        onBeforeDeletePrefix: () => {
+          deleteReached = true;
+        },
+      },
+    });
+    const zipWithParent = zipSync({
+      "../escape.md": new TextEncoder().encode("x"),
+    });
+    await assert.rejects(
+      () =>
+        zipSvc.import(scope, zipWithParent, {
+          confirmed: true,
+          directoryPath: "/a",
+        }),
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH",
+    );
+    assert.equal(deleteReached, false);
+    assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
+  });
+
+  it("T-Z6: directoryPath=/a 且 entries 全为首段 a/... → INVALID_PATH，子树不变", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz6-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/a/keep.txt", "keep");
+    let deleteReached = false;
+    const zipSvc = createVfsZipIoService(ctx.conn, {
+      testHook: {
+        onBeforeDeletePrefix: () => {
+          deleteReached = true;
+        },
+      },
+    });
+    await assert.rejects(
+      () =>
+        zipSvc.import(
+          scope,
+          buildVfsZip(
+            new Map([
+              ["a/foo.txt", "foo"],
+              ["a/bar.md", "bar"],
+            ]),
+          ),
+          { confirmed: true, directoryPath: "/a" },
+        ),
+      (e: unknown) => e instanceof VfsZipError && e.code === "INVALID_PATH",
+    );
+    assert.equal(deleteReached, false);
+    assert.equal((await vfs.read("/a/keep.txt")).content, "keep");
+    await assert.rejects(() => vfs.read("/a/a/foo.txt"));
+  });
+
+  it("T-Z7: directoryPath=/a 且 entries 为 foo.txt（首段 ≠ a）→ 导入成功", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz7-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/a/old.txt", "old");
+    await vfs.write("/b/sib.txt", "sib");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(scope, buildVfsZip(new Map([["foo.txt", "foo"]])), {
+      confirmed: true,
+      directoryPath: "/a",
+    });
+
+    assert.equal((await vfs.read("/a/foo.txt")).content, "foo");
+    await assert.rejects(() => vfs.read("/a/old.txt"));
+    assert.equal((await vfs.read("/b/sib.txt")).content, "sib");
+  });
+
 });
