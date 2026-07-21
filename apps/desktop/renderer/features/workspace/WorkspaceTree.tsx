@@ -16,8 +16,8 @@ import {
   vfsEntryStatusText,
 } from "./vfs-tree-utils";
 import {
-  clearActiveNativeDrag,
   confirmAndApplyBatchIngest,
+  finalizeRowDrag,
   handleTreeDrop,
   moveVfsPathsToDir,
   prefetchExportStage,
@@ -250,7 +250,7 @@ export function WorkspaceTree({
               onPointerDown={(e) => handleRowPointerDown(e, row)}
               onDragStart={(e) => handleRowDragStart(e, row)}
               onDragEnd={() => {
-                clearActiveNativeDrag();
+                finalizeRowDrag(row.path);
                 setDropHighlight(null);
               }}
               onDragOver={(e) => handleRowDragOver(e, row)}

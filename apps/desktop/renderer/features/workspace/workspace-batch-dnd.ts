@@ -11,6 +11,7 @@ import type {
 } from "@shared/ipc-types";
 import {
   getDesktopBridge,
+  ipcVfsBatchClearStaging,
   ipcVfsBatchExportStage,
   ipcVfsBatchIngestFromPaths,
   ipcVfsRename,
@@ -38,13 +39,62 @@ let activeNativeDrag: ActiveNativeDrag | null = null;
 const stagedByPath = new Map<string, StagedExport>();
 /** prefetch 已失败的路径：dragstart 无 staged 时补 toast（避免与 prefetch toast 重复）。 */
 const failedStagePaths = new Set<string>();
+/** pointerdown 后 prefetch 尚未完成的路径。 */
+const prefetchInFlight = new Set<string>();
+/** dragEnd 递增以作废仍在途的 prefetch 结果。 */
+const prefetchGeneration = new Map<string, number>();
 let startDragFailedUnsub: (() => void) | null = null;
+
+function clearStagingOnMain(stagingRoot: string): void {
+  void ipcVfsBatchClearStaging({ stagingRoot });
+}
+
+function removeStagedByRoot(stagingRoot: string): void {
+  for (const [path, staged] of stagedByPath) {
+    if (staged.stagingRoot === stagingRoot) {
+      stagedByPath.delete(path);
+    }
+  }
+}
+
+/** 释放单路径 staging（renderer map + main 临时目录）。 */
+export function releaseStagedExport(logicalPath: string): void {
+  const staged = stagedByPath.get(logicalPath);
+  if (staged == null) {
+    return;
+  }
+  stagedByPath.delete(logicalPath);
+  clearStagingOnMain(staged.stagingRoot);
+}
+
+/** dragEnd / 取消：清理 activeNativeDrag 与对应 staging。 */
+export function finalizeRowDrag(logicalPath: string): void {
+  prefetchGeneration.set(
+    logicalPath,
+    (prefetchGeneration.get(logicalPath) ?? 0) + 1,
+  );
+  releaseStagedExport(logicalPath);
+  if (activeNativeDrag != null) {
+    clearStagingOnMain(activeNativeDrag.stagingRoot);
+    removeStagedByRoot(activeNativeDrag.stagingRoot);
+    activeNativeDrag = null;
+  }
+}
+
+/** @internal 测试辅助 */
+export function isPrefetchInFlightForTest(logicalPath: string): boolean {
+  return prefetchInFlight.has(logicalPath);
+}
 
 /** 订阅 main startDrag 失败事件（幂等）。 */
 export function ensureStartDragFailureToast(): () => void {
   if (startDragFailedUnsub == null) {
     startDragFailedUnsub = onVfsStartDragFailed((payload) => {
-      clearActiveNativeDrag();
+      if (activeNativeDrag != null) {
+        clearStagingOnMain(activeNativeDrag.stagingRoot);
+        removeStagedByRoot(activeNativeDrag.stagingRoot);
+      }
+      activeNativeDrag = null;
       showToast(payload.message || "拖出失败");
     });
   }
@@ -117,11 +167,20 @@ export async function prefetchExportStage(options: {
   readonly scope: VfsScopeRequest;
   readonly logicalPath: string;
 }): Promise<void> {
+  releaseStagedExport(options.logicalPath);
+  const generation = prefetchGeneration.get(options.logicalPath) ?? 0;
+  prefetchInFlight.add(options.logicalPath);
   try {
     const result = await ipcVfsBatchExportStage({
       ...options.scope,
       logicalPaths: [options.logicalPath],
     });
+    if (prefetchGeneration.get(options.logicalPath) !== generation) {
+      if (result.ok) {
+        clearStagingOnMain(result.data.stagingRoot);
+      }
+      return;
+    }
     if (!result.ok) {
       stagedByPath.delete(options.logicalPath);
       failedStagePaths.add(options.logicalPath);
@@ -138,6 +197,8 @@ export async function prefetchExportStage(options: {
     stagedByPath.delete(options.logicalPath);
     failedStagePaths.add(options.logicalPath);
     showToast(err instanceof Error ? err.message : "导出物化失败");
+  } finally {
+    prefetchInFlight.delete(options.logicalPath);
   }
 }
 
@@ -149,6 +210,10 @@ export function startPrefetchedNativeDrag(options: {
   readonly logicalPath: string;
   readonly dragEvent: DragEvent;
 }): boolean {
+  if (prefetchInFlight.has(options.logicalPath)) {
+    showToast("导出准备中…");
+    return false;
+  }
   const staged = stagedByPath.get(options.logicalPath);
   if (staged == null) {
     if (failedStagePaths.has(options.logicalPath)) {
@@ -166,7 +231,9 @@ export function startPrefetchedNativeDrag(options: {
     getDesktopBridge().startDrag(staged.filePaths);
     return true;
   } catch (err) {
-    clearActiveNativeDrag();
+    clearStagingOnMain(staged.stagingRoot);
+    removeStagedByRoot(staged.stagingRoot);
+    activeNativeDrag = null;
     showToast(err instanceof Error ? err.message : "拖出失败");
     return false;
   }
@@ -289,7 +356,9 @@ export async function handleTreeDrop(options: {
     hostPaths.length > 0 &&
     hostPaths.every((p) => isPathUnderRoot(p, active.stagingRoot))
   ) {
-    clearActiveNativeDrag();
+    clearStagingOnMain(active.stagingRoot);
+    removeStagedByRoot(active.stagingRoot);
+    activeNativeDrag = null;
     await moveVfsPathsToDir({
       scope: options.scope,
       targetDir: options.targetDir,

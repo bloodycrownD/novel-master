@@ -61,6 +61,7 @@ import {
   type SessionRenameRequest,
   type SessionSetComposerDraftRequest,
   type UserVfsHasPendingRequest,
+  type VfsBatchClearStagingRequest,
   type VfsBatchExportStageRequest,
   type VfsBatchExportStageResult,
   type VfsBatchIngestFromPathsRequest,
@@ -241,6 +242,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       VfsBatchExportStageRequest,
       IpcResult<VfsBatchExportStageResult>
     >(invoke, IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE),
+    ipcVfsBatchClearStaging: withReq<
+      VfsBatchClearStagingRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING),
     ipcUserVfsHasPending: withReq<
       UserVfsHasPendingRequest,
       IpcResult<boolean>

@@ -16,8 +16,13 @@ import {
   confirmAndApplyBatchIngest,
   ensureStartDragFailureToast,
   handleTreeDrop,
+  moveVfsPathsToDir,
   type BatchIngestConfirmRequest,
 } from "../features/workspace/workspace-batch-dnd";
+import {
+  decodeVfsDragPayload,
+  NM_VFS_PATHS_MIME,
+} from "../features/workspace/vfs-tree-dnd";
 
 interface ExplorerPaneProps {
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
@@ -75,9 +80,12 @@ export function ExplorerPane({
     if ((e.target as HTMLElement).closest(".tree-node")) {
       return;
     }
-    if (Array.from(e.dataTransfer.types).includes("Files")) {
+    const types = Array.from(e.dataTransfer.types);
+    if (types.includes("Files") || types.includes(NM_VFS_PATHS_MIME)) {
       e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
+      e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME)
+        ? "move"
+        : "copy";
       setDropHighlightRoot(true);
     }
   }, []);
@@ -89,6 +97,19 @@ export function ExplorerPane({
       }
       e.preventDefault();
       setDropHighlightRoot(false);
+
+      const mimeRaw = e.dataTransfer.getData(NM_VFS_PATHS_MIME);
+      const mimePayload = mimeRaw ? decodeVfsDragPayload(mimeRaw) : null;
+      if (mimePayload != null) {
+        await moveVfsPathsToDir({
+          scope: scopeRequest(panelScope, projectId, sessionId),
+          targetDir: "/",
+          sourcePaths: mimePayload.paths,
+          onMoved: notifyWorkspaceMutated,
+        });
+        return;
+      }
+
       await handleTreeDrop({
         scope: scopeRequest(panelScope, projectId, sessionId),
         targetDir: "/",

@@ -71,6 +71,7 @@ export const {
   ipcVfsZipImport,
   ipcVfsBatchIngestFromPaths,
   ipcVfsBatchExportStage,
+  ipcVfsBatchClearStaging,
   ipcUserVfsHasPending,
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
