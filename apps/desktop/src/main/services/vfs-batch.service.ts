@@ -19,12 +19,42 @@ import { app, nativeImage, type WebContents } from "electron";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { resolveAppIconPath } from "../runtime/resolve-app-icon.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import {
   executeSessionUserVfsOp,
   isSessionVfsScope,
 } from "./user-vfs-turn-execute.service.js";
 import type { VfsService } from "@novel-master/core/vfs";
+
+/**
+ * Windows 上 `nativeImage.createEmpty()` + `startDrag` 会硬崩主进程（try/catch 拦不住）。
+ * 1×1 PNG 兜底，保证 icon 非空。
+ */
+const FALLBACK_DRAG_ICON_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** @internal 测试用：禁止 createEmpty。 */
+export function resolveDragIconForTest(): Electron.NativeImage {
+  return resolveDragIcon();
+}
+
+function resolveDragIcon(): Electron.NativeImage {
+  const iconPath = resolveAppIconPath();
+  if (iconPath != null) {
+    const fromPath = nativeImage.createFromPath(iconPath);
+    if (!fromPath.isEmpty()) {
+      return fromPath.resize({ width: 32, height: 32 });
+    }
+  }
+  const fallback = nativeImage.createFromBuffer(FALLBACK_DRAG_ICON_PNG);
+  if (fallback.isEmpty()) {
+    throw new Error("拖出图标无效");
+  }
+  return fallback;
+}
 
 function resolveTargetDir(targetDir?: string): string {
   if (targetDir == null || targetDir.trim() === "") {
@@ -208,6 +238,45 @@ export type ExportStageResult = {
   readonly filePaths: readonly string[];
 };
 
+/** 未显式清理时 main 侧兜底回收 staging 目录。 */
+const STAGING_TTL_MS = 5 * 60 * 1000;
+
+const stagingTtlTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function scheduleStagingTtl(stagingRoot: string): void {
+  const existing = stagingTtlTimers.get(stagingRoot);
+  if (existing != null) {
+    clearTimeout(existing);
+  }
+  stagingTtlTimers.set(
+    stagingRoot,
+    setTimeout(() => {
+      stagingTtlTimers.delete(stagingRoot);
+      void rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
+    }, STAGING_TTL_MS),
+  );
+}
+
+/** 删除 export staging 临时目录；dragEnd / 取消 / 失败 / TTL 到期时调用。 */
+export async function clearVfsBatchExportStaging(
+  stagingRoot: string,
+): Promise<void> {
+  if (stagingRoot.trim() === "") {
+    return;
+  }
+  const timer = stagingTtlTimers.get(stagingRoot);
+  if (timer != null) {
+    clearTimeout(timer);
+    stagingTtlTimers.delete(stagingRoot);
+  }
+  await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
+}
+
+/** @internal 测试辅助：当前注册的 staging TTL 数量。 */
+export function stagingTtlCountForTest(): number {
+  return stagingTtlTimers.size;
+}
+
 /** 将逻辑路径导出物化到 userData 临时目录，返回 startDrag 顶层路径。 */
 export async function stageVfsBatchExport(
   runtime: DesktopNovelMasterRuntime,
@@ -260,6 +329,7 @@ export async function stageVfsBatchExport(
       throw new Error("导出物化失败：无顶层条目");
     }
 
+    scheduleStagingTtl(stagingRoot);
     return { stagingRoot, filePaths };
   } catch (err) {
     await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
@@ -275,7 +345,7 @@ export function startDragExport(
   if (filePaths.length === 0) {
     throw new Error("没有可拖出的文件");
   }
-  const icon = nativeImage.createEmpty();
+  const icon = resolveDragIcon();
   // Electron 类型要求 `file`；多文件时同时传 `files`
   webContents.startDrag({
     file: filePaths[0]!,

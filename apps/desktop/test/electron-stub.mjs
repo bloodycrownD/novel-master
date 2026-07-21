@@ -12,6 +12,9 @@ export class BrowserWindow {
 
 export const app = {
   isPackaged: false,
+  getAppPath() {
+    return "/tmp/novel-master-test-app";
+  },
   getPath(name) {
     return name === "userData" ? "/tmp/novel-master-test-user-data" : "/tmp";
   },
@@ -20,5 +23,16 @@ export const app = {
 export const nativeImage = {
   createEmpty() {
     return { isEmpty: () => true };
+  },
+  createFromPath(_path) {
+    return {
+      isEmpty: () => false,
+      resize() {
+        return { isEmpty: () => false };
+      },
+    };
+  },
+  createFromBuffer(_buf) {
+    return { isEmpty: () => false };
   },
 };

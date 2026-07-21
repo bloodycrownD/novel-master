@@ -53,6 +53,8 @@ export const IPC_CHANNELS = {
   VFS_BATCH_INGEST_FROM_PATHS: 'nm:vfs/batchIngestFromPaths',
   /** 导出物化到临时目录（供 startDrag） */
   VFS_BATCH_EXPORT_STAGE: 'nm:vfs/batchExportStage',
+  /** 清理 export staging 临时目录（dragEnd / 取消 / 失败） */
+  VFS_BATCH_CLEAR_STAGING: 'nm:vfs/batchClearStaging',
   /** Main：webContents.startDrag（preload send，非 invoke） */
   VFS_START_DRAG: 'nm:vfs/startDrag',
   /** Main → renderer：startDrag 失败（send 无回传，经事件 toast） */
@@ -442,6 +444,10 @@ export type VfsBatchExportStageResult = {
   readonly stagingRoot: string;
   /** 供 startDrag 的顶层绝对路径（文件或目录） */
   readonly filePaths: readonly string[];
+};
+
+export type VfsBatchClearStagingRequest = {
+  readonly stagingRoot: string;
 };
 
 export type VfsStartDragRequest = {

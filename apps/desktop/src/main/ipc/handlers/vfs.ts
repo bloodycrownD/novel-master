@@ -6,6 +6,7 @@
 import type {
   IpcResult,
   UserVfsHasPendingRequest,
+  VfsBatchClearStagingRequest,
   VfsBatchExportStageRequest,
   VfsBatchExportStageResult,
   VfsBatchIngestFromPathsRequest,
@@ -47,6 +48,7 @@ import {
   isSessionVfsScope,
 } from "../../services/user-vfs-turn-execute.service.js";
 import {
+  clearVfsBatchExportStaging,
   ingestVfsFromHostPaths,
   stageVfsBatchExport,
   startDragExport,
@@ -334,6 +336,17 @@ export async function handleVfsBatchExportStage(
     const scope = resolveVfsScopeFromRequest(req);
     const staged = await stageVfsBatchExport(rt, scope, req.logicalPaths);
     return { ok: true, data: staged };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleVfsBatchClearStaging(
+  req: VfsBatchClearStagingRequest,
+): Promise<IpcResult<void>> {
+  try {
+    await clearVfsBatchExportStaging(req.stagingRoot);
+    return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
