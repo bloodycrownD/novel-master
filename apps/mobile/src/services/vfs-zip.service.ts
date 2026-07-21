@@ -129,9 +129,14 @@ async function readPickedZipAsBytes(uri: string): Promise<Uint8Array> {
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
+  options: { readonly directoryPath?: string } = {},
 ): Promise<'saved' | 'cancelled'> {
+  const directoryPath =
+    options.directoryPath == null || options.directoryPath.trim() === ''
+      ? '/'
+      : options.directoryPath;
   const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope);
+  const bytes = await zipSvc.export(scope, { directoryPath });
   assertZipArchive(bytes);
 
   const fileName = vfsZipExportFileName(scope);
@@ -163,7 +168,9 @@ export async function exportVfsZip(
 export async function importVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options: Pick<VfsZipImportOptions, 'confirmed'>,
+  options: Pick<VfsZipImportOptions, 'confirmed'> & {
+    readonly directoryPath?: string;
+  },
 ): Promise<void> {
   const [file] = await pick({
     type: [types.zip],
@@ -173,9 +180,14 @@ export async function importVfsZip(
     return;
   }
 
+  const directoryPath =
+    options.directoryPath == null || options.directoryPath.trim() === ''
+      ? '/'
+      : options.directoryPath;
   const zipBytes = await readPickedZipAsBytes(file.uri);
   const zipSvc = createVfsZipIoService(runtime.conn);
   await zipSvc.import(scope, zipBytes, {
     confirmed: options.confirmed,
+    directoryPath,
   });
 }
