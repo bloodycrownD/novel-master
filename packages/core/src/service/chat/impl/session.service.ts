@@ -11,7 +11,11 @@ import type { ProjectRepository } from "@/domain/chat/repositories/project.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
@@ -24,11 +28,16 @@ import { initializeSessionWorkspace } from "@/service/template/logic/initialize-
 import type { SessionService } from "../session.port.js";
 
 function reposFor(conn: TdbcConnection) {
+  const entries = new SqliteVfsEntryRepository(conn);
   return {
     projects: new SqliteProjectRepository(conn),
     sessions: new SqliteSessionRepository(conn),
     messages: new SqliteMessageRepository(conn),
-    vfs: new SqliteVfsEntryRepository(conn),
+    vfs: entries,
+    entries,
+    workplace: new SqliteWorkplaceRepository(conn),
+    checkpoints: new SqliteMessageCheckpointRepository(conn),
+    revisions: new SqliteVfsRevisionRepository(conn),
   };
 }
 
@@ -158,19 +167,29 @@ export class DefaultSessionService implements SessionService {
       };
       await r.sessions.insert(copy);
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
+      // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       await copyVfsTree(
         r.vfs,
         `/projects/${source.projectId}/sessions/${source.id}`,
         `/projects/${source.projectId}/sessions/${copy.id}`,
       );
       const messages = await r.messages.listBySession(source.id);
+      const newMessages: { id: string }[] = [];
       for (const msg of messages) {
+        const id = randomUUID();
         await r.messages.insert({
           ...msg,
-          id: randomUUID(),
+          id,
           sessionId: copy.id,
         });
+        newMessages.push({ id });
       }
+      await seedForkCopyParity(tx, {
+        projectId: source.projectId,
+        sourceSessionId: source.id,
+        targetSessionId: copy.id,
+        newMessages,
+      });
       return copy;
     });
   }
