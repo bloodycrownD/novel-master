@@ -79,6 +79,12 @@ import { suggestWorkplaceAttachmentsToComposerDraft } from '../../services/workp
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
+import {
+  exportVfsBatch,
+  formatBatchReportToast,
+  importVfsBatch,
+} from '../../services/vfs-batch.service';
+import type { BatchIngestRawEntry } from '@novel-master/core/vfs';
 import { useTheme } from '../../theme/ThemeProvider';
 import { TemplatePullButton } from '../template/TemplatePullButton';
 import { useToast } from '../chrome/ToastHost';
@@ -455,6 +461,8 @@ export const VfsFileManager = forwardRef<
     { label: '新建目录', action: 'create-directory' },
     { label: '新建文件', action: 'create-file' },
     { label: '导入 ZIP', action: 'import-zip' },
+    { label: '批量导入', action: 'import-batch' },
+    { label: '批量导出', action: 'export-batch' },
     { label: '目录规则', action: 'directory-rule' },
     { label: '批量操作', action: 'batch' },
   ];
@@ -659,6 +667,71 @@ export const VfsFileManager = forwardRef<
     ]);
   }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
 
+  const handleImportBatch = useCallback(() => {
+    const runApply = (
+      overwriteConfirmed: boolean,
+      preparedEntries?: readonly BatchIngestRawEntry[],
+    ) => {
+      importVfsBatch(runtime, scope, {
+        targetDir: currentPath,
+        overwriteConfirmed,
+        preparedEntries,
+      })
+        .then(async outcome => {
+          if (outcome.status === 'cancelled') {
+            return;
+          }
+          if (outcome.status === 'needs_confirm') {
+            Alert.alert(
+              '文件冲突',
+              `目标处已有 ${outcome.plan.conflicts.length} 个同名项。覆盖后不可撤销，是否继续？`,
+              [
+                { text: '取消', style: 'cancel' },
+                {
+                  text: '覆盖',
+                  style: 'destructive',
+                  onPress: () => runApply(true, outcome.plan.entries),
+                },
+              ],
+            );
+            return;
+          }
+          await reloadVfsListOnly();
+          showToast(
+            formatBatchReportToast(outcome.report, outcome.skippedBinary),
+          );
+        })
+        .catch(err => showToast(toastMessage('批量导入失败', err)));
+    };
+    runApply(false);
+  }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
+
+  const handleExportBatch = useCallback(() => {
+    const logicalPaths =
+      vfsBatch.active && vfsBatch.selectedCount > 0
+        ? [...vfsBatch.selectedIds]
+        : [currentPath];
+    setExportingZip(true);
+    exportVfsBatch(runtime, scope, { logicalPaths })
+      .then(result => {
+        if (result.status === 'saved') {
+          showToast(`已导出 ${result.savedCount} 个文件`);
+        } else if (result.savedCount > 0) {
+          showToast(`已保存 ${result.savedCount} 个文件（其余已取消）`);
+        }
+      })
+      .catch(err => showToast(toastMessage('批量导出失败', err)))
+      .finally(() => setExportingZip(false));
+  }, [
+    runtime,
+    scope,
+    currentPath,
+    vfsBatch.active,
+    vfsBatch.selectedCount,
+    vfsBatch.selectedIds,
+    showToast,
+  ]);
+
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
       openPrompt({
@@ -736,6 +809,14 @@ export const VfsFileManager = forwardRef<
     }
     if (action === 'import-zip') {
       handleImportZip();
+      return;
+    }
+    if (action === 'import-batch') {
+      handleImportBatch();
+      return;
+    }
+    if (action === 'export-batch') {
+      handleExportBatch();
     }
   };
 
