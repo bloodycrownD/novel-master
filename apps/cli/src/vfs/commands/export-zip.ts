@@ -12,10 +12,13 @@ export async function runExportZip(
   const { flags } = parseCliArgs(args);
   const out = flags.get("out");
   if (typeof out !== "string" || out === "") {
-    throw new Error("Usage: export-zip --out <path>");
+    throw new Error("Usage: export-zip --out <path> [--path <directoryPath>]");
   }
+  const pathFlag = flags.get("path");
+  const directoryPath =
+    typeof pathFlag === "string" && pathFlag !== "" ? pathFlag : "/";
 
   const zipSvc = createVfsZipIoService(conn);
-  const bytes = await zipSvc.export(scope);
+  const bytes = await zipSvc.export(scope, { directoryPath });
   await writeFile(out, bytes);
 }
