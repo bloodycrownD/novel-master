@@ -11,7 +11,6 @@ import React, {
   useState,
 } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -33,7 +32,7 @@ import {
   type WorkplaceListRow,
   type WorkplaceService,
 } from '@novel-master/core/workplace';
-import { ParentDirIcon, ZipExportIcon, ZipImportIcon } from '../icons/TabIcons';
+import { ParentDirIcon } from '../icons/TabIcons';
 import { BatchCheckbox } from '../batch/BatchCheckbox';
 import { VfsBatchHeader } from '../batch/VfsBatchHeader';
 import { BottomSheetMenu, type SheetMenuItem } from '../sheet/BottomSheetMenu';
@@ -80,6 +79,12 @@ import { suggestWorkplaceAttachmentsToComposerDraft } from '../../services/workp
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
+import {
+  exportVfsFile,
+  formatFileIngestToast,
+  importVfsFile,
+} from '../../services/vfs-batch.service';
+import type { BatchIngestRawEntry } from '@novel-master/core/vfs';
 import { useTheme } from '../../theme/ThemeProvider';
 import { TemplatePullButton } from '../template/TemplatePullButton';
 import { useToast } from '../chrome/ToastHost';
@@ -439,12 +444,14 @@ export const VfsFileManager = forwardRef<
   const entityMenuItems: SheetMenuItem[] = menuRow
     ? menuRow.kind === 'dir'
       ? [
+          { label: '导出 ZIP', action: 'export-zip' },
           { label: '状态变更', action: 'toggle-include' },
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
         ]
       : [
           { label: '打开', action: 'open' },
+          { label: '导出', action: 'export-file' },
           { label: '状态变更', action: 'toggle-include' },
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
@@ -454,6 +461,8 @@ export const VfsFileManager = forwardRef<
   const moreMenuItems: SheetMenuItem[] = [
     { label: '新建目录', action: 'create-directory' },
     { label: '新建文件', action: 'create-file' },
+    { label: '导入 ZIP', action: 'import-zip' },
+    { label: '文件导入', action: 'import-file' },
     { label: '目录规则', action: 'directory-rule' },
     { label: '批量操作', action: 'batch' },
   ];
@@ -614,39 +623,100 @@ export const VfsFileManager = forwardRef<
             },
           },
         ]);
+        return;
+      }
+      if (action === 'export-zip') {
+        setExportingZip(true);
+        exportVfsZip(runtime, scope, { directoryPath: menuPath })
+          .then(result => {
+            if (result === 'saved') {
+              showToast('ZIP 已保存到所选位置');
+            }
+          })
+          .catch(err => showToast(toastMessage('导出失败', err)))
+          .finally(() => setExportingZip(false));
+        return;
+      }
+      if (action === 'export-file') {
+        setExportingZip(true);
+        exportVfsFile(runtime, scope, menuPath)
+          .then(result => {
+            if (result === 'saved') {
+              showToast('文件已导出');
+            }
+          })
+          .catch(err => showToast(toastMessage('导出失败', err)))
+          .finally(() => setExportingZip(false));
       }
     } catch (error) {
       showToast(toastMessage('操作失败', error));
     }
   };
 
-  const handleExportZip = useCallback(() => {
-    setExportingZip(true);
-    exportVfsZip(runtime, scope)
-      .then(result => {
-        if (result === 'saved') {
-          showToast('ZIP 已保存到所选位置');
-        }
-      })
-      .catch(err => showToast(toastMessage('导出失败', err)))
-      .finally(() => setExportingZip(false));
-  }, [runtime, scope, showToast]);
+  const zipImportConfirmCopy = (path: string): string => {
+    if (path === '/') {
+      return '将覆盖目录「当前目录（工作区根）」下的全部文件，同级其他内容不受影响。是否继续？';
+    }
+    return `将覆盖目录「${path}」下的全部文件，同级其他内容不受影响。是否继续？`;
+  };
 
   const handleImportZip = useCallback(() => {
-    Alert.alert('导入 ZIP', '将完全替换当前工作区文件，是否继续？', [
+    Alert.alert('导入 ZIP', zipImportConfirmCopy(currentPath), [
       { text: '取消', style: 'cancel' },
       {
         text: '导入',
         style: 'destructive',
         onPress: () => {
-          importVfsZip(runtime, scope, { confirmed: true })
+          importVfsZip(runtime, scope, {
+            confirmed: true,
+            directoryPath: currentPath,
+          })
             .then(() => reloadVfsListOnly())
             .then(() => showToast('ZIP 导入完成'))
             .catch(err => showToast(toastMessage('导入失败', err)));
         },
       },
     ]);
-  }, [runtime, scope, reloadVfsListOnly, showToast]);
+  }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
+
+  const handleImportFile = useCallback(() => {
+    const runApply = (
+      overwriteConfirmed: boolean,
+      preparedEntry?: BatchIngestRawEntry,
+    ) => {
+      importVfsFile(runtime, scope, {
+        targetDir: currentPath,
+        overwriteConfirmed,
+        preparedEntry,
+      })
+        .then(async outcome => {
+          if (outcome.status === 'cancelled') {
+            return;
+          }
+          if (outcome.status === 'needs_confirm') {
+            Alert.alert(
+              '文件冲突',
+              `目标处已有「${outcome.conflictPath}」。覆盖后不可撤销，是否继续？`,
+              [
+                { text: '取消', style: 'cancel' },
+                {
+                  text: '覆盖',
+                  style: 'destructive',
+                  onPress: () => runApply(true, outcome.entry),
+                },
+              ],
+            );
+            return;
+          }
+          await reloadVfsListOnly();
+          showToast(
+            formatFileIngestToast(outcome.report, outcome.skippedBinary),
+          );
+        })
+        .catch(err => showToast(toastMessage('文件导入失败', err)));
+    };
+    runApply(false);
+  }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
 
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
@@ -723,6 +793,13 @@ export const VfsFileManager = forwardRef<
       vfsBatch.enter();
       return;
     }
+    if (action === 'import-zip') {
+      handleImportZip();
+      return;
+    }
+    if (action === 'import-file') {
+      handleImportFile();
+    }
   };
 
   const badgeColors = (tone: 'in' | 'follow' | 'muted') => {
@@ -766,25 +843,6 @@ export const VfsFileManager = forwardRef<
               onPulled={pullFromParent.onPulled}
             />
           ) : null}
-          <Pressable
-            accessibilityLabel="导出 ZIP"
-            disabled={exportingZip}
-            onPress={handleExportZip}
-            style={[styles.iconBtn, exportingZip && styles.iconBtnDisabled]}
-          >
-            {exportingZip ? (
-              <ActivityIndicator size="small" color={tokens.primary} />
-            ) : (
-              <ZipExportIcon color={tokens.primary} />
-            )}
-          </Pressable>
-          <Pressable
-            accessibilityLabel="导入 ZIP"
-            onPress={handleImportZip}
-            style={styles.iconBtn}
-          >
-            <ZipImportIcon color={tokens.primary} />
-          </Pressable>
           <Pressable
             testID="vfs-more-action"
             accessibilityLabel="更多操作"

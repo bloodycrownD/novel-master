@@ -6,6 +6,11 @@
 import type {
   IpcResult,
   UserVfsHasPendingRequest,
+  VfsBatchClearStagingRequest,
+  VfsBatchExportStageRequest,
+  VfsBatchExportStageResult,
+  VfsBatchIngestFromPathsRequest,
+  VfsBatchIngestFromPathsResult,
   VfsDeleteRequest,
   VfsListEntryDto,
   VfsListRequest,
@@ -14,11 +19,14 @@ import type {
   VfsReadResultDto,
   VfsRenameRequest,
   VfsScopeRequest,
+  VfsStartDragRequest,
+  VfsStartDragFailedPayload,
   VfsWriteRequest,
   VfsZipExportResult,
   VfsZipImportResult,
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
+import { IPC_CHANNELS } from "../../../../shared/ipc-types.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 
 import {
@@ -28,7 +36,7 @@ import {
   buildUserVfsSaveOp,
   readUserVfsSaveBaseline,
 } from "@novel-master/core/vfs";
-import { BrowserWindow } from "electron";
+import { BrowserWindow, type IpcMainEvent } from "electron";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   deleteVfsEntry,
@@ -39,6 +47,12 @@ import {
   executeSessionUserVfsOp,
   isSessionVfsScope,
 } from "../../services/user-vfs-turn-execute.service.js";
+import {
+  clearVfsBatchExportStaging,
+  ingestVfsFromHostPaths,
+  stageVfsBatchExport,
+  startDragExport,
+} from "../../services/vfs-batch.service.js";
 import {
   exportVfsZipWithDialog,
   importVfsZipWithDialog,
@@ -261,7 +275,12 @@ export async function handleVfsZipExport(
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
-    const result = await exportVfsZipWithDialog(rt, scope, focusedWindow());
+    const result = await exportVfsZipWithDialog(
+      rt,
+      scope,
+      { directoryPath: req.directoryPath },
+      focusedWindow(),
+    );
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -277,12 +296,80 @@ export async function handleVfsZipImport(
     const result = await importVfsZipWithDialog(
       rt,
       scope,
-      { confirmed: req.confirmed === true },
+      {
+        confirmed: req.confirmed === true,
+        directoryPath: req.directoryPath,
+      },
       focusedWindow(),
     );
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleVfsBatchIngestFromPaths(
+  req: VfsBatchIngestFromPathsRequest,
+): Promise<IpcResult<VfsBatchIngestFromPathsResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const outcome = await ingestVfsFromHostPaths(rt, scope, {
+      targetDir: req.targetDir,
+      hostPaths: req.hostPaths,
+      overwriteConfirmed: req.overwriteConfirmed === true,
+    });
+    if (outcome.status === "applied") {
+      pushWorkspaceMutated(req);
+    }
+    return { ok: true, data: outcome };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleVfsBatchExportStage(
+  req: VfsBatchExportStageRequest,
+): Promise<IpcResult<VfsBatchExportStageResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const staged = await stageVfsBatchExport(rt, scope, req.logicalPaths);
+    return { ok: true, data: staged };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleVfsBatchClearStaging(
+  req: VfsBatchClearStagingRequest,
+): Promise<IpcResult<void>> {
+  try {
+    await clearVfsBatchExportStaging(req.stagingRoot);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/**
+ * Preload 经 ipcRenderer.send 触发；须在 dragstart 流程中尽快调用 startDrag。
+ * 失败经 VFS_START_DRAG_FAILED 推回 renderer toast（send 无 invoke 回传）。
+ */
+export function handleVfsStartDrag(
+  event: IpcMainEvent,
+  req: VfsStartDragRequest,
+): void {
+  try {
+    startDragExport(event.sender, req.filePaths ?? []);
+  } catch (err) {
+    console.error("[vfs-batch] startDrag failed", err);
+    const payload: VfsStartDragFailedPayload = {
+      message: formatIpcError(err).message || "拖出失败",
+    };
+    if (!event.sender.isDestroyed()) {
+      event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
+    }
   }
 }
 

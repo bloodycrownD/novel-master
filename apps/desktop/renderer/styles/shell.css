@@ -1204,6 +1204,13 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   font-weight: 600;
 }
 
+.tree-node.is-drop-target,
+.explorer-tree.is-drop-target {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  outline: 1px dashed var(--primary);
+  outline-offset: -1px;
+}
+
 .tree-node--folder {
   color: var(--text);
   font-weight: 500;

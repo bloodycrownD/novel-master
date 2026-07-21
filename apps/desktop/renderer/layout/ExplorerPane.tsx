@@ -1,3 +1,8 @@
+import { useCallback, useEffect, useState } from "react";
+import { EVENT_AGENT_RUN_FINISHED } from "@shared/agent-event-types";
+import type { AgentRunFinishedPayload } from "@shared/agent-event-types";
+import type { VfsScopeRequest, WorkspacePanelScope } from "@shared/ipc-types";
+import { onAgentStream, vfsScope } from "../ipc/client";
 import { WorkspaceHeaderActions } from "../features/workspace/WorkspaceHeaderActions";
 import {
   WorkspaceTree,
@@ -6,10 +11,30 @@ import {
 import { useShellNav } from "../providers/ShellNavProvider";
 import { workspaceTitleForScope } from "../state/nav-workspace";
 import { WorkspaceFooter } from "../features/chat/WorkspaceFooter";
+import { ConfirmModal } from "../components/ui/ConfirmModal";
+import {
+  confirmAndApplyBatchIngest,
+  ensureStartDragFailureToast,
+  handleTreeDrop,
+  moveVfsPathsToDir,
+  type BatchIngestConfirmRequest,
+} from "../features/workspace/workspace-batch-dnd";
+import {
+  decodeVfsDragPayload,
+  NM_VFS_PATHS_MIME,
+} from "../features/workspace/vfs-tree-dnd";
 
 interface ExplorerPaneProps {
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
   onBlankContextMenu: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
+}
+
+function scopeRequest(
+  panelScope: WorkspacePanelScope,
+  projectId?: string,
+  sessionId?: string,
+): VfsScopeRequest {
+  return vfsScope(panelScope, projectId, sessionId);
 }
 
 export function ExplorerPane({
@@ -24,8 +49,77 @@ export function ExplorerPane({
     treeRefreshToken,
     notifyWorkspaceMutated,
     syncPreviewTabsFromFileRows,
+    footerKey,
+    reloadFooter,
   } = useShellNav();
   const title = workspaceTitleForScope(workspaceScope);
+  const [dropHighlightRoot, setDropHighlightRoot] = useState(false);
+  const [ingestConfirm, setIngestConfirm] =
+    useState<BatchIngestConfirmRequest | null>(null);
+  const [ingestBusy, setIngestBusy] = useState(false);
+
+  // agent.run.finished → 刷新页脚 token（缓存已在 core 写好）
+  useEffect(() => {
+    if (sessionId == null) {
+      return;
+    }
+    return onAgentStream((envelope) => {
+      if (envelope.type !== EVENT_AGENT_RUN_FINISHED) {
+        return;
+      }
+      const payload = envelope.payload as AgentRunFinishedPayload;
+      if (payload.sessionId === sessionId) {
+        reloadFooter();
+      }
+    });
+  }, [sessionId, reloadFooter]);
+
+  useEffect(() => ensureStartDragFailureToast(), []);
+
+  const handleBlankDragOver = useCallback((e: React.DragEvent) => {
+    if ((e.target as HTMLElement).closest(".tree-node")) {
+      return;
+    }
+    const types = Array.from(e.dataTransfer.types);
+    if (types.includes("Files") || types.includes(NM_VFS_PATHS_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME)
+        ? "move"
+        : "copy";
+      setDropHighlightRoot(true);
+    }
+  }, []);
+
+  const handleBlankDrop = useCallback(
+    async (e: React.DragEvent, panelScope: WorkspacePanelScope) => {
+      if ((e.target as HTMLElement).closest(".tree-node")) {
+        return;
+      }
+      e.preventDefault();
+      setDropHighlightRoot(false);
+
+      const mimeRaw = e.dataTransfer.getData(NM_VFS_PATHS_MIME);
+      const mimePayload = mimeRaw ? decodeVfsDragPayload(mimeRaw) : null;
+      if (mimePayload != null) {
+        await moveVfsPathsToDir({
+          scope: scopeRequest(panelScope, projectId, sessionId),
+          targetDir: "/",
+          sourcePaths: mimePayload.paths,
+          onMoved: notifyWorkspaceMutated,
+        });
+        return;
+      }
+
+      await handleTreeDrop({
+        scope: scopeRequest(panelScope, projectId, sessionId),
+        targetDir: "/",
+        dataTransfer: e.dataTransfer,
+        onNeedsConfirm: setIngestConfirm,
+        onMutated: notifyWorkspaceMutated,
+      });
+    },
+    [projectId, sessionId, notifyWorkspaceMutated],
+  );
 
   return (
     <>
@@ -46,11 +140,11 @@ export function ExplorerPane({
               <div
                 key={scope}
                 className={`workspace-tree-panel${visible ? " is-visible" : ""}`}
-                data-workspace-panel={scope}
                 hidden={!visible}
+                data-workspace-panel={scope}
               >
                 <div
-                  className="explorer-tree"
+                  className={`explorer-tree${dropHighlightRoot && visible ? " is-drop-target" : ""}`}
                   data-tree={scope}
                   id={`workspace-tree-${scope}`}
                   onPointerDown={(e) => {
@@ -60,6 +154,9 @@ export function ExplorerPane({
                     }
                     notifyWorkspaceMutated();
                   }}
+                  onDragOver={handleBlankDragOver}
+                  onDragLeave={() => setDropHighlightRoot(false)}
+                  onDrop={(e) => void handleBlankDrop(e, scope)}
                   onContextMenu={(e) => {
                     if ((e.target as HTMLElement).closest(".tree-node")) {
                       return;
@@ -94,12 +191,44 @@ export function ExplorerPane({
           hidden={viewId !== "conversation"}
         >
           {viewId === "conversation" && projectId && sessionId ? (
-            <WorkspaceFooter projectId={projectId} sessionId={sessionId} />
+            <WorkspaceFooter
+              key={footerKey}
+              projectId={projectId}
+              sessionId={sessionId}
+            />
           ) : (
             <div id="conversation-meta" className="workspace-footer-card" />
           )}
         </div>
       </section>
+      <ConfirmModal
+        open={ingestConfirm != null}
+        title="覆盖确认"
+        message={
+          ingestConfirm == null
+            ? ""
+            : `目标处已有 ${ingestConfirm.conflictCount} 个同名文件/目录。覆盖后不可撤销，是否继续？`
+        }
+        confirmLabel="覆盖"
+        danger
+        busy={ingestBusy}
+        onCancel={() => setIngestConfirm(null)}
+        onConfirm={async () => {
+          if (ingestConfirm == null) {
+            return;
+          }
+          setIngestBusy(true);
+          try {
+            await confirmAndApplyBatchIngest(
+              ingestConfirm,
+              notifyWorkspaceMutated,
+            );
+            setIngestConfirm(null);
+          } finally {
+            setIngestBusy(false);
+          }
+        }}
+      />
     </>
   );
 }

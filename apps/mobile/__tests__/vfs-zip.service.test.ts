@@ -15,8 +15,8 @@ const mockStat = jest.fn();
 const mockUnlink = jest.fn();
 const mockParseVfsZip = jest.fn();
 
-jest.mock('@novel-master/core', () => ({
-  ...jest.requireActual('@novel-master/core'),
+jest.mock('@novel-master/core/vfs', () => ({
+  ...jest.requireActual('@novel-master/core/vfs'),
   createVfsZipIoService: (...args: unknown[]) => mockCreateVfsZipIoService(...args),
   parseVfsZip: (...args: unknown[]) => mockParseVfsZip(...args),
 }));
@@ -193,7 +193,40 @@ describe('vfs-zip.service', () => {
     expect(mockImport).toHaveBeenCalledWith(
       scope,
       expect.any(Uint8Array),
-      {confirmed: true},
+      {confirmed: true, directoryPath: '/'},
+    );
+  });
+
+  it('passes directoryPath to Core export/import', async () => {
+    await exportVfsZip(runtime, scope, {directoryPath: '/a'});
+    expect(mockExport).toHaveBeenCalledWith(scope, {directoryPath: '/a'});
+
+    mockPick.mockResolvedValue([
+      {uri: 'content://downloads/x.zip', name: 'x.zip'},
+    ]);
+    await importVfsZip(runtime, scope, {
+      confirmed: true,
+      directoryPath: '/a',
+    });
+    expect(mockImport).toHaveBeenCalledWith(
+      scope,
+      expect.any(Uint8Array),
+      {confirmed: true, directoryPath: '/a'},
+    );
+  });
+
+  it('export fileName includes directoryPath suffix aligned with Desktop', async () => {
+    await exportVfsZip(runtime, scope, {directoryPath: '/a/b'});
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/cache/vfs-session-s-a-b.zip',
+      expect.any(String),
+      'base64',
+    );
+    expect(mockSaveDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceUris: ['file:///cache/vfs-session-s-a-b.zip'],
+        fileName: 'vfs-session-s-a-b.zip',
+      }),
     );
   });
 

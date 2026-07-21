@@ -8,14 +8,18 @@ import { dialog, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
-function vfsZipExportFileName(scope: VfsScope): string {
+function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
+  const pathSuffix =
+    directoryPath === "/"
+      ? ""
+      : `-${directoryPath.replace(/^\//, "").replace(/\//g, "-")}`;
   if (scope.kind === "global") {
-    return "vfs-global.zip";
+    return `vfs-global${pathSuffix}.zip`;
   }
   if (scope.kind === "project") {
-    return `vfs-project-${scope.projectId}.zip`;
+    return `vfs-project-${scope.projectId}${pathSuffix}.zip`;
   }
-  return `vfs-session-${scope.sessionId}.zip`;
+  return `vfs-session-${scope.sessionId}${pathSuffix}.zip`;
 }
 
 function assertZipArchive(bytes: Uint8Array): void {
@@ -33,23 +37,33 @@ function assertZipArchive(bytes: Uint8Array): void {
   }
 }
 
+function resolveDirectoryPath(directoryPath?: string): string {
+  if (directoryPath == null || directoryPath.trim() === "") {
+    return "/";
+  }
+  return directoryPath;
+}
+
 export async function exportVfsZipWithDialog(
   runtime: DesktopNovelMasterRuntime,
   scope: VfsScope,
+  options: { readonly directoryPath?: string } = {},
   parentWindow?: BrowserWindow | null,
 ): Promise<"saved" | "cancelled"> {
+  const directoryPath = resolveDirectoryPath(options.directoryPath);
   const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope);
+  const bytes = await zipSvc.export(scope, { directoryPath });
   assertZipArchive(bytes);
 
   const win = parentWindow ?? undefined;
+  const defaultPath = vfsZipExportFileName(scope, directoryPath);
   const result = win
     ? await dialog.showSaveDialog(win, {
-        defaultPath: vfsZipExportFileName(scope),
+        defaultPath,
         filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
       })
     : await dialog.showSaveDialog({
-        defaultPath: vfsZipExportFileName(scope),
+        defaultPath,
         filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
       });
   if (result.canceled || result.filePath == null) {
@@ -62,9 +76,10 @@ export async function exportVfsZipWithDialog(
 export async function importVfsZipWithDialog(
   runtime: DesktopNovelMasterRuntime,
   scope: VfsScope,
-  options: { readonly confirmed: boolean },
+  options: { readonly confirmed: boolean; readonly directoryPath?: string },
   parentWindow?: BrowserWindow | null,
 ): Promise<"imported" | "cancelled"> {
+  const directoryPath = resolveDirectoryPath(options.directoryPath);
   const win = parentWindow ?? undefined;
   const result = win
     ? await dialog.showOpenDialog(win, {
@@ -82,6 +97,9 @@ export async function importVfsZipWithDialog(
   const bytes = new Uint8Array(await readFile(result.filePaths[0]!));
   assertZipArchive(bytes);
   const zipSvc = createVfsZipIoService(runtime.conn);
-  await zipSvc.import(scope, bytes, { confirmed: options.confirmed });
+  await zipSvc.import(scope, bytes, {
+    confirmed: options.confirmed,
+    directoryPath,
+  });
   return "imported";
 }

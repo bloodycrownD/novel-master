@@ -38,6 +38,7 @@ import {
 } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type {
@@ -144,6 +145,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         sweepRevisions: true,
       });
     });
+    sessionApiPromptTokenCache.invalidate(sessionId);
   }
 
   private async resolveRollbackPlan(

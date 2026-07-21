@@ -18,6 +18,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js";
+import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -25,6 +26,7 @@ import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/re
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
+import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -158,6 +160,7 @@ export class DefaultMessageService implements MessageService {
         message.sessionId,
       );
     });
+    sessionApiPromptTokenCache.invalidate(message.sessionId);
   }
 
   async updateContent(
@@ -172,7 +175,9 @@ export class DefaultMessageService implements MessageService {
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
-    return this.get(messageId);
+    const message = await this.get(messageId);
+    sessionApiPromptTokenCache.invalidate(message.sessionId);
+    return message;
   }
 
   async fork(sessionId: string, upToMessageId: string): Promise<ChatSession> {
@@ -207,39 +212,59 @@ export class DefaultMessageService implements MessageService {
         updatedAtMs: now,
       };
       await r.sessions.insert(forked);
+      // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       await copyVfsTree(
         r.vfs,
         `/projects/${source.projectId}/sessions/${source.id}`,
         `/projects/${source.projectId}/sessions/${forked.id}`,
       );
 
+      const newMessages: { id: string }[] = [];
       let seq = 1;
       for (const msg of toCopy) {
+        const id = randomUUID();
         // Preserve hidden state when forking
         await r.messages.insert({
           ...msg,
-          id: randomUUID(),
+          id,
           sessionId: forked.id,
           seq,
         });
+        newMessages.push({ id });
         seq++;
       }
+      await seedForkCopyParity(tx, {
+        projectId: source.projectId,
+        sourceSessionId: source.id,
+        targetSessionId: forked.id,
+        newMessages,
+      });
       return forked;
     });
   }
 
   async hide(messageId: string): Promise<void> {
+    const existing = await this.deps.messages.findById(messageId);
+    if (existing == null) {
+      throw chatNotFound("message", messageId);
+    }
     const updated = await this.deps.messages.updateHidden(messageId, true);
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
+    sessionApiPromptTokenCache.invalidate(existing.sessionId);
   }
 
   async show(messageId: string): Promise<void> {
+    const existing = await this.deps.messages.findById(messageId);
+    if (existing == null) {
+      throw chatNotFound("message", messageId);
+    }
     const updated = await this.deps.messages.updateHidden(messageId, false);
     if (!updated) {
       throw chatNotFound("message", messageId);
     }
+    sessionApiPromptTokenCache.invalidate(existing.sessionId);
   }
 
   async hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
@@ -248,7 +273,16 @@ export class DefaultMessageService implements MessageService {
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
-    return this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, true);
+    const count = await this.deps.messages.updateHiddenRange(
+      sessionId,
+      fromSeq,
+      toSeq,
+      true,
+    );
+    if (count > 0) {
+      sessionApiPromptTokenCache.invalidate(sessionId);
+    }
+    return count;
   }
 
   async showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
@@ -257,6 +291,15 @@ export class DefaultMessageService implements MessageService {
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
-    return this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, false);
+    const count = await this.deps.messages.updateHiddenRange(
+      sessionId,
+      fromSeq,
+      toSeq,
+      false,
+    );
+    if (count > 0) {
+      sessionApiPromptTokenCache.invalidate(sessionId);
+    }
+    return count;
   }
 }

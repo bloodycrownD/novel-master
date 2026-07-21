@@ -4,7 +4,7 @@
  * @module services/chat-prompt-tokens
  *
  * Boundary: per-model counter mode comes from
- * {@link resolveTokenCounterModeForModel} → `countPromptLlmInput({ tokenizerOverride })`.
+ * {@link resolveTokenCounterModeForModel} → `resolveCurrentPromptTokens`（API 优先，否则本地）。
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} throws.
  */
@@ -12,7 +12,11 @@ import { resolveApplicationModelId } from "@novel-master/core/agent";
 
 import { messageBodyText } from "@novel-master/core/prompt";
 
-import { countPromptLlmInput, resolveTokenCounterModeForModel, serializePromptLlmInput } from "@novel-master/core/provider";
+import {
+  resolveCurrentPromptTokens,
+  resolveTokenCounterModeForModel,
+  serializePromptLlmInput,
+} from "@novel-master/core/provider";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {formatPromptTokenUsageLabel} from '../utils/format-token-count';
 import {buildSessionPromptInput, type SessionPromptScope} from './session-prompt-input.service';
@@ -27,7 +31,7 @@ function formatChatTokenLabel(
   return `${base} · ${result.counterKind}`;
 }
 
-/** Token label for chat header (e.g. `88% • 327/128K · gemma`). */
+/** Token label for chat header (e.g. `88% • 327/128K · gemma` 或 `· api`). */
 export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
@@ -54,7 +58,7 @@ export async function loadChatPromptTokenLabel(
     savedModelId,
   );
 
-  const result = await countPromptLlmInput({
+  const result = await resolveCurrentPromptTokens(scope.sessionId, {
     layout,
     ctx,
     savedModelId,

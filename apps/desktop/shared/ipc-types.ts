@@ -49,6 +49,16 @@ export const IPC_CHANNELS = {
   VFS_RENAME: 'nm:vfs/rename',
   VFS_ZIP_EXPORT: 'nm:vfs/zipExport',
   VFS_ZIP_IMPORT: 'nm:vfs/zipImport',
+  /** 本机路径批量 ingest（plan + 可选 apply） */
+  VFS_BATCH_INGEST_FROM_PATHS: 'nm:vfs/batchIngestFromPaths',
+  /** 导出物化到临时目录（供 startDrag） */
+  VFS_BATCH_EXPORT_STAGE: 'nm:vfs/batchExportStage',
+  /** 清理 export staging 临时目录（dragEnd / 取消 / 失败） */
+  VFS_BATCH_CLEAR_STAGING: 'nm:vfs/batchClearStaging',
+  /** Main：webContents.startDrag（preload send，非 invoke） */
+  VFS_START_DRAG: 'nm:vfs/startDrag',
+  /** Main → renderer：startDrag 失败（send 无回传，经事件 toast） */
+  VFS_START_DRAG_FAILED: 'nm:vfs/startDragFailed',
 
   WORKPLACE_BUILD_LIST_ROWS: 'nm:workplace/buildListRows',
   WORKPLACE_SET_DIR_RULE: 'nm:workplace/setDirRule',
@@ -387,10 +397,67 @@ export type VfsRenameRequest = VfsScopeRequest & {
 
 export type VfsZipRequest = VfsScopeRequest & {
   readonly confirmed?: boolean;
+  /** 子树目标目录；缺省 ≡ `/`（整域） */
+  readonly directoryPath?: string;
 };
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
 export type VfsZipImportResult = 'imported' | 'cancelled';
+
+export type VfsBatchConflictDto = {
+  readonly logicalPath: string;
+  readonly reason: 'exists';
+};
+
+export type VfsBatchApplyReportDto = {
+  readonly written: readonly string[];
+  readonly skipped: readonly string[];
+  readonly failed: ReadonlyArray<{
+    readonly path: string;
+    readonly message: string;
+  }>;
+};
+
+export type VfsBatchIngestFromPathsRequest = VfsScopeRequest & {
+  readonly targetDir: string;
+  readonly hostPaths: readonly string[];
+  readonly overwriteConfirmed?: boolean;
+};
+
+export type VfsBatchIngestFromPathsResult =
+  | {
+      readonly status: 'needs_confirm';
+      readonly conflicts: readonly VfsBatchConflictDto[];
+      readonly skippedBinary: readonly string[];
+    }
+  | {
+      readonly status: 'applied';
+      readonly report: VfsBatchApplyReportDto;
+      readonly skippedBinary: readonly string[];
+    };
+
+export type VfsBatchExportStageRequest = VfsScopeRequest & {
+  readonly logicalPaths: readonly string[];
+};
+
+export type VfsBatchExportStageResult = {
+  readonly stagingRoot: string;
+  /** 供 startDrag 的顶层绝对路径（文件或目录） */
+  readonly filePaths: readonly string[];
+};
+
+export type VfsBatchClearStagingRequest = {
+  readonly stagingRoot: string;
+};
+
+export type VfsStartDragRequest = {
+  readonly filePaths: readonly string[];
+};
+
+/** Main → renderer：startDrag 失败载荷（供 toast） */
+export type VfsStartDragFailedPayload = {
+  readonly message: string;
+};
 
 export type VfsListEntryDto = {
   readonly path: string;

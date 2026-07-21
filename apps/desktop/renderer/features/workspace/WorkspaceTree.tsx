@@ -6,6 +6,7 @@ import type {
 } from "@shared/ipc-types";
 import { ipcWorkplaceBuildListRows, vfsScope } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import {
   entryName,
@@ -14,6 +15,21 @@ import {
   pathDepth,
   vfsEntryStatusText,
 } from "./vfs-tree-utils";
+import {
+  confirmAndApplyBatchIngest,
+  finalizeRowDrag,
+  handleTreeDrop,
+  moveVfsPathsToDir,
+  prefetchExportStage,
+  resolveDropTargetDir,
+  startPrefetchedNativeDrag,
+  type BatchIngestConfirmRequest,
+} from "./workspace-batch-dnd";
+import {
+  decodeVfsDragPayload,
+  encodeVfsDragPayload,
+  NM_VFS_PATHS_MIME,
+} from "./vfs-tree-dnd";
 
 export type { WorkspaceContextTarget } from "./workspace-context";
 
@@ -41,13 +57,23 @@ export function WorkspaceTree({
   onOpenContextMenu,
   onRowsLoaded,
 }: WorkspaceTreeProps) {
-  const { projectId, sessionId, previewFile, selectPreviewFile, treeExpandRequest } =
-    useShellNav();
+  const {
+    projectId,
+    sessionId,
+    previewFile,
+    selectPreviewFile,
+    treeExpandRequest,
+    notifyWorkspaceMutated,
+  } = useShellNav();
   const [rows, setRows] = useState<WorkplaceListRowDto[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
     () => new Set(["/"]),
   );
   const [loading, setLoading] = useState(true);
+  const [dropHighlight, setDropHighlight] = useState<string | null>(null);
+  const [ingestConfirm, setIngestConfirm] =
+    useState<BatchIngestConfirmRequest | null>(null);
+  const [ingestBusy, setIngestBusy] = useState(false);
 
   const req = useMemo(
     () => scopeRequest(panelScope, projectId, sessionId),
@@ -108,6 +134,86 @@ export function WorkspaceTree({
     });
   }, []);
 
+  const onMutated = useCallback(() => {
+    notifyWorkspaceMutated();
+  }, [notifyWorkspaceMutated]);
+
+  const handleRowDragOver = useCallback(
+    (e: React.DragEvent, row: WorkplaceListRowDto) => {
+      const types = Array.from(e.dataTransfer.types);
+      if (
+        types.includes("Files") ||
+        types.includes(NM_VFS_PATHS_MIME)
+      ) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = types.includes(NM_VFS_PATHS_MIME)
+          ? "move"
+          : "copy";
+        setDropHighlight(resolveDropTargetDir(row.path, row.kind));
+      }
+    },
+    [],
+  );
+
+  const handleRowDrop = useCallback(
+    async (e: React.DragEvent, row: WorkplaceListRowDto) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDropHighlight(null);
+      const targetDir = resolveDropTargetDir(row.path, row.kind);
+
+      const mimeRaw = e.dataTransfer.getData(NM_VFS_PATHS_MIME);
+      const mimePayload = mimeRaw ? decodeVfsDragPayload(mimeRaw) : null;
+      if (mimePayload != null) {
+        await moveVfsPathsToDir({
+          scope: req,
+          targetDir,
+          sourcePaths: mimePayload.paths,
+          onMoved: onMutated,
+        });
+        return;
+      }
+
+      await handleTreeDrop({
+        scope: req,
+        targetDir,
+        dataTransfer: e.dataTransfer,
+        onNeedsConfirm: setIngestConfirm,
+        onMutated,
+      });
+    },
+    [req, onMutated],
+  );
+
+  const handleRowPointerDown = useCallback(
+    (e: React.PointerEvent, row: WorkplaceListRowDto) => {
+      e.stopPropagation();
+      // 失败时 prefetchExportStage 内部已 toast
+      void prefetchExportStage({ scope: req, logicalPath: row.path });
+    },
+    [req],
+  );
+
+  const handleRowDragStart = useCallback(
+    (e: React.DragEvent, row: WorkplaceListRowDto) => {
+      try {
+        e.dataTransfer.setData(
+          NM_VFS_PATHS_MIME,
+          encodeVfsDragPayload([row.path]),
+        );
+        e.dataTransfer.effectAllowed = "copyMove";
+      } catch {
+        // ignore
+      }
+      // 主验收路径：同步 startDrag（依赖 pointerdown prefetch）
+      startPrefetchedNativeDrag({
+        logicalPath: row.path,
+        dragEvent: e.nativeEvent,
+      });
+    },
+    [],
+  );
+
   if (loading) {
     return (
       <div className="explorer-tree__body explorer-tree__body--fill">
@@ -128,17 +234,28 @@ export function WorkspaceTree({
           const active =
             previewFile?.path === row.path &&
             previewFile.workspaceScope === panelScope;
+          const targetDir = resolveDropTargetDir(row.path, row.kind);
+          const isDropTarget = dropHighlight === targetDir;
           return (
             <div
               key={row.path}
-              className={`tree-node${isDir ? " tree-node--folder" : ""}${active ? " is-active" : ""}`}
+              className={`tree-node${isDir ? " tree-node--folder" : ""}${active ? " is-active" : ""}${isDropTarget ? " is-drop-target" : ""}`}
               data-vfs-scope={panelScope}
               data-vfs-kind={row.kind}
               style={{ paddingLeft: `${10 + depth * 14}px` }}
               role="button"
               tabIndex={0}
+              draggable
               aria-expanded={isDir ? expanded : undefined}
-              onPointerDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => handleRowPointerDown(e, row)}
+              onDragStart={(e) => handleRowDragStart(e, row)}
+              onDragEnd={() => {
+                finalizeRowDrag(row.path);
+                setDropHighlight(null);
+              }}
+              onDragOver={(e) => handleRowDragOver(e, row)}
+              onDragLeave={() => setDropHighlight(null)}
+              onDrop={(e) => void handleRowDrop(e, row)}
               onClick={() => {
                 if (isDir) {
                   toggleDir(row.path);
@@ -182,6 +299,31 @@ export function WorkspaceTree({
           );
         })
       )}
+      <ConfirmModal
+        open={ingestConfirm != null}
+        title="覆盖确认"
+        message={
+          ingestConfirm == null
+            ? ""
+            : `目标处已有 ${ingestConfirm.conflictCount} 个同名文件/目录。覆盖后不可撤销，是否继续？`
+        }
+        confirmLabel="覆盖"
+        danger
+        busy={ingestBusy}
+        onCancel={() => setIngestConfirm(null)}
+        onConfirm={async () => {
+          if (ingestConfirm == null) {
+            return;
+          }
+          setIngestBusy(true);
+          try {
+            await confirmAndApplyBatchIngest(ingestConfirm, onMutated);
+            setIngestConfirm(null);
+          } finally {
+            setIngestBusy(false);
+          }
+        }}
+      />
     </div>
   );
 }

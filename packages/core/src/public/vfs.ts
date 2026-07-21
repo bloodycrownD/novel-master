@@ -9,6 +9,7 @@ export type { VfsListEntry } from "../domain/vfs/model/vfs-list-entry.js";
 export { createVfsService } from "../service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "../service/vfs/create-scoped-vfs-service.js";
 export { createVfsZipIoService } from "../service/vfs/create-vfs-zip-io-service.js";
+export { createVfsBatchIoService } from "../service/vfs/create-vfs-batch-io-service.js";
 export {
   buildUserVfsCreateFileOp,
   buildUserVfsDeleteOp,
@@ -24,7 +25,25 @@ export type { VfsZipErrorCode } from "../errors/vfs-zip-errors.js";
 export type {
   VfsZipIoService,
   VfsZipImportOptions,
+  ZipPathOptions,
 } from "../domain/vfs/ports/vfs-zip-io.port.js";
+export type {
+  VfsBatchIoService,
+  BatchIngestRawEntry,
+  BatchIngestPlanEntry,
+  BatchIngestPlan,
+  BatchConflict,
+  BatchApplyReport,
+  BatchApplyOptions,
+  BatchExportPlan,
+  BatchExportFileEntry,
+  BatchIngestWriter,
+} from "../domain/vfs/ports/vfs-batch-io.port.js";
+export {
+  joinTargetLogicalPath,
+  normalizeBatchRelativePath,
+  relativePathUnderAnchor,
+} from "../domain/vfs/logic/vfs-batch-path.js";
 export type {
   VfsService,
   VfsReadResult,

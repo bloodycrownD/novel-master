@@ -2,10 +2,10 @@
  * Electron main process: window lifecycle, Vite renderer load, IPC, runtime teardown.
  */
 import { app, BrowserWindow, nativeImage } from "electron";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeDesktopConnection } from "./runtime/connection.js";
+import { resolveAppIconPath } from "./runtime/resolve-app-icon.js";
 import {
   attachAgentRunLifecycleListeners,
 } from "./ipc/handlers/agent.js";
@@ -45,24 +45,8 @@ function resolveRendererIndex(): string {
   return path.join(app.getAppPath(), "dist/renderer/index.html");
 }
 
-/** Dev: apps/desktop/build/icons; prod: extraResources sibling of dist. */
-function resolveIconPath(): string | undefined {
-  const candidates = [
-    path.join(app.getAppPath(), "build/icons/icon.png"),
-    path.join(app.getAppPath(), "..", "build/icons/icon.png"),
-    path.join(__dirname, "../../build/icons/icon.png"),
-    path.join(__dirname, "../../../build/icons/icon.png"),
-  ];
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return undefined;
-}
-
 function createMainWindow(): BrowserWindow {
-  const iconPath = resolveIconPath();
+  const iconPath = resolveAppIconPath();
   const window = new BrowserWindow({
     title: "",
     width: 1280,

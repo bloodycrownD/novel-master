@@ -2,8 +2,12 @@
  * Preload bridge — exposes a minimal typed IPC surface to the sandboxed renderer.
  * Renderer must not import @novel-master/core; all domain access goes through invoke.
  */
-import { contextBridge, ipcRenderer } from "electron";
-import type { IpcChannel } from "../../shared/ipc-types.js";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
+import {
+  IPC_CHANNELS,
+  type IpcChannel,
+  type VfsStartDragRequest,
+} from "../../shared/ipc-types.js";
 import pkg from "../../package.json" with { type: "json" };
 
 export interface NovelMasterDesktopBridge {
@@ -15,6 +19,13 @@ export interface NovelMasterDesktopBridge {
   invoke<T = unknown>(channel: IpcChannel, payload?: unknown): Promise<T>;
   on(channel: IpcChannel, callback: (payload: unknown) => void): () => void;
   off(channel: IpcChannel, callback: (payload: unknown) => void): void;
+  /** 将 File 对象解析为本机绝对路径（拖入导入）。 */
+  getPathForFile(file: File): string;
+  /**
+   * 触发 main `webContents.startDrag`（拖出导出）。
+   * 须在 dragstart 中 `preventDefault` 后调用；filePaths 来自 batchExportStage。
+   */
+  startDrag(filePaths: readonly string[]): void;
 }
 
 // on() registers an internal ipcRenderer listener wrapper; off() must resolve the same
@@ -53,6 +64,13 @@ const novelMasterDesktop: NovelMasterDesktopBridge = {
       ipcRenderer.removeListener(channel, listener);
       ipcListenerByCallback.delete(callback);
     }
+  },
+  getPathForFile(file) {
+    return webUtils.getPathForFile(file);
+  },
+  startDrag(filePaths) {
+    const payload: VfsStartDragRequest = { filePaths: [...filePaths] };
+    ipcRenderer.send(IPC_CHANNELS.VFS_START_DRAG, payload);
   },
 };
 

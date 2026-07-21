@@ -30,8 +30,9 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
-import type { ModelRequestService } from "../../provider/model-request.port.js";
-import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "../../prompt/render-prompt.js";
+import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
+import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import type { ModelRequestService } from "../../provider/model-request.port.js";import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "../../prompt/render-prompt.js";
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
@@ -234,6 +235,7 @@ export class DefaultAgentRunner implements AgentRunner {
             await this.deps.compactionConditions.shouldRequestCompaction(
               this.deps.session,
               {
+                sessionId,
                 modelContext: {
                   workspaceModelId: options.workspaceModelId,
                   savedModelId: options.savedModelId,
@@ -486,16 +488,18 @@ export class DefaultAgentRunner implements AgentRunner {
       if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
         stopReason = "cancelled";
       } else {
-      runError = e instanceof Error ? e.message : String(e);
-      if (publishRunLifecycle) {
-        bus.publish(EVENT_AGENT_RUN_FAILED, {
-          sessionId,
-          projectId,
-          runId,
-          error: runError,
-        });
-      }
-      throw e;
+        runError = e instanceof Error ? e.message : String(e);
+        // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 缓存，避免残留旧值
+        sessionApiPromptTokenCache.clear(sessionId);
+        if (publishRunLifecycle) {
+          bus.publish(EVENT_AGENT_RUN_FAILED, {
+            sessionId,
+            projectId,
+            runId,
+            error: runError,
+          });
+        }
+        throw e;
       }
     }
 
@@ -515,6 +519,17 @@ export class DefaultAgentRunner implements AgentRunner {
         stopReason,
         vfsMutated: vfsMutatedInRun,
       });
+    }
+
+    // 仅 completed ∧ pick 有值（含合法 0）写缓存；FINISHED 旁路其他一律 clear
+    const picked = pickLastPromptUsage(rounds);
+    if (stopReason === "completed" && picked !== undefined) {
+      sessionApiPromptTokenCache.set(sessionId, {
+        promptTokens: picked,
+        updatedAt: Date.now(),
+      });
+    } else {
+      sessionApiPromptTokenCache.clear(sessionId);
     }
 
     return {
