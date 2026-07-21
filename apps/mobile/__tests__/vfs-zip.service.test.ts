@@ -215,6 +215,21 @@ describe('vfs-zip.service', () => {
     );
   });
 
+  it('export fileName includes directoryPath suffix aligned with Desktop', async () => {
+    await exportVfsZip(runtime, scope, {directoryPath: '/a/b'});
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/cache/vfs-session-s-a-b.zip',
+      expect.any(String),
+      'base64',
+    );
+    expect(mockSaveDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceUris: ['file:///cache/vfs-session-s-a-b.zip'],
+        fileName: 'vfs-session-s-a-b.zip',
+      }),
+    );
+  });
+
   it('skips import when picker cancelled', async () => {
     mockPick.mockResolvedValue([]);
     await importVfsZip(runtime, scope, {confirmed: true});

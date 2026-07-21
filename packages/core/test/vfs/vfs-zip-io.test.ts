@@ -586,6 +586,66 @@ describe("VfsZipIoService", () => {
     await assert.rejects(() => vfs.read("/a/a/foo.txt"));
   });
 
+  it("directoryPath 指向 file 时 export/import 均 INVALID_PATH", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-file-path-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/note.md", "note");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    const assertInvalidPath = (e: unknown) =>
+      e instanceof VfsZipError && e.code === "INVALID_PATH";
+
+    await assert.rejects(
+      () => zipSvc.export(scope, { directoryPath: "/note.md" }),
+      assertInvalidPath,
+    );
+    await assert.rejects(
+      () =>
+        zipSvc.import(scope, buildVfsZip(new Map([["x.txt", "x"]])), {
+          confirmed: true,
+          directoryPath: "/note.md",
+        }),
+      assertInvalidPath,
+    );
+    assert.equal((await vfs.read("/note.md")).content, "note");
+  });
+
+  it("空 ZIP 导入非根子树仍保留目标目录行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-empty-sub-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.mkdir("/a");
+    await vfs.write("/a/old.txt", "old");
+    await vfs.write("/b/sib.txt", "sib");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(scope, buildVfsZip(new Map()), {
+      confirmed: true,
+      directoryPath: "/a",
+    });
+
+    const rootEntries = await vfs.list("/", { recursive: false });
+    assert.ok(
+      rootEntries.some((e) => e.kind === "directory" && e.path === "/a"),
+      "empty ZIP import should retain /a directory row",
+    );
+    await assert.rejects(() => vfs.read("/a/old.txt"));
+    assert.equal((await vfs.read("/b/sib.txt")).content, "sib");
+  });
+
   it("T-Z7: directoryPath=/a 且 entries 为 foo.txt（首段 ≠ a）→ 导入成功", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-tz7-${testIsolationSuffix()}`);

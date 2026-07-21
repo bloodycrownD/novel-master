@@ -15,14 +15,18 @@ import {
 } from '@react-native-documents/picker';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
-function vfsZipExportFileName(scope: VfsScope): string {
+function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
+  const pathSuffix =
+    directoryPath === '/'
+      ? ''
+      : `-${directoryPath.replace(/^\//, '').replace(/\//g, '-')}`;
   if (scope.kind === 'global') {
-    return 'vfs-global.zip';
+    return `vfs-global${pathSuffix}.zip`;
   }
   if (scope.kind === 'project') {
-    return `vfs-project-${scope.projectId}.zip`;
+    return `vfs-project-${scope.projectId}${pathSuffix}.zip`;
   }
-  return `vfs-session-${scope.sessionId}.zip`;
+  return `vfs-session-${scope.sessionId}${pathSuffix}.zip`;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -139,7 +143,7 @@ export async function exportVfsZip(
   const bytes = await zipSvc.export(scope, { directoryPath });
   assertZipArchive(bytes);
 
-  const fileName = vfsZipExportFileName(scope);
+  const fileName = vfsZipExportFileName(scope, directoryPath);
   const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
 
   await ReactNativeBlobUtil.fs.writeFile(tmpPath, bytesToBase64(bytes), 'base64');
