@@ -14,6 +14,8 @@ import {
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { formatTokenCount } from "@/utils/format-token-count";
 
+export { useWorkspaceFooterReload } from "./useWorkspaceFooterReload";
+
 interface WorkspaceFooterProps {
   projectId: string;
   sessionId: string;
@@ -198,13 +200,4 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
       />
     </div>
   );
-}
-
-export function useWorkspaceFooterReload(): {
-  reloadFooter: () => void;
-  footerKey: number;
-} {
-  const [footerKey, setFooterKey] = useState(0);
-  const reloadFooter = useCallback(() => setFooterKey((k) => k + 1), []);
-  return { reloadFooter, footerKey };
 }

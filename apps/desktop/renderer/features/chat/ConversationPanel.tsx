@@ -100,6 +100,7 @@ export function ConversationPanel({
     openSession,
     projectName,
     openChatWorkspacePreview,
+    reloadFooter,
   } = useShellNav();
   const vfsMutatedInRunRef = useRef(false);
   const [tab, setTab] = useState<'chat' | 'realPrompt'>('chat');
@@ -178,7 +179,9 @@ export function ConversationPanel({
       setMessages(result.data);
     }
     await refreshPendingUserOps();
-  }, [sessionId, refreshPendingUserOps]);
+    // messages changed → 刷新页脚 token（与 Mobile refreshChatTokenLabel 对称）
+    reloadFooter();
+  }, [sessionId, refreshPendingUserOps, reloadFooter]);
 
   const composerSendState = useMemo(
     () => deriveComposerSendState(findLastVisibleMessageDto(messages)),

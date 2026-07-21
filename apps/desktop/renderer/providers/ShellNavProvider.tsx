@@ -48,6 +48,7 @@ import {
   markPreviewTabsDeletedUnderPathInList,
   syncPreviewTabsWithFileRows,
 } from "../features/workspace/preview-tab-sync";
+import { useWorkspaceFooterReload } from "../features/chat/useWorkspaceFooterReload";
 
 import { loadDesktopScope, setDesktopProject, setDesktopSession } from "../state/desktop-scope";
 
@@ -132,6 +133,9 @@ export interface ShellNavContextValue {
   /** Bumps when workspace model/agent selection changes (footer, settings, etc.). */
   agentConfigRevision: number;
   notifyAgentConfigChanged: () => void;
+  /** 强制重挂 WorkspaceFooter / 重拉 token IPC（run finished、messages changed）。 */
+  footerKey: number;
+  reloadFooter: () => void;
   /** 注册 Preview 列可见性回调（由 App 注入 toggleColumn）。 */
   registerEnsurePreviewVisible: (fn: () => void) => void;
   /** 在聊天工作区 Preview 打开文件；若 Preview 列隐藏则先显示。 */
@@ -422,6 +426,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   const notifyAgentConfigChanged = useCallback(() => {
     setAgentConfigRevision((r) => r + 1);
   }, []);
+
+  const { footerKey, reloadFooter } = useWorkspaceFooterReload();
 
   const updateSessionName = useCallback((name: string) => {
     setSessionName(name);
@@ -715,6 +721,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       notifyAgentConfigChanged,
 
+      footerKey,
+
+      reloadFooter,
+
       registerEnsurePreviewVisible,
 
       openChatWorkspacePreview,
@@ -780,6 +790,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       agentConfigRevision,
 
       notifyAgentConfigChanged,
+
+      footerKey,
+
+      reloadFooter,
 
       registerEnsurePreviewVisible,
 

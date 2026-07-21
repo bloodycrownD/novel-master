@@ -5,23 +5,29 @@ import {
 } from '../src/services/chat-prompt-tokens.service';
 import type {MobileNovelMasterRuntime} from '../src/runtime/types';
 
-const mockCountPromptLlmInput = jest.fn();
+const mockResolveCurrentPromptTokens = jest.fn();
 const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
 const mockResolveApplicationModelId = jest.fn();
+const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
 
-jest.mock('@novel-master/core', () => {
-  const actual = jest.requireActual('@novel-master/core');
-  return {
-    ...actual,
-    countPromptLlmInput: (...args: unknown[]) => mockCountPromptLlmInput(...args),
-    resolveTokenCounterModeForModel: (...args: unknown[]) =>
-      mockResolveTokenCounterModeForModel(...args),
-    resolveApplicationModelId: (...args: unknown[]) =>
-      mockResolveApplicationModelId(...args),
-    serializePromptLlmInput: () => 'serialized',
-  };
-});
+jest.mock('@novel-master/core/provider', () => ({
+  resolveCurrentPromptTokens: (...args: unknown[]) =>
+    mockResolveCurrentPromptTokens(...args),
+  resolveTokenCounterModeForModel: (...args: unknown[]) =>
+    mockResolveTokenCounterModeForModel(...args),
+  serializePromptLlmInput: (...args: unknown[]) =>
+    mockSerializePromptLlmInput(...args),
+}));
+
+jest.mock('@novel-master/core/agent', () => ({
+  resolveApplicationModelId: (...args: unknown[]) =>
+    mockResolveApplicationModelId(...args),
+}));
+
+jest.mock('@novel-master/core/prompt', () => ({
+  messageBodyText: () => 'hello',
+}));
 
 jest.mock('../src/services/session-prompt-input.service', () => ({
   buildSessionPromptInput: (...args: unknown[]) =>
@@ -53,10 +59,11 @@ function stubRuntime(overrides?: {
 
 describe('chat-prompt-tokens.service', () => {
   beforeEach(() => {
-    mockCountPromptLlmInput.mockReset();
+    mockResolveCurrentPromptTokens.mockReset();
     mockResolveTokenCounterModeForModel.mockReset();
     mockBuildSessionPromptInput.mockReset();
     mockResolveApplicationModelId.mockReset();
+    mockSerializePromptLlmInput.mockClear();
   });
 
   it('formatPromptTokenUsageLabel shows percentage with context window', () => {
@@ -77,10 +84,11 @@ describe('chat-prompt-tokens.service', () => {
     });
     mockResolveApplicationModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('gemma');
-    mockCountPromptLlmInput.mockResolvedValue({
+    mockResolveCurrentPromptTokens.mockResolvedValue({
       tokenCount: 24_000,
       estimated: false,
       counterKind: 'gemma',
+      source: 'local',
     });
 
     const label = await loadChatPromptTokenLabel(stubRuntime(), {
@@ -89,9 +97,33 @@ describe('chat-prompt-tokens.service', () => {
     });
 
     expect(label).toBe('19% • 24K/128K · gemma');
-    expect(mockCountPromptLlmInput).toHaveBeenCalledWith(
+    expect(mockResolveCurrentPromptTokens).toHaveBeenCalledWith(
+      's1',
       expect.objectContaining({tokenizerOverride: 'gemma'}),
     );
+  });
+
+  it('T-T9: source===api ⇒ label 后缀 api 且无估算前缀', async () => {
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'openai/gpt-4o'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+    });
+    mockResolveApplicationModelId.mockReturnValue('openai/gpt-4o');
+    mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
+    mockResolveCurrentPromptTokens.mockResolvedValue({
+      tokenCount: 24_000,
+      estimated: false,
+      counterKind: 'api',
+      source: 'api',
+    });
+
+    const label = await loadChatPromptTokenLabel(stubRuntime(), {
+      sessionId: 's1',
+      projectId: 'p1',
+    });
+
+    expect(label).toBe('19% • 24K/128K · api');
   });
 
   it('loadChatPromptTokenLabel without model uses heuristic suffix', async () => {

@@ -6,8 +6,8 @@
 import { resolveApplicationModelId } from "@novel-master/core/agent";
 
 import {
-  countPromptLlmInput,
   countPromptLlmInputHeuristicOnly,
+  resolveCurrentPromptTokens,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from "@novel-master/core/provider";
@@ -78,7 +78,7 @@ export async function loadChatPromptTokenStats(
     savedModelId,
   );
 
-  const result = await countPromptLlmInput({
+  const result = await resolveCurrentPromptTokens(scope.sessionId, {
     layout,
     ctx,
     savedModelId,
