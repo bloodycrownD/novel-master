@@ -25,7 +25,6 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -34,15 +33,10 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import type { MessageService } from "../message.port.js";
 
 function reposFor(conn: TdbcConnection) {
-  const entries = new SqliteVfsEntryRepository(conn);
   return {
     sessions: new SqliteSessionRepository(conn),
     messages: new SqliteMessageRepository(conn),
-    vfs: entries,
-    entries,
-    workplace: new SqliteWorkplaceRepository(conn),
-    checkpoints: new SqliteMessageCheckpointRepository(conn),
-    revisions: new SqliteVfsRevisionRepository(conn),
+    vfs: new SqliteVfsEntryRepository(conn),
   };
 }
 

@@ -101,6 +101,7 @@ describe("fork/copy parity (F1)", () => {
     assert.ok(copyDir);
     assert.equal(copyDir.headCount, 7);
     assert.equal(copyDir.sortField, "updated");
+    assert.equal(copyDir.sortOrder, "desc");
     const copyRows = await cwt.buildListRows();
     const copyFile = copyRows.find(
       (r) => r.kind === "file" && r.path === "/a.md",

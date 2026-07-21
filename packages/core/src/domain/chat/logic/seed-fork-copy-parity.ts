@@ -1,6 +1,9 @@
 /**
  * fork / session.copy 共用：种带 content 的 revision、复制 workplace 规则、挂同树 checkpoint。
  *
+ * **唯一入口**：workplace / checkpoints / revisions / entries 的 Sqlite 实例仅在此 helper 内自建；
+ * message.service / session.service 的 reposFor 不得重复构造上述 repo。
+ *
  * @module domain/chat/logic/seed-fork-copy-parity
  */
 
