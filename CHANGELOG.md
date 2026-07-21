@@ -16,6 +16,7 @@
 
 ### 修复
 
+- **Mobile 文件导出扩展名**：不再统一 `text/plain`（会把 `xxx.md` 另存成 `xxx.md.txt`）；按后缀映射 MIME（如 `.md` → `text/markdown`）
 - **Mobile / Desktop 大备份导入闪退**：约百兆 `.nmbackup` 不再整包读入 JS 再 base64 写回，改为路径级拷贝，避免 OOM
 - **Desktop Windows 拖出导出崩溃**：拖出图标禁止空 `nativeImage`，改用应用图标 / PNG 兜底，避免主进程硬崩
 - **Desktop 拖出导出体验**：物化/startDrag 失败改为 toast；prefetch 未完成时提示「导出准备中」；拖出结束后清理 staging，避免临时目录泄漏

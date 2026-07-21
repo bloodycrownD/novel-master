@@ -70,6 +70,37 @@ function basename(logicalPath: string): string {
   return parts[parts.length - 1] ?? 'file';
 }
 
+/**
+ * Android SAF 按 mimeType 补扩展名：`text/plain` 会把 `foo.md` 存成 `foo.md.txt`。
+ * 按后缀选 MIME；未知则用 octet-stream，避免误加 `.txt`。
+ */
+function mimeTypeForExportFileName(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  const ext =
+    dot >= 0 ? fileName.slice(dot + 1).toLowerCase() : '';
+  switch (ext) {
+    case 'md':
+    case 'markdown':
+      return 'text/markdown';
+    case 'txt':
+      return 'text/plain';
+    case 'json':
+      return 'application/json';
+    case 'yaml':
+    case 'yml':
+      return 'application/yaml';
+    case 'html':
+    case 'htm':
+      return 'text/html';
+    case 'csv':
+      return 'text/csv';
+    case 'xml':
+      return 'application/xml';
+    default:
+      return 'application/octet-stream';
+  }
+}
+
 function resolveScopedVfs(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
@@ -243,7 +274,7 @@ export async function exportVfsFile(
     await fs.writeFile(tmpPath, read.content, 'utf8');
     const [result] = await saveDocuments({
       sourceUris: [toFileUri(tmpPath)],
-      mimeType: 'text/plain',
+      mimeType: mimeTypeForExportFileName(fileName),
       fileName,
       copy: true,
     });
