@@ -40,8 +40,9 @@ workspace-chat-vfs-upgrade:
   prd_confirmed: yes
   spec_draft_confirmed: yes
   execute_ready_confirmed: yes
-  status: code-dev-loop; branch feature/workspace-chat-vfs-upgrade
+  status: code-dev-loop dev-ready
   branch: feature/workspace-chat-vfs-upgrade
+  head_sha: 5810bd06
   spec_points:
     fork: seedForkCopyParity同事务_取content再append
     token: resolve+sessionId+FINISHED仅completed写缓存_FAILED必clear
