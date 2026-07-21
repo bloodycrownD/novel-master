@@ -49,6 +49,12 @@ export const IPC_CHANNELS = {
   VFS_RENAME: 'nm:vfs/rename',
   VFS_ZIP_EXPORT: 'nm:vfs/zipExport',
   VFS_ZIP_IMPORT: 'nm:vfs/zipImport',
+  /** 本机路径批量 ingest（plan + 可选 apply） */
+  VFS_BATCH_INGEST_FROM_PATHS: 'nm:vfs/batchIngestFromPaths',
+  /** 导出物化到临时目录（供 startDrag） */
+  VFS_BATCH_EXPORT_STAGE: 'nm:vfs/batchExportStage',
+  /** Main：webContents.startDrag（preload send，非 invoke） */
+  VFS_START_DRAG: 'nm:vfs/startDrag',
 
   WORKPLACE_BUILD_LIST_ROWS: 'nm:workplace/buildListRows',
   WORKPLACE_SET_DIR_RULE: 'nm:workplace/setDirRule',
@@ -393,6 +399,52 @@ export type VfsZipRequest = VfsScopeRequest & {
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
 export type VfsZipImportResult = 'imported' | 'cancelled';
+
+export type VfsBatchConflictDto = {
+  readonly logicalPath: string;
+  readonly reason: 'exists';
+};
+
+export type VfsBatchApplyReportDto = {
+  readonly written: readonly string[];
+  readonly skipped: readonly string[];
+  readonly failed: ReadonlyArray<{
+    readonly path: string;
+    readonly message: string;
+  }>;
+};
+
+export type VfsBatchIngestFromPathsRequest = VfsScopeRequest & {
+  readonly targetDir: string;
+  readonly hostPaths: readonly string[];
+  readonly overwriteConfirmed?: boolean;
+};
+
+export type VfsBatchIngestFromPathsResult =
+  | {
+      readonly status: 'needs_confirm';
+      readonly conflicts: readonly VfsBatchConflictDto[];
+      readonly skippedBinary: readonly string[];
+    }
+  | {
+      readonly status: 'applied';
+      readonly report: VfsBatchApplyReportDto;
+      readonly skippedBinary: readonly string[];
+    };
+
+export type VfsBatchExportStageRequest = VfsScopeRequest & {
+  readonly logicalPaths: readonly string[];
+};
+
+export type VfsBatchExportStageResult = {
+  readonly stagingRoot: string;
+  /** 供 startDrag 的顶层绝对路径（文件或目录） */
+  readonly filePaths: readonly string[];
+};
+
+export type VfsStartDragRequest = {
+  readonly filePaths: readonly string[];
+};
 
 export type VfsListEntryDto = {
   readonly path: string;

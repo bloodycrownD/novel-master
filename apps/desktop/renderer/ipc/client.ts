@@ -68,6 +68,8 @@ export const {
   ipcVfsRename,
   ipcVfsZipExport,
   ipcVfsZipImport,
+  ipcVfsBatchIngestFromPaths,
+  ipcVfsBatchExportStage,
   ipcUserVfsHasPending,
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,

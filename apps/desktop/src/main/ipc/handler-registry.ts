@@ -142,15 +142,19 @@ import {
 } from './handlers/sessions.js';
 import {
   handleUserVfsHasPending,
+  handleVfsBatchExportStage,
+  handleVfsBatchIngestFromPaths,
   handleVfsDelete,
   handleVfsList,
   handleVfsMkdir,
   handleVfsRead,
   handleVfsRename,
+  handleVfsStartDrag,
   handleVfsWrite,
   handleVfsZipExport,
   handleVfsZipImport,
 } from './handlers/vfs.js';
+import type { VfsStartDragRequest } from '../../../shared/ipc-types.js';
 import {
   handleWorkplaceBuildListRows,
   handleWorkplaceCaptureSessionBlock,
@@ -225,6 +229,15 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.VFS_RENAME, handleVfsRename);
   bindReq(IPC_CHANNELS.VFS_ZIP_EXPORT, handleVfsZipExport);
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
+  bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, handleVfsBatchIngestFromPaths);
+  bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);
+  // startDrag 须在 drag 流程中同步触发，使用 send 而非 invoke
+  ipcMain.on(
+    IPC_CHANNELS.VFS_START_DRAG,
+    (event, req: VfsStartDragRequest) => {
+      handleVfsStartDrag(event, req);
+    },
+  );
   bindReq(IPC_CHANNELS.USER_VFS_HAS_PENDING, handleUserVfsHasPending);
 
   bindReq(IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS, handleWorkplaceBuildListRows);

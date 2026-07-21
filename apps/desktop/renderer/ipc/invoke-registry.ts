@@ -61,6 +61,10 @@ import {
   type SessionRenameRequest,
   type SessionSetComposerDraftRequest,
   type UserVfsHasPendingRequest,
+  type VfsBatchExportStageRequest,
+  type VfsBatchExportStageResult,
+  type VfsBatchIngestFromPathsRequest,
+  type VfsBatchIngestFromPathsResult,
   type VfsDeleteRequest,
   type VfsMkdirRequest,
   type VfsReadRequest,
@@ -229,6 +233,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.VFS_ZIP_IMPORT,
     ),
+    ipcVfsBatchIngestFromPaths: withReq<
+      VfsBatchIngestFromPathsRequest,
+      IpcResult<VfsBatchIngestFromPathsResult>
+    >(invoke, IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS),
+    ipcVfsBatchExportStage: withReq<
+      VfsBatchExportStageRequest,
+      IpcResult<VfsBatchExportStageResult>
+    >(invoke, IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE),
     ipcUserVfsHasPending: withReq<
       UserVfsHasPendingRequest,
       IpcResult<boolean>

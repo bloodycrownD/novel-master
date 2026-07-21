@@ -6,6 +6,10 @@
 import type {
   IpcResult,
   UserVfsHasPendingRequest,
+  VfsBatchExportStageRequest,
+  VfsBatchExportStageResult,
+  VfsBatchIngestFromPathsRequest,
+  VfsBatchIngestFromPathsResult,
   VfsDeleteRequest,
   VfsListEntryDto,
   VfsListRequest,
@@ -14,6 +18,7 @@ import type {
   VfsReadResultDto,
   VfsRenameRequest,
   VfsScopeRequest,
+  VfsStartDragRequest,
   VfsWriteRequest,
   VfsZipExportResult,
   VfsZipImportResult,
@@ -28,7 +33,7 @@ import {
   buildUserVfsSaveOp,
   readUserVfsSaveBaseline,
 } from "@novel-master/core/vfs";
-import { BrowserWindow } from "electron";
+import { BrowserWindow, type IpcMainEvent } from "electron";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   deleteVfsEntry,
@@ -39,6 +44,11 @@ import {
   executeSessionUserVfsOp,
   isSessionVfsScope,
 } from "../../services/user-vfs-turn-execute.service.js";
+import {
+  ingestVfsFromHostPaths,
+  stageVfsBatchExport,
+  startDragExport,
+} from "../../services/vfs-batch.service.js";
 import {
   exportVfsZipWithDialog,
   importVfsZipWithDialog,
@@ -291,6 +301,54 @@ export async function handleVfsZipImport(
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleVfsBatchIngestFromPaths(
+  req: VfsBatchIngestFromPathsRequest,
+): Promise<IpcResult<VfsBatchIngestFromPathsResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const outcome = await ingestVfsFromHostPaths(rt, scope, {
+      targetDir: req.targetDir,
+      hostPaths: req.hostPaths,
+      overwriteConfirmed: req.overwriteConfirmed === true,
+    });
+    if (outcome.status === "applied") {
+      pushWorkspaceMutated(req);
+    }
+    return { ok: true, data: outcome };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleVfsBatchExportStage(
+  req: VfsBatchExportStageRequest,
+): Promise<IpcResult<VfsBatchExportStageResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const staged = await stageVfsBatchExport(rt, scope, req.logicalPaths);
+    return { ok: true, data: staged };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/**
+ * Preload 经 ipcRenderer.send 触发；须在 dragstart 流程中尽快调用 startDrag。
+ * 失败时向 renderer 无法直接返回，由 renderer 侧先行 stage 校验。
+ */
+export function handleVfsStartDrag(
+  event: IpcMainEvent,
+  req: VfsStartDragRequest,
+): void {
+  try {
+    startDragExport(event.sender, req.filePaths ?? []);
+  } catch (err) {
+    console.error("[vfs-batch] startDrag failed", err);
   }
 }
 
