@@ -11,8 +11,13 @@ import {
   deleteWorkspaceEntry,
   entryLabelForTarget,
   renameWorkspaceEntry,
+  scopeRequestFromTarget,
 } from './features/workspace/workspace-actions';
-import { workspaceMenuItems } from './features/workspace/workspace-context';
+import {
+  workspaceMenuItems,
+  zipDirectoryPathForTarget,
+  zipImportConfirmMessage,
+} from './features/workspace/workspace-context';
 import type { WorkspaceContextTarget } from './features/workspace/WorkspaceTree';
 import { AppChrome } from './layout/AppChrome';
 import { MainShell } from './layout/MainShell';
@@ -28,6 +33,8 @@ import {
   ipcModelListPicker,
   ipcModelSetCurrent,
   ipcSessionsRename,
+  ipcVfsZipExport,
+  ipcVfsZipImport,
 } from './ipc/client';
 
 type WorkspaceMenuState = WorkspaceContextTarget & {
@@ -39,7 +46,9 @@ type WorkspacePromptState =
   | { kind: 'create-folder'; target: WorkspaceContextTarget }
   | { kind: 'rename'; target: WorkspaceContextTarget; initialName: string };
 
-type WorkspaceConfirmState = { kind: 'delete'; target: WorkspaceContextTarget };
+type WorkspaceConfirmState =
+  | { kind: 'delete'; target: WorkspaceContextTarget }
+  | { kind: 'import-zip'; target: WorkspaceContextTarget; directoryPath: string };
 
 type SessionRenamePromptState = {
   sessionId: string;
@@ -174,8 +183,32 @@ function DesktopOverlays() {
         setFileInclusionTarget(target);
         return;
       }
+      if (action === 'export-zip') {
+        const directoryPath = zipDirectoryPathForTarget(target);
+        if (directoryPath == null) {
+          return;
+        }
+        const req = {
+          ...scopeRequestFromTarget(target, projectId, sessionId),
+          directoryPath,
+        };
+        const result = await ipcVfsZipExport(req);
+        if (result.ok && result.data === 'saved') {
+          showToast('已导出 ZIP');
+        } else if (!result.ok) {
+          showToast(result.error.message);
+        }
+        return;
+      }
+      if (action === 'import-zip') {
+        const directoryPath = zipDirectoryPathForTarget(target);
+        if (directoryPath == null) {
+          return;
+        }
+        setWorkspaceConfirm({ kind: 'import-zip', target, directoryPath });
+      }
     },
-    [],
+    [projectId, sessionId],
   );
 
   const handleWorkspacePromptConfirm = useCallback(
@@ -285,6 +318,20 @@ function DesktopOverlays() {
         showToast(result.message);
       }
       return;
+    }
+    if (confirm.kind === 'import-zip') {
+      const req = {
+        ...scopeRequestFromTarget(confirm.target, projectId, sessionId),
+        confirmed: true,
+        directoryPath: confirm.directoryPath,
+      };
+      const result = await ipcVfsZipImport(req);
+      if (result.ok && result.data === 'imported') {
+        notifyWorkspaceMutated();
+        showToast('已导入 ZIP');
+      } else if (!result.ok) {
+        showToast(result.error.message);
+      }
     }
   }, [
     workspaceConfirm,
@@ -512,8 +559,23 @@ function DesktopOverlays() {
         open={workspaceConfirm?.kind === 'delete'}
         title="确认删除"
         message={`确定删除「${
-          workspaceConfirm ? entryLabelForTarget(workspaceConfirm.target) : ''
+          workspaceConfirm?.kind === 'delete'
+            ? entryLabelForTarget(workspaceConfirm.target)
+            : ''
         }」？`}
+        danger
+        onConfirm={handleWorkspaceConfirm}
+        onCancel={() => setWorkspaceConfirm(null)}
+      />
+
+      <ConfirmModal
+        open={workspaceConfirm?.kind === 'import-zip'}
+        title="导入 ZIP"
+        message={
+          workspaceConfirm?.kind === 'import-zip'
+            ? zipImportConfirmMessage(workspaceConfirm.directoryPath)
+            : ''
+        }
         danger
         onConfirm={handleWorkspaceConfirm}
         onCancel={() => setWorkspaceConfirm(null)}

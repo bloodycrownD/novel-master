@@ -7,13 +7,10 @@ import { showToast } from "@/components/ui/show-toast";
 import {
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
-  ipcVfsZipExport,
-  ipcVfsZipImport,
-  vfsScope,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 
-type ConfirmKind = "import-zip" | "pull-template";
+type ConfirmKind = "pull-template";
 
 type MenuState = {
   x: number;
@@ -34,33 +31,7 @@ export function WorkspaceHeaderActions({
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const req = vfsScope(panelScope, projectId, sessionId);
   const showSync = panelScope === "session" || panelScope === "chat";
-
-  const exportZip = useCallback(async () => {
-    const result = await ipcVfsZipExport(req);
-    if (result.ok && result.data === "saved") {
-      showToast("已导出 ZIP");
-    } else if (!result.ok) {
-      showToast(result.error.message);
-    }
-  }, [req]);
-
-  const importZip = useCallback(async () => {
-    setBusy(true);
-    try {
-      const result = await ipcVfsZipImport({ ...req, confirmed: true });
-      if (result.ok && result.data === "imported") {
-        onRefresh();
-        showToast("已导入 ZIP");
-      } else if (!result.ok) {
-        showToast(result.error.message);
-      }
-    } finally {
-      setBusy(false);
-      setConfirmKind(null);
-    }
-  }, [req, onRefresh]);
 
   const pullTemplate = useCallback(async () => {
     setBusy(true);
@@ -93,34 +64,24 @@ export function WorkspaceHeaderActions({
     if (showSync) {
       items.push({ label: "初始化", action: "pull-template" });
     }
-    items.push({ label: "导入", action: "import-zip" });
-    items.push({ label: "导出", action: "export-zip" });
     return items;
   }, [showSync]);
 
-  const handleMenuSelect = useCallback(
-    (action: string) => {
-      if (action === "export-zip") {
-        void exportZip();
-        return;
-      }
-      if (action === "import-zip") {
-        setConfirmKind("import-zip");
-        return;
-      }
-      if (action === "pull-template") {
-        setConfirmKind("pull-template");
-      }
-    },
-    [exportZip],
-  );
+  const handleMenuSelect = useCallback((action: string) => {
+    if (action === "pull-template") {
+      setConfirmKind("pull-template");
+    }
+  }, []);
+
+  // Header 无 ZIP 时若无可选项则隐藏 ⋯
+  if (menuItems.length === 0) {
+    return null;
+  }
 
   const confirmMessage =
-    confirmKind === "import-zip"
-      ? "导入 ZIP 将覆盖当前工作区全部文件，确定继续？"
-      : panelScope === "session"
-        ? "将从全局工作区覆盖当前项目工作区，本地修改将丢失。确定继续？"
-        : "将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？";
+    panelScope === "session"
+      ? "将从全局工作区覆盖当前项目工作区，本地修改将丢失。确定继续？"
+      : "将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？";
 
   return (
     <>
@@ -151,14 +112,9 @@ export function WorkspaceHeaderActions({
         open={confirmKind != null}
         title="确认操作"
         message={confirmMessage}
-        danger={confirmKind === "import-zip"}
         busy={busy}
         onConfirm={() => {
-          if (confirmKind === "import-zip") {
-            void importZip();
-          } else {
-            void pullTemplate();
-          }
+          void pullTemplate();
         }}
         onCancel={() => !busy && setConfirmKind(null)}
       />

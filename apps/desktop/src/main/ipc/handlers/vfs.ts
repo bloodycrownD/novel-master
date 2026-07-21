@@ -261,7 +261,12 @@ export async function handleVfsZipExport(
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
-    const result = await exportVfsZipWithDialog(rt, scope, focusedWindow());
+    const result = await exportVfsZipWithDialog(
+      rt,
+      scope,
+      { directoryPath: req.directoryPath },
+      focusedWindow(),
+    );
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -277,7 +282,10 @@ export async function handleVfsZipImport(
     const result = await importVfsZipWithDialog(
       rt,
       scope,
-      { confirmed: req.confirmed === true },
+      {
+        confirmed: req.confirmed === true,
+        directoryPath: req.directoryPath,
+      },
       focusedWindow(),
     );
     return { ok: true, data: result };

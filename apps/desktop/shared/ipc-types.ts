@@ -387,6 +387,8 @@ export type VfsRenameRequest = VfsScopeRequest & {
 
 export type VfsZipRequest = VfsScopeRequest & {
   readonly confirmed?: boolean;
+  /** 子树目标目录；缺省 ≡ `/`（整域） */
+  readonly directoryPath?: string;
 };
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
