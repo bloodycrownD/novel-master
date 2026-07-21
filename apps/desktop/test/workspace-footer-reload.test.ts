@@ -54,6 +54,7 @@ describe("WorkspaceFooter reload wiring (T-T8)", () => {
     assert.match(shellNav, /useWorkspaceFooterReload/);
     assert.match(shellNav, /reloadFooter/);
     assert.match(shellNav, /footerKey/);
+    assert.match(shellNav, /notifyAgentConfigChanged[\s\S]*reloadFooter\(\)/);
 
     assert.match(explorer, /EVENT_AGENT_RUN_FINISHED/);
     assert.match(explorer, /reloadFooter/);

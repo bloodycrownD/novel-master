@@ -423,11 +423,12 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const { footerKey, reloadFooter } = useWorkspaceFooterReload();
+
   const notifyAgentConfigChanged = useCallback(() => {
     setAgentConfigRevision((r) => r + 1);
-  }, []);
-
-  const { footerKey, reloadFooter } = useWorkspaceFooterReload();
+    reloadFooter();
+  }, [reloadFooter]);
 
   const updateSessionName = useCallback((name: string) => {
     setSessionName(name);
