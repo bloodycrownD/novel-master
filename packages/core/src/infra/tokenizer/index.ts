@@ -37,6 +37,16 @@ export {
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
 } from "./logic/count-prompt-llm-input.js";
+export {
+  sessionApiPromptTokenCache,
+  type SessionApiPromptTokenCacheEntry,
+} from "./logic/session-api-prompt-token-cache.js";
+export { pickLastPromptUsage } from "./logic/pick-last-prompt-usage.js";
+export {
+  resolveCurrentPromptTokens,
+  type PromptTokenSource,
+  type ResolvedPromptTokens,
+} from "./logic/resolve-current-prompt-tokens.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
 export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
