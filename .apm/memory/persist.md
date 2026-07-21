@@ -40,7 +40,8 @@ workspace-chat-vfs-upgrade:
   prd_confirmed: yes
   spec_draft_confirmed: yes
   execute_ready_confirmed: yes
-  status: execute-ready confirmed; pending impl
+  status: code-dev-loop; branch feature/workspace-chat-vfs-upgrade
+  branch: feature/workspace-chat-vfs-upgrade
   spec_points:
     fork: seedForkCopyParity同事务_取content再append
     token: resolve+sessionId+FINISHED仅completed写缓存_FAILED必clear
@@ -49,6 +50,6 @@ workspace-chat-vfs-upgrade:
   known_p2:
     - token clear勿仅挂publish FAILED门控
     - batch conflicts与skipped字段择一
-    - fork helper签名补projectId
+  f1_impl: seedForkCopyParity+wire+T-F1..T-F6 done（含 projectId）
 
 
