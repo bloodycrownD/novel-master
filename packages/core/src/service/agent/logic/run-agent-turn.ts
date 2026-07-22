@@ -39,7 +39,7 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
+import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
@@ -145,10 +145,11 @@ export interface RunAgentTurnOptions {
    */
   readonly attachments?: readonly MessageAttachment[];
   /**
-   * App 本轮未发送批注草稿；Core 物化为 `action:annotate` 并 **concat** 进落库。
+   * App 本轮未发送批注草稿（文件形 | 消息形联合）；Core 物化为 `action:annotate` 并 **concat** 进落库。
    * 非空时计入 hasInput / shouldAppendNewUser，且禁止空续跑 re-append。
+   * Desktop 可继续只传文件形 `AnnotateDraft[]`（联合向后兼容）。
    */
-  readonly annotateDrafts?: readonly AnnotateDraft[];
+  readonly annotateDrafts?: readonly SendAnnotateDraft[];
   readonly onUserMessageAppended?: () => void | Promise<void>;
   readonly onAfterResolveModel?: (
     ctx: RunAgentTurnAfterResolveContext,
