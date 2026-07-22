@@ -195,7 +195,8 @@ function collectUnmarkedTextDomains(root: ParentNode): Text[][] {
     }
     const el = node as Element;
     if (el.classList?.contains(ANNOTATE_MARK_CLASS)) {
-      // 已包装区域整块跳过（其子 Text 不入匹配域）
+      // 已包装区域整块跳过；先 flush，避免 mark 两侧 Text 拼进同一 haystack
+      flush();
       return;
     }
     const tag = el.tagName?.toUpperCase?.() ?? '';

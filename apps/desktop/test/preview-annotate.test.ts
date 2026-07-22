@@ -205,6 +205,25 @@ describe("applyAnnotateHighlights DOM（T-XN3 / T-XN4 / T-XN5 / T-XN6）", () =>
     );
   });
 
+  it("B-1: 先长后短，跨已有 mark 的短针不得误命中", () => {
+    // 文档「h」+「ell」+「o」；长针先包 ell 后，短针「ho」不得跨 mark 拼域命中
+    const root = makeRoot("<p>hello</p>");
+    applyAnnotateHighlights(root, [
+      { id: "long", originalText: "ell" },
+      { id: "short", originalText: "ho" },
+    ]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.equal(marks.length, 1);
+    assert.equal(marks[0]?.textContent, "ell");
+    assert.deepEqual(
+      parseAnnotateIdsAttr(marks[0]?.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR)),
+      ["long"],
+    );
+    assert.equal(root.textContent, "hello");
+  });
+
   it("跨 p 不误命中；clear 后再 apply 无残留", () => {
     const root = makeRoot("<p>hel</p><p>lo</p>");
     applyAnnotateHighlights(root, [{ id: "x", originalText: "hello" }]);

@@ -151,6 +151,26 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
     expect(marks2.map(m => m.textContent)).toEqual(['hello', 'hello']);
   });
 
+  it('B-1: 先长后短，跨已有 mark 的短针不得误命中', () => {
+    // 文档「h」+「ell」+「o」；长针先包 ell 后，短针「ho」不得跨 mark 拼域命中
+    const root = createMiniRoot((doc, rootEl) => {
+      const p = doc.createElement('p');
+      p.appendChild(doc.createTextNode('hello'));
+      rootEl.appendChild(p);
+    });
+    applyAnnotateMarks(root as unknown as ParentNode, [
+      {id: 'long', originalText: 'ell'},
+      {id: 'short', originalText: 'ho'},
+    ]);
+    const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
+    expect(marks.length).toBe(1);
+    expect(marks[0]?.textContent).toBe('ell');
+    expect(parseAnnotateIdsAttr(marks[0]?.getAttribute(ANNOTATE_IDS_ATTR))).toEqual([
+      'long',
+    ]);
+    expect(root.textContent).toBe('hello');
+  });
+
   it('跨 p 不误命中；unwrap 后再 apply 无残留', () => {
     const root = rootCrossParagraph();
     applyAnnotateMarks(root as unknown as ParentNode, [
