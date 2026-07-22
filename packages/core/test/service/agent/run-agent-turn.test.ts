@@ -711,7 +711,7 @@ describe("runAgentTurn", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-SR8：re-append merge 含 materialize workplace 且不丢 flush/attach/trailing", async () => {
+  it("T-SR8：re-append merge 不含 workplace 且不丢 flush/attach/trailing", async () => {
     let reAppendedAtts:
       | readonly { source?: string; path?: string }[]
       | undefined;
@@ -763,15 +763,6 @@ describe("runAgentTurn", () => {
           path: "/chip.md",
         },
       ],
-      workplaceAttachments: [
-        {
-          name: "/delta.md",
-          source: "workplace",
-          type: "text",
-          content: null,
-          path: "/delta.md",
-        },
-      ],
     });
 
     assert.ok(result.reAppendedUserMessageId);
@@ -786,7 +777,8 @@ describe("runAgentTurn", () => {
       ),
     );
     assert.ok(
-      atts.some((a) => a.source === "workplace" && a.path === "/delta.md"),
+      !atts.some((a) => a.source === "workplace"),
+      "re-append merge 不得含 workplace materialize",
     );
   });
 

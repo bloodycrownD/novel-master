@@ -80,7 +80,7 @@
 
 | ID | 描述 | 状态 |
 |----|------|------|
-| SD-workplace-prepare-bypass | `prepare-user-vfs-turn-for-agent-run` 仍保留 `workplaceAttachments` 入参与 merge（旁路未拆净），偏离 chip-recontract D3 | **pending-fix** / 待实现闭合（挂 `review-scope-chip/C-orch-1`） |
+| SD-workplace-prepare-bypass | `prepare-user-vfs-turn-for-agent-run` 仍保留 `workplaceAttachments` 入参与 merge（旁路未拆净），偏离 chip-recontract D3 | **fixed**（`review-scope-chip/C-orch-1` + `G-1`） |
 
 ## Open questions / 待拍板
 
@@ -113,6 +113,6 @@
 | dag_version / review_round | 2 / 1 |
 | P0 / P1 / P2（已写入 fix-spec） | 1 / 2 / 3 |
 | 未写入的开放 must-fix | 0 |
-| spec_deviations | pending-fix: `SD-workplace-prepare-bypass` |
+| spec_deviations | fixed: `SD-workplace-prepare-bypass` |
 | C-orch | ✅ |
 | C 类合并后 QA | T-XN7 / T-CR9（见上「合并后 QA」；不阻塞 fix-spec-ready） |
