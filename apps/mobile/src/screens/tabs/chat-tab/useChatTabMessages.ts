@@ -7,6 +7,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import {
   type ChatMessage,
   isPlainUserUndoSendEligible,
+  parseAnnotateDraftsFromAttachments,
   resolveRollbackConfirmMessage,
 } from '@novel-master/core/chat';
 
@@ -26,8 +27,10 @@ import {
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
+import { addChatAnnotateDraft } from '@/storage/chat-annotate-draft';
 import {
   readChatComposerDraftState,
+  refreshComposerAnnotateChips,
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
 import { refreshComposerStatusAfterSessionKkvCleared } from '@/services/project-composer-status.service';
@@ -403,6 +406,9 @@ export function useChatTabMessageActions({
 
       const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
+      // 删消息前 snapshot：成功后解析真 VFS 工作区批注（伪 path 由 parse 跳过）
+      const annotateAttachmentsSnapshot =
+        mode === 'undo_send' ? (target.attachments ?? []) : null;
 
       const applyComposerRestore = () => {
         if (mode === 'undo_send' && restoreText != null) {
@@ -415,6 +421,17 @@ export function useChatTabMessageActions({
             },
             runtime.sessions,
           );
+          // append 进现有 store，与未发送草稿并存；无 annotate 不造草稿
+          if (annotateAttachmentsSnapshot != null) {
+            const restored = parseAnnotateDraftsFromAttachments(
+              annotateAttachmentsSnapshot,
+            );
+            for (const draft of restored) {
+              addChatAnnotateDraft(sessionId, draft);
+            }
+          }
+          // 重投影 chip（含未发送 ∪ 刚恢复）；无批注时仍保持 attachments:[]
+          refreshComposerAnnotateChips(sessionId);
           setDraftRestoreToken(t => t + 1);
         }
       };
