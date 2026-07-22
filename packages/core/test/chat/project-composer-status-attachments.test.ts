@@ -12,7 +12,7 @@ import {
 import { userOpsAttachmentsFromSummaries } from "@/domain/chat/logic/build-user-ops-attachment.js";
 
 describe("projectComposerStatusAttachments (T-CR2 ops-only)", () => {
-  it("T-CR2: 仅 user_ops；空摘要 → 投影空（无 workplace 半边）", () => {
+  it("T-CR2/T-CR8: 仅 user_ops；空摘要 → 投影空（无 workplace 半边 / 无规则 chip）", () => {
     assert.deepEqual(buildComposerStatusAttachments([]), []);
   });
 

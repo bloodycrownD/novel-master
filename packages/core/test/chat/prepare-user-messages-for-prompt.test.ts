@@ -258,7 +258,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.equal(messageBodyText(stored).includes("<user-input>"), false);
   });
 
-  it("T-TX3: prepare 后提示词段含 attachment wrap 与原文", async () => {
+  it("T-TX3/T-CR8: prepare 后提示词段含 attachment wrap 与原文（历史 workplace 重放）", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);

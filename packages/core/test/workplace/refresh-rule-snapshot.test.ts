@@ -22,7 +22,7 @@ import {
 novelMasterTestFixture();
 
 describe("refreshRuleSnapshot (T-CR2)", () => {
-  it("T-CR2: evaluate→写 canon；file_cache 域空", async () => {
+  it("T-CR2/T-CR8: evaluate→写 canon；file_cache 域空（新规则保存不靠 chip）", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
