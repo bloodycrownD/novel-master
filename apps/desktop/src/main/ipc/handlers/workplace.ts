@@ -12,7 +12,6 @@ import type {
   WorkplaceSetDirRuleRequest,
   WorkplaceSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
-import { type WorkplaceService } from "@novel-master/core/workplace";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   getWorkplaceForScope,
@@ -58,22 +57,18 @@ async function loadWorkplaceRows(
 }
 
 /**
- * 规则保存后：投影 Composer 状态条（workplace + user_ops）整表替换。
+ * 规则保存后：投影 Composer 状态条（仅 user_ops）整表替换。
  * 不刷新规则快照、不 capture。
+ * （workplace 差集 chip 已废止；Step 3 再改 refreshRuleSnapshot / 删 suggest。）
  */
 async function suggestWorkplaceAttachmentsAfterRuleChange(
   rt: DesktopNovelMasterRuntime,
-  wt: WorkplaceService,
   sessionId: string | undefined,
 ): Promise<void> {
   if (sessionId == null || sessionId === "") {
     return;
   }
-  const attachments = await projectComposerStatusForSession(
-    rt,
-    wt,
-    sessionId,
-  );
+  const attachments = await projectComposerStatusForSession(rt, sessionId);
   notifyComposerAttachmentsSuggestToRenderer({ sessionId, attachments });
 }
 
@@ -107,7 +102,7 @@ export async function handleWorkplaceSetDirRule(
     });
     // 规则变更不写 capture；不刷新规则快照；workplace 草稿见 composerAttachmentsSuggest
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
-    await suggestWorkplaceAttachmentsAfterRuleChange(rt, wt, req.sessionId);
+    await suggestWorkplaceAttachmentsAfterRuleChange(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -126,7 +121,7 @@ export async function handleWorkplaceSetFileRule(
       inclusionMode: req.inclusionMode,
     });
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
-    await suggestWorkplaceAttachmentsAfterRuleChange(rt, wt, req.sessionId);
+    await suggestWorkplaceAttachmentsAfterRuleChange(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

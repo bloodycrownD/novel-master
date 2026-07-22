@@ -231,17 +231,7 @@ export function ChatComposer({
         return;
       }
       try {
-        const session = await rt.sessions.get(sessionId);
-        const worktree = rt.workplace({
-          kind: 'session',
-          projectId: session.projectId,
-          sessionId,
-        });
-        const status = await projectComposerStatusForSession(
-          rt,
-          worktree,
-          sessionId,
-        );
+        const status = await projectComposerStatusForSession(rt, sessionId);
         if (cancelled) {
           return;
         }
@@ -345,15 +335,8 @@ export function ChatComposer({
         }
         // 发送 flush 后 pending 空 → 上条应空；以投影为准刷新 chip
         try {
-          const session = await runtime.sessions.get(sessionId);
-          const worktree = runtime.workplace({
-            kind: 'session',
-            projectId: session.projectId,
-            sessionId,
-          });
           const status = await projectComposerStatusForSession(
             runtime,
-            worktree,
             sessionId,
           );
           applyComposerStatusAttachmentsReplace({

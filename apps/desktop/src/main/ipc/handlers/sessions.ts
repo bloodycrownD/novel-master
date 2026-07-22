@@ -126,15 +126,8 @@ export async function handleSessionsProjectComposerStatus(
 ): Promise<IpcResult<MessageAttachmentDto[]>> {
   try {
     const rt = await getDesktopRuntime();
-    const session = await rt.sessions.get(req.sessionId);
-    const worktree = rt.workplace({
-      kind: "session",
-      projectId: session.projectId,
-      sessionId: req.sessionId,
-    });
     const attachments = await projectComposerStatusForSession(
       rt,
-      worktree,
       req.sessionId,
     );
     return { ok: true, data: attachments };
