@@ -21,7 +21,7 @@ export function MessageRow({ row }: MessageRowProps) {
   const thinkingKey = 'msg:' + row.id;
   const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
 
-  /** 气泡右上角 ⋯：传按钮 rect 开菜单（不再依赖长按）。 */
+  /** ⋯ 菜单入口：传按钮 rect 开菜单（user / assistant 均在气泡上方工具行）。 */
   const onMenuBtnClick = (event: Event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -52,7 +52,6 @@ export function MessageRow({ row }: MessageRowProps) {
         const attachExpanded = !!state.attachGroupExpanded[attachKey];
         bubble = (
           <div className="bubble bubble--fill-width bubble--user-compose">
-            {menuBtn}
             {hasText ? (
               <div className="bubble-body">{String(row.text)}</div>
             ) : null}
@@ -65,17 +64,13 @@ export function MessageRow({ row }: MessageRowProps) {
           </div>
         );
       } else {
-        bubble = (
-          <div className="bubble">
-            {menuBtn}
-            {String(row.text)}
-          </div>
-        );
+        bubble = <div className="bubble">{String(row.text)}</div>;
       }
     }
   } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
     const toolGroupKey = 'msg:' + row.id;
     const toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
+    // ⋯ 不进 .bubble，外置到行内气泡上方（见下方 return）
     bubble = (
       <div
         className={
@@ -88,7 +83,6 @@ export function MessageRow({ row }: MessageRowProps) {
           )
         }
       >
-        {menuBtn}
         <AssistantBubbleInner
           text={row.text}
           textHtml={row.textHtml}
@@ -111,6 +105,8 @@ export function MessageRow({ row }: MessageRowProps) {
       className={'row message ' + role + hidden}
       data-id={row.id}
     >
+      {/* user / assistant ⋯ 均在 .row 内、.bubble 之前的工具行 */}
+      {bubble ? <div className="message-menu-toolbar">{menuBtn}</div> : null}
       {bubble}
     </div>
   );

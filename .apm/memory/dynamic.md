@@ -1,29 +1,10 @@
+﻿---
+createdAt: "2026-07-22 12:35:00"
+updatedAt: "2026-07-22 22:25:00"
 ---
-createdAt: '2026-05-23 17:38:51'
-updatedAt: '2026-07-22 01:20:00'
----
-task: code-dev-loop
-iteration: workspace-chat-vfs-upgrade
-branch: feature/workspace-chat-vfs-upgrade
-base_sha: 42ea5bfb
-head_sha: 5810bd06
-dag_version: 2
-status: dev-ready
-dev_ready: yes
-node_status:
-  impl-f1-fork: { status: done, func_ready: yes }
-  impl-f2-token: { status: done, func_ready: yes }
-  impl-f3-zip: { status: done, func_ready: yes }
-  impl-f4-batch: { status: done, func_ready: yes }
-open_must_fix: []
-spec_deviations: []
-manual_pending:
-  - phase-fork-manual
-  - phase-token-manual / T-T10
-  - phase-zip-manual
-  - T-B9 Desktop startDrag + Mobile saveDocuments
-bundle_full:
-  branch: feature/workspace-chat-vfs-upgrade
-  base_sha: 42ea5bfb
-  head_sha: 5810bd06
-  features: [fork, token, zip, batch]
+task: agile-dev
+type: feature
+iteration: mobile-chat-composer-annotate-ux
+branch: feature/mobile-chat-composer-annotate-ux
+status: 进行中
+note: 从回滚基线仅恢复「⋯ 外置到气泡上方」；不去皮。气泡 UI 另开迭代。
