@@ -17,7 +17,10 @@ export type ComposerSendableInput = {
    */
   readonly hasWorkplaceDelta?: boolean;
   /**
-   * 本会话存在未发送批注草稿（App annotateStore）。
+   * 本会话存在未发送批注草稿。
+   * **Core 布尔语义不变**：仅消费调用方传入的布尔值。
+   * App 侧应对文件批注 store 与消息批注 store **取或** 后再传入
+   *（`hasChatAnnotateDrafts(sessionId) || hasChatMessageAnnotateDrafts(sessionId)`）。
    * 可选；为 true 时允许仅批注发送。
    */
   readonly hasAnnotateDrafts?: boolean;

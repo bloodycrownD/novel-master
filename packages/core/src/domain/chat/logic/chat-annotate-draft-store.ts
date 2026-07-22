@@ -5,7 +5,10 @@
  * @module domain/chat/logic/chat-annotate-draft-store
  */
 
-import type { AnnotateDraft } from "../model/annotate-draft.schema.js";
+import {
+  isMessageAnnotatePath,
+  type AnnotateDraft,
+} from "../model/annotate-draft.schema.js";
 import type { MessageAttachment } from "../model/message-attachment.schema.js";
 
 const bySession = new Map<string, AnnotateDraft[]>();
@@ -53,7 +56,10 @@ export function hasChatAnnotateDrafts(
   return (bySession.get(sessionId)?.length ?? 0) > 0;
 }
 
-/** 按 path 聚合一只 annotate 预览 chip（`source:user_ops` + `action:annotate`）。 */
+/**
+ * 按 path 聚合一只 annotate 预览 chip（`source:user_ops` + `action:annotate`）。
+ * **忽略**消息批注伪 path（`path.includes('__message__:')`）；消息草稿走独立 store。
+ */
 export function chipsFromAnnotateStore(
   sessionId: string | undefined,
 ): MessageAttachment[] {
@@ -61,6 +67,10 @@ export function chipsFromAnnotateStore(
   const seen = new Set<string>();
   const chips: MessageAttachment[] = [];
   for (const d of drafts) {
+    // 消息批注永不进 chip（防御误写入文件 store 的伪 path）
+    if (isMessageAnnotatePath(d.path)) {
+      continue;
+    }
     if (seen.has(d.path)) {
       continue;
     }
