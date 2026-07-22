@@ -1,11 +1,28 @@
 ﻿---
 createdAt: "2026-07-22 12:35:00"
-updatedAt: "2026-07-22 23:05:00"
+updatedAt: "2026-07-23 00:30:00"
 ---
-task: agile-dev
-type: feature
-iteration: mobile-chat-composer-annotate-ux
-agile_name: remove-message-annotate
+task: code-dev-loop
+spec_confirmed: yes
+execute_ready_confirmed: yes
 branch: feature/mobile-chat-composer-annotate-ux
-status: done
-note: User+Assistant 消息批注全链路已移除并提交；文件批注与 __message__: Undo/chip skip 保留；transcript menu=仅复制
+base_sha: 4569d0b5
+dag_version: 1
+status: in-progress
+wave_plan:
+  - [impl-xn-core, impl-chip-label-project]
+  - [verify-wave0]
+  - [cr-func-wave0]
+  - [impl-chip-rule-send]
+  - [verify-chip-mid]
+  - [impl-chip-kkv-undo]
+  - [impl-xn-shells]
+  - [verify-late]
+  - [cr-func-final]
+node_status:
+  impl-xn-core: done
+specs:
+  chip: Iterations/annotate-user-ops-unify/features/composer-chip-ops-annotate-recontract/spec.md
+  xn: Iterations/annotate-user-ops-unify/features/annotate-cross-node-highlight/spec.md
+open_must_fix: []
+spec_deviations: []

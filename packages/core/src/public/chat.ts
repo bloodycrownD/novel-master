@@ -190,10 +190,19 @@ export {
   updateChatAnnotateDraft,
 } from '../domain/chat/logic/chat-annotate-draft-store.js';
 export {
+  buildFlatTextIndex,
   findAllOccurrences,
   groupAnnotateIdsByOriginalText,
+  mapFlatRangeToSegments,
+  normalizeAnnotateNeedle,
+  normalizeAnnotateSegmentText,
   parseAnnotateIdsAttr,
   sortAnnotateTextsLongestFirst,
+} from '../domain/chat/logic/annotate-highlight.js';
+export type {
+  FlatSegmentLocalRange,
+  FlatTextIndex,
+  FlatTextSegmentSpan,
 } from '../domain/chat/logic/annotate-highlight.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
