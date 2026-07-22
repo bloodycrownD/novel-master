@@ -5,7 +5,30 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
 .row { display: flex; width: 100%; flex-direction: column; }
 .row.user { align-items: flex-end; }
 .row.assistant, .row.stream, .row.tool { align-items: flex-start; }
-.bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
+.bubble { position: relative; max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
+/* 消息 ⋯：外置于气泡上方工具行（user / assistant 统一；替代长按主路径） */
+.message-menu-btn {
+  position: absolute; top: 4px; right: 4px; z-index: 1;
+  width: 28px; height: 28px; padding: 0; margin: 0;
+  border: none; border-radius: 6px; background: transparent;
+  color: inherit; opacity: 0.55; font-size: 18px; line-height: 1;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none; user-select: none;
+}
+.message-menu-btn:active { opacity: 1; background: rgba(0, 0, 0, 0.08); }
+/* user/assistant：⋯ 外置于 .bubble 之前；全宽右对齐；取消 absolute 以免相对气泡定位 */
+/* 按钮落在 pane（--bg）上，用 --text 保证 light/dark 可见；勿再假设白字蓝底 */
+.row.message .message-menu-toolbar {
+  display: flex; justify-content: flex-end; align-self: stretch;
+  width: 100%; margin: 0 0 2px;
+}
+.row.message .message-menu-toolbar .message-menu-btn {
+  position: static; flex-shrink: 0;
+  color: var(--text, #111);
+}
+.row.message .message-menu-toolbar .message-menu-btn:active {
+  background: rgba(0, 0, 0, 0.08);
+}
 .row.user .bubble { background: var(--primary, #007aff); color: #fff; }
 /* 含附件：仍用用户蓝气泡，附件组嵌在同条消息内；卡片用半透明玻璃态适配蓝底 */
 .row.user .bubble.bubble--user-compose {

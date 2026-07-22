@@ -1,11 +1,11 @@
 /**
- * User VFS 发送前编排单入口（定案 A：materialize 并入 re-append merge）。
+ * User VFS 发送前编排单入口（chip-recontract D3：无 workplace materialize）。
  *
  * runAgentTurn 在 append user 前调用本模块，保证：
  * - 空续跑（allowResumeWithoutInput）+ pending 时末条 user 经 delete → flush → re-append，
- *   merge = trailing∪flush∪attach∪materialize（workplace）写回末条 user
+ *   merge = trailing∪flush∪attach 写回末条 user（不含 `source:workplace`）
  * - 否则仅 flush pending → 返回 attachments 供 caller 并入新 append
- * - **不** insert UA / ack；attachments 不丢
+ * - **不** insert UA / ack；attachments 不丢；**不** materialize workplace 差集
  *
  * @module service/agent/logic/prepare-user-vfs-turn-for-agent-run
  */
@@ -44,11 +44,6 @@ export interface PrepareUserVfsTurnForAgentRunInput {
    * 空续跑 re-append 时并入写回消息，避免丢 chip。
    */
   readonly composerAttachments?: readonly MessageAttachment[];
-  /**
-   * Core materialize 的 workplace 差集（定案 A）；
-   * re-append 时与 flush/attach/trailing 同级 merge。
-   */
-  readonly workplaceAttachments?: readonly MessageAttachment[];
 }
 
 export interface PrepareUserVfsTurnForAgentRunResult {
@@ -64,32 +59,27 @@ export interface PrepareUserVfsTurnForAgentRunResult {
 }
 
 /**
- * re-append merge：trailing∪flush∪attach∪materialize（剔除预览 user_ops）。
+ * re-append merge：trailing∪flush∪attach（剔除预览 user_ops；无 workplace materialize）。
  */
 function mergeAttachments(
   trailing: readonly MessageAttachment[] | undefined,
   flushed: readonly MessageAttachment[],
   composer?: readonly MessageAttachment[],
-  workplace?: readonly MessageAttachment[],
 ): MessageAttachment[] | undefined {
   const composerAttachOnly = (composer ?? []).filter(
     (a) => a.source === "attach",
-  );
-  const workplaceOnly = (workplace ?? []).filter(
-    (a) => a.source === "workplace",
   );
   const merged = [
     ...(trailing ?? []).filter((a) => a.source !== "user_ops"),
     ...flushed,
     ...composerAttachOnly,
-    ...workplaceOnly,
   ];
   return merged.length > 0 ? merged : undefined;
 }
 
 /**
  * flush 前若 pending 非空、空续跑且允许 resume 且末条为 user，暂存并删除该条；
- * flush 后再 append 写回（含 attachments + materialize）。
+ * flush 后再 append 写回（含 trailing∪flush∪attach）。
  */
 export async function prepareUserVfsTurnForAgentRun(
   input: PrepareUserVfsTurnForAgentRunInput,
@@ -101,7 +91,6 @@ export async function prepareUserVfsTurnForAgentRun(
     trimmedInput,
     allowResumeWithoutInput,
     composerAttachments,
-    workplaceAttachments,
   } = input;
 
   let trailingUser: TrailingUserSnapshot | null = null;
@@ -139,7 +128,6 @@ export async function prepareUserVfsTurnForAgentRun(
       trailingUser.attachments,
       flushedAttachments,
       composerAttachments,
-      workplaceAttachments,
     );
     const reAppended = await messages.append(
       sessionId,

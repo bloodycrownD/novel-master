@@ -1,6 +1,6 @@
 /**
- * Mobile mention 专属：controlled-mentions 内部格式 ↔ 对外纯字符串 `@/path`。
- * 禁止进 core（T-X2-2）。
+ * Mobile mention 专属：controlled-mentions 内部格式 ↔ 对外纯字符串。
+ * `@path` → `@/path`。禁止进 core（T-X2-2）。
  */
 import {
   generateValueFromMentionStateAndChangedText,
@@ -9,12 +9,15 @@ import {
   type TriggersConfig,
 } from 'react-native-controlled-mentions';
 
-/** 与 controlled-mentions 默认 trigger 同形；name/id 均为逻辑 path（含前导 `/`）。 */
-export type ComposerAtPathTriggersConfig = TriggersConfig<'atPath'>;
+/** Composer `@path` mention triggers。 */
+export type ComposerTriggersConfig = TriggersConfig<'atPath'>;
 
-/** mention 内部值 → 对外纯字符串（`{@}[path](id)` → `@path`）。 */
+/** @deprecated 兼容旧测试别名；请用 ComposerTriggersConfig。 */
+export type ComposerAtPathTriggersConfig = ComposerTriggersConfig;
+
+/** mention 内部值 → 对外展示 plain。 */
 export function mentionValueToPlain(mentionValue: string): string {
-  return replaceTriggerValues(mentionValue, ({ name }) => `@${name}`);
+  return replaceTriggerValues(mentionValue, ({name}) => `@${name}`);
 }
 
 /** `@/path` token → mention suggestion（name/id = 逻辑 path）。 */
@@ -23,10 +26,10 @@ export function suggestionFromAtPathToken(token: string): {
   name: string;
 } {
   const path = token.startsWith('@') ? token.slice(1) : token;
-  return { id: path, name: path };
+  return {id: path, name: path};
 }
 
-/** 默认 mention 标记串（与库 getTriggerValue 同形）。 */
+/** 默认 `@path` mention 标记串（与库 getTriggerValue 同形）。 */
 export function formatAtPathMentionMarkup(path: string): string {
   return `{@}[${path}](${path})`;
 }
@@ -38,11 +41,11 @@ export function formatAtPathMentionMarkup(path: string): string {
 export function tryAtomicMentionDelete(
   mentionValue: string,
   changedPlain: string,
-  triggersConfig: ComposerAtPathTriggersConfig,
+  triggersConfig: ComposerTriggersConfig,
 ): string | null {
   const configs = [triggersConfig.atPath];
   const state = parseValue(mentionValue, configs);
-  const { parts, plainText } = state;
+  const {parts, plainText} = state;
   if (changedPlain.length >= plainText.length) {
     return null;
   }
@@ -91,9 +94,11 @@ export function tryAtomicMentionDelete(
 export function mergeProgrammaticPlainIntoMentionValue(
   prevMentionValue: string,
   nextPlain: string,
-  triggersConfig: ComposerAtPathTriggersConfig,
+  triggersConfig: ComposerTriggersConfig,
 ): string {
-  const configs = [triggersConfig.atPath];
+  const configs = [triggersConfig.atPath].filter(
+    (c): c is NonNullable<typeof c> => c != null,
+  );
   const prev = parseValue(prevMentionValue, configs);
   if (prev.plainText === nextPlain) {
     return prevMentionValue;
@@ -111,9 +116,13 @@ export function mergeProgrammaticPlainIntoMentionValue(
 function findSingleAddedRange(
   prev: string,
   next: string,
-): { start: number; end: number } | null {
+): {start: number; end: number} | null {
   let prefix = 0;
-  while (prefix < prev.length && prefix < next.length && prev[prefix] === next[prefix]) {
+  while (
+    prefix < prev.length &&
+    prefix < next.length &&
+    prev[prefix] === next[prefix]
+  ) {
     prefix++;
   }
   let suffix = 0;
@@ -129,7 +138,7 @@ function findSingleAddedRange(
   if (start >= end) {
     return null;
   }
-  return { start, end };
+  return {start, end};
 }
 
 /**
@@ -137,14 +146,14 @@ function findSingleAddedRange(
  */
 function promotePlainAtPathsInRange(
   mentionValue: string,
-  triggersConfig: ComposerAtPathTriggersConfig,
-  range: { start: number; end: number },
+  triggersConfig: ComposerTriggersConfig,
+  range: {start: number; end: number},
 ): string {
   const plain = mentionValueToPlain(mentionValue);
   const slice = plain.slice(range.start, range.end);
   // 与 scan / 历史 token 同口径：@ + 非空白非 @
   const tokenRe = /@([^\s@]+)/g;
-  const promotions: Array<{ absStart: number; absEnd: number; path: string }> =
+  const promotions: Array<{absStart: number; absEnd: number; path: string}> =
     [];
   let m: RegExpExecArray | null;
   while ((m = tokenRe.exec(slice)) != null) {
@@ -153,11 +162,16 @@ function promotePlainAtPathsInRange(
     // 边界：行首或空白/(
     if (absStart > 0) {
       const prevCh = plain[absStart - 1]!;
-      if (prevCh !== ' ' && prevCh !== '\n' && prevCh !== '\t' && prevCh !== '(') {
+      if (
+        prevCh !== ' ' &&
+        prevCh !== '\n' &&
+        prevCh !== '\t' &&
+        prevCh !== '('
+      ) {
         continue;
       }
     }
-    promotions.push({ absStart, absEnd, path: m[1]! });
+    promotions.push({absStart, absEnd, path: m[1]!});
   }
   if (promotions.length === 0) {
     return mentionValue;
@@ -174,8 +188,8 @@ function promotePlainAtPathsInRange(
     }));
 
   type Span =
-    | { kind: 'mention'; start: number; end: number; original: string }
-    | { kind: 'promote'; start: number; end: number; path: string };
+    | {kind: 'mention'; start: number; end: number; original: string}
+    | {kind: 'promote'; start: number; end: number; path: string};
   const spans: Span[] = [
     ...mentionSpans.map(s => ({
       kind: 'mention' as const,
@@ -186,9 +200,7 @@ function promotePlainAtPathsInRange(
     ...promotions
       .filter(
         p =>
-          !mentionSpans.some(
-            s => p.absStart < s.end && p.absEnd > s.start,
-          ),
+          !mentionSpans.some(s => p.absStart < s.end && p.absEnd > s.start),
       )
       .map(p => ({
         kind: 'promote' as const,

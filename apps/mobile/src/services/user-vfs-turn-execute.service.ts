@@ -27,15 +27,8 @@ export async function executeSessionUserVfsOp(
   if (!result.ok) {
     throw result.error;
   }
-  const session = await runtime.sessions.get(sessionId);
-  const worktree = runtime.workplace({
-    kind: 'session',
-    projectId: session.projectId,
-    sessionId,
-  });
   const attachments = await projectComposerStatusForSession(
     runtime,
-    worktree,
     sessionId,
   );
   applyComposerStatusAttachmentsReplace({ sessionId, attachments });

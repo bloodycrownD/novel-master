@@ -1,29 +1,28 @@
----
-createdAt: '2026-05-23 17:38:51'
-updatedAt: '2026-07-22 01:20:00'
+﻿---
+createdAt: "2026-07-22 12:35:00"
+updatedAt: "2026-07-23 00:30:00"
 ---
 task: code-dev-loop
-iteration: workspace-chat-vfs-upgrade
-branch: feature/workspace-chat-vfs-upgrade
-base_sha: 42ea5bfb
-head_sha: 5810bd06
-dag_version: 2
-status: dev-ready
-dev_ready: yes
+spec_confirmed: yes
+execute_ready_confirmed: yes
+branch: feature/mobile-chat-composer-annotate-ux
+base_sha: 4569d0b5
+dag_version: 1
+status: in-progress
+wave_plan:
+  - [impl-xn-core, impl-chip-label-project]
+  - [verify-wave0]
+  - [cr-func-wave0]
+  - [impl-chip-rule-send]
+  - [verify-chip-mid]
+  - [impl-chip-kkv-undo]
+  - [impl-xn-shells]
+  - [verify-late]
+  - [cr-func-final]
 node_status:
-  impl-f1-fork: { status: done, func_ready: yes }
-  impl-f2-token: { status: done, func_ready: yes }
-  impl-f3-zip: { status: done, func_ready: yes }
-  impl-f4-batch: { status: done, func_ready: yes }
+  impl-xn-core: done
+specs:
+  chip: Iterations/annotate-user-ops-unify/features/composer-chip-ops-annotate-recontract/spec.md
+  xn: Iterations/annotate-user-ops-unify/features/annotate-cross-node-highlight/spec.md
 open_must_fix: []
 spec_deviations: []
-manual_pending:
-  - phase-fork-manual
-  - phase-token-manual / T-T10
-  - phase-zip-manual
-  - T-B9 Desktop startDrag + Mobile saveDocuments
-bundle_full:
-  branch: feature/workspace-chat-vfs-upgrade
-  base_sha: 42ea5bfb
-  head_sha: 5810bd06
-  features: [fork, token, zip, batch]

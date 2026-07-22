@@ -16,7 +16,7 @@ export const STATUS_CHIP_ZH: Readonly<
   delete: "删除",
   write: "创建",
   edit: "编辑",
-  mkdir: "建目",
+  mkdir: "创建",
   rename: "重命",
   workplaceChange: "规则",
   userAttach: "", // 不进状态 chip；映射表仍保留
@@ -30,7 +30,7 @@ const LEGACY_PREFIX_ZH: Readonly<Record<string, string>> = {
   write: "创建",
   edit: "编辑",
   delete: "删除",
-  mkdir: "建目",
+  mkdir: "创建",
   rename: "重命",
   workplaceChange: "规则",
   annotate: "批注",

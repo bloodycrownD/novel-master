@@ -44,7 +44,7 @@ test("T-HC5: attach 目录文案为 @path，不含「规则 ·」", () => {
   assert.ok(!label.includes("规则 ·"));
 });
 
-test("T-HC5/T-CHIP2: workplace 为「规则:/path」；user_ops 为中文二字:path", () => {
+test("T-HC5/T-CHIP2/T-CR8: workplace 为「规则:/path」；user_ops 为中文二字:path", () => {
   assert.equal(
     formatMessageAttachmentLabel(
       attach({

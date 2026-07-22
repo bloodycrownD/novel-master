@@ -91,7 +91,7 @@ describe("SqliteSessionRepository", () => {
     assert.deepEqual(parseComposerDraftJson(again), draft);
   });
 
-  it("T-LF1：clearSession 后 composer_draft 仍保留；状态投影空", async () => {
+  it("T-LF1：clearSession（手动重置/删会话口径）后 composer_draft 仍保留；状态投影空", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -154,9 +154,6 @@ describe("SqliteSessionRepository", () => {
     );
 
     const status = await projectComposerStatusAttachments(session.id, {
-      sessionKkv: ctx.sessionKkv,
-      layout: { workplace: true },
-      loadLiveWorkplacePaths: async () => [],
       previewUserOpsActions: async () => [],
     });
     assert.deepEqual(status, []);

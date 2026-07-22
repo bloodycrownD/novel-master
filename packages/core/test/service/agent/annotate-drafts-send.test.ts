@@ -19,7 +19,11 @@ import { hasComposerSendableInput } from "@/domain/chat/logic/composer-sendable-
 import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
-import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import {
+  messageAttachmentSchema,
+  type MessageAttachment,
+} from "@/domain/chat/model/message-attachment.schema.js";
+import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -312,6 +316,20 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.match(ann[1]!.content ?? "", /"userAnnotation": "二"/);
 
     resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("T-MA6: 文件形 buildAnnotateAttachmentFromDraft(AnnotateDraft) 签名仍可用", () => {
+    const fileOnly: AnnotateDraft = {
+      id: "desktop-ok",
+      path: "/desktop.md",
+      originalText: "x",
+      userAnnotation: "y",
+    };
+    const att = buildAnnotateAttachmentFromDraft(fileOnly);
+    assert.equal(att.path, "/desktop.md");
+    assert.equal(att.action, "annotate");
+    assert.equal(att.name, "/desktop.md");
+    assert.equal(messageAttachmentSchema.safeParse(att).success, true);
   });
 
   it("无输入且无 annotate → 仍抛消息不能为空", async () => {

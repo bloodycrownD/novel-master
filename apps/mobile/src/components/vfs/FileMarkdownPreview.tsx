@@ -100,7 +100,8 @@ export function FileMarkdownPreview({
   const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(
     defaultVfsMarkdownPreviewEngine(),
   );
-  const [pathDrafts, setPathDrafts] = useState<AnnotateDraft[]>([]);
+  /** store 变更时递增，驱动 pathDrafts 同步重算（禁止仅靠滞后 useEffect 派生）。 */
+  const [draftTick, setDraftTick] = useState(0);
   const [addVisible, setAddVisible] = useState(false);
   const [pendingOriginalText, setPendingOriginalText] = useState('');
   const [detailVisible, setDetailVisible] = useState(false);
@@ -123,27 +124,27 @@ export function FileMarkdownPreview({
     }, [refreshPreviewEngine]),
   );
 
-  const syncPathDrafts = useCallback(() => {
+  /**
+   * path/session 变化时在 render 期同步派生当前文件草稿。
+   * 避免 useEffect 滞后一帧导致新 path 错配旧 path 的 annotations。
+   */
+  const pathDrafts = useMemo((): AnnotateDraft[] => {
     if (!annotateEnabled || sessionId == null || sessionId === '') {
-      setPathDrafts([]);
-      return;
+      return [];
     }
-    setPathDrafts(
-      listChatAnnotateDrafts(sessionId).filter(d => d.path === path),
-    );
-  }, [annotateEnabled, sessionId, path]);
+    return listChatAnnotateDrafts(sessionId).filter(d => d.path === path);
+  }, [annotateEnabled, sessionId, path, draftTick]);
 
   useEffect(() => {
-    syncPathDrafts();
     if (!annotateEnabled || sessionId == null || sessionId === '') {
       return;
     }
     return subscribeChatAnnotateDraft(changed => {
       if (changed === sessionId) {
-        syncPathDrafts();
+        setDraftTick(t => t + 1);
       }
     });
-  }, [annotateEnabled, sessionId, syncPathDrafts]);
+  }, [annotateEnabled, sessionId]);
 
   const annotationMarks: readonly RichDocumentAnnotationMark[] = useMemo(
     () =>
@@ -381,6 +382,7 @@ export function FileMarkdownPreview({
       return (
         <View style={[styles.root, previewFill && styles.fillRoot]}>
           <RichDocumentWebView
+            key={path}
             plain={content}
             overLimit={plainOverLimit}
             style={previewFill ? styles.webBody : undefined}
@@ -409,6 +411,7 @@ export function FileMarkdownPreview({
         ]}>
         {nonMdUseWebViewPreview || annotateEnabled ? (
           <RichDocumentWebView
+            key={path}
             html={nonMdBodyHtml}
             plain={nonMdBody}
             overLimit={nonMdOverLimit}
@@ -443,6 +446,7 @@ export function FileMarkdownPreview({
       ) : null}
       {mdUseWebViewPreview || (annotateEnabled && split?.closed) ? (
         <RichDocumentWebView
+          key={path}
           html={mdBodyHtml}
           plain={mdBody || content}
           overLimit={mdOverLimit}

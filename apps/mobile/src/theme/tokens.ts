@@ -14,6 +14,11 @@ export interface ThemeTokens {
   border: string;
   borderLight: string;
   primary: string;
+  /**
+   * 文本选中高亮（柔和 tint，非 primary 原色整块）。
+   * Composer 等输入框 `selectionColor` 使用。
+   */
+  selection: string;
   headerBackground: string;
   tabBarBackground: string;
   tabBarActive: string;
@@ -35,6 +40,7 @@ export const lightTheme: ThemeTokens = {
   border: '#C6C6C8',
   borderLight: '#E5E5EA',
   primary: '#007AFF',
+  selection: '#007AFF55',
   headerBackground: '#FFFFFF',
   tabBarBackground: '#FFFFFF',
   tabBarActive: '#007AFF',
@@ -56,6 +62,7 @@ export const darkTheme: ThemeTokens = {
   border: '#38383A',
   borderLight: '#2C2C2E',
   primary: '#0A84FF',
+  selection: '#0A84FF55',
   headerBackground: '#1C1C1E',
   tabBarBackground: '#1C1C1E',
   tabBarActive: '#0A84FF',

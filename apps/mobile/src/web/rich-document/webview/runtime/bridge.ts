@@ -9,7 +9,6 @@ import {
 } from './document-model';
 import { post } from './post';
 import {
-  refreshAnnotateMarks,
   setAnnotateEnabled,
   setAnnotations,
 } from './annotate';
@@ -57,10 +56,9 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
 /** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
 export function setDocument(payload: DocumentPayload | null | undefined): void {
   invokeRegisteredSetDocumentView(payload ?? {});
-  // Preact 重渲染会清掉 mark；下一帧重建下划线
-  window.setTimeout(() => {
-    refreshAnnotateMarks();
-  }, 0);
+  // 同步 refresh 已由 main.registerSetDocumentView 在 render 后完成。
+  // 禁止再 setTimeout(0) 重建 marks：滞后回调可能在后续 setAnnotations 之后
+  // 用旧/空 annotations 盖住最终帧（多文件切换下划线丢失的根因之一）。
 }
 
 export function handleHostMessage(raw: unknown): void {

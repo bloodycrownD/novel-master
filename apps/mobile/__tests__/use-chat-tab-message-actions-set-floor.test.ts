@@ -1,6 +1,6 @@
 /**
  * T-SF1：Mobile runSetFloor 编排链（setMessageFloorAtMessage → reload → bump；
- * clear session kkv 由 Core 完成，UI 不再调 capture）。
+ * rule_snapshot+file_cache 由 Core clearDomain，UI 不再调 capture）。
  */
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import React from 'react';
@@ -23,6 +23,11 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
 jest.mock('../src/services/regex-apply-channel', () => ({
   loadSessionMessagesPageForDisplay: jest.fn(),
   loadSessionMessagesTailForDisplay: jest.fn(),
+}));
+
+jest.mock('../src/services/project-composer-status.service', () => ({
+  refreshComposerStatusAfterFloorOrCompaction: jest.fn(async () => undefined),
+  refreshComposerStatusAfterSessionKkvCleared: jest.fn(async () => undefined),
 }));
 
 jest.mock('../src/services/message-rollback.service', () => ({
@@ -102,7 +107,7 @@ describe('useChatTabMessageActions set-floor', () => {
     mockRefreshChatTokenLabel.mockResolvedValue(undefined);
   });
 
-  it('T-SF1: runSetFloor 链 setMessageFloor → reload → bump（kkv 由 Core clear）', async () => {
+  it('T-SF1: runSetFloor 链 setMessageFloor → reload → bump（kkv 由 Core clearDomain）', async () => {
     const api = mountActions();
 
     await act(async () => {

@@ -1,12 +1,12 @@
 /**
- * Composer 发送门闩（与 Desktop T-SR1b / T-ATD* / T-AN4 对齐）。
+ * Composer 发送门闩（T-CR3 / T-ATD* / T-AN4）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { resolveComposerSendIntent } from "../../src/domain/chat/logic/composer-send-intent.js";
 
 describe("resolveComposerSendIntent", () => {
-  it("T-SR1b: 仅状态条 workplace 可发且 allowResume=false；入参无预览 chip", () => {
+  it("T-CR3: 仅状态条 workplace → 不可发；入参无预览 chip", () => {
     const intent = resolveComposerSendIntent({
       text: "",
       attachments: [{ source: "workplace" }],
@@ -14,11 +14,10 @@ describe("resolveComposerSendIntent", () => {
       canResumeWithoutInput: false,
       hasModel: true,
     });
-    assert.equal(intent.sendDisabled, false);
-    assert.equal(intent.hasSendable, true);
+    assert.equal(intent.sendDisabled, true);
+    assert.equal(intent.hasSendable, false);
     assert.equal(intent.allowResumeWithoutInput, false);
     assert.equal(intent.attachOnly.length, 0);
-    assert.equal(intent.hasWorkplaceDelta, true);
   });
 
   it("T-ATD*: 正文含 @path 可发；draft attach chip 不计入门闩", () => {

@@ -36,7 +36,6 @@ describe('chat-annotate-draft wiring', () => {
         text: '',
         attachmentCount: 0,
         hasPendingUserOps: false,
-        hasWorkplaceDelta: false,
         hasAnnotateDrafts: true,
       }),
     ).toBe(true);

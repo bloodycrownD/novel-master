@@ -3,10 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  diffWorkplacePaths,
-  workplaceAttachmentsFromRuleDelta,
-} from "@/domain/workplace/logic/diff-workplace-paths.js";
+import { diffWorkplacePaths } from "@/domain/workplace/logic/diff-workplace-paths.js";
 import { fileCacheKey } from "@/domain/session-kkv/model/session-kkv-domains.js";
 
 describe("diffWorkplacePaths (T-RD1 / T-RD2)", () => {
@@ -42,7 +39,7 @@ describe("diffWorkplacePaths (T-RD1 / T-RD2)", () => {
     assert.deepEqual(diffWorkplacePaths(live, cacheKeys), []);
   });
 
-  it("header: 命中亦视为已加载；workplaceAttachmentsFromRuleDelta 产出草稿形状", () => {
+  it("header: 命中亦视为已加载", () => {
     const live = [
       { path: "/h.md", status: "full" as const },
       { path: "/need.md", status: "full" as const },
@@ -50,16 +47,6 @@ describe("diffWorkplacePaths (T-RD1 / T-RD2)", () => {
     const cacheKeys = new Set([fileCacheKey("header", "/h.md")]);
 
     assert.deepEqual(diffWorkplacePaths(live, cacheKeys), ["/need.md"]);
-    assert.deepEqual(workplaceAttachmentsFromRuleDelta(live, cacheKeys), [
-      {
-        name: "/need.md",
-        source: "workplace",
-        type: "text",
-        content: null,
-        path: "/need.md",
-        action: "workplaceChange",
-      },
-    ]);
   });
 
   it("live path 去重，保持首次出现顺序", () => {

@@ -33,7 +33,6 @@ export function ChatConversationPanel({
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
-
   const {
     conversationPanel,
     setConversationPanel,

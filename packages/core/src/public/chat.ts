@@ -33,10 +33,13 @@ export type { MessageAttachmentAction } from '../domain/chat/model/message-attac
 export {
   annotateDraftSchema,
   annotateDraftsSchema,
+  isMessageAnnotatePath,
+  MESSAGE_ANNOTATE_PATH_MARKER,
 } from '../domain/chat/model/annotate-draft.schema.js';
 export type {
   AnnotateDraft,
   AnnotateDrafts,
+  SendAnnotateDraft,
 } from '../domain/chat/model/annotate-draft.schema.js';
 export {
   EMPTY_COMPOSER_DRAFT,
@@ -65,7 +68,9 @@ export {
   buildAnnotateAttachmentFromDraft,
   buildAttachmentActionXml,
   buildDirTreeActionXml,
+  buildFileAnnotateAttachmentFromDraft,
   buildFileRefActionXml,
+  parseAnnotateDraftsFromAttachments,
 } from '../domain/chat/logic/build-attachment-action-xml.js';
 export {
   PROMPT_FILE_SEEN_SHORT_TIP,
@@ -185,10 +190,19 @@ export {
   updateChatAnnotateDraft,
 } from '../domain/chat/logic/chat-annotate-draft-store.js';
 export {
+  buildFlatTextIndex,
   findAllOccurrences,
   groupAnnotateIdsByOriginalText,
+  mapFlatRangeToSegments,
+  normalizeAnnotateNeedle,
+  normalizeAnnotateSegmentText,
   parseAnnotateIdsAttr,
   sortAnnotateTextsLongestFirst,
+} from '../domain/chat/logic/annotate-highlight.js';
+export type {
+  FlatSegmentLocalRange,
+  FlatTextIndex,
+  FlatTextSegmentSpan,
 } from '../domain/chat/logic/annotate-highlight.js';
 export {
   USER_VFS_TURN_ACK_TEXT,

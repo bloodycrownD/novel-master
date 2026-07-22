@@ -528,7 +528,7 @@ describe("runAgentTurn", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-SR1：丢弃预览 workplace/user_ops；materialize 落库 source:workplace；user_ops 来自 flush", async () => {
+  it("T-SR1：丢弃预览 workplace/user_ops；不 materialize workplace；user_ops 来自 flush", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     let appendedOpts:
       | {
@@ -541,7 +541,6 @@ describe("runAgentTurn", () => {
           }[];
         }
       | undefined;
-    // 同 path 与 workplace 并存：直 concat 不去重
     const flushAtt = flushWriteUserOpsAttachment("/delta.md");
     const runtime = makeRuntime({
       evaluateRuleView: async () => ruleViewWithFile("/delta.md"),
@@ -588,9 +587,10 @@ describe("runAgentTurn", () => {
       // runner deps stubbed
     }
     const atts = appendedOpts?.attachments ?? [];
-    assert.ok(
-      atts.some((a) => a.source === "workplace" && a.path === "/delta.md"),
-      "落库须含 materialize 的 workplace",
+    assert.equal(
+      atts.some((a) => a.source === "workplace"),
+      false,
+      "新路径不得 materialize / 保留预览 workplace",
     );
     assert.equal(
       atts.some((a) => a.path === "/stale-preview.md"),
@@ -603,59 +603,47 @@ describe("runAgentTurn", () => {
     assert.equal(ops[0]?.action, "write");
     assert.equal(ops[0]?.name, "/delta.md");
     assert.equal(ops[0]?.content, flushAtt.content);
-    assert.ok(
-      atts.some((a) => a.source === "workplace" && a.path === "/delta.md") &&
-        atts.some((a) => a.source === "user_ops" && a.path === "/delta.md"),
-      "同 path workplace+user_ops 须并存",
-    );
     assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-SR1b：空正文+仅 workplace 差集 → append 含 workplace；误置 allowResume 亦不纯 resume", async () => {
+  it("T-CR3：空正文+仅规则可见文件（无 pending/批注）→ 抛「消息不能为空」且不 append", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     refreshUserVfsUnifiedToolTurnSnapshot(false);
     let appendCount = 0;
-    let appendedOpts:
-      | { attachments?: readonly { source?: string; path?: string }[] }
-      | undefined;
-    let listCalledForResume = false;
+    let evaluateCalled = false;
     const runtime = makeRuntime({
-      evaluateRuleView: async () => ruleViewWithFile("/only-wp.md"),
-      listKeys: async () => [],
-      listBySession: async () => {
-        listCalledForResume = true;
-        return [{ id: "u-trail", role: "user", content: { blocks: [] } }];
+      evaluateRuleView: async () => {
+        evaluateCalled = true;
+        return ruleViewWithFile("/only-wp.md");
       },
-      append: async (_sid, _role, _content, opts) => {
+      listKeys: async () => [],
+      append: async () => {
         appendCount += 1;
-        appendedOpts = opts;
-        return { id: "m-sr1b" };
+        return { id: "m-cr3" };
       },
     });
-    try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
-        definitionOverride: workplaceOnDefinition,
-        allowResumeWithoutInput: true,
-      });
-    } catch {
-      // runner deps stubbed
-    }
-    assert.equal(appendCount, 1, "有差集须 append，不得纯 resume");
-    assert.equal(
-      listCalledForResume,
-      false,
-      "有差集时不得进入 resume-check listBySession",
+    await assert.rejects(
+      () =>
+        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+          definitionOverride: workplaceOnDefinition,
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof AgentTurnError);
+        assert.equal(err.message, "消息不能为空");
+        return true;
+      },
     );
-    assert.ok(
-      appendedOpts?.attachments?.some(
-        (a) => a.source === "workplace" && a.path === "/only-wp.md",
-      ),
+    assert.equal(appendCount, 0, "仅规则变更不得 append user");
+    assert.equal(
+      evaluateCalled,
+      false,
+      "发送路径不得再 evaluateRuleView materialize",
     );
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("B-01：allowAssistantContinue + 有规则可见文件 + 空 cache → 不因 workplace 差集误 append 空 user", async () => {
+  it("B-01：allowAssistantContinue + 空输入 → 不 append 空 user", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     refreshUserVfsUnifiedToolTurnSnapshot(false);
     const existing = [
@@ -668,7 +656,7 @@ describe("runAgentTurn", () => {
     let appendCount = 0;
     const runtime = makeRuntime({
       evaluateRuleView: async () => ruleViewWithFile("/visible.md"),
-      listKeys: async () => [], // 空 file_cache → materialize 有差集
+      listKeys: async () => [],
       listBySession: async () => existing,
       append: async () => {
         appendCount += 1;
@@ -684,7 +672,7 @@ describe("runAgentTurn", () => {
     } catch {
       // runner deps stubbed
     }
-    assert.equal(appendCount, 0, "continue 时不得因 hasWorkplaceDelta 误 append");
+    assert.equal(appendCount, 0, "continue 时不得误 append");
     const after = await runtime.messages.listBySession("s");
     assert.equal(after.length, existing.length, "listBySession 长度不变");
     assert.equal(
@@ -695,16 +683,12 @@ describe("runAgentTurn", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("A7: workplace=false → 即便有规则差集也不 materialize", async () => {
+  it("A7: workplace=false → 空输入仍抛「消息不能为空」", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     refreshUserVfsUnifiedToolTurnSnapshot(false);
-    let evaluateCalled = false;
     let appendCount = 0;
     const runtime = makeRuntime({
-      evaluateRuleView: async () => {
-        evaluateCalled = true;
-        return ruleViewWithFile("/should-not-send.md");
-      },
+      evaluateRuleView: async () => ruleViewWithFile("/should-not-send.md"),
       listKeys: async () => [],
       append: async () => {
         appendCount += 1;
@@ -723,12 +707,11 @@ describe("runAgentTurn", () => {
         return true;
       },
     );
-    assert.equal(evaluateCalled, false, "关常驻不得 evaluateRuleView");
-    assert.equal(appendCount, 0, "关常驻不得因差集 append");
+    assert.equal(appendCount, 0);
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-SR8：re-append merge 含 materialize workplace 且不丢 flush/attach/trailing", async () => {
+  it("T-SR8：re-append merge 不含 workplace 且不丢 flush/attach/trailing", async () => {
     let reAppendedAtts:
       | readonly { source?: string; path?: string }[]
       | undefined;
@@ -780,15 +763,6 @@ describe("runAgentTurn", () => {
           path: "/chip.md",
         },
       ],
-      workplaceAttachments: [
-        {
-          name: "/delta.md",
-          source: "workplace",
-          type: "text",
-          content: null,
-          path: "/delta.md",
-        },
-      ],
     });
 
     assert.ok(result.reAppendedUserMessageId);
@@ -803,7 +777,8 @@ describe("runAgentTurn", () => {
       ),
     );
     assert.ok(
-      atts.some((a) => a.source === "workplace" && a.path === "/delta.md"),
+      !atts.some((a) => a.source === "workplace"),
+      "re-append merge 不得含 workplace materialize",
     );
   });
 

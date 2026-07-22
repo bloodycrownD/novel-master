@@ -18,6 +18,7 @@
   "mapSessionWorkplacePathToProject",
   "parseMarkdownFrontMatter",
   "parseRuleSnapshotJson",
+  "refreshRuleSnapshot",
   "renderFileBlock",
   "renderFileBlockBody",
   "renderWorkplaceFileTree",
@@ -27,7 +28,5 @@
   "sortDirPaths",
   "sortFilesForDir",
   "splitMarkdownFrontMatter",
-  "workplaceAttachmentsFromNeededPaths",
-  "workplaceAttachmentsFromRuleDelta",
   "workplaceFileTreeRootLabel"
 ]

@@ -9,6 +9,7 @@ date: 2026-07-19
 - PRD：`Iterations/annotate-user-ops-unify/prd.md`
 - 前置：`Iterations/message-attachment-unified/prd.md`（及 Feature `composer-ops-chip-lifecycle` / `composer-at-token-prompt-dedup`、Bug `composer-two-pipelines-hard-contract`）
 - **局部 supersede**：`bugs/composer-ops-label-picker-typeahead` 中「ops chip = 英文 `action:path` 原样」→ 改为中文二字 `action:path`
+- **局部 supersede（后继 Feature）**：`features/composer-chip-ops-annotate-recontract` — 规则差集移出状态 chip / 废除仅 workplace 可空发 / 置位压缩保留 ops∪annotate chip / `mkdir` 文案「创建」；细节以该 Feature SPEC 为准，本文对应段落不再作为实现真源
 - 探索依据：2026-07-19 四路只读探索（Composer chip / 提示词拼装 / 聊天工作区阅读栈 / schema+测试）
 
 ## 设计目标
@@ -92,9 +93,9 @@ Core 导出（`@novel-master/core/chat`）：
 | `delete` | `删除` | path 等（现网） | 是 |
 | `write` | `创建` | path, content | 是 |
 | `edit` | `编辑` | path, content | 是 |
-| `mkdir` | `建目` | path | 是 |
+| `mkdir` | `建目`（**后继 supersede**：`composer-chip-ops-annotate-recontract` →「创建」） | path | 是 |
 | `rename` | `重命` | from, to；chip path 取 `to` → `重命:<to>` | 是 |
-| `workplaceChange` | `规则` | `path`, `content`（首次加载全文等；见下 JSON 钉死） | 是（差集投影） |
+| `workplaceChange` | `规则` | `path`, `content`（首次加载全文等；见下 JSON 钉死） | 是（差集投影；**后继 supersede**：`composer-chip-ops-annotate-recontract` 移出状态 chip / 不再空发） |
 | `userAttach` | —（**不进**状态 chip） | 见下 | 否（正文 `@`） |
 | `annotate` | `批注` | `path`, `originalText`, `userAnnotation` | 是（按 path 聚合） |
 

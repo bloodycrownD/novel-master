@@ -13,6 +13,7 @@ import React, {
 import { StyleSheet, View } from 'react-native';
 import WebView, { type WebViewMessageEvent } from 'react-native-webview';
 import { type ChatMessage } from '@novel-master/core/chat';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {
   encodeHostToTranscript,
   decodeTranscriptToHost,
@@ -42,6 +43,9 @@ import { prepareStreamTailHtml } from './prepare-stream-tail-html';
 import type { StreamWireChunk } from '@/services/stream-wire-queue';
 import { appendWireChunk } from '@/services/stream-wire-queue';
 import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
+import { CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS } from './chat-transcript-selection-menu';
+
+export { CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS } from './chat-transcript-selection-menu';
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
@@ -782,6 +786,23 @@ export const ChatTranscriptWebView = memo(
         ],
       );
 
+      const handleCustomMenuSelection = useCallback(
+        (event: {nativeEvent: {key?: string; selectedText?: string}}) => {
+          if (uiRunning) {
+            return;
+          }
+          const key = String(event.nativeEvent.key ?? '');
+          const selectedText = String(event.nativeEvent.selectedText ?? '')
+            .replace(/\u00a0/g, ' ')
+            .trim();
+          // 仅复制；消息批注入口已移除
+          if (key === 'copy' && selectedText) {
+            Clipboard.setString(selectedText);
+          }
+        },
+        [uiRunning],
+      );
+
       useEffect(() => {
         if (!webReady) {
           return;
@@ -1010,6 +1031,9 @@ export const ChatTranscriptWebView = memo(
             scrollEnabled={false}
             showsVerticalScrollIndicator={false}
             keyboardDisplayRequiresUserAction={false}
+            /* 划词：仅「复制」（勿改 RICH_DOCUMENT_ANNOTATE_MENU_ITEMS）。 */
+            menuItems={[...CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS]}
+            onCustomMenuSelection={handleCustomMenuSelection}
           />
         </View>
       );

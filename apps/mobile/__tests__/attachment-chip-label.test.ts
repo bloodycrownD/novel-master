@@ -25,7 +25,7 @@ describe('attachmentChipLabel', () => {
     ).toBe('批注:/n.md');
   });
 
-  it('workplace + action/无 action → 规则:path', () => {
+  it('T-CR8: workplace + action/无 action → 规则:path', () => {
     expect(
       attachmentChipLabel({
         source: 'workplace',

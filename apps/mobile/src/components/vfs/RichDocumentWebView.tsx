@@ -155,28 +155,20 @@ export function RichDocumentWebView({
     });
   }, [webReady, tokens, postToWeb]);
 
+  /**
+   * 文档与 annotations 同批投递：先 setDocument 再 setAnnotations。
+   * 避免分 effect 时空 marks / 旧 marks 与新文档错配，或滞后帧盖住最终下划线。
+   */
   useEffect(() => {
     if (!webReady) {
       return;
     }
     postToWeb(buildSetDocumentPayload(html, plain, overLimit, frontMatterHtml));
-  }, [webReady, html, plain, overLimit, frontMatterHtml, postToWeb]);
-
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
     postToWeb({
       v: 1,
       type: 'setAnnotateEnabled',
       payload: {enabled: annotateEnabled === true},
     });
-  }, [webReady, annotateEnabled, postToWeb]);
-
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
     postToWeb({
       v: 1,
       type: 'setAnnotations',
@@ -189,7 +181,16 @@ export function RichDocumentWebView({
           : [],
       },
     });
-  }, [webReady, annotateEnabled, annotations, postToWeb]);
+  }, [
+    webReady,
+    html,
+    plain,
+    overLimit,
+    frontMatterHtml,
+    annotateEnabled,
+    annotations,
+    postToWeb,
+  ]);
 
   const handleCustomMenuSelection = useCallback(
     (event: {nativeEvent: {key?: string; selectedText?: string}}) => {

@@ -133,8 +133,10 @@ export function ChatComposer({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
+  /** 文件批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算。 */
+  const [annotateEpoch, setAnnotateEpoch] = useState(0);
   const inputRef = useRef<TextInput>(null);
-  /** 程序化插入 @path（选择器 / typeahead）走 mentions 提交路径。 */
+  /** 程序化插入 @path tag 走 mentions 提交路径。 */
   const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
 
   const streamHandlersRef = useRef({
@@ -150,6 +152,9 @@ export function ChatComposer({
   runtimeRef.current = runtime;
 
   const activeAt = findActiveAtQuery(text, cursor);
+
+  const hasAnnotateDrafts = hasChatAnnotateDrafts(sessionId);
+  void annotateEpoch;
 
   useEffect(() => {
     if (activeAt == null) {
@@ -226,17 +231,7 @@ export function ChatComposer({
         return;
       }
       try {
-        const session = await rt.sessions.get(sessionId);
-        const worktree = rt.workplace({
-          kind: 'session',
-          projectId: session.projectId,
-          sessionId,
-        });
-        const status = await projectComposerStatusForSession(
-          rt,
-          worktree,
-          sessionId,
-        );
+        const status = await projectComposerStatusForSession(rt, sessionId);
         if (cancelled) {
           return;
         }
@@ -278,16 +273,12 @@ export function ChatComposer({
         return;
       }
       refreshComposerAnnotateChips(sessionId);
+      setAnnotateEpoch(n => n + 1);
     });
   }, [sessionId]);
 
   const executeRun = useCallback(
-    async (
-      content: string,
-      allowResumeWithoutInput: boolean,
-      /** 状态条有 workplace 差集：可发且发送后须清上条（由重投影收敛）。 */
-      hasWorkplaceDelta: boolean,
-    ) => {
+    async (content: string, allowResumeWithoutInput: boolean) => {
       if (isMobileAgentActive()) {
         return;
       }
@@ -297,12 +288,10 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
 
-      // 有正文 / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
+      // 有正文 / pending → 成功后清输入；pending 仍可发（门闩）
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
       const shouldClearComposer =
-        content.trim() !== '' ||
-        hasPendingUserOps ||
-        hasWorkplaceDelta;
+        content.trim() !== '' || hasPendingUserOps;
       let composerCleared = false;
       const clearComposerNow = () => {
         if (composerCleared) {
@@ -319,7 +308,7 @@ export function ChatComposer({
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
-        // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
+        // 文件引用由 Core 扫描正文 `@`；规则变更不走差集 materialize
         await runAgentTurn(runtime, scope, content, {
           stream,
           allowResumeWithoutInput,
@@ -327,7 +316,7 @@ export function ChatComposer({
           annotateDrafts:
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
-            // append 成功后再清输入 + annotate，避免失败时丢草稿
+            // append 成功后再清输入 + 文件批注，避免失败时丢草稿
             clearChatAnnotateDrafts(sessionId);
             clearComposerNow();
             void Promise.resolve(
@@ -335,21 +324,14 @@ export function ChatComposer({
             ).catch(() => undefined);
           },
         });
-        // 空续跑 / 仅 flush / 仅 workplace 等路径可能不走 append 回调
+        // 空续跑 / 仅 flush 等路径可能不走 append 回调
         if (shouldClearComposer) {
           clearComposerNow();
         }
         // 发送 flush 后 pending 空 → 上条应空；以投影为准刷新 chip
         try {
-          const session = await runtime.sessions.get(sessionId);
-          const worktree = runtime.workplace({
-            kind: 'session',
-            projectId: session.projectId,
-            sessionId,
-          });
           const status = await projectComposerStatusForSession(
             runtime,
-            worktree,
             sessionId,
           );
           applyComposerStatusAttachmentsReplace({
@@ -402,11 +384,7 @@ export function ChatComposer({
   );
 
   const sendWithBridgeIfNeeded = useCallback(
-    async (
-      content: string,
-      allowResumeWithoutInput: boolean,
-      hasWorkplaceDelta: boolean,
-    ) => {
+    async (content: string, allowResumeWithoutInput: boolean) => {
       if (content && lastMessageHasToolResult) {
         return new Promise<void>(resolve => {
           Alert.alert(
@@ -425,7 +403,7 @@ export function ChatComposer({
                     try {
                       await runtime.appendToolTurnBridge(sessionId);
                       await streamHandlersRef.current.onMessagesChanged();
-                      await executeRun(content, false, hasWorkplaceDelta);
+                      await executeRun(content, false);
                     } catch (err) {
                       setError(formatError(err));
                     } finally {
@@ -439,14 +417,14 @@ export function ChatComposer({
         });
       }
 
-      await executeRun(content, allowResumeWithoutInput, hasWorkplaceDelta);
+      await executeRun(content, allowResumeWithoutInput);
     },
     [lastMessageHasToolResult, runtime, sessionId, executeRun],
   );
 
   const insertTokensIntoComposer = useCallback(
-    (tokens: readonly string[]) => {
-      if (tokens.length === 0) {
+    (pathTokens: readonly string[]) => {
+      if (pathTokens.length === 0) {
         return;
       }
       // 有未完成 @… 时从 @ 起替换到光标，避免残留半截查询
@@ -455,7 +433,7 @@ export function ChatComposer({
       const after = text.slice(cursor);
       const gapBefore =
         before.length === 0 || /\s$/.test(before) ? '' : ' ';
-      const joined = tokens.join(' ');
+      const joined = pathTokens.join(' ');
       // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
       const gapAfter =
         after.length === 0 || !/^\s/.test(after) ? ' ' : '';
@@ -486,7 +464,12 @@ export function ChatComposer({
       if (activeAt == null) {
         return;
       }
-      const next = replaceActiveAtWithToken(text, cursor, activeAt.start, token);
+      const next = replaceActiveAtWithToken(
+        text,
+        cursor,
+        activeAt.start,
+        token,
+      );
       if (atPathInputRef.current) {
         atPathInputRef.current.replaceCommittedText(next.text, next.cursor);
         return;
@@ -519,11 +502,11 @@ export function ChatComposer({
       attachments,
       hasPendingUserOps,
       canResumeWithoutInput,
-      hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
+      hasAnnotateDrafts,
       hasModel,
       running,
     });
-    const { hasSendable, allowResumeWithoutInput, hasWorkplaceDelta } = intent;
+    const { hasSendable, allowResumeWithoutInput } = intent;
 
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
@@ -533,11 +516,7 @@ export function ChatComposer({
       return;
     }
 
-    await sendWithBridgeIfNeeded(
-      content,
-      allowResumeWithoutInput,
-      hasWorkplaceDelta,
-    );
+    await sendWithBridgeIfNeeded(content, allowResumeWithoutInput);
   }, [
     hasModel,
     running,
@@ -550,7 +529,7 @@ export function ChatComposer({
     abortUiRun,
     onNeedModel,
     sendWithBridgeIfNeeded,
-    sessionId,
+    hasAnnotateDrafts,
   ]);
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
@@ -559,7 +538,7 @@ export function ChatComposer({
     attachments,
     hasPendingUserOps,
     canResumeWithoutInput,
-    hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
+    hasAnnotateDrafts,
     hasModel,
     running,
   }).sendDisabled;
@@ -630,7 +609,9 @@ export function ChatComposer({
             style={[styles.toolBtn, { borderColor: tokens.border }]}
             accessibilityLabel="更多选项"
           >
-            <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>⋯</Text>
+            <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>
+              ⋯
+            </Text>
           </Pressable>
           <View style={styles.toolbarSpacer} />
           <Pressable
@@ -639,7 +620,9 @@ export function ChatComposer({
             style={[styles.toolBtn, { borderColor: tokens.border }]}
             accessibilityLabel="引用文件"
           >
-            <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>@</Text>
+            <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>
+              @
+            </Text>
           </Pressable>
           <Pressable
             onPress={send}
@@ -650,8 +633,8 @@ export function ChatComposer({
                 backgroundColor: sendDisabled
                   ? tokens.border
                   : running
-                  ? tokens.danger
-                  : tokens.primary,
+                    ? tokens.danger
+                    : tokens.primary,
               },
             ]}
             accessibilityLabel={running ? '终止' : '发送'}
@@ -666,8 +649,8 @@ export function ChatComposer({
         projectId={scope.projectId}
         sessionId={sessionId}
         onClose={() => setPickerOpen(false)}
-        onConfirm={tokens => {
-          insertTokensIntoComposer(tokens);
+        onConfirm={pathTokens => {
+          insertTokensIntoComposer(pathTokens);
         }}
       />
     </View>
@@ -710,49 +693,53 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingTop: 4,
     paddingBottom: 8,
-    gap: 4,
-    zIndex: 2,
-    elevation: 4,
   },
-  hintRow: { paddingVertical: 4 },
-  error: { fontSize: 12 },
+  hintRow: {
+    marginBottom: 6,
+  },
+  error: {
+    marginBottom: 6,
+    fontSize: 13,
+  },
   box: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 8,
-    gap: 4,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 6,
   },
   input: {
     minHeight: 56,
     maxHeight: 160,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
     fontSize: 16,
     lineHeight: 22,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    width: '100%',
+    textAlignVertical: 'top',
   },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginTop: 4,
+    gap: 8,
   },
-  toolbarSpacer: { flex: 1 },
+  toolbarSpacer: {
+    flex: 1,
+  },
   toolBtn: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtn: {
-    minWidth: 44,
-    height: 36,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
   },
 });

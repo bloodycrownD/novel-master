@@ -1,9 +1,16 @@
 /**
- * T-ATD*：Mobile `@路径` 插入与 typeahead≤5；mentions 单层口径与原子删。
+ * T-AT1 / T-AT2 / T-AT3 / T-SC1 + 既有 T-ATD*：
+ * Mobile `@路径` 插入、mention 口径、原子删、无 attach chip、选中色。
  */
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
+import React from 'react';
+import { TextInput } from 'react-native';
+import TestRenderer, { act } from 'react-test-renderer';
 import { parseValue } from 'react-native-controlled-mentions';
-import { scanAtPathAttachments } from '@novel-master/core/chat';
+import {
+  partitionComposerChipAttachments,
+  scanAtPathAttachments,
+} from '@novel-master/core/chat';
 import {
   atPathTokensFromPickerSelection,
   countScannedAtPathAttachments,
@@ -20,6 +27,24 @@ import {
   tryAtomicMentionDelete,
   type ComposerAtPathTriggersConfig,
 } from '../src/components/chat/composer-at-path-mention';
+import {
+  ComposerAtPathInput,
+  type ComposerAtPathInputHandle,
+} from '../src/components/chat/ComposerAtPathInput';
+import { darkTheme, lightTheme } from '../src/theme/tokens';
+
+jest.mock('../src/theme/ThemeProvider', () => {
+  const { lightTheme: theme } = require('../src/theme/tokens') as typeof import('../src/theme/tokens');
+  return {
+    useTheme: () => ({
+      mode: 'light' as const,
+      tokens: theme,
+      loaded: true,
+      setMode: async () => undefined,
+      toggleMode: async () => undefined,
+    }),
+  };
+});
 
 const triggersConfig: ComposerAtPathTriggersConfig = {
   atPath: {
@@ -30,7 +55,7 @@ const triggersConfig: ComposerAtPathTriggersConfig = {
   },
 };
 
-describe('composer-at-path (T-ATD*)', () => {
+describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
   it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
     const tokens = atPathTokensFromPickerSelection(['/notes'], ['/a.md']);
     expect(tokens).toEqual(['@/notes/', '@/a.md']);
@@ -73,7 +98,7 @@ describe('composer-at-path (T-ATD*)', () => {
     expect(countScannedAtPathAttachments('看')).toBe(0);
   });
 
-  it('mention ↔ plain：对外仍为纯字符串，不漏 {@} / HTML', () => {
+  it('T-AT1: mergeProgrammaticPlain 后 mention part 存在；plain 无 {@}', () => {
     const markup = `见 ${formatAtPathMentionMarkup('/a.md')} 与 ${formatAtPathMentionMarkup('/notes/')} 补充`;
     const plain = mentionValueToPlain(markup);
     expect(plain).toBe('见 @/a.md 与 @/notes/ 补充');
@@ -83,10 +108,21 @@ describe('composer-at-path (T-ATD*)', () => {
       id: '/a.md',
       name: '/a.md',
     });
+
+    const withPicker = mergeProgrammaticPlainIntoMentionValue(
+      '',
+      '见 @/a.md ',
+      triggersConfig,
+    );
+    expect(mentionValueToPlain(withPicker)).toBe('见 @/a.md ');
+    expect(withPicker.includes('{@}')).toBe(true);
+    expect(mentionValueToPlain(withPicker).includes('{@}')).toBe(false);
+    const state = parseValue(withPicker, [triggersConfig.atPath]);
+    expect(state.parts.some(p => p.data != null)).toBe(true);
   });
 
-  it('程序化 merge：新增 @路径 成 mention，可原子删；手输纯文本不提升', () => {
-    // 先有手输纯文本 @/x
+  it('T-AT2: 原子删整段 @/path；手输纯文本不成 tag', () => {
+    // 手输纯文本不提升
     const withHandTyped = mergeProgrammaticPlainIntoMentionValue(
       '见 @/x ',
       '见 @/x ',
@@ -119,13 +155,76 @@ describe('composer-at-path (T-ATD*)', () => {
     expect(afterAtomic).not.toBeNull();
     expect(mentionValueToPlain(afterAtomic!)).toBe('见 @/x  ');
     expect(afterAtomic!.includes('{@}')).toBe(false);
+
+    // 手输纯文本 @/x：退格不原子删
+    const hand = '见 @/x';
+    const handEnd = hand.length;
+    const handDeleted = `${hand.slice(0, handEnd - 1)}${hand.slice(handEnd)}`;
+    expect(tryAtomicMentionDelete(hand, handDeleted, triggersConfig)).toBeNull();
   });
 
-  it('手输纯文本 @/x：退格不原子删', () => {
-    const hand = '见 @/x';
-    const tokenEnd = hand.length;
-    const oneCharDeleted = `${hand.slice(0, tokenEnd - 1)}${hand.slice(tokenEnd)}`;
-    const after = tryAtomicMentionDelete(hand, oneCharDeleted, triggersConfig);
-    expect(after).toBeNull();
+  it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
+    const scanned = scanAtPathAttachments('请看 @/a.md');
+    expect(scanned.length).toBeGreaterThan(0);
+    expect(scanned.every(a => a.source === 'attach')).toBe(true);
+    const { status, attach } = partitionComposerChipAttachments(scanned);
+    expect(status).toHaveLength(0);
+    expect(attach).toHaveLength(scanned.length);
+  });
+
+  it('T-SC1: selectionColor 用 tokens.selection，≠ primary 原色', () => {
+    expect(lightTheme.selection).not.toBe(lightTheme.primary);
+    expect(darkTheme.selection).not.toBe(darkTheme.primary);
+    expect(lightTheme.selection.startsWith(lightTheme.primary)).toBe(true);
+    expect(darkTheme.selection.startsWith(darkTheme.primary)).toBe(true);
+
+    const onChangeText = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <ComposerAtPathInput value="" onChangeText={onChangeText} />,
+      );
+    });
+    const input = tree!.root.findByType(TextInput);
+    expect(input.props.selectionColor).toBe(lightTheme.selection);
+    expect(input.props.selectionColor).not.toBe(lightTheme.primary);
+    // 默认非全程受控：无 pending 时 selection 为 undefined
+    expect(input.props.selection).toBeUndefined();
+  });
+
+  it('程序化 replaceCommittedText 后对外 plain 无 {@}，且短暂设 selection', () => {
+    const handleRef = React.createRef<ComposerAtPathInputHandle>();
+    let text = '';
+    const onChangeText = jest.fn((next: string) => {
+      text = next;
+    });
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <ComposerAtPathInput
+          ref={handleRef}
+          value={text}
+          onChangeText={onChangeText}
+        />,
+      );
+    });
+
+    act(() => {
+      handleRef.current?.replaceCommittedText('见 @/a.md ', 9);
+      tree!.update(
+        <ComposerAtPathInput
+          ref={handleRef}
+          value={text}
+          onChangeText={onChangeText}
+        />,
+      );
+    });
+
+    expect(onChangeText).toHaveBeenCalled();
+    expect(text).toBe('见 @/a.md ');
+    expect(text.includes('{@}')).toBe(false);
+
+    const input = tree!.root.findByType(TextInput);
+    expect(input.props.selection).toEqual({ start: 9, end: 9 });
   });
 });

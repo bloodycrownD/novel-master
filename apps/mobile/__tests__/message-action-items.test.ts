@@ -41,7 +41,7 @@ describe('isSetFloorEligibleMessage', () => {
 });
 
 describe('buildMessageActionItems', () => {
-  it('includes edit, copy, set-floor, fork, rollback for editable messages', () => {
+  it('T-MN1: includes edit, copy, set-floor, fork, rollback for editable messages', () => {
     const actions = buildMessageActionItems(
       msg([{ type: 'text', text: 'hi' }]),
     ).map(i => i.action);

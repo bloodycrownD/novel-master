@@ -33,7 +33,7 @@ test("T-S2: uiRunning=false 时不渲染 stream tail", () => {
 });
 
 test("T-SR3：空正文 + attachments 渲染附件摘要卡", () => {
-  // Chip 文案跟 Core 中文映射（mkdir → 建目），勿断言英文 mkdir:/…
+  // Chip 文案跟 Core 中文映射（mkdir → 创建），勿断言英文 mkdir:/…
   const html = renderToStaticMarkup(
     <MessageList
       messages={[
@@ -61,6 +61,6 @@ test("T-SR3：空正文 + attachments 渲染附件摘要卡", () => {
     />,
   );
   assert.match(html, /消息附件/);
-  assert.match(html, /建目:\/notes/);
+  assert.match(html, /创建:\/notes/);
   assert.doesNotMatch(html, /暂无消息/);
 });

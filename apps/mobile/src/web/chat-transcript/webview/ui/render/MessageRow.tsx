@@ -6,6 +6,7 @@
  */
 import type { MessageRow as MessageRowModel } from '../../runtime/state/state';
 import { state } from '../../runtime/state/state';
+import { openContextMenuFromAnchor } from '../../runtime/menu/menu';
 import { assistantBubbleExtraClasses } from '../../runtime/stream/stream';
 import { AttachGroup } from './AttachGroup';
 import { AssistantBubbleInner } from './AssistantBubble';
@@ -19,6 +20,26 @@ export function MessageRow({ row }: MessageRowProps) {
   const hidden = row.hidden ? ' hidden' : '';
   const thinkingKey = 'msg:' + row.id;
   const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
+
+  /** ⋯ 菜单入口：传按钮 rect 开菜单（user / assistant 均在气泡上方工具行）。 */
+  const onMenuBtnClick = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const btn = event.currentTarget as HTMLButtonElement | null;
+    if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
+    openContextMenuFromAnchor(row.id, btn.getBoundingClientRect(), btn);
+  };
+
+  const menuBtn = (
+    <button
+      type="button"
+      className="message-menu-btn"
+      aria-label="消息操作"
+      onClick={onMenuBtnClick}
+    >
+      ⋯
+    </button>
+  );
 
   let bubble = null;
   if (role === 'user') {
@@ -49,6 +70,7 @@ export function MessageRow({ row }: MessageRowProps) {
   } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
     const toolGroupKey = 'msg:' + row.id;
     const toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
+    // ⋯ 不进 .bubble，外置到行内气泡上方（见下方 return）
     bubble = (
       <div
         className={
@@ -83,6 +105,8 @@ export function MessageRow({ row }: MessageRowProps) {
       className={'row message ' + role + hidden}
       data-id={row.id}
     >
+      {/* user / assistant ⋯ 均在 .row 内、.bubble 之前的工具行 */}
+      {bubble ? <div className="message-menu-toolbar">{menuBtn}</div> : null}
       {bubble}
     </div>
   );

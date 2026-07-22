@@ -36,33 +36,12 @@ describe("hasComposerSendableInput", () => {
     );
   });
 
-  it("T-SR1b：仅 hasWorkplaceDelta → 可发", () => {
+  it("T-CR3：仅规则差集语义废止 → 空正文无 pending/批注不可发", () => {
     assert.equal(
       hasComposerSendableInput({
         text: "",
         attachmentCount: 0,
         hasPendingUserOps: false,
-        hasWorkplaceDelta: true,
-      }),
-      true,
-    );
-  });
-
-  it("hasWorkplaceDelta 缺省/false → 不可发（兼容旧调用）", () => {
-    assert.equal(
-      hasComposerSendableInput({
-        text: "",
-        attachmentCount: 0,
-        hasPendingUserOps: false,
-      }),
-      false,
-    );
-    assert.equal(
-      hasComposerSendableInput({
-        text: "",
-        attachmentCount: 0,
-        hasPendingUserOps: false,
-        hasWorkplaceDelta: false,
       }),
       false,
     );
@@ -89,6 +68,26 @@ describe("hasComposerSendableInput", () => {
         hasAnnotateDrafts: false,
       }),
       false,
+    );
+  });
+
+  it("T-CR4：有 pending 或批注 → 可发", () => {
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: true,
+      }),
+      true,
+    );
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: false,
+        hasAnnotateDrafts: true,
+      }),
+      true,
     );
   });
 

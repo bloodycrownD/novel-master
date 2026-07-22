@@ -18,6 +18,10 @@ import {
   type SessionMessageReceivedPayload,
 } from "@/domain/events/model/event-types.js";
 import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type {
   EventEmitContext,
   EventOrchestrator,
@@ -127,12 +131,19 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
       nodes == null
         ? ({ ok: true, partialFailure: false, failures: [] } as const)
         : await this.runDag(nodes, ctx);
-    // 手动 / condition 压缩成功：清空 session kkv（与置位同口径）
+    // 手动 / condition 压缩成功：仅清 rule_snapshot + file_cache（与置位同口径；保留 pending）
     if (
       result.ok &&
       eventType === EVENT_SESSION_COMPACTION_REQUESTED
     ) {
-      await this.deps.sessionKkv.clearSession(ctx.sessionId);
+      await this.deps.sessionKkv.clearDomain(
+        ctx.sessionId,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      );
+      await this.deps.sessionKkv.clearDomain(
+        ctx.sessionId,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+      );
       sessionApiPromptTokenCache.invalidate(ctx.sessionId);
     }
     return result;

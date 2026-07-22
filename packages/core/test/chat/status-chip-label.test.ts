@@ -1,5 +1,5 @@
 /**
- * T-CHIP1（Core）：formatStatusChipLabel / FromAttachment。
+ * T-CHIP1 / T-CR1（Core）：formatStatusChipLabel / FromAttachment。
  */
 
 import assert from "node:assert/strict";
@@ -9,14 +9,14 @@ import {
   formatStatusChipLabelFromAttachment,
 } from "../../src/domain/chat/logic/status-chip-label.js";
 
-describe("formatStatusChipLabel (T-CHIP1)", () => {
-  it("已知枚举 → 中文二字:path", () => {
+describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
+  it("已知枚举 → 中文二字:path；mkdir 与 write 同为「创建」", () => {
     assert.equal(formatStatusChipLabel("workplaceChange", "/a"), "规则:/a");
     assert.equal(formatStatusChipLabel("write", "/b"), "创建:/b");
     assert.equal(formatStatusChipLabel("annotate", "/c"), "批注:/c");
     assert.equal(formatStatusChipLabel("edit", "/e"), "编辑:/e");
     assert.equal(formatStatusChipLabel("delete", "/d"), "删除:/d");
-    assert.equal(formatStatusChipLabel("mkdir", "/m"), "建目:/m");
+    assert.equal(formatStatusChipLabel("mkdir", "/m"), "创建:/m");
     assert.equal(formatStatusChipLabel("rename", "/to"), "重命:/to");
     assert.equal(formatStatusChipLabel("userAttach", "/x"), "");
   });
@@ -44,6 +44,16 @@ describe("formatStatusChipLabel (T-CHIP1)", () => {
     );
     assert.equal(
       formatStatusChipLabelFromAttachment({
+        action: "mkdir",
+        path: "/m",
+        name: "/m",
+        source: "user_ops",
+        content: null,
+      }),
+      "创建:/m",
+    );
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
         action: "annotate",
         path: "/c",
         name: "/c",
@@ -64,7 +74,7 @@ describe("formatStatusChipLabel (T-CHIP1)", () => {
     );
   });
 
-  it("无 action 降级：workplace→规则；旧 write:/；rename→取右侧；否则裸 path", () => {
+  it("无 action 降级：workplace→规则；旧 write:/、mkdir:/；rename→取右侧；否则裸 path", () => {
     assert.equal(
       formatStatusChipLabelFromAttachment({
         source: "workplace",
@@ -82,6 +92,15 @@ describe("formatStatusChipLabel (T-CHIP1)", () => {
         content: null,
       }),
       "创建:/old.md",
+    );
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        source: "user_ops",
+        name: "mkdir:/dir",
+        path: "/dir",
+        content: null,
+      }),
+      "创建:/dir",
     );
     assert.equal(
       formatStatusChipLabelFromAttachment({

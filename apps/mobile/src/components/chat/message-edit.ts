@@ -1,5 +1,5 @@
 /**
- * Helpers for in-app message edit (text-only content) and long-press menu items.
+ * Helpers for in-app message edit (text-only content) and message action menu items.
  */
 import {
   type ChatMessage,
@@ -51,7 +51,7 @@ export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
   return message.role === 'user';
 }
 
-/** 长按菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */
+/** 消息操作菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */
 export function buildMessageActionItems(
   message: ChatMessage,
 ): MessageActionMenuItem[] {

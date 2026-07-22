@@ -1,17 +1,30 @@
 /**
- * Desktop PreviewPane 划词批注纯逻辑测例（门闩 / 聚合 / 选区文本）。
+ * Desktop PreviewPane 划词批注纯逻辑测例（门闩 / 聚合 / 选区文本 / 跨节点 mark）。
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { parseHTML } from "linkedom";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
+  applyAnnotateHighlights,
+  clearAnnotateHighlights,
   groupAnnotateIdsByOriginalText,
   isPreviewAnnotateEnabled,
   parseAnnotateIdsAttr,
+  PREVIEW_ANNOTATE_IDS_ATTR,
+  PREVIEW_ANNOTATE_MARK_CLASS,
   readSelectionTextInContainer,
 } from "@/layout/preview-annotate";
+
+/** linkedom：与 Mobile 同合同的等价 DOM 宿主。 */
+function makeRoot(html: string): HTMLElement {
+  const { document } = parseHTML(
+    `<!DOCTYPE html><html><body><div id="root">${html}</div></body></html>`,
+  );
+  return document.getElementById("root") as HTMLElement;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const previewPanePath = path.join(
@@ -129,7 +142,112 @@ describe("applyAnnotateHighlights order (source)", () => {
     );
     assert.match(src, /sortAnnotateTextsLongestFirst/);
     assert.match(src, /@shared\/logic\/chat/);
+    assert.match(src, /buildFlatTextIndex/);
+    assert.match(src, /mapFlatRangeToSegments/);
     assert.doesNotMatch(src, /@novel-master\/core/);
+    assert.doesNotMatch(src, /findFirstUnmarkedPlainMatch/);
+    assert.doesNotMatch(src, /跨元素连续串无法匹配时跳过/);
+  });
+});
+
+describe("applyAnnotateHighlights DOM（T-XN3 / T-XN4 / T-XN5 / T-XN6）", () => {
+  it("T-XN3: 跨 strong 两段 preview-annotate-mark", () => {
+    const root = makeRoot("<p>hel<strong>lo</strong></p>");
+    applyAnnotateHighlights(root, [{ id: "d1", originalText: "hello" }]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.equal(marks.length, 2);
+    assert.equal(marks.map((m) => m.textContent).join(""), "hello");
+  });
+
+  it("T-XN4: 多段 mark 的 data-annotate-ids 一致", () => {
+    const root = makeRoot("<p>hel<a>lo</a></p>");
+    applyAnnotateHighlights(root, [
+      { id: "a", originalText: "hello" },
+      { id: "b", originalText: "hello" },
+    ]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.ok(marks.length >= 2);
+    const attrs = marks.map((m) => m.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR));
+    assert.equal(new Set(attrs).size, 1);
+    assert.deepEqual(parseAnnotateIdsAttr(attrs[0]), ["a", "b"]);
+  });
+
+  it("T-XN5: 原文不在文档 → 无 mark", () => {
+    const root = makeRoot("<p>hel<strong>lo</strong></p>");
+    applyAnnotateHighlights(root, [{ id: "x", originalText: "missing" }]);
+    assert.equal(
+      root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      0,
+    );
+  });
+
+  it("T-XN6: 同文两处均标；长串优先", () => {
+    const root = makeRoot("<p>hello hello</p>");
+    applyAnnotateHighlights(root, [
+      { id: "long", originalText: "hello hello" },
+      { id: "short", originalText: "hello" },
+    ]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.equal(marks.length, 1);
+    assert.equal(marks[0]?.textContent, "hello hello");
+
+    const root2 = makeRoot("<p>hello hello</p>");
+    applyAnnotateHighlights(root2, [{ id: "s", originalText: "hello" }]);
+    assert.equal(
+      root2.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      2,
+    );
+  });
+
+  it("B-1: 先长后短，跨已有 mark 的短针不得误命中", () => {
+    // 文档「h」+「ell」+「o」；长针先包 ell 后，短针「ho」不得跨 mark 拼域命中
+    const root = makeRoot("<p>hello</p>");
+    applyAnnotateHighlights(root, [
+      { id: "long", originalText: "ell" },
+      { id: "short", originalText: "ho" },
+    ]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.equal(marks.length, 1);
+    assert.equal(marks[0]?.textContent, "ell");
+    assert.deepEqual(
+      parseAnnotateIdsAttr(marks[0]?.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR)),
+      ["long"],
+    );
+    assert.equal(root.textContent, "hello");
+  });
+
+  it("跨 p 不误命中；clear 后再 apply 无残留", () => {
+    const root = makeRoot("<p>hel</p><p>lo</p>");
+    applyAnnotateHighlights(root, [{ id: "x", originalText: "hello" }]);
+    assert.equal(
+      root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      0,
+    );
+
+    const root2 = makeRoot("<p>hel<strong>lo</strong></p>");
+    applyAnnotateHighlights(root2, [{ id: "d1", originalText: "hello" }]);
+    assert.equal(
+      root2.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      2,
+    );
+    clearAnnotateHighlights(root2);
+    assert.equal(
+      root2.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      0,
+    );
+    applyAnnotateHighlights(root2, [{ id: "d1", originalText: "hello" }]);
+    assert.equal(
+      root2.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      2,
+    );
   });
 });
 
@@ -151,6 +269,8 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.match(pane, /previewFile\?\.workspaceScope/);
     assert.match(pane, /applyAnnotateHighlights/);
     assert.match(pane, /sessionId/);
+    assert.match(pane, /target\.closest\(`mark\.\$\{PREVIEW_ANNOTATE_MARK_CLASS\}`\)/);
+    assert.match(pane, /parseAnnotateIdsAttr/);
     assert.doesNotMatch(pane, /e\.preventDefault\(\);\s*\n\s*scheduleRefresh/);
   });
 });
