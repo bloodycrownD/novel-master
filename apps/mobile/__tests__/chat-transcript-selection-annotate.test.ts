@@ -1,27 +1,16 @@
 /**
- * transcript 划词选区 bridge 契约（T-MA7 / remove-assistant-message-annotate）。
- * menuItems 与 RICH_DOCUMENT 同形见 ChatTranscriptWebView 源码注释（批注+复制）。
- * 批注仅 user：上溯 `.row.message.user`；assistant 不进 store。
+ * transcript 划词选区菜单契约（remove-message-annotate）：仅「复制」。
+ * 不导入 RichDocumentWebView（会拉 Clipboard 原生模块）；文件预览菜单另有测。
  */
-import { RESOLVE_SELECTION_ANNOTATE_JS } from '../src/components/chat/ChatTranscriptBridge';
+import { CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS } from '../src/components/chat/chat-transcript-selection-menu';
 
-describe('chat-transcript-selection-annotate (T-MA7)', () => {
-  test('RESOLVE_SELECTION_ANNOTATE_JS 仅上溯 .row.message.user[data-id]', () => {
-    expect(RESOLVE_SELECTION_ANNOTATE_JS).toContain(
-      '.row.message.user[data-id]',
-    );
-    expect(RESOLVE_SELECTION_ANNOTATE_JS).not.toContain(
-      ".closest('.row.message[data-id]')",
-    );
-    expect(RESOLVE_SELECTION_ANNOTATE_JS).toContain('selectionAnnotate');
-    expect(RESOLVE_SELECTION_ANNOTATE_JS).toContain('getSelection');
-  });
-
-  test('assistant 行选择器无法匹配：user 选择器不含 assistant 类', () => {
-    // 注入脚本要求 closest('.row.message.user[data-id]')；
-    // class="row message assistant" 不满足 .user → messageId 空 → 宿主取消
-    expect(RESOLVE_SELECTION_ANNOTATE_JS).toMatch(
-      /\.row\.message\.user\[data-id\]/,
-    );
+describe('chat-transcript-selection-menu (copy-only)', () => {
+  test('transcript menuItems 仅含复制，不含批注', () => {
+    expect(CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS).toEqual([
+      {label: '复制', key: 'copy'},
+    ]);
+    expect(
+      CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS.some(i => i.key === 'annotate'),
+    ).toBe(false);
   });
 });

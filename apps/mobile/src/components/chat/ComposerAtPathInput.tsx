@@ -2,9 +2,8 @@
  * Mobile Composer：基于 react-native-controlled-mentions 的单层输入。
  *
  * - `@path`：选择器 / typeahead 程序化插入成 mention（着色 + 退格整段删）
- * - 消息批注：独立 `§` trigger（仅解析/程序化插入，`suggest` 恒空）；短标签不以 `@` 开头
  * - 手输 `@/path` 为普通字：不成 tag、不整段删
- * - 对外 value / onChangeText 始终为展示 plain；发送用 getSendUserContent（剥离消息批注）
+ * - 对外 value / onChangeText 始终为展示 plain
  * - selection 仅短暂受控（对齐 PromptMacroTextInput 的 pendingSelection）
  */
 import React, {
@@ -31,17 +30,11 @@ import {
 import {useTheme} from '@/theme/ThemeProvider';
 import {
   mentionValueToPlain,
-  mentionValueToSendUserContent,
   mergeProgrammaticPlainIntoMentionValue,
   suggestionFromAtPathToken,
   tryAtomicMentionDelete,
   type ComposerTriggersConfig,
 } from './composer-at-path-mention';
-import {
-  MESSAGE_ANNOTATE_TRIGGER,
-  formatMessageAnnotateMentionMarkup,
-  listMessageAnnotateDraftIdsInMentionValue,
-} from './composer-message-annotate-mention';
 
 export type ComposerAtPathInputHandle = {
   /**
@@ -54,16 +47,6 @@ export type ComposerAtPathInputHandle = {
    * 走 mentions `onSelect`；无活跃 keyword 时返回 false。
    */
   replaceActiveAt: (token: string) => boolean;
-  /** 程序化插入消息批注 tag（`§` trigger）。 */
-  insertMessageAnnotate: (draft: {
-    id: string;
-    originalText: string;
-  }) => void;
-  /**
-   * 发送用 plain：剥离全部消息批注 mention span。
-   * 作为 `runAgentTurn.userContent`（App 勿另调 scan）。
-   */
-  getSendUserContent: () => string;
 };
 
 export type ComposerAtPathInputProps = {
@@ -73,8 +56,6 @@ export type ComposerAtPathInputProps = {
   onSelectionChange?: (
     e: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
   ) => void;
-  /** 原子删 / 清空消息批注 tag 时回调（同步 removeMessageAnnotateDraft）。 */
-  onMessageAnnotateRemoved?: (draftIds: readonly string[]) => void;
   editable?: boolean;
   placeholder?: string;
   placeholderTextColor?: string;
@@ -97,7 +78,6 @@ export const ComposerAtPathInput = forwardRef<
     value,
     onChangeText,
     onSelectionChange,
-    onMessageAnnotateRemoved,
     editable = true,
     placeholder,
     placeholderTextColor,
@@ -108,7 +88,7 @@ export const ComposerAtPathInput = forwardRef<
   ref,
 ) {
   const {tokens} = useTheme();
-  /** 内部 mention 值（可含 `{@}[…](…)` / `{§}[…](…)`）；对外只发展示 plain。 */
+  /** 内部 mention 值（可含 `{@}[…](…)`）；对外只发展示 plain。 */
   const [mentionValue, setMentionValue] = useState(value);
   /** 仅程序化写入时短暂传入 TextInput；用户划选后清空，避免全程受控。 */
   const [pendingSelection, setPendingSelection] = useState<{
@@ -118,8 +98,6 @@ export const ComposerAtPathInput = forwardRef<
   const lastPlainRef = useRef(value);
   const mentionValueRef = useRef(mentionValue);
   mentionValueRef.current = mentionValue;
-  const onMessageAnnotateRemovedRef = useRef(onMessageAnnotateRemoved);
-  onMessageAnnotateRemovedRef.current = onMessageAnnotateRemoved;
   const triggersRef = useRef<ReturnType<typeof useMentions>['triggers'] | null>(
     null,
   );
@@ -139,53 +117,19 @@ export const ComposerAtPathInput = forwardRef<
         // 展示为 @/path（name 已含前导 /）
         getPlainString: mention => `@${mention.name}`,
       },
-      msgAnnotate: {
-        trigger: MESSAGE_ANNOTATE_TRIGGER,
-        allowedSpacesCount: 0,
-        isInsertSpaceAfterMention: true,
-        textStyle: {
-          color: tokens.primary,
-          backgroundColor: `${tokens.primary}18`,
-        },
-        // 短标签不以 `@` 开头
-        getPlainString: mention => mention.name,
-      },
     }),
     [tokens.primary],
   );
 
-  const syncRemovedMessageAnnotates = useCallback(
-    (prevMention: string, nextMention: string) => {
-      const prevIds = new Set(
-        listMessageAnnotateDraftIdsInMentionValue(prevMention),
-      );
-      const nextIds = new Set(
-        listMessageAnnotateDraftIdsInMentionValue(nextMention),
-      );
-      const removed: string[] = [];
-      for (const id of prevIds) {
-        if (!nextIds.has(id)) {
-          removed.push(id);
-        }
-      }
-      if (removed.length > 0) {
-        onMessageAnnotateRemovedRef.current?.(removed);
-      }
-    },
-    [],
-  );
-
   const emitMentionValue = useCallback(
     (nextMention: string) => {
-      const prev = mentionValueRef.current;
       const plain = mentionValueToPlain(nextMention);
       lastPlainRef.current = plain;
       mentionValueRef.current = nextMention;
       setMentionValue(nextMention);
-      syncRemovedMessageAnnotates(prev, nextMention);
       onChangeText(plain);
     },
-    [onChangeText, syncRemovedMessageAnnotates],
+    [onChangeText],
   );
 
   const applyPendingSelection = useCallback(
@@ -201,7 +145,7 @@ export const ComposerAtPathInput = forwardRef<
   const {textInputProps, triggers} = useMentions({
     value: mentionValue,
     onChange: emitMentionValue,
-    triggersConfig: triggersConfig as TriggersConfig<'atPath' | 'msgAnnotate'>,
+    triggersConfig: triggersConfig as TriggersConfig<'atPath'>,
     onSelectionChange: sel => {
       // 原生已应用选区后解除短暂受控（对照 PromptMacroTextInput）
       setPendingSelection(null);
@@ -217,14 +161,12 @@ export const ComposerAtPathInput = forwardRef<
     if (value === lastPlainRef.current) {
       return;
     }
-    const prev = mentionValueRef.current;
     lastPlainRef.current = value;
     mentionValueRef.current = value;
     setMentionValue(value);
-    syncRemovedMessageAnnotates(prev, value);
     const pos = Math.max(0, Math.min(cursor, value.length));
     applyPendingSelection(pos, pos);
-  }, [value, cursor, applyPendingSelection, syncRemovedMessageAnnotates]);
+  }, [value, cursor, applyPendingSelection]);
 
   useImperativeHandle(
     ref,
@@ -249,24 +191,6 @@ export const ComposerAtPathInput = forwardRef<
         }
         t.onSelect(suggestionFromAtPathToken(token));
         return true;
-      },
-      insertMessageAnnotate(draft) {
-        const markup = formatMessageAnnotateMentionMarkup(
-          draft.id,
-          draft.originalText,
-        );
-        const prev = mentionValueRef.current;
-        const gap =
-          prev.length === 0 || /\s$/.test(mentionValueToPlain(prev))
-            ? ''
-            : ' ';
-        const next = `${prev}${gap}${markup} `;
-        emitMentionValue(next);
-        const plain = mentionValueToPlain(next);
-        applyPendingSelection(plain.length, plain.length);
-      },
-      getSendUserContent() {
-        return mentionValueToSendUserContent(mentionValueRef.current);
       },
     }),
     [applyPendingSelection, emitMentionValue, triggersConfig],
@@ -296,9 +220,6 @@ export const ComposerAtPathInput = forwardRef<
     },
     [emitMentionValue, mentionValue, textInputProps, triggersConfig],
   );
-
-  // msgAnnotate：仅解析/程序化插入；suggest 恒空（不挂 typeahead）
-  void triggers.msgAnnotate;
 
   return (
     <TextInput

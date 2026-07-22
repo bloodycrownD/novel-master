@@ -13,8 +13,8 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
   buildAnnotateAttachmentFromDraft,
-  buildMessageAnnotateAttachmentFromDraft,
   type ChatMessage,
+  type MessageAttachment,
 } from '@novel-master/core/chat';
 import { Alert } from 'react-native';
 import {
@@ -379,13 +379,17 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-UD3: undo_send 伪 path __message__: / /__message__: → 不写入文件批注 store', async () => {
-    const msgAtt = buildMessageAnnotateAttachmentFromDraft({
-      id: 'd1',
-      messageId: 'm-99',
-      originalText: '气泡选区',
-      userAnnotation: '批一下',
-    });
-    const withSlash = {
+    // 手工伪 path（消息批注 builder 已移除；历史防御）
+    const msgAtt: MessageAttachment = {
+      name: '__message__:m-99:d1',
+      source: 'user_ops',
+      type: 'text',
+      content:
+        '<action name="annotate">\n{"path":"__message__:m-99:d1","messageId":"m-99","originalText":"气泡选区","userAnnotation":"批一下"}\n</action>',
+      path: '__message__:m-99:d1',
+      action: 'annotate',
+    };
+    const withSlash: MessageAttachment = {
       ...msgAtt,
       path: `/${msgAtt.path}`,
       name: `/${msgAtt.path}`,

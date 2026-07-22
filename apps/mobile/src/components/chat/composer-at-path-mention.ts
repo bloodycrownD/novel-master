@@ -1,7 +1,6 @@
 /**
  * Mobile mention 专属：controlled-mentions 内部格式 ↔ 对外纯字符串。
- * `@path` → `@/path`；消息批注 → 可见短标签（不以 `@` 开头）。
- * 禁止进 core（T-X2-2）。
+ * `@path` → `@/path`。禁止进 core（T-X2-2）。
  */
 import {
   generateValueFromMentionStateAndChangedText,
@@ -9,39 +8,16 @@ import {
   replaceTriggerValues,
   type TriggersConfig,
 } from 'react-native-controlled-mentions';
-import {
-  MESSAGE_ANNOTATE_TRIGGER,
-  formatMessageAnnotateShortLabel,
-} from './composer-message-annotate-mention';
 
-/** Composer 双 trigger：`@path` + 消息批注 `§`。 */
-export type ComposerTriggersConfig = TriggersConfig<'atPath' | 'msgAnnotate'>;
+/** Composer `@path` mention triggers。 */
+export type ComposerTriggersConfig = TriggersConfig<'atPath'>;
 
 /** @deprecated 兼容旧测试别名；请用 ComposerTriggersConfig。 */
 export type ComposerAtPathTriggersConfig = ComposerTriggersConfig;
 
-/** mention 内部值 → 对外展示 plain（按 trigger 分流）。 */
+/** mention 内部值 → 对外展示 plain。 */
 export function mentionValueToPlain(mentionValue: string): string {
-  return replaceTriggerValues(mentionValue, ({name, trigger}) => {
-    if (trigger === MESSAGE_ANNOTATE_TRIGGER) {
-      // 短标签不以 `@` 开头；name 已是可见短标签
-      return name;
-    }
-    return `@${name}`;
-  });
-}
-
-/**
- * 发送用 plain：剥离全部消息批注 mention span，仅保留 `@path` 展开 + 普通文本。
- * 所得串作为 `runAgentTurn.userContent`（供 Core merge 扫描与落库；App 勿另调 scan）。
- */
-export function mentionValueToSendUserContent(mentionValue: string): string {
-  return replaceTriggerValues(mentionValue, ({name, trigger}) => {
-    if (trigger === MESSAGE_ANNOTATE_TRIGGER) {
-      return '';
-    }
-    return `@${name}`;
-  });
+  return replaceTriggerValues(mentionValue, ({name}) => `@${name}`);
 }
 
 /** `@/path` token → mention suggestion（name/id = 逻辑 path）。 */
@@ -51,17 +27,6 @@ export function suggestionFromAtPathToken(token: string): {
 } {
   const path = token.startsWith('@') ? token.slice(1) : token;
   return {id: path, name: path};
-}
-
-/** 消息批注 draft → mention suggestion（name=短标签，id=draftId）。 */
-export function suggestionFromMessageAnnotateDraft(draft: {
-  id: string;
-  originalText: string;
-}): {id: string; name: string} {
-  return {
-    id: draft.id,
-    name: formatMessageAnnotateShortLabel(draft.originalText),
-  };
 }
 
 /** 默认 `@path` mention 标记串（与库 getTriggerValue 同形）。 */
@@ -78,7 +43,7 @@ export function tryAtomicMentionDelete(
   changedPlain: string,
   triggersConfig: ComposerTriggersConfig,
 ): string | null {
-  const configs = [triggersConfig.atPath, triggersConfig.msgAnnotate];
+  const configs = [triggersConfig.atPath];
   const state = parseValue(mentionValue, configs);
   const {parts, plainText} = state;
   if (changedPlain.length >= plainText.length) {
@@ -125,14 +90,13 @@ export function tryAtomicMentionDelete(
 /**
  * 程序化写入纯文本：保留既有 mention；仅在新增片段内把完整 `@path` 提成 mention。
  * 手输已存在的纯文本 `@/path` 落在未改区间，不会被提升。
- * 消息批注 tag 不经本函数提升（仅程序化 insertMessageAnnotate）。
  */
 export function mergeProgrammaticPlainIntoMentionValue(
   prevMentionValue: string,
   nextPlain: string,
   triggersConfig: ComposerTriggersConfig,
 ): string {
-  const configs = [triggersConfig.atPath, triggersConfig.msgAnnotate].filter(
+  const configs = [triggersConfig.atPath].filter(
     (c): c is NonNullable<typeof c> => c != null,
   );
   const prev = parseValue(prevMentionValue, configs);
@@ -214,10 +178,7 @@ function promotePlainAtPathsInRange(
   }
 
   // 按 plain 坐标把「已是 mention 的区间」与「待提升」合并重建 markup
-  const state = parseValue(mentionValue, [
-    triggersConfig.atPath,
-    triggersConfig.msgAnnotate,
-  ]);
+  const state = parseValue(mentionValue, [triggersConfig.atPath]);
   const mentionSpans = state.parts
     .filter(p => p.data != null)
     .map(p => ({
