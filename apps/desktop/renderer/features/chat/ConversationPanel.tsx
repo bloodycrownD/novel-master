@@ -53,6 +53,7 @@ import {
   editableTextFromMessage,
 } from './message-edit';
 import { resolveComposerDraftAfterRollbackSuccess } from './rollback-composer';
+import { applyUndoAnnotateRestore } from './rollback-annotate-restore';
 import { MessageEditModal } from './MessageEditModal';
 import {
   handleRunFinishedAbortRetain,
@@ -547,13 +548,20 @@ export function ConversationPanel({
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
       }
+      // 顺序对齐 Mobile：truncate/可先空条 → 正文 → 批注反投影 → ∪ chip（不恢复手改）
       setComposerText(prevText => {
         const next = resolveComposerDraftAfterRollbackSuccess(
           { text: prevText, attachments: composerAttachments },
           rollbackMode,
           { text: restoreText, attachments: restoreAttachments },
         );
-        setComposerAttachments([...next.attachments]);
+        if (rollbackMode === 'undo_send') {
+          setComposerAttachments(
+            applyUndoAnnotateRestore(sessionId, restoreAttachments),
+          );
+        } else {
+          setComposerAttachments([...next.attachments]);
+        }
         return next.text;
       });
       showToast(

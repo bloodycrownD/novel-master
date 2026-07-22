@@ -28,6 +28,7 @@ export type {
 export {
   addChatAnnotateDraft,
   atPathTokensFromPickerSelection,
+  buildAnnotateAttachmentFromDraft,
   buildFlatTextIndex,
   chipsFromAnnotateStore,
   clearChatAnnotateDrafts,
@@ -55,6 +56,7 @@ export {
   mapFlatRangeToSegments,
   normalizeAnnotateNeedle,
   normalizeAnnotateSegmentText,
+  parseAnnotateDraftsFromAttachments,
   parseAnnotateIdsAttr,
   parseComposerDraftJson,
   partitionComposerChipAttachments,
