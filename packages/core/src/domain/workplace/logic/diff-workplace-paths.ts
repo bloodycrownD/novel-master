@@ -7,7 +7,6 @@
  * @module domain/workplace/logic/diff-workplace-paths
  */
 
-import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import {
   fileCacheKey,
   type WorkplaceDisplayStatus,
@@ -41,7 +40,7 @@ export function isWorkplacePathLoadedInCache(
 }
 
 /**
- * 计算尚需推送为 workplace 草稿的 path 列表（去重，保持 live 顺序）。
+ * 计算尚需加载的 workplace path 列表（去重，保持 live 顺序）。
  */
 export function diffWorkplacePaths(
   live: readonly WorkplaceLivePath[],
@@ -63,32 +62,4 @@ export function diffWorkplacePaths(
     needed.push(path);
   }
   return needed;
-}
-
-/**
- * 差集 paths → Composer workplace 草稿附件（`content: null`，`type: "text"`）。
- */
-export function workplaceAttachmentsFromNeededPaths(
-  neededPaths: readonly string[],
-): MessageAttachment[] {
-  return neededPaths.map((path) => ({
-    name: path,
-    source: "workplace" as const,
-    type: "text" as const,
-    content: null,
-    path,
-    action: "workplaceChange" as const,
-  }));
-}
-
-/**
- * live + cacheKeys → 待推送的 workplace `MessageAttachment[]`。
- */
-export function workplaceAttachmentsFromRuleDelta(
-  live: readonly WorkplaceLivePath[],
-  cacheKeys: ReadonlySet<string> | readonly string[],
-): MessageAttachment[] {
-  return workplaceAttachmentsFromNeededPaths(
-    diffWorkplacePaths(live, cacheKeys),
-  );
 }

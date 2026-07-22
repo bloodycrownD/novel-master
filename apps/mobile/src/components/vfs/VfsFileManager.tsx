@@ -75,7 +75,7 @@ import {
   toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/workplace-operations.service';
-import { suggestWorkplaceAttachmentsToComposerDraft } from '../../services/workplace-rule-delta-draft.service';
+import { refreshRuleSnapshotAfterRuleChange } from '../../services/workplace-rule-delta-draft.service';
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
@@ -327,7 +327,7 @@ export const VfsFileManager = forwardRef<
     await reload();
     if (sessionId != null) {
       try {
-        await suggestWorkplaceAttachmentsToComposerDraft(
+        await refreshRuleSnapshotAfterRuleChange(
           runtime,
           workplace,
           sessionId,
@@ -492,7 +492,7 @@ export const VfsFileManager = forwardRef<
           await refreshVisibleRowsFromWorktree();
           if (sessionId != null) {
             try {
-              await suggestWorkplaceAttachmentsToComposerDraft(
+              await refreshRuleSnapshotAfterRuleChange(
                 runtime,
                 workplace,
                 sessionId,
@@ -531,7 +531,7 @@ export const VfsFileManager = forwardRef<
           }
           if (sessionId != null) {
             try {
-              await suggestWorkplaceAttachmentsToComposerDraft(
+              await refreshRuleSnapshotAfterRuleChange(
                 runtime,
                 workplace,
                 sessionId,

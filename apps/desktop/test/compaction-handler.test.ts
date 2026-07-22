@@ -58,7 +58,7 @@ describe("handleCompactionManual", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-CR5: manual 压缩 emit 成功后仅清 file_cache，保留 pending", async () => {
+  it("T-CR5: manual 压缩 emit 成功后清 file_cache + rule_snapshot，保留 pending", async () => {
     const rt = await getDesktopRuntime();
     const pendingJson = JSON.stringify([
       {
@@ -73,6 +73,7 @@ describe("handleCompactionManual", () => {
       "full:/a.md",
       JSON.stringify({ body: "x", mtimeMs: 1 }),
     );
+    await rt.sessionKkv.set(sessionId, "rule_snapshot", "canon", "[]");
     await rt.sessionKkv.set(
       sessionId,
       "user_vfs_pending",
@@ -87,12 +88,16 @@ describe("handleCompactionManual", () => {
       null,
     );
     assert.equal(
+      await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon"),
+      null,
+    );
+    assert.equal(
       await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
       pendingJson,
     );
   });
 
-  it("T-CR5: condition 压缩 orchestrator.emit 成功后亦仅清 file_cache", async () => {
+  it("T-CR5: condition 压缩 orchestrator.emit 成功后亦清 file_cache + rule_snapshot，保留 pending", async () => {
     const rt = await getDesktopRuntime();
     const pendingJson = JSON.stringify([
       {
@@ -107,6 +112,7 @@ describe("handleCompactionManual", () => {
       "full:/b.md",
       JSON.stringify({ body: "y", mtimeMs: 2 }),
     );
+    await rt.sessionKkv.set(sessionId, "rule_snapshot", "canon", "[]");
     await rt.sessionKkv.set(
       sessionId,
       "user_vfs_pending",
@@ -125,6 +131,10 @@ describe("handleCompactionManual", () => {
     assert.equal(emitResult.ok, true);
     assert.equal(
       await rt.sessionKkv.get(sessionId, "file_cache", "full:/b.md"),
+      null,
+    );
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon"),
       null,
     );
     assert.equal(

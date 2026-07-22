@@ -79,7 +79,5 @@ export {
 export {
   diffWorkplacePaths,
   isWorkplacePathLoadedInCache,
-  workplaceAttachmentsFromNeededPaths,
-  workplaceAttachmentsFromRuleDelta,
   type WorkplaceLivePath,
 } from "../domain/workplace/logic/diff-workplace-paths.js";

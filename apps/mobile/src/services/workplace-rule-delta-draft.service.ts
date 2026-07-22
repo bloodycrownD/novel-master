@@ -8,9 +8,8 @@ import type { MobileNovelMasterRuntime } from '../runtime/types';
 
 /**
  * 规则变更后刷新会话规则快照并清空 file_cache。
- * 保留旧函数名供 VfsFileManager 过渡调用。
  */
-export async function suggestWorkplaceAttachmentsToComposerDraft(
+export async function refreshRuleSnapshotAfterRuleChange(
   runtime: MobileNovelMasterRuntime,
   workplace: WorkplaceService,
   sessionId: string,
