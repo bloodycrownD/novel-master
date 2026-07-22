@@ -8,6 +8,13 @@ import { textBlocks } from '@novel-master/core/chat';
 import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
 import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
 import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  RULE_SNAPSHOT_CANON_KEY,
+  USER_VFS_PENDING_QUEUE_KEY,
+} from '../../src/domain/session-kkv/model/session-kkv-domains.js';
+import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
   testIsolationSuffix,
@@ -82,7 +89,7 @@ describe('MessageTranscriptEffectsService', () => {
     assert.equal((await svfs.read('/tail.md')).content, 'tail');
   });
 
-  it('T-SF1：setMessageFloorAtMessage 清空 session kkv（不依赖 capture）', async () => {
+  it('T-CR5/T-SF1：setMessageFloorAtMessage 仅清 rule_snapshot+file_cache，保留 pending', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -90,13 +97,44 @@ describe('MessageTranscriptEffectsService', () => {
     const sk = createSessionKkvService(ctx.conn);
     await sk.set(
       session.id,
-      'file_cache',
+      SESSION_KKV_DOMAIN_FILE_CACHE,
       'full:/a.md',
       JSON.stringify({ body: 'x', mtimeMs: 1 }),
     );
+    await sk.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+      '[]',
+    );
+    await sk.set(
+      session.id,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+      JSON.stringify([{ op: 'mkdir', path: '/keep-dir' }]),
+    );
     const anchor = await ctx.messages.append(session.id, 'user', textBlocks('u'));
     await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
-    assert.equal(await sk.get(session.id, 'file_cache', 'full:/a.md'), null);
+    assert.equal(
+      await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, 'full:/a.md'),
+      null,
+    );
+    assert.equal(
+      await sk.get(
+        session.id,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+        RULE_SNAPSHOT_CANON_KEY,
+      ),
+      null,
+    );
+    assert.equal(
+      await sk.get(
+        session.id,
+        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+        USER_VFS_PENDING_QUEUE_KEY,
+      ),
+      JSON.stringify([{ op: 'mkdir', path: '/keep-dir' }]),
+    );
   });
 
   it('T-SF4：setMessageFloorAtMessage 后 prefix hidden、suffix visible', async () => {

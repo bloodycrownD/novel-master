@@ -15,6 +15,10 @@ import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
 } from '@/service/message-checkpoint/truncate-tail-wiring.js';
+import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+} from '@/domain/session-kkv/model/session-kkv-domains.js';
 import type { SessionKkvService } from '@/service/session-kkv/session-kkv.port.js';
 import type { MessageService } from '../message.port.js';
 import type {
@@ -111,8 +115,15 @@ export class DefaultMessageTranscriptEffectsService
       );
     }
 
-    // 置位成功：清空 session kkv，下次 assemble 按新可见域重建常驻前缀
-    await this.deps.sessionKkv.clearSession(sessionId);
+    // 置位成功：仅清 rule_snapshot + file_cache（保留 user_vfs_pending / 手改 chip）
+    await this.deps.sessionKkv.clearDomain(
+      sessionId,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+    );
+    await this.deps.sessionKkv.clearDomain(
+      sessionId,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+    );
     sessionApiPromptTokenCache.invalidate(sessionId);
 
     return { hiddenCount, shownCount };

@@ -58,13 +58,26 @@ describe("handleCompactionManual", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("manual 压缩 emit 成功后 clear session kkv", async () => {
+  it("T-CR5: manual 压缩 emit 成功后仅清 file_cache，保留 pending", async () => {
     const rt = await getDesktopRuntime();
+    const pendingJson = JSON.stringify([
+      {
+        actionXml: '<action name="mkdir"><path>/keep</path></action>',
+        tools: [{ id: "t1", name: "vfs_mkdir" }],
+        createdAtMs: 1,
+      },
+    ]);
     await rt.sessionKkv.set(
       sessionId,
       "file_cache",
       "full:/a.md",
       JSON.stringify({ body: "x", mtimeMs: 1 }),
+    );
+    await rt.sessionKkv.set(
+      sessionId,
+      "user_vfs_pending",
+      "queue",
+      pendingJson,
     );
 
     const result = await handleCompactionManual({ projectId, sessionId });
@@ -73,15 +86,32 @@ describe("handleCompactionManual", () => {
       await rt.sessionKkv.get(sessionId, "file_cache", "full:/a.md"),
       null,
     );
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
+      pendingJson,
+    );
   });
 
-  it("condition 压缩 orchestrator.emit 成功后亦 clear session kkv", async () => {
+  it("T-CR5: condition 压缩 orchestrator.emit 成功后亦仅清 file_cache", async () => {
     const rt = await getDesktopRuntime();
+    const pendingJson = JSON.stringify([
+      {
+        actionXml: '<action name="mkdir"><path>/keep2</path></action>',
+        tools: [{ id: "t2", name: "vfs_mkdir" }],
+        createdAtMs: 2,
+      },
+    ]);
     await rt.sessionKkv.set(
       sessionId,
       "file_cache",
       "full:/b.md",
       JSON.stringify({ body: "y", mtimeMs: 2 }),
+    );
+    await rt.sessionKkv.set(
+      sessionId,
+      "user_vfs_pending",
+      "queue",
+      pendingJson,
     );
 
     const emitResult = await rt.eventOrchestrator.emit(
@@ -96,6 +126,10 @@ describe("handleCompactionManual", () => {
     assert.equal(
       await rt.sessionKkv.get(sessionId, "file_cache", "full:/b.md"),
       null,
+    );
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
+      pendingJson,
     );
   });
 });

@@ -66,7 +66,7 @@ describe('handleMessagesSetFloor', () => {
     return result.data.id;
   }
 
-  it('T-SF1: 置位成功 clear session kkv，不依赖 BlockStore capture', async () => {
+  it('T-SF1/T-CR5: 置位成功仅清 file_cache（+rule_snapshot），保留 pending；不依赖 BlockStore capture', async () => {
     const sessionId = await createSession('sf1');
     const rt = await getDesktopRuntime();
     await appendMessage(sessionId, 'user', 'u1');
@@ -80,6 +80,24 @@ describe('handleMessagesSetFloor', () => {
       'file_cache',
       'full:/a.md',
       JSON.stringify({ body: 'x', mtimeMs: 1 }),
+    );
+    await rt.sessionKkv.set(
+      sessionId,
+      'rule_snapshot',
+      'canon',
+      '[]',
+    );
+    await rt.sessionKkv.set(
+      sessionId,
+      'user_vfs_pending',
+      'queue',
+      JSON.stringify([
+        {
+          actionXml: '<action name="mkdir"><path>/keep</path></action>',
+          tools: [{ id: 't1', name: 'vfs_mkdir' }],
+          createdAtMs: 1,
+        },
+      ]),
     );
 
     const result = await handleMessagesSetFloor({
@@ -97,6 +115,20 @@ describe('handleMessagesSetFloor', () => {
     assert.equal(
       await rt.sessionKkv.get(sessionId, 'file_cache', 'full:/a.md'),
       null,
+    );
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, 'rule_snapshot', 'canon'),
+      null,
+    );
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, 'user_vfs_pending', 'queue'),
+      JSON.stringify([
+        {
+          actionXml: '<action name="mkdir"><path>/keep</path></action>',
+          tools: [{ id: 't1', name: 'vfs_mkdir' }],
+          createdAtMs: 1,
+        },
+      ]),
     );
 
     const anchor = await rt.messages.get(anchorId);

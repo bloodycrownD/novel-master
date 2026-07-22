@@ -25,10 +25,10 @@ export async function projectComposerStatusForSession(
 }
 
 /**
- * session kkv 清空后（置位 / 压缩 / 手动清缓存）：**直接清空**状态条。
+ * Undo / 手动重置常驻：直接清空状态条（Undo 可作中间态，随后反投影批注）。
  *
  * 正文 + `@` attach 由 replace 保留。
- * （置位/压缩终态改 project∪annotate 属后续 Step；本轮保持现网 `[]`。）
+ * 手动重置已知限制：会丢未发送手改 ops 投影（仍 clearSession）。
  */
 export async function refreshComposerStatusAfterSessionKkvCleared(
   _runtime: MobileNovelMasterRuntime,
@@ -37,5 +37,22 @@ export async function refreshComposerStatusAfterSessionKkvCleared(
   applyComposerStatusAttachmentsReplace({
     sessionId: scope.sessionId,
     attachments: [],
+  });
+}
+
+/**
+ * 置位 / 压缩成功：project(ops) ∪ annotate（`apply` 内 ∪）；禁止终态强制 `[]`。
+ */
+export async function refreshComposerStatusAfterFloorOrCompaction(
+  runtime: MobileNovelMasterRuntime,
+  scope: { readonly projectId: string; readonly sessionId: string },
+): Promise<void> {
+  const attachments = await projectComposerStatusForSession(
+    runtime,
+    scope.sessionId,
+  );
+  applyComposerStatusAttachmentsReplace({
+    sessionId: scope.sessionId,
+    attachments,
   });
 }

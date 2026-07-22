@@ -33,7 +33,10 @@ import {
   refreshComposerAnnotateChips,
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
-import { refreshComposerStatusAfterSessionKkvCleared } from '@/services/project-composer-status.service';
+import {
+  refreshComposerStatusAfterFloorOrCompaction,
+  refreshComposerStatusAfterSessionKkvCleared,
+} from '@/services/project-composer-status.service';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
 import {
@@ -331,7 +334,7 @@ export function useChatTabMessageActions({
                   toastMessage('压缩部分失败', result.failures[0]?.error),
                 );
               } else {
-                await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+                await refreshComposerStatusAfterFloorOrCompaction(runtime, {
                   projectId,
                   sessionId,
                 });
@@ -558,7 +561,7 @@ export function useChatTabMessageActions({
 
       const runSetFloor = async () => {
         try {
-          // clear session kkv 由 Core setMessageFloorAtMessage 完成
+          // clear rule_snapshot + file_cache 由 Core setMessageFloorAtMessage 完成
           const result =
             await runtime.messageTranscriptEffects.setMessageFloorAtMessage(
               projectId,
@@ -568,7 +571,7 @@ export function useChatTabMessageActions({
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();
-          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+          await refreshComposerStatusAfterFloorOrCompaction(runtime, {
             projectId,
             sessionId,
           });

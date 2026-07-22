@@ -1,5 +1,5 @@
 /**
- * refreshComposerStatusAfterSessionKkvCleared：清 kkv 后直接空状态条，不 project。
+ * T-CR5：置位/压缩 refresh 推 project∪annotate；Undo 路径仍可先空。
  */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
@@ -10,14 +10,17 @@ jest.mock('../src/storage/chat-composer-draft', () => ({
     mockReplace(...args),
 }));
 
-import { refreshComposerStatusAfterSessionKkvCleared } from '../src/services/project-composer-status.service';
+import {
+  refreshComposerStatusAfterFloorOrCompaction,
+  refreshComposerStatusAfterSessionKkvCleared,
+} from '../src/services/project-composer-status.service';
 
-describe('refreshComposerStatusAfterSessionKkvCleared', () => {
+describe('composer status after kkv clear (T-CR5)', () => {
   beforeEach(() => {
     mockReplace.mockClear();
   });
 
-  it('置位/清 kkv 后以空 attachments 替换状态条（禁止全量 workplace 投影）', async () => {
+  it('Undo/手动：refreshComposerStatusAfterSessionKkvCleared 以空 attachments 替换', async () => {
     await refreshComposerStatusAfterSessionKkvCleared({} as any, {
       projectId: 'p',
       sessionId: 's1',
@@ -25,6 +28,34 @@ describe('refreshComposerStatusAfterSessionKkvCleared', () => {
     expect(mockReplace).toHaveBeenCalledWith({
       sessionId: 's1',
       attachments: [],
+    });
+  });
+
+  it('T-CR5: 置位/压缩 refreshComposerStatusAfterFloorOrCompaction 推 project 结果（非强制 []）', async () => {
+    const runtime = {
+      userVfsTurn: {
+        hasPendingTurns: async () => true,
+        previewUserOpsActions: async () => [
+          { action: 'mkdir', path: '/keep' },
+        ],
+      },
+    } as any;
+    await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+      projectId: 'p',
+      sessionId: 's1',
+    });
+    expect(mockReplace).toHaveBeenCalledWith({
+      sessionId: 's1',
+      attachments: [
+        {
+          name: '/keep',
+          source: 'user_ops',
+          type: 'text',
+          content: null,
+          path: '/keep',
+          action: 'mkdir',
+        },
+      ],
     });
   });
 });
