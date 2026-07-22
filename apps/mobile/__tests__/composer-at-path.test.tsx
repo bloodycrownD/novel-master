@@ -53,6 +53,13 @@ const triggersConfig: ComposerAtPathTriggersConfig = {
     isInsertSpaceAfterMention: true,
     getPlainString: mention => `@${mention.name}`,
   },
+  // 与生产 ComposerAtPathInput 同构：消息批注第二 trigger（suggest 恒空）
+  msgAnnotate: {
+    trigger: '§',
+    allowedSpacesCount: 0,
+    isInsertSpaceAfterMention: true,
+    getPlainString: mention => mention.name,
+  },
 };
 
 describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {

@@ -13,10 +13,12 @@ import React, {
 import { StyleSheet, View } from 'react-native';
 import WebView, { type WebViewMessageEvent } from 'react-native-webview';
 import { type ChatMessage } from '@novel-master/core/chat';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {
   encodeHostToTranscript,
   decodeTranscriptToHost,
   parseScrollSnapshotFromHost,
+  RESOLVE_SELECTION_ANNOTATE_JS,
   type ChatTranscriptScrollSnapshot,
   type HostToTranscriptMessage,
   type TranscriptFlags,
@@ -42,6 +44,12 @@ import { prepareStreamTailHtml } from './prepare-stream-tail-html';
 import type { StreamWireChunk } from '@/services/stream-wire-queue';
 import { appendWireChunk } from '@/services/stream-wire-queue';
 import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
+import { RICH_DOCUMENT_ANNOTATE_MENU_ITEMS } from '@/components/vfs/RichDocumentWebView';
+
+/** 划词菜单：对齐 RICH_DOCUMENT_ANNOTATE_MENU_ITEMS（批注 + 复制）。 */
+export const CHAT_TRANSCRIPT_ANNOTATE_MENU_ITEMS = [
+  ...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
+] as const;
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
@@ -82,6 +90,14 @@ export type ChatTranscriptWebViewProps = {
   ) => void;
   readonly onMessageMenuAction?: (messageId: string, action: string) => void;
   readonly onWebMenuOpenChange?: (open: boolean) => void;
+  /**
+   * 划词「批注」：injectJS 上溯得到 `{ messageId, text }` 后回调。
+   * 解析失败时不回调（取消录入）。
+   */
+  readonly onSelectionAnnotate?: (payload: {
+    messageId: string;
+    text: string;
+  }) => void;
 };
 
 function transcriptFlagsEqual(
@@ -214,6 +230,7 @@ export const ChatTranscriptWebView = memo(
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
+        onSelectionAnnotate,
       },
       ref,
     ) {
@@ -225,6 +242,8 @@ export const ChatTranscriptWebView = memo(
       };
       const { tokens } = useTheme();
       const webRef = useRef<WebView>(null);
+      const onSelectionAnnotateRef = useRef(onSelectionAnnotate);
+      onSelectionAnnotateRef.current = onSelectionAnnotate;
       const [webReady, setWebReady] = useState(false);
       const prevStreamTextRef = useRef('');
       const prevStreamThinkingRef = useRef('');
@@ -769,6 +788,18 @@ export const ChatTranscriptWebView = memo(
             onWebMenuOpenChange?.(false);
             return;
           }
+          if (message.type === 'selectionAnnotate') {
+            const messageId = String(message.payload.messageId ?? '').trim();
+            const text = String(message.payload.text ?? '')
+              .replace(/\u00a0/g, ' ')
+              .trim();
+            // 上溯失败 / 空选区 → 取消录入、不写草稿、不插 tag
+            if (!messageId || !text) {
+              return;
+            }
+            onSelectionAnnotateRef.current?.({messageId, text});
+            return;
+          }
         },
         [
           onReady,
@@ -780,6 +811,29 @@ export const ChatTranscriptWebView = memo(
           onWebMenuOpenChange,
           uiRunning,
         ],
+      );
+
+      const handleCustomMenuSelection = useCallback(
+        (event: {nativeEvent: {key?: string; selectedText?: string}}) => {
+          if (uiRunning) {
+            return;
+          }
+          const key = String(event.nativeEvent.key ?? '');
+          const selectedText = String(event.nativeEvent.selectedText ?? '')
+            .replace(/\u00a0/g, ' ')
+            .trim();
+          if (key === 'copy') {
+            if (selectedText) {
+              Clipboard.setString(selectedText);
+            }
+            return;
+          }
+          if (key === 'annotate') {
+            // injectJS：getSelection 上溯 `.row.message[data-id]` → bridge
+            webRef.current?.injectJavaScript(RESOLVE_SELECTION_ANNOTATE_JS);
+          }
+        },
+        [uiRunning],
       );
 
       useEffect(() => {
@@ -1010,6 +1064,9 @@ export const ChatTranscriptWebView = memo(
             scrollEnabled={false}
             showsVerticalScrollIndicator={false}
             keyboardDisplayRequiresUserAction={false}
+            /* 划词：自定义选区菜单对齐 RICH_DOCUMENT（批注+复制）；须自备复制。 */
+            menuItems={[...CHAT_TRANSCRIPT_ANNOTATE_MENU_ITEMS]}
+            onCustomMenuSelection={handleCustomMenuSelection}
           />
         </View>
       );

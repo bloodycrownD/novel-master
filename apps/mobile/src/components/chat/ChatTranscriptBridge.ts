@@ -172,10 +172,47 @@ export type TranscriptToHostMessage =
   | BridgeEnvelope<'messageMenuAction', { messageId: string; action: string }>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>
+  /** 划词批注：injectJS 从上溯 `.row.message[data-id]` 得到 messageId + 选区文本。 */
+  | BridgeEnvelope<
+      'selectionAnnotate',
+      { messageId: string; text: string }
+    >
   | BridgeEnvelope<
       'log',
       { level: string; message: string; fields?: Record<string, unknown> }
     >;
+
+/**
+ * 划词批注：从 `window.getSelection()` 上溯 `.row.message[data-id]`，
+ * 经 bridge 回报 `{ messageId, text }`（失败时空串，宿主取消录入）。
+ */
+export const RESOLVE_SELECTION_ANNOTATE_JS = `(function(){
+  try {
+    var sel = window.getSelection && window.getSelection();
+    var text = (sel && sel.toString ? sel.toString() : '')
+      .replace(/\\u00a0/g, ' ')
+      .trim();
+    var messageId = '';
+    if (text && sel && sel.anchorNode) {
+      var node = sel.anchorNode;
+      var el = node.nodeType === 3 ? node.parentElement : node;
+      var row = el && el.closest ? el.closest('.row.message[data-id]') : null;
+      messageId = row ? (row.getAttribute('data-id') || '') : '';
+    }
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      v: 1,
+      type: 'selectionAnnotate',
+      payload: { messageId: messageId, text: text }
+    }));
+  } catch (e) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      v: 1,
+      type: 'selectionAnnotate',
+      payload: { messageId: '', text: '' }
+    }));
+  }
+  return true;
+})();`;
 
 export type HostToTranscriptType = HostToTranscriptMessage['type'];
 export type TranscriptToHostType = TranscriptToHostMessage['type'];

@@ -1,11 +1,14 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type VfsScope } from '@novel-master/core/vfs';
 import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
-import { ChatComposer } from '@/components/chat/ChatComposer';
+import {
+  ChatComposer,
+  type ChatComposerHandle,
+} from '@/components/chat/ChatComposer';
 import { ChatMetaBar } from '@/components/chat/ChatMetaBar';
 import { ChatStreamMetricsBarLive } from '@/components/chat/ChatStreamMetricsBarLive';
 import { ChatTranscriptWebView } from '@/components/chat/ChatTranscriptWebView';
@@ -33,6 +36,7 @@ export function ChatConversationPanel({
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
+  const composerRef = useRef<ChatComposerHandle>(null);
 
   const {
     conversationPanel,
@@ -181,6 +185,9 @@ export function ChatConversationPanel({
                 onOpenToolFile={scope.openSessionFilePreview}
                 onWebMenuOpenChange={controller.onWebMenuOpenChange}
                 onMessageMenuAction={controller.onWebMessageMenuAction}
+                onSelectionAnnotate={selection => {
+                  composerRef.current?.beginMessageAnnotate(selection);
+                }}
               />
             ) : (
               <MessageList
@@ -212,6 +219,7 @@ export function ChatConversationPanel({
               />
             )}
             <ChatComposer
+              ref={composerRef}
               scope={{ projectId, sessionId }}
               hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
               running={uiRunning}

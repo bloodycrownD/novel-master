@@ -1,8 +1,15 @@
 /**
- * Chat input: 大框 + 框内「更多 / @ / 发送」；attachments draft。
+ * Chat input: 大框 + 框内「更多 / @ / 发送」；attachments draft；消息批注 tag。
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   Alert,
@@ -50,6 +57,14 @@ import {
   listChatAnnotateDrafts,
   subscribeChatAnnotateDraft,
 } from '@/storage/chat-annotate-draft';
+import {
+  addChatMessageAnnotateDraft,
+  clearChatMessageAnnotateDrafts,
+  hasChatMessageAnnotateDrafts,
+  listChatMessageAnnotateDrafts,
+  removeChatMessageAnnotateDraft,
+  subscribeChatMessageAnnotateDraft,
+} from '@/storage/chat-message-annotate-draft';
 
 import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
 
@@ -67,6 +82,7 @@ import {
 } from './composer-at-path';
 import { composerDockBottomPadding } from './composer-dock-padding';
 import { FileReferencePicker } from './FileReferencePicker';
+import { MessageEditModal } from './MessageEditModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
@@ -102,577 +118,698 @@ type Props = {
   onOpenMore?: () => void;
 };
 
-export function ChatComposer({
-  scope,
-  hasModel,
-  running,
-  beginUiRun,
-  abortUiRun,
-  onStreamReset,
-  onMessagesChanged,
-  onNeedModel,
-  canResumeWithoutInput,
-  lastMessageHasToolResult,
-  lastMessageIsPlainUserText,
-  draftRestoreToken,
-  onOpenMore,
-}: Props) {
-  const { tokens } = useTheme();
-  const insets = useSafeAreaInsets();
-  const runtime = useRuntime();
-  const { sessionId } = scope;
-  const initial = readChatComposerDraftState(sessionId);
-  const [text, setText] = useState(initial.text);
-  const [attachments, setAttachments] = useState<MessageAttachment[]>([
-    ...initial.attachments,
-  ]);
-  const [hasPendingUserOps, setHasPendingUserOps] = useState(false);
-  const [error, setError] = useState<string | undefined>();
-  const [runAbortController, setRunAbortController] =
-    useState<AbortController | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [cursor, setCursor] = useState(0);
-  const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
-  const inputRef = useRef<TextInput>(null);
-  /** 程序化插入 @path（选择器 / typeahead）走 mentions 提交路径。 */
-  const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
+export type ChatComposerHandle = {
+  /** 划词宿主录入：弹出批注说明 → store + 插 Composer tag。 */
+  beginMessageAnnotate: (selection: {
+    messageId: string;
+    text: string;
+  }) => void;
+};
 
-  const streamHandlersRef = useRef({
-    onMessagesChanged,
-    onStreamReset,
-  });
-  streamHandlersRef.current = {
-    onMessagesChanged,
-    onStreamReset,
-  };
+function newMessageAnnotateId(): string {
+  return `mann-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
 
-  const runtimeRef = useRef(runtime);
-  runtimeRef.current = runtime;
-
-  const activeAt = findActiveAtQuery(text, cursor);
-
-  useEffect(() => {
-    if (activeAt == null) {
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const session = await runtimeRef.current.sessions.get(sessionId);
-        const worktree = runtimeRef.current.workplace({
-          kind: 'session',
-          projectId: session.projectId,
-          sessionId,
-        });
-        const rows = await worktree.buildListRows();
-        if (!cancelled) {
-          setTypeaheadRows(rows);
-        }
-      } catch {
-        if (!cancelled) {
-          setTypeaheadRows([]);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeAt != null, sessionId]);
-
-  const typeaheadCandidates = (() => {
-    if (activeAt == null) {
-      return [] as AtPathRef[];
-    }
-    const refs: AtPathRef[] = typeaheadRows
-      .filter(r => r.path !== '/')
-      .map(r => ({
-        path: r.path,
-        kind: r.kind === 'dir' ? ('dir' as const) : ('file' as const),
-      }));
-    return filterAtPathTypeaheadCandidates(refs, activeAt.query, 5);
-  })();
-
-  const persistDraft = useCallback(
-    (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
-      writeChatComposerDraftState(
-        sessionId,
-        {
-          text: nextText,
-          attachments: nextAttachments,
-        },
-        runtimeRef.current.sessions,
-      );
+export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
+  function ChatComposer(
+    {
+      scope,
+      hasModel,
+      running,
+      beginUiRun,
+      abortUiRun,
+      onStreamReset,
+      onMessagesChanged,
+      onNeedModel,
+      canResumeWithoutInput,
+      lastMessageHasToolResult,
+      lastMessageIsPlainUserText,
+      draftRestoreToken,
+      onOpenMore,
     },
-    [sessionId],
-  );
+    ref,
+  ) {
+    const { tokens } = useTheme();
+    const insets = useSafeAreaInsets();
+    const runtime = useRuntime();
+    const { sessionId } = scope;
+    const initial = readChatComposerDraftState(sessionId);
+    const [text, setText] = useState(initial.text);
+    const [attachments, setAttachments] = useState<MessageAttachment[]>([
+      ...initial.attachments,
+    ]);
+    const [hasPendingUserOps, setHasPendingUserOps] = useState(false);
+    const [error, setError] = useState<string | undefined>();
+    const [runAbortController, setRunAbortController] =
+      useState<AbortController | null>(null);
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [cursor, setCursor] = useState(0);
+    const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
+    /** 消息批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算（无 chip 投影）。 */
+    const [messageAnnotateEpoch, setMessageAnnotateEpoch] = useState(0);
+    const [pendingMessageAnnotate, setPendingMessageAnnotate] = useState<{
+      messageId: string;
+      text: string;
+    } | null>(null);
+    const [messageAnnotateModalVisible, setMessageAnnotateModalVisible] =
+      useState(false);
+    const inputRef = useRef<TextInput>(null);
+    /** 程序化插入 @path / 消息批注 tag 走 mentions 提交路径。 */
+    const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
 
-  const refreshPendingUserOps = useCallback(async () => {
-    try {
-      const pending = await runtimeRef.current.userVfsTurn.hasPendingTurns(
-        sessionId,
-      );
-      setHasPendingUserOps(pending);
-    } catch {
-      setHasPendingUserOps(false);
-    }
-  }, [sessionId]);
+    const streamHandlersRef = useRef({
+      onMessagesChanged,
+      onStreamReset,
+    });
+    streamHandlersRef.current = {
+      onMessagesChanged,
+      onStreamReset,
+    };
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const rt = runtimeRef.current;
-      await hydrateChatComposerDraftFromDb(sessionId, rt.sessions);
-      if (cancelled) {
+    const runtimeRef = useRef(runtime);
+    runtimeRef.current = runtime;
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        beginMessageAnnotate(selection) {
+          const messageId = selection.messageId.trim();
+          const textSel = selection.text.replace(/\u00a0/g, ' ').trim();
+          if (!messageId || !textSel) {
+            return;
+          }
+          setPendingMessageAnnotate({ messageId, text: textSel });
+          setMessageAnnotateModalVisible(true);
+        },
+      }),
+      [],
+    );
+
+    const activeAt = findActiveAtQuery(text, cursor);
+
+    // epoch 订阅触发重渲染后重新读两 store 取或
+    const hasAnnotateDraftsOr =
+      hasChatAnnotateDrafts(sessionId) ||
+      hasChatMessageAnnotateDrafts(sessionId);
+    void messageAnnotateEpoch;
+
+    useEffect(() => {
+      if (activeAt == null) {
         return;
       }
-      try {
-        const session = await rt.sessions.get(sessionId);
-        const worktree = rt.workplace({
-          kind: 'session',
-          projectId: session.projectId,
+      let cancelled = false;
+      void (async () => {
+        try {
+          const session = await runtimeRef.current.sessions.get(sessionId);
+          const worktree = runtimeRef.current.workplace({
+            kind: 'session',
+            projectId: session.projectId,
+            sessionId,
+          });
+          const rows = await worktree.buildListRows();
+          if (!cancelled) {
+            setTypeaheadRows(rows);
+          }
+        } catch {
+          if (!cancelled) {
+            setTypeaheadRows([]);
+          }
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [activeAt != null, sessionId]);
+
+    const typeaheadCandidates = (() => {
+      if (activeAt == null) {
+        return [] as AtPathRef[];
+      }
+      const refs: AtPathRef[] = typeaheadRows
+        .filter(r => r.path !== '/')
+        .map(r => ({
+          path: r.path,
+          kind: r.kind === 'dir' ? ('dir' as const) : ('file' as const),
+        }));
+      return filterAtPathTypeaheadCandidates(refs, activeAt.query, 5);
+    })();
+
+    const persistDraft = useCallback(
+      (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
+        writeChatComposerDraftState(
           sessionId,
-        });
-        const status = await projectComposerStatusForSession(
-          rt,
-          worktree,
+          {
+            text: nextText,
+            attachments: nextAttachments,
+          },
+          runtimeRef.current.sessions,
+        );
+      },
+      [sessionId],
+    );
+
+    const refreshPendingUserOps = useCallback(async () => {
+      try {
+        const pending = await runtimeRef.current.userVfsTurn.hasPendingTurns(
           sessionId,
         );
+        setHasPendingUserOps(pending);
+      } catch {
+        setHasPendingUserOps(false);
+      }
+    }, [sessionId]);
+
+    useEffect(() => {
+      let cancelled = false;
+      void (async () => {
+        const rt = runtimeRef.current;
+        await hydrateChatComposerDraftFromDb(sessionId, rt.sessions);
         if (cancelled) {
           return;
         }
-        applyComposerStatusAttachmentsReplace({
-          sessionId,
-          attachments: status,
-        });
-      } catch {
-        // 投影失败时仍用已水化的 attach+text
-      }
-      if (cancelled) {
-        return;
-      }
-      const draft = readChatComposerDraftState(sessionId);
-      setText(draft.text);
-      setAttachments([...draft.attachments]);
-      void refreshPendingUserOps();
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, draftRestoreToken, refreshPendingUserOps]);
-
-  useEffect(() => {
-    return subscribeChatComposerDraft(changedSessionId => {
-      if (changedSessionId !== sessionId) {
-        return;
-      }
-      const draft = readChatComposerDraftState(sessionId);
-      setText(draft.text);
-      setAttachments([...draft.attachments]);
-      void refreshPendingUserOps();
-    });
-  }, [sessionId, refreshPendingUserOps]);
-
-  useEffect(() => {
-    return subscribeChatAnnotateDraft(changedSessionId => {
-      if (changedSessionId !== sessionId) {
-        return;
-      }
-      refreshComposerAnnotateChips(sessionId);
-    });
-  }, [sessionId]);
-
-  const executeRun = useCallback(
-    async (
-      content: string,
-      allowResumeWithoutInput: boolean,
-      /** 状态条有 workplace 差集：可发且发送后须清上条（由重投影收敛）。 */
-      hasWorkplaceDelta: boolean,
-    ) => {
-      if (isMobileAgentActive()) {
-        return;
-      }
-
-      const controller = new AbortController();
-      setError(undefined);
-      onStreamReset();
-      beginUiRun();
-
-      // 有正文 / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
-      // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
-      const shouldClearComposer =
-        content.trim() !== '' ||
-        hasPendingUserOps ||
-        hasWorkplaceDelta;
-      let composerCleared = false;
-      const clearComposerNow = () => {
-        if (composerCleared) {
-          return;
-        }
-        composerCleared = true;
-        clearChatComposerDraft(sessionId, runtime.sessions);
-        setText('');
-        setAttachments([]);
-      };
-
-      setRunAbortController(controller);
-
-      try {
-        const stream = await runtime.preferences.getLlmStreamEnabled();
-        const annotateDrafts = listChatAnnotateDrafts(sessionId);
-        // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
-        await runAgentTurn(runtime, scope, content, {
-          stream,
-          allowResumeWithoutInput,
-          signal: controller.signal,
-          annotateDrafts:
-            annotateDrafts.length > 0 ? annotateDrafts : undefined,
-          onUserMessageAppended: () => {
-            // append 成功后再清输入 + annotate，避免失败时丢草稿
-            clearChatAnnotateDrafts(sessionId);
-            clearComposerNow();
-            void Promise.resolve(
-              streamHandlersRef.current.onMessagesChanged(),
-            ).catch(() => undefined);
-          },
-        });
-        // 空续跑 / 仅 flush / 仅 workplace 等路径可能不走 append 回调
-        if (shouldClearComposer) {
-          clearComposerNow();
-        }
-        // 发送 flush 后 pending 空 → 上条应空；以投影为准刷新 chip
         try {
-          const session = await runtime.sessions.get(sessionId);
-          const worktree = runtime.workplace({
+          const session = await rt.sessions.get(sessionId);
+          const worktree = rt.workplace({
             kind: 'session',
             projectId: session.projectId,
             sessionId,
           });
           const status = await projectComposerStatusForSession(
-            runtime,
+            rt,
             worktree,
             sessionId,
           );
+          if (cancelled) {
+            return;
+          }
           applyComposerStatusAttachmentsReplace({
             sessionId,
             attachments: status,
           });
         } catch {
-          // 投影失败不影响发送结果
+          // 投影失败时仍用已水化的 attach+text
         }
-        // 再刷一次列表，覆盖 re-append / 流式末态漏刷新
-        await Promise.resolve(
-          streamHandlersRef.current.onMessagesChanged(),
-        ).catch(() => undefined);
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
+        if (cancelled) {
           return;
         }
-        if (typeof __DEV__ !== 'undefined' && __DEV__) {
-          const detail =
-            err instanceof Error
-              ? {
-                  name: err.name,
-                  message: err.message,
-                  stack: err.stack,
-                  cause: String(
-                    (err as Error & { cause?: unknown }).cause ?? '',
-                  ),
-                }
-              : { name: typeof err, message: String(err) };
-          console.error('[novel-master/chat] run failed', detail);
-        }
-        setError(formatError(err));
-      } finally {
-        setRunAbortController(null);
-        if (isMobileAgentActive()) {
-          decrementAgentActive();
-        }
+        const draft = readChatComposerDraftState(sessionId);
+        setText(draft.text);
+        setAttachments([...draft.attachments]);
         void refreshPendingUserOps();
-      }
-    },
-    [
-      runtime,
-      scope,
-      sessionId,
-      beginUiRun,
-      onStreamReset,
-      refreshPendingUserOps,
-      hasPendingUserOps,
-    ],
-  );
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [sessionId, draftRestoreToken, refreshPendingUserOps]);
 
-  const sendWithBridgeIfNeeded = useCallback(
-    async (
-      content: string,
-      allowResumeWithoutInput: boolean,
-      hasWorkplaceDelta: boolean,
-    ) => {
-      if (content && lastMessageHasToolResult) {
-        return new Promise<void>(resolve => {
-          Alert.alert(
-            '插入桥接消息',
-            `为保证对话连续，将插入 Assistant 消息「${TOOL_TURN_BRIDGE_TEXT}」，再发送您的消息。`,
-            [
-              {
-                text: '取消',
-                style: 'cancel',
-                onPress: () => resolve(),
-              },
-              {
-                text: '确认并发送',
-                onPress: () => {
-                  void (async () => {
-                    try {
-                      await runtime.appendToolTurnBridge(sessionId);
-                      await streamHandlersRef.current.onMessagesChanged();
-                      await executeRun(content, false, hasWorkplaceDelta);
-                    } catch (err) {
-                      setError(formatError(err));
-                    } finally {
-                      resolve();
-                    }
-                  })();
+    useEffect(() => {
+      return subscribeChatComposerDraft(changedSessionId => {
+        if (changedSessionId !== sessionId) {
+          return;
+        }
+        const draft = readChatComposerDraftState(sessionId);
+        setText(draft.text);
+        setAttachments([...draft.attachments]);
+        void refreshPendingUserOps();
+      });
+    }, [sessionId, refreshPendingUserOps]);
+
+    useEffect(() => {
+      return subscribeChatAnnotateDraft(changedSessionId => {
+        if (changedSessionId !== sessionId) {
+          return;
+        }
+        refreshComposerAnnotateChips(sessionId);
+        setMessageAnnotateEpoch(n => n + 1);
+      });
+    }, [sessionId]);
+
+    useEffect(() => {
+      return subscribeChatMessageAnnotateDraft(changedSessionId => {
+        if (changedSessionId !== sessionId) {
+          return;
+        }
+        setMessageAnnotateEpoch(n => n + 1);
+      });
+    }, [sessionId]);
+
+    const handleMessageAnnotateRemoved = useCallback(
+      (draftIds: readonly string[]) => {
+        for (const id of draftIds) {
+          removeChatMessageAnnotateDraft(sessionId, id);
+        }
+      },
+      [sessionId],
+    );
+
+    const handleMessageAnnotateConfirm = useCallback(
+      async (userAnnotation: string) => {
+        const pending = pendingMessageAnnotate;
+        setMessageAnnotateModalVisible(false);
+        setPendingMessageAnnotate(null);
+        if (pending == null) {
+          return;
+        }
+        const draft = {
+          id: newMessageAnnotateId(),
+          messageId: pending.messageId,
+          originalText: pending.text,
+          userAnnotation,
+        };
+        addChatMessageAnnotateDraft(sessionId, draft);
+        atPathInputRef.current?.insertMessageAnnotate(draft);
+      },
+      [pendingMessageAnnotate, sessionId],
+    );
+
+    const executeRun = useCallback(
+      async (
+        content: string,
+        allowResumeWithoutInput: boolean,
+        /** 状态条有 workplace 差集：可发且发送后须清上条（由重投影收敛）。 */
+        hasWorkplaceDelta: boolean,
+      ) => {
+        if (isMobileAgentActive()) {
+          return;
+        }
+
+        const controller = new AbortController();
+        setError(undefined);
+        onStreamReset();
+        beginUiRun();
+
+        // 有正文 / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
+        // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
+        const shouldClearComposer =
+          content.trim() !== '' || hasPendingUserOps || hasWorkplaceDelta;
+        let composerCleared = false;
+        const clearComposerNow = () => {
+          if (composerCleared) {
+            return;
+          }
+          composerCleared = true;
+          clearChatComposerDraft(sessionId, runtime.sessions);
+          setText('');
+          setAttachments([]);
+        };
+
+        setRunAbortController(controller);
+
+        try {
+          const stream = await runtime.preferences.getLlmStreamEnabled();
+          const fileDrafts = listChatAnnotateDrafts(sessionId);
+          const msgDrafts = listChatMessageAnnotateDrafts(sessionId);
+          const annotateDrafts = [...fileDrafts, ...msgDrafts];
+          // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
+          // userContent 已是剥离消息批注 span 后的 plain（App 勿另调 scan）
+          await runAgentTurn(runtime, scope, content, {
+            stream,
+            allowResumeWithoutInput,
+            signal: controller.signal,
+            annotateDrafts:
+              annotateDrafts.length > 0 ? annotateDrafts : undefined,
+            onUserMessageAppended: () => {
+              // append 成功后再清输入 + 双清 annotate，避免失败时丢草稿
+              clearChatAnnotateDrafts(sessionId);
+              clearChatMessageAnnotateDrafts(sessionId);
+              clearComposerNow();
+              void Promise.resolve(
+                streamHandlersRef.current.onMessagesChanged(),
+              ).catch(() => undefined);
+            },
+          });
+          // 空续跑 / 仅 flush / 仅 workplace 等路径可能不走 append 回调
+          if (shouldClearComposer) {
+            clearComposerNow();
+          }
+          // 发送 flush 后 pending 空 → 上条应空；以投影为准刷新 chip
+          try {
+            const session = await runtime.sessions.get(sessionId);
+            const worktree = runtime.workplace({
+              kind: 'session',
+              projectId: session.projectId,
+              sessionId,
+            });
+            const status = await projectComposerStatusForSession(
+              runtime,
+              worktree,
+              sessionId,
+            );
+            applyComposerStatusAttachmentsReplace({
+              sessionId,
+              attachments: status,
+            });
+          } catch {
+            // 投影失败不影响发送结果
+          }
+          // 再刷一次列表，覆盖 re-append / 流式末态漏刷新
+          await Promise.resolve(
+            streamHandlersRef.current.onMessagesChanged(),
+          ).catch(() => undefined);
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            return;
+          }
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            const detail =
+              err instanceof Error
+                ? {
+                    name: err.name,
+                    message: err.message,
+                    stack: err.stack,
+                    cause: String(
+                      (err as Error & { cause?: unknown }).cause ?? '',
+                    ),
+                  }
+                : { name: typeof err, message: String(err) };
+            console.error('[novel-master/chat] run failed', detail);
+          }
+          setError(formatError(err));
+        } finally {
+          setRunAbortController(null);
+          if (isMobileAgentActive()) {
+            decrementAgentActive();
+          }
+          void refreshPendingUserOps();
+        }
+      },
+      [
+        runtime,
+        scope,
+        sessionId,
+        beginUiRun,
+        onStreamReset,
+        refreshPendingUserOps,
+        hasPendingUserOps,
+      ],
+    );
+
+    const sendWithBridgeIfNeeded = useCallback(
+      async (
+        content: string,
+        allowResumeWithoutInput: boolean,
+        hasWorkplaceDelta: boolean,
+      ) => {
+        if (content && lastMessageHasToolResult) {
+          return new Promise<void>(resolve => {
+            Alert.alert(
+              '插入桥接消息',
+              `为保证对话连续，将插入 Assistant 消息「${TOOL_TURN_BRIDGE_TEXT}」，再发送您的消息。`,
+              [
+                {
+                  text: '取消',
+                  style: 'cancel',
+                  onPress: () => resolve(),
                 },
-              },
-            ],
-          );
-        });
-      }
+                {
+                  text: '确认并发送',
+                  onPress: () => {
+                    void (async () => {
+                      try {
+                        await runtime.appendToolTurnBridge(sessionId);
+                        await streamHandlersRef.current.onMessagesChanged();
+                        await executeRun(content, false, hasWorkplaceDelta);
+                      } catch (err) {
+                        setError(formatError(err));
+                      } finally {
+                        resolve();
+                      }
+                    })();
+                  },
+                },
+              ],
+            );
+          });
+        }
 
-      await executeRun(content, allowResumeWithoutInput, hasWorkplaceDelta);
-    },
-    [lastMessageHasToolResult, runtime, sessionId, executeRun],
-  );
+        await executeRun(content, allowResumeWithoutInput, hasWorkplaceDelta);
+      },
+      [lastMessageHasToolResult, runtime, sessionId, executeRun],
+    );
 
-  const insertTokensIntoComposer = useCallback(
-    (tokens: readonly string[]) => {
-      if (tokens.length === 0) {
+    const insertTokensIntoComposer = useCallback(
+      (pathTokens: readonly string[]) => {
+        if (pathTokens.length === 0) {
+          return;
+        }
+        // 有未完成 @… 时从 @ 起替换到光标，避免残留半截查询
+        const replaceStart = activeAt != null ? activeAt.start : cursor;
+        const before = text.slice(0, replaceStart);
+        const after = text.slice(cursor);
+        const gapBefore =
+          before.length === 0 || /\s$/.test(before) ? '' : ' ';
+        const joined = pathTokens.join(' ');
+        // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
+        const gapAfter =
+          after.length === 0 || !/^\s/.test(after) ? ' ' : '';
+        const inserted = `${gapBefore}${joined}${gapAfter}`;
+        const next = `${before}${inserted}${after}`;
+        const nextCursor = before.length + inserted.length;
+        // 程序化 API：新增 @path 提成 mention（成 tag + 可原子删）
+        if (atPathInputRef.current) {
+          atPathInputRef.current.replaceCommittedText(next, nextCursor);
+          return;
+        }
+        const statusOnly = attachments.filter(
+          a => a.source === 'workplace' || a.source === 'user_ops',
+        );
+        setText(next);
+        persistDraft(next, statusOnly);
+        setCursor(nextCursor);
+      },
+      [activeAt, attachments, cursor, persistDraft, text],
+    );
+
+    const applyTypeaheadToken = useCallback(
+      (token: string) => {
+        // 优先 mentions onSelect；失败再整段 replaceCommittedText
+        if (atPathInputRef.current?.replaceActiveAt(token)) {
+          return;
+        }
+        if (activeAt == null) {
+          return;
+        }
+        const next = replaceActiveAtWithToken(
+          text,
+          cursor,
+          activeAt.start,
+          token,
+        );
+        if (atPathInputRef.current) {
+          atPathInputRef.current.replaceCommittedText(next.text, next.cursor);
+          return;
+        }
+        const statusOnly = attachments.filter(
+          a => a.source === 'workplace' || a.source === 'user_ops',
+        );
+        setText(next.text);
+        persistDraft(next.text, statusOnly);
+        setCursor(next.cursor);
+      },
+      [activeAt, attachments, cursor, persistDraft, text],
+    );
+
+    const send = useCallback(async () => {
+      if (!hasModel) {
+        onNeedModel();
         return;
       }
-      // 有未完成 @… 时从 @ 起替换到光标，避免残留半截查询
-      const replaceStart = activeAt != null ? activeAt.start : cursor;
-      const before = text.slice(0, replaceStart);
-      const after = text.slice(cursor);
-      const gapBefore =
-        before.length === 0 || /\s$/.test(before) ? '' : ' ';
-      const joined = tokens.join(' ');
-      // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
-      const gapAfter =
-        after.length === 0 || !/^\s/.test(after) ? ' ' : '';
-      const inserted = `${gapBefore}${joined}${gapAfter}`;
-      const next = `${before}${inserted}${after}`;
-      const nextCursor = before.length + inserted.length;
-      // 程序化 API：新增 @path 提成 mention（成 tag + 可原子删）
-      if (atPathInputRef.current) {
-        atPathInputRef.current.replaceCommittedText(next, nextCursor);
+
+      if (running) {
+        runAbortController?.abort();
+        abortUiRun();
         return;
       }
-      const statusOnly = attachments.filter(
-        a => a.source === 'workplace' || a.source === 'user_ops',
+
+      // 发送前剥离消息批注 span → plain 作 userContent（禁止 App 另调 scan）
+      const sendPlain =
+        atPathInputRef.current?.getSendUserContent() ?? text;
+      const content = sendPlain.trim();
+      const intent = resolveComposerSendIntent({
+        text,
+        attachments,
+        hasPendingUserOps,
+        canResumeWithoutInput,
+        hasAnnotateDrafts: hasAnnotateDraftsOr,
+        hasModel,
+        running,
+      });
+      const { hasSendable, allowResumeWithoutInput, hasWorkplaceDelta } =
+        intent;
+
+      if (!hasSendable && !allowResumeWithoutInput) {
+        return;
+      }
+
+      if (content && lastMessageIsPlainUserText) {
+        return;
+      }
+
+      await sendWithBridgeIfNeeded(
+        content,
+        allowResumeWithoutInput,
+        hasWorkplaceDelta,
       );
-      setText(next);
-      persistDraft(next, statusOnly);
-      setCursor(nextCursor);
-    },
-    [activeAt, attachments, cursor, persistDraft, text],
-  );
-
-  const applyTypeaheadToken = useCallback(
-    (token: string) => {
-      // 优先 mentions onSelect；失败再整段 replaceCommittedText
-      if (atPathInputRef.current?.replaceActiveAt(token)) {
-        return;
-      }
-      if (activeAt == null) {
-        return;
-      }
-      const next = replaceActiveAtWithToken(text, cursor, activeAt.start, token);
-      if (atPathInputRef.current) {
-        atPathInputRef.current.replaceCommittedText(next.text, next.cursor);
-        return;
-      }
-      const statusOnly = attachments.filter(
-        a => a.source === 'workplace' || a.source === 'user_ops',
-      );
-      setText(next.text);
-      persistDraft(next.text, statusOnly);
-      setCursor(next.cursor);
-    },
-    [activeAt, attachments, cursor, persistDraft, text],
-  );
-
-  const send = useCallback(async () => {
-    if (!hasModel) {
-      onNeedModel();
-      return;
-    }
-
-    if (running) {
-      runAbortController?.abort();
-      abortUiRun();
-      return;
-    }
-
-    const content = text.trim();
-    const intent = resolveComposerSendIntent({
+    }, [
+      hasModel,
+      running,
       text,
       attachments,
       hasPendingUserOps,
       canResumeWithoutInput,
-      hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
+      lastMessageIsPlainUserText,
+      runAbortController,
+      abortUiRun,
+      onNeedModel,
+      sendWithBridgeIfNeeded,
+      hasAnnotateDraftsOr,
+    ]);
+
+    const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
+    const sendDisabled = resolveComposerSendIntent({
+      text,
+      attachments,
+      hasPendingUserOps,
+      canResumeWithoutInput,
+      hasAnnotateDrafts: hasAnnotateDraftsOr,
       hasModel,
       running,
-    });
-    const { hasSendable, allowResumeWithoutInput, hasWorkplaceDelta } = intent;
+    }).sendDisabled;
 
-    if (!hasSendable && !allowResumeWithoutInput) {
-      return;
-    }
+    const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
-    if (content && lastMessageIsPlainUserText) {
-      return;
-    }
-
-    await sendWithBridgeIfNeeded(
-      content,
-      allowResumeWithoutInput,
-      hasWorkplaceDelta,
-    );
-  }, [
-    hasModel,
-    running,
-    text,
-    attachments,
-    hasPendingUserOps,
-    canResumeWithoutInput,
-    lastMessageIsPlainUserText,
-    runAbortController,
-    abortUiRun,
-    onNeedModel,
-    sendWithBridgeIfNeeded,
-    sessionId,
-  ]);
-
-  const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
-  const sendDisabled = resolveComposerSendIntent({
-    text,
-    attachments,
-    hasPendingUserOps,
-    canResumeWithoutInput,
-    hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
-    hasModel,
-    running,
-  }).sendDisabled;
-
-  const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
-
-  return (
-    <View
-      style={[
-        styles.dock,
-        {
-          backgroundColor: tokens.background,
-          paddingBottom: composerDockBottomPadding(insets.bottom),
-        },
-      ]}
-    >
-      {!hasModel ? (
-        <Pressable onPress={onNeedModel} style={styles.hintRow}>
-          <Text style={{ color: tokens.primary }}>请先选择工作区模型</Text>
-        </Pressable>
-      ) : null}
-
-      {error ? (
-        <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>
-      ) : null}
-
+    return (
       <View
         style={[
-          styles.box,
-          { backgroundColor: tokens.surface, borderColor: tokens.border },
+          styles.dock,
+          {
+            backgroundColor: tokens.background,
+            paddingBottom: composerDockBottomPadding(insets.bottom),
+          },
         ]}
       >
-        {/* 状态 chip 在输入框内顶部：不可叉；无文件引用 attach chip */}
-        <ComposerStatusChips
-          attachments={attachments}
-          disabled={inputDisabled}
-        />
-        <AtPathTypeahead
-          open={activeAt != null && !inputDisabled}
-          candidates={typeaheadCandidates}
-          onSelect={applyTypeaheadToken}
-        />
-        <ComposerAtPathInput
-          ref={atPathInputRef}
-          inputRef={inputRef}
-          testID="chat-composer-input"
-          style={styles.input}
-          placeholder={inputPlaceholder}
-          placeholderTextColor={tokens.textSecondary}
-          value={text}
-          cursor={cursor}
-          onChangeText={next => {
-            setText(next);
-            const statusOnly = attachments.filter(
-              a => a.source === 'workplace' || a.source === 'user_ops',
-            );
-            persistDraft(next, statusOnly);
-          }}
-          onSelectionChange={e => {
-            setCursor(e.nativeEvent.selection.start);
-          }}
-          editable={!inputDisabled}
-        />
-        <View style={styles.toolbar}>
-          <Pressable
-            onPress={onOpenMore}
-            disabled={onOpenMore == null}
-            style={[styles.toolBtn, { borderColor: tokens.border }]}
-            accessibilityLabel="更多选项"
-          >
-            <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>⋯</Text>
+        {!hasModel ? (
+          <Pressable onPress={onNeedModel} style={styles.hintRow}>
+            <Text style={{ color: tokens.primary }}>请先选择工作区模型</Text>
           </Pressable>
-          <View style={styles.toolbarSpacer} />
-          <Pressable
-            onPress={() => setPickerOpen(true)}
-            disabled={inputDisabled}
-            style={[styles.toolBtn, { borderColor: tokens.border }]}
-            accessibilityLabel="引用文件"
-          >
-            <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>@</Text>
-          </Pressable>
-          <Pressable
-            onPress={send}
-            disabled={sendDisabled}
-            style={[
-              styles.sendBtn,
-              {
-                backgroundColor: sendDisabled
-                  ? tokens.border
-                  : running
-                  ? tokens.danger
-                  : tokens.primary,
-              },
-            ]}
-            accessibilityLabel={running ? '终止' : '发送'}
-          >
-            {running ? <TerminateIcon /> : <SendIcon />}
-          </Pressable>
-        </View>
-      </View>
+        ) : null}
 
-      <FileReferencePicker
-        visible={pickerOpen}
-        projectId={scope.projectId}
-        sessionId={sessionId}
-        onClose={() => setPickerOpen(false)}
-        onConfirm={tokens => {
-          insertTokensIntoComposer(tokens);
-        }}
-      />
-    </View>
-  );
-}
+        {error ? (
+          <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>
+        ) : null}
+
+        <View
+          style={[
+            styles.box,
+            { backgroundColor: tokens.surface, borderColor: tokens.border },
+          ]}
+        >
+          {/* 状态 chip 在输入框内顶部：不可叉；无文件引用 attach chip；消息批注不进 chip */}
+          <ComposerStatusChips
+            attachments={attachments}
+            disabled={inputDisabled}
+          />
+          <AtPathTypeahead
+            open={activeAt != null && !inputDisabled}
+            candidates={typeaheadCandidates}
+            onSelect={applyTypeaheadToken}
+          />
+          <ComposerAtPathInput
+            ref={atPathInputRef}
+            inputRef={inputRef}
+            testID="chat-composer-input"
+            style={styles.input}
+            placeholder={inputPlaceholder}
+            placeholderTextColor={tokens.textSecondary}
+            value={text}
+            cursor={cursor}
+            onChangeText={next => {
+              setText(next);
+              const statusOnly = attachments.filter(
+                a => a.source === 'workplace' || a.source === 'user_ops',
+              );
+              persistDraft(next, statusOnly);
+            }}
+            onMessageAnnotateRemoved={handleMessageAnnotateRemoved}
+            onSelectionChange={e => {
+              setCursor(e.nativeEvent.selection.start);
+            }}
+            editable={!inputDisabled}
+          />
+          <View style={styles.toolbar}>
+            <Pressable
+              onPress={onOpenMore}
+              disabled={onOpenMore == null}
+              style={[styles.toolBtn, { borderColor: tokens.border }]}
+              accessibilityLabel="更多选项"
+            >
+              <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>
+                ⋯
+              </Text>
+            </Pressable>
+            <View style={styles.toolbarSpacer} />
+            <Pressable
+              onPress={() => setPickerOpen(true)}
+              disabled={inputDisabled}
+              style={[styles.toolBtn, { borderColor: tokens.border }]}
+              accessibilityLabel="引用文件"
+            >
+              <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>
+                @
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={send}
+              disabled={sendDisabled}
+              style={[
+                styles.sendBtn,
+                {
+                  backgroundColor: sendDisabled
+                    ? tokens.border
+                    : running
+                      ? tokens.danger
+                      : tokens.primary,
+                },
+              ]}
+              accessibilityLabel={running ? '终止' : '发送'}
+            >
+              {running ? <TerminateIcon /> : <SendIcon />}
+            </Pressable>
+          </View>
+        </View>
+
+        <FileReferencePicker
+          visible={pickerOpen}
+          projectId={scope.projectId}
+          sessionId={sessionId}
+          onClose={() => setPickerOpen(false)}
+          onConfirm={pathTokens => {
+            insertTokensIntoComposer(pathTokens);
+          }}
+        />
+
+        <MessageEditModal
+          visible={messageAnnotateModalVisible}
+          title="批注"
+          label={
+            pendingMessageAnnotate && pendingMessageAnnotate.text.length > 80
+              ? `${pendingMessageAnnotate.text.slice(0, 80)}…`
+              : pendingMessageAnnotate?.text
+          }
+          placeholder="批注说明"
+          confirmLabel="添加"
+          onClose={() => {
+            setMessageAnnotateModalVisible(false);
+            setPendingMessageAnnotate(null);
+          }}
+          onConfirm={handleMessageAnnotateConfirm}
+        />
+      </View>
+    );
+  },
+);
 
 function SendIcon() {
   return (
