@@ -39,35 +39,25 @@ export class ChatTranscriptPage {
     await browser.pause(300);
   }
 
-  async longPressMessage(messageId: string): Promise<void> {
+  async openMessageMenu(messageId: string): Promise<void> {
     await withRetry(
       async () => {
         await this.openWebView();
-        const row = await $(`.row.message[data-id="${messageId}"]`);
-        await row.waitForExist({timeout: 15000});
-        const location = await row.getLocation();
-        const size = await row.getSize();
-        const x = Math.round(location.x + size.width / 2);
-        const y = Math.round(location.y + size.height / 2);
-        await browser.performActions([
-          {
-            type: 'pointer',
-            id: 'finger1',
-            parameters: {pointerType: 'touch'},
-            actions: [
-              {type: 'pointerMove', duration: 0, x, y},
-              {type: 'pointerDown', button: 0},
-              {type: 'pause', duration: 900},
-              {type: 'pointerUp', button: 0},
-            ],
-          },
-        ]);
-        await browser.releaseActions();
+        const btn = await $(
+          `.row.message[data-id="${messageId}"] .message-menu-btn`,
+        );
+        await btn.waitForExist({timeout: 15000});
+        await btn.click();
         const menuProbe = await $('[data-menu-action="rollback"]');
         await menuProbe.waitForExist({timeout: 2500});
       },
-      {attempts: 3, delayMs: 700, label: `longPressMessage(${messageId})`},
+      {attempts: 3, delayMs: 700, label: `openMessageMenu(${messageId})`},
     );
+  }
+
+  /** @deprecated 使用 {@link openMessageMenu}（⋯ 点击）；保留别名兼容旧规格。 */
+  async longPressMessage(messageId: string): Promise<void> {
+    await this.openMessageMenu(messageId);
   }
 
   async tapMenuAction(action: 'rollback' | 'edit' | 'delete'): Promise<void> {

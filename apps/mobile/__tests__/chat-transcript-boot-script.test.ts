@@ -14,8 +14,6 @@ import {
   ANCHORED_MENU_MAX_WIDTH,
   ANCHORED_MENU_MIN_WIDTH,
   ANCHORED_MENU_SCREEN_MARGIN,
-  ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
-  LONG_PRESS_MOVE_TOLERANCE_PX,
   MENU_OPEN_GRACE_MS,
   MESSAGE_ACTION_MENU_ITEM_COUNT,
   NEAR_BOTTOM_THRESHOLD_PX,
@@ -89,7 +87,7 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('layoutContextMenu');
     expect(script).toContain('menuOverlayHandler');
     expect(script).toContain('handleMenuOverlayEvent');
-    expect(script).toContain('resolveMenuAnchor');
+    expect(script).toContain('openContextMenuFromAnchor');
     expect(script).toContain('attachMenuNativeTextBlock');
     expect(script).toContain('menu-open');
     expect(script).toContain(`MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS}`);
@@ -106,18 +104,17 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     // P1-4 弱证据（visibility / measuredHeight；useLayoutEffect 打包后可能改名）
     expect(script).toContain('visibility');
     expect(script).toContain('measuredHeight');
-    // 布局 / 手势意图
+    // 布局 / 锚点意图（⋯ 传按钮 rect；长按开菜单主路径已移除）
     expect(script).toContain('state.menuOpenedAt');
     expect(script).toContain('scrollable');
-    expect(script).toContain('touch.clientX');
-    expect(script).toContain('querySelector(".bubble")');
+    expect(script).toContain('message-menu-btn');
+    expect(script).toContain('getBoundingClientRect');
     // 项数门禁已迁 MenuOverlay（不再是 menu.items.length）
     expect(script).toContain('items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT');
-    expect(script).toContain('onMessagePointerMove');
-    expect(script).toContain('shouldCancelLongPressForMove');
+    expect(script).not.toContain('onMessagePointerDown');
+    expect(script).not.toContain('onMessagePointerMove');
     expect(script).toContain('decodeLiteralHtmlEntities');
     expect(script).toContain('richToggledOn');
-    expect(script).toContain('touchH');
     // 菜单项不再手拼 html +=
     expect(script).not.toMatch(/html\s*\+=\s*['"]<button[^'"]*menu-item/);
     // 防回潮：菜单壳不得再 createElement + appendChild(body)
@@ -128,20 +125,25 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toMatch(/addEventListener\s*\(\s*["']click["']/);
   });
 
-  it('T-BR-CT-02: shouldCancelLongPressForMove has function body or inline hypot', () => {
+  it('T-MN2: ⋯ 为菜单主入口；bind-shell 无长按开菜单', () => {
     const script = bootScript();
-    const hasFnBody = /function\s+shouldCancelLongPressForMove\s*\(/.test(
-      script,
+    const css = appCss();
+    expect(script).toContain('openContextMenuFromAnchor');
+    expect(script).toContain('message-menu-btn');
+    expect(css).toContain('.message-menu-btn');
+    // 长按开菜单主路径已从 boot 移除
+    expect(script).not.toContain('onMessagePointerDown');
+    expect(script).not.toMatch(
+      /addEventListener\s*\(\s*["']touchstart["']\s*,\s*onMessagePointer/,
     );
-    const hasInlineHypot =
-      /Math\.hypot\s*\(\s*dx\s*,\s*dy\s*\)/.test(script) ||
-      /Math\.hypot\s*\(\s*deltaX\s*,\s*deltaY\s*\)/.test(script);
-    expect(hasFnBody || hasInlineHypot).toBe(true);
-    if (hasFnBody) {
-      expect(script).toMatch(
-        /function\s+shouldCancelLongPressForMove\s*\([^)]*\)\s*\{[\s\S]*?Math\.hypot/,
-      );
-    }
+  });
+
+  it('T-BR-CT-02: openContextMenuFromAnchor 使用按钮 rect 作 MenuAnchor', () => {
+    const script = bootScript();
+    expect(script).toContain('openContextMenuFromAnchor');
+    expect(script).toContain('getBoundingClientRect');
+    // 锚点写入 state.menu.anchor（打包后可能拆字段，保留 width/height 赋值意图）
+    expect(script).toMatch(/anchor:\s*anchor|width:\s*rect\.width|width:\s*\w+\.width/);
   });
 
   it('T-BR-CT-03: stream waiting-first / incremental / rich+noHtml', () => {
@@ -251,9 +253,6 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     );
     expect(script).toContain('var NEAR_BOTTOM = NEAR_BOTTOM_THRESHOLD_PX;');
     expect(script).toContain(`var MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS};`);
-    expect(script).toContain(
-      `var LONG_PRESS_MOVE_TOLERANCE_PX = ${LONG_PRESS_MOVE_TOLERANCE_PX};`,
-    );
     expect(script).toContain(`var ANCHORED_MENU_GAP = ${ANCHORED_MENU_GAP};`);
     expect(script).toContain(
       `var ANCHORED_MENU_SCREEN_MARGIN = ${ANCHORED_MENU_SCREEN_MARGIN};`,
@@ -263,9 +262,6 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     );
     expect(script).toContain(
       `var ANCHORED_MENU_ITEM_LAYOUT_HEIGHT = ${ANCHORED_MENU_ITEM_LAYOUT_HEIGHT};`,
-    );
-    expect(script).toContain(
-      `var ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};`,
     );
     expect(script).toContain(
       `var ANCHORED_MENU_MAX_HEIGHT_CAP = ${ANCHORED_MENU_MAX_HEIGHT_CAP};`,

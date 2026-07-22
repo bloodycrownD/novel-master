@@ -72,7 +72,7 @@ export type TranscriptTheme = {
 
 export type TranscriptFlags = {
   readonly richText: boolean;
-  /** When true, long-press menu is suppressed (e.g. agent running). */
+  /** When true, message action menu (⋯) is suppressed (e.g. agent running). */
   readonly menuDisabled?: boolean;
 };
 

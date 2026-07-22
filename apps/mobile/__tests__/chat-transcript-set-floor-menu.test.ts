@@ -53,13 +53,13 @@ describe('WebView buildMenuItems set-floor eligibility', () => {
     expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
   });
 
-  it('普通 user message 行含 set-floor', () => {
+  it('普通 user message 行含 set-floor（T-MN1 集合）', () => {
     const actions = buildWebViewMenuActions({
       kind: 'message',
       role: 'user',
       text: 'hello',
     });
-    expect(actions).toContain('set-floor');
+    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 
   it('assistant message 行不含 set-floor', () => {

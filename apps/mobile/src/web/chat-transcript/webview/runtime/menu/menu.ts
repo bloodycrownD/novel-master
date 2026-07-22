@@ -2,14 +2,12 @@ import {
   ANCHORED_MENU_GAP,
   ANCHORED_MENU_SCREEN_MARGIN,
   ANCHORED_MENU_ITEM_MIN_HEIGHT,
-  ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
   ANCHORED_MENU_MAX_HEIGHT_CAP,
   ANCHORED_MENU_MIN_WIDTH,
   ANCHORED_MENU_MAX_WIDTH,
   ANCHORED_MENU_H_PADDING,
   ANCHORED_MENU_CHAR_WIDTH_EST,
   MENU_OPEN_GRACE_MS,
-  LONG_PRESS_MOVE_TOLERANCE_PX,
 } from '@web/shared/constants';
 import { state } from '../state/state';
 import type {
@@ -23,7 +21,8 @@ import { post } from '../bridge/bridge';
 /**
  * ISD 债/非债（菜单）：
  * - **债（已清）**：`#menu-backdrop` + `#context-menu` 的 createElement + body.appendChild / 裸 .remove()
- * - **非债（保留）**：layout / grace / menu-open / overlay 手势 / 长按
+ * - **非债（保留）**：layout / grace / menu-open / overlay 手势
+ * - **入口**：气泡右上角 ⋯ → `openContextMenuFromAnchor`（长按开菜单主路径已移除）
  * P0-3：完整 MenuOverlay 由 main 注册到 #menu-portal；本文件只持有实现引用，不 import ui / 不 preact.render。
  */
 export type MenuOverlayViewProps = {
@@ -54,7 +53,7 @@ export function invokeRegisteredRenderContextMenu(
 }
 
 /**
- * 消息长按菜单：布局、打开/关闭与指针手势。
+ * 消息菜单：布局、打开/关闭与 overlay 手势。
  */
 export function computeContextMenuWidth(items: MenuItem[]): number {
   let longest = 0;
@@ -133,28 +132,6 @@ export function layoutContextMenu(
     maxHeight: menuHeight,
     scrollable: scrollable,
   };
-}
-
-export function resolveMenuAnchor(
-  messageId: string,
-  clientX: number,
-  clientY: number,
-): MenuAnchor {
-  // Long-press finger point (viewport coords); clamp Y inside bubble for tall messages.
-  const touchH = ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT;
-  let y = clientY - touchH * 0.5;
-  const x = clientX;
-  const rowEl = document.querySelector(
-    '.row.message[data-id="' + messageId + '"]',
-  );
-  const boundsEl = rowEl
-    ? (rowEl.querySelector('.bubble') as Element | null) || rowEl
-    : null;
-  if (boundsEl) {
-    const rect = boundsEl.getBoundingClientRect();
-    y = Math.max(rect.top, Math.min(y, rect.bottom - touchH));
-  }
-  return { x: x, y: y, width: 1, height: touchH };
 }
 
 export function findMessageRow(
@@ -297,88 +274,35 @@ export function renderContextMenu(): void {
   document.addEventListener('touchend', state.menuOverlayHandler, true);
 }
 
-export function openContextMenu(
+/**
+ * 钉死入口：⋯ 点击传入按钮 `getBoundingClientRect()`（或等价 MenuAnchor）。
+ * 不再依赖长按触摸点。
+ */
+export function openContextMenuFromAnchor(
   messageId: string,
-  pageX: number,
-  pageY: number,
-  hitEl: EventTarget | null,
+  rect: Pick<DOMRect, 'x' | 'y' | 'width' | 'height'> | MenuAnchor,
+  hitEl: EventTarget | null = null,
 ): void {
   if (state.flags.menuDisabled) return;
   const row = findMessageRow(messageId);
   if (!row) return;
+  const anchor: MenuAnchor = {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  };
+  const pageX = anchor.x + anchor.width / 2;
+  const pageY = anchor.y + anchor.height / 2;
   post('openMessageMenu', { messageId: messageId, pageX: pageX, pageY: pageY });
   post('menuOpened', {});
   state.menu = {
     messageId: messageId,
     pageX: pageX,
     pageY: pageY,
-    anchor: resolveMenuAnchor(messageId, pageX, pageY),
+    anchor: anchor,
     items: buildMenuItems(row, hitEl),
   };
   state.menuOpenedAt = Date.now();
   renderContextMenu();
-}
-
-export function clearLongPress(): void {
-  if (state.longPressTimer != null) {
-    clearTimeout(state.longPressTimer);
-    state.longPressTimer = null;
-  }
-  state.longPressTarget = null;
-}
-
-export function onMessagePointerDown(event: TouchEvent): void {
-  if (state.flags.menuDisabled) return;
-  const target = event.target as Element | null;
-  const rowEl =
-    target && target.closest ? target.closest('.row.message') : null;
-  if (!rowEl) return;
-  const messageId = rowEl.getAttribute('data-id');
-  if (!messageId) return;
-  const touch = event.touches && event.touches[0];
-  if (!touch) return;
-  clearLongPress();
-  state.longPressTarget = {
-    messageId: messageId,
-    pageX: touch.clientX,
-    pageY: touch.clientY,
-    hitEl: event.target,
-  };
-  state.longPressTimer = setTimeout(function () {
-    state.longPressTimer = null;
-    const pressTarget = state.longPressTarget;
-    state.longPressTarget = null;
-    if (pressTarget) {
-      openContextMenu(
-        pressTarget.messageId,
-        pressTarget.pageX,
-        pressTarget.pageY,
-        pressTarget.hitEl,
-      );
-    }
-  }, 450);
-}
-
-export function shouldCancelLongPressForMove(
-  deltaX: number,
-  deltaY: number,
-  tolerancePx?: number,
-): boolean {
-  if (tolerancePx == null) tolerancePx = LONG_PRESS_MOVE_TOLERANCE_PX;
-  return Math.hypot(deltaX, deltaY) > tolerancePx;
-}
-
-export function onMessagePointerMove(event: TouchEvent): void {
-  if (!state.longPressTarget) return;
-  const touch = event.touches && event.touches[0];
-  if (!touch) return;
-  const dx = touch.clientX - state.longPressTarget.pageX;
-  const dy = touch.clientY - state.longPressTarget.pageY;
-  if (shouldCancelLongPressForMove(dx, dy, LONG_PRESS_MOVE_TOLERANCE_PX)) {
-    clearLongPress();
-  }
-}
-
-export function onMessagePointerUp(): void {
-  clearLongPress();
 }

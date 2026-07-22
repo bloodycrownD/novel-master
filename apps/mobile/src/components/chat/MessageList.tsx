@@ -541,46 +541,65 @@ export function MessageList({
             );
 
         return (
-          <MessageLongPressRow
+          <MessageMenuRow
             isUser={isUser}
-            onLongPress={anchor => onMessageLongPress?.(row.message, anchor)}
+            onOpenMenu={anchor => onMessageLongPress?.(row.message, anchor)}
           >
             {content}
-          </MessageLongPressRow>
+          </MessageMenuRow>
         );
       }}
     />
   );
 }
 
-type MessageLongPressRowProps = {
+type MessageMenuRowProps = {
   isUser: boolean;
-  onLongPress: (anchor: MessageMenuAnchor) => void;
+  onOpenMenu: (anchor: MessageMenuAnchor) => void;
   children: React.ReactNode;
 };
 
-/** Measures bubble window rect at long-press time for anchored action menu. */
-function MessageLongPressRow({
+/** 气泡右上角 ⋯：测量按钮窗口坐标后打开锚定菜单（替代长按主路径）。 */
+function MessageMenuRow({
   isUser,
-  onLongPress,
+  onOpenMenu,
   children,
-}: MessageLongPressRowProps) {
-  const rowRef = useRef<View>(null);
-  return (
+}: MessageMenuRowProps) {
+  const btnRef = useRef<View>(null);
+  const menuBtn = (
     <Pressable
-      ref={rowRef}
+      ref={btnRef}
+      accessibilityLabel="消息操作"
+      hitSlop={8}
+      style={styles.messageMenuBtn}
+      onPress={() => {
+        btnRef.current?.measureInWindow((x, y, width, height) => {
+          onOpenMenu({ x, y, width, height });
+        });
+      }}
+    >
+      <Text
+        style={[
+          styles.messageMenuBtnText,
+          { color: isUser ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' },
+        ]}
+      >
+        ⋯
+      </Text>
+    </Pressable>
+  );
+  return (
+    <View
       style={[
         styles.rowAlign,
         isUser ? styles.rowAlignUser : styles.rowAlignAssistant,
       ]}
-      onLongPress={() => {
-        rowRef.current?.measureInWindow((x, y, width, height) => {
-          onLongPress({ x, y, width, height });
-        });
-      }}
     >
-      {children}
-    </Pressable>
+      <View style={styles.bubbleWrap}>
+        {children}
+        {menuBtn}
+      </View>
+    </View>
   );
 }
 
@@ -597,15 +616,35 @@ const styles = StyleSheet.create({
   rowAlignAssistant: {
     alignItems: 'flex-start',
   },
-  bubble: {
+  bubbleWrap: {
+    position: 'relative',
     maxWidth: '85%',
     marginVertical: 6,
+  },
+  messageMenuBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    zIndex: 1,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+  },
+  messageMenuBtnText: {
+    fontSize: 18,
+    lineHeight: 20,
+  },
+  bubble: {
+    maxWidth: '100%',
     padding: 12,
+    paddingRight: 32,
     borderRadius: 12,
     flexShrink: 1,
   },
   /** Thinking/tools-only assistant bubbles — avoid shrink-to-header width. */
   bubbleFillWidth: {
-    width: '85%',
+    width: '100%',
   },
 });

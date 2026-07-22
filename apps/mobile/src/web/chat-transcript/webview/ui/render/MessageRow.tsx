@@ -6,6 +6,7 @@
  */
 import type { MessageRow as MessageRowModel } from '../../runtime/state/state';
 import { state } from '../../runtime/state/state';
+import { openContextMenuFromAnchor } from '../../runtime/menu/menu';
 import { assistantBubbleExtraClasses } from '../../runtime/stream/stream';
 import { AttachGroup } from './AttachGroup';
 import { AssistantBubbleInner } from './AssistantBubble';
@@ -20,6 +21,26 @@ export function MessageRow({ row }: MessageRowProps) {
   const thinkingKey = 'msg:' + row.id;
   const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
 
+  /** 气泡右上角 ⋯：传按钮 rect 开菜单（不再依赖长按）。 */
+  const onMenuBtnClick = (event: Event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const btn = event.currentTarget as HTMLButtonElement | null;
+    if (!btn || typeof btn.getBoundingClientRect !== 'function') return;
+    openContextMenuFromAnchor(row.id, btn.getBoundingClientRect(), btn);
+  };
+
+  const menuBtn = (
+    <button
+      type="button"
+      className="message-menu-btn"
+      aria-label="消息操作"
+      onClick={onMenuBtnClick}
+    >
+      ⋯
+    </button>
+  );
+
   let bubble = null;
   if (role === 'user') {
     const attachments = row.attachments || [];
@@ -31,6 +52,7 @@ export function MessageRow({ row }: MessageRowProps) {
         const attachExpanded = !!state.attachGroupExpanded[attachKey];
         bubble = (
           <div className="bubble bubble--fill-width bubble--user-compose">
+            {menuBtn}
             {hasText ? (
               <div className="bubble-body">{String(row.text)}</div>
             ) : null}
@@ -43,7 +65,12 @@ export function MessageRow({ row }: MessageRowProps) {
           </div>
         );
       } else {
-        bubble = <div className="bubble">{String(row.text)}</div>;
+        bubble = (
+          <div className="bubble">
+            {menuBtn}
+            {String(row.text)}
+          </div>
+        );
       }
     }
   } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
@@ -61,6 +88,7 @@ export function MessageRow({ row }: MessageRowProps) {
           )
         }
       >
+        {menuBtn}
         <AssistantBubbleInner
           text={row.text}
           textHtml={row.textHtml}

@@ -90,13 +90,6 @@ export type ContextMenuState = {
   items: MenuItem[];
 };
 
-export type LongPressTarget = {
-  messageId: string;
-  pageX: number;
-  pageY: number;
-  hitEl: EventTarget | null;
-};
-
 export type TranscriptState = {
   ready: boolean;
   nearBottom: boolean;
@@ -113,8 +106,6 @@ export type TranscriptState = {
   attachGroupExpanded: Record<string, boolean>;
   scrollRaf: number | null;
   loadOlderArmed: boolean;
-  longPressTimer: ReturnType<typeof setTimeout> | null;
-  longPressTarget: LongPressTarget | null;
   menuOpenedAt: number;
 };
 
@@ -140,7 +131,5 @@ export const state: TranscriptState = {
   attachGroupExpanded: {},
   scrollRaf: null,
   loadOlderArmed: true,
-  longPressTimer: null,
-  longPressTarget: null,
   menuOpenedAt: 0,
 };

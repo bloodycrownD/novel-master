@@ -1,7 +1,6 @@
 import { NEAR_BOTTOM } from '@web/shared/constants';
 import { state, SCHEMA_V } from '../state/state';
 import { post } from '../bridge/bridge';
-import { clearLongPress } from '../menu/menu';
 /**
  * 滚动锚点、贴底与加载更早消息。
  */
@@ -62,9 +61,6 @@ export function requestLoadOlder(): void {
 export function onScroll(): void {
   const scroller = document.getElementById('scroller');
   if (!scroller) return;
-  if (state.longPressTimer != null || state.longPressTarget != null) {
-    clearLongPress();
-  }
   state.nearBottom = isNearBottom(scroller);
   if (scroller.scrollTop <= SCROLL_TOP_LOAD_OLDER) {
     requestLoadOlder();
