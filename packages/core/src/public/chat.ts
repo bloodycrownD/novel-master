@@ -33,16 +33,12 @@ export type { MessageAttachmentAction } from '../domain/chat/model/message-attac
 export {
   annotateDraftSchema,
   annotateDraftsSchema,
-  buildMessageAnnotatePseudoPath,
-  isMessageAnnotateDraft,
   isMessageAnnotatePath,
   MESSAGE_ANNOTATE_PATH_MARKER,
-  messageAnnotateDraftSchema,
 } from '../domain/chat/model/annotate-draft.schema.js';
 export type {
   AnnotateDraft,
   AnnotateDrafts,
-  MessageAnnotateDraft,
   SendAnnotateDraft,
 } from '../domain/chat/model/annotate-draft.schema.js';
 export {
@@ -74,7 +70,6 @@ export {
   buildDirTreeActionXml,
   buildFileAnnotateAttachmentFromDraft,
   buildFileRefActionXml,
-  buildMessageAnnotateAttachmentFromDraft,
   parseAnnotateDraftsFromAttachments,
 } from '../domain/chat/logic/build-attachment-action-xml.js';
 export {
@@ -194,16 +189,6 @@ export {
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,
 } from '../domain/chat/logic/chat-annotate-draft-store.js';
-export {
-  addChatMessageAnnotateDraft,
-  clearChatMessageAnnotateDrafts,
-  hasChatMessageAnnotateDrafts,
-  listChatMessageAnnotateDrafts,
-  removeChatMessageAnnotateDraft,
-  resetChatMessageAnnotateDraftStoreForTests,
-  subscribeChatMessageAnnotateDraft,
-  updateChatMessageAnnotateDraft,
-} from '../domain/chat/logic/chat-message-annotate-draft-store.js';
 export {
   findAllOccurrences,
   groupAnnotateIdsByOriginalText,

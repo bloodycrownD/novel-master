@@ -7,12 +7,8 @@
 import { buildUserVfsActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import type { MessageAttachmentAction } from "../model/message-attachment.schema.js";
 import {
-  buildMessageAnnotatePseudoPath,
-  isMessageAnnotateDraft,
   isMessageAnnotatePath,
   type AnnotateDraft,
-  type MessageAnnotateDraft,
-  type SendAnnotateDraft,
 } from "../model/annotate-draft.schema.js";
 import {
   attachmentStorageName,
@@ -100,41 +96,12 @@ export function buildFileAnnotateAttachmentFromDraft(
 }
 
 /**
- * 由消息形批注草稿构造落库附件。
- * `path`=`name`=`__message__:<messageId>:<draftId>`；**不对**伪 path 做破坏性
- * `normalizePromptStorePath`；XML JSON 含 messageId / originalText / userAnnotation。
- */
-export function buildMessageAnnotateAttachmentFromDraft(
-  draft: MessageAnnotateDraft,
-): MessageAttachment {
-  // 伪 path：保持 `__message__:` 子串语义，禁止 normalizePromptStorePath
-  const path = buildMessageAnnotatePseudoPath(draft.messageId, draft.id);
-  const xml = buildAttachmentActionXml("annotate", {
-    path,
-    messageId: draft.messageId,
-    originalText: draft.originalText,
-    userAnnotation: draft.userAnnotation,
-  });
-  return {
-    name: attachmentStorageName(path),
-    source: "user_ops",
-    type: "text",
-    content: xml,
-    path,
-    action: "annotate",
-  };
-}
-
-/**
  * 由批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。
- * 接受 `SendAnnotateDraft` 联合并分派；Desktop 仅传文件形 `AnnotateDraft` 仍编译通过。
+ * 仅文件形 `AnnotateDraft`（消息批注发送管线已移除）。
  */
 export function buildAnnotateAttachmentFromDraft(
-  draft: SendAnnotateDraft,
+  draft: AnnotateDraft,
 ): MessageAttachment {
-  if (isMessageAnnotateDraft(draft)) {
-    return buildMessageAnnotateAttachmentFromDraft(draft);
-  }
   return buildFileAnnotateAttachmentFromDraft(draft);
 }
 

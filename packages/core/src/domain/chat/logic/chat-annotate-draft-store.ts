@@ -58,7 +58,7 @@ export function hasChatAnnotateDrafts(
 
 /**
  * 按 path 聚合一只 annotate 预览 chip（`source:user_ops` + `action:annotate`）。
- * **忽略**消息批注伪 path（`path.includes('__message__:')`）；消息草稿走独立 store。
+ * **忽略**历史消息批注伪 path（`path.includes('__message__:')`）——防御误写入。
  */
 export function chipsFromAnnotateStore(
   sessionId: string | undefined,

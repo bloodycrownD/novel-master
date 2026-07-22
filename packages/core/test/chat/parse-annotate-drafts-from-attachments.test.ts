@@ -6,16 +6,38 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildAnnotateAttachmentFromDraft,
-  buildMessageAnnotateAttachmentFromDraft,
   parseAnnotateDraftsFromAttachments,
 } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import {
   isMessageAnnotatePath,
   type AnnotateDraft,
-  type MessageAnnotateDraft,
 } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
-import { normalizePromptStorePath } from "@/domain/chat/logic/prompt-path-seen.js";
+
+/** 手工构造历史消息批注伪 path 附件（发送管线已移除消息形 builder）。 */
+function fakeMessageAnnotateAttachment(
+  messageId: string,
+  draftId: string,
+): MessageAttachment {
+  const path = `__message__:${messageId}:${draftId}`;
+  return {
+    name: path,
+    source: "user_ops",
+    type: "text",
+    content: `<action name="annotate">\n${JSON.stringify(
+      {
+        path,
+        messageId,
+        originalText: "原文",
+        userAnnotation: "说明",
+      },
+      null,
+      2,
+    )}\n</action>`,
+    path,
+    action: "annotate",
+  };
+}
 
 describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
   it("build↔parse round-trip：真 VFS path；新 mint id", () => {
@@ -36,13 +58,7 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
   });
 
   it("跳过 path.includes('__message__:')（含前导 /）", () => {
-    const msg: MessageAnnotateDraft = {
-      id: "d1",
-      messageId: "m-99",
-      originalText: "气泡选区",
-      userAnnotation: "批一下",
-    };
-    const msgAtt = buildMessageAnnotateAttachmentFromDraft(msg);
+    const msgAtt = fakeMessageAnnotateAttachment("m-99", "d1");
     assert.ok(isMessageAnnotatePath(msgAtt.path));
     assert.ok(msgAtt.path!.includes("__message__:"));
 
@@ -67,23 +83,12 @@ describe("parseAnnotateDraftsFromAttachments (T-UD3 部分)", () => {
     assert.equal(parsed[0]!.path, "/ok.md");
   });
 
-  it("消息形 builder 伪 path round-trip 仍含 __message__:；不做破坏性 normalize", () => {
-    const msg: MessageAnnotateDraft = {
-      id: "draft-x",
-      messageId: "msg-y",
-      originalText: "原文",
-      userAnnotation: "说明",
-    };
-    const att = buildMessageAnnotateAttachmentFromDraft(msg);
+  it("历史伪 path 手工附件仍含 __message__: 子串；Undo parse 跳过", () => {
+    const att = fakeMessageAnnotateAttachment("msg-y", "draft-x");
     assert.equal(att.path, "__message__:msg-y:draft-x");
     assert.equal(att.name, att.path);
-    assert.ok(att.path!.includes("__message__:"));
-    // 对照：若误 normalize 会变成带前导 /，但子串仍在；关键是 builder 未调用
-    const normalized = normalizePromptStorePath(att.path!);
-    assert.equal(normalized, "/__message__:msg-y:draft-x");
-    // 落库附件保持未 normalize 的伪 path（可无前导 /）
-    assert.equal(att.path, "__message__:msg-y:draft-x");
-    assert.notEqual(att.path, normalized);
+    assert.ok(isMessageAnnotatePath(att.path));
+    assert.equal(parseAnnotateDraftsFromAttachments([att]).length, 0);
   });
 
   it("非 annotate / 空 path 跳过", () => {
