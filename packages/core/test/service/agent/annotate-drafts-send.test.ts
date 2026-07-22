@@ -19,7 +19,11 @@ import { hasComposerSendableInput } from "@/domain/chat/logic/composer-sendable-
 import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
-import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import {
+  messageAttachmentSchema,
+  type MessageAttachment,
+} from "@/domain/chat/model/message-attachment.schema.js";
+import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -312,6 +316,133 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.match(ann[1]!.content ?? "", /"userAnnotation": "二"/);
 
     resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("T-MA1: 消息批注发送后 attachments 含 annotate；path===name 且 includes __message__:；XML 含 messageId；concat；过 schema", async () => {
+    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    let appendedAtts: readonly MessageAttachment[] | undefined;
+    const runtime = makeRuntime({
+      append: async (_s, _r, _c, opts) => {
+        appendedAtts = opts?.attachments;
+        return { id: "u-ma1" };
+      },
+      userVfsTurn: mockUserVfsTurn(),
+    });
+
+    const fileDraft = {
+      id: "f1",
+      path: "/file.md",
+      originalText: "文件选区",
+      userAnnotation: "文件批",
+    };
+    const msgDraft = {
+      id: "d1",
+      messageId: "msg-42",
+      originalText: "消息选区",
+      userAnnotation: "消息批",
+    };
+
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p1", sessionId: "s1" },
+        "hello",
+        {
+          annotateDrafts: [fileDraft, msgDraft],
+          definitionOverride: sampleDefinition,
+          stream: false,
+        },
+      );
+    } catch {
+      // runner 可能失败；append 语义仍可检
+    }
+
+    assert.ok(appendedAtts != null);
+    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+    assert.equal(ann.length, 2, "文件+消息须 concat 两条");
+
+    const msgAtt = ann.find((a) => (a.path ?? "").includes("__message__:"));
+    assert.ok(msgAtt != null);
+    assert.equal(msgAtt!.path, msgAtt!.name);
+    assert.ok(msgAtt!.path!.includes("__message__:"));
+    assert.match(msgAtt!.path!, /__message__:msg-42:d1/);
+    assert.match(msgAtt!.content ?? "", /"messageId": "msg-42"/);
+    assert.match(msgAtt!.content ?? "", /"originalText": "消息选区"/);
+    assert.match(msgAtt!.content ?? "", /"userAnnotation": "消息批"/);
+    const schemaOk = messageAttachmentSchema.safeParse(msgAtt);
+    assert.equal(schemaOk.success, true, "须通过 messageAttachmentSchema");
+
+    const fileAtt = ann.find((a) => a.path === "/file.md");
+    assert.ok(fileAtt != null);
+    assert.match(fileAtt!.content ?? "", /"userAnnotation": "文件批"/);
+
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("T-MA3 门闩侧 Core: 仅消息批注 annotateDrafts → hasInput/可 append", async () => {
+    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    let appendedAtts: readonly MessageAttachment[] | undefined;
+    const runtime = makeRuntime({
+      append: async (_s, _r, _c, opts) => {
+        appendedAtts = opts?.attachments;
+        return { id: "u-ma3" };
+      },
+      userVfsTurn: mockUserVfsTurn(),
+    });
+
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: false,
+        hasAnnotateDrafts: true,
+      }),
+      true,
+      "App 侧取或为 true 后 Core 门闩可发",
+    );
+
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p1", sessionId: "s1" },
+        "",
+        {
+          annotateDrafts: [
+            {
+              id: "only-msg",
+              messageId: "m1",
+              originalText: "only",
+              userAnnotation: "msg",
+            },
+          ],
+          definitionOverride: sampleDefinition,
+          stream: false,
+        },
+      );
+    } catch {
+      // runner 可能失败
+    }
+
+    assert.ok(appendedAtts != null, "仅消息批注须可 append");
+    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+    assert.equal(ann.length, 1);
+    assert.ok((ann[0]!.path ?? "").includes("__message__:"));
+
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("T-MA6: 文件形 buildAnnotateAttachmentFromDraft(AnnotateDraft) 签名仍可用", () => {
+    const fileOnly: AnnotateDraft = {
+      id: "desktop-ok",
+      path: "/desktop.md",
+      originalText: "x",
+      userAnnotation: "y",
+    };
+    const att = buildAnnotateAttachmentFromDraft(fileOnly);
+    assert.equal(att.path, "/desktop.md");
+    assert.equal(att.action, "annotate");
+    assert.equal(att.name, "/desktop.md");
+    assert.equal(messageAttachmentSchema.safeParse(att).success, true);
   });
 
   it("无输入且无 annotate → 仍抛消息不能为空", async () => {
