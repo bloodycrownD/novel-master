@@ -94,7 +94,7 @@ test("T-ATD4: 删除正文 @path 后门闩扫描无该 path；draft attach 不�
   assert.equal(countScannedAtPathAttachments(""), 0);
 });
 
-test("T-ATD2/门闩: 仅状态 workplace 仍可发；attachOnly 恒空", () => {
+test("T-CR3/门闩: 仅状态 workplace → 不可发；attachOnly 恒空", () => {
   const intent = resolveComposerSendIntent({
     text: "",
     attachments: [
@@ -104,9 +104,9 @@ test("T-ATD2/门闩: 仅状态 workplace 仍可发；attachOnly 恒空", () => {
     canResumeWithoutInput: false,
     hasModel: true,
   });
-  assert.equal(intent.hasSendable, true);
+  assert.equal(intent.hasSendable, false);
+  assert.equal(intent.sendDisabled, true);
   assert.equal(intent.attachOnly.length, 0);
-  assert.equal(intent.hasWorkplaceDelta, true);
 });
 
 test("Step5: 高亮层 HTML 含 @token class；契约仍为纯字符串 value", () => {

@@ -1,6 +1,6 @@
 /**
- * Composer 发送门闩 / 入参清洗（T-SR1 / T-ATD*）。
- * 文件引用以正文 `@` 扫描为准；draft attach 恒空；workplace 预览不进 payload。
+ * Composer 发送门闩 / 入参清洗（T-ATD* / T-CR3）。
+ * 文件引用以正文 `@` 扫描为准；draft attach 恒空；workplace 预览不进 payload、不可空发。
  *
  * @module domain/chat/logic/composer-send-intent
  */
@@ -30,7 +30,6 @@ export type ComposerSendIntent = {
   allowResumeWithoutInput: boolean;
   /** 显式 attachments 恒空；Core 从正文扫描 `@`。 */
   attachOnly: readonly [];
-  hasWorkplaceDelta: boolean;
   sendDisabled: boolean;
 };
 
@@ -39,14 +38,10 @@ export function resolveComposerSendIntent(
 ): ComposerSendIntent {
   const content = input.text.trim();
   const scannedCount = scanAtPathAttachments(input.text).length;
-  const hasWorkplaceDelta = input.attachments.some(
-    (a) => a.source === "workplace",
-  );
   const hasSendable = hasComposerSendableInput({
     text: content,
     attachmentCount: scannedCount,
     hasPendingUserOps: input.hasPendingUserOps,
-    hasWorkplaceDelta,
     hasAnnotateDrafts: input.hasAnnotateDrafts === true,
   });
   const allowResumeWithoutInput =
@@ -60,7 +55,6 @@ export function resolveComposerSendIntent(
     hasSendable,
     allowResumeWithoutInput,
     attachOnly: [],
-    hasWorkplaceDelta,
     sendDisabled,
   };
 }

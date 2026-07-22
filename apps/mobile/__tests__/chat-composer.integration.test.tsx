@@ -311,7 +311,7 @@ describe('ChatComposer integration', () => {
     });
   });
 
-  it('T-SR1b: 仅状态条 workplace 可发且禁纯 resume；入参无 attachments', async () => {
+  it('T-CR3: 仅状态条 workplace → 不可发（禁空发）', async () => {
     mockRunAgentTurn.mockImplementationOnce(async () => undefined);
     // 历史 draft attach 水化时丢弃；文件引用只认正文 @
     mockGetComposerDraftJson.mockResolvedValue(
@@ -339,28 +339,22 @@ describe('ChatComposer integration', () => {
     ]);
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
     });
     const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
-    expect(sendBtn.props.disabled).toBe(false);
+    expect(sendBtn.props.disabled).toBe(true);
     await act(async () => {
       sendBtn.props.onPress();
     });
-    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
-    const opts = mockRunAgentTurn.mock.calls[0]?.[3] as {
-      allowResumeWithoutInput?: boolean;
-      attachments?: readonly { source: string }[];
-    };
-    expect(opts.allowResumeWithoutInput).toBe(false);
-    expect(opts.attachments).toBeUndefined();
+    expect(mockRunAgentTurn).not.toHaveBeenCalled();
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });
   });
 
-  it('T-SR1b: 仅 workplace 空发可点（非 resume）', async () => {
+  it('T-CR3: 仅 workplace + canResume → 走 resume 门闩而非差集可发', async () => {
     mockRunAgentTurn.mockImplementationOnce(async () => undefined);
     mockProjectComposerStatus.mockResolvedValue([
       {
@@ -373,11 +367,12 @@ describe('ChatComposer integration', () => {
     ]);
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
-      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
     });
     const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
+    // 无可发输入时 canResume 仍可点（纯 resume），但非 workplace 差集门闩
     expect(sendBtn.props.disabled).toBe(false);
     await act(async () => {
       sendBtn.props.onPress();
@@ -387,7 +382,7 @@ describe('ChatComposer integration', () => {
       allowResumeWithoutInput?: boolean;
       attachments?: unknown;
     };
-    expect(opts.allowResumeWithoutInput).toBe(false);
+    expect(opts.allowResumeWithoutInput).toBe(true);
     expect(opts.attachments).toBeUndefined();
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();

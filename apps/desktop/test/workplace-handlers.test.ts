@@ -1,5 +1,5 @@
 /**
- * Workplace IPC：规则保存不 capture；差集经 composerAttachmentsSuggest；遗留 capture → clear kkv。
+ * Workplace IPC：规则保存 → refreshRuleSnapshot；差集 suggest 已废止；遗留 capture → clear kkv。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -66,9 +66,23 @@ describe("workplace ipc handlers", () => {
     }
   });
 
-  it("setDirRule 成功且不写 file_cache（无 capture）", async () => {
+  it("T-CR2: setDirRule → 写 rule_snapshot canon；file_cache 空；不推差集 suggest", async () => {
     const rt = await getDesktopRuntime();
-    const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
+    await rt.sessionKkv.set(
+      sessionId,
+      "file_cache",
+      "full:/stale.md",
+      JSON.stringify({ body: "stale", mtimeMs: 1 }),
+    );
+
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    setComposerAttachmentsSuggestForwardTarget(() => {
+      return {
+        send(channel: string, payload: unknown) {
+          sent.push({ channel, payload });
+        },
+      } as never;
+    });
 
     const result = await handleWorkplaceSetDirRule({
       workspaceScope: "chat",
@@ -79,13 +93,26 @@ describe("workplace ipc handlers", () => {
     });
 
     assert.equal(result.ok, true);
-    const keysAfter = await rt.sessionKkv.listKeys(sessionId, "file_cache");
-    assert.deepEqual(keysAfter, keysBefore);
+    const canon = await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon");
+    assert.ok(canon != null && canon !== "");
+    assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "file_cache"), []);
+    assert.equal(
+      sent.filter((s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST)
+        .length,
+      0,
+      "规则保存不得再推 workplace 差集 suggest",
+    );
+    setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
-  it("setFileRule 成功且不写 file_cache（无 capture）", async () => {
+  it("T-CR2: setFileRule → 写 rule_snapshot；file_cache 空", async () => {
     const rt = await getDesktopRuntime();
-    const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
+    await rt.sessionKkv.set(
+      sessionId,
+      "file_cache",
+      "full:/note.md",
+      JSON.stringify({ body: "stale", mtimeMs: 1 }),
+    );
 
     const result = await handleWorkplaceSetFileRule({
       workspaceScope: "chat",
@@ -96,8 +123,9 @@ describe("workplace ipc handlers", () => {
     });
 
     assert.equal(result.ok, true);
-    const keysAfter = await rt.sessionKkv.listKeys(sessionId, "file_cache");
-    assert.deepEqual(keysAfter, keysBefore);
+    const canon = await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon");
+    assert.ok(canon != null && canon !== "");
+    assert.deepEqual(await rt.sessionKkv.listKeys(sessionId, "file_cache"), []);
   });
 
   it("composerAttachmentsSuggest 通道独立；空 attachments 仍 send（整表替换）", async () => {
@@ -146,14 +174,6 @@ describe("workplace ipc handlers", () => {
       attachments: [],
     });
 
-    const result = await handleWorkplaceSetDirRule({
-      workspaceScope: "chat",
-      projectId,
-      sessionId,
-      logicalPath: "/",
-      ruleEnabled: true,
-    });
-    assert.equal(result.ok, true);
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
@@ -187,7 +207,7 @@ describe("workplace ipc handlers", () => {
     );
     assert.ok(
       sent.some(
-        s =>
+        (s) =>
           s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST &&
           (s.payload as { sessionId: string; attachments: unknown[] })
             .sessionId === sessionId &&

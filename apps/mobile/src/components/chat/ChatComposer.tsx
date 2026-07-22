@@ -278,12 +278,7 @@ export function ChatComposer({
   }, [sessionId]);
 
   const executeRun = useCallback(
-    async (
-      content: string,
-      allowResumeWithoutInput: boolean,
-      /** 状态条有 workplace 差集：可发且发送后须清上条（由重投影收敛）。 */
-      hasWorkplaceDelta: boolean,
-    ) => {
+    async (content: string, allowResumeWithoutInput: boolean) => {
       if (isMobileAgentActive()) {
         return;
       }
@@ -293,10 +288,10 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
 
-      // 有正文 / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
+      // 有正文 / pending → 成功后清输入；pending 仍可发（门闩）
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
       const shouldClearComposer =
-        content.trim() !== '' || hasPendingUserOps || hasWorkplaceDelta;
+        content.trim() !== '' || hasPendingUserOps;
       let composerCleared = false;
       const clearComposerNow = () => {
         if (composerCleared) {
@@ -313,7 +308,7 @@ export function ChatComposer({
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
-        // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
+        // 文件引用由 Core 扫描正文 `@`；规则变更不走差集 materialize
         await runAgentTurn(runtime, scope, content, {
           stream,
           allowResumeWithoutInput,
@@ -329,7 +324,7 @@ export function ChatComposer({
             ).catch(() => undefined);
           },
         });
-        // 空续跑 / 仅 flush / 仅 workplace 等路径可能不走 append 回调
+        // 空续跑 / 仅 flush 等路径可能不走 append 回调
         if (shouldClearComposer) {
           clearComposerNow();
         }
@@ -389,11 +384,7 @@ export function ChatComposer({
   );
 
   const sendWithBridgeIfNeeded = useCallback(
-    async (
-      content: string,
-      allowResumeWithoutInput: boolean,
-      hasWorkplaceDelta: boolean,
-    ) => {
+    async (content: string, allowResumeWithoutInput: boolean) => {
       if (content && lastMessageHasToolResult) {
         return new Promise<void>(resolve => {
           Alert.alert(
@@ -412,7 +403,7 @@ export function ChatComposer({
                     try {
                       await runtime.appendToolTurnBridge(sessionId);
                       await streamHandlersRef.current.onMessagesChanged();
-                      await executeRun(content, false, hasWorkplaceDelta);
+                      await executeRun(content, false);
                     } catch (err) {
                       setError(formatError(err));
                     } finally {
@@ -426,7 +417,7 @@ export function ChatComposer({
         });
       }
 
-      await executeRun(content, allowResumeWithoutInput, hasWorkplaceDelta);
+      await executeRun(content, allowResumeWithoutInput);
     },
     [lastMessageHasToolResult, runtime, sessionId, executeRun],
   );
@@ -515,8 +506,7 @@ export function ChatComposer({
       hasModel,
       running,
     });
-    const { hasSendable, allowResumeWithoutInput, hasWorkplaceDelta } =
-      intent;
+    const { hasSendable, allowResumeWithoutInput } = intent;
 
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
@@ -526,11 +516,7 @@ export function ChatComposer({
       return;
     }
 
-    await sendWithBridgeIfNeeded(
-      content,
-      allowResumeWithoutInput,
-      hasWorkplaceDelta,
-    );
+    await sendWithBridgeIfNeeded(content, allowResumeWithoutInput);
   }, [
     hasModel,
     running,

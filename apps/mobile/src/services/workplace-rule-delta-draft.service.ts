@@ -1,20 +1,22 @@
 /**
- * 规则变更后投影 Composer 状态条（仅 user_ops）整表替换。
- * 不刷新规则快照、不 capture。
- * （workplace 差集 chip 已废止；本函数签名保留 workplace 参数供调用方过渡，Step 3 再删 suggest。）
+ * 规则保存后：refreshRuleSnapshot（evaluate→写 canon→clear file_cache）。
+ * workplace 差集 suggest 已废止；不再改 Composer draft attachments。
  */
-import type { MessageAttachment } from '@novel-master/core/chat';
 import type { WorkplaceService } from '@novel-master/core/workplace';
+import { refreshRuleSnapshot } from '@novel-master/core/workplace';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
-import { applyComposerStatusAttachmentsReplace } from '../storage/chat-composer-draft';
-import { projectComposerStatusForSession } from './project-composer-status.service';
 
+/**
+ * 规则变更后刷新会话规则快照并清空 file_cache。
+ * 保留旧函数名供 VfsFileManager 过渡调用。
+ */
 export async function suggestWorkplaceAttachmentsToComposerDraft(
   runtime: MobileNovelMasterRuntime,
-  _workplace: WorkplaceService,
+  workplace: WorkplaceService,
   sessionId: string,
-): Promise<MessageAttachment[]> {
-  const attachments = await projectComposerStatusForSession(runtime, sessionId);
-  applyComposerStatusAttachmentsReplace({ sessionId, attachments });
-  return attachments;
+): Promise<void> {
+  await refreshRuleSnapshot(sessionId, {
+    sessionKkv: runtime.sessionKkv,
+    workplace,
+  });
 }

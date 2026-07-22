@@ -12,6 +12,7 @@ import type {
   WorkplaceSetDirRuleRequest,
   WorkplaceSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
+import { refreshRuleSnapshot } from "@novel-master/core/workplace";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   getWorkplaceForScope,
@@ -21,11 +22,9 @@ import {
   notifyWorkspaceMutatedToRenderer,
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
-import { notifyComposerAttachmentsSuggestToRenderer } from "../forward-composer-attachments-suggest.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 import { notifyComposerStatusAfterSessionKkvCleared } from "../../services/notify-composer-status-after-kkv-clear.js";
-import { projectComposerStatusForSession } from "../../services/project-composer-status.service.js";
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
@@ -57,19 +56,29 @@ async function loadWorkplaceRows(
 }
 
 /**
- * 规则保存后：投影 Composer 状态条（仅 user_ops）整表替换。
- * 不刷新规则快照、不 capture。
- * （workplace 差集 chip 已废止；Step 3 再改 refreshRuleSnapshot / 删 suggest。）
+ * 规则保存后：evaluate→写 rule_snapshot canon→clear file_cache。
+ * workplace 差集 suggest 已废止。
  */
-async function suggestWorkplaceAttachmentsAfterRuleChange(
+async function refreshRuleSnapshotAfterRuleChange(
   rt: DesktopNovelMasterRuntime,
-  sessionId: string | undefined,
+  req: { projectId?: string; sessionId?: string },
 ): Promise<void> {
-  if (sessionId == null || sessionId === "") {
+  if (
+    req.sessionId == null ||
+    req.sessionId === "" ||
+    req.projectId == null ||
+    req.projectId === ""
+  ) {
     return;
   }
-  const attachments = await projectComposerStatusForSession(rt, sessionId);
-  notifyComposerAttachmentsSuggestToRenderer({ sessionId, attachments });
+  await refreshRuleSnapshot(req.sessionId, {
+    sessionKkv: rt.sessionKkv,
+    workplace: rt.workplace({
+      kind: "session",
+      projectId: req.projectId,
+      sessionId: req.sessionId,
+    }),
+  });
 }
 
 export async function handleWorkplaceBuildListRows(
@@ -100,9 +109,8 @@ export async function handleWorkplaceSetDirRule(
       tailCount: req.tailCount,
       fillPolicy: req.fillPolicy,
     });
-    // 规则变更不写 capture；不刷新规则快照；workplace 草稿见 composerAttachmentsSuggest
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
-    await suggestWorkplaceAttachmentsAfterRuleChange(rt, req.sessionId);
+    await refreshRuleSnapshotAfterRuleChange(rt, req);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -121,7 +129,7 @@ export async function handleWorkplaceSetFileRule(
       inclusionMode: req.inclusionMode,
     });
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
-    await suggestWorkplaceAttachmentsAfterRuleChange(rt, req.sessionId);
+    await refreshRuleSnapshotAfterRuleChange(rt, req);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

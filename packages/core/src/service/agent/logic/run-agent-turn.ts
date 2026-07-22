@@ -3,10 +3,9 @@
  *
  * ## 编排（本模块）
  * 1. `prepareUserVfsTurnForAgentRun`：flush pending → `user_ops`；
- *    materialize workplace 差集（定案 A 并入 re-append merge =
- *    trailing∪flush∪attach∪materialize）；
+ *    re-append merge = trailing∪flush∪attach（无 workplace materialize）。
  * 2. 外层新 append（`!reAppended`）：直 concat =
- *    materialize∪flush `user_ops`∪attach(@扫描)∪annotate → append(user, 原文, attachments)。
+ *    flush `user_ops`∪attach(@扫描)∪annotate → append(user, 原文, attachments)。
  *
  * ## Runner 内（agent-runner 每 step；本模块不调用 wrap/assemble）
  * 3. `assembleWorkplaceDisplay` → layout → normalize → protocol map
@@ -15,14 +14,11 @@
  * ## 契约
  * - App `attachments` 入参仅 `source===attach`；误传 workplace/`user_ops` 预览一律丢弃；
  *   `@` 扫描仍由 Core 合并；禁止 composer status 原样当 payload。
- * - `prompts.workplace !== true` 时 materialize 返回空（与 assemble 前缀闸门一致；user_ops /
- *   annotate / `@path` 不受影响）。
- * - `hasInput` / `shouldAppendNewUser` 在 materialize / annotateDrafts 非空时为真。
- * - 有 workplace 差集时禁止 `allowResumeWithoutInput` 纯 resume（差集=新输入）。
+ * - **不** materialize workplace 差集；规则变更靠 `refreshRuleSnapshot` + 常驻前缀。
+ * - `hasInput` / `shouldAppendNewUser`：正文 / attach / pending / annotateDrafts（无 workplace）。
  * - 有 `annotateDrafts` 时本轮视 `allowResumeWithoutInput` 为 false（禁空续跑 re-append）。
  * - annotate 附件 **concat** 追加，禁止 `mergeAttachmentsByPath` / path 去重。
- * - `allowAssistantContinue`（空正文续跑）约定不 append user；即便有 workplace 差集也不因
- *   `hasWorkplaceDelta` 误 append 空 user（continue 时忽略差集对 append 的驱动）。
+ * - `allowAssistantContinue`（空正文续跑）约定不 append user。
  * - wrap/assemble **不**在本模块写库（T-SR0）；双渲染只读。
  *
  * @module service/agent/logic/run-agent-turn
@@ -43,9 +39,6 @@ import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schem
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import { ruleViewToSnapshotEntries } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { workplaceAttachmentsFromRuleDelta } from "@/domain/workplace/logic/diff-workplace-paths.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -175,33 +168,6 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * 与状态条 workplace 半边同源：evaluateRuleView → ruleViewToSnapshotEntries +
- * file_cache keys → workplaceAttachmentsFromRuleDelta。
- * `layout.workplace !== true` 时短路空数组（关常驻不发规则差集）。
- */
-async function materializeWorkplaceAttachments(
-  runtime: AgentTurnRuntimePort,
-  scope: AgentTurnScope,
-  layout: Pick<AgentDefinition["prompts"], "workplace">,
-): Promise<readonly MessageAttachment[]> {
-  if (layout.workplace !== true) {
-    return [];
-  }
-  const wtScope: VfsScope = {
-    kind: "session",
-    projectId: scope.projectId,
-    sessionId: scope.sessionId,
-  };
-  const view = await runtime.workplace(wtScope).evaluateRuleView();
-  const live = ruleViewToSnapshotEntries(view);
-  const cacheKeys = await runtime.sessionKkv.listKeys(
-    scope.sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-  );
-  return workplaceAttachmentsFromRuleDelta(live, cacheKeys);
-}
-
-/**
  * Appends a user message (optional) and runs the agent loop (streaming via event bus).
  */
 export async function runAgentTurn(
@@ -234,7 +200,6 @@ export async function runAgentTurn(
     );
   }
 
-  // 先解析 Agent：materialize 须读 prompts.workplace（与 assemble 前缀闸门一致）
   stage = "resolve-agent";
   const definition =
     options?.definitionOverride ??
@@ -244,14 +209,6 @@ export async function runAgentTurn(
       )
     ).definition;
 
-  stage = "materialize-workplace";
-  const workplaceAtts = await materializeWorkplaceAttachments(
-    runtime,
-    scope,
-    definition.prompts,
-  );
-  const hasWorkplaceDelta = workplaceAtts.length > 0;
-
   const hasPending =
     isUserVfsUnifiedToolTurnEnabled() &&
     runtime.userVfsTurn != null &&
@@ -260,7 +217,6 @@ export async function runAgentTurn(
     trimmed !== "" ||
     composerAttachOnly.length > 0 ||
     hasPending ||
-    hasWorkplaceDelta ||
     hasAnnotateDrafts;
 
   if (!hasInput && !allowResumeWithoutInput && !allowAssistantContinue) {
@@ -273,7 +229,6 @@ export async function runAgentTurn(
       );
     }
   }
-  // 有 workplace 差集 → 禁止纯 resume（差集=新输入）；即便误置 allowResume 也不进此支
   if (!hasInput && allowResumeWithoutInput) {
     stage = "resume-check-last-message";
     const list = await runtime.messages.listBySession(scope.sessionId);
@@ -324,7 +279,6 @@ export async function runAgentTurn(
       trimmedInput: trimmed,
       allowResumeWithoutInput,
       composerAttachments: scannedComposer,
-      workplaceAttachments: workplaceAtts,
     });
     userOpsAttachments = prepared.attachments;
     if (prepared.reAppendedUserMessageId != null) {
@@ -342,22 +296,20 @@ export async function runAgentTurn(
     buildAnnotateAttachmentFromDraft,
   );
 
-  // 新 append：workplace ∪ user_ops ∪ scannedComposer 直 concat；再 concat annotate（禁 path 去重）
+  // 新 append：user_ops ∪ scannedComposer 直 concat；再 concat annotate（禁 path 去重）
   const mergedAttachments = [
-    ...workplaceAtts,
     ...userOpsAttachments,
     ...scannedComposer,
     ...annotateAttachments,
   ];
 
-  // allowAssistantContinue：空正文续跑约定不 append user；continue 时忽略 hasWorkplaceDelta
+  // allowAssistantContinue：空正文续跑约定不 append user
   const shouldAppendNewUser =
     !reAppended &&
     !allowAssistantContinue &&
     (trimmed !== "" ||
       scannedComposer.length > 0 ||
       userOpsAttachments.length > 0 ||
-      hasWorkplaceDelta ||
       hasAnnotateDrafts);
 
   if (shouldAppendNewUser) {

@@ -67,6 +67,10 @@ export {
   type AssembleWorkplaceDisplayResult,
 } from "../service/workplace/assemble-workplace-display.js";
 export {
+  refreshRuleSnapshot,
+  type RefreshRuleSnapshotDeps,
+} from "../service/workplace/refresh-rule-snapshot.js";
+export {
   ruleViewToSnapshotEntries,
   parseRuleSnapshotJson,
   serializeRuleSnapshot,
