@@ -35,6 +35,7 @@
     "@eslint/js": "^9.22.0",
     "@types/node": "^25.6.2",
     "eslint": "^9.22.0",
+    "linkedom": "^0.18.13",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.4"
   },

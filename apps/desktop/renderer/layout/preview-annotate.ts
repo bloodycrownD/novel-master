@@ -1,24 +1,76 @@
 /**
  * Desktop PreviewPane 划词批注：入口门闩 + 选区 + 原文匹配下划线（尽力）。
- * 纯算法在 `@shared/logic/chat`；本文件保留 DOM wrap 壳。
+ * 纯算法在 `@shared/logic/chat`；本文件保留 DOM collect / wrap 壳。
+ * 定稿 apply（D5）：clear → 长优先 → 收集未 mark Text（D1 分批）→ flat findAll → 多段 wrap。
  * 仅 mode==="read" 且 workspaceScope==="chat" 且非空 sessionId 启用。
  */
 
 import {
+  buildFlatTextIndex,
+  findAllOccurrences,
   groupAnnotateIdsByOriginalText,
+  mapFlatRangeToSegments,
+  normalizeAnnotateNeedle,
   sortAnnotateTextsLongestFirst,
 } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 
 export {
+  buildFlatTextIndex,
   findAllOccurrences,
   groupAnnotateIdsByOriginalText,
+  mapFlatRangeToSegments,
+  normalizeAnnotateNeedle,
   parseAnnotateIdsAttr,
   sortAnnotateTextsLongestFirst,
 } from "@shared/logic/chat";
 
 export const PREVIEW_ANNOTATE_MARK_CLASS = "preview-annotate-mark";
 export const PREVIEW_ANNOTATE_IDS_ATTR = "data-annotate-ids";
+
+/** 切断匹配域：block / br / 表单元格（D1）。 */
+const CUT_BOUNDARY_TAGS = new Set([
+  "ADDRESS",
+  "ARTICLE",
+  "ASIDE",
+  "BLOCKQUOTE",
+  "BR",
+  "DETAILS",
+  "DIALOG",
+  "DIV",
+  "DL",
+  "DT",
+  "DD",
+  "FIELDSET",
+  "FIGCAPTION",
+  "FIGURE",
+  "FOOTER",
+  "FORM",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "HEADER",
+  "HGROUP",
+  "HR",
+  "LI",
+  "MAIN",
+  "NAV",
+  "OL",
+  "P",
+  "PRE",
+  "SECTION",
+  "TABLE",
+  "TBODY",
+  "TD",
+  "TFOOT",
+  "TH",
+  "THEAD",
+  "TR",
+  "UL",
+]);
 
 /** 划词批注入口门闩（编辑态 / global / session / 无 sessionId 均无入口）。 */
 export function isPreviewAnnotateEnabled(
@@ -103,7 +155,7 @@ export function clearAnnotateHighlights(root: HTMLElement): void {
 
 /**
  * 按 originalText 在预览 DOM 内做原文匹配下划线（尽力；重复则全部匹配）。
- * 跨元素连续串无法匹配时跳过（条目仍保留）。
+ * 跨行内节点拆成多段连续 mark（同 ids）；跨 block/br/单元格不误拼。
  */
 export function applyAnnotateHighlights(
   root: HTMLElement,
@@ -117,55 +169,161 @@ export function applyAnnotateHighlights(
     if (ids == null || ids.length === 0) {
       continue;
     }
-    wrapAllOccurrencesInRoot(root, text, ids);
+    const needle = normalizeAnnotateNeedle(text);
+    if (!needle) {
+      continue;
+    }
+    wrapAllPlainMatchesFlat(root, needle, ids);
   }
 }
 
-function wrapAllOccurrencesInRoot(
+/** 一次收集 → flat 全量命中 → 右到左多段 wrap（废弃单 Text / findFirst×N）。 */
+function wrapAllPlainMatchesFlat(
   root: HTMLElement,
   needle: string,
   ids: readonly string[],
 ): void {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const targets: Text[] = [];
-  let node: Node | null = walker.nextNode();
-  while (node != null) {
-    const textNode = node as Text;
-    const value = textNode.nodeValue ?? "";
-    if (
-      value.includes(needle) &&
-      textNode.parentElement?.closest(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`) ==
-        null
-    ) {
-      targets.push(textNode);
-    }
-    node = walker.nextNode();
+  const domains = collectUnmarkedTextDomains(root);
+  for (const domain of domains) {
+    wrapOccurrencesInDomain(domain, needle, ids);
   }
+}
 
-  const idsAttr = ids.join(",");
-  for (const textNode of targets) {
-    const value = textNode.nodeValue ?? "";
-    let start = 0;
-    let idx = value.indexOf(needle, start);
-    if (idx === -1) {
-      continue;
-    }
-    const frag = document.createDocumentFragment();
-    while (idx !== -1) {
-      if (idx > start) {
-        frag.appendChild(document.createTextNode(value.slice(start, idx)));
-      }
-      const mark = document.createElement("mark");
-      mark.className = PREVIEW_ANNOTATE_MARK_CLASS;
-      mark.setAttribute(PREVIEW_ANNOTATE_IDS_ATTR, idsAttr);
-      mark.textContent = needle;
-      frag.appendChild(mark);
-      start = idx + needle.length;
-      idx = value.indexOf(needle, start);
-    }
-    if (start < value.length) {
-      frag.appendChild(document.createTextNode(value.slice(start)));
-    }
-    textNode.parentNode?.replaceChild(frag, textNode);
+function wrapOccurrencesInDomain(
+  domainNodes: Text[],
+  needle: string,
+  ids: readonly string[],
+): void {
+  if (domainNodes.length === 0) {
+    return;
   }
+  const segments = domainNodes.map((n) => n.nodeValue ?? "");
+  const index = buildFlatTextIndex(segments);
+  const hits = findAllOccurrences(index.haystack, needle);
+  if (hits.length === 0) {
+    return;
+  }
+  const nodes: Array<Text | null> = domainNodes.slice();
+  for (let hi = hits.length - 1; hi >= 0; hi--) {
+    const at = hits[hi]!;
+    const ranges = mapFlatRangeToSegments(at, at + needle.length, index);
+    for (let ri = ranges.length - 1; ri >= 0; ri--) {
+      const range = ranges[ri]!;
+      const node = nodes[range.segmentIndex];
+      if (node == null) {
+        continue;
+      }
+      const beforeNode = wrapRange(node, range.start, range.end, ids);
+      nodes[range.segmentIndex] = beforeNode;
+    }
+  }
+}
+
+/**
+ * 按文档序收集未处于 preview-annotate-mark 内的 Text，并在 block/br/td 边界分批（D1a）。
+ */
+function collectUnmarkedTextDomains(root: ParentNode): Text[][] {
+  const domains: Text[][] = [];
+  let current: Text[] = [];
+
+  const flush = (): void => {
+    if (current.length > 0) {
+      domains.push(current);
+      current = [];
+    }
+  };
+
+  const visit = (node: Node): void => {
+    if (node.nodeType === 3) {
+      const textNode = node as Text;
+      if (!isInsideAnnotateMark(textNode)) {
+        current.push(textNode);
+      }
+      return;
+    }
+    if (node.nodeType !== 1) {
+      return;
+    }
+    const el = node as Element;
+    if (el.classList?.contains(PREVIEW_ANNOTATE_MARK_CLASS)) {
+      return;
+    }
+    const tag = el.tagName?.toUpperCase?.() ?? "";
+    const cut = CUT_BOUNDARY_TAGS.has(tag);
+    if (cut) {
+      flush();
+    }
+    const children = el.childNodes;
+    for (let i = 0; i < children.length; i++) {
+      visit(children[i]!);
+    }
+    if (cut) {
+      flush();
+    }
+  };
+
+  const kids = root.childNodes;
+  for (let i = 0; i < kids.length; i++) {
+    visit(kids[i]!);
+  }
+  flush();
+  return domains;
+}
+
+function isInsideAnnotateMark(node: Node): boolean {
+  let cur: Node | null = node.parentNode;
+  while (cur) {
+    if (
+      cur.nodeType === 1 &&
+      (cur as Element).classList?.contains(PREVIEW_ANNOTATE_MARK_CLASS)
+    ) {
+      return true;
+    }
+    cur = cur.parentNode;
+  }
+  return false;
+}
+
+/**
+ * 将 textNode 的 [start,end) 包成 mark。
+ * @returns 切出的左侧 Text（无 before 则为 null），供同节点右到左续包。
+ */
+function wrapRange(
+  textNode: Text,
+  start: number,
+  end: number,
+  ids: readonly string[],
+): Text | null {
+  const doc = textNode.ownerDocument;
+  if (!doc) {
+    return null;
+  }
+  const value = textNode.nodeValue ?? "";
+  if (start < 0 || end > value.length || start >= end) {
+    return null;
+  }
+  const before = value.slice(0, start);
+  const mid = value.slice(start, end);
+  const after = value.slice(end);
+  const mark = doc.createElement("mark");
+  mark.className = PREVIEW_ANNOTATE_MARK_CLASS;
+  mark.setAttribute(PREVIEW_ANNOTATE_IDS_ATTR, ids.join(","));
+  mark.textContent = mid;
+
+  const parent = textNode.parentNode;
+  if (!parent) {
+    return null;
+  }
+  let beforeNode: Text | null = null;
+  if (before) {
+    beforeNode = doc.createTextNode(before);
+    parent.insertBefore(beforeNode, textNode);
+  }
+  parent.insertBefore(mark, textNode);
+  if (after) {
+    textNode.nodeValue = after;
+  } else {
+    parent.removeChild(textNode);
+  }
+  return beforeNode;
 }
