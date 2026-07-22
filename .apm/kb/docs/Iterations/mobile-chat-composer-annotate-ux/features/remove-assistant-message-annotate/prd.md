@@ -5,7 +5,11 @@ dependency: Iterations/mobile-chat-composer-annotate-ux/prd.md
 
 # remove-assistant-message-annotate Feature PRD
 
-> 敏捷名称：`remove-assistant-message-annotate`  
+> **已被 `remove-message-annotate` 取代**（2026-07-22）：产品确认 User+Assistant 消息批注全部移除，不再仅收窄为「仅 user」。  
+> 请改读：`features/remove-message-annotate/prd.md`。  
+> 本文件保留以免断链。
+
+> 敏捷名称：`remove-assistant-message-annotate`（已 superseded）  
 > 所属迭代：`mobile-chat-composer-annotate-ux`  
 > 平台：仅 Mobile；Desktop 无消息批注，勿改。
 

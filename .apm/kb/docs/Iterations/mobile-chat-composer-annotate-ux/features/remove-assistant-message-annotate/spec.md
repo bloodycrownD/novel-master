@@ -6,7 +6,9 @@ dependency: Iterations/mobile-chat-composer-annotate-ux/prd.md
 
 # remove-assistant-message-annotate 实现规格（SPEC）
 
-> 敏捷：`remove-assistant-message-annotate`  
+> **已被 `remove-message-annotate` 取代**（2026-07-22）。请改读：`features/remove-message-annotate/spec.md`。本文件保留以免断链。
+
+> 敏捷：`remove-assistant-message-annotate`（已 superseded）  
 > 父迭代：`mobile-chat-composer-annotate-ux`
 
 ## 根因 / 方案摘要
