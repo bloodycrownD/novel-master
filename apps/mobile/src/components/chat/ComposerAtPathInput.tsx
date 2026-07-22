@@ -5,6 +5,7 @@
  * - 仅选择器 / @ 搜索 tips 经程序化 API 插入成 mention（着色 + 退格整段删）
  * - 手输 `@/path` 为普通字：不成 tag、不整段删
  * - 对外 value / onChangeText 始终为纯字符串（含 `@/path`），不落库 `{@}[…](id)`
+ * - selection 仅短暂受控（对齐 PromptMacroTextInput 的 pendingSelection），避免全程受控打断 mention 着色
  */
 import React, {
   forwardRef,
@@ -89,7 +90,11 @@ export const ComposerAtPathInput = forwardRef<
   const { tokens } = useTheme();
   /** 内部 mention 值（可含 `{@}[path](path)`）；对外只发 plain。 */
   const [mentionValue, setMentionValue] = useState(value);
-  const [selection, setSelection] = useState({ start: cursor, end: cursor });
+  /** 仅程序化写入时短暂传入 TextInput；用户划选后清空，避免全程受控。 */
+  const [pendingSelection, setPendingSelection] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
   const lastPlainRef = useRef(value);
   const triggersRef = useRef<ReturnType<typeof useMentions>['triggers'] | null>(
     null,
@@ -102,7 +107,11 @@ export const ComposerAtPathInput = forwardRef<
         // 路径无空格；避免把后续字吞进 keyword
         allowedSpacesCount: 0,
         isInsertSpaceAfterMention: true,
-        textStyle: { color: tokens.primary },
+        // 字色 + 轻底，与柔和 selection tint 可区分
+        textStyle: {
+          color: tokens.primary,
+          backgroundColor: `${tokens.primary}22`,
+        },
         // 展示为 @/path（name 已含前导 /）
         getPlainString: mention => `@${mention.name}`,
       },
@@ -120,9 +129,9 @@ export const ComposerAtPathInput = forwardRef<
     [onChangeText],
   );
 
-  const emitSelection = useCallback(
+  const applyPendingSelection = useCallback(
     (start: number, end: number) => {
-      setSelection({ start, end });
+      setPendingSelection({ start, end });
       onSelectionChange?.({
         nativeEvent: { selection: { start, end } },
       } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
@@ -135,7 +144,11 @@ export const ComposerAtPathInput = forwardRef<
     onChange: emitMentionValue,
     triggersConfig,
     onSelectionChange: sel => {
-      emitSelection(sel.start, sel.end);
+      // 原生已应用选区后解除短暂受控（对照 PromptMacroTextInput）
+      setPendingSelection(null);
+      onSelectionChange?.({
+        nativeEvent: { selection: { start: sel.start, end: sel.end } },
+      } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
     },
   });
   triggersRef.current = triggers;
@@ -148,8 +161,8 @@ export const ComposerAtPathInput = forwardRef<
     lastPlainRef.current = value;
     setMentionValue(value);
     const pos = Math.max(0, Math.min(cursor, value.length));
-    setSelection({ start: pos, end: pos });
-  }, [value, cursor]);
+    applyPendingSelection(pos, pos);
+  }, [value, cursor, applyPendingSelection]);
 
   useImperativeHandle(
     ref,
@@ -165,7 +178,7 @@ export const ComposerAtPathInput = forwardRef<
           cursorPos != null
             ? Math.max(0, Math.min(cursorPos, text.length))
             : text.length;
-        emitSelection(pos, pos);
+        applyPendingSelection(pos, pos);
       },
       replaceActiveAt(token: string) {
         const t = triggersRef.current?.atPath;
@@ -176,7 +189,7 @@ export const ComposerAtPathInput = forwardRef<
         return true;
       },
     }),
-    [emitMentionValue, emitSelection, mentionValue, triggersConfig],
+    [applyPendingSelection, emitMentionValue, mentionValue, triggersConfig],
   );
 
   const setMergedRef = useCallback(
@@ -214,8 +227,8 @@ export const ComposerAtPathInput = forwardRef<
       editable={editable}
       multiline
       caretHidden={false}
-      selectionColor={tokens.primary}
-      selection={selection}
+      selectionColor={tokens.selection}
+      selection={pendingSelection ?? undefined}
       // 库要求：勿直接传 value；由 children 着色 + onChangeText 驱动
       onChangeText={handleChangeText}
       onSelectionChange={textInputProps.onSelectionChange}
