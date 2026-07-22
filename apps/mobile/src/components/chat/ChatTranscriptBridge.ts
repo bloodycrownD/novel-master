@@ -183,8 +183,11 @@ export type TranscriptToHostMessage =
     >;
 
 /**
- * 划词批注：从 `window.getSelection()` 上溯 `.row.message[data-id]`，
+ * 划词批注：从 `window.getSelection()` 上溯 `.row.message.user[data-id]`，
  * 经 bridge 回报 `{ messageId, text }`（失败时空串，宿主取消录入）。
+ *
+ * 仅 user 行可 resolve：assistant 上点「批注」messageId 为空 → 静默取消。
+ * （RN WebView `menuItems` 为静态 prop，无法按选区角色低成本隐藏「批注」，故门闩静默。）
  */
 export const RESOLVE_SELECTION_ANNOTATE_JS = `(function(){
   try {
@@ -196,7 +199,8 @@ export const RESOLVE_SELECTION_ANNOTATE_JS = `(function(){
     if (text && sel && sel.anchorNode) {
       var node = sel.anchorNode;
       var el = node.nodeType === 3 ? node.parentElement : node;
-      var row = el && el.closest ? el.closest('.row.message[data-id]') : null;
+      // 仅 .user：assistant 划词批注不进 store / 不弹 modal
+      var row = el && el.closest ? el.closest('.row.message.user[data-id]') : null;
       messageId = row ? (row.getAttribute('data-id') || '') : '';
     }
     window.ReactNativeWebView.postMessage(JSON.stringify({

@@ -46,7 +46,11 @@ import { appendWireChunk } from '@/services/stream-wire-queue';
 import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
 import { RICH_DOCUMENT_ANNOTATE_MENU_ITEMS } from '@/components/vfs/RichDocumentWebView';
 
-/** 划词菜单：对齐 RICH_DOCUMENT_ANNOTATE_MENU_ITEMS（批注 + 复制）。 */
+/**
+ * 划词菜单：对齐 RICH_DOCUMENT_ANNOTATE_MENU_ITEMS（批注 + 复制）。
+ * 菜单项静态挂在全部 `.row.message`；assistant 上「批注」由 RESOLVE_SELECTION_ANNOTATE_JS
+ * 仅上溯 `.row.message.user` 静默取消（无法按选区角色低成本隐藏菜单项）。
+ */
 export const CHAT_TRANSCRIPT_ANNOTATE_MENU_ITEMS = [
   ...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
 ] as const;
@@ -795,6 +799,11 @@ export const ChatTranscriptWebView = memo(
               .trim();
             // 上溯失败 / 空选区 → 取消录入、不写草稿、不插 tag
             if (!messageId || !text) {
+              return;
+            }
+            // 二次门闩：仅 user 消息可批注（assistant 静默忽略）
+            const row = prevMessagesRef.current.find(m => m.id === messageId);
+            if (!row || row.role !== 'user') {
               return;
             }
             onSelectionAnnotateRef.current?.({messageId, text});

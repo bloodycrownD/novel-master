@@ -186,6 +186,13 @@ export function ChatConversationPanel({
                 onWebMenuOpenChange={controller.onWebMenuOpenChange}
                 onMessageMenuAction={controller.onWebMessageMenuAction}
                 onSelectionAnnotate={selection => {
+                  // 仅用户消息可批注；assistant 静默取消（与 RESOLVE 上溯 .user 一致）
+                  const row = chatMessages.find(
+                    m => m.id === selection.messageId,
+                  );
+                  if (!row || row.role !== 'user') {
+                    return;
+                  }
                   composerRef.current?.beginMessageAnnotate(selection);
                 }}
               />

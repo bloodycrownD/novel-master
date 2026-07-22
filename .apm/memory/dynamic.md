@@ -1,10 +1,11 @@
 ﻿---
 createdAt: "2026-07-22 12:35:00"
-updatedAt: "2026-07-22 22:25:00"
+updatedAt: "2026-07-22 22:30:00"
 ---
 task: agile-dev
 type: feature
 iteration: mobile-chat-composer-annotate-ux
+agile_name: remove-assistant-message-annotate
 branch: feature/mobile-chat-composer-annotate-ux
-status: 进行中
-note: 从回滚基线仅恢复「⋯ 外置到气泡上方」；不去皮。气泡 UI 另开迭代。
+status: 实现完成
+note: 仅 user 消息划词批注；RESOLVE 上溯 .row.message.user；宿主 role 门闩；assistant 静默

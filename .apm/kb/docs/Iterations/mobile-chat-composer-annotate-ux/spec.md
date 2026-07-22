@@ -20,7 +20,7 @@ date: 2026-07-22
 3. **Undo Send 恢复工作区批注**：含 `action:annotate` 且 **真 VFS path** 的 plain user Undo 时，按附件重建 store + chip（及打开文件时下划线）；**跳过** `path.includes('__message__:')` 的伪 path（含 `/__message__:`）。
 4. **Composer 选中色柔化**：不再用刺眼 `tokens.primary` 整块选中。
 5. **消息菜单右上角主入口**：对齐 Desktop「⋯」；弱化/移除长按主路径；划词复制可用；菜单项集合不变。
-6. **消息正文批注**：独立草稿；Composer tag（无 chip、气泡无下划线）；删 tag=删草稿；发送进模型（`<user-ops>` / `annotate`）；**传给 `runAgentTurn` 的 `userContent` 须已是剥离全部消息批注 mention span 后的 plain**（该串同时用于 Core 内 `mergeAttachmentsWithScannedAtPaths` 与落库正文；批注只走 `annotateDrafts`，不参与 `@` 扫描）。
+6. **消息正文批注**：独立草稿；**仅用户消息**可划词批注（助手静默取消）；Composer tag（无 chip、气泡无下划线）；删 tag=删草稿；发送进模型（`<user-ops>` / `annotate`）；**传给 `runAgentTurn` 的 `userContent` 须已是剥离全部消息批注 mention span 后的 plain**（该串同时用于 Core 内 `mergeAttachmentsWithScannedAtPaths` 与落库正文；批注只走 `annotateDrafts`，不参与 `@` 扫描）。
 
 **平台**：仅 Mobile（Android）。Desktop UI 不改、不验收；Core 扩联合类型时 Desktop 文件批注调用方须继续编译通过。
 
@@ -67,7 +67,8 @@ date: 2026-07-22
 │   __message__:<messageId>:<draftId>；XML JSON 含 messageId 等  │
 │ 划词：menuItems=批注+复制（对齐 RICH_DOCUMENT_ANNOTATE…）；    │
 │   onCustomMenuSelection → getSelection 上溯                     │
-│   .row.message[data-id] → bridge {messageId,text} → 宿主录入   │
+│   .row.message.user[data-id] → bridge {messageId,text} → 宿主  │
+│   （assistant 上溯失败 → 静默取消；menuItems 静态不按角色隐藏） │
 │   复制 → 系统剪贴板（自定义 menu 盖掉原生 Copy 后须自备）       │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -89,7 +90,7 @@ date: 2026-07-22
 | 消息批注 tag 文案 | 可见短标签：`批:「` + 截断 `originalText`（≤12 字，超出加 `…`）+ `」`；内部 mention id = `draft.id`。（**可选**：短标签可见文案内将 `@` 显示为全角 `＠`，便于人读；**主合同仍以发送前剥离为准**，不依赖显示替换防扫） |
 | **消息批注 mention + `userContent` / scanAt（第 2–3 轮主方案）** | **独立 trigger**（推荐 `§` 或实现期选定**非 `@`** 单字符；**禁止**复用 `@`）。内部 markup：`{§}[可见短标签](draft.id)`。Composer 对外展示 plain 仍可将消息批注展开为短标签；**但**传给 `runAgentTurn` 的 **`userContent` 必须已是**剥离全部消息批注 mention span 之后的 plain（仅保留 `@path` mention 展开结果 + 普通文本）。**剥离在 App `ChatComposer` 发送前完成**；该 `userContent` **同时**用于 Core 内 `mergeAttachmentsWithScannedAtPaths(userContent, …)` 与落库正文。**禁止** App 另调一次 `scanAtPathAttachments` / `mergeAttachmentsWithScannedAtPaths` 再与 Core 双轨。消息批注内容 **只**经 `annotateDrafts` / builder 进模型，**不参与** `AT_PATH_TOKEN_RE = /@([^\s@]+)/g` 扫描。删 tag / 原子删 → 同步 `removeMessageAnnotateDraft` |
 | **消息批注 trigger suggest（P2 实现注）** | 该 trigger **仅**用于解析已插入 markup / 程序化插入；typeahead **`suggest` 恒返回空列表**（不提供手输联想入口） |
-| **消息划词 messageId 主路径（第 2 轮钉死）** | `ChatTranscriptWebView`：自定义 `menuItems` + `onCustomMenuSelection` → **injectJS** 从 `window.getSelection()` 锚点上溯 `.row.message[data-id]`（或现网等价 row 选择器）→ bridge 载荷 **`{ messageId, text }`**（`text`=选区纯文本）→ 宿主 AnnotatePickModal 类录入（**不**画气泡下划线）。**解析失败**（无 row / 无 `data-id` / 空选区）→ **取消录入、不写草稿、不插 tag**。须改 `ChatTranscriptWebView.tsx`、`ChatTranscriptBridge.ts`（及 transcript 运行时接线） |
+| **消息划词 messageId 主路径（第 2 轮钉死；remove-assistant 修订）** | `ChatTranscriptWebView`：自定义 `menuItems` + `onCustomMenuSelection` → **injectJS** 从 `window.getSelection()` 锚点上溯 **`.row.message.user[data-id]`** → bridge 载荷 **`{ messageId, text }`** → 宿主 AnnotatePickModal 类录入（**不**画气泡下划线）。**解析失败**（无 user row / 无 `data-id` / 空选区 / 选区在 assistant）→ **取消录入、不写草稿、不插 tag**。宿主再按 `role === 'user'` 二次门闩。`menuItems` 静态含「批注」+「复制」（RN 无法低成本按角色隐藏）。须改 `ChatTranscriptWebView.tsx`、`ChatTranscriptBridge.ts` |
 | **transcript 划词 menuItems（第 3 轮钉死）** | **对齐** `RICH_DOCUMENT_ANNOTATE_MENU_ITEMS`：自定义 `menuItems` **须含**「批注」+「复制」（`key: 'annotate' | 'copy'` 或等价）。自定义项会盖掉原生 Copy/Share，故 **必须自备「复制」**；`copy` → 系统剪贴板（如 `Clipboard.setString(选区文本)`）。避免只有「批注」导致划词无法复制 |
 | **右上角菜单锚点** | 钉死 `openContextMenuFromAnchor(messageId, DOMRect)`（或扩展现有 `MenuAnchor` 后由 ⋯ 点击传入按钮 `getBoundingClientRect()`）；**⋯ 点击传按钮 rect**，不再依赖长按触摸点 |
 | `hasAnnotateDrafts` | **App 侧**对文件 store 与消息批注 store 取 **或** 后传入既有 Core 布尔入参；**不**改 Core `hasAnnotateDrafts` / `hasComposerSendableInput` 布尔语义 |
@@ -179,7 +180,7 @@ apps/mobile/src/
 | C7 | `useChatTabMessages` Undo | snapshot→restore store+chips；跳过消息伪 path；保留 T-TX2 无 attach chip |
 | C8 | transcript `MessageRow`+`menu.ts`+css | 右上角 ⋯；`openContextMenuFromAnchor(messageId, DOMRect)`（或扩展 MenuAnchor）；移除长按开菜单 |
 | C9 | Core schema + builder + store | `MessageAnnotateDraft` + `SendAnnotateDraft`；builder 分派；伪 path=name；**消息形跳过破坏性 normalize**；chip API 忽略消息草稿 |
-| C10 | `ChatTranscriptWebView` + `ChatTranscriptBridge` + Composer | **menuItems 对齐 `RICH_DOCUMENT_ANNOTATE_MENU_ITEMS`：须含「批注」+「复制」**；`copy`→系统剪贴板；`onCustomMenuSelection` → injectJS `getSelection` 上溯 `.row.message[data-id]` → `{ messageId, text }`；失败取消录入；插/删消息批注 tag；删 tag→`removeMessageAnnotateDraft` |
+| C10 | `ChatTranscriptWebView` + `ChatTranscriptBridge` + Composer | **menuItems 对齐 `RICH_DOCUMENT_ANNOTATE_MENU_ITEMS`：须含「批注」+「复制」**；`copy`→系统剪贴板；`onCustomMenuSelection` → injectJS `getSelection` 上溯 **`.row.message.user[data-id]`** → `{ messageId, text }`；助手/失败取消录入；宿主 `role==='user'` 门闩；插/删消息批注 tag；删 tag→`removeMessageAnnotateDraft` |
 | C11 | `ChatComposer` 发送/清空 | 两类草稿 → `SendAnnotateDraft[]`；App 侧 `hasAnnotateDrafts` 取或；append 双清；**发送前剥离消息批注 span → 所得 plain 作 `runAgentTurn.userContent`**（同串供 Core `mergeAttachmentsWithScannedAtPaths` 与落库；**勿** App 另调 scan） |
 | C12 | 测试 | 见「测试策略」；含 T-MA5（`originalText` 含 `@/foo.md` 不误扫 attach）；划词复制自备 |
 
@@ -203,7 +204,7 @@ apps/mobile/src/
 - Step 6 — phase-undo-restore — blocking: yes — qa: auto：`useChatTabMessages` 在 undo_send 确认路径 **删消息前** snapshot；成功后写入 store + `refreshComposerAnnotateChips`；无 annotate 附件不造草稿；仍 `attachments:[]` 写 draft（无 attach chip）。覆盖 T-UD1/T-UD2/T-UD3。
 - Step 7 — phase-msg-menu — blocking: yes — qa: auto：transcript `MessageRow` 右上角 ⋯；`menu.ts` 钉死 `openContextMenuFromAnchor(messageId, DOMRect)`（或扩展 `MenuAnchor`）；⋯ 点击传按钮 rect；移除长按开菜单；`buildMenuItems` 集合不变；legacy RN 列表同步 ⋯。覆盖 T-MN1/T-MN2。
 - Step 8 — phase-msg-annotate-core — blocking: yes — qa: auto：`MessageAnnotateDraft` + `SendAnnotateDraft` + store；builder 分派产出伪 path=name 的 annotate 附件（XML JSON 含 `messageId`/`originalText`/`userAnnotation`；伪 path 跳过破坏性 normalize）；`runAgentTurn` concat；Desktop 仅文件形编译通过；chip API **忽略**消息草稿。覆盖 T-MA1/T-MA3。
-- Step 9 — phase-msg-annotate-ui — blocking: yes — qa: auto：`ChatTranscriptWebView` + Bridge：自定义 `menuItems` =「批注」+「复制」（对齐 `RICH_DOCUMENT_ANNOTATE_MENU_ITEMS`）；`copy`→系统剪贴板；`onCustomMenuSelection` → injectJS 从 `getSelection()` 上溯 `.row.message[data-id]` → bridge `{ messageId, text }`；失败取消录入；宿主录入 → store + 程序化插 tag（非 `@` trigger；`suggest` 恒空）；**`ChatComposer` 发送前剥离消息批注 span → plain 作 `runAgentTurn.userContent`**（Core 内对该串 `mergeAttachmentsWithScannedAtPaths`；App 勿另调 scan）；原子删 → `removeMessageAnnotateDraft`；**无** chip、**无**气泡下划线；append 成功清空。覆盖 T-MA2/T-MA4/T-MA5/T-MA7。
+- Step 9 — phase-msg-annotate-ui — blocking: yes — qa: auto：`ChatTranscriptWebView` + Bridge：自定义 `menuItems` =「批注」+「复制」（对齐 `RICH_DOCUMENT_ANNOTATE_MENU_ITEMS`）；`copy`→系统剪贴板；`onCustomMenuSelection` → injectJS 从 `getSelection()` 上溯 **`.row.message.user[data-id]`** → bridge `{ messageId, text }`；助手/失败取消录入；宿主录入 → store + 程序化插 tag（非 `@` trigger；`suggest` 恒空）；**`ChatComposer` 发送前剥离消息批注 span → plain 作 `runAgentTurn.userContent`**（Core 内对该串 `mergeAttachmentsWithScannedAtPaths`；App 勿另调 scan）；原子删 → `removeMessageAnnotateDraft`；**无** chip、**无**气泡下划线；append 成功清空。覆盖 T-MA2/T-MA4/T-MA5/T-MA7。
 - Step 10 — phase-manual-android — blocking: no — qa: manual_user：Android 录屏：多文件下划线、`@path` tag、选中色、Undo 恢复批注、右上角菜单+划词复制、消息批注进模型（查看提示词）。
 
 ## 测试策略
@@ -232,7 +233,7 @@ apps/mobile/src/
 - T-MA4 — blocking: yes — 删除 tag 后草稿消失（`removeMessageAnnotateDraft`）；append 成功后 tag+草稿清空（→ Step 9）
 - T-MA5 — blocking: yes — **Given** 仅消息批注、且 `originalText` **含** `@/foo.md`（短标签展开后可见文案内嵌 `@`），**When** App 构造传给 `runAgentTurn` 的 `userContent`（= 剥离全部消息批注 mention span 后的 plain；同串供 Core `mergeAttachmentsWithScannedAtPaths` 与落库），**Then** **不得**新增 `source:attach`；批注仅经 `annotateDrafts` 进入发送管线；**禁止** App 另调 scan 双轨（→ Step 9）
 - T-MA6 — blocking: yes — Desktop/Core 文件形 `buildAnnotateAttachmentFromDraft(AnnotateDraft)` 签名与调用仍编译通过；`SendAnnotateDraft` 联合不破坏既有文件路径（→ Step 8）
-- T-MA7 — blocking: yes — 划词 `onCustomMenuSelection`：能从上溯 `.row.message[data-id]` 得到 `messageId` 时才写草稿；上溯失败 / 空选区 → **不**写 store、**不**插 tag；自定义 `menuItems` 含「批注」+「复制」，`copy` 写入系统剪贴板（→ Step 9）
+- T-MA7 — blocking: yes — 划词 `onCustomMenuSelection`：能从上溯 **`.row.message.user[data-id]`** 得到 `messageId` 时才写草稿；上溯失败 / 空选区 / **选区在 assistant** → **不**写 store、**不**插 tag；自定义 `menuItems` 含「批注」+「复制」，`copy` 写入系统剪贴板（→ Step 9）
 
 ## 风险与实现注
 
@@ -244,7 +245,7 @@ apps/mobile/src/
 | 短标签内嵌 `@` 被全局 `scanAtPath` 扫中 | **已钉死主方案**：`ChatComposer` 发送前剥离 → `userContent`；Core 内对该串 merge 扫描；T-MA5（`originalText` 含 `@/foo.md`）；可选显示 `＠` 仅为辅；**禁止** App 另调 scan 双轨 | — |
 | 落库省略 path 与 schema 冲突 | **已钉死方案 ②**：path=name=伪路径；禁止省略 path | — |
 | 伪 path 被 `normalizePromptStorePath` 破坏 | **已钉死**：消息形 builder **跳过**破坏性 normalize；识别用 `includes('__message__:')` | — |
-| 划词缺 messageId | **已钉死**：injectJS 上溯 `.row.message[data-id]`；失败取消录入（T-MA7） | — |
+| 划词缺 messageId | **已钉死**：injectJS 上溯 `.row.message.user[data-id]`；助手/失败取消录入（T-MA7） | — |
 | 划词自定义 menu 盖掉原生 Copy | **已钉死**：menuItems 对齐 `RICH_DOCUMENT_ANNOTATE_MENU_ITEMS`（批注+复制）；`copy`→系统剪贴板 | — |
 | Undo 与并发未发送草稿膨胀 | 并存不丢；单测钉条数 | 可后续加去重策略 |
 | **hasAnnotateDrafts** | **实现注**：App 侧两 store 取或传入 Core；**不**改 Core 布尔语义 | — |
