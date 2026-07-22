@@ -93,7 +93,7 @@ export async function importDatabaseBackupFromPath(
 
   try {
     await copyFile(dbPath, bakPath).catch(() => undefined);
-    await closeDesktopConnection();
+    await closeLiveDbForBackupImport();
     await copyFile(srcPath, dbPath);
 
     const restoreConn = await openDbForProviderRestore();
@@ -127,7 +127,7 @@ export async function importDatabaseBackupFromBytes(
 
   try {
     await copyFile(dbPath, bakPath).catch(() => undefined);
-    await closeDesktopConnection();
+    await closeLiveDbForBackupImport();
     await writeFile(dbPath, bytes);
 
     const restoreConn = await openDbForProviderRestore();
