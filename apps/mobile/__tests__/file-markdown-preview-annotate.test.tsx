@@ -228,4 +228,82 @@ hello world
       ),
     ).toBe(true);
   });
+
+  it('T-UL1: 同 session 两 path 草稿，切换 preview 时 annotations 仅为当前 path 且非空', async () => {
+    const sessionId = 's-ul1-multi-path';
+    const pathA = '/a.md';
+    const pathB = '/b.md';
+    const contentA = `---
+title: A
+---
+alpha text
+`;
+    const contentB = `---
+title: B
+---
+beta text
+`;
+    addChatAnnotateDraft(sessionId, {
+      id: 'da',
+      path: pathA,
+      originalText: 'alpha',
+      userAnnotation: '批A',
+    });
+    addChatAnnotateDraft(sessionId, {
+      id: 'db',
+      path: pathB,
+      originalText: 'beta',
+      userAnnotation: '批B',
+    });
+
+    let root: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      root = TestRenderer.create(
+        <FileMarkdownPreview
+          path={pathA}
+          content={contentA}
+          tokens={tokens}
+          annotateEnabled
+          sessionId={sessionId}
+        />,
+      );
+    });
+
+    // 同步派生：首帧即应为当前 path，无需再等 effect 一拍
+    const propsA = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(propsA?.annotations).toEqual([
+      {id: 'da', originalText: 'alpha'},
+    ]);
+    expect(propsA?.annotations?.length).toBeGreaterThan(0);
+
+    mockRichDocumentWebView.mockClear();
+
+    await act(async () => {
+      root!.update(
+        <FileMarkdownPreview
+          path={pathB}
+          content={contentB}
+          tokens={tokens}
+          annotateEnabled
+          sessionId={sessionId}
+        />,
+      );
+    });
+
+    // 切换后同帧：仅 B 的草稿，非空，不得残留 A
+    const callsAfterSwitch = mockRichDocumentWebView.mock.calls.map(
+      c => c[0]?.annotations,
+    );
+    for (const annotations of callsAfterSwitch) {
+      expect(annotations).toEqual([{id: 'db', originalText: 'beta'}]);
+      expect(annotations).not.toEqual([]);
+      expect(
+        (annotations as {id: string}[] | undefined)?.some(a => a.id === 'da'),
+      ).toBe(false);
+    }
+    const propsB = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(propsB?.annotations).toEqual([
+      {id: 'db', originalText: 'beta'},
+    ]);
+  });
 });
