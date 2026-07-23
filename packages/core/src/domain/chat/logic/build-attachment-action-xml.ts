@@ -67,6 +67,20 @@ function asParamString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+/** 读 optional 正整数参数（缺字段 / 非法 → undefined，旧附件兼容）。 */
+function asParamPositiveInt(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isInteger(n) && n > 0) {
+      return n;
+    }
+  }
+  return undefined;
+}
+
 /** 新 mint 批注草稿 id（Undo 解析恢复用；与发送原 id 解耦）。 */
 function mintAnnotateDraftId(): string {
   return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -75,16 +89,30 @@ function mintAnnotateDraftId(): string {
 /**
  * 由文件形批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。
  * 真 VFS path；可走既有 path 口径（本函数不对伪 path 调用破坏性 normalize）。
+ * 有宽松行列时**显式**写入 XML JSON（H9）；缺字段不写键。
  */
 export function buildFileAnnotateAttachmentFromDraft(
   draft: AnnotateDraft,
 ): MessageAttachment {
   const path = draft.path;
-  const xml = buildAttachmentActionXml("annotate", {
+  const params: Record<string, unknown> = {
     path,
     originalText: draft.originalText,
     userAnnotation: draft.userAnnotation,
-  });
+  };
+  if (draft.startLine != null) {
+    params.startLine = draft.startLine;
+  }
+  if (draft.endLine != null) {
+    params.endLine = draft.endLine;
+  }
+  if (draft.startCol != null) {
+    params.startCol = draft.startCol;
+  }
+  if (draft.endCol != null) {
+    params.endCol = draft.endCol;
+  }
+  const xml = buildAttachmentActionXml("annotate", params);
   return {
     name: attachmentStorageName(path),
     source: "user_ops",
@@ -127,6 +155,10 @@ export function parseAnnotateDraftsFromAttachments(
     let path = pathFromAtt;
     let originalText = "";
     let userAnnotation = "";
+    let startLine: number | undefined;
+    let endLine: number | undefined;
+    let startCol: number | undefined;
+    let endCol: number | undefined;
     if (typeof att.content === "string" && att.content.includes("<action")) {
       const actions = parseAllUserVfsActionsFromText(att.content);
       const annotate = actions.find((a) => a.name === "annotate");
@@ -136,6 +168,10 @@ export function parseAnnotateDraftsFromAttachments(
         }
         originalText = asParamString(annotate.params.originalText);
         userAnnotation = asParamString(annotate.params.userAnnotation);
+        startLine = asParamPositiveInt(annotate.params.startLine);
+        endLine = asParamPositiveInt(annotate.params.endLine);
+        startCol = asParamPositiveInt(annotate.params.startCol);
+        endCol = asParamPositiveInt(annotate.params.endCol);
       }
     }
     if (path == null || path === "") {
@@ -150,6 +186,10 @@ export function parseAnnotateDraftsFromAttachments(
       path,
       originalText,
       userAnnotation,
+      ...(startLine != null ? { startLine } : {}),
+      ...(endLine != null ? { endLine } : {}),
+      ...(startCol != null ? { startCol } : {}),
+      ...(endCol != null ? { endCol } : {}),
     });
   }
   return out;

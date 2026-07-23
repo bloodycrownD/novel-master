@@ -770,6 +770,14 @@ export type AnnotateDraftDto = {
   readonly path: string;
   readonly originalText: string;
   readonly userAnnotation: string;
+  /** 宽松窗口起始行（1-based，含）；缺省则预览全文匹配。 */
+  readonly startLine?: number;
+  /** 宽松窗口结束行（1-based，含）。 */
+  readonly endLine?: number;
+  /** 起始列（1-based，含）；缺省表示自行首。 */
+  readonly startCol?: number;
+  /** 结束列（1-based，含）；缺省表示至行尾。 */
+  readonly endCol?: number;
 };
 
 /**

@@ -7,13 +7,27 @@
 
 import { z } from "zod";
 
-/** 单条未发送工作区（真 VFS path）批注草稿。 */
+/** 正整数 optional（1-based 行列）。 */
+const optionalPositiveInt = z.number().int().positive().optional();
+
+/**
+ * 单条未发送工作区（真 VFS path）批注草稿。
+ * optional 宽松行列（1-based；行闭区间；列缺省表示整行）供预览窗口匹配与附件给模型。
+ */
 export const annotateDraftSchema = z
   .object({
     id: z.string().min(1),
     path: z.string().min(1),
     originalText: z.string(),
     userAnnotation: z.string(),
+    /** 宽松窗口起始行（1-based，含）。 */
+    startLine: optionalPositiveInt,
+    /** 宽松窗口结束行（1-based，含）。 */
+    endLine: optionalPositiveInt,
+    /** 起始列（1-based，含）；缺省表示自行首。 */
+    startCol: optionalPositiveInt,
+    /** 结束列（1-based，含）；缺省表示至行尾。 */
+    endCol: optionalPositiveInt,
   })
   .strict();
 
