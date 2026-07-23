@@ -192,18 +192,37 @@ export {
 export {
   buildFlatTextIndex,
   findAllOccurrences,
+  findAnnotateOccurrenceInSource,
   groupAnnotateIdsByOriginalText,
   mapFlatRangeToSegments,
   normalizeAnnotateNeedle,
+  normalizeAnnotateNeedleStripNewlines,
   normalizeAnnotateSegmentText,
   parseAnnotateIdsAttr,
   sortAnnotateTextsLongestFirst,
 } from '../domain/chat/logic/annotate-highlight.js';
 export type {
+  AnnotateSourceMatch,
+  AnnotateSourceMatchStrategy,
   FlatSegmentLocalRange,
   FlatTextIndex,
   FlatTextSegmentSpan,
 } from '../domain/chat/logic/annotate-highlight.js';
+export {
+  ANNOTATE_SOFT_RANGE_LINE_PADDING,
+  applySoftRangeLinePadding,
+  estimateSoftRangeFromOriginalText,
+  estimateSoftRangeFromPlainOffsets,
+  expandSoftRangeOnce,
+  hasValidAnnotateSoftRange,
+  offsetToSourceLineCol,
+  sliceSourceBySoftRange,
+  splitSourceLines,
+} from '../domain/chat/logic/annotate-source-range.js';
+export type {
+  AnnotateSoftRangeFields,
+  AnnotateSoftSourceRange,
+} from '../domain/chat/logic/annotate-source-range.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,

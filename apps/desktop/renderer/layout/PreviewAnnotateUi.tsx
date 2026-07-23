@@ -91,6 +91,9 @@ export function PreviewAnnotateAddModal({
         path: filePath,
         originalText: selectedText,
         userAnnotation: trimmed,
+        // TODO(annotate-custom-highlight-soft-range): 加草稿时用
+        // estimateSoftRangeFromPlainOffsets / estimateSoftRangeFromOriginalText
+        // 写入 startLine/endLine/startCol/endCol（需源文件文本 + 选区偏移）。
       });
       onClose();
     } finally {

@@ -174,6 +174,9 @@ export function FileMarkdownPreview({
         path,
         originalText: pendingOriginalText,
         userAnnotation,
+        // TODO(annotate-custom-highlight-soft-range): 加草稿时用
+        // estimateSoftRangeFromPlainOffsets / estimateSoftRangeFromOriginalText
+        // 写入 startLine/endLine/startCol/endCol（需源文件文本 + 选区偏移）。
       });
       refreshComposerAnnotateChips(sessionId);
     },
