@@ -3,7 +3,8 @@
   "version": "1.4.05",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
+    "android": "react-native run-android --no-packager",
+    "android:with-packager": "react-native run-android",
     "log-android": "react-native log-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
