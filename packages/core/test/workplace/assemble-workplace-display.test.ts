@@ -88,6 +88,21 @@ describe("assembleWorkplaceDisplay", () => {
     );
     assert.match(out.workplaceDisplay, /<file /);
     assert.match(out.workplaceDisplay, /hello-world/);
+    assert.equal(
+      (out.workplaceDisplay.match(/<workplace>/g) ?? []).length,
+      1,
+      "T-WP4: 恰好一层开标签",
+    );
+    assert.equal(
+      (out.workplaceDisplay.match(/<\/workplace>/g) ?? []).length,
+      1,
+      "T-WP4: 恰好一层闭标签",
+    );
+    assert.equal(out.workplaceDisplay.includes("<<workplace>"), false);
+    assert.equal(
+      out.workplaceDisplay.includes("<workplace>\n<workplace>"),
+      false,
+    );
     assert.deepEqual(out.prefixPaths, ["/note.md"]);
     assert.ok(
       (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=

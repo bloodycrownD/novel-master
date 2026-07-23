@@ -6,7 +6,6 @@
 
 import type { ChatMessage } from "../../domain/chat/model/message.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
-import { TOOL_TURN_BRIDGE_TEXT } from "../chat/impl/append-tool-turn-bridge.js";
 import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
 import type {
   AgentPromptLayout,
@@ -122,6 +121,7 @@ function syntheticWorkplaceUserMessage(
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
     role: "user",
+    // assemble 已包 `<workplace>`；此处勿再包
     content: textBlocks(workplaceDisplay),
     provider: null,
     raw: null,
@@ -131,6 +131,7 @@ function syntheticWorkplaceUserMessage(
 }
 
 function syntheticWorkplaceDoneMessage(
+  assistantText: string,
   ctx: PromptRenderContext
 ): ChatMessage {
   return {
@@ -138,7 +139,7 @@ function syntheticWorkplaceDoneMessage(
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
     role: "assistant",
-    content: textBlocks(TOOL_TURN_BRIDGE_TEXT),
+    content: textBlocks(assistantText),
     provider: null,
     raw: null,
     createdAtMs: 0,
@@ -146,7 +147,7 @@ function syntheticWorkplaceDoneMessage(
   };
 }
 
-/** `workplace` 开且展示非空时追加 user 文件树 + assistant done。 */
+/** `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语。 */
 function appendWorkplacePairIfPresent(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
@@ -159,7 +160,7 @@ function appendWorkplacePairIfPresent(
     return;
   }
   messages.push(syntheticWorkplaceUserMessage(ctx.workplaceDisplay, ctx));
-  messages.push(syntheticWorkplaceDoneMessage(ctx));
+  messages.push(syntheticWorkplaceDoneMessage(layout.workplace!, ctx));
 }
 
 function appendWorkplacePairSegmentsIfPresent(
@@ -181,7 +182,7 @@ function appendWorkplacePairSegmentsIfPresent(
     id: "prompt-workplace-done",
     role: "assistant",
     title: "workplace · done",
-    body: TOOL_TURN_BRIDGE_TEXT,
+    body: layout.workplace!,
     source: "template",
   });
 }

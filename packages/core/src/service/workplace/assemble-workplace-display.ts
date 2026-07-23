@@ -50,12 +50,23 @@ export interface AssembleWorkplaceDisplayResult {
 }
 
 /**
+ * 常驻前缀唯一包裹出口：非空 display 外包一层 `<workplace>`（空串不包）。
+ * 禁止在 renderFileBlock / joinFileBlocks / synthetic 路径再次包裹。
+ */
+function wrapWorkplaceDisplay(display: string): string {
+  if (display === "") {
+    return "";
+  }
+  return `<workplace>\n${display}\n</workplace>`;
+}
+
+/**
  * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
  *
  * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [] }`，不触 kkv
  * 2. 读 `rule_snapshot`/`canon`；空 → 规则引擎 → 写快照
  * 3. 按 path/status 读 `file_cache`；miss → VFS → 写缓存
- * 4. `renderFileBlock` + `joinFileBlocks`；`prefixPaths` = 快照全部可见 path（规范化）
+ * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；`prefixPaths` = 快照全部可见 path（规范化）
  */
 export async function assembleWorkplaceDisplay(
   scope: Extract<VfsScope, { kind: "session" }>,
@@ -92,7 +103,7 @@ export async function assembleWorkplaceDisplay(
     );
   }
   return {
-    workplaceDisplay: joinFileBlocks(blocks),
+    workplaceDisplay: wrapWorkplaceDisplay(joinFileBlocks(blocks)),
     prefixPaths,
   };
 }

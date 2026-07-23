@@ -171,6 +171,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.ok(!body.includes("<dir "));
     assert.ok(!body.includes("<file"));
     assert.ok(!body.includes("<attach>"));
+    // T-WP6: 消息增量 prepare 路径 body 仍不含常驻前缀用的 <workplace>
     assert.ok(!body.includes("<workplace>"));
 
     const cacheKeysAfter = await sk.listKeys(
