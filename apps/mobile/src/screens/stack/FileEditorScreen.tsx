@@ -249,6 +249,7 @@ export function FileEditorScreen() {
           <Text
             style={[
               styles.toolbarPath,
+              styles.toolbarPathText,
               {color: isDirty ? tokens.danger : tokens.textSecondary},
             ]}
             numberOfLines={1}

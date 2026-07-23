@@ -211,6 +211,29 @@ async function focusEditor(
   });
 }
 
+/** 扁平化 style 数组后是否含 textAlign: 'center'。 */
+function styleHasTextAlignCenter(style: unknown): boolean {
+  if (style == null) {
+    return false;
+  }
+  if (Array.isArray(style)) {
+    return style.some(styleHasTextAlignCenter);
+  }
+  if (typeof style === 'object' && 'textAlign' in (style as object)) {
+    return (style as {textAlign?: string}).textAlign === 'center';
+  }
+  return false;
+}
+
+function findToolbarPathText(
+  root: TestRenderer.ReactTestInstance,
+  label: string,
+): TestRenderer.ReactTestInstance {
+  return root.find(
+    node => node.type === 'Text' && node.props.children === label,
+  );
+}
+
 describe('FileEditorScreen', () => {
   beforeEach(() => {
     mockDismiss.mockClear();
@@ -328,5 +351,24 @@ describe('FileEditorScreen', () => {
     const editor = tree.root.findByProps({testID: 'file-editor-input'});
     expect(editor).toBeTruthy();
     expect(editor.props.style).toEqual({flex: 1});
+  });
+
+  it('T-FE1: 预览/聚焦/脏态工具栏文件名均 textAlign center', async () => {
+    const tree = await renderLoadedScreen();
+
+    const previewPath = findToolbarPathText(tree.root, 'readme.md');
+    expect(styleHasTextAlignCenter(previewPath.props.style)).toBe(true);
+
+    await switchToEditMode(tree);
+    await focusEditor(tree);
+    const focusedPath = findToolbarPathText(tree.root, 'readme.md');
+    expect(styleHasTextAlignCenter(focusedPath.props.style)).toBe(true);
+
+    const editor = tree.root.findByProps({testID: 'file-editor-input'});
+    await act(async () => {
+      editor.props.onChange?.('# Hello\n\nworld\nedited');
+    });
+    const dirtyPath = findToolbarPathText(tree.root, '未保存');
+    expect(styleHasTextAlignCenter(dirtyPath.props.style)).toBe(true);
   });
 });
