@@ -36,6 +36,8 @@ export type RichDocumentWebViewProps = {
   /** 划词批注入口（仅 session 预览态由上层打开）。 */
   readonly annotateEnabled?: boolean;
   readonly annotations?: readonly RichDocumentAnnotationMark[];
+  /** 磁盘源文件全文，供 WebView 窗口优先匹配。 */
+  readonly annotateSourceText?: string;
   readonly onSelectionAnnotate?: (text: string) => void;
   /** 同文多条时传入全部 id，由上层弹出选择列表。 */
   readonly onAnnotateOpen?: (ids: readonly string[]) => void;
@@ -86,6 +88,7 @@ export function RichDocumentWebView({
   style,
   annotateEnabled = false,
   annotations = EMPTY_ANNOTATIONS,
+  annotateSourceText,
   onSelectionAnnotate,
   onAnnotateOpen,
 }: RichDocumentWebViewProps) {
@@ -177,8 +180,19 @@ export function RichDocumentWebView({
           ? annotations.map(a => ({
               id: a.id,
               originalText: a.originalText,
+              ...(typeof a.startLine === 'number'
+                ? {startLine: a.startLine}
+                : {}),
+              ...(typeof a.endLine === 'number' ? {endLine: a.endLine} : {}),
+              ...(typeof a.startCol === 'number' ? {startCol: a.startCol} : {}),
+              ...(typeof a.endCol === 'number' ? {endCol: a.endCol} : {}),
             }))
           : [],
+        ...(annotateEnabled &&
+        typeof annotateSourceText === 'string' &&
+        annotateSourceText.length > 0
+          ? {sourceText: annotateSourceText}
+          : {}),
       },
     });
   }, [
@@ -189,6 +203,7 @@ export function RichDocumentWebView({
     frontMatterHtml,
     annotateEnabled,
     annotations,
+    annotateSourceText,
     postToWeb,
   ]);
 

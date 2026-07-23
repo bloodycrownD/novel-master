@@ -28,10 +28,14 @@ export type RichDocumentSetPayload = {
   readonly frontMatterHtml?: string;
 };
 
-/** 下划线标记（按 originalText 尽力匹配；重复则全部高亮）。 */
+/** 下划线标记（按 originalText 尽力匹配；重复则全部高亮；可选宽松行列）。 */
 export type RichDocumentAnnotationMark = {
   readonly id: string;
   readonly originalText: string;
+  readonly startLine?: number;
+  readonly endLine?: number;
+  readonly startCol?: number;
+  readonly endCol?: number;
 };
 
 /** Host → document WebView */
@@ -42,7 +46,11 @@ export type HostToRichDocumentMessage =
   | BridgeEnvelope<'setAnnotateEnabled', {enabled: boolean}>
   | BridgeEnvelope<
       'setAnnotations',
-      {annotations: readonly RichDocumentAnnotationMark[]}
+      {
+        annotations: readonly RichDocumentAnnotationMark[];
+        /** 磁盘源文件全文，供窗口优先匹配（H5/H11）。 */
+        sourceText?: string;
+      }
     >;
 
 /** Document WebView → host */

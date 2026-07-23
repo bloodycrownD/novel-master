@@ -61,7 +61,15 @@ describe('rich-document-bridge', () => {
       v: RICH_DOCUMENT_BRIDGE_VERSION,
       type: 'setAnnotations' as const,
       payload: {
-        annotations: [{id: 'a1', originalText: 'hello'}],
+        annotations: [
+          {
+            id: 'a1',
+            originalText: 'hello',
+            startLine: 1,
+            endLine: 3,
+          },
+        ],
+        sourceText: 'line1\nhello\nline3\n',
       },
     };
     expect(decodeHostToRichDocument(encodeHostToRichDocument(marks))).toEqual(

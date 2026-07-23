@@ -1,4 +1,4 @@
-import {describe, expect, it} from '@jest/globals';
+import {describe, expect, it, jest} from '@jest/globals';
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {
@@ -6,17 +6,17 @@ import {
   ANNOTATE_MARK_CLASS,
   applyAnnotateMarks,
   findAllOccurrences,
+  getRegisteredCssAnnotateRanges,
   groupAnnotateIdsByOriginalText,
   parseAnnotateIdsAttr,
   sortAnnotateTextsLongestFirst,
+  supportsCssCustomHighlight,
   unwrapAnnotateMarks,
 } from '../src/web/rich-document/webview/runtime/annotate-marks';
 import {
   createMiniRoot,
   type MiniElement,
 } from '../test-utils/annotate-mini-dom';
-
-/** `<p>hel<strong>lo</strong></p>` */
 function rootCrossStrong(): MiniElement {
   return createMiniRoot((doc, root) => {
     const p = doc.createElement('p');
@@ -166,22 +166,50 @@ describe('annotate-marks group / parse / sort（A-1 / B-3）', () => {
 });
 
 describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
-  it('T-XN2: 跨 strong 两段 mark，并集覆盖 hello', () => {
+  it('T-XN2 / T-AR10: 跨 strong 两段 mark，并集覆盖 hello', () => {
     const root = rootCrossStrong();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 'd1', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 'd1', originalText: 'hello'}],
+      {forceMarkFallback: true},
+    );
     const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks.length).toBe(2);
     expect(marks.map(m => m.textContent).join('')).toBe('hello');
   });
 
+  it('T-AR9: 回退路径 mark + data-annotate-ids 合同不变', () => {
+    const root = rootCrossStrong();
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [
+        {id: 'a', originalText: 'hello'},
+        {id: 'b', originalText: 'hello'},
+      ],
+      {forceMarkFallback: true},
+    );
+    const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    for (const m of marks) {
+      expect(m.getAttribute(ANNOTATE_IDS_ATTR)).toBe('a,b');
+      expect(parseAnnotateIdsAttr(m.getAttribute(ANNOTATE_IDS_ATTR))).toEqual([
+        'a',
+        'b',
+      ]);
+    }
+    expect(marks.map(m => m.textContent).join('')).toBe('hello');
+  });
+
   it('T-XN4: 多段 mark 的 data-annotate-ids 一致且可 parse', () => {
     const root = rootCrossStrong();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 'a', originalText: 'hello'},
-      {id: 'b', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [
+        {id: 'a', originalText: 'hello'},
+        {id: 'b', originalText: 'hello'},
+      ],
+      {forceMarkFallback: true},
+    );
     const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks.length).toBeGreaterThanOrEqual(2);
     const attrs = marks.map(m => m.getAttribute(ANNOTATE_IDS_ATTR));
@@ -191,18 +219,24 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
 
   it('T-XN5: 原文不在文档 → 无 mark', () => {
     const root = rootCrossStrong();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 'x', originalText: 'missing'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 'x', originalText: 'missing'}],
+      {forceMarkFallback: true},
+    );
     expect(root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
   });
 
   it('T-XN6: 同文两处均标；长串优先抢占短串', () => {
     const root = rootDoubleHello();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 'long', originalText: 'hello hello'},
-      {id: 'short', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [
+        {id: 'long', originalText: 'hello hello'},
+        {id: 'short', originalText: 'hello'},
+      ],
+      {forceMarkFallback: true},
+    );
     const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks.length).toBe(1);
     expect(marks[0]?.textContent).toBe('hello hello');
@@ -211,9 +245,11 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
     ]);
 
     const root2 = rootDoubleHello();
-    applyAnnotateMarks(root2 as unknown as ParentNode, [
-      {id: 's', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root2 as unknown as ParentNode,
+      [{id: 's', originalText: 'hello'}],
+      {forceMarkFallback: true},
+    );
     const marks2 = root2.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks2.length).toBe(2);
     expect(marks2.map(m => m.textContent)).toEqual(['hello', 'hello']);
@@ -226,10 +262,14 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
       p.appendChild(doc.createTextNode('hello'));
       rootEl.appendChild(p);
     });
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 'long', originalText: 'ell'},
-      {id: 'short', originalText: 'ho'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [
+        {id: 'long', originalText: 'ell'},
+        {id: 'short', originalText: 'ho'},
+      ],
+      {forceMarkFallback: true},
+    );
     const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks.length).toBe(1);
     expect(marks[0]?.textContent).toBe('ell');
@@ -241,21 +281,27 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
 
   it('跨 p 不误命中；unwrap 后再 apply 无残留', () => {
     const root = rootCrossParagraph();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 'x', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 'x', originalText: 'hello'}],
+      {forceMarkFallback: true},
+    );
     expect(root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
 
     const root2 = rootCrossStrong();
-    applyAnnotateMarks(root2 as unknown as ParentNode, [
-      {id: 'd1', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root2 as unknown as ParentNode,
+      [{id: 'd1', originalText: 'hello'}],
+      {forceMarkFallback: true},
+    );
     expect(root2.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(2);
     unwrapAnnotateMarks(root2 as unknown as ParentNode);
     expect(root2.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
-    applyAnnotateMarks(root2 as unknown as ParentNode, [
-      {id: 'd1', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root2 as unknown as ParentNode,
+      [{id: 'd1', originalText: 'hello'}],
+      {forceMarkFallback: true},
+    );
     expect(root2.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(2);
   });
 
@@ -277,6 +323,7 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
     expect(src).not.toMatch(/guard\+\+ < 200/);
     expect(src).toMatch(/buildFlatTextIndex/);
     expect(src).toMatch(/mapFlatRangeToSegments/);
+    expect(src).toMatch(/supportsCssCustomHighlight/);
   });
 
   it('T-XN4 点击合同：多段任一段 closest 可得同 ids（源码回归）', () => {
@@ -295,15 +342,96 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
     );
     expect(annotateSrc).toMatch(/target\.closest\(`\.\$\{ANNOTATE_MARK_CLASS\}`\)/);
     expect(annotateSrc).toMatch(/parseAnnotateIdsAttr/);
+    expect(annotateSrc).toMatch(/hitTestCssAnnotateIds/);
+  });
+
+  it('H1: supportsCssCustomHighlight 探测合同', () => {
+    expect(
+      supportsCssCustomHighlight({} as typeof globalThis),
+    ).toBe(false);
+    expect(
+      supportsCssCustomHighlight({
+        CSS: {highlights: {}},
+        Highlight: function Highlight() {},
+      } as unknown as typeof globalThis),
+    ).toBe(true);
+  });
+
+  it('Highlight 主路径：跨 strong 注册多段 Range 且无 mark（T-AR10）', () => {
+    const stored: AbstractRange[] = [];
+    function MockHighlight(...ranges: AbstractRange[]) {
+      stored.push(...ranges);
+    }
+    const highlights = {
+      set: jest.fn(),
+      delete: jest.fn(),
+    };
+    const globalObj = {
+      CSS: {highlights},
+      Highlight: MockHighlight,
+    } as unknown as typeof globalThis;
+
+    const root = rootCrossStrong();
+    // MiniDocument 无 createRange：补一个简易实现
+    const doc = root.ownerDocument as unknown as {
+      createRange: () => {
+        startContainer: Text | null;
+        startOffset: number;
+        endContainer: Text | null;
+        endOffset: number;
+        setStart: (n: Text, o: number) => void;
+        setEnd: (n: Text, o: number) => void;
+      };
+    };
+    doc.createRange = () => {
+      const r = {
+        startContainer: null as Text | null,
+        startOffset: 0,
+        endContainer: null as Text | null,
+        endOffset: 0,
+        setStart(n: Text, o: number) {
+          r.startContainer = n;
+          r.startOffset = o;
+        },
+        setEnd(n: Text, o: number) {
+          r.endContainer = n;
+          r.endOffset = o;
+        },
+      };
+      return r;
+    };
+
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 'd1', originalText: 'hello'}],
+      {globalObj},
+    );
+
+    expect(root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
+    expect(highlights.set).toHaveBeenCalled();
+    expect(getRegisteredCssAnnotateRanges().length).toBe(2);
+    const joined = getRegisteredCssAnnotateRanges()
+      .map(e => {
+        const n = e.range.startContainer as Text;
+        return (n.nodeValue ?? '').slice(
+          e.range.startOffset,
+          e.range.endOffset,
+        );
+      })
+      .join('');
+    expect(joined).toBe('hello');
+    expect(getRegisteredCssAnnotateRanges()[0]?.ids).toEqual(['d1']);
   });
 });
 
 describe('annotate-marks 表格连续域（T-AT2 / T-AT4 / T-AT5 / T-AT6 / T-AT7）', () => {
   it('T-AT2: 跨格选区（含 tab）→ ≥2 段 mark 并集覆盖 aabb', () => {
     const root = rootTableTwoCells();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 't2', originalText: 'aa\tbb'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 't2', originalText: 'aa\tbb'}],
+      {forceMarkFallback: true},
+    );
     const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks.length).toBeGreaterThanOrEqual(2);
     expect(marks.map(m => m.textContent).join('')).toBe('aabb');
@@ -311,9 +439,11 @@ describe('annotate-marks 表格连续域（T-AT2 / T-AT4 / T-AT5 / T-AT6 / T-AT7
 
   it('T-AT4: 整行多格高亮覆盖可见文本', () => {
     const root = rootTableFullRow();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 't4', originalText: 'aa\tbb\tcc'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 't4', originalText: 'aa\tbb\tcc'}],
+      {forceMarkFallback: true},
+    );
     const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks.length).toBeGreaterThanOrEqual(3);
     expect(marks.map(m => m.textContent).join('')).toBe('aabbcc');
@@ -321,17 +451,21 @@ describe('annotate-marks 表格连续域（T-AT2 / T-AT4 / T-AT5 / T-AT6 / T-AT7
 
   it('T-AT5: 表尾+段首拼接串零 mark', () => {
     const root = rootTableThenParagraph();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 't5', originalText: 'zzxx'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 't5', originalText: 'zzxx'}],
+      {forceMarkFallback: true},
+    );
     expect(root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
   });
 
   it('T-AT6: 同格 hel<strong>lo</strong> 仍 ≥2 段 mark', () => {
     const root = rootTableCellStrong();
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 't6', originalText: 'hello'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 't6', originalText: 'hello'}],
+      {forceMarkFallback: true},
+    );
     const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
     expect(marks.length).toBeGreaterThanOrEqual(2);
     expect(marks.map(m => m.textContent).join('')).toBe('hello');
@@ -348,9 +482,11 @@ describe('annotate-marks 表格连续域（T-AT2 / T-AT4 / T-AT5 / T-AT6 / T-AT7
       rootEl.appendChild(p1);
       rootEl.appendChild(p2);
     });
-    applyAnnotateMarks(root as unknown as ParentNode, [
-      {id: 't7', originalText: 'lohe'},
-    ]);
+    applyAnnotateMarks(
+      root as unknown as ParentNode,
+      [{id: 't7', originalText: 'lohe'}],
+      {forceMarkFallback: true},
+    );
     expect(root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
   });
 });

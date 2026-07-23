@@ -12,6 +12,7 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
 import type {AnnotateDraft} from '@novel-master/core/chat';
+import {estimateSoftRangeFromOriginalText} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
@@ -151,6 +152,10 @@ export function FileMarkdownPreview({
       pathDrafts.map(d => ({
         id: d.id,
         originalText: d.originalText,
+        ...(typeof d.startLine === 'number' ? {startLine: d.startLine} : {}),
+        ...(typeof d.endLine === 'number' ? {endLine: d.endLine} : {}),
+        ...(typeof d.startCol === 'number' ? {startCol: d.startCol} : {}),
+        ...(typeof d.endCol === 'number' ? {endCol: d.endCol} : {}),
       })),
     [pathDrafts],
   );
@@ -169,18 +174,27 @@ export function FileMarkdownPreview({
       if (!annotateEnabled || sessionId == null || sessionId === '') {
         return;
       }
+      const soft = estimateSoftRangeFromOriginalText(
+        content,
+        pendingOriginalText,
+      );
       addChatAnnotateDraft(sessionId, {
         id: newAnnotateId(),
         path,
         originalText: pendingOriginalText,
         userAnnotation,
-        // TODO(annotate-custom-highlight-soft-range): 加草稿时用
-        // estimateSoftRangeFromPlainOffsets / estimateSoftRangeFromOriginalText
-        // 写入 startLine/endLine/startCol/endCol（需源文件文本 + 选区偏移）。
+        ...(soft
+          ? {
+              startLine: soft.startLine,
+              endLine: soft.endLine,
+              ...(soft.startCol != null ? {startCol: soft.startCol} : {}),
+              ...(soft.endCol != null ? {endCol: soft.endCol} : {}),
+            }
+          : {}),
       });
       refreshComposerAnnotateChips(sessionId);
     },
-    [annotateEnabled, sessionId, path, pendingOriginalText],
+    [annotateEnabled, sessionId, path, pendingOriginalText, content],
   );
 
   const handleAnnotateOpen = useCallback(
@@ -308,6 +322,7 @@ export function FileMarkdownPreview({
     ? {
         annotateEnabled: true as const,
         annotations: annotationMarks,
+        annotateSourceText: content,
         onSelectionAnnotate: handleSelectionAnnotate,
         onAnnotateOpen: handleAnnotateOpen,
       }

@@ -140,10 +140,58 @@ hello world
     expect(last?.annotations).toEqual([
       {id: 'a1', originalText: 'hello'},
     ]);
+    expect(last?.annotateSourceText).toBe(content);
 
     // chip 联动：refreshComposerAnnotateChips 由添加路径调用；此处直接断言 store→chip
     expect(chipsFromAnnotateStore(sessionId)).toHaveLength(1);
     expect(chipsFromAnnotateStore(sessionId)[0]?.action).toBe('annotate');
+  });
+
+  it('草稿含宽松行列时 annotations 透传 startLine/endLine', async () => {
+    const sessionId = 's-soft-range';
+    const path = '/note.md';
+    const content = `---
+title: T
+---
+hello world
+`;
+    addChatAnnotateDraft(sessionId, {
+      id: 'a1',
+      path,
+      originalText: 'hello',
+      userAnnotation: '备注',
+      startLine: 2,
+      endLine: 6,
+      startCol: 1,
+      endCol: 5,
+    });
+
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path={path}
+          content={content}
+          tokens={tokens}
+          annotateEnabled
+          sessionId={sessionId}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const last = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(last?.annotations).toEqual([
+      {
+        id: 'a1',
+        originalText: 'hello',
+        startLine: 2,
+        endLine: 6,
+        startCol: 1,
+        endCol: 5,
+      },
+    ]);
   });
 
   it('同文多条 annotations 均传入 WebView（A-1）', async () => {

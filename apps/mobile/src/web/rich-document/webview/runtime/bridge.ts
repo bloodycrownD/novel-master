@@ -90,6 +90,10 @@ export function handleHostMessage(raw: unknown): void {
     const list = Array.isArray(rawList)
       ? (rawList as AnnotateMark[])
       : [];
-    setAnnotations(list);
+    const src =
+      typeof msg.payload?.sourceText === 'string'
+        ? msg.payload.sourceText
+        : undefined;
+    setAnnotations(list, src);
   }
 }
