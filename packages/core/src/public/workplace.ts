@@ -62,10 +62,10 @@ export { createTemplatePullService } from "../service/template/create-template-p
 export type { TemplatePullService } from "../service/template/template-pull.port.js";
 export {
   assembleWorkplaceDisplay,
-  layoutHasWorkplace,
   type AssembleWorkplaceDisplayDeps,
   type AssembleWorkplaceDisplayResult,
 } from "../service/workplace/assemble-workplace-display.js";
+export { layoutHasWorkplace } from "../domain/prompt/model/agent-prompt-layout.js";
 export {
   refreshRuleSnapshot,
   type RefreshRuleSnapshotDeps,

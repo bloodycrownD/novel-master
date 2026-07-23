@@ -140,7 +140,7 @@ async function resolveWorkplaceDisplay(
     sessionKkv: assemble.sessionKkv,
     workplace: service,
     vfs: assemble.vfs,
-    layout: { workplace: true },
+    layout: { workplace: "on" },
   });
   return workplaceDisplay;
 }

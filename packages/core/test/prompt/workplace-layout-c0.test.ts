@@ -52,7 +52,7 @@ describe("Workplace C0 协议", () => {
 
   it("T-W2: workplace:true + persistEnabled:false 仍注入 user+done", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: false,
       persist: [{ name: "u", type: "text", role: "user", content: "hidden" }],
       dynamic: [],
@@ -83,7 +83,7 @@ describe("Workplace C0 协议", () => {
     assert.deepEqual(def.prompts.persist, []);
   });
 
-  it("T-W4: 旧块 + workplace:true → 块丢弃、开关开", () => {
+  it("T-W4: 旧块 + workplace:true → 块丢弃、开关开（域文案【done】）", () => {
     const def = decode(
       {
         schemaVersion: 1,
@@ -99,14 +99,14 @@ describe("Workplace C0 协议", () => {
       },
       agentDefinitionSchema,
     );
-    assert.equal(def.prompts.workplace, true);
+    assert.equal(def.prompts.workplace, "【done】");
     assert.equal(def.prompts.persist.length, 1);
     assert.equal(def.prompts.persist[0]?.name, "intro");
   });
 
   it("T-W5: LLM 运行时合成消息 id 为 prompt:workplace / prompt:workplace:done", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persist: [],
       dynamic: [],
     };
@@ -124,7 +124,7 @@ describe("Workplace C0 协议", () => {
 
   it("T-W5b: 预览 segment id 为 prompt-workplace / prompt-workplace-done", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: false,
       persist: [],
       dynamic: [],
@@ -142,7 +142,7 @@ describe("Workplace C0 协议", () => {
     assert.equal(done?.body, TOOL_TURN_BRIDGE_TEXT);
   });
 
-  it("T-W6: 写出 wire 无 type:worktree", () => {
+  it("T-W6: 写出 wire 为 string 且无 type:worktree", () => {
     const def = decode(
       {
         schemaVersion: 1,
@@ -159,9 +159,12 @@ describe("Workplace C0 协议", () => {
       agentDefinitionSchema,
     );
     const wire = encode(def, agentDefinitionSchema) as {
-      prompts: { persist: Record<string, { type: string }>; workplace?: boolean };
+      prompts: {
+        persist: Record<string, { type: string }>;
+        workplace?: boolean | string;
+      };
     };
-    assert.equal(wire.prompts.workplace, true);
+    assert.equal(wire.prompts.workplace, "【done】");
     assert.equal(Object.keys(wire.prompts.persist).length, 1);
     assert.ok(
       Object.values(wire.prompts.persist).every((b) => b.type === "text"),

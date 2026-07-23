@@ -26,7 +26,7 @@ export async function assembleWorkplaceForMobile(
     sessionKkv: runtime.sessionKkv,
     workplace: runtime.workplace(wtScope),
     vfs: runtime.sessionVfs(scope.projectId, scope.sessionId),
-    layout: { workplace: true },
+    layout: { workplace: "on" },
   });
   return { workplaceDisplay, capturedAtMs: Date.now() };
 }

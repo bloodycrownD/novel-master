@@ -13,11 +13,17 @@ export type {
   PersistTextPromptBlock,
   PersistWorktreePromptBlock,
 } from "../domain/prompt/model/agent-prompt-layout.js";
+export {
+  DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+  WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT,
+  layoutHasWorkplace,
+} from "../domain/prompt/model/agent-prompt-layout.js";
 export { shouldIncludeDynamicBlock } from "../domain/prompt/logic/should-include-dynamic-block.js";
 export { messageBodyText } from "../domain/prompt/logic/message-body.js";
 export {
   validateAgentPromptLayoutFromMaps,
   validateAgentPromptLayout,
+  resolveWorkplaceFromWire,
 } from "../domain/prompt/logic/validate-agent-prompt-layout.js";
 export { normalizeForLlmExport } from "../domain/prompt/logic/normalize-for-llm-export.js";
 export type {

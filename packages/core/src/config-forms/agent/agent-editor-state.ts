@@ -8,6 +8,10 @@ import type {
   EditorPersistPromptBlock,
   PersistTextPromptBlock,
 } from "@/domain/prompt/model/agent-prompt-layout.js";
+import {
+  DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+  layoutHasWorkplace,
+} from "@/domain/prompt/model/agent-prompt-layout.js";
 import { validateAgentPromptLayout } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
 import { PromptError } from "@/errors/prompt-errors.js";
 import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
@@ -36,6 +40,8 @@ export const ROLE_OPTIONS = PROMPT_BLOCK_ROLES.map((role) => ({
   value: role,
   label: ROLE_LABELS[role],
 }));
+
+export { DEFAULT_WORKPLACE_ASSISTANT_TEXT };
 
 /** Agent 编辑器表单（三区 layout，非扁平 prompts）。 */
 export type AgentEditorFormInput = {
@@ -382,7 +388,7 @@ export function definitionToForm(
     systemContent: def.prompts.system ?? "",
     persistEnabled: def.prompts.persistEnabled ?? false,
     dynamicEnabled: def.prompts.dynamicEnabled ?? false,
-    workplace: def.prompts.workplace === true,
+    workplace: layoutHasWorkplace(def.prompts),
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
   };
@@ -410,7 +416,10 @@ export function layoutFromFormInput(
     ...(system != null ? { system } : {}),
     ...(input.persistEnabled ? { persistEnabled: true } : {}),
     ...(input.dynamicEnabled ? { dynamicEnabled: true } : {}),
-    ...(input.workplace ? { workplace: true } : {}),
+    // 过渡：表单仍为 boolean；开 → 预填默认确认语（Step 6 再拆 assistantText）
+    ...(input.workplace
+      ? { workplace: DEFAULT_WORKPLACE_ASSISTANT_TEXT }
+      : {}),
     persist: [...textBlocks],
     dynamic: [...input.dynamic],
   };

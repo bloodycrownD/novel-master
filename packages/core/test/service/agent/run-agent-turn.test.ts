@@ -52,7 +52,7 @@ const sampleDefinition: AgentDefinition = {
 /** 开启常驻工作区：materialize / 差集用例用。 */
 const workplaceOnDefinition: AgentDefinition = {
   ...sampleDefinition,
-  prompts: { persist: [], dynamic: [], workplace: true },
+  prompts: { persist: [], dynamic: [], workplace: "【done】" },
 };
 
 /** 空规则视图：materialize 无差集。 */

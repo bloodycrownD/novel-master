@@ -10,6 +10,7 @@ import type {
   DynamicPromptBlock,
   PersistTextPromptBlock,
 } from "../model/agent-prompt-layout.js";
+import { WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT } from "../model/agent-prompt-layout.js";
 import type { PromptBlockLifecycle } from "../model/prompt-block.js";
 import {
   dynamicBlockToWire,
@@ -25,6 +26,34 @@ const LIFECYCLES = new Set<PromptBlockLifecycle>(["always", "once"]);
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+/**
+ * 将 wire `prompts.workplace`（`boolean | string`）归一为域内非空 string；关则 `undefined`。
+ * @throws PromptError 空串 / 仅空白
+ */
+export function resolveWorkplaceFromWire(
+  workplace: boolean | string | undefined,
+): string | undefined {
+  if (workplace === undefined || workplace === false) {
+    return undefined;
+  }
+  if (workplace === true) {
+    return WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT;
+  }
+  if (typeof workplace === "string") {
+    if (workplace.trim().length < 1) {
+      throw new PromptError(
+        "INVALID_YAML",
+        "prompts.workplace 如开启则须为非空字符串",
+      );
+    }
+    return workplace;
+  }
+  throw new PromptError(
+    "INVALID_YAML",
+    "prompts.workplace 须为 boolean 或非空字符串",
+  );
 }
 
 function blockLabel(name: string): string {
@@ -184,7 +213,8 @@ export function validateAgentPromptLayoutFromMaps(
   options?: {
     readonly persistEnabled?: boolean;
     readonly dynamicEnabled?: boolean;
-    readonly workplace?: boolean;
+    /** wire：`boolean | string`；域开 = 非空 string。 */
+    readonly workplace?: boolean | string;
   }
 ): AgentPromptLayout {
   if (system != null && system.trim() === "") {
@@ -222,7 +252,7 @@ export function validateAgentPromptLayoutFromMaps(
 
   const persistEnabled = options?.persistEnabled === true;
   const dynamicEnabled = options?.dynamicEnabled === true;
-  const workplace = options?.workplace === true;
+  const workplace = resolveWorkplaceFromWire(options?.workplace);
 
   if (persistEnabled) {
     if (persist.length < 1) {
@@ -258,7 +288,7 @@ export function validateAgentPromptLayoutFromMaps(
     ...(system != null && system.trim() !== "" ? { system } : {}),
     ...(persistEnabled ? { persistEnabled: true } : {}),
     ...(dynamicEnabled ? { dynamicEnabled: true } : {}),
-    ...(workplace ? { workplace: true } : {}),
+    ...(workplace != null ? { workplace } : {}),
     persist,
     dynamic,
   };

@@ -17,6 +17,7 @@ import {
   toolsSelectionFromDefinition,
   withDynamicBlockPersistence,
   WORKPLACE_BLOCK_HINT,
+  DEFAULT_WORKPLACE_ASSISTANT_TEXT,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 import { validateAgentPromptLayout } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
@@ -122,7 +123,7 @@ test("definitionToForm maps system toggle and three regions", () => {
       system: "sys",
       persistEnabled: true,
       dynamicEnabled: true,
-      workplace: true,
+      workplace: "【done】",
       persist: [],
       dynamic: [
         {
@@ -228,7 +229,7 @@ test("layoutFromFormInput maps workplace boolean and strips legacy worktree", ()
     ],
     dynamic: [],
   });
-  assert.equal(layout.workplace, true);
+  assert.equal(layout.workplace, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
   assert.deepEqual(layout.persist, [
     { name: "persona", type: "text", role: "user", content: "x" },
   ]);
@@ -272,7 +273,10 @@ test("buildAgentDefinitionFromForm maps workplace boolean", () => {
   });
   assert.equal(result.ok, true);
   if (result.ok) {
-    assert.equal(result.definition.prompts.workplace, true);
+    assert.equal(
+      result.definition.prompts.workplace,
+      DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    );
     assert.deepEqual(
       result.definition.prompts.persist.map((block) => block.type),
       ["text"]
@@ -285,13 +289,16 @@ test("T-W7: definitionToForm ↔ layoutFromFormInput round-trip workplace", () =
   const formOn = definitionToForm({
     name: "writer",
     prompts: {
-      workplace: true,
+      workplace: "【done】",
       persist: [],
       dynamic: [],
     },
   });
   assert.equal(formOn.workplace, true);
-  assert.equal(layoutFromFormInput(formOn).workplace, true);
+  assert.equal(
+    layoutFromFormInput(formOn).workplace,
+    DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+  );
 
   const formOff = { ...formOn, workplace: false };
   assert.equal(layoutFromFormInput(formOff).workplace, undefined);
@@ -310,11 +317,11 @@ test("createDefaultAgentEditorPrompts persist 无 worktree", () => {
   assert.ok(defaults.persist.every((block) => block.type !== "worktree"));
 });
 
-test("definitionToForm workplace:true 可 derive Switch 开", () => {
+test("definitionToForm workplace 非空 string 可 derive Switch 开", () => {
   const form = definitionToForm({
     name: "writer",
     prompts: {
-      workplace: true,
+      workplace: "【done】",
       persist: [],
       dynamic: [],
     },

@@ -180,7 +180,7 @@ describe("prompt unify user-ops (T-PR*)", () => {
         workplace: wt,
         vfs,
         layout: {
-          workplace: true,
+          workplace: "【done】",
           persist: [],
         },
       },

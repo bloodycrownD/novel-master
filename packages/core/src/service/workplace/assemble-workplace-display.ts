@@ -5,6 +5,7 @@
  */
 
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
+import { layoutHasWorkplace } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import {
@@ -26,6 +27,8 @@ import { normalizePromptSeenPath } from "@/domain/chat/logic/prompt-path-seen.js
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
+export { layoutHasWorkplace };
+
 /** {@link assembleWorkplaceDisplay} 依赖。 */
 export interface AssembleWorkplaceDisplayDeps {
   readonly sessionKkv: SessionKkvService;
@@ -44,15 +47,6 @@ export interface AssembleWorkplaceDisplayResult {
    * 无 workplace 块或快照为空时为 `[]`。
    */
   readonly prefixPaths: string[];
-}
-
-/**
- * 布局是否启用常驻工作区。
- */
-export function layoutHasWorkplace(
-  layout: Pick<AgentPromptLayout, "workplace">,
-): boolean {
-  return layout.workplace === true;
 }
 
 /**

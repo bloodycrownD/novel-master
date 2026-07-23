@@ -21,11 +21,11 @@ import {
 novelMasterTestFixture();
 
 function layoutWithWorkplace(): Pick<AgentPromptLayout, "workplace"> {
-  return { workplace: true };
+  return { workplace: "【done】" };
 }
 
 function layoutWithoutWorkplace(): Pick<AgentPromptLayout, "workplace"> {
-  return { workplace: false };
+  return {};
 }
 
 describe("assembleWorkplaceDisplay", () => {

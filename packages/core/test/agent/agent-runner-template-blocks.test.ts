@@ -133,7 +133,7 @@ describe("AgentRunner template blocks", () => {
       name: "ctx-agent",
       prompts: {
         persistEnabled: true,
-        workplace: true,
+        workplace: "【done】",
         persist: [],
         dynamic: [],
       },
@@ -190,7 +190,7 @@ describe("AgentRunner template blocks", () => {
       name: "ctx-agent",
       prompts: {
         persistEnabled: true,
-        workplace: true,
+        workplace: "【done】",
         persist: [],
         dynamic: [],
       },

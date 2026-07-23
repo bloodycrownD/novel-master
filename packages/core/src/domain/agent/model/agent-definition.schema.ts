@@ -90,7 +90,17 @@ const promptsDocumentSchema = z.preprocess(
       dynamic: z.record(z.string().min(1), dynamicTextBlockValueSchema).default({}),
       persistEnabled: z.boolean().default(false),
       dynamicEnabled: z.boolean().default(false),
-      workplace: z.boolean().optional(),
+      /** wire：关 omit；开为非空 string；兼容旧 `true`（空串 / 仅空白非法）。 */
+      workplace: z
+        .union([
+          z.boolean(),
+          z
+            .string()
+            .refine((s) => s.trim().length > 0, {
+              message: "prompts.workplace 如开启则须为非空字符串",
+            }),
+        ])
+        .optional(),
     })
     .strict(),
 );
@@ -192,7 +202,10 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
       ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
       persistEnabled: def.prompts.persistEnabled ?? false,
       dynamicEnabled: def.prompts.dynamicEnabled ?? false,
-      ...(def.prompts.workplace === true ? { workplace: true } : {}),
+      ...(typeof def.prompts.workplace === "string" &&
+      def.prompts.workplace.length > 0
+        ? { workplace: def.prompts.workplace }
+        : {}),
       persist,
       dynamic,
     },

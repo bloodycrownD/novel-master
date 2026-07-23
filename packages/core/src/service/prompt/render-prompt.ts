@@ -13,6 +13,7 @@ import type {
   DynamicPromptBlock,
   PersistTextPromptBlock,
 } from "../../domain/prompt/model/agent-prompt-layout.js";
+import { layoutHasWorkplace } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
 import { shouldIncludeDynamicBlock } from "../../domain/prompt/logic/should-include-dynamic-block.js";
 import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm-export.js";
@@ -60,7 +61,7 @@ export function computeLlmExportZonesFromLayout(
 ): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
   const injectWorkplace =
-    layout.workplace === true &&
+    layoutHasWorkplace(layout) &&
     (options?.workplaceDisplay === undefined ||
       options.workplaceDisplay.trim() !== "");
   const textBlockCount = layout.persist.length;
@@ -151,7 +152,7 @@ function appendWorkplacePairIfPresent(
   ctx: PromptRenderContext,
   messages: ChatMessage[]
 ): void {
-  if (layout.workplace !== true) {
+  if (!layoutHasWorkplace(layout)) {
     return;
   }
   if (ctx.workplaceDisplay.trim() === "") {
@@ -166,7 +167,7 @@ function appendWorkplacePairSegmentsIfPresent(
   ctx: PromptRenderContext,
   segments: PromptAssemblySegment[]
 ): void {
-  if (layout.workplace !== true || ctx.workplaceDisplay.trim() === "") {
+  if (!layoutHasWorkplace(layout) || ctx.workplaceDisplay.trim() === "") {
     return;
   }
   segments.push({

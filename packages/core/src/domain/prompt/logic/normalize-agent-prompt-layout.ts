@@ -1,5 +1,5 @@
 /**
- * Agent Prompt 布局域形态归一化（strip 旧 worktree 块、workplace 缺省 false）。
+ * Agent Prompt 布局域形态归一化（strip 旧 worktree 块、保留 workplace string）。
  *
  * @module domain/prompt/logic/normalize-agent-prompt-layout
  */
@@ -8,6 +8,7 @@ import type {
   AgentPromptLayout,
   PersistTextPromptBlock,
 } from "../model/agent-prompt-layout.js";
+import { layoutHasWorkplace } from "../model/agent-prompt-layout.js";
 
 /** wire / 域对象中的旧 worktree 块形状（读入时 strip，不写入域模型）。 */
 export type LegacyPersistWorktreeWireBlock = {
@@ -29,7 +30,7 @@ export function isLegacyWorktreeWireBlock(
 }
 
 /**
- * 从 wire persist map 丢弃 `type:worktree` 条目（**不**据此设 `workplace:true`）。
+ * 从 wire persist map 丢弃 `type:worktree` 条目（**不**据此设 workplace）。
  */
 export function stripLegacyWorktreeBlocksFromPersistMap(
   persist: Record<string, unknown>,
@@ -45,7 +46,7 @@ export function stripLegacyWorktreeBlocksFromPersistMap(
 }
 
 /**
- * 域 layout 归一化：persist 仅 text；`workplace` 缺省 false；丢弃旧 worktree 块。
+ * 域 layout 归一化：persist 仅 text；保留非空 `workplace` string（勿压成 boolean）；丢弃旧 worktree 块。
  */
 export function normalizeAgentPromptLayoutDomain(
   layout: AgentPromptLayout,
@@ -54,14 +55,13 @@ export function normalizeAgentPromptLayoutDomain(
     (block): block is PersistTextPromptBlock =>
       (block as { type?: string }).type === "text",
   );
-  const workplace = layout.workplace === true;
   return {
     ...(layout.system != null && layout.system.trim() !== ""
       ? { system: layout.system }
       : {}),
     ...(layout.persistEnabled === true ? { persistEnabled: true } : {}),
     ...(layout.dynamicEnabled === true ? { dynamicEnabled: true } : {}),
-    ...(workplace ? { workplace: true } : {}),
+    ...(layoutHasWorkplace(layout) ? { workplace: layout.workplace } : {}),
     persist,
     dynamic: [...layout.dynamic],
   };

@@ -53,7 +53,7 @@ describe("buildPromptLlmInputFromLayout", () => {
 
   it("T-WT4: worktree 块注入 user 树 + assistant done 双消息", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: true,
       persist: [
         { name: "tail", type: "text", role: "assistant", content: "ok" },
@@ -94,7 +94,7 @@ describe("buildPromptLlmInputFromLayout", () => {
 describe("buildPromptAssemblyFromLayout worktree", () => {
   it("T-WT4b: 预览含 prompt-worktree 双段且 persistEnabled=false 仍注入", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: false,
       persist: [],
       dynamic: [],
@@ -113,7 +113,7 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
   it("T-WT8: 全 layout 顺序 worktree 对 → persist 文本 → chat → dynamic", async () => {
     const layout: AgentPromptLayout = {
       system: "sys",
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: true,
       dynamicEnabled: true,
       persist: [
@@ -314,7 +314,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
 
   it("T-WT6: persistEnabled=false + worktree 仅双消息无 persist 文本", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: false,
       persist: [
         { name: "u", type: "text", role: "user", content: "ask" },
@@ -340,7 +340,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
 
   it("workplaceDisplay 空时不注入 worktree 双段（避免 OpenAI 缺 content）", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: false,
       persist: [],
       dynamic: [],
@@ -361,7 +361,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
 
   it("T-WT7: wire role assistant on canon 仍注入 user+done", async () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: false,
       persist: [],
       dynamic: [],
@@ -383,7 +383,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
 describe("computeLlmExportZonesFromLayout", () => {
   it("T-WT9: persistCount 含 worktree 双消息", () => {
     const layout: AgentPromptLayout = {
-      workplace: true,
+      workplace: "【done】",
       persistEnabled: true,
       persist: [
         { name: "p1", type: "text", role: "user", content: "a" },

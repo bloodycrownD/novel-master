@@ -36,7 +36,7 @@ function mockWorktree(fileTree: string): WorkplaceService {
 describe("buildPromptLlmInputFromLayout assembly order", () => {
   const layout: AgentPromptLayout = {
     system: "sys",
-    workplace: true,
+    workplace: "【done】",
     persistEnabled: true,
     dynamicEnabled: true,
     persist: [
