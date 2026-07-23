@@ -148,7 +148,7 @@ describe('ProjectDrawer agent config entry', () => {
     capturedMenuOnSelect = undefined;
   });
 
-  it('项目菜单包含智能体配置并触发 onOpenAgentConfig', async () => {
+  it('项目菜单包含智能体并触发 onOpenAgentConfig', async () => {
     const onOpenAgentConfig = jest.fn();
 
     let tree!: TestRenderer.ReactTestRenderer;
