@@ -240,7 +240,7 @@ export function ProjectDrawer({
         visible={menuProjectId != null}
         items={[
           {label: '重命名', action: 'rename'},
-          {label: '智能体配置', action: 'agent-config'},
+          {label: '智能体', action: 'agent-config'},
           {label: '删除', action: 'delete', danger: true},
         ]}
         onClose={() => setMenuProjectId(undefined)}
