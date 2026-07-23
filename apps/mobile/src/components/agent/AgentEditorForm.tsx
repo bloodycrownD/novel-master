@@ -18,6 +18,7 @@ import {
   PROMPT_REGION_LABELS,
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
+  WORKPLACE_ASSISTANT_TEXT_LABEL,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   countFormPromptSources,
@@ -32,6 +33,7 @@ import {
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
+  withWorkplaceToggle,
   type ToolsMode,
 } from '@novel-master/core/config-forms/agent';
 import {
@@ -125,7 +127,8 @@ export function AgentEditorForm(props: Props) {
   const [systemContent, setSystemContent] = useState('');
   const [persistEnabled, setPersistEnabled] = useState(false);
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
-  const [workplace, setWorkplace] = useState(false);
+  const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
+  const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -160,7 +163,8 @@ export function AgentEditorForm(props: Props) {
         systemContent,
         persistEnabled,
         dynamicEnabled,
-        workplace,
+        workplaceEnabled,
+        workplaceAssistantText,
         persist,
         dynamic,
       }),
@@ -176,7 +180,8 @@ export function AgentEditorForm(props: Props) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
-      workplace,
+      workplaceEnabled,
+      workplaceAssistantText,
       persist,
       dynamic,
     ],
@@ -220,7 +225,8 @@ export function AgentEditorForm(props: Props) {
       setSystemContent(promptForm.systemContent);
       setPersistEnabled(promptForm.persistEnabled);
       setDynamicEnabled(promptForm.dynamicEnabled);
-      setWorkplace(promptForm.workplace);
+      setWorkplaceEnabled(promptForm.workplaceEnabled);
+      setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -463,7 +469,8 @@ export function AgentEditorForm(props: Props) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
-      workplace,
+      workplaceEnabled,
+      workplaceAssistantText,
       persist,
       dynamic,
     });
@@ -540,7 +547,8 @@ export function AgentEditorForm(props: Props) {
     systemContent,
     persistEnabled,
     dynamicEnabled,
-    workplace,
+    workplaceEnabled,
+    workplaceAssistantText,
     persist,
     dynamic,
   });
@@ -981,16 +989,43 @@ export function AgentEditorForm(props: Props) {
               </View>
               <View style={styles.blockHeaderSpacer} />
               <Switch
-                value={workplace}
-                onValueChange={setWorkplace}
+                value={workplaceEnabled}
+                onValueChange={next => {
+                  const patched = withWorkplaceToggle(
+                    next,
+                    workplaceAssistantText,
+                  );
+                  setWorkplaceEnabled(patched.workplaceEnabled);
+                  setWorkplaceAssistantText(patched.workplaceAssistantText);
+                }}
                 trackColor={{ false: tokens.border, true: tokens.primary }}
               />
             </View>
-            <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
-              {workplace
-                ? WORKPLACE_BLOCK_HINT
-                : '关闭时不注入项目文件树。'}
-            </Text>
+            {workplaceEnabled ? (
+              <>
+                <Text
+                  style={[styles.fieldHint, { color: tokens.textSecondary }]}
+                >
+                  {WORKPLACE_BLOCK_HINT}
+                </Text>
+                <FormField
+                  label={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                  tokens={tokens}
+                >
+                  <FormTextInput
+                    tokens={tokens}
+                    value={workplaceAssistantText}
+                    onChangeText={setWorkplaceAssistantText}
+                    multiline
+                    placeholder={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                  />
+                </FormField>
+              </>
+            ) : (
+              <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
+                关闭时不注入项目文件树。
+              </Text>
+            )}
           </View>
 
           {renderPromptSectionHead(promptSectionLabels.persist, {
