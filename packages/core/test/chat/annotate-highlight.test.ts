@@ -75,6 +75,12 @@ describe("normalizeAnnotateNeedle / normalizeAnnotateSegmentText", () => {
     assert.equal(normalizeAnnotateNeedle("  \u00a0  "), "");
   });
 
+  it('T-AT1: needle 删除 tab/换行后为连续串', () => {
+    assert.equal(normalizeAnnotateNeedle("a\tb\nc"), "abc");
+    assert.equal(normalizeAnnotateNeedle("a\tb\rc"), "abc");
+    assert.equal(normalizeAnnotateNeedle("  a\t\nb\r  "), "ab");
+  });
+
   it("segment：仅 NBSP→space，不 trim", () => {
     assert.equal(normalizeAnnotateSegmentText(`  a\u00a0b  `), "  a b  ");
   });

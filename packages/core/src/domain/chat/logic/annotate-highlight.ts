@@ -71,11 +71,15 @@ export function sortAnnotateTextsLongestFirst(
 }
 
 /**
- * 入库 / 匹配用 needle 归一：`\u00a0→space` + trim。
+ * 入库 / 匹配用 needle 归一：`\u00a0→space`，删除所有 `\t`/`\n`/`\r`，再 trim。
  * 空串表示应跳过该条匹配。
+ * 已知限制：单 Text / `<pre>` 内含换行的选区可能不再命中（haystack 仍保留换行）。
  */
 export function normalizeAnnotateNeedle(text: string): string {
-  return text.replace(/\u00a0/g, " ").trim();
+  return text
+    .replace(/\u00a0/g, " ")
+    .replace(/[\t\n\r]/g, "")
+    .trim();
 }
 
 /**
@@ -110,9 +114,9 @@ export type FlatSegmentLocalRange = {
 /**
  * 按 D1 直拼规则构建扁平索引。
  *
- * **切断合同**：调用方须在 block / `br` / 表单元格边界处切断，
- * 仅将同一匹配域内的行内 Text segments 传入本函数（彼此直拼、无插入符）。
- * 跨 `<p>` / 跨单元格不得并入同一 `segments` 列表，否则会误命中。
+ * **切断合同**：调用方须在 block / `br` / `TABLE` 边界处切断，
+ * 仅将同一匹配域内的 Text segments 传入本函数（彼此直拼、无插入符）。
+ * 表内相邻格允许直拼；跨 `<p>` / 跨表不得并入同一 `segments` 列表，否则会误命中。
  * 空串 segment 不贡献 haystack 字符，但仍保留 span（flatStart===flatEnd）以便下标对齐。
  */
 export function buildFlatTextIndex(
