@@ -3,7 +3,10 @@
  */
 
 import { useEffect, useState } from "react";
-import type { AnnotateDraft } from "@shared/logic/chat";
+import type {
+  AnnotateDraft,
+  AnnotateSoftSourceRange,
+} from "@shared/logic/chat";
 import { Button } from "../components/ui/Button";
 import {
   addChatAnnotateDraft,
@@ -50,6 +53,8 @@ type AddModalProps = {
   readonly selectedText: string;
   readonly sessionId: string;
   readonly filePath: string;
+  /** 加草稿时写入的宽松行列（采集侧已估算）。 */
+  readonly softRange?: AnnotateSoftSourceRange | null;
   readonly onClose: () => void;
 };
 
@@ -58,6 +63,7 @@ export function PreviewAnnotateAddModal({
   selectedText,
   sessionId,
   filePath,
+  softRange = null,
   onClose,
 }: AddModalProps) {
   const [value, setValue] = useState("");
@@ -91,9 +97,18 @@ export function PreviewAnnotateAddModal({
         path: filePath,
         originalText: selectedText,
         userAnnotation: trimmed,
-        // TODO(annotate-custom-highlight-soft-range): 加草稿时用
-        // estimateSoftRangeFromPlainOffsets / estimateSoftRangeFromOriginalText
-        // 写入 startLine/endLine/startCol/endCol（需源文件文本 + 选区偏移）。
+        ...(softRange != null
+          ? {
+              startLine: softRange.startLine,
+              endLine: softRange.endLine,
+              ...(softRange.startCol != null
+                ? { startCol: softRange.startCol }
+                : {}),
+              ...(softRange.endCol != null
+                ? { endCol: softRange.endCol }
+                : {}),
+            }
+          : {}),
       });
       onClose();
     } finally {

@@ -15,7 +15,7 @@ import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
 import { formatVfsErrorForUser, type VfsScope } from "@shared/logic/vfs";
-import type { AnnotateDraft } from "@shared/logic/chat";
+import type { AnnotateDraft, AnnotateSoftSourceRange } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { useShellNav } from "../providers/ShellNavProvider";
 import {
@@ -26,11 +26,10 @@ import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
 import {
   applyAnnotateHighlights,
+  estimateSoftRangeForPreviewSelection,
   getSelectionFloatingAnchor,
   isPreviewAnnotateEnabled,
-  parseAnnotateIdsAttr,
-  PREVIEW_ANNOTATE_IDS_ATTR,
-  PREVIEW_ANNOTATE_MARK_CLASS,
+  resolveAnnotateIdsFromClick,
   readSelectionTextInContainer,
 } from "./preview-annotate";
 import {
@@ -77,9 +76,12 @@ export function PreviewPane() {
     top: number;
     left: number;
     text: string;
+    softRange: AnnotateSoftSourceRange | null;
   } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState("");
+  const [pendingSoftRange, setPendingSoftRange] =
+    useState<AnnotateSoftSourceRange | null>(null);
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
   const previewContentRef = useRef<HTMLDivElement | null>(null);
@@ -163,6 +165,11 @@ export function PreviewPane() {
     }
   }, [annotateEnabled]);
 
+  const isMarkdown =
+    previewFile != null
+      ? shouldRenderMarkdownPreview(previewFile.path, content)
+      : false;
+
   const refreshSelectionFloating = useCallback(() => {
     if (!annotateEnabled) {
       setFloating(null);
@@ -179,8 +186,23 @@ export function PreviewPane() {
       setFloating(null);
       return;
     }
-    setFloating({ top: anchor.top, left: anchor.left, text });
-  }, [annotateEnabled]);
+    const plainRoot =
+      root?.querySelector?.("pre.preview-text") ?? null;
+    const softRange = estimateSoftRangeForPreviewSelection({
+      sourceText: content,
+      isPlainPreview: !isMarkdown,
+      selectedText: text,
+      selection:
+        typeof window !== "undefined" ? window.getSelection() : null,
+      plainRoot: plainRoot as HTMLElement | null,
+    });
+    setFloating({
+      top: anchor.top,
+      left: anchor.left,
+      text,
+      softRange,
+    });
+  }, [annotateEnabled, content, isMarkdown]);
 
   useEffect(() => {
     if (!annotateEnabled) {
@@ -231,7 +253,7 @@ export function PreviewPane() {
     if (root == null || !annotateEnabled) {
       return;
     }
-    applyAnnotateHighlights(root, pathDrafts);
+    applyAnnotateHighlights(root, pathDrafts, { sourceText: content });
   }, [annotateEnabled, pathDrafts, content, loading]);
 
   const openDraftsByIds = useCallback(
@@ -254,19 +276,20 @@ export function PreviewPane() {
       if (!annotateEnabled) {
         return;
       }
-      const target = e.target;
-      if (!(target instanceof Element)) {
+      const root = previewContentRef.current;
+      if (root == null) {
         return;
       }
-      const mark = target.closest(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`);
-      if (mark == null) {
+      const ids = resolveAnnotateIdsFromClick(root, {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        target: e.target,
+      });
+      if (ids.length === 0) {
         return;
       }
       e.preventDefault();
       e.stopPropagation();
-      const ids = parseAnnotateIdsAttr(
-        mark.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR),
-      );
       openDraftsByIds(ids);
       setFloating(null);
     },
@@ -274,10 +297,6 @@ export function PreviewPane() {
   );
 
   const isDirty = content !== savedContent;
-  const isMarkdown =
-    previewFile != null
-      ? shouldRenderMarkdownPreview(previewFile.path, content)
-      : false;
   const lineCount = useMemo(
     () => (content.length === 0 ? 0 : content.split("\n").length),
     [content],
@@ -411,6 +430,7 @@ export function PreviewPane() {
           left={floating.left}
           onAdd={() => {
             setPendingSelection(floating.text);
+            setPendingSoftRange(floating.softRange);
             setAddOpen(true);
             setFloating(null);
             window.getSelection()?.removeAllRanges();
@@ -421,9 +441,13 @@ export function PreviewPane() {
         <PreviewAnnotateAddModal
           open={addOpen}
           selectedText={pendingSelection}
+          softRange={pendingSoftRange}
           sessionId={sessionId}
           filePath={previewFile.path}
-          onClose={() => setAddOpen(false)}
+          onClose={() => {
+            setAddOpen(false);
+            setPendingSoftRange(null);
+          }}
         />
       ) : null}
       {annotateEnabled && sessionId ? (

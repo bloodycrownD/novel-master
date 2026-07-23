@@ -1,17 +1,23 @@
 /**
- * Desktop PreviewPane 划词批注：入口门闩 + 选区 + 原文匹配下划线（尽力）。
- * 纯算法在 `@shared/logic/chat`；本文件保留 DOM collect / wrap 壳。
- * 定稿 apply（D5）：clear → 长优先 → 收集未 mark Text（D1 分批）→ flat findAll → 多段 wrap。
+ * Desktop PreviewPane 划词批注：入口门闩 + 选区 + 原文匹配高亮。
+ * 主路径 CSS Custom Highlight（H1/H2）；不支持时 mark 回退（H3）。
+ * 纯算法在 `@shared/logic/chat`；本文件保留 DOM collect / Range / wrap 壳。
  * 仅 mode==="read" 且 workspaceScope==="chat" 且非空 sessionId 启用。
  */
 
 import {
   buildFlatTextIndex,
+  estimateSoftRangeFromOriginalText,
+  estimateSoftRangeFromPlainOffsets,
   findAllOccurrences,
+  findAnnotateOccurrenceInSource,
   groupAnnotateIdsByOriginalText,
+  hasValidAnnotateSoftRange,
   mapFlatRangeToSegments,
   normalizeAnnotateNeedle,
+  parseAnnotateIdsAttr,
   sortAnnotateTextsLongestFirst,
+  type AnnotateSoftSourceRange,
 } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 
@@ -27,6 +33,8 @@ export {
 
 export const PREVIEW_ANNOTATE_MARK_CLASS = "preview-annotate-mark";
 export const PREVIEW_ANNOTATE_IDS_ATTR = "data-annotate-ids";
+/** CSS Custom Highlight 注册名（::highlight(nm-annotate)）。 */
+export const PREVIEW_ANNOTATE_HIGHLIGHT_NAME = "nm-annotate";
 
 /** 切断匹配域：block / br / TABLE（表内相邻 Text 直拼；表与前后段落切断，T1/T6）。 */
 const CUT_BOUNDARY_TAGS = new Set([
@@ -66,6 +74,14 @@ const CUT_BOUNDARY_TAGS = new Set([
   "UL",
 ]);
 
+/** 已注册 Custom Highlight 条目（供点击 hit-test）。 */
+type ActiveHighlightEntry = {
+  readonly range: Range;
+  readonly ids: readonly string[];
+};
+
+let activeHighlightEntries: ActiveHighlightEntry[] = [];
+
 /** 划词批注入口门闩（编辑态 / global / session / 无 sessionId 均无入口）。 */
 export function isPreviewAnnotateEnabled(
   mode: "read" | "edit",
@@ -77,6 +93,25 @@ export function isPreviewAnnotateEnabled(
     workspaceScope === "chat" &&
     typeof sessionId === "string" &&
     sessionId.length > 0
+  );
+}
+
+/**
+ * H1：是否支持 CSS Custom Highlight。
+ * `typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight === 'function'`
+ */
+export function supportsCssCustomHighlight(
+  globalObj: typeof globalThis = globalThis,
+): boolean {
+  const g = globalObj as typeof globalThis & {
+    CSS?: { highlights?: unknown };
+    Highlight?: unknown;
+  };
+  return (
+    typeof g.CSS !== "undefined" &&
+    g.CSS != null &&
+    !!g.CSS.highlights &&
+    typeof g.Highlight === "function"
   );
 }
 
@@ -129,7 +164,75 @@ export function getSelectionFloatingAnchor(
   };
 }
 
-/** 清除 container 内批注下划线 mark，还原文本节点。 */
+/**
+ * 选区在 element 文本内容中的 0-based 半开偏移（plain/`pre` 用）。
+ * 选区须落在 element 内。
+ */
+export function getSelectionOffsetsInElement(
+  element: HTMLElement,
+  selection: Selection | null | undefined = typeof window !== "undefined"
+    ? window.getSelection()
+    : null,
+): { readonly start: number; readonly end: number } | null {
+  if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
+    return null;
+  }
+  const selRange = selection.getRangeAt(0);
+  if (
+    !element.contains(selRange.startContainer) ||
+    !element.contains(selRange.endContainer)
+  ) {
+    return null;
+  }
+  const doc = element.ownerDocument;
+  if (doc == null) {
+    return null;
+  }
+  const preRange = doc.createRange();
+  preRange.selectNodeContents(element);
+  preRange.setEnd(selRange.startContainer, selRange.startOffset);
+  const start = preRange.toString().length;
+  const selectedLen = selRange.toString().length;
+  return { start, end: start + selectedLen };
+}
+
+/**
+ * 预览选区 → 源文件宽松行列（H6/H7）。
+ * plain：选区偏移换算；MD / 无偏移：原文定位 + padding。
+ */
+export function estimateSoftRangeForPreviewSelection(args: {
+  readonly sourceText: string;
+  readonly isPlainPreview: boolean;
+  readonly selectedText: string;
+  readonly selection?: Selection | null;
+  readonly plainRoot?: HTMLElement | null;
+}): AnnotateSoftSourceRange | null {
+  const { sourceText, isPlainPreview, selectedText } = args;
+  if (!sourceText || !selectedText) {
+    return null;
+  }
+  if (isPlainPreview && args.plainRoot != null) {
+    const offsets = getSelectionOffsetsInElement(
+      args.plainRoot,
+      args.selection,
+    );
+    if (offsets != null) {
+      return estimateSoftRangeFromPlainOffsets(
+        sourceText,
+        offsets.start,
+        offsets.end,
+      );
+    }
+  }
+  return estimateSoftRangeFromOriginalText(sourceText, selectedText);
+}
+
+/** 当前已注册的 Custom Highlight 条目（测试 / 点击）。 */
+export function getActiveAnnotateHighlightEntries(): readonly ActiveHighlightEntry[] {
+  return activeHighlightEntries;
+}
+
+/** 清除 container 内批注 mark，并清空 Custom Highlight 注册。 */
 export function clearAnnotateHighlights(root: HTMLElement): void {
   const marks = [
     ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
@@ -145,19 +248,49 @@ export function clearAnnotateHighlights(root: HTMLElement): void {
     parent.removeChild(mark);
     parent.normalize();
   }
+  clearCssAnnotateHighlight();
 }
 
+function clearCssAnnotateHighlight(): void {
+  activeHighlightEntries = [];
+  try {
+    const highlights = (
+      globalThis as typeof globalThis & {
+        CSS?: { highlights?: { delete?: (name: string) => void } };
+      }
+    ).CSS?.highlights;
+    highlights?.delete?.(PREVIEW_ANNOTATE_HIGHLIGHT_NAME);
+  } catch {
+    // 忽略宿主差异
+  }
+}
+
+/** apply 入参草稿（含 optional 宽松行列）。 */
+export type PreviewAnnotateDraftInput = {
+  readonly id: string;
+  readonly originalText: string;
+  readonly startLine?: number;
+  readonly endLine?: number;
+  readonly startCol?: number;
+  readonly endCol?: number;
+};
+
 /**
- * 按 originalText 在预览 DOM 内做原文匹配下划线（尽力；重复则全部匹配）。
- * 跨行内节点拆成多段连续 mark（同 ids）；跨 block/br/TABLE 不误拼。
+ * 按 originalText 在预览 DOM 内匹配并绘制高亮（H11：文本/MD 同入口）。
+ * 有 sourceText 时先走 findAnnotateOccurrenceInSource（窗口优先，H5）；
+ * 支持 Custom Highlight 则注册 Range，否则 mark 回退。
  */
 export function applyAnnotateHighlights(
   root: HTMLElement,
-  drafts: readonly { readonly id: string; readonly originalText: string }[],
+  drafts: readonly PreviewAnnotateDraftInput[],
+  options?: { readonly sourceText?: string },
 ): void {
   clearAnnotateHighlights(root);
   const byText = groupAnnotateIdsByOriginalText(drafts);
   const texts = sortAnnotateTextsLongestFirst([...byText.keys()]);
+  const useHighlight = supportsCssCustomHighlight();
+  const highlightEntries: ActiveHighlightEntry[] = [];
+
   for (const text of texts) {
     const ids = byText.get(text);
     if (ids == null || ids.length === 0) {
@@ -167,8 +300,279 @@ export function applyAnnotateHighlights(
     if (!needle) {
       continue;
     }
-    wrapAllPlainMatchesFlat(root, needle, ids);
+
+    if (options?.sourceText != null) {
+      const softDraft = drafts.find(
+        (d) => d.originalText === text && hasValidAnnotateSoftRange(d),
+      );
+      const sourceHit = findAnnotateOccurrenceInSource(
+        options.sourceText,
+        text,
+        softDraft ?? null,
+      );
+      if (sourceHit == null) {
+        continue;
+      }
+    }
+
+    if (useHighlight) {
+      const ranges = collectMatchDomRanges(root, needle);
+      for (const range of ranges) {
+        if (highlightEntries.some((e) => rangesIntersect(e.range, range))) {
+          continue;
+        }
+        highlightEntries.push({ range, ids });
+      }
+    } else {
+      wrapAllPlainMatchesFlat(root, needle, ids);
+    }
   }
+
+  if (useHighlight && highlightEntries.length > 0) {
+    registerCssAnnotateHighlight(highlightEntries);
+  }
+}
+
+function registerCssAnnotateHighlight(
+  entries: readonly ActiveHighlightEntry[],
+): void {
+  activeHighlightEntries = [...entries];
+  const HighlightCtor = (
+    globalThis as typeof globalThis & {
+      Highlight: new (...ranges: Range[]) => unknown;
+    }
+  ).Highlight;
+  const highlight = new HighlightCtor(...entries.map((e) => e.range));
+  const highlights = (
+    globalThis as typeof globalThis & {
+      CSS: { highlights: { set: (name: string, value: unknown) => void } };
+    }
+  ).CSS.highlights;
+  highlights.set(PREVIEW_ANNOTATE_HIGHLIGHT_NAME, highlight);
+}
+
+/** 两 Range 是否相交（含边界触碰视为相交，用于长优先去重）。 */
+function rangesIntersect(a: Range, b: Range): boolean {
+  try {
+    return (
+      a.compareBoundaryPoints(Range.END_TO_START, b) < 0 &&
+      a.compareBoundaryPoints(Range.START_TO_END, b) > 0
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 点击命中批注 id（H4）：Highlight hit-test → caret 与已注册 Range 求交 → closest(mark)。
+ */
+export function resolveAnnotateIdsFromClick(
+  root: HTMLElement,
+  event: {
+    readonly clientX: number;
+    readonly clientY: number;
+    readonly target: EventTarget | null;
+  },
+): string[] {
+  const fromHighlight = resolveIdsFromHighlightHitTest(
+    root,
+    event.clientX,
+    event.clientY,
+  );
+  if (fromHighlight.length > 0) {
+    return fromHighlight;
+  }
+
+  const target = event.target;
+  if (isDomElement(target)) {
+    const mark = target.closest(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`);
+    if (mark != null && root.contains(mark)) {
+      return parseAnnotateIdsAttr(
+        mark.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR),
+      );
+    }
+  }
+  return [];
+}
+
+/** Node 环境无全局 Element 时仍可识别 DOM 元素。 */
+function isDomElement(node: EventTarget | null): node is Element {
+  return (
+    node != null &&
+    typeof node === "object" &&
+    "nodeType" in node &&
+    (node as Node).nodeType === 1 &&
+    "closest" in node &&
+    typeof (node as Element).closest === "function"
+  );
+}
+
+function resolveIdsFromHighlightHitTest(
+  root: HTMLElement,
+  clientX: number,
+  clientY: number,
+): string[] {
+  if (activeHighlightEntries.length === 0) {
+    return [];
+  }
+
+  const highlights = (
+    globalThis as typeof globalThis & {
+      CSS?: {
+        highlights?: {
+          highlightsFromPoint?: (
+            x: number,
+            y: number,
+          ) => Iterable<unknown> | unknown[] | null | undefined;
+        };
+      };
+    }
+  ).CSS?.highlights;
+
+  if (typeof highlights?.highlightsFromPoint === "function") {
+    try {
+      const hits = highlights.highlightsFromPoint(clientX, clientY);
+      if (hits != null) {
+        for (const hit of hits as Iterable<unknown>) {
+          const name =
+            typeof hit === "string"
+              ? hit
+              : hit != null &&
+                  typeof hit === "object" &&
+                  "name" in hit &&
+                  typeof (hit as { name: unknown }).name === "string"
+                ? (hit as { name: string }).name
+                : null;
+          if (name === PREVIEW_ANNOTATE_HIGHLIGHT_NAME) {
+            // 点在命名高亮上：再按 caret 细分到具体 Range/ids
+            break;
+          }
+        }
+      }
+    } catch {
+      // 继续 caret 回退
+    }
+  }
+
+  const doc = root.ownerDocument;
+  if (doc == null) {
+    return [];
+  }
+
+  let caret: Range | null = null;
+  const docWithCaret = doc as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    caretPositionFromPoint?: (
+      x: number,
+      y: number,
+    ) => { offsetNode: Node; offset: number } | null;
+  };
+  if (typeof docWithCaret.caretRangeFromPoint === "function") {
+    caret = docWithCaret.caretRangeFromPoint(clientX, clientY);
+  } else if (typeof docWithCaret.caretPositionFromPoint === "function") {
+    const pos = docWithCaret.caretPositionFromPoint(clientX, clientY);
+    if (pos?.offsetNode != null) {
+      caret = doc.createRange();
+      caret.setStart(pos.offsetNode, pos.offset);
+      caret.collapse(true);
+    }
+  }
+
+  if (caret != null) {
+    if (!root.contains(caret.startContainer)) {
+      return [];
+    }
+    for (const entry of activeHighlightEntries) {
+      try {
+        if (
+          entry.range.isPointInRange(caret.startContainer, caret.startOffset)
+        ) {
+          return [...entry.ids];
+        }
+      } catch {
+        // 边界点在部分宿主会抛；忽略
+      }
+    }
+  }
+
+  return [];
+}
+
+/** 一次收集 → flat 全量命中 → 各 Text 局部 DOM Range（不改 DOM；H2 允许多 Range）。 */
+function collectMatchDomRanges(root: HTMLElement, needle: string): Range[] {
+  const out: Range[] = [];
+  const domains = collectUnmarkedTextDomains(root);
+  for (const domainNodes of domains) {
+    if (domainNodes.length === 0) {
+      continue;
+    }
+    const segments = domainNodes.map((n) => n.nodeValue ?? "");
+    const index = buildFlatTextIndex(segments);
+    const hits = findAllOccurrences(index.haystack, needle);
+    for (const at of hits) {
+      const locals = mapFlatRangeToSegments(at, at + needle.length, index);
+      for (const local of locals) {
+        const node = domainNodes[local.segmentIndex];
+        if (node == null) {
+          continue;
+        }
+        const range = createCharRange(node, local.start, local.end);
+        if (range != null) {
+          out.push(range);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 在 Text 上创建 [start,end) 的 Range。
+ * 真实浏览器用 setStart/setEnd；linkedom 等缺省实现则用可 toString 的替身（供单测注册 Highlight）。
+ */
+function createCharRange(
+  node: Text,
+  start: number,
+  end: number,
+): Range | null {
+  const value = node.nodeValue ?? "";
+  if (start < 0 || end > value.length || start >= end) {
+    return null;
+  }
+  const doc = node.ownerDocument;
+  if (doc == null) {
+    return null;
+  }
+  const range = doc.createRange();
+  if (typeof range.setStart === "function" && typeof range.setEnd === "function") {
+    try {
+      range.setStart(node, start);
+      range.setEnd(node, end);
+      return range;
+    } catch {
+      return null;
+    }
+  }
+  const sliced = value.slice(start, end);
+  const stub = {
+    startContainer: node,
+    startOffset: start,
+    endContainer: node,
+    endOffset: end,
+    collapsed: false,
+    commonAncestorContainer: node.parentNode ?? node,
+    toString: () => sliced,
+    isPointInRange(n: Node, o: number) {
+      return n === node && o >= start && o < end;
+    },
+    compareBoundaryPoints: () => 0,
+    cloneRange() {
+      return stub as unknown as Range;
+    },
+    setStart() {},
+    setEnd() {},
+  };
+  return stub as unknown as Range;
 }
 
 /** 一次收集 → flat 全量命中 → 右到左多段 wrap（废弃单 Text / findFirst×N）。 */

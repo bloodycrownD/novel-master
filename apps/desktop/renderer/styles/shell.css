@@ -4672,6 +4672,16 @@ html[data-theme="dark"] .chat-batch-bar {
 }
 
 /* PreviewPane 划词批注（仅 chat + read） */
+/* Custom Highlight 主路径（H2） */
+::highlight(nm-annotate) {
+  text-decoration: underline;
+  text-decoration-color: var(--accent-blue);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  background-color: transparent;
+  color: inherit;
+}
+
 .preview-annotate-mark {
   background: transparent;
   color: inherit;

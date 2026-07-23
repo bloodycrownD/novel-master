@@ -10,12 +10,16 @@ import { fileURLToPath } from "node:url";
 import {
   applyAnnotateHighlights,
   clearAnnotateHighlights,
+  getActiveAnnotateHighlightEntries,
   groupAnnotateIdsByOriginalText,
   isPreviewAnnotateEnabled,
   parseAnnotateIdsAttr,
+  PREVIEW_ANNOTATE_HIGHLIGHT_NAME,
   PREVIEW_ANNOTATE_IDS_ATTR,
   PREVIEW_ANNOTATE_MARK_CLASS,
   readSelectionTextInContainer,
+  resolveAnnotateIdsFromClick,
+  supportsCssCustomHighlight,
 } from "@/layout/preview-annotate";
 
 /** linkedom：与 Mobile 同合同的等价 DOM 宿主。 */
@@ -24,6 +28,53 @@ function makeRoot(html: string): HTMLElement {
     `<!DOCTYPE html><html><body><div id="root">${html}</div></body></html>`,
   );
   return document.getElementById("root") as HTMLElement;
+}
+
+/** 模拟 CSS Custom Highlight（T-AR7）；测毕须 restore。 */
+function installHighlightMock(): {
+  readonly registry: Map<string, { readonly ranges: Range[] }>;
+  restore: () => void;
+} {
+  const registry = new Map<string, { ranges: Range[] }>();
+  class MockHighlight {
+    ranges: Range[];
+    constructor(...ranges: Range[]) {
+      this.ranges = ranges;
+    }
+    *[Symbol.iterator]() {
+      yield* this.ranges;
+    }
+  }
+  const g = globalThis as typeof globalThis & {
+    CSS?: unknown;
+    Highlight?: unknown;
+  };
+  const prevCSS = g.CSS;
+  const prevHighlight = g.Highlight;
+  g.Highlight = MockHighlight;
+  g.CSS = {
+    highlights: {
+      set(name: string, value: { ranges: Range[] }) {
+        registry.set(name, value);
+      },
+      delete(name: string) {
+        registry.delete(name);
+      },
+      get(name: string) {
+        return registry.get(name);
+      },
+      clear() {
+        registry.clear();
+      },
+    },
+  };
+  return {
+    registry,
+    restore() {
+      g.CSS = prevCSS;
+      g.Highlight = prevHighlight;
+    },
+  };
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -332,8 +383,129 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.match(pane, /previewFile\?\.workspaceScope/);
     assert.match(pane, /applyAnnotateHighlights/);
     assert.match(pane, /sessionId/);
-    assert.match(pane, /target\.closest\(`mark\.\$\{PREVIEW_ANNOTATE_MARK_CLASS\}`\)/);
-    assert.match(pane, /parseAnnotateIdsAttr/);
+    assert.match(pane, /resolveAnnotateIdsFromClick/);
+    assert.match(pane, /estimateSoftRangeForPreviewSelection/);
+    assert.match(pane, /sourceText:\s*content/);
     assert.doesNotMatch(pane, /e\.preventDefault\(\);\s*\n\s*scheduleRefresh/);
+  });
+
+  it("AddModal 写入宽松行列字段", () => {
+    const ui = readFileSync(previewAnnotateUiPath, "utf8");
+    assert.match(ui, /softRange/);
+    assert.match(ui, /startLine/);
+    assert.match(ui, /endLine/);
+    assert.doesNotMatch(
+      ui,
+      /TODO\(annotate-custom-highlight-soft-range\)/,
+    );
+  });
+});
+
+describe("Custom Highlight / mark 回退（T-AR7 / T-AR8 / T-AR10）", () => {
+  it("T-AR7: 模拟支持 Highlight 时注册非空 ranges；清除后 registry 干净", () => {
+    const mock = installHighlightMock();
+    try {
+      assert.equal(supportsCssCustomHighlight(), true);
+      const root = makeRoot("<p>hel<strong>lo</strong></p>");
+      applyAnnotateHighlights(root, [
+        { id: "d1", originalText: "hello" },
+      ]);
+      assert.equal(
+        root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+        0,
+        "主路径不插入 mark",
+      );
+      const registered = mock.registry.get(PREVIEW_ANNOTATE_HIGHLIGHT_NAME);
+      assert.ok(registered != null);
+      assert.ok(registered.ranges.length >= 1);
+      assert.equal(getActiveAnnotateHighlightEntries().length, registered.ranges.length);
+      assert.equal(
+        registered.ranges.map((r) => r.toString()).join(""),
+        "hello",
+      );
+
+      clearAnnotateHighlights(root);
+      assert.equal(mock.registry.has(PREVIEW_ANNOTATE_HIGHLIGHT_NAME), false);
+      assert.equal(getActiveAnnotateHighlightEntries().length, 0);
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it("T-AR8: 不支持时出现 mark + closest 可解析 ids", () => {
+    assert.equal(supportsCssCustomHighlight(), false);
+    const root = makeRoot("<p>hel<strong>lo</strong></p>");
+    applyAnnotateHighlights(root, [{ id: "a1", originalText: "hello" }]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.ok(marks.length >= 1);
+    const mark = marks[0]!;
+    const ids = resolveAnnotateIdsFromClick(root, {
+      clientX: 0,
+      clientY: 0,
+      target: mark,
+    });
+    assert.deepEqual(ids, ["a1"]);
+    assert.deepEqual(
+      parseAnnotateIdsAttr(mark.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR)),
+      ["a1"],
+    );
+  });
+
+  it("T-AR10: 跨 strong 可见串高亮覆盖（mark 回退）", () => {
+    assert.equal(supportsCssCustomHighlight(), false);
+    const root = makeRoot("<p>hel<strong>lo</strong> world</p>");
+    applyAnnotateHighlights(root, [{ id: "x", originalText: "hello" }]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.ok(marks.length >= 2);
+    assert.equal(marks.map((m) => m.textContent).join(""), "hello");
+  });
+
+  it("T-AR10: 跨 strong Custom Highlight 多 Range 覆盖", () => {
+    const mock = installHighlightMock();
+    try {
+      const root = makeRoot("<p>hel<strong>lo</strong></p>");
+      applyAnnotateHighlights(root, [
+        { id: "x", originalText: "hello" },
+      ]);
+      const registered = mock.registry.get(PREVIEW_ANNOTATE_HIGHLIGHT_NAME);
+      assert.ok(registered != null);
+      assert.ok(registered.ranges.length >= 2);
+      assert.equal(
+        registered.ranges.map((r) => r.toString()).join(""),
+        "hello",
+      );
+      assert.equal(
+        root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+        0,
+      );
+    } finally {
+      mock.restore();
+    }
+  });
+
+  it("有 sourceText 时接 findAnnotateOccurrenceInSource（源无原文则不高亮）", () => {
+    const root = makeRoot("<p>hel<strong>lo</strong></p>");
+    applyAnnotateHighlights(
+      root,
+      [{ id: "x", originalText: "hello" }],
+      { sourceText: "completely different file" },
+    );
+    assert.equal(
+      root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      0,
+    );
+
+    applyAnnotateHighlights(
+      root,
+      [{ id: "x", originalText: "hello" }],
+      { sourceText: "prefix hello suffix" },
+    );
+    assert.ok(
+      root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length >= 1,
+    );
   });
 });
