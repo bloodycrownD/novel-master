@@ -251,6 +251,69 @@ describe("applyAnnotateHighlights DOM（T-XN3 / T-XN4 / T-XN5 / T-XN6）", () =>
   });
 });
 
+describe("applyAnnotateHighlights 表格连续域（T-AT3 / T-AT4 / T-AT5 / T-AT6 / T-AT7）", () => {
+  it("T-AT3: 跨格选区（含 tab）→ ≥2 段 mark 并集覆盖 aabb", () => {
+    const root = makeRoot(`<table>
+  <tr>
+    <td>aa</td>
+    <td>bb</td>
+  </tr>
+</table>`);
+    applyAnnotateHighlights(root, [{ id: "t3", originalText: "aa\tbb" }]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.ok(marks.length >= 2);
+    assert.equal(marks.map((m) => m.textContent).join(""), "aabb");
+  });
+
+  it("T-AT4: 整行多格高亮覆盖可见文本", () => {
+    const root = makeRoot(
+      "<table><tr><td>aa</td><td>bb</td><td>cc</td></tr></table>",
+    );
+    applyAnnotateHighlights(root, [
+      { id: "t4", originalText: "aa\tbb\tcc" },
+    ]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.ok(marks.length >= 3);
+    assert.equal(marks.map((m) => m.textContent).join(""), "aabbcc");
+  });
+
+  it("T-AT5: 表尾+段首拼接串零 mark", () => {
+    const root = makeRoot(
+      "<table><tr><td>zz</td></tr></table><p>xx</p>",
+    );
+    applyAnnotateHighlights(root, [{ id: "t5", originalText: "zzxx" }]);
+    assert.equal(
+      root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      0,
+    );
+  });
+
+  it("T-AT6: 同格 hel<strong>lo</strong> 仍 ≥2 段 mark", () => {
+    const root = makeRoot(
+      "<table><tr><td>hel<strong>lo</strong></td></tr></table>",
+    );
+    applyAnnotateHighlights(root, [{ id: "t6", originalText: "hello" }]);
+    const marks = [
+      ...root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`),
+    ];
+    assert.ok(marks.length >= 2);
+    assert.equal(marks.map((m) => m.textContent).join(""), "hello");
+  });
+
+  it("T-AT7: 跨 p 的 lohe 仍零命中", () => {
+    const root = makeRoot("<p>hello</p><p>hello</p>");
+    applyAnnotateHighlights(root, [{ id: "t7", originalText: "lohe" }]);
+    assert.equal(
+      root.querySelectorAll(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`).length,
+      0,
+    );
+  });
+});
+
 describe("Preview annotate UI wiring (source)", () => {
   it("弹层组件接线 store CRUD 与「添加批注」文案", () => {
     const ui = readFileSync(previewAnnotateUiPath, "utf8");

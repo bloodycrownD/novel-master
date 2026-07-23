@@ -31,7 +31,7 @@ export {
 export const ANNOTATE_MARK_CLASS = 'annotate-mark';
 export const ANNOTATE_IDS_ATTR = 'data-annotate-ids';
 
-/** 切断匹配域：block / br / 表单元格（D1）。 */
+/** 切断匹配域：block / br / TABLE（表内相邻 Text 直拼；表与前后段落切断，T1/T6）。 */
 const CUT_BOUNDARY_TAGS = new Set([
   'ADDRESS',
   'ARTICLE',
@@ -66,12 +66,6 @@ const CUT_BOUNDARY_TAGS = new Set([
   'PRE',
   'SECTION',
   'TABLE',
-  'TBODY',
-  'TD',
-  'TFOOT',
-  'TH',
-  'THEAD',
-  'TR',
   'UL',
 ]);
 
@@ -169,7 +163,8 @@ function wrapOccurrencesInDomain(
 }
 
 /**
- * 按文档序收集未处于 annotate-mark 内的 Text，并在 block/br/td 边界分批（D1a）。
+ * 按文档序收集未处于 annotate-mark 内的 Text，并在 block/br/TABLE 边界分批（T1/T6）。
+ * TABLE 内纯空白 Text（pretty-print）不入域（T4）。
  */
 function collectUnmarkedTextDomains(root: ParentNode): Text[][] {
   const domains: Text[][] = [];
@@ -185,7 +180,10 @@ function collectUnmarkedTextDomains(root: ParentNode): Text[][] {
   const visit = (node: Node): void => {
     if (node.nodeType === 3) {
       const textNode = node as Text;
-      if (!isInsideAnnotateMark(textNode)) {
+      if (
+        !isInsideAnnotateMark(textNode) &&
+        !isTableWhitespaceOnlyText(textNode)
+      ) {
         current.push(textNode);
       }
       return;
@@ -219,6 +217,25 @@ function collectUnmarkedTextDomains(root: ParentNode): Text[][] {
   }
   flush();
   return domains;
+}
+
+/** TABLE 祖先内且仅为 tab/换行/空格的 Text 不入匹配域（T4）。 */
+function isTableWhitespaceOnlyText(textNode: Text): boolean {
+  const value = textNode.nodeValue ?? '';
+  if (!/^[\t\n\r ]*$/.test(value)) {
+    return false;
+  }
+  let cur: Node | null = textNode.parentNode;
+  while (cur) {
+    if (
+      cur.nodeType === 1 &&
+      (cur as Element).tagName?.toUpperCase?.() === 'TABLE'
+    ) {
+      return true;
+    }
+    cur = cur.parentNode;
+  }
+  return false;
 }
 
 function isInsideAnnotateMark(node: Node): boolean {

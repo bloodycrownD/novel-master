@@ -40,6 +40,74 @@ function rootCrossParagraph(): MiniElement {
   });
 }
 
+/** `<table><tr><td>aa</td><td>bb</td></tr></table>`（含 pretty-print 空白，验 T4） */
+function rootTableTwoCells(): MiniElement {
+  return createMiniRoot((doc, root) => {
+    const table = doc.createElement('table');
+    table.appendChild(doc.createTextNode('\n  '));
+    const tr = doc.createElement('tr');
+    tr.appendChild(doc.createTextNode('\n    '));
+    const td1 = doc.createElement('td');
+    td1.appendChild(doc.createTextNode('aa'));
+    tr.appendChild(td1);
+    tr.appendChild(doc.createTextNode('\n    '));
+    const td2 = doc.createElement('td');
+    td2.appendChild(doc.createTextNode('bb'));
+    tr.appendChild(td2);
+    tr.appendChild(doc.createTextNode('\n  '));
+    table.appendChild(tr);
+    table.appendChild(doc.createTextNode('\n'));
+    root.appendChild(table);
+  });
+}
+
+/** 整行三格：`<table><tr><td>aa</td><td>bb</td><td>cc</td></tr></table>` */
+function rootTableFullRow(): MiniElement {
+  return createMiniRoot((doc, root) => {
+    const table = doc.createElement('table');
+    const tr = doc.createElement('tr');
+    for (const cell of ['aa', 'bb', 'cc']) {
+      const td = doc.createElement('td');
+      td.appendChild(doc.createTextNode(cell));
+      tr.appendChild(td);
+    }
+    table.appendChild(tr);
+    root.appendChild(table);
+  });
+}
+
+/** 表后邻接段：`<table>…zz</table><p>xx</p>` */
+function rootTableThenParagraph(): MiniElement {
+  return createMiniRoot((doc, root) => {
+    const table = doc.createElement('table');
+    const tr = doc.createElement('tr');
+    const td = doc.createElement('td');
+    td.appendChild(doc.createTextNode('zz'));
+    tr.appendChild(td);
+    table.appendChild(tr);
+    root.appendChild(table);
+    const p = doc.createElement('p');
+    p.appendChild(doc.createTextNode('xx'));
+    root.appendChild(p);
+  });
+}
+
+/** 同格跨 strong：`<table><tr><td>hel<strong>lo</strong></td></tr></table>` */
+function rootTableCellStrong(): MiniElement {
+  return createMiniRoot((doc, root) => {
+    const table = doc.createElement('table');
+    const tr = doc.createElement('tr');
+    const td = doc.createElement('td');
+    td.appendChild(doc.createTextNode('hel'));
+    const strong = doc.createElement('strong');
+    strong.appendChild(doc.createTextNode('lo'));
+    td.appendChild(strong);
+    tr.appendChild(td);
+    table.appendChild(tr);
+    root.appendChild(table);
+  });
+}
+
 /** `<p>hello hello</p>` */
 function rootDoubleHello(): MiniElement {
   return createMiniRoot((doc, root) => {
@@ -227,5 +295,62 @@ describe('annotate-marks apply DOM（T-XN2 / T-XN4 / T-XN5 / T-XN6）', () => {
     );
     expect(annotateSrc).toMatch(/target\.closest\(`\.\$\{ANNOTATE_MARK_CLASS\}`\)/);
     expect(annotateSrc).toMatch(/parseAnnotateIdsAttr/);
+  });
+});
+
+describe('annotate-marks 表格连续域（T-AT2 / T-AT4 / T-AT5 / T-AT6 / T-AT7）', () => {
+  it('T-AT2: 跨格选区（含 tab）→ ≥2 段 mark 并集覆盖 aabb', () => {
+    const root = rootTableTwoCells();
+    applyAnnotateMarks(root as unknown as ParentNode, [
+      {id: 't2', originalText: 'aa\tbb'},
+    ]);
+    const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    expect(marks.map(m => m.textContent).join('')).toBe('aabb');
+  });
+
+  it('T-AT4: 整行多格高亮覆盖可见文本', () => {
+    const root = rootTableFullRow();
+    applyAnnotateMarks(root as unknown as ParentNode, [
+      {id: 't4', originalText: 'aa\tbb\tcc'},
+    ]);
+    const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
+    expect(marks.length).toBeGreaterThanOrEqual(3);
+    expect(marks.map(m => m.textContent).join('')).toBe('aabbcc');
+  });
+
+  it('T-AT5: 表尾+段首拼接串零 mark', () => {
+    const root = rootTableThenParagraph();
+    applyAnnotateMarks(root as unknown as ParentNode, [
+      {id: 't5', originalText: 'zzxx'},
+    ]);
+    expect(root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
+  });
+
+  it('T-AT6: 同格 hel<strong>lo</strong> 仍 ≥2 段 mark', () => {
+    const root = rootTableCellStrong();
+    applyAnnotateMarks(root as unknown as ParentNode, [
+      {id: 't6', originalText: 'hello'},
+    ]);
+    const marks = root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`);
+    expect(marks.length).toBeGreaterThanOrEqual(2);
+    expect(marks.map(m => m.textContent).join('')).toBe('hello');
+  });
+
+  it('T-AT7: 跨 p 的 lohe 仍零命中', () => {
+    const root = createMiniRoot((doc, rootEl) => {
+      const p1 = doc.createElement('p');
+      p1.appendChild(doc.createTextNode('hel'));
+      p1.appendChild(doc.createTextNode('lo'));
+      const p2 = doc.createElement('p');
+      p2.appendChild(doc.createTextNode('he'));
+      p2.appendChild(doc.createTextNode('llo'));
+      rootEl.appendChild(p1);
+      rootEl.appendChild(p2);
+    });
+    applyAnnotateMarks(root as unknown as ParentNode, [
+      {id: 't7', originalText: 'lohe'},
+    ]);
+    expect(root.querySelectorAll(`.${ANNOTATE_MARK_CLASS}`).length).toBe(0);
   });
 });
