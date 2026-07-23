@@ -13,6 +13,7 @@ export {
   countFormPromptSources,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,
+  DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   definitionToForm,
   deletePersistTextBlock,
   formSnapshotJson,
@@ -25,6 +26,8 @@ export {
   TOOL_MODE_OPTIONS,
   toolsSelectionFromDefinition,
   withDynamicBlockPersistence,
+  withWorkplaceToggle,
+  WORKPLACE_ASSISTANT_TEXT_LABEL,
   WORKPLACE_BLOCK_HINT,
   WORKPLACE_BLOCK_LABEL,
 } from "@novel-master/core/config-forms/agent";

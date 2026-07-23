@@ -37,6 +37,7 @@ import {
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
+  withWorkplaceToggle,
   type ToolsMode,
 } from "@shared/logic/config-forms-agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
@@ -92,7 +93,8 @@ function applyDefinitionToFormState(
     setSystemContent: (v: string) => void;
     setPersistEnabled: (v: boolean) => void;
     setDynamicEnabled: (v: boolean) => void;
-    setWorkplace: (v: boolean) => void;
+    setWorkplaceEnabled: (v: boolean) => void;
+    setWorkplaceAssistantText: (v: string) => void;
     setPersist: (v: PersistPromptBlock[]) => void;
     setDynamic: (v: DynamicPromptBlock[]) => void;
     setToolsMode: (v: ToolsMode) => void;
@@ -114,7 +116,8 @@ function applyDefinitionToFormState(
   setters.setSystemContent(promptForm.systemContent);
   setters.setPersistEnabled(promptForm.persistEnabled);
   setters.setDynamicEnabled(promptForm.dynamicEnabled);
-  setters.setWorkplace(promptForm.workplace);
+  setters.setWorkplaceEnabled(promptForm.workplaceEnabled);
+  setters.setWorkplaceAssistantText(promptForm.workplaceAssistantText);
   setters.setPersist([...promptForm.persist]);
   setters.setDynamic([...promptForm.dynamic]);
 
@@ -174,7 +177,8 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [systemContent, setSystemContent] = useState("");
   const [persistEnabled, setPersistEnabled] = useState(false);
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
-  const [workplace, setWorkplace] = useState(false);
+  const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
+  const [workplaceAssistantText, setWorkplaceAssistantText] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -205,7 +209,8 @@ export const AgentDefinitionEditorForm = forwardRef<
         systemContent,
         persistEnabled,
         dynamicEnabled,
-        workplace,
+        workplaceEnabled,
+        workplaceAssistantText,
         persist,
         dynamic,
       }),
@@ -221,7 +226,8 @@ export const AgentDefinitionEditorForm = forwardRef<
       systemContent,
       persistEnabled,
       dynamicEnabled,
-      workplace,
+      workplaceEnabled,
+      workplaceAssistantText,
       persist,
       dynamic,
     ]
@@ -282,7 +288,8 @@ export const AgentDefinitionEditorForm = forwardRef<
           setSystemContent,
           setPersistEnabled,
           setDynamicEnabled,
-          setWorkplace,
+          setWorkplaceEnabled,
+          setWorkplaceAssistantText,
           setPersist,
           setDynamic,
           setToolsMode,
@@ -320,7 +327,8 @@ export const AgentDefinitionEditorForm = forwardRef<
       systemContent,
       persistEnabled,
       dynamicEnabled,
-      workplace,
+      workplaceEnabled,
+      workplaceAssistantText,
       persist,
       dynamic,
     });
@@ -345,7 +353,8 @@ export const AgentDefinitionEditorForm = forwardRef<
     systemContent,
     persistEnabled,
     dynamicEnabled,
-    workplace,
+    workplaceEnabled,
+    workplaceAssistantText,
     persist,
     dynamic,
   ]);
@@ -386,7 +395,8 @@ export const AgentDefinitionEditorForm = forwardRef<
     systemContent,
     persistEnabled,
     dynamicEnabled,
-    workplace,
+    workplaceEnabled,
+    workplaceAssistantText,
     persist,
     dynamic,
   });
@@ -649,9 +659,15 @@ export const AgentDefinitionEditorForm = forwardRef<
         </div>
 
         <AgentWorkplaceBlockCard
-          checked={workplace}
+          checked={workplaceEnabled}
           disabled={disabled}
-          onChange={setWorkplace}
+          onChange={(next) => {
+            const patched = withWorkplaceToggle(next, workplaceAssistantText);
+            setWorkplaceEnabled(patched.workplaceEnabled);
+            setWorkplaceAssistantText(patched.workplaceAssistantText);
+          }}
+          assistantText={workplaceAssistantText}
+          onAssistantTextChange={setWorkplaceAssistantText}
         />
 
         <div className="config-block-card__section-head">

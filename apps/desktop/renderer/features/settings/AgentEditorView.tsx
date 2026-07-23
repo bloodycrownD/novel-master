@@ -32,6 +32,7 @@ import {
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
+  withWorkplaceToggle,
   type ToolsMode,
 } from "@shared/logic/config-forms-agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
@@ -110,7 +111,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [systemContent, setSystemContent] = useState("");
   const [persistEnabled, setPersistEnabled] = useState(false);
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
-  const [workplace, setWorkplace] = useState(false);
+  const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
+  const [workplaceAssistantText, setWorkplaceAssistantText] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -150,7 +152,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         systemContent,
         persistEnabled,
         dynamicEnabled,
-        workplace,
+        workplaceEnabled,
+        workplaceAssistantText,
         persist,
         dynamic,
       }),
@@ -166,7 +169,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
-      workplace,
+      workplaceEnabled,
+      workplaceAssistantText,
       persist,
       dynamic,
     ]
@@ -231,7 +235,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setSystemContent(promptForm.systemContent);
       setPersistEnabled(promptForm.persistEnabled);
       setDynamicEnabled(promptForm.dynamicEnabled);
-      setWorkplace(promptForm.workplace);
+      setWorkplaceEnabled(promptForm.workplaceEnabled);
+      setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -413,7 +418,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
-      workplace,
+      workplaceEnabled,
+      workplaceAssistantText,
       persist,
       dynamic,
     });
@@ -465,7 +471,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     systemContent,
     persistEnabled,
     dynamicEnabled,
-    workplace,
+    workplaceEnabled,
+    workplaceAssistantText,
     persist,
     dynamic,
   });
@@ -754,8 +761,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </div>
 
           <AgentWorkplaceBlockCard
-            checked={workplace}
-            onChange={setWorkplace}
+            checked={workplaceEnabled}
+            onChange={(next) => {
+              const patched = withWorkplaceToggle(next, workplaceAssistantText);
+              setWorkplaceEnabled(patched.workplaceEnabled);
+              setWorkplaceAssistantText(patched.workplaceAssistantText);
+            }}
+            assistantText={workplaceAssistantText}
+            onAssistantTextChange={setWorkplaceAssistantText}
           />
 
           <div className="config-block-card__section-head">
