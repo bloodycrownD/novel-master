@@ -17,7 +17,9 @@ import {
   toolsSelectionFromDefinition,
   withDynamicBlockPersistence,
   WORKPLACE_BLOCK_HINT,
+  WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE,
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+  withWorkplaceToggle,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 import { validateAgentPromptLayout } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
@@ -78,7 +80,7 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
 test("WORKPLACE_BLOCK_HINT 新文案", () => {
   assert.equal(
     WORKPLACE_BLOCK_HINT,
-    "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。"
+    "开启后可编辑助手确认语（默认如 i have seen workplace）；用户侧文件树包在 <workplace> 内，仅表常驻前缀。"
   );
 });
 
@@ -140,7 +142,7 @@ test("definitionToForm maps system toggle and three regions", () => {
   assert.equal(form.systemContent, "sys");
   assert.equal(form.persistEnabled, true);
   assert.equal(form.dynamicEnabled, true);
-  assert.equal(form.workplace, true);
+  assert.equal(form.workplaceEnabled, true);
   assert.equal(form.persist.length, 0);
   assert.equal(form.dynamic[0]?.lifecycle, "once");
 });
@@ -155,7 +157,7 @@ test("definitionToForm 缺省 persistEnabled/dynamicEnabled 为 false", () => {
   });
   assert.equal(form.persistEnabled, false);
   assert.equal(form.dynamicEnabled, false);
-  assert.equal(form.workplace, false);
+  assert.equal(form.workplaceEnabled, false);
 });
 
 test("layoutFromFormInput omits system when switch off", () => {
@@ -164,7 +166,8 @@ test("layoutFromFormInput omits system when switch off", () => {
     systemContent: "ignored",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
     dynamic: [],
   });
@@ -179,7 +182,8 @@ test("layoutFromFormInput wires persistEnabled/dynamicEnabled when on", () => {
     systemContent: "",
     persistEnabled: true,
     dynamicEnabled: true,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [{ name: "p1", type: "text", role: "assistant", content: "ok" }],
     dynamic: [
       { name: "d1", type: "text", role: "assistant", content: "a" },
@@ -222,7 +226,8 @@ test("layoutFromFormInput maps workplace boolean and strips legacy worktree", ()
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
     persist: [
       { name: "custom", type: "worktree", role: "assistant" },
       { name: "persona", type: "text", role: "user", content: "x" },
@@ -265,7 +270,8 @@ test("buildAgentDefinitionFromForm maps workplace boolean", () => {
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
     persist: [
       { name: "p1", type: "text", role: "user", content: "after tree" },
     ],
@@ -294,26 +300,28 @@ test("T-W7: definitionToForm ↔ layoutFromFormInput round-trip workplace", () =
       dynamic: [],
     },
   });
-  assert.equal(formOn.workplace, true);
-  assert.equal(
-    layoutFromFormInput(formOn).workplace,
-    DEFAULT_WORKPLACE_ASSISTANT_TEXT,
-  );
+  assert.equal(formOn.workplaceEnabled, true);
+  assert.equal(formOn.workplaceAssistantText, "【done】");
+  assert.equal(layoutFromFormInput(formOn).workplace, "【done】");
 
-  const formOff = { ...formOn, workplace: false };
+  const formOff = {
+    ...formOn,
+    workplaceEnabled: false,
+  };
   assert.equal(layoutFromFormInput(formOff).workplace, undefined);
 
   const roundTrip = definitionToForm({
     name: "writer",
     prompts: layoutFromFormInput(formOn),
   });
-  assert.equal(roundTrip.workplace, true);
+  assert.equal(roundTrip.workplaceEnabled, true);
+  assert.equal(roundTrip.workplaceAssistantText, "【done】");
 });
 
 test("createDefaultAgentEditorPrompts persist 无 worktree", () => {
   const defaults = createDefaultAgentEditorPrompts();
   assert.equal(defaults.persist.length, 0);
-  assert.equal(defaults.workplace, false);
+  assert.equal(defaults.workplaceEnabled, false);
   assert.ok(defaults.persist.every((block) => block.type !== "worktree"));
 });
 
@@ -326,7 +334,7 @@ test("definitionToForm workplace 非空 string 可 derive Switch 开", () => {
       dynamic: [],
     },
   });
-  assert.equal(form.workplace, true);
+  assert.equal(form.workplaceEnabled, true);
   assert.equal(form.persist.length, 0);
 });
 
@@ -351,12 +359,14 @@ test("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", ()
     ...createDefaultAgentEditorPrompts(),
     persistEnabled: true,
     dynamicEnabled: false,
-    workplace: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   });
   const parsed = JSON.parse(json) as Record<string, unknown>;
   assert.equal(parsed.persistEnabled, true);
   assert.equal(parsed.dynamicEnabled, false);
-  assert.equal(parsed.workplace, true);
+  assert.equal(parsed.workplaceEnabled, true);
+  assert.equal(parsed.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
 });
 
 test("formSnapshotJson omits model fields when disabled", () => {
@@ -436,7 +446,8 @@ test("buildAgentDefinitionFromForm system 开但内容空时失败", () => {
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [],
     dynamic: [],
   });
@@ -453,7 +464,8 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "",
       persistEnabled: false,
       dynamicEnabled: false,
-      workplace: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
       persist: [],
       dynamic: [],
     }),
@@ -465,7 +477,8 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "sys",
       persistEnabled: true,
       dynamicEnabled: true,
-      workplace: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
       persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
     }),
@@ -477,7 +490,8 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "   ",
       persistEnabled: true,
       dynamicEnabled: false,
-      workplace: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
       persist: [],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
     }),
@@ -489,7 +503,8 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "ignored",
       persistEnabled: true,
       dynamicEnabled: false,
-      workplace: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
       persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
       dynamic: [],
     }),
@@ -501,7 +516,8 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "",
       persistEnabled: false,
       dynamicEnabled: false,
-      workplace: true,
+      workplaceEnabled: true,
+      workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
       persist: [],
       dynamic: [],
     }),
@@ -522,7 +538,8 @@ test("buildAgentDefinitionFromForm allows empty persist with system content", ()
     systemContent: "你是写作助手",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [],
     dynamic: [],
   });
@@ -546,7 +563,8 @@ test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () 
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [],
     dynamic: [
       { name: "state", type: "text", role: "user", content: "{{$time}}" },
@@ -568,7 +586,8 @@ test("T-W8: buildAgentDefinitionFromForm workplace:true 且区域开关全关可
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
     persist: [],
     dynamic: [],
   });
@@ -613,7 +632,8 @@ test("countFormPromptSources ignores enabled system without content", () => {
     countFormPromptSources({
       systemEnabled: true,
       systemContent: "   ",
-      workplace: false,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
       persist: [],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
     }),
@@ -624,7 +644,8 @@ test("countFormPromptSources ignores enabled system without content", () => {
       {
         systemEnabled: true,
         systemContent: "sys",
-        workplace: false,
+        workplaceEnabled: false,
+        workplaceAssistantText: "",
         persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
         dynamic: [],
       },
@@ -638,7 +659,8 @@ test("countFormPromptSources counts all regions and respects exclusions", () => 
   const input = {
     systemEnabled: true,
     systemContent: "sys",
-    workplace: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
     persist: [{ name: "p1", type: "text", role: "user", content: "a" }],
     dynamic: [
       {
@@ -657,7 +679,14 @@ test("countFormPromptSources counts all regions and respects exclusions", () => 
   };
   assert.equal(countFormPromptSources(input), 5);
   assert.equal(countFormPromptSources(input, { excludeDynamicIndex: 1 }), 4);
-  assert.equal(countFormPromptSources({ ...input, workplace: false }), 4);
+  assert.equal(
+    countFormPromptSources({
+      ...input,
+      workplaceEnabled: false,
+      workplaceAssistantText: "",
+    }),
+    4
+  );
   assert.equal(
     countFormPromptSources(input, {
       excludePersistTextIndex: 0,
@@ -680,7 +709,8 @@ test("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", (
     systemContent: "",
     persistEnabled: true,
     dynamicEnabled: true,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [
       {
         name: "p1",
@@ -728,7 +758,8 @@ test("buildAgentDefinitionFromForm 开关关时省略 wire 布尔", () => {
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
     dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
   });
@@ -752,7 +783,8 @@ test("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败
     systemContent: "",
     persistEnabled: true,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
     dynamic: [],
   });
@@ -775,7 +807,8 @@ test("buildAgentDefinitionFromForm persistEnabled 开且 workplace + 文本末�
     systemContent: "",
     persistEnabled: true,
     dynamicEnabled: false,
-    workplace: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
     persist: [
       { name: "p1", type: "text", role: "user", content: "x" },
       { name: "tail", type: "text", role: "assistant", content: "ok" },
@@ -798,7 +831,8 @@ test("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", 
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: true,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [],
     dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
   });
@@ -821,7 +855,8 @@ test("buildAgentDefinitionFromForm 开关关时跳过启用后校验", () => {
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
     dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
   });
@@ -841,7 +876,8 @@ test("buildAgentDefinitionFromForm rejects persist macros", () => {
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [
       {
         name: "bad",
@@ -871,7 +907,8 @@ test("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [{ name: "p1", type: "text", role: "user", content: "ok" }],
     dynamic: [
       {
@@ -885,13 +922,87 @@ test("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
   assert.equal(result.ok, false);
 });
 
+test("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
+  const defaults = createDefaultAgentEditorPrompts();
+  const toggled = withWorkplaceToggle(true, defaults.workplaceAssistantText);
+  assert.equal(toggled.workplaceEnabled, true);
+  assert.equal(toggled.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+
+  const ok = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...defaults,
+    ...toggled,
+  });
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.equal(
+      ok.definition.prompts.workplace,
+      DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+    );
+  }
+
+  const empty = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...defaults,
+    workplaceEnabled: true,
+    workplaceAssistantText: "   ",
+  });
+  assert.equal(empty.ok, false);
+  if (!empty.ok) {
+    assert.equal(empty.message, WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE);
+  }
+});
+
+test("T-WP8: 关 omit workplace；再开文案空则预填默认", () => {
+  const on = withWorkplaceToggle(true, "");
+  assert.equal(on.workplaceAssistantText, DEFAULT_WORKPLACE_ASSISTANT_TEXT);
+
+  const custom = withWorkplaceToggle(true, "custom-done");
+  assert.equal(custom.workplaceAssistantText, "custom-done");
+
+  const off = withWorkplaceToggle(false, custom.workplaceAssistantText);
+  assert.equal(off.workplaceEnabled, false);
+  assert.equal(off.workplaceAssistantText, "custom-done");
+  assert.equal(
+    layoutFromFormInput({
+      systemEnabled: false,
+      systemContent: "",
+      persistEnabled: false,
+      dynamicEnabled: false,
+      ...off,
+      persist: [],
+      dynamic: [],
+    }).workplace,
+    undefined,
+  );
+
+  const clearedThenOn = withWorkplaceToggle(true, "");
+  assert.equal(
+    clearedThenOn.workplaceAssistantText,
+    DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+  );
+});
+
 test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
   const layout = layoutFromFormInput({
     systemEnabled: true,
     systemContent: "sys",
     persistEnabled: true,
     dynamicEnabled: true,
-    workplace: true,
+    workplaceEnabled: true,
+    workplaceAssistantText: DEFAULT_WORKPLACE_ASSISTANT_TEXT,
     persist: [{ name: "p1", type: "text", role: "assistant", content: "ok" }],
     dynamic: [
       { name: "d1", type: "text", role: "assistant", content: "a" },

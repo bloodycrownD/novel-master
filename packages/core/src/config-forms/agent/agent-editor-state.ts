@@ -57,7 +57,9 @@ export type AgentEditorFormInput = {
   persistEnabled: boolean;
   dynamicEnabled: boolean;
   /** 常驻工作区开关（与域 `prompts.workplace` 对应）。 */
-  workplace: boolean;
+  workplaceEnabled: boolean;
+  /** 常驻工作区助手确认语（开时默认 {@link DEFAULT_WORKPLACE_ASSISTANT_TEXT}）。 */
+  workplaceAssistantText: string;
   persist: readonly EditorPersistPromptBlock[];
   dynamic: readonly DynamicPromptBlock[];
 };
@@ -92,9 +94,16 @@ export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 /** 常驻工作区在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
 export const WORKPLACE_BLOCK_LABEL = "常驻工作区";
 
-/** 常驻工作区说明（用户可见，避免技术术语）。 */
+/** 常驻工作区说明（用户可见；强调可编辑确认语，仅常驻前缀）。 */
 export const WORKPLACE_BLOCK_HINT =
-  "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。";
+  "开启后可编辑助手确认语（默认如 i have seen workplace）；用户侧文件树包在 <workplace> 内，仅表常驻前缀。";
+
+/** 常驻工作区助手确认语字段标签。 */
+export const WORKPLACE_ASSISTANT_TEXT_LABEL = "助手确认语";
+
+/** 开态但确认语为空时的保存失败文案（W9 显式阻断，不依赖区域门闩）。 */
+export const WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE =
+  "请填写常驻工作区助手确认语";
 
 /** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
 export const PROMPT_REGION_LABELS = {
@@ -224,6 +233,31 @@ export function withDynamicBlockPersistence(
   return { ...block, lifecycle: "once" };
 }
 
+/**
+ * 常驻工作区开关变更：关保持文案；开且文案 trim 空则预填默认确认语（T-WP8）。
+ */
+export function withWorkplaceToggle(
+  enabled: boolean,
+  workplaceAssistantText: string
+): Pick<
+  AgentEditorFormInput,
+  "workplaceEnabled" | "workplaceAssistantText"
+> {
+  if (!enabled) {
+    return {
+      workplaceEnabled: false,
+      workplaceAssistantText,
+    };
+  }
+  return {
+    workplaceEnabled: true,
+    workplaceAssistantText:
+      workplaceAssistantText.trim() === ""
+        ? DEFAULT_WORKPLACE_ASSISTANT_TEXT
+        : workplaceAssistantText,
+  };
+}
+
 /** 新建 Agent 默认 Prompt 表单片段。 */
 export function createDefaultAgentEditorPrompts(): Pick<
   AgentEditorFormInput,
@@ -231,7 +265,8 @@ export function createDefaultAgentEditorPrompts(): Pick<
   | "systemContent"
   | "persistEnabled"
   | "dynamicEnabled"
-  | "workplace"
+  | "workplaceEnabled"
+  | "workplaceAssistantText"
   | "persist"
   | "dynamic"
 > {
@@ -240,7 +275,8 @@ export function createDefaultAgentEditorPrompts(): Pick<
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
     persist: [],
     dynamic: [],
   };
@@ -264,7 +300,8 @@ export function hasEffectivePromptSource(
     | "systemContent"
     | "persistEnabled"
     | "dynamicEnabled"
-    | "workplace"
+    | "workplaceEnabled"
+    | "workplaceAssistantText"
     | "persist"
     | "dynamic"
   >
@@ -280,7 +317,8 @@ export function countEffectiveFormPromptSources(
     | "systemContent"
     | "persistEnabled"
     | "dynamicEnabled"
-    | "workplace"
+    | "workplaceEnabled"
+    | "workplaceAssistantText"
     | "persist"
     | "dynamic"
   >
@@ -295,7 +333,10 @@ export function countEffectiveFormPromptSources(
   if (input.dynamicEnabled && input.dynamic.length > 0) {
     count += 1;
   }
-  if (input.workplace === true) {
+  if (
+    input.workplaceEnabled &&
+    input.workplaceAssistantText.trim() !== ""
+  ) {
     count += 1;
   }
   return count;
@@ -323,7 +364,12 @@ export function countMinimumPromptSources(
 export function countFormPromptSources(
   input: Pick<
     AgentEditorFormInput,
-    "systemEnabled" | "systemContent" | "workplace" | "persist" | "dynamic"
+    | "systemEnabled"
+    | "systemContent"
+    | "workplaceEnabled"
+    | "workplaceAssistantText"
+    | "persist"
+    | "dynamic"
   >,
   options?: {
     excludePersistTextIndex?: number;
@@ -338,7 +384,10 @@ export function countFormPromptSources(
   count += textBlocks.filter(
     (_, index) => index !== options?.excludePersistTextIndex
   ).length;
-  if (input.workplace === true) {
+  if (
+    input.workplaceEnabled &&
+    input.workplaceAssistantText.trim() !== ""
+  ) {
     count += 1;
   }
   count += input.dynamic.filter(
@@ -378,17 +427,21 @@ export function definitionToForm(
   | "systemContent"
   | "persistEnabled"
   | "dynamicEnabled"
-  | "workplace"
+  | "workplaceEnabled"
+  | "workplaceAssistantText"
   | "persist"
   | "dynamic"
 > {
   const system = def.prompts.system?.trim() ?? "";
+  const workplaceText =
+    typeof def.prompts.workplace === "string" ? def.prompts.workplace : "";
   return {
     systemEnabled: system.length > 0,
     systemContent: def.prompts.system ?? "",
     persistEnabled: def.prompts.persistEnabled ?? false,
     dynamicEnabled: def.prompts.dynamicEnabled ?? false,
-    workplace: layoutHasWorkplace(def.prompts),
+    workplaceEnabled: layoutHasWorkplace(def.prompts),
+    workplaceAssistantText: workplaceText,
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
   };
@@ -402,7 +455,8 @@ export function layoutFromFormInput(
     | "systemContent"
     | "persistEnabled"
     | "dynamicEnabled"
-    | "workplace"
+    | "workplaceEnabled"
+    | "workplaceAssistantText"
     | "persist"
     | "dynamic"
   >
@@ -412,13 +466,13 @@ export function layoutFromFormInput(
       ? input.systemContent
       : undefined;
   const { textBlocks } = splitPersistBlocksForEditor(input.persist);
+  const workplaceText = input.workplaceAssistantText.trim();
   return {
     ...(system != null ? { system } : {}),
     ...(input.persistEnabled ? { persistEnabled: true } : {}),
     ...(input.dynamicEnabled ? { dynamicEnabled: true } : {}),
-    // 过渡：表单仍为 boolean；开 → 预填默认确认语（Step 6 再拆 assistantText）
-    ...(input.workplace
-      ? { workplace: DEFAULT_WORKPLACE_ASSISTANT_TEXT }
+    ...(input.workplaceEnabled && workplaceText !== ""
+      ? { workplace: workplaceText }
       : {}),
     persist: [...textBlocks],
     dynamic: [...input.dynamic],
@@ -443,7 +497,8 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     systemContent: input.systemContent,
     persistEnabled: input.persistEnabled,
     dynamicEnabled: input.dynamicEnabled,
-    workplace: input.workplace,
+    workplaceEnabled: input.workplaceEnabled,
+    workplaceAssistantText: input.workplaceAssistantText,
     persist: input.persist,
     dynamic: input.dynamic,
   });
@@ -454,6 +509,16 @@ export function buildAgentDefinitionFromForm(
 ): { ok: true; definition: AgentDefinition } | { ok: false; message: string } {
   if (!input.name.trim()) {
     return { ok: false, message: "请填写 Agent 名称" };
+  }
+  // W9：开态空文案显式阻断（hasAnyPromptRegionEnabled 不含 workplace）
+  if (
+    input.workplaceEnabled &&
+    input.workplaceAssistantText.trim() === ""
+  ) {
+    return {
+      ok: false,
+      message: WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE,
+    };
   }
   if (hasAnyPromptRegionEnabled(input) && !hasEffectivePromptSource(input)) {
     return { ok: false, message: "至少保留一个 Prompt 块" };
