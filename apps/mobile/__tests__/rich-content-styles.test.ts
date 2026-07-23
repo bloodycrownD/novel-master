@@ -27,4 +27,12 @@ describe('rich-content-styles', () => {
     expect(css).toContain('.a.rich p, .b.rich p');
     expect(css).toContain('.a.rich ol, .b.rich ol, .a.rich ul, .b.rich ul');
   });
+
+  it('soft-wraps pre code blocks in chat and document rich CSS', () => {
+    for (const css of [CHAT_TRANSCRIPT_RICH_CSS, RICH_DOCUMENT_RICH_CSS]) {
+      expect(css).toContain('white-space: pre-wrap');
+      expect(css).toContain('overflow-wrap: anywhere');
+      expect(css).toContain('overflow-x: auto');
+    }
+  });
 });
