@@ -19,6 +19,7 @@ import {
   PREVIEW_ANNOTATE_MARK_CLASS,
   readSelectionTextInContainer,
   resolveAnnotateIdsFromClick,
+  setPreviewAnnotateDomSearchFallbackForTests,
   supportsCssCustomHighlight,
 } from "@/layout/preview-annotate";
 
@@ -381,16 +382,18 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.match(pane, /isPreviewAnnotateEnabled/);
     assert.match(pane, /PreviewAnnotateFloatingBar/);
     assert.match(pane, /previewFile\?\.workspaceScope/);
-    assert.match(pane, /applyAnnotateHighlights/);
+    assert.match(pane, /buildAnnotatedSource/);
+    assert.match(pane, /collectAnnotateRangeForPreviewSelection/);
     assert.match(pane, /sessionId/);
     assert.match(pane, /resolveAnnotateIdsFromClick/);
-    assert.match(pane, /estimateSoftRangeForPreviewSelection/);
-    assert.match(pane, /sourceText:\s*content/);
     assert.doesNotMatch(pane, /e\.preventDefault\(\);\s*\n\s*scheduleRefresh/);
   });
 
-  it("AddModal 写入宽松行列字段", () => {
+  it("AddModal 写入宽松 offset + 派生行列", () => {
     const ui = readFileSync(previewAnnotateUiPath, "utf8");
+    assert.match(ui, /softOffsetRange/);
+    assert.match(ui, /startOffset/);
+    assert.match(ui, /endOffset/);
     assert.match(ui, /softRange/);
     assert.match(ui, /startLine/);
     assert.match(ui, /endLine/);
@@ -432,7 +435,8 @@ describe("Custom Highlight / mark 回退（T-AR7 / T-AR8 / T-AR10）", () => {
     }
   });
 
-  it("T-AR8: 不支持时出现 mark + closest 可解析 ids", () => {
+  it("T-AR8: 应急开关下 mark + closest 可解析 ids", () => {
+    setPreviewAnnotateDomSearchFallbackForTests(true);
     assert.equal(supportsCssCustomHighlight(), false);
     const root = makeRoot("<p>hel<strong>lo</strong></p>");
     applyAnnotateHighlights(root, [{ id: "a1", originalText: "hello" }]);
@@ -451,6 +455,7 @@ describe("Custom Highlight / mark 回退（T-AR7 / T-AR8 / T-AR10）", () => {
       parseAnnotateIdsAttr(mark.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR)),
       ["a1"],
     );
+    setPreviewAnnotateDomSearchFallbackForTests(false);
   });
 
   it("T-AR10: 跨 strong 可见串高亮覆盖（mark 回退）", () => {
