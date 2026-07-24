@@ -77,13 +77,20 @@ describe('rich-document-bridge', () => {
     );
   });
 
-  it('round-trips selectionAnnotate / annotateOpen', () => {
-    const sel = {
+  it('round-trips selectionCollect / annotateOpen', () => {
+    const collect = {
       v: RICH_DOCUMENT_BRIDGE_VERSION,
-      type: 'selectionAnnotate' as const,
-      payload: {text: '选中原文'},
+      type: 'selectionCollect' as const,
+      payload: {
+        originalText: '选中原文',
+        mode: 'markdown' as const,
+        contextBefore: '前',
+        contextAfter: '后',
+      },
     };
-    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(sel))).toEqual(sel);
+    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(collect))).toEqual(
+      collect,
+    );
     const open = {
       v: RICH_DOCUMENT_BRIDGE_VERSION,
       type: 'annotateOpen' as const,
@@ -92,6 +99,15 @@ describe('rich-document-bridge', () => {
     expect(decodeRichDocumentToHost(encodeRichDocumentToHost(open))).toEqual(
       open,
     );
+  });
+
+  it('round-trips legacy selectionAnnotate', () => {
+    const sel = {
+      v: RICH_DOCUMENT_BRIDGE_VERSION,
+      type: 'selectionAnnotate' as const,
+      payload: {text: '选中原文'},
+    };
+    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(sel))).toEqual(sel);
   });
 
   it('rejects invalid bridge version', () => {

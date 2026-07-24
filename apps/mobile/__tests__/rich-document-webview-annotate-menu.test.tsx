@@ -64,13 +64,16 @@ describe('RichDocumentWebView annotate menuItems', () => {
     expect(last?.menuItems).toBeUndefined();
   });
 
-  it('annotateEnabled=true 挂「批注」「复制」；批注回调 / 复制写剪贴板', () => {
+  it('annotateEnabled=true 挂「批注」「复制」；批注走 inject / collect；复制写剪贴板', () => {
+    const onAnnotateCollect = jest.fn();
     const onSelectionAnnotate = jest.fn();
     act(() => {
       TestRenderer.create(
         <RichDocumentWebView
           plain="hello world"
           annotateEnabled
+          annotateCollectMode="plain"
+          onAnnotateCollect={onAnnotateCollect}
           onSelectionAnnotate={onSelectionAnnotate}
         />,
       );
@@ -81,10 +84,11 @@ describe('RichDocumentWebView annotate menuItems', () => {
       | ((e: {nativeEvent: {key: string; selectedText: string}}) => void)
       | undefined;
     expect(typeof handler).toBe('function');
+    // mock WebView 无 injectJavaScript：有 onAnnotateCollect 时不会立刻回调
     handler?.({
       nativeEvent: {key: 'annotate', selectedText: '  hello  '},
     });
-    expect(onSelectionAnnotate).toHaveBeenCalledWith('hello');
+    expect(onSelectionAnnotate).not.toHaveBeenCalled();
     handler?.({
       nativeEvent: {key: 'copy', selectedText: '  world  '},
     });

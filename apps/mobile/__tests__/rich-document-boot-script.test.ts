@@ -1,7 +1,9 @@
 /**
  * T-BB-07：rich-document 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
  */
-import { readWebViewDistFile } from './helpers/read-webview-dist';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
   return readWebViewDistFile('rich-document', 'app.js');
@@ -73,5 +75,13 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(css).toContain('#doc .doc-body.rich');
     expect(css).toContain('annotate-mark');
     expect(css).not.toContain('annotate-bar');
+  });
+
+  it('T-SA6: document.css 源含 nm-annotate-anchor', () => {
+    const src = readFileSync(
+      join(__dirname, '../src/web/rich-document/styles/document.css'),
+      'utf8',
+    );
+    expect(src).toContain('.nm-annotate-anchor');
   });
 });
