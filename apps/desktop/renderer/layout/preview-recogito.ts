@@ -122,3 +122,59 @@ export function extractRecogitoRenderRange(
     renderEnd: end,
   };
 }
+
+/**
+ * 选区相对 element 可见正文的半开 offset（Desktop 权威；PreviewPane / 采集均走此实现）。
+ * Recogito annotatingEnabled=false 时，用此采集再经 FloatingBar 开 AddModal。
+ * 策略 (b)：quote 做 trim，并按首尾空白收缩 renderStart/renderEnd，
+ * 使容器正文 `slice(renderStart, renderEnd) === quote`（R4）。
+ */
+export function getSelectionOffsetsInElement(
+  element: Element,
+  selection: Selection | null = typeof window !== "undefined"
+    ? window.getSelection()
+    : null,
+): RecogitoRenderRange | null {
+  if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
+    return null;
+  }
+  const selRange = selection.getRangeAt(0);
+  if (
+    !element.contains(selRange.startContainer) ||
+    !element.contains(selRange.endContainer)
+  ) {
+    return null;
+  }
+  const doc = element.ownerDocument;
+  if (doc == null) {
+    return null;
+  }
+  const preRange = doc.createRange();
+  preRange.selectNodeContents(element);
+  preRange.setEnd(selRange.startContainer, selRange.startOffset);
+  const rawStart = preRange.toString().length;
+  const rawSelected = selRange.toString();
+  const normalized = rawSelected.replace(/\u00a0/g, " ");
+  const quote = normalized.trim();
+  if (
+    !quote ||
+    !Number.isFinite(rawStart) ||
+    rawSelected.length <= 0 ||
+    rawStart < 0
+  ) {
+    return null;
+  }
+  // 按 trim 后的首尾空白收缩半开区间（与 quote 对齐）
+  const leadingWs = normalized.length - normalized.trimStart().length;
+  const trailingWs = normalized.length - normalized.trimEnd().length;
+  const renderStart = rawStart + leadingWs;
+  const renderEnd = rawStart + normalized.length - trailingWs;
+  if (renderStart >= renderEnd) {
+    return null;
+  }
+  return {
+    quote,
+    renderStart,
+    renderEnd,
+  };
+}

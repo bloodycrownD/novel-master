@@ -25,6 +25,7 @@ import {
   type AnnotateSoftSourceRange,
 } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
+import { getSelectionOffsetsInElement as getRecogitoSelectionOffsetsInElement } from "./preview-recogito";
 
 export {
   buildFlatTextIndex,
@@ -197,7 +198,7 @@ export function getSelectionFloatingAnchor(
 
 /**
  * 选区在 element 文本内容中的 0-based 半开偏移（plain/`pre` 用）。
- * 选区须落在 element 内。
+ * 委托 preview-recogito 权威实现（含 trim 收缩策略 (b)）；本处只映射为 {start,end}。
  */
 export function getSelectionOffsetsInElement(
   element: HTMLElement,
@@ -205,26 +206,14 @@ export function getSelectionOffsetsInElement(
     ? window.getSelection()
     : null,
 ): { readonly start: number; readonly end: number } | null {
-  if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
+  const range = getRecogitoSelectionOffsetsInElement(
+    element,
+    selection ?? null,
+  );
+  if (range == null) {
     return null;
   }
-  const selRange = selection.getRangeAt(0);
-  if (
-    !element.contains(selRange.startContainer) ||
-    !element.contains(selRange.endContainer)
-  ) {
-    return null;
-  }
-  const doc = element.ownerDocument;
-  if (doc == null) {
-    return null;
-  }
-  const preRange = doc.createRange();
-  preRange.selectNodeContents(element);
-  preRange.setEnd(selRange.startContainer, selRange.startOffset);
-  const start = preRange.toString().length;
-  const selectedLen = selRange.toString().length;
-  return { start, end: start + selectedLen };
+  return { start: range.renderStart, end: range.renderEnd };
 }
 
 /** 划词采集结果：权威为宽松半开 offset；行列由其派生。 */
