@@ -13,6 +13,7 @@ const HIGHLIGHT_CSS = `
   text-decoration-color: var(--primary, #007aff);
   text-decoration-thickness: 2px;
   text-underline-offset: 2px;
+  background-color: color-mix(in srgb, var(--primary, #007aff) 22%, transparent);
 }
 `.trim();
 

@@ -14,7 +14,19 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
 .fm-value { font-size: 15px; line-height: 21px; color: var(--text, #111); }
 .fm-mono { font-family: ui-monospace, monospace; }
 .over-limit-hint { margin-top: 6px; font-size: 12px; color: var(--text-secondary, #666); }
-/* 划词批注下划线：mark 回退 + CSS Custom Highlight 主路径 */
+/* 源范围锚（主路径） */
+.nm-annotate-anchor {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--primary, #007aff);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+  background-color: color-mix(in srgb, var(--primary, #007aff) 22%, transparent);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* 划词批注下划线：mark / CSS Highlight 仅应急回滚 */
 .annotate-mark {
   background: transparent;
   color: inherit;
@@ -24,11 +36,13 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
   text-underline-offset: 2px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  background-color: color-mix(in srgb, var(--primary, #007aff) 22%, transparent);
 }
 ::highlight(nm-annotate) {
   text-decoration: underline;
   text-decoration-color: var(--primary, #007aff);
   text-decoration-thickness: 2px;
   text-underline-offset: 2px;
+  background-color: color-mix(in srgb, var(--primary, #007aff) 22%, transparent);
 }
 /* __RICH_CSS__ */

@@ -1,6 +1,7 @@
 /**
  * Markdown file preview with Front Matter card and themed body rendering.
- * 划词批注：仅 annotateEnabled（session 预览态）经 WebView 桥接入。
+ * 划词批注：仅 annotateEnabled（session 预览态）经 WebView 桥接入；
+ * 预览高亮 = buildAnnotatedSource 注入锚后再 setDocument（非 DOM 搜字）。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
@@ -12,7 +13,12 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
 import type {AnnotateDraft} from '@novel-master/core/chat';
-import {estimateSoftRangeFromOriginalText} from '@novel-master/core/chat';
+import {
+  buildAnnotatedSource,
+  deriveSoftRangeFieldsFromOffsets,
+  estimateSoftOffsetRangeFromPlainOffsets,
+  estimateSoftOffsetRangeFromQuoteContext,
+} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
@@ -30,11 +36,12 @@ import {
 import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
+import {sanitizeRichHtml} from '../rich-content/sanitize-rich-html';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
-import type {RichDocumentAnnotationMark} from './RichDocumentBridge';
+import type {RichDocumentSelectionCollectPayload} from './RichDocumentBridge';
 import {AnnotatePickModal} from './AnnotatePickModal';
 import {RichDocumentWebView} from './RichDocumentWebView';
 
@@ -105,6 +112,10 @@ export function FileMarkdownPreview({
   const [draftTick, setDraftTick] = useState(0);
   const [addVisible, setAddVisible] = useState(false);
   const [pendingOriginalText, setPendingOriginalText] = useState('');
+  const [pendingOffsets, setPendingOffsets] = useState<{
+    startOffset: number;
+    endOffset: number;
+  } | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [editVisible, setEditVisible] = useState(false);
@@ -147,37 +158,57 @@ export function FileMarkdownPreview({
     });
   }, [annotateEnabled, sessionId]);
 
-  const annotationMarks: readonly RichDocumentAnnotationMark[] = useMemo(
-    () =>
-      pathDrafts.map(d => ({
-        id: d.id,
-        originalText: d.originalText,
-        ...(typeof d.startLine === 'number' ? {startLine: d.startLine} : {}),
-        ...(typeof d.endLine === 'number' ? {endLine: d.endLine} : {}),
-        ...(typeof d.startCol === 'number' ? {startCol: d.startCol} : {}),
-        ...(typeof d.endCol === 'number' ? {endCol: d.endCol} : {}),
-      })),
-    [pathDrafts],
+  const handleAnnotateCollect = useCallback(
+    (payload: RichDocumentSelectionCollectPayload) => {
+      const trimmed = payload.originalText.trim();
+      if (!trimmed) {
+        return;
+      }
+      let soft: {startOffset: number; endOffset: number} | null = null;
+      if (
+        payload.mode === 'plain' &&
+        typeof payload.selectionStart === 'number' &&
+        typeof payload.selectionEnd === 'number'
+      ) {
+        // Step 5a：相对 VFS 无锚源串的精确半开 → A10 padding
+        soft = estimateSoftOffsetRangeFromPlainOffsets(
+          content,
+          payload.selectionStart,
+          payload.selectionEnd,
+        );
+      } else {
+        // Step 5b：邻域定位；失败不写脏 offset（A12）
+        soft = estimateSoftOffsetRangeFromQuoteContext(content, {
+          originalText: trimmed,
+          ...(typeof payload.contextBefore === 'string'
+            ? {contextBefore: payload.contextBefore}
+            : {}),
+          ...(typeof payload.contextAfter === 'string'
+            ? {contextAfter: payload.contextAfter}
+            : {}),
+        });
+      }
+      setPendingOriginalText(trimmed);
+      setPendingOffsets(soft);
+      setAddVisible(true);
+    },
+    [content],
   );
-
-  const handleSelectionAnnotate = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) {
-      return;
-    }
-    setPendingOriginalText(trimmed);
-    setAddVisible(true);
-  }, []);
 
   const handleAddConfirm = useCallback(
     async (userAnnotation: string) => {
       if (!annotateEnabled || sessionId == null || sessionId === '') {
         return;
       }
-      const soft = estimateSoftRangeFromOriginalText(
-        content,
-        pendingOriginalText,
-      );
+      const soft = pendingOffsets;
+      const lineFields =
+        soft != null
+          ? deriveSoftRangeFieldsFromOffsets(
+              content,
+              soft.startOffset,
+              soft.endOffset,
+            )
+          : null;
       addChatAnnotateDraft(sessionId, {
         id: newAnnotateId(),
         path,
@@ -185,16 +216,34 @@ export function FileMarkdownPreview({
         userAnnotation,
         ...(soft
           ? {
-              startLine: soft.startLine,
-              endLine: soft.endLine,
-              ...(soft.startCol != null ? {startCol: soft.startCol} : {}),
-              ...(soft.endCol != null ? {endCol: soft.endCol} : {}),
+              startOffset: soft.startOffset,
+              endOffset: soft.endOffset,
+              ...(lineFields
+                ? {
+                    startLine: lineFields.startLine,
+                    endLine: lineFields.endLine,
+                    ...(lineFields.startCol != null
+                      ? {startCol: lineFields.startCol}
+                      : {}),
+                    ...(lineFields.endCol != null
+                      ? {endCol: lineFields.endCol}
+                      : {}),
+                  }
+                : {}),
             }
           : {}),
       });
       refreshComposerAnnotateChips(sessionId);
+      setPendingOffsets(null);
     },
-    [annotateEnabled, sessionId, path, pendingOriginalText, content],
+    [
+      annotateEnabled,
+      sessionId,
+      path,
+      pendingOriginalText,
+      pendingOffsets,
+      content,
+    ],
   );
 
   const handleAnnotateOpen = useCallback(
@@ -256,14 +305,57 @@ export function FileMarkdownPreview({
     showFrontMatter && split?.closed
       ? parseFrontMatterFields(fmLines)
       : [];
-  const mdBody =
-    isMdPath && split?.closed ? (split.body ?? '').trim() : '';
+
+  /**
+   * A15：全文注入再 split。文本 Tab / MD Tab 各自 mode 派生；
+   * 无 annotate 时仍走无锚原文。
+   */
+  const annotatedTextSource = useMemo(() => {
+    if (!annotateEnabled) {
+      return null;
+    }
+    return buildAnnotatedSource({
+      sourceText: content,
+      drafts: pathDrafts,
+      mode: 'text',
+    }).annotatedSource;
+  }, [annotateEnabled, content, pathDrafts]);
+
+  const annotatedMarkdownSource = useMemo(() => {
+    if (!annotateEnabled) {
+      return null;
+    }
+    return buildAnnotatedSource({
+      sourceText: content,
+      drafts: pathDrafts,
+      mode: 'markdown',
+    }).annotatedSource;
+  }, [annotateEnabled, content, pathDrafts]);
+
+  const mdBody = useMemo(() => {
+    if (annotateEnabled && annotatedMarkdownSource != null && isMdPath) {
+      const annSplit = splitMarkdownFrontMatter(annotatedMarkdownSource);
+      return annSplit.closed ? (annSplit.body ?? '').trim() : '';
+    }
+    return isMdPath && split?.closed ? (split.body ?? '').trim() : '';
+  }, [
+    annotateEnabled,
+    annotatedMarkdownSource,
+    isMdPath,
+    split?.closed,
+    split?.body,
+  ]);
 
   // Non-md + Markdown Tab: full file as body (no front-matter split).
-  const nonMdBody = useMemo(
-    () => (!isMdPath ? content.trim() : ''),
-    [content, isMdPath],
-  );
+  const nonMdBody = useMemo(() => {
+    if (!isMdPath) {
+      if (annotateEnabled && annotatedMarkdownSource != null) {
+        return annotatedMarkdownSource.trim();
+      }
+      return content.trim();
+    }
+    return '';
+  }, [isMdPath, annotateEnabled, annotatedMarkdownSource, content]);
 
   const mdOverLimit = isRichContentOverLimit(mdBody);
   const nonMdOverLimit = isRichContentOverLimit(nonMdBody);
@@ -290,6 +382,26 @@ export function FileMarkdownPreview({
       return undefined;
     }
   }, [nonMdBody, nonMdOverLimit, previewEngine]);
+
+  /** 文本 Tab 认锚 HTML（消毒后 TrustedHtml / pre-wrap）。 */
+  const plainAnnotatedHtml = useMemo(() => {
+    if (!annotateEnabled || annotatedTextSource == null) {
+      return undefined;
+    }
+    if (plainOverLimit || previewEngine !== 'webview') {
+      return undefined;
+    }
+    try {
+      return sanitizeRichHtml(annotatedTextSource);
+    } catch {
+      return undefined;
+    }
+  }, [
+    annotateEnabled,
+    annotatedTextSource,
+    plainOverLimit,
+    previewEngine,
+  ]);
 
   const mdUseWebViewPreview =
     previewEngine === 'webview' &&
@@ -321,9 +433,7 @@ export function FileMarkdownPreview({
   const annotateWebProps = annotateEnabled
     ? {
         annotateEnabled: true as const,
-        annotations: annotationMarks,
-        annotateSourceText: content,
-        onSelectionAnnotate: handleSelectionAnnotate,
+        onAnnotateCollect: handleAnnotateCollect,
         onAnnotateOpen: handleAnnotateOpen,
       }
     : {annotateEnabled: false as const};
@@ -340,7 +450,10 @@ export function FileMarkdownPreview({
         }
         placeholder="批注说明"
         confirmLabel="添加"
-        onClose={() => setAddVisible(false)}
+        onClose={() => {
+          setAddVisible(false);
+          setPendingOffsets(null);
+        }}
         onConfirm={handleAddConfirm}
       />
       <MessageEditModal
@@ -394,14 +507,17 @@ export function FileMarkdownPreview({
   }
 
   // renderKind drives tab: txt shows raw source for all file types.
-  // 划词批注开启时走 WebView plain，以便选区/下划线（md/txt 同验收）。
+  // 划词批注开启时走 WebView 认锚 HTML（md/txt 同验收）。
   if (renderKind === 'txt') {
     if (annotateEnabled) {
       return (
         <View style={[styles.root, previewFill && styles.fillRoot]}>
           <RichDocumentWebView
             key={path}
+            html={plainAnnotatedHtml}
             plain={content}
+            layout="plain"
+            annotateCollectMode="plain"
             overLimit={plainOverLimit}
             style={previewFill ? styles.webBody : undefined}
             {...annotateWebProps}
@@ -431,15 +547,16 @@ export function FileMarkdownPreview({
           <RichDocumentWebView
             key={path}
             html={nonMdBodyHtml}
-            plain={nonMdBody}
+            plain={content.trim()}
+            annotateCollectMode="markdown"
             overLimit={nonMdOverLimit}
             style={previewFill ? styles.webBody : undefined}
             {...annotateWebProps}
           />
-        ) : nonMdBody ? (
+        ) : content.trim() ? (
           <PreviewScrollWrap previewFill={previewFill}>
             <RichContentBody
-              content={nonMdBody}
+              content={content.trim()}
               tokens={tokens}
               variant="file-preview"
             />
@@ -466,7 +583,8 @@ export function FileMarkdownPreview({
         <RichDocumentWebView
           key={path}
           html={mdBodyHtml}
-          plain={mdBody || content}
+          plain={(split?.body ?? '').trim() || content}
+          annotateCollectMode="markdown"
           overLimit={mdOverLimit}
           frontMatterHtml={frontMatterHtml}
           style={previewFill ? styles.webBody : undefined}
@@ -485,7 +603,10 @@ export function FileMarkdownPreview({
           ) : null}
           <PreviewScrollWrap previewFill={previewFill}>
             <RichContentBody
-              content={mdBody}
+              content={
+                // RN 回退不认锚：无 WebView 时用无锚正文（A12）
+                (split?.body ?? '').trim() || content
+              }
               tokens={tokens}
               variant="file-preview"
             />

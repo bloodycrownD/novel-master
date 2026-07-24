@@ -8,7 +8,12 @@ import {
   handleHostMessage,
   registerSetDocumentView,
 } from './runtime/bridge';
-import { bindAnnotateUi, refreshAnnotateMarks } from './runtime/annotate';
+import {
+  bindAnnotateUi,
+  isAnnotateDomSearchFallbackEnabled,
+  refreshAnnotateMarks,
+} from './runtime/annotate';
+import { bindAnnotateCollectBridge } from './runtime/annotate-collect';
 import { DocumentApp } from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
@@ -16,10 +21,14 @@ const docRoot = document.getElementById('doc');
 registerSetDocumentView((payload) => {
   if (!docRoot) return;
   render(h(DocumentApp, { payload }), docRoot);
-  refreshAnnotateMarks();
+  // 主路径高亮已在宿主注入锚；仅应急开关下重建旧 marks
+  if (isAnnotateDomSearchFallbackEnabled()) {
+    refreshAnnotateMarks();
+  }
 });
 
 bindAnnotateUi();
+bindAnnotateCollectBridge();
 
 document.addEventListener('message', function (e: Event) {
   const ev = e as MessageEvent;

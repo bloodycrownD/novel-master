@@ -11,6 +11,7 @@ import { post } from './post';
 import {
   setAnnotateEnabled,
   setAnnotations,
+  isAnnotateDomSearchFallbackEnabled,
 } from './annotate';
 import type { AnnotateMark } from './annotate-marks';
 
@@ -86,6 +87,10 @@ export function handleHostMessage(raw: unknown): void {
     return;
   }
   if (msg.type === 'setAnnotations') {
+    // 主路径已退役；仅应急开关接受搜字 annotations
+    if (!isAnnotateDomSearchFallbackEnabled()) {
+      return;
+    }
     const rawList = msg.payload?.annotations;
     const list = Array.isArray(rawList)
       ? (rawList as AnnotateMark[])

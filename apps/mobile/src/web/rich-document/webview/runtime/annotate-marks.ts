@@ -14,6 +14,8 @@ import {
   mapFlatRangeToSegments,
   normalizeAnnotateNeedle,
   normalizeAnnotateNeedleStripNewlines,
+  annotateOccurrenceOrdinal,
+  selectAnnotateOccurrenceStarts,
   sortAnnotateTextsLongestFirst,
 } from '@novel-master/core/chat';
 import {
@@ -138,7 +140,7 @@ export function getRegisteredCssAnnotateRanges(): readonly RegisteredAnnotateRan
 
 /**
  * H4：按点击坐标解析 draft ids。
- * 优先 highlightsFromPoint（若有）；否则 caretRangeFromPoint / caretPositionFromPoint 与已注册 Range 求交。
+ * 优先 CSS.highlights.highlightsFromPoint（若有）→ caret 求交 → Range getClientRects 命中。
  * 失败返回 []，不抛。
  */
 export function hitTestCssAnnotateIds(
@@ -153,20 +155,32 @@ export function hitTestCssAnnotateIds(
 
   const g = globalObj as {
     CSS?: {
-      highlightsFromPoint?: (
-        x: number,
-        y: number,
-      ) => Iterable<unknown> | unknown[] | null | undefined;
+      highlights?: {
+        highlightsFromPoint?: (
+          x: number,
+          y: number,
+        ) => Iterable<unknown> | unknown[] | null | undefined;
+      };
     };
   };
+  let namedHighlightHit = false;
   try {
-    const fromPoint = g.CSS?.highlightsFromPoint;
+    const fromPoint = g.CSS?.highlights?.highlightsFromPoint;
     if (typeof fromPoint === 'function') {
-      const hits = fromPoint.call(g.CSS, clientX, clientY);
+      const hits = fromPoint.call(g.CSS.highlights, clientX, clientY);
       if (hits != null) {
-        for (const h of hits as Iterable<{name?: string}>) {
-          if (h && (h as {name?: string}).name === ANNOTATE_HIGHLIGHT_NAME) {
-            // 有命名命中时仍用 caret 解析具体 ids
+        for (const h of hits as Iterable<unknown>) {
+          const name =
+            typeof h === 'string'
+              ? h
+              : h != null &&
+                  typeof h === 'object' &&
+                  'name' in h &&
+                  typeof (h as {name: unknown}).name === 'string'
+                ? (h as {name: string}).name
+                : null;
+          if (name === ANNOTATE_HIGHLIGHT_NAME) {
+            namedHighlightHit = true;
             break;
           }
         }
@@ -177,12 +191,50 @@ export function hitTestCssAnnotateIds(
   }
 
   const caret = caretRangeAtPoint(doc, clientX, clientY);
-  if (!caret) {
-    return [];
+  if (caret) {
+    for (const entry of registeredCssRanges) {
+      if (rangeContainsCaret(entry.range, caret)) {
+        return [...entry.ids];
+      }
+    }
   }
+
+  const byRects = hitTestRegisteredRangesByClientRects(clientX, clientY);
+  if (byRects.length > 0) {
+    return byRects;
+  }
+
+  // FromPoint 命中命名高亮但 caret/rects 都失败时：退回首个已注册条目（单批注常见）
+  if (namedHighlightHit && registeredCssRanges.length === 1) {
+    return [...registeredCssRanges[0]!.ids];
+  }
+  return [];
+}
+
+function hitTestRegisteredRangesByClientRects(
+  clientX: number,
+  clientY: number,
+): string[] {
   for (const entry of registeredCssRanges) {
-    if (rangeContainsCaret(entry.range, caret)) {
-      return [...entry.ids];
+    let rects: DOMRectList | ArrayLike<DOMRect> | null = null;
+    try {
+      rects = entry.range.getClientRects?.() ?? null;
+    } catch {
+      rects = null;
+    }
+    if (!rects || rects.length === 0) {
+      continue;
+    }
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i]!;
+      if (
+        clientX >= r.left &&
+        clientX <= r.right &&
+        clientY >= r.top &&
+        clientY <= r.bottom
+      ) {
+        return [...entry.ids];
+      }
     }
   }
   return [];
@@ -296,7 +348,12 @@ export function applyAnnotateMarks(
     if (ids == null || ids.length === 0) {
       continue;
     }
-    if (!shouldApplyText(text, annotations, options?.sourceText)) {
+    const preferred = resolvePreferredDomOrdinal(
+      text,
+      annotations,
+      options?.sourceText,
+    );
+    if (preferred.skip) {
       continue;
     }
     const needleForPlain = normalizeAnnotateNeedle(text);
@@ -310,42 +367,73 @@ export function applyAnnotateMarks(
         ids,
         pendingRanges,
         coveredSpans,
+        preferred.preferredOrdinal,
       );
     } else {
-      wrapAllPlainMatchesFlat(root, text, ids);
+      wrapAllPlainMatchesFlat(root, text, ids, preferred.preferredOrdinal);
     }
   }
 
   if (useHighlight && pendingRanges.length > 0) {
-    registerCssHighlight(pendingRanges, globalObj);
+    const ok = registerCssHighlight(pendingRanges, globalObj);
+    if (!ok) {
+      // 注册失败：同一批改走 mark，保证可点
+      for (const text of texts) {
+        const ids = byText.get(text);
+        if (ids == null || ids.length === 0) {
+          continue;
+        }
+        const preferred = resolvePreferredDomOrdinal(
+          text,
+          annotations,
+          options?.sourceText,
+        );
+        if (preferred.skip) {
+          continue;
+        }
+        wrapAllPlainMatchesFlat(root, text, ids, preferred.preferredOrdinal);
+      }
+    }
   }
 }
 
 /**
- * 有有效宽松行列且提供源文件时：窗口/扩大/全文均未命中则跳过 DOM 绘制（H5）。
- * 无行列或无源文件 → 仍走 DOM 全文匹配（现网）。
+ * 有有效宽松行列且提供源文件时：未命中则跳过；命中则返回出现序次供 DOM 优选（H5）。
+ * 无行列或无源文件 → 不约束（全文全标）。
  */
-function shouldApplyText(
+function resolvePreferredDomOrdinal(
   text: string,
   annotations: readonly AnnotateMark[],
   sourceText: string | undefined,
-): boolean {
+): {skip: boolean; preferredOrdinal: number | null} {
   if (typeof sourceText !== 'string' || sourceText.length === 0) {
-    return true;
+    return {skip: false, preferredOrdinal: null};
   }
-  const sample = annotations.find(
-    a => a.originalText === text && a.id.length > 0,
+  const softDrafts = annotations.filter(
+    a =>
+      a.originalText === text &&
+      a.id.length > 0 &&
+      hasValidAnnotateSoftRange(a),
   );
-  if (!sample || !hasValidAnnotateSoftRange(sample)) {
-    return true;
+  if (softDrafts.length === 0) {
+    return {skip: false, preferredOrdinal: null};
   }
-  return findAnnotateOccurrenceInSource(sourceText, text, sample) != null;
+  const sample = softDrafts[0]!;
+  const hit = findAnnotateOccurrenceInSource(sourceText, text, sample);
+  if (hit == null) {
+    // 源窗口 miss（常见于 MD 跨标记选区）：仍走 DOM，不 skip
+    return {skip: false, preferredOrdinal: null};
+  }
+  return {
+    skip: false,
+    preferredOrdinal: annotateOccurrenceOrdinal(sourceText, text, hit.index),
+  };
 }
 
 function registerCssHighlight(
   entries: readonly RegisteredAnnotateRange[],
   globalObj: typeof globalThis,
-): void {
+): boolean {
   const g = globalObj as {
     Highlight: new (...ranges: AbstractRange[]) => {
       add?: (range: AbstractRange) => void;
@@ -360,8 +448,10 @@ function registerCssHighlight(
         : new g.Highlight();
     g.CSS.highlights.set(ANNOTATE_HIGHLIGHT_NAME, highlight);
     registeredCssRanges = [...entries];
+    return true;
   } catch {
     registeredCssRanges = [];
+    return false;
   }
 }
 
@@ -375,6 +465,7 @@ function collectHighlightRangesForText(
   ids: readonly string[],
   out: RegisteredAnnotateRange[],
   coveredSpans: Array<{node: Text; start: number; end: number}>,
+  preferredOrdinal: number | null,
 ): void {
   const domains = collectUnmarkedTextDomains(root);
   for (const domain of domains) {
@@ -382,7 +473,14 @@ function collectHighlightRangesForText(
     if (!needle) {
       continue;
     }
-    collectOccurrencesAsRanges(domain, needle, ids, out, coveredSpans);
+    collectOccurrencesAsRanges(
+      domain,
+      needle,
+      ids,
+      out,
+      coveredSpans,
+      preferredOrdinal,
+    );
   }
 }
 
@@ -432,6 +530,7 @@ function collectOccurrencesAsRanges(
   ids: readonly string[],
   out: RegisteredAnnotateRange[],
   coveredSpans: Array<{node: Text; start: number; end: number}>,
+  preferredOrdinal: number | null,
 ): void {
   if (domainNodes.length === 0 || !needle) {
     return;
@@ -442,7 +541,10 @@ function collectOccurrencesAsRanges(
   }
   const segments = domainNodes.map(n => n.nodeValue ?? '');
   const index = buildFlatTextIndex(segments);
-  const hits = findAllOccurrences(index.haystack, needle);
+  const hits = selectAnnotateOccurrenceStarts(
+    findAllOccurrences(index.haystack, needle),
+    preferredOrdinal,
+  );
   for (const at of hits) {
     const locals = mapFlatRangeToSegments(at, at + needle.length, index);
     let blocked = false;
@@ -479,13 +581,14 @@ function collectOccurrencesAsRanges(
 }
 
 /**
- * 一次收集未 mark 的 Text（按 D1 分批）→ flat 全量命中 → 右到左多段 wrap。
- * 废弃 while + 200×findFirst 模型。
+ * 一次收集未 mark 的 Text（按 D1 分批）→ flat 命中 → 右到左多段 wrap。
+ * 有 preferredOrdinal 时只 wrap 最近一处（H5）。
  */
 function wrapAllPlainMatchesFlat(
   root: ParentNode,
   originalText: string,
   ids: readonly string[],
+  preferredOrdinal: number | null = null,
 ): void {
   const domains = collectUnmarkedTextDomains(root);
   for (const domain of domains) {
@@ -493,7 +596,7 @@ function wrapAllPlainMatchesFlat(
     if (!needle) {
       continue;
     }
-    wrapOccurrencesInDomain(domain, needle, ids);
+    wrapOccurrencesInDomain(domain, needle, ids, preferredOrdinal);
   }
 }
 
@@ -501,13 +604,17 @@ function wrapOccurrencesInDomain(
   domainNodes: Text[],
   needle: string,
   ids: readonly string[],
+  preferredOrdinal: number | null,
 ): void {
   if (domainNodes.length === 0) {
     return;
   }
   const segments = domainNodes.map(n => n.nodeValue ?? '');
   const index = buildFlatTextIndex(segments);
-  const hits = findAllOccurrences(index.haystack, needle);
+  const hits = selectAnnotateOccurrenceStarts(
+    findAllOccurrences(index.haystack, needle),
+    preferredOrdinal,
+  );
   if (hits.length === 0) {
     return;
   }

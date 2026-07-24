@@ -15,6 +15,7 @@ const DISALLOWED_TAGS = [
 /**
  * 消毒富文本 HTML：未知/禁止标签以 escape 转为实体字面量（不 discard 挖空），
  * 并剥离事件属性与危险 scheme，供 TrustedHtml / RenderHTML 使用。
+ * 批注锚：显式放行 `span[data-annotate-id]`（仅靠 class 不够，默认会剥 data-*）。
  */
 export function sanitizeRichHtml(html: string): string {
   return sanitizeHtml(html, {
@@ -31,6 +32,8 @@ export function sanitizeRichHtml(html: string): string {
     allowedAttributes: {
       ...sanitizeHtml.defaults.allowedAttributes,
       '*': ['style', 'class', 'id'],
+      // 预览锚管道：须保留 data-annotate-id，否则 closest 点击失效
+      span: ['style', 'class', 'id', 'data-annotate-id'],
       a: ['href', 'name', 'target', 'rel'],
       img: ['src', 'alt', 'title', 'width', 'height'],
       td: ['colspan', 'rowspan', 'style', 'class'],

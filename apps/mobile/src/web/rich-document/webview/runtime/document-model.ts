@@ -20,4 +20,8 @@ export type DocumentPayload = {
   overLimit?: boolean;
   html?: string;
   plain?: string;
+  /**
+   * html 布局：`plain` 保留 pre-wrap（认锚文本 Tab）；缺省 / `rich` 为 Markdown 富文本。
+   */
+  layout?: 'plain' | 'rich';
 };
