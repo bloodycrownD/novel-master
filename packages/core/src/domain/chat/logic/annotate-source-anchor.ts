@@ -1,6 +1,10 @@
 /**
- * 预览用源范围钉点 → 注入锚 → 内存派生串（不写盘）。
+ * 源范围钉点 → 注入锚 → 内存派生串（不写盘）。
  * `mode: "text"` 单壳；`mode: "markdown"` 按下划线可渲染单元多壳同 id。
+ *
+ * **非预览投影合同**（SPEC R5）：本模块可暂留实现供测试/兼容；
+ * 宿主 MD/plain 预览主路径禁止调用 {@link buildAnnotatedSource}。
+ * 预览高亮唯一走 Recogito + 草稿 `renderStart`/`renderEnd`。
  *
  * @module domain/chat/logic/annotate-source-anchor
  */
@@ -11,10 +15,10 @@ import type { AnnotateDraft } from "../model/annotate-draft.schema.js";
 /** 锚 class（A5）。 */
 export const ANNOTATE_ANCHOR_CLASS = "nm-annotate-anchor";
 
-/** 预览派生模式（A4）。 */
+/** 注锚派生模式（A4）；非预览投影主路径。 */
 export type BuildAnnotatedSourceMode = "text" | "markdown";
 
-/** {@link buildAnnotatedSource} 入参。 */
+/** {@link buildAnnotatedSource} 入参（非预览投影合同）。 */
 export type BuildAnnotatedSourceInput = {
   /** VFS 全文（含 FM）；见 A15 */
   readonly sourceText: string;
@@ -22,7 +26,7 @@ export type BuildAnnotatedSourceInput = {
   readonly mode: BuildAnnotatedSourceMode;
 };
 
-/** {@link buildAnnotatedSource} 出参。 */
+/** {@link buildAnnotatedSource} 出参（非预览投影合同）。 */
 export type BuildAnnotatedSourceResult = {
   /** 仅内存；含锚 HTML 子集，不写盘；同 drafts 下 text/markdown 可不同 */
   readonly annotatedSource: string;
@@ -366,6 +370,9 @@ function collectPiecesForDraft(
 /**
  * 由 VFS 原文 + drafts 生成仅内存的带锚派生串（A4–A8、A13）。
  * 多草稿按 `startOffset` 升序；v1 重叠禁止注入（记入 `skippedDraftIds`，保留草稿）。
+ *
+ * **禁止**宿主 MD/plain 预览主路径调用（SPEC R5）；
+ * 预览投影权威为 Recogito 渲染坐标（`renderStart`/`renderEnd`），非本函数输出。
  */
 export function buildAnnotatedSource(
   input: BuildAnnotatedSourceInput,

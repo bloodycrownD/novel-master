@@ -1,6 +1,8 @@
 /**
  * 批注宽松行列 / offset：以磁盘源文件为坐标系，采集选区窗口并裁剪源文本。
- * 供 Desktop / Mobile 加草稿写入；预览锚注入见 `annotate-source-anchor`。
+ * 供 Desktop / Mobile 加草稿写入。
+ * 旧 VFS soft offset 非预览投影权威；MD 预览高亮见宿主 Recogito（`renderStart`/`renderEnd`）。
+ * 注锚派生串（非预览主路径、可暂留）见 `annotate-source-anchor`。
  *
  * @module domain/chat/logic/annotate-source-range
  */

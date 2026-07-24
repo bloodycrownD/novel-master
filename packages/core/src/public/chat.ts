@@ -233,6 +233,11 @@ export type {
   AnnotateSoftRangeFields,
   AnnotateSoftSourceRange,
 } from '../domain/chat/logic/annotate-source-range.js';
+/**
+ * 注锚派生导出（非预览投影合同，SPEC R5）：
+ * 可暂留 `buildAnnotatedSource` 等符号；宿主 MD/plain 预览主路径禁止调用。
+ * 预览高亮唯一走 Recogito + 草稿 `renderStart`/`renderEnd`。
+ */
 export {
   ANNOTATE_ANCHOR_CLASS,
   annotateRangeMatchesOriginalText,
