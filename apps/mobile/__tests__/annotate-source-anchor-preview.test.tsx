@@ -1,5 +1,6 @@
 /**
- * T-SA6 / T-SA7 / T-SA9：Mobile 认锚预览、sanitize、点击与退役搜字主路径。
+ * T-SA6：sanitize 仍允许历史锚属性（兼容存量 HTML）；预览主路径已改 Recogito。
+ * T-SA7 / T-SA9：改为 Recogito 合同（干净 HTML + annotations 投影；plain 无批注）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -50,7 +51,6 @@ jest.mock('../src/components/vfs/AnnotatePickModal', () => ({
 
 jest.mock('../src/components/rich-content/sanitize-rich-html', () => ({
   sanitizeRichHtml: (html: string) => {
-    // 测试替身：保留 data-annotate-id，剥 script/onclick（对齐 T-SA6 合同）
     return html
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/\son\w+="[^"]*"/gi, '');
@@ -84,7 +84,7 @@ const tokens = {
   textTertiary: '#666',
 };
 
-describe('T-SA6 Mobile sanitize / 认锚 HTML', () => {
+describe('T-SA6 Mobile sanitize / 认锚 HTML（存量兼容）', () => {
   it('sanitize 后仍保留 data-annotate-id 与 nm-annotate-anchor', () => {
     const raw =
       '<span class="nm-annotate-anchor" data-annotate-id="a1">hello</span>';
@@ -116,12 +116,11 @@ describe('T-SA6 Mobile sanitize / 认锚 HTML', () => {
     expect(out).toContain('data-annotate-id="1"');
     expect(out).not.toMatch(/<script\b/i);
     expect(out).not.toMatch(/onclick/i);
-    // 用户可见的是锚内文本，不是字面量开标签串作为正文唯一内容
     expect(out).toMatch(/<span[^>]*data-annotate-id="1"[^>]*>foo<\/span>/);
   });
 });
 
-describe('T-SA7 FileMarkdownPreview 双 Tab 同源 draft id', () => {
+describe('T-SA7 FileMarkdownPreview MD Recogito / plain 禁用', () => {
   beforeEach(() => {
     mockReadEngine.mockReset();
     mockReadEngine.mockResolvedValue('webview');
@@ -133,7 +132,7 @@ describe('T-SA7 FileMarkdownPreview 双 Tab 同源 draft id', () => {
     resetChatAnnotateDraftStoreForTests();
   });
 
-  it('文本 Tab 与 MD Tab 对同一 draft 注入同 id 锚 HTML', async () => {
+  it('文本 Tab 不挂 WebView 批注；MD Tab 干净 HTML + annotations 投影', async () => {
     const sessionId = 's-sa7';
     const path = '/note.md';
     const content = `---
@@ -141,14 +140,13 @@ title: T
 ---
 hello world
 `;
-    const bodyStart = content.indexOf('hello');
     addChatAnnotateDraft(sessionId, {
       id: 'draft-sa7',
       path,
       originalText: 'hello',
       userAnnotation: '备注',
-      startOffset: bodyStart,
-      endOffset: bodyStart + 5,
+      renderStart: 0,
+      renderEnd: 5,
     });
 
     await act(async () => {
@@ -166,16 +164,7 @@ hello world
     await act(async () => {
       await Promise.resolve();
     });
-    const txtProps = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as {
-      html?: string;
-      layout?: string;
-      annotateCollectMode?: string;
-    };
-    expect(txtProps?.layout).toBe('plain');
-    expect(txtProps?.annotateCollectMode).toBe('plain');
-    expect(txtProps?.html).toContain('data-annotate-id="draft-sa7"');
-    expect(txtProps?.html).toContain('nm-annotate-anchor');
-    expect(txtProps?.html).not.toContain('annotations');
+    expect(mockRichDocumentWebView.mock.calls.length).toBe(0);
 
     mockRichDocumentWebView.mockClear();
 
@@ -196,17 +185,17 @@ hello world
     });
     const mdProps = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as {
       html?: string;
-      annotateCollectMode?: string;
-      annotations?: unknown;
+      annotations?: {id: string}[];
+      annotateEnabled?: boolean;
     };
-    expect(mdProps?.annotateCollectMode).toBe('markdown');
-    expect(mdProps?.html).toContain('data-annotate-id="draft-sa7"');
-    expect(mdProps?.annotations).toBeUndefined();
+    expect(mdProps?.annotateEnabled).toBe(true);
+    expect(mdProps?.html).not.toContain('data-annotate-id');
+    expect(mdProps?.annotations?.[0]?.id).toBe('draft-sa7');
   });
 });
 
-describe('T-SA9 预览主路径退役 DOM 搜字', () => {
-  it('RichDocumentWebView 默认源码不在刷新路径投递 setAnnotations', () => {
+describe('T-SA9 预览主路径无 DOM 搜字 / 无插锚', () => {
+  it('RichDocumentWebView 无 fallback 开关；annotate 时投递 setAnnotations', () => {
     const src = readFileSync(
       join(
         __dirname,
@@ -214,13 +203,13 @@ describe('T-SA9 预览主路径退役 DOM 搜字', () => {
       ),
       'utf8',
     );
-    expect(src).toContain('NM_ANNOTATE_DOM_SEARCH_FALLBACK');
-    expect(src).toMatch(
-      /if\s*\(\s*NM_ANNOTATE_DOM_SEARCH_FALLBACK\s*&&\s*annotateEnabled\s*\)/,
-    );
+    expect(src).not.toContain('NM_ANNOTATE_DOM_SEARCH_FALLBACK');
+    expect(src).toContain("type: 'setAnnotations'");
+    expect(src).toContain('annotations');
+    expect(src).not.toContain('createTextAnnotator'); // Recogito 在 WebView annotate.ts
   });
 
-  it('annotate.ts 默认不调用 applyAnnotateMarks；点击走 data-annotate-id', () => {
+  it('annotate.ts 使用 createTextAnnotator，不调用 applyAnnotateMarks', () => {
     const src = readFileSync(
       join(
         __dirname,
@@ -228,15 +217,12 @@ describe('T-SA9 预览主路径退役 DOM 搜字', () => {
       ),
       'utf8',
     );
-    expect(src).toContain('isAnnotateDomSearchFallbackEnabled');
-    expect(src).toContain('data-annotate-id');
-    expect(src).toContain('nm-annotate-anchor');
-    expect(src).toMatch(
-      /if\s*\(\s*!isAnnotateDomSearchFallbackEnabled\(\)\s*\)\s*\{\s*return;/,
-    );
+    expect(src).toContain('createTextAnnotator');
+    expect(src).not.toMatch(/applyAnnotateMarks\s*\(|from\s+['"][^'"]*annotate-marks/);
+    expect(src).not.toContain('isAnnotateDomSearchFallbackEnabled');
   });
 
-  it('FileMarkdownPreview 主路径调用 buildAnnotatedSource，不传 annotations', async () => {
+  it('FileMarkdownPreview 主路径不插锚，经 annotations 投影', async () => {
     mockReadEngine.mockResolvedValue('webview');
     mockRichDocumentWebView.mockClear();
     resetChatAnnotateDraftStoreForTests();
@@ -248,8 +234,8 @@ describe('T-SA9 预览主路径退役 DOM 搜字', () => {
       path,
       originalText: 'hello',
       userAnnotation: 'n',
-      startOffset: 0,
-      endOffset: 5,
+      renderStart: 0,
+      renderEnd: 5,
     });
     await act(async () => {
       TestRenderer.create(
@@ -269,9 +255,15 @@ describe('T-SA9 预览主路径退役 DOM 搜字', () => {
       string,
       unknown
     >;
-    expect(last.annotations).toBeUndefined();
-    expect(last.annotateSourceText).toBeUndefined();
-    expect(String(last.html ?? '')).toContain('data-annotate-id="x"');
+    expect(last.annotations).toEqual([
+      {
+        id: 'x',
+        originalText: 'hello',
+        renderStart: 0,
+        renderEnd: 5,
+      },
+    ]);
+    expect(String(last.html ?? '')).not.toContain('data-annotate-id="x"');
     resetChatAnnotateDraftStoreForTests();
   });
 });

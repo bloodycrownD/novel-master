@@ -10,25 +10,22 @@ import {
 } from './runtime/bridge';
 import {
   bindAnnotateUi,
-  isAnnotateDomSearchFallbackEnabled,
-  refreshAnnotateMarks,
+  destroyAnnotator,
+  refreshAnnotateAfterDocument,
 } from './runtime/annotate';
-import { bindAnnotateCollectBridge } from './runtime/annotate-collect';
 import { DocumentApp } from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
 
 registerSetDocumentView((payload) => {
+  // 换文档前先销毁 Recogito，避免挂在已卸载 DOM 上
+  destroyAnnotator();
   if (!docRoot) return;
   render(h(DocumentApp, { payload }), docRoot);
-  // 主路径高亮已在宿主注入锚；仅应急开关下重建旧 marks
-  if (isAnnotateDomSearchFallbackEnabled()) {
-    refreshAnnotateMarks();
-  }
+  refreshAnnotateAfterDocument();
 });
 
 bindAnnotateUi();
-bindAnnotateCollectBridge();
 
 document.addEventListener('message', function (e: Event) {
   const ev = e as MessageEvent;

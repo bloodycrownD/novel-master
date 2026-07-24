@@ -1,9 +1,9 @@
 /**
  * RN WebView wrapper for VFS markdown preview body — postMessage via RichDocumentBridge.
+ * MD 批注：干净 HTML setDocument + Recogito（WebView 内）；草稿 → setAnnotations。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
-import Clipboard from '@react-native-clipboard/clipboard';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 import type {ThemeTokens} from '../../theme/tokens';
 import {
@@ -11,7 +11,7 @@ import {
   decodeRichDocumentToHost,
   type HostToRichDocumentMessage,
   type RichDocumentAnnotationMark,
-  type RichDocumentSelectionCollectPayload,
+  type RichDocumentRecogitoCreatePayload,
   type RichDocumentTheme,
 } from './RichDocumentBridge';
 import {
@@ -22,55 +22,24 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
 
-/** 划词开启时替换系统选区菜单（自定义项会盖掉原生 Copy/Share，故自备「复制」）。 */
-export const RICH_DOCUMENT_ANNOTATE_MENU_ITEMS = [
-  {label: '批注', key: 'annotate'},
-  {label: '复制', key: 'copy'},
-] as const;
-
-/**
- * 应急：恢复旧 setAnnotations 搜字链。默认 false。
- * 测试或运维可在 RN 侧置 true（须与 Web `globalThis.__NM_ANNOTATE_DOM_SEARCH_FALLBACK__` 同步）。
- */
-export let NM_ANNOTATE_DOM_SEARCH_FALLBACK = false;
-
-export function setNmAnnotateDomSearchFallbackForTests(enabled: boolean): void {
-  NM_ANNOTATE_DOM_SEARCH_FALLBACK = enabled === true;
-}
-
-export type RichDocumentAnnotateCollectMode = 'plain' | 'markdown';
-
 export type RichDocumentWebViewProps = {
   readonly html?: string;
   readonly plain?: string;
   readonly overLimit?: boolean;
   readonly frontMatterHtml?: string;
   /**
-   * html 布局：文本认锚用 `plain`（pre-wrap）；Markdown 用 `rich`（缺省）。
+   * html 布局：文本用 `plain`（pre-wrap）；Markdown 用 `rich`（缺省）。
    */
   readonly layout?: 'plain' | 'rich';
   readonly style?: StyleProp<ViewStyle>;
-  /** 划词批注入口（仅 session 预览态由上层打开）。 */
+  /** 划词批注入口（仅 session 预览 + MD Tab 由上层打开）。 */
   readonly annotateEnabled?: boolean;
-  /**
-   * 划词采集模式：plain → injectJS 半开 offset；markdown → 邻域。
-   * 缺省按是否有 html 推断（有 html 且 layout!==plain → markdown）。
-   */
-  readonly annotateCollectMode?: RichDocumentAnnotateCollectMode;
-  /** @deprecated 仅应急开关下投递。 */
+  /** Recogito 投影列表（仅含 renderStart/renderEnd 的草稿）。 */
   readonly annotations?: readonly RichDocumentAnnotationMark[];
-  /** @deprecated 仅应急。 */
-  readonly annotateSourceText?: string;
-  /**
-   * menuItems「批注」→ injectJS 采集后的主回调（Step 5 主通道）。
-   */
-  readonly onAnnotateCollect?: (
-    payload: RichDocumentSelectionCollectPayload,
+  /** Recogito createAnnotation → 宿主写草稿。 */
+  readonly onRecogitoCreate?: (
+    payload: RichDocumentRecogitoCreatePayload,
   ) => void;
-  /**
-   * @deprecated 遗留：仅有 selectedText 时的降级；主路径请用 onAnnotateCollect。
-   */
-  readonly onSelectionAnnotate?: (text: string) => void;
   /** 同文多条时传入全部 id，由上层弹出选择列表。 */
   readonly onAnnotateOpen?: (ids: readonly string[]) => void;
 };
@@ -119,23 +88,6 @@ function buildSetDocumentPayload(
   };
 }
 
-function resolveCollectMode(
-  explicit: RichDocumentAnnotateCollectMode | undefined,
-  html: string | undefined,
-  layout: 'plain' | 'rich' | undefined,
-): RichDocumentAnnotateCollectMode {
-  if (explicit === 'plain' || explicit === 'markdown') {
-    return explicit;
-  }
-  if (layout === 'plain') {
-    return 'plain';
-  }
-  if (html != null && html.length > 0) {
-    return 'markdown';
-  }
-  return 'plain';
-}
-
 export function RichDocumentWebView({
   html,
   plain,
@@ -144,24 +96,17 @@ export function RichDocumentWebView({
   layout,
   style,
   annotateEnabled = false,
-  annotateCollectMode,
   annotations = EMPTY_ANNOTATIONS,
-  annotateSourceText,
-  onAnnotateCollect,
-  onSelectionAnnotate,
+  onRecogitoCreate,
   onAnnotateOpen,
 }: RichDocumentWebViewProps) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
-  const onAnnotateCollectRef = useRef(onAnnotateCollect);
-  const onSelectionAnnotateRef = useRef(onSelectionAnnotate);
+  const onRecogitoCreateRef = useRef(onRecogitoCreate);
   const onAnnotateOpenRef = useRef(onAnnotateOpen);
-  onAnnotateCollectRef.current = onAnnotateCollect;
-  onSelectionAnnotateRef.current = onSelectionAnnotate;
+  onRecogitoCreateRef.current = onRecogitoCreate;
   onAnnotateOpenRef.current = onAnnotateOpen;
-
-  const collectMode = resolveCollectMode(annotateCollectMode, html, layout);
 
   const postToWeb = useCallback((message: HostToRichDocumentMessage) => {
     webRef.current?.postMessage(encodeHostToRichDocument(message));
@@ -182,42 +127,29 @@ export function RichDocumentWebView({
         setWebReady(true);
         return;
       }
-      if (message.type === 'selectionCollect') {
+      if (message.type === 'recogitoCreate') {
         const p = message.payload;
-        const text = String(p.originalText ?? '')
-          .replace(/\u00a0/g, ' ')
-          .trim();
-        if (!text) {
+        const quote = String(p.quote ?? '')
+          .replace(/\u00a0/g, ' ');
+        const renderStart = Number(p.renderStart);
+        const renderEnd = Number(p.renderEnd);
+        if (
+          !quote.trim() ||
+          !Number.isFinite(renderStart) ||
+          !Number.isFinite(renderEnd) ||
+          renderStart < 0 ||
+          renderEnd <= renderStart
+        ) {
           return;
         }
-        onAnnotateCollectRef.current?.({
-          originalText: text,
-          mode: p.mode === 'plain' ? 'plain' : 'markdown',
-          ...(typeof p.selectionStart === 'number'
-            ? {selectionStart: p.selectionStart}
-            : {}),
-          ...(typeof p.selectionEnd === 'number'
-            ? {selectionEnd: p.selectionEnd}
-            : {}),
-          ...(typeof p.contextBefore === 'string'
-            ? {contextBefore: p.contextBefore}
-            : {}),
-          ...(typeof p.contextAfter === 'string'
-            ? {contextAfter: p.contextAfter}
+        onRecogitoCreateRef.current?.({
+          quote,
+          renderStart,
+          renderEnd,
+          ...(typeof p.tempId === 'string' && p.tempId.length > 0
+            ? {tempId: p.tempId}
             : {}),
         });
-        return;
-      }
-      if (message.type === 'selectionAnnotate') {
-        // 遗留通道：降级为仅原文
-        const text = String(message.payload.text ?? '').trim();
-        if (text) {
-          onAnnotateCollectRef.current?.({
-            originalText: text,
-            mode: 'markdown',
-          });
-          onSelectionAnnotateRef.current?.(text);
-        }
         return;
       }
       if (message.type === 'annotateOpen') {
@@ -253,8 +185,7 @@ export function RichDocumentWebView({
   }, [webReady, tokens, postToWeb]);
 
   /**
-   * 主路径：只 setDocument + setAnnotateEnabled。
-   * setAnnotations 仅应急开关（默认关）。
+   * 主路径：setDocument（干净 HTML）+ setAnnotateEnabled + setAnnotations（Recogito 投影）。
    */
   useEffect(() => {
     if (!webReady) {
@@ -268,7 +199,7 @@ export function RichDocumentWebView({
       type: 'setAnnotateEnabled',
       payload: {enabled: annotateEnabled === true},
     });
-    if (NM_ANNOTATE_DOM_SEARCH_FALLBACK && annotateEnabled) {
+    if (annotateEnabled) {
       postToWeb({
         v: 1,
         type: 'setAnnotations',
@@ -276,17 +207,9 @@ export function RichDocumentWebView({
           annotations: annotations.map(a => ({
             id: a.id,
             originalText: a.originalText,
-            ...(typeof a.startLine === 'number'
-              ? {startLine: a.startLine}
-              : {}),
-            ...(typeof a.endLine === 'number' ? {endLine: a.endLine} : {}),
-            ...(typeof a.startCol === 'number' ? {startCol: a.startCol} : {}),
-            ...(typeof a.endCol === 'number' ? {endCol: a.endCol} : {}),
+            renderStart: a.renderStart,
+            renderEnd: a.renderEnd,
           })),
-          ...(typeof annotateSourceText === 'string' &&
-          annotateSourceText.length > 0
-            ? {sourceText: annotateSourceText}
-            : {}),
         },
       });
     }
@@ -299,49 +222,8 @@ export function RichDocumentWebView({
     layout,
     annotateEnabled,
     annotations,
-    annotateSourceText,
     postToWeb,
   ]);
-
-  const requestSelectionCollect = useCallback(
-    (fallbackText: string) => {
-      const mode = collectMode;
-      const escaped = mode === 'plain' ? 'plain' : 'markdown';
-      // 菜单回调通常只有 selectedText；injectJS 补 offset / 邻域
-      webRef.current?.injectJavaScript(
-        `(function(){try{if(typeof window.__nmCollectAnnotateSelection==='function'){window.__nmCollectAnnotateSelection('${escaped}');}else{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify({v:1,type:'selectionCollect',payload:{originalText:${JSON.stringify(fallbackText)},mode:'${escaped}'}}));}}catch(e){} true;})();`,
-      );
-    },
-    [collectMode],
-  );
-
-  const handleCustomMenuSelection = useCallback(
-    (event: {nativeEvent: {key?: string; selectedText?: string}}) => {
-      if (!annotateEnabled) {
-        return;
-      }
-      const key = String(event.nativeEvent.key ?? '');
-      const text = String(event.nativeEvent.selectedText ?? '')
-        .replace(/\u00a0/g, ' ')
-        .trim();
-      if (!text) {
-        return;
-      }
-      if (key === 'annotate') {
-        if (onAnnotateCollectRef.current) {
-          requestSelectionCollect(text);
-          return;
-        }
-        // 无 collect 回调时降级（测试 / 旧接线）
-        onSelectionAnnotateRef.current?.(text);
-        return;
-      }
-      if (key === 'copy') {
-        Clipboard.setString(text);
-      }
-    },
-    [annotateEnabled, requestSelectionCollect],
-  );
 
   return (
     <View style={[styles.fill, style]}>
@@ -360,15 +242,6 @@ export function RichDocumentWebView({
         scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         keyboardDisplayRequiresUserAction={false}
-        /* 划词批注：自定义选区菜单替换系统项；须自备「复制」。 */
-        menuItems={
-          annotateEnabled
-            ? [...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]
-            : undefined
-        }
-        onCustomMenuSelection={
-          annotateEnabled ? handleCustomMenuSelection : undefined
-        }
       />
     </View>
   );

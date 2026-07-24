@@ -1,153 +1,157 @@
 /**
- * rich-document 划词批注：锚点击打开；应急时可恢复旧 DOM 搜字 apply。
- * 「添加批注」由 RN WebView `menuItems` 提供（见 RichDocumentWebView）。
- * 主预览高亮来自 buildAnnotatedSource 注入的 `nm-annotate-anchor`，默认不再 applyAnnotateMarks。
+ * rich-document 划词批注：仅 Markdown 预览挂 @recogito/text-annotator。
+ * createAnnotation → bridge recogitoCreate；草稿变更 → setAnnotations 重投影。
+ * 禁止源串插锚与 DOM 搜字 apply 作为主路径。
  */
+import { createTextAnnotator, type TextAnnotator } from '@recogito/text-annotator';
 import { post } from './post';
 import {
-  ANNOTATE_IDS_ATTR,
-  ANNOTATE_MARK_CLASS,
-  applyAnnotateMarks,
-  hitTestCssAnnotateIds,
-  parseAnnotateIdsAttr,
-  type AnnotateMark,
-} from './annotate-marks';
-import { ensureAnnotateHighlightCss } from './annotate-highlight-css';
+  draftsToRecogitoAnnotations,
+  recogitoAnnotationToDraftFields,
+  type RecogitoTextAnnotation,
+} from './annotate-recogito-map';
 
-/** 锚 class / 属性（与 Core ANNOTATE_ANCHOR_CLASS 对齐）。 */
-export const ANNOTATE_ANCHOR_CLASS = 'nm-annotate-anchor';
-export const ANNOTATE_ID_ATTR = 'data-annotate-id';
-
-/**
- * 应急开关：临时恢复旧 setAnnotations → applyAnnotateMarks 搜字主路径。
- * 默认关；仅当 `globalThis.__NM_ANNOTATE_DOM_SEARCH_FALLBACK__ === true`。
- */
-export function isAnnotateDomSearchFallbackEnabled(): boolean {
-  try {
-    return (
-      (globalThis as { __NM_ANNOTATE_DOM_SEARCH_FALLBACK__?: unknown })
-        .__NM_ANNOTATE_DOM_SEARCH_FALLBACK__ === true
-    );
-  } catch {
-    return false;
-  }
-}
+export type AnnotateRenderMark = {
+  readonly id: string;
+  readonly originalText: string;
+  readonly renderStart: number;
+  readonly renderEnd: number;
+};
 
 let annotateEnabled = false;
-let annotations: AnnotateMark[] = [];
-let sourceText = '';
-let clickListenerBound = false;
+let annotations: AnnotateRenderMark[] = [];
+let annotator: TextAnnotator | null = null;
+/** 已由宿主确认并 setAnnotations 的 draft id；用于 selectionChanged 打开详情。 */
+const knownDraftIds = new Set<string>();
+/** createAnnotation 进行中：避免紧随其后的 selectionChanged 误开详情。 */
+let suppressOpenUntil = 0;
 
 export function setAnnotateEnabled(enabled: boolean): void {
   annotateEnabled = enabled === true;
   if (!annotateEnabled) {
-    clearSelectionQuiet();
+    destroyAnnotator();
+    return;
   }
-  refreshAnnotateMarks();
+  ensureAnnotator();
+  applyAnnotationsToAnnotator();
 }
 
-export function setAnnotations(
-  next: readonly AnnotateMark[],
-  nextSourceText?: string,
-): void {
+export function setAnnotations(next: readonly AnnotateRenderMark[]): void {
   annotations = Array.isArray(next)
-    ? next.map(a => ({
-        id: String(a.id ?? ''),
-        originalText: String(a.originalText ?? ''),
-        ...(typeof a.startLine === 'number' ? { startLine: a.startLine } : {}),
-        ...(typeof a.endLine === 'number' ? { endLine: a.endLine } : {}),
-        ...(typeof a.startCol === 'number' ? { startCol: a.startCol } : {}),
-        ...(typeof a.endCol === 'number' ? { endCol: a.endCol } : {}),
-      }))
+    ? next
+        .map(a => ({
+          id: String(a.id ?? ''),
+          originalText: String(a.originalText ?? ''),
+          renderStart: Number(a.renderStart),
+          renderEnd: Number(a.renderEnd),
+        }))
+        .filter(
+          a =>
+            a.id.length > 0 &&
+            Number.isFinite(a.renderStart) &&
+            Number.isFinite(a.renderEnd) &&
+            a.renderStart >= 0 &&
+            a.renderEnd > a.renderStart,
+        )
     : [];
-  if (typeof nextSourceText === 'string') {
-    sourceText = nextSourceText;
+  knownDraftIds.clear();
+  for (const a of annotations) {
+    knownDraftIds.add(a.id);
   }
-  refreshAnnotateMarks();
-}
-
-/** 单独更新源文件文本（与 setAnnotations 拆开投递时用）。 */
-export function setAnnotateSourceText(next: string): void {
-  sourceText = typeof next === 'string' ? next : '';
-  refreshAnnotateMarks();
+  if (!annotateEnabled) {
+    destroyAnnotator();
+    return;
+  }
+  ensureAnnotator();
+  applyAnnotationsToAnnotator();
 }
 
 /**
- * setDocument 渲染后：仅应急开关下重建旧 marks。
- * 默认主路径高亮已由宿主注入锚完成，禁止再搜字 apply。
+ * setDocument 渲染后：重建 Recogito（DOM 已换）。
+ * 由 main.registerSetDocumentView 在 Preact render 之后调用。
  */
-export function refreshAnnotateMarks(): void {
-  if (!isAnnotateDomSearchFallbackEnabled()) {
+export function refreshAnnotateAfterDocument(): void {
+  destroyAnnotator();
+  if (!annotateEnabled) {
+    return;
+  }
+  ensureAnnotator();
+  applyAnnotationsToAnnotator();
+}
+
+export function destroyAnnotator(): void {
+  if (annotator) {
+    try {
+      annotator.destroy();
+    } catch {
+      // ignore
+    }
+    annotator = null;
+  }
+}
+
+/** 生命周期入口：当前无额外全局监听；保留符号供契约测 / 未来扩展。 */
+export function bindAnnotateUi(): void {
+  // Recogito 在 ensureAnnotator 时挂到 .doc-body
+}
+
+function ensureAnnotator(): void {
+  if (annotator) {
     return;
   }
   const body = document.querySelector('.doc-body');
-  if (!body) {
+  if (!(body instanceof HTMLElement)) {
     return;
   }
-  if (!annotateEnabled || annotations.length === 0) {
-    applyAnnotateMarks(body, []);
+  const anno = createTextAnnotator(body, {
+    annotatingEnabled: true,
+  });
+  anno.on('createAnnotation', onCreateAnnotation);
+  anno.on('selectionChanged', onSelectionChanged);
+  annotator = anno;
+}
+
+function applyAnnotationsToAnnotator(): void {
+  if (!annotator) {
     return;
   }
-  applyAnnotateMarks(body, annotations, {
-    sourceText: sourceText.length > 0 ? sourceText : undefined,
-    // Mobile WebView ::highlight 常几乎看不见；应急 mark 回退保证可见可点
-    forceMarkFallback: true,
+  const list = draftsToRecogitoAnnotations(annotations) as RecogitoTextAnnotation[];
+  // Recogito setAnnotations 接受 TextAnnotation[]；映射形状与库一致
+  annotator.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
+}
+
+function onCreateAnnotation(annotation: unknown): void {
+  const fields = recogitoAnnotationToDraftFields(
+    annotation as Parameters<typeof recogitoAnnotationToDraftFields>[0],
+  );
+  if (!fields) {
+    return;
+  }
+  suppressOpenUntil = Date.now() + 400;
+  post('recogitoCreate', {
+    quote: fields.originalText,
+    renderStart: fields.renderStart,
+    renderEnd: fields.renderEnd,
+    tempId: fields.id,
   });
 }
 
-export function bindAnnotateUi(): void {
-  ensureAnnotateHighlightCss();
-  if (!clickListenerBound) {
-    clickListenerBound = true;
-    document.addEventListener('click', onDocClick, true);
-  }
-}
-
-function clearSelectionQuiet(): void {
-  const sel = window.getSelection();
-  sel?.removeAllRanges();
-}
-
-function onDocClick(e: Event): void {
-  const me = e as MouseEvent;
-  const target = e.target as Element | null;
-  if (target && typeof target.closest === 'function') {
-    // 主路径：源范围锚
-    const anchor = target.closest(
-      `[${ANNOTATE_ID_ATTR}], .${ANNOTATE_ANCHOR_CLASS}`,
-    );
-    if (anchor) {
-      const id = anchor.getAttribute(ANNOTATE_ID_ATTR);
-      if (id) {
-        e.preventDefault();
-        e.stopPropagation();
-        post('annotateOpen', { ids: [id] });
-        return;
-      }
-    }
-    // 应急：旧 mark
-    const mark = target.closest(`.${ANNOTATE_MARK_CLASS}`);
-    if (mark) {
-      const ids = parseAnnotateIdsAttr(mark.getAttribute(ANNOTATE_IDS_ATTR));
-      if (ids.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        post('annotateOpen', { ids });
-        return;
-      }
-    }
-  }
-  if (!isAnnotateDomSearchFallbackEnabled()) {
+function onSelectionChanged(selected: unknown): void {
+  if (Date.now() < suppressOpenUntil) {
     return;
   }
-  // Highlight 应急：无 mark 时按坐标命中
-  const x = typeof me.clientX === 'number' ? me.clientX : 0;
-  const y = typeof me.clientY === 'number' ? me.clientY : 0;
-  const cssIds = hitTestCssAnnotateIds(x, y);
-  if (cssIds.length === 0) {
+  if (!Array.isArray(selected) || selected.length === 0) {
     return;
   }
-  e.preventDefault();
-  e.stopPropagation();
-  post('annotateOpen', { ids: cssIds });
+  const ids: string[] = [];
+  for (const item of selected) {
+    const id = String((item as {id?: string})?.id ?? '');
+    if (id.length > 0 && knownDraftIds.has(id)) {
+      ids.push(id);
+    }
+  }
+  if (ids.length === 0) {
+    return;
+  }
+  post('annotateOpen', {ids});
 }

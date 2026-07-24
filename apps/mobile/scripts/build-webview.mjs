@@ -18,8 +18,11 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const mobileRoot = join(__dirname, '..');
@@ -165,6 +168,16 @@ async function buildPackage(pkg, richStyles) {
   mkdirSync(outDir, { recursive: true });
 
   const jsPath = await bundleAppJs(pkg.id, entryAbs);
+  // rich-document：把 Recogito 样式打进 app.css（file:// WebView 不能靠 CDN）
+  if (pkg.id === 'rich-document') {
+    const recogitoCssPath = require.resolve(
+      '@recogito/text-annotator/text-annotator.css',
+    );
+    css = `${css}\n/* @recogito/text-annotator */\n${readFileSync(
+      recogitoCssPath,
+      'utf8',
+    )}\n`;
+  }
   const cssPath = join(outDir, 'app.css');
   const htmlPath = join(outDir, 'index.html');
   writeFileSync(cssPath, css, 'utf8');

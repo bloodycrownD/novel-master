@@ -1,7 +1,7 @@
 /**
  * Markdown file preview with Front Matter card and themed body rendering.
- * 划词批注：仅 annotateEnabled（session 预览态）经 WebView 桥接入；
- * 预览高亮 = buildAnnotatedSource 注入锚后再 setDocument（非 DOM 搜字）。
+ * 划词批注：仅 MD Tab + annotateEnabled；干净 HTML setDocument 后 WebView 内 Recogito。
+ * plain/文本 Tab：禁用批注入口与投影。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
@@ -13,12 +13,6 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
 import type {AnnotateDraft} from '@novel-master/core/chat';
-import {
-  buildAnnotatedSource,
-  deriveSoftRangeFieldsFromOffsets,
-  estimateSoftOffsetRangeFromPlainOffsets,
-  estimateSoftOffsetRangeFromQuoteContext,
-} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
@@ -36,12 +30,14 @@ import {
 import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
-import {sanitizeRichHtml} from '../rich-content/sanitize-rich-html';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
-import type {RichDocumentSelectionCollectPayload} from './RichDocumentBridge';
+import type {
+  RichDocumentAnnotationMark,
+  RichDocumentRecogitoCreatePayload,
+} from './RichDocumentBridge';
 import {AnnotatePickModal} from './AnnotatePickModal';
 import {RichDocumentWebView} from './RichDocumentWebView';
 
@@ -63,7 +59,7 @@ interface FileMarkdownPreviewProps {
   renderKind?: PreviewRenderKind;
   /**
    * 划词批注入口。仅 FileEditorScreen 在 previewMode && scopeKind==="session" 时打开。
-   * project/global/编辑态必须为 false。
+   * project/global/编辑态必须为 false。plain Tab 即使为 true 也不挂 Recogito。
    */
   annotateEnabled?: boolean;
   /** annotateEnabled 时必填：写入 chat-annotate-draft 会话 Map。 */
@@ -95,6 +91,30 @@ function PreviewScrollWrap({
   );
 }
 
+/** 仅成对 renderStart/renderEnd 的草稿可投影（R8）。 */
+export function pathDraftsToRecogitoMarks(
+  drafts: readonly AnnotateDraft[],
+): RichDocumentAnnotationMark[] {
+  const out: RichDocumentAnnotationMark[] = [];
+  for (const d of drafts) {
+    if (
+      typeof d.renderStart !== 'number' ||
+      typeof d.renderEnd !== 'number' ||
+      d.renderStart < 0 ||
+      d.renderEnd <= d.renderStart
+    ) {
+      continue;
+    }
+    out.push({
+      id: d.id,
+      originalText: d.originalText,
+      renderStart: d.renderStart,
+      renderEnd: d.renderEnd,
+    });
+  }
+  return out;
+}
+
 export function FileMarkdownPreview({
   path,
   content,
@@ -112,9 +132,9 @@ export function FileMarkdownPreview({
   const [draftTick, setDraftTick] = useState(0);
   const [addVisible, setAddVisible] = useState(false);
   const [pendingOriginalText, setPendingOriginalText] = useState('');
-  const [pendingOffsets, setPendingOffsets] = useState<{
-    startOffset: number;
-    endOffset: number;
+  const [pendingRenderRange, setPendingRenderRange] = useState<{
+    renderStart: number;
+    renderEnd: number;
   } | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
@@ -147,6 +167,11 @@ export function FileMarkdownPreview({
     return listChatAnnotateDrafts(sessionId).filter(d => d.path === path);
   }, [annotateEnabled, sessionId, path, draftTick]);
 
+  const recogitoMarks = useMemo(
+    () => pathDraftsToRecogitoMarks(pathDrafts),
+    [pathDrafts],
+  );
+
   useEffect(() => {
     if (!annotateEnabled || sessionId == null || sessionId === '') {
       return;
@@ -158,41 +183,20 @@ export function FileMarkdownPreview({
     });
   }, [annotateEnabled, sessionId]);
 
-  const handleAnnotateCollect = useCallback(
-    (payload: RichDocumentSelectionCollectPayload) => {
-      const trimmed = payload.originalText.trim();
+  const handleRecogitoCreate = useCallback(
+    (payload: RichDocumentRecogitoCreatePayload) => {
+      const trimmed = payload.quote.trim();
       if (!trimmed) {
         return;
       }
-      let soft: {startOffset: number; endOffset: number} | null = null;
-      if (
-        payload.mode === 'plain' &&
-        typeof payload.selectionStart === 'number' &&
-        typeof payload.selectionEnd === 'number'
-      ) {
-        // Step 5a：相对 VFS 无锚源串的精确半开 → A10 padding
-        soft = estimateSoftOffsetRangeFromPlainOffsets(
-          content,
-          payload.selectionStart,
-          payload.selectionEnd,
-        );
-      } else {
-        // Step 5b：邻域定位；失败不写脏 offset（A12）
-        soft = estimateSoftOffsetRangeFromQuoteContext(content, {
-          originalText: trimmed,
-          ...(typeof payload.contextBefore === 'string'
-            ? {contextBefore: payload.contextBefore}
-            : {}),
-          ...(typeof payload.contextAfter === 'string'
-            ? {contextAfter: payload.contextAfter}
-            : {}),
-        });
-      }
       setPendingOriginalText(trimmed);
-      setPendingOffsets(soft);
+      setPendingRenderRange({
+        renderStart: payload.renderStart,
+        renderEnd: payload.renderEnd,
+      });
       setAddVisible(true);
     },
-    [content],
+    [],
   );
 
   const handleAddConfirm = useCallback(
@@ -200,49 +204,28 @@ export function FileMarkdownPreview({
       if (!annotateEnabled || sessionId == null || sessionId === '') {
         return;
       }
-      const soft = pendingOffsets;
-      const lineFields =
-        soft != null
-          ? deriveSoftRangeFieldsFromOffsets(
-              content,
-              soft.startOffset,
-              soft.endOffset,
-            )
-          : null;
+      const range = pendingRenderRange;
       addChatAnnotateDraft(sessionId, {
         id: newAnnotateId(),
         path,
         originalText: pendingOriginalText,
         userAnnotation,
-        ...(soft
+        ...(range
           ? {
-              startOffset: soft.startOffset,
-              endOffset: soft.endOffset,
-              ...(lineFields
-                ? {
-                    startLine: lineFields.startLine,
-                    endLine: lineFields.endLine,
-                    ...(lineFields.startCol != null
-                      ? {startCol: lineFields.startCol}
-                      : {}),
-                    ...(lineFields.endCol != null
-                      ? {endCol: lineFields.endCol}
-                      : {}),
-                  }
-                : {}),
+              renderStart: range.renderStart,
+              renderEnd: range.renderEnd,
             }
           : {}),
       });
       refreshComposerAnnotateChips(sessionId);
-      setPendingOffsets(null);
+      setPendingRenderRange(null);
     },
     [
       annotateEnabled,
       sessionId,
       path,
       pendingOriginalText,
-      pendingOffsets,
-      content,
+      pendingRenderRange,
     ],
   );
 
@@ -306,60 +289,21 @@ export function FileMarkdownPreview({
       ? parseFrontMatterFields(fmLines)
       : [];
 
-  /**
-   * A15：全文注入再 split。文本 Tab / MD Tab 各自 mode 派生；
-   * 无 annotate 时仍走无锚原文。
-   */
-  const annotatedTextSource = useMemo(() => {
-    if (!annotateEnabled) {
-      return null;
-    }
-    return buildAnnotatedSource({
-      sourceText: content,
-      drafts: pathDrafts,
-      mode: 'text',
-    }).annotatedSource;
-  }, [annotateEnabled, content, pathDrafts]);
-
-  const annotatedMarkdownSource = useMemo(() => {
-    if (!annotateEnabled) {
-      return null;
-    }
-    return buildAnnotatedSource({
-      sourceText: content,
-      drafts: pathDrafts,
-      mode: 'markdown',
-    }).annotatedSource;
-  }, [annotateEnabled, content, pathDrafts]);
-
+  /** 干净 MD 正文（禁止源串插锚注再渲染）。 */
   const mdBody = useMemo(() => {
-    if (annotateEnabled && annotatedMarkdownSource != null && isMdPath) {
-      const annSplit = splitMarkdownFrontMatter(annotatedMarkdownSource);
-      return annSplit.closed ? (annSplit.body ?? '').trim() : '';
-    }
     return isMdPath && split?.closed ? (split.body ?? '').trim() : '';
-  }, [
-    annotateEnabled,
-    annotatedMarkdownSource,
-    isMdPath,
-    split?.closed,
-    split?.body,
-  ]);
+  }, [isMdPath, split?.closed, split?.body]);
 
   // Non-md + Markdown Tab: full file as body (no front-matter split).
   const nonMdBody = useMemo(() => {
     if (!isMdPath) {
-      if (annotateEnabled && annotatedMarkdownSource != null) {
-        return annotatedMarkdownSource.trim();
-      }
       return content.trim();
     }
     return '';
-  }, [isMdPath, annotateEnabled, annotatedMarkdownSource, content]);
+  }, [isMdPath, content]);
 
   const mdOverLimit = isRichContentOverLimit(mdBody);
   const nonMdOverLimit = isRichContentOverLimit(nonMdBody);
-  const plainOverLimit = isRichContentOverLimit(content);
 
   const mdBodyHtml = useMemo(() => {
     if (!mdBody || mdOverLimit || previewEngine !== 'webview') {
@@ -382,26 +326,6 @@ export function FileMarkdownPreview({
       return undefined;
     }
   }, [nonMdBody, nonMdOverLimit, previewEngine]);
-
-  /** 文本 Tab 认锚 HTML（消毒后 TrustedHtml / pre-wrap）。 */
-  const plainAnnotatedHtml = useMemo(() => {
-    if (!annotateEnabled || annotatedTextSource == null) {
-      return undefined;
-    }
-    if (plainOverLimit || previewEngine !== 'webview') {
-      return undefined;
-    }
-    try {
-      return sanitizeRichHtml(annotatedTextSource);
-    } catch {
-      return undefined;
-    }
-  }, [
-    annotateEnabled,
-    annotatedTextSource,
-    plainOverLimit,
-    previewEngine,
-  ]);
 
   const mdUseWebViewPreview =
     previewEngine === 'webview' &&
@@ -430,10 +354,14 @@ export function FileMarkdownPreview({
     fmLines,
   ]);
 
-  const annotateWebProps = annotateEnabled
+  /** 仅 MD Tab 挂 Recogito；plain 永不 annotate。 */
+  const mdAnnotateActive = annotateEnabled === true && renderKind === 'markdown';
+
+  const annotateWebProps = mdAnnotateActive
     ? {
         annotateEnabled: true as const,
-        onAnnotateCollect: handleAnnotateCollect,
+        annotations: recogitoMarks,
+        onRecogitoCreate: handleRecogitoCreate,
         onAnnotateOpen: handleAnnotateOpen,
       }
     : {annotateEnabled: false as const};
@@ -452,7 +380,9 @@ export function FileMarkdownPreview({
         confirmLabel="添加"
         onClose={() => {
           setAddVisible(false);
-          setPendingOffsets(null);
+          setPendingRenderRange(null);
+          // 取消时靠 draftTick / setAnnotations 清掉 Recogito 临时高亮（无新稿）
+          setDraftTick(t => t + 1);
         }}
         onConfirm={handleAddConfirm}
       />
@@ -506,26 +436,8 @@ export function FileMarkdownPreview({
     );
   }
 
-  // renderKind drives tab: txt shows raw source for all file types.
-  // 划词批注开启时走 WebView 认锚 HTML（md/txt 同验收）。
+  // plain/文本 Tab：禁用批注（无 WebView annotate / 无 Recogito / 无菜单）
   if (renderKind === 'txt') {
-    if (annotateEnabled) {
-      return (
-        <View style={[styles.root, previewFill && styles.fillRoot]}>
-          <RichDocumentWebView
-            key={path}
-            html={plainAnnotatedHtml}
-            plain={content}
-            layout="plain"
-            annotateCollectMode="plain"
-            overLimit={plainOverLimit}
-            style={previewFill ? styles.webBody : undefined}
-            {...annotateWebProps}
-          />
-          {annotateModals}
-        </View>
-      );
-    }
     const plain = (
       <Text style={[styles.plain, {color: tokens.text}]}>{content}</Text>
     );
@@ -541,14 +453,13 @@ export function FileMarkdownPreview({
         style={[
           styles.root,
           previewFill && nonMdUseWebViewPreview && styles.fillRoot,
-          previewFill && annotateEnabled && styles.fillRoot,
+          previewFill && mdAnnotateActive && styles.fillRoot,
         ]}>
-        {nonMdUseWebViewPreview || annotateEnabled ? (
+        {nonMdUseWebViewPreview || mdAnnotateActive ? (
           <RichDocumentWebView
             key={path}
             html={nonMdBodyHtml}
             plain={content.trim()}
-            annotateCollectMode="markdown"
             overLimit={nonMdOverLimit}
             style={previewFill ? styles.webBody : undefined}
             {...annotateWebProps}
@@ -562,7 +473,7 @@ export function FileMarkdownPreview({
             />
           </PreviewScrollWrap>
         ) : null}
-        {annotateEnabled ? annotateModals : null}
+        {mdAnnotateActive ? annotateModals : null}
       </View>
     );
   }
@@ -572,19 +483,18 @@ export function FileMarkdownPreview({
       style={[
         styles.root,
         previewFill && mdUseWebViewPreview && styles.fillRoot,
-        previewFill && annotateEnabled && styles.fillRoot,
+        previewFill && mdAnnotateActive && styles.fillRoot,
       ]}>
       {!split?.closed ? (
         <Text style={{color: tokens.textSecondary, fontSize: 14}}>
           请返回编辑并补全结束的 --- 后再预览正文。
         </Text>
       ) : null}
-      {mdUseWebViewPreview || (annotateEnabled && split?.closed) ? (
+      {mdUseWebViewPreview || (mdAnnotateActive && split?.closed) ? (
         <RichDocumentWebView
           key={path}
           html={mdBodyHtml}
           plain={(split?.body ?? '').trim() || content}
-          annotateCollectMode="markdown"
           overLimit={mdOverLimit}
           frontMatterHtml={frontMatterHtml}
           style={previewFill ? styles.webBody : undefined}
@@ -603,10 +513,7 @@ export function FileMarkdownPreview({
           ) : null}
           <PreviewScrollWrap previewFill={previewFill}>
             <RichContentBody
-              content={
-                // RN 回退不认锚：无 WebView 时用无锚正文（A12）
-                (split?.body ?? '').trim() || content
-              }
+              content={(split?.body ?? '').trim() || content}
               tokens={tokens}
               variant="file-preview"
             />
@@ -625,7 +532,7 @@ export function FileMarkdownPreview({
           </Text>
         </>
       ) : null}
-      {annotateEnabled ? annotateModals : null}
+      {mdAnnotateActive ? annotateModals : null}
     </View>
   );
 }

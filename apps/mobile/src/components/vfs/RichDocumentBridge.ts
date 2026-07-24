@@ -1,6 +1,6 @@
 /**
  * RN ↔ Web document preview bridge: typed JSON envelopes ({ v, type, payload }).
- * Supports document set/theme plus optional annotate (selection collect / open).
+ * MD 批注：Recogito createAnnotation → recogitoCreate；草稿投影 → setAnnotations。
  */
 export const RICH_DOCUMENT_BRIDGE_VERSION = 1 as const;
 
@@ -27,25 +27,23 @@ export type RichDocumentSetPayload = {
   /** FM card HTML prepended inside #doc so FM and body scroll together. */
   readonly frontMatterHtml?: string;
   /**
-   * html 布局：`plain` 保留 pre-wrap（认锚文本 Tab）；缺省为 Markdown 富文本。
+   * html 布局：`plain` 保留 pre-wrap；缺省为 Markdown 富文本。
+   * plain Tab 已禁用批注，一般不再走 annotate 路径。
    */
   readonly layout?: 'plain' | 'rich';
 };
 
 /**
- * 应急回滚用旧 mark 载荷（默认主路径不再投递）。
- * @deprecated 预览主路径已改锚注入；仅 `__NM_ANNOTATE_DOM_SEARCH_FALLBACK__` 时使用。
+ * Recogito 投影载荷：相对 MD 渲染正文半开 [renderStart, renderEnd) + quote。
  */
 export type RichDocumentAnnotationMark = {
   readonly id: string;
   readonly originalText: string;
-  readonly startLine?: number;
-  readonly endLine?: number;
-  readonly startCol?: number;
-  readonly endCol?: number;
+  readonly renderStart: number;
+  readonly renderEnd: number;
 };
 
-/** menuItems → injectJS 采集回传（Step 5）。 */
+/** @deprecated 旧 menuItems 采集；MD 主路径已改 recogitoCreate。 */
 export type RichDocumentSelectionCollectPayload = {
   readonly originalText: string;
   readonly mode: 'plain' | 'markdown';
@@ -53,6 +51,14 @@ export type RichDocumentSelectionCollectPayload = {
   readonly selectionEnd?: number;
   readonly contextBefore?: string;
   readonly contextAfter?: string;
+};
+
+/** Recogito createAnnotation → 宿主写草稿。 */
+export type RichDocumentRecogitoCreatePayload = {
+  readonly quote: string;
+  readonly renderStart: number;
+  readonly renderEnd: number;
+  readonly tempId?: string;
 };
 
 /** Host → document WebView */
@@ -65,8 +71,6 @@ export type HostToRichDocumentMessage =
       'setAnnotations',
       {
         annotations: readonly RichDocumentAnnotationMark[];
-        /** 磁盘源文件全文，供窗口优先匹配（应急）。 */
-        sourceText?: string;
       }
     >;
 
@@ -79,7 +83,9 @@ export type RichDocumentToHostMessage =
     >
   /** @deprecated 不再作为主通道；保留解码兼容。 */
   | BridgeEnvelope<'selectionAnnotate', {text: string}>
+  /** @deprecated plain/menu 采集遗留；MD 主路径用 recogitoCreate。 */
   | BridgeEnvelope<'selectionCollect', RichDocumentSelectionCollectPayload>
+  | BridgeEnvelope<'recogitoCreate', RichDocumentRecogitoCreatePayload>
   /** 同文多条时 ids 含全部可改删项；单条时长度为 1。 */
   | BridgeEnvelope<'annotateOpen', {ids: readonly string[]}>;
 

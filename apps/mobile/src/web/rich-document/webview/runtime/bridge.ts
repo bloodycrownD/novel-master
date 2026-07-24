@@ -11,9 +11,8 @@ import { post } from './post';
 import {
   setAnnotateEnabled,
   setAnnotations,
-  isAnnotateDomSearchFallbackEnabled,
+  type AnnotateRenderMark,
 } from './annotate';
-import type { AnnotateMark } from './annotate-marks';
 
 /**
  * P0-3：setDocument 视图刷新注册门面。
@@ -57,9 +56,6 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
 /** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
 export function setDocument(payload: DocumentPayload | null | undefined): void {
   invokeRegisteredSetDocumentView(payload ?? {});
-  // 同步 refresh 已由 main.registerSetDocumentView 在 render 后完成。
-  // 禁止再 setTimeout(0) 重建 marks：滞后回调可能在后续 setAnnotations 之后
-  // 用旧/空 annotations 盖住最终帧（多文件切换下划线丢失的根因之一）。
 }
 
 export function handleHostMessage(raw: unknown): void {
@@ -87,18 +83,10 @@ export function handleHostMessage(raw: unknown): void {
     return;
   }
   if (msg.type === 'setAnnotations') {
-    // 主路径已退役；仅应急开关接受搜字 annotations
-    if (!isAnnotateDomSearchFallbackEnabled()) {
-      return;
-    }
     const rawList = msg.payload?.annotations;
     const list = Array.isArray(rawList)
-      ? (rawList as AnnotateMark[])
+      ? (rawList as AnnotateRenderMark[])
       : [];
-    const src =
-      typeof msg.payload?.sourceText === 'string'
-        ? msg.payload.sourceText
-        : undefined;
-    setAnnotations(list, src);
+    setAnnotations(list);
   }
 }

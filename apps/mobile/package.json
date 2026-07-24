@@ -40,6 +40,7 @@
     "@react-navigation/bottom-tabs": "^7.3.10",
     "@react-navigation/native": "^7.1.6",
     "@react-navigation/native-stack": "^7.3.10",
+    "@recogito/text-annotator": "^4.2.5",
     "@xmldom/xmldom": "^0.8.13",
     "buffer": "^6.0.3",
     "fast-text-encoding": "^1.0.6",
