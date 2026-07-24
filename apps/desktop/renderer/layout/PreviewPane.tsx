@@ -1,27 +1,25 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
 } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
+import {
+  createTextAnnotator,
+  type TextAnnotator,
+  type TextAnnotation,
+} from "@recogito/text-annotator";
+import "@recogito/text-annotator/text-annotator.css";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
 import { formatVfsErrorForUser, type VfsScope } from "@shared/logic/vfs";
-import {
-  buildAnnotatedSource,
-  type AnnotateDraft,
-  type AnnotateSoftOffsetRange,
-  type AnnotateSoftSourceRange,
-} from "@shared/logic/chat";
+import type { AnnotateDraft } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { useShellNav } from "../providers/ShellNavProvider";
 import {
@@ -30,20 +28,14 @@ import {
 } from "../features/chat/chat-annotate-draft";
 import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
+import { isPreviewAnnotateEnabled } from "./preview-annotate";
 import {
-  applyAnnotateHighlights,
-  collectAnnotateRangeForPreviewSelection,
-  getSelectionFloatingAnchor,
-  isPreviewAnnotateDomSearchFallbackEnabled,
-  isPreviewAnnotateEnabled,
-  resolveAnnotateIdsFromClick,
-  readSelectionTextInContainer,
-} from "./preview-annotate";
-import { sanitizeAnnotatePreviewHtml } from "./sanitize-annotate-preview-html";
+  draftsToRecogitoAnnotations,
+  extractRecogitoRenderRange,
+} from "./preview-recogito";
 import {
   PreviewAnnotateAddModal,
   PreviewAnnotateDetailModal,
-  PreviewAnnotateFloatingBar,
   PreviewAnnotatePickModal,
 } from "./PreviewAnnotateUi";
 
@@ -79,31 +71,32 @@ export function PreviewPane() {
   const [annotateDrafts, setAnnotateDrafts] = useState<readonly AnnotateDraft[]>(
     () => listChatAnnotateDrafts(sessionId),
   );
-  const [floating, setFloating] = useState<{
-    top: number;
-    left: number;
-    text: string;
-    softOffsetRange: AnnotateSoftOffsetRange | null;
-    softRange: AnnotateSoftSourceRange | null;
-  } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState("");
-  const [pendingSoftOffsetRange, setPendingSoftOffsetRange] =
-    useState<AnnotateSoftOffsetRange | null>(null);
-  const [pendingSoftRange, setPendingSoftRange] =
-    useState<AnnotateSoftSourceRange | null>(null);
+  const [pendingRenderStart, setPendingRenderStart] = useState<number | null>(
+    null,
+  );
+  const [pendingRenderEnd, setPendingRenderEnd] = useState<number | null>(null);
+  const [pendingDraftId, setPendingDraftId] = useState<string | null>(null);
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
   const [saving, setSaving] = useState(false);
-  const previewContentRef = useRef<HTMLDivElement | null>(null);
+  const mdRootRef = useRef<HTMLDivElement | null>(null);
+  const annotatorRef = useRef<TextAnnotator | null>(null);
+  /** 避免 createAnnotation 刚写入时 selectionChanged 立刻弹详情。 */
+  const suppressSelectionOpenRef = useRef(false);
+
+  const isMarkdown =
+    previewFile != null
+      ? shouldRenderMarkdownPreview(previewFile.path, content)
+      : false;
 
   const annotateEnabled = isPreviewAnnotateEnabled(
     mode,
     previewFile?.workspaceScope,
     sessionId,
+    isMarkdown,
   );
-  const domSearchFallback =
-    annotateEnabled && isPreviewAnnotateDomSearchFallbackEnabled();
 
   const pathDrafts = useMemo(() => {
     if (!annotateEnabled || previewFile == null) {
@@ -171,135 +164,15 @@ export function PreviewPane() {
 
   useEffect(() => {
     if (!annotateEnabled) {
-      setFloating(null);
       setAddOpen(false);
       setDetailDraft(null);
       setPickDrafts(null);
+      setPendingSelection("");
+      setPendingRenderStart(null);
+      setPendingRenderEnd(null);
+      setPendingDraftId(null);
     }
   }, [annotateEnabled]);
-
-  const isMarkdown =
-    previewFile != null
-      ? shouldRenderMarkdownPreview(previewFile.path, content)
-      : false;
-
-  /** 主路径：同源 drafts + VFS 原文按 mode 派生锚串并消毒；应急搜字时不注入。 */
-  const annotatedPreview = useMemo(() => {
-    if (!annotateEnabled || domSearchFallback || pathDrafts.length === 0) {
-      return null;
-    }
-    // A12：仅有无 offset 旧草稿时不走注入（避免整文件无意义转义）
-    const hasOffsetDraft = pathDrafts.some(
-      (d) => d.startOffset != null && d.endOffset != null,
-    );
-    if (!hasOffsetDraft) {
-      return null;
-    }
-    const modeKey = isMarkdown ? "markdown" : "text";
-    const { annotatedSource } = buildAnnotatedSource({
-      sourceText: content,
-      drafts: pathDrafts,
-      mode: modeKey,
-    });
-    return sanitizeAnnotatePreviewHtml(annotatedSource);
-  }, [
-    annotateEnabled,
-    domSearchFallback,
-    pathDrafts,
-    isMarkdown,
-    content,
-  ]);
-
-  const refreshSelectionFloating = useCallback(() => {
-    if (!annotateEnabled) {
-      setFloating(null);
-      return;
-    }
-    const root = previewContentRef.current;
-    const text = readSelectionTextInContainer(root);
-    if (text == null) {
-      setFloating(null);
-      return;
-    }
-    const anchor = getSelectionFloatingAnchor();
-    if (anchor == null) {
-      setFloating(null);
-      return;
-    }
-    const plainRoot =
-      (root?.querySelector?.("pre.preview-text") as HTMLElement | null) ?? null;
-    const mdRoot =
-      (root?.querySelector?.(".preview-markdown") as HTMLElement | null) ?? null;
-    const collected = collectAnnotateRangeForPreviewSelection({
-      sourceText: content,
-      isPlainPreview: !isMarkdown,
-      selectedText: text,
-      selection:
-        typeof window !== "undefined" ? window.getSelection() : null,
-      plainRoot,
-      selectionRoot: isMarkdown ? mdRoot : plainRoot,
-    });
-    setFloating({
-      top: anchor.top,
-      left: anchor.left,
-      text,
-      softOffsetRange: collected.softOffsetRange,
-      softRange: collected.softRange,
-    });
-  }, [annotateEnabled, content, isMarkdown]);
-
-  useEffect(() => {
-    if (!annotateEnabled) {
-      return;
-    }
-    let timer: number | undefined;
-    const scheduleRefresh = (delayMs: number) => {
-      if (timer != null) {
-        window.clearTimeout(timer);
-      }
-      timer = window.setTimeout(() => {
-        timer = undefined;
-        refreshSelectionFloating();
-      }, delayMs);
-    };
-    const onMouseUp = () => scheduleRefresh(0);
-    const onKeyUp = () => scheduleRefresh(0);
-    const onSelectionChange = () => scheduleRefresh(50);
-    const onContextMenu = () => {
-      const root = previewContentRef.current;
-      if (root == null) {
-        return;
-      }
-      const text = readSelectionTextInContainer(root);
-      if (text == null) {
-        return;
-      }
-      // 有有效选区时刷新浮动条；不 preventDefault，保留系统复制菜单
-      scheduleRefresh(0);
-    };
-    document.addEventListener("mouseup", onMouseUp);
-    document.addEventListener("keyup", onKeyUp);
-    document.addEventListener("selectionchange", onSelectionChange);
-    document.addEventListener("contextmenu", onContextMenu, true);
-    return () => {
-      if (timer != null) {
-        window.clearTimeout(timer);
-      }
-      document.removeEventListener("mouseup", onMouseUp);
-      document.removeEventListener("keyup", onKeyUp);
-      document.removeEventListener("selectionchange", onSelectionChange);
-      document.removeEventListener("contextmenu", onContextMenu, true);
-    };
-  }, [annotateEnabled, refreshSelectionFloating]);
-
-  // Step 6：默认禁止渲染后 applyAnnotateHighlights；仅应急开关开启时恢复
-  useLayoutEffect(() => {
-    const root = previewContentRef.current;
-    if (root == null || !annotateEnabled || !domSearchFallback) {
-      return;
-    }
-    applyAnnotateHighlights(root, pathDrafts, { sourceText: content });
-  }, [annotateEnabled, domSearchFallback, pathDrafts, content, loading]);
 
   const openDraftsByIds = useCallback(
     (ids: readonly string[]) => {
@@ -316,30 +189,144 @@ export function PreviewPane() {
     [pathDrafts],
   );
 
-  const onPreviewClick = useCallback(
-    (e: ReactMouseEvent) => {
-      if (!annotateEnabled) {
+  const openDraftsByIdsRef = useRef(openDraftsByIds);
+  openDraftsByIdsRef.current = openDraftsByIds;
+  const pathDraftsRef = useRef(pathDrafts);
+  pathDraftsRef.current = pathDrafts;
+
+  // MD 预览根挂 Recogito；plain / 非批注态不创建（R1 / R2）
+  useEffect(() => {
+    if (!annotateEnabled || loading || !isMarkdown) {
+      if (annotatorRef.current != null) {
+        annotatorRef.current.destroy();
+        annotatorRef.current = null;
+      }
+      return;
+    }
+    const el = mdRootRef.current;
+    if (el == null) {
+      return;
+    }
+
+    const anno = createTextAnnotator(el);
+    annotatorRef.current = anno;
+
+    const onCreate = (annotation: TextAnnotation) => {
+      const range = extractRecogitoRenderRange(annotation);
+      if (range == null) {
+        try {
+          anno.removeAnnotation(annotation.id);
+        } catch {
+          // ignore
+        }
         return;
       }
-      const root = previewContentRef.current;
-      if (root == null) {
+      suppressSelectionOpenRef.current = true;
+      setPendingDraftId(annotation.id);
+      setPendingSelection(range.quote);
+      setPendingRenderStart(range.renderStart);
+      setPendingRenderEnd(range.renderEnd);
+      setAddOpen(true);
+      setDetailDraft(null);
+      setPickDrafts(null);
+    };
+
+    const onSelectionChanged = (selected: TextAnnotation[]) => {
+      if (suppressSelectionOpenRef.current) {
+        suppressSelectionOpenRef.current = false;
         return;
       }
-      const ids = resolveAnnotateIdsFromClick(root, {
-        clientX: e.clientX,
-        clientY: e.clientY,
-        target: e.target,
+      if (selected.length === 0) {
+        return;
+      }
+      // 仅打开已落库草稿；新建过程中的临时注解走 AddModal
+      const draftIds = new Set(pathDraftsRef.current.map((d) => d.id));
+      const known = selected
+        .map((a) => a.id)
+        .filter((id) => draftIds.has(id));
+      if (known.length === 0) {
+        return;
+      }
+      openDraftsByIdsRef.current(known);
+      setAddOpen(false);
+    };
+
+    anno.on("createAnnotation", onCreate);
+    anno.on("selectionChanged", onSelectionChanged);
+
+    return () => {
+      anno.off("createAnnotation", onCreate);
+      anno.off("selectionChanged", onSelectionChanged);
+      anno.destroy();
+      if (annotatorRef.current === anno) {
+        annotatorRef.current = null;
+      }
+    };
+  }, [annotateEnabled, isMarkdown, loading, content, previewFile?.path]);
+
+  // 草稿 → Recogito 投影；仅 renderStart/End 新稿（R4 / R8）
+  useEffect(() => {
+    const anno = annotatorRef.current;
+    if (anno == null || !annotateEnabled) {
+      return;
+    }
+    const mapped = draftsToRecogitoAnnotations(pathDrafts);
+    // AddModal 打开期间保留刚创建的 Recogito 高亮，避免 setAnnotations 冲掉
+    if (
+      addOpen &&
+      pendingDraftId != null &&
+      !mapped.some((a) => a.id === pendingDraftId) &&
+      pendingRenderStart != null &&
+      pendingRenderEnd != null &&
+      pendingSelection.length > 0
+    ) {
+      mapped.push({
+        id: pendingDraftId,
+        bodies: [],
+        target: {
+          annotation: pendingDraftId,
+          selector: [
+            {
+              quote: pendingSelection,
+              start: pendingRenderStart,
+              end: pendingRenderEnd,
+            },
+          ],
+        },
       });
-      if (ids.length === 0) {
-        return;
+    }
+    anno.setAnnotations(mapped);
+  }, [
+    annotateEnabled,
+    pathDrafts,
+    addOpen,
+    pendingDraftId,
+    pendingRenderStart,
+    pendingRenderEnd,
+    pendingSelection,
+  ]);
+
+  const closeAddModal = useCallback(() => {
+    const pendingId = pendingDraftId;
+    setAddOpen(false);
+    setPendingSelection("");
+    setPendingRenderStart(null);
+    setPendingRenderEnd(null);
+    setPendingDraftId(null);
+    // 取消添加：从 Recogito 去掉尚未入库的临时注解（以 store 为准，避免 ref 未刷新误删）
+    if (pendingId != null && sessionId) {
+      const stillDraft = listChatAnnotateDrafts(sessionId).some(
+        (d) => d.id === pendingId,
+      );
+      if (!stillDraft) {
+        try {
+          annotatorRef.current?.removeAnnotation(pendingId);
+        } catch {
+          // ignore
+        }
       }
-      e.preventDefault();
-      e.stopPropagation();
-      openDraftsByIds(ids);
-      setFloating(null);
-    },
-    [annotateEnabled, openDraftsByIds],
-  );
+    }
+  }, [pendingDraftId, sessionId]);
 
   const isDirty = content !== savedContent;
   const lineCount = useMemo(
@@ -429,30 +416,11 @@ export function PreviewPane() {
             <p className="preview-empty">加载中…</p>
           </div>
         ) : mode === "read" ? (
-          <div
-            className="preview-body"
-            id="preview-body"
-            ref={previewContentRef}
-            onClick={onPreviewClick}
-          >
+          <div className="preview-body" id="preview-body">
             {isMarkdown ? (
-              <div className="preview-markdown">
-                {annotatedPreview != null ? (
-                  <Markdown
-                    remarkPlugins={[remarkGfm]}
-                    rehypePlugins={[rehypeRaw]}
-                  >
-                    {annotatedPreview}
-                  </Markdown>
-                ) : (
-                  <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
-                )}
+              <div className="preview-markdown" ref={mdRootRef}>
+                <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
               </div>
-            ) : annotatedPreview != null ? (
-              <pre
-                className="preview-text"
-                dangerouslySetInnerHTML={{ __html: annotatedPreview }}
-              />
             ) : (
               <pre className="preview-text">{content || "（空文件）"}</pre>
             )}
@@ -483,33 +451,16 @@ export function PreviewPane() {
           </div>
         )}
       </section>
-      {annotateEnabled && floating != null ? (
-        <PreviewAnnotateFloatingBar
-          top={floating.top}
-          left={floating.left}
-          onAdd={() => {
-            setPendingSelection(floating.text);
-            setPendingSoftOffsetRange(floating.softOffsetRange);
-            setPendingSoftRange(floating.softRange);
-            setAddOpen(true);
-            setFloating(null);
-            window.getSelection()?.removeAllRanges();
-          }}
-        />
-      ) : null}
       {annotateEnabled && previewFile != null && sessionId ? (
         <PreviewAnnotateAddModal
           open={addOpen}
           selectedText={pendingSelection}
-          softOffsetRange={pendingSoftOffsetRange}
-          softRange={pendingSoftRange}
+          renderStart={pendingRenderStart}
+          renderEnd={pendingRenderEnd}
+          draftId={pendingDraftId}
           sessionId={sessionId}
           filePath={previewFile.path}
-          onClose={() => {
-            setAddOpen(false);
-            setPendingSoftOffsetRange(null);
-            setPendingSoftRange(null);
-          }}
+          onClose={closeAddModal}
         />
       ) : null}
       {annotateEnabled && sessionId ? (

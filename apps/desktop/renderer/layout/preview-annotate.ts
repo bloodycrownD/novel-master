@@ -1,9 +1,8 @@
 /**
- * Desktop PreviewPane 划词批注：入口门闩 + 选区采集 + 锚点击。
- * 预览主路径：源 offset → buildAnnotatedSource 注入锚（PreviewPane）；
- * 本文件不再默认走 findAllOccurrences / applyAnnotateHighlights 搜字绘制。
- * 应急开关可临时恢复旧 DOM 搜字 apply（默认关）。
- * 仅 mode==="read" 且 workspaceScope==="chat" 且非空 sessionId 启用。
+ * Desktop PreviewPane 划词批注：入口门闩 +（遗留）选区采集 / DOM 搜字工具。
+ * 预览主路径（SPEC R1/R5）：MD 上 Recogito；禁止 buildAnnotatedSource 注锚与
+ * applyAnnotateHighlights / DOM 搜字 fallback。plain Tab 禁用批注（R2）。
+ * 本文件保留纯函数供单测与兼容；宿主 PreviewPane 不得再接线搜字 apply。
  */
 
 import {
@@ -48,21 +47,20 @@ export const PREVIEW_ANNOTATE_HIGHLIGHT_NAME = "nm-annotate";
 const MD_NEIGHBORHOOD_RADIUS = 64;
 
 /**
- * 应急回滚：为 true 时 PreviewPane 可临时恢复旧 applyAnnotateHighlights。
- * 默认关；单测可用 {@link setPreviewAnnotateDomSearchFallbackForTests}。
+ * @deprecated SPEC R5：预览主路径已永久关闭 DOM 搜字 fallback；始终 false。
+ * 保留导出仅兼容旧测例调用点。
  */
-let previewAnnotateDomSearchFallback = false;
-
-/** 是否启用旧 DOM 搜字高亮应急路径（默认 false）。 */
 export function isPreviewAnnotateDomSearchFallbackEnabled(): boolean {
-  return previewAnnotateDomSearchFallback;
+  return false;
 }
 
-/** 测试 / 应急开关：临时恢复旧搜字 apply。 */
+/**
+ * @deprecated SPEC R5：开关已永久关闭；调用无效。
+ */
 export function setPreviewAnnotateDomSearchFallbackForTests(
-  enabled: boolean,
+  _enabled: boolean,
 ): void {
-  previewAnnotateDomSearchFallback = enabled;
+  // no-op：禁止再打开搜字 apply / fallback
 }
 /** 切断匹配域：block / br / TABLE（表内相邻 Text 直拼；表与前后段落切断，T1/T6）。 */
 const CUT_BOUNDARY_TAGS = new Set([
@@ -110,17 +108,22 @@ type ActiveHighlightEntry = {
 
 let activeHighlightEntries: ActiveHighlightEntry[] = [];
 
-/** 划词批注入口门闩（编辑态 / global / session / 无 sessionId 均无入口）。 */
+/**
+ * 划词批注入口门闩。
+ * 须同时：预览态 + chat scope + 非空 sessionId + Markdown 预览（R2：plain 禁用）。
+ */
 export function isPreviewAnnotateEnabled(
   mode: "read" | "edit",
   workspaceScope: WorkspacePanelScope | null | undefined,
   sessionId?: string | null,
+  isMarkdown: boolean = false,
 ): boolean {
   return (
     mode === "read" &&
     workspaceScope === "chat" &&
     typeof sessionId === "string" &&
-    sessionId.length > 0
+    sessionId.length > 0 &&
+    isMarkdown === true
   );
 }
 
@@ -409,8 +412,8 @@ export type PreviewAnnotateDraftInput = {
 };
 
 /**
- * 【应急】按 originalText 在预览 DOM 内匹配并绘制高亮。
- * 预览主路径已退役（Step 6）；仅当 {@link isPreviewAnnotateDomSearchFallbackEnabled} 为真时由 PreviewPane 调用。
+ * 【遗留】按 originalText 在预览 DOM 内匹配并绘制高亮。
+ * SPEC R5：PreviewPane 主路径禁止调用；仅单测 / 本地工具保留。
  */
 export function applyAnnotateHighlights(
   root: HTMLElement,

@@ -12,6 +12,7 @@ import {
   clearAnnotateHighlights,
   getActiveAnnotateHighlightEntries,
   groupAnnotateIdsByOriginalText,
+  isPreviewAnnotateDomSearchFallbackEnabled,
   isPreviewAnnotateEnabled,
   parseAnnotateIdsAttr,
   PREVIEW_ANNOTATE_HIGHLIGHT_NAME,
@@ -95,29 +96,33 @@ const previewAnnotateUiPath = path.join(
 );
 
 describe("isPreviewAnnotateEnabled", () => {
-  it("仅 read + chat + 非空 sessionId 为真", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1"), true);
+  it("仅 read + chat + 非空 sessionId + Markdown 为真", () => {
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1", true), true);
+  });
+
+  it("plain / 非 MD 无入口（R2）", () => {
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1", false), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1"), false);
   });
 
   it("编辑态无入口", () => {
-    assert.equal(isPreviewAnnotateEnabled("edit", "chat", "s1"), false);
+    assert.equal(isPreviewAnnotateEnabled("edit", "chat", "s1", true), false);
   });
 
   it("global / session 无入口", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", "global", "s1"), false);
-    assert.equal(isPreviewAnnotateEnabled("read", "session", "s1"), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "global", "s1", true), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "session", "s1", true), false);
   });
 
   it("缺 scope 无入口", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", null, "s1"), false);
-    assert.equal(isPreviewAnnotateEnabled("read", undefined, "s1"), false);
+    assert.equal(isPreviewAnnotateEnabled("read", null, "s1", true), false);
+    assert.equal(isPreviewAnnotateEnabled("read", undefined, "s1", true), false);
   });
 
   it("缺 sessionId / 空串无入口", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", "chat"), false);
-    assert.equal(isPreviewAnnotateEnabled("read", "chat", null), false);
-    assert.equal(isPreviewAnnotateEnabled("read", "chat", undefined), false);
-    assert.equal(isPreviewAnnotateEnabled("read", "chat", ""), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", undefined, true), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", null, true), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", "", true), false);
   });
 });
 
@@ -377,30 +382,23 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.doesNotMatch(ui, /TextPromptModal/);
   });
 
-  it("PreviewPane 门闩与浮动条接入", () => {
+  it("PreviewPane 门闩与 Recogito 接入", () => {
     const pane = readFileSync(previewPanePath, "utf8");
     assert.match(pane, /isPreviewAnnotateEnabled/);
-    assert.match(pane, /PreviewAnnotateFloatingBar/);
+    assert.match(pane, /createTextAnnotator/);
     assert.match(pane, /previewFile\?\.workspaceScope/);
-    assert.match(pane, /buildAnnotatedSource/);
-    assert.match(pane, /collectAnnotateRangeForPreviewSelection/);
     assert.match(pane, /sessionId/);
-    assert.match(pane, /resolveAnnotateIdsFromClick/);
-    assert.doesNotMatch(pane, /e\.preventDefault\(\);\s*\n\s*scheduleRefresh/);
+    assert.match(pane, /PreviewAnnotateAddModal/);
+    assert.doesNotMatch(pane, /buildAnnotatedSource/);
+    assert.doesNotMatch(pane, /PreviewAnnotateFloatingBar/);
   });
 
-  it("AddModal 写入宽松 offset + 派生行列", () => {
+  it("AddModal 写入 renderStart/renderEnd", () => {
     const ui = readFileSync(previewAnnotateUiPath, "utf8");
-    assert.match(ui, /softOffsetRange/);
-    assert.match(ui, /startOffset/);
-    assert.match(ui, /endOffset/);
-    assert.match(ui, /softRange/);
-    assert.match(ui, /startLine/);
-    assert.match(ui, /endLine/);
-    assert.doesNotMatch(
-      ui,
-      /TODO\(annotate-custom-highlight-soft-range\)/,
-    );
+    assert.match(ui, /renderStart/);
+    assert.match(ui, /renderEnd/);
+    assert.match(ui, /addChatAnnotateDraft/);
+    assert.doesNotMatch(ui, /softOffsetRange/);
   });
 });
 
@@ -435,8 +433,9 @@ describe("Custom Highlight / mark 回退（T-AR7 / T-AR8 / T-AR10）", () => {
     }
   });
 
-  it("T-AR8: 应急开关下 mark + closest 可解析 ids", () => {
+  it("T-AR8: fallback 永久关闭后 mark 不再经 resolveAnnotateIdsFromClick 解析", () => {
     setPreviewAnnotateDomSearchFallbackForTests(true);
+    assert.equal(isPreviewAnnotateDomSearchFallbackEnabled(), false);
     assert.equal(supportsCssCustomHighlight(), false);
     const root = makeRoot("<p>hel<strong>lo</strong></p>");
     applyAnnotateHighlights(root, [{ id: "a1", originalText: "hello" }]);
@@ -445,17 +444,19 @@ describe("Custom Highlight / mark 回退（T-AR7 / T-AR8 / T-AR10）", () => {
     ];
     assert.ok(marks.length >= 1);
     const mark = marks[0]!;
-    const ids = resolveAnnotateIdsFromClick(root, {
-      clientX: 0,
-      clientY: 0,
-      target: mark,
-    });
-    assert.deepEqual(ids, ["a1"]);
     assert.deepEqual(
       parseAnnotateIdsAttr(mark.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR)),
       ["a1"],
     );
-    setPreviewAnnotateDomSearchFallbackForTests(false);
+    // R5：搜字 / mark hit-test 主路径已关
+    assert.deepEqual(
+      resolveAnnotateIdsFromClick(root, {
+        clientX: 0,
+        clientY: 0,
+        target: mark,
+      }),
+      [],
+    );
   });
 
   it("T-AR10: 跨 strong 可见串高亮覆盖（mark 回退）", () => {

@@ -3,11 +3,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type {
-  AnnotateDraft,
-  AnnotateSoftOffsetRange,
-  AnnotateSoftSourceRange,
-} from "@shared/logic/chat";
+import type { AnnotateDraft } from "@shared/logic/chat";
 import { Button } from "../components/ui/Button";
 import {
   addChatAnnotateDraft,
@@ -55,11 +51,13 @@ type AddModalProps = {
   readonly sessionId: string;
   readonly filePath: string;
   /**
-   * 权威宽松半开 offset（A1 / Step 5）；映射失败为 null（A12 不写脏 offset）。
+   * Recogito 渲染坐标半开起点（必写新稿；相对 MD 预览容器正文）。
    */
-  readonly softOffsetRange?: AnnotateSoftOffsetRange | null;
-  /** 由 offset 派生的行列；无 offset 时可不写。 */
-  readonly softRange?: AnnotateSoftSourceRange | null;
+  readonly renderStart?: number | null;
+  /** Recogito 渲染坐标半开终点（不含）。 */
+  readonly renderEnd?: number | null;
+  /** 可选：沿用 Recogito 注解 id，便于 setAnnotations 对齐。 */
+  readonly draftId?: string | null;
   readonly onClose: () => void;
 };
 
@@ -68,8 +66,9 @@ export function PreviewAnnotateAddModal({
   selectedText,
   sessionId,
   filePath,
-  softOffsetRange = null,
-  softRange = null,
+  renderStart = null,
+  renderEnd = null,
+  draftId = null,
   onClose,
 }: AddModalProps) {
   const [value, setValue] = useState("");
@@ -86,42 +85,34 @@ export function PreviewAnnotateAddModal({
   }
 
   const trimmed = value.trim();
-  const canSubmit = trimmed.length > 0 && !saving;
+  const hasRenderRange =
+    renderStart != null &&
+    renderEnd != null &&
+    Number.isFinite(renderStart) &&
+    Number.isFinite(renderEnd) &&
+    renderStart < renderEnd;
+  const canSubmit = trimmed.length > 0 && hasRenderRange && !saving;
   const label =
     selectedText.length > 80
       ? `${selectedText.slice(0, 80)}…`
       : selectedText;
 
   const handleConfirm = () => {
-    if (!canSubmit) {
+    if (!canSubmit || renderStart == null || renderEnd == null) {
       return;
     }
     setSaving(true);
     try {
       addChatAnnotateDraft(sessionId, {
-        id: randomUUID(),
+        id:
+          typeof draftId === "string" && draftId.length > 0
+            ? draftId
+            : randomUUID(),
         path: filePath,
         originalText: selectedText,
         userAnnotation: trimmed,
-        // A12：映射失败不写脏 offset；有 offset 时同步派生行列
-        ...(softOffsetRange != null
-          ? {
-              startOffset: softOffsetRange.startOffset,
-              endOffset: softOffsetRange.endOffset,
-              ...(softRange != null
-                ? {
-                    startLine: softRange.startLine,
-                    endLine: softRange.endLine,
-                    ...(softRange.startCol != null
-                      ? { startCol: softRange.startCol }
-                      : {}),
-                    ...(softRange.endCol != null
-                      ? { endCol: softRange.endCol }
-                      : {}),
-                  }
-                : {}),
-            }
-          : {}),
+        renderStart,
+        renderEnd,
       });
       onClose();
     } finally {

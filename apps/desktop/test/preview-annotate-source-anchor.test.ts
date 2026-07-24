@@ -108,15 +108,12 @@ describe("T-SA6 Desktop 认锚渲染 / 点击 / 消毒", () => {
     assert.deepEqual(ids, ["d1"]);
   });
 
-  it("Desktop MD 方案 a：PreviewPane 源码含 rehype-raw + 消毒 + buildAnnotatedSource", () => {
+  it("Desktop MD 已退役插锚：PreviewPane 不再含 buildAnnotatedSource / rehype-raw", () => {
     const pane = readFileSync(previewPanePath, "utf8");
-    assert.match(pane, /buildAnnotatedSource/);
-    assert.match(pane, /sanitizeAnnotatePreviewHtml/);
-    assert.match(pane, /rehypeRaw|rehype-raw/);
-    assert.match(pane, /rehypePlugins=\{\[rehypeRaw\]\}/);
-    assert.match(pane, /dangerouslySetInnerHTML/);
-    const sanitizeSrc = readFileSync(sanitizePath, "utf8");
-    assert.match(sanitizeSrc, /data-annotate-id/);
+    assert.doesNotMatch(pane, /buildAnnotatedSource/);
+    assert.doesNotMatch(pane, /sanitizeAnnotatePreviewHtml/);
+    assert.doesNotMatch(pane, /rehypeRaw|rehype-raw/);
+    assert.match(pane, /createTextAnnotator/);
   });
 
   it("MD 派生串消毒后仍可 closest data-annotate-id（宿主 DOM 合同）", () => {
@@ -330,30 +327,22 @@ describe("T-SA8b MD 邻域定位（Desktop → Core）", () => {
 });
 
 describe("T-SA9 Desktop 退役搜字主路径", () => {
-  it("应急开关默认关", () => {
+  it("应急开关永久关", () => {
+    assert.equal(isPreviewAnnotateDomSearchFallbackEnabled(), false);
+    setPreviewAnnotateDomSearchFallbackForTests(true);
     assert.equal(isPreviewAnnotateDomSearchFallbackEnabled(), false);
   });
 
-  it("PreviewPane 默认不在刷新路径无条件调用 applyAnnotateHighlights", () => {
+  it("PreviewPane 不接线 applyAnnotateHighlights / fallback", () => {
     const pane = readFileSync(previewPanePath, "utf8");
-    assert.match(pane, /isPreviewAnnotateDomSearchFallbackEnabled/);
-    assert.match(pane, /domSearchFallback/);
-    assert.match(
-      pane,
-      /!annotateEnabled \|\| !domSearchFallback|!domSearchFallback/,
-    );
-    // 主路径吃 buildAnnotatedSource，而非渲染后搜字
-    assert.match(pane, /buildAnnotatedSource/);
-    assert.doesNotMatch(
-      pane,
-      /useLayoutEffect\(\(\) => \{\s*const root = previewContentRef\.current;\s*if \(root == null \|\| !annotateEnabled\) \{\s*return;\s*\}\s*applyAnnotateHighlights/,
-    );
+    assert.doesNotMatch(pane, /applyAnnotateHighlights/);
+    assert.doesNotMatch(pane, /isPreviewAnnotateDomSearchFallbackEnabled/);
+    assert.doesNotMatch(pane, /buildAnnotatedSource/);
   });
 
-  it("preview-annotate 主路径注释钉死退役；apply 仅应急", () => {
+  it("preview-annotate 钉死 fallback 永久关闭", () => {
     const src = readFileSync(previewAnnotatePath, "utf8");
-    assert.match(src, /应急/);
+    assert.match(src, /永久关闭|始终 false|no-op/);
     assert.match(src, /isPreviewAnnotateDomSearchFallbackEnabled/);
-    assert.match(src, /【应急】/);
   });
 });
