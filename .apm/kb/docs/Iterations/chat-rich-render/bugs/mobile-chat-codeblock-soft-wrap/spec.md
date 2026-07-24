@@ -7,7 +7,7 @@ agile_trace: true
 
 ## 根因 / 方案摘要
 
-`buildRichContentCssRules` 中 `pre` 仅设 `overflow-x: auto`，未覆盖 UA `white-space: pre`。改为 `white-space: pre-wrap` + `overflow-wrap: anywhere`，并保留 `overflow-x: auto` 兜底。
+`buildRichContentCssRules` 中 `pre` 仅设 `overflow-x: auto`，未覆盖 UA `white-space: pre`。改为 `white-space: pre-wrap` + `overflow-wrap: anywhere`。后续为避免内层滚动抢 transcript 竖滑，将 `overflow-x` 改为 `visible`（不再用 `auto` 兜底）。
 
 ## 变更点清单
 
@@ -22,7 +22,7 @@ agile_trace: true
 pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  overflow-x: auto;
+  overflow-x: visible;
   margin: 0.35em 0;
 }
 ```

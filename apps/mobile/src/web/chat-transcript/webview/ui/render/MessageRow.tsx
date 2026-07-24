@@ -20,8 +20,9 @@ export function MessageRow({ row }: MessageRowProps) {
   const hidden = row.hidden ? ' hidden' : '';
   const thinkingKey = 'msg:' + row.id;
   const thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
+  const roleLabel = role === 'user' ? '用户' : '助手';
 
-  /** ⋯ 菜单入口：传按钮 rect 开菜单（user / assistant 均在气泡上方工具行）。 */
+  /** ⋯ 菜单入口：与角色标签同一顶行（对齐 Desktop，不占右列）。 */
   const onMenuBtnClick = (event: Event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -30,15 +31,18 @@ export function MessageRow({ row }: MessageRowProps) {
     openContextMenuFromAnchor(row.id, btn.getBoundingClientRect(), btn);
   };
 
-  const menuBtn = (
-    <button
-      type="button"
-      className="message-menu-btn"
-      aria-label="消息操作"
-      onClick={onMenuBtnClick}
-    >
-      ⋯
-    </button>
+  const menuRow = (
+    <div className="message-menu-row">
+      <span className="message-role-label">{roleLabel}</span>
+      <button
+        type="button"
+        className="message-menu-btn"
+        aria-label="消息操作"
+        onClick={onMenuBtnClick}
+      >
+        ⋯
+      </button>
+    </div>
   );
 
   let bubble = null;
@@ -52,6 +56,7 @@ export function MessageRow({ row }: MessageRowProps) {
         const attachExpanded = !!state.attachGroupExpanded[attachKey];
         bubble = (
           <div className="bubble bubble--fill-width bubble--user-compose">
+            {menuRow}
             {hasText ? (
               <div className="bubble-body">{String(row.text)}</div>
             ) : null}
@@ -64,13 +69,17 @@ export function MessageRow({ row }: MessageRowProps) {
           </div>
         );
       } else {
-        bubble = <div className="bubble">{String(row.text)}</div>;
+        bubble = (
+          <div className="bubble">
+            {menuRow}
+            <div className="bubble-body">{String(row.text)}</div>
+          </div>
+        );
       }
     }
   } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
     const toolGroupKey = 'msg:' + row.id;
     const toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
-    // ⋯ 不进 .bubble，外置到行内气泡上方（见下方 return）
     bubble = (
       <div
         className={
@@ -83,6 +92,7 @@ export function MessageRow({ row }: MessageRowProps) {
           )
         }
       >
+        {menuRow}
         <AssistantBubbleInner
           text={row.text}
           textHtml={row.textHtml}
@@ -105,8 +115,6 @@ export function MessageRow({ row }: MessageRowProps) {
       className={'row message ' + role + hidden}
       data-id={row.id}
     >
-      {/* user / assistant ⋯ 均在 .row 内、.bubble 之前的工具行 */}
-      {bubble ? <div className="message-menu-toolbar">{menuBtn}</div> : null}
       {bubble}
     </div>
   );

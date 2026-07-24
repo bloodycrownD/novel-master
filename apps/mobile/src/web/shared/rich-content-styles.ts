@@ -38,11 +38,11 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     ${child('h2')} { font-size: 1.08em; font-weight: 700; margin: 0.38em 0 0.28em; }
     ${child('h3')} { font-size: 1em; font-weight: 700; margin: 0.35em 0; }
     ${child('code')} { font-family: ui-monospace, monospace; font-size: 0.9em; background: rgba(0,0,0,0.06); padding: 0.1em 0.25em; border-radius: 4px; }
-    /* 覆盖 UA white-space:pre，窄屏代码块 soft-wrap；overflow-x 作兜底 */
+    /* 覆盖 UA white-space:pre；折行后勿用 overflow-x:auto，避免内层滚动抢 transcript 竖滑 */
     ${child('pre')} {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
-      overflow-x: auto;
+      overflow-x: visible;
       margin: 0.35em 0;
     }
     ${child('a')} { color: var(--primary, #007aff); }

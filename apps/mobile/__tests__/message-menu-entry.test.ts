@@ -35,8 +35,15 @@ describe('message menu entry (T-MN1 / T-MN2)', () => {
       'src/web/chat-transcript/webview/runtime/menu/menu.ts',
     );
     expect(messageRow).toContain('message-menu-btn');
+    expect(messageRow).toContain('message-menu-row');
+    expect(messageRow).toContain('message-role-label');
+    expect(messageRow).toContain('用户');
+    expect(messageRow).toContain('助手');
     expect(messageRow).toContain('openContextMenuFromAnchor');
     expect(messageRow).toContain('getBoundingClientRect');
+    expect(messageRow).not.toContain('message-menu-toolbar');
+    expect(messageRow).not.toContain('bubble--menu-corner');
+    expect(messageRow).not.toContain('menuSlot');
     expect(menu).toContain('export function openContextMenuFromAnchor');
     expect(bindShell).not.toContain('onMessagePointerDown');
     expect(bindShell).not.toContain('touchstart');
