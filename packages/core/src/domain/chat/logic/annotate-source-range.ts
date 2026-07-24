@@ -1,12 +1,24 @@
 /**
- * 批注宽松行列：以磁盘源文件为坐标系，采集选区/原文窗口并裁剪源文本。
- * 供 Desktop / Mobile 加草稿写入；预览匹配见 `annotate-highlight`。
+ * 批注宽松行列 / offset：以磁盘源文件为坐标系，采集选区窗口并裁剪源文本。
+ * 供 Desktop / Mobile 加草稿写入；预览锚注入见 `annotate-source-anchor`。
  *
  * @module domain/chat/logic/annotate-source-range
  */
 
-/** 默认行向 padding（±N 行，H6）。 */
+/** 默认行向 padding（±N 行，H6 / A10）。 */
 export const ANNOTATE_SOFT_RANGE_LINE_PADDING = 2;
+
+/**
+ * 默认字符向 padding（两侧各 N 个 UTF-16 code unit，A10）。
+ * 合并顺序：精确半开 offset → 先 ±CHAR → 再 ±LINE → 写回半开 offset。
+ */
+export const ANNOTATE_SOFT_RANGE_CHAR_PADDING = 32;
+
+/** 源文件半开 offset 窗口（UTF-16；`[startOffset, endOffset)`）。 */
+export type AnnotateSoftOffsetRange = {
+  readonly startOffset: number;
+  readonly endOffset: number;
+};
 
 /**
  * 源文件宽松行列窗口（1-based；行闭区间）。
@@ -138,16 +150,16 @@ export function applySoftRangeLinePadding(
 }
 
 /**
- * plain 选区：由源文件 0-based 半开偏移换算宽松行列（含默认 padding）。
+ * 由半开 offset 派生 1-based 行列（行闭区间；不做 padding）。
+ * `endOffset` 为不含端点，结束行列取 `endOffset - 1` 处字符。
  */
-export function estimateSoftRangeFromPlainOffsets(
+export function deriveSoftRangeFieldsFromOffsets(
   sourceText: string,
-  selectionStart: number,
-  selectionEnd: number,
-  options?: { readonly linePadding?: number },
+  startOffset: number,
+  endOffset: number,
 ): AnnotateSoftSourceRange {
-  const lo = Math.min(selectionStart, selectionEnd);
-  const hi = Math.max(selectionStart, selectionEnd);
+  const lo = Math.min(startOffset, endOffset);
+  const hi = Math.max(startOffset, endOffset);
   const startOff = Math.max(0, Math.min(lo, sourceText.length));
   const endOff = Math.max(startOff, Math.min(hi, sourceText.length));
   const start = offsetToSourceLineCol(sourceText, startOff);
@@ -155,18 +167,72 @@ export function estimateSoftRangeFromPlainOffsets(
     endOff > startOff
       ? offsetToSourceLineCol(sourceText, endOff - 1)
       : start;
-  const exact: AnnotateSoftSourceRange = {
+  return {
     startLine: start.line,
     endLine: endInclusive.line,
     startCol: start.col,
     endCol: endInclusive.col,
   };
+}
+
+/**
+ * plain 选区：由源文件 0-based 半开偏移换算宽松行列（含默认行向 padding）。
+ */
+export function estimateSoftRangeFromPlainOffsets(
+  sourceText: string,
+  selectionStart: number,
+  selectionEnd: number,
+  options?: { readonly linePadding?: number },
+): AnnotateSoftSourceRange {
+  const exact = deriveSoftRangeFieldsFromOffsets(
+    sourceText,
+    selectionStart,
+    selectionEnd,
+  );
   const lines = splitSourceLines(sourceText);
   return applySoftRangeLinePadding(
     exact,
     lines.length,
     options?.linePadding ?? ANNOTATE_SOFT_RANGE_LINE_PADDING,
   );
+}
+
+/**
+ * plain 选区 → 写入权威的宽松半开 offset（A10）。
+ *
+ * 合并顺序（钉死）：精确半开 → 先 ±`ANNOTATE_SOFT_RANGE_CHAR_PADDING`（默认 32）
+ * 并钳制到 `[0, sourceText.length]` → 再换算行列并施加 ±`LINE_PADDING` → 再换回半开 offset。
+ */
+export function estimateSoftOffsetRangeFromPlainOffsets(
+  sourceText: string,
+  selectionStart: number,
+  selectionEnd: number,
+  options?: {
+    readonly charPadding?: number;
+    readonly linePadding?: number;
+  },
+): AnnotateSoftOffsetRange {
+  const charPad = Math.max(
+    0,
+    Math.floor(options?.charPadding ?? ANNOTATE_SOFT_RANGE_CHAR_PADDING),
+  );
+  const lo = Math.min(selectionStart, selectionEnd);
+  const hi = Math.max(selectionStart, selectionEnd);
+  let startOff = Math.max(0, Math.min(lo, sourceText.length));
+  let endOff = Math.max(startOff, Math.min(hi, sourceText.length));
+  startOff = Math.max(0, startOff - charPad);
+  endOff = Math.min(sourceText.length, endOff + charPad);
+  const softRange = estimateSoftRangeFromPlainOffsets(
+    sourceText,
+    startOff,
+    endOff,
+    { linePadding: options?.linePadding },
+  );
+  const sliced = sliceSourceBySoftRange(sourceText, softRange);
+  return {
+    startOffset: sliced.startOffset,
+    endOffset: sliced.startOffset + sliced.text.length,
+  };
 }
 
 /**

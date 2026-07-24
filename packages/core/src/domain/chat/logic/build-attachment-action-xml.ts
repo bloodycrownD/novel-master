@@ -81,6 +81,20 @@ function asParamPositiveInt(value: unknown): number | undefined {
   return undefined;
 }
 
+/** 读 optional 非负整数（offset；0 合法；旧附件缺字段 → undefined）。 */
+function asParamNonNegInt(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isInteger(n) && n >= 0) {
+      return n;
+    }
+  }
+  return undefined;
+}
+
 /** 新 mint 批注草稿 id（Undo 解析恢复用；与发送原 id 解耦）。 */
 function mintAnnotateDraftId(): string {
   return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -89,7 +103,7 @@ function mintAnnotateDraftId(): string {
 /**
  * 由文件形批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。
  * 真 VFS path；可走既有 path 口径（本函数不对伪 path 调用破坏性 normalize）。
- * 有宽松行列时**显式**写入 XML JSON（H9）；缺字段不写键。
+ * 有半开 offset / 宽松行列时**显式**写入 XML JSON；缺字段不写键。
  */
 export function buildFileAnnotateAttachmentFromDraft(
   draft: AnnotateDraft,
@@ -100,6 +114,12 @@ export function buildFileAnnotateAttachmentFromDraft(
     originalText: draft.originalText,
     userAnnotation: draft.userAnnotation,
   };
+  if (draft.startOffset != null) {
+    params.startOffset = draft.startOffset;
+  }
+  if (draft.endOffset != null) {
+    params.endOffset = draft.endOffset;
+  }
   if (draft.startLine != null) {
     params.startLine = draft.startLine;
   }
@@ -155,6 +175,8 @@ export function parseAnnotateDraftsFromAttachments(
     let path = pathFromAtt;
     let originalText = "";
     let userAnnotation = "";
+    let startOffset: number | undefined;
+    let endOffset: number | undefined;
     let startLine: number | undefined;
     let endLine: number | undefined;
     let startCol: number | undefined;
@@ -168,6 +190,8 @@ export function parseAnnotateDraftsFromAttachments(
         }
         originalText = asParamString(annotate.params.originalText);
         userAnnotation = asParamString(annotate.params.userAnnotation);
+        startOffset = asParamNonNegInt(annotate.params.startOffset);
+        endOffset = asParamNonNegInt(annotate.params.endOffset);
         startLine = asParamPositiveInt(annotate.params.startLine);
         endLine = asParamPositiveInt(annotate.params.endLine);
         startCol = asParamPositiveInt(annotate.params.startCol);
@@ -181,11 +205,17 @@ export function parseAnnotateDraftsFromAttachments(
     if (isMessageAnnotatePath(path)) {
       continue;
     }
+    // offset 成对且半开合法才写回；残缺/非法旧数据丢 offset，保留其余
+    const offsetsOk =
+      startOffset != null &&
+      endOffset != null &&
+      startOffset < endOffset;
     out.push({
       id: mintAnnotateDraftId(),
       path,
       originalText,
       userAnnotation,
+      ...(offsetsOk ? { startOffset, endOffset } : {}),
       ...(startLine != null ? { startLine } : {}),
       ...(endLine != null ? { endLine } : {}),
       ...(startCol != null ? { startCol } : {}),

@@ -770,7 +770,14 @@ export type AnnotateDraftDto = {
   readonly path: string;
   readonly originalText: string;
   readonly userAnnotation: string;
-  /** 宽松窗口起始行（1-based，含）；缺省则预览全文匹配。 */
+  /**
+   * 宽松半开区间起点（UTF-16；相对 VFS 全文；`[startOffset, endOffset)`）。
+   * 新稿映射成功时必写；缺省兼容旧草稿。
+   */
+  readonly startOffset?: number;
+  /** 宽松半开区间终点（不含）。 */
+  readonly endOffset?: number;
+  /** 宽松窗口起始行（1-based，含）；由 offset 派生。 */
   readonly startLine?: number;
   /** 宽松窗口结束行（1-based，含）。 */
   readonly endLine?: number;

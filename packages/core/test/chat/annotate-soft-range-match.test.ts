@@ -9,6 +9,7 @@ import {
   findAnnotateOccurrenceInSource,
   normalizeAnnotateNeedle,
   normalizeAnnotateNeedleStripNewlines,
+  selectAnnotateOccurrenceStarts,
 } from "@/domain/chat/logic/annotate-highlight.js";
 import {
   ANNOTATE_SOFT_RANGE_LINE_PADDING,
@@ -107,6 +108,14 @@ describe("T-AR6 plain/pre 多行 originalText 可命中（H12）", () => {
     const needle = normalizeAnnotateNeedle("line1\nline2");
     assert.equal(needle, "line1\nline2");
     assert.deepEqual(findAllOccurrences(haystack, needle), [4]);
+  });
+
+  it("有 preferredOrdinal 时只保留对应出现序次（多处匹配收敛）", () => {
+    const starts = findAllOccurrences("xx foo yy foo zz", "foo");
+    assert.deepEqual(starts, [3, 10]);
+    assert.deepEqual(selectAnnotateOccurrenceStarts(starts, 1), [10]);
+    assert.deepEqual(selectAnnotateOccurrenceStarts(starts, 0), [3]);
+    assert.deepEqual(selectAnnotateOccurrenceStarts(starts, null), [3, 10]);
   });
 
   it("findAnnotateOccurrenceInSource 多行原文命中", () => {

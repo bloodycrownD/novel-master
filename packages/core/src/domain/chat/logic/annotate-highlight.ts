@@ -36,6 +36,89 @@ export function findAllOccurrences(
 }
 
 /**
+ * 有软窗口时：按「第几次出现」选 DOM/flat 起点（H5）。
+ * 源文件下标与 Markdown 渲染后 flat 下标不可比，禁止用绝对 index 就近。
+ * `preferredOrdinal` 缺省 → 原样全保留（无行列草稿）。
+ */
+export function selectAnnotateOccurrenceStarts(
+  starts: readonly number[],
+  preferredOrdinal: number | null | undefined,
+): number[] {
+  if (starts.length === 0) {
+    return [];
+  }
+  if (
+    preferredOrdinal == null ||
+    !Number.isInteger(preferredOrdinal) ||
+    preferredOrdinal < 0
+  ) {
+    return [...starts];
+  }
+  if (starts.length === 1) {
+    return [starts[0]!];
+  }
+  if (preferredOrdinal >= starts.length) {
+    return [starts[starts.length - 1]!];
+  }
+  return [starts[preferredOrdinal]!];
+}
+
+/**
+ * 源文件命中下标 → needle 在归一化全文中是第几次出现（0-based）。
+ * 供 DOM 侧按 ordinal 选取，避免 MD 源坐标与预览 flat 错位。
+ */
+export function annotateOccurrenceOrdinal(
+  haystack: string,
+  originalText: string,
+  hitIndex: number,
+): number {
+  const needle = normalizeAnnotateNeedle(originalText);
+  if (!needle) {
+    return 0;
+  }
+  const { normalized, indexMap } = normalizeHaystackWithIndexMap(haystack);
+  let from = 0;
+  let ordinal = 0;
+  while (from <= normalized.length - needle.length) {
+    const at = normalized.indexOf(needle, from);
+    if (at < 0) {
+      break;
+    }
+    const origStart = indexMap[at]!;
+    const origEnd = indexMap[at + needle.length - 1]!;
+    if (hitIndex >= origStart && hitIndex <= origEnd) {
+      return ordinal;
+    }
+    ordinal++;
+    from = at + needle.length;
+  }
+  return 0;
+}
+
+/** 归一化全文中 needle 出现次数（用于 MD 仅在唯一命中时写软窗口）。 */
+export function countAnnotateOccurrencesInSource(
+  haystack: string,
+  originalText: string,
+): number {
+  const needle = normalizeAnnotateNeedle(originalText);
+  if (!needle) {
+    return 0;
+  }
+  const { normalized } = normalizeHaystackWithIndexMap(haystack);
+  let from = 0;
+  let n = 0;
+  while (from <= normalized.length - needle.length) {
+    const at = normalized.indexOf(needle, from);
+    if (at < 0) {
+      break;
+    }
+    n++;
+    from = at + needle.length;
+  }
+  return n;
+}
+
+/**
  * 按 originalText 聚合 draft id（同文多条共用一处下划线点击）。
  * 空 text 或空 id 跳过（采 Mobile 更严规则）。
  */

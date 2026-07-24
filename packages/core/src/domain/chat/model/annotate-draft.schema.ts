@@ -10,9 +10,14 @@ import { z } from "zod";
 /** 正整数 optional（1-based 行列）。 */
 const optionalPositiveInt = z.number().int().positive().optional();
 
+/** 非负整数 optional（0-based UTF-16 offset）。 */
+const optionalNonNegInt = z.number().int().nonnegative().optional();
+
 /**
  * 单条未发送工作区（真 VFS path）批注草稿。
- * optional 宽松行列（1-based；行闭区间；列缺省表示整行）供预览窗口匹配与附件给模型。
+ *
+ * 权威位置为半开区间 `startOffset` / `endOffset`（`[start, end)`，相对 VFS 全文）；
+ * 行列由同一 offset 派生，供附件给模型与旧路径兼容。缺 offset 的旧草稿仍合法（A12）。
  */
 export const annotateDraftSchema = z
   .object({
@@ -20,7 +25,16 @@ export const annotateDraftSchema = z
     path: z.string().min(1),
     originalText: z.string(),
     userAnnotation: z.string(),
-    /** 宽松窗口起始行（1-based，含）。 */
+    /**
+     * 宽松半开区间起点（UTF-16 code unit；相对 VFS 全文；语义 `[startOffset, endOffset)`）。
+     * 新稿映射成功时必写；缺省兼容旧草稿。
+     */
+    startOffset: optionalNonNegInt,
+    /**
+     * 宽松半开区间终点（不含）；须严格大于 `startOffset`。
+     */
+    endOffset: optionalNonNegInt,
+    /** 宽松窗口起始行（1-based，含）；由 offset 派生。 */
     startLine: optionalPositiveInt,
     /** 宽松窗口结束行（1-based，含）。 */
     endLine: optionalPositiveInt,
@@ -29,7 +43,27 @@ export const annotateDraftSchema = z
     /** 结束列（1-based，含）；缺省表示至行尾。 */
     endCol: optionalPositiveInt,
   })
-  .strict();
+  .strict()
+  .superRefine((val, ctx) => {
+    const { startOffset, endOffset } = val;
+    const hasStart = startOffset != null;
+    const hasEnd = endOffset != null;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "startOffset 与 endOffset 须成对出现",
+        path: hasStart ? ["endOffset"] : ["startOffset"],
+      });
+      return;
+    }
+    if (hasStart && hasEnd && startOffset! >= endOffset!) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "须满足 startOffset < endOffset（半开区间 [start, end)）",
+        path: ["endOffset"],
+      });
+    }
+  });
 
 export type AnnotateDraft = z.infer<typeof annotateDraftSchema>;
 

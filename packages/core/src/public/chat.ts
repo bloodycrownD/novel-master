@@ -199,6 +199,9 @@ export {
   normalizeAnnotateNeedleStripNewlines,
   normalizeAnnotateSegmentText,
   parseAnnotateIdsAttr,
+  annotateOccurrenceOrdinal,
+  countAnnotateOccurrencesInSource,
+  selectAnnotateOccurrenceStarts,
   sortAnnotateTextsLongestFirst,
 } from '../domain/chat/logic/annotate-highlight.js';
 export type {
@@ -209,8 +212,11 @@ export type {
   FlatTextSegmentSpan,
 } from '../domain/chat/logic/annotate-highlight.js';
 export {
+  ANNOTATE_SOFT_RANGE_CHAR_PADDING,
   ANNOTATE_SOFT_RANGE_LINE_PADDING,
   applySoftRangeLinePadding,
+  deriveSoftRangeFieldsFromOffsets,
+  estimateSoftOffsetRangeFromPlainOffsets,
   estimateSoftRangeFromOriginalText,
   estimateSoftRangeFromPlainOffsets,
   expandSoftRangeOnce,
@@ -220,9 +226,24 @@ export {
   splitSourceLines,
 } from '../domain/chat/logic/annotate-source-range.js';
 export type {
+  AnnotateSoftOffsetRange,
   AnnotateSoftRangeFields,
   AnnotateSoftSourceRange,
 } from '../domain/chat/logic/annotate-source-range.js';
+export {
+  ANNOTATE_ANCHOR_CLASS,
+  annotateRangeMatchesOriginalText,
+  buildAnnotatedSource,
+  escapeAnnotateSourceText,
+  findMarkdownCodeRanges,
+  hasValidAnnotateOffsetRange,
+  splitMarkdownUnderlineRuns,
+} from '../domain/chat/logic/annotate-source-anchor.js';
+export type {
+  BuildAnnotatedSourceInput,
+  BuildAnnotatedSourceMode,
+  BuildAnnotatedSourceResult,
+} from '../domain/chat/logic/annotate-source-anchor.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
