@@ -217,15 +217,18 @@ export {
   applySoftRangeLinePadding,
   deriveSoftRangeFieldsFromOffsets,
   estimateSoftOffsetRangeFromPlainOffsets,
+  estimateSoftOffsetRangeFromQuoteContext,
   estimateSoftRangeFromOriginalText,
   estimateSoftRangeFromPlainOffsets,
   expandSoftRangeOnce,
   hasValidAnnotateSoftRange,
+  locateAnnotateOffsetRangeByQuoteContext,
   offsetToSourceLineCol,
   sliceSourceBySoftRange,
   splitSourceLines,
 } from '../domain/chat/logic/annotate-source-range.js';
 export type {
+  AnnotateQuoteContext,
   AnnotateSoftOffsetRange,
   AnnotateSoftRangeFields,
   AnnotateSoftSourceRange,

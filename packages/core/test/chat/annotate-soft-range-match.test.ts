@@ -13,9 +13,11 @@ import {
 } from "@/domain/chat/logic/annotate-highlight.js";
 import {
   ANNOTATE_SOFT_RANGE_LINE_PADDING,
+  estimateSoftOffsetRangeFromQuoteContext,
   estimateSoftRangeFromOriginalText,
   estimateSoftRangeFromPlainOffsets,
   expandSoftRangeOnce,
+  locateAnnotateOffsetRangeByQuoteContext,
   sliceSourceBySoftRange,
 } from "@/domain/chat/logic/annotate-source-range.js";
 
@@ -51,6 +53,57 @@ describe("T-AR4 plain 选区宽松窗口", () => {
     assert.ok(range);
     assert.equal(range!.startLine, 1);
     assert.equal(range!.endLine, 5);
+  });
+
+  it("locateAnnotateOffsetRangeByQuoteContext：邻域消歧 + 无邻域多命中拒收", () => {
+    const source = "xx SAME mid SAME yy";
+    const first = source.indexOf("SAME");
+    const second = source.lastIndexOf("SAME");
+    const hitSecond = locateAnnotateOffsetRangeByQuoteContext(source, {
+      originalText: "SAME",
+      contextBefore: " mid ",
+      contextAfter: " yy",
+    });
+    assert.ok(hitSecond);
+    assert.equal(hitSecond!.startOffset, second);
+    assert.equal(hitSecond!.endOffset, second + 4);
+
+    const hitFirst = locateAnnotateOffsetRangeByQuoteContext(source, {
+      originalText: "SAME",
+      contextBefore: "xx ",
+      contextAfter: " mid",
+    });
+    assert.ok(hitFirst);
+    assert.equal(hitFirst!.startOffset, first);
+
+    assert.equal(
+      locateAnnotateOffsetRangeByQuoteContext(source, { originalText: "SAME" }),
+      null,
+    );
+    assert.equal(
+      locateAnnotateOffsetRangeByQuoteContext(source, {
+        originalText: "missing",
+        contextBefore: "a",
+      }),
+      null,
+    );
+  });
+
+  it("estimateSoftOffsetRangeFromQuoteContext：定位后 CHAR→LINE padding", () => {
+    const source = ["L1", "L2", "L3", "TARGET HERE", "L5", "L6", "L7"].join(
+      "\n",
+    );
+    const soft = estimateSoftOffsetRangeFromQuoteContext(source, {
+      originalText: "TARGET",
+      contextBefore: "L3\n",
+      contextAfter: " HERE",
+    });
+    assert.ok(soft);
+    const selStart = source.indexOf("TARGET");
+    const selEnd = selStart + "TARGET".length;
+    assert.ok(soft!.startOffset <= selStart);
+    assert.ok(soft!.endOffset >= selEnd);
+    assert.ok(soft!.endOffset - soft!.startOffset > selEnd - selStart);
   });
 });
 

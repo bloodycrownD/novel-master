@@ -171,6 +171,14 @@ describe("T-SA2 build/parse offset + 派生行列 + public 导出", () => {
       typeof publicChat.estimateSoftOffsetRangeFromPlainOffsets,
       "function",
     );
+    assert.equal(
+      typeof publicChat.locateAnnotateOffsetRangeByQuoteContext,
+      "function",
+    );
+    assert.equal(
+      typeof publicChat.estimateSoftOffsetRangeFromQuoteContext,
+      "function",
+    );
     assert.equal(publicChat.ANNOTATE_SOFT_RANGE_CHAR_PADDING, 32);
     assert.equal(publicChat.ANNOTATE_SOFT_RANGE_LINE_PADDING, 2);
   });

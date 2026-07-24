@@ -270,6 +270,170 @@ export function estimateSoftRangeFromOriginalText(
 }
 
 /**
+ * MD 划词邻域：`originalText` + 前后文 → VFS 全文精确半开 offset（Step 5b）。
+ * 唯一命中直接用；多命中取邻域吻合度最高者；失败 → null（A12，不写脏 offset）。
+ */
+export type AnnotateQuoteContext = {
+  readonly originalText: string;
+  readonly contextBefore?: string;
+  readonly contextAfter?: string;
+};
+
+function normalizeAnnotateQuoteText(text: string): string {
+  return text.replace(/\u00a0/g, " ").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function findAllNeedleStarts(haystack: string, needle: string): number[] {
+  if (needle.length === 0) {
+    return [];
+  }
+  const out: number[] = [];
+  let from = 0;
+  while (from <= haystack.length - needle.length) {
+    const at = haystack.indexOf(needle, from);
+    if (at < 0) {
+      break;
+    }
+    out.push(at);
+    from = at + needle.length;
+  }
+  return out;
+}
+
+function scoreQuoteContextMatch(
+  haystack: string,
+  start: number,
+  end: number,
+  contextBefore: string,
+  contextAfter: string,
+): number {
+  let score = 0;
+  if (contextBefore.length > 0) {
+    const actual = haystack.slice(
+      Math.max(0, start - contextBefore.length),
+      start,
+    );
+    if (actual === contextBefore) {
+      score += contextBefore.length * 2;
+    } else if (contextBefore.endsWith(actual) || actual.endsWith(contextBefore)) {
+      score += Math.min(actual.length, contextBefore.length);
+    } else {
+      // 后缀重叠长度
+      const max = Math.min(actual.length, contextBefore.length);
+      for (let n = max; n > 0; n--) {
+        if (actual.slice(-n) === contextBefore.slice(-n)) {
+          score += n;
+          break;
+        }
+      }
+    }
+  }
+  if (contextAfter.length > 0) {
+    const actual = haystack.slice(
+      end,
+      Math.min(haystack.length, end + contextAfter.length),
+    );
+    if (actual === contextAfter) {
+      score += contextAfter.length * 2;
+    } else if (contextAfter.startsWith(actual) || actual.startsWith(contextAfter)) {
+      score += Math.min(actual.length, contextAfter.length);
+    } else {
+      const max = Math.min(actual.length, contextAfter.length);
+      for (let n = max; n > 0; n--) {
+        if (actual.slice(0, n) === contextAfter.slice(0, n)) {
+          score += n;
+          break;
+        }
+      }
+    }
+  }
+  return score;
+}
+
+/**
+ * 用引文 + 邻域在 VFS 无锚全文定位精确半开 `[startOffset, endOffset)`。
+ * 不做 CHAR/LINE padding（由调用方再走 {@link estimateSoftOffsetRangeFromPlainOffsets}）。
+ */
+export function locateAnnotateOffsetRangeByQuoteContext(
+  sourceText: string,
+  quote: AnnotateQuoteContext,
+): AnnotateSoftOffsetRange | null {
+  const needle = normalizeAnnotateQuoteText(quote.originalText ?? "");
+  if (needle.length === 0) {
+    return null;
+  }
+  const contextBefore = normalizeAnnotateQuoteText(quote.contextBefore ?? "");
+  const contextAfter = normalizeAnnotateQuoteText(quote.contextAfter ?? "");
+
+  let haystack = sourceText;
+  let starts = findAllNeedleStarts(haystack, needle);
+  let matchLen = needle.length;
+  if (starts.length === 0) {
+    const normSource = normalizeAnnotateQuoteText(sourceText);
+    starts = findAllNeedleStarts(normSource, needle);
+    if (starts.length === 0) {
+      return null;
+    }
+    haystack = normSource;
+  }
+
+  let bestStart = starts[0]!;
+  if (starts.length > 1) {
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (const at of starts) {
+      const score = scoreQuoteContextMatch(
+        haystack,
+        at,
+        at + matchLen,
+        contextBefore,
+        contextAfter,
+      );
+      if (score > bestScore) {
+        bestScore = score;
+        bestStart = at;
+      }
+    }
+    // 无邻域时多命中无法消歧 → 拒收（A12），避免默写首次命中
+    if (
+      contextBefore.length === 0 &&
+      contextAfter.length === 0 &&
+      starts.length > 1
+    ) {
+      return null;
+    }
+  }
+
+  return {
+    startOffset: bestStart,
+    endOffset: bestStart + matchLen,
+  };
+}
+
+/**
+ * MD 邻域定位 + A10 padding：精确命中后再 CHAR→LINE 合并为写入权威半开 offset。
+ * 定位失败 → null。
+ */
+export function estimateSoftOffsetRangeFromQuoteContext(
+  sourceText: string,
+  quote: AnnotateQuoteContext,
+  options?: {
+    readonly charPadding?: number;
+    readonly linePadding?: number;
+  },
+): AnnotateSoftOffsetRange | null {
+  const exact = locateAnnotateOffsetRangeByQuoteContext(sourceText, quote);
+  if (exact == null) {
+    return null;
+  }
+  return estimateSoftOffsetRangeFromPlainOffsets(
+    sourceText,
+    exact.startOffset,
+    exact.endOffset,
+    options,
+  );
+}
+
+/**
  * 再扩大一次行窗口（匹配失败后的二次尝试，H5）。
  * 相对当前窗口再 ±padding；扩大时丢弃列。
  */
