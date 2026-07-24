@@ -15,8 +15,12 @@ import {
   draftToRecogitoAnnotation,
   draftsToRecogitoAnnotations,
   extractRecogitoRenderRange,
+  getSelectionOffsetsInElement,
   hasRecogitoRenderRange,
 } from "@/layout/preview-recogito";
+import {
+  getSelectionOffsetsInElement as getLegacySelectionOffsetsInElement,
+} from "@/layout/preview-annotate";
 import type { AnnotateDraft } from "@shared/logic/chat";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -98,6 +102,27 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     );
   });
 
+  it("R6：annotatingEnabled false；mouseup 不直开 Add；显式 FloatingBar；cancelSelected/destroy", () => {
+    const pane = readFileSync(previewPanePath, "utf8");
+    assert.match(pane, /annotatingEnabled:\s*false/);
+    assert.match(pane, /PreviewAnnotateFloatingBar/);
+    assert.match(pane, /cancelSelected/);
+    assert.match(pane, /\.destroy\(\)/);
+    // mouseup 只更新 pending / floating，禁止 setAddOpen(true)
+    const mouseUpBody = pane.match(
+      /const onMouseUp = \(\) => \{[\s\S]*?\n    \};/,
+    );
+    assert.ok(mouseUpBody, "须存在 onMouseUp");
+    assert.doesNotMatch(mouseUpBody![0], /setAddOpen\(true\)/);
+    // 显式入口：FloatingBar onAdd 才开 AddModal
+    assert.match(
+      pane,
+      /PreviewAnnotateFloatingBar[\s\S]*?onAdd=\{[\s\S]*?setAddOpen\(true\)/,
+    );
+    // 命中已有 draft 时关 Add
+    assert.match(pane, /setAddOpen\(false\)/);
+  });
+
   it("门闩：MD 才启用；plain 禁用", () => {
     assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1", true), true);
     assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1", false), false);
@@ -151,7 +176,75 @@ describe("T-RG6 Desktop MD Recogito；plain 禁用批注", () => {
     const mapSrc = readFileSync(previewRecogitoPath, "utf8");
     assert.match(mapSrc, /draftToRecogitoAnnotation/);
     assert.match(mapSrc, /extractRecogitoRenderRange/);
+    assert.match(mapSrc, /getSelectionOffsetsInElement/);
     const pane = readFileSync(previewPanePath, "utf8");
     assert.match(pane, /from "\.\/preview-recogito"/);
+    // 权威实现仅在 preview-recogito；annotate 侧委托
+    const annotateSrc = readFileSync(previewAnnotatePath, "utf8");
+    assert.match(
+      annotateSrc,
+      /getSelectionOffsetsInElement as getRecogitoSelectionOffsetsInElement/,
+    );
+  });
+
+  it("getSelectionOffsetsInElement：首尾空白 trim 后 slice 对齐 quote（策略 b）", () => {
+    const bodyText = "prefix  hello  suffix";
+    const selStart = bodyText.indexOf("  hello  ");
+    const selEnd = selStart + "  hello  ".length;
+    const textNode = { nodeType: 3, nodeValue: bodyText };
+    const el = {
+      contains(node: unknown) {
+        return node === textNode;
+      },
+      ownerDocument: {
+        createRange() {
+          let endContainer: unknown = null;
+          let endOffset = 0;
+          return {
+            selectNodeContents() {},
+            setEnd(container: unknown, offset: number) {
+              endContainer = container;
+              endOffset = offset;
+            },
+            toString() {
+              if (endContainer === textNode) {
+                return bodyText.slice(0, endOffset);
+              }
+              return "";
+            },
+          };
+        },
+      },
+    } as unknown as Element;
+    const selRange = {
+      startContainer: textNode,
+      startOffset: selStart,
+      endContainer: textNode,
+      endOffset: selEnd,
+      toString: () => bodyText.slice(selStart, selEnd),
+    };
+    const selection = {
+      rangeCount: 1,
+      isCollapsed: false,
+      getRangeAt: () => selRange,
+    } as unknown as Selection;
+
+    const range = getSelectionOffsetsInElement(el, selection);
+    assert.ok(range != null);
+    assert.equal(range!.quote, "hello");
+    assert.equal(
+      bodyText.slice(range!.renderStart, range!.renderEnd),
+      range!.quote,
+    );
+
+    // annotate 委托路径与权威一致
+    const legacy = getLegacySelectionOffsetsInElement(
+      el as HTMLElement,
+      selection,
+    );
+    assert.deepEqual(legacy, {
+      start: range!.renderStart,
+      end: range!.renderEnd,
+    });
   });
 });

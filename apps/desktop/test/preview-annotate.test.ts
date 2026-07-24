@@ -382,15 +382,24 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.doesNotMatch(ui, /TextPromptModal/);
   });
 
-  it("PreviewPane 门闩与 Recogito 接入", () => {
+  it("PreviewPane 门闩与 Recogito 接入；FloatingBar 显式批注入口", () => {
     const pane = readFileSync(previewPanePath, "utf8");
     assert.match(pane, /isPreviewAnnotateEnabled/);
     assert.match(pane, /createTextAnnotator/);
     assert.match(pane, /previewFile\?\.workspaceScope/);
     assert.match(pane, /sessionId/);
     assert.match(pane, /PreviewAnnotateAddModal/);
+    assert.match(pane, /PreviewAnnotateFloatingBar/);
+    assert.match(pane, /annotatingEnabled:\s*false/);
+    assert.match(pane, /cancelSelected/);
     assert.doesNotMatch(pane, /buildAnnotatedSource/);
-    assert.doesNotMatch(pane, /PreviewAnnotateFloatingBar/);
+    // mouseup 禁止直开 AddModal；由 FloatingBar onAdd 显式打开
+    const mouseUpBody = pane.match(
+      /const onMouseUp = \(\) => \{[\s\S]*?\n    \};/,
+    );
+    assert.ok(mouseUpBody, "须存在 onMouseUp");
+    assert.doesNotMatch(mouseUpBody![0], /setAddOpen\(true\)/);
+    assert.doesNotMatch(pane, /draftId=\{null\}/);
   });
 
   it("AddModal 写入 renderStart/renderEnd", () => {
