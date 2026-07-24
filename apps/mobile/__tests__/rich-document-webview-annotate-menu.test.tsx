@@ -1,9 +1,11 @@
 /**
- * RichDocumentWebView：划词批注时挂原生选区菜单「添加批注」。
+ * RichDocumentWebView：Recogito MD 批注；无原生 menuItems / collect 主路径。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 
 const mockWebViewProps: Array<Record<string, unknown>> = [];
 
@@ -24,11 +26,6 @@ jest.mock('@/webview-host/rich-document/uri', () => ({
   getRichDocumentPackageDirUri: () => 'file:///rich-document/',
 }));
 
-jest.mock('@react-native-clipboard/clipboard', () => ({
-  __esModule: true,
-  default: {setString: jest.fn()},
-}));
-
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
@@ -42,19 +39,37 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-import Clipboard from '@react-native-clipboard/clipboard';
-import {
-  RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
-  RichDocumentWebView,
-} from '../src/components/vfs/RichDocumentWebView';
+import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
 
-describe('RichDocumentWebView annotate menuItems', () => {
+describe('RichDocumentWebView annotate（无 menuItems）', () => {
   beforeEach(() => {
     mockWebViewProps.length = 0;
-    (Clipboard.setString as jest.Mock).mockClear();
   });
 
-  it('annotateEnabled=false 不挂 menuItems', () => {
+  it('annotateEnabled=true 仍不挂 menuItems / onCustomMenuSelection', () => {
+    act(() => {
+      TestRenderer.create(
+        <RichDocumentWebView
+          html="<p>hello world</p>"
+          annotateEnabled
+          annotations={[
+            {
+              id: 'a1',
+              originalText: 'hello',
+              renderStart: 0,
+              renderEnd: 5,
+            },
+          ]}
+          onRecogitoCreate={jest.fn()}
+        />,
+      );
+    });
+    const last = mockWebViewProps[mockWebViewProps.length - 1];
+    expect(last?.menuItems).toBeUndefined();
+    expect(last?.onCustomMenuSelection).toBeUndefined();
+  });
+
+  it('annotateEnabled=false 亦不挂 menuItems', () => {
     act(() => {
       TestRenderer.create(
         <RichDocumentWebView plain="hello" annotateEnabled={false} />,
@@ -64,34 +79,16 @@ describe('RichDocumentWebView annotate menuItems', () => {
     expect(last?.menuItems).toBeUndefined();
   });
 
-  it('annotateEnabled=true 挂「批注」「复制」；批注走 inject / collect；复制写剪贴板', () => {
-    const onAnnotateCollect = jest.fn();
-    const onSelectionAnnotate = jest.fn();
-    act(() => {
-      TestRenderer.create(
-        <RichDocumentWebView
-          plain="hello world"
-          annotateEnabled
-          annotateCollectMode="plain"
-          onAnnotateCollect={onAnnotateCollect}
-          onSelectionAnnotate={onSelectionAnnotate}
-        />,
-      );
-    });
-    const last = mockWebViewProps[mockWebViewProps.length - 1];
-    expect(last?.menuItems).toEqual([...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]);
-    const handler = last?.onCustomMenuSelection as
-      | ((e: {nativeEvent: {key: string; selectedText: string}}) => void)
-      | undefined;
-    expect(typeof handler).toBe('function');
-    // mock WebView 无 injectJavaScript：有 onAnnotateCollect 时不会立刻回调
-    handler?.({
-      nativeEvent: {key: 'annotate', selectedText: '  hello  '},
-    });
-    expect(onSelectionAnnotate).not.toHaveBeenCalled();
-    handler?.({
-      nativeEvent: {key: 'copy', selectedText: '  world  '},
-    });
-    expect(Clipboard.setString).toHaveBeenCalledWith('world');
+  it('源码无旧 menuItems / collect；含 Recogito 消息路径', () => {
+    const src = readFileSync(
+      join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
+      'utf8',
+    );
+    expect(src).not.toMatch(/menuItems/);
+    expect(src).not.toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
+    expect(src).not.toMatch(/__nmCollectAnnotateSelection/);
+    expect(src).not.toMatch(/onAnnotateCollect/);
+    expect(src).toContain('recogitoCreate');
+    expect(src).toContain("type: 'setAnnotations'");
   });
 });

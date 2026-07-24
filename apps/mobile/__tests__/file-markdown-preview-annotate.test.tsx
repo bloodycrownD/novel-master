@@ -1,5 +1,5 @@
 /**
- * 预览划词 → store → chip 联动（组件可测部分）。
+ * 预览批注接线：Recogito MD-only（annotations 投影；plain 禁用；无插锚 HTML）。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -78,7 +78,7 @@ const tokens = {
   textTertiary: '#666',
 };
 
-describe('FileMarkdownPreview annotate wiring', () => {
+describe('FileMarkdownPreview annotate wiring (Recogito MD-only)', () => {
   beforeEach(() => {
     mockReadEngine.mockReset();
     mockReadEngine.mockResolvedValue('webview');
@@ -113,7 +113,7 @@ body here
     expect(last?.annotateEnabled).toBe(false);
   });
 
-  it('annotateEnabled=true 传递 onAnnotateCollect；store 写入后 chip 联动', async () => {
+  it('MD annotateEnabled 传 annotations + onRecogitoCreate；html 无插锚；chip 可联动', async () => {
     const sessionId = 's-preview-ann';
     const path = '/note.md';
     const content = `---
@@ -126,8 +126,8 @@ hello world
       path,
       originalText: 'hello',
       userAnnotation: '备注',
-      startOffset: content.indexOf('hello'),
-      endOffset: content.indexOf('hello') + 5,
+      renderStart: 0,
+      renderEnd: 5,
     });
 
     await act(async () => {
@@ -136,6 +136,7 @@ hello world
           path={path}
           content={content}
           tokens={tokens}
+          renderKind="markdown"
           annotateEnabled
           sessionId={sessionId}
         />,
@@ -150,35 +151,38 @@ hello world
       unknown
     >;
     expect(last?.annotateEnabled).toBe(true);
-    expect(typeof last?.onAnnotateCollect).toBe('function');
-    expect(last?.annotations).toBeUndefined();
-    expect(String(last?.html ?? '')).toContain('data-annotate-id="a1"');
+    expect(typeof last?.onRecogitoCreate).toBe('function');
+    expect(last?.onAnnotateCollect).toBeUndefined();
+    expect(last?.annotations).toEqual([
+      {
+        id: 'a1',
+        originalText: 'hello',
+        renderStart: 0,
+        renderEnd: 5,
+      },
+    ]);
+    expect(String(last?.html ?? '')).not.toContain('data-annotate-id');
+    expect(String(last?.html ?? '')).not.toContain('nm-annotate-anchor');
 
-    // chip 联动：refreshComposerAnnotateChips 由添加路径调用；此处直接断言 store→chip
     expect(chipsFromAnnotateStore(sessionId)).toHaveLength(1);
     expect(chipsFromAnnotateStore(sessionId)[0]?.action).toBe('annotate');
   });
 
-  it('草稿含 offset 时文本/MD 均注入锚（不再透传 annotations 行列）', async () => {
-    const sessionId = 's-soft-range';
+  it('缺 render 坐标的草稿不投影到 annotations', async () => {
+    const sessionId = 's-no-render';
     const path = '/note.md';
     const content = `---
 title: T
 ---
 hello world
 `;
-    const start = content.indexOf('hello');
     addChatAnnotateDraft(sessionId, {
-      id: 'a1',
+      id: 'legacy',
       path,
       originalText: 'hello',
-      userAnnotation: '备注',
-      startOffset: start,
-      endOffset: start + 5,
-      startLine: 2,
-      endLine: 6,
-      startCol: 1,
-      endCol: 5,
+      userAnnotation: '旧稿',
+      startOffset: content.indexOf('hello'),
+      endOffset: content.indexOf('hello') + 5,
     });
 
     await act(async () => {
@@ -187,6 +191,7 @@ hello world
           path={path}
           content={content}
           tokens={tokens}
+          renderKind="markdown"
           annotateEnabled
           sessionId={sessionId}
         />,
@@ -200,11 +205,12 @@ hello world
       string,
       unknown
     >;
-    expect(last?.annotations).toBeUndefined();
-    expect(String(last?.html ?? '')).toContain('data-annotate-id="a1"');
+    expect(last?.annotateEnabled).toBe(true);
+    expect(last?.annotations).toEqual([]);
+    expect(String(last?.html ?? '')).not.toContain('data-annotate-id');
   });
 
-  it('同文多条均按 offset 注入（A-1 / 同源 id）', async () => {
+  it('同文多条均按 render 坐标投影（同源 id）', async () => {
     const sessionId = 's-same-text';
     const path = '/note.md';
     const content = `---
@@ -212,23 +218,21 @@ title: T
 ---
 hello world hello
 `;
-    const first = content.indexOf('hello');
-    const second = content.lastIndexOf('hello');
     addChatAnnotateDraft(sessionId, {
       id: 'a1',
       path,
       originalText: 'hello',
       userAnnotation: '一',
-      startOffset: first,
-      endOffset: first + 5,
+      renderStart: 0,
+      renderEnd: 5,
     });
     addChatAnnotateDraft(sessionId, {
       id: 'a2',
       path,
       originalText: 'hello',
       userAnnotation: '二',
-      startOffset: second,
-      endOffset: second + 5,
+      renderStart: 12,
+      renderEnd: 17,
     });
 
     await act(async () => {
@@ -237,6 +241,7 @@ hello world hello
           path={path}
           content={content}
           tokens={tokens}
+          renderKind="markdown"
           annotateEnabled
           sessionId={sessionId}
         />,
@@ -246,16 +251,15 @@ hello world hello
       await Promise.resolve();
     });
 
-    const last = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as Record<
-      string,
-      unknown
-    >;
-    const html = String(last?.html ?? '');
-    expect(html).toContain('data-annotate-id="a1"');
-    expect(html).toContain('data-annotate-id="a2"');
+    const last = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as {
+      annotations?: {id: string}[];
+      html?: string;
+    };
+    expect(last?.annotations?.map(a => a.id)).toEqual(['a1', 'a2']);
+    expect(String(last?.html ?? '')).not.toContain('data-annotate-id');
   });
 
-  it('txt + annotateEnabled 走 WebView 认锚 html（layout=plain）', async () => {
+  it('txt + annotateEnabled 不挂 RichDocumentWebView（plain 禁用批注）', async () => {
     await act(async () => {
       TestRenderer.create(
         <FileMarkdownPreview
@@ -271,16 +275,7 @@ hello world hello
     await act(async () => {
       await Promise.resolve();
     });
-    const last = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as Record<
-      string,
-      unknown
-    >;
-    expect(last?.annotateEnabled).toBe(true);
-    expect(last?.layout).toBe('plain');
-    expect(last?.annotateCollectMode).toBe('plain');
-    expect(typeof last?.html === 'string' || last?.plain === 'plain text body').toBe(
-      true,
-    );
+    expect(mockRichDocumentWebView.mock.calls.length).toBe(0);
   });
 
   it('写入 annotate store 后 refreshComposerAnnotateChips 合并进状态条', () => {
@@ -302,7 +297,7 @@ hello world hello
     ).toBe(true);
   });
 
-  it('T-UL1: 同 session 两 path 草稿，切换 preview 时仅当前 path 锚进 html', async () => {
+  it('T-UL1: 同 session 两 path 草稿，切换 preview 时仅当前 path 进 annotations', async () => {
     const sessionId = 's-ul1-multi-path';
     const pathA = '/a.md';
     const pathB = '/b.md';
@@ -321,16 +316,16 @@ beta text
       path: pathA,
       originalText: 'alpha',
       userAnnotation: '批A',
-      startOffset: contentA.indexOf('alpha'),
-      endOffset: contentA.indexOf('alpha') + 5,
+      renderStart: 0,
+      renderEnd: 5,
     });
     addChatAnnotateDraft(sessionId, {
       id: 'db',
       path: pathB,
       originalText: 'beta',
       userAnnotation: '批B',
-      startOffset: contentB.indexOf('beta'),
-      endOffset: contentB.indexOf('beta') + 4,
+      renderStart: 0,
+      renderEnd: 4,
     });
 
     let root: TestRenderer.ReactTestRenderer;
@@ -340,17 +335,18 @@ beta text
           path={pathA}
           content={contentA}
           tokens={tokens}
+          renderKind="markdown"
           annotateEnabled
           sessionId={sessionId}
         />,
       );
     });
 
-    const propsA = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as Record<
-      string,
-      unknown
-    >;
-    expect(String(propsA?.html ?? '')).toContain('data-annotate-id="da"');
+    const propsA = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as {
+      annotations?: {id: string}[];
+      html?: string;
+    };
+    expect(propsA?.annotations?.map(a => a.id)).toEqual(['da']);
     expect(String(propsA?.html ?? '')).not.toContain('data-annotate-id="db"');
 
     mockRichDocumentWebView.mockClear();
@@ -361,17 +357,16 @@ beta text
           path={pathB}
           content={contentB}
           tokens={tokens}
+          renderKind="markdown"
           annotateEnabled
           sessionId={sessionId}
         />,
       );
     });
 
-    const propsB = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as Record<
-      string,
-      unknown
-    >;
-    expect(String(propsB?.html ?? '')).toContain('data-annotate-id="db"');
-    expect(String(propsB?.html ?? '')).not.toContain('data-annotate-id="da"');
+    const propsB = mockRichDocumentWebView.mock.calls.at(-1)?.[0] as {
+      annotations?: {id: string}[];
+    };
+    expect(propsB?.annotations?.map(a => a.id)).toEqual(['db']);
   });
 });

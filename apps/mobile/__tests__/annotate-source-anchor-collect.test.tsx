@@ -1,5 +1,6 @@
 /**
- * T-SA8 / T-SA8b：plain Range 量测 + MD menuItems 邻域采集链。
+ * T-SA8：plain Range 量测 / 邻域定位工具仍保留。
+ * 旧 menuItems → collect 主通道已退役（Recogito MD-only）；此处断言宿主不再挂该路径。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
@@ -41,11 +42,6 @@ jest.mock('@/webview-host/rich-document/uri', () => ({
   getRichDocumentPackageDirUri: () => 'file:///rich-document/',
 }));
 
-jest.mock('@react-native-clipboard/clipboard', () => ({
-  __esModule: true,
-  default: {setString: jest.fn()},
-}));
-
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
@@ -59,10 +55,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-import {
-  RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
-  RichDocumentWebView,
-} from '../src/components/vfs/RichDocumentWebView';
+import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
 
 /** 最小 DOM：textContent 对齐无锚源；锚 span 不计入 Range.toString。 */
 function installMiniDom(sourceText: string, selStart: number, selEnd: number) {
@@ -150,7 +143,7 @@ describe('T-SA8 plain 量测 → estimateSoftOffsetRangeFromPlainOffsets', () =>
   });
 });
 
-describe('T-SA8b menuItems → 邻域 → Core 定位', () => {
+describe('T-SA8b 旧 menuItems 采集退役；邻域工具仍可用', () => {
   beforeEach(() => {
     mockWebViewProps.length = 0;
     resetChatAnnotateDraftStoreForTests();
@@ -158,34 +151,45 @@ describe('T-SA8b menuItems → 邻域 → Core 定位', () => {
 
   afterEach(() => {
     resetChatAnnotateDraftStoreForTests();
+    delete (global as {document?: unknown}).document;
+    delete (global as {window?: unknown}).window;
   });
 
-  it('挂 menuItems；源码主通道含 injectJavaScript + selectionCollect', () => {
+  it('RichDocumentWebView 不挂 menuItems / onAnnotateCollect；走 Recogito', () => {
+    const onRecogitoCreate = jest.fn();
     act(() => {
       TestRenderer.create(
         <RichDocumentWebView
           html="<p>hello</p>"
           annotateEnabled
-          annotateCollectMode="markdown"
-          onAnnotateCollect={jest.fn()}
+          annotations={[
+            {
+              id: 'a1',
+              originalText: 'hello',
+              renderStart: 0,
+              renderEnd: 5,
+            },
+          ]}
+          onRecogitoCreate={onRecogitoCreate}
         />,
       );
     });
     const last = mockWebViewProps[mockWebViewProps.length - 1];
-    expect(last?.menuItems).toEqual([...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]);
-    expect(typeof last?.onCustomMenuSelection).toBe('function');
+    expect(last?.menuItems).toBeUndefined();
+    expect(last?.onCustomMenuSelection).toBeUndefined();
+    expect(last?.onAnnotateCollect).toBeUndefined();
 
     const src = readFileSync(
       join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
       'utf8',
     );
-    expect(src).toContain('injectJavaScript');
-    expect(src).toContain('selectionCollect');
-    expect(src).toContain('__nmCollectAnnotateSelection');
-    expect(src).toContain('onAnnotateCollect');
-    // 遗留 selectionAnnotate 不得再作主触发
-    expect(src).toMatch(/selectionAnnotate/);
-    expect(src).toContain('@deprecated');
+    expect(src).not.toContain('menuItems');
+    expect(src).not.toContain('RICH_DOCUMENT_ANNOTATE_MENU_ITEMS');
+    expect(src).not.toContain('__nmCollectAnnotateSelection');
+    expect(src).not.toContain('onAnnotateCollect');
+    expect(src).toContain('setAnnotations');
+    expect(src).toContain('recogitoCreate');
+    expect(src).toContain('onRecogitoCreate');
   });
 
   it('邻域定位成功写入半开 offset；无邻域多命中失败不写 offset（A12）', () => {
@@ -223,7 +227,7 @@ describe('T-SA8b menuItems → 邻域 → Core 定位', () => {
     expect(fail).toBeNull();
   });
 
-  it('markdown collect 产出 originalText + contextBefore/After', () => {
+  it('markdown collect 产出 originalText + contextBefore/After（工具层残留）', () => {
     const source = 'alpha SAME beta';
     const selStart = source.indexOf('SAME');
     const selEnd = selStart + 4;
@@ -233,7 +237,5 @@ describe('T-SA8b menuItems → 邻域 → Core 定位', () => {
     expect(collected?.mode).toBe('markdown');
     expect(collected?.contextBefore).toContain('alpha');
     expect(collected?.contextAfter).toContain('beta');
-    delete (global as {document?: unknown}).document;
-    delete (global as {window?: unknown}).window;
   });
 });
