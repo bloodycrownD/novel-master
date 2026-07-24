@@ -24,7 +24,7 @@ updated: 2026-07-24
 | R3 | **干净渲染**：MD 输入为 VFS 无锚原文（body）；`prepareTranscriptRichHtml` / `react-markdown` 等管道 **不得**先注入批注 HTML。 |
 | R4 | **草稿位置权威**：相对 **MD 渲染后、Recogito 所挂容器的可见正文** 的半开 `[start, end)` + `quote`（即 Recogito `target.selector`）。写入 `AnnotateDraft`（字段名见下）；**不再**以 VFS soft offset 作为预览投影权威。 |
 | R5 | **无 fallback**：删除或永久关闭预览主路径上的 `buildAnnotatedSource` 注锚接线、`applyAnnotateMarks`/`applyAnnotateHighlights`、`setAnnotations` 搜字链、`NM_ANNOTATE_DOM_SEARCH_FALLBACK` / `setPreviewAnnotateDomSearchFallbackForTests` 等应急开关（测试亦不得依赖其开）。Core 中 `buildAnnotatedSource` 可暂留文件但宿主预览 **禁止调用**。 |
-| R6 | **点击/创建**：Recogito `createAnnotation` → 宿主写草稿 + chip；`selectionChanged` / 选中已有 → 打开既有详情。可用现有 AddModal / 详情 / 删除流。 |
+| R6 | **点击/创建**：新建：RN 原生选区菜单「复制 / 批注」→ inject 量测 `.doc-body` 半开 offset → `recogitoCreate` → 写草稿 + chip。Recogito **`annotatingEnabled: false`**，禁止划词即 createAnnotation（避免选区变蓝、吞菜单）。已有批注：`selectionChanged` → 打开既有详情。 |
 | R7 | **发送附件**：至少 `path` + `originalText`（= quote）+ `userAnnotation`；渲染坐标字段有则写出（便于调试/日后），模型侧以引文为主。 |
 | R8 | **存量**：仅有旧 VFS offset、无 Recogito 坐标的草稿：MD 预览 **可不投影高亮**，chip/详情/发送仍可用（A12 底线）。 |
 | R9 | **双端**：Desktop / Mobile 同一合同；Primary 手测宿主 = Mobile。 |
