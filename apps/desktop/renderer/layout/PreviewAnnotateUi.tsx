@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import type {
   AnnotateDraft,
+  AnnotateSoftOffsetRange,
   AnnotateSoftSourceRange,
 } from "@shared/logic/chat";
 import { Button } from "../components/ui/Button";
@@ -53,7 +54,11 @@ type AddModalProps = {
   readonly selectedText: string;
   readonly sessionId: string;
   readonly filePath: string;
-  /** 加草稿时写入的宽松行列（采集侧已估算）。 */
+  /**
+   * 权威宽松半开 offset（A1 / Step 5）；映射失败为 null（A12 不写脏 offset）。
+   */
+  readonly softOffsetRange?: AnnotateSoftOffsetRange | null;
+  /** 由 offset 派生的行列；无 offset 时可不写。 */
   readonly softRange?: AnnotateSoftSourceRange | null;
   readonly onClose: () => void;
 };
@@ -63,6 +68,7 @@ export function PreviewAnnotateAddModal({
   selectedText,
   sessionId,
   filePath,
+  softOffsetRange = null,
   softRange = null,
   onClose,
 }: AddModalProps) {
@@ -97,15 +103,22 @@ export function PreviewAnnotateAddModal({
         path: filePath,
         originalText: selectedText,
         userAnnotation: trimmed,
-        ...(softRange != null
+        // A12：映射失败不写脏 offset；有 offset 时同步派生行列
+        ...(softOffsetRange != null
           ? {
-              startLine: softRange.startLine,
-              endLine: softRange.endLine,
-              ...(softRange.startCol != null
-                ? { startCol: softRange.startCol }
-                : {}),
-              ...(softRange.endCol != null
-                ? { endCol: softRange.endCol }
+              startOffset: softOffsetRange.startOffset,
+              endOffset: softOffsetRange.endOffset,
+              ...(softRange != null
+                ? {
+                    startLine: softRange.startLine,
+                    endLine: softRange.endLine,
+                    ...(softRange.startCol != null
+                      ? { startCol: softRange.startCol }
+                      : {}),
+                    ...(softRange.endCol != null
+                      ? { endCol: softRange.endCol }
+                      : {}),
+                  }
                 : {}),
             }
           : {}),

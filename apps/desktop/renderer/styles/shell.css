@@ -4672,13 +4672,28 @@ html[data-theme="dark"] .chat-batch-bar {
 }
 
 /* PreviewPane 划词批注（仅 chat + read） */
-/* Custom Highlight 主路径（H2） */
+/* 源锚主路径（A5）：下划线 + 淡底 */
+.nm-annotate-anchor {
+  background: color-mix(in srgb, var(--accent-blue) 14%, transparent);
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent-blue);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.nm-annotate-anchor:hover {
+  background: var(--accent-blue-soft);
+}
+
+/* 应急搜字路径：Custom Highlight / mark 回退 */
 ::highlight(nm-annotate) {
   text-decoration: underline;
   text-decoration-color: var(--accent-blue);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
-  background-color: transparent;
+  background-color: color-mix(in srgb, var(--accent-blue) 22%, transparent);
   color: inherit;
 }
 

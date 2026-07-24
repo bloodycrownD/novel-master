@@ -9,13 +9,19 @@ import {
 } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
 import { formatVfsErrorForUser, type VfsScope } from "@shared/logic/vfs";
-import type { AnnotateDraft, AnnotateSoftSourceRange } from "@shared/logic/chat";
+import {
+  buildAnnotatedSource,
+  type AnnotateDraft,
+  type AnnotateSoftOffsetRange,
+  type AnnotateSoftSourceRange,
+} from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { useShellNav } from "../providers/ShellNavProvider";
 import {
@@ -26,12 +32,14 @@ import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
 import {
   applyAnnotateHighlights,
-  estimateSoftRangeForPreviewSelection,
+  collectAnnotateRangeForPreviewSelection,
   getSelectionFloatingAnchor,
+  isPreviewAnnotateDomSearchFallbackEnabled,
   isPreviewAnnotateEnabled,
   resolveAnnotateIdsFromClick,
   readSelectionTextInContainer,
 } from "./preview-annotate";
+import { sanitizeAnnotatePreviewHtml } from "./sanitize-annotate-preview-html";
 import {
   PreviewAnnotateAddModal,
   PreviewAnnotateDetailModal,
@@ -67,7 +75,6 @@ export function PreviewPane() {
   const [savedContent, setSavedContent] = useState("");
   const [version, setVersion] = useState<number | undefined>();
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [fileMissing, setFileMissing] = useState(false);
   const [annotateDrafts, setAnnotateDrafts] = useState<readonly AnnotateDraft[]>(
     () => listChatAnnotateDrafts(sessionId),
@@ -76,14 +83,18 @@ export function PreviewPane() {
     top: number;
     left: number;
     text: string;
+    softOffsetRange: AnnotateSoftOffsetRange | null;
     softRange: AnnotateSoftSourceRange | null;
   } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState("");
+  const [pendingSoftOffsetRange, setPendingSoftOffsetRange] =
+    useState<AnnotateSoftOffsetRange | null>(null);
   const [pendingSoftRange, setPendingSoftRange] =
     useState<AnnotateSoftSourceRange | null>(null);
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
+  const [saving, setSaving] = useState(false);
   const previewContentRef = useRef<HTMLDivElement | null>(null);
 
   const annotateEnabled = isPreviewAnnotateEnabled(
@@ -91,6 +102,8 @@ export function PreviewPane() {
     previewFile?.workspaceScope,
     sessionId,
   );
+  const domSearchFallback =
+    annotateEnabled && isPreviewAnnotateDomSearchFallbackEnabled();
 
   const pathDrafts = useMemo(() => {
     if (!annotateEnabled || previewFile == null) {
@@ -170,6 +183,33 @@ export function PreviewPane() {
       ? shouldRenderMarkdownPreview(previewFile.path, content)
       : false;
 
+  /** 主路径：同源 drafts + VFS 原文按 mode 派生锚串并消毒；应急搜字时不注入。 */
+  const annotatedPreview = useMemo(() => {
+    if (!annotateEnabled || domSearchFallback || pathDrafts.length === 0) {
+      return null;
+    }
+    // A12：仅有无 offset 旧草稿时不走注入（避免整文件无意义转义）
+    const hasOffsetDraft = pathDrafts.some(
+      (d) => d.startOffset != null && d.endOffset != null,
+    );
+    if (!hasOffsetDraft) {
+      return null;
+    }
+    const modeKey = isMarkdown ? "markdown" : "text";
+    const { annotatedSource } = buildAnnotatedSource({
+      sourceText: content,
+      drafts: pathDrafts,
+      mode: modeKey,
+    });
+    return sanitizeAnnotatePreviewHtml(annotatedSource);
+  }, [
+    annotateEnabled,
+    domSearchFallback,
+    pathDrafts,
+    isMarkdown,
+    content,
+  ]);
+
   const refreshSelectionFloating = useCallback(() => {
     if (!annotateEnabled) {
       setFloating(null);
@@ -187,20 +227,24 @@ export function PreviewPane() {
       return;
     }
     const plainRoot =
-      root?.querySelector?.("pre.preview-text") ?? null;
-    const softRange = estimateSoftRangeForPreviewSelection({
+      (root?.querySelector?.("pre.preview-text") as HTMLElement | null) ?? null;
+    const mdRoot =
+      (root?.querySelector?.(".preview-markdown") as HTMLElement | null) ?? null;
+    const collected = collectAnnotateRangeForPreviewSelection({
       sourceText: content,
       isPlainPreview: !isMarkdown,
       selectedText: text,
       selection:
         typeof window !== "undefined" ? window.getSelection() : null,
-      plainRoot: plainRoot as HTMLElement | null,
+      plainRoot,
+      selectionRoot: isMarkdown ? mdRoot : plainRoot,
     });
     setFloating({
       top: anchor.top,
       left: anchor.left,
       text,
-      softRange,
+      softOffsetRange: collected.softOffsetRange,
+      softRange: collected.softRange,
     });
   }, [annotateEnabled, content, isMarkdown]);
 
@@ -248,13 +292,14 @@ export function PreviewPane() {
     };
   }, [annotateEnabled, refreshSelectionFloating]);
 
+  // Step 6：默认禁止渲染后 applyAnnotateHighlights；仅应急开关开启时恢复
   useLayoutEffect(() => {
     const root = previewContentRef.current;
-    if (root == null || !annotateEnabled) {
+    if (root == null || !annotateEnabled || !domSearchFallback) {
       return;
     }
     applyAnnotateHighlights(root, pathDrafts, { sourceText: content });
-  }, [annotateEnabled, pathDrafts, content, loading]);
+  }, [annotateEnabled, domSearchFallback, pathDrafts, content, loading]);
 
   const openDraftsByIds = useCallback(
     (ids: readonly string[]) => {
@@ -392,8 +437,22 @@ export function PreviewPane() {
           >
             {isMarkdown ? (
               <div className="preview-markdown">
-                <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
+                {annotatedPreview != null ? (
+                  <Markdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
+                  >
+                    {annotatedPreview}
+                  </Markdown>
+                ) : (
+                  <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
+                )}
               </div>
+            ) : annotatedPreview != null ? (
+              <pre
+                className="preview-text"
+                dangerouslySetInnerHTML={{ __html: annotatedPreview }}
+              />
             ) : (
               <pre className="preview-text">{content || "（空文件）"}</pre>
             )}
@@ -430,6 +489,7 @@ export function PreviewPane() {
           left={floating.left}
           onAdd={() => {
             setPendingSelection(floating.text);
+            setPendingSoftOffsetRange(floating.softOffsetRange);
             setPendingSoftRange(floating.softRange);
             setAddOpen(true);
             setFloating(null);
@@ -441,11 +501,13 @@ export function PreviewPane() {
         <PreviewAnnotateAddModal
           open={addOpen}
           selectedText={pendingSelection}
+          softOffsetRange={pendingSoftOffsetRange}
           softRange={pendingSoftRange}
           sessionId={sessionId}
           filePath={previewFile.path}
           onClose={() => {
             setAddOpen(false);
+            setPendingSoftOffsetRange(null);
             setPendingSoftRange(null);
           }}
         />

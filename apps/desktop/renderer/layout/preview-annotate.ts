@@ -1,14 +1,16 @@
 /**
- * Desktop PreviewPane 划词批注：入口门闩 + 选区 + 原文匹配高亮。
- * 主路径 CSS Custom Highlight（H1/H2）；不支持时 mark 回退（H3）。
- * 纯算法在 `@shared/logic/chat`；本文件保留 DOM collect / Range / wrap 壳。
+ * Desktop PreviewPane 划词批注：入口门闩 + 选区采集 + 锚点击。
+ * 预览主路径：源 offset → buildAnnotatedSource 注入锚（PreviewPane）；
+ * 本文件不再默认走 findAllOccurrences / applyAnnotateHighlights 搜字绘制。
+ * 应急开关可临时恢复旧 DOM 搜字 apply（默认关）。
  * 仅 mode==="read" 且 workspaceScope==="chat" 且非空 sessionId 启用。
  */
 
 import {
+  ANNOTATE_ANCHOR_CLASS,
   buildFlatTextIndex,
-  estimateSoftRangeFromOriginalText,
-  estimateSoftRangeFromPlainOffsets,
+  deriveSoftRangeFieldsFromOffsets,
+  estimateSoftOffsetRangeFromPlainOffsets,
   findAllOccurrences,
   findAnnotateOccurrenceInSource,
   groupAnnotateIdsByOriginalText,
@@ -16,7 +18,10 @@ import {
   mapFlatRangeToSegments,
   normalizeAnnotateNeedle,
   parseAnnotateIdsAttr,
+  annotateOccurrenceOrdinal,
+  selectAnnotateOccurrenceStarts,
   sortAnnotateTextsLongestFirst,
+  type AnnotateSoftOffsetRange,
   type AnnotateSoftSourceRange,
 } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
@@ -33,9 +38,31 @@ export {
 
 export const PREVIEW_ANNOTATE_MARK_CLASS = "preview-annotate-mark";
 export const PREVIEW_ANNOTATE_IDS_ATTR = "data-annotate-ids";
-/** CSS Custom Highlight 注册名（::highlight(nm-annotate)）。 */
+/** 锚点属性（A5 / A9）；与 Core `data-annotate-id` 一致。 */
+export const PREVIEW_ANNOTATE_ID_ATTR = "data-annotate-id";
+/** CSS Custom Highlight 注册名（::highlight(nm-annotate)；仅应急路径）。 */
 export const PREVIEW_ANNOTATE_HIGHLIGHT_NAME = "nm-annotate";
 
+/** MD 邻域默认半径（UTF-16 code unit；宿主侧，Core 邻域 API 缺口时暂用）。 */
+const MD_NEIGHBORHOOD_RADIUS = 64;
+
+/**
+ * 应急回滚：为 true 时 PreviewPane 可临时恢复旧 applyAnnotateHighlights。
+ * 默认关；单测可用 {@link setPreviewAnnotateDomSearchFallbackForTests}。
+ */
+let previewAnnotateDomSearchFallback = false;
+
+/** 是否启用旧 DOM 搜字高亮应急路径（默认 false）。 */
+export function isPreviewAnnotateDomSearchFallbackEnabled(): boolean {
+  return previewAnnotateDomSearchFallback;
+}
+
+/** 测试 / 应急开关：临时恢复旧搜字 apply。 */
+export function setPreviewAnnotateDomSearchFallbackForTests(
+  enabled: boolean,
+): void {
+  previewAnnotateDomSearchFallback = enabled;
+}
 /** 切断匹配域：block / br / TABLE（表内相邻 Text 直拼；表与前后段落切断，T1/T6）。 */
 const CUT_BOUNDARY_TAGS = new Set([
   "ADDRESS",
@@ -196,9 +223,89 @@ export function getSelectionOffsetsInElement(
   return { start, end: start + selectedLen };
 }
 
+/** 划词采集结果：权威为宽松半开 offset；行列由其派生。 */
+export type PreviewAnnotateCollectResult = {
+  /** 映射成功时非 null；失败走 A12，不写脏 offset。 */
+  readonly softOffsetRange: AnnotateSoftOffsetRange | null;
+  /** 由 softOffsetRange 派生；无 offset 时可为 null。 */
+  readonly softRange: AnnotateSoftSourceRange | null;
+};
+
 /**
- * 预览选区 → 源文件宽松行列（H6/H7）。
- * plain：选区偏移换算；MD / 无偏移：原文定位 + padding。
+ * 预览选区 → 源文件宽松半开 offset（Step 5 / A10）。
+ * plain：`getSelectionOffsetsInElement` → `estimateSoftOffsetRangeFromPlainOffsets`。
+ * MD：邻域 + 源全文定位（暂用宿主实现；Core 专用邻域 API 缺口记 fix 波次）→ 同一 padding。
+ * 失败 → softOffsetRange=null（A12）。
+ */
+export function collectAnnotateRangeForPreviewSelection(args: {
+  readonly sourceText: string;
+  readonly isPlainPreview: boolean;
+  readonly selectedText: string;
+  readonly selection?: Selection | null;
+  /** plain 量测根（如 pre.preview-text）；认锚后仍用 Range.toString 对齐无锚源串。 */
+  readonly plainRoot?: HTMLElement | null;
+  /** MD 邻域量测根（如 .preview-markdown）；缺省回退 plainRoot。 */
+  readonly selectionRoot?: ParentNode | null;
+  readonly contextBefore?: string;
+  readonly contextAfter?: string;
+}): PreviewAnnotateCollectResult {
+  const { sourceText, isPlainPreview, selectedText } = args;
+  if (!sourceText || !selectedText) {
+    return { softOffsetRange: null, softRange: null };
+  }
+
+  let exact: { start: number; end: number } | null = null;
+
+  if (isPlainPreview && args.plainRoot != null) {
+    // plain 量测相对 VFS 无锚坐标系：认锚 DOM 的 Range.toString 不含标签字符
+    const offsets = getSelectionOffsetsInElement(
+      args.plainRoot,
+      args.selection,
+    );
+    if (offsets != null && offsets.start < offsets.end) {
+      exact = { start: offsets.start, end: offsets.end };
+    }
+  } else {
+    const neighborhoodRoot = args.selectionRoot ?? args.plainRoot ?? null;
+    const neighborhood =
+      args.contextBefore != null || args.contextAfter != null
+        ? {
+            before: args.contextBefore ?? "",
+            after: args.contextAfter ?? "",
+          }
+        : readSelectionNeighborhood(
+            neighborhoodRoot,
+            args.selection,
+            MD_NEIGHBORHOOD_RADIUS,
+          );
+    exact = locateOriginalTextWithNeighborhood(
+      sourceText,
+      selectedText,
+      neighborhood?.before ?? "",
+      neighborhood?.after ?? "",
+    );
+  }
+
+  if (exact == null) {
+    return { softOffsetRange: null, softRange: null };
+  }
+
+  const softOffsetRange = estimateSoftOffsetRangeFromPlainOffsets(
+    sourceText,
+    exact.start,
+    exact.end,
+  );
+  const softRange = deriveSoftRangeFieldsFromOffsets(
+    sourceText,
+    softOffsetRange.startOffset,
+    softOffsetRange.endOffset,
+  );
+  return { softOffsetRange, softRange };
+}
+
+/**
+ * @deprecated 请用 {@link collectAnnotateRangeForPreviewSelection}；保留给旧调用兼容。
+ * 仅返回行列；不再写 offset 权威。
  */
 export function estimateSoftRangeForPreviewSelection(args: {
   readonly sourceText: string;
@@ -207,26 +314,147 @@ export function estimateSoftRangeForPreviewSelection(args: {
   readonly selection?: Selection | null;
   readonly plainRoot?: HTMLElement | null;
 }): AnnotateSoftSourceRange | null {
-  const { sourceText, isPlainPreview, selectedText } = args;
-  if (!sourceText || !selectedText) {
-    return null;
-  }
-  if (isPlainPreview && args.plainRoot != null) {
-    const offsets = getSelectionOffsetsInElement(
-      args.plainRoot,
-      args.selection,
-    );
-    if (offsets != null) {
-      return estimateSoftRangeFromPlainOffsets(
-        sourceText,
-        offsets.start,
-        offsets.end,
-      );
-    }
-  }
-  return estimateSoftRangeFromOriginalText(sourceText, selectedText);
+  return collectAnnotateRangeForPreviewSelection(args).softRange;
 }
 
+/**
+ * 读选区前后邻域纯文本（MD 采集用；相对当前选区容器 text）。
+ * 邻域相对渲染 DOM，定位时再映射回 VFS 源串。
+ */
+export function readSelectionNeighborhood(
+  container: ParentNode | null | undefined,
+  selection: Selection | null | undefined = typeof window !== "undefined"
+    ? window.getSelection()
+    : null,
+  radius: number = MD_NEIGHBORHOOD_RADIUS,
+): { readonly before: string; readonly after: string } | null {
+  if (container == null || selection == null || selection.rangeCount === 0) {
+    return null;
+  }
+  if (selection.isCollapsed) {
+    return null;
+  }
+  const selRange = selection.getRangeAt(0);
+  if (
+    !container.contains(selRange.startContainer) ||
+    !container.contains(selRange.endContainer)
+  ) {
+    return null;
+  }
+  const doc = (container as Node).ownerDocument;
+  if (doc == null) {
+    return null;
+  }
+  const beforeRange = doc.createRange();
+  beforeRange.selectNodeContents(container as Node);
+  beforeRange.setEnd(selRange.startContainer, selRange.startOffset);
+  const fullBefore = beforeRange.toString().replace(/\u00a0/g, " ");
+  const afterRange = doc.createRange();
+  afterRange.selectNodeContents(container as Node);
+  afterRange.setStart(selRange.endContainer, selRange.endOffset);
+  const fullAfter = afterRange.toString().replace(/\u00a0/g, " ");
+  const pad = Math.max(0, Math.floor(radius));
+  return {
+    before: fullBefore.slice(Math.max(0, fullBefore.length - pad)),
+    after: fullAfter.slice(0, pad),
+  };
+}
+
+/**
+ * 在 VFS 无锚全文中用 originalText + 邻域定位精确半开区间。
+ * 唯一命中直接用；多命中取邻域匹配最近；失败 → null（A12）。
+ * 缺口：Core 尚无专用邻域定位导出时，暂由宿主实现（可后续换 Core API）。
+ */
+export function locateOriginalTextWithNeighborhood(
+  sourceText: string,
+  originalText: string,
+  contextBefore: string,
+  contextAfter: string,
+): { readonly start: number; readonly end: number } | null {
+  const needle = originalText.replace(/\u00a0/g, " ");
+  if (needle.length === 0) {
+    return null;
+  }
+  const hits: number[] = [];
+  let from = 0;
+  while (from <= sourceText.length) {
+    const at = sourceText.indexOf(needle, from);
+    if (at < 0) {
+      break;
+    }
+    hits.push(at);
+    from = at + Math.max(1, needle.length);
+  }
+  if (hits.length === 0) {
+    // 换行归一再试一次（对齐 estimateSoftRangeFromOriginalText）
+    const normSource = sourceText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    if (normNeedle.length === 0 || normSource === sourceText) {
+      return null;
+    }
+    return locateOriginalTextWithNeighborhood(
+      normSource,
+      normNeedle,
+      contextBefore.replace(/\r\n/g, "\n").replace(/\r/g, "\n"),
+      contextAfter.replace(/\r\n/g, "\n").replace(/\r/g, "\n"),
+    );
+  }
+  if (hits.length === 1) {
+    const start = hits[0]!;
+    return { start, end: start + needle.length };
+  }
+  const before = contextBefore.replace(/\u00a0/g, " ");
+  const after = contextAfter.replace(/\u00a0/g, " ");
+  if (!before && !after) {
+    // 多命中且无邻域 → 不猜（A12）；勿退回首次命中写脏 offset
+    return null;
+  }
+  let best: { start: number; score: number } | null = null;
+  for (const start of hits) {
+    const end = start + needle.length;
+    const srcBefore = sourceText.slice(Math.max(0, start - before.length), start);
+    const srcAfter = sourceText.slice(end, end + after.length);
+    let score = 0;
+    if (before && srcBefore.endsWith(before)) {
+      score += before.length + 10;
+    } else if (before) {
+      score += commonSuffixLength(srcBefore, before);
+    }
+    if (after && srcAfter.startsWith(after)) {
+      score += after.length + 10;
+    } else if (after) {
+      score += commonPrefixLength(srcAfter, after);
+    }
+    if (best == null || score > best.score) {
+      best = { start, score };
+    } else if (best != null && score === best.score) {
+      // 并列最高分 → 歧义，拒绝
+      best = { start: best.start, score: -1 };
+    }
+  }
+  if (best == null || best.score <= 0) {
+    return null;
+  }
+  return { start: best.start, end: best.start + needle.length };
+}
+
+function commonSuffixLength(a: string, b: string): number {
+  let i = 0;
+  const max = Math.min(a.length, b.length);
+  while (i < max && a[a.length - 1 - i] === b[b.length - 1 - i]) {
+    i++;
+  }
+  return i;
+}
+
+function commonPrefixLength(a: string, b: string): number {
+  let i = 0;
+  const max = Math.min(a.length, b.length);
+  while (i < max && a[i] === b[i]) {
+    i++;
+  }
+  return i;
+}
 /** 当前已注册的 Custom Highlight 条目（测试 / 点击）。 */
 export function getActiveAnnotateHighlightEntries(): readonly ActiveHighlightEntry[] {
   return activeHighlightEntries;
@@ -276,9 +504,8 @@ export type PreviewAnnotateDraftInput = {
 };
 
 /**
- * 按 originalText 在预览 DOM 内匹配并绘制高亮（H11：文本/MD 同入口）。
- * 有 sourceText 时先走 findAnnotateOccurrenceInSource（窗口优先，H5）；
- * 支持 Custom Highlight 则注册 Range，否则 mark 回退。
+ * 【应急】按 originalText 在预览 DOM 内匹配并绘制高亮。
+ * 预览主路径已退役（Step 6）；仅当 {@link isPreviewAnnotateDomSearchFallbackEnabled} 为真时由 PreviewPane 调用。
  */
 export function applyAnnotateHighlights(
   root: HTMLElement,
@@ -301,6 +528,7 @@ export function applyAnnotateHighlights(
       continue;
     }
 
+    let preferredOrdinal: number | null = null;
     if (options?.sourceText != null) {
       const softDraft = drafts.find(
         (d) => d.originalText === text && hasValidAnnotateSoftRange(d),
@@ -311,12 +539,21 @@ export function applyAnnotateHighlights(
         softDraft ?? null,
       );
       if (sourceHit == null) {
-        continue;
+        if (!softDraft) {
+          continue;
+        }
+        // 有软窗口但源 miss（MD 跨标记常见）：仍画 DOM，不按 ordinal 约束
+      } else if (softDraft) {
+        preferredOrdinal = annotateOccurrenceOrdinal(
+          options.sourceText,
+          text,
+          sourceHit.index,
+        );
       }
     }
 
     if (useHighlight) {
-      const ranges = collectMatchDomRanges(root, needle);
+      const ranges = collectMatchDomRanges(root, needle, preferredOrdinal);
       for (const range of ranges) {
         if (highlightEntries.some((e) => rangesIntersect(e.range, range))) {
           continue;
@@ -324,31 +561,72 @@ export function applyAnnotateHighlights(
         highlightEntries.push({ range, ids });
       }
     } else {
-      wrapAllPlainMatchesFlat(root, needle, ids);
+      wrapAllPlainMatchesFlat(root, needle, ids, preferredOrdinal);
     }
   }
 
   if (useHighlight && highlightEntries.length > 0) {
-    registerCssAnnotateHighlight(highlightEntries);
+    const ok = registerCssAnnotateHighlight(highlightEntries);
+    if (!ok) {
+      for (const text of texts) {
+        const ids = byText.get(text);
+        if (ids == null || ids.length === 0) {
+          continue;
+        }
+        const needle = normalizeAnnotateNeedle(text);
+        if (!needle) {
+          continue;
+        }
+        let preferredOrdinal: number | null = null;
+        if (options?.sourceText != null) {
+          const softDraft = drafts.find(
+            (d) => d.originalText === text && hasValidAnnotateSoftRange(d),
+          );
+          const sourceHit = findAnnotateOccurrenceInSource(
+            options.sourceText,
+            text,
+            softDraft ?? null,
+          );
+          if (sourceHit == null) {
+            if (!softDraft) {
+              continue;
+            }
+          } else if (softDraft) {
+            preferredOrdinal = annotateOccurrenceOrdinal(
+              options.sourceText,
+              text,
+              sourceHit.index,
+            );
+          }
+        }
+        wrapAllPlainMatchesFlat(root, needle, ids, preferredOrdinal);
+      }
+    }
   }
 }
 
 function registerCssAnnotateHighlight(
   entries: readonly ActiveHighlightEntry[],
-): void {
-  activeHighlightEntries = [...entries];
-  const HighlightCtor = (
-    globalThis as typeof globalThis & {
-      Highlight: new (...ranges: Range[]) => unknown;
-    }
-  ).Highlight;
-  const highlight = new HighlightCtor(...entries.map((e) => e.range));
-  const highlights = (
-    globalThis as typeof globalThis & {
-      CSS: { highlights: { set: (name: string, value: unknown) => void } };
-    }
-  ).CSS.highlights;
-  highlights.set(PREVIEW_ANNOTATE_HIGHLIGHT_NAME, highlight);
+): boolean {
+  try {
+    activeHighlightEntries = [...entries];
+    const HighlightCtor = (
+      globalThis as typeof globalThis & {
+        Highlight: new (...ranges: Range[]) => unknown;
+      }
+    ).Highlight;
+    const highlight = new HighlightCtor(...entries.map((e) => e.range));
+    const highlights = (
+      globalThis as typeof globalThis & {
+        CSS: { highlights: { set: (name: string, value: unknown) => void } };
+      }
+    ).CSS.highlights;
+    highlights.set(PREVIEW_ANNOTATE_HIGHLIGHT_NAME, highlight);
+    return true;
+  } catch {
+    activeHighlightEntries = [];
+    return false;
+  }
 }
 
 /** 两 Range 是否相交（含边界触碰视为相交，用于长优先去重）。 */
@@ -364,7 +642,8 @@ function rangesIntersect(a: Range, b: Range): boolean {
 }
 
 /**
- * 点击命中批注 id（H4）：Highlight hit-test → caret 与已注册 Range 求交 → closest(mark)。
+ * 点击命中批注 id（A9）：优先 closest('[data-annotate-id]')；
+ * 应急路径再走 Highlight hit-test / mark（旧 data-annotate-ids）。
  */
 export function resolveAnnotateIdsFromClick(
   root: HTMLElement,
@@ -374,6 +653,23 @@ export function resolveAnnotateIdsFromClick(
     readonly target: EventTarget | null;
   },
 ): string[] {
+  const target = event.target;
+  if (isDomElement(target)) {
+    const anchor = target.closest(
+      `[${PREVIEW_ANNOTATE_ID_ATTR}], .${ANNOTATE_ANCHOR_CLASS}`,
+    );
+    if (anchor != null && root.contains(anchor)) {
+      const id = anchor.getAttribute(PREVIEW_ANNOTATE_ID_ATTR);
+      if (id != null && id.length > 0) {
+        return [id];
+      }
+    }
+  }
+
+  if (!isPreviewAnnotateDomSearchFallbackEnabled()) {
+    return [];
+  }
+
   const fromHighlight = resolveIdsFromHighlightHitTest(
     root,
     event.clientX,
@@ -383,7 +679,6 @@ export function resolveAnnotateIdsFromClick(
     return fromHighlight;
   }
 
-  const target = event.target;
   if (isDomElement(target)) {
     const mark = target.closest(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`);
     if (mark != null && root.contains(mark)) {
@@ -495,11 +790,38 @@ function resolveIdsFromHighlightHitTest(
     }
   }
 
+  for (const entry of activeHighlightEntries) {
+    let rects: DOMRectList | ArrayLike<DOMRect> | null = null;
+    try {
+      rects = entry.range.getClientRects?.() ?? null;
+    } catch {
+      rects = null;
+    }
+    if (!rects || rects.length === 0) {
+      continue;
+    }
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i]!;
+      if (
+        clientX >= r.left &&
+        clientX <= r.right &&
+        clientY >= r.top &&
+        clientY <= r.bottom
+      ) {
+        return [...entry.ids];
+      }
+    }
+  }
+
   return [];
 }
 
-/** 一次收集 → flat 全量命中 → 各 Text 局部 DOM Range（不改 DOM；H2 允许多 Range）。 */
-function collectMatchDomRanges(root: HTMLElement, needle: string): Range[] {
+/** 一次收集 → flat 命中 → 各 Text 局部 DOM Range；有 preferred 时只取最近一处（H5）。 */
+function collectMatchDomRanges(
+  root: HTMLElement,
+  needle: string,
+  preferredOrdinal: number | null = null,
+): Range[] {
   const out: Range[] = [];
   const domains = collectUnmarkedTextDomains(root);
   for (const domainNodes of domains) {
@@ -508,7 +830,10 @@ function collectMatchDomRanges(root: HTMLElement, needle: string): Range[] {
     }
     const segments = domainNodes.map((n) => n.nodeValue ?? "");
     const index = buildFlatTextIndex(segments);
-    const hits = findAllOccurrences(index.haystack, needle);
+    const hits = selectAnnotateOccurrenceStarts(
+      findAllOccurrences(index.haystack, needle),
+      preferredOrdinal,
+    );
     for (const at of hits) {
       const locals = mapFlatRangeToSegments(at, at + needle.length, index);
       for (const local of locals) {
@@ -575,15 +900,16 @@ function createCharRange(
   return stub as unknown as Range;
 }
 
-/** 一次收集 → flat 全量命中 → 右到左多段 wrap（废弃单 Text / findFirst×N）。 */
+/** 一次收集 → flat 命中 → 右到左多段 wrap；有 preferred 时只 wrap 最近一处（H5）。 */
 function wrapAllPlainMatchesFlat(
   root: HTMLElement,
   needle: string,
   ids: readonly string[],
+  preferredOrdinal: number | null = null,
 ): void {
   const domains = collectUnmarkedTextDomains(root);
   for (const domain of domains) {
-    wrapOccurrencesInDomain(domain, needle, ids);
+    wrapOccurrencesInDomain(domain, needle, ids, preferredOrdinal);
   }
 }
 
@@ -591,13 +917,17 @@ function wrapOccurrencesInDomain(
   domainNodes: Text[],
   needle: string,
   ids: readonly string[],
+  preferredOrdinal: number | null,
 ): void {
   if (domainNodes.length === 0) {
     return;
   }
   const segments = domainNodes.map((n) => n.nodeValue ?? "");
   const index = buildFlatTextIndex(segments);
-  const hits = findAllOccurrences(index.haystack, needle);
+  const hits = selectAnnotateOccurrenceStarts(
+    findAllOccurrences(index.haystack, needle),
+    preferredOrdinal,
+  );
   if (hits.length === 0) {
     return;
   }
