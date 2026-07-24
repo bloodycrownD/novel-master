@@ -16,36 +16,70 @@ const optionalNonNegInt = z.number().int().nonnegative().optional();
 /**
  * 单条未发送工作区（真 VFS path）批注草稿。
  *
- * 权威位置为半开区间 `startOffset` / `endOffset`（`[start, end)`，相对 VFS 全文）；
- * 行列由同一 offset 派生，供附件给模型与旧路径兼容。缺 offset 的旧草稿仍合法（A12）。
+ * **预览投影权威**（新稿）：半开 `renderStart` / `renderEnd`（`[start, end)`），
+ * 相对 MD 渲染后、Recogito 所挂容器的可见正文（UTF-16，与 Recogito `target.selector` 一致）。
+ *
+ * `startOffset` / `endOffset` / 行列：旧 VFS soft offset 路径，可读可写以兼容存量；
+ * **不再作为预览投影权威**（A12：仅有旧 offset 的草稿可不投影高亮，chip/详情/发送仍可用）。
  */
 export const annotateDraftSchema = z
   .object({
     id: z.string().min(1),
     path: z.string().min(1),
+    /** Recogito quote（划词原文）。 */
     originalText: z.string(),
     userAnnotation: z.string(),
     /**
-     * 宽松半开区间起点（UTF-16 code unit；相对 VFS 全文；语义 `[startOffset, endOffset)`）。
-     * 新稿映射成功时必写；缺省兼容旧草稿。
+     * MD 渲染正文 / Recogito 容器坐标系半开起点（UTF-16 code unit；`[renderStart, renderEnd)`）。
+     * 新稿必写；缺省兼容仅有旧 VFS offset 的存量草稿。
+     */
+    renderStart: optionalNonNegInt,
+    /**
+     * MD 渲染正文 / Recogito 容器坐标系半开终点（不含）；须严格大于 `renderStart`。
+     */
+    renderEnd: optionalNonNegInt,
+    /**
+     * 旧 VFS soft offset 起点（UTF-16；相对 VFS 全文；`[startOffset, endOffset)`）。
+     * 非预览投影权威；缺省兼容旧草稿。
      */
     startOffset: optionalNonNegInt,
     /**
-     * 宽松半开区间终点（不含）；须严格大于 `startOffset`。
+     * 旧 VFS soft offset 终点（不含）；须严格大于 `startOffset`。非预览投影权威。
      */
     endOffset: optionalNonNegInt,
-    /** 宽松窗口起始行（1-based，含）；由 offset 派生。 */
+    /** 宽松窗口起始行（1-based，含）；由 offset 派生；非预览投影权威。 */
     startLine: optionalPositiveInt,
-    /** 宽松窗口结束行（1-based，含）。 */
+    /** 宽松窗口结束行（1-based，含）；非预览投影权威。 */
     endLine: optionalPositiveInt,
-    /** 起始列（1-based，含）；缺省表示自行首。 */
+    /** 起始列（1-based，含）；缺省表示自行首；非预览投影权威。 */
     startCol: optionalPositiveInt,
-    /** 结束列（1-based，含）；缺省表示至行尾。 */
+    /** 结束列（1-based，含）；缺省表示至行尾；非预览投影权威。 */
     endCol: optionalPositiveInt,
   })
   .strict()
   .superRefine((val, ctx) => {
-    const { startOffset, endOffset } = val;
+    const { renderStart, renderEnd, startOffset, endOffset } = val;
+
+    const hasRenderStart = renderStart != null;
+    const hasRenderEnd = renderEnd != null;
+    if (hasRenderStart !== hasRenderEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "renderStart 与 renderEnd 须成对出现",
+        path: hasRenderStart ? ["renderEnd"] : ["renderStart"],
+      });
+    } else if (
+      hasRenderStart &&
+      hasRenderEnd &&
+      renderStart! >= renderEnd!
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "须满足 renderStart < renderEnd（半开区间 [start, end)）",
+        path: ["renderEnd"],
+      });
+    }
+
     const hasStart = startOffset != null;
     const hasEnd = endOffset != null;
     if (hasStart !== hasEnd) {

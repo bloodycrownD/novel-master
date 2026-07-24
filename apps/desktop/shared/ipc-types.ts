@@ -768,22 +768,30 @@ export type MessageAttachmentDto = {
 export type AnnotateDraftDto = {
   readonly id: string;
   readonly path: string;
+  /** Recogito quote（划词原文）。 */
   readonly originalText: string;
   readonly userAnnotation: string;
   /**
-   * 宽松半开区间起点（UTF-16；相对 VFS 全文；`[startOffset, endOffset)`）。
-   * 新稿映射成功时必写；缺省兼容旧草稿。
+   * MD 渲染正文 / Recogito 容器坐标系半开起点（UTF-16；`[renderStart, renderEnd)`）。
+   * 新稿必写；缺省兼容仅有旧 VFS offset 的存量草稿。
+   */
+  readonly renderStart?: number;
+  /** MD 渲染正文 / Recogito 容器坐标系半开终点（不含）。 */
+  readonly renderEnd?: number;
+  /**
+   * 旧 VFS soft offset 起点（UTF-16；相对 VFS 全文；`[startOffset, endOffset)`）。
+   * 非预览投影权威；缺省兼容旧草稿。
    */
   readonly startOffset?: number;
-  /** 宽松半开区间终点（不含）。 */
+  /** 旧 VFS soft offset 终点（不含）；非预览投影权威。 */
   readonly endOffset?: number;
-  /** 宽松窗口起始行（1-based，含）；由 offset 派生。 */
+  /** 宽松窗口起始行（1-based，含）；由 offset 派生；非预览投影权威。 */
   readonly startLine?: number;
-  /** 宽松窗口结束行（1-based，含）。 */
+  /** 宽松窗口结束行（1-based，含）；非预览投影权威。 */
   readonly endLine?: number;
-  /** 起始列（1-based，含）；缺省表示自行首。 */
+  /** 起始列（1-based，含）；缺省表示自行首；非预览投影权威。 */
   readonly startCol?: number;
-  /** 结束列（1-based，含）；缺省表示至行尾。 */
+  /** 结束列（1-based，含）；缺省表示至行尾；非预览投影权威。 */
   readonly endCol?: number;
 };
 

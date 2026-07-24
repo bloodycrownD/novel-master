@@ -103,7 +103,7 @@ function mintAnnotateDraftId(): string {
 /**
  * 由文件形批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。
  * 真 VFS path；可走既有 path 口径（本函数不对伪 path 调用破坏性 normalize）。
- * 有半开 offset / 宽松行列时**显式**写入 XML JSON；缺字段不写键。
+ * 有 Recogito 渲染坐标 / 半开 offset / 宽松行列时**显式**写入 XML JSON；缺字段不写键。
  */
 export function buildFileAnnotateAttachmentFromDraft(
   draft: AnnotateDraft,
@@ -114,6 +114,12 @@ export function buildFileAnnotateAttachmentFromDraft(
     originalText: draft.originalText,
     userAnnotation: draft.userAnnotation,
   };
+  if (draft.renderStart != null) {
+    params.renderStart = draft.renderStart;
+  }
+  if (draft.renderEnd != null) {
+    params.renderEnd = draft.renderEnd;
+  }
   if (draft.startOffset != null) {
     params.startOffset = draft.startOffset;
   }
@@ -175,6 +181,8 @@ export function parseAnnotateDraftsFromAttachments(
     let path = pathFromAtt;
     let originalText = "";
     let userAnnotation = "";
+    let renderStart: number | undefined;
+    let renderEnd: number | undefined;
     let startOffset: number | undefined;
     let endOffset: number | undefined;
     let startLine: number | undefined;
@@ -190,6 +198,8 @@ export function parseAnnotateDraftsFromAttachments(
         }
         originalText = asParamString(annotate.params.originalText);
         userAnnotation = asParamString(annotate.params.userAnnotation);
+        renderStart = asParamNonNegInt(annotate.params.renderStart);
+        renderEnd = asParamNonNegInt(annotate.params.renderEnd);
         startOffset = asParamNonNegInt(annotate.params.startOffset);
         endOffset = asParamNonNegInt(annotate.params.endOffset);
         startLine = asParamPositiveInt(annotate.params.startLine);
@@ -205,7 +215,11 @@ export function parseAnnotateDraftsFromAttachments(
     if (isMessageAnnotatePath(path)) {
       continue;
     }
-    // offset 成对且半开合法才写回；残缺/非法旧数据丢 offset，保留其余
+    // 渲染坐标 / offset 成对且半开合法才写回；残缺/非法旧数据丢对应对，保留其余
+    const renderOk =
+      renderStart != null &&
+      renderEnd != null &&
+      renderStart < renderEnd;
     const offsetsOk =
       startOffset != null &&
       endOffset != null &&
@@ -215,6 +229,7 @@ export function parseAnnotateDraftsFromAttachments(
       path,
       originalText,
       userAnnotation,
+      ...(renderOk ? { renderStart, renderEnd } : {}),
       ...(offsetsOk ? { startOffset, endOffset } : {}),
       ...(startLine != null ? { startLine } : {}),
       ...(endLine != null ? { endLine } : {}),
