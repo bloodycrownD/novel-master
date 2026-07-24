@@ -1,15 +1,17 @@
 /**
  * rich-document 划词批注：仅 Markdown 预览挂 @recogito/text-annotator。
- * createAnnotation → bridge recogitoCreate；草稿变更 → setAnnotations 重投影。
- * 禁止源串插锚与 DOM 搜字 apply 作为主路径。
+ *
+ * Recogito **只负责**已确认草稿的高亮投影与点击打开（annotatingEnabled=false），
+ * **禁止**划词即 createAnnotation（否则选区变蓝、抢走原生复制/批注菜单）。
+ * 新建批注：RN menuItems「批注」→ inject 采集 → recogitoCreate。
  */
 import { createTextAnnotator, type TextAnnotator } from '@recogito/text-annotator';
 import { post } from './post';
 import {
   draftsToRecogitoAnnotations,
-  recogitoAnnotationToDraftFields,
   type RecogitoTextAnnotation,
 } from './annotate-recogito-map';
+import { bindAnnotateCollectBridge } from './annotate-collect';
 
 export type AnnotateRenderMark = {
   readonly id: string;
@@ -23,8 +25,6 @@ let annotations: AnnotateRenderMark[] = [];
 let annotator: TextAnnotator | null = null;
 /** 已由宿主确认并 setAnnotations 的 draft id；用于 selectionChanged 打开详情。 */
 const knownDraftIds = new Set<string>();
-/** createAnnotation 进行中：避免紧随其后的 selectionChanged 误开详情。 */
-let suppressOpenUntil = 0;
 
 export function setAnnotateEnabled(enabled: boolean): void {
   annotateEnabled = enabled === true;
@@ -90,9 +90,9 @@ export function destroyAnnotator(): void {
   }
 }
 
-/** 生命周期入口：当前无额外全局监听；保留符号供契约测 / 未来扩展。 */
+/** 生命周期：挂 inject 采集桥；Recogito 在 ensureAnnotator 时挂到 .doc-body。 */
 export function bindAnnotateUi(): void {
-  // Recogito 在 ensureAnnotator 时挂到 .doc-body
+  bindAnnotateCollectBridge();
 }
 
 function ensureAnnotator(): void {
@@ -104,9 +104,17 @@ function ensureAnnotator(): void {
     return;
   }
   const anno = createTextAnnotator(body, {
-    annotatingEnabled: true,
+    // 划词不自动建批注，避免选区变蓝并吞掉系统选区菜单
+    annotatingEnabled: false,
+    // 已投影批注用下划线，不用大块蓝底
+    style: {
+      fill: 'transparent',
+      fillOpacity: 0,
+      underlineStyle: 'solid',
+      underlineThickness: 2,
+      underlineOffset: 1,
+    },
   });
-  anno.on('createAnnotation', onCreateAnnotation);
   anno.on('selectionChanged', onSelectionChanged);
   annotator = anno;
 }
@@ -120,26 +128,7 @@ function applyAnnotationsToAnnotator(): void {
   annotator.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
 }
 
-function onCreateAnnotation(annotation: unknown): void {
-  const fields = recogitoAnnotationToDraftFields(
-    annotation as Parameters<typeof recogitoAnnotationToDraftFields>[0],
-  );
-  if (!fields) {
-    return;
-  }
-  suppressOpenUntil = Date.now() + 400;
-  post('recogitoCreate', {
-    quote: fields.originalText,
-    renderStart: fields.renderStart,
-    renderEnd: fields.renderEnd,
-    tempId: fields.id,
-  });
-}
-
 function onSelectionChanged(selected: unknown): void {
-  if (Date.now() < suppressOpenUntil) {
-    return;
-  }
   if (!Array.isArray(selected) || selected.length === 0) {
     return;
   }
@@ -154,4 +143,19 @@ function onSelectionChanged(selected: unknown): void {
     return;
   }
   post('annotateOpen', {ids});
+  // 立刻取消选中：否则同一批注二次点击不触发 selectionChanged，体感卡死/极慢
+  try {
+    annotator?.cancelSelected();
+  } catch {
+    // ignore
+  }
+}
+
+/** 宿主关弹窗时清选中，避免残留选中态拖慢下一次点击。 */
+export function clearAnnotateSelection(): void {
+  try {
+    annotator?.cancelSelected();
+  } catch {
+    // ignore
+  }
 }

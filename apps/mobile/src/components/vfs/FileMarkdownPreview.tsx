@@ -130,6 +130,8 @@ export function FileMarkdownPreview({
   );
   /** store 变更时递增，驱动 pathDrafts 同步重算（禁止仅靠滞后 useEffect 派生）。 */
   const [draftTick, setDraftTick] = useState(0);
+  const [clearAnnotateSelectionSignal, setClearAnnotateSelectionSignal] =
+    useState(0);
   const [addVisible, setAddVisible] = useState(false);
   const [pendingOriginalText, setPendingOriginalText] = useState('');
   const [pendingRenderRange, setPendingRenderRange] = useState<{
@@ -185,11 +187,12 @@ export function FileMarkdownPreview({
 
   const handleRecogitoCreate = useCallback(
     (payload: RichDocumentRecogitoCreatePayload) => {
-      const trimmed = payload.quote.trim();
-      if (!trimmed) {
+      // 采集侧已 trim（策略 b）；此处勿二次 trim，以免与 renderStart/End 错位
+      const quote = payload.quote;
+      if (!quote) {
         return;
       }
-      setPendingOriginalText(trimmed);
+      setPendingOriginalText(quote);
       setPendingRenderRange({
         renderStart: payload.renderStart,
         renderEnd: payload.renderEnd,
@@ -357,12 +360,17 @@ export function FileMarkdownPreview({
   /** 仅 MD Tab 挂 Recogito；plain 永不 annotate。 */
   const mdAnnotateActive = annotateEnabled === true && renderKind === 'markdown';
 
+  const bumpClearAnnotateSelection = useCallback(() => {
+    setClearAnnotateSelectionSignal(n => n + 1);
+  }, []);
+
   const annotateWebProps = mdAnnotateActive
     ? {
         annotateEnabled: true as const,
         annotations: recogitoMarks,
         onRecogitoCreate: handleRecogitoCreate,
         onAnnotateOpen: handleAnnotateOpen,
+        clearAnnotateSelectionSignal,
       }
     : {annotateEnabled: false as const};
 
@@ -383,6 +391,7 @@ export function FileMarkdownPreview({
           setPendingRenderRange(null);
           // 取消时靠 draftTick / setAnnotations 清掉 Recogito 临时高亮（无新稿）
           setDraftTick(t => t + 1);
+          bumpClearAnnotateSelection();
         }}
         onConfirm={handleAddConfirm}
       />
@@ -394,6 +403,7 @@ export function FileMarkdownPreview({
         onClose={() => {
           setDetailVisible(false);
           setDetailDraft(null);
+          bumpClearAnnotateSelection();
         }}
         onEdit={handleDetailEdit}
         onDelete={handleDetailDelete}
@@ -412,6 +422,7 @@ export function FileMarkdownPreview({
         onClose={() => {
           setEditVisible(false);
           setEditingDraft(null);
+          bumpClearAnnotateSelection();
         }}
         onConfirm={handleEditConfirm}
       />
@@ -423,7 +434,10 @@ export function FileMarkdownPreview({
           setDetailDraft(d);
           setDetailVisible(true);
         }}
-        onClose={() => setPickDrafts(null)}
+        onClose={() => {
+          setPickDrafts(null);
+          bumpClearAnnotateSelection();
+        }}
       />
     </>
   );

@@ -43,7 +43,10 @@ export type RichDocumentAnnotationMark = {
   readonly renderEnd: number;
 };
 
-/** @deprecated 旧 menuItems 采集；MD 主路径已改 recogitoCreate。 */
+/**
+ * @deprecated 旧 menuItems / selectionCollect 遗留载荷；生产不再发送。
+ * 仅保留解码兼容；MD 主路径已改 recogitoCreate。
+ */
 export type RichDocumentSelectionCollectPayload = {
   readonly originalText: string;
   readonly mode: 'plain' | 'markdown';
@@ -72,7 +75,9 @@ export type HostToRichDocumentMessage =
       {
         annotations: readonly RichDocumentAnnotationMark[];
       }
-    >;
+    >
+  /** 关闭详情弹窗后清 Recogito 选中，避免二次点击卡顿。 */
+  | BridgeEnvelope<'clearAnnotateSelection', Record<string, never>>;
 
 /** Document WebView → host */
 export type RichDocumentToHostMessage =
@@ -83,7 +88,9 @@ export type RichDocumentToHostMessage =
     >
   /** @deprecated 不再作为主通道；保留解码兼容。 */
   | BridgeEnvelope<'selectionAnnotate', {text: string}>
-  /** @deprecated plain/menu 采集遗留；MD 主路径用 recogitoCreate。 */
+  /**
+   * @deprecated 生产不再发送；仅解码兼容。MD 主路径用 recogitoCreate。
+   */
   | BridgeEnvelope<'selectionCollect', RichDocumentSelectionCollectPayload>
   | BridgeEnvelope<'recogitoCreate', RichDocumentRecogitoCreatePayload>
   /** 同文多条时 ids 含全部可改删项；单条时长度为 1。 */

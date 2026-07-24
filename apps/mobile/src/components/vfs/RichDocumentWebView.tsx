@@ -1,10 +1,11 @@
 /**
  * RN WebView wrapper for VFS markdown preview body — postMessage via RichDocumentBridge.
- * MD 批注：干净 HTML setDocument + Recogito（WebView 内）；草稿 → setAnnotations。
+ * MD 批注：干净 HTML + Recogito 仅投影；新建走原生选区菜单「复制/批注」+ inject 采集。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
+import Clipboard from '@react-native-clipboard/clipboard';
 import type {ThemeTokens} from '../../theme/tokens';
 import {
   encodeHostToRichDocument,
@@ -22,6 +23,18 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
 
+/**
+ * 文件预览划词菜单：自定义项会盖掉原生 Copy，须自备「复制」。
+ * 批注 → inject 量测 Recogito 坐标系；勿让 Recogito 划词即建批注。
+ */
+export const RICH_DOCUMENT_ANNOTATE_MENU_ITEMS = [
+  {label: '复制', key: 'copy'},
+  {label: '批注', key: 'annotate'},
+] as const;
+
+const COLLECT_RECOGITO_JS =
+  '(function(){try{window.__nmCollectRecogitoSelection&&window.__nmCollectRecogitoSelection();}catch(e){} true;})();';
+
 export type RichDocumentWebViewProps = {
   readonly html?: string;
   readonly plain?: string;
@@ -36,12 +49,16 @@ export type RichDocumentWebViewProps = {
   readonly annotateEnabled?: boolean;
   /** Recogito 投影列表（仅含 renderStart/renderEnd 的草稿）。 */
   readonly annotations?: readonly RichDocumentAnnotationMark[];
-  /** Recogito createAnnotation → 宿主写草稿。 */
+  /** 菜单「批注」采集成功 → 宿主写草稿。 */
   readonly onRecogitoCreate?: (
     payload: RichDocumentRecogitoCreatePayload,
   ) => void;
   /** 同文多条时传入全部 id，由上层弹出选择列表。 */
   readonly onAnnotateOpen?: (ids: readonly string[]) => void;
+  /**
+   * 递增时通知 WebView `clearAnnotateSelection`（关详情弹窗后清选中，避免二次点击卡顿）。
+   */
+  readonly clearAnnotateSelectionSignal?: number;
 };
 
 function themeFromTokens(tokens: ThemeTokens): RichDocumentTheme {
@@ -99,6 +116,7 @@ export function RichDocumentWebView({
   annotations = EMPTY_ANNOTATIONS,
   onRecogitoCreate,
   onAnnotateOpen,
+  clearAnnotateSelectionSignal = 0,
 }: RichDocumentWebViewProps) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
@@ -111,6 +129,30 @@ export function RichDocumentWebView({
   const postToWeb = useCallback((message: HostToRichDocumentMessage) => {
     webRef.current?.postMessage(encodeHostToRichDocument(message));
   }, []);
+
+  const handleCustomMenuSelection = useCallback(
+    (event: {
+      nativeEvent: {
+        key?: string;
+        label?: string;
+        selectedText?: string;
+      };
+    }) => {
+      const key = String(event.nativeEvent.key ?? '');
+      const selectedText = String(event.nativeEvent.selectedText ?? '');
+      if (key === 'copy') {
+        if (selectedText.length > 0) {
+          Clipboard.setString(selectedText);
+        }
+        return;
+      }
+      if (key !== 'annotate' || annotateEnabled !== true) {
+        return;
+      }
+      webRef.current?.injectJavaScript(COLLECT_RECOGITO_JS);
+    },
+    [annotateEnabled],
+  );
 
   const sendInit = useCallback(() => {
     postToWeb({
@@ -185,7 +227,8 @@ export function RichDocumentWebView({
   }, [webReady, tokens, postToWeb]);
 
   /**
-   * 主路径：setDocument（干净 HTML）+ setAnnotateEnabled + setAnnotations（Recogito 投影）。
+   * 文档内容变化才 setDocument（会销毁并重建 Recogito）。
+   * 切勿与 annotations 绑在同一 effect，否则每改草稿都整页重渲 → 二次点击极卡。
    */
   useEffect(() => {
     if (!webReady) {
@@ -194,25 +237,6 @@ export function RichDocumentWebView({
     postToWeb(
       buildSetDocumentPayload(html, plain, overLimit, frontMatterHtml, layout),
     );
-    postToWeb({
-      v: 1,
-      type: 'setAnnotateEnabled',
-      payload: {enabled: annotateEnabled === true},
-    });
-    if (annotateEnabled) {
-      postToWeb({
-        v: 1,
-        type: 'setAnnotations',
-        payload: {
-          annotations: annotations.map(a => ({
-            id: a.id,
-            originalText: a.originalText,
-            renderStart: a.renderStart,
-            renderEnd: a.renderEnd,
-          })),
-        },
-      });
-    }
   }, [
     webReady,
     html,
@@ -220,8 +244,54 @@ export function RichDocumentWebView({
     overLimit,
     frontMatterHtml,
     layout,
+    postToWeb,
+  ]);
+
+  useEffect(() => {
+    if (!webReady) {
+      return;
+    }
+    postToWeb({
+      v: 1,
+      type: 'setAnnotateEnabled',
+      payload: {enabled: annotateEnabled === true},
+    });
+  }, [webReady, annotateEnabled, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady || annotateEnabled !== true) {
+      return;
+    }
+    postToWeb({
+      v: 1,
+      type: 'setAnnotations',
+      payload: {
+        annotations: annotations.map(a => ({
+          id: a.id,
+          originalText: a.originalText,
+          renderStart: a.renderStart,
+          renderEnd: a.renderEnd,
+        })),
+      },
+    });
+  }, [webReady, annotateEnabled, annotations, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady || annotateEnabled !== true) {
+      return;
+    }
+    if (clearAnnotateSelectionSignal <= 0) {
+      return;
+    }
+    postToWeb({
+      v: 1,
+      type: 'clearAnnotateSelection',
+      payload: {},
+    });
+  }, [
+    webReady,
     annotateEnabled,
-    annotations,
+    clearAnnotateSelectionSignal,
     postToWeb,
   ]);
 
@@ -242,6 +312,12 @@ export function RichDocumentWebView({
         scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         keyboardDisplayRequiresUserAction={false}
+        {...(annotateEnabled
+          ? {
+              menuItems: [...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS],
+              onCustomMenuSelection: handleCustomMenuSelection,
+            }
+          : {})}
       />
     </View>
   );

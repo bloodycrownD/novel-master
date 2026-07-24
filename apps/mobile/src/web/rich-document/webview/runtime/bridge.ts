@@ -11,6 +11,7 @@ import { post } from './post';
 import {
   setAnnotateEnabled,
   setAnnotations,
+  clearAnnotateSelection,
   type AnnotateRenderMark,
 } from './annotate';
 
@@ -88,5 +89,9 @@ export function handleHostMessage(raw: unknown): void {
       ? (rawList as AnnotateRenderMark[])
       : [];
     setAnnotations(list);
+    return;
+  }
+  if (msg.type === 'clearAnnotateSelection') {
+    clearAnnotateSelection();
   }
 }

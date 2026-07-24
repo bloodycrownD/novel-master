@@ -14,7 +14,10 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
 .fm-value { font-size: 15px; line-height: 21px; color: var(--text, #111); }
 .fm-mono { font-family: ui-monospace, monospace; }
 .over-limit-hint { margin-top: 6px; font-size: 12px; color: var(--text-secondary, #666); }
-/* 源范围锚（主路径） */
+/*
+ * 以下非主路径遗留样式：MD 批注主路径已改 Recogito（@recogito/text-annotator）。
+ * 保留仅为 sanitize 允许的存量 class / 旧 HTML 不崩样式；禁止新代码依赖。
+ */
 .nm-annotate-anchor {
   background: transparent;
   color: inherit;
@@ -26,7 +29,6 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-/* 划词批注下划线：mark / CSS Highlight 仅应急回滚 */
 .annotate-mark {
   background: transparent;
   color: inherit;

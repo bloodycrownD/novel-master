@@ -1,6 +1,7 @@
 /**
  * T-SA8：plain Range 量测 / 邻域定位工具仍保留。
- * 旧 menuItems → collect 主通道已退役（Recogito MD-only）；此处断言宿主不再挂该路径。
+ * MD 新建批注：原生 menuItems + inject recogitoCreate；Recogito 仅投影。
+ * mobile/B-1 / G-1：reportRecogitoCreateFromSelection 策略 (b) + 空白选区。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
@@ -19,6 +20,8 @@ import {
 import {
   getSelectionOffsetsInElement,
   collectAnnotateSelection,
+  reportRecogitoCreateFromSelection,
+  bindAnnotateCollectBridge,
 } from '../src/web/rich-document/webview/runtime/annotate-collect';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -40,6 +43,11 @@ jest.mock('react-native-webview', () => {
 jest.mock('@/webview-host/rich-document/uri', () => ({
   getRichDocumentUri: () => 'file:///rich-document/index.html',
   getRichDocumentPackageDirUri: () => 'file:///rich-document/',
+}));
+
+jest.mock('@react-native-clipboard/clipboard', () => ({
+  __esModule: true,
+  default: {setString: jest.fn()},
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({
@@ -104,7 +112,28 @@ function installMiniDom(sourceText: string, selStart: number, selEnd: number) {
   return {
     body: body as unknown as Element,
     selection: selection as unknown as Selection,
+    sourceText,
   };
+}
+
+type PostedEnvelope = {
+  v: number;
+  type: string;
+  payload: Record<string, unknown>;
+};
+
+function installPostCapture(): PostedEnvelope[] {
+  const posts: PostedEnvelope[] = [];
+  const prev = (global as {window?: Record<string, unknown>}).window ?? {};
+  (global as {window?: unknown}).window = {
+    ...prev,
+    ReactNativeWebView: {
+      postMessage: (raw: string) => {
+        posts.push(JSON.parse(raw) as PostedEnvelope);
+      },
+    },
+  };
+  return posts;
 }
 
 describe('T-SA8 plain 量测 → estimateSoftOffsetRangeFromPlainOffsets', () => {
@@ -143,7 +172,91 @@ describe('T-SA8 plain 量测 → estimateSoftOffsetRangeFromPlainOffsets', () =>
   });
 });
 
-describe('T-SA8b 旧 menuItems 采集退役；邻域工具仍可用', () => {
+describe('reportRecogitoCreateFromSelection（mobile/B-1 / G-1）', () => {
+  afterEach(() => {
+    delete (global as {document?: unknown}).document;
+    delete (global as {window?: unknown}).window;
+  });
+
+  it('正常选区：quote 与 renderStart/End 对齐 slice', () => {
+    const source = 'alpha TARGET beta';
+    const selStart = source.indexOf('TARGET');
+    const selEnd = selStart + 'TARGET'.length;
+    installMiniDom(source, selStart, selEnd);
+    const posts = installPostCapture();
+    reportRecogitoCreateFromSelection();
+    expect(posts).toHaveLength(1);
+    expect(posts[0]?.type).toBe('recogitoCreate');
+    const p = posts[0]!.payload;
+    expect(p.quote).toBe('TARGET');
+    expect(p.renderStart).toBe(selStart);
+    expect(p.renderEnd).toBe(selEnd);
+    expect(source.slice(Number(p.renderStart), Number(p.renderEnd))).toBe(
+      p.quote,
+    );
+  });
+
+  it('首尾空白选区：trim 后收缩 start/end（策略 b）', () => {
+    const source = 'alpha  hello  beta';
+    const needle = '  hello  ';
+    const selStart = source.indexOf(needle);
+    const selEnd = selStart + needle.length;
+    installMiniDom(source, selStart, selEnd);
+    const posts = installPostCapture();
+    reportRecogitoCreateFromSelection();
+    expect(posts).toHaveLength(1);
+    const p = posts[0]!.payload;
+    expect(p.quote).toBe('hello');
+    expect(p.renderStart).toBe(source.indexOf('hello'));
+    expect(p.renderEnd).toBe(source.indexOf('hello') + 'hello'.length);
+    expect(source.slice(Number(p.renderStart), Number(p.renderEnd))).toBe(
+      'hello',
+    );
+    expect(source.slice(Number(p.renderStart), Number(p.renderEnd))).toBe(
+      p.quote,
+    );
+  });
+
+  it('纯空白选区不发 recogitoCreate', () => {
+    const source = 'alpha     beta';
+    const selStart = source.indexOf('     ');
+    const selEnd = selStart + 5;
+    installMiniDom(source, selStart, selEnd);
+    const posts = installPostCapture();
+    reportRecogitoCreateFromSelection();
+    expect(posts).toHaveLength(0);
+  });
+
+  it('生产 bind 只挂 __nmCollectRecogitoSelection，不挂旧 collect', () => {
+    installMiniDom('x', 0, 1);
+    installPostCapture();
+    bindAnnotateCollectBridge();
+    expect(typeof window.__nmCollectRecogitoSelection).toBe('function');
+    expect(
+      (window as {__nmCollectAnnotateSelection?: unknown})
+        .__nmCollectAnnotateSelection,
+    ).toBeUndefined();
+
+    const collectSrc = readFileSync(
+      join(
+        __dirname,
+        '../src/web/rich-document/webview/runtime/annotate-collect.ts',
+      ),
+      'utf8',
+    );
+    expect(collectSrc).toContain('__nmCollectRecogitoSelection');
+    expect(collectSrc).not.toMatch(/__nmCollectAnnotateSelection\s*=/);
+
+    const previewSrc = readFileSync(
+      join(__dirname, '../src/components/vfs/FileMarkdownPreview.tsx'),
+      'utf8',
+    );
+    expect(previewSrc).toMatch(/handleRecogitoCreate/);
+    expect(previewSrc).not.toMatch(/payload\.quote\.trim\s*\(/);
+  });
+});
+
+describe('T-SA8b 原生菜单 + Recogito 投影', () => {
   beforeEach(() => {
     mockWebViewProps.length = 0;
     resetChatAnnotateDraftStoreForTests();
@@ -155,7 +268,7 @@ describe('T-SA8b 旧 menuItems 采集退役；邻域工具仍可用', () => {
     delete (global as {window?: unknown}).window;
   });
 
-  it('RichDocumentWebView 不挂 menuItems / onAnnotateCollect；走 Recogito', () => {
+  it('RichDocumentWebView 挂 menuItems；批注走 inject + recogitoCreate', () => {
     const onRecogitoCreate = jest.fn();
     act(() => {
       TestRenderer.create(
@@ -175,21 +288,19 @@ describe('T-SA8b 旧 menuItems 采集退役；邻域工具仍可用', () => {
       );
     });
     const last = mockWebViewProps[mockWebViewProps.length - 1];
-    expect(last?.menuItems).toBeUndefined();
-    expect(last?.onCustomMenuSelection).toBeUndefined();
-    expect(last?.onAnnotateCollect).toBeUndefined();
+    expect(last?.menuItems).toBeDefined();
+    expect(typeof last?.onCustomMenuSelection).toBe('function');
 
     const src = readFileSync(
       join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
       'utf8',
     );
-    expect(src).not.toContain('menuItems');
-    expect(src).not.toContain('RICH_DOCUMENT_ANNOTATE_MENU_ITEMS');
-    expect(src).not.toContain('__nmCollectAnnotateSelection');
-    expect(src).not.toContain('onAnnotateCollect');
+    expect(src).toContain('RICH_DOCUMENT_ANNOTATE_MENU_ITEMS');
+    expect(src).toContain('__nmCollectRecogitoSelection');
     expect(src).toContain('setAnnotations');
     expect(src).toContain('recogitoCreate');
     expect(src).toContain('onRecogitoCreate');
+    expect(src).not.toContain('__nmCollectAnnotateSelection');
   });
 
   it('邻域定位成功写入半开 offset；无邻域多命中失败不写 offset（A12）', () => {

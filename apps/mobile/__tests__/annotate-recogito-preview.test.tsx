@@ -150,13 +150,15 @@ describe('T-RG2 无插锚预览主路径', () => {
 });
 
 describe('T-RG3 Mobile Recogito 初始化与草稿映射接线', () => {
-  it('annotate.ts / main.ts 含 createTextAnnotator 与 destroy 生命周期', () => {
+  it('annotate.ts / main.ts 含 createTextAnnotator、annotatingEnabled=false 与 destroy', () => {
     const annotate = readSrc('web/rich-document/webview/runtime/annotate.ts');
     const main = readSrc('web/rich-document/webview/main.ts');
     expect(annotate).toContain('createTextAnnotator');
+    expect(annotate).toMatch(/annotatingEnabled:\s*false/);
     expect(annotate).toContain('setAnnotations');
     expect(annotate).toContain('destroy');
     expect(annotate).toContain('draftsToRecogitoAnnotations');
+    expect(annotate).not.toMatch(/\.on\(\s*['\"]createAnnotation['\"]/);
     expect(main).toContain('refreshAnnotateAfterDocument');
     expect(main).toContain('destroyAnnotator');
   });
@@ -261,11 +263,15 @@ describe('T-RG4 plain 无批注', () => {
     expect(src).not.toMatch(/onAnnotateCollect/);
   });
 
-  it('RichDocumentWebView 无 menuItems / annotate collect', () => {
+  it('RichDocumentWebView 挂 复制/批注菜单；划词不自动建批注', () => {
     const src = readSrc('components/vfs/RichDocumentWebView.tsx');
-    expect(src).not.toMatch(/menuItems/);
-    expect(src).not.toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
-    expect(src).not.toMatch(/__nmCollectAnnotateSelection/);
+    const annotate = readSrc(
+      'web/rich-document/webview/runtime/annotate.ts',
+    );
+    expect(src).toMatch(/menuItems/);
+    expect(src).toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
+    expect(src).toMatch(/__nmCollectRecogitoSelection/);
+    expect(annotate).toMatch(/annotatingEnabled:\s*false/);
   });
 });
 

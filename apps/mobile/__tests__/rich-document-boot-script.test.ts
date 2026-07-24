@@ -45,7 +45,11 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(script).toContain('setAnnotateEnabled');
     expect(script).toContain('setAnnotations');
     expect(script).toContain('annotateOpen');
-    expect(script).toContain('annotate-mark');
+    expect(script).toContain('annotatingEnabled: false');
+    expect(script).toContain('__nmCollectRecogitoSelection');
+    // 旧 mark / selectionCollect 生产不挂载
+    expect(script).not.toContain('applyAnnotateMarks');
+    expect(script).not.toContain('__nmCollectAnnotateSelection');
     // 「添加批注」由 RN menuItems 负责，Web 侧不再发 selectionAnnotate / 不叠 DOM 浮动条
     expect(script).not.toContain('selectionAnnotate');
     expect(script).not.toContain('annotate-bar');
@@ -68,20 +72,22 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(script).not.toContain("'<div class=\"doc-body rich\">'+");
   });
 
-  it('T-BR-CSS-02: rich list padding + annotate underline in app.css', () => {
+  it('T-BR-CSS-02: rich list padding；旧 annotate CSS 标为非主路径遗留', () => {
     const css = appCss();
     expect(css).toContain('padding-left: 1.5em');
     expect(css).toContain('list-style-position: outside');
     expect(css).toContain('#doc .doc-body.rich');
+    // 非主路径遗留 class 仍可能出现在产物 CSS；主路径用 Recogito
     expect(css).toContain('annotate-mark');
     expect(css).not.toContain('annotate-bar');
   });
 
-  it('T-SA6: document.css 源含 nm-annotate-anchor', () => {
+  it('T-SA6: document.css 含非主路径遗留 nm-annotate-anchor 注释块', () => {
     const src = readFileSync(
       join(__dirname, '../src/web/rich-document/styles/document.css'),
       'utf8',
     );
     expect(src).toContain('.nm-annotate-anchor');
+    expect(src).toMatch(/非主路径遗留/);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * RichDocumentWebView：Recogito MD 批注；无原生 menuItems / collect 主路径。
+ * RichDocumentWebView：MD 批注 = 原生「复制/批注」菜单 + Recogito 仅投影。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
@@ -21,6 +21,11 @@ jest.mock('react-native-webview', () => {
   };
 });
 
+jest.mock('@react-native-clipboard/clipboard', () => ({
+  __esModule: true,
+  default: {setString: jest.fn()},
+}));
+
 jest.mock('@/webview-host/rich-document/uri', () => ({
   getRichDocumentUri: () => 'file:///rich-document/index.html',
   getRichDocumentPackageDirUri: () => 'file:///rich-document/',
@@ -39,14 +44,17 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
+import {
+  RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
+  RichDocumentWebView,
+} from '../src/components/vfs/RichDocumentWebView';
 
-describe('RichDocumentWebView annotate（无 menuItems）', () => {
+describe('RichDocumentWebView annotate（原生菜单 + Recogito 投影）', () => {
   beforeEach(() => {
     mockWebViewProps.length = 0;
   });
 
-  it('annotateEnabled=true 仍不挂 menuItems / onCustomMenuSelection', () => {
+  it('annotateEnabled=true 挂 复制/批注 menuItems', () => {
     act(() => {
       TestRenderer.create(
         <RichDocumentWebView
@@ -65,11 +73,11 @@ describe('RichDocumentWebView annotate（无 menuItems）', () => {
       );
     });
     const last = mockWebViewProps[mockWebViewProps.length - 1];
-    expect(last?.menuItems).toBeUndefined();
-    expect(last?.onCustomMenuSelection).toBeUndefined();
+    expect(last?.menuItems).toEqual([...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]);
+    expect(typeof last?.onCustomMenuSelection).toBe('function');
   });
 
-  it('annotateEnabled=false 亦不挂 menuItems', () => {
+  it('annotateEnabled=false 不挂 menuItems', () => {
     act(() => {
       TestRenderer.create(
         <RichDocumentWebView plain="hello" annotateEnabled={false} />,
@@ -79,16 +87,23 @@ describe('RichDocumentWebView annotate（无 menuItems）', () => {
     expect(last?.menuItems).toBeUndefined();
   });
 
-  it('源码无旧 menuItems / collect；含 Recogito 消息路径', () => {
-    const src = readFileSync(
+  it('源码：菜单批注 + inject Recogito 采集；无划词即 createAnnotation', () => {
+    const web = readFileSync(
       join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
       'utf8',
     );
-    expect(src).not.toMatch(/menuItems/);
-    expect(src).not.toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
-    expect(src).not.toMatch(/__nmCollectAnnotateSelection/);
-    expect(src).not.toMatch(/onAnnotateCollect/);
-    expect(src).toContain('recogitoCreate');
-    expect(src).toContain("type: 'setAnnotations'");
+    const annotate = readFileSync(
+      join(
+        __dirname,
+        '../src/web/rich-document/webview/runtime/annotate.ts',
+      ),
+      'utf8',
+    );
+    expect(web).toMatch(/menuItems/);
+    expect(web).toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
+    expect(web).toMatch(/__nmCollectRecogitoSelection/);
+    expect(web).toContain('recogitoCreate');
+    expect(annotate).toMatch(/annotatingEnabled:\s*false/);
+    expect(annotate).not.toMatch(/\.on\(\s*['\"]createAnnotation['\"]/);
   });
 });
