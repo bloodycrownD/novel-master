@@ -28,14 +28,18 @@ import {
 } from "../features/chat/chat-annotate-draft";
 import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
-import { isPreviewAnnotateEnabled } from "./preview-annotate";
+import {
+  getSelectionFloatingAnchor,
+  isPreviewAnnotateEnabled,
+} from "./preview-annotate";
 import {
   draftsToRecogitoAnnotations,
-  extractRecogitoRenderRange,
+  getSelectionOffsetsInElement,
 } from "./preview-recogito";
 import {
   PreviewAnnotateAddModal,
   PreviewAnnotateDetailModal,
+  PreviewAnnotateFloatingBar,
   PreviewAnnotatePickModal,
 } from "./PreviewAnnotateUi";
 
@@ -71,20 +75,21 @@ export function PreviewPane() {
   const [annotateDrafts, setAnnotateDrafts] = useState<readonly AnnotateDraft[]>(
     () => listChatAnnotateDrafts(sessionId),
   );
+  const [floating, setFloating] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState("");
   const [pendingRenderStart, setPendingRenderStart] = useState<number | null>(
     null,
   );
   const [pendingRenderEnd, setPendingRenderEnd] = useState<number | null>(null);
-  const [pendingDraftId, setPendingDraftId] = useState<string | null>(null);
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
   const [saving, setSaving] = useState(false);
   const mdRootRef = useRef<HTMLDivElement | null>(null);
   const annotatorRef = useRef<TextAnnotator | null>(null);
-  /** 避免 createAnnotation 刚写入时 selectionChanged 立刻弹详情。 */
-  const suppressSelectionOpenRef = useRef(false);
 
   const isMarkdown =
     previewFile != null
@@ -164,13 +169,13 @@ export function PreviewPane() {
 
   useEffect(() => {
     if (!annotateEnabled) {
+      setFloating(null);
       setAddOpen(false);
       setDetailDraft(null);
       setPickDrafts(null);
       setPendingSelection("");
       setPendingRenderStart(null);
       setPendingRenderEnd(null);
-      setPendingDraftId(null);
     }
   }, [annotateEnabled]);
 
@@ -194,7 +199,15 @@ export function PreviewPane() {
   const pathDraftsRef = useRef(pathDrafts);
   pathDraftsRef.current = pathDrafts;
 
-  // MD 预览根挂 Recogito；plain / 非批注态不创建（R1 / R2）
+  const clearAnnotateSelection = useCallback(() => {
+    try {
+      annotatorRef.current?.cancelSelected();
+    } catch {
+      // 宿主差异忽略
+    }
+  }, []);
+
+  // MD 预览根挂 Recogito（仅投影）；划词新建不走 createAnnotation，避免选区变蓝
   useEffect(() => {
     if (!annotateEnabled || loading || !isMarkdown) {
       if (annotatorRef.current != null) {
@@ -208,38 +221,22 @@ export function PreviewPane() {
       return;
     }
 
-    const anno = createTextAnnotator(el);
+    const anno = createTextAnnotator(el, {
+      annotatingEnabled: false,
+      style: {
+        fill: "transparent",
+        fillOpacity: 0,
+        underlineStyle: "solid",
+        underlineThickness: 2,
+        underlineOffset: 1,
+      },
+    });
     annotatorRef.current = anno;
 
-    const onCreate = (annotation: TextAnnotation) => {
-      const range = extractRecogitoRenderRange(annotation);
-      if (range == null) {
-        try {
-          anno.removeAnnotation(annotation.id);
-        } catch {
-          // ignore
-        }
-        return;
-      }
-      suppressSelectionOpenRef.current = true;
-      setPendingDraftId(annotation.id);
-      setPendingSelection(range.quote);
-      setPendingRenderStart(range.renderStart);
-      setPendingRenderEnd(range.renderEnd);
-      setAddOpen(true);
-      setDetailDraft(null);
-      setPickDrafts(null);
-    };
-
     const onSelectionChanged = (selected: TextAnnotation[]) => {
-      if (suppressSelectionOpenRef.current) {
-        suppressSelectionOpenRef.current = false;
-        return;
-      }
       if (selected.length === 0) {
         return;
       }
-      // 仅打开已落库草稿；新建过程中的临时注解走 AddModal
       const draftIds = new Set(pathDraftsRef.current.map((d) => d.id));
       const known = selected
         .map((a) => a.id)
@@ -247,15 +244,44 @@ export function PreviewPane() {
       if (known.length === 0) {
         return;
       }
-      openDraftsByIdsRef.current(known);
+      // 命中已入库 draft：只开详情，关掉添加弹层与浮动条
       setAddOpen(false);
+      setFloating(null);
+      openDraftsByIdsRef.current(known);
+      // 立刻取消选中：否则二次点击同高亮常不触发 selectionChanged
+      try {
+        anno.cancelSelected();
+      } catch {
+        // ignore
+      }
     };
 
-    anno.on("createAnnotation", onCreate);
+    // mouseup 只更新 pending 选区 + 浮动条；禁止直开 AddModal（R6：显式批注、保留复制）
+    const onMouseUp = () => {
+      if (!annotateEnabled) {
+        return;
+      }
+      const range = getSelectionOffsetsInElement(el);
+      if (range == null) {
+        setFloating(null);
+        return;
+      }
+      const anchor = getSelectionFloatingAnchor();
+      if (anchor == null) {
+        setFloating(null);
+        return;
+      }
+      setPendingSelection(range.quote);
+      setPendingRenderStart(range.renderStart);
+      setPendingRenderEnd(range.renderEnd);
+      setFloating({ top: anchor.top, left: anchor.left });
+    };
+
     anno.on("selectionChanged", onSelectionChanged);
+    el.addEventListener("mouseup", onMouseUp);
 
     return () => {
-      anno.off("createAnnotation", onCreate);
+      el.removeEventListener("mouseup", onMouseUp);
       anno.off("selectionChanged", onSelectionChanged);
       anno.destroy();
       if (annotatorRef.current === anno) {
@@ -270,64 +296,15 @@ export function PreviewPane() {
     if (anno == null || !annotateEnabled) {
       return;
     }
-    const mapped = draftsToRecogitoAnnotations(pathDrafts);
-    // AddModal 打开期间保留刚创建的 Recogito 高亮，避免 setAnnotations 冲掉
-    if (
-      addOpen &&
-      pendingDraftId != null &&
-      !mapped.some((a) => a.id === pendingDraftId) &&
-      pendingRenderStart != null &&
-      pendingRenderEnd != null &&
-      pendingSelection.length > 0
-    ) {
-      mapped.push({
-        id: pendingDraftId,
-        bodies: [],
-        target: {
-          annotation: pendingDraftId,
-          selector: [
-            {
-              quote: pendingSelection,
-              start: pendingRenderStart,
-              end: pendingRenderEnd,
-            },
-          ],
-        },
-      });
-    }
-    anno.setAnnotations(mapped);
-  }, [
-    annotateEnabled,
-    pathDrafts,
-    addOpen,
-    pendingDraftId,
-    pendingRenderStart,
-    pendingRenderEnd,
-    pendingSelection,
-  ]);
+    anno.setAnnotations(draftsToRecogitoAnnotations(pathDrafts));
+  }, [annotateEnabled, pathDrafts]);
 
   const closeAddModal = useCallback(() => {
-    const pendingId = pendingDraftId;
     setAddOpen(false);
     setPendingSelection("");
     setPendingRenderStart(null);
     setPendingRenderEnd(null);
-    setPendingDraftId(null);
-    // 取消添加：从 Recogito 去掉尚未入库的临时注解（以 store 为准，避免 ref 未刷新误删）
-    if (pendingId != null && sessionId) {
-      const stillDraft = listChatAnnotateDrafts(sessionId).some(
-        (d) => d.id === pendingId,
-      );
-      if (!stillDraft) {
-        try {
-          annotatorRef.current?.removeAnnotation(pendingId);
-        } catch {
-          // ignore
-        }
-      }
-    }
-  }, [pendingDraftId, sessionId]);
-
+  }, []);
   const isDirty = content !== savedContent;
   const lineCount = useMemo(
     () => (content.length === 0 ? 0 : content.split("\n").length),
@@ -451,13 +428,25 @@ export function PreviewPane() {
           </div>
         )}
       </section>
+      {annotateEnabled && floating != null ? (
+        <PreviewAnnotateFloatingBar
+          top={floating.top}
+          left={floating.left}
+          onAdd={() => {
+            setAddOpen(true);
+            setFloating(null);
+            setDetailDraft(null);
+            setPickDrafts(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+        />
+      ) : null}
       {annotateEnabled && previewFile != null && sessionId ? (
         <PreviewAnnotateAddModal
           open={addOpen}
           selectedText={pendingSelection}
           renderStart={pendingRenderStart}
           renderEnd={pendingRenderEnd}
-          draftId={pendingDraftId}
           sessionId={sessionId}
           filePath={previewFile.path}
           onClose={closeAddModal}
@@ -468,7 +457,10 @@ export function PreviewPane() {
           open={detailDraft != null}
           draft={detailDraft}
           sessionId={sessionId}
-          onClose={() => setDetailDraft(null)}
+          onClose={() => {
+            setDetailDraft(null);
+            clearAnnotateSelection();
+          }}
         />
       ) : null}
       {annotateEnabled ? (
@@ -479,7 +471,10 @@ export function PreviewPane() {
             setPickDrafts(null);
             setDetailDraft(d);
           }}
-          onClose={() => setPickDrafts(null)}
+          onClose={() => {
+            setPickDrafts(null);
+            clearAnnotateSelection();
+          }}
         />
       ) : null}
     </>
