@@ -13,12 +13,12 @@ import {
   ANNOTATE_SOFT_RANGE_LINE_PADDING,
   buildAnnotatedSource,
   estimateSoftOffsetRangeFromPlainOffsets,
+  locateAnnotateOffsetRangeByQuoteContext,
 } from "@shared/logic/chat";
 import {
   collectAnnotateRangeForPreviewSelection,
   getSelectionOffsetsInElement,
   isPreviewAnnotateDomSearchFallbackEnabled,
-  locateOriginalTextWithNeighborhood,
   PREVIEW_ANNOTATE_ID_ATTR,
   resolveAnnotateIdsFromClick,
   setPreviewAnnotateDomSearchFallbackForTests,
@@ -284,28 +284,48 @@ describe("T-SA8 Desktop plain 划词宽松 offset", () => {
   });
 });
 
-describe("T-SA8 MD 邻域定位（Desktop 宿主侧）", () => {
+describe("T-SA8b MD 邻域定位（Desktop → Core）", () => {
   it("唯一命中写入；多命中无邻域 → A12 null", () => {
     const source = "foo bar foo";
-    assert.deepEqual(
-      locateOriginalTextWithNeighborhood(source, "foo", "", ""),
+    assert.equal(
+      locateAnnotateOffsetRangeByQuoteContext(source, {
+        originalText: "foo",
+      }),
       null,
     );
     assert.deepEqual(
-      locateOriginalTextWithNeighborhood(source, "bar", "", ""),
-      { start: 4, end: 7 },
+      locateAnnotateOffsetRangeByQuoteContext(source, {
+        originalText: "bar",
+      }),
+      { startOffset: 4, endOffset: 7 },
     );
   });
 
   it("多命中取邻域最近", () => {
     const source = "aaa foo bbb foo ccc";
-    const hit = locateOriginalTextWithNeighborhood(
-      source,
-      "foo",
-      "bbb ",
-      " ccc",
+    const hit = locateAnnotateOffsetRangeByQuoteContext(source, {
+      originalText: "foo",
+      contextBefore: "bbb ",
+      contextAfter: " ccc",
+    });
+    assert.deepEqual(hit, { startOffset: 12, endOffset: 15 });
+  });
+
+  it("collectAnnotateRangeForPreviewSelection MD 路径走 Core 邻域定位", () => {
+    const source = "aaa foo bbb foo ccc";
+    const collected = collectAnnotateRangeForPreviewSelection({
+      sourceText: source,
+      isPlainPreview: false,
+      selectedText: "foo",
+      contextBefore: "bbb ",
+      contextAfter: " ccc",
+    });
+    assert.ok(collected.softOffsetRange);
+    assert.ok(
+      collected.softOffsetRange!.startOffset <= 12 &&
+        collected.softOffsetRange!.endOffset >= 15,
     );
-    assert.deepEqual(hit, { start: 12, end: 15 });
+    assert.equal(source.slice(12, 15), "foo");
   });
 });
 

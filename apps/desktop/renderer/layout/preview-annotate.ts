@@ -11,6 +11,7 @@ import {
   buildFlatTextIndex,
   deriveSoftRangeFieldsFromOffsets,
   estimateSoftOffsetRangeFromPlainOffsets,
+  estimateSoftOffsetRangeFromQuoteContext,
   findAllOccurrences,
   findAnnotateOccurrenceInSource,
   groupAnnotateIdsByOriginalText,
@@ -43,7 +44,7 @@ export const PREVIEW_ANNOTATE_ID_ATTR = "data-annotate-id";
 /** CSS Custom Highlight 注册名（::highlight(nm-annotate)；仅应急路径）。 */
 export const PREVIEW_ANNOTATE_HIGHLIGHT_NAME = "nm-annotate";
 
-/** MD 邻域默认半径（UTF-16 code unit；宿主侧，Core 邻域 API 缺口时暂用）。 */
+/** MD 邻域默认半径（UTF-16 code unit；仅宿主 DOM 采集，定位走 Core）。 */
 const MD_NEIGHBORHOOD_RADIUS = 64;
 
 /**
@@ -234,7 +235,7 @@ export type PreviewAnnotateCollectResult = {
 /**
  * 预览选区 → 源文件宽松半开 offset（Step 5 / A10）。
  * plain：`getSelectionOffsetsInElement` → `estimateSoftOffsetRangeFromPlainOffsets`。
- * MD：邻域 + 源全文定位（暂用宿主实现；Core 专用邻域 API 缺口记 fix 波次）→ 同一 padding。
+ * MD：宿主采邻域 → Core `estimateSoftOffsetRangeFromQuoteContext`（与 Mobile 同 API）。
  * 失败 → softOffsetRange=null（A12）。
  */
 export function collectAnnotateRangeForPreviewSelection(args: {
@@ -254,7 +255,7 @@ export function collectAnnotateRangeForPreviewSelection(args: {
     return { softOffsetRange: null, softRange: null };
   }
 
-  let exact: { start: number; end: number } | null = null;
+  let softOffsetRange: AnnotateSoftOffsetRange | null = null;
 
   if (isPlainPreview && args.plainRoot != null) {
     // plain 量测相对 VFS 无锚坐标系：认锚 DOM 的 Range.toString 不含标签字符
@@ -263,9 +264,14 @@ export function collectAnnotateRangeForPreviewSelection(args: {
       args.selection,
     );
     if (offsets != null && offsets.start < offsets.end) {
-      exact = { start: offsets.start, end: offsets.end };
+      softOffsetRange = estimateSoftOffsetRangeFromPlainOffsets(
+        sourceText,
+        offsets.start,
+        offsets.end,
+      );
     }
   } else {
+    // Step 5b：宿主只采邻域；定位 + A10 padding 走 Core（与 Mobile 同链）
     const neighborhoodRoot = args.selectionRoot ?? args.plainRoot ?? null;
     const neighborhood =
       args.contextBefore != null || args.contextAfter != null
@@ -278,23 +284,17 @@ export function collectAnnotateRangeForPreviewSelection(args: {
             args.selection,
             MD_NEIGHBORHOOD_RADIUS,
           );
-    exact = locateOriginalTextWithNeighborhood(
-      sourceText,
-      selectedText,
-      neighborhood?.before ?? "",
-      neighborhood?.after ?? "",
-    );
+    softOffsetRange = estimateSoftOffsetRangeFromQuoteContext(sourceText, {
+      originalText: selectedText,
+      contextBefore: neighborhood?.before ?? "",
+      contextAfter: neighborhood?.after ?? "",
+    });
   }
 
-  if (exact == null) {
+  if (softOffsetRange == null) {
     return { softOffsetRange: null, softRange: null };
   }
 
-  const softOffsetRange = estimateSoftOffsetRangeFromPlainOffsets(
-    sourceText,
-    exact.start,
-    exact.end,
-  );
   const softRange = deriveSoftRangeFieldsFromOffsets(
     sourceText,
     softOffsetRange.startOffset,
@@ -360,101 +360,6 @@ export function readSelectionNeighborhood(
   };
 }
 
-/**
- * 在 VFS 无锚全文中用 originalText + 邻域定位精确半开区间。
- * 唯一命中直接用；多命中取邻域匹配最近；失败 → null（A12）。
- * 缺口：Core 尚无专用邻域定位导出时，暂由宿主实现（可后续换 Core API）。
- */
-export function locateOriginalTextWithNeighborhood(
-  sourceText: string,
-  originalText: string,
-  contextBefore: string,
-  contextAfter: string,
-): { readonly start: number; readonly end: number } | null {
-  const needle = originalText.replace(/\u00a0/g, " ");
-  if (needle.length === 0) {
-    return null;
-  }
-  const hits: number[] = [];
-  let from = 0;
-  while (from <= sourceText.length) {
-    const at = sourceText.indexOf(needle, from);
-    if (at < 0) {
-      break;
-    }
-    hits.push(at);
-    from = at + Math.max(1, needle.length);
-  }
-  if (hits.length === 0) {
-    // 换行归一再试一次（对齐 estimateSoftRangeFromOriginalText）
-    const normSource = sourceText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    const normNeedle = needle.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    if (normNeedle.length === 0 || normSource === sourceText) {
-      return null;
-    }
-    return locateOriginalTextWithNeighborhood(
-      normSource,
-      normNeedle,
-      contextBefore.replace(/\r\n/g, "\n").replace(/\r/g, "\n"),
-      contextAfter.replace(/\r\n/g, "\n").replace(/\r/g, "\n"),
-    );
-  }
-  if (hits.length === 1) {
-    const start = hits[0]!;
-    return { start, end: start + needle.length };
-  }
-  const before = contextBefore.replace(/\u00a0/g, " ");
-  const after = contextAfter.replace(/\u00a0/g, " ");
-  if (!before && !after) {
-    // 多命中且无邻域 → 不猜（A12）；勿退回首次命中写脏 offset
-    return null;
-  }
-  let best: { start: number; score: number } | null = null;
-  for (const start of hits) {
-    const end = start + needle.length;
-    const srcBefore = sourceText.slice(Math.max(0, start - before.length), start);
-    const srcAfter = sourceText.slice(end, end + after.length);
-    let score = 0;
-    if (before && srcBefore.endsWith(before)) {
-      score += before.length + 10;
-    } else if (before) {
-      score += commonSuffixLength(srcBefore, before);
-    }
-    if (after && srcAfter.startsWith(after)) {
-      score += after.length + 10;
-    } else if (after) {
-      score += commonPrefixLength(srcAfter, after);
-    }
-    if (best == null || score > best.score) {
-      best = { start, score };
-    } else if (best != null && score === best.score) {
-      // 并列最高分 → 歧义，拒绝
-      best = { start: best.start, score: -1 };
-    }
-  }
-  if (best == null || best.score <= 0) {
-    return null;
-  }
-  return { start: best.start, end: best.start + needle.length };
-}
-
-function commonSuffixLength(a: string, b: string): number {
-  let i = 0;
-  const max = Math.min(a.length, b.length);
-  while (i < max && a[a.length - 1 - i] === b[b.length - 1 - i]) {
-    i++;
-  }
-  return i;
-}
-
-function commonPrefixLength(a: string, b: string): number {
-  let i = 0;
-  const max = Math.min(a.length, b.length);
-  while (i < max && a[i] === b[i]) {
-    i++;
-  }
-  return i;
-}
 /** 当前已注册的 Custom Highlight 条目（测试 / 点击）。 */
 export function getActiveAnnotateHighlightEntries(): readonly ActiveHighlightEntry[] {
   return activeHighlightEntries;

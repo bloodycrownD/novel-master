@@ -8,6 +8,7 @@
 
 export type {
   AnnotateDraft,
+  AnnotateQuoteContext,
   AnnotateSoftOffsetRange,
   AnnotateSoftRangeFields,
   AnnotateSoftSourceRange,
@@ -53,6 +54,7 @@ export {
   countScannedAtPathAttachments,
   deriveSoftRangeFieldsFromOffsets,
   estimateSoftOffsetRangeFromPlainOffsets,
+  estimateSoftOffsetRangeFromQuoteContext,
   estimateSoftRangeFromOriginalText,
   estimateSoftRangeFromPlainOffsets,
   expandSoftRangeOnce,
@@ -74,6 +76,7 @@ export {
   isTailBatchRowSelectable,
   isTranscriptRowSelectable,
   listChatAnnotateDrafts,
+  locateAnnotateOffsetRangeByQuoteContext,
   mapFlatRangeToSegments,
   normalizeAnnotateNeedle,
   normalizeAnnotateNeedleStripNewlines,
