@@ -9,7 +9,7 @@ apply plugin: "com.facebook.react"
 def monorepoRoot = file("../../../../").canonicalFile
 
 react {
-    /* Folders — hoisted deps at monorepo root */
+    /* Folders �?hoisted deps at monorepo root */
     root = file("../../")
     reactNativeDir = new File(monorepoRoot, "node_modules/react-native")
     codegenDir = new File(monorepoRoot, "node_modules/@react-native/codegen")
@@ -41,7 +41,7 @@ react {
     //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
     // extraPackagerArgs = []
 
-    /* Hermes Commands — monorepo hoists hermes-compiler to repo root (RN 0.83+) */
+    /* Hermes Commands �?monorepo hoists hermes-compiler to repo root (RN 0.83+) */
     def osBin = org.gradle.internal.os.OperatingSystem.current().isWindows()
         ? "win64-bin"
         : (org.gradle.internal.os.OperatingSystem.current().isMacOsX() ? "osx-bin" : "linux64-bin")
@@ -93,7 +93,7 @@ android {
             ?: 1
         def ciVersionName = findProperty("versionName")?.toString()
             ?: System.getenv("VERSION_NAME")
-            ?: "1.4.05"
+            ?: "1.4.06"
         versionCode ciVersionCode
         versionName ciVersionName
     }
@@ -149,9 +149,9 @@ android {
 
 /**
  * WebView 壳（chat-transcript / rich-document / code-editor 三包）由
- * `npm run build:webview:native` 拷入 `src/main/assets/webview/`（gitignore）。
- * 裸 gradlew 漏拷时 APK 会缺文件 → 运行时 net::ERR_FILE_NOT_FOUND。
- * 在 preBuild 前硬失败，避免静默打出坏包。
+ * `npm run build:webview:native` 拷入 `src/main/assets/webview/`（gitignore）�?
+ * �?gradlew 漏拷�?APK 会缺文件 �?运行�?net::ERR_FILE_NOT_FOUND�?
+ * �?preBuild 前硬失败，避免静默打出坏包�?
  */
 tasks.register("checkWebViewAssets") {
     doLast {
