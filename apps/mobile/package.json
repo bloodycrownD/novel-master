@@ -2,7 +2,7 @@
   "name": "@novel-master/mobile",
   "version": "1.4.06",
   "private": true,
-  "//android": "禁止移除 Metro 自动启动：默�?android 不得�?--no-packager；端口占用再�?android:no-packager。勿再改�?no-packager 默认�?,
+  "//android": "禁止移除 Metro 自动启动：默认 android 不得加 --no-packager；端口占用再用 android:no-packager。勿再改回 no-packager 默认。",
   "scripts": {
     "android": "react-native run-android",
     "android:no-packager": "react-native run-android --no-packager",
