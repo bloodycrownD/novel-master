@@ -549,10 +549,11 @@ export function ConversationPanel({
         notifyWorkspaceMutated();
       }
       // D8：main 已（undo_send）parse→project 推 ops /（rewind）推空；
-      // renderer 仅正文 + annotate ∪；须保留 main 已推 ops，禁止 wipe
+      // renderer 仅正文 + annotate ∪；须保留 main 已推 ops，禁止 wipe；
+      // rewind 禁止用闭包 current.attachments 把旧 user_ops chip 盖回
       setComposerText(prevText => {
         const next = resolveComposerDraftAfterRollbackSuccess(
-          { text: prevText, attachments: composerAttachments },
+          { text: prevText, attachments: [] },
           rollbackMode,
           { text: restoreText, attachments: restoreAttachments },
         );
@@ -561,7 +562,10 @@ export function ConversationPanel({
             applyUndoAnnotateRestore(sessionId, restoreAttachments, prev),
           );
         } else {
-          setComposerAttachments([...next.attachments]);
+          // rewind：ops 半边空（main 已推 []），仅 ∪ annotate
+          setComposerAttachments(
+            applyUndoAnnotateRestore(sessionId, null, []),
+          );
         }
         return next.text;
       });
@@ -569,13 +573,7 @@ export function ConversationPanel({
         options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
       );
     },
-    [
-      projectId,
-      sessionId,
-      reloadMessages,
-      notifyWorkspaceMutated,
-      composerAttachments,
-    ],
+    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
   );
 
   const handleMessageAction = useCallback(

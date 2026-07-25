@@ -121,4 +121,23 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     assert.deepEqual(chips, chipsFromAnnotateStore("s1"));
     assert.deepEqual(chips, []);
   });
+
+  it("T-UOL7 rewind: ops 半边空 + 仅 ∪ annotate；不把旧 user_ops 盖回", () => {
+    addChatAnnotateDraft("s1", {
+      id: "ann-keep",
+      path: "/note.md",
+      originalText: "原文",
+      userAnnotation: "批注",
+    });
+    // ConversationPanel rewind：传 existing=[]（main 已推空），禁止传入闭包旧 chip
+    const chips = applyUndoAnnotateRestore("s1", null, []);
+    assert.ok(
+      chips.some((c) => c.path === "/note.md" && c.action === "annotate"),
+    );
+    assert.equal(
+      chips.some((c) => c.action !== "annotate"),
+      false,
+      "rewind 不得盖回旧非 annotate（手改）chip",
+    );
+  });
 });
