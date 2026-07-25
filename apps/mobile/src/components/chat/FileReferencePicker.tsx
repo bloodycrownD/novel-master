@@ -1,5 +1,7 @@
 /**
- * 只读文件/目录引用选择器：层级浏览 + 多选文件与目录。
+ * 只读文件/目录选择器：
+ * - at-ref（默认）：层级浏览 + 多选文件与目录，产出 @path token（ChatComposer）
+ * - pick-directory：注入 VfsScope，单选目标目录（批量移动）
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -11,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import type { WorkplaceListRow } from '@novel-master/core/workplace';
+import type { VfsScope } from '@novel-master/core/vfs';
 import { AppModal } from '@/components/ui/AppModal';
 import { useTheme } from '@/theme/ThemeProvider';
 import { formatError } from '@/errors/format-error';
@@ -19,16 +22,34 @@ import {
   isDirectChild,
   parentLogicalPath,
 } from '@/components/vfs/vfs-row-mapper';
+import { isBlockedMoveTarget } from '@/components/vfs/vfs-move-path';
 import { atPathTokensFromPickerSelection } from './composer-at-path';
 
-export type FileReferencePickerProps = {
+type AtRefPickerProps = {
   visible: boolean;
+  /** 默认 at-ref：会话工作区多选引用 */
+  mode?: 'at-ref';
   projectId: string;
   sessionId: string;
   onClose: () => void;
   /** 确认后插入正文的 `@path` token（目录带尾 `/`）。 */
   onConfirm: (atPathTokens: string[]) => void;
 };
+
+type PickDirectoryPickerProps = {
+  visible: boolean;
+  mode: 'pick-directory';
+  /** 与 VfsFileManager 相同的 scope（global / project / session） */
+  scope: VfsScope;
+  /** 禁止作为目标的源路径（自身及其子树） */
+  blockedSourcePaths?: readonly string[];
+  onClose: () => void;
+  onConfirmDir: (path: string) => void;
+};
+
+export type FileReferencePickerProps =
+  | AtRefPickerProps
+  | PickDirectoryPickerProps;
 
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
@@ -43,6 +64,14 @@ export function listPickerChildRows(
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
+/** pick-directory 模式只列目录，隐藏文件勾选。 */
+export function listPickerDirectoryChildRows(
+  rows: readonly WorkplaceListRow[],
+  currentPath: string,
+): WorkplaceListRow[] {
+  return listPickerChildRows(rows, currentPath).filter(r => r.kind === 'dir');
+}
+
 export { atPathTokensFromPickerSelection };
 
 function toggleInSet(prev: Set<string>, path: string): Set<string> {
@@ -55,13 +84,25 @@ function toggleInSet(prev: Set<string>, path: string): Set<string> {
   return next;
 }
 
-export function FileReferencePicker({
-  visible,
-  projectId,
-  sessionId,
-  onClose,
-  onConfirm,
-}: FileReferencePickerProps) {
+function resolveWorkplaceScope(
+  props: FileReferencePickerProps,
+): VfsScope {
+  if (props.mode === 'pick-directory') {
+    return props.scope;
+  }
+  return {
+    kind: 'session',
+    projectId: props.projectId,
+    sessionId: props.sessionId,
+  };
+}
+
+export function FileReferencePicker(props: FileReferencePickerProps) {
+  const { visible, onClose } = props;
+  const isPickDirectory = props.mode === 'pick-directory';
+  const blockedSourcePaths = isPickDirectory
+    ? (props.blockedSourcePaths ?? [])
+    : [];
   const { tokens } = useTheme();
   const runtime = useRuntime();
   const [rows, setRows] = useState<WorkplaceListRow[]>([]);
@@ -71,15 +112,14 @@ export function FileReferencePicker({
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
 
+  const workplaceScope = resolveWorkplaceScope(props);
+  const scopeKey = useMemo(() => JSON.stringify(workplaceScope), [workplaceScope]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(undefined);
     try {
-      const wt = runtime.workplace({
-        kind: 'session',
-        projectId,
-        sessionId,
-      });
+      const wt = runtime.workplace(workplaceScope);
       setRows(await wt.buildListRows());
     } catch (err) {
       setError(formatError(err));
@@ -87,7 +127,7 @@ export function FileReferencePicker({
     } finally {
       setLoading(false);
     }
-  }, [runtime, projectId, sessionId]);
+  }, [runtime, workplaceScope]);
 
   useEffect(() => {
     if (!visible) {
@@ -99,16 +139,24 @@ export function FileReferencePicker({
     setSelectedDirs(new Set());
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 打开瞬时拉一次列表
-  }, [visible, projectId, sessionId]);
+  }, [visible, scopeKey]);
 
   const visibleRows = useMemo(
-    () => listPickerChildRows(rows, currentPath),
-    [rows, currentPath],
+    () =>
+      isPickDirectory
+        ? listPickerDirectoryChildRows(rows, currentPath)
+        : listPickerChildRows(rows, currentPath),
+    [rows, currentPath, isPickDirectory],
   );
 
   const parentPath = parentLogicalPath(currentPath);
   const canGoUp = parentPath != null;
-  const canConfirm = selectedFiles.size > 0 || selectedDirs.size > 0;
+  const cwdBlocked = isPickDirectory
+    ? isBlockedMoveTarget(currentPath, blockedSourcePaths)
+    : false;
+  const canConfirmAtRef = selectedFiles.size > 0 || selectedDirs.size > 0;
+  const canConfirmPickDir = !cwdBlocked;
+  const canConfirm = isPickDirectory ? canConfirmPickDir : canConfirmAtRef;
   const currentDirSelected = selectedDirs.has(currentPath);
 
   const navigateInto = (dirPath: string) => {
@@ -120,11 +168,34 @@ export function FileReferencePicker({
   };
 
   const selectCurrentDir = () => {
+    if (props.mode === 'pick-directory') {
+      if (cwdBlocked) {
+        return;
+      }
+      props.onConfirmDir(currentPath);
+      onClose();
+      return;
+    }
     setSelectedDirs(prev => toggleInSet(prev, currentPath));
   };
 
   const toggleFile = (filePath: string) => {
     setSelectedFiles(prev => toggleInSet(prev, filePath));
+  };
+
+  const handleConfirm = () => {
+    if (props.mode === 'pick-directory') {
+      if (cwdBlocked) {
+        return;
+      }
+      props.onConfirmDir(currentPath);
+      onClose();
+      return;
+    }
+    props.onConfirm(
+      atPathTokensFromPickerSelection(selectedDirs, selectedFiles),
+    );
+    onClose();
   };
 
   return (
@@ -137,9 +208,13 @@ export function FileReferencePicker({
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={[styles.panel, { backgroundColor: tokens.surface }]}>
-          <Text style={[styles.title, { color: tokens.text }]}>引用文件</Text>
+          <Text style={[styles.title, { color: tokens.text }]}>
+            {isPickDirectory ? '选择目标目录' : '引用文件'}
+          </Text>
           <Text style={{ color: tokens.textSecondary, marginBottom: 8 }}>
-            可多选文件与目录
+            {isPickDirectory
+              ? '浏览到目标文件夹后确认；不可选中源自身或其子树'
+              : '可多选文件与目录'}
           </Text>
           <View style={styles.navBar}>
             <Text
@@ -169,14 +244,34 @@ export function FileReferencePicker({
             </Pressable>
             <Pressable
               onPress={selectCurrentDir}
+              disabled={isPickDirectory && cwdBlocked}
               style={styles.navBtn}
               testID="file-ref-select-cwd"
             >
-              <Text style={{ color: tokens.primary }}>
-                {currentDirSelected ? '取消选用' : '选择当前文件夹'}
+              <Text
+                style={{
+                  color:
+                    isPickDirectory && cwdBlocked
+                      ? tokens.textSecondary
+                      : tokens.primary,
+                }}
+              >
+                {isPickDirectory
+                  ? '选择当前文件夹'
+                  : currentDirSelected
+                    ? '取消选用'
+                    : '选择当前文件夹'}
               </Text>
             </Pressable>
           </View>
+          {cwdBlocked ? (
+            <Text
+              style={{ color: tokens.danger, marginBottom: 8 }}
+              testID="file-ref-cwd-blocked"
+            >
+              当前目录是源自身或子树，不能作为目标
+            </Text>
+          ) : null}
           {error ? (
             <Text style={{ color: tokens.danger, marginBottom: 8 }}>{error}</Text>
           ) : null}
@@ -190,30 +285,43 @@ export function FileReferencePicker({
               renderItem={({ item }) => {
                 const label = basename(item.path) || item.path;
                 if (item.kind === 'dir') {
+                  const dirBlocked =
+                    isPickDirectory &&
+                    isBlockedMoveTarget(item.path, blockedSourcePaths);
                   const checked = selectedDirs.has(item.path);
                   return (
                     <View
                       style={styles.row}
                       testID={`file-ref-dir-${item.path}`}
                     >
-                      <Pressable
-                        onPress={() => toggleDirSelect(item.path)}
-                        style={styles.checkHit}
-                        testID={`file-ref-dir-check-${item.path}`}
-                        accessibilityLabel={`选用目录 ${label}`}
-                      >
-                        <Text style={{ color: tokens.text }}>
-                          {checked ? '☑' : '☐'}
-                        </Text>
-                      </Pressable>
+                      {isPickDirectory ? null : (
+                        <Pressable
+                          onPress={() => toggleDirSelect(item.path)}
+                          style={styles.checkHit}
+                          testID={`file-ref-dir-check-${item.path}`}
+                          accessibilityLabel={`选用目录 ${label}`}
+                        >
+                          <Text style={{ color: tokens.text }}>
+                            {checked ? '☑' : '☐'}
+                          </Text>
+                        </Pressable>
+                      )}
                       <Pressable
                         style={styles.rowBody}
                         onPress={() => navigateInto(item.path)}
                         testID={`file-ref-dir-enter-${item.path}`}
                         accessibilityLabel={`进入目录 ${label}`}
                       >
-                        <Text style={{ color: tokens.text, flex: 1 }}>
+                        <Text
+                          style={{
+                            color: dirBlocked
+                              ? tokens.textSecondary
+                              : tokens.text,
+                            flex: 1,
+                          }}
+                        >
                           📁 {label}/
+                          {dirBlocked ? '（不可作目标）' : ''}
                         </Text>
                         <Text style={{ color: tokens.textSecondary }}>›</Text>
                       </Pressable>
@@ -250,7 +358,9 @@ export function FileReferencePicker({
                 );
               }}
               ListEmptyComponent={
-                <Text style={{ color: tokens.textSecondary }}>暂无文件</Text>
+                <Text style={{ color: tokens.textSecondary }}>
+                  {isPickDirectory ? '暂无子目录' : '暂无文件'}
+                </Text>
               }
             />
           )}
@@ -267,12 +377,7 @@ export function FileReferencePicker({
                 },
               ]}
               testID="file-ref-confirm"
-              onPress={() => {
-                onConfirm(
-                  atPathTokensFromPickerSelection(selectedDirs, selectedFiles),
-                );
-                onClose();
-              }}
+              onPress={handleConfirm}
             >
               <Text style={{ color: '#fff' }}>确认</Text>
             </Pressable>

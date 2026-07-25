@@ -246,4 +246,65 @@ describe('FileReferencePicker', () => {
       '@/hidden.md',
     ]);
   });
+
+  it('pick-directory：确认当前 cwd；隐藏文件行；拦截源自身', async () => {
+    const onConfirmDir = jest.fn();
+    const onClose = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileReferencePicker
+          visible
+          mode="pick-directory"
+          scope={{ kind: 'session', projectId: 'p1', sessionId: 's1' }}
+          blockedSourcePaths={['/notes']}
+          onClose={onClose}
+          onConfirmDir={onConfirmDir}
+        />,
+      );
+    });
+
+    // 不展示文件勾选
+    expect(() =>
+      findByTestId(tree!.root, 'file-ref-file-/a.md'),
+    ).toThrow();
+    expect(findByTestId(tree!.root, 'file-ref-dir-/notes')).toBeTruthy();
+
+    await act(async () => {
+      findByTestId(tree!.root, 'file-ref-confirm').props.onPress();
+    });
+    expect(onConfirmDir).toHaveBeenCalledWith('/');
+    expect(onClose).toHaveBeenCalled();
+
+    onConfirmDir.mockClear();
+    onClose.mockClear();
+    await act(async () => {
+      findByTestId(tree!.root, 'file-ref-dir-enter-/notes').props.onPress();
+    });
+    expect(findByTestId(tree!.root, 'file-ref-cwd-blocked')).toBeTruthy();
+    expect(
+      findByTestId(tree!.root, 'file-ref-confirm').props.disabled,
+    ).toBe(true);
+  });
+
+  it('pick-directory：选择当前文件夹直接确认', async () => {
+    const onConfirmDir = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileReferencePicker
+          visible
+          mode="pick-directory"
+          scope={{ kind: 'project', projectId: 'p1' }}
+          onClose={jest.fn()}
+          onConfirmDir={onConfirmDir}
+        />,
+      );
+    });
+
+    await act(async () => {
+      findByTestId(tree!.root, 'file-ref-select-cwd').props.onPress();
+    });
+    expect(onConfirmDir).toHaveBeenCalledWith('/');
+  });
 });
