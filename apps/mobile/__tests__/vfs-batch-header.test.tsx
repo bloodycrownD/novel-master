@@ -53,15 +53,14 @@ describe('VfsBatchHeader', () => {
   const handlers = {
     onCancel: jest.fn(),
     onDelete: jest.fn(),
-    onEnable: jest.fn(),
-    onDisable: jest.fn(),
+    onMove: jest.fn(),
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('disables delete/enable/disable when selectedCount is 0', () => {
+  it('selectedCount 为 0 时禁用删除/移动', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
@@ -69,13 +68,14 @@ describe('VfsBatchHeader', () => {
       );
     });
     const pressables = findAllPressables(tree.root);
-    expect(pressables).toHaveLength(4);
+    // 取消 + 删除 + 移动
+    expect(pressables).toHaveLength(3);
     for (const button of pressables.slice(1)) {
       expect(button.props.disabled).toBe(true);
     }
   });
 
-  it('enables actions when selectedCount is greater than 0', () => {
+  it('selectedCount > 0 时启用删除/移动并可触发 onMove', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
@@ -83,13 +83,13 @@ describe('VfsBatchHeader', () => {
       );
     });
     const pressables = findAllPressables(tree.root);
-    const [, deleteBtn, enableBtn, disableBtn] = pressables;
-    for (const button of [deleteBtn, enableBtn, disableBtn]) {
+    const [, deleteBtn, moveBtn] = pressables;
+    for (const button of [deleteBtn, moveBtn]) {
       expect(button.props.disabled).toBe(false);
     }
     act(() => {
-      enableBtn.props.onPress?.();
+      moveBtn.props.onPress?.();
     });
-    expect(handlers.onEnable).toHaveBeenCalledTimes(1);
+    expect(handlers.onMove).toHaveBeenCalledTimes(1);
   });
 });
