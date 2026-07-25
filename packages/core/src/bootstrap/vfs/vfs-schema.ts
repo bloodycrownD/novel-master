@@ -8,13 +8,14 @@
 export const VFS_ENTRY_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_entry (
   path TEXT PRIMARY KEY,
-  content TEXT NOT NULL,
+  content TEXT NULL,
   version INTEGER NOT NULL DEFAULT 1,
   head_version INTEGER NOT NULL DEFAULT 1,
   mtime_ms INTEGER NOT NULL,
   storage_kind TEXT NOT NULL DEFAULT 'inline',
   external_uri TEXT,
-  entry_kind TEXT NOT NULL DEFAULT 'file'
+  entry_kind TEXT NOT NULL DEFAULT 'file',
+  content_hash TEXT NULL
 )`.trim();
 
 /** Prefix index for LIKE-based list queries. */

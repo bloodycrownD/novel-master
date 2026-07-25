@@ -14,12 +14,14 @@ import {
 import { savedModelIdentityV1Migration } from "./saved-model-identity-v1.js";
 import { dropChatSessionUserVfsPendingV1Migration } from "./drop-chat-session-user-vfs-pending-v1.js";
 import { renameWorktreeTablesToWorkplaceV1Migration } from "./rename-worktree-tables-to-workplace-v1.js";
+import { vfsContentBlobZlibV1Migration } from "./vfs-content-blob-zlib-v1.js";
 
 /** 有序 migration 列表。 */
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   savedModelIdentityV1Migration,
   dropChatSessionUserVfsPendingV1Migration,
   renameWorktreeTablesToWorkplaceV1Migration,
+  vfsContentBlobZlibV1Migration,
 ];
 
 /**
@@ -53,3 +55,4 @@ export {
   isSchemaMigrationApplied,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
+export { VFS_CONTENT_BLOB_ZLIB_V1_ID } from "./vfs-content-blob-zlib-v1.js";
