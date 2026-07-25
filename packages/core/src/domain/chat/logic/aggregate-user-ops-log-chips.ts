@@ -24,6 +24,7 @@ function toAttachmentAction(
 /**
  * 按 path 聚合：同 path 多条日志 → 一颗 chip；`action` 取该 path **最后一条**。
  * 出现顺序按各 path 首次出现保留。
+ * rename/move 的文案由 `action` 自描述（`改名`/`移动`），`name` 仅存 path。
  */
 export function aggregateUserOpsLogChips(
   entries: readonly UserOpsLogEntry[],

@@ -17,7 +17,10 @@ export const STATUS_CHIP_ZH: Readonly<
   write: "创建",
   edit: "编辑",
   mkdir: "创建",
-  rename: "重命",
+  /** 同目录换名。 */
+  rename: "改名",
+  /** 跨目录移动。 */
+  move: "移动",
   workplaceChange: "规则",
   userAttach: "", // 不进状态 chip；映射表仍保留
   annotate: "批注",
@@ -31,11 +34,47 @@ const LEGACY_PREFIX_ZH: Readonly<Record<string, string>> = {
   edit: "编辑",
   delete: "删除",
   mkdir: "创建",
-  rename: "重命",
+  rename: "改名",
+  move: "移动",
   workplaceChange: "规则",
   annotate: "批注",
   userAttach: "",
 };
+
+/** 逻辑父目录：`/a.md`→`/`，`/续写/a.md`→`/续写`。 */
+export function logicalParentDir(path: string): string {
+  const normalized = path.trim();
+  if (normalized === "" || normalized === "/") {
+    return "/";
+  }
+  const noTrail =
+    normalized.length > 1 && normalized.endsWith("/")
+      ? normalized.slice(0, -1)
+      : normalized;
+  const idx = noTrail.lastIndexOf("/");
+  if (idx <= 0) {
+    return "/";
+  }
+  return noTrail.slice(0, idx) || "/";
+}
+
+/**
+ * 同目录 → `rename`；跨目录 → `move`（协议与 VFS `mv` 解耦分类）。
+ */
+export function resolveRenameOrMoveAction(
+  from: string,
+  to: string,
+): "rename" | "move" {
+  return logicalParentDir(from) === logicalParentDir(to) ? "rename" : "move";
+}
+
+/**
+ * 旧无 action / 旧 `rename:from→to` 降级文案。
+ * 缺 from/to 时回落 {@link STATUS_CHIP_ZH}.rename。
+ */
+export function renameChipZh(from: string, to: string): string {
+  return STATUS_CHIP_ZH[resolveRenameOrMoveAction(from, to)];
+}
 
 /**
  * 已知枚举 → `中文二字:` + path。
@@ -53,7 +92,8 @@ export function formatStatusChipLabel(
 }
 
 /**
- * 从附件读 `action`/`path`（及 rename 的 `to`）生成 chip 文案。
+ * 从附件读 `action`/`path`（及 rename/move 的 `to`）生成 chip 文案。
+ * 有 `action` 时直接走 {@link STATUS_CHIP_ZH}（action 自描述，不再靠 name hack）。
  * 无 `action` 时按降级规则（不做英文 /「规则 ·」/ emoji 兼容承诺）。
  */
 export function formatStatusChipLabelFromAttachment(
@@ -63,8 +103,7 @@ export function formatStatusChipLabelFromAttachment(
     if (a.action === "userAttach") {
       return "";
     }
-    const path = resolveChipPath(a);
-    return formatStatusChipLabel(a.action, path);
+    return formatStatusChipLabel(a.action, resolveChipPath(a));
   }
 
   // 无 action 降级 1：workplace → 规则:<path>
@@ -81,7 +120,11 @@ export function formatStatusChipLabelFromAttachment(
     let suffix = m[2] ?? "";
     const zh = LEGACY_PREFIX_ZH[prefix];
     if (zh != null && zh !== "") {
-      if (prefix === "rename") {
+      if (prefix === "rename" || prefix === "move") {
+        const pair = parseRenameArrowPair(suffix);
+        if (pair != null) {
+          return `${renameChipZh(pair.from, pair.to)}:${pair.to}`;
+        }
         suffix = renameSuffixToChipPath(suffix);
       }
       return `${zh}:${suffix}`;
@@ -95,7 +138,7 @@ export function formatStatusChipLabelFromAttachment(
 function resolveChipPath(
   a: Pick<MessageAttachment, "action" | "path" | "name" | "content">,
 ): string {
-  if (a.action === "rename") {
+  if (a.action === "rename" || a.action === "move") {
     // 优先 path（落库已取 to）；否则从 content JSON / name 解析
     if (a.path != null && a.path !== "") {
       return a.path;
@@ -125,7 +168,7 @@ function resolvePathOrName(
   return a.name ?? "";
 }
 
-/** `rename:from→to` 后缀：含 `→` 取右侧。 */
+/** `rename:from→to` / `move:from→to` 后缀：含 `→` 取右侧。 */
 function renameSuffixToChipPath(suffix: string): string {
   const sep = "→";
   const idx = suffix.indexOf(sep);
@@ -144,6 +187,12 @@ function stripLegacyPrefix(name: string): string | null {
 }
 
 function tryParseRenameTo(content: string | null | undefined): string | null {
+  return tryParseRenamePairFromContent(content)?.to ?? null;
+}
+
+function tryParseRenamePairFromContent(
+  content: string | null | undefined,
+): { from: string; to: string } | null {
   if (content == null || content === "") {
     return null;
   }
@@ -152,12 +201,46 @@ function tryParseRenameTo(content: string | null | undefined): string | null {
     return null;
   }
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as { to?: unknown };
-    if (typeof parsed.to === "string" && parsed.to !== "") {
-      return parsed.to;
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      from?: unknown;
+      to?: unknown;
+      oldPath?: unknown;
+      newPath?: unknown;
+    };
+    const from =
+      typeof parsed.from === "string"
+        ? parsed.from
+        : typeof parsed.oldPath === "string"
+          ? parsed.oldPath
+          : "";
+    const to =
+      typeof parsed.to === "string"
+        ? parsed.to
+        : typeof parsed.newPath === "string"
+          ? parsed.newPath
+          : "";
+    if (from !== "" && to !== "") {
+      return { from, to };
     }
   } catch {
     return null;
   }
   return null;
+}
+
+/** `from→to` 或 `rename:from→to` 后缀。 */
+function parseRenameArrowPair(
+  suffix: string,
+): { from: string; to: string } | null {
+  const sep = "→";
+  const idx = suffix.indexOf(sep);
+  if (idx < 0) {
+    return null;
+  }
+  const from = suffix.slice(0, idx);
+  const to = suffix.slice(idx + sep.length);
+  if (from === "" || to === "") {
+    return null;
+  }
+  return { from, to };
 }

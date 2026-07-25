@@ -5,6 +5,7 @@
  */
 
 import type { UserOpsLogEntry } from "../model/user-ops-log.schema.js";
+import { resolveRenameOrMoveAction } from "./status-chip-label.js";
 import { parseAllUserVfsActionsFromText } from "./user-vfs-turn-view.js";
 
 /** executeOp 入参的最小形状（避免 domain → service 反向依赖）。 */
@@ -112,7 +113,7 @@ export function userOpsLogEntryFromTurnOp(
           id,
           createdAtMs,
           actionXml,
-          action: "rename",
+          action: resolveRenameOrMoveAction(from, to),
           oldPath: from,
           newPath: to,
         };
@@ -172,14 +173,16 @@ export function userOpsLogEntryFromTurnOp(
       path: head.path,
     };
   }
-  if (head.name === "rename") {
+  if (head.name === "rename" || head.name === "move") {
+    const oldPath = asString(head.params.from);
+    const newPath = asString(head.params.to);
     return {
       id,
       createdAtMs,
       actionXml,
-      action: "rename",
-      oldPath: asString(head.params.from),
-      newPath: asString(head.params.to),
+      action: resolveRenameOrMoveAction(oldPath, newPath),
+      oldPath,
+      newPath,
     };
   }
 

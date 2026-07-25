@@ -1,6 +1,6 @@
 /**
  * 会话手改操作日志条目（进程内 store；发送 → user_ops 附件）。
- * edit 用 `hunks`（产品口径 `content` 数组）；落库 action 保持 write/mkdir/edit/delete/rename。
+ * edit 用 `hunks`（产品口径 `content` 数组）；落库 action 保持 write/mkdir/edit/delete/rename/move。
  *
  * @module domain/chat/model/user-ops-log.schema
  */
@@ -26,7 +26,7 @@ const entryBase = {
 
 /**
  * 单条未发送手改日志。
- * write 可带 `reason` / `kind`；rename 用 `oldPath`/`newPath`（chip 聚合 key = newPath）。
+ * write 可带 `reason` / `kind`；rename/move 用 `oldPath`/`newPath`（chip 聚合 key = newPath）。
  */
 export const userOpsLogEntrySchema = z.discriminatedUnion("action", [
   z
@@ -70,6 +70,14 @@ export const userOpsLogEntrySchema = z.discriminatedUnion("action", [
       newPath: z.string().min(1),
     })
     .strict(),
+  z
+    .object({
+      ...entryBase,
+      action: z.literal("move"),
+      oldPath: z.string().min(1),
+      newPath: z.string().min(1),
+    })
+    .strict(),
 ]);
 
 export type UserOpsLogEntry = z.infer<typeof userOpsLogEntrySchema>;
@@ -79,9 +87,9 @@ export const userOpsLogEntriesSchema = z.array(userOpsLogEntrySchema);
 
 export type UserOpsLogEntries = z.infer<typeof userOpsLogEntriesSchema>;
 
-/** chip / 附件聚合用 path：rename 取 newPath，其余取 path。 */
+/** chip / 附件聚合用 path：rename/move 取 newPath，其余取 path。 */
 export function userOpsLogEntryChipPath(entry: UserOpsLogEntry): string {
-  if (entry.action === "rename") {
+  if (entry.action === "rename" || entry.action === "move") {
     return entry.newPath;
   }
   return entry.path;

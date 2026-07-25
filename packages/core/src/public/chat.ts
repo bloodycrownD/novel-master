@@ -62,6 +62,9 @@ export {
   STATUS_CHIP_ZH,
   formatStatusChipLabel,
   formatStatusChipLabelFromAttachment,
+  logicalParentDir,
+  renameChipZh,
+  resolveRenameOrMoveAction,
 } from '../domain/chat/logic/status-chip-label.js';
 export {
   buildAlreadyReferencedActionXml,

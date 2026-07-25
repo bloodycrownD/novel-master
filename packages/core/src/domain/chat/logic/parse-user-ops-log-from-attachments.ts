@@ -10,6 +10,7 @@ import type {
   UserOpsLogEntry,
   UserOpsLogHunk,
 } from "../model/user-ops-log.schema.js";
+import { resolveRenameOrMoveAction } from "./status-chip-label.js";
 import { parseAllUserVfsActionsFromText } from "./user-vfs-turn-view.js";
 
 function mintUserOpsLogId(): string {
@@ -57,7 +58,8 @@ export function parseUserOpsLogFromAttachments(
           a.name === "edit" ||
           a.name === "mkdir" ||
           a.name === "delete" ||
-          a.name === "rename",
+          a.name === "rename" ||
+          a.name === "move",
       );
       if (handOps.length === 0) {
         continue;
@@ -151,17 +153,19 @@ export function parseUserOpsLogFromAttachments(
         });
         continue;
       }
-      if (head.name === "rename") {
+      if (head.name === "rename" || head.name === "move") {
         const oldPath = asString(head.params.from);
         const newPath = asString(head.params.to) || (att.path ?? "");
         if (oldPath === "" || newPath === "") {
           continue;
         }
+        // parse 时跨目录旧 rename 亦规范为 move（与 actionFromNamedTag 一致）。
+        const action = resolveRenameOrMoveAction(oldPath, newPath);
         out.push({
           id: mintUserOpsLogId(),
           createdAtMs,
           actionXml: xml.trim(),
-          action: "rename",
+          action,
           oldPath,
           newPath,
         });

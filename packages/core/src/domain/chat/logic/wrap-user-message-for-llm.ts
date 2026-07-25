@@ -3,6 +3,7 @@
  *
  * 增量统一为单一 `<user-ops>`；action 顺序钉死：attach → workplace → user_ops/annotate。
  * 可保留外层 `<attachment>` 与 `<user-input>` 分界。
+ * 送模型时 body 每行非空前缀 4 空格；落库 action XML 保持顶格（本函数不改附件 content）。
  *
  * @module domain/chat/logic/wrap-user-message-for-llm
  */
@@ -14,6 +15,14 @@ function sectionBody(attachments: readonly MessageAttachment[]): string {
     .map((a) => (a.content ?? "").trim())
     .filter((s) => s.length > 0)
     .join("\n\n");
+}
+
+/** 送 LLM 时对 body 每行非空前缀 4 空格（落库 XML 仍顶格）。 */
+function indentUserOpsBody(body: string): string {
+  return body
+    .split("\n")
+    .map((line) => (line.length === 0 ? line : `    ${line}`))
+    .join("\n");
 }
 
 /**
@@ -47,7 +56,7 @@ export function wrapUserMessageForLlm(
   return [
     "<attachment>",
     `  <user-ops>`,
-    body,
+    indentUserOpsBody(body),
     `  </user-ops>`,
     "</attachment>",
     "<user-input>",

@@ -94,6 +94,8 @@ function deriveFromNamedAction(
       ];
     }
     case "rename":
+    case "move":
+      // 协议 rename|move 均映射 VFS `mv`（同目录 / 跨目录由 action 名区分）。
       return [
         {
           name: "fs",

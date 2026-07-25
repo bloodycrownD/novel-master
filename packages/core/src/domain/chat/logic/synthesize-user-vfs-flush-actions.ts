@@ -11,12 +11,13 @@ import {
   buildUserVfsSimpleActionXml,
   mapUserSaveToToolUses,
 } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
+import { resolveRenameOrMoveAction } from "./status-chip-label.js";
 import type { WorkspaceFlushDiff } from "./diff-workspace-for-user-vfs-flush.js";
 
 /** flush / Composer 共用的单条 user_ops 摘要。 */
 export type UserOpsActionSummary = {
-  readonly action: "write" | "edit" | "mkdir" | "delete" | "rename";
-  /** 逻辑 path；rename 为 `from→to`（chip 取右侧 to）。 */
+  readonly action: "write" | "edit" | "mkdir" | "delete" | "rename" | "move";
+  /** 逻辑 path；rename/move 为 `from→to`（chip 取右侧 to）。 */
   readonly path: string;
 };
 
@@ -44,10 +45,11 @@ export function synthesizeUserVfsFlushActionEntries(
   }
 
   for (const { from, to } of diff.renames) {
+    const action = resolveRenameOrMoveAction(from, to);
     entries.push({
-      action: "rename",
+      action,
       path: `${from}→${to}`,
-      xml: buildUserVfsSimpleActionXml("rename", { from, to }),
+      xml: buildUserVfsSimpleActionXml(action, { from, to }),
     });
   }
 

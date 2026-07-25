@@ -29,6 +29,8 @@ export const messageAttachmentActionSchema = z.enum([
   "edit",
   "mkdir",
   "rename",
+  /** 跨目录移动；同目录换名仍用 `rename`。旧跨目录 `rename` 只读兼容。 */
+  "move",
   "workplaceChange",
   "userAttach",
   "annotate",

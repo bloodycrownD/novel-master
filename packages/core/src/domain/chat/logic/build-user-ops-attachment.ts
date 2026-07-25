@@ -50,9 +50,9 @@ export function buildUserOpsAttachmentsFromLogEntries(
 export function buildUserOpsAttachmentFromEntry(
   entry: SynthesizedUserVfsAction,
 ): MessageAttachment {
-  const storagePath = entry.action === "rename"
-    ? entry.path.split("→")[1] ?? entry.path
-    : entry.path;
+    const storagePath = entry.action === "rename" || entry.action === "move"
+      ? entry.path.split("→")[1] ?? entry.path
+      : entry.path;
   return {
     name: attachmentStorageName(storagePath),
     source: "user_ops",
@@ -94,7 +94,7 @@ export function userOpsAttachmentsFromSummaries(
   summaries: readonly UserOpsActionSummary[],
 ): MessageAttachment[] {
   return summaries.map((summary) => {
-    const storagePath = summary.action === "rename"
+    const storagePath = summary.action === "rename" || summary.action === "move"
       ? summary.path.split("→")[1] ?? summary.path
       : summary.path;
     return {
