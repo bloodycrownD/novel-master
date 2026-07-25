@@ -11,28 +11,13 @@ import {
   hasUnsentUserOpsLog,
   listUserOpsLog,
 } from "@/domain/chat/logic/chat-user-ops-log-store.js";
-import {
-  collectUserOpsChangedPaths,
-  diffWorkspaceForUserVfsFlush,
-  type WorkspaceFlushDiff,
-} from "@/domain/chat/logic/diff-workspace-for-user-vfs-flush.js";
-import { resolveCurrentWorkspaceSnapshot } from "@/domain/chat/logic/resolve-current-workspace-snapshot.js";
-import { resolveFlushBaselineTree } from "@/domain/chat/logic/resolve-flush-baseline-tree.js";
-import {
-  collectUserOpsActionSummaries,
-  type UserOpsActionSummary,
-} from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
+import type { UserOpsActionSummary } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
 import { userOpsLogEntryFromTurnOp } from "@/domain/chat/logic/user-ops-log-from-turn-op.js";
-import type { WorkspaceFlushSnapshot } from "@/domain/chat/logic/workspace-flush-snapshot.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import {
-  toPhysicalPath,
-  type VfsScope,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
@@ -68,7 +53,10 @@ export interface UserVfsTurnServiceDeps {
    */
   readonly sessionKkv: SessionKkvService;
   readonly messages: MessageService;
-  /** @deprecated preview 净 diff 仍用；flush 已不依赖。 */
+  /**
+   * 历史：净 diff preview 曾读消息列表；preview* 已 stub，保留以便工厂签名稳定。
+   * @deprecated
+   */
   readonly chatMessages: MessageRepository;
   readonly checkpoints: MessageCheckpointRepository;
   readonly entries: VfsEntryRepository;
@@ -82,56 +70,6 @@ export interface UserVfsTurnServiceDeps {
    * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
    */
   readonly messageCheckpoint: MessageCheckpointService;
-}
-
-async function loadRevisionContent(
-  revisions: VfsRevisionRepository,
-  scope: VfsScope,
-  logicalPath: string,
-  version: number,
-): Promise<string> {
-  const physical = toPhysicalPath(scope, logicalPath);
-  const rev = await revisions.findByPathAndVersion(physical, version);
-  if (rev == null || rev.status === "deleted") {
-    return "";
-  }
-  // find* 已解出明文；active 行 content 为 null 视为损坏，禁止 ?? "" 吞掉。
-  if (rev.content == null) {
-    throw new Error(
-      `loadRevisionContent: active revision 正文缺失 ${logicalPath}@${version}`,
-    );
-  }
-  return rev.content;
-}
-
-/** 读取 baseline / current 快照中各 path 的 revision 正文（仅 deprecated preview）。 */
-async function loadWorkspaceFlushContentMaps(
-  revisions: VfsRevisionRepository,
-  scope: VfsScope,
-  baseline: WorkspaceFlushSnapshot,
-  current: WorkspaceFlushSnapshot,
-): Promise<{
-  baselineContentByPath: Map<string, string>;
-  currentContentByPath: Map<string, string>;
-}> {
-  const baselineContentByPath = new Map<string, string>();
-  const currentContentByPath = new Map<string, string>();
-
-  for (const [path, version] of baseline.fileTree) {
-    baselineContentByPath.set(
-      path,
-      await loadRevisionContent(revisions, scope, path, version),
-    );
-  }
-
-  for (const [path, version] of current.fileTree) {
-    currentContentByPath.set(
-      path,
-      await loadRevisionContent(revisions, scope, path, version),
-    );
-  }
-
-  return { baselineContentByPath, currentContentByPath };
 }
 
 /**
@@ -243,78 +181,24 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
   }
 
   /**
-   * @deprecated 净 diff；状态条请改读 log store。
+   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。状态条请改读 UserOpsLogStore。
    */
   async previewUserOpsActions(
-    sessionId: string,
+    _sessionId: string,
   ): Promise<readonly UserOpsActionSummary[]> {
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      throw chatNotFound("session", sessionId);
-    }
-
-    const diff = await this.resolveWorkspaceFlushDiff(
-      sessionId,
-      session.projectId,
-    );
-    return collectUserOpsActionSummaries(diff);
+    return [];
   }
 
   /**
-   * @deprecated 净 diff；门闩请改读 hasPendingTurns / log store。
+   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。门闩请改读 hasPendingTurns / log store。
    */
   async previewUserOpsChangedPaths(
-    sessionId: string,
+    _sessionId: string,
   ): Promise<readonly string[]> {
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      throw chatNotFound("session", sessionId);
-    }
-
-    const diff = await this.resolveWorkspaceFlushDiff(
-      sessionId,
-      session.projectId,
-    );
-    return collectUserOpsChangedPaths(diff);
+    return [];
   }
 
   async hasPendingTurns(sessionId: string): Promise<boolean> {
     return hasUnsentUserOpsLog(sessionId);
-  }
-
-  /** @deprecated 仅 preview* 仍用；flush 已删除对本方法的调用。 */
-  private async resolveWorkspaceFlushDiff(
-    sessionId: string,
-    projectId: string,
-  ): Promise<WorkspaceFlushDiff> {
-    const baseline = await resolveFlushBaselineTree(
-      this.deps.checkpoints,
-      this.deps.chatMessages,
-      sessionId,
-    );
-    const current = await resolveCurrentWorkspaceSnapshot(
-      this.deps.entries,
-      projectId,
-      sessionId,
-    );
-    const scope: VfsScope = {
-      kind: "session",
-      projectId,
-      sessionId,
-    };
-    const { baselineContentByPath, currentContentByPath } =
-      await loadWorkspaceFlushContentMaps(
-        this.deps.revisions,
-        scope,
-        baseline,
-        current,
-      );
-
-    return diffWorkspaceForUserVfsFlush({
-      baseline,
-      current,
-      baselineContentByPath,
-      currentContentByPath,
-    });
   }
 }

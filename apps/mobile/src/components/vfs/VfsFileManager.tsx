@@ -447,7 +447,8 @@ export const VfsFileManager = forwardRef<
         const isDir = kind === 'dir' || dirPathSet.has(sourcePath);
         const itemT0 = Date.now();
         try {
-          // WHY: 批量时跳过每次 op 后的 composer 投影；批次结束统一刷一次（log store 轻量投影）。
+          // WHY: 批量时跳过每次 op 后的 composer 投影；批次结束统一刷一次。
+          // 非净 diff defer——投影读 UserOpsLogStore，本开关仅合并批次末 notify。
           const renameOpts = useUserVfsTurn
             ? { skipComposerStatusRefresh: true as const }
             : undefined;

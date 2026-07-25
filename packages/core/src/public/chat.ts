@@ -132,20 +132,9 @@ export {
   deriveDirPathsFromFileTree,
   emptyWorkspaceFlushSnapshot,
 } from '../domain/chat/logic/workspace-flush-snapshot.js';
-export { resolveFlushBaselineTree } from '../domain/chat/logic/resolve-flush-baseline-tree.js';
-export { resolveCurrentWorkspaceSnapshot } from '../domain/chat/logic/resolve-current-workspace-snapshot.js';
-export {
-  collectUserOpsChangedPaths,
-  diffWorkspaceForUserVfsFlush,
-  isWorkspaceFlushDiffEmpty,
-} from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
-export type {
-  WorkspaceFlushDiff,
-  WorkspaceFlushDiffInput,
-  WorkspaceFlushChangedFile,
-  WorkspaceFlushAddedFile,
-} from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
-export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
+// 净 diff 模块（resolveFlushBaselineTree / resolveCurrentWorkspaceSnapshot /
+// diffWorkspaceForUserVfsFlush / synthesizeUserVfsFlushActions）已退出 public；
+// 文件保留并标 @deprecated，仅供过渡期单测直接相对路径引用。
 export {
   buildUserOpsAttachmentFromLogEntry,
   buildUserOpsAttachmentsFromLogEntries,

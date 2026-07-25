@@ -111,6 +111,9 @@ export function parseUserOpsLogFromAttachments(
           typeof att.path === "string" && att.path !== ""
             ? att.path
             : head.path;
+        if (path === "") {
+          continue;
+        }
         out.push({
           id: mintUserOpsLogId(),
           createdAtMs,
@@ -123,6 +126,9 @@ export function parseUserOpsLogFromAttachments(
         continue;
       }
       if (head.name === "mkdir") {
+        if (head.path === "") {
+          continue;
+        }
         out.push({
           id: mintUserOpsLogId(),
           createdAtMs,
@@ -133,6 +139,9 @@ export function parseUserOpsLogFromAttachments(
         continue;
       }
       if (head.name === "delete") {
+        if (head.path === "") {
+          continue;
+        }
         out.push({
           id: mintUserOpsLogId(),
           createdAtMs,
@@ -143,13 +152,18 @@ export function parseUserOpsLogFromAttachments(
         continue;
       }
       if (head.name === "rename") {
+        const oldPath = asString(head.params.from);
+        const newPath = asString(head.params.to) || (att.path ?? "");
+        if (oldPath === "" || newPath === "") {
+          continue;
+        }
         out.push({
           id: mintUserOpsLogId(),
           createdAtMs,
           actionXml: xml.trim(),
           action: "rename",
-          oldPath: asString(head.params.from),
-          newPath: asString(head.params.to) || (att.path ?? ""),
+          oldPath,
+          newPath,
         });
       }
     } catch {

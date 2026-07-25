@@ -1,5 +1,5 @@
 /**
- * user-ops-operation-log：T-UOL3 / T-UOL6 / T-UOL11 及 store / parse 雏形。
+ * user-ops-operation-log：T-UOL3 / T-UOL6 / T-UOL10 / T-UOL11 及 store / parse 雏形。
  */
 
 import assert from "node:assert/strict";
@@ -8,9 +8,12 @@ import {
   buildUserOpsAttachmentFromLogEntry,
   chipsFromUserOpsLogStore,
   createUserVfsTurnServiceBundle,
+  formatStatusChipLabel,
+  formatStatusChipLabelFromAttachment,
   listUserOpsLog,
   parseUserOpsLogFromAttachments,
   projectComposerStatusAttachments,
+  replaceUserOpsLog,
   resetUserOpsLogStoreForTests,
 } from "@novel-master/core/chat";
 import { buildUserVfsSaveOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
@@ -134,6 +137,94 @@ describe("user-ops-operation-log (T-UOL*)", () => {
     assert.equal(parsed[0]!.action, "edit");
     if (parsed[0]!.action === "edit") {
       assert.equal(parsed[0]!.hunks.length, 2);
+    }
+  });
+
+  it("T-UOL10：旧合成 XML parse 不抛；损坏条跳过；chip write/mkdir→创建", () => {
+    const legacyMkdirXml = `<action name="mkdir">\n${JSON.stringify({ path: "/notes" }, null, 2)}\n</action>`;
+    const legacyWriteXml = `<action name="write">\n${JSON.stringify({ path: "/notes/a.md", content: "hello" }, null, 2)}\n</action>`;
+    // 旧净 diff 合成：同附件内多段 action（mkdir + write）
+    const legacyComboXml = `${legacyMkdirXml}\n${legacyWriteXml}`;
+
+    const mkdirAtt = {
+      name: "/notes",
+      source: "user_ops" as const,
+      type: "text" as const,
+      content: legacyMkdirXml,
+      path: "/notes",
+      action: "mkdir" as const,
+    };
+    const writeAtt = {
+      name: "/notes/a.md",
+      source: "user_ops" as const,
+      type: "text" as const,
+      content: legacyWriteXml,
+      path: "/notes/a.md",
+      action: "write" as const,
+    };
+    const comboAtt = {
+      name: "/notes",
+      source: "user_ops" as const,
+      type: "text" as const,
+      content: legacyComboXml,
+      path: "/notes",
+    };
+    const brokenAtt = {
+      name: "__broken__",
+      source: "user_ops" as const,
+      type: "text" as const,
+      // 无合法 action 标签 → handOps 空 → 跳过
+      content: "not-an-action-xml {{{",
+    };
+    const brokenEmptyPathAtt = {
+      name: "__no_path__",
+      source: "user_ops" as const,
+      type: "text" as const,
+      // JSON 损坏且无 att.path → write path 空 → 跳过
+      content: '<action name="write">\n{not-json\n</action>',
+    };
+
+    let parsed;
+    assert.doesNotThrow(() => {
+      parsed = parseUserOpsLogFromAttachments([
+        mkdirAtt,
+        writeAtt,
+        comboAtt,
+        brokenAtt,
+        brokenEmptyPathAtt,
+      ]);
+    });
+    assert.ok(parsed!);
+    // 损坏条跳过；mkdir / write / combo(首条 mkdir) 各映回一条
+    assert.equal(parsed!.length, 3);
+    assert.equal(parsed![0]!.action, "mkdir");
+    assert.equal(parsed![1]!.action, "write");
+    assert.equal(parsed![2]!.action, "mkdir");
+
+    assert.equal(formatStatusChipLabel("write", "/a.md"), "创建:/a.md");
+    assert.equal(formatStatusChipLabel("mkdir", "/dir"), "创建:/dir");
+    assert.equal(
+      formatStatusChipLabelFromAttachment(mkdirAtt),
+      "创建:/notes",
+    );
+    assert.equal(
+      formatStatusChipLabelFromAttachment(writeAtt),
+      "创建:/notes/a.md",
+    );
+
+    // Undo 映回 store 后 chip 文案亦为「创建」
+    const sessionId = `t-uol10-${testIsolationSuffix()}`;
+    replaceUserOpsLog(sessionId, parsed!);
+    const chips = chipsFromUserOpsLogStore(sessionId);
+    assert.ok(chips.some((c) => c.action === "mkdir"));
+    assert.ok(chips.some((c) => c.action === "write"));
+    for (const chip of chips) {
+      if (chip.action === "mkdir" || chip.action === "write") {
+        assert.match(
+          formatStatusChipLabelFromAttachment(chip),
+          /^创建:/,
+        );
+      }
     }
   });
 });

@@ -1,6 +1,7 @@
 /**
  * 对比 checkpoint 基准与当前工作区终态，产出 flush 净变更 diff。
  *
+ * @deprecated 手改热路径已改读 UserOpsLogStore；本模块仅过渡期单测 / 旧工具保留。
  * @module domain/chat/logic/diff-workspace-for-user-vfs-flush
  */
 

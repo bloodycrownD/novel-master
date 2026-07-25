@@ -21,7 +21,8 @@ export function isSessionVfsScope(
 export type ExecuteSessionUserVfsOpOptions = {
   /**
    * 批量移动等场景：跳过每次 op 后的状态条刷新，批次末统一
-   * {@link refreshComposerStatusAfterUserVfsOps}（log store 投影已轻量，仍可合并 notify）。
+   * {@link refreshComposerStatusAfterUserVfsOps}。
+   * **非**净 diff defer——投影已改读 UserOpsLogStore；本开关仅合并批次末 notify。
    */
   readonly skipComposerStatusRefresh?: boolean;
 };

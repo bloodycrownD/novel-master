@@ -59,16 +59,16 @@ export interface UserVfsTurnService {
   flushPendingUserVfsTurns(sessionId: string): Promise<UserVfsFlushResult>;
 
   /**
-   * @deprecated 净 diff 摘要；状态条请改读 UserOpsLogStore / `projectComposerStatusAttachments`。
-   * 相对上次发送 checkpoint 的净 action 摘要（稳定顺序）；**不清**日志 store。
+   * @deprecated 净 diff 热路径已拆除；实现恒返回 `[]`。
+   * 状态条请改读 UserOpsLogStore / `projectComposerStatusAttachments`。
    */
   previewUserOpsActions(
     sessionId: string,
   ): Promise<readonly UserOpsActionSummary[]>;
 
   /**
-   * @deprecated 净 diff path 集；门闩 / chip 请改读 `hasPendingTurns` / log store。
-   * 相对上次发送 checkpoint 的净变更 path 集（稳定排序）；**不清**日志 store。
+   * @deprecated 净 diff 热路径已拆除；实现恒返回 `[]`。
+   * 门闩 / chip 请改读 `hasPendingTurns` / log store。
    */
   previewUserOpsChangedPaths(sessionId: string): Promise<readonly string[]>;
 

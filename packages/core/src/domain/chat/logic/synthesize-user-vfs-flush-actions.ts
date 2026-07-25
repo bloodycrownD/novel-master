@@ -1,6 +1,7 @@
 /**
  * 将 flush 终态 diff 合成为多行 `<action name="…">` XML（及 UI 用摘要）。
  *
+ * @deprecated 手改 flush 已改读 UserOpsLogStore；本模块仅过渡期单测 / 类型别名保留。
  * @module domain/chat/logic/synthesize-user-vfs-flush-actions
  */
 
