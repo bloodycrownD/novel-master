@@ -56,6 +56,7 @@ export function attachmentChipLabel(a: {
       | 'edit'
       | 'mkdir'
       | 'rename'
+      | 'move'
       | 'workplaceChange'
       | 'userAttach'
       | 'annotate'
