@@ -27,7 +27,11 @@ import type {
   VfsRevisionPointerMeta,
   VfsRevisionRepository,
 } from "../vfs-revision.port.js";
+import { revisionPairKey } from "../../logic/revision-pair-key.js";
 import { normalizePath } from "./normalize-path.js";
+
+/** 批量 SQL 的分块大小（避免单条语句过长）。 */
+const REVISION_BATCH_CHUNK_SIZE = 100;
 
 /**
  * TDBC-backed vfs_revision repository（append-only；正文经 ContentStore）。
@@ -116,6 +120,46 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     };
   }
 
+  async findMetasByPathVersions(
+    pairs: ReadonlyArray<{ readonly path: string; readonly version: number }>,
+  ): Promise<Map<string, VfsRevisionPointerMeta>> {
+    const result = new Map<string, VfsRevisionPointerMeta>();
+    if (pairs.length === 0) {
+      return result;
+    }
+    for (let offset = 0; offset < pairs.length; offset += REVISION_BATCH_CHUNK_SIZE) {
+      const chunk = pairs.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
+      const bindings: Record<string, string | number> = {};
+      const conditions = chunk
+        .map((pair, index) => {
+          bindings[`path${index}`] = normalizePath(pair.path);
+          bindings[`version${index}`] = pair.version;
+          return `(path = #{path${index}} AND version = #{version${index}})`;
+        })
+        .join(" OR ");
+      const rows = await queryTemplate<{
+        path: string;
+        version: number;
+        status: string;
+        content_hash: string | null;
+      }>(
+        this.conn,
+        this.parser,
+        `SELECT path, version, status, content_hash
+         FROM vfs_revision
+         WHERE ${conditions}`,
+        bindings,
+      );
+      for (const row of rows) {
+        result.set(revisionPairKey(String(row.path), Number(row.version)), {
+          status: row.status as VfsRevisionStatus,
+          contentHash: nullableText(row.content_hash),
+        });
+      }
+    }
+    return result;
+  }
+
   async append(input: VfsRevisionAppendInput): Promise<void> {
     const normalized = normalizePath(input.path);
     let contentHash: string | null = null;
@@ -169,19 +213,30 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     reachable: ReadonlySet<string>,
   ): Promise<number> {
     const candidates = await this.listKeysUnderPrefix(physicalPrefix);
+    const toDelete = candidates.filter(
+      ({ path, version }) => !reachable.has(revisionPairKey(path, version)),
+    );
+    if (toDelete.length === 0) {
+      return 0;
+    }
     let deleted = 0;
-    for (const { path, version } of candidates) {
-      const key = `${path}:${version}`;
-      if (reachable.has(key)) {
-        continue;
-      }
+    for (let offset = 0; offset < toDelete.length; offset += REVISION_BATCH_CHUNK_SIZE) {
+      const chunk = toDelete.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
+      const bindings: Record<string, string | number> = {};
+      const conditions = chunk
+        .map(({ path, version }, index) => {
+          bindings[`path${index}`] = path;
+          bindings[`version${index}`] = version;
+          return `(path = #{path${index}} AND version = #{version${index}})`;
+        })
+        .join(" OR ");
       await executeTemplate(
         this.conn,
         this.parser,
-        `DELETE FROM vfs_revision WHERE path = #{path} AND version = #{version}`,
-        { path, version },
+        `DELETE FROM vfs_revision WHERE ${conditions}`,
+        bindings,
       );
-      deleted++;
+      deleted += chunk.length;
     }
     return deleted;
   }

@@ -27,6 +27,15 @@ export interface VfsEntryRepository {
    */
   findContentHash(path: string): Promise<string | null>;
 
+  /**
+   * 批量读取文件行的 `content_hash`（不解正文）。
+   *
+   * @returns 键为规范化物理 path；目录行 / 无 hash / 路径不存在时值为 `null`
+   */
+  findContentHashesByPaths(
+    paths: ReadonlyArray<string>,
+  ): Promise<Map<string, string | null>>;
+
   insert(path: string, content: string): Promise<{ version: number }>;
 
   /**

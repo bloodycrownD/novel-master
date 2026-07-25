@@ -14,6 +14,7 @@ import {
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { MessageCheckpointFile } from "../../model/message-checkpoint.js";
 import type {
+  MessageCheckpointDistinctPointer,
   MessageCheckpointInsertInput,
   MessageCheckpointRepository,
 } from "../message-checkpoint.port.js";
@@ -161,6 +162,26 @@ export class SqliteMessageCheckpointRepository
       { sessionId },
     );
     return rows.map((row) => rowToFilePointer(row));
+  }
+
+  async listDistinctCheckpointPointersForSession(
+    sessionId: string,
+  ): Promise<ReadonlyArray<MessageCheckpointDistinctPointer>> {
+    const rows = await queryTemplate<{
+      logical_path: string;
+      revision_version: number;
+    }>(
+      this.conn,
+      this.parser,
+      `SELECT DISTINCT logical_path, revision_version
+       FROM message_checkpoint_file
+       WHERE session_id = #{sessionId}`,
+      { sessionId },
+    );
+    return rows.map((row) => ({
+      logicalPath: String(row.logical_path),
+      revisionVersion: Number(row.revision_version),
+    }));
   }
 
   async listFilePointersForMessages(

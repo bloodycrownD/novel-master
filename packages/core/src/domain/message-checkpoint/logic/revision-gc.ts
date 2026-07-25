@@ -44,21 +44,42 @@ export async function sweepSessionRevisions(
   const prefix = scopePhysicalPrefix(scope);
   const reachable = new Set<string>();
 
+  const tReach0 = Date.now();
   const liveHeads = await entryRepo.listFileHeadsUnderPrefix(prefix);
   for (const head of liveHeads) {
     reachable.add(revisionReachableKey(head.path, head.headVersion));
   }
 
-  const pointers = await checkpoints.listFilePointersForSession(sessionId);
+  const pointers = await checkpoints.listDistinctCheckpointPointersForSession(sessionId);
   for (const pointer of pointers) {
     const physical = toPhysicalPath(scope, pointer.logicalPath);
     reachable.add(revisionReachableKey(physical, pointer.revisionVersion));
   }
+  const reachMs = Date.now() - tReach0;
 
+  const tDel0 = Date.now();
   const deleted = await revisionRepo.deleteExceptReachable(prefix, reachable);
+  const deleteMs = Date.now() - tDel0;
 
+  const tCollect0 = Date.now();
   const referenced = await contentStore.collectAllReferencedHashes();
+  const collectMs = Date.now() - tCollect0;
+  const tGc0 = Date.now();
   await contentStore.gc(referenced);
+  const gcMs = Date.now() - tGc0;
+  console.log("[nm-rollback] sweepSessionRevisions", {
+    sessionId,
+    liveHeads: liveHeads.length,
+    checkpointPointersDistinct: pointers.length,
+    reachable: reachable.size,
+    deletedRevisions: deleted,
+    referencedHashes: referenced.size,
+    reachMs,
+    deleteMs,
+    collectMs,
+    gcMs,
+    totalMs: reachMs + deleteMs + collectMs + gcMs,
+  });
 
   return deleted;
 }

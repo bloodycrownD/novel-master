@@ -6,6 +6,12 @@
 
 import type { MessageCheckpointFile } from "../model/message-checkpoint.js";
 
+/** 会话内去重后的 checkpoint 文件指针（不含 message_id，供 revision GC 可达集）。 */
+export type MessageCheckpointDistinctPointer = {
+  readonly logicalPath: string;
+  readonly revisionVersion: number;
+};
+
 /** Input for inserting a checkpoint tree. */
 export interface MessageCheckpointInsertInput {
   readonly sessionId: string;
@@ -56,6 +62,15 @@ export interface MessageCheckpointRepository {
   listFilePointersForSession(
     sessionId: string,
   ): Promise<ReadonlyArray<MessageCheckpointFile>>;
+
+  /**
+   * 列出会话内 DISTINCT (logical_path, revision_version)（revision GC 可达集）。
+   *
+   * @remarks 不含 message_id；同一路径版本在多 checkpoint 中重复时只计一次。
+   */
+  listDistinctCheckpointPointersForSession(
+    sessionId: string,
+  ): Promise<ReadonlyArray<MessageCheckpointDistinctPointer>>;
 
   /** Lists file pointers for specific messages (used during rollback diff). */
   listFilePointersForMessages(

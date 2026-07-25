@@ -23,7 +23,10 @@ import {
   truncateTailInTransaction,
 } from "@/service/message-checkpoint/truncate-tail-wiring.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import {
+  toPhysicalPath,
+  type VfsScope,
+} from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
@@ -310,6 +313,33 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       liveHeadRows.map((head) => [head.logicalPath, head.headVersion]),
     );
 
+    const reconcilePairs: Array<{
+      logicalPath: string;
+      physical: string;
+      version: number;
+    }> = [];
+    for (const logicalPath of pathsToReconcile) {
+      const version = targetTree.get(logicalPath);
+      if (version != null) {
+        reconcilePairs.push({
+          logicalPath,
+          physical: toPhysicalPath(scope, logicalPath),
+          version,
+        });
+      }
+    }
+
+    const revisionMetaByKey = await revisions.findMetasByPathVersions(
+      reconcilePairs.map((pair) => ({
+        path: pair.physical,
+        version: pair.version,
+      })),
+    );
+    const liveHashByPath = await entries.findContentHashesByPaths([
+      ...new Set(reconcilePairs.map((pair) => pair.physical)),
+    ]);
+    const prefetch = { revisionMetaByKey, liveHashByPath };
+
     let skippedSameVersion = 0;
     let skippedSameContentHash = 0;
     let restored = 0;
@@ -328,6 +358,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 logicalPath,
                 version,
                 liveHeadByPath,
+                prefetch,
               )
             ).outcome
           : await restorePathToRevision(
@@ -338,6 +369,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
               version,
               liveHeadByPath,
               entries,
+              prefetch,
             );
         if (outcome === "skipped_same_version") {
           skippedSameVersion++;

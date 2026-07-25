@@ -146,6 +146,50 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return nullableText(row.content_hash);
   }
 
+  async findContentHashesByPaths(
+    paths: ReadonlyArray<string>,
+  ): Promise<Map<string, string | null>> {
+    const result = new Map<string, string | null>();
+    if (paths.length === 0) {
+      return result;
+    }
+    const normalized = [...new Set(paths.map((path) => normalizePath(path)))];
+    const chunkSize = 200;
+    for (let offset = 0; offset < normalized.length; offset += chunkSize) {
+      const chunk = normalized.slice(offset, offset + chunkSize);
+      const bindings = Object.fromEntries(
+        chunk.map((path, index) => [`path${index}`, path]),
+      );
+      const inClause = chunk.map((_, index) => `#{path${index}}`).join(", ");
+      const rows = await queryTemplate<{
+        path: string;
+        content_hash: string | null;
+        entry_kind: string;
+      }>(
+        this.conn,
+        this.parser,
+        `SELECT path, content_hash, entry_kind
+         FROM vfs_entry
+         WHERE path IN (${inClause})`,
+        bindings,
+      );
+      for (const row of rows) {
+        const path = String(row.path);
+        if (row.entry_kind === "directory") {
+          result.set(path, null);
+        } else {
+          result.set(path, nullableText(row.content_hash));
+        }
+      }
+    }
+    for (const path of normalized) {
+      if (!result.has(path)) {
+        result.set(path, null);
+      }
+    }
+    return result;
+  }
+
   async insert(path: string, content: string): Promise<{ version: number }> {
     return this.insertAtVersion(path, content, 1);
   }

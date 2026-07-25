@@ -55,6 +55,15 @@ export interface VfsRevisionRepository {
   ): Promise<VfsRevisionPointerMeta | null>;
 
   /**
+   * 批量读取指定 (path, version) 的 status / content_hash（不解正文）。
+   *
+   * @returns 键为 `path:version`；不存在的 pair 不在 map 中
+   */
+  findMetasByPathVersions(
+    pairs: ReadonlyArray<{ readonly path: string; readonly version: number }>,
+  ): Promise<Map<string, VfsRevisionPointerMeta>>;
+
+  /**
    * Returns the highest stored revision version for a path.
    *
    * @returns `null` when no revision rows exist for the path.
