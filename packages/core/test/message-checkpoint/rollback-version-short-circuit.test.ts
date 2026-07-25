@@ -5,6 +5,7 @@ import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint
 import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import type { VfsContentStore } from "../../src/domain/vfs/content-store/vfs-content-store.port.js";
 import { toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
 import type { VfsRestorePort } from "../../src/domain/vfs/ports/vfs-restore.port.js";
@@ -58,24 +59,33 @@ describe("rollback version short-circuit", () => {
     assert.equal(await revisions.existsByPathAndVersion(physical, 2), false);
   });
 
-  it("findMissingRevisionPointers：用 exists 而非 findByPathAndVersion", async () => {
+  it("findMissingRevisionPointers：用批量 findMetas 而非 findByPathAndVersion", async () => {
     const scope = {
       kind: "session" as const,
       projectId: "p1",
       sessionId: "s1",
     };
     let findCalls = 0;
-    let existsCalls = 0;
+    let batchCalls = 0;
     const revisionRepo: VfsRevisionRepository = {
       findByPathAndVersion: async () => {
         findCalls++;
         return null;
       },
       existsByPathAndVersion: async () => {
-        existsCalls++;
-        return true;
+        throw new Error("不应逐条 exists");
       },
       findMetaByPathAndVersion: async () => null,
+      findMetasByPathVersions: async (pairs) => {
+        batchCalls++;
+        const physical = toPhysicalPath(scope, "/a.md");
+        return new Map([
+          [
+            revisionPairKey(physical, pairs[0]!.version),
+            { status: "active", contentHash: null },
+          ],
+        ]);
+      },
       findMaxVersionForPath: async () => null,
       append: async () => undefined,
       listKeysUnderPrefix: async () => [],
@@ -90,7 +100,7 @@ describe("rollback version short-circuit", () => {
     );
 
     assert.deepEqual(missing, []);
-    assert.equal(existsCalls, 1);
+    assert.equal(batchCalls, 1);
     assert.equal(findCalls, 0);
   });
 
@@ -114,6 +124,7 @@ describe("rollback version short-circuit", () => {
         findCalls++;
         return { status: "active", contentHash: "x" };
       },
+      findMetasByPathVersions: async () => new Map(),
       findMaxVersionForPath: async () => 2,
       append: async () => undefined,
       listKeysUnderPrefix: async () => [],
@@ -168,6 +179,7 @@ describe("rollback version short-circuit", () => {
         findMetaCalls++;
         return { status: "active", contentHash: "same-hash" };
       },
+      findMetasByPathVersions: async () => new Map(),
       findMaxVersionForPath: async () => 3,
       append: async () => undefined,
       listKeysUnderPrefix: async () => [],
