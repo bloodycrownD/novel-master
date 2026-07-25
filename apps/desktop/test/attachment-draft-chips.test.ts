@@ -79,7 +79,7 @@ test("T-CHIP1: annotate 预览为「批注:/path」", () => {
   );
 });
 
-test("T-CHIP1: rename 为「重命:<to>」", () => {
+test("T-CHIP1: rename→「改名」；move→「移动」（action 自描述）", () => {
   assert.equal(
     formatAttachmentChipLabel(
       attach({
@@ -90,7 +90,19 @@ test("T-CHIP1: rename 为「重命:<to>」", () => {
         action: "rename",
       }),
     ),
-    "重命:/to.md",
+    "改名:/to.md",
+  );
+  assert.equal(
+    formatAttachmentChipLabel(
+      attach({
+        source: "user_ops",
+        type: "text",
+        path: "/dir/to.md",
+        name: "/dir/to.md",
+        action: "move",
+      }),
+    ),
+    "移动:/dir/to.md",
   );
 });
 

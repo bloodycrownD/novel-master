@@ -16,7 +16,10 @@ import {
   replaceUserOpsLog,
   resetUserOpsLogStoreForTests,
 } from "@novel-master/core/chat";
-import { buildUserVfsSaveOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
+import {
+  buildUserVfsRenameOp,
+  buildUserVfsSaveOp,
+} from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -101,6 +104,76 @@ describe("user-ops-operation-log (T-UOL*)", () => {
 
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.attachments.length, 2);
+  });
+
+  it("rename/move：同目录 rename、跨目录 move；chip 自描述；旧跨目录 rename XML normalize 为 move", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/a.md", "x", "tu_a"),
+    );
+    await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/b.md", "y", "tu_b"),
+    );
+    await userVfsTurn.flushPendingUserVfsTurns(session.id);
+
+    await userVfsTurn.executeOp(
+      session.id,
+      buildUserVfsRenameOp("/a.md", "/a2.md"),
+    );
+    await userVfsTurn.executeOp(
+      session.id,
+      buildUserVfsRenameOp("/b.md", "/dir/b.md"),
+    );
+
+    const logs = listUserOpsLog(session.id);
+    assert.equal(logs.length, 2);
+    assert.equal(logs[0]!.action, "rename");
+    assert.equal(logs[1]!.action, "move");
+    assert.match(logs[0]!.actionXml, /name="rename"/);
+    assert.match(logs[1]!.actionXml, /name="move"/);
+
+    const chips = chipsFromUserOpsLogStore(session.id);
+    assert.equal(chips.length, 2);
+    const renameChip = chips.find((c) => c.path === "/a2.md");
+    const moveChip = chips.find((c) => c.path === "/dir/b.md");
+    assert.ok(renameChip);
+    assert.ok(moveChip);
+    assert.equal(renameChip!.action, "rename");
+    assert.equal(moveChip!.action, "move");
+    assert.equal(renameChip!.name, "/a2.md");
+    assert.equal(moveChip!.name, "/dir/b.md");
+    assert.equal(
+      formatStatusChipLabelFromAttachment(renameChip!),
+      "改名:/a2.md",
+    );
+    assert.equal(
+      formatStatusChipLabelFromAttachment(moveChip!),
+      "移动:/dir/b.md",
+    );
+
+    // 旧跨目录 rename XML → parse normalize 为 move
+    const legacyMoveXml =
+      '<action name="rename">\n{"from":"/old.md","to":"/dir/new.md"}\n</action>';
+    const parsed = parseUserOpsLogFromAttachments([
+      {
+        name: "/dir/new.md",
+        source: "user_ops",
+        type: "text",
+        content: legacyMoveXml,
+        path: "/dir/new.md",
+        action: "rename",
+      },
+    ]);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0]!.action, "move");
+    assert.equal(parsed[0]!.oldPath, "/old.md");
+    assert.equal(parsed[0]!.newPath, "/dir/new.md");
   });
 
   it("T-UOL11：noop save 不 append", async () => {

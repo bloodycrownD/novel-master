@@ -94,6 +94,42 @@ describe("prompt unify user-ops (T-PR*)", () => {
     const iWrite = wrapped.indexOf('name="write"');
     const iAnn = wrapped.indexOf('name="annotate"');
     assert.ok(iAttach >= 0 && iWp > iAttach && iWrite > iWp && iAnn > iWrite);
+    // body 每行非空前缀 4 空格（落库 XML 仍顶格，仅 wrap 时缩进）
+    assert.match(wrapped, /^ {4}<action name="userAttach">/m);
+    assert.match(wrapped, /^ {4}\{"path":"\/a\.md"/m);
+  });
+
+  it("T-PR1b golden：user-ops body 4 空格缩进；空行不补前缀", () => {
+    const writeXml =
+      '<action name="write">\n{\n  "path": "/o.md",\n  "content": ""\n}\n</action>';
+    const wrapped = wrapUserMessageForLlm("hi", [
+      {
+        name: "/o.md",
+        source: "user_ops",
+        type: "text",
+        content: writeXml,
+        path: "/o.md",
+        action: "write",
+      },
+    ]);
+    const expected = [
+      "<attachment>",
+      "  <user-ops>",
+      '    <action name="write">',
+      "    {",
+      '      "path": "/o.md",',
+      '      "content": ""',
+      "    }",
+      "    </action>",
+      "  </user-ops>",
+      "</attachment>",
+      "<user-input>",
+      "hi",
+      "</user-input>",
+    ].join("\n");
+    assert.equal(wrapped, expected);
+    // 落库 content 仍顶格（入参未改）
+    assert.equal(writeXml.startsWith("<action"), true);
   });
 
   it("T-PR2: header 档 front-matter 行号正文；JSON 无 mtime/createdAt", async () => {

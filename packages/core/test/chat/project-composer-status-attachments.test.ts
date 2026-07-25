@@ -33,6 +33,16 @@ function entry(
       newPath: partial.newPath ?? "/to",
     };
   }
+  if (partial.action === "move") {
+    return {
+      id,
+      createdAtMs,
+      actionXml,
+      action: "move",
+      oldPath: (partial as { oldPath?: string }).oldPath ?? "/from",
+      newPath: partial.newPath ?? "/dir/to",
+    };
+  }
   if (partial.action === "edit") {
     return {
       id,

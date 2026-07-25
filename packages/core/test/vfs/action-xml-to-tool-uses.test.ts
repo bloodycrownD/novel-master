@@ -24,12 +24,18 @@ describe("actionXmlToToolUses", () => {
     assert.equal(uses[0]?.input.command, "mkdir notes/");
   });
 
-  it("解析 rename", () => {
-    const uses = actionXmlToToolUses(
+  it("解析 rename（同目录）与 move（跨目录）均 → mv", () => {
+    const renameUses = actionXmlToToolUses(
       '<action name="rename">\n{"from":"a.md","to":"b.md"}\n</action>',
     );
-    assert.equal(uses[0]?.name, "fs");
-    assert.equal(uses[0]?.input.command, "mv a.md b.md");
+    assert.equal(renameUses[0]?.name, "fs");
+    assert.equal(renameUses[0]?.input.command, "mv a.md b.md");
+
+    const moveUses = actionXmlToToolUses(
+      '<action name="move">\n{"from":"/a.md","to":"/dir/b.md"}\n</action>',
+    );
+    assert.equal(moveUses[0]?.name, "fs");
+    assert.equal(moveUses[0]?.input.command, "mv /a.md /dir/b.md");
   });
 
   it("解析 edit", () => {
