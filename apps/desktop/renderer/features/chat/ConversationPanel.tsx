@@ -548,7 +548,8 @@ export function ConversationPanel({
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
       }
-      // 顺序对齐 Mobile：truncate/可先空条 → 正文 → 批注反投影 → ∪ chip（不恢复手改）
+      // D8：main 已（undo_send）parse→project 推 ops /（rewind）推空；
+      // renderer 仅正文 + annotate ∪；须保留 main 已推 ops，禁止 wipe
       setComposerText(prevText => {
         const next = resolveComposerDraftAfterRollbackSuccess(
           { text: prevText, attachments: composerAttachments },
@@ -556,8 +557,8 @@ export function ConversationPanel({
           { text: restoreText, attachments: restoreAttachments },
         );
         if (rollbackMode === 'undo_send') {
-          setComposerAttachments(
-            applyUndoAnnotateRestore(sessionId, restoreAttachments),
+          setComposerAttachments(prev =>
+            applyUndoAnnotateRestore(sessionId, restoreAttachments, prev),
           );
         } else {
           setComposerAttachments([...next.attachments]);

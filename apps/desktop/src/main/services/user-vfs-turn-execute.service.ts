@@ -17,7 +17,10 @@ export function isSessionVfsScope(
   return scope.kind === "session";
 }
 
-/** 经 userVfsTurn 执行；失败抛错供 IPC 格式化。成功后投影整表替换状态条。 */
+/**
+ * 经 userVfsTurn 执行；失败抛错供 IPC 格式化。
+ * 成功后轻量 refresh：读 main log store 投影推送（无净 diff preview）。
+ */
 export async function executeSessionUserVfsOp(
   rt: DesktopNovelMasterRuntime,
   sessionId: string,

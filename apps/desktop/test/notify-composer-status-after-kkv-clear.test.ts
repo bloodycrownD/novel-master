@@ -1,8 +1,12 @@
 /**
- * Desktop notify-composer-status-after-kkv-clear（T-CR5）。
+ * Desktop notify-composer-status-after-kkv-clear（T-CR5 / T-UOL8）。
  */
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { beforeEach, describe, it } from "node:test";
+import {
+  appendUserOpsLog,
+  resetUserOpsLogStoreForTests,
+} from "@novel-master/core/chat";
 import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import {
@@ -11,7 +15,11 @@ import {
 } from "../src/main/services/notify-composer-status-after-kkv-clear.js";
 
 describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
-  it("Undo/手动：推空 attachments", async () => {
+  beforeEach(() => {
+    resetUserOpsLogStoreForTests();
+  });
+
+  it("Undo rewind/手动：推空 attachments", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
     setComposerAttachmentsSuggestForwardTarget(() => {
       return {
@@ -29,7 +37,7 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
-  it("T-CR5: 置位/压缩推 project(ops)，非强制 []", async () => {
+  it("T-CR5/T-UOL8: 置位/压缩推 project(ops)（读 main log store），非强制 []", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
     setComposerAttachmentsSuggestForwardTarget(() => {
       return {
@@ -39,18 +47,15 @@ describe("notify-composer-status-after-kkv-clear (T-CR5)", () => {
       } as never;
     });
 
-    const rt = {
-      userVfsTurn: {
-        async hasPendingTurns() {
-          return true;
-        },
-        async previewUserOpsActions() {
-          return [{ action: "mkdir", path: "/keep" }];
-        },
-      },
-    };
+    appendUserOpsLog("s1", {
+      id: "uol-keep",
+      createdAtMs: 1,
+      actionXml: '<action name="mkdir">\n{"path":"/keep"}\n</action>',
+      action: "mkdir",
+      path: "/keep",
+    });
 
-    await notifyComposerStatusAfterFloorOrCompaction(rt as never, "s1");
+    await notifyComposerStatusAfterFloorOrCompaction({} as never, "s1");
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
     assert.deepEqual(sent[0]?.payload, {

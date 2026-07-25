@@ -2,7 +2,11 @@
  * Messages IPC handlers — list (display regex), append, edit, hide, delete, rollback.
  */
 import {
+  clearUserOpsLog,
+  isPlainUserUndoSendEligible,
+  parseUserOpsLogFromAttachments,
   readMessageMetadata,
+  replaceUserOpsLog,
   textBlocks,
   type ChatMessage,
   type MessageContent,
@@ -313,6 +317,11 @@ export async function handleMessagesRollback(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
+    // undo_send 会删掉锚点消息：须在 rollback 前读资格与附件
+    const anchor = await rt.messages.get(req.messageId);
+    const undoSend = isPlainUserUndoSendEligible(anchor);
+    const restoreAttachments = undoSend ? (anchor.attachments ?? []) : [];
+
     const rollbackOptions =
       req.skipVfsReconcile || req.revisionHeadBackfill
         ? {
@@ -330,8 +339,17 @@ export async function handleMessagesRollback(
       req.messageId,
       rollbackOptions,
     );
-    // truncate 已按域清空状态条 kkv；UI 空替换（勿再 project，避免灌满 workplace）
-    await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
+
+    // D8：undo_send only — parse 写 main log store → project 推 ops；
+    // rewind — 不 parse；清 store 后推空（renderer 再 ∪ annotate，禁止 wipe main ops）
+    if (undoSend) {
+      const entries = parseUserOpsLogFromAttachments(restoreAttachments);
+      replaceUserOpsLog(req.sessionId, entries);
+      await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);
+    } else {
+      clearUserOpsLog(req.sessionId);
+      await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
+    }
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

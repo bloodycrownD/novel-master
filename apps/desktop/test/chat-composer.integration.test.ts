@@ -94,3 +94,25 @@ test("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
   assert.equal(withAnnotate.sendDisabled, false);
   assert.equal(withAnnotate.allowResumeWithoutInput, false);
 });
+
+test("T-UOL9/T-CR4: 仅 hasPendingUserOps（未发送日志）→ 可发；全空不可发", () => {
+  const empty = resolveComposerSendIntent({
+    text: "",
+    attachments: [],
+    hasPendingUserOps: false,
+    canResumeWithoutInput: false,
+    hasModel: true,
+  });
+  assert.equal(empty.hasSendable, false);
+  assert.equal(empty.sendDisabled, true);
+
+  const pendingOnly = resolveComposerSendIntent({
+    text: "",
+    attachments: [],
+    hasPendingUserOps: true,
+    canResumeWithoutInput: false,
+    hasModel: true,
+  });
+  assert.equal(pendingOnly.hasSendable, true);
+  assert.equal(pendingOnly.sendDisabled, false);
+});

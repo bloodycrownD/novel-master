@@ -162,7 +162,8 @@ export function ChatComposer({
   }, [sessionId, onAttachmentsChange]);
 
   // 仅 append 成功推送后清 annotate + 正文（禁止 started:true 清；B4 对齐 Mobile）。
-  // 始终按 payload.sessionId 清 store，避免切会话后漏清、再回来重带旧批注。
+  // 手改 log：main prepare/flush 已 clearUserOpsLog；此处清 chip 即可（禁止 renderer 写 ops store）。
+  // 始终按 payload.sessionId 清 annotate store，避免切会话后漏清、再回来重带旧批注。
   useEffect(() => {
     return onUserMessageAppended((payload) => {
       clearChatAnnotateDrafts(payload.sessionId);
@@ -175,7 +176,7 @@ export function ChatComposer({
         return;
       }
       onChange("");
-      // projected 一并清空；annotate store 已清，无需再 ∪
+      // projected 一并清空（发送后 chip 空）；annotate store 已清，无需再 ∪
       onAttachmentsChange([]);
     });
   }, [sessionId, onAttachmentsChange, onChange]);
