@@ -36,6 +36,8 @@ function joinPhysical(prefix: string, relative: string): string {
 /**
  * Copies all vfs entries under `fromPrefix` to `toPrefix`.
  *
+ * 文件行优先复制 `content_hash`（共享 blob）；无 hash 时再 put 同源明文一次。
+ *
  * @param repo - Vfs entry repository
  * @param fromPrefix - Source physical prefix
  * @param toPrefix - Target physical prefix
@@ -70,6 +72,17 @@ export async function copyVfsTree(
     const mapped = options?.mapPath ? options.mapPath(relative) : relative;
     const targetPath = joinPhysical(toPrefix, mapped);
     const existing = await repo.findByPath(targetPath);
+    const contentHash = await repo.findContentHash(row.path);
+    if (contentHash != null) {
+      if (existing == null) {
+        await repo.insertWithContentHash(targetPath, contentHash);
+      } else {
+        await repo.updateWithContentHash(targetPath, contentHash, {
+          versionCheck: false,
+        });
+      }
+      continue;
+    }
     if (existing == null) {
       await repo.insert(targetPath, row.content);
     } else {

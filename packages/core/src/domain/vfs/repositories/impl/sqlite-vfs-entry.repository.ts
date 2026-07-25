@@ -125,8 +125,46 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return this.rowToEntry(rows[0]!);
   }
 
+  async findContentHash(path: string): Promise<string | null> {
+    const normalized = normalizePath(path);
+    const rows = await queryTemplate<{
+      content_hash: string | null;
+      entry_kind: string;
+    }>(
+      this.conn,
+      this.parser,
+      `SELECT content_hash, entry_kind FROM vfs_entry WHERE path = #{path}`,
+      { path: normalized },
+    );
+    if (rows.length === 0) {
+      return null;
+    }
+    const row = rows[0]!;
+    if (row.entry_kind === "directory") {
+      return null;
+    }
+    return nullableText(row.content_hash);
+  }
+
   async insert(path: string, content: string): Promise<{ version: number }> {
     return this.insertAtVersion(path, content, 1);
+  }
+
+  async insertWithContentHash(
+    path: string,
+    contentHash: string,
+  ): Promise<{ version: number }> {
+    const normalized = normalizePath(path);
+    const mtimeMs = Date.now();
+    const version = 1;
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `INSERT INTO vfs_entry (path, content, content_hash, version, head_version, mtime_ms, storage_kind, entry_kind)
+       VALUES (#{path}, NULL, #{contentHash}, #{version}, #{version}, #{mtimeMs}, 'inline', 'file')`,
+      { path: normalized, contentHash, version, mtimeMs },
+    );
+    return { version };
   }
 
   async insertAtVersion(
@@ -164,9 +202,25 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     content: string,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }> {
+    const contentHash = await this.contentStore.put(content);
+    return this.applyContentHashUpdate(path, contentHash, options);
+  }
+
+  async updateWithContentHash(
+    path: string,
+    contentHash: string,
+    options: VfsWriteRepoOptions,
+  ): Promise<{ version: number }> {
+    return this.applyContentHashUpdate(path, contentHash, options);
+  }
+
+  private async applyContentHashUpdate(
+    path: string,
+    contentHash: string,
+    options: VfsWriteRepoOptions,
+  ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
-    const contentHash = await this.contentStore.put(content);
 
     if (options.versionCheck) {
       const expectedVersion = options.expectedVersion!;

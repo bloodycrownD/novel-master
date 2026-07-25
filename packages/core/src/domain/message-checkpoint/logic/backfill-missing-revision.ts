@@ -17,7 +17,7 @@ export type BackfillRevisionDeps = {
  * checkpoint 目标 revision 缺失时，用 live head 追加 placeholder 行，使 restore 可继续。
  *
  * @returns 是否写入了回补行
- * @remarks 不 bump live entry 版本，仅补历史 revision 行。
+ * @remarks 不 bump live entry 版本，仅补历史 revision 行；只落 content_hash，不 put 明文副本。
  */
 export async function backfillMissingRevisionIfNeeded(
   deps: BackfillRevisionDeps,
@@ -36,10 +36,12 @@ export async function backfillMissingRevisionIfNeeded(
   const mtimeMs = Date.now();
 
   if (entry != null && entry.entryKind === "file") {
+    const contentHash = await deps.entryRepo.findContentHash(physicalPath);
     await deps.revisionRepo.append({
       path: physicalPath,
       version: targetVersion,
-      content: entry.content,
+      content: null,
+      contentHash,
       status: "active",
       mtimeMs,
       storageKind: entry.storageKind,

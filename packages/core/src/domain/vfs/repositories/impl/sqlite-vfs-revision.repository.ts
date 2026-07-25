@@ -76,8 +76,12 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   async append(input: VfsRevisionAppendInput): Promise<void> {
     const normalized = normalizePath(input.path);
     let contentHash: string | null = null;
-    if (input.status === "active" && input.content != null) {
-      contentHash = await this.contentStore.put(input.content);
+    if (input.status === "active") {
+      if (input.contentHash != null && input.contentHash.length > 0) {
+        contentHash = input.contentHash;
+      } else if (input.content != null) {
+        contentHash = await this.contentStore.put(input.content);
+      }
     }
 
     await executeTemplate(

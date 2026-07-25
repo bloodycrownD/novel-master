@@ -20,7 +20,24 @@ export interface VfsEntryRepository {
 
   findByPath(path: string): Promise<VfsEntry | null>;
 
+  /**
+   * 读取文件行的 `content_hash`（不解正文）。
+   *
+   * @returns 目录行 / 无 hash / 路径不存在时为 `null`
+   */
+  findContentHash(path: string): Promise<string | null>;
+
   insert(path: string, content: string): Promise<{ version: number }>;
+
+  /**
+   * 以已有 content_hash 插入文件行（不 put；`content=NULL`）。
+   *
+   * @remarks tree-copy / seed 共享 blob 时使用。
+   */
+  insertWithContentHash(
+    path: string,
+    contentHash: string,
+  ): Promise<{ version: number }>;
 
   /**
    * Inserts a new file entry at an explicit head version.
@@ -38,6 +55,15 @@ export interface VfsEntryRepository {
   update(
     path: string,
     content: string,
+    options: VfsWriteRepoOptions,
+  ): Promise<{ version: number }>;
+
+  /**
+   * 以已有 content_hash 更新文件行（不 put；`content=NULL`）。
+   */
+  updateWithContentHash(
+    path: string,
+    contentHash: string,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }>;
 

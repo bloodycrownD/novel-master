@@ -6,8 +6,16 @@
 
 import type { VfsRevision } from "../model/vfs-revision.js";
 
-/** Input for appending a new revision row (insert-only). */
-export type VfsRevisionAppendInput = Omit<VfsRevision, never>;
+/**
+ * Input for appending a new revision row (insert-only).
+ *
+ * @remarks
+ * `contentHash` 若提供则跳过 ContentStore.put，直接落库（seed-fork / backfill 共享 blob）。
+ * active 行无 hash 且 `content` 非空时由 repo put 后只写 hash。
+ */
+export type VfsRevisionAppendInput = VfsRevision & {
+  readonly contentHash?: string | null;
+};
 
 /**
  * Persistence contract for vfs_revision rows.

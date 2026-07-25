@@ -23,10 +23,14 @@ function createSpyingWorkplaceService(
       calls.findByPath += 1;
       return baseRepo.findByPath(...args);
     },
+    findContentHash: (...args) => baseRepo.findContentHash(...args),
     insert: (...args) => baseRepo.insert(...args),
+    insertWithContentHash: (...args) => baseRepo.insertWithContentHash(...args),
     insertAtVersion: (...args) => baseRepo.insertAtVersion(...args),
     insertDirectory: (...args) => baseRepo.insertDirectory(...args),
     update: (...args) => baseRepo.update(...args),
+    updateWithContentHash: (...args) => baseRepo.updateWithContentHash(...args),
+    setHeadContentHash: (...args) => baseRepo.setHeadContentHash(...args),
     delete: (...args) => baseRepo.delete(...args),
     listAllPaths: (...args) => baseRepo.listAllPaths(...args),
     listDirectoryPathsUnderPrefix: (...args) =>
@@ -37,6 +41,8 @@ function createSpyingWorkplaceService(
       calls.listFileMetaUnderPrefix += 1;
       return baseRepo.listFileMetaUnderPrefix(...args);
     },
+    listFileHeadsUnderPrefix: (...args) =>
+      baseRepo.listFileHeadsUnderPrefix(...args),
     scanContents: async (...args) => {
       calls.scanContents += 1;
       return baseRepo.scanContents(...args);

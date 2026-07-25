@@ -28,7 +28,7 @@ export interface SeedForkCopyParityInput {
 /**
  * 在已开事务内、VFS 与消息写入目标会话之后调用。
  *
- * 内部顺序钉死：list heads → findByPath 取 content → revisions.append →
+ * 内部顺序钉死：list heads → findContentHash → revisions.append（只落 hash，不 put）→
  * session→session copyScope → 对每条新消息 insertCheckpoint（同一活树）。
  *
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
@@ -69,10 +69,12 @@ export async function seedForkCopyParity(
       });
       continue;
     }
+    const contentHash = await entries.findContentHash(physical);
     await revisions.append({
       path: physical,
       version: head.headVersion,
-      content: entry.content,
+      content: null,
+      contentHash,
       status: "active",
       mtimeMs: entry.mtimeMs,
       storageKind: entry.storageKind,
