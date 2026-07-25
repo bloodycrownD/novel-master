@@ -11,6 +11,7 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-not-found-error.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {
   VfsError,
   vfsConflict,
@@ -135,6 +136,58 @@ export class RevisionAwareVfsService implements VfsService {
         normalized,
         options?.recursive === true,
       );
+    });
+  }
+
+  async resetHeadToVersion(path: string, version: number): Promise<void> {
+    const normalized = normalizePath(path);
+    await runInTransactionOrConn(this.conn, async (tx) => {
+      const entryRepo = new SqliteVfsEntryRepository(tx);
+      const revisionRepo = new SqliteVfsRevisionRepository(tx);
+      const contentStore = new SqliteVfsContentStore(tx);
+
+      const rev = await revisionRepo.findByPathAndVersion(normalized, version);
+      if (rev == null || rev.status === "deleted") {
+        throw new VfsError(
+          "NOT_FOUND",
+          `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}`,
+          { path: normalized },
+        );
+      }
+      if (rev.content == null) {
+        throw new VfsError(
+          "NOT_FOUND",
+          `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}`,
+          { path: normalized },
+        );
+      }
+
+      // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
+      const contentHash = await contentStore.put(rev.content);
+      await ensureParentDirectories(entryRepo, normalized);
+      await entryRepo.setHeadContentHash(normalized, {
+        version: rev.version,
+        contentHash,
+        mtimeMs: rev.mtimeMs,
+      });
+    });
+  }
+
+  async hardDelete(
+    path: string,
+    options?: { recursive?: boolean },
+  ): Promise<void> {
+    const normalized = normalizePath(path);
+    if (normalized === "/") {
+      throw vfsInvalidPath(path, "cannot hardDelete root");
+    }
+
+    await runInTransactionOrConn(this.conn, async (tx) => {
+      const entryRepo = new SqliteVfsEntryRepository(tx);
+      // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
+      await entryRepo.delete(normalized, {
+        recursive: options?.recursive === true,
+      });
     });
   }
 }
