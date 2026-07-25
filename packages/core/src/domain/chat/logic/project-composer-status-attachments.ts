@@ -1,30 +1,40 @@
 /**
- * Composer 状态条投影：仅 user_ops 净 action → MessageAttachment[]。
- * 规则差集 / workplace 半边已废止（见 composer-chip-ops-annotate-recontract）。
+ * Composer 状态条投影：读 UserOpsLogStore → 按 path 聚合 MessageAttachment[]。
+ * App 层仅 ∪ annotate；禁止 App 再 ∪ ops-log。
  *
  * @module domain/chat/logic/project-composer-status-attachments
  */
 
 import type { MessageAttachment } from "../model/message-attachment.schema.js";
-import { userOpsAttachmentsFromSummaries } from "./build-user-ops-attachment.js";
+import type { UserOpsLogEntry } from "../model/user-ops-log.schema.js";
+import { aggregateUserOpsLogChips } from "./aggregate-user-ops-log-chips.js";
+import { listUserOpsLog } from "./chat-user-ops-log-store.js";
 import type { UserOpsActionSummary } from "./synthesize-user-vfs-flush-actions.js";
 
-/** `projectComposerStatusAttachments` 所需依赖（不绑定完整 Service）。 */
+/**
+ * `projectComposerStatusAttachments` 所需依赖。
+ * 默认读进程内 store；可注入 `listUserOpsLogEntries`（测试 / 自定义）。
+ */
 export type ProjectComposerStatusAttachmentsDeps = {
-  /** 相对 checkpoint 的净 action 摘要（须走 preview，禁止 flush）。 */
-  readonly previewUserOpsActions: (
+  readonly listUserOpsLogEntries?: (
+    sessionId: string,
+  ) => readonly UserOpsLogEntry[];
+  /**
+   * @deprecated 已忽略；手改 chip 改读 UserOpsLogStore。
+   * 过渡期保留字段以免 Desktop/Mobile 旧调用方编译失败。
+   */
+  readonly previewUserOpsActions?: (
     sessionId: string,
   ) => Promise<readonly UserOpsActionSummary[]>;
 };
 
 /**
- * 由 user_ops 摘要合成状态条附件（纯函数）。
- * 不再接受 live / cacheKeys：不投影 workplace。
+ * 由操作日志合成状态条附件（按 path 去重；action 取该 path 最后一条）。
  */
 export function buildComposerStatusAttachments(
-  userOpsActions: readonly UserOpsActionSummary[],
+  entries: readonly UserOpsLogEntry[],
 ): MessageAttachment[] {
-  return userOpsAttachmentsFromSummaries(userOpsActions);
+  return aggregateUserOpsLogChips(entries);
 }
 
 /**
@@ -39,12 +49,13 @@ export function replaceComposerStatusAttachments(
 }
 
 /**
- * session 真源 → Composer 状态条 `MessageAttachment[]`（仅 user_ops）。
+ * session 真源（未发送 ops-log）→ Composer 状态条 `MessageAttachment[]`（仅 user_ops）。
  */
 export async function projectComposerStatusAttachments(
   sessionId: string,
-  deps: ProjectComposerStatusAttachmentsDeps,
+  deps: ProjectComposerStatusAttachmentsDeps = {},
 ): Promise<MessageAttachment[]> {
-  const userOpsActions = await deps.previewUserOpsActions(sessionId);
-  return buildComposerStatusAttachments(userOpsActions);
+  const entries =
+    deps.listUserOpsLogEntries?.(sessionId) ?? listUserOpsLog(sessionId);
+  return buildComposerStatusAttachments(entries);
 }

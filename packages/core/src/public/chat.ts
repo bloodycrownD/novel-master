@@ -147,6 +147,8 @@ export type {
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
 export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
 export {
+  buildUserOpsAttachmentFromLogEntry,
+  buildUserOpsAttachmentsFromLogEntries,
   previewPendingUserOpsAttachment,
 } from '../domain/chat/logic/build-user-ops-attachment.js';
 export {
@@ -189,6 +191,31 @@ export {
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,
 } from '../domain/chat/logic/chat-annotate-draft-store.js';
+export {
+  appendUserOpsLog,
+  chipsFromUserOpsLogStore,
+  clearUserOpsLog,
+  hasUnsentUserOpsLog,
+  listUserOpsLog,
+  replaceUserOpsLog,
+  resetUserOpsLogStoreForTests,
+  subscribeUserOpsLog,
+} from '../domain/chat/logic/chat-user-ops-log-store.js';
+export { aggregateUserOpsLogChips } from '../domain/chat/logic/aggregate-user-ops-log-chips.js';
+export { parseUserOpsLogFromAttachments } from '../domain/chat/logic/parse-user-ops-log-from-attachments.js';
+export { userOpsLogEntryFromTurnOp } from '../domain/chat/logic/user-ops-log-from-turn-op.js';
+export type { UserOpsLogTurnOpInput } from '../domain/chat/logic/user-ops-log-from-turn-op.js';
+export {
+  userOpsLogEntriesSchema,
+  userOpsLogEntryChipPath,
+  userOpsLogEntrySchema,
+  userOpsLogHunkSchema,
+} from '../domain/chat/model/user-ops-log.schema.js';
+export type {
+  UserOpsLogEntries,
+  UserOpsLogEntry,
+  UserOpsLogHunk,
+} from '../domain/chat/model/user-ops-log.schema.js';
 export {
   buildFlatTextIndex,
   findAllOccurrences,
