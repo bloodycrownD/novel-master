@@ -21,13 +21,13 @@ async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
 novelMasterTestFixture();
 
 describe("VfsZipIoService", () => {
-  it("Z1: session export includes logical paths in ZIP", async () => {
+  it("T-IO1: ZIP 导出仍为明文文件内容（不出现 null 伪串）", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/a.md", "A");
-    await vfs.write("/dir/b.md", "B");
+    await vfs.write("/plain.md", "中文正文-zip-io1");
+    await vfs.write("/empty.md", "");
 
     const zipSvc = createVfsZipIoService(ctx.conn);
     const bytes = await zipSvc.export({
@@ -36,9 +36,15 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     });
     const entries = unzipSync(bytes);
-    assert.ok("a.md" in entries);
-    assert.ok("dir/b.md" in entries);
-    assert.equal(new TextDecoder().decode(entries["a.md"]!), "A");
+    assert.equal(
+      new TextDecoder().decode(entries["plain.md"]!),
+      "中文正文-zip-io1",
+    );
+    assert.equal(new TextDecoder().decode(entries["empty.md"]!), "");
+    assert.notEqual(
+      new TextDecoder().decode(entries["plain.md"]!),
+      "null",
+    );
   });
 
   it("Z2: global export has no projects/ prefix", async () => {
