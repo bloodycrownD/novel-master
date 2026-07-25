@@ -149,8 +149,14 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     await this.deps.conn.transaction(async (tx) => {
       if (!options?.skipVfsReconcile) {
         const tRec0 = Date.now();
+        let reconcileStats: {
+          skippedSameVersion: number;
+          skippedSameContentHash: number;
+          restored: number;
+          deleted: number;
+        } | null = null;
         try {
-          await this.reconcileVfsPaths(
+          reconcileStats = await this.reconcileVfsPaths(
             tx,
             plan,
             options?.revisionHeadBackfill === true,
@@ -164,6 +170,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         reconcileMs = Date.now() - tRec0;
         console.log("[nm-rollback] reconcile", {
           paths: plan.pathsToReconcile.size,
+          ...reconcileStats,
           ms: reconcileMs,
         });
       }
@@ -288,7 +295,12 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     tx: TdbcConnection,
     plan: RollbackPlan,
     useRevisionHeadBackfill: boolean,
-  ): Promise<void> {
+  ): Promise<{
+    skippedSameVersion: number;
+    skippedSameContentHash: number;
+    restored: number;
+    deleted: number;
+  }> {
     const { scope, pathsToReconcile, targetTree, projectId, sessionId } = plan;
     const vfs = this.scopedVfs(projectId, sessionId, tx);
     const revisions = new SqliteVfsRevisionRepository(tx);
@@ -298,33 +310,56 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       liveHeadRows.map((head) => [head.logicalPath, head.headVersion]),
     );
 
+    let skippedSameVersion = 0;
+    let skippedSameContentHash = 0;
+    let restored = 0;
+    let deleted = 0;
+
     for (const logicalPath of pathsToReconcile) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
-        if (useRevisionHeadBackfill) {
-          await restorePathToRevisionWithBackfill(
-            vfs,
-            revisions,
-            entries,
-            scope,
-            logicalPath,
-            version,
-            liveHeadByPath,
-          );
+        const outcome = useRevisionHeadBackfill
+          ? (
+              await restorePathToRevisionWithBackfill(
+                vfs,
+                revisions,
+                entries,
+                scope,
+                logicalPath,
+                version,
+                liveHeadByPath,
+              )
+            ).outcome
+          : await restorePathToRevision(
+              vfs,
+              revisions,
+              scope,
+              logicalPath,
+              version,
+              liveHeadByPath,
+              entries,
+            );
+        if (outcome === "skipped_same_version") {
+          skippedSameVersion++;
+        } else if (outcome === "skipped_same_content_hash") {
+          skippedSameContentHash++;
+        } else if (outcome === "deleted") {
+          deleted++;
         } else {
-          await restorePathToRevision(
-            vfs,
-            revisions,
-            scope,
-            logicalPath,
-            version,
-            liveHeadByPath,
-          );
+          restored++;
         }
       } else {
         await this.deletePathIfExists(vfs, logicalPath);
+        deleted++;
       }
     }
+
+    return {
+      skippedSameVersion,
+      skippedSameContentHash,
+      restored,
+      deleted,
+    };
   }
 
   private scopedVfs(

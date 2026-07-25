@@ -4,7 +4,7 @@
  * @module domain/vfs/repositories/vfs-revision.port
  */
 
-import type { VfsRevision } from "../model/vfs-revision.js";
+import type { VfsRevision, VfsRevisionStatus } from "../model/vfs-revision.js";
 
 /**
  * Input for appending a new revision row (insert-only).
@@ -15,6 +15,14 @@ import type { VfsRevision } from "../model/vfs-revision.js";
  */
 export type VfsRevisionAppendInput = VfsRevision & {
   readonly contentHash?: string | null;
+};
+
+/**
+ * revision 行轻量元数据（不解 ContentStore 正文）。
+ */
+export type VfsRevisionPointerMeta = {
+  readonly status: VfsRevisionStatus;
+  readonly contentHash: string | null;
 };
 
 /**
@@ -35,6 +43,16 @@ export interface VfsRevisionRepository {
    * 判断指定 path+version 的 revision 行是否存在（不解正文）。
    */
   existsByPathAndVersion(path: string, version: number): Promise<boolean>;
+
+  /**
+   * 读取指定 path+version 的 status / content_hash（不解正文）。
+   *
+   * @returns 行不存在时为 `null`
+   */
+  findMetaByPathAndVersion(
+    path: string,
+    version: number,
+  ): Promise<VfsRevisionPointerMeta | null>;
 
   /**
    * Returns the highest stored revision version for a path.

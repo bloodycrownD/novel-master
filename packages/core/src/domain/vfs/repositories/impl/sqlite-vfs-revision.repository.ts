@@ -24,6 +24,7 @@ import type {
 import type { VfsStorageKind } from "../../model/vfs-entry.js";
 import type {
   VfsRevisionAppendInput,
+  VfsRevisionPointerMeta,
   VfsRevisionRepository,
 } from "../vfs-revision.port.js";
 import { normalizePath } from "./normalize-path.js";
@@ -87,6 +88,32 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       { path: normalized, version },
     );
     return rows.length > 0;
+  }
+
+  async findMetaByPathAndVersion(
+    path: string,
+    version: number,
+  ): Promise<VfsRevisionPointerMeta | null> {
+    const normalized = normalizePath(path);
+    const rows = await queryTemplate<{
+      status: string;
+      content_hash: string | null;
+    }>(
+      this.conn,
+      this.parser,
+      `SELECT status, content_hash FROM vfs_revision
+       WHERE path = #{path} AND version = #{version}
+       LIMIT 1`,
+      { path: normalized, version },
+    );
+    const row = rows[0];
+    if (row == null) {
+      return null;
+    }
+    return {
+      status: row.status as VfsRevisionStatus,
+      contentHash: nullableText(row.content_hash),
+    };
   }
 
   async append(input: VfsRevisionAppendInput): Promise<void> {

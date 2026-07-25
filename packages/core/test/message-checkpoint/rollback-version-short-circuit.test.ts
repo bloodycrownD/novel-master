@@ -75,6 +75,7 @@ describe("rollback version short-circuit", () => {
         existsCalls++;
         return true;
       },
+      findMetaByPathAndVersion: async () => null,
       findMaxVersionForPath: async () => null,
       append: async () => undefined,
       listKeysUnderPrefix: async () => [],
@@ -109,6 +110,10 @@ describe("rollback version short-circuit", () => {
         };
       },
       existsByPathAndVersion: async () => true,
+      findMetaByPathAndVersion: async () => {
+        findCalls++;
+        return { status: "active", contentHash: "x" };
+      },
       findMaxVersionForPath: async () => 2,
       append: async () => undefined,
       listKeysUnderPrefix: async () => [],
@@ -128,7 +133,7 @@ describe("rollback version short-circuit", () => {
     };
     const liveHeadByPath = new Map([["/same.md", 2]]);
 
-    await restorePathToRevision(
+    const outcome = await restorePathToRevision(
       vfs,
       revisionRepo,
       scope,
@@ -137,16 +142,81 @@ describe("rollback version short-circuit", () => {
       liveHeadByPath,
     );
 
+    assert.equal(outcome, "skipped_same_version");
     assert.equal(findCalls, 0);
     assert.equal(writeCalls, 0);
   });
 
-  it("restorePathToRevision：head version 不等时仍执行 restore", async () => {
+  it("restorePathToRevision：version 不等但 content_hash 相同则跳过解压与 write", async () => {
+    let findFullCalls = 0;
+    let findMetaCalls = 0;
+    let writeCalls = 0;
+    const revisionRepo: VfsRevisionRepository = {
+      findByPathAndVersion: async () => {
+        findFullCalls++;
+        return {
+          path: "/x",
+          version: 1,
+          content: "should-not-read",
+          status: "active",
+          mtimeMs: 0,
+          storageKind: "inline",
+        };
+      },
+      existsByPathAndVersion: async () => true,
+      findMetaByPathAndVersion: async () => {
+        findMetaCalls++;
+        return { status: "active", contentHash: "same-hash" };
+      },
+      findMaxVersionForPath: async () => 3,
+      append: async () => undefined,
+      listKeysUnderPrefix: async () => [],
+      deleteExceptReachable: async () => 0,
+    };
+    const entryRepo = {
+      findContentHash: async () => "same-hash",
+    } as import("../../src/domain/vfs/repositories/vfs-entry.port.js").VfsEntryRepository;
+    const vfs: VfsRestorePort = {
+      write: async () => {
+        writeCalls++;
+      },
+      delete: async () => undefined,
+      mkdir: async () => undefined,
+    };
+    const scope = {
+      kind: "session" as const,
+      projectId: "p1",
+      sessionId: "s1",
+    };
+    // live head 高于锚点（T-RB1），但正文 hash 已与目标 revision 一致
+    const liveHeadByPath = new Map([["/hash-same.md", 3]]);
+
+    const outcome = await restorePathToRevision(
+      vfs,
+      revisionRepo,
+      scope,
+      "/hash-same.md",
+      1,
+      liveHeadByPath,
+      entryRepo,
+    );
+
+    assert.equal(outcome, "skipped_same_content_hash");
+    assert.equal(findMetaCalls, 1);
+    assert.equal(findFullCalls, 0);
+    assert.equal(writeCalls, 0);
+  });
+
+  it("restorePathToRevision：head version 不等且正文不同时仍执行 restore", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    const { SqliteVfsEntryRepository } = await import(
+      "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js"
+    );
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
     const scope = {
       kind: "session" as const,
       projectId: project.id,
@@ -160,15 +230,17 @@ describe("rollback version short-circuit", () => {
       ["/delta.md", (await svfs.read("/delta.md")).version],
     ]);
 
-    await restorePathToRevision(
+    const outcome = await restorePathToRevision(
       svfs,
       revisions,
       scope,
       "/delta.md",
       anchorVersion,
       liveHeadByPath,
+      entries,
     );
 
+    assert.equal(outcome, "restored");
     assert.equal((await svfs.read("/delta.md")).content, "anchor");
   });
 

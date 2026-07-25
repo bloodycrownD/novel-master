@@ -18,6 +18,13 @@ import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 import { backfillMissingRevisionIfNeeded } from "./backfill-missing-revision.js";
 
+/** restore 单路径结果（供 reconcile 统计短路次数）。 */
+export type RestorePathOutcome =
+  | "skipped_same_version"
+  | "skipped_same_content_hash"
+  | "restored"
+  | "deleted";
+
 /**
  * Creates parent directories from root down (idempotent mkdir).
  */
@@ -39,6 +46,11 @@ export async function ensureDirectoryChain(
 
 /**
  * Restores one logical path to the content/status of a stored revision.
+ *
+ * @remarks
+ * - live head version 已等于目标 version → 直接跳过
+ * - version 不等但 live `content_hash` 与目标 revision 相同 → 跳过解压与 write（T-RB1 允许 live version 高于锚点）
+ * - 传入 `entryRepo` 时才启用 hash 短路；未传则退化为全量 find + write
  */
 export async function restorePathToRevision(
   vfs: VfsRestorePort,
@@ -47,13 +59,39 @@ export async function restorePathToRevision(
   logicalPath: string,
   version: number,
   liveHeadByPath?: ReadonlyMap<string, number>,
-): Promise<void> {
-  // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore（T-RB1 允许 head ≥ 锚点，此处仅相等短路）。
+  entryRepo?: VfsEntryRepository,
+): Promise<RestorePathOutcome> {
+  // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore。
   if (liveHeadByPath?.get(logicalPath) === version) {
-    return;
+    return "skipped_same_version";
   }
 
   const physical = toPhysicalPath(scope, logicalPath);
+
+  // 轻量 meta：先判 deleted / 再比 content_hash，避免无谓解压。
+  if (entryRepo != null) {
+    const meta = await revisionRepo.findMetaByPathAndVersion(physical, version);
+    if (meta == null) {
+      throw sessionFsRestoreRevisionMissing(logicalPath, version);
+    }
+    if (meta.status === "deleted") {
+      try {
+        await vfs.delete(logicalPath);
+      } catch (error) {
+        if (!isVfsError(error, "NOT_FOUND")) {
+          throw error;
+        }
+      }
+      return "deleted";
+    }
+    if (meta.contentHash != null && meta.contentHash.length > 0) {
+      const liveHash = await entryRepo.findContentHash(physical);
+      if (liveHash != null && liveHash === meta.contentHash) {
+        return "skipped_same_content_hash";
+      }
+    }
+  }
+
   const rev = await revisionRepo.findByPathAndVersion(physical, version);
   if (rev == null) {
     throw sessionFsRestoreRevisionMissing(logicalPath, version);
@@ -67,7 +105,7 @@ export async function restorePathToRevision(
         throw error;
       }
     }
-    return;
+    return "deleted";
   }
 
   await ensureDirectoryChain(vfs, logicalPath);
@@ -76,12 +114,13 @@ export async function restorePathToRevision(
     throw sessionFsRestoreRevisionMissing(logicalPath, version);
   }
   await vfs.write(logicalPath, rev.content, { versionCheck: false });
+  return "restored";
 }
 
 /**
  * 缺失 revision 时先回补 placeholder，再执行严格 restore。
  *
- * @returns 是否对该 path 执行了 head 回补
+ * @returns 是否对该 path 执行了 head 回补，以及 restore 结局
  */
 export async function restorePathToRevisionWithBackfill(
   vfs: VfsRestorePort,
@@ -91,9 +130,9 @@ export async function restorePathToRevisionWithBackfill(
   logicalPath: string,
   version: number,
   liveHeadByPath?: ReadonlyMap<string, number>,
-): Promise<{ backfilled: boolean }> {
+): Promise<{ backfilled: boolean; outcome: RestorePathOutcome }> {
   if (liveHeadByPath?.get(logicalPath) === version) {
-    return { backfilled: false };
+    return { backfilled: false, outcome: "skipped_same_version" };
   }
 
   const physical = toPhysicalPath(scope, logicalPath);
@@ -102,13 +141,14 @@ export async function restorePathToRevisionWithBackfill(
     physical,
     version,
   );
-  await restorePathToRevision(
+  const outcome = await restorePathToRevision(
     vfs,
     revisionRepo,
     scope,
     logicalPath,
     version,
     liveHeadByPath,
+    entryRepo,
   );
-  return { backfilled };
+  return { backfilled, outcome };
 }
