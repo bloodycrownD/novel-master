@@ -94,7 +94,13 @@ async function loadRevisionContent(
   if (rev == null || rev.status === "deleted") {
     return "";
   }
-  return rev.content ?? "";
+  // find* 已解出明文；active 行 content 为 null 视为损坏，禁止 ?? "" 吞掉。
+  if (rev.content == null) {
+    throw new Error(
+      `loadRevisionContent: active revision 正文缺失 ${logicalPath}@${version}`,
+    );
+  }
+  return rev.content;
 }
 
 /** 读取 baseline / current 快照中各 path 的 revision 正文。 */

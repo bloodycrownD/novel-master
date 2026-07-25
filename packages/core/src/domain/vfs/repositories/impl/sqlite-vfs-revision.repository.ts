@@ -11,6 +11,12 @@ import {
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { SqliteVfsContentStore } from "../../content-store/impl/sqlite-vfs-content-store.js";
+import type { VfsContentStore } from "../../content-store/vfs-content-store.port.js";
+import {
+  nullableText,
+  resolveRevisionPlainContent,
+} from "../../content-store/logic/resolve-stored-content.js";
 import type {
   VfsRevision,
   VfsRevisionStatus,
@@ -22,27 +28,19 @@ import type {
 } from "../vfs-revision.port.js";
 import { normalizePath } from "./normalize-path.js";
 
-function rowToRevision(row: Row): VfsRevision {
-  const statusRaw = String(row.status);
-  const status: VfsRevisionStatus =
-    statusRaw === "deleted" ? "deleted" : "active";
-  return {
-    path: String(row.path),
-    version: Number(row.version),
-    content: row.content == null ? null : String(row.content),
-    status,
-    mtimeMs: Number(row.mtime_ms),
-    storageKind: String(row.storage_kind) as VfsStorageKind,
-  };
-}
-
 /**
- * TDBC-backed vfs_revision repository (append-only inserts).
+ * TDBC-backed vfs_revision repository（append-only；正文经 ContentStore）。
  */
 export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   private readonly parser = new SqlTemplateParser();
+  private readonly contentStore: VfsContentStore;
 
-  constructor(private readonly conn: TdbcConnection) {}
+  constructor(
+    private readonly conn: TdbcConnection,
+    contentStore?: VfsContentStore,
+  ) {
+    this.contentStore = contentStore ?? new SqliteVfsContentStore(conn);
+  }
 
   async findMaxVersionForPath(path: string): Promise<number | null> {
     const normalized = normalizePath(path);
@@ -64,7 +62,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT path, version, content, status, mtime_ms, storage_kind
+      `SELECT path, version, content, content_hash, status, mtime_ms, storage_kind
        FROM vfs_revision
        WHERE path = #{path} AND version = #{version}`,
       { path: normalized, version },
@@ -72,21 +70,26 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     if (rows.length === 0) {
       return null;
     }
-    return rowToRevision(rows[0]!);
+    return this.rowToRevision(rows[0]!);
   }
 
   async append(input: VfsRevisionAppendInput): Promise<void> {
     const normalized = normalizePath(input.path);
+    let contentHash: string | null = null;
+    if (input.status === "active" && input.content != null) {
+      contentHash = await this.contentStore.put(input.content);
+    }
+
     await executeTemplate(
       this.conn,
       this.parser,
       `INSERT INTO vfs_revision
-       (path, version, content, status, mtime_ms, storage_kind)
-       VALUES (#{path}, #{version}, #{content}, #{status}, #{mtimeMs}, #{storageKind})`,
+       (path, version, content, content_hash, status, mtime_ms, storage_kind)
+       VALUES (#{path}, #{version}, NULL, #{contentHash}, #{status}, #{mtimeMs}, #{storageKind})`,
       {
         path: normalized,
         version: input.version,
-        content: input.content,
+        contentHash,
         status: input.status,
         mtimeMs: input.mtimeMs,
         storageKind: input.storageKind,
@@ -134,5 +137,24 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       deleted++;
     }
     return deleted;
+  }
+
+  private async rowToRevision(row: Row): Promise<VfsRevision> {
+    const statusRaw = String(row.status);
+    const status: VfsRevisionStatus =
+      statusRaw === "deleted" ? "deleted" : "active";
+    const content = await resolveRevisionPlainContent(this.contentStore, {
+      status,
+      content: nullableText(row.content),
+      contentHash: nullableText(row.content_hash),
+    });
+    return {
+      path: String(row.path),
+      version: Number(row.version),
+      content,
+      status,
+      mtimeMs: Number(row.mtime_ms),
+      storageKind: String(row.storage_kind) as VfsStorageKind,
+    };
   }
 }

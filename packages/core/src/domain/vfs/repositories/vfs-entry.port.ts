@@ -41,6 +41,23 @@ export interface VfsEntryRepository {
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }>;
 
+  /**
+   * 不升版写回 live head（补偿专用）。
+   *
+   * @remarks
+   * entry 已存在 → 按指定 version / content_hash / mtime 写回，不 `version+1`；
+   * entry 不存在 → 按指定 version + content_hash 插入（`content=NULL`）。
+   * 禁止补偿路径复用会 bump 的 {@link update}。
+   */
+  setHeadContentHash(
+    path: string,
+    input: {
+      version: number;
+      contentHash: string;
+      mtimeMs: number;
+    },
+  ): Promise<void>;
+
   delete(path: string, options: VfsDeleteOptions): Promise<void>;
 
   listAllPaths(): Promise<string[]>;

@@ -65,7 +65,11 @@ export async function restorePathToRevision(
   }
 
   await ensureDirectoryChain(vfs, logicalPath);
-  await vfs.write(logicalPath, rev.content ?? "", { versionCheck: false });
+  // find* 已按 ContentStore 解出明文；禁止再用 ?? "" 把未解 NULL 当空串。
+  if (rev.content == null) {
+    throw sessionFsRestoreRevisionMissing(logicalPath, version);
+  }
+  await vfs.write(logicalPath, rev.content, { versionCheck: false });
 }
 
 /**
