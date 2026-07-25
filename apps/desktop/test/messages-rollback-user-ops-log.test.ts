@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import {
+  appendUserOpsLog,
   listUserOpsLog,
   resetUserOpsLogStoreForTests,
   textBlocks,
@@ -107,6 +108,85 @@ describe("handleMessagesRollback (T-UOL7 / D8)", () => {
     assert.ok(
       payload.attachments.some(
         (a) => a.path === "/hand.md" && a.action === "write",
+      ),
+    );
+
+    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+  });
+
+  it("T-UOL7 undo_send: 映回 + 既有未发送并存（禁止 replace 抹掉）", async () => {
+    const sessionId = await createSession("undo-send-coexist");
+    const rt = await getDesktopRuntime();
+
+    appendUserOpsLog(sessionId, {
+      id: "uol-unsent",
+      createdAtMs: 1,
+      actionXml:
+        '<action name="write">\n{"path":"/keep.md","content":"k"}\n</action>',
+      action: "write",
+      path: "/keep.md",
+      content: "k",
+    });
+
+    const actionXml =
+      '<action name="edit">\n{"path":"/hand.md","oldString":"a","newString":"b"}\n</action>';
+    const msg = await rt.messages.append(
+      sessionId,
+      "user",
+      textBlocks("请看手改"),
+      {
+        attachments: [
+          {
+            name: "/hand.md",
+            source: "user_ops",
+            type: "text",
+            content: actionXml,
+            path: "/hand.md",
+            action: "edit",
+          },
+        ],
+      },
+    );
+
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    setComposerAttachmentsSuggestForwardTarget(() => {
+      return {
+        send(channel: string, payload: unknown) {
+          sent.push({ channel, payload });
+        },
+      } as never;
+    });
+
+    const result = await handleMessagesRollback({
+      projectId,
+      sessionId,
+      messageId: msg.id,
+      skipVfsReconcile: true,
+    });
+    assert.equal(result.ok, true);
+
+    const entries = listUserOpsLog(sessionId);
+    assert.ok(
+      entries.some((e) => e.action === "write" && e.path === "/keep.md"),
+      "既有未发送须保留",
+    );
+    assert.ok(
+      entries.some((e) => e.action === "edit" && e.path === "/hand.md"),
+      "消息手改须映回",
+    );
+    assert.equal(entries.length, 2);
+
+    const payload = sent[0]?.payload as {
+      attachments: Array<{ path?: string; action?: string }>;
+    };
+    assert.ok(
+      payload.attachments.some(
+        (a) => a.path === "/keep.md" && a.action === "write",
+      ),
+    );
+    assert.ok(
+      payload.attachments.some(
+        (a) => a.path === "/hand.md" && a.action === "edit",
       ),
     );
 

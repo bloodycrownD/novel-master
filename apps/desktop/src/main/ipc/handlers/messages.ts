@@ -2,11 +2,11 @@
  * Messages IPC handlers — list (display regex), append, edit, hide, delete, rollback.
  */
 import {
+  appendUserOpsLog,
   clearUserOpsLog,
   isPlainUserUndoSendEligible,
   parseUserOpsLogFromAttachments,
   readMessageMetadata,
-  replaceUserOpsLog,
   textBlocks,
   type ChatMessage,
   type MessageContent,
@@ -340,11 +340,13 @@ export async function handleMessagesRollback(
       rollbackOptions,
     );
 
-    // D8：undo_send only — parse 写 main log store → project 推 ops；
+    // D8：undo_send only — parse 后 append 写 main log store（与未发送并存，禁止 replace 抹掉）→ project 推 ops；
     // rewind — 不 parse；清 store 后推空（renderer 再 ∪ annotate，禁止 wipe main ops）
     if (undoSend) {
       const entries = parseUserOpsLogFromAttachments(restoreAttachments);
-      replaceUserOpsLog(req.sessionId, entries);
+      for (const entry of entries) {
+        appendUserOpsLog(req.sessionId, entry);
+      }
       await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);
     } else {
       clearUserOpsLog(req.sessionId);
