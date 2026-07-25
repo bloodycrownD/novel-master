@@ -1,5 +1,5 @@
 /**
- * 用户 VFS 用例端口：execute → pending → flush 产出 user_ops 附件。
+ * 用户 VFS 用例端口：execute → 操作日志 → flush 产出 user_ops 附件。
  *
  * @module service/chat/user-vfs-turn.port
  */
@@ -28,18 +28,22 @@ export type UserVfsTurnExecuteResult =
 
 /** `flushPendingUserVfsTurns` 执行结果。 */
 export interface UserVfsFlushResult {
-  /** 是否产出了非空 user_ops 附件（pending 非空且 net diff 非空）。 */
+  /**
+   * 是否已将未发送操作日志转为附件。
+   * `true` ⇔ 日志非空且已转为附件并清空 store（**废除** pending∧net-diff 非空条件）。
+   */
   readonly flushed: boolean;
-  /** pending→合成的 user_ops 附件；无净变更时为空数组。 */
+  /** 由未发送日志逐条构造的 user_ops 附件；无日志时为空数组。 */
   readonly attachments: readonly MessageAttachment[];
 }
 
 /**
- * 用户 VFS 操作编排：即时 ToolRunner 执行 + pending 队列 + flush 产出附件（不再落 UA）。
+ * 用户 VFS 操作编排：即时 ToolRunner 执行 + 进程内操作日志 + flush 产出附件（不再落 UA）。
  */
 export interface UserVfsTurnService {
   /**
-   * 执行合成 tool 并 append pending；失败不写 pending。
+   * 执行合成 tool；成功后 append 操作日志（停写 `user_vfs_pending`）。
+   * 写盘失败不写日志；日志 append 失败不回滚已成功写盘。
    */
   executeOp(
     sessionId: string,
@@ -47,30 +51,30 @@ export interface UserVfsTurnService {
   ): Promise<UserVfsTurnExecuteResult>;
 
   /**
-   * pending 非空时按 checkpoint 净 diff 合成 `user_ops` 附件并清空 pending；**不** insert UA 两段。
+   * 未发送日志 → 逐条 `user_ops` 附件并清空 store；**不** insert UA，**不**做 checkpoint 净 diff。
    *
-   * @remarks flush 禁止再次调用 ToolRunner；附件按净 action 各一条（`name` = path），
-   * 不以 pending 历史 tool 名拼接。checkpoint 改挂带 user_ops 的 user append（见 runAgentTurn）。
+   * @remarks flush 禁止再次调用 ToolRunner；附件按日志条目各一条（跨次不合并）。
+   * checkpoint 仍可在带 user_ops 的 user append 后 capture（不作下一轮 flush baseline）。
    */
   flushPendingUserVfsTurns(sessionId: string): Promise<UserVfsFlushResult>;
 
   /**
-   * 相对上次发送 checkpoint 的净 action 摘要（稳定顺序）；**不清** pending。
-   *
-   * @remarks 复用 flush 同源 baseline / current / diff；禁止调用 flush 或 `savePendingQueue([])`。
+   * @deprecated 净 diff 摘要；状态条请改读 UserOpsLogStore / `projectComposerStatusAttachments`。
+   * 相对上次发送 checkpoint 的净 action 摘要（稳定顺序）；**不清**日志 store。
    */
   previewUserOpsActions(
     sessionId: string,
   ): Promise<readonly UserOpsActionSummary[]>;
 
   /**
-   * 相对上次发送 checkpoint 的净变更 path 集（稳定排序）；**不清** pending。
-   *
-   * @remarks 复用 flush 同源 baseline / current / diff；禁止调用 flush 或 `savePendingQueue([])`。
+   * @deprecated 净 diff path 集；门闩 / chip 请改读 `hasPendingTurns` / log store。
+   * 相对上次发送 checkpoint 的净变更 path 集（稳定排序）；**不清**日志 store。
    */
   previewUserOpsChangedPaths(sessionId: string): Promise<readonly string[]>;
 
-  /** 会话是否存在待 flush 的 VFS pending 条目。 */
+  /**
+   * 会话是否存在未发送手改（读操作日志 store；可暂保留本方法名）。
+   */
   hasPendingTurns(sessionId: string): Promise<boolean>;
 }
 

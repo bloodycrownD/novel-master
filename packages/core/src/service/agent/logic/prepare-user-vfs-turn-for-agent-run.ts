@@ -2,10 +2,10 @@
  * User VFS 发送前编排单入口（chip-recontract D3：无 workplace materialize）。
  *
  * runAgentTurn 在 append user 前调用本模块，保证：
- * - 空续跑（allowResumeWithoutInput）+ pending 时末条 user 经 delete → flush → re-append，
+ * - 空续跑（allowResumeWithoutInput）+ 未发送 ops-log 时末条 user 经 delete → flush → re-append，
  *   merge = trailing∪flush∪attach 写回末条 user（不含 `source:workplace`）
- * - 否则仅 flush pending → 返回 attachments 供 caller 并入新 append
- * - **不** insert UA / ack；attachments 不丢；**不** materialize workplace 差集
+ * - 否则仅 flush（list log → attachments → clear）→ 返回 attachments 供 caller 并入新 append
+ * - **不** insert UA / ack；attachments 不丢；**不** materialize workplace 差集；**不**净 diff
  *
  * @module service/agent/logic/prepare-user-vfs-turn-for-agent-run
  */
@@ -47,7 +47,7 @@ export interface PrepareUserVfsTurnForAgentRunInput {
 }
 
 export interface PrepareUserVfsTurnForAgentRunResult {
-  /** flush 是否产出了非空 user_ops。 */
+  /** flush 是否将未发送日志转为非空 user_ops 附件。 */
   readonly flushed: boolean;
   /**
    * 供 caller 并入**新** append 的 attachments。
@@ -78,7 +78,7 @@ function mergeAttachments(
 }
 
 /**
- * flush 前若 pending 非空、空续跑且允许 resume 且末条为 user，暂存并删除该条；
+ * flush 前若未发送 ops-log 非空、空续跑且允许 resume 且末条为 user，暂存并删除该条；
  * flush 后再 append 写回（含 trailing∪flush∪attach）。
  */
 export async function prepareUserVfsTurnForAgentRun(
