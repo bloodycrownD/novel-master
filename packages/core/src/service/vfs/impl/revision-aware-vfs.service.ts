@@ -13,6 +13,7 @@ import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js"
 import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-not-found-error.js";
 import {
   VfsError,
+  vfsConflict,
   vfsInvalidPath,
   vfsIsDirectory,
   vfsNotFound,
@@ -201,6 +202,24 @@ async function writeWithRevision(
       `expectedVersion required when updating ${normalized}`,
       { path: normalized },
     );
+  }
+
+  // 乐观锁优先：过期仍 CONFLICT，同文短路不得绕过
+  if (
+    versionCheck &&
+    options?.expectedVersion != null &&
+    options.expectedVersion !== existing.version
+  ) {
+    throw vfsConflict(
+      normalized,
+      options.expectedVersion,
+      existing.version,
+    );
+  }
+
+  // 同文短路：相对 live 明文全等 → 不 bump、不 append
+  if (existing.content === content) {
+    return { version: existing.version };
   }
 
   const updated = await entryRepo.update(normalized, content, {
