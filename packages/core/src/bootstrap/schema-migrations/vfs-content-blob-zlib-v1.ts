@@ -119,77 +119,106 @@ async function ensureRevisionContentHash(tx: TdbcConnection): Promise<void> {
   );
 }
 
+/** 分批迁移，避免一次 SELECT 把整库正文拉进内存导致移动端 OOM 闪退。 */
+const MIGRATE_BATCH_SIZE = 32;
+
 /**
  * 仍有明文的行 → put → 写 hash → content=NULL；目录行双 NULL。可重入。
+ *
+ * @remarks 按批拉取待迁行，禁止 `SELECT` 全表 `content`（大库会打爆 Hermes/低内存进程）。
  */
 async function migratePlaintextToBlobs(tx: TdbcConnection): Promise<void> {
   const store = new SqliteVfsContentStore(tx);
 
-  const entries = await tx.query<{
-    path: string;
-    content: string | null;
-    content_hash: string | null;
-    entry_kind: string;
-  }>(
-    `SELECT path, content, content_hash, entry_kind FROM vfs_entry`,
-  );
-
-  for (const row of entries) {
-    if (row.entry_kind === "directory") {
-      if (row.content != null || row.content_hash != null) {
-        await tx.execute(
-          `UPDATE vfs_entry SET content = NULL, content_hash = NULL WHERE path = ?`,
-          [row.path],
-        );
-      }
-      continue;
+  // 目录行：清掉空串/残留明文，不 put。
+  for (;;) {
+    const dirs = await tx.query<{ path: string }>(
+      `SELECT path FROM vfs_entry
+       WHERE entry_kind = 'directory'
+         AND (content IS NOT NULL OR content_hash IS NOT NULL)
+       LIMIT ?`,
+      [MIGRATE_BATCH_SIZE],
+    );
+    if (dirs.length === 0) {
+      break;
     }
-
-    // 已迁完：有 hash 且 content 已 NULL
-    if (row.content_hash != null && row.content == null) {
-      continue;
+    for (const row of dirs) {
+      await tx.execute(
+        `UPDATE vfs_entry SET content = NULL, content_hash = NULL WHERE path = ?`,
+        [row.path],
+      );
     }
+  }
 
-    if (row.content != null) {
-      const hash = await store.put(row.content);
+  // 文件 entry：仅拉仍含明文的行。
+  for (;;) {
+    const entries = await tx.query<{
+      path: string;
+      content: string;
+      content_hash: string | null;
+    }>(
+      `SELECT path, content, content_hash FROM vfs_entry
+       WHERE entry_kind = 'file' AND content IS NOT NULL
+       LIMIT ?`,
+      [MIGRATE_BATCH_SIZE],
+    );
+    if (entries.length === 0) {
+      break;
+    }
+    for (const row of entries) {
+      const hash =
+        row.content_hash != null && row.content_hash.length > 0
+          ? row.content_hash
+          : await store.put(row.content);
       await tx.execute(
         `UPDATE vfs_entry SET content_hash = ?, content = NULL WHERE path = ?`,
         [hash, row.path],
       );
-      continue;
     }
-
-    // 文件行双 NULL：迁移窗口外视为异常，跳过（读路径会报错）
   }
 
-  const revisions = await tx.query<{
-    path: string;
-    version: number;
-    content: string | null;
-    content_hash: string | null;
-    status: string;
-  }>(
-    `SELECT path, version, content, content_hash, status FROM vfs_revision`,
-  );
-
-  for (const row of revisions) {
-    if (row.status === "deleted") {
-      if (row.content != null || row.content_hash != null) {
-        await tx.execute(
-          `UPDATE vfs_revision SET content = NULL, content_hash = NULL
-           WHERE path = ? AND version = ?`,
-          [row.path, row.version],
-        );
-      }
-      continue;
+  // deleted revision：清残留，不 put。
+  for (;;) {
+    const deleted = await tx.query<{ path: string; version: number }>(
+      `SELECT path, version FROM vfs_revision
+       WHERE status = 'deleted'
+         AND (content IS NOT NULL OR content_hash IS NOT NULL)
+       LIMIT ?`,
+      [MIGRATE_BATCH_SIZE],
+    );
+    if (deleted.length === 0) {
+      break;
     }
-
-    if (row.content_hash != null && row.content == null) {
-      continue;
+    for (const row of deleted) {
+      await tx.execute(
+        `UPDATE vfs_revision SET content = NULL, content_hash = NULL
+         WHERE path = ? AND version = ?`,
+        [row.path, row.version],
+      );
     }
+  }
 
-    if (row.content != null) {
-      const hash = await store.put(row.content);
+  // active revision：仅拉仍含明文的行。
+  for (;;) {
+    const revisions = await tx.query<{
+      path: string;
+      version: number;
+      content: string;
+      content_hash: string | null;
+    }>(
+      `SELECT path, version, content, content_hash FROM vfs_revision
+       WHERE status = 'active' AND content IS NOT NULL
+       LIMIT ?`,
+      [MIGRATE_BATCH_SIZE],
+    );
+    if (revisions.length === 0) {
+      break;
+    }
+    for (const row of revisions) {
+      const hash =
+        row.content_hash != null && row.content_hash.length > 0
+          ? row.content_hash
+          : await store.put(row.content);
       await tx.execute(
         `UPDATE vfs_revision SET content_hash = ?, content = NULL
          WHERE path = ? AND version = ?`,

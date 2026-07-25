@@ -31,7 +31,13 @@ function asUint8Array(value: unknown, label: string): Uint8Array {
   if (value instanceof Uint8Array) {
     return value;
   }
-  throw new Error(`${label} 期望 Uint8Array，实际 ${typeof value}`);
+  // RN quick-sqlite / 部分绑定可能直接给出 ArrayBuffer。
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  throw new Error(
+    `${label} 期望 Uint8Array/ArrayBuffer，实际 ${Object.prototype.toString.call(value)}`,
+  );
 }
 
 /**
