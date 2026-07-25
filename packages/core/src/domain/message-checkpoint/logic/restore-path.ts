@@ -46,7 +46,13 @@ export async function restorePathToRevision(
   scope: VfsScope,
   logicalPath: string,
   version: number,
+  liveHeadByPath?: ReadonlyMap<string, number>,
 ): Promise<void> {
+  // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore（T-RB1 允许 head ≥ 锚点，此处仅相等短路）。
+  if (liveHeadByPath?.get(logicalPath) === version) {
+    return;
+  }
+
   const physical = toPhysicalPath(scope, logicalPath);
   const rev = await revisionRepo.findByPathAndVersion(physical, version);
   if (rev == null) {
@@ -84,7 +90,12 @@ export async function restorePathToRevisionWithBackfill(
   scope: VfsScope,
   logicalPath: string,
   version: number,
+  liveHeadByPath?: ReadonlyMap<string, number>,
 ): Promise<{ backfilled: boolean }> {
+  if (liveHeadByPath?.get(logicalPath) === version) {
+    return { backfilled: false };
+  }
+
   const physical = toPhysicalPath(scope, logicalPath);
   const backfilled = await backfillMissingRevisionIfNeeded(
     { revisionRepo, entryRepo },
@@ -97,6 +108,7 @@ export async function restorePathToRevisionWithBackfill(
     scope,
     logicalPath,
     version,
+    liveHeadByPath,
   );
   return { backfilled };
 }

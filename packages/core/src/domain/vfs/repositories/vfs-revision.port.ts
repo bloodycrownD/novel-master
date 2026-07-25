@@ -32,6 +32,11 @@ export interface VfsRevisionRepository {
   ): Promise<VfsRevision | null>;
 
   /**
+   * 判断指定 path+version 的 revision 行是否存在（不解正文）。
+   */
+  existsByPathAndVersion(path: string, version: number): Promise<boolean>;
+
+  /**
    * Returns the highest stored revision version for a path.
    *
    * @returns `null` when no revision rows exist for the path.

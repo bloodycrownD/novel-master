@@ -29,8 +29,11 @@ export async function findMissingRevisionPointers(
       continue;
     }
     const physical = toPhysicalPath(scope, logicalPath);
-    const rev = await revisionRepo.findByPathAndVersion(physical, targetVersion);
-    if (rev == null) {
+    const exists = await revisionRepo.existsByPathAndVersion(
+      physical,
+      targetVersion,
+    );
+    if (!exists) {
       missing.push(logicalPath);
     }
   }

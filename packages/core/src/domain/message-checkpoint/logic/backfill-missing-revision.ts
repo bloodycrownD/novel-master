@@ -24,11 +24,11 @@ export async function backfillMissingRevisionIfNeeded(
   physicalPath: string,
   targetVersion: number,
 ): Promise<boolean> {
-  const existing = await deps.revisionRepo.findByPathAndVersion(
+  const exists = await deps.revisionRepo.existsByPathAndVersion(
     physicalPath,
     targetVersion,
   );
-  if (existing != null) {
+  if (exists) {
     return false;
   }
 

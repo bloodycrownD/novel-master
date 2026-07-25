@@ -73,6 +73,22 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return this.rowToRevision(rows[0]!);
   }
 
+  async existsByPathAndVersion(
+    path: string,
+    version: number,
+  ): Promise<boolean> {
+    const normalized = normalizePath(path);
+    const rows = await queryTemplate<{ one: number }>(
+      this.conn,
+      this.parser,
+      `SELECT 1 AS one FROM vfs_revision
+       WHERE path = #{path} AND version = #{version}
+       LIMIT 1`,
+      { path: normalized, version },
+    );
+    return rows.length > 0;
+  }
+
   async append(input: VfsRevisionAppendInput): Promise<void> {
     const normalized = normalizePath(input.path);
     let contentHash: string | null = null;
