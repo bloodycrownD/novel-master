@@ -6,8 +6,10 @@ import { Alert } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   type ChatMessage,
+  appendUserOpsLog,
   isPlainUserUndoSendEligible,
   parseAnnotateDraftsFromAttachments,
+  parseUserOpsLogFromAttachments,
   resolveRollbackConfirmMessage,
 } from '@novel-master/core/chat';
 
@@ -29,11 +31,12 @@ import {
 } from '@novel-master/core/session-fs';
 import { addChatAnnotateDraft } from '@/storage/chat-annotate-draft';
 import {
+  applyComposerStatusAttachmentsReplace,
   readChatComposerDraftState,
-  refreshComposerAnnotateChips,
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
 import {
+  projectComposerStatusForSession,
   refreshComposerStatusAfterFloorOrCompaction,
   refreshComposerStatusAfterSessionKkvCleared,
 } from '@/services/project-composer-status.service';
@@ -409,34 +412,46 @@ export function useChatTabMessageActions({
 
       const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
-      // 删消息前 snapshot：成功后解析真 VFS 工作区批注（伪 path 由 parse 跳过）
-      const annotateAttachmentsSnapshot =
+      // 删消息前 snapshot：undo_send 成功后解析批注 + 手改日志（rewind 不映回手改）
+      const attachmentsSnapshot =
         mode === 'undo_send' ? (target.attachments ?? []) : null;
 
-      const applyComposerRestore = () => {
-        if (mode === 'undo_send' && restoreText != null) {
-          // T-TX2：仅正文（含 `@路径`）；状态由 kkv 清空后投影；无 attach chip
-          writeChatComposerDraftState(
-            sessionId,
-            {
-              text: restoreText,
-              attachments: [],
-            },
-            runtime.sessions,
-          );
-          // append 进现有 store，与未发送草稿并存；无 annotate 不造草稿
-          if (annotateAttachmentsSnapshot != null) {
-            const restored = parseAnnotateDraftsFromAttachments(
-              annotateAttachmentsSnapshot,
-            );
-            for (const draft of restored) {
-              addChatAnnotateDraft(sessionId, draft);
-            }
-          }
-          // 重投影 chip（含未发送 ∪ 刚恢复）；无批注时仍保持 attachments:[]
-          refreshComposerAnnotateChips(sessionId);
-          setDraftRestoreToken(t => t + 1);
+      const applyComposerRestore = async () => {
+        if (mode !== 'undo_send' || restoreText == null) {
+          return;
         }
+        // T-TX2：仅正文（含 `@路径`）；无 attach chip
+        writeChatComposerDraftState(
+          sessionId,
+          {
+            text: restoreText,
+            attachments: [],
+          },
+          runtime.sessions,
+        );
+        // 顺序：正文 → parseAnnotate → parseUserOpsLog → project + ∪ annotate
+        if (attachmentsSnapshot != null) {
+          const restoredAnnotate = parseAnnotateDraftsFromAttachments(
+            attachmentsSnapshot,
+          );
+          for (const draft of restoredAnnotate) {
+            addChatAnnotateDraft(sessionId, draft);
+          }
+          const restoredOps =
+            parseUserOpsLogFromAttachments(attachmentsSnapshot);
+          for (const entry of restoredOps) {
+            appendUserOpsLog(sessionId, entry);
+          }
+        }
+        const status = await projectComposerStatusForSession(
+          runtime,
+          sessionId,
+        );
+        applyComposerStatusAttachmentsReplace({
+          sessionId,
+          attachments: status,
+        });
+        setDraftRestoreToken(t => t + 1);
       };
 
       const runRollback = async (
@@ -450,13 +465,26 @@ export function useChatTabMessageActions({
             targetMessageId,
             options,
           );
-          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
-            projectId,
-            sessionId,
-          });
+          if (mode === 'undo_send') {
+            // 可先空条作中间态，随后 applyComposerRestore 再 project
+            await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+              projectId,
+              sessionId,
+            });
+          } else {
+            // rewind：不映回消息手改；project 当前 store（可能仍有未发送日志）
+            const status = await projectComposerStatusForSession(
+              runtime,
+              sessionId,
+            );
+            applyComposerStatusAttachmentsReplace({
+              sessionId,
+              attachments: status,
+            });
+          }
           resetStreamingDisplay();
           await reloadMessages(true);
-          applyComposerRestore();
+          await applyComposerRestore();
           showToast(
             options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );

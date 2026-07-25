@@ -16,7 +16,10 @@ import {
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import {
+  clearUserOpsLog,
+  hasUnsentUserOpsLog,
   resolveComposerSendIntent,
+  subscribeUserOpsLog,
   TOOL_TURN_BRIDGE_TEXT,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -126,7 +129,6 @@ export function ChatComposer({
   const [attachments, setAttachments] = useState<MessageAttachment[]>([
     ...initial.attachments,
   ]);
-  const [hasPendingUserOps, setHasPendingUserOps] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [runAbortController, setRunAbortController] =
     useState<AbortController | null>(null);
@@ -135,6 +137,8 @@ export function ChatComposer({
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
   /** 文件批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算。 */
   const [annotateEpoch, setAnnotateEpoch] = useState(0);
+  /** 手改日志 store 变更时 bump，驱动 hasPendingUserOps 重算。 */
+  const [opsLogEpoch, setOpsLogEpoch] = useState(0);
   const inputRef = useRef<TextInput>(null);
   /** 程序化插入 @path tag 走 mentions 提交路径。 */
   const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
@@ -155,6 +159,9 @@ export function ChatComposer({
 
   const hasAnnotateDrafts = hasChatAnnotateDrafts(sessionId);
   void annotateEpoch;
+  // 门闩真源：UserOpsLogStore（与 hasPendingTurns 同读 store；本地同步更稳）
+  const hasPendingUserOps = hasUnsentUserOpsLog(sessionId);
+  void opsLogEpoch;
 
   useEffect(() => {
     if (activeAt == null) {
@@ -211,17 +218,6 @@ export function ChatComposer({
     [sessionId],
   );
 
-  const refreshPendingUserOps = useCallback(async () => {
-    try {
-      const pending = await runtimeRef.current.userVfsTurn.hasPendingTurns(
-        sessionId,
-      );
-      setHasPendingUserOps(pending);
-    } catch {
-      setHasPendingUserOps(false);
-    }
-  }, [sessionId]);
-
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -248,12 +244,11 @@ export function ChatComposer({
       const draft = readChatComposerDraftState(sessionId);
       setText(draft.text);
       setAttachments([...draft.attachments]);
-      void refreshPendingUserOps();
     })();
     return () => {
       cancelled = true;
     };
-  }, [sessionId, draftRestoreToken, refreshPendingUserOps]);
+  }, [sessionId, draftRestoreToken]);
 
   useEffect(() => {
     return subscribeChatComposerDraft(changedSessionId => {
@@ -263,9 +258,8 @@ export function ChatComposer({
       const draft = readChatComposerDraftState(sessionId);
       setText(draft.text);
       setAttachments([...draft.attachments]);
-      void refreshPendingUserOps();
     });
-  }, [sessionId, refreshPendingUserOps]);
+  }, [sessionId]);
 
   useEffect(() => {
     return subscribeChatAnnotateDraft(changedSessionId => {
@@ -274,6 +268,15 @@ export function ChatComposer({
       }
       refreshComposerAnnotateChips(sessionId);
       setAnnotateEpoch(n => n + 1);
+    });
+  }, [sessionId]);
+
+  useEffect(() => {
+    return subscribeUserOpsLog(changedSessionId => {
+      if (changedSessionId !== sessionId) {
+        return;
+      }
+      setOpsLogEpoch(n => n + 1);
     });
   }, [sessionId]);
 
@@ -316,8 +319,9 @@ export function ChatComposer({
           annotateDrafts:
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
-            // append 成功后再清输入 + 文件批注，避免失败时丢草稿
+            // append 成功后再清输入 + 批注 + 手改日志，避免失败时丢草稿
             clearChatAnnotateDrafts(sessionId);
+            clearUserOpsLog(sessionId);
             clearComposerNow();
             void Promise.resolve(
               streamHandlersRef.current.onMessagesChanged(),
@@ -369,7 +373,6 @@ export function ChatComposer({
         if (isMobileAgentActive()) {
           decrementAgentActive();
         }
-        void refreshPendingUserOps();
       }
     },
     [
@@ -378,7 +381,6 @@ export function ChatComposer({
       sessionId,
       beginUiRun,
       onStreamReset,
-      refreshPendingUserOps,
       hasPendingUserOps,
     ],
   );

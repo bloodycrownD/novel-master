@@ -18,7 +18,10 @@ import {
   type UserVfsSaveVersionOptions,
 } from '@novel-master/core/vfs';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
-import { executeSessionUserVfsOp } from './user-vfs-turn-execute.service';
+import {
+  executeSessionUserVfsOp,
+  type ExecuteSessionUserVfsOpOptions,
+} from './user-vfs-turn-execute.service';
 
 /** Create a new file (empty by default). */
 export async function createVfsFile(
@@ -127,7 +130,13 @@ export async function renameVfsFile(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
+  const t0 = Date.now();
   await moveVfsPath(vfs, oldPath, newPath);
+  console.log('[vfs-move] renameVfsFile (direct moveVfsPath)', {
+    oldPath,
+    newPath,
+    ms: Date.now() - t0,
+  });
 }
 
 /** 会话 scope：重命名文件经 userVfsTurn。 */
@@ -136,12 +145,21 @@ export async function sessionRenameVfsFile(
   sessionId: string,
   oldPath: string,
   newPath: string,
+  options?: ExecuteSessionUserVfsOpOptions,
 ): Promise<void> {
+  const t0 = Date.now();
   await executeSessionUserVfsOp(
     runtime,
     sessionId,
     buildUserVfsRenameOp(oldPath, newPath),
+    options,
   );
+  console.log('[vfs-move] sessionRenameVfsFile', {
+    oldPath,
+    newPath,
+    skipComposerStatusRefresh: options?.skipComposerStatusRefresh === true,
+    ms: Date.now() - t0,
+  });
 }
 
 /** Rename a directory tree (delegates to Core move logic). */
@@ -150,7 +168,13 @@ export async function renameVfsDirectory(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
+  const t0 = Date.now();
   await moveVfsPath(vfs, oldPath, newPath);
+  console.log('[vfs-move] renameVfsDirectory (direct moveVfsPath)', {
+    oldPath,
+    newPath,
+    ms: Date.now() - t0,
+  });
 }
 
 /** 会话 scope：重命名目录经 userVfsTurn。 */
@@ -159,12 +183,21 @@ export async function sessionRenameVfsDirectory(
   sessionId: string,
   oldPath: string,
   newPath: string,
+  options?: ExecuteSessionUserVfsOpOptions,
 ): Promise<void> {
+  const t0 = Date.now();
   await executeSessionUserVfsOp(
     runtime,
     sessionId,
     buildUserVfsRenameOp(oldPath, newPath),
+    options,
   );
+  console.log('[vfs-move] sessionRenameVfsDirectory', {
+    oldPath,
+    newPath,
+    skipComposerStatusRefresh: options?.skipComposerStatusRefresh === true,
+    ms: Date.now() - t0,
+  });
 }
 
 /** 会话 scope：保存文件经 userVfsTurn（含锚点 diff）。 */

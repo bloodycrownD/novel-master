@@ -52,6 +52,7 @@ import { orderedDirectChildPaths } from './vfs-direct-children-order';
 import { isUserVfsUnifiedToolTurnEnabled } from '@novel-master/core/feature-flags';
 
 import { isVfsError } from '@novel-master/core/vfs';
+import { refreshComposerStatusAfterUserVfsOps } from '../../services/user-vfs-turn-execute.service';
 import {
   createVfsDirectory,
   createVfsFile,
@@ -422,6 +423,13 @@ export const VfsFileManager = forwardRef<
       if (paths.length === 0) {
         return;
       }
+      const batchT0 = Date.now();
+      console.log('[vfs-move] batch start', {
+        count: paths.length,
+        targetDir,
+        useUserVfsTurn,
+        scopeKind: scope.kind,
+      });
       const kindByPath = new Map(rows.map(r => [r.path, r.kind] as const));
       let moved = 0;
       let skipped = 0;
@@ -437,19 +445,29 @@ export const VfsFileManager = forwardRef<
         }
         const kind = kindByPath.get(sourcePath);
         const isDir = kind === 'dir' || dirPathSet.has(sourcePath);
+        const itemT0 = Date.now();
         try {
+          // WHY: 批量时跳过每次 op 后的 composer 投影；批次结束统一刷一次（log store 轻量投影）。
+          const renameOpts = useUserVfsTurn
+            ? { skipComposerStatusRefresh: true as const }
+            : undefined;
           if (isDir) {
+            const renameT0 = Date.now();
             if (useUserVfsTurn) {
               await sessionRenameVfsDirectory(
                 runtime,
                 sessionId!,
                 sourcePath,
                 newPath,
+                renameOpts,
               );
             } else {
               await renameVfsDirectory(vfs, sourcePath, newPath);
             }
+            const renameMs = Date.now() - renameT0;
+            const ruleT0 = Date.now();
             await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
+            const ruleMs = Date.now() - ruleT0;
             if (
               currentPath === sourcePath ||
               currentPath.startsWith(`${sourcePath}/`)
@@ -458,6 +476,13 @@ export const VfsFileManager = forwardRef<
                 remapPathUnderDir(currentPath, sourcePath, newPath),
               );
             }
+            console.log('[vfs-move] batch item ok (dir)', {
+              sourcePath,
+              newPath,
+              renameMs,
+              ruleMs,
+              totalMs: Date.now() - itemT0,
+            });
           } else {
             if (useUserVfsTurn) {
               await sessionRenameVfsFile(
@@ -465,14 +490,28 @@ export const VfsFileManager = forwardRef<
                 sessionId!,
                 sourcePath,
                 newPath,
+                renameOpts,
               );
             } else {
               await renameVfsFile(vfs, sourcePath, newPath);
             }
+            console.log('[vfs-move] batch item ok (file)', {
+              sourcePath,
+              newPath,
+              via: useUserVfsTurn ? 'userVfsTurn' : 'direct',
+              totalMs: Date.now() - itemT0,
+            });
           }
           moved += 1;
         } catch (err) {
           skipped += 1;
+          console.log('[vfs-move] batch item FAILED', {
+            sourcePath,
+            newPath,
+            isDir,
+            ms: Date.now() - itemT0,
+            error: err instanceof Error ? err.message : String(err),
+          });
           if (isVfsError(err, 'ALREADY_EXISTS')) {
             showToast('目标已存在同名项，已跳过');
           } else {
@@ -480,8 +519,22 @@ export const VfsFileManager = forwardRef<
           }
         }
       }
+      if (useUserVfsTurn && moved > 0 && sessionId != null) {
+        const composerT0 = Date.now();
+        await refreshComposerStatusAfterUserVfsOps(runtime, sessionId);
+        console.log('[vfs-move] batch composer refresh', {
+          ms: Date.now() - composerT0,
+        });
+      }
       vfsBatch.exit();
+      const reloadT0 = Date.now();
       await reloadVfsListOnly();
+      console.log('[vfs-move] batch done', {
+        moved,
+        skipped,
+        reloadMs: Date.now() - reloadT0,
+        totalMs: Date.now() - batchT0,
+      });
       if (moved > 0 && skipped > 0) {
         showToast(`已移动 ${moved} 项，跳过 ${skipped} 项`);
       } else if (moved > 0) {
@@ -500,6 +553,7 @@ export const VfsFileManager = forwardRef<
       currentPath,
       reloadVfsListOnly,
       showToast,
+      scope.kind,
     ],
   );
 
