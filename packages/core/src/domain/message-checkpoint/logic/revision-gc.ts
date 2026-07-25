@@ -9,6 +9,7 @@ import {
   toPhysicalPath,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { MessageCheckpointRepository } from "../repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
@@ -22,6 +23,9 @@ export function revisionReachableKey(path: string, version: number): string {
  * Deletes vfs_revision rows under the session prefix that are not referenced
  * by live file heads or any remaining checkpoint pointer.
  *
+ * 删完本 session 不可达 revision 后，末尾经 ContentStore 跑一次**全库** blob gc
+ * （blob GC 唯一入口；禁止调用方旁路再手拼 gc）。
+ *
  * @returns Count of deleted revision rows.
  */
 export async function sweepSessionRevisions(
@@ -30,6 +34,7 @@ export async function sweepSessionRevisions(
   checkpoints: MessageCheckpointRepository,
   projectId: string,
   sessionId: string,
+  contentStore: VfsContentStore,
 ): Promise<number> {
   const scope: VfsScope = {
     kind: "session",
@@ -50,5 +55,10 @@ export async function sweepSessionRevisions(
     reachable.add(revisionReachableKey(physical, pointer.revisionVersion));
   }
 
-  return revisionRepo.deleteExceptReachable(prefix, reachable);
+  const deleted = await revisionRepo.deleteExceptReachable(prefix, reachable);
+
+  const referenced = await contentStore.collectAllReferencedHashes();
+  await contentStore.gc(referenced);
+
+  return deleted;
 }

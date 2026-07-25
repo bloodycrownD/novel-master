@@ -8,6 +8,7 @@ import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/re
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import { SESSION_KKV_COMPOSER_STATUS_DOMAINS } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
+import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { sweepSessionRevisions } from "./revision-gc.js";
@@ -28,6 +29,8 @@ export type TruncateTailDeps = {
   readonly sessionKkv: SessionKkvRepository;
   readonly revisions: VfsRevisionRepository;
   readonly entries: VfsEntryRepository;
+  /** blob GC 唯一入口经 sweepSessionRevisions 末尾触发。 */
+  readonly contentStore: VfsContentStore;
 };
 
 /**
@@ -60,6 +63,7 @@ export async function truncateTailInTransaction(
       deps.checkpoints,
       projectId,
       sessionId,
+      deps.contentStore,
     );
   }
 

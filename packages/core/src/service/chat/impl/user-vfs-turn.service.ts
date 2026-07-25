@@ -21,11 +21,13 @@ import {
 import type { WorkspaceFlushSnapshot } from "@/domain/chat/logic/workspace-flush-snapshot.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
+import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import {
   SESSION_KKV_DOMAIN_USER_VFS_PENDING,
   USER_VFS_PENDING_QUEUE_KEY,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {
   toPhysicalPath,
   type VfsScope,
@@ -230,6 +232,15 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
           }
         }
       }
+      // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
+      await sweepSessionRevisions(
+        this.deps.revisions,
+        this.deps.entries,
+        this.deps.checkpoints,
+        session.projectId,
+        sessionId,
+        new SqliteVfsContentStore(this.deps.conn),
+      );
       if (restoreErrors.length > 0) {
         return {
           ok: false,

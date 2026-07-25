@@ -33,6 +33,8 @@ import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl
 import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { createScopedVfsService } from "../../src/service/vfs/create-scoped-vfs-service.js";
+import { toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import {
   buildUserVfsDeleteOp,
   buildUserVfsMkdirOp,
@@ -546,11 +548,18 @@ describe("UserVfsTurnService", () => {
   });
 
 
-  it("T1：第二次 tool 失败时回滚已成功 path 且 pending 为空", async () => {
+  it("T-UO-SWEEP1：第二次 tool 失败时回滚已成功 path，且 sweep+blob gc；composite 后仍 sweep", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
+    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const physicalA = toPhysicalPath(scope, "/a.md");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -587,7 +596,7 @@ describe("UserVfsTurnService", () => {
         {
           id: "tu_1",
           name: "write",
-          input: { path: "/a.md", content: "A" },
+          input: { path: "/a.md", content: "A-orphan-body" },
         },
         {
           id: "tu_2",
@@ -601,6 +610,90 @@ describe("UserVfsTurnService", () => {
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
     await assert.rejects(() => svfs.read("/a.md"));
     await assert.rejects(() => svfs.read("/b.md"));
+
+    // restore 后不可达 revision 被 sweep；无引用 blob 被全库 gc
+    const keys = await revisions.listKeysUnderPrefix(
+      `/projects/${project.id}/sessions/${session.id}`,
+    );
+    assert.equal(
+      keys.some((k) => k.path === physicalA),
+      false,
+      "失败回滚后 /a.md 不可达 revision 须被 sweep",
+    );
+    const hashRows = await ctx.conn.query<{ content_hash: string }>(
+      `SELECT content_hash FROM vfs_content_blob`,
+      [],
+    );
+    const orphanHash = hashContent("A-orphan-body");
+    assert.equal(
+      hashRows.some((r) => String(r.content_hash) === orphanHash),
+      false,
+      "无引用 orphan blob 须被 gc",
+    );
+
+    // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失
+    const orphanPath = toPhysicalPath(scope, "/orphan-sweep.md");
+    await revisions.append({
+      path: orphanPath,
+      version: 99,
+      content: "pre-sweep-orphan",
+      status: "active",
+      mtimeMs: Date.now(),
+      storageKind: "inline",
+    });
+    const beforeOrphan = await revisions.findByPathAndVersion(orphanPath, 99);
+    assert.ok(beforeOrphan);
+
+    const baseVfs = createScopedVfsService(ctx.conn, scope);
+    const failingVfs = new Proxy(baseVfs, {
+      get(target, prop, receiver) {
+        if (prop === "hardDelete" || prop === "resetHeadToVersion") {
+          return async () => {
+            throw new Error("restore composite boom");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const compositeTurn = new DefaultUserVfsTurnService(
+      makeUserVfsTurnDeps(ctx.conn, {
+        toolRunner,
+        resolveToolCtx: () => ({
+          vfs: failingVfs,
+          projectId: project.id,
+          sessionId: session.id,
+          listSessionMessages: () =>
+            new SqliteMessageRepository(ctx.conn).listBySession(session.id),
+          sessionKkv: createSessionKkvService(ctx.conn),
+        }),
+      }),
+    );
+
+    const compositeResult = await compositeTurn.executeOp(session.id, {
+      actionXml:
+        '<action name="write">\n{"path":"/c.md","content":""}\n</action>\n<action name="write">\n{"path":"/d.md","content":""}\n</action>',
+      tools: [
+        {
+          id: "tu_c",
+          name: "write",
+          input: { path: "/c.md", content: "C" },
+        },
+        {
+          id: "tu_d",
+          name: "write",
+          input: { path: "/d.md", content: "D" },
+        },
+      ],
+    });
+    assert.equal(compositeResult.ok, false);
+    assert.ok(compositeResult.partialFailure);
+    const afterOrphan = await revisions.findByPathAndVersion(orphanPath, 99);
+    assert.equal(
+      afterOrphan,
+      null,
+      "restore 抛 composite 后仍须 sweep 掉不可达 revision",
+    );
   });
 
   it("T2：两次 tool 均成功时 pending 一条且磁盘保留", async () => {

@@ -12,6 +12,7 @@ import {
 } from "@/domain/message-checkpoint/logic/truncate-tail-in-transaction.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteSessionKkvRepository } from "@/domain/session-kkv/repositories/impl/sqlite-session-kkv.repository.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -27,5 +28,6 @@ export function createTruncateTailDepsFromTx(tx: TdbcConnection): TruncateTailDe
     sessionKkv: new SqliteSessionKkvRepository(tx),
     revisions: new SqliteVfsRevisionRepository(tx),
     entries: new SqliteVfsEntryRepository(tx),
+    contentStore: new SqliteVfsContentStore(tx),
   };
 }
