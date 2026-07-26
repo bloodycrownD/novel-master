@@ -38,6 +38,7 @@ import { runRead } from "./vfs/commands/read.js";
 import { runReplace } from "./vfs/commands/replace.js";
 import { runWrite } from "./vfs/commands/write.js";
 import { runExportZip } from "./vfs/commands/export-zip.js";
+import { runImportCharacterCard } from "./vfs/commands/import-character-card.js";
 import { runImportZip } from "./vfs/commands/import-zip.js";
 import { extractDbPath, parseCliArgs } from "./vfs/parse-args.js";
 
@@ -80,9 +81,13 @@ async function runVfs(argv: string[]): Promise<number> {
       await runImportZip(rt.conn, { kind: "global" }, subArgs);
       return 0;
     }
+    if (subcommand === "import-character-card") {
+      await runImportCharacterCard(rt.conn, { kind: "global" }, subArgs);
+      return 0;
+    }
     if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
       console.error(
-        "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|workplace> ...",
+        "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|import-character-card|workplace> ...",
       );
       return EXIT_USAGE;
     }
