@@ -60,14 +60,5 @@ export {
   isSchemaMigrationApplied,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
-export {
-  VFS_CONTENT_BLOB_ZLIB_V1_ID,
-  VFS_CONTENT_BLOB_VACUUM_V1_ID,
-  runVfsContentBlobDataMigration,
-  maybeVacuumAfterVfsContentBlobMigration,
-} from "./vfs-content-blob-zlib-v1.js";
+export { VFS_CONTENT_BLOB_ZLIB_V1_ID } from "./vfs-content-blob-zlib-v1.js";
 export { VFS_REVISION_REF_COUNT_V1_ID } from "./vfs-revision-ref-count-v1.js";
-export type {
-  VfsContentBlobVacuumOptions,
-  VfsContentBlobVacuumResult,
-} from "./vfs-content-blob-zlib-v1.js";
