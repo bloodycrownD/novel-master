@@ -28,7 +28,7 @@ import { ProviderError } from "@novel-master/core/provider";
 import { SessionFsError } from "@novel-master/core/session-fs";
 
 
-import { VfsError, VfsZipError } from "@novel-master/core/vfs";
+import { VfsError, VfsZipError, CharacterCardError } from "@novel-master/core/vfs";
 import { SkspError } from "@novel-master/core/sksp";
 
 export const EXIT_USAGE = 1;
@@ -41,6 +41,7 @@ export function formatCliError(error: unknown): string {
   if (
     error instanceof VfsError ||
     error instanceof VfsZipError ||
+    error instanceof CharacterCardError ||
     error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
     error instanceof CompactionConditionsError ||
@@ -67,6 +68,7 @@ export function exitCodeForError(error: unknown): number {
   if (
     error instanceof VfsError ||
     error instanceof VfsZipError ||
+    error instanceof CharacterCardError ||
     error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
     error instanceof CompactionConditionsError ||
