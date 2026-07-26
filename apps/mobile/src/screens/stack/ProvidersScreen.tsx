@@ -198,7 +198,7 @@ export function ProvidersScreen() {
                   <Text style={styles.icon}>🟢</Text>
                 )
               }
-              title={item.id}
+              title={item.displayName}
               subtitle={metaLine(item)}
               trailingMeta={
                 <ApiKeyStatusTag status={item.apiKeyStatus} tokens={tokens} />

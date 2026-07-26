@@ -28,10 +28,9 @@ const mockRuntime = {
 };
 
 const sampleValues = {
-  id: 'p1',
+  displayName: 'Test',
   protocol: 'openai' as const,
   baseUrl: 'https://api.example.com',
-  displayName: 'Test',
   apiKey: 'secret-key',
   headersJson: '',
 };

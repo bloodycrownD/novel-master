@@ -29,7 +29,7 @@ const baseValues: ProviderFormValues = {
   apiKey: 'secret-key',
 };
 
-describe('providerForm helpers', () => {
+describe('providerForm helpers (T-PI9)', () => {
   it('providerFormToCreateInput 要求 displayName 且无用户 id', () => {
     const input = providerFormToCreateInput(baseValues);
     expect(input).toMatchObject({
@@ -40,7 +40,7 @@ describe('providerForm helpers', () => {
     expect('id' in input).toBe(false);
   });
 
-  it('providerFormToCreateInput 拒绝空白名称', () => {
+  it('providerFormToCreateInput 拒绝空白名称（翻转原 omit displayName）', () => {
     expect(() =>
       providerFormToCreateInput({
         ...baseValues,
@@ -49,7 +49,7 @@ describe('providerForm helpers', () => {
     ).toThrow(/服务商名称/);
   });
 
-  it('providerFormToEditPatch 可携带 displayName', () => {
+  it('providerFormToEditPatch 可携带 displayName（翻转原 omit）', () => {
     const patch = providerFormToEditPatch({
       ...baseValues,
       displayName: '新名称',
