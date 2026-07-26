@@ -548,25 +548,20 @@ export function ConversationPanel({
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
       }
-      // D8：main 已（undo_send）parse→project 推 ops /（rewind）推空；
-      // renderer 仅正文 + annotate ∪；须保留 main 已推 ops，禁止 wipe；
-      // rewind 禁止用闭包 current.attachments 把旧 user_ops chip 盖回
+      // D8：main 已推空 ops；renderer 仅正文 + annotate ∪（禁止用 prev 盖回旧 user_ops chip）
       setComposerText(prevText => {
         const next = resolveComposerDraftAfterRollbackSuccess(
           { text: prevText, attachments: [] },
           rollbackMode,
           { text: restoreText, attachments: restoreAttachments },
         );
-        if (rollbackMode === 'undo_send') {
-          setComposerAttachments(prev =>
-            applyUndoAnnotateRestore(sessionId, restoreAttachments, prev),
-          );
-        } else {
-          // rewind：ops 半边空（main 已推 []），仅 ∪ annotate
-          setComposerAttachments(
-            applyUndoAnnotateRestore(sessionId, null, []),
-          );
-        }
+        setComposerAttachments(
+          applyUndoAnnotateRestore(
+            sessionId,
+            rollbackMode === 'undo_send' ? restoreAttachments : null,
+            [],
+          ),
+        );
         return next.text;
       });
       showToast(

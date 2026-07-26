@@ -6,10 +6,9 @@ import { Alert } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   type ChatMessage,
-  appendUserOpsLog,
+  clearUserOpsLog,
   isPlainUserUndoSendEligible,
   parseAnnotateDraftsFromAttachments,
-  parseUserOpsLogFromAttachments,
   resolveRollbackConfirmMessage,
 } from '@novel-master/core/chat';
 
@@ -412,7 +411,7 @@ export function useChatTabMessageActions({
 
       const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
-      // 删消息前 snapshot：undo_send 成功后解析批注 + 手改日志（rewind 不映回手改）
+      // 删消息前 snapshot：undo_send 成功后仅解析批注（rewind / undo_send 均清空 ops store）
       const attachmentsSnapshot =
         mode === 'undo_send' ? (target.attachments ?? []) : null;
 
@@ -429,18 +428,13 @@ export function useChatTabMessageActions({
           },
           runtime.sessions,
         );
-        // 顺序：正文 → parseAnnotate → parseUserOpsLog → project + ∪ annotate
+        // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
           const restoredAnnotate = parseAnnotateDraftsFromAttachments(
             attachmentsSnapshot,
           );
           for (const draft of restoredAnnotate) {
             addChatAnnotateDraft(sessionId, draft);
-          }
-          const restoredOps =
-            parseUserOpsLogFromAttachments(attachmentsSnapshot);
-          for (const entry of restoredOps) {
-            appendUserOpsLog(sessionId, entry);
           }
         }
         const status = await projectComposerStatusForSession(
@@ -465,23 +459,11 @@ export function useChatTabMessageActions({
             targetMessageId,
             options,
           );
-          if (mode === 'undo_send') {
-            // 可先空条作中间态，随后 applyComposerRestore 再 project
-            await refreshComposerStatusAfterSessionKkvCleared(runtime, {
-              projectId,
-              sessionId,
-            });
-          } else {
-            // rewind：不映回消息手改；project 当前 store（可能仍有未发送日志）
-            const status = await projectComposerStatusForSession(
-              runtime,
-              sessionId,
-            );
-            applyComposerStatusAttachmentsReplace({
-              sessionId,
-              attachments: status,
-            });
-          }
+          clearUserOpsLog(sessionId);
+          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+            projectId,
+            sessionId,
+          });
           resetStreamingDisplay();
           await reloadMessages(true);
           await applyComposerRestore();
