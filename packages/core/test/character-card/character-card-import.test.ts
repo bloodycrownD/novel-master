@@ -99,6 +99,34 @@ describe("CharacterCardImportService", () => {
     assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
   });
 
+  it("G-1/Z5: Phase B insert 失败整事务回滚", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-g1-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    // 对齐 ZIP Z5：目标子树先写旧文件，insert 钩子失败后应整事务回滚
+    await vfs.write("/角色/旧文件.md", "old");
+
+    const svc = createCharacterCardImportService(ctx.conn, {
+      testHook: { throwOnInsertLogical: "/角色/角色描述.md" },
+    });
+    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    await assert.rejects(() =>
+      svc.import(scope, tree, {
+        confirmed: true,
+        directoryPath: "/角色",
+      }),
+    );
+
+    assert.equal((await vfs.read("/角色/旧文件.md")).content, "old");
+    await assert.rejects(() => vfs.read("/角色/角色描述.md"));
+  });
+
   it("T-C9: importFromBytes 解析失败 → 子树不变", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-tc9-${testIsolationSuffix()}`);
