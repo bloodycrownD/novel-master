@@ -21,7 +21,7 @@ describe("character-card-to-md-tree", () => {
     assert.equal(tree.get("角色描述.md"), "只有描述");
   });
 
-  it("T-C2: first_mes + 2 alternate → 开场1..3 顺序正确", () => {
+  it("T-C2: first_mes + 2 alternate → 开场001..003 顺序正确", () => {
     const tree = characterCardJsonToMdTree({
       spec: "chara_card_v2",
       data: {
@@ -30,9 +30,23 @@ describe("character-card-to-md-tree", () => {
         alternate_greetings: ["备选A", "备选B"],
       },
     });
-    assert.equal(tree.get("开场/开场1.md"), "主开场");
-    assert.equal(tree.get("开场/开场2.md"), "备选A");
-    assert.equal(tree.get("开场/开场3.md"), "备选B");
+    assert.equal(tree.get("开场/开场001.md"), "主开场");
+    assert.equal(tree.get("开场/开场002.md"), "备选A");
+    assert.equal(tree.get("开场/开场003.md"), "备选B");
+  });
+
+  it("开场编号三位对齐：第 10 条为开场010", () => {
+    const greets = Array.from({ length: 9 }, (_, i) => `备选${i + 1}`);
+    const tree = characterCardJsonToMdTree({
+      spec: "chara_card_v2",
+      data: {
+        description: "d",
+        first_mes: "主",
+        alternate_greetings: greets,
+      },
+    });
+    assert.equal(tree.get("开场/开场001.md"), "主");
+    assert.equal(tree.get("开场/开场010.md"), "备选9");
   });
 
   it("T-C3: 两条 comment 均为「原神」→ 原神.md 与 原神-2.md", () => {

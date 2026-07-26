@@ -120,7 +120,9 @@ export function normalizedCardToMdTree(
 
   const openings = collectOpenings(card);
   for (let i = 0; i < openings.length; i++) {
-    tree.set(`开场/开场${i + 1}.md`, openings[i]!);
+    // 三位数字对齐：开场001、开场002 … 开场010
+    const index = String(i + 1).padStart(3, "0");
+    tree.set(`开场/开场${index}.md`, openings[i]!);
   }
 
   const entries = card.characterBookEntries;

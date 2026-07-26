@@ -23,7 +23,7 @@ const SAMPLE_V2 = {
 
 const EXPECTED_UNDER_ROLE = [
   "/角色/世界书/设定.md",
-  "/角色/开场/开场1.md",
+  "/角色/开场/开场001.md",
   "/角色/角色描述.md",
 ].sort();
 

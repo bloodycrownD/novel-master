@@ -65,7 +65,7 @@ describe("CharacterCardImportService", () => {
     });
 
     assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
-    assert.equal((await vfs.read("/角色/开场/开场1.md")).content, "开场一");
+    assert.equal((await vfs.read("/角色/开场/开场001.md")).content, "开场一");
     assert.ok(
       (await vfs.read("/角色/世界书/设定.md")).content.includes("世界书正文"),
     );
@@ -254,6 +254,6 @@ describe("CharacterCardImportService", () => {
       directoryPath: "/开场",
     });
     assert.equal((await vfs.read("/开场/角色描述.md")).content, "d");
-    assert.equal((await vfs.read("/开场/开场/开场1.md")).content, "hi");
+    assert.equal((await vfs.read("/开场/开场/开场001.md")).content, "hi");
   });
 });
