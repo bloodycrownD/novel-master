@@ -91,4 +91,21 @@ export interface VfsRevisionRepository {
     physicalPrefix: string,
     reachable: ReadonlySet<string>,
   ): Promise<number>;
+
+  /** 对 (path, version) 的 ref_count 增减；行不存在且 delta<0 时为 no-op。 */
+  adjustRefCount(path: string, version: number, delta: number): Promise<void>;
+
+  /** 将 ref_count 上调至 expected（只增不减，保守纠偏）。 */
+  repairRefCountFloor(
+    path: string,
+    version: number,
+    expected: number,
+  ): Promise<boolean>;
+
+  /**
+   * 删除前缀下 ref_count <= 0 的 revision 行。
+   *
+   * @returns 删除行数
+   */
+  deleteUnreferencedUnderPrefix(physicalPrefix: string): Promise<number>;
 }

@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS vfs_revision (
   mtime_ms INTEGER NOT NULL,
   storage_kind TEXT NOT NULL DEFAULT 'inline',
   content_hash TEXT NULL,
+  ref_count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (path, version)
 )`.trim();
 

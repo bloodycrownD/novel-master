@@ -32,6 +32,8 @@ export interface VfsContentStore {
 
   /**
    * 收集全库仍被 `vfs_entry` ∪ `vfs_revision` 引用的非空 `content_hash`。
+   *
+   * @remarks 全库 blob 回收算法唯一入口之一；须经 {@link runDeferredBlobGc} 调度，禁止回滚热路径 sync 调用。
    */
   collectAllReferencedHashes(): Promise<Set<string>>;
 }

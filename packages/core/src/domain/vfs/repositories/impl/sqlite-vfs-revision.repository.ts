@@ -241,6 +241,82 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return deleted;
   }
 
+  async adjustRefCount(
+    path: string,
+    version: number,
+    delta: number,
+  ): Promise<void> {
+    if (delta === 0) {
+      return;
+    }
+    const normalized = normalizePath(path);
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE vfs_revision SET ref_count = ref_count + #{delta}
+       WHERE path = #{path} AND version = #{version}`,
+      { path: normalized, version, delta },
+    );
+  }
+
+  async repairRefCountFloor(
+    path: string,
+    version: number,
+    expected: number,
+  ): Promise<boolean> {
+    const normalized = normalizePath(path);
+    const rows = await queryTemplate<{ ref_count: number }>(
+      this.conn,
+      this.parser,
+      `SELECT ref_count FROM vfs_revision
+       WHERE path = #{path} AND version = #{version}`,
+      { path: normalized, version },
+    );
+    const row = rows[0];
+    if (row == null) {
+      return false;
+    }
+    const current = Number(row.ref_count);
+    if (current >= expected) {
+      return false;
+    }
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE vfs_revision SET ref_count = #{expected}
+       WHERE path = #{path} AND version = #{version}`,
+      { path: normalized, version, expected },
+    );
+    return true;
+  }
+
+  async deleteUnreferencedUnderPrefix(physicalPrefix: string): Promise<number> {
+    const base = normalizePath(physicalPrefix);
+    const escaped = base.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const childPattern = base === "/" ? "/%" : `${escaped}/%`;
+    const before = await queryTemplate<{ n: number }>(
+      this.conn,
+      this.parser,
+      `SELECT COUNT(*) AS n FROM vfs_revision
+       WHERE (path = #{path} OR path LIKE #{childPattern} ESCAPE '\\')
+         AND ref_count <= 0`,
+      { path: base, childPattern },
+    );
+    const count = Number(before[0]?.n ?? 0);
+    if (count === 0) {
+      return 0;
+    }
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM vfs_revision
+       WHERE (path = #{path} OR path LIKE #{childPattern} ESCAPE '\\')
+         AND ref_count <= 0`,
+      { path: base, childPattern },
+    );
+    return count;
+  }
+
   private async rowToRevision(row: Row): Promise<VfsRevision> {
     const statusRaw = String(row.status);
     const status: VfsRevisionStatus =
