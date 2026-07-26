@@ -1,5 +1,5 @@
 /**
- * Resolves effective provider API key (SKSP override, then builtin default).
+ * 解析有效的 provider API key（SKSP 覆盖，再回落到内置默认）。
  *
  * @module domain/provider/logic/resolve-provider-api-key
  */
@@ -13,10 +13,10 @@ import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { builtinDefaultApiKey } from "./builtin-providers.js";
 
 /**
- * Returns SKSP-stored key, else builtin default for known built-in providers.
+ * 返回 SKSP 存储的密钥，否则按 builtin_key 取内置默认。
  */
 export async function resolveProviderApiKey(
-  provider: Pick<LlmProvider, "id" | "secretRef">,
+  provider: Pick<LlmProvider, "id" | "secretRef" | "builtinKey">,
   secretStore: SecretStore,
 ): Promise<string> {
   const ref = resolveProviderApiKeySecretRef(provider);
@@ -24,7 +24,10 @@ export async function resolveProviderApiKey(
   if (stored != null && stored !== "") {
     return stored;
   }
-  const fallback = builtinDefaultApiKey(provider.id);
+  const fallback =
+    provider.builtinKey != null
+      ? builtinDefaultApiKey(provider.builtinKey)
+      : undefined;
   if (fallback != null && fallback !== "") {
     return fallback;
   }
@@ -33,14 +36,16 @@ export async function resolveProviderApiKey(
   });
 }
 
-/** Whether list/UI should treat the provider as having a usable API key. */
+/** list/UI 是否应把该服务商视为已配置可用 API key。 */
 export async function providerApiKeyIsConfigured(
-  provider: Pick<LlmProvider, "id" | "secretRef">,
+  provider: Pick<LlmProvider, "id" | "secretRef" | "builtinKey">,
   secretStore: SecretStore,
 ): Promise<boolean> {
   const ref = resolveProviderApiKeySecretRef(provider);
   if (await secretStore.has(ref)) {
     return true;
   }
-  return builtinDefaultApiKey(provider.id) != null;
+  return (
+    provider.builtinKey != null && builtinDefaultApiKey(provider.builtinKey) != null
+  );
 }

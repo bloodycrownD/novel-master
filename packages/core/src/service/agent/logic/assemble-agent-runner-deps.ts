@@ -6,6 +6,7 @@
 
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
+import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -31,6 +32,8 @@ export interface AssembleAgentRunnerDepsInput {
     readonly savedModelRepo?: SavedModelRepository;
     /** 事件轨 savedModels 别名。 */
     readonly savedModels?: SavedModelRepository;
+    readonly providerRepo?: Pick<ProviderRepository, "findById">;
+    readonly providers?: Pick<ProviderRepository, "findById">;
     readonly compactionConditionEvaluator?: CompactionConditionEvaluator;
     readonly eventOrchestrator?: EventOrchestrator;
   };
@@ -46,11 +49,14 @@ export function assembleAgentRunnerDeps(
 ): CreateAgentRunnerDeps {
   const savedModels =
     input.runtime.savedModelRepo ?? input.runtime.savedModels;
+  const providers =
+    input.runtime.providerRepo ?? input.runtime.providers;
 
   const base: CreateAgentRunnerDeps = {
     session: input.session,
     modelRequests: input.runtime.modelRequests,
     savedModels: savedModels as SavedModelRepository,
+    providers,
     registry: input.registry,
     toolCtx: input.toolCtx,
     messageCheckpoint: input.runtime.messageCheckpoint,

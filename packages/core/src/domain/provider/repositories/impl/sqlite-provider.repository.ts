@@ -1,5 +1,5 @@
 /**
- * SQLite `llm_provider` repository.
+ * SQLite `llm_provider` repository。
  *
  * @module domain/provider/repositories/impl/sqlite-provider.repository
  */
@@ -34,11 +34,17 @@ function parseHeaders(json: string): Record<string, string> {
 }
 
 function rowToProvider(row: Row): LlmProvider {
+  const displayRaw = row.display_name;
+  const displayName =
+    displayRaw != null && String(displayRaw).trim() !== ""
+      ? String(displayRaw)
+      : String(row.id);
   return {
     id: String(row.id),
+    builtinKey: row.builtin_key != null ? String(row.builtin_key) : null,
     protocol: String(row.protocol) as LlmProtocolKind,
     baseUrl: String(row.base_url),
-    displayName: row.display_name != null ? String(row.display_name) : null,
+    displayName,
     secretRef: row.secret_ref != null ? String(row.secret_ref) : null,
     headers: parseHeaders(String(row.headers_json ?? "{}")),
     isBuiltin: Number(row.is_builtin) === 1,
@@ -57,7 +63,7 @@ export class SqliteProviderRepository implements ProviderRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, protocol, base_url, display_name, secret_ref,
+      `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
               headers_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider ORDER BY id`,
       {},
@@ -69,7 +75,7 @@ export class SqliteProviderRepository implements ProviderRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, protocol, base_url, display_name, secret_ref,
+      `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
               headers_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider WHERE id = #{id}`,
       { id },
@@ -85,14 +91,15 @@ export class SqliteProviderRepository implements ProviderRepository {
       this.conn,
       this.parser,
       `INSERT INTO llm_provider (
-        id, protocol, base_url, display_name, secret_ref,
+        id, builtin_key, protocol, base_url, display_name, secret_ref,
         headers_json, is_builtin, created_at_ms, updated_at_ms
       ) VALUES (
-        #{id}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef},
+        #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef},
         #{headersJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
         id: provider.id,
+        builtinKey: provider.builtinKey,
         protocol: provider.protocol,
         baseUrl: provider.baseUrl,
         displayName: provider.displayName,

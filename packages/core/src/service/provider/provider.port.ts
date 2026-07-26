@@ -2,10 +2,10 @@ import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface CreateProviderInput {
-  readonly id: string;
   readonly protocol: LlmProtocolKind;
   readonly baseUrl: string;
-  readonly displayName?: string;
+  /** trim 后非空，否则 INVALID_ARGUMENT。 */
+  readonly displayName: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly apiKey?: string;
 }
@@ -13,7 +13,8 @@ export interface CreateProviderInput {
 export interface EditProviderPatch {
   readonly protocol?: LlmProtocolKind;
   readonly baseUrl?: string;
-  readonly displayName?: string | null;
+  /** 若出现则 trim 后必须非空（禁止写回 null / 空白）。 */
+  readonly displayName?: string;
   readonly headers?: Readonly<Record<string, string>>;
   readonly apiKey?: string;
 }

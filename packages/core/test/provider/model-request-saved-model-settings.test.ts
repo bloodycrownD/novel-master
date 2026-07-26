@@ -1,3 +1,4 @@
+﻿import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
@@ -49,8 +50,8 @@ describe("ModelRequestService saved model sampling", () => {
     try {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
-      await secrets.set("provider/openai/apiKey", "sk-test");
-      const saved = await bundle.providerModels.create("openai", "profile-merge");
+      await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
+      const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "profile-merge");
       await bundle.providerModels.updateSettings(saved.id, {
         sampling: {
           enabled: true,
@@ -85,8 +86,8 @@ describe("ModelRequestService saved model sampling", () => {
     try {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
-      await secrets.set("provider/openai/apiKey", "sk-test");
-      const saved = await bundle.providerModels.create("openai", "no-profile");
+      await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
+      const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "no-profile");
       await bundle.modelRequests.request(saved.id, "hi", {
         system: "test",
       });
@@ -127,8 +128,8 @@ describe("ModelRequestService saved model sampling", () => {
         maxDelayMs: 0,
         jitterRatio: 0,
       });
-      await secrets.set("provider/openai/apiKey", "sk-test");
-      const saved = await bundle.providerModels.create("openai", "retry-policy");
+      await secrets.set(`provider/${BUILTIN_PROVIDER_UUID_OPENAI}/apiKey`, "sk-test");
+      const saved = await bundle.providerModels.create(BUILTIN_PROVIDER_UUID_OPENAI, "retry-policy");
 
       const out = await bundle.modelRequests.request(saved.id, "hi", {
         system: "test",

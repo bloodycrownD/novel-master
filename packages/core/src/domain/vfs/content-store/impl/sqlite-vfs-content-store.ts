@@ -5,6 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import type { SqlValue } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import {
   executeTemplate,
@@ -174,7 +175,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
   async get(contentHash: string): Promise<string> {
     const rows = await queryTemplate<{
       encoding: string;
-      bytes: unknown;
+      bytes: SqlValue;
     }>(
       this.conn,
       this.parser,

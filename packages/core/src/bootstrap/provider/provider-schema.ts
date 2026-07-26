@@ -1,5 +1,5 @@
 /**
- * LLM provider / model DDL.
+ * LLM provider / model DDL。
  *
  * @module bootstrap/provider/provider-schema
  */
@@ -7,9 +7,10 @@
 export const PROVIDER_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS llm_provider (
   id TEXT PRIMARY KEY,
+  builtin_key TEXT UNIQUE,
   protocol TEXT NOT NULL CHECK (protocol IN ('openai', 'anthropic', 'gemini')),
   base_url TEXT NOT NULL,
-  display_name TEXT,
+  display_name TEXT NOT NULL,
   secret_ref TEXT,
   headers_json TEXT NOT NULL DEFAULT '{}',
   is_builtin INTEGER NOT NULL DEFAULT 0,

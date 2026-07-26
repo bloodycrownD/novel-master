@@ -9,6 +9,7 @@ import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
 import type { RegexConfigService } from "../regex/regex-config.port.js";
@@ -25,6 +26,7 @@ export interface CreateAgentRunnerDeps {
   readonly session: AgentSession;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
+  readonly providers?: Pick<ProviderRepository, "findById">;
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;

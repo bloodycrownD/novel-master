@@ -38,6 +38,7 @@ import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
 import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
+import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
@@ -68,6 +69,8 @@ export interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
+  /** 用于自定义服务商协议推断；缺省时仅内置固定 UUID 可解析。 */
+  readonly providers?: Pick<ProviderRepository, "findById">;
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
@@ -273,6 +276,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const protocol = await inferLlmProtocolFromSavedModelId(
           options.savedModelId,
           this.deps.savedModels,
+          this.deps.providers,
         );
         const exportMessages = normalizeForLlmExport(
           llmInput.messages,

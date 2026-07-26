@@ -16,6 +16,7 @@ function stubProvider(
 ): LlmProvider {
   return {
     id,
+    builtinKey: null,
     protocol,
     baseUrl: "https://example.com/v1",
     displayName: id,

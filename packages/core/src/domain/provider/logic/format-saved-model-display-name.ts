@@ -4,10 +4,10 @@
  * @module domain/provider/logic/format-saved-model-display-name
  */
 
-/** 由 providerId 与持久化 modelName 派生 UI/CLI 展示路径。 */
+/** 主文案前缀为服务商 displayName（非技术 id）。 */
 export function formatSavedModelDisplayName(
-  providerId: string,
+  providerDisplayName: string,
   modelName: string,
 ): string {
-  return `${providerId}/${modelName}`;
+  return `${providerDisplayName}/${modelName}`;
 }

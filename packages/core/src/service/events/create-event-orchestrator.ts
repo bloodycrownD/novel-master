@@ -13,6 +13,7 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { RunAgentHandlerDeps } from "./impl/actions/run-agent.handler.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
+import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -41,6 +42,7 @@ export function createRunAgentHandlerDeps(input: {
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
+  readonly providers?: Pick<ProviderRepository, "findById">;
   readonly workplace: (scope: VfsScope) => WorkplaceService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
@@ -54,6 +56,7 @@ export function createRunAgentHandlerDeps(input: {
     agentRegistry: input.agentRegistry,
     modelRequests: input.modelRequests,
     savedModels: input.savedModels,
+    providers: input.providers,
     workplace: input.workplace,
     sessionVfs: input.sessionVfs,
     messageCheckpoint: input.messageCheckpoint,

@@ -1,10 +1,11 @@
 /**
- * Default provider CRUD service.
+ * 默认 provider CRUD 服务。
  *
  * @module service/provider/impl/provider.service
  */
 
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
+import { randomUUID } from "@/infra/random-uuid.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import {
@@ -14,7 +15,6 @@ import {
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import { BUILTIN_PROVIDER_IDS } from "@/domain/provider/logic/builtin-providers.js";
 import { providerApiKeyIsConfigured } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import { normalizeBaseUrl } from "@/infra/llm-protocol/logic/http-util.js";
 import type {
@@ -24,8 +24,6 @@ import type {
   ProviderService,
 } from "../provider.port.js";
 
-const BUILTIN_IDS = new Set(BUILTIN_PROVIDER_IDS);
-
 export interface DefaultProviderServiceDeps {
   readonly providers: ProviderRepository;
   readonly suggestions: ModelSuggestionRepository;
@@ -33,7 +31,22 @@ export interface DefaultProviderServiceDeps {
   readonly secretStore: SecretStore;
 }
 
-/** Provider configuration service. */
+function requireNonEmptyDisplayName(
+  raw: string,
+  providerId?: string,
+): string {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    throw new ProviderError(
+      "INVALID_ARGUMENT",
+      "displayName 不能为空",
+      providerId != null ? { providerId } : undefined,
+    );
+  }
+  return trimmed;
+}
+
+/** Provider 配置服务。 */
 export class DefaultProviderService implements ProviderService {
   constructor(private readonly deps: DefaultProviderServiceDeps) {}
 
@@ -58,31 +71,19 @@ export class DefaultProviderService implements ProviderService {
   }
 
   async create(input: CreateProviderInput): Promise<LlmProvider> {
-    if (BUILTIN_IDS.has(input.id)) {
-      throw new ProviderError(
-        "BUILTIN_PROVIDER",
-        `Cannot create built-in provider id: ${input.id}`,
-        { providerId: input.id },
-      );
-    }
-    const existing = await this.deps.providers.findById(input.id);
-    if (existing) {
-      throw new ProviderError("CONFLICT", `Provider already exists: ${input.id}`, {
-        providerId: input.id,
-      });
-    }
+    const displayName = requireNonEmptyDisplayName(input.displayName);
+    const id = randomUUID();
     const now = Date.now();
-    const secretRef = input.apiKey
-      ? providerApiKeyRef(input.id)
-      : null;
+    const secretRef = input.apiKey ? providerApiKeyRef(id) : null;
     if (input.apiKey) {
       await this.deps.secretStore.set(secretRef!, input.apiKey);
     }
     const provider: LlmProvider = {
-      id: input.id,
+      id,
+      builtinKey: null,
       protocol: input.protocol,
       baseUrl: normalizeBaseUrl(input.baseUrl),
-      displayName: input.displayName ?? null,
+      displayName,
       secretRef,
       headers: input.headers ?? {},
       isBuiltin: false,
@@ -115,14 +116,17 @@ export class DefaultProviderService implements ProviderService {
         await this.deps.secretStore.set(secretRef, patch.apiKey);
       }
     }
+    const displayName =
+      patch.displayName !== undefined
+        ? requireNonEmptyDisplayName(patch.displayName, id)
+        : provider.displayName;
     const updated: LlmProvider = {
       ...provider,
       protocol: patch.protocol ?? provider.protocol,
       baseUrl: patch.baseUrl
         ? normalizeBaseUrl(patch.baseUrl)
         : provider.baseUrl,
-      displayName:
-        patch.displayName !== undefined ? patch.displayName : provider.displayName,
+      displayName,
       headers: patch.headers ?? provider.headers,
       secretRef,
       updatedAtMs: Date.now(),

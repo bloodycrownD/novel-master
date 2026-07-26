@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 import { ProviderError } from "../../src/errors/provider-errors.js";
 import { DefaultModelRequestService } from "../../src/service/provider/impl/model-request.service.js";
 import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adapter.port.js";
@@ -12,7 +13,8 @@ import { defaultSavedModelSettings } from "../../src/domain/provider/model/defau
 const providerRepo: ProviderRepository = {
   list: async () => [],
   findById: async () => ({
-    id: "openai",
+    id: BUILTIN_PROVIDER_UUID_OPENAI,
+    builtinKey: null,
     protocol: "openai",
     baseUrl: "https://api.openai.com/v1",
     displayName: "OpenAI",
@@ -35,7 +37,7 @@ const savedModels: SavedModelRepository = {
     id === SAVED_MODEL_ID
       ? {
           id: SAVED_MODEL_ID,
-          providerId: "openai",
+          providerId: BUILTIN_PROVIDER_UUID_OPENAI,
           vendorModelId: "gpt-4o-mini",
           modelName: "gpt-4o-mini",
           settings: defaultSavedModelSettings("gpt-4o-mini"),

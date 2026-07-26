@@ -32,6 +32,7 @@ function createService(
     list: async () => [],
     findById: async () => ({
       id: protocol,
+      builtinKey: null,
       protocol,
       baseUrl: "https://api.example.com/v1",
       displayName: protocol,
