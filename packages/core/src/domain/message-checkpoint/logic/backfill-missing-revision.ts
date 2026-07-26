@@ -6,6 +6,7 @@
 
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 
 /** {@link backfillMissingRevisionIfNeeded} 依赖。 */
 export type BackfillRevisionDeps = {
@@ -46,6 +47,7 @@ export async function backfillMissingRevisionIfNeeded(
       mtimeMs,
       storageKind: entry.storageKind,
     });
+    await adjustRef(deps.revisionRepo, physicalPath, targetVersion, +1);
     return true;
   }
 
@@ -57,5 +59,6 @@ export async function backfillMissingRevisionIfNeeded(
     mtimeMs,
     storageKind: "inline",
   });
+  await adjustRef(deps.revisionRepo, physicalPath, targetVersion, +1);
   return true;
 }

@@ -13,6 +13,7 @@ import { toPhysicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -67,6 +68,7 @@ export async function seedForkCopyParity(
         mtimeMs: Date.now(),
         storageKind: "inline",
       });
+      await adjustRef(revisions, physical, head.headVersion, +1);
       continue;
     }
     const contentHash = await entries.findContentHash(physical);
@@ -79,6 +81,7 @@ export async function seedForkCopyParity(
       mtimeMs: entry.mtimeMs,
       storageKind: entry.storageKind,
     });
+    await adjustRef(revisions, physical, head.headVersion, +1);
   }
 
   await workplace.copyScope(

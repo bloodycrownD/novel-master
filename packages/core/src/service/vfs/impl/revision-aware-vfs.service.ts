@@ -11,6 +11,10 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-not-found-error.js";
+import {
+  adjustRef,
+  transferLiveRef,
+} from "@/domain/vfs/logic/revision-ref-count.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {
   VfsError,
@@ -165,11 +169,19 @@ export class RevisionAwareVfsService implements VfsService {
       // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
       const contentHash = await contentStore.put(rev.content);
       await ensureParentDirectories(entryRepo, normalized);
+      const existing = await entryRepo.findByPath(normalized);
+      const oldVersion =
+        existing?.entryKind === "file" ? existing.version : null;
       await entryRepo.setHeadContentHash(normalized, {
         version: rev.version,
         contentHash,
         mtimeMs: rev.mtimeMs,
       });
+      if (oldVersion != null && oldVersion !== rev.version) {
+        await transferLiveRef(revisionRepo, normalized, oldVersion, rev.version);
+      } else if (oldVersion == null) {
+        await adjustRef(revisionRepo, normalized, rev.version, +1);
+      }
     });
   }
 
@@ -184,6 +196,11 @@ export class RevisionAwareVfsService implements VfsService {
 
     await runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
+      const revisionRepo = new SqliteVfsRevisionRepository(tx);
+      const entry = await entryRepo.findByPath(normalized);
+      if (entry != null && entry.entryKind === "file") {
+        await adjustRef(revisionRepo, normalized, entry.version, -1);
+      }
       // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
       await entryRepo.delete(normalized, {
         recursive: options?.recursive === true,
@@ -245,6 +262,7 @@ async function writeWithRevision(
       mtimeMs,
       storageKind: "inline",
     });
+    await adjustRef(revisionRepo, normalized, version, +1);
     return { version };
   }
 
@@ -288,6 +306,7 @@ async function writeWithRevision(
     mtimeMs,
     storageKind: existing.storageKind,
   });
+  await transferLiveRef(revisionRepo, normalized, existing.version, version);
   return { version };
 }
 
@@ -305,6 +324,7 @@ async function appendDeletedRevisionsForSubtree(
     if (fileEntry == null || fileEntry.entryKind !== "file") {
       continue;
     }
+    await adjustRef(revisionRepo, fileEntry.path, fileEntry.version, -1);
     await appendDeletedRevision(
       revisionRepo,
       fileEntry.path,
@@ -337,6 +357,7 @@ async function deleteWithRevision(
 
   if (entry.entryKind === "file") {
     await appendDeletedRevision(revisionRepo, entry.path, entry.version, entry.storageKind);
+    await adjustRef(revisionRepo, entry.path, entry.version, -1);
     await entryRepo.delete(path, { recursive: false });
     return;
   }
@@ -365,4 +386,5 @@ async function appendDeletedRevision(
     mtimeMs: Date.now(),
     storageKind,
   });
+  await adjustRef(revisionRepo, path, deletedVersion, +1);
 }

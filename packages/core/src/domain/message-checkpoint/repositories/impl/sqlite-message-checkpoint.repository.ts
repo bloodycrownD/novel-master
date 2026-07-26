@@ -12,6 +12,11 @@ import {
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import {
+  decrementRefsForCheckpointFiles,
+  incrementRefsForCheckpointFiles,
+} from "@/domain/vfs/logic/revision-ref-count.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MessageCheckpointFile } from "../../model/message-checkpoint.js";
 import type {
   MessageCheckpointDistinctPointer,
@@ -25,6 +30,27 @@ function rowToFilePointer(row: Row): MessageCheckpointFile {
     messageId: String(row.message_id),
     logicalPath: String(row.logical_path),
     revisionVersion: Number(row.revision_version),
+  };
+}
+
+async function resolveSessionScope(
+  conn: TdbcConnection,
+  parser: SqlTemplateParser,
+  sessionId: string,
+): Promise<{ projectId: string; sessionId: string } | null> {
+  const rows = await queryTemplate<{ project_id: string }>(
+    conn,
+    parser,
+    `SELECT project_id FROM chat_session WHERE id = #{sessionId} LIMIT 1`,
+    { sessionId },
+  );
+  const row = rows[0];
+  if (row == null) {
+    return null;
+  }
+  return {
+    projectId: String(row.project_id),
+    sessionId,
   };
 }
 
@@ -63,6 +89,29 @@ export class SqliteMessageCheckpointRepository
   }
 
   async insertCheckpoint(input: MessageCheckpointInsertInput): Promise<void> {
+    const scope = await resolveSessionScope(
+      this.conn,
+      this.parser,
+      input.sessionId,
+    );
+    const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
+
+    const oldRows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT session_id, message_id, logical_path, revision_version
+       FROM message_checkpoint_file
+       WHERE session_id = #{sessionId} AND message_id = #{messageId}`,
+      { sessionId: input.sessionId, messageId: input.messageId },
+    );
+    if (scope != null && oldRows.length > 0) {
+      await decrementRefsForCheckpointFiles(
+        revisionRepo,
+        { kind: "session", ...scope },
+        oldRows.map((row) => rowToFilePointer(row)),
+      );
+    }
+
     await executeTemplate(
       this.conn,
       this.parser,
@@ -101,6 +150,17 @@ export class SqliteMessageCheckpointRepository
           logicalPath: normalizePath(file.logicalPath),
           revisionVersion: file.revisionVersion,
         },
+      );
+    }
+
+    if (scope != null && input.files.length > 0) {
+      await incrementRefsForCheckpointFiles(
+        revisionRepo,
+        { kind: "session", ...scope },
+        input.files.map((file) => ({
+          logicalPath: file.logicalPath,
+          revisionVersion: file.revisionVersion,
+        })),
       );
     }
   }
@@ -213,10 +273,33 @@ export class SqliteMessageCheckpointRepository
     if (messageIds.length === 0) {
       return;
     }
+    const scope = await resolveSessionScope(
+      this.conn,
+      this.parser,
+      sessionId,
+    );
+    const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
     const bindings = Object.fromEntries(
       messageIds.map((id, i) => [`id${i}`, id]),
     );
     const inClause = messageIds.map((_, i) => `#{id${i}}`).join(", ");
+
+    const fileRows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT session_id, message_id, logical_path, revision_version
+       FROM message_checkpoint_file
+       WHERE session_id = #{sessionId} AND message_id IN (${inClause})`,
+      { sessionId, ...bindings },
+    );
+    if (scope != null && fileRows.length > 0) {
+      await decrementRefsForCheckpointFiles(
+        revisionRepo,
+        { kind: "session", ...scope },
+        fileRows.map((row) => rowToFilePointer(row)),
+      );
+    }
+
     await executeTemplate(
       this.conn,
       this.parser,
@@ -234,6 +317,28 @@ export class SqliteMessageCheckpointRepository
   }
 
   async deleteCheckpointsForSession(sessionId: string): Promise<void> {
+    const scope = await resolveSessionScope(
+      this.conn,
+      this.parser,
+      sessionId,
+    );
+    const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
+    const fileRows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT session_id, message_id, logical_path, revision_version
+       FROM message_checkpoint_file
+       WHERE session_id = #{sessionId}`,
+      { sessionId },
+    );
+    if (scope != null && fileRows.length > 0) {
+      await decrementRefsForCheckpointFiles(
+        revisionRepo,
+        { kind: "session", ...scope },
+        fileRows.map((row) => rowToFilePointer(row)),
+      );
+    }
+
     await executeTemplate(
       this.conn,
       this.parser,

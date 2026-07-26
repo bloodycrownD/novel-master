@@ -16,8 +16,8 @@ import { userOpsLogEntryFromTurnOp } from "@/domain/chat/logic/user-ops-log-from
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
@@ -140,8 +140,9 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
         this.deps.checkpoints,
         session.projectId,
         sessionId,
-        new SqliteVfsContentStore(this.deps.conn),
+        this.deps.conn,
       );
+      await runDeferredBlobGc(this.deps.conn);
       if (restoreErrors.length > 0) {
         return {
           ok: false,

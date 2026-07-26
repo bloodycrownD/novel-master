@@ -21,9 +21,9 @@ import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js"
 import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
@@ -159,9 +159,10 @@ export class DefaultMessageService implements MessageService {
         checkpoints,
         session.projectId,
         message.sessionId,
-        new SqliteVfsContentStore(tx),
+        tx,
       );
     });
+    await runDeferredBlobGc(this.deps.conn);
     sessionApiPromptTokenCache.invalidate(message.sessionId);
   }
 
