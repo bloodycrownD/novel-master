@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### 变更
+
+- **服务商身份 UUID 化（破坏性）**：服务商技术主键改为 UUID；创建时填写「服务商名称」（必填），UI 主路径按名称展示（正式撤销 `mobile-bugfix` 中「移除展示名、改以服务商 ID 展示」的决策）。CLI 创建改用 `--name`，旧 `--providerId <slug>` 创建不再兼容。密钥环境变量改为 `NOVEL_MASTER_PROVIDER_<UUID>_API_KEY`，旧如 `NOVEL_MASTER_PROVIDER_OPENAI_API_KEY` 不再命中
+
 ## [1.4.07] - 2026-07-26
 
 ### 新增
