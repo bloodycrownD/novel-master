@@ -147,7 +147,7 @@
 | SD-encoding-zlib-b64 | SPEC 曾钉死 `encoding='zlib'`；Hermes 上 `put` 落 **`zlib-b64`**（`blob-bytes-codec.ts`），读路径已兼容；Node 测 T-CS2 仍断言 `zlib` | **fixed / 已收窄**（2026-07-26 impl-docs：vfs spec 写清 Node zlib / RN zlib-b64） |
 | SD-schema-mark-early | `vfs-content-blob-zlib-v1` 的 `up()` mark applied 后，明文搬迁才在 bootstrap 外跑；中间态靠 `resolve-stored-content` 读遗留明文 | **fixed / 已收窄**（2026-07-26 impl-docs：vfs spec 写清 mark 早于 data migrate） |
 | SD-session-del-order | SPEC Step 9 顺序为「−ref → 删行 → revision 打扫」；现网 `deleteSessionFsData` 在 `deleteVfsPrefix`（entry 删）**之前**做 revision 前缀 DELETE，事务内 entry 短暂指向已删 revision | **fixed / 已收窄**（2026-07-26 impl-docs：rollback redesign spec Step 9 钉死现网偏差） |
-| SD-user-ops-d1-degrade | D1 日志失败降级：不回滚盘 ✅；toast / 记错路径 ❌（见 **user-ops/B-1**） | **下游文档同步**（B-1 闭合后标 fixed；本 wave 未改） |
+| SD-user-ops-d1-degrade | D1 日志失败降级：不回滚盘 ✅；Core 返回 `logAppended=false`（**user-ops/B-1** 已闭合）；上层 toast 可选后续接线 | **fixed**（2026-07-26 code-dev-loop：Core 信号已具备） |
 | SD-user-ops-d8-append | **产品翻转**：undo_send 不再映回 ops → 与 rewind 一致 `clearUserOpsLog` + 推空；下游须同步改 user-ops PRD/SPEC D8 + T-UOL7 等测例 | **fixed**（2026-07-26 impl-docs：user-ops prd/spec D8 + T-UOL7 已同步；clients 注释已对齐） |
 | SD-repair-idle | PRD 验收含「空闲校验可纠偏」；`repairRefCounts` 未接线生产调度 | **fixed / 已收窄**（2026-07-26 impl-docs：rollback prd 注明 API 已实现、生产调度留后续 Step） |
 
@@ -198,7 +198,7 @@
 - **SD-deferred-gc-trigger**：✅ `vfs-revision-storage-optimize/spec.md` + prd 以 `runDeferredBlobGc` deferred 合同为准
 - **SD-migration-batch / SD-encoding-zlib-b64 / SD-schema-mark-early**：✅ vfs-revision PRD/SPEC 写清 RN 分批迁移、zlib-b64、mark 早于 data migrate
 - **SD-session-del-order**：✅ rollback redesign spec Step 9 钉死现网 delete 顺序偏差
-- **SD-user-ops-d1-degrade**：⏳ `user-ops/B-1` 闭合后标 **fixed**（本 wave 未改）
+- **SD-user-ops-d1-degrade**：✅ Core `logAppended` 已闭合；apps toast 可选后续
 - **SD-user-ops-d8-append**：✅ user-ops PRD/SPEC **D8** + T-UOL7；Desktop clients 注释已对齐
 - **SD-repair-idle**：✅ rollback prd 注明 `repairRefCounts` 已实现、生产调度留后续
 
@@ -212,11 +212,12 @@
 
 | 项 | 状态 |
 |----|------|
-| fix-spec-ready | **no**（must-fix 代码项仍 open；impl-docs wave 已闭合 SD 文档同步；**非** merge-ready） |
+| fix-spec-ready | **yes**（code-dev-loop 已闭合全部 must-fix + SD；**非** merge-ready） |
 | fix_spec_path | `.apm/kb/docs/Iterations/vfs-revision-storage-optimize/cr-fix-spec.md` |
-| dag_version / review_round | 2 / 2 |
-| P0 / P1 / P2（已写入 fix-spec） | 0 / 7 / 4 |
+| code_dev_loop | **dev-ready**（HEAD 见 iteration-state；2026-07-26） |
+| dag_version / review_round | 2 / 2（CR）+ code-dev-loop v1 |
+| P0 / P1 / P2（已写入且已实现） | 0 / 7 / 4 |
 | 未写入的开放 must-fix | 0 |
-| spec_deviations | **fixed/已收窄**：SD-deferred-gc-trigger, SD-migration-batch, SD-encoding-zlib-b64, SD-schema-mark-early, SD-session-del-order, SD-user-ops-d8-append, SD-repair-idle；**open**：SD-user-ops-d1-degrade（待 user-ops/B-1） |
-| C-orch | ✅（rollback/C-orch-1、clients/C-orch-1、clients/C-orch-2 已写入） |
-| C 类合并后 QA | 见上「合并后 QA」；不阻塞 draft 落盘 |
+| spec_deviations | **none open**（均 fixed / 已收窄） |
+| C-orch | ✅ |
+| C 类合并后 QA | 见上；真机可选 |
