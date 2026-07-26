@@ -1,5 +1,5 @@
 /**
- * T-UOL7：Desktop main handleMessagesRollback — undo_send parse→main store→推 ops；rewind 不 parse。
+ * T-UOL7：Desktop main handleMessagesRollback — undo_send / rewind 均 clearUserOpsLog 推空。
  */
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
@@ -53,7 +53,7 @@ describe("handleMessagesRollback (T-UOL7 / D8)", () => {
     return session.data.id;
   }
 
-  it("T-UOL7 undo_send: truncate 后 parse 写 main log store 并 COMPOSER_ATTACHMENTS_SUGGEST 推 ops", async () => {
+  it("T-UOL7 undo_send: truncate 后 clearUserOpsLog 并 COMPOSER_ATTACHMENTS_SUGGEST 推空", async () => {
     const sessionId = await createSession("undo-send");
     const rt = await getDesktopRuntime();
     const actionXml =
@@ -93,28 +93,19 @@ describe("handleMessagesRollback (T-UOL7 / D8)", () => {
     });
     assert.equal(result.ok, true);
 
-    const entries = listUserOpsLog(sessionId);
-    assert.equal(entries.length, 1);
-    assert.equal(entries[0]?.action, "write");
-    assert.equal(entries[0]?.path, "/hand.md");
+    assert.equal(listUserOpsLog(sessionId).length, 0);
 
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
-    const payload = sent[0]?.payload as {
-      sessionId: string;
-      attachments: Array<{ path?: string; action?: string }>;
-    };
-    assert.equal(payload.sessionId, sessionId);
-    assert.ok(
-      payload.attachments.some(
-        (a) => a.path === "/hand.md" && a.action === "write",
-      ),
-    );
+    assert.deepEqual(sent[0]?.payload, {
+      sessionId,
+      attachments: [],
+    });
 
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
-  it("T-UOL7 undo_send: 映回 + 既有未发送并存（禁止 replace 抹掉）", async () => {
+  it("T-UOL7 undo_send: 清空 store（含既有未发送 ops，不映回消息手改）", async () => {
     const sessionId = await createSession("undo-send-coexist");
     const rt = await getDesktopRuntime();
 
@@ -165,30 +156,12 @@ describe("handleMessagesRollback (T-UOL7 / D8)", () => {
     });
     assert.equal(result.ok, true);
 
-    const entries = listUserOpsLog(sessionId);
-    assert.ok(
-      entries.some((e) => e.action === "write" && e.path === "/keep.md"),
-      "既有未发送须保留",
-    );
-    assert.ok(
-      entries.some((e) => e.action === "edit" && e.path === "/hand.md"),
-      "消息手改须映回",
-    );
-    assert.equal(entries.length, 2);
+    assert.equal(listUserOpsLog(sessionId).length, 0);
 
-    const payload = sent[0]?.payload as {
-      attachments: Array<{ path?: string; action?: string }>;
-    };
-    assert.ok(
-      payload.attachments.some(
-        (a) => a.path === "/keep.md" && a.action === "write",
-      ),
-    );
-    assert.ok(
-      payload.attachments.some(
-        (a) => a.path === "/hand.md" && a.action === "edit",
-      ),
-    );
+    assert.deepEqual(sent[0]?.payload, {
+      sessionId,
+      attachments: [],
+    });
 
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
@@ -239,6 +212,57 @@ describe("handleMessagesRollback (T-UOL7 / D8)", () => {
     assert.equal(result.ok, true);
     assert.equal(listUserOpsLog(sessionId).length, 0);
     assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0]?.payload, {
+      sessionId,
+      attachments: [],
+    });
+
+    setComposerAttachmentsSuggestForwardTarget(() => undefined);
+  });
+
+  it("T-UOL7 rewind: 回滚前预置未发送 ops → store 空、推空", async () => {
+    const sessionId = await createSession("rewind-unsent");
+    const rt = await getDesktopRuntime();
+
+    appendUserOpsLog(sessionId, {
+      id: "uol-unsent",
+      createdAtMs: 1,
+      actionXml:
+        '<action name="write">\n{"path":"/keep.md","content":"k"}\n</action>',
+      action: "write",
+      path: "/keep.md",
+      content: "k",
+    });
+
+    const userMsg = await rt.messages.append(
+      sessionId,
+      "user",
+      textBlocks("问一下"),
+    );
+    const assistant = await rt.messages.append(
+      sessionId,
+      "assistant",
+      textBlocks("答一下"),
+    );
+    void userMsg;
+
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    setComposerAttachmentsSuggestForwardTarget(() => {
+      return {
+        send(channel: string, payload: unknown) {
+          sent.push({ channel, payload });
+        },
+      } as never;
+    });
+
+    const result = await handleMessagesRollback({
+      projectId,
+      sessionId,
+      messageId: assistant.id,
+      skipVfsReconcile: true,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(listUserOpsLog(sessionId).length, 0);
     assert.deepEqual(sent[0]?.payload, {
       sessionId,
       attachments: [],

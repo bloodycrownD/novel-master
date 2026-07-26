@@ -416,7 +416,7 @@ describe('useChatTabMessageActions rollback', () => {
     expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
   });
 
-  it('T-UD4/T-UOL7: undo_send 含 user_ops → log store 映回 + chip；与未发送并存', async () => {
+  it('T-UD4/T-UOL7: undo_send 含 user_ops → log store 清空、无 user_ops chip；正文恢复', async () => {
     appendUserOpsLog('s1', {
       id: 'uol-unsent',
       createdAtMs: 1,
@@ -445,25 +445,10 @@ describe('useChatTabMessageActions rollback', () => {
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
     expect(readChatComposerDraft('s1')).toBe('请看手改');
-    const logs = listUserOpsLog('s1');
-    expect(logs.some(e => e.action === 'write' && e.path === '/keep.md')).toBe(
-      true,
-    );
-    expect(logs.some(e => e.action === 'edit' && e.path === '/chapter/a.md')).toBe(
-      true,
-    );
+    expect(listUserOpsLog('s1')).toEqual([]);
     const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
     expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
-    expect(
-      draftAttachments.some(
-        a => a.source === 'user_ops' && a.path === '/chapter/a.md',
-      ),
-    ).toBe(true);
-    expect(
-      draftAttachments.some(
-        a => a.source === 'user_ops' && a.path === '/keep.md',
-      ),
-    ).toBe(true);
+    expect(draftAttachments.some(a => a.source === 'user_ops')).toBe(false);
   });
 
   it('T-UD5/T-UOL7: rewind 不映回消息手改附件', async () => {
@@ -492,5 +477,42 @@ describe('useChatTabMessageActions rollback', () => {
     expect(mockRollbackToMessage).toHaveBeenCalled();
     expect(listUserOpsLog('s1')).toEqual([]);
     expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
+  });
+
+  it('T-UD6/G-1: rewind 前预置未发送 ops → store 空、无 user_ops chip', async () => {
+    appendUserOpsLog('s1', {
+      id: 'uol-unsent',
+      createdAtMs: 1,
+      actionXml: `<action name="write">\n${JSON.stringify({ path: '/keep.md', content: 'k' }, null, 2)}\n</action>`,
+      action: 'write',
+      path: '/keep.md',
+      content: 'k',
+    });
+    writeChatComposerDraftState('s1', {
+      text: 'draft',
+      attachments: [
+        {
+          name: '/keep.md',
+          source: 'user_ops',
+          type: 'text',
+          content: null,
+          path: '/keep.md',
+          action: 'write',
+        },
+      ],
+    });
+    const api = mountActions([plainUserMessage('u'), assistantMessage()]);
+
+    await act(async () => {
+      api.handleMessageMenuAction(assistantMessage(), 'rollback');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockRollbackToMessage).toHaveBeenCalled();
+    expect(listUserOpsLog('s1')).toEqual([]);
+    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    expect(draftAttachments.some(a => a.source === 'user_ops')).toBe(false);
   });
 });
