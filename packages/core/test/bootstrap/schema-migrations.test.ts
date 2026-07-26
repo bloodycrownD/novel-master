@@ -866,4 +866,74 @@ describe("provider-identity-v1 migration", () => {
       await conn.close();
     }
   });
+
+  it("孤儿 nm-model-suggestions key（已删服务商）应丢弃而非启动失败", async () => {
+    const conn = await openMemoryConn();
+    try {
+      await conn.execute(`
+        CREATE TABLE llm_provider (
+          id TEXT PRIMARY KEY,
+          protocol TEXT NOT NULL CHECK (protocol IN ('openai', 'anthropic', 'gemini')),
+          base_url TEXT NOT NULL,
+          display_name TEXT,
+          secret_ref TEXT,
+          headers_json TEXT NOT NULL DEFAULT '{}',
+          is_builtin INTEGER NOT NULL DEFAULT 0,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL
+        )
+      `);
+      await conn.execute(`
+        CREATE TABLE kkv_entry (
+          module TEXT NOT NULL,
+          key TEXT NOT NULL,
+          value TEXT NOT NULL,
+          PRIMARY KEY (module, key)
+        )
+      `);
+      await conn.execute(
+        `INSERT INTO llm_provider (
+          id, protocol, base_url, display_name, secret_ref, headers_json,
+          is_builtin, created_at_ms, updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "openai",
+          "openai",
+          "https://api.openai.com/v1",
+          "OpenAI",
+          null,
+          "{}",
+          1,
+          NOW_MS,
+          NOW_MS,
+        ],
+      );
+      await conn.execute(
+        `INSERT INTO kkv_entry (module, key, value) VALUES (?, ?, ?)`,
+        ["nm-model-suggestions", "gg", "[]"],
+      );
+      await conn.execute(
+        `INSERT INTO kkv_entry (module, key, value) VALUES (?, ?, ?)`,
+        ["nm-model-suggestions", "zhipu", "[]"],
+      );
+      await conn.execute(
+        `INSERT INTO kkv_entry (module, key, value) VALUES (?, ?, ?)`,
+        ["nm-model-suggestions", "openai", "[]"],
+      );
+
+      await execBootstrapSchemaDdl(conn);
+      await bootstrapNovelMaster(conn);
+
+      const suggestions = await conn.query<{ key: string }>(
+        `SELECT key FROM kkv_entry WHERE module = ? ORDER BY key`,
+        ["nm-model-suggestions"],
+      );
+      assert.deepEqual(
+        suggestions.map((r) => r.key),
+        [BUILTIN_PROVIDER_UUID_OPENAI],
+      );
+    } finally {
+      await conn.close();
+    }
+  });
 });

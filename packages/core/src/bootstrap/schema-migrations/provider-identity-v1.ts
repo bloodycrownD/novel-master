@@ -284,7 +284,6 @@ async function renameSkspSecrets(
     return;
   }
 
-  const orphans: string[] = [];
   const rows = await queryTemplate<{ ref: string }>(
     tx,
     parser,
@@ -301,10 +300,15 @@ async function renameSkspSecrets(
     const oldId = match[1]!;
     const newId = mapping.get(oldId);
     if (newId === undefined) {
-      // 可能已是新 UUID（映射值侧）；若既非旧 id 也非新 uuid 则孤儿
+      // 可能已是新 UUID（映射值侧）；若既非旧 id 也非新 uuid → 已删服务商遗留密钥，删除
       const isNewUuid = [...mapping.values()].includes(oldId);
       if (!isNewUuid) {
-        orphans.push(`sksp_secrets.ref: ${ref}`);
+        await executeTemplate(
+          tx,
+          parser,
+          `DELETE FROM sksp_secrets WHERE ref = #{ref}`,
+          { ref },
+        );
       }
       continue;
     }
@@ -342,10 +346,6 @@ async function renameSkspSecrets(
       { newRef, oldRef, id: newId },
     );
   }
-
-  if (orphans.length > 0) {
-    throwOrphanRef(orphans);
-  }
 }
 
 async function renameSuggestionKeys(
@@ -359,7 +359,6 @@ async function renameSuggestionKeys(
     return;
   }
 
-  const orphans: string[] = [];
   const rows = await queryTemplate<{ key: string; value: string }>(
     tx,
     parser,
@@ -372,9 +371,16 @@ async function renameSuggestionKeys(
     const newKey = mapping.get(oldKey);
     if (newKey === undefined) {
       const isNewUuid = [...mapping.values()].includes(oldKey);
-      if (!isNewUuid) {
-        orphans.push(`kkv:${SUGGESTIONS_MODULE}/${oldKey}`);
+      if (isNewUuid) {
+        continue;
       }
+      // 建议缓存：已删服务商遗留的孤儿 key，直接丢弃（可再 fetch）
+      await executeTemplate(
+        tx,
+        parser,
+        `DELETE FROM kkv_entry WHERE module = #{module} AND key = #{oldKey}`,
+        { module: SUGGESTIONS_MODULE, oldKey },
+      );
       continue;
     }
     if (newKey === oldKey) {
@@ -399,10 +405,6 @@ async function renameSuggestionKeys(
        WHERE module = #{module} AND key = #{oldKey}`,
       { module: SUGGESTIONS_MODULE, newKey, oldKey },
     );
-  }
-
-  if (orphans.length > 0) {
-    throwOrphanRef(orphans);
   }
 }
 
@@ -438,9 +440,14 @@ async function migrateCurrentProviderId(
     if (isNewUuid) {
       return;
     }
-    throwOrphanRef([
-      `kkv:${WORKSPACE_STATE_MODULE}/${KEY_CURRENT_PROVIDER_ID}: ${current}`,
-    ]);
+    // 指针指向已删服务商：清空，避免启动失败
+    await executeTemplate(
+      tx,
+      parser,
+      `DELETE FROM kkv_entry WHERE module = #{module} AND key = #{key}`,
+      { module: WORKSPACE_STATE_MODULE, key: KEY_CURRENT_PROVIDER_ID },
+    );
+    return;
   }
   if (resolved === current) {
     return;
