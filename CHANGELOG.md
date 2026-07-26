@@ -6,9 +6,16 @@
 
 ## [Unreleased]
 
+## [1.4.08] - 2026-07-27
+
 ### 变更
 
-- **服务商身份 UUID 化（破坏性）**：服务商技术主键改为 UUID；创建时填写「服务商名称」（必填），UI 主路径按名称展示（正式撤销 `mobile-bugfix` 中「移除展示名、改以服务商 ID 展示」的决策）。CLI 创建改用 `--name`，旧 `--providerId <slug>` 创建不再兼容。密钥环境变量改为 `NOVEL_MASTER_PROVIDER_<UUID>_API_KEY`，旧如 `NOVEL_MASTER_PROVIDER_OPENAI_API_KEY` 不再命中
+- **服务商身份 UUID 化（破坏性）**：服务商技术主键改为 UUID；创建时填写「服务商名称」（必填），列表 / 详情 / Agent 下拉等主路径按名称展示（正式撤销 `mobile-bugfix` 中「移除展示名、改以服务商 ID 展示」的决策）。CLI 创建改用 `--name`，旧 `--providerId <slug>` 创建不再兼容。密钥环境变量改为 `NOVEL_MASTER_PROVIDER_<UUID>_API_KEY`，旧如 `NOVEL_MASTER_PROVIDER_OPENAI_API_KEY` 不再命中。升级旧库时自动迁移；无法映射的模型建议 / 当前服务商指针会被清空，以免启动失败
+
+### 修复
+
+- **Mobile 表单底部主按钮热区**：`StickyFormFooter` 主色条左右空白亦可点击（不再只点文字才生效）；Android 上 `PrimaryButton fullWidth` 命中区与视觉条对齐
+- **Mobile 工作区正文读写（RN）**：ContentStore 在 Hermes / RN 落库改为 `zlib-b64`，并兼容读取既有 `zlib` 行；升级后打开旧库、新建再读不再因 BLOB 读成 string 报错
 
 ## [1.4.07] - 2026-07-26
 
