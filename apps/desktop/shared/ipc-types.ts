@@ -49,6 +49,8 @@ export const IPC_CHANNELS = {
   VFS_RENAME: 'nm:vfs/rename',
   VFS_ZIP_EXPORT: 'nm:vfs/zipExport',
   VFS_ZIP_IMPORT: 'nm:vfs/zipImport',
+  /** 角色卡导入（PNG/JSON → 子树替换） */
+  VFS_CHARACTER_CARD_IMPORT: 'nm:vfs/characterCardImport',
   /** 本机路径批量 ingest（plan + 可选 apply） */
   VFS_BATCH_INGEST_FROM_PATHS: 'nm:vfs/batchIngestFromPaths',
   /** 导出物化到临时目录（供 startDrag） */
@@ -403,6 +405,15 @@ export type VfsZipRequest = VfsScopeRequest & {
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
 export type VfsZipImportResult = 'imported' | 'cancelled';
+
+/** 角色卡导入请求：与 {@link VfsZipRequest} 同构（确认在 Renderer，选文件在 Main）。 */
+export type VfsCharacterCardImportRequest = VfsScopeRequest & {
+  readonly confirmed?: boolean;
+  /** 子树目标目录；缺省 ≡ `/`（整域） */
+  readonly directoryPath?: string;
+};
+
+export type VfsCharacterCardImportResult = 'imported' | 'cancelled';
 
 export type VfsBatchConflictDto = {
   readonly logicalPath: string;

@@ -72,6 +72,8 @@ import {
   type VfsReadResultDto,
   type VfsRenameRequest,
   type VfsWriteRequest,
+  type VfsCharacterCardImportRequest,
+  type VfsCharacterCardImportResult,
   type VfsZipExportResult,
   type VfsZipImportResult,
   type VfsZipRequest,
@@ -234,6 +236,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.VFS_ZIP_IMPORT,
     ),
+    ipcVfsCharacterCardImport: withReq<
+      VfsCharacterCardImportRequest,
+      IpcResult<VfsCharacterCardImportResult>
+    >(invoke, IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT),
     ipcVfsBatchIngestFromPaths: withReq<
       VfsBatchIngestFromPathsRequest,
       IpcResult<VfsBatchIngestFromPathsResult>

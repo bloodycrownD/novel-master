@@ -69,6 +69,7 @@ export const {
   ipcVfsRename,
   ipcVfsZipExport,
   ipcVfsZipImport,
+  ipcVfsCharacterCardImport,
   ipcVfsBatchIngestFromPaths,
   ipcVfsBatchExportStage,
   ipcVfsBatchClearStaging,

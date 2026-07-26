@@ -152,6 +152,7 @@ import {
   handleVfsRename,
   handleVfsStartDrag,
   handleVfsWrite,
+  handleVfsCharacterCardImport,
   handleVfsZipExport,
   handleVfsZipImport,
 } from './handlers/vfs.js';
@@ -230,6 +231,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.VFS_RENAME, handleVfsRename);
   bindReq(IPC_CHANNELS.VFS_ZIP_EXPORT, handleVfsZipExport);
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
+  bindReq(IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT, handleVfsCharacterCardImport);
   bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, handleVfsBatchIngestFromPaths);
   bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);
   bindReq(IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING, handleVfsBatchClearStaging);

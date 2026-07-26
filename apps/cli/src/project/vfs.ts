@@ -10,6 +10,7 @@ import { type TdbcConnection } from "@novel-master/core";
 import { type VfsService } from "@novel-master/core/vfs";
 import { runDelete } from "../vfs/commands/delete.js";
 import { runExportZip } from "../vfs/commands/export-zip.js";
+import { runImportCharacterCard } from "../vfs/commands/import-character-card.js";
 import { runImportZip } from "../vfs/commands/import-zip.js";
 import { runGlob } from "../vfs/commands/glob.js";
 import { runGrep } from "../vfs/commands/grep.js";
@@ -61,9 +62,18 @@ export async function runProjectVfs(
     );
     return;
   }
+  if (sub === "import-character-card") {
+    const idx = vfsRest.indexOf(sub);
+    await runImportCharacterCard(
+      conn,
+      { kind: "project", projectId },
+      vfsRest.slice(idx + 1),
+    );
+    return;
+  }
   if (sub == null || !(sub in PROJECT_VFS_COMMANDS)) {
     throw new Error(
-      "Usage: nm project vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip> ...",
+      "Usage: nm project vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|import-character-card> ...",
     );
   }
   const vfs = projectVfs(projectId);

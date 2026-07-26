@@ -9,7 +9,18 @@ export type { VfsListEntry } from "../domain/vfs/model/vfs-list-entry.js";
 export { createVfsService } from "../service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "../service/vfs/create-scoped-vfs-service.js";
 export { createVfsZipIoService } from "../service/vfs/create-vfs-zip-io-service.js";
+export { createCharacterCardImportService } from "../service/vfs/create-character-card-import-service.js";
+export type { CreateCharacterCardImportServiceOptions } from "../service/vfs/create-character-card-import-service.js";
 export { createVfsBatchIoService } from "../service/vfs/create-vfs-batch-io-service.js";
+export { parseCharacterCardToMdTree } from "../domain/character-card/logic/parse-character-card-to-md-tree.js";
+export { characterCardJsonToMdTree } from "../domain/character-card/logic/character-card-to-md-tree.js";
+export { CharacterCardError } from "../errors/character-card-errors.js";
+export type { CharacterCardErrorCode } from "../errors/character-card-errors.js";
+export type { MdTree } from "../domain/character-card/model/character-card.js";
+export type {
+  CharacterCardImportService,
+  CharacterCardImportOptions,
+} from "../domain/vfs/ports/character-card-import.port.js";
 export {
   buildUserVfsCreateFileOp,
   buildUserVfsDeleteOp,

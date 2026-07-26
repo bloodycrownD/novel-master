@@ -15,6 +15,7 @@ import { runRead } from "../vfs/commands/read.js";
 import { runReplace } from "../vfs/commands/replace.js";
 import { runWrite } from "../vfs/commands/write.js";
 import { runExportZip } from "../vfs/commands/export-zip.js";
+import { runImportCharacterCard } from "../vfs/commands/import-character-card.js";
 import { runImportZip } from "../vfs/commands/import-zip.js";
 import { runSessionTemplate } from "./template.js";
 import { runSessionWorkplace } from "./workplace.js";
@@ -167,6 +168,15 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
     );
     return;
   }
+  if (group === "import-character-card") {
+    const idx = args.indexOf(group);
+    await runImportCharacterCard(
+      deps.conn,
+      { kind: "session", projectId, sessionId },
+      args.slice(idx + 1),
+    );
+    return;
+  }
 
   const vfs = deps.sessionVfs(projectId, sessionId);
   const idx = args.indexOf(group);
@@ -180,7 +190,7 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
 
   if (group == null || !(group in SESSION_VFS_COMMANDS)) {
     throw new Error(
-      "Usage: nm session vfs <list|read|write|export-zip|import-zip|...>",
+      "Usage: nm session vfs <list|read|write|export-zip|import-zip|import-character-card|...>",
     );
   }
 

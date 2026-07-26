@@ -47,6 +47,7 @@ export function workspaceMenuItems(target: WorkspaceContextTarget): Array<{
       { action: "create-file", label: "新建文件" },
       { action: "create-folder", label: "新建文件夹" },
       { action: "import-zip", label: "导入 ZIP" },
+      { action: "import-character-card", label: "导入角色卡" },
       { action: "export-zip", label: "导出 ZIP" },
     ];
   }
@@ -57,6 +58,7 @@ export function workspaceMenuItems(target: WorkspaceContextTarget): Array<{
       { action: "create-file", label: "新建文件" },
       { action: "create-folder", label: "新建文件夹" },
       { action: "import-zip", label: "导入 ZIP" },
+      { action: "import-character-card", label: "导入角色卡" },
       { action: "export-zip", label: "导出 ZIP" },
       { action: "rule-config", label: "规则配置" },
       { action: "rename", label: "重命名" },
