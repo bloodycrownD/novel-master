@@ -14,6 +14,7 @@ import {
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -203,6 +204,102 @@ describe("rollback ref_count + deferred blob gc", () => {
       ctx.conn,
     );
     assert.ok(await revisions.findByPathAndVersion(physical, version));
+  });
+
+  it("T-RB-REF-TRUNC: 回滚截断 tail checkpoint 后 ref 递减且归零 revision 被删", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const physicalA = toPhysicalPath(scope, "/trunc-a.md");
+    const physicalTail = toPhysicalPath(scope, "/tail-only.md");
+
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "cp1" }],
+    });
+    await svfs.write("/trunc-a.md", "anchor", { versionCheck: false });
+    const vAnchor = (await svfs.read("/trunc-a.md")).version;
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+
+    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "cp2" }],
+    });
+    await svfs.write("/trunc-a.md", "tail", { versionCheck: false });
+    const vTail = (await svfs.read("/trunc-a.md")).version;
+    await svfs.write("/tail-only.md", "orphan", { versionCheck: false });
+    const vOrphan = (await svfs.read("/tail-only.md")).version;
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+
+    const tailRefBefore = await ctx.conn.query<{ ref_count: number }>(
+      `SELECT ref_count FROM vfs_revision WHERE path = ? AND version = ?`,
+      [physicalA, vTail],
+    );
+    assert.equal(Number(tailRefBefore[0]?.ref_count), 2);
+
+    await ctx.sessionFs.rollbackToMessage(
+      session.id,
+      project.id,
+      assistant1.id,
+    );
+
+    assert.equal((await svfs.read("/trunc-a.md")).content, "anchor");
+    assert.equal(
+      await revisions.findByPathAndVersion(physicalA, vTail),
+      null,
+    );
+    assert.equal(
+      await revisions.findByPathAndVersion(physicalTail, vOrphan),
+      null,
+    );
+
+    assert.ok(await revisions.findByPathAndVersion(physicalA, vAnchor));
+    const anchorRef = await ctx.conn.query<{ ref_count: number }>(
+      `SELECT ref_count FROM vfs_revision WHERE path = ? AND version = ?`,
+      [physicalA, vAnchor],
+    );
+    assert.ok(Number(anchorRef[0]?.ref_count) >= 1);
+  });
+
+  it("T-RB-SESSION-DEL: deleteSessionFsData −checkpoint/live ref 并打扫 revision", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const physical = toPhysicalPath(scope, "/session-del.md");
+
+    const assistant = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "w" }],
+    });
+    await svfs.write("/session-del.md", "gone", { versionCheck: false });
+    const version = (await svfs.read("/session-del.md")).version;
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+
+    const refBefore = await ctx.conn.query<{ ref_count: number }>(
+      `SELECT ref_count FROM vfs_revision WHERE path = ? AND version = ?`,
+      [physical, version],
+    );
+    assert.equal(Number(refBefore[0]?.ref_count), 2);
+
+    await deleteSessionFsData(ctx.conn, session.id, project.id);
+
+    assert.equal(
+      (await checkpoints.listFilePointersForSession(session.id)).length,
+      0,
+    );
+    assert.equal(await revisions.findByPathAndVersion(physical, version), null);
   });
 
   it("T-RB-GC-DEFER: sweep 后 runDeferredBlobGc 删除 orphan blob", async () => {
