@@ -77,6 +77,7 @@ import {
 import { refreshRuleSnapshotAfterRuleChange } from '../../services/workplace-rule-delta-draft.service';
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
+import { importCharacterCard } from '../../services/vfs-character-card.service';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
 import { useTheme } from '../../theme/ThemeProvider';
 import { TemplatePullButton } from '../template/TemplatePullButton';
@@ -601,6 +602,7 @@ export const VfsFileManager = forwardRef<
     { label: '新建目录', action: 'create-directory' },
     { label: '新建文件', action: 'create-file' },
     { label: '导入 ZIP', action: 'import-zip' },
+    { label: '导入角色卡', action: 'import-character-card' },
     { label: '目录规则', action: 'directory-rule' },
   ];
 
@@ -797,6 +799,25 @@ export const VfsFileManager = forwardRef<
     ]);
   }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
 
+  const handleImportCharacterCard = useCallback(() => {
+    Alert.alert('导入角色卡', zipImportConfirmCopy(currentPath), [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '导入',
+        style: 'destructive',
+        onPress: () => {
+          importCharacterCard(runtime, scope, {
+            confirmed: true,
+            directoryPath: currentPath,
+          })
+            .then(() => reloadVfsListOnly())
+            .then(() => showToast('已导入角色卡'))
+            .catch(err => showToast(toastMessage('导入失败', err)));
+        },
+      },
+    ]);
+  }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
+
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
       openPrompt({
@@ -870,6 +891,10 @@ export const VfsFileManager = forwardRef<
     }
     if (action === 'import-zip') {
       handleImportZip();
+      return;
+    }
+    if (action === 'import-character-card') {
+      handleImportCharacterCard();
     }
   };
 
