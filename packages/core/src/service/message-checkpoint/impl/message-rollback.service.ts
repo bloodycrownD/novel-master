@@ -49,7 +49,6 @@ import type {
   MessageRollbackService,
   RollbackOptions,
 } from "../message-rollback.port.js";
-import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 
 /** Dependencies for {@link DefaultMessageRollbackService}. */
 export interface MessageRollbackServiceDeps {
@@ -195,7 +194,6 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       });
     });
     const txMs = Date.now() - tTx0;
-    await runDeferredBlobGc(this.deps.conn);
     sessionApiPromptTokenCache.invalidate(sessionId);
     console.log("[nm-rollback] core done", {
       mode: plan.mode,
