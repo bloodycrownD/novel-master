@@ -1,7 +1,12 @@
 /**
  * T-CR5：置位/压缩 refresh 推 project∪annotate；Undo 路径仍可先空。
+ * 投影读 UserOpsLogStore（不再 preview 净 diff）。
  */
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  appendUserOpsLog,
+  resetUserOpsLogStoreForTests,
+} from '@novel-master/core/chat';
 
 const mockReplace = jest.fn();
 
@@ -18,6 +23,7 @@ import {
 describe('composer status after kkv clear (T-CR5)', () => {
   beforeEach(() => {
     mockReplace.mockClear();
+    resetUserOpsLogStoreForTests();
   });
 
   it('Undo/手动：refreshComposerStatusAfterSessionKkvCleared 以空 attachments 替换', async () => {
@@ -32,15 +38,14 @@ describe('composer status after kkv clear (T-CR5)', () => {
   });
 
   it('T-CR5: 置位/压缩 refreshComposerStatusAfterFloorOrCompaction 推 project 结果（非强制 []）', async () => {
-    const runtime = {
-      userVfsTurn: {
-        hasPendingTurns: async () => true,
-        previewUserOpsActions: async () => [
-          { action: 'mkdir', path: '/keep' },
-        ],
-      },
-    } as any;
-    await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+    appendUserOpsLog('s1', {
+      id: 'uol-keep',
+      createdAtMs: 1,
+      actionXml: `<action name="mkdir">\n${JSON.stringify({ path: '/keep' }, null, 2)}\n</action>`,
+      action: 'mkdir',
+      path: '/keep',
+    });
+    await refreshComposerStatusAfterFloorOrCompaction({} as any, {
       projectId: 'p',
       sessionId: 's1',
     });

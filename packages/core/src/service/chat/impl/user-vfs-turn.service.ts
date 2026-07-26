@@ -1,42 +1,25 @@
 /**
- * 用户 VFS：execute → pending → flush 产出 user_ops 附件（不再落 UA）。
+ * 用户 VFS：execute → 操作日志 → flush 产出 user_ops 附件（不再落 UA；停写 pending kkv）。
  *
  * @module service/chat/impl/user-vfs-turn.service
  */
 
-import { buildUserOpsAttachmentsFromEntries } from "@/domain/chat/logic/build-user-ops-attachment.js";
+import { buildUserOpsAttachmentsFromLogEntries } from "@/domain/chat/logic/build-user-ops-attachment.js";
 import {
-  collectUserOpsChangedPaths,
-  diffWorkspaceForUserVfsFlush,
-  isWorkspaceFlushDiffEmpty,
-  type WorkspaceFlushDiff,
-} from "@/domain/chat/logic/diff-workspace-for-user-vfs-flush.js";
-import { resolveCurrentWorkspaceSnapshot } from "@/domain/chat/logic/resolve-current-workspace-snapshot.js";
-import { resolveFlushBaselineTree } from "@/domain/chat/logic/resolve-flush-baseline-tree.js";
-import {
-  collectUserOpsActionSummaries,
-  synthesizeUserVfsFlushActionEntries,
-  type UserOpsActionSummary,
-} from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
-import type { WorkspaceFlushSnapshot } from "@/domain/chat/logic/workspace-flush-snapshot.js";
+  appendUserOpsLog,
+  clearUserOpsLog,
+  hasUnsentUserOpsLog,
+  listUserOpsLog,
+} from "@/domain/chat/logic/chat-user-ops-log-store.js";
+import type { UserOpsActionSummary } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
+import { userOpsLogEntryFromTurnOp } from "@/domain/chat/logic/user-ops-log-from-turn-op.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
+import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import {
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  USER_VFS_PENDING_QUEUE_KEY,
-} from "@/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  toPhysicalPath,
-  type VfsScope,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import {
-  userVfsPendingQueueSchema,
-  type UserVfsPendingEntry,
-  type UserVfsPendingQueue,
-} from "@/domain/chat/model/user-vfs-pending.schema.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import {
@@ -64,10 +47,16 @@ import type {
 export interface UserVfsTurnServiceDeps {
   readonly conn: TdbcConnection;
   readonly sessions: SessionRepository;
-  /** pending 队列：session kkv 域 `user_vfs_pending`。 */
+  /**
+   * 历史：曾写 `user_vfs_pending`；现仅保留以便工厂签名稳定 / truncate 清旧域。
+   * execute / flush **不再**读写 pending 队列。
+   */
   readonly sessionKkv: SessionKkvService;
   readonly messages: MessageService;
-  /** flush 基准解析：会话消息 seq 上界。 */
+  /**
+   * 历史：净 diff preview 曾读消息列表；preview* 已 stub，保留以便工厂签名稳定。
+   * @deprecated
+   */
   readonly chatMessages: MessageRepository;
   readonly checkpoints: MessageCheckpointRepository;
   readonly entries: VfsEntryRepository;
@@ -83,88 +72,8 @@ export interface UserVfsTurnServiceDeps {
   readonly messageCheckpoint: MessageCheckpointService;
 }
 
-async function loadRevisionContent(
-  revisions: VfsRevisionRepository,
-  scope: VfsScope,
-  logicalPath: string,
-  version: number,
-): Promise<string> {
-  const physical = toPhysicalPath(scope, logicalPath);
-  const rev = await revisions.findByPathAndVersion(physical, version);
-  if (rev == null || rev.status === "deleted") {
-    return "";
-  }
-  return rev.content ?? "";
-}
-
-/** 读取 baseline / current 快照中各 path 的 revision 正文。 */
-async function loadWorkspaceFlushContentMaps(
-  revisions: VfsRevisionRepository,
-  scope: VfsScope,
-  baseline: WorkspaceFlushSnapshot,
-  current: WorkspaceFlushSnapshot,
-): Promise<{
-  baselineContentByPath: Map<string, string>;
-  currentContentByPath: Map<string, string>;
-}> {
-  const baselineContentByPath = new Map<string, string>();
-  const currentContentByPath = new Map<string, string>();
-
-  for (const [path, version] of baseline.fileTree) {
-    baselineContentByPath.set(
-      path,
-      await loadRevisionContent(revisions, scope, path, version),
-    );
-  }
-
-  for (const [path, version] of current.fileTree) {
-    currentContentByPath.set(
-      path,
-      await loadRevisionContent(revisions, scope, path, version),
-    );
-  }
-
-  return { baselineContentByPath, currentContentByPath };
-}
-
-async function loadPendingQueue(
-  sessionKkv: SessionKkvService,
-  sessionId: string,
-): Promise<UserVfsPendingQueue> {
-  const json = await sessionKkv.get(
-    sessionId,
-    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-    USER_VFS_PENDING_QUEUE_KEY,
-  );
-  if (json == null || json.trim() === "") {
-    return [];
-  }
-  return userVfsPendingQueueSchema.parse(JSON.parse(json));
-}
-
-async function savePendingQueue(
-  sessionKkv: SessionKkvService,
-  sessionId: string,
-  queue: UserVfsPendingQueue,
-): Promise<void> {
-  if (queue.length === 0) {
-    await sessionKkv.delete(
-      sessionId,
-      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-      USER_VFS_PENDING_QUEUE_KEY,
-    );
-    return;
-  }
-  await sessionKkv.set(
-    sessionId,
-    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-    USER_VFS_PENDING_QUEUE_KEY,
-    JSON.stringify(queue),
-  );
-}
-
 /**
- * 编排 execute → pending、flush → user_ops 附件（清空 pending，不落 UA）。
+ * 编排 execute → 操作日志、flush → user_ops 附件（清空 store，不落 UA）。
  */
 export class DefaultUserVfsTurnService implements UserVfsTurnService {
   constructor(private readonly deps: UserVfsTurnServiceDeps) {}
@@ -224,6 +133,16 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
           }
         }
       }
+      // restore 尝试结束后不论 composite 仍 sweep 一次（末尾全库 blob gc）
+      await sweepSessionRevisions(
+        this.deps.revisions,
+        this.deps.entries,
+        this.deps.checkpoints,
+        session.projectId,
+        sessionId,
+        this.deps.conn,
+      );
+      await runDeferredBlobGc(this.deps.conn);
       if (restoreErrors.length > 0) {
         return {
           ok: false,
@@ -234,15 +153,15 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { ok: false, error: failed.error, partialFailure: true };
     }
 
-    const queue = await loadPendingQueue(this.deps.sessionKkv, sessionId);
-    const entry: UserVfsPendingEntry = {
-      actionXml: op.actionXml,
-      tools: op.tools.map((tool) => ({ id: tool.id, name: tool.name })),
-      createdAtMs: Date.now(),
-    };
-    queue.push(entry);
-    await savePendingQueue(this.deps.sessionKkv, sessionId, queue);
-    return { ok: true };
+    // 写盘已成功：日志失败不回滚盘（D1）
+    try {
+      const entry = userOpsLogEntryFromTurnOp(op);
+      appendUserOpsLog(sessionId, entry);
+      return { ok: true, logAppended: true };
+    } catch (logAppendError: unknown) {
+      // toast / 记错由上层；此处不回滚已成功写盘
+      return { ok: true, logAppended: false, logAppendError };
+    }
   }
 
   async flushPendingUserVfsTurns(
@@ -253,102 +172,35 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       throw chatNotFound("session", sessionId);
     }
 
-    const pending = await loadPendingQueue(this.deps.sessionKkv, sessionId);
-    if (pending.length === 0) {
+    const entries = listUserOpsLog(sessionId);
+    if (entries.length === 0) {
       return { flushed: false, attachments: [] };
     }
 
-    const diff = await this.resolveWorkspaceFlushDiff(
-      sessionId,
-      session.projectId,
-    );
-    const entries = synthesizeUserVfsFlushActionEntries(diff);
-
-    if (isWorkspaceFlushDiffEmpty(diff) || entries.length === 0) {
-      await savePendingQueue(this.deps.sessionKkv, sessionId, []);
-      return { flushed: false, attachments: [] };
-    }
-
-    const attachments = buildUserOpsAttachmentsFromEntries(entries);
-
-    await savePendingQueue(this.deps.sessionKkv, sessionId, []);
+    const attachments = buildUserOpsAttachmentsFromLogEntries(entries);
+    clearUserOpsLog(sessionId);
     return { flushed: true, attachments };
   }
 
   /**
-   * 相对 checkpoint 的净 action 摘要；不读 pending 也不改队列。
+   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。状态条请改读 UserOpsLogStore。
    */
   async previewUserOpsActions(
-    sessionId: string,
+    _sessionId: string,
   ): Promise<readonly UserOpsActionSummary[]> {
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      throw chatNotFound("session", sessionId);
-    }
-
-    const diff = await this.resolveWorkspaceFlushDiff(
-      sessionId,
-      session.projectId,
-    );
-    return collectUserOpsActionSummaries(diff);
+    return [];
   }
 
   /**
-   * 相对 checkpoint 的净 path 集；不读 pending 也不改队列。
+   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。门闩请改读 hasPendingTurns / log store。
    */
   async previewUserOpsChangedPaths(
-    sessionId: string,
+    _sessionId: string,
   ): Promise<readonly string[]> {
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      throw chatNotFound("session", sessionId);
-    }
-
-    const diff = await this.resolveWorkspaceFlushDiff(
-      sessionId,
-      session.projectId,
-    );
-    return collectUserOpsChangedPaths(diff);
+    return [];
   }
 
   async hasPendingTurns(sessionId: string): Promise<boolean> {
-    const pending = await loadPendingQueue(this.deps.sessionKkv, sessionId);
-    return pending.length > 0;
-  }
-
-  /** flush / preview 共用：baseline + current + 正文 → 净 diff。 */
-  private async resolveWorkspaceFlushDiff(
-    sessionId: string,
-    projectId: string,
-  ): Promise<WorkspaceFlushDiff> {
-    const baseline = await resolveFlushBaselineTree(
-      this.deps.checkpoints,
-      this.deps.chatMessages,
-      sessionId,
-    );
-    const current = await resolveCurrentWorkspaceSnapshot(
-      this.deps.entries,
-      projectId,
-      sessionId,
-    );
-    const scope: VfsScope = {
-      kind: "session",
-      projectId,
-      sessionId,
-    };
-    const { baselineContentByPath, currentContentByPath } =
-      await loadWorkspaceFlushContentMaps(
-        this.deps.revisions,
-        scope,
-        baseline,
-        current,
-      );
-
-    return diffWorkspaceForUserVfsFlush({
-      baseline,
-      current,
-      baselineContentByPath,
-      currentContentByPath,
-    });
+    return hasUnsentUserOpsLog(sessionId);
   }
 }

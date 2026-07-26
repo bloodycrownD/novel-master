@@ -52,6 +52,7 @@ import { orderedDirectChildPaths } from './vfs-direct-children-order';
 import { isUserVfsUnifiedToolTurnEnabled } from '@novel-master/core/feature-flags';
 
 import { isVfsError } from '@novel-master/core/vfs';
+import { refreshComposerStatusAfterUserVfsOps } from '../../services/user-vfs-turn-execute.service';
 import {
   createVfsDirectory,
   createVfsFile,
@@ -65,8 +66,6 @@ import {
   sessionRenameVfsFile,
 } from '../../services/vfs-operations.service';
 import {
-  batchSetDirRulesDisabled,
-  batchSetDirRulesEnabled,
   cycleFileInclusion,
   defaultDirRuleForm,
   dirRuleToForm,
@@ -79,15 +78,14 @@ import { refreshRuleSnapshotAfterRuleChange } from '../../services/workplace-rul
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
-import {
-  exportVfsFile,
-  formatFileIngestToast,
-  importVfsFile,
-} from '../../services/vfs-batch.service';
-import type { BatchIngestRawEntry } from '@novel-master/core/vfs';
 import { useTheme } from '../../theme/ThemeProvider';
 import { TemplatePullButton } from '../template/TemplatePullButton';
 import { useToast } from '../chrome/ToastHost';
+import { FileReferencePicker } from '../chat/FileReferencePicker';
+import {
+  isSelfOrAncestorPath,
+  resolveMoveDestination,
+} from './vfs-move-path';
 
 export type VfsFileManagerPullScope =
   | { kind: 'project'; projectId: string }
@@ -158,15 +156,13 @@ export const VfsFileManager = forwardRef<
     () => new Set(),
   );
   const [exportingZip, setExportingZip] = useState(false);
-
-  const vfsBatchEnter = useCallback(() => {
-    setVfsBatchActive(true);
-    setVfsBatchSelected(new Set());
-  }, []);
+  /** 批量移动：目标目录选择器是否打开 */
+  const [movePickerOpen, setMovePickerOpen] = useState(false);
 
   const vfsBatchExit = useCallback(() => {
     setVfsBatchActive(prev => (prev ? false : prev));
     setVfsBatchSelected(prev => (prev.size === 0 ? prev : new Set()));
+    setMovePickerOpen(false);
   }, []);
 
   const vfsBatchToggle = useCallback((id: string) => {
@@ -181,22 +177,42 @@ export const VfsFileManager = forwardRef<
     });
   }, []);
 
+  /** 长按：进入多选并勾选该项（已在多选则仅切换勾选）。 */
+  const vfsBatchLongPress = useCallback((path: string) => {
+    setVfsBatchActive(prevActive => {
+      if (!prevActive) {
+        setVfsBatchSelected(new Set([path]));
+        return true;
+      }
+      setVfsBatchSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(path)) {
+          next.delete(path);
+        } else {
+          next.add(path);
+        }
+        return next;
+      });
+      return prevActive;
+    });
+  }, []);
+
   const vfsBatch = useMemo(
     () => ({
       active: vfsBatchActive,
       selectedIds: vfsBatchSelected,
       selectedCount: vfsBatchSelected.size,
-      enter: vfsBatchEnter,
       exit: vfsBatchExit,
       toggle: vfsBatchToggle,
+      longPress: vfsBatchLongPress,
       isSelected: (id: string) => vfsBatchSelected.has(id),
     }),
     [
       vfsBatchActive,
       vfsBatchSelected,
-      vfsBatchEnter,
       vfsBatchExit,
       vfsBatchToggle,
+      vfsBatchLongPress,
     ],
   );
 
@@ -401,32 +417,157 @@ export const VfsFileManager = forwardRef<
     sessionId,
   ]);
 
-  const runBatchSetRules = useCallback(
-    async (enabled: boolean) => {
+  const runBatchMove = useCallback(
+    async (targetDir: string) => {
       const paths = [...vfsBatch.selectedIds];
       if (paths.length === 0) {
         return;
       }
-      try {
-        const result = enabled
-          ? await batchSetDirRulesEnabled(workplace, paths, dirPathSet)
-          : await batchSetDirRulesDisabled(workplace, paths, dirPathSet);
-        vfsBatch.exit();
-        await reloadAfterRuleChange();
-        if (result.skipped > 0) {
-          showToast(
-            enabled
-              ? `已开启 ${result.applied} 个目录规则，跳过 ${result.skipped} 项`
-              : `已关闭 ${result.applied} 个目录规则，跳过 ${result.skipped} 项`,
-          );
-        } else {
-          showToast(enabled ? '目录规则已开启' : '目录规则已关闭');
+      const batchT0 = Date.now();
+      if (__DEV__) {
+        console.log('[vfs-move] batch start', {
+          count: paths.length,
+          targetDir,
+          useUserVfsTurn,
+          scopeKind: scope.kind,
+        });
+      }
+      const kindByPath = new Map(rows.map(r => [r.path, r.kind] as const));
+      let moved = 0;
+      let skipped = 0;
+      for (const sourcePath of paths) {
+        if (isSelfOrAncestorPath(sourcePath, targetDir)) {
+          showToast('不能移动到自身或子目录');
+          skipped += 1;
+          continue;
         }
-      } catch (error) {
-        showToast(toastMessage('操作失败', error));
+        const newPath = resolveMoveDestination(sourcePath, targetDir);
+        if (newPath === sourcePath) {
+          continue;
+        }
+        const kind = kindByPath.get(sourcePath);
+        const isDir = kind === 'dir' || dirPathSet.has(sourcePath);
+        const itemT0 = Date.now();
+        try {
+          // WHY: 批量时跳过每次 op 后的 composer 投影；批次结束统一刷一次。
+          // 非净 diff defer——投影读 UserOpsLogStore，本开关仅合并批次末 notify。
+          const renameOpts = useUserVfsTurn
+            ? { skipComposerStatusRefresh: true as const }
+            : undefined;
+          if (isDir) {
+            const renameT0 = Date.now();
+            if (useUserVfsTurn) {
+              await sessionRenameVfsDirectory(
+                runtime,
+                sessionId!,
+                sourcePath,
+                newPath,
+                renameOpts,
+              );
+            } else {
+              await renameVfsDirectory(vfs, sourcePath, newPath);
+            }
+            const renameMs = Date.now() - renameT0;
+            const ruleT0 = Date.now();
+            await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
+            const ruleMs = Date.now() - ruleT0;
+            if (
+              currentPath === sourcePath ||
+              currentPath.startsWith(`${sourcePath}/`)
+            ) {
+              setCurrentPath(
+                remapPathUnderDir(currentPath, sourcePath, newPath),
+              );
+            }
+            if (__DEV__) {
+              console.log('[vfs-move] batch item ok (dir)', {
+                sourcePath,
+                newPath,
+                renameMs,
+                ruleMs,
+                totalMs: Date.now() - itemT0,
+              });
+            }
+          } else {
+            if (useUserVfsTurn) {
+              await sessionRenameVfsFile(
+                runtime,
+                sessionId!,
+                sourcePath,
+                newPath,
+                renameOpts,
+              );
+            } else {
+              await renameVfsFile(vfs, sourcePath, newPath);
+            }
+            if (__DEV__) {
+              console.log('[vfs-move] batch item ok (file)', {
+                sourcePath,
+                newPath,
+                via: useUserVfsTurn ? 'userVfsTurn' : 'direct',
+                totalMs: Date.now() - itemT0,
+              });
+            }
+          }
+          moved += 1;
+        } catch (err) {
+          skipped += 1;
+          if (__DEV__) {
+            console.log('[vfs-move] batch item FAILED', {
+              sourcePath,
+              newPath,
+              isDir,
+              ms: Date.now() - itemT0,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+          if (isVfsError(err, 'ALREADY_EXISTS')) {
+            showToast('目标已存在同名项，已跳过');
+          } else {
+            showToast(toastMessage('移动失败', err));
+          }
+        }
+      }
+      if (useUserVfsTurn && moved > 0 && sessionId != null) {
+        const composerT0 = Date.now();
+        await refreshComposerStatusAfterUserVfsOps(runtime, sessionId);
+        if (__DEV__) {
+          console.log('[vfs-move] batch composer refresh', {
+            ms: Date.now() - composerT0,
+          });
+        }
+      }
+      vfsBatch.exit();
+      const reloadT0 = Date.now();
+      await reloadVfsListOnly();
+      if (__DEV__) {
+        console.log('[vfs-move] batch done', {
+          moved,
+          skipped,
+          reloadMs: Date.now() - reloadT0,
+          totalMs: Date.now() - batchT0,
+        });
+      }
+      if (moved > 0 && skipped > 0) {
+        showToast(`已移动 ${moved} 项，跳过 ${skipped} 项`);
+      } else if (moved > 0) {
+        showToast(`已移动 ${moved} 项`);
       }
     },
-    [vfsBatch, workplace, dirPathSet, reloadAfterRuleChange, showToast],
+    [
+      vfsBatch,
+      rows,
+      dirPathSet,
+      useUserVfsTurn,
+      runtime,
+      sessionId,
+      vfs,
+      workplace,
+      currentPath,
+      reloadVfsListOnly,
+      showToast,
+      scope.kind,
+    ],
   );
 
   const canGoUp = currentPath !== root;
@@ -450,8 +591,6 @@ export const VfsFileManager = forwardRef<
           { label: '删除', action: 'delete', danger: true },
         ]
       : [
-          { label: '打开', action: 'open' },
-          { label: '导出', action: 'export-file' },
           { label: '状态变更', action: 'toggle-include' },
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
@@ -462,9 +601,7 @@ export const VfsFileManager = forwardRef<
     { label: '新建目录', action: 'create-directory' },
     { label: '新建文件', action: 'create-file' },
     { label: '导入 ZIP', action: 'import-zip' },
-    { label: '文件导入', action: 'import-file' },
     { label: '目录规则', action: 'directory-rule' },
-    { label: '批量操作', action: 'batch' },
   ];
 
   const openPrompt = (state: PromptState) => {
@@ -478,14 +615,6 @@ export const VfsFileManager = forwardRef<
     }
     const meta = worktreeRows.find(r => r.path === menuPath);
     try {
-      if (action === 'open') {
-        if (menuRow.kind === 'dir') {
-          setCurrentPath(menuPath);
-        } else {
-          onOpenFile(menuPath);
-        }
-        return;
-      }
       if (action === 'toggle-include' && meta) {
         if (menuRow.kind === 'file' && meta.kind === 'file') {
           await cycleFileInclusion(workplace, menuPath, meta.inclusionMode);
@@ -637,17 +766,6 @@ export const VfsFileManager = forwardRef<
           .finally(() => setExportingZip(false));
         return;
       }
-      if (action === 'export-file') {
-        setExportingZip(true);
-        exportVfsFile(runtime, scope, menuPath)
-          .then(result => {
-            if (result === 'saved') {
-              showToast('文件已导出');
-            }
-          })
-          .catch(err => showToast(toastMessage('导出失败', err)))
-          .finally(() => setExportingZip(false));
-      }
     } catch (error) {
       showToast(toastMessage('操作失败', error));
     }
@@ -677,45 +795,6 @@ export const VfsFileManager = forwardRef<
         },
       },
     ]);
-  }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
-
-  const handleImportFile = useCallback(() => {
-    const runApply = (
-      overwriteConfirmed: boolean,
-      preparedEntry?: BatchIngestRawEntry,
-    ) => {
-      importVfsFile(runtime, scope, {
-        targetDir: currentPath,
-        overwriteConfirmed,
-        preparedEntry,
-      })
-        .then(async outcome => {
-          if (outcome.status === 'cancelled') {
-            return;
-          }
-          if (outcome.status === 'needs_confirm') {
-            Alert.alert(
-              '文件冲突',
-              `目标处已有「${outcome.conflictPath}」。覆盖后不可撤销，是否继续？`,
-              [
-                { text: '取消', style: 'cancel' },
-                {
-                  text: '覆盖',
-                  style: 'destructive',
-                  onPress: () => runApply(true, outcome.entry),
-                },
-              ],
-            );
-            return;
-          }
-          await reloadVfsListOnly();
-          showToast(
-            formatFileIngestToast(outcome.report, outcome.skippedBinary),
-          );
-        })
-        .catch(err => showToast(toastMessage('文件导入失败', err)));
-    };
-    runApply(false);
   }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
 
   const handleMoreAction = (action: string) => {
@@ -789,16 +868,8 @@ export const VfsFileManager = forwardRef<
       })();
       return;
     }
-    if (action === 'batch') {
-      vfsBatch.enter();
-      return;
-    }
     if (action === 'import-zip') {
       handleImportZip();
-      return;
-    }
-    if (action === 'import-file') {
-      handleImportFile();
     }
   };
 
@@ -861,8 +932,7 @@ export const VfsFileManager = forwardRef<
           selectedCount={vfsBatch.selectedCount}
           onCancel={() => vfsBatch.exit()}
           onDelete={confirmBatchDelete}
-          onEnable={() => runBatchSetRules(true).catch(() => undefined)}
-          onDisable={() => runBatchSetRules(false).catch(() => undefined)}
+          onMove={() => setMovePickerOpen(true)}
         />
       ) : null}
 
@@ -906,6 +976,9 @@ export const VfsFileManager = forwardRef<
                     } else {
                       onOpenFile(item.path);
                     }
+                  }}
+                  onLongPress={() => {
+                    vfsBatch.longPress(item.path);
                   }}
                 >
                   <Text style={styles.kind}>
@@ -1033,6 +1106,17 @@ export const VfsFileManager = forwardRef<
           </View>
         </View>
       </AppModal>
+
+      <FileReferencePicker
+        visible={movePickerOpen}
+        mode="pick-directory"
+        scope={scope}
+        blockedSourcePaths={[...vfsBatch.selectedIds]}
+        onClose={() => setMovePickerOpen(false)}
+        onConfirmDir={targetDir => {
+          void runBatchMove(targetDir);
+        }}
+      />
     </View>
   );
 });

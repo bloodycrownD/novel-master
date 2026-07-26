@@ -11,6 +11,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
+import { VFS_CONTENT_BLOB_SCHEMA_STATEMENTS } from "./vfs/vfs-content-blob-schema.js";
 import { MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS } from "./message-checkpoint/message-checkpoint-schema.js";
 import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.js";
@@ -29,6 +30,7 @@ import { runPendingSchemaMigrations } from "./schema-migrations/index.js";
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_SCHEMA_STATEMENTS,
   ...VFS_REVISION_SCHEMA_STATEMENTS,
+  ...VFS_CONTENT_BLOB_SCHEMA_STATEMENTS,
   ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
   ...KKV_SCHEMA_STATEMENTS,
   ...SESSION_KKV_SCHEMA_STATEMENTS,

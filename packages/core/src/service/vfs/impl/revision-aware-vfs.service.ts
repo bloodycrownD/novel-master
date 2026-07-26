@@ -12,7 +12,13 @@ import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revisi
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-not-found-error.js";
 import {
+  adjustRef,
+  transferLiveRef,
+} from "@/domain/vfs/logic/revision-ref-count.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {
   VfsError,
+  vfsConflict,
   vfsInvalidPath,
   vfsIsDirectory,
   vfsNotFound,
@@ -136,6 +142,78 @@ export class RevisionAwareVfsService implements VfsService {
       );
     });
   }
+
+  async resetHeadToVersion(path: string, version: number): Promise<void> {
+    const normalized = normalizePath(path);
+    await runInTransactionOrConn(this.conn, async (tx) => {
+      const entryRepo = new SqliteVfsEntryRepository(tx);
+      const revisionRepo = new SqliteVfsRevisionRepository(tx);
+      const contentStore = new SqliteVfsContentStore(tx);
+
+      const rev = await revisionRepo.findByPathAndVersion(normalized, version);
+      if (rev == null || rev.status === "deleted") {
+        throw new VfsError(
+          "NOT_FOUND",
+          `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}`,
+          { path: normalized },
+        );
+      }
+      if (rev.content == null) {
+        throw new VfsError(
+          "NOT_FOUND",
+          `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}`,
+          { path: normalized },
+        );
+      }
+
+      // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
+      const contentHash = await contentStore.put(rev.content);
+      await ensureParentDirectories(entryRepo, normalized);
+      const existing = await entryRepo.findByPath(normalized);
+      const oldVersion =
+        existing?.entryKind === "file" ? existing.version : null;
+      await entryRepo.setHeadContentHash(normalized, {
+        version: rev.version,
+        contentHash,
+        mtimeMs: rev.mtimeMs,
+      });
+      if (oldVersion != null && oldVersion !== rev.version) {
+        await transferLiveRef(revisionRepo, normalized, oldVersion, rev.version);
+      } else if (oldVersion == null) {
+        await adjustRef(revisionRepo, normalized, rev.version, +1);
+      }
+    });
+  }
+
+  async hardDelete(
+    path: string,
+    options?: { recursive?: boolean },
+  ): Promise<void> {
+    const normalized = normalizePath(path);
+    if (normalized === "/") {
+      throw vfsInvalidPath(path, "cannot hardDelete root");
+    }
+
+    await runInTransactionOrConn(this.conn, async (tx) => {
+      const entryRepo = new SqliteVfsEntryRepository(tx);
+      const revisionRepo = new SqliteVfsRevisionRepository(tx);
+      if (options?.recursive === true) {
+        const heads = await entryRepo.listFileHeadsUnderPrefix(normalized);
+        for (const head of heads) {
+          await adjustRef(revisionRepo, head.path, head.headVersion, -1);
+        }
+      } else {
+        const entry = await entryRepo.findByPath(normalized);
+        if (entry != null && entry.entryKind === "file") {
+          await adjustRef(revisionRepo, normalized, entry.version, -1);
+        }
+      }
+      // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
+      await entryRepo.delete(normalized, {
+        recursive: options?.recursive === true,
+      });
+    });
+  }
 }
 
 /**
@@ -191,6 +269,7 @@ async function writeWithRevision(
       mtimeMs,
       storageKind: "inline",
     });
+    await adjustRef(revisionRepo, normalized, version, +1);
     return { version };
   }
 
@@ -201,6 +280,24 @@ async function writeWithRevision(
       `expectedVersion required when updating ${normalized}`,
       { path: normalized },
     );
+  }
+
+  // 乐观锁优先：过期仍 CONFLICT，同文短路不得绕过
+  if (
+    versionCheck &&
+    options?.expectedVersion != null &&
+    options.expectedVersion !== existing.version
+  ) {
+    throw vfsConflict(
+      normalized,
+      options.expectedVersion,
+      existing.version,
+    );
+  }
+
+  // 同文短路：相对 live 明文全等 → 不 bump、不 append
+  if (existing.content === content) {
+    return { version: existing.version };
   }
 
   const updated = await entryRepo.update(normalized, content, {
@@ -216,6 +313,7 @@ async function writeWithRevision(
     mtimeMs,
     storageKind: existing.storageKind,
   });
+  await transferLiveRef(revisionRepo, normalized, existing.version, version);
   return { version };
 }
 
@@ -233,6 +331,7 @@ async function appendDeletedRevisionsForSubtree(
     if (fileEntry == null || fileEntry.entryKind !== "file") {
       continue;
     }
+    await adjustRef(revisionRepo, fileEntry.path, fileEntry.version, -1);
     await appendDeletedRevision(
       revisionRepo,
       fileEntry.path,
@@ -265,6 +364,7 @@ async function deleteWithRevision(
 
   if (entry.entryKind === "file") {
     await appendDeletedRevision(revisionRepo, entry.path, entry.version, entry.storageKind);
+    await adjustRef(revisionRepo, entry.path, entry.version, -1);
     await entryRepo.delete(path, { recursive: false });
     return;
   }
@@ -293,4 +393,5 @@ async function appendDeletedRevision(
     mtimeMs: Date.now(),
     storageKind,
   });
+  await adjustRef(revisionRepo, path, deletedVersion, +1);
 }

@@ -20,17 +20,22 @@ function createSpyVfs(
       }
       return { path, content, version: 1, mtimeMs: 0 };
     },
+    findContentHash: async () => null,
     insert: async () => ({ version: 1 }),
+    insertWithContentHash: async () => ({ version: 1 }),
     insertAtVersion: async () => ({ version: 1 }),
     insertDirectory: async () => undefined,
     update: async () => ({ version: 1 }),
+    updateWithContentHash: async () => ({ version: 1 }),
+    setHeadContentHash: async () => undefined,
     delete: async () => ({ deleted: true }),
     listAllPaths: async () => [],
     listDirectoryPathsUnderPrefix: async () => [],
     listEntriesUnderPrefix: async () => [],
     listFileMetaUnderPrefix: async () => [],
+    listFileHeadsUnderPrefix: async () => [],
     scanContents: async () => [],
-  };
+  } as unknown as VfsEntryRepository & { findByPathCalls: string[] };
 }
 
 describe("worktree materialize engine", () => {

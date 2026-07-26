@@ -146,4 +146,21 @@ export class ScopedVfsService implements VfsService {
     const physical = toPhysicalPath(this.scope, logical);
     return this.inner.delete(physical, options);
   }
+
+  async resetHeadToVersion(path: string, version: number): Promise<void> {
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    const physical = toPhysicalPath(this.scope, logical);
+    return this.inner.resetHeadToVersion(physical, version);
+  }
+
+  async hardDelete(
+    path: string,
+    options?: { recursive?: boolean },
+  ): Promise<void> {
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    const physical = toPhysicalPath(this.scope, logical);
+    return this.inner.hardDelete(physical, options);
+  }
 }

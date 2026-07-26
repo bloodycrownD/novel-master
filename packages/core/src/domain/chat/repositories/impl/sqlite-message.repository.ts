@@ -194,6 +194,17 @@ export class SqliteMessageRepository implements MessageRepository {
     );
   }
 
+  async listIdsAfterSeq(sessionId: string, afterSeq: number): Promise<string[]> {
+    const rows = await queryTemplate<{ id: string }>(
+      this.conn,
+      this.parser,
+      `SELECT id FROM chat_message
+       WHERE session_id = #{sessionId} AND seq > #{afterSeq}`,
+      { sessionId, afterSeq },
+    );
+    return rows.map((row) => String(row.id));
+  }
+
   async updateHidden(messageId: string, hidden: boolean): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,

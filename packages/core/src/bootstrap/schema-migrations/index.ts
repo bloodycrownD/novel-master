@@ -14,12 +14,16 @@ import {
 import { savedModelIdentityV1Migration } from "./saved-model-identity-v1.js";
 import { dropChatSessionUserVfsPendingV1Migration } from "./drop-chat-session-user-vfs-pending-v1.js";
 import { renameWorktreeTablesToWorkplaceV1Migration } from "./rename-worktree-tables-to-workplace-v1.js";
+import { vfsContentBlobZlibV1Migration } from "./vfs-content-blob-zlib-v1.js";
+import { vfsRevisionRefCountV1Migration } from "./vfs-revision-ref-count-v1.js";
 
 /** 有序 migration 列表。 */
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   savedModelIdentityV1Migration,
   dropChatSessionUserVfsPendingV1Migration,
   renameWorktreeTablesToWorkplaceV1Migration,
+  vfsContentBlobZlibV1Migration,
+  vfsRevisionRefCountV1Migration,
 ];
 
 /**
@@ -39,10 +43,13 @@ export async function runPendingSchemaMigrations(
     seen.add(migration.id);
 
     if (await isSchemaMigrationApplied(tx, migration.id)) {
+      console.log(`[nm-boot] migration skip (applied): ${migration.id}`);
       continue;
     }
 
+    console.log(`[nm-boot] migration run: ${migration.id}`);
     await migration.up(tx);
+    console.log(`[nm-boot] migration applied: ${migration.id}`);
     await markSchemaMigrationApplied(tx, migration.id, Date.now());
   }
 }
@@ -53,3 +60,14 @@ export {
   isSchemaMigrationApplied,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
+export {
+  VFS_CONTENT_BLOB_ZLIB_V1_ID,
+  VFS_CONTENT_BLOB_VACUUM_V1_ID,
+  runVfsContentBlobDataMigration,
+  maybeVacuumAfterVfsContentBlobMigration,
+} from "./vfs-content-blob-zlib-v1.js";
+export { VFS_REVISION_REF_COUNT_V1_ID } from "./vfs-revision-ref-count-v1.js";
+export type {
+  VfsContentBlobVacuumOptions,
+  VfsContentBlobVacuumResult,
+} from "./vfs-content-blob-zlib-v1.js";

@@ -749,6 +749,7 @@ export type MessageAttachmentActionDto =
   | 'edit'
   | 'mkdir'
   | 'rename'
+  | 'move'
   | 'workplaceChange'
   | 'userAttach'
   | 'annotate';

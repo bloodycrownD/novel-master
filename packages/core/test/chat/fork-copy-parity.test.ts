@@ -18,7 +18,7 @@ import {
 novelMasterTestFixture();
 
 describe("fork/copy parity (F1)", () => {
-  it("T-F1: fork 后目标 revision 含 content，checkpoint 指向该 version", async () => {
+  it("T-F1 / T-FK1: fork 后目标 revision 可读；源/目标共享同一 content_hash/blob", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -26,6 +26,17 @@ describe("fork/copy parity (F1)", () => {
     await svfs.write("/note.md", "fork-body", { versionCheck: false });
     const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
     const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+
+    const sourcePhysical = toPhysicalPath(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      "/note.md",
+    );
+    const sourceHashRows = await ctx.conn.query<{ content_hash: string | null }>(
+      `SELECT content_hash FROM vfs_entry WHERE path = ?`,
+      [sourcePhysical],
+    );
+    const sourceHash = sourceHashRows[0]?.content_hash;
+    assert.ok(sourceHash, "源 entry 须有 content_hash");
 
     const forked = await ctx.messages.fork(session.id, m2.id);
     const forkedMsgs = await ctx.messages.listBySession(forked.id);
@@ -41,6 +52,23 @@ describe("fork/copy parity (F1)", () => {
     assert.ok(rev, "须存在带 content 的 vfs_revision，不得靠 backfill");
     assert.equal(rev.content, "fork-body");
     assert.equal(rev.status, "active");
+
+    const targetEntryHash = await ctx.conn.query<{ content_hash: string | null }>(
+      `SELECT content_hash FROM vfs_entry WHERE path = ?`,
+      [physical],
+    );
+    const targetRevHash = await ctx.conn.query<{ content_hash: string | null }>(
+      `SELECT content_hash FROM vfs_revision WHERE path = ? AND version = ?`,
+      [physical, live.version],
+    );
+    assert.equal(targetEntryHash[0]?.content_hash, sourceHash);
+    assert.equal(targetRevHash[0]?.content_hash, sourceHash);
+
+    const blobCount = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`,
+      [sourceHash],
+    );
+    assert.equal(Number(blobCount[0]!.n), 1, "源/目标须共享同一 blob 行");
 
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     for (const msg of forkedMsgs) {

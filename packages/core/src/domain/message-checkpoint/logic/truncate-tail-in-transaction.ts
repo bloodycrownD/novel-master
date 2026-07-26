@@ -10,6 +10,7 @@ import { SESSION_KKV_COMPOSER_STATUS_DOMAINS } from "@/domain/session-kkv/model/
 import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { sweepSessionRevisions } from "./revision-gc.js";
 
 /** tail 截断事务参数。 */
@@ -28,25 +29,25 @@ export type TruncateTailDeps = {
   readonly sessionKkv: SessionKkvRepository;
   readonly revisions: VfsRevisionRepository;
   readonly entries: VfsEntryRepository;
+  /** 用于 migration 分支判断与 sweep。 */
+  readonly conn: TdbcConnection;
 };
 
 /**
  * 在已有事务内截断 tail 消息并清理 checkpoint。
  *
- * 1. 列出 seq > afterSeq 的消息 → tailIds
- * 2. deleteCheckpointsForMessages(sessionId, tailIds)
- * 3. messages.deleteAfterSeq(sessionId, afterSeq)
- * 4. 若 sweepRevisions → sweepSessionRevisions(...)
- * 5. 若 tail 非空 → 清空 Composer 无叉 chip 对应 kkv 域
- *    （file_cache / user_vfs_pending）；**保留** rule_snapshot 与其它域
+ * 1. 子查询列出 seq > afterSeq 的 tail → deleteCheckpointsForMessages（内含 −ref）
+ * 2. messages.deleteAfterSeq(sessionId, afterSeq)
+ * 3. 若 sweepRevisions → sweepSessionRevisions（仅 revision，无 sync blob）
+ * 4. 若 tail 非空 → 清空 Composer 无叉 chip 对应 kkv 域
  */
 export async function truncateTailInTransaction(
   deps: TruncateTailDeps,
   params: TruncateTailParams,
 ): Promise<void> {
   const { projectId, sessionId, afterSeq, sweepRevisions } = params;
-  const all = await deps.messages.listBySession(sessionId);
-  const tailIds = all.filter((m) => m.seq > afterSeq).map((m) => m.id);
+
+  const tailIds = await deps.messages.listIdsAfterSeq(sessionId, afterSeq);
 
   if (tailIds.length > 0) {
     await deps.checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
@@ -60,6 +61,7 @@ export async function truncateTailInTransaction(
       deps.checkpoints,
       projectId,
       sessionId,
+      deps.conn,
     );
   }
 

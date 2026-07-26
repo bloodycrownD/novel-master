@@ -3,6 +3,11 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
+import {
+  appendUserOpsLog,
+  listUserOpsLog,
+  resetUserOpsLogStoreForTests,
+} from "@novel-master/core/chat";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
@@ -177,14 +182,23 @@ describe("workplace ipc handlers", () => {
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
-  it("遗留 captureSessionBlock IPC 清空 session kkv 并推空状态条", async () => {
+  it("遗留 captureSessionBlock IPC 清空 session kkv、clearUserOpsLog 并推空状态条", async () => {
     const rt = await getDesktopRuntime();
+    resetUserOpsLogStoreForTests();
     await rt.sessionKkv.set(
       sessionId,
       "file_cache",
       "full:/z.md",
       JSON.stringify({ body: "z", mtimeMs: 1 }),
     );
+    appendUserOpsLog(sessionId, {
+      id: "uol-reset",
+      createdAtMs: 1,
+      actionXml: '<action name="mkdir">\n{"path":"/z"}\n</action>',
+      action: "mkdir",
+      path: "/z",
+    });
+    assert.equal(listUserOpsLog(sessionId).length, 1);
 
     const sent: Array<{ channel: string; payload: unknown }> = [];
     setComposerAttachmentsSuggestForwardTarget(() => {
@@ -204,6 +218,11 @@ describe("workplace ipc handlers", () => {
     assert.equal(
       await rt.sessionKkv.get(sessionId, "file_cache", "full:/z.md"),
       null,
+    );
+    assert.equal(
+      listUserOpsLog(sessionId).length,
+      0,
+      "D10：手动重置须 clearUserOpsLog",
     );
     assert.ok(
       sent.some(

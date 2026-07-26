@@ -20,7 +20,33 @@ export interface VfsEntryRepository {
 
   findByPath(path: string): Promise<VfsEntry | null>;
 
+  /**
+   * 读取文件行的 `content_hash`（不解正文）。
+   *
+   * @returns 目录行 / 无 hash / 路径不存在时为 `null`
+   */
+  findContentHash(path: string): Promise<string | null>;
+
+  /**
+   * 批量读取文件行的 `content_hash`（不解正文）。
+   *
+   * @returns 键为规范化物理 path；目录行 / 无 hash / 路径不存在时值为 `null`
+   */
+  findContentHashesByPaths(
+    paths: ReadonlyArray<string>,
+  ): Promise<Map<string, string | null>>;
+
   insert(path: string, content: string): Promise<{ version: number }>;
+
+  /**
+   * 以已有 content_hash 插入文件行（不 put；`content=NULL`）。
+   *
+   * @remarks tree-copy / seed 共享 blob 时使用。
+   */
+  insertWithContentHash(
+    path: string,
+    contentHash: string,
+  ): Promise<{ version: number }>;
 
   /**
    * Inserts a new file entry at an explicit head version.
@@ -40,6 +66,32 @@ export interface VfsEntryRepository {
     content: string,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }>;
+
+  /**
+   * 以已有 content_hash 更新文件行（不 put；`content=NULL`）。
+   */
+  updateWithContentHash(
+    path: string,
+    contentHash: string,
+    options: VfsWriteRepoOptions,
+  ): Promise<{ version: number }>;
+
+  /**
+   * 不升版写回 live head（补偿专用）。
+   *
+   * @remarks
+   * entry 已存在 → 按指定 version / content_hash / mtime 写回，不 `version+1`；
+   * entry 不存在 → 按指定 version + content_hash 插入（`content=NULL`）。
+   * 禁止补偿路径复用会 bump 的 {@link update}。
+   */
+  setHeadContentHash(
+    path: string,
+    input: {
+      version: number;
+      contentHash: string;
+      mtimeMs: number;
+    },
+  ): Promise<void>;
 
   delete(path: string, options: VfsDeleteOptions): Promise<void>;
 

@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
 
-import { createUserVfsTurnServiceBundle, readMessageMetadata, textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+import { createUserVfsTurnServiceBundle, listUserOpsLog, readMessageMetadata, resetUserOpsLogStoreForTests, textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { projectComposerStatusAttachments } from "../../src/domain/chat/logic/project-composer-status-attachments.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {
@@ -33,6 +33,8 @@ import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl
 import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { createScopedVfsService } from "../../src/service/vfs/create-scoped-vfs-service.js";
+import { toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
 import {
   buildUserVfsDeleteOp,
   buildUserVfsMkdirOp,
@@ -45,10 +47,15 @@ import {
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+import { beforeEach } from "node:test";
 
 novelMasterTestFixture();
 
-/** T-OP1：pending 存于 session kkv，不经 chat_session 列。 */
+beforeEach(() => {
+  resetUserOpsLogStoreForTests();
+});
+
+/** 断言已停写 user_vfs_pending kkv（操作日志进程内）。 */
 async function loadPendingQueueJson(
   conn: TdbcConnection,
   sessionId: string,
@@ -258,7 +265,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(listed[1]!.id, originalUser.id);
   });
 
-  it("execute 失败不写 pending；成功写入 pending", async () => {
+  it("execute 失败不写日志；成功 append 日志且停写 pending kkv", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -275,6 +282,7 @@ describe("UserVfsTurnService", () => {
       ],
     });
     assert.equal(fail.ok, false);
+    assert.equal(listUserOpsLog(session.id).length, 0);
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
 
     const ok = await userVfsTurn.executeOp(
@@ -282,14 +290,61 @@ describe("UserVfsTurnService", () => {
       writeOp("/ok.md", "hello", "tu_ok"),
     );
     assert.equal(ok.ok, true);
-    const pendingJson = await loadPendingQueueJson(ctx.conn, session.id);
-    assert.ok(pendingJson);
-    const pending = JSON.parse(pendingJson!) as unknown[];
-    assert.equal(pending.length, 1);
-    assert.equal((pending[0] as { tools: { id: string }[] }).tools[0]?.id, "tu_ok");
+    if (ok.ok) {
+      assert.equal(ok.logAppended, true);
+    }
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+    const logs = listUserOpsLog(session.id);
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0]!.action, "write");
+    assert.equal(logs[0]!.action === "write" ? logs[0]!.path : "", "/ok.md");
   });
 
-  it("T-UO1：flush 不产生 user_vfs_action 行，仅产出 attachments 并清 pending", async () => {
+  it("T-UO-D1：写盘成功但日志派生失败时 ok=true、logAppended=false、store 空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registry.register({
+      name: "patch",
+      description: "writes without user-ops derivation",
+      inputSchema: z.object({
+        path: z.string(),
+        content: z.string(),
+      }),
+      async run(input, ctx) {
+        await ctx.vfs.write(input.path, input.content, { versionCheck: false });
+        return { version: 1 };
+      },
+    });
+    const toolRunner = new ToolRunner(registry);
+    const userVfsTurn = new DefaultUserVfsTurnService(
+      makeUserVfsTurnDeps(ctx.conn, { toolRunner }),
+    );
+
+    const result = await userVfsTurn.executeOp(session.id, {
+      actionXml: '<action name="noop">{}</action>',
+      tools: [
+        {
+          id: "tu_patch",
+          name: "patch",
+          input: { path: "/d1-degrade.md", content: "on-disk" },
+        },
+      ],
+    });
+
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.logAppended, false);
+      assert.ok(result.logAppendError != null);
+    }
+    assert.equal(listUserOpsLog(session.id).length, 0);
+    assert.equal((await svfs.read("/d1-degrade.md")).content, "on-disk");
+  });
+
+  it("T-UO1：flush 不产生 user_vfs_action 行，仅产出 attachments 并清日志", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -309,6 +364,7 @@ describe("UserVfsTurnService", () => {
       ),
       false,
     );
+    assert.equal(listUserOpsLog(session.id).length, 0);
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
   });
 
@@ -392,7 +448,7 @@ describe("UserVfsTurnService", () => {
     assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
   });
 
-  it("创建后再改同一文件：flush 仅一条 write，不以 pending write+edit 命名", async () => {
+  it("T-UOL1：同文件 create 后 edit → store 两条；flush 两条附件（翻转折单 write）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -401,25 +457,24 @@ describe("UserVfsTurnService", () => {
     const v1 = "alpha\nbeta\ngamma\n";
     const v2 = "alpha\nbeta-edited\ngamma\n";
     await userVfsTurn.executeOp(session.id, writeOp("/net.md", v1, "tu_w"));
-    // 再保存：相对刚写入内容走 edit；相对 checkpoint（空）净 diff 仍为 added → write
     const saveOp = buildUserVfsSaveOp(v1, v2, "/net.md", v2);
     assert.ok(saveOp);
     assert.equal(saveOp!.tools[0]?.name, "edit");
     await userVfsTurn.executeOp(session.id, saveOp!);
 
+    const logs = listUserOpsLog(session.id);
+    assert.equal(logs.length, 2);
+    assert.equal(logs[0]!.action, "write");
+    assert.equal(logs[1]!.action, "edit");
+
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
-    assert.equal(flush.attachments.length, 1);
-    assert.equal(flush.attachments[0]!.name, "/net.md");
+    assert.equal(flush.attachments.length, 2);
     assert.equal(flush.attachments[0]!.action, "write");
-    assert.equal(flush.attachments[0]!.path, "/net.md");
+    assert.equal(flush.attachments[1]!.action, "edit");
     assert.match(flush.attachments[0]!.content ?? "", /name="write"/);
-    assert.match(flush.attachments[0]!.content ?? "", /"content"/);
-    assert.ok((flush.attachments[0]!.content ?? "").includes("beta-edited"));
-    assert.equal(
-      (flush.attachments[0]!.content ?? "").includes('name="edit"'),
-      false,
-    );
+    assert.match(flush.attachments[1]!.content ?? "", /name="edit"/);
+    assert.ok((flush.attachments[1]!.content ?? "").includes("beta-edited"));
   });
 
   it("flush 本身不 capture；带 user_ops 的 user append 后可锚定 checkpoint", async () => {
@@ -546,11 +601,18 @@ describe("UserVfsTurnService", () => {
   });
 
 
-  it("T1：第二次 tool 失败时回滚已成功 path 且 pending 为空", async () => {
+  it("T-UO-SWEEP1：第二次 tool 失败时回滚已成功 path，且 sweep+blob gc；composite 后仍 sweep", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
+    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const physicalA = toPhysicalPath(scope, "/a.md");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -587,7 +649,7 @@ describe("UserVfsTurnService", () => {
         {
           id: "tu_1",
           name: "write",
-          input: { path: "/a.md", content: "A" },
+          input: { path: "/a.md", content: "A-orphan-body" },
         },
         {
           id: "tu_2",
@@ -601,9 +663,93 @@ describe("UserVfsTurnService", () => {
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
     await assert.rejects(() => svfs.read("/a.md"));
     await assert.rejects(() => svfs.read("/b.md"));
+
+    // restore 后不可达 revision 被 sweep；无引用 blob 被全库 gc
+    const keys = await revisions.listKeysUnderPrefix(
+      `/projects/${project.id}/sessions/${session.id}`,
+    );
+    assert.equal(
+      keys.some((k) => k.path === physicalA),
+      false,
+      "失败回滚后 /a.md 不可达 revision 须被 sweep",
+    );
+    const hashRows = await ctx.conn.query<{ content_hash: string }>(
+      `SELECT content_hash FROM vfs_content_blob`,
+      [],
+    );
+    const orphanHash = hashContent("A-orphan-body");
+    assert.equal(
+      hashRows.some((r) => String(r.content_hash) === orphanHash),
+      false,
+      "无引用 orphan blob 须被 gc",
+    );
+
+    // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失
+    const orphanPath = toPhysicalPath(scope, "/orphan-sweep.md");
+    await revisions.append({
+      path: orphanPath,
+      version: 99,
+      content: "pre-sweep-orphan",
+      status: "active",
+      mtimeMs: Date.now(),
+      storageKind: "inline",
+    });
+    const beforeOrphan = await revisions.findByPathAndVersion(orphanPath, 99);
+    assert.ok(beforeOrphan);
+
+    const baseVfs = createScopedVfsService(ctx.conn, scope);
+    const failingVfs = new Proxy(baseVfs, {
+      get(target, prop, receiver) {
+        if (prop === "hardDelete" || prop === "resetHeadToVersion") {
+          return async () => {
+            throw new Error("restore composite boom");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+
+    const compositeTurn = new DefaultUserVfsTurnService(
+      makeUserVfsTurnDeps(ctx.conn, {
+        toolRunner,
+        resolveToolCtx: () => ({
+          vfs: failingVfs,
+          projectId: project.id,
+          sessionId: session.id,
+          listSessionMessages: () =>
+            new SqliteMessageRepository(ctx.conn).listBySession(session.id),
+          sessionKkv: createSessionKkvService(ctx.conn),
+        }),
+      }),
+    );
+
+    const compositeResult = await compositeTurn.executeOp(session.id, {
+      actionXml:
+        '<action name="write">\n{"path":"/c.md","content":""}\n</action>\n<action name="write">\n{"path":"/d.md","content":""}\n</action>',
+      tools: [
+        {
+          id: "tu_c",
+          name: "write",
+          input: { path: "/c.md", content: "C" },
+        },
+        {
+          id: "tu_d",
+          name: "write",
+          input: { path: "/d.md", content: "D" },
+        },
+      ],
+    });
+    assert.equal(compositeResult.ok, false);
+    assert.ok(compositeResult.partialFailure);
+    const afterOrphan = await revisions.findByPathAndVersion(orphanPath, 99);
+    assert.equal(
+      afterOrphan,
+      null,
+      "restore 抛 composite 后仍须 sweep 掉不可达 revision",
+    );
   });
 
-  it("T2：两次 tool 均成功时 pending 一条且磁盘保留", async () => {
+  it("T2：两次 tool 均成功时日志一条且磁盘保留", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -632,10 +778,12 @@ describe("UserVfsTurnService", () => {
       ],
     });
     assert.equal(ok.ok, true);
+    if (ok.ok) {
+      assert.equal(ok.logAppended, true);
+    }
 
-    const pendingJson = await loadPendingQueueJson(ctx.conn, session.id);
-    assert.ok(pendingJson);
-    assert.equal(JSON.parse(pendingJson).length, 1);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+    assert.equal(listUserOpsLog(session.id).length, 1);
     assert.equal((await svfs.read("/1.md")).content, "one");
     assert.equal((await svfs.read("/2.md")).content, "two");
   });
@@ -665,7 +813,7 @@ describe("UserVfsTurnService", () => {
     }
   });
 
-  it("T5：flush 清 pending 且不调用 capture、不落库消息", async () => {
+  it("T5：flush 清日志且不调用 capture、不落库消息", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -686,10 +834,11 @@ describe("UserVfsTurnService", () => {
     assert.equal(flush.flushed, true);
     assert.equal(captureCalled, false);
     assert.equal((await deps.messages.listBySession(session.id)).length, 0);
+    assert.equal(listUserOpsLog(session.id).length, 0);
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
   });
 
-  it("F4 flush：pending 非空但 net diff 空（删目录再 mkdir 同路径）→ 无 message、pending 清空", async () => {
+  it("T-UOL4：删目录再 mkdir 同 path → 有日志则 flush 有附件（翻转 F4 skip-empty）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -698,11 +847,12 @@ describe("UserVfsTurnService", () => {
     await userVfsTurn.executeOp(session.id, buildUserVfsMkdirOp("/drafts"));
     await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/drafts", true));
 
+    assert.equal(listUserOpsLog(session.id).length, 2);
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
-    assert.equal(flush.flushed, false);
-    assert.deepEqual(flush.attachments, []);
+    assert.equal(flush.flushed, true);
+    assert.equal(flush.attachments.length, 2);
     assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+    assert.equal(listUserOpsLog(session.id).length, 0);
   });
 
   it("F4 flush：真删除仍产出 user_ops（含 delete action XML）", async () => {
@@ -736,7 +886,7 @@ describe("UserVfsTurnService", () => {
     assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
   });
 
-  it("F4 flush：删文件再 write 同路径同内容 → net diff 空", async () => {
+  it("T-UOL4b：删文件再 write 同路径同内容 → 仍 flush 两条附件（废除 net-diff 空跳过）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -756,9 +906,10 @@ describe("UserVfsTurnService", () => {
     await userVfsTurn.executeOp(session.id, writeOp("/round.md", "same", "tu_rewrite"));
 
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
-    assert.equal(flush.flushed, false);
+    assert.equal(flush.flushed, true);
+    assert.equal(flush.attachments.length, 2);
     assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+    assert.equal(listUserOpsLog(session.id).length, 0);
   });
 
   it("executeOp 可递归删除目录（不触发 IS_DIRECTORY）", async () => {
@@ -803,7 +954,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(payload!.body, "from-bundle");
   });
 
-  it("T-OP2：preview path 与即将 flush 的 path 集一致，且不清 pending", async () => {
+  it("T-OP2（废止净 diff 对齐）：flush 附件 path 来自日志，不清 store 前 hasPending", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -812,10 +963,9 @@ describe("UserVfsTurnService", () => {
     await userVfsTurn.executeOp(session.id, writeOp("/op2-a.md", "A", "tu_a"));
     await userVfsTurn.executeOp(session.id, writeOp("/op2-b.md", "B", "tu_b"));
 
-    const preview = await userVfsTurn.previewUserOpsChangedPaths(session.id);
-    assert.deepEqual([...preview], ["/op2-a.md", "/op2-b.md"]);
     assert.equal(await userVfsTurn.hasPendingTurns(session.id), true);
-    assert.ok(await loadPendingQueueJson(ctx.conn, session.id));
+    assert.equal(listUserOpsLog(session.id).length, 2);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
 
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
@@ -823,12 +973,12 @@ describe("UserVfsTurnService", () => {
       pathsFromUserOpsXml(
         flush.attachments.map((a) => a.content ?? "").join("\n"),
       ),
-      [...preview],
+      ["/op2-a.md", "/op2-b.md"],
     );
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+    assert.equal(listUserOpsLog(session.id).length, 0);
   });
 
-  it("T-OP3：同 path 写 A 再写回 baseline → preview 空集且不清 pending", async () => {
+  it("T-UOL2（翻转 T-OP3）：同 path 写 A 再写回 baseline → store 非空且 chip 可见", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -852,22 +1002,23 @@ describe("UserVfsTurnService", () => {
       session.id,
       writeOp("/op3.md", "changed", "tu_a"),
     );
-    assert.deepEqual(
-      [...(await userVfsTurn.previewUserOpsChangedPaths(session.id))],
-      ["/op3.md"],
-    );
-
     await userVfsTurn.executeOp(
       session.id,
       writeOp("/op3.md", "baseline", "tu_back"),
     );
-    const preview = await userVfsTurn.previewUserOpsChangedPaths(session.id);
-    assert.deepEqual([...preview], []);
+
+    assert.equal(listUserOpsLog(session.id).length, 2);
     assert.equal(await userVfsTurn.hasPendingTurns(session.id), true);
-    assert.ok(await loadPendingQueueJson(ctx.conn, session.id));
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+
+    const chips = await projectComposerStatusAttachments(session.id, {});
+    assert.ok(
+      chips.some((a) => a.source === "user_ops" && a.path === "/op3.md"),
+      "改回 baseline 后 chip 仍按 path 可见",
+    );
   });
 
-  it("T-SD1：发送 flush 出 user_ops → pending 空且 checkpoint 后上条空", async () => {
+  it("T-UOL5：发送后 store 空、chip 空；checkpoint capture 仍可触发", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -878,26 +1029,17 @@ describe("UserVfsTurnService", () => {
       writeOp("/sd1.md", "payload", "tu_sd1"),
     );
 
-    const statusDeps = {
-      previewUserOpsActions: (id: string) =>
-        userVfsTurn.previewUserOpsActions(id),
-    };
-
-    const before = await projectComposerStatusAttachments(
-      session.id,
-      statusDeps,
-    );
+    const before = await projectComposerStatusAttachments(session.id, {});
     assert.ok(
-      before.some(a => a.source === "user_ops" && a.path === "/sd1.md"),
+      before.some((a) => a.source === "user_ops" && a.path === "/sd1.md"),
       "flush 前应有 user_ops 状态 chip",
     );
 
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
     assert.equal(await userVfsTurn.hasPendingTurns(session.id), false);
-    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+    assert.equal(listUserOpsLog(session.id).length, 0);
 
-    // 现网发送：append 带 user_ops → capture checkpoint（投影相对新基线）
     const anchor = await ctx.messages.append(
       session.id,
       "user",
@@ -906,9 +1048,9 @@ describe("UserVfsTurnService", () => {
     );
     await ctx.messageCheckpoint.capture(session.id, project.id, anchor.id);
 
-    const after = await projectComposerStatusAttachments(session.id, statusDeps);
+    const after = await projectComposerStatusAttachments(session.id, {});
     assert.equal(
-      after.filter(a => a.source === "user_ops").length,
+      after.filter((a) => a.source === "user_ops").length,
       0,
       "发送收尾后上条不应再有 user_ops",
     );

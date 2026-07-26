@@ -62,6 +62,9 @@ export {
   STATUS_CHIP_ZH,
   formatStatusChipLabel,
   formatStatusChipLabelFromAttachment,
+  logicalParentDir,
+  renameChipZh,
+  resolveRenameOrMoveAction,
 } from '../domain/chat/logic/status-chip-label.js';
 export {
   buildAlreadyReferencedActionXml,
@@ -132,21 +135,12 @@ export {
   deriveDirPathsFromFileTree,
   emptyWorkspaceFlushSnapshot,
 } from '../domain/chat/logic/workspace-flush-snapshot.js';
-export { resolveFlushBaselineTree } from '../domain/chat/logic/resolve-flush-baseline-tree.js';
-export { resolveCurrentWorkspaceSnapshot } from '../domain/chat/logic/resolve-current-workspace-snapshot.js';
+// 净 diff 模块（resolveFlushBaselineTree / resolveCurrentWorkspaceSnapshot /
+// diffWorkspaceForUserVfsFlush / synthesizeUserVfsFlushActions）已退出 public；
+// 文件保留并标 @deprecated，仅供过渡期单测直接相对路径引用。
 export {
-  collectUserOpsChangedPaths,
-  diffWorkspaceForUserVfsFlush,
-  isWorkspaceFlushDiffEmpty,
-} from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
-export type {
-  WorkspaceFlushDiff,
-  WorkspaceFlushDiffInput,
-  WorkspaceFlushChangedFile,
-  WorkspaceFlushAddedFile,
-} from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
-export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
-export {
+  buildUserOpsAttachmentFromLogEntry,
+  buildUserOpsAttachmentsFromLogEntries,
   previewPendingUserOpsAttachment,
 } from '../domain/chat/logic/build-user-ops-attachment.js';
 export {
@@ -189,6 +183,31 @@ export {
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,
 } from '../domain/chat/logic/chat-annotate-draft-store.js';
+export {
+  appendUserOpsLog,
+  chipsFromUserOpsLogStore,
+  clearUserOpsLog,
+  hasUnsentUserOpsLog,
+  listUserOpsLog,
+  replaceUserOpsLog,
+  resetUserOpsLogStoreForTests,
+  subscribeUserOpsLog,
+} from '../domain/chat/logic/chat-user-ops-log-store.js';
+export { aggregateUserOpsLogChips } from '../domain/chat/logic/aggregate-user-ops-log-chips.js';
+export { parseUserOpsLogFromAttachments } from '../domain/chat/logic/parse-user-ops-log-from-attachments.js';
+export { userOpsLogEntryFromTurnOp } from '../domain/chat/logic/user-ops-log-from-turn-op.js';
+export type { UserOpsLogTurnOpInput } from '../domain/chat/logic/user-ops-log-from-turn-op.js';
+export {
+  userOpsLogEntriesSchema,
+  userOpsLogEntryChipPath,
+  userOpsLogEntrySchema,
+  userOpsLogHunkSchema,
+} from '../domain/chat/model/user-ops-log.schema.js';
+export type {
+  UserOpsLogEntries,
+  UserOpsLogEntry,
+  UserOpsLogHunk,
+} from '../domain/chat/model/user-ops-log.schema.js';
 export {
   buildFlatTextIndex,
   findAllOccurrences,

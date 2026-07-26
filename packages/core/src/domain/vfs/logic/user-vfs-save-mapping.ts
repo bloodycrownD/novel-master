@@ -296,9 +296,9 @@ export function buildUserVfsSaveEditActionXml(
     .join("\n");
 }
 
-/** 生成 delete / mkdir / rename 的 `<action name="…">`。 */
+/** 生成 delete / mkdir / rename / move 的 `<action name="…">`。 */
 export function buildUserVfsSimpleActionXml(
-  kind: "delete" | "mkdir" | "rename",
+  kind: "delete" | "mkdir" | "rename" | "move",
   attrs: Record<string, string>,
 ): string {
   if (kind === "delete") {
@@ -311,7 +311,8 @@ export function buildUserVfsSimpleActionXml(
   if (kind === "mkdir") {
     return buildUserVfsActionXml("mkdir", { path: attrs.path ?? "" });
   }
-  return buildUserVfsActionXml("rename", {
+  // rename（同目录）与 move（跨目录）JSON 字段同为 from/to；VFS 底层仍 mv。
+  return buildUserVfsActionXml(kind, {
     from: attrs.from ?? "",
     to: attrs.to ?? "",
   });

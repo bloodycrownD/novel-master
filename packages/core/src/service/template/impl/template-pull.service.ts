@@ -11,6 +11,7 @@ import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { chatNotFound } from "@/errors/chat-errors.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import type { TemplatePullService } from "../template-pull.port.js";
 
@@ -48,5 +49,6 @@ export class DefaultTemplatePullService implements TemplatePullService {
         clearCheckpoints: true,
       });
     });
+    await runDeferredBlobGc(this.conn);
   }
 }

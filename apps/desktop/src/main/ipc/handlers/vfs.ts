@@ -373,7 +373,10 @@ export function handleVfsStartDrag(
   }
 }
 
-/** Composer 空发门闩：会话是否有 pending→user_ops。 */
+/**
+ * Composer 空发门闩：会话是否有未发送手改日志。
+ * `hasPendingTurns` 已改读 main 进程 UserOpsLogStore（与 flush 同真源）。
+ */
 export async function handleUserVfsHasPending(
   req: UserVfsHasPendingRequest,
 ): Promise<IpcResult<boolean>> {

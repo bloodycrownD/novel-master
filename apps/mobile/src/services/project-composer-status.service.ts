@@ -1,5 +1,5 @@
 /**
- * Composer 状态条投影：组装 runtime deps → projectComposerStatusAttachments。
+ * Composer 状态条投影：Core 读 UserOpsLogStore → ops chip；App 仅 ∪ annotate。
  */
 import {
   projectComposerStatusAttachments,
@@ -8,27 +8,23 @@ import {
 import { applyComposerStatusAttachmentsReplace } from '../storage/chat-composer-draft';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 
-/** session 真源 → 状态条 attachments（仅 user_ops；App 侧再 ∪ annotate）。 */
+/**
+ * session 真源 → 状态条 attachments（仅 user_ops）。
+ * Core `projectComposerStatusAttachments` 读进程内 log store；App 侧再 ∪ annotate。
+ * `runtime` 保留签名稳定（调用方不必改）；投影不再走 preview 净 diff。
+ */
 export async function projectComposerStatusForSession(
-  runtime: MobileNovelMasterRuntime,
+  _runtime: MobileNovelMasterRuntime,
   sessionId: string,
 ): Promise<MessageAttachment[]> {
-  return projectComposerStatusAttachments(sessionId, {
-    previewUserOpsActions: async id => {
-      // chip 以 pending 为门闩：flush 清队列后上条必空，避免「pending 已空但 checkpoint 落后」粘住 mkdir 等 chip
-      if (!(await runtime.userVfsTurn.hasPendingTurns(id))) {
-        return [];
-      }
-      return runtime.userVfsTurn.previewUserOpsActions(id);
-    },
-  });
+  return projectComposerStatusAttachments(sessionId);
 }
 
 /**
- * Undo / 手动重置常驻：直接清空状态条（Undo 可作中间态，随后反投影批注）。
+ * Undo 中间态 / 手动重置常驻：直接清空状态条（Undo 可作中间态，随后反投影）。
  *
  * 正文 + `@` attach 由 replace 保留。
- * 手动重置已知限制：会丢未发送手改 ops 投影（仍 clearSession）。
+ * 手动重置：调用方须先 `clearUserOpsLog`（与 clearSession 对称），本函数只清 UI 上条。
  */
 export async function refreshComposerStatusAfterSessionKkvCleared(
   _runtime: MobileNovelMasterRuntime,
@@ -42,6 +38,7 @@ export async function refreshComposerStatusAfterSessionKkvCleared(
 
 /**
  * 置位 / 压缩成功：project(ops) ∪ annotate（`apply` 内 ∪）；禁止终态强制 `[]`。
+ * 未发送 ops-log store 保留（对齐 annotate）。
  */
 export async function refreshComposerStatusAfterFloorOrCompaction(
   runtime: MobileNovelMasterRuntime,

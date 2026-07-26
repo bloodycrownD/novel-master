@@ -13,6 +13,7 @@ import {
   type DerivedToolUseInput,
 } from "../../vfs/logic/action-xml-to-tool-uses.js";
 import { buildUserVfsActionXml } from "../../vfs/logic/user-vfs-save-mapping.js";
+import { resolveRenameOrMoveAction } from "./status-chip-label.js";
 import { USER_VFS_TURN_ACK_TEXT } from "./user-vfs-turn-constants.js";
 
 export { USER_VFS_TURN_ACK_TEXT } from "./user-vfs-turn-constants.js";
@@ -24,7 +25,7 @@ export type ParsedUserVfsEditHunk = {
 };
 
 export type ParsedUserVfsAction = {
-  /** 操作名：write / edit / mkdir / delete / rename。 */
+  /** 操作名：write / edit / mkdir / delete / rename / move。 */
   readonly name: string;
   readonly path: string;
   readonly params: Record<string, unknown>;
@@ -77,12 +78,21 @@ function actionFromNamedTag(
   name: string,
   params: Record<string, unknown>,
 ): ParsedUserVfsAction {
+  // 旧跨目录 rename XML → 规范为 move（只读兼容）。
+  let resolvedName = name;
+  if (name === "rename" || name === "move") {
+    const from = asString(params.from);
+    const to = asString(params.to);
+    if (from !== "" && to !== "") {
+      resolvedName = resolveRenameOrMoveAction(from, to);
+    }
+  }
   const path =
-    name === "rename"
+    resolvedName === "rename" || resolvedName === "move"
       ? `${asString(params.from)}→${asString(params.to)}`
       : asString(params.path);
   const hunks: ParsedUserVfsEditHunk[] =
-    name === "edit"
+    resolvedName === "edit"
       ? [
           {
             index: "1",
@@ -92,11 +102,11 @@ function actionFromNamedTag(
         ]
       : [];
   return {
-    name,
+    name: resolvedName,
     path,
     params,
-    kind: name,
-    method: name === "write" || name === "edit" ? name : undefined,
+    kind: resolvedName,
+    method: resolvedName === "write" || resolvedName === "edit" ? resolvedName : undefined,
     hunks,
   };
 }
@@ -137,7 +147,7 @@ function formatUserVfsActionXml(action: ParsedUserVfsAction): string {
   const params =
     Object.keys(action.params).length > 0
       ? action.params
-      : action.name === "rename"
+      : action.name === "rename" || action.name === "move"
         ? (() => {
             const [from = "", to = ""] = action.path.split("→");
             return { from, to };

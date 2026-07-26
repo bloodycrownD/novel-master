@@ -32,6 +32,9 @@ export interface MessageRepository {
   /** Deletes messages with seq strictly greater than `afterSeq` in the session. */
   deleteAfterSeq(sessionId: string, afterSeq: number): Promise<void>;
 
+  /** 列出 seq > afterSeq 的消息 id（截断 tail 用，避免全量 listBySession）。 */
+  listIdsAfterSeq(sessionId: string, afterSeq: number): Promise<string[]>;
+
   /** Update the hidden state of a single message. Returns true if message was found. */
   updateHidden(messageId: string, hidden: boolean): Promise<boolean>;
 

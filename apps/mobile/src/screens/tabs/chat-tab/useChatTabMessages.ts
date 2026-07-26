@@ -6,6 +6,7 @@ import { Alert } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   type ChatMessage,
+  clearUserOpsLog,
   isPlainUserUndoSendEligible,
   parseAnnotateDraftsFromAttachments,
   resolveRollbackConfirmMessage,
@@ -29,11 +30,12 @@ import {
 } from '@novel-master/core/session-fs';
 import { addChatAnnotateDraft } from '@/storage/chat-annotate-draft';
 import {
+  applyComposerStatusAttachmentsReplace,
   readChatComposerDraftState,
-  refreshComposerAnnotateChips,
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
 import {
+  projectComposerStatusForSession,
   refreshComposerStatusAfterFloorOrCompaction,
   refreshComposerStatusAfterSessionKkvCleared,
 } from '@/services/project-composer-status.service';
@@ -409,34 +411,41 @@ export function useChatTabMessageActions({
 
       const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
-      // 删消息前 snapshot：成功后解析真 VFS 工作区批注（伪 path 由 parse 跳过）
-      const annotateAttachmentsSnapshot =
+      // 删消息前 snapshot：undo_send 成功后仅解析批注（rewind / undo_send 均清空 ops store）
+      const attachmentsSnapshot =
         mode === 'undo_send' ? (target.attachments ?? []) : null;
 
-      const applyComposerRestore = () => {
-        if (mode === 'undo_send' && restoreText != null) {
-          // T-TX2：仅正文（含 `@路径`）；状态由 kkv 清空后投影；无 attach chip
-          writeChatComposerDraftState(
-            sessionId,
-            {
-              text: restoreText,
-              attachments: [],
-            },
-            runtime.sessions,
-          );
-          // append 进现有 store，与未发送草稿并存；无 annotate 不造草稿
-          if (annotateAttachmentsSnapshot != null) {
-            const restored = parseAnnotateDraftsFromAttachments(
-              annotateAttachmentsSnapshot,
-            );
-            for (const draft of restored) {
-              addChatAnnotateDraft(sessionId, draft);
-            }
-          }
-          // 重投影 chip（含未发送 ∪ 刚恢复）；无批注时仍保持 attachments:[]
-          refreshComposerAnnotateChips(sessionId);
-          setDraftRestoreToken(t => t + 1);
+      const applyComposerRestore = async () => {
+        if (mode !== 'undo_send' || restoreText == null) {
+          return;
         }
+        // T-TX2：仅正文（含 `@路径`）；无 attach chip
+        writeChatComposerDraftState(
+          sessionId,
+          {
+            text: restoreText,
+            attachments: [],
+          },
+          runtime.sessions,
+        );
+        // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
+        if (attachmentsSnapshot != null) {
+          const restoredAnnotate = parseAnnotateDraftsFromAttachments(
+            attachmentsSnapshot,
+          );
+          for (const draft of restoredAnnotate) {
+            addChatAnnotateDraft(sessionId, draft);
+          }
+        }
+        const status = await projectComposerStatusForSession(
+          runtime,
+          sessionId,
+        );
+        applyComposerStatusAttachmentsReplace({
+          sessionId,
+          attachments: status,
+        });
+        setDraftRestoreToken(t => t + 1);
       };
 
       const runRollback = async (
@@ -450,13 +459,14 @@ export function useChatTabMessageActions({
             targetMessageId,
             options,
           );
+          clearUserOpsLog(sessionId);
           await refreshComposerStatusAfterSessionKkvCleared(runtime, {
             projectId,
             sessionId,
           });
           resetStreamingDisplay();
           await reloadMessages(true);
-          applyComposerRestore();
+          await applyComposerRestore();
           showToast(
             options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );

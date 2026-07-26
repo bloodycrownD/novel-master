@@ -4,6 +4,7 @@
  * @module service/vfs/build-user-vfs-turn-op
  */
 
+import { resolveRenameOrMoveAction } from "@/domain/chat/logic/status-chip-label.js";
 import {
   buildUserVfsSaveEditActionXml,
   buildUserVfsSaveWriteActionXml,
@@ -57,10 +58,14 @@ export function buildUserVfsMkdirOp(path: string): UserVfsTurnOp {
   return toOp(actionXml, [{ id, name: "fs", input: { command: `mkdir ${path}` } }]);
 }
 
-/** 构建重命名/移动操作 op。 */
+/**
+ * 构建重命名/移动操作 op。
+ * 同目录 → `<action name="rename">`；跨目录 → `name="move"`；VFS 仍 `mv`。
+ */
 export function buildUserVfsRenameOp(from: string, to: string): UserVfsTurnOp {
-  const actionXml = buildUserVfsSimpleActionXml("rename", { from, to });
-  const [id] = allocToolIds(1, "rename");
+  const kind = resolveRenameOrMoveAction(from, to);
+  const actionXml = buildUserVfsSimpleActionXml(kind, { from, to });
+  const [id] = allocToolIds(1, kind);
   return toOp(actionXml, [
     { id, name: "fs", input: { command: `mv ${from} ${to}` } },
   ]);

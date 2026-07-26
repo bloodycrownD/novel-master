@@ -1,6 +1,7 @@
 /**
  * 解析当前会话工作区快照：live 文件头 + 空目录列表。
  *
+ * @deprecated 手改净 diff 已废除；本模块仅过渡期单测保留。
  * @module domain/chat/logic/resolve-current-workspace-snapshot
  */
 

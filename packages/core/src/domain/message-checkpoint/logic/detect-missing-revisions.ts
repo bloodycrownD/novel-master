@@ -9,6 +9,7 @@ import {
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 
 /**
  * 扫描待 reconcile 路径，找出目标树中 revision 行不存在的逻辑路径。
@@ -21,17 +22,37 @@ export async function findMissingRevisionPointers(
   targetTree: ReadonlyMap<string, number>,
   pathsToReconcile: Iterable<string>,
 ): Promise<string[]> {
-  const missing: string[] = [];
+  const pairs: Array<{
+    logicalPath: string;
+    physical: string;
+    version: number;
+  }> = [];
 
   for (const logicalPath of pathsToReconcile) {
     const targetVersion = targetTree.get(logicalPath);
     if (targetVersion == null) {
       continue;
     }
-    const physical = toPhysicalPath(scope, logicalPath);
-    const rev = await revisionRepo.findByPathAndVersion(physical, targetVersion);
-    if (rev == null) {
-      missing.push(logicalPath);
+    pairs.push({
+      logicalPath,
+      physical: toPhysicalPath(scope, logicalPath),
+      version: targetVersion,
+    });
+  }
+
+  if (pairs.length === 0) {
+    return [];
+  }
+
+  const metas = await revisionRepo.findMetasByPathVersions(
+    pairs.map((pair) => ({ path: pair.physical, version: pair.version })),
+  );
+
+  const missing: string[] = [];
+  for (const pair of pairs) {
+    const key = revisionPairKey(pair.physical, pair.version);
+    if (!metas.has(key)) {
+      missing.push(pair.logicalPath);
     }
   }
 

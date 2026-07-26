@@ -197,6 +197,21 @@ export class DefaultVfsService implements VfsService {
     }
     return this.repo.delete(normalized, { recursive: options?.recursive === true });
   }
+
+  async resetHeadToVersion(path: string, _version: number): Promise<void> {
+    // 无 revision 层：补偿合同依赖 revision，禁止静默 no-op
+    throw new Error(
+      `resetHeadToVersion is unsupported without revision history: ${path}`,
+    );
+  }
+
+  hardDelete(
+    path: string,
+    options?: { recursive?: boolean },
+  ): Promise<void> {
+    // 无墓碑可 append 时与物理 delete 一致
+    return this.delete(path, options);
+  }
 }
 
 function pathUnderDir(entryPath: string, dir: string): boolean {

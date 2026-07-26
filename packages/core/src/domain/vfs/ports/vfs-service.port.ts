@@ -79,4 +79,18 @@ export interface VfsService {
   ): Promise<VfsGrepMatch[]>;
 
   delete(path: string, options?: { recursive?: boolean }): Promise<void>;
+
+  /**
+   * 失败补偿：将 live head 拨回指定 revision，不 append、不 bump。
+   *
+   * @remarks
+   * revision 缺失或 `status='deleted'` 时明确抛错。
+   * live entry 不存在时按该 revision 重建（含父目录），禁止走 `write` 注水。
+   */
+  resetHeadToVersion(path: string, version: number): Promise<void>;
+
+  /**
+   * 失败补偿：物理删除 entry（及约定子树），不 append `deleted` 墓碑 revision。
+   */
+  hardDelete(path: string, options?: { recursive?: boolean }): Promise<void>;
 }

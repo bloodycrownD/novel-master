@@ -32,6 +32,7 @@ export type TranscriptAttachmentView = {
     | 'edit'
     | 'mkdir'
     | 'rename'
+    | 'move'
     | 'workplaceChange'
     | 'userAttach'
     | 'annotate';

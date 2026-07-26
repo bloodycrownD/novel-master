@@ -13,6 +13,7 @@ import { toPhysicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -28,7 +29,7 @@ export interface SeedForkCopyParityInput {
 /**
  * 在已开事务内、VFS 与消息写入目标会话之后调用。
  *
- * 内部顺序钉死：list heads → findByPath 取 content → revisions.append →
+ * 内部顺序钉死：list heads → findContentHash → revisions.append（只落 hash，不 put）→
  * session→session copyScope → 对每条新消息 insertCheckpoint（同一活树）。
  *
  * @remarks 禁止嵌套调用 MessageCheckpointService.capture；禁止指望 backfill 播种。
@@ -67,16 +68,20 @@ export async function seedForkCopyParity(
         mtimeMs: Date.now(),
         storageKind: "inline",
       });
+      await adjustRef(revisions, physical, head.headVersion, +1);
       continue;
     }
+    const contentHash = await entries.findContentHash(physical);
     await revisions.append({
       path: physical,
       version: head.headVersion,
-      content: entry.content,
+      content: null,
+      contentHash,
       status: "active",
       mtimeMs: entry.mtimeMs,
       storageKind: entry.storageKind,
     });
+    await adjustRef(revisions, physical, head.headVersion, +1);
   }
 
   await workplace.copyScope(

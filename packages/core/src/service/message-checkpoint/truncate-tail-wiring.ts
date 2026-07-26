@@ -27,5 +27,6 @@ export function createTruncateTailDepsFromTx(tx: TdbcConnection): TruncateTailDe
     sessionKkv: new SqliteSessionKkvRepository(tx),
     revisions: new SqliteVfsRevisionRepository(tx),
     entries: new SqliteVfsEntryRepository(tx),
+    conn: tx,
   };
 }

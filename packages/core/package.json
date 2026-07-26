@@ -82,7 +82,6 @@
       "types": "./dist/service/session-kkv/index.d.ts",
       "import": "./dist/service/session-kkv/index.js"
     },
-
     "./config-forms": {
       "types": "./dist/config-forms/index.d.ts",
       "import": "./dist/config-forms/index.js"
@@ -117,6 +116,7 @@
     "test:perf": "npm run test:fast -- test/message-checkpoint/performance.test.ts"
   },
   "dependencies": {
+    "@noble/hashes": "^2.2.0",
     "fflate": "^0.8.3",
     "iconv-lite": "^0.6.3",
     "yaml": "^2.8.2",

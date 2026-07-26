@@ -1,6 +1,7 @@
 /**
  * 解析 flush 基准：最近 message checkpoint 文件树 + 推导目录集。
  *
+ * @deprecated 手改净 diff 已废除；本模块仅过渡期单测保留。
  * @module domain/chat/logic/resolve-flush-baseline-tree
  */
 

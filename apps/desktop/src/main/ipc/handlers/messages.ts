@@ -2,6 +2,7 @@
  * Messages IPC handlers — list (display regex), append, edit, hide, delete, rollback.
  */
 import {
+  clearUserOpsLog,
   readMessageMetadata,
   textBlocks,
   type ChatMessage,
@@ -313,6 +314,7 @@ export async function handleMessagesRollback(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
+
     const rollbackOptions =
       req.skipVfsReconcile || req.revisionHeadBackfill
         ? {
@@ -330,7 +332,9 @@ export async function handleMessagesRollback(
       req.messageId,
       rollbackOptions,
     );
-    // truncate 已按域清空状态条 kkv；UI 空替换（勿再 project，避免灌满 workplace）
+
+    // D8：undo_send / rewind 均 clearUserOpsLog 后推空；renderer 再 ∪ annotate（正文/批注仍恢复）
+    clearUserOpsLog(req.sessionId);
     await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {

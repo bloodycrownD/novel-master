@@ -1,6 +1,6 @@
 /**
- * VFS file manager batch header: delete + enable/disable directory rules.
- * Shown when user enters batch mode from the path bar ⋯ menu.
+ * VFS 文件管理器批量操作栏：删除 + 移动。
+ * 由行长按进入多选后展示。
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -10,16 +10,15 @@ type Props = {
   selectedCount: number;
   onCancel: () => void;
   onDelete: () => void;
-  onEnable: () => void;
-  onDisable: () => void;
+  /** 打开目标目录选择并执行批量移动 */
+  onMove: () => void;
 };
 
 export function VfsBatchHeader({
   selectedCount,
   onCancel,
   onDelete,
-  onEnable,
-  onDisable,
+  onMove,
 }: Props) {
   const {tokens} = useTheme();
   const actionsEnabled = selectedCount > 0;
@@ -45,7 +44,7 @@ export function VfsBatchHeader({
               删除
             </Text>
           </Pressable>
-          <Pressable onPress={onEnable} disabled={!actionsEnabled}>
+          <Pressable onPress={onMove} disabled={!actionsEnabled}>
             <Text
               style={[
                 styles.actionLabel,
@@ -53,18 +52,7 @@ export function VfsBatchHeader({
                   color: actionsEnabled ? tokens.primary : tokens.textTertiary,
                 },
               ]}>
-              开启
-            </Text>
-          </Pressable>
-          <Pressable onPress={onDisable} disabled={!actionsEnabled}>
-            <Text
-              style={[
-                styles.actionLabel,
-                {
-                  color: actionsEnabled ? tokens.primary : tokens.textTertiary,
-                },
-              ]}>
-              关闭
+              移动
             </Text>
           </Pressable>
         </View>

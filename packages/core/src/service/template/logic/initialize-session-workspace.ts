@@ -27,7 +27,7 @@ export async function initializeSessionWorkspace(
   options: InitializeSessionWorkspaceOptions,
 ): Promise<void> {
   if (options.clearCheckpoints) {
-    await deleteSessionFsData(tx, sessionId);
+    await deleteSessionFsData(tx, sessionId, projectId);
   }
   const vfs = new SqliteVfsEntryRepository(tx);
   const worktree = new SqliteWorkplaceRepository(tx);

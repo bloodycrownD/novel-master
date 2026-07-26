@@ -1,5 +1,5 @@
 /**
- * T-CR6：Desktop Undo 批注反投影（对齐 Mobile；不恢复手改）。
+ * T-CR6 / T-UOL7：Desktop Undo 批注反投影；保留 main 已推 ops，禁止 wipe。
  */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
@@ -13,12 +13,12 @@ import {
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import { applyUndoAnnotateRestore } from "@/features/chat/rollback-annotate-restore";
 
-describe("applyUndoAnnotateRestore (T-CR6)", () => {
+describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
   beforeEach(() => {
     resetChatAnnotateDraftStoreForTests();
   });
 
-  it("T-CR6: annotate 附件 → store 新 mint id + chip；与未发送并存；无手改 chip", () => {
+  it("T-UOL7: annotate 附件 → store 新 mint id + chip；与未发送并存；保留 main 已推 ops", () => {
     addChatAnnotateDraft("s1", {
       id: "unsent-keep",
       path: "/keep.md",
@@ -32,7 +32,22 @@ describe("applyUndoAnnotateRestore (T-CR6)", () => {
       userAnnotation: "请改短",
     }) as MessageAttachmentDto;
 
-    const chips = applyUndoAnnotateRestore("s1", [annotateAtt]);
+    const mainPushedOps: MessageAttachmentDto[] = [
+      {
+        name: "/hand.md",
+        source: "user_ops",
+        type: "text",
+        content: null,
+        path: "/hand.md",
+        action: "write",
+      },
+    ];
+
+    const chips = applyUndoAnnotateRestore(
+      "s1",
+      [annotateAtt],
+      mainPushedOps,
+    );
     const drafts = listChatAnnotateDrafts("s1");
     assert.equal(drafts.length, 2);
     assert.ok(
@@ -50,12 +65,10 @@ describe("applyUndoAnnotateRestore (T-CR6)", () => {
     assert.ok(
       chips.some((c) => c.path === "/keep.md" && c.action === "annotate"),
     );
-    assert.equal(
-      chips.some((c) => c.action === "mkdir" || c.action === "write"),
-      false,
-      "手改 chip 不得出现",
+    assert.ok(
+      chips.some((c) => c.path === "/hand.md" && c.action === "write"),
+      "须保留 main 已推 user_ops chip（禁止 wipe）",
     );
-    assert.deepEqual(chipsFromAnnotateStore("s1"), chips);
   });
 
   it("T-CR6: 伪 __message__: path 跳过", () => {
@@ -73,17 +86,58 @@ describe("applyUndoAnnotateRestore (T-CR6)", () => {
     assert.equal(chips.length, 0);
   });
 
-  it("T-CR6: 无 annotate → store 不新增；状态条空（ops 半边空）", () => {
-    const chips = applyUndoAnnotateRestore("s1", [
+  it("T-UOL7: 无 annotate → store 不新增；保留 existing ops", () => {
+    const mainOps: MessageAttachmentDto[] = [
       {
         name: "/a.md",
-        source: "attach",
+        source: "user_ops",
         type: "text",
         content: null,
         path: "/a.md",
+        action: "mkdir",
       },
-    ]);
+    ];
+    const chips = applyUndoAnnotateRestore(
+      "s1",
+      [
+        {
+          name: "/x.md",
+          source: "attach",
+          type: "text",
+          content: null,
+          path: "/x.md",
+        },
+      ],
+      mainOps,
+    );
     assert.equal(listChatAnnotateDrafts("s1").length, 0);
+    assert.equal(chips.length, 1);
+    assert.equal(chips[0]?.path, "/a.md");
+    assert.equal(chips[0]?.action, "mkdir");
+  });
+
+  it("T-UOL7: 禁止 union([],…) — 无 existing 时仅 annotate chip", () => {
+    const chips = applyUndoAnnotateRestore("s1", []);
+    assert.deepEqual(chips, chipsFromAnnotateStore("s1"));
     assert.deepEqual(chips, []);
+  });
+
+  it("T-UOL7 rewind: ops 半边空 + 仅 ∪ annotate；不把旧 user_ops 盖回", () => {
+    addChatAnnotateDraft("s1", {
+      id: "ann-keep",
+      path: "/note.md",
+      originalText: "原文",
+      userAnnotation: "批注",
+    });
+    // ConversationPanel rewind：传 existing=[]（main 已推空），禁止传入闭包旧 chip
+    const chips = applyUndoAnnotateRestore("s1", null, []);
+    assert.ok(
+      chips.some((c) => c.path === "/note.md" && c.action === "annotate"),
+    );
+    assert.equal(
+      chips.some((c) => c.action !== "annotate"),
+      false,
+      "rewind 不得盖回旧非 annotate（手改）chip",
+    );
   });
 });

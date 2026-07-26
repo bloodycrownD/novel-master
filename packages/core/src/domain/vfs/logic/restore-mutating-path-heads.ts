@@ -115,7 +115,68 @@ export async function captureMutatingPathHeadSnapshots(
 }
 
 /**
+ * directory 补偿：快照外 hardDelete + 快照内 resetHead（禁 write 注水）。
+ */
+async function restoreDirectorySnapshot(
+  vfs: VfsService,
+  snapshot: MutatingPathHeadDirectory,
+): Promise<void> {
+  // 空目录：硬清 D 下残留文件/子树后，确保目录存在
+  if (snapshot.files.length === 0) {
+    try {
+      await vfs.hardDelete(snapshot.path, { recursive: true });
+    } catch (error: unknown) {
+      if (!isVfsError(error, "NOT_FOUND")) {
+        throw error;
+      }
+    }
+    try {
+      await vfs.mkdir(snapshot.path);
+    } catch (error: unknown) {
+      if (!isVfsError(error, "ALREADY_EXISTS")) {
+        throw error;
+      }
+    }
+    return;
+  }
+
+  // list 遇 NOT_FOUND ≡ 无快照外文件
+  let currentFilePaths: string[] = [];
+  try {
+    const entries = await vfs.list(snapshot.path, { recursive: true });
+    currentFilePaths = entries
+      .filter((entry) => entry.kind === "file")
+      .map((entry) => entry.path);
+  } catch (error: unknown) {
+    if (!isVfsError(error, "NOT_FOUND")) {
+      throw error;
+    }
+  }
+
+  const snapshotPaths = new Set(snapshot.files.map((file) => file.path));
+  for (const filePath of currentFilePaths) {
+    if (snapshotPaths.has(filePath)) {
+      continue;
+    }
+    try {
+      await vfs.hardDelete(filePath, { recursive: true });
+    } catch (error: unknown) {
+      if (!isVfsError(error, "NOT_FOUND")) {
+        throw error;
+      }
+    }
+  }
+
+  // 快照内只用 version 拨回；content 字段仅为 capture 遗留
+  for (const file of snapshot.files) {
+    await vfs.resetHeadToVersion(file.path, file.version);
+  }
+}
+
+/**
  * 将给定 paths 恢复为 snapshots 中记录的起始 head。
+ *
+ * @remarks 走 resetHeadToVersion / hardDelete 补偿原语，禁止 write 注水。
  */
 export async function restoreMutatingPathHeads(
   vfs: VfsService,
@@ -131,7 +192,7 @@ export async function restoreMutatingPathHeads(
     try {
       if (snapshot.kind === "absent") {
         try {
-          await vfs.delete(path, { recursive: true });
+          await vfs.hardDelete(path, { recursive: true });
         } catch (error: unknown) {
           if (!isVfsError(error, "NOT_FOUND")) {
             throw error;
@@ -140,26 +201,10 @@ export async function restoreMutatingPathHeads(
         continue;
       }
       if (snapshot.kind === "directory") {
-        try {
-          await vfs.delete(path, { recursive: true });
-        } catch (error: unknown) {
-          if (!isVfsError(error, "NOT_FOUND")) {
-            throw error;
-          }
-        }
-        if (snapshot.files.length === 0) {
-          await vfs.mkdir(path);
-          continue;
-        }
-        for (const file of snapshot.files) {
-          await vfs.write(file.path, file.content, { versionCheck: false });
-        }
+        await restoreDirectorySnapshot(vfs, snapshot);
         continue;
       }
-      await vfs.write(snapshot.path, snapshot.content, {
-        versionCheck: false,
-        expectedVersion: snapshot.version,
-      });
+      await vfs.resetHeadToVersion(snapshot.path, snapshot.version);
     } catch (error: unknown) {
       errors.push(error);
     }

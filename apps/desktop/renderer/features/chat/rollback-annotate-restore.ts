@@ -1,6 +1,6 @@
 /**
- * Desktop Undo（undo_send）：从锚点附件反投影工作区批注草稿 + chip。
- * 不对齐手改旁路（D6 废止）；伪 `__message__:` path 由 parse 跳过。
+ * Desktop Undo（undo_send / rewind）：从锚点附件反投影工作区批注草稿 + chip。
+ * 手改 ops 由 main `clearUserOpsLog` 后推空；本函数仅 ∪ annotate。
  */
 import {
   parseAnnotateDraftsFromAttachments,
@@ -24,11 +24,13 @@ function toMessageAttachment(a: MessageAttachmentDto): MessageAttachment {
 }
 
 /**
- * 解析附件 → annotate store（新 mint id）→ 返回 project∪annotate 状态条（ops 半边空）。
+ * 解析附件 → annotate store（新 mint id）→ ∪ annotate。
+ * @param existingStatusAttachments main suggest 已推的状态条（Undo 时通常为空 ops）
  */
 export function applyUndoAnnotateRestore(
   sessionId: string,
   attachments: readonly MessageAttachmentDto[] | null | undefined,
+  existingStatusAttachments: readonly MessageAttachmentDto[] = [],
 ): MessageAttachmentDto[] {
   if (attachments != null && attachments.length > 0) {
     const restored = parseAnnotateDraftsFromAttachments(
@@ -38,5 +40,9 @@ export function applyUndoAnnotateRestore(
       addChatAnnotateDraft(sessionId, draft);
     }
   }
-  return unionComposerStatusWithAnnotate([], sessionId);
+  // Undo 时 main 已推空 ops；仅 ∪ annotate（D8）
+  const opsHalf = existingStatusAttachments.filter(
+    (a) => a.action !== "annotate",
+  );
+  return unionComposerStatusWithAnnotate(opsHalf, sessionId);
 }
