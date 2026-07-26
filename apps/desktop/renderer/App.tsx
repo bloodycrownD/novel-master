@@ -33,6 +33,7 @@ import {
   ipcModelListPicker,
   ipcModelSetCurrent,
   ipcSessionsRename,
+  ipcVfsCharacterCardImport,
   ipcVfsZipExport,
   ipcVfsZipImport,
 } from './ipc/client';
@@ -48,7 +49,12 @@ type WorkspacePromptState =
 
 type WorkspaceConfirmState =
   | { kind: 'delete'; target: WorkspaceContextTarget }
-  | { kind: 'import-zip'; target: WorkspaceContextTarget; directoryPath: string };
+  | { kind: 'import-zip'; target: WorkspaceContextTarget; directoryPath: string }
+  | {
+      kind: 'import-character-card';
+      target: WorkspaceContextTarget;
+      directoryPath: string;
+    };
 
 type SessionRenamePromptState = {
   sessionId: string;
@@ -206,6 +212,18 @@ function DesktopOverlays() {
           return;
         }
         setWorkspaceConfirm({ kind: 'import-zip', target, directoryPath });
+        return;
+      }
+      if (action === 'import-character-card') {
+        const directoryPath = zipDirectoryPathForTarget(target);
+        if (directoryPath == null) {
+          return;
+        }
+        setWorkspaceConfirm({
+          kind: 'import-character-card',
+          target,
+          directoryPath,
+        });
       }
     },
     [projectId, sessionId],
@@ -329,6 +347,21 @@ function DesktopOverlays() {
       if (result.ok && result.data === 'imported') {
         notifyWorkspaceMutated();
         showToast('已导入 ZIP');
+      } else if (!result.ok) {
+        showToast(result.error.message);
+      }
+      return;
+    }
+    if (confirm.kind === 'import-character-card') {
+      const req = {
+        ...scopeRequestFromTarget(confirm.target, projectId, sessionId),
+        confirmed: true,
+        directoryPath: confirm.directoryPath,
+      };
+      const result = await ipcVfsCharacterCardImport(req);
+      if (result.ok && result.data === 'imported') {
+        notifyWorkspaceMutated();
+        showToast('已导入角色卡');
       } else if (!result.ok) {
         showToast(result.error.message);
       }
@@ -573,6 +606,19 @@ function DesktopOverlays() {
         title="导入 ZIP"
         message={
           workspaceConfirm?.kind === 'import-zip'
+            ? zipImportConfirmMessage(workspaceConfirm.directoryPath)
+            : ''
+        }
+        danger
+        onConfirm={handleWorkspaceConfirm}
+        onCancel={() => setWorkspaceConfirm(null)}
+      />
+
+      <ConfirmModal
+        open={workspaceConfirm?.kind === 'import-character-card'}
+        title="导入角色卡"
+        message={
+          workspaceConfirm?.kind === 'import-character-card'
             ? zipImportConfirmMessage(workspaceConfirm.directoryPath)
             : ''
         }
