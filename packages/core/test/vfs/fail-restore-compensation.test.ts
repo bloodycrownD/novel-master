@@ -8,6 +8,13 @@ import {
   captureMutatingPathHeadSnapshots,
   restoreMutatingPathHeads,
 } from "../../src/domain/vfs/logic/restore-mutating-path-heads.js";
+import { sweepSessionRevisions } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
+import { runDeferredBlobGc } from "../../src/domain/vfs/logic/deferred-blob-gc.js";
+import { hashContent } from "../../src/domain/vfs/content-store/logic/hash-content.js";
+import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsContentStore } from "../../src/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -148,6 +155,12 @@ describe("fail restore compensation (sessionVfs)", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
+    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
+    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
+    const contentStore = new SqliteVfsContentStore(ctx.conn);
+    const physX = physicalPath(project.id, session.id, "/empty/x.md");
+    const orphanHash = hashContent("x");
 
     await vfs.mkdir("/empty");
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/empty"]);
@@ -158,6 +171,20 @@ describe("fail restore compensation (sessionVfs)", () => {
 
     await assert.rejects(() => vfs.read("/empty/x.md"));
     assert.deepEqual(await vfs.list("/empty"), []);
+
+    // recursive hardDelete 补偿须 −live ref；sweep 后 revision / orphan blob 可回收
+    await sweepSessionRevisions(
+      revisions,
+      entries,
+      checkpoints,
+      project.id,
+      session.id,
+      ctx.conn,
+    );
+    await runDeferredBlobGc(ctx.conn);
+
+    assert.equal(await revisions.findByPathAndVersion(physX, 1), null);
+    await assert.rejects(() => contentStore.get(orphanHash));
   });
 
   it("T-FR-D3: directory 两文件改写+删除后均拨回（含重建），无额外写回 version", async () => {

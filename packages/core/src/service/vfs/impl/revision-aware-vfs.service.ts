@@ -197,9 +197,16 @@ export class RevisionAwareVfsService implements VfsService {
     await runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      const entry = await entryRepo.findByPath(normalized);
-      if (entry != null && entry.entryKind === "file") {
-        await adjustRef(revisionRepo, normalized, entry.version, -1);
+      if (options?.recursive === true) {
+        const heads = await entryRepo.listFileHeadsUnderPrefix(normalized);
+        for (const head of heads) {
+          await adjustRef(revisionRepo, head.path, head.headVersion, -1);
+        }
+      } else {
+        const entry = await entryRepo.findByPath(normalized);
+        if (entry != null && entry.entryKind === "file") {
+          await adjustRef(revisionRepo, normalized, entry.version, -1);
+        }
       }
       // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
       await entryRepo.delete(normalized, {
