@@ -4,8 +4,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import {
+  bytesToBase64,
+  VFS_CONTENT_ENCODING_ZLIB_B64,
+} from "@/domain/vfs/content-store/logic/blob-bytes-codec.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
-import { VFS_CONTENT_ENCODING_ZLIB } from "@/domain/vfs/content-store/logic/zlib-codec.js";
+import {
+  compressZlib,
+  VFS_CONTENT_ENCODING_ZLIB,
+} from "@/domain/vfs/content-store/logic/zlib-codec.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -33,7 +40,7 @@ describe("VfsContentStore", () => {
 
   it("T-CS2: put/get 往返；encoding=zlib；byte_len=压缩后长度", async () => {
     const { conn } = getNovelMasterTestContext();
-    const store = new SqliteVfsContentStore(conn);
+    const store = new SqliteVfsContentStore(conn, { preferZlibB64: false });
 
     const cases = [
       "",
@@ -60,6 +67,82 @@ describe("VfsContentStore", () => {
       assert.equal(Number(meta[0]!.byte_len), meta[0]!.bytes.byteLength);
       assert.notEqual(String(meta[0]!.bytes), "[object Object]");
     }
+  });
+
+  it("zlib-b64: preferZlibB64 put/get 往返；byte_len=base64 字符串长度", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const store = new SqliteVfsContentStore(conn, { preferZlibB64: true });
+    const plain = `rn-b64-${testIsolationSuffix()}-中文`;
+
+    const hash = await store.put(plain);
+    assert.equal(await store.get(hash), plain);
+
+    const meta = await conn.query<{
+      encoding: string;
+      byte_len: number;
+      bytes: string;
+    }>(
+      `SELECT encoding, byte_len, bytes FROM vfs_content_blob WHERE content_hash = ?`,
+      [hash],
+    );
+    assert.equal(meta.length, 1);
+    assert.equal(meta[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB_B64);
+    assert.equal(typeof meta[0]!.bytes, "string");
+    assert.equal(Number(meta[0]!.byte_len), meta[0]!.bytes.length);
+  });
+
+  it("get：encoding=zlib 且 bytes 为 base64 string 时兜底解码", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const store = new SqliteVfsContentStore(conn, { preferZlibB64: false });
+    const plain = `legacy-zlib-string-${testIsolationSuffix()}`;
+    const contentHash = hashContent(plain);
+    const compressed = compressZlib(new TextEncoder().encode(plain));
+    const b64 = bytesToBase64(compressed);
+
+    // 模拟存量：encoding 仍标 zlib，但列里实际是 base64 文本（RN 读回形态）。
+    await conn.execute(
+      `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
+       VALUES (?, ?, ?, ?)`,
+      [contentHash, VFS_CONTENT_ENCODING_ZLIB, b64, b64.length],
+    );
+
+    assert.equal(await store.get(contentHash), plain);
+  });
+
+  it("get：手动插入 zlib-b64 行可按 encoding 解码", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const store = new SqliteVfsContentStore(conn);
+    const plain = `manual-b64-${testIsolationSuffix()}`;
+    const contentHash = hashContent(plain);
+    const compressed = compressZlib(new TextEncoder().encode(plain));
+    const b64 = bytesToBase64(compressed);
+
+    await conn.execute(
+      `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
+       VALUES (?, ?, ?, ?)`,
+      [contentHash, VFS_CONTENT_ENCODING_ZLIB_B64, b64, b64.length],
+    );
+
+    assert.equal(await store.get(contentHash), plain);
+  });
+
+  it("同 hash 复用行不改 encoding（Node 行不被 RN put 改写）", async () => {
+    const { conn } = getNovelMasterTestContext();
+    const plain = `reuse-encoding-${testIsolationSuffix()}`;
+    const nodeStore = new SqliteVfsContentStore(conn, {
+      preferZlibB64: false,
+    });
+    const rnStore = new SqliteVfsContentStore(conn, { preferZlibB64: true });
+
+    const hash = await nodeStore.put(plain);
+    await rnStore.put(plain);
+
+    const meta = await conn.query<{ encoding: string }>(
+      `SELECT encoding FROM vfs_content_blob WHERE content_hash = ?`,
+      [hash],
+    );
+    assert.equal(meta[0]!.encoding, VFS_CONTENT_ENCODING_ZLIB);
+    assert.equal(await rnStore.get(hash), plain);
   });
 
   it("gc：全库引用集保留他 session 仍引用的 blob", async () => {

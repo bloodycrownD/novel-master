@@ -10,6 +10,12 @@ import {
   executeTemplate,
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
+import {
+  base64ToBytes,
+  bytesToBase64,
+  isReactNativeRuntime,
+  VFS_CONTENT_ENCODING_ZLIB_B64,
+} from "../logic/blob-bytes-codec.js";
 import { hashContent } from "../logic/hash-content.js";
 import {
   compressZlib,
@@ -17,6 +23,17 @@ import {
   VFS_CONTENT_ENCODING_ZLIB,
 } from "../logic/zlib-codec.js";
 import type { VfsContentStore } from "../vfs-content-store.port.js";
+
+/**
+ * ContentStore 构造可选注入，便于单测强制 RN / Node 落库形态。
+ */
+export type SqliteVfsContentStoreOptions = {
+  /**
+   * 为 true 时 put 落 `zlib-b64`；为 false 时落 `zlib`。
+   * 未传则按 {@link isReactNativeRuntime} 探测。
+   */
+  preferZlibB64?: boolean;
+};
 
 /**
  * 确保 BLOB 绑定使用独立 ArrayBuffer（RN / better-sqlite3 约定）。
@@ -27,6 +44,11 @@ function tightBytes(source: Uint8Array): Uint8Array {
   return copy;
 }
 
+/**
+ * 将已知为二进制 BLOB 的列值收成 Uint8Array。
+ *
+ * @remarks string 不得经此函数；存量 / zlib-b64 的 string 路径在 decodeCompressedBytes 约定分支处理。
+ */
 function asUint8Array(value: unknown, label: string): Uint8Array {
   if (value instanceof Uint8Array) {
     return value;
@@ -41,12 +63,63 @@ function asUint8Array(value: unknown, label: string): Uint8Array {
 }
 
 /**
+ * 将 zlib-b64 列值（或 UTF-8 形态的 base64 字节）还原为 base64 文本。
+ */
+function asBase64Text(value: unknown, label: string): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
+    const bytes =
+      value instanceof Uint8Array ? value : new Uint8Array(value);
+    return new TextDecoder().decode(bytes);
+  }
+  throw new Error(
+    `${label} 期望 base64 字符串或 UTF-8 字节，实际 ${Object.prototype.toString.call(value)}`,
+  );
+}
+
+/**
+ * 按 encoding 将 vfs_content_blob.bytes 解成 zlib 压缩字节。
+ *
+ * - `zlib` + Uint8Array/ArrayBuffer：原样
+ * - `zlib` + string：存量 RN 误存 base64，按 base64 解（对齐 sksp）
+ * - `zlib-b64`：取 base64 文本再解码
+ */
+function decodeCompressedBytes(
+  encoding: string,
+  bytes: unknown,
+): Uint8Array {
+  if (encoding === VFS_CONTENT_ENCODING_ZLIB) {
+    if (typeof bytes === "string") {
+      // 存量：Mobile 曾写 encoding=zlib，但 quick-sqlite 读回为 base64 字符串。
+      return base64ToBytes(bytes);
+    }
+    return asUint8Array(bytes, "vfs_content_blob.bytes");
+  }
+
+  if (encoding === VFS_CONTENT_ENCODING_ZLIB_B64) {
+    const b64 = asBase64Text(bytes, "vfs_content_blob.bytes");
+    return base64ToBytes(b64);
+  }
+
+  throw new Error(`不支持的 content blob encoding: ${encoding}`);
+}
+
+/**
  * TDBC 后端的内容寻址存储。
  */
 export class SqliteVfsContentStore implements VfsContentStore {
   private readonly parser = new SqlTemplateParser();
+  private readonly preferZlibB64: boolean;
 
-  constructor(private readonly conn: TdbcConnection) {}
+  constructor(
+    private readonly conn: TdbcConnection,
+    options?: SqliteVfsContentStoreOptions,
+  ) {
+    this.preferZlibB64 =
+      options?.preferZlibB64 ?? isReactNativeRuntime();
+  }
 
   async put(plain: string): Promise<string> {
     const contentHash = hashContent(plain);
@@ -57,11 +130,31 @@ export class SqliteVfsContentStore implements VfsContentStore {
       { contentHash },
     );
     if (existing.length > 0) {
+      // 同 hash 复用已有行，不改 encoding / bytes。
       return contentHash;
     }
 
     const utf8 = new TextEncoder().encode(plain);
     const compressed = compressZlib(utf8);
+
+    if (this.preferZlibB64) {
+      // Hermes/RN：zlib 后再 base64，以 TEXT 写入，规避 quick-sqlite BLOB 绑参。
+      const b64 = bytesToBase64(compressed);
+      await executeTemplate(
+        this.conn,
+        this.parser,
+        `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len)
+         VALUES (#{contentHash}, #{encoding}, #{bytes}, #{byteLen})`,
+        {
+          contentHash,
+          encoding: VFS_CONTENT_ENCODING_ZLIB_B64,
+          bytes: b64,
+          byteLen: b64.length,
+        },
+      );
+      return contentHash;
+    }
+
     const bytes = tightBytes(compressed);
     await executeTemplate(
       this.conn,
@@ -81,7 +174,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
   async get(contentHash: string): Promise<string> {
     const rows = await queryTemplate<{
       encoding: string;
-      bytes: Uint8Array | null;
+      bytes: unknown;
     }>(
       this.conn,
       this.parser,
@@ -93,10 +186,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
     }
     const row = rows[0]!;
     const encoding = String(row.encoding);
-    const compressed = asUint8Array(row.bytes, "vfs_content_blob.bytes");
-    if (encoding !== VFS_CONTENT_ENCODING_ZLIB) {
-      throw new Error(`不支持的 content blob encoding: ${encoding}`);
-    }
+    const compressed = decodeCompressedBytes(encoding, row.bytes);
     const plainUtf8 = decompressZlib(compressed);
     return new TextDecoder().decode(plainUtf8);
   }

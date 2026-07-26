@@ -6,7 +6,11 @@
 
 import { unzlibSync, zlibSync } from "fflate";
 
-/** ContentStore 落库 encoding 字面量。 */
+/**
+ * ContentStore 落库 encoding：原始 zlib 字节（Node / Desktop）。
+ *
+ * @remarks RN 侧 put 使用 `VFS_CONTENT_ENCODING_ZLIB_B64`（见 blob-bytes-codec）；get 须同时支持二者。
+ */
 export const VFS_CONTENT_ENCODING_ZLIB = "zlib" as const;
 
 /**
