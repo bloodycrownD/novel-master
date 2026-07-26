@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ToolError } from "@novel-master/core";
-import { VfsError } from "@novel-master/core/vfs";
+import { CharacterCardError, VfsError } from "@novel-master/core/vfs";
 import { AgentTurnError } from "@novel-master/core/agent";
 import {
   sessionFsRollbackNoCheckpoint,
@@ -61,5 +61,15 @@ describe("formatIpcError", () => {
     const payload = formatIpcError(err);
     assert.equal(payload.code, "AGENT_RUN_ERROR");
     assert.equal(payload.message, "消息不能为空");
+  });
+
+  it("透出 CharacterCardError.code（勿落成 Error.name）", () => {
+    const err = new CharacterCardError(
+      "NOT_CHARACTER_CARD",
+      "无法识别为角色卡",
+    );
+    const payload = formatIpcError(err);
+    assert.equal(payload.code, "NOT_CHARACTER_CARD");
+    assert.equal(payload.message, "无法识别为角色卡");
   });
 });

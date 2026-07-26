@@ -7,7 +7,11 @@ import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
 import { isCloudSyncError } from "@novel-master/core";
 import { AgentTurnError } from "@novel-master/core/agent";
 import { ToolError } from "@novel-master/core";
-import { VfsError, isVfsError } from "@novel-master/core/vfs";
+import {
+  CharacterCardError,
+  VfsError,
+  isVfsError,
+} from "@novel-master/core/vfs";
 import { ZodError } from "zod";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -68,6 +72,10 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
     return { code: "VALIDATION", message: formatZodIssues(err) };
   }
   if (err instanceof VfsError) {
+    return { code: err.code, message: err.message };
+  }
+  // 角色卡须显式透出 domain code（严于现网 VfsZipError 仅落 name 的路径）
+  if (err instanceof CharacterCardError) {
     return { code: err.code, message: err.message };
   }
   if (err instanceof ToolError) {

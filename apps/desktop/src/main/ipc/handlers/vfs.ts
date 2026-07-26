@@ -22,6 +22,8 @@ import type {
   VfsStartDragRequest,
   VfsStartDragFailedPayload,
   VfsWriteRequest,
+  VfsCharacterCardImportRequest,
+  VfsCharacterCardImportResult,
   VfsZipExportResult,
   VfsZipImportResult,
   VfsZipRequest,
@@ -53,6 +55,7 @@ import {
   stageVfsBatchExport,
   startDragExport,
 } from "../../services/vfs-batch.service.js";
+import { importCharacterCardWithDialog } from "../../services/vfs-character-card.service.js";
 import {
   exportVfsZipWithDialog,
   importVfsZipWithDialog,
@@ -294,6 +297,27 @@ export async function handleVfsZipImport(
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
     const result = await importVfsZipWithDialog(
+      rt,
+      scope,
+      {
+        confirmed: req.confirmed === true,
+        directoryPath: req.directoryPath,
+      },
+      focusedWindow(),
+    );
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleVfsCharacterCardImport(
+  req: VfsCharacterCardImportRequest,
+): Promise<IpcResult<VfsCharacterCardImportResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const result = await importCharacterCardWithDialog(
       rt,
       scope,
       {
