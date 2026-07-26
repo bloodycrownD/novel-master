@@ -11,11 +11,9 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import {
   scopePhysicalPrefix,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import {
-  decrementLiveRefsUnderPrefix,
-  deleteUnreferencedUnderPrefix,
-} from "@/domain/vfs/logic/revision-ref-count.js";
+import { decrementLiveRefsUnderPrefix } from "@/domain/vfs/logic/revision-ref-count.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
+import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { createMessageRollbackService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
 import { DefaultSessionFsService } from "./impl/session-fs.service.js";
 import type { SessionFsService } from "./session-fs.port.js";
@@ -49,7 +47,14 @@ export async function deleteSessionFsData(
 
   await checkpoints.deleteCheckpointsForSession(sessionId);
   await decrementLiveRefsUnderPrefix(revisions, entries, prefix);
-  await deleteUnreferencedUnderPrefix(revisions, prefix);
+  await sweepSessionRevisions(
+    revisions,
+    entries,
+    checkpoints,
+    projectId,
+    sessionId,
+    conn,
+  );
 }
 
 /** 事务提交后调度全库 blob gc（项目/会话删除批量路径用）。 */
