@@ -200,7 +200,7 @@ export function AgentEditorForm(props: Props) {
     setProviders(
       list.map(p => ({
         id: p.id,
-        label: p.id,
+        label: p.displayName,
         protocol: p.protocol,
       })),
     );
@@ -448,8 +448,11 @@ export function AgentEditorForm(props: Props) {
     }
     const selected = savedModels.find(m => m.id === savedModelId);
     if (selected) {
+      const providerLabel =
+        providers.find(p => p.id === selected.providerId)?.label ??
+        '未知服务商';
       return formatSavedModelDisplayName(
-        selected.providerId,
+        providerLabel,
         selected.modelName,
       );
     }
@@ -624,7 +627,10 @@ export function AgentEditorForm(props: Props) {
   }, [savedModels]);
   const modelSelectOptions = savedModels.map(m => ({
     value: m.id,
-    label: formatSavedModelDisplayName(m.providerId, m.modelName),
+    label: formatSavedModelDisplayName(
+      providers.find(p => p.id === m.providerId)?.label ?? '未知服务商',
+      m.modelName,
+    ),
     subtitle:
       (modelNameCounts.get(m.modelName) ?? 0) > 1 ? m.vendorModelId : undefined,
   }));

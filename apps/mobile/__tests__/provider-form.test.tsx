@@ -24,28 +24,38 @@ import {
 
 const baseValues: ProviderFormValues = {
   ...EMPTY_PROVIDER_FORM,
-  id: 'my-openai',
+  displayName: '智谱',
   baseUrl: 'https://api.example.com/v1',
   apiKey: 'secret-key',
 };
 
 describe('providerForm helpers', () => {
-  it('providerFormToCreateInput omits displayName (T5)', () => {
+  it('providerFormToCreateInput 要求 displayName 且无用户 id', () => {
     const input = providerFormToCreateInput(baseValues);
     expect(input).toMatchObject({
-      id: 'my-openai',
+      displayName: '智谱',
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'secret-key',
     });
-    expect('displayName' in input).toBe(false);
+    expect('id' in input).toBe(false);
   });
 
-  it('providerFormToEditPatch omits displayName key (T5)', () => {
+  it('providerFormToCreateInput 拒绝空白名称', () => {
+    expect(() =>
+      providerFormToCreateInput({
+        ...baseValues,
+        displayName: '   ',
+      }),
+    ).toThrow(/服务商名称/);
+  });
+
+  it('providerFormToEditPatch 可携带 displayName', () => {
     const patch = providerFormToEditPatch({
       ...baseValues,
+      displayName: '新名称',
       baseUrl: 'https://api.example.com/v2',
     });
     expect(patch.baseUrl).toBe('https://api.example.com/v2');
-    expect('displayName' in patch).toBe(false);
+    expect(patch.displayName).toBe('新名称');
   });
 });

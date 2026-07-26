@@ -33,12 +33,12 @@ export function ProviderCreateScreen() {
           setSaving(true);
           try {
             const input = providerFormToCreateInput(values);
-            await runtime.providers.create(input);
+            const created = await runtime.providers.create(input);
             if (__DEV__) {
-              console.info('[ProviderCreate] created', input.id);
+              console.info('[ProviderCreate] created', created.id);
             }
-            showToast(`已创建服务商：${input.id}`);
-            navigation.replace('ProviderDetail', {providerId: input.id});
+            showToast(`已创建服务商：${created.displayName}`);
+            navigation.replace('ProviderDetail', {providerId: created.id});
           } catch (err) {
             showToast(toastMessage('创建失败', err));
           } finally {

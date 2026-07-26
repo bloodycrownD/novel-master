@@ -18,7 +18,7 @@ import {toastMessage} from '../../errors/toast-message';
 const PROTOCOLS: LlmProtocolKind[] = ['openai', 'anthropic', 'gemini'];
 
 export type ProviderFormValues = {
-  id: string;
+  displayName: string;
   protocol: LlmProtocolKind;
   baseUrl: string;
   apiKey: string;
@@ -26,7 +26,7 @@ export type ProviderFormValues = {
 };
 
 export const EMPTY_PROVIDER_FORM: ProviderFormValues = {
-  id: '',
+  displayName: '',
   protocol: 'openai',
   baseUrl: '',
   apiKey: '',
@@ -62,19 +62,19 @@ function parseHeadersJson(raw: string): Record<string, string> | undefined {
 }
 
 export function providerFormToCreateInput(values: ProviderFormValues) {
-  const id = values.id.trim();
+  const displayName = values.displayName.trim();
   const baseUrl = values.baseUrl.trim();
   const apiKey = values.apiKey.trim();
-  if (!id || !baseUrl) {
-    throw new Error('请填写 providerId 与 baseUrl');
+  if (!displayName || !baseUrl) {
+    throw new Error('请填写服务商名称与 baseUrl');
   }
   if (!apiKey) {
     throw new Error('请填写 API Key');
   }
   return {
-    id,
     protocol: values.protocol,
     baseUrl,
+    displayName,
     apiKey,
     headers: parseHeadersJson(values.headersJson),
   };
@@ -84,9 +84,14 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
   const patch: {
     protocol?: LlmProtocolKind;
     baseUrl?: string;
+    displayName?: string;
     apiKey?: string;
     headers?: Record<string, string>;
   } = {};
+  const displayName = values.displayName.trim();
+  if (displayName) {
+    patch.displayName = displayName;
+  }
   const baseUrl = values.baseUrl.trim();
   if (baseUrl) {
     patch.baseUrl = baseUrl;
@@ -134,13 +139,13 @@ export function ProviderForm({
   const canSave = useMemo(() => {
     if (mode === 'create') {
       return (
-        values.id.trim().length > 0 &&
+        values.displayName.trim().length > 0 &&
         values.baseUrl.trim().length > 0 &&
         values.apiKey.trim().length > 0
       );
     }
-    return true;
-  }, [mode, values.apiKey, values.baseUrl, values.id]);
+    return values.displayName.trim().length > 0;
+  }, [mode, values.apiKey, values.baseUrl, values.displayName]);
 
   const handleSave = async () => {
     try {
@@ -174,22 +179,16 @@ export function ProviderForm({
         )
       }>
       <FormSectionCard title="连接" tokens={tokens}>
-        {mode === 'create' ? (
-          <FormField label="Provider ID" tokens={tokens}>
-            <FormTextInput
-              tokens={tokens}
-              value={values.id}
-              onChangeText={text => patch({id: text})}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="例如 my-openai"
-            />
-          </FormField>
-        ) : (
-          <Text style={[styles.readonlyId, {color: tokens.text}]}>
-            ID: {values.id}
-          </Text>
-        )}
+        <FormField label="服务商名称" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            value={values.displayName}
+            onChangeText={text => patch({displayName: text})}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="例如 智谱"
+          />
+        </FormField>
         <FormField label="协议" tokens={tokens}>
           <FormChipGroup
             tokens={tokens}
@@ -256,7 +255,6 @@ export function ProviderForm({
 }
 
 const styles = StyleSheet.create({
-  readonlyId: {fontSize: 16, fontWeight: '600'},
   savingFooter: {padding: 16, alignItems: 'center'},
   statusRow: {
     flexDirection: 'row',

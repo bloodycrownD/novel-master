@@ -44,6 +44,9 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
       const workspaceId = await runtime.state.getCurrentModelId();
       setCurrentId(workspaceId ?? undefined);
       const providers = await runtime.providers.list();
+      const nameById = new Map(
+        providers.map(provider => [provider.id, provider.displayName]),
+      );
       const allModels: Array<{
         id: string;
         providerId: string;
@@ -70,9 +73,14 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
         const duplicate =
           (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ??
             0) > 1;
+        const providerDisplayName =
+          nameById.get(model.providerId) ?? '未知服务商';
         return {
           savedModelId: model.id,
-          label: formatSavedModelDisplayName(model.providerId, model.modelName),
+          label: formatSavedModelDisplayName(
+            providerDisplayName,
+            model.modelName,
+          ),
           subtitle: duplicate ? model.vendorModelId : undefined,
         };
       });

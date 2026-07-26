@@ -137,6 +137,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
     savedModelRepo: providerBundle.savedModelRepo,
+    providerRepo: providerBundle.providerRepo,
     modelRequests: providerBundle.modelRequests,
     regexConfig,
     userVfsTurn,

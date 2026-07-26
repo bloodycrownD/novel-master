@@ -58,7 +58,8 @@ export async function runModel(
           { modelId },
         );
       }
-      console.log(savedModelDisplayName(saved));
+      const provider = await rt.providers.get(saved.providerId);
+      console.log(savedModelDisplayName(saved, provider.displayName));
       return;
     }
     case "list": {
@@ -67,7 +68,7 @@ export async function runModel(
         const list = await rt.providerModels.savedList(provider.id);
         for (const m of list) {
           console.log(
-            `${m.id}\t${savedModelDisplayName(m)}\t${m.vendorModelId}`,
+            `${m.id}\t${savedModelDisplayName(m, provider.displayName)}\t${m.vendorModelId}`,
           );
         }
       }

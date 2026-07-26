@@ -91,7 +91,7 @@ export function ProviderDetailScreen() {
     setLoading(true);
     try {
       const provider = await runtime.providers.get(providerId);
-      setStackOverride({title: provider.id});
+      setStackOverride({title: provider.displayName});
       const saved = await runtime.providerModels.savedList(providerId);
       const nameCounts = new Map<string, number>();
       for (const model of saved) {
@@ -107,7 +107,7 @@ export function ProviderDetailScreen() {
           (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ??
             0) > 1;
         const label = formatSavedModelDisplayName(
-          model.providerId,
+          provider.displayName,
           model.modelName,
         );
         const subtitleParts = [

@@ -4,7 +4,7 @@
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
-/** Primary row label: derived displayName (`provider/modelName`). */
+/** Primary row label: derived displayName (`服务商名称/modelName`). */
 export async function resolveModelDisplayLabel(
   runtime: MobileNovelMasterRuntime,
   savedModelId: string,
@@ -13,7 +13,8 @@ export async function resolveModelDisplayLabel(
   if (saved == null) {
     return savedModelId;
   }
-  return formatSavedModelDisplayName(saved.providerId, saved.modelName);
+  const provider = await runtime.providers.get(saved.providerId);
+  return formatSavedModelDisplayName(provider.displayName, saved.modelName);
 }
 
 /** Compact title: persisted modelName (not derived path). */

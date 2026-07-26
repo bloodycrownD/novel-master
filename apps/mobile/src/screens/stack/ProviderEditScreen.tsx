@@ -52,12 +52,12 @@ export function ProviderEditScreen() {
       const provider = await runtime.providers.get(providerId);
       const listed = (await runtime.providers.list()).find(p => p.id === providerId);
       setStackOverride({
-        title: `编辑 ${provider.id}`,
+        title: `编辑 ${provider.displayName}`,
       });
       setIsBuiltin(provider.isBuiltin);
       setApiKeyStatus(listed?.apiKeyStatus ?? 'not set');
       setInitial({
-        id: provider.id,
+        displayName: provider.displayName,
         protocol: provider.protocol,
         baseUrl: provider.baseUrl,
         headersJson:

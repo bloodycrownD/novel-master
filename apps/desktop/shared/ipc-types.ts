@@ -835,7 +835,7 @@ export type PreviewFileSelection = {
 
 export type ProviderListItemDto = {
   readonly id: string;
-  readonly displayName: string | null;
+  readonly displayName: string;
   readonly protocol: string;
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
@@ -845,7 +845,7 @@ export type ProviderListItemDto = {
 
 export type ProviderDetailDto = {
   readonly id: string;
-  readonly displayName: string | null;
+  readonly displayName: string;
   readonly protocol: string;
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
@@ -854,10 +854,10 @@ export type ProviderDetailDto = {
 };
 
 export type ProviderCreateRequest = {
-  readonly id: string;
   readonly protocol: 'openai' | 'anthropic' | 'gemini';
   readonly baseUrl: string;
-  readonly displayName?: string;
+  /** 必填：服务商对人名称。 */
+  readonly displayName: string;
   readonly apiKey: string;
   readonly headers?: Record<string, string>;
 };
@@ -866,7 +866,8 @@ export type ProviderEditRequest = {
   readonly providerId: string;
   readonly protocol?: 'openai' | 'anthropic' | 'gemini';
   readonly baseUrl?: string;
-  readonly displayName?: string | null;
+  /** 若出现则 trim 后必须非空。 */
+  readonly displayName?: string;
   readonly apiKey?: string;
   readonly headers?: Record<string, string>;
 };

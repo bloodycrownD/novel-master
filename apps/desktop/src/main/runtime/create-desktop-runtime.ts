@@ -168,6 +168,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
     savedModelRepo: providerBundle.savedModelRepo,
+    providerRepo: providerBundle.providerRepo,
     modelRequests: providerBundle.modelRequests,
     regexConfig,
     userVfsTurn,

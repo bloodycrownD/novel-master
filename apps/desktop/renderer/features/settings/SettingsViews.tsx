@@ -808,7 +808,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
 export function ProvidersView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
   const [rows, setRows] = useState<
-    Array<{ id: string; displayName: string | null; savedCount: number; apiKeyStatus: string }>
+    Array<{ id: string; displayName: string; savedCount: number; apiKeyStatus: string }>
   >([]);
   const [providerMenu, setProviderMenu] = useState<{
     providerId: string;
@@ -1016,7 +1016,6 @@ export function ProviderFormView({
   mode: "create" | "edit";
 }) {
   const providerId = nav.navState.editingProviderId;
-  const [id, setId] = useState("");
   const [protocol, setProtocol] = useState<"openai" | "anthropic" | "gemini">("openai");
   const [baseUrl, setBaseUrl] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -1029,10 +1028,9 @@ export function ProviderFormView({
     if (mode !== "edit" || !providerId) return;
     ipcProvidersGet({ providerId }).then((res) => {
       if (!res.ok) return;
-      setId(res.data.id);
       setProtocol(res.data.protocol as typeof protocol);
       setBaseUrl(res.data.baseUrl);
-      setDisplayName(res.data.displayName ?? "");
+      setDisplayName(res.data.displayName);
       setIsBuiltin(res.data.isBuiltin);
       setApiKeyStatus(res.data.apiKeyStatus);
       setHeadersJson(
@@ -1046,11 +1044,15 @@ export function ProviderFormView({
   const submit = async () => {
     try {
       if (mode === "create") {
+        const name = displayName.trim();
+        if (!name) {
+          toastSettingsError("请填写服务商名称");
+          return;
+        }
         const res = await ipcProvidersCreate({
-          id: id.trim(),
           protocol,
           baseUrl: baseUrl.trim(),
-          displayName: displayName.trim() || undefined,
+          displayName: name,
           apiKey: apiKey.trim(),
           headers: headersJson.trim() ? JSON.parse(headersJson) : undefined,
         });
@@ -1058,12 +1060,17 @@ export function ProviderFormView({
           toastSettingsError(res.error.message);
           return;
         }
-        nav.navState.editingProviderId = id.trim();
+        nav.navState.editingProviderId = res.data.providerId;
         nav.push("providerDetail");
       } else if (providerId) {
+        const name = displayName.trim();
+        if (!name) {
+          toastSettingsError("服务商名称不能为空");
+          return;
+        }
         const patch: Record<string, unknown> = {};
         if (baseUrl.trim()) patch.baseUrl = baseUrl.trim();
-        patch.displayName = displayName.trim() || null;
+        patch.displayName = name;
         if (apiKey.trim()) patch.apiKey = apiKey.trim();
         if (headersJson.trim()) patch.headers = JSON.parse(headersJson);
         if (!isBuiltin) patch.protocol = protocol;
@@ -1099,11 +1106,6 @@ export function ProviderFormView({
           </Button>
         }
       >
-        {mode === "create" ? (
-          <SettingsField label="Provider ID">
-            <input value={id} onChange={(e) => setId(e.target.value)} />
-          </SettingsField>
-        ) : null}
         <SettingsField label="协议">
           <select
             value={protocol}
@@ -1118,7 +1120,7 @@ export function ProviderFormView({
         <SettingsField label="Base URL">
           <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
         </SettingsField>
-        <SettingsField label="显示名称">
+        <SettingsField label="服务商名称">
           <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
         </SettingsField>
         <SettingsField label={mode === "edit" ? "新 API Key（留空则不修改）" : "API Key"}>

@@ -52,7 +52,8 @@ async function resolveModelLabel(
   if (saved == null) {
     return savedModelId;
   }
-  return savedModelDisplayName(saved);
+  const provider = await rt.providers.get(saved.providerId);
+  return savedModelDisplayName(saved, provider.displayName);
 }
 
 export async function handleAgentResolveCurrent(): Promise<
@@ -146,7 +147,7 @@ export async function handleModelListPicker(): Promise<
       const saved = await rt.providerModels.savedList(provider.id);
       for (const model of saved) {
         const savedModelId = model.id;
-        let label = savedModelDisplayName(model);
+        let label = savedModelDisplayName(model, provider.displayName);
         try {
           label = await resolveModelLabel(rt, savedModelId);
         } catch {

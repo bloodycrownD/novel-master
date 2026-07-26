@@ -68,7 +68,12 @@ export async function handlePromptAgentMeta(
       let modelLabel = "未选择模型";
       if (savedModelId) {
         const saved = await rt.providerModels.getSavedById(savedModelId);
-        modelLabel = saved != null ? savedModelDisplayName(saved) : savedModelId;
+        if (saved != null) {
+          const provider = await rt.providers.get(saved.providerId);
+          modelLabel = savedModelDisplayName(saved, provider.displayName);
+        } else {
+          modelLabel = savedModelId;
+        }
       }
       const hasDedicatedModel =
         definition.model != null && definition.model !== "";

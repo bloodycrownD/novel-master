@@ -66,8 +66,8 @@ export async function handleProvidersCreate(
 ): Promise<IpcResult<{ providerId: string }>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.providers.create(req);
-    return { ok: true, data: { providerId: req.id } };
+    const created = await rt.providers.create(req);
+    return { ok: true, data: { providerId: created.id } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

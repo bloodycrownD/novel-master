@@ -65,32 +65,32 @@ export async function runProvider(
       const list = await rt.providers.list();
       for (const p of list) {
         console.log(
-          `${p.id}\t${p.protocol}\t${p.baseUrl}\t${p.displayName ?? ""}\tapiKey: ${p.apiKeyStatus}`,
+          `${p.id}\t${p.displayName}\t${p.protocol}\t${p.baseUrl}\tapiKey: ${p.apiKeyStatus}`,
         );
       }
       return;
     }
     case "create": {
-      const id = flagString(flags, "providerId");
+      const name = flagString(flags, "name");
       const protocol = flagString(flags, "protocol") as
         | "openai"
         | "anthropic"
         | "gemini"
         | undefined;
       const baseUrl = flagString(flags, "baseUrl");
-      if (!id || !protocol || !baseUrl) {
+      if (!name || !protocol || !baseUrl) {
         throw new Error(
-          "Usage: nm provider create --providerId <id> --protocol <openai|anthropic|gemini> --baseUrl <url> [--displayName] [--headers] [--apiKey]",
+          "Usage: nm provider create --name <name> --protocol <openai|anthropic|gemini> --baseUrl <url> [--headers] [--apiKey]",
         );
       }
-      await rt.providers.create({
-        id,
+      const created = await rt.providers.create({
         protocol,
         baseUrl,
-        displayName: flagString(flags, "displayName"),
+        displayName: name,
         headers: parseHeaders(flags),
         apiKey: flagString(flags, "apiKey"),
       });
+      console.error(created.id);
       return;
     }
     case "delete": {
@@ -113,7 +113,7 @@ export async function runProvider(
       const patch: {
         protocol?: "openai" | "anthropic" | "gemini";
         baseUrl?: string;
-        displayName?: string | null;
+        displayName?: string;
         headers?: Record<string, string>;
         apiKey?: string;
       } = {};
@@ -125,8 +125,12 @@ export async function runProvider(
       if (baseUrl) {
         patch.baseUrl = baseUrl;
       }
-      if (flags.has("displayName")) {
-        patch.displayName = flagString(flags, "displayName") ?? null;
+      if (flags.has("name")) {
+        const name = flagString(flags, "name") ?? "";
+        if (name.trim() === "") {
+          throw new ProviderError("INVALID_ARGUMENT", "displayName 不能为空");
+        }
+        patch.displayName = name;
       }
       const headers = parseHeaders(flags);
       if (headers) {
@@ -139,7 +143,7 @@ export async function runProvider(
       }
       if (Object.keys(patch).length === 0) {
         throw new Error(
-          "Usage: nm provider edit --providerId <id> [--baseUrl] [--displayName] [--headers] [--apiKey] [--clear-api-key] [--protocol]",
+          "Usage: nm provider edit --providerId <uuid> [--baseUrl] [--name] [--headers] [--apiKey] [--clear-api-key] [--protocol]",
         );
       }
       await rt.providers.edit(id, patch);
@@ -155,11 +159,11 @@ export async function runProvider(
       const id = await rt.state.getCurrentProviderId();
       if (id == null || id === "") {
         throw new Error(
-          "No current provider (run: nm provider use --providerId <id>)",
+          "No current provider (run: nm provider use --providerId <uuid>)",
         );
       }
-      await rt.providers.get(id);
-      console.log(id);
+      const provider = await rt.providers.get(id);
+      console.log(`${provider.displayName}\t${provider.id}`);
       return;
     }
     default:

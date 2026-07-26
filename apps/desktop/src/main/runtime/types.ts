@@ -76,6 +76,7 @@ export interface DesktopNovelMasterRuntime {
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
   readonly savedModelRepo: ProviderServiceBundle["savedModelRepo"];
+  readonly providerRepo: ProviderServiceBundle["providerRepo"];
   readonly modelRequests: ModelRequestService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;

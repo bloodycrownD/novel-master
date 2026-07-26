@@ -124,6 +124,7 @@ export interface NovelMasterRuntime {
   readonly savedModels: ProviderServiceBundle["savedModelRepo"];
   /** {@link AgentTurnRuntimePort} 别名；与 savedModels 同源。 */
   readonly savedModelRepo: ProviderServiceBundle["savedModelRepo"];
+  readonly providerRepo: ProviderServiceBundle["providerRepo"];
   /** 用户 VFS U-A-U-A 落库；runAgentTurn flush 前置。 */
   readonly userVfsTurn: UserVfsTurnService;
   /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
@@ -252,6 +253,7 @@ export async function createNovelMasterRuntime(
     modelRequests,
     savedModels: providerBundle.savedModelRepo,
     savedModelRepo: providerBundle.savedModelRepo,
+    providerRepo: providerBundle.providerRepo,
     userVfsTurn,
     regexConfig,
   };

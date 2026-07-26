@@ -102,9 +102,10 @@ export async function runProviderModel(
     }
     case "list": {
       const list = await rt.providerModels.savedList(providerId);
+      const provider = await rt.providers.get(providerId);
       for (const m of list) {
         console.log(
-          `${m.id}\t${savedModelDisplayName(m)}\t${m.vendorModelId}`,
+          `${m.id}\t${savedModelDisplayName(m, provider.displayName)}\t${m.vendorModelId}`,
         );
       }
       return;

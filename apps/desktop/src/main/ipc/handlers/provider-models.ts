@@ -20,26 +20,40 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../ipc-error.js";
 
-function toSavedDto(model: SavedModel): ProviderModelSavedDto {
+function toSavedDto(
+  model: SavedModel,
+  providerDisplayName: string,
+): ProviderModelSavedDto {
   return {
     id: model.id,
     vendorModelId: model.vendorModelId,
     modelName: model.modelName,
-    displayName: savedModelDisplayName(model),
+    displayName: savedModelDisplayName(model, providerDisplayName),
   };
 }
 
-function toSavedDetailDto(model: SavedModel): ProviderModelSavedDetailDto {
+function toSavedDetailDto(
+  model: SavedModel,
+  providerDisplayName: string,
+): ProviderModelSavedDetailDto {
   return {
     id: model.id,
     providerId: model.providerId,
     vendorModelId: model.vendorModelId,
     modelName: model.modelName,
-    displayName: savedModelDisplayName(model),
+    displayName: savedModelDisplayName(model, providerDisplayName),
     settings: model.settings,
     createdAtMs: model.createdAtMs,
     updatedAtMs: model.updatedAtMs,
   };
+}
+
+async function resolveProviderDisplayName(
+  rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
+  providerId: string,
+): Promise<string> {
+  const provider = await rt.providers.get(providerId);
+  return provider.displayName;
 }
 
 export async function handleProviderModelsSavedList(
@@ -47,8 +61,15 @@ export async function handleProviderModelsSavedList(
 ): Promise<IpcResult<ProviderModelSavedDto[]>> {
   try {
     const rt = await getDesktopRuntime();
+    const providerDisplayName = await resolveProviderDisplayName(
+      rt,
+      req.providerId,
+    );
     const saved = await rt.providerModels.savedList(req.providerId);
-    return { ok: true, data: saved.map(toSavedDto) };
+    return {
+      ok: true,
+      data: saved.map((model) => toSavedDto(model, providerDisplayName)),
+    };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -108,7 +129,11 @@ export async function handleProviderModelsEditSaved(
       req.savedModelId,
       req.modelName,
     );
-    return { ok: true, data: toSavedDetailDto(updated) };
+    const providerDisplayName = await resolveProviderDisplayName(
+      rt,
+      updated.providerId,
+    );
+    return { ok: true, data: toSavedDetailDto(updated, providerDisplayName) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -144,7 +169,14 @@ export async function handleProviderModelsGetSaved(
   try {
     const rt = await getDesktopRuntime();
     const saved = await rt.providerModels.getSavedById(req.savedModelId);
-    return { ok: true, data: saved ? toSavedDetailDto(saved) : null };
+    if (saved == null) {
+      return { ok: true, data: null };
+    }
+    const providerDisplayName = await resolveProviderDisplayName(
+      rt,
+      saved.providerId,
+    );
+    return { ok: true, data: toSavedDetailDto(saved, providerDisplayName) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -185,7 +217,11 @@ export async function handleProviderModelsResetContextWindow(
     const updated = await rt.providerModels.resetContextWindowToDefault(
       req.savedModelId,
     );
-    return { ok: true, data: toSavedDetailDto(updated) };
+    const providerDisplayName = await resolveProviderDisplayName(
+      rt,
+      updated.providerId,
+    );
+    return { ok: true, data: toSavedDetailDto(updated, providerDisplayName) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
