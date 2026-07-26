@@ -2,13 +2,23 @@ import { TdbcError, ToolError } from "@novel-master/core";
 import { AgentError } from "@novel-master/core/agent";
 import { ChatError } from "@novel-master/core/chat";
 import { ProviderError } from "@novel-master/core/provider";
-import { VfsError } from "@novel-master/core/vfs";
+import { CharacterCardError, VfsError, VfsZipError } from "@novel-master/core/vfs";
 import {formatError} from '../src/errors/format-error';
 
 describe('formatError (T4)', () => {
   it('formats VfsError message', () => {
     const err = new VfsError('NOT_FOUND', 'Path not found: /x', {path: '/x'});
     expect(formatError(err)).toBe('文件不存在或已被删除。');
+  });
+
+  it('formats CharacterCardError message (align VfsZipError)', () => {
+    const zipErr = new VfsZipError('INVALID_ZIP', 'bad zip');
+    expect(formatError(zipErr)).toBe('bad zip');
+    const cardErr = new CharacterCardError(
+      'NOT_CHARACTER_CARD',
+      '无法识别为角色卡',
+    );
+    expect(formatError(cardErr)).toBe('无法识别为角色卡');
   });
 
   it('T-M-TOAST-01: REPLACE_NOT_FOUND uses Chinese refresh hint', () => {
