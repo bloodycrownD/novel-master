@@ -15,6 +15,10 @@ module.exports = {
   moduleNameMapper: {
     '^react-native-webview$': '<rootDir>/test-utils/react-native-webview-mock.tsx',
     '^tiktoken$': '<rootDir>/src/shims/tiktoken.js',
+    // RN Jest resolves package "browser"/"default" exports; yaml's browser entry
+    // is ESM and breaks. Force the Node CJS build (also needed once core/vfs
+    // re-exports character-card which imports stringify-text → yaml).
+    '^yaml$': path.join(repoRoot, 'node_modules/yaml/dist/index.js'),
     // Avoid importing `@novel-master/core` barrel in tests: it pulls in the
     // prompt-yaml module which depends on `yaml` ESM browser entry and breaks
     // under the default RN Jest transform settings.
