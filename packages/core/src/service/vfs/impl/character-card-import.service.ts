@@ -1,0 +1,151 @@
+/**
+ * 默认角色卡导入：confirmed 门闸 + Phase A 路径校验 + Phase B 子树替换（对齐 ZIP）。
+ *
+ * @module service/vfs/impl/character-card-import.service
+ */
+
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import {
+  CharacterCardError,
+  characterCardError,
+} from "@/errors/character-card-errors.js";
+import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import {
+  toPhysicalPath,
+  type VfsScope,
+} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
+import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import type { MdTree } from "@/domain/character-card/model/character-card.js";
+import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/parse-character-card-to-md-tree.js";
+import { validateMdTreeForImport } from "@/domain/character-card/logic/validate-md-tree-paths.js";
+import type {
+  CharacterCardImportOptions,
+  CharacterCardImportService,
+} from "@/domain/vfs/ports/character-card-import.port.js";
+
+/** @internal 导入事务回滚单测钩子 */
+export type CharacterCardImportTestHook = {
+  readonly throwOnInsertLogical?: string;
+  /** @internal 在 Phase B deleteVfsPrefix 之前调用 */
+  readonly onBeforeDeletePrefix?: () => void;
+};
+
+async function ensureEmptyDirectoryRow(
+  repo: VfsEntryRepository,
+  scope: VfsScope,
+  logical: string,
+): Promise<void> {
+  const physical = toPhysicalPath(scope, logical);
+  await ensureParentDirectories(repo, `${physical}/__vfs_card_placeholder`);
+  const existing = await repo.findByPath(physical);
+  if (existing == null) {
+    await repo.insertDirectory(physical);
+    return;
+  }
+  if (existing.entryKind !== "directory") {
+    throw characterCardError(
+      "INVALID_PATH",
+      `character card target path is a file, not a directory: ${logical}`,
+    );
+  }
+}
+
+async function assertDirectoryPathNotFile(
+  repo: VfsEntryRepository,
+  scope: VfsScope,
+  directoryPath: string,
+): Promise<void> {
+  const physical = toPhysicalPath(scope, directoryPath);
+  const existing = await repo.findByPath(physical);
+  if (existing != null && existing.entryKind === "file") {
+    throw characterCardError(
+      "INVALID_PATH",
+      `character card target path is a file, not a directory: ${directoryPath}`,
+    );
+  }
+}
+
+export type DefaultCharacterCardImportServiceOptions = {
+  /** @internal import rollback tests only */
+  readonly testHook?: CharacterCardImportTestHook;
+};
+
+export class DefaultCharacterCardImportService
+  implements CharacterCardImportService
+{
+  private readonly testHook?: CharacterCardImportTestHook;
+
+  constructor(
+    private readonly conn: TdbcConnection,
+    private readonly repo: VfsEntryRepository,
+    options: DefaultCharacterCardImportServiceOptions = {},
+  ) {
+    this.testHook = options.testHook;
+  }
+
+  async import(
+    scope: VfsScope,
+    tree: MdTree,
+    options: CharacterCardImportOptions,
+  ): Promise<void> {
+    if (options.confirmed !== true) {
+      throw characterCardError(
+        "NOT_CONFIRMED",
+        "import requires explicit confirmation (CLI --yes or confirm dialog)",
+      );
+    }
+
+    const directoryPath = resolveZipDirectoryPath(options.directoryPath);
+    await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
+
+    // Phase A：路径校验 — 任何 delete 之前；禁止 ZIP basename / validateVfsZipEntries
+    const files = validateMdTreeForImport(scope, tree, directoryPath);
+    const physicalPrefix = toPhysicalPath(scope, directoryPath);
+
+    try {
+      await this.conn.transaction(async (tx) => {
+        const repoTx = new SqliteVfsEntryRepository(tx);
+        this.testHook?.onBeforeDeletePrefix?.();
+        await deleteVfsPrefix(repoTx, physicalPrefix);
+        await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
+        for (const [logical, content] of files) {
+          if (this.testHook?.throwOnInsertLogical === logical) {
+            throw new Error("test import failure");
+          }
+          const physical = toPhysicalPath(scope, logical);
+          await ensureParentDirectories(repoTx, physical);
+          await repoTx.insert(physical, content);
+        }
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === "test import failure") {
+        throw error;
+      }
+      if (error instanceof CharacterCardError) {
+        throw error;
+      }
+      const message =
+        error instanceof Error ? error.message : "import transaction failed";
+      throw characterCardError("IMPORT_FAILED", message);
+    }
+  }
+
+  async importFromBytes(
+    scope: VfsScope,
+    bytes: Uint8Array,
+    options: CharacterCardImportOptions,
+  ): Promise<void> {
+    // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
+    if (options.confirmed !== true) {
+      throw characterCardError(
+        "NOT_CONFIRMED",
+        "import requires explicit confirmation (CLI --yes or confirm dialog)",
+      );
+    }
+    const tree = parseCharacterCardToMdTree(bytes);
+    await this.import(scope, tree, options);
+  }
+}

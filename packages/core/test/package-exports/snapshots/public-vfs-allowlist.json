@@ -1,4 +1,5 @@
 [
+  "CharacterCardError",
   "VfsError",
   "VfsZipError",
   "actionXmlToToolUses",
@@ -13,7 +14,9 @@
   "buildUserVfsSaveWriteActionXml",
   "buildUserVfsSimpleActionXml",
   "buildVfsZip",
+  "characterCardJsonToMdTree",
   "copyVfsPath",
+  "createCharacterCardImportService",
   "createScopedVfsService",
   "createVfsBatchIoService",
   "createVfsService",
@@ -27,6 +30,7 @@
   "moveVfsPath",
   "normalizeBatchRelativePath",
   "normalizeDirPath",
+  "parseCharacterCardToMdTree",
   "parseVfsZip",
   "projectVfsPrefix",
   "readUserVfsSaveBaseline",
