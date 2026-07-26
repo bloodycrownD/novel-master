@@ -6,6 +6,7 @@ import { describe, it, mock } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
@@ -89,6 +90,16 @@ describe("rollback ref_count + deferred blob gc", () => {
       [physical, version],
     );
     assert.equal(Number(rows[0]?.ref_count), 2);
+  });
+
+  it("T-RB-REF-MISSING: adjustRefCount +1 对缺失 revision 行抛错", async () => {
+    const ctx = getNovelMasterTestContext();
+    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
+
+    await assert.rejects(
+      () => revisions.adjustRefCount("/missing/revision.md", 1, 1),
+      (err: unknown) => isVfsError(err, "NOT_FOUND"),
+    );
   });
 
   it("T-RB-REF-LIVE: write bump 时 live ref 从旧版转移到新版", async () => {

@@ -27,6 +27,7 @@ import type {
   VfsRevisionPointerMeta,
   VfsRevisionRepository,
 } from "../vfs-revision.port.js";
+import { VfsError } from "@/errors/vfs-errors.js";
 import { revisionPairKey } from "../../logic/revision-pair-key.js";
 import { normalizePath } from "./normalize-path.js";
 
@@ -250,13 +251,20 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       return;
     }
     const normalized = normalizePath(path);
-    await executeTemplate(
+    const result = await executeTemplate(
       this.conn,
       this.parser,
       `UPDATE vfs_revision SET ref_count = ref_count + #{delta}
        WHERE path = #{path} AND version = #{version}`,
       { path: normalized, version, delta },
     );
+    if (delta > 0 && result.changes === 0) {
+      throw new VfsError(
+        "NOT_FOUND",
+        `Revision not found: ${normalized}@${version}`,
+        { path: normalized, expectedVersion: version },
+      );
+    }
   }
 
   async repairRefCountFloor(
