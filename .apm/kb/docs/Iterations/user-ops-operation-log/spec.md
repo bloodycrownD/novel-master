@@ -12,7 +12,7 @@ date: 2026-07-25
 1. 废除手改路径上的 **checkpoint 净 diff**（`previewUserOpsActions` / `flushPendingUserVfsTurns` 内 `resolveWorkspaceFlushDiff`）。
 2. 以 **按次追加的操作日志** 为 Composer 真源：写盘仍即时；日志旁路；投影 / 发送 / Undo 均围绕日志。
 3. UI 状态条按 **path 聚成一颗 chip**；真源可多条；跨次保存不合并。
-4. **supersede** recontract D6：Undo 从消息 `user_ops`（非 annotate）附件映回操作日志。
+4. **supersede** recontract D6：2026-07-26 产品收窄 — `undo_send` 与 `rewind` 一致 **`clearUserOpsLog` + 推空 chip**；**不**从消息 `user_ops` 附件映回 store；正文 / 批注仍恢复。
 5. message checkpoint **仍服务 VFS 回滚**；不再作 flush baseline。
 
 ## 总体方案
@@ -28,7 +28,7 @@ date: 2026-07-25
 | D5 | 发送：未发送日志 → 逐条 `MessageAttachment`（`source:user_ops`，`content` = 该条日志 action XML）；清空 store；**禁止**净 diff 合成 / `flush_skip_empty_diff` |
 | D6 | Composer chip：**Core** `projectComposerStatusAttachments` / `chipsFromUserOpsLogStore` **按 path 去重一颗**（label 取该 path 最后一条日志的 action 文案）；App 层 **仅** `unionComposerStatusWithAnnotate`（**不**再 App ∪ ops-log，与 annotate 对称，避免双 chip） |
 | D7 | 门闩 / `hasPendingTurns` / flush 真源：**一律读 log store**（`hasUnsentUserOpsLog(sessionId)`；可暂保留 `hasPendingTurns` 名但改实现）∨ `hasAnnotateDrafts` ∨ 正文 |
-| D8 | Undo：**顺序钉死** — truncate 清旧 `user_vfs_pending`（若残留）→ 按 `isPlainUserUndoSendEligible(anchor)` 分 **`undo_send` / `rewind`**（与 `chat-user-rollback-redo` 同门控）。**`undo_send` only**：**Desktop main** `handleMessagesRollback` truncate 后 **`parseUserOpsLogFromAttachments` 写 main log store** → `projectComposerStatusForSession` → `COMPOSER_ATTACHMENTS_SUGGEST` 推送 ops；renderer **仅**正文回填 + `parseAnnotateDraftsFromAttachments` + App ∪ annotate。**`rewind`**：main **不** parse 手改附件映回 log store；`COMPOSER_ATTACHMENTS_SUGGEST` 推空或仅 project 当前空 store。**禁止** Desktop renderer 写 ops log store；**禁止** `applyUndoAnnotateRestore` 以 `unionComposerStatusWithAnnotate([], …)` 等空 ops 覆盖 main 已推 user_ops chip（须先接受 main suggest 的 ops 再 ∪ annotate，或 annotate restore 保留 existing 非 annotate attachments）。**Mobile 单进程**：`undo_send` 可先推空条 → 正文 → parseAnnotate → parseUserOpsLog → project + ∪ annotate；`rewind` 不 parse 手改。**不**自动重放写盘 |
+| D8 | Undo：**顺序钉死** — truncate 清旧 `user_vfs_pending`（若残留）→ 按 `isPlainUserUndoSendEligible(anchor)` 分 **`undo_send` / `rewind`**（与 `chat-user-rollback-redo` 同门控）。**二者 VFS 成功后一致**：**`clearUserOpsLog(sessionId)`** → 推空 Composer chip（Desktop main `notifyComposerStatusAfterSessionKkvCleared`；Mobile 等价）；**禁止** `parseUserOpsLogFromAttachments` → `appendUserOpsLog` 映回手改 store（2026-07-26 产品收窄）。**正文回填** + **`parseAnnotateDraftsFromAttachments` + App ∪ annotate** 仍执行。**Desktop**：main 清 store 并推空；renderer **仅**正文 + annotate ∪。**Mobile 单进程**：清 store → 推空 → 正文 → parseAnnotate → ∪ annotate。**不**自动重放写盘 |
 | D9 | 置位/压缩：保留未发送 ops-log store（对齐 annotate）；钩子终态 **Core project(ops) 推送 + renderer/App ∪ annotate**；禁止强制 `[]` 当终态 |
 | D10 | 手动重置常驻：仍 `clearSession` 类清 kkv **且** `clearUserOpsLogStore(sessionId)`（与置位不对称）；**不必**清 annotate store（除非产品另定） |
 | D11 | wire：产品 `create`（文件/目录统一展示「创建」）；落库 `action` 可用 `write`（新文件）/ `mkdir`（目录）或统一新枚举 `create`——**实现选 A：落库 `action` 保持现网枚举兼容，chip 文案统一「创建」；XML/JSON 内可带 `kind:file|dir`**。历史旧合成 XML **只读兼容** |
@@ -53,10 +53,8 @@ date: 2026-07-25
 Undo
   → mode = isPlainUserUndoSendEligible(anchor) ? undo_send : rewind
   → VFS + truncate（清旧 pending 域）
-  → undo_send：Desktop main parseUserOpsLog 写 main store → project → COMPOSER_ATTACHMENTS_SUGGEST 推送 ops
-  → rewind：main 不 parse 手改；推空或 project 当前空 store
-  → renderer / Mobile：正文回填 → parseAnnotate → App ∪ annotate（Desktop：先保留 main 已推 ops，再 ∪ annotate；禁止 wipe）
-  → Mobile undo_send：可先空条 → 正文 → parseAnnotate → parseUserOpsLog → project + ∪ annotate
+  → clearUserOpsLog(sessionId) + 推空 Composer chip（undo_send / rewind 一致）
+  → renderer / Mobile：正文回填 → parseAnnotate → App ∪ annotate
 ```
 
 ### Action 载荷（落日志时）
@@ -117,14 +115,14 @@ apps/mobile:
 
 apps/desktop:
   src/main/services/project-composer-status.service.ts  # Core project(ops) 推送；读 main log store
-  src/main/services/notify-composer-status-after-kkv-clear.ts  # 置位/压缩 project；Undo undo_send 推 ops / rewind 推空；renderer ∪ annotate（禁止 wipe main ops）
-  src/main/ipc/handlers/messages.ts       # handleMessagesRollback：truncate 后 parseUserOpsLog 写 main store + project；handleMessagesSetFloor 置位钩子
+  src/main/services/notify-composer-status-after-kkv-clear.ts  # 置位/压缩 project；Undo undo_send/rewind 推空；renderer ∪ annotate
+  src/main/ipc/handlers/messages.ts       # handleMessagesRollback：truncate 后 clearUserOpsLog + 推空；handleMessagesSetFloor 置位钩子
   src/main/ipc/handlers/compaction.ts     # handleCompactionManual → notifyComposerStatusAfterFloorOrCompaction
   src/main/ipc/handlers/vfs.ts            # handleUserVfsHasPending 改读 main log store
   src/main/ipc/handlers/workplace.ts      # 手动重置 clearUserOpsLogStore
   renderer/features/chat/ChatComposer.tsx       # unionComposerStatusWithAnnotate（仅 annotate）
   renderer/features/chat/ConversationPanel.tsx  # Undo 正文回填 + annotate；门闩 ipcUserVfsHasPending
-  renderer/features/chat/rollback-annotate-restore.ts  # 仅 annotate ∪；保留 main 已推 ops，禁止空 ops 覆盖 user_ops chip
+  renderer/features/chat/rollback-annotate-restore.ts  # 仅 annotate ∪；Undo 时 main 已推空 ops，renderer 不映回 user_ops
   packages/core/.../message-transcript-effects.service.ts  # Core set-floor 路径（Desktop 经 handleMessagesSetFloor 接线）
 ```
 
@@ -138,7 +136,7 @@ apps/desktop:
 | flush | `flushPendingUserVfsTurns` 实现改为 list→attachments→clear store；无净 diff；`flushed:true` ⇔ 未发送日志非空且已转为附件（**废除** net diff 非空条件） |
 | preview | 删除 runtime 对 `resolveWorkspaceFlushDiff` 的调用；Core `projectComposerStatusAttachments` 改读 log store |
 | chip | path 聚合；同 path 多条日志一颗 chip；**Core 出 ops，App 仅 ∪ annotate** |
-| Undo | **`undo_send` only** `parseUserOpsLogFromAttachments`；**Desktop main** truncate 后写 **main** log store → `COMPOSER_ATTACHMENTS_SUGGEST` 推 ops；renderer 正文 + annotate ∪（**禁止** `applyUndoAnnotateRestore` wipe main ops）；**`rewind`** 不映回手改；**Mobile** 单进程同门控；supersede D6（见 Step 6） |
+| Undo | **`undo_send` / `rewind` 一致**：`clearUserOpsLog` + 推空 chip；**不** parse/append 映回手改 store；正文 + annotate 仍恢复；Desktop main 清 store；renderer 正文 + annotate ∪；Mobile 单进程同门控 |
 | Desktop 真源 | `UserOpsLogStore` / `hasPendingTurns` / flush **同处 main 进程**；renderer 禁止写 ops log store |
 | 置位/压缩 | 不清 store；钩子 Core project(ops) + App ∪ annotate |
 | 手动重置 | `clearUserOpsLogStore` + `clearSession` kkv；不必清 annotate |
@@ -152,7 +150,7 @@ apps/desktop:
 - Step 3 — phase-flush-from-log — blocking: yes — qa: auto：`flushPendingUserVfsTurns` 改为 list log store→`buildUserOpsAttachmentFromLogEntry`（**相对现网 `buildUserOpsAttachmentFromEntry` 新增/改名**；入参改为 `UserOpsLogEntry` 而非 `SynthesizedUserVfsAction`）→clear store；删除 `resolveWorkspaceFlushDiff` 调用；`hasPendingTurns` 改读 log store；更新 `user-vfs-turn.port.ts` JSDoc：`UserVfsFlushResult.flushed` = 未发送日志非空且已转为附件（**废除** pending 非空且 net diff 非空）；更新 `prepare-user-vfs-turn-for-agent-run`
 - Step 4 — phase-project-chips — blocking: yes — qa: auto：`projectComposerStatusAttachments` deps 改为读 log store（见上 `ProjectComposerStatusAttachmentsDeps` 新形状）；去掉 `previewUserOpsActions` 热路径；**Core 负责 ops chip**；Mobile `chat-composer-draft` / Desktop `ChatComposer` **仅** `unionComposerStatusWithAnnotate`（禁止 App ∪ ops-log）；Desktop main `projectComposerStatusForSession` 推送 ops，renderer ∪ annotate
 - Step 5 — phase-send-gate-clear — blocking: yes — qa: auto：门闩读 log store 非空（`hasPendingTurns` 同名改实现）；append 成功后 clear log（对称 annotate）；Mobile `ChatComposer`；Desktop `ConversationPanel.tsx`（`ipcUserVfsHasPending` / `refreshPendingUserOps`）+ main `vfs.ts` `handleUserVfsHasPending` 改读 **main** log store；Desktop `ChatComposer` 接线
-- Step 6 — phase-undo-restore — blocking: yes — qa: auto：**必改文件** — `parse-user-ops-log-from-attachments.ts`；Mobile `useChatTabMessages.ts`（单进程：`mode = isPlainUserUndoSendEligible`；**`undo_send` only** parseUserOpsLog；`rewind` 不映回；truncate → 可先空条 → 正文 → parseAnnotate → parseUserOpsLog → project + ∪ annotate）；Desktop **main** `messages.ts` `handleMessagesRollback`：**`undo_send` only** truncate 后 `parseUserOpsLogFromAttachments` 写 **main** log store → `projectComposerStatusForSession` → `notify-composer-status-after-kkv-clear.ts` / `COMPOSER_ATTACHMENTS_SUGGEST` 推 ops；**`rewind`** main 不 parse 手改、推空或 project 空 store；renderer `ConversationPanel.tsx` 正文回填 + `rollback-annotate-restore.ts`（annotate ∪，**先保留 main 已推 ops 再 ∪**，禁止 `unionComposerStatusWithAnnotate([], …)` wipe user_ops chip）；**禁止** renderer 写 ops log store。**顺序钉死**见 D8；注释/测试废止 D6「不恢复手改」
+- Step 6 — phase-undo-restore — blocking: yes — qa: auto：**必改文件** — Mobile `useChatTabMessages.ts`（单进程：`mode = isPlainUserUndoSendEligible`；**`undo_send` / `rewind` 一致** `clearUserOpsLog` + 推空 chip；truncate → 正文 → parseAnnotate → ∪ annotate）；Desktop **main** `messages.ts` `handleMessagesRollback`：truncate 后 **`clearUserOpsLog` + `notifyComposerStatusAfterSessionKkvCleared`**；renderer `ConversationPanel.tsx` 正文回填 + `rollback-annotate-restore.ts`（annotate ∪ only）；**禁止** renderer 写 ops log store；**禁止** parse/append 映回手改 store。**顺序钉死**见 D8
 - Step 7 — phase-floor-compaction — blocking: yes — qa: auto：置位/压缩钩子 Core project(ops) + App ∪ annotate；Desktop main `messages.ts` `handleMessagesSetFloor` + `compaction.ts` `handleCompactionManual` → `notifyComposerStatusAfterFloorOrCompaction`（现网已有，改数据源读 **main** log store）；Core `message-transcript-effects.service.ts` set-floor 路径；**手动重置**：Mobile `workplace-block.service.ts` / `useChatTabController.ts` + Desktop `workplace.ts` IPC → `clearUserOpsLogStore(sessionId)`（**不必**清 annotate，除非产品另定）
 - Step 8 — phase-cleanup-diff — blocking: no — qa: auto：删除或 deprecate 净 diff 模块与无用导出；更新 public allowlist；弱化/删除 `skipComposerStatusRefresh` 批次 defer（可选保留 notify 合并）
 - Step 9 — phase-compat-wire — blocking: yes — qa: auto：历史旧 user_ops XML 只读 parse；chip 文案 create/mkdir→「创建」
@@ -168,7 +166,7 @@ apps/desktop:
 - T-UOL4 — blocking: yes — Step 3：删目录再 mkdir 同 path → 有日志则 flush **有附件**（**翻转 F4 skip-empty**）
 - T-UOL5 — blocking: yes — Step 3/5：发送后 store 空、chip 空；checkpoint capture 仍可在有附件时触发（T-SD1 改写）
 - T-UOL6 — blocking: yes — Step 4：投影 path 聚合 — 同 path 两条日志 → **一颗** chip；发送仍两条附件
-- T-UOL7 — blocking: yes — Step 6：**`undo_send`** 含 user_ops 附件 → store 映回 + chip；**Desktop** 断言 main 侧 log store 非 renderer，且 renderer `applyUndoAnnotateRestore` **不** wipe main 已推 ops；盘 prior；**`rewind`** 锚点 **不**映回手改日志；**不**要求重放写盘（**翻转 T-CR6 / D6**）
+- T-UOL7 — blocking: yes — Step 6：**`undo_send`** 含 user_ops 附件 → **`listUserOpsLog` 为空、Composer chip 无 user_ops**（**不**映回 store）；正文回填；批注可恢复；盘 prior；**`rewind`** 锚点同样清空 store、推空 chip；**不**要求重放写盘（**翻转**原 T-CR6「Undo 映回手改」/ D6）
 - T-UOL8 — blocking: yes — Step 7：置位/压缩后未发送日志与 chip 仍在（`message-transcript-effects.service.ts` / compaction-handler 改数据源；T-CR5 改数据源）
 - T-UOL9 — blocking: yes — Step 5：仅未发送日志、无正文无批注 → 可发送；全空不可发
 - T-UOL10 — blocking: yes — Step 9：旧合成 XML 附件 parse 不抛；Undo 尽力映回或跳过损坏条
@@ -185,7 +183,7 @@ apps/desktop:
 | T-OP2 preview≡flush（净 diff） | 废止；由 T-UOL6 替代「投影聚合 vs 发送全量」 |
 | T-OP3 改回 baseline chip 空 | 翻转 → T-UOL2 |
 | F4 flush_skip_empty_diff | 翻转 → T-UOL4 |
-| recontract D6 / T-CR6「Undo 无手改」 | 翻转 → T-UOL7 |
+| recontract D6 / T-CR6「Undo 无手改」 | 2026-07-26 再次翻转 → T-UOL7 断言 undo_send **清空** store（与 rewind 一致） |
 | composer-ops-chip-lifecycle「净 path 投影」 | 局部 supersede |
 
 ## 风险与回滚方案
@@ -193,10 +191,10 @@ apps/desktop:
 | 风险 | 缓解 |
 |------|------|
 | 杀进程丢未发送手改日志（进程内 store） | 与 annotate 同限；若不可接受，后续 Feature 加 kkv 持久化 |
-| Undo 后再发送：盘 prior、日志描述历史变更 | 产品默认不重放写盘；SPEC/PRD 已写；可选 UI 文案后续补 |
+| Undo 后再发送：盘 prior、store 已空 | 产品默认不重放写盘；用户须重新操作产生新日志；SPEC/PRD 已写 |
 | 有「抵消感」的操作仍发给模型 | 有意为之；比静默吞掉更诚实 |
 | Public API 破坏 | allowlist + 主版本/变更说明 |
-| Desktop renderer wipe main ops | Undo 时 `applyUndoAnnotateRestore` 须保留 main `COMPOSER_ATTACHMENTS_SUGGEST` 已推 ops；annotate restore 仅 ∪ annotate，禁止空 ops 覆盖 user_ops chip |
+| Desktop renderer 与 main ops 分工 | Undo 时 main 推空 ops；renderer `applyUndoAnnotateRestore` 仅 ∪ annotate |
 | Desktop/Mobile 分批中间态双真源 | Core store+flush 先合，再切 App 投影；**禁止** App 侧 ∪ ops-log（仅 Core project + App ∪ annotate）；**禁止** Desktop renderer 写 ops log store（须 main 与 userVfsTurn 同进程）；**禁止** renderer wipe main 已推 ops；禁止只改一端 |
 | 回滚本迭代 | revert commits；恢复 `resolveWorkspaceFlushDiff` 调用与旧测试；KKV/store 无强制迁移 |
 
@@ -204,4 +202,4 @@ apps/desktop:
 
 - 本迭代默认操作日志 **不持久化到 DB**（对齐 annotate）；杀进程 / 重装后未发送手改 chip 丢失。
 - 项目工作区、Agent tool 写盘不记日志。
-- Undo 映回后再次发送 **不**自动把磁盘改回「日志描述的终态」。
+- Undo 后再次发送 **不**自动把磁盘改回「日志描述的终态」；Undo 已清空 store。

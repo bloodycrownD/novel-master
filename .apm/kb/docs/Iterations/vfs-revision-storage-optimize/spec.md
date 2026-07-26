@@ -40,7 +40,7 @@ SQLite (同一 novel.db)
 
 - 表：`vfs_content_blob(content_hash TEXT PRIMARY KEY, encoding TEXT NOT NULL, bytes BLOB NOT NULL, byte_len INTEGER NOT NULL)`
   - `content_hash`：UTF-8 明文的 SHA-256 hex（小写）
-  - `encoding`：字面量 `'zlib'`（本迭代固定；读时按字段解码，禁止写死假设）
+  - `encoding`：存储格式标识。Node / 桌面测 **`'zlib'`**（raw zlib bytes）；Hermes / RN 上 `put` 落 **`'zlib-b64'`**（`blob-bytes-codec.ts`：zlib 后再 base64 编码以规避 RN BLOB 绑定问题）。读路径按 `encoding` 字段解码，**禁止**写死单一格式。
   - `bytes`：zlib 压缩后字节
   - `byte_len`：**压缩后**字节长度（= `bytes.byteLength`；诊断用；禁止存明文长度冒充）
 - API（端口层）：
@@ -71,13 +71,14 @@ SQLite (同一 novel.db)
   ∪  
   `SELECT content_hash FROM vfs_revision WHERE content_hash IS NOT NULL`  
   （实现可写成一次查询或 store 内 `collectAllReferencedHashes()`）。
-- **blob GC 唯一入口（钉死 · 首选已定）**：全库 blob gc **只**经 `sweepSessionRevisions` 触发，禁止旁路助手或第三套入口。
-  - `sweepSessionRevisions` **增加** `contentStore`（或等价 deps：能 `collectAllReferencedHashes` + `gc` 即可）；删完本 session 不可达 revision 行之后，**末尾内部**自动跑一次全库 blob gc。
-  - **调用方一律只调 `sweepSessionRevisions`**（不得在调用后再手拼 `ContentStore.gc`）：
-    - `message.service`（单条删消息后 sweep）
+- **blob GC 算法唯一入口（钉死）**：全库 blob gc **只**经 `collectAllReferencedHashes` + `ContentStore.gc` 这一套算法；禁止旁路助手或第三套 collect/gc 逻辑。
+  - **现网（`message-rollback-execution-redesign` 已落地）**：算法仍唯一，**触发为 deferred**——revision 打扫（`sweepSessionRevisions` 或等价）**不再**末尾同步跑 blob gc；改由 `runDeferredBlobGc` 统一调度（业务路径事务后 / 空闲 / 周期可选触发）。调用方不得手写第二套 gc。
+  - `sweepSessionRevisions` 仅删本 session 不可达 revision 行；blob 回收须经 `runDeferredBlobGc`（内部仍为 collect+gc）。
+  - **调用方**一律只经上述入口触发 blob gc（不得在调用后再手拼 `ContentStore.gc`）：
+    - `message.service`（单条删消息后 sweep + deferred gc）
     - `truncate-tail-in-transaction`（`sweepRevisions: true` 时）
     - `user-vfs-turn` 失败补偿末尾（restore 尝试结束后不论是否 composite）
-  - **备选「统一助手」作废**，不再作为落地选项。
+    - `session.service` / `project.service` / `sessionTemplatePull` 等 session 删路径（事务后 deferred gc）
 - **明确禁止**：用「当前 session 前缀下的局部 keepSet」去 `DELETE` keepSet 之外的全部 blob 行——会误删其它 session 仍在引用的正文。
 - `sweepSessionRevisions` 仍可只删本 session 不可达 `(path,version)` 行；但紧随其后的 blob gc **不得**把 keepSet 缩成 session 局部。
 
@@ -164,11 +165,10 @@ user-vfs-turn 失败
        → present:   vfs.resetHeadToVersion(path, snapshot.version)
        → absent:    vfs.hardDelete(path, { recursive: true })
        → directory: 见下表
-  → sweepSessionRevisions(session…, contentStore)  // 可达集 = live heads ∪ checkpoint 指针；
-                                                    // 末尾内部全库 blob gc（见「blob GC 唯一入口」）
+  → sweepSessionRevisions(session…)  // revision 打扫 only；blob 经 runDeferredBlobGc
 ```
 
-**restore 部分失败与 sweep+gc（钉死）**：`restoreMutatingPathHeads` 允许对多 path 收集错误并抛 **composite error**；无论是否抛出、是否部分 path 失败，user-vfs-turn 在 **restore 尝试结束后**仍须执行 **一次** `sweepSessionRevisions`（末尾连带全库 blob gc）。禁止「composite 就跳过清理」。
+**restore 部分失败与 sweep+gc（钉死）**：`restoreMutatingPathHeads` 允许对多 path 收集错误并抛 **composite error**；无论是否抛出、是否部分 path 失败，user-vfs-turn 在 **restore 尝试结束后**仍须执行 **一次** revision 打扫（`sweepSessionRevisions`）；blob 回收经 **`runDeferredBlobGc`**（同一 collect+gc 算法）。禁止「composite 就跳过清理」。
 
 #### `resetHeadToVersion(path, version)` 合同（钉死）
 
@@ -214,7 +214,7 @@ user-vfs-turn 失败
 2. **全库**收集仍被 `vfs_entry` ∪ `vfs_revision` 引用的非空 `content_hash`
 3. `ContentStore.gc` 删除无引用 blob
 
-**唯一入口（钉死）**：步骤 2–3 收敛进 `sweepSessionRevisions` 末尾（函数签名增加 `contentStore` 或等价 deps）。user-vfs 补偿末尾、message 删除、truncate-tail 均只触发该入口一次，不旁路第二次手写 gc。
+**算法唯一入口（钉死）**：步骤 2–3 的 collect+gc **只**此一套实现，封装为 **`runDeferredBlobGc`**（`message-rollback-execution-redesign` 已落地）。`sweepSessionRevisions` **不再**末尾同步 blob gc；user-vfs 补偿末尾、message 删除、truncate-tail、session 删等路径在 revision 打扫后**可选**调度 `runDeferredBlobGc`。不旁路第二次手写 gc。
 
 触发点：既有 message delete / truncateTail（`sweepRevisions: true`）之外，**加上** user vfs 失败补偿末尾（restore 尝试结束后，**不论**是否 composite error）。两处均须遵守「全库引用集」合同。
 
@@ -222,16 +222,20 @@ user-vfs-turn 失败
 
 - 新 migration：`vfs-content-blob-zlib-v1`（stem=`id`），登记 `SCHEMA_MIGRATIONS`
 - 同步更新 canonical `vfs-schema.ts` / `vfs-revision-schema.ts` + blob DDL（`vfs_entry.content` 改为 `TEXT NULL`）
-- `up`：
+- **`up()`（schema 阶段，bootstrap 事务内）**：
   1. 建 `vfs_content_blob`
   2. **旧库 `vfs_entry` table rebuild**（去掉 `content NOT NULL`，加入 `content_hash`）
   3. `vfs_revision` ADD `content_hash`（或等价）
-  4. 扫仍有明文的 entry/revision（`content IS NOT NULL`）→ `put` → 写 `content_hash` → **`content=NULL`**
-  5. 目录行：确保 `content`/`content_hash` 均为 `NULL`
-  6. 可重入：已有 hash 且 content 已 NULL 则跳过
-- 新库路径 B：DDL 已完整且无待迁明文 → no-op（仍 mark applied）
+  4. **mark migration applied**（schema 就绪即可启动；**不**在事务内扫全库明文）
+  5. 新库路径 B：DDL 已完整且无待迁明文 → no-op（仍 mark applied）
+- **明文 data migrate（bootstrap 事务外，`runVfsContentBlobDataMigration`）**：
+  - 扫仍有明文的 entry/revision（`content IS NOT NULL`）→ `put` → 写 `content_hash` → **`content=NULL`**
+  - **RN 工程折中**：Hermes 上长事务 + 大批量 BLOB 写入曾触发闪退，故 data migrate **拆到事务外**，每批 1 行 + yield，可跨多次 boot 重入续迁
+  - 目录行：确保 `content`/`content_hash` 均为 `NULL`
+  - 可重入：已有 hash 且 content 已 NULL 则跳过
+  - **中间态读路径**：schema 已 mark applied、明文尚未迁完时，靠 `resolve-stored-content` 读遗留 `content` 列（行为可接受）
 - **禁止**只靠 `alignSchemaColumns` 完成「去掉 NOT NULL」
-- 阻塞在 bootstrap 事务内；极大库首次打开耗时写入风险说明（可接受：升级一次性）
+- 极大库首次打开 / 升级可能分多次 boot 完成 data migrate；耗时写入发布说明
 
 ### 旁路写路径（钉死）
 
@@ -257,7 +261,7 @@ packages/core/src/
     vfs-content-store.port.ts
     impl/sqlite-vfs-content-store.ts
     logic/hash-content.ts          # @noble/hashes/sha256 → hex
-    logic/zlib-codec.ts            # fflate zlibSync/unzlibSync；encoding='zlib'
+    logic/zlib-codec.ts            # fflate zlibSync/unzlibSync；Node encoding='zlib'，RN 经 blob-bytes-codec 落 zlib-b64
   bootstrap/vfs/
     vfs-content-blob-schema.ts     # 或并入 vfs-schema
     vfs-schema.ts                  # content TEXT NULL + content_hash
@@ -272,7 +276,7 @@ packages/core/src/
   domain/vfs/ports/...entry...                    # 不 bump 的 set-head（含 insertAtVersion+hash）
   domain/vfs/logic/restore-mutating-path-heads.ts
   domain/vfs/repositories/...
-  domain/message-checkpoint/logic/revision-gc.ts  # sweepSessionRevisions(+contentStore) 末尾全库 blob gc
+  domain/message-checkpoint/logic/revision-gc.ts  # sweepSessionRevisions revision-only；blob 经 runDeferredBlobGc
   service/chat/impl/user-vfs-turn.service.ts      # restore 后不论 composite 仍 sweep 一次；loadRevisionContent 不靠 NULL??""
   domain/message-checkpoint/logic/restore-path.ts # 吃 repo 已解出的明文；禁止 rev.content ?? "" 把 NULL 当空串
 ```
@@ -296,8 +300,8 @@ apps/desktop、apps/mobile、apps/cli：**常规读写预期零改**；补偿原
 | DefaultVfsService | 无 revision：`resetHeadToVersion` throw/unsupported；`hardDelete` 可等同 `delete` |
 | RevisionAware write | 同文短路；异文只存 hash；`resetHead` 走 set-head 原语 |
 | restoreMutatingPathHeads | 改调补偿原语；directory 快照外硬删 + reset（list `NOT_FOUND`≡无外文件）；禁 write 注水；snapshot `content` 仅 capture 遗留 |
-| user-vfs-turn | restore 尝试结束后 **不论 composite error** 仍做一次 `sweepSessionRevisions`；只经 **blob GC 唯一入口** |
-| revision-gc / sweep | `sweepSessionRevisions` 增加 contentStore（或等价 deps），末尾全库 blob gc；调用方：message.service、truncate-tail、user-vfs 补偿末尾 |
+| user-vfs-turn | restore 尝试结束后 **不论 composite error** 仍做一次 revision 打扫；blob gc 经 **`runDeferredBlobGc`**（collect+gc 算法唯一入口） |
+| revision-gc / sweep | `sweepSessionRevisions` revision-only；blob 经 `runDeferredBlobGc`（见 `message-rollback-execution-redesign`） |
 | seed-fork / backfill / tree-copy / batch | 只落 `content_hash`；fork 共享同一 blob |
 | 测试 | 见下；T-FR* 用 `sessionVfs`；补偿 sweep 测例 **T-UO-SWEEP1**（扩展现有 T1，勿与 attachment 的 T-UO1 撞名） |
 
@@ -308,8 +312,8 @@ apps/desktop、apps/mobile、apps/cli：**常规读写预期零改**；补偿原
 - Step 3 — phase-repo-wire — blocking: yes — qa: auto：entry/revision repo 读写走 ContentStore；NULL 读路径（含 directory 显式分支）；`find*` 解出明文；entry **set-head** 不 bump API；`insertDirectory` 双 NULL；凡 insert/update/append 文件只落 hash；`scanContents`/`findByPath` 对文件仍返回明文 string；点名修 `restore-path.ts` / `loadRevisionContent` 的 `?? ""`；T-NULL-DIR
 - Step 4 — phase-same-content-shortcircuit — blocking: yes — qa: auto：`writeWithRevision` 同文短路；T-SC1/SC2/SC3（含乐观锁仍 CONFLICT）
 - Step 5 — phase-fail-restore-b — blocking: yes — qa: auto：`resetHeadToVersion`/`hardDelete` 挂上 VfsService + Scoped 转发 + Default throw；改 `restoreMutatingPathHeads`；T-FR1/FR2/FR3 + T-FR-D*（均经 `sessionVfs`）
-- Step 6 — phase-compensate-sweep — blocking: yes — qa: auto：user-vfs restore 结束后不论 composite 仍 `sweepSessionRevisions` 一次（末尾全库 blob gc）；**扩展现有 user-vfs T1** → 测例 **T-UO-SWEEP1**（勿复用 attachment 的 T-UO1 名）
-- Step 7 — phase-gc-blob — blocking: yes — qa: auto：落地 `sweepSessionRevisions(+contentStore)` 末尾全库 gc；接线 message.service / truncate-tail；T-GC1/T-GC2
+- Step 6 — phase-compensate-sweep — blocking: yes — qa: auto：user-vfs restore 结束后不论 composite 仍 `sweepSessionRevisions` 一次；blob 经 **`runDeferredBlobGc`**；**扩展现有 user-vfs T1** → 测例 **T-UO-SWEEP1**（勿复用 attachment 的 T-UO1 名）
+- Step 7 — phase-gc-blob — blocking: yes — qa: auto：落地 **`runDeferredBlobGc`**（collect+gc 唯一入口）；接线 message.service / truncate-tail / session 删；T-GC1/T-GC2 挂 deferred 入口
 - Step 8 — phase-callers — blocking: yes — qa: auto：seed-fork / backfill / tree-copy / batch 只落 hash、fork 共享 blob；fork-copy-parity 仍断言可读 content
 - Step 9 — phase-regression — blocking: yes — qa: auto：ZIP、grep、rollback R1/R8、capture 指针回归；T-IO1/T-RB1
 - Step 10 — phase-manual-sample — blocking: no — qa: manual_user：用样例大库升级后看体积下降 + 抽样回滚（合并后用户执行）
@@ -321,7 +325,7 @@ apps/desktop、apps/mobile、apps/cli：**常规读写预期零改**；补偿原
 ### 测试用例
 
 - T-CS1 — blocking: yes — ContentStore：相同明文 → 相同 hash，blob 表仅一行
-- T-CS2 — blocking: yes — put/get 往返（空串、中文、较长正文）；encoding=`zlib`；`byte_len` = 压缩后长度
+- T-CS2 — blocking: yes — put/get 往返（空串、中文、较长正文）；Node 侧 `encoding='zlib'`；RN 侧可读 `zlib-b64`；`byte_len` = 存储字节长度
 - T-MG1 — blocking: yes — 旧 TEXT NOT NULL fixture 经 rebuild 后 `content` 可空；迁移后可读；二次 bootstrap 可重入；`content` 列为 NULL 后读仍明文；目录行 content/hash 皆 NULL
 - T-SC1 — blocking: yes — 同文 write 两次：version 与 revision 行数不变
 - T-SC2 — blocking: yes — 异文 write：version+1，两版可共享不同/相同 blob（按正文）；entry/revision 的 `content` 为 NULL
@@ -336,7 +340,7 @@ apps/desktop、apps/mobile、apps/cli：**常规读写预期零改**；补偿原
 - T-FR-D4 — blocking: yes — **Given** directory 快照，批次中在快照外路径 `/d/sub/new.md` 新建，**When** 补偿，**Then** 该新文件硬删；快照内文件 head 不因补偿 bump
 - T-GC1 — blocking: yes — 不可达 revision 删除后，无引用 blob 被 gc（经唯一入口）
 - T-GC2 — blocking: yes — session A sweep 后 gc：**不得**删除仍被 session B 的 entry/revision 引用的 blob
-- T-UO-SWEEP1 — blocking: yes — **扩展**现有 user-vfs-turn **T1**（失败回滚）：失败回滚后 revision/blob 断言；含「restore 抛 composite 后仍执行一次 `sweepSessionRevisions`+全库 blob gc」。**禁止**再用 `T-UO1` 命名（与 `message-attachment-unified` 的 T-UO1 撞名）
+- T-UO-SWEEP1 — blocking: yes — **扩展**现有 user-vfs-turn **T1**（失败回滚）：失败回滚后 revision 断言 + deferred blob gc 可回收 orphan。**禁止**再用 `T-UO1` 命名（与 `message-attachment-unified` 的 T-UO1 撞名）
 - T-IO1 — blocking: yes — ZIP 导出仍为明文文件内容（读路径不出现 `"null"` 伪串）
 - T-RB1 — blocking: yes — message rollback 语义保持（可升 live head；同文吃短路）
 - T-FK1 — blocking: yes — fork-copy-parity：目标 session revision 可读；源/目标共享同一 `content_hash`/blob 行，不靠明文 backfill 堆第二份
@@ -347,7 +351,7 @@ apps/desktop、apps/mobile、apps/cli：**常规读写预期零改**；补偿原
 
 | 风险 | 缓解 |
 |------|------|
-| 大库迁移阻塞开库 | 可重入；失败则事务回滚不标记 applied；风险写入发布说明 |
+| 大库迁移阻塞开库 | schema 事务内 mark applied；明文 data migrate 事务外分批 + yield，可跨 boot 重入；失败 schema 阶段则事务回滚不 mark |
 | 旧库 `content NOT NULL` | migration 强制 table rebuild，与 canonical `TEXT NULL` 对齐 |
 | RN BLOB 绑定 | 沿用 tight ArrayBuffer；conformance C4 + ContentStore 测 |
 | 误用 `String(BLOB)` / `String(null)` | repo 层显式 Uint8Array / NULL / directory 分支；T-NULL-DIR 负向测 |
@@ -372,6 +376,6 @@ apps/desktop、apps/mobile、apps/cli：**常规读写预期零改**；补偿原
 10. 本迭代不把 message 回滚改成「只拨指针」
 11. 禁止以 `node:crypto` 作为 SHA-256 唯一实现
 12. 禁止 session 局部 keepSet 驱动的「删除 keepSet 外全部 blob」
-13. 禁止绕过 blob GC 唯一入口（`sweepSessionRevisions` 末尾）另开第三套全库/局部 gc；「统一助手」备选已作废
+13. 禁止旁路 collect+gc **算法**另开第三套全库/局部 gc。**触发**须经 `runDeferredBlobGc`（`collectAllReferencedHashes` + `ContentStore.gc`）；`sweepSessionRevisions` 末尾**不再**同步 blob gc
 14. 禁止对 directory 行走 ContentStore.get，或把目录 `NULL` content `String(...)` 成 `"null"`
 15. 禁止 `restore-path` / `loadRevisionContent` 用 `rev.content ?? ""` 把未解出的 SQL `NULL` 当空串

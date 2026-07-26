@@ -17,7 +17,7 @@ dependency:
 > - `desktop-chat-workspace-polish` F4：发送时 checkpoint 净 diff 合成 flush
 > - `composer-ops-chip-lifecycle`：状态条手改 chip 由净 path 投影；抵消后 chip 消失
 > - `annotate-user-ops-unify` 中手改依赖 `synthesize-user-vfs-flush-actions` 的落库路径
-> - `composer-chip-ops-annotate-recontract` D6：**Undo 不恢复手改** → 改为从消息附件映射回操作日志（与批注对称）
+> - `composer-chip-ops-annotate-recontract` D6：**Undo 不恢复手改** → 本迭代曾改为从消息附件映回；**2026-07-26 产品收窄**：`undo_send` 与 `rewind` 一致 **清空** 未发送 ops store（不映回手改）；正文 / 批注仍恢复
 >
 > **保留**：`composer-two-pipelines-hard-contract`（状态 chip vs `@`）；批注 store / ∪ chip；写盘即时发生；message checkpoint 仍服务 VFS 回滚（不再作 flush baseline）。
 
@@ -36,7 +36,7 @@ dependency:
 
 1. 手改不再依赖 checkpoint 净 diff 做 chip 投影或发送合成。
 2. 每次成功保存（或等价一次用户 VFS 突变落盘）追加一条操作日志；跨次保存不做合并。
-3. Composer 存什么 → 状态条投影什么 → 发送带什么；**Undo Send** 从该条 plain user 消息的手改附件映回日志（**Rewind 不映回**）。
+3. Composer 存什么 → 状态条投影什么 → 发送带什么；**Undo Send / Rewind** 回滚成功后均 **清空** 未发送 ops store 并推空 Composer chip（**不**从消息附件映回手改 ops）；正文 / 批注仍恢复。
 4. 会话内 rename / 移动后状态条刷新不再触发全树 diff（目标：与「无 chip 时代」同量级，毫秒～百毫秒级 UI 更新，而非秒级）。
 
 **成功指标（可判定）**
@@ -44,7 +44,7 @@ dependency:
 - 单次会话文件保存 / rename 后，状态条更新路径上**不再**调用 `previewUserOpsActions` / `resolveWorkspaceFlushDiff`（或等价净 diff API）。
 - 同文件连续两次保存（先 create 后 edit）→ 日志两条；发送消息上对应两条手改附件（或等价多 action 序列），**不是**被净 diff 折成一条。
 - 改完又改回 baseline：日志与 chip（按 path 聚合后）仍在，直到发送清空或 Undo 规则处理。
-- Undo Send：正文回填；批注仍恢复；**手改操作日志可从消息映回**（Desktop main 推送 ops，renderer 不 wipe）；Rewind 不映回手改。
+- Undo Send / Rewind：正文回填；批注仍恢复；**手改 ops store 清空、Composer chip 无 user_ops**（与 rewind 一致，不 parse/append 映回）。
 
 ## 用户与场景
 
@@ -62,7 +62,7 @@ dependency:
 1. **操作日志真源**：会话手改以按次追加的操作日志为准（见核心需求载荷）；写盘仍即时发生，日志不替代写盘。
 2. **Composer 投影**：状态条手改 chip 由 **Core** 从日志投影；App **仅** ∪ annotate；UI **按 path 聚成一颗**（展示层）；真源日志可多条。
 3. **发送**：取消 checkpoint 净 diff flush；发送时将未发送日志原样（或按既定 wire）变为消息 `user_ops` 附件并清空未发送日志。
-4. **Undo Send**：从被撤销 plain user 消息的手改附件映射回 Composer 操作日志（与批注对称；**Rewind 不映回**；Desktop renderer 不得 wipe main 已推 ops）；盘仍走既有 prior checkpoint 回滚。
+4. **Undo Send / Rewind**：VFS 回滚成功后 **`clearUserOpsLog` + 推空 Composer chip**（双端一致；**不**从消息 `user_ops` 附件 parse/append 映回 store）；正文回填、批注反投影仍执行；盘仍走既有 prior checkpoint / rewind 规则。
 5. **置位 / 压缩**：未发送操作日志与批注一样保留（对齐 recontract「跟输入框走」）。
 6. **双端合同**：Desktop + Mobile 行为一致。
 7. **历史消息**：已发出的旧合成 XML 附件只读兼容；新消息走新日志形态。
@@ -94,8 +94,8 @@ dependency:
    废除「pending 非空再对 checkpoint 算净 diff 合成附件」。发送时未发送日志 → 消息附件；发送成功后清空未发送日志。不再要求「净 diff 为空则跳过落库」——有日志就带上（含「看起来像抵消」的条目，若用户确有多条保存）。
 
 5. **Undo / 置位对称批注**  
-   - **Undo Send**（`isPlainUserUndoSendEligible(anchor)` → `undo_send`）：盘 prior；正文回填；批注反投影；**手改日志从该条消息附件映回**（supersede recontract D6）。**Rewind**（assistant / `user_vfs_turn` 等锚点）：盘按现网 rewind 规则；**不**从消息映回手改日志（Composer ops 推空或仅 project 当前空 store）。  
-   - **Desktop 双进程分工**：ops log store 以 **main** 为真源；`undo_send` 时 main truncate 后 `parseUserOpsLogFromAttachments` 写 store 并经 `COMPOSER_ATTACHMENTS_SUGGEST`（或等价）推送 ops chip；renderer **仅**正文回填 + 批注反投影 ∪。**禁止** renderer 侧 `applyUndoAnnotateRestore` 以空 ops 覆盖 main 已推的 user_ops chip（须先接受 main suggest 的 ops 再 ∪ annotate，或 annotate restore 保留 existing 非 annotate attachments）。  
+   - **Undo Send**（`isPlainUserUndoSendEligible(anchor)` → `undo_send`）与 **Rewind**（assistant / `user_vfs_turn` 等锚点）：VFS 回滚成功后 **`clearUserOpsLog` + 推空 Composer chip**（双端一致；含 `skipVfsReconcile` 路径）；正文回填；批注反投影；**不**从消息 `user_ops` 附件映回手改 store（2026-07-26 产品收窄，supersede 原 recontract D6「Undo 映回手改」）。  
+   - **Desktop 双进程分工**：ops log store 以 **main** 为真源；`undo_send` / `rewind` 均由 main `clearUserOpsLog` → `notifyComposerStatusAfterSessionKkvCleared`（或等价推空）；renderer **仅**正文回填 + 批注反投影 ∪ annotate。  
    - 置位 / 压缩：保留未发送手改日志与 chip（不清成空条终态）。
 
 6. **门闩**  
@@ -107,14 +107,14 @@ dependency:
 2. **Given** 编辑文件后再改回与保存前相同内容并**再次保存（第二次须非 noop）**，**When** 看状态条，**Then** 该 path 仍有手改 chip（按 path 聚合可见），不因「相对 checkpoint 净空」而消失。  
 3. **Given** 会话内 rename / 移动文件，**When** 操作完成，**Then** 状态条更新不依赖工作区全量 checkpoint diff；主观卡顿相对现网明显下降（可用 Metro/日志确认无 `resolveWorkspaceFlushDiff` / `previewUserOpsActions`）。  
 4. **Given** 一次保存中同一文件多处修改，**When** 落日志，**Then** 为一条 `edit`，且 `hunks`（产品口径即 `content` 数组）为多段 `oldString`/`newString`。  
-5. **Given** 已发送含手改附件的 plain user 消息，**When** Undo Send（`undo_send`），**Then** 正文回填；批注可恢复；手改操作日志从该消息映回 Composer（Desktop：main 推送 ops，renderer 不 wipe）；盘为 prior。**Given** assistant / `user_vfs_turn` 锚点，**When** Rewind，**Then** **不**映回手改日志。  
+5. **Given** 已发送含手改附件的 plain user 消息，**When** Undo Send（`undo_send`），**Then** 正文回填；批注可恢复；**`listUserOpsLog` 为空、Composer chip 无 user_ops**（不映回）；盘为 prior。**Given** assistant / `user_vfs_turn` 锚点，**When** Rewind，**Then** 同样 **清空** 未发送 ops store、推空 chip。  
 6. **Given** 未发送手改日志存在，**When** 置位或压缩成功，**Then** 手改 chip / 日志仍在（与批注保留口径一致）。  
 7. **Given** 仅有历史旧格式 user_ops 附件的消息，**When** 打开会话或 Undo 到该消息，**Then** 不崩溃；新旧格式只读兼容策略在 SPEC 中可测。
 
 ## 风险与待确认项
 
-1. **Undo 映回日志后再次发送**：盘已是 prior，日志描述的是「曾做过的变更」。默认建议：**不自动重放写盘**；再次发送只是把日志再交给模型（与批注「再发草稿」类似）。若产品要求「Undo 后发送必须先重放磁盘」，需另开需求。  
-2. **Undo Send vs Rewind**：仅 `undo_send`（`isPlainUserUndoSendEligible`）映回手改；`rewind` 不 parse 手改附件。Desktop renderer 须保留 main 经 `COMPOSER_ATTACHMENTS_SUGGEST` 推送的 ops，禁止 annotate restore 以空 ops 覆盖。  
+1. **Undo 后再次发送**：Undo 已清空未发送 ops store；若用户需再次说明手改，须重新保存 / 操作产生新日志。盘已是 prior，**不**自动重放写盘。  
+2. **Undo Send vs Rewind**：二者 VFS 成功后均 **`clearUserOpsLog` + 推空 chip**；正文 / 批注恢复规则不变。  
 3. **noop 保存**（内容未变）：是否不写日志——建议不写。  
 4. **手动重置常驻**：是否仍清空未发送手改日志（现网倾向 clearSession）——建议保持「手动重置会丢未发送手改」，与置位不对称；实现上 `clearUserOpsLogStore(sessionId)` + kkv clearSession，**不必**清 annotate store（写入 SPEC）。  
 5. **wire 命名**：产品 `create` vs 现网附件 `write`/`mkdir` 的迁移与 LLM `<action>` 名——SPEC 钉死兼容层。  

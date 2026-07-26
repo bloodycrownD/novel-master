@@ -41,8 +41,8 @@ Message Checkpoint v2 已落地：checkpoint 只存整树 `{路径 → revision 
 
 1. **同文不升 version**：相对当前 live 文件正文完全一致的写入，不新增 revision、不抬 head version（返回仍表示写成功，version 为当前值）。
 2. **content_hash → 共享正文**：live entry 与 revision 都改为按内容指纹指向共享存储；明文不再作为迁移后的真源（列可空，值为 `NULL`）。
-3. **zlib 压缩**：共享正文压缩后落库（算法定 zlib）。
-4. **旧库迁移**：升级路径把已有正文迁入压缩共享存储；保留现有 `(path, version)` 与 checkpoint 指针；不强制 GC 同文 version 行；旧库须完成 `vfs_entry.content` 可空化（与 canonical DDL 一致）。
+3. **zlib 压缩**：共享正文压缩后落库（算法定 zlib；RN/Hermes 落库 encoding 为 `zlib-b64`，读路径按 encoding 解码）。
+4. **旧库迁移**：升级路径把已有正文迁入压缩共享存储；**schema migration（事务内 mark applied）与明文 data migrate（事务外、RN 分批 yield）拆分**；保留现有 `(path, version)` 与 checkpoint 指针；不强制 GC 同文 version 行；旧库须完成 `vfs_entry.content` 可空化（与 canonical DDL 一致）。
 5. **失败补偿收敛（B）**：user vfs 失败补偿经不升版原语拨回快照 head / 硬删 absent；若快照为 present 但 live 已被删，仍按目标 revision 重建 live（不升版、不叠假历史）；directory 清掉快照外新文件并拨回快照内文件（补偿 list 遇路径不存在视为无快照外文件；快照里的 content 仅 capture 遗留，拨回只认 version）；restore 尝试结束后不论是否部分失败，仍做一次 sweep + 回收无引用共享正文。
 6. 对外读写仍是完整 UTF-8 文本；目录无正文、不泄漏伪串 `"null"`；ZIP / 备份等用户可感知行为不因存法变化而丢内容。
 
@@ -62,7 +62,7 @@ Message Checkpoint v2 已落地：checkpoint 只存整树 `{路径 → revision 
 3. **zlib 压缩存储**：共享正文以 zlib 压缩形式持久化；读取时对上层仍还原为完整文本。
 4. **升级迁移**：已有库在升级过程中完成正文迁入与 `content` 可空化；迁移后旧明文列置 `NULL`，不再作为主存储；checkpoint 回滚仍可用。
 5. **失败补偿不堆假历史**：user vfs 一批操作失败后的恢复，不得以「再 append 一条与目标相同的新 version」作为默认实现；应拨回（或重建）到补偿前 head，并避免留下仅因失败尝试产生的不可达 revision；部分 path 恢复失败时仍须完成约定清理。
-6. **GC 与共享正文协调**：按现有可达性删除不可达 revision 行之后，须按**全库** entry∪revision 引用回收无主共享正文；禁止只按当前 session 局部引用集删 blob（否则会误伤其它 session）。
+6. **GC 与共享正文协调**：按现有可达性删除不可达 revision 行之后，须按**全库** entry∪revision 引用回收无主共享正文（经 `runDeferredBlobGc` 统一调度；禁止只按当前 session 局部引用集删 blob）。
 
 ## 验收标准
 
@@ -81,6 +81,6 @@ Message Checkpoint v2 已落地：checkpoint 只存整树 `{路径 → revision 
 ## 风险与待确认项
 
 - ~~live 工作区行（`vfs_entry`）是否也改为只存内容指纹、与 revision 共享同一正文池~~：**已定案（SPEC）**——entry 与 revision 共用 ContentStore；迁移后 `content=NULL`，真源为 `content_hash`；目录行 content/hash 皆 `NULL`；旧库经 table rebuild 去掉 `content NOT NULL`。
-- 迁移耗时与大库首次打开体验：SPEC 已定为同步、可重入、失败事务不 mark applied；极大库首次打开耗时写入发布说明。PRD 要求「升级后体积下降且可回滚」可测。
+- 迁移耗时与大库首次打开体验：SPEC 已定为 **schema 事务内 mark applied + 明文 data migrate 事务外分批（RN 每批 1 行 + yield，可跨 boot 重入）**；中间态靠读路径兼容遗留明文；极大库升级耗时写入发布说明。PRD 要求「升级后体积下降且可回滚」可测。
 - Agent tool 失败路径当前不走 user vfs 同一套补偿；若实现时写入口统一，可一并受益，但不把「重做 Agent 失败模型」列为独立产品范围。
 - dependency 前置 `message-checkpoint-v2`：本迭代不改其 checkpoint 指针 / 可达性语义，无需改前置 PRD message。
