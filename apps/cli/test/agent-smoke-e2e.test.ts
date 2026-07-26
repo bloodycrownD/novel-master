@@ -1,26 +1,36 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readCliState, runNm, seedMockProviderModels } from "./helpers.js";
+import { readCliState, runNm, seedMockProviderModels, stripBootLogs } from "./helpers.js";
 
 const MOCK_ENV = {
   NM_AGENT_MOCK_LLM: "1",
   NM_AGENT_MOCK_SCENARIO: "continue",
 };
 
+const MINIMAL_AGENT_YAML = `
+schemaVersion: 1
+name: e2e-smoke
+prompts:
+  persist: {}
+  dynamic: {}
+`;
+
 describe("agent CLI smoke", () => {
   it("project → session → agent continue (mock LLM)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-"));
     const dbPath = join(dir, "novel.db");
+    const agentPath = join(dir, "agent.yaml");
     try {
+      await writeFile(agentPath, MINIMAL_AGENT_YAML, "utf8");
       const project = runNm(
         ["project", "create", "--name", "AgentSmoke", "--db", dbPath],
         { env: MOCK_ENV },
       );
       assert.equal(project.status, 0, project.stderr);
-      const projectId = project.stdout.trim();
+      const projectId = stripBootLogs(project.stdout);
 
       runNm(["project", "use", "--project", projectId, "--db", dbPath], {
         env: MOCK_ENV,
@@ -31,7 +41,7 @@ describe("agent CLI smoke", () => {
         { env: MOCK_ENV },
       );
       assert.equal(session.status, 0, session.stderr);
-      const sessionId = session.stdout.trim();
+      const sessionId = stripBootLogs(session.stdout);
       runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
         env: MOCK_ENV,
       });
@@ -47,6 +57,8 @@ describe("agent CLI smoke", () => {
           "step one",
           "--modelId",
           savedModelId,
+          "--agent-config",
+          agentPath,
           "--db",
           dbPath,
         ],
@@ -72,29 +84,30 @@ describe("agent CLI smoke", () => {
   it("agent doom_loop surfaces AgentError on stderr", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-doom-"));
     const dbPath = join(dir, "novel.db");
+    const agentPath = join(dir, "agent.yaml");
     try {
-      const projectId = runNm(
-        ["project", "create", "--name", "Doom", "--db", dbPath],
-        { env: { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" } },
-      )
-        .stdout.trim();
+      await writeFile(agentPath, MINIMAL_AGENT_YAML, "utf8");
+      const doomEnv = { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" };
+      const projectId = stripBootLogs(
+        runNm(
+          ["project", "create", "--name", "Doom", "--db", dbPath],
+          { env: doomEnv },
+        ).stdout,
+      );
       runNm(["project", "use", "--project", projectId, "--db", dbPath], {
-        env: { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" },
+        env: doomEnv,
       });
-      const sessionId = runNm(
-        ["session", "create", "--project", projectId, "--db", dbPath],
-        { env: { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" } },
-      )
-        .stdout.trim();
+      const sessionId = stripBootLogs(
+        runNm(
+          ["session", "create", "--project", projectId, "--db", dbPath],
+          { env: doomEnv },
+        ).stdout,
+      );
       runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
-        env: { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" },
+        env: doomEnv,
       });
 
-      const mockModels = seedMockProviderModels(
-        dbPath,
-        ["test"],
-        { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" },
-      );
+      const mockModels = seedMockProviderModels(dbPath, ["test"], doomEnv);
       const savedModelId = mockModels.get("test")!;
 
       const agent = runNm(
@@ -105,13 +118,15 @@ describe("agent CLI smoke", () => {
           "trigger doom",
           "--modelId",
           savedModelId,
+          "--agent-config",
+          agentPath,
           "--db",
           dbPath,
         ],
-        { env: { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" } },
+        { env: doomEnv },
       );
       assert.notEqual(agent.status, 0);
-      assert.match(agent.stderr, /Doom loop/i);
+      assert.match(stripBootLogs(agent.stderr), /Doom loop/i);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

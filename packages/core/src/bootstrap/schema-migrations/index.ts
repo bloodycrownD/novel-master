@@ -45,13 +45,13 @@ export async function runPendingSchemaMigrations(
     seen.add(migration.id);
 
     if (await isSchemaMigrationApplied(tx, migration.id)) {
-      console.log(`[nm-boot] migration skip (applied): ${migration.id}`);
+      console.error(`[nm-boot] migration skip (applied): ${migration.id}`);
       continue;
     }
 
-    console.log(`[nm-boot] migration run: ${migration.id}`);
+    console.error(`[nm-boot] migration run: ${migration.id}`);
     await migration.up(tx);
-    console.log(`[nm-boot] migration applied: ${migration.id}`);
+    console.error(`[nm-boot] migration applied: ${migration.id}`);
     await markSchemaMigrationApplied(tx, migration.id, Date.now());
   }
 }

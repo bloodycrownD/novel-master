@@ -36,6 +36,15 @@ export interface SpawnResult {
   readonly stderr: string;
 }
 
+/** 去掉 bootstrap 打到 stdout/stderr 的 `[nm-boot] …` 行。 */
+export function stripBootLogs(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !line.startsWith("[nm-boot]"))
+    .join("\n")
+    .trim();
+}
+
 /** Spawns the CLI entry via tsx (same as other e2e tests). */
 export function runNm(
   args: string[],
@@ -72,12 +81,66 @@ export interface SavedModelListRow {
   readonly vendorModelId: string;
 }
 
+export interface ProviderListRow {
+  readonly id: string;
+  readonly displayName: string;
+  readonly protocol: string;
+  readonly baseUrl: string;
+  readonly apiKeyStatus: string;
+}
+
+/**
+ * 与 Core `builtin-providers` 固定 UUID 对齐（CLI e2e 选用内置服务商）。
+ * @see packages/core/src/domain/provider/logic/builtin-providers.ts
+ */
+export const BUILTIN_OPENAI_UUID = "c0ffeeee-0001-4000-8000-000000000001";
+export const BUILTIN_ANTHROPIC_UUID = "c0ffeeee-0001-4000-8000-000000000002";
+export const BUILTIN_GOOGLE_UUID = "c0ffeeee-0001-4000-8000-000000000003";
+export const BUILTIN_OPENROUTER_UUID = "c0ffeeee-0001-4000-8000-000000000004";
+export const BUILTIN_OPENCODE_UUID = "c0ffeeee-0001-4000-8000-000000000005";
+
+/** 解析 `nm provider list` TSV：`uuid\\tdisplayName\\tprotocol\\tbaseUrl\\tapiKey: …`。 */
+export function parseProviderList(stdout: string): ProviderListRow[] {
+  return stdout
+    .trim()
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0 && !line.startsWith("[nm-boot]"))
+    .map((line) => {
+      const [id, displayName, protocol, baseUrl, apiKeyStatus] = line.split("\t");
+      if (id == null || displayName == null || protocol == null || baseUrl == null) {
+        throw new Error(`invalid provider list line: ${line}`);
+      }
+      return {
+        id,
+        displayName,
+        protocol,
+        baseUrl,
+        apiKeyStatus: apiKeyStatus ?? "",
+      };
+    });
+}
+
+/** 解析 `nm provider create` 打印到 stderr 的 UUID。 */
+export function parseCreatedProviderId(stderr: string): string {
+  const id = stripBootLogs(stderr)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .at(-1);
+  if (id == null || id === "") {
+    throw new Error(`provider create did not print uuid on stderr: ${stderr}`);
+  }
+  return id;
+}
+
 /** 解析 `nm provider model list` TSV：`uuid\\tdisplayName\\tvendorModelId`。 */
 export function parseSavedModelList(stdout: string): SavedModelListRow[] {
   return stdout
     .trim()
     .split("\n")
-    .filter((line) => line.length > 0)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0 && !line.startsWith("[nm-boot]"))
     .map((line) => {
       const [id, displayName, vendorModelId] = line.split("\t");
       if (id == null || vendorModelId == null) {
@@ -150,11 +213,11 @@ export function seedMockProviderModels(
   env?: NodeJS.ProcessEnv,
 ): Map<string, string> {
   const runOpts = env != null ? { env } : undefined;
-  runNm(
+  const create = runNm(
     [
       "provider",
       "create",
-      "--providerId",
+      "--name",
       "mock",
       "--protocol",
       "openai",
@@ -167,7 +230,11 @@ export function seedMockProviderModels(
     ],
     runOpts,
   );
-  runNm(["provider", "use", "--providerId", "mock", "--db", dbPath], runOpts);
+  if (create.status !== 0) {
+    throw new Error(create.stderr || "provider create mock failed");
+  }
+  const providerId = parseCreatedProviderId(create.stderr);
+  runNm(["provider", "use", "--providerId", providerId, "--db", dbPath], runOpts);
   const ids = new Map<string, string>();
   for (const vendorModelId of vendorIds) {
     ids.set(vendorModelId, createSavedModelId(dbPath, vendorModelId));

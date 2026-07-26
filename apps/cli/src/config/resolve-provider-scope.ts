@@ -32,7 +32,7 @@ export async function resolveProviderId(
     return fromState;
   }
   throw new Error(
-    "Missing --providerId <id> (or run: nm provider use --providerId <id>)",
+    "Missing --providerId <uuid> (or run: nm provider use --providerId <uuid>)",
   );
 }
 
@@ -65,5 +65,5 @@ export function requireProviderId(
   if (fromFlag != null) {
     return fromFlag;
   }
-  throw new Error("Missing --providerId <id>");
+  throw new Error("Missing --providerId <uuid>");
 }

@@ -9,7 +9,13 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { createSavedModelId, runNm, savedModelIdByVendor } from "./helpers.js";
+import {
+  BUILTIN_OPENAI_UUID,
+  createSavedModelId,
+  runNm,
+  savedModelIdByVendor,
+  stripBootLogs,
+} from "./helpers.js";
 
 const PROMPT_YAML = `
 persist: {}
@@ -22,7 +28,7 @@ async function setupSession(dbPath: string): Promise<{
 }> {
   const project = runNm(["project", "create", "--name", "Prompt", "--db", dbPath]);
   assert.equal(project.status, 0, project.stderr);
-  const projectId = project.stdout.trim();
+  const projectId = stripBootLogs(project.stdout);
   const session = runNm([
     "session",
     "create",
@@ -32,7 +38,7 @@ async function setupSession(dbPath: string): Promise<{
     dbPath,
   ]);
   assert.equal(session.status, 0, session.stderr);
-  return { projectId, sessionId: session.stdout.trim() };
+  return { projectId, sessionId: stripBootLogs(session.stdout) };
 }
 
 function parseTokenJsonLine(stderr: string): {
@@ -147,7 +153,14 @@ describe("prompt render --tokens CLI e2e", () => {
     try {
       await writeFile(promptPath, PROMPT_YAML, "utf8");
       runNm(["provider", "list", "--db", dbPath]);
-      runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
+      runNm([
+        "provider",
+        "use",
+        "--providerId",
+        BUILTIN_OPENAI_UUID,
+        "--db",
+        dbPath,
+      ]);
       createSavedModelId(dbPath, "gpt-4o");
       const savedModelId = savedModelIdByVendor(dbPath, "gpt-4o");
 
@@ -199,7 +212,14 @@ describe("prompt render --tokens CLI e2e", () => {
     const promptPath = join(dir, "prompt.yaml");
     try {
       await writeFile(promptPath, PROMPT_YAML, "utf8");
-      runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
+      runNm([
+        "provider",
+        "use",
+        "--providerId",
+        BUILTIN_OPENAI_UUID,
+        "--db",
+        dbPath,
+      ]);
       createSavedModelId(dbPath, "gpt-4o");
       const savedModelId = savedModelIdByVendor(dbPath, "gpt-4o");
       runNm([
@@ -259,7 +279,14 @@ describe("prompt render --tokens CLI e2e", () => {
     const promptPath = join(dir, "prompt.yaml");
     try {
       await writeFile(promptPath, PROMPT_YAML, "utf8");
-      runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
+      runNm([
+        "provider",
+        "use",
+        "--providerId",
+        BUILTIN_OPENAI_UUID,
+        "--db",
+        dbPath,
+      ]);
       createSavedModelId(dbPath, "claude-3-5-sonnet");
       const savedModelId = savedModelIdByVendor(dbPath, "claude-3-5-sonnet");
 

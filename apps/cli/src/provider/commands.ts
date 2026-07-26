@@ -78,7 +78,7 @@ export async function runProvider(
         | "gemini"
         | undefined;
       const baseUrl = flagString(flags, "baseUrl");
-      if (!name || !protocol || !baseUrl) {
+      if (name == null || name.trim() === "" || !protocol || !baseUrl) {
         throw new Error(
           "Usage: nm provider create --name <name> --protocol <openai|anthropic|gemini> --baseUrl <url> [--headers] [--apiKey]",
         );
@@ -95,15 +95,19 @@ export async function runProvider(
     }
     case "delete": {
       const id = requireProviderId(flags);
+      // 须在 providers.delete（会级联删 saved model）之前查归属
+      const currentModelId = await rt.state.getCurrentModelId();
+      let clearCurrentModel = false;
+      if (currentModelId != null && currentModelId !== "") {
+        const saved = await rt.providerModels.getSavedById(currentModelId);
+        clearCurrentModel = saved?.providerId === id;
+      }
       await rt.providers.delete(id);
-      // Clear current provider if it was deleted
       const currentProviderId = await rt.state.getCurrentProviderId();
       if (currentProviderId === id) {
         await rt.state.resetCurrentProviderId();
       }
-      // Clear current model if it belongs to this provider
-      const currentModelId = await rt.state.getCurrentModelId();
-      if (currentModelId?.startsWith(`${id}/`)) {
+      if (clearCurrentModel) {
         await rt.state.resetCurrentModelId();
       }
       return;

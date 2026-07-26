@@ -144,36 +144,47 @@ function ensureChatMessageHiddenColumn(targetDb) {
   });
 }
 
+function findProviderByDisplayName(listStdout, displayName) {
+  return listStdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, name, protocol, baseUrl, apiKeyStatus] = line.split("\t");
+      return { id, name, protocol, baseUrl, apiKeyStatus };
+    })
+    .find((row) => row.name === displayName);
+}
+
 function assertZhipuReady(targetDb) {
   const envKey = process.env.NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY;
   const list = run(["provider", "list", "--db", targetDb]);
-  const zhipuLine = list.stdout
-    .split("\n")
-    .find((line) => line.startsWith("zhipu\t"));
-  if (!zhipuLine) {
+  const zhipu = findProviderByDisplayName(list.stdout, "Zhipu GLM");
+  if (!zhipu) {
     console.error(
-      "capture-agent-scenarios: zhipu provider not found in database.\n" +
+      "capture-agent-scenarios: Zhipu GLM provider not found in database.\n" +
         `  db: ${targetDb}\n` +
-        "  Fix: nm provider create --providerId zhipu --protocol openai " +
+        "  Fix: nm provider create --name \"Zhipu GLM\" --protocol openai " +
         `--baseUrl ${ZHIPU_BASE} --apiKey <key> --db <db>\n` +
         "  Or: set NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY",
     );
     process.exit(1);
   }
-  if (!zhipuLine.includes("apiKey: set") && !envKey) {
+  if (!zhipu.apiKeyStatus?.includes("apiKey: set") && !envKey) {
     console.error(
       "capture-agent-scenarios: zhipu apiKey is not set and NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY is unset.\n" +
         `  db: ${targetDb}\n` +
-        "  Fix: nm provider edit --providerId zhipu --apiKey <key> --db <db>\n" +
+        `  Fix: nm provider edit --providerId ${zhipu.id} --apiKey <key> --db <db>\n` +
         "  Or: export NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY=<key>",
     );
     process.exit(1);
   }
+  return zhipu.id;
 }
 
 function ensureZhipuProvider(targetDb) {
   const list = run(["provider", "list", "--db", targetDb]);
-  if (list.stdout.split("\n").some((line) => line.startsWith("zhipu\t"))) {
+  if (findProviderByDisplayName(list.stdout, "Zhipu GLM")) {
     return;
   }
   const apiKey =
@@ -186,14 +197,12 @@ function ensureZhipuProvider(targetDb) {
   run([
     "provider",
     "create",
-    "--providerId",
-    "zhipu",
+    "--name",
+    "Zhipu GLM",
     "--protocol",
     "openai",
     "--baseUrl",
     ZHIPU_BASE,
-    "--displayName",
-    "Zhipu GLM",
     "--apiKey",
     apiKey,
     "--db",
@@ -201,9 +210,9 @@ function ensureZhipuProvider(targetDb) {
   ]);
 }
 
-function setupZhipuModel(targetDb, useProjectDb) {
+function setupZhipuModel(targetDb, useProjectDb, providerId) {
   if (!useProjectDb) {
-    run(["provider", "use", "--providerId", "zhipu", "--db", targetDb]);
+    run(["provider", "use", "--providerId", providerId, "--db", targetDb]);
     const hasKey = Boolean(process.env.NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY);
     if (hasKey) {
       run([
@@ -211,7 +220,7 @@ function setupZhipuModel(targetDb, useProjectDb) {
         "model",
         "fetch",
         "--providerId",
-        "zhipu",
+        providerId,
         "--db",
         targetDb,
       ]);
@@ -222,7 +231,7 @@ function setupZhipuModel(targetDb, useProjectDb) {
     "model",
     "list",
     "--providerId",
-    "zhipu",
+    providerId,
     "--db",
     targetDb,
   ]);
@@ -231,15 +240,15 @@ function setupZhipuModel(targetDb, useProjectDb) {
     .map((l) => l.trim())
     .find((l) => l.length > 0);
   if (firstLine) {
-    const appId = firstLine.split(/\s+/)[0];
-    if (appId?.includes("/")) {
-      return appId;
+    const savedId = firstLine.split("\t")[0];
+    if (savedId) {
+      return savedId;
     }
   }
   if (useProjectDb) {
     console.error(
-      "capture-agent-scenarios: no zhipu application model in database.\n" +
-        "  Fix: nm provider model save --vendorModelId glm-4-flash --providerId zhipu --db <db>",
+      "capture-agent-scenarios: no zhipu saved model in database.\n" +
+        `  Fix: nm provider model save --vendorModelId glm-4-flash --providerId ${providerId} --db <db>`,
     );
     process.exit(1);
   }
@@ -251,20 +260,42 @@ function setupZhipuModel(targetDb, useProjectDb) {
     "--vendorModelId",
     vendor,
     "--providerId",
-    "zhipu",
+    providerId,
     "--db",
     targetDb,
   ]);
-  return `zhipu/${vendor}`;
+  const after = run([
+    "provider",
+    "model",
+    "list",
+    "--providerId",
+    providerId,
+    "--db",
+    targetDb,
+  ]);
+  const row = after.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const [id, , vendorModelId] = l.split("\t");
+      return { id, vendorModelId };
+    })
+    .find((r) => r.vendorModelId === vendor);
+  if (!row?.id) {
+    console.error("capture-agent-scenarios: failed to save glm-4-flash");
+    process.exit(1);
+  }
+  return row.id;
 }
 
-function listZhipuModelIds(targetDb) {
+function listZhipuSavedModels(targetDb, providerId) {
   const listed = run([
     "provider",
     "model",
     "list",
     "--providerId",
-    "zhipu",
+    providerId,
     "--db",
     targetDb,
   ]);
@@ -272,27 +303,30 @@ function listZhipuModelIds(targetDb) {
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
-    .map((l) => l.split(/\s+/)[0])
-    .filter((id) => id?.includes("/"));
+    .map((l) => {
+      const [id, , vendorModelId] = l.split("\t");
+      return { id, vendorModelId };
+    })
+    .filter((r) => r.id && r.vendorModelId);
 }
 
-function pickZhipuToolModel(targetDb, fallbackModelId) {
+function pickZhipuToolModel(targetDb, providerId, fallbackModelId) {
   const envModel = process.env.NM_CAPTURE_ZHIPU_MODEL;
-  const ids = listZhipuModelIds(targetDb);
+  const rows = listZhipuSavedModels(targetDb, providerId);
   if (envModel) {
-    if (ids.includes(envModel)) {
-      return envModel;
+    const byId = rows.find((r) => r.id === envModel);
+    if (byId) {
+      return byId.id;
     }
-    const full = envModel.includes("/") ? envModel : `zhipu/${envModel}`;
-    if (ids.includes(full)) {
-      return full;
+    const byVendor = rows.find((r) => r.vendorModelId === envModel);
+    if (byVendor) {
+      return byVendor.id;
     }
   }
   for (const vendor of ZHIPU_TOOL_MODEL_PREFERENCE) {
-    const full = `zhipu/${vendor}`;
-    const found = ids.find((id) => id === full || id.endsWith(`/${vendor}`));
+    const found = rows.find((r) => r.vendorModelId === vendor);
     if (found) {
-      return found;
+      return found.id;
     }
   }
   return fallbackModelId;
@@ -341,7 +375,52 @@ const mockDbPath = join(mockTempDir, "novel.db");
 
 try {
   if (USE_MOCK) {
-    const modelFlag = ["--modelId", "mock/test", "--db", mockDbPath];
+    const create = run([
+      "provider",
+      "create",
+      "--name",
+      "mock",
+      "--protocol",
+      "openai",
+      "--baseUrl",
+      "http://127.0.0.1/v1",
+      "--apiKey",
+      "test",
+      "--db",
+      mockDbPath,
+    ]);
+    const mockProviderId = create.stderr.trim().split(/\r?\n/).filter(Boolean).at(-1);
+    run([
+      "provider",
+      "use",
+      "--providerId",
+      mockProviderId,
+      "--db",
+      mockDbPath,
+    ]);
+    run([
+      "provider",
+      "model",
+      "create",
+      "--vendorModelId",
+      "test",
+      "--db",
+      mockDbPath,
+    ]);
+    const mockModels = run([
+      "provider",
+      "model",
+      "list",
+      "--db",
+      mockDbPath,
+    ]);
+    const mockModelId = mockModels.stdout
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => l.split("\t")[0])
+      .find(Boolean);
+    const modelFlag = ["--modelId", mockModelId, "--db", mockDbPath];
     createCaptureScope(mockDbPath, "AgentCapture");
     block(
       "场景 7 — 单步 continue（mock LLM）",
@@ -357,17 +436,17 @@ try {
   if (!isTemp) {
     ensureChatMessageHiddenColumn(dbPath);
   }
-  assertZhipuReady(dbPath);
+  let zhipuProviderId = assertZhipuReady(dbPath);
   if (isTemp) {
     ensureZhipuProvider(dbPath);
-    assertZhipuReady(dbPath);
+    zhipuProviderId = assertZhipuReady(dbPath);
   }
 
   const useProjectDb = !isTemp;
-  const modelId = setupZhipuModel(dbPath, useProjectDb);
+  const modelId = setupZhipuModel(dbPath, useProjectDb, zhipuProviderId);
 
   const modelFlag = ["--modelId", modelId, "--db", dbPath];
-  const zhipuNote = `provider zhipu, baseUrl ${ZHIPU_BASE}, model ${modelId}, db ${dbPath}`;
+  const zhipuNote = `provider ${zhipuProviderId}, baseUrl ${ZHIPU_BASE}, model ${modelId}, db ${dbPath}`;
 
   function runZhipuScenario(title, args, extraEnv = {}) {
     createCaptureScope(dbPath, CAPTURE_PROJECT);
@@ -376,7 +455,7 @@ try {
 
   function runZhipuVfsToolScenario() {
     createCaptureScope(dbPath, CAPTURE_PROJECT);
-    const vfsModelId = pickZhipuToolModel(dbPath, modelId);
+    const vfsModelId = pickZhipuToolModel(dbPath, zhipuProviderId, modelId);
     const vfsModelFlag = ["--modelId", vfsModelId, "--db", dbPath];
     const toolEnv = { OPENAI_TOOL_CHOICE_REQUIRED: "1" };
 
@@ -477,22 +556,70 @@ try {
   }
 
   if (shouldRunScenario(scenarios, 11)) {
+    const doomCreate = run([
+      "provider",
+      "create",
+      "--name",
+      "mock",
+      "--protocol",
+      "openai",
+      "--baseUrl",
+      "http://127.0.0.1/v1",
+      "--apiKey",
+      "test",
+      "--db",
+      mockDbPath,
+    ]);
+    const doomProviderId = doomCreate.stderr
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .at(-1);
+    run([
+      "provider",
+      "use",
+      "--providerId",
+      doomProviderId,
+      "--db",
+      mockDbPath,
+    ]);
+    run([
+      "provider",
+      "model",
+      "create",
+      "--vendorModelId",
+      "test",
+      "--db",
+      mockDbPath,
+    ]);
+    const doomModelId = run([
+      "provider",
+      "model",
+      "list",
+      "--db",
+      mockDbPath,
+    ])
+      .stdout.split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => l.split("\t")[0])
+      .find(Boolean);
     createCaptureScope(mockDbPath, "AgentCaptureMock");
     block(
       "场景 11 — doom_loop（mock LLM，非 zhipu）",
-    run(
-      [
-        "agent",
-        "continue",
-        "--content",
-        "doom",
-        "--modelId",
-        "mock/test",
-        "--db",
-        mockDbPath,
-      ],
-      { NM_AGENT_MOCK_LLM: "1", NM_AGENT_MOCK_SCENARIO: "doom" },
-    ),
+      run(
+        [
+          "agent",
+          "continue",
+          "--content",
+          "doom",
+          "--modelId",
+          doomModelId,
+          "--db",
+          mockDbPath,
+        ],
+        { NM_AGENT_MOCK_LLM: "1", NM_AGENT_MOCK_SCENARIO: "doom" },
+      ),
       "显式 mock：NM_AGENT_MOCK_LLM=1 + NM_AGENT_MOCK_SCENARIO=doom（独立 temp db）",
     );
   }
@@ -514,7 +641,7 @@ try {
       "schemaVersion: 1",
       "name: capture-compact",
       `model:`,
-      `  applicationModelId: ${modelId}`,
+      `  savedModelId: ${modelId}`,
       "prompts:",
       "  blocks:",
       "    - name: c",
