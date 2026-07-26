@@ -424,12 +424,14 @@ export const VfsFileManager = forwardRef<
         return;
       }
       const batchT0 = Date.now();
-      console.log('[vfs-move] batch start', {
-        count: paths.length,
-        targetDir,
-        useUserVfsTurn,
-        scopeKind: scope.kind,
-      });
+      if (__DEV__) {
+        console.log('[vfs-move] batch start', {
+          count: paths.length,
+          targetDir,
+          useUserVfsTurn,
+          scopeKind: scope.kind,
+        });
+      }
       const kindByPath = new Map(rows.map(r => [r.path, r.kind] as const));
       let moved = 0;
       let skipped = 0;
@@ -477,13 +479,15 @@ export const VfsFileManager = forwardRef<
                 remapPathUnderDir(currentPath, sourcePath, newPath),
               );
             }
-            console.log('[vfs-move] batch item ok (dir)', {
-              sourcePath,
-              newPath,
-              renameMs,
-              ruleMs,
-              totalMs: Date.now() - itemT0,
-            });
+            if (__DEV__) {
+              console.log('[vfs-move] batch item ok (dir)', {
+                sourcePath,
+                newPath,
+                renameMs,
+                ruleMs,
+                totalMs: Date.now() - itemT0,
+              });
+            }
           } else {
             if (useUserVfsTurn) {
               await sessionRenameVfsFile(
@@ -496,23 +500,27 @@ export const VfsFileManager = forwardRef<
             } else {
               await renameVfsFile(vfs, sourcePath, newPath);
             }
-            console.log('[vfs-move] batch item ok (file)', {
-              sourcePath,
-              newPath,
-              via: useUserVfsTurn ? 'userVfsTurn' : 'direct',
-              totalMs: Date.now() - itemT0,
-            });
+            if (__DEV__) {
+              console.log('[vfs-move] batch item ok (file)', {
+                sourcePath,
+                newPath,
+                via: useUserVfsTurn ? 'userVfsTurn' : 'direct',
+                totalMs: Date.now() - itemT0,
+              });
+            }
           }
           moved += 1;
         } catch (err) {
           skipped += 1;
-          console.log('[vfs-move] batch item FAILED', {
-            sourcePath,
-            newPath,
-            isDir,
-            ms: Date.now() - itemT0,
-            error: err instanceof Error ? err.message : String(err),
-          });
+          if (__DEV__) {
+            console.log('[vfs-move] batch item FAILED', {
+              sourcePath,
+              newPath,
+              isDir,
+              ms: Date.now() - itemT0,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
           if (isVfsError(err, 'ALREADY_EXISTS')) {
             showToast('目标已存在同名项，已跳过');
           } else {
@@ -523,19 +531,23 @@ export const VfsFileManager = forwardRef<
       if (useUserVfsTurn && moved > 0 && sessionId != null) {
         const composerT0 = Date.now();
         await refreshComposerStatusAfterUserVfsOps(runtime, sessionId);
-        console.log('[vfs-move] batch composer refresh', {
-          ms: Date.now() - composerT0,
-        });
+        if (__DEV__) {
+          console.log('[vfs-move] batch composer refresh', {
+            ms: Date.now() - composerT0,
+          });
+        }
       }
       vfsBatch.exit();
       const reloadT0 = Date.now();
       await reloadVfsListOnly();
-      console.log('[vfs-move] batch done', {
-        moved,
-        skipped,
-        reloadMs: Date.now() - reloadT0,
-        totalMs: Date.now() - batchT0,
-      });
+      if (__DEV__) {
+        console.log('[vfs-move] batch done', {
+          moved,
+          skipped,
+          reloadMs: Date.now() - reloadT0,
+          totalMs: Date.now() - batchT0,
+        });
+      }
       if (moved > 0 && skipped > 0) {
         showToast(`已移动 ${moved} 项，跳过 ${skipped} 项`);
       } else if (moved > 0) {
@@ -603,14 +615,6 @@ export const VfsFileManager = forwardRef<
     }
     const meta = worktreeRows.find(r => r.path === menuPath);
     try {
-      if (action === 'open') {
-        if (menuRow.kind === 'dir') {
-          setCurrentPath(menuPath);
-        } else {
-          onOpenFile(menuPath);
-        }
-        return;
-      }
       if (action === 'toggle-include' && meta) {
         if (menuRow.kind === 'file' && meta.kind === 'file') {
           await cycleFileInclusion(workplace, menuPath, meta.inclusionMode);

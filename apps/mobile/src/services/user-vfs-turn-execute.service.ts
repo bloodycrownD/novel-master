@@ -38,32 +38,38 @@ export async function executeSessionUserVfsOp(
   const result = await runtime.userVfsTurn.executeOp(sessionId, op);
   const executeMs = Date.now() - t0;
   if (!result.ok) {
-    console.log('[vfs-move] userVfsTurn.executeOp FAILED', {
-      sessionId,
-      executeMs,
-      error:
-        result.error instanceof Error
-          ? result.error.message
-          : String(result.error),
-    });
+    if (__DEV__) {
+      console.log('[vfs-move] userVfsTurn.executeOp FAILED', {
+        sessionId,
+        executeMs,
+        error:
+          result.error instanceof Error
+            ? result.error.message
+            : String(result.error),
+      });
+    }
     throw result.error;
   }
   if (options.skipComposerStatusRefresh) {
-    console.log('[vfs-move] userVfsTurn op done (composer refresh deferred)', {
-      sessionId,
-      executeMs,
-      totalMs: Date.now() - t0,
-    });
+    if (__DEV__) {
+      console.log('[vfs-move] userVfsTurn op done (composer refresh deferred)', {
+        sessionId,
+        executeMs,
+        totalMs: Date.now() - t0,
+      });
+    }
     return;
   }
   const t1 = Date.now();
   await refreshComposerStatusAfterUserVfsOps(runtime, sessionId);
-  console.log('[vfs-move] userVfsTurn op done', {
-    sessionId,
-    executeMs,
-    composerStatusMs: Date.now() - t1,
-    totalMs: Date.now() - t0,
-  });
+  if (__DEV__) {
+    console.log('[vfs-move] userVfsTurn op done', {
+      sessionId,
+      executeMs,
+      composerStatusMs: Date.now() - t1,
+      totalMs: Date.now() - t0,
+    });
+  }
 }
 
 /** 批次结束后补一次状态条投影（读 UserOpsLogStore，无净 diff）。 */
@@ -74,8 +80,10 @@ export async function refreshComposerStatusAfterUserVfsOps(
   const t0 = Date.now();
   const attachments = await projectComposerStatusForSession(runtime, sessionId);
   applyComposerStatusAttachmentsReplace({sessionId, attachments});
-  console.log('[vfs-move] composer status refresh', {
-    sessionId,
-    ms: Date.now() - t0,
-  });
+  if (__DEV__) {
+    console.log('[vfs-move] composer status refresh', {
+      sessionId,
+      ms: Date.now() - t0,
+    });
+  }
 }
