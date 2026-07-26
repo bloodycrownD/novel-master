@@ -35,6 +35,7 @@ export function StickyFormFooter({
         tokens={tokens}
         onPress={onPress}
         disabled={disabled || loading}
+        fullWidth
       />
     </View>
   );
