@@ -12,6 +12,7 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
+import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProvider } from "../../model/provider.js";
 import type { ProviderRepository } from "../provider.port.js";
 
@@ -35,16 +36,19 @@ function parseHeaders(json: string): Record<string, string> {
 
 function rowToProvider(row: Row): LlmProvider {
   const displayRaw = row.display_name;
-  const displayName =
-    displayRaw != null && String(displayRaw).trim() !== ""
-      ? String(displayRaw)
-      : String(row.id);
+  if (displayRaw == null || String(displayRaw).trim() === "") {
+    throw new ProviderError(
+      "INVALID_ARGUMENT",
+      `服务商 display_name 不得为空（id=${String(row.id)}）`,
+      { providerId: String(row.id) },
+    );
+  }
   return {
     id: String(row.id),
     builtinKey: row.builtin_key != null ? String(row.builtin_key) : null,
     protocol: String(row.protocol) as LlmProtocolKind,
     baseUrl: String(row.base_url),
-    displayName,
+    displayName: String(displayRaw),
     secretRef: row.secret_ref != null ? String(row.secret_ref) : null,
     headers: parseHeaders(String(row.headers_json ?? "{}")),
     isBuiltin: Number(row.is_builtin) === 1,
