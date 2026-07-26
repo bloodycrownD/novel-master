@@ -4,12 +4,12 @@
 
 - repo: `d:\Dev\Js\novel-master`
 - base_sha: `61385b35`
-- head_sha: `285087c5`
+- head_sha: `0fead242`
 - prd_path: `.apm/kb/docs/Iterations/character-card-import/prd.md`
 - spec_path: `.apm/kb/docs/Iterations/character-card-import/spec.md`
 - review_round: 2
 - dag_version: 3
-- 状态：fix-spec-ready（待用户确认开工）
+- 状态：executed（core/G-1 已闭合）
 
 ## Must-fix（按 P0 → P1 → P2）
 
@@ -28,6 +28,7 @@
   4. `assert.rejects`；断言旧文件内容不变、新 md（合成树中的路径）不存在。
 - 验收/测试：该用例 pass；与 ZIP Z5 对称（旧内容保留、新路径不存在）。
 - 来源：review-scope-core / round 1
+- 状态：**已由 code-dev-loop 闭合**（commit `43536490`）
 
 ## Spec deviations
 
@@ -78,5 +79,5 @@ none
 | 未写入的开放 must-fix | 0 |
 | spec_deviations | none |
 | C-orch | ✅ |
-| base_sha / head_sha | `61385b35` / `285087c5`（保持） |
-| 阻塞项 | 待用户确认开工；代码侧待执行 `core/G-1` |
+| base_sha / head_sha | `61385b35` / `0fead242` |
+| 阻塞项 | 无（`core/G-1` 已执行并闭合） |
