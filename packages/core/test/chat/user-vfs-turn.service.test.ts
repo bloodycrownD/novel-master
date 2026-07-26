@@ -290,11 +290,58 @@ describe("UserVfsTurnService", () => {
       writeOp("/ok.md", "hello", "tu_ok"),
     );
     assert.equal(ok.ok, true);
+    if (ok.ok) {
+      assert.equal(ok.logAppended, true);
+    }
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
     const logs = listUserOpsLog(session.id);
     assert.equal(logs.length, 1);
     assert.equal(logs[0]!.action, "write");
     assert.equal(logs[0]!.action === "write" ? logs[0]!.path : "", "/ok.md");
+  });
+
+  it("T-UO-D1：写盘成功但日志派生失败时 ok=true、logAppended=false、store 空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registry.register({
+      name: "patch",
+      description: "writes without user-ops derivation",
+      inputSchema: z.object({
+        path: z.string(),
+        content: z.string(),
+      }),
+      async run(input, ctx) {
+        await ctx.vfs.write(input.path, input.content, { versionCheck: false });
+        return { version: 1 };
+      },
+    });
+    const toolRunner = new ToolRunner(registry);
+    const userVfsTurn = new DefaultUserVfsTurnService(
+      makeUserVfsTurnDeps(ctx.conn, { toolRunner }),
+    );
+
+    const result = await userVfsTurn.executeOp(session.id, {
+      actionXml: '<action name="noop">{}</action>',
+      tools: [
+        {
+          id: "tu_patch",
+          name: "patch",
+          input: { path: "/d1-degrade.md", content: "on-disk" },
+        },
+      ],
+    });
+
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.logAppended, false);
+      assert.ok(result.logAppendError != null);
+    }
+    assert.equal(listUserOpsLog(session.id).length, 0);
+    assert.equal((await svfs.read("/d1-degrade.md")).content, "on-disk");
   });
 
   it("T-UO1：flush 不产生 user_vfs_action 行，仅产出 attachments 并清日志", async () => {
@@ -731,6 +778,9 @@ describe("UserVfsTurnService", () => {
       ],
     });
     assert.equal(ok.ok, true);
+    if (ok.ok) {
+      assert.equal(ok.logAppended, true);
+    }
 
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
     assert.equal(listUserOpsLog(session.id).length, 1);

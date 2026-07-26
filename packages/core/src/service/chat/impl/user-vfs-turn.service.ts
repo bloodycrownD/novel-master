@@ -157,10 +157,11 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     try {
       const entry = userOpsLogEntryFromTurnOp(op);
       appendUserOpsLog(sessionId, entry);
-    } catch {
-      // toast / 记错由上层；此处吞掉以免破坏已成功写盘
+      return { ok: true, logAppended: true };
+    } catch (logAppendError: unknown) {
+      // toast / 记错由上层；此处不回滚已成功写盘
+      return { ok: true, logAppended: false, logAppendError };
     }
-    return { ok: true };
   }
 
   async flushPendingUserVfsTurns(

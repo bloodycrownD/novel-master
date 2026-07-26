@@ -23,7 +23,12 @@ export interface UserVfsTurnOp {
 
 /** `executeOp` 执行结果。 */
 export type UserVfsTurnExecuteResult =
-  | { readonly ok: true }
+  | {
+      readonly ok: true;
+      /** 操作日志是否已成功 append；派生失败时为 false，磁盘不回滚。 */
+      readonly logAppended?: boolean;
+      readonly logAppendError?: unknown;
+    }
   | { readonly ok: false; readonly error: unknown; readonly partialFailure?: true };
 
 /** `flushPendingUserVfsTurns` 执行结果。 */
