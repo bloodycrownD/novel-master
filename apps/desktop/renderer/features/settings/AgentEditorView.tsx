@@ -247,7 +247,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       const providerRows = providerRes.ok
         ? providerRes.data.map((p) => ({
             id: p.id,
-            label: p.displayName?.trim() || p.id,
+            label: p.displayName,
           }))
         : [];
       setProviders(providerRows);

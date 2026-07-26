@@ -864,7 +864,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
     if (action === "rename") {
       setRenamePrompt({
         providerId: row.id,
-        initialName: row.displayName?.trim() || row.id,
+        initialName: row.displayName,
       });
       return;
     }
@@ -877,7 +877,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
       setDeleteConfirm({
         kind: "single",
         providerId: row.id,
-        label: row.displayName?.trim() || row.id,
+        label: row.displayName,
       });
     }
   };
@@ -888,12 +888,17 @@ export function ProvidersView({ nav }: { nav: Nav }) {
     if (!prompt) {
       return;
     }
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toastSettingsError("服务商名称不能为空");
+      return;
+    }
     const res = await ipcProvidersEdit({
       providerId: prompt.providerId,
-      displayName: name.trim() || null,
+      displayName: trimmed,
     });
     if (!res.ok) {
-      showToast(res.error.message);
+      toastSettingsError(res.error.message);
       return;
     }
     await reload();
@@ -937,7 +942,7 @@ export function ProvidersView({ nav }: { nav: Nav }) {
         {rows.map((p) => (
           <SettingsListItem
             key={p.id}
-            title={p.displayName?.trim() || p.id}
+            title={p.displayName}
             meta={
               <>
                 {`${p.savedCount} 个模型 · `}

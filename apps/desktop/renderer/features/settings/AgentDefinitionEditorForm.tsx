@@ -274,7 +274,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       const providerRows = providerRes.ok
         ? providerRes.data.map((p) => ({
             id: p.id,
-            label: p.displayName?.trim() || p.id,
+            label: p.displayName,
           }))
         : [];
       setProviders(providerRows);
