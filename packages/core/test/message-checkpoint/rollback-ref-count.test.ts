@@ -24,14 +24,11 @@ import {
 novelMasterTestFixture();
 
 describe("rollback ref_count + deferred blob gc", () => {
-  it("T-RB-HOT-NOBLOB: sweepSessionRevisions 热路径不 sync collect/gc", async () => {
+  it("T-RB-HOT-NOBLOB: rollbackToMessage 热路径不 sync collect/gc", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
 
     const collectSpy = mock.method(
       SqliteVfsContentStore.prototype,
@@ -39,26 +36,33 @@ describe("rollback ref_count + deferred blob gc", () => {
     );
     const gcSpy = mock.method(SqliteVfsContentStore.prototype, "gc");
 
-    const assistant = await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "w" }],
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "anchor" }],
     });
-    await svfs.write("/hot.md", "v1", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    await svfs.write("/hot.md", "anchor", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
 
-    await sweepSessionRevisions(
-      revisions,
-      entries,
-      checkpoints,
-      project.id,
-      session.id,
-      ctx.conn,
-    );
+    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "tail" }],
+    });
+    await svfs.write("/hot.md", "tail", { versionCheck: false });
+    await svfs.write("/tail-only.md", "orphan", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+
+    try {
+      await ctx.sessionFs.rollbackToMessage(
+        session.id,
+        project.id,
+        assistant1.id,
+      );
+    } finally {
+      collectSpy.mock.restore();
+      gcSpy.mock.restore();
+    }
 
     assert.equal(collectSpy.mock.callCount(), 0);
     assert.equal(gcSpy.mock.callCount(), 0);
-
-    collectSpy.mock.restore();
-    gcSpy.mock.restore();
+    assert.equal((await svfs.read("/hot.md")).content, "anchor");
   });
 
   it("T-RB-REF-CAP: capture 后 checkpoint 指针对应 ref 累加", async () => {
