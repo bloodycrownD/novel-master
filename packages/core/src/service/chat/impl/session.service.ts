@@ -19,7 +19,7 @@ import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import type { SessionService } from "../session.port.js";
@@ -107,7 +107,7 @@ export class DefaultSessionService implements SessionService {
     await this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       await r.messages.deleteBySession(id);
-      await deleteSessionFsData(tx, id);
+      await deleteSessionFsData(tx, id, session.projectId);
       await createSessionKkvService(tx).clearSession(id);
       await deleteVfsPrefix(
         r.vfs,
@@ -118,6 +118,7 @@ export class DefaultSessionService implements SessionService {
         throw chatNotFound("session", id);
       }
     });
+    await runDeferredBlobGc(this.deps.conn);
   }
 
   async pullTemplate(sessionId: string): Promise<void> {

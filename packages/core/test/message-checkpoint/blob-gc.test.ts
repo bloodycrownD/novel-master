@@ -1,9 +1,10 @@
 /**
- * T-GC1 / T-GC2：sweepSessionRevisions 末尾全库 blob gc（唯一入口）。
+ * T-GC1 / T-GC2：sweep + runDeferredBlobGc 全库 blob gc（唯一算法入口）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
@@ -63,8 +64,9 @@ describe("sweepSessionRevisions + blob gc", () => {
       checkpoints,
       project.id,
       session.id,
-      contentStore,
+      ctx.conn,
     );
+    await runDeferredBlobGc(ctx.conn);
 
     const afterKeys = await revisions.listKeysUnderPrefix(
       scopePhysicalPrefix(scope),
@@ -108,8 +110,9 @@ describe("sweepSessionRevisions + blob gc", () => {
       checkpoints,
       project.id,
       sessionA.id,
-      contentStore,
+      ctx.conn,
     );
+    await runDeferredBlobGc(ctx.conn);
 
     await assert.rejects(() => contentStore.get(onlyAHash));
     assert.equal(await contentStore.get(sharedHash), sharedPlain);

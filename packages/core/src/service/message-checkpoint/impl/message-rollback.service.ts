@@ -14,6 +14,7 @@ import {
   resolvePriorRollbackTargetTree,
   resolveRollbackTargetTree,
 } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
+import { resolveReconcilePathSets } from "@/domain/message-checkpoint/logic/resolve-reconcile-paths.js";
 import {
   restorePathToRevision,
   restorePathToRevisionWithBackfill,
@@ -48,6 +49,7 @@ import type {
   MessageRollbackService,
   RollbackOptions,
 } from "../message-rollback.port.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 
 /** Dependencies for {@link DefaultMessageRollbackService}. */
 export interface MessageRollbackServiceDeps {
@@ -64,7 +66,8 @@ type RollbackPlan = {
   anchor: ChatMessage;
   truncateAfterSeq: number;
   tailMessageIds: string[];
-  pathsToReconcile: Set<string>;
+  pathsNeedWrite: ReadonlySet<string>;
+  pathsNeedDelete: ReadonlySet<string>;
   targetTree: Map<string, number>;
   projectId: string;
   sessionId: string;
@@ -115,7 +118,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const planMs = Date.now() - tPlan0;
     console.log("[nm-rollback] plan", {
       mode: plan.mode,
-      pathsToReconcile: plan.pathsToReconcile.size,
+      pathsNeedWrite: plan.pathsNeedWrite.size,
+      pathsNeedDelete: plan.pathsNeedDelete.size,
       targetTree: plan.targetTree.size,
       tailMessages: plan.tailMessageIds.length,
       skipVfsReconcile: options?.skipVfsReconcile === true,
@@ -130,7 +134,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         this.deps.revisions,
         plan.scope,
         plan.targetTree,
-        plan.pathsToReconcile,
+        plan.pathsNeedWrite,
       );
       missingMs = Date.now() - tMissing0;
       missingCount = missing.length;
@@ -172,7 +176,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         }
         reconcileMs = Date.now() - tRec0;
         console.log("[nm-rollback] reconcile", {
-          paths: plan.pathsToReconcile.size,
+          pathsNeedWrite: plan.pathsNeedWrite.size,
+          pathsNeedDelete: plan.pathsNeedDelete.size,
           ...reconcileStats,
           ms: reconcileMs,
         });
@@ -185,11 +190,12 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         sweepRevisions: true,
       });
       truncateSweepMs = Date.now() - tTrunc0;
-      console.log("[nm-rollback] truncate+sweep (incl blob GC)", {
+      console.log("[nm-rollback] truncate+sweep (revision-only, no sync blob)", {
         ms: truncateSweepMs,
       });
     });
     const txMs = Date.now() - tTx0;
+    await runDeferredBlobGc(this.deps.conn);
     sessionApiPromptTokenCache.invalidate(sessionId);
     console.log("[nm-rollback] core done", {
       mode: plan.mode,
@@ -258,25 +264,25 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     }
 
     const scope: VfsScope = { kind: "session", projectId, sessionId };
-    const tailPointers = await this.deps.checkpoints.listFilePointersForMessages(
-      sessionId,
-      tailMessageIds,
-    );
-    const tailLogicalPaths = tailPointers.map((p) => p.logicalPath);
 
-    const pathsToReconcile = new Set<string>([
-      ...tailLogicalPaths,
-      ...targetTree.keys(),
-    ]);
-    if (hasDirectTargetTree) {
-      const currentFiles = await listSessionFileHeads(
-        this.deps.entries,
-        projectId,
-        sessionId,
-      );
-      for (const { logicalPath } of currentFiles) {
-        if (!targetTree.has(logicalPath)) {
-          pathsToReconcile.add(logicalPath);
+    const reconcileSets = await resolveReconcilePathSets(
+      this.deps.entries,
+      this.deps.revisions,
+      scope,
+      targetTree,
+      hasDirectTargetTree,
+    );
+
+    const pathsNeedDelete = new Set(reconcileSets.pathsNeedDelete);
+    if (tailMessageIds.length > 0) {
+      const tailPointers =
+        await this.deps.checkpoints.listFilePointersForMessages(
+          sessionId,
+          tailMessageIds,
+        );
+      for (const pointer of tailPointers) {
+        if (!targetTree.has(pointer.logicalPath)) {
+          pathsNeedDelete.add(pointer.logicalPath);
         }
       }
     }
@@ -286,7 +292,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       truncateAfterSeq,
       anchor,
       tailMessageIds,
-      pathsToReconcile,
+      pathsNeedWrite: reconcileSets.pathsNeedWrite,
+      pathsNeedDelete,
       targetTree,
       projectId,
       sessionId,
@@ -304,7 +311,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     restored: number;
     deleted: number;
   }> {
-    const { scope, pathsToReconcile, targetTree, projectId, sessionId } = plan;
+    const { scope, pathsNeedWrite, pathsNeedDelete, targetTree, projectId, sessionId } = plan;
     const vfs = this.scopedVfs(projectId, sessionId, tx);
     const revisions = new SqliteVfsRevisionRepository(tx);
     const entries = new SqliteVfsEntryRepository(tx);
@@ -318,7 +325,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       physical: string;
       version: number;
     }> = [];
-    for (const logicalPath of pathsToReconcile) {
+    for (const logicalPath of pathsNeedWrite) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
         reconcilePairs.push({
@@ -339,13 +346,16 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       ...new Set(reconcilePairs.map((pair) => pair.physical)),
     ]);
     const prefetch = { revisionMetaByKey, liveHashByPath };
+    const prefetchForRestore = useRevisionHeadBackfill
+      ? { liveHashByPath: prefetch.liveHashByPath }
+      : prefetch;
 
     let skippedSameVersion = 0;
     let skippedSameContentHash = 0;
     let restored = 0;
     let deleted = 0;
 
-    for (const logicalPath of pathsToReconcile) {
+    for (const logicalPath of pathsNeedWrite) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
         const outcome = useRevisionHeadBackfill
@@ -358,7 +368,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 logicalPath,
                 version,
                 liveHeadByPath,
-                prefetch,
+                prefetchForRestore,
               )
             ).outcome
           : await restorePathToRevision(
@@ -369,7 +379,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
               version,
               liveHeadByPath,
               entries,
-              prefetch,
+              prefetchForRestore,
             );
         if (outcome === "skipped_same_version") {
           skippedSameVersion++;
@@ -380,10 +390,12 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         } else {
           restored++;
         }
-      } else {
-        await this.deletePathIfExists(vfs, logicalPath);
-        deleted++;
       }
+    }
+
+    for (const logicalPath of pathsNeedDelete) {
+      await this.deletePathIfExists(vfs, logicalPath);
+      deleted++;
     }
 
     return {
