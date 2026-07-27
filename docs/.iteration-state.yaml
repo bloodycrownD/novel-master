@@ -1,13 +1,40 @@
-dag_version: 1
-loop: code-dev
-iteration_name: webview-imperative-shell-debt
-branch: feature/webview-imperative-shell-debt
-base_sha: a064a386
-head_sha: 1a4f63cb
-prd_path: .apm/kb/docs/Iterations/mobile-webview-preact-htm/features/webview-imperative-shell-debt/prd.md
-spec_path: .apm/kb/docs/Iterations/mobile-webview-preact-htm/features/webview-imperative-shell-debt/spec.md
-status: dev-ready
+dag_version: 5
+wave_plan:
+  - [impl-core]
+  - [verify-core]
+  - [cr-func-core]
+  - [impl-cli]
+  - [verify-cli]
+  - [cr-func-cli]
+  - [impl-desktop, impl-mobile]
+  - [verify-desktop, verify-mobile]
+  - [cr-func-ui]
+  - [impl-docs]
+node_status:
+  impl-core: { status: done, head_sha: ef0d8db2 }
+  verify-core: { status: done }
+  cr-func-core: { status: done, func_ready: yes }
+  impl-cli: { status: done, head_sha: 3407187d }
+  verify-cli: { status: done }
+  cr-func-cli: { status: done, func_ready: yes }
+  impl-desktop: { status: done, head_sha: 351d4654 }
+  impl-mobile: { status: done, head_sha: 596d958a }
+  verify-desktop: { status: done }
+  verify-mobile: { status: done }
+  cr-func-ui: { status: done, func_ready: yes }
+  impl-docs: { status: done, head_sha: 1dd63bb0 }
 open_must_fix: []
 spec_deviations: []
-remaining: Step6 manual_user device smoke
-updatedAt: "2026-07-18 01:40:00"
+branch: feature/mobile-form-footer-hit-area
+status: dev-ready
+head_sha: 1dd63bb0
+blocking_steps_closed:
+  - phase-core-schema
+  - phase-core-migration
+  - phase-core-api
+  - phase-cli
+  - phase-desktop
+  - phase-mobile
+manual_pending: phase-manual-accept
+spec_path: .apm/kb/docs/Iterations/provider-identity/spec.md
+prd_path: .apm/kb/docs/Iterations/provider-identity/prd.md

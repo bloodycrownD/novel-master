@@ -21,15 +21,18 @@ import {
 } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { validateVfsZipEntries } from "@/domain/vfs/logic/vfs-zip-validate.js";
 import { vfsNotADirectory } from "@/errors/vfs-errors.js";
-import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {
+  insertFileSeedingRevision,
+} from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type {
   VfsZipImportOptions,
   VfsZipIoService,
   ZipPathOptions,
 } from "@/domain/vfs/ports/vfs-zip-io.port.js";
-
 /** @internal test hook for import transaction rollback verification */
 export type VfsZipImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -166,8 +169,9 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     try {
       await this.conn.transaction(async (tx) => {
         const repoTx = new SqliteVfsEntryRepository(tx);
+        const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
-        await deleteVfsPrefix(repoTx, physicalPrefix);
+        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, physicalPrefix);
         // WHY: deleteVfsPrefix 会删掉目标目录行；即使 ZIP 为空也要保证目录仍存在
         await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
         for (const logical of directories) {
@@ -179,7 +183,12 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
           }
           const physical = toPhysicalPath(scope, logical);
           await ensureParentDirectories(repoTx, physical);
-          await repoTx.insert(physical, content);
+          await insertFileSeedingRevision(
+            repoTx,
+            revisionTx,
+            physical,
+            content,
+          );
         }
       });
     } catch (error) {

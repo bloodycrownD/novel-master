@@ -53,6 +53,7 @@
   "computeVisibilityBatchAffectedIds",
   "countAnnotateOccurrencesInSource",
   "countScannedAtPathAttachments",
+  "createChatServices",
   "createMessageService",
   "createMessageTranscriptEffectsService",
   "createProjectService",

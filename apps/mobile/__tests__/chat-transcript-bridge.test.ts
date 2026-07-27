@@ -167,6 +167,17 @@ describe('chat-transcript-bridge', () => {
     );
   });
 
+  it('round-trips RN→Web stickIfNearBottom envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'stickIfNearBottom' as const,
+      payload: {},
+    };
+    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
+      message,
+    );
+  });
+
   it('round-trips RN→Web themeUpdate envelope', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,

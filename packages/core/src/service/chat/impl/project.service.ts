@@ -21,12 +21,14 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { projectVfsPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
@@ -38,6 +40,7 @@ function reposFor(conn: TdbcConnection) {
     sessions: new SqliteSessionRepository(conn),
     messages: new SqliteMessageRepository(conn),
     vfs: new SqliteVfsEntryRepository(conn),
+    revisions: new SqliteVfsRevisionRepository(conn),
   };
 }
 
@@ -223,6 +226,11 @@ export class DefaultProjectService implements ProjectService {
       await copyVfsTree(
         r.vfs,
         `${projectVfsPrefix(id)}/template`,
+        `${projectVfsPrefix(copy.id)}/template`,
+      );
+      await seedLiveHeadRevisionsUnderPrefix(
+        r.vfs,
+        r.revisions,
         `${projectVfsPrefix(copy.id)}/template`,
       );
       return copy;

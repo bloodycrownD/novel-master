@@ -4,20 +4,13 @@
  * @module service/vfs/impl/character-card-import.service
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import {
-  CharacterCardError,
-  characterCardError,
-} from "@/errors/character-card-errors.js";
-import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import {
-  toPhysicalPath,
-  type VfsScope,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
-import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+  insertFileSeedingRevision,
+} from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { MdTree } from "@/domain/character-card/model/character-card.js";
 import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/parse-character-card-to-md-tree.js";
 import { validateMdTreeForImport } from "@/domain/character-card/logic/validate-md-tree-paths.js";
@@ -25,7 +18,17 @@ import type {
   CharacterCardImportOptions,
   CharacterCardImportService,
 } from "@/domain/vfs/ports/character-card-import.port.js";
-
+import {
+  CharacterCardError,
+  characterCardError,
+} from "@/errors/character-card-errors.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import {
+  toPhysicalPath,
+  type VfsScope,
+} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
 /** @internal 导入事务回滚单测钩子 */
 export type CharacterCardImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -108,8 +111,9 @@ export class DefaultCharacterCardImportService
     try {
       await this.conn.transaction(async (tx) => {
         const repoTx = new SqliteVfsEntryRepository(tx);
+        const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
-        await deleteVfsPrefix(repoTx, physicalPrefix);
+        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, physicalPrefix);
         await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
         for (const [logical, content] of files) {
           if (this.testHook?.throwOnInsertLogical === logical) {
@@ -117,7 +121,12 @@ export class DefaultCharacterCardImportService
           }
           const physical = toPhysicalPath(scope, logical);
           await ensureParentDirectories(repoTx, physical);
-          await repoTx.insert(physical, content);
+          await insertFileSeedingRevision(
+            repoTx,
+            revisionTx,
+            physical,
+            content,
+          );
         }
       });
     } catch (error) {

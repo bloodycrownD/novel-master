@@ -336,10 +336,12 @@ export {
   visibleFloorByMessageId,
 } from '../domain/chat/logic/message-visible-floor.js';
 export {
+  createChatServices,
   createProjectService,
   createSessionService,
   createMessageService,
 } from '../service/chat/create-chat-services.js';
+export type { ChatServiceBundle } from '../service/chat/create-chat-services.js';
 export {
   createUserVfsTurnService,
   createUserVfsTurnServiceBundle,

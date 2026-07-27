@@ -13,6 +13,9 @@ module.exports = {
   ],
 
   moduleNameMapper: {
+    '^react-native-reanimated$': 'react-native-reanimated/mock',
+    '^react-native-keyboard-controller$':
+      '<rootDir>/test-utils/react-native-keyboard-controller-mock.tsx',
     '^react-native-webview$': '<rootDir>/test-utils/react-native-webview-mock.tsx',
     '^tiktoken$': '<rootDir>/src/shims/tiktoken.js',
     // RN Jest resolves package "browser"/"default" exports; yaml's browser entry

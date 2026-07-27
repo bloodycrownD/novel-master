@@ -13,6 +13,7 @@ import {
 import { clearStreamRichUpgrade } from '../stream/stream-markdown';
 import { closeContextMenu } from '../menu/menu';
 import { flagsEqual, renderRows } from '../render/row-logic';
+import { scheduleStickIfNearBottom } from '../scroll/scroll';
 
 /** 宿主下发的主题 token（最小字段）。 */
 export type HostTheme = {
@@ -133,6 +134,9 @@ export function handleHostMessage(raw: unknown): void {
       break;
     case 'closeMenu':
       closeContextMenu(true);
+      break;
+    case 'stickIfNearBottom':
+      scheduleStickIfNearBottom();
       break;
     default:
       break;

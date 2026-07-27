@@ -79,6 +79,18 @@ async function assertSqliteBackupAtPath(srcPath: string): Promise<void> {
   }
 }
 
+/** 将字节块转为 ascii 字符串（`writeStream(..., 'ascii')` 需要 string）。 */
+function bytesToAsciiString(bytes: Uint8Array): string {
+  // 与 vfs-zip 一致：按 0x8000 切段再 fromCharCode，避免超大 spread 撑爆调用栈
+  const charChunk = 0x8000;
+  let out = '';
+  for (let i = 0; i < bytes.length; i += charChunk) {
+    const slice = bytes.subarray(i, Math.min(i + charChunk, bytes.length));
+    out += String.fromCharCode(...slice);
+  }
+  return out;
+}
+
 /** 分块 ascii 写入，避免整包 `String.fromCharCode` / `btoa`。 */
 async function writeBytesToFileChunked(
   destPath: string,
@@ -93,7 +105,7 @@ async function writeBytesToFileChunked(
     for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
       const end = Math.min(offset + WRITE_CHUNK_BYTES, bytes.length);
       const slice = bytes.subarray(offset, end);
-      await stream.write(Array.from(slice));
+      await stream.write(bytesToAsciiString(slice));
     }
   } finally {
     await stream.close();

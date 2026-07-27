@@ -7,6 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { mapProjectWorkplacePathToSession } from "@/domain/workplace/logic/workplace-path-map.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
@@ -30,11 +31,13 @@ export async function initializeSessionWorkspace(
     await deleteSessionFsData(tx, sessionId, projectId);
   }
   const vfs = new SqliteVfsEntryRepository(tx);
+  const revisions = new SqliteVfsRevisionRepository(tx);
   const worktree = new SqliteWorkplaceRepository(tx);
   await replaceVfsSubtree(
     vfs,
     `/projects/${projectId}/template`,
     `/projects/${projectId}/sessions/${sessionId}`,
+    { revisions },
   );
   await worktree.copyScope(
     workplaceScopeKey({ kind: "project", projectId }),

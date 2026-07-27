@@ -5,6 +5,12 @@
  */
 
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
+import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
+import {
+  decrementLiveRefsUnderPrefix,
+  deleteUnreferencedUnderPrefix,
+} from "./revision-ref-count.js";
+import { seedLiveHeadRevisionsUnderPrefix } from "./seed-live-head-revisions.js";
 
 function normalizePrefix(prefix: string): string {
   if (prefix === "/") {
@@ -33,6 +39,18 @@ function joinPhysical(prefix: string, relative: string): string {
   return `${base}/${relative}`;
 }
 
+export type CopyVfsTreeOptions = {
+  mapPath?: (relative: string) => string;
+};
+
+export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
+  /**
+   * 传入时：删除前释放 live ref + GC，拷贝后为 live head 补种 revision。
+   * fork/copy 仍走 seedForkCopyParity，不要传此字段以免双重播种。
+   */
+  revisions?: VfsRevisionRepository;
+};
+
 /**
  * Copies all vfs entries under `fromPrefix` to `toPrefix`.
  *
@@ -47,7 +65,7 @@ export async function copyVfsTree(
   repo: VfsEntryRepository,
   fromPrefix: string,
   toPrefix: string,
-  options?: { mapPath?: (relative: string) => string },
+  options?: CopyVfsTreeOptions,
 ): Promise<void> {
   const dirPaths = await repo.listDirectoryPathsUnderPrefix(fromPrefix);
   for (const dirPath of dirPaths) {
@@ -98,10 +116,30 @@ export async function replaceVfsSubtree(
   repo: VfsEntryRepository,
   fromPrefix: string,
   toPrefix: string,
-  options?: { mapPath?: (relative: string) => string },
+  options?: ReplaceVfsSubtreeOptions,
 ): Promise<void> {
-  await deleteVfsPrefix(repo, toPrefix);
+  if (options?.revisions != null) {
+    await releaseAndDeleteVfsPrefix(repo, options.revisions, toPrefix);
+  } else {
+    await deleteVfsPrefix(repo, toPrefix);
+  }
   await copyVfsTree(repo, fromPrefix, toPrefix, options);
+  if (options?.revisions != null) {
+    await seedLiveHeadRevisionsUnderPrefix(repo, options.revisions, toPrefix);
+  }
+}
+
+/**
+ * 释放前缀下 live head 引用 → 删 entry → GC 无引用 revision。
+ */
+export async function releaseAndDeleteVfsPrefix(
+  repo: VfsEntryRepository,
+  revisionRepo: VfsRevisionRepository,
+  physicalPrefix: string,
+): Promise<void> {
+  await decrementLiveRefsUnderPrefix(revisionRepo, repo, physicalPrefix);
+  await deleteVfsPrefix(repo, physicalPrefix);
+  await deleteUnreferencedUnderPrefix(revisionRepo, physicalPrefix);
 }
 
 /**

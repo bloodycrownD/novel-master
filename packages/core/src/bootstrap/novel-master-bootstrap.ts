@@ -5,6 +5,9 @@
  * 声明式 legacy 列对齐与内置 provider 种子数据。不执行 DROP 列、KKV 搬迁、wire 迁移；
  * 极旧未升级库（缺表、缺 RENAME 前列等）仍不在支持范围。
  *
+ * 稳态冷启动：若 `PRAGMA user_version` ≥ {@link SCHEMA_BOOT_VERSION}，跳过 DDL 与
+ * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
+ *
  * @module bootstrap/novel-master-bootstrap
  */
 
@@ -26,6 +29,15 @@ import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import { runPendingSchemaMigrations } from "./schema-migrations/index.js";
 
+/**
+ * 稳态 DDL + 列对齐合同版本。
+ *
+ * 变更 {@link NOVEL_MASTER_SCHEMA_STATEMENTS} 或 `SCHEMA_COLUMN_ALIGNMENTS` 时必须 +1，
+ * 否则已升版库会走快路径而漏建表/漏补列。新增 schema migration 不必改此值
+ * （快路径仍会执行 pending migration）。
+ */
+export const SCHEMA_BOOT_VERSION = 1;
+
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_SCHEMA_STATEMENTS,
@@ -43,6 +55,19 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...AGENT_SCHEMA_STATEMENTS,
 ];
 
+async function readSchemaBootVersion(tx: TdbcConnection): Promise<number> {
+  const rows = await tx.query<{ user_version: number }>("PRAGMA user_version");
+  return Number(rows[0]?.user_version ?? 0);
+}
+
+async function writeSchemaBootVersion(
+  tx: TdbcConnection,
+  version: number,
+): Promise<void> {
+  // user_version 为整数 pragma，不能参数绑定。
+  await tx.execute(`PRAGMA user_version = ${version}`);
+}
+
 /**
  * 确保所有实体表存在并写入内置 provider。可安全重复调用。
  *
@@ -50,11 +75,20 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
  */
 export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> {
   await conn.transaction(async (tx) => {
+    const bootVersion = await readSchemaBootVersion(tx);
+    if (bootVersion >= SCHEMA_BOOT_VERSION) {
+      // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
+      await runPendingSchemaMigrations(tx);
+      await seedBuiltinProviders(tx);
+      return;
+    }
+
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
     await runPendingSchemaMigrations(tx);
     await alignSchemaColumns(tx);
     await seedBuiltinProviders(tx);
+    await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
 }

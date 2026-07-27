@@ -75,6 +75,11 @@ export type ChatTranscriptWebViewProps = {
   readonly uiRunning?: boolean;
   readonly toolInvoking?: boolean;
   readonly menuCloseSignal?: number;
+  /**
+   * Bumped when Android IME lifts the composer; web stick-if-near-bottom so
+   * the last messages stay above the input after the viewport shrinks.
+   */
+  readonly keyboardLiftNonce?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
@@ -114,6 +119,7 @@ function chatTranscriptWebViewPropsEqual(
     prev.toolInvoking === next.toolInvoking &&
     prev.defaultScrollToBottom === next.defaultScrollToBottom &&
     prev.menuCloseSignal === next.menuCloseSignal &&
+    prev.keyboardLiftNonce === next.keyboardLiftNonce &&
     prev.initialScroll === next.initialScroll &&
     transcriptFlagsEqual(prev.flags, next.flags)
   );
@@ -211,6 +217,7 @@ export const ChatTranscriptWebView = memo(
         uiRunning: uiRunningProp,
         toolInvoking = false,
         menuCloseSignal = 0,
+        keyboardLiftNonce = 0,
         onScrollSnapshot,
         onReady,
         onLoadOlder,
@@ -851,6 +858,13 @@ export const ChatTranscriptWebView = memo(
         }
         postToWeb({ v: 1, type: 'closeMenu', payload: {} });
       }, [webReady, menuCloseSignal, postToWeb]);
+
+      useEffect(() => {
+        if (!webReady || keyboardLiftNonce === 0) {
+          return;
+        }
+        postToWeb({ v: 1, type: 'stickIfNearBottom', payload: {} });
+      }, [webReady, keyboardLiftNonce, postToWeb]);
 
       useEffect(() => {
         syncStreamToolInvoking();

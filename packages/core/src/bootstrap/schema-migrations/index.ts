@@ -8,7 +8,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
 import {
   ensureSchemaMigrationsTable,
-  isSchemaMigrationApplied,
+  listAppliedSchemaMigrationIds,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
 import { savedModelIdentityV1Migration } from "./saved-model-identity-v1.js";
@@ -36,6 +36,7 @@ export async function runPendingSchemaMigrations(
   tx: TdbcConnection,
 ): Promise<void> {
   await ensureSchemaMigrationsTable(tx);
+  const applied = await listAppliedSchemaMigrationIds(tx);
 
   const seen = new Set<string>();
   for (const migration of SCHEMA_MIGRATIONS) {
@@ -44,15 +45,15 @@ export async function runPendingSchemaMigrations(
     }
     seen.add(migration.id);
 
-    if (await isSchemaMigrationApplied(tx, migration.id)) {
-      console.error(`[nm-boot] migration skip (applied): ${migration.id}`);
+    if (applied.has(migration.id)) {
       continue;
     }
 
-    console.error(`[nm-boot] migration run: ${migration.id}`);
+    console.log(`[nm-boot] migration run: ${migration.id}`);
     await migration.up(tx);
-    console.error(`[nm-boot] migration applied: ${migration.id}`);
     await markSchemaMigrationApplied(tx, migration.id, Date.now());
+    applied.add(migration.id);
+    console.log(`[nm-boot] migration applied: ${migration.id}`);
   }
 }
 
@@ -60,6 +61,7 @@ export type { SchemaMigration } from "./schema-migration.types.js";
 export {
   ensureSchemaMigrationsTable,
   isSchemaMigrationApplied,
+  listAppliedSchemaMigrationIds,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
 export { VFS_CONTENT_BLOB_ZLIB_V1_ID } from "./vfs-content-blob-zlib-v1.js";

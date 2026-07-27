@@ -55,6 +55,7 @@ export type {
 export {
   bootstrapNovelMaster,
   NOVEL_MASTER_SCHEMA_STATEMENTS,
+  SCHEMA_BOOT_VERSION,
 } from "./bootstrap/novel-master-bootstrap.js";
 
 /**

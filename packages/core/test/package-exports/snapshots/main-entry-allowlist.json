@@ -23,6 +23,7 @@
   "PREF_KEY_SESSION_FS_VERSION_CHECK",
   "PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN",
   "PreferencesError",
+  "SCHEMA_BOOT_VERSION",
   "SqlTemplateError",
   "SqlTemplateParser",
   "TOOL_OUTPUT_MAX_BYTES",

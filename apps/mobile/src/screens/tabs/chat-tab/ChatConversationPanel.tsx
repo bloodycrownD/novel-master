@@ -1,8 +1,20 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import {
+  KeyboardStickyView,
+  useKeyboardState,
+} from 'react-native-keyboard-controller';
 import { type VfsScope } from '@novel-master/core/vfs';
 import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
 import { ChatComposer } from '@/components/chat/ChatComposer';
@@ -25,6 +37,60 @@ export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
 };
+
+/**
+ * Android：用 keyboard-controller 抬输入框（曾验证有效），
+ * 消息区按键盘高度留出 margin，避免 StickyView 盖住最后几条。
+ * 不手算 measure / RN Keyboard 脏高度。
+ */
+function AndroidKeyboardChatBody({
+  style,
+  pointerEvents,
+  header,
+  transcript,
+  composer,
+  onKeyboardLifted,
+}: {
+  style?: StyleProp<ViewStyle>;
+  pointerEvents?: 'auto' | 'none';
+  header: React.ReactNode;
+  transcript: React.ReactNode;
+  composer: React.ReactNode;
+  onKeyboardLifted?: () => void;
+}) {
+  const keyboardHeight = useKeyboardState(state => state.height);
+  const keyboardVisible = useKeyboardState(state => state.isVisible);
+  const transcriptReserve = keyboardVisible
+    ? Math.max(0, Math.round(keyboardHeight))
+    : 0;
+
+  useEffect(() => {
+    if (!keyboardVisible || transcriptReserve <= 0 || onKeyboardLifted == null) {
+      return;
+    }
+    const outer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        onKeyboardLifted();
+      });
+    });
+    return () => cancelAnimationFrame(outer);
+  }, [keyboardVisible, transcriptReserve, onKeyboardLifted]);
+
+  return (
+    <View style={style} pointerEvents={pointerEvents}>
+      {header}
+      <View
+        style={[
+          styles.transcriptHost,
+          transcriptReserve > 0 ? { marginBottom: transcriptReserve } : null,
+        ]}
+      >
+        {transcript}
+      </View>
+      <KeyboardStickyView>{composer}</KeyboardStickyView>
+    </View>
+  );
+}
 
 export function ChatConversationPanel({
   tokens,
@@ -132,6 +198,101 @@ export function ChatConversationPanel({
     }
   }, [conversationPanel, workspaceVfsRef]);
 
+  const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
+  const onKeyboardLifted = useCallback(() => {
+    setKeyboardLiftNonce(n => n + 1);
+  }, []);
+
+  const chatPanelStyle = [
+    styles.chatPanel,
+    conversationPanel !== 'chat' && styles.panelHidden,
+  ];
+  const chatPointerEvents =
+    conversationPanel === 'chat' ? ('auto' as const) : ('none' as const);
+  const chatHeader =
+    projectId != null && sessionId != null ? (
+      <>
+        <ChatMetaBar meta={agentMeta} />
+        <ChatStreamMetricsBarLive
+          agentRunning={uiRunning}
+          accRef={streamMetricsAccRef}
+          lastRun={streamMetricsLastRun}
+        />
+      </>
+    ) : null;
+  const chatTranscript =
+    projectId != null && sessionId != null ? (
+      useWebviewTranscript ? (
+        <ChatTranscriptWebView
+          ref={transcriptWebRef}
+          key={chatScrollKey ?? 'no-session-scroll'}
+          sessionKey={chatScrollKey ?? 'no-session'}
+          messages={chatMessages}
+          hasMore={hasMoreMessages}
+          agentRunning={agentActive}
+          uiRunning={uiRunning}
+          toolInvoking={uiRunning}
+          flags={transcriptFlags}
+          menuCloseSignal={webMenuCloseSignal}
+          initialScroll={restoredTranscriptScroll ?? null}
+          defaultScrollToBottom={defaultChatScrollToBottom}
+          onScrollSnapshot={onChatScrollSnapshot}
+          onLoadOlder={onLoadOlderMessages}
+          onOpenToolFile={scope.openSessionFilePreview}
+          onWebMenuOpenChange={controller.onWebMenuOpenChange}
+          onMessageMenuAction={controller.onWebMessageMenuAction}
+          keyboardLiftNonce={keyboardLiftNonce}
+        />
+      ) : (
+        <MessageList
+          key={chatScrollKey ?? 'no-session-scroll'}
+          messages={chatMessages}
+          streamingText={streamingText}
+          streamingThinking={streamingThinking}
+          toolInvoking={uiRunning}
+          agentRunning={agentActive}
+          chatRichTextEnabled={chatRichTextEnabled}
+          richRenderEpoch={richRenderEpoch}
+          initialScroll={cachedChatScroll ?? null}
+          defaultScrollToBottom={defaultChatScrollToBottom}
+          onScrollSnapshot={onChatScrollSnapshot}
+          onMessageLongPress={controller.handleMessageLongPress}
+          onOpenToolFile={scope.openSessionFilePreview}
+          keyboardLiftNonce={keyboardLiftNonce}
+          listHeaderComponent={
+            hasMoreMessages ? (
+              <Pressable
+                style={styles.loadMoreBtn}
+                onPress={onLoadOlderMessages}
+              >
+                <Text style={{ color: tokens.primary }}>
+                  {loadingMoreMessages ? '加载中…' : '加载更早消息'}
+                </Text>
+              </Pressable>
+            ) : null
+          }
+        />
+      )
+    ) : null;
+  const chatComposer =
+    projectId != null && sessionId != null ? (
+      <ChatComposer
+        scope={{ projectId, sessionId }}
+        hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
+        running={uiRunning}
+        beginUiRun={beginUiRun}
+        abortUiRun={abortUiRun}
+        onStreamReset={onStreamReset}
+        onMessagesChanged={onMessagesChanged}
+        onNeedModel={onNeedModel}
+        canResumeWithoutInput={canResumeWithoutInput}
+        lastMessageHasToolResult={lastMessageHasToolResult}
+        lastMessageIsPlainUserText={lastMessageIsPlainUserText}
+        draftRestoreToken={draftRestoreToken}
+        onOpenMore={() => setSessionDrawerOpen(true)}
+      />
+    ) : null;
+
   return (
     <View
       style={[styles.subviewFill, !visible && styles.panelHidden]}
@@ -148,84 +309,22 @@ export function ChatConversationPanel({
       />
       {projectId != null && sessionId != null ? (
         <>
-          <View
-            style={[
-              styles.chatPanel,
-              conversationPanel !== 'chat' && styles.panelHidden,
-            ]}
-            pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}
-          >
-            <ChatMetaBar meta={agentMeta} />
-            <ChatStreamMetricsBarLive
-              agentRunning={uiRunning}
-              accRef={streamMetricsAccRef}
-              lastRun={streamMetricsLastRun}
+          {Platform.OS === 'android' ? (
+            <AndroidKeyboardChatBody
+              style={chatPanelStyle}
+              pointerEvents={chatPointerEvents}
+              header={chatHeader}
+              transcript={chatTranscript}
+              composer={chatComposer}
+              onKeyboardLifted={onKeyboardLifted}
             />
-            {useWebviewTranscript ? (
-              <ChatTranscriptWebView
-                ref={transcriptWebRef}
-                key={chatScrollKey ?? 'no-session-scroll'}
-                sessionKey={chatScrollKey ?? 'no-session'}
-                messages={chatMessages}
-                hasMore={hasMoreMessages}
-                agentRunning={agentActive}
-                uiRunning={uiRunning}
-                toolInvoking={uiRunning}
-                flags={transcriptFlags}
-                menuCloseSignal={webMenuCloseSignal}
-                initialScroll={restoredTranscriptScroll ?? null}
-                defaultScrollToBottom={defaultChatScrollToBottom}
-                onScrollSnapshot={onChatScrollSnapshot}
-                onLoadOlder={onLoadOlderMessages}
-                onOpenToolFile={scope.openSessionFilePreview}
-                onWebMenuOpenChange={controller.onWebMenuOpenChange}
-                onMessageMenuAction={controller.onWebMessageMenuAction}
-              />
-            ) : (
-              <MessageList
-                key={chatScrollKey ?? 'no-session-scroll'}
-                messages={chatMessages}
-                streamingText={streamingText}
-                streamingThinking={streamingThinking}
-                toolInvoking={uiRunning}
-                agentRunning={agentActive}
-                chatRichTextEnabled={chatRichTextEnabled}
-                richRenderEpoch={richRenderEpoch}
-                initialScroll={cachedChatScroll ?? null}
-                defaultScrollToBottom={defaultChatScrollToBottom}
-                onScrollSnapshot={onChatScrollSnapshot}
-                onMessageLongPress={controller.handleMessageLongPress}
-                onOpenToolFile={scope.openSessionFilePreview}
-                listHeaderComponent={
-                  hasMoreMessages ? (
-                    <Pressable
-                      style={styles.loadMoreBtn}
-                      onPress={onLoadOlderMessages}
-                    >
-                      <Text style={{ color: tokens.primary }}>
-                        {loadingMoreMessages ? '加载中…' : '加载更早消息'}
-                      </Text>
-                    </Pressable>
-                  ) : null
-                }
-              />
-            )}
-            <ChatComposer
-              scope={{ projectId, sessionId }}
-              hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
-              running={uiRunning}
-              beginUiRun={beginUiRun}
-              abortUiRun={abortUiRun}
-              onStreamReset={onStreamReset}
-              onMessagesChanged={onMessagesChanged}
-              onNeedModel={onNeedModel}
-              canResumeWithoutInput={canResumeWithoutInput}
-              lastMessageHasToolResult={lastMessageHasToolResult}
-              lastMessageIsPlainUserText={lastMessageIsPlainUserText}
-              draftRestoreToken={draftRestoreToken}
-              onOpenMore={() => setSessionDrawerOpen(true)}
-            />
-          </View>
+          ) : (
+            <View style={chatPanelStyle} pointerEvents={chatPointerEvents}>
+              {chatHeader}
+              <View style={styles.transcriptHost}>{chatTranscript}</View>
+              {chatComposer}
+            </View>
+          )}
           {sessionVfs && sessionWorktree ? (
             <View
               style={[
@@ -322,6 +421,7 @@ const styles = StyleSheet.create({
   subviewFill: { flex: 1, minHeight: 0 },
   panelHidden: { display: 'none' },
   chatPanel: { flex: 1 },
+  transcriptHost: { flex: 1, minHeight: 0 },
   flexFill: { flex: 1 },
   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadMoreBtn: {

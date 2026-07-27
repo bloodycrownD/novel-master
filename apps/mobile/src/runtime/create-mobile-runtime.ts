@@ -16,10 +16,8 @@ import {
   SimpleEventBus,
 } from '@novel-master/core/events';
 import {
-  createMessageService,
+  createChatServices,
   createMessageTranscriptEffectsService,
-  createProjectService,
-  createSessionService,
   createUserVfsTurnServiceBundle,
 } from '@novel-master/core/chat';
 import {
@@ -50,7 +48,6 @@ import type { MobileNovelMasterRuntime } from './types';
  * Opens the app DB once and returns service handles aligned with CLI runtime.
  */
 export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMasterRuntime> {
-  ensureLlmFetchConfigured();
   const conn = await getMobileConnection();
 
   const state = createPersistentState(conn);
@@ -59,29 +56,47 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const userVfsUnifiedToolTurnEnabled =
     await preferences.getUserVfsUnifiedToolTurn();
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
+
   const regexConfig = createRegexConfigService(conn, state);
 
   const secretStore = createCompositeSecretStore({
     db: createAndroidSecretStore(conn),
   });
-
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({});
 
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const messages = createMessageService(conn);
+
+  const chat = createChatServices(conn);
+  const { projects, sessions, messages } = chat;
+
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn, appendToolTurnBridge } =
     createUserVfsTurnServiceBundle(conn);
 
-  const compactionConditionEvaluator = createCompactionConditionEvaluator({
-    conditionsStore: compactionConditions,
-    tokenCounters,
-    providerModels: providerBundle.providerModels,
-  });
+  let compactionConditionEvaluator:
+    | ReturnType<typeof createCompactionConditionEvaluator>
+    | undefined;
+  const lazyCompactionConditionEvaluator: ReturnType<
+    typeof createCompactionConditionEvaluator
+  > = {
+    shouldRequestCompaction(session, evaluation) {
+      if (compactionConditionEvaluator == null) {
+        compactionConditionEvaluator = createCompactionConditionEvaluator({
+          conditionsStore: compactionConditions,
+          tokenCounters,
+          providerModels: providerBundle.providerModels,
+        });
+      }
+      return compactionConditionEvaluator.shouldRequestCompaction(
+        session,
+        evaluation,
+      );
+    },
+  };
 
   const agentRegistry = createAgentRegistryService(conn, state);
 
@@ -107,6 +122,10 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     }),
   });
 
+  setTimeout(() => {
+    ensureLlmFetchConfigured();
+  }, 0);
+
   return {
     conn,
     state,
@@ -115,12 +134,12 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventBus,
     eventsConfig,
     compactionConditions,
-    compactionConditionEvaluator,
+    compactionConditionEvaluator: lazyCompactionConditionEvaluator,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,
-    projects: createProjectService(conn),
-    sessions: createSessionService(conn),
+    projects,
+    sessions,
     messages,
     messageTranscriptEffects,
     appendToolTurnBridge,

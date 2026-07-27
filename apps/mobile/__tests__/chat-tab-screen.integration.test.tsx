@@ -2,7 +2,6 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
-import {EVENT_AGENT_STREAM_TEXT_DELTA} from '@novel-master/core/events';
 
 const mockLoadTail = jest.fn(async () => [{id: 'm2', seq: 2, role: 'assistant'}]);
 const mockLoadPage = jest.fn(async () => [{id: 'm1', seq: 1, role: 'user'}]);
@@ -231,6 +230,7 @@ jest.mock('../src/components/chat/MessageList', () => {
 
 jest.mock('../src/components/chat/ChatComposer', () => {
   const ReactNative = require('react-native');
+  const {EVENT_AGENT_STREAM_TEXT_DELTA} = require('@novel-master/core/events');
   return {
     ChatComposer: (props: any) => (
       <ReactNative.View>

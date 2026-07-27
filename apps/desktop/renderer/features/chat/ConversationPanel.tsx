@@ -579,13 +579,8 @@ export function ConversationPanel({
           showToast('该消息没有可编辑的文本');
           return;
         }
-        // T-TX2：编辑回填仅正文（含 `@路径`）+ 现有状态投影；无文件引用 chip
-        setComposerText(initial);
-        setComposerAttachments((prev) =>
-          prev.filter(
-            (a) => a.source === 'workplace' || a.source === 'user_ops',
-          ),
-        );
+        // 编辑走 MessageEditModal，不写 Composer；否则取消后输入框会残留消息正文。
+        // T-TX2 的 Composer 回填仅适用于 undo_send。
         setMessageEdit({ messageId: message.id, initialText: initial });
         return;
       }

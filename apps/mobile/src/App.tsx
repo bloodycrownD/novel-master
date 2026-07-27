@@ -3,6 +3,7 @@
  */
 import React from 'react';
 import {StatusBar} from 'react-native';
+import {KeyboardProvider} from 'react-native-keyboard-controller';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {NovelMasterProvider} from './runtime/novel-master-context';
 import {ThemeProvider, useTheme} from './theme/ThemeProvider';
@@ -25,11 +26,13 @@ function AppContent() {
 function App() {
   return (
     <SafeAreaProvider>
-      <NovelMasterProvider>
-        <ThemeProvider>
-          <AppContent />
-        </ThemeProvider>
-      </NovelMasterProvider>
+      <KeyboardProvider preload={false}>
+        <NovelMasterProvider>
+          <ThemeProvider>
+            <AppContent />
+          </ThemeProvider>
+        </NovelMasterProvider>
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

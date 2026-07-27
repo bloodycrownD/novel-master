@@ -284,4 +284,65 @@ describe("CharacterCardImportService", () => {
     assert.equal((await vfs.read("/开场/角色描述.md")).content, "d");
     assert.equal((await vfs.read("/开场/开场/开场001.md")).content, "hi");
   });
+
+  it("导入后删无关文件再 capture 不抛 Revision not found", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(
+      `P-rev-seed-${testIsolationSuffix()}`,
+    );
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    const tree = parseCharacterCardToMdTree(
+      JSON.stringify({
+        spec: "chara_card_v2",
+        data: {
+          description: "角色正文",
+          first_mes: "开场一",
+          character_book: {
+            entries: [
+              { comment: "世界观", keys: ["k1"], content: "世界书正文" },
+            ],
+          },
+        },
+      }),
+    );
+    await svc.import(scope, tree, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+
+    assert.equal(
+      (await vfs.read("/角色/世界书/世界观.md")).content.includes("世界书正文"),
+      true,
+    );
+
+    // 删无关文件（模拟用户删 状态栏/开场），保留世界书
+    await vfs.delete("/角色/开场/开场001.md");
+
+    const user = await ctx.messages.append(session.id, "user", {
+      blocks: [{ type: "text", text: "你好" }],
+    });
+    await assert.doesNotReject(() =>
+      ctx.messageCheckpoint.capture(session.id, project.id, user.id),
+    );
+
+    // 再导入后再次 capture（回滚清空后再导入的场景）
+    await svc.import(scope, tree, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+    const user2 = await ctx.messages.append(session.id, "user", {
+      blocks: [{ type: "text", text: "再问" }],
+    });
+    await assert.doesNotReject(() =>
+      ctx.messageCheckpoint.capture(session.id, project.id, user2.id),
+    );
+  });
 });

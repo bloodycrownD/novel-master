@@ -6,6 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
@@ -24,11 +25,13 @@ export class DefaultTemplatePullService implements TemplatePullService {
   async projectTemplatePull(projectId: string): Promise<void> {
     await this.conn.transaction(async (tx) => {
       const vfs = new SqliteVfsEntryRepository(tx);
+      const revisions = new SqliteVfsRevisionRepository(tx);
       const worktree = new SqliteWorkplaceRepository(tx);
       await replaceVfsSubtree(
         vfs,
         "/template",
         `/projects/${projectId}/template`,
+        { revisions },
       );
       await worktree.copyScope(
         workplaceScopeKey({ kind: "global" }),

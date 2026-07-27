@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+## [1.4.09] - 2026-07-28
+
+### 修复
+
+- **Mobile Android 聊天输入框被键盘遮挡**：聊天页用 `KeyboardStickyView` 跟随软键盘抬升，并为消息区预留底部空间，避免盖住最后几条；适配 Android 16 上 `adjustResize` 不稳定的情况
+- **取消编辑消息后输入框残留正文**：打开「编辑消息」不再写入 Composer 草稿；取消后输入框保持为空（撤回发送回填不受影响）
+- **导入角色卡 / ZIP 后 Revision not found**：导入与树复制会为 live head 补齐 revision，后续删除无关文件再 checkpoint / 回滚不再因缺 revision 失败
+
+### 变更
+
+- **启动略快**：库结构已对齐时跳过重复 DDL / 列对齐；Mobile 部分初始化改为按需加载，减少首屏卡顿
+
 ## [1.4.08] - 2026-07-27
 
 ### 变更

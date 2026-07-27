@@ -40,6 +40,19 @@ export async function isSchemaMigrationApplied(
   return rows.length > 0;
 }
 
+/** 一次读出全部已 apply 的 migration id（供 runner 避免 N+1）。 */
+export async function listAppliedSchemaMigrationIds(
+  tx: TdbcConnection,
+): Promise<Set<string>> {
+  const rows = await queryTemplate<{ id: string }>(
+    tx,
+    parser,
+    `SELECT id FROM ${TABLE}`,
+    {},
+  );
+  return new Set(rows.map((row) => String(row.id)));
+}
+
 /** 登记 migration 已 apply（调用方须在同一事务内保证幂等）。 */
 export async function markSchemaMigrationApplied(
   tx: TdbcConnection,

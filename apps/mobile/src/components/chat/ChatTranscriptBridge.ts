@@ -143,7 +143,9 @@ export type HostToTranscriptMessage =
   | BridgeEnvelope<'messagePatch', { messageId: string; patch: unknown }>
   | BridgeEnvelope<'themeUpdate', { theme: TranscriptTheme }>
   | BridgeEnvelope<'flagsUpdate', { flags: TranscriptFlags }>
-  | BridgeEnvelope<'closeMenu', Record<string, never>>;
+  | BridgeEnvelope<'closeMenu', Record<string, never>>
+  /** 键盘抬高输入框后：若当前贴底则重新 stick，避免最后几条被挡在输入框下。 */
+  | BridgeEnvelope<'stickIfNearBottom', Record<string, never>>;
 
 /** Transcript → host */
 export const CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION = 2 as const;

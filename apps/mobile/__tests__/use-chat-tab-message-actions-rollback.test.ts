@@ -209,9 +209,9 @@ describe('useChatTabMessageActions rollback', () => {
     expect(mockSetDraftRestoreToken).toHaveBeenCalled();
   });
 
-  it('T-TX2: 编辑回填仅正文（含 @路径）；不恢复 source:attach', async () => {
+  it('T-TX2: 编辑打开弹窗不污染 Composer draft；仅 undo_send 回填正文', async () => {
     writeChatComposerDraftState('s1', {
-      text: '',
+      text: 'keep-me',
       attachments: [
         {
           name: '/w.md',
@@ -273,10 +273,12 @@ describe('useChatTabMessageActions rollback', () => {
       api!.handleMessageMenuAction(target, 'edit');
     });
 
-    expect(setMessageEditPrompt).toHaveBeenCalled();
+    expect(setMessageEditPrompt).toHaveBeenCalledWith({
+      messageId: target.id,
+      initialText: editText,
+    });
     const draft = readChatComposerDraftState('s1');
-    expect(draft.text).toBe(editText);
-    expect(draft.text).toContain('@/a.md');
+    expect(draft.text).toBe('keep-me');
     expect(draft.attachments).toEqual([
       {
         name: '/w.md',
@@ -285,11 +287,15 @@ describe('useChatTabMessageActions rollback', () => {
         content: null,
         path: '/w.md',
       },
+      {
+        name: '/old.md',
+        source: 'attach',
+        type: 'text',
+        content: null,
+        path: '/old.md',
+      },
     ]);
-    expect((draft.attachments ?? []).some(a => a.source === 'attach')).toBe(
-      false,
-    );
-    expect(mockSetDraftRestoreToken).toHaveBeenCalled();
+    expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
   });
 
   it('T-M3: assistant 回滚不写 draft', async () => {

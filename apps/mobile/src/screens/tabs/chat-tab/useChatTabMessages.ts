@@ -626,22 +626,7 @@ export function useChatTabMessageActions({
           showToast(toastMessage('无法编辑', '该消息没有可编辑的文本'));
           return;
         }
-        // T-TX2：编辑回填仅正文（含 `@路径`）+ 现有状态投影；无文件引用 chip
-        if (sessionId != null) {
-          const prev = readChatComposerDraftState(sessionId);
-          const statusOnly = (prev.attachments ?? []).filter(
-            a => a.source === 'workplace' || a.source === 'user_ops',
-          );
-          writeChatComposerDraftState(
-            sessionId,
-            {
-              text: initial,
-              attachments: statusOnly,
-            },
-            runtime.sessions,
-          );
-          setDraftRestoreToken(t => t + 1);
-        }
+        // 编辑走 MessageEditModal，不写 Composer draft；否则取消后输入框会残留消息正文。
         setMessageEditPrompt({
           messageId: target.id,
           initialText: initial,
@@ -666,8 +651,6 @@ export function useChatTabMessageActions({
       handleForkFromMessage,
       handleSetFloorFromMessage,
       handleRollbackFromMessage,
-      sessionId,
-      setDraftRestoreToken,
       setMessageEditPrompt,
       showToast,
     ],
