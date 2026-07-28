@@ -1,19 +1,6 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-
-jest.mock('react-native-reanimated', () => {
-  const {View} = require('react-native');
-  return {
-    __esModule: true,
-    default: {
-      View,
-      createAnimatedComponent: (Component: unknown) => Component,
-    },
-    useAnimatedStyle: () => ({}),
-  };
-});
-
 import {FileEditorScreen} from '../src/screens/stack/FileEditorScreen';
 
 const mockDismiss = jest.fn();

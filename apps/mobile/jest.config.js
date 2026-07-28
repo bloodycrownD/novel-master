@@ -13,7 +13,8 @@ module.exports = {
   ],
 
   moduleNameMapper: {
-    '^react-native-reanimated$': 'react-native-reanimated/mock',
+    '^react-native-reanimated$':
+      '<rootDir>/test-utils/react-native-reanimated-mock.tsx',
     '^react-native-keyboard-controller$':
       '<rootDir>/test-utils/react-native-keyboard-controller-mock.tsx',
     '^react-native-webview$': '<rootDir>/test-utils/react-native-webview-mock.tsx',
