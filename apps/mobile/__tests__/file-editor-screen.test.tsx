@@ -1,6 +1,19 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+
+jest.mock('react-native-reanimated', () => {
+  const {View} = require('react-native');
+  return {
+    __esModule: true,
+    default: {
+      View,
+      createAnimatedComponent: (Component: unknown) => Component,
+    },
+    useAnimatedStyle: () => ({}),
+  };
+});
+
 import {FileEditorScreen} from '../src/screens/stack/FileEditorScreen';
 
 const mockDismiss = jest.fn();
@@ -116,6 +129,7 @@ jest.mock('react-native', () => {
   return {
     ActivityIndicator: () => mockReact.createElement('ActivityIndicator'),
     Keyboard: {dismiss: (...args: unknown[]) => mockDismiss(...args)},
+    Platform: {OS: 'android'},
     Pressable: ({
       children,
       onPress,
@@ -350,7 +364,7 @@ describe('FileEditorScreen', () => {
 
     const editor = tree.root.findByProps({testID: 'file-editor-input'});
     expect(editor).toBeTruthy();
-    expect(editor.props.style).toEqual({flex: 1});
+    expect(editor.props.style).toEqual({flex: 1, minHeight: 0});
   });
 
   it('T-FE1: 预览/聚焦/脏态工具栏文件名均 textAlign center', async () => {

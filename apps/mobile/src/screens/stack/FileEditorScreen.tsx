@@ -5,11 +5,17 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Keyboard,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -30,6 +36,31 @@ import {
 } from '../../components/vfs/CodeEditorWebView';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {formatCharCount} from '@novel-master/core/format';
+
+/**
+ * Android：与聊天页同款——整页 translateY 跟键盘高度走，外层 overflow 裁切。
+ * 不用 KAV padding：和 adjustResize 叠在一起容易多出一条白带盖住末行。
+ */
+function AndroidKeyboardFileEditorBody({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  const liftStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{translateY: keyboardHeightSV.value}],
+    };
+  }, [keyboardHeightSV]);
+
+  return (
+    <View style={styles.keyboardClip}>
+      <Animated.View style={[styles.keyboardLiftBody, liftStyle]}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 
@@ -210,8 +241,8 @@ export function FileEditorScreen() {
     );
   }
 
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
+  const editorBody = (
+    <>
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
           style={styles.toolbarBtn}
@@ -321,16 +352,42 @@ export function FileEditorScreen() {
           path={path}
           onChange={setContent}
           onFocusChange={setEditorFocused}
-          style={{flex: 1}}
+          style={styles.editor}
         />
       )}
-    </View>
+    </>
+  );
+
+  const rootStyle = [styles.root, {backgroundColor: tokens.background}];
+
+  // 预览无软键盘；编辑态 Android 抬升（同聊天页），iOS 仍用 KAV padding。
+  if (previewMode) {
+    return <View style={rootStyle}>{editorBody}</View>;
+  }
+
+  if (Platform.OS === 'android') {
+    return (
+      <View style={rootStyle}>
+        <AndroidKeyboardFileEditorBody>{editorBody}</AndroidKeyboardFileEditorBody>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={rootStyle}
+      behavior="padding"
+      automaticOffset>
+      {editorBody}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {flex: 1},
   center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
+  keyboardLiftBody: {flex: 1, minHeight: 0},
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -358,4 +415,5 @@ const styles = StyleSheet.create({
   },
   statsText: {fontSize: 12},
   preview: {flex: 1, minHeight: 0, padding: 12},
+  editor: {flex: 1, minHeight: 0},
 });

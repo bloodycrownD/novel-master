@@ -1,7 +1,7 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   Platform,
   Pressable,
@@ -12,9 +12,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 import {
-  KeyboardStickyView,
-  useKeyboardState,
+  useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { type VfsScope } from '@novel-master/core/vfs';
 import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
 import { ChatComposer } from '@/components/chat/ChatComposer';
@@ -39,9 +39,8 @@ export type ChatConversationPanelProps = {
 };
 
 /**
- * Android：用 keyboard-controller 抬输入框（曾验证有效），
- * 消息区按键盘高度留出 margin，避免 StickyView 盖住最后几条。
- * 不手算 measure / RN Keyboard 脏高度。
+ * Android：消息区 + 输入框共用同一套 Reanimated translateY（与 KeyboardStickyView 同源 height）。
+ * 不要用 marginBottom 压缩 WebView——压缩后要靠 bridge stick，弹起时会明显落后于输入框。
  */
 function AndroidKeyboardChatBody({
   style,
@@ -49,45 +48,29 @@ function AndroidKeyboardChatBody({
   header,
   transcript,
   composer,
-  onKeyboardLifted,
 }: {
   style?: StyleProp<ViewStyle>;
   pointerEvents?: 'auto' | 'none';
   header: React.ReactNode;
   transcript: React.ReactNode;
   composer: React.ReactNode;
-  onKeyboardLifted?: () => void;
 }) {
-  const keyboardHeight = useKeyboardState(state => state.height);
-  const keyboardVisible = useKeyboardState(state => state.isVisible);
-  const transcriptReserve = keyboardVisible
-    ? Math.max(0, Math.round(keyboardHeight))
-    : 0;
-
-  useEffect(() => {
-    if (!keyboardVisible || transcriptReserve <= 0 || onKeyboardLifted == null) {
-      return;
-    }
-    const outer = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        onKeyboardLifted();
-      });
-    });
-    return () => cancelAnimationFrame(outer);
-  }, [keyboardVisible, transcriptReserve, onKeyboardLifted]);
+  const { height: keyboardHeightSV } = useReanimatedKeyboardAnimation();
+  const liftStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: keyboardHeightSV.value }],
+    };
+  }, [keyboardHeightSV]);
 
   return (
     <View style={style} pointerEvents={pointerEvents}>
       {header}
-      <View
-        style={[
-          styles.transcriptHost,
-          transcriptReserve > 0 ? { marginBottom: transcriptReserve } : null,
-        ]}
-      >
-        {transcript}
+      <View style={styles.keyboardClip}>
+        <Animated.View style={[styles.keyboardLiftBody, liftStyle]}>
+          <View style={styles.transcriptHost}>{transcript}</View>
+          {composer}
+        </Animated.View>
       </View>
-      <KeyboardStickyView>{composer}</KeyboardStickyView>
     </View>
   );
 }
@@ -198,11 +181,6 @@ export function ChatConversationPanel({
     }
   }, [conversationPanel, workspaceVfsRef]);
 
-  const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
-  const onKeyboardLifted = useCallback(() => {
-    setKeyboardLiftNonce(n => n + 1);
-  }, []);
-
   const chatPanelStyle = [
     styles.chatPanel,
     conversationPanel !== 'chat' && styles.panelHidden,
@@ -241,7 +219,6 @@ export function ChatConversationPanel({
           onOpenToolFile={scope.openSessionFilePreview}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onMessageMenuAction={controller.onWebMessageMenuAction}
-          keyboardLiftNonce={keyboardLiftNonce}
         />
       ) : (
         <MessageList
@@ -258,7 +235,6 @@ export function ChatConversationPanel({
           onScrollSnapshot={onChatScrollSnapshot}
           onMessageLongPress={controller.handleMessageLongPress}
           onOpenToolFile={scope.openSessionFilePreview}
-          keyboardLiftNonce={keyboardLiftNonce}
           listHeaderComponent={
             hasMoreMessages ? (
               <Pressable
@@ -316,7 +292,6 @@ export function ChatConversationPanel({
               header={chatHeader}
               transcript={chatTranscript}
               composer={chatComposer}
-              onKeyboardLifted={onKeyboardLifted}
             />
           ) : (
             <View style={chatPanelStyle} pointerEvents={chatPointerEvents}>
@@ -421,6 +396,8 @@ const styles = StyleSheet.create({
   subviewFill: { flex: 1, minHeight: 0 },
   panelHidden: { display: 'none' },
   chatPanel: { flex: 1 },
+  keyboardClip: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  keyboardLiftBody: { flex: 1, minHeight: 0 },
   transcriptHost: { flex: 1, minHeight: 0 },
   flexFill: { flex: 1 },
   placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },

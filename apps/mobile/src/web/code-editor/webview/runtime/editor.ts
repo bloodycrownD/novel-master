@@ -33,6 +33,9 @@ function buildExtensions(path: string, readOnly: boolean): Extension[] {
     EditorView.domEventHandlers({
       focus: () => {
         post('focus', {});
+        requestAnimationFrame(() => {
+          scrollCaretIntoView();
+        });
         return false;
       },
       blur: () => {
@@ -42,6 +45,40 @@ function buildExtensions(path: string, readOnly: boolean): Extension[] {
     }),
   ];
 }
+
+function scrollCaretIntoView(): void {
+  if (!view?.hasFocus) return;
+  view.dispatch({
+    effects: EditorView.scrollIntoView(view.state.selection.main.head, {
+      y: 'nearest',
+    }),
+  });
+}
+
+/** 只负责键盘/尺寸变化后滚光标；底部避让交给 RN 侧抬升/KAV，避免双重垫高。 */
+function bindCaretRevealOnResize(): () => void {
+  const apply = () => {
+    requestAnimationFrame(() => {
+      scrollCaretIntoView();
+    });
+  };
+  apply();
+  window.addEventListener('resize', apply);
+  const vv = window.visualViewport;
+  if (vv != null) {
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+  }
+  return () => {
+    window.removeEventListener('resize', apply);
+    if (vv != null) {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+    }
+  };
+}
+
+let unbindCaretReveal: (() => void) | null = null;
 
 export function mountEditor(
   parent: HTMLElement,
@@ -60,9 +97,14 @@ export function mountEditor(
     }),
     parent,
   });
+  unbindCaretReveal = bindCaretRevealOnResize();
 }
 
 export function destroyEditor(): void {
+  if (unbindCaretReveal != null) {
+    unbindCaretReveal();
+    unbindCaretReveal = null;
+  }
   if (view) {
     view.destroy();
     view = null;
