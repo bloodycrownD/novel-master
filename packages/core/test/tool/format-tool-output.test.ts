@@ -15,7 +15,8 @@ const sessionScope: VfsScope = {
   sessionId: "sess-1",
 };
 
-const physicalPath = "/projects/proj-1/sessions/sess-1/missing.txt";
+// entry_id 化后 vfsError.path 已是纯逻辑路径，不再含物理前缀
+const physicalPath = "/missing.txt";
 
 describe("formatToolOutputForLlm", () => {
   it("returns ok for version-only write result", () => {
