@@ -272,7 +272,14 @@ export const VfsFileManager = forwardRef<
   }, [fetchWorktreeRows, applyWorktreeRowsToVisibleList]);
 
   const reload = useCallback(async () => {
+    const reloadT0 = Date.now();
     if (reloadInFlightRef.current) {
+      if (__DEV__) {
+        console.log('[vfs-reload] SKIPPED by inFlight guard', {
+          currentPath,
+          atMs: reloadT0,
+        });
+      }
       return;
     }
     reloadInFlightRef.current = true;
@@ -285,6 +292,14 @@ export const VfsFileManager = forwardRef<
         fetchWorktreeRows(),
         worktreeSvc.getDirRule(currentPath),
       ]);
+      if (__DEV__) {
+        console.log('[vfs-reload] data fetched', {
+          currentPath,
+          fetchMs: Date.now() - reloadT0,
+          vfsPaths: listEntries.map(e => e.path),
+          worktreePaths: allRows.map(r => r.path),
+        });
+      }
       setWorktreeRows(allRows);
       const metaByPath = new Map<string, WorkplaceListRow>();
       for (const row of allRows) {
@@ -313,6 +328,14 @@ export const VfsFileManager = forwardRef<
         dirRule: dirRule ?? null,
         kindByPath,
       });
+
+      if (__DEV__) {
+        console.log('[vfs-reload] applied', {
+          currentPath,
+          totalMs: Date.now() - reloadT0,
+          renderedPaths: orderedPaths,
+        });
+      }
 
       const mapped = orderedPaths.map(path => {
         const meta = metaByPath.get(path);
@@ -688,6 +711,7 @@ export const VfsFileManager = forwardRef<
             const newPath =
               parent === '/' ? `/${trimmed}` : `${parent}/${trimmed}`;
             try {
+              const renameT0 = Date.now();
               if (menuRow.kind === 'file') {
                 if (useUserVfsTurn) {
                   await sessionRenameVfsFile(
@@ -710,17 +734,50 @@ export const VfsFileManager = forwardRef<
                 } else {
                   await renameVfsDirectory(vfs, menuPath, newPath);
                 }
+                if (__DEV__) {
+                  console.log('[vfs-rename] vfs move done', {
+                    menuPath,
+                    newPath,
+                    moveMs: Date.now() - renameT0,
+                  });
+                }
                 await migrateWorkplaceDirRename(workplace, menuPath, newPath);
+                if (__DEV__) {
+                  console.log('[vfs-rename] workplace migrate done', {
+                    menuPath,
+                    newPath,
+                    migrateMs: Date.now() - renameT0,
+                  });
+                }
                 if (
                   currentPath === menuPath ||
                   currentPath.startsWith(`${menuPath}/`)
                 ) {
-                  setCurrentPath(
-                    remapPathUnderDir(currentPath, menuPath, newPath),
-                  );
+                  const remapped = remapPathUnderDir(currentPath, menuPath, newPath);
+                  if (__DEV__) {
+                    console.log('[vfs-rename] setCurrentPath (path under renamed dir)', {
+                      from: currentPath,
+                      to: remapped,
+                    });
+                  }
+                  setCurrentPath(remapped);
                 }
               }
+              if (__DEV__) {
+                console.log('[vfs-rename] before reloadVfsListOnly', {
+                  menuPath,
+                  newPath,
+                  totalMs: Date.now() - renameT0,
+                });
+              }
               await reloadVfsListOnly();
+              if (__DEV__) {
+                console.log('[vfs-rename] reloadVfsListOnly done', {
+                  menuPath,
+                  newPath,
+                  totalMs: Date.now() - renameT0,
+                });
+              }
             } catch (err) {
               // WHY: Core rejects duplicate names; surface friendly copy on mobile.
               if (isVfsError(err, 'ALREADY_EXISTS')) {
@@ -741,12 +798,25 @@ export const VfsFileManager = forwardRef<
             style: 'destructive',
             onPress: () => {
               const runDelete = async () => {
+                const deleteT0 = Date.now();
                 await deleteScopedVfsEntry(runtime, scope, vfs, menuPath, {
                   recursive: true,
                   useUserVfsTurn,
                   sessionId,
                 });
+                if (__DEV__) {
+                  console.log('[vfs-delete] delete done', {
+                    menuPath,
+                    deleteMs: Date.now() - deleteT0,
+                  });
+                }
                 await reloadVfsListOnly();
+                if (__DEV__) {
+                  console.log('[vfs-delete] reload done', {
+                    menuPath,
+                    totalMs: Date.now() - deleteT0,
+                  });
+                }
               };
               runDelete().catch(err =>
                 showToast(toastMessage('删除失败', err)),
@@ -831,12 +901,25 @@ export const VfsFileManager = forwardRef<
           }
           const path =
             currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
+          const t0 = Date.now();
           if (useUserVfsTurn) {
             await sessionCreateVfsFile(runtime, sessionId!, path);
           } else {
             await createVfsFile(vfs, path);
           }
+          if (__DEV__) {
+            console.log('[vfs-create-file] done', {
+              path,
+              createMs: Date.now() - t0,
+            });
+          }
           await reloadVfsListOnly();
+          if (__DEV__) {
+            console.log('[vfs-create-file] reload done', {
+              path,
+              totalMs: Date.now() - t0,
+            });
+          }
         },
       });
       return;
@@ -853,13 +936,32 @@ export const VfsFileManager = forwardRef<
           }
           const path =
             currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
+          const t0 = Date.now();
           if (useUserVfsTurn) {
             await sessionCreateVfsDirectory(runtime, sessionId!, path);
           } else {
             await createVfsDirectory(vfs, path);
           }
+          if (__DEV__) {
+            console.log('[vfs-create-dir] vfs mkdir done', {
+              path,
+              mkdirMs: Date.now() - t0,
+            });
+          }
           await workplace.setDirRule(defaultDirRuleForm(path));
+          if (__DEV__) {
+            console.log('[vfs-create-dir] setDirRule done', {
+              path,
+              ruleMs: Date.now() - t0,
+            });
+          }
           await reloadAfterRuleChange();
+          if (__DEV__) {
+            console.log('[vfs-create-dir] reload done', {
+              path,
+              totalMs: Date.now() - t0,
+            });
+          }
         },
       });
       return;
