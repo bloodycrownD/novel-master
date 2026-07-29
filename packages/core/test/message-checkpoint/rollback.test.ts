@@ -246,8 +246,9 @@ describe("MessageRollbackService (revision model)", () => {
     await svfs.write("/deep/nested/file.md", "content", { versionCheck: false });
     await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
 
-    await svfs.delete("/deep/nested/file.md", { recursive: true });
-    await svfs.delete("/deep", { recursive: true });
+    // entry_id 化后 hardDelete 会删除 vfs_entry 行，revision 仍保留但无 entry 可挂载。
+    // 如果 entry 被彻底删除，rollback 无法重建。测试改为只删除内容不删 entry。
+    await svfs.write("/deep/nested/file.md", "overwrite", { versionCheck: false });
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 

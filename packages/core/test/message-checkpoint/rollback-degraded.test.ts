@@ -9,6 +9,10 @@ import {
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackVfsRestoreFailed,
 } from "@novel-master/core/session-fs";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import {
+  scopeKey,
+} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { toPhysicalPath } from "@novel-master/core/vfs";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -38,23 +42,34 @@ async function setupR1Scenario() {
   return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
 
+/** 通过 entryId 删除特定 anchor revision 行（模拟 revision 缺失）。 */
+async function deleteAnchorRevisionForPath(
+  ctx: ReturnType<typeof getNovelMasterTestContext>,
+  projectId: string,
+  sessionId: string,
+  logicalPath: string,
+) {
+  const sk = scopeKey({ kind: "session", projectId, sessionId });
+  const entries = new SqliteVfsEntryRepository(ctx.conn);
+  const entry = await entries.findByPath(sk, logicalPath);
+  if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
+  const revisions = await ctx.conn.query<{ version: number }>(
+    "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
+    [entry.entryId],
+  );
+  const anchorVersion = revisions[0]!.version;
+  await ctx.conn.execute(
+    "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
+    [entry.entryId, anchorVersion],
+  );
+  return anchorVersion;
+}
+
 describe("MessageRollbackService (degraded fallback)", () => {
   it("DF1: revision 缺失时完整回滚抛 ROLLBACK_REVISION_BACKFILL_REQUIRED，消息与 VFS 不变", async () => {
     const { ctx, project, session, svfs, assistant1 } = await setupR1Scenario();
 
-    const physicalPath = toPhysicalPath(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      "/poem.md",
-    );
-    const revisions = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE path = ? ORDER BY version ASC",
-      [physicalPath],
-    );
-    const anchorVersion = revisions[0]!.version;
-    await ctx.conn.execute(
-      "DELETE FROM vfs_revision WHERE path = ? AND version = ?",
-      [physicalPath, anchorVersion],
-    );
+    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
     await assert.rejects(
       () =>
@@ -80,18 +95,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     const { ctx, project, session, svfs, user1, assistant1 } =
       await setupR1Scenario();
 
-    const physicalPath = toPhysicalPath(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      "/poem.md",
-    );
-    const revisions = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE path = ? ORDER BY version ASC",
-      [physicalPath],
-    );
-    await ctx.conn.execute(
-      "DELETE FROM vfs_revision WHERE path = ? AND version = ?",
-      [physicalPath, revisions[0]!.version],
-    );
+    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
     await ctx.sessionFs.rollbackToMessage(
       session.id,
@@ -111,18 +115,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     const { ctx, project, session, svfs, user1, assistant1 } =
       await setupR1Scenario();
 
-    const physicalPath = toPhysicalPath(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      "/poem.md",
-    );
-    const revisions = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE path = ? ORDER BY version ASC",
-      [physicalPath],
-    );
-    await ctx.conn.execute(
-      "DELETE FROM vfs_revision WHERE path = ? AND version = ?",
-      [physicalPath, revisions[0]!.version],
-    );
+    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
     await assert.rejects(() =>
       ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
@@ -284,18 +277,7 @@ describe("MessageRollbackService (degraded fallback)", () => {
     const { ctx, project, session, svfs, user1, assistant1 } =
       await setupR1Scenario();
 
-    const physicalPath = toPhysicalPath(
-      { kind: "session", projectId: project.id, sessionId: session.id },
-      "/poem.md",
-    );
-    const revisions = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE path = ? ORDER BY version ASC",
-      [physicalPath],
-    );
-    await ctx.conn.execute(
-      "DELETE FROM vfs_revision WHERE path = ? AND version = ?",
-      [physicalPath, revisions[0]!.version],
-    );
+    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/poem.md");
 
     await assert.rejects(() =>
       ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
