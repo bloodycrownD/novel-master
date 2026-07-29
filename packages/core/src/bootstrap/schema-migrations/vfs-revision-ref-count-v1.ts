@@ -25,8 +25,24 @@ async function columnNames(
 
 /**
  * 回填 ref_count：按 checkpoint 行计数 + live file head 各 +1。
+ *
+ * 兼容守卫：entry_id 化后新 schema 的 `vfs_revision` 已无 `path` 列、
+ * `message_checkpoint_file` 已无 `logical_path` 列，本函数的 SQL 会撞列不存在。
+ * 新 schema 上 ref_count 由 entry-id migration 初始化 + 触发器维护，本回填完全退役，
+ * 探测到新形态直接跳过。
  */
 async function backfillRefCounts(tx: TdbcConnection): Promise<void> {
+  const revisionCols = await columnNames(tx, "vfs_revision");
+  if (revisionCols.size > 0 && !revisionCols.has("path")) {
+    // entry_id 化后新形态：本回填退役。
+    return;
+  }
+  const checkpointCols = await columnNames(tx, "message_checkpoint_file");
+  if (checkpointCols.size > 0 && !checkpointCols.has("logical_path")) {
+    // entry_id 化后新形态：本回填退役。
+    return;
+  }
+
   await tx.execute(`UPDATE vfs_revision SET ref_count = 0`);
 
   const counts = new Map<string, number>();

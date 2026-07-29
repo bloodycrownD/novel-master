@@ -36,7 +36,7 @@ import { runPendingSchemaMigrations } from "./schema-migrations/index.js";
  * 否则已升版库会走快路径而漏建表/漏补列。新增 schema migration 不必改此值
  * （快路径仍会执行 pending migration）。
  */
-export const SCHEMA_BOOT_VERSION = 1;
+export const SCHEMA_BOOT_VERSION = 2;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
