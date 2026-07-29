@@ -5,6 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -39,7 +40,10 @@ export async function initializeSessionWorkspace(
     "/template",
     { scopeKey: `session:${projectId}:${sessionId}` },
     "/",
-    { revisions },
+    {
+      revisions,
+      contentStore: new SqliteVfsContentStore(tx),
+    },
   );
   await worktree.copyScope(
     workplaceScopeKey({ kind: "project", projectId }),

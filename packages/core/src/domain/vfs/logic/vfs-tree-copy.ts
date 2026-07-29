@@ -160,9 +160,11 @@ export async function replaceVfsSubtree(
 }
 
 /**
- * 释放 scope+前缀下 live head 引用 → 删 entry → GC 无引用 revision。
+ * 泛化 sweep：释放 scope+前缀下 live head 引用 → 删 entry → GC 无引用 revision。
+ *
+ * 三 scope（project/session/template）通用。
  */
-export async function releaseAndDeleteVfsPrefix(
+export async function sweepRevisionsUnderScope(
   repo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
@@ -171,6 +173,20 @@ export async function releaseAndDeleteVfsPrefix(
   await decrementLiveRefsUnderScope(revisionRepo, repo, scopeKey, pathPrefix);
   await deleteVfsPrefix(repo, scopeKey, pathPrefix);
   await deleteUnreferencedUnderScope(revisionRepo, scopeKey, pathPrefix);
+}
+
+/**
+ * 释放 scope+前缀下 live head 引用 → 删 entry → GC 无引用 revision。
+ *
+ * @deprecated 使用 {@link sweepRevisionsUnderScope} 替代，语义相同。
+ */
+export async function releaseAndDeleteVfsPrefix(
+  repo: VfsEntryRepository,
+  revisionRepo: VfsRevisionRepository,
+  scopeKey: string,
+  pathPrefix: string,
+): Promise<void> {
+  await sweepRevisionsUnderScope(repo, revisionRepo, scopeKey, pathPrefix);
 }
 
 /**

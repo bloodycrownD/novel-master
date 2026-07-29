@@ -13,27 +13,21 @@ import {
   MIN_LCS_LENGTH,
   truncateLcsSnippet,
 } from "./longest-common-substring.js";
-import {
-  type VfsScope,
-  toLogicalPath,
-} from "./vfs-path-mapper.js";
+import type { VfsScope } from "./vfs-path-mapper.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
 
+/**
+ * entry_id 化后 vfsError.path 就是逻辑路径，直接用它就好。
+ * scope 参数保留兼容签名，不再用于转换。
+ */
 function resolveLogicalPathForError(
   vfsError: VfsError,
-  scope?: VfsScope,
+  _scope?: VfsScope,
 ): string | undefined {
   if (vfsError.path == null) {
     return undefined;
   }
-  if (scope == null) {
-    return stripKnownPhysicalPrefixes(vfsError.path);
-  }
-  try {
-    return toLogicalPath(scope, vfsError.path);
-  } catch {
-    return stripKnownPhysicalPrefixes(vfsError.path);
-  }
+  return vfsError.path;
 }
 
 function extractInvalidPathReason(message: string): string {

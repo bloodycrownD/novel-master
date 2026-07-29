@@ -19,6 +19,7 @@ import type { ProjectRepository } from "@/domain/chat/repositories/project.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
@@ -226,18 +227,21 @@ export class DefaultProjectService implements ProjectService {
         await r.projects.updateAgentConfig(copy.id, clonedJson, now);
       }
       // entry_id 化后项目模板独立 scope：project:{id}，逻辑前缀为 "/"
+      const contentStore = new SqliteVfsContentStore(tx);
       await copyVfsTree(
         r.vfs,
         { scopeKey: `project:${id}` },
         "/",
         { scopeKey: `project:${copy.id}` },
         "/",
+        { contentStore },
       );
       await seedLiveHeadRevisionsUnderPrefix(
         r.vfs,
         r.revisions,
         `project:${copy.id}`,
         "/",
+        contentStore,
       );
       return copy;
     });

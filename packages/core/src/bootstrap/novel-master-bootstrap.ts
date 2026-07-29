@@ -69,6 +69,11 @@ async function writeSchemaBootVersion(
 }
 
 /**
+ * entry-id migration 刚跑完时置为 true，供 repairRefCounts 空闲调度判断。
+ */
+export let _entryIdMigrationJustApplied = false;
+
+/**
  * 确保所有实体表存在并写入内置 provider。可安全重复调用。
  *
  * @param conn - 已打开的 TDBC 连接
@@ -78,17 +83,19 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     const bootVersion = await readSchemaBootVersion(tx);
     if (bootVersion >= SCHEMA_BOOT_VERSION) {
       // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
-      await runPendingSchemaMigrations(tx);
+      const entryIdApplied = await runPendingSchemaMigrations(tx);
       await seedBuiltinProviders(tx);
+      _entryIdMigrationJustApplied = entryIdApplied;
       return;
     }
 
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
-    await runPendingSchemaMigrations(tx);
+    const entryIdApplied = await runPendingSchemaMigrations(tx);
     await alignSchemaColumns(tx);
     await seedBuiltinProviders(tx);
+    _entryIdMigrationJustApplied = entryIdApplied;
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
 }

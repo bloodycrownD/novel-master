@@ -7,7 +7,7 @@
 import { ToolError } from "@/errors/tool-errors.js";
 import { VfsError, isVfsError } from "@/errors/vfs-errors.js";
 import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
-import { type VfsScope, toLogicalPath } from "./vfs-path-mapper.js";
+import type { VfsScope } from "./vfs-path-mapper.js";
 
 type IpcLikeError = {
   readonly code: string;
@@ -25,18 +25,15 @@ function isIpcLikeError(error: unknown): error is IpcLikeError {
   );
 }
 
-function resolveDisplayPath(vfsError: VfsError, scope?: VfsScope): string {
+/**
+ * entry_id 化后 vfsError.path 就是逻辑路径，直接用它。
+ * scope 参数保留兼容签名，不再用于转换。
+ */
+function resolveDisplayPath(vfsError: VfsError, _scope?: VfsScope): string {
   if (vfsError.path == null) {
     return stripKnownPhysicalPrefixes(vfsError.message);
   }
-  if (scope == null) {
-    return stripKnownPhysicalPrefixes(vfsError.path);
-  }
-  try {
-    return toLogicalPath(scope, vfsError.path);
-  } catch {
-    return stripKnownPhysicalPrefixes(vfsError.path);
-  }
+  return vfsError.path;
 }
 
 function formatVfsErrorCodeMessage(
