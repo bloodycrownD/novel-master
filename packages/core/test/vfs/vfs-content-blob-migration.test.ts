@@ -13,7 +13,6 @@ import {
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   isSchemaMigrationApplied,
   VFS_CONTENT_BLOB_ZLIB_V1_ID,
@@ -68,17 +67,17 @@ async function seedLegacyInlineVfs(conn: TdbcConnection): Promise<void> {
   await conn.execute(
     `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind)
      VALUES (?, ?, 1, 1, ?, 'inline', 'file')`,
-    ["/legacy/a.md", "旧明文正文", Date.now()],
+    ["/projects/legacy-p/sessions/legacy-s/a.md", "旧明文正文", Date.now()],
   );
   await conn.execute(
     `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind)
      VALUES (?, ?, 1, 1, ?, 'inline', 'directory')`,
-    ["/legacy/dir", "", Date.now()],
+    ["/projects/legacy-p/sessions/legacy-s/dir", "", Date.now()],
   );
   await conn.execute(
     `INSERT INTO vfs_revision (path, version, content, status, mtime_ms, storage_kind)
      VALUES (?, 1, ?, 'active', ?, 'inline')`,
-    ["/legacy/a.md", "旧明文正文", Date.now()],
+    ["/projects/legacy-p/sessions/legacy-s/a.md", "旧明文正文", Date.now()],
   );
 }
 
@@ -110,7 +109,7 @@ describe("vfs-content-blob-zlib-v1 migration", () => {
         content: string | null;
         content_hash: string | null;
       }>(`SELECT content, content_hash FROM vfs_entry WHERE path = ?`, [
-        "/legacy/a.md",
+        "/a.md",
       ]);
       assert.equal(fileRow[0]!.content, null);
       assert.ok(fileRow[0]!.content_hash);
@@ -119,15 +118,10 @@ describe("vfs-content-blob-zlib-v1 migration", () => {
         content: string | null;
         content_hash: string | null;
       }>(`SELECT content, content_hash FROM vfs_entry WHERE path = ?`, [
-        "/legacy/dir",
+        "/dir",
       ]);
       assert.equal(dirRow[0]!.content, null);
       assert.equal(dirRow[0]!.content_hash, null);
-
-      const repo = new SqliteVfsEntryRepository(conn);
-      const entry = await repo.findByPath("/legacy/a.md");
-      assert.ok(entry);
-      assert.equal(entry.content, "旧明文正文");
 
       const store = new SqliteVfsContentStore(conn);
       assert.equal(
@@ -137,8 +131,10 @@ describe("vfs-content-blob-zlib-v1 migration", () => {
 
       // 二次 bootstrap 可重入
       await bootstrapNovelMaster(conn);
-      const entry2 = await repo.findByPath("/legacy/a.md");
-      assert.equal(entry2?.content, "旧明文正文");
+      assert.equal(
+        await store.get(fileRow[0]!.content_hash!),
+        "旧明文正文",
+      );
       const blobs = await conn.query<{ n: number }>(
         `SELECT COUNT(*) AS n FROM vfs_content_blob WHERE content_hash = ?`,
         [fileRow[0]!.content_hash],
