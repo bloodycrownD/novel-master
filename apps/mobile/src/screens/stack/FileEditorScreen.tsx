@@ -38,8 +38,9 @@ import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {formatCharCount} from '@novel-master/core/format';
 
 /**
- * Android：与聊天页同款——整页 translateY 跟键盘高度走，外层 overflow 裁切。
- * 不用 KAV padding：和 adjustResize 叠在一起容易多出一条白带盖住末行。
+ * Android：与聊天页同款——裁切窗口用 marginBottom 收缩键盘高度，
+ * 内容区（flex:1）跟着缩到键盘以上。不能只 translateY：body 高度不变的话
+ * 顶部会被 overflow:hidden 裁掉，未行够不着、也滚动不了。
  */
 function AndroidKeyboardFileEditorBody({
   children,
@@ -47,18 +48,15 @@ function AndroidKeyboardFileEditorBody({
   children: React.ReactNode;
 }) {
   const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
-  const liftStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{translateY: keyboardHeightSV.value}],
-    };
+  // hook 返回的 height 是负数，取反得到正的键盘高度。
+  const clipStyle = useAnimatedStyle(() => {
+    return { marginBottom: -keyboardHeightSV.value };
   }, [keyboardHeightSV]);
 
   return (
-    <View style={styles.keyboardClip}>
-      <Animated.View style={[styles.keyboardLiftBody, liftStyle]}>
-        {children}
-      </Animated.View>
-    </View>
+    <Animated.View style={[styles.keyboardClip, clipStyle]}>
+      <View style={styles.keyboardLiftBody}>{children}</View>
+    </Animated.View>
   );
 }
 

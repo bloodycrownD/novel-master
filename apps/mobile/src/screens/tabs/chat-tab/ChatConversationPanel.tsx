@@ -39,8 +39,10 @@ export type ChatConversationPanelProps = {
 };
 
 /**
- * Android：消息区 + 输入框共用同一套 Reanimated translateY（与 KeyboardStickyView 同源 height）。
- * 不要用 marginBottom 压缩 WebView——压缩后要靠 bridge stick，弹起时会明显落后于输入框。
+ * Android：消息区 + 输入框共用同一套 Reanimated 动画（与 KeyboardStickyView 同源 height）。
+ * 关键不能只靠 translateY——body 是 flex:1 不会自动缩，平移后顶部会被外层
+ * overflow:hidden 裁掉，滚不回去也编辑不了。这里改为「直接收缩裁切窗口高度」，
+ * body 跟着收紧到键盘以上，内容区照常滚动、输入框依然贴在键盘上方。
  */
 function AndroidKeyboardChatBody({
   style,
@@ -56,21 +58,23 @@ function AndroidKeyboardChatBody({
   composer: React.ReactNode;
 }) {
   const { height: keyboardHeightSV } = useReanimatedKeyboardAnimation();
-  const liftStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateY: keyboardHeightSV.value }],
-    };
+  // useReanimatedKeyboardAnimation 返回的 height 是负数（键盘高 300 时值为 -300）。
+  // 取反拿到正的键盘高度，作为 marginBottom 让裁切窗口底部收紧——
+  // body（flex:1）跟着缩到键盘以上，内容区可正常滚动，输入框自然贴在键盘上方。
+  const clipStyle = useAnimatedStyle(() => {
+    const kb = -keyboardHeightSV.value;
+    return { marginBottom: kb };
   }, [keyboardHeightSV]);
 
   return (
     <View style={style} pointerEvents={pointerEvents}>
       {header}
-      <View style={styles.keyboardClip}>
-        <Animated.View style={[styles.keyboardLiftBody, liftStyle]}>
+      <Animated.View style={[styles.keyboardClip, clipStyle]}>
+        <View style={styles.keyboardLiftBody}>
           <View style={styles.transcriptHost}>{transcript}</View>
           {composer}
-        </Animated.View>
-      </View>
+        </View>
+      </Animated.View>
     </View>
   );
 }
