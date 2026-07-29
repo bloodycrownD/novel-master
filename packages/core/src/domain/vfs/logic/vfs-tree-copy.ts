@@ -23,10 +23,14 @@ export interface VfsCopyScope {
 }
 
 function normalizePrefix(prefix: string): string {
-  if (prefix === "/") {
+  if (prefix === "/" || prefix === "") {
     return prefix;
   }
   return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+}
+
+function withSlashSuffix(prefix: string): string {
+  return prefix === "/" ? prefix : `${prefix}/`;
 }
 
 function relativeUnderPrefix(fullPath: string, prefix: string): string {
@@ -34,11 +38,11 @@ function relativeUnderPrefix(fullPath: string, prefix: string): string {
   if (fullPath === base) {
     return "";
   }
-  const withSlash = `${base}/`;
-  if (!fullPath.startsWith(withSlash)) {
+  const slashSuffix = withSlashSuffix(base);
+  if (!fullPath.startsWith(slashSuffix)) {
     throw new Error(`Path ${fullPath} is not under prefix ${prefix}`);
   }
-  return fullPath.slice(withSlash.length);
+  return fullPath.slice(slashSuffix.length);
 }
 
 function joinLogical(prefix: string, relative: string): string {

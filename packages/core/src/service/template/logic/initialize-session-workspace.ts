@@ -37,7 +37,7 @@ export async function initializeSessionWorkspace(
   await replaceVfsSubtree(
     vfs,
     { scopeKey: `project:${projectId}` },
-    "/template",
+    "/",
     { scopeKey: `session:${projectId}:${sessionId}` },
     "/",
     {

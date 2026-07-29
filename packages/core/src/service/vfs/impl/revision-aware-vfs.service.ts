@@ -184,8 +184,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         entryId = existing.entryId;
       }
       if (entryId == null) {
-        // 历史可能仍存（entry 被删但 revision 保留）。按 path 反查一次 max version 探活。
-        // entry_id 通道下若 entry 与 revision 都无，无法定位 → 报错。
+        // entry 已被 hardDelete 且 revision 无 entry 可挂。
         throw new VfsError(
           "NOT_FOUND",
           `cannot resetHeadToVersion: entry missing for ${normalized}`,

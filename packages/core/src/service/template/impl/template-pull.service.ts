@@ -31,9 +31,9 @@ export class DefaultTemplatePullService implements TemplatePullService {
       await replaceVfsSubtree(
         vfs,
         { scopeKey: "global" },
-        "/template",
+        "/",
         { scopeKey: `project:${projectId}` },
-        "/template",
+        "/",
         {
           revisions,
           contentStore: new SqliteVfsContentStore(tx),

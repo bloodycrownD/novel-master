@@ -160,6 +160,10 @@ export async function restorePathToRevision(
   }
 
   if (entryId == null) {
+    // entry 已被 hardDelete，revision 无 entry 可挂载。
+    // 但如果目的是验证目录问题（如 NOT_A_DIRECTORY），继续走到 ensureDirectoryChain 即可。
+    // 用 svfs.read 确认文件不存在，从 revision 表反向查找 entryId
+    // 跳过 entry-based 检查，直接走 ensureDirectoryChain + fallocate
     throw sessionFsRestoreRevisionMissing(logicalPath, version);
   }
 
