@@ -13,7 +13,9 @@ export interface MarkdownFrontMatterSplit {
   frontMatterLines: string[] | null;
   /** Markdown body after the closing delimiter, or full file when no front matter. */
   body: string;
-  /** `false` when an opening `---` has no closing `---`. */
+  /** `closed` is kept for signature compatibility but is always `true` after the
+   * unclosed-as-no-front-matter change — an opening `---` without a closing one
+   * is treated as "no front matter". New code should not branch on this field. */
   closed: boolean;
 }
 
@@ -38,7 +40,10 @@ export function splitMarkdownFrontMatter(content: string): MarkdownFrontMatterSp
     frontMatterLines.push(line);
   }
   if (!closed) {
-    return { frontMatterLines, body: content, closed: false };
+    // Treat unclosed `---` as "no front matter" — render the original content
+    // as body. The closing delimiter is not part of the Markdown spec, so an
+    // unclosed opener should not block normal rendering.
+    return { frontMatterLines: null, body: content, closed: true };
   }
   const body = lines.slice(endIndex).join("\n");
   return { frontMatterLines, body, closed: true };
@@ -53,9 +58,6 @@ export function parseMarkdownFrontMatter(content: string): string[] {
   const split = splitMarkdownFrontMatter(content);
   if (split.frontMatterLines === null) {
     return ["1|（无 Front Matter）"];
-  }
-  if (!split.closed) {
-    return ["1|（Front Matter 格式无效）"];
   }
   if (split.frontMatterLines.length === 0) {
     return ["1|（空 Front Matter）"];

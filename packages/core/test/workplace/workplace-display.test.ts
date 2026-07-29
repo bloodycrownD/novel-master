@@ -34,9 +34,30 @@ describe("worktree display", () => {
     assert.equal(split.closed, true);
   });
 
-  it("degrades invalid front matter", () => {
+  it("treats unclosed front matter as no front matter", () => {
     const lines = parseMarkdownFrontMatter("---\nno close");
-    assert.deepEqual(lines, ["1|（Front Matter 格式无效）"]);
+    assert.deepEqual(lines, ["1|（无 Front Matter）"]);
+  });
+
+  it("split treats unclosed front matter as no front matter", () => {
+    const split = splitMarkdownFrontMatter("---\na: 1\n# body");
+    assert.equal(split.frontMatterLines, null);
+    assert.equal(split.body, "---\na: 1\n# body");
+    assert.equal(split.closed, true);
+  });
+
+  it("split handles single unclosed delimiter line", () => {
+    const split = splitMarkdownFrontMatter("---");
+    assert.equal(split.frontMatterLines, null);
+    assert.equal(split.body, "---");
+    assert.equal(split.closed, true);
+  });
+
+  it("split handles empty closed front matter", () => {
+    const split = splitMarkdownFrontMatter("---\n---\n");
+    assert.deepEqual(split.frontMatterLines, []);
+    assert.equal(split.body, "");
+    assert.equal(split.closed, true);
   });
 
   it("joins blocks with blank line", () => {
