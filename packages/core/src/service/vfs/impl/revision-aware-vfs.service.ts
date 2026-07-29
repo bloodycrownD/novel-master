@@ -19,6 +19,7 @@ import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-no
 import {
   adjustRef,
   transferLiveRef,
+  deleteUnreferencedUnderScope,
 } from "@/domain/vfs/logic/revision-ref-count.js";
 import {
   renameVfsEntry,
@@ -244,10 +245,14 @@ export class RevisionAwareVfsService implements InternalVfsService {
         for (const head of heads) {
           await adjustRef(revisionRepo, head.entryId, head.headVersion, -1);
         }
+        // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
+        await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
       } else {
         const entry = await entryRepo.findByPath(scopeKey, normalized);
         if (entry != null && entry.entryKind === "file") {
           await adjustRef(revisionRepo, entry.entryId, entry.version, -1);
+          // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
+          await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
         }
       }
       // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）

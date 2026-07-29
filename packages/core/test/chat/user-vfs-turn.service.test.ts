@@ -677,20 +677,18 @@ describe("UserVfsTurnService", () => {
       0,
       "失败回滚后 scope 下不应有残留 revision",
     );
-    // content_hash 检查：由于 content_hash 是 hex 格式且在 content_store 表中可能以其他格式存储，
-    // 跳过精确的 blob gc 验证，在 composite 段验证 sweep 行为。
+    // content_hash 列始终存 hashContent() 输出的 hex 格式（SHA-256 hex），
+    // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证。
     const orphanHash = hashContent("A-orphan-body");
-    // 只确认 content_blob 表中不包含该 hash（runDeferredBlobGc 已执行的前提下）
-    // 若 content_store 使用了不同的 hash 存储格式，以下检查可被安全忽略。
     const hashRows = await ctx.conn.query<{ content_hash: string }>(
       `SELECT content_hash FROM vfs_content_blob`,
       [],
     );
-    // 注：content_blob 的 hash 可能通过 zlib 重新编码，跳过精确匹配
-    // assert.equal(
-    //   hashRows.some((r) => String(r.content_hash) === orphanHash),
-    //   false,
-    // );
+    assert.equal(
+      hashRows.some((r) => String(r.content_hash) === orphanHash),
+      false,
+      "orphan blob 应被 runDeferredBlobGc 清理",
+    );
 
     // composite restore 后仍执行 sweep：预埋不可达 revision，restore 抛错后须消失
     await svfs.write("/orphan-sweep.md", "seed", { versionCheck: false });

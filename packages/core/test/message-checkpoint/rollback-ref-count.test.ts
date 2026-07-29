@@ -418,12 +418,13 @@ describe("rollback ref_count + deferred blob gc", () => {
     const assistant = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "w" }],
     });
+    const orphanContent = "orphan-" + testIsolationSuffix();
     await svfs.write("/defer.md", "keep", { versionCheck: false });
-    await svfs.write("/defer.md", "orphan", { versionCheck: false });
+    await svfs.write("/defer.md", orphanContent, { versionCheck: false });
     await svfs.write("/defer.md", "keep-final", { versionCheck: false });
     await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
 
-    const orphanHash = hashContent("orphan");
+    const orphanHash = hashContent(orphanContent);
     const entry = await entries.findByPath(scopeKey({kind:"session",projectId:project.id,sessionId:session.id}), "/defer.md");
     assert.ok(entry != null);
     // 确认 orphan revision 存在
@@ -443,9 +444,10 @@ describe("rollback ref_count + deferred blob gc", () => {
     const afterSweep = await revisions.findByEntryAndVersion(entry.entryId, 2);
     assert.equal(afterSweep, null, "orphan revision 应在 sweep 后被删除");
 
-    // content_store 的 hash 可能与 hashContent 的格式不同（zlib b64 编码），跳过 blob gc 精确检查
-    // await runDeferredBlobGc(ctx.conn);
-    // await assert.rejects(() => contentStore.get(orphanHash));
+    // content_hash 列始终存 hashContent() 输出的 hex 格式（SHA-256 hex），
+    // zlib b64 只影响 bytes 列编码，不影响 content_hash 列。可直接精确验证 blob gc。
+    await runDeferredBlobGc(ctx.conn);
+    await assert.rejects(() => contentStore.get(orphanHash));
     assert.equal((await svfs.read("/defer.md")).content, "keep-final");
   });
 });
