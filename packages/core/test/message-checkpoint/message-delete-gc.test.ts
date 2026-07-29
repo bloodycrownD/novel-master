@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
-  scopePhysicalPrefix,
-  toPhysicalPath,
+  scopeKey,
 } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -16,6 +16,7 @@ describe("MessageService.delete checkpoint GC", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
 
@@ -33,17 +34,18 @@ describe("MessageService.delete checkpoint GC", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const physical = toPhysicalPath(scope, "/gc-delete.md");
-    const prefix = scopePhysicalPrefix(scope);
+    const sk = scopeKey(scope);
+    const entry = await entries.findByPath(sk, "/gc-delete.md");
+    assert.ok(entry != null);
 
     await ctx.messages.delete(assistant.id);
 
     assert.equal((await svfs.read("/gc-delete.md")).content, "v2");
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant.id), false);
-    const keys = await revisions.listKeysUnderPrefix(prefix);
-    assert.ok(keys.some((k) => k.path === physical && k.version === v2));
+    const keys = await revisions.listKeysUnderScope(sk, "/");
+    assert.ok(keys.some((k) => k.entryId === entry.entryId && k.version === v2));
     assert.equal(
-      keys.some((k) => k.path === physical && k.version === v1),
+      keys.some((k) => k.entryId === entry.entryId && k.version === v1),
       false,
     );
   });

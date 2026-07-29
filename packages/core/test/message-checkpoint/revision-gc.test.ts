@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import {
-  scopePhysicalPrefix,
-  toPhysicalPath,
+  scopeKey,
 } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionReachableKey } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -18,6 +18,7 @@ describe("revision GC", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
 
     const assistant1 = await ctx.messages.append(session.id, "assistant", {
@@ -39,12 +40,13 @@ describe("revision GC", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const physical = toPhysicalPath(scope, "/gc.md");
-    const prefix = scopePhysicalPrefix(scope);
+    const sk = scopeKey(scope);
+    const entry = await entries.findByPath(sk, "/gc.md");
+    assert.ok(entry != null);
 
-    const before = await revisions.listKeysUnderPrefix(prefix);
-    assert.ok(before.some((r) => r.path === physical && r.version === v1));
-    assert.ok(before.some((r) => r.path === physical && r.version === v2));
+    const before = await revisions.listKeysUnderScope(sk, "/");
+    assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v1));
+    assert.ok(before.some((r) => r.entryId === entry.entryId && r.version === v2));
 
     await ctx.sessionFs.rollbackToMessage(
       session.id,
@@ -52,16 +54,16 @@ describe("revision GC", () => {
       assistant1.id,
     );
 
-    const after = await revisions.listKeysUnderPrefix(prefix);
-    assert.ok(after.some((r) => r.path === physical && r.version === v1));
+    const after = await revisions.listKeysUnderScope(sk, "/");
+    assert.ok(after.some((r) => r.entryId === entry.entryId && r.version === v1));
     assert.equal(
-      after.some((r) => r.path === physical && r.version === v2),
+      after.some((r) => r.entryId === entry.entryId && r.version === v2),
       false,
     );
 
     const head = (await svfs.read("/gc.md")).version;
     assert.notEqual(head, v2);
-    assert.equal(revisionReachableKey(physical, v1).includes(physical), true);
+    assert.equal(revisionReachableKey(entry.entryId, v1).includes(String(entry.entryId)), true);
   });
 
   it("sweep drops intermediate revisions not referenced by checkpoint or live head", async () => {
@@ -69,6 +71,7 @@ describe("revision GC", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
 
     const assistant = await ctx.messages.append(session.id, "assistant", {
@@ -85,8 +88,9 @@ describe("revision GC", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const physical = toPhysicalPath(scope, "/trim.md");
-    const prefix = scopePhysicalPrefix(scope);
+    const sk = scopeKey(scope);
+    const entry = await entries.findByPath(sk, "/trim.md");
+    assert.ok(entry != null);
 
     await ctx.sessionFs.rollbackToMessage(
       session.id,
@@ -94,9 +98,9 @@ describe("revision GC", () => {
       assistant.id,
     );
 
-    const keys = await revisions.listKeysUnderPrefix(prefix);
+    const keys = await revisions.listKeysUnderScope(sk, "/");
     const versions = keys
-      .filter((k) => k.path === physical)
+      .filter((k) => k.entryId === entry.entryId)
       .map((k) => k.version);
     assert.ok(versions.includes(v2));
     assert.equal(versions.includes(v1), false);

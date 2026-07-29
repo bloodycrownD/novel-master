@@ -54,7 +54,7 @@ describe("rollback execution redesign", () => {
       tailAssistant.id,
     );
 
-    const writeSpy = mock.method(RevisionAwareVfsService.prototype, "write");
+    const resetSpy = mock.method(RevisionAwareVfsService.prototype, "resetHeadToVersion");
     try {
       await ctx.sessionFs.rollbackToMessage(
         session.id,
@@ -62,10 +62,10 @@ describe("rollback execution redesign", () => {
         anchorAssistant.id,
       );
     } finally {
-      writeSpy.mock.restore();
+      resetSpy.mock.restore();
     }
 
-    assert.equal(writeSpy.mock.callCount(), diffCount);
+    assert.equal(resetSpy.mock.callCount(), diffCount);
     for (let i = 0; i < diffCount; i++) {
       assert.equal((await svfs.read(`/partial-${i}.md`)).content, `anchor-${i}`);
     }
@@ -110,7 +110,7 @@ describe("rollback execution redesign", () => {
     );
     const deleteUnrefSpy = mock.method(
       SqliteVfsRevisionRepository.prototype,
-      "deleteUnreferencedUnderPrefix",
+      "deleteUnreferencedUnderScope",
     );
 
     try {
