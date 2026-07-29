@@ -6,8 +6,7 @@
 
 import {
   assertLogicalPathAllowed,
-  scopePhysicalPrefix,
-  toLogicalPath,
+  scopeKey as vfsScopeKey,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
@@ -197,8 +196,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
   /** Loads path/mtime/rules context without scanning file content. */
   private async loadContextMetadata(): Promise<WorkplaceRuleContext> {
     const scopeKey = workplaceScopeKey(this.scope);
-    const physicalPrefix = scopePhysicalPrefix(this.scope);
-    const fileMeta = await this.deps.vfs.listFileMetaUnderPrefix(physicalPrefix);
+    const vfsKey = vfsScopeKey(this.scope);
+    // entry_id 化后 path 列直接存逻辑路径，整个 scope 列在 "/" 前缀下
+    const fileMeta = await this.deps.vfs.listFileMetaUnderPrefix(vfsKey, "/");
     const dirRules = await this.deps.workplace.listDirRules(scopeKey);
     const fileRules = await this.deps.workplace.listFileRules(scopeKey);
     const dirRuleMap = new Map(dirRules.map((r) => [r.logicalPath, r]));
@@ -207,15 +207,10 @@ export class DefaultWorkplaceService implements WorkplaceService {
       ...dirRules.map((r) => r.logicalPath),
       ...fileRules.map((r) => r.logicalPath),
     ];
-    const fileSet = new Set(
-      fileMeta.map((row) =>
-        normalizePath(toLogicalPathFromPhysical(this.scope, row.path)),
-      ),
-    );
+    const fileSet = new Set(fileMeta.map((row) => normalizePath(row.path)));
     const mtimeByPath = new Map<string, number>();
     for (const row of fileMeta) {
-      const logical = toLogicalPathFromPhysical(this.scope, row.path);
-      mtimeByPath.set(logical, row.mtimeMs);
+      mtimeByPath.set(row.path, row.mtimeMs);
     }
     const allDirs = buildWorkplaceDirSet({
       scope: this.scope,
@@ -223,10 +218,10 @@ export class DefaultWorkplaceService implements WorkplaceService {
       configuredPaths,
     });
     const dirPaths = await this.deps.vfs.listDirectoryPathsUnderPrefix(
-      physicalPrefix,
+      vfsKey,
+      "/",
     );
-    for (const physicalDir of dirPaths) {
-      const logical = toLogicalPathFromPhysical(this.scope, physicalDir);
+    for (const logical of dirPaths) {
       allDirs.add(logical);
     }
     return {
@@ -239,9 +234,4 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 }
 
-function toLogicalPathFromPhysical(
-  scope: WorkplaceScope,
-  physical: string,
-): string {
-  return toLogicalPath(scope, physical);
-}
+

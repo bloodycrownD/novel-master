@@ -25,7 +25,7 @@ import {
 } from "@/service/message-checkpoint/truncate-tail-wiring.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import {
-  toPhysicalPath,
+  scopeKey,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
@@ -131,6 +131,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       const tMissing0 = Date.now();
       const missing = await findMissingRevisionPointers(
         this.deps.revisions,
+        this.deps.entries,
         plan.scope,
         plan.targetTree,
         plan.pathsNeedWrite,
@@ -278,9 +279,22 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           sessionId,
           tailMessageIds,
         );
-      for (const pointer of tailPointers) {
-        if (!targetTree.has(pointer.logicalPath)) {
-          pathsNeedDelete.add(pointer.logicalPath);
+      // entry_id 化后 tail pointer 只有 entryId；用 live heads 把 entryId 反解成当前逻辑路径，
+      // 再判是否落在 targetTree 外（需删除）。已不在 live 树里的 entry 跳过（无物可删）。
+      if (tailPointers.length > 0) {
+        const liveHeads = await listSessionFileHeads(
+          this.deps.entries,
+          projectId,
+          sessionId,
+        );
+        const pathByEntryId = new Map(
+          liveHeads.map((h) => [h.entryId, h.logicalPath]),
+        );
+        for (const pointer of tailPointers) {
+          const logicalPath = pathByEntryId.get(pointer.entryId);
+          if (logicalPath != null && !targetTree.has(logicalPath)) {
+            pathsNeedDelete.add(logicalPath);
+          }
         }
       }
     }
@@ -310,6 +324,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     deleted: number;
   }> {
     const { scope, pathsNeedWrite, pathsNeedDelete, targetTree, projectId, sessionId } = plan;
+    const scopeKeyStr = scopeKey(scope);
     const vfs = this.scopedVfs(projectId, sessionId, tx);
     const revisions = new SqliteVfsRevisionRepository(tx);
     const entries = new SqliteVfsEntryRepository(tx);
@@ -317,35 +332,39 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const liveHeadByPath = new Map(
       liveHeadRows.map((head) => [head.logicalPath, head.headVersion]),
     );
+    const entryIdByPath = new Map(
+      liveHeadRows.map((head) => [head.logicalPath, head.entryId]),
+    );
 
+    // 需写盘的路径先解析出 entryId（live 优先，缺时按 path 探测）。
     const reconcilePairs: Array<{
       logicalPath: string;
-      physical: string;
+      entryId: number;
       version: number;
     }> = [];
     for (const logicalPath of pathsNeedWrite) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
-        reconcilePairs.push({
-          logicalPath,
-          physical: toPhysicalPath(scope, logicalPath),
-          version,
-        });
+        let entryId = entryIdByPath.get(logicalPath);
+        if (entryId == null) {
+          const entry = await entries.findByPath(scopeKeyStr, logicalPath);
+          entryId = entry?.entryId ?? -1;
+        }
+        reconcilePairs.push({ logicalPath, entryId, version });
       }
     }
 
-    const revisionMetaByKey = await revisions.findMetasByPathVersions(
-      reconcilePairs.map((pair) => ({
-        path: pair.physical,
-        version: pair.version,
-      })),
+    const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
+    const revisionMetaByKey = await revisions.findMetasByEntryVersions(
+      queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })),
     );
-    const liveHashByPath = await entries.findContentHashesByPaths([
-      ...new Set(reconcilePairs.map((pair) => pair.physical)),
-    ]);
-    const prefetch = { revisionMetaByKey, liveHashByPath };
+    const liveHashByPath = await entries.findContentHashesByPaths(
+      scopeKeyStr,
+      [...new Set(reconcilePairs.map((pair) => pair.logicalPath))],
+    );
+    const prefetch = { entryIdByPath, revisionMetaByKey, liveHashByPath };
     const prefetchForRestore = useRevisionHeadBackfill
-      ? { liveHashByPath: prefetch.liveHashByPath }
+      ? { liveHashByPath: prefetch.liveHashByPath, entryIdByPath: prefetch.entryIdByPath }
       : prefetch;
 
     let skippedSameVersion = 0;

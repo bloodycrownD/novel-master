@@ -1,6 +1,9 @@
 /**
  * VFS revision repository port (append-only file history).
  *
+ * entry_id 化后全部按 `entryId` 寻址；前缀扫描类按 `(scopeKey, pathPrefix)` 经
+ * `vfs_entry` JOIN 圈定范围。
+ *
  * @module domain/vfs/repositories/vfs-revision.port
  */
 
@@ -30,82 +33,88 @@ export type VfsRevisionPointerMeta = {
  */
 export interface VfsRevisionRepository {
   /**
-   * Loads a specific revision by path and version.
+   * 按 entryId + version 读取完整 revision（解正文）。
    *
    * @returns `null` when no row exists for the pair.
    */
-  findByPathAndVersion(
-    path: string,
+  findByEntryAndVersion(
+    entryId: number,
     version: number,
   ): Promise<VfsRevision | null>;
 
-  /**
-   * 判断指定 path+version 的 revision 行是否存在（不解正文）。
-   */
-  existsByPathAndVersion(path: string, version: number): Promise<boolean>;
+  /** 判断指定 entryId+version 的 revision 行是否存在（不解正文）。 */
+  existsByEntryAndVersion(
+    entryId: number,
+    version: number,
+  ): Promise<boolean>;
 
   /**
-   * 读取指定 path+version 的 status / content_hash（不解正文）。
+   * 读取指定 entryId+version 的 status / content_hash（不解正文）。
    *
    * @returns 行不存在时为 `null`
    */
-  findMetaByPathAndVersion(
-    path: string,
+  findMetaByEntryAndVersion(
+    entryId: number,
     version: number,
   ): Promise<VfsRevisionPointerMeta | null>;
 
   /**
-   * 批量读取指定 (path, version) 的 status / content_hash（不解正文）。
+   * 批量读取指定 (entryId, version) 的 status / content_hash（不解正文）。
    *
-   * @returns 键为 `path:version`；不存在的 pair 不在 map 中
+   * @returns 键为 `entryId:version`；不存在的 pair 不在 map 中
    */
-  findMetasByPathVersions(
-    pairs: ReadonlyArray<{ readonly path: string; readonly version: number }>,
+  findMetasByEntryVersions(
+    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
   ): Promise<Map<string, VfsRevisionPointerMeta>>;
 
   /**
-   * Returns the highest stored revision version for a path.
+   * Returns the highest stored revision version for an entry.
    *
-   * @returns `null` when no revision rows exist for the path.
+   * @returns `null` when no revision rows exist for the entry.
    */
-  findMaxVersionForPath(path: string): Promise<number | null>;
+  findMaxVersionForEntry(entryId: number): Promise<number | null>;
 
   /** Appends a new revision row; never updates existing rows. */
   append(input: VfsRevisionAppendInput): Promise<void>;
 
   /**
-   * Lists all `(path, version)` revision keys under a physical prefix.
+   * 列出 scope 下某逻辑路径前缀的所有 `(entryId, version)` revision 键。
    *
    * @remarks Used by revision GC to enumerate candidates for deletion.
    */
-  listKeysUnderPrefix(
-    physicalPrefix: string,
-  ): Promise<ReadonlyArray<{ path: string; version: number }>>;
+  listKeysUnderScope(
+    scopeKey: string,
+    pathPrefix: string,
+  ): Promise<ReadonlyArray<{ entryId: number; version: number }>>;
 
   /**
-   * Deletes revision rows under `physicalPrefix` whose `path:version` key is not in `reachable`.
+   * 删除 scope 下某逻辑路径前缀内、`entryId:version` 键不在 `reachable` 中的 revision 行。
    *
    * @returns Count of deleted rows.
    */
   deleteExceptReachable(
-    physicalPrefix: string,
+    scopeKey: string,
+    pathPrefix: string,
     reachable: ReadonlySet<string>,
   ): Promise<number>;
 
-  /** 对 (path, version) 的 ref_count 增减；行不存在且 delta<0 时为 no-op。 */
-  adjustRefCount(path: string, version: number, delta: number): Promise<void>;
+  /** 对 (entryId, version) 的 ref_count 增减；行不存在且 delta<0 时为 no-op。 */
+  adjustRefCount(entryId: number, version: number, delta: number): Promise<void>;
 
   /** 将 ref_count 上调至 expected（只增不减，保守纠偏）。 */
   repairRefCountFloor(
-    path: string,
+    entryId: number,
     version: number,
     expected: number,
   ): Promise<boolean>;
 
   /**
-   * 删除前缀下 ref_count <= 0 的 revision 行。
+   * 删除 scope 下某逻辑路径前缀内 ref_count <= 0 的 revision 行。
    *
    * @returns 删除行数
    */
-  deleteUnreferencedUnderPrefix(physicalPrefix: string): Promise<number>;
+  deleteUnreferencedUnderScope(
+    scopeKey: string,
+    pathPrefix: string,
+  ): Promise<number>;
 }

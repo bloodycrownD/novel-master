@@ -216,10 +216,13 @@ export class DefaultMessageService implements MessageService {
       };
       await r.sessions.insert(forked);
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
+      // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
       await copyVfsTree(
         r.vfs,
-        `/projects/${source.projectId}/sessions/${source.id}`,
-        `/projects/${source.projectId}/sessions/${forked.id}`,
+        { scopeKey: `session:${source.projectId}:${source.id}` },
+        "/",
+        { scopeKey: `session:${source.projectId}:${forked.id}` },
+        "/",
       );
 
       const newMessages: { id: string }[] = [];

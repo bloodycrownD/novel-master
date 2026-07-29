@@ -1,6 +1,9 @@
 /**
  * 批量写入（角色卡 / ZIP / 树拷贝）后补种 live head 的 vfs_revision。
  *
+ * entry_id 化后按 `(scopeKey, pathPrefix)` 扫描 live head，revision append / adjustRef
+ * 全部吃 entryId。
+ *
  * @module domain/vfs/logic/seed-live-head-revisions
  */
 
@@ -9,51 +12,50 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
 /**
- * 为前缀下每个 live file head 补种缺失的 revision 行，并 +1 live ref。
+ * 为 scope + 前缀下每个 live file head 补种缺失的 revision 行，并 +1 live ref。
  *
  * @returns 新写入的 revision 行数
- * @remarks 已存在的 (path, version) 跳过（不二次 +1）。
+ * @remarks 已存在的 (entryId, version) 跳过（不二次 +1）。
  */
 export async function seedLiveHeadRevisionsUnderPrefix(
   entryRepo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
-  physicalPrefix: string,
+  scopeKey: string,
+  pathPrefix: string,
 ): Promise<number> {
-  const heads = await entryRepo.listFileHeadsUnderPrefix(physicalPrefix);
+  const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
   let seeded = 0;
   for (const head of heads) {
-    const exists = await revisionRepo.existsByPathAndVersion(
-      head.path,
+    const exists = await revisionRepo.existsByEntryAndVersion(
+      head.entryId,
       head.headVersion,
     );
     if (exists) {
       continue;
     }
-    const entry = await entryRepo.findByPath(head.path);
+    const entry = await entryRepo.findByPath(scopeKey, head.path);
     if (entry == null || entry.entryKind !== "file") {
       await revisionRepo.append({
-        path: head.path,
+        entryId: head.entryId,
         version: head.headVersion,
         content: null,
         status: "deleted",
         mtimeMs: Date.now(),
-        storageKind: "inline",
       });
-      await adjustRef(revisionRepo, head.path, head.headVersion, +1);
+      await adjustRef(revisionRepo, head.entryId, head.headVersion, +1);
       seeded++;
       continue;
     }
-    const contentHash = await entryRepo.findContentHash(head.path);
+    const contentHash = await entryRepo.findContentHash(scopeKey, head.path);
     await revisionRepo.append({
-      path: head.path,
+      entryId: head.entryId,
       version: head.headVersion,
       content: null,
       contentHash,
       status: "active",
       mtimeMs: entry.mtimeMs,
-      storageKind: entry.storageKind,
     });
-    await adjustRef(revisionRepo, head.path, head.headVersion, +1);
+    await adjustRef(revisionRepo, head.entryId, head.headVersion, +1);
     seeded++;
   }
   return seeded;
@@ -66,29 +68,36 @@ export async function seedLiveHeadRevisionsUnderPrefix(
 export async function insertFileSeedingRevision(
   entryRepo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
-  physicalPath: string,
+  scopeKey: string,
+  logicalPath: string,
   content: string,
 ): Promise<{ version: number }> {
-  const maxRevision = await revisionRepo.findMaxVersionForPath(physicalPath);
+  const entry = await entryRepo.findByPath(scopeKey, logicalPath);
+  const entryId = entry?.entryId;
   let version: number;
-  if (maxRevision != null) {
-    await entryRepo.insertAtVersion(physicalPath, content, maxRevision + 1);
-    version = maxRevision + 1;
+  if (entryId != null) {
+    const maxRevision = await revisionRepo.findMaxVersionForEntry(entryId);
+    if (maxRevision != null) {
+      await entryRepo.insertAtVersion(scopeKey, logicalPath, content, maxRevision + 1);
+      version = maxRevision + 1;
+    } else {
+      const inserted = await entryRepo.insert(scopeKey, logicalPath, content);
+      version = inserted.version;
+    }
   } else {
-    const inserted = await entryRepo.insert(physicalPath, content);
+    const inserted = await entryRepo.insert(scopeKey, logicalPath, content);
     version = inserted.version;
   }
-  const entry = await entryRepo.findByPath(physicalPath);
-  const contentHash = await entryRepo.findContentHash(physicalPath);
+  const after = await entryRepo.findByPath(scopeKey, logicalPath);
+  const contentHash = await entryRepo.findContentHash(scopeKey, logicalPath);
   await revisionRepo.append({
-    path: physicalPath,
+    entryId: after!.entryId,
     version,
     content: null,
     contentHash,
     status: "active",
-    mtimeMs: entry?.mtimeMs ?? Date.now(),
-    storageKind: entry?.storageKind ?? "inline",
+    mtimeMs: after?.mtimeMs ?? Date.now(),
   });
-  await adjustRef(revisionRepo, physicalPath, version, +1);
+  await adjustRef(revisionRepo, after!.entryId, version, +1);
   return { version };
 }

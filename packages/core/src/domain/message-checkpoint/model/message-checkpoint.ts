@@ -11,16 +11,18 @@ export interface MessageCheckpoint {
   readonly createdAtMs: number;
 }
 
-/** File path → revision version pointer at capture time. */
+/** entry_id → revision version pointer at capture time. */
 export interface MessageCheckpointFile {
   readonly sessionId: string;
   readonly messageId: string;
-  readonly logicalPath: string;
+  /** 指向 vfs_entry.entry_id；文件改名后历史 checkpoint 仍命中同一 entry。 */
+  readonly entryId: number;
   readonly revisionVersion: number;
 }
 
-/** Logical path and head revision version for capture input. */
+/** Live file head for capture input（entry_id + 逻辑路径 + head 版本）。 */
 export interface SessionFileHead {
+  readonly entryId: number;
   readonly logicalPath: string;
   readonly headVersion: number;
 }

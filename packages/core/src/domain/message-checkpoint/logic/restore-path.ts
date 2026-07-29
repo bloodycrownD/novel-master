@@ -1,13 +1,17 @@
 /**
  * Restores a logical path to a specific revision (forward restore).
  *
+ * entry_id 化后 revision 按 `entryId` 寻址；`vfs` / entryRepo 都吃纯逻辑路径。
+ * 本节点保持「走 write 注水」的现有语义（resetHead 改造是 Step 9 的工作），仅把
+ * revision 读写切换到 entry_id 通道，并把 path 映射退役。
+ *
  * @module domain/message-checkpoint/logic/restore-path
  */
 
 import { mkdirIgnoreExistingDirectory } from "@/domain/vfs/logic/vfs-move.js";
 import { parentDir } from "@/domain/vfs/logic/parent-dir.js";
 import {
-  toPhysicalPath,
+  scopeKey,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
@@ -27,34 +31,49 @@ export type RestorePathOutcome =
   | "restored"
   | "deleted";
 
-/** reconcile 批量预取的 revision meta 与 live hash（内存比对，减 N 次 SQL）。 */
+/** reconcile 批量预取的 entryId / revision meta / live hash（内存比对，减 N 次 SQL）。 */
 export type RestorePathPrefetch = {
+  readonly entryIdByPath?: ReadonlyMap<string, number>;
   readonly revisionMetaByKey?: ReadonlyMap<string, VfsRevisionPointerMeta>;
   readonly liveHashByPath?: ReadonlyMap<string, string | null>;
 };
 
+async function resolveEntryId(
+  entryRepo: VfsEntryRepository,
+  scopeKeyStr: string,
+  logicalPath: string,
+  prefetch?: RestorePathPrefetch,
+): Promise<number | null> {
+  if (prefetch?.entryIdByPath != null) {
+    return prefetch.entryIdByPath.get(logicalPath) ?? null;
+  }
+  const entry = await entryRepo.findByPath(scopeKeyStr, logicalPath);
+  return entry?.entryId ?? null;
+}
+
 async function resolveRevisionMeta(
   revisionRepo: VfsRevisionRepository,
-  physical: string,
+  entryId: number,
   version: number,
   prefetch?: RestorePathPrefetch,
 ): Promise<VfsRevisionPointerMeta | null> {
-  const key = revisionPairKey(physical, version);
+  const key = revisionPairKey(entryId, version);
   if (prefetch?.revisionMetaByKey != null) {
     return prefetch.revisionMetaByKey.get(key) ?? null;
   }
-  return revisionRepo.findMetaByPathAndVersion(physical, version);
+  return revisionRepo.findMetaByEntryAndVersion(entryId, version);
 }
 
 async function resolveLiveHash(
   entryRepo: VfsEntryRepository,
-  physical: string,
+  scopeKeyStr: string,
+  logicalPath: string,
   prefetch?: RestorePathPrefetch,
 ): Promise<string | null> {
   if (prefetch?.liveHashByPath != null) {
-    return prefetch.liveHashByPath.get(physical) ?? null;
+    return prefetch.liveHashByPath.get(logicalPath) ?? null;
   }
-  return entryRepo.findContentHash(physical);
+  return entryRepo.findContentHash(scopeKeyStr, logicalPath);
 }
 
 /**
@@ -99,13 +118,19 @@ export async function restorePathToRevision(
     return "skipped_same_version";
   }
 
-  const physical = toPhysicalPath(scope, logicalPath);
+  const scopeKeyStr = scopeKey(scope);
+
+  // entry_id 解析：prefetch 优先，退化为 entryRepo 探测。
+  let entryId: number | null = null;
+  if (entryRepo != null) {
+    entryId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
+  }
 
   // 轻量 meta：先判 deleted / 再比 content_hash，避免无谓解压。
-  if (entryRepo != null) {
+  if (entryRepo != null && entryId != null) {
     const meta = await resolveRevisionMeta(
       revisionRepo,
-      physical,
+      entryId,
       version,
       prefetch,
     );
@@ -123,14 +148,23 @@ export async function restorePathToRevision(
       return "deleted";
     }
     if (meta.contentHash != null && meta.contentHash.length > 0) {
-      const liveHash = await resolveLiveHash(entryRepo, physical, prefetch);
+      const liveHash = await resolveLiveHash(
+        entryRepo,
+        scopeKeyStr,
+        logicalPath,
+        prefetch,
+      );
       if (liveHash != null && liveHash === meta.contentHash) {
         return "skipped_same_content_hash";
       }
     }
   }
 
-  const rev = await revisionRepo.findByPathAndVersion(physical, version);
+  if (entryId == null) {
+    throw sessionFsRestoreRevisionMissing(logicalPath, version);
+  }
+
+  const rev = await revisionRepo.findByEntryAndVersion(entryId, version);
   if (rev == null) {
     throw sessionFsRestoreRevisionMissing(logicalPath, version);
   }
@@ -174,10 +208,13 @@ export async function restorePathToRevisionWithBackfill(
     return { backfilled: false, outcome: "skipped_same_version" };
   }
 
-  const physical = toPhysicalPath(scope, logicalPath);
+  const scopeKeyStr = scopeKey(scope);
+  const entryId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
   const backfilled = await backfillMissingRevisionIfNeeded(
     { revisionRepo, entryRepo },
-    physical,
+    scopeKeyStr,
+    logicalPath,
+    entryId,
     version,
   );
   const outcome = await restorePathToRevision(

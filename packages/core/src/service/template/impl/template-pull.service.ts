@@ -29,8 +29,10 @@ export class DefaultTemplatePullService implements TemplatePullService {
       const worktree = new SqliteWorkplaceRepository(tx);
       await replaceVfsSubtree(
         vfs,
+        { scopeKey: "global" },
         "/template",
-        `/projects/${projectId}/template`,
+        { scopeKey: `project:${projectId}` },
+        "/template",
         { revisions },
       );
       await worktree.copyScope(

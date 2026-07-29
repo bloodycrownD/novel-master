@@ -8,10 +8,8 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import {
-  scopePhysicalPrefix,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { decrementLiveRefsUnderPrefix } from "@/domain/vfs/logic/revision-ref-count.js";
+import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { decrementLiveRefsUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { createMessageRollbackService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
@@ -39,14 +37,15 @@ export async function deleteSessionFsData(
   const checkpoints = new SqliteMessageCheckpointRepository(conn);
   const revisions = new SqliteVfsRevisionRepository(conn);
   const entries = new SqliteVfsEntryRepository(conn);
-  const prefix = scopePhysicalPrefix({
-    kind: "session",
+  const sessionScope = {
+    kind: "session" as const,
     projectId,
     sessionId,
-  });
+  };
+  const sk = scopeKey(sessionScope);
 
   await checkpoints.deleteCheckpointsForSession(sessionId);
-  await decrementLiveRefsUnderPrefix(revisions, entries, prefix);
+  await decrementLiveRefsUnderScope(revisions, entries, sk, "/");
   await sweepSessionRevisions(
     revisions,
     entries,

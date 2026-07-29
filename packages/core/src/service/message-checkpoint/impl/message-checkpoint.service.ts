@@ -47,7 +47,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
         messageId,
         createdAtMs: Date.now(),
         files: files.map((f) => ({
-          logicalPath: f.logicalPath,
+          entryId: f.entryId,
           revisionVersion: f.headVersion,
         })),
       });

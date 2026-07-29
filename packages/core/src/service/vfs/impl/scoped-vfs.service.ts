@@ -1,6 +1,10 @@
 /**
  * Scoped VFS service: maps logical paths per global/project/session domain.
  *
+ * 对外继续实现 {@link VfsService}（apps 层契约不变）；对内把 `scope.scopeKey` 透传给
+ * {@link InternalVfsService} 的每一条点查询。entry_id 化后 `vfs_entry.path` 直接存纯
+ * 逻辑路径，inner 返回的 path 本身就是 logical，`list/glob/grep` 不再需要反向转换。
+ *
  * @module service/vfs/impl/scoped-vfs.service
  */
 
@@ -8,29 +12,33 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {
   assertLogicalPathAllowed,
   resolveLogicalPath,
-  toLogicalPath,
-  toPhysicalPath,
+  scopeKey,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { VfsService } from "../vfs.port.js";
+import type { InternalVfsService } from "../internal-vfs.port.js";
 import { matchGlob } from "../glob-match.js";
 import type {
   VfsGrepMatch,
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
+  VfsService,
   WriteOptions,
 } from "../vfs.port.js";
 
 /**
- * Wraps an inner {@link VfsService} operating on physical paths.
+ * Wraps an inner {@link InternalVfsService} operating on scopeKey + logical paths.
  *
- * @remarks Callers use logical paths; physical `projects/…` layout is hidden.
+ * @remarks Callers use logical paths; scopeKey is hidden behind this translation point.
  */
 export class ScopedVfsService implements VfsService {
   constructor(
-    private readonly inner: VfsService,
+    private readonly inner: InternalVfsService,
     private readonly scope: VfsScope,
   ) {}
+
+  private get scopeKeyStr(): string {
+    return scopeKey(this.scope);
+  }
 
   async list(
     dir: string,
@@ -38,27 +46,19 @@ export class ScopedVfsService implements VfsService {
   ): Promise<VfsListEntry[]> {
     const logicalDir = resolveLogicalPath(dir);
     assertLogicalPathAllowed(this.scope, logicalDir);
-    const physicalDir = toPhysicalPath(this.scope, logicalDir);
-    const entries = await this.inner.list(physicalDir, options);
-    return entries.map((e) => ({
-      path: toLogicalPath(this.scope, e.path),
-      kind: e.kind,
-    }));
+    return this.inner.list(this.scopeKeyStr, logicalDir, options);
   }
 
   async mkdir(path: string): Promise<void> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    const physical = toPhysicalPath(this.scope, logical);
-    return this.inner.mkdir(physical);
+    return this.inner.mkdir(this.scopeKeyStr, logical);
   }
 
   async read(path: string): Promise<VfsReadResult> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    const physical = toPhysicalPath(this.scope, logical);
-    const result = await this.inner.read(physical);
-    return { ...result, path: toLogicalPath(this.scope, result.path) };
+    return this.inner.read(this.scopeKeyStr, logical);
   }
 
   async write(
@@ -68,8 +68,7 @@ export class ScopedVfsService implements VfsService {
   ): Promise<{ version: number }> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    const physical = toPhysicalPath(this.scope, logical);
-    return this.inner.write(physical, content, options);
+    return this.inner.write(this.scopeKeyStr, logical, content, options);
   }
 
   async replace(
@@ -80,8 +79,7 @@ export class ScopedVfsService implements VfsService {
   ): Promise<{ version: number; replacements: number }> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    const physical = toPhysicalPath(this.scope, logical);
-    return this.inner.replace(physical, oldString, newString, options);
+    return this.inner.replace(this.scopeKeyStr, logical, oldString, newString, options);
   }
 
   async glob(
@@ -89,22 +87,12 @@ export class ScopedVfsService implements VfsService {
     options?: { cwd?: string },
   ): Promise<string[]> {
     const cwd = options?.cwd;
-    let physicalCwd: string | undefined;
+    let logicalCwd: string | undefined;
     if (cwd != null) {
-      const logicalCwd = resolveLogicalPath(cwd);
+      logicalCwd = resolveLogicalPath(cwd);
       assertLogicalPathAllowed(this.scope, logicalCwd);
-      physicalCwd = toPhysicalPath(this.scope, logicalCwd);
     }
-    const paths = await this.inner.glob(pattern, { cwd: physicalCwd });
-    return paths
-      .map((p) => {
-        try {
-          return toLogicalPath(this.scope, p);
-        } catch {
-          return null;
-        }
-      })
-      .filter((p): p is string => p != null);
+    return this.inner.glob(this.scopeKeyStr, pattern, { cwd: logicalCwd });
   }
 
   async grep(
@@ -112,29 +100,19 @@ export class ScopedVfsService implements VfsService {
     options?: VfsGrepOptions,
   ): Promise<VfsGrepMatch[]> {
     const prefix = options?.pathPrefix;
-    let physicalPrefix: string | undefined;
+    let logicalPrefix: string | undefined;
     if (prefix != null) {
-      const logicalPrefix = resolveLogicalPath(prefix);
+      logicalPrefix = resolveLogicalPath(prefix);
       assertLogicalPathAllowed(this.scope, logicalPrefix);
-      physicalPrefix = toPhysicalPath(this.scope, logicalPrefix);
     }
     const { pathGlob, ...innerOptions } = options ?? {};
-    const matches = await this.inner.grep(pattern, {
+    const matches = await this.inner.grep(this.scopeKeyStr, pattern, {
       ...innerOptions,
-      pathPrefix: physicalPrefix,
+      pathPrefix: logicalPrefix,
     });
-    return matches
-      .map((m) => {
-        try {
-          return { ...m, path: toLogicalPath(this.scope, m.path) };
-        } catch {
-          return null;
-        }
-      })
-      .filter((m): m is VfsGrepMatch => m != null)
-      .filter((m) =>
-        pathGlob != null ? matchGlob(pathGlob, m.path) : true,
-      );
+    return matches.filter((m) =>
+      pathGlob != null ? matchGlob(pathGlob, m.path) : true,
+    );
   }
 
   async delete(
@@ -143,15 +121,13 @@ export class ScopedVfsService implements VfsService {
   ): Promise<void> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    const physical = toPhysicalPath(this.scope, logical);
-    return this.inner.delete(physical, options);
+    return this.inner.delete(this.scopeKeyStr, logical, options);
   }
 
   async resetHeadToVersion(path: string, version: number): Promise<void> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    const physical = toPhysicalPath(this.scope, logical);
-    return this.inner.resetHeadToVersion(physical, version);
+    return this.inner.resetHeadToVersion(this.scopeKeyStr, logical, version);
   }
 
   async hardDelete(
@@ -160,7 +136,6 @@ export class ScopedVfsService implements VfsService {
   ): Promise<void> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    const physical = toPhysicalPath(this.scope, logical);
-    return this.inner.hardDelete(physical, options);
+    return this.inner.hardDelete(this.scopeKeyStr, logical, options);
   }
 }

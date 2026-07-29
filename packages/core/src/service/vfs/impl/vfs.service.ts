@@ -1,6 +1,10 @@
 /**
  * Default VFS application service implementation.
  *
+ * entry_id 化后实现 {@link InternalVfsService}（scopeKey + 纯逻辑路径），所有 repo
+ * 调用带 scopeKey 透传。`resetHeadToVersion` 维持 unsupported 抛错（无 revision 层）；
+ * `hardDelete` 维持走 `delete`；`renamePath` / `renamePrefix` 抛 unsupported（§D）。
+ *
  * @module service/vfs/impl/vfs.service
  */
 
@@ -27,25 +31,26 @@ import type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
-  VfsService,
   WriteOptions,
-} from "../vfs.port.js";
+} from "../internal-vfs.port.js";
+import type { InternalVfsService } from "../internal-vfs.port.js";
 import { grepContents } from "@/domain/vfs/logic/vfs-grep.js";
 
 /**
  * VFS service delegating persistence to {@link VfsEntryRepository}.
  */
-export class DefaultVfsService implements VfsService {
+export class DefaultVfsService implements InternalVfsService {
   constructor(private readonly repo: VfsEntryRepository) {}
 
   async list(
+    scopeKey: string,
     dir: string,
     options?: { recursive?: boolean; maxDepth?: number },
   ): Promise<VfsListEntry[]> {
     const normalized = normalizePath(dir);
-    const entries = await this.repo.list(normalized, options);
+    const entries = await this.repo.list(scopeKey, normalized, options);
     if (normalized !== "/" && !isStorageRootParent(normalized)) {
-      const entry = await this.repo.findByPath(normalized);
+      const entry = await this.repo.findByPath(scopeKey, normalized);
       // 虚拟 storage root 无目录行时视为空目录，与 mkdir 豁免一致
       if (entry == null && entries.length === 0) {
         throw vfsNotFound(normalized);
@@ -54,20 +59,20 @@ export class DefaultVfsService implements VfsService {
     return entries;
   }
 
-  async mkdir(path: string): Promise<void> {
+  async mkdir(scopeKey: string, path: string): Promise<void> {
     const normalized = normalizePath(path);
     if (normalized === "/") {
       throw vfsInvalidPath(path, "cannot mkdir root");
     }
 
-    const existing = await this.repo.findByPath(normalized);
+    const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing != null) {
       throw vfsAlreadyExists(normalized);
     }
 
     const parent = parentDir(normalized);
     if (parent !== "/" && !isStorageRootParent(parent)) {
-      const parentEntry = await this.repo.findByPath(parent);
+      const parentEntry = await this.repo.findByPath(scopeKey, parent);
       if (parentEntry == null) {
         throw vfsParentNotFound(parent);
       }
@@ -76,11 +81,11 @@ export class DefaultVfsService implements VfsService {
       }
     }
 
-    await this.repo.insertDirectory(normalized);
+    await this.repo.insertDirectory(scopeKey, normalized);
   }
 
-  async read(path: string): Promise<VfsReadResult> {
-    const entry = await this.repo.findByPath(path);
+  async read(scopeKey: string, path: string): Promise<VfsReadResult> {
+    const entry = await this.repo.findByPath(scopeKey, path);
     if (entry == null) {
       throw vfsNotFound(path);
     }
@@ -96,18 +101,19 @@ export class DefaultVfsService implements VfsService {
   }
 
   async write(
+    scopeKey: string,
     path: string,
     content: string,
     options?: WriteOptions,
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
-    const existing = await this.repo.findByPath(normalized);
+    const existing = await this.repo.findByPath(scopeKey, normalized);
     if (existing?.entryKind === "directory") {
       throw vfsIsDirectory(normalized);
     }
     if (existing == null) {
-      await ensureParentDirectories(this.repo, normalized);
-      return this.repo.insert(normalized, content);
+      await ensureParentDirectories(this.repo, scopeKey, normalized);
+      return this.repo.insert(scopeKey, normalized, content);
     }
 
     const versionCheck = options?.versionCheck !== false;
@@ -118,19 +124,20 @@ export class DefaultVfsService implements VfsService {
         { path: normalized },
       );
     }
-    return this.repo.update(normalized, content, {
+    return this.repo.update(scopeKey, normalized, content, {
       expectedVersion: options?.expectedVersion,
       versionCheck,
     });
   }
 
   async replace(
+    scopeKey: string,
     path: string,
     oldString: string,
     newString: string,
     options?: { replaceAll?: boolean },
   ): Promise<{ version: number; replacements: number }> {
-    const current = await this.read(path);
+    const current = await this.read(scopeKey, path);
     let replacements = 0;
     let nextContent = current.content;
 
@@ -153,7 +160,7 @@ export class DefaultVfsService implements VfsService {
         current.content.slice(index + oldString.length);
     }
 
-    const result = await this.repo.update(path, nextContent, {
+    const result = await this.repo.update(scopeKey, path, nextContent, {
       expectedVersion: current.version,
       versionCheck: true,
     });
@@ -161,10 +168,11 @@ export class DefaultVfsService implements VfsService {
   }
 
   async glob(
+    scopeKey: string,
     pattern: string,
     options?: { cwd?: string },
   ): Promise<string[]> {
-    const paths = await this.repo.listAllPaths();
+    const paths = await this.repo.listAllPaths(scopeKey);
     const cwd = options?.cwd;
 
     const matched = paths.filter((entryPath) => {
@@ -179,10 +187,11 @@ export class DefaultVfsService implements VfsService {
   }
 
   async grep(
+    scopeKey: string,
     pattern: string,
     options?: VfsGrepOptions,
   ): Promise<VfsGrepMatch[]> {
-    const rows = await this.repo.scanContents(options?.pathPrefix);
+    const rows = await this.repo.scanContents(scopeKey, options?.pathPrefix);
     const filtered =
       options?.pathGlob != null
         ? rows.filter((row) => matchGlob(options.pathGlob!, row.path))
@@ -190,27 +199,61 @@ export class DefaultVfsService implements VfsService {
     return grepContents(filtered, pattern, options);
   }
 
-  delete(path: string, options?: { recursive?: boolean }): Promise<void> {
+  delete(
+    scopeKey: string,
+    path: string,
+    options?: { recursive?: boolean },
+  ): Promise<void> {
     const normalized = normalizePath(path);
     if (normalized === "/") {
       throw vfsInvalidPath(path, "cannot delete root");
     }
-    return this.repo.delete(normalized, { recursive: options?.recursive === true });
+    return this.repo.delete(scopeKey, normalized, {
+      recursive: options?.recursive === true,
+    });
   }
 
-  async resetHeadToVersion(path: string, _version: number): Promise<void> {
+  async resetHeadToVersion(
+    scopeKey: string,
+    path: string,
+    _version: number,
+  ): Promise<void> {
     // 无 revision 层：补偿合同依赖 revision，禁止静默 no-op
     throw new Error(
-      `resetHeadToVersion is unsupported without revision history: ${path}`,
+      `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}`,
     );
   }
 
   hardDelete(
+    scopeKey: string,
     path: string,
     options?: { recursive?: boolean },
   ): Promise<void> {
     // 无墓碑可 append 时与物理 delete 一致
-    return this.delete(path, options);
+    return this.delete(scopeKey, path, options);
+  }
+
+  renamePath(
+    _scopeKey: string,
+    fromLogical: string,
+    _toLogical: string,
+    _options?: { overwrite?: boolean },
+  ): Promise<void> {
+    // rename 原语依赖事务 + repo + scopeKey，本服务只拿 repo 不在事务里跑；
+    // 生产 wiring 走 RevisionAwareVfsService，不会命中此分支。
+    throw new Error(
+      `renamePath is unsupported without revision history: ${fromLogical}`,
+    );
+  }
+
+  renamePrefix(
+    _scopeKey: string,
+    oldDirLogical: string,
+    _newDirLogical: string,
+  ): Promise<void> {
+    throw new Error(
+      `renamePrefix is unsupported without revision history: ${oldDirLogical}`,
+    );
   }
 }
 

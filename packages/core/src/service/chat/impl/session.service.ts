@@ -111,7 +111,8 @@ export class DefaultSessionService implements SessionService {
       await createSessionKkvService(tx).clearSession(id);
       await deleteVfsPrefix(
         r.vfs,
-        `/projects/${session.projectId}/sessions/${id}`,
+        `session:${session.projectId}:${id}`,
+        "/",
       );
       const deleted = await r.sessions.delete(id);
       if (!deleted) {
@@ -161,10 +162,13 @@ export class DefaultSessionService implements SessionService {
       await r.sessions.insert(copy);
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
+      // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
       await copyVfsTree(
         r.vfs,
-        `/projects/${source.projectId}/sessions/${source.id}`,
-        `/projects/${source.projectId}/sessions/${copy.id}`,
+        { scopeKey: `session:${source.projectId}:${source.id}` },
+        "/",
+        { scopeKey: `session:${source.projectId}:${copy.id}` },
+        "/",
       );
       const messages = await r.messages.listBySession(source.id);
       const newMessages: { id: string }[] = [];

@@ -35,8 +35,10 @@ export async function initializeSessionWorkspace(
   const worktree = new SqliteWorkplaceRepository(tx);
   await replaceVfsSubtree(
     vfs,
-    `/projects/${projectId}/template`,
-    `/projects/${projectId}/sessions/${sessionId}`,
+    { scopeKey: `project:${projectId}` },
+    "/template",
+    { scopeKey: `session:${projectId}:${sessionId}` },
+    "/",
     { revisions },
   );
   await worktree.copyScope(

@@ -8,7 +8,6 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import {
   toPhysicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
 
 export const VFS_REVISION_REF_COUNT_V1_ID = "vfs-revision-ref-count-v1";
@@ -48,7 +47,9 @@ async function backfillRefCounts(tx: TdbcConnection): Promise<void> {
   const counts = new Map<string, number>();
 
   const bump = (path: string, version: number, delta: number): void => {
-    const key = revisionPairKey(path, version);
+    // 本 migration 属冻结代码（新库上 entry-id migration 已先跑，此回填退役）。
+    // 不再 import revisionPairKey，本地字面拼接保持原 `path:version` 语义。
+    const key = `${path}:${version}`;
     counts.set(key, (counts.get(key) ?? 0) + delta);
   };
 
