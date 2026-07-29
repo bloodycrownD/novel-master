@@ -17,6 +17,10 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => cb(),
 }));
 
+jest.mock('../src/components/rich-content/sanitize-rich-html', () => ({
+  sanitizeRichHtml: (html: string) => html,
+}));
+
 jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
   RichDocumentWebView: jest.fn((props: Record<string, unknown>) => {
     const React = require('react');
@@ -193,11 +197,11 @@ title: Test
     expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
   });
 
-  it('does not render Web body when front matter is unclosed', async () => {
+  it('renders unclosed front matter as body without FM card (T-FM4)', async () => {
     const content = `---
 title: broken
 no closing fence
-`;
+# Body`;
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(
@@ -211,7 +215,40 @@ no closing fence
     await act(async () => {
       await Promise.resolve();
     });
-    expect(() => tree!.root.findByProps({testID: 'rich-document-webview'})).toThrow();
+    // Unclosed FM is treated as no FM — body renders normally.
+    expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(lastCall?.frontMatterHtml).toBeUndefined();
+    // plain is the full content as body (unclosed `---` becomes normal markdown).
+    expect(lastCall?.plain).toContain('# Body');
+  });
+
+  it('renders closed FM with empty body only once (T-FM5)', async () => {
+    const content = `---
+title: x
+---
+`;
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/empty-body.md"
+          content={content}
+          tokens={tokens}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockRichDocumentWebView).toHaveBeenCalled();
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    // FM card should render once at top.
+    expect(lastCall?.frontMatterHtml).toContain('fm-card');
+    expect(lastCall?.frontMatterHtml).toContain('title');
+    // plain should be empty — not echoing the FM block back.
+    expect(lastCall?.plain).toBe('');
+    expect(lastCall?.plain).not.toContain('---');
+    expect(lastCall?.plain).not.toContain('title: x');
   });
 
   it('non-md txt with previewFill wraps content in ScrollView (T1)', async () => {

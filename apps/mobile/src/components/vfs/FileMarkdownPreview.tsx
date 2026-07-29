@@ -288,14 +288,14 @@ export function FileMarkdownPreview({
   const fmLines = split?.frontMatterLines ?? null;
   const showFrontMatter = isMdPath && fmLines !== null;
   const fmFields =
-    showFrontMatter && split?.closed
+    showFrontMatter
       ? parseFrontMatterFields(fmLines)
       : [];
 
   /** 干净 MD 正文（禁止源串插锚注再渲染）。 */
   const mdBody = useMemo(() => {
-    return isMdPath && split?.closed ? (split.body ?? '').trim() : '';
-  }, [isMdPath, split?.closed, split?.body]);
+    return isMdPath ? (split?.body ?? '').trim() : '';
+  }, [isMdPath, split?.body]);
 
   // Non-md + Markdown Tab: full file as body (no front-matter split).
   const nonMdBody = useMemo(() => {
@@ -333,7 +333,6 @@ export function FileMarkdownPreview({
   const mdUseWebViewPreview =
     previewEngine === 'webview' &&
     isMdPath &&
-    split?.closed === true &&
     (mdBody.length > 0 || showFrontMatter);
 
   const nonMdUseWebViewPreview =
@@ -345,15 +344,12 @@ export function FileMarkdownPreview({
     }
     return buildFrontMatterDocumentHtml({
       fields: fmFields,
-      invalid: !split?.closed,
-      empty: split?.closed === true && fmLines.length === 0,
-      rawLines: !split?.closed ? fmLines : undefined,
+      empty: fmLines.length === 0,
     });
   }, [
     mdUseWebViewPreview,
     showFrontMatter,
     fmFields,
-    split?.closed,
     fmLines,
   ]);
 
@@ -499,16 +495,11 @@ export function FileMarkdownPreview({
         previewFill && mdUseWebViewPreview && styles.fillRoot,
         previewFill && mdAnnotateActive && styles.fillRoot,
       ]}>
-      {!split?.closed ? (
-        <Text style={{color: tokens.textSecondary, fontSize: 14}}>
-          请返回编辑并补全结束的 --- 后再预览正文。
-        </Text>
-      ) : null}
-      {mdUseWebViewPreview || (mdAnnotateActive && split?.closed) ? (
+      {mdUseWebViewPreview || mdAnnotateActive ? (
         <RichDocumentWebView
           key={path}
           html={mdBodyHtml}
-          plain={(split?.body ?? '').trim() || content}
+          plain={mdBody}
           overLimit={mdOverLimit}
           frontMatterHtml={frontMatterHtml}
           style={previewFill ? styles.webBody : undefined}
@@ -520,25 +511,22 @@ export function FileMarkdownPreview({
             <FrontMatterCard
               tokens={tokens}
               fields={fmFields}
-              invalid={!split?.closed}
-              empty={split?.closed === true && fmLines.length === 0}
-              rawLines={!split?.closed ? fmLines : undefined}
+              empty={fmLines.length === 0}
             />
           ) : null}
           <PreviewScrollWrap previewFill={previewFill}>
             <RichContentBody
-              content={(split?.body ?? '').trim() || content}
+              content={mdBody}
               tokens={tokens}
               variant="file-preview"
             />
           </PreviewScrollWrap>
         </>
-      ) : split?.closed && showFrontMatter ? (
+      ) : showFrontMatter ? (
         <>
           <FrontMatterCard
             tokens={tokens}
             fields={fmFields}
-            invalid={false}
             empty={fmLines.length === 0}
           />
           <Text style={{color: tokens.textSecondary, fontSize: 14}}>
@@ -554,17 +542,13 @@ export function FileMarkdownPreview({
 interface FrontMatterCardProps {
   tokens: ThemeTokens;
   fields: {key: string; value: string}[];
-  invalid: boolean;
   empty: boolean;
-  rawLines?: string[];
 }
 
 function FrontMatterCard({
   tokens,
   fields,
-  invalid,
   empty,
-  rawLines,
 }: FrontMatterCardProps) {
   return (
     <View
@@ -578,17 +562,12 @@ function FrontMatterCard({
       <Text style={[styles.fmTitle, {color: tokens.textSecondary}]}>
         Front Matter
       </Text>
-      {invalid ? (
-        <Text style={[styles.fmError, {color: tokens.danger}]}>
-          格式无效：缺少结束的 --- 分隔线
-        </Text>
-      ) : null}
       {empty ? (
         <Text style={{color: tokens.textSecondary, fontSize: 13}}>
           （空 Front Matter）
         </Text>
       ) : null}
-      {!invalid && !empty
+      {!empty
         ? fields.map((field, index) => (
             <View key={`${field.key}-${index}`} style={styles.fmRow}>
               {field.key ? (
@@ -602,15 +581,6 @@ function FrontMatterCard({
                 {field.value}
               </Text>
             </View>
-          ))
-        : null}
-      {invalid && rawLines?.length
-        ? rawLines.map((line, index) => (
-            <Text
-              key={index}
-              style={[styles.fmValue, {color: tokens.text, fontFamily: 'monospace'}]}>
-              {line}
-            </Text>
           ))
         : null}
     </View>
@@ -637,7 +607,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  fmError: {fontSize: 13},
   fmRow: {gap: 2},
   fmKey: {fontSize: 12, fontWeight: '500'},
   fmValue: {fontSize: 15, lineHeight: 21},
