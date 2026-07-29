@@ -45,6 +45,10 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
   if (fullPath === base) {
     return "";
   }
+  // 根目录前缀 / 的特殊处理：fullPath 必定以 / 开头
+  if (base === "/") {
+    return fullPath.slice(1);
+  }
   const withSlash = `${base}/`;
   if (!fullPath.startsWith(withSlash)) {
     throw new Error(`Path ${fullPath} is not under prefix ${prefix}`);
