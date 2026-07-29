@@ -14,6 +14,7 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
@@ -41,6 +42,7 @@ export async function seedForkCopyParity(
   input: SeedForkCopyParityInput,
 ): Promise<void> {
   const entries = new SqliteVfsEntryRepository(tx);
+  const contentStore = new SqliteVfsContentStore(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);
   const workplace = new SqliteWorkplaceRepository(tx);
   const checkpoints = new SqliteMessageCheckpointRepository(tx);
@@ -72,6 +74,9 @@ export async function seedForkCopyParity(
       continue;
     }
     const contentHash = await entries.findContentHash(targetScopeKey, head.logicalPath);
+    if (contentHash != null) {
+      await contentStore.ensureBlob(contentHash, null);
+    }
     await revisions.append({
       entryId: head.entryId,
       version: head.headVersion,

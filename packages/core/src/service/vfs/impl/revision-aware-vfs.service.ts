@@ -20,6 +20,10 @@ import {
   adjustRef,
   transferLiveRef,
 } from "@/domain/vfs/logic/revision-ref-count.js";
+import {
+  renameVfsEntry,
+  renameVfsDirectory,
+} from "@/domain/vfs/logic/vfs-rename-primitive.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {
   VfsError,
@@ -254,26 +258,31 @@ export class RevisionAwareVfsService implements InternalVfsService {
     });
   }
 
-  renamePath(
-    _scopeKey: string,
+  async renamePath(
+    scopeKey: string,
     fromLogical: string,
-    _toLogical: string,
+    toLogical: string,
     _options?: { overwrite?: boolean },
   ): Promise<void> {
-    // Step 7 才接通 rename 原语；本节点显式抛错，避免 silent no-op。
-    throw new Error(
-      `renamePath is unsupported in this wiring: ${fromLogical}`,
-    );
+    const normalizedFrom = normalizePath(fromLogical);
+    const normalizedTo = normalizePath(toLogical);
+    return runInTransactionOrConn(this.conn, async (tx) => {
+      const entryRepo = new SqliteVfsEntryRepository(tx);
+      await renameVfsEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
+    });
   }
 
-  renamePrefix(
-    _scopeKey: string,
+  async renamePrefix(
+    scopeKey: string,
     oldDirLogical: string,
-    _newDirLogical: string,
+    newDirLogical: string,
   ): Promise<void> {
-    throw new Error(
-      `renamePrefix is unsupported in this wiring: ${oldDirLogical}`,
-    );
+    const normalizedOld = normalizePath(oldDirLogical);
+    const normalizedNew = normalizePath(newDirLogical);
+    return runInTransactionOrConn(this.conn, async (tx) => {
+      const entryRepo = new SqliteVfsEntryRepository(tx);
+      await renameVfsDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);
+    });
   }
 }
 
@@ -380,19 +389,23 @@ async function writeWithRevision(
 }
 
 /**
- * entry_id 通道下，max revision 需要先知道 entry_id；entry 不存在时返回 null
- * （revision repo 无法凭空定位）。这覆盖了「entry 已删但 revision 仍在」的边界场景：
- * 此时 entry 重建后 revision 历史已不可凭 path 直接定位，writeWithRevision 走 insert v1。
+ * entry_id 通道下，max revision 通过 entry_id 寻址。
+ *
+ * 先取 entryId（entry 不存在时返回 null），然后按 entry_id 查 max version。
+ * 这覆盖了「entry 已删但 revision 仍在」的边界场景：此时 entry 不存在，
+ * resolveMaxRevision 返回 null，writeWithRevision 走 insert v1。
  */
 async function resolveMaxRevision(
-  _entryRepo: VfsEntryRepository,
-  _revisionRepo: VfsRevisionRepository,
-  _scopeKey: string,
-  _path: string,
+  entryRepo: VfsEntryRepository,
+  revisionRepo: VfsRevisionRepository,
+  scopeKey: string,
+  path: string,
 ): Promise<number | null> {
-  // entry 不存在时拿不到 entry_id；保留 null 让上层按全新文件 v1 插入。
-  // （历史 revision 仍按 entry_id 留存，后续 resetHead 可经新 entry_id 重建链路补接。）
-  return null;
+  const entry = await entryRepo.findByPath(scopeKey, path);
+  if (entry == null) {
+    return null;
+  }
+  return revisionRepo.findMaxVersionForEntry(entry.entryId);
 }
 
 async function appendDeletedRevisionsForSubtree(

@@ -138,4 +138,24 @@ export class ScopedVfsService implements VfsService {
     assertLogicalPathAllowed(this.scope, logical);
     return this.inner.hardDelete(this.scopeKeyStr, logical, options);
   }
+
+  async renamePath(
+    from: string,
+    to: string,
+    options?: { overwrite?: boolean },
+  ): Promise<void> {
+    const logicalFrom = resolveLogicalPath(from);
+    const logicalTo = resolveLogicalPath(to);
+    assertLogicalPathAllowed(this.scope, logicalFrom);
+    assertLogicalPathAllowed(this.scope, logicalTo);
+    return this.inner.renamePath(this.scopeKeyStr, logicalFrom, logicalTo, options);
+  }
+
+  async renamePrefix(oldDir: string, newDir: string): Promise<void> {
+    const logicalOld = resolveLogicalPath(oldDir);
+    const logicalNew = resolveLogicalPath(newDir);
+    assertLogicalPathAllowed(this.scope, logicalOld);
+    assertLogicalPathAllowed(this.scope, logicalNew);
+    return this.inner.renamePrefix(this.scopeKeyStr, logicalOld, logicalNew);
+  }
 }

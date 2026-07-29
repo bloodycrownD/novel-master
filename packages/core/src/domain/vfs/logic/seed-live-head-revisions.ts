@@ -8,6 +8,7 @@
  */
 
 import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
+import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
@@ -22,6 +23,7 @@ export async function seedLiveHeadRevisionsUnderPrefix(
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   pathPrefix: string,
+  contentStore?: VfsContentStore,
 ): Promise<number> {
   const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
   let seeded = 0;
@@ -47,6 +49,9 @@ export async function seedLiveHeadRevisionsUnderPrefix(
       continue;
     }
     const contentHash = await entryRepo.findContentHash(scopeKey, head.path);
+    if (contentHash != null && contentStore != null) {
+      await contentStore.ensureBlob(contentHash, null);
+    }
     await revisionRepo.append({
       entryId: head.entryId,
       version: head.headVersion,

@@ -143,9 +143,8 @@ async function moveVfsFile(
   from: string,
   to: string,
 ): Promise<void> {
-  const existing = await vfs.read(from);
-  await vfs.write(to, existing.content, { versionCheck: false });
-  await vfs.delete(from);
+  // entry_id 化后走 rename 原语（单事务 UPDATE entry.path），不写 revision/checkpoint。
+  await vfs.renamePath(from, to);
 }
 
 async function moveVfsDirectory(
@@ -153,32 +152,8 @@ async function moveVfsDirectory(
   from: string,
   to: string,
 ): Promise<void> {
-  const oldDir = normalizeDirPath(from);
-  const newDir = normalizeDirPath(to);
-  const entries = await vfs.list(oldDir, { recursive: true });
-  const dirs = entries
-    .filter((e) => e.kind === "directory")
-    .sort((a, b) => a.path.length - b.path.length);
-  const files = entries.filter((e) => e.kind === "file");
-
-  // list() omits the source root row; ensure destination root exists first.
-  await mkdirIgnoreExists(vfs, newDir);
-  for (const dir of dirs) {
-    await mkdirIgnoreExists(vfs, remapPathUnderDir(dir.path, oldDir, newDir));
-  }
-
-  for (const file of files) {
-    await moveVfsFile(
-      vfs,
-      file.path,
-      remapPathUnderDir(file.path, oldDir, newDir),
-    );
-  }
-
-  const hadOldDirRow = dirs.some((d) => d.path === oldDir);
-  if (hadOldDirRow) {
-    await vfs.delete(oldDir, { recursive: false });
-  }
+  // entry_id 化后走 renamePrefix 原语（单事务 REPLACE path 前缀），revision/checkpoint 零操作。
+  await vfs.renamePrefix(from, to);
 }
 
 /**

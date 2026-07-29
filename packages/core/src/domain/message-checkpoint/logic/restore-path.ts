@@ -2,8 +2,7 @@
  * Restores a logical path to a specific revision (forward restore).
  *
  * entry_id 化后 revision 按 `entryId` 寻址；`vfs` / entryRepo 都吃纯逻辑路径。
- * 本节点保持「走 write 注水」的现有语义（resetHead 改造是 Step 9 的工作），仅把
- * revision 读写切换到 entry_id 通道，并把 path 映射退役。
+ * 走 resetHead 语义（不 append 新 revision），revision 表行数不回滚不增长。
  *
  * @module domain/message-checkpoint/logic/restore-path
  */
@@ -185,7 +184,7 @@ export async function restorePathToRevision(
   if (rev.content == null) {
     throw sessionFsRestoreRevisionMissing(logicalPath, version);
   }
-  await vfs.write(logicalPath, rev.content, { versionCheck: false });
+  await vfs.resetHeadToVersion(logicalPath, version);
   return "restored";
 }
 

@@ -215,6 +215,25 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return hashes;
   }
 
+  async ensureBlob(contentHash: string, fallbackPlain: string | null): Promise<string> {
+    const existing = await queryTemplate<{ content_hash: string }>(
+      this.conn,
+      this.parser,
+      `SELECT content_hash FROM vfs_content_blob WHERE content_hash = #{contentHash}`,
+      { contentHash },
+    );
+    if (existing.length > 0) {
+      return contentHash;
+    }
+    if (fallbackPlain == null) {
+      throw new Error(
+        `vfs_content_blob 缺失且无可回退明文: ${contentHash}`,
+      );
+    }
+    // 走 put 路径落新行（insert 或复用同 hash 其他行）
+    return this.put(fallbackPlain);
+  }
+
   async gc(referencedHashes: ReadonlySet<string>): Promise<number> {
     const rows = await queryTemplate<{ content_hash: string }>(
       this.conn,

@@ -7,6 +7,7 @@
  * @module domain/message-checkpoint/logic/backfill-missing-revision
  */
 
+import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
@@ -15,6 +16,8 @@ import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 export type BackfillRevisionDeps = {
   readonly revisionRepo: VfsRevisionRepository;
   readonly entryRepo: VfsEntryRepository;
+  /** 可选 content store：共享 blob 回补前执行 ensureBlob。 */
+  readonly contentStore?: VfsContentStore;
 };
 
 /**
@@ -48,6 +51,9 @@ export async function backfillMissingRevisionIfNeeded(
 
   if (entry != null && entry.entryKind === "file") {
     const contentHash = await deps.entryRepo.findContentHash(scopeKey, logicalPath);
+    if (contentHash != null && deps.contentStore != null) {
+      await deps.contentStore.ensureBlob(contentHash, null);
+    }
     await deps.revisionRepo.append({
       entryId,
       version: targetVersion,

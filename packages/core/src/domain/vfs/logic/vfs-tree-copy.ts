@@ -8,6 +8,7 @@
  * @module domain/vfs/vfs-tree-copy
  */
 
+import type { VfsContentStore } from "../content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../repositories/vfs-revision.port.js";
 import {
@@ -50,6 +51,9 @@ function joinLogical(prefix: string, relative: string): string {
 
 export type CopyVfsTreeOptions = {
   mapPath?: (relative: string) => string;
+
+  /** 可选 content store：传入时在共享 blob 写入前执行 ensureBlob。 */
+  readonly contentStore?: VfsContentStore;
 };
 
 export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
@@ -101,7 +105,11 @@ export async function copyVfsTree(
     const existing = await repo.findByPath(toScope.scopeKey, targetPath);
     const contentHash = await repo.findContentHash(fromScope.scopeKey, row.path);
     if (contentHash != null) {
-      // NOTE: Step 6 会在此处补 ensureBlob(contentHash) 承诺式调用，本节点保留位置。
+      // 共享 blob 路径：写 entry 前确保 blob 行已存在，避免触发器 UPDATE 命中 0 行。
+      if (options?.contentStore != null) {
+        // 从源侧取明文做 fallback（源侧 content 已在 row.content 中）。
+        await options.contentStore.ensureBlob(contentHash, row.content);
+      }
       if (existing == null) {
         await repo.insertWithContentHash(toScope.scopeKey, targetPath, contentHash);
       } else {

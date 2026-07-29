@@ -16,4 +16,11 @@ export interface VfsRestorePort {
     options?: WriteOptions,
   ): Promise<{ version: number }>;
   delete(path: string): Promise<void>;
+
+  /**
+   * 将 live head 拨回指定 version（不 append、不 bump）。
+   *
+   * @remarks restore-path 走 resetHead 语义替代 write 注水。
+   */
+  resetHeadToVersion(path: string, version: number): Promise<void>;
 }
