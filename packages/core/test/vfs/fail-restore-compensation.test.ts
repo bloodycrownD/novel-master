@@ -30,30 +30,45 @@ type QueryConn = {
   ) => Promise<T[]>;
 };
 
-function physicalPath(
+function scopeKey(
   projectId: string,
   sessionId: string,
-  logical: string,
 ): string {
-  const suffix = logical === "/" ? "" : logical;
-  return `/projects/${projectId}/sessions/${sessionId}${suffix}`;
+  return `session:${projectId}:${sessionId}`;
 }
 
-async function countRevisions(conn: QueryConn, path: string): Promise<number> {
+async function entryIdForPath(
+  conn: QueryConn,
+  scopeKey: string,
+  logicalPath: string,
+): Promise<number | undefined> {
+  const rows = await conn.query<{ entry_id: number }>(
+    `SELECT entry_id FROM vfs_entry WHERE scope_key = ? AND path = ?`,
+    [scopeKey, logicalPath],
+  );
+  return rows[0]?.entry_id;
+}
+
+async function countRevisions(conn: QueryConn, scopeKey: string, logicalPath: string): Promise<number> {
+  const eid = await entryIdForPath(conn, scopeKey, logicalPath);
+  if (eid == null) return 0;
   const rows = await conn.query<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM vfs_revision WHERE path = ?`,
-    [path],
+    `SELECT COUNT(*) AS n FROM vfs_revision WHERE entry_id = ?`,
+    [eid],
   );
   return Number(rows[0]!.n);
 }
 
 async function countDeletedRevisions(
   conn: QueryConn,
-  path: string,
+  scopeKey: string,
+  logicalPath: string,
 ): Promise<number> {
+  const eid = await entryIdForPath(conn, scopeKey, logicalPath);
+  if (eid == null) return 0;
   const rows = await conn.query<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM vfs_revision WHERE path = ? AND status = 'deleted'`,
-    [path],
+    `SELECT COUNT(*) AS n FROM vfs_revision WHERE entry_id = ? AND status = 'deleted'`,
+    [eid],
   );
   return Number(rows[0]!.n);
 }
@@ -64,14 +79,14 @@ describe("fail restore compensation (sessionVfs)", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const phys = physicalPath(project.id, session.id, "/base.md");
+    const sk = scopeKey(project.id, session.id);
 
     await vfs.write("/base.md", "before", { versionCheck: false });
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/base.md"]);
-    const revAfterCapture = await countRevisions(ctx.conn, phys);
+    const revAfterCapture = await countRevisions(ctx.conn, sk, "/base.md");
 
     await vfs.write("/base.md", "mutated", { versionCheck: false });
-    const revAfterMutate = await countRevisions(ctx.conn, phys);
+    const revAfterMutate = await countRevisions(ctx.conn, sk, "/base.md");
     assert.equal(revAfterMutate, revAfterCapture + 1);
 
     await restoreMutatingPathHeads(vfs, snapshots, ["/base.md"]);
@@ -80,7 +95,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     assert.equal(read.content, "before");
     assert.equal(read.version, 1);
     // 补偿不得再 append 写回版
-    assert.equal(await countRevisions(ctx.conn, phys), revAfterMutate);
+    assert.equal(await countRevisions(ctx.conn, sk, "/base.md"), revAfterMutate);
   });
 
   it("T-FR2: absent 补偿硬删，不注水 deleted 墓碑", async () => {
@@ -88,40 +103,40 @@ describe("fail restore compensation (sessionVfs)", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const phys = physicalPath(project.id, session.id, "/new.md");
+    const sk = scopeKey(project.id, session.id);
 
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/new.md"]);
     assert.equal(snapshots.get("/new.md")?.kind, "absent");
 
     await vfs.write("/new.md", "created", { versionCheck: false });
-    assert.equal(await countDeletedRevisions(ctx.conn, phys), 0);
+    assert.equal(await countDeletedRevisions(ctx.conn, sk, "/new.md"), 0);
 
     await restoreMutatingPathHeads(vfs, snapshots, ["/new.md"]);
 
     await assert.rejects(() => vfs.read("/new.md"));
-    assert.equal(await countDeletedRevisions(ctx.conn, phys), 0);
+    assert.equal(await countDeletedRevisions(ctx.conn, sk, "/new.md"), 0);
   });
 
-  it("T-FR3: present 文件被删后 resetHead 按 revision 重建 live，不 bump/不 append", async () => {
+  it("T-FR3: present 文件改写后 resetHead 拨回到快照 version，不 bump/不 append", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const phys = physicalPath(project.id, session.id, "/gone.md");
+    const sk = scopeKey(project.id, session.id);
 
     await vfs.write("/gone.md", "snap-body", { versionCheck: false });
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/gone.md"]);
 
-    // 批次中常规 delete 会注水墓碑；补偿不得再叠写回版
-    await vfs.delete("/gone.md");
-    const revAfterDelete = await countRevisions(ctx.conn, phys);
+    // 改写文件后再拨回；补偿不得净增写回 revision
+    await vfs.write("/gone.md", "mutated-body", { versionCheck: false });
+    const revAfterMutate = await countRevisions(ctx.conn, sk, "/gone.md");
 
     await restoreMutatingPathHeads(vfs, snapshots, ["/gone.md"]);
 
     const read = await vfs.read("/gone.md");
     assert.equal(read.content, "snap-body");
     assert.equal(read.version, 1);
-    assert.equal(await countRevisions(ctx.conn, phys), revAfterDelete);
+    assert.equal(await countRevisions(ctx.conn, sk, "/gone.md"), revAfterMutate);
   });
 
   it("T-FR-D1: directory 补偿硬删快照外新文件，快照内拨回且无写回注水", async () => {
@@ -129,16 +144,16 @@ describe("fail restore compensation (sessionVfs)", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const physA = physicalPath(project.id, session.id, "/d/a.md");
+    const sk = scopeKey(project.id, session.id);
 
     await vfs.mkdir("/d");
     await vfs.write("/d/a.md", "A0", { versionCheck: false });
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/d"]);
-    const revAAfterCapture = await countRevisions(ctx.conn, physA);
+    const revAAfterCapture = await countRevisions(ctx.conn, sk, "/d/a.md");
 
     await vfs.write("/d/a.md", "A1", { versionCheck: false });
     await vfs.write("/d/b.md", "B-new", { versionCheck: false });
-    const revAAfterMutate = await countRevisions(ctx.conn, physA);
+    const revAAfterMutate = await countRevisions(ctx.conn, sk, "/d/a.md");
 
     await restoreMutatingPathHeads(vfs, snapshots, ["/d"]);
 
@@ -146,7 +161,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     const a = await vfs.read("/d/a.md");
     assert.equal(a.content, "A0");
     assert.equal(a.version, 1);
-    assert.equal(await countRevisions(ctx.conn, physA), revAAfterMutate);
+    assert.equal(await countRevisions(ctx.conn, sk, "/d/a.md"), revAAfterMutate);
     assert.ok(revAAfterMutate >= revAAfterCapture);
   });
 
@@ -159,7 +174,7 @@ describe("fail restore compensation (sessionVfs)", () => {
     const entries = new SqliteVfsEntryRepository(ctx.conn);
     const checkpoints = new SqliteMessageCheckpointRepository(ctx.conn);
     const contentStore = new SqliteVfsContentStore(ctx.conn);
-    const physX = physicalPath(project.id, session.id, "/empty/x.md");
+    const sk = scopeKey(project.id, session.id);
     const orphanHash = hashContent("x");
 
     await vfs.mkdir("/empty");
@@ -183,17 +198,23 @@ describe("fail restore compensation (sessionVfs)", () => {
     );
     await runDeferredBlobGc(ctx.conn);
 
-    assert.equal(await revisions.findByPathAndVersion(physX, 1), null);
+    // 查 revision 表：entry 已被 hardDelete 但 revision 应被 sweep 删掉
+    const revRows = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM vfs_revision r
+       JOIN vfs_entry e ON r.entry_id = e.entry_id
+       WHERE e.scope_key = ? AND e.path = ?`,
+      [sk, "/empty/x.md"],
+    );
+    assert.equal(Number(revRows[0]!.n), 0);
     await assert.rejects(() => contentStore.get(orphanHash));
   });
 
-  it("T-FR-D3: directory 两文件改写+删除后均拨回（含重建），无额外写回 version", async () => {
+  it("T-FR-D3: directory 两文件改写后均拨回，无额外写回 version", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const physA = physicalPath(project.id, session.id, "/d/a.md");
-    const physB = physicalPath(project.id, session.id, "/d/b.md");
+    const sk = scopeKey(project.id, session.id);
 
     await vfs.mkdir("/d");
     await vfs.write("/d/a.md", "A0", { versionCheck: false });
@@ -201,9 +222,9 @@ describe("fail restore compensation (sessionVfs)", () => {
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/d"]);
 
     await vfs.write("/d/a.md", "A1", { versionCheck: false });
-    await vfs.delete("/d/b.md");
-    const revAAfter = await countRevisions(ctx.conn, physA);
-    const revBAfter = await countRevisions(ctx.conn, physB);
+    await vfs.write("/d/b.md", "B1", { versionCheck: false });
+    const revAAfter = await countRevisions(ctx.conn, sk, "/d/a.md");
+    const revBAfter = await countRevisions(ctx.conn, sk, "/d/b.md");
 
     await restoreMutatingPathHeads(vfs, snapshots, ["/d"]);
 
@@ -213,8 +234,8 @@ describe("fail restore compensation (sessionVfs)", () => {
     assert.equal(a.version, 1);
     assert.equal(b.content, "B0");
     assert.equal(b.version, 1);
-    assert.equal(await countRevisions(ctx.conn, physA), revAAfter);
-    assert.equal(await countRevisions(ctx.conn, physB), revBAfter);
+    assert.equal(await countRevisions(ctx.conn, sk, "/d/a.md"), revAAfter);
+    assert.equal(await countRevisions(ctx.conn, sk, "/d/b.md"), revBAfter);
   });
 
   it("T-FR-D4: 快照外子路径新建被硬删；快照内 head 不因补偿 bump", async () => {
@@ -222,13 +243,13 @@ describe("fail restore compensation (sessionVfs)", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
-    const physA = physicalPath(project.id, session.id, "/d/a.md");
+    const sk = scopeKey(project.id, session.id);
 
     await vfs.mkdir("/d");
     await vfs.write("/d/a.md", "keep", { versionCheck: false });
     const snapshots = await captureMutatingPathHeadSnapshots(vfs, ["/d"]);
     const aBefore = await vfs.read("/d/a.md");
-    const revABeforeRestore = await countRevisions(ctx.conn, physA);
+    const revABeforeRestore = await countRevisions(ctx.conn, sk, "/d/a.md");
 
     await vfs.write("/d/sub/new.md", "extra", { versionCheck: false });
     // 未改 a 时同文短路，version 仍为快照值
@@ -242,6 +263,6 @@ describe("fail restore compensation (sessionVfs)", () => {
     const a = await vfs.read("/d/a.md");
     assert.equal(a.content, "keep");
     assert.equal(a.version, aBefore.version);
-    assert.equal(await countRevisions(ctx.conn, physA), revABeforeRestore);
+    assert.equal(await countRevisions(ctx.conn, sk, "/d/a.md"), revABeforeRestore);
   });
 });

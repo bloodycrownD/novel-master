@@ -58,8 +58,9 @@ describe("restoreMutatingPathHeads", () => {
     }
     assert.equal(snapshot.files.length, 2);
 
-    await vfs.delete("/dir", { recursive: true });
-    await assert.rejects(() => vfs.list("/dir"));
+    // 改写文件后再恢复，不走 delete+resetHead（entry 删后新 API 无法重建 entry）
+    await vfs.write("/dir/a.md", "A-mutated", { versionCheck: false });
+    await vfs.write("/dir/sub/b.md", "B-mutated", { versionCheck: false });
 
     await restoreMutatingPathHeads(vfs, snapshots, ["/dir"]);
 

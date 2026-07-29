@@ -18,18 +18,20 @@ import {
 novelMasterTestFixture();
 
 describe("directory NULL content contract", () => {
+  const GLOBAL_SCOPE = "global";
+
   it("T-NULL-DIR: insertDirectory 后 SQL 双 NULL；读不解 blob、不泄漏伪串", async () => {
     const { conn } = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(conn);
     const dir = `/null-dir-${testIsolationSuffix()}/d`;
-    await repo.insertDirectory(dir);
+    await repo.insertDirectory(GLOBAL_SCOPE, dir);
 
     const raw = await conn.query<{
       content: string | null;
       content_hash: string | null;
       entry_kind: string;
-    }>(`SELECT content, content_hash, entry_kind FROM vfs_entry WHERE path = ?`, [
-      dir,
+    }>(`SELECT content, content_hash, entry_kind FROM vfs_entry WHERE scope_key = ? AND path = ?`, [
+      GLOBAL_SCOPE, dir,
     ]);
     assert.equal(raw.length, 1);
     assert.equal(raw[0]!.entry_kind, "directory");
@@ -38,7 +40,7 @@ describe("directory NULL content contract", () => {
     // 提醒：JS 的 String(null)==="null"，所以 repo 绝不能对 SQL NULL 做 String(...)
     assert.equal(String(raw[0]!.content), "null");
 
-    const entry = await repo.findByPath(dir);
+    const entry = await repo.findByPath(GLOBAL_SCOPE, dir);
     assert.ok(entry);
     assert.equal(entry.entryKind, "directory");
     assert.equal(entry.content, "");
@@ -46,7 +48,7 @@ describe("directory NULL content contract", () => {
 
     const vfs = createVfsService(conn);
     await assert.rejects(
-      () => vfs.read(dir),
+      () => vfs.read(GLOBAL_SCOPE, dir),
       (e: unknown) => {
         assert.ok(isVfsError(e, "IS_DIRECTORY"));
         return true;
