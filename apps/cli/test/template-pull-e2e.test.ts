@@ -7,6 +7,7 @@ import {
   captureMessageCheckpoint,
   countSessionCheckpointPointers,
   runNm,
+  stripBootLogs,
   vfsListFilePaths,
 } from "./helpers.js";
 
@@ -16,7 +17,7 @@ describe("template pull CLI e2e", () => {
     const dbPath = join(dir, "novel.db");
     try {
       const create = runNm(["project", "create", "--name", "P", "--db", dbPath]);
-      const projectId = create.stdout.trim();
+      const projectId = stripBootLogs(create.stdout);
       runNm(
         [
           "project",
