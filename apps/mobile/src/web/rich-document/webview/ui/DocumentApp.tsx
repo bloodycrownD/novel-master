@@ -23,16 +23,19 @@ export function DocumentApp({ payload }: DocumentAppProps) {
   if (mode === 'html' && payload.html) {
     const cls =
       payload.layout === 'plain' ? 'doc-body' : 'doc-body rich';
-    body = <TrustedHtml html={payload.html} className={cls} />;
+    // FM HTML 并入 .doc-body 内部（置于正文之前），让 Recogito 挂载点与偏移量基准覆盖 FM
+    body = (
+      <TrustedHtml
+        html={fm ? `${fm}${payload.html}` : payload.html}
+        className={cls}
+      />
+    );
   } else if (payload.plain) {
     // 无锚纯文本回退（非 annotate 预览）；认锚路径须走 html+TrustedHtml
     body = <div className="doc-body">{payload.plain}</div>;
   }
 
   const children: ComponentChildren[] = [];
-  if (fm) {
-    children.push(<TrustedHtml html={fm} />);
-  }
   if (body) {
     children.push(body);
   }
