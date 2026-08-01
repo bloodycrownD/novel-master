@@ -166,28 +166,14 @@ export async function migrateWorkplaceDirRename(
   oldDir: string,
   newDir: string,
 ): Promise<void> {
-  const rows = await workplace.buildListRows();
-  for (const row of rows) {
-    if (!pathUnderDir(oldDir, row.path)) {
-      continue;
-    }
-    const targetPath =
-      row.path === oldDir
-        ? newDir
-        : `${newDir}${row.path.slice(oldDir.length)}`;
-    if (row.kind === 'dir') {
-      const rule = await workplace.getDirRule(row.path);
-      if (rule != null) {
-        await workplace.setDirRule({
-          ...dirRuleToForm(rule),
-          logicalPath: targetPath,
-        });
-      }
-    } else {
-      await workplace.setFileRule({
-        logicalPath: targetPath,
-        inclusionMode: row.inclusionMode,
-      });
-    }
-  }
+  // 一条 SQL UPDATE 批量重命名规则路径，替代逐条 get+set 循环。
+  // 旧实现 70 文件目录要 ~1s（每个文件单独 getDirRule + setDirRule）；
+  // 批量 UPDATE 只需几 ms，且不会残留旧路径规则（rename 而非 copy）。
+  //
+  // 语义确认：buildListRows 会枚举 scope 下每个 VFS 文件（不只 file_rule 已存在的行），
+  // 旧逻辑的 file 分支对每个文件都 setFileRule（UPSERT），包括原本没有规则行的文件——
+  // 会给它们写入 inclusionMode=auto 的冗余行。新逻辑是纯 UPDATE，只迁移真实规则行；
+  // 对未配置规则的文件不产生新行，展示行为与 auto 完全等价（auto 就是默认），
+  // 反而避免了残留冗余的 auto 规则行，因此 UPDATE 是更干净且行为等价的做法。
+  await workplace.renameRulesUnderLogicalPrefix(oldDir, newDir);
 }

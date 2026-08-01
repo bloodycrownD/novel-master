@@ -73,10 +73,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   ): Promise<VfsListEntry[]> {
     const normalizedDir = normalizePath(dir);
     const pattern = childLikePattern(normalizedDir);
-    const rows = await queryTemplate<{ path: string; entry_kind: string }>(
+    const rows = await queryTemplate<{
+      path: string;
+      entry_kind: string;
+      head_version: number;
+    }>(
       this.conn,
       this.parser,
-      `SELECT path, entry_kind FROM vfs_entry
+      `SELECT path, entry_kind, head_version FROM vfs_entry
        WHERE scope_key = #{scopeKey}
          AND path LIKE #{pattern} ESCAPE '\\'`,
       { scopeKey, pattern },
@@ -93,7 +97,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       const relative = relativeUnderDir(normalizedDir, entryPath);
       if (!recursive) {
         if (!relative.includes("/")) {
-          entries.push({ path: entryPath, kind });
+          entries.push({
+            path: entryPath,
+            kind,
+            version: Number(row.head_version),
+          });
         }
         continue;
       }
@@ -104,7 +112,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
           continue;
         }
       }
-      entries.push({ path: entryPath, kind });
+      entries.push({
+        path: entryPath,
+        kind,
+        version: Number(row.head_version),
+      });
     }
 
     entries.sort((a, b) => a.path.localeCompare(b.path));
@@ -519,7 +531,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     pathPrefix: string,
   ): Promise<
-    ReadonlyArray<{ entryId: number; path: string; headVersion: number }>
+    ReadonlyArray<{
+      entryId: number;
+      path: string;
+      headVersion: number;
+      mtimeMs: number;
+    }>
   > {
     const base = normalizePrefix(pathPrefix);
     const pattern = childLikePattern(base);
@@ -527,10 +544,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       entry_id: number;
       path: string;
       head_version: number;
+      mtime_ms: number;
     }>(
       this.conn,
       this.parser,
-      `SELECT entry_id, path, head_version FROM vfs_entry
+      `SELECT entry_id, path, head_version, mtime_ms FROM vfs_entry
        WHERE scope_key = #{scopeKey}
          AND entry_kind = 'file'
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
@@ -541,6 +559,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       entryId: Number(row.entry_id),
       path: String(row.path),
       headVersion: Number(row.head_version),
+      mtimeMs: Number(row.mtime_ms),
     }));
   }
 
@@ -585,6 +604,130 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       { scopeKey, path: base, pattern },
     );
     return this.resolveScanRows(rows);
+  }
+
+  async scanFileEntriesWithMeta(
+    scopeKey: string,
+    pathPrefix?: string,
+  ): Promise<
+    ReadonlyArray<{
+      entryId: number;
+      path: string;
+      contentHash: string | null;
+      headVersion: number;
+      mtimeMs: number;
+    }>
+  > {
+    if (pathPrefix == null) {
+      const rows = await queryTemplate<{
+        entry_id: number;
+        path: string;
+        content_hash: string | null;
+        head_version: number;
+        mtime_ms: number;
+      }>(
+        this.conn,
+        this.parser,
+        `SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry
+         WHERE scope_key = #{scopeKey} AND entry_kind = 'file'`,
+        { scopeKey },
+      );
+      return rows.map((r) => ({
+        entryId: r.entry_id,
+        path: r.path,
+        contentHash: nullableText(r.content_hash),
+        headVersion: r.head_version,
+        mtimeMs: r.mtime_ms,
+      }));
+    }
+
+    const base = normalizePath(pathPrefix);
+    const pattern = childLikePattern(base);
+    const rows = await queryTemplate<{
+      entry_id: number;
+      path: string;
+      content_hash: string | null;
+      head_version: number;
+      mtime_ms: number;
+    }>(
+      this.conn,
+      this.parser,
+      `SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry
+       WHERE scope_key = #{scopeKey}
+         AND entry_kind = 'file'
+         AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')`,
+      { scopeKey, path: base, pattern },
+    );
+    return rows.map((r) => ({
+      entryId: r.entry_id,
+      path: r.path,
+      contentHash: nullableText(r.content_hash),
+      headVersion: r.head_version,
+      mtimeMs: r.mtime_ms,
+    }));
+  }
+
+  async findExistingPaths(
+    scopeKey: string,
+    paths: ReadonlyArray<string>,
+  ): Promise<Set<string>> {
+    const result = new Set<string>();
+    if (paths.length === 0) {
+      return result;
+    }
+    const normalized = [...new Set(paths.map((p) => normalizePath(p)))];
+    const chunkSize = 200;
+    for (let offset = 0; offset < normalized.length; offset += chunkSize) {
+      const chunk = normalized.slice(offset, offset + chunkSize);
+      const bindings: Record<string, string> = { scopeKey };
+      const inClause = chunk
+        .map((path, index) => {
+          bindings[`path${index}`] = path;
+          return `#{path${index}}`;
+        })
+        .join(", ");
+      const rows = await queryTemplate<{ path: string }>(
+        this.conn,
+        this.parser,
+        `SELECT path FROM vfs_entry
+         WHERE scope_key = #{scopeKey} AND path IN (${inClause})`,
+        bindings,
+      );
+      for (const row of rows) {
+        result.add(String(row.path));
+      }
+    }
+    return result;
+  }
+
+  async batchInsertFileEntriesWithHash(
+    scopeKey: string,
+    entries: ReadonlyArray<{
+      path: string;
+      contentHash: string;
+      mtimeMs: number;
+    }>,
+  ): Promise<void> {
+    if (entries.length === 0) return;
+    const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, ?, 1, ?, 'file')`;
+    const paramsList = entries.map((e) => [
+      scopeKey,
+      normalizePath(e.path),
+      e.contentHash,
+      e.mtimeMs,
+    ]);
+    await this.conn.batch(sql, paramsList);
+  }
+
+  async batchInsertDirectoryEntries(
+    scopeKey: string,
+    paths: ReadonlyArray<string>,
+  ): Promise<void> {
+    if (paths.length === 0) return;
+    const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, NULL, 1, ?, 'directory')`;
+    const now = Date.now();
+    const paramsList = paths.map((p) => [scopeKey, normalizePath(p), now]);
+    await this.conn.batch(sql, paramsList);
   }
 
   private async resolveScanRows(

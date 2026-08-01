@@ -4,6 +4,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { DefaultWorkplaceService } from "@/service/workplace/impl/workplace.service.js";
+import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -151,5 +152,148 @@ describe("worktree materializeLiveView", () => {
 
     rows = await wt.buildListRows();
     assert.ok(!rows.some((r) => r.path === "/55" || r.path.startsWith("/55/")));
+  });
+
+  it("renameRulesUnderLogicalPrefix 批量重命名目录及子路径规则", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    // 准备文件结构
+    await svfs.write("/原/子/a.md", "a", { versionCheck: false });
+    await svfs.write("/原/子/b.md", "b", { versionCheck: false });
+    await svfs.write("/原/c.md", "c", { versionCheck: false });
+    await svfs.write("/其他/d.md", "d", { versionCheck: false });
+
+    const wt = new DefaultWorkplaceService({
+      scope: { kind: "session", projectId: project.id, sessionId: session.id },
+      vfs: new SqliteVfsEntryRepository(ctx.conn),
+      workplace: new SqliteWorkplaceRepository(ctx.conn),
+    });
+    // 设规则
+    await wt.setDirRule({
+      ...DEFAULT_WORKPLACE_DIR_RULE,
+      logicalPath: "/原",
+      ruleEnabled: true,
+    });
+    await wt.setDirRule({
+      ...DEFAULT_WORKPLACE_DIR_RULE,
+      logicalPath: "/原/子",
+      ruleEnabled: true,
+    });
+    await wt.setFileRule({
+      logicalPath: "/原/c.md",
+      inclusionMode: "hide",
+    });
+    await wt.setFileRule({
+      logicalPath: "/其他/d.md",
+      inclusionMode: "show",
+    });
+
+    // rename /原 → /新名
+    await wt.renameRulesUnderLogicalPrefix("/原", "/新名");
+
+    // 旧路径规则应不存在
+    assert.equal(await wt.getDirRule("/原"), undefined);
+    assert.equal(await wt.getDirRule("/原/子"), undefined);
+
+    // 新路径规则应存在且保留原配置
+    const newRootRule = await wt.getDirRule("/新名");
+    assert.ok(newRootRule != null);
+    assert.equal(newRootRule.ruleEnabled, true);
+
+    const newSubRule = await wt.getDirRule("/新名/子");
+    assert.ok(newSubRule != null);
+    assert.equal(newSubRule.ruleEnabled, true);
+
+    // 子文件规则也应迁移（直接查 repo，因为 buildListRows 的 path 来自 VFS entry，
+    // 不是 file_rule 表）
+    const fileScopeKey = `session:${session.id}`;
+    const repo = new SqliteWorkplaceRepository(ctx.conn);
+    const migratedFileRule = await repo.findFileRule(
+      fileScopeKey,
+      "/新名/c.md",
+    );
+    assert.ok(migratedFileRule != null, "/新名/c.md 的 file rule 应已迁移");
+    assert.equal(migratedFileRule.inclusionMode, "hide");
+
+    // 旧路径不应再有规则
+    const oldFileRule = await repo.findFileRule(
+      fileScopeKey,
+      "/原/c.md",
+    );
+    assert.equal(oldFileRule, null);
+
+    // 不相关路径不受影响
+    const otherRule = await repo.findFileRule(
+      fileScopeKey,
+      "/其他/d.md",
+    );
+    assert.ok(otherRule != null);
+    assert.equal(otherRule.inclusionMode, "show");
+  });
+
+  it("renameRulesUnderLogicalPrefix 任一侧失败时整批回滚", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.write("/原/c.md", "c", { versionCheck: false });
+
+    // 只抛 file_rule 表的 UPDATE，dir_rule 的 UPDATE 会先执行成功。
+    // 用包装 transaction：驱动层负责 BEGIN/ROLLBACK，但 tx 的 execute 遇到
+    // file_rule 语句时抛错，验证事务把已成功的 dir_rule UPDATE 一并回滚。
+    const real = ctx.conn;
+    const failingConn: import("@novel-master/core").TdbcConnection = {
+      execute: (sql, params) => real.execute(sql, params),
+      query: (sql, params) => real.query(sql, params),
+      batch: (sql, list) => real.batch(sql, list),
+      transaction(fn) {
+        return real.transaction(async (tx) =>
+          fn({
+            execute: async (sql, params) => {
+              if (String(sql).includes("workplace_file_rule")) {
+                throw new Error("simulated file_rule update failure");
+              }
+              return tx.execute(sql, params);
+            },
+            query: (sql, params) => tx.query(sql, params),
+            batch: (sql, list) => tx.batch(sql, list),
+            transaction: (inner) => tx.transaction(inner),
+            close: () => tx.close(),
+          }),
+        );
+      },
+      close: () => real.close(),
+    };
+
+    const wt = new DefaultWorkplaceService({
+      scope: { kind: "session", projectId: project.id, sessionId: session.id },
+      vfs: new SqliteVfsEntryRepository(ctx.conn),
+      workplace: new SqliteWorkplaceRepository(failingConn),
+    });
+    await wt.setDirRule({
+      ...DEFAULT_WORKPLACE_DIR_RULE,
+      logicalPath: "/原",
+      ruleEnabled: true,
+    });
+    await wt.setDirRule({
+      ...DEFAULT_WORKPLACE_DIR_RULE,
+      logicalPath: "/原/子",
+      ruleEnabled: true,
+    });
+
+    // file_rule 侧失败应让整个 rename 抛错，且 dir_rule 的 UPDATE 一并回滚
+    await assert.rejects(
+      wt.renameRulesUnderLogicalPrefix("/原", "/新名"),
+      /simulated file_rule update failure/,
+    );
+
+    const repo = new SqliteWorkplaceRepository(ctx.conn);
+    const fileScopeKey = `session:${session.id}`;
+    // 旧 dir 规则仍在（未半套提交），新规则未生成
+    assert.ok((await repo.findDirRule(fileScopeKey, "/原")) != null);
+    assert.ok((await repo.findDirRule(fileScopeKey, "/原/子")) != null);
+    assert.equal(await repo.findDirRule(fileScopeKey, "/新名"), null);
   });
 });

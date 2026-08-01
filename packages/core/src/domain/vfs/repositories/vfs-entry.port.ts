@@ -10,7 +10,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import type { VfsEntry, VfsEntryKind } from "../model/vfs-entry.js";
+import type { VfsEntry } from "../model/vfs-entry.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
@@ -142,7 +142,12 @@ export interface VfsEntryRepository {
     scopeKey: string,
     pathPrefix: string,
   ): Promise<
-    ReadonlyArray<{ entryId: number; path: string; headVersion: number }>
+    ReadonlyArray<{
+      entryId: number;
+      path: string;
+      headVersion: number;
+      mtimeMs: number;
+    }>
   >;
 
   scanContents(
@@ -179,7 +184,52 @@ export interface VfsEntryRepository {
     oldPrefix: string,
     newPrefix: string,
   ): Promise<void>;
+
+  /**
+   * 扫描 scope + 前缀下所有文件 entry 的元数据（不解正文）。
+   *
+   * @returns 包含 entryId, path, contentHash, headVersion, mtimeMs 的列表
+   */
+  scanFileEntriesWithMeta(
+    scopeKey: string,
+    pathPrefix?: string,
+  ): Promise<
+    ReadonlyArray<{
+      entryId: number;
+      path: string;
+      contentHash: string | null;
+      headVersion: number;
+      mtimeMs: number;
+    }>
+  >;
+
+  /** 批量检查哪些路径在指定 scope 下已存在（文件或目录行）。 */
+  findExistingPaths(
+    scopeKey: string,
+    paths: ReadonlyArray<string>,
+  ): Promise<Set<string>>;
+
+  /**
+   * 批量插入文件 entry（共享 blob，content=NULL）。
+   *
+   * @remarks 每条 entry 的 head_version 固定为 1（tree-copy 新建场景）。
+   * 使用 conn.batch 在一个原生调用内完成所有 INSERT。
+   */
+  batchInsertFileEntriesWithHash(
+    scopeKey: string,
+    entries: ReadonlyArray<{
+      path: string;
+      contentHash: string;
+      mtimeMs: number;
+    }>,
+  ): Promise<void>;
+
+  /** 批量插入目录 entry（head_version=1, content_hash=NULL）。 */
+  batchInsertDirectoryEntries(
+    scopeKey: string,
+    paths: ReadonlyArray<string>,
+  ): Promise<void>;
 }
 
 /** re-export entry kind type for impl convenience. */
-export type { VfsEntryKind };
+export type { VfsEntryKind } from "../model/vfs-entry.js";

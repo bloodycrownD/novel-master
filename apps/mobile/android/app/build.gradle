@@ -9,7 +9,7 @@ apply plugin: "com.facebook.react"
 def monorepoRoot = file("../../../../").canonicalFile
 
 react {
-    /* Folders �?hoisted deps at monorepo root */
+    /* Folders — hoisted deps at monorepo root */
     root = file("../../")
     reactNativeDir = new File(monorepoRoot, "node_modules/react-native")
     codegenDir = new File(monorepoRoot, "node_modules/@react-native/codegen")
@@ -41,7 +41,7 @@ react {
     //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
     // extraPackagerArgs = []
 
-    /* Hermes Commands �?monorepo hoists hermes-compiler to repo root (RN 0.83+) */
+    /* Hermes Commands — monorepo hoists hermes-compiler to repo root (RN 0.83+) */
     def osBin = org.gradle.internal.os.OperatingSystem.current().isWindows()
         ? "win64-bin"
         : (org.gradle.internal.os.OperatingSystem.current().isMacOsX() ? "osx-bin" : "linux64-bin")
@@ -97,9 +97,15 @@ android {
         versionCode ciVersionCode
         versionName ciVersionName
     }
+    // debug 只编译 arm64-v8a + x86_64（见 gradle.properties），打一个 universal apk 够用了。
+    // release 才按 ABI 分包，发版 CI 会用 -PreactNativeArchitectures 覆盖成全架构。
     splits {
         abi {
-            enable true
+            // 以 buildType 判定是否按 ABI 分包：仅当本次目标包含 release 变体才分包。
+            // 避免用任务名是否泛匹配 release——./gradlew build 时 taskNames=[build] 会误判。
+            enable gradle.startParameter.taskNames.any { taskName ->
+                taskName.contains('assembleRelease') || taskName.contains('bundleRelease')
+            }
             reset()
             include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
             universalApk true
@@ -149,9 +155,9 @@ android {
 
 /**
  * WebView 壳（chat-transcript / rich-document / code-editor 三包）由
- * `npm run build:webview:native` 拷入 `src/main/assets/webview/`（gitignore）�?
- * �?gradlew 漝拷�?APK 会缺文件 �?违行�?net::ERR_FILE_NOT_FOUND�?
- * �?preBuild 剝硬失败，靿兝静默打出坝包�?
+ * `npm run build:webview:native` 拷入 `src/main/assets/webview/`（gitignore）。
+ * 若漏掉 gradlew 编译时 APK 会缺文件，运行时会报 net::ERR_FILE_NOT_FOUND。
+ * 所以在 preBuild 前强制失败，避免静默打出损坏包。
  */
 tasks.register("checkWebViewAssets") {
     doLast {
