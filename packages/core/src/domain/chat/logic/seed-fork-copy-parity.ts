@@ -60,9 +60,15 @@ export async function seedForkCopyParity(
     targetSessionId,
   );
 
+  // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
+  // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
+  const fileMetas = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
+  const metaByEntryId = new Map(fileMetas.map((m) => [m.entryId, m]));
+
   for (const head of heads) {
-    const entry = await entries.findByPath(targetScopeKey, head.logicalPath);
-    if (entry == null || entry.entryKind !== "file") {
+    const meta = metaByEntryId.get(head.entryId);
+    if (meta == null) {
+      // entry 缺失 / 非文件行，钉 deleted revision 兜底，防止脏 head 污染
       await revisions.append({
         entryId: head.entryId,
         version: head.headVersion,
@@ -73,7 +79,7 @@ export async function seedForkCopyParity(
       await adjustRef(revisions, head.entryId, head.headVersion, +1);
       continue;
     }
-    const contentHash = await entries.findContentHash(targetScopeKey, head.logicalPath);
+    const contentHash = meta.contentHash;
     if (contentHash != null) {
       await contentStore.ensureBlob(contentHash, null);
     }
@@ -83,7 +89,7 @@ export async function seedForkCopyParity(
       content: null,
       contentHash,
       status: "active",
-      mtimeMs: entry.mtimeMs,
+      mtimeMs: meta.mtimeMs,
     });
     await adjustRef(revisions, head.entryId, head.headVersion, +1);
   }
