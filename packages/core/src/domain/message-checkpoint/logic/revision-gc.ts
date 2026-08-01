@@ -53,15 +53,11 @@ export async function sweepSessionRevisions(
     VFS_REVISION_REF_COUNT_V1_ID,
   );
 
-  const t0 = Date.now();
   let deleted: number;
-  let mode: "ref_count" | "reachable_set";
 
   if (refCountReady) {
-    mode = "ref_count";
     deleted = await deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
   } else {
-    mode = "reachable_set";
     const reachable = new Set<string>();
     const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKeyStr, "/");
     for (const head of liveHeads) {
@@ -74,13 +70,6 @@ export async function sweepSessionRevisions(
     }
     deleted = await revisionRepo.deleteExceptReachable(scopeKeyStr, "/", reachable);
   }
-
-  console.log("[nm-rollback] sweepSessionRevisions", {
-    sessionId,
-    mode,
-    deletedRevisions: deleted,
-    ms: Date.now() - t0,
-  });
 
   return deleted;
 }

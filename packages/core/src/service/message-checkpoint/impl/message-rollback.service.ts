@@ -106,29 +106,14 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     options?: RollbackOptions,
   ): Promise<void> {
     assertRollbackOptionsCompatible(options);
-    const tAll = Date.now();
 
-    const tPlan0 = Date.now();
     const plan = await this.resolveRollbackPlan(
       sessionId,
       projectId,
       anchorMessageId,
     );
-    const planMs = Date.now() - tPlan0;
-    console.log("[nm-rollback] plan", {
-      mode: plan.mode,
-      pathsNeedWrite: plan.pathsNeedWrite.size,
-      pathsNeedDelete: plan.pathsNeedDelete.size,
-      targetTree: plan.targetTree.size,
-      tailMessages: plan.tailMessageIds.length,
-      skipVfsReconcile: options?.skipVfsReconcile === true,
-      ms: planMs,
-    });
 
-    let missingMs = 0;
-    let missingCount = 0;
     if (!options?.skipVfsReconcile) {
-      const tMissing0 = Date.now();
       const missing = await findMissingRevisionPointers(
         this.deps.revisions,
         this.deps.entries,
@@ -136,12 +121,6 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         plan.targetTree,
         plan.pathsNeedWrite,
       );
-      missingMs = Date.now() - tMissing0;
-      missingCount = missing.length;
-      console.log("[nm-rollback] missing-check", {
-        missing: missingCount,
-        ms: missingMs,
-      });
       if (missing.length > 0 && !options?.revisionHeadBackfill) {
         throw sessionFsRollbackRevisionBackfillRequired(missing, {
           sessionId,
@@ -150,20 +129,10 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       }
     }
 
-    let reconcileMs = 0;
-    let truncateSweepMs = 0;
-    const tTx0 = Date.now();
     await this.deps.conn.transaction(async (tx) => {
       if (!options?.skipVfsReconcile) {
-        const tRec0 = Date.now();
-        let reconcileStats: {
-          skippedSameVersion: number;
-          skippedSameContentHash: number;
-          restored: number;
-          deleted: number;
-        } | null = null;
         try {
-          reconcileStats = await this.reconcileVfsPaths(
+          await this.reconcileVfsPaths(
             tx,
             plan,
             options?.revisionHeadBackfill === true,
@@ -174,38 +143,15 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             { sessionId, messageId: anchorMessageId },
           );
         }
-        reconcileMs = Date.now() - tRec0;
-        console.log("[nm-rollback] reconcile", {
-          pathsNeedWrite: plan.pathsNeedWrite.size,
-          pathsNeedDelete: plan.pathsNeedDelete.size,
-          ...reconcileStats,
-          ms: reconcileMs,
-        });
       }
-      const tTrunc0 = Date.now();
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId: plan.projectId,
         sessionId: plan.sessionId,
         afterSeq: plan.truncateAfterSeq,
         sweepRevisions: true,
       });
-      truncateSweepMs = Date.now() - tTrunc0;
-      console.log("[nm-rollback] truncate+sweep (revision-only, no sync blob)", {
-        ms: truncateSweepMs,
-      });
     });
-    const txMs = Date.now() - tTx0;
     sessionApiPromptTokenCache.invalidate(sessionId);
-    console.log("[nm-rollback] core done", {
-      mode: plan.mode,
-      planMs,
-      missingMs,
-      missingCount,
-      reconcileMs,
-      truncateSweepMs,
-      txMs,
-      totalMs: Date.now() - tAll,
-    });
   }
 
   private async resolveRollbackPlan(

@@ -120,7 +120,6 @@ export function useChatTabScope({
   }, [runtime, projectId, refreshChatTokenLabel]);
 
   const reloadLists = useCallback(async () => {
-    const t0 = Date.now();
     const plist = await runtime.projects.list();
     setProjects(plist);
     const pid = projectId ?? plist[0]?.id;
@@ -135,12 +134,6 @@ export function useChatTabScope({
     } else {
       setCurrentProjectMeta(undefined);
       setSessions([]);
-    }
-    if (__DEV__) {
-      console.log('[chat-scope] reloadLists done', {
-        ms: Date.now() - t0,
-        projectCount: plist.length,
-      });
     }
   }, [runtime, projectId]);
 
@@ -189,30 +182,11 @@ export function useChatTabScope({
     if (projectId == null) {
       return;
     }
-    const t0 = Date.now();
     try {
       const list = await runtime.sessions.listByProject(projectId);
       const title = nextDefaultSessionTitle(list.map(s => s.title));
-      if (__DEV__) {
-        console.log('[chat-scope] createSession before', {
-          projectId,
-          existingSessions: list.length,
-          listMs: Date.now() - t0,
-        });
-      }
-      const createT0 = Date.now();
       await runtime.sessions.create(projectId, title);
-      if (__DEV__) {
-        console.log('[chat-scope] sessions.create done', {
-          createMs: Date.now() - createT0,
-        });
-      }
       await reloadLists();
-      if (__DEV__) {
-        console.log('[chat-scope] createSession total done', {
-          totalMs: Date.now() - t0,
-        });
-      }
     } catch (error) {
       showToast(toastMessage('创建失败', error));
     }
