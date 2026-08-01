@@ -239,3 +239,16 @@ export function parseAnnotateDraftsFromAttachments(
   }
   return out;
 }
+
+/**
+ * 丢弃批注草稿的 Recogito 渲染坐标（`renderStart`/`renderEnd`），保留其余字段。
+ *
+ * 用于 Undo 恢复历史批注入口：FM 并入 `.doc-body` 后，旧消息保存的 render 坐标
+ * 基于旧 DOM 坐标系会错位；丢坐标后草稿落入既有降级路径——不投影高亮，
+ * 但 chip/详情/发送仍可用。不经过 schema 校验，直接返回新对象（render 字段省略）。
+ */
+export function stripRenderCoords(
+  drafts: readonly AnnotateDraft[],
+): AnnotateDraft[] {
+  return drafts.map(({ renderStart: _renderStart, renderEnd: _renderEnd, ...rest }) => rest);
+}
