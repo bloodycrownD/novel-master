@@ -79,7 +79,8 @@ export async function deleteUnreferencedUnderScope(
 /**
  * 空闲校验：重算 checkpoint 行数 + live head，只上调 ref_count（禁止因偏低误删）。
  *
- * @remarks 仅适用于 session scope。
+ * @remarks 可对任意 scope 调用；bootstrap W3 作为全局 template 兜底以 (global, /)
+ * 触发，只覆盖 global scope，session/project 靠 migration 保留 ref_count。
  */
 export async function repairRefCounts(
   revisionRepo: VfsRevisionRepository,
