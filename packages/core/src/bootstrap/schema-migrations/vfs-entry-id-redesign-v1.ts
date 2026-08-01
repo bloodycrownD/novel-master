@@ -135,6 +135,10 @@ async function createNewTables(tx: TdbcConnection): Promise<void> {
  * （SQLite 内置字符串函数做不了「先判 sessions 再判 template」这种顺序敏感的分支）。
  * 只把 path（短字符串）拉进 JS 堆，正文 content_hash 是哈希值也不大；真正的大字段
  * content 列虽被 SELECT 拉进来，但在新表里仍写回（保留该列），不进 contentStore。
+ *
+ * 容错：遇到无法反解 scope 的脏 path（历史 bug 写入的不规范路径），记 warning 并跳过，
+ * 不让整条迁移卡死。跳过的 entry 不会写进 _migration_path_map，所以关联的 revision
+ * 在 Step 4 JOIN 时自然丢弃——与 checkpoint 「孤儿行丢弃」策略一致。
  */
 async function backfillVfsEntry(tx: TdbcConnection): Promise<void> {
   const hasContent = await columnNames(tx, "vfs_entry").then((s) =>
@@ -153,10 +157,22 @@ async function backfillVfsEntry(tx: TdbcConnection): Promise<void> {
     } FROM vfs_entry`,
   );
 
+  let skipped = 0;
   for (const row of entries) {
-    const { scopeKey, logicalPath } = inferScopeFromPhysicalPath(
-      String(row.path),
-    );
+    let scopeKey: string;
+    let logicalPath: string;
+    try {
+      const inferred = inferScopeFromPhysicalPath(String(row.path));
+      scopeKey = inferred.scopeKey;
+      logicalPath = inferred.logicalPath;
+    } catch {
+      // 旧库脏数据：path 不符合任何 scope 物理前缀。跳过并记 warning，不阻塞迁移。
+      console.warn(
+        `[vfs-entry-id-migration] 跳过无法反解 scope 的脏 path: ${row.path}`,
+      );
+      skipped++;
+      continue;
+    }
     await tx.execute(
       `INSERT INTO vfs_entry_new
          (scope_key, path, content_hash, head_version, mtime_ms, entry_kind${
@@ -190,6 +206,11 @@ async function backfillVfsEntry(tx: TdbcConnection): Promise<void> {
     await tx.execute(
       `INSERT INTO _migration_path_map (path, entry_id) VALUES (?, ?)`,
       [String(row.path), entryId],
+    );
+  }
+  if (skipped > 0) {
+    console.warn(
+      `[vfs-entry-id-migration] 共跳过 ${skipped} 条无法反解 scope 的脏 entry（含其 revision 一起丢弃）。`,
     );
   }
 }
@@ -228,9 +249,22 @@ async function backfillCheckpointFile(tx: TdbcConnection): Promise<void> {
   if (cpCols.size === 0 || !cpCols.has("logical_path")) {
     return;
   }
-  // LEFT JOIN + WHERE m.entry_id IS NOT NULL：丢掉反查不到的孤儿行。
-  // 用 INNER JOIN 等价但更直观，这里显式 LEFT JOIN 是为了在 SELECT 阶段能看到被丢弃的行
-  // （未来如需 warning 日志可在 LEFT JOIN 的 NULL 分支统计）。
+  // 落数据前先 LEFT JOIN 数一遍孤儿行（反查不到 entry_id 的 checkpoint），
+  // 有则记 warning，再走 INNER JOIN 把能反查到的落进去。
+  const orphanRows = await tx.query<{ orphan_count: number }>(`
+    SELECT COUNT(*) AS orphan_count
+    FROM message_checkpoint_file c
+    JOIN chat_session s ON s.id = c.session_id
+    LEFT JOIN _migration_path_map m
+      ON m.path = ('/projects/' || s.project_id || '/sessions/' || s.id || c.logical_path)
+    WHERE m.entry_id IS NULL
+  `);
+  const orphanCount = Number(orphanRows[0]?.orphan_count ?? 0);
+  if (orphanCount > 0) {
+    console.warn(
+      `[vfs-entry-id-migration] 丢弃 ${orphanCount} 条孤儿 checkpoint 行（无法反查 entry_id）。`,
+    );
+  }
   await tx.execute(`
     INSERT INTO message_checkpoint_file_new
       (session_id, message_id, entry_id, revision_version)

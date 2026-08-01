@@ -55,19 +55,23 @@ describe("SqliteVfsEntryRepository", () => {
     await repo.insertDirectory(GLOBAL_SCOPE, `${a}/b`);
     await repo.insert(GLOBAL_SCOPE, `${a}/b/c`, "c");
     const shallow = await repo.list(GLOBAL_SCOPE, a);
-    assert.deepEqual(shallow, [{ path: `${a}/b`, kind: "directory" }]);
+    assert.deepEqual(shallow, [
+      { path: `${a}/b`, kind: "directory", version: 1 },
+    ]);
     const recursive = await repo.list(GLOBAL_SCOPE, a, { recursive: true });
     assert.deepEqual(recursive, [
-      { path: `${a}/b`, kind: "directory" },
-      { path: `${a}/b/c`, kind: "file" },
+      { path: `${a}/b`, kind: "directory", version: 1 },
+      { path: `${a}/b/c`, kind: "file", version: 1 },
     ]);
     const depth2 = await repo.list(GLOBAL_SCOPE, a, { recursive: true, maxDepth: 2 });
     assert.deepEqual(depth2, [
-      { path: `${a}/b`, kind: "directory" },
-      { path: `${a}/b/c`, kind: "file" },
+      { path: `${a}/b`, kind: "directory", version: 1 },
+      { path: `${a}/b/c`, kind: "file", version: 1 },
     ]);
     const depth1 = await repo.list(GLOBAL_SCOPE, a, { recursive: true, maxDepth: 1 });
-    assert.deepEqual(depth1, [{ path: `${a}/b`, kind: "directory" }]);
+    assert.deepEqual(depth1, [
+      { path: `${a}/b`, kind: "directory", version: 1 },
+    ]);
   });
 
   it("list 将路径中的 % 按字面量匹配（非递归）", async () => {
@@ -82,7 +86,9 @@ describe("SqliteVfsEntryRepository", () => {
     await repo.insert(GLOBAL_SCOPE, `${wrongDir}/wrong.txt`, "wrong");
 
     const shallow = await repo.list(GLOBAL_SCOPE, draftDir);
-    assert.deepEqual(shallow, [{ path: `${draftDir}/keep.txt`, kind: "file" }]);
+    assert.deepEqual(shallow, [
+      { path: `${draftDir}/keep.txt`, kind: "file", version: 1 },
+    ]);
   });
 
   it("list 将路径中的 % 按字面量匹配（递归）", async () => {
@@ -121,7 +127,9 @@ describe("SqliteVfsEntryRepository", () => {
     await repo.insert(GLOBAL_SCOPE, wrongPath, "wrong");
 
     const shallow = await repo.list(GLOBAL_SCOPE, barDir);
-    assert.deepEqual(shallow, [{ path: `${barDir}/ok.txt`, kind: "file" }]);
+    assert.deepEqual(shallow, [
+      { path: `${barDir}/ok.txt`, kind: "file", version: 1 },
+    ]);
   });
 
   it("detects version conflicts", async () => {
@@ -177,6 +185,55 @@ describe("SqliteVfsEntryRepository", () => {
     await repo.delete(GLOBAL_SCOPE, tree, { recursive: true });
     assert.equal(await repo.findByPath(GLOBAL_SCOPE, tree), null);
     assert.equal(await repo.findByPath(GLOBAL_SCOPE, `${tree}/leaf`), null);
+  });
+
+  it("跨 scope 隔离：同 path 在不同 scope 各自独立读写删", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const scopeA = `session:projA:sessA`;
+    const scopeB = `session:projA:sessB`;
+    const root = isolatedRoot();
+    const path = `${root}/foo.md`;
+
+    // 两个 scope 各 insert 同 path、不同内容。
+    await repo.insert(scopeA, path, "content-A");
+    await repo.insert(scopeB, path, "content-B");
+
+    // findByPath 按 scope 取各自的版本。
+    const a = await repo.findByPath(scopeA, path);
+    const b = await repo.findByPath(scopeB, path);
+    assert.ok(a);
+    assert.ok(b);
+    assert.equal(a!.content, "content-A");
+    assert.equal(b!.content, "content-B");
+    // 注意：entry_id 是全局唯一身份键，两个 scope 的同一 path 不应共享同一个 entry_id。
+    assert.notEqual(a!.entryId, b!.entryId);
+
+    // 对 scopeA 做 update 不影响 scopeB。
+    await repo.update(scopeA, path, "content-A2", { versionCheck: false });
+    assert.equal((await repo.findByPath(scopeA, path))!.content, "content-A2");
+    assert.equal((await repo.findByPath(scopeB, path))!.content, "content-B");
+
+    // listAllPaths / listFileHeadsUnderPrefix / listFileMetaUnderPrefix 的 scope 隔离。
+    assert.deepEqual(await repo.listAllPaths(scopeA), [path]);
+    await repo.insertDirectory(scopeA, `${root}/otherA`);
+    const headsA = await repo.listFileHeadsUnderPrefix(scopeA, root);
+    assert.ok(headsA.some((h) => h.path === path));
+    const headsB = await repo.listFileHeadsUnderPrefix(scopeB, root);
+    assert.ok(headsB.some((h) => h.path === path));
+    assert.deepEqual(
+      (await repo.listFileMetaUnderPrefix(scopeA, root)).map((m) => m.path).sort(),
+      [path].sort(),
+    );
+    assert.deepEqual(
+      (await repo.listFileMetaUnderPrefix(scopeB, root)).map((m) => m.path).sort(),
+      [path].sort(),
+    );
+
+    // 删除 scopeA 不影响 scopeB。
+    await repo.delete(scopeA, path, { recursive: false });
+    assert.equal(await repo.findByPath(scopeA, path), null);
+    assert.equal((await repo.findByPath(scopeB, path))!.content, "content-B");
   });
 
   it("listFileMetaUnderPrefix returns path and mtime without content", async () => {
