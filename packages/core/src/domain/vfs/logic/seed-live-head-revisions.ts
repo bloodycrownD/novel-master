@@ -68,6 +68,7 @@ export async function seedLiveHeadRevisionsUnderPrefix(
   // 批量 INSERT revision（ref_count = 1，省掉逐条 adjustRefCount）
   const items = needsSeed.map((h) => {
     const contentHash = hashMap.get(h.path) ?? null;
+    // file entry 理应有 hash；遇 null 视为受损数据，以 deleted 兜底，防止脏 revision 污染 head
     const status = contentHash != null ? "active" : "deleted";
     return {
       entryId: h.entryId,
