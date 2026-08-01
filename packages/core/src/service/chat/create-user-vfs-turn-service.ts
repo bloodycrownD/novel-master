@@ -17,6 +17,7 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import { createMessageCheckpointService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { createPersistentPreferences } from "@/service/persistent-preferences/create-persistent-preferences.js";
 import { DefaultMessageService } from "./impl/message.service.js";
 import { DefaultUserVfsTurnService } from "./impl/user-vfs-turn.service.js";
 import { createAppendToolTurnBridge } from "./impl/append-tool-turn-bridge.js";
@@ -84,6 +85,7 @@ export function createUserVfsTurnServiceBundle(
     toolRunner,
     resolveToolCtx,
     messageCheckpoint: createMessageCheckpointService(conn),
+    preferences: createPersistentPreferences(conn),
   });
 
   return {

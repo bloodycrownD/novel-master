@@ -44,6 +44,7 @@ import {
   buildUserVfsSaveOp,
 } from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import { createMessageCheckpointService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
+import { createPersistentPreferences } from "../../src/service/persistent-preferences/create-persistent-preferences.js";
 import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
 import {
   getNovelMasterTestContext,
@@ -123,6 +124,7 @@ function makeUserVfsTurnDeps(
     toolRunner,
     resolveToolCtx: (sid, pid) => makeToolCtx(conn, pid, sid),
     messageCheckpoint: createMessageCheckpointService(conn),
+    preferences: createPersistentPreferences(conn),
     ...overrides,
   };
 }
@@ -301,6 +303,63 @@ describe("UserVfsTurnService", () => {
     assert.equal(logs.length, 1);
     assert.equal(logs[0]!.action, "write");
     assert.equal(logs[0]!.action === "write" ? logs[0]!.path : "", "/ok.md");
+  });
+
+  describe("user ops 总开关", () => {
+    it("开关开启时 executeOp 产生 user ops log", async () => {
+      const ctx = getNovelMasterTestContext();
+      const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+      const session = await ctx.sessions.create(project.id);
+
+      // 显式 set 为 true 后再执行
+      await ctx.preferences.setUserOpsLogEnabled(true);
+      const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+
+      const result = await userVfsTurn.executeOp(
+        session.id,
+        writeOp("/uo-on.md", "body"),
+      );
+
+      assert.equal(result.ok, true);
+      if (result.ok) {
+        assert.equal(result.logAppended, true);
+      }
+      const logs = listUserOpsLog(session.id);
+      assert.equal(logs.length, 1);
+      assert.equal(logs[0]!.action, "write");
+      assert.equal(logs[0]!.action === "write" ? logs[0]!.path : "", "/uo-on.md");
+    });
+
+    it("开关关闭时 executeOp 不产生 user ops log", async () => {
+      const ctx = getNovelMasterTestContext();
+      const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+      const session = await ctx.sessions.create(project.id);
+
+      await ctx.preferences.setUserOpsLogEnabled(false);
+      try {
+        const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+
+        const result = await userVfsTurn.executeOp(
+          session.id,
+          writeOp("/uo-off.md", "body"),
+        );
+
+        assert.equal(result.ok, true);
+        if (result.ok) {
+          assert.equal(result.logAppended, false);
+        }
+        assert.equal(listUserOpsLog(session.id).length, 0);
+        // 磁盘写入仍应成功
+        assert.equal(
+          (await ctx.sessionVfs(project.id, session.id).read("/uo-off.md"))
+            .content,
+          "body",
+        );
+      } finally {
+        // 共享内存 DB：关闭开关会污染后续测试，必须恢复默认 true。
+        await ctx.preferences.resetUserOpsLogEnabled();
+      }
+    });
   });
 
   it("T-UO-D1：写盘成功但日志派生失败时 ok=true、logAppended=false、store 空", async () => {
