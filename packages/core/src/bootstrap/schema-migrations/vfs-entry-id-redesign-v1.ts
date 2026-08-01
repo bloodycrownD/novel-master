@@ -249,15 +249,16 @@ async function backfillCheckpointFile(tx: TdbcConnection): Promise<void> {
   if (cpCols.size === 0 || !cpCols.has("logical_path")) {
     return;
   }
-  // 落数据前先 LEFT JOIN 数一遍孤儿行（反查不到 entry_id 的 checkpoint），
-  // 有则记 warning，再走 INNER JOIN 把能反查到的落进去。
+  // 落数据前先 LEFT JOIN 数一遍孤儿行：反查不到 entry_id 的、以及 session_id 在
+  // chat_session 里无对应行的，都算孤儿。有则记 warning，再走 INNER JOIN 把能
+  // 反查到的落进去（缺 session 的行本就该丢弃，仅用于计数告警）。
   const orphanRows = await tx.query<{ orphan_count: number }>(`
     SELECT COUNT(*) AS orphan_count
     FROM message_checkpoint_file c
-    JOIN chat_session s ON s.id = c.session_id
+    LEFT JOIN chat_session s ON s.id = c.session_id
     LEFT JOIN _migration_path_map m
       ON m.path = ('/projects/' || s.project_id || '/sessions/' || s.id || c.logical_path)
-    WHERE m.entry_id IS NULL
+    WHERE m.entry_id IS NULL OR s.id IS NULL
   `);
   const orphanCount = Number(orphanRows[0]?.orphan_count ?? 0);
   if (orphanCount > 0) {
