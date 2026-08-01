@@ -4,7 +4,7 @@
  * entry_id 化后实现 {@link InternalVfsService}（scopeKey + 纯逻辑路径）。每次
  * write/delete/resetHead/hardDelete/replace 先按 `(scopeKey, path)` 取出 entry_id，
  * 再交给 revision repo 的 entry_id 寻址方法。`runInTransactionOrConn` 事务模型不变；
- * `renamePath` / `renamePrefix` 本节点抛 unsupported（Step 7 接通原语）。
+ * `renamePath` / `renamePrefix` 走 Step 7 原语（单事务 UPDATE path）。
  *
  * @module service/vfs/impl/revision-aware-vfs.service
  */
@@ -178,20 +178,16 @@ export class RevisionAwareVfsService implements InternalVfsService {
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
       const contentStore = new SqliteVfsContentStore(tx);
 
-      // entry_id 已知时直接寻址；entry 暂缺时先按 path 探测。
-      let entryId: number | null = null;
+      // entry 缺失（已被 hardDelete 且 revision 无 entry 可挂）时直接抛 NOT_FOUND。
       const existing = await entryRepo.findByPath(scopeKey, normalized);
-      if (existing != null) {
-        entryId = existing.entryId;
-      }
-      if (entryId == null) {
-        // entry 已被 hardDelete 且 revision 无 entry 可挂。
+      if (existing == null) {
         throw new VfsError(
           "NOT_FOUND",
           `cannot resetHeadToVersion: entry missing for ${normalized}`,
           { path: normalized },
         );
       }
+      const entryId = existing.entryId;
 
       const rev = await revisionRepo.findByEntryAndVersion(entryId, version);
       if (rev == null || rev.status === "deleted") {
