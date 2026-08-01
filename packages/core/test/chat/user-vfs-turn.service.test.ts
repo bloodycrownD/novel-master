@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
 
-import { createUserVfsTurnServiceBundle, listUserOpsLog, readMessageMetadata, resetUserOpsLogStoreForTests, textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+import { createUserVfsTurnServiceBundle, hasComposerSendableInput, hasUnsentUserOpsLog, listUserOpsLog, readMessageMetadata, resetUserOpsLogStoreForTests, textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { projectComposerStatusAttachments } from "../../src/domain/chat/logic/project-composer-status-attachments.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {
@@ -354,6 +354,14 @@ describe("UserVfsTurnService", () => {
           (await ctx.sessionVfs(project.id, session.id).read("/uo-off.md"))
             .content,
           "body",
+        );
+
+        // T-UO3 (M2)：关闭后无 pending ops，空发门闩不可空发
+        assert.equal(hasUnsentUserOpsLog(session.id), false);
+        // 空发门闩不可空发
+        assert.equal(
+          hasComposerSendableInput({ text: "", attachmentCount: 0, hasPendingUserOps: false }),
+          false,
         );
       } finally {
         // 共享内存 DB：关闭开关会污染后续测试，必须恢复默认 true。

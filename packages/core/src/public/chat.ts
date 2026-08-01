@@ -187,6 +187,7 @@ export {
 export {
   appendUserOpsLog,
   chipsFromUserOpsLogStore,
+  clearAllUserOpsLog,
   clearUserOpsLog,
   hasUnsentUserOpsLog,
   listUserOpsLog,

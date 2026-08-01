@@ -5,8 +5,10 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
+  appendUserOpsLog,
   buildUserOpsAttachmentFromLogEntry,
   chipsFromUserOpsLogStore,
+  clearAllUserOpsLog,
   createUserVfsTurnServiceBundle,
   formatStatusChipLabel,
   formatStatusChipLabelFromAttachment,
@@ -46,6 +48,43 @@ function writeOp(path: string, content: string, toolId = "tu_write") {
 }
 
 describe("user-ops-operation-log (T-UOL*)", () => {
+  it("T-UOL clearAll：清空多个 session 的 pending ops 并返回其 id 列表", () => {
+    const s1 = `s1-${testIsolationSuffix()}`;
+    const s2 = `s2-${testIsolationSuffix()}`;
+    const s3 = `s3-${testIsolationSuffix()}`;
+    const entry = {
+      id: `e-${testIsolationSuffix()}`,
+      createdAtMs: 0,
+      action: "write" as const,
+      path: "/a.md",
+      actionXml: `<action name="write"></action>`,
+    };
+
+    appendUserOpsLog(s1, entry);
+    appendUserOpsLog(s1, entry);
+    appendUserOpsLog(s2, entry);
+    // s3 无 pending
+
+    assert.equal(listUserOpsLog(s1).length, 2);
+    assert.equal(listUserOpsLog(s2).length, 1);
+    assert.equal(listUserOpsLog(s3).length, 0);
+
+    const clearedIds = clearAllUserOpsLog();
+
+    // 仅返回实际被清空的会话
+    assert.deepEqual(
+      [...clearedIds].sort(),
+      [s1, s2].sort(),
+    );
+    assert.equal(listUserOpsLog(s1).length, 0);
+    assert.equal(listUserOpsLog(s2).length, 0);
+    assert.equal(listUserOpsLog(s3).length, 0);
+
+    // 再清一次空表合法且入参断言
+    const emptyIds = clearAllUserOpsLog();
+    assert.deepEqual([...emptyIds], []);
+  });
+
   it("T-UOL3：单次 save 多 hunk → 一条 edit，hunks.length ≥ 2", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);

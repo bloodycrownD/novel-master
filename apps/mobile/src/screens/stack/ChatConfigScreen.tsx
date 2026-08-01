@@ -15,6 +15,7 @@ import {
   SESSION_FS_LABELS,
   USER_OPS_LABELS,
 } from '@novel-master/core/config-forms/shared';
+import {clearAllUserOpsLog} from '@novel-master/core/chat';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export function ChatConfigScreen() {
@@ -112,6 +113,10 @@ export function ChatConfigScreen() {
         tokens={tokens}
         onValueChange={enabled => {
           setUserOpsLogEnabled(enabled);
+          if (!enabled) {
+            // M1：关闭开关时清空所有已知会话的存量 pending ops（chip 随 store 订阅自动消失）
+            clearAllUserOpsLog();
+          }
           runtime.preferences
             .setUserOpsLogEnabled(enabled)
             .catch(() => undefined);

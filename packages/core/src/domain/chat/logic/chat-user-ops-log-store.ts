@@ -115,6 +115,23 @@ export function clearUserOpsLog(sessionId: string | undefined): void {
   notifyUserOpsLogListeners(sessionId);
 }
 
+/**
+ * 清空全部已知会话的手改日志（全局开关关闭时清存量 pending ops）。
+ * 逐个通知订阅者，保证各会话 chip 随之消失。
+ * @returns 被清空的会话 id 列表（调用方可据以推空 Composer 状态条）。
+ */
+export function clearAllUserOpsLog(): readonly string[] {
+  if (bySession.size === 0) {
+    return [];
+  }
+  const ids = [...bySession.keys()];
+  bySession.clear();
+  for (const sessionId of ids) {
+    notifyUserOpsLogListeners(sessionId);
+  }
+  return ids;
+}
+
 /** 测试用：清空全部会话手改日志。 */
 export function resetUserOpsLogStoreForTests(): void {
   bySession.clear();
