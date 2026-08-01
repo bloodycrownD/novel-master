@@ -27,6 +27,13 @@ export interface PersistentPreferences {
   setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void>;
   resetUserVfsUnifiedToolTurn(): Promise<void>;
 
+  /**
+   * Chat：user ops 总开关（未设置时默认 `true`）。关闭时 executeOp 成功也不写操作日志。
+   */
+  getUserOpsLogEnabled(): Promise<boolean>;
+  setUserOpsLogEnabled(enabled: boolean): Promise<void>;
+  resetUserOpsLogEnabled(): Promise<void>;
+
   /** All entries in `nm-preferences`, sorted by key (for `nm preferences list`). */
   list(): Promise<ReadonlyArray<{ key: string; value: string }>>;
 
