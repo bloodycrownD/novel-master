@@ -86,6 +86,31 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     assert.equal(chips.length, 0);
   });
 
+  it("T-CR6 undo render: 入参含合法 renderStart/renderEnd 时，恢复入 store 草稿丢渲染坐标", () => {
+    const annotateAtt = buildAnnotateAttachmentFromDraft({
+      id: "sent-ann-r",
+      path: "/chapter/undo.md",
+      originalText: "FM 并入 doc-body 前的选取原文",
+      userAnnotation: "旧坐标系批注",
+      renderStart: 8,
+      renderEnd: 18,
+      startOffset: 3,
+      endOffset: 7,
+    }) as MessageAttachmentDto;
+
+    applyUndoAnnotateRestore("s1", [annotateAtt]);
+    const drafts = listChatAnnotateDrafts("s1");
+    const restored = drafts.find((d) => d.path === "/chapter/undo.md");
+    assert.ok(restored);
+    // 合法 render 坐标→ Undo 恢复后必须丢弃，落入既有降级路径（不投影高亮）
+    assert.equal(restored!.renderStart, undefined);
+    assert.equal(restored!.renderEnd, undefined);
+    // 非渲染字段保留
+    assert.equal(restored!.startOffset, 3);
+    assert.equal(restored!.endOffset, 7);
+    assert.equal(restored!.originalText, "FM 并入 doc-body 前的选取原文");
+  });
+
   it("T-UOL7: 无 annotate → store 不新增；保留 existing ops", () => {
     const mainOps: MessageAttachmentDto[] = [
       {
