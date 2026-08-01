@@ -29,6 +29,30 @@ export async function handlePreferencesSetSessionFsVersionCheck(
   }
 }
 
+export async function handlePreferencesGetUserOpsLogEnabled(): Promise<
+  IpcResult<boolean>
+> {
+  try {
+    const rt = await getDesktopRuntime();
+    const enabled = await rt.preferences.getUserOpsLogEnabled();
+    return { ok: true, data: enabled };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handlePreferencesSetUserOpsLogEnabled(
+  enabled: boolean,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.preferences.setUserOpsLogEnabled(enabled);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
 export async function handlePreferencesGetLlmStream(): Promise<
   IpcResult<boolean>
 > {
