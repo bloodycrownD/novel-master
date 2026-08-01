@@ -13,6 +13,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
@@ -169,6 +170,7 @@ export class DefaultSessionService implements SessionService {
         "/",
         { scopeKey: `session:${source.projectId}:${copy.id}` },
         "/",
+        { contentStore: new SqliteVfsContentStore(tx) },
       );
       const messages = await r.messages.listBySession(source.id);
       const newMessages: { id: string }[] = [];

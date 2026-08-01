@@ -20,6 +20,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js";
 import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -223,6 +224,7 @@ export class DefaultMessageService implements MessageService {
         "/",
         { scopeKey: `session:${source.projectId}:${forked.id}` },
         "/",
+        { contentStore: new SqliteVfsContentStore(tx) },
       );
 
       const newMessages: { id: string }[] = [];

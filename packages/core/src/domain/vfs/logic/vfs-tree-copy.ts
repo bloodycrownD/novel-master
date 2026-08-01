@@ -74,8 +74,8 @@ async function resolvePlainContentMap(
 export type CopyVfsTreeOptions = {
   mapPath?: (relative: string) => string;
 
-  /** 可选 content store：传入时在共享 blob 写入前执行 ensureBlob。 */
-  readonly contentStore?: VfsContentStore;
+  /** content store：共享 blob 写入前执行 ensureBlob / findExistingBlobHashes。 */
+  readonly contentStore: VfsContentStore;
 };
 
 export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
@@ -156,7 +156,7 @@ export async function copyVfsTree(
   if (blobFiles.length > 0) {
     const hashes = [...new Set(blobFiles.map((f) => f.contentHash!))];
     let allBlobsExist = true;
-    if (options?.contentStore != null) {
+    if (options != null) {
       const existingBlobs =
         await options.contentStore.findExistingBlobHashes(hashes);
       allBlobsExist = hashes.every((h) => existingBlobs.has(h));
@@ -196,7 +196,7 @@ export async function copyVfsTree(
         fromPathPrefix,
       );
       for (const f of blobFiles) {
-        if (options?.contentStore != null) {
+        if (options != null) {
           await options.contentStore.ensureBlob(
             f.contentHash!,
             plainMap.get(f.sourcePath) ?? null,
