@@ -105,7 +105,6 @@ export {
   sortAnnotateTextsLongestFirst,
   splitSourceLines,
   subscribeChatAnnotateDraft,
-  stripRenderCoords,
   tailBatchDeleteAfterSeq,
   TOOL_TURN_BRIDGE_TEXT,
   transcriptSelectableRole,

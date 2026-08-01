@@ -10,7 +10,6 @@ import {
   isPlainUserUndoSendEligible,
   parseAnnotateDraftsFromAttachments,
   resolveRollbackConfirmMessage,
-  stripRenderCoords,
 } from '@novel-master/core/chat';
 
 import { EVENT_SESSION_COMPACTION_REQUESTED } from '@novel-master/core/events';
@@ -431,10 +430,8 @@ export function useChatTabMessageActions({
         );
         // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
-          const restoredAnnotate = stripRenderCoords(
-            parseAnnotateDraftsFromAttachments(
-              attachmentsSnapshot,
-            ),
+          const restoredAnnotate = parseAnnotateDraftsFromAttachments(
+            attachmentsSnapshot,
           );
           for (const draft of restoredAnnotate) {
             addChatAnnotateDraft(sessionId, draft);

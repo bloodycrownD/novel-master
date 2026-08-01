@@ -157,7 +157,6 @@
   "splitSourceLines",
   "subscribeChatAnnotateDraft",
   "subscribeUserOpsLog",
-  "stripRenderCoords",
   "tailBatchDeleteAfterSeq",
   "textBlocks",
   "transcriptSelectableRole",
