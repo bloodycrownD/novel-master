@@ -405,6 +405,12 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
 
   it("T-M3: 找不到 entry_id 的 checkpoint 行丢弃", async () => {
     const conn = await openMemory();
+    // 临时把 console.warn 换成收集器，验证迁移真的对孤儿行发了 warning
+    const originalWarn = console.warn;
+    const warns: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warns.push(args.join(" "));
+    };
     try {
       await seedLegacySchema(conn);
       const now = Date.now();
@@ -459,7 +465,15 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.message_id, "m1");
       assert.ok(Number(rows[0]!.entry_id) > 0);
+
+      // 孤儿 checkpoint 被丢弃时应发 warning（含「丢弃」/「孤儿」字样）
+      const joined = warns.join(" ");
+      assert.ok(
+        joined.includes("丢弃") || joined.includes("孤儿"),
+        `迁移应发出孤儿 checkpoint 丢弃 warning，实际 warns=${joined}`,
+      );
     } finally {
+      console.warn = originalWarn;
       await conn.close();
     }
   });
@@ -525,6 +539,72 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
         Number(refAfterDelete[0]!.ref_count),
         before,
         "DELETE revision 后 blob ref_count 应 -1",
+      );
+
+      // UPDATE content_hash 时触发转移逻辑：旧 hash -1、新 hash +1。
+      // 取一个已有 revision 行，把它的 content_hash 换成另一个已存在的 blob。
+      const updRev = await conn.query<{
+        entry_id: number;
+        version: number;
+        content_hash: string;
+      }>(`SELECT entry_id, version, content_hash FROM vfs_revision WHERE content_hash IS NOT NULL LIMIT 1`);
+      const updEntryId = Number(updRev[0]!.entry_id);
+      const updVersion = Number(updRev[0]!.version);
+      const oldHash = String(updRev[0]!.content_hash);
+      const newHash = "blob_update_target";
+      // 新 blob 先建好行——UPDATE 触发器只会对已存在的 blob 行 +1，不会自动新建
+      await conn.execute(
+        `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len) VALUES (?, 'zlib', ?, ?)`,
+        [newHash, Buffer.from("target"), 6],
+      );
+
+      const updOldBefore = Number(
+        (
+          await conn.query<{ ref_count: number }>(
+            `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
+            [oldHash],
+          )
+        )[0]!.ref_count,
+      );
+      const updNewBefore = Number(
+        (
+          await conn.query<{ ref_count: number }>(
+            `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
+            [newHash],
+          )
+        )[0]!.ref_count,
+      );
+
+      await conn.execute(
+        `UPDATE vfs_revision SET content_hash = ? WHERE entry_id = ? AND version = ?`,
+        [newHash, updEntryId, updVersion],
+      );
+
+      const updOldAfter = Number(
+        (
+          await conn.query<{ ref_count: number }>(
+            `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
+            [oldHash],
+          )
+        )[0]!.ref_count,
+      );
+      const updNewAfter = Number(
+        (
+          await conn.query<{ ref_count: number }>(
+            `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
+            [newHash],
+          )
+        )[0]!.ref_count,
+      );
+      assert.equal(
+        updOldAfter,
+        updOldBefore - 1,
+        "UPDATE content_hash 后旧 blob ref_count 应 -1",
+      );
+      assert.equal(
+        updNewAfter,
+        updNewBefore + 1,
+        "UPDATE content_hash 后新 blob ref_count 应 +1",
       );
     } finally {
       await conn.close();
