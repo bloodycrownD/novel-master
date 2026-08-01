@@ -309,6 +309,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       [...new Set(reconcilePairs.map((pair) => pair.logicalPath))],
     );
     const prefetch = { entryIdByPath, revisionMetaByKey, liveHashByPath };
+    // backfill 会 append 新 revision 使 meta 变化，沿用 prefetch 的 revisionMetaByKey
+    // 会有 stale prefetch——此处有意不放 revisionMetaByKey，由 restorePathToRevision
+    // 逐条 findMetaByEntryAndVersion 查最新 meta，不并入 prefetch。
     const prefetchForRestore = useRevisionHeadBackfill
       ? { liveHashByPath: prefetch.liveHashByPath, entryIdByPath: prefetch.entryIdByPath }
       : prefetch;
@@ -327,6 +330,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 vfs,
                 revisions,
                 entries,
+                tx,
                 scope,
                 logicalPath,
                 version,

@@ -15,12 +15,14 @@ import {
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { sessionFsRestoreRevisionMissing } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 import type { VfsRevisionPointerMeta } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { backfillMissingRevisionIfNeeded } from "./backfill-missing-revision.js";
 
 /** restore 单路径结果（供 reconcile 统计短路次数）。 */
@@ -160,10 +162,7 @@ export async function restorePathToRevision(
   }
 
   if (entryId == null) {
-    // entry 已被 hardDelete，revision 无 entry 可挂载。
-    // 但如果目的是验证目录问题（如 NOT_A_DIRECTORY），继续走到 ensureDirectoryChain 即可。
-    // 用 svfs.read 确认文件不存在，从 revision 表反向查找 entryId
-    // 跳过 entry-based 检查，直接走 ensureDirectoryChain + fallocate
+    // entry 已 hardDelete（物理删除），revision 无 entry 可挂载，无法恢复，直接抛 restore-missing。
     throw sessionFsRestoreRevisionMissing(logicalPath, version);
   }
 
@@ -201,6 +200,7 @@ export async function restorePathToRevisionWithBackfill(
   vfs: VfsRestorePort,
   revisionRepo: VfsRevisionRepository,
   entryRepo: VfsEntryRepository,
+  tx: TdbcConnection,
   scope: VfsScope,
   logicalPath: string,
   version: number,
@@ -214,7 +214,7 @@ export async function restorePathToRevisionWithBackfill(
   const scopeKeyStr = scopeKey(scope);
   const entryId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
   const backfilled = await backfillMissingRevisionIfNeeded(
-    { revisionRepo, entryRepo },
+    { revisionRepo, entryRepo, contentStore: new SqliteVfsContentStore(tx) },
     scopeKeyStr,
     logicalPath,
     entryId,
