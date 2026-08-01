@@ -250,5 +250,11 @@ export function parseAnnotateDraftsFromAttachments(
 export function stripRenderCoords(
   drafts: readonly AnnotateDraft[],
 ): AnnotateDraft[] {
-  return drafts.map(({ renderStart: _renderStart, renderEnd: _renderEnd, ...rest }) => rest);
+  // 显式重建：删除 render 坐标字段，不触发 no-unused-vars，也不修改原对象
+  return drafts.map((draft) => {
+    const rest = { ...draft };
+    delete rest.renderStart;
+    delete rest.renderEnd;
+    return rest;
+  });
 }
