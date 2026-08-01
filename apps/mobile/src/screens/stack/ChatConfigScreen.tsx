@@ -11,7 +11,11 @@ import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
 } from '../../storage/chat-rich-text-pref';
-import {SESSION_FS_LABELS} from '@novel-master/core/config-forms/shared';
+import {
+  SESSION_FS_LABELS,
+  USER_OPS_LABELS,
+} from '@novel-master/core/config-forms/shared';
+import {clearAllUserOpsLog} from '@novel-master/core/chat';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export function ChatConfigScreen() {
@@ -21,6 +25,7 @@ export function ChatConfigScreen() {
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
+  const [userOpsLogEnabled, setUserOpsLogEnabled] = useState(true);
 
   const refreshStreamPref = useCallback(async () => {
     setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
@@ -39,15 +44,21 @@ export function ChatConfigScreen() {
     setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
+  const refreshUserOpsLogPref = useCallback(async () => {
+    setUserOpsLogEnabled(await runtime.preferences.getUserOpsLogEnabled());
+  }, [runtime]);
+
   useFocusEffect(
     useCallback(() => {
       refreshStreamPref().catch(() => undefined);
       refreshSessionFsVersionCheckPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
+      refreshUserOpsLogPref().catch(() => undefined);
     }, [
       refreshStreamPref,
       refreshSessionFsVersionCheckPref,
       refreshChatRichTextPref,
+      refreshUserOpsLogPref,
     ]),
   );
 
@@ -87,6 +98,27 @@ export function ChatConfigScreen() {
           setSessionFsVersionCheck(enabled);
           runtime.preferences
             .setSessionFsVersionCheck(enabled)
+            .catch(() => undefined);
+        }}
+      />
+      <ProfileSwitchItem
+        icon="🕹️"
+        label={USER_OPS_LABELS.title}
+        subtitle={
+          userOpsLogEnabled
+            ? USER_OPS_LABELS.enabledHint
+            : USER_OPS_LABELS.disabledHint
+        }
+        value={userOpsLogEnabled}
+        tokens={tokens}
+        onValueChange={enabled => {
+          setUserOpsLogEnabled(enabled);
+          if (!enabled) {
+            // M1：关闭开关时清空所有已知会话的存量 pending ops（chip 随 store 订阅自动消失）
+            clearAllUserOpsLog();
+          }
+          runtime.preferences
+            .setUserOpsLogEnabled(enabled)
             .catch(() => undefined);
         }}
       />

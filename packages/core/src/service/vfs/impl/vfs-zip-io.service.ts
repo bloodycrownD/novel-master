@@ -10,9 +10,8 @@ import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.j
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
 import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
 import {
-  toLogicalPath,
-  toPhysicalPath,
   type VfsScope,
+  scopeKey,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {
   resolveZipDirectoryPath,
@@ -46,6 +45,10 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
   if (fullPath === base) {
     return "";
   }
+  // 根目录前缀 / 的特殊处理：fullPath 必定以 / 开头
+  if (base === "/") {
+    return fullPath.slice(1);
+  }
   const withSlash = `${base}/`;
   if (!fullPath.startsWith(withSlash)) {
     throw new Error(`Path ${fullPath} is not under prefix ${prefix}`);
@@ -58,15 +61,15 @@ async function ensureEmptyDirectoryRow(
   scope: VfsScope,
   logical: string,
 ): Promise<void> {
-  const physical = toPhysicalPath(scope, logical);
-  await ensureParentDirectories(repo, `${physical}/__vfs_zip_placeholder`);
-  const existing = await repo.findByPath(physical);
+  const sk = scopeKey(scope);
+  await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
+  const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
-    await repo.insertDirectory(physical);
+    await repo.insertDirectory(sk, logical);
     return;
   }
   if (existing.entryKind !== "directory") {
-    throw vfsNotADirectory(physical);
+    throw vfsNotADirectory(logical);
   }
 }
 
@@ -75,8 +78,7 @@ async function assertDirectoryPathNotFile(
   scope: VfsScope,
   directoryPath: string,
 ): Promise<void> {
-  const physical = toPhysicalPath(scope, directoryPath);
-  const existing = await repo.findByPath(physical);
+  const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
     throw vfsZipError(
       "INVALID_PATH",
@@ -104,19 +106,13 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
   async export(scope: VfsScope, options?: ZipPathOptions): Promise<Uint8Array> {
     const directoryPath = resolveZipDirectoryPath(options?.directoryPath);
     await assertDirectoryPathNotFile(this.repo, scope, directoryPath);
-    const physicalPrefix = toPhysicalPath(scope, directoryPath);
-    const rows = await this.repo.scanContents(physicalPrefix);
+    const sk = scopeKey(scope);
+    const rows = await this.repo.scanContents(sk, directoryPath);
     const zipFiles = new Map<string, string>();
 
     for (const row of rows) {
-      if (row.storageKind === "external") {
-        throw vfsZipError(
-          "EXTERNAL_NOT_SUPPORTED",
-          `external storage not supported in ZIP export: ${row.path}`,
-        );
-      }
-      const logical = toLogicalPath(scope, row.path);
-      const entryName = zipEntryNameRelativeToDirectory(logical, directoryPath);
+      // entry_id 化后 storageKind 已下线，所有文件均为 inline blob
+      const entryName = zipEntryNameRelativeToDirectory(row.path, directoryPath);
       if (entryName.length === 0) {
         continue;
       }
@@ -125,17 +121,16 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
     const directoryZipNames: string[] = [];
     const entriesUnderScope =
-      await this.repo.listEntriesUnderPrefix(physicalPrefix);
+      await this.repo.listEntriesUnderPrefix(sk, directoryPath);
     for (const entry of entriesUnderScope) {
       if (entry.kind !== "directory") {
         continue;
       }
-      if (relativeUnderPhysicalPrefix(entry.path, physicalPrefix).length === 0) {
+      if (relativeUnderPhysicalPrefix(entry.path, directoryPath).length === 0) {
         continue;
       }
-      const logical = toLogicalPath(scope, entry.path);
       directoryZipNames.push(
-        zipDirectoryEntryNameRelativeToDirectory(logical, directoryPath),
+        zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath),
       );
     }
 
@@ -164,14 +159,14 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
       rawEntries,
       directoryPath,
     );
-    const physicalPrefix = toPhysicalPath(scope, directoryPath);
+    const sk = scopeKey(scope);
 
     try {
       await this.conn.transaction(async (tx) => {
         const repoTx = new SqliteVfsEntryRepository(tx);
         const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
-        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, physicalPrefix);
+        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
         // WHY: deleteVfsPrefix 会删掉目标目录行；即使 ZIP 为空也要保证目录仍存在
         await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
         for (const logical of directories) {
@@ -181,12 +176,12 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
           if (this.testHook?.throwOnInsertLogical === logical) {
             throw new Error("test import failure");
           }
-          const physical = toPhysicalPath(scope, logical);
-          await ensureParentDirectories(repoTx, physical);
+          await ensureParentDirectories(repoTx, sk, logical);
           await insertFileSeedingRevision(
             repoTx,
             revisionTx,
-            physical,
+            sk,
+            logical,
             content,
           );
         }

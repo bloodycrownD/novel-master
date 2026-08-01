@@ -1,6 +1,8 @@
 /**
  * fork / session.copy 共用：种带 content 的 revision、复制 workplace 规则、挂同树 checkpoint。
  *
+ * entry_id 化后 revision append / adjustRef 吃 entryId；checkpoint files 直接存 entryId。
+ *
  * **唯一入口**：workplace / checkpoints / revisions / entries 的 Sqlite 实例仅在此 helper 内自建；
  * message.service / session.service 的 reposFor 不得重复构造上述 repo。
  *
@@ -9,9 +11,10 @@
 
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { toPhysicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
@@ -39,16 +42,17 @@ export async function seedForkCopyParity(
   input: SeedForkCopyParityInput,
 ): Promise<void> {
   const entries = new SqliteVfsEntryRepository(tx);
+  const contentStore = new SqliteVfsContentStore(tx);
   const revisions = new SqliteVfsRevisionRepository(tx);
   const workplace = new SqliteWorkplaceRepository(tx);
   const checkpoints = new SqliteMessageCheckpointRepository(tx);
 
   const { projectId, sourceSessionId, targetSessionId, newMessages } = input;
-  const targetScope = {
-    kind: "session" as const,
+  const targetScopeKey = scopeKey({
+    kind: "session",
     projectId,
     sessionId: targetSessionId,
-  };
+  });
 
   const heads = await listSessionFileHeads(
     entries,
@@ -56,32 +60,38 @@ export async function seedForkCopyParity(
     targetSessionId,
   );
 
+  // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
+  // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
+  const fileMetas = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
+  const metaByEntryId = new Map(fileMetas.map((m) => [m.entryId, m]));
+
   for (const head of heads) {
-    const physical = toPhysicalPath(targetScope, head.logicalPath);
-    const entry = await entries.findByPath(physical);
-    if (entry == null || entry.entryKind !== "file") {
+    const meta = metaByEntryId.get(head.entryId);
+    if (meta == null) {
+      // entry 缺失 / 非文件行，钉 deleted revision 兜底，防止脏 head 污染
       await revisions.append({
-        path: physical,
+        entryId: head.entryId,
         version: head.headVersion,
         content: null,
         status: "deleted",
         mtimeMs: Date.now(),
-        storageKind: "inline",
       });
-      await adjustRef(revisions, physical, head.headVersion, +1);
+      await adjustRef(revisions, head.entryId, head.headVersion, +1);
       continue;
     }
-    const contentHash = await entries.findContentHash(physical);
+    const contentHash = meta.contentHash;
+    if (contentHash != null) {
+      await contentStore.ensureBlob(contentHash, null);
+    }
     await revisions.append({
-      path: physical,
+      entryId: head.entryId,
       version: head.headVersion,
       content: null,
       contentHash,
       status: "active",
-      mtimeMs: entry.mtimeMs,
-      storageKind: entry.storageKind,
+      mtimeMs: meta.mtimeMs,
     });
-    await adjustRef(revisions, physical, head.headVersion, +1);
+    await adjustRef(revisions, head.entryId, head.headVersion, +1);
   }
 
   await workplace.copyScope(
@@ -103,7 +113,7 @@ export async function seedForkCopyParity(
   }
 
   const files = heads.map((h) => ({
-    logicalPath: h.logicalPath,
+    entryId: h.entryId,
     revisionVersion: h.headVersion,
   }));
   const createdAtMs = Date.now();

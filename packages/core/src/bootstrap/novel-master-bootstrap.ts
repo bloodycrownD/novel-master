@@ -28,6 +28,10 @@ import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import { runPendingSchemaMigrations } from "./schema-migrations/index.js";
+import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 
 /**
  * 稳态 DDL + 列对齐合同版本。
@@ -36,7 +40,7 @@ import { runPendingSchemaMigrations } from "./schema-migrations/index.js";
  * 否则已升版库会走快路径而漏建表/漏补列。新增 schema migration 不必改此值
  * （快路径仍会执行 pending migration）。
  */
-export const SCHEMA_BOOT_VERSION = 1;
+export const SCHEMA_BOOT_VERSION = 2;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -69,6 +73,11 @@ async function writeSchemaBootVersion(
 }
 
 /**
+ * entry-id migration 刚跑完时置为 true，供 repairRefCounts 空闲调度判断。
+ */
+export let _entryIdMigrationJustApplied = false;
+
+/**
  * 确保所有实体表存在并写入内置 provider。可安全重复调用。
  *
  * @param conn - 已打开的 TDBC 连接
@@ -78,17 +87,28 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     const bootVersion = await readSchemaBootVersion(tx);
     if (bootVersion >= SCHEMA_BOOT_VERSION) {
       // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
-      await runPendingSchemaMigrations(tx);
+      const entryIdApplied = await runPendingSchemaMigrations(tx);
       await seedBuiltinProviders(tx);
+      _entryIdMigrationJustApplied = entryIdApplied;
       return;
     }
 
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
-    await runPendingSchemaMigrations(tx);
+    const entryIdApplied = await runPendingSchemaMigrations(tx);
     await alignSchemaColumns(tx);
     await seedBuiltinProviders(tx);
+    _entryIdMigrationJustApplied = entryIdApplied;
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
+
+  // W3：entry-id migration 刚跑完时，异步触发 repairRefCounts 作为安全网
+  if (_entryIdMigrationJustApplied) {
+    const revisionRepo = new SqliteVfsRevisionRepository(conn);
+    const entryRepo = new SqliteVfsEntryRepository(conn);
+    const checkpoints = new SqliteMessageCheckpointRepository(conn);
+    // global scope 兜底修复；不阻塞启动，丢 rejection 也不崩
+    repairRefCounts(revisionRepo, entryRepo, checkpoints, "global", "/", "").catch(() => {});
+  }
 }

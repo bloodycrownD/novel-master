@@ -9,6 +9,7 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { hashContent } from "@/domain/vfs/content-store/logic/hash-content.js";
 import {
+  scopeKey,
   scopePhysicalPrefix,
   toPhysicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -52,10 +53,13 @@ describe("sweepSessionRevisions + blob gc", () => {
     const orphanHash = hashContent("orphan-mid");
 
     // 确认 orphan-mid revision 存在且 blob 在
-    const midKeys = await revisions.listKeysUnderPrefix(
-      scopePhysicalPrefix(scope),
+    const midKeys = await revisions.listKeysUnderScope(
+      scopeKey(scope),
+      "/",
     );
-    assert.ok(midKeys.some((k) => k.path === physical && k.version === 2));
+    const entry = await entries.findByPath(scopeKey(scope), "/gc1.md");
+    assert.ok(entry != null);
+    assert.ok(midKeys.some((k) => k.entryId === entry.entryId && k.version === 2));
     assert.equal(await contentStore.get(orphanHash), "orphan-mid");
 
     await sweepSessionRevisions(
@@ -68,11 +72,12 @@ describe("sweepSessionRevisions + blob gc", () => {
     );
     await runDeferredBlobGc(ctx.conn);
 
-    const afterKeys = await revisions.listKeysUnderPrefix(
-      scopePhysicalPrefix(scope),
+    const afterKeys = await revisions.listKeysUnderScope(
+      scopeKey(scope),
+      "/",
     );
     assert.equal(
-      afterKeys.some((k) => k.path === physical && k.version === 2),
+      afterKeys.some((k) => k.entryId === entry.entryId && k.version === 2),
       false,
     );
     await assert.rejects(() => contentStore.get(orphanHash));

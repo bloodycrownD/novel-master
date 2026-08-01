@@ -7,8 +7,7 @@
 
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import {
-  scopePhysicalPrefix,
-  toLogicalPath,
+  scopeKey,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -27,15 +26,14 @@ export async function resolveCurrentWorkspaceSnapshot(
     projectId,
     sessionId,
   };
-  const prefix = scopePhysicalPrefix(scope);
+  const scopeKeyStr = scopeKey(scope);
   const heads = await listSessionFileHeads(vfs, projectId, sessionId);
   const fileTree = new Map<string, number>(
     heads.map((head) => [head.logicalPath, head.headVersion]),
   );
 
-  const physicalDirs = await vfs.listDirectoryPathsUnderPrefix(prefix);
   const dirPaths = new Set<string>(
-    physicalDirs.map((physical) => toLogicalPath(scope, physical)),
+    await vfs.listDirectoryPathsUnderPrefix(scopeKeyStr, "/"),
   );
 
   return { fileTree, dirPaths };

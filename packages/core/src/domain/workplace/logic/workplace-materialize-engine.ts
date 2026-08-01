@@ -4,7 +4,7 @@
  * @module domain/workplace/logic/workplace-materialize-engine
  */
 
-import { toPhysicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { joinFileBlocks, renderFileBlock } from "./workplace-display.js";
 import type { WorkplaceScope } from "../model/workplace-types.js";
@@ -20,6 +20,7 @@ export async function materializeBlockFromView(
   scope: WorkplaceScope,
   mtimeByPath: ReadonlyMap<string, number>,
 ): Promise<string> {
+  const scopeKeyStr = scopeKey(scope);
   const blocks: string[] = [];
   for (const row of view.rows) {
     if (row.kind !== "file") {
@@ -31,8 +32,8 @@ export async function materializeBlockFromView(
     }
     let content = "";
     if (display === "full" || display === "header") {
-      const physical = toPhysicalPath(scope, row.path);
-      const entry = await vfs.findByPath(physical);
+      // entry_id 化后 path 列直接存纯逻辑路径，无需物理前缀拼接
+      const entry = await vfs.findByPath(scopeKeyStr, row.path);
       content = entry?.content ?? "";
     }
     blocks.push(

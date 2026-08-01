@@ -231,4 +231,51 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       { scopeKey, path: base, childPattern },
     );
   }
+
+  async renameRulesUnderLogicalPrefix(
+    scopeKey: string,
+    oldPrefix: string,
+    newPrefix: string,
+  ): Promise<void> {
+    const oldBase = normalizePath(oldPrefix);
+    const newBase = normalizePath(newPrefix);
+    const escaped = escapeLike(oldBase);
+    const childPattern = `${escaped}/%`;
+    const matchClause =
+      "scope_key = #{scopeKey} AND (logical_path = #{oldBase} OR logical_path LIKE #{childPattern} ESCAPE '\\')";
+    // 一条 UPDATE：精确匹配自身（替换为 newBase）或子路径（拼接 newBase + 剩余部分）
+    const renameDir = `
+      UPDATE ${WORKPLACE_DIR_RULE_TABLE}
+      SET logical_path = CASE
+        WHEN logical_path = #{oldBase} THEN #{newBase}
+        ELSE #{newBase} || substr(logical_path, length(#{oldBase}) + 1)
+      END
+      WHERE ${matchClause}
+    `;
+    const renameFile = `
+      UPDATE ${WORKPLACE_FILE_RULE_TABLE}
+      SET logical_path = CASE
+        WHEN logical_path = #{oldBase} THEN #{newBase}
+        ELSE #{newBase} || substr(logical_path, length(#{oldBase}) + 1)
+      END
+      WHERE ${matchClause}
+    `;
+    // 两条 UPDATE 放进同一事务，避免 dir_rule 成功而 file_rule 失败时留下半套状态。
+    // 注意：TDBC 事务不可嵌套——目前唯一调用方（createWorkplaceService 的默认连接）
+    // 在此处是非事务连接，安全；若未来有调用方把本方法放进外层事务，需改成“复用外层 tx”。
+    await this.conn.transaction(async (tx) => {
+      await executeTemplate(
+        tx,
+        this.parser,
+        renameDir,
+        { scopeKey, oldBase, newBase, childPattern },
+      );
+      await executeTemplate(
+        tx,
+        this.parser,
+        renameFile,
+        { scopeKey, oldBase, newBase, childPattern },
+      );
+    });
+  }
 }

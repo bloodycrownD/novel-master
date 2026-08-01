@@ -34,6 +34,7 @@ import {
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
+import type { PersistentPreferences } from "@/service/persistent-preferences/persistent-preferences.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";
 import type {
@@ -70,6 +71,8 @@ export interface UserVfsTurnServiceDeps {
    * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
    */
   readonly messageCheckpoint: MessageCheckpointService;
+  /** user ops 总开关偏好（关闭时不写操作日志）。 */
+  readonly preferences: PersistentPreferences;
 }
 
 /**
@@ -153,7 +156,12 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { ok: false, error: failed.error, partialFailure: true };
     }
 
-    // 写盘已成功：日志失败不回滚盘（D1）
+    // 写盘已成功：先判总开关。关闭时不写操作日志（直接返回，不回滚已成功写盘）。
+    if (!(await this.deps.preferences.getUserOpsLogEnabled())) {
+      return { ok: true, logAppended: false };
+    }
+
+    // 日志失败不回滚盘（D1）
     try {
       const entry = userOpsLogEntryFromTurnOp(op);
       appendUserOpsLog(sessionId, entry);

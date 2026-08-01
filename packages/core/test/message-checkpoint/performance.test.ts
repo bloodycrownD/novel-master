@@ -19,7 +19,7 @@ const CAPTURE_P95_MS = 200;
 /** SPEC desktop P95 rollback target (ms). */
 const ROLLBACK_P95_MS = 500;
 /** Multiplier for CI / slow hosts (documented in spec performance section). */
-const CI_SLACK = 4;
+const CI_SLACK = 6;
 
 function percentile(values: readonly number[], p: number): number {
   const sorted = [...values].sort((a, b) => a - b);

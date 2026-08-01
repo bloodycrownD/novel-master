@@ -13,6 +13,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
@@ -111,7 +112,8 @@ export class DefaultSessionService implements SessionService {
       await createSessionKkvService(tx).clearSession(id);
       await deleteVfsPrefix(
         r.vfs,
-        `/projects/${session.projectId}/sessions/${id}`,
+        `session:${session.projectId}:${id}`,
+        "/",
       );
       const deleted = await r.sessions.delete(id);
       if (!deleted) {
@@ -161,10 +163,14 @@ export class DefaultSessionService implements SessionService {
       await r.sessions.insert(copy);
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
+      // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
       await copyVfsTree(
         r.vfs,
-        `/projects/${source.projectId}/sessions/${source.id}`,
-        `/projects/${source.projectId}/sessions/${copy.id}`,
+        { scopeKey: `session:${source.projectId}:${source.id}` },
+        "/",
+        { scopeKey: `session:${source.projectId}:${copy.id}` },
+        "/",
+        { contentStore: new SqliteVfsContentStore(tx) },
       );
       const messages = await r.messages.listBySession(source.id);
       const newMessages: { id: string }[] = [];

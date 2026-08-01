@@ -126,8 +126,19 @@ const MIGRATE_BATCH_SIZE = 32;
  * 仍有明文的行 → put → 写 hash → content=NULL；目录行双 NULL。可重入。
  *
  * @remarks 按批拉取待迁行，禁止 `SELECT` 全表 `content`（大库会打爆 Hermes/低内存进程）。
+ *
+ * 兼容守卫：entry_id 化后新 schema 的 `vfs_revision` 已无 `path`/`content` 列（正文
+ * 全量迁入 blob 是该 migration 的职责，新库 canonical DDL 建表时就不带这两列），
+ * revision 循环在新 schema 上应整体跳过——此时 revision 无明文可迁。`vfs_entry`
+ * 的 `path`/`content` 列在新 schema 仍保留，所以 entry 循环不受影响。
  */
 async function migratePlaintextToBlobs(tx: TdbcConnection): Promise<void> {
+  const revisionCols = await columnNames(tx, "vfs_revision");
+  const revisionHasInlineContent =
+    revisionCols.size > 0 &&
+    revisionCols.has("path") &&
+    revisionCols.has("content");
+
   const store = new SqliteVfsContentStore(tx);
 
   // 目录行：清掉空串/残留明文，不 put。
@@ -175,6 +186,11 @@ async function migratePlaintextToBlobs(tx: TdbcConnection): Promise<void> {
         [hash, row.path],
       );
     }
+  }
+
+  if (!revisionHasInlineContent) {
+    // 新 schema（entry_id 化后）：revision 表无 path/content 列，无明文可迁。
+    return;
   }
 
   // deleted revision：清残留，不 put。

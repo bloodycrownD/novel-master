@@ -5,6 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
@@ -29,9 +30,14 @@ export class DefaultTemplatePullService implements TemplatePullService {
       const worktree = new SqliteWorkplaceRepository(tx);
       await replaceVfsSubtree(
         vfs,
-        "/template",
-        `/projects/${projectId}/template`,
-        { revisions },
+        { scopeKey: "global" },
+        "/",
+        { scopeKey: `project:${projectId}` },
+        "/",
+        {
+          revisions,
+          contentStore: new SqliteVfsContentStore(tx),
+        },
       );
       await worktree.copyScope(
         workplaceScopeKey({ kind: "global" }),
@@ -39,6 +45,7 @@ export class DefaultTemplatePullService implements TemplatePullService {
         (p) => p,
       );
     });
+    await runDeferredBlobGc(this.conn);
   }
 
   async sessionTemplatePull(sessionId: string): Promise<void> {

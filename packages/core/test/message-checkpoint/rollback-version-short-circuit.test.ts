@@ -4,9 +4,13 @@ import { textBlocks } from "@novel-master/core/chat";
 import { findMissingRevisionPointers } from "../../src/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import type { VfsContentStore } from "../../src/domain/vfs/content-store/vfs-content-store.port.js";
-import { toPhysicalPath } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+import {
+  scopeKey,
+  toPhysicalPath,
+} from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import type { VfsEntryRepository } from "../../src/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
 import type { VfsRestorePort } from "../../src/domain/vfs/ports/vfs-restore.port.js";
 import {
@@ -26,11 +30,13 @@ function createNoGetContentStore(): VfsContentStore {
     },
     gc: async () => 0,
     collectAllReferencedHashes: async () => new Set(),
+    ensureBlob: async () => undefined,
+    size: async () => 0,
   };
 }
 
 describe("rollback version short-circuit", () => {
-  it("existsByPathAndVersion：有行即 true，且不解压 blob", async () => {
+  it("existsByEntryAndVersion：有行即 true，且不解压 blob", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -45,21 +51,29 @@ describe("rollback version short-circuit", () => {
       createNoGetContentStore(),
     );
 
+    // need to get entryId first; append now requires entryId
+    const { SqliteVfsEntryRepository } = await import(
+      "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js"
+    );
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
+    await entries.insert(scopeKey(scope), "/blob-only.md", "seed");
+    const entry = await entries.findByPath(scopeKey(scope), "/blob-only.md");
+    assert.ok(entry != null);
+
     await revisions.append({
-      path: physical,
+      entryId: entry.entryId,
       version: 3,
       content: null,
       contentHash: "deadbeef",
       status: "active",
       mtimeMs: Date.now(),
-      storageKind: "inline",
     });
 
-    assert.equal(await revisions.existsByPathAndVersion(physical, 3), true);
-    assert.equal(await revisions.existsByPathAndVersion(physical, 2), false);
+    assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 3), true);
+    assert.equal(await revisions.existsByEntryAndVersion(entry.entryId, 2), false);
   });
 
-  it("findMissingRevisionPointers：用批量 findMetas 而非 findByPathAndVersion", async () => {
+  it("findMissingRevisionPointers：用批量 findMetasByEntryVersions 而非 findByEntryAndVersion", async () => {
     const scope = {
       kind: "session" as const,
       projectId: "p1",
@@ -67,33 +81,59 @@ describe("rollback version short-circuit", () => {
     };
     let findCalls = 0;
     let batchCalls = 0;
+    const entryId = 1;
     const revisionRepo: VfsRevisionRepository = {
-      findByPathAndVersion: async () => {
+      findByEntryAndVersion: async () => {
         findCalls++;
         return null;
       },
-      existsByPathAndVersion: async () => {
+      existsByEntryAndVersion: async () => {
         throw new Error("不应逐条 exists");
       },
-      findMetaByPathAndVersion: async () => null,
-      findMetasByPathVersions: async (pairs) => {
+      findMetaByEntryAndVersion: async () => null,
+      findMetasByEntryVersions: async (pairs) => {
         batchCalls++;
-        const physical = toPhysicalPath(scope, "/a.md");
         return new Map([
           [
-            revisionPairKey(physical, pairs[0]!.version),
+            revisionPairKey(entryId, pairs[0]!.version),
             { status: "active", contentHash: null },
           ],
         ]);
       },
-      findMaxVersionForPath: async () => null,
+      findMaxVersionForEntry: async () => null,
       append: async () => undefined,
-      listKeysUnderPrefix: async () => [],
+      listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
+      adjustRefCount: async () => undefined,
+      repairRefCountFloor: async () => false,
+      deleteUnreferencedUnderScope: async () => 0,
+    };
+    const entryRepo: VfsEntryRepository = {
+      findByPath: async () => ({ entryId, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+      findContentHash: async () => null,
+      findContentHashesByPaths: async () => new Map(),
+      list: async () => [],
+      insert: async () => ({ version: 1 }),
+      insertWithContentHash: async () => ({ version: 1 }),
+      insertAtVersion: async () => ({ version: 1 }),
+      insertDirectory: async () => undefined,
+      update: async () => ({ version: 1 }),
+      updateWithContentHash: async () => ({ version: 1 }),
+      setHeadContentHash: async () => undefined,
+      delete: async () => undefined,
+      listAllPaths: async () => [],
+      listDirectoryPathsUnderPrefix: async () => [],
+      listEntriesUnderPrefix: async () => [],
+      listFileMetaUnderPrefix: async () => [],
+      listFileHeadsUnderPrefix: async () => [],
+      scanContents: async () => [],
+      renamePathInScope: async () => undefined,
+      renamePrefixInScope: async () => undefined,
     };
 
     const missing = await findMissingRevisionPointers(
       revisionRepo,
+      entryRepo,
       scope,
       new Map([["/a.md", 1]]),
       ["/a.md"],
@@ -107,28 +147,31 @@ describe("rollback version short-circuit", () => {
   it("restorePathToRevision：head version 相等时跳过 find 与 write", async () => {
     let findCalls = 0;
     let writeCalls = 0;
+    const entryId = 1;
     const revisionRepo: VfsRevisionRepository = {
-      findByPathAndVersion: async () => {
+      findByEntryAndVersion: async () => {
         findCalls++;
         return {
-          path: "/x",
+          entryId,
           version: 2,
           content: "should-not-read",
           status: "active",
           mtimeMs: 0,
-          storageKind: "inline",
         };
       },
-      existsByPathAndVersion: async () => true,
-      findMetaByPathAndVersion: async () => {
+      existsByEntryAndVersion: async () => true,
+      findMetaByEntryAndVersion: async () => {
         findCalls++;
         return { status: "active", contentHash: "x" };
       },
-      findMetasByPathVersions: async () => new Map(),
-      findMaxVersionForPath: async () => 2,
+      findMetasByEntryVersions: async () => new Map(),
+      findMaxVersionForEntry: async () => 2,
       append: async () => undefined,
-      listKeysUnderPrefix: async () => [],
+      listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
+      adjustRefCount: async () => undefined,
+      repairRefCountFloor: async () => false,
+      deleteUnreferencedUnderScope: async () => 0,
     };
     const vfs: VfsRestorePort = {
       write: async () => {
@@ -136,6 +179,7 @@ describe("rollback version short-circuit", () => {
       },
       delete: async () => undefined,
       mkdir: async () => undefined,
+      resetHeadToVersion: async () => undefined,
     };
     const scope = {
       kind: "session" as const,
@@ -143,6 +187,28 @@ describe("rollback version short-circuit", () => {
       sessionId: "s1",
     };
     const liveHeadByPath = new Map([["/same.md", 2]]);
+    const entryRepo: VfsEntryRepository = {
+      findByPath: async () => ({ entryId, path: "/x", version: 2, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+      findContentHash: async () => null,
+      findContentHashesByPaths: async () => new Map(),
+      list: async () => [],
+      insert: async () => ({ version: 1 }),
+      insertWithContentHash: async () => ({ version: 1 }),
+      insertAtVersion: async () => ({ version: 1 }),
+      insertDirectory: async () => undefined,
+      update: async () => ({ version: 1 }),
+      updateWithContentHash: async () => ({ version: 1 }),
+      setHeadContentHash: async () => undefined,
+      delete: async () => undefined,
+      listAllPaths: async () => [],
+      listDirectoryPathsUnderPrefix: async () => [],
+      listEntriesUnderPrefix: async () => [],
+      listFileMetaUnderPrefix: async () => [],
+      listFileHeadsUnderPrefix: async () => [],
+      scanContents: async () => [],
+      renamePathInScope: async () => undefined,
+      renamePrefixInScope: async () => undefined,
+    };
 
     const outcome = await restorePathToRevision(
       vfs,
@@ -151,6 +217,7 @@ describe("rollback version short-circuit", () => {
       "/same.md",
       2,
       liveHeadByPath,
+      entryRepo,
     );
 
     assert.equal(outcome, "skipped_same_version");
@@ -162,38 +229,44 @@ describe("rollback version short-circuit", () => {
     let findFullCalls = 0;
     let findMetaCalls = 0;
     let writeCalls = 0;
+    const entryId = 1;
     const revisionRepo: VfsRevisionRepository = {
-      findByPathAndVersion: async () => {
+      findByEntryAndVersion: async () => {
         findFullCalls++;
         return {
-          path: "/x",
+          entryId,
           version: 1,
           content: "should-not-read",
           status: "active",
           mtimeMs: 0,
-          storageKind: "inline",
         };
       },
-      existsByPathAndVersion: async () => true,
-      findMetaByPathAndVersion: async () => {
+      existsByEntryAndVersion: async () => true,
+      findMetaByEntryAndVersion: async () => {
         findMetaCalls++;
         return { status: "active", contentHash: "same-hash" };
       },
-      findMetasByPathVersions: async () => new Map(),
-      findMaxVersionForPath: async () => 3,
+      findMetasByEntryVersions: async () => new Map(),
+      findMaxVersionForEntry: async () => 3,
       append: async () => undefined,
-      listKeysUnderPrefix: async () => [],
+      listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
+      adjustRefCount: async () => undefined,
+      repairRefCountFloor: async () => false,
+      deleteUnreferencedUnderScope: async () => 0,
     };
     const entryRepo = {
       findContentHash: async () => "same-hash",
-    } as import("../../src/domain/vfs/repositories/vfs-entry.port.js").VfsEntryRepository;
+      findContentHashesByPaths: async () => new Map(),
+      findByPath: async () => ({ entryId }),
+    } as unknown as VfsEntryRepository;
     const vfs: VfsRestorePort = {
       write: async () => {
         writeCalls++;
       },
       delete: async () => undefined,
       mkdir: async () => undefined,
+      resetHeadToVersion: async () => undefined,
     };
     const scope = {
       kind: "session" as const,

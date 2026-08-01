@@ -49,6 +49,16 @@ export interface WorkplaceService {
   deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<void>;
 
   /**
+   * 批量重命名路径及其子路径下的规则（rename 目录时用）。
+   *
+   * 一条 SQL UPDATE 替代逐条 get+set，70 文件目录从 ~1s 降到几 ms。
+   */
+  renameRulesUnderLogicalPrefix(
+    oldPrefix: string,
+    newPrefix: string,
+  ): Promise<void>;
+
+  /**
    * 向后兼容：组合 {@link materializeLiveView} 与 {@link materializePersistBlock}。
    *
    * @deprecated 新代码请使用 {@link materializeLiveView} / {@link materializePersistBlock}。

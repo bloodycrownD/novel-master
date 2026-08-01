@@ -5,6 +5,14 @@
 export const BRIDGE_V = 1;
 export const OVER_LIMIT_HINT = '内容过长，已显示原文';
 
+/** 拼接 FM HTML（置于前）与正文，统一进 .doc-body；无 FM 时原样返回正文。 */
+export function concatDocBodyHtml(
+  frontMatterHtml: string,
+  body: string,
+): string {
+  return frontMatterHtml ? `${frontMatterHtml}${body}` : body;
+}
+
 export type HostTheme = {
   background?: string;
   text?: string;

@@ -104,6 +104,10 @@ export const IPC_CHANNELS = {
     'nm:preferences/getSessionFsVersionCheck',
   PREFERENCES_SET_SESSION_FS_VERSION_CHECK:
     'nm:preferences/setSessionFsVersionCheck',
+  PREFERENCES_GET_USER_OPS_LOG_ENABLED:
+    'nm:preferences/getUserOpsLogEnabled',
+  PREFERENCES_SET_USER_OPS_LOG_ENABLED:
+    'nm:preferences/setUserOpsLogEnabled',
   PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
   PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
 

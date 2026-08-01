@@ -7,11 +7,13 @@ import {
 } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import { revisionPairKey } from "../../src/domain/vfs/logic/revision-pair-key.js";
 import {
-  scopePhysicalPrefix,
+  scopeKey,
   toPhysicalPath,
 } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import type { VfsEntryRepository } from "../../src/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "../../src/domain/vfs/repositories/vfs-revision.port.js";
 import type { VfsRestorePort } from "../../src/domain/vfs/ports/vfs-restore.port.js";
 import {
@@ -49,11 +51,12 @@ describe("rollback reach hash batch", () => {
 
     assert.equal(all.length, 2);
     assert.equal(distinct.length, 1);
-    assert.equal(distinct[0]!.logicalPath, "/dup.md");
+    // distinct 按 entryId 去重，不再返回 logicalPath
     assert.equal(distinct[0]!.revisionVersion, version);
+    assert.ok(typeof distinct[0]!.entryId === "number");
   });
 
-  it("findMissingRevisionPointers：批量 findMetasByPathVersions，零逐条 exists", async () => {
+  it("findMissingRevisionPointers：批量 findMetasByEntryVersions，零逐条 exists", async () => {
     const scope = {
       kind: "session" as const,
       projectId: "p1",
@@ -62,35 +65,61 @@ describe("rollback reach hash batch", () => {
     let findCalls = 0;
     let batchCalls = 0;
     const revisionRepo: VfsRevisionRepository = {
-      findByPathAndVersion: async () => {
+      findByEntryAndVersion: async () => {
         findCalls++;
         return null;
       },
-      existsByPathAndVersion: async () => {
+      existsByEntryAndVersion: async () => {
         throw new Error("不应逐条 exists");
       },
-      findMetaByPathAndVersion: async () => {
+      findMetaByEntryAndVersion: async () => {
         throw new Error("不应逐条 findMeta");
       },
-      findMetasByPathVersions: async (pairs) => {
+      findMetasByEntryVersions: async (pairs) => {
         batchCalls++;
         const map = new Map<string, { status: "active"; contentHash: string | null }>();
         for (const pair of pairs) {
-          map.set(revisionPairKey(pair.path, pair.version), {
+          map.set(revisionPairKey(pair.entryId, pair.version), {
             status: "active",
             contentHash: null,
           });
         }
         return map;
       },
-      findMaxVersionForPath: async () => null,
+      findMaxVersionForEntry: async () => null,
       append: async () => undefined,
-      listKeysUnderPrefix: async () => [],
+      listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
+      adjustRefCount: async () => undefined,
+      repairRefCountFloor: async () => false,
+      deleteUnreferencedUnderScope: async () => 0,
+    };
+    const entryRepo: VfsEntryRepository = {
+      findByPath: async () => ({ entryId: 1, path: "/a.md", version: 1, content: "", mtimeMs: 0, scopeKey: "session:p1:s1" }),
+      findContentHash: async () => null,
+      findContentHashesByPaths: async () => new Map(),
+      list: async () => [],
+      insert: async () => ({ version: 1 }),
+      insertWithContentHash: async () => ({ version: 1 }),
+      insertAtVersion: async () => ({ version: 1 }),
+      insertDirectory: async () => undefined,
+      update: async () => ({ version: 1 }),
+      updateWithContentHash: async () => ({ version: 1 }),
+      setHeadContentHash: async () => undefined,
+      delete: async () => undefined,
+      listAllPaths: async () => [],
+      listDirectoryPathsUnderPrefix: async () => [],
+      listEntriesUnderPrefix: async () => [],
+      listFileMetaUnderPrefix: async () => [],
+      listFileHeadsUnderPrefix: async () => [],
+      scanContents: async () => [],
+      renamePathInScope: async () => undefined,
+      renamePrefixInScope: async () => undefined,
     };
 
     const missing = await findMissingRevisionPointers(
       revisionRepo,
+      entryRepo,
       scope,
       new Map([
         ["/a.md", 1],
@@ -113,22 +142,26 @@ describe("rollback reach hash batch", () => {
       projectId: "p1",
       sessionId: "s1",
     };
-    const physical = toPhysicalPath(scope, "/hash-same.md");
+    const sk = scopeKey(scope);
+    const entryId = 1;
     const revisionRepo: VfsRevisionRepository = {
-      findByPathAndVersion: async () => {
+      findByEntryAndVersion: async () => {
         findFullCalls++;
         return null;
       },
-      existsByPathAndVersion: async () => true,
-      findMetaByPathAndVersion: async () => {
+      existsByEntryAndVersion: async () => true,
+      findMetaByEntryAndVersion: async () => {
         findMetaCalls++;
         return { status: "active", contentHash: "same-hash" };
       },
-      findMetasByPathVersions: async () => new Map(),
-      findMaxVersionForPath: async () => 3,
+      findMetasByEntryVersions: async () => new Map(),
+      findMaxVersionForEntry: async () => 3,
       append: async () => undefined,
-      listKeysUnderPrefix: async () => [],
+      listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
+      adjustRefCount: async () => undefined,
+      repairRefCountFloor: async () => false,
+      deleteUnreferencedUnderScope: async () => 0,
     };
     const entryRepo = {
       findContentHash: async () => {
@@ -136,17 +169,19 @@ describe("rollback reach hash batch", () => {
         return "same-hash";
       },
       findContentHashesByPaths: async () => new Map(),
-    } as import("../../src/domain/vfs/repositories/vfs-entry.port.js").VfsEntryRepository;
+      findByPath: async () => ({ entryId }),
+    } as unknown as VfsEntryRepository;
     const vfs: VfsRestorePort = {
       write: async () => undefined,
       delete: async () => undefined,
       mkdir: async () => undefined,
     };
     const prefetch: RestorePathPrefetch = {
+      entryIdByPath: new Map([["/hash-same.md", entryId]]),
       revisionMetaByKey: new Map([
-        [revisionPairKey(physical, 1), { status: "active", contentHash: "same-hash" }],
+        [revisionPairKey(entryId, 1), { status: "active", contentHash: "same-hash" }],
       ]),
-      liveHashByPath: new Map([[physical, "same-hash"]]),
+      liveHashByPath: new Map([["/hash-same.md", "same-hash"]]),
     };
 
     const outcome = await restorePathToRevision(
@@ -171,26 +206,28 @@ describe("rollback reach hash batch", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
-    const prefix = scopePhysicalPrefix(scope);
+    const sk = scopeKey(scope);
 
     await svfs.write("/batch-del.md", "keep", { versionCheck: false });
     await svfs.write("/batch-del.md", "drop-me", { versionCheck: false });
     await svfs.write("/batch-del.md", "live", { versionCheck: false });
 
-    const physical = toPhysicalPath(scope, "/batch-del.md");
+    const entry = await entries.findByPath(sk, "/batch-del.md");
+    assert.ok(entry != null);
     const liveVersion = (await svfs.read("/batch-del.md")).version;
-    const reachable = new Set([revisionPairKey(physical, liveVersion)]);
+    const reachable = new Set([revisionPairKey(entry.entryId, liveVersion)]);
 
-    const deleted = await revisions.deleteExceptReachable(prefix, reachable);
-    const keys = await revisions.listKeysUnderPrefix(prefix);
+    const deleted = await revisions.deleteExceptReachable(sk, "/", reachable);
+    const keys = await revisions.listKeysUnderScope(sk, "/");
     const versions = keys
-      .filter((key) => key.path === physical)
+      .filter((key) => key.entryId === entry.entryId)
       .map((key) => key.version);
 
     assert.equal(deleted, 2);

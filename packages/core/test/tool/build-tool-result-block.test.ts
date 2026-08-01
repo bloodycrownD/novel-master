@@ -32,8 +32,9 @@ describe("buildToolResultBlock", () => {
   });
 
   it("T-BTRB-01: error with vfsScope summary uses classified message", () => {
-    const cause = new VfsError("NOT_FOUND", "Path not found: /projects/p/sessions/s/f.txt", {
-      path: "/projects/p/sessions/s/f.txt",
+    // entry_id 化后 vfsError.path 已是逻辑路径（无物理前缀）
+    const cause = new VfsError("NOT_FOUND", "Path not found: /f.txt", {
+      path: "/f.txt",
     });
     const block = buildToolResultBlock(
       "tu4",

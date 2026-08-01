@@ -20,6 +20,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js";
 import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
@@ -216,10 +217,14 @@ export class DefaultMessageService implements MessageService {
       };
       await r.sessions.insert(forked);
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
+      // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
       await copyVfsTree(
         r.vfs,
-        `/projects/${source.projectId}/sessions/${source.id}`,
-        `/projects/${source.projectId}/sessions/${forked.id}`,
+        { scopeKey: `session:${source.projectId}:${source.id}` },
+        "/",
+        { scopeKey: `session:${source.projectId}:${forked.id}` },
+        "/",
+        { contentStore: new SqliteVfsContentStore(tx) },
       );
 
       const newMessages: { id: string }[] = [];

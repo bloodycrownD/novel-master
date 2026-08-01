@@ -17,6 +17,7 @@ import { dropChatSessionUserVfsPendingV1Migration } from "./drop-chat-session-us
 import { renameWorktreeTablesToWorkplaceV1Migration } from "./rename-worktree-tables-to-workplace-v1.js";
 import { vfsContentBlobZlibV1Migration } from "./vfs-content-blob-zlib-v1.js";
 import { vfsRevisionRefCountV1Migration } from "./vfs-revision-ref-count-v1.js";
+import { VFS_ENTRY_ID_REDESIGN_V1_ID, vfsEntryIdRedesignV1Migration } from "./vfs-entry-id-redesign-v1.js";
 
 /** 有序 migration 列表。 */
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
@@ -26,18 +27,25 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   renameWorktreeTablesToWorkplaceV1Migration,
   vfsContentBlobZlibV1Migration,
   vfsRevisionRefCountV1Migration,
+  vfsEntryIdRedesignV1Migration,
 ];
 
 /**
  * 按 id 顺序执行尚未 apply 的 migration。
  * 须在 bootstrap 事务内、DDL 之后、alignSchemaColumns 之前调用。
  */
+/**
+ * 执行 pending schema migration。
+ *
+ * @returns 若 `vfs-entry-id-redesign-v1` 本次刚被 applied 则为 true
+ */
 export async function runPendingSchemaMigrations(
   tx: TdbcConnection,
-): Promise<void> {
+): Promise<boolean> {
   await ensureSchemaMigrationsTable(tx);
   const applied = await listAppliedSchemaMigrationIds(tx);
 
+  let entryIdMigrationApplied = false;
   const seen = new Set<string>();
   for (const migration of SCHEMA_MIGRATIONS) {
     if (seen.has(migration.id)) {
@@ -54,7 +62,12 @@ export async function runPendingSchemaMigrations(
     await markSchemaMigrationApplied(tx, migration.id, Date.now());
     applied.add(migration.id);
     console.log(`[nm-boot] migration applied: ${migration.id}`);
+    if (migration.id === VFS_ENTRY_ID_REDESIGN_V1_ID) {
+      entryIdMigrationApplied = true;
+    }
   }
+
+  return entryIdMigrationApplied;
 }
 
 export type { SchemaMigration } from "./schema-migration.types.js";
@@ -66,3 +79,5 @@ export {
 } from "./schema-migrations-table.js";
 export { VFS_CONTENT_BLOB_ZLIB_V1_ID } from "./vfs-content-blob-zlib-v1.js";
 export { VFS_REVISION_REF_COUNT_V1_ID } from "./vfs-revision-ref-count-v1.js";
+export { VFS_ENTRY_ID_REDESIGN_V1_ID } from "./vfs-entry-id-redesign-v1.js";
+export { vfsEntryIdRedesignV1Up } from "./vfs-entry-id-redesign-v1.js";

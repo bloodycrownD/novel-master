@@ -6,6 +6,7 @@
 
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "../message-checkpoint.port.js";
@@ -23,31 +24,33 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
   constructor(private readonly deps: MessageCheckpointServiceDeps) {}
 
   /**
-   * @remarks listSessionFileHeads 在 insert 事务外执行；单写 desktop 可接受，并发 session 写可能捕获陈旧 head。
+   * @remarks listSessionFileHeads 移入事务内执行，持锁扫描避免并发 capture 捕获陈旧 head。
    */
   async capture(
     sessionId: string,
     projectId: string,
     messageId: string,
   ): Promise<void> {
-    const files = await listSessionFileHeads(
-      this.deps.entries,
-      projectId,
-      sessionId,
-    );
-    if (files.length === 0) {
-      return;
-    }
-
     await this.deps.conn.transaction(async (tx) => {
+      // listSessionFileHeads 在事务内调：用绑定 tx 的 entry repo 持锁扫描，
+      // 避免并发 capture 读到未提交的 head（V8）。
+      const txEntries = new SqliteVfsEntryRepository(tx);
+      const files = await listSessionFileHeads(
+        txEntries,
+        projectId,
+        sessionId,
+      );
+      if (files.length === 0) {
+        return;
+      }
+
       const checkpoints = new SqliteMessageCheckpointRepository(tx);
-      // Boundary: capture runs in one transaction so tree index stays consistent.
       await checkpoints.insertCheckpoint({
         sessionId,
         messageId,
         createdAtMs: Date.now(),
         files: files.map((f) => ({
-          logicalPath: f.logicalPath,
+          entryId: f.entryId,
           revisionVersion: f.headVersion,
         })),
       });

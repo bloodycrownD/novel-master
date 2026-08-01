@@ -8,7 +8,7 @@ import type { MessageCheckpointFile } from "../model/message-checkpoint.js";
 
 /** 会话内去重后的 checkpoint 文件指针（不含 message_id，供 revision GC 可达集）。 */
 export type MessageCheckpointDistinctPointer = {
-  readonly logicalPath: string;
+  readonly entryId: number;
   readonly revisionVersion: number;
 };
 
@@ -18,7 +18,7 @@ export interface MessageCheckpointInsertInput {
   readonly messageId: string;
   readonly createdAtMs: number;
   readonly files: ReadonlyArray<{
-    readonly logicalPath: string;
+    readonly entryId: number;
     readonly revisionVersion: number;
   }>;
 }

@@ -74,6 +74,7 @@ export {
   buildFileAnnotateAttachmentFromDraft,
   buildFileRefActionXml,
   parseAnnotateDraftsFromAttachments,
+  stripRenderCoords,
 } from '../domain/chat/logic/build-attachment-action-xml.js';
 export {
   PROMPT_FILE_SEEN_SHORT_TIP,
@@ -186,6 +187,7 @@ export {
 export {
   appendUserOpsLog,
   chipsFromUserOpsLogStore,
+  clearAllUserOpsLog,
   clearUserOpsLog,
   hasUnsentUserOpsLog,
   listUserOpsLog,

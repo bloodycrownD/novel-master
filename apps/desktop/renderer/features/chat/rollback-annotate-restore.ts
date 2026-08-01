@@ -4,6 +4,7 @@
  */
 import {
   parseAnnotateDraftsFromAttachments,
+  stripRenderCoords,
   type MessageAttachment,
 } from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
@@ -33,8 +34,10 @@ export function applyUndoAnnotateRestore(
   existingStatusAttachments: readonly MessageAttachmentDto[] = [],
 ): MessageAttachmentDto[] {
   if (attachments != null && attachments.length > 0) {
-    const restored = parseAnnotateDraftsFromAttachments(
-      attachments.map(toMessageAttachment),
+    const restored = stripRenderCoords(
+      parseAnnotateDraftsFromAttachments(
+        attachments.map(toMessageAttachment),
+      ),
     );
     for (const draft of restored) {
       addChatAnnotateDraft(sessionId, draft);

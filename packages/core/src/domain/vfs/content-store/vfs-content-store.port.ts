@@ -36,4 +36,26 @@ export interface VfsContentStore {
    * @remarks 全库 blob 回收算法唯一入口之一；须经 {@link runDeferredBlobGc} 调度，禁止回滚热路径 sync 调用。
    */
   collectAllReferencedHashes(): Promise<Set<string>>;
+
+  /**
+   * 承诺式 ensure：若指定 content_hash 的 blob 行不存在，则 put 一份明文；
+   * 已存在则直接返回 content_hash。
+   *
+   * @remarks
+   * 共享 blob 路径（tree-copy / seed / backfill）在写 revision 之前必须调此方法，
+   * 确保触发器 `trg_revision_insert_inc_blob_ref` 的 UPDATE 不命中 0 行。
+   * 调用方**不保证**明文完整可用——无明文时传 `null` 仅探测不 put。
+   *
+   * @param contentHash 目标 blob 的 hash
+   * @param fallbackPlain 不存在时用于 put 的明文；为 null 时仅探测不写入
+   * @throws 当 blob 不存在且 fallbackPlain 为 null 时抛 `NOT_FOUND`
+   */
+  ensureBlob(contentHash: string, fallbackPlain: string | null): Promise<string>;
+
+  /**
+   * 批量检查哪些 content_hash 的 blob 行已存在。
+   *
+   * @returns 已存在的 hash 集合
+   */
+  findExistingBlobHashes(hashes: ReadonlyArray<string>): Promise<Set<string>>;
 }

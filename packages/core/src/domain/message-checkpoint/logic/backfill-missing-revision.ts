@@ -1,9 +1,13 @@
 /**
  * 用 live head 回补缺失的 checkpoint revision 行。
  *
+ * entry_id 化后按 entryId 探测 / append；entry 不存在（已 hardDelete）时无法回补，
+ * 直接返回 false（无 entry_id 可挂 revision 行）。
+ *
  * @module domain/message-checkpoint/logic/backfill-missing-revision
  */
 
+import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
@@ -12,6 +16,8 @@ import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 export type BackfillRevisionDeps = {
   readonly revisionRepo: VfsRevisionRepository;
   readonly entryRepo: VfsEntryRepository;
+  /** 可选 content store：共享 blob 回补前执行 ensureBlob。 */
+  readonly contentStore?: VfsContentStore;
 };
 
 /**
@@ -22,43 +28,51 @@ export type BackfillRevisionDeps = {
  */
 export async function backfillMissingRevisionIfNeeded(
   deps: BackfillRevisionDeps,
-  physicalPath: string,
+  scopeKey: string,
+  logicalPath: string,
+  entryId: number | null,
   targetVersion: number,
 ): Promise<boolean> {
-  const exists = await deps.revisionRepo.existsByPathAndVersion(
-    physicalPath,
+  if (entryId == null) {
+    // entry 已不存在（hardDelete）：无 entry_id 可挂 revision，无法回补。
+    return false;
+  }
+
+  const exists = await deps.revisionRepo.existsByEntryAndVersion(
+    entryId,
     targetVersion,
   );
   if (exists) {
     return false;
   }
 
-  const entry = await deps.entryRepo.findByPath(physicalPath);
+  const entry = await deps.entryRepo.findByPath(scopeKey, logicalPath);
   const mtimeMs = Date.now();
 
   if (entry != null && entry.entryKind === "file") {
-    const contentHash = await deps.entryRepo.findContentHash(physicalPath);
+    const contentHash = await deps.entryRepo.findContentHash(scopeKey, logicalPath);
+    if (contentHash != null && deps.contentStore != null) {
+      await deps.contentStore.ensureBlob(contentHash, null);
+    }
     await deps.revisionRepo.append({
-      path: physicalPath,
+      entryId,
       version: targetVersion,
       content: null,
       contentHash,
       status: "active",
       mtimeMs,
-      storageKind: entry.storageKind,
     });
-    await adjustRef(deps.revisionRepo, physicalPath, targetVersion, +1);
+    await adjustRef(deps.revisionRepo, entryId, targetVersion, +1);
     return true;
   }
 
   await deps.revisionRepo.append({
-    path: physicalPath,
+    entryId,
     version: targetVersion,
     content: null,
     status: "deleted",
     mtimeMs,
-    storageKind: "inline",
   });
-  await adjustRef(deps.revisionRepo, physicalPath, targetVersion, +1);
+  await adjustRef(deps.revisionRepo, entryId, targetVersion, +1);
   return true;
 }

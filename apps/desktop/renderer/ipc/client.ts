@@ -102,6 +102,8 @@ export const {
   ipcCompactionManual,
   ipcPreferencesGetSessionFsVersionCheck,
   ipcPreferencesSetSessionFsVersionCheck,
+  ipcPreferencesGetUserOpsLogEnabled,
+  ipcPreferencesSetUserOpsLogEnabled,
   ipcPreferencesGetLlmStream,
   ipcPreferencesSetLlmStream,
   ipcProvidersList,

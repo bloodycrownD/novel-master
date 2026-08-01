@@ -25,7 +25,7 @@ import {
 } from "@/service/message-checkpoint/truncate-tail-wiring.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import {
-  toPhysicalPath,
+  scopeKey,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
@@ -106,41 +106,21 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     options?: RollbackOptions,
   ): Promise<void> {
     assertRollbackOptionsCompatible(options);
-    const tAll = Date.now();
 
-    const tPlan0 = Date.now();
     const plan = await this.resolveRollbackPlan(
       sessionId,
       projectId,
       anchorMessageId,
     );
-    const planMs = Date.now() - tPlan0;
-    console.log("[nm-rollback] plan", {
-      mode: plan.mode,
-      pathsNeedWrite: plan.pathsNeedWrite.size,
-      pathsNeedDelete: plan.pathsNeedDelete.size,
-      targetTree: plan.targetTree.size,
-      tailMessages: plan.tailMessageIds.length,
-      skipVfsReconcile: options?.skipVfsReconcile === true,
-      ms: planMs,
-    });
 
-    let missingMs = 0;
-    let missingCount = 0;
     if (!options?.skipVfsReconcile) {
-      const tMissing0 = Date.now();
       const missing = await findMissingRevisionPointers(
         this.deps.revisions,
+        this.deps.entries,
         plan.scope,
         plan.targetTree,
         plan.pathsNeedWrite,
       );
-      missingMs = Date.now() - tMissing0;
-      missingCount = missing.length;
-      console.log("[nm-rollback] missing-check", {
-        missing: missingCount,
-        ms: missingMs,
-      });
       if (missing.length > 0 && !options?.revisionHeadBackfill) {
         throw sessionFsRollbackRevisionBackfillRequired(missing, {
           sessionId,
@@ -149,20 +129,10 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       }
     }
 
-    let reconcileMs = 0;
-    let truncateSweepMs = 0;
-    const tTx0 = Date.now();
     await this.deps.conn.transaction(async (tx) => {
       if (!options?.skipVfsReconcile) {
-        const tRec0 = Date.now();
-        let reconcileStats: {
-          skippedSameVersion: number;
-          skippedSameContentHash: number;
-          restored: number;
-          deleted: number;
-        } | null = null;
         try {
-          reconcileStats = await this.reconcileVfsPaths(
+          await this.reconcileVfsPaths(
             tx,
             plan,
             options?.revisionHeadBackfill === true,
@@ -173,38 +143,15 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
             { sessionId, messageId: anchorMessageId },
           );
         }
-        reconcileMs = Date.now() - tRec0;
-        console.log("[nm-rollback] reconcile", {
-          pathsNeedWrite: plan.pathsNeedWrite.size,
-          pathsNeedDelete: plan.pathsNeedDelete.size,
-          ...reconcileStats,
-          ms: reconcileMs,
-        });
       }
-      const tTrunc0 = Date.now();
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId: plan.projectId,
         sessionId: plan.sessionId,
         afterSeq: plan.truncateAfterSeq,
         sweepRevisions: true,
       });
-      truncateSweepMs = Date.now() - tTrunc0;
-      console.log("[nm-rollback] truncate+sweep (revision-only, no sync blob)", {
-        ms: truncateSweepMs,
-      });
     });
-    const txMs = Date.now() - tTx0;
     sessionApiPromptTokenCache.invalidate(sessionId);
-    console.log("[nm-rollback] core done", {
-      mode: plan.mode,
-      planMs,
-      missingMs,
-      missingCount,
-      reconcileMs,
-      truncateSweepMs,
-      txMs,
-      totalMs: Date.now() - tAll,
-    });
   }
 
   private async resolveRollbackPlan(
@@ -278,9 +225,22 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           sessionId,
           tailMessageIds,
         );
-      for (const pointer of tailPointers) {
-        if (!targetTree.has(pointer.logicalPath)) {
-          pathsNeedDelete.add(pointer.logicalPath);
+      // entry_id 化后 tail pointer 只有 entryId；用 live heads 把 entryId 反解成当前逻辑路径，
+      // 再判是否落在 targetTree 外（需删除）。已不在 live 树里的 entry 跳过（无物可删）。
+      if (tailPointers.length > 0) {
+        const liveHeads = await listSessionFileHeads(
+          this.deps.entries,
+          projectId,
+          sessionId,
+        );
+        const pathByEntryId = new Map(
+          liveHeads.map((h) => [h.entryId, h.logicalPath]),
+        );
+        for (const pointer of tailPointers) {
+          const logicalPath = pathByEntryId.get(pointer.entryId);
+          if (logicalPath != null && !targetTree.has(logicalPath)) {
+            pathsNeedDelete.add(logicalPath);
+          }
         }
       }
     }
@@ -310,6 +270,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     deleted: number;
   }> {
     const { scope, pathsNeedWrite, pathsNeedDelete, targetTree, projectId, sessionId } = plan;
+    const scopeKeyStr = scopeKey(scope);
     const vfs = this.scopedVfs(projectId, sessionId, tx);
     const revisions = new SqliteVfsRevisionRepository(tx);
     const entries = new SqliteVfsEntryRepository(tx);
@@ -317,35 +278,42 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const liveHeadByPath = new Map(
       liveHeadRows.map((head) => [head.logicalPath, head.headVersion]),
     );
+    const entryIdByPath = new Map(
+      liveHeadRows.map((head) => [head.logicalPath, head.entryId]),
+    );
 
+    // 需写盘的路径先解析出 entryId（live 优先，缺时按 path 探测）。
     const reconcilePairs: Array<{
       logicalPath: string;
-      physical: string;
+      entryId: number;
       version: number;
     }> = [];
     for (const logicalPath of pathsNeedWrite) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
-        reconcilePairs.push({
-          logicalPath,
-          physical: toPhysicalPath(scope, logicalPath),
-          version,
-        });
+        let entryId = entryIdByPath.get(logicalPath);
+        if (entryId == null) {
+          const entry = await entries.findByPath(scopeKeyStr, logicalPath);
+          entryId = entry?.entryId ?? -1;
+        }
+        reconcilePairs.push({ logicalPath, entryId, version });
       }
     }
 
-    const revisionMetaByKey = await revisions.findMetasByPathVersions(
-      reconcilePairs.map((pair) => ({
-        path: pair.physical,
-        version: pair.version,
-      })),
+    const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
+    const revisionMetaByKey = await revisions.findMetasByEntryVersions(
+      queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })),
     );
-    const liveHashByPath = await entries.findContentHashesByPaths([
-      ...new Set(reconcilePairs.map((pair) => pair.physical)),
-    ]);
-    const prefetch = { revisionMetaByKey, liveHashByPath };
+    const liveHashByPath = await entries.findContentHashesByPaths(
+      scopeKeyStr,
+      [...new Set(reconcilePairs.map((pair) => pair.logicalPath))],
+    );
+    const prefetch = { entryIdByPath, revisionMetaByKey, liveHashByPath };
+    // backfill 会 append 新 revision 使 meta 变化，沿用 prefetch 的 revisionMetaByKey
+    // 会有 stale prefetch——此处有意不放 revisionMetaByKey，由 restorePathToRevision
+    // 逐条 findMetaByEntryAndVersion 查最新 meta，不并入 prefetch。
     const prefetchForRestore = useRevisionHeadBackfill
-      ? { liveHashByPath: prefetch.liveHashByPath }
+      ? { liveHashByPath: prefetch.liveHashByPath, entryIdByPath: prefetch.entryIdByPath }
       : prefetch;
 
     let skippedSameVersion = 0;
@@ -362,6 +330,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
                 vfs,
                 revisions,
                 entries,
+                tx,
                 scope,
                 logicalPath,
                 version,

@@ -15,6 +15,7 @@ import { isStorageRootParent, parentDir } from "./parent-dir.js";
  */
 export async function ensureParentDirectories(
   repo: VfsEntryRepository,
+  scopeKey: string,
   filePath: string,
 ): Promise<void> {
   const chain: string[] = [];
@@ -28,13 +29,13 @@ export async function ensureParentDirectories(
   chain.reverse();
 
   for (const dirPath of chain) {
-    const existing = await repo.findByPath(dirPath);
+    const existing = await repo.findByPath(scopeKey, dirPath);
     if (existing != null) {
       if (existing.entryKind === "file") {
         throw vfsNotADirectory(dirPath);
       }
       continue;
     }
-    await repo.insertDirectory(dirPath);
+    await repo.insertDirectory(scopeKey, dirPath);
   }
 }

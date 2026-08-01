@@ -5,7 +5,7 @@ import {
   formatRollbackRevisionBackfillAlertMessage,
   isRollbackRevisionBackfillRequiredError,
 } from "@novel-master/core/session-fs";
-import { isVfsError, toPhysicalPath } from "@novel-master/core/vfs";
+import { isVfsError } from "@novel-master/core/vfs";
 import { backfillMissingRevisionIfNeeded } from "../../src/domain/message-checkpoint/logic/backfill-missing-revision.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
@@ -41,24 +41,26 @@ async function setupR1Scenario() {
   return { ctx, project, session, svfs, user1, assistant1, assistant2 };
 }
 
+/** 通过 entryId 删除特定 anchor revision 行。 */
 async function deleteAnchorRevisionForPath(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
   projectId: string,
   sessionId: string,
   logicalPath: string,
 ) {
-  const physicalPath = toPhysicalPath(
-    { kind: "session", projectId, sessionId },
-    logicalPath,
-  );
+  const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+  const sk = scopeKey({ kind: "session", projectId, sessionId });
+  const entries = new SqliteVfsEntryRepository(ctx.conn);
+  const entry = await entries.findByPath(sk, logicalPath);
+  if (entry == null) throw new Error(`entry not found for ${logicalPath}`);
   const revisions = await ctx.conn.query<{ version: number }>(
-    "SELECT version FROM vfs_revision WHERE path = ? ORDER BY version ASC",
-    [physicalPath],
+    "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
+    [entry.entryId],
   );
   const anchorVersion = revisions[0]!.version;
   await ctx.conn.execute(
-    "DELETE FROM vfs_revision WHERE path = ? AND version = ?",
-    [physicalPath, anchorVersion],
+    "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
+    [entry.entryId, anchorVersion],
   );
   return anchorVersion;
 }
@@ -163,24 +165,18 @@ describe("MessageRollbackService (revision head backfill)", () => {
       projectId: project.id,
       sessionId: session.id,
     };
-    const physical = toPhysicalPath(scope, "/ghost.md");
+    const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+    const sk = scopeKey(scope);
 
     const backfilled = await backfillMissingRevisionIfNeeded(
       { revisionRepo: revisions, entryRepo: entries },
-      physical,
+      sk,
+      "/ghost.md",
+      null,  // entryId = null → entry not exist
       7,
     );
 
-    assert.equal(backfilled, true);
-    const row = await revisions.findByPathAndVersion(physical, 7);
-    assert.ok(row != null);
-    assert.equal(row.status, "deleted");
-    assert.equal(row.content, null);
-
-    await assert.rejects(
-      () => svfs.read("/ghost.md"),
-      (error: unknown) => isVfsError(error, "NOT_FOUND"),
-    );
+    assert.equal(backfilled, false);
   });
 
   it("RB4b: entry 不存在时 partial rollback 不创建文件", async () => {
@@ -196,12 +192,29 @@ describe("MessageRollbackService (revision head backfill)", () => {
     await svfs.write("/gone.md", "anchor-gone", { versionCheck: false });
     await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
 
+    // 先拿到 entryId 再删除 entry
+    const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
+    const sk = scopeKey({ kind: "session", projectId: project.id, sessionId: session.id });
+    const entries = new SqliteVfsEntryRepository(ctx.conn);
+    const entry = await entries.findByPath(sk, "/gone.md");
+    assert.ok(entry != null);
+    const entryId = entry.entryId;
+
     await ctx.messages.append(session.id, "user", textBlocks("more"));
     await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "later" }],
     });
     await svfs.delete("/gone.md");
-    await deleteAnchorRevisionForPath(ctx, project.id, session.id, "/gone.md");
+
+    // 手动删除 anchor revision 行（entry_id 在 entry 被删后仍可用作 revision 外键筛选）
+    const revisions = await ctx.conn.query<{ version: number }>(
+      "SELECT version FROM vfs_revision WHERE entry_id = ? ORDER BY version ASC",
+      [entryId],
+    );
+    await ctx.conn.execute(
+      "DELETE FROM vfs_revision WHERE entry_id = ? AND version = ?",
+      [entryId, revisions[0]!.version],
+    );
 
     await ctx.sessionFs.rollbackToMessage(
       session.id,
@@ -264,29 +277,34 @@ describe("MessageRollbackService (revision head backfill)", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
     const entries = new SqliteVfsEntryRepository(ctx.conn);
+    const { scopeKey } = await import("../../src/domain/vfs/logic/vfs-path-mapper.js");
     const scope = {
       kind: "session" as const,
       projectId: project.id,
       sessionId: session.id,
     };
+    const sk = scopeKey(scope);
 
     await svfs.write("/exists.md", "content", { versionCheck: false });
-    const physical = toPhysicalPath(scope, "/exists.md");
+    const entry = await entries.findByPath(sk, "/exists.md");
+    assert.ok(entry != null);
     const before = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE path = ?",
-      [physical],
+      "SELECT version FROM vfs_revision WHERE entry_id = ?",
+      [entry.entryId],
     );
 
     const backfilled = await backfillMissingRevisionIfNeeded(
       { revisionRepo: revisions, entryRepo: entries },
-      physical,
+      sk,
+      "/exists.md",
+      entry.entryId,
       1,
     );
 
     assert.equal(backfilled, false);
     const after = await ctx.conn.query<{ version: number }>(
-      "SELECT version FROM vfs_revision WHERE path = ?",
-      [physical],
+      "SELECT version FROM vfs_revision WHERE entry_id = ?",
+      [entry.entryId],
     );
     assert.equal(after.length, before.length);
   });

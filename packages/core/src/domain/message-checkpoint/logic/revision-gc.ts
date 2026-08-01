@@ -1,15 +1,17 @@
 /**
  * Revision garbage collection for session-scoped paths.
  *
+ * entry_id 化后可达集按 `(scopeKey, entryId)`；`revisionReachableKey` 改 entryId。
+ * 前缀打扫走 `deleteUnreferencedUnderScope`。
+ *
  * @module domain/message-checkpoint/logic/revision-gc
  */
 
 import {
-  scopePhysicalPrefix,
-  toPhysicalPath,
+  scopeKey,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { deleteUnreferencedUnderPrefix } from "@/domain/vfs/logic/revision-ref-count.js";
+import { deleteUnreferencedUnderScope } from "@/domain/vfs/logic/revision-ref-count.js";
 import {
   isSchemaMigrationApplied,
   VFS_REVISION_REF_COUNT_V1_ID,
@@ -20,13 +22,13 @@ import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revisi
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
 
-/** Builds a stable `path:version` key for revision GC fallback。 */
-export function revisionReachableKey(path: string, version: number): string {
-  return revisionPairKey(path, version);
+/** Builds a stable `entryId:version` key for revision GC fallback。 */
+export function revisionReachableKey(entryId: number, version: number): string {
+  return revisionPairKey(entryId, version);
 }
 
 /**
- * 仅 revision 行打扫（前缀 ref_count<=0 DELETE 或 migration 前 fallback 可达集）。
+ * 仅 revision 行打扫（scope 前缀 ref_count<=0 DELETE 或 migration 前 fallback 可达集）。
  *
  * blob GC 须经 {@link runDeferredBlobGc} 另行调度，本函数不再同步 collect/gc。
  *
@@ -45,41 +47,29 @@ export async function sweepSessionRevisions(
     projectId,
     sessionId,
   };
-  const prefix = scopePhysicalPrefix(scope);
+  const scopeKeyStr = scopeKey(scope);
   const refCountReady = await isSchemaMigrationApplied(
     conn,
     VFS_REVISION_REF_COUNT_V1_ID,
   );
 
-  const t0 = Date.now();
   let deleted: number;
-  let mode: "ref_count" | "reachable_set";
 
   if (refCountReady) {
-    mode = "ref_count";
-    deleted = await deleteUnreferencedUnderPrefix(revisionRepo, prefix);
+    deleted = await deleteUnreferencedUnderScope(revisionRepo, scopeKeyStr, "/");
   } else {
-    mode = "reachable_set";
     const reachable = new Set<string>();
-    const liveHeads = await entryRepo.listFileHeadsUnderPrefix(prefix);
+    const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKeyStr, "/");
     for (const head of liveHeads) {
-      reachable.add(revisionReachableKey(head.path, head.headVersion));
+      reachable.add(revisionReachableKey(head.entryId, head.headVersion));
     }
     const pointers =
       await checkpoints.listDistinctCheckpointPointersForSession(sessionId);
     for (const pointer of pointers) {
-      const physical = toPhysicalPath(scope, pointer.logicalPath);
-      reachable.add(revisionReachableKey(physical, pointer.revisionVersion));
+      reachable.add(revisionReachableKey(pointer.entryId, pointer.revisionVersion));
     }
-    deleted = await revisionRepo.deleteExceptReachable(prefix, reachable);
+    deleted = await revisionRepo.deleteExceptReachable(scopeKeyStr, "/", reachable);
   }
-
-  console.log("[nm-rollback] sweepSessionRevisions", {
-    sessionId,
-    mode,
-    deletedRevisions: deleted,
-    ms: Date.now() - t0,
-  });
 
   return deleted;
 }

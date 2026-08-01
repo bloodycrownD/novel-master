@@ -25,7 +25,7 @@ import {
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import {
-  toPhysicalPath,
+  scopeKey,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
@@ -41,11 +41,11 @@ async function ensureEmptyDirectoryRow(
   scope: VfsScope,
   logical: string,
 ): Promise<void> {
-  const physical = toPhysicalPath(scope, logical);
-  await ensureParentDirectories(repo, `${physical}/__vfs_card_placeholder`);
-  const existing = await repo.findByPath(physical);
+  const sk = scopeKey(scope);
+  await ensureParentDirectories(repo, sk, `${logical}/__vfs_card_placeholder`);
+  const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
-    await repo.insertDirectory(physical);
+    await repo.insertDirectory(sk, logical);
     return;
   }
   if (existing.entryKind !== "directory") {
@@ -61,8 +61,7 @@ async function assertDirectoryPathNotFile(
   scope: VfsScope,
   directoryPath: string,
 ): Promise<void> {
-  const physical = toPhysicalPath(scope, directoryPath);
-  const existing = await repo.findByPath(physical);
+  const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
     throw characterCardError(
       "INVALID_PATH",
@@ -106,27 +105,21 @@ export class DefaultCharacterCardImportService
 
     // Phase A：路径校验 — 任何 delete 之前；禁止 ZIP basename / validateVfsZipEntries
     const files = validateMdTreeForImport(scope, tree, directoryPath);
-    const physicalPrefix = toPhysicalPath(scope, directoryPath);
+    const sk = scopeKey(scope);
 
     try {
       await this.conn.transaction(async (tx) => {
         const repoTx = new SqliteVfsEntryRepository(tx);
         const revisionTx = new SqliteVfsRevisionRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
-        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, physicalPrefix);
+        await releaseAndDeleteVfsPrefix(repoTx, revisionTx, sk, directoryPath);
         await ensureEmptyDirectoryRow(repoTx, scope, directoryPath);
         for (const [logical, content] of files) {
           if (this.testHook?.throwOnInsertLogical === logical) {
             throw new Error("test import failure");
           }
-          const physical = toPhysicalPath(scope, logical);
-          await ensureParentDirectories(repoTx, physical);
-          await insertFileSeedingRevision(
-            repoTx,
-            revisionTx,
-            physical,
-            content,
-          );
+          await ensureParentDirectories(repoTx, sk, logical);
+          await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
         }
       });
     } catch (error) {

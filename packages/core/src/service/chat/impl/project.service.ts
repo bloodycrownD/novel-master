@@ -19,7 +19,7 @@ import type { ProjectRepository } from "@/domain/chat/repositories/project.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { projectVfsPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
@@ -147,13 +147,16 @@ export class DefaultProjectService implements ProjectService {
         await r.messages.deleteBySession(session.id);
         await deleteSessionFsData(tx, session.id, id);
         await sessionKkv.clearSession(session.id);
+        // entry_id 化后会话独立 scope：session:{pid}:{sid}，前缀为"/"
         await deleteVfsPrefix(
           r.vfs,
-          `/projects/${id}/sessions/${session.id}`,
+          `session:${id}:${session.id}`,
+          "/",
         );
       }
       await r.sessions.deleteByProject(id);
-      await deleteVfsPrefix(r.vfs, projectVfsPrefix(id));
+      // 项目 scope 只剩 template（会话都有自己的 scope）
+      await deleteVfsPrefix(r.vfs, `project:${id}`, "/");
       const deleted = await r.projects.delete(id);
       if (!deleted) {
         throw chatNotFound("project", id);
@@ -223,15 +226,22 @@ export class DefaultProjectService implements ProjectService {
         const clonedJson = deepCloneAgentConfigJson(sourceAgentConfigJson);
         await r.projects.updateAgentConfig(copy.id, clonedJson, now);
       }
+      // entry_id 化后项目模板独立 scope：project:{id}，逻辑前缀为 "/"
+      const contentStore = new SqliteVfsContentStore(tx);
       await copyVfsTree(
         r.vfs,
-        `${projectVfsPrefix(id)}/template`,
-        `${projectVfsPrefix(copy.id)}/template`,
+        { scopeKey: `project:${id}` },
+        "/",
+        { scopeKey: `project:${copy.id}` },
+        "/",
+        { contentStore },
       );
       await seedLiveHeadRevisionsUnderPrefix(
         r.vfs,
         r.revisions,
-        `${projectVfsPrefix(copy.id)}/template`,
+        `project:${copy.id}`,
+        "/",
+        contentStore,
       );
       return copy;
     });

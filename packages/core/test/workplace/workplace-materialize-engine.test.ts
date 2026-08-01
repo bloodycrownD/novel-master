@@ -12,13 +12,13 @@ function createSpyVfs(
   return {
     findByPathCalls,
     list: async () => [],
-    findByPath: async (path: string) => {
+    findByPath: async (scopeKey: string, path: string) => {
       findByPathCalls.push(path);
       const content = contents.get(path);
       if (content == null) {
-        return undefined;
+        return null;
       }
-      return { path, content, version: 1, mtimeMs: 0 };
+      return { entryId: 1, scopeKey, path, content, version: 1, mtimeMs: 0 };
     },
     findContentHash: async () => null,
     insert: async () => ({ version: 1 }),
@@ -113,8 +113,8 @@ describe("worktree materialize engine", () => {
 
     const vfs = createSpyVfs(
       new Map([
-        ["/projects/p1/template/show/a.md", "FULL-A"],
-        ["/projects/p1/template/hdr/b.md", "---\ntitle: B\n---\nbody"],
+        ["/show/a.md", "FULL-A"],
+        ["/hdr/b.md", "---\ntitle: B\n---\nbody"],
       ]),
     );
 
@@ -126,8 +126,8 @@ describe("worktree materialize engine", () => {
     );
 
     assert.equal(vfs.findByPathCalls.length, 2);
-    assert.ok(vfs.findByPathCalls.includes("/projects/p1/template/show/a.md"));
-    assert.ok(vfs.findByPathCalls.includes("/projects/p1/template/hdr/b.md"));
+    assert.ok(vfs.findByPathCalls.includes("/show/a.md"));
+    assert.ok(vfs.findByPathCalls.includes("/hdr/b.md"));
     assert.match(block, /FULL-A/);
     assert.match(block, /title: B/);
     assert.match(block, /d\.md/);

@@ -14,8 +14,7 @@ import {
 import {
   assertLogicalPathAllowed,
   resolveLogicalPath,
-  toLogicalPath,
-  toPhysicalPath,
+  scopeKey,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -70,11 +69,11 @@ async function ensureEmptyDirectoryRow(
   scope: VfsScope,
   logical: string,
 ): Promise<void> {
-  const physical = toPhysicalPath(scope, logical);
-  await ensureParentDirectories(repo, `${physical}/__vfs_batch_placeholder`);
-  const existing = await repo.findByPath(physical);
+  const sk = scopeKey(scope);
+  await ensureParentDirectories(repo, sk, `${logical}/__vfs_batch_placeholder`);
+  const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
-    await repo.insertDirectory(physical);
+    await repo.insertDirectory(sk, logical);
     return;
   }
   if (existing.entryKind === "file") {
@@ -88,17 +87,17 @@ async function writeOrUpdateFile(
   logical: string,
   content: string,
 ): Promise<void> {
-  const physical = toPhysicalPath(scope, logical);
-  await ensureParentDirectories(repo, physical);
-  const existing = await repo.findByPath(physical);
+  const sk = scopeKey(scope);
+  await ensureParentDirectories(repo, sk, logical);
+  const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
-    await repo.insert(physical, content);
+    await repo.insert(sk, logical, content);
     return;
   }
   if (existing.entryKind === "directory") {
     throw new Error(`cannot overwrite directory with file: ${logical}`);
   }
-  await repo.update(physical, content, { versionCheck: false });
+  await repo.update(sk, logical, content, { versionCheck: false });
 }
 
 function emptyReport(
@@ -248,8 +247,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       }
       seenLogical.add(logical);
 
-      const physical = toPhysicalPath(scope, logical);
-      const existing = await this.repo.findByPath(physical);
+      const existing = await this.repo.findByPath(scopeKey(scope), logical);
       if (existing != null && existing.entryKind === "file") {
         conflicts.push({ logicalPath: logical, reason: "exists" });
       }
@@ -387,17 +385,14 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     const seenFileRels = new Set<string>();
     const seenDirRels = new Set<string>();
     const selectionCount = logicalPaths.length;
+    const sk = scopeKey(scope);
 
     for (const raw of logicalPaths) {
       const logical = resolveLogicalPath(raw);
       assertLogicalPathAllowed(scope, logical);
-      const physical = toPhysicalPath(scope, logical);
-      const existing = await this.repo.findByPath(physical);
+      const existing = await this.repo.findByPath(sk, logical);
 
       if (existing != null && existing.entryKind === "file") {
-        if (existing.storageKind === "external") {
-          continue;
-        }
         const fileRel = basenameOf(logical);
         if (fileRel.length > 0 && !seenFileRels.has(fileRel)) {
           seenFileRels.add(fileRel);
@@ -407,12 +402,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       }
 
       // 目录或隐式前缀：递归文件 + 显式空目录
-      const rows = await this.repo.scanContents(physical);
+      const rows = await this.repo.scanContents(sk, logical);
       for (const row of rows) {
-        if (row.storageKind === "external") {
-          continue;
-        }
-        const childLogical = toLogicalPath(scope, row.path);
+        const childLogical = row.path;
         const rel = exportRelativePath(childLogical, logical, selectionCount);
         if (rel.length === 0 || seenFileRels.has(rel)) {
           continue;
@@ -421,12 +413,12 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
         files.push({ relativePath: rel, content: row.content });
       }
 
-      const entriesUnder = await this.repo.listEntriesUnderPrefix(physical);
+      const entriesUnder = await this.repo.listEntriesUnderPrefix(sk, logical);
       for (const entry of entriesUnder) {
         if (entry.kind !== "directory") {
           continue;
         }
-        const childLogical = toLogicalPath(scope, entry.path);
+        const childLogical = entry.path;
         const rel = exportRelativePath(childLogical, logical, selectionCount);
         if (rel.length === 0 || seenDirRels.has(rel)) {
           continue;

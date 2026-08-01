@@ -125,14 +125,29 @@ describe("schema 列对齐（T-B3）", () => {
 
   it("A4：legacy vfs_entry 缺 entry_kind/head_version，bootstrap 后 head_version 回填为 version", async () => {
     const conn = await openInMemoryConnection();
-    const path = "/legacy/vfs.txt";
+    const physicalPath = "/template/legacy.txt";
     const mtime = 1_700_000_000_000;
 
+    // 旧库形态：旧 vfs_entry（path 主键）+ 旧 vfs_revision（path 列）
     await execLegacyVfsEntryTable(conn);
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS vfs_revision (
+        path TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'visible',
+        mtime_ms INTEGER NOT NULL,
+        content_hash TEXT,
+        PRIMARY KEY (path, version)
+      )
+    `);
     await execBootstrapSchemaDdl(conn);
     await conn.execute(
       `INSERT INTO vfs_entry (path, content, version, mtime_ms)
-       VALUES ('${path}', 'legacy-content', 3, ${mtime})`,
+       VALUES ('${physicalPath}', 'legacy-content', 3, ${mtime})`,
+    );
+    await conn.execute(
+      `INSERT INTO vfs_revision (path, version, status, mtime_ms, content_hash)
+       VALUES ('${physicalPath}', 3, 'visible', ${mtime}, NULL)`,
     );
     await bootstrapNovelMaster(conn);
 
@@ -140,8 +155,9 @@ describe("schema 列对齐（T-B3）", () => {
     assert.ok(columns.has("entry_kind"));
     assert.ok(columns.has("head_version"));
 
+    // 迁移后 path 已转为逻辑路径，用 scope_key + 逻辑 path 查询
     const rows = await conn.query<{ head_version: number; entry_kind: string }>(
-      `SELECT head_version, entry_kind FROM vfs_entry WHERE path = '${path}'`,
+      `SELECT head_version, entry_kind FROM vfs_entry WHERE scope_key = 'global' AND path = '/legacy.txt'`,
     );
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.head_version, 3);
