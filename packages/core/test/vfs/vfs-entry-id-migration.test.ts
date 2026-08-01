@@ -572,6 +572,100 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
     }
   });
 
+  it("T-M6: 脏 path（无法反解 scope）跳过且不阻塞迁移", async () => {
+    const conn = await openMemory();
+    try {
+      await seedLegacySchema(conn);
+      const now = Date.now();
+      await conn.execute(
+        `INSERT INTO chat_project (id, name, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?)`,
+        ["p", "P", now, now],
+      );
+      await conn.execute(
+        `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?, ?)`,
+        ["s", "p", "S", now, now],
+      );
+      // 一条正常的 session scope 文件
+      await conn.execute(
+        `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind, content_hash)
+         VALUES ('/projects/p/sessions/s/real.md', NULL, 1, 1, ?, 'inline', 'file', 'blob_real')`,
+        [now],
+      );
+      await conn.execute(
+        `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len) VALUES (?, 'zlib', ?, ?)`,
+        ["blob_real", Buffer.from("x"), 1],
+      );
+      await conn.execute(
+        `INSERT INTO vfs_revision (path, version, content, status, mtime_ms, storage_kind, content_hash, ref_count)
+         VALUES ('/projects/p/sessions/s/real.md', 1, NULL, 'active', ?, 'inline', 'blob_real', 1)`,
+        [now],
+      );
+      // 两条脏数据：path 不符合任何 scope 物理前缀
+      await conn.execute(
+        `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind, content_hash)
+         VALUES ('/random/unknown/prefix.md', NULL, 1, 1, ?, 'inline', 'file', 'blob_dirty1')`,
+        [now],
+      );
+      await conn.execute(
+        `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind, content_hash)
+         VALUES ('/projects/p', NULL, 1, 1, ?, 'inline', 'file', 'blob_dirty2')`,
+        [now],
+      );
+      for (const hash of ["blob_dirty1", "blob_dirty2"]) {
+        await conn.execute(
+          `INSERT INTO vfs_content_blob (content_hash, encoding, bytes, byte_len) VALUES (?, 'zlib', ?, ?)`,
+          [hash, Buffer.from(hash), hash.length],
+        );
+      }
+      // 脏 entry 的 revision 也一起写（迁移时应因 JOIN 不到 _migration_path_map 而丢弃）
+      for (const dirtyPath of [
+        "/random/unknown/prefix.md",
+        "/projects/p",
+      ]) {
+        await conn.execute(
+          `INSERT INTO vfs_revision (path, version, content, status, mtime_ms, storage_kind, content_hash, ref_count)
+           VALUES (?, 1, NULL, 'active', ?, 'inline', ?, 1)`,
+          [dirtyPath, now, dirtyPath.includes("random") ? "blob_dirty1" : "blob_dirty2"],
+        );
+      }
+
+      // 不应抛错
+      await bootstrapNovelMaster(conn);
+
+      // 正常 entry 迁移成功
+      const entries = await conn.query<{ scope_key: string; path: string }>(
+        `SELECT scope_key, path FROM vfs_entry ORDER BY path`,
+      );
+      assert.equal(entries.length, 1, "只保留正常 entry");
+      assert.equal(entries[0]!.scope_key, "session:p:s");
+      assert.equal(entries[0]!.path, "/real.md");
+
+      // 正常 revision 迁移成功，脏 revision 丢弃
+      const revs = await conn.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM vfs_revision`,
+      );
+      assert.equal(Number(revs[0]!.n), 1, "脏 entry 的 revision 应一起丢弃");
+
+      // 脏 blob 的 ref_count 保持 0（revision 被丢弃后无引用）
+      const dirtyBlobs = await conn.query<{
+        content_hash: string;
+        ref_count: number;
+      }>(
+        `SELECT content_hash, ref_count FROM vfs_content_blob WHERE content_hash IN ('blob_dirty1', 'blob_dirty2') ORDER BY content_hash`,
+      );
+      assert.equal(dirtyBlobs.length, 2);
+      for (const row of dirtyBlobs) {
+        assert.equal(
+          Number(row.ref_count),
+          0,
+          `脏 blob ${row.content_hash} ref_count 应为 0`,
+        );
+      }
+    } finally {
+      await conn.close();
+    }
+  });
+
   it("新库路径：canonical DDL 直接建新 schema → migration up() no-op", async () => {
     const conn = await openMemory();
     try {

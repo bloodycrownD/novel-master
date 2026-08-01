@@ -51,4 +51,11 @@ export interface VfsContentStore {
    * @throws 当 blob 不存在且 fallbackPlain 为 null 时抛 `NOT_FOUND`
    */
   ensureBlob(contentHash: string, fallbackPlain: string | null): Promise<string>;
+
+  /**
+   * 批量检查哪些 content_hash 的 blob 行已存在。
+   *
+   * @returns 已存在的 hash 集合
+   */
+  findExistingBlobHashes(hashes: ReadonlyArray<string>): Promise<Set<string>>;
 }

@@ -53,6 +53,24 @@ function joinLogical(prefix: string, relative: string): string {
   return `${base}/${relative}`;
 }
 
+/**
+ * 用 scanContents 解出 scope+prefix 下所有文件的明文，返回 path→content 映射。
+ *
+ * @remarks 仅在回退路径（blob 缺失或无 hash）调用；快路径不触发。
+ */
+async function resolvePlainContentMap(
+  repo: VfsEntryRepository,
+  scopeKey: string,
+  pathPrefix: string,
+): Promise<Map<string, string>> {
+  const rows = await repo.scanContents(scopeKey, pathPrefix);
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    map.set(row.path, row.content);
+  }
+  return map;
+}
+
 export type CopyVfsTreeOptions = {
   mapPath?: (relative: string) => string;
 
@@ -81,57 +99,148 @@ export async function copyVfsTree(
   toPathPrefix: string,
   options?: CopyVfsTreeOptions,
 ): Promise<void> {
+  // --- 目录：批量检查存在 + 批量 INSERT ---
   const dirPaths = await repo.listDirectoryPathsUnderPrefix(
     fromScope.scopeKey,
     fromPathPrefix,
   );
+  const targetDirPaths: string[] = [];
   for (const dirPath of dirPaths) {
     const relative = relativeUnderPrefix(dirPath, fromPathPrefix);
     if (relative.length === 0) {
       continue;
     }
     const mapped = options?.mapPath ? options.mapPath(relative) : relative;
-    const targetPath = joinLogical(toPathPrefix, mapped);
-    const existing = await repo.findByPath(toScope.scopeKey, targetPath);
-    if (existing == null) {
-      await repo.insertDirectory(toScope.scopeKey, targetPath);
+    targetDirPaths.push(joinLogical(toPathPrefix, mapped));
+  }
+  if (targetDirPaths.length > 0) {
+    const existingDirs = await repo.findExistingPaths(
+      toScope.scopeKey,
+      targetDirPaths,
+    );
+    const newDirs = targetDirPaths.filter((p) => !existingDirs.has(p));
+    if (newDirs.length > 0) {
+      await repo.batchInsertDirectoryEntries(toScope.scopeKey, newDirs);
     }
   }
 
-  const rows = await repo.scanContents(fromScope.scopeKey, fromPathPrefix);
-  for (const row of rows) {
-    const relative = relativeUnderPrefix(row.path, fromPathPrefix);
+  // --- 文件：scanFileEntriesWithMeta 一次 SELECT 拿全部元数据（不解明文）---
+  const fileEntries = await repo.scanFileEntriesWithMeta(
+    fromScope.scopeKey,
+    fromPathPrefix,
+  );
+  const mappedFiles: Array<{
+    sourcePath: string;
+    targetPath: string;
+    contentHash: string | null;
+    mtimeMs: number;
+  }> = [];
+  for (const entry of fileEntries) {
+    const relative = relativeUnderPrefix(entry.path, fromPathPrefix);
     if (relative.length === 0) {
       continue;
     }
     const mapped = options?.mapPath ? options.mapPath(relative) : relative;
-    const targetPath = joinLogical(toPathPrefix, mapped);
-    const existing = await repo.findByPath(toScope.scopeKey, targetPath);
-    const contentHash = await repo.findContentHash(fromScope.scopeKey, row.path);
-    if (contentHash != null) {
-      // 共享 blob 路径：写 entry 前确保 blob 行已存在，避免触发器 UPDATE 命中 0 行。
-      if (options?.contentStore != null) {
-        // 从源侧取明文做 fallback（源侧 content 已在 row.content 中）。
-        await options.contentStore.ensureBlob(contentHash, row.content);
+    mappedFiles.push({
+      sourcePath: entry.path,
+      targetPath: joinLogical(toPathPrefix, mapped),
+      contentHash: entry.contentHash,
+      mtimeMs: entry.mtimeMs,
+    });
+  }
+
+  const blobFiles = mappedFiles.filter((f) => f.contentHash != null);
+  const plainFiles = mappedFiles.filter((f) => f.contentHash == null);
+
+  // --- blob 共享文件：批量路径（同库复制时全部 blob 已存在）---
+  if (blobFiles.length > 0) {
+    const hashes = [...new Set(blobFiles.map((f) => f.contentHash!))];
+    let allBlobsExist = true;
+    if (options?.contentStore != null) {
+      const existingBlobs =
+        await options.contentStore.findExistingBlobHashes(hashes);
+      allBlobsExist = hashes.every((h) => existingBlobs.has(h));
+    }
+
+    if (allBlobsExist) {
+      // 快路径：批量检查目标存在 + 批量 INSERT
+      const targetPaths = blobFiles.map((f) => f.targetPath);
+      const existingTargets = await repo.findExistingPaths(
+        toScope.scopeKey,
+        targetPaths,
+      );
+      const newEntries = blobFiles
+        .filter((f) => !existingTargets.has(f.targetPath))
+        .map((f) => ({
+          path: f.targetPath,
+          contentHash: f.contentHash!,
+          mtimeMs: f.mtimeMs,
+        }));
+      if (newEntries.length > 0) {
+        await repo.batchInsertFileEntriesWithHash(toScope.scopeKey, newEntries);
       }
-      if (existing == null) {
-        await repo.insertWithContentHash(toScope.scopeKey, targetPath, contentHash);
-      } else {
+      // 已存在的目标用逐条 update（tree-copy 到清空 scope 时不会走到）
+      for (const f of blobFiles.filter((f) => existingTargets.has(f.targetPath))) {
         await repo.updateWithContentHash(
           toScope.scopeKey,
-          targetPath,
-          contentHash,
+          f.targetPath,
+          f.contentHash!,
           { versionCheck: false },
         );
       }
-      continue;
-    }
-    if (existing == null) {
-      await repo.insert(toScope.scopeKey, targetPath, row.content);
     } else {
-      await repo.update(toScope.scopeKey, targetPath, row.content, {
-        versionCheck: false,
-      });
+      // 慢路径：部分 blob 缺失，回退逐条处理
+      const plainMap = await resolvePlainContentMap(
+        repo,
+        fromScope.scopeKey,
+        fromPathPrefix,
+      );
+      for (const f of blobFiles) {
+        if (options?.contentStore != null) {
+          await options.contentStore.ensureBlob(
+            f.contentHash!,
+            plainMap.get(f.sourcePath) ?? null,
+          );
+        }
+        const existing = await repo.findByPath(toScope.scopeKey, f.targetPath);
+        if (existing == null) {
+          await repo.insertWithContentHash(
+            toScope.scopeKey,
+            f.targetPath,
+            f.contentHash!,
+          );
+        } else {
+          await repo.updateWithContentHash(
+            toScope.scopeKey,
+            f.targetPath,
+            f.contentHash!,
+            { versionCheck: false },
+          );
+        }
+      }
+    }
+  }
+
+  // --- 无 hash 文件：回退 scanContents 取明文逐条写入 ---
+  if (plainFiles.length > 0) {
+    const plainMap = await resolvePlainContentMap(
+      repo,
+      fromScope.scopeKey,
+      fromPathPrefix,
+    );
+    for (const f of plainFiles) {
+      const content = plainMap.get(f.sourcePath);
+      if (content == null) {
+        continue;
+      }
+      const existing = await repo.findByPath(toScope.scopeKey, f.targetPath);
+      if (existing == null) {
+        await repo.insert(toScope.scopeKey, f.targetPath, content);
+      } else {
+        await repo.update(toScope.scopeKey, f.targetPath, content, {
+          versionCheck: false,
+        });
+      }
     }
   }
 }

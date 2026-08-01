@@ -215,6 +215,28 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return hashes;
   }
 
+  async findExistingBlobHashes(
+    hashes: ReadonlyArray<string>,
+  ): Promise<Set<string>> {
+    const result = new Set<string>();
+    if (hashes.length === 0) {
+      return result;
+    }
+    const CHUNK_SIZE = 500;
+    for (let offset = 0; offset < hashes.length; offset += CHUNK_SIZE) {
+      const chunk = hashes.slice(offset, offset + CHUNK_SIZE);
+      const placeholders = chunk.map(() => `?`).join(`,`);
+      const rows = await this.conn.query<{ content_hash: string }>(
+        `SELECT content_hash FROM vfs_content_blob WHERE content_hash IN (${placeholders})`,
+        chunk,
+      );
+      for (const row of rows) {
+        result.add(String(row.content_hash));
+      }
+    }
+    return result;
+  }
+
   async ensureBlob(contentHash: string, fallbackPlain: string | null): Promise<string> {
     const existing = await queryTemplate<{ content_hash: string }>(
       this.conn,

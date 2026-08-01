@@ -5,6 +5,7 @@
  */
 
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
+import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 
 /** 起始 head 快照：路径不存在。 */
@@ -21,13 +22,12 @@ export type MutatingPathHeadPresent = {
   readonly version: number;
 };
 
-/** 起始 head 快照：目录（含子树文件内容）。 */
+/** 起始 head 快照：目录（含子树文件 head version）。 */
 export type MutatingPathHeadDirectory = {
   readonly kind: "directory";
   readonly path: string;
   readonly files: readonly {
     readonly path: string;
-    readonly content: string;
     readonly version: number;
   }[];
 };
@@ -49,21 +49,27 @@ export class MutatingPathRestoreCompositeError extends Error {
   }
 }
 
-async function captureDirectorySnapshot(
-  vfs: VfsService,
+/**
+ * 由已 list 出的 entries 直接采集目录快照，避免逐文件 read。
+ *
+ * @remarks 回滚只依赖 version（见 {@link restoreDirectorySnapshot}），
+ * 故 list 返回的 head_version 已足够，不必再 read 正文。
+ */
+function captureDirectorySnapshot(
   path: string,
-): Promise<MutatingPathHeadDirectory> {
-  const entries = await vfs.list(path, { recursive: true });
+  entries: readonly VfsListEntry[],
+): MutatingPathHeadDirectory {
   const files: MutatingPathHeadDirectory["files"][number][] = [];
   for (const entry of entries) {
     if (entry.kind !== "file") {
       continue;
     }
-    const read = await vfs.read(entry.path);
+    if (entry.version == null) {
+      continue;
+    }
     files.push({
       path: entry.path,
-      content: read.content,
-      version: read.version,
+      version: entry.version,
     });
   }
   return { kind: "directory", path, files };
@@ -91,7 +97,7 @@ export async function captureMutatingPathHeadSnapshots(
         try {
           const entries = await vfs.list(path, { recursive: true });
           if (entries.length > 0) {
-            snapshots.set(path, await captureDirectorySnapshot(vfs, path));
+            snapshots.set(path, captureDirectorySnapshot(path, entries));
           } else {
             snapshots.set(path, { kind: "absent", path });
           }
@@ -105,7 +111,8 @@ export async function captureMutatingPathHeadSnapshots(
         continue;
       }
       if (isVfsError(error, "IS_DIRECTORY")) {
-        snapshots.set(path, await captureDirectorySnapshot(vfs, path));
+        const entries = await vfs.list(path, { recursive: true });
+        snapshots.set(path, captureDirectorySnapshot(path, entries));
         continue;
       }
       throw error;
@@ -167,7 +174,7 @@ async function restoreDirectorySnapshot(
     }
   }
 
-  // 快照内只用 version 拨回；content 字段仅为 capture 遗留
+  // 快照内只用 version 拨回
   for (const file of snapshot.files) {
     await vfs.resetHeadToVersion(file.path, file.version);
   }

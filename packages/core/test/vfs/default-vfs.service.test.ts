@@ -133,13 +133,13 @@ describe("DefaultVfsService (integration)", () => {
     await vfs.mkdir(GLOBAL, "/a/b");
     await vfs.write(GLOBAL, "/a/b/c", "c");
     assert.deepEqual(await vfs.list(GLOBAL, "/a"), [
-      { path: "/a/b", kind: "directory" },
+      { path: "/a/b", kind: "directory", version: 1 },
     ]);
     assert.deepEqual(
       await vfs.list(GLOBAL, "/a", { recursive: true, maxDepth: 2 }),
       [
-        { path: "/a/b", kind: "directory" },
-        { path: "/a/b/c", kind: "file" },
+        { path: "/a/b", kind: "directory", version: 1 },
+        { path: "/a/b/c", kind: "file", version: 1 },
       ],
     );
   });

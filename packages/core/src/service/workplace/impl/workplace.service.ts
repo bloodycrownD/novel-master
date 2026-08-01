@@ -121,6 +121,21 @@ export class DefaultWorkplaceService implements WorkplaceService {
     );
   }
 
+  async renameRulesUnderLogicalPrefix(
+    oldPrefix: string,
+    newPrefix: string,
+  ): Promise<void> {
+    const oldNormalized = normalizePath(oldPrefix);
+    const newNormalized = normalizePath(newPrefix);
+    assertLogicalPathAllowed(this.scope, oldNormalized);
+    assertLogicalPathAllowed(this.scope, newNormalized);
+    await this.deps.workplace.renameRulesUnderLogicalPrefix(
+      workplaceScopeKey(this.scope),
+      oldNormalized,
+      newNormalized,
+    );
+  }
+
   /** @deprecated 使用 {@link materializeLiveView} / {@link materializePersistBlock}。 */
   async materialize(): Promise<WorkplaceMaterialized> {
     const [live, persist] = await Promise.all([

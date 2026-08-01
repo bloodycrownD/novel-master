@@ -162,6 +162,55 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return result;
   }
 
+  async findExistingEntryVersionKeys(
+    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+  ): Promise<Set<string>> {
+    const result = new Set<string>();
+    if (pairs.length === 0) {
+      return result;
+    }
+    const CHUNK_SIZE = 500;
+    for (let offset = 0; offset < pairs.length; offset += CHUNK_SIZE) {
+      const chunk = pairs.slice(offset, offset + CHUNK_SIZE);
+      const placeholders = chunk.map(() => `(?,?)`).join(`,`);
+      const params: unknown[] = [];
+      for (const pair of chunk) {
+        params.push(pair.entryId, pair.version);
+      }
+      const rows = await this.conn.query<{ entry_id: number; version: number }>(
+        `SELECT entry_id, version FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`,
+        params,
+      );
+      for (const row of rows) {
+        result.add(revisionPairKey(Number(row.entry_id), Number(row.version)));
+      }
+    }
+    return result;
+  }
+
+  async batchAppendWithRefCount(
+    items: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+      readonly contentHash: string | null;
+      readonly status: string;
+      readonly mtimeMs: number;
+      readonly refCount: number;
+    }>,
+  ): Promise<void> {
+    if (items.length === 0) return;
+    const sql = `INSERT INTO vfs_revision (entry_id, version, content_hash, status, mtime_ms, ref_count) VALUES (?, ?, ?, ?, ?, ?)`;
+    const paramsList = items.map((i) => [
+      i.entryId,
+      i.version,
+      i.contentHash,
+      i.status,
+      i.mtimeMs,
+      i.refCount,
+    ]);
+    await this.conn.batch(sql, paramsList);
+  }
+
   async append(input: VfsRevisionAppendInput): Promise<void> {
     let contentHash: string | null = null;
     if (input.status === "active") {

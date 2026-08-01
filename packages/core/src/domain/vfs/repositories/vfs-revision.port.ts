@@ -101,6 +101,33 @@ export interface VfsRevisionRepository {
   /** 对 (entryId, version) 的 ref_count 增减；行不存在且 delta<0 时为 no-op。 */
   adjustRefCount(entryId: number, version: number, delta: number): Promise<void>;
 
+  /**
+   * 批量检查哪些 (entryId, version) 的 revision 行已存在。
+   *
+   * @returns 已存在的 pair 集合，key 格式为 `${entryId}:${version}`
+   */
+  findExistingEntryVersionKeys(
+    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+  ): Promise<Set<string>>;
+
+  /**
+   * 批量插入 revision 行并直接设置 ref_count。
+   *
+   * @remarks 与逐条 append + adjustRefCount 等效，但在一个原生调用内完成。
+   * 仅用于 tree-copy / seed 的「全新 revision」场景（调用方已确保行不存在）。
+   * content_hash 非 null 时触发器会自动 bump blob ref_count。
+   */
+  batchAppendWithRefCount(
+    items: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+      readonly contentHash: string | null;
+      readonly status: string;
+      readonly mtimeMs: number;
+      readonly refCount: number;
+    }>,
+  ): Promise<void>;
+
   /** 将 ref_count 上调至 expected（只增不减，保守纠偏）。 */
   repairRefCountFloor(
     entryId: number,

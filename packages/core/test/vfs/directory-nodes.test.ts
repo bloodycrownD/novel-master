@@ -33,7 +33,9 @@ describe("VFS directory nodes", () => {
     const drafts = `${root}/drafts`;
     await vfs.mkdir(GLOBAL_SCOPE, drafts);
     const listed = await vfs.list(GLOBAL_SCOPE, root);
-    assert.deepEqual(listed, [{ path: drafts, kind: "directory" }]);
+    assert.deepEqual(listed, [
+      { path: drafts, kind: "directory", version: 1 },
+    ]);
     assert.deepEqual(await vfs.list(GLOBAL_SCOPE, drafts), []);
     const paths = await vfs.glob(GLOBAL_SCOPE, "**/.keep", { cwd: root });
     assert.equal(paths.length, 0);

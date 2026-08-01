@@ -306,6 +306,11 @@ export const VfsFileManager = forwardRef<
         metaByPath.set(row.path, row);
       }
 
+      // VFS 是版本管理的权威源；worktree（磁盘）只是物理存储。
+      // worktree 上有但 VFS 没有的路径是孤儿残留（如 rename 没清理掉的旧目录壳），
+      // 不应渲染给用户——否则点进去 VFS 查不到 entry 就报「已删除」。
+      const vfsPathSet = new Set(listEntries.map(e => e.path));
+
       const childPaths = new Set<string>();
       for (const row of allRows) {
         if (row.kind === 'dir' && isDirectChild(currentPath, row.path)) {
@@ -327,7 +332,7 @@ export const VfsFileManager = forwardRef<
         extraPaths: [...childPaths],
         dirRule: dirRule ?? null,
         kindByPath,
-      });
+      }).filter(path => vfsPathSet.has(path));
 
       if (__DEV__) {
         console.log('[vfs-reload] applied', {
