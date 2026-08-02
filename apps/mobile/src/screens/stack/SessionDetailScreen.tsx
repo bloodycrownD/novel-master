@@ -1,10 +1,11 @@
 /**
- * 会话详情页（mobile）：收拢原 SessionActionsDrawer 五项能力。
+ * 会话详情页（mobile）：展示即操作，参考 QQ 详情页的交互。
  *
- * 承载：重命名 / 切模型 / 切智能体 / 查看提示词 / 压缩上下文。
- * agent/model 切换一律走 session 级绑定——传入 sessionId 后 picker
- * 写 session 绑定（selectSessionAgent / session model override），
- * 不再写 workspace 全局；workspace 全局入口在「我的」tab。
+ * - 聊天名点击直接进入 inline 编辑（TextInput），失焦或回车提交，不再弹弹层。
+ * - 当前智能体 / 当前大模型 各是一张可点击卡片，点击直接弹 picker 切换
+ *   （agentLocked / modelLocked 时给提示，不进 picker）。
+ * - 次要操作（查看提示词 / 压缩上下文 / 重命名弹层）已经由输入框旁边的 ⋯ 按钮
+ *   弹出的 SessionActionsDrawer 承载，本页不再重复堆菜单列表。
  *
  * 锁定规则（与 desktop SessionDetailDrawer 对齐）：
  * - `source === 'project-custom'` → agent 切换禁用（项目截断，引导去项目设置改）。
@@ -12,24 +13,26 @@
  * - `source === 'session'` → agent 可切换（会话独立持有 agentId）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useNavigation, useRoute} from '@react-navigation/native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
-import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {EVENT_SESSION_COMPACTION_REQUESTED} from '@novel-master/core/events';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
-import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {loadChatAgentMeta, type ChatAgentMeta} from '../../services/chat-agent-meta';
-import {refreshComposerStatusAfterFloorOrCompaction} from '../../services/project-composer-status.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
-type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 /** agent 来源对应的中文标签（贴在 agent 名后面，帮用户判断当前生效来源）。 */
 function agentSourceLabel(source: ChatAgentMeta['source']): string {
@@ -53,21 +56,24 @@ function modelSourceLabel(modelSource: ChatAgentMeta['modelSource']): string {
   }
 }
 
+const AGENT_LOCK_TOAST = '项目专属智能体会截断会话级切换，请到「项目智能体配置」修改';
+const MODEL_LOCK_TOAST = '当前 Agent 已指定模型，会话内无法覆盖';
+
 export function SessionDetailScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-  const navigation = useNavigation<Nav>();
   const route = useRoute<ScreenRoute>();
   const {projectId, sessionId} = route.params;
 
   const [sessionTitle, setSessionTitle] = useState<string>('');
   const [meta, setMeta] = useState<ChatAgentMeta | undefined>();
   const [loading, setLoading] = useState(true);
-  const [renameOpen, setRenameOpen] = useState(false);
+  // 聊天名 inline 编辑态：editingTitle 打开时渲染 TextInput，titleDraft 暂存输入。
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const [compacting, setCompacting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -92,57 +98,45 @@ export function SessionDetailScreen() {
   const modelLocked =
     meta?.modelSource === 'agent-pin' || (meta?.hasDedicatedModel ?? false);
 
-  const handleRename = useCallback(
-    async (nextTitle: string) => {
+  // 提交 inline 重命名：空串或未改动直接收起，不调 rename。
+  const commitTitle = useCallback(
+    async (raw: string) => {
+      const next = raw.trim();
+      setEditingTitle(false);
+      if (!next || next === sessionTitle) {
+        return;
+      }
       try {
-        await runtime.sessions.rename(sessionId, nextTitle);
-        setSessionTitle(nextTitle);
+        await runtime.sessions.rename(sessionId, next);
+        setSessionTitle(next);
         showToast('已重命名');
       } catch (error) {
         showToast(toastMessage('重命名失败', error));
       }
     },
-    [runtime, sessionId, showToast],
+    [runtime, sessionId, sessionTitle, showToast],
   );
 
-  const handleCompact = useCallback(() => {
-    if (compacting) {
+  const startEditTitle = useCallback(() => {
+    setTitleDraft(sessionTitle);
+    setEditingTitle(true);
+  }, [sessionTitle]);
+
+  const openAgentPicker = useCallback(() => {
+    if (agentLocked) {
+      showToast(AGENT_LOCK_TOAST);
       return;
     }
-    Alert.alert('压缩上下文', '将按照事件配置压缩上下文。是否继续？', [
-      {text: '取消', style: 'cancel'},
-      {
-        text: '压缩',
-        onPress: () => {
-          void (async () => {
-            setCompacting(true);
-            try {
-              const result = await runtime.eventOrchestrator.emit(
-                EVENT_SESSION_COMPACTION_REQUESTED,
-                {sessionId, projectId, trigger: 'manual'},
-              );
-              if (!result.ok) {
-                showToast(
-                  toastMessage('压缩部分失败', result.failures[0]?.error),
-                );
-              } else {
-                await refreshComposerStatusAfterFloorOrCompaction(runtime, {
-                  projectId,
-                  sessionId,
-                });
-                showToast('已压缩');
-              }
-              await load();
-            } catch (error) {
-              showToast(toastMessage('压缩失败', error));
-            } finally {
-              setCompacting(false);
-            }
-          })();
-        },
-      },
-    ]);
-  }, [compacting, runtime, sessionId, projectId, showToast, load]);
+    setAgentPickerOpen(true);
+  }, [agentLocked, showToast]);
+
+  const openModelPicker = useCallback(() => {
+    if (modelLocked) {
+      showToast(MODEL_LOCK_TOAST);
+      return;
+    }
+    setModelPickerOpen(true);
+  }, [modelLocked, showToast]);
 
   if (loading || meta == null) {
     return (
@@ -160,97 +154,94 @@ export function SessionDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled">
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, {color: tokens.textSecondary}]}>
-            聊天名
-          </Text>
-          <Text style={[styles.titleValue, {color: tokens.text}]}>
-            {sessionTitle || '（未命名）'}
-          </Text>
+        {/* 聊天名：展示态是大字标题，点击切到 TextInput inline 编辑。 */}
+        <View style={styles.titleBlock}>
+          {editingTitle ? (
+            <TextInput
+              testID="session-title-input"
+              style={[
+                styles.titleInput,
+                {color: tokens.text, borderColor: tokens.border},
+              ]}
+              value={titleDraft}
+              autoFocus
+              onChangeText={setTitleDraft}
+              onSubmitEditing={() => commitTitle(titleDraft)}
+              onEndEditing={() => commitTitle(titleDraft)}
+              placeholder="输入会话名称"
+              placeholderTextColor={tokens.textTertiary}
+              accessibilityLabel="会话名称输入框"
+            />
+          ) : (
+            <Pressable
+              testID="session-title"
+              onPress={startEditTitle}
+              accessibilityLabel="编辑会话名称">
+              <Text
+                style={[styles.titleValue, {color: tokens.text}]}
+                numberOfLines={2}>
+                {sessionTitle || '（未命名）'}
+              </Text>
+              <Text style={[styles.titleHint, {color: tokens.textTertiary}]}>
+                点击编辑
+              </Text>
+            </Pressable>
+          )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, {color: tokens.textSecondary}]}>
-            Agent
-          </Text>
-          <View style={styles.metaRow}>
-            <Text style={[styles.metaValue, {color: tokens.text}]} numberOfLines={2}>
-              {meta.agentName}
+        {/* 当前智能体：点击直接弹 AgentPickerModal，locked 时仅提示。 */}
+        <Pressable
+          testID="agent-row"
+          style={[styles.card, {backgroundColor: tokens.surface}]}
+          onPress={openAgentPicker}
+          accessibilityLabel="切换智能体">
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+              当前智能体
             </Text>
             <Text style={[styles.badge, {color: tokens.textTertiary}]}>
               {agentSourceLabel(meta.source)}
             </Text>
           </View>
+          <Text
+            style={[styles.cardValue, {color: tokens.text}]}
+            numberOfLines={2}>
+            {meta.agentName}
+          </Text>
           {agentLocked ? (
-            <Text style={[styles.hint, {color: tokens.textTertiary}]}>
-              项目专属智能体会截断会话级切换，请到「项目智能体配置」修改。
+            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
+              {AGENT_LOCK_TOAST}
             </Text>
           ) : null}
-        </View>
+        </Pressable>
 
-        <View style={styles.section}>
-          <Text style={[styles.sectionTitle, {color: tokens.textSecondary}]}>
-            大模型
-          </Text>
-          <View style={styles.metaRow}>
-            <Text style={[styles.metaValue, {color: tokens.text}]} numberOfLines={2}>
-              {meta.modelLabel}
+        {/* 当前大模型：点击直接弹 ModelPickerModal，locked 时仅提示。 */}
+        <Pressable
+          testID="model-row"
+          style={[styles.card, {backgroundColor: tokens.surface}]}
+          onPress={openModelPicker}
+          accessibilityLabel="切换大模型">
+          <View style={styles.cardHeader}>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+              当前大模型
             </Text>
             <Text style={[styles.badge, {color: tokens.textTertiary}]}>
               {modelSourceLabel(meta.modelSource)}
             </Text>
           </View>
+          <Text
+            style={[styles.cardValue, {color: tokens.text}]}
+            numberOfLines={2}>
+            {meta.modelLabel}
+          </Text>
           {modelLocked ? (
-            <Text style={[styles.hint, {color: tokens.textTertiary}]}>
-              当前 Agent 已指定模型，会话内无法覆盖。
+            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
+              {MODEL_LOCK_TOAST}
             </Text>
           ) : null}
-        </View>
-
-        <View style={[styles.actions, {borderTopColor: tokens.border}]}>
-          <DetailAction
-            label="聊天重命名"
-            tokens={tokens}
-            onPress={() => setRenameOpen(true)}
-          />
-          <DetailAction
-            label="切换大模型"
-            tokens={tokens}
-            disabled={modelLocked}
-            hint={modelLocked ? 'Agent 已指定模型' : undefined}
-            onPress={() => setModelPickerOpen(true)}
-          />
-          <DetailAction
-            label="切换智能体"
-            tokens={tokens}
-            disabled={agentLocked}
-            hint={agentLocked ? '项目专属已锁定' : undefined}
-            onPress={() => setAgentPickerOpen(true)}
-          />
-          <DetailAction
-            label="查看提示词"
-            tokens={tokens}
-            onPress={() => navigation.navigate('RealPrompt')}
-          />
-          <DetailAction
-            label={compacting ? '压缩中…' : '压缩上下文'}
-            tokens={tokens}
-            disabled={compacting}
-            onPress={handleCompact}
-          />
-        </View>
+        </Pressable>
       </ScrollView>
 
-      <TextPromptModal
-        visible={renameOpen}
-        title="重命名会话"
-        label="会话名称"
-        placeholder="输入会话名称"
-        initialValue={sessionTitle}
-        confirmLabel="保存"
-        onClose={() => setRenameOpen(false)}
-        onConfirm={handleRename}
-      />
       <ModelPickerModal
         visible={modelPickerOpen}
         sessionId={sessionId}
@@ -267,60 +258,35 @@ export function SessionDetailScreen() {
   );
 }
 
-/** 单行操作按钮：与原 SessionActionsDrawer 的列表项保持一致的视觉权重。 */
-function DetailAction({
-  label,
-  tokens,
-  onPress,
-  disabled,
-  hint,
-}: {
-  label: string;
-  tokens: ReturnType<typeof useTheme>['tokens'];
-  onPress: () => void;
-  disabled?: boolean;
-  hint?: string;
-}) {
-  return (
-    <Pressable
-      style={[styles.actionRow, {borderBottomColor: tokens.border}]}
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityLabel={label}>
-      <Text
-        style={{
-          color: disabled ? tokens.textTertiary : tokens.text,
-          fontSize: 15,
-        }}>
-        {label}
-      </Text>
-      {hint ? (
-        <Text style={{color: tokens.textTertiary, fontSize: 12}}>{hint}</Text>
-      ) : null}
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   root: {flex: 1},
   scroll: {flex: 1},
-  scrollContent: {paddingBottom: 32},
+  scrollContent: {paddingHorizontal: 16, paddingTop: 20, paddingBottom: 32},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
-  section: {paddingHorizontal: 16, paddingVertical: 12, gap: 4},
-  sectionTitle: {fontSize: 12, fontWeight: '600', letterSpacing: 0.02},
-  titleValue: {fontSize: 18, fontWeight: '600'},
-  metaRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  metaValue: {flex: 1, fontSize: 15, fontWeight: '600'},
-  badge: {fontSize: 12},
-  hint: {fontSize: 12, marginTop: 2},
-  actions: {marginTop: 8, borderTopWidth: StyleSheet.hairlineWidth},
-  actionRow: {
+  titleBlock: {marginBottom: 20},
+  titleValue: {fontSize: 22, fontWeight: '700'},
+  titleHint: {fontSize: 12, marginTop: 6},
+  titleInput: {
+    fontSize: 20,
+    fontWeight: '600',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  card: {
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    gap: 6,
+  },
+  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
   },
+  cardLabel: {fontSize: 13, fontWeight: '500'},
+  cardValue: {fontSize: 16, fontWeight: '600'},
+  badge: {fontSize: 12},
+  lockHint: {fontSize: 12, marginTop: 4},
 });
