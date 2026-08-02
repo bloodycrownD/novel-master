@@ -109,11 +109,13 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
+    source: 'global',
     agentId: 'a1',
     agentName: 'Agent',
     modelLabel: 'Model',
     tokenLabel: '',
     hasDedicatedModel: false,
+    modelSource: 'workspace',
   })),
 }));
 
