@@ -16,17 +16,14 @@ import {
 } from 'react-native-keyboard-controller';
 import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { type VfsScope } from '@novel-master/core/vfs';
-import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
-import { ChatComposer } from '@/components/chat/ChatComposer';
-import { ChatMetaBar } from '@/components/chat/ChatMetaBar';
-import { ChatStreamMetricsBarLive } from '@/components/chat/ChatStreamMetricsBarLive';
-import { ChatTranscriptWebView } from '@/components/chat/ChatTranscriptWebView';
-import { MessageActionMenu } from '@/components/chat/MessageActionMenu';
-import { MessageEditModal } from '@/components/chat/MessageEditModal';
-import { MessageList } from '@/components/chat/MessageList';
-import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
-import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
-import { VfsFileManager } from '@/components/vfs/VfsFileManager';
+import {ChatComposer} from '@/components/chat/ChatComposer';
+import {ChatMetaBar} from '@/components/chat/ChatMetaBar';
+import {ChatStreamMetricsBarLive} from '@/components/chat/ChatStreamMetricsBarLive';
+import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
+import {MessageActionMenu} from '@/components/chat/MessageActionMenu';
+import {MessageEditModal} from '@/components/chat/MessageEditModal';
+import {MessageList} from '@/components/chat/MessageList';
+import {VfsFileManager} from '@/components/vfs/VfsFileManager';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import type { ThemeTokens } from '@/theme/tokens';
 import { useChatTabContext } from './ChatTabProvider';
@@ -118,12 +115,6 @@ export function ChatConversationPanel({
     vfsRefreshKey,
     sessionVfs,
     sessionWorktree,
-    sessionDrawerOpen,
-    setSessionDrawerOpen,
-    modelPickerOpen,
-    setModelPickerOpen,
-    agentPickerOpen,
-    setAgentPickerOpen,
     messageMenuTarget,
     messageMenuAnchor,
     messageEditPrompt,
@@ -132,14 +123,13 @@ export function ChatConversationPanel({
     abortUiRun,
     onStreamReset,
     onMessagesChanged,
-    onNeedModel,
     bumpWorktreeUiToken,
     onOpenFileEditor,
     onChatScrollSnapshot,
     onLoadOlderMessages,
-    onRefreshChatMeta,
     workspaceVfsRef,
     scope,
+    navigation,
   } = ctx;
 
   const transcriptFlags = useMemo(
@@ -194,7 +184,12 @@ export function ChatConversationPanel({
   const chatHeader =
     projectId != null && sessionId != null ? (
       <>
-        <ChatMetaBar meta={agentMeta} />
+        <ChatMetaBar
+          meta={agentMeta}
+          onOpenDetail={() =>
+            navigation.navigate('SessionDetail', {projectId, sessionId})
+          }
+        />
         <ChatStreamMetricsBarLive
           agentRunning={uiRunning}
           accRef={streamMetricsAccRef}
@@ -264,12 +259,16 @@ export function ChatConversationPanel({
         abortUiRun={abortUiRun}
         onStreamReset={onStreamReset}
         onMessagesChanged={onMessagesChanged}
-        onNeedModel={onNeedModel}
+        onNeedModel={() =>
+          navigation.navigate('SessionDetail', {projectId, sessionId})
+        }
         canResumeWithoutInput={canResumeWithoutInput}
         lastMessageHasToolResult={lastMessageHasToolResult}
         lastMessageIsPlainUserText={lastMessageIsPlainUserText}
         draftRestoreToken={draftRestoreToken}
-        onOpenMore={() => setSessionDrawerOpen(true)}
+        onOpenMore={() =>
+          navigation.navigate('SessionDetail', {projectId, sessionId})
+        }
       />
     ) : null;
 
@@ -342,23 +341,6 @@ export function ChatConversationPanel({
           <Text style={{ color: tokens.textSecondary }}>请先选择会话</Text>
         </View>
       )}
-      <SessionActionsDrawer
-        visible={sessionDrawerOpen}
-        onClose={() => setSessionDrawerOpen(false)}
-        onRename={() => {
-          if (sessionId != null) {
-            setSessionDrawerOpen(false);
-            scope.openSessionRenamePrompt(sessionId);
-          }
-        }}
-        onCompact={() => {
-          setSessionDrawerOpen(false);
-          controller.handleCompactSession();
-        }}
-        onRealPrompt={controller.onNavigateRealPrompt}
-        onSwitchModel={() => setModelPickerOpen(true)}
-        onSwitchAgent={() => setAgentPickerOpen(true)}
-      />
       <MessageActionMenu
         visible={!useWebviewTranscript && messageMenuTarget != null}
         anchor={messageMenuAnchor}
@@ -381,16 +363,6 @@ export function ChatConversationPanel({
             await controller.handleSaveMessageEdit(prompt.messageId, value);
           }
         }}
-      />
-      <ModelPickerModal
-        visible={modelPickerOpen}
-        onClose={() => setModelPickerOpen(false)}
-        onSelected={onRefreshChatMeta}
-      />
-      <AgentPickerModal
-        visible={agentPickerOpen}
-        onClose={() => setAgentPickerOpen(false)}
-        onSelected={onRefreshChatMeta}
       />
     </View>
   );

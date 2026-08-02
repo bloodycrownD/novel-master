@@ -42,9 +42,6 @@ jest.mock('../src/components/chat/ChatTranscriptWebView', () => ({
 jest.mock('../src/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
-jest.mock('../src/components/chrome/SessionActionsDrawer', () => ({
-  SessionActionsDrawer: () => null,
-}));
 jest.mock('../src/components/chat/MessageActionMenu', () => ({
   MessageActionMenu: () => null,
 }));
