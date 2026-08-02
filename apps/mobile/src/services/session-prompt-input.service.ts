@@ -35,9 +35,15 @@ export async function buildSessionPromptInput(
   scope: SessionPromptScope,
   definition?: AgentDefinition,
 ): Promise<SessionPromptInputBundle> {
+  // 未预传入 definition 时才调 resolver（与 desktop 同样的 ?? 短路逻辑），
+  // 透传 scope.sessionId 让 core 解析链读到会话级绑定。
   const resolved =
     definition ??
-    (await resolveAgentForProject(runtime, scope.projectId)).definition;
+    (await resolveAgentForProject(
+      runtime,
+      scope.projectId,
+      scope.sessionId,
+    )).definition;
 
   const allMessages = await runtime.messages.listBySession(scope.sessionId);
   const visible = allMessages.filter(m => !m.hidden);
