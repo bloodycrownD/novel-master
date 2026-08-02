@@ -109,13 +109,14 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
-    source: 'global',
+    // 与新类型契约保持一致：枚举统一为 'session'
+    source: 'session',
     agentId: 'a1',
     agentName: 'Agent',
     modelLabel: 'Model',
     tokenLabel: '',
     hasDedicatedModel: false,
-    modelSource: 'workspace',
+    modelSource: 'session',
   })),
 }));
 
