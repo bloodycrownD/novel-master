@@ -1,9 +1,7 @@
 /**
- * 会话详情页 mobile UI 测试（T-M2 / T-M3 / T-M4 / T-M5）。
+ * 会话详情页 mobile UI 测试（T-M2 / T-M5）。
  *
  * - T-M2: SessionDetailScreen 渲染 + 操作 wiring（重命名 / 切模型 / 切智能体 / 查看提示词 / 压缩上下文）
- * - T-M3: ChatMetaBar 渲染「详情」按钮 + onOpenDetail 触发 navigate('SessionDetail')
- * - T-M4: ChatConversationPanel 不再渲染 SessionActionsDrawer（源文件已删除）
  * - T-M5: picker select 分流——会话内写 session 绑定，全局页写 workspace
  */
 import React from 'react';
@@ -189,7 +187,6 @@ jest.mock('react-native', () => {
 });
 
 import {SessionDetailScreen} from '../src/screens/stack/SessionDetailScreen';
-import {ChatMetaBar} from '../src/components/chat/ChatMetaBar';
 import {
   selectSessionAgent,
   selectWorkspaceAgent,
@@ -335,43 +332,7 @@ describe('T-M2 SessionDetailScreen', () => {
   });
 });
 
-// ── T-M3 ChatMetaBar 详情按钮 ───────────────────────────────────────────────
-describe('T-M3 ChatMetaBar onOpenDetail', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
 
-  it('渲染「详情 ⌄」提示并在点击时触发 onOpenDetail', async () => {
-    const onOpenDetail = jest.fn();
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(
-        <ChatMetaBar meta={meta()} onOpenDetail={onOpenDetail} />,
-      );
-    });
-    const json = JSON.stringify(tree.toJSON());
-    expect(json).toContain('详情');
-    await act(async () => {
-      tree.root.findByProps({testID: '会话详情'}).props.onPress();
-    });
-    expect(onOpenDetail).toHaveBeenCalled();
-  });
-
-  it('未传 onOpenDetail 时仍可渲染', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<ChatMetaBar meta={meta()} />);
-    });
-    expect(tree.toJSON()).toBeTruthy();
-  });
-});
-
-// ── T-M4 ChatConversationPanel 不再渲染 SessionActionsDrawer ─────────────────
-describe('T-M4 SessionActionsDrawer 源文件已删除', () => {
-  it('require 已删除的 SessionActionsDrawer 模块会抛错', () => {
-    expect(() => require('../src/components/chrome/SessionActionsDrawer')).toThrow();
-  });
-});
 
 // ── T-M5 picker select 分流 ─────────────────────────────────────────────────
 describe('T-M5 picker select 分流', () => {

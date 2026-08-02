@@ -38,11 +38,23 @@ type Nav = CompositeNavigationProp<
 
 function ChatTabScreenInner() {
   const sessionBatch = useBatchSelection();
+  const ctx = useChatTabContext();
+  const navigation = useNavigation<Nav>();
+
+  const onOpenSessionDetail = useCallback(() => {
+    if (ctx.projectId != null && ctx.sessionId != null) {
+      navigation.navigate('SessionDetail', {
+        projectId: ctx.projectId,
+        sessionId: ctx.sessionId,
+      });
+    }
+  }, [ctx.projectId, ctx.sessionId, navigation]);
 
   return (
     <ChatTabNavigationProvider
       sessionBatchActive={sessionBatch.active}
       onExitSessionBatch={sessionBatch.exit}
+      onOpenSessionDetail={onOpenSessionDetail}
     >
       <ChatTabScreenContent sessionBatch={sessionBatch} />
     </ChatTabNavigationProvider>
