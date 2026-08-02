@@ -15,7 +15,11 @@ export async function buildRealPromptPreviewSegments(
   runtime: DesktopNovelMasterRuntime,
   scope: PromptPreviewScope,
 ): Promise<readonly PromptPreviewSegment[]> {
-  const { definition } = await resolveAgentForProject(runtime, scope.projectId);
+  const { definition } = await resolveAgentForProject(
+    runtime,
+    scope.projectId,
+    scope.sessionId,
+  );
   const { layout, ctx } = await buildSessionPromptInput(
     runtime,
     scope,

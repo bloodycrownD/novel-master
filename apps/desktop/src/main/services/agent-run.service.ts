@@ -42,9 +42,10 @@ export async function resolveCurrentAgentDefinition(
 export async function resolveDesktopSavedModelId(
   runtime: DesktopNovelMasterRuntime,
   definition: AgentDefinition,
+  sessionId: string,
 ): Promise<{ savedModelId: string; workspaceModelId: string }> {
   return mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition),
+    resolveApplicationModelIdForRun(runtime, definition, sessionId),
   );
 }
 

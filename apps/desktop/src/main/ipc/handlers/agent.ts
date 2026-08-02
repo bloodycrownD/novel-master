@@ -274,6 +274,7 @@ export async function handleAgentRun(
     await resolveDesktopSavedModelId(
       rt,
       (await resolveCurrentAgentDefinition(rt)).definition,
+      req.sessionId,
     );
     const controller = new AbortController();
     const { sessionId } = req;
