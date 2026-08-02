@@ -7,7 +7,10 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
+import type {
+  SessionAgentConfig,
+  SessionAgentConfigPatch,
+} from "@/domain/chat/model/session-agent-config.js";
 import { sessionAgentConfigSchema } from "@/domain/chat/model/session-agent-config.schema.js";
 import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
@@ -199,12 +202,30 @@ export class DefaultSessionService implements SessionService {
 
   async updateSessionAgentConfig(
     id: string,
-    config: SessionAgentConfig,
+    patch: SessionAgentConfigPatch,
   ): Promise<SessionAgentConfig> {
     await this.get(id);
-    // decode 既是校验也是规范化（含 strict）。
+    // partial overlay merge：拿当前配置当基线，patch 里只覆盖出现的字段。
+    const baseline = await this.getSessionAgentConfig(id);
+    // agentId：不传或空串都当作「保持」，传非空串才覆盖。
+    const agentId =
+      patch.agentId != null && patch.agentId !== ""
+        ? patch.agentId
+        : baseline.agentId;
+    // modelId：undefined 保持当前；null 清除；非空串覆盖。
+    let modelId: string | undefined;
+    if (patch.modelId === undefined) {
+      modelId = baseline.modelId;
+    } else if (patch.modelId === null) {
+      modelId = undefined;
+    } else {
+      modelId = patch.modelId;
+    }
+    const merged: SessionAgentConfig =
+      modelId == null ? { agentId } : { agentId, modelId };
+    // merge 完走 schema 校验（agentId 必填）+ 规范化（含 strict）。
     const validated = decode(
-      sessionAgentConfigSchema.toWire(config),
+      sessionAgentConfigSchema.toWire(merged),
       sessionAgentConfigSchema,
     );
     const updatedAtMs = Date.now();

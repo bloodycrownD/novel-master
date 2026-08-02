@@ -5,7 +5,10 @@
  */
 
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
+import type {
+  SessionAgentConfig,
+  SessionAgentConfigPatch,
+} from "@/domain/chat/model/session-agent-config.js";
 
 /** Session CRUD, template copy on create, and full copy. */
 export interface SessionService {
@@ -48,12 +51,15 @@ export interface SessionService {
   getSessionAgentConfig(id: string): Promise<SessionAgentConfig>;
 
   /**
-   * 全量替换会话智能体配置（非 partial overlay）。
+   * partial overlay 更新会话智能体配置。
    *
-   * 调用方传完整新配置：`agentId` 必填，`modelId` 可选。校验通过后写入列。
+   * 调用方只传要改的字段即可：`agentId` 可选（不传就保留），`modelId` 不传
+   * 保持、传非空串覆盖、传 `null` 清除会话级 model 覆盖。service 内部会拿
+   * 当前配置当基线 merge，merge 完再走 schema 校验（`agentId` 必填），最后
+   * 序列化写库。返回 merge 之后的完整配置。
    */
   updateSessionAgentConfig(
     id: string,
-    config: SessionAgentConfig,
+    patch: SessionAgentConfigPatch,
   ): Promise<SessionAgentConfig>;
 }

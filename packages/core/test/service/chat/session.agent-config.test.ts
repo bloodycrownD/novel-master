@@ -113,60 +113,113 @@ describe("SessionService agent config（v2，T-S3）", () => {
     );
   });
 
-  it("update 全量替换为新配置", async () => {
-    const ctx = getNovelMasterTestContext();
-    await ctx.agentRegistry.upsert("seed", def("seed"));
-    await ctx.state.setCurrentAgentId("seed");
-
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "for-update");
-
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
-      agentId: "new-agent",
-      modelId: "new-model",
-    });
-    assert.deepEqual(after, { agentId: "new-agent", modelId: "new-model" });
-
-    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
-    assert.deepEqual(loaded, { agentId: "new-agent", modelId: "new-model" });
-  });
-
-  it("update 仅 agentId 不带 modelId 时清掉旧 modelId（全量替换语义）", async () => {
+  it("update partial overlay：仅切 agent 保留当前 modelId", async () => {
     const ctx = getNovelMasterTestContext();
     await ctx.agentRegistry.upsert("seed", def("seed"));
     await ctx.state.setCurrentAgentId("seed");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "replace-only");
+    const session = await ctx.sessions.create(project.id, "only-agent");
 
-    // 初始有 modelId（来自 workspace）
-    const initial = await ctx.sessions.getSessionAgentConfig(session.id);
-    assert.notEqual(initial.modelId, undefined);
+    // 初始从 workspace 复制了 modelId，切 agent 必须保留它
+    const before = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.equal(before.modelId, TEST_SAVED_MODEL_A);
 
     const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
-      agentId: "agent-only",
+      agentId: "switched-agent",
     });
-    assert.deepEqual(after, { agentId: "agent-only" });
+    assert.deepEqual(after, {
+      agentId: "switched-agent",
+      modelId: TEST_SAVED_MODEL_A,
+    });
+
+    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.deepEqual(loaded, {
+      agentId: "switched-agent",
+      modelId: TEST_SAVED_MODEL_A,
+    });
   });
 
-  it("update 缺 agentId 被 schema 拒绝（ConfigDecodeError）", async () => {
+  it("update partial overlay：仅切 model 保留当前 agentId", async () => {
     const ctx = getNovelMasterTestContext();
-    const { ConfigDecodeError } = await import(
-      "../../../src/errors/config-decode-errors.js"
-    );
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "only-model");
+
+    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+      modelId: TEST_SAVED_MODEL_A,
+    });
+    assert.deepEqual(after, {
+      agentId: "seed",
+      modelId: TEST_SAVED_MODEL_A,
+    });
+
+    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.deepEqual(loaded, {
+      agentId: "seed",
+      modelId: TEST_SAVED_MODEL_A,
+    });
+  });
+
+  it("update partial overlay：传 null 清除 modelId，agentId 保留", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "clear-model");
+
+    const before = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.equal(before.modelId, TEST_SAVED_MODEL_A);
+
+    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+      modelId: null,
+    });
+    assert.deepEqual(after, { agentId: "seed" });
+
+    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.deepEqual(loaded, { agentId: "seed" });
+  });
+
+  it("update partial overlay：不传 modelId 字段保持当前值", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "keep-model");
+
+    // patch 里两个都不传（空 patch），modelId 必须原地不动
+    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {});
+    assert.deepEqual(after, {
+      agentId: "seed",
+      modelId: TEST_SAVED_MODEL_A,
+    });
+  });
+
+  it("update merge 后非法 modelId 被 schema 拒绝", async () => {
+    const ctx = getNovelMasterTestContext();
     await ctx.agentRegistry.upsert("seed", def("seed"));
     await ctx.state.setCurrentAgentId("seed");
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "reject-empty");
 
+    // partial overlay 下 agentId 会从 baseline 继承，schema 主要兌锋点变成 modelId。
+    // 空串 modelId 不满足 min(1)，会被 schema 拒绝。
+    // 这里按 name 判定（避免 tsx 双实例下 instanceof ConfigDecodeError prototype 不匹配）。
     await assert.rejects(
       () =>
         ctx.sessions.updateSessionAgentConfig(session.id, {
-          agentId: "",
-        } as unknown as { agentId: string }),
-      ConfigDecodeError,
+          modelId: "",
+        }),
+      (error: unknown) =>
+        error instanceof Error && error.name === "ConfigDecodeError",
     );
   });
 

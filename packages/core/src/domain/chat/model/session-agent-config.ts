@@ -21,11 +21,18 @@ export type SessionAgentConfig = {
 };
 
 /**
- * `SessionService.updateSessionAgentConfig` 入参——**全量替换**（非 partial overlay）。
+ * `SessionService.updateSessionAgentConfig` 入参——**partial overlay**，不是全量替换。
  *
- * 调用方需传入完整的新配置；`agentId` 必填，`modelId` 可选。
+ * 调用方只传需要改的字段，service 会拿当前 `SessionAgentConfig` 当基线做 merge：
+ * - `agentId`：可选。不传就保持当前值；传非空串就覆盖。
+ * - `modelId`：可选。不传保持当前值；传非空串覆盖；传 `null` 表示清除会话级
+ *   model 覆盖，回退到 agent pin。
+ *
+ * 注意 `agentId` 在 patch 里是可选的，但 merge 完之后最终落库的
+ * {@link SessionAgentConfig} 仍然要求 `agentId` 必填——schema 校验会兜底，
+ * 调用方不用自己保证。
  */
 export type SessionAgentConfigPatch = {
-  readonly agentId: string;
-  readonly modelId?: string;
+  readonly agentId?: string;
+  readonly modelId?: string | null;
 };
