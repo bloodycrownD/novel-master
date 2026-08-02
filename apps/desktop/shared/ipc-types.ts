@@ -37,6 +37,12 @@ export const IPC_CHANNELS = {
   SESSIONS_GET_COMPOSER_DRAFT: 'nm:sessions/getComposerDraft',
   SESSIONS_SET_COMPOSER_DRAFT: 'nm:sessions/setComposerDraft',
   SESSIONS_PROJECT_COMPOSER_STATUS: 'nm:sessions/projectComposerStatus',
+  /** 会话级：读取当前会话的智能体绑定（follow / bind）。 */
+  SESSIONS_GET_AGENT_BINDING: 'nm:sessions/getAgentBinding',
+  /** 会话级：绑定 agent 到会话（agentId=null 解绑回 follow）。 */
+  SESSIONS_SET_AGENT_BINDING: 'nm:sessions/setAgentBinding',
+  /** 会话级：覆盖模型（modelId=null 清除覆盖，mode/agentId 保持现状）。 */
+  SESSIONS_SET_MODEL_OVERRIDE: 'nm:sessions/setModelOverride',
 
   APP_UI_GET: 'nm:app-ui/get',
   APP_UI_SET: 'nm:app-ui/set',
@@ -322,6 +328,32 @@ export type SessionSetComposerDraftRequest = {
 
 export type SessionProjectComposerStatusRequest = {
   readonly sessionId: string;
+};
+
+/**
+ * 会话级智能体配置 wire 形态（与 core 的 SessionAgentConfig 同型，避免双向映射）。
+ *
+ * - `follow`：跟随项目/工作区解析结果。
+ * - `bind`：固定到 registry 中的 `agentId`，可附带 `modelId` 覆盖 agent pin。
+ */
+export type SessionAgentConfigDto =
+  | { readonly mode: 'follow' }
+  | { readonly mode: 'bind'; readonly agentId: string; readonly modelId?: string };
+
+export type SessionGetAgentBindingRequest = {
+  readonly sessionId: string;
+};
+
+export type SessionSetAgentBindingRequest = {
+  readonly sessionId: string;
+  /** `null` 表示解绑回 follow；具体 id 写 bind。 */
+  readonly agentId: string | null;
+};
+
+export type SessionSetModelOverrideRequest = {
+  readonly sessionId: string;
+  /** `null` 表示清除模型覆盖；mode 与 agentId 保持现状不动。 */
+  readonly modelId: string | null;
 };
 
 export type AppUiGetRequest = {
@@ -722,11 +754,19 @@ export type PromptPreviewSegmentDto = {
 };
 
 export type PromptAgentMetaResponse = {
-  readonly source: 'global' | 'project-custom' | 'none';
+  readonly source: 'global' | 'session-bind' | 'project-custom' | 'none';
   readonly agentId?: string;
   readonly agentName: string;
   readonly modelLabel: string;
   readonly hasDedicatedModel: boolean;
+  /**
+   * 模型来源优先级链：
+   * - `agent-pin`：agent definition 自带 model（压制 session/workspace）。
+   * - `session-override`：会话 bind 且带 modelId，且 agent 无 pin。
+   * - `workspace`：回退工作区当前模型。
+   * `source: 'none'` 时省略。
+   */
+  readonly modelSource?: 'agent-pin' | 'session-override' | 'workspace';
 };
 
 /** Structured chat context usage for workspace footer (prototype token bar). */
