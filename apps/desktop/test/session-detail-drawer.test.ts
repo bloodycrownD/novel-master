@@ -69,18 +69,20 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /if \(!open\)/);
   });
 
-  it("源码：project-custom 锁定 agent 切换；session 可改", () => {
+  it("源码：source !== 'session' 时锁定 agent/model 卡片（与 mobile/B-1 方案一一致）", () => {
     const src = readDrawer();
-    // agent 锁：source === "project-custom"（project-custom 截断锁定，session 可改）
-    assert.match(src, /agentLocked = source === "project-custom"/);
-    // model 锁：modelSource === "agent-pin" || hasDedicatedModel
-    assert.match(src, /modelLocked/);
-    assert.match(src, /"agent-pin"/);
-    assert.match(src, /hasDedicatedModel/);
-    // project-custom 锁定 toast 引导
+    // source 默认 'none'（meta 未加载或 session.agentId 指向已删 agent）
+    assert.match(src, /meta\?\.source \?\? "none"/);
+    // agent 锁：只有 session 才允许切；none / project-custom 一律锁
+    assert.match(src, /agentLocked = source !== "session"/);
+    // model 同口径收口（原 agent-pin / hasDedicatedModel 判定已废弃）
+    assert.match(src, /modelLocked = source !== "session"/);
+    // 锁定 toast 引导文案保留
     assert.match(src, /项目锁定/);
-    // agent pin 锁定 toast 引导
     assert.match(src, /已锁定模型/);
+    // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
+    assert.doesNotMatch(src, /"agent-pin"/);
+    assert.doesNotMatch(src, /hasDedicatedModel/);
   });
 
   it("源码：重命名走行内编辑（ipcSessionsRename）；agent/model 切换走 session 级 IPC", () => {
@@ -92,6 +94,16 @@ describe("SessionDetailDrawer (T-D3)", () => {
     // 不应再调用 workspace 级 setCurrent
     assert.doesNotMatch(src, /ipcAgentSetCurrent\(/);
     assert.doesNotMatch(src, /ipcModelSetCurrent\(/);
+  });
+
+  it("源码：行内编辑竞态防护（submittingRef + 空串短路）[G-1]", () => {
+    const src = readDrawer();
+    // submittingRef：防止 blur 与 keydown Enter 重复提交
+    assert.match(src, /submittingRef/);
+    assert.match(src, /if \(submittingRef\.current\)/);
+    // 空串或未改动 → 直接退出，不调用 IPC
+    assert.match(src, /!trimmed/);
+    assert.match(src, /trimmed === sessionName/);
   });
 
   it("源码：agent picker 不允许 none；model picker 允许 none 且措辞修正", () => {
@@ -114,21 +126,5 @@ describe("App.tsx 入口替换 (T-D4)", () => {
     assert.match(appSrc, /SessionDetailDrawer/);
     // openSessionActions 改为打开抽屉
     assert.match(appSrc, /setSessionDetailOpen\(true\)/);
-  });
-
-  it("源码：WorkspaceFooter 锁判定 project-custom 锁 / session 可改", () => {
-    const footerSrc = readFileSync(
-      join(rendererRoot, "features", "chat", "WorkspaceFooter.tsx"),
-      "utf8",
-    );
-    // project-custom 锁 agent；session 可改（判定或注释中体现）
-    assert.match(footerSrc, /project-custom/);
-    assert.match(footerSrc, /session/);
-    // model pin 锁定检测
-    assert.match(footerSrc, /"agent-pin"/);
-    assert.match(footerSrc, /hasDedicatedModel/);
-    // 写回改 session 级 IPC
-    assert.match(footerSrc, /ipcSessionsSetAgentBinding\(/);
-    assert.match(footerSrc, /ipcSessionsSetModelOverride\(/);
   });
 });

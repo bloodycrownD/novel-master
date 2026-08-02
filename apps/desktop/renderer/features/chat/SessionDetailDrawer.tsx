@@ -2,7 +2,7 @@
  * 会话详情抽屉（desktop）。
  *
  * 收拢原 `#session-actions-menu`（重命名 / 压缩 / 切模型 / 切智能体）
- * 与 `WorkspaceFooter`（agent/model 切换 + token 占用）的散落入口，
+ * 与旧底部栏（agent/model 切换 + token 占用）的散落入口，
  * 统一为单一模态抽屉。整体走「点击即编辑 / 点击即切换」的轻交互，
  * 不再堆叠菜单按钮。
  *
@@ -12,11 +12,10 @@
  *   （`ipcSessionsSetAgentBinding` / `ipcSessionsSetModelOverride`），
  *   不再写 workspace 全局。
  *
- * 锁定规则（保持不变）：
- * - `source === 'project-custom'` → agent 切换禁用（项目截断，引导去项目设置）。
- * - `source === 'session'` → agent 可切换（会话独立持有 agentId）。
- * - `modelSource === 'agent-pin'` 或 agent definition 自带 model → model 切换禁用
- *   （agent pin 压制 session）。
+ * 锁定规则（与 mobile/B-1 方案一一致）：
+ * - 只有 `source === 'session'`（session.agentId 指向真实 agent）才允许切 agent/model。
+ * - `source === 'none'`（agentId 指向已删 agent）/ `source === 'project-custom'`（项目截断）
+ *   一律锁卡，避免已删 agent 场景下还能点出 picker。
  *
  * core 移除 workspace 回退后：会话始终持有 agentId（必填）+ modelId（可选），
  * 因此 agent picker 不允许 none；model picker 允许 none（清除会话覆盖，
@@ -141,12 +140,13 @@ export function SessionDetailDrawer({
   }
 
   const source = meta?.source ?? "none";
-  const modelSource = meta?.modelSource;
-  // project-custom 截断 → agent 锁；session 是会话绑定，用户可改，不锁
-  const agentLocked = source === "project-custom";
-  // agent pin：definition 自带 model（hasDedicatedModel）压制 session
-  const modelLocked =
-    modelSource === "agent-pin" || (meta?.hasDedicatedModel ?? false);
+  // 锁定口径：只有 source === 'session'（session.agentId 指向真实 agent）才允许切；
+  // source === 'none'（session.agentId 指向已删 agent，handler 内层 catch 命中）和
+  // source === 'project-custom'（项目级截断）一律锁，与 mobile/B-1 方案一保持一致。
+  const agentLocked = source !== "session";
+  // model 同口径收口：source !== 'session' 即锁定，避免 source='none' 时 model 卡仍可点
+  // （原 agent pin / 专属模型判定已废弃，统一走 source 判定）
+  const modelLocked = source !== "session";
 
   const openAgentPicker = async () => {
     if (agentLocked) {
