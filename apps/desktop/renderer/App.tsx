@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useColumnSplitters } from './hooks/useColumnSplitters';
-import { runCompaction } from './features/chat/ConversationPanel';
+import { SessionDetailDrawer } from './features/chat/SessionDetailDrawer';
 import { ConfirmModal } from './components/ui/ConfirmModal';
 import { TextPromptModal } from './components/ui/TextPromptModal';
 import { showToast } from './components/ui/show-toast';
@@ -26,13 +26,7 @@ import { NovelMasterProvider } from './providers/NovelMasterProvider';
 import { ShellNavProvider, useShellNav } from './providers/ShellNavProvider';
 import { ToastHost } from './components/ui/ToastHost';
 import { ThemeProvider } from './providers/ThemeProvider';
-import { PickerModal } from './components/ui/PickerModal';
 import {
-  ipcAgentListPicker,
-  ipcAgentSetCurrent,
-  ipcModelListPicker,
-  ipcModelSetCurrent,
-  ipcSessionsRename,
   ipcVfsCharacterCardImport,
   ipcVfsZipExport,
   ipcVfsZipImport,
@@ -55,11 +49,6 @@ type WorkspaceConfirmState =
       target: WorkspaceContextTarget;
       directoryPath: string;
     };
-
-type SessionRenamePromptState = {
-  sessionId: string;
-  initialTitle: string;
-};
 
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -87,25 +76,11 @@ function DesktopOverlays() {
     useState<WorkspaceContextTarget | null>(null);
   const [fileInclusionTarget, setFileInclusionTarget] =
     useState<WorkspaceContextTarget | null>(null);
-  const [sessionMenu, setSessionMenu] = useState<{
-    left: number;
-    bottom: number;
-  } | null>(null);
-  const [confirmCompact, setConfirmCompact] = useState(false);
-  const [sessionRenamePrompt, setSessionRenamePrompt] =
-    useState<SessionRenamePromptState | null>(null);
-  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const [agentRows, setAgentRows] = useState<
-    Array<{ agentId: string; label: string }>
-  >([]);
-  const [modelRows, setModelRows] = useState<
-    Array<{ savedModelId: string; label: string }>
-  >([]);
+  // 会话详情抽屉（原 #session-actions-menu 收拢入口）
+  const [sessionDetailOpen, setSessionDetailOpen] = useState(false);
 
   const closeMenus = useCallback(() => {
     setWorkspaceMenu(null);
-    setSessionMenu(null);
   }, []);
 
   useEffect(() => {
@@ -123,10 +98,8 @@ function DesktopOverlays() {
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
-      if (
-        target?.closest("[data-action='open-session-actions']") ||
-        target?.closest('#session-actions-menu')
-      ) {
+      // 会话操作入口点击交给 ChatComposer onClick 处理（打开详情抽屉）
+      if (target?.closest("[data-action='open-session-actions']")) {
         return;
       }
       closeMenus();
@@ -138,7 +111,6 @@ function DesktopOverlays() {
   const openWorkspaceContextMenu = useCallback(
     (target: WorkspaceContextTarget) => {
       setWorkspaceMenu({ ...target, items: workspaceMenuItems(target) });
-      setSessionMenu(null);
     },
     [],
   );
@@ -150,13 +122,9 @@ function DesktopOverlays() {
     [openWorkspaceContextMenu],
   );
 
-  const openSessionActions = useCallback((anchor: HTMLElement) => {
-    const rect = anchor.getBoundingClientRect();
-    setSessionMenu({
-      left: Math.max(12, Math.min(rect.left, window.innerWidth - 200)),
-      bottom: window.innerHeight - rect.top + 8,
-    });
-    setWorkspaceMenu(null);
+  // 原浮动菜单收拢为模态抽屉：保留 anchor 入参以兼容现有按钮回调签名
+  const openSessionActions = useCallback((_anchor: HTMLElement) => {
+    setSessionDetailOpen(true);
   }, []);
 
   const handleWorkspaceAction = useCallback(
@@ -285,33 +253,6 @@ function DesktopOverlays() {
     ],
   );
 
-  const handleSessionRenameConfirm = useCallback(
-    async (title: string) => {
-      const prompt = sessionRenamePrompt;
-      setSessionRenamePrompt(null);
-      if (!prompt) {
-        return;
-      }
-      const trimmed = title.trim();
-      if (!trimmed) {
-        return;
-      }
-      const result = await ipcSessionsRename({
-        id: prompt.sessionId,
-        title: trimmed,
-      });
-      if (result.ok) {
-        if (prompt.sessionId === sessionId) {
-          updateSessionName(trimmed);
-        }
-        showToast('已重命名会话');
-      } else {
-        showToast(result.error.message);
-      }
-    },
-    [sessionRenamePrompt, sessionId, updateSessionName],
-  );
-
   const handleWorkspaceConfirm = useCallback(async () => {
     const confirm = workspaceConfirm;
     setWorkspaceConfirm(null);
@@ -404,124 +345,13 @@ function DesktopOverlays() {
         />
       </div>
 
-      <div
-        id="session-actions-menu"
-        className={`session-actions-menu${sessionMenu ? '' : ' hidden'}`}
-        role="menu"
-        aria-label="会话操作"
-        hidden={!sessionMenu}
-        style={
-          sessionMenu
-            ? { left: sessionMenu.left, bottom: sessionMenu.bottom }
-            : undefined
-        }
-        onClick={e => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          data-session-action="rename"
-          onClick={() => {
-            closeMenus();
-            if (sessionId && sessionName != null) {
-              setSessionRenamePrompt({
-                sessionId,
-                initialTitle: sessionName,
-              });
-            }
-          }}
-        >
-          聊天重命名
-        </button>
-        <button
-          type="button"
-          data-session-action="compact-chat"
-          onClick={() => {
-            closeMenus();
-            if (projectId && sessionId) {
-              setConfirmCompact(true);
-            }
-          }}
-        >
-          压缩上下文
-        </button>
-        <button
-          type="button"
-          data-session-action="switch-model"
-          onClick={() => {
-            closeMenus();
-            void (async () => {
-              const result = await ipcModelListPicker();
-              if (!result.ok || result.data.rows.length === 0) {
-                showToast('暂无模型，请先在设置中配置 Provider。');
-                return;
-              }
-              setModelRows(result.data.rows);
-              setModelPickerOpen(true);
-            })();
-          }}
-        >
-          切换大模型
-        </button>
-        <button
-          type="button"
-          data-session-action="switch-agent"
-          onClick={() => {
-            closeMenus();
-            void (async () => {
-              const result = await ipcAgentListPicker();
-              if (!result.ok || result.data.rows.length === 0) {
-                showToast('暂无 Agent，请先在设置中配置。');
-                return;
-              }
-              setAgentRows(result.data.rows);
-              setAgentPickerOpen(true);
-            })();
-          }}
-        >
-          切换智能体
-        </button>
-      </div>
-
-      <PickerModal
-        open={modelPickerOpen}
-        title="选择模型"
-        rows={modelRows.map(r => ({ id: r.savedModelId, label: r.label }))}
-        onClose={() => setModelPickerOpen(false)}
-        onSelect={savedModelId => {
-          if (savedModelId == null) {
-            return;
-          }
-          void ipcModelSetCurrent({ savedModelId }).then(() => {
-            notifyAgentConfigChanged();
-          });
-        }}
-      />
-      <PickerModal
-        open={agentPickerOpen}
-        title="选择 Agent"
-        rows={agentRows.map(r => ({ id: r.agentId, label: r.label }))}
-        onClose={() => setAgentPickerOpen(false)}
-        onSelect={agentId => {
-          if (agentId == null) {
-            return;
-          }
-          void ipcAgentSetCurrent({ agentId }).then(() => {
-            notifyAgentConfigChanged();
-          });
-        }}
-      />
-
-      <ConfirmModal
-        open={confirmCompact}
-        title="压缩上下文"
-        message="将按照事件配置压缩上下文。是否继续？"
-        onConfirm={() => {
-          setConfirmCompact(false);
-          if (projectId && sessionId) {
-            void runCompaction(projectId, sessionId);
-          }
-        }}
-        onCancel={() => setConfirmCompact(false)}
+      <SessionDetailDrawer
+        open={sessionDetailOpen && !!projectId && !!sessionId}
+        projectId={projectId ?? ''}
+        sessionId={sessionId ?? ''}
+        sessionName={sessionName ?? ''}
+        onClose={() => setSessionDetailOpen(false)}
+        onRenamed={updateSessionName}
       />
 
       <div
@@ -577,15 +407,6 @@ function DesktopOverlays() {
         }
         onClose={() => setWorkspacePrompt(null)}
         onConfirm={handleWorkspacePromptConfirm}
-      />
-
-      <TextPromptModal
-        open={sessionRenamePrompt != null}
-        title="重命名会话"
-        placeholder="会话名称"
-        initialValue={sessionRenamePrompt?.initialTitle ?? ''}
-        onClose={() => setSessionRenamePrompt(null)}
-        onConfirm={handleSessionRenameConfirm}
       />
 
       <ConfirmModal
