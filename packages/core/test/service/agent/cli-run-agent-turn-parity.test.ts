@@ -98,6 +98,7 @@ function makeRuntime(
           displayByPath: new Map(),
         }),
       }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
+    sessions: ctx.sessions,
   };
 }
 

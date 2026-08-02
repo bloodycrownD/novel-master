@@ -93,6 +93,9 @@ function makeRuntime(
       listKeys: async () => [],
     },
     userVfsTurn: mockUserVfsTurn(),
+    sessions: {
+      getSessionAgentConfig: async () => ({ mode: "follow" }),
+    },
   };
 }
 

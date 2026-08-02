@@ -48,6 +48,7 @@ describe("resolveAgentForProject", () => {
       state: ctx.state,
       agentRegistry: registry,
       projects: ctx.projects,
+      sessions: ctx.sessions,
     };
 
     const resolved = await resolveAgentForProject(runtime, project.id);
@@ -83,6 +84,7 @@ describe("resolveAgentForProject", () => {
       state: ctx.state,
       agentRegistry: registry,
       projects: ctx.projects,
+      sessions: ctx.sessions,
     };
 
     const resolved = await resolveAgentForProject(runtime, project.id);
@@ -109,6 +111,9 @@ describe("resolveAgentForProject", () => {
           mode: "custom" as const,
           definition: undefined,
         }),
+      },
+      sessions: {
+        getSessionAgentConfig: async () => ({ mode: "follow" }),
       },
     };
 

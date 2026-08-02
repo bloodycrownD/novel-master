@@ -148,6 +148,9 @@ function makeRuntime(overrides: {
     ...(overrides.userVfsTurn != null
       ? { userVfsTurn: overrides.userVfsTurn }
       : {}),
+    sessions: {
+      getSessionAgentConfig: async () => ({ mode: "follow" }),
+    },
   };
 }
 

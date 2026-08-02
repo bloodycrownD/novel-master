@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
 import {
   AgentRunResolveError,
   resolveApplicationModelIdForRun,
@@ -21,6 +22,7 @@ function makeRuntime(overrides: {
   readonly currentModelId?: string | null;
   readonly agentIds?: string[];
   readonly getAgent?: (id: string) => Promise<AgentDefinition>;
+  readonly sessionConfig?: SessionAgentConfig;
 }): AgentRunRuntimePort {
   return {
     state: {
@@ -35,6 +37,10 @@ function makeRuntime(overrides: {
         }
         return sampleDefinition;
       },
+    },
+    sessions: {
+      getSessionAgentConfig: async () =>
+        overrides.sessionConfig ?? { mode: "follow" },
     },
   };
 }
@@ -90,5 +96,66 @@ describe("agent-run-shared", () => {
       () => resolveApplicationModelIdForRun(runtime, definition),
       (error: unknown) => error instanceof AgentRunResolveError,
     );
+  });
+
+  it("resolveApplicationModelIdForRun 不传 sessionId 时不读 session 绑定", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      // bind 配置应被忽略，因为未传 sessionId
+      sessionConfig: { mode: "bind", agentId: "a1", modelId: "session-model" },
+    });
+    const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
+    const result = await resolveApplicationModelIdForRun(runtime, definition);
+    assert.equal(result.savedModelId, "workspace-model");
+  });
+
+  it("resolveApplicationModelIdForRun session bind modelId 覆盖 workspace", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      sessionConfig: {
+        mode: "bind",
+        agentId: "a1",
+        modelId: "session-model",
+      },
+    });
+    const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
+    const result = await resolveApplicationModelIdForRun(
+      runtime,
+      definition,
+      "sess-1",
+    );
+    assert.equal(result.savedModelId, "session-model");
+    assert.equal(result.workspaceModelId, "workspace-model");
+  });
+
+  it("resolveApplicationModelIdForRun agent pin 压制 session 覆盖", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      sessionConfig: {
+        mode: "bind",
+        agentId: "a1",
+        modelId: "session-model",
+      },
+    });
+    const result = await resolveApplicationModelIdForRun(
+      runtime,
+      sampleDefinition, // model = "provider:model"
+      "sess-1",
+    );
+    assert.equal(result.savedModelId, "provider:model");
+  });
+
+  it("resolveApplicationModelIdForRun follow 模式不产生 sessionModelId", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      sessionConfig: { mode: "follow" },
+    });
+    const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
+    const result = await resolveApplicationModelIdForRun(
+      runtime,
+      definition,
+      "sess-1",
+    );
+    assert.equal(result.savedModelId, "workspace-model");
   });
 });
