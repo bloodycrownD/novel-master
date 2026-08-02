@@ -333,12 +333,13 @@ export type SessionProjectComposerStatusRequest = {
 /**
  * 会话级智能体配置 wire 形态（与 core 的 SessionAgentConfig 同型，避免双向映射）。
  *
- * - `follow`：跟随项目/工作区解析结果。
- * - `bind`：固定到 registry 中的 `agentId`，可附带 `modelId` 覆盖 agent pin。
+ * - `agentId`：固定到 registry 中的 agent，必填（会话始终独立持有，不再 follow workspace）。
+ * - `modelId`：可选，覆盖 agent pin 的模型。
  */
-export type SessionAgentConfigDto =
-  | { readonly mode: 'follow' }
-  | { readonly mode: 'bind'; readonly agentId: string; readonly modelId?: string };
+export type SessionAgentConfigDto = {
+  readonly agentId: string;
+  readonly modelId?: string;
+};
 
 export type SessionGetAgentBindingRequest = {
   readonly sessionId: string;
@@ -346,13 +347,13 @@ export type SessionGetAgentBindingRequest = {
 
 export type SessionSetAgentBindingRequest = {
   readonly sessionId: string;
-  /** `null` 表示解绑回 follow；具体 id 写 bind。 */
+  /** `null` 表示回退到 workspace 当前 agent；具体 id 直接写入会话。 */
   readonly agentId: string | null;
 };
 
 export type SessionSetModelOverrideRequest = {
   readonly sessionId: string;
-  /** `null` 表示清除模型覆盖；mode 与 agentId 保持现状不动。 */
+  /** `null` 表示清除模型覆盖；agentId 保持现状不动。 */
   readonly modelId: string | null;
 };
 
@@ -754,19 +755,18 @@ export type PromptPreviewSegmentDto = {
 };
 
 export type PromptAgentMetaResponse = {
-  readonly source: 'global' | 'session-bind' | 'project-custom' | 'none';
+  readonly source: 'project-custom' | 'session' | 'none';
   readonly agentId?: string;
   readonly agentName: string;
   readonly modelLabel: string;
   readonly hasDedicatedModel: boolean;
   /**
-   * 模型来源优先级链：
-   * - `agent-pin`：agent definition 自带 model（压制 session/workspace）。
-   * - `session-override`：会话 bind 且带 modelId，且 agent 无 pin。
-   * - `workspace`：回退工作区当前模型。
+   * 模型来源优先级链（workspace 层已移除）：
+   * - `agent-pin`：agent definition 自带 model，压制 session 覆盖。
+   * - `session`：会话级 modelId（agent 无 pin 时生效）。
    * `source: 'none'` 时省略。
    */
-  readonly modelSource?: 'agent-pin' | 'session-override' | 'workspace';
+  readonly modelSource?: 'agent-pin' | 'session';
 };
 
 /** Structured chat context usage for workspace footer (prototype token bar). */

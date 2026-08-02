@@ -154,22 +154,38 @@ export async function handleSessionsGetAgentBinding(
 }
 
 /**
- * 写会话级智能体绑定。`agentId: null` 解绑回 follow；具体 id 写 bind。
- * 返回最新 config，UI 拿到后可直接刷新本地状态（无需重新 GET）。
+ * 写会话级智能体绑定。`agentId: null` 回退到 workspace 当前 agent；
+ * 具体 id 直接写入。返回最新 config，UI 拿到后可直接刷新本地状态（无需重新 GET）。
  */
 export async function handleSessionsSetAgentBinding(
   req: SessionSetAgentBindingRequest,
 ): Promise<IpcResult<SessionAgentConfigDto>> {
   try {
     const rt = await getDesktopRuntime();
-    const patch =
-      req.agentId == null
-        ? { mode: 'follow' as const }
-        : { mode: 'bind' as const, agentId: req.agentId };
-    const config = await rt.sessions.updateSessionAgentConfig(
-      req.sessionId,
-      patch,
-    );
+    // workspace 层已移除：会话始终独立持有 agentId（必填）。
+    // agentId 为 null 时回退到 workspace 当前 agent（state 优先，缺失回落 registry 首项）。
+    let agentId = req.agentId;
+    if (agentId == null) {
+      const fromState = await rt.state.getCurrentAgentId();
+      agentId =
+        fromState && fromState !== ""
+          ? fromState
+          : (await rt.agentRegistry.listAgentIds())[0];
+      if (agentId == null || agentId === "") {
+        return {
+          ok: false,
+          error: formatIpcError(
+            new Error(
+              "回退 workspace agent 失败：workspace 未配置 Agent，且 registry 为空",
+            ),
+          ),
+        };
+      }
+    }
+    // 切换 agent 时重置 modelId（覆盖是针对旧 agent 的，避免残留误用）。
+    const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
+      agentId,
+    });
     return { ok: true, data: config };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -177,7 +193,7 @@ export async function handleSessionsSetAgentBinding(
 }
 
 /**
- * 写会话级模型覆盖。`modelId: null` 清除覆盖；mode 与 agentId 保持现状。
+ * 写会话级模型覆盖。`modelId: null` 清除覆盖；agentId 保持现状不动。
  * 返回最新 config，UI 拿到后可直接刷新本地状态（无需重新 GET）。
  */
 export async function handleSessionsSetModelOverride(
@@ -185,10 +201,12 @@ export async function handleSessionsSetModelOverride(
 ): Promise<IpcResult<SessionAgentConfigDto>> {
   try {
     const rt = await getDesktopRuntime();
-    const config = await rt.sessions.updateSessionAgentConfig(
-      req.sessionId,
-      { modelId: req.modelId },
-    );
+    // updateSessionAgentConfig 为全量替换：先读当前 config，保留 agentId，只换 modelId。
+    const current = await rt.sessions.getSessionAgentConfig(req.sessionId);
+    const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
+      agentId: current.agentId,
+      modelId: req.modelId ?? undefined,
+    });
     return { ok: true, data: config };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

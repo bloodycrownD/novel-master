@@ -3,7 +3,7 @@
  *
  * @module services/chat-prompt-tokens
  */
-import { resolveApplicationModelId } from "@novel-master/core/agent";
+import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
   countPromptLlmInputHeuristicOnly,
@@ -61,10 +61,13 @@ export async function loadChatPromptTokenStats(
     scope,
   );
 
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const savedModelId = resolveApplicationModelId({
+  // workspace 层已移除：模型解析链为 agent pin → session.modelId。
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+    scope.sessionId,
+  );
+  const savedModelId = resolveSavedModelId({
     agentModelId: definition.model,
-    workspaceModelId: workspaceModelId || undefined,
+    sessionModelId: sessionConfig.modelId,
   });
 
   if (!savedModelId) {
@@ -107,10 +110,13 @@ async function loadChatPromptTokenStatsFallback(
     scope,
   );
 
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const savedModelId = resolveApplicationModelId({
+  // workspace 层已移除：fallback 路径同样走 agent pin → session.modelId。
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+    scope.sessionId,
+  );
+  const savedModelId = resolveSavedModelId({
     agentModelId: definition.model,
-    workspaceModelId: workspaceModelId || undefined,
+    sessionModelId: sessionConfig.modelId,
   });
 
   if (!savedModelId) {
