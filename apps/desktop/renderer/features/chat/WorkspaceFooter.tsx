@@ -36,11 +36,11 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
   const { notifyAgentConfigChanged } = useShellNav();
   const [agentName, setAgentName] = useState("—");
   const [agentSource, setAgentSource] = useState<
-    "global" | "session-bind" | "project-custom" | "none"
+    "project-custom" | "session" | "none"
   >("none");
   const [modelLabel, setModelLabel] = useState("—");
   const [modelSource, setModelSource] = useState<
-    "agent-pin" | "session-override" | "workspace" | undefined
+    "agent-pin" | "session" | undefined
   >(undefined);
   const [hasDedicatedModel, setHasDedicatedModel] = useState(false);
   const [tokenStats, setTokenStats] = useState<PromptChatTokenStatsResponse | null>(
@@ -72,9 +72,9 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
     void reload();
   }, [reload]);
 
-  // project-custom 截断 → agent 锁；session-bind 是会话绑定，用户可改，不锁
+  // project-custom 截断 → agent 锁；session 是会话绑定，用户可改，不锁
   const agentLocked = agentSource === "project-custom";
-  // agent pin（definition 自带 model）压制 session/workspace
+  // agent pin（definition 自带 model）压制 session
   const modelLocked =
     modelSource === "agent-pin" || hasDedicatedModel;
 

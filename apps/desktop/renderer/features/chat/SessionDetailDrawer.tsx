@@ -9,9 +9,9 @@
  *
  * 锁定规则：
  * - `source === 'project-custom'` 时 agent 切换禁用（项目截断，引导去项目设置改）。
- * - `source === 'session-bind'` 时 agent 可切换（这是 session 绑定，用户可改）。
+ * - `source === 'session'` 时 agent 可切换（这是 session 绑定，用户可改）。
  * - `modelSource === 'agent-pin'` 或 agent definition 自带 model 时 model 切换禁用
- *   （agent pin 压制 session/workspace）。
+ *   （agent pin 压制 session）。
  */
 import { useCallback, useEffect, useState } from "react";
 import type {
@@ -47,9 +47,8 @@ interface SessionDetailDrawerProps {
 }
 
 const AGENT_SOURCE_LABEL: Record<PromptAgentMetaResponse["source"], string> = {
-  global: "工作区",
-  "session-bind": "会话绑定",
   "project-custom": "项目专属",
+  session: "会话",
   none: "未配置",
 };
 
@@ -58,8 +57,7 @@ const MODEL_SOURCE_LABEL: Record<
   string
 > = {
   "agent-pin": "Agent 固定",
-  "session-override": "会话覆盖",
-  workspace: "工作区",
+  session: "会话",
 };
 
 function tokenCountLabel(stats: PromptChatTokenStatsResponse): string {
@@ -124,8 +122,9 @@ export function SessionDetailDrawer({
 
   const source = meta?.source ?? "none";
   const modelSource = meta?.modelSource;
-  const agentLocked = source !== "session-bind" && source !== "global";
-  // agent pin：definition 自带 model（hasDedicatedModel）压制 session/workspace
+  // project-custom 截断 → agent 锁；session 是会话绑定，用户可改，不锁
+  const agentLocked = source === "project-custom";
+  // agent pin：definition 自带 model（hasDedicatedModel）压制 session
   const modelLocked =
     modelSource === "agent-pin" || (meta?.hasDedicatedModel ?? false);
 
