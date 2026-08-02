@@ -112,6 +112,9 @@ function makeRuntime(overrides: {
       getById: async () => null,
     } as AgentTurnRuntimePort["savedModelRepo"],
     userVfsTurn: overrides.userVfsTurn,
+    sessions: {
+      getSessionAgentConfig: async () => ({ mode: "follow" }),
+    },
   } as AgentTurnRuntimePort;
 }
 
