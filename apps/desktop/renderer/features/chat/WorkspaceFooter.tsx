@@ -36,7 +36,7 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
   const { notifyAgentConfigChanged } = useShellNav();
   const [agentName, setAgentName] = useState("—");
   const [agentSource, setAgentSource] = useState<
-    "global" | "project-custom" | "none"
+    "global" | "session-bind" | "project-custom" | "none"
   >("none");
   const [modelLabel, setModelLabel] = useState("—");
   const [tokenStats, setTokenStats] = useState<PromptChatTokenStatsResponse | null>(
