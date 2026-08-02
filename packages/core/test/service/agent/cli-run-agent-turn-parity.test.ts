@@ -6,7 +6,6 @@ import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 import {
   agentDefinitionSchema,
-  AgentTurnError,
   createAgentRegistryService,
   runAgentTurn,
   type AgentDefinition,
@@ -32,7 +31,6 @@ novelMasterTestFixture();
 
 const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000088";
 const PROJECT_MODEL_ID = "00000000-0000-4000-8000-000000000089";
-const FLAG_MODEL_ID = "00000000-0000-4000-8000-000000000090";
 
 const customDefinition: AgentDefinition = {
   name: "项目专属 Agent",
@@ -48,22 +46,6 @@ const customDefinition: AgentDefinition = {
     dynamic: [],
   },
   model: PROJECT_MODEL_ID,
-};
-
-const flagDefinition: AgentDefinition = {
-  name: "CLI Flag Agent",
-  prompts: {
-    persist: [
-      {
-        name: "sys",
-        type: "text",
-        role: "user",
-        content: "FLAG_PROMPT",
-      },
-    ],
-    dynamic: [],
-  },
-  model: FLAG_MODEL_ID,
 };
 
 function writeOp(path: string, content: string, toolId = "tu_write") {
@@ -141,7 +123,7 @@ async function runUntilRunner(
 }
 
 describe("cli-run-agent-turn parity", () => {
-  it("T-R2：无 definitionOverride 时走 resolveAgentForProject（项目 custom）", async () => {
+  it("T-R2：agent 解析走 resolveAgentForProject（项目 custom）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await registry.upsert(
@@ -223,49 +205,6 @@ describe("cli-run-agent-turn parity", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-R2-CLI：definitionOverride 注入时跳过 resolveAgentForProject", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    await registry.upsert(
-      "global-agent",
-      decode(
-        {
-          schemaVersion: 1,
-          name: "全局 Agent",
-          prompts: {
-            persist: {
-              sys: { type: "text", role: "user", content: "GLOBAL_PROMPT" },
-            },
-            dynamic: {},
-          },
-          model: "00000000-0000-4000-8000-000000000087",
-        },
-        agentDefinitionSchema,
-      ),
-    );
-    await ctx.state.setCurrentAgentId("global-agent");
-    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    await ctx.projects.updateAgentConfig(project.id, {
-      mode: "custom",
-      definition: customDefinition,
-    });
-    const session = await ctx.sessions.create(project.id, "S1");
-    const runtime = makeRuntime(ctx, registry);
-
-    const captured = await runUntilRunner(
-      runtime,
-      { projectId: project.id, sessionId: session.id },
-      "hello",
-      { definitionOverride: flagDefinition },
-    );
-
-    assert.ok(captured != null);
-    assert.equal(captured.name, "CLI Flag Agent");
-    assert.equal(captured.prompts.persist[0]?.content, "FLAG_PROMPT");
-  });
-
   it("T-R2-cont：visible 末条 user 空续跑不 append 新 user", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
@@ -282,143 +221,12 @@ describe("cli-run-agent-turn parity", () => {
       runtime,
       { projectId: project.id, sessionId: session.id },
       "",
-      { allowResumeWithoutInput: true, maxStepsOverride: 1 },
+      { allowResumeWithoutInput: true },
     );
 
     const after = await ctx.messages.listBySession(session.id);
     assert.equal(after.length, 1);
     const tailText = after[0]!.content.blocks[0];
     assert.equal(tailText?.type === "text" ? tailText.text : "", "已有 user");
-  });
-
-  it("T-R2-cont：allowAssistantContinue + maxStepsOverride:1 空续跑不 append", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-
-    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
-    const before = await ctx.messages.listBySession(session.id);
-    assert.equal(before.length, 1);
-
-    const runtime = makeRuntime(ctx, registry);
-    await runUntilRunner(
-      runtime,
-      { projectId: project.id, sessionId: session.id },
-      "",
-      { allowAssistantContinue: true, maxStepsOverride: 1 },
-    );
-
-    const after = await ctx.messages.listBySession(session.id);
-    assert.equal(after.length, 1);
-    assert.equal(after[0]!.role, "assistant");
-  });
-
-  it("B-01：allowAssistantContinue + 有规则可见文件 + 空 cache → list 长度不变、无新 user", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-
-    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
-    const before = await ctx.messages.listBySession(session.id);
-    assert.equal(before.length, 1);
-
-    const base = makeRuntime(ctx, registry);
-    const runtime: AgentTurnRuntimePort = {
-      ...base,
-      workplace: (_scope) =>
-        ({
-          renderDisplay: async () => "",
-          buildListRows: async () => [],
-          materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-          evaluateRuleView: async () => ({
-            rows: [
-              {
-                kind: "file" as const,
-                path: "/visible.md",
-                inclusionMode: "include" as const,
-                displayState: "full" as const,
-              },
-            ],
-            displayByPath: new Map([["/visible.md", "full" as const]]),
-          }),
-        }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
-    };
-
-    await runUntilRunner(
-      runtime,
-      { projectId: project.id, sessionId: session.id },
-      "",
-      { allowAssistantContinue: true, maxStepsOverride: 1 },
-    );
-
-    const after = await ctx.messages.listBySession(session.id);
-    assert.equal(after.length, before.length, "listBySession 长度不变");
-    assert.equal(
-      after.some((m) => m.role === "user"),
-      false,
-      "不得因 workplace 差集误 append 空 user",
-    );
-    assert.equal(after[0]!.role, "assistant");
-  });
-
-  it("T-R2-cont：allowAssistantContinue 无 maxStepsOverride:1 时拒绝", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
-
-    const runtime = makeRuntime(ctx, registry);
-    await assert.rejects(
-      () =>
-        runAgentTurn(
-          runtime,
-          { projectId: project.id, sessionId: session.id },
-          "",
-          { allowAssistantContinue: true },
-        ),
-      (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
-        assert.match(
-          (err as AgentTurnError).message,
-          /allowAssistantContinue 须配合 maxStepsOverride: 1/,
-        );
-        return true;
-      },
-    );
-  });
-
-  it("T-R2-cont：allowResumeWithoutInput 与 allowAssistantContinue 互斥", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-
-    const runtime = makeRuntime(ctx, registry);
-    await assert.rejects(
-      () =>
-        runAgentTurn(
-          runtime,
-          { projectId: project.id, sessionId: session.id },
-          "",
-          {
-            allowResumeWithoutInput: true,
-            allowAssistantContinue: true,
-            maxStepsOverride: 1,
-          },
-        ),
-      (err: unknown) => {
-        assert.ok(err instanceof AgentTurnError);
-        assert.match(
-          (err as AgentTurnError).message,
-          /互斥/,
-        );
-        return true;
-      },
-    );
   });
 });

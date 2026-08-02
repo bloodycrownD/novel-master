@@ -7,18 +7,7 @@ import {
 import { resolveApplicationModelId } from "../../src/domain/agent/logic/resolve-application-model-id.js";
 
 describe("resolveSavedModelId", () => {
-  it("R1: prefers CLI flag over pin and workspace", () => {
-    assert.equal(
-      resolveSavedModelId({
-        cliModelId: "zhipu/glm-4.6",
-        agentModelId: "mock/test",
-        workspaceModelId: "openai/gpt-4",
-      }),
-      "zhipu/glm-4.6",
-    );
-  });
-
-  it("R1: falls back to agent model pin then workspace", () => {
+  it("R1: prefers agent model pin over workspace", () => {
     assert.equal(
       resolveSavedModelId({
         agentModelId: "mock/test",
@@ -26,6 +15,9 @@ describe("resolveSavedModelId", () => {
       }),
       "mock/test",
     );
+  });
+
+  it("R1: falls back to workspace when agent pin absent", () => {
     assert.equal(
       resolveSavedModelId({ workspaceModelId: "openai/gpt-4" }),
       "openai/gpt-4",
@@ -35,15 +27,7 @@ describe("resolveSavedModelId", () => {
 });
 
 describe("resolveSummarySavedModelId", () => {
-  it("T6: prefers CLI, then summary pin, then workspace (not dialogue)", () => {
-    assert.equal(
-      resolveSummarySavedModelId({
-        cliModelId: "flag/model",
-        summaryModelId: "pin/model",
-        workspaceModelId: "workspace/model",
-      }),
-      "flag/model",
-    );
+  it("T6: prefers summary pin, then workspace (not dialogue)", () => {
     assert.equal(
       resolveSummarySavedModelId({
         summaryModelId: "pin/model",

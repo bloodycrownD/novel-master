@@ -60,15 +60,18 @@ export async function resolveCurrentAgentDefinition(
   }
 }
 
-/** Resolves dialogue savedModelId（cliModelId → agent pin → workspace current model）。 */
+/**
+ * 解析对话 Agent 的 savedModelId（agent pin → workspace current model）。
+ *
+ * CLI-only 的 `cliModelId` 入参已在 chat-session-detail-page 迭代 Phase 0 移除；
+ * core 只认 project/session/workspace 三层，CLI 自行兜底 flag 覆盖。
+ */
 export async function resolveApplicationModelIdForRun(
   runtime: AgentRunRuntimePort,
   definition: AgentDefinition,
-  cliModelId?: string,
 ): Promise<{ savedModelId: string; workspaceModelId: string }> {
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
   const resolved = resolveSavedModelId({
-    cliModelId,
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,
   });

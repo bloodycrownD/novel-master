@@ -3,18 +3,7 @@ import { describe, it } from "node:test";
 import { resolveApplicationModelId, resolveSummaryApplicationModelId } from "@novel-master/core/agent";
 
 describe("resolveApplicationModelId", () => {
-  it("R1: prefers CLI flag over pin and workspace", () => {
-    assert.equal(
-      resolveApplicationModelId({
-        cliModelId: "zhipu/glm-4.6",
-        agentModelId: "mock/test",
-        workspaceModelId: "openai/gpt-4",
-      }),
-      "zhipu/glm-4.6",
-    );
-  });
-
-  it("R1: falls back to agent model pin then workspace", () => {
+  it("R1: prefers agent model pin over workspace", () => {
     assert.equal(
       resolveApplicationModelId({
         agentModelId: "mock/test",
@@ -22,6 +11,9 @@ describe("resolveApplicationModelId", () => {
       }),
       "mock/test",
     );
+  });
+
+  it("R1: falls back to workspace when agent pin absent", () => {
     assert.equal(
       resolveApplicationModelId({ workspaceModelId: "openai/gpt-4" }),
       "openai/gpt-4",
@@ -31,15 +23,7 @@ describe("resolveApplicationModelId", () => {
 });
 
 describe("resolveSummaryApplicationModelId", () => {
-  it("T6: prefers CLI, then summary pin, then workspace (not dialogue)", () => {
-    assert.equal(
-      resolveSummaryApplicationModelId({
-        cliModelId: "flag/model",
-        summaryModelId: "pin/model",
-        workspaceModelId: "workspace/model",
-      }),
-      "flag/model",
-    );
+  it("T6: prefers summary pin, then workspace (not dialogue)", () => {
     assert.equal(
       resolveSummaryApplicationModelId({
         summaryModelId: "pin/model",

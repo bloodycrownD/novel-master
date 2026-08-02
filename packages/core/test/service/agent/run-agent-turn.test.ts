@@ -89,7 +89,10 @@ function makeRuntime(overrides: {
   readonly userVfsTurn?: UserVfsTurnService;
   readonly evaluateRuleView?: () => Promise<ReturnType<typeof emptyRuleView>>;
   readonly listKeys?: (sessionId: string, domain: string) => Promise<string[]>;
+  /** 覆盖 agentRegistry.get 返回的 definition（默认 sampleDefinition）。 */
+  readonly definition?: AgentDefinition;
 }): AgentTurnRuntimePort {
+  const definition = overrides.definition ?? sampleDefinition;
   return {
     state: {
       getCurrentAgentId: async () => "a1",
@@ -98,7 +101,7 @@ function makeRuntime(overrides: {
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
-      get: async () => sampleDefinition,
+      get: async () => definition,
     },
     projects: {
       getAgentConfig: async () => ({ mode: "follow" }),
@@ -543,6 +546,7 @@ describe("runAgentTurn", () => {
       | undefined;
     const flushAtt = flushWriteUserOpsAttachment("/delta.md");
     const runtime = makeRuntime({
+      definition: workplaceOnDefinition,
       evaluateRuleView: async () => ruleViewWithFile("/delta.md"),
       listKeys: async () => [],
       userVfsTurn: mockUserVfsTurn({
@@ -559,7 +563,6 @@ describe("runAgentTurn", () => {
     });
     try {
       await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
-        definitionOverride: workplaceOnDefinition,
         attachments: [
           {
             name: "preview-wp",
@@ -613,6 +616,7 @@ describe("runAgentTurn", () => {
     let appendCount = 0;
     let evaluateCalled = false;
     const runtime = makeRuntime({
+      definition: workplaceOnDefinition,
       evaluateRuleView: async () => {
         evaluateCalled = true;
         return ruleViewWithFile("/only-wp.md");
@@ -625,9 +629,7 @@ describe("runAgentTurn", () => {
     });
     await assert.rejects(
       () =>
-        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
-          definitionOverride: workplaceOnDefinition,
-        }),
+        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
         assert.ok(err instanceof AgentTurnError);
         assert.equal(err.message, "消息不能为空");
@@ -643,7 +645,7 @@ describe("runAgentTurn", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("B-01：allowAssistantContinue + 空输入 → 不 append 空 user", async () => {
+  it("B-01：空输入且末条 assistant → 抛「消息不能为空」、不 append 空 user", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     refreshUserVfsUnifiedToolTurnSnapshot(false);
     const existing = [
@@ -655,6 +657,7 @@ describe("runAgentTurn", () => {
     ];
     let appendCount = 0;
     const runtime = makeRuntime({
+      definition: workplaceOnDefinition,
       evaluateRuleView: async () => ruleViewWithFile("/visible.md"),
       listKeys: async () => [],
       listBySession: async () => existing,
@@ -663,16 +666,15 @@ describe("runAgentTurn", () => {
         return { id: "m-b01-bad" };
       },
     });
-    try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
-        definitionOverride: workplaceOnDefinition,
-        allowAssistantContinue: true,
-        maxStepsOverride: 1,
-      });
-    } catch {
-      // runner deps stubbed
-    }
-    assert.equal(appendCount, 0, "continue 时不得误 append");
+    await assert.rejects(
+      () => runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
+      (err: unknown) => {
+        assert.ok(err instanceof AgentTurnError);
+        assert.equal(err.message, "消息不能为空");
+        return true;
+      },
+    );
+    assert.equal(appendCount, 0, "末条 assistant 不得误 append");
     const after = await runtime.messages.listBySession("s");
     assert.equal(after.length, existing.length, "listBySession 长度不变");
     assert.equal(
@@ -688,6 +690,8 @@ describe("runAgentTurn", () => {
     refreshUserVfsUnifiedToolTurnSnapshot(false);
     let appendCount = 0;
     const runtime = makeRuntime({
+      // sampleDefinition：workplace 缺省 false
+      definition: sampleDefinition,
       evaluateRuleView: async () => ruleViewWithFile("/should-not-send.md"),
       listKeys: async () => [],
       append: async () => {
@@ -697,10 +701,7 @@ describe("runAgentTurn", () => {
     });
     await assert.rejects(
       () =>
-        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
-          // sampleDefinition：workplace 缺省 false
-          definitionOverride: sampleDefinition,
-        }),
+        runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, ""),
       (err: unknown) => {
         assert.ok(err instanceof AgentTurnError);
         assert.equal(err.message, "消息不能为空");

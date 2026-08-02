@@ -18,7 +18,6 @@
  * - `hasInput` / `shouldAppendNewUser`：正文 / attach / pending / annotateDrafts（无 workplace）。
  * - 有 `annotateDrafts` 时本轮视 `allowResumeWithoutInput` 为 false（禁空续跑 re-append）。
  * - annotate 附件 **concat** 追加，禁止 `mergeAttachmentsByPath` / path 去重。
- * - `allowAssistantContinue`（空正文续跑）约定不 append user。
  * - wrap/assemble **不**在本模块写库（T-SR0）；双渲染只读。
  *
  * @module service/agent/logic/run-agent-turn
@@ -115,25 +114,13 @@ export interface RunAgentTurnOptions {
    * 空 content 续跑且末条为 user（含 App Composer 空发）。
    * 跳过「content 非空」校验；不 append user。
    * 有 workplace 差集时不得走纯 resume（差集=新输入）。
+   *
+   * 三端共用（mobile/desktop/CLI）的空续跑能力，保留不动。
    */
   readonly allowResumeWithoutInput?: boolean;
-  /**
-   * CLI assistant-continue：空 content + visible 末条 assistant + maxStepsOverride: 1。
-   * 跳过「末条须 user」校验；不 append user。App 不传此字段。
-   */
-  readonly allowAssistantContinue?: boolean;
   readonly signal?: AbortSignal;
-  /** CLI `--modelId`；透传至 runner.run.cliModelId，覆盖 definition.model pin。 */
-  readonly cliModelId?: string;
-  /** 覆盖 definition.runtime.maxSteps；CLI continue → 1；`--max-steps` → 用户值。 */
-  readonly maxStepsOverride?: number;
   /** CLI stdout 流式回调；App 经 eventBus，通常不传。 */
   readonly onStream?: (event: LlmStreamEvent) => void;
-  /**
-   * 仅 CLI `--agent-config` / `--agent-id` / `--prompt-path` 解析成功时注入。
-   * 非空时跳过 resolveAgentForProject。
-   */
-  readonly definitionOverride?: AgentDefinition;
   /**
    * Composer 显式附件；**仅** `source===attach` 生效。
    * 误传的 workplace/`user_ops` 预览一律丢弃；`@` 扫描由 Core 合并。
@@ -186,30 +173,16 @@ export async function runAgentTurn(
   // 有批注草稿时本轮禁止空续跑 re-append（prepare 不得删末条）
   const allowResumeWithoutInput =
     options?.allowResumeWithoutInput === true && !hasAnnotateDrafts;
-  const allowAssistantContinue = options?.allowAssistantContinue === true;
 
   // 入参清洗：误传的 workplace / user_ops 预览一律丢弃，只保留 attach
   const composerAttachOnly = (options?.attachments ?? []).filter(
     (a) => a.source === "attach",
   );
 
-  if (
-    options?.allowResumeWithoutInput === true &&
-    allowAssistantContinue
-  ) {
-    throw new AgentTurnError(
-      "allowResumeWithoutInput 与 allowAssistantContinue 互斥",
-    );
-  }
-
   stage = "resolve-agent";
-  const definition =
-    options?.definitionOverride ??
-    (
-      await mapResolveError(() =>
-        resolveAgentForProject(runtime, scope.projectId),
-      )
-    ).definition;
+  const definition = (
+    await mapResolveError(() => resolveAgentForProject(runtime, scope.projectId))
+  ).definition;
 
   const hasPending =
     isUserVfsUnifiedToolTurnEnabled() &&
@@ -221,15 +194,8 @@ export async function runAgentTurn(
     hasPending ||
     hasAnnotateDrafts;
 
-  if (!hasInput && !allowResumeWithoutInput && !allowAssistantContinue) {
+  if (!hasInput && !allowResumeWithoutInput) {
     throw new AgentTurnError("消息不能为空");
-  }
-  if (trimmed === "" && allowAssistantContinue) {
-    if (options?.maxStepsOverride !== 1) {
-      throw new AgentTurnError(
-        "allowAssistantContinue 须配合 maxStepsOverride: 1",
-      );
-    }
   }
   if (!hasInput && allowResumeWithoutInput) {
     stage = "resume-check-last-message";
@@ -243,7 +209,7 @@ export async function runAgentTurn(
 
   stage = "resolve-model";
   const { savedModelId, workspaceModelId } = await mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition, options?.cliModelId),
+    resolveApplicationModelIdForRun(runtime, definition),
   );
 
   await options?.onAfterResolveModel?.({
@@ -266,12 +232,11 @@ export async function runAgentTurn(
   let checkpointAnchorMessageId: string | undefined;
   let reAppended = false;
 
-  // Flush when we can attach user_ops to a user message; assistant-continue skips pending.
+  // Flush when we can attach user_ops to a user message.
   if (
     isUserVfsUnifiedToolTurnEnabled() &&
     runtime.userVfsTurn != null &&
-    (hasInput || allowResumeWithoutInput) &&
-    !allowAssistantContinue
+    (hasInput || allowResumeWithoutInput)
   ) {
     stage = "flush-pending-user-vfs-turns";
     const prepared = await prepareUserVfsTurnForAgentRun({
@@ -305,10 +270,8 @@ export async function runAgentTurn(
     ...annotateAttachments,
   ];
 
-  // allowAssistantContinue：空正文续跑约定不 append user
   const shouldAppendNewUser =
     !reAppended &&
-    !allowAssistantContinue &&
     (trimmed !== "" ||
       scannedComposer.length > 0 ||
       userOpsAttachments.length > 0 ||
@@ -371,16 +334,13 @@ export async function runAgentTurn(
   try {
     stage = "runner.run";
     const maxSteps =
-      options?.maxStepsOverride ??
-      definition.runtime?.maxSteps ??
-      DEFAULT_AGENT_MAX_STEPS;
+      definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
     const result = await runner.run({
       definition,
       sessionId: scope.sessionId,
       projectId: scope.projectId,
       savedModelId,
       workspaceModelId,
-      cliModelId: options?.cliModelId,
       maxSteps,
       activeRegexGroupId: activeRegexGroupId ?? undefined,
       stream,
