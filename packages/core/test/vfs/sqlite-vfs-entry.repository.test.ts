@@ -187,6 +187,32 @@ describe("SqliteVfsEntryRepository", () => {
     assert.equal(await repo.findByPath(GLOBAL_SCOPE, `${tree}/leaf`), null);
   });
 
+  it("non-recursive delete of an explicit root row does not self-match", async () => {
+    // 回归：childLikePattern("/") 返回 "/%"，`'/' LIKE '/%'` 为真，
+    // 删根行时不能把自己当成 child，否则会误报 DIRECTORY_NOT_EMPTY。
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const sk = `session:regression:root-row`;
+    await repo.insertDirectory(sk, "/");
+    await repo.delete(sk, "/", { recursive: false });
+    assert.equal(await repo.findByPath(sk, "/"), null);
+  });
+
+  it("non-recursive delete of root still reports not empty when children exist", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const sk = `session:regression:root-with-child`;
+    await repo.insertDirectory(sk, "/");
+    await repo.insert(sk, `/leaf.md`, "leaf");
+    await assert.rejects(
+      () => repo.delete(sk, "/", { recursive: false }),
+      (e: unknown) => {
+        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
+        return true;
+      },
+    );
+  });
+
   it("跨 scope 隔离：同 path 在不同 scope 各自独立读写删", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);

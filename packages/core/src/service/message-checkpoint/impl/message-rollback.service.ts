@@ -192,6 +192,19 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         sessionId,
         anchor.seq - 1,
       );
+      // prior 为空时回退到 anchor 自身的 checkpoint。
+      // 角色卡 / ZIP 导入会在事务末尾给空 checkpoint 的 message 补 baseline 快照，
+      // 这样「导入后聊一轮再回滚首条 user」时，虽然 prior（seq<anchor.seq）为空，
+      // 但 anchor 自身有 baseline checkpoint 可用，回滚到导入后的状态而非空树。
+      if (targetTree.size === 0) {
+        const anchorTree = await this.deps.checkpoints.loadFileTree(
+          sessionId,
+          anchor.id,
+        );
+        if (anchorTree != null) {
+          targetTree = anchorTree;
+        }
+      }
       // undo_send 始终按 prior 基线 diff 当前工作区（空树 = 删光会话文件）
       hasDirectTargetTree = true;
     } else {

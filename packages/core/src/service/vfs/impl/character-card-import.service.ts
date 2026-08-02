@@ -29,6 +29,9 @@ import {
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
+import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 /** @internal 导入事务回滚单测钩子 */
 export type CharacterCardImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -42,6 +45,9 @@ async function ensureEmptyDirectoryRow(
   logical: string,
 ): Promise<void> {
   const sk = scopeKey(scope);
+  if (logical === "/") {
+    return;
+  }
   await ensureParentDirectories(repo, sk, `${logical}/__vfs_card_placeholder`);
   const existing = await repo.findByPath(sk, logical);
   if (existing == null) {
@@ -73,12 +79,18 @@ async function assertDirectoryPathNotFile(
 export type DefaultCharacterCardImportServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: CharacterCardImportTestHook;
+  /**
+   * session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照。
+   * 默认开启；仅对 session scope 生效。
+   */
+  readonly backfillBaseline?: boolean;
 };
 
 export class DefaultCharacterCardImportService
   implements CharacterCardImportService
 {
   private readonly testHook?: CharacterCardImportTestHook;
+  private readonly backfillBaseline: boolean;
 
   constructor(
     private readonly conn: TdbcConnection,
@@ -86,6 +98,7 @@ export class DefaultCharacterCardImportService
     options: DefaultCharacterCardImportServiceOptions = {},
   ) {
     this.testHook = options.testHook;
+    this.backfillBaseline = options.backfillBaseline ?? true;
   }
 
   async import(
@@ -120,6 +133,19 @@ export class DefaultCharacterCardImportService
           }
           await ensureParentDirectories(repoTx, sk, logical);
           await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
+        }
+        // session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照，
+        // 让回滚有正确的基线可对齐，不会因空基线误删导入的文件。
+        if (this.backfillBaseline && scope.kind === "session") {
+          const messageRepo = new SqliteMessageRepository(tx);
+          const checkpointRepo = new SqliteMessageCheckpointRepository(tx);
+          await backfillBaselineCheckpoints(
+            repoTx,
+            messageRepo,
+            checkpointRepo,
+            scope.projectId,
+            scope.sessionId,
+          );
         }
       });
     } catch (error) {
