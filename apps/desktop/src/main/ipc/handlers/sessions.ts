@@ -4,15 +4,19 @@
 import type {
   IpcResult,
   MessageAttachmentDto,
+  SessionAgentConfigDto,
   SessionCreateRequest,
   SessionDeleteRequest,
   SessionDto,
+  SessionGetAgentBindingRequest,
   SessionGetComposerDraftRequest,
   SessionListByProjectRequest,
   SessionProjectComposerStatusRequest,
   SessionPullTemplateRequest,
   SessionRenameRequest,
+  SessionSetAgentBindingRequest,
   SessionSetComposerDraftRequest,
+  SessionSetModelOverrideRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
@@ -131,6 +135,61 @@ export async function handleSessionsProjectComposerStatus(
       req.sessionId,
     );
     return { ok: true, data: attachments };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/** 读取会话级智能体绑定（透传 core sessions service）。 */
+export async function handleSessionsGetAgentBinding(
+  req: SessionGetAgentBindingRequest,
+): Promise<IpcResult<SessionAgentConfigDto>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const config = await rt.sessions.getSessionAgentConfig(req.sessionId);
+    return { ok: true, data: config };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/**
+ * 写会话级智能体绑定。`agentId: null` 解绑回 follow；具体 id 写 bind。
+ * 返回最新 config，UI 拿到后可直接刷新本地状态（无需重新 GET）。
+ */
+export async function handleSessionsSetAgentBinding(
+  req: SessionSetAgentBindingRequest,
+): Promise<IpcResult<SessionAgentConfigDto>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const patch =
+      req.agentId == null
+        ? { mode: 'follow' as const }
+        : { mode: 'bind' as const, agentId: req.agentId };
+    const config = await rt.sessions.updateSessionAgentConfig(
+      req.sessionId,
+      patch,
+    );
+    return { ok: true, data: config };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/**
+ * 写会话级模型覆盖。`modelId: null` 清除覆盖；mode 与 agentId 保持现状。
+ * 返回最新 config，UI 拿到后可直接刷新本地状态（无需重新 GET）。
+ */
+export async function handleSessionsSetModelOverride(
+  req: SessionSetModelOverrideRequest,
+): Promise<IpcResult<SessionAgentConfigDto>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const config = await rt.sessions.updateSessionAgentConfig(
+      req.sessionId,
+      { modelId: req.modelId },
+    );
+    return { ok: true, data: config };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

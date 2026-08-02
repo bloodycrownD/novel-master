@@ -58,7 +58,11 @@ export async function handlePromptAgentMeta(
   try {
     const rt = await getDesktopRuntime();
     try {
-      const resolved = await resolveAgentForProject(rt, req.projectId);
+      const resolved = await resolveAgentForProject(
+        rt,
+        req.projectId,
+        req.sessionId,
+      );
       const { definition } = resolved;
       const workspaceModelId = (await rt.state.getCurrentModelId()) ?? "";
       const savedModelId = resolveApplicationModelId({
@@ -77,6 +81,22 @@ export async function handlePromptAgentMeta(
       }
       const hasDedicatedModel =
         definition.model != null && definition.model !== "";
+      // modelSource 优先级链：agent pin 压制一切 → 会话 bind 带 modelId 覆盖 → 回退 workspace。
+      // project-custom / global / none 不产生 session-override（custom 截断 session，global 表示 session 为 follow）。
+      let modelSource: 'agent-pin' | 'session-override' | 'workspace';
+      if (hasDedicatedModel) {
+        modelSource = 'agent-pin';
+      } else if (resolved.source === 'session-bind') {
+        const sessionConfig = await rt.sessions.getSessionAgentConfig(
+          req.sessionId,
+        );
+        modelSource =
+          sessionConfig.mode === 'bind' && sessionConfig.modelId
+            ? 'session-override'
+            : 'workspace';
+      } else {
+        modelSource = 'workspace';
+      }
       if (resolved.source === "global") {
         return {
           ok: true,
@@ -86,6 +106,20 @@ export async function handlePromptAgentMeta(
             agentName: definition.name,
             modelLabel,
             hasDedicatedModel,
+            modelSource,
+          },
+        };
+      }
+      if (resolved.source === "session-bind") {
+        return {
+          ok: true,
+          data: {
+            source: "session-bind",
+            agentId: resolved.agentId,
+            agentName: definition.name,
+            modelLabel,
+            hasDedicatedModel,
+            modelSource,
           },
         };
       }
@@ -96,6 +130,7 @@ export async function handlePromptAgentMeta(
           agentName: PROJECT_AGENT_META_DISPLAY_LABEL,
           modelLabel,
           hasDedicatedModel,
+          modelSource,
         },
       };
     } catch (error) {
