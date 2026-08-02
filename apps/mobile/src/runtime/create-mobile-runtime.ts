@@ -58,6 +58,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
 
   const regexConfig = createRegexConfigService(conn, state);
+  const agentRegistry = createAgentRegistryService(conn, state);
 
   const secretStore = createCompositeSecretStore({
     db: createAndroidSecretStore(conn),
@@ -69,7 +70,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
 
-  const chat = createChatServices(conn);
+  const chat = createChatServices(conn, { state, agentRegistry });
   const { projects, sessions, messages } = chat;
 
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -97,8 +98,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       );
     },
   };
-
-  const agentRegistry = createAgentRegistryService(conn, state);
 
   const eventOrchestrator = createEventOrchestrator({
     eventsConfig,

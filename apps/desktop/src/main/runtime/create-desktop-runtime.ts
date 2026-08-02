@@ -147,7 +147,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     agentRegistry,
     tokenCounters,
     projects: createProjectService(conn),
-    sessions: createSessionService(conn),
+    sessions: createSessionService(conn, { state, agentRegistry }),
     messages,
     messageTranscriptEffects,
     appendToolTurnBridge,
