@@ -24,6 +24,12 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
       "ALTER TABLE chat_session ADD COLUMN composer_draft_json TEXT NULL",
   },
   {
+    table: "chat_session",
+    column: "agent_config_json",
+    addColumnSql:
+      "ALTER TABLE chat_session ADD COLUMN agent_config_json TEXT NULL",
+  },
+  {
     table: "chat_message",
     column: "hidden",
     addColumnSql:

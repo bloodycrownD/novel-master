@@ -139,4 +139,35 @@ export class SqliteSessionRepository implements SessionRepository {
     );
     return result.changes > 0;
   }
+
+  async getSessionAgentConfig(id: string): Promise<string | null> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT agent_config_json FROM chat_session WHERE id = #{id}`,
+      { id },
+    );
+    if (rows.length === 0) {
+      return null;
+    }
+    const value = rows[0]!.agent_config_json;
+    return value == null ? null : String(value);
+  }
+
+  async setSessionAgentConfig(
+    id: string,
+    agentConfigJson: string | null,
+    updatedAtMs: number,
+  ): Promise<boolean> {
+    // 绑定切换是会话活动（区别于高频草稿写），同步更新 updated_at_ms。
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_session
+         SET agent_config_json = #{agentConfigJson}, updated_at_ms = #{updatedAtMs}
+       WHERE id = #{id}`,
+      { id, agentConfigJson, updatedAtMs },
+    );
+    return result.changes > 0;
+  }
 }
