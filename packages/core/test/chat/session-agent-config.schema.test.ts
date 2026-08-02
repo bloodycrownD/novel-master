@@ -2,86 +2,79 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode } from "../../src/infra/serialization/decode.js";
 import { ConfigDecodeError } from "../../src/errors/config-decode-errors.js";
-import {
-  sessionAgentConfigSchema,
-  sessionAgentModeSchema,
-} from "../../src/domain/chat/model/session-agent-config.schema.js";
+import { sessionAgentConfigSchema } from "../../src/domain/chat/model/session-agent-config.schema.js";
 
-describe("sessionAgentConfigSchema", () => {
-  it("follow 合法", () => {
-    const config = decode({ mode: "follow" }, sessionAgentConfigSchema);
-    assert.equal(config.mode, "follow");
-  });
-
-  it("bind 缺 agentId 报错", () => {
+describe("sessionAgentConfigSchema（v2 单形态）", () => {
+  it("缺 agentId 报错", () => {
     assert.throws(
-      () => decode({ mode: "bind" }, sessionAgentConfigSchema),
+      () => decode({}, sessionAgentConfigSchema),
       ConfigDecodeError,
     );
   });
 
-  it("bind 带 agentId 合法", () => {
-    const config = decode(
-      { mode: "bind", agentId: "agent-a" },
-      sessionAgentConfigSchema,
-    );
-    assert.equal(config.mode, "bind");
-    assert.equal((config as { agentId: string }).agentId, "agent-a");
-    assert.equal(
-      (config as { modelId?: string }).modelId,
-      undefined,
-    );
-  });
-
-  it("bind 带 agentId + modelId 合法", () => {
-    const config = decode(
-      { mode: "bind", agentId: "agent-a", modelId: "gpt-4" },
-      sessionAgentConfigSchema,
-    );
-    assert.equal(config.mode, "bind");
-    assert.equal((config as { agentId: string }).agentId, "agent-a");
-    assert.equal(
-      (config as { modelId?: string }).modelId,
-      "gpt-4",
-    );
-  });
-
-  it("未知 mode 报错（.strict()）", () => {
+  it("空 agentId 报错", () => {
     assert.throws(
-      () => decode({ mode: "registry" }, sessionAgentModeSchema),
+      () => decode({ agentId: "" }, sessionAgentConfigSchema),
       ConfigDecodeError,
     );
+  });
+
+  it("agentId 合法", () => {
+    const config = decode({ agentId: "agent-a" }, sessionAgentConfigSchema);
+    assert.equal(config.agentId, "agent-a");
+    assert.equal(config.modelId, undefined);
+  });
+
+  it("agentId + modelId 合法", () => {
+    const config = decode(
+      { agentId: "agent-a", modelId: "gpt-4" },
+      sessionAgentConfigSchema,
+    );
+    assert.equal(config.agentId, "agent-a");
+    assert.equal(config.modelId, "gpt-4");
+  });
+
+  it("多余字段报错（.strict()）", () => {
     assert.throws(
       () =>
         decode(
-          { mode: "follow", extra: 1 } as Record<string, unknown>,
+          { agentId: "a", extra: 1 } as Record<string, unknown>,
+          sessionAgentConfigSchema,
+        ),
+      ConfigDecodeError,
+    );
+    // 老 mode 字段现在被 .strict() 拒绝
+    assert.throws(
+      () =>
+        decode(
+          { mode: "bind", agentId: "a" } as Record<string, unknown>,
           sessionAgentConfigSchema,
         ),
       ConfigDecodeError,
     );
   });
 
-  it("bind 空 agentId 报错", () => {
+  it("空 modelId 报错", () => {
     assert.throws(
       () =>
         decode(
-          { mode: "bind", agentId: "" },
+          { agentId: "a", modelId: "" },
           sessionAgentConfigSchema,
         ),
       ConfigDecodeError,
     );
   });
 
-  it("toWire round-trip：bind 不带 modelId 时不输出 modelId 字段", () => {
+  it("toWire：不带 modelId 时只输出 agentId", () => {
+    const wire = sessionAgentConfigSchema.toWire({ agentId: "agent-b" });
+    assert.deepEqual(wire, { agentId: "agent-b" });
+  });
+
+  it("toWire：带 modelId 时输出两个字段", () => {
     const wire = sessionAgentConfigSchema.toWire({
-      mode: "bind",
       agentId: "agent-b",
+      modelId: "m1",
     });
-    assert.deepEqual(wire, { mode: "bind", agentId: "agent-b" });
-  });
-
-  it("toWire：follow 仅输出 mode", () => {
-    const wire = sessionAgentConfigSchema.toWire({ mode: "follow" });
-    assert.deepEqual(wire, { mode: "follow" });
+    assert.deepEqual(wire, { agentId: "agent-b", modelId: "m1" });
   });
 });

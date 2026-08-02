@@ -44,6 +44,16 @@ interface AgentDefinitionIdRow extends Row {
   agent_id: string;
 }
 
+/** 检查 chat_session 是否已有 agent_config_json 列（migration 跑在 align 之前）。 */
+async function chatSessionHasAgentConfigColumn(
+  tx: TdbcConnection,
+): Promise<boolean> {
+  const rows = await tx.query<{ name: string }>(
+    `SELECT name FROM pragma_table_info('chat_session')`,
+  );
+  return rows.some((row) => row.name === "agent_config_json");
+}
+
 /** 读 kkv_entry 中 module=nm-workspace-state 的某个 key 值。 */
 async function readWorkspaceKey(
   tx: TdbcConnection,
@@ -85,6 +95,14 @@ function isV2Shape(parsed: Record<string, unknown>): boolean {
 }
 
 async function up(tx: TdbcConnection): Promise<void> {
+  // migration 跑在 alignSchemaColumns 之前：legacy 库可能还缺这列。
+  // 缺列时手动补上（NULL），再继续回填，避免依赖 align 后序补列导致跳过回填。
+  if (!(await chatSessionHasAgentConfigColumn(tx))) {
+    await tx.execute(
+      `ALTER TABLE chat_session ADD COLUMN agent_config_json TEXT`,
+    );
+  }
+
   const workspaceAgentId =
     (await readWorkspaceKey(tx, KEY_CURRENT_AGENT_ID)) ??
     (await readFirstRegistryAgentId(tx));

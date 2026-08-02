@@ -91,6 +91,23 @@ export class DefaultSessionService implements SessionService {
     title?: string | null,
   ): Promise<ChatSession> {
     await this.requireProject(projectId);
+    // 复制 workspace 当前 agentId + modelId 落到新会话；agentId 缺失回落 registry 首项。
+    // 读取放在事务外：state / agentRegistry 走的是另一套表，不需要在 chat_session 事务内同步。
+    const agentId = await resolveWorkspaceAgentForNewSession({
+      state: this.deps.state,
+      agentRegistry: this.deps.agentRegistry,
+    });
+    if (agentId == null || agentId === "") {
+      throw chatInvalidArgument(
+        "新建会话失败：workspace 未配置 Agent，且 registry 为空",
+      );
+    }
+    const workspaceModelId = await this.deps.state.getCurrentModelId();
+    const config: SessionAgentConfig =
+      workspaceModelId == null || workspaceModelId === ""
+        ? { agentId }
+        : { agentId, modelId: workspaceModelId };
+    const configJson = serializeSessionAgentConfigForStorage(config);
     return this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const now = Date.now();
@@ -105,25 +122,7 @@ export class DefaultSessionService implements SessionService {
       await initializeSessionWorkspace(tx, projectId, session.id, {
         clearCheckpoints: false,
       });
-
-      // 复制 workspace 当前 agentId + modelId 落到新会话；agentId 缺失回落 registry 首项。
-      const agentId = await resolveWorkspaceAgentForNewSession({
-        state: this.deps.state,
-        agentRegistry: this.deps.agentRegistry,
-      });
-      if (agentId == null || agentId === "") {
-        throw chatInvalidArgument(
-          "新建会话失败：workspace 未配置 Agent，且 registry 为空",
-        );
-      }
-      const workspaceModelId = await this.deps.state.getCurrentModelId();
-      const config: SessionAgentConfig =
-        workspaceModelId == null || workspaceModelId === ""
-          ? { agentId }
-          : { agentId, modelId: workspaceModelId };
-      const configJson = serializeSessionAgentConfigForStorage(config);
       await r.sessions.setSessionAgentConfig(session.id, configJson, now);
-
       return session;
     });
   }

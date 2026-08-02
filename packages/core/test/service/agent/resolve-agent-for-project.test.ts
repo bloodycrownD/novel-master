@@ -16,7 +16,7 @@ import {
 
 novelMasterTestFixture();
 
-const TEST_SAVED_MODEL_GLOBAL = "33333333-3333-4333-8333-333333333333";
+const TEST_SAVED_MODEL_SESSION = "33333333-3333-4333-8333-333333333333";
 const TEST_SAVED_MODEL_CUSTOM = "44444444-4444-4444-8444-444444444444";
 
 function customDefinition(name: string): AgentDefinition {
@@ -27,40 +27,8 @@ function customDefinition(name: string): AgentDefinition {
   };
 }
 
-describe("resolveAgentForProject", () => {
-  it("follow 模式返回 global 含 agentId", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const globalDef = decode(
-      {
-        schemaVersion: 1,
-        name: "全局助手",
-        prompts: { persist: {}, dynamic: {} },
-        model: TEST_SAVED_MODEL_GLOBAL,
-      },
-      agentDefinitionSchema,
-    );
-    await registry.upsert("global-agent", globalDef);
-    await ctx.state.setCurrentAgentId("global-agent");
-
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "S1");
-    const runtime = {
-      state: ctx.state,
-      agentRegistry: registry,
-      projects: ctx.projects,
-      sessions: ctx.sessions,
-    };
-
-    const resolved = await resolveAgentForProject(runtime, project.id, session.id);
-    assert.equal(resolved.source, "global");
-    if (resolved.source === "global") {
-      assert.equal(resolved.agentId, "global-agent");
-      assert.equal(resolved.definition.name, "全局助手");
-    }
-  });
-
-  it("custom 模式返回 project-custom 且无 agentId", async () => {
+describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
+  it("project custom 截断：返回 project-custom 且无 agentId", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     const globalDef = decode(
@@ -115,7 +83,7 @@ describe("resolveAgentForProject", () => {
         }),
       },
       sessions: {
-        getSessionAgentConfig: async () => ({ mode: "follow" }),
+        getSessionAgentConfig: async () => ({ agentId: "x" }),
       },
     };
 
@@ -125,18 +93,20 @@ describe("resolveAgentForProject", () => {
     );
   });
 
-  it("T-R2：project custom 时忽略 session 绑定（截断）", async () => {
+  it("T-R2：project custom 时忽略 session.agentId（截断）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const globalDef = decode(
-      {
-        schemaVersion: 1,
-        name: "全局助手",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema,
+    await registry.upsert(
+      "global-agent",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "全局助手",
+          prompts: { persist: {}, dynamic: {} },
+        },
+        agentDefinitionSchema,
+      ),
     );
-    await registry.upsert("global-agent", globalDef);
     await ctx.state.setCurrentAgentId("global-agent");
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -146,11 +116,10 @@ describe("resolveAgentForProject", () => {
       definition: custom,
     });
     const session = await ctx.sessions.create(project.id, "S1");
-    // 会话绑定到另一个 agent——custom 截断下应被忽略
+    // 会话引用另一个 agent——custom 截断下应被忽略
     await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "bind-agent",
-      modelId: TEST_SAVED_MODEL_GLOBAL,
+      agentId: "session-agent",
+      modelId: TEST_SAVED_MODEL_SESSION,
     });
 
     const runtime = {
@@ -168,43 +137,40 @@ describe("resolveAgentForProject", () => {
     assert.equal(resolved.source, "project-custom");
     if (resolved.source === "project-custom") {
       assert.equal(resolved.definition.name, "项目专属助手");
-      assert.equal(
-        (resolved as { agentId?: string }).agentId,
-        undefined,
-      );
     }
   });
 
-  it("T-R2：project follow + session bind → source: session-bind + 正确 definition", async () => {
+  it("project follow → session.agentId 取 definition，source: session", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const globalDef = decode(
-      {
-        schemaVersion: 1,
-        name: "全局助手",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema,
+    await registry.upsert(
+      "global-agent",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "全局助手",
+          prompts: { persist: {}, dynamic: {} },
+        },
+        agentDefinitionSchema,
+      ),
     );
-    await registry.upsert("global-agent", globalDef);
     await ctx.state.setCurrentAgentId("global-agent");
 
     const bindDef = decode(
       {
         schemaVersion: 1,
-        name: "会话绑定助手",
+        name: "会话引用助手",
         prompts: { persist: {}, dynamic: {} },
-        model: TEST_SAVED_MODEL_GLOBAL,
+        model: TEST_SAVED_MODEL_SESSION,
       },
       agentDefinitionSchema,
     );
-    await registry.upsert("bind-agent", bindDef);
+    await registry.upsert("session-agent", bindDef);
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "S1");
     await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "bind-agent",
+      agentId: "session-agent",
     });
 
     const runtime = {
@@ -219,30 +185,35 @@ describe("resolveAgentForProject", () => {
       project.id,
       session.id,
     );
-    assert.equal(resolved.source, "session-bind");
-    if (resolved.source === "session-bind") {
-      assert.equal(resolved.agentId, "bind-agent");
-      assert.equal(resolved.definition.name, "会话绑定助手");
+    assert.equal(resolved.source, "session");
+    if (resolved.source === "session") {
+      assert.equal(resolved.agentId, "session-agent");
+      assert.equal(resolved.definition.name, "会话引用助手");
     }
   });
 
-  it("T-R2：project follow + session follow → 回退 workspace 全局", async () => {
+  it("session.agentId 在 registry 不存在时抛 AgentRunResolveError", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const globalDef = decode(
-      {
-        schemaVersion: 1,
-        name: "全局助手",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema,
+    await registry.upsert(
+      "global-agent",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "全局助手",
+          prompts: { persist: {}, dynamic: {} },
+        },
+        agentDefinitionSchema,
+      ),
     );
-    await registry.upsert("global-agent", globalDef);
     await ctx.state.setCurrentAgentId("global-agent");
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "S1");
-    // 会话默认 follow（未绑定）
+    // 强行把 session 引用指向一个不存在的 agent
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "ghost-agent",
+    });
 
     const runtime = {
       state: ctx.state,
@@ -251,23 +222,19 @@ describe("resolveAgentForProject", () => {
       sessions: ctx.sessions,
     };
 
-    const resolved = await resolveAgentForProject(
-      runtime,
-      project.id,
-      session.id,
+    await assert.rejects(
+      () => resolveAgentForProject(runtime, project.id, session.id),
+      (error: unknown) =>
+        error instanceof AgentRunResolveError &&
+        error.message.includes("ghost-agent"),
     );
-    assert.equal(resolved.source, "global");
-    if (resolved.source === "global") {
-      assert.equal(resolved.agentId, "global-agent");
-      assert.equal(resolved.definition.name, "全局助手");
-    }
   });
 
-  it("T-R3：session bind 的 agentId 在 registry 改 definition 后，下次 resolve 拿到新 definition（引用语义）", async () => {
+  it("T-R3：session.agentId 在 registry 改 definition 后，下次 resolve 拿到新 definition（引用语义）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await registry.upsert(
-      "bind-agent",
+      "session-agent",
       decode(
         {
           schemaVersion: 1,
@@ -277,13 +244,10 @@ describe("resolveAgentForProject", () => {
         agentDefinitionSchema,
       ),
     );
+    await ctx.state.setCurrentAgentId("session-agent");
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "S1");
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "bind-agent",
-    });
 
     const runtime = {
       state: ctx.state,
@@ -297,13 +261,13 @@ describe("resolveAgentForProject", () => {
       project.id,
       session.id,
     );
-    assert.equal(first.source, "session-bind");
-    if (first.source !== "session-bind") return;
+    assert.equal(first.source, "session");
+    if (first.source !== "session") return;
     assert.equal(first.definition.name, "v1");
 
-    // 会话绑定指向的 agentId 不变，但在 registry 里改了 definition 内容。
+    // 会话引用的 agentId 不变，但在 registry 里改了 definition 内容。
     await registry.upsert(
-      "bind-agent",
+      "session-agent",
       decode(
         {
           schemaVersion: 1,
@@ -319,11 +283,11 @@ describe("resolveAgentForProject", () => {
       project.id,
       session.id,
     );
-    assert.equal(second.source, "session-bind");
-    if (second.source !== "session-bind") return;
+    assert.equal(second.source, "session");
+    if (second.source !== "session") return;
     // 每次 resolve 都从 registry 现取，拿到的是最新 definition（引用语义）。
     assert.equal(second.definition.name, "v2-after-update");
-    assert.equal(second.agentId, "bind-agent");
+    assert.equal(second.agentId, "session-agent");
     // 之前那次拿到的 v1 引用不受影响（不是共享可变 slot）。
     assert.equal(first.definition.name, "v1");
   });

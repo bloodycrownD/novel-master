@@ -2,12 +2,14 @@ import {
   bootstrapNovelMaster,
   createPersistentPreferences,
   createPersistentState,
+  decode,
   open,
   type PersistentPreferences,
   type PersistentState,
   type TdbcConnection,
 } from "@novel-master/core";
 import {
+  agentDefinitionSchema,
   createAgentRegistryService,
   type AgentRegistryService,
 } from "@novel-master/core/agent";
@@ -62,6 +64,20 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
   await bootstrapNovelMaster(conn);
   const state = createPersistentState(conn);
   const agentRegistry = createAgentRegistryService(conn, state);
+  // 种子化一个默认 agent + workspace 指针，让多数调用 ctx.sessions.create() 的测试
+  // 无需手动设置 workspace agent 也能跑。
+  await agentRegistry.upsert(
+    "test-default-agent",
+    decode(
+      {
+        schemaVersion: 1,
+        name: "测试默认 Agent",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    ),
+  );
+  await state.setCurrentAgentId("test-default-agent");
   return {
     conn,
     state,

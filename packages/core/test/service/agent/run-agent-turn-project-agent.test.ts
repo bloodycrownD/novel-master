@@ -179,7 +179,7 @@ describe("runAgentTurn project agent config", () => {
     await ctx.state.setCurrentAgentId("global-agent");
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
-    // 会话绑定的另一个 agent
+    // 会话绑定的另一个 agent（v2：不再回退 workspace，给个 model pin）
     await registry.upsert(
       "session-bind-agent",
       decode(
@@ -192,6 +192,7 @@ describe("runAgentTurn project agent config", () => {
             },
             dynamic: {},
           },
+          model: TEST_SAVED_MODEL_ID,
         },
         agentDefinitionSchema,
       ),
@@ -200,7 +201,6 @@ describe("runAgentTurn project agent config", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "S1");
     await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
       agentId: "session-bind-agent",
     });
 
@@ -223,14 +223,14 @@ describe("runAgentTurn project agent config", () => {
       // runner deps stubbed; onAfterResolveModel runs before runner
     }
 
-    // 透传 sessionId 后 resolver 走 session-bind 分支，拿到 bind agent 的 definition。
+    // 透传 sessionId 后 resolver 走 session 分支，拿到 bind agent 的 definition。
     assert.ok(capturedDefinition != null);
     assert.equal(capturedDefinition.name, "会话绑定 Agent");
     assert.equal(
       capturedDefinition.prompts.persist[0]?.content,
       "SESSION_BIND_PROMPT",
     );
-    // session-bind agent 无 model pin，回退 workspace 当前模型。
+    // v2：session-bind agent 自带 model pin，不再回退 workspace。
     assert.equal(capturedModel, TEST_SAVED_MODEL_ID);
   });
 });

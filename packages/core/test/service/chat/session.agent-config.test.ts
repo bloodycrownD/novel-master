@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+
+// PersistentState.setCurrentModelId 会校验 UUID，测试里统一用这个常量。
+const TEST_SAVED_MODEL_A = "11111111-1111-4111-8111-111111111111";
 import { describe, it } from "node:test";
-import { ConfigDecodeError } from "@novel-master/core";
+import { decode } from "@novel-master/core";
+import { agentDefinitionSchema } from "@novel-master/core/agent";
 import { ChatError } from "@novel-master/core/chat";
 import {
   getNovelMasterTestContext,
@@ -10,152 +14,197 @@ import {
 
 novelMasterTestFixture();
 
-describe("SessionService agent config（T-S3）", () => {
-  it("列 NULL 时 getSessionAgentConfig 返回默认 follow", async () => {
+function def(name: string) {
+  return decode(
+    {
+      schemaVersion: 1,
+      name,
+      prompts: { persist: {}, dynamic: {} },
+    },
+    agentDefinitionSchema,
+  );
+}
+
+describe("SessionService agent config（v2，T-S3）", () => {
+  it("create 复制 workspace 当前 agentId + modelId 到新会话", async () => {
     const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("ws-agent", def("ws-agent"));
+    await ctx.state.setCurrentAgentId("ws-agent");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
+
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "default-follow");
+    const session = await ctx.sessions.create(project.id, "copy-ws");
 
     const config = await ctx.sessions.getSessionAgentConfig(session.id);
-    assert.deepEqual(config, { mode: "follow" });
+    assert.deepEqual(config, { agentId: "ws-agent", modelId: TEST_SAVED_MODEL_A });
   });
 
-  it("patch { mode: follow } 整体替换为 follow，列存 NULL", async () => {
+  it("create workspace 无 modelId 时只写 agentId", async () => {
     const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("ws-agent-2", def("ws-agent-2"));
+    await ctx.state.setCurrentAgentId("ws-agent-2");
+    await ctx.state.resetCurrentModelId();
+
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "to-follow");
+    const session = await ctx.sessions.create(project.id, "no-model");
 
-    // 先 bind
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "a1",
-    });
-    assert.equal(
-      (await ctx.sessions.getSessionAgentConfig(session.id)).mode,
-      "bind",
+    const config = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.deepEqual(config, { agentId: "ws-agent-2" });
+  });
+
+  it("create workspace agentId 缺失时回落 registry 首项", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("alpha", def("alpha"));
+    await ctx.agentRegistry.upsert("beta", def("beta"));
+    await ctx.state.resetCurrentAgentId();
+    await ctx.state.resetCurrentModelId();
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "fallback-registry");
+
+    const config = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.equal(config.agentId, "alpha");
+    assert.equal(config.modelId, undefined);
+  });
+
+  it("create workspace 与 registry 均空时抛 INVALID_ARGUMENT", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ctx.state.resetCurrentAgentId();
+    // registry 在 shared DB 中可能已有别的 agent，但 workspace 指针清空后
+    // 若 registry 列表为空才会抛。这里改用一个隔离检查：mock 一个空 registry。
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+
+    // 直接验证空 registry + 空 state 的 service 行为：
+    // 构造一个临时 session service 实例（用空 registry），看 create 是否抛。
+    const { DefaultSessionService } = await import(
+      "../../../src/service/chat/impl/session.service.js"
     );
-
-    // 再解绑
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "follow",
-    });
-    assert.deepEqual(after, { mode: "follow" });
-
-    // 列存 NULL：直接读仓储原始值
+    const { SqliteProjectRepository } = await import(
+      "../../../src/domain/chat/repositories/impl/sqlite-project.repository.js"
+    );
     const { SqliteSessionRepository } = await import(
       "../../../src/domain/chat/repositories/impl/sqlite-session.repository.js"
     );
-    const repo = new SqliteSessionRepository(ctx.conn);
-    assert.equal(await repo.getSessionAgentConfig(session.id), null);
-  });
-
-  it("patch { mode: bind; agentId } 整体替换为 bind（不带 modelId）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "to-bind");
-
-    const saved = await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "agent-x",
+    const { SqliteMessageRepository } = await import(
+      "../../../src/domain/chat/repositories/impl/sqlite-message.repository.js"
+    );
+    const { SqliteVfsEntryRepository } = await import(
+      "../../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js"
+    );
+    const emptyState = {
+      getCurrentAgentId: async () => undefined as string | undefined,
+      getCurrentModelId: async () => undefined as string | undefined,
+    };
+    const emptyRegistry = { listAgentIds: async () => [] as const };
+    const svc = new DefaultSessionService({
+      conn: ctx.conn,
+      projects: new SqliteProjectRepository(ctx.conn),
+      sessions: new SqliteSessionRepository(ctx.conn),
+      messages: new SqliteMessageRepository(ctx.conn),
+      vfs: new SqliteVfsEntryRepository(ctx.conn),
+      state: emptyState,
+      agentRegistry: emptyRegistry,
     });
-    assert.deepEqual(saved, { mode: "bind", agentId: "agent-x" });
-
-    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
-    assert.deepEqual(loaded, { mode: "bind", agentId: "agent-x" });
-  });
-
-  it("patch { mode: bind; agentId; modelId } 带 modelId", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "bind-model");
-
-    const saved = await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "agent-x",
-      modelId: "gpt-4",
-    });
-    assert.deepEqual(saved, {
-      mode: "bind",
-      agentId: "agent-x",
-      modelId: "gpt-4",
-    });
-  });
-
-  it("patch { modelId: string } 在 bind 上覆盖 model，保持 agentId", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "model-override");
-
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "agent-y",
-    });
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
-      modelId: "claude",
-    });
-    assert.deepEqual(after, {
-      mode: "bind",
-      agentId: "agent-y",
-      modelId: "claude",
-    });
-  });
-
-  it("patch { modelId: null } 清掉 model 覆盖，保持 bind", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "model-clear");
-
-    await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
-      agentId: "agent-y",
-      modelId: "claude",
-    });
-    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
-      modelId: null,
-    });
-    assert.deepEqual(after, { mode: "bind", agentId: "agent-y" });
-  });
-
-  it("patch { modelId } 在 follow 上拒绝（无 agentId）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "model-on-follow");
 
     await assert.rejects(
-      () =>
-        ctx.sessions.updateSessionAgentConfig(session.id, {
-          modelId: "gpt-4",
-        }),
+      () => svc.create(project.id, "should-fail"),
       (error: unknown) =>
         error instanceof ChatError && error.code === "INVALID_ARGUMENT",
     );
   });
 
-  it("patch { mode: bind } 缺 agentId 被 schema 拒绝（ConfigDecodeError）", async () => {
+  it("update 全量替换为新配置", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "bind-no-agent");
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
 
-    // 直接构造非法 wire 绕过 TS 类型，验证 schema 拒绝
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "for-update");
+
+    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "new-agent",
+      modelId: "new-model",
+    });
+    assert.deepEqual(after, { agentId: "new-agent", modelId: "new-model" });
+
+    const loaded = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.deepEqual(loaded, { agentId: "new-agent", modelId: "new-model" });
+  });
+
+  it("update 仅 agentId 不带 modelId 时清掉旧 modelId（全量替换语义）", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "replace-only");
+
+    // 初始有 modelId（来自 workspace）
+    const initial = await ctx.sessions.getSessionAgentConfig(session.id);
+    assert.notEqual(initial.modelId, undefined);
+
+    const after = await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "agent-only",
+    });
+    assert.deepEqual(after, { agentId: "agent-only" });
+  });
+
+  it("update 缺 agentId 被 schema 拒绝（ConfigDecodeError）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { ConfigDecodeError } = await import(
+      "../../../src/errors/config-decode-errors.js"
+    );
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "reject-empty");
+
     await assert.rejects(
       () =>
         ctx.sessions.updateSessionAgentConfig(session.id, {
-          mode: "bind",
           agentId: "",
-        } as unknown as { mode: "bind"; agentId: string }),
+        } as unknown as { agentId: string }),
       ConfigDecodeError,
     );
   });
 
-  it("copy 后新会话为 follow，不继承绑定（与 composer_draft_json 一致）", async () => {
+  it("getSessionAgentConfig 列 NULL 视为异常抛错", async () => {
     const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "null-column");
+
+    // 直接把列改回 NULL 模拟未迁移的老数据
+    const { SqliteSessionRepository } = await import(
+      "../../../src/domain/chat/repositories/impl/sqlite-session.repository.js"
+    );
+    const repo = new SqliteSessionRepository(ctx.conn);
+    await repo.setSessionAgentConfig(session.id, null, Date.now());
+
+    await assert.rejects(
+      () => ctx.sessions.getSessionAgentConfig(session.id),
+      (error: unknown) =>
+        error instanceof ChatError && error.code === "INVALID_ARGUMENT",
+    );
+  });
+
+  it("copy 继承源 session 的 agent_config_json", async () => {
+    const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_A);
+
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const source = await ctx.sessions.create(project.id, "copy-source");
 
+    // 改一下源配置，区别于 workspace 初始值
     await ctx.sessions.updateSessionAgentConfig(source.id, {
-      mode: "bind",
-      agentId: "agent-z",
-      modelId: "m1",
+      agentId: "copied-agent",
+      modelId: "copied-model",
     });
 
     const copy = await ctx.sessions.copy(source.id);
@@ -163,27 +212,28 @@ describe("SessionService agent config（T-S3）", () => {
     const copyConfig = await ctx.sessions.getSessionAgentConfig(copy.id);
 
     // 源不变
-    assert.equal(sourceConfig.mode, "bind");
-    // 副本默认 follow
-    assert.deepEqual(copyConfig, { mode: "follow" });
-
-    // 列也确实为 NULL
-    const { SqliteSessionRepository } = await import(
-      "../../../src/domain/chat/repositories/impl/sqlite-session.repository.js"
-    );
-    const repo = new SqliteSessionRepository(ctx.conn);
-    assert.equal(await repo.getSessionAgentConfig(copy.id), null);
+    assert.deepEqual(sourceConfig, {
+      agentId: "copied-agent",
+      modelId: "copied-model",
+    });
+    // 副本继承源
+    assert.deepEqual(copyConfig, {
+      agentId: "copied-agent",
+      modelId: "copied-model",
+    });
   });
 
   it("updateSessionAgentConfig 更新 updated_at_ms", async () => {
     const ctx = getNovelMasterTestContext();
+    await ctx.agentRegistry.upsert("seed", def("seed"));
+    await ctx.state.setCurrentAgentId("seed");
+
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "ts-bump");
 
     const before = await ctx.sessions.get(session.id);
     await new Promise((r) => setTimeout(r, 5));
     await ctx.sessions.updateSessionAgentConfig(session.id, {
-      mode: "bind",
       agentId: "a",
     });
     const after = await ctx.sessions.get(session.id);

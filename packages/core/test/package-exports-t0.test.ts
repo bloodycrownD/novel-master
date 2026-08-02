@@ -9,7 +9,6 @@ import {
 import type { ResolvedAgentForProject } from "@novel-master/core/agent";
 import {
   createMessageService,
-  DEFAULT_SESSION_AGENT_CONFIG,
   sessionAgentConfigSchema,
 } from "@novel-master/core/chat";
 import type {
@@ -88,13 +87,12 @@ describe("T0 package exports (@novel-master/core entry)", () => {
   });
 
   it("从 @novel-master/core/chat 导出 session agent config 符号", () => {
-    assert.deepEqual(DEFAULT_SESSION_AGENT_CONFIG, { mode: "follow" });
     assert.equal(typeof sessionAgentConfigSchema, "object");
     assert.equal(typeof sessionAgentConfigSchema.toWire, "function");
     assert.equal(typeof sessionAgentConfigSchema.parse, "function");
     // 类型仅作 import 契约存在，运行期断言仅占位
-    const _typeCheck: SessionAgentConfigPatch = { mode: "follow" };
-    const _cfg: SessionAgentConfig = DEFAULT_SESSION_AGENT_CONFIG;
+    const _typeCheck: SessionAgentConfigPatch = { agentId: "a" };
+    const _cfg: SessionAgentConfig = { agentId: "a" };
     void _typeCheck;
     void _cfg;
   });
@@ -103,9 +101,9 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     // Step 10 契约：sessionId 升级为必填后，函数仍从公开子入口导出。
     assert.equal(typeof resolveAgentForProject, "function");
     assert.equal(resolveAgentForProject.length, 3);
-    // 类型仅作 import 契约存在，锁定 ResolvedAgentForProject 三个 source 分支可达。
+    // 类型仅作 import 契约存在，锁定 ResolvedAgentForProject 两个 source 分支可达。
     const _typeCheck: ResolvedAgentForProject = {
-      source: "session-bind",
+      source: "session",
       agentId: "x",
       definition: { name: "n", prompts: { persist: [], dynamic: [] } },
     };

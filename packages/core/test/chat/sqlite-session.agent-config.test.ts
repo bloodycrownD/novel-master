@@ -9,17 +9,19 @@ import {
 
 novelMasterTestFixture();
 
-describe("SqliteSessionRepository agent_config_json（T-S2）", () => {
+describe("SqliteSessionRepository agent_config_json（v2，T-S2）", () => {
   it("set 写入后 get 读回一致；列不进 ChatSession 主模型", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "agent-config-rw");
 
-    // 默认 NULL
-    assert.equal(await repo.getSessionAgentConfig(session.id), null);
+    // create 后由 service 写入非空配置
+    const initial = await repo.getSessionAgentConfig(session.id);
+    assert.notEqual(initial, null);
 
-    const json = JSON.stringify({ mode: "bind", agentId: "agent-x" });
+    // 用仓储直接覆盖
+    const json = JSON.stringify({ agentId: "agent-x" });
     const now = Date.now();
     assert.equal(await repo.setSessionAgentConfig(session.id, json, now), true);
 
@@ -38,15 +40,6 @@ describe("SqliteSessionRepository agent_config_json（T-S2）", () => {
     );
   });
 
-  it("NULL 读回为 null", async () => {
-    const ctx = getNovelMasterTestContext();
-    const repo = new SqliteSessionRepository(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id, "agent-config-null");
-
-    assert.equal(await repo.getSessionAgentConfig(session.id), null);
-  });
-
   it("set 更新 updated_at_ms", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
@@ -58,7 +51,7 @@ describe("SqliteSessionRepository agent_config_json（T-S2）", () => {
     const futureTs = before!.updatedAtMs + 60_000;
     await repo.setSessionAgentConfig(
       session.id,
-      JSON.stringify({ mode: "follow" }),
+      JSON.stringify({ agentId: "a2" }),
       futureTs,
     );
 
@@ -67,19 +60,13 @@ describe("SqliteSessionRepository agent_config_json（T-S2）", () => {
     assert.equal(after!.updatedAtMs, futureTs);
   });
 
-  it("set 传 null 清空列（解绑回 follow）", async () => {
+  it("set 传 null 清空列（仓储层仍允许 null，由 service/migration 保证不写 null）", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteSessionRepository(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "agent-config-clear");
 
-    await repo.setSessionAgentConfig(
-      session.id,
-      JSON.stringify({ mode: "bind", agentId: "a" }),
-      Date.now(),
-    );
-    assert.notEqual(await repo.getSessionAgentConfig(session.id), null);
-
+    // 仓储契约保持：null 仍可写入（供未来其它路径使用）
     await repo.setSessionAgentConfig(session.id, null, Date.now());
     assert.equal(await repo.getSessionAgentConfig(session.id), null);
   });
