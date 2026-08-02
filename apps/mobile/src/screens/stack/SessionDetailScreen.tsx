@@ -7,9 +7,10 @@
  *   右侧是 › chevron 暗示可点；锁定时 chevron 换成 🔒，并整体降透明度。
  *
  * 锁定规则（与 desktop SessionDetailDrawer 对齐）：
- * - `source === 'project-custom'` → agent 切换禁用（项目截断，引导去项目设置改）。
- * - `modelSource === 'agent-pin'` 或 agent definition 带 model pin → model 切换禁用。
- * - `source === 'session'` → agent 可切换（会话独立持有 agentId）。
+ * - `source === 'session'` → agent / model 都允许在会话内切（model 仍受 agent-pin 压制）。
+ * - `source === 'project-custom'` → 项目截断，agent / model 卡片都锁定，引导去项目设置改。
+ * - `source === 'none'`（agent 解析失败，例如会话 agentId 指向已删 agent）→ 两张卡片都锁定，
+ *   避免在异常态误操作。只有 session 才放开，所以锁定判据统一收口为 `source !== 'session'`。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
@@ -70,10 +71,16 @@ export function SessionDetailScreen() {
     load().catch(() => undefined);
   }, [load]);
 
-  // project-custom 时 agent 被项目截断，不能在会话内改；agent pin 时 model 被锁。
-  const agentLocked = meta?.source === 'project-custom';
+  // 锁定判据：只有 source='session' 才允许在会话内切，其余（project-custom / none）一律锁。
+  // 这里把 agent 与 model 卡片按同一条件收口——否则 source='none' 时 modelSource 会被
+  // chat-agent-meta.ts 回填为 'session'，只锁 agent 卡的话 model 卡仍然可点。
+  // model 卡片额外在 agent-pin / hasDedicatedModel 时锁定（agent 自带 model 压制会话覆盖）。
+  const notSession = meta?.source !== 'session';
+  const agentLocked = notSession;
   const modelLocked =
-    meta?.modelSource === 'agent-pin' || (meta?.hasDedicatedModel ?? false);
+    notSession ||
+    meta?.modelSource === 'agent-pin' ||
+    (meta?.hasDedicatedModel ?? false);
 
   // 提交 inline 重命名：空串或未改动直接收起，不调 rename。
   const commitTitle = useCallback(

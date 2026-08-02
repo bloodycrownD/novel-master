@@ -277,6 +277,51 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(mockShowToast).toHaveBeenCalled();
   });
 
+  // review-mobile/B-1 + G-2：source='none'（agent 解析失败）时 agent/model 卡片都应锁定。
+  it("source='none' 时 agent/model 卡片都锁定，点击只弹锁定提示不进 picker", async () => {
+    // chat-agent-meta.ts 在 AgentRunResolveError 时会回填这条 meta
+    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'none'}));
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    const json = JSON.stringify(tree.toJSON());
+    // 两张卡片都应是锁定态（🔒，不再有 ›）
+    expect(json).toContain('🔒');
+    expect(json).not.toContain('›');
+    await act(async () => {
+      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
+    });
+    expect(tree.root.findByProps({testID: 'agent-picker-modal'}).props.visible).toBe(
+      'false',
+    );
+    await act(async () => {
+      tree.root.findByProps({testID: 'model-row'}).props.onPress();
+    });
+    expect(tree.root.findByProps({testID: 'model-picker-modal'}).props.visible).toBe(
+      'false',
+    );
+    // 两张卡片都应触发锁定提示
+    expect(mockShowToast).toHaveBeenCalledTimes(2);
+  });
+
+  // review-mobile/G-2：loadChatAgentMeta 抛非 AgentRunResolveError 时走异常路径，
+  // 详情页弹错误提示并停留在加载态（卡片不渲染，自然不可点）。
+  it('loadChatAgentMeta reject 时弹加载失败提示，卡片不渲染', async () => {
+    mockLoadChatAgentMeta.mockRejectedValue(new Error('boom'));
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    expect(mockShowToast).toHaveBeenCalled();
+    const json = JSON.stringify(tree.toJSON());
+    // 仍在加载态，没有渲染卡片
+    expect(json).not.toContain('agent-row');
+    expect(json).not.toContain('model-row');
+  });
+
   it('session 时智能体可切换（不锁、不弹提示）', async () => {
     mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'session'}));
     let tree!: TestRenderer.ReactTestRenderer;
