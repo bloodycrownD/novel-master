@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { EVENT_AGENT_RUN_FINISHED } from "@shared/agent-event-types";
-import type { AgentRunFinishedPayload } from "@shared/agent-event-types";
 import type { VfsScopeRequest, WorkspacePanelScope } from "@shared/ipc-types";
-import { onAgentStream, vfsScope } from "../ipc/client";
+import { vfsScope } from "../ipc/client";
 import { WorkspaceHeaderActions } from "../features/workspace/WorkspaceHeaderActions";
 import {
   WorkspaceTree,
@@ -10,7 +8,7 @@ import {
 } from "../features/workspace/WorkspaceTree";
 import { useShellNav } from "../providers/ShellNavProvider";
 import { workspaceTitleForScope } from "../state/nav-workspace";
-import { WorkspaceFooter } from "../features/chat/WorkspaceFooter";
+
 import { ConfirmModal } from "../components/ui/ConfirmModal";
 import {
   confirmAndApplyBatchIngest,
@@ -49,8 +47,6 @@ export function ExplorerPane({
     treeRefreshToken,
     notifyWorkspaceMutated,
     syncPreviewTabsFromFileRows,
-    footerKey,
-    reloadFooter,
   } = useShellNav();
   const title = workspaceTitleForScope(workspaceScope);
   const [dropHighlightRoot, setDropHighlightRoot] = useState(false);
@@ -58,21 +54,7 @@ export function ExplorerPane({
     useState<BatchIngestConfirmRequest | null>(null);
   const [ingestBusy, setIngestBusy] = useState(false);
 
-  // agent.run.finished → 刷新页脚 token（缓存已在 core 写好）
-  useEffect(() => {
-    if (sessionId == null) {
-      return;
-    }
-    return onAgentStream((envelope) => {
-      if (envelope.type !== EVENT_AGENT_RUN_FINISHED) {
-        return;
-      }
-      const payload = envelope.payload as AgentRunFinishedPayload;
-      if (payload.sessionId === sessionId) {
-        reloadFooter();
-      }
-    });
-  }, [sessionId, reloadFooter]);
+
 
   useEffect(() => ensureStartDragFailureToast(), []);
 
@@ -189,17 +171,7 @@ export function ExplorerPane({
           id="workspace-footer"
           className={`workspace-footer${viewId === "conversation" ? "" : " hidden"}`}
           hidden={viewId !== "conversation"}
-        >
-          {viewId === "conversation" && projectId && sessionId ? (
-            <WorkspaceFooter
-              key={footerKey}
-              projectId={projectId}
-              sessionId={sessionId}
-            />
-          ) : (
-            <div id="conversation-meta" className="workspace-footer-card" />
-          )}
-        </div>
+        />
       </section>
       <ConfirmModal
         open={ingestConfirm != null}
