@@ -2,7 +2,11 @@
 import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
 import { createKkvService, KkvError } from "@novel-master/core/kkv";
-import { createAgentRegistryService } from "@novel-master/core/agent";
+import {
+  createAgentRegistryService,
+  resolveAgentForProject,
+} from "@novel-master/core/agent";
+import type { ResolvedAgentForProject } from "@novel-master/core/agent";
 import {
   createMessageService,
   DEFAULT_SESSION_AGENT_CONFIG,
@@ -93,5 +97,18 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     const _cfg: SessionAgentConfig = DEFAULT_SESSION_AGENT_CONFIG;
     void _typeCheck;
     void _cfg;
+  });
+
+  it("从 @novel-master/core/agent 导出 resolveAgentForProject（sessionId 必填签名）", () => {
+    // Step 10 契约：sessionId 升级为必填后，函数仍从公开子入口导出。
+    assert.equal(typeof resolveAgentForProject, "function");
+    assert.equal(resolveAgentForProject.length, 3);
+    // 类型仅作 import 契约存在，锁定 ResolvedAgentForProject 三个 source 分支可达。
+    const _typeCheck: ResolvedAgentForProject = {
+      source: "session-bind",
+      agentId: "x",
+      definition: { name: "n", prompts: { persist: [], dynamic: [] } },
+    };
+    void _typeCheck;
   });
 });
