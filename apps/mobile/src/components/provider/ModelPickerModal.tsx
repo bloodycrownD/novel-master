@@ -1,8 +1,9 @@
 /**
  * 模型选择器：同时服务「我的」tab（workspace 全局）与会话详情页（session 覆盖）。
  *
- * 传入 `sessionId` 时走会话级路径——`currentId` 取 session 绑定 modelId
- * （缺失回退 workspace 当前模型），选中后写 `{ modelId }` patch（保持现有 mode/agentId）。
+ * 传入 `sessionId` 时走会话级路径——`currentId` 取 session 绑定 modelId。
+ * session 模式不回退 workspace：`modelId` 为空时 picker 不高亮任何项，
+ * 避免误导用户以为这个会话已经绑了模型。选中后写 `{ modelId }` patch（保持现有 mode/agentId）。
  * 不传时维持原 workspace 行为。`locked` 用于 agent pin 场景整体禁用选择。
  */
 import React, {useCallback, useEffect, useState} from 'react';
@@ -50,19 +51,21 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const workspaceId = await runtime.state.getCurrentModelId();
-      let effectiveId = workspaceId ?? undefined;
+      let effectiveId: string | undefined;
       if (sessionId != null) {
-        // 会话级：session.modelId 存在时优先，否则回退 workspace 当前模型。
+        // 会话级：只用 session 自己绑定的 modelId 高亮。即便为空，
+        // 也不再回退 workspace 当前模型——否则用户会以为会话已经绑定了模型。
         const sessionConfig = await runtime.sessions.getSessionAgentConfig(
           sessionId,
         );
-        if (
-          sessionConfig.modelId &&
-          sessionConfig.modelId.length > 0
-        ) {
-          effectiveId = sessionConfig.modelId;
-        }
+        effectiveId =
+          sessionConfig.modelId && sessionConfig.modelId.length > 0
+            ? sessionConfig.modelId
+            : undefined;
+      } else {
+        // workspace 全局：用 workspace 当前模型高亮。
+        const workspaceId = await runtime.state.getCurrentModelId();
+        effectiveId = workspaceId ?? undefined;
       }
       setCurrentId(effectiveId);
       const providers = await runtime.providers.list();
