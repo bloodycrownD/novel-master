@@ -57,8 +57,9 @@ export async function runRunAgentAction(
 
   const definition = await deps.agentRegistry.get(agentId);
   const workspaceModelId = (await deps.getWorkspaceModelId()) ?? "";
-  // workspace 层已从 resolveSavedModelId 移除：event 触发的 agent 运行没有 session
-  // 上下文，这里沿用「agent pin → workspace 当前模型」的田语义作为并fallback。
+  // workspace 层已从 resolveSavedModelId 移除。event 触发的 run-agent 没有 session
+  // 上下文，所以这里保留「agent pin → workspace 当前模型」的原语义作为 fallback——
+  // 这属于 event 触发场景的例外（业务 spec deviations #3 已登记，不在本节点改 spec）。
   const savedModelId =
     resolveSavedModelId({
       agentModelId: definition.model,
