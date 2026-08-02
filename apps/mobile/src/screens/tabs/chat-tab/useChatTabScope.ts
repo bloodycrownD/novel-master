@@ -65,7 +65,7 @@ export function useChatTabScope({
     modelLabel: '—',
     tokenLabel: '',
     hasDedicatedModel: false,
-    modelSource: 'workspace',
+    modelSource: 'session',
   });
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
 
@@ -97,7 +97,7 @@ export function useChatTabScope({
         modelLabel: '—',
         tokenLabel: '',
         hasDedicatedModel: false,
-        modelSource: 'workspace',
+        modelSource: 'session',
       });
       return;
     }
@@ -110,7 +110,7 @@ export function useChatTabScope({
         modelLabel: '—',
         tokenLabel: '',
         hasDedicatedModel: false,
-        modelSource: 'workspace',
+        modelSource: 'session',
       });
       return;
     }
@@ -130,7 +130,7 @@ export function useChatTabScope({
         modelLabel: '—',
         tokenLabel: '',
         hasDedicatedModel: false,
-        modelSource: 'workspace',
+        modelSource: 'session',
       });
     }
   }, [runtime, projectId, sessionId, refreshChatTokenLabel]);

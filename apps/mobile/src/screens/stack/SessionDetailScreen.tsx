@@ -9,7 +9,7 @@
  * 锁定规则（与 desktop SessionDetailDrawer 对齐）：
  * - `source === 'project-custom'` → agent 切换禁用（项目截断，引导去项目设置改）。
  * - `modelSource === 'agent-pin'` 或 agent definition 带 model pin → model 切换禁用。
- * - `source === 'session-bind'` → agent 可切换（这就是 session 绑定本身）。
+ * - `source === 'session'` → agent 可切换（会话独立持有 agentId）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
@@ -34,10 +34,8 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 /** agent 来源对应的中文标签（贴在 agent 名后面，帮用户判断当前生效来源）。 */
 function agentSourceLabel(source: ChatAgentMeta['source']): string {
   switch (source) {
-    case 'global':
-      return '全局';
-    case 'session-bind':
-      return '会话绑定';
+    case 'session':
+      return '会话引用';
     case 'project-custom':
       return '项目专属';
     default:
@@ -45,15 +43,13 @@ function agentSourceLabel(source: ChatAgentMeta['source']): string {
   }
 }
 
-/** model 来源标签：agent pin 压制 / 会话覆盖 / workspace。 */
+/** model 来源标签：agent pin 压制 / 会话跟随。 */
 function modelSourceLabel(modelSource: ChatAgentMeta['modelSource']): string {
   switch (modelSource) {
     case 'agent-pin':
       return 'Agent 指定';
-    case 'session-override':
-      return '会话覆盖';
     default:
-      return '工作区';
+      return '会话';
   }
 }
 

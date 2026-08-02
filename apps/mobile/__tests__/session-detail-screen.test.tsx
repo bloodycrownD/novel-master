@@ -12,10 +12,10 @@ import TestRenderer, {act} from 'react-test-renderer';
 const mockSessionsGet = jest.fn(async () => ({id: 's1', title: '我的会话'}));
 const mockSessionsRename = jest.fn(async () => undefined);
 const mockSessionsGetSessionAgentConfig = jest.fn(async () => ({
-  mode: 'follow',
+  agentId: 'workspace-agent',
 }));
 const mockSessionsUpdateSessionAgentConfig = jest.fn(async () => ({
-  mode: 'follow',
+  agentId: 'workspace-agent',
 }));
 const mockEventOrchestratorEmit = jest.fn(async () => ({ok: true, failures: []}));
 const mockStateGetCurrentAgentId = jest.fn(async () => 'workspace-agent');
@@ -199,13 +199,13 @@ function flushPromises(): Promise<void> {
 
 function meta(overrides: Partial<ChatAgentMeta> = {}): ChatAgentMeta {
   return {
-    source: 'global',
+    source: 'session',
     agentId: 'agent-a',
     agentName: 'Alpha',
     modelLabel: 'Model-1',
     tokenLabel: '',
     hasDedicatedModel: false,
-    modelSource: 'workspace',
+    modelSource: 'session',
     ...overrides,
   };
 }
@@ -228,8 +228,8 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(json).toContain('我的会话');
     expect(json).toContain('Alpha');
     expect(json).toContain('Model-1');
-    // global source → 「全局」标签
-    expect(json).toContain('全局');
+    // session source → 「会话引用」标签
+    expect(json).toContain('会话引用');
   });
 
   it('点击「查看提示词」navigate 到 RealPrompt', async () => {
@@ -284,8 +284,8 @@ describe('T-M2 SessionDetailScreen', () => {
     );
   });
 
-  it('session-bind 时 agent 可切换（不锁）', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'session-bind'}));
+  it('session 时 agent 可切换（不锁）', async () => {
+    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'session'}));
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -340,10 +340,9 @@ describe('T-M5 picker select 分流', () => {
     jest.clearAllMocks();
   });
 
-  it('会话内 agent 选择：selectSessionAgent 写 session bind，不碰 workspace 全局', async () => {
+  it('会话内 agent 选择：selectSessionAgent 写 session agentId，不碰 workspace 全局', async () => {
     await selectSessionAgent(mockRuntime as never, 's1', 'agent-a');
     expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
-      mode: 'bind',
       agentId: 'agent-a',
     });
     expect(mockStateGetCurrentAgentId).not.toHaveBeenCalled();
@@ -355,13 +354,15 @@ describe('T-M5 picker select 分流', () => {
     expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
   });
 
-  it('会话内 model 选择：写 session modelId patch（保持现有 mode/agentId）', async () => {
-    // ModelPickerModal 的 select 在 session 模式下调
-    // runtime.sessions.updateSessionAgentConfig(sessionId, { modelId })
+  it('会话内 model 选择：写全量 session 配置（保留 agentId 换 modelId）', async () => {
+    // ModelPickerModal 的 select 在 session 模式下需要先读 current config 再写回全量
+    const current = await mockRuntime.sessions.getSessionAgentConfig('s1');
     await mockRuntime.sessions.updateSessionAgentConfig('s1', {
+      agentId: current.agentId,
       modelId: 'model-x',
     });
     expect(mockSessionsUpdateSessionAgentConfig).toHaveBeenCalledWith('s1', {
+      agentId: current.agentId,
       modelId: 'model-x',
     });
   });

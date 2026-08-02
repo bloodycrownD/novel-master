@@ -97,7 +97,7 @@ function makeMockContext(
     setConversationPanel: mockSetConversationPanel,
     chatSubview: 'conversation' as const,
     setChatSubview: jest.fn(),
-    agentMeta: { source: 'global', agentId: 'a1', agentName: 'A', hasDedicatedModel: false, modelLabel: 'Model', tokenLabel: '', modelSource: 'workspace' },
+    agentMeta: { source: 'session', agentId: 'a1', agentName: 'A', hasDedicatedModel: false, modelLabel: 'Model', tokenLabel: '', modelSource: 'session' },
     uiRunning: false,
     agentActive: false,
     activeRunId: null,

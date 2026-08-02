@@ -53,12 +53,11 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
       const workspaceId = await runtime.state.getCurrentModelId();
       let effectiveId = workspaceId ?? undefined;
       if (sessionId != null) {
-        // 会话级：bind 且带 modelId 时优先，否则回退 workspace 当前模型。
+        // 会话级：session.modelId 存在时优先，否则回退 workspace 当前模型。
         const sessionConfig = await runtime.sessions.getSessionAgentConfig(
           sessionId,
         );
         if (
-          sessionConfig.mode === 'bind' &&
           sessionConfig.modelId &&
           sessionConfig.modelId.length > 0
         ) {
@@ -122,9 +121,11 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
 
   const select = useCallback(
     async (savedModelId: string) => {
-      // 分流：session 写 modelId patch（保持现有 mode/agentId），workspace 写全局。
+      // 分流：session 写全量配置（保留 agentId 只换 modelId），workspace 写全局。
       if (sessionId != null) {
+        const current = await runtime.sessions.getSessionAgentConfig(sessionId);
         await runtime.sessions.updateSessionAgentConfig(sessionId, {
+          agentId: current.agentId,
           modelId: savedModelId,
         });
       } else {
