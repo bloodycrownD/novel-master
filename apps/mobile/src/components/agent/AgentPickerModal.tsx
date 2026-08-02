@@ -1,5 +1,8 @@
 /**
- * Workspace agent picker: lists registry agents and sets PersistentState current agent.
+ * Agent 选择器：同时服务「我的」tab（workspace 全局）与会话详情页（session 绑定）。
+ *
+ * 传入 `sessionId` 时走会话级路径——读 `loadSessionAgentPickerRows`，
+ * 写 `selectSessionAgent`（不动 workspace 全局指针）；不传时维持原 workspace 行为。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
@@ -15,7 +18,9 @@ import {
   AGENT_PICKER_EMPTY_MESSAGE,
   isAgentPickerRowSelected,
   loadAgentPickerRows,
+  loadSessionAgentPickerRows,
   selectWorkspaceAgent,
+  selectSessionAgent,
   type AgentPickerRow,
 } from '../../services/agent-picker';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -24,9 +29,14 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onSelected?: (agentId: string) => void;
+  /**
+   * 传入后会话级分流：读 session 绑定作为当前选中，写 selectSessionAgent。
+   * 不传则维持 workspace 全局行为（「我的」tab）。
+   */
+  sessionId?: string;
 };
 
-export function AgentPickerModal({visible, onClose, onSelected}: Props) {
+export function AgentPickerModal({visible, onClose, onSelected, sessionId}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const [rows, setRows] = useState<AgentPickerRow[]>([]);
@@ -36,13 +46,17 @@ export function AgentPickerModal({visible, onClose, onSelected}: Props) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const loaded = await loadAgentPickerRows(runtime);
+      // 有 sessionId 走会话级（绑定优先、缺失回退 workspace）；否则读 workspace 全局。
+      const loaded =
+        sessionId != null
+          ? await loadSessionAgentPickerRows(runtime, sessionId)
+          : await loadAgentPickerRows(runtime);
       setCurrentId(loaded.currentId);
       setRows(loaded.rows);
     } finally {
       setLoading(false);
     }
-  }, [runtime]);
+  }, [runtime, sessionId]);
 
   useEffect(() => {
     if (visible) {
@@ -52,11 +66,16 @@ export function AgentPickerModal({visible, onClose, onSelected}: Props) {
 
   const select = useCallback(
     async (agentId: string) => {
-      await selectWorkspaceAgent(runtime, agentId);
+      // 分流：session 绑定只影响单个会话；workspace 入口继续写全局指针。
+      if (sessionId != null) {
+        await selectSessionAgent(runtime, sessionId, agentId);
+      } else {
+        await selectWorkspaceAgent(runtime, agentId);
+      }
       onSelected?.(agentId);
       onClose();
     },
-    [runtime, onSelected, onClose],
+    [runtime, sessionId, onSelected, onClose],
   );
 
   return (
