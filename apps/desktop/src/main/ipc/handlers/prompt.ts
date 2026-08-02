@@ -4,7 +4,7 @@
 import {
   AgentRunResolveError,
   resolveAgentForProject,
-  resolveApplicationModelId,
+  resolveSavedModelId,
 } from "@novel-master/core/agent";
 import { savedModelDisplayName } from "@novel-master/core/provider";
 import { PROJECT_AGENT_META_DISPLAY_LABEL } from "@novel-master/core/chat";
@@ -58,12 +58,20 @@ export async function handlePromptAgentMeta(
   try {
     const rt = await getDesktopRuntime();
     try {
-      const resolved = await resolveAgentForProject(rt, req.projectId);
+      const resolved = await resolveAgentForProject(
+        rt,
+        req.projectId,
+        req.sessionId,
+      );
       const { definition } = resolved;
-      const workspaceModelId = (await rt.state.getCurrentModelId()) ?? "";
-      const savedModelId = resolveApplicationModelId({
+      // workspace 层已移除：模型解析链收窄为 agent pin → session.modelId。
+      // 这里读 session 配置拿 modelId，同时用于 modelSource 判定。
+      const sessionConfig = await rt.sessions.getSessionAgentConfig(
+        req.sessionId,
+      );
+      const savedModelId = resolveSavedModelId({
         agentModelId: definition.model,
-        workspaceModelId: workspaceModelId || undefined,
+        sessionModelId: sessionConfig.modelId,
       });
       let modelLabel = "未选择模型";
       if (savedModelId) {
@@ -77,15 +85,20 @@ export async function handlePromptAgentMeta(
       }
       const hasDedicatedModel =
         definition.model != null && definition.model !== "";
-      if (resolved.source === "global") {
+      // modelSource 优先级链：agent pin 压制一切 → 否则取 session。
+      const modelSource: 'agent-pin' | 'session' = hasDedicatedModel
+        ? 'agent-pin'
+        : 'session';
+      if (resolved.source === "session") {
         return {
           ok: true,
           data: {
-            source: "global",
+            source: "session",
             agentId: resolved.agentId,
             agentName: definition.name,
             modelLabel,
             hasDedicatedModel,
+            modelSource,
           },
         };
       }
@@ -96,6 +109,7 @@ export async function handlePromptAgentMeta(
           agentName: PROJECT_AGENT_META_DISPLAY_LABEL,
           modelLabel,
           hasDedicatedModel,
+          modelSource,
         },
       };
     } catch (error) {

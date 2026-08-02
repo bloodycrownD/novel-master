@@ -37,6 +37,12 @@ export const IPC_CHANNELS = {
   SESSIONS_GET_COMPOSER_DRAFT: 'nm:sessions/getComposerDraft',
   SESSIONS_SET_COMPOSER_DRAFT: 'nm:sessions/setComposerDraft',
   SESSIONS_PROJECT_COMPOSER_STATUS: 'nm:sessions/projectComposerStatus',
+  /** 会话级：读取当前会话的智能体绑定（follow / bind）。 */
+  SESSIONS_GET_AGENT_BINDING: 'nm:sessions/getAgentBinding',
+  /** 会话级：绑定 agent 到会话（agentId=null 解绑回 follow）。 */
+  SESSIONS_SET_AGENT_BINDING: 'nm:sessions/setAgentBinding',
+  /** 会话级：覆盖模型（modelId=null 清除覆盖，mode/agentId 保持现状）。 */
+  SESSIONS_SET_MODEL_OVERRIDE: 'nm:sessions/setModelOverride',
 
   APP_UI_GET: 'nm:app-ui/get',
   APP_UI_SET: 'nm:app-ui/set',
@@ -322,6 +328,37 @@ export type SessionSetComposerDraftRequest = {
 
 export type SessionProjectComposerStatusRequest = {
   readonly sessionId: string;
+};
+
+/**
+ * 会话级智能体配置 wire 形态（与 core 的 SessionAgentConfig 同型，避免双向映射）。
+ *
+ * - `agentId`：固定到 registry 中的 agent，必填（会话始终独立持有，不再 follow workspace）。
+ * - `modelId`：可选，覆盖 agent pin 的模型。
+ */
+export type SessionAgentConfigDto = {
+  readonly agentId: string;
+  readonly modelId?: string;
+};
+
+export type SessionGetAgentBindingRequest = {
+  readonly sessionId: string;
+};
+
+export type SessionSetAgentBindingRequest = {
+  readonly sessionId: string;
+  /**
+   * `null` 表示将该会话的 agentId 同步为 workspace 当前 agent（作为该会话的新
+   * 默认值）；会话始终持有 agentId，这不是解绑/回退，而是「同步到当前默认」。
+   * 具体 id 直接写入会话。
+   */
+  readonly agentId: string | null;
+};
+
+export type SessionSetModelOverrideRequest = {
+  readonly sessionId: string;
+  /** `null` 表示清除模型覆盖；agentId 保持现状不动。 */
+  readonly modelId: string | null;
 };
 
 export type AppUiGetRequest = {
@@ -722,11 +759,18 @@ export type PromptPreviewSegmentDto = {
 };
 
 export type PromptAgentMetaResponse = {
-  readonly source: 'global' | 'project-custom' | 'none';
+  readonly source: 'project-custom' | 'session' | 'none';
   readonly agentId?: string;
   readonly agentName: string;
   readonly modelLabel: string;
   readonly hasDedicatedModel: boolean;
+  /**
+   * 模型来源优先级链（workspace 层已移除）：
+   * - `agent-pin`：agent definition 自带 model，压制 session 覆盖。
+   * - `session`：会话级 modelId（agent 无 pin 时生效）。
+   * `source: 'none'` 时省略。
+   */
+  readonly modelSource?: 'agent-pin' | 'session';
 };
 
 /** Structured chat context usage for workspace footer (prototype token bar). */

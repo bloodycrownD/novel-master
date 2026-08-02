@@ -307,4 +307,50 @@ describe("schema 列对齐（T-B3）", () => {
 
     await conn.close();
   });
+
+  it("A9：legacy chat_session 缺 agent_config_json，bootstrap 后列存在且可读写（T-S4）", async () => {
+    const conn = await openInMemoryConnection();
+    const sessionId = randomUUID();
+    const projectId = randomUUID();
+    const now = 1_700_000_000_000;
+
+    // 旧库形态：v1.0.7 风格 chat_session（无 composer_draft_json 也无 agent_config_json）
+    await execLegacyV107ChatDdl(conn);
+    await conn.execute(
+      `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
+       VALUES ('${sessionId}', '${projectId}', 'legacy-agent-col', ${now}, ${now})`,
+    );
+    await bootstrapNovelMaster(conn);
+
+    const columns = await tableColumnNames(conn, "chat_session");
+    assert.ok(columns.has("agent_config_json"), "agent_config_json 应被 ALIGN 补列");
+
+    const repo = new SqliteSessionRepository(conn);
+    assert.equal(await repo.getSessionAgentConfig(sessionId), null);
+    assert.equal(
+      await repo.setSessionAgentConfig(
+        sessionId,
+        JSON.stringify({ mode: "bind", agentId: "a1" }),
+        now + 1,
+      ),
+      true,
+    );
+    assert.equal(
+      await repo.getSessionAgentConfig(sessionId),
+      JSON.stringify({ mode: "bind", agentId: "a1" }),
+    );
+
+    await conn.close();
+  });
+
+  it("A10：新库 bootstrap 后 chat_session.agent_config_json 由 DDL 直接创建（不重复 ALIGN）", async () => {
+    const conn = await openInMemoryConnection();
+    await bootstrapNovelMaster(conn);
+    await bootstrapNovelMaster(conn); // 快路径：user_version 已达 SCHEMA_BOOT_VERSION
+
+    const columns = await tableColumnNames(conn, "chat_session");
+    assert.ok(columns.has("agent_config_json"));
+
+    await conn.close();
+  });
 });

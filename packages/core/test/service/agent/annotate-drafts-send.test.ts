@@ -112,6 +112,9 @@ function makeRuntime(overrides: {
       getById: async () => null,
     } as AgentTurnRuntimePort["savedModelRepo"],
     userVfsTurn: overrides.userVfsTurn,
+    sessions: {
+      getSessionAgentConfig: async () => ({ mode: "follow" }),
+    },
   } as AgentTurnRuntimePort;
 }
 
@@ -165,7 +168,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     });
 
     // stub runner：避免真实 LLM；runAgentTurn 在 append 后会进 runner
-    // 通过 definitionOverride + 让 runner 早失败不方便；此处只验证 append 前编排
+    // 此处只验证 append 前编排（makeRuntime 默认注入 sampleDefinition）
     // 使用 onUserMessageAppended + 在 runner 前抛错的方式不可行。
     // 改为：mock 到 append 后抛错——实际上 runAgentTurn 会继续 runner。
     // 最小：断言空 content + annotate 不抛「消息不能为空」，且 delete 未调用。
@@ -184,7 +187,6 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
               userAnnotation: "说明",
             },
           ],
-          definitionOverride: sampleDefinition,
           stream: false,
         },
       );
@@ -227,7 +229,6 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
               userAnnotation: "批",
             },
           ],
-          definitionOverride: sampleDefinition,
           stream: false,
           onUserMessageAppended: () => {
             callbackCount += 1;
@@ -300,7 +301,6 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
         "hello",
         {
           annotateDrafts: drafts,
-          definitionOverride: sampleDefinition,
           stream: false,
         },
       );
@@ -341,7 +341,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
           runtime,
           { projectId: "p1", sessionId: "s1" },
           "  ",
-          { definitionOverride: sampleDefinition, stream: false },
+          { stream: false },
         ),
       (err: unknown) =>
         err instanceof AgentTurnError && err.message === "消息不能为空",

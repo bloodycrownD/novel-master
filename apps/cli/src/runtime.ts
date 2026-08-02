@@ -230,7 +230,7 @@ export async function createNovelMasterRuntime(
     agentRegistry,
     tokenCounters,
     projects: createProjectService(conn),
-    sessions: createSessionService(conn),
+    sessions: createSessionService(conn, { state, agentRegistry }),
     messages,
     messageTranscriptEffects,
     sessionFs: createSessionFsService(conn),

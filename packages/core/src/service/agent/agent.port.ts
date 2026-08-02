@@ -16,8 +16,6 @@ export interface AgentRunOptions {
   readonly savedModelId: string;
   /** Workspace current model id. */
   readonly workspaceModelId: string;
-  /** When set, CLI `--modelId` as highest priority for model resolution. */
-  readonly cliModelId?: string;
   readonly maxSteps?: number;
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;

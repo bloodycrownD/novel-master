@@ -16,6 +16,13 @@ export {
 } from '../domain/chat/model/project-agent-config.schema.js';
 export type { ChatSession } from '../domain/chat/model/session.js';
 export type {
+  SessionAgentConfig,
+  SessionAgentConfigPatch,
+} from '../domain/chat/model/session-agent-config.js';
+export {
+  sessionAgentConfigSchema,
+} from '../domain/chat/model/session-agent-config.schema.js';
+export type {
   ChatMessage,
   MessageAttachment,
   MessageContent,
@@ -342,7 +349,7 @@ export {
   createSessionService,
   createMessageService,
 } from '../service/chat/create-chat-services.js';
-export type { ChatServiceBundle } from '../service/chat/create-chat-services.js';
+export type { ChatServiceBundle, ChatServicesSessionDeps } from '../service/chat/create-chat-services.js';
 export {
   createUserVfsTurnService,
   createUserVfsTurnServiceBundle,

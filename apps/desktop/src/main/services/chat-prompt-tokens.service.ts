@@ -3,7 +3,7 @@
  *
  * @module services/chat-prompt-tokens
  */
-import { resolveApplicationModelId } from "@novel-master/core/agent";
+import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
   countPromptLlmInputHeuristicOnly,
@@ -52,19 +52,38 @@ export function formatChatTokenStatsLabel(
   return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${stats.counterKind}`;
 }
 
-export async function loadChatPromptTokenStats(
+// 共用的会话输入快照：避免主路径和 fallback 各自重复读取 sessionConfig。
+type SessionPromptInput = Awaited<ReturnType<typeof buildSessionPromptInput>>;
+// 传给计数分叉的参数，只暴露计数阶段实际需要的三项。
+type CountArgs = Pick<SessionPromptInput, "layout" | "ctx"> & {
+  savedModelId: string;
+};
+type CountResult = {
+  tokenCount: number;
+  estimated: boolean;
+  counterKind: string;
+  contextWindow: number | undefined;
+};
+
+// 主路径与 fallback 的公共骨架：负责构造输入、读取 sessionConfig、解析 savedModelId，
+// 以及 savedModelId 缺失时的 heuristic 早退。只有真正调用 token counter 的部分通过 countFn 分叉。
+async function computeChatPromptTokenStats(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
+  countFn: (args: CountArgs) => Promise<CountResult>,
 ): Promise<PromptChatTokenStatsResponse> {
   const { definition, layout, ctx } = await buildSessionPromptInput(
     runtime,
     scope,
   );
 
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const savedModelId = resolveApplicationModelId({
+  // workspace 层已移除：模型解析链为 agent pin → session.modelId。
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+    scope.sessionId,
+  );
+  const savedModelId = resolveSavedModelId({
     agentModelId: definition.model,
-    workspaceModelId: workspaceModelId || undefined,
+    sessionModelId: sessionConfig.modelId,
   });
 
   if (!savedModelId) {
@@ -73,75 +92,70 @@ export async function loadChatPromptTokenStats(
     return buildTokenStats(count, true, "heuristic", undefined);
   }
 
-  const tokenizerOverride = await resolveTokenCounterModeForModel(
-    runtime.providerModels,
-    savedModelId,
-  );
+  const { tokenCount, estimated, counterKind, contextWindow } =
+    await countFn({ layout, ctx, savedModelId });
+  return buildTokenStats(tokenCount, estimated, counterKind, contextWindow);
+}
 
-  const result = await resolveCurrentPromptTokens(scope.sessionId, {
-    layout,
-    ctx,
-    savedModelId,
-    registry: runtime.tokenCounters,
-    tokenizerOverride,
-    savedModels: runtime.savedModelRepo,
+export async function loadChatPromptTokenStats(
+  runtime: DesktopNovelMasterRuntime,
+  scope: SessionPromptScope,
+): Promise<PromptChatTokenStatsResponse> {
+  return computeChatPromptTokenStats(runtime, scope, async (args) => {
+    const { layout, ctx, savedModelId } = args;
+    const tokenizerOverride = await resolveTokenCounterModeForModel(
+      runtime.providerModels,
+      savedModelId,
+    );
+    const result = await resolveCurrentPromptTokens(scope.sessionId, {
+      layout,
+      ctx,
+      savedModelId,
+      registry: runtime.tokenCounters,
+      tokenizerOverride,
+      savedModels: runtime.savedModelRepo,
+    });
+    const contextWindow =
+      await runtime.providerModels.getContextWindow(savedModelId);
+    return {
+      tokenCount: result.tokenCount,
+      estimated: result.estimated,
+      counterKind: result.counterKind,
+      contextWindow: contextWindow ?? undefined,
+    };
   });
-
-  const contextWindow =
-    await runtime.providerModels.getContextWindow(savedModelId);
-
-  return buildTokenStats(
-    result.tokenCount,
-    result.estimated,
-    result.counterKind,
-    contextWindow ?? undefined,
-  );
 }
 
 async function loadChatPromptTokenStatsFallback(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<PromptChatTokenStatsResponse> {
-  const { definition, layout, ctx } = await buildSessionPromptInput(
-    runtime,
-    scope,
-  );
+  return computeChatPromptTokenStats(runtime, scope, async (args) => {
+    const { layout, ctx, savedModelId } = args;
+    const result = await countPromptLlmInputHeuristicOnly({
+      layout,
+      ctx,
+      savedModelId,
+      registry: runtime.tokenCounters,
+      savedModels: runtime.savedModelRepo,
+    });
 
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const savedModelId = resolveApplicationModelId({
-    agentModelId: definition.model,
-    workspaceModelId: workspaceModelId || undefined,
+    let contextWindow: number | undefined;
+    try {
+      const cw =
+        await runtime.providerModels.getContextWindow(savedModelId);
+      contextWindow = cw ?? undefined;
+    } catch {
+      contextWindow = undefined;
+    }
+
+    return {
+      tokenCount: result.tokenCount,
+      estimated: result.estimated,
+      counterKind: result.counterKind,
+      contextWindow,
+    };
   });
-
-  if (!savedModelId) {
-    const serialized = await serializePromptLlmInput(layout, ctx);
-    const count = runtime.tokenCounters.heuristic.countText(serialized);
-    return buildTokenStats(count, true, "heuristic", undefined);
-  }
-
-  const result = await countPromptLlmInputHeuristicOnly({
-    layout,
-    ctx,
-    savedModelId,
-    registry: runtime.tokenCounters,
-    savedModels: runtime.savedModelRepo,
-  });
-
-  let contextWindow: number | undefined;
-  try {
-    const cw =
-      await runtime.providerModels.getContextWindow(savedModelId);
-    contextWindow = cw ?? undefined;
-  } catch {
-    contextWindow = undefined;
-  }
-
-  return buildTokenStats(
-    result.tokenCount,
-    result.estimated,
-    result.counterKind,
-    contextWindow,
-  );
 }
 
 export async function loadChatPromptTokenStatsResilient(

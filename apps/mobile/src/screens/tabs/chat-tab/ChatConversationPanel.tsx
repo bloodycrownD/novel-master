@@ -345,12 +345,6 @@ export function ChatConversationPanel({
       <SessionActionsDrawer
         visible={sessionDrawerOpen}
         onClose={() => setSessionDrawerOpen(false)}
-        onRename={() => {
-          if (sessionId != null) {
-            setSessionDrawerOpen(false);
-            scope.openSessionRenamePrompt(sessionId);
-          }
-        }}
         onCompact={() => {
           setSessionDrawerOpen(false);
           controller.handleCompactSession();
@@ -383,11 +377,13 @@ export function ChatConversationPanel({
         }}
       />
       <ModelPickerModal
+        sessionId={sessionId}
         visible={modelPickerOpen}
         onClose={() => setModelPickerOpen(false)}
         onSelected={onRefreshChatMeta}
       />
       <AgentPickerModal
+        sessionId={sessionId}
         visible={agentPickerOpen}
         onClose={() => setAgentPickerOpen(false)}
         onSelected={onRefreshChatMeta}

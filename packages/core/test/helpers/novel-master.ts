@@ -2,11 +2,17 @@ import {
   bootstrapNovelMaster,
   createPersistentPreferences,
   createPersistentState,
+  decode,
   open,
   type PersistentPreferences,
   type PersistentState,
   type TdbcConnection,
 } from "@novel-master/core";
+import {
+  agentDefinitionSchema,
+  createAgentRegistryService,
+  type AgentRegistryService,
+} from "@novel-master/core/agent";
 import {
   createMessageService,
   createProjectService,
@@ -37,6 +43,7 @@ export interface NovelMasterTestContext {
   readonly conn: TdbcConnection;
   readonly state: PersistentState;
   readonly preferences: PersistentPreferences;
+  readonly agentRegistry: AgentRegistryService;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
@@ -55,12 +62,29 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
     filename: ":memory:",
   });
   await bootstrapNovelMaster(conn);
+  const state = createPersistentState(conn);
+  const agentRegistry = createAgentRegistryService(conn, state);
+  // 种子化一个默认 agent + workspace 指针，让多数调用 ctx.sessions.create() 的测试
+  // 无需手动设置 workspace agent 也能跑。
+  await agentRegistry.upsert(
+    "test-default-agent",
+    decode(
+      {
+        schemaVersion: 1,
+        name: "测试默认 Agent",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    ),
+  );
+  await state.setCurrentAgentId("test-default-agent");
   return {
     conn,
-    state: createPersistentState(conn),
+    state,
+    agentRegistry,
     preferences: createPersistentPreferences(conn),
     projects: createProjectService(conn),
-    sessions: createSessionService(conn),
+    sessions: createSessionService(conn, { state, agentRegistry }),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),

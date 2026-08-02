@@ -140,6 +140,9 @@ export interface ShellNavContextValue {
   registerEnsurePreviewVisible: (fn: () => void) => void;
   /** 在聊天工作区 Preview 打开文件；若 Preview 列隐藏则先显示。 */
   openChatWorkspacePreview: (path: string) => void;
+  /** 详情抽屉「查看提示词」请求：bump 后由 ConversationPanel 切到 realPrompt tab。 */
+  viewPromptRequest: { token: number } | null;
+  requestViewPrompt: () => void;
 }
 
 
@@ -221,6 +224,9 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     token: number;
   } | null>(null);
   const [agentConfigRevision, setAgentConfigRevision] = useState(0);
+  const [viewPromptRequest, setViewPromptRequest] = useState<{
+    token: number;
+  } | null>(null);
   const mutateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ensurePreviewVisibleRef = useRef<(() => void) | null>(null);
 
@@ -421,6 +427,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       path,
       token: (prev?.token ?? 0) + 1,
     }));
+  }, []);
+
+  const requestViewPrompt = useCallback(() => {
+    setViewPromptRequest((prev) => ({ token: (prev?.token ?? 0) + 1 }));
   }, []);
 
   const { footerKey, reloadFooter } = useWorkspaceFooterReload();
@@ -730,6 +740,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       openChatWorkspacePreview,
 
+      viewPromptRequest,
+
+      requestViewPrompt,
+
     }),
 
     [
@@ -799,6 +813,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       registerEnsurePreviewVisible,
 
       openChatWorkspacePreview,
+
+      viewPromptRequest,
+
+      requestViewPrompt,
 
     ],
 

@@ -1,5 +1,10 @@
 /**
- * Workspace model picker: lists saved models and sets PersistentState current model.
+ * 模型选择器：同时服务「我的」tab（workspace 全局）与会话详情页（session 覆盖）。
+ *
+ * 传入 `sessionId` 时走会话级路径——`currentId` 取 session 绑定 modelId。
+ * session 模式不回退 workspace：`modelId` 为空时 picker 不高亮任何项，
+ * 避免误导用户以为这个会话已经绑了模型。选中后写 `{ modelId }` patch（保持现有 mode/agentId）。
+ * 不传时维持原 workspace 行为。`locked` 用于 agent pin 场景整体禁用选择。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
@@ -25,13 +30,18 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onSelected?: (savedModelId: string) => void;
+  /**
+   * 传入后会话级分流：读 session 绑定 modelId 作为当前选中，写 session override。
+   * 不传则维持 workspace 全局行为（「我的」tab）。
+   */
+  sessionId?: string;
 };
 
 function modelNameKey(providerId: string, modelName: string): string {
   return `${providerId}\0${modelName}`;
 }
 
-export function ModelPickerModal({visible, onClose, onSelected}: Props) {
+export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const [rows, setRows] = useState<SavedModelRow[]>([]);
@@ -41,8 +51,23 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const workspaceId = await runtime.state.getCurrentModelId();
-      setCurrentId(workspaceId ?? undefined);
+      let effectiveId: string | undefined;
+      if (sessionId != null) {
+        // 会话级：只用 session 自己绑定的 modelId 高亮。即便为空，
+        // 也不再回退 workspace 当前模型——否则用户会以为会话已经绑定了模型。
+        const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+          sessionId,
+        );
+        effectiveId =
+          sessionConfig.modelId && sessionConfig.modelId.length > 0
+            ? sessionConfig.modelId
+            : undefined;
+      } else {
+        // workspace 全局：用 workspace 当前模型高亮。
+        const workspaceId = await runtime.state.getCurrentModelId();
+        effectiveId = workspaceId ?? undefined;
+      }
+      setCurrentId(effectiveId);
       const providers = await runtime.providers.list();
       const nameById = new Map(
         providers.map(provider => [provider.id, provider.displayName]),
@@ -89,7 +114,7 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
     } finally {
       setLoading(false);
     }
-  }, [runtime]);
+  }, [runtime, sessionId]);
 
   useEffect(() => {
     if (visible) {
@@ -99,11 +124,20 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
 
   const select = useCallback(
     async (savedModelId: string) => {
-      await runtime.state.setCurrentModelId(savedModelId);
+      // 分流：session 写全量配置（保留 agentId 只换 modelId），workspace 写全局。
+      if (sessionId != null) {
+        const current = await runtime.sessions.getSessionAgentConfig(sessionId);
+        await runtime.sessions.updateSessionAgentConfig(sessionId, {
+          agentId: current.agentId,
+          modelId: savedModelId,
+        });
+      } else {
+        await runtime.state.setCurrentModelId(savedModelId);
+      }
       onSelected?.(savedModelId);
       onClose();
     },
-    [runtime, onSelected, onClose],
+    [runtime, sessionId, onSelected, onClose],
   );
 
   return (

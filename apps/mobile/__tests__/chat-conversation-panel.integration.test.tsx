@@ -42,9 +42,6 @@ jest.mock('../src/components/chat/ChatTranscriptWebView', () => ({
 jest.mock('../src/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
-jest.mock('../src/components/chrome/SessionActionsDrawer', () => ({
-  SessionActionsDrawer: () => null,
-}));
 jest.mock('../src/components/chat/MessageActionMenu', () => ({
   MessageActionMenu: () => null,
 }));
@@ -56,6 +53,9 @@ jest.mock('../src/components/provider/ModelPickerModal', () => ({
 }));
 jest.mock('../src/components/agent/AgentPickerModal', () => ({
   AgentPickerModal: () => null,
+}));
+jest.mock('../src/components/chrome/SessionActionsDrawer', () => ({
+  SessionActionsDrawer: () => null,
 }));
 
 import { ChatConversationPanel } from '../src/screens/tabs/chat-tab/ChatConversationPanel';
@@ -97,7 +97,7 @@ function makeMockContext(
     setConversationPanel: mockSetConversationPanel,
     chatSubview: 'conversation' as const,
     setChatSubview: jest.fn(),
-    agentMeta: { agentId: 'a1', agentName: 'A', hasDedicatedModel: false },
+    agentMeta: { source: 'session', agentId: 'a1', agentName: 'A', hasDedicatedModel: false, modelLabel: 'Model', tokenLabel: '', modelSource: 'session' },
     uiRunning: false,
     agentActive: false,
     activeRunId: null,

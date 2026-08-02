@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
 import {
   AgentRunResolveError,
   resolveApplicationModelIdForRun,
@@ -21,6 +22,7 @@ function makeRuntime(overrides: {
   readonly currentModelId?: string | null;
   readonly agentIds?: string[];
   readonly getAgent?: (id: string) => Promise<AgentDefinition>;
+  readonly sessionConfig?: SessionAgentConfig;
 }): AgentRunRuntimePort {
   return {
     state: {
@@ -35,6 +37,10 @@ function makeRuntime(overrides: {
         }
         return sampleDefinition;
       },
+    },
+    sessions: {
+      getSessionAgentConfig: async () =>
+        overrides.sessionConfig ?? { agentId: "a1" },
     },
   };
 }
@@ -83,22 +89,71 @@ describe("agent-run-shared", () => {
     assert.equal(result.workspaceModelId, "workspace-model");
   });
 
-  it("resolveApplicationModelIdForRun 优先使用 cliModelId", async () => {
+  it("resolveApplicationModelIdForRun throws when no model resolved（无 workspace 回退）", async () => {
     const runtime = makeRuntime({ currentModelId: "workspace-model" });
+    const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
+    // sessionConfig 默认 { agentId: "a1" } 无 modelId；agent 也无 pin → 抛错
+    await assert.rejects(
+      () => resolveApplicationModelIdForRun(runtime, definition, "sess-1"),
+      (error: unknown) => error instanceof AgentRunResolveError,
+    );
+  });
+
+  it("resolveApplicationModelIdForRun 不传 sessionId 时不读 session 配置", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      sessionConfig: { agentId: "a1", modelId: "session-model" },
+    });
+    const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
+    // 无 sessionId → 无 sessionModelId；agent 无 pin → 抛错（不再回退 workspace）
+    await assert.rejects(
+      () => resolveApplicationModelIdForRun(runtime, definition),
+      (error: unknown) => error instanceof AgentRunResolveError,
+    );
+  });
+
+  it("resolveApplicationModelIdForRun session.modelId 作为 savedModelId", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      sessionConfig: {
+        agentId: "a1",
+        modelId: "session-model",
+      },
+    });
+    const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
     const result = await resolveApplicationModelIdForRun(
       runtime,
-      sampleDefinition,
-      "cli-override-model",
+      definition,
+      "sess-1",
     );
-    assert.equal(result.savedModelId, "cli-override-model");
+    assert.equal(result.savedModelId, "session-model");
     assert.equal(result.workspaceModelId, "workspace-model");
   });
 
-  it("resolveApplicationModelIdForRun throws when no model resolved", async () => {
-    const runtime = makeRuntime({ currentModelId: "" });
+  it("resolveApplicationModelIdForRun agent pin 压制 session 覆盖", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      sessionConfig: {
+        agentId: "a1",
+        modelId: "session-model",
+      },
+    });
+    const result = await resolveApplicationModelIdForRun(
+      runtime,
+      sampleDefinition, // model = "provider:model"
+      "sess-1",
+    );
+    assert.equal(result.savedModelId, "provider:model");
+  });
+
+  it("resolveApplicationModelIdForRun session 无 modelId 且 agent 无 pin → 抛错", async () => {
+    const runtime = makeRuntime({
+      currentModelId: "workspace-model",
+      sessionConfig: { agentId: "a1" },
+    });
     const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
     await assert.rejects(
-      () => resolveApplicationModelIdForRun(runtime, definition),
+      () => resolveApplicationModelIdForRun(runtime, definition, "sess-1"),
       (error: unknown) => error instanceof AgentRunResolveError,
     );
   });

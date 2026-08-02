@@ -40,6 +40,8 @@ export type RootStackParamList = {
     /** Called after a successful session-scope save (refreshes workspace list). */
     onSessionVfsSaved?: () => void;
   };
+  /** 会话详情页：承载原 SessionActionsDrawer 五项能力 + agent/model 来源展示。 */
+  SessionDetail: { projectId: string; sessionId: string };
   About: undefined;
 };
 

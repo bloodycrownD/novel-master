@@ -135,12 +135,15 @@ import {
 import {
   handleSessionsCreate,
   handleSessionsDelete,
+  handleSessionsGetAgentBinding,
   handleSessionsGetComposerDraft,
   handleSessionsListByProject,
   handleSessionsProjectComposerStatus,
   handleSessionsPullTemplate,
   handleSessionsRename,
+  handleSessionsSetAgentBinding,
   handleSessionsSetComposerDraft,
+  handleSessionsSetModelOverride,
 } from './handlers/sessions.js';
 import {
   handleUserVfsHasPending,
@@ -220,6 +223,12 @@ export function registerHandlersFromRegistry(): void {
   bindReq(
     IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS,
     handleSessionsProjectComposerStatus,
+  );
+  bindReq(IPC_CHANNELS.SESSIONS_GET_AGENT_BINDING, handleSessionsGetAgentBinding);
+  bindReq(IPC_CHANNELS.SESSIONS_SET_AGENT_BINDING, handleSessionsSetAgentBinding);
+  bindReq(
+    IPC_CHANNELS.SESSIONS_SET_MODEL_OVERRIDE,
+    handleSessionsSetModelOverride,
   );
 
   bindReq(IPC_CHANNELS.APP_UI_GET, handleAppUiGet);

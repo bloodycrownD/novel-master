@@ -2,8 +2,19 @@
 import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
 import { createKkvService, KkvError } from "@novel-master/core/kkv";
-import { createAgentRegistryService } from "@novel-master/core/agent";
-import { createMessageService } from "@novel-master/core/chat";
+import {
+  createAgentRegistryService,
+  resolveAgentForProject,
+} from "@novel-master/core/agent";
+import type { ResolvedAgentForProject } from "@novel-master/core/agent";
+import {
+  createMessageService,
+  sessionAgentConfigSchema,
+} from "@novel-master/core/chat";
+import type {
+  SessionAgentConfig,
+  SessionAgentConfigPatch,
+} from "@novel-master/core/chat";
 import { createCompactionConditionsStore } from "@novel-master/core/compaction";
 import { createEventsConfigStore } from "@novel-master/core/events";
 import { buildPromptAssemblyFromLayout } from "@novel-master/core/prompt";
@@ -73,5 +84,29 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(typeof createSessionFsService, "function");
     assert.equal(typeof createScopedVfsService, "function");
     assert.equal(typeof createWorkplaceService, "function");
+  });
+
+  it("从 @novel-master/core/chat 导出 session agent config 符号", () => {
+    assert.equal(typeof sessionAgentConfigSchema, "object");
+    assert.equal(typeof sessionAgentConfigSchema.toWire, "function");
+    assert.equal(typeof sessionAgentConfigSchema.parse, "function");
+    // 类型仅作 import 契约存在，运行期断言仅占位
+    const _typeCheck: SessionAgentConfigPatch = { agentId: "a" };
+    const _cfg: SessionAgentConfig = { agentId: "a" };
+    void _typeCheck;
+    void _cfg;
+  });
+
+  it("从 @novel-master/core/agent 导出 resolveAgentForProject（sessionId 必填签名）", () => {
+    // Step 10 契约：sessionId 升级为必填后，函数仍从公开子入口导出。
+    assert.equal(typeof resolveAgentForProject, "function");
+    assert.equal(resolveAgentForProject.length, 3);
+    // 类型仅作 import 契约存在，锁定 ResolvedAgentForProject 两个 source 分支可达。
+    const _typeCheck: ResolvedAgentForProject = {
+      source: "session",
+      agentId: "x",
+      definition: { name: "n", prompts: { persist: [], dynamic: [] } },
+    };
+    void _typeCheck;
   });
 });

@@ -32,13 +32,19 @@ export async function resolveCurrentAgentDefinition(
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 
-/** Resolves dialogue savedModelId (agent pin → workspace current model). */
+/**
+ * 解析对话 savedModelId。
+ *
+ * 优先级链：agent pin → 会话 bind 的 modelId → workspace 当前模型。
+ * sessionId 透传给 core 解析链，让其读取会话级绑定配置。
+ */
 export async function resolveMobileSavedModelId(
   runtime: MobileNovelMasterRuntime,
   definition: AgentDefinition,
+  sessionId: string,
 ): Promise<{savedModelId: string; workspaceModelId: string}> {
   return mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition),
+    resolveApplicationModelIdForRun(runtime, definition, sessionId),
   );
 }
 

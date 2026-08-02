@@ -6,44 +6,44 @@ import {
 } from "../../src/domain/agent/logic/resolve-saved-model-id.js";
 import { resolveApplicationModelId } from "../../src/domain/agent/logic/resolve-application-model-id.js";
 
-describe("resolveSavedModelId", () => {
-  it("R1: prefers CLI flag over pin and workspace", () => {
+describe("resolveSavedModelId（v2，无 workspace 回退）", () => {
+  it("agent pin 优先", () => {
     assert.equal(
       resolveSavedModelId({
-        cliModelId: "zhipu/glm-4.6",
-        agentModelId: "mock/test",
-        workspaceModelId: "openai/gpt-4",
+        agentModelId: "agent/pin",
+        sessionModelId: "session/override",
       }),
-      "zhipu/glm-4.6",
+      "agent/pin",
     );
   });
 
-  it("R1: falls back to agent model pin then workspace", () => {
+  it("无 agent pin 时回落 session", () => {
+    assert.equal(
+      resolveSavedModelId({ sessionModelId: "session/override" }),
+      "session/override",
+    );
+  });
+
+  it("agent + session 都空时返回 undefined（不再回退 workspace）", () => {
+    assert.equal(resolveSavedModelId({}), undefined);
+    assert.equal(resolveSavedModelId({ sessionModelId: undefined }), undefined);
+  });
+
+  it("session 为空时不影响 agent pin 生效", () => {
     assert.equal(
       resolveSavedModelId({
-        agentModelId: "mock/test",
-        workspaceModelId: "openai/gpt-4",
+        agentModelId: "agent/pin",
+        sessionModelId: undefined,
       }),
-      "mock/test",
+      "agent/pin",
     );
-    assert.equal(
-      resolveSavedModelId({ workspaceModelId: "openai/gpt-4" }),
-      "openai/gpt-4",
-    );
-    assert.equal(resolveSavedModelId({}), undefined);
+    // 纯函数严格走 ??：空串不视作「无覆盖」（归一化由调用方负责）。
+    assert.equal(resolveSavedModelId({ sessionModelId: "" }), "");
   });
 });
 
 describe("resolveSummarySavedModelId", () => {
-  it("T6: prefers CLI, then summary pin, then workspace (not dialogue)", () => {
-    assert.equal(
-      resolveSummarySavedModelId({
-        cliModelId: "flag/model",
-        summaryModelId: "pin/model",
-        workspaceModelId: "workspace/model",
-      }),
-      "flag/model",
-    );
+  it("summary pin 优先，否则 workspace（摘要仍读 workspace）", () => {
     assert.equal(
       resolveSummarySavedModelId({
         summaryModelId: "pin/model",
@@ -63,8 +63,9 @@ describe("resolveSummarySavedModelId", () => {
 describe("resolveApplicationModelId (deprecated alias)", () => {
   it("delegates to resolveSavedModelId", () => {
     assert.equal(
-      resolveApplicationModelId({ workspaceModelId: "openai/gpt-4" }),
-      "openai/gpt-4",
+      resolveApplicationModelId({ agentModelId: "agent/pin" }),
+      "agent/pin",
     );
+    assert.equal(resolveApplicationModelId({}), undefined);
   });
 });

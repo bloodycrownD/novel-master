@@ -151,6 +151,7 @@
   "selectVisibilityBatchEligibleIdsFromAnchor",
   "serializeAttachmentsJson",
   "serializeComposerDraftJson",
+  "sessionAgentConfigSchema",
   "sliceSourceBySoftRange",
   "sortAnnotateTextsLongestFirst",
   "splitMarkdownUnderlineRuns",

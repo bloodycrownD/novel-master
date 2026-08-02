@@ -38,10 +38,13 @@ export async function loadChatPromptTokenLabel(
 ): Promise<string> {
   const {definition, layout, ctx} = await buildSessionPromptInput(runtime, scope);
 
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
+  // core 移除 workspace 回退后，savedModelId 解析优先级为 agent pin → session modelId。
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+    scope.sessionId,
+  );
   const savedModelId = resolveApplicationModelId({
     agentModelId: definition.model,
-    workspaceModelId: workspaceModelId || undefined,
+    sessionModelId: sessionConfig.modelId,
   });
 
   if (!savedModelId) {
@@ -88,11 +91,15 @@ async function loadChatPromptTokenLabelFallback(
   let savedModelId: string | undefined;
   try {
     const {definition} = await buildSessionPromptInput(runtime, scope);
+    const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+      scope.sessionId,
+    );
     savedModelId = resolveApplicationModelId({
       agentModelId: definition.model,
-      workspaceModelId: workspaceModelId || undefined,
+      sessionModelId: sessionConfig.modelId,
     });
   } catch {
+    // 兜底显示用 workspace 当前模型（仅用于查 contextWindow，不参与 runtime 解析）。
     savedModelId = workspaceModelId || undefined;
   }
 

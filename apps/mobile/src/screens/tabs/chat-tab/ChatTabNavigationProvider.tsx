@@ -71,12 +71,15 @@ export type ChatTabNavigationProviderProps = {
   children: ReactNode;
   sessionBatchActive: boolean;
   onExitSessionBatch: () => void;
+  /** 会话视图时三线按钮触发：跳转详情页（由父组件注入 navigation）。 */
+  onOpenSessionDetail?: () => void;
 };
 
 export function ChatTabNavigationProvider({
   children,
   sessionBatchActive,
   onExitSessionBatch,
+  onOpenSessionDetail,
 }: ChatTabNavigationProviderProps) {
   const ctx = useChatTabContext();
   const [workspaceBackState, setWorkspaceBackState] = useState<{
@@ -118,7 +121,12 @@ export function ChatTabNavigationProvider({
       showSessionsPanel: () => ctx.scope.setSessionListPanel('sessions'),
       openDrawer: () => {
         if (ctx.chatSubview === 'conversation') {
-          ctx.setSessionDrawerOpen(true);
+          // 三线按钮在会话视图：跳详情页（不再弹 SessionActionsDrawer）
+          if (onOpenSessionDetail != null) {
+            onOpenSessionDetail();
+          } else {
+            ctx.setSessionDrawerOpen(true);
+          }
         } else {
           ctx.scope.setProjectDrawerOpen(true);
         }
@@ -131,7 +139,7 @@ export function ChatTabNavigationProvider({
       exitSessionBatch: onExitSessionBatch,
       workspaceGoUp: workspaceBackState?.goUp,
     }),
-    [ctx, onExitSessionBatch, workspaceBackState],
+    [ctx, onExitSessionBatch, onOpenSessionDetail, workspaceBackState],
   );
 
   const value = useMemo(() => ({ state, actions }), [state, actions]);

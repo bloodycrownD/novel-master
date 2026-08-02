@@ -55,11 +55,15 @@ import {
   type SessionDto,
   type SessionFsRollbackRequest,
   type SessionGetComposerDraftRequest,
+  type SessionGetAgentBindingRequest,
   type SessionListByProjectRequest,
   type SessionProjectComposerStatusRequest,
   type SessionPullTemplateRequest,
   type SessionRenameRequest,
+  type SessionAgentConfigDto,
+  type SessionSetAgentBindingRequest,
   type SessionSetComposerDraftRequest,
+  type SessionSetModelOverrideRequest,
   type UserVfsHasPendingRequest,
   type VfsBatchClearStagingRequest,
   type VfsBatchExportStageRequest,
@@ -184,6 +188,18 @@ export function createInvokeClient(invoke: InvokeFn) {
       SessionProjectComposerStatusRequest,
       IpcResult<MessageAttachmentDto[]>
     >(invoke, IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS),
+    ipcSessionsGetAgentBinding: withReq<
+      SessionGetAgentBindingRequest,
+      IpcResult<SessionAgentConfigDto>
+    >(invoke, IPC_CHANNELS.SESSIONS_GET_AGENT_BINDING),
+    ipcSessionsSetAgentBinding: withReq<
+      SessionSetAgentBindingRequest,
+      IpcResult<SessionAgentConfigDto>
+    >(invoke, IPC_CHANNELS.SESSIONS_SET_AGENT_BINDING),
+    ipcSessionsSetModelOverride: withReq<
+      SessionSetModelOverrideRequest,
+      IpcResult<SessionAgentConfigDto>
+    >(invoke, IPC_CHANNELS.SESSIONS_SET_MODEL_OVERRIDE),
     ipcAppUiGet: (key: string) =>
       invoke<AppUiGetResponse>(IPC_CHANNELS.APP_UI_GET, { key }),
     ipcAppUiSet: (key: string, value: string) =>

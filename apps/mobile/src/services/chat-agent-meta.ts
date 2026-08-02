@@ -1,5 +1,11 @@
 /**
- * Chat header meta: current agent name + resolved model label (PRD D4).
+ * Chat header meta: current agent name + resolved model label (PRD D4)。
+ *
+ * source 用于区分 agent 来源（会话级引用 / 项目自定义）。
+ * modelSource 用于区分生效模型来源（agent pin / 会话）。
+ *
+ * workspace 层已在 core 移除：会话始终独立持有 agentId（必填），
+ * 可选 modelId 覆盖 agent pin。meta 这里只把 core 的解析结果翻译成 UI 标签。
  */
 import {
   AgentRunResolveError,
@@ -10,8 +16,15 @@ import {PROJECT_AGENT_META_DISPLAY_LABEL} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from '../provider/model-display-label';
 
+/**
+ * modelSource 与 desktop `PromptAgentMetaResponse.modelSource` 同语义
+ * （不含 desktop 独有的 'cli'）。workspace 层移除后只剩两档：
+ * agent 自带 pin 压制 → 否则跟随会话配置。
+ */
+export type ChatAgentModelSource = 'agent-pin' | 'session';
+
 export interface ChatAgentMeta {
-  readonly source: 'global' | 'project-custom' | 'none';
+  readonly source: 'project-custom' | 'session' | 'none';
   readonly agentId: string | undefined;
   readonly agentName: string;
   readonly modelLabel: string;
@@ -19,22 +32,43 @@ export interface ChatAgentMeta {
   readonly tokenLabel: string;
   /** Agent has dedicated model pin (no workspace suffix). */
   readonly hasDedicatedModel: boolean;
+  /** 生效模型来源（agent pin → 会话）。 */
+  readonly modelSource: ChatAgentModelSource;
 }
 
-/** 按项目解析 Agent 元信息；custom 模式不含 agentId。 */
+/**
+ * 按项目 + 会话解析 Agent 元信息。
+ *
+ * - `project-custom`：项目 custom 截断，不含 agentId，不读 session。
+ * - `session`：会话独立 agentId 解析得到的 registry definition。
+ *
+ * modelSource 两档：agent definition 自带 model 压制一切，
+ * 否则跟随会话（session.modelId 可选，作为 savedModelId 兜底）。
+ */
 export async function loadChatAgentMeta(
   runtime: MobileNovelMasterRuntime,
   projectId: string,
+  sessionId: string,
 ): Promise<ChatAgentMeta> {
   try {
-    const resolved = await resolveAgentForProject(runtime, projectId);
+    const resolved = await resolveAgentForProject(
+      runtime,
+      projectId,
+      sessionId,
+    );
     const {definition} = resolved;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
-    const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
+    // 仅 session 来源才读 sessionConfig：custom 截断会话，modelId 不参与。
+    // core 的 resolveSavedModelId 优先级为 agent pin → session modelId；
+    // workspace 已移除，无可用来源时 savedModelId 为 undefined。
+    const sessionConfig =
+      resolved.source === 'session'
+        ? await runtime.sessions.getSessionAgentConfig(sessionId)
+        : undefined;
     const savedModelId = resolveApplicationModelId({
       agentModelId: definition.model,
-      workspaceModelId: workspaceModelId || undefined,
+      sessionModelId: sessionConfig?.modelId,
     });
     let modelLabel = '未选择模型';
     if (savedModelId) {
@@ -44,14 +78,19 @@ export async function loadChatAgentMeta(
         modelLabel = savedModelId;
       }
     }
-    if (resolved.source === 'global') {
+    // modelSource 优先级链：agent pin 压制 → 否则跟随会话。
+    const modelSource: ChatAgentModelSource = hasDedicatedModel
+      ? 'agent-pin'
+      : 'session';
+    if (resolved.source === 'session') {
       return {
-        source: 'global',
+        source: 'session',
         agentId: resolved.agentId,
         agentName: definition.name,
         modelLabel,
         tokenLabel: '',
         hasDedicatedModel,
+        modelSource,
       };
     }
     return {
@@ -61,6 +100,7 @@ export async function loadChatAgentMeta(
       modelLabel,
       tokenLabel: '',
       hasDedicatedModel,
+      modelSource,
     };
   } catch (error) {
     if (error instanceof AgentRunResolveError) {
@@ -71,6 +111,7 @@ export async function loadChatAgentMeta(
         modelLabel: '—',
         tokenLabel: '',
         hasDedicatedModel: false,
+        modelSource: 'session',
       };
     }
     throw error;

@@ -65,6 +65,7 @@ export function useChatTabScope({
     modelLabel: '—',
     tokenLabel: '',
     hasDedicatedModel: false,
+    modelSource: 'session',
   });
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
 
@@ -96,11 +97,25 @@ export function useChatTabScope({
         modelLabel: '—',
         tokenLabel: '',
         hasDedicatedModel: false,
+        modelSource: 'session',
+      });
+      return;
+    }
+    if (sessionId == null) {
+      // 无活动会话时无法解析 session 绑定，回退到无 meta 状态。
+      setAgentMeta({
+        source: 'none',
+        agentId: undefined,
+        agentName: '—',
+        modelLabel: '—',
+        tokenLabel: '',
+        hasDedicatedModel: false,
+        modelSource: 'session',
       });
       return;
     }
     try {
-      const meta = await loadChatAgentMeta(runtime, projectId);
+      const meta = await loadChatAgentMeta(runtime, projectId, sessionId);
       setAgentMeta(prev => ({
         ...prev,
         ...meta,
@@ -115,9 +130,10 @@ export function useChatTabScope({
         modelLabel: '—',
         tokenLabel: '',
         hasDedicatedModel: false,
+        modelSource: 'session',
       });
     }
-  }, [runtime, projectId, refreshChatTokenLabel]);
+  }, [runtime, projectId, sessionId, refreshChatTokenLabel]);
 
   const reloadLists = useCallback(async () => {
     const plist = await runtime.projects.list();

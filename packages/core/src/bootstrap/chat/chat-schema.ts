@@ -18,6 +18,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     project_id TEXT NOT NULL,
     title TEXT,
     composer_draft_json TEXT NULL,
+    agent_config_json TEXT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
   )`,

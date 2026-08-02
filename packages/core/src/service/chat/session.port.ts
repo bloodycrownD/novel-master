@@ -5,6 +5,10 @@
  */
 
 import type { ChatSession } from "@/domain/chat/model/session.js";
+import type {
+  SessionAgentConfig,
+  SessionAgentConfigPatch,
+} from "@/domain/chat/model/session-agent-config.js";
 
 /** Session CRUD, template copy on create, and full copy. */
 export interface SessionService {
@@ -39,4 +43,23 @@ export interface SessionService {
     id: string,
     draftJson: string | null,
   ): Promise<boolean>;
+
+  /**
+   * 读取会话智能体配置；列 NULL 视为异常（migration 后不应存在 NULL），
+   * 抛 `ChatError(INVALID_ARGUMENT)` 提示运行迁移。
+   */
+  getSessionAgentConfig(id: string): Promise<SessionAgentConfig>;
+
+  /**
+   * partial overlay 更新会话智能体配置。
+   *
+   * 调用方只传要改的字段即可：`agentId` 可选（不传就保留），`modelId` 不传
+   * 保持、传非空串覆盖、传 `null` 清除会话级 model 覆盖。service 内部会拿
+   * 当前配置当基线 merge，merge 完再走 schema 校验（`agentId` 必填），最后
+   * 序列化写库。返回 merge 之后的完整配置。
+   */
+  updateSessionAgentConfig(
+    id: string,
+    patch: SessionAgentConfigPatch,
+  ): Promise<SessionAgentConfig>;
 }

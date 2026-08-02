@@ -27,7 +27,8 @@ export async function buildSessionPromptInput(
 ): Promise<SessionPromptInputBundle> {
   const resolved =
     definition ??
-    (await resolveAgentForProject(runtime, scope.projectId)).definition;
+    (await resolveAgentForProject(runtime, scope.projectId, scope.sessionId))
+      .definition;
 
   const allMessages = await runtime.messages.listBySession(scope.sessionId);
   const visible = allMessages.filter((m) => !m.hidden);
