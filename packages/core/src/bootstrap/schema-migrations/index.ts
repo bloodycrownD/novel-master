@@ -18,6 +18,7 @@ import { renameWorktreeTablesToWorkplaceV1Migration } from "./rename-worktree-ta
 import { vfsContentBlobZlibV1Migration } from "./vfs-content-blob-zlib-v1.js";
 import { vfsRevisionRefCountV1Migration } from "./vfs-revision-ref-count-v1.js";
 import { VFS_ENTRY_ID_REDESIGN_V1_ID, vfsEntryIdRedesignV1Migration } from "./vfs-entry-id-redesign-v1.js";
+import { sessionAgentConfigV2Migration } from "./session-agent-config-v2.js";
 
 /** 有序 migration 列表。 */
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
@@ -28,6 +29,7 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   vfsContentBlobZlibV1Migration,
   vfsRevisionRefCountV1Migration,
   vfsEntryIdRedesignV1Migration,
+  sessionAgentConfigV2Migration,
 ];
 
 /**
@@ -81,3 +83,5 @@ export { VFS_CONTENT_BLOB_ZLIB_V1_ID } from "./vfs-content-blob-zlib-v1.js";
 export { VFS_REVISION_REF_COUNT_V1_ID } from "./vfs-revision-ref-count-v1.js";
 export { VFS_ENTRY_ID_REDESIGN_V1_ID } from "./vfs-entry-id-redesign-v1.js";
 export { vfsEntryIdRedesignV1Up } from "./vfs-entry-id-redesign-v1.js";
+export { SESSION_AGENT_CONFIG_V2_ID } from "./session-agent-config-v2.js";
+export { sessionAgentConfigV2Up } from "./session-agent-config-v2.js";
