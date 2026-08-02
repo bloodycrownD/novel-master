@@ -102,6 +102,7 @@ export function ConversationPanel({
     projectName,
     openChatWorkspacePreview,
     reloadFooter,
+    viewPromptRequest,
   } = useShellNav();
   const vfsMutatedInRunRef = useRef(false);
   const [tab, setTab] = useState<'chat' | 'realPrompt'>('chat');
@@ -192,6 +193,13 @@ export function ConversationPanel({
   useEffect(() => {
     void reloadMessages();
   }, [reloadMessages]);
+
+  // 详情抽屉「查看提示词」请求：切到 realPrompt tab
+  useEffect(() => {
+    if (viewPromptRequest?.token && viewPromptRequest.token > 0) {
+      setTab('realPrompt');
+    }
+  }, [viewPromptRequest]);
 
   useEffect(() => {
     return onWorkspaceMutated(payload => {
