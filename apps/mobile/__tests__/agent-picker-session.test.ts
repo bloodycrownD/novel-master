@@ -2,7 +2,6 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {
   loadSessionAgentPickerRows,
   selectSessionAgent,
-  clearSessionAgentBinding,
 } from '../src/services/agent-picker';
 
 // core 移除 workspace 回退层后，SessionAgentConfig = { agentId, modelId? }。
@@ -45,14 +44,5 @@ describe('session 级 agent picker', () => {
     });
     // 不该碰 workspace 全局 state
     expect(rt.state.getCurrentAgentId).not.toHaveBeenCalled();
-  });
-
-  it('clearSessionAgentBinding：把会话 agentId 重置为 workspace 当前指针', async () => {
-    const rt = mockRuntime({agentId: 'agent-a'});
-    await clearSessionAgentBinding(rt as never, 'sess-1');
-    expect(rt.state.getCurrentAgentId).toHaveBeenCalled();
-    expect(rt.sessions.updateSessionAgentConfig).toHaveBeenCalledWith('sess-1', {
-      agentId: 'workspace-agent',
-    });
   });
 });

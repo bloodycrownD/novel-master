@@ -90,21 +90,4 @@ export async function selectSessionAgent(
   });
 }
 
-/**
- * 把会话 agentId 重置回 workspace 当前指针（放弃会话级独立引用，重新跟随全局）。
- *
- * core 已移除 workspace 回退层——会话 agentId 始终必填，所以「解绑」语义
- * 改为同步到 workspace 当前 agentId；workspace 无指针时不写避免覆盖。
- */
-export async function clearSessionAgentBinding(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-): Promise<void> {
-  const workspaceAgentId = await runtime.state.getCurrentAgentId();
-  if (workspaceAgentId == null || workspaceAgentId === '') {
-    return;
-  }
-  await runtime.sessions.updateSessionAgentConfig(sessionId, {
-    agentId: workspaceAgentId,
-  });
-}
+
