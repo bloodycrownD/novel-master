@@ -59,20 +59,6 @@ interface SessionDetailDrawerProps {
   onRenamed?: (newName: string) => void;
 }
 
-const AGENT_SOURCE_LABEL: Record<PromptAgentMetaResponse["source"], string> = {
-  "project-custom": "项目专属",
-  session: "会话",
-  none: "未配置",
-};
-
-const MODEL_SOURCE_LABEL: Record<
-  NonNullable<PromptAgentMetaResponse["modelSource"]>,
-  string
-> = {
-  "agent-pin": "Agent 固定",
-  session: "会话",
-};
-
 function tokenCountLabel(stats: PromptChatTokenStatsResponse): string {
   const prefix = stats.estimated ? "~" : "";
   const current = formatTokenCount(stats.tokenCount);
@@ -288,7 +274,6 @@ export function SessionDetailDrawer({
                 type="button"
                 className="session-detail-drawer__name"
                 data-session-detail-action="rename"
-                title="点击重命名"
                 onClick={startRename}
               >
                 <span className="session-detail-drawer__name-text">
@@ -309,18 +294,34 @@ export function SessionDetailDrawer({
               aria-disabled={agentLocked}
               onClick={() => void openAgentPicker()}
             >
-              <span className="session-detail-pick__icon" aria-hidden="true">
-                🧠
+              <span
+                className="session-detail-pick__icon session-detail-pick__icon--agent"
+                aria-hidden="true"
+              >
+                A
               </span>
               <span className="session-detail-pick__body">
                 <span className="session-detail-pick__label">Agent</span>
                 <span className="session-detail-pick__value">
                   {meta?.agentName ?? "—"}
                 </span>
-                <span className="session-detail-pick__source">
-                  {AGENT_SOURCE_LABEL[source]}
-                  {agentLocked ? " · 锁定" : ""}
-                </span>
+                {agentLocked ? (
+                  <span className="session-detail-pick__lock">
+                    <span
+                      className="session-detail-pick__lock-icon"
+                      aria-hidden="true"
+                    >
+                      🔒
+                    </span>
+                    项目专属
+                  </span>
+                ) : null}
+              </span>
+              <span
+                className="session-detail-pick__chevron"
+                aria-hidden="true"
+              >
+                {agentLocked ? "" : "›"}
               </span>
             </button>
             <button
@@ -333,18 +334,34 @@ export function SessionDetailDrawer({
               aria-disabled={modelLocked}
               onClick={() => void openModelPicker()}
             >
-              <span className="session-detail-pick__icon" aria-hidden="true">
-                🤖
+              <span
+                className="session-detail-pick__icon session-detail-pick__icon--model"
+                aria-hidden="true"
+              >
+                M
               </span>
               <span className="session-detail-pick__body">
                 <span className="session-detail-pick__label">模型</span>
                 <span className="session-detail-pick__value">
                   {meta?.modelLabel ?? "—"}
                 </span>
-                <span className="session-detail-pick__source">
-                  {modelSource ? MODEL_SOURCE_LABEL[modelSource] : ""}
-                  {modelLocked ? " · 锁定" : ""}
-                </span>
+                {modelLocked ? (
+                  <span className="session-detail-pick__lock">
+                    <span
+                      className="session-detail-pick__lock-icon"
+                      aria-hidden="true"
+                    >
+                      🔒
+                    </span>
+                    Agent 指定
+                  </span>
+                ) : null}
+              </span>
+              <span
+                className="session-detail-pick__chevron"
+                aria-hidden="true"
+              >
+                {modelLocked ? "" : "›"}
               </span>
             </button>
           </div>

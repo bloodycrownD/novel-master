@@ -37,9 +37,19 @@ describe("SessionDetailDrawer (T-D3)", () => {
     // 不再使用 TextPromptModal 弹窗重命名
     assert.doesNotMatch(src, /TextPromptModal/);
     assert.doesNotMatch(src, /setRenameOpen/);
+    // 不再保留「点击重命名」的 title tooltip
+    assert.doesNotMatch(src, /title="点击重命名"/);
     // Agent / 模型 区块
     assert.match(src, /session-detail-pick__label.*Agent/s);
     assert.match(src, /session-detail-pick__label.*模型/s);
+    // 不再使用 source 标签 / AGENT_SOURCE_LABEL 常量
+    assert.doesNotMatch(src, /AGENT_SOURCE_LABEL/);
+    assert.doesNotMatch(src, /MODEL_SOURCE_LABEL/);
+    assert.doesNotMatch(src, /session-detail-pick__source/);
+    // 锁定指示仍保留
+    assert.match(src, /session-detail-pick__lock/);
+    assert.match(src, /项目专属/);
+    assert.match(src, /Agent 指定/);
     // 操作入口 data hook
     assert.match(src, /data-session-detail-action="switch-agent"/);
     assert.match(src, /data-session-detail-action="switch-model"/);
