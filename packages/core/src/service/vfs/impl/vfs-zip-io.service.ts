@@ -32,6 +32,9 @@ import type {
   VfsZipIoService,
   ZipPathOptions,
 } from "@/domain/vfs/ports/vfs-zip-io.port.js";
+import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 /** @internal test hook for import transaction rollback verification */
 export type VfsZipImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -93,10 +96,16 @@ async function assertDirectoryPathNotFile(
 export type DefaultVfsZipIoServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: VfsZipImportTestHook;
+  /**
+   * session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照。
+   * 默认开启；仅对 session scope 生效。
+   */
+  readonly backfillBaseline?: boolean;
 };
 
 export class DefaultVfsZipIoService implements VfsZipIoService {
   private readonly testHook?: VfsZipImportTestHook;
+  private readonly backfillBaseline: boolean;
 
   constructor(
     private readonly conn: TdbcConnection,
@@ -104,6 +113,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     options: DefaultVfsZipIoServiceOptions = {},
   ) {
     this.testHook = options.testHook;
+    this.backfillBaseline = options.backfillBaseline ?? true;
   }
 
   async export(scope: VfsScope, options?: ZipPathOptions): Promise<Uint8Array> {
@@ -186,6 +196,18 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
             sk,
             logical,
             content,
+          );
+        }
+        // session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照。
+        if (this.backfillBaseline && scope.kind === "session") {
+          const messageRepo = new SqliteMessageRepository(tx);
+          const checkpointRepo = new SqliteMessageCheckpointRepository(tx);
+          await backfillBaselineCheckpoints(
+            repoTx,
+            messageRepo,
+            checkpointRepo,
+            scope.projectId,
+            scope.sessionId,
           );
         }
       });
