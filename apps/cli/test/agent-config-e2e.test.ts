@@ -10,38 +10,13 @@ const MOCK_ENV = {
   NM_AGENT_MOCK_SCENARIO: "continue",
 };
 
-const MINIMAL_AGENT_YAML = `
-schemaVersion: 1
-name: e2e-agent
-prompts:
-  persist: {}
-  dynamic: {}
-`;
-
-const MOCK_ENV_REPORT_MODEL = {
-  ...MOCK_ENV,
-  NM_AGENT_MOCK_REPORT_MODEL: "1",
-};
-
-function agentYamlWithPinnedModel(savedModelId: string): string {
-  return `
-schemaVersion: 1
-name: e2e-pin
-model: ${savedModelId}
-prompts:
-  persist: {}
-  dynamic: {}
-`;
-}
-
 describe("agent config CLI", () => {
-  it("E1: --agent-config without model runs after model use", async () => {
+  // Phase 0 兑底后：transient --agent-config 覆盖已降级，run 走 workspace follow agent +
+  // workspace 当前模型。这里验证「设了 workspace 模型后 continue 正常跑通」。
+  it("E1: agent continue runs with workspace model", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-cfg-"));
     const dbPath = join(dir, "novel.db");
-    const agentPath = join(dir, "agent.yaml");
     try {
-      await writeFile(agentPath, MINIMAL_AGENT_YAML, "utf8");
-
       const projectId = runNm(
         ["project", "create", "--name", "Cfg", "--db", dbPath],
         { env: MOCK_ENV },
@@ -67,16 +42,7 @@ describe("agent config CLI", () => {
       assert.equal(modelUse.status, 0, modelUse.stderr);
 
       const agent = runNm(
-        [
-          "agent",
-          "continue",
-          "--content",
-          "hello",
-          "--agent-config",
-          agentPath,
-          "--db",
-          dbPath,
-        ],
+        ["agent", "continue", "--content", "hello", "--db", dbPath],
         { env: MOCK_ENV },
       );
       assert.equal(agent.status, 0, agent.stderr);
@@ -89,17 +55,11 @@ describe("agent config CLI", () => {
     }
   });
 
-  it("C2: --prompt-path only still runs", async () => {
+  // Phase 0 兑底后：--modelId 不再覆盖，仅打印「不再支持」警告；run 仍走 workspace 模型。
+  it("C2: --modelId flag degrades to warning and workspace model still runs", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-prompt-path-"));
     const dbPath = join(dir, "novel.db");
-    const promptPath = join(dir, "prompt.yaml");
     try {
-      await writeFile(
-        promptPath,
-        `persist: {}\ndynamic: {}\n`,
-        "utf8",
-      );
-
       const projectId = runNm(
         ["project", "create", "--name", "Pp", "--db", dbPath],
         { env: MOCK_ENV },
@@ -118,6 +78,9 @@ describe("agent config CLI", () => {
       });
       const mockModels = seedMockProviderModels(dbPath, ["test"], MOCK_ENV);
       const savedModelId = mockModels.get("test")!;
+      runNm(["model", "use", "--modelId", savedModelId, "--db", dbPath], {
+        env: MOCK_ENV,
+      });
 
       const agent = runNm(
         [
@@ -125,8 +88,6 @@ describe("agent config CLI", () => {
           "continue",
           "--content",
           "hi",
-          "--prompt-path",
-          promptPath,
           "--modelId",
           savedModelId,
           "--db",
@@ -135,71 +96,15 @@ describe("agent config CLI", () => {
         { env: MOCK_ENV },
       );
       assert.equal(agent.status, 0, agent.stderr);
+      assert.match(agent.stderr, /--modelId 不再支持/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("E2: --modelId overrides agent model pin", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "nm-agent-e2-"));
-    const dbPath = join(dir, "novel.db");
-    const agentPath = join(dir, "agent.yaml");
-    try {
-      const mockModels = seedMockProviderModels(
-        dbPath,
-        ["pinned", "override", "workspace"],
-        MOCK_ENV_REPORT_MODEL,
-      );
-      const pinnedId = mockModels.get("pinned")!;
-      const overrideId = mockModels.get("override")!;
-      const workspaceId = mockModels.get("workspace")!;
-
-      await writeFile(agentPath, agentYamlWithPinnedModel(pinnedId), "utf8");
-
-      const projectId = runNm(
-        ["project", "create", "--name", "E2", "--db", dbPath],
-        { env: MOCK_ENV_REPORT_MODEL },
-      )
-        .stdout.trim();
-      runNm(["project", "use", "--project", projectId, "--db", dbPath], {
-        env: MOCK_ENV_REPORT_MODEL,
-      });
-      const sessionId = runNm(
-        ["session", "create", "--project", projectId, "--db", dbPath],
-        { env: MOCK_ENV_REPORT_MODEL },
-      )
-        .stdout.trim();
-      runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
-        env: MOCK_ENV_REPORT_MODEL,
-      });
-      runNm(
-        ["model", "use", "--modelId", workspaceId, "--db", dbPath],
-        { env: MOCK_ENV_REPORT_MODEL },
-      );
-
-      const agent = runNm(
-        [
-          "agent",
-          "continue",
-          "--content",
-          "hello",
-          "--agent-config",
-          agentPath,
-          "--modelId",
-          overrideId,
-          "--db",
-          dbPath,
-        ],
-        { env: MOCK_ENV_REPORT_MODEL },
-      );
-      assert.equal(agent.status, 0, agent.stderr);
-      assert.match(agent.stdout, new RegExp(`model: ${overrideId}`));
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("C3: invalid agent yaml fails", async () => {
+  // Phase 0 兑底后：transient --agent-config 不再校验；--save 路径仍会校验 definition。
+  // 这里走 --save，用非法 yaml 触发校验失败。
+  it("C3: invalid agent yaml fails via --save", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-bad-agent-"));
     const dbPath = join(dir, "novel.db");
     const agentPath = join(dir, "bad.yaml");
@@ -228,6 +133,9 @@ describe("agent config CLI", () => {
       });
       const mockModels = seedMockProviderModels(dbPath, ["test"], MOCK_ENV);
       const savedModelId = mockModels.get("test")!;
+      runNm(["model", "use", "--modelId", savedModelId, "--db", dbPath], {
+        env: MOCK_ENV,
+      });
 
       const agent = runNm(
         [
@@ -237,8 +145,9 @@ describe("agent config CLI", () => {
           "x",
           "--agent-config",
           agentPath,
-          "--modelId",
-          savedModelId,
+          "--agent-id",
+          "bad-agent",
+          "--save",
           "--db",
           dbPath,
         ],

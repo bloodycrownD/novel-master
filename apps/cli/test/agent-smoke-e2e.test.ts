@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -10,21 +10,11 @@ const MOCK_ENV = {
   NM_AGENT_MOCK_SCENARIO: "continue",
 };
 
-const MINIMAL_AGENT_YAML = `
-schemaVersion: 1
-name: e2e-smoke
-prompts:
-  persist: {}
-  dynamic: {}
-`;
-
 describe("agent CLI smoke", () => {
   it("project → session → agent continue (mock LLM)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-"));
     const dbPath = join(dir, "novel.db");
-    const agentPath = join(dir, "agent.yaml");
     try {
-      await writeFile(agentPath, MINIMAL_AGENT_YAML, "utf8");
       const project = runNm(
         ["project", "create", "--name", "AgentSmoke", "--db", dbPath],
         { env: MOCK_ENV },
@@ -48,20 +38,13 @@ describe("agent CLI smoke", () => {
 
       const mockModels = seedMockProviderModels(dbPath, ["test"], MOCK_ENV);
       const savedModelId = mockModels.get("test")!;
+      // Phase 0 兑底：--modelId 已降级，改用 workspace 当前模型。
+      runNm(["model", "use", "--modelId", savedModelId, "--db", dbPath], {
+        env: MOCK_ENV,
+      });
 
       const agent = runNm(
-        [
-          "agent",
-          "continue",
-          "--content",
-          "step one",
-          "--modelId",
-          savedModelId,
-          "--agent-config",
-          agentPath,
-          "--db",
-          dbPath,
-        ],
+        ["agent", "continue", "--content", "step one", "--db", dbPath],
         { env: MOCK_ENV },
       );
       assert.equal(agent.status, 0, agent.stderr);
@@ -84,9 +67,7 @@ describe("agent CLI smoke", () => {
   it("agent doom_loop surfaces AgentError on stderr", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-doom-"));
     const dbPath = join(dir, "novel.db");
-    const agentPath = join(dir, "agent.yaml");
     try {
-      await writeFile(agentPath, MINIMAL_AGENT_YAML, "utf8");
       const doomEnv = { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" };
       const projectId = stripBootLogs(
         runNm(
@@ -109,20 +90,12 @@ describe("agent CLI smoke", () => {
 
       const mockModels = seedMockProviderModels(dbPath, ["test"], doomEnv);
       const savedModelId = mockModels.get("test")!;
+      runNm(["model", "use", "--modelId", savedModelId, "--db", dbPath], {
+        env: doomEnv,
+      });
 
       const agent = runNm(
-        [
-          "agent",
-          "continue",
-          "--content",
-          "trigger doom",
-          "--modelId",
-          savedModelId,
-          "--agent-config",
-          agentPath,
-          "--db",
-          dbPath,
-        ],
+        ["agent", "continue", "--content", "trigger doom", "--db", dbPath],
         { env: doomEnv },
       );
       assert.notEqual(agent.status, 0);
