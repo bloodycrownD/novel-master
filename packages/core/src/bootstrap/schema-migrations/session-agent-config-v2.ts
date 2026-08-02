@@ -6,6 +6,7 @@
  * - NULL（mode=follow）：用 workspace 当前 agentId + modelId 回填；
  *   workspace agentId 缺失时回落 registry 第一个 agent；registry 也空则保留 NULL
  *   （service 层 getSessionAgentConfig 会抛错提示）。
+ * - `{ mode: "follow", ... }` JSON：与 NULL 同策略回填（显式分支）。
  * - `{ mode: "bind", agentId, modelId? }` JSON：剥掉 mode，转 `{ agentId, modelId? }`。
  *
  * 幂等：已是 v2 形态（JSON 无 `mode` 字段且非 NULL）则跳过。
@@ -168,7 +169,27 @@ async function up(tx: TdbcConnection): Promise<void> {
       continue;
     }
 
-    // 其他未知形态（含老 mode=follow 的 JSON 异常态）：按 NULL 同策略回填。
+    // 老 mode=follow：`{ mode: "follow" }`（或仅含 mode=follow 的 JSON 形态），
+    // 与列 NULL 同策略——用 workspace 指针回填；workspace 也无则保留原值不动。
+    // spec「mode=follow → 同 NULL」一一对应。
+    if (parsed.mode === "follow") {
+      if (workspaceAgentId != null) {
+        const wire: Record<string, unknown> = { agentId: workspaceAgentId };
+        if (workspaceModelId != null) {
+          wire.modelId = workspaceModelId;
+        }
+        await executeTemplate(
+          tx,
+          parser,
+          `UPDATE chat_session SET agent_config_json = #{configJson}
+           WHERE id = #{sessionId}`,
+          { sessionId, configJson: JSON.stringify(wire) },
+        );
+      }
+      continue;
+    }
+
+    // 其他未知形态（已不含 mode=follow，上文已显式处理）：按 NULL 同策略回填。
     if (workspaceAgentId != null) {
       const wire: Record<string, unknown> = { agentId: workspaceAgentId };
       if (workspaceModelId != null) {
