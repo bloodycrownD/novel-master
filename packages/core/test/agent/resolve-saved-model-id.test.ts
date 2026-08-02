@@ -24,6 +24,53 @@ describe("resolveSavedModelId", () => {
     );
     assert.equal(resolveSavedModelId({}), undefined);
   });
+
+  it("T-R1: agent pin > session > workspace 三档全优先级覆盖", () => {
+    // agent pin 压制 session + workspace
+    assert.equal(
+      resolveSavedModelId({
+        agentModelId: "agent/pin",
+        sessionModelId: "session/override",
+        workspaceModelId: "workspace/model",
+      }),
+      "agent/pin",
+    );
+    // 无 agent pin 时 session 压制 workspace
+    assert.equal(
+      resolveSavedModelId({
+        sessionModelId: "session/override",
+        workspaceModelId: "workspace/model",
+      }),
+      "session/override",
+    );
+    // session 与 agent 都缺时回退 workspace
+    assert.equal(
+      resolveSavedModelId({ workspaceModelId: "workspace/model" }),
+      "workspace/model",
+    );
+    // 全空
+    assert.equal(resolveSavedModelId({}), undefined);
+  });
+
+  it("T-R1: session 为空时不影响 agent pin 生效", () => {
+    assert.equal(
+      resolveSavedModelId({
+        agentModelId: "agent/pin",
+        sessionModelId: undefined,
+        workspaceModelId: "workspace/model",
+      }),
+      "agent/pin",
+    );
+    // 纯函数严格走 ??：空串不视作「无覆盖」（与 workspaceModelId 同约束），
+    // 空串→undefined 的归一化由调用方（resolveApplicationModelIdForRun）负责。
+    assert.equal(
+      resolveSavedModelId({
+        sessionModelId: "",
+        workspaceModelId: "workspace/model",
+      }),
+      "",
+    );
+  });
 });
 
 describe("resolveSummarySavedModelId", () => {
