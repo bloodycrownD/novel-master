@@ -1,11 +1,10 @@
 /**
- * 会话详情页（mobile）：展示即操作，参考 QQ 详情页的交互。
+ * 会话详情页（mobile）：参考 iOS 设置页 / QQ 详情页的卡片式交互。
  *
- * - 聊天名点击直接进入 inline 编辑（TextInput），失焦或回车提交，不再弹弹层。
- * - 当前智能体 / 当前大模型 各是一张可点击卡片，点击直接弹 picker 切换
- *   （agentLocked / modelLocked 时给提示，不进 picker）。
- * - 次要操作（查看提示词 / 压缩上下文 / 重命名弹层）已经由输入框旁边的 ⋯ 按钮
- *   弹出的 SessionActionsDrawer 承载，本页不再重复堆菜单列表。
+ * - 聊天名是大字标题，点一下直接 inline 编辑（TextInput），失焦或回车提交，
+ *   不再单独弹弹层，也不需要"点击编辑"这种提示文字。
+ * - 当前智能体 / 当前大模型各是一张卡片：左侧头像 icon、中间是 label + 取值、
+ *   右侧是 › chevron 暗示可点；锁定时 chevron 换成 🔒，并整体降透明度。
  *
  * 锁定规则（与 desktop SessionDetailDrawer 对齐）：
  * - `source === 'project-custom'` → agent 切换禁用（项目截断，引导去项目设置改）。
@@ -33,28 +32,6 @@ import {toastMessage} from '../../errors/toast-message';
 import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
-
-/** agent 来源对应的中文标签（贴在 agent 名后面，帮用户判断当前生效来源）。 */
-function agentSourceLabel(source: ChatAgentMeta['source']): string {
-  switch (source) {
-    case 'session':
-      return '会话引用';
-    case 'project-custom':
-      return '项目专属';
-    default:
-      return '—';
-  }
-}
-
-/** model 来源标签：agent pin 压制 / 会话跟随。 */
-function modelSourceLabel(modelSource: ChatAgentMeta['modelSource']): string {
-  switch (modelSource) {
-    case 'agent-pin':
-      return 'Agent 指定';
-    default:
-      return '会话';
-  }
-}
 
 const AGENT_LOCK_TOAST = '项目专属智能体会截断会话级切换，请到「项目智能体配置」修改';
 const MODEL_LOCK_TOAST = '当前 Agent 已指定模型，会话内无法覆盖';
@@ -148,13 +125,22 @@ export function SessionDetailScreen() {
     );
   }
 
+  // 卡片阴影样式：iOS 用 shadow*，Android 用 elevation，统一浮起感。
+  const cardShadow = {
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2,
+  };
+
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled">
-        {/* 聊天名：展示态是大字标题，点击切到 TextInput inline 编辑。 */}
+        {/* 聊天名：大字标题 + 弱化铅笔暗示可编辑，点击切到 TextInput inline 编辑。 */}
         <View style={styles.titleBlock}>
           {editingTitle ? (
             <TextInput
@@ -176,14 +162,15 @@ export function SessionDetailScreen() {
             <Pressable
               testID="session-title"
               onPress={startEditTitle}
-              accessibilityLabel="编辑会话名称">
+              accessibilityLabel="编辑会话名称"
+              style={styles.titleRow}>
               <Text
                 style={[styles.titleValue, {color: tokens.text}]}
                 numberOfLines={2}>
                 {sessionTitle || '（未命名）'}
               </Text>
-              <Text style={[styles.titleHint, {color: tokens.textTertiary}]}>
-                点击编辑
+              <Text style={[styles.titleEditGlyph, {color: tokens.textTertiary}]}>
+                ✎
               </Text>
             </Pressable>
           )}
@@ -192,53 +179,83 @@ export function SessionDetailScreen() {
         {/* 当前智能体：点击直接弹 AgentPickerModal，locked 时仅提示。 */}
         <Pressable
           testID="agent-row"
-          style={[styles.card, {backgroundColor: tokens.surface}]}
           onPress={openAgentPicker}
-          accessibilityLabel="切换智能体">
-          <View style={styles.cardHeader}>
+          accessibilityLabel="切换智能体"
+          style={[
+            styles.card,
+            cardShadow,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.borderLight,
+              opacity: agentLocked ? 0.6 : 1,
+            },
+          ]}>
+          <View
+            style={[
+              styles.iconBox,
+              {backgroundColor: tokens.primary + '1A'},
+            ]}>
+            <Text style={styles.iconGlyph}>🤖</Text>
+          </View>
+          <View style={styles.cardBody}>
             <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
               当前智能体
             </Text>
-            <Text style={[styles.badge, {color: tokens.textTertiary}]}>
-              {agentSourceLabel(meta.source)}
+            <Text
+              style={[styles.cardValue, {color: tokens.text}]}
+              numberOfLines={1}>
+              {meta.agentName}
             </Text>
+            {agentLocked ? (
+              <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
+                {AGENT_LOCK_TOAST}
+              </Text>
+            ) : null}
           </View>
-          <Text
-            style={[styles.cardValue, {color: tokens.text}]}
-            numberOfLines={2}>
-            {meta.agentName}
+          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+            {agentLocked ? '🔒' : '›'}
           </Text>
-          {agentLocked ? (
-            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-              {AGENT_LOCK_TOAST}
-            </Text>
-          ) : null}
         </Pressable>
 
         {/* 当前大模型：点击直接弹 ModelPickerModal，locked 时仅提示。 */}
         <Pressable
           testID="model-row"
-          style={[styles.card, {backgroundColor: tokens.surface}]}
           onPress={openModelPicker}
-          accessibilityLabel="切换大模型">
-          <View style={styles.cardHeader}>
+          accessibilityLabel="切换大模型"
+          style={[
+            styles.card,
+            cardShadow,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.borderLight,
+              opacity: modelLocked ? 0.6 : 1,
+            },
+          ]}>
+          <View
+            style={[
+              styles.iconBox,
+              {backgroundColor: tokens.primary + '1A'},
+            ]}>
+            <Text style={styles.iconGlyph}>⚡</Text>
+          </View>
+          <View style={styles.cardBody}>
             <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
               当前大模型
             </Text>
-            <Text style={[styles.badge, {color: tokens.textTertiary}]}>
-              {modelSourceLabel(meta.modelSource)}
+            <Text
+              style={[styles.cardValue, {color: tokens.text}]}
+              numberOfLines={1}>
+              {meta.modelLabel}
             </Text>
+            {modelLocked ? (
+              <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
+                {MODEL_LOCK_TOAST}
+              </Text>
+            ) : null}
           </View>
-          <Text
-            style={[styles.cardValue, {color: tokens.text}]}
-            numberOfLines={2}>
-            {meta.modelLabel}
+          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+            {modelLocked ? '🔒' : '›'}
           </Text>
-          {modelLocked ? (
-            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-              {MODEL_LOCK_TOAST}
-            </Text>
-          ) : null}
         </Pressable>
       </ScrollView>
 
@@ -261,32 +278,47 @@ export function SessionDetailScreen() {
 const styles = StyleSheet.create({
   root: {flex: 1},
   scroll: {flex: 1},
-  scrollContent: {paddingHorizontal: 16, paddingTop: 20, paddingBottom: 32},
+  scrollContent: {paddingHorizontal: 16, paddingTop: 32, paddingBottom: 40},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
-  titleBlock: {marginBottom: 20},
-  titleValue: {fontSize: 22, fontWeight: '700'},
-  titleHint: {fontSize: 12, marginTop: 6},
+  titleBlock: {marginBottom: 24, paddingHorizontal: 4},
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  titleValue: {flex: 1, fontSize: 24, fontWeight: '700'},
+  // 右侧弱化铅笔，提示用户标题可点编辑；不喧宾夺主。
+  titleEditGlyph: {fontSize: 16, fontWeight: '400'},
   titleInput: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '600',
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   card: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    gap: 6,
-  },
-  cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 12,
   },
+  // 左侧头像容器：圆形 + 浅色 tint，给卡片"头像感"。
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconGlyph: {fontSize: 20},
+  cardBody: {flex: 1, gap: 2},
   cardLabel: {fontSize: 13, fontWeight: '500'},
   cardValue: {fontSize: 16, fontWeight: '600'},
-  badge: {fontSize: 12},
-  lockHint: {fontSize: 12, marginTop: 4},
+  // 右侧 chevron / 锁图标，暗示是否可点。
+  chevron: {fontSize: 18, fontWeight: '500'},
+  lockHint: {fontSize: 12, marginTop: 4, lineHeight: 16},
 });

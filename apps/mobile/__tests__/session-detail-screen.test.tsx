@@ -197,7 +197,7 @@ describe('T-M2 SessionDetailScreen', () => {
     mockLoadChatAgentMeta.mockResolvedValue(meta());
   });
 
-  it('渲染聊天名 / agent / model 来源标签', async () => {
+  it('渲染聊天名 / agent / model 卡片（不再有来源标签）', async () => {
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
@@ -207,8 +207,11 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(json).toContain('我的会话');
     expect(json).toContain('Alpha');
     expect(json).toContain('Model-1');
-    // session source → 「会话引用」标签
-    expect(json).toContain('会话引用');
+    // 已去除来源标签 badge，确认不再残留
+    expect(json).not.toContain('会话引用');
+    expect(json).not.toContain('点击编辑');
+    // 卡片右侧 chevron 暗示可点（非锁定场景）
+    expect(json).toContain('›');
   });
 
   it('点击当前智能体卡片打开 AgentPickerModal（session 模式：传 sessionId）', async () => {
@@ -239,13 +242,16 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(picker.props.sessionId).toBe('s1');
   });
 
-  it('project-custom 时点击智能体卡片不进 picker，弹锁定提示', async () => {
+  it('project-custom 时 agent 卡片显示锁图标，点击不进 picker 弹锁定提示', async () => {
     mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'project-custom'}));
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<SessionDetailScreen />);
       await flushPromises();
     });
+    const json = JSON.stringify(tree.toJSON());
+    // 锁定场景 chevron 换成锁图标
+    expect(json).toContain('🔒');
     await act(async () => {
       tree.root.findByProps({testID: 'agent-row'}).props.onPress();
     });
