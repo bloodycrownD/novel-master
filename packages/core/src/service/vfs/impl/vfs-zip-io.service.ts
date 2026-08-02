@@ -62,6 +62,9 @@ async function ensureEmptyDirectoryRow(
   logical: string,
 ): Promise<void> {
   const sk = scopeKey(scope);
+  if (logical === "/") {
+    return;
+  }
   await ensureParentDirectories(repo, sk, `${logical}/__vfs_zip_placeholder`);
   const existing = await repo.findByPath(sk, logical);
   if (existing == null) {

@@ -421,8 +421,9 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         `SELECT 1 FROM vfs_entry
          WHERE scope_key = #{scopeKey}
            AND path LIKE #{pattern} ESCAPE '\\'
+           AND path <> #{path}
          LIMIT 1`,
-        { scopeKey, pattern },
+        { scopeKey, pattern, path: normalized },
       );
       if (childRows.length > 0) {
         throw vfsDirectoryNotEmpty(normalized);
