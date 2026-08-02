@@ -97,7 +97,7 @@ describe("sessions agent-binding IPC handlers + prompt meta", () => {
       assert.equal(reread.data.agentId, "agent-y");
     }
 
-    // agentId=null → 回退 workspace 当前 agent（仍是 agent-x）
+    // agentId=null → 同步到 workspace 当前 agent（仍是 agent-x）
     const unbound = await handleSessionsSetAgentBinding({
       sessionId,
       agentId: null,

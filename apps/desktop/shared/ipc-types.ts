@@ -347,7 +347,11 @@ export type SessionGetAgentBindingRequest = {
 
 export type SessionSetAgentBindingRequest = {
   readonly sessionId: string;
-  /** `null` 表示回退到 workspace 当前 agent；具体 id 直接写入会话。 */
+  /**
+   * `null` 表示将该会话的 agentId 同步为 workspace 当前 agent（作为该会话的新
+   * 默认值）；会话始终持有 agentId，这不是解绑/回退，而是「同步到当前默认」。
+   * 具体 id 直接写入会话。
+   */
   readonly agentId: string | null;
 };
 

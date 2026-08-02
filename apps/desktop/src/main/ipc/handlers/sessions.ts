@@ -154,16 +154,22 @@ export async function handleSessionsGetAgentBinding(
 }
 
 /**
- * 写会话级智能体绑定。`agentId: null` 回退到 workspace 当前 agent；
+ * 写会话级智能体绑定。
+ *
+ * `agentId: null` 表示将该会话的 agentId 同步为 workspace 当前 agent（作为该会话
+ * 的新默认值）；会话始终持有 agentId，这不是解绑/回退，而是「同步到当前默认」。
  * 具体 id 直接写入。返回最新 config，UI 拿到后可直接刷新本地状态（无需重新 GET）。
+ *
+ * core 的 `updateSessionAgentConfig` 为 partial overlay：只传 `{ agentId }` 时
+ * modelId 会被保留，因此切 agent 不会清掉会话上已有的 modelId 覆盖。
  */
 export async function handleSessionsSetAgentBinding(
   req: SessionSetAgentBindingRequest,
 ): Promise<IpcResult<SessionAgentConfigDto>> {
   try {
     const rt = await getDesktopRuntime();
-    // workspace 层已移除：会话始终独立持有 agentId（必填）。
-    // agentId 为 null 时回退到 workspace 当前 agent（state 优先，缺失回落 registry 首项）。
+    // null 表示同步到 workspace 当前 agent（state 优先，缺失回落 registry 首项）。
+    // 会话始终持有 agentId，不存在「解绑」语义。
     let agentId = req.agentId;
     if (agentId == null) {
       const fromState = await rt.state.getCurrentAgentId();
@@ -176,13 +182,13 @@ export async function handleSessionsSetAgentBinding(
           ok: false,
           error: formatIpcError(
             new Error(
-              "回退 workspace agent 失败：workspace 未配置 Agent，且 registry 为空",
+              "同步 workspace agent 失败：workspace 未配置 Agent，且 registry 为空",
             ),
           ),
         };
       }
     }
-    // 切换 agent 时重置 modelId（覆盖是针对旧 agent 的，避免残留误用）。
+    // partial overlay：只传 agentId，core 会保留 modelId（切 agent 不清模型覆盖）。
     const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
       agentId,
     });
@@ -193,19 +199,23 @@ export async function handleSessionsSetAgentBinding(
 }
 
 /**
- * 写会话级模型覆盖。`modelId: null` 清除覆盖；agentId 保持现状不动。
- * 返回最新 config，UI 拿到后可直接刷新本地状态（无需重新 GET）。
+ * 写会话级模型覆盖。
+ *
+ * `modelId: null` 清除覆盖；agentId 保持现状不动。返回最新 config，UI 拿到后
+ * 可直接刷新本地状态（无需重新 GET）。
+ *
+ * core 的 `updateSessionAgentConfig` 为 partial overlay：只传 `{ modelId }` 时
+ * agentId 会被保留，`modelId: null` 表示显式清除。因此这里不再需要先读当前
+ * config 再回写（去 read-modify-write），直接把 modelId 透传给 core 即可。
  */
 export async function handleSessionsSetModelOverride(
   req: SessionSetModelOverrideRequest,
 ): Promise<IpcResult<SessionAgentConfigDto>> {
   try {
     const rt = await getDesktopRuntime();
-    // updateSessionAgentConfig 为全量替换：先读当前 config，保留 agentId，只换 modelId。
-    const current = await rt.sessions.getSessionAgentConfig(req.sessionId);
+    // partial overlay：core 接受 modelId: null 表示清除，agentId 自动保留。
     const config = await rt.sessions.updateSessionAgentConfig(req.sessionId, {
-      agentId: current.agentId,
-      modelId: req.modelId ?? undefined,
+      modelId: req.modelId,
     });
     return { ok: true, data: config };
   } catch (err) {
