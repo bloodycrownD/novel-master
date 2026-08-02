@@ -16,6 +16,16 @@ export {
 } from '../domain/chat/model/project-agent-config.schema.js';
 export type { ChatSession } from '../domain/chat/model/session.js';
 export type {
+  SessionAgentConfig,
+  SessionAgentConfigPatch,
+  SessionAgentMode,
+} from '../domain/chat/model/session-agent-config.js';
+export { DEFAULT_SESSION_AGENT_CONFIG } from '../domain/chat/model/session-agent-config.js';
+export {
+  sessionAgentConfigSchema,
+  sessionAgentModeSchema,
+} from '../domain/chat/model/session-agent-config.schema.js';
+export type {
   ChatMessage,
   MessageAttachment,
   MessageContent,
