@@ -5,10 +5,7 @@
  */
 
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import type {
-  SessionAgentConfig,
-  SessionAgentConfigPatch,
-} from "@/domain/chat/model/session-agent-config.js";
+import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
 
 /** Session CRUD, template copy on create, and full copy. */
 export interface SessionService {
@@ -45,21 +42,18 @@ export interface SessionService {
   ): Promise<boolean>;
 
   /**
-   * 读取会话智能体配置；列 NULL 时返回 {@link DEFAULT_SESSION_AGENT_CONFIG}
-   * （mode=follow）。
+   * 读取会话智能体配置；列 NULL 视为异常（migration 后不应存在 NULL），
+   * 抛 `ChatError(INVALID_ARGUMENT)` 提示运行迁移。
    */
   getSessionAgentConfig(id: string): Promise<SessionAgentConfig>;
 
   /**
-   * 应用 patch 到当前配置（partial overlay），校验后写入列。
+   * 全量替换会话智能体配置（非 partial overlay）。
    *
-   * - `{ mode: "follow" }`：解绑，列存 NULL。
-   * - `{ mode: "bind"; agentId; modelId? }`：整体替换为 bind。
-   * - `{ modelId: string | null }`：仅改 model 覆盖，保持 mode/agentId；
-   *   当前为 follow 时会因缺 agentId 被 schema 拒绝。
+   * 调用方传完整新配置：`agentId` 必填，`modelId` 可选。校验通过后写入列。
    */
   updateSessionAgentConfig(
     id: string,
-    patch: SessionAgentConfigPatch,
+    config: SessionAgentConfig,
   ): Promise<SessionAgentConfig>;
 }

@@ -18,12 +18,9 @@ export type { ChatSession } from '../domain/chat/model/session.js';
 export type {
   SessionAgentConfig,
   SessionAgentConfigPatch,
-  SessionAgentMode,
 } from '../domain/chat/model/session-agent-config.js';
-export { DEFAULT_SESSION_AGENT_CONFIG } from '../domain/chat/model/session-agent-config.js';
 export {
   sessionAgentConfigSchema,
-  sessionAgentModeSchema,
 } from '../domain/chat/model/session-agent-config.schema.js';
 export type {
   ChatMessage,
@@ -352,7 +349,7 @@ export {
   createSessionService,
   createMessageService,
 } from '../service/chat/create-chat-services.js';
-export type { ChatServiceBundle } from '../service/chat/create-chat-services.js';
+export type { ChatServiceBundle, ChatServicesSessionDeps } from '../service/chat/create-chat-services.js';
 export {
   createUserVfsTurnService,
   createUserVfsTurnServiceBundle,

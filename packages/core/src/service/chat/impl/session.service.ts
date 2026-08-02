@@ -7,11 +7,7 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
-import {
-  DEFAULT_SESSION_AGENT_CONFIG,
-  type SessionAgentConfig,
-  type SessionAgentConfigPatch,
-} from "@/domain/chat/model/session-agent-config.js";
+import type { SessionAgentConfig } from "@/domain/chat/model/session-agent-config.js";
 import { sessionAgentConfigSchema } from "@/domain/chat/model/session-agent-config.schema.js";
 import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
@@ -30,6 +26,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
+import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
 import type { SessionService } from "../session.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -45,54 +42,10 @@ function parseStoredSessionAgentConfig(json: string): SessionAgentConfig {
   return decode(JSON.parse(json), sessionAgentConfigSchema);
 }
 
-/**
- * 按规约合并 session agent config patch（partial overlay，非 full replace）。
- *
- * - `{ mode: "follow" }`：忽略其它字段，整体落为 follow。
- * - `{ mode: "bind"; agentId; modelId? }`：整体替换为 bind；modelId 未传时不带 pin，
- *   不继承旧 patch 的 modelId。
- * - `{ modelId: string | null }`：保持当前 mode/agentId，仅覆盖 model；
- *   若当前是 follow（无 agentId），合并后为 `{ mode: "follow", modelId }`，
- *   会被后续 schema 校验拒绝（follow 不接受 modelId 字段，且无 agentId 无法转 bind）。
- */
-function mergeSessionAgentConfigPatch(
-  current: SessionAgentConfig,
-  patch: SessionAgentConfigPatch,
-): SessionAgentConfig {
-  if ("mode" in patch) {
-    if (patch.mode === "follow") {
-      return { mode: "follow" };
-    }
-    // mode === "bind"：整体替换；modelId 未传时不带 pin，不继承旧值
-    if (patch.modelId != null) {
-      return { mode: "bind", agentId: patch.agentId, modelId: patch.modelId };
-    }
-    return { mode: "bind", agentId: patch.agentId };
-  }
-  // patch 仅含 modelId：保持当前 mode/agentId，覆盖 model
-  if (current.mode !== "bind") {
-    // follow 无 agentId，无法单独改 model；按 SPEC 视为非法 patch，拒绝。
-    throw chatInvalidArgument(
-      "无法在 follow 会话上单独覆盖 modelId：请先 bind agent",
-    );
-  }
-  const merged: SessionAgentConfig =
-    patch.modelId == null
-      ? { mode: "bind", agentId: current.agentId }
-      : { mode: "bind", agentId: current.agentId, modelId: patch.modelId };
-  return merged;
-}
-
-/**
- * follow 序列化为 NULL（复用 project agent config 的 NULL 规约）；
- * 否则存 wire JSON。
- */
+/** 永远写非 null wire JSON（agentId 必填，schema 校验已保证非空）。 */
 function serializeSessionAgentConfigForStorage(
   config: SessionAgentConfig,
-): string | null {
-  if (config.mode === "follow") {
-    return null;
-  }
+): string {
   return JSON.stringify(sessionAgentConfigSchema.toWire(config));
 }
 
@@ -103,6 +56,15 @@ export interface SessionServiceDeps {
   readonly sessions: SessionRepository;
   readonly messages: MessageRepository;
   readonly vfs: VfsEntryRepository;
+  /** 用于新建会话时读 workspace 当前 agentId + modelId。 */
+  readonly state: {
+    getCurrentAgentId(): Promise<string | null | undefined>;
+    getCurrentModelId(): Promise<string | null | undefined>;
+  };
+  /** agentId 缺失时回落 registry 第一个 agent。 */
+  readonly agentRegistry: {
+    listAgentIds(): Promise<readonly string[]>;
+  };
 }
 
 /**
@@ -143,6 +105,25 @@ export class DefaultSessionService implements SessionService {
       await initializeSessionWorkspace(tx, projectId, session.id, {
         clearCheckpoints: false,
       });
+
+      // 复制 workspace 当前 agentId + modelId 落到新会话；agentId 缺失回落 registry 首项。
+      const agentId = await resolveWorkspaceAgentForNewSession({
+        state: this.deps.state,
+        agentRegistry: this.deps.agentRegistry,
+      });
+      if (agentId == null || agentId === "") {
+        throw chatInvalidArgument(
+          "新建会话失败：workspace 未配置 Agent，且 registry 为空",
+        );
+      }
+      const workspaceModelId = await this.deps.state.getCurrentModelId();
+      const config: SessionAgentConfig =
+        workspaceModelId == null || workspaceModelId === ""
+          ? { agentId }
+          : { agentId, modelId: workspaceModelId };
+      const configJson = serializeSessionAgentConfigForStorage(config);
+      await r.sessions.setSessionAgentConfig(session.id, configJson, now);
+
       return session;
     });
   }
@@ -209,21 +190,22 @@ export class DefaultSessionService implements SessionService {
     await this.get(id);
     const json = await this.deps.sessions.getSessionAgentConfig(id);
     if (json == null) {
-      return DEFAULT_SESSION_AGENT_CONFIG;
+      // migration 后不应有 NULL；这里视为异常，提示运行 session-agent-config-v2。
+      throw chatInvalidArgument(
+        "session agent config missing, run migration session-agent-config-v2",
+      );
     }
     return parseStoredSessionAgentConfig(json);
   }
 
   async updateSessionAgentConfig(
     id: string,
-    patch: SessionAgentConfigPatch,
+    config: SessionAgentConfig,
   ): Promise<SessionAgentConfig> {
     await this.get(id);
-    const current = await this.getSessionAgentConfig(id);
-    const merged = mergeSessionAgentConfigPatch(current, patch);
-    // decode 既是校验也是规范化（含 strict + superRefine）。
+    // decode 既是校验也是规范化（含 strict）。
     const validated = decode(
-      sessionAgentConfigSchema.toWire(merged),
+      sessionAgentConfigSchema.toWire(config),
       sessionAgentConfigSchema,
     );
     const updatedAtMs = Date.now();
@@ -240,9 +222,11 @@ export class DefaultSessionService implements SessionService {
   }
 
   /**
-   * 复制会话（VFS + 消息）。
+   * 复制会话（VFS + 消息 + agent 配置）。
    *
    * @remarks **不**复制 `session_kkv_entry`；新会话侧 kkv 为空，首次拼装重建。
+   * agent_config_json 直接复制源会话原始 JSON（不再默认 follow）。
+   * composer_draft_json 维持现状不复制。
    */
   async copy(id: string): Promise<ChatSession> {
     const source = await this.get(id);
@@ -258,8 +242,13 @@ export class DefaultSessionService implements SessionService {
       };
       await r.sessions.insert(copy);
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
-      // 刻意不复制 composer_draft_json / agent_config_json（SPEC：copy 不复制草稿与绑定，
-      // 新会话默认 follow）。绑定是用户主动行为，复制后需重新设置。
+      // 刻意不复制 composer_draft_json（维持现状）
+      // agent_config_json：继承源会话配置（v2 后 agentId 必填，源不会是 NULL）
+      const sourceAgentConfigJson =
+        await r.sessions.getSessionAgentConfig(source.id);
+      if (sourceAgentConfigJson != null) {
+        await r.sessions.setSessionAgentConfig(copy.id, sourceAgentConfigJson, now);
+      }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
       await copyVfsTree(

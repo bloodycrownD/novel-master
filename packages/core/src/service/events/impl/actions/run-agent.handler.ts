@@ -57,10 +57,12 @@ export async function runRunAgentAction(
 
   const definition = await deps.agentRegistry.get(agentId);
   const workspaceModelId = (await deps.getWorkspaceModelId()) ?? "";
-  const savedModelId = resolveSavedModelId({
-    agentModelId: definition.model,
-    workspaceModelId: workspaceModelId || undefined,
-  });
+  // workspace 层已从 resolveSavedModelId 移除：event 触发的 agent 运行没有 session
+  // 上下文，这里沿用「agent pin → workspace 当前模型」的田语义作为并fallback。
+  const savedModelId =
+    resolveSavedModelId({
+      agentModelId: definition.model,
+    }) ?? (workspaceModelId || undefined);
   if (savedModelId == null || savedModelId === "") {
     throw new Error(`run-agent: no model resolved for agent "${agentId}"`);
   }

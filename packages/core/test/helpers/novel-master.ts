@@ -8,6 +8,10 @@ import {
   type TdbcConnection,
 } from "@novel-master/core";
 import {
+  createAgentRegistryService,
+  type AgentRegistryService,
+} from "@novel-master/core/agent";
+import {
   createMessageService,
   createProjectService,
   createSessionService,
@@ -37,6 +41,7 @@ export interface NovelMasterTestContext {
   readonly conn: TdbcConnection;
   readonly state: PersistentState;
   readonly preferences: PersistentPreferences;
+  readonly agentRegistry: AgentRegistryService;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
@@ -55,12 +60,15 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
     filename: ":memory:",
   });
   await bootstrapNovelMaster(conn);
+  const state = createPersistentState(conn);
+  const agentRegistry = createAgentRegistryService(conn, state);
   return {
     conn,
-    state: createPersistentState(conn),
+    state,
+    agentRegistry,
     preferences: createPersistentPreferences(conn),
     projects: createProjectService(conn),
-    sessions: createSessionService(conn),
+    sessions: createSessionService(conn, { state, agentRegistry }),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
