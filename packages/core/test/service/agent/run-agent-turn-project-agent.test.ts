@@ -49,6 +49,7 @@ function mockUserVfsTurn(): UserVfsTurnService {
 function makeRuntime(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
   registry: ReturnType<typeof createAgentRegistryService>,
+  overrides?: { readonly sessions?: AgentTurnRuntimePort["sessions"] },
 ): AgentTurnRuntimePort {
   return {
     state: {
@@ -93,9 +94,7 @@ function makeRuntime(
       listKeys: async () => [],
     },
     userVfsTurn: mockUserVfsTurn(),
-    sessions: {
-      getSessionAgentConfig: async () => ({ mode: "follow" }),
-    },
+    sessions: overrides?.sessions ?? ctx.sessions,
   };
 }
 
@@ -154,5 +153,84 @@ describe("runAgentTurn project agent config", () => {
       capturedDefinition.prompts.persist[0]?.content,
       "CUSTOM_PROJECT_PROMPT",
     );
+  });
+
+  it("T-R4：scope.sessionId 透传到 resolver；session-bind 覆盖 workspace 全局", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    // workspace 全局 agent
+    await registry.upsert(
+      "global-agent",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "全局 Agent",
+          prompts: {
+            persist: {
+              sys: { type: "text", role: "user", content: "GLOBAL_PROMPT" },
+            },
+            dynamic: {},
+          },
+          model: "00000000-0000-4000-8000-000000000087",
+        },
+        agentDefinitionSchema,
+      ),
+    );
+    await ctx.state.setCurrentAgentId("global-agent");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+
+    // 会话绑定的另一个 agent
+    await registry.upsert(
+      "session-bind-agent",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "会话绑定 Agent",
+          prompts: {
+            persist: {
+              sys: { type: "text", role: "user", content: "SESSION_BIND_PROMPT" },
+            },
+            dynamic: {},
+          },
+        },
+        agentDefinitionSchema,
+      ),
+    );
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S1");
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      mode: "bind",
+      agentId: "session-bind-agent",
+    });
+
+    const runtime = makeRuntime(ctx, registry);
+    let capturedDefinition: AgentDefinition | undefined;
+    let capturedModel: string | undefined;
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: project.id, sessionId: session.id },
+        "hello",
+        {
+          onAfterResolveModel: async (resolveCtx) => {
+            capturedDefinition = resolveCtx.definition;
+            capturedModel = resolveCtx.savedModelId;
+          },
+        },
+      );
+    } catch {
+      // runner deps stubbed; onAfterResolveModel runs before runner
+    }
+
+    // 透传 sessionId 后 resolver 走 session-bind 分支，拿到 bind agent 的 definition。
+    assert.ok(capturedDefinition != null);
+    assert.equal(capturedDefinition.name, "会话绑定 Agent");
+    assert.equal(
+      capturedDefinition.prompts.persist[0]?.content,
+      "SESSION_BIND_PROMPT",
+    );
+    // session-bind agent 无 model pin，回退 workspace 当前模型。
+    assert.equal(capturedModel, TEST_SAVED_MODEL_ID);
   });
 });

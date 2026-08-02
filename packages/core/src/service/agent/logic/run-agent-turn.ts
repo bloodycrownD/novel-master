@@ -181,7 +181,9 @@ export async function runAgentTurn(
 
   stage = "resolve-agent";
   const definition = (
-    await mapResolveError(() => resolveAgentForProject(runtime, scope.projectId))
+    await mapResolveError(() =>
+      resolveAgentForProject(runtime, scope.projectId, scope.sessionId),
+    )
   ).definition;
 
   const hasPending =
@@ -209,7 +211,7 @@ export async function runAgentTurn(
 
   stage = "resolve-model";
   const { savedModelId, workspaceModelId } = await mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition),
+    resolveApplicationModelIdForRun(runtime, definition, scope.sessionId),
   );
 
   await options?.onAfterResolveModel?.({
