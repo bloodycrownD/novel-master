@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
+import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
+import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
 import { handleVfsDelete, handleVfsWrite } from "../src/main/ipc/handlers/vfs.js";
 import {
@@ -26,6 +28,13 @@ describe("handleVfsDelete", () => {
       return;
     }
     projectId = project.data.id;
+
+    // 新 core 下 session 创建要求 workspace 已配置 agent。
+    const blank = await handleAgentRegistryCreateBlank();
+    assert.equal(blank.ok, true);
+    if (blank.ok) {
+      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+    }
 
     const session = await handleSessionsCreate({
       projectId,

@@ -33,6 +33,23 @@ describe("chat-prompt-tokens.service", () => {
     }
     projectId = project.data.id;
 
+    // 新 core 下会话始终独立持有 agentId + modelId：create 会从 workspace 当前指针复制，
+    // 这里先注册空白 agent、保存模型并都设为 workspace 当前，保证 create 能把两者落进 session 配置。
+    const agent = await handleAgentRegistryCreateBlank();
+    assert.equal(agent.ok, true);
+    if (!agent.ok) {
+      return;
+    }
+    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
+    assert.equal(setAgent.ok, true);
+    if (!setAgent.ok) {
+      return;
+    }
+
+    const rt = await getDesktopRuntime();
+    const saved = await rt.providerModels.save("openai", "gpt-4o");
+    await rt.state.setCurrentModelId(saved.id);
+
     const session = await handleSessionsCreate({
       projectId,
       title: "token-session",
@@ -42,18 +59,6 @@ describe("chat-prompt-tokens.service", () => {
       return;
     }
     sessionId = session.data.id;
-
-    const rt = await getDesktopRuntime();
-    const saved = await rt.providerModels.save("openai", "gpt-4o");
-    await rt.state.setCurrentModelId(saved.id);
-
-    const agent = await handleAgentRegistryCreateBlank();
-    assert.equal(agent.ok, true);
-    if (!agent.ok) {
-      return;
-    }
-    const setAgent = await handleAgentSetCurrent({ agentId: agent.data.agentId });
-    assert.equal(setAgent.ok, true);
   });
 
   after(async () => {

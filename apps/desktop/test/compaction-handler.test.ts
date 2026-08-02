@@ -8,6 +8,8 @@ import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton
 import { handleCompactionManual } from "../src/main/ipc/handlers/compaction.js";
 import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
+import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
+import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
 import {
   setupDesktopDbTestEnv,
@@ -28,6 +30,13 @@ describe("handleCompactionManual", () => {
       return;
     }
     projectId = project.data.id;
+
+    // 新 core 下 session 创建要求 workspace 已配置 agent。
+    const blank = await handleAgentRegistryCreateBlank();
+    assert.equal(blank.ok, true);
+    if (blank.ok) {
+      await handleAgentSetCurrent({ agentId: blank.data.agentId });
+    }
 
     const session = await handleSessionsCreate({
       projectId,

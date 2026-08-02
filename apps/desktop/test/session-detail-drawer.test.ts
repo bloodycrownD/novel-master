@@ -53,10 +53,10 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /if \(!open\)/);
   });
 
-  it("源码：project-custom 锁判定包含 session-bind / global 例外", () => {
+  it("源码：project-custom 锁定 agent 切换；session 可改", () => {
     const src = readDrawer();
-    // agent 锁：source !== 'session-bind' && source !== 'global'
-    assert.match(src, /agentLocked = source !== "session-bind" && source !== "global"/);
+    // agent 锁：source === "project-custom"（project-custom 截断锁定，session 可改）
+    assert.match(src, /agentLocked = source === "project-custom"/);
     // model 锁：modelSource === "agent-pin" || hasDedicatedModel
     assert.match(src, /modelLocked/);
     assert.match(src, /"agent-pin"/);
@@ -88,13 +88,14 @@ describe("App.tsx 入口替换 (T-D4)", () => {
     assert.match(appSrc, /setSessionDetailOpen\(true\)/);
   });
 
-  it("源码：WorkspaceFooter 锁判定扩展兼容 session-bind", () => {
+  it("源码：WorkspaceFooter 锁判定 project-custom 锁 / session 可改", () => {
     const footerSrc = readFileSync(
       join(rendererRoot, "features", "chat", "WorkspaceFooter.tsx"),
       "utf8",
     );
-    // session-bind 不锁（注释或判定中体现）
-    assert.match(footerSrc, /session-bind/);
+    // project-custom 锁 agent；session 可改（判定或注释中体现）
+    assert.match(footerSrc, /project-custom/);
+    assert.match(footerSrc, /session/);
     // model pin 锁定检测
     assert.match(footerSrc, /"agent-pin"/);
     assert.match(footerSrc, /hasDedicatedModel/);
