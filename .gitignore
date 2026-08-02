@@ -46,3 +46,6 @@ tmp/
 
 # Cursor IDE local files (debug logs, etc.)
 .cursor/
+
+# 本地 worktree（agent 工作区）
+.worktree/
