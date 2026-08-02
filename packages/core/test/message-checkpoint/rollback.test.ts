@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
+import { createCharacterCardImportService } from "@novel-master/core/vfs";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -40,7 +41,7 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(messages[1]!.id, assistant1.id);
   });
 
-  it("R2: plain user undo_send 删除锚点并对齐发送前空树", async () => {
+  it("R2: plain user undo_send 无 prior 时回退到 anchor checkpoint", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -58,7 +59,9 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
 
-    await assert.rejects(() => svfs.read("/anchor.md"));
+    // 无 prior 时回退到 anchor 自身 checkpoint：/anchor.md 恢复到 capture 版本，
+    // /later.md 不在 checkpoint 里 → 删除。
+    assert.equal((await svfs.read("/anchor.md")).content, "at-send");
     await assert.rejects(() => svfs.read("/later.md"));
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
@@ -153,6 +156,94 @@ describe("MessageRollbackService (revision model)", () => {
     await assert.rejects(() => svfs.read("/solo.md"));
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 0);
+  });
+
+  it("R-BC1: 角色卡导入 backfill baseline 后 undo_send 回首条 user 保留文件", async () => {
+    // 导入角色卡会 backfill baseline checkpoint，让回滚有正确基线。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-rbc1-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 先发一条消息（纯文本，无 capture），再导入角色卡——导入 backfill
+    // 会给这条消息补 baseline checkpoint。
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("你好"));
+
+    const cardSvc = createCharacterCardImportService(ctx.conn);
+    const tree = new Map<string, string>([
+      ["角色描述.md", "card-desc"],
+      ["世界书/设定.md", "world"],
+    ]);
+    await cardSvc.import(scope, tree, { confirmed: true, directoryPath: "/" });
+
+    // 聊一轮：assistant 文本（不触发 capture，因为没改文件）。
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "你好呀" }],
+    });
+
+    // 回滚到首条 user（undo_send）。
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
+
+    // 导入的文件应保留（baseline checkpoint 保护了它们）。
+    assert.equal((await svfs.read("/角色描述.md")).content, "card-desc");
+    assert.equal((await svfs.read("/世界书/设定.md")).content, "world");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 0);
+  });
+
+  it("R-BC2: 消息 3 有 checkpoint，消息 6 导入时只补 4-6 不碰 1-2", async () => {
+    // backfill 只应补「最后一个有 checkpoint 的消息之后」的空窗，
+    // 不能给已有 checkpoint 之前的消息补（那会破坏它们原有的回滚语义）。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-rbc2-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 消息 1-2：纯文本，无 checkpoint。
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("first"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "hi" }],
+    });
+
+    // 消息 3：assistant 写文件 + capture（成为最后一个有 checkpoint 的）。
+    await svfs.write("/old.md", "v1", { versionCheck: false });
+    const assistant3 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "wrote" }],
+    });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant3.id);
+
+    // 消息 4-5：纯文本，无 checkpoint（空窗开始）。
+    const user4 = await ctx.messages.append(session.id, "user", textBlocks("chat"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "reply" }],
+    });
+
+    // 消息 6 时导入角色卡——backfill 应只补 4、5、6，不碰 1、2。
+    const cardSvc = createCharacterCardImportService(ctx.conn);
+    const tree = new Map<string, string>([
+      ["新文件.md", "imported"],
+    ]);
+    await cardSvc.import(scope, tree, { confirmed: true, directoryPath: "/" });
+
+    // 验证：消息 1 没有 baseline checkpoint（backfill 没碰它），
+    // 所以回滚到消息 1 时仍然走空基线（无 prior、无 anchor checkpoint）。
+    // 回滚到消息 4 时，anchor 有 backfill 的 checkpoint → 文件保留。
+
+    // 先回滚到消息 4：新文件.md 应保留（anchor checkpoint 保护）。
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user4.id);
+    assert.equal((await svfs.read("/新文件.md")).content, "imported");
+    const msgsAfter4 = await ctx.messages.listBySession(session.id);
+    assert.equal(msgsAfter4.length, 3); // user1, asst2, asst3
   });
 
   it("U3: undo_send 含锚点 checkpoint 时仍仅用 prior tree", async () => {
