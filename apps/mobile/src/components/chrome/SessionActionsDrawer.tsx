@@ -1,5 +1,5 @@
 ﻿/**
- * Session actions drawer: rename, prompt preview, compaction, model/agent.
+ * Session actions drawer: prompt preview, compaction, model/agent.
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -9,7 +9,6 @@ import { useTheme } from '../../theme/ThemeProvider';
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onRename?: () => void;
   onCompact?: () => void;
   onRealPrompt?: () => void;
   onSwitchModel?: () => void;
@@ -19,7 +18,6 @@ type Props = {
 export function SessionActionsDrawer({
   visible,
   onClose,
-  onRename,
   onCompact,
   onRealPrompt,
   onSwitchModel,
@@ -28,7 +26,6 @@ export function SessionActionsDrawer({
   const { tokens } = useTheme();
 
   const items = [
-    { label: '聊天重命名', action: onRename },
     { label: '查看提示词', action: onRealPrompt },
     { label: '压缩上下文', action: onCompact },
     { label: '切换大模型', action: onSwitchModel },
