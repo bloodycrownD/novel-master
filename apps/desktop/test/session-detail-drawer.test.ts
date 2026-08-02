@@ -27,24 +27,30 @@ function readDrawer(): string {
 }
 
 describe("SessionDetailDrawer (T-D3)", () => {
-  it("渲染聊天名 / Agent / 模型 / 操作入口（重命名 / 切换 / 查看提示词 / 压缩）", () => {
+  it("渲染聊天名（点击编辑）/ Agent / 模型 / 操作入口（切换 / 查看提示词 / 压缩）", () => {
     const src = readDrawer();
-    // 聊天名展示
+    // 聊天名行内编辑入口（点击 name 进入编辑）
     assert.match(src, /session-detail-drawer__name/);
     assert.match(src, /\{sessionName\}/);
+    assert.match(src, /data-session-detail-action="rename"/);
+    assert.match(src, /data-session-detail-action="rename-input"/);
+    // 不再使用 TextPromptModal 弹窗重命名
+    assert.doesNotMatch(src, /TextPromptModal/);
+    assert.doesNotMatch(src, /setRenameOpen/);
     // Agent / 模型 区块
     assert.match(src, /session-detail-pick__label.*Agent/s);
     assert.match(src, /session-detail-pick__label.*模型/s);
     // 操作入口 data hook
-    assert.match(src, /data-session-detail-action="rename"/);
     assert.match(src, /data-session-detail-action="switch-agent"/);
     assert.match(src, /data-session-detail-action="switch-model"/);
     assert.match(src, /data-session-detail-action="view-prompt"/);
     assert.match(src, /data-session-detail-action="compact"/);
     // 文案
-    assert.match(src, /重命名/);
     assert.match(src, /查看提示词/);
     assert.match(src, /压缩上下文/);
+    // 行内编辑交互：Enter 提交 / Escape 取消 / blur 提交
+    assert.match(src, /commitRename/);
+    assert.match(src, /cancelRename/);
   });
 
   it("open=false 时不渲染抽屉", () => {
@@ -67,13 +73,25 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /已固定模型/);
   });
 
-  it("源码：agent/model 切换走 session 级 IPC（传 sessionId）", () => {
+  it("源码：重命名走行内编辑（ipcSessionsRename）；agent/model 切换走 session 级 IPC", () => {
     const src = readDrawer();
+    // 聊天名行内编辑调用 ipcSessionsRename
+    assert.match(src, /ipcSessionsRename\(/);
     assert.match(src, /ipcSessionsSetAgentBinding\(/);
     assert.match(src, /ipcSessionsSetModelOverride\(/);
     // 不应再调用 workspace 级 setCurrent
     assert.doesNotMatch(src, /ipcAgentSetCurrent\(/);
     assert.doesNotMatch(src, /ipcModelSetCurrent\(/);
+  });
+
+  it("源码：agent picker 不允许 none；model picker 允许 none 且措辞修正", () => {
+    const src = readDrawer();
+    // 会话必须持有 agentId → agent picker 不允许 none，无“回退工作区”措辞
+    assert.doesNotMatch(src, /解除会话绑定/);
+    // model picker 保留 allowNone，措辞改为“清除会话覆盖（使用 Agent 指定模型）”
+    assert.match(src, /清除会话覆盖（使用 Agent 指定模型）/);
+    // 旧的“回退工作区”措辞已全部移除
+    assert.doesNotMatch(src, /回退工作区/);
   });
 });
 

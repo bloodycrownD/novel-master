@@ -1,26 +1,39 @@
 /**
  * 会话详情抽屉（desktop）。
  *
- * 承载原 `#session-actions-menu`（重命名 / 压缩 / 切模型 / 切智能体）
+ * 收拢原 `#session-actions-menu`（重命名 / 压缩 / 切模型 / 切智能体）
  * 与 `WorkspaceFooter`（agent/model 切换 + token 占用）的散落入口，
- * 收拢为单一模态抽屉。agent/model 切换一律走 session 级 IPC
- * （`ipcSessionsSetAgentBinding` / `ipcSessionsSetModelOverride`），
- * 不再写 workspace 全局。
+ * 统一为单一模态抽屉。整体走「点击即编辑 / 点击即切换」的轻交互，
+ * 不再堆叠菜单按钮。
  *
- * 锁定规则：
- * - `source === 'project-custom'` 时 agent 切换禁用（项目截断，引导去项目设置改）。
- * - `source === 'session'` 时 agent 可切换（这是 session 绑定，用户可改）。
- * - `modelSource === 'agent-pin'` 或 agent definition 自带 model 时 model 切换禁用
+ * - 聊天名：点击文字直接进入行内编辑（input），回车或失焦保存，
+ *   Esc 取消；保存时调用 `ipcSessionsRename`，成功后回调 `onRenamed`。
+ * - Agent / 模型：点击卡片弹出 picker，写 session 级绑定
+ *   （`ipcSessionsSetAgentBinding` / `ipcSessionsSetModelOverride`），
+ *   不再写 workspace 全局。
+ *
+ * 锁定规则（保持不变）：
+ * - `source === 'project-custom'` → agent 切换禁用（项目截断，引导去项目设置）。
+ * - `source === 'session'` → agent 可切换（会话独立持有 agentId）。
+ * - `modelSource === 'agent-pin'` 或 agent definition 自带 model → model 切换禁用
  *   （agent pin 压制 session）。
+ *
+ * core 移除 workspace 回退后：会话始终持有 agentId（必填）+ modelId（可选），
+ * 因此 agent picker 不允许 none；model picker 允许 none（清除会话覆盖，
+ * 回退到 agent pin 指定的模型）。
  */
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type {
   PromptAgentMetaResponse,
   PromptChatTokenStatsResponse,
 } from "@shared/ipc-types";
 import { PickerModal } from "@/components/ui/PickerModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { TextPromptModal } from "@/components/ui/TextPromptModal";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { showToast } from "@/components/ui/show-toast";
 import {
@@ -93,8 +106,14 @@ export function SessionDetailDrawer({
   const [modelRows, setModelRows] = useState<
     Array<{ savedModelId: string; label: string }>
   >([]);
-  const [renameOpen, setRenameOpen] = useState(false);
   const [compactOpen, setCompactOpen] = useState(false);
+
+  // 聊天名行内编辑状态
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState(sessionName);
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  // 防止 blur 与 keydown Enter 重复提交
+  const submittingRef = useRef(false);
 
   const reload = useCallback(async () => {
     const [metaRes, tokens] = await Promise.all([
@@ -115,6 +134,21 @@ export function SessionDetailDrawer({
     }
     void reload();
   }, [open, reload]);
+
+  // 外部传入的 sessionName 变化时同步草稿（非编辑态下）
+  useEffect(() => {
+    if (!editingName) {
+      setDraftName(sessionName);
+    }
+  }, [sessionName, editingName]);
+
+  // 进入编辑态时聚焦并全选
+  useEffect(() => {
+    if (editingName && nameInputRef.current) {
+      nameInputRef.current.focus();
+      nameInputRef.current.select();
+    }
+  }, [editingName]);
 
   if (!open) {
     return null;
@@ -156,6 +190,40 @@ export function SessionDetailDrawer({
     setModelPickerOpen(true);
   };
 
+  const startRename = () => {
+    setDraftName(sessionName);
+    setEditingName(true);
+  };
+
+  const commitRename = async () => {
+    if (submittingRef.current) {
+      return;
+    }
+    const trimmed = draftName.trim();
+    // 空串或未改动 → 直接退出编辑，不调用 IPC
+    if (!trimmed || trimmed === sessionName) {
+      setEditingName(false);
+      setDraftName(sessionName);
+      return;
+    }
+    submittingRef.current = true;
+    const result = await ipcSessionsRename({ id: sessionId, title: trimmed });
+    submittingRef.current = false;
+    setEditingName(false);
+    if (result.ok) {
+      onRenamed?.(trimmed);
+      showToast("已重命名会话");
+    } else {
+      showToast(result.error.message);
+      setDraftName(sessionName);
+    }
+  };
+
+  const cancelRename = () => {
+    setEditingName(false);
+    setDraftName(sessionName);
+  };
+
   const barPct =
     tokenStats?.pct != null
       ? Math.min(100, Math.max(0, tokenStats.pct))
@@ -193,19 +261,41 @@ export function SessionDetailDrawer({
         </div>
 
         <div className="session-detail-drawer__body">
-          <div className="session-detail-drawer__row">
-            <span className="session-detail-drawer__row-label">聊天名</span>
-            <div className="session-detail-drawer__row-value">
-              <span className="session-detail-drawer__name">{sessionName}</span>
+          {/* 聊天名：点击进入行内编辑 */}
+          <div className="session-detail-drawer__name-row">
+            {editingName ? (
+              <input
+                ref={nameInputRef}
+                className="session-detail-drawer__name-input"
+                data-session-detail-action="rename-input"
+                value={draftName}
+                placeholder="会话名称"
+                aria-label="编辑会话名称"
+                onChange={(e) => setDraftName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void commitRename();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    cancelRename();
+                  }
+                }}
+                onBlur={() => void commitRename()}
+              />
+            ) : (
               <button
                 type="button"
-                className="session-detail-drawer__inline-btn"
+                className="session-detail-drawer__name"
                 data-session-detail-action="rename"
-                onClick={() => setRenameOpen(true)}
+                title="点击重命名"
+                onClick={startRename}
               >
-                重命名
+                <span className="session-detail-drawer__name-text">
+                  {sessionName}
+                </span>
               </button>
-            </div>
+            )}
           </div>
 
           <div className="session-detail-drawer__pick">
@@ -296,10 +386,11 @@ export function SessionDetailDrawer({
             </div>
           ) : null}
 
-          <div className="session-detail-drawer__actions">
+          {/* 次要操作：弱化为底部文字链接 */}
+          <div className="session-detail-drawer__secondary">
             <button
               type="button"
-              className="session-detail-drawer__action"
+              className="session-detail-drawer__link"
               data-session-detail-action="view-prompt"
               onClick={() => {
                 onClose();
@@ -308,9 +399,12 @@ export function SessionDetailDrawer({
             >
               查看提示词
             </button>
+            <span className="session-detail-drawer__dot" aria-hidden="true">
+              ·
+            </span>
             <button
               type="button"
-              className="session-detail-drawer__action"
+              className="session-detail-drawer__link"
               data-session-detail-action="compact"
               onClick={() => setCompactOpen(true)}
             >
@@ -319,27 +413,30 @@ export function SessionDetailDrawer({
           </div>
         </div>
 
+        {/* 会话必须持有 agentId，agent picker 不允许 none */}
         <PickerModal
           open={agentPickerOpen}
           title={`选择 Agent（当前：${meta?.agentName ?? "—"}）`}
           rows={agentRows.map((r) => ({ id: r.agentId, label: r.label }))}
           currentId={meta?.agentId}
-          allowNone
-          noneLabel="解除会话绑定（回退工作区）"
           onClose={() => setAgentPickerOpen(false)}
           onSelect={(agentId) => {
+            if (agentId == null) {
+              return;
+            }
             void ipcSessionsSetAgentBinding({ sessionId, agentId }).then(() => {
               void reload();
               notifyAgentConfigChanged();
             });
           }}
         />
+        {/* model 可清除会话覆盖 → 回退到 agent pin 指定的模型 */}
         <PickerModal
           open={modelPickerOpen}
           title={`选择模型（当前：${meta?.modelLabel ?? "—"}）`}
           rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
           allowNone
-          noneLabel="清除会话覆盖（回退工作区）"
+          noneLabel="清除会话覆盖（使用 Agent 指定模型）"
           onClose={() => setModelPickerOpen(false)}
           onSelect={(savedModelId) => {
             void ipcSessionsSetModelOverride({
@@ -349,23 +446,6 @@ export function SessionDetailDrawer({
               void reload();
               notifyAgentConfigChanged();
             });
-          }}
-        />
-
-        <TextPromptModal
-          open={renameOpen}
-          title="重命名会话"
-          placeholder="会话名称"
-          initialValue={sessionName}
-          onClose={() => setRenameOpen(false)}
-          onConfirm={async (title) => {
-            const result = await ipcSessionsRename({ id: sessionId, title });
-            if (result.ok) {
-              onRenamed?.(title);
-              showToast("已重命名会话");
-            } else {
-              showToast(result.error.message);
-            }
           }}
         />
 
