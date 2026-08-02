@@ -34,8 +34,9 @@ import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
 import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
 import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
-import {AboutScreen} from '../screens/stack/AboutScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
+import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
+import {AboutScreen} from '../screens/stack/AboutScreen';
 import {useAutoUpdateCheck} from '../hooks/useAutoUpdateCheck';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -151,6 +152,10 @@ const RegexRuleEditorStackScreen = withStackLayout(
   RegexRuleEditorScreen,
 );
 const FileEditorStackScreen = withStackLayout('FileEditor', FileEditorScreen);
+const SessionDetailStackScreen = withStackLayout(
+  'SessionDetail',
+  SessionDetailScreen,
+);
 const AboutStackScreen = withStackLayout('About', AboutScreen);
 
 export function RootNavigator() {
@@ -204,6 +209,10 @@ export function RootNavigator() {
             component={RegexRuleEditorStackScreen}
           />
           <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
+          <Stack.Screen
+            name="SessionDetail"
+            component={SessionDetailStackScreen}
+          />
           <Stack.Screen name="About" component={AboutStackScreen} />
         </Stack.Navigator>
       </HeaderProvider>
