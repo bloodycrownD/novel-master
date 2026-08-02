@@ -5,11 +5,11 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { showToast } from "@/components/ui/show-toast";
 import {
   ipcAgentListPicker,
-  ipcAgentSetCurrent,
   ipcModelListPicker,
-  ipcModelSetCurrent,
   ipcPromptAgentMeta,
   ipcPromptChatTokenLabel,
+  ipcSessionsSetAgentBinding,
+  ipcSessionsSetModelOverride,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { formatTokenCount } from "@/utils/format-token-count";
@@ -39,6 +39,10 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
     "global" | "session-bind" | "project-custom" | "none"
   >("none");
   const [modelLabel, setModelLabel] = useState("—");
+  const [modelSource, setModelSource] = useState<
+    "agent-pin" | "session-override" | "workspace" | undefined
+  >(undefined);
+  const [hasDedicatedModel, setHasDedicatedModel] = useState(false);
   const [tokenStats, setTokenStats] = useState<PromptChatTokenStatsResponse | null>(
     null,
   );
@@ -56,6 +60,8 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
       setAgentName(meta.data.agentName);
       setAgentSource(meta.data.source);
       setModelLabel(meta.data.modelLabel);
+      setModelSource(meta.data.modelSource);
+      setHasDedicatedModel(meta.data.hasDedicatedModel);
     }
     if (tokens.ok) {
       setTokenStats(tokens.data);
@@ -66,7 +72,11 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
     void reload();
   }, [reload]);
 
+  // project-custom 截断 → agent 锁；session-bind 是会话绑定，用户可改，不锁
   const agentLocked = agentSource === "project-custom";
+  // agent pin（definition 自带 model）压制 session/workspace
+  const modelLocked =
+    modelSource === "agent-pin" || hasDedicatedModel;
 
   const openAgentPicker = async () => {
     if (agentLocked) {
@@ -83,6 +93,10 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
   };
 
   const openModelPicker = async () => {
+    if (modelLocked) {
+      showToast("当前 Agent 已固定模型，请先在 Agent 配置中修改。");
+      return;
+    }
     const result = await ipcModelListPicker();
     if (!result.ok || result.data.rows.length === 0) {
       showToast("暂无模型，请先在设置中配置 Provider。");
@@ -120,9 +134,12 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
         </button>
         <button
           type="button"
-          className="workspace-pick"
+          className={`workspace-pick${
+            modelLocked ? " workspace-pick--locked" : ""
+          }`}
           data-action="open-model-picker"
-          aria-label="切换大模型"
+          aria-label={modelLocked ? "切换大模型（已锁定）" : "切换大模型"}
+          aria-disabled={modelLocked}
           onClick={() => void openModelPicker()}
         >
           <span className="workspace-pick__icon" aria-hidden="true">
@@ -178,9 +195,14 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
         open={agentPickerOpen}
         title={`选择 Agent（当前：${agentName}）`}
         rows={agentRows.map((r) => ({ id: r.agentId, label: r.label }))}
+        allowNone
+        noneLabel="解除会话绑定（回退工作区）"
         onClose={() => setAgentPickerOpen(false)}
         onSelect={(agentId) => {
-          void ipcAgentSetCurrent({ agentId }).then(() => {
+          void ipcSessionsSetAgentBinding({
+            sessionId,
+            agentId,
+          }).then(() => {
             void reload();
             notifyAgentConfigChanged();
           });
@@ -190,9 +212,14 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
         open={modelPickerOpen}
         title={`选择模型（当前：${modelLabel}）`}
         rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
+        allowNone
+        noneLabel="清除会话覆盖（回退工作区）"
         onClose={() => setModelPickerOpen(false)}
         onSelect={(savedModelId) => {
-          void ipcModelSetCurrent({ savedModelId }).then(() => {
+          void ipcSessionsSetModelOverride({
+            sessionId,
+            modelId: savedModelId,
+          }).then(() => {
             void reload();
             notifyAgentConfigChanged();
           });
