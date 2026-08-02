@@ -33,8 +33,8 @@ import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
 
-const AGENT_LOCK_TOAST = '项目专属智能体会截断会话级切换，请到「项目智能体配置」修改';
-const MODEL_LOCK_TOAST = '当前 Agent 已指定模型，会话内无法覆盖';
+const AGENT_LOCK_TOAST = '智能体已被项目锁定，无法在会话内切换，请到「项目智能体配置」修改';
+const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 
 export function SessionDetailScreen() {
   const {tokens} = useTheme();

@@ -48,8 +48,8 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.doesNotMatch(src, /session-detail-pick__source/);
     // 锁定指示仍保留
     assert.match(src, /session-detail-pick__lock/);
-    assert.match(src, /项目专属/);
-    assert.match(src, /Agent 指定/);
+    assert.match(src, /项目锁定/);
+    assert.match(src, /智能体锁定/);
     // 操作入口 data hook
     assert.match(src, /data-session-detail-action="switch-agent"/);
     assert.match(src, /data-session-detail-action="switch-model"/);
@@ -78,9 +78,9 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /"agent-pin"/);
     assert.match(src, /hasDedicatedModel/);
     // project-custom 锁定 toast 引导
-    assert.match(src, /项目专属智能体/);
+    assert.match(src, /项目锁定/);
     // agent pin 锁定 toast 引导
-    assert.match(src, /已固定模型/);
+    assert.match(src, /已锁定模型/);
   });
 
   it("源码：重命名走行内编辑（ipcSessionsRename）；agent/model 切换走 session 级 IPC", () => {
@@ -98,8 +98,8 @@ describe("SessionDetailDrawer (T-D3)", () => {
     const src = readDrawer();
     // 会话必须持有 agentId → agent picker 不允许 none，无“回退工作区”措辞
     assert.doesNotMatch(src, /解除会话绑定/);
-    // model picker 保留 allowNone，措辞改为“清除会话覆盖（使用 Agent 指定模型）”
-    assert.match(src, /清除会话覆盖（使用 Agent 指定模型）/);
+    // model picker 保留 allowNone，措辞改为“清除会话覆盖（使用智能体锁定模型）”
+    assert.match(src, /清除会话覆盖（使用智能体锁定模型）/);
     // 旧的“回退工作区”措辞已全部移除
     assert.doesNotMatch(src, /回退工作区/);
   });

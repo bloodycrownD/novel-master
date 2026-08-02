@@ -150,7 +150,7 @@ export function SessionDetailDrawer({
 
   const openAgentPicker = async () => {
     if (agentLocked) {
-      showToast("本项目使用项目专属智能体，请在项目设置中修改。");
+      showToast("当前会话的智能体已被项目锁定，请在项目设置中修改。");
       return;
     }
     const result = await ipcAgentListPicker();
@@ -164,7 +164,7 @@ export function SessionDetailDrawer({
 
   const openModelPicker = async () => {
     if (modelLocked) {
-      showToast("当前 Agent 已固定模型，请先在 Agent 配置中修改。");
+      showToast("当前智能体已锁定模型，请先在智能体配置中修改。");
       return;
     }
     const result = await ipcModelListPicker();
@@ -313,7 +313,7 @@ export function SessionDetailDrawer({
                     >
                       🔒
                     </span>
-                    项目专属
+                    项目锁定
                   </span>
                 ) : null}
               </span>
@@ -353,7 +353,7 @@ export function SessionDetailDrawer({
                     >
                       🔒
                     </span>
-                    Agent 指定
+                    智能体锁定
                   </span>
                 ) : null}
               </span>
@@ -453,7 +453,7 @@ export function SessionDetailDrawer({
           title={`选择模型（当前：${meta?.modelLabel ?? "—"}）`}
           rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
           allowNone
-          noneLabel="清除会话覆盖（使用 Agent 指定模型）"
+          noneLabel="清除会话覆盖（使用智能体锁定模型）"
           onClose={() => setModelPickerOpen(false)}
           onSelect={(savedModelId) => {
             void ipcSessionsSetModelOverride({
