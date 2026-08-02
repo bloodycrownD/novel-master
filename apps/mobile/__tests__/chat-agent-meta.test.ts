@@ -1,20 +1,19 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
 import {PROJECT_AGENT_META_DISPLAY_LABEL} from '@novel-master/core/chat';
-import type {SessionAgentConfig} from '@novel-master/core/chat';
 import {loadChatAgentMeta} from '../src/services/chat-agent-meta';
 
 const globalDefinition = buildDefaultAgentDefinitionPreservingName('全局助手');
 const projectDefinition = buildDefaultAgentDefinitionPreservingName('项目副本');
 const sessionBindDefinition = buildDefaultAgentDefinitionPreservingName('会话绑定助手');
 
-const DEFAULT_SESSION_CONFIG: SessionAgentConfig = {mode: 'follow'};
+const DEFAULT_SESSION_CONFIG = {mode: 'follow'};
 
 function mockRuntime(overrides: {
   agentConfig?: {mode: 'follow' | 'custom'; definition?: typeof projectDefinition};
   currentAgentId?: string;
   currentModelId?: string;
-  sessionAgentConfig?: SessionAgentConfig;
+  sessionAgentConfig?: {mode: 'follow'} | {mode: 'bind'; agentId: string; modelId?: string};
   sessionBindAgentDefinition?: typeof globalDefinition;
 }) {
   const {

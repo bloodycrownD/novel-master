@@ -4,9 +4,8 @@ import {
   selectSessionAgent,
   clearSessionAgentBinding,
 } from '../src/services/agent-picker';
-import type {SessionAgentConfig} from '@novel-master/core/chat';
 
-function mockRuntime(sessionAgentConfig: SessionAgentConfig) {
+function mockRuntime(sessionAgentConfig: {mode: 'follow'} | {mode: 'bind'; agentId: string; modelId?: string}) {
   return {
     state: {
       getCurrentAgentId: jest.fn(async () => 'workspace-agent'),
@@ -34,8 +33,8 @@ describe('session 级 agent picker', () => {
       agentId: 'agent-a',
       label: '显示名-agent-a',
     });
-    // bind 时不应回退 workspace
-    expect(rt.state.getCurrentAgentId).not.toHaveBeenCalled();
+    // bind 时 currentId 取会话绑定，不回退 workspace 结果
+    expect(result.currentId).toBe('agent-a');
     expect(rt.sessions.getSessionAgentConfig).toHaveBeenCalledWith('sess-1');
   });
 
