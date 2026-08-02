@@ -41,7 +41,7 @@ date: 2026-08-02
 
 3. **IPC 层**：保留老的 `AGENT_SET_CURRENT`/`MODEL_SET_CURRENT`（workspace 全局，供全局页用），新增 session 级 channel（`SESSIONS_SET_AGENT_BINDING` 等）。`PromptAgentMetaResponse.source` 收窄为 `'project-custom' | 'session'`（UI 兑底可加 `'none'` 表示无 meta），`modelSource` 收窄为 `'agent-pin' | 'session'`。`handlePromptAgentMeta` 终于消费 `req.sessionId`。会话始终持有 agentId，`SET_AGENT_BINDING` 不再支持 null 解绑；`SET_MODEL_OVERRIDE` 传 null 清除会话 model 覆盖（回退到 agent pin，文案改为「使用 Agent 指定模型」，去掉「回退工作区」措辞）。
 
-4. **UI 层**：mobile 新增 `SessionDetailScreen`（独立 Stack 路由，由 AppHeader 三线按钮触发），`SessionActionsDrawer` **保留**（由 ChatComposer ⋯ 按钮触发，继续承载重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项）。desktop 新增模态抽屉 `SessionDetailDrawer`，替换 `#session-actions-menu`。详情页聊天名点击直接 inline 编辑（不弹 modal），agent / model 各是一张可点击卡片，去掉菜单列表。两端 picker 的 select 逻辑分流：会话内写 session 绑定，全局页写 workspace。
+4. **UI 层**：mobile 新增 `SessionDetailScreen`（独立 Stack 路由，由 AppHeader 三线按钮触发），`SessionActionsDrawer` **保留**（由 ChatComposer ⋯ 按钮触发，继续承载查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体四项，重命名改由详情页 inline 编辑承担）。desktop 新增模态抽屉 `SessionDetailDrawer`，替换 `#session-actions-menu`。详情页聊天名点击直接 inline 编辑（不弹 modal），agent / model 各是一张可点击卡片，去掉菜单列表。两端 picker 的 select 逻辑分流：会话内写 session 绑定，全局页写 workspace。
 
 ## 最终项目结构
 
@@ -97,7 +97,7 @@ apps/desktop/test/session-detail-drawer.test.ts                      # 抽屉测
 | `packages/core/src/bootstrap/chat/chat-schema.ts` | `chat_session` DDL 加 `agent_config_json TEXT NULL` |
 | `packages/core/src/bootstrap/schema-align/schema-column-alignments.ts` | 加一条 `chat_session.agent_config_json` 对齐声明 |
 | `packages/core/src/bootstrap/novel-master-bootstrap.ts` | `SCHEMA_BOOT_VERSION` 2 → 3 |
-| `packages/core/src/domain/chat/model/session-agent-config.ts` | **新文件**：`SessionAgentConfig`（`{ agentId: string; modelId?: string }`，agentId 必填，去 mode）、`SessionAgentConfigPatch`、`DEFAULT_SESSION_AGENT_CONFIG` |
+| `packages/core/src/domain/chat/model/session-agent-config.ts` | **新文件**：`SessionAgentConfig`（`{ agentId: string; modelId?: string }`，agentId 必填，去 mode）、`SessionAgentConfigPatch`（不提供静态 `DEFAULT_SESSION_AGENT_CONFIG` 常量——默认值由 service 运行时通过 `resolveWorkspaceAgentForNewSession` 计算） |
 | `packages/core/src/domain/chat/model/session-agent-config.schema.ts` | **新文件**：`sessionAgentConfigSchema`（`.strict()` + `.superRefine` agentId 必填、去 mode 校验）+ `toWire` |
 | `packages/core/src/domain/chat/repositories/session.port.ts` | 加 `getSessionAgentConfig(id): Promise<string \| null>`、`setSessionAgentConfig(id, json, updatedAtMs): Promise<boolean>` |
 | `packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts` | 实现上述两方法（照抄 `getComposerDraftJson`/`setComposerDraftJson`）；**不**加进 `SESSION_COLUMNS`/`rowToSession`；`set` 更新 `updated_at_ms`（绑定切换是会话活动，语义比 composer 草稿更重） |
@@ -139,7 +139,7 @@ merge 规约（在 service 层应用，patch 与当前 config 合并后再 schem
 | 文件 | 改动 |
 |------|------|
 | `packages/core/src/public/agent.ts` | 导出 `resolveAgentForProject` 新签名兼容（已有导出，签名变更）；如新增类型一并导出 |
-| `packages/core/src/public/chat.ts` | 导出 `SessionAgentConfig`、`SessionAgentConfigPatch`、`DEFAULT_SESSION_AGENT_CONFIG`、`sessionAgentConfigSchema` |
+| `packages/core/src/public/chat.ts` | 导出 `SessionAgentConfig`、`SessionAgentConfigPatch`、`sessionAgentConfigSchema`（不导出静态默认常量，默认值由 service 运行时计算，见 `resolveWorkspaceAgentForNewSession`） |
 | `packages/core/src/service/chat/impl/session.service.ts`（deps 扩展） | `SessionServiceDeps` 加 `state`（workspace state 读取）+ `agentRegistry`（agent registry）；`createChatServices(conn, { state, agentRegistry })` 第二参可选，只透传给 session service。新建会话时用 `resolveWorkspaceAgentForNewSession({ state, agentRegistry })` helper 决定默认 agentId + modelId（workspace agentId 缺失时回落 registry 第一个 agent） |
 | `packages/core/test/package-exports-t0.test.ts` | 补 session agent config 导出契约 |
 
@@ -181,7 +181,7 @@ export type SessionAgentConfigDto = {
 | `SESSIONS_SET_MODEL_OVERRIDE` (`nm:sessions/setModelOverride`) | `{ sessionId: string; modelId: string \| null }` | `IpcResult<SessionAgentConfigDto>` |
 
 语义约定：
-- `SET_AGENT_BINDING` 的 `agentId` 必填（会话始终持有 agentId，不支持 null 解绑）；传具体 id 写入 session.agentId。原「传 null 解绑回 follow」语义作废。
+- `SET_AGENT_BINDING` 的 `agentId` 支持传 null：null 表示将该会话的 agentId 同步为 workspace 当前 agent（作为该会话的新默认值），会话始终持有 agentId，这不是解绑/回退，而是「同步到当前默认」。传具体 id 则写入 session.agentId。原「传 null 解绑回 follow」语义作废——新语义是「同步到 workspace 当前值」，列上始终落非 NULL 的 agentId。
 - `SET_MODEL_OVERRIDE` 传 `modelId: null` 表示清掉会话 model 覆盖（回退到 agent pin 指定的模型，UI 文案为「清除会话覆盖（使用 Agent 指定模型）」）；agentId 保持现状不动。
 - 两个 SET 都返回最新 `SessionAgentConfigDto`，UI 拿到后直接刷新本地状态（无需重新 GET）。
 - **channel 命名保留现状**（审查 P2 已认定 `SESSIONS_GET_AGENT_BINDING` 命名合理），后续不再改名，避免内部多份引用同步负担。
@@ -199,12 +199,12 @@ export type SessionAgentConfigDto = {
 
 | 文件 | 改动 |
 |------|------|
-| `apps/mobile/src/screens/stack/SessionDetailScreen.tsx` | **新文件**：详情页（由 AppHeader 三线按钮触发），承载聊天名 inline 编辑 + agent / model 卡片切换；去掉菜单列表；次要操作（查看提示词 / 压缩上下文 / 重命名 / 切换大模型 / 切换智能体）不重复，仍由 `SessionActionsDrawer`（⋯ 按钮触发）承载 |
+| `apps/mobile/src/screens/stack/SessionDetailScreen.tsx` | **新文件**：详情页（由 AppHeader 三线按钮触发），承载聊天名 inline 编辑 + agent / model 卡片切换；去掉菜单列表；次要操作（查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体）不重复，仍由 `SessionActionsDrawer`（⋯ 按钮触发）承载 |
 | `apps/mobile/src/navigation/types.ts` | `RootStackParamList` 加 `SessionDetail: { projectId: string; sessionId: string }` |
 | `apps/mobile/src/navigation/RootNavigator.tsx` | 三步注册：import + `withStackLayout('SessionDetail', SessionDetailScreen)` + `<Stack.Screen>` |
 | `apps/mobile/src/components/chat/ChatMetaBar.tsx` | `onOpenDetail` 由 AppHeader 三线按钮（MenuIcon）触发，跳转详情页；`agentLocked` 基于 `source === "project-custom"`（source 枚举收窄后无 `'session-bind'`，session 状态下 agent 可切换） |
 | `apps/mobile/src/screens/tabs/chat-tab/ChatConversationPanel.tsx` | **保留** `SessionActionsDrawer`（L345-361），由 `ChatComposer.onOpenMore`（⋯ 按钮）触发；picker（AgentPickerModal / ModelPickerModal）迁进详情页；详情页由三线按钮 navigate |
-| `apps/mobile/src/components/chrome/SessionActionsDrawer.tsx` | **保留不动**（⋯ 按钮触发，继续承载重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项；原 spec「删除」作废） |
+| `apps/mobile/src/components/chrome/SessionActionsDrawer.tsx` | **保留**（⋯ 按钮触发，继续承载查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体四项；重命名入口移除，改由详情页 inline 编辑承担；原 spec「删除整文件」作废） |
 | `apps/mobile/src/components/agent/AgentPickerModal.tsx` | `select` 接收 `sessionId`，分流写 session 绑定 vs workspace；`reload` 的 `currentId` 按 session 取 |
 | `apps/mobile/src/components/provider/ModelPickerModal.tsx` | 同上，`select` 分流；加 agent pin 检测禁用 |
 | `apps/mobile/src/services/agent-picker.ts` | 加 `loadSessionAgentPickerRows(runtime, sessionId)`、`selectSessionAgent(runtime, sessionId, agentId)` |
@@ -251,6 +251,7 @@ export type SessionAgentConfigDto = {
 - 新 session 级 channel 独立，会话内入口走新 channel，全局页走老 channel，互不干扰。
 - `resolveAgentForProject` 签名加 `sessionId` 是 breaking change，但所有调用点都在本仓库内（同 PR 同步改完即可）。core 的 `resolveSavedModelId` 移除 `workspaceModelId?` 入参同样在仓内同步改完。
 - **列 NULL 语义**：`getSessionAgentConfig` 读到列 NULL 视为**异常**，service 抛 `INVALID_ARGUMENT`（migration 保证无 NULL）。旧设计「NULL = follow 默认值」语义作废。
+- **event 触发 run-agent 的 workspace fallback 例外**：event 通道触发的 `run-agent.handler` 没有 session 上下文（无 `sessionId`），这条路径保留 `agent pin → workspace fallback` 作为例外；会话内入口（mobile/desktop UI）都带 `sessionId`，走 session 级解析链，不触发此例外。
 - **CLI-only 入口清理是 breaking change**：`runAgentTurn` 的 `cliModelId`/`definitionOverride`/`allowAssistantContinue`/`maxStepsOverride` 四个字段移除。CLI 是唯一消费方（desktop/mobile 全不传），同步改 CLI 兑底逻辑即可。core 探索审查 `core-explore-remediation` 已标记 `cliModelId` 为「声明但未接线」的死代码，本次一并清掉。`allowResumeWithoutInput` 不在清理范围（三端共用空续跑，见「Core 清理 CLI-only 漏入」小节）。
 
 ### copy 语义
@@ -263,7 +264,7 @@ export type SessionAgentConfigDto = {
 
 ### 解绑语义
 
-- 会话始终持有 agentId（必填），没有「解绑回 follow」路径，`SET_AGENT_BINDING` 不支持 null。原「`bind → follow` 列存 NULL」规约作废。model 可清除会话覆盖（`SET_MODEL_OVERRIDE` 传 null），回退到 agent pin 指定的模型（文案「清除会话覆盖（使用 Agent 指定模型）」），去掉「回退工作区」措辞。
+- 会话始终持有 agentId（必填），没有「解绑回 follow」路径。`SET_AGENT_BINDING` 允许传 null，语义为「同步到 workspace 当前 agent 作为该会话新默认值」（handler 内解析 workspace 当前 agentId 回填，registry 为空时回落首项），列上始终落非 NULL 的 agentId。原「`bind → follow` 列存 NULL」规约作废。model 可清除会话覆盖（`SET_MODEL_OVERRIDE` 传 null），回退到 agent pin 指定的模型（文案「清除会话覆盖（使用 Agent 指定模型）」），去掉「回退工作区」措辞。
 
 ## 详细实现步骤
 
@@ -305,7 +306,7 @@ export type SessionAgentConfigDto = {
 - Step 21 — phase-mobile-service — blocking: yes — qa: auto：`useChatTabScope.ts` `refreshChatMeta` 传 sessionId
 - Step 22 — phase-mobile-ui — blocking: no — qa: auto：新建 `SessionDetailScreen.tsx` + Stack 注册（types.ts + RootNavigator.tsx）
 - Step 23 — phase-mobile-ui — blocking: no — qa: auto：AppHeader 三线按钮（MenuIcon）跳详情页（navigate）；`agentLocked` 基于 `source === "project-custom"`（session 状态下 agent 可切换）
-- Step 24 — phase-mobile-ui — blocking: no — qa: auto：`ChatConversationPanel.tsx` **保留** `SessionActionsDrawer`（⋯ 按钮触发，承载五项次要操作）；picker 迁进详情页；详情页由三线按钮 navigate
+- Step 24 — phase-mobile-ui — blocking: no — qa: auto：`ChatConversationPanel.tsx` **保留** `SessionActionsDrawer`（⋯ 按钮触发，承载四项次要操作：查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体；重命名已移至详情页）；picker 迁进详情页；详情页由三线按钮 navigate
 - Step 25 — phase-mobile-ui — blocking: no — qa: auto：`AgentPickerModal`/`ModelPickerModal` select 分流（session vs workspace）；`SessionActionsDrawer.tsx` **保留不动**（原 spec「删除」作废）
 - Step 26 — phase-e2e-verify — blocking: no — qa: manual_user：mobile 真机验收详情页转场 + Android 返回键；desktop 验收模态抽屉交互（合并后用户执行）
 
@@ -350,7 +351,7 @@ export type SessionAgentConfigDto = {
 
 - T-M2 — blocking: no — `SessionDetailScreen` 渲染 + 操作（聊天名 inline 编辑 / 切模型 / 切智能体卡片）wiring 正确；不包含重命名 / 查看提示词 / 压缩上下文（这些由 `SessionActionsDrawer` 承载）
 - T-M3 — blocking: no — AppHeader 三线按钮跳详情页（navigate）
-- T-M4 — blocking: no — `ChatConversationPanel` **仍渲染** `SessionActionsDrawer`（⋯ 按钮触发，承载重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项，不删除）
+- T-M4 — blocking: no — `ChatConversationPanel` **仍渲染** `SessionActionsDrawer`（⋯ 按钮触发，承载查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体四项，重命名已移至详情页，不删除）
 - T-M5 — blocking: no — picker select 分流：会话内写 session 绑定，全局页写 workspace
 
 **集成**

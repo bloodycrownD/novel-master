@@ -9,7 +9,7 @@ dependency:
 
 ## 背景
 
-当前产品中，单个聊天会话的操作入口分散在多处：mobile 端是输入框旁的「更多」按钮触发的底部抽屉（`SessionActionsDrawer`，含聊天重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项），desktop 端是浮动会话操作菜单（`#session-actions-menu`，含重命名 / 压缩 / 切换模型 / 切换智能体）加底部 `WorkspaceFooter`（agent/model 切换 + token 占用）。用户想把这些散点收拢成一个类似 QQ 详情页的统一入口。
+当前产品中，单个聊天会话的操作入口分散在多处：mobile 端是输入框旁的「更多」按钮触发的底部抽屉（`SessionActionsDrawer`，原含聊天重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项，本迭代将重命名移至详情页 inline 编辑，保留其余四项），desktop 端是浮动会话操作菜单（`#session-actions-menu`，含重命名 / 压缩 / 切换模型 / 切换智能体）加底部 `WorkspaceFooter`（agent/model 切换 + token 占用）。用户想把这些散点收拢成一个类似 QQ 详情页的统一入口。
 
 同时，当前「切换模型 / 切换智能体」是**工作区/项目级**全局生效的——所有会话共享同一份配置。用户希望把模型/智能体的作用域下沉到**单聊（session）级别**：每个会话可以独立绑定一个 agent（引用 registry 里的 agent id，不私存完整配置内容），并独立覆盖 model，互不影响。
 
@@ -41,9 +41,9 @@ dependency:
 
 ### 包含范围
 
-- mobile 端新增聊天详情页（独立 Stack 路由，三线按钮触发），承载聊天名 inline 编辑 + agent / model 卡片切换；原 `SessionActionsDrawer` 由 ⋯ 按钮触发保留，继续承载重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项，详情页不重复。
+- mobile 端新增聊天详情页（独立 Stack 路由，三线按钮触发），承载聊天名 inline 编辑 + agent / model 卡片切换；原 `SessionActionsDrawer` 由 ⋯ 按钮触发保留，继续承载查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体四项（重命名移至详情页 inline 编辑），详情页不重复。
 - desktop 端新增聊天详情页（模态抽屉/弹窗呈现），由原会话操作入口改造触发，承载原浮动菜单 + 底部栏切换的能力。
-- 入口架构调整：mobile 的三线按钮（AppHeader 的 MenuIcon）跳详情页，⋯ 按钮（ChatComposer.onOpenMore）仍弹 `SessionActionsDrawer`（保留，承载重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项）；desktop 的 `#session-actions-menu` 会话操作菜单改造为打开详情抽屉（SessionDetailDrawer）。
+- 入口架构调整：mobile 的三线按钮（AppHeader 的 MenuIcon）跳详情页，⋯ 按钮（ChatComposer.onOpenMore）仍弹 `SessionActionsDrawer`（保留，承载查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体四项，重命名移至详情页）；desktop 的 `#session-actions-menu` 会话操作菜单改造为打开详情抽屉（SessionDetailDrawer）。
 - 单聊级 agent 配置：每个会话独立持有 agentId（引用 registry 中的 agent id，只存引用不私存完整 agent 配置内容），解析链为 `project custom 截断 > session.agentId`；session 始终有 agentId，无 follow / workspace 回退。
 - 单聊级 model 配置：会话可独立指定 modelId（可选），解析链为 `agent pin（definition.model）> session.modelId`；去掉 CLI flag 与 workspace 回退层。
 - 两级解析链：project custom 命中即截断（不读 session.agentId），否则用 session.agentId；model 同理，agent 带 pin 则截断（不读 session.modelId），否则用 session.modelId。无 workspace 回退层。workspace 全局仅作为「新建会话时复制的默认值来源」保留，不参与 session 运行时解析。
@@ -73,7 +73,7 @@ dependency:
 
 6. **保持 project-custom 锁定行为**：详情页内 agent 切换入口在 project-custom 状态下被禁用，并给出与现状一致的引导（提示去项目设置修改）。model 切换在 agent 带 pin 时禁用，无 pin 时可用。
 
-7. **入口架构调整**：mobile 三线按钮（AppHeader 的 MenuIcon）跳详情页，⋯ 按钮（ChatComposer.onOpenMore）仍弹 `SessionActionsDrawer`（保留，承载重命名 / 查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体五项，详情页不重复这些次要操作）；desktop 的 `#session-actions-menu` 会话操作菜单替换为详情抽屉（SessionDetailDrawer）。
+7. **入口架构调整**：mobile 三线按钮（AppHeader 的 MenuIcon）跳详情页，⋯ 按钮（ChatComposer.onOpenMore）仍弹 `SessionActionsDrawer`（保留，承载查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体四项，重命名移至详情页 inline 编辑，详情页不重复这些次要操作）；desktop 的 `#session-actions-menu` 会话操作菜单替换为详情抽屉（SessionDetailDrawer）。
 
 ## 验收标准
 

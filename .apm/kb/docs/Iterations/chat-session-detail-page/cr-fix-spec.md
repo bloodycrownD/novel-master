@@ -301,11 +301,11 @@
 
 | # | 条目 | 状态 | 处置 |
 | --- | --- | --- | --- |
-| 1 | `SessionActionsDrawer` 移除重命名（用户确认） | open | spec L207 / PRD L44 原写"保留不动含重命名"，需改为"保留四项，移除重命名"。下游同步。 |
-| 2 | `SET_AGENT_BINDING` null 语义登记（review-desktop/A-2） | open | spec「IPC DTO wire 形态」段落补一句：null = 同步到 workspace 当前 agent 作为该会话新默认值；会话始终持有 agentId，非解绑。下游同步。 |
-| 3 | run-agent.handler workspace fallback 例外（review-core/C-1） | open | spec「兼容性」段落补一条：event 触发的 run-agent 无 session 上下文，保留 agent pin → workspace fallback 作为例外。下游同步。 |
-| 4 | `DEFAULT_SESSION_AGENT_CONFIG` 删引用（review-core/A-2） | open | 删除 spec 两处引用，注明默认值由 service 运行时通过 `resolveWorkspaceAgentForNewSession` 计算，不提供静态常量。下游同步。 |
-| 5 | `SessionAgentConfigPatch` 改 partial overlay（用户决策 ①） | open（改代码不改 spec） | spec 本就写的是 partial，是代码偏离了 spec。本次只改代码（core A-1），业务 spec 无需改动。 |
+| 1 | `SessionActionsDrawer` 移除重命名（用户确认） | ✅ 已同步 | spec L44/L202/L207/L308/L354 + PRD L12/L44/L46/L76 均已改为「四项，移除重命名，详情页 inline 编辑承担」。 |
+| 2 | `SET_AGENT_BINDING` null 语义登记（review-desktop/A-2） | ✅ 已同步 | spec「IPC DTO wire 形态」+「解绑语义」均已补 null = 同步到 workspace 当前 agent 作为新默认值，会话始终持有 agentId，非解绑。 |
+| 3 | run-agent.handler workspace fallback 例外（review-core/C-1） | ✅ 已同步 | spec「向后兼容」段补一条：event 触发的 run-agent 无 session 上下文，保留 agent pin → workspace fallback 作为例外。 |
+| 4 | `DEFAULT_SESSION_AGENT_CONFIG` 删引用（review-core/A-2） | ✅ 已同步 | spec L100/L142 两处已删引用，注明默认值由 service 运行时通过 `resolveWorkspaceAgentForNewSession` 计算。 |
+| 5 | `SessionAgentConfigPatch` 改 partial overlay（用户决策 ①） | ✅ 代码已改，spec 无需动 | spec 本就写的是 partial，代码已对齐（commit 7adcfb2c），业务 spec 无需改动。 |
 
 ## Open questions / 待拍板
 
