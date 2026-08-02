@@ -1,6 +1,6 @@
 {
   "name": "@novel-master/mobile",
-  "version": "1.4.14",
+  "version": "1.4.15"
   "private": true,
   "//android": "禁止移除 Metro 自动启动：默认 android 不得加 --no-packager；端口占用再用 android:no-packager。勿再改回 no-packager 默认。",
   "scripts": {

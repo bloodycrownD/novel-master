@@ -6,6 +6,27 @@
 
 ## [Unreleased]
 
+## [1.4.15] - 2026-08-03
+
+### 新增
+
+- **聊天会话详情页（QQ 式）**：Mobile 顶部右侧三线按钮现在打开会话详情页，承载聊天名点击 inline 编辑、当前智能体 / 当前大模型卡片切换；⋯ 按钮仍弹出原 `SessionActionsDrawer`，继续承载查看提示词 / 压缩上下文 / 切换大模型 / 切换智能体（重命名入口收敛到详情页 inline 编辑）。Desktop 将原会话操作菜单与底部 `WorkspaceFooter` 统一收拢为模态抽屉 `SessionDetailDrawer`，入口更集中
+- **单聊级智能体配置**：每个会话现在独立绑定一个 agent（引用 registry agent id，不私存配置内容），解析链为「项目 custom 截断 > session.agentId」；agent 在 registry 改了，所有引用该 agent 的会话自动跟随。项目 custom 命中时截断，agent 切换入口禁用并给出引导
+- **单聊级模型配置**：每个会话可独立指定 modelId，解析链为「agent pin（definition.model）> session.modelId」；agent 带 pin 时截断（model 切换入口禁用），否则用 session.modelId
+- **两级解析链**：移除 workspace 运行时回退层；agent 链为 `project custom 截断 > session.agentId`，model 链为 `agent pin > session.modelId`。workspace 仅作为「新建会话时复制的默认值来源」，会话创建后即独立持有配置，不再 follow / 回退
+
+### 变更
+
+- **会话配置存为 partial overlay**：`SessionAgentConfigPatch` 改为 partial overlay——切换 agent 时保留 modelId，切换 model 时保留 agentId；`modelId: null` 表示清除会话 model 覆盖（回退到 agent pin 指定的模型）
+- **`SET_AGENT_BINDING` null 语义**：允许传 null，语义为「同步到 workspace 当前 agent 作为该会话新默认值」（会话始终持有 agentId，这不是解绑/回退，而是同步到当前默认）
+- **核心层清理**：移除 CLI-only 入口（`cliModelId` / `definitionOverride` / `allowAssistantContinue` / `maxStepsOverride`）与 workspace 运行时回退层；core 与 mobile/desktop 更干净，CLI 降级为本地测试用途
+
+### 修复
+
+- **`source='none'` 时卡片锁定**：当 session.agentId 指向已删 agent 时，详情页 agent / model 卡片现在会锁定不可点击，Mobile 与 Desktop 口径一致
+- **ModelPicker session 模式误高亮**：session 模式下 modelId 为空时不再回退 workspace 当前模型去高亮，避免误以为会话已绑模型
+- **chat-prompt-tokens DRY**：主路径与 fallback 各自重复读取 sessionConfig 的问题已抽 helper 消除
+
 ## [1.4.14] - 2026-08-02
 
 ### 修复
