@@ -246,4 +246,34 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
     expect(json).toContain('隐藏消息');
     expect(json).toContain('已隐藏');
   });
+
+  it('长消息点击卡片展开后显示完整文本', async () => {
+    const longText = '这是一段很长的文本'.repeat(30);
+    mockSearchMessages.mockResolvedValue([
+      makeMessage({seq: 5, text: longText}),
+    ]);
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+
+    // 收起态：截断 + 「展开全文」提示
+    let json = JSON.stringify(tree.toJSON());
+    expect(json).toContain('展开全文');
+
+    // 点击卡片展开
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-result-card'}).props.onPress();
+    });
+
+    // 展开态：显示完整文本 + 「收起」提示
+    json = JSON.stringify(tree.toJSON());
+    expect(json).toContain(longText);
+    expect(json).toContain('收起');
+  });
 });

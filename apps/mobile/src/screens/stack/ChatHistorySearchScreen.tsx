@@ -9,6 +9,8 @@
  *
  * 布局只有一排搜索栏（关键词输入框 + 搜索按钮），下方 FlatList 占满剩余屏幕。
  * 返回由导航 header 的 showBack 处理，组件内不再单独放返回按钮。
+ *
+ * 点击卡片可以展开/收起完整文本内容，避免长消息被摘要截断后无法阅读。
  */
 import React, {useCallback, useMemo, useState} from 'react';
 import {
@@ -35,19 +37,26 @@ const SEARCH_LIMIT = 50;
 /**
  * 把消息里的 TextBlock 拼成单行摘要（忽略 tool_use / thinking 等非对话块）。
  * 跟 core 的 `messageMatchesKeyword` 扫描范围保持一致，避免「命中了但卡片看不到」。
+ *
+ * 摘要只用于收起态预览；展开后用 `extractFullText` 拿完整文本。
  */
 function extractMessageSummary(message: ChatMessage, max = 200): string {
+  const full = extractFullText(message);
+  if (full.length <= max) {
+    return full || '（无文本内容）';
+  }
+  return full.slice(0, max) + '…';
+}
+
+/** 拼接消息所有 TextBlock 的完整文本（不截断）。 */
+function extractFullText(message: ChatMessage): string {
   const parts: string[] = [];
   for (const block of message.content.blocks) {
     if (block.type === 'text' && block.text) {
       parts.push(block.text);
     }
   }
-  const full = parts.join('\n').trim();
-  if (full.length <= max) {
-    return full || '（无文本内容）';
-  }
-  return full.slice(0, max) + '…';
+  return parts.join('\n').trim();
 }
 
 /** 角色标签：user/assistant 直出，其他角色归一为「系统」。 */
@@ -215,13 +224,18 @@ export function ChatHistorySearchScreen() {
         onEndReachedThreshold={0.3}
         ListFooterComponent={ListFooterComponent}
         ListEmptyComponent={ListEmptyComponent}
-        contentContainerStyle={styles.resultContent}
+        contentContainerStyle={
+          results.length === 0
+            ? styles.resultContentEmpty
+            : styles.resultContent
+        }
       />
     </View>
   );
 }
 
-/** 单条搜索结果卡片：角色标签 + seq + 摘要；hidden 时整体降透明度。 */
+/** 单条搜索结果卡片：角色标签 + seq + 摘要；hidden 时整体降透明度。
+ *  点击卡片切换展开/收起——展开后显示完整文本（不限行数）。 */
 function MessageResultCard({
   message,
   tokens,
@@ -229,8 +243,15 @@ function MessageResultCard({
   message: ChatMessage;
   tokens: ThemeTokens;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = extractMessageSummary(message);
+  const fullText = extractFullText(message);
+  const canExpand = fullText.length > 200 || fullText.includes('\n');
+
   return (
-    <View
+    <Pressable
+      testID="chat-history-search-result-card"
+      onPress={() => canExpand && setExpanded(prev => !prev)}
       style={[
         styles.resultCard,
         {
@@ -254,10 +275,15 @@ function MessageResultCard({
       </View>
       <Text
         style={[styles.resultBody, {color: tokens.text}]}
-        numberOfLines={4}>
-        {extractMessageSummary(message)}
+        numberOfLines={expanded ? undefined : 4}>
+        {expanded ? fullText || '（无文本内容）' : summary}
       </Text>
-    </View>
+      {canExpand ? (
+        <Text style={[styles.expandHint, {color: tokens.primary}]}>
+          {expanded ? '收起' : '展开全文'}
+        </Text>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -285,6 +311,7 @@ const styles = StyleSheet.create({
   error: {fontSize: 12, paddingHorizontal: 2},
   resultList: {flex: 1},
   resultContent: {padding: 16, gap: 10},
+  resultContentEmpty: {flex: 1, padding: 16, gap: 10},
   resultCard: {
     borderRadius: 12,
     paddingHorizontal: 14,
@@ -299,5 +326,6 @@ const styles = StyleSheet.create({
   resultBody: {fontSize: 14, lineHeight: 20},
   emptyWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
   empty: {fontSize: 14, textAlign: 'center'},
+  expandHint: {fontSize: 13, fontWeight: '600', paddingTop: 4},
   hint: {fontSize: 12, textAlign: 'center', paddingVertical: 8},
 });
