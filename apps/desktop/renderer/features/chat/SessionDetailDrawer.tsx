@@ -46,6 +46,7 @@ import {
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
+import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
 import { formatTokenCount } from "@/utils/format-token-count";
 
 interface SessionDetailDrawerProps {
@@ -92,6 +93,7 @@ export function SessionDetailDrawer({
     Array<{ savedModelId: string; label: string }>
   >([]);
   const [compactOpen, setCompactOpen] = useState(false);
+  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
 
   // 聊天名行内编辑状态
   const [editingName, setEditingName] = useState(false);
@@ -246,6 +248,13 @@ export function SessionDetailDrawer({
           </button>
         </div>
 
+        {searchPanelOpen ? (
+          <ChatHistorySearchPanel
+            projectId={projectId}
+            sessionId={sessionId}
+            onClose={() => setSearchPanelOpen(false)}
+          />
+        ) : (
         <div className="session-detail-drawer__body">
           {/* 聊天名：点击进入行内编辑 */}
           <div className="session-detail-drawer__name-row">
@@ -427,8 +436,20 @@ export function SessionDetailDrawer({
             >
               压缩上下文
             </button>
+            <span className="session-detail-drawer__dot" aria-hidden="true">
+              ·
+            </span>
+            <button
+              type="button"
+              className="session-detail-drawer__link"
+              data-session-detail-action="search-history"
+              onClick={() => setSearchPanelOpen(true)}
+            >
+              查找聊天记录
+            </button>
           </div>
         </div>
+        )}
 
         {/* 会话必须持有 agentId，agent picker 不允许 none */}
         <PickerModal

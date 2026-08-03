@@ -117,6 +117,34 @@ describe("SessionDetailDrawer (T-D3)", () => {
   });
 });
 
+describe("SessionDetailDrawer 聊天记录查询入口 (T-DR1)", () => {
+  it("源码：secondary 区有「查找聊天记录」入口 + ChatHistorySearchPanel 切换", () => {
+    const src = readDrawer();
+    // 文案与 data hook
+    assert.match(src, /查找聊天记录/);
+    assert.match(src, /data-session-detail-action="search-history"/);
+    // import 查询面板
+    assert.match(src, /import \{ ChatHistorySearchPanel \}/);
+    // searchPanelOpen 切换 state
+    assert.match(src, /searchPanelOpen/);
+    assert.match(src, /setSearchPanelOpen\(true\)/);
+    // 打开时渲染查询面板
+    assert.match(src, /<ChatHistorySearchPanel/);
+  });
+
+  it("源码：ChatHistorySearchPanel 调用 ipcMessagesSearch（不套 regex-apply）", () => {
+    const panelSrc = readFileSync(
+      join(rendererRoot, "features", "chat", "ChatHistorySearchPanel.tsx"),
+      "utf8",
+    );
+    assert.match(panelSrc, /ipcMessagesSearch/);
+    // 复用 desktop MessageList 渲染命中结果
+    assert.match(panelSrc, /MessageList/);
+    // 空态文案
+    assert.match(panelSrc, /未找到匹配的聊天记录/);
+  });
+});
+
 describe("App.tsx 入口替换 (T-D4)", () => {
   it("不再渲染 #session-actions-menu；改为挂载 SessionDetailDrawer", () => {
     const appSrc = readFileSync(join(rendererRoot, "App.tsx"), "utf8");
