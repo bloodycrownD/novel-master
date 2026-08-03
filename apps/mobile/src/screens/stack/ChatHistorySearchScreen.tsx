@@ -7,7 +7,8 @@
  *
  * 搜索始终包含隐藏消息——hidden 的卡片整体降透明度，与「已隐藏」语义一致。
  *
- * 布局：顶部「搜索栏 + 工具条」两行固定区域，下方 FlatList 占满剩余屏幕。
+ * 布局：VSCode 搜索框风格——顶部一行搜索栏（「更多」按钮 + 输入框 + 搜索 + 返回），
+ * 点「更多」展开筛选面板（正则 / 大小写 / 日期三个 toggle），下方 FlatList 占满剩余屏幕。
  */
 import React, {useCallback, useMemo, useState} from 'react';
 import {
@@ -125,6 +126,8 @@ export function ChatHistorySearchScreen() {
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
   /** 当前展开的日期选择器字段，null 表示收起。 */
   const [openPicker, setOpenPicker] = useState<DateField | null>(null);
+  /** 筛选面板是否展开（默认收起，符合 VSCode 搜索框默认隐藏高级选项的交互）。 */
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [results, setResults] = useState<readonly ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -216,12 +219,17 @@ export function ChatHistorySearchScreen() {
   );
 
   /**
-   * 点日期按钮的策略：从头开始重新走一遍选择流程。
-   * 如果两端都还没选，或者已经选完，都先弹 from；选完 from 自动弹 to。
+   * 点日期按钮的策略：VSCode 风格——已经有日期范围就直接清空还原，
+   * 没有就弹 from picker，选完 from 自动接力弹 to picker。
    */
   const onPressDate = useCallback(() => {
+    if (fromDate != null || toDate != null) {
+      setFromDate(undefined);
+      setToDate(undefined);
+      return;
+    }
     setOpenPicker('from');
-  }, []);
+  }, [fromDate, toDate]);
 
   const onBack = useCallback(() => {
     navigation.goBack();
@@ -265,8 +273,30 @@ export function ChatHistorySearchScreen() {
           styles.header,
           {borderBottomColor: tokens.borderLight},
         ]}>
-        {/* 第 1 行：关键词输入框 + 搜索按钮 */}
+        {/* 第 1 行：更多按钮 + 关键词输入框 + 搜索按钮 + 返回 */}
         <View style={styles.searchRow}>
+          {/* 「更多」按钮：切换筛选面板展开/收起，激活态高亮提示当前有筛选可见 */}
+          <Pressable
+            testID="chat-history-search-more"
+            onPress={() => setFiltersOpen(v => !v)}
+            accessibilityLabel="更多筛选"
+            style={[
+              styles.moreBtn,
+              {
+                backgroundColor: filtersOpen
+                  ? tokens.surfaceElevated
+                  : tokens.surface,
+                borderColor: filtersOpen ? tokens.border : tokens.borderLight,
+              },
+            ]}>
+            <Text
+              style={[
+                styles.moreText,
+                {color: filtersOpen ? tokens.text : tokens.textSecondary},
+              ]}>
+              {'\u22EF'}
+            </Text>
+          </Pressable>
           <FormTextInput
             testID="chat-history-search-keyword"
             tokens={tokens}
@@ -282,7 +312,7 @@ export function ChatHistorySearchScreen() {
             disabled={loading}
             style={[
               styles.submitBtn,
-              {backgroundColor: tokens.primary, opacity: loading ? 0.7 : 1},
+              {backgroundColor: tokens.primary, opacity: loading ? 0.6 : 1},
             ]}
             accessibilityLabel="查询聊天记录">
             {loading ? (
@@ -291,94 +321,7 @@ export function ChatHistorySearchScreen() {
               <Text style={styles.submitText}>搜索</Text>
             )}
           </Pressable>
-        </View>
-
-        {/* 第 2 行：工具条——精准/正则 + 大小写 + 日期 + 返回 */}
-        <View style={styles.toolbar}>
-          {/* 精准/正则 pill 切换 */}
-          <Pressable
-            testID="chat-history-search-mode-literal"
-            onPress={() => setMode('literal')}
-            style={[
-              styles.pill,
-              {
-                backgroundColor:
-                  mode === 'literal' ? tokens.primary : tokens.surface,
-                borderColor:
-                  mode === 'literal' ? tokens.primary : tokens.borderLight,
-              },
-            ]}>
-            <Text
-              style={[
-                styles.pillText,
-                {color: mode === 'literal' ? '#FFFFFF' : tokens.textSecondary},
-              ]}>
-              精准
-            </Text>
-          </Pressable>
-          <Pressable
-            testID="chat-history-search-mode-regex"
-            onPress={() => setMode('regex')}
-            style={[
-              styles.pill,
-              {
-                backgroundColor:
-                  mode === 'regex' ? tokens.primary : tokens.surface,
-                borderColor: mode === 'regex' ? tokens.primary : tokens.borderLight,
-              },
-            ]}>
-            <Text
-              style={[
-                styles.pillText,
-                {color: mode === 'regex' ? '#FFFFFF' : tokens.textSecondary},
-              ]}>
-              正则
-            </Text>
-          </Pressable>
-
-          {/* Aa 大小写 toggle */}
-          <Pressable
-            testID="chat-history-search-case-sensitive"
-            onPress={() => setCaseSensitive(v => !v)}
-            style={[
-              styles.square,
-              {
-                backgroundColor: caseSensitive ? tokens.primary : tokens.surface,
-                borderColor: caseSensitive ? tokens.primary : tokens.borderLight,
-              },
-            ]}>
-            <Text
-              style={[
-                styles.squareText,
-                {color: caseSensitive ? '#FFFFFF' : tokens.textSecondary},
-              ]}>
-              Aa
-            </Text>
-          </Pressable>
-
-          {/* 日期按钮：紧凑显示当前日期范围，点击重新选 */}
-          <Pressable
-            testID="chat-history-search-date"
-            onPress={onPressDate}
-            style={[
-              styles.pill,
-              {
-                backgroundColor: dateActive
-                  ? tokens.surfaceElevated
-                  : tokens.surface,
-                borderColor: dateActive ? tokens.primary : tokens.borderLight,
-              },
-            ]}>
-            <Text
-              style={[
-                styles.pillText,
-                {color: dateActive ? tokens.primary : tokens.textSecondary},
-              ]}>
-              {dateLabel}
-            </Text>
-          </Pressable>
-
-          {/* 返回按钮推到最右，作为测试钩子 + 备用返回入口 */}
+          {/* 返回按钮：作为测试钩子 + 备用返回入口，保持不显眼 */}
           <Pressable
             testID="chat-history-search-back"
             onPress={onBack}
@@ -390,7 +333,83 @@ export function ChatHistorySearchScreen() {
           </Pressable>
         </View>
 
-        {/* 错误信息紧凑显示在工具条下方 */}
+        {/* 第 2 行（条件渲染）：筛选面板——正则 + 大小写 + 日期三个 toggle */}
+        {filtersOpen ? (
+          <View style={styles.toolbar}>
+            {/* 正则 .* 切换：再次点击切回精准 */}
+            <Pressable
+              testID="chat-history-search-mode-regex"
+              onPress={() =>
+                setMode(m => (m === 'regex' ? 'literal' : 'regex'))
+              }
+              style={[
+                styles.pill,
+                {
+                  backgroundColor:
+                    mode === 'regex' ? tokens.primary : tokens.surface,
+                  borderColor:
+                    mode === 'regex' ? tokens.primary : tokens.borderLight,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.pillText,
+                  styles.pillTextMono,
+                  {color: mode === 'regex' ? '#FFFFFF' : tokens.textSecondary},
+                ]}>
+                .*
+              </Text>
+            </Pressable>
+
+            {/* Aa 大小写 toggle */}
+            <Pressable
+              testID="chat-history-search-case-sensitive"
+              onPress={() => setCaseSensitive(v => !v)}
+              style={[
+                styles.pill,
+                {
+                  backgroundColor: caseSensitive
+                    ? tokens.primary
+                    : tokens.surface,
+                  borderColor: caseSensitive
+                    ? tokens.primary
+                    : tokens.borderLight,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.pillText,
+                  {color: caseSensitive ? '#FFFFFF' : tokens.textSecondary},
+                ]}>
+                Aa
+              </Text>
+            </Pressable>
+
+            {/* 日期按钮：紧凑显示当前日期范围，有日期时点击清空，无日期时点击弹 picker */}
+            <Pressable
+              testID="chat-history-search-date"
+              onPress={onPressDate}
+              style={[
+                styles.pill,
+                {
+                  backgroundColor: dateActive
+                    ? tokens.primary
+                    : tokens.surface,
+                  borderColor: dateActive ? tokens.primary : tokens.borderLight,
+                },
+              ]}>
+              <Text
+                style={[
+                  styles.pillText,
+                  {color: dateActive ? '#FFFFFF' : tokens.textSecondary},
+                ]}>
+                {dateLabel}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {/* 错误信息紧凑显示在筛选面板下方 */}
         {error != null ? (
           <Text style={[styles.error, {color: tokens.danger}]} numberOfLines={2}>
             {error}
@@ -494,19 +513,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   submitText: {color: '#FFFFFF', fontSize: 15, fontWeight: '700'},
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  pillText: {fontSize: 13, fontWeight: '600'},
-  square: {
+  moreBtn: {
     width: 36,
     height: 36,
     borderRadius: 8,
@@ -514,9 +521,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
   },
-  squareText: {fontSize: 14, fontWeight: '700'},
+  moreText: {fontSize: 20, fontWeight: '700'},
+  toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  pillText: {fontSize: 15, fontWeight: '700'},
+  pillTextMono: {fontFamily: 'monospace'},
   backBtn: {
-    marginLeft: 'auto',
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
