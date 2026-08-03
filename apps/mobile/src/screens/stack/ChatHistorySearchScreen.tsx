@@ -6,12 +6,14 @@
  * onEndReached 透传、且绑定 streaming 语境，搜索结果场景错配）。
  *
  * 搜索始终包含隐藏消息——hidden 的卡片整体降透明度，与「已隐藏」语义一致。
+ *
+ * 布局：顶部「搜索栏 + 工具条」两行固定区域，下方 FlatList 占满剩余屏幕。
  */
 import React, {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -22,10 +24,9 @@ import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
 import {FormTextInput} from '../../components/form/FormTextInput';
-import {FormSwitchRow} from '../../components/form/FormSwitchRow';
-import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
+import type {ThemeTokens} from '../../theme/tokens';
 import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'ChatHistorySearch'>;
@@ -62,6 +63,30 @@ function formatDate(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+/** 把 Date 折算成 MM-DD 简写，给日期按钮文字用，避免太长挤占工具条。 */
+function formatDateShort(date: Date): string {
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${m}-${d}`;
+}
+
+/**
+ * 根据当前已选的 from/to 计算日期按钮上显示的文字。
+ * 没选就显示「日期」，只选一端就显示「从 xx」「至 xx」，两端都选就显示区间。
+ */
+function dateRangeLabel(from: Date | undefined, to: Date | undefined): string {
+  if (from != null && to != null) {
+    return `${formatDateShort(from)} ~ ${formatDateShort(to)}`;
+  }
+  if (from != null) {
+    return `从 ${formatDateShort(from)}`;
+  }
+  if (to != null) {
+    return `至 ${formatDateShort(to)}`;
+  }
+  return '日期';
 }
 
 /** 把 Date 折算成搜索边界 ms：start=false 取当天 00:00:00.000，true 取 23:59:59.999。 */
@@ -180,13 +205,23 @@ export function ChatHistorySearchScreen() {
       }
       if (field === 'from') {
         setFromDate(date);
+        // 选完 from 之后自动接力弹 to，让用户一次性把范围选完。
+        setOpenPicker('to');
       } else {
         setToDate(date);
+        setOpenPicker(null);
       }
-      setOpenPicker(null);
     },
     [],
   );
+
+  /**
+   * 点日期按钮的策略：从头开始重新走一遍选择流程。
+   * 如果两端都还没选，或者已经选完，都先弹 from；选完 from 自动弹 to。
+   */
+  const onPressDate = useCallback(() => {
+    setOpenPicker('from');
+  }, []);
 
   const onBack = useCallback(() => {
     navigation.goBack();
@@ -194,139 +229,187 @@ export function ChatHistorySearchScreen() {
 
   const showEmpty = hasSearched && !loading && results.length === 0;
 
+  const dateActive = fromDate != null || toDate != null;
+  const dateLabel = dateRangeLabel(fromDate, toDate);
+
+  const renderItem = useCallback(
+    ({item}: {item: ChatMessage}) => (
+      <MessageResultCard message={item} tokens={tokens} />
+    ),
+    [tokens],
+  );
+
+  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+
+  const ListFooterComponent = loadingMore ? (
+    <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+      正在加载更早的记录…
+    </Text>
+  ) : null;
+
+  const ListEmptyComponent = showEmpty ? (
+    <View style={styles.emptyWrap}>
+      <Text
+        style={[styles.empty, {color: tokens.textSecondary}]}
+        testID="chat-history-search-empty">
+        未找到匹配的聊天记录
+      </Text>
+    </View>
+  ) : null;
+
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <ScrollView
-        style={styles.conditionScroll}
-        contentContainerStyle={styles.conditionContent}
-        keyboardShouldPersistTaps="handled">
-        <FormTextInput
-          testID="chat-history-search-keyword"
-          tokens={tokens}
-          value={keyword}
-          onChangeText={setKeyword}
-          placeholder="输入关键词，留空列出全部"
-          accessibilityLabel="搜索关键词输入框"
-        />
-
-        <View style={styles.controlRow}>
-          <SegmentedControl<SearchMode>
+      {/* 顶部：搜索栏 + 工具条，固定区域，不参与滚动。 */}
+      <View
+        style={[
+          styles.header,
+          {borderBottomColor: tokens.borderLight},
+        ]}>
+        {/* 第 1 行：关键词输入框 + 搜索按钮 */}
+        <View style={styles.searchRow}>
+          <FormTextInput
+            testID="chat-history-search-keyword"
             tokens={tokens}
-            value={mode}
-            onChange={value => setMode(value)}
-            options={[
-              {value: 'literal', label: '精准', testID: 'chat-history-search-mode-literal'},
-              {value: 'regex', label: '正则', testID: 'chat-history-search-mode-regex'},
+            value={keyword}
+            onChangeText={setKeyword}
+            placeholder="输入关键词，留空列出全部"
+            accessibilityLabel="搜索关键词输入框"
+            style={styles.keywordInput}
+          />
+          <Pressable
+            testID="chat-history-search-submit"
+            onPress={onSubmitSearch}
+            disabled={loading}
+            style={[
+              styles.submitBtn,
+              {backgroundColor: tokens.primary, opacity: loading ? 0.7 : 1},
             ]}
-          />
+            accessibilityLabel="查询聊天记录">
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitText}>搜索</Text>
+            )}
+          </Pressable>
         </View>
 
-        <View
-          style={[
-            styles.switchCard,
-            {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
-          ]}>
-          <FormSwitchRow
-            label="区分大小写"
-            description="关闭时精准匹配忽略大小写、正则自动加 i flag"
-            tokens={tokens}
-            value={caseSensitive}
-            onValueChange={setCaseSensitive}
-            testID="chat-history-search-case-sensitive"
-          />
-        </View>
-
-        <View style={styles.dateRow}>
-          <DateChip
-            testID="chat-history-search-from"
-            label="起始日期"
-            value={fromDate != null ? formatDate(fromDate) : '不限'}
-            onPress={() => setOpenPicker('from')}
-            tokens={tokens}
-          />
-          <DateChip
-            testID="chat-history-search-to"
-            label="结束日期"
-            value={toDate != null ? formatDate(toDate) : '不限'}
-            onPress={() => setOpenPicker('to')}
-            tokens={tokens}
-          />
-        </View>
-
-        <Pressable
-          testID="chat-history-search-submit"
-          onPress={onSubmitSearch}
-          disabled={loading}
-          style={[
-            styles.submitBtn,
-            {
-              backgroundColor: tokens.primary,
-              opacity: loading ? 0.6 : 1,
-            },
-          ]}
-          accessibilityLabel="查询聊天记录">
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitText}>查询</Text>
-          )}
-        </Pressable>
-
-        {error != null ? (
-          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-        ) : null}
-      </ScrollView>
-
-      {/* 结果列表：自渲染 FlatList，不复用 chat/MessageList。 */}
-      <View style={[styles.resultSection, {backgroundColor: tokens.background}]}>
-        {loadingMore ? (
-          <ActivityIndicator style={styles.loadingMore} color={tokens.primary} />
-        ) : null}
-        {results.length > 0 ? (
-          <ScrollView
-            style={styles.resultScroll}
-            contentContainerStyle={styles.resultContent}
-            onScroll={({nativeEvent}) => {
-              const {layoutMeasurement, contentOffset, contentSize} = nativeEvent;
-              const distanceFromEnd =
-                contentSize.height - layoutMeasurement.height - contentOffset.y;
-              if (distanceFromEnd < 80) {
-                onEndReached();
-              }
-            }}
-            scrollEventThrottle={32}>
-            {results.map(message => (
-              <MessageResultCard
-                key={message.id}
-                message={message}
-                tokens={tokens}
-              />
-            ))}
-            {loadingMore ? (
-              <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-                正在加载更早的记录…
-              </Text>
-            ) : null}
-          </ScrollView>
-        ) : showEmpty ? (
-          <View style={styles.emptyWrap}>
+        {/* 第 2 行：工具条——精准/正则 + 大小写 + 日期 + 返回 */}
+        <View style={styles.toolbar}>
+          {/* 精准/正则 pill 切换 */}
+          <Pressable
+            testID="chat-history-search-mode-literal"
+            onPress={() => setMode('literal')}
+            style={[
+              styles.pill,
+              {
+                backgroundColor:
+                  mode === 'literal' ? tokens.primary : tokens.surface,
+                borderColor:
+                  mode === 'literal' ? tokens.primary : tokens.borderLight,
+              },
+            ]}>
             <Text
-              style={[styles.empty, {color: tokens.textSecondary}]}
-              testID="chat-history-search-empty">
-              未找到匹配的聊天记录
+              style={[
+                styles.pillText,
+                {color: mode === 'literal' ? '#FFFFFF' : tokens.textSecondary},
+              ]}>
+              精准
             </Text>
-          </View>
+          </Pressable>
+          <Pressable
+            testID="chat-history-search-mode-regex"
+            onPress={() => setMode('regex')}
+            style={[
+              styles.pill,
+              {
+                backgroundColor:
+                  mode === 'regex' ? tokens.primary : tokens.surface,
+                borderColor: mode === 'regex' ? tokens.primary : tokens.borderLight,
+              },
+            ]}>
+            <Text
+              style={[
+                styles.pillText,
+                {color: mode === 'regex' ? '#FFFFFF' : tokens.textSecondary},
+              ]}>
+              正则
+            </Text>
+          </Pressable>
+
+          {/* Aa 大小写 toggle */}
+          <Pressable
+            testID="chat-history-search-case-sensitive"
+            onPress={() => setCaseSensitive(v => !v)}
+            style={[
+              styles.square,
+              {
+                backgroundColor: caseSensitive ? tokens.primary : tokens.surface,
+                borderColor: caseSensitive ? tokens.primary : tokens.borderLight,
+              },
+            ]}>
+            <Text
+              style={[
+                styles.squareText,
+                {color: caseSensitive ? '#FFFFFF' : tokens.textSecondary},
+              ]}>
+              Aa
+            </Text>
+          </Pressable>
+
+          {/* 日期按钮：紧凑显示当前日期范围，点击重新选 */}
+          <Pressable
+            testID="chat-history-search-date"
+            onPress={onPressDate}
+            style={[
+              styles.pill,
+              {
+                backgroundColor: dateActive
+                  ? tokens.surfaceElevated
+                  : tokens.surface,
+                borderColor: dateActive ? tokens.primary : tokens.borderLight,
+              },
+            ]}>
+            <Text
+              style={[
+                styles.pillText,
+                {color: dateActive ? tokens.primary : tokens.textSecondary},
+              ]}>
+              {dateLabel}
+            </Text>
+          </Pressable>
+
+          {/* 返回按钮推到最右，作为测试钩子 + 备用返回入口 */}
+          <Pressable
+            testID="chat-history-search-back"
+            onPress={onBack}
+            accessibilityLabel="返回"
+            style={styles.backBtn}>
+            <Text style={[styles.backText, {color: tokens.textSecondary}]}>
+              ←
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* 错误信息紧凑显示在工具条下方 */}
+        {error != null ? (
+          <Text style={[styles.error, {color: tokens.danger}]} numberOfLines={2}>
+            {error}
+          </Text>
         ) : null}
       </View>
 
-      {/* 返回按钮：测试用 testID 钩子；运行时也方便单手返回。 */}
-      <Pressable
-        testID="chat-history-search-back"
-        onPress={onBack}
-        accessibilityLabel="返回"
-        style={[styles.backBtn, {backgroundColor: tokens.surface, borderColor: tokens.borderLight}]}>
-        <Text style={[styles.backText, {color: tokens.text}]}>返回</Text>
-      </Pressable>
+      {/* 结果列表：FlatList 占满剩余屏幕，同时承担分页加载。 */}
+      <FlatList
+        style={styles.resultList}
+        data={results}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={ListFooterComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        contentContainerStyle={styles.resultContent}
+      />
 
       {openPicker === 'from' ? (
         <DateTimePicker
@@ -350,44 +433,13 @@ export function ChatHistorySearchScreen() {
   );
 }
 
-/** 日期选择触发按钮：label 在上、当前值在下，整体像一张窄卡片。 */
-function DateChip({
-  label,
-  value,
-  onPress,
-  tokens,
-  testID,
-}: {
-  label: string;
-  value: string;
-  onPress: () => void;
-  tokens: typeof import('../../theme/tokens').lightTheme;
-  testID: string;
-}) {
-  return (
-    <Pressable
-      testID={testID}
-      onPress={onPress}
-      style={[
-        styles.dateChip,
-        {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
-      ]}
-      accessibilityLabel={label}>
-      <Text style={[styles.dateChipLabel, {color: tokens.textSecondary}]}>
-        {label}
-      </Text>
-      <Text style={[styles.dateChipValue, {color: tokens.text}]}>{value}</Text>
-    </Pressable>
-  );
-}
-
 /** 单条搜索结果卡片：角色标签 + seq + 摘要；hidden 时整体降透明度。 */
 function MessageResultCard({
   message,
   tokens,
 }: {
   message: ChatMessage;
-  tokens: typeof import('../../theme/tokens').lightTheme;
+  tokens: ThemeTokens;
 }) {
   return (
     <View
@@ -423,37 +475,55 @@ function MessageResultCard({
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  conditionScroll: {flex: 0, maxHeight: 380},
-  conditionContent: {padding: 16, gap: 12},
-  controlRow: {marginTop: 4},
-  switchCard: {
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    borderWidth: StyleSheet.hairlineWidth,
+  header: {
+    padding: 12,
+    gap: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  dateRow: {flexDirection: 'row', gap: 12},
-  dateChip: {
-    flex: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 4,
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  dateChipLabel: {fontSize: 12, fontWeight: '500'},
-  dateChipValue: {fontSize: 15, fontWeight: '600'},
+  keywordInput: {flex: 1},
   submitBtn: {
+    width: 56,
+    height: 44,
     borderRadius: 12,
-    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  submitText: {color: '#FFFFFF', fontSize: 16, fontWeight: '700'},
-  error: {fontSize: 13, paddingHorizontal: 4},
-  resultSection: {flex: 1},
-  resultScroll: {flex: 1},
-  resultContent: {padding: 16, paddingTop: 8, gap: 10},
+  submitText: {color: '#FFFFFF', fontSize: 15, fontWeight: '700'},
+  toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  pillText: {fontSize: 13, fontWeight: '600'},
+  square: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  squareText: {fontSize: 14, fontWeight: '700'},
+  backBtn: {
+    marginLeft: 'auto',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  backText: {fontSize: 18},
+  error: {fontSize: 12, paddingHorizontal: 2},
+  resultList: {flex: 1},
+  resultContent: {padding: 16, gap: 10},
   resultCard: {
     borderRadius: 12,
     paddingHorizontal: 14,
@@ -468,21 +538,5 @@ const styles = StyleSheet.create({
   resultBody: {fontSize: 14, lineHeight: 20},
   emptyWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
   empty: {fontSize: 14, textAlign: 'center'},
-  loadingMore: {paddingVertical: 8},
   hint: {fontSize: 12, textAlign: 'center', paddingVertical: 8},
-  backBtn: {
-    position: 'absolute',
-    bottom: 24,
-    right: 16,
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  backText: {fontSize: 14, fontWeight: '600'},
 });

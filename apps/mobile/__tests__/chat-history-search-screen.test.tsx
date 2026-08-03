@@ -136,6 +136,32 @@ jest.mock('react-native', () => {
         testID: props.testID,
         onScroll: props.onScroll,
       }, props.children),
+    FlatList: (props: {
+      data?: readonly unknown[];
+      renderItem?: (info: {item: unknown}) => React.ReactNode;
+      keyExtractor?: (item: unknown) => string;
+      ListEmptyComponent?: React.ReactNode;
+      ListFooterComponent?: React.ReactNode;
+      testID?: string;
+    }) => {
+      const items = props.data ?? [];
+      const body = items.map((item, index) =>
+        props.renderItem
+          ? RnReact.createElement(
+              'View',
+              {key: props.keyExtractor ? props.keyExtractor(item) : String(index)},
+              props.renderItem({item}),
+            )
+          : null,
+      );
+      return RnReact.createElement(
+        'FlatList',
+        {testID: props.testID},
+        items.length === 0 && props.ListEmptyComponent
+          ? props.ListEmptyComponent
+          : [...body, props.ListFooterComponent ?? null],
+      );
+    },
     TextInput: (props: {
       testID?: string;
       value?: string;
