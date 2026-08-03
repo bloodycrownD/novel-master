@@ -1,23 +1,24 @@
 ---
 createdAt: '2026-07-29 21:38:22'
-updatedAt: '2026-07-30 00:29:46'
+updatedAt: '2026-08-03 22:48:46'
 ---
-﻿# 阶段记忆
+﻿## 背景
 
-## 背景
+「聊天记录查询」迭代（docs/Iterations/chat-history-search/）PRD/SPEC 收敛审查，目标达 execute-ready。
 
-vfs-version-redesign 迭代：彻底重设计 VFS 版本管理系统。引入不可变 entry_id 身份键解开 path 三重职责耦合。
-
-需求路径：.apm/kb/docs/Iterations/vfs-version-redesign/prd.md（已确认，9 条核心需求 + 12 条验收 V1-V12，V7 已同步 9 文件范围）。
-SPEC 路径：.apm/kb/docs/Iterations/vfs-version-redesign/spec.md（经 3 轮审查循环收敛，execute-ready 待用户确认）。
-前置 PRD：vfs-revision-storage-optimize（ContentStore/blob 共享存储模型）、vfs-move-and-frontmatter-bugfix（导火索迭代）。
+需求路径：docs/Iterations/chat-history-search/prd.md（已确认）。SPEC 路径：docs/Iterations/chat-history-search/spec.md。前置依赖：chat-session-detail-page、message-visibility。
 
 ## 目的
 
-使 PRD/SPEC 达到 execute-ready（可开始按 spec 编码），通过审查→doc-fix→再审查循环收敛文档。
+通过审查→doc-fix→再审查循环，让 PRD/SPEC 达到 execute-ready，可开始按 spec 编码。
 
 ## 现状
 
-SPEC 审查循环完成（3 轮审查 + 2 轮 doc-fix）。第 3 轮审查结论 Go（execute-ready）。累计闭合 6 个 P0 + 6 个 P1 + 4 个 P2。剩余 1 个 P1（vfs_entry content 列去留文档矛盾，按 §A 保留即可）+ 4 个 P2（VfsScope scopeKey 字段落点、listAllPaths 改造清单、existsByPathAndVersion 签名、ensureBlob API 签名），不阻塞开工，编码时顺手补。
+经 2 轮审查 + 1 轮 doc-fix，审查子代理判定 Go（execute-ready）。
 
-待用户确认 execute-ready 后进入实现阶段。
+第 1 轮：4 个 P1（IPC channel 前缀缺 nm:、mobile MessageList 无 onEndReached 透传 + streaming 语境错配、组件不存在误判）；主代理驳回误判（SegmentedControl/FormTextInput 真实存在），闭合 P1-1（channel 改 nm:messages/search）+ P1-3/P1-4（mobile 改自渲染 FlatList 不复用 MessageList）+ P2-2/P2-3。
+第 2 轮：4 项 must-fix 全部真闭合，无 P0，仅 1 个 P2（mobile 摘要文本来源开工时拍板——只取 TextBlock.text 拼，不阻塞）。
+
+核心（仓储/service/匹配函数）、desktop（IPC/renderer/UI）、mobile（导航/runtime/UI）全链路代码对照验证通过。
+
+待用户确认 execute-ready 后开始编码。
