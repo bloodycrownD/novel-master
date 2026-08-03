@@ -90,6 +90,7 @@ export const IPC_CHANNELS = {
   MESSAGES_ROLLBACK: 'nm:messages/rollback',
   MESSAGES_SET_FLOOR: 'nm:messages/setFloor',
   MESSAGES_APPEND_TOOL_TURN_BRIDGE: 'nm:messages/appendToolTurnBridge',
+  MESSAGES_SEARCH: 'nm:messages/search',
 
   AGENT_RUN: 'nm:agent/run',
   AGENT_ABORT: 'nm:agent/abort',
@@ -591,6 +592,18 @@ export type SessionPullTemplateRequest = {
 export type MessagesListRequest = {
   readonly sessionId: string;
 };
+
+/** 聊天记录查询入参，透传 core 的 MessageSearchQuery。 */
+export interface MessagesSearchRequest {
+  readonly sessionId: string;
+  readonly keyword?: string;
+  readonly mode: 'literal' | 'regex';
+  readonly caseSensitive: boolean;
+  readonly fromMs?: number;
+  readonly toMs?: number;
+  readonly limit: number;
+  readonly beforeSeq?: number;
+}
 
 export type ContentBlockDto =
   | { readonly type: 'text'; readonly text: string }

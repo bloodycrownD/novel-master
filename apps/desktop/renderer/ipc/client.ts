@@ -80,6 +80,7 @@ export const {
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
   ipcMessagesList,
+  ipcMessagesSearch,
   ipcMessagesAppend,
   ipcMessagesAppendToolTurnBridge,
   ipcMessagesEdit,

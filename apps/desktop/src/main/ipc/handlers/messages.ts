@@ -23,6 +23,7 @@ import type {
   MessagesHideRequest,
   MessagesHideRangeRequest,
   MessagesListRequest,
+  MessagesSearchRequest,
   MessagesShowRequest,
   MessagesSetFloorPayload,
   MessagesSetFloorResult,
@@ -89,6 +90,30 @@ export async function handleMessagesList(
   try {
     const rt = await getDesktopRuntime();
     const messages = await loadSessionMessagesForDisplay(rt, req.sessionId);
+    return { ok: true, data: messages.map(toDto) };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/**
+ * 聊天记录查询：直接透传 core 的 searchMessages，不套 regex-apply
+ * （loadSessionMessagesForDisplay），保证返回的 bodyText 是原始文本。
+ */
+export async function handleMessagesSearch(
+  req: MessagesSearchRequest,
+): Promise<IpcResult<ChatMessageDto[]>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const messages = await rt.messages.searchMessages(req.sessionId, {
+      keyword: req.keyword,
+      mode: req.mode,
+      caseSensitive: req.caseSensitive,
+      fromMs: req.fromMs,
+      toMs: req.toMs,
+      limit: req.limit,
+      beforeSeq: req.beforeSeq,
+    });
     return { ok: true, data: messages.map(toDto) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

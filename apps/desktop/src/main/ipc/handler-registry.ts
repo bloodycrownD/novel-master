@@ -108,6 +108,7 @@ import {
   handleMessagesHideRange,
   handleMessagesList,
   handleMessagesRollback,
+  handleMessagesSearch,
   handleMessagesSetFloor,
   handleMessagesShow,
   handleMessagesShowRange,
@@ -265,6 +266,7 @@ export function registerHandlersFromRegistry(): void {
   );
 
   bindReq(IPC_CHANNELS.MESSAGES_LIST, handleMessagesList);
+  bindReq(IPC_CHANNELS.MESSAGES_SEARCH, handleMessagesSearch);
   bindReq(IPC_CHANNELS.MESSAGES_APPEND, handleMessagesAppend);
   bindReq(IPC_CHANNELS.MESSAGES_EDIT, handleMessagesEdit);
   bindReq(IPC_CHANNELS.MESSAGES_HIDE, handleMessagesHide);
