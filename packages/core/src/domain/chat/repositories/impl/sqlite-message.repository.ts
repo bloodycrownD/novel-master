@@ -246,22 +246,18 @@ export class SqliteMessageRepository implements MessageRepository {
   ): Promise<ChatMessage[]> {
     const keyword = query.keyword?.trim() ?? "";
     const hasKeyword = keyword.length > 0;
-    // keyword 非空时加 role 粗筛，减少 LIKE 召回的候选行数；keyword 为空不加 role 过滤
-    // （纯时间范围浏览应返回所有类型消息）。
+    // keyword 非空时加 role 粗筛 + LIKE 粗筛（LIKE 扫整个 content_json 是超集，内存层再精筛 TextBlock）；
+    // keyword 为空时不加 role / LIKE 过滤，返回所有类型消息。
     const roleFilter = hasKeyword
       ? "AND role IN ('user', 'assistant')"
       : "";
-    // 精准模式加 LIKE 粗筛（LIKE 扫整个 content_json 是超集，内存层会再精筛 TextBlock）；
-    // 正则模式无法用 LIKE 表达，直接全量拉内存跑。
-    const likeFilter =
-      hasKeyword && query.mode === "literal"
-        ? // JS 源码双反斜杠 → 落到 SQL 是单反斜杠 ESCAPE '\'。
-          "AND content_json LIKE #{likePattern} ESCAPE '\\'"
-        : "";
-    const likePattern =
-      hasKeyword && query.mode === "literal"
-        ? `%${escapeLikePattern(keyword)}%`
-        : null;
+    // JS 源码双反斜杠 → 落到 SQL 是单反斜杠 ESCAPE '\'。
+    const likeFilter = hasKeyword
+      ? "AND content_json LIKE #{likePattern} ESCAPE '\\'"
+      : "";
+    const likePattern = hasKeyword
+      ? `%${escapeLikePattern(keyword)}%`
+      : null;
     const clampedLimit = Math.max(1, Math.floor(query.limit));
     const rows = await queryTemplate(
       this.conn,
@@ -271,16 +267,12 @@ export class SqliteMessageRepository implements MessageRepository {
        WHERE session_id = #{sessionId}
          ${roleFilter}
          ${likeFilter}
-         AND (#{fromMs} IS NULL OR created_at_ms >= #{fromMs})
-         AND (#{toMs} IS NULL OR created_at_ms <= #{toMs})
          AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
        ORDER BY seq DESC
        LIMIT #{limit}`,
       {
         sessionId,
         likePattern,
-        fromMs: query.fromMs ?? null,
-        toMs: query.toMs ?? null,
         beforeSeq: query.beforeSeq ?? null,
         limit: clampedLimit,
       },

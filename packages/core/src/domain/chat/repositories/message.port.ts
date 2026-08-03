@@ -48,8 +48,8 @@ export interface MessageRepository {
   ): Promise<number>;
 
   /**
-   * 搜索会话内消息：精准模式用 LIKE 粗筛 + role 粗筛，正则模式跳过 LIKE 全量拉；
-   * 时间范围 + seq DESC LIMIT + 可选 beforeSeq；不在 SQL 层过滤 hidden（始终含隐藏消息）。
+   * 搜索会话内消息：keyword 非空时加 LIKE 粗筛 + role 粗筛，keyword 为空时全量拉；
+   * seq DESC LIMIT + 可选 beforeSeq；不在 SQL 层过滤 hidden（始终含隐藏消息）。
    */
   searchMessages(
     sessionId: string,

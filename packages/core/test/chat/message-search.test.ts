@@ -85,14 +85,8 @@ describe("聊天记录查询 core 基座", () => {
           { type: "text", text: "今天天气不错" },
         ),
       });
-      assert.equal(
-        messageMatchesKeyword(msg, "魔法", { mode: "literal", caseSensitive: false }),
-        false,
-      );
-      assert.equal(
-        messageMatchesKeyword(msg, "天气", { mode: "literal", caseSensitive: false }),
-        true,
-      );
+      assert.equal(messageMatchesKeyword(msg, "魔法"), false);
+      assert.equal(messageMatchesKeyword(msg, "天气"), true);
     });
 
     it("非 user/assistant 角色（system/tool）直接返回 false", () => {
@@ -103,38 +97,19 @@ describe("聊天记录查询 core 基座", () => {
         createdAtMs: 0,
         content: textBlocks("魔法"),
       });
-      assert.equal(
-        messageMatchesKeyword(msg, "魔法", { mode: "literal", caseSensitive: false }),
-        false,
-      );
+      assert.equal(messageMatchesKeyword(msg, "魔法"), false);
     });
 
-    it("正则模式命中（T-CS3 辅助）", () => {
-      const msg: ChatMessage = makeMessage({
-        sessionId: "x",
-        seq: 1,
-        role: "assistant",
-        createdAtMs: 0,
-        content: textBlocks("魔法基础设定"),
-      });
-      assert.equal(
-        messageMatchesKeyword(msg, "魔法.*设定", { mode: "regex", caseSensitive: false }),
-        true,
-      );
-    });
-
-    it("非法正则返回 false，不抛异常（T-CS5 辅助）", () => {
+    it("大小写不敏感匹配", () => {
       const msg: ChatMessage = makeMessage({
         sessionId: "x",
         seq: 1,
         role: "user",
         createdAtMs: 0,
-        content: textBlocks("anything"),
+        content: textBlocks("Hello World"),
       });
-      assert.equal(
-        messageMatchesKeyword(msg, "[unclosed", { mode: "regex", caseSensitive: false }),
-        false,
-      );
+      assert.equal(messageMatchesKeyword(msg, "hello"), true);
+      assert.equal(messageMatchesKeyword(msg, "WORLD"), true);
     });
   });
 
@@ -171,8 +146,6 @@ describe("聊天记录查询 core 基座", () => {
 
       const result = await repo.searchMessages(sessionId, {
         keyword: "魔法",
-        mode: "literal",
-        caseSensitive: false,
         limit: 50,
       });
       assert.deepEqual(
@@ -229,109 +202,12 @@ describe("聊天记录查询 core 基座", () => {
 
       const result = await ctx.messages.searchMessages(sessionId, {
         keyword: "魔法",
-        mode: "literal",
-        caseSensitive: false,
         limit: 50,
       });
       assert.deepEqual(
         result.map((m) => m.seq),
         [3],
       );
-    });
-  });
-
-  describe("T-CS3：正则匹配命中", () => {
-    it("mode=regex 时 service 层正则命中 TextBlock", async () => {
-      const ctx = getNovelMasterTestContext();
-      const { sessionId, repo } = await newSession();
-      await repo.insert(
-        makeMessage({
-          sessionId,
-          seq: 1,
-          role: "assistant",
-          createdAtMs: 1,
-          content: textBlocks("魔法基础设定"),
-        }),
-      );
-      await repo.insert(
-        makeMessage({
-          sessionId,
-          seq: 2,
-          role: "assistant",
-          createdAtMs: 2,
-          content: textBlocks("无关内容"),
-        }),
-      );
-
-      const result = await ctx.messages.searchMessages(sessionId, {
-        keyword: "魔法.*设定",
-        mode: "regex",
-        caseSensitive: false,
-        limit: 50,
-      });
-      assert.deepEqual(
-        result.map((m) => m.seq),
-        [1],
-      );
-    });
-  });
-
-  describe("T-CS4：大小写敏感", () => {
-    it("caseSensitive=true 不召回；caseSensitive=false 召回", async () => {
-      const ctx = getNovelMasterTestContext();
-      const { sessionId, repo } = await newSession();
-      await repo.insert(
-        makeMessage({
-          sessionId,
-          seq: 1,
-          role: "user",
-          createdAtMs: 1,
-          content: textBlocks("Hello World"),
-        }),
-      );
-
-      const sensitive = await ctx.messages.searchMessages(sessionId, {
-        keyword: "hello",
-        mode: "literal",
-        caseSensitive: true,
-        limit: 50,
-      });
-      assert.equal(sensitive.length, 0);
-
-      const insensitive = await ctx.messages.searchMessages(sessionId, {
-        keyword: "hello",
-        mode: "literal",
-        caseSensitive: false,
-        limit: 50,
-      });
-      assert.deepEqual(
-        insensitive.map((m) => m.seq),
-        [1],
-      );
-    });
-  });
-
-  describe("T-CS5：非法正则容错", () => {
-    it("mode=regex + 非法 pattern 不崩溃，返回空结果", async () => {
-      const ctx = getNovelMasterTestContext();
-      const { sessionId, repo } = await newSession();
-      await repo.insert(
-        makeMessage({
-          sessionId,
-          seq: 1,
-          role: "user",
-          createdAtMs: 1,
-          content: textBlocks("anything"),
-        }),
-      );
-
-      const result = await ctx.messages.searchMessages(sessionId, {
-        keyword: "[unclosed",
-        mode: "regex",
-        caseSensitive: false,
-        limit: 50,
-      });
-      assert.equal(result.length, 0);
     });
   });
 
@@ -355,71 +231,11 @@ describe("聊天记录查询 core 基座", () => {
 
       const result = await ctx.messages.searchMessages(sessionId, {
         keyword: "",
-        mode: "literal",
-        caseSensitive: false,
         limit: 50,
       });
       assert.equal(result.length, 5);
       // 验证 hidden 消息确实被包含
       assert.equal(result.filter((m) => m.hidden).length, 3);
-    });
-  });
-
-  describe("T-CS7：fromMs / toMs 时间范围（含边界）", () => {
-    it("仓储层直接 insert 手造 created_at_ms，断言范围过滤", async () => {
-      const { sessionId, repo } = await newSession();
-      // 在 1000ms ~ 5000ms 之间插 5 条，每条间隔 1000ms
-      for (let i = 0; i < 5; i++) {
-        await repo.insert(
-          makeMessage({
-            sessionId,
-            seq: i + 1,
-            role: "user",
-            createdAtMs: 1000 + i * 1000,
-            content: textBlocks(`m-${i}`),
-          }),
-        );
-      }
-
-      // fromMs=2000 应包含 2000/3000/4000/5000（>= 含边界）
-      const fromResult = await repo.searchMessages(sessionId, {
-        keyword: "",
-        mode: "literal",
-        caseSensitive: false,
-        fromMs: 2000,
-        limit: 50,
-      });
-      assert.deepEqual(
-        fromResult.map((m) => m.seq),
-        [5, 4, 3, 2],
-      );
-
-      // toMs=3000 应包含 1000/2000/3000（<= 含边界）
-      const toResult = await repo.searchMessages(sessionId, {
-        keyword: "",
-        mode: "literal",
-        caseSensitive: false,
-        toMs: 3000,
-        limit: 50,
-      });
-      assert.deepEqual(
-        toResult.map((m) => m.seq),
-        [3, 2, 1],
-      );
-
-      // 区间 [2000, 4000]
-      const rangeResult = await repo.searchMessages(sessionId, {
-        keyword: "",
-        mode: "literal",
-        caseSensitive: false,
-        fromMs: 2000,
-        toMs: 4000,
-        limit: 50,
-      });
-      assert.deepEqual(
-        rangeResult.map((m) => m.seq),
-        [4, 3, 2],
-      );
     });
   });
 
@@ -440,8 +256,6 @@ describe("聊天记录查询 core 基座", () => {
 
       const page1 = await repo.searchMessages(sessionId, {
         keyword: "",
-        mode: "literal",
-        caseSensitive: false,
         limit: 20,
         beforeSeq: 50,
       });
@@ -453,8 +267,6 @@ describe("聊天记录查询 core 基座", () => {
 
       const page2 = await repo.searchMessages(sessionId, {
         keyword: "",
-        mode: "literal",
-        caseSensitive: false,
         limit: 20,
         beforeSeq: 30,
       });
@@ -494,8 +306,6 @@ describe("聊天记录查询 core 基座", () => {
 
       const result = await ctx.messages.searchMessages(sessionId, {
         keyword: "50%",
-        mode: "literal",
-        caseSensitive: false,
         limit: 50,
       });
       assert.deepEqual(
@@ -524,8 +334,6 @@ describe("聊天记录查询 core 基座", () => {
       );
       const under = await ctx.messages.searchMessages(sessionId, {
         keyword: "a_b",
-        mode: "literal",
-        caseSensitive: false,
         limit: 50,
       });
       assert.deepEqual(
@@ -546,8 +354,6 @@ describe("聊天记录查询 core 基座", () => {
       );
       const slash = await ctx.messages.searchMessages(sessionId, {
         keyword: "C:\\NoSuchPath",
-        mode: "literal",
-        caseSensitive: true,
         limit: 50,
       });
       assert.deepEqual(slash, []);
@@ -588,8 +394,6 @@ describe("聊天记录查询 core 基座", () => {
 
       const result = await ctx.messages.searchMessages(sessionId, {
         keyword: "",
-        mode: "literal",
-        caseSensitive: false,
         limit: 50,
       });
       assert.deepEqual(
@@ -611,8 +415,6 @@ describe("聊天记录查询 core 基座", () => {
         }),
       );
       const result = await ctx.messages.searchMessages(sessionId, {
-        mode: "literal",
-        caseSensitive: false,
         limit: 50,
       });
       assert.equal(result.length, 1);

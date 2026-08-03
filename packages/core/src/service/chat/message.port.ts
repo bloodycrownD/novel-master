@@ -61,7 +61,7 @@ export interface MessageService {
   showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number>;
 
   /**
-   * 搜索会话内消息（透传仓储层召回，keyword 非空时在内存层用 messageMatchesKeyword 精筛）。
+   * 搜索会话内消息（透传仓储层召回，keyword 非空时在内存层精筛 TextBlock）。
    */
   searchMessages(
     sessionId: string,

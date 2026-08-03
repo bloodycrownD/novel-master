@@ -329,11 +329,6 @@ export class DefaultMessageService implements MessageService {
       return candidates;
     }
     // 仓储层 LIKE 是 content_json 超集召回，内存层只匹配 user/assistant 的 TextBlock 做最终判定。
-    return candidates.filter((msg) =>
-      messageMatchesKeyword(msg, keyword, {
-        mode: query.mode,
-        caseSensitive: query.caseSensitive,
-      }),
-    );
+    return candidates.filter((msg) => messageMatchesKeyword(msg, keyword));
   }
 }
