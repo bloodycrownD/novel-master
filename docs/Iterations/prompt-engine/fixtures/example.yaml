@@ -1,0 +1,17 @@
+blocks:
+  - name: system_msg
+    type: text
+    role: system
+    content: |
+      You are an assistant.
+      Worktree:
+      {{ .worktree }}
+
+  - name: conversation_history
+    type: chat
+
+  - name: user_query
+    type: text
+    role: user
+    content: |
+      Today is {{ $.time }}（{{ $.week_cn }}）。

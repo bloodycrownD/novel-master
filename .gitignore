@@ -41,8 +41,7 @@ apps/mobile/.appium/
 tmp/
 
 # Generated knowledge-base search index (rebuild locally)
-.apm/kb/index/
-.apm/status.json
+.apm/
 
 # Cursor IDE local files (debug logs, etc.)
 .cursor/

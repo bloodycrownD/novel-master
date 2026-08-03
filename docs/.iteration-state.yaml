@@ -1,40 +1,39 @@
-dag_version: 5
-wave_plan:
-  - [impl-core]
-  - [verify-core]
-  - [cr-func-core]
-  - [impl-cli]
-  - [verify-cli]
-  - [cr-func-cli]
-  - [impl-desktop, impl-mobile]
-  - [verify-desktop, verify-mobile]
-  - [cr-func-ui]
-  - [impl-docs]
+# 聊天记录查询迭代 — code-dev-loop 编排状态
+# 本文件记录 DAG / wave / node_status，不属 apm dynamic。
+
+spec_path: docs/Iterations/chat-history-search/spec.md
+prd_path: docs/Iterations/chat-history-search/prd.md
+branch: feat/chat-history-search
+base_sha: 8799c6d2
+head_sha: ce3d448f
+
+dag_version: 9
+
 node_status:
-  impl-core: { status: done, head_sha: ef0d8db2 }
-  verify-core: { status: done }
+  impl-core-search: { status: done, head_sha: 0890ec44 }
+  verify-core: { status: done, note: '1692/1692 全绿（fix 后）' }
   cr-func-core: { status: done, func_ready: yes }
-  impl-cli: { status: done, head_sha: 3407187d }
-  verify-cli: { status: done }
-  cr-func-cli: { status: done, func_ready: yes }
-  impl-desktop: { status: done, head_sha: 351d4654 }
-  impl-mobile: { status: done, head_sha: 596d958a }
-  verify-desktop: { status: done }
-  verify-mobile: { status: done }
-  cr-func-ui: { status: done, func_ready: yes }
-  impl-docs: { status: done, head_sha: 1dd63bb0 }
+  fix-core-snapshot: { status: done, head_sha: 477b2d98 }
+  impl-desktop-ipc: { status: done, head_sha: 82274ec7 }
+  verify-desktop-ipc: { status: done, note: '无新增失败（2 个 main 基线遗留忽略）' }
+  cr-func-desktop-ipc: { status: done, func_ready: yes }
+  impl-desktop-ui: { status: done, head_sha: 6173bdfd }
+  verify-desktop-ui: { status: done, note: 'build:main 零报错; 9/9 T-DR1; 无新增失败' }
+  cr-func-desktop-ui: { status: done, func_ready: yes }
+  impl-mobile-full: { status: done, head_sha: c2c84abe }
+  verify-mobile: { status: done, note: 'typecheck 干净; 19/19 T-MO1~3; 零新增失败' }
+  cr-func-mobile: { status: done, func_ready: yes }
+
 open_must_fix: []
+
 spec_deviations: []
-branch: feature/mobile-form-footer-hit-area
-status: dev-ready
-head_sha: 1dd63bb0
-blocking_steps_closed:
-  - phase-core-schema
-  - phase-core-migration
-  - phase-core-api
-  - phase-cli
-  - phase-desktop
-  - phase-mobile
-manual_pending: phase-manual-accept
-spec_path: .apm/kb/docs/Iterations/provider-identity/spec.md
-prd_path: .apm/kb/docs/Iterations/provider-identity/prd.md
+
+  # 迭代历史
+  fix-mobile-ui-redesign: { status: done, head_sha: cb605c5a, note: '第一版紧凑工具条（已被后续简化替代）' }
+  fix-mobile-ui-vscode-style: { status: done, head_sha: 5c088833, note: 'VSCode 风格 toggle（已被功能简化替代）' }
+  # 用户决定移除正则/大小写/时间范围，只保留关键词精准搜索
+  simplify-mobile: { status: done, head_sha: c7e78bb9, note: '移除筛选 toggle/返回按钮/datetimepicker；18/18' }
+  simplify-desktop: { status: done, head_sha: 4e067a59, note: '移除三态 UI/日期；15/15' }
+  simplify-core: { status: done, head_sha: ce3d448f, note: 'MessageSearchQuery 简化为 keyword/limit/beforeSeq；1687/1687' }
+
+status: dev-ready（功能简化完成，三层联调全绿）
