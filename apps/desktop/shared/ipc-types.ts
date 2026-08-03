@@ -597,10 +597,6 @@ export type MessagesListRequest = {
 export interface MessagesSearchRequest {
   readonly sessionId: string;
   readonly keyword?: string;
-  readonly mode: 'literal' | 'regex';
-  readonly caseSensitive: boolean;
-  readonly fromMs?: number;
-  readonly toMs?: number;
   readonly limit: number;
   readonly beforeSeq?: number;
 }

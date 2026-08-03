@@ -5,9 +5,8 @@
  * `MessageList` 渲染命中消息（包含隐藏消息，靠 MessageList 自带的
  * hidden 角标 + dimmed 区分，不再叠加 hiddenFilter）。
  *
- * 搜索三态用原生 `<button>` 实现 VSCode 风格：精准/正则二选一 + Aa
- * 大小写敏感 toggle；时间范围走两个原生 `<input type="date">`。
- * 搜索基于原始文本，不套 regex-apply。
+ * 查询只保留关键词（大小写不敏感，由 core 统一处理），支持 beforeSeq
+ * 翻页。搜索基于原始文本，不套 regex-apply。
  */
 import { useCallback, useMemo, useState } from 'react';
 import type { ChatMessageDto } from '@shared/ipc-types';
@@ -22,35 +21,12 @@ interface ChatHistorySearchPanelProps {
 
 const SEARCH_LIMIT = 50;
 
-/** 把 `<input type="date">` 的 YYYY-MM-DD 字符串按本地时区解析成 ms。 */
-function dateStringToMs(
-  value: string,
-  endOfDay: boolean,
-): number | undefined {
-  if (!value) return undefined;
-  // 用本地时区构造，避免 UTC 偏移把日期拉到前一天
-  const [y, m, d] = value.split('-').map((n) => parseInt(n, 10));
-  if (!y || !m || !d) return undefined;
-  const base = new Date(y, m - 1, d);
-  if (Number.isNaN(base.getTime())) return undefined;
-  if (endOfDay) {
-    base.setHours(23, 59, 59, 999);
-  } else {
-    base.setHours(0, 0, 0, 0);
-  }
-  return base.getTime();
-}
-
 export function ChatHistorySearchPanel({
   projectId: _projectId,
   sessionId,
   onClose,
 }: ChatHistorySearchPanelProps) {
   const [keyword, setKeyword] = useState('');
-  const [mode, setMode] = useState<'literal' | 'regex'>('literal');
-  const [caseSensitive, setCaseSensitive] = useState(false);
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
 
   const [results, setResults] = useState<ChatMessageDto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,17 +56,10 @@ export function ChatHistorySearchPanel({
       }
       setError(undefined);
 
-      const fromMs = dateStringToMs(fromDate, false);
-      const toMs = dateStringToMs(toDate, true);
-
       try {
         const result = await ipcMessagesSearch({
           sessionId,
           keyword: keyword.trim() || undefined,
-          mode,
-          caseSensitive,
-          fromMs,
-          toMs,
           limit: SEARCH_LIMIT,
           beforeSeq: opts?.beforeSeq,
         });
@@ -122,7 +91,7 @@ export function ChatHistorySearchPanel({
         }
       }
     },
-    [sessionId, keyword, mode, caseSensitive, fromDate, toDate],
+    [sessionId, keyword],
   );
 
   const onSubmit = useCallback(
@@ -165,45 +134,6 @@ export function ChatHistorySearchPanel({
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
-          {/* VSCode 风格三态切换：精准 / 正则 + Aa 大小写 */}
-          <div className="chat-history-search__toggles" role="group" aria-label="搜索选项">
-            <button
-              type="button"
-              className={`chat-history-search__toggle${
-                mode === 'literal' ? ' chat-history-search__toggle--active' : ''
-              }`}
-              data-session-detail-action="search-history-mode-literal"
-              aria-pressed={mode === 'literal'}
-              title="精准匹配"
-              onClick={() => setMode('literal')}
-            >
-              精准
-            </button>
-            <button
-              type="button"
-              className={`chat-history-search__toggle${
-                mode === 'regex' ? ' chat-history-search__toggle--active' : ''
-              }`}
-              data-session-detail-action="search-history-mode-regex"
-              aria-pressed={mode === 'regex'}
-              title="正则匹配"
-              onClick={() => setMode('regex')}
-            >
-              正则
-            </button>
-            <button
-              type="button"
-              className={`chat-history-search__toggle${
-                caseSensitive ? ' chat-history-search__toggle--active' : ''
-              }`}
-              data-session-detail-action="search-history-case"
-              aria-pressed={caseSensitive}
-              title="区分大小写"
-              onClick={() => setCaseSensitive((v) => !v)}
-            >
-              Aa
-            </button>
-          </div>
           <button
             type="submit"
             className="chat-history-search__submit"
@@ -212,29 +142,6 @@ export function ChatHistorySearchPanel({
           >
             {loading ? '查询中…' : '查询'}
           </button>
-        </div>
-
-        <div className="chat-history-search__date-row">
-          <label className="chat-history-search__date-label">
-            起始
-            <input
-              type="date"
-              className="chat-history-search__date"
-              data-session-detail-action="search-history-from"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-            />
-          </label>
-          <label className="chat-history-search__date-label">
-            截止
-            <input
-              type="date"
-              className="chat-history-search__date"
-              data-session-detail-action="search-history-to"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-            />
-          </label>
         </div>
       </form>
 

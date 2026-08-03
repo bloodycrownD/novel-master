@@ -76,8 +76,6 @@ describe('handleMessagesSearch', () => {
     const result = await handleMessagesSearch({
       sessionId,
       keyword: 'hello',
-      mode: 'literal',
-      caseSensitive: false,
       limit: 50,
     });
 
@@ -94,60 +92,19 @@ describe('handleMessagesSearch', () => {
     }
   });
 
-  it('T-DI2: 精准 / 正则 / 大小写三态在 IPC 层行为正确（透传 core）', async () => {
+  it('T-DI2: 精准匹配命中（大小写不敏感，透传 core）', async () => {
     const sessionId = await createSession('di2');
     await appendMessage(sessionId, 'user', 'Apple Banana');
     await appendMessage(sessionId, 'assistant', 'apple cherry');
 
-    // 精准 + 不区分大小写：两条都命中 apple。
-    const literalCI = await handleMessagesSearch({
+    // 固定大小写不敏感：大小写不同的 apple 都应命中。
+    const result = await handleMessagesSearch({
       sessionId,
       keyword: 'apple',
-      mode: 'literal',
-      caseSensitive: false,
       limit: 50,
     });
-    assert.equal(literalCI.ok, true);
-    assert.equal(literalCI.ok && literalCI.data.length, 2);
-
-    // 精准 + 区分大小写：只命中小写 apple。
-    const literalCS = await handleMessagesSearch({
-      sessionId,
-      keyword: 'apple',
-      mode: 'literal',
-      caseSensitive: true,
-      limit: 50,
-    });
-    assert.equal(literalCS.ok, true);
-    assert.equal(literalCS.ok && literalCS.data.length, 1);
-    if (literalCS.ok) {
-      assert.match(literalCS.data[0].bodyText, /apple cherry/);
-    }
-
-    // 正则 + 不区分大小写：Ap{2} 匹配 Apple / apple。
-    const regexCI = await handleMessagesSearch({
-      sessionId,
-      keyword: 'Ap{2}',
-      mode: 'regex',
-      caseSensitive: false,
-      limit: 50,
-    });
-    assert.equal(regexCI.ok, true);
-    assert.equal(regexCI.ok && regexCI.data.length, 2);
-
-    // 正则 + 区分大小写：只匹配大写 Apple。
-    const regexCS = await handleMessagesSearch({
-      sessionId,
-      keyword: 'Ap{2}',
-      mode: 'regex',
-      caseSensitive: true,
-      limit: 50,
-    });
-    assert.equal(regexCS.ok, true);
-    assert.equal(regexCS.ok && regexCS.data.length, 1);
-    if (regexCS.ok) {
-      assert.match(regexCS.data[0].bodyText, /Apple Banana/);
-    }
+    assert.equal(result.ok, true);
+    assert.equal(result.ok && result.data.length, 2);
   });
 
   it('T-DI3: 匹配范围只限 user/assistant 的 TextBlock（透传 core）', async () => {
@@ -158,8 +115,6 @@ describe('handleMessagesSearch', () => {
     const result = await handleMessagesSearch({
       sessionId,
       keyword: 'target',
-      mode: 'literal',
-      caseSensitive: false,
       limit: 50,
     });
     assert.equal(result.ok, true);
@@ -175,12 +130,10 @@ describe('handleMessagesSearch', () => {
     await appendMessage(sessionId, 'user', 'page keyword two');
     await appendMessage(sessionId, 'user', 'page keyword three');
 
-    // 先取最新一条，拿到它的 seq 作为翻页锚点。
+    // 先取最新一条，拿到他的 seq 作为翻页锚点。
     const first = await handleMessagesSearch({
       sessionId,
       keyword: 'keyword',
-      mode: 'literal',
-      caseSensitive: false,
       limit: 1,
     });
     assert.equal(first.ok, true);
@@ -194,8 +147,6 @@ describe('handleMessagesSearch', () => {
     const next = await handleMessagesSearch({
       sessionId,
       keyword: 'keyword',
-      mode: 'literal',
-      caseSensitive: false,
       limit: 50,
       beforeSeq: anchorSeq,
     });
@@ -217,8 +168,6 @@ describe('handleMessagesSearch', () => {
     const result = await handleMessagesSearch({
       sessionId,
       keyword: '原始文本',
-      mode: 'literal',
-      caseSensitive: false,
       limit: 50,
     });
     assert.equal(result.ok, true);
@@ -245,8 +194,6 @@ describe('handleMessagesSearch', () => {
       const result = await handleMessagesSearch({
         sessionId,
         keyword: 'something',
-        mode: 'literal',
-        caseSensitive: false,
         limit: 50,
       });
       assert.equal(result.ok, false);

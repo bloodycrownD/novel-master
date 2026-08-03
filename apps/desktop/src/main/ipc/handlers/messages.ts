@@ -107,10 +107,6 @@ export async function handleMessagesSearch(
     const rt = await getDesktopRuntime();
     const messages = await rt.messages.searchMessages(req.sessionId, {
       keyword: req.keyword,
-      mode: req.mode,
-      caseSensitive: req.caseSensitive,
-      fromMs: req.fromMs,
-      toMs: req.toMs,
       limit: req.limit,
       beforeSeq: req.beforeSeq,
     });
