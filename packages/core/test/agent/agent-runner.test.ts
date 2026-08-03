@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   ChatAgentSession,
@@ -154,8 +154,8 @@ describe("AgentRunner", () => {
     assert.equal(result.stepsExecuted, 0);
   });
 
-  // T-SR5：runner 不 append 仅空 text 的 assistant（hasMeaningfulAssistantBlocks）
-  it("T-SR5: 不 append 仅空 text 的 assistant", async () => {
+  // T-SR5��runner �� append ���� text �� assistant��hasMeaningfulAssistantBlocks��
+  it("T-SR5: �� append ���� text �� assistant", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -190,11 +190,11 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "completed");
     assert.equal(model.callCount(), 1);
     const msgs = await session.list();
-    assert.equal(msgs.length, 1, "不得落库无意义空 assistant");
+    assert.equal(msgs.length, 1, "�������������� assistant");
     assert.equal(msgs[0]!.role, "user");
   });
 
-  it("T-ARP-C1: abort + text/thinking blocks 落库 partial assistant，无 tool_results", async () => {
+  it("T-ARP-C1: abort + text/thinking blocks ��� partial assistant���� tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -252,7 +252,7 @@ describe("AgentRunner", () => {
     assert.deepEqual(phases, ["assistant"]);
   });
 
-  it("T-ARP-C2: abort + tool_use blocks 落库 assistant，不跑 runParallel，无 tool_results", async () => {
+  it("T-ARP-C2: abort + tool_use blocks ��� assistant������ runParallel���� tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -269,7 +269,7 @@ describe("AgentRunner", () => {
               type: "tool_use",
               id: "tu1",
               name: "fs",
-              input: { command: "ls /" },
+              input: { action: "ls", path: "/" },
             },
           ],
           raw: {},
@@ -315,7 +315,7 @@ describe("AgentRunner", () => {
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
-  it("T-ARP-C3: abort 后无第二次 model request，stepsExecuted===0", async () => {
+  it("T-ARP-C3: abort ���޵ڶ��� model request��stepsExecuted===0", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -357,7 +357,7 @@ describe("AgentRunner", () => {
     assert.equal(result.stepsExecuted, 0);
   });
 
-  it("T-ARP-C4: abort 在 tool 执行完成后 append 前仍无 tool_results", async () => {
+  it("T-ARP-C4: abort �� tool ִ����ɺ� append ǰ���� tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -414,7 +414,7 @@ describe("AgentRunner", () => {
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
-  it("生命周期�?stream 事件携带一�?runId", async () => {
+  it("��������??stream �¼�Я��һ??runId", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("hi"));
     const bus = new SimpleEventBus();
@@ -544,7 +544,7 @@ describe("AgentRunner", () => {
             type: "tool_use",
             id: "t1",
             name: "fs",
-            input: { command: "ls /" },
+            input: { action: "ls", path: "/" },
           },
         ],
         raw: {},
@@ -556,7 +556,7 @@ describe("AgentRunner", () => {
             type: "tool_use",
             id: "t2",
             name: "fs",
-            input: { command: "ls /" },
+            input: { action: "ls", path: "/" },
           },
         ],
         raw: {},
@@ -646,7 +646,7 @@ describe("AgentRunner", () => {
             type: "tool_use",
             id: "tu1",
             name: "fs",
-            input: { command: "ls /" },
+            input: { action: "ls", path: "/" },
           },
         ],
         raw: {},
@@ -682,7 +682,7 @@ describe("AgentRunner", () => {
     assert.deepEqual(phases, ["assistant", "tool_results", "assistant"]);
   });
 
-  it("tool_results �?run_finished 携带 vfsMutated", async () => {
+  it("tool_results ??run_finished Я�� vfsMutated", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
     const bus = new SimpleEventBus();
@@ -902,7 +902,7 @@ describe("AgentRunner", () => {
             type: "tool_use",
             id: "l1",
             name: "fs",
-            input: { command: "ls /" },
+            input: { action: "ls", path: "/" },
           },
         ],
         raw: {},
@@ -1025,7 +1025,7 @@ describe("AgentRunner", () => {
     assert.notEqual(resultBlock.content, "Error: Tool failed: read");
   });
 
-  /** 从会话消息中提取首个 tool_result block�?*/
+  /** �ӻỰ��Ϣ����ȡ�׸� tool_result block??*/
   async function firstToolResultBlock(sessionId: string) {
     const ctx = getNovelMasterTestContext();
     const messages = await ctx.messages.listBySession(sessionId);
@@ -1329,7 +1329,7 @@ describe("AgentRunner", () => {
       },
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "b1", name: "fs", input: { command: "ls /" } }],
+        blocks: [{ type: "tool_use", id: "b1", name: "fs", input: { action: "ls", path: "/" } }],
         raw: {},
       },
       {
@@ -1339,7 +1339,7 @@ describe("AgentRunner", () => {
       },
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "b2", name: "fs", input: { command: "ls /" } }],
+        blocks: [{ type: "tool_use", id: "b2", name: "fs", input: { action: "ls", path: "/" } }],
         raw: {},
       },
     ]);
@@ -1365,7 +1365,7 @@ describe("AgentRunner", () => {
     );
   });
 
-  it("T-ITA-03: degraded tool args → no RUN_FAILED, tool_result ok:false, run continues", async () => {
+  it("T-ITA-03: degraded tool args �� no RUN_FAILED, tool_result ok:false, run continues", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
     const bus = new SimpleEventBus();

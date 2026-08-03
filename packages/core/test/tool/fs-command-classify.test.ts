@@ -7,48 +7,65 @@ import {
 
 describe("classifyFsCommand", () => {
   it("ls 只读", () => {
-    assert.deepEqual(classifyFsCommand("ls /"), {
+    assert.deepEqual(classifyFsCommand({ action: "ls", path: "/" }), {
       mutating: false,
       paths: null,
     });
-    assert.deepEqual(classifyFsCommand("ls -r /dir"), {
-      mutating: false,
-      paths: null,
-    });
+    assert.deepEqual(
+      classifyFsCommand({ action: "ls", path: "/dir", recursive: true }),
+      { mutating: false, paths: null },
+    );
   });
 
   it("写操作突变并返回路径", () => {
-    assert.deepEqual(classifyFsCommand("rm /a"), {
+    assert.deepEqual(classifyFsCommand({ action: "rm", path: "/a" }), {
       mutating: true,
       paths: ["/a"],
     });
-    assert.deepEqual(classifyFsCommand("mkdir /d"), {
+    assert.deepEqual(classifyFsCommand({ action: "mkdir", path: "/d" }), {
       mutating: true,
       paths: ["/d"],
     });
-    assert.deepEqual(classifyFsCommand("mv /a /b"), {
-      mutating: true,
-      paths: ["/a", "/b"],
-    });
-    assert.deepEqual(classifyFsCommand("cp -r /src /dst"), {
-      mutating: true,
-      paths: ["/src", "/dst"],
-    });
+    assert.deepEqual(
+      classifyFsCommand({ action: "mv", from: "/a", to: "/b" }),
+      { mutating: true, paths: ["/a", "/b"] },
+    );
+    assert.deepEqual(
+      classifyFsCommand({
+        action: "cp",
+        from: "/src",
+        to: "/dst",
+        recursive: true,
+      }),
+      { mutating: true, paths: ["/src", "/dst"] },
+    );
   });
 
-  it("空 command 非突变、无路径", () => {
-    assert.deepEqual(classifyFsCommand(""), {
+  it("无 action 非突变、无路径", () => {
+    assert.deepEqual(classifyFsCommand({}), {
       mutating: false,
       paths: null,
     });
-    assert.deepEqual(classifyFsCommand("   "), {
+    assert.deepEqual(classifyFsCommand({ action: "" }), {
+      mutating: false,
+      paths: null,
+    });
+    assert.deepEqual(classifyFsCommand(null), {
+      mutating: false,
+      paths: null,
+    });
+    assert.deepEqual(classifyFsCommand(undefined), {
       mutating: false,
       paths: null,
     });
   });
 
   it("解析失败保守突变、无路径", () => {
-    assert.deepEqual(classifyFsCommand("bad cmd"), {
+    assert.deepEqual(classifyFsCommand({ action: "bad" }), {
+      mutating: true,
+      paths: null,
+    });
+    assert.deepEqual(classifyFsCommand({ action: "rm" }), {
       mutating: true,
       paths: null,
     });
@@ -75,14 +92,14 @@ describe("classifyMutatingToolCall", () => {
   });
 
   it("fs ls 只读", () => {
-    assert.deepEqual(classifyMutatingToolCall("fs", { command: "ls /" }), {
-      mutating: false,
-      paths: null,
-    });
+    assert.deepEqual(
+      classifyMutatingToolCall("fs", { action: "ls", path: "/" }),
+      { mutating: false, paths: null },
+    );
   });
 
-  it("fs 空 command 非突变", () => {
-    assert.deepEqual(classifyMutatingToolCall("fs", { command: "" }), {
+  it("fs 无 action 非突变", () => {
+    assert.deepEqual(classifyMutatingToolCall("fs", {}), {
       mutating: false,
       paths: null,
     });

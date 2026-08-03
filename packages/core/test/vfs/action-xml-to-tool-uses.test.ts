@@ -13,7 +13,7 @@ describe("actionXmlToToolUses", () => {
     );
     assert.equal(uses.length, 1);
     assert.equal(uses[0]?.name, "fs");
-    assert.equal(uses[0]?.input.command, "rm -r draft.md");
+    assert.deepEqual(uses[0]?.input, { action: "rm", path: "draft.md", recursive: true });
   });
 
   it("解析 mkdir", () => {
@@ -21,7 +21,7 @@ describe("actionXmlToToolUses", () => {
       '<action name="mkdir">\n{"path":"notes/"}\n</action>',
     );
     assert.equal(uses[0]?.name, "fs");
-    assert.equal(uses[0]?.input.command, "mkdir notes/");
+    assert.deepEqual(uses[0]?.input, { action: "mkdir", path: "notes/" });
   });
 
   it("解析 rename（同目录）与 move（跨目录）均 → mv", () => {
@@ -29,13 +29,13 @@ describe("actionXmlToToolUses", () => {
       '<action name="rename">\n{"from":"a.md","to":"b.md"}\n</action>',
     );
     assert.equal(renameUses[0]?.name, "fs");
-    assert.equal(renameUses[0]?.input.command, "mv a.md b.md");
+    assert.deepEqual(renameUses[0]?.input, { action: "mv", from: "a.md", to: "b.md" });
 
     const moveUses = actionXmlToToolUses(
       '<action name="move">\n{"from":"/a.md","to":"/dir/b.md"}\n</action>',
     );
     assert.equal(moveUses[0]?.name, "fs");
-    assert.equal(moveUses[0]?.input.command, "mv /a.md /dir/b.md");
+    assert.deepEqual(moveUses[0]?.input, { action: "mv", from: "/a.md", to: "/dir/b.md" });
   });
 
   it("解析 edit", () => {

@@ -4,6 +4,7 @@
  * @module domain/tool/logic/fs-command-classify
  */
 
+import type { FsToolInput } from "./fs-command.js";
 import { parseFsCommand } from "./fs-command.js";
 
 /** fs 命令或 tool 调用的分类结果。 */
@@ -15,20 +16,20 @@ export type FsCommandClassification = {
 };
 
 /**
- * 分类 fs 子命令字符串。
+ * 分类 fs 结构化 input。
  *
  * @remarks
- * - **空 command**：`mutating=false`、`paths=null`（与 {@link isMutatingFsCommand}、runner 路径串行化一致）。
+ * - **无 action**（缺失或非字符串或空串）：`mutating=false`、`paths=null`（与 {@link isMutatingFsCommand}、runner 路径串行化一致）。
  * - **ls**：只读，`mutating=false`。
  * - **解析失败**：`mutating=true`、`paths=null`（checkpoint 保守策略；runner 不串行化未知路径）。
  */
-export function classifyFsCommand(command: string): FsCommandClassification {
-  const trimmed = command.trim();
-  if (trimmed === "") {
+export function classifyFsCommand(input: unknown): FsCommandClassification {
+  const action = (input as { action?: unknown } | null | undefined)?.action;
+  if (typeof action !== "string" || action === "") {
     return { mutating: false, paths: null };
   }
   try {
-    const parsed = parseFsCommand(trimmed);
+    const parsed = parseFsCommand(input as FsToolInput);
     switch (parsed.kind) {
       case "ls":
         return { mutating: false, paths: null };
@@ -50,7 +51,7 @@ export function classifyFsCommand(command: string): FsCommandClassification {
  *
  * @remarks
  * - write / edit：有非空 `path` 时返回 `[path]`，否则 `paths=null`。
- * - fs：委托 {@link classifyFsCommand}；空 command 时 `paths=null`（不串行化）。
+ * - fs：委托 {@link classifyFsCommand}；无 action 时 `paths=null`（不串行化）。
  * - 其他 tool：`mutating=false`、`paths=null`。
  */
 export function classifyMutatingToolCall(
@@ -68,11 +69,7 @@ export function classifyMutatingToolCall(
     return { mutating: true, paths: [path] };
   }
   if (name === "fs") {
-    const command =
-      typeof (input as { command?: unknown }).command === "string"
-        ? (input as { command: string }).command
-        : "";
-    return classifyFsCommand(command);
+    return classifyFsCommand(input);
   }
   return { mutating: false, paths: null };
 }

@@ -18,12 +18,12 @@ export function toolUseMutatesWorkspace(
   if (name !== "fs") {
     return true; // write | edit
   }
-  const command = typeof input.command === "string" ? input.command : "";
-  // checkpoint 对空 command 保守视为突变；runner 路径串行化则视为非突变（见 fs-command-classify）
-  if (command.trim() === "") {
+  const action = typeof input.action === "string" ? input.action : "";
+  // checkpoint 对无 action 保守视为突变；runner 路径串行化则视为非突变（见 fs-command-classify）
+  if (action === "") {
     return true;
   }
-  return classifyFsCommand(command).mutating;
+  return classifyFsCommand(input).mutating;
 }
 
 /** 一轮并行 tool_use 中是否存在任一突变。 */

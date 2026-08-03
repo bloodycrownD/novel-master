@@ -119,7 +119,7 @@ describe("matchUserVfsTurnAt", () => {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       }),
       msg("a1", 2, "assistant", [
-        { type: "tool_use", id: "tu1", name: "fs", input: { command: "…" } },
+        { type: "tool_use", id: "tu1", name: "fs", input: { action: "ls" } },
       ], { metadata: { synthetic: true, actor: "user", toolInputCompressed: true } }),
       msg("u2", 3, "user", [
         { type: "tool_result", toolUseId: "tu1", content: "ok", ok: true },
@@ -152,7 +152,7 @@ describe("formatChatMessageForCliPreview", () => {
           type: "tool_use",
           id: "call_1",
           name: "fs",
-          input: { command: "ls /" },
+          input: { action: "ls", path: "/" },
         },
       ]),
     );

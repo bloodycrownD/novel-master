@@ -46,16 +46,19 @@ export function buildUserVfsDeleteOp(
     path,
     ...(recursive ? { recursive: "true" } : {}),
   });
-  const command = recursive ? `rm -r ${path}` : `rm ${path}`;
   const [id] = allocToolIds(1, "delete");
-  return toOp(actionXml, [{ id, name: "fs", input: { command } }]);
+  return toOp(actionXml, [
+    { id, name: "fs", input: { action: "rm", path, recursive } },
+  ]);
 }
 
 /** 构建新建目录操作 op。 */
 export function buildUserVfsMkdirOp(path: string): UserVfsTurnOp {
   const actionXml = buildUserVfsSimpleActionXml("mkdir", { path });
   const [id] = allocToolIds(1, "mkdir");
-  return toOp(actionXml, [{ id, name: "fs", input: { command: `mkdir ${path}` } }]);
+  return toOp(actionXml, [
+    { id, name: "fs", input: { action: "mkdir", path } },
+  ]);
 }
 
 /**
@@ -67,7 +70,7 @@ export function buildUserVfsRenameOp(from: string, to: string): UserVfsTurnOp {
   const actionXml = buildUserVfsSimpleActionXml(kind, { from, to });
   const [id] = allocToolIds(1, kind);
   return toOp(actionXml, [
-    { id, name: "fs", input: { command: `mv ${from} ${to}` } },
+    { id, name: "fs", input: { action: "mv", from, to } },
   ]);
 }
 

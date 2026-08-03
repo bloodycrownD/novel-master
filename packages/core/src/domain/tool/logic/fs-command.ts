@@ -1,5 +1,8 @@
 /**
- * Strict grammar parser for the `fs` builtin tool command string.
+ * `fs` 内置工具的结构化参数解析与执行。
+ *
+ * WHY 结构化参数：原先用命令行字符串 `split(/\s+/)` 解析，路径含空格会被截断。
+ * 改成 JSON 参数（`action` + 各字段）后，路径可以是任意字符串，与 read/write/edit 风格一致。
  *
  * @module domain/tool/logic/fs-command
  */
@@ -28,6 +31,22 @@ export type FsCommand =
   | { readonly kind: "mkdir"; readonly path: string }
   | { readonly kind: "ls"; readonly dir: string; readonly recursive: boolean };
 
+/**
+ * `fs` 工具的结构化输入。
+ *
+ * - `action`：子命令；`ls` / `rm` / `rmdir` / `mv` / `cp` / `mkdir`。
+ * - `path`：单路径类子命令（ls/rm/rmdir/mkdir）的目标路径。`ls` 省略时列根目录。
+ * - `from` / `to`：`mv` / `cp` 的源与目标。
+ * - `recursive`：`ls` / `rm` / `cp` 的递归标记。
+ */
+export type FsToolInput = {
+  readonly action?: string;
+  readonly path?: string;
+  readonly from?: string;
+  readonly to?: string;
+  readonly recursive?: boolean;
+};
+
 export type FsLsOutput = {
   readonly entries: readonly VfsListEntry[];
   readonly total: number;
@@ -37,97 +56,70 @@ export type FsLsOutput = {
 
 export type FsCommandResult = { readonly ok: true } | FsLsOutput;
 
-const SHELL_METACHAR_RE = /&&|\||;/;
-
-function invalidCommand(command: string, reason: string): never {
-  throw new ToolError(
-    "INVALID_ARGUMENT",
-    `Invalid fs command: ${reason} (command: ${command})`,
-    { toolName: "fs" },
-  );
+function invalidCommand(reason: string): never {
+  throw new ToolError("INVALID_ARGUMENT", `Invalid fs command: ${reason}`, {
+    toolName: "fs",
+  });
 }
 
-/** Parses a single fs subcommand; rejects shell chaining and unknown tokens. */
-export function parseFsCommand(command: string): FsCommand {
-  const trimmed = command.trim();
-  if (trimmed === "") {
-    invalidCommand(command, "empty command");
+function requireField(value: string | undefined, field: string): string {
+  if (typeof value !== "string" || value === "") {
+    invalidCommand(`missing or empty ${field}`);
   }
-  if (SHELL_METACHAR_RE.test(trimmed)) {
-    invalidCommand(command, "shell metacharacters are not supported");
-  }
+  return value;
+}
 
-  const tokens = trimmed.split(/\s+/);
-  const head = tokens[0]!;
-
-  switch (head) {
-    case "rm": {
-      if (tokens.length === 2) {
-        return { kind: "rm", path: tokens[1]!, recursive: false };
-      }
-      if (tokens.length === 3 && tokens[1] === "-r") {
-        return { kind: "rm", path: tokens[2]!, recursive: true };
-      }
-      return invalidCommand(command, "expected `rm <path>` or `rm -r <path>`");
-    }
-    case "rmdir": {
-      if (tokens.length === 2) {
-        return { kind: "rmdir", path: tokens[1]! };
-      }
-      return invalidCommand(command, "expected `rmdir <path>`");
-    }
-    case "mv": {
-      if (tokens.length === 3) {
-        return { kind: "mv", from: tokens[1]!, to: tokens[2]! };
-      }
-      return invalidCommand(command, "expected `mv <from> <to>`");
-    }
-    case "cp": {
-      if (tokens.length === 3) {
-        return { kind: "cp", from: tokens[1]!, to: tokens[2]!, recursive: false };
-      }
-      if (tokens.length === 4 && tokens[1] === "-r") {
-        return {
-          kind: "cp",
-          from: tokens[2]!,
-          to: tokens[3]!,
-          recursive: true,
-        };
-      }
-      return invalidCommand(
-        command,
-        "expected `cp <from> <to>` or `cp -r <from> <to>`",
-      );
-    }
-    case "mkdir": {
-      if (tokens.length === 2) {
-        return { kind: "mkdir", path: tokens[1]! };
-      }
-      return invalidCommand(command, "expected `mkdir <path>`");
-    }
+/**
+ * 将结构化 {@link FsToolInput} 解析为 {@link FsCommand}。
+ *
+ * @remarks `action` 为空字符串或缺失时抛 `INVALID_ARGUMENT`；classify 层在调用前自行判空。
+ */
+export function parseFsCommand(input: FsToolInput): FsCommand {
+  const action = input.action;
+  switch (action) {
+    case "rm":
+      return {
+        kind: "rm",
+        path: requireField(input.path, "path"),
+        recursive: input.recursive === true,
+      };
+    case "rmdir":
+      return { kind: "rmdir", path: requireField(input.path, "path") };
+    case "mv":
+      return {
+        kind: "mv",
+        from: requireField(input.from, "from"),
+        to: requireField(input.to, "to"),
+      };
+    case "cp":
+      return {
+        kind: "cp",
+        from: requireField(input.from, "from"),
+        to: requireField(input.to, "to"),
+        recursive: input.recursive === true,
+      };
+    case "mkdir":
+      return { kind: "mkdir", path: requireField(input.path, "path") };
     case "ls": {
-      if (tokens.length === 1) {
-        return { kind: "ls", dir: "/", recursive: false };
-      }
-      if (tokens.length === 2) {
-        return { kind: "ls", dir: tokens[1]!, recursive: false };
-      }
-      if (tokens.length === 3 && tokens[1] === "-r") {
-        return { kind: "ls", dir: tokens[2]!, recursive: true };
-      }
-      return invalidCommand(
-        command,
-        "expected `ls [dir]`, `ls <dir>`, or `ls -r <dir>`",
-      );
+      const dir = typeof input.path === "string" && input.path !== "" ? input.path : "/";
+      return { kind: "ls", dir, recursive: input.recursive === true };
     }
     default:
-      return invalidCommand(command, `unknown subcommand: ${head}`);
+      invalidCommand(
+        typeof action === "string" && action !== ""
+          ? `unknown action: ${action}`
+          : "missing action",
+      );
   }
 }
 
-/** 突变 fs 子命令返回 true；`ls` 只读。 */
-export function isMutatingFsCommand(command: string): boolean {
-  return classifyFsCommand(command).mutating;
+/**
+ * 突变 fs 子命令返回 true；`ls` 只读。
+ *
+ * @remarks 接收结构化 input（`unknown`），与 {@link classifyFsCommand} 语义一致。
+ */
+export function isMutatingFsCommand(input: unknown): boolean {
+  return classifyFsCommand(input).mutating;
 }
 
 function formatListEntry(entry: VfsListEntry): string {

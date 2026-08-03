@@ -80,7 +80,7 @@ function deriveFromNamedAction(
       return [
         {
           name: "fs",
-          input: { command: `mkdir ${asString(params.path)}` },
+          input: { action: "mkdir", path: asString(params.path) },
         },
       ];
     case "delete": {
@@ -89,7 +89,7 @@ function deriveFromNamedAction(
       return [
         {
           name: "fs",
-          input: { command: recursive ? `rm -r ${path}` : `rm ${path}` },
+          input: { action: "rm", path, recursive },
         },
       ];
     }
@@ -100,7 +100,9 @@ function deriveFromNamedAction(
         {
           name: "fs",
           input: {
-            command: `mv ${asString(params.from)} ${asString(params.to)}`,
+            action: "mv",
+            from: asString(params.from),
+            to: asString(params.to),
           },
         },
       ];

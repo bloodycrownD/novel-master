@@ -306,26 +306,49 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     },
   };
 
-  const fs: Tool<{ command: string }, FsCommandResult, BuiltinToolContext> = {
+  const fs: Tool<
+    {
+      action: "ls" | "rm" | "rmdir" | "mv" | "cp" | "mkdir";
+      path?: string;
+      from?: string;
+      to?: string;
+      recursive?: boolean;
+    },
+    FsCommandResult,
+    BuiltinToolContext
+  > = {
     name: "fs",
-    description: `执行单条文件系统命令（非 shell）。每次调用仅一条命令，不支持 &&、|、; 等链式语法。
+    description: `执行单条文件系统命令（非 shell）。每次调用仅一条命令，通过结构化参数指定动作与路径。
 
-支持的子命令：
-- ls [ -r ] <dir> — 列目录；-r 递归
-- rm <path> / rm -r <path> — 删文件或递归删目录
-- rmdir <path> — 删空目录
-- mv <from> <to> — 移动或重命名
-- cp <from> <to> / cp -r <from> <to> — 复制文件或目录
-- mkdir <path> — 创建目录
+支持的 action：
+- ls：列目录；path 省略时列根目录；recursive=true 递归列出
+- rm：删文件或目录；recursive=true 强制递归删目录（不传时若目标是目录也会自动递归删）
+- rmdir：删空目录
+- mv：移动或重命名；需 from + to
+- cp：复制文件或目录；需 from + to；recursive=true 递归复制目录
+- mkdir：创建目录
 
-与 read/write/edit 区别：fs 管路径级操作（增删移复制、列目录）；改文件内容用 write/edit。`,
+参数说明：
+- action：必填，上述子命令之一
+- path：ls / rm / rmdir / mkdir 的目标路径
+- from / to：mv / cp 的源与目标
+- recursive：ls / rm / cp 的递归标记
+
+路径可以是任意字符串（含空格、中文等），不需要担心 shell 转义。与 read/write/edit 区别：fs 管路径级操作（增删移复制、列目录）；改文件内容用 write/edit。`,
     inputSchema: z.object({
-      command: z
+      action: z
+        .enum(["ls", "rm", "rmdir", "mv", "cp", "mkdir"])
+        .describe("子命令，决定本次操作类型"),
+      path: z
         .string()
-        .min(1)
-        .describe(
-          "单条 fs 子命令字符串，例如 `ls src`、`rm -r tmp`、`mv a.txt b.txt`",
-        ),
+        .optional()
+        .describe("ls / rm / rmdir / mkdir 的目标路径；ls 省略时列根目录"),
+      from: z.string().optional().describe("mv / cp 的源路径"),
+      to: z.string().optional().describe("mv / cp 的目标路径"),
+      recursive: z
+        .boolean()
+        .optional()
+        .describe("ls / rm / cp 的递归标记"),
     }),
     outputSchema: z.union([
       z.object({ ok: z.literal(true) }),
@@ -342,7 +365,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       }),
     ]),
     async run(input, ctx) {
-      const parsed = parseFsCommand(input.command);
+      const parsed = parseFsCommand(input);
       return await executeFsCommand(ctx.vfs, parsed);
     },
   };

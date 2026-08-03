@@ -162,7 +162,7 @@ test("vfsToolFilePath：delete 与非文件工具返回 undefined", () => {
     vfsToolFilePath({
       toolUseId: "t6",
       name: "fs",
-      input: { command: "ls /" },
+      input: { action: "ls", path: "/" },
       status: "success",
     }),
     undefined,

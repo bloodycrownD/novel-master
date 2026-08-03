@@ -672,7 +672,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't2',
         name: 'fs',
-        input: { command: 'ls /' },
+        input: { action: 'ls', path: '/' },
         status: 'success',
       }),
     ).toBeUndefined();
@@ -786,7 +786,7 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'fs', input: { command: '…' } }],
+        [{ type: 'tool_use', id: 'tu1', name: 'fs', input: { action: 'ls' } }],
         2,
         false,
         {
