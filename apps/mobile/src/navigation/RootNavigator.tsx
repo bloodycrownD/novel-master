@@ -36,6 +36,7 @@ import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
 import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
+import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {AboutScreen} from '../screens/stack/AboutScreen';
 import {useAutoUpdateCheck} from '../hooks/useAutoUpdateCheck';
 
@@ -156,6 +157,10 @@ const SessionDetailStackScreen = withStackLayout(
   'SessionDetail',
   SessionDetailScreen,
 );
+const ChatHistorySearchStackScreen = withStackLayout(
+  'ChatHistorySearch',
+  ChatHistorySearchScreen,
+);
 const AboutStackScreen = withStackLayout('About', AboutScreen);
 
 export function RootNavigator() {
@@ -212,6 +217,10 @@ export function RootNavigator() {
           <Stack.Screen
             name="SessionDetail"
             component={SessionDetailStackScreen}
+          />
+          <Stack.Screen
+            name="ChatHistorySearch"
+            component={ChatHistorySearchStackScreen}
           />
           <Stack.Screen name="About" component={AboutStackScreen} />
         </Stack.Navigator>

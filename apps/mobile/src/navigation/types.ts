@@ -42,6 +42,8 @@ export type RootStackParamList = {
   };
   /** 会话详情页：承载原 SessionActionsDrawer 五项能力 + agent/model 来源展示。 */
   SessionDetail: { projectId: string; sessionId: string };
+  /** 聊天记录查询页：参数与 SessionDetail 一致，限定单会话范围搜索。 */
+  ChatHistorySearch: { projectId: string; sessionId: string };
   About: undefined;
 };
 
