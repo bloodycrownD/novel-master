@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage } from "../model/message.js";
+import type { MessageSearchQuery } from "../content/message-content-match.js";
 
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
@@ -45,4 +46,13 @@ export interface MessageRepository {
     toSeq: number,
     hidden: boolean,
   ): Promise<number>;
+
+  /**
+   * 搜索会话内消息：精准模式用 LIKE 粗筛 + role 粗筛，正则模式跳过 LIKE 全量拉；
+   * 时间范围 + seq DESC LIMIT + 可选 beforeSeq；不在 SQL 层过滤 hidden（始终含隐藏消息）。
+   */
+  searchMessages(
+    sessionId: string,
+    query: MessageSearchQuery,
+  ): Promise<ChatMessage[]>;
 }

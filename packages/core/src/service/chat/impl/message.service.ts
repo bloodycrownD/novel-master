@@ -7,6 +7,10 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import {
+  messageMatchesKeyword,
+  type MessageSearchQuery,
+} from "@/domain/chat/content/message-content-match.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type {
   ChatMessage,
@@ -309,5 +313,27 @@ export class DefaultMessageService implements MessageService {
       sessionApiPromptTokenCache.invalidate(sessionId);
     }
     return count;
+  }
+
+  async searchMessages(
+    sessionId: string,
+    query: MessageSearchQuery,
+  ): Promise<ChatMessage[]> {
+    const candidates = await this.deps.messages.searchMessages(
+      sessionId,
+      query,
+    );
+    const keyword = query.keyword?.trim() ?? "";
+    if (keyword.length === 0) {
+      // keyword 为空时不做关键词过滤，仓储层已返回所有符合时间/limit 约束的消息。
+      return candidates;
+    }
+    // 仓储层 LIKE 是 content_json 超集召回，内存层只匹配 user/assistant 的 TextBlock 做最终判定。
+    return candidates.filter((msg) =>
+      messageMatchesKeyword(msg, keyword, {
+        mode: query.mode,
+        caseSensitive: query.caseSensitive,
+      }),
+    );
   }
 }

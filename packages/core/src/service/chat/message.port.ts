@@ -10,6 +10,7 @@ import type {
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
+import type { MessageSearchQuery } from "@/domain/chat/content/message-content-match.js";
 
 /** Message CRUD and fork (branch) operations. */
 export interface MessageService {
@@ -58,4 +59,12 @@ export interface MessageService {
 
   /** Show a range of messages by seq. Returns count of affected messages. */
   showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number>;
+
+  /**
+   * 搜索会话内消息（透传仓储层召回，keyword 非空时在内存层用 messageMatchesKeyword 精筛）。
+   */
+  searchMessages(
+    sessionId: string,
+    query: MessageSearchQuery,
+  ): Promise<ChatMessage[]>;
 }
