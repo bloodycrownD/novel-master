@@ -111,9 +111,11 @@ jest.mock('../src/components/provider/ModelPickerModal', () => {
   };
 });
 
+const mockNavigate = jest.fn();
+const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({params: mockRouteParams}),
-  useNavigation: () => ({navigate: jest.fn()}),
+  useNavigation: () => ({navigate: mockNavigate, goBack: mockGoBack}),
   useFocusEffect: () => undefined,
 }));
 
@@ -287,9 +289,10 @@ describe('T-M2 SessionDetailScreen', () => {
       await flushPromises();
     });
     const json = JSON.stringify(tree.toJSON());
-    // 两张卡片都应是锁定态（🔒，不再有 ›）
+    // 两张锁定卡片都应是 🔒（chat-history-row 是新增的常驻入口，始终带 ›，
+    // 所以不再用「整页不含 ›」反向断言，改成检查 🔒 数量）
     expect(json).toContain('🔒');
-    expect(json).not.toContain('›');
+    expect((json.match(/🔒/g) ?? []).length).toBeGreaterThanOrEqual(2);
     await act(async () => {
       tree.root.findByProps({testID: 'agent-row'}).props.onPress();
     });
@@ -418,5 +421,32 @@ describe('T-M5 picker select 分流', () => {
     await mockRuntime.state.setCurrentModelId('model-x');
     expect(mockStateSetCurrentModelId).toHaveBeenCalledWith('model-x');
     expect(mockSessionsUpdateSessionAgentConfig).not.toHaveBeenCalled();
+  });
+});
+
+// ── T-MO1 聊天记录查询入口 ─────────────────────────────────────────────────
+describe('T-MO1 SessionDetailScreen 聊天记录查询入口', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
+    mockLoadChatAgentMeta.mockResolvedValue(meta());
+  });
+
+  it('渲染「聊天记录」入口卡片，点击 navigate 到 ChatHistorySearch', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    const json = JSON.stringify(tree.toJSON());
+    expect(json).toContain('聊天记录');
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-row'}).props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('ChatHistorySearch', {
+      projectId: 'p1',
+      sessionId: 's1',
+    });
   });
 });
