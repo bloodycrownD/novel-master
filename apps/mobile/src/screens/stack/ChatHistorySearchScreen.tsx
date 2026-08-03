@@ -7,8 +7,8 @@
  *
  * 搜索始终包含隐藏消息——hidden 的卡片整体降透明度，与「已隐藏」语义一致。
  *
- * 布局：VSCode 搜索框风格——顶部一行搜索栏（「更多」按钮 + 输入框 + 搜索 + 返回），
- * 点「更多」展开筛选面板（正则 / 大小写 / 日期三个 toggle），下方 FlatList 占满剩余屏幕。
+ * 布局只有一排搜索栏（关键词输入框 + 搜索按钮），下方 FlatList 占满剩余屏幕。
+ * 返回由导航 header 的 showBack 处理，组件内不再单独放返回按钮。
  */
 import React, {useCallback, useMemo, useState} from 'react';
 import {
@@ -19,9 +19,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import type {DateTimePickerEvent} from '@react-native-community/datetimepicker';
-import {useNavigation, useRoute} from '@react-navigation/native';
+import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
 import {FormTextInput} from '../../components/form/FormTextInput';
@@ -33,12 +31,6 @@ import type {RootStackParamList} from '../../navigation/types';
 type ScreenRoute = RouteProp<RootStackParamList, 'ChatHistorySearch'>;
 
 const SEARCH_LIMIT = 50;
-
-/** 搜索模式分段。 */
-type SearchMode = 'literal' | 'regex';
-
-/** 哪一个日期选择器当前展开（一次只展开一个，避免两个 picker 重叠）。 */
-type DateField = 'from' | 'to';
 
 /**
  * 把消息里的 TextBlock 拼成单行摘要（忽略 tool_use / thinking 等非对话块）。
@@ -58,49 +50,6 @@ function extractMessageSummary(message: ChatMessage, max = 200): string {
   return full.slice(0, max) + '…';
 }
 
-/** 把 Date 格式化成 YYYY-MM-DD 展示给用户（本地时区）。 */
-function formatDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-/** 把 Date 折算成 MM-DD 简写，给日期按钮文字用，避免太长挤占工具条。 */
-function formatDateShort(date: Date): string {
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${m}-${d}`;
-}
-
-/**
- * 根据当前已选的 from/to 计算日期按钮上显示的文字。
- * 没选就显示「日期」，只选一端就显示「从 xx」「至 xx」，两端都选就显示区间。
- */
-function dateRangeLabel(from: Date | undefined, to: Date | undefined): string {
-  if (from != null && to != null) {
-    return `${formatDateShort(from)} ~ ${formatDateShort(to)}`;
-  }
-  if (from != null) {
-    return `从 ${formatDateShort(from)}`;
-  }
-  if (to != null) {
-    return `至 ${formatDateShort(to)}`;
-  }
-  return '日期';
-}
-
-/** 把 Date 折算成搜索边界 ms：start=false 取当天 00:00:00.000，true 取 23:59:59.999。 */
-function toDateBound(date: Date, endOfDay: boolean): number {
-  const copy = new Date(date);
-  if (endOfDay) {
-    copy.setHours(23, 59, 59, 999);
-  } else {
-    copy.setHours(0, 0, 0, 0);
-  }
-  return copy.getTime();
-}
-
 /** 角色标签：user/assistant 直出，其他角色归一为「系统」。 */
 function roleLabel(role: string): string {
   if (role === 'user') {
@@ -115,19 +64,10 @@ function roleLabel(role: string): string {
 export function ChatHistorySearchScreen() {
   const {tokens} = useTheme();
   const runtime = useRuntime();
-  const navigation = useNavigation();
   const route = useRoute<ScreenRoute>();
   const {sessionId} = route.params;
 
   const [keyword, setKeyword] = useState('');
-  const [mode, setMode] = useState<SearchMode>('literal');
-  const [caseSensitive, setCaseSensitive] = useState(false);
-  const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
-  const [toDate, setToDate] = useState<Date | undefined>(undefined);
-  /** 当前展开的日期选择器字段，null 表示收起。 */
-  const [openPicker, setOpenPicker] = useState<DateField | null>(null);
-  /** 筛选面板是否展开（默认收起，符合 VSCode 搜索框默认隐藏高级选项的交互）。 */
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [results, setResults] = useState<readonly ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -161,10 +101,6 @@ export function ChatHistorySearchScreen() {
       try {
         const batch = await runtime.messages.searchMessages(sessionId, {
           keyword: trimmed.length > 0 ? trimmed : undefined,
-          mode,
-          caseSensitive,
-          fromMs: fromDate != null ? toDateBound(fromDate, false) : undefined,
-          toMs: toDate != null ? toDateBound(toDate, true) : undefined,
           limit: SEARCH_LIMIT,
           beforeSeq: opts?.beforeSeq,
         });
@@ -185,7 +121,7 @@ export function ChatHistorySearchScreen() {
         setLoadingMore(false);
       }
     },
-    [runtime, sessionId, keyword, mode, caseSensitive, fromDate, toDate],
+    [runtime, sessionId, keyword],
   );
 
   const onSubmitSearch = useCallback(() => {
@@ -199,46 +135,7 @@ export function ChatHistorySearchScreen() {
     runQuery({beforeSeq: minSeq, append: true}).catch(() => undefined);
   }, [hasMore, loading, loadingMore, minSeq, runQuery]);
 
-  const onDateChange = useCallback(
-    (field: DateField, event: DateTimePickerEvent, date?: Date) => {
-      // Android 上「取消」会带 type='dismissed'，直接收起 picker 不改值。
-      if (event.type !== 'set' || date == null) {
-        setOpenPicker(null);
-        return;
-      }
-      if (field === 'from') {
-        setFromDate(date);
-        // 选完 from 之后自动接力弹 to，让用户一次性把范围选完。
-        setOpenPicker('to');
-      } else {
-        setToDate(date);
-        setOpenPicker(null);
-      }
-    },
-    [],
-  );
-
-  /**
-   * 点日期按钮的策略：VSCode 风格——已经有日期范围就直接清空还原，
-   * 没有就弹 from picker，选完 from 自动接力弹 to picker。
-   */
-  const onPressDate = useCallback(() => {
-    if (fromDate != null || toDate != null) {
-      setFromDate(undefined);
-      setToDate(undefined);
-      return;
-    }
-    setOpenPicker('from');
-  }, [fromDate, toDate]);
-
-  const onBack = useCallback(() => {
-    navigation.goBack();
-  }, [navigation]);
-
   const showEmpty = hasSearched && !loading && results.length === 0;
-
-  const dateActive = fromDate != null || toDate != null;
-  const dateLabel = dateRangeLabel(fromDate, toDate);
 
   const renderItem = useCallback(
     ({item}: {item: ChatMessage}) => (
@@ -267,36 +164,13 @@ export function ChatHistorySearchScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {/* 顶部：搜索栏 + 工具条，固定区域，不参与滚动。 */}
+      {/* 顶部：搜索栏（关键词输入框 + 搜索按钮），固定区域，不参与滚动。 */}
       <View
         style={[
           styles.header,
           {borderBottomColor: tokens.borderLight},
         ]}>
-        {/* 第 1 行：更多按钮 + 关键词输入框 + 搜索按钮 + 返回 */}
         <View style={styles.searchRow}>
-          {/* 「更多」按钮：切换筛选面板展开/收起，激活态高亮提示当前有筛选可见 */}
-          <Pressable
-            testID="chat-history-search-more"
-            onPress={() => setFiltersOpen(v => !v)}
-            accessibilityLabel="更多筛选"
-            style={[
-              styles.moreBtn,
-              {
-                backgroundColor: filtersOpen
-                  ? tokens.surfaceElevated
-                  : tokens.surface,
-                borderColor: filtersOpen ? tokens.border : tokens.borderLight,
-              },
-            ]}>
-            <Text
-              style={[
-                styles.moreText,
-                {color: filtersOpen ? tokens.text : tokens.textSecondary},
-              ]}>
-              {'\u22EF'}
-            </Text>
-          </Pressable>
           <FormTextInput
             testID="chat-history-search-keyword"
             tokens={tokens}
@@ -321,95 +195,9 @@ export function ChatHistorySearchScreen() {
               <Text style={styles.submitText}>搜索</Text>
             )}
           </Pressable>
-          {/* 返回按钮：作为测试钩子 + 备用返回入口，保持不显眼 */}
-          <Pressable
-            testID="chat-history-search-back"
-            onPress={onBack}
-            accessibilityLabel="返回"
-            style={styles.backBtn}>
-            <Text style={[styles.backText, {color: tokens.textSecondary}]}>
-              ←
-            </Text>
-          </Pressable>
         </View>
 
-        {/* 第 2 行（条件渲染）：筛选面板——正则 + 大小写 + 日期三个 toggle */}
-        {filtersOpen ? (
-          <View style={styles.toolbar}>
-            {/* 正则 .* 切换：再次点击切回精准 */}
-            <Pressable
-              testID="chat-history-search-mode-regex"
-              onPress={() =>
-                setMode(m => (m === 'regex' ? 'literal' : 'regex'))
-              }
-              style={[
-                styles.pill,
-                {
-                  backgroundColor:
-                    mode === 'regex' ? tokens.primary : tokens.surface,
-                  borderColor:
-                    mode === 'regex' ? tokens.primary : tokens.borderLight,
-                },
-              ]}>
-              <Text
-                style={[
-                  styles.pillText,
-                  styles.pillTextMono,
-                  {color: mode === 'regex' ? '#FFFFFF' : tokens.textSecondary},
-                ]}>
-                .*
-              </Text>
-            </Pressable>
-
-            {/* Aa 大小写 toggle */}
-            <Pressable
-              testID="chat-history-search-case-sensitive"
-              onPress={() => setCaseSensitive(v => !v)}
-              style={[
-                styles.pill,
-                {
-                  backgroundColor: caseSensitive
-                    ? tokens.primary
-                    : tokens.surface,
-                  borderColor: caseSensitive
-                    ? tokens.primary
-                    : tokens.borderLight,
-                },
-              ]}>
-              <Text
-                style={[
-                  styles.pillText,
-                  {color: caseSensitive ? '#FFFFFF' : tokens.textSecondary},
-                ]}>
-                Aa
-              </Text>
-            </Pressable>
-
-            {/* 日期按钮：紧凑显示当前日期范围，有日期时点击清空，无日期时点击弹 picker */}
-            <Pressable
-              testID="chat-history-search-date"
-              onPress={onPressDate}
-              style={[
-                styles.pill,
-                {
-                  backgroundColor: dateActive
-                    ? tokens.primary
-                    : tokens.surface,
-                  borderColor: dateActive ? tokens.primary : tokens.borderLight,
-                },
-              ]}>
-              <Text
-                style={[
-                  styles.pillText,
-                  {color: dateActive ? '#FFFFFF' : tokens.textSecondary},
-                ]}>
-                {dateLabel}
-              </Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {/* 错误信息紧凑显示在筛选面板下方 */}
+        {/* 错误信息紧凑显示在搜索栏下方 */}
         {error != null ? (
           <Text style={[styles.error, {color: tokens.danger}]} numberOfLines={2}>
             {error}
@@ -429,25 +217,6 @@ export function ChatHistorySearchScreen() {
         ListEmptyComponent={ListEmptyComponent}
         contentContainerStyle={styles.resultContent}
       />
-
-      {openPicker === 'from' ? (
-        <DateTimePicker
-          testID="chat-history-search-from-picker"
-          mode="date"
-          display="default"
-          value={fromDate ?? new Date()}
-          onChange={(e, d) => onDateChange('from', e, d)}
-        />
-      ) : null}
-      {openPicker === 'to' ? (
-        <DateTimePicker
-          testID="chat-history-search-to-picker"
-          mode="date"
-          display="default"
-          value={toDate ?? new Date()}
-          onChange={(e, d) => onDateChange('to', e, d)}
-        />
-      ) : null}
     </View>
   );
 }
@@ -513,33 +282,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   submitText: {color: '#FFFFFF', fontSize: 15, fontWeight: '700'},
-  moreBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  moreText: {fontSize: 20, fontWeight: '700'},
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  pill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  pillText: {fontSize: 15, fontWeight: '700'},
-  pillTextMono: {fontFamily: 'monospace'},
-  backBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  backText: {fontSize: 18},
   error: {fontSize: 12, paddingHorizontal: 2},
   resultList: {flex: 1},
   resultContent: {padding: 16, gap: 10},

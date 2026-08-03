@@ -1,11 +1,11 @@
 /**
- * 聊天记录查询页 mobile 组件测试（T-MO2 / T-MO3）。
+ * 聊天记录查询页 mobile 组件测试（T-MO2）。
  *
  * - T-MO2：点击查询触发 runtime.messages.searchMessages，结果渲染到自渲染列表；
  *          空结果时显示「未找到匹配的聊天记录」。
- * - T-MO3：返回按钮触发 navigation.goBack，回到详情页。
  *
- * DateTimePicker 是原生组件，jest 环境无 bridge，统一 mock 成简单 View。
+ * 返回由导航 header 的 showBack 处理，组件内不再单独放返回按钮，因此不再需要
+ * 单独的返回测试。
  */
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
@@ -22,8 +22,6 @@ let mockRouteParams: {projectId: string; sessionId: string} = {
   projectId: 'p1',
   sessionId: 's1',
 };
-const mockGoBack = jest.fn();
-const mockNavigate = jest.fn();
 
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
@@ -49,25 +47,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({params: mockRouteParams}),
-  useNavigation: () => ({goBack: mockGoBack, navigate: mockNavigate}),
 }));
-
-jest.mock('@react-native-community/datetimepicker', () => {
-  const React = require('react');
-  const Picker = (props: {
-    testID?: string;
-    value?: unknown;
-    mode?: string;
-  }) =>
-    React.createElement('View', {
-      testID: props.testID ?? 'datetime-picker',
-      mode: props.mode,
-    });
-  return {
-    __esModule: true,
-    default: Picker,
-  };
-});
 
 jest.mock('../src/components/form/FormTextInput', () => {
   const React = require('react');
@@ -84,44 +64,6 @@ jest.mock('../src/components/form/FormTextInput', () => {
       placeholder: props.placeholder,
     });
   return {FormTextInput};
-});
-
-jest.mock('../src/components/form/FormSwitchRow', () => {
-  const React = require('react');
-  const FormSwitchRow = (props: {
-    testID?: string;
-    value?: boolean;
-    onValueChange?: (v: boolean) => void;
-    label?: string;
-  }) =>
-    React.createElement('View', {
-      testID: props.testID,
-      value: String(props.value ?? false),
-    });
-  return {FormSwitchRow};
-});
-
-jest.mock('../src/components/ui/SegmentedControl', () => {
-  const React = require('react');
-  const SegmentedControl = <T extends string>(props: {
-    testID?: string;
-    value?: T;
-    onChange?: (v: T) => void;
-    options?: readonly {value: T; label: string; testID?: string}[];
-  }) =>
-    React.createElement(
-      'View',
-      {testID: 'segmented-control', value: props.value},
-      (props.options ?? []).map(opt =>
-        React.createElement('View', {
-          key: opt.value,
-          testID: opt.testID,
-          label: opt.label,
-          onPress: () => props.onChange?.(opt.value),
-        }),
-      ),
-    );
-  return {SegmentedControl};
 });
 
 jest.mock('react-native', () => {
@@ -258,10 +200,8 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
     });
 
     expect(mockSearchMessages).toHaveBeenCalledTimes(1);
-    // 透传给 core 的入参形状
+    // 透传给 core 的入参形状（仅关键词 + limit + 翻页游标）
     expect(mockSearchMessages).toHaveBeenCalledWith('s1', expect.objectContaining({
-      mode: 'literal',
-      caseSensitive: false,
       limit: 50,
     }));
     const json = JSON.stringify(tree.toJSON());
@@ -305,24 +245,5 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
     const json = JSON.stringify(tree.toJSON());
     expect(json).toContain('隐藏消息');
     expect(json).toContain('已隐藏');
-  });
-});
-
-describe('T-MO3 ChatHistorySearchScreen 返回', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
-    mockSearchMessages.mockResolvedValue([]);
-  });
-
-  it('点击返回按钮触发 navigation.goBack', async () => {
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<ChatHistorySearchScreen />);
-    });
-    await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-back'}).props.onPress();
-    });
-    expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 });
