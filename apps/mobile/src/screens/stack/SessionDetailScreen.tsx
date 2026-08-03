@@ -21,8 +21,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {useRoute} from '@react-navigation/native';
+import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -33,6 +34,10 @@ import {toastMessage} from '../../errors/toast-message';
 import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
+type ScreenNavigation = NativeStackNavigationProp<
+  RootStackParamList,
+  'SessionDetail'
+>;
 
 const AGENT_LOCK_TOAST = '智能体已被项目锁定，无法在会话内切换，请到「项目智能体配置」修改';
 const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
@@ -42,6 +47,7 @@ export function SessionDetailScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const route = useRoute<ScreenRoute>();
+  const navigation = useNavigation<ScreenNavigation>();
   const {projectId, sessionId} = route.params;
 
   const [sessionTitle, setSessionTitle] = useState<string>('');
@@ -263,6 +269,39 @@ export function SessionDetailScreen() {
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
             {modelLocked ? '🔒' : '›'}
           </Text>
+        </Pressable>
+
+        {/* 聊天记录查询：跳转到 ChatHistorySearch 页面，参数与 SessionDetail 一致。 */}
+        <Pressable
+          testID="chat-history-row"
+          onPress={() =>
+            navigation.navigate('ChatHistorySearch', {projectId, sessionId})
+          }
+          accessibilityLabel="聊天记录查询"
+          style={[
+            styles.card,
+            cardShadow,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.borderLight,
+            },
+          ]}>
+          <View
+            style={[
+              styles.iconBox,
+              {backgroundColor: tokens.primary + '1A'},
+            ]}>
+            <Text style={styles.iconGlyph}>🔍</Text>
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+              聊天记录
+            </Text>
+            <Text style={[styles.cardValue, {color: tokens.text}]}>
+              查询历史消息
+            </Text>
+          </View>
+          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
         </Pressable>
       </ScrollView>
 
