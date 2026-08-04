@@ -96,6 +96,47 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.match(body, /<user-input>\n继续\n<\/user-input>/);
   });
 
+  it("T-EI4: user_ops 附件 + extraInfo 非空 → </user-ops> 后 <extra-info> 嵌 attachment 内、顺序钉死", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const actionXml = `<action name="write">\n{"path":"/x.md","content":""}\n</action>`;
+    const attachments: MessageAttachment[] = [
+      { name: "ops", source: "user_ops", type: "text", content: actionXml },
+    ];
+    const stored = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("继续"),
+      { attachments },
+    );
+    const sk = createSessionKkvService(ctx.conn);
+    const prepared = await prepareUserMessagesForPrompt([stored], {
+      sessionId: session.id,
+      sessionKkv: sk,
+      vfs: ctx.sessionVfs(project.id, session.id),
+      extraInfo: "备注信息",
+    });
+    const body = messageBodyText(prepared[0]!);
+    // 顺序：user-ops 先闭合 → extra-info 嵌在 attachment 内 → attachment 闭合 → user-input
+    const expected = [
+      "<attachment>",
+      "  <user-ops>",
+      "    <action name=\"write\">",
+      '    {"path":"/x.md","content":""}',
+      "    </action>",
+      "  </user-ops>",
+      "  <extra-info>",
+      "    备注信息",
+      "  </extra-info>",
+      "</attachment>",
+      "<user-input>",
+      "继续",
+      "</user-input>",
+    ].join("\n");
+    assert.equal(body, expected);
+  });
+
   it("T-AT2: user_ops + text → wrap 含 user-ops 与 user-input；库内仍为原文", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
