@@ -841,42 +841,29 @@ export const AgentDefinitionEditorForm = forwardRef<
             <span className="config-block-card__badge">
               {PROMPT_REGION_LABELS.chatTag}
             </span>
-            <span className="config-block-card__readonly-pill">只读</span>
+            <Switch
+              checked={customAttachEnabled}
+              disabled={disabled}
+              onChange={setCustomAttachEnabled}
+              aria-label="开启自定义附加信息"
+            />
           </div>
           <div className="config-block-card__body">
-            <p className="config-block-card__meta config-block-card__meta--chat-title">
-              {PROMPT_REGION_LABELS.chat}
-            </p>
             <p className="config-block-card__hint">
-              {PROMPT_REGION_LABELS.chatReadonlyHint}
+              用户聊天历史，开启后可给每次输入附加额外内容
             </p>
-            <div className="config-block-card__chat-extra">
-              <div className="config-block-card__chat-extra-head">
-                <span className="config-block-card__meta">附加信息</span>
-                <Switch
-                  checked={customAttachEnabled}
+            {customAttachEnabled ? (
+              <SettingsField label="附加信息文本">
+                <textarea
+                  rows={4}
+                  value={customAttachText}
                   disabled={disabled}
-                  onChange={setCustomAttachEnabled}
-                  aria-label="开启自定义附加信息"
+                  onChange={(e) => setCustomAttachText(e.target.value)}
+                  onKeyDown={handlePromptTextareaKeyDown}
+                  placeholder="每条用户消息都会附带这段文本给模型"
                 />
-              </div>
-              {customAttachEnabled ? (
-                <SettingsField label="附加信息文本">
-                  <textarea
-                    rows={4}
-                    value={customAttachText}
-                    disabled={disabled}
-                    onChange={(e) => setCustomAttachText(e.target.value)}
-                    onKeyDown={handlePromptTextareaKeyDown}
-                    placeholder="每条用户消息都会附带这段文本给模型"
-                  />
-                </SettingsField>
-              ) : (
-                <p className="config-block-card__hint">
-                  开启后，每次发送消息会以 &lt;extra-info&gt; 块把这段文本附加到用户消息上；留空则静默省略。
-                </p>
-              )}
-            </div>
+              </SettingsField>
+            ) : null}
           </div>
         </div>
 

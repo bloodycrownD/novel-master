@@ -107,10 +107,7 @@ type ProjectEditorProps = {
 
 type Props = RegistryEditorProps | ProjectEditorProps;
 
-// 自定义附加信息区块文案（core 未导出，UI 层自管）。
-const CUSTOM_ATTACH_BLOCK_LABEL = '自定义附加信息';
-const CUSTOM_ATTACH_BLOCK_HINT =
-  '开启后，每次发消息会以 <extra-info> 块附加给模型；留空则静默省略。';
+// 自定义附加信息输入框文案（core 未导出，UI 层自管）。
 const CUSTOM_ATTACH_TEXT_LABEL = '附加信息内容';
 
 export function AgentEditorForm(props: Props) {
@@ -1213,67 +1210,28 @@ export function AgentEditorForm(props: Props) {
                   {PROMPT_REGION_LABELS.chatTag}
                 </Text>
               </View>
-              <View
-                style={[
-                  styles.readonlyPill,
-                  {
-                    backgroundColor: tokens.surface,
-                    borderColor: tokens.borderLight,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.readonlyPillText,
-                    { color: tokens.textSecondary },
-                  ]}
-                >
-                  只读
-                </Text>
-              </View>
+              <Switch
+                value={customAttachEnabled}
+                onValueChange={next => setCustomAttachEnabled(next)}
+                trackColor={{ false: tokens.border, true: tokens.primary }}
+              />
             </View>
-            <Text style={[styles.chatSlotTitle, { color: tokens.text }]}>
-              {PROMPT_REGION_LABELS.chat}
-            </Text>
             <Text
               style={[styles.chatSlotHint, { color: tokens.textSecondary }]}
             >
-              {PROMPT_REGION_LABELS.chatReadonlyHint}
+              用户聊天历史，开启后可给每次输入附加额外内容
             </Text>
-
-            <View
-              style={[styles.chatExtra, { borderColor: tokens.borderLight }]}
-            >
-              <View style={styles.chatExtraHead}>
-                <Text
-                  style={[styles.chatExtraLabel, { color: tokens.text }]}
-                >
-                  {CUSTOM_ATTACH_BLOCK_LABEL}
-                </Text>
-                <Switch
-                  value={customAttachEnabled}
-                  onValueChange={next => setCustomAttachEnabled(next)}
-                  trackColor={{ false: tokens.border, true: tokens.primary }}
+            {customAttachEnabled ? (
+              <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
+                <FormTextInput
+                  tokens={tokens}
+                  value={customAttachText}
+                  onChangeText={setCustomAttachText}
+                  multiline
+                  placeholder={CUSTOM_ATTACH_TEXT_LABEL}
                 />
-              </View>
-              {customAttachEnabled ? (
-                <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
-                  <FormTextInput
-                    tokens={tokens}
-                    value={customAttachText}
-                    onChangeText={setCustomAttachText}
-                    multiline
-                    placeholder={CUSTOM_ATTACH_TEXT_LABEL}
-                  />
-                </FormField>
-              ) : (
-                <Text
-                  style={[styles.fieldHint, { color: tokens.textSecondary }]}
-                >
-                  {CUSTOM_ATTACH_BLOCK_HINT}
-                </Text>
-              )}
-            </View>
+              </FormField>
+            ) : null}
           </View>
 
           {renderPromptSectionHead(promptSectionLabels.dynamic, {
@@ -1513,29 +1471,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
-  chatSlotTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 2,
-  },
   chatSlotHint: {
     fontSize: 13,
     lineHeight: 20,
-  },
-  chatExtra: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
-  chatExtraHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  chatExtraLabel: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   readonlyCard: { opacity: 0.85 },
   blockHeader: {
