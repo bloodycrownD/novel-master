@@ -688,37 +688,6 @@ export const AgentDefinitionEditorForm = forwardRef<
           onAssistantTextChange={setWorkplaceAssistantText}
         />
 
-        <div className="config-block-card config-block-card--prompt">
-          <div className="config-block-card__header">
-            <span className="config-block-card__badge">附加信息</span>
-            <span className="config-block-card__meta">自定义附加信息</span>
-            <Switch
-              checked={customAttachEnabled}
-              disabled={disabled}
-              onChange={setCustomAttachEnabled}
-              aria-label="开启自定义附加信息"
-            />
-          </div>
-          <div className="config-block-card__body">
-            {customAttachEnabled ? (
-              <SettingsField label="附加信息文本">
-                <textarea
-                  rows={4}
-                  value={customAttachText}
-                  disabled={disabled}
-                  onChange={(e) => setCustomAttachText(e.target.value)}
-                  onKeyDown={handlePromptTextareaKeyDown}
-                  placeholder="每条用户消息都会附带这段文本给模型"
-                />
-              </SettingsField>
-            ) : (
-              <p className="config-block-card__hint">
-                开启后，每次发送消息会以 &lt;extra-info&gt; 块附加这段文本给模型；留空则静默省略，不会阻断保存。
-              </p>
-            )}
-          </div>
-        </div>
-
         <div className="config-block-card__section-head">
           <span className="config-block-card__section-label">
             {PROMPT_REGION_LABELS.persistBlocks}
@@ -881,6 +850,33 @@ export const AgentDefinitionEditorForm = forwardRef<
             <p className="config-block-card__hint">
               {PROMPT_REGION_LABELS.chatReadonlyHint}
             </p>
+            <div className="config-block-card__chat-extra">
+              <div className="config-block-card__chat-extra-head">
+                <span className="config-block-card__meta">附加信息</span>
+                <Switch
+                  checked={customAttachEnabled}
+                  disabled={disabled}
+                  onChange={setCustomAttachEnabled}
+                  aria-label="开启自定义附加信息"
+                />
+              </div>
+              {customAttachEnabled ? (
+                <SettingsField label="附加信息文本">
+                  <textarea
+                    rows={4}
+                    value={customAttachText}
+                    disabled={disabled}
+                    onChange={(e) => setCustomAttachText(e.target.value)}
+                    onKeyDown={handlePromptTextareaKeyDown}
+                    placeholder="每条用户消息都会附带这段文本给模型"
+                  />
+                </SettingsField>
+              ) : (
+                <p className="config-block-card__hint">
+                  开启后，每次发送消息会以 &lt;extra-info&gt; 块把这段文本附加到用户消息上；留空则静默省略。
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

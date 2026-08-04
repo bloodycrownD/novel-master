@@ -2704,6 +2704,17 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 .config-block-card__header--chat-slot {
   justify-content: space-between;
 }
+.config-block-card__chat-extra {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+.config-block-card__chat-extra-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
 
 .config-block-card__readonly-pill {
   padding: 2px 10px;

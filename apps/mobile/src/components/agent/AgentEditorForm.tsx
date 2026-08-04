@@ -1052,55 +1052,6 @@ export function AgentEditorForm(props: Props) {
             )}
           </View>
 
-          {renderPromptSectionHead(CUSTOM_ATTACH_BLOCK_LABEL)}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
-            <View style={styles.blockHeader}>
-              <View
-                style={[
-                  styles.typeBadge,
-                  { backgroundColor: `${tokens.primary}1A` },
-                ]}
-              >
-                <Text style={[styles.typeBadgeText, { color: tokens.primary }]}>
-                  {CUSTOM_ATTACH_BLOCK_LABEL}
-                </Text>
-              </View>
-              <View style={styles.blockHeaderSpacer} />
-              <Switch
-                value={customAttachEnabled}
-                onValueChange={next => setCustomAttachEnabled(next)}
-                trackColor={{ false: tokens.border, true: tokens.primary }}
-              />
-            </View>
-            {customAttachEnabled ? (
-              <>
-                <Text
-                  style={[styles.fieldHint, { color: tokens.textSecondary }]}
-                >
-                  {CUSTOM_ATTACH_BLOCK_HINT}
-                </Text>
-                <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
-                  <FormTextInput
-                    tokens={tokens}
-                    value={customAttachText}
-                    onChangeText={setCustomAttachText}
-                    multiline
-                    placeholder={CUSTOM_ATTACH_TEXT_LABEL}
-                  />
-                </FormField>
-              </>
-            ) : (
-              <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
-                关闭时不附加额外信息。
-              </Text>
-            )}
-          </View>
-
           {renderPromptSectionHead(promptSectionLabels.persist, {
             switchValue: persistEnabled,
             onSwitchChange: setPersistEnabled,
@@ -1289,6 +1240,40 @@ export function AgentEditorForm(props: Props) {
             >
               {PROMPT_REGION_LABELS.chatReadonlyHint}
             </Text>
+
+            <View
+              style={[styles.chatExtra, { borderColor: tokens.borderLight }]}
+            >
+              <View style={styles.chatExtraHead}>
+                <Text
+                  style={[styles.chatExtraLabel, { color: tokens.text }]}
+                >
+                  {CUSTOM_ATTACH_BLOCK_LABEL}
+                </Text>
+                <Switch
+                  value={customAttachEnabled}
+                  onValueChange={next => setCustomAttachEnabled(next)}
+                  trackColor={{ false: tokens.border, true: tokens.primary }}
+                />
+              </View>
+              {customAttachEnabled ? (
+                <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
+                  <FormTextInput
+                    tokens={tokens}
+                    value={customAttachText}
+                    onChangeText={setCustomAttachText}
+                    multiline
+                    placeholder={CUSTOM_ATTACH_TEXT_LABEL}
+                  />
+                </FormField>
+              ) : (
+                <Text
+                  style={[styles.fieldHint, { color: tokens.textSecondary }]}
+                >
+                  {CUSTOM_ATTACH_BLOCK_HINT}
+                </Text>
+              )}
+            </View>
           </View>
 
           {renderPromptSectionHead(promptSectionLabels.dynamic, {
@@ -1536,6 +1521,21 @@ const styles = StyleSheet.create({
   chatSlotHint: {
     fontSize: 13,
     lineHeight: 20,
+  },
+  chatExtra: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  chatExtraHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chatExtraLabel: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   readonlyCard: { opacity: 0.85 },
   blockHeader: {
