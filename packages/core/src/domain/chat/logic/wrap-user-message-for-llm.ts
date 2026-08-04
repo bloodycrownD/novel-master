@@ -39,8 +39,11 @@ function renderExtraInfoBlock(extraInfo: string): string {
  * 顺序：`userAttach`（attach）→ `workplaceChange`（workplace，历史只读兼容）→ 手改/annotate（user_ops）。
  * 若全部 body 空 → **直接返回 `plainText`**，不包空 `<attachment>`。
  *
- * `extraInfo`（customAttach）非空时在 `</user-ops>` 之后、`</attachment>` 之前插入 `<extra-info>` 纯文本块；
- * 无附件 body 但 extraInfo 非空时，仍会包外层 `<attachment>` 以承载该块。
+ * `extraInfo`（customAttach）非空时在 `</user-ops>` 之后、`</attachment>` 之前插入 `<extra-info>` 纯文本块。
+ *
+ * 边界：当无附件 body 但 `extraInfo` 非空时，仍会包外层 `<attachment>` 以承载 `<extra-info>`，
+ * 此时不含 `<user-ops>`（仅 `<extra-info>` + `<user-input>`）。上游解析器应按「外层 `<attachment>` 是否存在」
+ * 判定，而非假定 `<user-ops>` 必然出现。
  *
  * 调用方须保证 workplace/attach 的 `content` 已 hydrate 为 action XML。
  * `user_ops` 的 `content` 为 action XML。
