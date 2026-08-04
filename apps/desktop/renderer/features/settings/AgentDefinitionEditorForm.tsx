@@ -52,10 +52,7 @@ import {
 } from "@/ipc/client";
 import { SettingsField, SettingsSection } from "./settings-ui";
 import { PromptMacroTextarea } from "./PromptMacroTextarea";
-import {
-  PROMPT_INSERTABLE_MACROS,
-  insertTextAtSelection,
-} from "./prompt-macro-input";
+import { PromptMacroChips } from "./PromptMacroChips";
 
 /** 非当前编辑块共用的空 ref（芯片插入只针对聚焦块）。 */
 const inactiveDynamicTextareaRef: RefObject<HTMLTextAreaElement | null> = {
@@ -864,46 +861,12 @@ export const AgentDefinitionEditorForm = forwardRef<
                   onChange={setCustomAttachText}
                   placeholder="每条用户消息都会附带这段文本给模型"
                 />
-                <div className="config-dep-chips">
-                  <span className="config-block-card__hint">宏：</span>
-                  {PROMPT_INSERTABLE_MACROS.map((macro) => (
-                    <button
-                      key={macro.token}
-                      type="button"
-                      className="config-dep-chip"
-                      disabled={disabled}
-                      onClick={() => {
-                        const ta = customAttachTextareaRef.current;
-                        const selection =
-                          ta != null
-                            ? {
-                                start: ta.selectionStart ?? customAttachText.length,
-                                end: ta.selectionEnd ?? customAttachText.length,
-                              }
-                            : {
-                                start: customAttachText.length,
-                                end: customAttachText.length,
-                              };
-                        const { next, selection: nextSel } =
-                          insertTextAtSelection(
-                            customAttachText,
-                            selection,
-                            macro.token
-                          );
-                        setCustomAttachText(next);
-                        requestAnimationFrame(() => {
-                          const el = customAttachTextareaRef.current;
-                          if (el != null) {
-                            el.focus();
-                            el.setSelectionRange(nextSel.start, nextSel.end);
-                          }
-                        });
-                      }}
-                    >
-                      {macro.label}
-                    </button>
-                  ))}
-                </div>
+                <PromptMacroChips
+                  value={customAttachText}
+                  onChange={setCustomAttachText}
+                  textareaRef={customAttachTextareaRef}
+                  disabled={disabled}
+                />
               </SettingsField>
             ) : null}
           </div>
@@ -1059,57 +1022,23 @@ export const AgentDefinitionEditorForm = forwardRef<
                             }
                           />
                         </SettingsField>
-                        <div className="config-dep-chips">
-                          <span className="config-block-card__hint">宏：</span>
-                          {PROMPT_INSERTABLE_MACROS.map((macro) => (
-                            <button
-                              key={macro.token}
-                              type="button"
-                              className="config-dep-chip"
-                              disabled={disabled}
-                              onClick={() => {
-                                setDynamicInsertIndex(index);
-                                const ta =
-                                  dynamicInsertIndex === index
-                                    ? dynamicTextareaRef.current
-                                    : null;
-                                const selection =
-                                  ta != null
-                                    ? {
-                                        start: ta.selectionStart ?? block.content.length,
-                                        end: ta.selectionEnd ?? block.content.length,
-                                      }
-                                    : {
-                                        start: block.content.length,
-                                        end: block.content.length,
-                                      };
-                                const { next, selection: nextSel } =
-                                  insertTextAtSelection(
-                                    block.content,
-                                    selection,
-                                    macro.token
-                                  );
-                                setDynamic((prev) =>
-                                  prev.map((b, i) =>
-                                    i === index ? { ...b, content: next } : b
-                                  )
-                                );
-                                requestAnimationFrame(() => {
-                                  const el = dynamicTextareaRef.current;
-                                  if (el != null) {
-                                    el.focus();
-                                    el.setSelectionRange(
-                                      nextSel.start,
-                                      nextSel.end
-                                    );
-                                  }
-                                });
-                              }}
-                            >
-                              {macro.label}
-                            </button>
-                          ))}
-                        </div>
+                        <PromptMacroChips
+                          value={block.content}
+                          onChange={(content) =>
+                            setDynamic((prev) =>
+                              prev.map((b, i) =>
+                                i === index ? { ...b, content } : b
+                              )
+                            )
+                          }
+                          textareaRef={
+                            dynamicInsertIndex === index
+                              ? dynamicTextareaRef
+                              : inactiveDynamicTextareaRef
+                          }
+                          disabled={disabled}
+                          onBeforeInsert={() => setDynamicInsertIndex(index)}
+                        />
                       </div>
                     </div>
                   ))}
