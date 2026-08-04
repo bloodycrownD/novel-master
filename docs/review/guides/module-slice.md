@@ -3,9 +3,24 @@
 > 每个 phase2 的 `D2-<module>` 子代理读这份文档 + 自己模块的专属上下文（由主代理在派遣时提供）。
 > 模块清单在 D0-2 定稿，主代理按清单逐个（或并行）派遣。
 
+## Phase 0 已定稿的 6 个切片
+
+你被派遣时，主代理会告诉你你是哪个切片。下面是 6 个切片的实际 context 组合和已知重点（详见 `phase0/D0-2-docs-index.md`）：
+
+| 切片 | 包含 context | 已知重点 |
+|------|-------------|---------|
+| **D2-vfs** | domain/vfs, service/vfs, bootstrap/vfs | 3 表（entry/revision/content-blob）、3 god module（vfs-path-mapper/vfs-entry.port/sqlite-vfs-entry.repository）、17 迭代、zip 压缩加入又移除、entry-id 重设计、version-redesign |
+| **D2-chat-message** | domain/chat, domain/message-checkpoint, service/chat, service/message-checkpoint | 双巨头之一、checkpoint + rollback 事务核心、5 个 rollback-* 迭代全是补丁、message-attachment-unified |
+| **D2-provider-llm** | domain/provider, infra/llm-protocol, service/provider | 三协议 parity、adapter.port 36 次引用、token 计数、saved-model 身份、SSE postSse 两版本 |
+| **D2-agent-tool** | domain/agent, domain/tool, service/agent | 14+5 迭代、agent-config-shape 反复改、tool v1→v2、agent-prompt-abstract-block、vfs-tool-suite |
+| **D2-compaction** | domain/compaction-conditions, service/compaction-conditions | 195+217 行但 5 迭代、触发逻辑从内置→全局→事件总线、event-config-dag |
+| **D2-prompt** | domain/prompt, service/prompt, infra/prompt-template | 依赖 chat（唯一跨 context 引用）、prompt-engine、prompt-llm-input-parity、block-lifecycle、agent-prompt-layout 19 次引用 |
+
+**重要**：D2-chat-message 和 D2-provider-llm 是合并切片，体量大。如果发现单一切片无法在一次评审中完成，主代理可能拆分（如 D2-vfs-entry + D2-vfs-revision）。状态文件会记录拆分。
+
 ## 你是谁，你干什么
 
-你是一个**模块切片 reviewer**。你的任务是对**一个 bounded context** 做完整的多角度审视，但和角度横扫（L1–L8）不同，你的核心价值是**把多个角度的结论叠在一起，找「单角度看不出来的问题」**。
+你是一个**模块切片 reviewer**。你的任务是对**一个 bounded context**（或上面表中的组合）做完整的多角度审视，但和角度横扫（L1–L8）不同，你的核心价值是**把多个角度的结论叠在一起，找「单角度看不出来的问题」**。
 
 角度横扫的人是带着一把尺子量所有模块；你是带着八把尺子量一个模块，然后看这八把尺子在哪里打架。
 

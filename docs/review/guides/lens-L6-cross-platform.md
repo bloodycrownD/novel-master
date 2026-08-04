@@ -15,20 +15,54 @@
 - **平台特有 hack**：端侧代码里有 `#ifdef` 式的平台判断（`Platform.OS === 'web'`），这些 hack 是否该下沉到 core
 - **能力缺失对齐**：某个端缺少某个功能（比如 mobile 没有 desktop 的某项配置），是有意为之还是遗漏
 
+## Phase 0 已确认的跨端现实
+
+Phase 0 侦察已测出三端体量，**极端不对称**是核心事实：
+
+### 三端体量（实测）
+
+| app | 文件 | 行数 | 备注 |
+|-----|------|------|------|
+| **mobile** | **284** | **35 766** | 含 android/ 5 个 Kotlin/Java 文件 |
+| desktop | 75 | 7 192 | Electron |
+| cli | 54 | 4 010 | |
+
+mobile 是 desktop 的 5 倍、cli 的 9 倍。这种不对称意味着很多逻辑只在 mobile 上跑过——跨端 parity 风险高度集中在 mobile vs 其余两端。
+
+### 已知 driver 分布（三端能力差异的根源）
+
+| 能力 | node/CLI/Electron | RN/mobile | 平台原生 |
+|------|-------------------|-----------|---------|
+| tokenizer | `@novel-master/tokenizer-driver-node` | `@novel-master/tokenizer-driver-rn` | Android Kotlin `TokenizerModule` |
+| tdbc | `@novel-master/tdbc-driver-better-sqlite3` | `@novel-master/tdbc-driver-rn` | |
+| sksp（密钥） | env-secret-store | `@novel-master/sksp-android` | `@novel-master/sksp-mac`、`sksp-windows` |
+| cloud-sync | `cloud-sync-driver-s3` | 同上（RN 兼容） | |
+| SSE（llm-protocol） | Node fetch 版 postSse | RN XHR 版 postSse | |
+
+### 30+ mobile-* 迭代的解读
+
+mobile 有 30+ 个 `mobile-*` 迭代，但大量是 UI/UX 调整（如 mobile-form-footer-hit-area、mobile-overlay-navigation-stuck）和 bugfix（mobile-chat-stability-fixes）。这些不是 core 设计问题，是 mobile 消费 core 时的适配问题——但这恰恰说明 core 的抽象在某些点上不够干净，导致 mobile 反复补丁。L6 要透过 mobile bug 找 core 抽象的泄漏点。
+
+特别值得关注的高信号 mobile 迭代：
+- `mobile-sse-stream-resilience`——SSE 在 RN 上的韧性补丁，说明 postSse 的 RN 版本可能有问题
+- `mobile-stability-db-migration`——DB migration 在 RN 上出过问题
+- `mobile-cloud-sync-rn-compat`——云同步在 RN 上的兼容补丁
+- `remove-mobile-vfs-zip-native` + `vfs-zip-native-compression`——vfs zip 原生压缩的加入和移除
+
 ## 读什么文件
 
 ### 核心目标
 
 | 目录 | 为什么看 |
-|------|----------|
-| `packages/core/src/infra/llm-protocol/` | SSE 实现（postSse 有 Node + RN 两个版本）—— parity 核心 |
-| `packages/core/src/infra/tokenizer/` + `packages/tokenizer-driver-node/` + `packages/tokenizer-driver-rn/` | tokenizer 的两套 driver——行为是否对齐 |
+|------|--------|
+| `packages/core/src/infra/llm-protocol/logic/` | postSse 的 Node 版 + RN 版——parity 核心 |
+| `packages/core/src/infra/tokenizer/` + `packages/tokenizer-driver-node/` + `packages/tokenizer-driver-rn/` | tokenizer 两套 driver |
 | `packages/core/src/infra/tdbc/` + `packages/tdbc-driver-better-sqlite3/` + `packages/tdbc-driver-rn/` | TDBC 两套 driver |
 | `packages/core/src/infra/sksp/` + `packages/sksp-android/` + `packages/sksp-mac/` + `packages/sksp-windows/` | 密钥存储三端实现 |
-| `apps/cli/src/` | CLI 端怎么用 core |
+| `apps/cli/src/` | CLI 端怎么用 core（最小端，作为基准） |
 | `apps/desktop/src/` | Electron 端怎么用 core |
-| `apps/mobile/src/` + `apps/mobile/android/` | RN 端怎么用 core |
-| `packages/cloud-sync-driver-s3/` | S3 同步 driver——三端是否都能用 |
+| **`apps/mobile/src/`**（284 文件） | **最大端**，重点看它怎么获得 core 未导出的能力 |
+| `packages/cloud-sync-driver-s3/` | S3 同步 driver |
 
 ### grep 模式
 
