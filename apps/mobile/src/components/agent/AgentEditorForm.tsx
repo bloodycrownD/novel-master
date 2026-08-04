@@ -1460,16 +1460,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  readonlyPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  readonlyPillText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
   chatSlotHint: {
     fontSize: 13,
     lineHeight: 20,
