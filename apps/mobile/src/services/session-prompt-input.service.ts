@@ -77,6 +77,7 @@ export async function buildSessionPromptInput(
     sessionKkv: runtime.sessionKkv,
     vfs,
     seenPaths: prefixPaths,
+    extraInfo: resolved.prompts.customAttach,
   });
   const ctx: PromptRenderContext = {
     workplaceDisplay,
