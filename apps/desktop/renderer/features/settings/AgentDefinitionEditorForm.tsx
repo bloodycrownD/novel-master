@@ -95,6 +95,8 @@ function applyDefinitionToFormState(
     setDynamicEnabled: (v: boolean) => void;
     setWorkplaceEnabled: (v: boolean) => void;
     setWorkplaceAssistantText: (v: string) => void;
+    setCustomAttachEnabled: (v: boolean) => void;
+    setCustomAttachText: (v: string) => void;
     setPersist: (v: PersistPromptBlock[]) => void;
     setDynamic: (v: DynamicPromptBlock[]) => void;
     setToolsMode: (v: ToolsMode) => void;
@@ -118,6 +120,9 @@ function applyDefinitionToFormState(
   setters.setDynamicEnabled(promptForm.dynamicEnabled);
   setters.setWorkplaceEnabled(promptForm.workplaceEnabled);
   setters.setWorkplaceAssistantText(promptForm.workplaceAssistantText);
+  // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
+  setters.setCustomAttachEnabled(promptForm.customAttachEnabled);
+  setters.setCustomAttachText(promptForm.customAttachText);
   setters.setPersist([...promptForm.persist]);
   setters.setDynamic([...promptForm.dynamic]);
 
@@ -179,6 +184,9 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState("");
+  // 自定义附加信息开关 / 文本（对应域 prompts.customAttach）。
+  const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
+  const [customAttachText, setCustomAttachText] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -211,6 +219,8 @@ export const AgentDefinitionEditorForm = forwardRef<
         dynamicEnabled,
         workplaceEnabled,
         workplaceAssistantText,
+        customAttachEnabled,
+        customAttachText,
         persist,
         dynamic,
       }),
@@ -228,6 +238,8 @@ export const AgentDefinitionEditorForm = forwardRef<
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     ]
@@ -290,6 +302,8 @@ export const AgentDefinitionEditorForm = forwardRef<
           setDynamicEnabled,
           setWorkplaceEnabled,
           setWorkplaceAssistantText,
+          setCustomAttachEnabled,
+          setCustomAttachText,
           setPersist,
           setDynamic,
           setToolsMode,
@@ -329,6 +343,8 @@ export const AgentDefinitionEditorForm = forwardRef<
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     });
@@ -355,6 +371,8 @@ export const AgentDefinitionEditorForm = forwardRef<
     dynamicEnabled,
     workplaceEnabled,
     workplaceAssistantText,
+    customAttachEnabled,
+    customAttachText,
     persist,
     dynamic,
   ]);
@@ -669,6 +687,37 @@ export const AgentDefinitionEditorForm = forwardRef<
           assistantText={workplaceAssistantText}
           onAssistantTextChange={setWorkplaceAssistantText}
         />
+
+        <div className="config-block-card config-block-card--prompt">
+          <div className="config-block-card__header">
+            <span className="config-block-card__badge">附加信息</span>
+            <span className="config-block-card__meta">自定义附加信息</span>
+            <Switch
+              checked={customAttachEnabled}
+              disabled={disabled}
+              onChange={setCustomAttachEnabled}
+              aria-label="开启自定义附加信息"
+            />
+          </div>
+          <div className="config-block-card__body">
+            {customAttachEnabled ? (
+              <SettingsField label="附加信息文本">
+                <textarea
+                  rows={4}
+                  value={customAttachText}
+                  disabled={disabled}
+                  onChange={(e) => setCustomAttachText(e.target.value)}
+                  onKeyDown={handlePromptTextareaKeyDown}
+                  placeholder="每条用户消息都会附带这段文本给模型"
+                />
+              </SettingsField>
+            ) : (
+              <p className="config-block-card__hint">
+                开启后，每次发送消息会以 &lt;extra-info&gt; 块附加这段文本给模型；留空则静默省略，不会阻断保存。
+              </p>
+            )}
+          </div>
+        </div>
 
         <div className="config-block-card__section-head">
           <span className="config-block-card__section-label">
