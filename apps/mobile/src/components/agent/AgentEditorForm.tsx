@@ -107,6 +107,12 @@ type ProjectEditorProps = {
 
 type Props = RegistryEditorProps | ProjectEditorProps;
 
+// 自定义附加信息区块文案（core 未导出，UI 层自管）。
+const CUSTOM_ATTACH_BLOCK_LABEL = '自定义附加信息';
+const CUSTOM_ATTACH_BLOCK_HINT =
+  '开启后，每次发消息会以 <extra-info> 块附加给模型；留空则静默省略。';
+const CUSTOM_ATTACH_TEXT_LABEL = '附加信息内容';
+
 export function AgentEditorForm(props: Props) {
   const { onDirtyChange, onSaved } = props;
   const isProjectMode = props.editorMode === 'project';
@@ -129,6 +135,8 @@ export function AgentEditorForm(props: Props) {
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
+  const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
+  const [customAttachText, setCustomAttachText] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -165,6 +173,8 @@ export function AgentEditorForm(props: Props) {
         dynamicEnabled,
         workplaceEnabled,
         workplaceAssistantText,
+        customAttachEnabled,
+        customAttachText,
         persist,
         dynamic,
       }),
@@ -182,6 +192,8 @@ export function AgentEditorForm(props: Props) {
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     ],
@@ -227,6 +239,8 @@ export function AgentEditorForm(props: Props) {
       setDynamicEnabled(promptForm.dynamicEnabled);
       setWorkplaceEnabled(promptForm.workplaceEnabled);
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
+      setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
+      setCustomAttachText(promptForm.customAttachText ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -474,6 +488,8 @@ export function AgentEditorForm(props: Props) {
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     });
@@ -552,6 +568,8 @@ export function AgentEditorForm(props: Props) {
     dynamicEnabled,
     workplaceEnabled,
     workplaceAssistantText,
+    customAttachEnabled,
+    customAttachText,
     persist,
     dynamic,
   });
@@ -1030,6 +1048,55 @@ export function AgentEditorForm(props: Props) {
             ) : (
               <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
                 关闭时不注入项目文件树。
+              </Text>
+            )}
+          </View>
+
+          {renderPromptSectionHead(CUSTOM_ATTACH_BLOCK_LABEL)}
+          <View
+            style={[
+              styles.blockCard,
+              { backgroundColor: tokens.surface, borderColor: tokens.border },
+            ]}
+          >
+            <View style={styles.blockHeader}>
+              <View
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: `${tokens.primary}1A` },
+                ]}
+              >
+                <Text style={[styles.typeBadgeText, { color: tokens.primary }]}>
+                  {CUSTOM_ATTACH_BLOCK_LABEL}
+                </Text>
+              </View>
+              <View style={styles.blockHeaderSpacer} />
+              <Switch
+                value={customAttachEnabled}
+                onValueChange={next => setCustomAttachEnabled(next)}
+                trackColor={{ false: tokens.border, true: tokens.primary }}
+              />
+            </View>
+            {customAttachEnabled ? (
+              <>
+                <Text
+                  style={[styles.fieldHint, { color: tokens.textSecondary }]}
+                >
+                  {CUSTOM_ATTACH_BLOCK_HINT}
+                </Text>
+                <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
+                  <FormTextInput
+                    tokens={tokens}
+                    value={customAttachText}
+                    onChangeText={setCustomAttachText}
+                    multiline
+                    placeholder={CUSTOM_ATTACH_TEXT_LABEL}
+                  />
+                </FormField>
+              </>
+            ) : (
+              <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
+                关闭时不附加额外信息。
               </Text>
             )}
           </View>
