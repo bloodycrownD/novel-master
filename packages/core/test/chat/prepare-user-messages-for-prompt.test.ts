@@ -61,6 +61,41 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.equal(wrapUserMessageForLlm("你好", []), "你好");
   });
 
+  it("T-EI1: 无附件但 extraInfo 非空 → wrap 注入 <extra-info> 块", () => {
+    const wrapped = wrapUserMessageForLlm("你好", undefined, "补充信息");
+    assert.match(wrapped, /<extra-info>/);
+    assert.match(wrapped, /补充信息/);
+    assert.match(wrapped, /<user-input>\n你好\n<\/user-input>/);
+    assert.match(wrapped, /<attachment>/);
+  });
+
+  it("T-EI2: 无附件无 extraInfo → wrap 仍恒等原文", () => {
+    assert.equal(wrapUserMessageForLlm("你好", undefined, undefined), "你好");
+    assert.equal(wrapUserMessageForLlm("你好", undefined, "   "), "你好");
+  });
+
+  it("T-EI3: prepare 对无附件纯文本消息注入 extraInfo（不再提前 return）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const stored = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("继续"),
+    );
+    const sk = createSessionKkvService(ctx.conn);
+    const prepared = await prepareUserMessagesForPrompt([stored], {
+      sessionId: session.id,
+      sessionKkv: sk,
+      vfs: ctx.sessionVfs(project.id, session.id),
+      extraInfo: "当前目录结构",
+    });
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /<extra-info>/);
+    assert.match(body, /当前目录结构/);
+    assert.match(body, /<user-input>\n继续\n<\/user-input>/);
+  });
+
   it("T-AT2: user_ops + text → wrap 含 user-ops 与 user-input；库内仍为原文", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

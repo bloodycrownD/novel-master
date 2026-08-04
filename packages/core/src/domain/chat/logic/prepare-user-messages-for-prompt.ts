@@ -358,8 +358,13 @@ async function prepareOneUserMessage(
     return message;
   }
 
-  const attachments = message.attachments;
-  if (attachments == null || attachments.length === 0) {
+  const attachments = message.attachments ?? [];
+  const hasExtraInfo =
+    typeof runtime.extraInfo === "string" &&
+    runtime.extraInfo.trim().length > 0;
+  // 无附件且无 extraInfo：恒等原文，不走 wrap。
+  // 无附件但 extraInfo 非空：仍需走 wrap 注入 <extra-info> 块。
+  if (attachments.length === 0 && !hasExtraInfo) {
     return message;
   }
 
@@ -418,7 +423,8 @@ export async function prepareUserMessagesForPrompt(
   const seen = createPromptPathSeenSet(runtime.seenPaths);
   // 每轮 prepare 展开一次 customAttach 宏（与 dynamic 区每步展开对齐），同一轮内所有 user 消息复用同一份文本。
   const extraInfoResolved =
-    typeof runtime.extraInfo === "string" && runtime.extraInfo.trim().length > 0
+    typeof runtime.extraInfo === "string" &&
+    runtime.extraInfo.trim().length > 0
       ? await expandDynamicMacros(runtime.extraInfo, {
           now: runtime.now,
           workplace: runtime.workplace,
