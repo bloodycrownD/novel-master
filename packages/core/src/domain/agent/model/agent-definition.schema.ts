@@ -101,6 +101,13 @@ const promptsDocumentSchema = z.preprocess(
             }),
         ])
         .optional(),
+      /** wire：关 omit；开为 trim 后非空 string（新字段，无历史值，无需 boolean 兼容）。 */
+      customAttach: z
+        .string()
+        .refine((s) => s.trim().length > 0, {
+          message: "prompts.customAttach 如填写则须为非空字符串",
+        })
+        .optional(),
     })
     .strict(),
 );
@@ -174,6 +181,7 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
       persistEnabled: doc.prompts.persistEnabled,
       dynamicEnabled: doc.prompts.dynamicEnabled,
       workplace: doc.prompts.workplace,
+      customAttach: doc.prompts.customAttach,
     },
   );
   const tools = wireToolsToDomain(doc.tools);
@@ -205,6 +213,10 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
       ...(typeof def.prompts.workplace === "string" &&
       def.prompts.workplace.length > 0
         ? { workplace: def.prompts.workplace }
+        : {}),
+      ...(typeof def.prompts.customAttach === "string" &&
+      def.prompts.customAttach.trim().length > 0
+        ? { customAttach: def.prompts.customAttach }
         : {}),
       persist,
       dynamic,

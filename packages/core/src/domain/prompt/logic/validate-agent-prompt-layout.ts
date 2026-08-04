@@ -215,6 +215,8 @@ export function validateAgentPromptLayoutFromMaps(
     readonly dynamicEnabled?: boolean;
     /** wire：`boolean | string`；域开 = 非空 string。 */
     readonly workplace?: boolean | string;
+    /** 自定义附加信息纯文本；trim 后空视为关（不注入）。 */
+    readonly customAttach?: string;
   }
 ): AgentPromptLayout {
   if (system != null && system.trim() === "") {
@@ -253,6 +255,11 @@ export function validateAgentPromptLayoutFromMaps(
   const persistEnabled = options?.persistEnabled === true;
   const dynamicEnabled = options?.dynamicEnabled === true;
   const workplace = resolveWorkplaceFromWire(options?.workplace);
+  const customAttachRaw = options?.customAttach;
+  const customAttach =
+    typeof customAttachRaw === "string" && customAttachRaw.trim().length > 0
+      ? customAttachRaw
+      : undefined;
 
   if (persistEnabled) {
     if (persist.length < 1) {
@@ -289,6 +296,7 @@ export function validateAgentPromptLayoutFromMaps(
     ...(persistEnabled ? { persistEnabled: true } : {}),
     ...(dynamicEnabled ? { dynamicEnabled: true } : {}),
     ...(workplace != null ? { workplace } : {}),
+    ...(customAttach != null ? { customAttach } : {}),
     persist,
     dynamic,
   };
@@ -336,6 +344,7 @@ export function validateAgentPromptLayout(
       persistEnabled: layout.persistEnabled,
       dynamicEnabled: layout.dynamicEnabled,
       workplace: layout.workplace,
+      customAttach: layout.customAttach,
     }
   );
 }
