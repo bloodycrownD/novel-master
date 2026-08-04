@@ -38,6 +38,8 @@ import {
 } from "./prompt-path-seen.js";
 import { renderDirAttachTree } from "./render-dir-attach-tree.js";
 import { wrapUserMessageForLlm } from "./wrap-user-message-for-llm.js";
+import { expandDynamicMacros } from "@/domain/prompt/logic/expand-dynamic-macros.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
 /** {@link prepareUserMessagesForPrompt} 运行时依赖与可选初始 seen。 */
 export interface PrepareUserMessagesForPromptRuntime {
@@ -50,9 +52,14 @@ export interface PrepareUserMessagesForPromptRuntime {
    */
   readonly seenPaths?: readonly string[];
   /**
-   * 自定义附加信息（agent 配置 customAttach）；trim 非空时 wrap 阶段注入 `<extra-info>` 纯文本块。
+   * 自定义附加信息（agent 配置 customAttach，**未展开宏的原文本**）；
+   * trim 非空时在 prepare 入口经 {@link expandDynamicMacros} 展开宏后，由 wrap 阶段注入 `<extra-info>` 块。
    */
   readonly extraInfo?: string;
+  /** 宏展开所需的当前时间（默认取 new Date()）。 */
+  readonly now?: Date;
+  /** 宏展开所需的 workplace 服务（用于 $filetree）。 */
+  readonly workplace?: WorkplaceService;
 }
 
 async function resolveWorkplaceStatus(
@@ -409,13 +416,25 @@ export async function prepareUserMessagesForPrompt(
   runtime: PrepareUserMessagesForPromptRuntime,
 ): Promise<ChatMessage[]> {
   const seen = createPromptPathSeenSet(runtime.seenPaths);
+  // 每轮 prepare 展开一次 customAttach 宏（与 dynamic 区每步展开对齐），同一轮内所有 user 消息复用同一份文本。
+  const extraInfoResolved =
+    typeof runtime.extraInfo === "string" && runtime.extraInfo.trim().length > 0
+      ? await expandDynamicMacros(runtime.extraInfo, {
+          now: runtime.now,
+          workplace: runtime.workplace,
+        })
+      : undefined;
+  const resolvedRuntime: PrepareUserMessagesForPromptRuntime =
+    extraInfoResolved === undefined
+      ? runtime
+      : { ...runtime, extraInfo: extraInfoResolved };
   const out: ChatMessage[] = [];
   for (const message of messages) {
     if (message.role !== "user") {
       out.push(message);
       continue;
     }
-    out.push(await prepareOneUserMessage(message, runtime, seen));
+    out.push(await prepareOneUserMessage(message, resolvedRuntime, seen));
   }
   return out;
 }

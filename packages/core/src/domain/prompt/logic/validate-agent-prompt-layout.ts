@@ -260,6 +260,10 @@ export function validateAgentPromptLayoutFromMaps(
     typeof customAttachRaw === "string" && customAttachRaw.trim().length > 0
       ? customAttachRaw
       : undefined;
+  if (customAttach != null) {
+    // customAttach 宏白名单与动态区一致（time/week_cn/filetree）。
+    validateDynamicMacros(customAttach, "附加信息");
+  }
 
   if (persistEnabled) {
     if (persist.length < 1) {

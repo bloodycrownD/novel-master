@@ -78,6 +78,8 @@ export async function buildSessionPromptInput(
     vfs,
     seenPaths: prefixPaths,
     extraInfo: resolved.prompts.customAttach,
+    now: new Date(),
+    workplace: wt,
   });
   const ctx: PromptRenderContext = {
     workplaceDisplay,

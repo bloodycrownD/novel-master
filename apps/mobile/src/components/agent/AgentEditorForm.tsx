@@ -1223,12 +1223,11 @@ export function AgentEditorForm(props: Props) {
             </Text>
             {customAttachEnabled ? (
               <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
-                <FormTextInput
+                <PromptMacroTextInput
                   tokens={tokens}
                   value={customAttachText}
                   onChangeText={setCustomAttachText}
-                  multiline
-                  placeholder={CUSTOM_ATTACH_TEXT_LABEL}
+                  placeholder="支持 $time、$week_cn、$filetree…"
                 />
               </FormField>
             ) : null}

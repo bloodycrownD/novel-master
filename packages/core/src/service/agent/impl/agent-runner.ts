@@ -216,6 +216,8 @@ export class DefaultAgentRunner implements AgentRunner {
           vfs: this.deps.toolCtx.vfs,
           seenPaths: prefixPaths,
           extraInfo: options.definition.prompts.customAttach,
+          now: new Date(),
+          workplace: wt,
         });
         if (signal?.aborted) {
           stopReason = "cancelled";

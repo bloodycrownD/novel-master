@@ -202,6 +202,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(
     null
   );
+  const customAttachTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const snapshot = useMemo(
     () =>
@@ -854,14 +855,55 @@ export const AgentDefinitionEditorForm = forwardRef<
             </p>
             {customAttachEnabled ? (
               <SettingsField label="附加信息文本">
-                <textarea
+                <PromptMacroTextarea
+                  textareaRef={customAttachTextareaRef}
                   rows={4}
                   value={customAttachText}
                   disabled={disabled}
-                  onChange={(e) => setCustomAttachText(e.target.value)}
                   onKeyDown={handlePromptTextareaKeyDown}
+                  onChange={setCustomAttachText}
                   placeholder="每条用户消息都会附带这段文本给模型"
                 />
+                <div className="config-dep-chips">
+                  <span className="config-block-card__hint">宏：</span>
+                  {PROMPT_INSERTABLE_MACROS.map((macro) => (
+                    <button
+                      key={macro.token}
+                      type="button"
+                      className="config-dep-chip"
+                      disabled={disabled}
+                      onClick={() => {
+                        const ta = customAttachTextareaRef.current;
+                        const selection =
+                          ta != null
+                            ? {
+                                start: ta.selectionStart ?? customAttachText.length,
+                                end: ta.selectionEnd ?? customAttachText.length,
+                              }
+                            : {
+                                start: customAttachText.length,
+                                end: customAttachText.length,
+                              };
+                        const { next, selection: nextSel } =
+                          insertTextAtSelection(
+                            customAttachText,
+                            selection,
+                            macro.token
+                          );
+                        setCustomAttachText(next);
+                        requestAnimationFrame(() => {
+                          const el = customAttachTextareaRef.current;
+                          if (el != null) {
+                            el.focus();
+                            el.setSelectionRange(nextSel.start, nextSel.end);
+                          }
+                        });
+                      }}
+                    >
+                      {macro.label}
+                    </button>
+                  ))}
+                </div>
               </SettingsField>
             ) : null}
           </div>
