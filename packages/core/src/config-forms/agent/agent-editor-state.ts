@@ -10,6 +10,7 @@ import type {
 } from "@/domain/prompt/model/agent-prompt-layout.js";
 import {
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
+  layoutHasCustomAttach,
   layoutHasWorkplace,
 } from "@/domain/prompt/model/agent-prompt-layout.js";
 import { validateAgentPromptLayout } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
@@ -60,6 +61,10 @@ export type AgentEditorFormInput = {
   workplaceEnabled: boolean;
   /** 常驻工作区助手确认语（开时默认 {@link DEFAULT_WORKPLACE_ASSISTANT_TEXT}）。 */
   workplaceAssistantText: string;
+  /** 自定义附加信息开关（与域 `prompts.customAttach` 对应）。 */
+  customAttachEnabled?: boolean;
+  /** 自定义附加信息文本（开但 trim 空时静默省略，不阻断保存）。 */
+  customAttachText?: string;
   persist: readonly EditorPersistPromptBlock[];
   dynamic: readonly DynamicPromptBlock[];
 };
@@ -267,6 +272,8 @@ export function createDefaultAgentEditorPrompts(): Pick<
   | "dynamicEnabled"
   | "workplaceEnabled"
   | "workplaceAssistantText"
+  | "customAttachEnabled"
+  | "customAttachText"
   | "persist"
   | "dynamic"
 > {
@@ -277,6 +284,8 @@ export function createDefaultAgentEditorPrompts(): Pick<
     dynamicEnabled: false,
     workplaceEnabled: false,
     workplaceAssistantText: "",
+    customAttachEnabled: false,
+    customAttachText: "",
     persist: [],
     dynamic: [],
   };
@@ -429,12 +438,16 @@ export function definitionToForm(
   | "dynamicEnabled"
   | "workplaceEnabled"
   | "workplaceAssistantText"
+  | "customAttachEnabled"
+  | "customAttachText"
   | "persist"
   | "dynamic"
 > {
   const system = def.prompts.system?.trim() ?? "";
   const workplaceText =
     typeof def.prompts.workplace === "string" ? def.prompts.workplace : "";
+  const customAttachText =
+    typeof def.prompts.customAttach === "string" ? def.prompts.customAttach : "";
   return {
     systemEnabled: system.length > 0,
     systemContent: def.prompts.system ?? "",
@@ -442,6 +455,8 @@ export function definitionToForm(
     dynamicEnabled: def.prompts.dynamicEnabled ?? false,
     workplaceEnabled: layoutHasWorkplace(def.prompts),
     workplaceAssistantText: workplaceText,
+    customAttachEnabled: layoutHasCustomAttach(def.prompts),
+    customAttachText,
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
   };
@@ -457,6 +472,8 @@ export function layoutFromFormInput(
     | "dynamicEnabled"
     | "workplaceEnabled"
     | "workplaceAssistantText"
+    | "customAttachEnabled"
+    | "customAttachText"
     | "persist"
     | "dynamic"
   >
@@ -467,12 +484,16 @@ export function layoutFromFormInput(
       : undefined;
   const { textBlocks } = splitPersistBlocksForEditor(input.persist);
   const workplaceText = input.workplaceAssistantText.trim();
+  const customAttachText = (input.customAttachText ?? "").trim();
   return {
     ...(system != null ? { system } : {}),
     ...(input.persistEnabled ? { persistEnabled: true } : {}),
     ...(input.dynamicEnabled ? { dynamicEnabled: true } : {}),
     ...(input.workplaceEnabled && workplaceText !== ""
       ? { workplace: workplaceText }
+      : {}),
+    ...(input.customAttachEnabled && customAttachText !== ""
+      ? { customAttach: customAttachText }
       : {}),
     persist: [...textBlocks],
     dynamic: [...input.dynamic],
@@ -499,6 +520,8 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     dynamicEnabled: input.dynamicEnabled,
     workplaceEnabled: input.workplaceEnabled,
     workplaceAssistantText: input.workplaceAssistantText,
+    customAttachEnabled: input.customAttachEnabled ?? false,
+    customAttachText: input.customAttachText ?? "",
     persist: input.persist,
     dynamic: input.dynamic,
   });
