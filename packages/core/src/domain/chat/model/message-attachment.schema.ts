@@ -51,9 +51,9 @@ export const messageAttachmentObjectSchema = z
     name: z.string().min(1),
     source: z.enum(["workplace", "attach", "user_ops"]),
     type: z.enum(["text", "image", "dir"]),
-    /** workplace/attach 落库可长期为 null；发送后均为 action XML。 */
+    /** workplace/attach 落库可长期为 null；发送后均为 action XML。workplace 为历史只读兼容，新数据不再产生。 */
     content: z.string().nullable(),
-    /** workplace/attach/user_ops 的逻辑 path。 */
+    /** workplace/attach/user_ops 的逻辑 path。workplace 为历史只读兼容，新数据不再产生。 */
     path: z.string().optional(),
     /** 结构化 action；新写入应必填；历史可缺省。 */
     action: messageAttachmentActionSchema.optional(),

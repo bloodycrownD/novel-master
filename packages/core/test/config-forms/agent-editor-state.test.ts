@@ -16,6 +16,7 @@ import {
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   withDynamicBlockPersistence,
+  hasAnyPromptRegionEnabled,
   WORKPLACE_BLOCK_HINT,
   WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE,
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
@@ -383,6 +384,88 @@ test("formSnapshotJson omits model fields when disabled", () => {
   const parsed = JSON.parse(json) as Record<string, unknown>;
   assert.equal(parsed.providerId, undefined);
   assert.equal(parsed.savedModelId, undefined);
+});
+
+test("T-CA2a: definitionToForm 从 prompts.customAttach 非空反推 enabled=true", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      customAttach: "附加笔记",
+      persist: [],
+      dynamic: [],
+    },
+  });
+  assert.equal(form.customAttachEnabled, true);
+  assert.equal(form.customAttachText, "附加笔记");
+});
+
+test("T-CA2b: layoutFromFormInput 在 trim 空时不 emit customAttach", () => {
+  const base = createDefaultAgentEditorPrompts();
+  // 开关开但文本为空 → 不 emit
+  const layoutEmpty = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "",
+  });
+  assert.equal(layoutEmpty.customAttach, undefined);
+  // 开关开但仅空白 → trim 后为空，同样不 emit
+  const layoutBlank = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "   \n  ",
+  });
+  assert.equal(layoutBlank.customAttach, undefined);
+  // 关时即便有文本也不 emit
+  const layoutOff = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: false,
+    customAttachText: "附加笔记",
+  });
+  assert.equal(layoutOff.customAttach, undefined);
+  // 正常开 + 非空才 emit
+  const layoutOn = layoutFromFormInput({
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "附加笔记",
+  });
+  assert.equal(layoutOn.customAttach, "附加笔记");
+});
+
+test("T-CA2c: formSnapshotJson 将 customAttach 两字段纳入 dirty 比对", () => {
+  const base = createDefaultAgentEditorPrompts();
+  const json = formSnapshotJson({
+    name: "agent",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    savedModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+    customAttachEnabled: true,
+    customAttachText: "附加笔记",
+  });
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  assert.equal(parsed.customAttachEnabled, true);
+  assert.equal(parsed.customAttachText, "附加笔记");
+});
+
+test("T-CA2d: 只开 customAttachEnabled 不影响 hasAnyPromptRegionEnabled 门闩", () => {
+  const base = createDefaultAgentEditorPrompts();
+  // 三区全关，仅 customAttach 开 → 门闩仍为 false（customAttach 不是区域）
+  assert.equal(
+    hasAnyPromptRegionEnabled({ ...base, customAttachEnabled: true }),
+    false,
+  );
+  // 同时打开 system 才变 true
+  assert.equal(
+    hasAnyPromptRegionEnabled({
+      ...base,
+      systemEnabled: true,
+      customAttachEnabled: true,
+    }),
+    true,
+  );
 });
 
 test("buildAgentDefinitionFromForm validates required fields", () => {

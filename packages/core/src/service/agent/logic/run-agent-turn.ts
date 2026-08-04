@@ -12,10 +12,10 @@
  * 4. `prepareUserMessagesForPrompt`（hydrate+wrap；S0）
  *
  * ## 契约
- * - App `attachments` 入参仅 `source===attach`；误传 workplace/`user_ops` 预览一律丢弃；
+ * - App `attachments` 入参仅 `source===attach` 生效；误传的 `user_ops` 预览一律丢弃；
  *   `@` 扫描仍由 Core 合并；禁止 composer status 原样当 payload。
- * - **不** materialize workplace 差集；规则变更靠 `refreshRuleSnapshot` + 常驻前缀。
- * - `hasInput` / `shouldAppendNewUser`：正文 / attach / pending / annotateDrafts（无 workplace）。
+ * - workplace 不再走附件通道：规则变更靠 `refreshRuleSnapshot` + 常驻前缀 S0 注入。
+ * - `hasInput` / `shouldAppendNewUser`：正文 / attach / pending / annotateDrafts。
  * - 有 `annotateDrafts` 时本轮视 `allowResumeWithoutInput` 为 false（禁空续跑 re-append）。
  * - annotate 附件 **concat** 追加，禁止 `mergeAttachmentsByPath` / path 去重。
  * - wrap/assemble **不**在本模块写库（T-SR0）；双渲染只读。
@@ -113,7 +113,7 @@ export interface RunAgentTurnOptions {
   /**
    * 空 content 续跑且末条为 user（含 App Composer 空发）。
    * 跳过「content 非空」校验；不 append user。
-   * 有 workplace 差集时不得走纯 resume（差集=新输入）。
+   * workplace 已不再走附件通道，故无 workplace 差集概念；该能力仅为三端共用的空续跑兼容。
    *
    * 三端共用（mobile/desktop/CLI）的空续跑能力，保留不动。
    */
@@ -123,7 +123,8 @@ export interface RunAgentTurnOptions {
   readonly onStream?: (event: LlmStreamEvent) => void;
   /**
    * Composer 显式附件；**仅** `source===attach` 生效。
-   * 误传的 workplace/`user_ops` 预览一律丢弃；`@` 扫描由 Core 合并。
+   * 误传的 `user_ops` 预览一律丢弃（filter 保留拦截）；`@` 扫描由 Core 合并。
+   * workplace 为历史只读兼容，新数据不再产生。
    */
   readonly attachments?: readonly MessageAttachment[];
   /**
@@ -174,7 +175,7 @@ export async function runAgentTurn(
   const allowResumeWithoutInput =
     options?.allowResumeWithoutInput === true && !hasAnnotateDrafts;
 
-  // 入参清洗：误传的 workplace / user_ops 预览一律丢弃，只保留 attach
+  // 入参清洗：误传的 user_ops 预览一律丢弃，只保留 attach（workplace 为历史只读兼容，新数据不再产生）
   const composerAttachOnly = (options?.attachments ?? []).filter(
     (a) => a.source === "attach",
   );

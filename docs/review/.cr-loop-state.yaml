@@ -1,0 +1,121 @@
+# 全局 CR Loop 编排状态
+# 本文件记录矩阵覆盖、wave、node_status；上下文压缩后读这份接着干。
+# Phase 0 已完成，待用户确认进入 Phase 1。
+# 六阶段：phase1 横扫 → phase2 切片 → phase2.5 跨模块模式 → phase3 交叉 → phase4 综合 → phase5 fix-spec
+
+base_sha: 待记录（开跑 Phase 1 前填入）
+mode: global-cr
+current_phase: phase0-done
+dag_version: 1
+
+# 切片模块清单（Phase 0 定稿，6 个切片）
+slice_modules:
+  - { id: D2-vfs,           contexts: [domain/vfs, service/vfs, bootstrap/vfs], priority: 1 }
+  - { id: D2-chat-message,  contexts: [domain/chat, domain/message-checkpoint, service/chat, service/message-checkpoint], priority: 2 }
+  - { id: D2-provider-llm,  contexts: [domain/provider, infra/llm-protocol, service/provider], priority: 3 }
+  - { id: D2-agent-tool,    contexts: [domain/agent, domain/tool, service/agent], priority: 4 }
+  - { id: D2-compaction,    contexts: [domain/compaction-conditions, service/compaction-conditions], priority: 5 }
+  - { id: D2-prompt,        contexts: [domain/prompt, service/prompt, infra/prompt-template], priority: 6 }
+
+# 横扫-only 模块（21 个，只被 L1-L8 扫过，不做切片）
+sweep_only_modules:
+  [events, events-config, regex, workplace, session-kkv, kkv,
+   persistent-preferences, persistent-state, depth, format, character-card,
+   cloud-sync, sksp, tdbc, sql-template, tokenizer, nmtp, db-backup,
+   serialization, feature-flags, session-fs]
+
+# 角度清单（11 个）
+lenses: [L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11]
+
+# 角度 × 切片 覆盖矩阵（phase1 完成后填充；phase2 切片引用 phase1 结论）
+# key: "<lens>/<slice>", value: done | pending | blocked | na(理由)
+matrix:
+  coverage:
+    # phase1 横扫：每个角度扫全部模块（切片 + 横扫-only）
+    L1/sweep: pending   # 数据模型扫全部
+    L2/sweep: pending   # 算法扫全部
+    L3/sweep: pending   # 架构扫全部
+    L4/sweep: pending   # 错误处理扫全部
+    L5/sweep: pending   # 并发扫全部
+    L6/sweep: pending   # 跨端扫全部
+    L7/sweep: pending   # 测试扫全部
+    L8/sweep: pending   # API/安全扫全部（含包导出面 + 发版策略）
+    L9/sweep: pending   # 死代码扫全部（基于 knip 报告）
+    L10/sweep: pending  # 工程化基建一致性扫全部（tsconfig/ESLint/测试运行器/CI/Node engines）
+    L11/sweep: pending  # 文档与代码漂移扫全部（monorepo.md/examples/docs↔实现）
+    # phase2 切片：每切片综合所有角度
+    all/D2-vfs: pending
+    all/D2-chat-message: pending
+    all/D2-provider-llm: pending
+    all/D2-agent-tool: pending
+    all/D2-compaction: pending
+    all/D2-prompt: pending
+
+node_status:
+  D0-1: { status: done, doc: phase0/D0-1-code-map.md }
+  D0-2: { status: done, doc: phase0/D0-2-docs-index.md }
+  D0-3: { status: done, doc: phase0/D0-3-knip-scan.md, note: 'knip 6.31.0 全量扫描' }
+  D1-L1: { status: pending }
+  D1-L2: { status: pending }
+  D1-L3: { status: pending }
+  D1-L4: { status: pending }
+  D1-L5: { status: pending }
+  D1-L6: { status: pending }
+  D1-L7: { status: pending }
+  D1-L8: { status: pending }
+  D1-L9: { status: pending }
+  D1-L10: { status: pending }
+  D1-L11: { status: pending }
+  D2-vfs: { status: pending }
+  D2-chat-message: { status: pending }
+  D2-provider-llm: { status: pending }
+  D2-agent-tool: { status: pending }
+  D2-compaction: { status: pending }
+  D2-prompt: { status: pending }
+  # Phase 2.5: 跨模块模式识别（11 个角度各一份）
+  D2a-L1: { status: pending }
+  D2a-L2: { status: pending }
+  D2a-L3: { status: pending }
+  D2a-L4: { status: pending }
+  D2a-L5: { status: pending }
+  D2a-L6: { status: pending }
+  D2a-L7: { status: pending }
+  D2a-L8: { status: pending }
+  D2a-L9: { status: pending }
+  D2a-L10: { status: pending }
+  D2a-L11: { status: pending }
+  D3-1: { status: pending }
+  D3-2: { status: pending }
+  D4-1: { status: pending }
+  # Phase 5: fix-spec 收敛
+  D5-1: { status: pending, note: 'spec-fix 子代理，分 wave：5a/5b/5c' }
+  D5-2: { status: pending }
+
+# Phase 0 关键发现摘要（供 phase1 各角度参考，避免重复扫描已确认清零的项）
+phase0_findings:
+  layering_violations: "三類違規全清零（domain→service、infra→service、apps 绕过 facade）"
+  cross_context_imports: "唯一实质跨 context：prompt → chat（normalize-for-llm-export.ts）"
+  god_modules:
+    - { file: connection.port, refs: 80, note: "TDBC 连接 port，所有 repo 基础依赖" }
+    - { file: vfs-path-mapper, refs: 42, note: "god module 嫌疑，被 vfs 几乎所有文件引用" }
+    - { file: adapter.port, refs: 36, note: "LLM 协议 adapter port" }
+    - { file: vfs-entry.port, refs: 28 }
+    - { file: sqlite-vfs-entry.repository, refs: 24 }
+  top_index_lines: 183
+  domain_contexts_have_barrel: false  # 大多无 index.ts
+  test_blind_spots: [regex, bootstrap, cloud-sync, session-kkv, sksp, kkv]
+  persistence_contexts: [vfs(3表), chat, provider, workplace, message-checkpoint, agent, regex, session-kkv, kkv, sksp]
+  three_app_sizes: { mobile: 35766, desktop: 7192, cli: 4010 }
+
+open_questions: []
+blocked: []
+
+wave_plan:
+  - phase1: [D1-L1, D1-L2, D1-L3, D1-L4, D1-L5, D1-L6, D1-L7, D1-L8, D1-L9, D1-L10, D1-L11]  # 11 角度并行横扫
+  - phase2: [D2-vfs, D2-chat-message, D2-provider-llm, D2-agent-tool, D2-compaction, D2-prompt]  # 6 切片并行
+  - phase2.5: [D2a-L1, D2a-L2, D2a-L3, D2a-L4, D2a-L5, D2a-L6, D2a-L7, D2a-L8, D2a-L9, D2a-L10, D2a-L11]  # 11 角度跨模块模式识别
+  - phase3: [D3-1, D3-2]  # 主代理亲自（含辩论式回派）
+  - phase4: [D4-1]  # 主代理亲自
+  - phase5: [D5-1]  # spec-fix 子代理，按严重度分 wave（5a/5b/5c）
+
+status: Phase 0 已完成，待用户确认进入 Phase 1 角度横扫（六阶段 loop：1→2→2.5→3→4→5）

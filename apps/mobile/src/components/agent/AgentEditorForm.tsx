@@ -107,6 +107,9 @@ type ProjectEditorProps = {
 
 type Props = RegistryEditorProps | ProjectEditorProps;
 
+// 自定义附加信息输入框文案（core 未导出，UI 层自管）。
+const CUSTOM_ATTACH_TEXT_LABEL = '附加信息内容';
+
 export function AgentEditorForm(props: Props) {
   const { onDirtyChange, onSaved } = props;
   const isProjectMode = props.editorMode === 'project';
@@ -129,6 +132,8 @@ export function AgentEditorForm(props: Props) {
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
+  const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
+  const [customAttachText, setCustomAttachText] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -165,6 +170,8 @@ export function AgentEditorForm(props: Props) {
         dynamicEnabled,
         workplaceEnabled,
         workplaceAssistantText,
+        customAttachEnabled,
+        customAttachText,
         persist,
         dynamic,
       }),
@@ -182,6 +189,8 @@ export function AgentEditorForm(props: Props) {
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     ],
@@ -227,6 +236,8 @@ export function AgentEditorForm(props: Props) {
       setDynamicEnabled(promptForm.dynamicEnabled);
       setWorkplaceEnabled(promptForm.workplaceEnabled);
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
+      setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
+      setCustomAttachText(promptForm.customAttachText ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -474,6 +485,8 @@ export function AgentEditorForm(props: Props) {
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     });
@@ -552,6 +565,8 @@ export function AgentEditorForm(props: Props) {
     dynamicEnabled,
     workplaceEnabled,
     workplaceAssistantText,
+    customAttachEnabled,
+    customAttachText,
     persist,
     dynamic,
   });
@@ -1195,33 +1210,27 @@ export function AgentEditorForm(props: Props) {
                   {PROMPT_REGION_LABELS.chatTag}
                 </Text>
               </View>
-              <View
-                style={[
-                  styles.readonlyPill,
-                  {
-                    backgroundColor: tokens.surface,
-                    borderColor: tokens.borderLight,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.readonlyPillText,
-                    { color: tokens.textSecondary },
-                  ]}
-                >
-                  只读
-                </Text>
-              </View>
+              <Switch
+                value={customAttachEnabled}
+                onValueChange={next => setCustomAttachEnabled(next)}
+                trackColor={{ false: tokens.border, true: tokens.primary }}
+              />
             </View>
-            <Text style={[styles.chatSlotTitle, { color: tokens.text }]}>
-              {PROMPT_REGION_LABELS.chat}
-            </Text>
             <Text
               style={[styles.chatSlotHint, { color: tokens.textSecondary }]}
             >
-              {PROMPT_REGION_LABELS.chatReadonlyHint}
+              用户聊天历史，开启后可给每次输入附加额外内容
             </Text>
+            {customAttachEnabled ? (
+              <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
+                <PromptMacroTextInput
+                  tokens={tokens}
+                  value={customAttachText}
+                  onChangeText={setCustomAttachText}
+                  placeholder="支持 $time、$week_cn、$filetree…"
+                />
+              </FormField>
+            ) : null}
           </View>
 
           {renderPromptSectionHead(promptSectionLabels.dynamic, {
@@ -1450,21 +1459,6 @@ const styles = StyleSheet.create({
   chatSlotTagText: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  readonlyPill: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  readonlyPillText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  chatSlotTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 2,
   },
   chatSlotHint: {
     fontSize: 13,

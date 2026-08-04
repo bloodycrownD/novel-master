@@ -1,10 +1,10 @@
 # L8：API 稳定性 & 安全
 
-> 角度横扫指导。你是 lens-sweep 子代理，readonly，负责从**公共 API 契约稳定性和安全性**这一个角度扫遍整个仓库。
+> 角度横扫指导。你是 lens-sweep 子代理，readonly，负责从**公共 API 契约稳定性、包导出面设计、发版策略一致性、安全性**这一个角度扫遍整个仓库。
 
 ## 你的一句话职责
 
-查清这个仓库的**公共面（`index.ts` 导出）对不对、稳不稳定、安不安全**。你同时关注两件事：API 稳定性（导出了什么、该不该导出、有没有破坏性变更）和安全性（密钥处理、输入校验、注入面）。这两个看似不相关，但它们的共同点是「都关注**边界**」——公共面是模块边界，安全是信任边界。
+查清这个仓库的**公共面对不对、稳不稳定、安不安全**。公共面有三层你要一起看：源码层是 `index.ts` 导出（导出了什么、该不该导出、有没有破坏性变更），包描述层是 `package.json` 的 `exports` 字段（24 个子路径、三种路径风格、封装性破坏），发版层是版本号和 release 流程（0.0.0 vs 1.4.16 的混乱、release.yml 只发部分包）。安全面你关注密钥处理、输入校验、注入面。这四块看似分散，但共同点是「都关注**边界**」——源码公共面是模块边界，包导出面是发布单元边界，发版策略是兼容性边界，安全是信任边界。
 
 ## 你的独有抓手
 
@@ -21,24 +21,63 @@
 - **密钥传输**：API key 在传输过程中是否安全（日志、错误消息里有没有泄漏）
 - **权限边界**：tool / vfs 操作有没有越权风险（agent 能否读写不该访问的路径）
 
+### 包导出面设计
+- **package.json exports 路径风格混用**：`./chat` 指向 `dist/public/*`（正确，走 public 面），但 `./tdbc` 指向 `dist/infra/tdbc/`（暴露内部 infra 目录）、`./kkv` 指向 `dist/service/*`（暴露 service 层）——三种风格混用说明 exports 设计没有一致原则。
+- **exports 暴露内部目录**：`./tdbc` 直接映射到 `dist/infra/tdbc/` 意味着消费者能 import core 的 infra 内部实现，绕过了 `src/index.ts` 这个源码公共面。源码层 facade 做得严（只有 183 行导出），但 package.json 层却开了 24 个口子，两层公共面不一致。
+- **exports 与 src/index.ts 不同步**：src/index.ts 只导出 183 行的能力，但 package.json exports 有 24 个子路径——这俩是谁在定义真正的公共面？如果 exports 暴露的符号在 src/index.ts 里没有，说明它们是「绕过源码 facade 直接发布的内部模块」。
+
+### 发版策略一致性
+- **版本号 0.0.0 vs 1.4.16 混乱**：desktop 和 mobile 是 `1.4.16`（有真实版本管理），但 core 和所有 driver 包停在 `0.0.0`（语义上等于「随时破坏性变更」）。0.0.0 的包被 1.4.16 的包消费，版本语义自相矛盾。
+- **release.yml 只发部分包**：`.github/workflows/release.yml` 只发布 mobile 和 desktop，core 和 driver 包没有发版流程——但它们的 package.json 有 name 字段，理论上可发布。这意味着 core 的「已发布版本」和「实际被消费的版本」（monorepo 内部 workspaces 链接）是两回事。
+- **CHANGELOG / 发版产物校验缺失**：发版流程没有自动校验 CHANGELOG 是否更新、发版产物是否包含 exports 声明的所有入口。
+
+## Phase 0 已确认的公共面现实
+
+Phase 0 侦察已读完全部 `packages/core/src/index.ts`（183 行），**公共面实际很窄**：
+
+### 顶层 index.ts 实际导出范围（已知）
+
+导出了这些能力：
+- **SQL Template**：SqlTemplateParser、parseTemplateToAst 等
+- **TDBC**：open、registerDriver、connection 类型
+- **Bootstrap**：bootstrapNovelMaster、NOVEL_MASTER_SCHEMA_STATEMENTS
+- **DB Backup**：dumpProviderTableSnapshot、scrubProviderTables 等
+- **Cloud Sync**：CloudSyncCoordinator、lease/lock 相关
+- **KKV / Preferences**：createPersistentState、createPersistentPreferences、preference keys
+- **Tool**：ToolRegistry、ToolRunner、vfs tools、builtin tools
+- **Serialization**（文件末尾，183 行处）
+
+**未导出的重要 context**（外部消费者怎么用它们？这是 L8 要查的重点）：
+- chat、vfs、message、agent、prompt、provider、compaction、regex、workplace 等 domain context 的能力，**顶层 index.ts 几乎没直接导出**
+- 这意味着要么外部 app 不直接用这些（通过别的机制），要么有未发现的入口
+
+### 公共面审查重点（基于实测）
+
+1. **未导出的 context 如何被消费**：读 apps/cli、apps/desktop、apps/mobile 的入口文件，看它们怎么获得 chat/vfs/message 能力——是通过 factory 函数？还是 core 另有未发现的公共面？
+2. **导出范围是否合理**：183 行导出了 SQL template、TDBC、bootstrap 这些偏底层的能力，但没导出 chat/vfs 这些业务能力——分层是否倒置？
+3. **安全面实际状汐**：sksp-schema 只有 1 行 CREATE，sksp 测试只有 1 个文件——密钥存储的防护实际有多少？
+
 ## 读什么文件
 
 ### 核心目标
 
-| 目录 | 为什么看 |
+| 目标 | 为什么看 |
 |------|----------|
-| `packages/core/src/index.ts` | 顶层 facade——最重要的公共面 |
-| `packages/core/src/public/` | public 目录下的公开类型 |
-| `packages/core/src/types/` | 类型定义 |
-| `packages/core/src/domain/*/index.ts` | 各 context 的 barrel |
-| `packages/core/src/service/*/index.ts` | 各 service 的 barrel |
+| **`packages/core/src/index.ts`** | 183 行，全读——这是唯一的顶层 facade |
+| **`packages/core/package.json` exports 字段** | 第 8–104 行，24 个子路径——这是包导出面，和 src/index.ts 对照看是否一致 |
+| **所有 `packages/*/package.json` + `apps/*/package.json` 的 version 字段** | 发版策略一致性检查 |
+| **`.github/workflows/release.yml`** | 发版流程覆盖范围 |
+| `packages/core/src/public/` | 13 文件，999 行——看 public 目录里有什么 |
+| `packages/core/src/types/` | 1 文件，17 行 |
+| `packages/core/src/errors/` | 17 文件，894 行——错误类型体系 |
+| `packages/core/src/domain/*/` | 查哪些类型该被导出但没导出 |
 | `packages/core/src/infra/sksp/` | 密钥存储——安全核心 |
 | `packages/core/src/infra/llm-protocol/` | API key 传输——安全核心 |
-| `packages/core/src/infra/tdbc/` | SQL 执行——注入面 |
-| `packages/core/src/infra/sql-template/` | SQL 模板——注入面 |
+| `packages/core/src/infra/tdbc/` + `infra/sql-template/` | SQL 执行——注入面 |
 | `packages/core/src/domain/vfs/` | 文件系统操作——路径穿越 |
 | `packages/core/src/domain/tool/` | tool 系统——权限边界 |
 | `packages/core/src/config-forms/` | 配置表单——输入校验 |
+| **apps/cli/src、apps/desktop/src** | 查它们如何获得未导出的 context 能力 |
 
 ### grep 模式
 
@@ -78,6 +117,18 @@ regex: "new\s+RegExp\s*\([^)]*\$\{"
 # console.log 输出敏感信息
 include: "packages/core/src/**/*.ts"
 regex: "console\.(log|error|warn|debug).*\n.*(apiKey|secret|password|token)"
+
+# package.json exports 字段（包导出面）
+include: "packages/core/package.json"
+regex: "\"exports\"|\"\./"
+
+# 找所有包的 version 字段（发版策略）
+include: "**/package.json"
+regex: "\"version\"\s*:\s*\"0\.0\.0\""
+
+# 找外部消费 core 子路径的方式（验证 exports 是否被实际使用）
+include: "apps/**/*.ts*"
+regex: "from\s+['\"]@novel-master/core/"
 ```
 
 ## 相关 Iterations
@@ -156,6 +207,23 @@ regex: "console\.(log|error|warn|debug).*\n.*(apiKey|secret|password|token)"
 
 **判定标准**：agent 可越权访问文件/配置，标 A。
 
+### 7. 包导出面设计（扩展维度）
+**怎么查**：读 `packages/core/package.json` 的 `exports` 字段（第 8–104 行，24 个子路径）。对每个子路径：
+- 它映射到 `dist/` 下的哪个目录？是 `dist/public/`（走源码 facade）、`dist/infra/`（暴露 infra 内部）、还是 `dist/service/`（暴露 service 层）？
+- 这个导出在 `src/index.ts` 里有对应吗？如果没有，说明 package.json 在发布一个源码层没声明的公共面。
+- 外部包（apps/、其他 packages/）实际通过哪种子路径 import core？grep `from ['"]@novel-master/core/` 看真实消费模式。
+
+**判定标准**：exports 映射到 `dist/infra/` 或 `dist/service/`（暴露内部层），标 A；exports 子路径在 src/index.ts 无对应且被外部消费，标 A；exports 与实际 import 路径不符（声明了但没人用，或有人用但没声明），标 B。
+
+### 8. 发版策略一致性（扩展维度）
+**怎么查**：
+- 读所有 `packages/*/package.json` 和 `apps/*/package.json` 的 `version` 字段，列一张「版本号对照表」。找出哪些是 0.0.0、哪些是真实版本号。
+- 读 `.github/workflows/release.yml`，看它发哪些包、不发哪些包。
+- 读 `CHANGELOG.md`（如果存在），看它是否覆盖所有发布了的包。
+- 判断 0.0.0 的包被其他包消费时，semver 语义是否还成立（0.0.0 意味着任何变更都是 breaking）。
+
+**判定标准**：被消费的包停在 0.0.0 且消费者是有真实版本的包，标 A（版本语义矛盾）；release 流程漏发有 name 的包，标 B；CHANGELOG 与实际发版产物不符，标 B。
+
 ## 与其他角度的潜在冲突
 
 | 对方角度 | 可能的冲突 | 你的立场 |
@@ -163,6 +231,8 @@ regex: "console\.(log|error|warn|debug).*\n.*(apiKey|secret|password|token)"
 | **L3 架构** | 你说「这个该导出」，L3 可能说「这个不该导出（是内部细节）」 | 如果外部需要它但它是内部细节，说明抽象层级有问题——双方都对，冲突交给 phase3 |
 | **L1 数据模型** | 你说「输入校验缺失」，L1 可能说「schema 定义了」 | schema 定义了不代表运行时校验了——区分「有 zod schema」和「有实际 .parse()」 |
 | **L6 跨端** | 你说「密钥处理不安全」，L6 可能说「三端密钥实现不同」 | 三端不同不代表某个端不安全——你分别评每个端 |
+| **L3 架构（包依赖）** | 你发现 exports 暴露了内部目录，L3 可能发现 package.json 的 dependencies 也暴露了内部 | L3 看 dependencies（包依赖图），L8 看 exports（包导出面）——两者互补，不冲突 |
+| **L10 工程化基建** | 你发现 release.yml 只发部分包，L10 也会发现 CI 缺失 | 发版产物范围归 L8（API 稳定性），CI 是否覆盖 PR/push 归 L10 |
 
 ## 输出格式
 
@@ -192,6 +262,6 @@ regex: "console\.(log|error|warn|debug).*\n.*(apiKey|secret|password|token)"
 | 级别 | 场景 |
 |------|------|
 | **S** | 顶层 index.ts 导出了内部实现且外部已依赖（重构即破坏性变更） |
-| **A** | 外部需要的类型未导出（迫使走私路径）；导出类型与运行时不符 |
-| **B** | 导出了过多的内部细节（暂无外部依赖但有风险） |
-| **C** | 导出命名不一致；缺少 deprecation 标记 |
+| **A** | 外部需要的类型未导出（迫使走私路径）；导出类型与运行时不符；exports 映射到 dist/infra/ 或 dist/service/（暴露内部层）；exports 子路径被消费但 src/index.ts 无对应；被消费的包停在 0.0.0 且消费者是真实版本 |
+| **B** | 导出了过多的内部细节（暂无外部依赖但有风险）；exports 与实际 import 路径不符；release 流程漏发有 name 的包；CHANGELOG 与实际发版产物不符 |
+| **C** | 导出命名不一致；缺少 deprecation 标记；版本号局部不一致但无 semver 风险 |

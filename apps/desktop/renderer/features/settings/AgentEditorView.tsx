@@ -113,6 +113,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState("");
+  // 自定义附加信息开关 / 文本（对应域 prompts.customAttach）。
+  const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
+  const [customAttachText, setCustomAttachText] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -154,6 +157,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         dynamicEnabled,
         workplaceEnabled,
         workplaceAssistantText,
+        customAttachEnabled,
+        customAttachText,
         persist,
         dynamic,
       }),
@@ -171,6 +176,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     ]
@@ -237,6 +244,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setDynamicEnabled(promptForm.dynamicEnabled);
       setWorkplaceEnabled(promptForm.workplaceEnabled);
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
+      // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
+      setCustomAttachEnabled(promptForm.customAttachEnabled);
+      setCustomAttachText(promptForm.customAttachText);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -420,6 +430,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     });
@@ -919,15 +931,27 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               <span className="config-block-card__badge">
                 {PROMPT_REGION_LABELS.chatTag}
               </span>
-              <span className="config-block-card__readonly-pill">只读</span>
+              <Switch
+                checked={customAttachEnabled}
+                onChange={setCustomAttachEnabled}
+                aria-label="开启自定义附加信息"
+              />
             </div>
             <div className="config-block-card__body">
-              <p className="config-block-card__meta config-block-card__meta--chat-title">
-                {PROMPT_REGION_LABELS.chat}
-              </p>
               <p className="config-block-card__hint">
-                {PROMPT_REGION_LABELS.chatReadonlyHint}
+                用户聊天历史，开启后可给每次输入附加额外内容
               </p>
+              {customAttachEnabled ? (
+                <SettingsField label="附加信息文本">
+                  <textarea
+                    rows={4}
+                    value={customAttachText}
+                    onChange={(e) => setCustomAttachText(e.target.value)}
+                    onKeyDown={handlePromptTextareaKeyDown}
+                    placeholder="每条用户消息都会附带这段文本给模型"
+                  />
+                </SettingsField>
+              ) : null}
             </div>
           </div>
 

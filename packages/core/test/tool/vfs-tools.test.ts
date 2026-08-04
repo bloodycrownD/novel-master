@@ -54,6 +54,40 @@ describe("Builtin file tools V2 (unit)", () => {
     assert.equal(isMutatingFileToolName("grep"), false);
     assert.equal(isMutatingFileToolName("fs"), true);
   });
+
+  it("write 相对路径规范化后统一写入与 file_cache，不报 INVALID_PATH", async () => {
+    const writes: Array<{ path: string; content: string }> = [];
+    const kkvSets: Array<{ key: string; value: string }> = [];
+    const vfs = {
+      write: async (path: string, content: string) => {
+        writes.push({ path, content });
+        return { version: 1 };
+      },
+    } as unknown as BuiltinToolContext["vfs"];
+    const sessionKkv = {
+      set: async (_sid: string, _domain: string, key: string, value: string) => {
+        kkvSets.push({ key, value });
+      },
+    } as unknown as BuiltinToolContext["sessionKkv"];
+    const ctx: BuiltinToolContext = {
+      ...toolCtx(vfs, "p", "s"),
+      sessionKkv,
+    };
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+
+    const result = await runner.call<{ version: number }>(
+      "write",
+      { path: "drafts/a.md", content: "hi" },
+      ctx,
+    );
+    assert.equal(result.version, 1);
+    // vfs.write 收到规范化后的绝对路径
+    assert.equal(writes[0].path, "/drafts/a.md");
+    // file_cache key 用同一规范路径，不再抛 INVALID_PATH
+    assert.equal(kkvSets[0].key, "full:/drafts/a.md");
+  });
 });
 
 novelMasterTestFixture();

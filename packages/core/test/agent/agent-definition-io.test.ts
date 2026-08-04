@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode, parseText, stringifyText } from "@novel-master/core";
 
-import { agentDefinitionSchema } from "@novel-master/core/agent";
+import { agentDefinitionSchema, promptsDocumentSchema } from "@novel-master/core/agent";
 
 const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 
@@ -63,5 +63,55 @@ prompts:
     assert.equal(kick?.lifecycle, "once");
     const ctx = again.prompts.dynamic.find((b) => b.name === "ctx");
     assert.equal(ctx?.lifecycle, undefined);
+  });
+
+  it("T-CA1a: prompts.customAttach 走 definitionToDocument → documentToDefinition 往返不丢字段", () => {
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "ca",
+        prompts: { persist: {}, dynamic: {}, customAttach: "笔记内容" },
+      },
+      agentDefinitionSchema,
+    );
+    assert.equal(def.prompts.customAttach, "笔记内容");
+    const doc = encode(def, agentDefinitionSchema) as {
+      prompts?: { customAttach?: string };
+    };
+    assert.equal(doc.prompts?.customAttach, "笔记内容");
+    const again = decode(doc, agentDefinitionSchema);
+    assert.equal(again.prompts.customAttach, "笔记内容");
+  });
+
+  it("T-CA1b: 缺省 customAttach 读回 undefined，且 definitionToDocument 不写出该 key", () => {
+    // wire 层 refine 已禁止空串 / 纯空白，这里只验证缺省路径：
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "ca-missing",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    );
+    assert.equal(def.prompts.customAttach, undefined);
+    const doc = encode(def, agentDefinitionSchema) as {
+      prompts?: { customAttach?: string };
+    };
+    assert.equal(
+      doc.prompts?.customAttach,
+      undefined,
+      "缺省时不应该写出 customAttach key",
+    );
+    const again = decode(doc, agentDefinitionSchema);
+    assert.equal(again.prompts.customAttach, undefined);
+  });
+
+  it("T-CA1c: promptsDocumentSchema 对未声明字段返回失败（.strict() 验证）", () => {
+    const parsed = promptsDocumentSchema.safeParse({
+      persist: {},
+      dynamic: {},
+      unknownExtraField: 1,
+    });
+    assert.equal(parsed.success, false);
   });
 });

@@ -26,6 +26,12 @@ function minimalDefinition(): AgentDefinition {
   };
 }
 
+/** 从 stringify 后的 user 消息里抽出 <extra-info>...</extra-info> 片段用于一致性比对。 */
+function extractExtraInfoBlock(s: string): string {
+  const match = s.match(/<extra-info>[\s\S]*?<\/extra-info>/);
+  return match ? match[0] : "";
+}
+
 const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
@@ -1495,4 +1501,100 @@ describe("AgentRunner", () => {
     assert.equal(file.content, "hi");
   });
 
+  // T-CA4：runner 注入 extraInfo（prompts.customAttach）零覆盖补齐。
+  it("T-CA4a: definition prompts.customAttach 非空 → 每条 user 消息都含同一份 extra-info", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("第一问"));
+
+    const model = createMockModel([
+      { assistantText: "ok", blocks: [{ type: "text", text: "ok-1" }], raw: {} },
+      { assistantText: "ok", blocks: [{ type: "text", text: "ok-2" }], raw: {} },
+    ]);
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    const definition = {
+      name: "ca",
+      prompts: { persist: [], dynamic: [], customAttach: "笔记内容" },
+    };
+
+    // 第一轮：只有一条 user 消息。跑完后 session 里追加 assistant。
+    await runner.run({
+      maxSteps: 1,
+      definition,
+      ...defaultRunScope,
+    });
+
+    // 第二轮：再追一条 user 消息，此时 history 含两条 user（中间隔 assistant），不会被合并。
+    await session.append("user", textBlocks("第二问"));
+    await runner.run({
+      maxSteps: 1,
+      definition,
+      ...defaultRunScope,
+    });
+
+    assert.equal(model.callCount(), 2);
+    const opts = (model.request as unknown as ReturnType<typeof mock.fn>)
+      .mock.calls[1]!.arguments[2] as { history: Array<{ role: string }> };
+    const userMsgs = opts.history.filter((m) => m.role === "user");
+    assert.equal(
+      userMsgs.length,
+      2,
+      "第二轮 history 里应含两条 user 消息",
+    );
+    const bodies = userMsgs.map((m) => JSON.stringify(m));
+    // 每条都含 extra-info 块且文本一致（常驻 + 同一份）
+    for (const b of bodies) {
+      assert.match(b, /<extra-info>/);
+      assert.match(b, /笔记内容/);
+      assert.match(b, /<\/extra-info>/);
+    }
+    const firstExtra = extractExtraInfoBlock(bodies[0]!);
+    const secondExtra = extractExtraInfoBlock(bodies[1]!);
+    assert.equal(
+      firstExtra,
+      secondExtra,
+      "两条 user 消息里的 extra-info 必须完全一致",
+    );
+  });
+
+  it("T-CA4b: definition 无 customAttach → user 消息 body 不出现 extra-info 段", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("第一问"));
+
+    const model = createMockModel([
+      { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} },
+    ]);
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    const opts = (model.request as unknown as ReturnType<typeof mock.fn>)
+      .mock.calls[0]!.arguments[2] as { history: Array<{ role: string }> };
+    const userMsgs = opts.history.filter((m) => m.role === "user");
+    for (const m of userMsgs) {
+      assert.doesNotMatch(JSON.stringify(m), /<extra-info>/);
+    }
+  });
 });

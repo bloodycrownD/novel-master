@@ -16,19 +16,58 @@
 - **跨层测试缺失**：domain → service → repo 的集成路径没有端到端测试
 - **可测性差**：代码没有依赖注入、硬编码了副作用（直接 new Date()、直接调 IO），导致无法隔离测试
 
+## Phase 0 已确认的测试覆盖现实
+
+Phase 0 侦察已统计了 `packages/core/test/` 的全部测试文件分布，**不需重复统计**：
+
+### 测试密度排名（已知）
+
+**测试健康的**（密度高）：
+| 模块 | 测试文件 | src 行数 | 密度 |
+|------|---------|---------|------|
+| events | 4 | 94 | 1/24 |
+| agent | 18 | 752 | 1/42 |
+| provider | 26 | 1652 | 1/64 |
+| message-checkpoint | 17 | 1207 | 1/71 |
+| prompt | 13 | 1006 | 1/77 |
+| depth | 2 | 161 | 1/80 |
+
+**测试盲区（L7 重点查）**：
+| 模块 | 测试文件 | src 行数 | 密度 | 问题 |
+|------|---------|---------|------|------|
+| **regex** | **3** | **1014**（727 domain + 287 service） | **1/338** | **严重不足**——正则引擎是核心逻辑 |
+| **bootstrap** | **7** | **2661** | **1/380** | schema/migration 正确性风险高 |
+| **cloud-sync** | **2** | **532** | **1/266** | 同步是数据安全核心 |
+| **session-kkv** | **1** | **298** | **1/298** | KV 存储测试极少 |
+| **sksp** | **1** | **221** | **1/221** | 密钥存储测试不足 |
+| **kkv** | **1** | **184** | **1/184** | 基础 KV |
+| **config-forms** | **6** | **1216** | **1/203** | 配置表单 |
+| **vfs** | 31 | 5512 | 1/178 | 密度中等但代码量巨大，盲区可能藏在量里 |
+| **chat** | 49 | 6797 | 1/139 | 密度中等，同 vfs |
+| **compaction-conditions** | 3 | 412 | 1/137 | 触发逻辑高复杂度 |
+
+### 你的重点因此明确为：
+
+1. **regex**：3 个测试覆盖了什么？正则引擎的 NFA/DFA 匹配、规则优先级、边界条件是否测了？
+2. **bootstrap 迁移**：8 个迁移脚本（含 vfs-entry-id-redesign 9 CREATE）的幂等性、重跑安全性有没有测？
+3. **cloud-sync**：租约锁、状态机、并发同步有没有测？
+4. **vfs/chat 的量中藏质**：31/49 个测试文件看起来多，但 5512/6797 行代码里可能有大量未测的错误路径
+5. **compaction-conditions**：触发条件的各种组合是否测了？
+
 ## 读什么文件
 
 ### 核心目标
 
 | 目录 | 为什么看 |
 |------|----------|
-| `packages/core/test/` | 核心测试目录，已有 30 个子目录 |
+| `packages/core/test/` | 核心测试目录（已扫，30 个子目录） |
+| **`packages/core/test/regex/`** | **重点**——只有 3 文件覆盖 1014 行 |
+| **`packages/core/test/bootstrap/`** | **重点**——只有 7 文件覆盖 2661 行 |
+| **`packages/core/test/cloud-sync/`** | **重点**——只有 2 文件覆盖 532 行 |
 | `packages/core/test/helpers/` | 测试工具和 fixture |
-| `packages/core/test/*/` | 各 context 的测试 |
-| `packages/core/test/bootstrap/` | bootstrap 测试（DDL/迁移测试） |
 | `packages/core/test/package-exports/` | 公共面导出测试 |
 | `apps/mobile/` 下 e2e 相关 | mobile e2e（Appium） |
-| `packages/core/src/domain/*/logic/` | 这些纯函数是否都有对应测试 |
+| `packages/core/src/domain/*/logic/` | 对比这些纯函数是否都有对应测试 |
 
 ### grep / find 模式
 

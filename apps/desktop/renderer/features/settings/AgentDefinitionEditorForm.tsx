@@ -52,10 +52,7 @@ import {
 } from "@/ipc/client";
 import { SettingsField, SettingsSection } from "./settings-ui";
 import { PromptMacroTextarea } from "./PromptMacroTextarea";
-import {
-  PROMPT_INSERTABLE_MACROS,
-  insertTextAtSelection,
-} from "./prompt-macro-input";
+import { PromptMacroChips } from "./PromptMacroChips";
 
 /** 非当前编辑块共用的空 ref（芯片插入只针对聚焦块）。 */
 const inactiveDynamicTextareaRef: RefObject<HTMLTextAreaElement | null> = {
@@ -95,6 +92,8 @@ function applyDefinitionToFormState(
     setDynamicEnabled: (v: boolean) => void;
     setWorkplaceEnabled: (v: boolean) => void;
     setWorkplaceAssistantText: (v: string) => void;
+    setCustomAttachEnabled: (v: boolean) => void;
+    setCustomAttachText: (v: string) => void;
     setPersist: (v: PersistPromptBlock[]) => void;
     setDynamic: (v: DynamicPromptBlock[]) => void;
     setToolsMode: (v: ToolsMode) => void;
@@ -118,6 +117,9 @@ function applyDefinitionToFormState(
   setters.setDynamicEnabled(promptForm.dynamicEnabled);
   setters.setWorkplaceEnabled(promptForm.workplaceEnabled);
   setters.setWorkplaceAssistantText(promptForm.workplaceAssistantText);
+  // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
+  setters.setCustomAttachEnabled(promptForm.customAttachEnabled);
+  setters.setCustomAttachText(promptForm.customAttachText);
   setters.setPersist([...promptForm.persist]);
   setters.setDynamic([...promptForm.dynamic]);
 
@@ -179,6 +181,9 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [workplaceEnabled, setWorkplaceEnabled] = useState(false);
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState("");
+  // 自定义附加信息开关 / 文本（对应域 prompts.customAttach）。
+  const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
+  const [customAttachText, setCustomAttachText] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -194,6 +199,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(
     null
   );
+  const customAttachTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const snapshot = useMemo(
     () =>
@@ -211,6 +217,8 @@ export const AgentDefinitionEditorForm = forwardRef<
         dynamicEnabled,
         workplaceEnabled,
         workplaceAssistantText,
+        customAttachEnabled,
+        customAttachText,
         persist,
         dynamic,
       }),
@@ -228,6 +236,8 @@ export const AgentDefinitionEditorForm = forwardRef<
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     ]
@@ -290,6 +300,8 @@ export const AgentDefinitionEditorForm = forwardRef<
           setDynamicEnabled,
           setWorkplaceEnabled,
           setWorkplaceAssistantText,
+          setCustomAttachEnabled,
+          setCustomAttachText,
           setPersist,
           setDynamic,
           setToolsMode,
@@ -329,6 +341,8 @@ export const AgentDefinitionEditorForm = forwardRef<
       dynamicEnabled,
       workplaceEnabled,
       workplaceAssistantText,
+      customAttachEnabled,
+      customAttachText,
       persist,
       dynamic,
     });
@@ -355,6 +369,8 @@ export const AgentDefinitionEditorForm = forwardRef<
     dynamicEnabled,
     workplaceEnabled,
     workplaceAssistantText,
+    customAttachEnabled,
+    customAttachText,
     persist,
     dynamic,
   ]);
@@ -823,15 +839,36 @@ export const AgentDefinitionEditorForm = forwardRef<
             <span className="config-block-card__badge">
               {PROMPT_REGION_LABELS.chatTag}
             </span>
-            <span className="config-block-card__readonly-pill">只读</span>
+            <Switch
+              checked={customAttachEnabled}
+              disabled={disabled}
+              onChange={setCustomAttachEnabled}
+              aria-label="开启自定义附加信息"
+            />
           </div>
           <div className="config-block-card__body">
-            <p className="config-block-card__meta config-block-card__meta--chat-title">
-              {PROMPT_REGION_LABELS.chat}
-            </p>
             <p className="config-block-card__hint">
-              {PROMPT_REGION_LABELS.chatReadonlyHint}
+              用户聊天历史，开启后可给每次输入附加额外内容
             </p>
+            {customAttachEnabled ? (
+              <SettingsField label="附加信息文本">
+                <PromptMacroTextarea
+                  textareaRef={customAttachTextareaRef}
+                  rows={4}
+                  value={customAttachText}
+                  disabled={disabled}
+                  onKeyDown={handlePromptTextareaKeyDown}
+                  onChange={setCustomAttachText}
+                  placeholder="每条用户消息都会附带这段文本给模型"
+                />
+                <PromptMacroChips
+                  value={customAttachText}
+                  onChange={setCustomAttachText}
+                  textareaRef={customAttachTextareaRef}
+                  disabled={disabled}
+                />
+              </SettingsField>
+            ) : null}
           </div>
         </div>
 
@@ -985,57 +1022,23 @@ export const AgentDefinitionEditorForm = forwardRef<
                             }
                           />
                         </SettingsField>
-                        <div className="config-dep-chips">
-                          <span className="config-block-card__hint">宏：</span>
-                          {PROMPT_INSERTABLE_MACROS.map((macro) => (
-                            <button
-                              key={macro.token}
-                              type="button"
-                              className="config-dep-chip"
-                              disabled={disabled}
-                              onClick={() => {
-                                setDynamicInsertIndex(index);
-                                const ta =
-                                  dynamicInsertIndex === index
-                                    ? dynamicTextareaRef.current
-                                    : null;
-                                const selection =
-                                  ta != null
-                                    ? {
-                                        start: ta.selectionStart ?? block.content.length,
-                                        end: ta.selectionEnd ?? block.content.length,
-                                      }
-                                    : {
-                                        start: block.content.length,
-                                        end: block.content.length,
-                                      };
-                                const { next, selection: nextSel } =
-                                  insertTextAtSelection(
-                                    block.content,
-                                    selection,
-                                    macro.token
-                                  );
-                                setDynamic((prev) =>
-                                  prev.map((b, i) =>
-                                    i === index ? { ...b, content: next } : b
-                                  )
-                                );
-                                requestAnimationFrame(() => {
-                                  const el = dynamicTextareaRef.current;
-                                  if (el != null) {
-                                    el.focus();
-                                    el.setSelectionRange(
-                                      nextSel.start,
-                                      nextSel.end
-                                    );
-                                  }
-                                });
-                              }}
-                            >
-                              {macro.label}
-                            </button>
-                          ))}
-                        </div>
+                        <PromptMacroChips
+                          value={block.content}
+                          onChange={(content) =>
+                            setDynamic((prev) =>
+                              prev.map((b, i) =>
+                                i === index ? { ...b, content } : b
+                              )
+                            )
+                          }
+                          textareaRef={
+                            dynamicInsertIndex === index
+                              ? dynamicTextareaRef
+                              : inactiveDynamicTextareaRef
+                          }
+                          disabled={disabled}
+                          onBeforeInsert={() => setDynamicInsertIndex(index)}
+                        />
                       </div>
                     </div>
                   ))}

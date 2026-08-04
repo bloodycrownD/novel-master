@@ -61,6 +61,15 @@ export function layoutHasWorkplace(
 }
 
 /**
+ * 布局是否带自定义附加信息（开 = trim 后非空 string；缺省 = 关）。
+ */
+export function layoutHasCustomAttach(
+  layout: Pick<AgentPromptLayout, "customAttach">,
+): boolean {
+  return typeof layout.customAttach === "string" && layout.customAttach.trim().length > 0;
+}
+
+/**
  * Agent Prompt 布局（替代扁平 {@link PromptBlock}[]）。
  * chat 为运行时槽位，不出现在配置中。
  */
@@ -76,6 +85,11 @@ export interface AgentPromptLayout {
    *（wire 可读 `true` → {@link WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT}）。
    */
   readonly workplace?: string;
+  /**
+   * 自定义附加信息（运行时注入 `<extra-info>` 纯文本块）；缺省 = 关；
+   * 开 = trim 后非空 string（空则静默省略）。
+   */
+  readonly customAttach?: string;
   /** 持久区文本块（不含 worktree 块）。 */
   readonly persist: readonly PersistTextPromptBlock[];
   readonly dynamic: readonly DynamicPromptBlock[];

@@ -1,9 +1,10 @@
 /**
  * 异步 hydrate + wrap 用户消息附件；LLM / 预览 / token 的唯一拼装入口。
  *
- * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace；user_ops 不参与。
+ * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace（历史只读兼容）；user_ops 不参与。
  * 文件 attach 非首次 → alreadyReferenced 短提示；workplace 非首次 → content 空；目录每次拼树仍计 seen。
  * 增量统一为 `<action name="userAttach|workplaceChange|…">` + JSON（行号正文；无 mtime/createdAt）。
+ * `runtime.extraInfo`（来自 agent 配置 customAttach）非空时，wrap 阶段在 `</user-ops>` 后注入 `<extra-info>` 纯文本块。
  *
  * @module domain/chat/logic/prepare-user-messages-for-prompt
  */
@@ -37,6 +38,8 @@ import {
 } from "./prompt-path-seen.js";
 import { renderDirAttachTree } from "./render-dir-attach-tree.js";
 import { wrapUserMessageForLlm } from "./wrap-user-message-for-llm.js";
+import { expandDynamicMacros } from "@/domain/prompt/logic/expand-dynamic-macros.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
 /** {@link prepareUserMessagesForPrompt} 运行时依赖与可选初始 seen。 */
 export interface PrepareUserMessagesForPromptRuntime {
@@ -48,6 +51,15 @@ export interface PrepareUserMessagesForPromptRuntime {
    * 通常来自 `assembleWorkplaceDisplay().prefixPaths`。
    */
   readonly seenPaths?: readonly string[];
+  /**
+   * 自定义附加信息（agent 配置 customAttach，**未展开宏的原文本**）；
+   * trim 非空时在 prepare 入口经 {@link expandDynamicMacros} 展开宏后，由 wrap 阶段注入 `<extra-info>` 块。
+   */
+  readonly extraInfo?: string;
+  /** 宏展开所需的当前时间（默认取 new Date()）。 */
+  readonly now?: Date;
+  /** 宏展开所需的 workplace 服务（用于 $filetree）。 */
+  readonly workplace?: WorkplaceService;
 }
 
 async function resolveWorkplaceStatus(
@@ -346,8 +358,13 @@ async function prepareOneUserMessage(
     return message;
   }
 
-  const attachments = message.attachments;
-  if (attachments == null || attachments.length === 0) {
+  const attachments = message.attachments ?? [];
+  const hasExtraInfo =
+    typeof runtime.extraInfo === "string" &&
+    runtime.extraInfo.trim().length > 0;
+  // 无附件且无 extraInfo：恒等原文，不走 wrap。
+  // 无附件但 extraInfo 非空：仍需走 wrap 注入 <extra-info> 块。
+  if (attachments.length === 0 && !hasExtraInfo) {
     return message;
   }
 
@@ -381,7 +398,7 @@ async function prepareOneUserMessage(
   );
 
   const plainText = messageBodyTextFromContent(message.content);
-  const wrapped = wrapUserMessageForLlm(plainText, hydrated);
+  const wrapped = wrapUserMessageForLlm(plainText, hydrated, runtime.extraInfo);
 
   return {
     ...message,
@@ -404,13 +421,26 @@ export async function prepareUserMessagesForPrompt(
   runtime: PrepareUserMessagesForPromptRuntime,
 ): Promise<ChatMessage[]> {
   const seen = createPromptPathSeenSet(runtime.seenPaths);
+  // 每轮 prepare 展开一次 customAttach 宏（与 dynamic 区每步展开对齐），同一轮内所有 user 消息复用同一份文本。
+  const extraInfoResolved =
+    typeof runtime.extraInfo === "string" &&
+    runtime.extraInfo.trim().length > 0
+      ? await expandDynamicMacros(runtime.extraInfo, {
+          now: runtime.now,
+          workplace: runtime.workplace,
+        })
+      : undefined;
+  const resolvedRuntime: PrepareUserMessagesForPromptRuntime =
+    extraInfoResolved === undefined
+      ? runtime
+      : { ...runtime, extraInfo: extraInfoResolved };
   const out: ChatMessage[] = [];
   for (const message of messages) {
     if (message.role !== "user") {
       out.push(message);
       continue;
     }
-    out.push(await prepareOneUserMessage(message, runtime, seen));
+    out.push(await prepareOneUserMessage(message, resolvedRuntime, seen));
   }
   return out;
 }

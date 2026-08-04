@@ -18,19 +18,64 @@
 - **归一化不一致**：同一个值在不同表里格式不同（比如时间戳一处用毫秒一处用秒）
 - **软删除 vs 硬删除语义混乱**：有的表有 deleted flag，有的直接 DELETE，同一套业务里混着用
 
+## Phase 0 已确认的数据模型现实
+
+Phase 0 侦察已定位全部 schema 文件和表分布，**不需重复发现**：
+
+### 已知 schema 文件（13 个，均在 bootstrap/<ctx>/ 下）
+
+| schema 文件 | CREATE 数 | 表/通途 |
+|------------|----------|--------|
+| `bootstrap/vfs/vfs-schema.ts` | 3 | vfs entry 主表 |
+| `bootstrap/vfs/vfs-revision-schema.ts` | 2 | vfs revision 表 |
+| `bootstrap/vfs/vfs-content-blob-schema.ts` | 1 | vfs content blob 表 |
+| `bootstrap/chat/chat-schema.ts` | 4 | messages/sessions/projects 等 |
+| `bootstrap/provider/provider-schema.ts` | 3 | provider/saved-model/model-suggestion |
+| `bootstrap/workplace/workplace-schema.ts` | 4 | worktree/agent 配置（原 worktree，后 rename） |
+| `bootstrap/message-checkpoint/message-checkpoint-schema.ts` | 3 | checkpoint 表 |
+| `bootstrap/regex/regex-schema.ts` | 3 | rule/group |
+| `bootstrap/session-kkv/session-kkv-schema.ts` | 2 | session 级 KV |
+| `bootstrap/agent/agent-schema.ts` | 1 | agent-definition |
+| `bootstrap/kkv/kkv-schema.ts` | 1 | 全局 KV |
+| `bootstrap/sksp/sksp-schema.ts` | 1 | secret store 元数据 |
+| `bootstrap/session-fs/session-fs-schema.ts` | ? | session 文件系统（与 session-kkv 可能重叠） |
+
+### 已知迁移脚本（8 个，均在 bootstrap/schema-migrations/ 下，均带 v1/v2 后缀）
+
+- `vfs-entry-id-redesign-v1`（9 个 CREATE，最大迁移）— vfs entry id 大重设计
+- `provider-identity-v1`（4 CREATE）— provider 身份重构
+- `rename-worktree-tables-to-workplace-v1`（2 CREATE）— worktree→workplace 整体改名
+- `saved-model-identity-v1`（2 CREATE）— saved-model 身份
+- `session-agent-config-v2` — session agent config 升 v2
+- `vfs-content-blob-zlib-v1`（2 CREATE）— content blob 加 zlib 压缩
+- `vfs-revision-ref-count-v1` — revision 加引用计数
+- `drop-chat-session-user-vfs-pending-v1`（2 CREATE）— 清理 pending 状态
+
+### 有/无持久化的 context（已确认）
+
+**有持久化（10 个）**：vfs（3 表）、chat、provider、workplace、message-checkpoint、agent、regex、session-kkv、kkv、sksp
+
+**无持久化（纯计算/编排）**：compaction-conditions、prompt、tool、events、events-config、depth、format、feature-flags、character-card
+
+### 重叠嫌疑（L1 重点查）
+
+- **session-fs vs session-kkv vs kkv**：三个 KV 相关 context。session-fs 是文件系统 session，session-kkv 是 session 级 KV，kkv 是全局 KV。职责是否重叠？
+- **vfs 3 表设计**：entry/revision/content-blob 分表是否有必要？content-blob 为什么要独立表（且加了 zlib 压缩）？
+
 ## 读什么文件
 
 ### 核心目标
 
 | 目录 | 看什么 |
 |------|--------|
-| `packages/core/src/bootstrap/*/` | 所有 DDL：CREATE TABLE、ALTER TABLE、CREATE INDEX |
-| `packages/core/src/bootstrap/schema-migrations/` | migration 脚本，查幂等性 |
-| `packages/core/src/bootstrap/schema-align/` | schema 对齐逻辑，看对齐了什么、漏了什么 |
+| `packages/core/src/bootstrap/*/` | 13 个 schema 文件的 DDL（清单见上） |
+| `packages/core/src/bootstrap/schema-migrations/` | 8 个迁移脚本，查幂等性、是否可重跑 |
+| `packages/core/src/bootstrap/schema-align/` | schema 对齐逻辑 |
 | `packages/core/src/domain/*/model/*.schema.ts` | zod schema 定义 |
 | `packages/core/src/domain/*/model/*.ts` | TypeScript 类型定义 |
 | `packages/core/src/domain/*/repositories/` | repo port + sqlite 实现 |
 | `packages/core/src/domain/*/repositories/impl/` | SQL 查询实现 |
+| **重叠重点**：`bootstrap/session-fs/` + `bootstrap/session-kkv/` + `bootstrap/kkv/` | 职责重叠判定 |
 
 ### grep 模式
 

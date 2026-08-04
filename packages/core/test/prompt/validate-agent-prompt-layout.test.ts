@@ -193,6 +193,47 @@ describe("validateAgentPromptLayoutFromMaps", () => {
     assert.equal(layout.persist.length, 1);
     assert.equal(layout.dynamic.length, 1);
   });
+
+  it("T-CA3a: customAttach 含合法宏 {{$time}}/{{$filetree}} 通过且原样进 layout", () => {
+    const layout = validateAgentPromptLayoutFromMaps(
+      {},
+      {},
+      undefined,
+      { customAttach: "现在是 {{$time}}，目录：{{$filetree}}" }
+    );
+    assert.equal(layout.customAttach, "现在是 {{$time}}，目录：{{$filetree}}");
+  });
+
+  it("T-CA3b: customAttach 含非法宏 {{$unknown}} 抛 PromptError", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          {},
+          {},
+          undefined,
+          { customAttach: "未知 {{$unknown}}" }
+        ),
+      (e: unknown) =>
+        e instanceof PromptError && e.message.includes("未知的动态宏"),
+    );
+  });
+
+  it("T-CA3c: 空 / 纯空白 customAttach 不出现在 layout", () => {
+    const empty = validateAgentPromptLayoutFromMaps(
+      {},
+      {},
+      undefined,
+      { customAttach: "" }
+    );
+    assert.equal(empty.customAttach, undefined);
+    const blank = validateAgentPromptLayoutFromMaps(
+      {},
+      {},
+      undefined,
+      { customAttach: "   \n  " }
+    );
+    assert.equal(blank.customAttach, undefined);
+  });
 });
 
 describe("agentDefinitionSchema wire", () => {

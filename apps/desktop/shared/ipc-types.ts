@@ -710,7 +710,7 @@ export type AgentRunRequest = {
   readonly userContent: string;
   readonly stream?: boolean;
   readonly allowResumeWithoutInput?: boolean;
-  /** Composer 附件（workplace / attach / user_ops）；Core 发送时再扫描合并 `@path`。 */
+  /** Composer 附件；当前仅 `source===attach` 生效（Core 发送时再扫描合并 `@path`）。workplace/user_ops 为历史只读兼容。 */
   readonly attachments?: readonly MessageAttachmentDto[];
   /** 本轮未发送批注草稿；main 透传至 Core `runAgentTurn`。 */
   readonly annotateDrafts?: readonly AnnotateDraftDto[];
@@ -865,7 +865,9 @@ export type AnnotateDraftDto = {
 };
 
 /**
- * 规则变更差集推送：Composer 追加 workplace 草稿。
+ * Composer 附件建议推送载荷。
+ * 该通道已废止：workplace 差集不再推送（workplace 改走常驻前缀 S0，不再生成附件）。
+ * 类型保留以兼容历史 IPC 读取；新代码不应再向 renderer 推送 workplace 差集。
  * 职责与 {@link WorkspaceMutatedPayload} 分离，禁止塞进 workspaceMutated。
  */
 export type ComposerAttachmentsSuggestPayload = {
