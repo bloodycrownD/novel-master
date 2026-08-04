@@ -32,7 +32,7 @@ import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
-import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 /** Registered builtin file tool names (insertion order). */
 export const FILE_TOOL_NAMES = [
@@ -241,14 +241,17 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
       const versionCheck = input.options?.versionCheck ?? false;
-      const result = await ctx.vfs.write(input.path, input.content, {
+      // 入口统一规范化：相对路径补 / 后规范化，避免「写入宽容、file_cache 校验严格」
+      // 两套口径不一致导致写成功却报 INVALID_PATH。
+      const logicalPath = resolveLogicalPath(input.path);
+      const result = await ctx.vfs.write(logicalPath, input.content, {
         versionCheck,
         ...(input.options?.expectedVersion != null
           ? { expectedVersion: input.options.expectedVersion }
           : {}),
       });
       // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
-      await upsertFileCacheAfterWrite(ctx, input.path, input.content);
+      await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
       return result;
     },
   };
@@ -529,7 +532,7 @@ async function upsertFileCacheAfterWrite(
   if (ctx.sessionKkv == null) {
     return;
   }
-  const logicalPath = normalizePath(path);
+  const logicalPath = resolveLogicalPath(path);
   const key = fileCacheKey("full", logicalPath);
   await ctx.sessionKkv.set(
     ctx.sessionId,
