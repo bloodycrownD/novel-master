@@ -526,13 +526,13 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
  */
 async function upsertFileCacheAfterWrite(
   ctx: BuiltinToolContext,
-  path: string,
+  // 入参已是规范化的逻辑路径（write 入口 resolveLogicalPath 处理过），无需再次规范化。
+  logicalPath: string,
   content: string,
 ): Promise<void> {
   if (ctx.sessionKkv == null) {
     return;
   }
-  const logicalPath = resolveLogicalPath(path);
   const key = fileCacheKey("full", logicalPath);
   await ctx.sessionKkv.set(
     ctx.sessionId,
