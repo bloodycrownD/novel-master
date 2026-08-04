@@ -307,7 +307,7 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
 
-      // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
+      // workplace 走常驻前缀 S0 注入，不构造附件；文件引用由 Core 扫描正文 `@path` 生成 attach
       // B4：禁止 started:true 清正文/projected；append 推送后再清（对齐 Mobile）
       // annotate：禁止在 started 清 store；reproject 时 ∪ store 保留至 append
       const annotateDrafts = listChatAnnotateDrafts(sessionId);
