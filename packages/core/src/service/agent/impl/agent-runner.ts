@@ -215,6 +215,7 @@ export class DefaultAgentRunner implements AgentRunner {
           sessionKkv: this.deps.sessionKkv,
           vfs: this.deps.toolCtx.vfs,
           seenPaths: prefixPaths,
+          extraInfo: options.definition.prompts.customAttach,
         });
         if (signal?.aborted) {
           stopReason = "cancelled";

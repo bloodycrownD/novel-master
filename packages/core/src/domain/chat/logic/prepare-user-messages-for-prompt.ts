@@ -1,9 +1,10 @@
 /**
  * 异步 hydrate + wrap 用户消息附件；LLM / 预览 / token 的唯一拼装入口。
  *
- * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace；user_ops 不参与。
+ * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace（历史只读兼容）；user_ops 不参与。
  * 文件 attach 非首次 → alreadyReferenced 短提示；workplace 非首次 → content 空；目录每次拼树仍计 seen。
  * 增量统一为 `<action name="userAttach|workplaceChange|…">` + JSON（行号正文；无 mtime/createdAt）。
+ * `runtime.extraInfo`（来自 agent 配置 customAttach）非空时，wrap 阶段在 `</user-ops>` 后注入 `<extra-info>` 纯文本块。
  *
  * @module domain/chat/logic/prepare-user-messages-for-prompt
  */
@@ -48,6 +49,10 @@ export interface PrepareUserMessagesForPromptRuntime {
    * 通常来自 `assembleWorkplaceDisplay().prefixPaths`。
    */
   readonly seenPaths?: readonly string[];
+  /**
+   * 自定义附加信息（agent 配置 customAttach）；trim 非空时 wrap 阶段注入 `<extra-info>` 纯文本块。
+   */
+  readonly extraInfo?: string;
 }
 
 async function resolveWorkplaceStatus(
@@ -381,7 +386,7 @@ async function prepareOneUserMessage(
   );
 
   const plainText = messageBodyTextFromContent(message.content);
-  const wrapped = wrapUserMessageForLlm(plainText, hydrated);
+  const wrapped = wrapUserMessageForLlm(plainText, hydrated, runtime.extraInfo);
 
   return {
     ...message,
