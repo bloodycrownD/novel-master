@@ -200,6 +200,20 @@ export function formatToolOutputForLlm(out: unknown): string {
     if (keys.length === 1 && rec.ok === true) {
       return "ok";
     }
+
+    // task 工具输出形如 { text, subagentSessionId }：剩掉 subagentSessionId，
+    // 剩余只有一个 string text 字段时直接返回原始文本，不走 JSON.stringify
+    // （P0-1 方案 B）。兼容未来其他只有 text 的 task-output 形状。
+    if ("subagentSessionId" in rec) {
+      const rest = keys.filter((k) => k !== "subagentSessionId");
+      if (
+        rest.length === 1 &&
+        rest[0] === "text" &&
+        typeof rec.text === "string"
+      ) {
+        return rec.text;
+      }
+    }
   }
   return JSON.stringify(out, null, 2);
 }

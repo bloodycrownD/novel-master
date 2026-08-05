@@ -120,7 +120,33 @@ function hasMeaningfulAssistantBlocks(
 }
 
 /**
- * Executes agent loops: conditions �?LLM �?tools �?repeat up to maxSteps.
+ * 从 task 工具的 outcome.output 提取 `subagentSessionId`（P0-1）。
+ *
+ * 仅 task 工具有该字段；其他工具输出不含 subagentSessionId，返回 undefined。
+ * 本函数与 {@link buildToolResultBlock} 内部检测互补：build 内部会优先看 output，
+ * 这里显式提取是为了让 agent-runner 调用处意图更明显（C34），便于追踪。
+ */
+function extractSubagentSessionIdFromOutcome(
+  outcome: { readonly ok: boolean; readonly output?: unknown } | {
+    readonly ok: boolean; readonly error?: unknown;
+  },
+): string | undefined {
+  if (!outcome.ok) return undefined;
+  const output = (outcome as { output?: unknown }).output;
+  if (
+    output != null &&
+    typeof output === "object" &&
+    !Array.isArray(output) &&
+    typeof (output as { subagentSessionId?: unknown }).subagentSessionId ===
+      "string"
+  ) {
+    return (output as { subagentSessionId: string }).subagentSessionId;
+  }
+  return undefined;
+}
+
+/**
+ * Executes agent loops: conditions → LLM → tools → repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
   private readonly toolRunner: ToolRunner<BuiltinToolContext>;
@@ -444,6 +470,9 @@ export class DefaultAgentRunner implements AgentRunner {
           buildToolResultBlock(tu.id, outcomes[i]!, {
             toolName: tu.name,
             vfsScope: { kind: "session", projectId, sessionId },
+            // task 工具输出对象含 subagentSessionId：透传到 ToolResultBlock.meta（P0-1）。
+            // buildToolResultBlock 内部还会从 outcome.output.subagentSessionId 自动检测。
+            subagentSessionId: extractSubagentSessionIdFromOutcome(outcomes[i]!),
           }),
         );
 

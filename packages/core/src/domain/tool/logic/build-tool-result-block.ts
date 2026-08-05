@@ -19,6 +19,12 @@ import type { ParallelToolOutcome } from "./tool-runner.js";
 export interface BuildToolResultBlockMeta {
   readonly toolName?: string;
   readonly vfsScope?: VfsScope;
+  /**
+   * `task` 工具输出中的 `subagentSessionId`，透传到 `ToolResultBlock.meta.subagentSessionId`。
+   *
+   * 调用方可从 `outcome.output.subagentSessionId` 或独立源头传入；任一来源均为 string 时生效。
+   */
+  readonly subagentSessionId?: string;
 }
 
 /** UI / legacy: explicit `ok` wins; otherwise infer from `Error:` prefix only. */
@@ -111,12 +117,20 @@ export function buildToolResultBlock(
   if (outcome.ok) {
     const content = formatToolOutputForLlm(outcome.output);
     const summary = summarizeToolSuccess(meta?.toolName, outcome.output);
+    // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
+    const subagentSessionId = resolveSubagentSessionIdFromOutcome(
+      outcome.output,
+      meta?.subagentSessionId,
+    );
     return {
       type: "tool_result",
       toolUseId,
       ok: true,
       content,
       ...(summary != null ? { summary } : {}),
+      ...(subagentSessionId != null
+        ? { meta: { subagentSessionId } }
+        : {}),
     };
   }
 
@@ -131,4 +145,28 @@ export function buildToolResultBlock(
     content,
     ...(summary != null ? { summary } : {}),
   };
+}
+
+/**
+ * 从工具输出对象或显式 meta 提取 `subagentSessionId`。
+ *
+ * 优先 `outcome.output.subagentSessionId`（string 时生效）；否则回落到调用方显式传入的 meta。
+ * 仅 task 工具有该字段，其他工具输出不含 subagentSessionId，返回 undefined。
+ */
+function resolveSubagentSessionIdFromOutcome(
+  output: unknown,
+  fallback?: string,
+): string | undefined {
+  if (
+    output != null &&
+    typeof output === "object" &&
+    !Array.isArray(output) &&
+    typeof (output as { subagentSessionId?: unknown }).subagentSessionId ===
+      "string"
+  ) {
+    return (output as { subagentSessionId: string }).subagentSessionId;
+  }
+  return typeof fallback === "string" && fallback.length > 0
+    ? fallback
+    : undefined;
 }
