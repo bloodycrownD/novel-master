@@ -18,6 +18,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
  */
 export const DEFAULT_SUBAGENT_DEFINITION: AgentDefinition = {
   name: "general",
+  description: "通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
   prompts: {
     system:
       "你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",

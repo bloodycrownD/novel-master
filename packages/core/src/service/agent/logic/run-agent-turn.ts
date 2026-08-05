@@ -331,14 +331,14 @@ export async function runAgentTurn(
     registeredToolNames: toolProbe.list(),
   });
 
-  // 装配 task 工具：先查 registry 拿 subagentCallable=true 的 name 列表，
-  // 再 createSubagentTool 注册。description 拼上 name 列表让模型知道有哪些子 agent 能调。
+  // 装配 task 工具：先查 registry 拿 subagentCallable=true 的 agent（名字 + 描述），
+  // 再 createSubagentTool 注册。description 拼上该列表让模型知道有哪些子 agent 能调及其擅长什么。
   // probe 不含 task（避免 validate 误判），本 registry 才含 task。
-  const subagentCallableNames = (await runtime.agentRegistry.list())
+  const subagentCallableAgents = (await runtime.agentRegistry.list())
     .filter((d) => d.subagentCallable === true)
-    .map((d) => d.name);
-  if (subagentCallableNames.length > 0) {
-    registerSubagentTool(toolProbe, subagentCallableNames);
+    .map((d) => ({ name: d.name, description: d.description }));
+  if (subagentCallableAgents.length > 0) {
+    registerSubagentTool(toolProbe, subagentCallableAgents);
   }
 
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
@@ -477,11 +477,11 @@ async function runChildAgent(args: {
   const baseRegistry = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(baseRegistry);
   if (childDepth < 2) {
-    const callableNames = (await runtime.agentRegistry.list())
+    const callableAgents = (await runtime.agentRegistry.list())
       .filter((d) => d.subagentCallable === true)
-      .map((d) => d.name);
-    if (callableNames.length > 0) {
-      registerSubagentTool(baseRegistry, callableNames);
+      .map((d) => ({ name: d.name, description: d.description }));
+    if (callableAgents.length > 0) {
+      registerSubagentTool(baseRegistry, callableAgents);
     }
   }
   const registry = resolveAgentToolRegistry(baseRegistry, def, {

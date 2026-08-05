@@ -72,19 +72,33 @@ function extractLastAssistantText(
 /**
  * 工厂：创建 `task` 工具实例。
  *
- * `Tool.description` 是静态 readonly string，因此动态可选 agent name 列表通过工厂参数注入：
- * `description` 拼上可选 name 列表，让 LLM 知道有哪些子 agent 能调。
+ * `Tool.description` 是静态 readonly string，因此动态可选 agent 列表通过工厂参数注入：
+ * `description` 拼上可选 agent 列表（名字 + 可选描述），让 LLM 知道有哪些子 agent 能调以及各自擅长什么。
  *
- * @param availableNames 当前 registry 中 `subagentCallable=true` 的 agent name 列表
+ * @param availableAgents 当前 registry 中 `subagentCallable=true` 的 agent（名字 + 可选描述）
  */
 export function createSubagentTool(
-  availableNames: readonly string[],
+  availableAgents: readonly {
+    readonly name: string;
+    readonly description?: string;
+  }[],
 ): Tool<TaskToolInput, TaskToolOutput, BuiltinToolContext> {
-  const list = availableNames.length > 0 ? availableNames.join(", ") : "（暂无）";
+  const list =
+    availableAgents.length > 0
+      ? availableAgents
+          .map((a) =>
+            a.description != null && a.description.trim().length > 0
+              ? `${a.name}：${a.description.trim()}`
+              : a.name,
+          )
+          .join("\n")
+      : "（暂无）";
   const description = `派生一个子代理执行子任务，等它跑完后把末条回复文本作为本工具的结果回流。适用于把复杂或独立子任务（如查大纲设定、生成角色档案）委派给专门的 agent，避免在主对话中累积过多上下文。
 
 入参：
-- subagentName：目标子代理 name（当前可选：${list}）
+- subagentName：目标子代理 name（你可以调用的 subagent 如下：
+${list}
+）
 - description：3-5 词任务描述（用作子会话标题）
 - prompt：任务正文，写清要子代理完成什么
 
