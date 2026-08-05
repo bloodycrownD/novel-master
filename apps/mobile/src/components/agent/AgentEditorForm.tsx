@@ -136,6 +136,8 @@ export function AgentEditorForm(props: Props) {
   const [customAttachText, setCustomAttachText] = useState('');
   // 是否可被 task 工具调用为子代理（对应域 subagentCallable）。
   const [subagentCallable, setSubagentCallable] = useState(false);
+  // 人类可读的 agent 描述（对应域 description，多行文本）。
+  const [description, setDescription] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -175,6 +177,7 @@ export function AgentEditorForm(props: Props) {
         customAttachEnabled,
         customAttachText,
         subagentCallable,
+        description,
         persist,
         dynamic,
       }),
@@ -195,6 +198,7 @@ export function AgentEditorForm(props: Props) {
       customAttachEnabled,
       customAttachText,
       subagentCallable,
+      description,
       persist,
       dynamic,
     ],
@@ -243,6 +247,7 @@ export function AgentEditorForm(props: Props) {
       setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
       setCustomAttachText(promptForm.customAttachText ?? '');
       setSubagentCallable(promptForm.subagentCallable === true);
+      setDescription(promptForm.description ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -493,6 +498,7 @@ export function AgentEditorForm(props: Props) {
       customAttachEnabled,
       customAttachText,
       subagentCallable,
+      description,
       persist,
       dynamic,
     });
@@ -860,6 +866,19 @@ export function AgentEditorForm(props: Props) {
               tokens={tokens}
               value={name}
               onChangeText={setName}
+            />
+          </FormField>
+          <FormField
+            label="描述"
+            tokens={tokens}
+            hint="向 task 工具说明这个 agent 擅长什么，可留空。"
+          >
+            <FormTextInput
+              tokens={tokens}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              placeholder="例如：擅长检索代码库、写测试。"
             />
           </FormField>
         </FormSectionCard>
