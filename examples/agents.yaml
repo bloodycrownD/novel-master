@@ -29,6 +29,7 @@ agents:
   # general: 通用 subagent 模板（运行时虚拟注入的参考形态）
   # subagentCallable 缺省即按 false 处理（递归基线，禁止 task 工具递归派生）
   general:
+    description: 通用 subagent 模板，擅长读写文件、搜索内容，可完成主代理委派的探索性任务。
     prompts:
       system: |
         你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。

@@ -101,4 +101,46 @@ describe("agents bundle schema", () => {
     // general 作为递归基线，subagentCallable 缺省（语义 false）
     assert.equal(doc.agents.general?.subagentCallable, undefined);
   });
+
+  it("T-C3e: examples/agents.yaml general 模板含 description", () => {
+    const raw = readFileSync(examplesAgentsYaml, "utf8");
+    const parsed = parseText(raw, "yaml");
+    const doc = decode(parsed, agentsBundleDocumentSchema);
+    assert.equal(
+      typeof doc.agents.general?.description,
+      "string"
+    );
+    assert.ok((doc.agents.general?.description ?? "").length > 0);
+  });
+
+  it("T-C3f: bundle entry 含 description decode 保留字段", () => {
+    const doc = decode(
+      {
+        schemaVersion: 1,
+        agents: {
+          researcher: {
+            prompts: { persist: {}, dynamic: {}, system: "s" },
+            description: "擅长代码检索。",
+          },
+        },
+      },
+      agentsBundleDocumentSchema
+    );
+    assert.equal(doc.agents.researcher?.description, "擅长代码检索。");
+  });
+
+  it("T-C3g: 旧 bundle（无 description）仍可 decode（optional 兼容）", () => {
+    const doc = decode(
+      {
+        schemaVersion: 1,
+        agents: {
+          legacy: {
+            prompts: { persist: {}, dynamic: {} },
+          },
+        },
+      },
+      agentsBundleDocumentSchema
+    );
+    assert.equal(doc.agents.legacy?.description, undefined);
+  });
 });

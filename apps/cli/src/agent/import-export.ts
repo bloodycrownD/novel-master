@@ -45,6 +45,9 @@ function bundleToDefinitions(
           }
         : {}),
       ...(entry.subagentCallable === true ? { subagentCallable: true } : {}),
+      ...(entry.description != null && entry.description.trim().length > 0
+        ? { description: entry.description }
+        : {}),
     });
   }
   return map;
@@ -87,6 +90,7 @@ export async function exportAgentsToFile(
       runtime?: { maxSteps?: number };
       tools?: { allow?: string[]; deny?: string[] };
       subagentCallable?: boolean;
+      description?: string;
     };
     agents[agentId] = {
       prompts: entry.prompts,
@@ -101,6 +105,9 @@ export async function exportAgentsToFile(
           }
         : {}),
       ...(entry.subagentCallable === true ? { subagentCallable: true } : {}),
+      ...(entry.description != null && entry.description.trim().length > 0
+        ? { description: entry.description }
+        : {}),
     };
   }
   const doc: AgentsBundleDocument = { schemaVersion: 1, agents };

@@ -24,6 +24,8 @@ const agentBundleEntrySchema = z
     tools: agentBundleToolPolicySchema.optional(),
     /** 是否可被 `task` 工具调用；缺省按 `false` 处理。 */
     subagentCallable: z.boolean().optional(),
+    /** 人类可读的 agent 描述（用于向主代理介绍本 agent 的能力）。 */
+    description: z.string().optional(),
   })
   .strict();
 
