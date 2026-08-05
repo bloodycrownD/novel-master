@@ -10,6 +10,9 @@ import type { ChatSession } from "../model/session.js";
 export interface SessionRepository {
   listByProject(projectId: string): Promise<ChatSession[]>;
 
+  /** 按父 session 查子 session（子 agent 会话）；不含 parent_session_id IS NULL 的主会话。 */
+  listByParentSession(parentSessionId: string): Promise<ChatSession[]>;
+
   findById(id: string): Promise<ChatSession | null>;
 
   insert(session: ChatSession): Promise<void>;
