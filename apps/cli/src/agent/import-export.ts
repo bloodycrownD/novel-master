@@ -36,6 +36,15 @@ function bundleToDefinitions(
       prompts,
       model: entry.model,
       runtime: entry.runtime,
+      ...(entry.tools != null
+        ? {
+            tools: {
+              ...(entry.tools.allow != null ? { allow: [...entry.tools.allow] } : {}),
+              ...(entry.tools.deny != null ? { deny: [...entry.tools.deny] } : {}),
+            },
+          }
+        : {}),
+      ...(entry.subagentCallable === true ? { subagentCallable: true } : {}),
     });
   }
   return map;
@@ -76,11 +85,22 @@ export async function exportAgentsToFile(
       prompts: AgentsBundleDocument["agents"][string]["prompts"];
       model?: string;
       runtime?: { maxSteps?: number };
+      tools?: { allow?: string[]; deny?: string[] };
+      subagentCallable?: boolean;
     };
     agents[agentId] = {
       prompts: entry.prompts,
       ...(entry.model != null ? { model: entry.model } : {}),
       ...(entry.runtime != null ? { runtime: entry.runtime } : {}),
+      ...(entry.tools != null
+        ? {
+            tools: {
+              ...(entry.tools.allow != null ? { allow: [...entry.tools.allow] } : {}),
+              ...(entry.tools.deny != null ? { deny: [...entry.tools.deny] } : {}),
+            },
+          }
+        : {}),
+      ...(entry.subagentCallable === true ? { subagentCallable: true } : {}),
     };
   }
   const doc: AgentsBundleDocument = { schemaVersion: 1, agents };
