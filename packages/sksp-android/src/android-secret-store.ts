@@ -52,7 +52,7 @@ export class AndroidSecretStore implements SecretStore {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT ciphertext, iv, algo FROM sksp_secrets WHERE ref = #{ref}`,
+      `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`,
       { ref },
     );
     if (rows.length === 0) {
