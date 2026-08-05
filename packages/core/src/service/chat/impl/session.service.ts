@@ -118,6 +118,7 @@ export class DefaultSessionService implements SessionService {
         id: randomUUID(),
         projectId,
         title: title ?? null,
+        parentSessionId: null,
         createdAtMs: now,
         updatedAtMs: now,
       };
@@ -128,6 +129,40 @@ export class DefaultSessionService implements SessionService {
       await r.sessions.setSessionAgentConfig(session.id, configJson, now);
       return session;
     });
+  }
+
+  async createSubSession(
+    parentSessionId: string,
+    projectId: string,
+    title?: string | null,
+  ): Promise<ChatSession> {
+    // SPEC agent-subagent / P0-4：子 session 仅 insert（带 parentSessionId），
+    // 完全不碰 VFS——不调 initializeSessionWorkspace、不创建 child scope、
+    // 不调 copyVfsTree，也不复制项目模板。子 agent run 的 VFS 访问在 runChildAgent
+    // 装配期通过 toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId) 指向父 scope。
+    //
+    // 父 session 必须存在且属于该项目；这里只校验父在，不强校验父子同项目
+    // （调用方 runChildAgent 自己保证）。
+    const parent = await this.deps.sessions.findById(parentSessionId);
+    if (parent == null) {
+      throw chatNotFound("session", parentSessionId);
+    }
+    if (parent.projectId !== projectId) {
+      throw chatInvalidArgument(
+        `createSubSession: parent projectId ${parent.projectId} !== ${projectId}`,
+      );
+    }
+    const now = Date.now();
+    const session: ChatSession = {
+      id: randomUUID(),
+      projectId,
+      title: title ?? null,
+      parentSessionId,
+      createdAtMs: now,
+      updatedAtMs: now,
+    };
+    await this.deps.sessions.insert(session);
+    return session;
   }
 
   async rename(id: string, title: string): Promise<ChatSession> {
@@ -151,21 +186,40 @@ export class DefaultSessionService implements SessionService {
   async delete(id: string): Promise<void> {
     const session = await this.get(id);
     await this.deps.conn.transaction(async (tx) => {
-      const r = reposFor(tx);
-      await r.messages.deleteBySession(id);
-      await deleteSessionFsData(tx, id, session.projectId);
-      await createSessionKkvService(tx).clearSession(id);
-      await deleteVfsPrefix(
-        r.vfs,
-        `session:${session.projectId}:${id}`,
-        "/",
-      );
-      const deleted = await r.sessions.delete(id);
-      if (!deleted) {
-        throw chatNotFound("session", id);
-      }
+      await this.deleteSessionTree(tx, session);
     });
     await runDeferredBlobGc(this.deps.conn);
+  }
+
+  /**
+   * 递归删除 session 及其全部子 session（messages/fs/kkv/vfs 全清）。
+   *
+   * 必须在事务内调：先 `listByParentSession` 取直接子，递归调本函数删子，
+   * 再删自己。子 session delete 时 `deleteVfsPrefix(session:{pid}:{childId})`
+   * 是无害空操作（子 session 根本没建过 VFS scope），不需 special-case 跳过。
+   */
+  private async deleteSessionTree(
+    tx: TdbcConnection,
+    session: ChatSession,
+  ): Promise<void> {
+    const r = reposFor(tx);
+    // 先递归删全部子 session（深度优先，避免删自己后子变孤儿）。
+    const children = await r.sessions.listByParentSession(session.id);
+    for (const child of children) {
+      await this.deleteSessionTree(tx, child);
+    }
+    await r.messages.deleteBySession(session.id);
+    await deleteSessionFsData(tx, session.id, session.projectId);
+    await createSessionKkvService(tx).clearSession(session.id);
+    await deleteVfsPrefix(
+      r.vfs,
+      `session:${session.projectId}:${session.id}`,
+      "/",
+    );
+    const deleted = await r.sessions.delete(session.id);
+    if (!deleted) {
+      throw chatNotFound("session", session.id);
+    }
   }
 
   async pullTemplate(sessionId: string): Promise<void> {
@@ -257,6 +311,8 @@ export class DefaultSessionService implements SessionService {
         id: randomUUID(),
         projectId: source.projectId,
         title: source.title == null ? null : `${source.title} (copy)`,
+        // P2-13：fork/copy 出的是独立主会话，不继承源会话的 parent 关系。
+        parentSessionId: null,
         createdAtMs: now,
         updatedAtMs: now,
       };
