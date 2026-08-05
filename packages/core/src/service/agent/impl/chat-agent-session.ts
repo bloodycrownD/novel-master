@@ -34,4 +34,8 @@ export class ChatAgentSession implements AgentSession {
   hideRange(fromSeq: number, toSeq: number): Promise<number> {
     return this.messages.hideRange(this.sessionId, fromSeq, toSeq);
   }
+
+  truncateAfterMessage(afterMessageId: string | null): Promise<void> {
+    return this.messages.truncateAfter(this.sessionId, afterMessageId);
+  }
 }

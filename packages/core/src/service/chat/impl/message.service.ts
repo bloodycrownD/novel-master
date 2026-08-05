@@ -315,6 +315,55 @@ export class DefaultMessageService implements MessageService {
     return count;
   }
 
+  async truncateAfter(
+    sessionId: string,
+    afterMessageId: string | null,
+  ): Promise<void> {
+    const session = await this.deps.sessions.findById(sessionId);
+    if (session == null) {
+      throw chatNotFound("session", sessionId);
+    }
+
+    if (afterMessageId == null) {
+      // anchor 为 null → 清空整 session：先把所有 message id 找出来拿去删 checkpoint 指针
+      const all = await this.deps.messages.listBySession(sessionId);
+      const ids = all.map((m) => m.id);
+      await this.deps.conn.transaction(async (tx) => {
+        const messages = new SqliteMessageRepository(tx);
+        const checkpoints = new SqliteMessageCheckpointRepository(tx);
+        if (ids.length > 0) {
+          await checkpoints.deleteCheckpointsForMessages(sessionId, ids);
+        }
+        await messages.deleteBySession(sessionId);
+      });
+      sessionApiPromptTokenCache.invalidate(sessionId);
+      return;
+    }
+
+    const anchor = await this.deps.messages.findById(afterMessageId);
+    if (anchor == null || anchor.sessionId !== sessionId) {
+      throw chatNotFound("message", afterMessageId, { sessionId });
+    }
+
+    const tailIds = await this.deps.messages.listIdsAfterSeq(
+      sessionId,
+      anchor.seq,
+    );
+    if (tailIds.length === 0) {
+      // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
+      sessionApiPromptTokenCache.invalidate(sessionId);
+      return;
+    }
+
+    await this.deps.conn.transaction(async (tx) => {
+      const messages = new SqliteMessageRepository(tx);
+      const checkpoints = new SqliteMessageCheckpointRepository(tx);
+      await checkpoints.deleteCheckpointsForMessages(sessionId, tailIds);
+      await messages.deleteAfterSeq(sessionId, anchor.seq);
+    });
+    sessionApiPromptTokenCache.invalidate(sessionId);
+  }
+
   async searchMessages(
     sessionId: string,
     query: MessageSearchQuery,

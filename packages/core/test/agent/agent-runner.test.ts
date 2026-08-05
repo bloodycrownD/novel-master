@@ -248,14 +248,11 @@ describe("AgentRunner", () => {
     assert.equal(model.callCount(), 1);
     assert.equal(result.stepsExecuted, 0);
     const msgs = await session.list();
-    assert.equal(msgs.length, 2);
+    // 方案 B：abort 后干净回滚到 turn 起点，不写 partial assistant
+    assert.equal(msgs.length, 1, "仅保留 turn 起点的 user 消息");
     assert.equal(msgs[0]!.role, "user");
-    assert.equal(msgs[1]!.role, "assistant");
-    const blocks = msgs[1]!.content.blocks;
-    assert.ok(blocks.some((b) => b.type === "thinking"));
-    assert.ok(blocks.some((b) => b.type === "text" && b.text === "partial"));
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
-    assert.deepEqual(phases, ["assistant"]);
+    assert.deepEqual(phases, []);
   });
 
   it("T-ARP-C2: abort + tool_use blocks ��� assistant������ runParallel���� tool_results", async () => {
@@ -315,9 +312,10 @@ describe("AgentRunner", () => {
     assert.equal(result.stepsExecuted, 0);
     assert.equal(runParallelInvoked, false);
     const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    assert.equal(msgs[1]!.role, "assistant");
-    assert.ok(msgs[1]!.content.blocks.some((b) => b.type === "tool_use"));
+    // 方案 B：abort 后干净回滚；assistant partial 不应残留
+    assert.equal(msgs.length, 1, "仅保留 turn 起点的 user 消息");
+    assert.equal(msgs[0]!.role, "user");
+    assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_use")));
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
@@ -414,9 +412,10 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
     const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    assert.equal(msgs[1]!.role, "assistant");
-    assert.ok(msgs[1]!.content.blocks.some((b) => b.type === "tool_use"));
+    // 方案 B：abort 后干净回滚；assistant tool_use partial 不应残留，也不会有 tool_results
+    assert.equal(msgs.length, 1, "仅保留 turn 起点的 user 消息");
+    assert.equal(msgs[0]!.role, "user");
+    assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_use")));
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 

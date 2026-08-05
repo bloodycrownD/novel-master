@@ -54,6 +54,19 @@ export class InMemoryAgentSession implements AgentSession {
     return count;
   }
 
+  async truncateAfterMessage(afterMessageId: string | null): Promise<void> {
+    if (afterMessageId == null) {
+      this.messages.length = 0;
+      this.seq = 0;
+      return;
+    }
+    const idx = this.messages.findIndex((m) => m.id === afterMessageId);
+    if (idx < 0) {
+      return;
+    }
+    this.messages.splice(idx + 1);
+  }
+
   /** All messages including hidden (tests). */
   allMessages(): readonly ChatMessage[] {
     return [...this.messages];

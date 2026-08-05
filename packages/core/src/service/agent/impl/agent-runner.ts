@@ -171,17 +171,53 @@ export class DefaultAgentRunner implements AgentRunner {
       sessionId,
     };
 
+    // turn 起点 = run() 开始时 session 里最后一条消息；abort 后干净回滚到这里
+    // （方案 B：abort 不留 partial assistant）。
+    const turnStartMessages = await session.list();
+    const turnStartMessageId: string | null =
+      turnStartMessages.length > 0
+        ? turnStartMessages[turnStartMessages.length - 1]!.id
+        : null;
+    let turnDirty = false;
+
+    /**
+     * 统一 abort 处理：置 stopReason + 回滚本 turn 写入的全部消息。
+     *
+     * 检测点（9 处）与 catch 分支命中 AbortError 都走这里，保证不管 abort 发生在哪个阶段，
+     * 会话状态都干净回到 turn 起点，不留 partial assistant。
+     */
+    const handleAbort = async (branch: string): Promise<void> => {
+      stopReason = "cancelled";
+      if (!turnDirty) {
+        return;
+      }
+      try {
+        await session.truncateAfterMessage(turnStartMessageId);
+      } catch (err) {
+        // 回滚失败不能阻碍 abort 主路径；只记录日志，下一次 list/capture 会重新对齐
+        console.error("[agent-runner] abort_rollback_failed", {
+          branch,
+          sessionId,
+          projectId,
+          turnStartMessageId,
+          error: err,
+        });
+      }
+      turnDirty = false;
+      assistantAppendCount = 0;
+    };
+
     try {
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("loop_start");
           break;
         }
         let stepCompactionEmitted = false;
 
         let visible = await session.list();
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_session_list");
           break;
         }
         visible = await applyLlmRegexChannelToVisible(
@@ -190,7 +226,7 @@ export class DefaultAgentRunner implements AgentRunner {
           visible,
         );
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_regex_channel");
           break;
         }
 
@@ -206,7 +242,7 @@ export class DefaultAgentRunner implements AgentRunner {
           },
         );
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_assemble_workplace");
           break;
         }
 
@@ -220,7 +256,7 @@ export class DefaultAgentRunner implements AgentRunner {
           workplace: wt,
         });
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_prepare_user_messages");
           break;
         }
 
@@ -252,7 +288,7 @@ export class DefaultAgentRunner implements AgentRunner {
               },
             );
           if (signal?.aborted) {
-            stopReason = "cancelled";
+            await handleAbort("after_compaction_eval");
             break;
           }
           if (shouldCompact && !stepCompactionEmitted) {
@@ -320,7 +356,7 @@ export class DefaultAgentRunner implements AgentRunner {
             signal?.aborted ||
             (e instanceof Error && e.name === "AbortError")
           ) {
-            stopReason = "cancelled";
+            await handleAbort("model_request_catch");
             break;
           }
           throw e;
@@ -328,22 +364,9 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
 
+        // 方案 B：模型返回后如果已经 abort，不写 partial assistant，直接回滚
         if (signal?.aborted) {
-          stopReason = "cancelled";
-          if (result.blocks.length > 0 && meaningful) {
-            await session.append("assistant", { blocks: result.blocks }, {
-              raw: result.raw as Record<string, unknown>,
-            });
-            assistantAppendCount += 1;
-            if (publishRunLifecycle) {
-              bus.publish(EVENT_AGENT_STEP_COMMITTED, {
-                sessionId,
-                projectId,
-                runId,
-                phase: "assistant",
-              });
-            }
-          }
+          await handleAbort("post_model");
           break;
         }
 
@@ -354,6 +377,7 @@ export class DefaultAgentRunner implements AgentRunner {
           assistantMessage = await session.append("assistant", { blocks: result.blocks }, {
             raw: result.raw as Record<string, unknown>,
           });
+          turnDirty = true;
           assistantAppendCount += 1;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -400,7 +424,7 @@ export class DefaultAgentRunner implements AgentRunner {
         });
 
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("before_tool_run");
           break;
         }
 
@@ -472,10 +496,11 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_tool_checkpoint");
           break;
         }
         await session.append("user", { blocks: toolResults });
+        turnDirty = true;
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
@@ -493,7 +518,8 @@ export class DefaultAgentRunner implements AgentRunner {
       }
     } catch (e: unknown) {
       if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
-        stopReason = "cancelled";
+        // catch 命中 AbortError：同样走统一回滚，防止已写 partial assistant 残留
+        await handleAbort("catch_abort");
       } else {
         runError = e instanceof Error ? e.message : String(e);
         // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 缓存，避免残留旧值

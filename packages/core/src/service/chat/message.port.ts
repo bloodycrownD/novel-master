@@ -61,6 +61,17 @@ export interface MessageService {
   showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number>;
 
   /**
+   * 删除 `sessionId` 中严格位于 `afterMessageId` 之后的所有消息（及其 checkpoint 指针），
+   * 不含 anchor 自身；`afterMessageId` 为 null 时清空 session 内全部消息。
+   *
+   * 主要给 agent turn abort 回滚用——干净回到 turn 起点。
+   */
+  truncateAfter(
+    sessionId: string,
+    afterMessageId: string | null,
+  ): Promise<void>;
+
+  /**
    * 搜索会话内消息（透传仓储层召回，keyword 非空时在内存层精筛 TextBlock）。
    */
   searchMessages(
