@@ -5,12 +5,14 @@ type ToolCallGroupCardProps = {
   tools: readonly ToolCallView[];
   dimmed?: boolean;
   onOpenFile?: (path: string) => void;
+  onOpenSubagentSession?: (sessionId: string) => void;
 };
 
 export function ToolCallGroupCard({
   tools,
   dimmed = false,
   onOpenFile,
+  onOpenSubagentSession,
 }: ToolCallGroupCardProps) {
   if (tools.length === 0) {
     return null;
@@ -26,6 +28,7 @@ export function ToolCallGroupCard({
             tool={tool}
             groupItem
             onOpenFile={onOpenFile}
+            onOpenSubagentSession={onOpenSubagentSession}
           />
         ))}
       </div>
