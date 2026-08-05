@@ -116,6 +116,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   // 自定义附加信息开关 / 文本（对应域 prompts.customAttach）。
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState("");
+  // 是否可被 task 工具调用为子代理（对应域 subagentCallable）。
+  const [subagentCallable, setSubagentCallable] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -159,6 +161,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         workplaceAssistantText,
         customAttachEnabled,
         customAttachText,
+        subagentCallable,
         persist,
         dynamic,
       }),
@@ -178,6 +181,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      subagentCallable,
       persist,
       dynamic,
     ]
@@ -247,6 +251,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
       setCustomAttachEnabled(promptForm.customAttachEnabled);
       setCustomAttachText(promptForm.customAttachText);
+      setSubagentCallable(promptForm.subagentCallable === true);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -432,6 +437,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      subagentCallable,
       persist,
       dynamic,
     });
@@ -731,6 +737,16 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               个）：read、write、edit、fs、glob、grep。
             </p>
           )}
+          <SettingsField label="可被调用为子代理">
+            <Switch
+              checked={subagentCallable}
+              onChange={setSubagentCallable}
+              aria-label="开启子代理调用"
+            />
+          </SettingsField>
+          <p className="settings-hint">
+            开启后，其他 Agent 可通过 task 工具调用本 Agent。
+          </p>
         </SettingsSection>
 
         <SettingsSection title={PROMPT_REGION_LABELS.layoutTitle}>
