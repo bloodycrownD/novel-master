@@ -131,6 +131,8 @@ export const {
   ipcAgentRegistryCreateBlank,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
+  ipcSubagentNamesGet,
+  ipcSubagentNamesSet,
   ipcRegexListGroups,
   ipcRegexCreateGroup,
   ipcRegexUpdateGroup,

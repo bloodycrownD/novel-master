@@ -134,6 +134,10 @@ import {
   handleScopeSetSession,
 } from './handlers/scope.js';
 import {
+  handleSubagentNamesGet,
+  handleSubagentNamesSet,
+} from './handlers/subagent-names.js';
+import {
   handleSessionsCreate,
   handleSessionsDelete,
   handleSessionsGetAgentBinding,
@@ -369,6 +373,9 @@ export function registerHandlersFromRegistry(): void {
   );
   bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, handleAgentYamlExport);
   bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
+
+  bindNoArg(IPC_CHANNELS.SUBAGENT_NAMES_GET, handleSubagentNamesGet);
+  bindReq(IPC_CHANNELS.SUBAGENT_NAMES_SET, handleSubagentNamesSet);
 
   bindNoArg(IPC_CHANNELS.REGEX_LIST_GROUPS, handleRegexListGroups);
   bindReq(IPC_CHANNELS.REGEX_GET_GROUP, handleRegexGetGroup);
