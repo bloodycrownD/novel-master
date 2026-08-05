@@ -25,10 +25,14 @@
 
 import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tool-registry.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
+import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
-import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
-import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
+import {
+  registerBuiltinTools,
+  registerSubagentTool,
+} from "@/domain/tool/builtin/register-builtin-tools.js";
+import type { BuiltinToolContext, RunChildAgentOptions } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -42,6 +46,7 @@ import type { CompactionConditionEvaluator } from "@/service/compaction-conditio
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
+import type { SessionService } from "@/service/chat/session.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -52,6 +57,7 @@ import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
+import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
@@ -72,6 +78,18 @@ export interface AgentTurnScope {
 
 /** Runtime surface required to run one agent dialogue turn. */
 export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
+  /**
+   * 工作区 agent 注册表。父接口 {@link AgentRunRuntimePort} 已声明窄类型
+   * `{ listAgentIds, get }`，这里重新声明收窄到完整 {@link AgentRegistryService}
+   * （含本次新增的 `list()`）——`runChildAgent` 装配子 agent 时需要 `list()`
+   * 拿可选 name、需要 `createSubSession` 建子 session（P0-3）。
+   */
+  readonly agentRegistry: AgentRegistryService;
+  /**
+   * 会话服务。父接口已声明窄类型 `{ getSessionAgentConfig }`，这里重新声明收窄到
+   * 完整 {@link SessionService}（含 `createSubSession`）。
+   */
+  readonly sessions: SessionService;
   readonly projects: ProjectService;
   readonly messages: MessageService;
   readonly messageCheckpoint: MessageCheckpointService;
@@ -313,23 +331,83 @@ export async function runAgentTurn(
     registeredToolNames: toolProbe.list(),
   });
 
+  // 装配 task 工具：先查 registry 拿 subagentCallable=true 的 name 列表，
+  // 再 createSubagentTool 注册。description 拼上 name 列表让模型知道有哪些子 agent 能调。
+  // probe 不含 task（避免 validate 误判），本 registry 才含 task。
+  const subagentCallableNames = (await runtime.agentRegistry.list())
+    .filter((d) => d.subagentCallable === true)
+    .map((d) => d.name);
+  if (subagentCallableNames.length > 0) {
+    registerSubagentTool(toolProbe, subagentCallableNames);
+  }
+
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  const registry = resolveAgentToolRegistry(toolProbe, definition);
+  // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
+  const registry = resolveAgentToolRegistry(toolProbe, definition, { depth: 0 });
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
+  // 主 agent run 的 signal：作为 task 工具内子 agent run 的 parentSignal。
+  const parentSignal = options?.signal ?? new AbortController().signal;
+  const toolCtx: BuiltinToolContext = {
+    vfs,
+    projectId: scope.projectId,
+    sessionId: scope.sessionId,
+    listSessionMessages: (): Promise<readonly ChatMessage[]> =>
+      runtime.messages.listBySession(scope.sessionId),
+    sessionKkv: runtime.sessionKkv,
+    // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
+    subagent: {
+      agentRegistry: runtime.agentRegistry,
+      messages: runtime.messages,
+      sessions: runtime.sessions,
+      createChildSession: async (title: string): Promise<string> => {
+ const child = await runtime.sessions.createSubSession(
+          scope.sessionId,
+          scope.projectId,
+          title,
+        );
+        return child.id;
+      },
+      resolveChildModelId: (
+        def: AgentDefinition,
+      ): { savedModelId: string; workspaceModelId: string } => {
+        // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）。
+        const resolved = resolveSavedModelId({
+          agentModelId: def.model,
+          sessionModelId: savedModelId,
+        });
+        if (resolved == null || resolved === "") {
+          throw new AgentRunResolveError(
+            "子代理未指定模型，且父 agent 也无可用 savedModelId。",
+          );
+        }
+        return { savedModelId: resolved, workspaceModelId };
+      },
+      runChildAgent: async (
+        def: AgentDefinition,
+        childSessionId: string,
+        opts: RunChildAgentOptions,
+      ): Promise<AgentRunResult> => {
+        return runChildAgent({
+          runtime,
+          parentProjectId: scope.projectId,
+          parentSessionId: scope.sessionId,
+          parentDepth: 0,
+          def,
+          childSessionId,
+          opts,
+        });
+      },
+      depth: 0,
+      parentSignal,
+    },
+  };
   const runner = createAgentRunner(
     assembleAgentRunnerDeps({
       session,
       runtime,
       registry,
-      toolCtx: {
-        vfs,
-        projectId: scope.projectId,
-        sessionId: scope.sessionId,
-        listSessionMessages: (): Promise<readonly ChatMessage[]> =>
-          runtime.messages.listBySession(scope.sessionId),
-        sessionKkv: runtime.sessionKkv,
-      },
+      toolCtx,
       includeCompactionOrchestrator: true,
     }),
   );
@@ -361,4 +439,157 @@ export async function runAgentTurn(
     });
     throw error;
   }
+}
+
+/**
+ * `runChildAgent` 内部装配：递归派生子 agent runner（P0-2 / P0-3 / P0-4 / P1-6）。
+ *
+ * 不抛 "暂未实现" ——本函数是 `task` 工具 `runChildAgent` 闭包背后的真正实现：
+ * - VFS（P0-4）：子 agent `toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId)`
+ *   复用父 session VFS 视图（查大纲设定场景需要能读到文件）。
+ * - abort 派生（P1-6）：`new AbortController()` + `parentSignal.addEventListener("abort", ..., { once: true })`。
+ * - registry（P1-10）：`resolveAgentToolRegistry(baseRegistry, def, { depth: parentDepth + 1 })`；
+ *   孙 agent（depth >= 2）强制 deny task。
+ * - 装配期 vs run 期（P0-2）：`assembleAgentRunnerDeps({ ..., includeCompactionOrchestrator: false })`
+ *   是装配期字段，不在 `AgentRunOptions`。
+ */
+async function runChildAgent(args: {
+  readonly runtime: AgentTurnRuntimePort;
+  readonly parentProjectId: string;
+  readonly parentSessionId: string;
+  readonly parentDepth: number;
+  readonly def: AgentDefinition;
+  readonly childSessionId: string;
+  readonly opts: RunChildAgentOptions;
+}): Promise<AgentRunResult> {
+  const {
+    runtime,
+    parentProjectId,
+    parentSessionId,
+    parentDepth,
+    def,
+    childSessionId,
+    opts,
+  } = args;
+  const childDepth = parentDepth + 1;
+
+  // 装配子 agent 用的 registry：vfs 6 件 + 可选 task（孙 agent 被 resolve deny）。
+  const baseRegistry = new ToolRegistry<BuiltinToolContext>();
+  registerBuiltinTools(baseRegistry);
+  if (childDepth < 2) {
+    const callableNames = (await runtime.agentRegistry.list())
+      .filter((d) => d.subagentCallable === true)
+      .map((d) => d.name);
+    if (callableNames.length > 0) {
+      registerSubagentTool(baseRegistry, callableNames);
+    }
+  }
+  const registry = resolveAgentToolRegistry(baseRegistry, def, {
+    depth: childDepth,
+  });
+
+  // VFS（P0-4）：子 agent 用父 session 的 VFS 视图（能读到父会话文件）。
+  const vfs = runtime.sessionVfs(parentProjectId, parentSessionId);
+
+  // abort 派生（P1-6）：子 agent 退出/完成不应反向影响父 signal。
+  const childController = new AbortController();
+  const parentSignal = opts.signal;
+  if (parentSignal.aborted) {
+    childController.abort();
+  } else {
+    parentSignal.addEventListener(
+      "abort",
+      () => {
+        childController.abort();
+      },
+      { once: true },
+    );
+  }
+
+  const session = new ChatAgentSession(runtime.messages, childSessionId);
+  const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
+  const toolCtx: BuiltinToolContext = {
+    vfs,
+    projectId: parentProjectId,
+    sessionId: childSessionId,
+    listSessionMessages: (): Promise<readonly ChatMessage[]> =>
+      runtime.messages.listBySession(childSessionId),
+    sessionKkv: runtime.sessionKkv,
+    // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
+    subagent: {
+      agentRegistry: runtime.agentRegistry,
+      messages: runtime.messages,
+      sessions: runtime.sessions,
+      createChildSession: async (title: string): Promise<string> => {
+        const grandchild = await runtime.sessions.createSubSession(
+          childSessionId,
+          parentProjectId,
+          title,
+        );
+        return grandchild.id;
+      },
+      resolveChildModelId: (
+        grandchildDef: AgentDefinition,
+      ): { savedModelId: string; workspaceModelId: string } => {
+        // 子 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）。
+        const resolved = resolveSavedModelId({
+          agentModelId: grandchildDef.model,
+          sessionModelId: opts.savedModelId,
+        });
+        if (resolved == null || resolved === "") {
+          throw new AgentRunResolveError(
+            "孙代理未指定模型，且子 agent 也无可用 savedModelId。",
+          );
+        }
+        return {
+          savedModelId: resolved,
+          workspaceModelId: opts.workspaceModelId,
+        };
+      },
+      runChildAgent: async (
+        grandchildDef: AgentDefinition,
+        grandchildSessionId: string,
+        grandchildOpts: RunChildAgentOptions,
+      ): Promise<AgentRunResult> => {
+        return runChildAgent({
+          runtime,
+          parentProjectId,
+          parentSessionId: childSessionId,
+          parentDepth: childDepth,
+          def: grandchildDef,
+          childSessionId: grandchildSessionId,
+          opts: grandchildOpts,
+        });
+      },
+      depth: childDepth,
+      parentSignal: childController.signal,
+    },
+  };
+
+  const runner = createAgentRunner(
+    assembleAgentRunnerDeps({
+      session,
+      runtime,
+      registry,
+      toolCtx,
+      // 装配期 false：子 agent run 不走压缩编排（P0-2）。
+      includeCompactionOrchestrator: false,
+    }),
+  );
+
+  const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
+  return runner.run({
+    definition: def,
+    sessionId: childSessionId,
+    projectId: parentProjectId,
+    savedModelId: opts.savedModelId,
+    workspaceModelId: opts.workspaceModelId,
+    maxSteps,
+    activeRegexGroupId: activeRegexGroupId ?? undefined,
+    // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=false 不发总线事件；stream=false。
+    persistMessages: true,
+    publishRunLifecycle: false,
+    stream: false,
+    signal: childController.signal,
+  });
 }
