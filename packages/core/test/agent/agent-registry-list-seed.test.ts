@@ -23,6 +23,10 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
     assert.equal(general!.subagentCallable, false);
+    assert.ok(
+      general!.description != null && general!.description.length > 0,
+      "虚拟 general 应带有 description，供 task 工具展示",
+    );
   });
 
   it("get(<不存在的 uuid>) 报 AGENT_NOT_FOUND（get 不合并虚拟）", async () => {

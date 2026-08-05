@@ -137,7 +137,7 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 3, finished: true, stopReason: "completed", rounds: [] },
       },
     });
-    const tool = createSubagentTool(["general"]);
+    const tool = createSubagentTool([{ name: "general" }]);
     const output = await tool.run(
       { description: "生成角色档案", prompt: "请生成主角档案", subagentName: "general" },
       makeToolCtx(ctx),
@@ -157,7 +157,7 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 1, finished: true, stopReason: "completed", rounds: [] },
       },
     });
-    const tool = createSubagentTool(["general"]);
+    const tool = createSubagentTool([{ name: "general" }]);
     const longPrompt =
       "请帮我把这一段超长任务描述做些处理然后生成结果返回再来一段超出四十字符的填充内容结尾";
     await tool.run(
@@ -185,7 +185,7 @@ describe("subagent-tool / task", () => {
 
   it("T-T3: 不存在的 subagentName 抛 ToolError", async () => {
     const { ctx } = makeMockSubagent({ defs: [generalDef] });
-    const tool = createSubagentTool(["general"]);
+    const tool = createSubagentTool([{ name: "general" }]);
     await assert.rejects(
       () =>
         tool.run(
@@ -198,11 +198,39 @@ describe("subagent-tool / task", () => {
   });
 
   it("T-T7: description 含可选 subagent name 列表", () => {
-    const withGeneral = createSubagentTool(["general"]);
+    const withGeneral = createSubagentTool([{ name: "general" }]);
     assert.ok(withGeneral.description.includes("general"));
     const empty = createSubagentTool([]);
     // 即便空列表，description 也应描述能力（不崩）。
     assert.ok(empty.description.includes("task"));
+    assert.ok(empty.description.includes("（暂无）"));
+  });
+
+  it("T-T7b: description 含每个 agent 的 description 文本（按 `名字：描述` 格式）", () => {
+    const tool = createSubagentTool([
+      {
+        name: "general",
+        description: "通用助手，可以读写文件、搜索内容。",
+      },
+      {
+        name: "researcher",
+        description: "专门负责查资料和事实核查。",
+      },
+      { name: "nodescr" },
+    ]);
+    assert.ok(
+      tool.description.includes(
+        "general：通用助手，可以读写文件、搜索内容。",
+      ),
+      "应当拼出 `general：描述` 一行",
+    );
+    assert.ok(
+      tool.description.includes("researcher：专门负责查资料和事实核查。"),
+      "应当拼出 `researcher：描述` 一行",
+    );
+    // 没描述的 agent 只列名字，不应出现 `nodescr：`。
+    assert.ok(tool.description.includes("nodescr"));
+    assert.ok(!tool.description.includes("nodescr："));
   });
 
   it("T-T8: 子 agent stopReason !== completed → fallback 文本", async () => {
@@ -215,7 +243,7 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 10, finished: false, stopReason: "max_steps", rounds: [] },
       },
     });
-    const tool = createSubagentTool(["general"]);
+    const tool = createSubagentTool([{ name: "general" }]);
     const output = await tool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(ctx),
@@ -235,7 +263,7 @@ describe("subagent-tool / task", () => {
         return resolved;
       },
     };
-    const tool = createSubagentTool(["general"]);
+    const tool = createSubagentTool([{ name: "general" }]);
     await tool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(wrappedCtx),
@@ -250,7 +278,7 @@ describe("resolveAgentToolRegistry 递归上限", () => {
   function makeBaseRegistry(): ToolRegistry<BuiltinToolContext> {
     const r = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(r);
-    registerSubagentTool(r, ["general"]);
+    registerSubagentTool(r, [{ name: "general" }]);
     return r;
   }
   const def: AgentDefinition = { name: "x", prompts: { persist: [], dynamic: [] } };
