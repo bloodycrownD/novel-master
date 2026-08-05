@@ -72,7 +72,10 @@ import {
   createCompositeSecretStore,
   createEnvSecretStore,
   resolveSkspDriver,
+  resolveSkspNameFromPlatform,
+  type PlatformSkspName,
 } from "@novel-master/core/sksp";
+import { registerSkspMacDriver } from "@novel-master/sksp-mac";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
 import { createAgentMockModelRequests } from "./agent/mock-llm.js";
 import { installE2eLlmFetchCapture } from "./test/e2e-llm-fetch.js";
@@ -80,6 +83,27 @@ import { CliScopeResolver } from "./config/resolve-scope.js";
 import { extractDbPath } from "./vfs/parse-args.js";
 
 const DEFAULT_DB = "./.novel-master/novel.db";
+
+/**
+ * 根据当前进程平台注册对应的 SKSP driver，并返回其注册名。
+ *
+ * 之所以显式走 `resolveSkspNameFromPlatform`，而不是直接写死 `"windows"`，
+ * 是因为之前 macOS/Linux 上跑 CLI 时会静默落到 windows driver，行为不对。
+ * 现在改成：darwin→macos、win32→windows，其它平台（比如 Linux）
+ * `resolveSkspNameFromPlatform` 会直接抛错——这样无 driver 的平台会
+ * 在启动早期就明确报错，而不是悄悄用错驱动。
+ */
+export function registerPlatformSkspDriver(
+  platform: string = process.platform,
+): PlatformSkspName {
+  const name = resolveSkspNameFromPlatform(platform);
+  if (name === "macos") {
+    registerSkspMacDriver();
+  } else {
+    registerSkspWindowsDriver();
+  }
+  return name;
+}
 
 /**
  * Resolves database file path: NOVEL_MASTER_DB > --db > default.
@@ -142,7 +166,7 @@ export async function createNovelMasterRuntime(
   argv: readonly string[],
 ): Promise<NovelMasterRuntime> {
   registerBetterSqlite3Driver();
-  registerSkspWindowsDriver();
+  const skspName = registerPlatformSkspDriver();
   registerTokenizerNodeDriver();
   const dbPath = resolve(resolveDbPath(argv));
   await mkdir(dirname(dbPath), { recursive: true });
@@ -159,7 +183,7 @@ export async function createNovelMasterRuntime(
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
   const scope = new CliScopeResolver(state);
 
-  const dbStore = resolveSkspDriver("windows").createStore(conn);
+  const dbStore = resolveSkspDriver(skspName).createStore(conn);
   const envStore =
     process.env.NM_SKSP_DISABLE_ENV === "1"
       ? undefined
