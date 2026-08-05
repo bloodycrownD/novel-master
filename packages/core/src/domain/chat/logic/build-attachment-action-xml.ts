@@ -101,9 +101,34 @@ function mintAnnotateDraftId(): string {
 }
 
 /**
+ * 由行列号拼自然语言位置标签，喂给模型读（避免它解读 JSON 数字）。
+ * `startLine === endLine` →「第 N 行」；跨行 →「第 A-B 行」。
+ * 任一行号缺失或非法返回 `undefined`，调用方据此决定是否写键。
+ */
+export function formatAnnotateLocationLabel(
+  startLine: number | undefined | null,
+  endLine: number | undefined | null,
+): string | undefined {
+  if (
+    typeof startLine !== "number" ||
+    !Number.isFinite(startLine) ||
+    startLine < 1
+  ) {
+    return undefined;
+  }
+  const safeEnd =
+    typeof endLine === "number" && Number.isFinite(endLine) && endLine >= 1
+      ? Math.max(startLine, Math.floor(endLine))
+      : startLine;
+  const start = Math.floor(startLine);
+  return start === safeEnd ? `第 ${start} 行` : `第 ${start}-${safeEnd} 行`;
+}
+
+/**
  * 由文件形批注草稿构造落库附件（`source:user_ops` + `action:annotate`）。
  * 真 VFS path；可走既有 path 口径（本函数不对伪 path 调用破坏性 normalize）。
  * 有 Recogito 渲染坐标 / 半开 offset / 宽松行列时**显式**写入 XML JSON；缺字段不写键。
+ * 有 `startLine` 时额外写 `locationLabel`（「第 N 行」/「第 A-B 行」），让模型直接读自然语言。
  */
 export function buildFileAnnotateAttachmentFromDraft(
   draft: AnnotateDraft,
@@ -137,6 +162,14 @@ export function buildFileAnnotateAttachmentFromDraft(
   }
   if (draft.endCol != null) {
     params.endCol = draft.endCol;
+  }
+  // 行号已就位时附自然语言位置标签，方便模型一眼定位（仅渲染态，不回灌草稿）
+  const locationLabel = formatAnnotateLocationLabel(
+    draft.startLine,
+    draft.endLine,
+  );
+  if (locationLabel != null) {
+    params.locationLabel = locationLabel;
   }
   const xml = buildAttachmentActionXml("annotate", params);
   return {

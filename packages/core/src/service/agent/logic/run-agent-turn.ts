@@ -41,6 +41,7 @@ import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-source-range.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
@@ -280,8 +281,41 @@ export async function runAgentTurn(
   }
 
   // annotate：concat 追加（禁止 mergeAttachmentsByPath / path 去重，以免同 path 丢条）
-  const annotateAttachments = annotateDrafts.map(
-    buildAnnotateAttachmentFromDraft,
+  // 上游划词创建草稿时只传了 renderStart/renderEnd，没填 startLine/endLine，
+  // 这里在落库前用 VFS 读源文本 + originalText 反查，补上精确行号（padding=0）
+  // 给模型读附件时多一个「第 N 行」的位置提示；匹配不到或读盘失败就静默跳过。
+  const annotateVfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+  const annotateAttachments = await Promise.all(
+    annotateDrafts.map(async (draft) => {
+      if (draft.startLine != null && draft.endLine != null) {
+        return buildAnnotateAttachmentFromDraft(draft);
+      }
+      let sourceText: string | undefined;
+      try {
+        sourceText = (await annotateVfs.read(draft.path)).content;
+      } catch {
+        // 文件不存在 / 权限 / 伪 path 等：拿不到源文本就跳过行号补算
+      }
+      if (typeof sourceText !== "string" || sourceText.length === 0) {
+        return buildAnnotateAttachmentFromDraft(draft);
+      }
+      const softRange = estimateSoftRangeFromOriginalText(
+        sourceText,
+        draft.originalText,
+        { linePadding: 0 },
+      );
+      if (softRange == null) {
+        return buildAnnotateAttachmentFromDraft(draft);
+      }
+      const enriched: typeof draft = {
+        ...draft,
+        startLine: softRange.startLine,
+        endLine: softRange.endLine,
+        ...(softRange.startCol != null ? { startCol: softRange.startCol } : {}),
+        ...(softRange.endCol != null ? { endCol: softRange.endCol } : {}),
+      };
+      return buildAnnotateAttachmentFromDraft(enriched);
+    }),
   );
 
   // 新 append：user_ops ∪ scannedComposer 直 concat；再 concat annotate（禁 path 去重）
