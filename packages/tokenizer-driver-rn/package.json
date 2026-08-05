@@ -27,10 +27,10 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@novel-master/core": "*",
     "js-tiktoken": "^1.0.21"
   },
   "peerDependencies": {
+    "@novel-master/core": "*",
     "react-native": ">=0.74.0"
   },
   "react-native": {

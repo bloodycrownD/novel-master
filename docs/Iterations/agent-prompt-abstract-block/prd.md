@@ -1,5 +1,7 @@
 # Agent Prompt：移除 when、引入 abstract 块 PRD
 
+> **Superseded**：本 PRD 引入的 `type: abstract` 块已被 [`event-bus-compaction-conditions`](../event-bus-compaction-conditions/spec.md) 整条移除——后者删除 abstract 块分支、`PromptRenderDot.abstract` 与 `CompactionPolicy.action.abstract`，改用 conditions + events 模型。下文仅作历史参考，不再代表当前实现。
+
 ## 背景与变更动机
 
 在 **agent-config-and-compaction** 迭代中，为在不用宏 `if` 的前提下注入压缩摘要，引入了 **PromptBlock.when**（`present: abstract` / `absent: ...`）配合 `type: text` 块。

@@ -23,10 +23,9 @@
     "lint": "eslint src test",
     "test": "tsx --test test/**/*.test.ts"
   },
-  "dependencies": {
-    "@novel-master/core": "*"
-  },
+  "dependencies": {},
   "peerDependencies": {
+    "@novel-master/core": "*",
     "react-native": ">=0.74.0"
   },
   "react-native": {

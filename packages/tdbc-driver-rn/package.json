@@ -23,17 +23,16 @@
     "lint": "eslint src test",
     "test": "tsx --test test/**/*.test.ts"
   },
-  "dependencies": {
-    "@novel-master/core": "*"
+  "dependencies": {},
+  "peerDependencies": {
+    "@novel-master/core": "*",
+    "react-native-quick-sqlite": ">=8.0.0"
   },
   "devDependencies": {
     "@novel-master/tdbc-conformance": "*",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^11.10.0",
     "tsx": "^4.21.0"
-  },
-  "peerDependencies": {
-    "react-native-quick-sqlite": ">=8.0.0"
   },
   "peerDependenciesMeta": {
     "react-native-quick-sqlite": {

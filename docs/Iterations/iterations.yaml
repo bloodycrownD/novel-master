@@ -1,0 +1,119 @@
+# Iterations 取代链索引
+#
+# 本文件由 cr-fix-spec Step 21（S-2）建立，用于追踪 Iterations 目录下各迭代的
+# supersedes / superseded-by 关系与状态。目录平铺无元数据，PRD 定稿被推翻后
+# 容易遗留漂移；这里集中登记，后续迭代须同步维护。
+#
+# 字段说明：
+#   id            —— 迭代目录名（唯一）
+#   status        —— active | superseded | obsolete | merged
+#   supersedes    —— 本迭代取代的旧 iteration id（列表）
+#   superseded-by —— 取代本迭代的后续 iteration id
+#   notes         —— 漂移 / 状态备注
+#
+# 当前覆盖范围：cr-fix S-2 已知 9 处漂移涉及的 iteration 及其直接取代链邻居。
+# 全量 151 个 iteration 待逐步补齐。
+
+iterations:
+  # ---- SKSP：env 空串语义反向漂移（S-2 漂移 #1，与 #9 联动）----
+  # spec.md L248 已在 cr-fix Phase 2 Step 16（6dadb65e）对齐到收紧语义。
+  - id: sksp
+    status: active
+    notes: >
+      env 空串语义反向漂移已在 Step 16 修复——空 env（未设置 / "" / 纯空白）
+      一律视为未命中，不覆盖 DB。spec 与 env-secret-store.ts 实现一致。
+
+  # ---- agent-prompt-abstract-block：type: abstract 块（S-2 漂移 #2，被推翻）----
+  - id: agent-prompt-abstract-block
+    status: superseded
+    supersedes:
+      - agent-config-and-compaction   # 仅 PromptBlock.when 部分
+    superseded-by: event-bus-compaction-conditions
+    notes: >
+      本 PRD 引入的 type: abstract 块已被 event-bus-compaction-conditions 整条
+      移除——后者删除 abstract 块分支、PromptRenderDot.abstract 与
+      CompactionPolicy.action.abstract，改用 conditions + events。PRD/spec 仅作
+      历史参考。
+
+  - id: agent-config-and-compaction
+    status: superseded
+    superseded-by:
+      - agent-prompt-abstract-block   # PromptBlock.when → type: abstract
+      - global-compaction-policy      # AgentDefinition.compact → 全局策略
+    notes: >
+      PromptBlock.when 由 agent-prompt-abstract-block 接手；AgentDefinition.compact
+      由 global-compaction-policy 接手。model / runtime 章节仍作历史参考。
+
+  - id: global-compaction-policy
+    status: superseded
+    superseded-by: event-bus-compaction-conditions
+    notes: >
+      CompactionPolicy / abstract 注入链路被 event-bus-compaction-conditions 改为
+      conditions + events 模型。
+
+  - id: event-bus-compaction-conditions
+    status: active
+    supersedes:
+      - agent-prompt-abstract-block
+      - global-compaction-policy
+    notes: >
+      移除 abstract 压缩链路（render-prompt abstract 分支、agent-definition.schema
+      拒绝 type: abstract、CompactionPolicy store），改用 compaction-conditions + events。
+
+  # ---- tool-system-v2：chat_grep 必备条目（S-2 漂移 #3，与 S-5 联动）----
+  - id: tool-system
+    status: superseded
+    superseded-by: tool-system-v2
+    notes: V1 工具集（replace / delete / move / copy / mkdir / list）由 V2 合并重构。
+
+  - id: tool-system-v2
+    status: active
+    supersedes:
+      - tool-system
+    notes: >
+      cr-fix 决策记录 #2 已拍板撤掉 chat_grep（代码 @deprecated，干净优先）。
+      PRD 中 chat_grep 的必备条目已对齐移除；内置工具集由 7 个收敛为 6 个
+      （read / write / edit / fs / glob / grep）。chat-grep-tool.ts 的清扫归 S-5。
+
+  # ---- core-package-structure：ARCHITECTURE.md documented exceptions（S-2 漂移 #4）----
+  - id: core-package-structure
+    status: active
+    notes: >
+      ARCHITECTURE.md §Documented exceptions 中 domain/compaction/action/
+      default-compaction-action.ts 一条失效（compaction 上下文已重构为
+      compaction-conditions，文件不存在），已删除。其余 5 条 exception 仍有效。
+
+  # ---- prompt-engine：prompt API 导出路径（S-2 漂移 #5）----
+  - id: prompt-engine
+    status: active
+    notes: >
+      spec.md 原写 prompt API 经 packages/core/src/index.ts 导出，与实现不符——
+      实际经 packages/core/src/public/prompt.ts 导出（index.ts 不导出 prompt）。
+      spec 已对齐到 public/prompt.ts。
+
+  # ---- message-rollback-remove-session-log：batch 回滚模型（S-2 漂移 #6，被架空）----
+  - id: message-rollback-remove-session-log
+    status: superseded
+    superseded-by: message-checkpoint-v2
+    notes: >
+      本 spec 的 batch/action/snapshot 回滚模型被 message-checkpoint-v2 架空——
+      后者以 message 级整树 checkpoint + VFS revision 取代 batch 模型，并在
+      Phase 5 清理时 deprecated 本 spec 的 batch 描述。spec 仅作历史参考。
+
+  - id: message-checkpoint-v2
+    status: active
+    supersedes:
+      - message-rollback-remove-session-log
+    notes: >
+      以 message 级整树 checkpoint + VFS revision 取代 batch/action/snapshot
+      回滚模型；工具层与 checkpoint 解耦并支持并发。
+
+# ---- S-2 漂移对齐跟踪表（9 处）----
+# #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）
+# #2 agent-prompt-abstract-block  —— fixed（superseded-by event-bus-compaction-conditions）
+# #3 tool-system-v2 chat_grep     —— fixed（撤掉 chat_grep，决策记录 #2）
+# #4 ARCHITECTURE.md exceptions   —— fixed（删失效的 compaction action 条）
+# #5 prompt-engine L201/L245      —— fixed（index.ts → public/prompt.ts）
+# #6 message-rollback-remove-session-log —— fixed（superseded-by message-checkpoint-v2）
+# #7 iterations.yaml 索引          —— fixed（本文件）
+# #8 / #9：随上述 6 处文件漂移与索引一并闭合，无独立文件。

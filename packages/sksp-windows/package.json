@@ -20,7 +20,9 @@
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
-    "@primno/dpapi": "^2.0.1",
+    "@primno/dpapi": "^2.0.1"
+  },
+  "peerDependencies": {
     "@novel-master/core": "*"
   },
   "devDependencies": {

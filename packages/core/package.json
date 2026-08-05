@@ -124,8 +124,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@novel-master/tdbc-driver-better-sqlite3": "*",
-    "@novel-master/tokenizer-driver-node": "*",
     "tsc-alias": "^1.8.10",
     "tsx": "^4.21.0"
   }

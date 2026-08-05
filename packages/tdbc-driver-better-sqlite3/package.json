@@ -20,8 +20,10 @@
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
-    "@novel-master/core": "*",
     "better-sqlite3": "^11.10.0"
+  },
+  "peerDependencies": {
+    "@novel-master/core": "*"
   },
   "devDependencies": {
     "@novel-master/tdbc-conformance": "*",

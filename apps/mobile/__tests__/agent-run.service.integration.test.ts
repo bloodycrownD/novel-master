@@ -9,6 +9,16 @@ function baseRuntime(overrides: Partial<any> = {}) {
       getCurrentModelId: async () => 'openai/gpt',
       getCurrentRegexGroupId: async () => undefined,
     },
+    projects: {
+      getAgentConfig: async () => ({
+        mode: 'custom',
+        definition: {
+          name: 'x',
+          prompts: { persist: [], dynamic: [] },
+          model: 'openai/gpt',
+        },
+      }),
+    },
     agentRegistry: {
       listAgentIds: async () => ['a1'],
       get: async () => ({
@@ -19,6 +29,7 @@ function baseRuntime(overrides: Partial<any> = {}) {
     },
     messageCheckpoint: {
       capture: jest.fn(async () => undefined),
+      backfillMissingBaselines: jest.fn(async () => undefined),
     },
     messages: {
       listBySession: async () => [],
@@ -42,7 +53,9 @@ function baseRuntime(overrides: Partial<any> = {}) {
       materializePersistBlock: async () => ({ workplaceDisplay: '' }),
     }),
     modelRequests: {},
-    compactionConditionEvaluator: undefined,
+    compactionConditionEvaluator: {
+      shouldRequestCompaction: async () => false,
+    },
     eventOrchestrator: {},
     ...overrides,
   };

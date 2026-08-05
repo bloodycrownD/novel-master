@@ -1,5 +1,7 @@
 # Tool System V2 PRD
 
+> **修订（cr-fix S-2 / 决策记录 #2）**：`chat_grep` 已拍板撤掉（代码 @deprecated，干净优先）。下文中把 `chat_grep` 列为必备工具的条目均已对齐移除，内置工具集由 7 个收敛为 6 个（`read` / `write` / `edit` / `fs` / `glob` / `grep`）。原 `chat_grep` 相关章节保留为历史叙述，但不再属于 V2 必备范围。
+
 > **平台**：Core + Mobile / Desktop / CLI UI 同步更新  
 > **类型**：工具集重构（破坏性变更）  
 > **关联迭代**：`tool-system`（V1）、`agent-system`  
@@ -11,20 +13,18 @@
 
 1. **工具粒度过细**：`delete` / `move` / `copy` / `mkdir` 等各自独立，LLM 上下文占用多、策略配置繁琐。
 2. **命名不一致**：行业惯例使用 `edit` 表示精确替换编辑，本系统仍用 `replace`。
-3. **读取无边界**：`read` / `grep` / `glob` 等可能返回超大内容，撑爆模型上下文。
-4. **缺少聊天记录检索**：Agent 无法像 `grep` 一样搜索当前会话历史，需人工翻阅消息。
-5. **工具策略配置不便**：Agent 编辑器中白/黑名单使用 **逗号分隔文本输入**（Mobile / Desktop 均有），用户需记忆工具名与拼写，易出错。
+3. **读取无边界持续**：`read` / `grep` / `glob` 等可能返回超大内容，撑爆模型上下文（历史场景；V2 已统一加上限）。
+4. **工具策略配置不便**：Agent 编辑器中白/黑名单使用 **逗号分隔文本输入**（Mobile / Desktop 均有），用户需记忆工具名与拼写，易出错。
 
-本需求对内置工具集进行 **V2 重构**：合并文件操作、重命名编辑工具、统一读取类工具输出限制，并新增 `chat_grep`；同时将工具黑白名单改为 **可搜索多选 UI**。
+本需求对内置工具集进行 **V2 重构**：合并文件操作、重命名编辑工具、统一读取类工具输出限制；同时将工具黑白名单改为 **可搜索多选 UI**。（早期草案曾含 `chat_grep` 会话内搜索工具，cr-fix 决策已撤掉，不纳入 V2。）
 
 ## 目标（含成功指标）
 
 | 目标 | 成功指标 |
 |------|----------|
-| 工具集精简 | 内置工具从 10 个减至 **7 个**：`read`、`write`、`edit`、`fs`、`glob`、`grep` + 新增 `chat_grep` |
-| 读取可控 | `read` / `grep` / `glob` / `chat_grep` / `fs ls` 输出均受统一上限约束，单轮工具结果 **≤ 50KB**（或等价条数限制） |
+| 工具集精简 | 内置工具从 10 个减至 **6 个**：`read`、`write`、`edit`、`fs`、`glob`、`grep` |
+| 读取可控 | `read` / `grep` / `glob` / `fs ls` 输出均受统一上限约束，单轮工具结果 **≤ 50KB**（或等价条数限制） |
 | 文件操作统一 | `delete` / `move` / `copy` / `mkdir` / `rmdir` / **`list`** 合并为 **`fs` 单工具**，通过 command 字符串调用 |
-| 聊天可检索 | `chat_grep` 可在 **当前会话全部消息（含 hidden）** 中搜索并返回匹配楼层与行 |
 | 全端一致 | Core 定义 + Mobile / Desktop / CLI 工具展示、权限、Agent 默认策略 **同步更新** |
 | 工具策略易配 | Agent 编辑器白/黑名单 **100% 通过多选 UI** 配置，无文本输入 |
 
@@ -36,7 +36,7 @@
 |------|------|
 | Agent 开发者 | 配置更少的工具权限项；通过搜索多选快速勾选白/黑名单，无需手打工具名 |
 | Agent 配置用户 | 在 Mobile / Desktop Agent 编辑器中可视化选择允许或禁止的工具 |
-| 对话用户 | Agent 读大文件时分页读取；搜索历史消息找之前讨论过的内容 |
+| 对话用户 | Agent 读大文件时分页读取 |
 | 平台维护者 | 统一输出截断规则，避免 LLM 上下文被单次 tool result 撑爆 |
 
 ## 范围
@@ -97,29 +97,17 @@
 
 截断时输出须包含：`truncated: true` 或等价提示，以及被省略的数量。
 
-#### 5. 新增 `chat_grep` 工具
-
-- **范围**：**当前会话**的全部消息，**包含 hidden 消息**。
-- **能力**：类似 `grep`，在消息文本（user / assistant / tool 结果等可搜索字段）中按正则或文本模式搜索。
-- **返回**：匹配项列表，至少包含：
-  - 消息 ID 或楼层序号（session 内顺序）
-  - 角色（user / assistant / …）
-  - 匹配行号（消息内第几行）
-  - 匹配 excerpt（受 `MAX_LINE_LENGTH` 约束）
-- **限制**：与 `grep` 对齐——最多 100 条匹配、总输出 ≤ 50KB；超限时截断并提示。
-- **不包含**：跨会话、跨项目搜索。
-
-#### 6. 保留不变的工具
+#### 5. 保留不变的工具
 
 - `write` 保留。
 - Agent 工具策略、UI 工具卡片、format-tool-output、checkpoint 分类等 **随新工具名更新**。
 
-#### 7. 全端 UI 同步（Core + UI）
+#### 6. 全端 UI 同步（Core + UI）
 
 - Mobile / Desktop / CLI 中工具调用展示、Agent 编辑器默认工具列表、工具权限配置 **同步 V2 名称**。
 - 移除对已删除工具名（`replace`、`delete`、`move`、`copy`、`mkdir`、`list`）的 UI 引用。
 
-#### 8. 工具黑白名单：可搜索多选 UI
+#### 7. 工具黑白名单：可搜索多选 UI
 
 **现状**：`AgentEditorForm`（Mobile）与 `AgentEditorView`（Desktop）在 allow/deny 模式下使用 **逗号分隔文本框**（`toolsList`）；底层经 `config-forms` 的 `buildToolsPolicy` 序列化为 `tools.allow` / `tools.deny` 数组。
 
@@ -150,7 +138,7 @@
 
 - 真实 OS shell 执行（`bash` / 进程）；`fs` 仅操作 **VFS 工作区**。
 - `fs` 支持 `mkdir -p`、通配符、`&&` 链式命令（可后续迭代）。
-- 跨会话 / 跨项目 `chat_grep`。
+- 跨会话 / 跨项目搜索（早期草案的 `chat_grep` 已撤，不纳入 V2）。
 - LLM 协议层（OpenAI / Anthropic function calling）映射改造细节（属 SPEC）。
 - OpenCode 式 truncation 文件落盘（首期仅 inline 截断 + 提示；不写入临时文件）。
 - Desktop-only 或 Mobile-only 的独立工具集分叉。
@@ -161,10 +149,9 @@
 1. **破坏性工具集迁移**：`replace`→`edit`；`delete`/`move`/`copy`/`mkdir`/`list`→`fs`；旧名 **不保留别名**。
 2. **`fs` command 字符串**：LLM 传入单条 command，服务端解析并映射到 VFS 操作；不支持任意 shell。
 3. **`read` 分页读取**：`offset` + `limit`（默认 2000 行）+ 单行/总字节截断。
-4. **读取类工具统一上限**：`grep`、`glob`、`chat_grep`、`fs ls` 均受行宽、条数、50KB 约束。
-5. **`chat_grep`**：当前会话全量消息（含 hidden）可搜索，返回楼层 + 行 + excerpt。
-6. **全端一致**：Core 与各端 UI、Agent 默认配置、测试用例同步更新。
-7. **工具策略多选 UI**：Mobile / Desktop Agent 编辑器用可搜索多选 + 已选标签替代文本输入；选项与 V2 注册工具名一致。
+4. **读取类工具统一上限**：`grep`、`glob`、`fs ls` 均受行宽、条数、50KB 约束。
+5. **全端一致**：Core 与各端 UI、Agent 默认配置、测试用例同步更新。
+6. **工具策略多选 UI**：Mobile / Desktop Agent 编辑器用可搜索多选 + 已选标签替代文本输入；选项与 V2 注册工具名一致。
 
 ## 验收标准
 
@@ -220,7 +207,7 @@
   **When** `read`  
   **Then** 返回错误（非空成功）
 
-### grep / glob / chat_grep 限制
+### grep / glob 限制
 
 - **Given** `grep` 匹配超过 100 处  
   **When** 执行  
@@ -230,16 +217,8 @@
   **When** 执行  
   **Then** 返回前 100 条 + 截断说明
 
-- **Given** 当前会话有 50 条消息，其中 3 条含关键词  
-  **When** `chat_grep` 搜索该关键词  
-  **Then** 返回 3 条匹配，含消息楼层/序号、角色、行号、excerpt
-
-- **Given** 会话含 hidden 消息且内容匹配  
-  **When** `chat_grep`  
-  **Then** hidden 消息 **纳入** 搜索结果
-
 - **Given** 匹配结果将超 50KB  
-  **When** `chat_grep` / `grep` / `glob`  
+  **When** `grep` / `glob`  
   **Then** 截断并提示省略数量
 
 ### 工具黑白名单 UI
@@ -248,13 +227,13 @@
   **When** 查看工具名单配置区  
   **Then** 显示 **可搜索多选列表** 与 **顶部已选标签/面包屑**；**不存在** 逗号分隔文本输入框
 
-- **Given** 注册工具包含 V2 全集（`read`、`write`、`edit`、`fs`、`glob`、`grep`、`chat_grep`）  
+- **Given** 注册工具包含 V2 全集（`read`、`write`、`edit`、`fs`、`glob`、`grep`）  
   **When** 打开多选列表  
-  **Then** 列表展示上述 7 个工具名；**不展示** 已移除的 `replace`、`delete`、`move`、`copy`、`mkdir`、`list`
+  **Then** 列表展示上述 6 个工具名；**不展示** 已移除的 `replace`、`delete`、`move`、`copy`、`mkdir`、`list`（也不含已撤的 `chat_grep`）
 
 - **Given** 用户在搜索框输入 `grep`  
   **When** 过滤列表  
-  **Then** 仅显示名称匹配的工具（如 `grep`、`chat_grep`）
+  **Then** 仅显示名称匹配的工具（如 `grep`）
 
 - **Given** 用户勾选 `read`、`grep` 并保存 Agent  
   **When** 重新打开该 Agent  
@@ -285,7 +264,6 @@
 ## 约束与依赖
 
 - 依赖现有 `VfsService`（read/write/replace/delete/mkdir/glob/grep + move/copy 逻辑）。
-- 依赖消息存储与 session 上下文（`chat_grep` 需 sessionId + message repository）。
 - **破坏性变更**：已有 Agent YAML / 数据库中 `tools.allow` 含旧工具名的配置 **须人工或迁移脚本更新**（本 PRD 不要求自动 DB 迁移，但 SPEC 应说明影响面）。
 
 ## 风险与待确认项
@@ -294,12 +272,11 @@
 |------|------|
 | Agent 配置断裂 | 破坏性移除旧工具名后，存量 Agent 若未更新将无法调用文件操作 |
 | `fs` 解析歧义 | command 字符串需严格 grammar，避免 LLM 注入式多命令 |
-| `chat_grep` 性能 | 长会话全量扫描可能慢；首期可接受，后续可加索引 |
 
 **已确认（评审澄清）**
 
 - `fs` 形态：**单参数 command 字符串**
 - 兼容性：**破坏性变更，无别名**
-- `chat_grep` 范围：**当前会话，含 hidden**
+- `chat_grep`：**已撤**（cr-fix 决策记录 #2，不纳入 V2）
 - 交付：**Core + 各端 UI**
 - 工具策略 UI：**可搜索多选 + 顶部已选标签**；**仅多选，移除文本输入**

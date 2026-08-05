@@ -56,7 +56,6 @@ domain/<ctx>/
 ### Documented exceptions
 
 - **`domain/*/repositories/impl/sqlite-*.ts`** — SQLite adapters live with their bounded context (port in repo, impl co-located), not in `infra/persistence/`.
-- **`domain/compaction/action/default-compaction-action.ts`** — may import `infra/prompt-template`, `infra/date-format` (domain → infra is valid).
 - **`domain/provider/model/saved-model-settings-from-json.ts`** — wire encode/decode helper; stays beside schema in `model/`.
 - **`infra/sksp/sksp-error.ts`**, **`infra/sql-template/errors.ts`**, **`infra/tdbc/errors.ts`** — infra-internal errors, not in `errors/`.
 - **`service/prompt/render-prompt.ts`** — single-file application service; no `impl/` subdir.

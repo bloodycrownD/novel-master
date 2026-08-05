@@ -22,8 +22,10 @@
   "dependencies": {
     "@agnai/sentencepiece-js": "^1.1.1",
     "@agnai/web-tokenizers": "^0.1.3",
-    "@novel-master/core": "*",
     "tiktoken": "^1.0.21"
+  },
+  "peerDependencies": {
+    "@novel-master/core": "*"
   },
   "devDependencies": {
     "tsx": "^4.21.0"
