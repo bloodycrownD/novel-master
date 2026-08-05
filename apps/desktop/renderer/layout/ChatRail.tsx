@@ -62,6 +62,28 @@ export function ChatRail({
     notifyAgentConfigChanged,
   } = useShellNav();
 
+  // 子代理只读会话面板的 sessionId 在 ChatRail 本地维护，避免污染全局导航状态
+  // （P2-11：全局 nav 仍指向父会话，子会话只在面板栈层切换）。
+  const [subagentSessionId, setSubagentSessionId] = useState<string | null>(
+    null,
+  );
+  const [subagentSessionName, setSubagentSessionName] = useState<string>('');
+
+  const openSubagentSession = useCallback(
+    (childSessionId: string, label?: string) => {
+      setSubagentSessionId(childSessionId);
+      setSubagentSessionName(label ?? '子代理会话');
+      showNavView('subagent-conversation');
+    },
+    [showNavView],
+  );
+
+  const goBackToConversation = useCallback(() => {
+    setSubagentSessionId(null);
+    setSubagentSessionName('');
+    showNavView('conversation');
+  }, [showNavView]);
+
   const {
     active: projectBatchActive,
     selectedIds: projectSelectedIds,
@@ -402,7 +424,10 @@ export function ChatRail({
     }
   })();
 
-  const showBack = viewId === 'sessions' || viewId === 'conversation';
+  const showBack =
+    viewId === 'sessions' ||
+    viewId === 'conversation' ||
+    viewId === 'subagent-conversation';
 
   return (
     <>
@@ -413,11 +438,19 @@ export function ChatRail({
               type="button"
               className="chat-nav-back"
               data-action={
-                viewId === 'sessions' ? 'back-to-projects' : 'back-to-sessions'
+                viewId === 'sessions'
+                  ? 'back-to-projects'
+                  : viewId === 'subagent-conversation'
+                    ? 'back-to-conversation'
+                    : 'back-to-sessions'
               }
               aria-label="返回"
               onClick={
-                viewId === 'sessions' ? goBackToProjects : goBackToSessions
+                viewId === 'sessions'
+                  ? goBackToProjects
+                  : viewId === 'subagent-conversation'
+                    ? goBackToConversation
+                    : goBackToSessions
               }
             >
               ‹
@@ -430,6 +463,10 @@ export function ChatRail({
           ) : viewId === 'conversation' ? (
             <span className="column-header__title column-header__title--truncate">
               {sessionName ?? '—'}
+            </span>
+          ) : viewId === 'subagent-conversation' ? (
+            <span className="column-header__title column-header__title--truncate">
+              {subagentSessionName || '子代理会话'}
             </span>
           ) : (
             <span className="column-header__title">
@@ -636,7 +673,7 @@ export function ChatRail({
         </div>
 
         <div
-          className={`chat-nav-view${
+          className={`chat-nav-view$${
             viewId === 'conversation' ? ' is-visible' : ''
           }`}
           data-nav-view="conversation"
@@ -647,9 +684,34 @@ export function ChatRail({
               projectId={projectId}
               sessionId={sessionId}
               onOpenSessionActions={onOpenSessionActions}
+              onOpenSubagentSession={(childSessionId) =>
+                openSubagentSession(childSessionId)
+              }
             />
           ) : (
             <p className="preview-empty">请选择会话</p>
+          )}
+        </div>
+
+        <div
+          className={`chat-nav-view$${
+            viewId === 'subagent-conversation' ? ' is-visible' : ''
+          }`}
+          data-nav-view="subagent-conversation"
+          hidden={viewId !== 'subagent-conversation'}
+        >
+          {projectId && subagentSessionId ? (
+            <ConversationPanel
+              projectId={projectId}
+              sessionId={subagentSessionId}
+              onOpenSessionActions={() => undefined}
+              readOnly
+              onOpenSubagentSession={(childSessionId) =>
+                openSubagentSession(childSessionId)
+              }
+            />
+          ) : (
+            <p className="preview-empty">请返回父会话并重新点击子代理卡片</p>
           )}
         </div>
       </section>

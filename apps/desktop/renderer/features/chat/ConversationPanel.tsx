@@ -68,6 +68,13 @@ interface ConversationPanelProps {
   projectId: string;
   sessionId: string;
   onOpenSessionActions: (anchor: HTMLElement) => void;
+  /**
+   * 只读模式：用于子代理会话浏览。开启后不渲染 Composer、不写入草稿 IPC、
+   * 不允许消息右键菜单（hide/edit/rollback 等写操作）。读消息 / 跳转预览仍可用。
+   */
+  readOnly?: boolean;
+  /** 点击 task 工具卡片时跳转只读子会话面板；仅需在父面板传入。 */
+  onOpenSubagentSession?: (sessionId: string) => void;
 }
 
 type RollbackConfirmContext = {
@@ -95,6 +102,8 @@ export function ConversationPanel({
   projectId,
   sessionId,
   onOpenSessionActions,
+  readOnly = false,
+  onOpenSubagentSession,
 }: ConversationPanelProps) {
   const {
     notifyWorkspaceMutated,
@@ -219,6 +228,11 @@ export function ConversationPanel({
     setComposerText('');
     setComposerAttachments([]);
 
+    if (readOnly) {
+      // 只读面板不水化草稿、不订阅写 IPC。
+      return;
+    }
+
     let cancelled = false;
     void (async () => {
       const [draftRes, statusRes] = await Promise.all([
@@ -247,10 +261,13 @@ export function ConversationPanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, resetUiForSessionChange, onStreamReset]);
+  }, [sessionId, resetUiForSessionChange, onStreamReset, readOnly]);
 
   // 水化完成后：仅持久 attach+text（状态条不进列）
   useEffect(() => {
+    if (readOnly) {
+      return;
+    }
     if (!composerDraftHydratedRef.current) {
       return;
     }
@@ -260,7 +277,7 @@ export function ConversationPanel({
       attachments: [],
     });
     void ipcSessionsSetComposerDraft({ sessionId, draftJson });
-  }, [sessionId, composerText, composerAttachments]);
+  }, [sessionId, composerText, composerAttachments, readOnly]);
 
   useEffect(() => {
     ipcAppUiGet('chatRichText')
@@ -784,8 +801,9 @@ export function ConversationPanel({
             streamTailGenerating={running}
             agentRunning={agentActive}
             chatRichText={chatRichText}
-            onOpenMessageMenu={openMessageMenu}
+            onOpenMessageMenu={readOnly ? undefined : openMessageMenu}
             onOpenToolFile={openChatWorkspacePreview}
+            onOpenSubagentSession={onOpenSubagentSession}
           />
         </div>
         <div
@@ -832,28 +850,30 @@ export function ConversationPanel({
             }
           }}
         />
-        <ChatComposer
-          projectId={projectId}
-          sessionId={sessionId}
-          value={composerText}
-          onChange={setComposerText}
-          attachments={composerAttachments}
-          onAttachmentsChange={setComposerAttachments}
-          running={running}
-          canResumeWithoutInput={composerSendState.canResumeWithoutInput}
-          hasPendingUserOps={hasPendingUserOps}
-          lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
-          lastMessageIsPlainUserText={
-            composerSendState.lastMessageIsPlainUserText
-          }
-          error={composerError}
-          onErrorChange={setComposerError}
-          beginUiRun={beginUiRun}
-          abortUiRun={abortUiRun}
-          onStreamReset={onStreamReset}
-          onMessagesChanged={reloadMessages}
-          onOpenSessionActions={onOpenSessionActions}
-        />
+        {readOnly ? null : (
+          <ChatComposer
+            projectId={projectId}
+            sessionId={sessionId}
+            value={composerText}
+            onChange={setComposerText}
+            attachments={composerAttachments}
+            onAttachmentsChange={setComposerAttachments}
+            running={running}
+            canResumeWithoutInput={composerSendState.canResumeWithoutInput}
+            hasPendingUserOps={hasPendingUserOps}
+            lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
+            lastMessageIsPlainUserText={
+              composerSendState.lastMessageIsPlainUserText
+            }
+            error={composerError}
+            onErrorChange={setComposerError}
+            beginUiRun={beginUiRun}
+            abortUiRun={abortUiRun}
+            onStreamReset={onStreamReset}
+            onMessagesChanged={reloadMessages}
+            onOpenSessionActions={onOpenSessionActions}
+          />
+        )}
       </div>
       <div
         className={`conversation-panel${
