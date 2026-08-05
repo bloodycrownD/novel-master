@@ -134,6 +134,8 @@ export function AgentEditorForm(props: Props) {
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState('');
+  // 是否可被 task 工具调用为子代理（对应域 subagentCallable）。
+  const [subagentCallable, setSubagentCallable] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -172,6 +174,7 @@ export function AgentEditorForm(props: Props) {
         workplaceAssistantText,
         customAttachEnabled,
         customAttachText,
+        subagentCallable,
         persist,
         dynamic,
       }),
@@ -191,6 +194,7 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      subagentCallable,
       persist,
       dynamic,
     ],
@@ -238,6 +242,7 @@ export function AgentEditorForm(props: Props) {
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
       setCustomAttachText(promptForm.customAttachText ?? '');
+      setSubagentCallable(promptForm.subagentCallable === true);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -487,6 +492,7 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      subagentCallable,
       persist,
       dynamic,
     });
@@ -954,6 +960,38 @@ export function AgentEditorForm(props: Props) {
               个）：read、write、edit、fs、glob、grep。
             </Text>
           )}
+          <View
+            style={[
+              styles.switchRow,
+              { marginTop: 8, justifyContent: 'space-between' },
+            ]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: tokens.textPrimary,
+                  fontSize: 14,
+                  fontWeight: '600',
+                }}
+              >
+                可被调用为子代理
+              </Text>
+              <Text
+                style={{
+                  color: tokens.textSecondary,
+                  fontSize: 12,
+                  marginTop: 2,
+                }}
+              >
+                开启后，其他 Agent 可通过 task 工具调用本 Agent
+              </Text>
+            </View>
+            <Switch
+              value={subagentCallable}
+              onValueChange={setSubagentCallable}
+              trackColor={{ false: tokens.border, true: tokens.primary }}
+            />
+          </View>
         </FormSectionCard>
 
         <FormSectionCard
