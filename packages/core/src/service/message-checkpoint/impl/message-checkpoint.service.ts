@@ -4,8 +4,10 @@
  * @module service/message-checkpoint/impl/message-checkpoint.service
  */
 
+import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -54,6 +56,28 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
           revisionVersion: f.headVersion,
         })),
       });
+    });
+  }
+
+  /**
+   * @remarks backfillBaselineCheckpoints 移入事务内执行：复用 capture 同款锁语义，
+   * 避免并发 backfill 读到未提交的 head；与导入路径同一份纯逻辑。
+   */
+  async backfillMissingBaselines(
+    sessionId: string,
+    projectId: string,
+  ): Promise<void> {
+    await this.deps.conn.transaction(async (tx) => {
+      const txEntries = new SqliteVfsEntryRepository(tx);
+      const txMessages = new SqliteMessageRepository(tx);
+      const txCheckpoints = new SqliteMessageCheckpointRepository(tx);
+      await backfillBaselineCheckpoints(
+        txEntries,
+        txMessages,
+        txCheckpoints,
+        projectId,
+        sessionId,
+      );
     });
   }
 }

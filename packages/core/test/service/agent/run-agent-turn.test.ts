@@ -95,6 +95,11 @@ function makeRuntime(overrides: {
     projectId: string,
     messageId: string,
   ) => Promise<void>;
+  /** 覆盖 messageCheckpoint.backfillMissingBaselines（默认 no-op）。 */
+  readonly backfillMissingBaselines?: (
+    sessionId: string,
+    projectId: string,
+  ) => Promise<void>;
   /** 覆盖 agentRegistry.get 返回的 definition（默认 sampleDefinition）。 */
   readonly definition?: AgentDefinition;
 }): AgentTurnRuntimePort {
@@ -123,6 +128,8 @@ function makeRuntime(overrides: {
     messageCheckpoint: {
       capture:
         overrides.capture ?? (async () => undefined),
+      backfillMissingBaselines:
+        overrides.backfillMissingBaselines ?? (async () => undefined),
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
@@ -889,6 +896,33 @@ describe("runAgentTurn", () => {
         ),
       /baseline capture failed/,
     );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  // T-DS5（S-13 扩展）：runAgentTurn 入口必须调一次 backfillMissingBaselines，
+  // 给历史空窗消息补 baseline。Step 9 已保证新消息源头有 baseline，但旧会话里
+  // 可能还留着 Step 9 之前的消息——这里在 turn 开始时幂等补齐。
+  it("T-DS5：runAgentTurn 开始时调一次 backfillMissingBaselines", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-backfill-1" }),
+      backfillMissingBaselines: async (sessionId, projectId) => {
+        backfilled.push({ sessionId, projectId });
+      },
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "继续聊天",
+      );
+    } catch {
+      // runner deps stubbed；走到断言即说明 backfill 已调
+    }
+    assert.equal(backfilled.length, 1, "每轮发送只能调一次 backfill");
+    assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 });

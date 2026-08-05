@@ -66,6 +66,7 @@ function makeRuntime(
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
       capture: async () => undefined,
+      backfillMissingBaselines: async () => undefined,
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
     eventBus: {} as AgentTurnRuntimePort["eventBus"],

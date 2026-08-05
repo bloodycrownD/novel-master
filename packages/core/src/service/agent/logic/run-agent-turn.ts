@@ -180,6 +180,15 @@ export async function runAgentTurn(
     (a) => a.source === "attach",
   );
 
+  // S-13 扩展：每轮发送开头都尝试 backfill 一下历史空窗消息。Step 9 之后新消息
+  // 在源头就有 baseline 了，但旧会话里可能还留着没有 checkpoint 的历史消息——
+  // 这里幂等地补齐，确保 undo_send 始终能找到可回滚点。已有 checkpoint 的消息不动。
+  stage = "backfill-baseline-checkpoints";
+  await runtime.messageCheckpoint.backfillMissingBaselines(
+    scope.sessionId,
+    scope.projectId,
+  );
+
   stage = "resolve-agent";
   const definition = (
     await mapResolveError(() =>
@@ -210,7 +219,7 @@ export async function runAgentTurn(
     }
   }
 
-  stage = "resolve-model";
+  stage = "resolve-agent";
   const { savedModelId, workspaceModelId } = await mapResolveError(() =>
     resolveApplicationModelIdForRun(runtime, definition, scope.sessionId),
   );
