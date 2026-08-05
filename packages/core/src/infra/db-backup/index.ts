@@ -15,3 +15,8 @@ export {
   scrubProviderTablesInDatabase,
   restoreProviderTableSnapshot,
 } from "./provider-table-snapshot.js";
+export {
+  type ProviderTableSnapshotErrorCode,
+  ProviderTableSnapshotError,
+} from "./provider-table-snapshot-error.js";
+export { validateProviderTableSnapshot } from "./provider-table-snapshot-validate.js";

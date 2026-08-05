@@ -8,6 +8,7 @@ import {
   dumpProviderTableSnapshot,
   NOVEL_MASTER_SCHEMA_STATEMENTS,
   open,
+  ProviderTableSnapshotError,
   restoreProviderTableSnapshot,
   scrubProviderTables,
   scrubProviderTablesInDatabase,
@@ -141,6 +142,47 @@ function normalizeSnapshot(snapshot: ProviderTableSnapshot): string {
   return JSON.stringify(normalized);
 }
 
+/** 构造一份与 seedTestProviderData 等价的快照，供非法变体用例改写后注入。 */
+function buildValidSnapshot(): ProviderTableSnapshot {
+  return {
+    llm_provider: [
+      {
+        id: "custom-openai",
+        builtin_key: null,
+        protocol: "openai",
+        base_url: "https://api.example.com/v1",
+        display_name: "Custom OpenAI",
+        secret_ref: "sksp:custom-openai-key",
+        headers_json: "{}",
+        is_builtin: 0,
+        created_at_ms: NOW_MS,
+        updated_at_ms: NOW_MS,
+      },
+    ],
+    llm_saved_model: [
+      {
+        id: TEST_SAVED_MODEL_ID,
+        provider_id: "custom-openai",
+        vendor_model_id: "gpt-test",
+        model_name: "GPT Test",
+        settings_json: '{"temperature":0.7}',
+        created_at_ms: NOW_MS,
+        updated_at_ms: NOW_MS,
+      },
+    ],
+    sksp_secrets: [
+      {
+        ref: "sksp:custom-openai-key",
+        ciphertext: new Uint8Array([1, 2, 3, 4]),
+        iv: new Uint8Array([5, 6, 7, 8]),
+        algo: "aes-gcm",
+        version: 1,
+        updated_at_ms: NOW_MS,
+      },
+    ],
+  };
+}
+
 describe("provider-table-snapshot", () => {
   it("DB-1: scrub 后三张服务商表行数为 0", async () => {
     const conn = await openMemoryDb();
@@ -239,6 +281,103 @@ describe("provider-table-snapshot", () => {
     } finally {
       await source.close();
       await target.close();
+    }
+  });
+});
+
+describe("restoreProviderTableSnapshot 校验闸门 (T-SC12)", () => {
+  it("T-SC12a：非法 protocol 被拒，主库未被 scrub", async () => {
+    const conn = await openMemoryDb();
+    try {
+      await seedTestProviderData(conn);
+      const before = await countProviderRows(conn);
+
+      const snapshot = buildValidSnapshot();
+      (snapshot.llm_provider[0]! as Record<string, unknown>).protocol =
+        "unknown-protocol";
+
+      await assert.rejects(
+        () => restoreProviderTableSnapshot(conn, snapshot),
+        (err: unknown) => {
+          assert.ok(err instanceof ProviderTableSnapshotError);
+          assert.equal(err.code, "INVALID_PROVIDER_ROW");
+          assert.equal(err.table, "llm_provider");
+          return true;
+        },
+      );
+      // 校验在事务外抛错，主库行数应保持原样
+      assert.equal(await countProviderRows(conn), before);
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("T-SC12b：空 display_name 被拒", async () => {
+    const conn = await openMemoryDb();
+    try {
+      const snapshot = buildValidSnapshot();
+      (snapshot.llm_provider[0]! as Record<string, unknown>).display_name =
+        "   ";
+      await assert.rejects(
+        () => restoreProviderTableSnapshot(conn, snapshot),
+        (err: unknown) => {
+          assert.ok(err instanceof ProviderTableSnapshotError);
+          assert.equal(err.code, "INVALID_PROVIDER_ROW");
+          return true;
+        },
+      );
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("T-SC12c：saved_model 悬空 provider_id 被拒", async () => {
+    const conn = await openMemoryDb();
+    try {
+      const snapshot = buildValidSnapshot();
+      (snapshot.llm_saved_model[0]! as Record<string, unknown>).provider_id =
+        "nonexistent-provider";
+      await assert.rejects(
+        () => restoreProviderTableSnapshot(conn, snapshot),
+        (err: unknown) => {
+          assert.ok(err instanceof ProviderTableSnapshotError);
+          assert.equal(err.code, "DANGLING_SAVED_MODEL");
+          assert.equal(err.table, "llm_saved_model");
+          return true;
+        },
+      );
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("T-SC12d：sksp_secrets 缺 ciphertext 被拒", async () => {
+    const conn = await openMemoryDb();
+    try {
+      const snapshot = buildValidSnapshot();
+      delete (snapshot.sksp_secrets[0]! as Record<string, unknown>).ciphertext;
+      await assert.rejects(
+        () => restoreProviderTableSnapshot(conn, snapshot),
+        (err: unknown) => {
+          assert.ok(err instanceof ProviderTableSnapshotError);
+          assert.equal(err.code, "INVALID_SECRET_ROW");
+          return true;
+        },
+      );
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("T-SC12e：合法快照仍能正常 restore", async () => {
+    const conn = await openMemoryDb();
+    try {
+      await scrubProviderTables(conn);
+      const snapshot = buildValidSnapshot();
+      await restoreProviderTableSnapshot(conn, snapshot);
+      assert.ok((await countProviderRows(conn)) > 0);
+    } finally {
+      await conn.close();
     }
   });
 });
