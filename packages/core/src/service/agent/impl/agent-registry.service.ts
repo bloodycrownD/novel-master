@@ -94,6 +94,14 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     if (!(await this.deps.repository.exists(agentId))) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
     }
+    // built-in general 不可删除（子智能体名单兜底依赖它）
+    const def = await this.deps.repository.get(agentId);
+    if (def?.name === DEFAULT_SUBAGENT_DEFINITION.name) {
+      throw new AgentConfigError(
+        "INVALID_SCHEMA",
+        `内置 agent "${DEFAULT_SUBAGENT_DEFINITION.name}" 不可删除`,
+      );
+    }
     await this.deps.repository.delete(agentId);
     if (this.deps.state) {
       const current = await this.deps.state.getCurrentAgentId();

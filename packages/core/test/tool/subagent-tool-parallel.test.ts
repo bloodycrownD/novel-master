@@ -18,7 +18,6 @@ import type { SessionService } from "@/service/chat/session.port.js";
 const generalDef: AgentDefinition = {
   name: "general",
   prompts: { persist: [], dynamic: [] },
-  subagentCallable: true,
 };
 
 interface SetupOpts {

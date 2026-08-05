@@ -23,13 +23,11 @@ import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 const generalDef: AgentDefinition = {
   name: "general",
   prompts: { persist: [], dynamic: [] },
-  subagentCallable: true,
 };
 
 const nonCallableDef: AgentDefinition = {
   name: "writer",
   prompts: { persist: [], dynamic: [] },
-  subagentCallable: false,
 };
 
 /** 简化的 VfsService mock（仅满足 BuiltinToolContext 类型，不被实际调用）。 */
@@ -168,19 +166,18 @@ describe("subagent-tool / task", () => {
     assert.equal(childSessions[0]!.title, longPrompt.slice(0, 40));
   });
 
-  it("T-T3: subagentCallable=false 的 agent 被调用时抛 ToolError", async () => {
+  it("T-T3: 不在名单的 agent 被调用时不抛（运行时不再校验名单；名单由注册层管）", async () => {
+    // 新设计：subagentCallable 已移除，task 运行时只查 registry 找 agent，
+    // 找到就用（名单过滤在注册层 createSubagentTool description 拼装时完成）。
+    // nonCallableDef 在 registry 里存在 → 不抛错（runChildAgent 会走完整流程，
+    // 这里 mock 的 runChildAgent 会返回成功）。
     const { ctx } = makeMockSubagent({ defs: [nonCallableDef] });
     const tool = createSubagentTool([]);
-    await assert.rejects(
-      () =>
-        tool.run(
-          { description: "task", prompt: "p", subagentName: "writer" },
-          makeToolCtx(ctx),
-        ),
-      (err: unknown) =>
-        err instanceof ToolError &&
-        err.message.includes("未开启 subagentCallable"),
+    const result = await tool.run(
+      { description: "task", prompt: "p", subagentName: "writer" },
+      makeToolCtx(ctx),
     );
+    assert.ok(result, "registry 中存在的 agent 可被调用，不再需要 subagentCallable 校验");
   });
 
   it("T-T3: 不存在的 subagentName 抛 ToolError", async () => {

@@ -44,7 +44,6 @@ function bundleToDefinitions(
             },
           }
         : {}),
-      ...(entry.subagentCallable === true ? { subagentCallable: true } : {}),
       ...(entry.description != null && entry.description.trim().length > 0
         ? { description: entry.description }
         : {}),
@@ -89,7 +88,6 @@ export async function exportAgentsToFile(
       model?: string;
       runtime?: { maxSteps?: number };
       tools?: { allow?: string[]; deny?: string[] };
-      subagentCallable?: boolean;
       description?: string;
     };
     agents[agentId] = {
@@ -104,7 +102,6 @@ export async function exportAgentsToFile(
             },
           }
         : {}),
-      ...(entry.subagentCallable === true ? { subagentCallable: true } : {}),
       ...(entry.description != null && entry.description.trim().length > 0
         ? { description: entry.description }
         : {}),

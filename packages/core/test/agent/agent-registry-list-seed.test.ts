@@ -16,13 +16,12 @@ import {
 novelMasterTestFixture();
 
 describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
-  it("空 DB 时 list 包含虚拟 general（subagentCallable=false）", async () => {
+  it("空 DB 时 list 包含虚拟 general", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const defs = await registry.list();
     const general = defs.find((d) => d.name === "general");
     assert.ok(general, "list 必须包含虚拟 general");
-    assert.equal(general!.subagentCallable, false);
     assert.ok(
       general!.description != null && general!.description.length > 0,
       "虚拟 general 应带有 description，供 task 工具展示",
@@ -68,7 +67,6 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
           schemaVersion: 1,
           name: "general",
           prompts: { persist: {}, dynamic: {} },
-          subagentCallable: true,
         },
         agentDefinitionSchema,
       ),
@@ -76,7 +74,6 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     const defs = await registry.list();
     const generals = defs.filter((d) => d.name === "general");
     assert.equal(generals.length, 1, "list 不应返回重复 general");
-    assert.equal(generals[0]!.subagentCallable, true, "DB 版本优先");
   });
 
   it("list 同时返回 DB 已有 agent + 虚拟 general", async () => {

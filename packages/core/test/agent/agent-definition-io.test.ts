@@ -115,45 +115,22 @@ prompts:
     assert.equal(parsed.success, false);
   });
 
-  it("T-C1a: subagentCallable=true 走 definitionToDocument → documentToDefinition 往返不丢字段", () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "callable",
-        prompts: { persist: {}, dynamic: {} },
-        subagentCallable: true,
-      },
-      agentDefinitionSchema,
-    );
-    assert.equal(def.subagentCallable, true);
-    const doc = encode(def, agentDefinitionSchema) as {
-      subagentCallable?: boolean;
-    };
-    assert.equal(doc.subagentCallable, true);
-    const again = decode(doc, agentDefinitionSchema);
-    assert.equal(again.subagentCallable, true);
-  });
-
-  it("T-C1b: 缺省 subagentCallable 读回 undefined（语义等价 false），且 definitionToDocument 不写出该 key", () => {
+  it("T-C1: 废弃的 subagentCallable 字段被 preprocess silently strip（不炸）", () => {
+    // subagentCallable 已移除；老数据如果带这个字段，preprocess silently strip。
     const def = decode(
       {
         schemaVersion: 1,
         name: "legacy",
         prompts: { persist: {}, dynamic: {} },
+        subagentCallable: true,
       },
       agentDefinitionSchema,
     );
-    assert.equal(def.subagentCallable, undefined);
+    assert.equal((def as { subagentCallable?: unknown }).subagentCallable, undefined);
     const doc = encode(def, agentDefinitionSchema) as {
-      subagentCallable?: boolean;
+      subagentCallable?: unknown;
     };
-    assert.equal(
-      doc.subagentCallable,
-      undefined,
-      "缺省时不应该写出 subagentCallable key",
-    );
-    const again = decode(doc, agentDefinitionSchema);
-    assert.equal(again.subagentCallable, undefined);
+    assert.equal(doc.subagentCallable, undefined);
   });
 
   it("T-D1a: description 走 definitionToDocument → documentToDefinition 往返不丢字段", () => {
@@ -210,21 +187,4 @@ prompts:
     assert.equal(doc.description, undefined);
   });
 
-  it("T-C1c: wire 显式 false 读回 undefined（按 false 语义），再次 encode 仍不写出", () => {
-    // 老文档可能显式写了 false；语义上等价缺省，encode 后不再写出。
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "explicit-false",
-        prompts: { persist: {}, dynamic: {} },
-        subagentCallable: false,
-      },
-      agentDefinitionSchema,
-    );
-    assert.equal(def.subagentCallable, undefined);
-    const doc = encode(def, agentDefinitionSchema) as {
-      subagentCallable?: boolean;
-    };
-    assert.equal(doc.subagentCallable, undefined);
-  });
 });

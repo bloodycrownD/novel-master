@@ -2,9 +2,8 @@ import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agen
 import type { ToolsMode } from "./agent-editor-state.js";
 
 /** Catalog of V2 builtin tools for Agent policy UI（与 FILE_TOOL_NAMES 同步）。 */
-// 注意：`task` 不进此 catalog（C20 反向决策，SPEC agent-subagent）：
-// task 由 `createSubagentTool` 工厂在 runAgentTurn 装配期动态注册，
-// `validateAgentToolPolicy` 内部白名单（与 FILE_TOOL_NAMES 并列常量）允许用户配 task。
+// `task` 不进此 catalog：它由全局子智能体名单驱动，装配期按需注册，
+// 不是用户可在 tools.allow/deny 里配置的工具。
 export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   readonly name: string;
   readonly label: string;

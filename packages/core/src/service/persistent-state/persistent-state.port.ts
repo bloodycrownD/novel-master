@@ -38,9 +38,17 @@ export interface PersistentState {
   resetCurrentRegexGroupId(): Promise<void>;
 
   /**
-   * 当前 Agent 指针；实体删除由 {@link import("@/service/agent/agent-registry.port.js").AgentRegistryService} 维护。
+   * 当前 Agent 指针；实体删除由 {@link import("../../service/agent/agent-registry.port.js").AgentRegistryService} 维护。
    */
   getCurrentAgentId(): Promise<string | undefined>;
   setCurrentAgentId(id: string): Promise<void>;
   resetCurrentAgentId(): Promise<void>;
+
+  /**
+   * 全局子智能体名单（agent name 数组）；task 工具仅调用名单中的 agent。
+   * 缺省返回空数组（core 层合并 `general` 兜底）。
+   */
+  getSubagentNames(): Promise<readonly string[]>;
+  setSubagentNames(names: readonly string[]): Promise<void>;
+  resetSubagentNames(): Promise<void>;
 }

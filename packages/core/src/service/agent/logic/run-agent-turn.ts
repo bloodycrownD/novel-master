@@ -107,6 +107,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly sessionKkv: SessionKkvService;
   readonly state: AgentRunRuntimePort["state"] & {
     getCurrentRegexGroupId(): Promise<string | null | undefined>;
+    getSubagentNames(): Promise<readonly string[]>;
   };
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
@@ -365,11 +366,19 @@ export async function runAgentTurn(
     registeredToolNames: toolProbe.list(),
   });
 
-  // 装配 task 工具：先查 registry 拿 subagentCallable=true 的 agent（名字 + 描述），
-  // 再 createSubagentTool 注册。description 拼上该列表让模型知道有哪些子 agent 能调及其擅长什么。
+  // 装配 task 工具：读全局子智能体名单（PersistentState KKV），
+  // 查 registry 拿对应描述，拼进 task description 让模型知道能调哪些子 agent。
+  // general 兜底：名单空时自动合并 ["general"]。
   // probe 不含 task（避免 validate 误判），本 registry 才含 task。
-  const subagentCallableAgents = (await runtime.agentRegistry.list())
-    .filter((d) => d.subagentCallable === true)
+  const subagentNamesRaw = await runtime.state.getSubagentNames();
+  const subagentNameSet = new Set(subagentNamesRaw);
+  subagentNameSet.add("general"); // built-in 兜底
+  subagentNameSet.delete(definition.name); // 排除自己防自递归
+  const allDefs = await runtime.agentRegistry.list();
+  const defByName = new Map(allDefs.map((d) => [d.name, d]));
+  const subagentCallableAgents = [...subagentNameSet]
+    .map((name) => defByName.get(name))
+    .filter((d): d is AgentDefinition => d != null)
     .map((d) => ({ name: d.name, description: d.description }));
   if (subagentCallableAgents.length > 0) {
     registerSubagentTool(toolProbe, subagentCallableAgents);
@@ -511,8 +520,15 @@ async function runChildAgent(args: {
   const baseRegistry = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(baseRegistry);
   if (childDepth < 2) {
-    const callableAgents = (await runtime.agentRegistry.list())
-      .filter((d) => d.subagentCallable === true)
+    const subagentNamesRaw = await runtime.state.getSubagentNames();
+    const subagentNameSet = new Set(subagentNamesRaw);
+    subagentNameSet.add("general");
+    subagentNameSet.delete(def.name);
+    const allDefs = await runtime.agentRegistry.list();
+    const defByName = new Map(allDefs.map((d) => [d.name, d]));
+    const callableAgents = [...subagentNameSet]
+      .map((name) => defByName.get(name))
+      .filter((d): d is AgentDefinition => d != null)
       .map((d) => ({ name: d.name, description: d.description }));
     if (callableAgents.length > 0) {
       registerSubagentTool(baseRegistry, callableAgents);

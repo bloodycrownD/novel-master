@@ -17,19 +17,6 @@ const LEGACY_TOOL_MIGRATION: Readonly<Record<string, string>> = {
   list: "fs (ls / ls -r)",
 };
 
-/**
- * 内置已知名白名单（与 {@link FILE_TOOL_NAMES} 并列）：不依赖 probe 注册。
- *
- * `task` 由 `createSubagentTool` 工厂在 `runAgentTurn` 装配期动态注册，
- * `validateAgentDefinition` 用的 probe（`new ToolRegistry(); registerBuiltinTools(probe)`）
- * 不含 `task`。若不加入白名单，用户配 `tools.allow: ["task"]` 会被
- * `INVALID_TOOL_POLICY` 拒掉（P1-9）。
- */
-const BUILTIN_KNOWN_TOOL_NAMES: ReadonlySet<string> = new Set<string>([
-  ...FILE_TOOL_NAMES,
-  "task",
-]);
-
 function migrationHint(raw: string): string | undefined {
   const normalized = normalizeAgentToolPolicyName(raw);
   return LEGACY_TOOL_MIGRATION[normalized];
@@ -42,10 +29,6 @@ function assertKnownNames(
 ): void {
   for (const raw of names) {
     const name = normalizeAgentToolPolicyName(raw);
-    // 内置白名单优先（task 等不在 probe 里的工具名）：P1-9。
-    if (BUILTIN_KNOWN_TOOL_NAMES.has(name)) {
-      continue;
-    }
     if (!registryNames.has(name)) {
       const hint = migrationHint(raw);
       const v2List = FILE_TOOL_NAMES.join(", ");

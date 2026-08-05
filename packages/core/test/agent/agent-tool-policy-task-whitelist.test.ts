@@ -14,21 +14,22 @@ function vfsRegistryNames(): Set<string> {
   return new Set(registry.list());
 }
 
-describe("validateAgentToolPolicy task 白名单（T-C4 / P1-9）", () => {
+describe("validateAgentToolPolicy task 不再特殊白名单（T-C4 修订）", () => {
   const registryNames = vfsRegistryNames();
 
-  it("tools.allow 含 task 不报错（task 在内置白名单，不依赖 probe 注册）", () => {
-    // probe 不含 task（仅 vfs 6 件），但允许配置 task。
-    assert.equal(
-      validateAgentToolPolicy({ allow: ["task"] }, registryNames),
-      undefined,
+  it("tools.allow 含 task 报 INVALID_TOOL_POLICY（task 不再是用户可配工具）", () => {
+    assert.throws(
+      () => validateAgentToolPolicy({ allow: ["task"] }, registryNames),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
     );
   });
 
-  it("tools.deny 含 task 不报错", () => {
-    assert.equal(
-      validateAgentToolPolicy({ deny: ["task"] }, registryNames),
-      undefined,
+  it("tools.deny 含 task 报 INVALID_TOOL_POLICY", () => {
+    assert.throws(
+      () => validateAgentToolPolicy({ deny: ["task"] }, registryNames),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
     );
   });
 
@@ -40,12 +41,9 @@ describe("validateAgentToolPolicy task 白名单（T-C4 / P1-9）", () => {
     );
   });
 
-  it("tools.allow 同时含 task 和 vfs 工具正常", () => {
+  it("tools.allow 只含 vfs 工具正常", () => {
     assert.equal(
-      validateAgentToolPolicy(
-        { allow: ["task", "read", "grep"] },
-        registryNames,
-      ),
+      validateAgentToolPolicy({ allow: ["read", "grep"] }, registryNames),
       undefined,
     );
   });

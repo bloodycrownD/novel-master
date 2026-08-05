@@ -14,7 +14,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
  * 虚拟 `general` subagent：全部注册工具可用，禁止递归（递归基线）。
  *
  * `model` 不 pin，运行时跟随父 agent；`tools` 为 `undefined` 表示全部
- * 注册工具可用；`subagentCallable=false` 防止 `task` 工具递归派生。
+ * 注册工具可用。
  */
 export const DEFAULT_SUBAGENT_DEFINITION: AgentDefinition = {
   name: "general",
@@ -26,5 +26,4 @@ export const DEFAULT_SUBAGENT_DEFINITION: AgentDefinition = {
     dynamic: [],
   },
   tools: undefined,
-  subagentCallable: false,
 };

@@ -27,6 +27,4 @@ export interface AgentDefinition {
   };
   /** Optional tool allow/deny policy (default: all registered tools). */
   readonly tools?: AgentToolPolicy;
-  /** 是否可被 `task` 工具调用为子代理；缺省按 `false` 处理（递归基线）。 */
-  readonly subagentCallable?: boolean;
 }

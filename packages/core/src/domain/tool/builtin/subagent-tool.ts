@@ -147,16 +147,8 @@ ${list}
         throw new ToolError(
           "FAILED",
           `未找到名为 "${input.subagentName}" 的子代理；可选：${defs
-            .filter((d) => d.subagentCallable === true)
             .map((d) => d.name)
             .join(", ") || "（暂无）"}`,
-          { toolName: "task" },
-        );
-      }
-      if (def.subagentCallable !== true) {
-        throw new ToolError(
-          "FAILED",
-          `子代理 "${input.subagentName}" 未开启 subagentCallable，不能被 task 调用`,
           { toolName: "task" },
         );
       }

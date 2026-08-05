@@ -136,8 +136,6 @@ export const agentDefinitionDocumentSchema = z
       .strict()
       .optional(),
     tools: agentToolPolicyDocumentSchema.optional(),
-    /** wire：缺省按 `false` 处理（递归基线）；仅在为 `true` 时写出，保持 wire 干净。 */
-    subagentCallable: z.boolean().optional(),
   })
   .strict();
 
@@ -197,7 +195,6 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
     model: doc.model,
     runtime: doc.runtime,
     ...(tools != null ? { tools } : {}),
-    ...(doc.subagentCallable === true ? { subagentCallable: true } : {}),
   };
 }
 
@@ -243,12 +240,21 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
           },
         }
       : {}),
-    ...(def.subagentCallable === true ? { subagentCallable: true } : {}),
   };
 }
 
 const agentDefinitionWireSchema = z.preprocess((raw) => {
   assertNoLegacyAgentFields(raw);
+  // silently strip 已废弃的 subagentCallable（strict schema 会拒未知字段）
+  if (
+    raw != null &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    "subagentCallable" in raw
+  ) {
+    const { subagentCallable: _omit, ...rest } = raw as Record<string, unknown>;
+    return rest;
+  }
   return raw;
 }, agentDefinitionDocumentSchema);
 
