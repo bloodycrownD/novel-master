@@ -22,6 +22,11 @@ export interface ToolCallView {
   readonly status: ToolCallStatus;
   readonly resultContent?: string;
   readonly summary?: string;
+  /**
+   * 子代理会话 id：`task` 工具产生的 tool_result 会带上 meta.subagentSessionId，
+   * 这里从 result.meta 读出来供工具卡片点击跳转子会话只读浏览（对称 vfsToolFilePath）。
+   */
+  readonly subagentSessionId?: string;
 }
 
 export interface MessageListItem {
@@ -174,6 +179,7 @@ export function toolCallViewFromUse(
       status: 'pending',
     };
   }
+  const subagentSessionId = result.meta?.subagentSessionId;
   return {
     toolUseId: use.id,
     name: use.name,
@@ -181,6 +187,9 @@ export function toolCallViewFromUse(
     status: toolStatusFromResult(result),
     resultContent: result.content,
     ...(result.summary != null ? { summary: result.summary } : {}),
+    ...(typeof subagentSessionId === 'string' && subagentSessionId.length > 0
+      ? { subagentSessionId }
+      : {}),
   };
 }
 
@@ -382,6 +391,9 @@ export function buildTranscriptRows(
               status: t.status,
               resultContent: t.resultContent,
               ...(t.summary != null ? { summary: t.summary } : {}),
+              ...(t.subagentSessionId != null
+                ? { subagentSessionId: t.subagentSessionId }
+                : {}),
             })),
           }
         : {}),
