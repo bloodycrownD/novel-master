@@ -67,6 +67,8 @@ export type AgentEditorFormInput = {
   customAttachText?: string;
   /** 是否可被 `task` 工具调用为子代理（与域 `subagentCallable` 对应，缺省按 false）。 */
   subagentCallable?: boolean;
+  /** 人类可读的 agent 描述（与域 `description` 对应；多行文本，空则 omit）。 */
+  description?: string;
   persist: readonly EditorPersistPromptBlock[];
   dynamic: readonly DynamicPromptBlock[];
 };
@@ -443,6 +445,7 @@ export function definitionToForm(
   | "customAttachEnabled"
   | "customAttachText"
   | "subagentCallable"
+  | "description"
   | "persist"
   | "dynamic"
 > {
@@ -461,6 +464,7 @@ export function definitionToForm(
     customAttachEnabled: layoutHasCustomAttach(def.prompts),
     customAttachText,
     subagentCallable: def.subagentCallable === true,
+    description: def.description ?? "",
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
   };
@@ -527,6 +531,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     customAttachEnabled: input.customAttachEnabled ?? false,
     customAttachText: input.customAttachText ?? "",
     subagentCallable: input.subagentCallable === true,
+    description: input.description ?? "",
     persist: input.persist,
     dynamic: input.dynamic,
   });
@@ -574,6 +579,7 @@ export function buildAgentDefinitionFromForm(
     }
     modelPin = trimmed;
   }
+  const descriptionText = (input.description ?? "").trim();
   const def: AgentDefinition = {
     name: input.name.trim(),
     prompts: validatedLayout,
@@ -583,6 +589,7 @@ export function buildAgentDefinitionFromForm(
     ...(modelPin != null ? { model: modelPin } : {}),
     ...(tools != null ? { tools } : {}),
     ...(input.subagentCallable === true ? { subagentCallable: true } : {}),
+    ...(descriptionText.length > 0 ? { description: descriptionText } : {}),
   };
   return { ok: true, definition: def };
 }
