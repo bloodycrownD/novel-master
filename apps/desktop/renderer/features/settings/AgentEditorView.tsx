@@ -118,6 +118,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [customAttachText, setCustomAttachText] = useState("");
   // 是否可被 task 工具调用为子代理（对应域 subagentCallable）。
   const [subagentCallable, setSubagentCallable] = useState(false);
+  // 人类可读的 agent 描述（对应域 description，多行文本）。
+  const [description, setDescription] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -162,6 +164,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         customAttachEnabled,
         customAttachText,
         subagentCallable,
+        description,
         persist,
         dynamic,
       }),
@@ -182,6 +185,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       customAttachEnabled,
       customAttachText,
       subagentCallable,
+      description,
       persist,
       dynamic,
     ]
@@ -252,6 +256,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setCustomAttachEnabled(promptForm.customAttachEnabled);
       setCustomAttachText(promptForm.customAttachText);
       setSubagentCallable(promptForm.subagentCallable === true);
+      setDescription(promptForm.description ?? "");
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -438,6 +443,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       customAttachEnabled,
       customAttachText,
       subagentCallable,
+      description,
       persist,
       dynamic,
     });
@@ -651,6 +657,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               onChange={(e) => setName(e.target.value)}
             />
           </SettingsField>
+          <SettingsField label="描述">
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="向 task 工具说明这个 agent 擅长什么，可留空。"
+            />
+          </SettingsField>
+          <p className="settings-hint settings-hint--compact">
+            用于在 task 工具中向主代理介绍本 agent 的能力。
+          </p>
         </SettingsSection>
 
         <SettingsSection title="模型">
