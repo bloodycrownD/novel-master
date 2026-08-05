@@ -135,6 +135,8 @@ export const agentDefinitionDocumentSchema = z
       .strict()
       .optional(),
     tools: agentToolPolicyDocumentSchema.optional(),
+    /** wire：缺省按 `false` 处理（递归基线）；仅在为 `true` 时写出，保持 wire 干净。 */
+    subagentCallable: z.boolean().optional(),
   })
   .strict();
 
@@ -191,6 +193,7 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
     model: doc.model,
     runtime: doc.runtime,
     ...(tools != null ? { tools } : {}),
+    ...(doc.subagentCallable === true ? { subagentCallable: true } : {}),
   };
 }
 
@@ -233,6 +236,7 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
           },
         }
       : {}),
+    ...(def.subagentCallable === true ? { subagentCallable: true } : {}),
   };
 }
 
