@@ -227,6 +227,8 @@ export type SessionDto = {
   readonly id: string;
   readonly projectId: string;
   readonly title: string | null;
+  /** 父会话 id；task 工具派生的子会话挂主会话 id，顶层会话为 null。 */
+  readonly parentSessionId: string | null;
   readonly createdAtMs: number;
   readonly updatedAtMs: number;
 };
@@ -616,6 +618,8 @@ export type ContentBlockDto =
       readonly content: string;
       readonly ok?: boolean;
       readonly summary?: string;
+      /** UI-only 旁路字段；task 工具携带 `subagentSessionId` 供卡片跳转子会话。 */
+      readonly meta?: { readonly subagentSessionId?: string };
     };
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
