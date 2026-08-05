@@ -106,6 +106,7 @@
   "scripts": {
     "lint": "eslint src test",
     "build": "tsc --build tsconfig.json --force && tsc-alias -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "rebuild": "npm run clean && npm run build",
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
