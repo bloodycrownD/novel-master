@@ -11,7 +11,10 @@ export type SessionFsErrorCode =
   | "ROLLBACK_NO_CHECKPOINT"
   | "RESTORE_REVISION_MISSING"
   | "ROLLBACK_VFS_RESTORE_FAILED"
-  | "ROLLBACK_REVISION_BACKFILL_REQUIRED";
+  | "ROLLBACK_REVISION_BACKFILL_REQUIRED"
+  // S-13 护栏：undo_send 解析出的 targetTree 为空时拒绝删除，
+  // 避免在缺少 baseline checkpoint 的纯文本 chat 路径上把整个会话工作区删光。
+  | "ROLLBACK_UNDO_SEND_EMPTY_TARGET";
 
 /**
  * Unified error for session-fs rollback operations.
@@ -117,6 +120,22 @@ export function sessionFsRollbackNoCheckpoint(
     "ROLLBACK_NO_CHECKPOINT",
     "该消息无回滚点",
     { messageId, sessionId },
+  );
+}
+
+/**
+ * undo_send 的 targetTree 经过 prior + anchor 两轮兜底后仍为空，
+ * 继续删除会把当前会话工作区整体清掉。这里抛错让上层走「仅截断消息」的
+ * 降级路径（skipVfsReconcile），或提示用户该会话缺少 baseline 快照。
+ */
+export function sessionFsRollbackUndoSendEmptyTarget(
+  sessionId: string,
+  messageId: string,
+): SessionFsError {
+  return new SessionFsError(
+    "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
+    "undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区",
+    { sessionId, messageId },
   );
 }
 

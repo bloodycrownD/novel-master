@@ -38,6 +38,7 @@ import {
   sessionFsRollbackMessageSessionMismatch,
   sessionFsRollbackRevisionBackfillRequired,
   sessionFsRollbackVfsRestoreFailed,
+  sessionFsRollbackUndoSendEmptyTarget,
   isSessionFsError,
 } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
@@ -112,6 +113,19 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       projectId,
       anchorMessageId,
     );
+
+    // S-13 护栏：undo_send 解析出的 targetTree 为空意味着没有 baseline 快照可对齐，
+    // 一旦进入 reconcileVfsPaths 会把 live 树里所有路径都当「需删除」处理——
+    // 这正是纯文本 chat 路径「聊一轮再 undo_send」把整个会话工作区删光的根因。
+    // 仅当确实要 reconcile VFS 时才拦；skipVfsReconcile 只截断消息、不碰文件，
+    // 空 targetTree 不会造成破坏，仍然放行（例如 DF-U1 的降级回滚）。
+    if (
+      !options?.skipVfsReconcile &&
+      plan.mode === "undo_send" &&
+      plan.targetTree.size === 0
+    ) {
+      throw sessionFsRollbackUndoSendEmptyTarget(sessionId, anchorMessageId);
+    }
 
     if (!options?.skipVfsReconcile) {
       const missing = await findMissingRevisionPointers(
@@ -205,7 +219,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           targetTree = anchorTree;
         }
       }
-      // undo_send 始终按 prior 基线 diff 当前工作区（空树 = 删光会话文件）
+      // undo_send 始终按 prior 基线 diff 当前工作区。空 targetTree 历史上意味着
+      // 「删光会话文件」，但 S-13 护栏已在 rollbackToMessage 拦住空 targetTree 的
+      // reconcile 调用，避免误删；这里保持 hasDirectTargetTree 语义不变。
       hasDirectTargetTree = true;
     } else {
       const directTargetTree = await this.deps.checkpoints.loadFileTree(

@@ -15,6 +15,7 @@ export {
   sessionFsRollbackMessageSessionMismatch,
   sessionFsRollbackNoCheckpoint,
   sessionFsRollbackRevisionBackfillRequired,
+  sessionFsRollbackUndoSendEmptyTarget,
   sessionFsRollbackVfsRestoreFailed,
 } from "../errors/session-fs-errors.js";
 export type { SessionFsErrorCode } from "../errors/session-fs-errors.js";

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
+import { isSessionFsError } from "@novel-master/core/session-fs";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
@@ -83,7 +84,7 @@ describe("rollbackToMessage", () => {
     assert.equal(messages[1]!.id, assistant1.id);
   });
 
-  it("plain user undo_send 删除锚点并移除后续 assistant 写入", async () => {
+  it("plain user undo_send 无 baseline 时护栏拒绝删光工作区", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -100,14 +101,19 @@ describe("rollbackToMessage", () => {
       blocks: [{ type: "text", text: "thanks" }],
     });
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
-
-    await assert.rejects(() => svfs.read("/poem.md"));
+    // S-13 护栏：user1 首条 plain user，prior 与 anchor 均无 baseline 快照，
+    // targetTree 为空 → 拒绝 reconcile，保留 /poem.md 与现有消息。
+    await assert.rejects(
+      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      (error: unknown) =>
+        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+    );
+    assert.equal((await svfs.read("/poem.md")).content, "draft");
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 0);
+    assert.equal(messages.length, 4);
   });
 
-  it("plain user undo_send 无 prior 时纯文本 tail 删锚点并清空工作区", async () => {
+  it("plain user undo_send 无 prior 时护栏拒绝清空工作区", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -120,11 +126,15 @@ describe("rollbackToMessage", () => {
     });
     await ctx.messages.append(session.id, "user", textBlocks("bye"));
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
-
-    await assert.rejects(() => svfs.read("/keep.md"));
+    // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝删除。
+    await assert.rejects(
+      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      (error: unknown) =>
+        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+    );
+    assert.equal((await svfs.read("/keep.md")).content, "stable");
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 0);
+    assert.equal(messages.length, 3);
   });
 
   it("deleteAfterSeq removes only higher seq", async () => {
@@ -143,7 +153,9 @@ describe("rollbackToMessage", () => {
     assert.equal(left[0]!.id, m1.id);
   });
 
-  it("rollback 成功截断消息", async () => {
+  it("rollback 默认路径首条 plain user 被护栏拦截", async () => {
+    // 与下一条 skipVfsReconcile 用例呼应：首条 plain user 无 baseline 时，
+    // 默认 reconcile 路径会被 S-13 护栏拦下；要走「仅截断」需显式降级。
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -154,7 +166,13 @@ describe("rollbackToMessage", () => {
       blocks: [{ type: "text", text: "bye" }],
     });
 
-    await rollback.rollbackToMessage(session.id, project.id, user1.id);
+    await assert.rejects(
+      () => rollback.rollbackToMessage(session.id, project.id, user1.id),
+      (error: unknown) =>
+        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+    );
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 2);
   });
 
   it("skipVfsReconcile 截断消息", async () => {

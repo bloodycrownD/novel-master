@@ -10,5 +10,6 @@
   "sessionFsRollbackMessageSessionMismatch",
   "sessionFsRollbackNoCheckpoint",
   "sessionFsRollbackRevisionBackfillRequired",
+  "sessionFsRollbackUndoSendEmptyTarget",
   "sessionFsRollbackVfsRestoreFailed"
 ]
