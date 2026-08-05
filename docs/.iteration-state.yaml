@@ -1,39 +1,98 @@
-# 聊天记录查询迭代 — code-dev-loop 编排状态
-# 本文件记录 DAG / wave / node_status，不属 apm dynamic。
+# agent-subagent 迭代编排状态（code-dev-loop）
+# 维护方：主代理；子代理只读参考
 
-spec_path: docs/Iterations/chat-history-search/spec.md
-prd_path: docs/Iterations/chat-history-search/prd.md
-branch: feat/chat-history-search
-base_sha: 8799c6d2
-head_sha: ce3d448f
+spec_path: docs/Iterations/agent-subagent/spec.md
+prd_path: docs/Iterations/agent-subagent/prd.md
+worktree: D:/Dev/Js/novel-master/.worktree/agent-subagent
+branch: feat/agent-subagent
+base_sha: f09a5cdb
 
-dag_version: 9
+dag_version: 1
+current_wave: wave-0
+status: in-progress
+
+# 初始 DAG（含 cr-func 边）
+wave_plan:
+  - wave-0: [impl-m1-data, impl-agent-config]          # 并行，无文件冲突（chat vs agent 域）
+  - wave-1: [cr-func-wave0]                              # readonly 审查 wave-0
+  - wave-2: [impl-core-tool]                             # Step 7后半 + 9-15 core，大节点
+  - wave-3: [verify-core, cr-func-core]                 # core 验证 + 功能小检
+  - wave-4: [impl-config-ui, impl-ui-mobile, impl-ui-desktop, impl-cli-doc]  # 并行 4，无冲突
+  - wave-5: [cr-func-final]                              # 全量功能检查
 
 node_status:
-  impl-core-search: { status: done, head_sha: 0890ec44 }
-  verify-core: { status: done, note: '1692/1692 全绿（fix 后）' }
-  cr-func-core: { status: done, func_ready: yes }
-  fix-core-snapshot: { status: done, head_sha: 477b2d98 }
-  impl-desktop-ipc: { status: done, head_sha: 82274ec7 }
-  verify-desktop-ipc: { status: done, note: '无新增失败（2 个 main 基线遗留忽略）' }
-  cr-func-desktop-ipc: { status: done, func_ready: yes }
-  impl-desktop-ui: { status: done, head_sha: 6173bdfd }
-  verify-desktop-ui: { status: done, note: 'build:main 零报错; 9/9 T-DR1; 无新增失败' }
-  cr-func-desktop-ui: { status: done, func_ready: yes }
-  impl-mobile-full: { status: done, head_sha: c2c84abe }
-  verify-mobile: { status: done, note: 'typecheck 干净; 19/19 T-MO1~3; 零新增失败' }
-  cr-func-mobile: { status: done, func_ready: yes }
+  impl-m1-data: { status: pending, spec_steps: [1,2,3,4], blocking: yes }
+  impl-agent-config: { status: pending, spec_steps: [5,6,7-C18], blocking: yes }
+  cr-func-wave0: { status: pending }
+  impl-core-tool: { status: pending, spec_steps: [7后半-C19, 9,10,11,12,13,14,15-core], blocking: yes }
+  verify-core: { status: pending }
+  cr-func-core: { status: pending }
+  impl-config-ui: { status: pending, spec_steps: [8], blocking: no }
+  impl-ui-mobile: { status: pending, spec_steps: [15-mobile,16,17], blocking: no }
+  impl-ui-desktop: { status: pending, spec_steps: [15-desktop,16-desktop,18], blocking: no }
+  impl-cli-doc: { status: pending, spec_steps: [19], blocking: no }
+  cr-func-final: { status: pending }
 
 open_must_fix: []
-
 spec_deviations: []
 
-  # 迭代历史
-  fix-mobile-ui-redesign: { status: done, head_sha: cb605c5a, note: '第一版紧凑工具条（已被后续简化替代）' }
-  fix-mobile-ui-vscode-style: { status: done, head_sha: 5c088833, note: 'VSCode 风格 toggle（已被功能简化替代）' }
-  # 用户决定移除正则/大小写/时间范围，只保留关键词精准搜索
-  simplify-mobile: { status: done, head_sha: c7e78bb9, note: '移除筛选 toggle/返回按钮/datetimepicker；18/18' }
-  simplify-desktop: { status: done, head_sha: 4e067a59, note: '移除三态 UI/日期；15/15' }
-  simplify-core: { status: done, head_sha: ce3d448f, note: 'MessageSearchQuery 简化为 keyword/limit/beforeSeq；1687/1687' }
-
-status: dev-ready（功能简化完成，三层联调全绿）
+# 文件冲突矩阵（用于动态重编排时判断能否并行）
+scope_ownership:
+  impl-m1-data:
+    - packages/core/src/bootstrap/chat/chat-schema.ts
+    - packages/core/src/bootstrap/schema-align/schema-column-alignments.ts
+    - packages/core/src/bootstrap/novel-master-bootstrap.ts
+    - packages/core/src/domain/chat/model/session.ts
+    - packages/core/src/domain/chat/model/content-block.ts
+    - packages/core/src/domain/chat/content/parse-message-content.ts
+    - packages/core/src/domain/chat/repositories/session.port.ts
+    - packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts
+    - packages/core/src/service/chat/session.port.ts
+    - packages/core/src/service/chat/impl/session.service.ts
+  impl-agent-config:
+    - packages/core/src/domain/agent/model/agent-definition.ts
+    - packages/core/src/domain/agent/model/agent-definition.schema.ts
+    - packages/core/src/service/agent/default-subagent-definition.ts   # C18 新增
+    - apps/cli/src/agent/schemas/agents-bundle.schema.ts                # C21
+    - examples/agents.yaml                                              # C31
+  impl-core-tool:
+    - packages/core/src/domain/tool/builtin/subagent-tool.ts           # C16 新增
+    - packages/core/src/domain/tool/logic/subagent-tool-session-id.ts  # C17 新增
+    - packages/core/src/domain/tool/builtin/builtin-tool-context.ts    # C12
+    - packages/core/src/domain/tool/builtin/register-builtin-tools.ts  # C13
+    - packages/core/src/domain/tool/logic/build-tool-result-block.ts   # C32
+    - packages/core/src/domain/tool/logic/format-tool-output.ts        # C33
+    - packages/core/src/domain/agent/logic/resolve-agent-tool-registry.ts  # C11
+    - packages/core/src/domain/agent/logic/validate-agent-tool-policy.ts   # C13后半
+    - packages/core/src/service/agent/agent-registry.port.ts           # C19 list()
+    - packages/core/src/service/agent/impl/agent-registry.service.ts   # C19 list() 实现
+    - packages/core/src/service/agent/logic/run-agent-turn.ts          # C14
+    - packages/core/src/service/agent/impl/agent-runner.ts             # C34
+    - packages/core/src/config-forms/agent/agent-tool-catalog.ts
+    - apps/cli/src/runtime.ts                                          # C35
+    # desktop/mobile runtime 装配也涉及，但放 wave-4 UI 节点更合适
+  impl-config-ui:
+    - packages/core/src/config-forms/agent/agent-editor-state.ts       # C20
+    - apps/mobile/src/components/agent/AgentEditorForm.tsx             # C30
+    - apps/desktop/src/renderer/features/settings/AgentEditorView.tsx  # C30
+  impl-ui-mobile:
+    - apps/mobile/src/components/chat/message-blocks.ts                # C22
+    - apps/mobile/src/components/chat/ToolCallCard.tsx                 # C23
+    - apps/mobile/src/components/chat/ToolCallGroupCard.tsx            # C24
+    - apps/mobile/src/screens/tabs/chat-tab/ChatConversationPanel.tsx  # C24
+    - apps/mobile/src/screens/stack/SubagentSessionScreen.tsx          # C25 新增
+    - apps/mobile/src/navigation/types.ts                             # C25
+    - apps/mobile/src/navigation/RootNavigator.tsx                    # C25
+    - apps/mobile/src/runtime/                                        # C35 mobile runtime
+  impl-ui-desktop:
+    - apps/desktop/shared/ipc-types.ts                                # C29
+    - apps/desktop/src/main/ipc/handlers/sessions.ts                  # C29
+    - apps/desktop/src/main/ipc/handlers/messages.ts                  # C29
+    - apps/desktop/src/renderer/features/chat/message-blocks.ts       # C26
+    - apps/desktop/src/renderer/features/chat/ToolCallCard.tsx        # C27
+    - apps/desktop/src/renderer/features/chat/ConversationPanel.tsx   # C28
+    - apps/desktop/src/renderer/layout/ChatRail.tsx                   # C28
+    - apps/desktop/src/renderer/state/nav-workspace.ts                # C28
+    - apps/desktop/src/main/services/                                 # C35 desktop runtime
+  impl-cli-doc:
+    - docs/ （CLI 验收文档说明）

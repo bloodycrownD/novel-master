@@ -3,10 +3,10 @@
 # Phase 0 已完成，待用户确认进入 Phase 1。
 # 六阶段：phase1 横扫 → phase2 切片 → phase2.5 跨模块模式 → phase3 交叉 → phase4 综合 → phase5 fix-spec
 
-base_sha: 待记录（开跑 Phase 1 前填入）
+base_sha: 3166a96e7341a336177c1cb3d9b9d19b7303a003
 mode: global-cr
-current_phase: phase0-done
-dag_version: 1
+current_phase: done
+dag_version: 8
 
 # 切片模块清单（Phase 0 定稿，6 个切片）
 slice_modules:
@@ -32,64 +32,64 @@ lenses: [L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11]
 matrix:
   coverage:
     # phase1 横扫：每个角度扫全部模块（切片 + 横扫-only）
-    L1/sweep: pending   # 数据模型扫全部
-    L2/sweep: pending   # 算法扫全部
-    L3/sweep: pending   # 架构扫全部
-    L4/sweep: pending   # 错误处理扫全部
-    L5/sweep: pending   # 并发扫全部
-    L6/sweep: pending   # 跨端扫全部
-    L7/sweep: pending   # 测试扫全部
-    L8/sweep: pending   # API/安全扫全部（含包导出面 + 发版策略）
-    L9/sweep: pending   # 死代码扫全部（基于 knip 报告）
-    L10/sweep: pending  # 工程化基建一致性扫全部（tsconfig/ESLint/测试运行器/CI/Node engines）
-    L11/sweep: pending  # 文档与代码漂移扫全部（monorepo.md/examples/docs↔实现）
+    L1/sweep: done     # 数据模型扫全部
+    L2/sweep: done     # 算法扫全部（含构建性能）
+    L3/sweep: done     # 架构扫全部（含 monorepo 依赖图）
+    L4/sweep: done     # 错误处理扫全部
+    L5/sweep: done     # 并发扫全部
+    L6/sweep: done     # 跨端扫全部
+    L7/sweep: done     # 测试扫全部
+    L8/sweep: done     # API/安全扫全部（含包导出面 + 发版策略）
+    L9/sweep: done     # 死代码扫全部（基于 knip 报告）
+    L10/sweep: done    # 工程化基建一致性扫全部
+    L11/sweep: done    # 文档与代码漂移扫全部
     # phase2 切片：每切片综合所有角度
-    all/D2-vfs: pending
-    all/D2-chat-message: pending
-    all/D2-provider-llm: pending
-    all/D2-agent-tool: pending
-    all/D2-compaction: pending
-    all/D2-prompt: pending
+    all/D2-vfs: done
+    all/D2-chat-message: done
+    all/D2-provider-llm: done
+    all/D2-agent-tool: done
+    all/D2-compaction: done
+    all/D2-prompt: done
 
 node_status:
   D0-1: { status: done, doc: phase0/D0-1-code-map.md }
   D0-2: { status: done, doc: phase0/D0-2-docs-index.md }
   D0-3: { status: done, doc: phase0/D0-3-knip-scan.md, note: 'knip 6.31.0 全量扫描' }
-  D1-L1: { status: pending }
-  D1-L2: { status: pending }
-  D1-L3: { status: pending }
-  D1-L4: { status: pending }
-  D1-L5: { status: pending }
-  D1-L6: { status: pending }
-  D1-L7: { status: pending }
-  D1-L8: { status: pending }
-  D1-L9: { status: pending }
-  D1-L10: { status: pending }
-  D1-L11: { status: pending }
-  D2-vfs: { status: pending }
-  D2-chat-message: { status: pending }
-  D2-provider-llm: { status: pending }
-  D2-agent-tool: { status: pending }
-  D2-compaction: { status: pending }
-  D2-prompt: { status: pending }
+  D1-L1: { status: done, doc: phase1-lens/D1-01-data-model.md }
+  D1-L2: { status: done, doc: phase1-lens/D1-02-algorithm.md }
+  D1-L3: { status: done, doc: phase1-lens/D1-03-architecture.md }
+  D1-L4: { status: done, doc: phase1-lens/D1-04-error-txn.md }
+  D1-L5: { status: done, doc: phase1-lens/D1-05-concurrency.md }
+  D1-L6: { status: done, doc: phase1-lens/D1-06-cross-platform.md }
+  D1-L7: { status: done, doc: phase1-lens/D1-07-testing.md }
+  D1-L8: { status: done, doc: phase1-lens/D1-08-api-security.md }
+  D1-L9: { status: done, doc: phase1-lens/D1-09-dead-code.md }
+  D1-L10: { status: done, doc: phase1-lens/D1-10-build-infra.md }
+  D1-L11: { status: done, doc: phase1-lens/D1-11-doc-drift.md }
+  D2-vfs: { status: done, doc: phase2-slice/D2-vfs.md }
+  D2-chat-message: { status: done, doc: phase2-slice/D2-chat-message.md }
+  D2-provider-llm: { status: done, doc: phase2-slice/D2-provider-llm.md }
+  D2-agent-tool: { status: done, doc: phase2-slice/D2-agent-tool.md }
+  D2-compaction: { status: done, doc: phase2-slice/D2-compaction.md }
+  D2-prompt: { status: done, doc: phase2-slice/D2-prompt.md }
   # Phase 2.5: 跨模块模式识别（11 个角度各一份）
-  D2a-L1: { status: pending }
-  D2a-L2: { status: pending }
-  D2a-L3: { status: pending }
-  D2a-L4: { status: pending }
-  D2a-L5: { status: pending }
-  D2a-L6: { status: pending }
-  D2a-L7: { status: pending }
-  D2a-L8: { status: pending }
-  D2a-L9: { status: pending }
-  D2a-L10: { status: pending }
-  D2a-L11: { status: pending }
-  D3-1: { status: pending }
-  D3-2: { status: pending }
-  D4-1: { status: pending }
+  D2a-L1: { status: done, doc: phase2.5-pattern/D2a-L1-data-model.md }
+  D2a-L2: { status: done, doc: phase2.5-pattern/D2a-L2-algorithm.md }
+  D2a-L3: { status: done, doc: phase2.5-pattern/D2a-L3-architecture.md }
+  D2a-L4: { status: done, doc: phase2.5-pattern/D2a-L4-error-txn.md }
+  D2a-L5: { status: done, doc: phase2.5-pattern/D2a-L5-concurrency.md }
+  D2a-L6: { status: done, doc: phase2.5-pattern/D2a-L6-cross-platform.md }
+  D2a-L7: { status: done, doc: phase2.5-pattern/D2a-L7-testing.md }
+  D2a-L8: { status: done, doc: phase2.5-pattern/D2a-L8-api-security.md }
+  D2a-L9: { status: done, doc: phase2.5-pattern/D2a-L9-dead-code.md }
+  D2a-L10: { status: done, doc: phase2.5-pattern/D2a-L10-build-infra.md }
+  D2a-L11: { status: done, doc: phase2.5-pattern/D2a-L11-doc-drift.md }
+  D3-1: { status: done, doc: phase3-cross/D3-1-conflict-matrix.md }
+  D3-2: { status: done, doc: phase3-cross/D3-2-debt-register.md }
+  D4-1: { status: done, doc: phase4-synthesis/D4-1-executive-summary.md }
   # Phase 5: fix-spec 收敛
-  D5-1: { status: pending, note: 'spec-fix 子代理，分 wave：5a/5b/5c' }
-  D5-2: { status: pending }
+  D5-1: { status: done, doc: phase5-fix-spec/D5-1-fix-spec.md, note: 'spec-fix 子代理 wave 5a+5b，28 条全写入' }
+  D5-2: { status: done, doc: phase5-fix-spec/D5-2-closure.md }
 
 # Phase 0 关键发现摘要（供 phase1 各角度参考，避免重复扫描已确认清零的项）
 phase0_findings:
@@ -118,4 +118,4 @@ wave_plan:
   - phase4: [D4-1]  # 主代理亲自
   - phase5: [D5-1]  # spec-fix 子代理，按严重度分 wave（5a/5b/5c）
 
-status: Phase 0 已完成，待用户确认进入 Phase 1 角度横扫（六阶段 loop：1→2→2.5→3→4→5）
+status: CR 完成度 ready——六阶段全部 done（Phase 0→1→2→2.5→3→4→5），fix-spec-ready

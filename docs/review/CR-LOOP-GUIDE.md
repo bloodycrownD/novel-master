@@ -171,6 +171,50 @@ Phase 0 已完成侦察，模块清单已在 [`phase0/D0-2-docs-index.md`](phase
 | **4** | 综合 + 路线图 | D4-1 执行摘要 | — |
 | **5** | fix-spec 收敛 | D5-1 修复说明书、D5-2 Closure 表 | fix-spec-ready 门禁 |
 
+### 结构图：pipeline + 嵌套 loop
+
+整个 CR 是「有向 pipeline + 两层嵌套 loop」。大箭头是前向流动（不回头），虚线框里是各自独立收敛的 loop。唯一的跨阶段回流是 Phase 5 发现诊断不足时回派 Phase 1/2。
+
+```mermaid
+graph TD
+    P0[Phase 0 侦察 ✅ 已完成]
+    P1[Phase 1: 11 角度横扫<br/>11 份 D1-xx]
+    P2[Phase 2: 6 模块切片<br/>6 份 D2-xx]
+    P25[Phase 2.5: 跨模块模式识别<br/>11 份 D2a-Lxx]
+    P3[Phase 3: 冲突矩阵 + 债务登记<br/>D3-1 + D3-2]
+    P4[Phase 4: 综合 + 路线图<br/>D4-1]
+    P5[Phase 5: fix-spec 收敛<br/>D5-1 + D5-2]
+    READY[CR 完成度 ready]
+
+    P0 --> P1
+    P1 --> P2
+    P2 --> P25
+    P25 --> P3
+    P3 --> P4
+    P4 --> P5
+    P5 --> READY
+
+    subgraph loop1 [轻量 loop: Phase 1 角度内多轮]
+        L1a[浅扫标可疑点] --> L1b[深挖可疑点] --> L1c[逐模块细化]
+    end
+    loop1 -.-> P1
+
+    subgraph loop2 [轻量 loop: Phase 3 辩论式回派]
+        L2a[A 角度给论据] --> L2b[B 角度给论据] --> L2c[主代理裁决]
+        L2c -. 不收敛 .-> L2a
+    end
+    loop2 -.-> P3
+
+    subgraph loop3 [紧密收敛 loop: Phase 5 fix-spec-ready 门禁]
+        L3a[spec-fix 子代理写 fix-spec] --> L3b[主代理查覆盖率]
+        L3b -. not-ready .-> L3a
+        L3b -. ready .-> READY
+    end
+    loop3 -.-> P5
+
+    P5 -. 诊断不足、回派补查 .-> P1
+```
+
 ### 终态：CR 完成度 ready
 
 须同时满足：
