@@ -9,9 +9,11 @@ import {
   toolFailed,
   toolInvalidArgument,
   toolNotFound,
+  toolPathForbidden,
   type ToolError,
 } from "@/errors/tool-errors.js";
 import { classifyMutatingToolCall } from "./fs-command-classify.js";
+import { checkToolPathPolicy } from "./tool-path-policy.js";
 import type { ToolRegistry } from "./tool-registry.js";
 
 /** A single tool invocation for parallel dispatch. */
@@ -90,6 +92,14 @@ export class ToolRunner<Ctx = unknown> {
     const parsedIn = tool.inputSchema.safeParse(input);
     if (!parsedIn.success) {
       throw toolInvalidArgument(name, parsedIn.error.issues);
+    }
+
+    // A-14: path 白名单二次校验（schema 之后的第二道闸）。
+    // ctx 上没有 allowedPaths 时 checkToolPathPolicy 直接返回 null，
+    // 向后兼容，不影响现有调用方。
+    const disallowedPath = checkToolPathPolicy(parsedIn.data, ctx);
+    if (disallowedPath !== null) {
+      throw toolPathForbidden(name, disallowedPath);
     }
 
     try {

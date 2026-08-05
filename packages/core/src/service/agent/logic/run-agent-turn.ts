@@ -339,6 +339,10 @@ export async function runAgentTurn(
         listSessionMessages: (): Promise<readonly ChatMessage[]> =>
           runtime.messages.listBySession(scope.sessionId),
         sessionKkv: runtime.sessionKkv,
+        // A-14 path policy：三端共用走 runAgentTurn，这里统一不限制（undefined）；
+        // 后续若要按 platform / project 收紧，改成 resolveAllowedPaths(...) 即可。
+        allowedPaths: undefined,
+        resourceQuota: undefined,
       },
       includeCompactionOrchestrator: true,
     }),
