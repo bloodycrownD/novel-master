@@ -40,7 +40,7 @@ import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/r
  * 否则已升版库会走快路径而漏建表/漏补列。新增 schema migration 不必改此值
  * （快路径仍会执行 pending migration）。
  */
-export const SCHEMA_BOOT_VERSION = 3;
+export const SCHEMA_BOOT_VERSION = 4;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -98,6 +98,11 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     }
     const entryIdApplied = await runPendingSchemaMigrations(tx);
     await alignSchemaColumns(tx);
+    // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
+    // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
+    await tx.execute(
+      "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)",
+    );
     await seedBuiltinProviders(tx);
     _entryIdMigrationJustApplied = entryIdApplied;
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
