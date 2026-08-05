@@ -86,6 +86,82 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
   });
 
+  it("annotate chip：有 content 时显示原文片段而非路径；截断+省略号；content 为 null 回落路径", () => {
+    // content 含 originalText → chip 显示截断原文
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/note.md",
+        name: "/note.md",
+        source: "user_ops",
+        content:
+          '<action name="annotate">\n{"path":"/note.md","originalText":"短原文","userAnnotation":"说明"}\n</action>',
+      }),
+      "批注:短原文",
+    );
+    // 超长原文 → 截断 20 字 + 省略号
+    const long = "这是一段很长的划词原文内容超过二十个字符就会被截断掉哦";
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/note.md",
+        name: "/note.md",
+        source: "user_ops",
+        content:
+          '<action name="annotate">\n{"originalText":"' +
+          long +
+          '"}\n</action>',
+      }),
+      "批注:" + long.slice(0, 20) + "…",
+    );
+    // 多行原文 → 换行压空格
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/note.md",
+        name: "/note.md",
+        source: "user_ops",
+        content:
+          '<action name="annotate">\n{"originalText":"第一行\\n第二行"}\n</action>',
+      }),
+      "批注:第一行 第二行",
+    );
+    // content 为 null → 回落路径（向后兼容）
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/c",
+        name: "/c",
+        source: "user_ops",
+        content: null,
+      }),
+      "批注:/c",
+    );
+    // content JSON 缺 originalText → 回落路径
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/c",
+        name: "/c",
+        source: "user_ops",
+        content:
+          '<action name="annotate">\n{"path":"/c","userAnnotation":"只有说明"}\n</action>',
+      }),
+      "批注:/c",
+    );
+    // content JSON 解析失败 → 回落路径
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/c",
+        name: "/c",
+        source: "user_ops",
+        content: '<action name="annotate">\n{not json}\n</action>',
+      }),
+      "批注:/c",
+    );
+  });
+
   it("无 action 降级：workplace→规则；旧 write:/、mkdir:/；rename→取右侧并按父目录区分；否则裸 path", () => {
     assert.equal(
       formatStatusChipLabelFromAttachment({

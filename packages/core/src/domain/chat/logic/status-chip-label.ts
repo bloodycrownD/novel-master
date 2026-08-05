@@ -135,9 +135,21 @@ export function formatStatusChipLabelFromAttachment(
   return resolvePathOrName(a);
 }
 
+/** 批注 chip 摘要最大字符数（防 mobile chip 超长）。 */
+const ANNOTATE_CHIP_MAX_CHARS = 20;
+
 function resolveChipPath(
   a: Pick<MessageAttachment, "action" | "path" | "name" | "content">,
 ): string {
+  // 批注：chip 显示「原文片段」而非文件路径——从 content XML JSON 取 originalText 截断。
+  // 拿不到 content 或解析失败 → 回落 path（向后兼容老附件）。
+  if (a.action === "annotate") {
+    const originalText = tryParseAnnotateOriginalText(a.content);
+    if (originalText != null && originalText !== "") {
+      return truncateChipText(originalText, ANNOTATE_CHIP_MAX_CHARS);
+    }
+    return resolvePathOrName(a);
+  }
   if (a.action === "rename" || a.action === "move") {
     // 优先 path（落库已取 to）；否则从 content JSON / name 解析
     if (a.path != null && a.path !== "") {
@@ -226,6 +238,34 @@ function tryParseRenamePairFromContent(
     return null;
   }
   return null;
+}
+
+/** 从 annotate action XML 解析划词原文（originalText）。失败返回 null。 */
+function tryParseAnnotateOriginalText(
+  content: string | null | undefined,
+): string | null {
+  if (content == null || content === "") {
+    return null;
+  }
+  const jsonMatch = /\{[\s\S]*\}/.exec(content);
+  if (jsonMatch == null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(jsonMatch[0]) as { originalText?: unknown };
+    return typeof parsed.originalText === "string" ? parsed.originalText : null;
+  } catch {
+    return null;
+  }
+}
+
+/** chip 单行展示：换行压空格 + 超长截断加省略号。 */
+function truncateChipText(text: string, maxChars: number): string {
+  const flat = text.replace(/[\r\n]+/g, " ").trim();
+  if (flat.length <= maxChars) {
+    return flat;
+  }
+  return flat.slice(0, maxChars) + "…";
 }
 
 /** `from→to` 或 `rename:from→to` 后缀。 */
