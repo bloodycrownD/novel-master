@@ -290,15 +290,16 @@ export async function runAgentTurn(
         ? { attachments: mergedAttachments }
         : undefined,
     );
-    // Checkpoint still anchors on user append that carries user_ops (P1).
-    if (userOpsAttachments.length > 0) {
-      checkpointAnchorMessageId = appended.id;
-    }
+    // S-13 治本：每条新 user 消息都写 baseline checkpoint，确保后续步骤失败时
+    // undo_send 仍有可回滚点。原先仅在 userOpsAttachments 非空时才 capture，
+    // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
+    // 这里把不变式上提到源头，user_ops 路径的 anchor 语义保留（仍走同一 capture）。
+    checkpointAnchorMessageId = appended.id;
     await options?.onUserMessageAppended?.();
   }
 
   if (checkpointAnchorMessageId != null) {
-    stage = "capture-checkpoint-after-user-ops";
+    stage = "capture-baseline-checkpoint";
     await runtime.messageCheckpoint.capture(
       scope.sessionId,
       scope.projectId,

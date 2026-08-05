@@ -89,6 +89,12 @@ function makeRuntime(overrides: {
   readonly userVfsTurn?: UserVfsTurnService;
   readonly evaluateRuleView?: () => Promise<ReturnType<typeof emptyRuleView>>;
   readonly listKeys?: (sessionId: string, domain: string) => Promise<string[]>;
+  /** 覆盖 messageCheckpoint.capture（默认 no-op）。 */
+  readonly capture?: (
+    sessionId: string,
+    projectId: string,
+    messageId: string,
+  ) => Promise<void>;
   /** 覆盖 agentRegistry.get 返回的 definition（默认 sampleDefinition）。 */
   readonly definition?: AgentDefinition;
 }): AgentTurnRuntimePort {
@@ -115,7 +121,8 @@ function makeRuntime(overrides: {
       delete: overrides.delete ?? (async () => undefined),
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
-      capture: async () => undefined,
+      capture:
+        overrides.capture ?? (async () => undefined),
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
@@ -825,5 +832,63 @@ describe("runAgentTurn", () => {
     );
 
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
+  });
+
+  // T-DS3（S-13 治本）：普通纯文本 chat 路径下，runAgentTurn 必须为新 append
+  // 的 user 消息写 baseline checkpoint。原先仅 userOpsAttachments 非空时才写，
+  // 导致 plain chat 无 baseline → undo_send 时 targetTree 空 → 删光工作区。
+  it("T-DS3a：普通纯文本 chat 路径为新 user 消息写 baseline checkpoint", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const captured: Array<{
+      sessionId: string;
+      projectId: string;
+      messageId: string;
+    }> = [];
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-plain-1" }),
+      capture: async (sessionId, projectId, messageId) => {
+        captured.push({ sessionId, projectId, messageId });
+      },
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "只是一条纯文本消息",
+      );
+    } catch {
+      // runner deps stubbed；走到 capture 即说明 baseline 已写
+    }
+    assert.equal(captured.length, 1, "plain chat 必须为新 user 消息写一次 baseline");
+    assert.deepEqual(captured[0], {
+      sessionId: "s",
+      projectId: "p",
+      messageId: "u-plain-1",
+    });
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  // T-DS3b：baseline checkpoint 写入失败必须向上抛出，不能静默吞掉，否则
+  // 调用方无法感知 baseline 缺失，后续 undo_send 仍会撞护栏。
+  it("T-DS3b：baseline capture 抛错时 runAgentTurn 向上抛出", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-plain-2" }),
+      capture: async () => {
+        throw new Error("baseline capture failed");
+      },
+    });
+    await assert.rejects(
+      () =>
+        runAgentTurn(
+          runtime,
+          { projectId: "p", sessionId: "s" },
+          "纯文本消息",
+        ),
+      /baseline capture failed/,
+    );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 });
