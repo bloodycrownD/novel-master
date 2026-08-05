@@ -48,6 +48,8 @@ type Props = {
   listHeaderComponent?: React.ReactElement | null;
   /** Open session VFS file from vfs.read / write / replace tool cards. */
   onOpenToolFile?: (path: string) => void;
+  /** 点击 task 工具卡片跳转到子会话只读浏览页。 */
+  onOpenSubagentSession?: (sessionId: string) => void;
   /** Restored scroll position after panel remount (workspace ↔ chat). */
   initialScroll?: ChatListScrollSnapshot | null;
   onScrollSnapshot?: (snap: ChatListScrollSnapshot) => void;
@@ -124,6 +126,7 @@ export function MessageList({
   onMessageLongPress,
   listHeaderComponent,
   onOpenToolFile,
+  onOpenSubagentSession,
   initialScroll = null,
   onScrollSnapshot,
   defaultScrollToBottom = false,
@@ -422,6 +425,7 @@ export function MessageList({
             tools={tools}
             dimmed={hidden}
             onOpenFile={onOpenToolFile}
+            onOpenSubagentSession={onOpenSubagentSession}
             embedded
           />
         ) : null}

@@ -358,6 +358,21 @@ export function useChatTabScope({
     [openFileEditor],
   );
 
+  // 点击 task 工具卡片跳转到子会话只读浏览页。子会话与当前主会话同属一个项目，
+  // 故 projectId 取当前会话的项目，sessionId 用入参（子会话 id）。
+  const openSubagentSession = useCallback(
+    (childSessionId: string) => {
+      if (projectId == null) {
+        return;
+      }
+      navigation.navigate('SubagentSessionView', {
+        projectId,
+        sessionId: childSessionId,
+      });
+    },
+    [navigation, projectId],
+  );
+
   const sessionVfs = useMemo(
     () =>
       projectId != null && sessionId != null
@@ -427,6 +442,7 @@ export function useChatTabScope({
     handleDeleteProjects,
     openFileEditor,
     openSessionFilePreview,
+    openSubagentSession,
     sessionVfs,
     sessionWorktree,
     projectVfs,

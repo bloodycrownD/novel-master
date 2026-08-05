@@ -84,6 +84,8 @@ export type ChatTranscriptWebViewProps = {
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
   readonly onOpenToolFile?: (path: string) => void;
+  /** 点击 task 工具卡片跳转子会话只读浏览（webview web app 发 openSubagentSession）。 */
+  readonly onOpenSubagentSession?: (sessionId: string) => void;
   readonly onOpenMessageMenu?: (
     messageId: string,
     pageX: number,
@@ -222,6 +224,7 @@ export const ChatTranscriptWebView = memo(
         onReady,
         onLoadOlder,
         onOpenToolFile,
+        onOpenSubagentSession,
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
@@ -753,6 +756,10 @@ export const ChatTranscriptWebView = memo(
             onOpenToolFile?.(message.payload.path);
             return;
           }
+          if (message.type === 'openSubagentSession') {
+            onOpenSubagentSession?.(message.payload.sessionId);
+            return;
+          }
           if (message.type === 'openMessageMenu') {
             if (uiRunning) {
               return;
@@ -786,6 +793,7 @@ export const ChatTranscriptWebView = memo(
           onScrollSnapshot,
           onLoadOlder,
           onOpenToolFile,
+          onOpenSubagentSession,
           onOpenMessageMenu,
           onMessageMenuAction,
           onWebMenuOpenChange,
