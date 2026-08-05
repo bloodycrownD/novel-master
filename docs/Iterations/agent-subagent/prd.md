@@ -39,9 +39,9 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 
 **Core — 工具与运行**
 
-- 新增 `subagent`（或 `task`，SPEC 定稿）工具：模型可调用，入参为 `{ description, prompt, subagentType }`，其中 `subagentType` 指向一个已注册且「允许子 agent 调用」的 agent。
+- 新增 `subagent`（或 `task`，SPEC 定稿）工具：模型可调用，入参为 `{ description, prompt, subagentName }`，其中 `subagentName` 用 agent 名称（非 UUID id，因 id 不便模型使用）指向一个已注册且「允许子 agent 调用」的 agent。
 - 工具内部创建独立子 session（`parent_session_id` 指向父 session）、构造 `AgentRunner`、`runner.run({ persistMessages: true, ... })`，跑完后取最后一条 assistant 文本作为 `tool_result` 回流主 agent。
-- 子 agent 的 `AgentDefinition` 来自 registry（复用现有 `AgentRegistryService.get`），工具策略、模型 pin、maxSteps 等均沿用该 agent 的定义。
+- 子 agent 的 `AgentDefinition` 来自 registry（按 name 查询，复用现有 `AgentRegistryService`），工具策略、模型 pin、maxSteps 等均沿用该 agent 的定义。
 - **递归控制**：子 agent 能否再派孙 agent，由该 agent 的「允许子 agent 调用」开关决定；全局递归深度上限为 2 层（主 → 子 → 孙，孙 agent 不允许再派）。超过上限时工具返回明确错误，不执行。
 - **并行**：主 agent 单条消息内多个 subagent 工具调用并发执行，复用现有 `ToolRunner.runParallel` 的有界并发机制。
 
@@ -97,8 +97,8 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 
 **subagent 工具基本闭环**
 
-- Given 一个开了 `subagentCallable` 的 agent A（registry 中）
-- When 主 agent 在对话中调用 subagent 工具，`subagentType: "A"`，`prompt: "查一下 X"`
+- **Given** 一个开了 `subagentCallable` 的 agent A（registry 中）
+- When 主 agent 在对话中调用 subagent 工具，`subagentName: "A"`，`prompt: "查一下 X"`
 - Then 工具执行后，主 agent 收到一条 `tool_result`，内容为子 agent 的最后一条 assistant 文本；子 agent 的中间 tool 调用不出现在主对话中。
 
 **子会话持久化与隔离**
@@ -138,7 +138,7 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 - When 切换「允许子 agent 调用」开关并保存
 - Then 该 agent 在 subagent 工具的可选范围中相应出现 / 消失。
 - When 主 agent 调用 subagent 工具时
-- Then `subagentType` 只能选择已开启开关的 agent；未开启的不可选。
+- Then `subagentName` 只能选择已开启开关的 agent；未开启的不可选。
 
 **出厂通用 subagent**
 
@@ -159,12 +159,13 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 - 依赖已合并的 **agent-system**、**tool-system-v2**、**content-blocks**、**agent-config-shape**、**event-bus-compaction-conditions**（`run-agent` action 不受影响，并行存在）。
 - subagent 工具实现位于 `@novel-master/core`；apps 层负责 UI 入口与子会话浏览页。
 - 数据模型变更：`chat_session` 加 `parent_session_id` 列，`SCHEMA_BOOT_VERSION` 递增；走现有 `SCHEMA_COLUMN_ALIGNMENTS` 的 `ALTER TABLE ADD COLUMN` 路径。
-- 工具白名单口径：subagent 工具名需纳入 `registerBuiltinTools` 与 `validateAgentToolPolicy` 的已知名集合，使 agent 的 `tools.allow/deny` 能正确引用。
+- 工具白名单口径：`task` 不进 UI 的 `BUILTIN_TOOL_CATALOG`（「谁能被调」由 `subagentCallable` 单点控制，避免正交概念混淆）；但其名字需在 `validateAgentToolPolicy` 的内置已知名白名单中（不依赖 probe 注册），使用户配 `tools.allow/deny: ["task"]` 能正确生效。
 
 ## 非功能需求（业务/体验）
 
 - 子 agent 的执行对主对话用户可见但不打扰：主会话仅多一条工具调用卡片，不灌入子 agent 的 assistant 消息；想看细节才主动点进去。
-- 递归超限、agent 不允许被调用等错误，对主 agent 以可读的 `tool_result`（error 文本）呈现，便于模型理解失败原因并决定下一步。
+- 子 agent 复用父 session 的 VFS 视图（而非独立空 scope），以保证「查大纲设定」这类核心场景能读到工作区文件；子 session 记录仅用于落消息历史。
+- 递归超限、agent 不允许被调用、子 agent 非正常结束（如 `max_steps`）等错误，对主 agent 以可读的 `tool_result`（error/fallback 文本，仍携带 `subagentSessionId` 供 UI 跳转）呈现，便于模型理解失败原因并决定下一步。
 
 ## 风险与待确认项
 
@@ -173,6 +174,8 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 | 子 agent 运行中流式可见 | 子 agent 运行期间，子会话浏览页是否展示渐进落库的消息（半成品可见）？还是等子 agent 完成后才可浏览？影响 `persistMessages` 时序与 UI 刷新策略。 |
 | 子会话的标题生成 | 子 session 的 `title` 如何生成？取工具入参的 `description`？还是跑完后由摘要 agent 生成？ |
 | 并行子 agent 的 token / 成本 | 多个并行子 agent 同时跑可能放大 token 消耗；是否需要 per-run 的粗粒度上限提示（非硬限制）。 |
+| registry seed 虚拟注入语义 | 虚拟 general 仅在 `list()` 合并，`get(id)`/`delete(id)` 不合并——「不可删」是 DB 找不到行的自然结果。需在 SPEC 明确这条口径，避免实施者误改 get/delete 语义。 |
+| 子 agent VFS scope | 已定稿（SPEC P0-4）：子 agent 复用父 session 的 VFS 视图，不独立空 scope；原「独立空 scope」与「查大纲设定」场景矛盾。 |
 
 ## 里程碑（实现顺序建议）
 
