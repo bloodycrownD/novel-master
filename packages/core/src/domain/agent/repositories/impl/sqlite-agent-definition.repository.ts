@@ -103,4 +103,14 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       { agentId },
     );
   }
+
+  async list(): Promise<readonly AgentDefinition[]> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT agent_id, prompts_json FROM agent_definition ORDER BY agent_id ASC`,
+      {},
+    );
+    return rows.map((row) => rowToDefinition(row));
+  }
 }
