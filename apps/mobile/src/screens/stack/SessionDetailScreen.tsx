@@ -307,6 +307,37 @@ export function SessionDetailScreen() {
           </View>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
         </Pressable>
+
+        {/* 查看提示词：跳转到 RealPromptScreen，预览当前会话实际发送的提示词。 */}
+        <Pressable
+          testID="real-prompt-row"
+          onPress={() => navigation.navigate('RealPrompt')}
+          accessibilityLabel="查看提示词"
+          style={[
+            styles.card,
+            cardShadow,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.borderLight,
+            },
+          ]}>
+          <View
+            style={[
+              styles.iconBox,
+              {backgroundColor: tokens.primary + '1A'},
+            ]}>
+            <Text style={styles.iconGlyph}>📄</Text>
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+              查看提示词
+            </Text>
+            <Text style={[styles.cardValue, {color: tokens.text}]}>
+              预览实际发送的提示词
+            </Text>
+          </View>
+          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+        </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
 
