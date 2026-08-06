@@ -11,6 +11,7 @@ export type CloudSyncErrorCode =
   | "LOCK_HELD_BY_OTHER"
   | "LOCK_CONTENTION"
   | "AGENT_ACTIVE"
+  | "PUSH_MUTEX_TIMEOUT"
   | "ALREADY_UP_TO_DATE"
   | "INVALID_STATUS"
   | "SNAPSHOT_MISSING"

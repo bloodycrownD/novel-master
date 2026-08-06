@@ -12,6 +12,11 @@ import {
   isEffectiveLock,
   renewLease,
 } from "../logic/lock.js";
+import {
+  PushAgentMutex,
+  PushAgentMutexAcquireError,
+  type PushAgentLockHandle,
+} from "../logic/push-agent-mutex.js";
 import { snapshotKey, statusKey } from "../logic/paths.js";
 import {
   EMPTY_CLOUD_SYNC_STATUS,
@@ -36,7 +41,33 @@ export type CloudSyncCoordinatorDeps = {
   /** Pull 时下载快照的临时路径（可选；与 getToPath 配合） */
   importTempPath?: string;
   leaseSeconds?: number;
+  /**
+   * 进程内 push/agent 互斥锁（session 维度）。
+   *
+   * 不传时使用模块级单例——coordinator 实例可能每次 build 都新建，
+   * 但 push 之间、push 与 agent 之间需要共享同一把锁，所以默认走单例。
+   * apps runtime 在 agent 启动入口应拿到同一实例（通过 {@link getDefaultPushAgentMutex}）。
+   */
+  pushMutex?: PushAgentMutex;
+  /** push 入口等待互斥锁的最长时间（毫秒）；超时降级拒绝。 */
+  pushAcquireTimeoutMs?: number;
 };
+
+/** 模块级默认互斥锁单例；coordinator 与 apps runtime 共享。 */
+let defaultPushMutex: PushAgentMutex | null = null;
+
+/** 获取进程内默认 push/agent 互斥锁单例（apps runtime 的 agent 启动入口用同一个）。 */
+export function getDefaultPushAgentMutex(): PushAgentMutex {
+  if (defaultPushMutex == null) {
+    defaultPushMutex = new PushAgentMutex();
+  }
+  return defaultPushMutex;
+}
+
+/** 重置默认单例（仅测试用；生产代码不要调）。 */
+export function __resetDefaultPushAgentMutexForTests(): void {
+  defaultPushMutex = null;
+}
 
 export type PullOptions = {
   lastSyncedRev: number;
@@ -70,6 +101,8 @@ export class CloudSyncCoordinator {
   private readonly hashSnapshotFile?: (path: string) => Promise<string>;
   private readonly importTempPath?: string;
   private readonly leaseSeconds: number;
+  private readonly pushMutex: PushAgentMutex;
+  private readonly pushAcquireTimeoutMs: number;
 
   constructor(deps: CloudSyncCoordinatorDeps) {
     this.storage = deps.storage;
@@ -83,6 +116,9 @@ export class CloudSyncCoordinator {
     this.hashSnapshotFile = deps.hashSnapshotFile;
     this.importTempPath = deps.importTempPath;
     this.leaseSeconds = deps.leaseSeconds ?? DEFAULT_LEASE_SECONDS;
+    this.pushMutex = deps.pushMutex ?? getDefaultPushAgentMutex();
+    // 默认 30s：push 通常很快，agent 启动等 30s 还等不到就降级拒绝
+    this.pushAcquireTimeoutMs = deps.pushAcquireTimeoutMs ?? 30_000;
   }
 
   /** Push 是否可走文件路径（分块哈希 + 单次读文件上传） */
@@ -139,10 +175,41 @@ export class CloudSyncCoordinator {
     return { rev: remote.rev };
   }
 
-  /** 导出本机快照并推送到云端（抢锁 → 上传 → 清锁） */
+  /** 导出本机快照并推送到云端（进程内互斥 → 抢云端锁 → 上传 → 清锁） */
   async push(options: PushOptions): Promise<PushResult> {
     this.assertConfigured();
 
+    // 进程内互斥锁：push 持锁期间 agent 启动入口排队；超时降级拒绝
+    const lockHandle = await this.acquirePushLock();
+    try {
+      return await this.runPush(options);
+    } finally {
+      this.pushMutex.release(lockHandle);
+    }
+  }
+
+  /** 申请 push 互斥锁；超时转成 PUSH_MUTEX_TIMEOUT（调用方据此降级拒绝）。 */
+  private async acquirePushLock(): Promise<PushAgentLockHandle> {
+    try {
+      return await this.pushMutex.acquire({
+        timeoutMs: this.pushAcquireTimeoutMs,
+      });
+    } catch (error) {
+      if (error instanceof PushAgentMutexAcquireError) {
+        throw new CloudSyncError(
+          "PUSH_MUTEX_TIMEOUT",
+          "推送繁忙，等待互斥锁超时，请稍后再试",
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+  }
+
+  /** push 主体；调用方负责持有进程内互斥锁。 */
+  private async runPush(options: PushOptions): Promise<PushResult> {
+    // 入口仍保留 isAgentActive 检查：兼容 apps runtime 尚未接入互斥锁的旧路径
+    // （旧 agent handler 不抢锁，只能靠这里拒绝）
     if (this.dbSync.isAgentActive()) {
       throw new CloudSyncError("AGENT_ACTIVE", "Agent 运行中，请稍后再推送");
     }
@@ -184,6 +251,13 @@ export class CloudSyncCoordinator {
         await this.storage.put(snapKey, snapshotBytes);
       }
       const uploadElapsed = Date.now() - uploadStart;
+
+      // 续租点：上传耗时过长要续云端租约；同时复检本机 agent 状态。
+      // 互斥锁接入后理论上 agent 进不来，但 apps 旧路径可能未抢锁——
+      // agent 拍跑到这里就拒绝，走 finally 清云端锁，避免上传菲的快照续命。
+      if (this.dbSync.isAgentActive()) {
+        throw new CloudSyncError("AGENT_ACTIVE", "Agent 运行中，请稍后再推送");
+      }
 
       if (uploadElapsed > this.leaseSeconds * 500) {
         const renewedLock = renewLease(newLock, this.leaseSeconds);
