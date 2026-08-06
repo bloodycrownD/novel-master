@@ -11,6 +11,10 @@
     "jsxImportSource": "react",
     // base 的 types 是 ["node"]；mobile 还要 jest 类型，这里显式列全。
     "types": ["jest", "node"],
+    // base 启用了 noUnusedLocals/noUnusedParameters；mobile 历史代码有较多 unused，
+    // 暂不跟进到 base 的严格度，避免一次性引入 129 个 TS6133/TS6138 债务。
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
