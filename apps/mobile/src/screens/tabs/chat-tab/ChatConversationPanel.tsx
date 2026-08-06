@@ -100,17 +100,22 @@ export function ChatConversationPanel({
 
   // 键盘弹起时 bump nonce，传给 MessageList / ChatTranscriptWebView
   // 让消息列表 scrollToEnd，确保最新消息在键盘上方可见。
-  // 用 useAnimatedReaction 盯住 Reanimated 键盘高度 shared value，
-  // 每变化 ~15px 就 bump 一次 nonce——跟动画帧同步，比 setInterval 平滑得多。
+  // WebView transcript 有自己的 ResizeObserver 处理平滑贴底（见 bind-shell-events.ts），
+  // 这里的 nonce 主要给 MessageList（FlatList）用，在键盘动画结束后 bump 一次即可。
   const { height: panelKeyboardHeightSV } = useReanimatedKeyboardAnimation();
   const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
   const bumpNonce = useCallback(() => {
     setKeyboardLiftNonce(n => n + 1);
   }, []);
   useAnimatedReaction(
-    () => Math.floor(-panelKeyboardHeightSV.value / 15),
+    () => {
+      const h = -panelKeyboardHeightSV.value;
+      // 只在高度从 >0 变到 0（键盘收起）或从 0 变到 >0（键盘弹起到终值）时触发
+      return h > 0 ? 1 : 0;
+    },
     (curr, prev) => {
-      if (curr !== prev && curr > 0) {
+      if (curr !== prev && curr === 1) {
+        // 键盘弹起到终值后 bump 一次（FlatList 的 scrollToEnd）
         runOnJS(bumpNonce)();
       }
     },
