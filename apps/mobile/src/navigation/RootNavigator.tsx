@@ -176,9 +176,6 @@ export function RootNavigator() {
           screenOptions={{
             headerShown: false,
             contentStyle: {backgroundColor: tokens.background},
-            // 关闭默认 slide/fade 转场动画：连续 push（如详情页→提示词）时默认动画
-            // 会拖慢体感，改为即时切换。
-            animation: 'none',
           }}>
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="AgentsSettings" component={AgentsSettingsStackScreen} />
@@ -187,7 +184,11 @@ export function RootNavigator() {
             name="ProjectAgentConfig"
             component={ProjectAgentConfigStackScreen}
           />
-          <Stack.Screen name="RealPrompt" component={RealPromptStackScreen} />
+          <Stack.Screen
+            name="RealPrompt"
+            component={RealPromptStackScreen}
+            options={{animation: 'none'}}
+          />
           <Stack.Screen name="Providers" component={ProvidersStackScreen} />
           <Stack.Screen name="ProviderCreate" component={ProviderCreateStackScreen} />
           <Stack.Screen name="ProviderEdit" component={ProviderEditStackScreen} />

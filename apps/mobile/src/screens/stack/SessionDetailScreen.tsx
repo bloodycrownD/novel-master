@@ -134,7 +134,7 @@ export function SessionDetailScreen() {
   // 压缩上下文：与聊天页抽屉里的入口行为一致——Alert 确认 → 发事件 → toast 反馈。
   // 详情页不渲染消息列表，压缩成功后只需 load() 刷新 meta（agent meta 可能受压缩影响）。
   const handleCompact = useCallback(() => {
-    Alert.alert('压缩上下文', '将按照事件配置压缩上下文。是否继续？', [
+    Alert.alert('压缩上下文', '减少上下文占用。是否继续？', [
       {text: '取消', style: 'cancel'},
       {
         text: '压缩',
@@ -397,7 +397,7 @@ export function SessionDetailScreen() {
               压缩上下文
             </Text>
             <Text style={[styles.cardValue, {color: tokens.text}]}>
-              按事件配置压缩
+              减少上下文占用
             </Text>
           </View>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
