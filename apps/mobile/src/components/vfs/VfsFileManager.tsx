@@ -538,6 +538,7 @@ export const VfsFileManager = forwardRef<
     ? menuRow.kind === 'dir'
       ? [
           { label: '导出 ZIP', action: 'export-zip' },
+          { label: '导入 ZIP', action: 'import-zip' },
           { label: '状态变更', action: 'toggle-include' },
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
@@ -553,6 +554,7 @@ export const VfsFileManager = forwardRef<
     { label: '新建目录', action: 'create-directory' },
     { label: '新建文件', action: 'create-file' },
     { label: '导入 ZIP', action: 'import-zip' },
+    { label: '导出 ZIP', action: 'export-zip' },
     { label: '导入角色卡', action: 'import-character-card' },
     { label: '目录规则', action: 'directory-rule' },
   ];
@@ -718,6 +720,25 @@ export const VfsFileManager = forwardRef<
           .finally(() => setExportingZip(false));
         return;
       }
+      if (action === 'import-zip') {
+        Alert.alert('导入 ZIP', zipImportConfirmCopy(menuPath), [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '导入',
+            style: 'destructive',
+            onPress: () => {
+              importVfsZip(runtime, scope, {
+                confirmed: true,
+                directoryPath: menuPath,
+              })
+                .then(() => reloadVfsListOnly())
+                .then(() => showToast('ZIP 导入完成'))
+                .catch(err => showToast(toastMessage('导入失败', err)));
+            },
+          },
+        ]);
+        return;
+      }
     } catch (error) {
       showToast(toastMessage('操作失败', error));
     }
@@ -841,6 +862,18 @@ export const VfsFileManager = forwardRef<
     }
     if (action === 'import-zip') {
       handleImportZip();
+      return;
+    }
+    if (action === 'export-zip') {
+      setExportingZip(true);
+      exportVfsZip(runtime, scope, { directoryPath: currentPath })
+        .then(result => {
+          if (result === 'saved') {
+            showToast('ZIP 已保存到所选位置');
+          }
+        })
+        .catch(err => showToast(toastMessage('导出失败', err)))
+        .finally(() => setExportingZip(false));
       return;
     }
     if (action === 'import-character-card') {
