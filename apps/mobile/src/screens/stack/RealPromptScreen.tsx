@@ -5,7 +5,6 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  InteractionManager,
   StyleSheet,
   Text,
   View,
@@ -55,13 +54,8 @@ export function RealPromptScreen() {
     }
   }, [runtime, projectId, sessionId]);
 
-  // 导航动画期间不触发 prompt 组装（resolveAgentForProject → buildSessionPromptInput
-  // 的同步段会占 JS 线程，把 native stack push 动画挤掉帧）。等交互结束再开始重活。
   useEffect(() => {
-    const handle = InteractionManager.runAfterInteractions(() => {
-      load().catch(() => undefined);
-    });
-    return () => handle.cancel();
+    load().catch(() => undefined);
   }, [load]);
 
   return (
