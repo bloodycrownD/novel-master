@@ -48,6 +48,13 @@ export {
   type ResolvedPromptTokens,
 } from "./logic/resolve-current-prompt-tokens.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
+export {
+  countTokens,
+  type ChatTokenEncoder,
+  type ChatTokenMessage,
+  type ChatTokenCountKind,
+  type CountTokensOptions,
+} from "./logic/count-tokens.js";
 export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
   parseTokenCounterModePref,

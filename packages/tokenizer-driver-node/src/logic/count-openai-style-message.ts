@@ -4,7 +4,7 @@
  * @module logic/count-openai-style-message
  */
 
-import { isGpt0301TiktokenModel } from "@novel-master/core/provider";
+import { countTokens } from "@novel-master/core/provider";
 import type { Tiktoken } from "tiktoken";
 
 export interface OpenAiStyleMessage {
@@ -21,37 +21,21 @@ export interface CountOpenAiStyleMessageOptions {
 /**
  * Counts tokens for chat-style messages using OpenAI billing overhead.
  *
- * Mirrors SillyTavern `/api/tokenizers/openai/count` for tiktoken models.
+ * 骨架走 core 公共纯函数 {@link countTokens}（`precise` 档），
+ * 这里只负责把 tiktoken encoding 适配成 `ChatTokenEncoder`。
+ * 与 SillyTavern `/api/tokenizers/openai/count` 行为一致。
  */
 export function countOpenAiStyleMessages(
   encoding: Tiktoken,
   messages: readonly OpenAiStyleMessage[],
   tiktokenModel: string,
 ): number {
-  const is0301 = isGpt0301TiktokenModel(tiktokenModel);
-  const tokensPerMessage = is0301 ? 4 : 3;
-  const tokensPerName = is0301 ? -1 : 1;
-  let numTokens = 0;
-
-  for (const msg of messages) {
-    numTokens += tokensPerMessage;
-    for (const [key, value] of Object.entries(msg)) {
-      if (typeof value !== "string") {
-        continue;
-      }
-      numTokens += encoding.encode(value).length;
-      if (key === "name") {
-        numTokens += tokensPerName;
-      }
-    }
-  }
-
-  numTokens += 3;
-  if (is0301) {
-    numTokens += 9;
-  }
-
-  return numTokens;
+  return countTokens(
+    (text) => encoding.encode(text).length,
+    messages,
+    "precise",
+    { tiktokenModel },
+  );
 }
 
 /**
