@@ -28,10 +28,13 @@ import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import { runPendingSchemaMigrations } from "./schema-migrations/index.js";
-import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
+import { createRevisionRefCountRepairOperation } from "@/domain/vfs/logic/revision-ref-count.js";
+import { createProviderIdentityRepairOperation } from "@/domain/provider/logic/provider-identity-repair.js";
+import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
 
 /**
  * 稳态 DDL + 列对齐合同版本。
@@ -103,12 +106,31 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
 
-  // W3：entry-id migration 刚跑完时，异步触发 repairRefCounts 作为安全网
+  // W3：entry-id migration 刚跑完时，异步走统一完整性修复注册表作为安全网。
+  //
+  // 这里登记两类操作：
+  //   1. vfs revision ref_count 修复（只动 vfs_revision.ref_count，不碰 blob 侧触发器计数）；
+  //   2. provider 双身份键形态校验（migration 后 assertMigratedShape 的运行时镜像）。
+  //
+  // 两条路径各自独立，互不干扰。不阻塞启动，丢 rejection 也不崩。
   if (_entryIdMigrationJustApplied) {
     const revisionRepo = new SqliteVfsRevisionRepository(conn);
     const entryRepo = new SqliteVfsEntryRepository(conn);
     const checkpoints = new SqliteMessageCheckpointRepository(conn);
+    const providerRepo = new SqliteProviderRepository(conn);
+    const registry = new IntegrityRepairRegistry()
+      .register(
+        createRevisionRefCountRepairOperation({
+          revisionRepo,
+          entryRepo,
+          checkpoints,
+          scopeKey: "global",
+          pathPrefix: "/",
+          sessionId: "",
+        }),
+      )
+      .register(createProviderIdentityRepairOperation({ providerRepo }));
     // global scope 兜底修复；不阻塞启动，丢 rejection 也不崩
-    repairRefCounts(revisionRepo, entryRepo, checkpoints, "global", "/", "").catch(() => {});
+    registry.runAll().catch(() => {});
   }
 }
