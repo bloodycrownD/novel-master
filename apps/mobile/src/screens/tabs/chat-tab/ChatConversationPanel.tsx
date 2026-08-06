@@ -1,7 +1,7 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   Platform,
@@ -101,16 +101,31 @@ export function ChatConversationPanel({
 
   // 键盘弹起时 bump nonce，传给 MessageList / ChatTranscriptWebView
   // 让消息列表 scrollToEnd，确保最新消息在键盘上方可见。
+  // 注意：keyboardDidShow 在 Android 上在动画起始就触发，此时 Reanimated 的
+  // marginBottom 动画才刚开始（从 0 平滑增长到键盘高度）。如果立即 scrollToEnd，
+  // viewport 还没收缩完，滚到的位置是错的——最新消息会被键盘盖住。
+  // 所以延迟到动画大致跑完（~300ms）再 bump nonce。
   const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
+  const liftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const onShow = (e: { endCoordinates?: { height?: number } }) => {
       const h = e.endCoordinates?.height ?? 0;
       console.log(
         '[ChatConversationPanel] keyboardDidShow height=',
         h,
-        'bumping nonce',
+        'will bump nonce after delay',
       );
-      setKeyboardLiftNonce(n => n + 1);
+      if (liftTimerRef.current != null) {
+        clearTimeout(liftTimerRef.current);
+      }
+      liftTimerRef.current = setTimeout(() => {
+        liftTimerRef.current = null;
+        console.log(
+          '[ChatConversationPanel] bumping keyboardLiftNonce, kb height=',
+          h,
+        );
+        setKeyboardLiftNonce(n => n + 1);
+      }, 300);
     };
     const onHide = () => {
       console.log('[ChatConversationPanel] keyboardDidHide');
@@ -120,6 +135,9 @@ export function ChatConversationPanel({
     return () => {
       showSub.remove();
       hideSub.remove();
+      if (liftTimerRef.current != null) {
+        clearTimeout(liftTimerRef.current);
+      }
     };
   }, []);
   const {
