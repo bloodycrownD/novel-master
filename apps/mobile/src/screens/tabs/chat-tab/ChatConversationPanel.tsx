@@ -1,9 +1,8 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,7 +14,11 @@ import {
 import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
-import Animated, { useAnimatedStyle } from 'react-native-reanimated';
+import Animated, {
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
 import { type VfsScope } from '@novel-master/core/vfs';
 import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
 import { ChatComposer } from '@/components/chat/ChatComposer';
@@ -70,10 +73,6 @@ function AndroidKeyboardChatBody({
   // body（flex:1）跟着缩到键盘以上，内容区可正常滚动，输入框自然贴在键盘上方。
   const clipStyle = useAnimatedStyle(() => {
     const kb = -keyboardHeightSV.value;
-    // DEBUG: 键盘高度变化时打日志
-    if (kb > 0) {
-      console.log('[AndroidKeyboardChatBody] marginBottom=', kb);
-    }
     return { marginBottom: kb };
   }, [keyboardHeightSV]);
 
@@ -101,59 +100,22 @@ export function ChatConversationPanel({
 
   // 键盘弹起时 bump nonce，传给 MessageList / ChatTranscriptWebView
   // 让消息列表 scrollToEnd，确保最新消息在键盘上方可见。
-  // Android 上 keyboardDidShow 在动画起始就触发，但 Reanimated 的 marginBottom
-  // 动画是平滑增长的（约 1s 从 0 到键盘高度）。如果在某一刻只 bump 一次，
-  // 要么太早（viewport 没收缩完，滚动位置错误），要么太晚（用户看到延迟 gap）。
-  // 所以在动画过程中多次 bump nonce，让 scrollToEnd 跟着 viewport 逐步跟进。
+  // 用 useAnimatedReaction 盯住 Reanimated 键盘高度 shared value，
+  // 每变化 ~15px 就 bump 一次 nonce——跟动画帧同步，比 setInterval 平滑得多。
+  const { height: panelKeyboardHeightSV } = useReanimatedKeyboardAnimation();
   const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
-  const liftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    const onShow = (e: { endCoordinates?: { height?: number } }) => {
-      const h = e.endCoordinates?.height ?? 0;
-      console.log(
-        '[ChatConversationPanel] keyboardDidShow height=',
-        h,
-      );
-      // 清掉上一次的 interval（快速连击键盘时防止叠夹）
-      if (liftTimerRef.current != null) {
-        clearInterval(liftTimerRef.current);
-      }
-      // 在 0-1000ms 内每 100ms bump 一次 nonce，覆盖整个 marginBottom 动画过程
-      let elapsed = 0;
-      setKeyboardLiftNonce(n => n + 1);
-      liftTimerRef.current = setInterval(() => {
-        elapsed += 100;
-        if (elapsed >= 1000) {
-          if (liftTimerRef.current != null) {
-            clearInterval(liftTimerRef.current);
-            liftTimerRef.current = null;
-          }
-          return;
-        }
-        console.log(
-          '[ChatConversationPanel] bumping nonce, elapsed=',
-          elapsed,
-        );
-        setKeyboardLiftNonce(n => n + 1);
-      }, 100);
-    };
-    const onHide = () => {
-      console.log('[ChatConversationPanel] keyboardDidHide');
-      if (liftTimerRef.current != null) {
-        clearInterval(liftTimerRef.current);
-        liftTimerRef.current = null;
-      }
-    };
-    const showSub = Keyboard.addListener('keyboardDidShow', onShow);
-    const hideSub = Keyboard.addListener('keyboardDidHide', onHide);
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-      if (liftTimerRef.current != null) {
-        clearInterval(liftTimerRef.current);
-      }
-    };
+  const bumpNonce = useCallback(() => {
+    setKeyboardLiftNonce(n => n + 1);
   }, []);
+  useAnimatedReaction(
+    () => Math.floor(-panelKeyboardHeightSV.value / 15),
+    (curr, prev) => {
+      if (curr !== prev && curr > 0) {
+        runOnJS(bumpNonce)();
+      }
+    },
+    [bumpNonce],
+  );
   const {
     conversationPanel,
     setConversationPanel,
