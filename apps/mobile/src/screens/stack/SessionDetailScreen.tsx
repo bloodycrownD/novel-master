@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
@@ -149,10 +150,13 @@ export function SessionDetailScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled">
+      {/* 用 KeyboardAvoidingView 包裹 ScrollView，让聊天名 inline 编辑时
+          软键盘弹起能抬升内容，TextInput 不被键盘盖住。 */}
+      <KeyboardAvoidingView style={styles.scroll} behavior="padding">
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled">
         {/* 聊天名：大字标题 + 弱化铅笔暗示可编辑，点击切到 TextInput inline 编辑。 */}
         <View style={styles.titleBlock}>
           {editingTitle ? (
@@ -303,7 +307,8 @@ export function SessionDetailScreen() {
           </View>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
         </Pressable>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <ModelPickerModal
         visible={modelPickerOpen}

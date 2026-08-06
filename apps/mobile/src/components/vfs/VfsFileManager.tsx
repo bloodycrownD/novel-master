@@ -20,6 +20,7 @@ import {
   View,
 } from 'react-native';
 import { AppModal } from '../ui/AppModal';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useDismissOverlaysOnBlur } from '../../hooks/useDismissOverlaysOnBlur';
 import {
   type VfsListEntry,
@@ -1039,46 +1040,51 @@ export const VfsFileManager = forwardRef<
         animationType="fade"
         onRequestClose={() => setPrompt(null)}
       >
-        <View style={styles.promptBackdrop}>
-          <View style={[styles.promptBox, { backgroundColor: tokens.surface }]}>
-            <Text style={[styles.promptTitle, { color: tokens.text }]}>
-              {prompt?.title}
-            </Text>
-            <TextInput
-              testID="vfs-prompt-input"
-              style={[
-                styles.promptInput,
-                { borderColor: tokens.border, color: tokens.text },
-              ]}
-              placeholder={prompt?.placeholder}
-              placeholderTextColor={tokens.textSecondary}
-              value={promptValue}
-              onChangeText={setPromptValue}
-              autoFocus
-            />
-            <View style={styles.promptActions}>
-              <Pressable onPress={() => setPrompt(null)}>
-                <Text style={{ color: tokens.textSecondary }}>取消</Text>
-              </Pressable>
-              <Pressable
-                testID="vfs-prompt-submit"
-                onPress={() => {
-                  const current = prompt;
-                  if (!current) {
-                    return;
-                  }
-                  setPrompt(null);
-                  current
-                    .onSubmit(promptValue)
-                    .then(() => reloadVfsListOnly())
-                    .catch(err => showToast(toastMessage('失败', err)));
-                }}
-              >
-                <Text style={{ color: tokens.primary }}>确定</Text>
-              </Pressable>
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={styles.promptAvoidingRoot}
+        >
+          <View style={styles.promptBackdrop}>
+            <View style={[styles.promptBox, { backgroundColor: tokens.surface }]}>
+              <Text style={[styles.promptTitle, { color: tokens.text }]}>
+                {prompt?.title}
+              </Text>
+              <TextInput
+                testID="vfs-prompt-input"
+                style={[
+                  styles.promptInput,
+                  { borderColor: tokens.border, color: tokens.text },
+                ]}
+                placeholder={prompt?.placeholder}
+                placeholderTextColor={tokens.textSecondary}
+                value={promptValue}
+                onChangeText={setPromptValue}
+                autoFocus
+              />
+              <View style={styles.promptActions}>
+                <Pressable onPress={() => setPrompt(null)}>
+                  <Text style={{ color: tokens.textSecondary }}>取消</Text>
+                </Pressable>
+                <Pressable
+                  testID="vfs-prompt-submit"
+                  onPress={() => {
+                    const current = prompt;
+                    if (!current) {
+                      return;
+                    }
+                    setPrompt(null);
+                    current
+                      .onSubmit(promptValue)
+                      .then(() => reloadVfsListOnly())
+                      .catch(err => showToast(toastMessage('失败', err)));
+                  }}
+                >
+                  <Text style={{ color: tokens.primary }}>确定</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </AppModal>
 
       <FileReferencePicker
@@ -1136,6 +1142,9 @@ const styles = StyleSheet.create({
   badge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   menuBtn: { paddingHorizontal: 12, paddingVertical: 8 },
   empty: { textAlign: 'center', marginTop: 32 },
+  promptAvoidingRoot: {
+    flex: 1,
+  },
   promptBackdrop: {
     flex: 1,
     justifyContent: 'center',

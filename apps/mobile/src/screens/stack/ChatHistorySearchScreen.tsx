@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {ChatMessage} from '@novel-master/core/chat';
 import {FormTextInput} from '../../components/form/FormTextInput';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -171,8 +172,12 @@ export function ChatHistorySearchScreen() {
     </View>
   ) : null;
 
+  // 用 KeyboardAvoidingView 包裹根部，让软键盘弹起时收缩可视窗口，
+  // 避免搜索框 / 结果列表被键盘盖住（Android 默认 resize 行为不可靠）。
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
+    <KeyboardAvoidingView
+      style={[styles.root, {backgroundColor: tokens.background}]}
+      behavior="padding">
       {/* 顶部：搜索栏（关键词输入框 + 搜索按钮），固定区域，不参与滚动。 */}
       <View
         style={[
@@ -230,7 +235,7 @@ export function ChatHistorySearchScreen() {
             : styles.resultContent
         }
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

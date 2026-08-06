@@ -3,6 +3,7 @@
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -49,6 +50,7 @@ export function EditModelNameModal({
       animationType="slide"
       transparent
       onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior="padding" style={styles.avoidingRoot}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
@@ -84,11 +86,15 @@ export function EditModelNameModal({
           </View>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
+  avoidingRoot: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',

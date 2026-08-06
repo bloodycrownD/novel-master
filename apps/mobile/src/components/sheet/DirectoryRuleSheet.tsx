@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import {
   DEFAULT_WORKPLACE_DIR_RULE,
   type FillPolicy,
@@ -123,16 +124,20 @@ export function DirectoryRuleSheet({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.backdrop}>
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: tokens.surface,
-              paddingBottom: Math.max(insets.bottom, 16),
-            },
-          ]}
-        >
+      <KeyboardAvoidingView
+        behavior="padding"
+        style={styles.avoidingRoot}
+      >
+        <View style={styles.backdrop}>
+          <View
+            style={[
+              styles.sheet,
+              {
+                backgroundColor: tokens.surface,
+                paddingBottom: Math.max(insets.bottom, 16),
+              },
+            ]}
+          >
           <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
           <ScrollView
             style={styles.form}
@@ -205,9 +210,10 @@ export function DirectoryRuleSheet({
                 {saving ? '保存中…' : '保存'}
               </Text>
             </Pressable>
+            </View>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </AppModal>
   );
 }
@@ -270,6 +276,9 @@ function OptionRow<T extends string>({
 }
 
 const styles = StyleSheet.create({
+  avoidingRoot: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',

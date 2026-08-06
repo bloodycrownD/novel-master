@@ -2,19 +2,20 @@
  * 聊天消息编辑弹窗。回车换行；仅按钮保存。
  * 多行输入对齐 ChatComposer 模式（TextInput 直挂 min/maxHeight），禁止 ScrollView 包裹。
  * 垂直位置：上下对称 flex spacer 实现相对居中；键盘压缩窗口时 bottomSpacer 优先收缩。
+ * 键盘避让：统一用 react-native-keyboard-controller 的 KeyboardAvoidingView，
+ * Android 不再依赖 adjustResize（Modal 内不生效），iOS 也不再单独分支。
  * readOnly：同款 UI、输入禁用可滚动，用于批注详情预览。
  */
 import React, {useEffect, useMemo, useState} from 'react';
 import {
   Dimensions,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '@/theme/ThemeProvider';
 import {AppModal} from '@/components/ui/AppModal';
@@ -178,8 +179,9 @@ export function MessageEditModal({
       animationType="fade"
       transparent
       onRequestClose={onClose}>
-      {Platform.OS === 'ios' && !readOnly ? (
-        // iOS Modal 与键盘不同步，用 padding 行为避让
+      {!readOnly ? (
+        // react-native-keyboard-controller 的 KAV 在 KeyboardProvider 下双端生效，
+        // 不依赖 Android adjustResize（Modal 内不托底）。readOnly 无需键盘避让。
         <KeyboardAvoidingView
           behavior="padding"
           style={styles.avoidingRoot}
@@ -187,8 +189,6 @@ export function MessageEditModal({
           {modalBody}
         </KeyboardAvoidingView>
       ) : (
-        // AndroidManifest adjustResize 已托底；叠加 KAV height 会双重收缩 panel
-        // readOnly 无需键盘避让
         modalBody
       )}
     </AppModal>
