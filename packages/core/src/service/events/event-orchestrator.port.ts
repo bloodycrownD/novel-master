@@ -28,4 +28,12 @@ export interface EventOrchestrator {
   attachToBus(): void;
   /** Removes bus listeners (rebootstrap / tests). */
   detachFromBus(): void;
+  /**
+   * 等待 attachToBus 触发的全部 in-flight emit 完成（成功或失败均 settle）。
+   *
+   * 这是为了把原来 fire-and-forget 的 `void emit().then().catch()` 暴露给调用方：
+   * 上层（CLI/runtime/测试）可以选择 await 它，确保 bus 触发的下游 action 真正落地后再继续；
+   * 失败已由内部 reportActionFailure 处理，不会产生 unhandledRejection。
+   */
+  pendingEmits(): Promise<void>;
 }

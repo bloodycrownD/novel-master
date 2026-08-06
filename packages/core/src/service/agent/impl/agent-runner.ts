@@ -603,16 +603,50 @@ async function applyLlmRegexChannelToVisible(
   return applyRegexChannelToMessages(visible, rules, "llm", depthMap);
 }
 
-/** @internal Exposed for stream-bus deferral unit tests. */
+/**
+ * @internal Exposed for stream-bus deferral unit tests.
+ *
+ * 这里不再为每个 stream event 各自 `queueMicrotask`：那样 N 个 event 会插进 N 条微任务，
+ * 中间可能被其它微任务（订阅者倒序调用、scheduler 等）插入，跨批次顺序不稳。
+ *
+ * 改成单个“合并刷新”：同一同步批次的全部 stream event 先压进 `pendingQueue`，只调度一次
+ * `queueMicrotask(flush)`。flush 里按 FIFO 顺序逐条 publish，保证批次内顺序确定、
+ * 批次间也只有一个微任务槽位，跨批次顺序不会被随机插入打乱。bus.publish 仍然不在调用方
+ * 同步执行（避免订阅者中途回访 runner 产生的重入）。
+ */
 export function wrapStreamForBus(
   bus: SimpleEventBus,
   sessionId: string,
   runId: string,
   userOnStream?: (event: LlmStreamEvent) => void,
 ): ((event: LlmStreamEvent) => void) | undefined {
+  // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
+  const pendingQueue: Array<() => void> = [];
+  let flushScheduled = false;
+
+  const scheduleFlush = (): void => {
+    if (flushScheduled) {
+      return;
+    }
+    flushScheduled = true;
+    queueMicrotask(() => {
+      // 先重置调度标志，让 flush 期间新加入的事件能在下一个微任务里再排（保留批语义）。
+      flushScheduled = false;
+      const drain = pendingQueue.splice(0, pendingQueue.length);
+      for (const publish of drain) {
+        publish();
+      }
+    });
+  };
+
+  const enqueuePublish = (publish: () => void): void => {
+    pendingQueue.push(publish);
+    scheduleFlush();
+  };
+
   const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
     if (ev.type === "text-delta") {
-      queueMicrotask(() =>
+      enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
           sessionId,
           runId,
@@ -620,7 +654,7 @@ export function wrapStreamForBus(
         }),
       );
     } else if (ev.type === "thinking-delta") {
-      queueMicrotask(() =>
+      enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
           sessionId,
           runId,
@@ -628,7 +662,7 @@ export function wrapStreamForBus(
         }),
       );
     } else if (ev.type === "tool-use") {
-      queueMicrotask(() =>
+      enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
           sessionId,
           runId,
