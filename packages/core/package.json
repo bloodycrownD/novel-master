@@ -75,12 +75,12 @@
       "import": "./dist/infra/nmtp/index.js"
     },
     "./kkv": {
-      "types": "./dist/service/kkv/index.d.ts",
-      "import": "./dist/service/kkv/index.js"
+      "types": "./dist/public/kkv.d.ts",
+      "import": "./dist/public/kkv.js"
     },
     "./session-kkv": {
-      "types": "./dist/service/session-kkv/index.d.ts",
-      "import": "./dist/service/session-kkv/index.js"
+      "types": "./dist/public/session-kkv.d.ts",
+      "import": "./dist/public/session-kkv.js"
     },
     "./config-forms": {
       "types": "./dist/config-forms/index.d.ts",
@@ -105,7 +105,7 @@
   },
   "scripts": {
     "lint": "eslint src test",
-    "build": "tsc --build tsconfig.json --force && tsc-alias -p tsconfig.json",
+    "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "rebuild": "npm run clean && npm run build",
     "dev": "tsc -p tsconfig.json --watch",
