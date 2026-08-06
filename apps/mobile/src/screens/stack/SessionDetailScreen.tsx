@@ -14,6 +14,7 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,6 +26,7 @@ import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {EVENT_SESSION_COMPACTION_REQUESTED} from '@novel-master/core/events';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -128,6 +130,37 @@ export function SessionDetailScreen() {
     }
     setModelPickerOpen(true);
   }, [modelLocked, showToast]);
+
+  // 压缩上下文：与聊天页抽屉里的入口行为一致——Alert 确认 → 发事件 → toast 反馈。
+  // 详情页不渲染消息列表，压缩成功后只需 load() 刷新 meta（agent meta 可能受压缩影响）。
+  const handleCompact = useCallback(() => {
+    Alert.alert('压缩上下文', '将按照事件配置压缩上下文。是否继续？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '压缩',
+        onPress: () => {
+          void (async () => {
+            try {
+              const result = await runtime.eventOrchestrator.emit(
+                EVENT_SESSION_COMPACTION_REQUESTED,
+                {sessionId, projectId, trigger: 'manual'},
+              );
+              if (!result.ok) {
+                showToast(
+                  toastMessage('压缩部分失败', result.failures[0]?.error),
+                );
+              } else {
+                showToast('已压缩');
+              }
+              await load();
+            } catch (error) {
+              showToast(toastMessage('压缩失败', error));
+            }
+          })();
+        },
+      },
+    ]);
+  }, [runtime, sessionId, projectId, showToast, load]);
 
   if (loading || meta == null) {
     return (
@@ -334,6 +367,37 @@ export function SessionDetailScreen() {
             </Text>
             <Text style={[styles.cardValue, {color: tokens.text}]}>
               预览提示词
+            </Text>
+          </View>
+          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+        </Pressable>
+
+        {/* 压缩上下文：发 SESSION_COMPACTION_REQUESTED 事件，与聊天页抽屉入口一致。 */}
+        <Pressable
+          testID="compact-row"
+          onPress={handleCompact}
+          accessibilityLabel="压缩上下文"
+          style={[
+            styles.card,
+            cardShadow,
+            {
+              backgroundColor: tokens.surface,
+              borderColor: tokens.borderLight,
+            },
+          ]}>
+          <View
+            style={[
+              styles.iconBox,
+              {backgroundColor: tokens.primary + '1A'},
+            ]}>
+            <Text style={styles.iconGlyph}>🗜️</Text>
+          </View>
+          <View style={styles.cardBody}>
+            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+              压缩上下文
+            </Text>
+            <Text style={[styles.cardValue, {color: tokens.text}]}>
+              按事件配置压缩
             </Text>
           </View>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
