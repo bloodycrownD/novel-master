@@ -605,6 +605,9 @@ export function ChatComposer({
           editable={!inputDisabled}
         />
         <View style={styles.toolbar}>
+          {/* 「更多」按钮已隐藏：压缩上下文/切换智能体/模型等入口已迁移到会话详情页。
+              代码保留，后续若有新功能需要此入口可恢复渲染。 */}
+          {/*
           <Pressable
             onPress={onOpenMore}
             disabled={onOpenMore == null}
@@ -615,6 +618,7 @@ export function ChatComposer({
               ⋯
             </Text>
           </Pressable>
+          */}
           <View style={styles.toolbarSpacer} />
           <Pressable
             onPress={() => setPickerOpen(true)}
