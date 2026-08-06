@@ -68,7 +68,9 @@ import {
   findActiveAtQuery,
   replaceActiveAtWithToken,
 } from './composer-at-path';
-import { composerDockBottomPadding } from './composer-dock-padding';
+import {composerDockBottomPadding} from './composer-dock-padding';
+import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import { FileReferencePicker } from './FileReferencePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -123,6 +125,15 @@ export function ChatComposer({
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const runtime = useRuntime();
+  // 键盘弹起时不再需要 safeAreaBottom padding——键盘已覆盖底部，
+  // 多出来的 padding 会形成一道白条。
+  const { height: keyboardHeightSV } = useReanimatedKeyboardAnimation();
+  const dockPadRest = composerDockBottomPadding(insets.bottom);
+  const dockPaddingBottom = useAnimatedStyle(() => {
+    const kb = -keyboardHeightSV.value;
+    // 键盘弹起（kb > 0）时 padding 归零；否则走 safeAreaBottom
+    return { paddingBottom: kb > 0 ? 0 : dockPadRest };
+  }, [keyboardHeightSV, dockPadRest]);
   const { sessionId } = scope;
   const initial = readChatComposerDraftState(sessionId);
   const [text, setText] = useState(initial.text);
@@ -548,13 +559,13 @@ export function ChatComposer({
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.dock,
         {
           backgroundColor: tokens.background,
-          paddingBottom: composerDockBottomPadding(insets.bottom),
         },
+        dockPaddingBottom,
       ]}
     >
       {!hasModel ? (
@@ -659,7 +670,7 @@ export function ChatComposer({
           insertTokensIntoComposer(pathTokens);
         }}
       />
-    </View>
+    </Animated.View>
   );
 }
 
