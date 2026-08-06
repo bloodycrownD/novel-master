@@ -539,6 +539,7 @@ export const VfsFileManager = forwardRef<
       ? [
           { label: '导出 ZIP', action: 'export-zip' },
           { label: '导入 ZIP', action: 'import-zip' },
+          { label: '导入角色卡', action: 'import-character-card' },
           { label: '状态变更', action: 'toggle-include' },
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
@@ -733,6 +734,25 @@ export const VfsFileManager = forwardRef<
               })
                 .then(() => reloadVfsListOnly())
                 .then(() => showToast('ZIP 导入完成'))
+                .catch(err => showToast(toastMessage('导入失败', err)));
+            },
+          },
+        ]);
+        return;
+      }
+      if (action === 'import-character-card') {
+        Alert.alert('导入角色卡', zipImportConfirmCopy(menuPath), [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '导入',
+            style: 'destructive',
+            onPress: () => {
+              importCharacterCard(runtime, scope, {
+                confirmed: true,
+                directoryPath: menuPath,
+              })
+                .then(() => reloadVfsListOnly())
+                .then(() => showToast('已导入角色卡'))
                 .catch(err => showToast(toastMessage('导入失败', err)));
             },
           },
