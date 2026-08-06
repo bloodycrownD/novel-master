@@ -141,12 +141,12 @@ const ANNOTATE_CHIP_MAX_CHARS = 20;
 function resolveChipPath(
   a: Pick<MessageAttachment, "action" | "path" | "name" | "content">,
 ): string {
-  // 批注：chip 显示「原文片段」而非文件路径——从 content XML JSON 取 originalText 截断。
-  // 拿不到 content 或解析失败 → 回落 path（向后兼容老附件）。
+  // 批注：chip 显示「用户批注内容」而非划词原文——优先 userAnnotation，
+  // 回落 originalText（向后兼容老附件）；都拿不到回落 path。
   if (a.action === "annotate") {
-    const originalText = tryParseAnnotateOriginalText(a.content);
-    if (originalText != null && originalText !== "") {
-      return truncateChipText(originalText, ANNOTATE_CHIP_MAX_CHARS);
+    const chipText = tryParseAnnotateChipText(a.content);
+    if (chipText != null && chipText !== "") {
+      return truncateChipText(chipText, ANNOTATE_CHIP_MAX_CHARS);
     }
     return resolvePathOrName(a);
   }
@@ -240,8 +240,9 @@ function tryParseRenamePairFromContent(
   return null;
 }
 
-/** 从 annotate action XML 解析划词原文（originalText）。失败返回 null。 */
-function tryParseAnnotateOriginalText(
+/** 从 annotate action content JSON 解析用户批注内容（userAnnotation）。
+ * 取不到时回落 originalText（向后兼容旧数据）。都拿不到返回 null。 */
+function tryParseAnnotateChipText(
   content: string | null | undefined,
 ): string | null {
   if (content == null || content === "") {
@@ -252,7 +253,18 @@ function tryParseAnnotateOriginalText(
     return null;
   }
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as { originalText?: unknown };
+    const parsed = JSON.parse(jsonMatch[0]) as {
+      userAnnotation?: unknown;
+      originalText?: unknown;
+    };
+    const userAnnotation =
+      typeof parsed.userAnnotation === "string"
+        ? parsed.userAnnotation.trim()
+        : "";
+    if (userAnnotation !== "") {
+      return userAnnotation;
+    }
+    // 回落：旧数据可能没有 userAnnotation，用划词原文代替
     return typeof parsed.originalText === "string" ? parsed.originalText : null;
   } catch {
     return null;

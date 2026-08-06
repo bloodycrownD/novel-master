@@ -428,7 +428,7 @@ export function ChatConversationPanel({
 const styles = StyleSheet.create({
   subviewFill: { flex: 1, minHeight: 0 },
   panelHidden: { display: 'none' },
-  chatPanel: { flex: 1 },
+  chatPanel: { flex: 1, backgroundColor: 'transparent' },
   keyboardClip: { flex: 1, minHeight: 0, overflow: 'hidden' },
   keyboardLiftBody: { flex: 1, minHeight: 0 },
   transcriptHost: { flex: 1, minHeight: 0 },
