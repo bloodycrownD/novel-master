@@ -198,12 +198,15 @@ export function MessageEditModal({
 const styles = StyleSheet.create({
   avoidingRoot: {
     flex: 1,
+    // 背景色放在父容器：KeyboardAvoidingView 加的 paddingBottom 区域
+    // 也属于 avoidingRoot 的 padding box，会被 backgroundColor 覆盖，
+    // 这样键盘弹起后底部不会透出白条。backdrop 不再单独设背景色。
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   backdrop: {
     flex: 1,
     flexDirection: 'column',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
     paddingHorizontal: 24,
   },
   topSpacer: {
