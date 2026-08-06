@@ -144,9 +144,6 @@ export {
   deriveDirPathsFromFileTree,
   emptyWorkspaceFlushSnapshot,
 } from '../domain/chat/logic/workspace-flush-snapshot.js';
-// 净 diff 模块（resolveFlushBaselineTree / resolveCurrentWorkspaceSnapshot /
-// diffWorkspaceForUserVfsFlush / synthesizeUserVfsFlushActions）已退出 public；
-// 文件保留并标 @deprecated，仅供过渡期单测直接相对路径引用。
 export {
   buildUserOpsAttachmentFromLogEntry,
   buildUserOpsAttachmentsFromLogEntries,
