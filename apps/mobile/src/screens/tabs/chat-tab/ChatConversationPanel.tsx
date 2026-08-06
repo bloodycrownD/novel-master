@@ -28,7 +28,13 @@ import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
 import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
 import { VfsFileManager } from '@/components/vfs/VfsFileManager';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { useToast } from '@/components/chrome/ToastHost';
 import type { ThemeTokens } from '@/theme/tokens';
+
+// 锁定提示文案与 SessionDetailScreen 对齐（项目级锁定 / agent-pin 压制）。
+const AGENT_LOCK_TOAST =
+  '智能体已被项目锁定，无法在会话内切换，请到「项目智能体配置」修改';
+const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabWorkspaceBackState } from './ChatTabNavigationProvider';
 import { useChatTabController } from './useChatTabController';
@@ -86,6 +92,7 @@ export function ChatConversationPanel({
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
+  const { showToast } = useToast();
   const {
     conversationPanel,
     setConversationPanel,
@@ -185,6 +192,28 @@ export function ChatConversationPanel({
     }
   }, [conversationPanel, workspaceVfsRef]);
 
+  // 顶部 meta 条点 agent / model 名 → 判锁定后开对应 picker（与 SessionDetailScreen 同一套规则）。
+  const openAgentPicker = useCallback(() => {
+    if (agentMeta?.source !== 'session') {
+      showToast(AGENT_LOCK_TOAST);
+      return;
+    }
+    setAgentPickerOpen(true);
+  }, [agentMeta, showToast, setAgentPickerOpen]);
+
+  const openModelPicker = useCallback(() => {
+    const notSession = agentMeta?.source !== 'session';
+    if (
+      notSession ||
+      agentMeta?.modelSource === 'agent-pin' ||
+      (agentMeta?.hasDedicatedModel ?? false)
+    ) {
+      showToast(MODEL_LOCK_TOAST);
+      return;
+    }
+    setModelPickerOpen(true);
+  }, [agentMeta, showToast, setModelPickerOpen]);
+
   const chatPanelStyle = [
     styles.chatPanel,
     conversationPanel !== 'chat' && styles.panelHidden,
@@ -194,7 +223,11 @@ export function ChatConversationPanel({
   const chatHeader =
     projectId != null && sessionId != null ? (
       <>
-        <ChatMetaBar meta={agentMeta} />
+        <ChatMetaBar
+          meta={agentMeta}
+          onPressAgent={openAgentPicker}
+          onPressModel={openModelPicker}
+        />
         <ChatStreamMetricsBarLive
           agentRunning={uiRunning}
           accRef={streamMetricsAccRef}
