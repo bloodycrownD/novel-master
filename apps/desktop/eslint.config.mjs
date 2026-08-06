@@ -1,14 +1,8 @@
 import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
+import { sharedTsRules } from "../../eslint.config.base.mjs";
 
 const tsconfigRootDir = import.meta.dirname;
-
-/** Align with eslint.config.base.mjs sharedTsRules (warn on legacy debt). */
-const sharedTsRules = {
-  "@typescript-eslint/no-unused-vars": "warn",
-  "@typescript-eslint/no-explicit-any": "warn",
-  "@typescript-eslint/no-require-imports": "off",
-};
 
 /**
  * Desktop splits main (tsconfig.json) vs renderer/test (tsconfig.renderer.json).
