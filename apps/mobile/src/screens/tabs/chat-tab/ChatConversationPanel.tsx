@@ -1,8 +1,9 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -69,6 +70,10 @@ function AndroidKeyboardChatBody({
   // body（flex:1）跟着缩到键盘以上，内容区可正常滚动，输入框自然贴在键盘上方。
   const clipStyle = useAnimatedStyle(() => {
     const kb = -keyboardHeightSV.value;
+    // DEBUG: 键盘高度变化时打日志
+    if (kb > 0) {
+      console.log('[AndroidKeyboardChatBody] marginBottom=', kb);
+    }
     return { marginBottom: kb };
   }, [keyboardHeightSV]);
 
@@ -93,6 +98,30 @@ export function ChatConversationPanel({
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
   const { showToast } = useToast();
+
+  // 键盘弹起时 bump nonce，传给 MessageList / ChatTranscriptWebView
+  // 让消息列表 scrollToEnd，确保最新消息在键盘上方可见。
+  const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
+  useEffect(() => {
+    const onShow = (e: { endCoordinates?: { height?: number } }) => {
+      const h = e.endCoordinates?.height ?? 0;
+      console.log(
+        '[ChatConversationPanel] keyboardDidShow height=',
+        h,
+        'bumping nonce',
+      );
+      setKeyboardLiftNonce(n => n + 1);
+    };
+    const onHide = () => {
+      console.log('[ChatConversationPanel] keyboardDidHide');
+    };
+    const showSub = Keyboard.addListener('keyboardDidShow', onShow);
+    const hideSub = Keyboard.addListener('keyboardDidHide', onHide);
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const {
     conversationPanel,
     setConversationPanel,
@@ -256,6 +285,7 @@ export function ChatConversationPanel({
           onOpenToolFile={scope.openSessionFilePreview}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onMessageMenuAction={controller.onWebMessageMenuAction}
+          keyboardLiftNonce={keyboardLiftNonce}
         />
       ) : (
         <MessageList
@@ -271,6 +301,7 @@ export function ChatConversationPanel({
           defaultScrollToBottom={defaultChatScrollToBottom}
           onScrollSnapshot={onChatScrollSnapshot}
           onMessageLongPress={controller.handleMessageLongPress}
+          keyboardLiftNonce={keyboardLiftNonce}
           onOpenToolFile={scope.openSessionFilePreview}
           listHeaderComponent={
             hasMoreMessages ? (
