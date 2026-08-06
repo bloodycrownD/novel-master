@@ -5,7 +5,6 @@
   "createCompactionConditionEvaluator",
   "createCompactionConditionsStore",
   "depthByMessageId",
-  "estimateTokens",
   "isCompactionConditionsError",
   "listVisibleForDepth",
   "matchDepth",
