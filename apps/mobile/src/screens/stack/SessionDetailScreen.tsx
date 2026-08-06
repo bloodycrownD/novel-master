@@ -333,7 +333,7 @@ export function SessionDetailScreen() {
               查看提示词
             </Text>
             <Text style={[styles.cardValue, {color: tokens.text}]}>
-              预览实际发送的提示词
+              预览提示词
             </Text>
           </View>
           <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
