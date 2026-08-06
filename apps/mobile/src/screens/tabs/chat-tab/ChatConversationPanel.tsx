@@ -101,10 +101,10 @@ export function ChatConversationPanel({
 
   // 键盘弹起时 bump nonce，传给 MessageList / ChatTranscriptWebView
   // 让消息列表 scrollToEnd，确保最新消息在键盘上方可见。
-  // 注意：keyboardDidShow 在 Android 上在动画起始就触发，此时 Reanimated 的
-  // marginBottom 动画才刚开始（从 0 平滑增长到键盘高度）。如果立即 scrollToEnd，
-  // viewport 还没收缩完，滚到的位置是错的——最新消息会被键盘盖住。
-  // 所以延迟到动画大致跑完（~300ms）再 bump nonce。
+  // Android 上 keyboardDidShow 在动画起始就触发，但 Reanimated 的 marginBottom
+  // 动画是平滑增长的（约 1s 从 0 到键盘高度）。如果在某一刻只 bump 一次，
+  // 要么太早（viewport 没收缩完，滚动位置错误），要么太晚（用户看到延迟 gap）。
+  // 所以在动画过程中多次 bump nonce，让 scrollToEnd 跟着 viewport 逐步跟进。
   const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
   const liftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -113,22 +113,36 @@ export function ChatConversationPanel({
       console.log(
         '[ChatConversationPanel] keyboardDidShow height=',
         h,
-        'will bump nonce after delay',
       );
+      // 清掉上一次的 interval（快速连击键盘时防止叠夹）
       if (liftTimerRef.current != null) {
-        clearTimeout(liftTimerRef.current);
+        clearInterval(liftTimerRef.current);
       }
-      liftTimerRef.current = setTimeout(() => {
-        liftTimerRef.current = null;
+      // 在 0-1000ms 内每 100ms bump 一次 nonce，覆盖整个 marginBottom 动画过程
+      let elapsed = 0;
+      setKeyboardLiftNonce(n => n + 1);
+      liftTimerRef.current = setInterval(() => {
+        elapsed += 100;
+        if (elapsed >= 1000) {
+          if (liftTimerRef.current != null) {
+            clearInterval(liftTimerRef.current);
+            liftTimerRef.current = null;
+          }
+          return;
+        }
         console.log(
-          '[ChatConversationPanel] bumping keyboardLiftNonce, kb height=',
-          h,
+          '[ChatConversationPanel] bumping nonce, elapsed=',
+          elapsed,
         );
         setKeyboardLiftNonce(n => n + 1);
-      }, 300);
+      }, 100);
     };
     const onHide = () => {
       console.log('[ChatConversationPanel] keyboardDidHide');
+      if (liftTimerRef.current != null) {
+        clearInterval(liftTimerRef.current);
+        liftTimerRef.current = null;
+      }
     };
     const showSub = Keyboard.addListener('keyboardDidShow', onShow);
     const hideSub = Keyboard.addListener('keyboardDidHide', onHide);
@@ -136,7 +150,7 @@ export function ChatConversationPanel({
       showSub.remove();
       hideSub.remove();
       if (liftTimerRef.current != null) {
-        clearTimeout(liftTimerRef.current);
+        clearInterval(liftTimerRef.current);
       }
     };
   }, []);
