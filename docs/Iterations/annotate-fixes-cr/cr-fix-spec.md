@@ -7,10 +7,11 @@
 - head_sha: `17d3eebf00d8f08463ad27b26c1257bf1e77bf16`（feat/annotate-fixes）
 - prd_path: 无独立 PRD（多改动合集分支 feat/annotate-fixes；以 diff 变更点本身为需求基线）
 - spec_path: 无独立 SPEC
-- review_round: 1
-- dag_version: 2
+- review_round: 2
+- dag_version: 3
+- must-fix 总数: 16（P0 ×1，P1 ×2，P2 ×13；本轮新增 cr-x/H-1；cr-c/B-2 文件清单扩展不算新增条目）
 - 本 wave 范围: 全部 must-fix（P0 → P1 → P2，单文件改动为主，无跨条目冲突）
-- 状态: draft
+- 状态: draft（round 2 修订中）
 
 > 说明：本 spec 只描述「要怎么修」，不包含实现代码。下游执行节点按本 spec 落地实现，落地后回填状态。
 
@@ -70,21 +71,27 @@
 
 - **严重度**: P1
 - **维度**: A（需求符合性）
-- **文件**: 待定位（导入流程中创建目录 / 初始化目录规则的 service 代码）
+- **文件**: `apps/mobile/src/components/vfs/VfsFileManager.tsx`（落点在移动端 UI 层，不动 Core）
 - **问题**:
   导入 zip 或角色卡后会生成新目录，但这些新目录的「目录规则」当前默认是关闭状态。用户希望默认开启。
+- **round 2 追踪到的架构真相**（修正 round 1 的错误定位）:
+  - 目录规则开关状态**不在 VFS entry 上**，而在独立的 `workplace_dir_rule` 表（`WorkplaceDirRule.ruleEnabled` 字段）。
+  - 规则派生逻辑在 `packages/core/src/domain/workplace/logic/workplace-rule-engine.ts` L66–79：`dirRuleMap.get(dirPath)` 取不到行 → 判 `rule_off`，所以「没有规则行」本身就等于默认关闭。
+  - Core 的 import service（`vfs-zip-io.service.ts` 的 `ensureEmptyDirectoryRow`、`character-card-import.service.ts`）只插 VFS 目录行，从不写 `workplace_dir_rule` 行。
+  - 现状里 `create-directory` 默认开规则，是因为 `VfsFileManager.tsx` L852 创建目录后**手动调了** `workplace.setDirRule(defaultDirRuleForm(path))`（`defaultDirRuleForm` 在 `apps/mobile/src/services/workplace-operations.service.ts` L126，`ruleEnabled: true`）——这是 UI 层补丁，不是 Core 行为。
 - **改法**:
-  1. 先定位 service 实现：mobile 端调的是 `importVfsZip` 和 `importCharacterCard`（从 `VfsFileManager.tsx` 的 import 语句反查导出位置；这两个名字在仓库里多平台共享，注意认 mobile/runtime 实际链路那一层，别认成 cli/desktop 的同名封装）。
-  2. 顺着 service 找「创建目录 / 写入目录规则」的代码路径。关键看新建目录时初始化的 `directoryRule` / `directory_rule` 字段默认值（可能在 core 包的 vfs service 里，也可能在某个 `ensureDirectory` / `createNode` 之类的 helper 里）。
-  3. 把默认值从「关闭」改成「开启」。如果 zip 导入和角色卡导入共用同一个目录创建逻辑，改一处就够；如果各写各的，两处都要改——这点必须实测确认，别想当然。
-  4. 改完留意向后兼容：已有目录的规则状态不动，只影响「这次导入新建出来的目录」。
+  1. 落点在**移动端 UI 层**，不要动 Core service（动 Core 会牵连 CLI/desktop 全平台行为）。
+  2. 在 cr-c/C-1 抽出的 `runImport(kind, targetPath)` helper 里，import 成功 + `reloadVfsListOnly()` 之后，补一段「为新出现的目录补规则行」：
+     - 导入前快照当前 `targetPath` 下的目录集合（或拿 service 返回值/事件里新创建的目录列表——目前 `importVfsZip` / `importCharacterCard` 返回 `void`，需比对导入前后目录列表）。
+     - 对每个新目录调 `workplace.setDirRule(defaultDirRuleForm(newDirPath))`（`defaultDirRuleForm` 已在 `apps/mobile/src/services/workplace-operations.service.ts` L126 导出，直接复用）。
+  3. zip 导入和角色卡导入共用同一条 `runImport` 路径，只改一处。
+  4. 已有目录不受影响：只挑「新增」目录调 `setDirRule`，不覆盖旧目录规则。
+  5. 边界：如果导入的目标 `directoryPath` 本身已存在，不对它调 `setDirRule`（会覆盖用户已有规则），只对导入产物里的新子目录调。
 - **验收/测试**:
-  - 导入 zip 后，新目录的规则为开启状态。
-  - 导入角色卡后，新目录的规则为开启状态。
-  - 已有目录的规则状态不被影响（回归）。
-- **来源**: 用户口头追加 / round 1
-- **待拍板/下游执行时确认**:
-  - 「目录规则默认开启」具体指哪个字段（如果规则是组合开关，需明确是全部开启还是某个子项开启）。下游定位到代码后，若发现规则结构比预想复杂，回到本 spec 补一条说明再动手。
+  - 导入 zip 后，**新出现的子目录**规则为开启；导入目标目录本身（已存在的）规则状态不变。
+  - 导入角色卡后同上。
+  - 回归：手动改过规则的已有目录，导入前后规则状态不变。
+- **来源**: 用户口头追加 / round 1，round 2 重写改法
 
 ---
 
@@ -132,7 +139,7 @@
 - **问题**:
   L290 那行写的是 `const enriched: typeof draft = { ...draft, ... }`，拿变量推导出来的类型当注解，读起来得倒回去看 `draft` 是什么类型才能懂。
 - **改法**:
-  import 真实的 `AnnotateDraft` 类型，改成 `const enriched: AnnotateDraft = { ... }`。类型路径以仓库现有 import 为准（`draft` 来自 `buildAnnotateAttachmentFromDraft` 的入参类型，反查即可）。
+  import 真实的 `AnnotateDraft` 类型，改成 `const enriched: AnnotateDraft = { ... }`。类型来源是 `@/domain/chat/model/annotate-draft.schema.js` 里导出的 `SendAnnotateDraft`（或其对应类型别名），从 `buildAnnotateAttachmentFromDraft` 的入参类型反查即可确认。
 - **验收/测试**:
   - 编译通过（`tsc --noEmit` 或仓库既有的 typecheck 脚本）。
   - 行为不变。
@@ -211,7 +218,7 @@
 - **严重度**: P2
 - **维度**: C（DRY / 类型）
 - **文件**:
-  - `packages/core`（`chat-agent-meta.ts` 或就近，helper 落点）
+  - `apps/mobile/src/services/chat-agent-meta.ts`（helper 落点）
   - `apps/mobile/src/components/chat/ChatMetaBar.tsx`
   - `apps/mobile/src/screens/tabs/chat-tab/ChatConversationPanel.tsx`
   - `apps/mobile/src/screens/stack/SessionDetailScreen.tsx`
@@ -219,7 +226,7 @@
   `meta.hasDedicatedModel` 已经是 `boolean` 不是 optional 了，但 `ChatMetaBar`、`ChatConversationPanel` 还在写 `?? false`；agent/model 锁定判据在三处各写了一遍 inline。
 - **改法**:
   1. 去掉多余的 `?? false`。
-  2. 把锁定判据抽成 helper：`isAgentLocked(meta)` / `isModelLocked(meta)`，落在 core 包的 `chat-agent-meta.ts`（或就近的 meta 工具文件），三处共用。
+  2. 把锁定判据抽成 helper：`isAgentLocked(meta)` / `isModelLocked(meta)`，落在 `apps/mobile/src/services/chat-agent-meta.ts`，三处共用。
 - **验收/测试**:
   - 编译通过。
   - 锁定行为不变（锁定 / 解锁两种状态下，UI 和可切性都跟改之前一致）。
@@ -259,14 +266,19 @@
 - **文件**:
   - `apps/mobile/src/components/vfs/VfsFileManager.tsx`
   - `apps/mobile/src/screens/stack/ChatHistorySearchScreen.tsx`
+  - `apps/mobile/src/screens/stack/SessionDetailScreen.tsx`
+  - `apps/mobile/src/components/provider/AddModelModal.tsx`
+  - `apps/mobile/src/components/provider/EditModelNameModal.tsx`
+  - `apps/mobile/src/components/sheet/DirectoryRuleSheet.tsx`
+  - `apps/mobile/src/components/ui/TextPromptModal.tsx`
 - **问题**:
-  两处硬编码 `behavior="padding"`。RN 官方推荐 iOS 用 `'padding'`、Android 传 `undefined`，因为 Android 上 padding 模式可能让根视图高度收缩异常。
+  本 PR 在 7 处硬编码 `behavior="padding"`（round 2 追踪发现原清单只列了 2 个文件，遗漏了 5 个）。RN 官方推荐 iOS 用 `'padding'`、Android 传 `undefined`，因为 Android 上 padding 模式可能让根视图高度收缩异常。
 - **改法**:
-  改成 `behavior={Platform.OS === 'ios' ? 'padding' : undefined}`。
-  备选：如果在 Android 真机上验证过 padding 模式也 OK，可以不改代码，但必须在注释里写明「已在 Android 真机验证，padding 模式无异常」，免得后人再来踩一遍。
+  统一改成 `behavior={Platform.OS === 'ios' ? 'padding' : undefined}`。
+  备选：如果在 Android 真机上验证过 padding 模式也 OK，可以不改代码，但必须在每个文件注释里写明「已在 Android 真机验证，padding 模式无异常」，免得后人再来踩一遍。
 - **验收/测试**:
-  - iOS / Android 双端键盘弹起 / 收起时布局正常，无高度异常收缩。
-- **来源**: review-scope-c / round 1
+  - iOS / Android 双端键盘弹起 / 收起时布局正常，无高度异常收缩；7 个文件逐一回归。
+- **来源**: review-scope-c / round 1，round 2 扩文件清单
 
 #### cr-c/C-2 — 错误文案不统一
 
@@ -280,6 +292,20 @@
 - **验收/测试**:
   - 导入 / 导出失败时 toast 前缀一致（同一类动作同一前缀）。
 - **来源**: review-scope-c / round 1
+
+#### cr-x/H-1 — ChatMetaBar 无障碍语义缺失
+
+- **严重度**: P2
+- **维度**: H（无障碍）
+- **文件**: `apps/mobile/src/components/chat/ChatMetaBar.tsx`
+- **问题**:
+  本 PR 把 agent/model 两段从裸 `View` 改成了 `Pressable`，但没补 `accessibilityRole="button"` / `accessibilityLabel` / `accessibilityState={{ disabled }}`。锁定态下读屏用户既听不到「这是按钮」，也听不到「已禁用」，可操作性信息丢了。
+- **改法**:
+  - agent Pressable 补：`accessibilityRole="button"`、`accessibilityLabel={`切换智能体，当前 ${meta.agentName}`}`、`accessibilityState={{ disabled: !onPressAgent }}`。
+  - model Pressable 同样补上对应三属性（label 用 `meta.modelName`，disabled 判据用 `!onPressModel`）。
+- **验收/测试**:
+  - Android TalkBack / iOS VoiceOver 朗读正确，能识别为按钮；锁定态读出「已禁用」。qa: manual_user。
+- **来源**: review-full / round 2
 
 ---
 
@@ -303,6 +329,13 @@
 - **用户确认**: 有意为之（用户原话：「2 故意的，这样提高性能，其他先不变」）。
 - **结论**: 关闭。本 spec 不涉及转场动画改动。
 
+### OQ-3 — run-agent-turn 补算分支测试覆盖确认
+
+- **条目**: `run-agent-turn.ts` 里 draft 缺 `startLine` 时调 `estimateSoftRangeFromOriginalText` 的补算分支。
+- **背景**: `annotate-drafts-send.test.ts` 本轮加了 262 行，但需确认是否覆盖了这条新分支。
+- **结论/行动**: 待下游确认。如未覆盖，应补一条 P2 must-fix（在合并前补上针对 `estimateSoftRangeFromOriginalText` 被触发场景的单测）。
+- **来源**: review-full / round 2
+
 ---
 
 ## 已豁免（用户确认不修）
@@ -321,6 +354,7 @@
 - **键盘 behavior 平台区分**（cr-c/B-2）：Android 真机验收键盘弹起 / 收起布局正常。
 - **ChatMetaBar 锁定视觉**（cr-b/C-2）：锁定状态下 agent 列与 model 列都有透明度提示。
 - **SessionDetailScreen 压缩入口**（cr-b/B-1）：Agent 运行中点压缩应被拦截；文案与聊天页一致。
+- **ChatMetaBar 无障碍语义**（cr-x/H-1）：Android TalkBack / iOS VoiceOver 朗读 agent/model 按钮正确，锁定态读出「已禁用」。
 
 ---
 
