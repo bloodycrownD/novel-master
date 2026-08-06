@@ -15,6 +15,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -30,10 +31,17 @@ import {EVENT_SESSION_COMPACTION_REQUESTED} from '@novel-master/core/events';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
-import {loadChatAgentMeta, type ChatAgentMeta} from '../../services/chat-agent-meta';
+import {
+  isAgentLocked,
+  isModelLocked,
+  loadChatAgentMeta,
+  type ChatAgentMeta,
+} from '../../services/chat-agent-meta';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
+import {isMobileAgentActive} from '../../runtime/agent-activity';
+import {refreshComposerStatusAfterFloorOrCompaction} from '../../services/project-composer-status.service';
 import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
@@ -80,16 +88,11 @@ export function SessionDetailScreen() {
     load().catch(() => undefined);
   }, [load]);
 
-  // 锁定判据：只有 source='session' 才允许在会话内切，其余（project-custom / none）一律锁。
-  // 这里把 agent 与 model 卡片按同一条件收口——否则 source='none' 时 modelSource 会被
-  // chat-agent-meta.ts 回填为 'session'，只锁 agent 卡的话 model 卡仍然可点。
-  // model 卡片额外在 agent-pin / hasDedicatedModel 时锁定（agent 自带 model 压制会话覆盖）。
-  const notSession = meta?.source !== 'session';
-  const agentLocked = notSession;
-  const modelLocked =
-    notSession ||
-    meta?.modelSource === 'agent-pin' ||
-    (meta?.hasDedicatedModel ?? false);
+  // 锁定判据统一收口到 chat-agent-meta 的 helper：agent 卡看 isAgentLocked，
+  // model 卡在 agent 锁的基础上再看 agent-pin / hasDedicatedModel。meta 还没加载
+  // 出来时 helper 返回 true（锁定），避免异常态误点。
+  const agentLocked = isAgentLocked(meta);
+  const modelLocked = isModelLocked(meta);
 
   // 提交 inline 重命名：空串或未改动直接收起，不调 rename。
   const commitTitle = useCallback(
@@ -131,10 +134,17 @@ export function SessionDetailScreen() {
     setModelPickerOpen(true);
   }, [modelLocked, showToast]);
 
-  // 压缩上下文：与聊天页抽屉里的入口行为一致——Alert 确认 → 发事件 → toast 反馈。
-  // 详情页不渲染消息列表，压缩成功后只需 load() 刷新 meta（agent meta 可能受压缩影响）。
+  // 压缩上下文：与聊天页 useChatTabMessages.handleCompactSession 对齐。
+  // 1) Agent 运行中拒压缩（进程级标记 isMobileAgentActive，详情页没有聊天页的 uiRunning，
+  //    所以直接读进程级标记，StorageConfigScreen 也是这么判同步禁用的）；
+  // 2) Alert 文案保持一致；
+  // 3) 成功后同样调 refreshComposerStatusAfterFloorOrCompaction 刷新 composer 状态。
   const handleCompact = useCallback(() => {
-    Alert.alert('压缩上下文', '减少上下文占用。是否继续？', [
+    if (isMobileAgentActive()) {
+      showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
+      return;
+    }
+    Alert.alert('压缩上下文', '将按照事件配置压缩上下文。是否继续？', [
       {text: '取消', style: 'cancel'},
       {
         text: '压缩',
@@ -150,6 +160,10 @@ export function SessionDetailScreen() {
                   toastMessage('压缩部分失败', result.failures[0]?.error),
                 );
               } else {
+                await refreshComposerStatusAfterFloorOrCompaction(runtime, {
+                  projectId,
+                  sessionId,
+                });
                 showToast('已压缩');
               }
               await load();
@@ -185,7 +199,11 @@ export function SessionDetailScreen() {
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       {/* 用 KeyboardAvoidingView 包裹 ScrollView，让聊天名 inline 编辑时
           软键盘弹起能抬升内容，TextInput 不被键盘盖住。 */}
-      <KeyboardAvoidingView style={styles.scroll} behavior="padding">
+      {/* behavior 仅 iOS 用 padding：Android 上 KeyboardAvoidingView 的 padding 反而
+          会把内容顶过头（Android 窗口默认会 resize），所以 Android 传 undefined 让它不介入。 */}
+      <KeyboardAvoidingView
+        style={styles.scroll}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}

@@ -202,18 +202,13 @@ function tryParseRenameTo(content: string | null | undefined): string | null {
   return tryParseRenamePairFromContent(content)?.to ?? null;
 }
 
+/** 从 rename/move content JSON 抽 {from, to}（兼容 from/to 与 oldPath/newPath 两套键）。
+ * 缺键或值为空返回 null。 */
 function tryParseRenamePairFromContent(
   content: string | null | undefined,
 ): { from: string; to: string } | null {
-  if (content == null || content === "") {
-    return null;
-  }
-  const jsonMatch = /\{[\s\S]*\}/.exec(content);
-  if (jsonMatch == null) {
-    return null;
-  }
-  try {
-    const parsed = JSON.parse(jsonMatch[0]) as {
+  return parseContentJson(content, (raw) => {
+    const parsed = raw as {
       from?: unknown;
       to?: unknown;
       oldPath?: unknown;
@@ -234,17 +229,16 @@ function tryParseRenamePairFromContent(
     if (from !== "" && to !== "") {
       return { from, to };
     }
-  } catch {
     return null;
-  }
-  return null;
+  });
 }
 
-/** 从 annotate action content JSON 解析用户批注内容（userAnnotation）。
- * 取不到时回落 originalText（向后兼容旧数据）。都拿不到返回 null。 */
-function tryParseAnnotateChipText(
+/** 从 content 文本里抠出第一个 `{...}` JSON 并交给 validate 投影。
+ * content 为空 / 没匹配到 JSON / JSON.parse 抛错 / validate 返回 null，统一兜底为 null。 */
+function parseContentJson<T>(
   content: string | null | undefined,
-): string | null {
+  validate: (raw: unknown) => T | null,
+): T | null {
   if (content == null || content === "") {
     return null;
   }
@@ -252,11 +246,22 @@ function tryParseAnnotateChipText(
   if (jsonMatch == null) {
     return null;
   }
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      userAnnotation?: unknown;
-      originalText?: unknown;
-    };
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    return null;
+  }
+  return validate(parsed);
+}
+
+/** 从 annotate action content JSON 解析用户批注内容（userAnnotation）。
+ * 取不到时回落 originalText（向后兼容旧数据）。都拿不到返回 null。 */
+function tryParseAnnotateChipText(
+  content: string | null | undefined,
+): string | null {
+  return parseContentJson(content, (raw) => {
+    const parsed = raw as { userAnnotation?: unknown; originalText?: unknown };
     const userAnnotation =
       typeof parsed.userAnnotation === "string"
         ? parsed.userAnnotation.trim()
@@ -266,9 +271,7 @@ function tryParseAnnotateChipText(
     }
     // 回落：旧数据可能没有 userAnnotation，用划词原文代替
     return typeof parsed.originalText === "string" ? parsed.originalText : null;
-  } catch {
-    return null;
-  }
+  });
 }
 
 /** chip 单行展示：换行压空格 + 超长截断加省略号。 */

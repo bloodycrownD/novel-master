@@ -29,7 +29,11 @@ import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
 import { VfsFileManager } from '@/components/vfs/VfsFileManager';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { useToast } from '@/components/chrome/ToastHost';
-import type { ThemeTokens } from '@/theme/tokens';
+import {
+  isAgentLocked,
+  isModelLocked,
+} from '@/services/chat-agent-meta';
+import type {ThemeTokens} from '@/theme/tokens';
 
 // 锁定提示文案与 SessionDetailScreen 对齐（项目级锁定 / agent-pin 压制）。
 const AGENT_LOCK_TOAST =
@@ -192,9 +196,10 @@ export function ChatConversationPanel({
     }
   }, [conversationPanel, workspaceVfsRef]);
 
-  // 顶部 meta 条点 agent / model 名 → 判锁定后开对应 picker（与 SessionDetailScreen 同一套规则）。
+  // 顶部 meta 条点 agent / model 名 → 判锁定后开对应 picker，判据统一走 helper，
+  // 不再各处手写 source/modelSource/hasDedicatedModel 的组合。
   const openAgentPicker = useCallback(() => {
-    if (agentMeta?.source !== 'session') {
+    if (isAgentLocked(agentMeta)) {
       showToast(AGENT_LOCK_TOAST);
       return;
     }
@@ -202,12 +207,7 @@ export function ChatConversationPanel({
   }, [agentMeta, showToast, setAgentPickerOpen]);
 
   const openModelPicker = useCallback(() => {
-    const notSession = agentMeta?.source !== 'session';
-    if (
-      notSession ||
-      agentMeta?.modelSource === 'agent-pin' ||
-      (agentMeta?.hasDedicatedModel ?? false)
-    ) {
+    if (isModelLocked(agentMeta)) {
       showToast(MODEL_LOCK_TOAST);
       return;
     }
@@ -302,7 +302,9 @@ export function ChatConversationPanel({
         lastMessageHasToolResult={lastMessageHasToolResult}
         lastMessageIsPlainUserText={lastMessageIsPlainUserText}
         draftRestoreToken={draftRestoreToken}
-        onOpenMore={() => setSessionDrawerOpen(true)}
+        // 「更多」按钮已在 ChatComposer 内注释隐藏，这里不再传 onOpenMore，
+        // 避免传了却没人响应造成误解。压缩/切换等入口改由会话详情页抽屉承担。
+        // onOpenMore={() => setSessionDrawerOpen(true)}
       />
     ) : null;
 

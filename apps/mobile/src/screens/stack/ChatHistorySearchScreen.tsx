@@ -16,6 +16,7 @@ import React, {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -177,7 +178,7 @@ export function ChatHistorySearchScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.root, {backgroundColor: tokens.background}]}
-      behavior="padding">
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {/* 顶部：搜索栏（关键词输入框 + 搜索按钮），固定区域，不参与滚动。 */}
       <View
         style={[

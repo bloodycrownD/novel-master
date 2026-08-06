@@ -8,7 +8,11 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {ChatAgentMeta} from '@/services/chat-agent-meta';
+import {
+  isAgentLocked,
+  isModelLocked,
+  type ChatAgentMeta,
+} from '@/services/chat-agent-meta';
 import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
@@ -20,18 +24,19 @@ type Props = {
 export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
   const {tokens} = useTheme();
   const showTokens = meta.tokenLabel.length > 0;
-  // 锁定判据与 SessionDetailScreen 收口一致：source !== 'session' 即锁定。
-  // 原先只判 'project-custom' 会漏掉 'none'（agent 解析失败），这里统一收口。
-  const agentLocked = meta.source !== 'session';
-  const modelLocked =
-    agentLocked ||
-    meta.modelSource === 'agent-pin' ||
-    (meta.hasDedicatedModel ?? false);
+  // 锁定判据统一收口到 chat-agent-meta 的 helper：source !== 'session' 即锁定
+  // （原先只判 'project-custom' 会漏掉 'none'）。hasDedicatedModel 已是 boolean，
+  // 不再需要 ?? false 兜底。
+  const agentLocked = isAgentLocked(meta);
+  const modelLocked = isModelLocked(meta);
   return (
     <View style={[styles.bar, {borderBottomColor: tokens.border}]}>
       <Pressable
         disabled={!onPressAgent}
         onPress={onPressAgent}
+        accessibilityRole="button"
+        accessibilityLabel={`切换智能体，当前 ${meta.agentName}`}
+        accessibilityState={{disabled: agentLocked}}
         style={({pressed}) => [styles.agentCol, pressed && styles.pressed]}>
         <Text style={[styles.fieldLabel, {color: tokens.textSecondary}]}>
           Agent
@@ -49,6 +54,9 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
       <Pressable
         disabled={!onPressModel}
         onPress={onPressModel}
+        accessibilityRole="button"
+        accessibilityLabel={`切换模型，当前 ${meta.modelLabel}`}
+        accessibilityState={{disabled: modelLocked}}
         style={({pressed}) => [styles.metaRight, pressed && styles.pressed]}>
         <Text
           style={[

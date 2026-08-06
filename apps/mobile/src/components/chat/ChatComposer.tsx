@@ -103,7 +103,10 @@ type Props = {
   /** undo_send 回滚成功后递增，触发从 draft 刷新输入框。 */
   draftRestoreToken?: number;
 
-  /** 打开更多菜单（压缩 / 模型 / Agent 等）。 */
+  /** 打开更多菜单（压缩 / 模型 / Agent 等）。
+   *
+   * 暂未使用：工具栏「更多」按钮已注释隐藏，调用方也不再传该 prop。保留接口，
+   * 后续若恢复按钮再从解构里取回即可。 */
   onOpenMore?: () => void;
 };
 
@@ -120,7 +123,6 @@ export function ChatComposer({
   lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   draftRestoreToken,
-  onOpenMore,
 }: Props) {
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();

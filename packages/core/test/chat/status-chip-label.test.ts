@@ -86,8 +86,8 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
     );
   });
 
-  it("annotate chip：有 content 时显示原文片段而非路径；截断+省略号；content 为 null 回落路径", () => {
-    // content 含 originalText → chip 显示截断原文
+  it("annotate chip：有 content 时优先显示 userAnnotation，回落 originalText；截断+省略号；content 为 null 回落路径", () => {
+    // content 同时含 originalText 和 userAnnotation → chip 优先显示 userAnnotation
     assert.equal(
       formatStatusChipLabelFromAttachment({
         action: "annotate",
@@ -97,7 +97,19 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
         content:
           '<action name="annotate">\n{"path":"/note.md","originalText":"短原文","userAnnotation":"说明"}\n</action>',
       }),
-      "批注:短原文",
+      "批注:说明",
+    );
+    // userAnnotation 前后空白会被 trim，再截断
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/note.md",
+        name: "/note.md",
+        source: "user_ops",
+        content:
+          '<action name="annotate">\n{"path":"/note.md","userAnnotation":"  说明  "}\n</action>',
+      }),
+      "批注:说明",
     );
     // 超长原文 → 截断 20 字 + 省略号
     const long = "这是一段很长的划词原文内容超过二十个字符就会被截断掉哦";
@@ -137,7 +149,7 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
       }),
       "批注:/c",
     );
-    // content JSON 缺 originalText → 回落路径
+    // content 缺 originalText、但有 userAnnotation → 显示 userAnnotation
     assert.equal(
       formatStatusChipLabelFromAttachment({
         action: "annotate",
@@ -147,7 +159,31 @@ describe("formatStatusChipLabel (T-CHIP1 / T-CR1)", () => {
         content:
           '<action name="annotate">\n{"path":"/c","userAnnotation":"只有说明"}\n</action>',
       }),
-      "批注:/c",
+      "批注:只有说明",
+    );
+    // userAnnotation 为空串 → 回落 originalText
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/note.md",
+        name: "/note.md",
+        source: "user_ops",
+        content:
+          '<action name="annotate">\n{"path":"/note.md","originalText":"短原文","userAnnotation":""}\n</action>',
+      }),
+      "批注:短原文",
+    );
+    // JSON 无 userAnnotation 字段 → 回落 originalText
+    assert.equal(
+      formatStatusChipLabelFromAttachment({
+        action: "annotate",
+        path: "/note.md",
+        name: "/note.md",
+        source: "user_ops",
+        content:
+          '<action name="annotate">\n{"path":"/note.md","originalText":"短原文"}\n</action>',
+      }),
+      "批注:短原文",
     );
     // content JSON 解析失败 → 回落路径
     assert.equal(

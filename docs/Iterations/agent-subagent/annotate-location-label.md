@@ -32,6 +32,8 @@ Desktop / Mobile 划词创建批注草稿时（`PreviewAnnotateUi.tsx` 的 handl
 
 注意 `linePadding: 0`：要的是精确行号，不是默认的 ±2 行宽松窗口（宽松窗口是给 Recogito 画下划线用的，给模型读不需要 padding）。
 
+另外 `estimateSoftRangeFromOriginalText` 内部用 `indexOf` 取**首次命中**的位置来算行列，所以如果同一 `originalText` 在源文件里重复出现（比如常见短语、空行分隔等），返回的行号会偏到第一次出现的地方，和用户实际划词的那一处可能对不上。这是已知限制：`padding=0` 只是个给模型读的「大概在第几行」提示，并不保证唯一命中或精确锚定，定位失败可以接受（graceful skip）。
+
 草稿已带 `startLine`/`endLine` 则短路跳过 VFS 补算，不覆盖上游已有值。
 
 ### 2. locationLabel 自然语言字段（`build-attachment-action-xml.ts`）

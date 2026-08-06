@@ -13,6 +13,7 @@ import React, {
 import {
   Alert,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -710,53 +711,15 @@ export const VfsFileManager = forwardRef<
         return;
       }
       if (action === 'export-zip') {
-        setExportingZip(true);
-        exportVfsZip(runtime, scope, { directoryPath: menuPath })
-          .then(result => {
-            if (result === 'saved') {
-              showToast('ZIP 已保存到所选位置');
-            }
-          })
-          .catch(err => showToast(toastMessage('导出失败', err)))
-          .finally(() => setExportingZip(false));
+        runExport(menuPath);
         return;
       }
       if (action === 'import-zip') {
-        Alert.alert('导入 ZIP', zipImportConfirmCopy(menuPath), [
-          { text: '取消', style: 'cancel' },
-          {
-            text: '导入',
-            style: 'destructive',
-            onPress: () => {
-              importVfsZip(runtime, scope, {
-                confirmed: true,
-                directoryPath: menuPath,
-              })
-                .then(() => reloadVfsListOnly())
-                .then(() => showToast('ZIP 导入完成'))
-                .catch(err => showToast(toastMessage('导入失败', err)));
-            },
-          },
-        ]);
+        runImport('zip', menuPath);
         return;
       }
       if (action === 'import-character-card') {
-        Alert.alert('导入角色卡', zipImportConfirmCopy(menuPath), [
-          { text: '取消', style: 'cancel' },
-          {
-            text: '导入',
-            style: 'destructive',
-            onPress: () => {
-              importCharacterCard(runtime, scope, {
-                confirmed: true,
-                directoryPath: menuPath,
-              })
-                .then(() => reloadVfsListOnly())
-                .then(() => showToast('已导入角色卡'))
-                .catch(err => showToast(toastMessage('导入失败', err)));
-            },
-          },
-        ]);
+        runImport('character-card', menuPath);
         return;
       }
     } catch (error) {
@@ -771,43 +734,87 @@ export const VfsFileManager = forwardRef<
     return `将覆盖目录「${path}」下的全部文件，同级其他内容不受影响。是否继续？`;
   };
 
-  const handleImportZip = useCallback(() => {
-    Alert.alert('导入 ZIP', zipImportConfirmCopy(currentPath), [
+  // 导入 ZIP / 角色卡的共用流程：Alert 确认 → 调对应 service → 刷新列表 →
+  // 为新增子目录补默认目录规则。
+  // WHY: Core 的 importVfsZip / importCharacterCard 只写 VFS 目录行，
+  // 不会往 workplace_dir_rule 表插入规则，导入出来的目录默认就是 rule_off。
+  // 这里在导入后比对前后目录集合，给新增子目录调 setDirRule(defaultDirRuleForm)，
+  // 让导入产生的目录与「新建目录」行为一致（默认开规则）。
+  const runImport = (
+    kind: 'zip' | 'character-card',
+    targetPath: string,
+  ) => {
+    const title = kind === 'zip' ? '导入 ZIP' : '导入角色卡';
+    const successToast = kind === 'zip' ? 'ZIP 导入完成' : '已导入角色卡';
+    Alert.alert(title, zipImportConfirmCopy(targetPath), [
       { text: '取消', style: 'cancel' },
       {
         text: '导入',
         style: 'destructive',
         onPress: () => {
-          importVfsZip(runtime, scope, {
-            confirmed: true,
-            directoryPath: currentPath,
-          })
-            .then(() => reloadVfsListOnly())
-            .then(() => showToast('ZIP 导入完成'))
-            .catch(err => showToast(toastMessage('导入失败', err)));
+          void (async () => {
+            // 导入前快照 targetPath 下的目录集合，导入后比对找出新增子目录。
+            const beforeDirPaths = new Set(
+              (await vfs.list(targetPath))
+                .filter(e => e.kind === 'directory')
+                .map(e => e.path),
+            );
+            try {
+              if (kind === 'zip') {
+                await importVfsZip(runtime, scope, {
+                  confirmed: true,
+                  directoryPath: targetPath,
+                });
+              } else {
+                await importCharacterCard(runtime, scope, {
+                  confirmed: true,
+                  directoryPath: targetPath,
+                });
+              }
+              await reloadVfsListOnly();
+              // 为新增子目录补默认目录规则；targetPath 自身已存在则跳过。
+              const afterEntries = await vfs.list(targetPath);
+              for (const entry of afterEntries) {
+                if (entry.kind !== 'directory') {
+                  continue;
+                }
+                if (entry.path === targetPath) {
+                  continue;
+                }
+                if (beforeDirPaths.has(entry.path)) {
+                  continue;
+                }
+                try {
+                  await workplace.setDirRule(defaultDirRuleForm(entry.path));
+                } catch {
+                  // 单个目录规则写入失败不阻断整体导入流程。
+                }
+              }
+              showToast(successToast);
+            } catch (err) {
+              showToast(toastMessage('导入失败', err));
+            }
+          })();
         },
       },
     ]);
-  }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
+  };
 
-  const handleImportCharacterCard = useCallback(() => {
-    Alert.alert('导入角色卡', zipImportConfirmCopy(currentPath), [
-      { text: '取消', style: 'cancel' },
-      {
-        text: '导入',
-        style: 'destructive',
-        onPress: () => {
-          importCharacterCard(runtime, scope, {
-            confirmed: true,
-            directoryPath: currentPath,
-          })
-            .then(() => reloadVfsListOnly())
-            .then(() => showToast('已导入角色卡'))
-            .catch(err => showToast(toastMessage('导入失败', err)));
-        },
-      },
-    ]);
-  }, [runtime, scope, currentPath, reloadVfsListOnly, showToast]);
+  // 导出 ZIP 的共用流程：exportingZip 守卫 → exportVfsZip → toast → 清状态。
+  const runExport = (targetPath: string) => {
+    if (exportingZip) {
+      return;
+    }
+    setExportingZip(true);
+    exportVfsZip(runtime, scope, { directoryPath: targetPath })
+      .then(result => {
+        if (result === 'saved') {
+          showToast('ZIP 已保存到所选位置');
+        }
+      })
+      .catch(err => showToast(toastMessage('导出失败', err)))
+      .finally(() => setExportingZip(false));
+  };
 
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
@@ -881,23 +888,15 @@ export const VfsFileManager = forwardRef<
       return;
     }
     if (action === 'import-zip') {
-      handleImportZip();
+      runImport('zip', currentPath);
       return;
     }
     if (action === 'export-zip') {
-      setExportingZip(true);
-      exportVfsZip(runtime, scope, { directoryPath: currentPath })
-        .then(result => {
-          if (result === 'saved') {
-            showToast('ZIP 已保存到所选位置');
-          }
-        })
-        .catch(err => showToast(toastMessage('导出失败', err)))
-        .finally(() => setExportingZip(false));
+      runExport(currentPath);
       return;
     }
     if (action === 'import-character-card') {
-      handleImportCharacterCard();
+      runImport('character-card', currentPath);
     }
   };
 
@@ -1094,7 +1093,7 @@ export const VfsFileManager = forwardRef<
         onRequestClose={() => setPrompt(null)}
       >
         <KeyboardAvoidingView
-          behavior="padding"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.promptAvoidingRoot}
         >
           <View style={styles.promptBackdrop}>

@@ -289,7 +289,8 @@ export async function runAgentTurn(
       if (softRange == null) {
         return buildAnnotateAttachmentFromDraft(draft);
       }
-      const enriched: typeof draft = {
+      // draft 来自 annotateDrafts（SendAnnotateDraft），合并行号后还是同型；显式标注避免依赖推导
+      const enriched: SendAnnotateDraft = {
         ...draft,
         startLine: softRange.startLine,
         endLine: softRange.endLine,

@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -125,9 +126,8 @@ export function DirectoryRuleSheet({
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior="padding"
-        style={styles.avoidingRoot}
-      >
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.avoidingRoot}>
         <View style={styles.backdrop}>
           <View
             style={[
@@ -136,80 +136,77 @@ export function DirectoryRuleSheet({
                 backgroundColor: tokens.surface,
                 paddingBottom: Math.max(insets.bottom, 16),
               },
-            ]}
-          >
-          <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
-          <ScrollView
-            style={styles.form}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <FormSwitchRow
-              label="规则启用"
-              tokens={tokens}
-              value={ruleEnabled}
-              onValueChange={setRuleEnabled}
-              disabled={rootRuleLocked}
-              description={rootRuleLocked ? '根目录规则不可关闭' : undefined}
-              testID="dir-rule-enabled-switch"
-            />
-            <FieldLabel tokens={tokens} text="排序字段" />
-            <OptionRow
-              options={SORT_FIELDS}
-              value={sortField}
-              onChange={setSortField}
-              tokens={tokens}
-            />
-            <FieldLabel tokens={tokens} text="排序方向" />
-            <OptionRow
-              options={SORT_ORDERS}
-              value={sortOrder}
-              onChange={setSortOrder}
-              tokens={tokens}
-            />
-            <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
-            <TextInput
-              style={[
-                styles.input,
-                { borderColor: tokens.border, color: tokens.text },
-              ]}
-              keyboardType="number-pad"
-              value={headCount}
-              onChangeText={setHeadCount}
-              underlineColorAndroid="transparent"
-            />
-            <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
-            <TextInput
-              style={[
-                styles.input,
-                { borderColor: tokens.border, color: tokens.text },
-              ]}
-              keyboardType="number-pad"
-              value={tailCount}
-              onChangeText={setTailCount}
-              underlineColorAndroid="transparent"
-            />
-            <FieldLabel tokens={tokens} text="其余文件填充" />
-            <OptionRow
-              options={FILL_POLICIES}
-              value={fillPolicy}
-              onChange={setFillPolicy}
-              tokens={tokens}
-            />
-          </ScrollView>
-          <View style={[styles.actions, { borderTopColor: tokens.border }]}>
-            <Pressable onPress={onClose} style={styles.actionBtn}>
-              <Text style={{ color: tokens.textSecondary }}>取消</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => handleSave().catch(() => undefined)}
-              disabled={saving}
-              style={styles.actionBtn}
-            >
-              <Text style={{ color: tokens.primary }}>
-                {saving ? '保存中…' : '保存'}
-              </Text>
-            </Pressable>
+            ]}>
+            <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
+            <ScrollView
+              style={styles.form}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}>
+              <FormSwitchRow
+                label="规则启用"
+                tokens={tokens}
+                value={ruleEnabled}
+                onValueChange={setRuleEnabled}
+                disabled={rootRuleLocked}
+                description={rootRuleLocked ? '根目录规则不可关闭' : undefined}
+                testID="dir-rule-enabled-switch"
+              />
+              <FieldLabel tokens={tokens} text="排序字段" />
+              <OptionRow
+                options={SORT_FIELDS}
+                value={sortField}
+                onChange={setSortField}
+                tokens={tokens}
+              />
+              <FieldLabel tokens={tokens} text="排序方向" />
+              <OptionRow
+                options={SORT_ORDERS}
+                value={sortOrder}
+                onChange={setSortOrder}
+                tokens={tokens}
+              />
+              <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
+              <TextInput
+                style={[
+                  styles.input,
+                  { borderColor: tokens.border, color: tokens.text },
+                ]}
+                keyboardType="number-pad"
+                value={headCount}
+                onChangeText={setHeadCount}
+                underlineColorAndroid="transparent"
+              />
+              <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
+              <TextInput
+                style={[
+                  styles.input,
+                  { borderColor: tokens.border, color: tokens.text },
+                ]}
+                keyboardType="number-pad"
+                value={tailCount}
+                onChangeText={setTailCount}
+                underlineColorAndroid="transparent"
+              />
+              <FieldLabel tokens={tokens} text="其余文件填充" />
+              <OptionRow
+                options={FILL_POLICIES}
+                value={fillPolicy}
+                onChange={setFillPolicy}
+                tokens={tokens}
+              />
+            </ScrollView>
+            <View style={[styles.actions, { borderTopColor: tokens.border }]}>
+              <Pressable onPress={onClose} style={styles.actionBtn}>
+                <Text style={{ color: tokens.textSecondary }}>取消</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => handleSave().catch(() => undefined)}
+                disabled={saving}
+                style={styles.actionBtn}>
+                <Text style={{ color: tokens.primary }}>
+                  {saving ? '保存中…' : '保存'}
+                </Text>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -276,13 +273,14 @@ function OptionRow<T extends string>({
 }
 
 const styles = StyleSheet.create({
+  // 背景色放在 avoidingRoot：键盘弹起后底部不会透出白条，backdrop 不再单独设背景色。
   avoidingRoot: {
     flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
     maxHeight: '85%',
