@@ -1,10 +1,9 @@
 /**
  * 聊天消息编辑弹窗。回车换行；仅按钮保存。
  * 多行输入对齐 ChatComposer 模式（TextInput 直挂 min/maxHeight），禁止 ScrollView 包裹。
- * 垂直位置：上下对称 flex spacer 实现相对居中；键盘压缩窗口时 bottomSpacer 优先收缩。
- * 键盘避让：统一用 react-native-keyboard-controller 的 KeyboardAvoidingView，
- * Android 不再依赖 adjustResize（Modal 内不生效），iOS 也不再单独分支。
- * readOnly：同款 UI、输入禁用可滚动，用于批注详情预览。
+ * 垂直位置：justifyContent center 居中面板。
+ * 键盘避让：只给面板加 translateY 上移键盘高度的一半，走 GPU 合成层不触发 layout。
+ * 遮罩保持 flex:1 覆盖全屏不动。readOnly 无需键盘避让。
  */
 import React, {useEffect, useMemo, useState} from 'react';
 import {
@@ -15,8 +14,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useTheme} from '@/theme/ThemeProvider';
 import {AppModal} from '@/components/ui/AppModal';
 
@@ -51,9 +50,16 @@ export function MessageEditModal({
   onDelete,
 }: Props) {
   const {tokens} = useTheme();
-  const insets = useSafeAreaInsets();
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
+  // Android Modal 是独立 window，useReanimatedKeyboardAnimation 走 native event emitter
+  // 在 Modal 内也能正常收事件。只给面板加 translateY，遮罩不动，不触发 flex layout。
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  const panelAvoidStyle = useAnimatedStyle(() => {
+    // 上移键盘高度的一半，既避免被键盘遮挡，又不至于推到屏幕顶部。
+    // keyboardHeightSV.value 在键盘弹起时为负值（如 -250），收起时为 0。
+    return {transform: [{translateY: Math.min(0, keyboardHeightSV.value) / 2}]};
+  }, [keyboardHeightSV]);
 
   const inputMaxHeight = useMemo(() => {
     const windowHeight = Dimensions.get('window').height;
@@ -130,12 +136,12 @@ export function MessageEditModal({
 
   const modalBody = (
     <Pressable
-      style={[styles.backdrop, {paddingBottom: 24 + insets.bottom}]}
+      style={styles.backdrop}
       onPress={onClose}>
-      <View style={styles.topSpacer} testID="message-edit-top-spacer" />
-      <Pressable
-        style={[styles.panel, {backgroundColor: tokens.surface}]}
-        onPress={e => e.stopPropagation()}>
+      <Animated.View
+        style={[styles.panel, {backgroundColor: tokens.surface}, !readOnly ? panelAvoidStyle : undefined]}
+        onStartShouldSetResponder={() => true}>
+        <Pressable onPress={e => e.stopPropagation()}>
         <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
         {label ? (
           <Text style={[styles.label, {color: tokens.textSecondary}]}>
@@ -168,8 +174,8 @@ export function MessageEditModal({
           textAlignVertical="top"
         />
         {actions}
-      </Pressable>
-      <View style={styles.bottomSpacer} testID="message-edit-bottom-spacer" />
+        </Pressable>
+      </Animated.View>
     </Pressable>
   );
 
@@ -179,46 +185,18 @@ export function MessageEditModal({
       animationType="fade"
       transparent
       onRequestClose={onClose}>
-      {!readOnly ? (
-        // react-native-keyboard-controller 的 KAV 在 KeyboardProvider 下双端生效，
-        // 不依赖 Android adjustResize（Modal 内不托底）。readOnly 无需键盘避让。
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={styles.avoidingRoot}
-          keyboardVerticalOffset={24}>
-          {modalBody}
-        </KeyboardAvoidingView>
-      ) : (
-        modalBody
-      )}
+      {modalBody}
     </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  avoidingRoot: {
-    flex: 1,
-    // 背景色放在父容器：KeyboardAvoidingView 加的 paddingBottom 区域
-    // 也属于 avoidingRoot 的 padding box，会被 backgroundColor 覆盖，
-    // 这样键盘弹起后底部不会透出白条。backdrop 不再单独设背景色。
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   backdrop: {
     flex: 1,
-    flexDirection: 'column',
+    justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     paddingHorizontal: 24,
-  },
-  topSpacer: {
-    flex: 1,
-    // 键盘压缩窗口时保留上方空白，仅收缩 bottomSpacer
-    flexShrink: 0,
-    minHeight: 0,
-  },
-  bottomSpacer: {
-    flex: 1,
-    flexShrink: 1,
-    minHeight: 0,
   },
   panel: {
     width: '100%',
