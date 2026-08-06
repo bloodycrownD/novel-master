@@ -68,7 +68,9 @@ import {
   findActiveAtQuery,
   replaceActiveAtWithToken,
 } from './composer-at-path';
-import { composerDockBottomPadding } from './composer-dock-padding';
+import {composerDockBottomPadding} from './composer-dock-padding';
+import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import { FileReferencePicker } from './FileReferencePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -101,7 +103,10 @@ type Props = {
   /** undo_send 回滚成功后递增，触发从 draft 刷新输入框。 */
   draftRestoreToken?: number;
 
-  /** 打开更多菜单（压缩 / 模型 / Agent 等）。 */
+  /** 打开更多菜单（压缩 / 模型 / Agent 等）。
+   *
+   * 暂未使用：工具栏「更多」按钮已注释隐藏，调用方也不再传该 prop。保留接口，
+   * 后续若恢复按钮再从解构里取回即可。 */
   onOpenMore?: () => void;
 };
 
@@ -118,11 +123,19 @@ export function ChatComposer({
   lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   draftRestoreToken,
-  onOpenMore,
 }: Props) {
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const runtime = useRuntime();
+  // 键盘弹起时不再需要 safeAreaBottom padding——键盘已覆盖底部，
+  // 多出来的 padding 会形成一道白条。
+  const { height: keyboardHeightSV } = useReanimatedKeyboardAnimation();
+  const dockPadRest = composerDockBottomPadding(insets.bottom);
+  const dockPaddingBottom = useAnimatedStyle(() => {
+    const kb = -keyboardHeightSV.value;
+    // 键盘弹起（kb > 0）时 padding 归零；否则走 safeAreaBottom
+    return { paddingBottom: kb > 0 ? 0 : dockPadRest };
+  }, [keyboardHeightSV, dockPadRest]);
   const { sessionId } = scope;
   const initial = readChatComposerDraftState(sessionId);
   const [text, setText] = useState(initial.text);
@@ -548,13 +561,13 @@ export function ChatComposer({
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.dock,
         {
           backgroundColor: tokens.background,
-          paddingBottom: composerDockBottomPadding(insets.bottom),
         },
+        dockPaddingBottom,
       ]}
     >
       {!hasModel ? (
@@ -605,6 +618,9 @@ export function ChatComposer({
           editable={!inputDisabled}
         />
         <View style={styles.toolbar}>
+          {/* 「更多」按钮已隐藏：压缩上下文/切换智能体/模型等入口已迁移到会话详情页。
+              代码保留，后续若有新功能需要此入口可恢复渲染。 */}
+          {/*
           <Pressable
             onPress={onOpenMore}
             disabled={onOpenMore == null}
@@ -615,6 +631,7 @@ export function ChatComposer({
               ⋯
             </Text>
           </Pressable>
+          */}
           <View style={styles.toolbarSpacer} />
           <Pressable
             onPress={() => setPickerOpen(true)}
@@ -655,7 +672,7 @@ export function ChatComposer({
           insertTokensIntoComposer(pathTokens);
         }}
       />
-    </View>
+    </Animated.View>
   );
 }
 

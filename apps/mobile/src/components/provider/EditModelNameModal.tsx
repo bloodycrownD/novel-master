@@ -2,7 +2,8 @@
  * Rename a saved model preset (`editSaved`).
  */
 import React, {useEffect, useState} from 'react';
-import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -49,6 +50,9 @@ export function EditModelNameModal({
       animationType="slide"
       transparent
       onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.avoidingRoot}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
@@ -84,15 +88,20 @@ export function EditModelNameModal({
           </View>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
+  // 背景色放在 avoidingRoot：键盘弹起后底部不会透出白条，backdrop 不再单独设背景色。
+  avoidingRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
     borderTopLeftRadius: 12,

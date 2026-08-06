@@ -184,7 +184,11 @@ export function RootNavigator() {
             name="ProjectAgentConfig"
             component={ProjectAgentConfigStackScreen}
           />
-          <Stack.Screen name="RealPrompt" component={RealPromptStackScreen} />
+          <Stack.Screen
+            name="RealPrompt"
+            component={RealPromptStackScreen}
+            options={{animation: 'none'}}
+          />
           <Stack.Screen name="Providers" component={ProvidersStackScreen} />
           <Stack.Screen name="ProviderCreate" component={ProviderCreateStackScreen} />
           <Stack.Screen name="ProviderEdit" component={ProviderEditStackScreen} />
