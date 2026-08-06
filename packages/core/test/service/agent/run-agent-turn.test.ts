@@ -95,6 +95,11 @@ function makeRuntime(overrides: {
     projectId: string,
     messageId: string,
   ) => Promise<void>;
+  /** 覆盖 messageCheckpoint.release（默认 no-op；S-1 回滚路径用）。 */
+  readonly release?: (
+    sessionId: string,
+    messageId: string,
+  ) => Promise<void>;
   /** 覆盖 messageCheckpoint.backfillMissingBaselines（默认 no-op）。 */
   readonly backfillMissingBaselines?: (
     sessionId: string,
@@ -128,6 +133,7 @@ function makeRuntime(overrides: {
     messageCheckpoint: {
       capture:
         overrides.capture ?? (async () => undefined),
+      release: overrides.release ?? (async () => undefined),
       backfillMissingBaselines:
         overrides.backfillMissingBaselines ?? (async () => undefined),
     } as AgentTurnRuntimePort["messageCheckpoint"],
@@ -896,6 +902,48 @@ describe("runAgentTurn", () => {
         ),
       /baseline capture failed/,
     );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  // T-SC1（S-1 迁移）：runAgentTurn 的 append+capture 链走 CoordinatedWrite 后，
+  // capture 步骤抛错时必须逆序回滚——删掉刚 append 的 user 消息，同时入口的
+  // backfillMissingBaselines 已为历史消息写了 baseline，会话仍可回滚。
+  it("T-SC1：capture 抛错时 append 被逆序回滚、baseline checkpoint 仍存在", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const deletedIds: string[] = [];
+    const released: Array<{ sessionId: string; messageId: string }> = [];
+    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-sc1" }),
+      delete: async (id: string) => {
+        deletedIds.push(id);
+      },
+      capture: async () => {
+        throw new Error("capture boom");
+      },
+      release: async (sessionId, messageId) => {
+        released.push({ sessionId, messageId });
+      },
+      backfillMissingBaselines: async (sessionId, projectId) => {
+        backfilled.push({ sessionId, projectId });
+      },
+    });
+    await assert.rejects(
+      () =>
+        runAgentTurn(
+          runtime,
+          { projectId: "p", sessionId: "s" },
+          "会触发 capture 失败的消息",
+        ),
+      /capture boom/,
+    );
+    // 入口 baseline 回填仍执行 → 历史消息的 baseline checkpoint 存在、会话可回滚
+    assert.equal(backfilled.length, 1, "入口必须调一次 backfillMissingBaselines");
+    // append 的补偿动作：刚写入的 user 消息被删
+    assert.deepEqual(deletedIds, ["u-sc1"], "capture 失败后 append 必须被逆序回滚");
+    // capture 的补偿动作（release）在 execute 抛错前未实际写入，这里仅验证调度路径
+    assert.equal(released.length, 0, "capture execute 抛错，其自身回滚不触发");
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 

@@ -80,4 +80,15 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
       );
     });
   }
+
+  /**
+   * {@link release} 的默认实现：直接用连接构造 repo 删行。
+   *
+   * 单条 delete 不值得再裹一层事务——`deleteCheckpointsForMessages` 本身就是一条
+   * 确定 SQL，没有中间态。幂等：消息没有 checkpoint 时 repo 层也不会抛错。
+   */
+  async release(sessionId: string, messageId: string): Promise<void> {
+    const checkpoints = new SqliteMessageCheckpointRepository(this.deps.conn);
+    await checkpoints.deleteCheckpointsForMessages(sessionId, [messageId]);
+  }
 }

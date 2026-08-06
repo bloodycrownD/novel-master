@@ -7,6 +7,7 @@
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { randomUUID } from "@/infra/random-uuid.js";
 import { ProviderError } from "@/errors/provider-errors.js";
+import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import {
   providerApiKeyRef,
@@ -75,9 +76,6 @@ export class DefaultProviderService implements ProviderService {
     const id = randomUUID();
     const now = Date.now();
     const secretRef = input.apiKey ? providerApiKeyRef(id) : null;
-    if (input.apiKey) {
-      await this.deps.secretStore.set(secretRef!, input.apiKey);
-    }
     const provider: LlmProvider = {
       id,
       builtinKey: null,
@@ -90,7 +88,34 @@ export class DefaultProviderService implements ProviderService {
       createdAtMs: now,
       updatedAtMs: now,
     };
-    await this.deps.providers.insert(provider);
+
+    // S-1：secretStore.set → providers.insert 这条跨资源写链走 CoordinatedWrite。
+    // 中间步骤失败时逆序补偿：先删 provider 行，再删 secret，避免留半套凭据。
+    const write = new CoordinatedWrite();
+    if (input.apiKey) {
+      const ref = secretRef!;
+      write.register({
+        name: "set-secret",
+        execute: async () => {
+          await this.deps.secretStore.set(ref, input.apiKey!);
+        },
+        rollback: async () => {
+          if (await this.deps.secretStore.has(ref)) {
+            await this.deps.secretStore.delete(ref);
+          }
+        },
+      });
+    }
+    write.register({
+      name: "insert-provider",
+      execute: async () => {
+        await this.deps.providers.insert(provider);
+      },
+      rollback: async () => {
+        await this.deps.providers.delete(id);
+      },
+    });
+    await write.run();
     return provider;
   }
 
@@ -103,19 +128,28 @@ export class DefaultProviderService implements ProviderService {
         { providerId: id },
       );
     }
+
+    // 先捕获原始 secret 明文与 ref，用于回滚时精确恢复（secretStore 没有事务，
+    // 只能在应用层用「读到旧值 → 失败时写回」来补偿）。
+    const originalSecretRef = resolveProviderApiKeySecretRef(provider);
+    const originalSecretValue = await this.deps.secretStore.get(
+      originalSecretRef,
+    );
+
     let secretRef = provider.secretRef;
+    let secretOp: "set" | "delete" | "noop" = "noop";
+    let newSecretValue: string | null = null;
     if (patch.apiKey !== undefined) {
       if (patch.apiKey === "") {
-        const ref = resolveProviderApiKeySecretRef(provider);
-        if (await this.deps.secretStore.has(ref)) {
-          await this.deps.secretStore.delete(ref);
-        }
+        secretOp = "delete";
         secretRef = null;
       } else {
+        secretOp = "set";
         secretRef = providerApiKeyRef(id);
-        await this.deps.secretStore.set(secretRef, patch.apiKey);
+        newSecretValue = patch.apiKey;
       }
     }
+
     const displayName =
       patch.displayName !== undefined
         ? requireNonEmptyDisplayName(patch.displayName, id)
@@ -131,7 +165,47 @@ export class DefaultProviderService implements ProviderService {
       secretRef,
       updatedAtMs: Date.now(),
     };
-    await this.deps.providers.update(updated);
+
+    // S-1：secretStore 写 → providers.update 走 CoordinatedWrite。
+    // secret 回滚靠上面捕获的原始明文；providers 回滚靠 update 回原始行。
+    const write = new CoordinatedWrite();
+    if (secretOp !== "noop") {
+      write.register({
+        name: "write-secret",
+        execute: async () => {
+          if (secretOp === "delete") {
+            if (await this.deps.secretStore.has(originalSecretRef)) {
+              await this.deps.secretStore.delete(originalSecretRef);
+            }
+          } else {
+            await this.deps.secretStore.set(secretRef!, newSecretValue!);
+          }
+        },
+        rollback: async () => {
+          if (originalSecretValue != null) {
+            await this.deps.secretStore.set(
+              originalSecretRef,
+              originalSecretValue,
+            );
+          } else if (secretOp === "set") {
+            // 原本没有 secret：删掉新写的，避免留孤儿凭据。
+            if (await this.deps.secretStore.has(secretRef!)) {
+              await this.deps.secretStore.delete(secretRef!);
+            }
+          }
+        },
+      });
+    }
+    write.register({
+      name: "update-provider",
+      execute: async () => {
+        await this.deps.providers.update(updated);
+      },
+      rollback: async () => {
+        await this.deps.providers.update(provider);
+      },
+    });
+    await write.run();
     return updated;
   }
 
@@ -144,13 +218,60 @@ export class DefaultProviderService implements ProviderService {
         { providerId: id },
       );
     }
-    await this.deps.suggestions.deleteByProvider(id);
-    await this.deps.savedModels.deleteByProvider(id);
-    await this.deps.providers.delete(id);
+
+    // S-1：五步顺序写跨 suggestions / savedModels / providers / secretStore 四个域。
+    // 先把待删数据快照下来，失败时逆序恢复，保证不留半套。
     const ref = resolveProviderApiKeySecretRef(provider);
-    if (await this.deps.secretStore.has(ref)) {
-      await this.deps.secretStore.delete(ref);
-    }
+    const suggestions = await this.deps.suggestions.listByProvider(id);
+    const savedModels = await this.deps.savedModels.listByProvider(id);
+    const secretValue = await this.deps.secretStore.get(ref);
+
+    const write = new CoordinatedWrite();
+    write.register({
+      name: "delete-suggestions",
+      execute: async () => {
+        await this.deps.suggestions.deleteByProvider(id);
+      },
+      rollback: async () => {
+        for (const s of suggestions) {
+          await this.deps.suggestions.upsert(s);
+        }
+      },
+    });
+    write.register({
+      name: "delete-saved-models",
+      execute: async () => {
+        await this.deps.savedModels.deleteByProvider(id);
+      },
+      rollback: async () => {
+        for (const m of savedModels) {
+          await this.deps.savedModels.insert(m);
+        }
+      },
+    });
+    write.register({
+      name: "delete-provider",
+      execute: async () => {
+        await this.deps.providers.delete(id);
+      },
+      rollback: async () => {
+        await this.deps.providers.insert(provider);
+      },
+    });
+    write.register({
+      name: "delete-secret",
+      execute: async () => {
+        if (await this.deps.secretStore.has(ref)) {
+          await this.deps.secretStore.delete(ref);
+        }
+      },
+      rollback: async () => {
+        if (secretValue != null) {
+          await this.deps.secretStore.set(ref, secretValue);
+        }
+      },
+    });
+    await write.run();
   }
 
   private async apiKeyStatus(

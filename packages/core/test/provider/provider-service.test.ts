@@ -1,7 +1,10 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { DefaultProviderService } from "../../src/service/provider/impl/provider.service.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
+import { KkvModelSuggestionRepository } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
+import { SqliteSavedModelRepository } from "../../src/domain/provider/repositories/impl/sqlite-saved-model.repository.js";
 import { ProviderError } from "../../src/errors/provider-errors.js";
 import {
   BUILTIN_PROVIDER_UUID_OPENAI,
@@ -175,6 +178,69 @@ describe("ProviderService", () => {
     assert.equal(await secrets.has(`provider/${created.id}/apiKey`), false);
     const row = await bundle.providers.get(created.id);
     assert.equal(row.secretRef, null);
+  });
+
+  // T-SC2（S-1 迁移）：create 的 secretStore.set → providers.insert 走 CoordinatedWrite 后，
+  // providers.insert 抛错时必须逆序回滚——删掉刚写的 secret，不留半套凭据。
+  it("T-SC2：create 写 secretStore 后 providers.insert 失败 → 不留半套凭据", async () => {
+    const ctx = getNovelMasterTestContext();
+    // 自建一个可枚举的 secretStore，方便断言“没有半套凭据残留”
+    const secretMap = new Map<string, string>();
+    const secrets: SecretStore = {
+      async get(ref) {
+        return secretMap.get(ref) ?? null;
+      },
+      async has(ref) {
+        return secretMap.has(ref);
+      },
+      async set(ref, plain) {
+        secretMap.set(ref, plain);
+      },
+      async delete(ref) {
+        return secretMap.delete(ref);
+      },
+    };
+    const kkv = createKkvService(ctx.conn);
+    const bundle = createProviderServices(ctx.conn, secrets);
+    const realProvidersRepo = bundle.providerRepo;
+    // 包一层让 insert 抛错，模拟中间步骤失败
+    const failingProvidersRepo = Object.create(realProvidersRepo) as typeof realProvidersRepo;
+    failingProvidersRepo.insert = async () => {
+      throw new Error("insert boom");
+    };
+    const service = new DefaultProviderService({
+      providers: failingProvidersRepo,
+      suggestions: new KkvModelSuggestionRepository(kkv),
+      savedModels: new SqliteSavedModelRepository(ctx.conn),
+      secretStore: secrets,
+    });
+
+    await assert.rejects(
+      () =>
+        service.create({
+          protocol: "openai",
+          baseUrl: "https://example.com/v1",
+          displayName: "sc2gw",
+          apiKey: "half-cred",
+        }),
+      /insert boom/,
+    );
+
+    // 不留半套凭据：secretStore 里不应残留任何含 half-cred 的条目
+    const leftoverValues = [...secretMap.values()].filter((v) =>
+      v.includes("half-cred"),
+    );
+    assert.deepEqual(
+      leftoverValues,
+      [],
+      "providers.insert 失败后 secretStore 不应残留刚写的 apiKey",
+    );
+    // providers 表也不应有半套行（displayName sc2gw）
+    const rows = await realProvidersRepo.list();
+    assert.ok(
+      rows.every((p) => p.displayName !== "sc2gw"),
+      "providers 表不应残留失败的半套行",
+    );
   });
 
   it("delete provider clears nm-model-suggestions KKV after fetch", async () => {
