@@ -1,7 +1,7 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   Platform,
   Pressable,
@@ -14,11 +14,7 @@ import {
 import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
-import Animated, {
-  runOnJS,
-  useAnimatedReaction,
-  useAnimatedStyle,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedStyle } from 'react-native-reanimated';
 import { type VfsScope } from '@novel-master/core/vfs';
 import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
 import { ChatComposer } from '@/components/chat/ChatComposer';
@@ -97,30 +93,6 @@ export function ChatConversationPanel({
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
   const { showToast } = useToast();
-
-  // 键盘弹起时 bump nonce，传给 MessageList / ChatTranscriptWebView
-  // 让消息列表 scrollToEnd，确保最新消息在键盘上方可见。
-  // WebView transcript 有自己的 ResizeObserver 处理平滑贴底（见 bind-shell-events.ts），
-  // 这里的 nonce 主要给 MessageList（FlatList）用，在键盘动画结束后 bump 一次即可。
-  const { height: panelKeyboardHeightSV } = useReanimatedKeyboardAnimation();
-  const [keyboardLiftNonce, setKeyboardLiftNonce] = useState(0);
-  const bumpNonce = useCallback(() => {
-    setKeyboardLiftNonce(n => n + 1);
-  }, []);
-  useAnimatedReaction(
-    () => {
-      const h = -panelKeyboardHeightSV.value;
-      // 只在高度从 >0 变到 0（键盘收起）或从 0 变到 >0（键盘弹起到终值）时触发
-      return h > 0 ? 1 : 0;
-    },
-    (curr, prev) => {
-      if (curr !== prev && curr === 1) {
-        // 键盘弹起到终值后 bump 一次（FlatList 的 scrollToEnd）
-        runOnJS(bumpNonce)();
-      }
-    },
-    [bumpNonce],
-  );
   const {
     conversationPanel,
     setConversationPanel,
@@ -284,7 +256,6 @@ export function ChatConversationPanel({
           onOpenToolFile={scope.openSessionFilePreview}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onMessageMenuAction={controller.onWebMessageMenuAction}
-          keyboardLiftNonce={keyboardLiftNonce}
         />
       ) : (
         <MessageList
@@ -300,7 +271,6 @@ export function ChatConversationPanel({
           defaultScrollToBottom={defaultChatScrollToBottom}
           onScrollSnapshot={onChatScrollSnapshot}
           onMessageLongPress={controller.handleMessageLongPress}
-          keyboardLiftNonce={keyboardLiftNonce}
           onOpenToolFile={scope.openSessionFilePreview}
           listHeaderComponent={
             hasMoreMessages ? (
