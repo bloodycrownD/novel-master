@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readFile, stat, unlink } from "node:fs/promises";
+import { readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -333,14 +333,23 @@ export class DesktopCloudSyncService {
       throw new CloudSyncError("NOT_CONFIGURED", "请先配置云存储");
     }
 
-    const storage = createS3ObjectStorage({
-      endpoint: publicConfig.endpoint,
-      region: publicConfig.region,
-      bucket: publicConfig.bucket,
-      accessKeyId: publicConfig.accessKeyId,
-      secretAccessKey: secret,
-      forcePathStyle: publicConfig.forcePathStyle,
-    });
+    // Node 端注入基于 node:fs/promises 的 FileSystemPort（对应 A-26），
+    // 与 hashSnapshotFile 配合走 putFile / getToPath 文件路径，避免一次性读入大快照。
+    const nodeFileSystem = {
+      readFile: (path: string) => readFile(path),
+      writeFile: (path: string, bytes: Uint8Array) => writeFile(path, bytes),
+    };
+    const storage = createS3ObjectStorage(
+      {
+        endpoint: publicConfig.endpoint,
+        region: publicConfig.region,
+        bucket: publicConfig.bucket,
+        accessKeyId: publicConfig.accessKeyId,
+        secretAccessKey: secret,
+        forcePathStyle: publicConfig.forcePathStyle,
+      },
+      { fileSystem: nodeFileSystem },
+    );
 
     const runtime = this.runtime;
     const stamp = Date.now();
