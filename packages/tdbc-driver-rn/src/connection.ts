@@ -19,6 +19,8 @@ import { rowsFromResult } from "./row-mapper.js";
 export class RnConnection implements TdbcConnection {
   private closed = false;
   private inTransaction = false;
+  /** Nesting depth for SAVEPOINT naming inside an outer transaction. */
+  private savepointDepth = 0;
   private readonly mutex = new AsyncMutex();
 
   constructor(private readonly adapter: RnSqliteAdapter) {}
@@ -145,14 +147,27 @@ export class RnConnection implements TdbcConnection {
     };
 
     if (this.inTransaction) {
-      // --- batch inside outer transaction: statements only, no nested BEGIN/COMMIT ---
+      // --- batch inside outer transaction: SAVEPOINT-scoped nested transaction.
+      // A failure rolls back only this batch (ROLLBACK TO sp); the outer
+      // transaction stays open and usable, matching better-sqlite3's
+      // db.transaction() nesting semantics. ---
+      const sp = `tdbc_sp_${++this.savepointDepth}`;
+      await this.adapter.execute(`SAVEPOINT ${sp}`);
       try {
-        return await runStatements();
+        const result = await runStatements();
+        await this.adapter.execute(`RELEASE ${sp}`);
+        return result;
       } catch (cause) {
+        // Roll back to the savepoint and drop it before surfacing the
+        // error, so the outer transaction is left in a clean state.
+        await this.adapter.execute(`ROLLBACK TO ${sp}`);
+        await this.adapter.execute(`RELEASE ${sp}`);
         throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
           driver: "rn",
           cause,
         });
+      } finally {
+        this.savepointDepth--;
       }
     }
 
