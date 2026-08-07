@@ -124,6 +124,7 @@ export const agentDefinitionDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
     name: z.string().min(1),
+    description: z.string().optional(),
     prompts: promptsDocumentSchema,
     model: z.string().uuid().optional(),
     runtime: z
@@ -187,6 +188,9 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
   const tools = wireToolsToDomain(doc.tools);
   return {
     name: doc.name,
+    ...(doc.description != null && doc.description.length > 0
+      ? { description: doc.description }
+      : {}),
     prompts,
     model: doc.model,
     runtime: doc.runtime,
@@ -206,6 +210,9 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
   return {
     schemaVersion: 1,
     name: def.name,
+    ...(def.description != null && def.description.trim().length > 0
+      ? { description: def.description }
+      : {}),
     prompts: {
       ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
       persistEnabled: def.prompts.persistEnabled ?? false,
@@ -238,6 +245,16 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
 
 const agentDefinitionWireSchema = z.preprocess((raw) => {
   assertNoLegacyAgentFields(raw);
+  // silently strip 已废弃的 subagentCallable（strict schema 会拒未知字段）
+  if (
+    raw != null &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    "subagentCallable" in raw
+  ) {
+    const { subagentCallable: _omit, ...rest } = raw as Record<string, unknown>;
+    return rest;
+  }
   return raw;
 }, agentDefinitionDocumentSchema);
 

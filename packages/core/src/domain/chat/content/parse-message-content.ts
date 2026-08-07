@@ -132,6 +132,26 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       if ("summary" in value && typeof value.summary !== "string") {
         throw chatInvalidArgument(`${label}: summary must be a string`);
       }
+      // meta 同 summary/ok 语义：UI-only 旁路字段，允许不存在。
+      // 存在时必须是 record；具名称字段类型检查，未知字段静默忽略（向前兼容）。
+      let meta: { subagentSessionId?: string } | undefined;
+      if ("meta" in value && value.meta !== undefined) {
+        const metaValue = value.meta;
+        if (!isRecord(metaValue)) {
+          throw chatInvalidArgument(`${label}: meta must be an object`);
+        }
+        if (
+          "subagentSessionId" in metaValue &&
+          typeof metaValue.subagentSessionId !== "string"
+        ) {
+          throw chatInvalidArgument(
+            `${label}: meta.subagentSessionId must be a string`,
+          );
+        }
+        const subagentSessionId = optionalString(metaValue.subagentSessionId);
+        meta =
+          subagentSessionId != null ? { subagentSessionId } : undefined;
+      }
       const ok = optionalBoolean(value.ok);
       const summary = optionalString(value.summary);
       return {
@@ -140,6 +160,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
         content,
         ...(ok !== undefined ? { ok } : {}),
         ...(summary !== undefined ? { summary } : {}),
+        ...(meta !== undefined ? { meta } : {}),
       } satisfies ToolResultBlock;
     }
     case "thinking": {

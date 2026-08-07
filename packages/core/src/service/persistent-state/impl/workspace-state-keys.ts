@@ -13,3 +13,4 @@ export const KEY_CURRENT_PROVIDER_ID = "currentProviderId";
 export const KEY_CURRENT_MODEL_ID = "currentModelId";
 export const KEY_CURRENT_REGEX_GROUP_ID = "currentRegexGroupId";
 export const KEY_CURRENT_AGENT_ID = "currentAgentId";
+export const KEY_SUBAGENT_NAMES = "subagentNames";

@@ -26,3 +26,11 @@ agents:
     prompts:
       persist: {}
       dynamic: {}
+  # general: 通用 subagent 模板，作为子智能体名单的默认成员（不可删除）
+  general:
+    description: 通用 subagent 模板，擅长读写文件、搜索内容，可完成主代理委派的探索性任务。
+    prompts:
+      system: |
+        你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。
+      persist: {}
+      dynamic: {}

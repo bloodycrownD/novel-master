@@ -143,6 +143,10 @@ export const IPC_CHANNELS = {
   AGENT_YAML_EXPORT: 'nm:agentYaml/export',
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
 
+  /** 全局子智能体名单（读 / 写） */
+  SUBAGENT_NAMES_GET: 'nm:subagentNames/get',
+  SUBAGENT_NAMES_SET: 'nm:subagentNames/set',
+
   REGEX_LIST_GROUPS: 'nm:regex/listGroups',
   REGEX_GET_GROUP: 'nm:regex/getGroup',
   REGEX_CREATE_GROUP: 'nm:regex/createGroup',
@@ -227,6 +231,8 @@ export type SessionDto = {
   readonly id: string;
   readonly projectId: string;
   readonly title: string | null;
+  /** 父会话 id；task 工具派生的子会话挂主会话 id，顶层会话为 null。 */
+  readonly parentSessionId: string | null;
   readonly createdAtMs: number;
   readonly updatedAtMs: number;
 };
@@ -616,6 +622,8 @@ export type ContentBlockDto =
       readonly content: string;
       readonly ok?: boolean;
       readonly summary?: string;
+      /** UI-only 旁路字段；task 工具携带 `subagentSessionId` 供卡片跳转子会话。 */
+      readonly meta?: { readonly subagentSessionId?: string };
     };
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
@@ -739,6 +747,11 @@ export type AgentListPickerResponse = {
 
 export type AgentSetCurrentRequest = {
   readonly agentId: string;
+};
+
+/** 写入全局子智能体名单（agent name 列表）。 */
+export type SubagentNamesSetRequest = {
+  readonly names: readonly string[];
 };
 
 export type ModelPickerRowDto = {

@@ -56,6 +56,7 @@ function makeRuntime(
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
       getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
       getCurrentRegexGroupId: async () => undefined,
+      getSubagentNames: async () => [],
     },
     agentRegistry: registry,
     projects: ctx.projects,

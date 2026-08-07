@@ -17,6 +17,8 @@ type Props = {
   groupItem?: boolean;
   /** When set and tool has a VFS file path, the card is tappable. */
   onOpenFile?: (path: string) => void;
+  /** 当 tool 带 subagentSessionId 时，点击跳转子会话只读浏览。 */
+  onOpenSubagentSession?: (sessionId: string) => void;
 };
 
 function statusLabel(status: ToolCallView['status']): string {
@@ -52,12 +54,18 @@ export function ToolCallCard({
   showFullParams,
   groupItem = false,
   onOpenFile,
+  onOpenSubagentSession,
 }: Props) {
   const { tokens } = useTheme();
   const filePath = vfsToolFilePath(tool);
-  const canOpen = filePath != null && onOpenFile != null;
+  const subagentSessionId = tool.subagentSessionId;
+  // canOpen 对称 vfs 文件路径：文件路径或子会话 id 任一可跳转即视为可点。
+  const canOpen =
+    (filePath != null && onOpenFile != null) ||
+    (subagentSessionId != null && onOpenSubagentSession != null);
   const summary = toolCallSummary(tool);
   const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : summary;
+  const openHint = subagentSessionId != null ? '点击查看 · 子会话' : '点击查看 · 聊天工作区';
 
   const card = (
     <>
@@ -78,7 +86,7 @@ export function ToolCallCard({
       ) : null}
       {canOpen ? (
         <Text style={[styles.openHint, { color: tokens.primary }]}>
-          点击查看 · 聊天工作区
+          {openHint}
         </Text>
       ) : null}
     </>
@@ -88,8 +96,18 @@ export function ToolCallCard({
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`打开文件 ${filePath}`}
-        onPress={() => onOpenFile(filePath)}
+        accessibilityLabel={
+          subagentSessionId != null
+            ? `打开子会话 ${subagentSessionId}`
+            : `打开文件 ${filePath}`
+        }
+        onPress={() => {
+          if (subagentSessionId != null && onOpenSubagentSession != null) {
+            onOpenSubagentSession(subagentSessionId);
+          } else if (filePath != null && onOpenFile != null) {
+            onOpenFile(filePath);
+          }
+        }}
         style={({ pressed }) => [
           groupItem ? styles.groupItem : styles.card,
           {

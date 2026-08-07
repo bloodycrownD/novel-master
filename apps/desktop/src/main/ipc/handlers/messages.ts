@@ -57,6 +57,7 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
         content: block.content,
         ...(block.ok !== undefined ? { ok: block.ok } : {}),
         ...(block.summary !== undefined ? { summary: block.summary } : {}),
+        ...(block.meta != null ? { meta: block.meta } : {}),
       };
     default:
       return null;
@@ -287,6 +288,7 @@ function toSessionDto(session: {
   id: string;
   projectId: string;
   title: string | null;
+  parentSessionId: string | null;
   createdAtMs: number;
   updatedAtMs: number;
 }): SessionDto {
@@ -294,6 +296,7 @@ function toSessionDto(session: {
     id: session.id,
     projectId: session.projectId,
     title: session.title,
+    parentSessionId: session.parentSessionId,
     createdAtMs: session.createdAtMs,
     updatedAtMs: session.updatedAtMs,
   };

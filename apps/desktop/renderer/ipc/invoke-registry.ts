@@ -65,6 +65,7 @@ import {
   type SessionSetAgentBindingRequest,
   type SessionSetComposerDraftRequest,
   type SessionSetModelOverrideRequest,
+  type SubagentNamesSetRequest,
   type UserVfsHasPendingRequest,
   type VfsBatchClearStagingRequest,
   type VfsBatchExportStageRequest,
@@ -482,6 +483,14 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcAgentYamlImport: withReq<{ agentId: string }, unknown>(
       invoke,
       IPC_CHANNELS.AGENT_YAML_IMPORT,
+    ),
+    ipcSubagentNamesGet: noArg<IpcResult<string[]>>(
+      invoke,
+      IPC_CHANNELS.SUBAGENT_NAMES_GET,
+    ),
+    ipcSubagentNamesSet: withReq<SubagentNamesSetRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SUBAGENT_NAMES_SET,
     ),
     ipcRegexListGroups: noArg(invoke, IPC_CHANNELS.REGEX_LIST_GROUPS),
     ipcRegexCreateGroup: withReq<unknown, unknown>(

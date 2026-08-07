@@ -30,6 +30,18 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
       "ALTER TABLE chat_session ADD COLUMN agent_config_json TEXT NULL",
   },
   {
+    table: "chat_session",
+    column: "parent_session_id",
+    addColumnSql:
+      "ALTER TABLE chat_session ADD COLUMN parent_session_id TEXT NULL",
+    afterAdd: async (tx) => {
+      // 老库升版补列后建索引（新库由 bootstrap 末尾的幂等步骤建）。
+      await tx.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)",
+      );
+    },
+  },
+  {
     table: "chat_message",
     column: "hidden",
     addColumnSql:

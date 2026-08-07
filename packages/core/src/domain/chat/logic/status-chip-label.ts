@@ -283,6 +283,7 @@ function truncateChipText(text: string, maxChars: number): string {
   return flat.slice(0, maxChars) + "…";
 }
 
+
 /** `from→to` 或 `rename:from→to` 后缀。 */
 function parseRenameArrowPair(
   suffix: string,

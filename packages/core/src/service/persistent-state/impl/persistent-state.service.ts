@@ -17,6 +17,7 @@ import {
   KEY_CURRENT_PROVIDER_ID,
   KEY_CURRENT_REGEX_GROUP_ID,
   KEY_CURRENT_SESSION_ID,
+  KEY_SUBAGENT_NAMES,
   WORKSPACE_STATE_MODULE,
 } from "./workspace-state-keys.js";
 
@@ -110,6 +111,30 @@ export class DefaultPersistentState implements PersistentState {
 
   resetCurrentAgentId(): Promise<void> {
     return this.reset(KEY_CURRENT_AGENT_ID);
+  }
+
+  async getSubagentNames(): Promise<readonly string[]> {
+    const raw = await this.get(KEY_SUBAGENT_NAMES);
+    if (raw == null || raw === "") {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed.filter((v): v is string => typeof v === "string");
+    } catch {
+      return [];
+    }
+  }
+
+  async setSubagentNames(names: readonly string[]): Promise<void> {
+    await this.set(KEY_SUBAGENT_NAMES, JSON.stringify([...names]));
+  }
+
+  resetSubagentNames(): Promise<void> {
+    return this.reset(KEY_SUBAGENT_NAMES);
   }
 
   private async get(key: string): Promise<string | undefined> {

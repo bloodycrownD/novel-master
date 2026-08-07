@@ -19,6 +19,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     title TEXT,
     composer_draft_json TEXT NULL,
     agent_config_json TEXT NULL,
+    parent_session_id TEXT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
   )`,

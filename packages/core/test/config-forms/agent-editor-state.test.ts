@@ -1094,3 +1094,99 @@ test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
   });
   assert.doesNotThrow(() => validateAgentPromptLayout(layout));
 });
+
+test("T-DESC1: definitionToForm 将非空 description 透传到表单", () => {
+  const form = definitionToForm({
+    name: "x",
+    prompts: { persist: [], dynamic: [] },
+    description: "擅长检索代码库。",
+  });
+  assert.equal(form.description, "擅长检索代码库。");
+});
+
+test("T-DESC2: definitionToForm 对缺省 description 返回空串", () => {
+  const form = definitionToForm({
+    name: "x",
+    prompts: { persist: [], dynamic: [] },
+  });
+  assert.equal(form.description, "");
+});
+
+test("T-DESC3: buildAgentDefinitionFromForm 在 description 非空时透传", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    description: "  擅长写测试  ",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    // 非空但 trim 后有内容才透传，且透传值会 trim。
+    assert.equal(result.definition.description, "擅长写测试");
+  }
+});
+
+test("T-DESC4: buildAgentDefinitionFromForm 在 description trim 空时省略字段", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    description: "   \n  ",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.description, undefined);
+  }
+});
+
+test("T-DESC5: formSnapshotJson 将 description 纳入 dirty 比对", () => {
+  const base = createDefaultAgentEditorPrompts();
+  const json = formSnapshotJson({
+    name: "a",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+    description: "desc-a",
+  });
+  assert.equal(JSON.parse(json).description, "desc-a");
+  // 缺省时序列化为空串，与显式空串等价。
+  const jsonEmpty = formSnapshotJson({
+    name: "a",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  assert.equal(JSON.parse(jsonEmpty).description, "");
+});

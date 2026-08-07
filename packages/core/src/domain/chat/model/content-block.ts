@@ -44,6 +44,16 @@ export interface ToolResultBlock {
   readonly ok?: boolean;
   /** Short UI hint; not sent to LLM adapters. */
   readonly summary?: string;
+  /**
+   * UI-only 旁路字段集合（同 `summary`/`ok` 语义：三端 content mapper 天然忽略）。
+   *
+   * 目前唯一字段是 `subagentSessionId`：`task` 工具把子 agent 跑完的子 session id
+   * 写进这里，供 UI 工具卡片点击跳转子会话只读浏览。不申给 LLM（剥离在
+   * `format-tool-output` 提取 `text` 时完成，不足这里）。
+   */
+  readonly meta?: {
+    readonly subagentSessionId?: string;
+  };
 }
 
 export interface ThinkingBlock {

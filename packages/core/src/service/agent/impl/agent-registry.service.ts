@@ -12,6 +12,7 @@ import {
   type ValidateAgentDefinitionOptions,
 } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
+import { DEFAULT_SUBAGENT_DEFINITION } from "../default-subagent-definition.js";
 import type { AgentRegistryService } from "../agent-registry.port.js";
 
 export interface DefaultAgentRegistryServiceDeps {
@@ -25,6 +26,15 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
 
   async listAgentIds(): Promise<readonly string[]> {
     return this.deps.repository.listIds();
+  }
+
+  async list(): Promise<readonly AgentDefinition[]> {
+    const dbDefs = await this.deps.repository.list();
+    // 仅 list 合并虚拟 general：DB 同名优先（允许用户 upsert 覆盖出厂 seed）。
+    if (dbDefs.some((def) => def.name === DEFAULT_SUBAGENT_DEFINITION.name)) {
+      return dbDefs;
+    }
+    return [...dbDefs, DEFAULT_SUBAGENT_DEFINITION];
   }
 
   async getRawWire(agentId: string): Promise<unknown | null> {
@@ -83,6 +93,14 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   async delete(agentId: string): Promise<void> {
     if (!(await this.deps.repository.exists(agentId))) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
+    }
+    // built-in general 不可删除（子智能体名单兜底依赖它）
+    const def = await this.deps.repository.get(agentId);
+    if (def?.name === DEFAULT_SUBAGENT_DEFINITION.name) {
+      throw new AgentConfigError(
+        "INVALID_SCHEMA",
+        `内置 agent "${DEFAULT_SUBAGENT_DEFINITION.name}" 不可删除`,
+      );
     }
     await this.deps.repository.delete(agentId);
     if (this.deps.state) {

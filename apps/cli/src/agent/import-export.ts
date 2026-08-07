@@ -36,6 +36,17 @@ function bundleToDefinitions(
       prompts,
       model: entry.model,
       runtime: entry.runtime,
+      ...(entry.tools != null
+        ? {
+            tools: {
+              ...(entry.tools.allow != null ? { allow: [...entry.tools.allow] } : {}),
+              ...(entry.tools.deny != null ? { deny: [...entry.tools.deny] } : {}),
+            },
+          }
+        : {}),
+      ...(entry.description != null && entry.description.trim().length > 0
+        ? { description: entry.description }
+        : {}),
     });
   }
   return map;
@@ -76,11 +87,24 @@ export async function exportAgentsToFile(
       prompts: AgentsBundleDocument["agents"][string]["prompts"];
       model?: string;
       runtime?: { maxSteps?: number };
+      tools?: { allow?: string[]; deny?: string[] };
+      description?: string;
     };
     agents[agentId] = {
       prompts: entry.prompts,
       ...(entry.model != null ? { model: entry.model } : {}),
       ...(entry.runtime != null ? { runtime: entry.runtime } : {}),
+      ...(entry.tools != null
+        ? {
+            tools: {
+              ...(entry.tools.allow != null ? { allow: [...entry.tools.allow] } : {}),
+              ...(entry.tools.deny != null ? { deny: [...entry.tools.deny] } : {}),
+            },
+          }
+        : {}),
+      ...(entry.description != null && entry.description.trim().length > 0
+        ? { description: entry.description }
+        : {}),
     };
   }
   const doc: AgentsBundleDocument = { schemaVersion: 1, agents };

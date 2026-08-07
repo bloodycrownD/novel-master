@@ -254,6 +254,7 @@ export function ChatConversationPanel({
           onScrollSnapshot={onChatScrollSnapshot}
           onLoadOlder={onLoadOlderMessages}
           onOpenToolFile={scope.openSessionFilePreview}
+          onOpenSubagentSession={scope.openSubagentSession}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onMessageMenuAction={controller.onWebMessageMenuAction}
         />
@@ -272,6 +273,7 @@ export function ChatConversationPanel({
           onScrollSnapshot={onChatScrollSnapshot}
           onMessageLongPress={controller.handleMessageLongPress}
           onOpenToolFile={scope.openSessionFilePreview}
+          onOpenSubagentSession={scope.openSubagentSession}
           listHeaderComponent={
             hasMoreMessages ? (
               <Pressable

@@ -116,6 +116,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   // 自定义附加信息开关 / 文本（对应域 prompts.customAttach）。
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState("");
+  // 人类可读的 agent 描述（对应域 description，多行文本）。
+  const [description, setDescription] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -159,6 +161,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         workplaceAssistantText,
         customAttachEnabled,
         customAttachText,
+        description,
         persist,
         dynamic,
       }),
@@ -178,6 +181,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     ]
@@ -247,6 +251,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
       setCustomAttachEnabled(promptForm.customAttachEnabled);
       setCustomAttachText(promptForm.customAttachText);
+      setDescription(promptForm.description ?? "");
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -432,6 +437,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     });
@@ -645,6 +651,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               onChange={(e) => setName(e.target.value)}
             />
           </SettingsField>
+          <SettingsField label="描述">
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="向 task 工具说明这个 agent 擅长什么，可留空。"
+            />
+          </SettingsField>
+          <p className="settings-hint settings-hint--compact">
+            用于在 task 工具中向主代理介绍本 agent 的能力。
+          </p>
         </SettingsSection>
 
         <SettingsSection title="模型">

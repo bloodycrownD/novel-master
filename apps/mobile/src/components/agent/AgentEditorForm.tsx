@@ -134,6 +134,8 @@ export function AgentEditorForm(props: Props) {
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState('');
+  // 人类可读的 agent 描述（对应域 description，多行文本）。
+  const [description, setDescription] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -172,6 +174,7 @@ export function AgentEditorForm(props: Props) {
         workplaceAssistantText,
         customAttachEnabled,
         customAttachText,
+        description,
         persist,
         dynamic,
       }),
@@ -191,6 +194,7 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     ],
@@ -238,6 +242,7 @@ export function AgentEditorForm(props: Props) {
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
       setCustomAttachText(promptForm.customAttachText ?? '');
+      setDescription(promptForm.description ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -487,6 +492,7 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     });
@@ -854,6 +860,19 @@ export function AgentEditorForm(props: Props) {
               tokens={tokens}
               value={name}
               onChangeText={setName}
+            />
+          </FormField>
+          <FormField
+            label="描述"
+            tokens={tokens}
+            hint="向 task 工具说明这个 agent 擅长什么，可留空。"
+          >
+            <FormTextInput
+              tokens={tokens}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              placeholder="例如：擅长检索代码库、写测试。"
             />
           </FormField>
         </FormSectionCard>

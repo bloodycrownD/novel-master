@@ -143,7 +143,17 @@ export class DefaultProjectService implements ProjectService {
       }
       const sessionList = await r.sessions.listByProject(id);
       const sessionKkv = createSessionKkvService(tx);
-      for (const session of sessionList) {
+      // listByProject 现在只返 parent_session_id IS NULL 的顶层主会话，
+      // 子 agent 会话需要 BFS 展开，否则会留孤儿 messages/fs/kkv/vfs。
+      const allSessions: { id: string }[] = [];
+      const queue: { id: string }[] = [...sessionList];
+      while (queue.length > 0) {
+        const s = queue.shift()!;
+        allSessions.push(s);
+        const children = await r.sessions.listByParentSession(s.id);
+        queue.push(...children);
+      }
+      for (const session of allSessions) {
         await r.messages.deleteBySession(session.id);
         await deleteSessionFsData(tx, session.id, id);
         await sessionKkv.clearSession(session.id);

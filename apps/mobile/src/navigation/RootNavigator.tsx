@@ -17,6 +17,7 @@ import {ChatTabScreen} from '../screens/tabs/ChatTabScreen';
 import {ProfileTabScreen} from '../screens/tabs/ProfileTabScreen';
 import {AgentsSettingsScreen} from '../screens/stack/AgentsSettingsScreen';
 import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
+import {SubagentRosterScreen} from '../screens/stack/SubagentRosterScreen';
 import {ProjectAgentConfigScreen} from '../screens/stack/ProjectAgentConfigScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
@@ -36,6 +37,7 @@ import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
 import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
+import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
 import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {AboutScreen} from '../screens/stack/AboutScreen';
 import {useAutoUpdateCheck} from '../hooks/useAutoUpdateCheck';
@@ -108,6 +110,10 @@ const AgentsSettingsStackScreen = withStackLayout(
   AgentsSettingsScreen,
 );
 const AgentEditorStackScreen = withStackLayout('AgentEditor', AgentEditorScreen);
+const SubagentRosterStackScreen = withStackLayout(
+  'SubagentRoster',
+  SubagentRosterScreen,
+);
 const ProjectAgentConfigStackScreen = withStackLayout(
   'ProjectAgentConfig',
   ProjectAgentConfigScreen,
@@ -157,6 +163,10 @@ const SessionDetailStackScreen = withStackLayout(
   'SessionDetail',
   SessionDetailScreen,
 );
+const SubagentSessionStackScreen = withStackLayout(
+  'SubagentSessionView',
+  SubagentSessionScreen,
+);
 const ChatHistorySearchStackScreen = withStackLayout(
   'ChatHistorySearch',
   ChatHistorySearchScreen,
@@ -180,6 +190,10 @@ export function RootNavigator() {
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="AgentsSettings" component={AgentsSettingsStackScreen} />
           <Stack.Screen name="AgentEditor" component={AgentEditorStackScreen} />
+          <Stack.Screen
+            name="SubagentRoster"
+            component={SubagentRosterStackScreen}
+          />
           <Stack.Screen
             name="ProjectAgentConfig"
             component={ProjectAgentConfigStackScreen}
@@ -221,6 +235,10 @@ export function RootNavigator() {
           <Stack.Screen
             name="SessionDetail"
             component={SessionDetailStackScreen}
+          />
+          <Stack.Screen
+            name="SubagentSessionView"
+            component={SubagentSessionStackScreen}
           />
           <Stack.Screen
             name="ChatHistorySearch"

@@ -15,6 +15,8 @@ export interface AgentToolPolicy {
 /** Serializable agent configuration (Core truth source). */
 export interface AgentDefinition {
   readonly name: string;
+  /** 人类可读的 agent 描述；用于在 task 工具 description 中向主 agent 介绍各 subagent 擅长什么。 */
+  readonly description?: string;
   readonly prompts: AgentPromptLayout;
   /** Optional default model pin (savedModelId UUID); host resolves with CLI flag/state. */
   readonly model?: string;
