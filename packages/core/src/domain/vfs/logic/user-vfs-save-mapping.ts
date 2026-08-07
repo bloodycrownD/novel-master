@@ -4,6 +4,7 @@
  * @module domain/vfs/logic/user-vfs-save-mapping
  */
 
+import { diffArrays } from "diff";
 import type { ToolUseBlock } from "@/domain/chat/model/content-block.js";
 
 /** 保存映射可选参数。 */
@@ -68,75 +69,73 @@ function countOccurrences(haystack: string, needle: string): number {
   return count;
 }
 
-/** 行级 diff：返回若干不相交的变更区间。 */
+/**
+ * 行级 diff：基于 Myers 算法（`diff` 包的 `diffArrays`）。
+ *
+ * Myers 会把变更拆成若干 added/removed 片段，这里再把相邻的 added/removed
+ * （中间没有公共行）归并成一个变更块，最终转换成与原来一致的闭区间表示。
+ * 纯插入侧 oldStart > oldEnd、纯删除侧 newStart > newEnd，由 expandAnchorHunk 处理。
+ */
 function computeLineChangeRegions(
   baselineLines: readonly string[],
   savedLines: readonly string[],
 ): LineChangeRegion[] {
   const regions: LineChangeRegion[] = [];
-  diffRecursive(
-    baselineLines,
-    0,
-    baselineLines.length,
-    savedLines,
-    0,
-    savedLines.length,
-    regions,
+  const parts = diffArrays(
+    [...baselineLines],
+    [...savedLines],
   );
+
+  let oldIdx = 0; // 已消费的 baseline 行号（开区间端点）
+  let newIdx = 0; // 已消费的 saved 行号（开区间端点）
+  let blockOldStart = 0; // 当前变更块在 baseline 的起点
+  let blockNewStart = 0; // 当前变更块在 saved 的起点
+  let inBlock = false;
+
+  // 把当前变更块落成一个 region；oldEnd/newEnd 用闭区间（开区间端点 - 1）。
+  const flush = (oldEndExclusive: number, newEndExclusive: number): void => {
+    if (!inBlock) return;
+    regions.push({
+      oldStart: blockOldStart,
+      oldEnd: oldEndExclusive - 1,
+      newStart: blockNewStart,
+      newEnd: newEndExclusive - 1,
+    });
+    inBlock = false;
+  };
+
+  for (const part of parts) {
+    if (part.added) {
+      // 进入变更块时记下起点（此时两侧都还没推进，天然对齐到块首）。
+      if (!inBlock) {
+        inBlock = true;
+        blockOldStart = oldIdx;
+        blockNewStart = newIdx;
+      }
+      newIdx += part.count;
+    } else if (part.removed) {
+      if (!inBlock) {
+        inBlock = true;
+        blockOldStart = oldIdx;
+        blockNewStart = newIdx;
+      }
+      oldIdx += part.count;
+    } else {
+      // 公共行会切断变更块：先落盘当前块，再同步推进两侧指针。
+      flush(oldIdx, newIdx);
+      oldIdx += part.count;
+      newIdx += part.count;
+    }
+  }
+  flush(oldIdx, newIdx);
+
   return regions;
 }
 
-function diffRecursive(
-  oldLines: readonly string[],
-  oStart: number,
-  oEnd: number,
-  newLines: readonly string[],
-  nStart: number,
-  nEnd: number,
-  regions: LineChangeRegion[],
-): void {
-  let os = oStart;
-  let ns = nStart;
-  let oe = oEnd;
-  let ne = nEnd;
-
-  while (os < oe && ns < ne && oldLines[os] === newLines[ns]) {
-    os++;
-    ns++;
-  }
-  while (os < oe && ns < ne && oldLines[oe - 1] === newLines[ne - 1]) {
-    oe--;
-    ne--;
-  }
-  if (os >= oe && ns >= ne) {
-    return;
-  }
-
-  for (let oi = os; oi < oe; oi++) {
-    for (let nj = ns; nj < ne; nj++) {
-      if (oldLines[oi] === newLines[nj]) {
-        if (oi > os || nj > ns) {
-          regions.push({
-            oldStart: os,
-            oldEnd: oi - 1,
-            newStart: ns,
-            newEnd: nj - 1,
-          });
-        }
-        diffRecursive(oldLines, oi, oe, newLines, nj, ne, regions);
-        return;
-      }
-    }
-  }
-
-  regions.push({
-    oldStart: os,
-    oldEnd: oe - 1,
-    newStart: ns,
-    newEnd: ne - 1,
-  });
-}
-
+/**
+ * 基于 Myers 输出做对称线性扩展：每轮把上下文向首尾各扩 radius 行，
+ * 找到第一个在 baseline 中唯一出现的锚点就返回。
+ */
 function expandAnchorHunk(
   baseline: string,
   baselineLines: readonly string[],
@@ -145,25 +144,19 @@ function expandAnchorHunk(
 ): { oldString: string; newString: string } | null {
   const maxRadius = Math.max(baselineLines.length, savedLines.length);
   for (let radius = 0; radius <= maxRadius; radius++) {
-    const candidates: Array<{ before: number; after: number }> = [];
-    for (let before = 0; before <= radius; before++) {
-      candidates.push({ before, after: radius - before });
+    const oldStart = Math.max(0, region.oldStart - radius);
+    const oldEnd = Math.min(baselineLines.length - 1, region.oldEnd + radius);
+    const newStart = Math.max(0, region.newStart - radius);
+    const newEnd = Math.min(savedLines.length - 1, region.newEnd + radius);
+    if (oldStart > oldEnd || newStart > newEnd) {
+      continue;
     }
-    for (const { before, after } of candidates) {
-      const oldStart = Math.max(0, region.oldStart - before);
-      const oldEnd = Math.min(baselineLines.length - 1, region.oldEnd + after);
-      const newStart = Math.max(0, region.newStart - before);
-      const newEnd = Math.min(savedLines.length - 1, region.newEnd + after);
-      if (oldStart > oldEnd || newStart > newEnd) {
-        continue;
-      }
-      const oldString = joinLines(baselineLines.slice(oldStart, oldEnd + 1));
-      if (oldString === "" || countOccurrences(baseline, oldString) !== 1) {
-        continue;
-      }
-      const newString = joinLines(savedLines.slice(newStart, newEnd + 1));
-      return { oldString, newString };
+    const oldString = joinLines(baselineLines.slice(oldStart, oldEnd + 1));
+    if (oldString === "" || countOccurrences(baseline, oldString) !== 1) {
+      continue;
     }
+    const newString = joinLines(savedLines.slice(newStart, newEnd + 1));
+    return { oldString, newString };
   }
   return null;
 }
