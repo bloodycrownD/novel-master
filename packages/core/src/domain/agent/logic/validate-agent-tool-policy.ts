@@ -53,6 +53,12 @@ export function validateAgentToolPolicy(
   tools: AgentToolPolicy | undefined,
   registryNames: ReadonlySet<string>,
 ): void {
+  // task 是静态内置工具（registerBuiltinTools 注册，对 LLM 可见），
+  // 但不能让用户在 tools.allow/deny 里配 "task"。这里中心过滤掉 task，
+  // 后续 assertKnownNames 用过滤后的集合，保证用户写 "task" 仍报 INVALID_TOOL_POLICY（AC-9）。
+  const knownNames = new Set(registryNames);
+  knownNames.delete("task");
+
   if (tools == null) {
     return;
   }
@@ -67,9 +73,9 @@ export function validateAgentToolPolicy(
   }
 
   if (tools.allow != null) {
-    assertKnownNames(tools.allow, registryNames, "tools.allow");
+    assertKnownNames(tools.allow, knownNames, "tools.allow");
   }
   if (tools.deny != null) {
-    assertKnownNames(tools.deny, registryNames, "tools.deny");
+    assertKnownNames(tools.deny, knownNames, "tools.deny");
   }
 }

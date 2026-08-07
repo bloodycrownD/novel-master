@@ -53,6 +53,16 @@ export interface BuiltinToolSubagentContext {
   readonly depth: number;
   /** 父 agent run 的 abort signal；子 agent 内部派生自己的 controller 监听它。 */
   readonly parentSignal: AbortSignal;
+  /**
+   * 装配期预算好的候选子代理列表（name + 可选描述），
+   * `task` 工具的 description lambda 从这里拼给 LLM 看的候选文案。
+   * 已排除当前 agent 自身、且仅含 `mode !== "primary"` 的 agent，
+   * 至少含内置 `general`，所以 task 描述始终有内容。
+   */
+  readonly callableAgents: readonly {
+    readonly name: string;
+    readonly description?: string;
+  }[];
 }
 
 /** 注入到内置工具 `run()` 的运行时上下文。 */

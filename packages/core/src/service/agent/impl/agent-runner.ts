@@ -190,7 +190,7 @@ export class DefaultAgentRunner implements AgentRunner {
     const doomLoopCrossRoundWindow =
       options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
-    const tools = toolsFromRegistry(this.deps.registry);
+    const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
     const wtScope: VfsScope = {
       kind: "session",
       projectId,

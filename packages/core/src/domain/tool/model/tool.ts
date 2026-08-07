@@ -18,8 +18,12 @@ export interface Tool<Input, Output, Ctx = unknown> {
   /** Globally unique tool name (e.g. `read`). */
   readonly name: string;
 
-  /** Human readable description for logs/UX. */
-  readonly description: string;
+  /**
+   * 人类可读描述；按运行时上下文动态生成（如 task 工具拼候选 subagent 名单）。
+   *
+   * 由 {@link toolsFromRegistry} 在装配期调 `description(ctx)` 求值成 string。
+   */
+  readonly description: (ctx: Ctx) => string;
 
   /** Input validation schema. */
   readonly inputSchema: z.ZodType<Input>;

@@ -30,7 +30,6 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import {
   registerBuiltinTools,
-  registerSubagentTool,
 } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext, RunChildAgentOptions } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
@@ -107,7 +106,6 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly sessionKkv: SessionKkvService;
   readonly state: AgentRunRuntimePort["state"] & {
     getCurrentRegexGroupId(): Promise<string | null | undefined>;
-    getSubagentNames(): Promise<readonly string[]>;
   };
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
@@ -367,23 +365,14 @@ export async function runAgentTurn(
     registeredToolNames: toolProbe.list(),
   });
 
-  // 装配 task 工具：读全局子智能体名单（PersistentState KKV），
-  // 查 registry 拿对应描述，拼进 task description 让模型知道能调哪些子 agent。
-  // general 兜底：名单空时自动合并 ["general"]。
-  // probe 不含 task（避免 validate 误判），本 registry 才含 task。
-  const subagentNamesRaw = await runtime.state.getSubagentNames();
-  const subagentNameSet = new Set(subagentNamesRaw);
-  subagentNameSet.add("general"); // built-in 兜底
-  subagentNameSet.delete(definition.name); // 排除自己防自递归
+  // 预算候选子代理名单：mode !== "primary"（排除主 agent）、排除当前 agent 自身防自递归。
+  // 内置 general 永远 mode:"subagent"，排除自身后至少含 general，task 描述始终有内容。
+  // task 是静态内置工具，registerBuiltinTools 已注册（probe 也含 task）；
+  // 这里不单独注册 task，只把 callable 塞进下方 toolCtx.subagent.callableAgents 供 description lambda 读。
   const allDefs = await runtime.agentRegistry.list();
-  const defByName = new Map(allDefs.map((d) => [d.name, d]));
-  const subagentCallableAgents = [...subagentNameSet]
-    .map((name) => defByName.get(name))
-    .filter((d): d is AgentDefinition => d != null)
+  const callable = allDefs
+    .filter((d) => d.mode !== "primary" && d.name !== definition.name)
     .map((d) => ({ name: d.name, description: d.description }));
-  if (subagentCallableAgents.length > 0) {
-    registerSubagentTool(toolProbe, subagentCallableAgents);
-  }
 
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
@@ -444,6 +433,7 @@ export async function runAgentTurn(
       },
       depth: 0,
       parentSignal,
+      callableAgents: callable,
     },
   };
   const runner = createAgentRunner(
@@ -517,24 +507,15 @@ async function runChildAgent(args: {
   } = args;
   const childDepth = parentDepth + 1;
 
-  // 装配子 agent 用的 registry：vfs 6 件 + 可选 task（孙 agent 被 resolve deny）。
+  // 装配子 agent 用的 registry：vfs 6 件 + 静态 task（孙 agent 被 resolve deny）。
   const baseRegistry = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(baseRegistry);
-  if (childDepth < 2) {
-    const subagentNamesRaw = await runtime.state.getSubagentNames();
-    const subagentNameSet = new Set(subagentNamesRaw);
-    subagentNameSet.add("general");
-    subagentNameSet.delete(def.name);
-    const allDefs = await runtime.agentRegistry.list();
-    const defByName = new Map(allDefs.map((d) => [d.name, d]));
-    const callableAgents = [...subagentNameSet]
-      .map((name) => defByName.get(name))
-      .filter((d): d is AgentDefinition => d != null)
-      .map((d) => ({ name: d.name, description: d.description }));
-    if (callableAgents.length > 0) {
-      registerSubagentTool(baseRegistry, callableAgents);
-    }
-  }
+  // 预算候选子代理名单：mode !== "primary"、排除子 agent 自身。
+  // task 是否对 LLM 可见由下方 resolveAgentToolRegistry 的 depth 判断控制（depth>=2 deny）。
+  const childAllDefs = await runtime.agentRegistry.list();
+  const callable = childAllDefs
+    .filter((d) => d.mode !== "primary" && d.name !== def.name)
+    .map((d) => ({ name: d.name, description: d.description }));
   const registry = resolveAgentToolRegistry(baseRegistry, def, {
     depth: childDepth,
   });
@@ -614,6 +595,7 @@ async function runChildAgent(args: {
       },
       depth: childDepth,
       parentSignal: childController.signal,
+      callableAgents: callable,
     },
   };
 

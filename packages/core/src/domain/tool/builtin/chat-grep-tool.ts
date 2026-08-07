@@ -93,7 +93,7 @@ export function createChatGrepTool(): Tool<
 > {
   return {
     name: "chat_grep",
-    description: "在当前会话消息中搜索文本或正则（含 hidden 消息）",
+    description: () => "在当前会话消息中搜索文本或正则（含 hidden 消息）",
     inputSchema: z.object({
       pattern: z.string().min(1),
       options: z.object({ role: z.string().optional() }).optional(),
