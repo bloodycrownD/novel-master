@@ -30,6 +30,18 @@ function isLegacyTemplateLogicalPath(normalized: string): boolean {
 }
 
 /**
+ * 针对已规范化的路径做 `/template` 旧前缀校验。
+ *
+ * 抽出来是为了让 {@link toPhysicalPath} 拿到规范化结果后能直接复用，不必再
+ * 走一遍 {@link resolveLogicalPath} 重复 normalize。
+ */
+function assertNormalizedPathAllowed(normalized: string): void {
+  if (isLegacyTemplateLogicalPath(normalized)) {
+    throw vfsInvalidPath(normalized, LEGACY_TEMPLATE_MESSAGE);
+  }
+}
+
+/**
  * Resolves caller path input to a normalized absolute logical path.
  *
  * @param input - Absolute (`/notes/a.md`) or relative (`notes/a.md`) path
@@ -54,9 +66,7 @@ export function resolveLogicalPath(input: string): string {
  */
 export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): void {
   const normalized = resolveLogicalPath(logical);
-  if (isLegacyTemplateLogicalPath(normalized)) {
-    throw vfsInvalidPath(logical, LEGACY_TEMPLATE_MESSAGE);
-  }
+  assertNormalizedPathAllowed(normalized);
 }
 
 /**
@@ -64,7 +74,7 @@ export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): voi
  */
 export function toPhysicalPath(scope: VfsScope, logical: string): string {
   const normalized = resolveLogicalPath(logical);
-  assertLogicalPathAllowed(scope, normalized);
+  assertNormalizedPathAllowed(normalized);
   switch (scope.kind) {
     case "global":
       if (normalized === "/") {
