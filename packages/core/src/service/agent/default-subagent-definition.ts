@@ -2,8 +2,8 @@
  * 出厂通用 subagent 定义（运行时虚拟注入用）。
  *
  * 仅在此导出常量；`AgentRegistryService.list` 合并虚拟 `general` 的逻辑
- * 由 registry 服务实现（见 impl-core-tool 节点）。用户若 upsert 同名
- * `general`，DB 版本优先（允许覆盖）。
+ * 由 registry 服务实现（见 impl-core-tool 节点）。内置 `general` 名称
+ * 在 upsert 时会被直接拒绝（见 agent-registry.service.ts）。
  *
  * @module service/agent/default-subagent-definition
  */
@@ -19,6 +19,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 export const DEFAULT_SUBAGENT_DEFINITION: AgentDefinition = {
   name: "general",
   description: "通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
+  mode: "subagent",
   prompts: {
     system:
       "你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",

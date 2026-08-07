@@ -62,6 +62,13 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
         "agent name must not be empty",
       );
     }
+    // 内置 general 是虚拟 agent，禁止用户创建同名
+    if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
+      throw new AgentConfigError(
+        "INVALID_SCHEMA",
+        `"${DEFAULT_SUBAGENT_DEFINITION.name}" 是内置智能体名称，不可使用`,
+      );
+    }
     await this.assertUniqueDisplayName(agentId, trimmedName);
 
     const normalized: AgentDefinition = { ...def, name: trimmedName };
@@ -94,7 +101,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     if (!(await this.deps.repository.exists(agentId))) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
     }
-    // built-in general 不可删除（子智能体名单兜底依赖它）
+    // built-in general 不可删除（运行时虚拟注入的递归基线）
     const def = await this.deps.repository.get(agentId);
     if (def?.name === DEFAULT_SUBAGENT_DEFINITION.name) {
       throw new AgentConfigError(
