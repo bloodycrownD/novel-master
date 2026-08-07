@@ -1,0 +1,23 @@
+# agent-mode-refactor 迭代审查状态（spec-check-loop）
+# 维护方：主代理；子代理只读参考
+
+prd_path: docs/Iterations/agent-mode-refactor/prd.md
+spec_path: docs/Iterations/agent-mode-refactor/spec.md
+
+dag_version: 13
+review_round: 7
+doc_fix_plan: []
+status: execute-ready（待用户确认）
+open_must_fix: []
+conclusion: Go（execute-ready）
+remaining_p2:
+  - P2-1: agent-tool-policy.test.ts 行号标注风格（不影响执行）
+  - P2-2: PRD FR-4 措辞与现状微调（SPEC 操作描述已覆盖）
+phase_test_fix_coverage: 17 files（tool/ 10 + agent/ 3 + service/agent/ 4）
+round_history:
+  - R2: P0-A/B/C + P1-A/B（中心过滤 + list-seed + 行号）
+  - R3: P0-1 + P1-1 + P2-1/P2-2（补列 vfs/stream 测试 + risk 同步 + 7 调用点）
+  - R4: P1-1~P1-4 + P2-2/P2-3（description 类型区分 + risk #3 + 行号）
+  - R5: P1-A + P2-B/C（service/agent 4 文件 + persistent-state 措辞 + 可选链统一）
+  - R6: P1-N1/N2（内联 Tool 字面量 + count=6 断言）
+  - R7: Go
