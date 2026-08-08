@@ -113,6 +113,7 @@ export function ChatConversationPanel({
     chatMessages,
     hasMoreMessages,
     chatRichTextEnabled,
+    pendingSubagentSessions,
     richRenderEpoch,
     webMenuCloseSignal,
     restoredTranscriptScroll,
@@ -255,6 +256,7 @@ export function ChatConversationPanel({
           onLoadOlder={onLoadOlderMessages}
           onOpenToolFile={scope.openSessionFilePreview}
           onOpenSubagentSession={scope.openSubagentSession}
+          pendingSubagentSessions={pendingSubagentSessions}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onMessageMenuAction={controller.onWebMessageMenuAction}
         />
@@ -274,6 +276,7 @@ export function ChatConversationPanel({
           onMessageLongPress={controller.handleMessageLongPress}
           onOpenToolFile={scope.openSessionFilePreview}
           onOpenSubagentSession={scope.openSubagentSession}
+          pendingSubagentSessions={pendingSubagentSessions}
           listHeaderComponent={
             hasMoreMessages ? (
               <Pressable

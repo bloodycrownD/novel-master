@@ -16,6 +16,10 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { type ChatMessage } from '@novel-master/core/chat';
 import type { VfsService } from '@novel-master/core/vfs';
 import type { WorkplaceService } from '@novel-master/core/workplace';
+import {
+  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+  type SubagentChildSessionCreatedPayload,
+} from '@novel-master/core/events';
 import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
 import type { MessageMenuAnchor } from '@/components/chat/MessageActionMenu';
 import type { VfsFileManagerHandle } from '@/components/vfs/VfsFileManager';
@@ -116,6 +120,11 @@ export type ChatTabContextValue = {
   ) => void;
   readonly useWebviewTranscript: boolean;
   readonly chatRichTextEnabled: boolean;
+  /**
+   * pending task 工具的子会话映射（title → childSessionId）。
+   * 由 EVENT_SUBAGENT_CHILD_SESSION_CREATED 维护，让执行中的 task 卡片可点击进入子会话。
+   */
+  readonly pendingSubagentSessions: ReadonlyMap<string, string>;
   readonly richRenderEpoch: number;
   readonly webMenuCloseSignal: number;
   readonly webMenuOpen: boolean;
@@ -189,11 +198,40 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     }
   }, [scope.chatSubview, sessionId, projectId, refreshChatMeta]);
 
+  // 订阅子会话创建事件：task 工具执行中（createChildSession）即发出，
+  // 用 title → childSessionId 维护映射，让 pending 卡片也能点击进入子会话浏览。
+  // 切换会话时清空，避免上一个会话的映射串到新会话。
+  useEffect(() => {
+    if (sessionId == null) {
+      setPendingSubagentSessions(new Map());
+      return undefined;
+    }
+    const sid = sessionId;
+    setPendingSubagentSessions(new Map());
+    const sub = runtime.eventBus.subscribe(
+      EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+      (payload: SubagentChildSessionCreatedPayload) => {
+        if (payload.parentSessionId !== sid) {
+          return;
+        }
+        setPendingSubagentSessions(prev => {
+          const next = new Map(prev);
+          next.set(payload.title, payload.childSessionId);
+          return next;
+        });
+      },
+    );
+    return () => sub.unsubscribe();
+  }, [runtime.eventBus, sessionId]);
+
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
+  const [pendingSubagentSessions, setPendingSubagentSessions] = useState<
+    Map<string, string>
+  >(() => new Map());
   const [chatStreamBatchEnabled, setChatStreamBatchEnabled] = useState(true);
   const [messageMenuTarget, setMessageMenuTarget] = useState<
     ChatMessage | undefined
@@ -389,6 +427,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       setMessageEditPrompt,
       useWebviewTranscript,
       chatRichTextEnabled,
+      pendingSubagentSessions,
       richRenderEpoch,
       webMenuCloseSignal,
       webMenuOpen,
@@ -428,6 +467,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       messageEditPrompt,
       useWebviewTranscript,
       chatRichTextEnabled,
+      pendingSubagentSessions,
       richRenderEpoch,
       webMenuCloseSignal,
       webMenuOpen,

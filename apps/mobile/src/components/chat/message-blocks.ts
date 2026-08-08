@@ -45,6 +45,8 @@ export interface BuildChatListItemsOptions {
   readonly agentRunning?: boolean;
   /** true 当 uiRunning=false（Composer 已停）；与 agentRunning 正交 */
   readonly runUiStopped?: boolean;
+  /** pending task 工具的子会话映射：title → childSessionId（执行中即可点击进入）。 */
+  readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
 }
 
 function blocksForMessage(message: ChatMessage): readonly ContentBlock[] {
@@ -169,15 +171,34 @@ function toolStatusFromResult(result: ToolResultBlock): ToolCallStatus {
 export function toolCallViewFromUse(
   use: ToolUseBlock,
   results: Map<string, ToolResultBlock>,
+  options?: BuildChatListItemsOptions,
 ): ToolCallView {
   const result = results.get(use.id);
   if (result == null) {
-    return {
+    const view: ToolCallView = {
       toolUseId: use.id,
       name: use.name,
       input: use.input,
       status: 'pending',
     };
+    // pending task 工具：尝试从 pendingSubagentSessions 按 title 匹配 childSessionId，
+    // 这样执行中的 task 卡片也能点击进入子会话浏览。
+    if (use.name === 'task' && options?.pendingSubagentSessions) {
+      const desc =
+        typeof use.input?.description === 'string'
+          ? use.input.description.trim()
+          : '';
+      const prompt =
+        typeof use.input?.prompt === 'string' ? use.input.prompt.trim() : '';
+      const title = desc || prompt.slice(0, 40);
+      if (title) {
+        const childSessionId = options.pendingSubagentSessions.get(title);
+        if (childSessionId) {
+          return { ...view, subagentSessionId: childSessionId };
+        }
+      }
+    }
+    return view;
   }
   const subagentSessionId = result.meta?.subagentSessionId;
   return {
@@ -302,7 +323,7 @@ export function buildChatListItems(
       ? resolveUnpairedToolStatus(message, messages, agentRunning, runUiStopped)
       : undefined;
     const tools = toolUses.map(use => {
-      const view = toolCallViewFromUse(use, results);
+      const view = toolCallViewFromUse(use, results, options);
       if (view.status === 'pending' && unpairedStatus != null) {
         return { ...view, status: unpairedStatus };
       }

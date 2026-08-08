@@ -93,6 +93,8 @@ export type ChatTranscriptWebViewProps = {
   ) => void;
   readonly onMessageMenuAction?: (messageId: string, action: string) => void;
   readonly onWebMenuOpenChange?: (open: boolean) => void;
+  /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
+  readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
 };
 
 function transcriptFlagsEqual(
@@ -123,7 +125,8 @@ function chatTranscriptWebViewPropsEqual(
     prev.menuCloseSignal === next.menuCloseSignal &&
     prev.keyboardLiftNonce === next.keyboardLiftNonce &&
     prev.initialScroll === next.initialScroll &&
-    transcriptFlagsEqual(prev.flags, next.flags)
+    transcriptFlagsEqual(prev.flags, next.flags) &&
+    prev.pendingSubagentSessions === next.pendingSubagentSessions
   );
 }
 
@@ -228,6 +231,7 @@ export const ChatTranscriptWebView = memo(
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
+        pendingSubagentSessions,
       },
       ref,
     ) {
@@ -236,6 +240,7 @@ export const ChatTranscriptWebView = memo(
       const transcriptListOptions = {
         agentRunning,
         runUiStopped: !uiRunning,
+        pendingSubagentSessions,
       };
       const { tokens } = useTheme();
       const webRef = useRef<WebView>(null);
