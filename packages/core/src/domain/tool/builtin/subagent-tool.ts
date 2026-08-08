@@ -166,10 +166,9 @@ ${formatCallableList(callable)}
     }
 
     // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
-    const title =
-      input.description.trim().length > 0
-        ? input.description
-        : input.prompt.slice(0, 40);
+    // 统一 trim，与 mobile 侧 pendingSubagentSessions 的 title 匹配逻辑保持一致。
+    const trimmedDesc = input.description.trim();
+    const title = trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
     const childSessionId = await subagent.createChildSession(title);
 
     const { savedModelId, workspaceModelId } =

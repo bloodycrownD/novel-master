@@ -895,6 +895,15 @@ export const ChatTranscriptWebView = memo(
         sendSessionSnapshot('preserve');
       }, [webReady, flags?.richText, sendSessionSnapshot]);
 
+      // pendingSubagentSessions 变化时（task 工具创建子会话事件到达），
+      // 重发 snapshot 让 pending task 卡片立即获得 subagentSessionId 可点击。
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        sendSessionSnapshot('preserve');
+      }, [webReady, pendingSubagentSessions, sendSessionSnapshot]);
+
       useEffect(() => {
         if (!webReady) {
           return;
