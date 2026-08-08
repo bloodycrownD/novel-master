@@ -23,6 +23,9 @@ import {
 
 export type ToolsMode = "default" | "allow" | "deny";
 
+/** Agent 暴露范围（与域 {@link AgentDefinition}["mode"] 对应）。 */
+export type AgentMode = "primary" | "subagent" | "all";
+
 /** persist / dynamic 文本块可选角色（system 单独顶置）。 */
 export const PROMPT_BLOCK_ROLES = ["user", "assistant"] as const;
 
@@ -30,6 +33,12 @@ export const TOOL_MODE_OPTIONS: Array<{ value: ToolsMode; label: string }> = [
   { value: "default", label: "默认（全部工具）" },
   { value: "allow", label: "白名单" },
   { value: "deny", label: "黑名单" },
+];
+
+export const MODE_OPTIONS: Array<{ value: AgentMode; label: string }> = [
+  { value: "all", label: "都可以" },
+  { value: "primary", label: "仅主代理" },
+  { value: "subagent", label: "仅子代理" },
 ];
 
 const ROLE_LABELS: Record<(typeof PROMPT_BLOCK_ROLES)[number], string> = {
@@ -47,6 +56,8 @@ export { DEFAULT_WORKPLACE_ASSISTANT_TEXT };
 /** Agent 编辑器表单（三区 layout，非扁平 prompts）。 */
 export type AgentEditorFormInput = {
   name: string;
+  /** 暴露范围（与域 {@link AgentDefinition}["mode"] 对应；缺省按 "all" 解释）。 */
+  mode: AgentMode;
   maxSteps: string;
   modelEnabled: boolean;
   providerId: string;
@@ -434,6 +445,7 @@ export function definitionToForm(
   def: AgentDefinition
 ): Pick<
   AgentEditorFormInput,
+  | "mode"
   | "systemEnabled"
   | "systemContent"
   | "persistEnabled"
@@ -453,6 +465,7 @@ export function definitionToForm(
   const customAttachText =
     typeof def.prompts.customAttach === "string" ? def.prompts.customAttach : "";
   return {
+    mode: def.mode ?? "all",
     systemEnabled: system.length > 0,
     systemContent: def.prompts.system ?? "",
     persistEnabled: def.prompts.persistEnabled ?? false,
@@ -578,6 +591,7 @@ export function buildAgentDefinitionFromForm(
   const descriptionText = (input.description ?? "").trim();
   const def: AgentDefinition = {
     name: input.name.trim(),
+    mode: input.mode,
     prompts: validatedLayout,
     ...(Number.isFinite(steps) && steps > 0
       ? { runtime: { maxSteps: steps } }
