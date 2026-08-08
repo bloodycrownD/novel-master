@@ -28,6 +28,8 @@ export type ToolCallRow = {
   summary?: string;
   input?: Record<string, unknown> | null;
   resultContent?: unknown;
+  /** 子智能体会话 id：非空时卡片可点击进入子会话只读浏览。applySnapshot 是浅引用赋值，运行时数据已挂在对象上，这里只是补类型声明。 */
+  subagentSessionId?: string;
 };
 
 /** 消息附件芯片。 */
