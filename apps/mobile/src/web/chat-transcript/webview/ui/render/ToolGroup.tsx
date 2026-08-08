@@ -27,7 +27,7 @@ function ToolGroupItem({ tool }: { tool: ToolCallRow }) {
   const statusClass = toolStatusClass(tool.status);
   const statusInner = toolStatusLabel(tool.status);
   const openHint = hasSubagent
-    ? '点击查看 · 子智能体会话'
+    ? '点击查看 · 子会话'
     : '点击查看 · 聊天工作区';
   return (
     <div
