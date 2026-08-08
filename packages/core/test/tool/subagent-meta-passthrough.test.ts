@@ -71,4 +71,39 @@ describe("subagent meta 透传链路", () => {
       undefined,
     );
   });
+
+  it("T-A2: output.stopped=true → ok=false + content=output.text + meta 带 subagentSessionId + failureReason", () => {
+    const block = buildToolResultBlock("tu-stop", {
+      ok: true,
+      output: {
+        text: "子代理被中断前的末条文本",
+        subagentSessionId: "child-stop",
+        stopped: true,
+        failureReason: "用户停止",
+      },
+    });
+    // 关键：outcome.ok=true 但 output.stopped=true 时 tool_result 要标 ok=false。
+    assert.equal(block.ok, false);
+    // content 是 output.text 的 LLM 格式（末条文本），不是 JSON 壳。
+    assert.equal(block.content, "子代理被中断前的末条文本");
+    assert.ok(!block.content.includes("stopped"));
+    assert.ok(!block.content.includes("failureReason"));
+    assert.ok(!block.content.includes("subagentSessionId"));
+    // meta 两字段都透传。
+    assert.equal(block.meta?.subagentSessionId, "child-stop");
+    assert.equal(block.meta?.failureReason, "用户停止");
+  });
+
+  it("T-A3: stopReason=completed → stopped 字段不出现 → tool_result ok=true（回归）", () => {
+    // 正常完成路径：output 不含 stopped，走原有 ok=true 分支。
+    const block = buildToolResultBlock("tu-ok", {
+      ok: true,
+      output: { text: "done", subagentSessionId: "child-ok" },
+    });
+    assert.equal(block.ok, true);
+    assert.equal(block.content, "done");
+    assert.equal(block.meta?.subagentSessionId, "child-ok");
+    // 正常完成不应出现 failureReason。
+    assert.equal(block.meta?.failureReason, undefined);
+  });
 });

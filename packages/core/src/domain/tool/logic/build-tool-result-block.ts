@@ -122,6 +122,30 @@ export function buildToolResultBlock(
       outcome.output,
       meta?.subagentSessionId,
     );
+
+    // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
+    // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
+    // content 仍是 output.text（末条 assistant 文本或占位文案），meta 额外带 failureReason。
+    if (isStoppedTaskOutput(outcome.output)) {
+      const failureReason = readFailureReason(outcome.output);
+      return {
+        type: "tool_result",
+        toolUseId,
+        ok: false,
+        content,
+        ...(subagentSessionId != null
+          ? {
+              meta: {
+                ...(failureReason != null ? { failureReason } : {}),
+                subagentSessionId,
+              },
+            }
+          : failureReason != null
+            ? { meta: { failureReason } }
+            : {}),
+      };
+    }
+
     return {
       type: "tool_result",
       toolUseId,
@@ -145,6 +169,35 @@ export function buildToolResultBlock(
     content,
     ...(summary != null ? { summary } : {}),
   };
+}
+
+/**
+ * 检测 task 工具输出是否携带有「用户停止」标记（phase-1-abort-reflow）。
+ *
+ * outcome.ok=true 但 output.stopped=true 时，buildToolResultBlock 要把这条
+ * tool_result 标成 ok=false。本函数只做窄义类型守卫，不复用 resolveSubagentSessionIdFromOutcome
+ * 的 object 判定，语义上更直结。
+ */
+function isStoppedTaskOutput(output: unknown): boolean {
+  return (
+    output != null &&
+    typeof output === "object" &&
+    !Array.isArray(output) &&
+    (output as { stopped?: unknown }).stopped === true
+  );
+}
+
+/** 从 task 工具输出读取 failureReason（仅 string 时生效，否则返回 undefined）。 */
+function readFailureReason(output: unknown): string | undefined {
+  if (
+    output == null ||
+    typeof output !== "object" ||
+    Array.isArray(output)
+  ) {
+    return undefined;
+  }
+  const reason = (output as { failureReason?: unknown }).failureReason;
+  return typeof reason === "string" ? reason : undefined;
 }
 
 /**
