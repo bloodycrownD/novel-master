@@ -891,3 +891,77 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
     assert.equal(messageBodyText(prepared[0]!), plain);
   });
 });
+
+describe("prepareUserMessagesForPrompt tool_result 透传 (T-S1)", () => {
+  it("T-S1a: 含 tool_result 的 user 消息在 extraInfo 非空时仍透传、block 类型保住", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    // 直接构造含 tool_result block 的 user 消息，不复用 userMsg（后者写死 textBlocks）。
+    const toolResultMsg: ChatMessage = {
+      id: "tr1",
+      sessionId: session.id,
+      seq: 1,
+      role: "user",
+      content: {
+        blocks: [
+          {
+            type: "tool_result",
+            toolUseId: "tu_1",
+            content: "result text",
+          },
+        ],
+      },
+      provider: null,
+      raw: null,
+      createdAtMs: 0,
+      hidden: false,
+    };
+    const prepared = await prepareUserMessagesForPrompt([toolResultMsg], {
+      sessionId: session.id,
+      sessionKkv: sk,
+      vfs: ctx.sessionVfs(project.id, session.id),
+      extraInfo: "自定义附加信息",
+    });
+    assert.equal(prepared.length, 1);
+    assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
+    assert.equal(
+      (prepared[0]!.content.blocks[0] as { toolUseId: string }).toolUseId,
+      "tu_1",
+    );
+  });
+
+  it("T-S1b: 含 tool_result 的 user 消息在无 customAttach 时透传、block 类型保住", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const toolResultMsg: ChatMessage = {
+      id: "tr2",
+      sessionId: session.id,
+      seq: 1,
+      role: "user",
+      content: {
+        blocks: [
+          {
+            type: "tool_result",
+            toolUseId: "tu_2",
+            content: "result text",
+          },
+        ],
+      },
+      provider: null,
+      raw: null,
+      createdAtMs: 0,
+      hidden: false,
+    };
+    const prepared = await prepareUserMessagesForPrompt([toolResultMsg], {
+      sessionId: session.id,
+      sessionKkv: sk,
+      vfs: ctx.sessionVfs(project.id, session.id),
+    });
+    assert.equal(prepared.length, 1);
+    assert.equal(prepared[0]!.content.blocks[0]!.type, "tool_result");
+  });
+});
