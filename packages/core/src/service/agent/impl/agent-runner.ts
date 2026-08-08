@@ -206,20 +206,6 @@ export class DefaultAgentRunner implements AgentRunner {
         let stepCompactionEmitted = false;
 
         let visible = await session.list();
-        // [DEBUG subagent-400] DB 读出的原始消息（session.list 后）
-        console.log("[agent-runner DEBUG] session_list_raw", {
-          sessionId,
-          step,
-          messageCount: visible.length,
-          roles: visible.map(m => ({
-            role: m.role,
-            hidden: m.hidden,
-            seq: m.seq,
-            blockTypes: m.content.blocks.map(b => b.type),
-            toolUseBlockIds: m.content.blocks.filter(b => b.type === "tool_use").map(b => (b as { id: string }).id),
-            toolResultIds: m.content.blocks.filter(b => b.type === "tool_result").map(b => (b as { toolUseId: string }).toolUseId),
-          })),
-        });
         if (signal?.aborted) {
           stopReason = "cancelled";
           break;
@@ -326,44 +312,7 @@ export class DefaultAgentRunner implements AgentRunner {
           protocol,
           zones,
         );
-        // [DEBUG subagent-400] normalizeForLlmExport 后、normalizeOrphan 前
-        console.log("[agent-runner DEBUG] before_orphan_normalize", {
-          sessionId,
-          step,
-          messageCount: exportMessages.length,
-          roles: exportMessages.map(m => ({
-            role: m.role,
-            blockTypes: m.content.blocks.map(b => b.type),
-          })),
-        });
         const llmMessages = normalizeOrphanToolResultsForLlm(exportMessages);
-
-        // [DEBUG subagent-400] 检查发给 LLM 的消息历史里 tool_use/tool_result 配对
-        {
-          const toolUseIds = new Set<string>();
-          const toolResultIds = new Set<string>();
-          for (const msg of llmMessages) {
-            for (const block of msg.content.blocks) {
-              if (block.type === "tool_use") toolUseIds.add(block.id);
-              if (block.type === "tool_result") toolResultIds.add(block.toolUseId);
-            }
-          }
-          const unpairedToolUses = [...toolUseIds].filter(id => !toolResultIds.has(id));
-          const orphanToolResults = [...toolResultIds].filter(id => !toolUseIds.has(id));
-          console.log("[agent-runner DEBUG] llm_request_history", {
-            sessionId,
-            step,
-            messageCount: llmMessages.length,
-            roleSequence: llmMessages.map(m => {
-              const blockTypes = m.content.blocks.map(b => b.type);
-              return m.role + "[" + blockTypes.join(",") + "]";
-            }),
-            toolUseCount: toolUseIds.size,
-            toolResultCount: toolResultIds.size,
-            unpairedToolUses: unpairedToolUses.length > 0 ? unpairedToolUses : undefined,
-            orphanToolResults: orphanToolResults.length > 0 ? orphanToolResults : undefined,
-          });
-        }
 
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
         if (this.deps.listAllSessionMessages != null) {
@@ -446,17 +395,6 @@ export class DefaultAgentRunner implements AgentRunner {
           (b): b is ToolUseBlock => b.type === "tool_use",
         );
 
-        // [DEBUG subagent-400] 记录 assistant 消息追加状态 + tool_use 清单
-        console.log("[agent-runner DEBUG] step=" + step, {
-          sessionId,
-          assistantAppended: assistantMessage != null,
-          assistantMessageId: assistantMessage?.id,
-          toolUseCount: toolUses.length,
-          toolUseNames: toolUses.map(tu => ({ id: tu.id, name: tu.name })),
-          blockTypes: result.blocks.map(b => b.type),
-          meaningful,
-        });
-
         if (toolUses.length === 0) {
           finished = true;
           stopReason = "completed";
@@ -526,18 +464,6 @@ export class DefaultAgentRunner implements AgentRunner {
           }
         }
 
-        // [DEBUG subagent-400] 记录工具执行结果
-        console.log("[agent-runner DEBUG] tool_results", {
-          sessionId,
-          step,
-          outcomes: outcomes.map((o, i) => ({
-            toolUseId: toolUses[i]?.id,
-            toolName: toolUses[i]?.name,
-            ok: o?.ok,
-            errorMessage: o && !o.ok ? String(o.error) : undefined,
-          })),
-        });
-
         const vfsMutated = anyToolUseMutatesWorkspace(toolUses);
         vfsMutatedInRun = vfsMutatedInRun || vfsMutated;
         const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
@@ -579,13 +505,6 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         await session.append("user", { blocks: toolResults });
-        // [DEBUG subagent-400] 确认 tool_results 已落库
-        console.log("[agent-runner DEBUG] tool_results_appended", {
-          sessionId,
-          step,
-          count: toolResults.length,
-          toolResultIds: toolResults.map(tr => ({ toolUseId: tr.toolUseId })),
-        });
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
@@ -602,13 +521,6 @@ export class DefaultAgentRunner implements AgentRunner {
         }
       }
     } catch (e: unknown) {
-      // [DEBUG subagent-400] 异常退出时记录关键状态
-      console.log("[agent-runner DEBUG] caught_error", {
-        sessionId,
-        error: e instanceof Error ? e.message : String(e),
-        errorName: e instanceof Error ? e.name : undefined,
-        stack: e instanceof Error ? e.stack?.split('\n').slice(0, 5).join(' | ') : undefined,
-      });
       if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
         stopReason = "cancelled";
       } else {

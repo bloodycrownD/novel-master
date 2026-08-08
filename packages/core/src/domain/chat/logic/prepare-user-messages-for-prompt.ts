@@ -362,9 +362,14 @@ async function prepareOneUserMessage(
   const hasExtraInfo =
     typeof runtime.extraInfo === "string" &&
     runtime.extraInfo.trim().length > 0;
-  // 无附件且无 extraInfo：恒等原文，不走 wrap。
-  // 无附件但 extraInfo 非空：仍需走 wrap 注入 <extra-info> 块。
-  if (attachments.length === 0 && !hasExtraInfo) {
+  // 含 tool block 的消息（tool_result）不走 wrap——wrap 会用 messageBodyTextFromContent
+  // 提取纯文本再重组为 textBlocks，丢失 tool_result block 类型，导致 LLM API 报
+  // "insufficient tool messages following tool_calls"。
+  const hasToolBlocks = message.content.blocks.some(
+    (b) => b.type === "tool_result" || b.type === "tool_use",
+  );
+  // 无附件且无 extraInfo，或含 tool block：恒等原文，不走 wrap。
+  if ((attachments.length === 0 && !hasExtraInfo) || hasToolBlocks) {
     return message;
   }
 
