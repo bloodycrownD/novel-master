@@ -133,6 +133,13 @@ ${formatCallableList(callable)}
   }),
   async run(input, ctx) {
     const subagent = ctx.subagent;
+    // [DEBUG subagent-400] task 工具被调用
+    console.log("[task-tool DEBUG] run_start", {
+      subagentName: input.subagentName,
+      description: input.description,
+      hasSubagentCtx: subagent != null,
+      depth: subagent?.depth,
+    });
     if (subagent == null) {
       throw new ToolError(
         "FAILED",
@@ -180,6 +187,13 @@ ${formatCallableList(callable)}
       workspaceModelId,
       signal: subagent.parentSignal,
       maxSteps: def.runtime?.maxSteps,
+    });
+
+    // [DEBUG subagent-400] 子 agent 运行结果
+    console.log("[task-tool DEBUG] child_agent_done", {
+      subagentName: input.subagentName,
+      childSessionId,
+      stopReason: result.stopReason,
     });
 
     // AgentRunResult 不带文本，必须自己 listBySession 拿末条 assistant text。
