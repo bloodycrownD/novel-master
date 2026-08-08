@@ -38,7 +38,6 @@ const WORKSPACE_GLOBAL_MENU = {
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
   [
     {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
-    {icon: '🤝', label: '子智能体名单', route: 'SubagentRoster'},
     {icon: '🔌', label: '服务商配置', route: 'Providers'},
     {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
     {icon: '💾', label: '存储配置', route: 'StorageConfig'},

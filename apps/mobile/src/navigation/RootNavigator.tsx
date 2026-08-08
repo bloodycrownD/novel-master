@@ -17,7 +17,6 @@ import {ChatTabScreen} from '../screens/tabs/ChatTabScreen';
 import {ProfileTabScreen} from '../screens/tabs/ProfileTabScreen';
 import {AgentsSettingsScreen} from '../screens/stack/AgentsSettingsScreen';
 import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
-import {SubagentRosterScreen} from '../screens/stack/SubagentRosterScreen';
 import {ProjectAgentConfigScreen} from '../screens/stack/ProjectAgentConfigScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
@@ -110,10 +109,6 @@ const AgentsSettingsStackScreen = withStackLayout(
   AgentsSettingsScreen,
 );
 const AgentEditorStackScreen = withStackLayout('AgentEditor', AgentEditorScreen);
-const SubagentRosterStackScreen = withStackLayout(
-  'SubagentRoster',
-  SubagentRosterScreen,
-);
 const ProjectAgentConfigStackScreen = withStackLayout(
   'ProjectAgentConfig',
   ProjectAgentConfigScreen,
@@ -190,10 +185,6 @@ export function RootNavigator() {
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="AgentsSettings" component={AgentsSettingsStackScreen} />
           <Stack.Screen name="AgentEditor" component={AgentEditorStackScreen} />
-          <Stack.Screen
-            name="SubagentRoster"
-            component={SubagentRosterStackScreen}
-          />
           <Stack.Screen
             name="ProjectAgentConfig"
             component={ProjectAgentConfigStackScreen}

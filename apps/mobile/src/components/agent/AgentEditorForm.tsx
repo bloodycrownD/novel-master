@@ -15,6 +15,7 @@ import {
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
+  MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
@@ -35,6 +36,7 @@ import {
   withDynamicBlockPersistence,
   withWorkplaceToggle,
   type ToolsMode,
+  type AgentMode,
 } from '@novel-master/core/config-forms/agent';
 import {
   STORED_CONFIG_LABELS,
@@ -121,6 +123,7 @@ export function AgentEditorForm(props: Props) {
   const navigation = useNavigation<StackNav>();
   const runtime = useRuntime();
   const [name, setName] = useState('');
+  const [mode, setMode] = useState<AgentMode>('all');
   const [maxSteps, setMaxSteps] = useState('20');
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState('');
@@ -160,6 +163,7 @@ export function AgentEditorForm(props: Props) {
     () =>
       formSnapshotJson({
         name,
+        mode,
         maxSteps,
         modelEnabled,
         providerId,
@@ -233,6 +237,7 @@ export function AgentEditorForm(props: Props) {
     async (def: AgentDefinition) => {
       const promptForm = definitionToForm(def);
       setName(def.name);
+      setMode(def.mode ?? 'all');
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
       setSystemEnabled(promptForm.systemEnabled);
       setSystemContent(promptForm.systemContent);
@@ -478,6 +483,7 @@ export function AgentEditorForm(props: Props) {
   const handleSave = async () => {
     const built = buildAgentDefinitionFromForm({
       name,
+      mode,
       maxSteps,
       modelEnabled,
       providerId,
@@ -860,6 +866,15 @@ export function AgentEditorForm(props: Props) {
               tokens={tokens}
               value={name}
               onChangeText={setName}
+            />
+          </FormField>
+          <FormField label="角色" tokens={tokens}>
+            <FormSelectField
+              tokens={tokens}
+              value={mode}
+              onChange={value => setMode(value as AgentMode)}
+              options={MODE_OPTIONS}
+              sheetTitle="选择角色"
             />
           </FormField>
           <FormField

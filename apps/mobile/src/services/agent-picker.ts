@@ -22,6 +22,9 @@ export async function loadAgentPickerRows(
     let label = agentId;
     try {
       const def = await runtime.agentRegistry.get(agentId);
+      if (def.mode === 'subagent') {
+        continue;
+      }
       label = def.name?.trim() || agentId;
     } catch {
       /* keep agentId */
@@ -65,6 +68,9 @@ export async function loadSessionAgentPickerRows(
     let label = agentId;
     try {
       const def = await runtime.agentRegistry.get(agentId);
+      if (def.mode === 'subagent') {
+        continue;
+      }
       label = def.name?.trim() || agentId;
     } catch {
       /* keep agentId */

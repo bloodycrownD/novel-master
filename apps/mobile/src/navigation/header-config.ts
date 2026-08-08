@@ -17,7 +17,6 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   profile: {title: '我的', showBack: false, showNav: true},
   AgentsSettings: {title: '智能体配置', showBack: true, showNav: false},
   AgentEditor: {title: 'Agent 配置', showBack: true, showNav: false},
-  SubagentRoster: {title: '子智能体名单', showBack: true, showNav: false},
   ProjectAgentConfig: {title: '项目智能体配置', showBack: true, showNav: false},
   RealPrompt: {title: '查看提示词', showBack: true, showNav: false},
   Providers: {title: '服务商配置', showBack: true, showNav: false},
