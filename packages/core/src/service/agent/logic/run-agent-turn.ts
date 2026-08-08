@@ -61,6 +61,7 @@ import type { ProjectService } from "@/service/chat/project.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
+import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
@@ -81,6 +82,13 @@ export interface AgentTurnScope {
 
 /** Runtime surface required to run one agent dialogue turn. */
 export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
+  /**
+   * Agent abort registry：按 sessionId 索引 in-flight run 的 controller，
+   * 给 mobile / desktop 停止按钮一个统一中断入口。
+   *
+   * CLI 不注入也能跑（`abortRegistry?.register(...)` 空安全）。
+   */
+  readonly abortRegistry?: AgentAbortRegistry;
   /**
    * 工作区 agent 注册表。父接口 {@link AgentRunRuntimePort} 已声明窄类型
    * `{ listAgentIds, get }`，这里重新声明收窄到完整 {@link AgentRegistryService}
@@ -382,8 +390,25 @@ export async function runAgentTurn(
   const registry = resolveAgentToolRegistry(toolProbe, definition, { depth: 0 });
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
+  // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
+  // caller signal（如果有）桥接到 internal：外部 abort 级联到 internal。
+  // runner.run 拿 internal.signal；同时 internal.signal 作为 task 工具内子 agent run
+  // 的 parentSignal，让 registry.abort(sessionId) 也能级联到子 run。
+  const internalController = new AbortController();
+  const callerSignal = options?.signal;
+  if (callerSignal != null) {
+    if (callerSignal.aborted) {
+      internalController.abort(callerSignal.reason);
+    } else {
+      callerSignal.addEventListener(
+        "abort",
+        () => internalController.abort(callerSignal.reason),
+        { once: true },
+      );
+    }
+  }
   // 主 agent run 的 signal：作为 task 工具内子 agent run 的 parentSignal。
-  const parentSignal = options?.signal ?? new AbortController().signal;
+  const parentSignal = internalController.signal;
   const toolCtx: BuiltinToolContext = {
     vfs,
     projectId: scope.projectId,
@@ -455,6 +480,7 @@ export async function runAgentTurn(
     }),
   );
 
+  runtime.abortRegistry?.register(scope.sessionId, internalController);
   try {
     stage = "runner.run";
     const maxSteps =
@@ -468,7 +494,7 @@ export async function runAgentTurn(
       maxSteps,
       activeRegexGroupId: activeRegexGroupId ?? undefined,
       stream,
-      signal: options?.signal,
+      signal: internalController.signal,
       onStream: options?.onStream,
     });
     return result;
@@ -481,6 +507,9 @@ export async function runAgentTurn(
       stream,
     });
     throw error;
+  } finally {
+    // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller。
+    runtime.abortRegistry?.unregister(scope.sessionId, internalController);
   }
 }
 
@@ -546,6 +575,10 @@ async function runChildAgent(args: {
       { once: true },
     );
   }
+
+  // 子 run controller 同样挂进 registry，让外部（子会话页停止按钮）
+  // 能按 childSessionId 中断子 run。try/finally 里反注册常所有权比对。
+  runtime.abortRegistry?.register(childSessionId, childController);
 
   const session = new ChatAgentSession(runtime.messages, childSessionId);
 
@@ -632,18 +665,23 @@ async function runChildAgent(args: {
   );
 
   const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
-  return runner.run({
-    definition: def,
-    sessionId: childSessionId,
-    projectId: parentProjectId,
-    savedModelId: opts.savedModelId,
-    workspaceModelId: opts.workspaceModelId,
-    maxSteps,
-    activeRegexGroupId: activeRegexGroupId ?? undefined,
-    // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=true 发事件供子会话浏览页实时刷新（主会话按 sessionId 过滤不会串）；stream=true 走流式供子会话浏览页实时输出。
-    persistMessages: true,
-    publishRunLifecycle: true,
-    stream: true,
-    signal: childController.signal,
-  });
+  try {
+    return await runner.run({
+      definition: def,
+      sessionId: childSessionId,
+      projectId: parentProjectId,
+      savedModelId: opts.savedModelId,
+      workspaceModelId: opts.workspaceModelId,
+      maxSteps,
+      activeRegexGroupId: activeRegexGroupId ?? undefined,
+      // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=true 发事件供子会话浏览页实时刷新（主会话按 sessionId 过滤不会串）；stream=true 走流式供子会话浏览页实时输出。
+      persistMessages: true,
+      publishRunLifecycle: true,
+      stream: true,
+      signal: childController.signal,
+    });
+  } finally {
+    // 反注册带所有权比对，防误删新 run 的 controller。
+    runtime.abortRegistry?.unregister(childSessionId, childController);
+  }
 }
