@@ -1,23 +1,71 @@
-# agent-mode-refactor 迭代审查状态（spec-check-loop）
+# agent-mode-refactor 开发编排状态（code-dev-loop）
 # 维护方：主代理；子代理只读参考
+# DAG/编排状态放这里，不写 apm dynamic/persist
 
 prd_path: docs/Iterations/agent-mode-refactor/prd.md
 spec_path: docs/Iterations/agent-mode-refactor/spec.md
+branch: feat/merge-subagent
+base_sha: 37dcd56c
 
-dag_version: 13
-review_round: 7
-doc_fix_plan: []
-status: execute-ready（待用户确认）
+spec_summary: >
+  把子代理可调用性从全局名单(KKV subagentNames)改为 AgentDefinition.mode 字段
+  (primary/subagent/all)；Tool.description 改函数类型 (ctx)=>string；task 作为静态
+  内置工具在 registerBuiltinTools 注册；validateAgentToolPolicy 内部中心过滤 task；
+  upsert 禁止 name==="general"。7 phase / 32 step。
+
+contracts:
+  - AgentDefinition.mode: optional "primary"|"subagent"|"all"，缺省消费侧按 "all" 解释
+  - Tool.description: (ctx: Ctx) => string（不再 readonly string）
+  - task 静态内置工具，registerBuiltinTools 注册，不进用户 allow/deny
+  - validateAgentToolPolicy 内部从 registryNames 过滤掉 "task"（AC-9）
+  - upsert 禁止 name==="general"，抛 INVALID_SCHEMA
+  - 内置 general 固定 mode="subagent"
+
+blocking_steps: [1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,24,25,27,28,29,30,32]
+
+# 编排说明：核心链 model→core-tool→test-fix 为强耦合编译依赖链，串行；
+# test-fix 完成后做一次 core 层综合 verify + cr-func；persist/form-state 并行；
+# desktop/mobile 文件不重叠，并行。
+dag_version: 1
+wave_plan:
+  - [impl-model]                 # Step 1-7
+  - [impl-core-tool]             # Step 8-12（依赖 model build 通过）
+  - [impl-test-fix]              # Step 13-16（依赖 core-tool）
+  - [verify-core]                # 全量 core build + test，确认 core 层闭环
+  - [cr-func-core]               # 覆盖 model/core-tool/test-fix spec 矩阵
+  - [impl-persist, impl-form-state]  # Step 17-20（文件不重叠，并行）
+  - [cr-func-persist-form]
+  - [impl-desktop, impl-mobile]  # Step 21-27（并行）
+  - [cr-func-desktop-mobile]
+  - [impl-test-doc]              # Step 28-32
+  - [cr-func-final]              # → dev-ready
+node_status:
+  impl-model: { status: done, head_sha: f5eeb9f9 }
+  impl-core-tool: { status: done, head_sha: 340dad60 }
+  impl-test-fix: { status: done, head_sha: 17b5b59e, note: "子代理改完被取消未提交，主代理接管验证+提交" }
+  verify-core: { status: done, note: "build 340dad60 通过；test 1778/1764 pass/14 fail=baseline(12 pre-existing+2 预期)" }
+  cr-func-core: { status: done, func_ready: yes, head_sha: 17b5b59e }
+  impl-persist: { status: done, head_sha: 251455e5 }
+  impl-form-state: { status: done, head_sha: 708745c6 }
+  cr-func-persist-form: { status: done, func_ready: yes, note: "persist 零残留+form-state mode 字段到位" }
+  impl-desktop: { status: done, head_sha: 26b0fea1 }
+  impl-mobile: { status: done, head_sha: 2cec6238 }
+  cr-func-desktop-mobile: { status: done, func_ready: yes, note: "发现 AgentDefinitionEditorForm 漏扫消费方，已补 mode 缺省值修复(3dd810b6)" }
 open_must_fix: []
-conclusion: Go（execute-ready）
-remaining_p2:
-  - P2-1: agent-tool-policy.test.ts 行号标注风格（不影响执行）
-  - P2-2: PRD FR-4 措辞与现状微调（SPEC 操作描述已覆盖）
-phase_test_fix_coverage: 17 files（tool/ 10 + agent/ 3 + service/agent/ 4）
-round_history:
-  - R2: P0-A/B/C + P1-A/B（中心过滤 + list-seed + 行号）
-  - R3: P0-1 + P1-1 + P2-1/P2-2（补列 vfs/stream 测试 + risk 同步 + 7 调用点）
-  - R4: P1-1~P1-4 + P2-2/P2-3（description 类型区分 + risk #3 + 行号）
-  - R5: P1-A + P2-B/C（service/agent 4 文件 + persistent-state 措辞 + 可选链统一）
-  - R6: P1-N1/N2（内联 Tool 字面量 + count=6 断言）
-  - R7: Go
+spec_deviations: []
+
+# 测试失败基线（区分本迭代引入 vs pre-existing）
+test_baseline:
+  base_sha: 37dcd56c
+  core_test_fail_at_base: 12   # pre-existing，非本迭代范围：vfs/fs-command 系列、agent-registry-delete-invalid
+  cli_build_broken_at_base: true  # apps/cli session/commands.ts SessionDeps 缺 sessionKkv（pre-existing）
+  model_introduced_expected_fail: 2  # subagentCallable-strip 用例(Step28)、agent-registry-list-seed(Step30)
+
+# 审查阶段历史（spec-check-loop，已结束）
+spec_check:
+  dag_version: 13
+  review_round: 7
+  conclusion: Go（execute-ready）
+  remaining_p2:
+    - P2-1: agent-tool-policy.test.ts 行号标注风格（不影响执行）
+    - P2-2: PRD FR-4 措辞与现状微调（SPEC 操作描述已覆盖）

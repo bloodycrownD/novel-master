@@ -23,7 +23,7 @@ describe("agent registry e2e", () => {
         ["agent", "import", EXAMPLES_AGENTS, "--db", dbPath],
       );
       assert.equal(imported.status, 0, imported.stderr);
-      assert.match(imported.stdout, /Imported 3 agent/);
+      assert.match(imported.stdout, /Imported 2 agent/);
 
       const listed = runNm(["agent", "list", "--db", dbPath]);
       assert.equal(listed.status, 0, listed.stderr);

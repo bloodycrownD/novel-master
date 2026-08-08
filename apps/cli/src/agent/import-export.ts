@@ -47,6 +47,7 @@ function bundleToDefinitions(
       ...(entry.description != null && entry.description.trim().length > 0
         ? { description: entry.description }
         : {}),
+      ...(entry.mode != null ? { mode: entry.mode } : {}),
     });
   }
   return map;
@@ -65,10 +66,14 @@ export async function importAgentsFromFile(
   const raw = parseText(source, format);
   const doc = decode(raw, agentsBundleDocumentSchema);
   const bundle = bundleToDefinitions(doc);
+  let imported = 0;
   for (const [agentId, def] of bundle) {
+    // general 是内置虚拟 agent，upsert 禁止重名，import 时跳过（由 registry seed 提供）
+    if (def.name === "general") continue;
     await registry.upsert(agentId, def, validateOptions);
+    imported++;
   }
-  return bundle.size;
+  return imported;
 }
 
 /**
@@ -89,6 +94,7 @@ export async function exportAgentsToFile(
       runtime?: { maxSteps?: number };
       tools?: { allow?: string[]; deny?: string[] };
       description?: string;
+      mode?: "primary" | "subagent" | "all";
     };
     agents[agentId] = {
       prompts: entry.prompts,
@@ -105,6 +111,7 @@ export async function exportAgentsToFile(
       ...(entry.description != null && entry.description.trim().length > 0
         ? { description: entry.description }
         : {}),
+      ...(entry.mode != null ? { mode: entry.mode } : {}),
     };
   }
   const doc: AgentsBundleDocument = { schemaVersion: 1, agents };
