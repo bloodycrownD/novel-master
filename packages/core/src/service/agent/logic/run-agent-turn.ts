@@ -36,6 +36,9 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
+import {
+  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+} from "@/domain/events/model/event-types.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
@@ -399,6 +402,12 @@ export async function runAgentTurn(
           scope.projectId,
           title,
         );
+        runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+          parentSessionId: scope.sessionId,
+          projectId: scope.projectId,
+          childSessionId: child.id,
+          title,
+        });
         return child.id;
       },
       resolveChildModelId: (
@@ -564,6 +573,12 @@ async function runChildAgent(args: {
           parentProjectId,
           title,
         );
+        runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+          parentSessionId: childSessionId,
+          projectId: parentProjectId,
+          childSessionId: grandchild.id,
+          title,
+        });
         return grandchild.id;
       },
       resolveChildModelId: (

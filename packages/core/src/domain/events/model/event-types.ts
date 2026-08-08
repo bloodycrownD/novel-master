@@ -15,6 +15,9 @@ export const EVENT_AGENT_STREAM_THINKING_DELTA =
 export const EVENT_AGENT_STREAM_TOOL_USE = "agent.stream.tool-use" as const;
 /** One agent loop step persisted (assistant turn or tool_result user turn). */
 export const EVENT_AGENT_STEP_COMMITTED = "agent.step.committed" as const;
+/** 子 agent 会话创建：task 工具执行中即可点击进入子会话浏览。 */
+export const EVENT_SUBAGENT_CHILD_SESSION_CREATED =
+  "subagent.child-session.created" as const;
 export const EVENT_SESSION_MESSAGE_RECEIVED = "session.message.received" as const;
 export const EVENT_SESSION_COMPACTION_REQUESTED =
   "session.compaction.requested" as const;
@@ -27,6 +30,7 @@ export type NovelMasterEventType =
   | typeof EVENT_AGENT_STREAM_THINKING_DELTA
   | typeof EVENT_AGENT_STREAM_TOOL_USE
   | typeof EVENT_AGENT_STEP_COMMITTED
+  | typeof EVENT_SUBAGENT_CHILD_SESSION_CREATED
   | typeof EVENT_SESSION_MESSAGE_RECEIVED
   | typeof EVENT_SESSION_COMPACTION_REQUESTED;
 
@@ -83,6 +87,14 @@ export interface AgentStepCommittedPayload {
   readonly vfsMutated?: boolean;
 }
 
+export interface SubagentChildSessionCreatedPayload {
+  readonly parentSessionId: string;
+  readonly projectId: string;
+  readonly childSessionId: string;
+  /** 子会话标题（来自 task 工具入参 description 或 prompt 前 40 字）；供 UI 按 title 匹配 pending tool_use。 */
+  readonly title: string;
+}
+
 export interface SessionMessageReceivedPayload {
   readonly sessionId: string;
   readonly projectId: string;
@@ -104,5 +116,6 @@ export type NovelMasterEventPayload =
   | AgentStreamThinkingDeltaPayload
   | AgentStreamToolUsePayload
   | AgentStepCommittedPayload
+  | SubagentChildSessionCreatedPayload
   | SessionMessageReceivedPayload
   | SessionCompactionRequestedPayload;

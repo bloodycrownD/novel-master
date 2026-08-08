@@ -8,6 +8,7 @@ export {
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
   EVENT_AGENT_STEP_COMMITTED,
+  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
   EVENT_SESSION_MESSAGE_RECEIVED,
   EVENT_SESSION_COMPACTION_REQUESTED,
 } from "../domain/events/model/event-types.js";
@@ -21,6 +22,7 @@ export type {
   AgentStreamToolUsePayload,
   AgentStepCommittedPayload,
   AgentStepCommittedPhase,
+  SubagentChildSessionCreatedPayload,
   SessionCompactionRequestedPayload,
   CompactionTriggerKind,
 } from "../domain/events/model/event-types.js";
