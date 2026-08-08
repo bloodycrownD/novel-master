@@ -11,17 +11,13 @@ export function summarizeToolInput(
 ): string {
   if (!input) return '';
 
-  // task 工具：展示 description（任务描述）+ prompt 摘要，比裸 JSON 可读。
+  // task 工具：展示 @agent · description，比裸 JSON 可读。
   if (name === 'task') {
     const desc = typeof input.description === 'string' ? input.description.trim() : '';
-    const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : '';
     const agent = typeof input.subagentName === 'string' ? input.subagentName : '';
     const parts: string[] = [];
     if (agent) parts.push(`@${agent}`);
     if (desc) parts.push(desc);
-    if (prompt) {
-      parts.push(prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt);
-    }
     return parts.join(' · ');
   }
 
