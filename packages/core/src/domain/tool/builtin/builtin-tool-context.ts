@@ -25,6 +25,11 @@ export interface RunChildAgentOptions {
   readonly workspaceModelId: string;
   readonly signal: AbortSignal;
   readonly maxSteps?: number;
+  /**
+   * task 工具入参的 prompt 正文：run 前写进子 session 作为第一条 user 消息，
+   * 使子 agent 对话历史完整（UI 浏览可见、LLM 能看到任务描述）。
+   */
+  readonly prompt?: string;
 }
 
 /** `task` 工具读取的子代理装配闭包；仅 depth=0/1 注入（孙 agent 无 task 工具）。 */

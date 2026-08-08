@@ -539,6 +539,12 @@ async function runChildAgent(args: {
   }
 
   const session = new ChatAgentSession(runtime.messages, childSessionId);
+
+  // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
+  // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。
+  if (opts.prompt && opts.prompt.trim().length > 0) {
+    await session.append("user", textBlocks(opts.prompt));
+  }
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
   const toolCtx: BuiltinToolContext = {
     vfs,

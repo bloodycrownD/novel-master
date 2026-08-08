@@ -180,6 +180,7 @@ ${formatCallableList(callable)}
       workspaceModelId,
       signal: subagent.parentSignal,
       maxSteps: def.runtime?.maxSteps,
+      prompt: input.prompt,
     });
 
     // AgentRunResult 不带文本，必须自己 listBySession 拿末条 assistant text。
