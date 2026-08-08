@@ -23,7 +23,7 @@ import {
 
 export type ToolsMode = "default" | "allow" | "deny";
 
-/** Agent 暴露范围（与域 {@link AgentDefinition}["mode"] 对应）。 */
+/** 智能体作用域（与域 {@link AgentDefinition}["mode"] 对应）。 */
 export type AgentMode = "primary" | "subagent" | "all";
 
 /** persist / dynamic 文本块可选角色（system 单独顶置）。 */
@@ -31,14 +31,15 @@ export const PROMPT_BLOCK_ROLES = ["user", "assistant"] as const;
 
 export const TOOL_MODE_OPTIONS: Array<{ value: ToolsMode; label: string }> = [
   { value: "default", label: "默认（全部工具）" },
+  // 注：task 工具始终注册、始终可用，不进 allow/deny 策略（AC-9）。
   { value: "allow", label: "白名单" },
   { value: "deny", label: "黑名单" },
 ];
 
 export const MODE_OPTIONS: Array<{ value: AgentMode; label: string }> = [
-  { value: "all", label: "都可以" },
-  { value: "primary", label: "仅主代理" },
-  { value: "subagent", label: "仅子代理" },
+  { value: "all", label: "全部" },
+  { value: "primary", label: "仅主智能体" },
+  { value: "subagent", label: "仅子智能体" },
 ];
 
 const ROLE_LABELS: Record<(typeof PROMPT_BLOCK_ROLES)[number], string> = {

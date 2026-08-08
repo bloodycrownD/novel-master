@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
 import {
-  AgentConfigError,
   validateAgentToolPolicy,
 } from "@novel-master/core/agent";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
@@ -14,22 +13,24 @@ function vfsRegistryNames(): Set<string> {
   return new Set(registry.list());
 }
 
-describe("validateAgentToolPolicy task 不再特殊白名单（T-C4 修订）", () => {
+describe("validateAgentToolPolicy task 是合法工具（T-C4）", () => {
   const registryNames = vfsRegistryNames();
 
-  it("tools.allow 含 task 报 INVALID_TOOL_POLICY（task 不再是用户可配工具）", () => {
-    assert.throws(
-      () => validateAgentToolPolicy({ allow: ["task"] }, registryNames),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
+  it("registryNames 含 task（task 进 registerBuiltinTools）", () => {
+    assert.ok(registryNames.has("task"));
+  });
+
+  it("tools.allow 含 task 正常通过（task 是合法工具名）", () => {
+    assert.equal(
+      validateAgentToolPolicy({ allow: ["task"] }, registryNames),
+      undefined,
     );
   });
 
-  it("tools.deny 含 task 报 INVALID_TOOL_POLICY", () => {
-    assert.throws(
-      () => validateAgentToolPolicy({ deny: ["task"] }, registryNames),
-      (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
+  it("tools.deny 含 task 正常通过", () => {
+    assert.equal(
+      validateAgentToolPolicy({ deny: ["task"] }, registryNames),
+      undefined,
     );
   });
 
@@ -37,7 +38,7 @@ describe("validateAgentToolPolicy task 不再特殊白名单（T-C4 修订）", 
     assert.throws(
       () => validateAgentToolPolicy({ allow: ["unknown_tool"] }, registryNames),
       (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
+        e instanceof Error && (e as { code?: string }).code === "INVALID_TOOL_POLICY",
     );
   });
 

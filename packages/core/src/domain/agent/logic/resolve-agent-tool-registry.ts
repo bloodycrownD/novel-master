@@ -37,8 +37,10 @@ export interface ResolveAgentToolRegistryOptions {
 /**
  * Returns a new registry containing only tools permitted for the agent.
  *
- * `depth >= 2` 时强制从结果中移除 `task`（递归上限，P1-10）：孙 agent 的 LLM 根本
- * 看不到 `task` 工具，不会尝试调用。调用点从闭包变量传 depth，不依赖 ctx 推导。
+ * 两层硬性过滤（覆盖用户 policy，防递归）：
+ * 1. mode === "subagent" 的智能体强制移除 task——子智能体不能再生子智能体。
+ * 2. depth >= 2（孙 agent）也强制移除 task——递归上限双保险。
+ * 用户在 tools.allow/deny 里配 task 是合法的，但对子智能体无效（装配时忽略）。
  */
 export function resolveAgentToolRegistry<Ctx>(
   baseRegistry: ToolRegistry<Ctx>,
@@ -47,8 +49,8 @@ export function resolveAgentToolRegistry<Ctx>(
 ): ToolRegistry<Ctx> {
   const allNames = baseRegistry.list();
   const allowed = new Set(allowedToolNames(definition, allNames));
-  // 孙 agent 强制 deny task，不管 tools policy 如何配。
-  if ((options?.depth ?? 0) >= 2) {
+  // 子智能体强制移除 task（防递归）；孙 agent 同理（递归上限）。
+  if (definition.mode === "subagent" || (options?.depth ?? 0) >= 2) {
     allowed.delete(SUBAGENT_TOOL_NAME);
   }
   const filtered = new ToolRegistry<Ctx>();

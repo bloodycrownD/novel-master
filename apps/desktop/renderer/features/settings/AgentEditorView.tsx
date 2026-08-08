@@ -403,7 +403,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     return (
       <SettingsPanel>
         <div className="settings-error-panel">
-          <p className="settings-error-panel__title">无法加载 Agent 配置</p>
+          <p className="settings-error-panel__title">无法加载智能体配置</p>
           <p className="settings-error-panel__message">{loadError}</p>
           <div className="settings-error-panel__actions">
             <Button variant="secondary" onClick={() => nav.pop()}>
@@ -466,7 +466,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       });
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
-        toastSettingsSuccess("已保存 Agent 配置");
+        toastSettingsSuccess("已保存智能体配置");
       } else {
         toastSettingsError(saveRes.error.message);
       }
@@ -619,7 +619,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     <SettingsPanel>
       {loading ? <p className="settings-hint">加载中…</p> : null}
       <SettingsFormSection
-        title="Agent 配置"
+        title="智能体配置"
         desc={`编辑 ${displayName}${dirty ? " · 未保存" : ""}`}
         toolbar={
           <div className="settings-yaml-links">
@@ -663,13 +663,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="向 task 工具说明这个 agent 擅长什么，可留空。"
+              placeholder="向 task 工具说明这个智能体擅长什么，可留空。"
             />
           </SettingsField>
           <p className="settings-hint settings-hint--compact">
-            用于在 task 工具中向主代理介绍本 agent 的能力。
+            用于在 task 工具中向主智能体介绍本智能体的能力。
           </p>
-          <SettingsField label="角色">
+          <SettingsField label="作用域">
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value as AgentMode)}
@@ -1211,7 +1211,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       <ConfirmModal
         open={confirmImport}
         title="导入 YAML"
-        message="将覆盖当前 Agent 配置，是否继续？"
+        message="将覆盖当前智能体配置，是否继续？"
         onConfirm={() => {
           setConfirmImport(false);
           void ipcAgentYamlImport({ agentId }).then((r) => {

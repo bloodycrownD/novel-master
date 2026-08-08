@@ -16,7 +16,7 @@ export const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
   projects: "global",
   sessions: "session",
   conversation: "chat",
-  // 子代理只读会话面板与父会话共享聊天工作区预览面板（P2-11）
+  // 子智能体只读会话面板与父会话共享聊天工作区预览面板（P2-11）
   "subagent-conversation": "chat",
 };
 
@@ -37,6 +37,6 @@ export function workspaceTitleForScope(scope: WorkspaceScope): string {
 
 export function railPaneNavTitle(viewId: NavViewId): string {
   if (viewId === "projects") return "项目";
-  if (viewId === "subagent-conversation") return "子代理会话";
+  if (viewId === "subagent-conversation") return "子智能体会话";
   return "—";
 }

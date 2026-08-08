@@ -531,7 +531,7 @@ export function AgentEditorForm(props: Props) {
       }
       setSavedBaseline(snapshot);
       await onSaved?.();
-      showToast(isProjectMode ? '已保存项目专属配置' : '已保存 Agent 配置');
+      showToast(isProjectMode ? '已保存项目专属配置' : '已保存智能体配置');
     } catch (error) {
       showToast(toastMessage('保存失败', error));
     } finally {
@@ -551,7 +551,7 @@ export function AgentEditorForm(props: Props) {
   }, [runtime, agentId, showToast]);
 
   const handleImportYaml = useCallback(() => {
-    Alert.alert('导入 YAML', '将覆盖当前 Agent 配置，是否继续？', [
+    Alert.alert('导入 YAML', '将覆盖当前智能体配置，是否继续？', [
       { text: '取消', style: 'cancel' },
       {
         text: '导入',
@@ -858,7 +858,7 @@ export function AgentEditorForm(props: Props) {
             </View>
           ) : (
             <Text style={[styles.hint, { color: tokens.textSecondary }]}>
-              项目专属配置，不会写入全局 Agent 列表。
+              项目专属配置，不会写入全局智能体列表。
             </Text>
           )}
           <FormField label="名称" tokens={tokens}>
@@ -868,19 +868,19 @@ export function AgentEditorForm(props: Props) {
               onChangeText={setName}
             />
           </FormField>
-          <FormField label="角色" tokens={tokens}>
+          <FormField label="作用域" tokens={tokens}>
             <FormSelectField
               tokens={tokens}
               value={mode}
               onChange={value => setMode(value as AgentMode)}
               options={MODE_OPTIONS}
-              sheetTitle="选择角色"
+              sheetTitle="选择作用域"
             />
           </FormField>
           <FormField
             label="描述"
             tokens={tokens}
-            hint="向 task 工具说明这个 agent 擅长什么，可留空。"
+            hint="向 task 工具说明这个智能体擅长什么，可留空。"
           >
             <FormTextInput
               tokens={tokens}

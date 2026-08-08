@@ -1,5 +1,5 @@
 /**
- * Agent 定义编辑表单（复用 config-forms/agent，供全局 Agent 与项目专属配置共用）。
+ * 智能体定义编辑表单（复用 config-forms/agent，供全局智能体与项目专属配置共用）。
  */
 import {
   forwardRef,

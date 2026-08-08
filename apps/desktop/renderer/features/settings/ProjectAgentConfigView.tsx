@@ -28,10 +28,10 @@ export type ProjectAgentConfigViewProps = {
   onSaved?: () => void;
 };
 
-/** 克隆当前全局 Agent 定义；无全局 Agent 时用默认模板。 */
+/** 克隆当前全局智能体定义；无全局智能体时用默认模板。 */
 async function cloneGlobalAgentDefinition(): Promise<AgentDefinition> {
   const currentRes = await ipcAgentResolveCurrent();
-  const fallbackName = currentRes.ok ? currentRes.data.agentName : "项目专属 Agent";
+  const fallbackName = currentRes.ok ? currentRes.data.agentName : "项目专属智能体";
 
   if (currentRes.ok && currentRes.data.agentId) {
     const agentRes = await ipcAgentRegistryGet({ agentId: currentRes.data.agentId });
@@ -229,13 +229,13 @@ export function ProjectAgentConfigView({
                     跟随全局：<strong>{globalAgentName}</strong>
                   </p>
                   <p className="settings-hint settings-hint--subtle">
-                    全局 Agent 变更后，本项目将自动使用新的全局配置；关闭专属配置时会保留自定义草稿但不生效。
+                    全局智能体变更后，本项目将自动使用新的全局配置；关闭专属配置时会保留自定义草稿但不生效。
                   </p>
                 </div>
               ) : formDefinition ? (
                 <div className="project-agent-config-modal__custom">
                   <p className="settings-hint settings-hint--subtle">
-                    以下为项目专属 Agent 配置，不会写入全局 Agent 列表。
+                    以下为项目专属智能体配置，不会写入全局智能体列表。
                   </p>
                   <AgentDefinitionEditorForm
                     ref={formRef}

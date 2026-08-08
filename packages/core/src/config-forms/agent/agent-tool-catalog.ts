@@ -1,14 +1,13 @@
 import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
 import type { ToolsMode } from "./agent-editor-state.js";
 
-/** Catalog of V2 builtin tools for Agent policy UI（与 FILE_TOOL_NAMES 同步）。 */
-// task 始终由 registerBuiltinTools 注册（对 LLM 可见），但不进此 catalog：
-// 它不是用户能在 tools.allow/deny 里配置的工具（validateAgentToolPolicy 中心过滤掉 task）。
+/** Catalog of V2 builtin tools for Agent policy UI（与 registerBuiltinTools 同步）。 */
 export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   readonly name: string;
   readonly label: string;
   readonly description: string;
 }> = [
+  { name: "task", label: "task", description: "委派子智能体执行子任务（仅主智能体可用）" },
   { name: "read", label: "read", description: "读取工作区文件（支持分页）" },
   { name: "write", label: "write", description: "写入或整文件覆盖" },
   { name: "edit", label: "edit", description: "精确查找替换（含尾追）" },

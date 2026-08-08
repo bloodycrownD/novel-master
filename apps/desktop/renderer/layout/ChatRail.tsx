@@ -62,7 +62,7 @@ export function ChatRail({
     notifyAgentConfigChanged,
   } = useShellNav();
 
-  // 子代理只读会话面板的 sessionId 在 ChatRail 本地维护，避免污染全局导航状态
+  // 子智能体只读会话面板的 sessionId 在 ChatRail 本地维护，避免污染全局导航状态
   // （P2-11：全局 nav 仍指向父会话，子会话只在面板栈层切换）。
   const [subagentSessionId, setSubagentSessionId] = useState<string | null>(
     null,
@@ -72,7 +72,7 @@ export function ChatRail({
   const openSubagentSession = useCallback(
     (childSessionId: string, label?: string) => {
       setSubagentSessionId(childSessionId);
-      setSubagentSessionName(label ?? '子代理会话');
+      setSubagentSessionName(label ?? '子智能体会话');
       showNavView('subagent-conversation');
     },
     [showNavView],
@@ -466,7 +466,7 @@ export function ChatRail({
             </span>
           ) : viewId === 'subagent-conversation' ? (
             <span className="column-header__title column-header__title--truncate">
-              {subagentSessionName || '子代理会话'}
+              {subagentSessionName || '子智能体会话'}
             </span>
           ) : (
             <span className="column-header__title">
@@ -711,7 +711,7 @@ export function ChatRail({
               }
             />
           ) : (
-            <p className="preview-empty">请返回父会话并重新点击子代理卡片</p>
+            <p className="preview-empty">请返回父会话并重新点击子智能体卡片</p>
           )}
         </div>
       </section>

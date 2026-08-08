@@ -46,7 +46,7 @@ export function ToolCallCard({
     ? JSON.stringify(tool.input, null, 2)
     : summary;
 
-  const openHint = canOpenSubagent ? "点击查看 · 子代理会话" : "点击查看 · 聊天工作区";
+  const openHint = canOpenSubagent ? "点击查看 · 子智能体会话" : "点击查看 · 聊天工作区";
 
   const handleClick = () => {
     // 文件路径优先（同一张卡理论上不会同时具备两种入口，仍以文件优先兜底）
@@ -62,7 +62,7 @@ export function ToolCallCard({
   const ariaLabel = canOpenFile
     ? `打开文件 ${filePath}`
     : canOpenSubagent
-      ? `查看子代理会话 ${subagentSessionId}`
+      ? `查看子智能体会话 ${subagentSessionId}`
       : "";
 
   const content = (

@@ -69,7 +69,7 @@ interface ConversationPanelProps {
   sessionId: string;
   onOpenSessionActions: (anchor: HTMLElement) => void;
   /**
-   * 只读模式：用于子代理会话浏览。开启后不渲染 Composer、不写入草稿 IPC、
+   * 只读模式：用于子智能体会话浏览。开启后不渲染 Composer、不写入草稿 IPC、
    * 不允许消息右键菜单（hide/edit/rollback 等写操作）。读消息 / 跳转预览仍可用。
    */
   readOnly?: boolean;

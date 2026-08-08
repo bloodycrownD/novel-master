@@ -13,14 +13,15 @@ import {
 } from "../../../tokenizer-driver-node/src/node-tokenizer-loader.js";
 import { NODE_DRIVER_NAME } from "../../../tokenizer-driver-node/src/register.js";
 import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
+import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { InMemoryAgentSession } from "@novel-master/core/agent";
 
-import { countPromptLlmInput, createDefaultTokenCounterRegistry } from "@novel-master/core/provider";
+import { createDefaultTokenCounterRegistry } from "@novel-master/core/provider";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "../../src/domain/prompt/model/prompt-render-context.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
 
-function systemOnlyEvaluation(systemContent: string) {
+function systemOnlyEvaluation(systemContent: string, sessionId = "sess-token-ratio") {
   const layout: AgentPromptLayout = {
     system: systemContent,
     persist: [],
@@ -31,7 +32,7 @@ function systemOnlyEvaluation(systemContent: string) {
     messages: [],
   };
   return {
-    sessionId: "sess-token-ratio",
+    sessionId,
     modelContext: {
       workspaceModelId: "openai/gpt-4o",
       savedModelId: "openai/gpt-4o",
@@ -42,12 +43,10 @@ function systemOnlyEvaluation(systemContent: string) {
   };
 }
 
-// TODO(perf): 暂时跳过。这个 suite 实测 ~205s，占了整个 core test 的 ~94%，
-// 因为里面会构造 34 万字符量级的 prompt，走完整的 tiktoken 编码，单进程串行时极其拖慢。
-// 等 tiktoken 路径的提速方案落地（减少重复加载 / 缩小输入 / 并行化），再单独跑通后把这里换回 describe。
-describe.skip("TokenRatioConditionTrigger", () => {
+describe("TokenRatioConditionTrigger", () => {
   beforeEach(() => {
     registerNodeTokenizerDriverForTests();
+    sessionApiPromptTokenCache.clearAll();
   });
 
   it("does not fire below threshold or when context window is unknown", async () => {
@@ -78,23 +77,17 @@ describe.skip("TokenRatioConditionTrigger", () => {
     );
   });
 
-  it("ratio 0.8 × 100k: 85001 triggers", async () => {
+  it("fires when token count exceeds floor(contextWindow × ratio)", async () => {
     const session = new InMemoryAgentSession();
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const evaluation = {
-      ...systemOnlyEvaluation("x".repeat(340_004)),
-      modelContext: {
-        workspaceModelId: "openai/test",
-        savedModelId: "openai/test",
-      },
-    };
-    const { tokenCount } = await countPromptLlmInput({
-      layout: evaluation.layout,
-      ctx: evaluation.ctx,
-      savedModelId: evaluation.modelContext.savedModelId,
-      registry,
+    const evaluation = systemOnlyEvaluation("(small)", "sess-above-threshold");
+
+    // Prime the API cache so resolveCurrentPromptTokens skips the real tokenizer.
+    // threshold = floor(100_000 × 0.8) = 80_000; 85_001 > 80_000 → fires.
+    sessionApiPromptTokenCache.set("sess-above-threshold", {
+      promptTokens: 85_001,
+      updatedAt: Date.now(),
     });
-    assert.ok(tokenCount > 80_000);
 
     const trigger = new TokenRatioConditionTrigger(
       {
@@ -107,23 +100,21 @@ describe.skip("TokenRatioConditionTrigger", () => {
     assert.equal(await trigger.shouldTrigger(session, evaluation), true);
   });
 
-  it("85000 tokens at effective threshold does not trigger (strict >)", async () => {
+  it("does not fire when token count equals threshold (strict >)", async () => {
     const session = new InMemoryAgentSession();
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const evaluation = systemOnlyEvaluation("x".repeat(340_000));
-    const { tokenCount } = await countPromptLlmInput({
-      layout: evaluation.layout,
-      ctx: evaluation.ctx,
-      savedModelId: "openai/test",
-      registry,
+    const evaluation = systemOnlyEvaluation("(small)", "sess-at-threshold");
+
+    // threshold = floor(100_000 × 0.8) = 80_000; 80_000 > 80_000 → false (strict >).
+    sessionApiPromptTokenCache.set("sess-at-threshold", {
+      promptTokens: 80_000,
+      updatedAt: Date.now(),
     });
-    const contextWindow = tokenCount / 0.8;
-    assert.equal(Math.floor(contextWindow * 0.8), tokenCount);
 
     const trigger = new TokenRatioConditionTrigger(
       {
         tokenRatio: 0.8,
-        resolveContextWindow: async () => contextWindow,
+        resolveContextWindow: async () => 100_000,
         resolveTokenizerOverride: async () => "auto",
       },
       registry,

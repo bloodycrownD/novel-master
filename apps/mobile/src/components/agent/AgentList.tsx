@@ -151,7 +151,7 @@ export function AgentList({onCreate}: Props) {
   useFocusEffect(
     useCallback(() => {
       reload().catch(err =>
-        showToast(toastMessage('加载 Agent 列表失败', err)),
+        showToast(toastMessage('加载智能体列表失败', err)),
       );
     }, [reload, showToast]),
   );
