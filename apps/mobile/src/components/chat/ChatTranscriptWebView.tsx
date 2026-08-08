@@ -927,7 +927,6 @@ export const ChatTranscriptWebView = memo(
         if (prevMessagesRef.current === messages) {
           return;
         }
-        prevMessagesRef.current = messages;
 
         const firstId = messages[0]?.id;
         const prevFirstId = prevFirstMessageIdRef.current;
@@ -938,6 +937,32 @@ export const ChatTranscriptWebView = memo(
           prevFirstId != null &&
           firstId != null &&
           firstId !== prevFirstId;
+
+        // 压缩/置位后消息数量和首条 ID 不变，但 hidden 字段变了。
+        // 前面的分支（grew/streamCommit/uiRunning）都不命中，会走到 else sendSessionSnapshot，
+        // 但 L976 的 streamCommit 分支可能在 lastStreamCommitIdsRef 非空时提前拦截。
+        // 这里在分流前检测 hidden 变化，确保走 sendSessionSnapshot 而不是被拦截。
+        if (!grew && prevFirstId === firstId && prevCount === messages.length && prevCount > 0) {
+          const prevMsgs = prevMessagesRef.current;
+          if (prevMsgs != null && prevMsgs.length === messages.length) {
+            let hiddenChanged = false;
+            for (let i = 0; i < messages.length; i++) {
+              if (prevMsgs[i]!.hidden !== messages[i]!.hidden) {
+                hiddenChanged = true;
+                break;
+              }
+            }
+            if (hiddenChanged) {
+              sendSessionSnapshot('preserve');
+              prevFirstMessageIdRef.current = firstId;
+              prevMessageCountRef.current = messages.length;
+              prevMessagesRef.current = messages;
+              return;
+            }
+          }
+        }
+
+        prevMessagesRef.current = messages;
 
         if (prependedOlder) {
           const prependedCount = messages.length - prevCount;

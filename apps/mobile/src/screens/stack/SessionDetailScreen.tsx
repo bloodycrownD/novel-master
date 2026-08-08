@@ -15,6 +15,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   Alert,
+  DeviceEventEmitter,
   Platform,
   Pressable,
   ScrollView,
@@ -165,6 +166,8 @@ export function SessionDetailScreen() {
                   sessionId,
                 });
                 showToast('已压缩');
+                // 通知聊天页刷新消息列表（压缩后旧消息 hidden 已置 true，聊天页需 reload 才能渲染降透明度）
+                DeviceEventEmitter.emit('session-transcript-changed', {sessionId});
               }
               await load();
             } catch (error) {
