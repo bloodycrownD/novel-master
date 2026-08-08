@@ -203,6 +203,17 @@ export function ConversationPanel({
     void reloadMessages();
   }, [reloadMessages]);
 
+  // 手动压缩成功后重新拉取消息列表（旧消息 hidden 已在 DB 置 true，前端需刷新才能看到降透明度）
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if ((e as CustomEvent<{ sessionId: string }>).detail?.sessionId === sessionId) {
+        void reloadMessages();
+      }
+    };
+    window.addEventListener('session-compacted', handler);
+    return () => window.removeEventListener('session-compacted', handler);
+  }, [sessionId, reloadMessages]);
+
   // 详情抽屉「查看提示词」请求：切到 realPrompt tab
   useEffect(() => {
     if (viewPromptRequest?.token && viewPromptRequest.token > 0) {
@@ -905,7 +916,7 @@ export function ConversationPanel({
   );
 }
 
-/** 手动压缩：ok 收尾 Toast；上条清空由 main 投影推送 COMPOSER_ATTACHMENTS_SUGGEST。 */
+/** 手动压缩：成功后派发 session-compacted 事件，让 ConversationPanel 重新拉取消息列表。 */
 export async function runCompaction(
   projectId: string,
   sessionId: string,
@@ -920,4 +931,9 @@ export async function runCompaction(
     return;
   }
   showToast('已压缩');
+  // 压缩成功后 DB 里旧消息的 hidden 已置 true，但前端内存里的消息列表不会自动刷新。
+  // 派发自定义事件，ConversationPanel 监听后重新拉取消息列表，使隐藏样式即时生效。
+  window.dispatchEvent(
+    new CustomEvent('session-compacted', { detail: { sessionId } }),
+  );
 }
