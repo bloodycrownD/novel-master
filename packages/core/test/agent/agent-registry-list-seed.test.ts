@@ -56,24 +56,38 @@ describe("AgentRegistryService.list 虚拟 seed（T-C2 / P1-5）", () => {
     assert.ok(!ids.includes("general"));
   });
 
-  it("upsert 同名 general 后 DB 优先（list 返回 DB 版本，不重复）", async () => {
+  it("upsert 同名 general 被拒绝（Step 6 禁止内置名重名，抛 INVALID_SCHEMA）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const dbGeneralId = `db-general-${testIsolationSuffix()}`;
-    await registry.upsert(
-      dbGeneralId,
-      decode(
-        {
-          schemaVersion: 1,
-          name: "general",
-          prompts: { persist: {}, dynamic: {} },
-        },
-        agentDefinitionSchema,
+    await assert.rejects(
+      registry.upsert(
+        dbGeneralId,
+        decode(
+          {
+            schemaVersion: 1,
+            name: "general",
+            prompts: { persist: {}, dynamic: {} },
+          },
+          agentDefinitionSchema,
+        ),
       ),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "INVALID_SCHEMA",
     );
+  });
+
+  it("T-G1: 空 DB 时 list 返回的虚拟 general 满足 mode === subagent（FR-5）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
     const defs = await registry.list();
-    const generals = defs.filter((d) => d.name === "general");
-    assert.equal(generals.length, 1, "list 不应返回重复 general");
+    const general = defs.find((d) => d.name === "general");
+    assert.ok(general, "list 必须包含虚拟 general");
+    assert.equal(
+      general!.mode,
+      "subagent",
+      "虚拟 general 应带 mode=subagent，供 task 工具按 mode 过滤",
+    );
   });
 
   it("list 同时返回 DB 已有 agent + 虚拟 general", async () => {

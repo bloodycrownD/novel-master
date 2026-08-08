@@ -63,7 +63,7 @@ describe("agent registry e2e", () => {
     }
   });
 
-  it("E4 / T-C3: tools 导入导出闭环；废弃 subagentCallable 被 silent strip", async () => {
+  it("E4 / T-C3: tools + mode 导入导出闭环；mode 字段往返保留", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-policy-"));
     const dbPath = join(dir, "novel.db");
     const bundlePath = join(dir, "policy-bundle.yaml");
@@ -84,7 +84,7 @@ describe("agent registry e2e", () => {
           "      allow:",
           "        - read",
           "        - grep",
-          "    subagentCallable: true",
+          "    mode: subagent",
         ].join("\n"),
         "utf8",
       );
@@ -92,10 +92,10 @@ describe("agent registry e2e", () => {
       const imported = runNm(["agent", "import", bundlePath, "--db", dbPath]);
       assert.equal(imported.status, 0, imported.stderr);
 
-      // show 导入后的 agent，验证 tools 保留；subagentCallable 已废弃不写出
+      // show 导入后的 agent，验证 tools 保留 + mode 字段导出
       const shown = runNm(["agent", "show", "researcher", "--db", dbPath]);
       assert.equal(shown.status, 0, shown.stderr);
-      assert.doesNotMatch(shown.stdout, /subagentCallable/);
+      assert.match(shown.stdout, /mode"\s*:\s*"subagent"/);
       assert.match(shown.stdout, /"allow"\s*:\s*\[\s*"read"/);
 
       // 导出 → 空库重导入 → 字段仍在
@@ -108,7 +108,7 @@ describe("agent registry e2e", () => {
 
       const shown2 = runNm(["agent", "show", "researcher", "--db", dbPath2]);
       assert.equal(shown2.status, 0, shown2.stderr);
-      assert.doesNotMatch(shown2.stdout, /subagentCallable/);
+      assert.match(shown2.stdout, /mode"\s*:\s*"subagent"/);
       assert.match(shown2.stdout, /"allow"\s*:\s*\[\s*"read"/);
     } finally {
       await rm(dir, { recursive: true, force: true });

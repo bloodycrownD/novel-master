@@ -12,7 +12,7 @@ Step 19 的核心是「大部分能力已存在，本节点主要是验证 + 文
 
 - 子会话消息查询复用现成的 `nm message list --session`（`apps/cli/src/message/commands.ts` 的 `runMessage` 走 `rt.scope.resolveSessionId(flags)` → `messages.listBySession(sessionId)`，对父/子 session 不做区分）。
 - 通用 subagent `general` 由 core 的 `AgentRegistryService.list()` 合并虚拟 seed（wave-2 / Step 7）。
-- `subagentCallable` 配置字段通过现成的 `nm agent import / export` bundle schema 落库（Step 6）。
+- `mode` 配置字段通过现成的 `nm agent import / export` bundle schema 落库（Step 6 起 schema 直接收 `mode` 枚举）。
 
 ## CLI 用法（subagent 相关）
 
@@ -58,9 +58,9 @@ nm agent list --db <path>
 
 > 这条口径在 PRD「风险与待确认项」也写明了：虚拟 general 仅在 `list()` 合并，`get(id)`/`delete(id)` 不合并——「不可删」是 DB 找不到行的自然结果。
 
-### 3. 配置 agent 的 `subagentCallable`
+### 3. 配置 agent 的 `mode`
 
-CLI 下配置走的是 agent bundle 导入导出（`nm agent import` / `nm agent export`），bundle schema 在 Step 6 已补上 `subagentCallable` 字段（`apps/cli/src/agent/schemas/agents-bundle.schema.ts`）。在 `agents.yaml` 里给某个 agent 加一行就能开启：
+CLI 下配置走的是 agent bundle 导入导出（`nm agent import` / `nm agent export`），bundle schema 在 Step 4 已补上 `mode` 枚举字段（`apps/cli/src/agent/schemas/agents-bundle.schema.ts`）。在 `agents.yaml` 里给某个 agent 加一行 `mode: subagent` 就能限定它只在子代理场景出现：
 
 ```yaml
 # examples/agents.yaml 片段
@@ -72,8 +72,9 @@ agents:
         你是一个负责查资料的子代理。
       persist: {}
       dynamic: {}
-    # 关键字段：允许被 task 工具调用；缺省按 false 处理
-    subagentCallable: true
+    # 关键字段：暴露范围为 subagent（仅可被 task 工具调用）；
+    # 缺省按 all 解释（主场景与子场景都可用）。
+    mode: subagent
     # 可选：限定子代理可用的工具集
     tools:
       allow: [read, glob, grep]
@@ -84,10 +85,10 @@ agents:
 ```bash
 nm agent import path/to/agents.yaml --db <path>
 nm agent list --db <path>
-nm agent show researcher --db <path>   # 确认 subagentCallable 已写入
+nm agent show researcher --db <path>   # 确认 mode 已写入
 ```
 
-切换开关只需改 yaml 重新 import（会 upsert 覆盖同名 agent）。改完之后，主 agent 下一次回合装配 `task` 工具时，可选范围会相应变化（`runAgentTurn` 装配期调 `agentRegistry.list()` 过滤 `subagentCallable=true`）。
+切换范围只需改 yaml 重新 import（会 upsert 覆盖同名 agent）。改完之后，主 agent 下一次回合装配 `task` 工具时，可选范围会相应变化（`runAgentTurn` 装配期调 `agentRegistry.list()` 后按 `mode !== "primary"` 过滤出可被派生的子代理）。
 
 ## 验收场景（CLI 视角）
 
@@ -101,7 +102,7 @@ nm agent show researcher --db <path>   # 确认 subagentCallable 已写入
 
 **步骤**：
 
-1. 准备一个开了 `subagentCallable` 的 agent（如上面的 `researcher`），`nm agent import` 落库。
+1. 准备一个设了 `mode: subagent`（或缺省按 all）的 agent（如上面的 `researcher`），`nm agent import` 落库。
 2. 在主会话跑主 agent：`nm agent run --session <parentSessionId> --content "帮我查一下 X 并总结"`（主 agent 自行决定是否派子 agent）。
 3. 主回合结束后查主会话消息流：
 
@@ -144,11 +145,11 @@ nm agent show researcher --db <path>   # 确认 subagentCallable 已写入
 
 ### 场景 3 — 递归上限拦截
 
-**目的**：全局递归深度上限 2 层（主 → 子 → 孙，孙不能再派）；未开 `subagentCallable` 的 agent 不能被调用。
+**目的**：全局递归深度上限 2 层（主 → 子 → 孙，孙不能再派）；`mode` 非 subagent/all 的 agent 不能被调用。
 
 **步骤**：
 
-1. 配置 A、B 两个 agent 都开 `subagentCallable`，构成「主 → A → B」可达第 2 层；再配一个 C 不开 `subagentCallable`。
+1. 配置 A、B 两个 agent 都设 `mode: subagent`（或缺省按 all），构成「主 → A → B」可达第 2 层；再配一个 C 设 `mode: primary`（主场景专用，不可被派生）。
 2. 让 B 在子 agent 回合内尝试再调 `task`（派孙 agent）。
 3. 让主 agent 尝试用 C 作为 `subagentName` 调 `task`。
 
@@ -190,7 +191,7 @@ nm agent show researcher --db <path>   # 确认 subagentCallable 已写入
 
 ## 已知限制与阻塞
 
-- **`nm agent list` 不展示虚拟 `general`**：如上文「用法 2」所述，这是 `listAgentIds()` 与 `list()` 的口径差异，**非 bug**。要看到 `general`，导入 `examples/agents.yaml` 即可。
+- **`nm agent list` 不展示虚拟 `general`**：如上文「用法 2」所述，这是 `listAgentIds()` 与 `list()` 的口径差异，**非 bug**。要看到 `general`，导入 `examples/agents.yaml` 即可。虚拟 `general` 自带 `mode: subagent`（FR-5）。
 - **CLI 没有 `nm session list-children` 子命令**：列父 session 下的子会话目前要走 SQL（`listByParentSession` 仓储方法已在 core 就绪，但未暴露成 CLI 子命令）。本节点不补这个命令（超出 Step 19 scope）。
 - **CLI 运行时 bootstrap 预存问题**：在当前环境实测 `nm agent list` 时遇到 `createChatServices` 读 `sessionDeps.state` 为 undefined 的报错（与 subagent 无关，属于 baseline 已知的 CLI/session 类型错）。因此本验收以**代码确认**为主：能力是否存在以 `apps/cli/src/message/commands.ts`、`apps/cli/src/agent/registry-commands.ts` 与 core `AgentRegistryService` 的源码为准（上文已逐条核实）。
 
@@ -200,4 +201,4 @@ nm agent show researcher --db <path>   # 确认 subagentCallable 已写入
 |---|---|---|
 | `nm message list --session <childId>` 查子会话 | `apps/cli/src/message/commands.ts` `runMessage` → `resolveSessionId(flags)` → `messages.listBySession(sessionId)` | ✅ 现有能力，对父子 session 不区分，传子 id 即可 |
 | `nm agent list` 展示 `general` | `apps/cli/src/agent/registry-commands.ts` 走 `listAgentIds()`；虚拟注入只在 core `AgentRegistryService.list()` | ⚠️ 空 DB 看不到；导入 `examples/agents.yaml` 后可见；`task` 运行时按 `list()` 永远有 `general` |
-| `subagentCallable` 配置导入导出 | `apps/cli/src/agent/schemas/agents-bundle.schema.ts` + `import-export.ts` | ✅ bundle schema 已支持，`nm agent import/export` 闭环 |
+| `mode` 配置导入导出 | `apps/cli/src/agent/schemas/agents-bundle.schema.ts` + `import-export.ts` | ✅ bundle schema 已支持 `mode` 枚举，`nm agent import/export` 闭环 |

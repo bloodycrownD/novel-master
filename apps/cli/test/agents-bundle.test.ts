@@ -44,7 +44,7 @@ describe("agents bundle schema", () => {
     assert.deepEqual(doc.agents.summarizer!.prompts.persist, {});
   });
 
-  it("T-C3a: bundle entry 含 tools decode 保留字段；废弃 subagentCallable 被 silent strip", () => {
+  it("T-C3a: bundle entry 含 tools + mode decode 保留字段", () => {
     const doc = decode(
       {
         schemaVersion: 1,
@@ -52,7 +52,7 @@ describe("agents bundle schema", () => {
           researcher: {
             prompts: { persist: {}, dynamic: {}, system: "s" },
             tools: { allow: ["read", "grep"] },
-            subagentCallable: true,
+            mode: "subagent",
           },
         },
       },
@@ -61,7 +61,7 @@ describe("agents bundle schema", () => {
     const entry = doc.agents.researcher!;
     assert.deepEqual(entry.tools?.allow, ["read", "grep"]);
     assert.equal(entry.tools?.deny, undefined);
-    assert.equal((entry as { subagentCallable?: unknown }).subagentCallable, undefined);
+    assert.equal(entry.mode, "subagent");
   });
 
   it("T-C3b: 旧 bundle（无 tools）仍可 decode（optional 兼容）", () => {

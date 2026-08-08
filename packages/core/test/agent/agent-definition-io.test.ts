@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, encode, parseText, stringifyText } from "@novel-master/core";
+import {
+  ConfigDecodeError,
+  decode,
+  encode,
+  parseText,
+  stringifyText,
+} from "@novel-master/core";
 
 import { agentDefinitionSchema, promptsDocumentSchema, type AgentDefinition } from "@novel-master/core/agent";
 
@@ -115,22 +121,58 @@ prompts:
     assert.equal(parsed.success, false);
   });
 
-  it("T-C1: 废弃的 subagentCallable 字段被 preprocess silently strip（不炸）", () => {
-    // subagentCallable 已移除；老数据如果带这个字段，preprocess silently strip。
+  it("T-C1: 废弃的 subagentCallable 字段被 strict schema 直接拒绝（不再 silent strip）", () => {
+    // Step 3 删除 silent-strip preprocess 后，带 subagentCallable 的输入会被
+    // strict schema 拒绝（未发布功能，无旧数据需兼容）。
+    assert.throws(
+      () =>
+        decode(
+          {
+            schemaVersion: 1,
+            name: "legacy",
+            prompts: { persist: {}, dynamic: {} },
+            subagentCallable: true,
+          },
+          agentDefinitionSchema,
+        ),
+      (e: unknown) =>
+        e instanceof ConfigDecodeError &&
+        e.code === "INVALID_SCHEMA" &&
+        /subagentCallable/.test(e.message),
+    );
+  });
+
+  it("T-M1: 显式 mode 字段走 definitionToDocument → documentToDefinition 往返不丢", () => {
     const def = decode(
       {
         schemaVersion: 1,
-        name: "legacy",
+        name: "with-mode",
+        mode: "subagent",
         prompts: { persist: {}, dynamic: {} },
-        subagentCallable: true,
       },
       agentDefinitionSchema,
     );
-    assert.equal((def as { subagentCallable?: unknown }).subagentCallable, undefined);
-    const doc = encode(def, agentDefinitionSchema) as {
-      subagentCallable?: unknown;
-    };
-    assert.equal(doc.subagentCallable, undefined);
+    assert.equal(def.mode, "subagent");
+    const doc = encode(def, agentDefinitionSchema) as { mode?: string };
+    assert.equal(doc.mode, "subagent");
+    const again = decode(doc, agentDefinitionSchema);
+    assert.equal(again.mode, "subagent");
+  });
+
+  it("T-M2: 缺省 mode 读回 undefined，且 definitionToDocument 不写出该 key", () => {
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "no-mode",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    );
+    assert.equal(def.mode, undefined);
+    const doc = encode(def, agentDefinitionSchema) as { mode?: string };
+    assert.equal(doc.mode, undefined, "缺省时不应该写出 mode key");
+    const again = decode(doc, agentDefinitionSchema);
+    assert.equal(again.mode, undefined);
   });
 
   it("T-D1a: description 走 definitionToDocument → documentToDefinition 往返不丢字段", () => {
