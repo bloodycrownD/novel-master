@@ -326,6 +326,16 @@ export class DefaultAgentRunner implements AgentRunner {
           protocol,
           zones,
         );
+        // [DEBUG subagent-400] normalizeForLlmExport 后、normalizeOrphan 前
+        console.log("[agent-runner DEBUG] before_orphan_normalize", {
+          sessionId,
+          step,
+          messageCount: exportMessages.length,
+          roles: exportMessages.map(m => ({
+            role: m.role,
+            blockTypes: m.content.blocks.map(b => b.type),
+          })),
+        });
         const llmMessages = normalizeOrphanToolResultsForLlm(exportMessages);
 
         // [DEBUG subagent-400] 检查发给 LLM 的消息历史里 tool_use/tool_result 配对
