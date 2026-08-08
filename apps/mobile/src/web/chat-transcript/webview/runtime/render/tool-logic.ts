@@ -6,12 +6,28 @@ import type { ToolCallRow } from '../state/state';
  */
 
 export function summarizeToolInput(
-  _name: string,
+  name: string,
   input: Record<string, unknown> | null | undefined,
 ): string {
-  const path = input && (input.path || input.dir || input.from);
+  if (!input) return '';
+
+  // task 工具：展示 description（任务描述）+ prompt 摘要，比裸 JSON 可读。
+  if (name === 'task') {
+    const desc = typeof input.description === 'string' ? input.description.trim() : '';
+    const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : '';
+    const agent = typeof input.subagentName === 'string' ? input.subagentName : '';
+    const parts: string[] = [];
+    if (agent) parts.push(`@${agent}`);
+    if (desc) parts.push(desc);
+    if (prompt) {
+      parts.push(prompt.length > 80 ? prompt.slice(0, 77) + '…' : prompt);
+    }
+    return parts.join(' · ');
+  }
+
+  const path = input.path || input.dir || input.from;
   if (typeof path === 'string') return path;
-  const keys = input ? Object.keys(input) : [];
+  const keys = Object.keys(input);
   if (keys.length === 0) return '';
   try {
     const raw = JSON.stringify(input);
