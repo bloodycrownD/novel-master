@@ -27,6 +27,7 @@ import {
   isBinaryAttachPath,
   isImageAttachPath,
 } from "./attach-binary-heuristic.js";
+import { isUserInputMessage } from "./message-content-helpers.js";
 import {
   buildAlreadyReferencedActionXml,
   buildDirTreeActionXml,
@@ -362,14 +363,8 @@ async function prepareOneUserMessage(
   const hasExtraInfo =
     typeof runtime.extraInfo === "string" &&
     runtime.extraInfo.trim().length > 0;
-  // 含 tool block 的消息（tool_result）不走 wrap——wrap 会用 messageBodyTextFromContent
-  // 提取纯文本再重组为 textBlocks，丢失 tool_result block 类型，导致 LLM API 报
-  // "insufficient tool messages following tool_calls"。
-  const hasToolBlocks = message.content.blocks.some(
-    (b) => b.type === "tool_result" || b.type === "tool_use",
-  );
-  // 无附件且无 extraInfo，或含 tool block：恒等原文，不走 wrap。
-  if ((attachments.length === 0 && !hasExtraInfo) || hasToolBlocks) {
+  // 无附件且无 extraInfo：恒等原文，不走 wrap。
+  if (attachments.length === 0 && !hasExtraInfo) {
     return message;
   }
 
@@ -442,6 +437,12 @@ export async function prepareUserMessagesForPrompt(
   const out: ChatMessage[] = [];
   for (const message of messages) {
     if (message.role !== "user") {
+      out.push(message);
+      continue;
+    }
+    // 非用户输入的 user 消息（含 tool_result 的工具结果）直接透传，不走 wrap——
+    // wrap 会把 block 类型拍平成 text，导致 LLM API 报 tool 配对错误。
+    if (!isUserInputMessage(message)) {
       out.push(message);
       continue;
     }
