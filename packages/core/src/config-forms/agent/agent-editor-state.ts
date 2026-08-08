@@ -37,7 +37,7 @@ export const TOOL_MODE_OPTIONS: Array<{ value: ToolsMode; label: string }> = [
 ];
 
 export const MODE_OPTIONS: Array<{ value: AgentMode; label: string }> = [
-  { value: "all", label: "全部" },
+  { value: "all", label: "默认（全部）" },
   { value: "primary", label: "仅主智能体" },
   { value: "subagent", label: "仅子智能体" },
 ];
