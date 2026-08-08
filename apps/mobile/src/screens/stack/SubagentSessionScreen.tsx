@@ -3,13 +3,13 @@
  *
  * 主会话里点击 `task` 工具卡片跳转到此页，展示子 agent 的完整消息历史。
  * 复用主会话的 {@link ChatTranscriptWebView}（WebView 引擎），与主会话共享
- * 富文本渲染、工具卡片展示、消息宽度等所有视觉行为。
+ * 富文本渲染、工具卡片展示、消息宽度、流式输出等所有视觉行为。
  *
- * 实时刷新：子 agent run 现在发 `publishRunLifecycle: true` 事件，
- * 本页订阅 `agent.step.committed`（按 sessionId 过滤）每步重新拉消息，
- * `agent.run.started/finished` 控制 loading 样式——和主会话体验一致。
+ * 实时刷新：子 agent run 发 publishRunLifecycle=true 事件，本页订阅
+ * agent.run.started/finished（loading）、agent.stream.text/thinking-delta
+ * （流式输出）、agent.step.committed（每步 reload 落库消息）——和主会话体验一致。
  *
- * 只读：无 composer、无 streaming 输入。
+ * 只读：无 composer、无用户输入。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
@@ -20,10 +20,16 @@ import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_STEP_COMMITTED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
   type AgentRunStartedPayload,
   type AgentRunFinishedPayload,
   type AgentRunFailedPayload,
   type AgentStepCommittedPayload,
+  type AgentStreamTextDeltaPayload,
+  type AgentStreamThinkingDeltaPayload,
+  type AgentStreamToolUsePayload,
 } from '@novel-master/core/events';
 import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -48,6 +54,9 @@ export function SubagentSessionScreen() {
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [agentRunning, setAgentRunning] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingThinking, setStreamingThinking] = useState('');
+  const [toolInvoking, setToolInvoking] = useState(false);
   const [richTextEnabled, setRichTextEnabled] = useState(false);
   const reloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -94,8 +103,8 @@ export function SubagentSessionScreen() {
       .catch(() => undefined);
   }, [appUi]);
 
-  // 订阅子 agent run 事件：实时刷新消息 + loading 样式。
-  // 子 agent run 现在 publishRunLifecycle=true，事件按 sessionId 过滤不会串到主会话。
+  // 订阅子 agent run 事件：实时刷新消息 + 流式输出 + loading 样式。
+  // 子 agent run 现在 publishRunLifecycle=true + stream=true，事件按 sessionId 过滤不会串到主会话。
   useEffect(() => {
     if (sessionId == null) {
       return undefined;
@@ -103,7 +112,7 @@ export function SubagentSessionScreen() {
     const sid = sessionId;
     const bus = runtime.eventBus;
 
-    // 节流：step committed 可能连续触发，合并到一次 reload。
+    // 节流：step committed 连续触发时合并到一次 reload。
     const scheduleReload = () => {
       if (reloadTimerRef.current != null) {
         clearTimeout(reloadTimerRef.current);
@@ -119,13 +128,46 @@ export function SubagentSessionScreen() {
       (payload: AgentRunStartedPayload) => {
         if (payload.sessionId !== sid) return;
         setAgentRunning(true);
+        setStreamingText('');
+        setStreamingThinking('');
+        setToolInvoking(false);
         scheduleReload();
+      },
+    );
+    const subText = bus.subscribe(
+      EVENT_AGENT_STREAM_TEXT_DELTA,
+      (payload: AgentStreamTextDeltaPayload) => {
+        if (payload.sessionId !== sid) return;
+        setStreamingText(prev => prev + payload.text);
+      },
+    );
+    const subThinking = bus.subscribe(
+      EVENT_AGENT_STREAM_THINKING_DELTA,
+      (payload: AgentStreamThinkingDeltaPayload) => {
+        if (payload.sessionId !== sid) return;
+        setStreamingThinking(prev => prev + payload.text);
+      },
+    );
+    const subToolUse = bus.subscribe(
+      EVENT_AGENT_STREAM_TOOL_USE,
+      (payload: AgentStreamToolUsePayload) => {
+        if (payload.sessionId !== sid) return;
+        // 工具调用出现时清空流式缓冲，step committed 会 reload 落库消息。
+        setStreamingText('');
+        setStreamingThinking('');
+        setToolInvoking(true);
       },
     );
     const subStep = bus.subscribe(
       EVENT_AGENT_STEP_COMMITTED,
       (payload: AgentStepCommittedPayload) => {
         if (payload.sessionId !== sid) return;
+        // assistant 落库后清空流式缓冲，让落库消息接管渲染。
+        if (payload.phase === 'assistant') {
+          setStreamingText('');
+          setStreamingThinking('');
+          setToolInvoking(false);
+        }
         scheduleReload();
       },
     );
@@ -134,6 +176,9 @@ export function SubagentSessionScreen() {
       (payload: AgentRunFinishedPayload) => {
         if (payload.sessionId !== sid) return;
         setAgentRunning(false);
+        setStreamingText('');
+        setStreamingThinking('');
+        setToolInvoking(false);
         scheduleReload();
       },
     );
@@ -142,11 +187,17 @@ export function SubagentSessionScreen() {
       (payload: AgentRunFailedPayload) => {
         if (payload.sessionId !== sid) return;
         setAgentRunning(false);
+        setStreamingText('');
+        setStreamingThinking('');
+        setToolInvoking(false);
         scheduleReload();
       },
     );
     return () => {
       subStarted.unsubscribe();
+      subText.unsubscribe();
+      subThinking.unsubscribe();
+      subToolUse.unsubscribe();
       subStep.unsubscribe();
       subFinished.unsubscribe();
       subFailed.unsubscribe();
@@ -198,6 +249,9 @@ export function SubagentSessionScreen() {
         <ChatTranscriptWebView
           sessionKey={sessionKey}
           messages={messages}
+          streamingText={streamingText}
+          streamingThinking={streamingThinking}
+          toolInvoking={toolInvoking}
           flags={flags}
           agentRunning={agentRunning}
           defaultScrollToBottom={false}
