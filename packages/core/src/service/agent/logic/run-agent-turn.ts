@@ -640,9 +640,9 @@ async function runChildAgent(args: {
     workspaceModelId: opts.workspaceModelId,
     maxSteps,
     activeRegexGroupId: activeRegexGroupId ?? undefined,
-    // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=false 不发总线事件；stream=false。
+    // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=true 发事件供子会话浏览页实时刷新（主会话按 sessionId 过滤不会串）；stream=false。
     persistMessages: true,
-    publishRunLifecycle: false,
+    publishRunLifecycle: true,
     stream: false,
     signal: childController.signal,
   });
