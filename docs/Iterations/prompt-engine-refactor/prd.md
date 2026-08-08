@@ -13,20 +13,57 @@ agent-subagent 和 agent-mode-refactor 两个迭代合入后，子智能体（ta
 
 ### 问题一：Prompt 引擎对消息类型的处理不够精确
 
-当前 Prompt 组装链路对 `role=user` 的消息一视同仁处理。`prepareUserMessagesForPrompt` 会对所有非 hidden 的 user 消息做附件 hydrate + extraInfo wrap——但 `tool_result` 消息虽然 role 也是 user，它不是「用户在输入框里发的消息」，不应该被 wrap。
+要理解这个问题，需要先了解当前 Prompt 引擎的完整链路，以及它和 agent 配置是怎么配套的。
 
-实际触发的 bug：agent 配了 `customAttach`（extraInfo）时，tool_result 消息被 `messageBodyTextFromContent` 提取纯文本再 `textBlocks` 重组，`tool_result` block 类型丢失，发给 LLM API 时变成纯 `text`，导致 OpenAI 格式 API 报 `"insufficient tool messages following tool_calls"` 400 错误。
+#### Agent 配置的三区布局模型
 
-当前已有一个临时修复（检测 tool blocks 跳过 wrap），但根因是设计层面的问题：**Prompt 引擎靠 `role === "user"` 来判断「这是不是用户输入的消息」，而实际上 `role=user` 包含两种语义不同的消息**：
+Agent 的提示词配置（`AgentPromptLayout`）把提示词分成三个区域加上独立字段：
+
+- **system**：单段文本，单独走 API `system` 字段。
+- **workplace**（常驻工作区）：开启时合成一对照消息——`user` 放工作区文件树文本，`assistant` 放确认语（如 `i have seen workplace`）。注入位置在 persist 区之前。
+- **persist 区**（持久前缀）：若干固定 user/assistant 文本块，每次对话开头注入。
+- **chat 区**（会话历史）：DB 里真实存的对话消息。
+- **dynamic 区**（动态后缀）：按 lifecycle 控制每步注入的 user/assistant 文本块。
+- **customAttach**（自定义附加信息）：一段文本，注入到用户输入消息的 `<extra-info>` 块里。
+
+其中 attach（文件附件）、workplace（工作区文件树）、user_ops（用户操作日志）、annotate（批注）都是注入到**用户输入消息内部** `attachments` 字段里的内容——它们不是独立的 `role=user` 消息种类，而是用户输入消息的组成部分。
+
+#### agent-runner 每个 step 的组装流程
+
+```
+1. session.list()                       从 DB 读可见消息
+2. applyLlmRegexChannelToVisible        正则过滤（可选）
+3. assembleWorkplaceDisplay             读工作区文件 → 拼文件树文本 + prefixPaths
+4. prepareUserMessagesForPrompt         对 role=user 消息做 attach hydrate + extraInfo wrap
+5. buildPromptLlmInputFromLayout        按 layout 三区组装最终消息列表
+   ├─ workplace 双段（合成 user+assistant）
+   ├─ persist 区（合成 user/assistant）
+   ├─ chat 区（ctx.messages 过滤 hidden）   ← 步骤 4 处理过的消息在这里
+   └─ dynamic 区（合成 user/assistant）
+6. computeLlmExportZonesFromLayout      算三区边界（persistCount / dynamicCount）
+7. normalizeForLlmExport                区内 merge 连续同 role 纯文本
+8. normalizeOrphanToolResultsForLlm     降级孤立 tool_result/tool_use
+9. 发给 LLM API
+```
+
+三区布局模型本身和 agent 配置是配套的。问题出在**步骤 4**。
+
+#### 步骤 4 的设计缺陷
+
+`prepareUserMessagesForPrompt` 的职责是「给用户输入消息注入附件内容」——读 `attachments` 字段做 hydrate（把文件内容、工作区文件树等展开），再 wrap 成带 `<attach>` / `<extra-info>` 标签的文本。
+
+但它的触发条件是 `role === "user"`，不是「这是用户输入」。在只有纯文本对话时两者等价，但有了工具调用后就不再等价了：
 
 | 消息种类 | 当前 role | block 类型 | 语义 | 应该怎么处理 |
 |---|---|---|---|---|
 | 用户输入 | user | text + attachments | 用户在输入框发的内容（attach/workplace/user_ops/annotate 都注入到这条消息的 attachments 里） | hydrate attach + 注入 extraInfo |
 | 工具结果 | user | tool_result | 工具执行后的返回（agent-runner 的 `session.append("user", { blocks: toolResults })`） | 原样透传，不走 wrap |
 
-这两种消息的处理逻辑完全不同，但当前都用 `role === "user"` 进入同一个 `prepareOneUserMessage` 函数，再靠条件分支区分。这种做法脆弱且容易出 bug。
+这两种消息的处理逻辑完全不同，但当前都走同一个 `prepareOneUserMessage` 函数。`tool_result` 消息没有 attachments、也不是用户输入，走 wrap 后会被 `messageBodyTextFromContent` 提取纯文本再 `textBlocks` 重组——`tool_result` block 类型丢失，发给 LLM API 时变成纯 `text`。
 
-注意：attach / customAttach / annotate / workplace 都是注入到**用户输入消息内部**的 `<attach>` 标签内容（通过 `attachments` 字段），不是独立的 `role=user` 消息种类。`prepareUserMessagesForPrompt` 的 wrap 逻辑是给用户输入消息注入这些附件内容的，对工具结果消息完全不适用。
+实际触发的 bug：agent 配了 `customAttach`（extraInfo）时，上述流程导致 OpenAI 格式 API 报 `"insufficient tool messages following tool_calls"` 400 错误。
+
+当前已有一个临时修复（在 `prepareOneUserMessage` 里检测 tool blocks 跳过 wrap），但根因是设计层面的：**不应该靠 `role === "user"` 来判断「这是不是用户输入的消息」**。
 
 ### 问题二：Mobile WebView 不支持子智能体卡片点击
 
