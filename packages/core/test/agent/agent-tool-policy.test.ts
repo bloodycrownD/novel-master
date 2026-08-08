@@ -18,6 +18,24 @@ function vfsRegistryNames(): string[] {
   return registry.list();
 }
 
+const mockToolCtx: BuiltinToolContext = {
+  vfs: {} as never,
+  projectId: "proj",
+  sessionId: "sess",
+  listSessionMessages: async () => [],
+  subagent: {
+    agentRegistry: {} as never,
+    messages: {} as never,
+    sessions: {} as never,
+    createChildSession: async () => "",
+    runChildAgent: async () => ({}) as never,
+    resolveChildModelId: () => ({ savedModelId: "", workspaceModelId: "" }),
+    depth: 0,
+    parentSignal: new AbortController().signal,
+    callableAgents: [{ name: "general" }],
+  },
+};
+
 describe("agent tool policy", () => {
   const registryNames = new Set(vfsRegistryNames());
 
@@ -26,7 +44,7 @@ describe("agent tool policy", () => {
     registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, BASE_DEF);
     assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
-    assert.equal(toolsFromRegistry(filtered).length, vfsRegistryNames().length);
+    assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, vfsRegistryNames().length);
   });
 
   it("T2: allow list restricts LLM tools", () => {
@@ -38,7 +56,7 @@ describe("agent tool policy", () => {
     registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
-    assert.equal(toolsFromRegistry(filtered).length, 2);
+    assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, 2);
     assert.equal(filtered.get("write"), undefined);
   });
 
@@ -51,7 +69,7 @@ describe("agent tool policy", () => {
     registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list(), []);
-    assert.equal(toolsFromRegistry(filtered).length, 0);
+    assert.equal(toolsFromRegistry(filtered, mockToolCtx).length, 0);
   });
 
   it("T4: deny list removes named tools", () => {

@@ -141,7 +141,7 @@ describe("ToolRunner.runParallel", () => {
     let maxInFlight = 0;
     registry.register({
       name: "test.slow",
-      description: "slow",
+      description: () => "slow",
       inputSchema: z.object({ id: z.number() }),
       async run() {
         inFlight += 1;

@@ -73,10 +73,10 @@ function makeRuntime(overrides: {
       getCurrentAgentId: async () => "a1",
       getCurrentModelId: async () => "openai/gpt",
       getCurrentRegexGroupId: async () => undefined,
-      getSubagentNames: async () => [],
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
+      list: async () => [sampleDefinition],
       get: async () => sampleDefinition,
     },
     projects: {

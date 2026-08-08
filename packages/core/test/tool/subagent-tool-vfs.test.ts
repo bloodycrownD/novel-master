@@ -4,7 +4,11 @@ import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { createSubagentTool, type TaskToolInput, type TaskToolOutput } from "@/domain/tool/builtin/subagent-tool.js";
+import {
+  subagentTool,
+  type TaskToolInput,
+  type TaskToolOutput,
+} from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -63,6 +67,7 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
       messages,
       sessions,
       depth: 0,
+      callableAgents: [{ name: "general" }],
       parentSignal: new AbortController().signal,
       createChildSession: async (title) => {
         const s = await sessions.createSubSession("parent-sess", "proj-x", title);
@@ -87,8 +92,7 @@ describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
       subagent,
     };
 
-    const tool = createSubagentTool(["general"]);
-    const out: TaskToolOutput = await tool.run(
+    const out: TaskToolOutput = await subagentTool.run(
       { description: "读大纲", prompt: "请读 /outline.md", subagentName: "general" } satisfies TaskToolInput,
       ctx,
     );

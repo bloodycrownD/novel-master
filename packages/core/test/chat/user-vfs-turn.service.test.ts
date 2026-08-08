@@ -379,7 +379,7 @@ describe("UserVfsTurnService", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registry.register({
       name: "patch",
-      description: "writes without user-ops derivation",
+      description: () => "writes without user-ops derivation",
       inputSchema: z.object({
         path: z.string(),
         content: z.string(),
@@ -650,7 +650,7 @@ describe("UserVfsTurnService", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registry.register({
       name: "test.boom",
-      description: "boom",
+      description: () => "boom",
       inputSchema: z.object({}),
       async run() {
         throw new Error("disk fail");

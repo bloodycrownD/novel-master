@@ -5,7 +5,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { TextBlock, ToolResultBlock } from "@/domain/chat/model/content-block.js";
-import { createSubagentTool } from "@/domain/tool/builtin/subagent-tool.js";
+import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -13,7 +13,7 @@ import type {
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tool-registry.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import { registerBuiltinTools, registerSubagentTool } from "@/domain/tool/builtin/register-builtin-tools.js";
+import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -42,6 +42,7 @@ interface MockRunChildAgentResult {
 
 function makeMockSubagent(args: {
   readonly defs?: readonly AgentDefinition[];
+  readonly callableAgents?: readonly { readonly name: string; readonly description?: string }[];
   readonly runResult?: MockRunChildAgentResult;
   readonly depth?: number;
   readonly capturedChildSessionIds?: string[];
@@ -52,6 +53,8 @@ function makeMockSubagent(args: {
 } {
   const depth = args.depth ?? 0;
   const defs = args.defs ?? [generalDef];
+  const callableAgents =
+    args.callableAgents ?? defs.map((d) => ({ name: d.name, description: d.description }));
   const childSessions: { id: string; title: string }[] = [];
   let sessionCounter = 0;
   const childMsgsBySession = new Map<string, ChatMessage[]>();
@@ -84,6 +87,7 @@ function makeMockSubagent(args: {
     messages,
     sessions,
     depth,
+    callableAgents,
     parentSignal: new AbortController().signal,
     createChildSession: async (title: string) => {
       const s = await sessions.createSubSession("p", "proj", title);
@@ -135,8 +139,7 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 3, finished: true, stopReason: "completed", rounds: [] },
       },
     });
-    const tool = createSubagentTool([{ name: "general" }]);
-    const output = await tool.run(
+    const output = await subagentTool.run(
       { description: "生成角色档案", prompt: "请生成主角档案", subagentName: "general" },
       makeToolCtx(ctx),
     );
@@ -155,10 +158,9 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 1, finished: true, stopReason: "completed", rounds: [] },
       },
     });
-    const tool = createSubagentTool([{ name: "general" }]);
     const longPrompt =
       "请帮我把这一段超长任务描述做些处理然后生成结果返回再来一段超出四十字符的填充内容结尾";
-    await tool.run(
+    await subagentTool.run(
       // description schema 是 min(1)，故测试直接构造 input 不走 schema：用空格 trim 后空
       { description: "   ", prompt: longPrompt, subagentName: "general" },
       makeToolCtx(ctx),
@@ -172,8 +174,7 @@ describe("subagent-tool / task", () => {
     // nonCallableDef 在 registry 里存在 → 不抛错（runChildAgent 会走完整流程，
     // 这里 mock 的 runChildAgent 会返回成功）。
     const { ctx } = makeMockSubagent({ defs: [nonCallableDef] });
-    const tool = createSubagentTool([]);
-    const result = await tool.run(
+    const result = await subagentTool.run(
       { description: "task", prompt: "p", subagentName: "writer" },
       makeToolCtx(ctx),
     );
@@ -182,10 +183,9 @@ describe("subagent-tool / task", () => {
 
   it("T-T3: 不存在的 subagentName 抛 ToolError", async () => {
     const { ctx } = makeMockSubagent({ defs: [generalDef] });
-    const tool = createSubagentTool([{ name: "general" }]);
     await assert.rejects(
       () =>
-        tool.run(
+        subagentTool.run(
           { description: "t", prompt: "p", subagentName: "ghost" },
           makeToolCtx(ctx),
         ),
@@ -195,39 +195,44 @@ describe("subagent-tool / task", () => {
   });
 
   it("T-T7: description 含可选 subagent name 列表", () => {
-    const withGeneral = createSubagentTool([{ name: "general" }]);
-    assert.ok(withGeneral.description.includes("general"));
-    const empty = createSubagentTool([]);
+    const ctxWithGeneral = makeToolCtx(
+      makeMockSubagent({ callableAgents: [{ name: "general" }] }).ctx,
+    );
+    assert.ok(subagentTool.description(ctxWithGeneral).includes("general"));
+    const ctxEmpty = makeToolCtx(makeMockSubagent({ callableAgents: [] }).ctx);
     // 即便空列表，description 也应描述能力（不崩）。
-    assert.ok(empty.description.includes("task"));
-    assert.ok(empty.description.includes("（暂无）"));
+    assert.ok(subagentTool.description(ctxEmpty).includes("task"));
+    assert.ok(subagentTool.description(ctxEmpty).includes("（暂无）"));
   });
 
   it("T-T7b: description 含每个 agent 的 description 文本（按 `名字：描述` 格式）", () => {
-    const tool = createSubagentTool([
-      {
-        name: "general",
-        description: "通用助手，可以读写文件、搜索内容。",
-      },
-      {
-        name: "researcher",
-        description: "专门负责查资料和事实核查。",
-      },
-      { name: "nodescr" },
-    ]);
+    const ctx = makeToolCtx(
+      makeMockSubagent({
+        callableAgents: [
+          {
+            name: "general",
+            description: "通用助手，可以读写文件、搜索内容。",
+          },
+          {
+            name: "researcher",
+            description: "专门负责查资料和事实核查。",
+          },
+          { name: "nodescr" },
+        ],
+      }).ctx,
+    );
+    const desc = subagentTool.description(ctx);
     assert.ok(
-      tool.description.includes(
-        "general：通用助手，可以读写文件、搜索内容。",
-      ),
+      desc.includes("general：通用助手，可以读写文件、搜索内容。"),
       "应当拼出 `general：描述` 一行",
     );
     assert.ok(
-      tool.description.includes("researcher：专门负责查资料和事实核查。"),
+      desc.includes("researcher：专门负责查资料和事实核查。"),
       "应当拼出 `researcher：描述` 一行",
     );
     // 没描述的 agent 只列名字，不应出现 `nodescr：`。
-    assert.ok(tool.description.includes("nodescr"));
-    assert.ok(!tool.description.includes("nodescr："));
+    assert.ok(desc.includes("nodescr"));
+    assert.ok(!desc.includes("nodescr："));
   });
 
   it("T-T8: 子 agent stopReason !== completed → fallback 文本", async () => {
@@ -240,8 +245,7 @@ describe("subagent-tool / task", () => {
         result: { stepsExecuted: 10, finished: false, stopReason: "max_steps", rounds: [] },
       },
     });
-    const tool = createSubagentTool([{ name: "general" }]);
-    const output = await tool.run(
+    const output = await subagentTool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(ctx),
     );
@@ -260,8 +264,7 @@ describe("subagent-tool / task", () => {
         return resolved;
       },
     };
-    const tool = createSubagentTool([{ name: "general" }]);
-    await tool.run(
+    await subagentTool.run(
       { description: "t", prompt: "p", subagentName: "general" },
       makeToolCtx(wrappedCtx),
     );
@@ -275,7 +278,6 @@ describe("resolveAgentToolRegistry 递归上限", () => {
   function makeBaseRegistry(): ToolRegistry<BuiltinToolContext> {
     const r = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(r);
-    registerSubagentTool(r, [{ name: "general" }]);
     return r;
   }
   const def: AgentDefinition = { name: "x", prompts: { persist: [], dynamic: [] } };

@@ -7,7 +7,7 @@ describe("toolsFromRegistry parameter descriptions", () => {
   it("edit tool schema includes property descriptions for LLM", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const edit = toolsFromRegistry(registry).find((t) => t.name === "edit");
+    const edit = toolsFromRegistry(registry, { subagent: { callableAgents: [{ name: "general" }] } }).find((t) => t.name === "edit");
     assert.ok(edit);
     assert.match(edit!.description, /尾追/);
 
@@ -20,10 +20,10 @@ describe("toolsFromRegistry parameter descriptions", () => {
     assert.match(schema.properties!.oldString!.description!, /唯一/);
   });
 
-  it("registers 6 builtin tools without chat_grep", () => {
+  it("registers 7 builtin tools without chat_grep", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    assert.equal(registry.list().length, 6);
+    assert.equal(registry.list().length, 7);
     assert.ok(!registry.list().includes("chat_grep"));
   });
 });

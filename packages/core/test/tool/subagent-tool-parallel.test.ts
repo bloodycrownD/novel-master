@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { createSubagentTool } from "@/domain/tool/builtin/subagent-tool.js";
+import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -65,6 +65,7 @@ function setupParallel(opts: SetupOpts = {}): {
     messages,
     sessions,
     depth: 0,
+    callableAgents: [{ name: "general" }],
     parentSignal: opts.parentSignal ?? new AbortController().signal,
     createChildSession: async (title) => {
       const s = await sessions.createSubSession("p", "proj", title);
@@ -101,7 +102,7 @@ describe("task 工具并行派生与 abort 级联", () => {
   it("T-T4: 单消息 2 个 task tool_use 并发执行，各自独立子 session 与回流", async () => {
     const { ctx } = setupParallel();
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registry.register(createSubagentTool(["general"]));
+    registry.register(subagentTool);
     const runner = new ToolRunner(registry);
 
     const outcomes = await runner.runParallel(
@@ -142,7 +143,7 @@ describe("task 工具并行派生与 abort 级联", () => {
       parentSignal: parentController.signal,
     });
     const registry = new ToolRegistry<BuiltinToolContext>();
-    registry.register(createSubagentTool(["general"]));
+    registry.register(subagentTool);
     const runner = new ToolRunner(registry);
 
     // 启动 task 后立即 abort 父 signal。

@@ -111,16 +111,17 @@ describe("chat_grep tool", () => {
 });
 
 describe("registerBuiltinTools", () => {
-  it("registers 6 V2 file tools (chat_grep 已废弃不注册)", () => {
+  it("registers 7 V2 file tools (chat_grep 已废弃不注册)", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
-    assert.equal(registry.list().length, 6);
+    assert.equal(registry.list().length, 7);
     assert.deepEqual(registry.list().sort(), [
       "edit",
       "fs",
       "glob",
       "grep",
       "read",
+      "task",
       "write",
     ]);
   });
