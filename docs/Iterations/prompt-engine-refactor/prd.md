@@ -17,15 +17,16 @@ agent-subagent 和 agent-mode-refactor 两个迭代合入后，子智能体（ta
 
 实际触发的 bug：agent 配了 `customAttach`（extraInfo）时，tool_result 消息被 `messageBodyTextFromContent` 提取纯文本再 `textBlocks` 重组，`tool_result` block 类型丢失，发给 LLM API 时变成纯 `text`，导致 OpenAI 格式 API 报 `"insufficient tool messages following tool_calls"` 400 错误。
 
-当前已有一个临时修复（检测 tool blocks 跳过 wrap），但根因是设计层面的问题：**Prompt 引擎靠 `role === "user"` 来判断「这是不是用户输入的消息」，而实际上 `role=user` 包含了至少三种语义不同的消息**：
+当前已有一个临时修复（检测 tool blocks 跳过 wrap），但根因是设计层面的问题：**Prompt 引擎靠 `role === "user"` 来判断「这是不是用户输入的消息」，而实际上 `role=user` 包含两种语义不同的消息**：
 
 | 消息种类 | 当前 role | block 类型 | 语义 | 应该怎么处理 |
 |---|---|---|---|---|
-| 用户输入 | user | text + attachments | 用户在输入框发的内容 | hydrate attach + 注入 extraInfo |
-| 工具结果 | user | tool_result | 工具执行后的返回 | 原样透传，不走 wrap |
-| VFS 操作 | user | text + raw.kind=user_vfs_action | 用户操作工作区的合成消息 | 走 VFS semantic 段处理，不走 wrap |
+| 用户输入 | user | text + attachments | 用户在输入框发的内容（attach/workplace/user_ops/annotate 都注入到这条消息的 attachments 里） | hydrate attach + 注入 extraInfo |
+| 工具结果 | user | tool_result | 工具执行后的返回（agent-runner 的 `session.append("user", { blocks: toolResults })`） | 原样透传，不走 wrap |
 
-这三种消息的处理逻辑完全不同，但当前都用 `role === "user"` 进入同一个函数，再靠各种条件分支区分。这种做法脆弱且容易出 bug——每加一种新的 user 消息子类型就得记得在 wrap 函数里加排除条件。
+这两种消息的处理逻辑完全不同，但当前都用 `role === "user"` 进入同一个 `prepareOneUserMessage` 函数，再靠条件分支区分。这种做法脆弱且容易出 bug。
+
+注意：attach / customAttach / annotate / workplace 都是注入到**用户输入消息内部**的 `<attach>` 标签内容（通过 `attachments` 字段），不是独立的 `role=user` 消息种类。`prepareUserMessagesForPrompt` 的 wrap 逻辑是给用户输入消息注入这些附件内容的，对工具结果消息完全不适用。
 
 ### 问题二：Mobile WebView 不支持子智能体卡片点击
 
@@ -75,8 +76,9 @@ agent-subagent 和 agent-mode-refactor 两个迭代合入后，子智能体（ta
 在 `packages/core/src/domain/chat/logic/` 下提供 `isUserInputMessage(message: ChatMessage): boolean` 工具函数，判断一条 `role=user` 消息是否为「用户在输入框输入的消息」：
 
 - 含 `tool_result` block → `false`（工具结果）
-- `raw.kind` 为 `user_vfs_action` / `user_vfs_ack` / `tool_turn_bridge` → `false`（VFS 语义段）
 - 其余 `role=user` → `true`（用户输入）
+
+注意：`user_vfs_action` / `user_vfs_ack` 等旧的合成消息 kind 在当前流程中已被 `prepareUserVfsTurnForAgentRun` flush 为 attachments 合并到用户输入消息里，不再是独立的 `role=user` 消息。如果后续发现有其他合成 user 消息需要排除，可在 `isUserInputMessage` 里统一加判断。
 
 ### FR-2：prepareUserMessagesForPrompt 使用分流函数
 
