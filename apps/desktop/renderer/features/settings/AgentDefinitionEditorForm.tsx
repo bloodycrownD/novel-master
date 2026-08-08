@@ -205,6 +205,7 @@ export const AgentDefinitionEditorForm = forwardRef<
     () =>
       formSnapshotJson({
         name,
+        mode: "all",
         maxSteps,
         modelEnabled,
         providerId,
@@ -329,6 +330,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   const buildDefinition = useCallback((): AgentDefinitionBuildResult => {
     const built = buildAgentDefinitionFromForm({
       name,
+      mode: "all",
       maxSteps,
       modelEnabled: false,
       providerId: "",
