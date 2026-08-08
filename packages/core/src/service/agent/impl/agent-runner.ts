@@ -125,8 +125,12 @@ function hasMeaningfulAssistantBlocks(
  * 仅 task 工具有该字段；其他工具输出不含 subagentSessionId，返回 undefined。
  * 本函数与 {@link buildToolResultBlock} 内部检测互补：build 内部会优先看 output，
  * 这里显式提取是为了让 agent-runner 调用处意图更明显（C34），便于追踪。
+ *
+ * phase-1-abort-reflow：导出以供单测固化「中断回流场景仍走同一提取路径」
+ * （output.stopped=true 也带 subagentSessionId，本函数不看 stopped，只看
+ * subagentSessionId 是否为 string，天然覆盖）。
  */
-function extractSubagentSessionIdFromOutcome(
+export function extractSubagentSessionIdFromOutcome(
   outcome: { readonly ok: boolean; readonly output?: unknown } | {
     readonly ok: boolean; readonly error?: unknown;
   },
