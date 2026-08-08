@@ -143,9 +143,6 @@ export const IPC_CHANNELS = {
   AGENT_YAML_EXPORT: 'nm:agentYaml/export',
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
 
-  /** 全局子智能体名单（读 / 写） */
-  SUBAGENT_NAMES_GET: 'nm:subagentNames/get',
-  SUBAGENT_NAMES_SET: 'nm:subagentNames/set',
 
   REGEX_LIST_GROUPS: 'nm:regex/listGroups',
   REGEX_GET_GROUP: 'nm:regex/getGroup',
@@ -749,10 +746,6 @@ export type AgentSetCurrentRequest = {
   readonly agentId: string;
 };
 
-/** 写入全局子智能体名单（agent name 列表）。 */
-export type SubagentNamesSetRequest = {
-  readonly names: readonly string[];
-};
 
 export type ModelPickerRowDto = {
   readonly savedModelId: string;

@@ -110,6 +110,7 @@ export async function handleAgentListPicker(): Promise<
       let label = agentId;
       try {
         const def = await rt.agentRegistry.get(agentId);
+        if (def.mode === "subagent") continue;
         label = def.name?.trim() || agentId;
       } catch {
         /* keep id */

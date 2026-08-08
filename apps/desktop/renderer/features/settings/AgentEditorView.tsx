@@ -16,6 +16,7 @@ import {
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
+  MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -33,6 +34,7 @@ import {
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
   withWorkplaceToggle,
+  type AgentMode,
   type ToolsMode,
 } from "@shared/logic/config-forms-agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
@@ -121,6 +123,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
+  const [mode, setMode] = useState<AgentMode>("all");
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
   const [providers, setProviders] = useState<
     Array<{ id: string; label: string }>
@@ -148,6 +151,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       formSnapshotJson({
         name,
         maxSteps,
+        mode,
         modelEnabled,
         providerId,
         savedModelId: savedModelId,
@@ -168,6 +172,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     [
       name,
       maxSteps,
+      mode,
       modelEnabled,
       providerId,
       savedModelId,
@@ -241,6 +246,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       const def = agentRes.data.value as AgentDefinition;
       const promptForm = definitionToForm(def);
       setName(def.name ?? "");
+      setMode(promptForm.mode);
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
       setSystemEnabled(promptForm.systemEnabled);
       setSystemContent(promptForm.systemContent);
@@ -423,6 +429,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const save = async () => {
     const built = buildAgentDefinitionFromForm({
       name,
+      mode,
       maxSteps,
       modelEnabled: false,
       providerId: "",
@@ -662,6 +669,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <p className="settings-hint settings-hint--compact">
             用于在 task 工具中向主代理介绍本 agent 的能力。
           </p>
+          <SettingsField label="角色">
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as AgentMode)}
+            >
+              {MODE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </SettingsField>
         </SettingsSection>
 
         <SettingsSection title="模型">

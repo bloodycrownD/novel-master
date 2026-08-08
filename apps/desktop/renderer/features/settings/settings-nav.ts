@@ -6,7 +6,6 @@ export type SettingsViewId =
   | "dataManagement"
   | "agentsSettings"
   | "agentEditor"
-  | "subagentRoster"
   | "providers"
   | "providerDetail"
   | "providerCreate"
@@ -26,7 +25,6 @@ export const SETTINGS_NAV = [
     label: "AI",
     items: [
       { id: "agentsSettings" as const, label: "智能体配置", icon: "🧠" },
-      { id: "subagentRoster" as const, label: "子智能体名单", icon: "🤝" },
       { id: "providers" as const, label: "服务商配置", icon: "🔌" },
     ],
   },
@@ -52,7 +50,6 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   about: "关于",
   dataManagement: "备份与恢复",
   agentsSettings: "智能体配置",
-  subagentRoster: "子智能体名单",
   providers: "服务商配置",
   eventsConfig: "事件配置",
   regexGroups: "正则过滤",

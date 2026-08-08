@@ -20,7 +20,6 @@ import {
   RegexGroupsView,
   RegexRuleEditorView,
   RegexRulesView,
-  SubagentRosterView,
 } from "../features/settings/SettingsViews";
 import { AboutView } from "../features/settings/AboutView";
 import { WorkspaceSettingsView } from "../features/settings/WorkspaceSettingsView";
@@ -109,8 +108,7 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <AgentsSettingsView nav={nav} />;
       case "agentEditor":
         return <AgentEditorView nav={nav} />;
-      case "subagentRoster":
-        return <SubagentRosterView />;
+
       case "providers":
         return <ProvidersView nav={nav} />;
       case "providerCreate":
