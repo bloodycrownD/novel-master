@@ -39,11 +39,28 @@ export interface TaskToolInput {
   readonly subagentName: string;
 }
 
-/** `task` 工具输出（P0-1 方案 B）：text 回流给主 agent LLM，subagentSessionId 是 UI-only。 */
+/**
+ * `task` 工具输出（P0-1 方案 B）：text 回流给主 agent LLM，subagentSessionId 是 UI-only。
+ *
+ * 中断回流（phase-1-abort-reflow）：子 agent 被用户停止（stopReason=cancelled）时，
+ * 额外带上 `stopped: true` 与 `failureReason`，让 `buildToolResultBlock` 能把这条
+ * tool_result 标成 `ok: false`，主 agent 才能区分「用户停止」和「工具崩溃」。
+ */
 export interface TaskToolOutput {
   readonly text: string;
   readonly subagentSessionId: string;
+  /** 子 agent 被用户中断时为 true（对应 stopReason=cancelled）。 */
+  readonly stopped?: boolean;
+  /** 中断原因文案（目前固定为 {@link SUBAGENT_STOP_REASON_USER}）。 */
+  readonly failureReason?: string;
 }
+
+/**
+ * 子 agent 被用户停止时回流的失败原因常量（phase-1-abort-reflow）。
+ *
+ * run 返回值 / outputSchema 描述 / 单测三处统一引用本常量，避免文案散落漂移。
+ */
+export const SUBAGENT_STOP_REASON_USER = "用户停止";
 
 /** 递归上限：depth >= 2（孙 agent）不允许调用 task（已被 registry 层 deny，双保险）。 */
 const SUBAGENT_MAX_DEPTH = 2;
@@ -130,6 +147,9 @@ ${formatCallableList(callable)}
   outputSchema: z.object({
     text: z.string(),
     subagentSessionId: z.string(),
+    // 中断回流（phase-1-abort-reflow）：cancelled 时才有值，故可选。
+    stopped: z.boolean().optional(),
+    failureReason: z.string().optional(),
   }),
   async run(input, ctx) {
     const subagent = ctx.subagent;
@@ -185,6 +205,19 @@ ${formatCallableList(callable)}
     // AgentRunResult 不带文本，必须自己 listBySession 拿末条 assistant text。
     const childMessages = await subagent.messages.listBySession(childSessionId);
     const lastText = extractLastAssistantText(childMessages);
+
+    // 中断回流（phase-1-abort-reflow）：cancelled 单独走「用户停止」分支，
+    // 不再套 [子代理未完成任务] 文案——主 agent 要能区分「用户主动停」和「工具崩了」。
+    // text 取值边界：cancelled 时 lastText 可能为空（LLM 还没吐字），固定占位文案，
+    // 不能用空串吞掉回流，否则主 agent 会收到一个内容为空的 tool_result。
+    if (result.stopReason === "cancelled") {
+      return {
+        text: lastText ?? "[用户停止，无已生成文本]",
+        subagentSessionId: childSessionId,
+        stopped: true,
+        failureReason: SUBAGENT_STOP_REASON_USER,
+      };
+    }
 
     let text: string;
     if (result.stopReason === "completed" && lastText != null) {

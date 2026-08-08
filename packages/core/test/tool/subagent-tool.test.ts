@@ -5,7 +5,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { TextBlock, ToolResultBlock } from "@/domain/chat/model/content-block.js";
-import { subagentTool } from "@/domain/tool/builtin/subagent-tool.js";
+import { subagentTool, SUBAGENT_STOP_REASON_USER } from "@/domain/tool/builtin/subagent-tool.js";
 import type {
   BuiltinToolContext,
   BuiltinToolSubagentContext,
@@ -251,6 +251,48 @@ describe("subagent-tool / task", () => {
     );
     assert.equal(output.text, "[子代理未完成任务: stopReason=max_steps]");
     assert.ok(typeof output.subagentSessionId === "string");
+  });
+
+  it("T-A1: 子 agent stopReason=cancelled → stopped=true + failureReason=用户停止 + text=末条文本", async () => {
+    const lastText = "子代理被中断前最后一句";
+    const { ctx } = makeMockSubagent({
+      runResult: {
+        childMessages: [
+          { role: "assistant", content: { blocks: [{ type: "text", text: lastText }] } } as ChatMessage,
+        ],
+        result: { stepsExecuted: 2, finished: false, stopReason: "cancelled", rounds: [] },
+      },
+    });
+    const output = await subagentTool.run(
+      { description: "t", prompt: "p", subagentName: "general" },
+      makeToolCtx(ctx),
+    );
+    assert.equal(output.stopped, true);
+    assert.equal(output.failureReason, SUBAGENT_STOP_REASON_USER);
+    assert.equal(output.failureReason, "用户停止");
+    // cancelled 且有末条文本时，text 就是末条文本（不是占位文案）。
+    assert.equal(output.text, lastText);
+    assert.ok(typeof output.subagentSessionId === "string");
+  });
+
+  it("T-A1: cancelled 且 lastText 为空 → text 固定占位文案，不是空字符串", async () => {
+    const { ctx } = makeMockSubagent({
+      runResult: {
+        // 子 agent 还没来得及吐 assistant text 就被中断
+        childMessages: [
+          { role: "assistant", content: { blocks: [{ type: "tool_use", id: "x", name: "read", input: {} }] } } as ChatMessage,
+        ],
+        result: { stepsExecuted: 1, finished: false, stopReason: "cancelled", rounds: [] },
+      },
+    });
+    const output = await subagentTool.run(
+      { description: "t", prompt: "p", subagentName: "general" },
+      makeToolCtx(ctx),
+    );
+    assert.equal(output.stopped, true);
+    assert.equal(output.failureReason, SUBAGENT_STOP_REASON_USER);
+    assert.equal(output.text, "[用户停止，无已生成文本]");
+    assert.notEqual(output.text, "");
   });
 
   it("T-T6: 模型解析 — 子 agent pin → 父 savedModelId（不走 workspace fallback）", async () => {
