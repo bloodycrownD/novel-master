@@ -206,6 +206,20 @@ export class DefaultAgentRunner implements AgentRunner {
         let stepCompactionEmitted = false;
 
         let visible = await session.list();
+        // [DEBUG subagent-400] DB 读出的原始消息（session.list 后）
+        console.log("[agent-runner DEBUG] session_list_raw", {
+          sessionId,
+          step,
+          messageCount: visible.length,
+          roles: visible.map(m => ({
+            role: m.role,
+            hidden: m.hidden,
+            seq: m.seq,
+            blockTypes: m.content.blocks.map(b => b.type),
+            toolUseBlockIds: m.content.blocks.filter(b => b.type === "tool_use").map(b => (b as { id: string }).id),
+            toolResultIds: m.content.blocks.filter(b => b.type === "tool_result").map(b => (b as { toolUseId: string }).toolUseId),
+          })),
+        });
         if (signal?.aborted) {
           stopReason = "cancelled";
           break;
