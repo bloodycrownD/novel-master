@@ -371,10 +371,10 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
 
-        // 模型返回后如果已经 abort，保留 partial assistant，直接退出
-        if (signal?.aborted) {
+        // abort 时仍写入 partial assistant（用户能看到模型刚吐出的内容），然后退出
+        const aborted = signal?.aborted;
+        if (aborted) {
           await handleAbort("post_model");
-          break;
         }
 
         stepsExecuted += 1;
@@ -393,6 +393,11 @@ export class DefaultAgentRunner implements AgentRunner {
               phase: "assistant",
             });
           }
+        }
+
+        // abort 时已写入 partial assistant，不再执行 tool，直接退出
+        if (aborted) {
+          break;
         }
 
         const toolUses = result.blocks.filter(
