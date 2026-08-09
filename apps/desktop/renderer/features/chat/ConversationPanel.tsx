@@ -16,13 +16,14 @@ import type {
   AgentRunFinishedPayload,
   AgentStepCommittedPayload,
 } from '@shared/agent-event-types';
-import { useAgentStream } from '@/hooks/useAgentStream';
+import { useAgentStream, type UseAgentStreamCallbacks } from '@/hooks/useAgentStream';
 import { useAgentRunLifecycle, shouldApplyTranscriptReload } from '@/hooks/useAgentRunLifecycle';
 import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';
 import { useAgentStreamMetrics } from '@/hooks/useAgentStreamMetrics';
 import { useDesktopAgentActive } from '@/hooks/useDesktopAgentActive';
 import {
   ipcAppUiGet,
+  ipcAgentAbort,
   ipcCompactionManual,
   ipcMessagesEdit,
   ipcMessagesFork,
@@ -58,7 +59,6 @@ import { MessageEditModal } from './MessageEditModal';
 import {
   handleRunFinishedAbortRetain,
   handleStepCommittedAbortRetain,
-  shouldAcceptStreamIngress,
 } from './conversation-abort-retain';
 import { MessageList } from './MessageList';
 import { RealPromptPanel } from './RealPromptPanel';
@@ -75,6 +75,11 @@ interface ConversationPanelProps {
   readOnly?: boolean;
   /** 点击 task 工具卡片时跳转只读子会话面板；仅需在父面板传入。 */
   onOpenSubagentSession?: (sessionId: string) => void;
+  /**
+   * 运行态上报（Phase 3 Step 23）：只读子会话面板的停止按钮需要知道
+   * 子 agent 是否在跑。父级（ChatRail）用这个回调订阅 running 变化。
+   */
+  onRunningChange?: (running: boolean) => void;
 }
 
 type RollbackConfirmContext = {
@@ -104,6 +109,7 @@ export function ConversationPanel({
   onOpenSessionActions,
   readOnly = false,
   onOpenSubagentSession,
+  onRunningChange,
 }: ConversationPanelProps) {
   const {
     notifyWorkspaceMutated,
@@ -116,9 +122,6 @@ export function ConversationPanel({
   const vfsMutatedInRunRef = useRef(false);
   const [tab, setTab] = useState<'chat' | 'realPrompt'>('chat');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
-  const [streamingText, setStreamingText] = useState('');
-  const [streamingThinking, setStreamingThinking] = useState('');
-  const streamingTextRef = useRef('');
 
   const runLifecycle = useAgentRunLifecycle();
   const {
@@ -137,22 +140,44 @@ export function ConversationPanel({
   } = runLifecycle;
 
   const abortUiRun = useCallback(() => {
+    // Phase 3 Step 19：abort 单元自己经 IPC 调 core registry，
+    // ChatComposer / ChatRail 停止按钮只调本函数即可，不再单独发 ipcAgentAbort。
     abortUiRunBase(messages.length);
-  }, [abortUiRunBase, messages.length]);
+    void ipcAgentAbort({ sessionId });
+  }, [abortUiRunBase, messages.length, sessionId]);
 
   const agentActive = useDesktopAgentActive();
 
-  const onStreamReset = useCallback(() => {
-    streamingTextRef.current = '';
-    setStreamingText('');
-    setStreamingThinking('');
-  }, []);
+  // Phase 3 Step 20：stream 单元提前实例化，拿回 streamingText /
+  // streamingThinking / streamingTextRef / onStreamReset 给下面的
+  // session 切换 effect 与 onStepCommitted / onRunFinished / onRunFailed 使用。
+  // 回调集合走 ref（callbacksRef）：本帧稍后定义完回调再写入 ref.current，
+  // useAgentStream 在事件到达时现读——不依赖定义顺序，与 Mobile P1-2 对称。
+  const streamCallbacksRef = useRef<UseAgentStreamCallbacks>({
+    acceptRunEvent: () => false,
+    getUiRunning: () => false,
+  });
+  const {
+    streamingText,
+    streamingThinking,
+    streamingTextRef,
+    onStreamReset,
+  } = useAgentStream({
+    sessionId,
+    callbacksRef: streamCallbacksRef,
+    batchEnabled: true,
+  });
 
   useEffect(() => {
     if (running) {
       vfsMutatedInRunRef.current = false;
     }
   }, [running]);
+
+  // Phase 3 Step 23：把 running 上报给父级（ChatRail 只读面板的停止按钮用）。
+  useEffect(() => {
+    onRunningChange?.(running);
+  }, [running, onRunningChange]);
   const {
     metrics: streamMetrics,
     noteTextDelta: noteMetricsTextDelta,
@@ -300,35 +325,6 @@ export function ConversationPanel({
       .catch(() => undefined);
   }, []);
 
-  const onTextDelta = useCallback(
-    (delta: string) => {
-      if (!shouldAcceptStreamIngress(getUiRunning())) {
-        return;
-      }
-      if (delta.length === 0) {
-        return;
-      }
-      noteMetricsTextDelta(delta);
-      setStreamingText(prev => {
-        const next = prev + delta;
-        streamingTextRef.current = next;
-        return next;
-      });
-    },
-    [getUiRunning, noteMetricsTextDelta],
-  );
-
-  const onThinkingDelta = useCallback(
-    (delta: string) => {
-      if (!shouldAcceptStreamIngress(getUiRunning())) {
-        return;
-      }
-      noteMetricsThinkingDelta(delta);
-      setStreamingThinking(prev => prev + delta);
-    },
-    [getUiRunning, noteMetricsThinkingDelta],
-  );
-
   const abortRetainLifecycle = useMemo(
     () => ({
       getUiRunning,
@@ -393,6 +389,7 @@ export function ConversationPanel({
       finishUiRun,
       getUiRunning,
       getTranscriptFreezeCount,
+      streamingTextRef,
       sessionId,
       reloadMessages,
       onStreamReset,
@@ -409,9 +406,7 @@ export function ConversationPanel({
       if (!failUiRun(payload)) {
         return;
       }
-      streamingTextRef.current = '';
-      setStreamingText('');
-      setStreamingThinking('');
+      onStreamReset();
       if (vfsMutatedInRunRef.current) {
         notifyWorkspaceMutated();
       }
@@ -428,19 +423,23 @@ export function ConversationPanel({
       notifyWorkspaceMutated,
       getUiRunning,
       getTranscriptFreezeCount,
+      onStreamReset,
     ],
   );
 
-  useAgentStream({
-    sessionId,
+  // Phase 3 Step 20：stream 单元在组件顶部已实例化（拿回 streamingText /
+  // streamingTextRef / onStreamReset）。这里把定义完的生命周期回调 + 守卫
+  // 同步写入 callbacksRef，让 useAgentStream 的事件订阅现读最新值。
+  streamCallbacksRef.current = {
     acceptRunEvent,
-    onTextDelta,
-    onThinkingDelta,
+    getUiRunning,
+    noteTextDelta: noteMetricsTextDelta,
+    noteThinkingDelta: noteMetricsThinkingDelta,
     onRunStarted,
     onStepCommitted,
     onRunFinished,
     onRunFailed,
-  });
+  };
 
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   useChatMessagesScrollFollow(chatMessagesRef, {
@@ -578,8 +577,7 @@ export function ConversationPanel({
         showToast(result.error.message);
         return;
       }
-      streamingTextRef.current = '';
-      setStreamingText('');
+      onStreamReset();
       await reloadMessages();
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
@@ -604,7 +602,7 @@ export function ConversationPanel({
         options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
       );
     },
-    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
+    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated, onStreamReset],
   );
 
   const handleMessageAction = useCallback(
@@ -645,8 +643,7 @@ export function ConversationPanel({
           showToast(result.error.message);
           return;
         }
-        streamingTextRef.current = '';
-        setStreamingText('');
+        onStreamReset();
         await openSession(result.data, projectName ?? '—');
         return;
       }
@@ -661,6 +658,7 @@ export function ConversationPanel({
       rollbackToMessage,
       openSession,
       projectName,
+      onStreamReset,
     ],
   );
 
