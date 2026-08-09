@@ -210,9 +210,18 @@ ${formatCallableList(callable)}
     // 不再套 [子代理未完成任务] 文案——主 agent 要能区分「用户主动停」和「工具崩了」。
     // text 取值边界：cancelled 时 lastText 可能为空（LLM 还没吐字），固定占位文案，
     // 不能用空串吞掉回流，否则主 agent 会收到一个内容为空的 tool_result。
+    //
+    // 报错前缀必须进 text（而非只放 meta.failureReason）：meta 是 UI-only 旁路，
+    // 三端 content mapper 会剥离 meta，主 agent LLM 只看 content。若 content 只有
+    // lastText，主 agent 会把半成品当成子 agent 正常答案。加 [用户停止] 前缀后，
+    // 主 agent 能从 content 里识别这是用户中断、不是工具崩溃。
     if (result.stopReason === "cancelled") {
+      const cancelledText =
+        lastText != null
+          ? `[${SUBAGENT_STOP_REASON_USER}]\n${lastText}`
+          : "[用户停止，无已生成文本]";
       return {
-        text: lastText ?? "[用户停止，无已生成文本]",
+        text: cancelledText,
         subagentSessionId: childSessionId,
         stopped: true,
         failureReason: SUBAGENT_STOP_REASON_USER,

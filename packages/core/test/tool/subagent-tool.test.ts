@@ -270,8 +270,10 @@ describe("subagent-tool / task", () => {
     assert.equal(output.stopped, true);
     assert.equal(output.failureReason, SUBAGENT_STOP_REASON_USER);
     assert.equal(output.failureReason, "用户停止");
-    // cancelled 且有末条文本时，text 就是末条文本（不是占位文案）。
-    assert.equal(output.text, lastText);
+    // cancelled 且有末条文本时，text 带报错前缀 + 末条内容（主 agent LLM 从 content 能识别中断）
+    assert.equal(output.text, `[${SUBAGENT_STOP_REASON_USER}]\n${lastText}`);
+    assert.ok(output.text.includes(lastText));
+    assert.ok(output.text.includes(SUBAGENT_STOP_REASON_USER));
     assert.ok(typeof output.subagentSessionId === "string");
   });
 
