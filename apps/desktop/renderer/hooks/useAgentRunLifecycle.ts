@@ -12,7 +12,7 @@ import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
-} from "@shared/agent-event-types";
+} from "@novel-master/core/events";
 
 export {
   shouldAcceptRunEvent,

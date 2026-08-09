@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 /**
- * 从 packages/core event-types.ts 生成 apps/desktop/shared/agent-event-types.ts。
- * renderer 禁止手改生成文件。
+ * 已不需要——renderer 现在直接 import `@novel-master/core/events` 的类型（type-only，编译期擦除）。
+ * 本脚本保留作为可选的 renderer 子集 lint 约束：手动跑一遍可以校验 core 仍然导出了这 7 个
+ * agent 事件常量 + 8 个载荷类型（见下方 agentEventNames / agentTypes 列表），core 一旦
+ * 漏导就会抛错。不再绑定到 npm script，也不再生成 `shared/agent-event-types.ts`。
+ *
+ * 源：packages/core/src/domain/events/model/event-types.ts
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,7 +17,7 @@ const sourcePath = path.join(
   repoRoot,
   "packages/core/src/domain/events/model/event-types.ts",
 );
-const outPath = path.join(repoRoot, "apps/desktop/shared/agent-event-types.ts");
+
 
 const source = readFileSync(sourcePath, "utf8");
 
@@ -53,24 +57,22 @@ function extractBlock(name, kind) {
   return match[0];
 }
 
-const header = `/**
- * Agent stream IPC 事件名与载荷（renderer 安全；由脚本生成，禁止手改）。
- * 生成：npm run generate:desktop-events -w @novel-master/desktop
- * 源：packages/core/src/domain/events/model/event-types.ts
- */
+// 校验：core 仍导出了上述全部常量与类型。一旦 core 漏导，extractBlock 会抛错，
+// 提醒补回导出。不再回写 shared/agent-event-types.ts（那份手抄副本已删，renderer 直
+// 接 import core 类型）。
+for (const name of agentEventNames) {
+  extractBlock(name, "const");
+}
+for (const name of agentTypes) {
+  if (name === "AgentStepCommittedPhase") {
+    extractBlock(name, "type");
+  } else {
+    extractBlock(name, "interface");
+  }
+}
 
-`;
-
-const body = [
-  ...agentEventNames.map((n) => extractBlock(n, "const")),
-  "",
-  ...agentTypes.map((n) => {
-    if (n === "AgentStepCommittedPhase") {
-      return extractBlock(n, "type");
-    }
-    return extractBlock(n, "interface");
-  }),
-].join("\n");
-
-writeFileSync(outPath, `${header}${body}\n`, "utf8");
-console.log(`已生成 ${path.relative(repoRoot, outPath)}`);
+console.log(
+  "已校验 core event-types.ts 仍导出上述 " +
+    `${agentEventNames.length} 个常量 + ${agentTypes.length} 个类型` +
+    "（未生成 shared/agent-event-types.ts，renderer 直接 import core）。",
+);

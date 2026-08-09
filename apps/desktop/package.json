@@ -10,7 +10,6 @@
     "build": "npm run build:icons && vite build && npm run build:main && npm run build:preload",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build:icons": "node scripts/generate-icons.mjs",
-    "generate:desktop-events": "node scripts/generate-desktop-events.mjs",
     "build:main": "tsc -p tsconfig.json",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --outfile=dist/src/preload/preload.cjs --external:electron",
     "build:renderer": "vite build",
