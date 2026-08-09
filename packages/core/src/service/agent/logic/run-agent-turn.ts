@@ -577,8 +577,12 @@ async function runChildAgent(args: {
   }
 
   // 子 run controller 同样挂进 registry，让外部（子会话页停止按钮）
-  // 能按 childSessionId 中断子 run。try/finally 里反注册常所有权比对。
-  runtime.abortRegistry?.register(childSessionId, childController);
+  // 能按 childSessionId 中断子 run。register 起就纳入 try/finally 包络，
+  // 覆盖中间 await（session.append / getCurrentRegexGroupId）抛错路径——
+  // 否则一旦这些 await 抛错，finally 不会执行，registry 留下孤儿 controller。
+  // finally 反注册带所有权比对，防误删新 run 的 controller。形态对齐 runAgentTurn。
+  try {
+    runtime.abortRegistry?.register(childSessionId, childController);
 
   // ChatAgentSession 的消息落子 session（独立历史），但工作区归属指向父 session——
   // 子 session 是 createSubSession 新建的、sessionKkv 空，常驻前缀读父的
@@ -672,7 +676,6 @@ async function runChildAgent(args: {
   );
 
   const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
-  try {
     return await runner.run({
       definition: def,
       sessionId: childSessionId,

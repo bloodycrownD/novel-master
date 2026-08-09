@@ -232,6 +232,92 @@ async function seedChildAgent(
   await registry.upsert("child-worker", childAgentDef);
 }
 
+describe("runChildAgent abort registry 孤儿修复（T-CF1）", () => {
+  it("T-CF1：register 后 runner.run 前 throw → finally 仍 unregister → registry.has(childSessionId)===false", async () => {
+    const ctx = getNovelMasterTestContext();
+    await seedChildAgent(ctx);
+    await ensureDefaultAgentModel(ctx);
+
+    const abortRegistry = createAgentAbortRegistry();
+    const seenChildIds: string[] = [];
+
+    // 计数式 mock getCurrentRegexGroupId：第 1 次（父 runAgentTurn）正常返回，
+    // 第 2 次（子 runChildAgent）抛错——此时 register 已执行、但还没进 runner.run，
+    // 走的就是修复前会留孤儿的路径。修复后 finally 必须兑现 unregister。
+    let regexGroupCalls = 0;
+    const throwReason =
+      "T-CF1: 模拟 runChildAgent 内 getCurrentRegexGroupId 抛错（register 后、runner.run 前）";
+
+    const modelRequests = scriptedModel({
+      // 主 agent 第 1 轮（index=0）：发起 task tool_use
+      // 子 agent 永远到不了 model 调用（getCurrentRegexGroupId 先抛错）
+      // 主 agent 第 2 轮（index=1）：收到 error tool_result 后收尾
+      responses: [
+        taskToolUseResponse("tu-cf1"),
+        textDoneResponse("主代理识别到子任务失败"),
+      ],
+    });
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S-CF1");
+
+    const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
+    // 覆写 getCurrentRegexGroupId：第 2 次调用（即 runChildAgent 内那次）抛错。
+    runtime.state = {
+      ...runtime.state,
+      getCurrentRegexGroupId: async () => {
+        regexGroupCalls += 1;
+        if (regexGroupCalls >= 2) {
+          throw new Error(throwReason);
+        }
+        return undefined;
+      },
+    };
+    const originalCreateSubSession = ctx.sessions.createSubSession.bind(
+      ctx.sessions,
+    );
+    runtime.sessions = new Proxy(ctx.sessions, {
+      get(target, prop, receiver) {
+        if (prop === "createSubSession") {
+          return async (parentId: string, projId: string, title?: string) => {
+            const child = await originalCreateSubSession(parentId, projId, title);
+            seenChildIds.push(child.id);
+            return child;
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as AgentTurnRuntimePort["sessions"];
+    runtime.eventBus = realEventBus();
+
+    await ctx.state.setCurrentAgentId("test-default-agent");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+
+    // runChildAgent 抛错后 runner 会把 tool 错误转成 error tool_result，主 agent 继续；
+    // 无论主 run 最终怎么收尾，关键是子 controller 不应残留在 registry 里。
+    await runAgentTurn(
+      runtime,
+      { projectId: project.id, sessionId: session.id },
+      "请派生子代理完成任务",
+      { stream: false, onStream: () => {} },
+    );
+
+    assert.equal(seenChildIds.length, 1, "应已创建 1 个子会话（task 工具走到了 runChildAgent）");
+    const childSessionId = seenChildIds[0]!;
+    assert.equal(
+      abortRegistry.has(childSessionId),
+      false,
+      "runChildAgent 在 register 之后抛错时，finally 必须反注册子 controller，" +
+        "不能留孤儿（修复前 register 在 try 外，该路径会漏 unregister）",
+    );
+    assert.equal(
+      regexGroupCalls,
+      2,
+      "getCurrentRegexGroupId 应被调用两次（父 + 子），第 2 次抛错已触发",
+    );
+  });
+});
+
 describe("runChildAgent abort registry 注册 / 父级联（T-R2 / T-A4）", () => {
   it("T-R2：runChildAgent 期间 registry.has(childSessionId)===true，结束后===false", async () => {
     const ctx = getNovelMasterTestContext();
