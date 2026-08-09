@@ -1,4 +1,4 @@
-import {formatPromptTokenUsageLabel} from '../src/utils/format-token-count';
+import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
 import {
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,

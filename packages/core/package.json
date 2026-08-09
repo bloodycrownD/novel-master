@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./common": {
+      "types": "./dist/common/index.d.ts",
+      "import": "./dist/common/index.js"
+    },
     "./agent": {
       "types": "./dist/public/agent.d.ts",
       "import": "./dist/public/agent.js"

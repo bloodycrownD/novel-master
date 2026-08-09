@@ -18,7 +18,7 @@ import {
   serializePromptLlmInput,
 } from "@novel-master/core/provider";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {formatPromptTokenUsageLabel} from '../utils/format-token-count';
+import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
 import {buildSessionPromptInput, type SessionPromptScope} from './session-prompt-input.service';
 
 function formatChatTokenLabel(

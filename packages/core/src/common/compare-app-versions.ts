@@ -1,14 +1,15 @@
 /**
- * Semver comparison for app versions (major.minor.patch numeric parts only).
- * Returns -1 when local is older, 0 when equal, 1 when local is newer.
+ * App 版本号比较（只认 major.minor.patch 三段纯数字）。
+ *
+ * 返回值约定：local 比 remote 旧返回 -1，相等返回 0，更新返回 1。
  */
 
 function parseParts(version: string): [number, number, number] {
-  const parts = version.split('.');
+  const parts = version.split(".");
   if (parts.length !== 3) {
     throw new Error(`无效的版本号: ${version}`);
   }
-  const nums = parts.map(p => {
+  const nums = parts.map((p) => {
     const n = Number.parseInt(p, 10);
     if (!Number.isFinite(n) || n < 0) {
       throw new Error(`无效的版本号: ${version}`);

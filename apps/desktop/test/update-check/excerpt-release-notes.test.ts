@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { excerptReleaseNotes } from "../../src/main/update-check/excerpt-release-notes.js";
+import { excerptReleaseNotes } from "@novel-master/core/common";
 
 const WORKFLOW_BODY = `# Novel Master v1.0.3
 

@@ -1,4 +1,4 @@
-import {compareAppVersions} from '../../src/update-check/compare-app-versions';
+import {compareAppVersions} from '@novel-master/core/common';
 
 describe('compareAppVersions', () => {
   it('returns -1 when local is older', () => {

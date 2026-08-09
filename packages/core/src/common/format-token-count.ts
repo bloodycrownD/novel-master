@@ -1,4 +1,10 @@
-/** Compact token count labels (ported from mobile). */
+/**
+ * 紧凑的 token 数量与 usage 标签格式化（跨端共用）。
+ *
+ * 大数值会用 K / M 后缀压缩（例如 2500 → "2.5K"），避免 UI 上挤一长串数字。
+ * `formatPromptTokenUsageLabel` 在已知 context window 时会输出百分比 + 占比
+ * 形式（`88% • 327/128K`），未知时退回纯计数。
+ */
 
 function trimTrailingZeros(s: string): string {
   return s.replace(/\.0$/, "");
