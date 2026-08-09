@@ -8,24 +8,26 @@ import {
 import { resolveSubagentSessionId } from "@/domain/tool/logic/subagent-tool-session-id.js";
 
 describe("subagent meta 透传链路", () => {
-  it("T-T1: formatToolOutputForLlm 对 task 输出对象先剩 subagentSessionId 再提取 text", () => {
+  it("T-T1: formatToolOutputForLlm 对 task 输出返回结构化 JSON（主 agent 可读 stopped / failureReason / text）", () => {
     const text = "子代理已完成：角色档案已生成。";
     const out = formatToolOutputForLlm({ text, subagentSessionId: "child-1" });
-    assert.equal(out, text);
-    // 不应被包成 JSON 壳。
-    assert.ok(!out.includes('"text"'));
-    assert.ok(!out.includes("subagentSessionId"));
+    // task 工具输出统一走 JSON——主 agent 从 content 里能同时拿到所有字段
+    // （subagentSessionId 也在里面，它是 UI-only meta 的来源，不单独剩掉）。
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.text, text);
+    assert.equal(parsed.subagentSessionId, "child-1");
   });
 
-  it("C33: subagentSessionId 与其他字段共存时不强行提取 text（回落 JSON.stringify）", () => {
+  it("C33: subagentSessionId 与其他字段共存时同样走 JSON.stringify", () => {
     const out = formatToolOutputForLlm({
       text: "x",
       subagentSessionId: "child-1",
       extra: "y",
     });
-    // 非纯 {text, subagentSessionId} 形状，回落 JSON.stringify。
-    assert.ok(out.includes('"text"'));
-    assert.ok(out.includes("extra"));
+    const parsed = JSON.parse(out);
+    assert.equal(parsed.text, "x");
+    assert.equal(parsed.subagentSessionId, "child-1");
+    assert.equal(parsed.extra, "y");
   });
 
   it("T-T1: buildToolResultBlock 从 outcome.output.subagentSessionId 透传到 meta", () => {
@@ -34,12 +36,12 @@ describe("subagent meta 透传链路", () => {
       output: { text: "hello", subagentSessionId: "child-7" },
     });
     assert.equal(block.ok, true);
-    // content 是原始文本，不是 JSON 壳。
-    assert.equal(block.content, "hello");
-    // meta.subagentSessionId 透传。
+    // content 是 task 输出的 JSON 壳。
+    const parsed = JSON.parse(block.content);
+    assert.equal(parsed.text, "hello");
+    assert.equal(parsed.subagentSessionId, "child-7");
+    // meta.subagentSessionId 同样透传。
     assert.equal(block.meta?.subagentSessionId, "child-7");
-    // content 里不能含 subagentSessionId 字段（已剩掉）。
-    assert.ok(!block.content.includes("subagentSessionId"));
   });
 
   it("T-T1: buildToolResultBlock 显式 meta.subagentSessionId 也生效（无 output 字段时）", () => {
@@ -72,7 +74,7 @@ describe("subagent meta 透传链路", () => {
     );
   });
 
-  it("T-A2: output.stopped=true → ok=false + content=output.text + meta 带 subagentSessionId + failureReason", () => {
+  it("T-A2: output.stopped=true → ok=false + content=JSON(含 text + failureReason) + meta 带 subagentSessionId + failureReason", () => {
     const block = buildToolResultBlock("tu-stop", {
       ok: true,
       output: {
@@ -84,11 +86,12 @@ describe("subagent meta 透传链路", () => {
     });
     // 关键：outcome.ok=true 但 output.stopped=true 时 tool_result 要标 ok=false。
     assert.equal(block.ok, false);
-    // content 是 output.text 的 LLM 格式（末条文本），不是 JSON 壳。
-    assert.equal(block.content, "子代理被中断前的末条文本");
-    assert.ok(!block.content.includes("stopped"));
-    assert.ok(!block.content.includes("failureReason"));
-    assert.ok(!block.content.includes("subagentSessionId"));
+    // content 是 task 输出的 JSON 壳——主 agent 能从中读到 text + stopped + failureReason。
+    const parsed = JSON.parse(block.content);
+    assert.equal(parsed.text, "子代理被中断前的末条文本");
+    assert.equal(parsed.stopped, true);
+    assert.equal(parsed.failureReason, "用户停止");
+    assert.equal(parsed.subagentSessionId, "child-stop");
     // meta 两字段都透传。
     assert.equal(block.meta?.subagentSessionId, "child-stop");
     assert.equal(block.meta?.failureReason, "用户停止");
@@ -101,7 +104,11 @@ describe("subagent meta 透传链路", () => {
       output: { text: "done", subagentSessionId: "child-ok" },
     });
     assert.equal(block.ok, true);
-    assert.equal(block.content, "done");
+    // content 是 JSON 壳。
+    const parsed = JSON.parse(block.content);
+    assert.equal(parsed.text, "done");
+    assert.equal(parsed.subagentSessionId, "child-ok");
+    assert.equal(parsed.stopped, undefined);
     assert.equal(block.meta?.subagentSessionId, "child-ok");
     // 正常完成不应出现 failureReason。
     assert.equal(block.meta?.failureReason, undefined);

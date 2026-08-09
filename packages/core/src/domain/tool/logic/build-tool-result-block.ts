@@ -125,7 +125,8 @@ export function buildToolResultBlock(
 
     // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
-    // content 仍是 output.text（末条 assistant 文本或占位文案），meta 额外带 failureReason。
+    // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
+    // meta 额外带 failureReason（UI 卡片用）。
     if (isStoppedTaskOutput(outcome.output)) {
       const failureReason = readFailureReason(outcome.output);
       return {

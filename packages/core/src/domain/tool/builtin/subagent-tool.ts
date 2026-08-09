@@ -120,7 +120,7 @@ export const subagentTool: Tool<
   name: "task",
   description: (ctx) => {
     const callable = ctx.subagent?.callableAgents ?? [];
-    return `派生一个子代理执行子任务，等它跑完后把末条回复文本作为本工具的结果回流。适用于把复杂或独立子任务（如查大纲设定、生成角色档案）委派给专门的 agent，避免在主对话中累积过多上下文。
+    return `派生一个子代理执行子任务，等它跑完后回流结果。适用于把复杂或独立子任务（如查大纲设定、生成角色档案）委派给专门的 agent，避免在主对话中累积过多上下文。
 
 入参：
 - subagentName：目标子代理 name（你可以调用的 subagent 如下：
@@ -128,6 +128,11 @@ ${formatCallableList(callable)}
 ）
 - description：3-5 词任务描述（用作子会话标题）
 - prompt：任务正文，写清要子代理完成什么
+
+结果格式：本工具回流的是一个 JSON 对象，结构为 { text, subagentSessionId, stopped?, failureReason? }。
+- text：子代理的末条回复正文；若子代理被中断且还未输出文本，text 为占位文案「[用户停止，无已生成文本]」。
+- stopped：为 true 表示子代理被用户中断（部分成功），此时 failureReason 字段给出原因（如「用户停止」）。text 可能是中断前的半成品，需结合 stopped 判断：stopped=true 时不要把 text 当作完整答案。
+- subagentSessionId：子会话 id（UI 跳转用）。
 
 并行：本工具非突变工具，单条 assistant 消息里可同时发起多个 task tool_use，会并发执行各自独立子会话。
 
@@ -145,11 +150,10 @@ ${formatCallableList(callable)}
       .describe("目标子代理 name（非 id），需为 mode 非 primary 的 agent"),
   }),
   outputSchema: z.object({
-    text: z.string(),
-    subagentSessionId: z.string(),
-    // 中断回流（phase-1-abort-reflow）：cancelled 时才有值，故可选。
-    stopped: z.boolean().optional(),
-    failureReason: z.string().optional(),
+    text: z.string().describe("子代理末条回复正文；被中断且未输出文本时为占位文案"),
+    subagentSessionId: z.string().describe("子会话 id（UI 跳转用）"),
+    stopped: z.boolean().optional().describe("true 表示子代理被用户中断，text 可能是半成品"),
+    failureReason: z.string().optional().describe("中断原因（如「用户停止」），仅在 stopped=true 时出现"),
   }),
   async run(input, ctx) {
     const subagent = ctx.subagent;
@@ -211,17 +215,12 @@ ${formatCallableList(callable)}
     // text 取值边界：cancelled 时 lastText 可能为空（LLM 还没吐字），固定占位文案，
     // 不能用空串吞掉回流，否则主 agent 会收到一个内容为空的 tool_result。
     //
-    // 报错前缀必须进 text（而非只放 meta.failureReason）：meta 是 UI-only 旁路，
-    // 三端 content mapper 会剥离 meta，主 agent LLM 只看 content。若 content 只有
-    // lastText，主 agent 会把半成品当成子 agent 正常答案。加 [用户停止] 前缀后，
-    // 主 agent 能从 content 里识别这是用户中断、不是工具崩溃。
+    // 回流内容以结构化 JSON 给主 agent（task 工具输出本就是给 AI 看的）——
+    // formatToolOutputForLlm 对 task 输出走 JSON.stringify，主 agent 从 content 里
+    // 能同时拿到 stopped / failureReason / text / subagentSessionId。
     if (result.stopReason === "cancelled") {
-      const cancelledText =
-        lastText != null
-          ? `[${SUBAGENT_STOP_REASON_USER}]\n${lastText}`
-          : "[用户停止，无已生成文本]";
       return {
-        text: cancelledText,
+        text: lastText ?? "[用户停止，无已生成文本]",
         subagentSessionId: childSessionId,
         stopped: true,
         failureReason: SUBAGENT_STOP_REASON_USER,
