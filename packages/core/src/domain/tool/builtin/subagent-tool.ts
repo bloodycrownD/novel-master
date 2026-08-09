@@ -40,7 +40,8 @@ export interface TaskToolInput {
 }
 
 /**
- * `task` 工具输出（P0-1 方案 B）：text 回流给主 agent LLM，subagentSessionId 是 UI-only。
+ * `task` 工具输出（P0-1 方案 B）：text 回流给主 agent LLM；subagentSessionId 同时
+ * 供 UI 卡片读取与主 agent 上下文（task 全 JSON 化后随 content 回流）。
  *
  * 中断回流（phase-1-abort-reflow）：子 agent 被用户停止（stopReason=cancelled）时，
  * 额外带上 `stopped: true` 与 `failureReason`，让 `buildToolResultBlock` 能把这条
