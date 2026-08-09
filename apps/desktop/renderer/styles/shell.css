@@ -3286,6 +3286,36 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   display: flex;
 }
 
+/* Phase 3 Step 23：只读子会话面板的精简停止条。 */
+.subagent-stop-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--pane-chat-bg, transparent);
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+}
+
+.subagent-stop-bar__label {
+  font-size: 13px;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.55));
+}
+
+.subagent-stop-bar__button {
+  padding: 4px 14px;
+  font-size: 13px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.18));
+  border-radius: 6px;
+  background: var(--danger-bg, rgba(220, 38, 38, 0.08));
+  color: var(--danger-text, #dc2626);
+  cursor: pointer;
+}
+
+.subagent-stop-bar__button:hover {
+  background: var(--danger-bg-hover, rgba(220, 38, 38, 0.16));
+}
+
 .chat-nav-subheader {
   padding: 12px 16px 6px;
   font-size: 13px;

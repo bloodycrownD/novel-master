@@ -10,6 +10,7 @@ import { ConversationPanel } from '../features/chat/ConversationPanel';
 import { ProjectAgentConfigView } from '../features/settings/ProjectAgentConfigView';
 import { useBatchSelection } from '../hooks/useBatchSelection';
 import {
+  ipcAgentAbort,
   ipcProjectsCreate,
   ipcProjectsDelete,
   ipcProjectsList,
@@ -68,6 +69,9 @@ export function ChatRail({
     null,
   );
   const [subagentSessionName, setSubagentSessionName] = useState<string>('');
+  // Phase 3 Step 23：只读子会话面板的运行态——ConversationPanel 通过
+  // onRunningChange 上报，停止按钮据此显示/隐藏。
+  const [subagentRunning, setSubagentRunning] = useState(false);
 
   const openSubagentSession = useCallback(
     (childSessionId: string, label?: string) => {
@@ -81,8 +85,16 @@ export function ChatRail({
   const goBackToConversation = useCallback(() => {
     setSubagentSessionId(null);
     setSubagentSessionName('');
+    setSubagentRunning(false);
     showNavView('conversation');
   }, [showNavView]);
+
+  // Phase 3 Step 23：只读面板停止按钮——点击调 ipcAgentAbort（最终走
+  // rt.abortRegistry.abort）。abort 本身幂等，运行中才显示按钮所以不会误触。
+  const stopSubagentRun = useCallback(async () => {
+    if (subagentSessionId == null) return;
+    await ipcAgentAbort({ sessionId: subagentSessionId });
+  }, [subagentSessionId]);
 
   const {
     active: projectBatchActive,
@@ -701,15 +713,34 @@ export function ChatRail({
           hidden={viewId !== 'subagent-conversation'}
         >
           {projectId && subagentSessionId ? (
-            <ConversationPanel
-              projectId={projectId}
-              sessionId={subagentSessionId}
-              onOpenSessionActions={() => undefined}
-              readOnly
-              onOpenSubagentSession={(childSessionId) =>
-                openSubagentSession(childSessionId)
-              }
-            />
+            <>
+              {subagentRunning ? (
+                <div className="subagent-stop-bar" role="toolbar">
+                  <span className="subagent-stop-bar__label">
+                    子智能体运行中…
+                  </span>
+                  <button
+                    type="button"
+                    className="subagent-stop-bar__button"
+                    onClick={() => {
+                      void stopSubagentRun();
+                    }}
+                  >
+                    停止
+                  </button>
+                </div>
+              ) : null}
+              <ConversationPanel
+                projectId={projectId}
+                sessionId={subagentSessionId}
+                onOpenSessionActions={() => undefined}
+                readOnly
+                onRunningChange={setSubagentRunning}
+                onOpenSubagentSession={(childSessionId) =>
+                  openSubagentSession(childSessionId)
+                }
+              />
+            </>
           ) : (
             <p className="preview-empty">请返回父会话并重新点击子智能体卡片</p>
           )}
