@@ -196,6 +196,7 @@ export function useChatTabScope({
 
   const handleCreateSession = useCallback(async () => {
     if (projectId == null) {
+      showToast('请先创建或选择项目');
       return;
     }
     try {
