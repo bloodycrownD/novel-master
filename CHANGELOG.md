@@ -6,6 +6,46 @@
 
 ## [Unreleased]
 
+### 新增
+
+- **子会话文件引入导航**（移动端）：子会话里的文件引入卡片现在可以点击跳转到文件编辑器，之前点击无反应
+- **空状态引导提示**：无项目时点「新建会话」会提示「请先创建或选择项目」；桌面端 Picker 弹窗在列表为空时显示「暂无可选项，请先在设置中创建」
+
+### 修复
+
+- **流式停止丢消息**：修复点击停止后已接收的流式内容被撤回的问题——现在会保留模型刚吐出的 partial 内容
+- **token 计数不刷新**：修复提示词 token 统计只在每轮结束后刷新的问题——现在每条消息提交后实时更新
+- **子会话流式丢失**（移动端）：修复子会话流式输出进行中退出再进入时流式内容清空的问题——新增按 sessionId 缓存流式内容，重进时恢复
+- **子会话面板 keep-alive**（桌面端）：修复桌面端子会话面板退出时被卸载导致流式内容丢失的问题——改为 hidden 切换保持挂载
+- **edit 工具中文引号**：补全 action XML 解析的 HTML entity（`&ldquo;` `&rdquo;` 等），并在替换失败时输出 codepoint 诊断信息帮助定位字符差异
+- **undo_send 空 targetTree**：回滚操作目标文件树为空时拒绝删光会话工作区，防止数据丢失
+- **Android SKSP version 列**：Android SKSP 的 SELECT 语句补上 `version` 列，与 macOS / Windows 对齐
+- **SKSP 空 env 语义**：收紧三端 SKSP env 覆盖逻辑——空字符串 / 空白 / undefined 一律视为不覆盖 DB
+- **customAttach 透传**：修复 normalize-agent-prompt-layout 丢失 customAttach 透传的问题
+
+### 变更
+
+- **CI 基建**：新增 GitHub Actions CI 工作流（lint + typecheck + test）；全包补 ESLint 配置 + typecheck 脚本 + knip 死代码扫描
+- **数据安全**：abort 统一走 `handleAbort` 编排；cloud-sync push 加进程内互斥锁；rollback 加乐观锁版本号；所有产生消息的入口写 baseline checkpoint
+- **CoordinatedWrite 抽象**：新建跨资源写编排（secretStore / kkv / append+capture+append 链），失败时按注册逆序回滚
+- **死代码清扫**：删除 7 个废弃文件 + 5 个死导出（deprecated alias / estimateTokens / chat-grep-tool / 净 diff 模块）；新增 lint 规则永久禁止 public barrel re-export @deprecated 符号
+- **SKSP 三端抽象**：SKSP secret store 抽公共 SQLite 编排（模板方法模式），三端只保留各自的加密 / 解密 strategy
+- **ESLint 三端统一**：共享 TS 规则导出；desktop 改为 import 共享规则；mobile 迁移到 ESLint 9 flat config
+- **TS 增量编译**：core build 去掉 `--force` 启用增量；mobile tsconfig extends base；CLI 加 project references
+- **countTokens 公共函数**：三端共用 `countTokens` 纯函数；RN tokenizer 诚实标记为 heuristic；compaction evaluator 在 heuristic 模式下走保守阈值
+- **Myers diff**：VFS save mapping 的 diff 算法从朴素 O(n²) 替换为 Myers；expandAnchorHunk 改为对称线性扩展
+- **TDBC SAVEPOINT parity**：driver-rn 嵌套事务走 SAVEPOINT；新建跨端 parity 测试套件
+- **FileSystemPort 注入**：S3 object storage 去掉 `node:fs` 硬依赖，改为 `FileSystemPort` 接口注入
+- **DRY 收敛**：desktop event-types 删手抄副本直接 import core；mobile + desktop yaml service 抽公共编排；纯工具函数移到 core/common；webview post.ts 统一；vfs replace 抽纯函数
+
+### 维护
+
+- **内部包锁 0.0.0**：所有内部包统一锁定 version 0.0.0，仅端产品（desktop / mobile / cli）发版
+- **kkv / session-kkv public barrel**：新建 public barrel 收拢导出路径
+- **memoize 工具**：新增纯函数 memoize 工具；SqlTemplateParser / expression 加缓存；vfs-path-mapper 重复 normalize 收敛为一次
+- **SSE parity**：抽公共 `dispatchSseChunk`，fetch / XHR 两路统一
+- **文档归档**：CR loop 产出文档归档到 `docs/Iterations/cr-fix-spec/review`
+
 ## [1.4.19] - 2026-08-09
 
 ### 新增
