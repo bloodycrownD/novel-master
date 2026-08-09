@@ -17,6 +17,12 @@
  * 只读：无 composer；但 agent 运行中时显示停止按钮（调 abortRegistry.abort）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
+  type AgentStreamTextDeltaPayload,
+  type AgentStreamThinkingDeltaPayload,
+} from '@novel-master/core/events';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
@@ -38,6 +44,7 @@ import type {RootStackParamList} from '../../navigation/types';
 import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
 import {useSessionBatch} from '@/screens/tabs/chat-tab/useSessionBatch';
 import {useSessionStream} from '@/screens/tabs/chat-tab/useSessionStream';
+import {useSubagentStreamCache} from '@/screens/stack/subagent-stream-cache';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
@@ -51,11 +58,19 @@ export function SubagentSessionScreen() {
   const route = useRoute<ScreenRoute>();
   const {sessionId, projectId} = route.params;
 
+  // 子会话流式 partial 缓存：pop/unmount 后 remount 时用缓存恢复 partial。
+  // 见 subagent-stream-cache.tsx 的说明。
+  const streamCache = useSubagentStreamCache();
+
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [richTextEnabled, setRichTextEnabled] = useState(false);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
   const messagesCountRef = useRef(0);
+  // WebView 路径下 streamingText state 不会增长（delta 直接推给 webview 内部），
+  // 重进时需要靠 streamCache + 本 ref 把 partial 注回新的 webview。
+  const [webviewReady, setWebviewReady] = useState(false);
+  const streamInjectedRef = useRef(false);
 
   const reload = useCallback(async (): Promise<readonly ChatMessage[]> => {
     try {
@@ -137,22 +152,36 @@ export function SubagentSessionScreen() {
   const handleRunFinished = useCallback(
     (_payload: AgentRunFinishedPayload) => {
       abort.markRunEnded();
+      // run 结束后 partial 已经落库为正式消息，缓存清掉避免下次同 sessionId
+      // 的新 run 接到旧尾巴上。
+      if (sessionId != null) {
+        streamCache.clear(sessionId);
+      }
       void reload().catch(() => undefined);
     },
-    [abort, reload],
+    [abort, reload, streamCache, sessionId],
   );
   const handleRunFailed = useCallback(
     (_payload: AgentRunFailedPayload) => {
       abort.markRunEnded();
+      if (sessionId != null) {
+        streamCache.clear(sessionId);
+      }
       void reload().catch(() => undefined);
     },
-    [abort, reload],
+    [abort, reload, streamCache, sessionId],
   );
   const handleStepCommitted = useCallback(
     (_payload: AgentStepCommittedPayload) => {
+      // step 提交后 partial 已 flush 为正式消息，缓存清零，下一 step 的 delta
+      // 从空重新累积。
+      if (sessionId != null) {
+        streamCache.clear(sessionId);
+      }
+      streamInjectedRef.current = false;
       void reload().catch(() => undefined);
     },
-    [reload],
+    [reload, streamCache, sessionId],
   );
 
   const stream = useSessionStream({
@@ -191,6 +220,92 @@ export function SubagentSessionScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 mount 时检查
   }, [sessionId]);
+
+  // 流式 partial 缓存累加：WebView 路径下 delta 不走 streamingText state，
+  // 直接 pushStreamBatch/Delta 给 webview 内部。screen unmount 后 webview 丢
+  // 得干干净净，重进时没法重放 delta，所以这里并行订阅同一组 bus 事件，把
+  // delta 累加到 Context 缓存。run 结束（uiRunning=false）时不累加，避免把
+  // 下一轮 run 的 delta 接到旧尾巴上。
+  useEffect(() => {
+    if (sessionId == null) {
+      return undefined;
+    }
+    const sid = sessionId;
+    const bus = runtime.eventBus;
+    const subText = bus.subscribe(
+      EVENT_AGENT_STREAM_TEXT_DELTA,
+      (payload: AgentStreamTextDeltaPayload) => {
+        if (payload.sessionId !== sid) {
+          return;
+        }
+        if (!abort.getUiRunning()) {
+          return;
+        }
+        if (payload.text.length === 0) {
+          return;
+        }
+        streamCache.set(sid, {text: payload.text});
+      },
+    );
+    const subThinking = bus.subscribe(
+      EVENT_AGENT_STREAM_THINKING_DELTA,
+      (payload: AgentStreamThinkingDeltaPayload) => {
+        if (payload.sessionId !== sid) {
+          return;
+        }
+        if (!abort.getUiRunning()) {
+          return;
+        }
+        if (payload.text.length === 0) {
+          return;
+        }
+        streamCache.set(sid, {thinking: payload.text});
+      },
+    );
+    return () => {
+      subText.unsubscribe();
+      subThinking.unsubscribe();
+    };
+    // abort.getUiRunning / streamCache 是稳定引用，不放进依赖避免重建订阅。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runtime.eventBus, sessionId]);
+
+  // WebView 路径恢复 partial：重进后新的 webview ready + run 还活跃时，把缓存
+  // 的累积文本一次性 pushStreamDelta 注回去。webview 把它当成一次大 delta 累加
+  // 到空的 stream tail，正好对上重进前的状态。run 已经结束的会话不需要注入——
+  // 落库的消息会从 messages list 正常加载。
+  useEffect(() => {
+    if (streamInjectedRef.current) {
+      return;
+    }
+    if (!webviewReady) {
+      return;
+    }
+    if (!abort.uiRunning) {
+      return;
+    }
+    if (sessionId == null) {
+      return;
+    }
+    const cached = streamCache.get(sessionId);
+    if (cached == null) {
+      return;
+    }
+    if (cached.text.length === 0 && cached.thinking.length === 0) {
+      return;
+    }
+    const web = transcriptWebRef.current;
+    if (web == null) {
+      return;
+    }
+    streamInjectedRef.current = true;
+    if (cached.text.length > 0) {
+      web.pushStreamDelta('text', cached.text);
+    }
+    if (cached.thinking.length > 0) {
+      web.pushStreamDelta('thinking', cached.thinking);
+    }
+  }, [webviewReady, abort.uiRunning, sessionId, streamCache]);
 
   const onOpenSubagentSession = useCallback(
     (childSessionId: string) => {
@@ -249,6 +364,7 @@ export function SubagentSessionScreen() {
           flags={flags}
           agentRunning={agentRunning}
           defaultScrollToBottom={false}
+          onReady={() => setWebviewReady(true)}
           onOpenSubagentSession={onOpenSubagentSession}
         />
       )}
