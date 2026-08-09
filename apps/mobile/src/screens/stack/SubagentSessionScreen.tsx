@@ -241,6 +241,7 @@ export function SubagentSessionScreen() {
         </View>
       ) : (
         <ChatTranscriptWebView
+          ref={transcriptWebRef}
           sessionKey={sessionKey}
           messages={messages}
           streamingText={stream.streamingText}
