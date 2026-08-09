@@ -580,7 +580,14 @@ async function runChildAgent(args: {
   // 能按 childSessionId 中断子 run。try/finally 里反注册常所有权比对。
   runtime.abortRegistry?.register(childSessionId, childController);
 
-  const session = new ChatAgentSession(runtime.messages, childSessionId);
+  // ChatAgentSession 的消息落子 session（独立历史），但工作区归属指向父 session——
+  // 子 session 是 createSubSession 新建的、sessionKkv 空，常驻前缀读父的
+  // rule_snapshot / file_cache，与父工作区视图一致（VFS 也复用同一父 session）。
+  const session = new ChatAgentSession(
+    runtime.messages,
+    childSessionId,
+    parentSessionId,
+  );
 
   // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
   // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。

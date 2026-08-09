@@ -21,6 +21,11 @@ export class EphemeralOverlayAgentSession implements AgentSession {
     readonly sessionId: string,
   ) {}
 
+  /** 工作区归属透传 base——overlay 不改变工作区 session 归属。 */
+  get workplaceScopeSessionId(): string {
+    return this.base.workplaceScopeSessionId;
+  }
+
   async list(): Promise<readonly ChatMessage[]> {
     const base = await this.base.list();
     return [...base, ...this.overlay];

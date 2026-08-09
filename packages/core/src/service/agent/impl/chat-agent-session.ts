@@ -11,11 +11,15 @@ import type { AgentSession } from "@/domain/agent/session/agent-session.port.js"
 
 /**
  * Agent session adapter over {@link MessageService}.
+ *
+ * workplaceScopeSessionId 默认等于 sessionId（主 session）；子 agent 场景
+ * 由 runChildAgent 装配时传父 session id，使常驻工作区前缀读父 session。
  */
 export class ChatAgentSession implements AgentSession {
   constructor(
     private readonly messages: MessageService,
     readonly sessionId: string,
+    readonly workplaceScopeSessionId: string = sessionId,
   ) {}
 
   async list(): Promise<readonly ChatMessage[]> {

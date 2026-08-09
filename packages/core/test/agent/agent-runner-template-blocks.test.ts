@@ -126,7 +126,7 @@ function runnerDeps(
 
 describe("AgentRunner template blocks", () => {
   it("T-WT16: history 含 worktree 双消息 + 会话 user", async () => {
-    const session = new InMemoryAgentSession();
+    const session = new InMemoryAgentSession(SESSION_ID);
     await session.append("user", textBlocks("go"));
 
     const definition: AgentDefinition = {
@@ -183,7 +183,7 @@ describe("AgentRunner template blocks", () => {
   });
 
   it("T-WT16 R3: 多步 history 均含 worktree 双消息", async () => {
-    const session = new InMemoryAgentSession();
+    const session = new InMemoryAgentSession(SESSION_ID);
     await session.append("user", textBlocks("go"));
 
     const definition: AgentDefinition = {
