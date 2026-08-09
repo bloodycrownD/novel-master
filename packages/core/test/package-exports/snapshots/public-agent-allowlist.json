@@ -13,6 +13,7 @@
   "assembleAgentRunnerDeps",
   "assertNoCrossRoundDoomLoop",
   "assertNoDoomLoopInBlocks",
+  "createAgentAbortRegistry",
   "createAgentRegistryService",
   "createAgentRunner",
   "promptsDocumentSchema",

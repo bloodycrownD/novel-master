@@ -1,0 +1,80 @@
+# Code Dev Loop 编排状态（session-runtime-extract）
+# 仅供编排逻辑读取；勿写入 apm dynamic/persist。
+spec_path: docs/Iterations/session-runtime-extract/spec.md
+prd_path: docs/Iterations/session-runtime-extract/prd.md
+branch: feat/merge-subagent
+base_sha: 4e6cada1
+spec_summary: |
+  三 phase 重构。Phase 1 Core：abort registry + controller 注册 + 中断回流语义 +
+  ToolResultBlock.meta 扩展。Phase 2 Mobile：四能力（stream/abort/batch/composer）
+  拆分 + SubagentSessionScreen 重构 + 子会话停止按钮。Phase 3 Desktop：四能力拆分
+  + main 进程接入 core registry + ChatRail 停止按钮。Phase 1 前置于 2/3；2 与 3
+  文件域不重叠可并行。
+contracts:
+  - AgentAbortRegistry: register(sessionId,controller)/abort(sessionId)/unregister(sessionId,controller)(所有权校验)/has(sessionId)
+  - AgentTurnRuntimePort.abortRegistry?: 可选字段（CLI 不注入空安全）
+  - runAgentTurn: 永远内部 new AbortController() 作 internalController 注册到 registry；
+    caller signal 桥接 callerSignal.addEventListener("abort",()=>internalController.abort(reason),{once:true})；
+    runner.run 的 signal 改传 internalController.signal；try/finally register/unregister
+  - runChildAgent: childController 创建后 register(childSessionId, childController)；
+    try/finally unregister；保留 parentSignal 级联
+  - TaskToolOutput: 加 readonly stopped?: boolean + readonly failureReason?: string；
+    导出 const SUBAGENT_STOP_REASON_USER = "用户停止"
+  - subagent-tool run: stopReason==="cancelled" → {text:lastText??"[用户停止，无已生成文本]", subagentSessionId, stopped:true, failureReason:SUBAGENT_STOP_REASON_USER}
+  - buildToolResultBlock: ok 分支 output.stopped===true → {ok:false, content:output.text, meta:{subagentSessionId, failureReason}}
+  - ToolResultBlock.meta: { subagentSessionId?: string; failureReason?: string }
+  - 两端 runtime 装配注入 abortRegistry: createAgentAbortRegistry()
+blocking_steps_all_yes_except: [Step21(blocking:no), Step17/Step23(qa:manual_user)]
+files_touched_plan:
+  p1_registry:
+    - packages/core/src/service/agent/agent-abort-registry.port.ts (新)
+    - packages/core/src/service/agent/create-agent-abort-registry.ts (新)
+    - packages/core/src/public/agent.ts
+    - packages/core/src/service/agent/logic/run-agent-turn.ts
+    - apps/mobile/src/runtime/types.ts
+    - apps/mobile/src/runtime/create-mobile-runtime.ts
+    - apps/desktop/src/main/runtime/
+  p1_reflow:
+    - packages/core/src/domain/tool/builtin/subagent-tool.ts
+    - packages/core/src/domain/tool/logic/build-tool-result-block.ts
+    - packages/core/src/domain/chat/model/content-block.ts
+    - packages/core/src/service/agent/impl/agent-runner.ts (extract*SubagentSessionId* no-op + 单测固化)
+    - packages/core/test/** 相关单测
+dag_version: 2
+wave_plan:
+  - [impl-p1-registry, impl-p1-reflow]   # done
+  - [fix-p1-tests]                        # 补 T-R2 + T-A4 + 完整 test 对比基线
+  - [cr-func-p1]
+node_status:
+  impl-p1-registry: { status: done, executor: subagent, spec_steps: [1,2,3,4,5], head_sha: 586e1da1 }
+  impl-p1-reflow: { status: done, executor: subagent, spec_steps: [6,7,8,9], head_sha: 8d33a559 }
+  fix-p1-tests: { status: done, executor: subagent, head_sha: 5bfdac5f }
+  cr-func-p1: { status: pending, executor: subagent, readonly: true }
+open_must_fix: []
+spec_deviations:
+  - id: D-1
+    node: impl-p1-registry
+    desc: "Step 3 同步把 task 工具用的 parentSignal 改为 internalController.signal（spec 文字未点名），保证 registry 中断主 run 时级联到子 run，使 T-A4 成立"
+    severity: P3
+    accepted: true
+  - id: D-2
+    node: impl-p1-registry
+    desc: "callerSignal 已 aborted 时短路直接 abort internalController（边界处理）"
+    severity: P3
+    accepted: true
+  - id: D-3
+    node: impl-p1-reflow
+    desc: "format-tool-output.ts 同步把 stopped/failureReason 加入剥离名单，否则 content 落 JSON 壳违反 content=output.text"
+    severity: P3
+    accepted: true
+  - id: D-4
+    node: impl-p1-reflow
+    desc: "给 extractSubagentSessionIdFromOutcome 加 export 以便单测导入（行为零变化）"
+    severity: P3
+    accepted: true
+  - id: D-5
+    node: fix-p1-tests
+    desc: "T-A4 文字说『父 abort → 子回流失败 tool_result』，但主 runner 在 abort 后于 session.append(tool_result) 之前 break（agent-runner.ts L507-511），父级 abort 后 partial tool_result 不落库。这是既定生产行为非本次引入。T-A4 改为验证级联机制（主 run cancelled + 子 controller 反注册 + 子 session 创建）；中断回流语义由 T-A1（cancelled 返回 stopped=true）/ T-A2（buildToolResultBlock 识别 stopped）单元级覆盖"
+    severity: P2
+    accepted: pending_cr_func
+# Phase 2/3 DAG 待 Phase 1 dev-ready 后补 wave_plan
