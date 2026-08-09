@@ -155,6 +155,7 @@ function Harness(props: {
         hasModel={true}
         running={abort.uiRunning}
         beginUiRun={lifecycle.beginUiRun}
+        endUiRunOnError={lifecycle.endUiRunOnError}
         abortUiRun={abort.abortUiRun}
         onStreamReset={() => undefined}
         onMessagesChanged={() => undefined}

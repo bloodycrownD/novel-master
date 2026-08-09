@@ -39,6 +39,16 @@ export type AgentRunLifecycle = {
   /** accept 后：activeRunId=null、递减 agentActive；通知 abort 单元 uiRunning=false。 */
   onRunFinished(payload: AgentRunFinishedPayload): void;
   onRunFailed(payload: AgentRunFailedPayload): void;
+  /**
+   * UI 侧 run 异常收尾（如 runAgentTurn 同步 throw）。
+   *
+   * 幂等：用 uiActiveRef 跟踪 beginUiRun / onRunStarted 是否已激活 UI run 态，
+   * 未激活时直接 no-op；激活过则清 activeRunId、通知 abort 单元 uiRunning=false、
+   * 递减 agentActive，并把 uiActiveRef 翻回未激活。
+   *
+   * 这样 composer 不再需要 finally 兜底递减——refcount 单一归属 lifecycle。
+   */
+  endUiRunOnError(): void;
   /** session 切换：清 activeRunId（abort 状态与 stream 清理由 abort 单元负责）。 */
   resetUiForSessionChange(): void;
 };
@@ -62,6 +72,8 @@ export function useAgentRunLifecycle({
 }: UseAgentRunLifecycleParams = {}): AgentRunLifecycle {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
+  // 跟踪 beginUiRun / onRunStarted 是否已激活 UI run 态，给 endUiRunOnError 做幂等守卫。
+  const uiActiveRef = useRef(false);
 
   const onRunUiActivateRef = useRef(onRunUiActivate);
   onRunUiActivateRef.current = onRunUiActivate;
@@ -77,6 +89,7 @@ export function useAgentRunLifecycle({
 
   const beginUiRun = useCallback(() => {
     // abort 状态机的 freeze/retain 清理由 abort.markRunStarted 完成。
+    uiActiveRef.current = true;
     onRunUiActivateRef.current?.();
     incrementAgentActive();
   }, []);
@@ -94,14 +107,21 @@ export function useAgentRunLifecycle({
         return;
       }
       syncActiveRunId(payload.runId);
+      uiActiveRef.current = true;
       onRunUiActivateRef.current?.();
     },
     [syncActiveRunId],
   );
 
   const onRunFinished = useCallback(
-    (_payload: AgentRunFinishedPayload) => {
+    (payload: AgentRunFinishedPayload) => {
+      // 守卫：runId 不匹配（含 endUiRunOnError 已清空 activeRunId 的迟到事件）则拒绝，
+      // 避免二次递减导致 refcount 负数。
+      if (!shouldAcceptRunEvent(activeRunIdRef.current, payload.runId)) {
+        return;
+      }
       syncActiveRunId(null);
+      uiActiveRef.current = false;
       onRunUiDeactivateRef.current?.();
       decrementAgentActive();
     },
@@ -109,13 +129,29 @@ export function useAgentRunLifecycle({
   );
 
   const onRunFailed = useCallback(
-    (_payload: AgentRunFailedPayload) => {
+    (payload: AgentRunFailedPayload) => {
+      // 同 onRunFinished：守卫拒绝迟到的 RUN_FAILED。
+      if (!shouldAcceptRunEvent(activeRunIdRef.current, payload.runId)) {
+        return;
+      }
       syncActiveRunId(null);
+      uiActiveRef.current = false;
       onRunUiDeactivateRef.current?.();
       decrementAgentActive();
     },
     [syncActiveRunId],
   );
+
+  const endUiRunOnError = useCallback(() => {
+    // 幂等：未激活过 UI run 态时直接 return（比如还没 beginUiRun 就报错）。
+    if (!uiActiveRef.current) {
+      return;
+    }
+    syncActiveRunId(null);
+    uiActiveRef.current = false;
+    onRunUiDeactivateRef.current?.();
+    decrementAgentActive();
+  }, [syncActiveRunId]);
 
   const resetUiForSessionChange = useCallback(() => {
     syncActiveRunId(null);
@@ -128,6 +164,7 @@ export function useAgentRunLifecycle({
     onRunStarted,
     onRunFinished,
     onRunFailed,
+    endUiRunOnError,
     resetUiForSessionChange,
   };
 }

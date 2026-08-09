@@ -33,10 +33,7 @@ import { runAgentTurn, type AgentRunScope } from '@/services/agent-run.service';
 
 import { useRuntime } from '@/hooks/useRuntime';
 
-import {
-  decrementAgentActive,
-  isMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {isMobileAgentActive} from '@/runtime/agent-activity';
 
 import {
   applyComposerStatusAttachmentsReplace,
@@ -83,6 +80,9 @@ type Props = {
 
   beginUiRun: () => void;
 
+  /** UI run 异常收尾（替代旧 finally 兜底递减，refcount 单一归属 lifecycle）。 */
+  endUiRunOnError: () => void;
+
   abortUiRun: () => void;
 
   onStreamReset: () => void;
@@ -115,6 +115,7 @@ export function ChatComposer({
   hasModel,
   running,
   beginUiRun,
+  endUiRunOnError,
   abortUiRun,
   onStreamReset,
   onMessagesChanged,
@@ -359,8 +360,12 @@ export function ChatComposer({
         ).catch(() => undefined);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
+          // abort 走正常 RUN_FINISHED/FAILED 路径，lifecycle 自己递减 refcount，
+          // 这里不再调用 endUiRunOnError。
           return;
         }
+        // 非 abort 异常：收敛到 lifecycle 单一归属收尾。
+        endUiRunOnError();
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const detail =
             err instanceof Error
@@ -376,12 +381,6 @@ export function ChatComposer({
           console.error('[novel-master/chat] run failed', detail);
         }
         setError(formatError(err));
-      } finally {
-        // refcount 单一归属 lifecycle.onRunFinished/onRunFailed；这里仅作安全兑底，
-        // decrementAgentActive 对已归 0 的计数幂等忽略。
-        if (isMobileAgentActive()) {
-          decrementAgentActive();
-        }
       }
     },
     [
@@ -389,6 +388,7 @@ export function ChatComposer({
       scope,
       sessionId,
       beginUiRun,
+      endUiRunOnError,
       onStreamReset,
       hasPendingUserOps,
     ],

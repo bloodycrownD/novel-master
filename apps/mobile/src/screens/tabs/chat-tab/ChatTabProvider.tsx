@@ -133,6 +133,8 @@ export type ChatTabContextValue = {
   readonly webMenuOpen: boolean;
   readonly setWebMenuOpen: (open: boolean) => void;
   readonly beginUiRun: () => void;
+  /** UI run 异常收尾（composer catch 路径用）。 */
+  readonly endUiRunOnError: () => void;
   readonly abortUiRun: () => void;
   readonly onLoadOlderMessages: () => void;
   readonly onOpenFileEditor: (
@@ -461,6 +463,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       webMenuOpen,
       setWebMenuOpen,
       beginUiRun: lifecycle.beginUiRun,
+      endUiRunOnError: lifecycle.endUiRunOnError,
       abortUiRun: abortUiRunWithFreeze,
       onLoadOlderMessages: () =>
         messages.loadOlderMessages().catch(() => undefined),

@@ -141,6 +141,7 @@ export function ChatConversationPanel({
     messageEditPrompt,
     setMessageEditPrompt,
     beginUiRun,
+    endUiRunOnError,
     abortUiRun,
     onStreamReset,
     onMessagesChanged,
@@ -299,6 +300,7 @@ export function ChatConversationPanel({
         hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
         running={uiRunning}
         beginUiRun={beginUiRun}
+        endUiRunOnError={endUiRunOnError}
         abortUiRun={abortUiRun}
         onStreamReset={onStreamReset}
         onMessagesChanged={onMessagesChanged}
