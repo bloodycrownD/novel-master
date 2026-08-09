@@ -7,6 +7,7 @@ import {
   type AgentListPickerResponse,
   type AgentRegistryGetResponse,
   type AgentResolveCurrentResponse,
+  type AgentRunIsActiveRequest,
   type AgentRunRequest,
   type AgentSetCurrentRequest,
   type AgentActivityPayload,
@@ -345,6 +346,10 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcAgentAbort: withReq<AgentAbortRequest, IpcResult<void>>(
       invoke,
       IPC_CHANNELS.AGENT_ABORT,
+    ),
+    ipcAgentRunIsActive: withReq<AgentRunIsActiveRequest, IpcResult<boolean>>(
+      invoke,
+      IPC_CHANNELS.AGENT_RUN_IS_ACTIVE,
     ),
     ipcAgentResolveCurrent: noArg<IpcResult<AgentResolveCurrentResponse>>(
       invoke,

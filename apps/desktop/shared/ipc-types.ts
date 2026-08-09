@@ -94,6 +94,7 @@ export const IPC_CHANNELS = {
 
   AGENT_RUN: 'nm:agent/run',
   AGENT_ABORT: 'nm:agent/abort',
+  AGENT_RUN_IS_ACTIVE: 'nm:agent/runIsActive',
   AGENT_RESOLVE_CURRENT: 'nm:agent/resolveCurrent',
   AGENT_LIST_PICKER: 'nm:agent/listPicker',
   AGENT_SET_CURRENT: 'nm:agent/setCurrent',
@@ -722,6 +723,14 @@ export type AgentRunRequest = {
 };
 
 export type AgentAbortRequest = {
+  readonly sessionId: string;
+};
+
+/**
+ * renderer 查询某 session 是否有 in-flight run 的请求体；
+ * main 侧转调 rt.abortRegistry.has(sessionId)。
+ */
+export type AgentRunIsActiveRequest = {
   readonly sessionId: string;
 };
 

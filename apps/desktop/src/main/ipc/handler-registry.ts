@@ -9,6 +9,7 @@ import {
   handleAgentListPicker,
   handleAgentResolveCurrent,
   handleAgentRun,
+  handleAgentRunIsActive,
   handleAgentSetCurrent,
   handleModelListPicker,
   handleModelSetCurrent,
@@ -286,6 +287,7 @@ export function registerHandlersFromRegistry(): void {
 
   bindReq(IPC_CHANNELS.AGENT_RUN, handleAgentRun);
   bindReq(IPC_CHANNELS.AGENT_ABORT, handleAgentAbort);
+  bindReq(IPC_CHANNELS.AGENT_RUN_IS_ACTIVE, handleAgentRunIsActive);
   bindNoArg(IPC_CHANNELS.AGENT_ACTIVITY_GET, () => ({
     active: isDesktopAgentActive(),
   }));

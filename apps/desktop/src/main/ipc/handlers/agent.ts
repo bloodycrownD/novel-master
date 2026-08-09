@@ -22,6 +22,7 @@ import type {
   AgentAbortRequest,
   AgentListPickerResponse,
   AgentResolveCurrentResponse,
+  AgentRunIsActiveRequest,
   AgentRunRequest,
   AgentSetCurrentRequest,
   IpcResult,
@@ -260,6 +261,17 @@ export async function handleAgentAbort(
 ): Promise<IpcResult<void>> {
   await abortAgentRun(req.sessionId);
   return { ok: true, data: undefined };
+}
+
+/**
+ * 查询某 session 是否有 in-flight run——转调 rt.abortRegistry.has(sessionId)。
+ * renderer 的 readOnly 子面板用它判断 stale，避免在 run 进行中渲染可交互 UI。
+ */
+export async function handleAgentRunIsActive(
+  req: AgentRunIsActiveRequest,
+): Promise<IpcResult<boolean>> {
+  const rt = await getDesktopRuntime();
+  return { ok: true, data: rt.abortRegistry.has(req.sessionId) };
 }
 
 export async function handleAgentRun(

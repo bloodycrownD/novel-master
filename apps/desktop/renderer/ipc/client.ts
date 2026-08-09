@@ -95,6 +95,7 @@ export const {
   ipcMessagesSetFloor,
   ipcAgentRun,
   ipcAgentAbort,
+  ipcAgentRunIsActive,
   ipcAgentResolveCurrent,
   ipcAgentListPicker,
   ipcAgentSetCurrent,
