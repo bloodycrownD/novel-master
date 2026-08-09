@@ -323,8 +323,12 @@ export async function handleAgentRun(
           return;
         }
         // 无 RUN_STARTED 的早退（T23）：finishTrackedRun 不会触发，手动清 map。
+        // C-orch-1：早退分支必须同步递减 refcount，否则 incrementDesktopAgentActive()
+        // 的增量永不回落，isDesktopAgentActive() 永久 true，后续 run 全部 AGENT_BUSY。
+        // 不会双递减：正常路径 runId != null 已提前 return，递减归 finishTrackedRun。
         activeRuns.delete(sessionId);
         sessionRunIds.delete(sessionId);
+        decrementDesktopAgentActive();
       });
 
     return { ok: true, data: { started: true } };
@@ -346,4 +350,18 @@ export async function abortAgentRun(sessionId: string): Promise<void> {
   const rt = await getDesktopRuntime();
   rt.abortRegistry.abort(sessionId);
   // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
+}
+
+/**
+ * 测试专用内省：暴露 run 追踪 map 的当前大小，用于断言早退兜底无泄漏。
+ * 仅在单测中引用，生产代码不应依赖。
+ */
+export function __testRunTrackingState(): {
+  activeRunsCount: number;
+  sessionRunIdsCount: number;
+} {
+  return {
+    activeRunsCount: activeRuns.size,
+    sessionRunIdsCount: sessionRunIds.size,
+  };
 }
