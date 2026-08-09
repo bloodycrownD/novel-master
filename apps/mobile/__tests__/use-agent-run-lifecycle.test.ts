@@ -178,4 +178,92 @@ describe('useAgentRunLifecycle (slimmed)', () => {
     });
     expect(lifecycle.activeRunId).toBe(null);
   });
+
+  // T-CF4: composer finally 兑底收敛到 lifecycle.endUiRunOnError 后的幂等与守卫。
+  describe('endUiRunOnError (T-CF4)', () => {
+    it('beginUiRun 后 runAgentTurn 同步 throw → endUiRunOnError 收尾，refcount 归 0、uiActiveRef 翻 false', () => {
+      const onRunUiDeactivate = jest.fn();
+      const lifecycle = mountLifecycle({onRunUiDeactivate});
+      act(() => {
+        lifecycle.beginUiRun();
+      });
+      expect(isMobileAgentActive()).toBe(true);
+
+      // 模拟 runAgentTurn 同步 throw 后 composer 调用 endUiRunOnError。
+      act(() => {
+        lifecycle.endUiRunOnError();
+      });
+      expect(isMobileAgentActive()).toBe(false);
+      expect(lifecycle.activeRunId).toBe(null);
+      expect(onRunUiDeactivate).toHaveBeenCalledTimes(1);
+
+      // 幂等：再调一次不应再递减（这里以不报错 + 状态仍归 0 来间接验证）。
+      act(() => {
+        lifecycle.endUiRunOnError();
+      });
+      expect(isMobileAgentActive()).toBe(false);
+      expect(onRunUiDeactivate).toHaveBeenCalledTimes(1);
+    });
+
+    it('未 beginUiRun 时 endUiRunOnError 是 no-op', () => {
+      const onRunUiDeactivate = jest.fn();
+      const lifecycle = mountLifecycle({onRunUiDeactivate});
+      act(() => {
+        lifecycle.endUiRunOnError();
+      });
+      expect(isMobileAgentActive()).toBe(false);
+      expect(onRunUiDeactivate).not.toHaveBeenCalled();
+    });
+
+    it('正常完成路径：beginUiRun → onRunStarted → onRunFinished，不调 endUiRunOnError', () => {
+      const onRunUiDeactivate = jest.fn();
+      const lifecycle = mountLifecycle({
+        onRunUiDeactivate,
+        getUiRunning: () => true,
+      });
+      act(() => {
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({sessionId: 's1', projectId: 'p1', runId: 'r1'});
+      });
+      act(() => {
+        lifecycle.onRunFinished({
+          sessionId: 's1',
+          projectId: 'p1',
+          runId: 'r1',
+          stopReason: 'end_turn',
+        });
+      });
+      expect(isMobileAgentActive()).toBe(false);
+      expect(lifecycle.activeRunId).toBe(null);
+      expect(onRunUiDeactivate).toHaveBeenCalledTimes(1);
+    });
+
+    it('endUiRunOnError 后迟到的 RUN_FINISHED 不会二次递减（shouldAcceptRunEvent 守卫生效）', () => {
+      const lifecycle = mountLifecycle({getUiRunning: () => true});
+      act(() => {
+        lifecycle.beginUiRun();
+        lifecycle.onRunStarted({sessionId: 's1', projectId: 'p1', runId: 'r1'});
+      });
+      expect(isMobileAgentActive()).toBe(true);
+
+      // runAgentTurn 同步 throw：endUiRunOnError 已递减并清空 activeRunId。
+      act(() => {
+        lifecycle.endUiRunOnError();
+      });
+      expect(isMobileAgentActive()).toBe(false);
+
+      // 此时迟到的 RUN_FINISHED 到达——不匹配的 runId（r1 vs null）被守卫拒绝，
+      // decrementAgentActive 不应被再次调用，refcount 维持在 0（不会变负）。
+      act(() => {
+        lifecycle.onRunFinished({
+          sessionId: 's1',
+          projectId: 'p1',
+          runId: 'r1',
+          stopReason: 'end_turn',
+        });
+      });
+      expect(isMobileAgentActive()).toBe(false);
+      expect(lifecycle.activeRunId).toBe(null);
+    });
+  });
 });
