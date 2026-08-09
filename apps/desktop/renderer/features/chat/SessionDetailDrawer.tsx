@@ -43,7 +43,14 @@ import {
   ipcSessionsRename,
   ipcSessionsSetAgentBinding,
   ipcSessionsSetModelOverride,
+  onAgentStream,
 } from "@/ipc/client";
+import {
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_STEP_COMMITTED,
+  type AgentRunFinishedPayload,
+  type AgentStepCommittedPayload,
+} from "@novel-master/core/events";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
 import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
@@ -121,6 +128,31 @@ export function SessionDetailDrawer({
     }
     void reload();
   }, [open, reload]);
+
+  // 订阅 agent stream 生命周期事件：每条消息落库（step committed）或一轮跑完
+  // （run finished）后 token 占用都会变，这里实时 reload 一下，免得用户发完
+  // 消息还得关掉抽屉再打开才能看到新计数。
+  useEffect(() => {
+    if (!open || sessionId == null) {
+      return;
+    }
+    return onAgentStream((envelope) => {
+      const { type, payload } = envelope;
+      if (type === EVENT_AGENT_STEP_COMMITTED) {
+        const p = payload as AgentStepCommittedPayload;
+        if (p.sessionId === sessionId) {
+          void reload();
+        }
+        return;
+      }
+      if (type === EVENT_AGENT_RUN_FINISHED) {
+        const p = payload as AgentRunFinishedPayload;
+        if (p.sessionId === sessionId) {
+          void reload();
+        }
+      }
+    });
+  }, [open, sessionId, reload]);
 
   // 外部传入的 sessionName 变化时同步草稿（非编辑态下）
   useEffect(() => {
