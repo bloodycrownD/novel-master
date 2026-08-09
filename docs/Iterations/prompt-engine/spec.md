@@ -166,7 +166,7 @@ packages/core/src/
     parse-prompt-yaml.ts           # yaml.parse + 入口校验
   service/prompt/
     render-prompt.ts               # renderPromptToText(blocks, ctx)
-  index.ts                         # 导出 parse / render / 类型 / PromptError
+  public/prompt.ts                 # 导出 parse / render / 类型 / PromptError（core 公共面经 public/*.ts 暴露）
 
 packages/core/test/prompt/
   prompt-blocks-validate.test.ts
@@ -198,7 +198,7 @@ apps/cli/src/
 | `packages/core/src/infra/prompt-template/**` | **新增** 宏引擎 |
 | `packages/core/src/infra/prompt-yaml/parse-prompt-yaml.ts` | **新增** |
 | `packages/core/src/service/prompt/render-prompt.ts` | **新增** |
-| `packages/core/src/index.ts` | 导出 prompt API |
+| `packages/core/src/public/prompt.ts` | 导出 prompt API（core 公共面经 `public/*.ts` 暴露，不经 `index.ts`） |
 | `apps/cli/src/prompt/commands.ts` | **新增** |
 | `apps/cli/src/main.ts` | 注册 `prompt` |
 | `apps/cli/src/cli-errors.ts` | `PromptError` 分支 |
@@ -242,7 +242,7 @@ apps/cli/src/
 
 ### 步骤 5：core 导出
 
-`index.ts` 导出：
+`public/prompt.ts` 导出（core 公共面按分层约定经 `public/*.ts` 暴露，`index.ts` 仅 re-export 顶层 barrel，不直接挂 prompt）：
 
 - `PromptError`, `PromptErrorCode`
 - `PromptBlock`, `PromptBlockRole`

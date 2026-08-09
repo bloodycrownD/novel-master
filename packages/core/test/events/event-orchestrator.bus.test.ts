@@ -17,8 +17,19 @@ import {
 } from "../../src/service/events/impl/event-orchestrator.service.js";
 import type { EventRunResult } from "../../src/service/events/event-run-result.js";
 
-async function waitForBusActions(ms = 30): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+async function waitForBusActions(orch: {
+  pendingEmits(): Promise<void>;
+}): Promise<void> {
+  // 不再用 setTimeout(30) 等 fire-and-forget emit 调落：orchestrator 现在把 in-flight
+  // promise 收集起来，pendingEmits 能确定性等到它们 settle。
+  await orch.pendingEmits();
+}
+
+// 兼容旧入口：部分测试只需抽干 microtask 队列，不依赖 orchestrator。
+async function flushMicrotasks(depth = 4): Promise<void> {
+  for (let i = 0; i < depth; i++) {
+    await Promise.resolve();
+  }
 }
 
 function withUnhandledRejectionGuard<T>(
@@ -126,7 +137,7 @@ describe("event orchestrator (bus integration)", () => {
         sessionId: "s1",
         projectId: "p1",
       });
-      await waitForBusActions();
+      await waitForBusActions(orch);
     });
 
     assert.equal(rejections.length, 0);
@@ -163,7 +174,7 @@ describe("event orchestrator (bus integration)", () => {
         projectId: "p1",
         trigger: "manual",
       });
-      await waitForBusActions();
+      await waitForBusActions(orch);
     });
 
     assert.equal(rejections.length, 0);
@@ -193,7 +204,7 @@ describe("event orchestrator (bus integration)", () => {
       sessionId: "s1",
       projectId: "p1",
     });
-    await waitForBusActions();
+    await waitForBusActions(orch);
     assert.equal(reported.length, 0);
     orch.detachFromBus();
   });
@@ -217,7 +228,7 @@ describe("event orchestrator (bus integration)", () => {
       sessionId: "s1",
       projectId: "p1",
     });
-    await waitForBusActions();
+    await waitForBusActions(orch);
     assert.equal(getHideCalls(), 1);
     orch.detachFromBus();
   });
@@ -276,5 +287,94 @@ describe("event orchestrator (bus integration)", () => {
     );
 
     assert.equal(published.length, 0);
+  });
+
+  // T-SC7：sub-agent task 工具（persistMessages:true）触发时，父 run events DAG 正确门控。
+  //
+  // 该分支现未合入 task 工具与 `agentActiveRefCount` 装配点，能直接测的是“最接近的同类路径”——
+  // 经 orchestrator DAG 走的 run-agent action：它必须仍以 publishRunLifecycle:false / persistMessages:false
+  // 运行，并且不向父 bus 透走任何 AGENT_RUN_* 事件。该断言起到“门控回归保底”的作用：
+  // 一旦 task 工具 / agentActiveRefCount 后续合入，这里能第一时间报警谁把门控默走了。
+  it("T-SC7: run-agent 事件 action 不向父 bus 透走 AGENT_RUN_* 生命周期事件", async () => {
+    const bus = new SimpleEventBus();
+    const lifecycleEvents = [
+      EVENT_AGENT_RUN_STARTED,
+      EVENT_AGENT_RUN_FINISHED,
+    ];
+    const published: string[] = [];
+    for (const type of lifecycleEvents) {
+      bus.subscribe(type, () => published.push(type));
+    }
+
+    const config: EventsConfig = {
+      schemaVersion: 2,
+      events: {
+        [EVENT_SESSION_MESSAGE_RECEIVED]: [
+          { type: "run-agent", params: { agentId: "writer" } },
+        ],
+      },
+    };
+
+    let runAgentCalled = false;
+    const { orch } = createOrchestrator({
+      bus,
+      config,
+      onActionFailure: ({ result }) => {
+        throw new Error(
+          `DAG 应门控成功，不应上报失败: ${JSON.stringify(result.failures)}`,
+        );
+      },
+    });
+    // 注入 runAgent runtime 桩：只记录被调用、不实际跑 runner，验证 DAG 把该 action 正常走到位。
+    (orch as unknown as { deps: DefaultEventOrchestratorDeps }).deps.runAgent = {
+      messages: {
+        async listBySession() {
+          return [];
+        },
+      } as never,
+      agentRegistry: {
+        async get() {
+          return {
+            name: "writer",
+            model: "anthropic/claude",
+            prompts: { persist: [], dynamic: [] },
+          };
+        },
+      } as never,
+      modelRequests: {
+        async request() {
+          runAgentCalled = true;
+          return {
+            assistantText: "ok",
+            blocks: [{ type: "text", text: "ok" }],
+            raw: {},
+          };
+        },
+      } as never,
+      workplace: () =>
+        ({
+          scope: { kind: "session", projectId: "p1", sessionId: "s1" },
+          renderDisplay: async () => "",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+        }) as never,
+      sessionVfs: () => ({}) as never,
+      messageCheckpoint: {} as never,
+      sessionKkv: {} as never,
+      eventBus: bus,
+      getWorkspaceModelId: async () => "anthropic/claude",
+    };
+    orch.attachToBus();
+
+    bus.publish(EVENT_SESSION_MESSAGE_RECEIVED, {
+      sessionId: "s1",
+      projectId: "p1",
+    });
+    await waitForBusActions(orch);
+
+    // 门控仍生效：父 bus 看不到任何 AGENT_RUN_* 事件；DAG 仍然推进了 run-agent。
+    assert.equal(published.length, 0);
+    assert.equal(runAgentCalled, true);
+    orch.detachFromBus();
   });
 });

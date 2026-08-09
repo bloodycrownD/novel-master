@@ -23,7 +23,6 @@ export function registerBuiltinTools(
     registry.register(tool);
   }
   registry.register(subagentTool);
-  // 废弃：chat_grep 不再注册（实现保留于 chat-grep-tool.ts）
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   type ProviderBackupTableName,
   type ProviderTableSnapshot,
 } from "./provider-tables.js";
+import { validateProviderTableSnapshot } from "./provider-table-snapshot-validate.js";
 
 /** restore 时插入顺序：先父表再子表，与 FK 一致。 */
 const RESTORE_TABLE_ORDER: readonly ProviderBackupTableName[] = [
@@ -72,11 +73,17 @@ export async function scrubProviderTablesInDatabase(
 
 /**
  * 先清空主库三表，再按 FK 顺序将快照写回（单事务）。
+ *
+ * INSERT 之前先跑 service 级 {@link validateProviderTableSnapshot}，把过去
+ * 绕过 service upsert 的 raw INSERT 路径（db-backup import / cloud-sync pull）
+ * 拉回到与 DefaultProviderService.create 等价的校验水位。校验在事务外执行，
+ * 任意行非法直接抛 {@link ProviderTableSnapshotError}，主库保持原状。
  */
 export async function restoreProviderTableSnapshot(
   conn: TdbcConnection,
   snapshot: ProviderTableSnapshot,
 ): Promise<void> {
+  validateProviderTableSnapshot(snapshot);
   await conn.transaction(async (tx) => {
     await scrubProviderTablesWithPrefix(tx);
     for (const table of RESTORE_TABLE_ORDER) {

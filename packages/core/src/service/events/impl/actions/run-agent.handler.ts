@@ -89,6 +89,9 @@ export async function runRunAgentAction(
         sessionId: ctx.sessionId,
         listSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
         sessionKkv: deps.sessionKkv,
+        // A-14 path policy：事件轨同样先不限制（三端共用 undefined 语义）。
+        allowedPaths: undefined,
+        resourceQuota: undefined,
       },
       includeCompactionOrchestrator: false,
     }),

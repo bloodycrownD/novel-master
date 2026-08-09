@@ -13,7 +13,7 @@ import {
 } from "@novel-master/core/provider";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { formatTokenCount } from "../utils/format-token-count.js";
+import { formatTokenCount } from "@novel-master/core/common";
 import {
   buildSessionPromptInput,
   type SessionPromptScope,

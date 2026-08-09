@@ -74,6 +74,8 @@ flowchart TD
   UI2 -->|否| SKIP[Composer 不动]
 ```
 
+> **A-22 乐观锁（cr-fix 后新增）**：`resolveRollbackPlan` 解析多次 await 读与 `conn.transaction` 写之间原先存在 TOCTOU 间隙（agent 可在间隙写入），以前依赖「单 session 单写者」的桌面应用默认作为隐式豁免。cr-fix Step 30 补上了乐观锁——plan 阶段记 `messageCountSnapshot`，事务体开头用 tx 作用域 repo 重读会话消息计数校验，冲突重试 3 次后向上报 `ROLLBACK_CONFLICT`。原先的「不加护栏是设计」默认到此作废。
+
 ### Composer 恢复（UI）
 
 - **时机**：Core 调用 **成功** 后（含 `skipVfsReconcile` 降级成功）。
@@ -308,6 +310,7 @@ IPC **不改**；`handleMessagesRollback` 透传 `RollbackOptions` 不变。
 - `rollback-degraded.test.ts` DF1、DF2（assistant）、DF3–DF6
 - `message-action-items.test.ts` 双端菜单项不变
 - `truncate-tail-in-transaction.test.ts` 全绿
+- `rollback-optimistic-lock.test.ts`（A-22 / T-SC11）——plan 解析与事务间隙注入写入后被乐观锁拦下、重试上限耗尽报 ROLLBACK_CONFLICT；仅首次冲突可重试成功；无并发写入路径不受影响
 
 ## 风险与回滚方案
 

@@ -14,7 +14,7 @@ import {
   parentDir,
 } from "@/domain/vfs/logic/parent-dir.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-not-found-error.js";
+import { computeReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
 import {
   VfsError,
   vfsAlreadyExists,
@@ -138,27 +138,13 @@ export class DefaultVfsService implements InternalVfsService {
     options?: { replaceAll?: boolean },
   ): Promise<{ version: number; replacements: number }> {
     const current = await this.read(scopeKey, path);
-    let replacements = 0;
-    let nextContent = current.content;
-
-    if (options?.replaceAll) {
-      if (!current.content.includes(oldString)) {
-        throw buildReplaceNotFoundError(path, current.content, oldString);
-      }
-      const parts = current.content.split(oldString);
-      replacements = parts.length - 1;
-      nextContent = parts.join(newString);
-    } else {
-      const index = current.content.indexOf(oldString);
-      if (index === -1) {
-        throw buildReplaceNotFoundError(path, current.content, oldString);
-      }
-      replacements = 1;
-      nextContent =
-        current.content.slice(0, index) +
-        newString +
-        current.content.slice(index + oldString.length);
-    }
+    const { nextContent, replacements } = computeReplaceResult(
+      path,
+      current.content,
+      oldString,
+      newString,
+      options,
+    );
 
     const result = await this.repo.update(scopeKey, path, nextContent, {
       expectedVersion: current.version,

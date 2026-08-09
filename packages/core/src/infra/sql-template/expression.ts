@@ -24,6 +24,29 @@ const RESERVED_WORDS = new Set([
 const IDENTIFIER_RE = /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\b/g;
 
 /**
+ * `new Function` 编译缓存：相同表达式体复用同一个已编译函数。
+ *
+ * `new Function` 在 V8 里会触发即时编译，单次开销不小。AgentRunner 主循环里
+ * 同一个 `test` 表达式往往会被反复求值（每轮 foreach 迭代、每个 when 分支），
+ * 每次都重新 `new Function` 是纯浪费。这里按规范化后的表达式体做 key 缓存
+ * 编译结果，命中后直接拿现成函数去跑就行。
+ */
+const compiledTestFunctionCache = new Map<
+  string,
+  (ctx: unknown) => unknown
+>();
+
+function compileTestFunction(normalized: string): (ctx: unknown) => unknown {
+  const cached = compiledTestFunctionCache.get(normalized);
+  if (cached !== undefined) return cached;
+  const fn = new Function("__ctx__", `return (${normalized});`) as (
+    ctx: unknown,
+  ) => unknown;
+  compiledTestFunctionCache.set(normalized, fn);
+  return fn;
+}
+
+/**
  * Applies `transform` only to segments outside single- and double-quoted literals.
  */
 function mapOutsideStringLiterals(
@@ -130,7 +153,7 @@ export function evaluateTest(
 
   const ctx = mergedContextForExpression(stack);
   try {
-    const fn = new Function("__ctx__", `return (${normalized});`);
+    const fn = compileTestFunction(normalized);
     return Boolean(fn(ctx));
   } catch (err) {
     throw new SqlTemplateError(

@@ -4,12 +4,20 @@
  * @module errors/vfs-errors
  */
 
-/** edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。 */
+/**
+ * edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。
+ *
+ * oldStringCodepoints / fileHintCodepoints 是按 codepoint 转储的十六进制串，
+ * 用来排查中文引号、HTML entity 这类「肉眼看着一样但码点不同」的不匹配。
+ * 设为可选，老的对象字面量构造路径不强制要求。
+ */
 export type VfsReplaceNotFoundDetails = {
   readonly oldStringLength: number;
   readonly longestCommonSubstring: string;
   readonly lcsLength: number;
   readonly lcsOccurrences: number;
+  readonly oldStringCodepoints?: string;
+  readonly fileHintCodepoints?: string;
 };
 
 /** Discriminant codes for {@link VfsError}. */

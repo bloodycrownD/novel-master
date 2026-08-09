@@ -136,6 +136,7 @@ export {
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,
   isGpt0301TiktokenModel,
+  countTokens,
   tokenizerAssetPaths,
   resolveContextWindowTokens,
   seedContextWindowTokens,
@@ -156,6 +157,10 @@ export {
   type SessionApiPromptTokenCacheEntry,
   type TokenizerDriver,
   type TokenizerErrorCode,
+  type ChatTokenEncoder,
+  type ChatTokenMessage,
+  type ChatTokenCountKind,
+  type CountTokensOptions,
 } from "../infra/tokenizer/index.js";
 export {
   parseTokenCounterModePref,

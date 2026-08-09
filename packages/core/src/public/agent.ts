@@ -14,13 +14,6 @@ export {
   type ResolveSavedModelIdInput,
   type ResolveSummarySavedModelIdInput,
 } from "../domain/agent/logic/resolve-saved-model-id.js";
-/** @deprecated 请改用 {@link resolveSavedModelId}。 */
-export {
-  resolveApplicationModelId,
-  resolveSummaryApplicationModelId,
-  type ResolveApplicationModelIdInput,
-  type ResolveSummaryApplicationModelIdInput,
-} from "../domain/agent/logic/resolve-application-model-id.js";
 export { resolveAgentToolRegistry } from "../domain/agent/logic/resolve-agent-tool-registry.js";
 export { validateAgentToolPolicy } from "../domain/agent/logic/validate-agent-tool-policy.js";
 export type { AgentToolPolicy } from "../domain/agent/model/agent-definition.js";

@@ -48,6 +48,9 @@ export function PickerModal({
               </button>
             </li>
           ) : null}
+          {rows.length === 0 && !allowNone ? (
+            <li className="picker-modal__empty">暂无可选项，请先在设置中创建。</li>
+          ) : null}
           {rows.map((row) => (
             <li key={row.id}>
               <button

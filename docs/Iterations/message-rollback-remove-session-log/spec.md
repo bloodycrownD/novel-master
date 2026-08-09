@@ -1,5 +1,7 @@
 # 移除会话日志 & 消息回滚 技术规格（SPEC）
 
+> **Superseded**：本 spec 的 batch/action/snapshot 回滚模型已被 [`message-checkpoint-v2`](../message-checkpoint-v2/spec.md) 架空——后者以 message 级整树 checkpoint + VFS revision 取代 batch 模型，并在 Phase 5 清理时 deprecated 本 spec 的 batch 描述。下文仅作历史参考，不再代表当前实现。
+>
 > PRD：`.apm/kb/docs/Iterations/message-rollback-remove-session-log/prd.md`
 
 ## 设计目标

@@ -10,6 +10,7 @@ import {
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,
   serializePromptLlmInput,
+  countTokens,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
   type TokenCounterKind,
@@ -74,12 +75,16 @@ async function countTiktoken(
   const model = mapVendorModelIdToTiktokenModel(vendorModelId);
   const enc = encoding_for_model(model);
   try {
-    const message = { role: "system", content: serialized };
-    let numTokens = 3;
-    numTokens += enc.encode(message.content).length;
-    numTokens += 3;
+    // RN 走 js-tiktoken，只 encode content、固定 +3+3，不区分 0301。
+    // 包装粒度比 Node 的 precise 档粗，所以 counterKind 诚实标 heuristic，
+    // 不能冒充精确 tiktoken——否则 compaction 会按精确阈值判定，容易超限。
+    const count = countTokens(
+      (text) => enc.encode(text).length,
+      [{ role: "system", content: serialized }],
+      "heuristic",
+    );
     enc.free();
-    return { count: numTokens, counterKind: "tiktoken", estimated: false };
+    return { count, counterKind: "heuristic", estimated: true };
   } catch {
     enc.free();
     return {

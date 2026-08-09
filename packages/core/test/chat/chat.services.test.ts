@@ -106,6 +106,58 @@ describe("Chat services", () => {
     assert.equal(list.length, 0);
   });
 
+  it("message truncateAfter(anchor) 删掉 anchor 之后的全部消息但保留 anchor", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const u1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("partial"));
+    await ctx.messages.append(session.id, "user", textBlocks("tool_results"));
+
+    await ctx.messages.truncateAfter(session.id, u1.id);
+    const list = await ctx.messages.listBySession(session.id);
+    assert.equal(list.length, 1, "仅保留 anchor");
+    assert.equal(list[0]!.id, u1.id);
+  });
+
+  it("message truncateAfter(null) 清空整个 session 的消息", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    await ctx.messages.append(session.id, "user", textBlocks("a"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("b"));
+
+    await ctx.messages.truncateAfter(session.id, null);
+    const list = await ctx.messages.listBySession(session.id);
+    assert.equal(list.length, 0, "session 被清空");
+  });
+
+  it("message truncateAfter 同步清掉被删消息的 checkpoint 指针", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const u1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
+    const a1 = await ctx.messages.append(session.id, "assistant", textBlocks("partial"));
+
+    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
+    await checkpointRepo.insertCheckpoint({
+      sessionId: session.id,
+      messageId: a1.id,
+      createdAtMs: Date.now(),
+      files: [],
+    });
+    assert.equal(await checkpointRepo.hasCheckpoint(session.id, a1.id), true);
+
+    await ctx.messages.truncateAfter(session.id, u1.id);
+    assert.equal(
+      await checkpointRepo.hasCheckpoint(session.id, a1.id),
+      false,
+      "被删 assistant 的 checkpoint 指针应同步清掉",
+    );
+    const list = await ctx.messages.listBySession(session.id);
+    assert.equal(list.length, 1);
+  });
+
   it("message updateContent replaces text", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

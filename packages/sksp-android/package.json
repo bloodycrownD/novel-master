@@ -18,12 +18,14 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
-    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\""
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "lint": "eslint src test",
+    "test": "tsx --test test/**/*.test.ts"
   },
-  "dependencies": {
-    "@novel-master/core": "*"
-  },
+  "dependencies": {},
   "peerDependencies": {
+    "@novel-master/core": "*",
     "react-native": ">=0.74.0"
   },
   "react-native": {
@@ -32,6 +34,7 @@
     }
   },
   "devDependencies": {
+    "@novel-master/tdbc-driver-better-sqlite3": "*",
     "tsx": "^4.21.0",
     "typescript": "^5.8.3"
   }

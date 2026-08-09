@@ -143,13 +143,16 @@ async function createCoordinator(
   const storageConfig = s3Config ?? (await buildS3StorageConfig(runtime));
   const baseStorage = createS3ObjectStorage(storageConfig, {
     client: createRnS3Client(storageConfig),
-    readFile: readFileBytes,
-    writeFile: async (path, bytes) => {
-      await ReactNativeBlobUtil.fs.writeFile(
-        path,
-        Buffer.from(bytes).toString('base64'),
-        'base64',
-      );
+    // mobile 端注入基于 react-native-blob-util 的 FileSystemPort（对应 A-26）。
+    fileSystem: {
+      readFile: readFileBytes,
+      writeFile: async (path, bytes) => {
+        await ReactNativeBlobUtil.fs.writeFile(
+          path,
+          Buffer.from(bytes).toString('base64'),
+          'base64',
+        );
+      },
     },
   });
   const storage =

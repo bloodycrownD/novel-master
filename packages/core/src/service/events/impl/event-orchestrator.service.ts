@@ -55,6 +55,14 @@ export interface DefaultEventOrchestratorDeps {
 export class DefaultEventOrchestrator implements EventOrchestrator {
   private busAttached = false;
   private busSubscriptions: Array<{ unsubscribe: () => void }> = [];
+  /**
+   * attachToBus 触发的 in-flight emit promise 集合。
+   *
+   * 原来 `void emit().then().catch()` 是真正的 fire-and-forget：promise 一旦发出就脱离任何调用方，
+   * 上层既等不到完成也看不见失败。这里把它们收集起来，通过 {@link pendingEmits} 暴露出去，
+   * 让 CLI/runtime/测试能选择 await；emit 本身仍然不阻塞 bus.publish（subscribe 回调是同步的，没法 await）。
+   */
+  private readonly inflightEmits = new Set<Promise<unknown>>();
 
   constructor(private readonly deps: DefaultEventOrchestratorDeps) {}
 
@@ -68,7 +76,9 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
       if (ctx == null) {
         return;
       }
-      void this.emit(eventType, ctx)
+      // 不再用 `void ... .then().catch()` 把 promise 丢掉：跟踪到 inflightEmits，
+      // 让 pendingEmits() 能等到它；失败仍由 reportActionFailure 统一上报，不会变成 unhandledRejection。
+      const settled = this.emit(eventType, ctx)
         .then((result) => {
           if (!result.ok) {
             this.reportActionFailure(eventType, ctx, result);
@@ -86,6 +96,11 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
             ],
           });
         });
+      this.inflightEmits.add(settled);
+      // settle 后从集合里删掉，避免集合无限增长 + 让 pendingEmits 在结束后能立即返回。
+      void settled.finally(() => {
+        this.inflightEmits.delete(settled);
+      });
     };
     this.busSubscriptions.push(
       this.deps.eventBus.subscribe(EVENT_SESSION_COMPACTION_REQUESTED, (p) =>
@@ -122,6 +137,19 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
     }
     this.busSubscriptions = [];
     this.busAttached = false;
+  }
+
+  /**
+   * 等待 attachToBus 触发的全部 in-flight emit 完成。
+   *
+   * 用 Promise.allSettled 包一层：emit 失败已经在内部走 reportActionFailure，
+   * 这里只关心是否 settle，不再向上报错（避免重复/双重处理）。
+   */
+  async pendingEmits(): Promise<void> {
+    if (this.inflightEmits.size === 0) {
+      return;
+    }
+    await Promise.allSettled([...this.inflightEmits]);
   }
 
   async emit(eventType: string, ctx: EventEmitContext): Promise<EventRunResult> {

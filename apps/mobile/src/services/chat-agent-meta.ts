@@ -10,7 +10,7 @@
 import {
   AgentRunResolveError,
   resolveAgentForProject,
-  resolveApplicationModelId,
+  resolveSavedModelId,
 } from '@novel-master/core/agent';
 import {PROJECT_AGENT_META_DISPLAY_LABEL} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -66,7 +66,7 @@ export async function loadChatAgentMeta(
       resolved.source === 'session'
         ? await runtime.sessions.getSessionAgentConfig(sessionId)
         : undefined;
-    const savedModelId = resolveApplicationModelId({
+    const savedModelId = resolveSavedModelId({
       agentModelId: definition.model,
       sessionModelId: sessionConfig?.modelId,
     });

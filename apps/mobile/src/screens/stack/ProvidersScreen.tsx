@@ -174,7 +174,7 @@ export function ProvidersScreen() {
           }
           ListEmptyComponent={
             <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-              暂无服务商，点击「添加服务商」创建。
+              暂无服务商，点击右上角「添加」创建。
             </Text>
           }
           renderItem={({item}) => (

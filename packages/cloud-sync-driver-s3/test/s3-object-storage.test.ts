@@ -181,7 +181,7 @@ describe("createS3ObjectStorage", () => {
   });
 
   it("putFile：从本地文件读取并上传", async () => {
-    const { writeFile, unlink } = await import("node:fs/promises");
+    const { readFile, writeFile, unlink } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");
     const filePath = join(tmpdir(), `s3-put-file-${Date.now()}.bin`);
@@ -195,6 +195,11 @@ describe("createS3ObjectStorage", () => {
           assert.deepEqual(command.input.Body, payload);
           return { ETag: '"file-etag"' };
         }),
+        // Node 端注入基于 node:fs/promises 的 FileSystemPort（A-26）。
+        fileSystem: {
+          readFile: (path) => readFile(path),
+          writeFile: (path, bytes) => writeFile(path, bytes),
+        },
       });
 
       const result = await storage.putFile!("snapshots/test.nmbackup", filePath);
@@ -205,7 +210,7 @@ describe("createS3ObjectStorage", () => {
   });
 
   it("getToPath：下载并写入本地文件", async () => {
-    const { readFile, unlink } = await import("node:fs/promises");
+    const { readFile, writeFile, unlink } = await import("node:fs/promises");
     const { join } = await import("node:path");
     const { tmpdir } = await import("node:os");
     const destPath = join(tmpdir(), `s3-get-to-path-${Date.now()}.bin`);
@@ -219,6 +224,11 @@ describe("createS3ObjectStorage", () => {
           Body: { transformToByteArray: async () => payload },
         };
       }),
+      // Node 端注入基于 node:fs/promises 的 FileSystemPort（A-26）。
+      fileSystem: {
+        readFile: (path) => readFile(path),
+        writeFile: (path, bytes) => writeFile(path, bytes),
+      },
     });
 
     try {

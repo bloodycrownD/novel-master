@@ -114,7 +114,7 @@ docs/
 - **`resolveRollbackPlan` 乐观锁版本号来源未定**——`chat_message` 没 version 列，需 schema 设计决策（加列 or 用 seq+checkpoint 组合）
 - **S-5 撤 `resolveApplicationModelId` alias 会破三个 app**——`apps/desktop`、`apps/mobile` 多处仍在消费，必须先迁移下游到 `resolveSavedModelId`
 - **S-8 双引用计数器实际用途不同**（blob 回收 vs revision GC），注释明示「并存不矛盾」——裁决时不能强行合一，应裁决「同类计数器」的兜底逻辑合并，而非两套不同用途的计数器
-- **A-22「无护栏是设计」spec 在 `Iterations/chat-user-rollback-redo/spec.md` L18-19**——加乐观锁后需同步清该 spec 条款
+- **A-22「无护栏是设计」spec 在 `Iterations/chat-user-rollback-redo/spec.md` L18-19**（核实为错位引用）——实际「spec 明示这是设计」出现在 `core-explore-remediation/features/message-checkpoint-and-agent/explore-message-checkpoint.md` M3 与 `D5-1-fix-spec.md` A-22。Step 30 已用选择 B（listBySession length 快照 + 事务内 tx 作用域重读校验 + 3 次重试上限）完成加锁，无需动 schema / migration，`ARCHITECTURE.md` 也无需改动
 - **provider identity worktree 状态**——`.worktree/agent-subagent` 里 `BUILTIN_PROVIDER_KEYS` 改名已完成，主线未合并；A-27 的 builtin id 改名需确认是否等 worktree 合并
 
 ### Phase 4：phase-infra-alignment（A-11 + A-15 + A-12 + A-17 + A-18）
@@ -171,7 +171,7 @@ docs/
 - Step 27 — phase-structure-core — blocking: yes — qa: auto：**S-6**：`event-orchestrator.service.ts` L66-98 的 `void emit().then()` 改为纳入调用方生命周期（await 或挂到 run 的取消/完成信号）；`wrapStreamForBus` 的 `queueMicrotask` 改为确定性排序；sub-agent events 生命周期纳入父 run 的 `agentActiveRefCount`；同步改 `agent-runner-stream-bus.test.ts` 的 intentional 断言
 - Step 28 — phase-structure-core — blocking: yes — qa: auto：**A-14**：`BuiltinToolContext` 加 `allowedPaths?: string[]`（先定语义层级——VFS 内绝对路径还是相对 session root）；`ToolRunner.call()` L93 后补 path 白名单二次校验；加资源配额占位；三端 runtime + 测试桩补字段注入
 - Step 29 — phase-structure-core — blocking: yes — qa: auto：**A-21**：`cloud-sync-coordinator.ts` 的 `push` 入口加进程内互斥锁（session 维度），push 持锁期间 agent 启动排队（带超时降级拒绝）；push 续租检查锁状态；先定位 agent 启动入口（扫 `createAgentRunner` 调用方）确定锁挂在 core 还是 apps runtime
-- Step 30 — phase-structure-core — blocking: yes — qa: auto：**A-22**：`message-rollback.service.ts` 的 `resolveRollbackPlan` 加乐观锁版本号——先做 schema 设计决策（加 version 列 or 用 seq+checkpoint 组合）；读时记版本号，写时校验，冲突则重试；同步清 `Iterations/chat-user-rollback-redo/spec.md` L18-19 的「无护栏是设计」条款 + `ARCHITECTURE.md` 对应 exception
+- Step 30 — phase-structure-core — blocking: yes — qa: auto：**A-22**（已完成）：`message-rollback.service.ts` 的 `resolveRollbackPlan` 加乐观锁版本号。**Schema 设计决策走选择 B**——不改 `chat_message` schema、不写 migration；plan 阶段记 `messageCountSnapshot = listBySession(sessionId).length`，事务开始时用 tx 作用域的 `SqliteMessageRepository` 重读 length 与快照对比，不一致抛 `ROLLBACK_CONFLICT`；`rollbackToMessage` 外层裹 3 次重试上限，耗尽后向上报冲突。探索报告原说的「L18-19 无护栏是设计」错位——该短语实际出现在 `core-explore-remediation/features/message-checkpoint-and-agent/explore-message-checkpoint.md` M3 与 `D5-1-fix-spec.md` A-22（“spec 明示这是设计”），`chat-user-rollback-redo/spec.md` L18-19 只是「最小侵入 / 双端 parity」两条，不存在需要清除的护栏豁免条款。`ARCHITECTURE.md` 本来就没登记 rollback exception（S-2 核过、D5-1 也明确“无需登记例外”），无需改动
 - Step 31 — phase-structure-core — blocking: yes — qa: auto：**A-27**：`provider-table-snapshot.ts` 的 `restoreProviderTableSnapshot` 改为走 service upsert 或统一 `validateDefinition`（不再 raw INSERT）；各 module repository 的 row→def 映射补 service 校验；清理残留（`CompactionConditionsTrigger` 草稿、`validatePromptBlocks` 死路径、`setMessageFloor` 改代码两步、`BUILTIN_PROVIDER_IDS` 改名——先确认 provider identity worktree 状态）
 
 ### Phase 4：phase-infra-alignment
@@ -243,7 +243,7 @@ docs/
 
 1. **A-19 全回滚的 turn 起点定义**：当前代码没有显式 turn marker，回滚依赖 `messageCheckpoint` 或新增 turn-snapshot。若 messageCheckpoint 不足以界定 turn 边界，需先做 schema 设计（加 turn_id 列）。回滚方案：若无法干净回滚到 turn 起点，退回方案 A（partial + abort flag）作为过渡。
 
-2. **A-22 乐观锁版本号 schema 设计**：`chat_message` 没 version 列，乐观锁要加新列（schema migration）或用 seq+checkpoint 组合。加列是 schema 变更，需 migration 脚本 + 回滚 migration。回滚方案：若 schema 变更风险大，退回写锁（session 级互斥）。
+2. ~~**A-22 乐观锁版本号 schema 设计**~~（已解）：Schema 决策走选择 B（会话消息计数快照），不改 schema、不需 migration，不需回滚 migration。Step 30 已实现并过 T-SC11。
 
 3. **S-5 撤 `resolveApplicationModelId` alias 的下游迁移**：desktop/mobile 多处仍在消费，迁移本身是一次跨 app 改动。回滚方案：若下游迁移未完成，保留 alias 但加 `@deprecated` JSDoc + lint warning，延后撤除。
 
@@ -256,5 +256,5 @@ docs/
 ### 回滚原则
 
 - 每个 Phase 独立可回滚——若某 Phase 的 blocking Step 测试不绿，不进下一 Phase
-- schema 变更（A-22 version 列、A-19 turn snapshot）必须有对应的 down migration
+- schema 变更（A-19 turn snapshot；~~A-22 version 列~~ 已用选择 B 绕开）必须有对应的 down migration
 - 公共面撤除（S-5 alias）必须先迁移下游，下游迁移本身是独立 commit

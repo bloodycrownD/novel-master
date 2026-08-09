@@ -3,8 +3,7 @@
  */
 
 import {APP_VERSION} from './app-meta';
-import {compareAppVersions} from './compare-app-versions';
-import {excerptReleaseNotes} from './excerpt-release-notes';
+import {compareAppVersions, excerptReleaseNotes} from '@novel-master/core/common';
 import {resolveLatestRelease, type FetchFn} from './resolve-latest-release';
 import type {UpdateCheckData} from './types';
 

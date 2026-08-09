@@ -8,7 +8,7 @@
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} throws.
  */
-import { resolveApplicationModelId } from "@novel-master/core/agent";
+import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import { messageBodyText } from "@novel-master/core/prompt";
 
@@ -18,7 +18,7 @@ import {
   serializePromptLlmInput,
 } from "@novel-master/core/provider";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {formatPromptTokenUsageLabel} from '../utils/format-token-count';
+import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
 import {buildSessionPromptInput, type SessionPromptScope} from './session-prompt-input.service';
 
 function formatChatTokenLabel(
@@ -42,7 +42,7 @@ export async function loadChatPromptTokenLabel(
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
   );
-  const savedModelId = resolveApplicationModelId({
+  const savedModelId = resolveSavedModelId({
     agentModelId: definition.model,
     sessionModelId: sessionConfig.modelId,
   });
@@ -94,7 +94,7 @@ async function loadChatPromptTokenLabelFallback(
     const sessionConfig = await runtime.sessions.getSessionAgentConfig(
       scope.sessionId,
     );
-    savedModelId = resolveApplicationModelId({
+    savedModelId = resolveSavedModelId({
       agentModelId: definition.model,
       sessionModelId: sessionConfig.modelId,
     });

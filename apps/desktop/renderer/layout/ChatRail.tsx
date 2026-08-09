@@ -82,10 +82,10 @@ export function ChatRail({
     [showNavView],
   );
 
+  // Bug 2：子会话面板 keep-alive——返回父会话时只切 viewId，不清空子会话状态。
+  // 这样 ConversationPanel 始终保持挂载，streamingText 等 local state 不会因卸载而丢失，
+  // 用户退出再进入子会话还能看到正在进行的流式内容。面板的显隐完全交给外层 hidden 控制。
   const goBackToConversation = useCallback(() => {
-    setSubagentSessionId(null);
-    setSubagentSessionName('');
-    setSubagentRunning(false);
     showNavView('conversation');
   }, [showNavView]);
 
