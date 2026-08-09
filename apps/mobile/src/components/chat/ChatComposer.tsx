@@ -143,8 +143,6 @@ export function ChatComposer({
     ...initial.attachments,
   ]);
   const [error, setError] = useState<string | undefined>();
-  const [runAbortController, setRunAbortController] =
-    useState<AbortController | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
@@ -299,7 +297,6 @@ export function ChatComposer({
         return;
       }
 
-      const controller = new AbortController();
       setError(undefined);
       onStreamReset();
       beginUiRun();
@@ -319,16 +316,14 @@ export function ChatComposer({
         setAttachments([]);
       };
 
-      setRunAbortController(controller);
-
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
         // 文件引用由 Core 扫描正文 `@`；规则变更不走差集 materialize
+        // caller 不传 signal——core runAgentTurn 自建 internalController 注册到 registry。
         await runAgentTurn(runtime, scope, content, {
           stream,
           allowResumeWithoutInput,
-          signal: controller.signal,
           annotateDrafts:
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
@@ -382,7 +377,8 @@ export function ChatComposer({
         }
         setError(formatError(err));
       } finally {
-        setRunAbortController(null);
+        // refcount 单一归属 lifecycle.onRunFinished/onRunFailed；这里仅作安全兑底，
+        // decrementAgentActive 对已归 0 的计数幂等忽略。
         if (isMobileAgentActive()) {
           decrementAgentActive();
         }
@@ -506,7 +502,6 @@ export function ChatComposer({
     }
 
     if (running) {
-      runAbortController?.abort();
       abortUiRun();
       return;
     }
@@ -540,7 +535,6 @@ export function ChatComposer({
     hasPendingUserOps,
     canResumeWithoutInput,
     lastMessageIsPlainUserText,
-    runAbortController,
     abortUiRun,
     onNeedModel,
     sendWithBridgeIfNeeded,

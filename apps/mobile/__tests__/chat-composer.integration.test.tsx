@@ -112,6 +112,7 @@ import {
 } from '@novel-master/core/chat';
 import { ChatComposer } from '../src/components/chat/ChatComposer';
 import { useAgentRunLifecycle } from '../src/hooks/useAgentRunLifecycle';
+import { useSessionAbort } from '../src/screens/tabs/chat-tab/useSessionAbort';
 import {
   decrementAgentActive,
   isMobileAgentActive,
@@ -129,15 +130,32 @@ function Harness(props: {
   lastMessageIsPlainUserText?: boolean;
   draftRestoreToken?: number;
 }) {
-  const lifecycle = useAgentRunLifecycle();
+  // 与 ChatTabProvider 等价的 abort + lifecycle 装配（composer 是 dumb component）。
+  const onStreamResetRef = React.useRef<() => void>(() => undefined);
+  const abortRegistry = React.useRef({
+    register: () => undefined,
+    abort: () => undefined,
+    unregister: () => undefined,
+    has: () => false,
+  });
+  const abort = useSessionAbort({
+    sessionId: 's',
+    abortRegistry: abortRegistry.current as never,
+    onStreamResetRef,
+  });
+  const lifecycle = useAgentRunLifecycle({
+    onRunUiActivate: abort.markRunStarted,
+    onRunUiDeactivate: abort.markRunEnded,
+    getUiRunning: abort.getUiRunning,
+  });
   return (
     <ThemeProvider>
       <ChatComposer
         scope={{ projectId: 'p', sessionId: 's' }}
         hasModel={true}
-        running={lifecycle.uiRunning}
+        running={abort.uiRunning}
         beginUiRun={lifecycle.beginUiRun}
-        abortUiRun={lifecycle.abortUiRun}
+        abortUiRun={abort.abortUiRun}
         onStreamReset={() => undefined}
         onMessagesChanged={() => undefined}
         onNeedModel={() => undefined}
