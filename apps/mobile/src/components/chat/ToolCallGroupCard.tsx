@@ -13,6 +13,8 @@ type Props = {
   dimmed?: boolean;
   defaultExpanded?: boolean;
   onOpenFile?: (path: string) => void;
+  /** 点击 task 工具卡片时，跳转到对应子会话只读浏览页。 */
+  onOpenSubagentSession?: (sessionId: string) => void;
   showDividerBelow?: boolean;
 };
 
@@ -22,6 +24,7 @@ export function ToolCallGroupCard({
   dimmed = false,
   defaultExpanded = false,
   onOpenFile,
+  onOpenSubagentSession,
   showDividerBelow = false,
 }: Props) {
   const {tokens} = useTheme();
@@ -68,6 +71,7 @@ export function ToolCallGroupCard({
               tool={tool}
               groupItem
               onOpenFile={onOpenFile}
+              onOpenSubagentSession={onOpenSubagentSession}
             />
           ))}
         </View>

@@ -5,6 +5,7 @@
  * @module runtime/create-desktop-runtime
  */
 import {
+  createAgentAbortRegistry,
   createAgentRegistryService,
 } from "@novel-master/core/agent";
 import {
@@ -106,6 +107,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   });
 
   const agentRegistry = createAgentRegistryService(conn, state);
+  const abortRegistry = createAgentAbortRegistry();
 
   const eventOrchestrator = createEventOrchestrator({
     eventsConfig,
@@ -145,6 +147,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     compactionConditionEvaluator,
     eventOrchestrator,
     agentRegistry,
+    abortRegistry,
     tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn, { state, agentRegistry }),

@@ -19,6 +19,24 @@ export interface SessionService {
   /** Creates session and copies project template VFS into session domain. */
   create(projectId: string, title?: string | null): Promise<ChatSession>;
 
+  /**
+   * 创建子 agent 会话（SPEC agent-subagent / P0-4）。
+   *
+   * 与 {@link create} 不同：**仅 insert**（带 `parentSessionId`），完全不碰 VFS——
+   * 不调 `initializeSessionWorkspace`、不创建 child scope、不调 `copyVfsTree`、
+   * 不复制项目模板，也不写默认 agent 配置。子 agent run 的 VFS 访问由
+   * `runChildAgent` 装配期 `toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId)`
+   * 指向父 session scope 实现。
+   *
+   * 子 session delete 时 `deleteVfsPrefix(session:{pid}:{childId})` 是无害空操作
+   * （child scope 根本没建过），不需 special-case。
+   */
+  createSubSession(
+    parentSessionId: string,
+    projectId: string,
+    title?: string | null,
+  ): Promise<ChatSession>;
+
   rename(id: string, title: string): Promise<ChatSession>;
 
   delete(id: string): Promise<void>;

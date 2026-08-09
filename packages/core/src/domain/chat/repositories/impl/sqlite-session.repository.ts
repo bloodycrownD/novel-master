@@ -15,13 +15,15 @@ import type { ChatSession } from "../../model/session.js";
 import type { SessionRepository } from "../session.port.js";
 
 const SESSION_COLUMNS =
-  "id, project_id, title, created_at_ms, updated_at_ms";
+  "id, project_id, title, parent_session_id, created_at_ms, updated_at_ms";
 
 function rowToSession(row: Row): ChatSession {
   return {
     id: String(row.id),
     projectId: String(row.project_id),
     title: row.title == null ? null : String(row.title),
+    parentSessionId:
+      row.parent_session_id == null ? null : String(row.parent_session_id),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
   };
@@ -38,8 +40,23 @@ export class SqliteSessionRepository implements SessionRepository {
       this.conn,
       this.parser,
       `SELECT ${SESSION_COLUMNS}
-       FROM chat_session WHERE project_id = #{projectId} ORDER BY created_at_ms`,
+       FROM chat_session
+       WHERE project_id = #{projectId} AND parent_session_id IS NULL
+       ORDER BY created_at_ms`,
       { projectId },
+    );
+    return rows.map(rowToSession);
+  }
+
+  async listByParentSession(parentSessionId: string): Promise<ChatSession[]> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT ${SESSION_COLUMNS}
+       FROM chat_session
+       WHERE parent_session_id = #{parentSessionId}
+       ORDER BY created_at_ms`,
+      { parentSessionId },
     );
     return rows.map(rowToSession);
   }
@@ -63,15 +80,16 @@ export class SqliteSessionRepository implements SessionRepository {
       this.conn,
       this.parser,
       `INSERT INTO chat_session (
-         id, project_id, title, created_at_ms, updated_at_ms
+         id, project_id, title, parent_session_id, created_at_ms, updated_at_ms
        )
        VALUES (
-         #{id}, #{projectId}, #{title}, #{createdAtMs}, #{updatedAtMs}
+         #{id}, #{projectId}, #{title}, #{parentSessionId}, #{createdAtMs}, #{updatedAtMs}
        )`,
       {
         id: session.id,
         projectId: session.projectId,
         title: session.title,
+        parentSessionId: session.parentSessionId,
         createdAtMs: session.createdAtMs,
         updatedAtMs: session.updatedAtMs,
       },

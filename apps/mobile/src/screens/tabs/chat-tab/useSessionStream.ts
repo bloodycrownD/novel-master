@@ -1,7 +1,19 @@
 /**
- * Chat tab 流式 runtime：独占 Bus 订阅，FIFO wire → 64ms apply → 双引擎。
+ * Session stream 单元：bus 事件订阅 + streamingText/streamingThinking state + stale 守卫。
+ *
+ * 从 {@link useChatStreamRuntime} 拆出来的事件源单元——独占 Bus 订阅，
+ * 负责把 RUN_STARTED / STREAM_TEXT/THINKING_DELTA / STEP_COMMITTED /
+ * RUN_FINISHED / RUN_FAILED 派发到对应的 lifecycle / abort / batch 入口。
+ *
+ * 不直接依赖 abort 单元或 lifecycle 单元——所有守卫 / 回调由 Provider 注入：
+ * - lifecycle 守卫：acceptRunEvent / onRunStarted / onRunFinished / onRunFailed；
+ * - abort 守卫：getUiRunning / getTranscriptFreezeCount / getAbortRetainPending / clearAbortRetainPending；
+ * - batch 入口：ingestWireChunk / clearBuffers。
+ *
+ * 注意：refcount 归属 lifecycle 单元——本单元的 FINISHED/FAILED 不再直接
+ * decrementAgentActive，改为通知 lifecycle（onRunFinished/onRunFailed）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import {
   EVENT_AGENT_RUN_FAILED,
@@ -29,53 +41,72 @@ import {
 } from '@/components/chat/flush-run-ui';
 import { useStreamMetricsAcc } from '@/hooks/useAgentStreamMetrics';
 import { useRuntime } from '@/hooks/useRuntime';
-import { decrementAgentActive } from '@/runtime/agent-activity';
-import { createStreamApplyBuffer } from '@/services/stream-apply-buffer';
-import {
-  appendWireChunk,
-  coalesceWireQueue,
-  type StreamWireChunk,
-} from '@/services/stream-wire-queue';
+import type { StreamWireChunk } from '@/services/stream-wire-queue';
 
-const INGRESS_COALESCE_MS = 32;
-
-export type UseChatStreamRuntimeParams = {
+export type UseSessionStreamParams = {
   sessionId: string | undefined;
-  uiRunning: boolean;
+  /** 是否走 webview 转录引擎；stream end / reset / apply 路由都据此决定。 */
   useWebviewTranscript: boolean;
-  chatStreamBatchEnabled: boolean;
+  /** webview 路径下是否合并为 pushStreamBatch；false 走 pushStreamDelta 逐条保序。 */
+  batchEnabled: boolean;
   transcriptWebRef: RefObject<ChatTranscriptWebViewHandle | null>;
-  onMessagesChanged: FlushMessagesChanged;
-  getMessageCount: () => number;
-  getUiRunning: () => boolean;
-  getTranscriptFreezeCount: () => number | null;
-  getAbortRetainPending: () => boolean;
-  clearAbortRetainPending: () => void;
-  onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
+  /** uiRunning state（来自 abort 单元），用于驱动 stream metrics acc。 */
+  uiRunning: boolean;
+  // lifecycle 守卫（注入）
   acceptRunEvent: (runId: string | undefined) => boolean;
   onRunStarted: (payload: AgentRunStartedPayload) => void;
   onRunFinished?: (payload: AgentRunFinishedPayload) => void;
   onRunFailed?: (payload: AgentRunFailedPayload) => void;
+  // abort 守卫（注入）
+  getUiRunning: () => boolean;
+  getTranscriptFreezeCount: () => number | null;
+  getAbortRetainPending: () => boolean;
+  clearAbortRetainPending: () => void;
+  // batch 入口（注入）
+  batchIngest: (chunk: StreamWireChunk) => void;
+  batchClear: () => void;
+  // messages
+  onMessagesChanged: FlushMessagesChanged;
+  getMessageCount: () => number;
+  onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
 };
 
-export function useChatStreamRuntime({
+export type UseSessionStreamResult = {
+  streamingText: string;
+  streamingThinking: string;
+  /** 清空 batch buffer + 重置 stream state（webview resetStream 或 state 清空）。 */
+  handleStreamReset: () => void;
+  /** 仅清空 streamingText/Thinking state（legacy 路径专用）。 */
+  resetStreamingDisplay: () => void;
+  /**
+   * apply 叶子：batch 单元调它下发合并后的 segments。
+   * 路由 webview（pushStreamBatch / pushStreamDelta）vs streamingText 回退。
+   */
+  applySegments(segments: readonly StreamWireChunk[]): void;
+  streamMetricsAccRef: ReturnType<typeof useStreamMetricsAcc>['accRef'];
+  streamMetricsLastRun: ReturnType<typeof useStreamMetricsAcc>['lastRun'];
+};
+
+export function useSessionStream({
   sessionId,
-  uiRunning,
   useWebviewTranscript,
-  chatStreamBatchEnabled,
+  batchEnabled,
   transcriptWebRef,
-  onMessagesChanged,
-  getMessageCount,
-  getUiRunning,
-  getTranscriptFreezeCount,
-  getAbortRetainPending,
-  clearAbortRetainPending,
-  onStepCommitted,
+  uiRunning,
   acceptRunEvent,
   onRunStarted,
   onRunFinished,
   onRunFailed,
-}: UseChatStreamRuntimeParams) {
+  getUiRunning,
+  getTranscriptFreezeCount,
+  getAbortRetainPending,
+  clearAbortRetainPending,
+  batchIngest,
+  batchClear,
+  onMessagesChanged,
+  getMessageCount,
+  onStepCommitted,
+}: UseSessionStreamParams): UseSessionStreamResult {
   const runtime = useRuntime();
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
@@ -89,11 +120,12 @@ export function useChatStreamRuntime({
 
   const useWebviewRef = useRef(useWebviewTranscript);
   useWebviewRef.current = useWebviewTranscript;
-  const batchEnabledRef = useRef(chatStreamBatchEnabled);
-  batchEnabledRef.current = chatStreamBatchEnabled;
+  const batchEnabledRef = useRef(batchEnabled);
+  batchEnabledRef.current = batchEnabled;
   const transcriptWebRefRef = useRef(transcriptWebRef);
   transcriptWebRefRef.current = transcriptWebRef;
 
+  // 所有注入回调用 ref 持有最新值，bus 订阅 effect 不依赖它们重建。
   const lifecycleRef = useRef({
     acceptRunEvent,
     onRunStarted,
@@ -107,25 +139,40 @@ export function useChatStreamRuntime({
     onRunFailed,
   };
 
-  const callbacksRef = useRef({
-    onMessagesChanged,
-    onStepCommitted,
+  const callbacksRef = useRef({ onMessagesChanged, onStepCommitted });
+  callbacksRef.current = { onMessagesChanged, onStepCommitted };
+
+  const abortGuardsRef = useRef({
+    getUiRunning,
+    getTranscriptFreezeCount,
+    getAbortRetainPending,
+    clearAbortRetainPending,
   });
-  callbacksRef.current = {
-    onMessagesChanged,
-    onStepCommitted,
+  abortGuardsRef.current = {
+    getUiRunning,
+    getTranscriptFreezeCount,
+    getAbortRetainPending,
+    clearAbortRetainPending,
   };
 
-  const metricsRef = useRef({
-    noteMetricsTextDelta,
-    noteMetricsThinkingDelta,
-  });
-  metricsRef.current = {
-    noteMetricsTextDelta,
-    noteMetricsThinkingDelta,
-  };
+  const metricsRef = useRef({ noteMetricsTextDelta, noteMetricsThinkingDelta });
+  metricsRef.current = { noteMetricsTextDelta, noteMetricsThinkingDelta };
 
-  const applySegments = useCallback((segments: StreamWireChunk[]) => {
+  const batchIngestRef = useRef(batchIngest);
+  batchIngestRef.current = batchIngest;
+  const batchClearRef = useRef(batchClear);
+  batchClearRef.current = batchClear;
+  // abort fallback commit：内部定义后赋值（见下），这里占位。
+  const commitAbortOverlayRef = useRef<() => Promise<void>>(async () => undefined);
+
+  const getMessageCountRef = useRef(getMessageCount);
+  getMessageCountRef.current = getMessageCount;
+
+  /** 本 run 内已成功 streamCommit 的消息 id，防止 step + RUN_FINISHED 双次提交。 */
+  const committedTailIdsRef = useRef<Set<string>>(new Set());
+
+  /** apply 叶子：webview 路径调 pushStreamBatch/Delta，非 webview 回退到 state。 */
+  const applySegments = useCallback((segments: readonly StreamWireChunk[]) => {
     if (segments.length === 0) {
       return;
     }
@@ -152,67 +199,31 @@ export function useChatStreamRuntime({
     }
   }, []);
 
-  const applyBuffer = useMemo(
-    () => createStreamApplyBuffer(applySegments, { flushIntervalMs: 64 }),
-    [applySegments],
-  );
-
-  const ingressQueueRef = useRef<StreamWireChunk[]>([]);
-  const ingressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const flushIngressToApplyBuffer = useCallback(() => {
-    ingressTimerRef.current = null;
-    if (ingressQueueRef.current.length === 0) {
-      return;
-    }
-    const coalesced = coalesceWireQueue(ingressQueueRef.current);
-    ingressQueueRef.current = [];
-    applyBuffer.pushAll(coalesced);
-  }, [applyBuffer]);
-
-  const scheduleIngressFlush = useCallback(() => {
-    if (ingressTimerRef.current != null) {
-      return;
-    }
-    ingressTimerRef.current = setTimeout(
-      flushIngressToApplyBuffer,
-      INGRESS_COALESCE_MS,
-    );
-  }, [flushIngressToApplyBuffer]);
-
-  const ingestWireChunk = useCallback(
-    (chunk: StreamWireChunk) => {
-      appendWireChunk(ingressQueueRef.current, chunk);
-      scheduleIngressFlush();
+  const handleIngressText = useCallback(
+    (delta: string) => {
+      if (delta.length === 0) {
+        return;
+      }
+      metricsRef.current.noteMetricsTextDelta(delta);
+      batchIngestRef.current({ kind: 'text', delta });
     },
-    [scheduleIngressFlush],
+    [],
   );
 
-  const getMessageCountRef = useRef(getMessageCount);
-  getMessageCountRef.current = getMessageCount;
-  const getUiRunningRef = useRef(getUiRunning);
-  getUiRunningRef.current = getUiRunning;
-  const getTranscriptFreezeCountRef = useRef(getTranscriptFreezeCount);
-  getTranscriptFreezeCountRef.current = getTranscriptFreezeCount;
-  const getAbortRetainPendingRef = useRef(getAbortRetainPending);
-  getAbortRetainPendingRef.current = getAbortRetainPending;
-  const clearAbortRetainPendingRef = useRef(clearAbortRetainPending);
-  clearAbortRetainPendingRef.current = clearAbortRetainPending;
-  /** 本 run 内已成功 streamCommit 的消息 id，防止 step + RUN_FINISHED 双次提交。 */
-  const committedTailIdsRef = useRef<Set<string>>(new Set());
-
-  const clearStreamBuffers = useCallback(() => {
-    if (ingressTimerRef.current != null) {
-      clearTimeout(ingressTimerRef.current);
-      ingressTimerRef.current = null;
-    }
-    ingressQueueRef.current = [];
-    applyBuffer.reset();
-  }, [applyBuffer]);
+  const handleIngressThinking = useCallback(
+    (delta: string) => {
+      if (delta.length === 0) {
+        return;
+      }
+      metricsRef.current.noteMetricsThinkingDelta(delta);
+      batchIngestRef.current({ kind: 'thinking', delta });
+    },
+    [],
+  );
 
   const handleStreamEndAfterReload = useCallback(
     ({ messages, prevCount }: FlushStreamEndContext) => {
-      clearStreamBuffers();
+      batchClearRef.current();
       const added = messages.slice(prevCount);
       if (added.length === 0) {
         if (committedTailIdsRef.current.size > 0) {
@@ -248,25 +259,27 @@ export function useChatStreamRuntime({
       setStreamingText('');
       setStreamingThinking('');
     },
-    [clearStreamBuffers],
+    [],
   );
 
   const handleStreamReset = useCallback(() => {
-    clearStreamBuffers();
+    batchClearRef.current();
     if (useWebviewRef.current) {
       transcriptWebRefRef.current.current?.resetStream();
     } else {
       setStreamingText('');
       setStreamingThinking('');
     }
-  }, [clearStreamBuffers]);
+  }, []);
 
   const resetStreamingDisplay = useCallback(() => {
     setStreamingText('');
     setStreamingThinking('');
   }, []);
 
-  const commitAbortOverlayFallback = useCallback(async (): Promise<void> => {
+  // abort 时 commit 半成品 stream：webview 路径调 commitAbortOverlaySnapshot；
+  // legacy 路径仅检测 state 是否非空（保持原行为）。
+  const commitAbortOverlay = useCallback(async (): Promise<void> => {
     if (useWebviewRef.current) {
       transcriptWebRefRef.current.current?.commitAbortOverlaySnapshot();
       return;
@@ -276,27 +289,9 @@ export function useChatStreamRuntime({
     }
   }, [streamingText, streamingThinking]);
 
-  const handleIngressText = useCallback(
-    (delta: string) => {
-      if (delta.length === 0) {
-        return;
-      }
-      metricsRef.current.noteMetricsTextDelta(delta);
-      ingestWireChunk({ kind: 'text', delta });
-    },
-    [ingestWireChunk],
-  );
-
-  const handleIngressThinking = useCallback(
-    (delta: string) => {
-      if (delta.length === 0) {
-        return;
-      }
-      metricsRef.current.noteMetricsThinkingDelta(delta);
-      ingestWireChunk({ kind: 'thinking', delta });
-    },
-    [ingestWireChunk],
-  );
+  // bus 订阅 effect 不依赖 commitAbortOverlay 重建——用 ref 持有最新实现，
+  // 避免 streamingText 变化导致整个订阅 effect 重建。
+  commitAbortOverlayRef.current = commitAbortOverlay;
 
   useEffect(() => {
     if (sessionId == null) {
@@ -324,7 +319,7 @@ export function useChatStreamRuntime({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
-        if (!getUiRunningRef.current()) {
+        if (!abortGuardsRef.current.getUiRunning()) {
           return;
         }
         handleIngressText(payload.text);
@@ -339,7 +334,7 @@ export function useChatStreamRuntime({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
-        if (!getUiRunningRef.current()) {
+        if (!abortGuardsRef.current.getUiRunning()) {
           return;
         }
         handleIngressThinking(payload.text);
@@ -363,8 +358,8 @@ export function useChatStreamRuntime({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
-        const uiRunning = getUiRunningRef.current();
-        const freezeCount = getTranscriptFreezeCountRef.current();
+        const uiRunning = abortGuardsRef.current.getUiRunning();
+        const freezeCount = abortGuardsRef.current.getTranscriptFreezeCount();
         const cb = callbacksRef.current;
         if (payload.phase === 'tool_results') {
           if (!shouldApplyTranscriptReload(uiRunning, freezeCount)) {
@@ -379,14 +374,14 @@ export function useChatStreamRuntime({
           uiRunning,
           freezeCount,
           {
-            abortRetainPending: getAbortRetainPendingRef.current(),
+            abortRetainPending: abortGuardsRef.current.getAbortRetainPending(),
             phase: 'assistant',
           },
         );
         if (!allowAssistantReload) {
           return;
         }
-        const abortRetainReload = getAbortRetainPendingRef.current();
+        const abortRetainReload = abortGuardsRef.current.getAbortRetainPending();
         void flushAgentStepUi(
           payload.phase,
           cb.onMessagesChanged,
@@ -399,7 +394,7 @@ export function useChatStreamRuntime({
           .catch(() => undefined)
           .finally(() => {
             if (abortRetainReload) {
-              clearAbortRetainPendingRef.current();
+              abortGuardsRef.current.clearAbortRetainPending();
               handleStreamReset();
             }
           });
@@ -414,17 +409,18 @@ export function useChatStreamRuntime({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
-        decrementAgentActive();
-        const uiRunning = getUiRunningRef.current();
-        const freezeCount = getTranscriptFreezeCountRef.current();
+        // refcount 归属 lifecycle 单元——这里只通知 lifecycle，不直接 decrement。
+        const uiRunning = abortGuardsRef.current.getUiRunning();
+        const freezeCount = abortGuardsRef.current.getTranscriptFreezeCount();
         const cb = callbacksRef.current;
         const finishRun = () =>
           lifecycleRef.current.onRunFinished?.(payload);
-        if (getAbortRetainPendingRef.current()) {
-          void commitAbortOverlayFallback()
+        if (abortGuardsRef.current.getAbortRetainPending()) {
+          void commitAbortOverlayRef
+            .current()
             .catch(() => undefined)
             .finally(() => {
-              clearAbortRetainPendingRef.current();
+              abortGuardsRef.current.clearAbortRetainPending();
               handleStreamReset();
               finishRun();
             });
@@ -453,9 +449,9 @@ export function useChatStreamRuntime({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
-        decrementAgentActive();
-        const uiRunning = getUiRunningRef.current();
-        const freezeCount = getTranscriptFreezeCountRef.current();
+        // refcount 归属 lifecycle 单元——这里只通知 lifecycle，不直接 decrement。
+        const uiRunning = abortGuardsRef.current.getUiRunning();
+        const freezeCount = abortGuardsRef.current.getTranscriptFreezeCount();
         const cb = callbacksRef.current;
         const failRun = () => lifecycleRef.current.onRunFailed?.(payload);
         if (shouldApplyTranscriptReload(uiRunning, freezeCount)) {
@@ -489,28 +485,15 @@ export function useChatStreamRuntime({
     handleIngressThinking,
     handleStreamEndAfterReload,
     handleStreamReset,
-    commitAbortOverlayFallback,
   ]);
 
-  useEffect(() => {
-    return () => {
-      applyBuffer.dispose();
-      if (ingressTimerRef.current != null) {
-        clearTimeout(ingressTimerRef.current);
-      }
-    };
-  }, [applyBuffer]);
-
   return {
-    streamMetricsAccRef,
-    streamMetricsLastRun,
     streamingText,
     streamingThinking,
     handleStreamReset,
     resetStreamingDisplay,
+    applySegments,
+    streamMetricsAccRef,
+    streamMetricsLastRun,
   };
 }
-
-export type UseChatStreamRuntimeResult = ReturnType<
-  typeof useChatStreamRuntime
->;

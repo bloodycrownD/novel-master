@@ -41,13 +41,13 @@ export async function runAgentRegistryCommand(
 
   switch (subcommand) {
     case "list": {
-      const ids = await registry.listAgentIds();
-      if (ids.length === 0) {
+      const defs = await registry.list();
+      if (defs.length === 0) {
         console.log("No agents in registry. Run: nm agent import <path>");
         return;
       }
-      for (const id of ids) {
-        console.log(id);
+      for (const def of defs) {
+        console.log(def.name);
       }
       return;
     }

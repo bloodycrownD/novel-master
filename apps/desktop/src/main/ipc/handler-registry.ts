@@ -9,6 +9,7 @@ import {
   handleAgentListPicker,
   handleAgentResolveCurrent,
   handleAgentRun,
+  handleAgentRunIsActive,
   handleAgentSetCurrent,
   handleModelListPicker,
   handleModelSetCurrent,
@@ -133,6 +134,7 @@ import {
   handleScopeSetProject,
   handleScopeSetSession,
 } from './handlers/scope.js';
+
 import {
   handleSessionsCreate,
   handleSessionsDelete,
@@ -285,6 +287,7 @@ export function registerHandlersFromRegistry(): void {
 
   bindReq(IPC_CHANNELS.AGENT_RUN, handleAgentRun);
   bindReq(IPC_CHANNELS.AGENT_ABORT, handleAgentAbort);
+  bindReq(IPC_CHANNELS.AGENT_RUN_IS_ACTIVE, handleAgentRunIsActive);
   bindNoArg(IPC_CHANNELS.AGENT_ACTIVITY_GET, () => ({
     active: isDesktopAgentActive(),
   }));
@@ -369,6 +372,7 @@ export function registerHandlersFromRegistry(): void {
   );
   bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, handleAgentYamlExport);
   bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
+
 
   bindNoArg(IPC_CHANNELS.REGEX_LIST_GROUPS, handleRegexListGroups);
   bindReq(IPC_CHANNELS.REGEX_GET_GROUP, handleRegexGetGroup);

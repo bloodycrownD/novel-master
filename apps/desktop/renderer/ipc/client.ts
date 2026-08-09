@@ -95,6 +95,7 @@ export const {
   ipcMessagesSetFloor,
   ipcAgentRun,
   ipcAgentAbort,
+  ipcAgentRunIsActive,
   ipcAgentResolveCurrent,
   ipcAgentListPicker,
   ipcAgentSetCurrent,
@@ -131,6 +132,7 @@ export const {
   ipcAgentRegistryCreateBlank,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
+
   ipcRegexListGroups,
   ipcRegexCreateGroup,
   ipcRegexUpdateGroup,

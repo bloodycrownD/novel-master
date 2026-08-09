@@ -1,24 +1,21 @@
 ---
 createdAt: '2026-07-29 21:38:22'
-updatedAt: '2026-08-03 22:48:46'
+updatedAt: '2026-08-08 20:40:43'
 ---
 ﻿## 背景
 
-「聊天记录查询」迭代（docs/Iterations/chat-history-search/）PRD/SPEC 收敛审查，目标达 execute-ready。
-
-需求路径：docs/Iterations/chat-history-search/prd.md（已确认）。SPEC 路径：docs/Iterations/chat-history-search/spec.md。前置依赖：chat-session-detail-page、message-visibility。
+「agent-mode-refactor」迭代（docs/Iterations/agent-mode-refactor/）：把子代理系统从全局名单（KKV subagentNames）重构为 AgentDefinition.mode 字段。SPEC 路径 docs/Iterations/agent-mode-refactor/spec.md，PRD docs/Iterations/agent-mode-refactor/prd.md。分支 feat/merge-subagent，base_sha 37dcd56c。编排状态见 docs/Iterations/agent-mode-refactor/.iteration-state.yaml。
 
 ## 目的
 
-通过审查→doc-fix→再审查循环，让 PRD/SPEC 达到 execute-ready，可开始按 spec 编码。
+按 spec 完成 7 phase / 32 step 的实现，达 dev-ready（spec 范围内实现与功能小检完成）。
 
 ## 现状
 
-经 2 轮审查 + 1 轮 doc-fix，审查子代理判定 Go（execute-ready）。
+代码层面 dev-ready，所有自动化步骤闭合（Step 1-31），仅剩 Step 32（三端 build，qa: manual_user）等用户手测验收。
 
-第 1 轮：4 个 P1（IPC channel 前缀缺 nm:、mobile MessageList 无 onEndReached 透传 + streaming 语境错配、组件不存在误判）；主代理驳回误判（SegmentedControl/FormTextInput 真实存在），闭合 P1-1（channel 改 nm:messages/search）+ P1-3/P1-4（mobile 改自渲染 FlatList 不复用 MessageList）+ P2-2/P2-3。
-第 2 轮：4 项 must-fix 全部真闭合，无 P0，仅 1 个 P2（mobile 摘要文本来源开工时拍板——只取 TextBlock.text 拼，不阻塞）。
+11 个 commit 链（37dcd56c base → da1d8da6 head）：model→core-tool→test-fix→persist+form→desktop+mobile→test-doc→fix(import-export mode 映射遗漏)。dag_version 2（test-doc 后发现 import-export.ts 缺 mode 映射，重编排插入 fix）。
 
-核心（仓储/service/匹配函数）、desktop（IPC/renderer/UI）、mobile（导航/runtime/UI）全链路代码对照验证通过。
+验证全绿：core build ✅、core test 1777/1765 pass/12 fail(全 pre-existing)、CLI e2e 5/5、agents-bundle 9/9、desktop tsc+vite ✅、mobile tsc+jest ✅、T-C1 零残留 ✅。blocking 测试 T-T1/T-T2/T-T3/T-T4/T-C1/T-C4/T-G1/T-P1 全部通过。
 
-待用户确认 execute-ready 后开始编码。
+3 个 spec_deviations 均已修复（SD-1 AgentDefinitionEditorForm 补 mode 缺省值；SD-2 import-export 补 mode 映射；SD-3 import 跳过 general + CLI list 改用 list()）。

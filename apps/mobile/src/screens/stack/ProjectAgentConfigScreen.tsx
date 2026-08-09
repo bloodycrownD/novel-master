@@ -65,7 +65,7 @@ export function ProjectAgentConfigScreen() {
     setLoading(true);
     try {
       const cfg = await runtime.projects.getAgentConfig(projectId);
-      let globalName = '（无全局 Agent）';
+      let globalName = '（无全局智能体）';
       try {
         const resolved = await resolveCurrentAgentDefinition(runtime);
         globalName = resolved.definition.name;

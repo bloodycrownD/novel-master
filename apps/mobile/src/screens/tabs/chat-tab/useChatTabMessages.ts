@@ -2,7 +2,7 @@
  * Chat tab message list state: tail load, cache, and older-message paging.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, DeviceEventEmitter } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   type ChatMessage,
@@ -249,6 +249,20 @@ export function useChatTabMessages({
       reloadMessages().catch(() => undefined);
     }
   }, [chatSubview, sessionId, reloadMessages]);
+
+  // 详情页压缩/置位后 DB 消息 hidden 已变，但聊天页 chatMessages state 不会自动刷新。
+  // 监听 session-transcript-changed 事件，命中当前 session 时强制 reload。
+  useEffect(() => {
+    if (sessionId == null) {
+      return;
+    }
+    const sub = DeviceEventEmitter.addListener('session-transcript-changed', (e?: { sessionId?: string }) => {
+      if (e?.sessionId === sessionId) {
+        reloadMessages(true).catch(() => undefined);
+      }
+    });
+    return () => sub.remove();
+  }, [sessionId, reloadMessages]);
 
   return {
     chatMessages,

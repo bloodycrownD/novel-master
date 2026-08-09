@@ -26,15 +26,33 @@ function allowedToolNames(
   return allNames;
 }
 
+/** 递归上限（P1-10）：depth >= 2（孙 agent）时 task 被 deny，孙 agent LLM 看不到它。 */
+const SUBAGENT_TOOL_NAME = "task";
+
+export interface ResolveAgentToolRegistryOptions {
+  /** 当前 agent 递归深度：主 agent depth=0，子 depth=1，孙 depth=2。 */
+  readonly depth?: number;
+}
+
 /**
  * Returns a new registry containing only tools permitted for the agent.
+ *
+ * 两层硬性过滤（覆盖用户 policy，防递归）：
+ * 1. mode === "subagent" 的智能体强制移除 task——子智能体不能再生子智能体。
+ * 2. depth >= 2（孙 agent）也强制移除 task——递归上限双保险。
+ * 用户在 tools.allow/deny 里配 task 是合法的，但对子智能体无效（装配时忽略）。
  */
 export function resolveAgentToolRegistry<Ctx>(
   baseRegistry: ToolRegistry<Ctx>,
   definition: AgentDefinition,
+  options?: ResolveAgentToolRegistryOptions,
 ): ToolRegistry<Ctx> {
   const allNames = baseRegistry.list();
   const allowed = new Set(allowedToolNames(definition, allNames));
+  // 子智能体强制移除 task（防递归）；孙 agent 同理（递归上限）。
+  if (definition.mode === "subagent" || (options?.depth ?? 0) >= 2) {
+    allowed.delete(SUBAGENT_TOOL_NAME);
+  }
   const filtered = new ToolRegistry<Ctx>();
   for (const name of allNames) {
     if (allowed.has(name)) {

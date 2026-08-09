@@ -1,21 +1,21 @@
 /**
  * 聊天消息编辑弹窗。回车换行；仅按钮保存。
  * 多行输入对齐 ChatComposer 模式（TextInput 直挂 min/maxHeight），禁止 ScrollView 包裹。
- * 垂直位置：上下对称 flex spacer 实现相对居中；键盘压缩窗口时 bottomSpacer 优先收缩。
- * readOnly：同款 UI、输入禁用可滚动，用于批注详情预览。
+ * 垂直位置：justifyContent center 居中面板。
+ * 键盘避让：只给面板加 translateY 上移键盘高度的一半，走 GPU 合成层不触发 layout。
+ * 遮罩保持 flex:1 覆盖全屏不动。readOnly 无需键盘避让。
  */
 import React, {useEffect, useMemo, useState} from 'react';
 import {
   Dimensions,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useTheme} from '@/theme/ThemeProvider';
 import {AppModal} from '@/components/ui/AppModal';
 
@@ -50,9 +50,16 @@ export function MessageEditModal({
   onDelete,
 }: Props) {
   const {tokens} = useTheme();
-  const insets = useSafeAreaInsets();
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
+  // Android Modal 是独立 window，useReanimatedKeyboardAnimation 走 native event emitter
+  // 在 Modal 内也能正常收事件。只给面板加 translateY，遮罩不动，不触发 flex layout。
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  const panelAvoidStyle = useAnimatedStyle(() => {
+    // 上移键盘高度的一半，既避免被键盘遮挡，又不至于推到屏幕顶部。
+    // keyboardHeightSV.value 在键盘弹起时为负值（如 -250），收起时为 0。
+    return {transform: [{translateY: Math.min(0, keyboardHeightSV.value) / 2}]};
+  }, [keyboardHeightSV]);
 
   const inputMaxHeight = useMemo(() => {
     const windowHeight = Dimensions.get('window').height;
@@ -129,12 +136,12 @@ export function MessageEditModal({
 
   const modalBody = (
     <Pressable
-      style={[styles.backdrop, {paddingBottom: 24 + insets.bottom}]}
+      style={styles.backdrop}
       onPress={onClose}>
-      <View style={styles.topSpacer} testID="message-edit-top-spacer" />
-      <Pressable
-        style={[styles.panel, {backgroundColor: tokens.surface}]}
-        onPress={e => e.stopPropagation()}>
+      <Animated.View
+        style={[styles.panel, {backgroundColor: tokens.surface}, !readOnly ? panelAvoidStyle : undefined]}
+        onStartShouldSetResponder={() => true}>
+        <Pressable onPress={e => e.stopPropagation()}>
         <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
         {label ? (
           <Text style={[styles.label, {color: tokens.textSecondary}]}>
@@ -167,8 +174,8 @@ export function MessageEditModal({
           textAlignVertical="top"
         />
         {actions}
-      </Pressable>
-      <View style={styles.bottomSpacer} testID="message-edit-bottom-spacer" />
+        </Pressable>
+      </Animated.View>
     </Pressable>
   );
 
@@ -178,44 +185,18 @@ export function MessageEditModal({
       animationType="fade"
       transparent
       onRequestClose={onClose}>
-      {Platform.OS === 'ios' && !readOnly ? (
-        // iOS Modal 与键盘不同步，用 padding 行为避让
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={styles.avoidingRoot}
-          keyboardVerticalOffset={24}>
-          {modalBody}
-        </KeyboardAvoidingView>
-      ) : (
-        // AndroidManifest adjustResize 已托底；叠加 KAV height 会双重收缩 panel
-        // readOnly 无需键盘避让
-        modalBody
-      )}
+      {modalBody}
     </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  avoidingRoot: {
-    flex: 1,
-  },
   backdrop: {
     flex: 1,
-    flexDirection: 'column',
+    justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.4)',
     paddingHorizontal: 24,
-  },
-  topSpacer: {
-    flex: 1,
-    // 键盘压缩窗口时保留上方空白，仅收缩 bottomSpacer
-    flexShrink: 0,
-    minHeight: 0,
-  },
-  bottomSpacer: {
-    flex: 1,
-    flexShrink: 1,
-    minHeight: 0,
   },
   panel: {
     width: '100%',

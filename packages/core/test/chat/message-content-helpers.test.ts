@@ -1,16 +1,16 @@
 /**
- * message-content-helpers 单测。
+ * isUserInputMessage 单测（T-S2）。
  */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import {
   hasToolResult,
-  isPlainUserText,
+  isUserInputMessage,
 } from "../../src/domain/chat/logic/message-content-helpers.js";
+import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 
-function msg(
+function makeMsg(
   role: string,
   blocks: ChatMessage["content"]["blocks"],
 ): ChatMessage {
@@ -27,24 +27,24 @@ function msg(
   };
 }
 
-describe("message-content-helpers", () => {
-  it("hasToolResult 识别 tool_result 块", () => {
-    const withResult = msg("user", [
-      { type: "tool_result", toolUseId: "tu_1", content: "ok" },
-    ]);
-    const plain = msg("user", [{ type: "text", text: "hi" }]);
-    assert.equal(hasToolResult(withResult), true);
-    assert.equal(hasToolResult(plain), false);
+describe("isUserInputMessage (T-S2)", () => {
+  it("role=user + 纯 text → true", () => {
+    const msg = makeMsg("user", [{ type: "text", text: "你好" }]);
+    assert.equal(isUserInputMessage(msg), true);
+    // hasToolResult 顺便复验：纯 text 无 tool_result
+    assert.equal(hasToolResult(msg), false);
   });
 
-  it("isPlainUserText 仅 plain user 文本为 true", () => {
-    const plain = msg("user", [{ type: "text", text: "hello" }]);
-    const toolResult = msg("user", [
-      { type: "tool_result", toolUseId: "tu_1", content: "ok" },
+  it("role=user + 含 tool_result → false", () => {
+    const msg = makeMsg("user", [
+      { type: "tool_result", toolUseId: "tu_1", content: "result" },
     ]);
-    const assistant = msg("assistant", [{ type: "text", text: "hi" }]);
-    assert.equal(isPlainUserText(plain), true);
-    assert.equal(isPlainUserText(toolResult), false);
-    assert.equal(isPlainUserText(assistant), false);
+    assert.equal(isUserInputMessage(msg), false);
+    assert.equal(hasToolResult(msg), true);
+  });
+
+  it("role=assistant → false", () => {
+    const msg = makeMsg("assistant", [{ type: "text", text: "我回复" }]);
+    assert.equal(isUserInputMessage(msg), false);
   });
 });

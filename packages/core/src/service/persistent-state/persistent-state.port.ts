@@ -38,7 +38,7 @@ export interface PersistentState {
   resetCurrentRegexGroupId(): Promise<void>;
 
   /**
-   * 当前 Agent 指针；实体删除由 {@link import("@/service/agent/agent-registry.port.js").AgentRegistryService} 维护。
+   * 当前 Agent 指针；实体删除由 {@link import("../../service/agent/agent-registry.port.js").AgentRegistryService} 维护。
    */
   getCurrentAgentId(): Promise<string | undefined>;
   setCurrentAgentId(id: string): Promise<void>;

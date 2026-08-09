@@ -1,6 +1,6 @@
 /**
- * Agent 编辑器「常驻工作区」顶卡（section head + Switch + 助手确认语）。
- * 供全局 Agent 与定义表单两处共用；开关与文案均为受控，由调用方传入。
+ * 智能体编辑器「常驻工作区」顶卡（section head + Switch + 助手确认语）。
+ * 供全局智能体与定义表单两处共用；开关与文案均为受控，由调用方传入。
  */
 import {
   WORKPLACE_BLOCK_LABEL,

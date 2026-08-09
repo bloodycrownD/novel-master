@@ -16,7 +16,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   chat: {title: '会话', showBack: false, showNav: true},
   profile: {title: '我的', showBack: false, showNav: true},
   AgentsSettings: {title: '智能体配置', showBack: true, showNav: false},
-  AgentEditor: {title: 'Agent 配置', showBack: true, showNav: false},
+  AgentEditor: {title: '智能体配置', showBack: true, showNav: false},
   ProjectAgentConfig: {title: '项目智能体配置', showBack: true, showNav: false},
   RealPrompt: {title: '查看提示词', showBack: true, showNav: false},
   Providers: {title: '服务商配置', showBack: true, showNav: false},
@@ -36,6 +36,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   RegexRuleEditor: {title: '规则详情', showBack: true, showNav: false},
   FileEditor: {title: '编辑文件', showBack: true, showNav: false},
   SessionDetail: {title: '会话详情', showBack: true, showNav: false},
+  SubagentSessionView: {title: '子会话', showBack: true, showNav: false},
   ChatHistorySearch: {title: '聊天记录', showBack: true, showNav: false},
   About: {title: '关于 Novel Master', showBack: true, showNav: false},
 };

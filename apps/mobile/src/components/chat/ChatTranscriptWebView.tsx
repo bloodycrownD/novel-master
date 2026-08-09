@@ -84,6 +84,8 @@ export type ChatTranscriptWebViewProps = {
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
   readonly onOpenToolFile?: (path: string) => void;
+  /** 点击 task 工具卡片跳转子会话只读浏览（webview web app 发 openSubagentSession）。 */
+  readonly onOpenSubagentSession?: (sessionId: string) => void;
   readonly onOpenMessageMenu?: (
     messageId: string,
     pageX: number,
@@ -91,6 +93,8 @@ export type ChatTranscriptWebViewProps = {
   ) => void;
   readonly onMessageMenuAction?: (messageId: string, action: string) => void;
   readonly onWebMenuOpenChange?: (open: boolean) => void;
+  /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
+  readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
 };
 
 function transcriptFlagsEqual(
@@ -121,7 +125,8 @@ function chatTranscriptWebViewPropsEqual(
     prev.menuCloseSignal === next.menuCloseSignal &&
     prev.keyboardLiftNonce === next.keyboardLiftNonce &&
     prev.initialScroll === next.initialScroll &&
-    transcriptFlagsEqual(prev.flags, next.flags)
+    transcriptFlagsEqual(prev.flags, next.flags) &&
+    prev.pendingSubagentSessions === next.pendingSubagentSessions
   );
 }
 
@@ -222,9 +227,11 @@ export const ChatTranscriptWebView = memo(
         onReady,
         onLoadOlder,
         onOpenToolFile,
+        onOpenSubagentSession,
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
+        pendingSubagentSessions,
       },
       ref,
     ) {
@@ -233,6 +240,7 @@ export const ChatTranscriptWebView = memo(
       const transcriptListOptions = {
         agentRunning,
         runUiStopped: !uiRunning,
+        pendingSubagentSessions,
       };
       const { tokens } = useTheme();
       const webRef = useRef<WebView>(null);
@@ -753,6 +761,10 @@ export const ChatTranscriptWebView = memo(
             onOpenToolFile?.(message.payload.path);
             return;
           }
+          if (message.type === 'openSubagentSession') {
+            onOpenSubagentSession?.(message.payload.sessionId);
+            return;
+          }
           if (message.type === 'openMessageMenu') {
             if (uiRunning) {
               return;
@@ -786,6 +798,7 @@ export const ChatTranscriptWebView = memo(
           onScrollSnapshot,
           onLoadOlder,
           onOpenToolFile,
+          onOpenSubagentSession,
           onOpenMessageMenu,
           onMessageMenuAction,
           onWebMenuOpenChange,
@@ -882,6 +895,15 @@ export const ChatTranscriptWebView = memo(
         sendSessionSnapshot('preserve');
       }, [webReady, flags?.richText, sendSessionSnapshot]);
 
+      // pendingSubagentSessions 变化时（task 工具创建子会话事件到达），
+      // 重发 snapshot 让 pending task 卡片立即获得 subagentSessionId 可点击。
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        sendSessionSnapshot('preserve');
+      }, [webReady, pendingSubagentSessions, sendSessionSnapshot]);
+
       useEffect(() => {
         if (!webReady) {
           return;
@@ -919,7 +941,6 @@ export const ChatTranscriptWebView = memo(
         if (prevMessagesRef.current === messages) {
           return;
         }
-        prevMessagesRef.current = messages;
 
         const firstId = messages[0]?.id;
         const prevFirstId = prevFirstMessageIdRef.current;
@@ -930,6 +951,32 @@ export const ChatTranscriptWebView = memo(
           prevFirstId != null &&
           firstId != null &&
           firstId !== prevFirstId;
+
+        // 压缩/置位后消息数量和首条 ID 不变，但 hidden 字段变了。
+        // 前面的分支（grew/streamCommit/uiRunning）都不命中，会走到 else sendSessionSnapshot，
+        // 但 L976 的 streamCommit 分支可能在 lastStreamCommitIdsRef 非空时提前拦截。
+        // 这里在分流前检测 hidden 变化，确保走 sendSessionSnapshot 而不是被拦截。
+        if (!grew && prevFirstId === firstId && prevCount === messages.length && prevCount > 0) {
+          const prevMsgs = prevMessagesRef.current;
+          if (prevMsgs != null && prevMsgs.length === messages.length) {
+            let hiddenChanged = false;
+            for (let i = 0; i < messages.length; i++) {
+              if (prevMsgs[i]!.hidden !== messages[i]!.hidden) {
+                hiddenChanged = true;
+                break;
+              }
+            }
+            if (hiddenChanged) {
+              sendSessionSnapshot('preserve');
+              prevFirstMessageIdRef.current = firstId;
+              prevMessageCountRef.current = messages.length;
+              prevMessagesRef.current = messages;
+              return;
+            }
+          }
+        }
+
+        prevMessagesRef.current = messages;
 
         if (prependedOlder) {
           const prependedCount = messages.length - prevCount;

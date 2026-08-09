@@ -7,6 +7,7 @@ import {
   type AgentListPickerResponse,
   type AgentRegistryGetResponse,
   type AgentResolveCurrentResponse,
+  type AgentRunIsActiveRequest,
   type AgentRunRequest,
   type AgentSetCurrentRequest,
   type AgentActivityPayload,
@@ -65,6 +66,7 @@ import {
   type SessionSetAgentBindingRequest,
   type SessionSetComposerDraftRequest,
   type SessionSetModelOverrideRequest,
+
   type UserVfsHasPendingRequest,
   type VfsBatchClearStagingRequest,
   type VfsBatchExportStageRequest,
@@ -345,6 +347,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.AGENT_ABORT,
     ),
+    ipcAgentRunIsActive: withReq<AgentRunIsActiveRequest, IpcResult<boolean>>(
+      invoke,
+      IPC_CHANNELS.AGENT_RUN_IS_ACTIVE,
+    ),
     ipcAgentResolveCurrent: noArg<IpcResult<AgentResolveCurrentResponse>>(
       invoke,
       IPC_CHANNELS.AGENT_RESOLVE_CURRENT,
@@ -483,6 +489,7 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.AGENT_YAML_IMPORT,
     ),
+
     ipcRegexListGroups: noArg(invoke, IPC_CHANNELS.REGEX_LIST_GROUPS),
     ipcRegexCreateGroup: withReq<unknown, unknown>(
       invoke,

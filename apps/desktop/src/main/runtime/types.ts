@@ -8,7 +8,10 @@ import type {
   PersistentState,
   TdbcConnection,
 } from "@novel-master/core";
-import type { AgentRegistryService } from "@novel-master/core/agent";
+import type {
+  AgentAbortRegistry,
+  AgentRegistryService,
+} from "@novel-master/core/agent";
 import type {
   MessageService,
   MessageTranscriptEffectsService,
@@ -80,6 +83,8 @@ export interface DesktopNovelMasterRuntime {
   readonly modelRequests: ModelRequestService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
+  /** 按 sessionId 索引 in-flight run 的 controller，供停止按钮 / IPC 中断。 */
+  readonly abortRegistry: AgentAbortRegistry;
   readonly tokenCounters: TokenCounterRegistry;
   readonly userVfsTurn: UserVfsTurnService;
 }

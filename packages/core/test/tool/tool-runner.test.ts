@@ -19,7 +19,7 @@ describe("ToolRunner", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "test.sum",
-      description: "sum",
+      description: () => "sum",
       inputSchema: z.object({ a: z.number(), b: z.number() }),
       outputSchema: z.object({ sum: z.number() }),
       async run(input) {
@@ -41,7 +41,7 @@ describe("ToolRunner", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "test.fail",
-      description: "fail",
+      description: () => "fail",
       inputSchema: z.object({}),
       async run() {
         throw new Error("boom");
@@ -62,7 +62,7 @@ describe("ToolRunner", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "test.badOutput",
-      description: "bad output",
+      description: () => "bad output",
       inputSchema: z.object({}),
       outputSchema: z.object({ ok: z.literal(true) }),
       async run() {

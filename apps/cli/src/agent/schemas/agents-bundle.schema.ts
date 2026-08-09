@@ -7,11 +7,25 @@
 import { z } from "zod";
 import { promptsDocumentSchema } from "@novel-master/core/agent";
 
+/** Bundle 内单条 agent 的工具策略（与 core wire schema 同构）。 */
+const agentBundleToolPolicySchema = z
+  .object({
+    allow: z.array(z.string().min(1)).optional(),
+    deny: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
 const agentBundleEntrySchema = z
   .object({
     prompts: promptsDocumentSchema,
     model: z.string().min(1).optional(),
     runtime: z.object({ maxSteps: z.number().int().positive().optional() }).strict().optional(),
+    /** 可选工具 allow/deny 策略（缺省：全部注册工具）。旧 bundle 无此字段仍可导入。 */
+    tools: agentBundleToolPolicySchema.optional(),
+    /** 人类可读的 agent 描述（用于向主代理介绍本 agent 的能力）。 */
+    description: z.string().optional(),
+    /** 暴露范围：缺省按 "all" 解释（消费侧 fallback）。 */
+    mode: z.enum(["primary", "subagent", "all"]).optional(),
   })
   .strict();
 

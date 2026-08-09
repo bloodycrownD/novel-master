@@ -93,7 +93,7 @@ export function ProfileTabScreen() {
   const navigateTo = (route: keyof RootStackParamList) => {
     const parent = navigation.getParent();
     if (parent) {
-      parent.navigate(route);
+      parent.navigate(route as string);
     }
   };
 

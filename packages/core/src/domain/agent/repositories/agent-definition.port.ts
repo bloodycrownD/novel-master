@@ -9,6 +9,8 @@ import type { AgentDefinition } from "../model/agent-definition.js";
 /** Persistence for workspace agent definitions. */
 export interface AgentDefinitionRepository {
   listIds(): Promise<readonly string[]>;
+  /** 列出全部 agent 完整定义（仅 DB 行，不含虚拟 seed）。 */
+  list(): Promise<readonly AgentDefinition[]>;
   get(agentId: string): Promise<AgentDefinition | null>;
   /** 读取 prompts_json 解析后的 wire 对象，行不存在返回 null。 */
   getRawWire(agentId: string): Promise<unknown | null>;

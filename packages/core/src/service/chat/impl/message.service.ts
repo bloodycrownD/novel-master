@@ -216,6 +216,8 @@ export class DefaultMessageService implements MessageService {
         id: randomUUID(),
         projectId: source.projectId,
         title: forkTitle,
+        // P2-13：fork 出的是独立主会话，不继承源会话的 parent 关系。
+        parentSessionId: null,
         createdAtMs: now,
         updatedAtMs: now,
       };

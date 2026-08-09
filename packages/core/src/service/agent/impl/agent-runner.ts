@@ -120,7 +120,37 @@ function hasMeaningfulAssistantBlocks(
 }
 
 /**
- * Executes agent loops: conditions �?LLM �?tools �?repeat up to maxSteps.
+ * 从 task 工具的 outcome.output 提取 `subagentSessionId`（P0-1）。
+ *
+ * 仅 task 工具有该字段；其他工具输出不含 subagentSessionId，返回 undefined。
+ * 本函数与 {@link buildToolResultBlock} 内部检测互补：build 内部会优先看 output，
+ * 这里显式提取是为了让 agent-runner 调用处意图更明显（C34），便于追踪。
+ *
+ * phase-1-abort-reflow：导出以供单测固化「中断回流场景仍走同一提取路径」
+ * （output.stopped=true 也带 subagentSessionId，本函数不看 stopped，只看
+ * subagentSessionId 是否为 string，天然覆盖）。
+ */
+export function extractSubagentSessionIdFromOutcome(
+  outcome: { readonly ok: boolean; readonly output?: unknown } | {
+    readonly ok: boolean; readonly error?: unknown;
+  },
+): string | undefined {
+  if (!outcome.ok) return undefined;
+  const output = (outcome as { output?: unknown }).output;
+  if (
+    output != null &&
+    typeof output === "object" &&
+    !Array.isArray(output) &&
+    typeof (output as { subagentSessionId?: unknown }).subagentSessionId ===
+      "string"
+  ) {
+    return (output as { subagentSessionId: string }).subagentSessionId;
+  }
+  return undefined;
+}
+
+/**
+ * Executes agent loops: conditions → LLM → tools → repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
   private readonly toolRunner: ToolRunner<BuiltinToolContext>;
@@ -164,11 +194,14 @@ export class DefaultAgentRunner implements AgentRunner {
     const doomLoopCrossRoundWindow =
       options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
-    const tools = toolsFromRegistry(this.deps.registry);
+    const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
+    // 常驻工作区前缀 scope：从 session 拿归属 id。子 session 的归属指向父 session
+    //（子 session 新建、kkv 空，工作区前缀读父的 rule_snapshot / file_cache），
+    // 主 session 的归属是自身。VFS 也复用同一归属 session 视图。
     const wtScope: VfsScope = {
       kind: "session",
       projectId,
-      sessionId,
+      sessionId: session.workplaceScopeSessionId,
     };
 
     // turn 起点 = run() 开始时 session 里最后一条消息；abort 后干净回滚到这里
@@ -468,6 +501,9 @@ export class DefaultAgentRunner implements AgentRunner {
           buildToolResultBlock(tu.id, outcomes[i]!, {
             toolName: tu.name,
             vfsScope: { kind: "session", projectId, sessionId },
+            // task 工具输出对象含 subagentSessionId：透传到 ToolResultBlock.meta（P0-1）。
+            // buildToolResultBlock 内部还会从 outcome.output.subagentSessionId 自动检测。
+            subagentSessionId: extractSubagentSessionIdFromOutcome(outcomes[i]!),
           }),
         );
 
@@ -609,7 +645,7 @@ async function applyLlmRegexChannelToVisible(
  * 这里不再为每个 stream event 各自 `queueMicrotask`：那样 N 个 event 会插进 N 条微任务，
  * 中间可能被其它微任务（订阅者倒序调用、scheduler 等）插入，跨批次顺序不稳。
  *
- * 改成单个“合并刷新”：同一同步批次的全部 stream event 先压进 `pendingQueue`，只调度一次
+ * 改成单个"合并刷新"：同一同步批次的全部 stream event 先压进 `pendingQueue`，只调度一次
  * `queueMicrotask(flush)`。flush 里按 FIFO 顺序逐条 publish，保证批次内顺序确定、
  * 批次间也只有一个微任务槽位，跨批次顺序不会被随机插入打乱。bus.publish 仍然不在调用方
  * 同步执行（避免订阅者中途回访 runner 产生的重入）。

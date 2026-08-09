@@ -117,3 +117,33 @@ export async function loadChatAgentMeta(
     throw error;
   }
 }
+
+/**
+ * Agent 是否被锁定（不可在会话内切换）。
+ *
+ * 只有 source='session' 才放开，project-custom（项目截断）和 none（解析失败）
+ * 一律视为锁定。meta 还没加载出来（undefined）时也按锁定处理，避免异常态误触。
+ */
+export function isAgentLocked(meta: ChatAgentMeta | undefined): boolean {
+  if (!meta) {
+    return true;
+  }
+  return meta.source !== 'session';
+}
+
+/**
+ * Model 是否被锁定（不可在会话内覆盖）。
+ *
+ * Agent 锁定时 model 必然也锁；Agent 放开时再额外看 agent-pin 压制 / hasDedicatedModel。
+ * hasDedicatedModel 已是 boolean（非 optional），不需要再兜 ?? false。
+ */
+export function isModelLocked(meta: ChatAgentMeta | undefined): boolean {
+  if (!meta) {
+    return true;
+  }
+  return (
+    isAgentLocked(meta) ||
+    meta.modelSource === 'agent-pin' ||
+    meta.hasDedicatedModel
+  );
+}

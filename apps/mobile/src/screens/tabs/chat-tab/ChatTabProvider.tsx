@@ -16,7 +16,12 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { type ChatMessage } from '@novel-master/core/chat';
 import type { VfsService } from '@novel-master/core/vfs';
 import type { WorkplaceService } from '@novel-master/core/workplace';
+import {
+  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+  type SubagentChildSessionCreatedPayload,
+} from '@novel-master/core/events';
 import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
+import type { StreamWireChunk } from '@/services/stream-wire-queue';
 import type { MessageMenuAnchor } from '@/components/chat/MessageActionMenu';
 import type { VfsFileManagerHandle } from '@/components/vfs/VfsFileManager';
 import type { ChatListScrollSnapshot } from '@/services/chat-list-scroll-cache';
@@ -51,7 +56,9 @@ import {
   type ConversationPanel,
 } from './useChatTabScope';
 import { useChatTabScrollCache } from './useChatTabStream';
-import { useChatStreamRuntime } from './useChatStreamRuntime';
+import { useSessionAbort } from './useSessionAbort';
+import { useSessionBatch } from './useSessionBatch';
+import { useSessionStream } from './useSessionStream';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -116,11 +123,18 @@ export type ChatTabContextValue = {
   ) => void;
   readonly useWebviewTranscript: boolean;
   readonly chatRichTextEnabled: boolean;
+  /**
+   * pending task 工具的子会话映射（title → childSessionId）。
+   * 由 EVENT_SUBAGENT_CHILD_SESSION_CREATED 维护，让执行中的 task 卡片可点击进入子会话。
+   */
+  readonly pendingSubagentSessions: ReadonlyMap<string, string>;
   readonly richRenderEpoch: number;
   readonly webMenuCloseSignal: number;
   readonly webMenuOpen: boolean;
   readonly setWebMenuOpen: (open: boolean) => void;
   readonly beginUiRun: () => void;
+  /** UI run 异常收尾（composer catch 路径用）。 */
+  readonly endUiRunOnError: () => void;
   readonly abortUiRun: () => void;
   readonly onLoadOlderMessages: () => void;
   readonly onOpenFileEditor: (
@@ -189,11 +203,40 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     }
   }, [scope.chatSubview, sessionId, projectId, refreshChatMeta]);
 
+  // 订阅子会话创建事件：task 工具执行中（createChildSession）即发出，
+  // 用 title → childSessionId 维护映射，让 pending 卡片也能点击进入子会话浏览。
+  // 切换会话时清空，避免上一个会话的映射串到新会话。
+  useEffect(() => {
+    if (sessionId == null) {
+      setPendingSubagentSessions(new Map());
+      return undefined;
+    }
+    const sid = sessionId;
+    setPendingSubagentSessions(new Map());
+    const sub = runtime.eventBus.subscribe(
+      EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+      (payload: SubagentChildSessionCreatedPayload) => {
+        if (payload.parentSessionId !== sid) {
+          return;
+        }
+        setPendingSubagentSessions(prev => {
+          const next = new Map(prev);
+          next.set(payload.title, payload.childSessionId);
+          return next;
+        });
+      },
+    );
+    return () => sub.unsubscribe();
+  }, [runtime.eventBus, sessionId]);
+
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
+  const [pendingSubagentSessions, setPendingSubagentSessions] = useState<
+    Map<string, string>
+  >(() => new Map());
   const [chatStreamBatchEnabled, setChatStreamBatchEnabled] = useState(true);
   const [messageMenuTarget, setMessageMenuTarget] = useState<
     ChatMessage | undefined
@@ -217,22 +260,39 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     useWebviewTranscript,
   });
 
+  const onStreamResetRef = useRef<() => void>(() => undefined);
+  const applySegmentsRef = useRef<(segments: readonly StreamWireChunk[]) => void>(
+    () => undefined,
+  );
   const agentRunningRef = useRef(false);
-  const streamResetRef = useRef<() => void>(() => undefined);
   const chatMessageCountRef = useRef(0);
 
   useEffect(() => {
     chatMessageCountRef.current = messages.chatMessages.length;
   }, [messages.chatMessages.length]);
 
-  const lifecycle = useAgentRunLifecycle({
-    onStreamReset: () => streamResetRef.current(),
+  // 装配顺序（P1-2）：先实例化 abort 单元（传 onStreamResetRef 占位 no-op），
+  // 再实例化 batch / lifecycle / stream，最后把 stream 输出的 handleStreamReset
+  // 写入同一个 ref——这样 abort 状态机调 onStreamResetRef.current() 即可，
+  // abort 与 stream 两个单元不直接 import。apply 叶子同理：batch 接收一个
+  // ref 包装，stream mount 后把自己的 applySegments 写进去。
+  const abort = useSessionAbort({
+    sessionId,
+    abortRegistry: runtime.abortRegistry,
+    onStreamResetRef,
   });
 
   const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
   useEffect(() => subscribeMobileAgentActivity(setAgentActive), []);
 
+  const lifecycle = useAgentRunLifecycle({
+    onRunUiActivate: abort.markRunStarted,
+    onRunUiDeactivate: abort.markRunEnded,
+    getUiRunning: abort.getUiRunning,
+  });
+
   useEffect(() => {
+    abort.resetForSessionChange();
     lifecycle.resetUiForSessionChange();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 session 切换时重置 UI
   }, [sessionId]);
@@ -251,28 +311,36 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     [messages, scope.refreshChatTokenLabel],
   );
 
-  const abortUiRunWithFreeze = useCallback(() => {
-    lifecycle.abortUiRun(chatMessageCountRef.current);
-  }, [lifecycle]);
+  const batch = useSessionBatch({
+    applySegments: segments => applySegmentsRef.current(segments),
+  });
 
-  const stream = useChatStreamRuntime({
+  const stream = useSessionStream({
     sessionId,
-    uiRunning: lifecycle.uiRunning,
     useWebviewTranscript,
-    chatStreamBatchEnabled,
+    batchEnabled: chatStreamBatchEnabled,
     transcriptWebRef,
-    onMessagesChanged: handleMessagesChanged,
-    getMessageCount: () => chatMessageCountRef.current,
-    getUiRunning: lifecycle.getUiRunning,
-    getTranscriptFreezeCount: lifecycle.getTranscriptFreezeCount,
-    getAbortRetainPending: lifecycle.getAbortRetainPending,
-    clearAbortRetainPending: lifecycle.clearAbortRetainPending,
+    uiRunning: abort.uiRunning,
     acceptRunEvent: lifecycle.acceptRunEvent,
     onRunStarted: lifecycle.onRunStarted,
     onRunFinished: lifecycle.onRunFinished,
     onRunFailed: lifecycle.onRunFailed,
+    getUiRunning: abort.getUiRunning,
+    getTranscriptFreezeCount: abort.getTranscriptFreezeCount,
+    getAbortRetainPending: abort.getAbortRetainPending,
+    clearAbortRetainPending: abort.clearAbortRetainPending,
+    batchIngest: batch.ingestWireChunk,
+    batchClear: batch.clearBuffers,
+    onMessagesChanged: handleMessagesChanged,
+    getMessageCount: () => chatMessageCountRef.current,
   });
-  streamResetRef.current = stream.handleStreamReset;
+  // 拆环：stream mount 后把 apply 叶子 / stream reset 写入两个占位 ref。
+  applySegmentsRef.current = stream.applySegments;
+  onStreamResetRef.current = stream.handleStreamReset;
+
+  const abortUiRunWithFreeze = useCallback(() => {
+    abort.abortUiRun(chatMessageCountRef.current);
+  }, [abort]);
 
   agentRunningRef.current = agentActive;
 
@@ -347,10 +415,10 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       chatSubview: scope.chatSubview,
       setChatSubview: scope.setChatSubview,
       agentMeta: scope.agentMeta,
-      uiRunning: lifecycle.uiRunning,
+      uiRunning: abort.uiRunning,
       agentActive,
       activeRunId: lifecycle.activeRunId,
-      streamTailGenerating: lifecycle.uiRunning,
+      streamTailGenerating: abort.uiRunning,
       streamingText: stream.streamingText,
       streamingThinking: stream.streamingThinking,
       streamMetricsLastRun: stream.streamMetricsLastRun,
@@ -389,11 +457,13 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       setMessageEditPrompt,
       useWebviewTranscript,
       chatRichTextEnabled,
+      pendingSubagentSessions,
       richRenderEpoch,
       webMenuCloseSignal,
       webMenuOpen,
       setWebMenuOpen,
       beginUiRun: lifecycle.beginUiRun,
+      endUiRunOnError: lifecycle.endUiRunOnError,
       abortUiRun: abortUiRunWithFreeze,
       onLoadOlderMessages: () =>
         messages.loadOlderMessages().catch(() => undefined),
@@ -416,6 +486,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       sessionId,
       scope,
       lifecycle,
+      abort,
       agentActive,
       stream,
       messages,
@@ -428,6 +499,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       messageEditPrompt,
       useWebviewTranscript,
       chatRichTextEnabled,
+      pendingSubagentSessions,
       richRenderEpoch,
       webMenuCloseSignal,
       webMenuOpen,

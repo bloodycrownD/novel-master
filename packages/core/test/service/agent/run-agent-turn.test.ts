@@ -117,6 +117,7 @@ function makeRuntime(overrides: {
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
+      list: async () => [definition],
       get: async () => definition,
     },
     projects: {

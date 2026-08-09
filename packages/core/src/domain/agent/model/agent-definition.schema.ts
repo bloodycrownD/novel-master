@@ -124,6 +124,9 @@ export const agentDefinitionDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
     name: z.string().min(1),
+    description: z.string().optional(),
+    /** 暴露范围：缺省按 "all" 解释（消费侧 fallback）。 */
+    mode: z.enum(["primary", "subagent", "all"]).optional(),
     prompts: promptsDocumentSchema,
     model: z.string().uuid().optional(),
     runtime: z
@@ -187,6 +190,10 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
   const tools = wireToolsToDomain(doc.tools);
   return {
     name: doc.name,
+    ...(doc.description != null && doc.description.length > 0
+      ? { description: doc.description }
+      : {}),
+    ...(doc.mode != null ? { mode: doc.mode } : {}),
     prompts,
     model: doc.model,
     runtime: doc.runtime,
@@ -206,6 +213,10 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
   return {
     schemaVersion: 1,
     name: def.name,
+    ...(def.description != null && def.description.trim().length > 0
+      ? { description: def.description }
+      : {}),
+    ...(def.mode != null ? { mode: def.mode } : {}),
     prompts: {
       ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
       persistEnabled: def.prompts.persistEnabled ?? false,
@@ -238,6 +249,7 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
 
 const agentDefinitionWireSchema = z.preprocess((raw) => {
   assertNoLegacyAgentFields(raw);
+  // subagentCallable 已废弃且功能未发布，无旧数据需兼容：strict schema 直接拒绝。
   return raw;
 }, agentDefinitionDocumentSchema);
 

@@ -25,6 +25,8 @@ interface MessageListProps {
   ) => void;
   /** 点击文件类工具卡片时在聊天工作区 Preview 打开路径。 */
   onOpenToolFile?: (path: string) => void;
+  /** 点击 task 工具卡片时跳转只读子会话面板。 */
+  onOpenSubagentSession?: (sessionId: string) => void;
 }
 
 function MessageBody({
@@ -56,6 +58,7 @@ export function MessageList({
   chatRichText = false,
   onOpenMessageMenu,
   onOpenToolFile,
+  onOpenSubagentSession,
 }: MessageListProps) {
   const hasStreaming = uiRunning;
 
@@ -140,6 +143,7 @@ export function MessageList({
                   tools={item.tools}
                   dimmed={msg.hidden}
                   onOpenFile={onOpenToolFile}
+                  onOpenSubagentSession={onOpenSubagentSession}
                 />
               ) : null}
             </div>

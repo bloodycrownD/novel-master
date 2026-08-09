@@ -15,6 +15,7 @@ import {
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
+  MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
@@ -35,6 +36,7 @@ import {
   withDynamicBlockPersistence,
   withWorkplaceToggle,
   type ToolsMode,
+  type AgentMode,
 } from '@novel-master/core/config-forms/agent';
 import {
   STORED_CONFIG_LABELS,
@@ -121,6 +123,7 @@ export function AgentEditorForm(props: Props) {
   const navigation = useNavigation<StackNav>();
   const runtime = useRuntime();
   const [name, setName] = useState('');
+  const [mode, setMode] = useState<AgentMode>('all');
   const [maxSteps, setMaxSteps] = useState('20');
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState('');
@@ -134,6 +137,8 @@ export function AgentEditorForm(props: Props) {
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState('');
+  // 人类可读的 agent 描述（对应域 description，多行文本）。
+  const [description, setDescription] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -158,6 +163,7 @@ export function AgentEditorForm(props: Props) {
     () =>
       formSnapshotJson({
         name,
+        mode,
         maxSteps,
         modelEnabled,
         providerId,
@@ -172,6 +178,7 @@ export function AgentEditorForm(props: Props) {
         workplaceAssistantText,
         customAttachEnabled,
         customAttachText,
+        description,
         persist,
         dynamic,
       }),
@@ -191,6 +198,7 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     ],
@@ -229,6 +237,7 @@ export function AgentEditorForm(props: Props) {
     async (def: AgentDefinition) => {
       const promptForm = definitionToForm(def);
       setName(def.name);
+      setMode(def.mode ?? 'all');
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
       setSystemEnabled(promptForm.systemEnabled);
       setSystemContent(promptForm.systemContent);
@@ -238,6 +247,7 @@ export function AgentEditorForm(props: Props) {
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
       setCustomAttachText(promptForm.customAttachText ?? '');
+      setDescription(promptForm.description ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -473,6 +483,7 @@ export function AgentEditorForm(props: Props) {
   const handleSave = async () => {
     const built = buildAgentDefinitionFromForm({
       name,
+      mode,
       maxSteps,
       modelEnabled,
       providerId,
@@ -487,6 +498,7 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     });
@@ -519,7 +531,7 @@ export function AgentEditorForm(props: Props) {
       }
       setSavedBaseline(snapshot);
       await onSaved?.();
-      showToast(isProjectMode ? '已保存项目专属配置' : '已保存 Agent 配置');
+      showToast(isProjectMode ? '已保存项目专属配置' : '已保存智能体配置');
     } catch (error) {
       showToast(toastMessage('保存失败', error));
     } finally {
@@ -539,7 +551,7 @@ export function AgentEditorForm(props: Props) {
   }, [runtime, agentId, showToast]);
 
   const handleImportYaml = useCallback(() => {
-    Alert.alert('导入 YAML', '将覆盖当前 Agent 配置，是否继续？', [
+    Alert.alert('导入 YAML', '将覆盖当前智能体配置，是否继续？', [
       { text: '取消', style: 'cancel' },
       {
         text: '导入',
@@ -846,7 +858,7 @@ export function AgentEditorForm(props: Props) {
             </View>
           ) : (
             <Text style={[styles.hint, { color: tokens.textSecondary }]}>
-              项目专属配置，不会写入全局 Agent 列表。
+              项目专属配置，不会写入全局智能体列表。
             </Text>
           )}
           <FormField label="名称" tokens={tokens}>
@@ -854,6 +866,28 @@ export function AgentEditorForm(props: Props) {
               tokens={tokens}
               value={name}
               onChangeText={setName}
+            />
+          </FormField>
+          <FormField label="作用域" tokens={tokens}>
+            <FormSelectField
+              tokens={tokens}
+              value={mode}
+              onChange={value => setMode(value as AgentMode)}
+              options={MODE_OPTIONS}
+              sheetTitle="选择作用域"
+            />
+          </FormField>
+          <FormField
+            label="描述"
+            tokens={tokens}
+            hint="向 task 工具说明这个智能体擅长什么，可留空。"
+          >
+            <FormTextInput
+              tokens={tokens}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              placeholder="例如：擅长检索代码库、写测试。"
             />
           </FormField>
         </FormSectionCard>
@@ -950,8 +984,8 @@ export function AgentEditorForm(props: Props) {
             </FormField>
           ) : (
             <Text style={[styles.hint, { color: tokens.textSecondary }]}>
-              未配置时使用全部内置工具（6
-              个）：read、write、edit、fs、glob、grep。
+              未配置时使用全部内置工具（7
+              个）：task、read、write、edit、fs、glob、grep。
             </Text>
           )}
         </FormSectionCard>

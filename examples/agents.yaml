@@ -2,6 +2,7 @@
 schemaVersion: 1
 agents:
   writer:
+    mode: subagent
     runtime:
       maxSteps: 20
     prompts:
@@ -23,6 +24,16 @@ agents:
             目录：
             {{$filetree}}
   summarizer:
+    mode: subagent
     prompts:
+      persist: {}
+      dynamic: {}
+  # general: 出厂内置的虚拟 subagent（递归基线，不可删除、不可同名创建）
+  general:
+    mode: subagent
+    description: 通用 subagent 模板，擅长读写文件、搜索内容，可完成主代理委派的探索性任务。
+    prompts:
+      system: |
+        你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。
       persist: {}
       dynamic: {}

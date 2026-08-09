@@ -1,0 +1,88 @@
+# agent-mode-refactor 开发编排状态（code-dev-loop）
+# 维护方：主代理；子代理只读参考
+# DAG/编排状态放这里，不写 apm dynamic/persist
+
+prd_path: docs/Iterations/agent-mode-refactor/prd.md
+spec_path: docs/Iterations/agent-mode-refactor/spec.md
+branch: feat/merge-subagent
+base_sha: 37dcd56c
+head_sha: da1d8da6
+
+spec_summary: >
+  把子代理可调用性从全局名单(KKV subagentNames)改为 AgentDefinition.mode 字段
+  (primary/subagent/all)；Tool.description 改函数类型 (ctx)=>string；task 作为静态
+  内置工具在 registerBuiltinTools 注册；validateAgentToolPolicy 内部中心过滤 task；
+  upsert 禁止 name==="general"。7 phase / 32 step。
+
+# dag_version 1→2：wave-9 test-doc 发现 import-export.ts 缺 mode 映射（spec Step 4 遗漏），
+# not-ready 重编排插入 fix 节点
+dag_version: 2
+
+node_status:
+  impl-model: { status: done, head_sha: f5eeb9f9 }
+  impl-core-tool: { status: done, head_sha: 340dad60 }
+  impl-test-fix: { status: done, head_sha: 17b5b59e }
+  verify-core: { status: done, note: "build ✅; test 1777/1765 pass/12 fail(pre-existing)" }
+  cr-func-core: { status: done, func_ready: yes }
+  impl-persist: { status: done, head_sha: 251455e5 }
+  impl-form-state: { status: done, head_sha: 708745c6 }
+  cr-func-persist-form: { status: done, func_ready: yes }
+  impl-desktop: { status: done, head_sha: 26b0fea1 }
+  impl-mobile: { status: done, head_sha: 2cec6238 }
+  cr-func-desktop-mobile: { status: done, func_ready: yes, note: "发现 AgentDefinitionEditorForm 漏扫，已补 mode 缺省值(3dd810b6)" }
+  impl-test-doc: { status: done, head_sha: 23feb1e1 }
+  fix-import-export-mode: { status: done, head_sha: da1d8da6, note: "import-export.ts 补 mode 映射 + import 跳过 general + CLI list 改用 list()" }
+  cr-func-final: { status: done, func_ready: yes }
+
+open_must_fix: []
+
+# spec_deviations：均已修复（非 open），记录 spec 探索阶段的漏扫
+spec_deviations:
+  - id: SD-1
+    severity: P1
+    desc: "AgentDefinitionEditorForm.tsx（项目级 agent 编辑器）未被 spec 覆盖；phase-form-state 加必填 mode 后 TS2345"
+    resolution: "补 mode:'all' 缺省值（3dd810b6）；项目级 mode 切换 UI 不在本迭代 scope"
+  - id: SD-2
+    severity: P0
+    desc: "import-export.ts 缺 mode 字段映射；spec Step 4 只改 bundle schema，漏了映射层"
+    resolution: "bundleToDefinitions + exportAgentsToFile 各补 mode 映射（da1d8da6）"
+  - id: SD-3
+    severity: P0
+    desc: "Step 6 禁止 upsert general 后，import examples/agents.yaml（含 general 条目）崩溃；CLI list 不显示 seed general"
+    resolution: "importAgentsFromFile 跳过 general（da1d8da6）；CLI agent list 改用 registry.list() 含 seed"
+
+# 测试结果汇总
+test_results:
+  core_build: pass
+  core_test: "1777 tests / 1765 pass / 12 fail (全 pre-existing: vfs/fs-command 系列、delete-invalid、ToolRunner.runParallel)"
+  cli_e2e: "5/5 pass (agent-registry-e2e)"
+  cli_bundle_schema: "9/9 pass (agents-bundle)"
+  desktop_tsc_main_shared: pass
+  desktop_vite_build: pass
+  mobile_tsc: pass
+  mobile_jest: "agent-picker-modal 6/6 pass（含新增 T-AC7 subagent 过滤用例）"
+  T_C1_zero_residue: pass
+
+# blocking 测试覆盖状态
+blocking_tests:
+  T-T1: pass  # task 始终可见（subagent-tool.test）
+  T-T2: pass  # mode 驱动候选（装配段 filter + mock 间接覆盖）
+  T-T3: pass  # 自递归防护
+  T-T4: pass  # 递归上限 depth>=2 deny
+  T-C1: pass  # 名单零残留（全局 grep）
+  T-C4: pass  # task 不进 allow/deny（task-whitelist 保留通过）
+  T-G1: pass  # general mode 固定 subagent + 禁止重名（list-seed Step30）
+  T-P1: pass  # 主代理选择过滤（移动端自动化；桌面 picker manual_user）
+  T-U1: pending_manual  # 三端 mode 选择器一致 + 桌面 picker 过滤
+  T-B1: pending_manual  # 三端 build + CLI bundle 回归
+
+# 剩余 manual_user 步骤（不阻塞代码 dev-ready，需用户手测验收）
+pending_manual_user:
+  - Step 24: 桌面 handleAgentListPicker subagent 过滤手测（T-U1）
+  - Step 32: 三端 build 验证（desktop electron build + mobile android build + cli bundle schema 导入导出回归）（T-B1）
+
+# 审查阶段历史（spec-check-loop，已结束）
+spec_check:
+  dag_version: 13
+  review_round: 7
+  conclusion: Go（execute-ready）

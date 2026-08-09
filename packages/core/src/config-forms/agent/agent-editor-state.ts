@@ -23,13 +23,23 @@ import {
 
 export type ToolsMode = "default" | "allow" | "deny";
 
+/** 智能体作用域（与域 {@link AgentDefinition}["mode"] 对应）。 */
+export type AgentMode = "primary" | "subagent" | "all";
+
 /** persist / dynamic 文本块可选角色（system 单独顶置）。 */
 export const PROMPT_BLOCK_ROLES = ["user", "assistant"] as const;
 
 export const TOOL_MODE_OPTIONS: Array<{ value: ToolsMode; label: string }> = [
   { value: "default", label: "默认（全部工具）" },
+  // 注：task 工具始终注册、始终可用，不进 allow/deny 策略（AC-9）。
   { value: "allow", label: "白名单" },
   { value: "deny", label: "黑名单" },
+];
+
+export const MODE_OPTIONS: Array<{ value: AgentMode; label: string }> = [
+  { value: "all", label: "默认（全部）" },
+  { value: "primary", label: "仅主智能体" },
+  { value: "subagent", label: "仅子智能体" },
 ];
 
 const ROLE_LABELS: Record<(typeof PROMPT_BLOCK_ROLES)[number], string> = {
@@ -47,6 +57,8 @@ export { DEFAULT_WORKPLACE_ASSISTANT_TEXT };
 /** Agent 编辑器表单（三区 layout，非扁平 prompts）。 */
 export type AgentEditorFormInput = {
   name: string;
+  /** 暴露范围（与域 {@link AgentDefinition}["mode"] 对应；缺省按 "all" 解释）。 */
+  mode: AgentMode;
   maxSteps: string;
   modelEnabled: boolean;
   providerId: string;
@@ -65,6 +77,8 @@ export type AgentEditorFormInput = {
   customAttachEnabled?: boolean;
   /** 自定义附加信息文本（开但 trim 空时静默省略，不阻断保存）。 */
   customAttachText?: string;
+  /** 人类可读的 agent 描述（与域 `description` 对应；多行文本，空则 omit）。 */
+  description?: string;
   persist: readonly EditorPersistPromptBlock[];
   dynamic: readonly DynamicPromptBlock[];
 };
@@ -432,6 +446,7 @@ export function definitionToForm(
   def: AgentDefinition
 ): Pick<
   AgentEditorFormInput,
+  | "mode"
   | "systemEnabled"
   | "systemContent"
   | "persistEnabled"
@@ -440,6 +455,8 @@ export function definitionToForm(
   | "workplaceAssistantText"
   | "customAttachEnabled"
   | "customAttachText"
+  | "description"
+  | "description"
   | "persist"
   | "dynamic"
 > {
@@ -449,6 +466,7 @@ export function definitionToForm(
   const customAttachText =
     typeof def.prompts.customAttach === "string" ? def.prompts.customAttach : "";
   return {
+    mode: def.mode ?? "all",
     systemEnabled: system.length > 0,
     systemContent: def.prompts.system ?? "",
     persistEnabled: def.prompts.persistEnabled ?? false,
@@ -457,6 +475,7 @@ export function definitionToForm(
     workplaceAssistantText: workplaceText,
     customAttachEnabled: layoutHasCustomAttach(def.prompts),
     customAttachText,
+    description: def.description ?? "",
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
   };
@@ -522,6 +541,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     workplaceAssistantText: input.workplaceAssistantText,
     customAttachEnabled: input.customAttachEnabled ?? false,
     customAttachText: input.customAttachText ?? "",
+    description: input.description ?? "",
     persist: input.persist,
     dynamic: input.dynamic,
   });
@@ -569,14 +589,17 @@ export function buildAgentDefinitionFromForm(
     }
     modelPin = trimmed;
   }
+  const descriptionText = (input.description ?? "").trim();
   const def: AgentDefinition = {
     name: input.name.trim(),
+    mode: input.mode,
     prompts: validatedLayout,
     ...(Number.isFinite(steps) && steps > 0
       ? { runtime: { maxSteps: steps } }
       : {}),
     ...(modelPin != null ? { model: modelPin } : {}),
     ...(tools != null ? { tools } : {}),
+    ...(descriptionText.length > 0 ? { description: descriptionText } : {}),
   };
   return { ok: true, definition: def };
 }

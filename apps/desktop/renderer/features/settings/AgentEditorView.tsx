@@ -16,6 +16,7 @@ import {
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
+  MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -33,6 +34,7 @@ import {
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
   withWorkplaceToggle,
+  type AgentMode,
   type ToolsMode,
 } from "@shared/logic/config-forms-agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
@@ -116,9 +118,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   // 自定义附加信息开关 / 文本（对应域 prompts.customAttach）。
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState("");
+  // 人类可读的 agent 描述（对应域 description，多行文本）。
+  const [description, setDescription] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
+  const [mode, setMode] = useState<AgentMode>("all");
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
   const [providers, setProviders] = useState<
     Array<{ id: string; label: string }>
@@ -146,6 +151,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       formSnapshotJson({
         name,
         maxSteps,
+        mode,
         modelEnabled,
         providerId,
         savedModelId: savedModelId,
@@ -159,12 +165,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         workplaceAssistantText,
         customAttachEnabled,
         customAttachText,
+        description,
         persist,
         dynamic,
       }),
     [
       name,
       maxSteps,
+      mode,
       modelEnabled,
       providerId,
       savedModelId,
@@ -178,6 +186,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     ]
@@ -237,6 +246,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       const def = agentRes.data.value as AgentDefinition;
       const promptForm = definitionToForm(def);
       setName(def.name ?? "");
+      setMode(promptForm.mode);
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
       setSystemEnabled(promptForm.systemEnabled);
       setSystemContent(promptForm.systemContent);
@@ -247,6 +257,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
       setCustomAttachEnabled(promptForm.customAttachEnabled);
       setCustomAttachText(promptForm.customAttachText);
+      setDescription(promptForm.description ?? "");
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -392,7 +403,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     return (
       <SettingsPanel>
         <div className="settings-error-panel">
-          <p className="settings-error-panel__title">无法加载 Agent 配置</p>
+          <p className="settings-error-panel__title">无法加载智能体配置</p>
           <p className="settings-error-panel__message">{loadError}</p>
           <div className="settings-error-panel__actions">
             <Button variant="secondary" onClick={() => nav.pop()}>
@@ -418,6 +429,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const save = async () => {
     const built = buildAgentDefinitionFromForm({
       name,
+      mode,
       maxSteps,
       modelEnabled: false,
       providerId: "",
@@ -432,6 +444,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      description,
       persist,
       dynamic,
     });
@@ -453,7 +466,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       });
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
-        toastSettingsSuccess("已保存 Agent 配置");
+        toastSettingsSuccess("已保存智能体配置");
       } else {
         toastSettingsError(saveRes.error.message);
       }
@@ -606,7 +619,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     <SettingsPanel>
       {loading ? <p className="settings-hint">加载中…</p> : null}
       <SettingsFormSection
-        title="Agent 配置"
+        title="智能体配置"
         desc={`编辑 ${displayName}${dirty ? " · 未保存" : ""}`}
         toolbar={
           <div className="settings-yaml-links">
@@ -644,6 +657,29 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
+          </SettingsField>
+          <SettingsField label="描述">
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="向 task 工具说明这个智能体擅长什么，可留空。"
+            />
+          </SettingsField>
+          <p className="settings-hint settings-hint--compact">
+            用于在 task 工具中向主智能体介绍本智能体的能力。
+          </p>
+          <SettingsField label="作用域">
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as AgentMode)}
+            >
+              {MODE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </SettingsField>
         </SettingsSection>
 
@@ -727,8 +763,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </SettingsField>
           ) : (
             <p className="settings-hint">
-              未配置时使用全部内置工具（6
-              个）：read、write、edit、fs、glob、grep。
+              未配置时使用全部内置工具（7
+              个）：task、read、write、edit、fs、glob、grep。
             </p>
           )}
         </SettingsSection>
@@ -1175,7 +1211,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       <ConfirmModal
         open={confirmImport}
         title="导入 YAML"
-        message="将覆盖当前 Agent 配置，是否继续？"
+        message="将覆盖当前智能体配置，是否继续？"
         onConfirm={() => {
           setConfirmImport(false);
           void ipcAgentYamlImport({ agentId }).then((r) => {

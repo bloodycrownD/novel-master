@@ -4,7 +4,10 @@
  * @module runtime/create-mobile-runtime
  */
 
-import { createAgentRegistryService } from '@novel-master/core/agent';
+import {
+  createAgentAbortRegistry,
+  createAgentRegistryService,
+} from '@novel-master/core/agent';
 import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
@@ -61,6 +64,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
 
   const regexConfig = createRegexConfigService(conn, state);
   const agentRegistry = createAgentRegistryService(conn, state);
+  const abortRegistry = createAgentAbortRegistry();
 
   const secretStore = createCompositeSecretStore({
     db: resolveSkspDriver('android').createStore(conn),
@@ -138,6 +142,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     compactionConditionEvaluator: lazyCompactionConditionEvaluator,
     eventOrchestrator,
     agentRegistry,
+    abortRegistry,
     tokenCounters,
     projects,
     sessions,

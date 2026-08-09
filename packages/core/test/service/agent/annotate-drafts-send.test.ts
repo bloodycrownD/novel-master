@@ -17,7 +17,7 @@ import {
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { hasComposerSendableInput } from "@/domain/chat/logic/composer-sendable-input.js";
 import { wrapUserMessageForLlm } from "@/domain/chat/logic/wrap-user-message-for-llm.js";
-import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
+import { buildAnnotateAttachmentFromDraft, buildFileAnnotateAttachmentFromDraft, formatAnnotateLocationLabel } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsByPath } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import {
   messageAttachmentSchema,
@@ -64,6 +64,9 @@ function makeRuntime(overrides: {
   ) => Promise<{ id: string }>;
   readonly delete?: (id: string) => Promise<void>;
   readonly userVfsTurn?: UserVfsTurnService;
+  readonly sessionVfs?: () => {
+    read: (path: string) => Promise<{ content: string }>;
+  };
 }): AgentTurnRuntimePort {
   return {
     state: {
@@ -73,6 +76,7 @@ function makeRuntime(overrides: {
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
+      list: async () => [sampleDefinition],
       get: async () => sampleDefinition,
     },
     projects: {
@@ -96,7 +100,9 @@ function makeRuntime(overrides: {
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator:
       {} as AgentTurnRuntimePort["eventOrchestrator"],
-    sessionVfs: () => ({} as never),
+    sessionVfs:
+      overrides.sessionVfs ??
+      (() => ({} as never)),
     workplace: () =>
       ({
         renderDisplay: async () => "",
@@ -347,6 +353,259 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
       (err: unknown) =>
         err instanceof AgentTurnError && err.message === "消息不能为空",
     );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+});
+
+describe("formatAnnotateLocationLabel（位置标签拼装）", () => {
+  it("单行：startLine === endLine → 「第 N 行」", () => {
+    assert.equal(formatAnnotateLocationLabel(5, 5), "第 5 行");
+    assert.equal(formatAnnotateLocationLabel(3, 3), "第 3 行");
+  });
+
+  it("跨行：startLine < endLine → 「第 A-B 行」", () => {
+    assert.equal(formatAnnotateLocationLabel(5, 7), "第 5-7 行");
+    assert.equal(formatAnnotateLocationLabel(1, 10), "第 1-10 行");
+  });
+
+  it("endLine 缺省 → 退化为单行", () => {
+    assert.equal(formatAnnotateLocationLabel(5, undefined), "第 5 行");
+    assert.equal(formatAnnotateLocationLabel(5, null), "第 5 行");
+  });
+
+  it("endLine 小于 startLine → 以 startLine 为下限（防御式 normalize）", () => {
+    assert.equal(formatAnnotateLocationLabel(5, 3), "第 5 行");
+  });
+
+  it("startLine 缺省 / 非正整数 → undefined（不写键）", () => {
+    assert.equal(formatAnnotateLocationLabel(undefined, 5), undefined);
+    assert.equal(formatAnnotateLocationLabel(null, 5), undefined);
+    assert.equal(formatAnnotateLocationLabel(0, 5), undefined);
+    assert.equal(formatAnnotateLocationLabel(-1, 5), undefined);
+    assert.equal(formatAnnotateLocationLabel(Number.NaN, 5), undefined);
+  });
+});
+
+describe("buildFileAnnotateAttachmentFromDraft：locationLabel 注入", () => {
+  it("有 startLine/endLine → params 含 locationLabel 自然语言", () => {
+    const att = buildFileAnnotateAttachmentFromDraft({
+      id: "x",
+      path: "/a.md",
+      originalText: "原文",
+      userAnnotation: "批",
+      startLine: 5,
+      endLine: 7,
+    });
+    assert.match(att.content, /"locationLabel": "第 5-7 行"/);
+    assert.match(att.content, /"startLine": 5/);
+    assert.match(att.content, /"endLine": 7/);
+  });
+
+  it("单行 locationLabel", () => {
+    const att = buildFileAnnotateAttachmentFromDraft({
+      id: "x",
+      path: "/a.md",
+      originalText: "原文",
+      userAnnotation: "批",
+      startLine: 3,
+      endLine: 3,
+    });
+    assert.match(att.content, /"locationLabel": "第 3 行"/);
+  });
+
+  it("无行号 → 不写 locationLabel（老附件兼容）", () => {
+    const att = buildFileAnnotateAttachmentFromDraft({
+      id: "x",
+      path: "/a.md",
+      originalText: "原文",
+      userAnnotation: "批",
+    });
+    assert.doesNotMatch(att.content, /locationLabel/);
+  });
+});
+
+describe("runAgentTurn 批注行号补算（VFS read + originalText 反查）", () => {
+  it("草稿缺 startLine、VFS 能读到源文本且 originalText 命中 → 落库附件含行号 + locationLabel", async () => {
+    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    // 源文件第 3 行包含 "find-me"
+    const source = "L1\nL2\nfind-me\nL4\nL5\n";
+    let appendedAtts: readonly MessageAttachment[] | undefined;
+    const runtime = makeRuntime({
+      append: async (_s, _r, _c, opts) => {
+        appendedAtts = opts?.attachments;
+        return { id: "u-lin1" };
+      },
+      userVfsTurn: mockUserVfsTurn(),
+      sessionVfs: () => ({
+        read: async () => ({ content: source }),
+      }),
+    });
+
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p1", sessionId: "s1" },
+        "hi",
+        {
+          annotateDrafts: [
+            {
+              id: "d1",
+              path: "/note.md",
+              originalText: "find-me",
+              userAnnotation: "就是这",
+            },
+          ],
+          stream: false,
+        },
+      );
+    } catch {
+      // runner 可能失败；append 已发生即可
+    }
+
+    assert.ok(appendedAtts != null);
+    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+    assert.equal(ann.length, 1);
+    // padding=0 精确行号：命中原第 3 行
+    assert.match(ann[0]!.content ?? "", /"startLine": 3/);
+    assert.match(ann[0]!.content ?? "", /"locationLabel": "第 3 行"/);
+
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("草稿缺 startLine、VFS 拿不到源文本（read 招错） → 静默跳过，不写行号也不报错", async () => {
+    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    let appendedAtts: readonly MessageAttachment[] | undefined;
+    const runtime = makeRuntime({
+      append: async (_s, _r, _c, opts) => {
+        appendedAtts = opts?.attachments;
+        return { id: "u-lin2" };
+      },
+      userVfsTurn: mockUserVfsTurn(),
+      sessionVfs: () => ({
+        read: async () => {
+          throw new Error("no such file");
+        },
+      }),
+    });
+
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p1", sessionId: "s1" },
+        "hi",
+        {
+          annotateDrafts: [
+            {
+              id: "d1",
+              path: "/missing.md",
+              originalText: "x",
+              userAnnotation: "y",
+            },
+          ],
+          stream: false,
+        },
+      );
+    } catch {
+      // runner 可能失败
+    }
+
+    assert.ok(appendedAtts != null);
+    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+    assert.equal(ann.length, 1);
+    // 招错 → 不行行号补算，locationLabel / startLine 均不出现
+    assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
+    assert.doesNotMatch(ann[0]!.content ?? "", /startLine/);
+
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("originalText 在源文本里查不到 → 静默跳过行号补算", async () => {
+    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    const source = "aaa\nbbb\nccc\n";
+    let appendedAtts: readonly MessageAttachment[] | undefined;
+    const runtime = makeRuntime({
+      append: async (_s, _r, _c, opts) => {
+        appendedAtts = opts?.attachments;
+        return { id: "u-lin3" };
+      },
+      userVfsTurn: mockUserVfsTurn(),
+      sessionVfs: () => ({
+        read: async () => ({ content: source }),
+      }),
+    });
+
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p1", sessionId: "s1" },
+        "hi",
+        {
+          annotateDrafts: [
+            {
+              id: "d1",
+              path: "/note.md",
+              originalText: "不存在的选区文本 xyz",
+              userAnnotation: "y",
+            },
+          ],
+          stream: false,
+        },
+      );
+    } catch {
+      // runner 可能失败
+    }
+
+    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+    assert.equal(ann.length, 1);
+    assert.doesNotMatch(ann[0]!.content ?? "", /locationLabel/);
+
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("草稿已带 startLine/endLine → 不覆盖，原样物化", async () => {
+    refreshUserVfsUnifiedToolTurnSnapshot(true);
+    let appendedAtts: readonly MessageAttachment[] | undefined;
+    const runtime = makeRuntime({
+      append: async (_s, _r, _c, opts) => {
+        appendedAtts = opts?.attachments;
+        return { id: "u-lin4" };
+      },
+      userVfsTurn: mockUserVfsTurn(),
+      sessionVfs: () => ({
+        // 故意返回和草稿行号不同的内容，验证不被覆盖
+        read: async () => ({ content: "L1\nL2\ntarget\nL4\n" }),
+      }),
+    });
+
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p1", sessionId: "s1" },
+        "hi",
+        {
+          annotateDrafts: [
+            {
+              id: "d1",
+              path: "/note.md",
+              originalText: "target",
+              userAnnotation: "y",
+              startLine: 99,
+              endLine: 99,
+            },
+          ],
+          stream: false,
+        },
+      );
+    } catch {
+      // runner 可能失败
+    }
+
+    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+    assert.equal(ann.length, 1);
+    // 草稿自带 99/99 不应被 VFS 反查出的 3 覆盖
+    assert.match(ann[0]!.content ?? "", /"startLine": 99/);
+    assert.match(ann[0]!.content ?? "", /"locationLabel": "第 99 行"/);
+
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 });

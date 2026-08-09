@@ -9,7 +9,7 @@ import {
 const mockSetCurrentAgentId = jest.fn(async () => undefined);
 const mockGetCurrentAgentId = jest.fn(async () => undefined as string | undefined);
 const mockListAgentIds = jest.fn(async () => [] as string[]);
-const mockGet = jest.fn(async () => ({name: 'writer'}));
+const mockGet = jest.fn(async () => ({name: 'writer', mode: 'all'} as const));
 
 function mockRuntime() {
   return {
@@ -54,12 +54,32 @@ describe('AgentPickerModal (picker service)', () => {
     mockListAgentIds.mockResolvedValue(['a1', 'a2']);
     mockGet.mockImplementation(async (id: string) => ({
       name: id === 'a1' ? 'Alpha' : 'Beta',
+      mode: 'all',
     }));
 
     const {rows} = await loadAgentPickerRows(mockRuntime() as never);
     expect(rows).toEqual([
       {agentId: 'a1', label: 'Alpha'},
       {agentId: 'a2', label: 'Beta'},
+    ]);
+  });
+
+  it('T-AC7: filters out agents whose mode is subagent (AC-7)', async () => {
+    mockListAgentIds.mockResolvedValue(['primary', 'sub', 'all']);
+    mockGet.mockImplementation(async (id: string) => {
+      if (id === 'primary') {
+        return {name: 'Primary', mode: 'primary'};
+      }
+      if (id === 'sub') {
+        return {name: 'Sub', mode: 'subagent'};
+      }
+      return {name: 'All', mode: 'all'};
+    });
+
+    const {rows} = await loadAgentPickerRows(mockRuntime() as never);
+    expect(rows).toEqual([
+      {agentId: 'primary', label: 'Primary'},
+      {agentId: 'all', label: 'All'},
     ]);
   });
 });

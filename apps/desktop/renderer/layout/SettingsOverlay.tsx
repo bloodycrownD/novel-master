@@ -35,7 +35,7 @@ function getSettingsMainTitle(
   agentEditorTitle?: string,
 ): string {
   if (viewId === "agentEditor") {
-    return agentEditorTitle ?? navState.editingAgentDisplayName ?? "Agent 配置";
+    return agentEditorTitle ?? navState.editingAgentDisplayName ?? "智能体配置";
   }
   if (viewId === "providerDetail") return "模型管理";
   if (viewId === "providerCreate") return "新建服务商";
@@ -108,6 +108,7 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <AgentsSettingsView nav={nav} />;
       case "agentEditor":
         return <AgentEditorView nav={nav} />;
+
       case "providers":
         return <ProvidersView nav={nav} />;
       case "providerCreate":

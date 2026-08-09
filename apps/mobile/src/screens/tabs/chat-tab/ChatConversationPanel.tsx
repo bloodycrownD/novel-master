@@ -28,7 +28,17 @@ import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
 import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
 import { VfsFileManager } from '@/components/vfs/VfsFileManager';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import type { ThemeTokens } from '@/theme/tokens';
+import { useToast } from '@/components/chrome/ToastHost';
+import {
+  isAgentLocked,
+  isModelLocked,
+} from '@/services/chat-agent-meta';
+import type {ThemeTokens} from '@/theme/tokens';
+
+// 锁定提示文案与 SessionDetailScreen 对齐（项目级锁定 / agent-pin 压制）。
+const AGENT_LOCK_TOAST =
+  '智能体已被项目锁定，无法在会话内切换，请到「项目智能体配置」修改';
+const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabWorkspaceBackState } from './ChatTabNavigationProvider';
 import { useChatTabController } from './useChatTabController';
@@ -86,6 +96,7 @@ export function ChatConversationPanel({
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
+  const { showToast } = useToast();
   const {
     conversationPanel,
     setConversationPanel,
@@ -102,6 +113,7 @@ export function ChatConversationPanel({
     chatMessages,
     hasMoreMessages,
     chatRichTextEnabled,
+    pendingSubagentSessions,
     richRenderEpoch,
     webMenuCloseSignal,
     restoredTranscriptScroll,
@@ -129,6 +141,7 @@ export function ChatConversationPanel({
     messageEditPrompt,
     setMessageEditPrompt,
     beginUiRun,
+    endUiRunOnError,
     abortUiRun,
     onStreamReset,
     onMessagesChanged,
@@ -185,6 +198,24 @@ export function ChatConversationPanel({
     }
   }, [conversationPanel, workspaceVfsRef]);
 
+  // 顶部 meta 条点 agent / model 名 → 判锁定后开对应 picker，判据统一走 helper，
+  // 不再各处手写 source/modelSource/hasDedicatedModel 的组合。
+  const openAgentPicker = useCallback(() => {
+    if (isAgentLocked(agentMeta)) {
+      showToast(AGENT_LOCK_TOAST);
+      return;
+    }
+    setAgentPickerOpen(true);
+  }, [agentMeta, showToast, setAgentPickerOpen]);
+
+  const openModelPicker = useCallback(() => {
+    if (isModelLocked(agentMeta)) {
+      showToast(MODEL_LOCK_TOAST);
+      return;
+    }
+    setModelPickerOpen(true);
+  }, [agentMeta, showToast, setModelPickerOpen]);
+
   const chatPanelStyle = [
     styles.chatPanel,
     conversationPanel !== 'chat' && styles.panelHidden,
@@ -194,7 +225,11 @@ export function ChatConversationPanel({
   const chatHeader =
     projectId != null && sessionId != null ? (
       <>
-        <ChatMetaBar meta={agentMeta} />
+        <ChatMetaBar
+          meta={agentMeta}
+          onPressAgent={openAgentPicker}
+          onPressModel={openModelPicker}
+        />
         <ChatStreamMetricsBarLive
           agentRunning={uiRunning}
           accRef={streamMetricsAccRef}
@@ -221,6 +256,8 @@ export function ChatConversationPanel({
           onScrollSnapshot={onChatScrollSnapshot}
           onLoadOlder={onLoadOlderMessages}
           onOpenToolFile={scope.openSessionFilePreview}
+          onOpenSubagentSession={scope.openSubagentSession}
+          pendingSubagentSessions={pendingSubagentSessions}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onMessageMenuAction={controller.onWebMessageMenuAction}
         />
@@ -239,6 +276,8 @@ export function ChatConversationPanel({
           onScrollSnapshot={onChatScrollSnapshot}
           onMessageLongPress={controller.handleMessageLongPress}
           onOpenToolFile={scope.openSessionFilePreview}
+          onOpenSubagentSession={scope.openSubagentSession}
+          pendingSubagentSessions={pendingSubagentSessions}
           listHeaderComponent={
             hasMoreMessages ? (
               <Pressable
@@ -261,6 +300,7 @@ export function ChatConversationPanel({
         hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
         running={uiRunning}
         beginUiRun={beginUiRun}
+        endUiRunOnError={endUiRunOnError}
         abortUiRun={abortUiRun}
         onStreamReset={onStreamReset}
         onMessagesChanged={onMessagesChanged}
@@ -269,7 +309,9 @@ export function ChatConversationPanel({
         lastMessageHasToolResult={lastMessageHasToolResult}
         lastMessageIsPlainUserText={lastMessageIsPlainUserText}
         draftRestoreToken={draftRestoreToken}
-        onOpenMore={() => setSessionDrawerOpen(true)}
+        // 「更多」按钮已在 ChatComposer 内注释隐藏，这里不再传 onOpenMore，
+        // 避免传了却没人响应造成误解。压缩/切换等入口改由会话详情页抽屉承担。
+        // onOpenMore={() => setSessionDrawerOpen(true)}
       />
     ) : null;
 
@@ -395,7 +437,7 @@ export function ChatConversationPanel({
 const styles = StyleSheet.create({
   subviewFill: { flex: 1, minHeight: 0 },
   panelHidden: { display: 'none' },
-  chatPanel: { flex: 1 },
+  chatPanel: { flex: 1, backgroundColor: 'transparent' },
   keyboardClip: { flex: 1, minHeight: 0, overflow: 'hidden' },
   keyboardLiftBody: { flex: 1, minHeight: 0 },
   transcriptHost: { flex: 1, minHeight: 0 },

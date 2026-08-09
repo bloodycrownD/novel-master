@@ -15,7 +15,10 @@ export class InMemoryAgentSession implements AgentSession {
   private readonly messages: ChatMessage[] = [];
   private seq = 0;
 
-  constructor(readonly sessionId = "in-memory") {}
+  constructor(
+    readonly sessionId = "in-memory",
+    readonly workplaceScopeSessionId = sessionId,
+  ) {}
 
   async list(): Promise<readonly ChatMessage[]> {
     return this.messages.filter((m) => !m.hidden);

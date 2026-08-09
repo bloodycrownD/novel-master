@@ -36,6 +36,7 @@ import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
 import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
+import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
 import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {AboutScreen} from '../screens/stack/AboutScreen';
 import {useAutoUpdateCheck} from '../hooks/useAutoUpdateCheck';
@@ -157,6 +158,10 @@ const SessionDetailStackScreen = withStackLayout(
   'SessionDetail',
   SessionDetailScreen,
 );
+const SubagentSessionStackScreen = withStackLayout(
+  'SubagentSessionView',
+  SubagentSessionScreen,
+);
 const ChatHistorySearchStackScreen = withStackLayout(
   'ChatHistorySearch',
   ChatHistorySearchScreen,
@@ -184,7 +189,11 @@ export function RootNavigator() {
             name="ProjectAgentConfig"
             component={ProjectAgentConfigStackScreen}
           />
-          <Stack.Screen name="RealPrompt" component={RealPromptStackScreen} />
+          <Stack.Screen
+            name="RealPrompt"
+            component={RealPromptStackScreen}
+            options={{animation: 'none'}}
+          />
           <Stack.Screen name="Providers" component={ProvidersStackScreen} />
           <Stack.Screen name="ProviderCreate" component={ProviderCreateStackScreen} />
           <Stack.Screen name="ProviderEdit" component={ProviderEditStackScreen} />
@@ -217,6 +226,10 @@ export function RootNavigator() {
           <Stack.Screen
             name="SessionDetail"
             component={SessionDetailStackScreen}
+          />
+          <Stack.Screen
+            name="SubagentSessionView"
+            component={SubagentSessionStackScreen}
           />
           <Stack.Screen
             name="ChatHistorySearch"

@@ -9,7 +9,7 @@ describe("ToolRegistry", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "test.echo",
-      description: "echo",
+      description: () => "echo",
       inputSchema: z.object({ x: z.number() }),
       outputSchema: z.object({ x: z.number() }),
       async run(input) {
@@ -25,7 +25,7 @@ describe("ToolRegistry", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "dup",
-      description: "dup",
+      description: () => "dup",
       inputSchema: z.object({}),
       async run() {
         return null;
@@ -35,7 +35,7 @@ describe("ToolRegistry", () => {
       () =>
         registry.register({
           name: "dup",
-          description: "dup2",
+          description: () => "dup2",
           inputSchema: z.object({}),
           async run() {
             return null;
@@ -49,7 +49,7 @@ describe("ToolRegistry", () => {
     const registry = new ToolRegistry();
     registry.register({
       name: "x",
-      description: "x",
+      description: () => "x",
       inputSchema: z.object({}),
       async run() {
         return null;

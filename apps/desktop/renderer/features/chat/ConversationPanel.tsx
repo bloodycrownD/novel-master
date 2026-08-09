@@ -14,15 +14,18 @@ import type {
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
+  AgentRunStartedPayload,
   AgentStepCommittedPayload,
 } from '@shared/agent-event-types';
-import { useAgentStream } from '@/hooks/useAgentStream';
+import { useAgentStream, type UseAgentStreamCallbacks } from '@/hooks/useAgentStream';
 import { useAgentRunLifecycle, shouldApplyTranscriptReload } from '@/hooks/useAgentRunLifecycle';
 import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';
 import { useAgentStreamMetrics } from '@/hooks/useAgentStreamMetrics';
 import { useDesktopAgentActive } from '@/hooks/useDesktopAgentActive';
 import {
   ipcAppUiGet,
+  ipcAgentAbort,
+  ipcAgentRunIsActive,
   ipcCompactionManual,
   ipcMessagesEdit,
   ipcMessagesFork,
@@ -58,7 +61,6 @@ import { MessageEditModal } from './MessageEditModal';
 import {
   handleRunFinishedAbortRetain,
   handleStepCommittedAbortRetain,
-  shouldAcceptStreamIngress,
 } from './conversation-abort-retain';
 import { MessageList } from './MessageList';
 import { RealPromptPanel } from './RealPromptPanel';
@@ -68,6 +70,18 @@ interface ConversationPanelProps {
   projectId: string;
   sessionId: string;
   onOpenSessionActions: (anchor: HTMLElement) => void;
+  /**
+   * 只读模式：用于子智能体会话浏览。开启后不渲染 Composer、不写入草稿 IPC、
+   * 不允许消息右键菜单（hide/edit/rollback 等写操作）。读消息 / 跳转预览仍可用。
+   */
+  readOnly?: boolean;
+  /** 点击 task 工具卡片时跳转只读子会话面板；仅需在父面板传入。 */
+  onOpenSubagentSession?: (sessionId: string) => void;
+  /**
+   * 运行态上报（Phase 3 Step 23）：只读子会话面板的停止按钮需要知道
+   * 子 agent 是否在跑。父级（ChatRail）用这个回调订阅 running 变化。
+   */
+  onRunningChange?: (running: boolean) => void;
 }
 
 type RollbackConfirmContext = {
@@ -95,6 +109,9 @@ export function ConversationPanel({
   projectId,
   sessionId,
   onOpenSessionActions,
+  readOnly = false,
+  onOpenSubagentSession,
+  onRunningChange,
 }: ConversationPanelProps) {
   const {
     notifyWorkspaceMutated,
@@ -107,9 +124,6 @@ export function ConversationPanel({
   const vfsMutatedInRunRef = useRef(false);
   const [tab, setTab] = useState<'chat' | 'realPrompt'>('chat');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
-  const [streamingText, setStreamingText] = useState('');
-  const [streamingThinking, setStreamingThinking] = useState('');
-  const streamingTextRef = useRef('');
 
   const runLifecycle = useAgentRunLifecycle();
   const {
@@ -125,25 +139,49 @@ export function ConversationPanel({
     onRunFinished: finishUiRun,
     onRunFailed: failUiRun,
     resetUiForSessionChange,
+    markExternalRunActive,
+    markExternalRunEnded,
   } = runLifecycle;
 
   const abortUiRun = useCallback(() => {
+    // Phase 3 Step 19：abort 单元自己经 IPC 调 core registry，
+    // ChatComposer / ChatRail 停止按钮只调本函数即可，不再单独发 ipcAgentAbort。
     abortUiRunBase(messages.length);
-  }, [abortUiRunBase, messages.length]);
+    void ipcAgentAbort({ sessionId });
+  }, [abortUiRunBase, messages.length, sessionId]);
 
   const agentActive = useDesktopAgentActive();
 
-  const onStreamReset = useCallback(() => {
-    streamingTextRef.current = '';
-    setStreamingText('');
-    setStreamingThinking('');
-  }, []);
+  // Phase 3 Step 20：stream 单元提前实例化，拿回 streamingText /
+  // streamingThinking / streamingTextRef / onStreamReset 给下面的
+  // session 切换 effect 与 onStepCommitted / onRunFinished / onRunFailed 使用。
+  // 回调集合走 ref（callbacksRef）：本帧稍后定义完回调再写入 ref.current，
+  // useAgentStream 在事件到达时现读——不依赖定义顺序，与 Mobile P1-2 对称。
+  const streamCallbacksRef = useRef<UseAgentStreamCallbacks>({
+    acceptRunEvent: () => false,
+    getUiRunning: () => false,
+  });
+  const {
+    streamingText,
+    streamingThinking,
+    streamingTextRef,
+    onStreamReset,
+  } = useAgentStream({
+    sessionId,
+    callbacksRef: streamCallbacksRef,
+    batchEnabled: true,
+  });
 
   useEffect(() => {
     if (running) {
       vfsMutatedInRunRef.current = false;
     }
   }, [running]);
+
+  // Phase 3 Step 23：把 running 上报给父级（ChatRail 只读面板的停止按钮用）。
+  useEffect(() => {
+    onRunningChange?.(running);
+  }, [running, onRunningChange]);
   const {
     metrics: streamMetrics,
     noteTextDelta: noteMetricsTextDelta,
@@ -194,6 +232,17 @@ export function ConversationPanel({
     void reloadMessages();
   }, [reloadMessages]);
 
+  // 手动压缩成功后重新拉取消息列表（旧消息 hidden 已在 DB 置 true，前端需刷新才能看到降透明度）
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if ((e as CustomEvent<{ sessionId: string }>).detail?.sessionId === sessionId) {
+        void reloadMessages();
+      }
+    };
+    window.addEventListener('session-compacted', handler);
+    return () => window.removeEventListener('session-compacted', handler);
+  }, [sessionId, reloadMessages]);
+
   // 详情抽屉「查看提示词」请求：切到 realPrompt tab
   useEffect(() => {
     if (viewPromptRequest?.token && viewPromptRequest.token > 0) {
@@ -218,6 +267,11 @@ export function ConversationPanel({
     composerDraftHydratedRef.current = false;
     setComposerText('');
     setComposerAttachments([]);
+
+    if (readOnly) {
+      // 只读面板不水化草稿、不订阅写 IPC。
+      return;
+    }
 
     let cancelled = false;
     void (async () => {
@@ -247,10 +301,13 @@ export function ConversationPanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, resetUiForSessionChange, onStreamReset]);
+  }, [sessionId, resetUiForSessionChange, onStreamReset, readOnly]);
 
   // 水化完成后：仅持久 attach+text（状态条不进列）
   useEffect(() => {
+    if (readOnly) {
+      return;
+    }
     if (!composerDraftHydratedRef.current) {
       return;
     }
@@ -260,7 +317,7 @@ export function ConversationPanel({
       attachments: [],
     });
     void ipcSessionsSetComposerDraft({ sessionId, draftJson });
-  }, [sessionId, composerText, composerAttachments]);
+  }, [sessionId, composerText, composerAttachments, readOnly]);
 
   useEffect(() => {
     ipcAppUiGet('chatRichText')
@@ -271,35 +328,6 @@ export function ConversationPanel({
       )
       .catch(() => undefined);
   }, []);
-
-  const onTextDelta = useCallback(
-    (delta: string) => {
-      if (!shouldAcceptStreamIngress(getUiRunning())) {
-        return;
-      }
-      if (delta.length === 0) {
-        return;
-      }
-      noteMetricsTextDelta(delta);
-      setStreamingText(prev => {
-        const next = prev + delta;
-        streamingTextRef.current = next;
-        return next;
-      });
-    },
-    [getUiRunning, noteMetricsTextDelta],
-  );
-
-  const onThinkingDelta = useCallback(
-    (delta: string) => {
-      if (!shouldAcceptStreamIngress(getUiRunning())) {
-        return;
-      }
-      noteMetricsThinkingDelta(delta);
-      setStreamingThinking(prev => prev + delta);
-    },
-    [getUiRunning, noteMetricsThinkingDelta],
-  );
 
   const abortRetainLifecycle = useMemo(
     () => ({
@@ -365,6 +393,7 @@ export function ConversationPanel({
       finishUiRun,
       getUiRunning,
       getTranscriptFreezeCount,
+      streamingTextRef,
       sessionId,
       reloadMessages,
       onStreamReset,
@@ -381,9 +410,7 @@ export function ConversationPanel({
       if (!failUiRun(payload)) {
         return;
       }
-      streamingTextRef.current = '';
-      setStreamingText('');
-      setStreamingThinking('');
+      onStreamReset();
       if (vfsMutatedInRunRef.current) {
         notifyWorkspaceMutated();
       }
@@ -400,19 +427,112 @@ export function ConversationPanel({
       notifyWorkspaceMutated,
       getUiRunning,
       getTranscriptFreezeCount,
+      onStreamReset,
     ],
   );
 
-  useAgentStream({
-    sessionId,
-    acceptRunEvent,
-    onTextDelta,
-    onThinkingDelta,
-    onRunStarted,
-    onStepCommitted,
-    onRunFinished,
-    onRunFailed,
-  });
+  // ===== FR8-1：readOnly 子面板放宽守卫（对齐 mobile SubagentSessionScreen）=====
+  //
+  // readOnly 子会话的典型时序是「面板晚于 run 启动」：mount 时 RUN_STARTED 已是历史。
+  // 主会话的 beginUiRun + shouldAcceptRunEvent 守卫在这个场景断裂（beginUiRun 先把
+  // activeRunId 置 null，迟到 RUN_FINISHED 被守卫拒绝 → uiRunning 卡死）。
+  // 这里另起一套回调：acceptRunEvent 放宽为非空 runId 即接受、不碰 activeRunId、
+  // 只翻 uiRunning + 触发 reload。
+  const readOnlyAcceptRunEvent = useCallback(
+    (runId: string | undefined) => runId != null && runId !== '',
+    [],
+  );
+  const readOnlyOnRunStarted = useCallback(
+    (_payload: AgentRunStartedPayload) => {
+      markExternalRunActive();
+      void reloadMessages();
+    },
+    [markExternalRunActive, reloadMessages],
+  );
+  const readOnlyOnRunFinished = useCallback(
+    (payload: AgentRunFinishedPayload) => {
+      markExternalRunEnded();
+      onStreamReset();
+      if (payload.vfsMutated) {
+        notifyWorkspaceMutated();
+      }
+      void reloadMessages();
+    },
+    [markExternalRunEnded, onStreamReset, reloadMessages, notifyWorkspaceMutated],
+  );
+  const readOnlyOnRunFailed = useCallback(
+    (payload: AgentRunFailedPayload) => {
+      markExternalRunEnded();
+      onStreamReset();
+      if (vfsMutatedInRunRef.current) {
+        notifyWorkspaceMutated();
+      }
+      vfsMutatedInRunRef.current = false;
+      void reloadMessages();
+    },
+    [markExternalRunEnded, onStreamReset, reloadMessages, notifyWorkspaceMutated],
+  );
+
+  // readOnly mount probe：主动查 IPC 该 session 是否有 in-flight run，
+  // 若有则 markExternalRunActive 初始化 uiRunning=true（不调 beginUiRun、不动 activeRunId）。
+  //
+  // FR8-1 风险4 IPC 往返竞态防护：useAgentStream 的 bus 订阅比本 effect 先 mount，
+  // 极端时序下 run 可能在 IPC 往返期间结束——迟到 RUN_FINISHED 先到→markExternalRunEnded
+  // 把 endedRef 置位→markExternalRunActive 退化为 no-op，uiRunning 不会错误翻回 true。
+  // 再补一次复询：若第二次查询返回 false（run 确实已结束），markExternalRunEnded 兑底。
+  useEffect(() => {
+    if (!readOnly || sessionId == null) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const res = await ipcAgentRunIsActive({ sessionId });
+      if (cancelled) {
+        return;
+      }
+      if (res.ok && res.data) {
+        markExternalRunActive();
+        void reloadMessages();
+        // 竞态校正：IPC 往返期间 run 可能已结束，复询一次兑底。
+        const recheck = await ipcAgentRunIsActive({ sessionId });
+        if (cancelled) {
+          return;
+        }
+        if (recheck.ok && !recheck.data) {
+          markExternalRunEnded();
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 mount / sessionId 切换时 probe
+  }, [sessionId, readOnly]);
+
+  // Phase 3 Step 20：stream 单元在组件顶部已实例化（拿回 streamingText /
+  // streamingTextRef / onStreamReset）。这里把定义完的生命周期回调 + 守卫
+  // 同步写入 callbacksRef，让 useAgentStream 的事件订阅现读最新值。
+  streamCallbacksRef.current = readOnly
+    ? {
+        acceptRunEvent: readOnlyAcceptRunEvent,
+        getUiRunning,
+        noteTextDelta: noteMetricsTextDelta,
+        noteThinkingDelta: noteMetricsThinkingDelta,
+        onRunStarted: readOnlyOnRunStarted,
+        onStepCommitted,
+        onRunFinished: readOnlyOnRunFinished,
+        onRunFailed: readOnlyOnRunFailed,
+      }
+    : {
+        acceptRunEvent,
+        getUiRunning,
+        noteTextDelta: noteMetricsTextDelta,
+        noteThinkingDelta: noteMetricsThinkingDelta,
+        onRunStarted,
+        onStepCommitted,
+        onRunFinished,
+        onRunFailed,
+      };
 
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   useChatMessagesScrollFollow(chatMessagesRef, {
@@ -550,8 +670,7 @@ export function ConversationPanel({
         showToast(result.error.message);
         return;
       }
-      streamingTextRef.current = '';
-      setStreamingText('');
+      onStreamReset();
       await reloadMessages();
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
@@ -576,7 +695,7 @@ export function ConversationPanel({
         options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
       );
     },
-    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
+    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated, onStreamReset],
   );
 
   const handleMessageAction = useCallback(
@@ -617,8 +736,7 @@ export function ConversationPanel({
           showToast(result.error.message);
           return;
         }
-        streamingTextRef.current = '';
-        setStreamingText('');
+        onStreamReset();
         await openSession(result.data, projectName ?? '—');
         return;
       }
@@ -633,6 +751,7 @@ export function ConversationPanel({
       rollbackToMessage,
       openSession,
       projectName,
+      onStreamReset,
     ],
   );
 
@@ -784,8 +903,9 @@ export function ConversationPanel({
             streamTailGenerating={running}
             agentRunning={agentActive}
             chatRichText={chatRichText}
-            onOpenMessageMenu={openMessageMenu}
+            onOpenMessageMenu={readOnly ? undefined : openMessageMenu}
             onOpenToolFile={openChatWorkspacePreview}
+            onOpenSubagentSession={onOpenSubagentSession}
           />
         </div>
         <div
@@ -832,28 +952,30 @@ export function ConversationPanel({
             }
           }}
         />
-        <ChatComposer
-          projectId={projectId}
-          sessionId={sessionId}
-          value={composerText}
-          onChange={setComposerText}
-          attachments={composerAttachments}
-          onAttachmentsChange={setComposerAttachments}
-          running={running}
-          canResumeWithoutInput={composerSendState.canResumeWithoutInput}
-          hasPendingUserOps={hasPendingUserOps}
-          lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
-          lastMessageIsPlainUserText={
-            composerSendState.lastMessageIsPlainUserText
-          }
-          error={composerError}
-          onErrorChange={setComposerError}
-          beginUiRun={beginUiRun}
-          abortUiRun={abortUiRun}
-          onStreamReset={onStreamReset}
-          onMessagesChanged={reloadMessages}
-          onOpenSessionActions={onOpenSessionActions}
-        />
+        {readOnly ? null : (
+          <ChatComposer
+            projectId={projectId}
+            sessionId={sessionId}
+            value={composerText}
+            onChange={setComposerText}
+            attachments={composerAttachments}
+            onAttachmentsChange={setComposerAttachments}
+            running={running}
+            canResumeWithoutInput={composerSendState.canResumeWithoutInput}
+            hasPendingUserOps={hasPendingUserOps}
+            lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
+            lastMessageIsPlainUserText={
+              composerSendState.lastMessageIsPlainUserText
+            }
+            error={composerError}
+            onErrorChange={setComposerError}
+            beginUiRun={beginUiRun}
+            abortUiRun={abortUiRun}
+            onStreamReset={onStreamReset}
+            onMessagesChanged={reloadMessages}
+            onOpenSessionActions={onOpenSessionActions}
+          />
+        )}
       </div>
       <div
         className={`conversation-panel${
@@ -885,7 +1007,7 @@ export function ConversationPanel({
   );
 }
 
-/** 手动压缩：ok 收尾 Toast；上条清空由 main 投影推送 COMPOSER_ATTACHMENTS_SUGGEST。 */
+/** 手动压缩：成功后派发 session-compacted 事件，让 ConversationPanel 重新拉取消息列表。 */
 export async function runCompaction(
   projectId: string,
   sessionId: string,
@@ -900,4 +1022,9 @@ export async function runCompaction(
     return;
   }
   showToast('已压缩');
+  // 压缩成功后 DB 里旧消息的 hidden 已置 true，但前端内存里的消息列表不会自动刷新。
+  // 派发自定义事件，ConversationPanel 监听后重新拉取消息列表，使隐藏样式即时生效。
+  window.dispatchEvent(
+    new CustomEvent('session-compacted', { detail: { sessionId } }),
+  );
 }

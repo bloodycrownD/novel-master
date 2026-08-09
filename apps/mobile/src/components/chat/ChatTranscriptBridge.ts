@@ -17,6 +17,8 @@ export type TranscriptToolView = {
   readonly status: string;
   readonly resultContent?: string;
   readonly summary?: string;
+  /** task 工具的子会话跳转 id（对称 vfs 工具卡片的可点路径）。 */
+  readonly subagentSessionId?: string;
 };
 
 /** Rows sent to Web (seq ascending; Web renders forward DOM order). */
@@ -172,6 +174,7 @@ export type TranscriptToHostMessage =
       { messageId: string; pageX: number; pageY: number }
     >
   | BridgeEnvelope<'openToolFile', { path: string }>
+  | BridgeEnvelope<'openSubagentSession', { sessionId: string }>
   | BridgeEnvelope<'messageMenuAction', { messageId: string; action: string }>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>

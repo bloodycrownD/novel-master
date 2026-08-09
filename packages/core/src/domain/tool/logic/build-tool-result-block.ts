@@ -19,6 +19,12 @@ import type { ParallelToolOutcome } from "./tool-runner.js";
 export interface BuildToolResultBlockMeta {
   readonly toolName?: string;
   readonly vfsScope?: VfsScope;
+  /**
+   * `task` 工具输出中的 `subagentSessionId`，透传到 `ToolResultBlock.meta.subagentSessionId`。
+   *
+   * 调用方可从 `outcome.output.subagentSessionId` 或独立源头传入；任一来源均为 string 时生效。
+   */
+  readonly subagentSessionId?: string;
 }
 
 /** UI / legacy: explicit `ok` wins; otherwise infer from `Error:` prefix only. */
@@ -111,12 +117,45 @@ export function buildToolResultBlock(
   if (outcome.ok) {
     const content = formatToolOutputForLlm(outcome.output);
     const summary = summarizeToolSuccess(meta?.toolName, outcome.output);
+    // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
+    const subagentSessionId = resolveSubagentSessionIdFromOutcome(
+      outcome.output,
+      meta?.subagentSessionId,
+    );
+
+    // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
+    // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
+    // content 是 task 输出的 JSON 壳（含 text + stopped + failureReason + subagentSessionId），
+    // meta 额外带 failureReason（UI 卡片用）。
+    if (isStoppedTaskOutput(outcome.output)) {
+      const failureReason = readFailureReason(outcome.output);
+      return {
+        type: "tool_result",
+        toolUseId,
+        ok: false,
+        content,
+        ...(subagentSessionId != null
+          ? {
+              meta: {
+                ...(failureReason != null ? { failureReason } : {}),
+                subagentSessionId,
+              },
+            }
+          : failureReason != null
+            ? { meta: { failureReason } }
+            : {}),
+      };
+    }
+
     return {
       type: "tool_result",
       toolUseId,
       ok: true,
       content,
       ...(summary != null ? { summary } : {}),
+      ...(subagentSessionId != null
+        ? { meta: { subagentSessionId } }
+        : {}),
     };
   }
 
@@ -131,4 +170,57 @@ export function buildToolResultBlock(
     content,
     ...(summary != null ? { summary } : {}),
   };
+}
+
+/**
+ * 检测 task 工具输出是否携带有「用户停止」标记（phase-1-abort-reflow）。
+ *
+ * outcome.ok=true 但 output.stopped=true 时，buildToolResultBlock 要把这条
+ * tool_result 标成 ok=false。本函数只做窄义类型守卫，不复用 resolveSubagentSessionIdFromOutcome
+ * 的 object 判定，语义上更直结。
+ */
+function isStoppedTaskOutput(output: unknown): boolean {
+  return (
+    output != null &&
+    typeof output === "object" &&
+    !Array.isArray(output) &&
+    (output as { stopped?: unknown }).stopped === true
+  );
+}
+
+/** 从 task 工具输出读取 failureReason（仅 string 时生效，否则返回 undefined）。 */
+function readFailureReason(output: unknown): string | undefined {
+  if (
+    output == null ||
+    typeof output !== "object" ||
+    Array.isArray(output)
+  ) {
+    return undefined;
+  }
+  const reason = (output as { failureReason?: unknown }).failureReason;
+  return typeof reason === "string" ? reason : undefined;
+}
+
+/**
+ * 从工具输出对象或显式 meta 提取 `subagentSessionId`。
+ *
+ * 优先 `outcome.output.subagentSessionId`（string 时生效）；否则回落到调用方显式传入的 meta。
+ * 仅 task 工具有该字段，其他工具输出不含 subagentSessionId，返回 undefined。
+ */
+function resolveSubagentSessionIdFromOutcome(
+  output: unknown,
+  fallback?: string,
+): string | undefined {
+  if (
+    output != null &&
+    typeof output === "object" &&
+    !Array.isArray(output) &&
+    typeof (output as { subagentSessionId?: unknown }).subagentSessionId ===
+      "string"
+  ) {
+    return (output as { subagentSessionId: string }).subagentSessionId;
+  }
+  return typeof fallback === "string" && fallback.length > 0
+    ? fallback
+    : undefined;
 }

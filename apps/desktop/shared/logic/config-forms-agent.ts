@@ -3,7 +3,7 @@
  * 禁止 `export *`。
  */
 
-export type { ToolsMode } from "@novel-master/core/config-forms/agent";
+export type { AgentMode, ToolsMode } from "@novel-master/core/config-forms/agent";
 
 export {
   blockTypeLabel,
@@ -20,6 +20,7 @@ export {
   hasAnyPromptRegionEnabled,
   isDynamicBlockPersistent,
   mapPersistTextBlocks,
+  MODE_OPTIONS,
   movePersistTextBlock,
   PROMPT_REGION_LABELS,
   ROLE_OPTIONS,

@@ -10,6 +10,14 @@ import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/valida
 /** Workspace agent registry (SQL-backed). */
 export interface AgentRegistryService {
   listAgentIds(): Promise<readonly string[]>;
+  /**
+   * 列出全部 agent 完整定义（含虚拟 seed `general`，DB 同名优先）。
+   *
+   * `task` 工具按 name 查询用；与 {@link get} 不同——`get(id)` 入参是 UUID，
+   * 虚拟 general 没有 id，因此 `get` 不合并虚拟（保持现状，找不到报
+   * `AGENT_NOT_FOUND`）。
+   */
+  list(): Promise<readonly AgentDefinition[]>;
   /** 读取 prompts_json 解析后的 wire，行不存在返回 null（不解码）。 */
   getRawWire(agentId: string): Promise<unknown | null>;
   get(agentId: string): Promise<AgentDefinition>;

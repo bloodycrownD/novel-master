@@ -26,6 +26,7 @@ function toDto(session: {
   id: string;
   projectId: string;
   title: string | null;
+  parentSessionId: string | null;
   createdAtMs: number;
   updatedAtMs: number;
 }): SessionDto {
@@ -33,6 +34,7 @@ function toDto(session: {
     id: session.id,
     projectId: session.projectId,
     title: session.title,
+    parentSessionId: session.parentSessionId,
     createdAtMs: session.createdAtMs,
     updatedAtMs: session.updatedAtMs,
   };

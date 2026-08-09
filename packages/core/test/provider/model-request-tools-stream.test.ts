@@ -228,7 +228,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
   it("toolsFromRegistry produces serializable schemas", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const tools = toolsFromRegistry(registry);
+    const tools = toolsFromRegistry(registry, { subagent: { callableAgents: [{ name: "general" }] } });
     assert.ok(tools.length >= 6);
     for (const t of tools) {
       assert.equal(typeof t.name, "string");

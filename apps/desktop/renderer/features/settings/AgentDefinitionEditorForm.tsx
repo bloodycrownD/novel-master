@@ -1,5 +1,5 @@
 /**
- * Agent 定义编辑表单（复用 config-forms/agent，供全局 Agent 与项目专属配置共用）。
+ * 智能体定义编辑表单（复用 config-forms/agent，供全局智能体与项目专属配置共用）。
  */
 import {
   forwardRef,
@@ -205,6 +205,7 @@ export const AgentDefinitionEditorForm = forwardRef<
     () =>
       formSnapshotJson({
         name,
+        mode: "all",
         maxSteps,
         modelEnabled,
         providerId,
@@ -329,6 +330,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   const buildDefinition = useCallback((): AgentDefinitionBuildResult => {
     const built = buildAgentDefinitionFromForm({
       name,
+      mode: "all",
       maxSteps,
       modelEnabled: false,
       providerId: "",
@@ -627,8 +629,8 @@ export const AgentDefinitionEditorForm = forwardRef<
           </SettingsField>
         ) : (
           <p className="settings-hint">
-            未配置时使用全部内置工具（6
-            个）：read、write、edit、fs、glob、grep。
+            未配置时使用全部内置工具（7
+            个）：task、read、write、edit、fs、glob、grep。
           </p>
         )}
       </SettingsSection>

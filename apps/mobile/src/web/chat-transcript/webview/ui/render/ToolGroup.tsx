@@ -19,22 +19,29 @@ export type ToolGroupProps = {
 
 function ToolGroupItem({ tool }: { tool: ToolCallRow }) {
   const filePath = vfsToolFilePath(tool.name || '', tool.input || {});
-  const canOpen = filePath != null;
+  // 子会话优先：有 subagentSessionId 时跳子会话，否则回退到文件路径打开。
+  const subagentSessionId = tool.subagentSessionId;
+  const hasSubagent = subagentSessionId != null;
+  const canOpen = filePath != null || hasSubagent;
   const summary = toolCallSummary(tool);
   const statusClass = toolStatusClass(tool.status);
   const statusInner = toolStatusLabel(tool.status);
+  const openHint = hasSubagent
+    ? '点击查看 · 子会话'
+    : '点击查看 · 聊天工作区';
   return (
     <div
       className={'tool-group-item tool-card' + (canOpen ? ' tappable' : '')}
-      data-action={canOpen ? 'open-tool-file' : undefined}
-      data-path={canOpen ? filePath! : undefined}
+      data-action={hasSubagent ? 'open-subagent-session' : canOpen ? 'open-tool-file' : undefined}
+      data-session-id={hasSubagent ? subagentSessionId : undefined}
+      data-path={!hasSubagent && canOpen ? filePath! : undefined}
     >
       <div className="tool-header">
         <span className="tool-name">{tool.name || ''}</span>
         <span className={'tool-status ' + statusClass}>{statusInner}</span>
       </div>
       {summary ? <div className="tool-summary">{summary}</div> : null}
-      {canOpen ? <div className="tool-open-hint">点击查看 · 聊天工作区</div> : null}
+      {canOpen ? <div className="tool-open-hint">{openHint}</div> : null}
     </div>
   );
 }

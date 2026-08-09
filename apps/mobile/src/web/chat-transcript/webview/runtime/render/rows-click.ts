@@ -54,6 +54,11 @@ export function onRowsClick(event: MouseEvent): void {
     if (path) post('openToolFile', { path: path });
     return;
   }
+  if (action === 'open-subagent-session') {
+    const sessionId = actionEl.getAttribute('data-session-id');
+    if (sessionId) post('openSubagentSession', { sessionId: sessionId });
+    return;
+  }
   if (action === 'load-older') {
     requestLoadOlder();
   }

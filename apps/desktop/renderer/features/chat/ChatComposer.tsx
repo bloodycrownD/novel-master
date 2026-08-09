@@ -9,7 +9,6 @@ import {
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
-  ipcAgentAbort,
   ipcAgentRun,
   ipcMessagesAppendToolTurnBridge,
   ipcPreferencesGetLlmStream,
@@ -367,7 +366,6 @@ export function ChatComposer({
   const send = async () => {
     if (running) {
       abortUiRun();
-      await ipcAgentAbort({ sessionId });
       return;
     }
 

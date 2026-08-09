@@ -33,10 +33,7 @@ import { runAgentTurn, type AgentRunScope } from '@/services/agent-run.service';
 
 import { useRuntime } from '@/hooks/useRuntime';
 
-import {
-  decrementAgentActive,
-  isMobileAgentActive,
-} from '@/runtime/agent-activity';
+import {isMobileAgentActive} from '@/runtime/agent-activity';
 
 import {
   applyComposerStatusAttachmentsReplace,
@@ -68,7 +65,9 @@ import {
   findActiveAtQuery,
   replaceActiveAtWithToken,
 } from './composer-at-path';
-import { composerDockBottomPadding } from './composer-dock-padding';
+import {composerDockBottomPadding} from './composer-dock-padding';
+import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import { FileReferencePicker } from './FileReferencePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -80,6 +79,9 @@ type Props = {
   running: boolean;
 
   beginUiRun: () => void;
+
+  /** UI run 异常收尾（替代旧 finally 兜底递减，refcount 单一归属 lifecycle）。 */
+  endUiRunOnError: () => void;
 
   abortUiRun: () => void;
 
@@ -101,7 +103,10 @@ type Props = {
   /** undo_send 回滚成功后递增，触发从 draft 刷新输入框。 */
   draftRestoreToken?: number;
 
-  /** 打开更多菜单（压缩 / 模型 / Agent 等）。 */
+  /** 打开更多菜单（压缩 / 模型 / Agent 等）。
+   *
+   * 暂未使用：工具栏「更多」按钮已注释隐藏，调用方也不再传该 prop。保留接口，
+   * 后续若恢复按钮再从解构里取回即可。 */
   onOpenMore?: () => void;
 };
 
@@ -110,6 +115,7 @@ export function ChatComposer({
   hasModel,
   running,
   beginUiRun,
+  endUiRunOnError,
   abortUiRun,
   onStreamReset,
   onMessagesChanged,
@@ -118,11 +124,19 @@ export function ChatComposer({
   lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   draftRestoreToken,
-  onOpenMore,
 }: Props) {
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const runtime = useRuntime();
+  // 键盘弹起时不再需要 safeAreaBottom padding——键盘已覆盖底部，
+  // 多出来的 padding 会形成一道白条。
+  const { height: keyboardHeightSV } = useReanimatedKeyboardAnimation();
+  const dockPadRest = composerDockBottomPadding(insets.bottom);
+  const dockPaddingBottom = useAnimatedStyle(() => {
+    const kb = -keyboardHeightSV.value;
+    // 键盘弹起（kb > 0）时 padding 归零；否则走 safeAreaBottom
+    return { paddingBottom: kb > 0 ? 0 : dockPadRest };
+  }, [keyboardHeightSV, dockPadRest]);
   const { sessionId } = scope;
   const initial = readChatComposerDraftState(sessionId);
   const [text, setText] = useState(initial.text);
@@ -130,8 +144,6 @@ export function ChatComposer({
     ...initial.attachments,
   ]);
   const [error, setError] = useState<string | undefined>();
-  const [runAbortController, setRunAbortController] =
-    useState<AbortController | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
@@ -286,7 +298,6 @@ export function ChatComposer({
         return;
       }
 
-      const controller = new AbortController();
       setError(undefined);
       onStreamReset();
       beginUiRun();
@@ -306,16 +317,14 @@ export function ChatComposer({
         setAttachments([]);
       };
 
-      setRunAbortController(controller);
-
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
         // 文件引用由 Core 扫描正文 `@`；规则变更不走差集 materialize
+        // caller 不传 signal——core runAgentTurn 自建 internalController 注册到 registry。
         await runAgentTurn(runtime, scope, content, {
           stream,
           allowResumeWithoutInput,
-          signal: controller.signal,
           annotateDrafts:
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
@@ -351,8 +360,12 @@ export function ChatComposer({
         ).catch(() => undefined);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
+          // abort 走正常 RUN_FINISHED/FAILED 路径，lifecycle 自己递减 refcount，
+          // 这里不再调用 endUiRunOnError。
           return;
         }
+        // 非 abort 异常：收敛到 lifecycle 单一归属收尾。
+        endUiRunOnError();
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const detail =
             err instanceof Error
@@ -368,11 +381,6 @@ export function ChatComposer({
           console.error('[novel-master/chat] run failed', detail);
         }
         setError(formatError(err));
-      } finally {
-        setRunAbortController(null);
-        if (isMobileAgentActive()) {
-          decrementAgentActive();
-        }
       }
     },
     [
@@ -380,6 +388,7 @@ export function ChatComposer({
       scope,
       sessionId,
       beginUiRun,
+      endUiRunOnError,
       onStreamReset,
       hasPendingUserOps,
     ],
@@ -493,7 +502,6 @@ export function ChatComposer({
     }
 
     if (running) {
-      runAbortController?.abort();
       abortUiRun();
       return;
     }
@@ -527,7 +535,6 @@ export function ChatComposer({
     hasPendingUserOps,
     canResumeWithoutInput,
     lastMessageIsPlainUserText,
-    runAbortController,
     abortUiRun,
     onNeedModel,
     sendWithBridgeIfNeeded,
@@ -548,13 +555,13 @@ export function ChatComposer({
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
   return (
-    <View
+    <Animated.View
       style={[
         styles.dock,
         {
           backgroundColor: tokens.background,
-          paddingBottom: composerDockBottomPadding(insets.bottom),
         },
+        dockPaddingBottom,
       ]}
     >
       {!hasModel ? (
@@ -605,6 +612,9 @@ export function ChatComposer({
           editable={!inputDisabled}
         />
         <View style={styles.toolbar}>
+          {/* 「更多」按钮已隐藏：压缩上下文/切换智能体/模型等入口已迁移到会话详情页。
+              代码保留，后续若有新功能需要此入口可恢复渲染。 */}
+          {/*
           <Pressable
             onPress={onOpenMore}
             disabled={onOpenMore == null}
@@ -615,6 +625,7 @@ export function ChatComposer({
               ⋯
             </Text>
           </Pressable>
+          */}
           <View style={styles.toolbarSpacer} />
           <Pressable
             onPress={() => setPickerOpen(true)}
@@ -655,7 +666,7 @@ export function ChatComposer({
           insertTokensIntoComposer(pathTokens);
         }}
       />
-    </View>
+    </Animated.View>
   );
 }
 

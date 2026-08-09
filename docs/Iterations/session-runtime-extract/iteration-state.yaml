@@ -1,0 +1,141 @@
+# Code Dev Loop 编排状态（session-runtime-extract）
+# 仅供编排逻辑读取；勿写入 apm dynamic/persist。
+spec_path: docs/Iterations/session-runtime-extract/spec.md
+prd_path: docs/Iterations/session-runtime-extract/prd.md
+branch: feat/merge-subagent
+base_sha: 4e6cada1
+spec_summary: |
+  三 phase 重构。Phase 1 Core：abort registry + controller 注册 + 中断回流语义 +
+  ToolResultBlock.meta 扩展。Phase 2 Mobile：四能力（stream/abort/batch/composer）
+  拆分 + SubagentSessionScreen 重构 + 子会话停止按钮。Phase 3 Desktop：四能力拆分
+  + main 进程接入 core registry + ChatRail 停止按钮。Phase 1 前置于 2/3；2 与 3
+  文件域不重叠可并行。
+contracts:
+  - AgentAbortRegistry: register(sessionId,controller)/abort(sessionId)/unregister(sessionId,controller)(所有权校验)/has(sessionId)
+  - AgentTurnRuntimePort.abortRegistry?: 可选字段（CLI 不注入空安全）
+  - runAgentTurn: 永远内部 new AbortController() 作 internalController 注册到 registry；
+    caller signal 桥接 callerSignal.addEventListener("abort",()=>internalController.abort(reason),{once:true})；
+    runner.run 的 signal 改传 internalController.signal；try/finally register/unregister
+  - runChildAgent: childController 创建后 register(childSessionId, childController)；
+    try/finally unregister；保留 parentSignal 级联
+  - TaskToolOutput: 加 readonly stopped?: boolean + readonly failureReason?: string；
+    导出 const SUBAGENT_STOP_REASON_USER = "用户停止"
+  - subagent-tool run: stopReason==="cancelled" → {text:lastText??"[用户停止，无已生成文本]", subagentSessionId, stopped:true, failureReason:SUBAGENT_STOP_REASON_USER}
+  - buildToolResultBlock: ok 分支 output.stopped===true → {ok:false, content:output.text, meta:{subagentSessionId, failureReason}}
+  - ToolResultBlock.meta: { subagentSessionId?: string; failureReason?: string }
+  - 两端 runtime 装配注入 abortRegistry: createAgentAbortRegistry()
+blocking_steps_all_yes_except: [Step21(blocking:no), Step17/Step23(qa:manual_user)]
+files_touched_plan:
+  p1_registry:
+    - packages/core/src/service/agent/agent-abort-registry.port.ts (新)
+    - packages/core/src/service/agent/create-agent-abort-registry.ts (新)
+    - packages/core/src/public/agent.ts
+    - packages/core/src/service/agent/logic/run-agent-turn.ts
+    - apps/mobile/src/runtime/types.ts
+    - apps/mobile/src/runtime/create-mobile-runtime.ts
+    - apps/desktop/src/main/runtime/
+  p1_reflow:
+    - packages/core/src/domain/tool/builtin/subagent-tool.ts
+    - packages/core/src/domain/tool/logic/build-tool-result-block.ts
+    - packages/core/src/domain/chat/model/content-block.ts
+    - packages/core/src/service/agent/impl/agent-runner.ts (extract*SubagentSessionId* no-op + 单测固化)
+    - packages/core/test/** 相关单测
+dag_version: 5
+phase_1_dev_ready: true   # func-ready yes (cr-func-p1), head 3f648077
+wave_plan:
+  # Phase 1 (done)
+  - [impl-p1-registry, impl-p1-reflow]   # done
+  - [fix-p1-tests]                        # done
+  - [cr-func-p1]                          # done, func-ready yes
+  # Phase 2/3（文件域 apps/mobile vs apps/desktop 不重叠，并行）
+  - [impl-mobile, impl-desktop]           # done
+  - [verify-mobile, verify-desktop]        # done（本波次引入失败=0）
+  - [fix-desktop-footer]                   # done: 核查后 T-T8 为 ExplorerPane pre-existing (v1.4.15)，非本波引入
+  - [cr-func-mobile, cr-func-desktop]      # pending
+node_status:
+  impl-p1-registry: { status: done, executor: subagent, spec_steps: [1,2,3,4,5], head_sha: 586e1da1 }
+  impl-p1-reflow: { status: done, executor: subagent, spec_steps: [6,7,8,9], head_sha: 8d33a559 }
+  fix-p1-tests: { status: done, executor: subagent, head_sha: 5bfdac5f }
+  cr-func-p1: { status: done, executor: subagent, readonly: true, func_ready: yes, head_sha: 3f648077 }
+  impl-mobile: { status: done, executor: subagent, spec_steps: [11,12,13,14,15,16,17], head_sha: f6ea7941 }
+  impl-desktop: { status: done, executor: subagent, spec_steps: [19,20,21,23,24,22], head_sha: d93ea857 }
+  verify-mobile: { status: done, executor: main, tsc_pass: true, jest_related_pass: true, new_failures: 0 }
+  verify-desktop: { status: done, executor: main, build_main_pass: true, renderer_build_pass: true, test_297_pass_3_preexisting_fail, new_failures: 0 }
+  fix-desktop-footer: { status: done, executor: subagent, conclusion: "T-T8 ExplorerPane 断言失败为 pre-existing (v1.4.15 commit 8799c6d2 删 WorkspaceFooter 所致)；ConversationPanel reloadFooter 接线完好。无 must-fix" }
+  cr-func-mobile: { status: done, executor: subagent, readonly: true, func_ready: yes }
+  cr-func-desktop: { status: done, executor: subagent, readonly: true, func_ready: yes }
+open_must_fix:
+  # session-runtime-extract CR（docs/Iterations/session-runtime-extract/cr-fix-spec.md）产出的
+  # 5 条 must-fix，已升级到独立迭代 session-runtime-cr-fix 闭合（见该迭代 spec/prd）。
+  # base_sha 注明：ae5e6083 是本迭代 dev-ready milestone commit（feat/merge-subagent
+  # 「子 agent 常驻工作区归属移到 session 侧」），与本文件 base_sha: 4e6cada1（迭代起点）
+  # 不冲突——后者是 session-runtime-extract 的起点，前者是该迭代的终点。
+  - C-orch-1   # desktop main finally 早退分支漏 decrementDesktopAgentActive (P0) → 已是 FU-3
+  - FR8-1      # desktop readOnly 子面板缺 stale 守卫 → 停止按钮不显示 (P2)
+  - C-orch-2   # mobile composer finally 改 lifecycle 单一归属 (P2) → 已是 FU-2
+  - C-1        # runChildAgent register/try 间隙 → 异常路径 registry 孤儿 (P2)
+  - C-2        # content-block + subagent-tool 注释过时 (P3)
+cr_fix_iteration: docs/Iterations/session-runtime-cr-fix
+spec_deviations:
+  - id: D-1
+    node: impl-p1-registry
+    desc: "Step 3 同步把 task 工具用的 parentSignal 改为 internalController.signal（spec 文字未点名），保证 registry 中断主 run 时级联到子 run，使 T-A4 成立"
+    severity: P3
+    accepted: true
+  - id: D-2
+    node: impl-p1-registry
+    desc: "callerSignal 已 aborted 时短路直接 abort internalController（边界处理）"
+    severity: P3
+    accepted: true
+  - id: D-3
+    node: impl-p1-reflow
+    desc: "format-tool-output.ts 同步把 stopped/failureReason 加入剥离名单，否则 content 落 JSON 壳违反 content=output.text"
+    severity: P3
+    accepted: true
+  - id: D-4
+    node: impl-p1-reflow
+    desc: "给 extractSubagentSessionIdFromOutcome 加 export 以便单测导入（行为零变化）"
+    severity: P3
+    accepted: true
+  - id: D-5
+    node: fix-p1-tests
+    desc: "T-A4 文字说『父 abort → 子回流失败 tool_result』，但主 runner 在 abort 后于 session.append(tool_result) 之前 break（agent-runner.ts L507-511），父级 abort 后 partial tool_result 不落库。这是既定生产行为非本次引入。T-A4 改为验证级联机制（主 run cancelled + 子 controller 反注册 + 子 session 创建）；中断回流语义由 T-A1（cancelled 返回 stopped=true）/ T-A2（buildToolResultBlock 识别 stopped）单元级覆盖。spec T-A4 文字已修正。"
+    severity: P2
+    accepted: true
+# Phase 2/3 DAG 待 Phase 1 dev-ready 后补 wave_plan
+dev_ready: true              # 三 phase 全 func-ready (cr-func-p1/mobile/desktop yes)
+head_sha: f6ea7941           # feat/merge-subagent
+dev_dag_matrix:
+  impl-p1-registry: done
+  impl-p1-reflow: done
+  fix-p1-tests: done
+  cr-func-p1: done (func-ready yes)
+  impl-mobile: done
+  impl-desktop: done
+  verify-mobile: done
+  verify-desktop: done
+  fix-desktop-footer: done (not-a-must-fix, pre-existing)
+  cr-func-mobile: done (func-ready yes)
+  cr-func-desktop: done (func-ready yes)
+# 非 blocking follow-up（不阻塞 dev-ready，供后续可选清理）
+follow_ups:
+  - id: FU-1
+    severity: P3
+    desc: "mobile use-session-abort.test.ts 触发 setState 的调用补 act 包裹，消掉控制台 warning（M-4）"
+  - id: FU-2
+    severity: P3
+    desc: "mobile ChatComposer.executeRun finally 仍保留 decrementAgentActive 兜底；spec 风险2 要求 refcount 完全单一归属到 lifecycle 单元，建议后续清理（cr-func-mobile 审查点4 ⚠️）"
+    upgraded_to_must_fix: C-orch-2   # 已升级为 must-fix，见 cr-fix-spec.md / session-runtime-cr-fix
+  - id: FU-3
+    severity: P3
+    desc: "desktop handleAgentRun.finally 在『runAgentTurn 异步 reject 且从未发 RUN_STARTED』极端场景理论 refcount 泄漏；符合 spec Step24(d)『finally 不碰 refcount』设计权衡，建议保持现状或单开 follow-up 加 RUN_STARTED timeout 兜底"
+    upgraded_to_must_fix: C-orch-1   # 已升级为 must-fix（P0），见 cr-fix-spec.md / session-runtime-cr-fix
+  - id: FU-4
+    severity: P3
+    desc: "desktop handleAgentRun.catch 无条件 decrementDesktopAgentActive，若 increment 前抛错会减成负数（pre-existing 历史遗留，非本迭代引入）"
+  - id: FU-5
+    severity: P3
+    desc: "mobile 全量 jest 失败两类 pre-existing：sanitize-html ESM 解析 + react-native-quick-sqlite 等 RN 原生模块未 mock（与本迭代无关）"
+  - id: FU-6
+    severity: P3
+    desc: "desktop T-T8 ExplorerPane 断言失败 pre-existing（v1.4.15 commit 8799c6d2 删 WorkspaceFooter）；chat-prompt-tokens openai provider / electron-builder EPERM 环境问题"

@@ -115,7 +115,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "read",
-    description: `读取工作区单个文件的文本内容。只读，不修改文件。
+    description: () => `读取工作区单个文件的文本内容。只读，不修改文件。
 
 用法：
 - 首次读取：提供 path；默认从第 1 行起返回一段内容
@@ -219,7 +219,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "write",
-    description: `写入或整文件覆盖工作区路径的内容。会创建不存在的文件。
+    description: () => `写入或整文件覆盖工作区路径的内容。会创建不存在的文件。
 
 用法：
 - 新建或全文重写：path + content
@@ -267,7 +267,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "edit",
-    description: `在工作区文件内做精确文本替换（单次或 replaceAll）。适合小范围修改，避免整文件 write。
+    description: () => `在工作区文件内做精确文本替换（单次或 replaceAll）。适合小范围修改，避免整文件 write。
 
 用法：
 - 常规替换：oldString 为文件中待替换片段，newString 为替换结果；oldString 须在文件中唯一匹配
@@ -321,7 +321,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "fs",
-    description: `执行单条文件系统命令（非 shell）。每次调用仅一条命令，通过结构化参数指定动作与路径。
+    description: () => `执行单条文件系统命令（非 shell）。每次调用仅一条命令，通过结构化参数指定动作与路径。
 
 支持的 action：
 - ls：列目录；path 省略时列根目录；recursive=true 递归列出
@@ -379,7 +379,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "glob",
-    description: `按 glob 模式在工作区中查找路径列表。只返回路径，不读文件内容。
+    description: () => `按 glob 模式在工作区中查找路径列表。只返回路径，不读文件内容。
 
 用法：
 - pattern：glob 模式，如 \`**/*.ts\`、\`src/**\`
@@ -434,7 +434,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "grep",
-    description: `在工作区文件**内容**中搜索，返回 path、行号、列号与 excerpt。
+    description: () => `在工作区文件**内容**中搜索，返回 path、行号、列号与 excerpt。
 
 用法：
 - pattern：搜索模式；默认 matchMode=auto（先尝试正则，失败则按字面量子串）

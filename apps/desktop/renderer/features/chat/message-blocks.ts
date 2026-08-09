@@ -14,6 +14,8 @@ export interface ToolCallView {
   readonly status: ToolCallStatus;
   readonly resultContent?: string;
   readonly summary?: string;
+  /** task 工具产生的子会话 id；存在则卡片可点跳转子会话。 */
+  readonly subagentSessionId?: string;
 }
 
 
@@ -158,6 +160,9 @@ export function toolCallViewFromUse(
     status: toolStatusFromResult(result),
     resultContent: result.content,
     ...(result.summary != null ? { summary: result.summary } : {}),
+    ...(result.meta?.subagentSessionId != null
+      ? { subagentSessionId: result.meta.subagentSessionId }
+      : {}),
   };
 }
 

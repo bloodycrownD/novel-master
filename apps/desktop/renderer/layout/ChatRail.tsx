@@ -10,6 +10,7 @@ import { ConversationPanel } from '../features/chat/ConversationPanel';
 import { ProjectAgentConfigView } from '../features/settings/ProjectAgentConfigView';
 import { useBatchSelection } from '../hooks/useBatchSelection';
 import {
+  ipcAgentAbort,
   ipcProjectsCreate,
   ipcProjectsDelete,
   ipcProjectsList,
@@ -61,6 +62,39 @@ export function ChatRail({
     showNavView,
     notifyAgentConfigChanged,
   } = useShellNav();
+
+  // 子智能体只读会话面板的 sessionId 在 ChatRail 本地维护，避免污染全局导航状态
+  // （P2-11：全局 nav 仍指向父会话，子会话只在面板栈层切换）。
+  const [subagentSessionId, setSubagentSessionId] = useState<string | null>(
+    null,
+  );
+  const [subagentSessionName, setSubagentSessionName] = useState<string>('');
+  // Phase 3 Step 23：只读子会话面板的运行态——ConversationPanel 通过
+  // onRunningChange 上报，停止按钮据此显示/隐藏。
+  const [subagentRunning, setSubagentRunning] = useState(false);
+
+  const openSubagentSession = useCallback(
+    (childSessionId: string, label?: string) => {
+      setSubagentSessionId(childSessionId);
+      setSubagentSessionName(label ?? '子智能体会话');
+      showNavView('subagent-conversation');
+    },
+    [showNavView],
+  );
+
+  const goBackToConversation = useCallback(() => {
+    setSubagentSessionId(null);
+    setSubagentSessionName('');
+    setSubagentRunning(false);
+    showNavView('conversation');
+  }, [showNavView]);
+
+  // Phase 3 Step 23：只读面板停止按钮——点击调 ipcAgentAbort（最终走
+  // rt.abortRegistry.abort）。abort 本身幂等，运行中才显示按钮所以不会误触。
+  const stopSubagentRun = useCallback(async () => {
+    if (subagentSessionId == null) return;
+    await ipcAgentAbort({ sessionId: subagentSessionId });
+  }, [subagentSessionId]);
 
   const {
     active: projectBatchActive,
@@ -402,7 +436,10 @@ export function ChatRail({
     }
   })();
 
-  const showBack = viewId === 'sessions' || viewId === 'conversation';
+  const showBack =
+    viewId === 'sessions' ||
+    viewId === 'conversation' ||
+    viewId === 'subagent-conversation';
 
   return (
     <>
@@ -413,11 +450,19 @@ export function ChatRail({
               type="button"
               className="chat-nav-back"
               data-action={
-                viewId === 'sessions' ? 'back-to-projects' : 'back-to-sessions'
+                viewId === 'sessions'
+                  ? 'back-to-projects'
+                  : viewId === 'subagent-conversation'
+                    ? 'back-to-conversation'
+                    : 'back-to-sessions'
               }
               aria-label="返回"
               onClick={
-                viewId === 'sessions' ? goBackToProjects : goBackToSessions
+                viewId === 'sessions'
+                  ? goBackToProjects
+                  : viewId === 'subagent-conversation'
+                    ? goBackToConversation
+                    : goBackToSessions
               }
             >
               ‹
@@ -430,6 +475,10 @@ export function ChatRail({
           ) : viewId === 'conversation' ? (
             <span className="column-header__title column-header__title--truncate">
               {sessionName ?? '—'}
+            </span>
+          ) : viewId === 'subagent-conversation' ? (
+            <span className="column-header__title column-header__title--truncate">
+              {subagentSessionName || '子智能体会话'}
             </span>
           ) : (
             <span className="column-header__title">
@@ -636,7 +685,7 @@ export function ChatRail({
         </div>
 
         <div
-          className={`chat-nav-view${
+          className={`chat-nav-view$${
             viewId === 'conversation' ? ' is-visible' : ''
           }`}
           data-nav-view="conversation"
@@ -647,9 +696,53 @@ export function ChatRail({
               projectId={projectId}
               sessionId={sessionId}
               onOpenSessionActions={onOpenSessionActions}
+              onOpenSubagentSession={(childSessionId) =>
+                openSubagentSession(childSessionId)
+              }
             />
           ) : (
             <p className="preview-empty">请选择会话</p>
+          )}
+        </div>
+
+        <div
+          className={`chat-nav-view$${
+            viewId === 'subagent-conversation' ? ' is-visible' : ''
+          }`}
+          data-nav-view="subagent-conversation"
+          hidden={viewId !== 'subagent-conversation'}
+        >
+          {projectId && subagentSessionId ? (
+            <>
+              {subagentRunning ? (
+                <div className="subagent-stop-bar" role="toolbar">
+                  <span className="subagent-stop-bar__label">
+                    子智能体运行中…
+                  </span>
+                  <button
+                    type="button"
+                    className="subagent-stop-bar__button"
+                    onClick={() => {
+                      void stopSubagentRun();
+                    }}
+                  >
+                    停止
+                  </button>
+                </div>
+              ) : null}
+              <ConversationPanel
+                projectId={projectId}
+                sessionId={subagentSessionId}
+                onOpenSessionActions={() => undefined}
+                readOnly
+                onRunningChange={setSubagentRunning}
+                onOpenSubagentSession={(childSessionId) =>
+                  openSubagentSession(childSessionId)
+                }
+              />
+            </>
+          ) : (
+            <p className="preview-empty">请返回父会话并重新点击子智能体卡片</p>
           )}
         </div>
       </section>

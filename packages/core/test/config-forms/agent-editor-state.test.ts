@@ -139,6 +139,7 @@ test("definitionToForm maps system toggle and three regions", () => {
       ],
     },
   });
+  assert.equal(form.mode, "all");
   assert.equal(form.systemEnabled, true);
   assert.equal(form.systemContent, "sys");
   assert.equal(form.persistEnabled, true);
@@ -261,6 +262,7 @@ test("movePersistBlock swaps text blocks", () => {
 test("buildAgentDefinitionFromForm maps workplace boolean", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -351,6 +353,7 @@ test("createDefaultAgentEditorPrompts starts with empty persist", () => {
 test("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", () => {
   const json = formSnapshotJson({
     name: "agent",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "p",
@@ -373,6 +376,7 @@ test("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", ()
 test("formSnapshotJson omits model fields when disabled", () => {
   const json = formSnapshotJson({
     name: "agent",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "p",
@@ -435,6 +439,7 @@ test("T-CA2c: formSnapshotJson 将 customAttach 两字段纳入 dirty 比对", (
   const base = createDefaultAgentEditorPrompts();
   const json = formSnapshotJson({
     name: "agent",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "p",
@@ -472,6 +477,7 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
   assert.equal(
     buildAgentDefinitionFromForm({
       name: "",
+      mode: "all",
       maxSteps: "20",
       modelEnabled: false,
       providerId: "",
@@ -485,6 +491,7 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
   assert.equal(
     buildAgentDefinitionFromForm({
       name: "writer",
+      mode: "all",
       maxSteps: "20",
       modelEnabled: false,
       providerId: "",
@@ -500,6 +507,7 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
 test("buildAgentDefinitionFromForm 三区全关空 layout 可保存", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -519,6 +527,7 @@ test("buildAgentDefinitionFromForm 三区全关空 layout 可保存", () => {
 test("buildAgentDefinitionFromForm system 开但内容空时失败", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -611,6 +620,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
 test("buildAgentDefinitionFromForm allows empty persist with system content", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -636,6 +646,7 @@ test("buildAgentDefinitionFromForm allows empty persist with system content", ()
 test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -659,6 +670,7 @@ test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () 
 test("T-W8: buildAgentDefinitionFromForm workplace:true 且区域开关全关可保存", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -782,6 +794,7 @@ test("countFormPromptSources counts all regions and respects exclusions", () => 
 test("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", () => {
   const input = {
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -820,9 +833,11 @@ test("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", (
   const result = buildAgentDefinitionFromForm(input);
   assert.equal(result.ok, true);
   if (result.ok) {
+    assert.equal(result.definition.mode, "all");
     assert.equal(result.definition.prompts.persistEnabled, true);
     assert.equal(result.definition.prompts.dynamicEnabled, true);
     const form = definitionToForm(result.definition);
+    assert.equal(form.mode, "all");
     assert.equal(form.persistEnabled, true);
     assert.equal(form.dynamicEnabled, true);
   }
@@ -831,6 +846,7 @@ test("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", (
 test("buildAgentDefinitionFromForm 开关关时省略 wire 布尔", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -856,6 +872,7 @@ test("buildAgentDefinitionFromForm 开关关时省略 wire 布尔", () => {
 test("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -880,6 +897,7 @@ test("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败
 test("buildAgentDefinitionFromForm persistEnabled 开且 workplace + 文本末块 assistant 可保存", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -904,6 +922,7 @@ test("buildAgentDefinitionFromForm persistEnabled 开且 workplace + 文本末�
 test("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -928,6 +947,7 @@ test("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", 
 test("buildAgentDefinitionFromForm 开关关时跳过启用后校验", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -949,6 +969,7 @@ test("buildAgentDefinitionFromForm 开关关时跳过启用后校验", () => {
 test("buildAgentDefinitionFromForm rejects persist macros", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -980,6 +1001,7 @@ test("buildAgentDefinitionFromForm rejects persist macros", () => {
 test("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -1013,6 +1035,7 @@ test("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
 
   const ok = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -1032,6 +1055,7 @@ test("T-WP7: 开启默认文案；清空后 build 显式 ok:false", () => {
 
   const empty = buildAgentDefinitionFromForm({
     name: "writer",
+    mode: "all",
     maxSteps: "20",
     modelEnabled: false,
     providerId: "",
@@ -1093,4 +1117,104 @@ test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
     ],
   });
   assert.doesNotThrow(() => validateAgentPromptLayout(layout));
+});
+
+test("T-DESC1: definitionToForm 将非空 description 透传到表单", () => {
+  const form = definitionToForm({
+    name: "x",
+    prompts: { persist: [], dynamic: [] },
+    description: "擅长检索代码库。",
+  });
+  assert.equal(form.description, "擅长检索代码库。");
+});
+
+test("T-DESC2: definitionToForm 对缺省 description 返回空串", () => {
+  const form = definitionToForm({
+    name: "x",
+    prompts: { persist: [], dynamic: [] },
+  });
+  assert.equal(form.description, "");
+});
+
+test("T-DESC3: buildAgentDefinitionFromForm 在 description 非空时透传", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    description: "  擅长写测试  ",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    // 非空但 trim 后有内容才透传，且透传值会 trim。
+    assert.equal(result.definition.description, "擅长写测试");
+  }
+});
+
+test("T-DESC4: buildAgentDefinitionFromForm 在 description trim 空时省略字段", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    workplaceEnabled: false,
+    workplaceAssistantText: "",
+    description: "   \n  ",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.description, undefined);
+  }
+});
+
+test("T-DESC5: formSnapshotJson 将 description 纳入 dirty 比对", () => {
+  const base = createDefaultAgentEditorPrompts();
+  const json = formSnapshotJson({
+    name: "a",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+    description: "desc-a",
+  });
+  assert.equal(JSON.parse(json).description, "desc-a");
+  // 缺省时序列化为空串，与显式空串等价。
+  const jsonEmpty = formSnapshotJson({
+    name: "a",
+    mode: "all",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    savedModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...base,
+  });
+  assert.equal(JSON.parse(jsonEmpty).description, "");
 });
