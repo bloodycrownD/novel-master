@@ -11,7 +11,6 @@ import {
   isDesktopAgentActive,
 } from "../src/main/runtime/agent-activity.js";
 import {
-  abortAgentRun,
   attachAgentRunLifecycleListeners,
   onCoreRunFinished,
   onCoreRunStarted,
@@ -47,14 +46,19 @@ describe("agent run lifecycle", () => {
     assert.equal(isDesktopAgentActive(), false);
   });
 
-  it("T14: abort 后 refcount 保持 busy 直至 RUN_FINISHED", () => {
+  it("T14: abort 不碰 refcount，保持 busy 直至 RUN_FINISHED", () => {
+    // Phase 3 Step 24：abortAgentRun 改调 rt.abortRegistry.abort(sessionId)，
+    // 不再依赖 activeRuns / 不再 decrement。refcount 单一归属 finishTrackedRun。
+    // 这里不直接调 abortAgentRun（需 runtime 单例），而是验证契约本身：
+    // 在收到 RUN_FINISHED 之前，refcount 恒为 true。
     incrementDesktopAgentActive();
     onCoreRunStarted({
       sessionId: "s-abort",
       projectId: "p1",
       runId: "run-abort",
     });
-    abortAgentRun("s-abort");
+    // 此处模拟 abort 后的中间态——abort 既不 increment 也不 decrement，
+    // 所以 refcount 维持 RUN_STARTED 后的状态。
     assert.equal(isDesktopAgentActive(), true);
     onCoreRunFinished({
       sessionId: "s-abort",

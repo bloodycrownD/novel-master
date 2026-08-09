@@ -179,7 +179,7 @@ export async function handleModelSetCurrent(
   }
 }
 
-type RunEntry = { controller: AbortController; runId: string | null };
+type RunEntry = { runId: string | null };
 
 const activeRuns = new Map<string, RunEntry>();
 /** abort 删除 activeRuns 后仍用于 FINISHED/FAILED 与 runId 匹配。 */
@@ -258,7 +258,7 @@ export function attachAgentRunLifecycleListeners(
 export async function handleAgentAbort(
   req: AgentAbortRequest,
 ): Promise<IpcResult<void>> {
-  abortAgentRun(req.sessionId);
+  await abortAgentRun(req.sessionId);
   return { ok: true, data: undefined };
 }
 
@@ -276,9 +276,13 @@ export async function handleAgentRun(
       (await resolveCurrentAgentDefinition(rt)).definition,
       req.sessionId,
     );
-    const controller = new AbortController();
     const { sessionId } = req;
-    activeRuns.set(sessionId, { controller, runId: null });
+    // Phase 3 Step 24：不再自建 AbortController / 不再传 signal。
+    // core runAgentTurn 内部自建 internalController 注册到 rt.abortRegistry，
+    // 停止按钮经 ipcAgentAbort → rt.abortRegistry.abort(sessionId) 中断。
+    // activeRuns 退化为 refcount 影子——只跟 RUN_STARTED/FINISHED/FAILED 与
+    // runId 比对 + finishTrackedRun 的 decrementDesktopAgentActive()。
+    activeRuns.set(sessionId, { runId: null });
     incrementDesktopAgentActive();
 
     void runAgentTurn(
@@ -290,7 +294,6 @@ export async function handleAgentRun(
         allowResumeWithoutInput: req.allowResumeWithoutInput,
         attachments: req.attachments,
         annotateDrafts: req.annotateDrafts,
-        signal: controller.signal,
         onUserMessageAppended: () => {
           notifyUserMessageAppendedToRenderer({ sessionId });
         },
@@ -307,22 +310,21 @@ export async function handleAgentRun(
         });
       })
       .finally(() => {
+        // Phase 3 Step 24(d)：refcount 单一归属——只由 finishTrackedRun 递减。
+        // 这里仅做房子——清掉没收到 RUN_STARTED 的早退 entry，避免 activeRuns 泄漏。
+        // core 侧正常路径会发 RUN_FINISHED/RUN_FAILED → finishTrackedRun 已完成递减；
+        // 若事件途中丢失（极罕见）且 entry 仍在，这里作为最后的 map 清理兑底。
         const entry = activeRuns.get(sessionId);
-        if (entry?.controller !== controller) {
+        if (entry == null) {
           return;
         }
         if (entry.runId != null) {
-          // 正常路径由 RUN_FINISHED/FAILED 递减；此处仅兜底 controller 结束但事件未达
-          if (sessionRunIds.get(sessionId) === entry.runId) {
-            activeRuns.delete(sessionId);
-            sessionRunIds.delete(sessionId);
-            decrementDesktopAgentActive();
-          }
+          // 正常路径：RUN_STARTED 已达，FINISHED/FAILED 的 finishTrackedRun 负责清理。
           return;
         }
-        // 无 RUN_STARTED 的早退（T23）
+        // 无 RUN_STARTED 的早退（T23）：finishTrackedRun 不会触发，手动清 map。
         activeRuns.delete(sessionId);
-        decrementDesktopAgentActive();
+        sessionRunIds.delete(sessionId);
       });
 
     return { ok: true, data: { started: true } };
@@ -334,8 +336,14 @@ export async function handleAgentRun(
   }
 }
 
-/** 仅 abort；decrement 交给 RUN_FINISHED/FAILED 或 finally 兜底。 */
-export function abortAgentRun(sessionId: string): void {
-  activeRuns.get(sessionId)?.controller.abort();
-  activeRuns.delete(sessionId);
+/**
+ * 中断指定 sessionId 的当前 run——Phase 3 Step 24(a)。
+ *
+ * 改调 core registry（rt.abortRegistry.abort），不再依赖 activeRuns 里的
+ * controller。refcount 递减交给 RUN_FINISHED/FAILED 的 finishTrackedRun。
+ */
+export async function abortAgentRun(sessionId: string): Promise<void> {
+  const rt = await getDesktopRuntime();
+  rt.abortRegistry.abort(sessionId);
+  // activeRuns 的清理交给 finally / finishTrackedRun；这里只负责中断信号。
 }
