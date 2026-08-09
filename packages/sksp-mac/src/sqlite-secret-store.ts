@@ -1,20 +1,18 @@
 /**
- * macOS Keychain + AES-GCM SQLite `sksp_secrets` store.
+ * macOS Keychain + AES-GCM SQLite `sksp_secrets` store。
+ *
+ * 重构后只保留平台 strategy 实现，SQL 编排交给
+ * {@link BaseSqliteSecretStore}。
  *
  * @module sqlite-secret-store
  */
 
-import type { TdbcConnection } from "@novel-master/core/tdbc";
-import { SqlTemplateParser } from "@novel-master/core";
+import type { TdbcConnection, Row } from "@novel-master/core/tdbc";
 import {
-  executeTemplate,
-  queryTemplate,
-} from "@novel-master/core/tdbc";
-import type { Row } from "@novel-master/core/tdbc";
-import {
-  assertValidRef,
+  BaseSqliteSecretStore,
   SkspError,
   type SecretStore,
+  type SkspCryptoStrategy,
 } from "@novel-master/core/sksp";
 import { decryptUtf8, encryptUtf8 } from "./crypto.js";
 import { getOrCreateMasterKey } from "./keychain.js";
@@ -46,81 +44,23 @@ function rowIv(row: Row, ref: string): Uint8Array {
   throw new SkspError("DB_ERROR", "Invalid iv column type");
 }
 
-/** Keychain-backed secret store using an open TDBC connection. */
-export class MacSqliteSecretStore implements SecretStore {
-  private readonly parser = new SqlTemplateParser();
-
-  constructor(private readonly conn: TdbcConnection) {}
-
-  async get(ref: string): Promise<string | null> {
-    assertValidRef(ref);
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`,
-      { ref },
-    );
-    if (rows.length === 0) {
-      return null;
-    }
-    const row = rows[0]!;
-    if (String(row.algo) !== ALGO) {
-      throw new SkspError(
-        "DECRYPT_FAILED",
-        `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`,
-        { ref },
-      );
-    }
+/** macOS Keychain 加密策略：ciphertext/iv 都是 Uint8Array。 */
+const macStrategy: SkspCryptoStrategy = {
+  algo: ALGO,
+  async encrypt(ref, plain) {
+    const masterKey = await getOrCreateMasterKey(ref, "encrypt");
+    return encryptUtf8(plain, masterKey, ref);
+  },
+  async decrypt(ref, row: Row) {
     const masterKey = await getOrCreateMasterKey(ref, "decrypt");
     return decryptUtf8(rowCiphertext(row), rowIv(row, ref), masterKey, ref);
-  }
+  },
+};
 
-  async has(ref: string): Promise<boolean> {
-    assertValidRef(ref);
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT 1 AS n FROM sksp_secrets WHERE ref = #{ref} LIMIT 1`,
-      { ref },
-    );
-    return rows.length > 0;
-  }
-
-  async set(ref: string, plain: string): Promise<void> {
-    assertValidRef(ref);
-    const masterKey = await getOrCreateMasterKey(ref, "encrypt");
-    const { ciphertext, iv } = encryptUtf8(plain, masterKey, ref);
-    const now = Date.now();
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
-       VALUES (#{ref}, #{ciphertext}, #{iv}, #{algo}, 1, #{updatedAtMs})
-       ON CONFLICT(ref) DO UPDATE SET
-         ciphertext = excluded.ciphertext,
-         iv = excluded.iv,
-         algo = excluded.algo,
-         version = excluded.version,
-         updated_at_ms = excluded.updated_at_ms`,
-      {
-        ref,
-        ciphertext,
-        iv,
-        algo: ALGO,
-        updatedAtMs: now,
-      },
-    );
-  }
-
-  async delete(ref: string): Promise<boolean> {
-    assertValidRef(ref);
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM sksp_secrets WHERE ref = #{ref}`,
-      { ref },
-    );
-    return result.changes > 0;
+/** Keychain-backed secret store using an open TDBC connection. */
+export class MacSqliteSecretStore extends BaseSqliteSecretStore {
+  constructor(conn: TdbcConnection) {
+    super(conn, macStrategy);
   }
 }
 

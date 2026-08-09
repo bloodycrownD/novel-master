@@ -1,20 +1,19 @@
 /**
- * Windows DPAPI + SQLite `sksp_secrets` store.
+ * Windows DPAPI + SQLite `sksp_secrets` store。
+ *
+ * 重构后只保留平台 strategy 实现，SQL 编排交给
+ * {@link BaseSqliteSecretStore}。DPAPI 没有 iv 概念，
+ * 所以 strategy 的 iv 返回 null，DB 里也存 NULL。
  *
  * @module sqlite-secret-store
  */
 
-import type { TdbcConnection } from "@novel-master/core/tdbc";
-import { SqlTemplateParser } from "@novel-master/core";
+import type { TdbcConnection, Row } from "@novel-master/core/tdbc";
 import {
-  executeTemplate,
-  queryTemplate,
-} from "@novel-master/core/tdbc";
-import type { Row } from "@novel-master/core/tdbc";
-import {
-  assertValidRef,
+  BaseSqliteSecretStore,
   SkspError,
   type SecretStore,
+  type SkspCryptoStrategy,
 } from "@novel-master/core/sksp";
 import { protectUtf8, unprotectUtf8 } from "./dpapi.js";
 
@@ -31,78 +30,22 @@ function rowCiphertext(row: Row): Uint8Array {
   throw new SkspError("DB_ERROR", "Invalid ciphertext column type");
 }
 
-/** DPAPI-backed secret store using an open TDBC connection. */
-export class SqliteSecretStore implements SecretStore {
-  private readonly parser = new SqlTemplateParser();
-
-  constructor(private readonly conn: TdbcConnection) {}
-
-  async get(ref: string): Promise<string | null> {
-    assertValidRef(ref);
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`,
-      { ref },
-    );
-    if (rows.length === 0) {
-      return null;
-    }
-    const row = rows[0]!;
-    if (String(row.algo) !== ALGO) {
-      throw new SkspError(
-        "DECRYPT_FAILED",
-        `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`,
-        { ref },
-      );
-    }
-    return unprotectUtf8(rowCiphertext(row), ref);
-  }
-
-  async has(ref: string): Promise<boolean> {
-    assertValidRef(ref);
-    const rows = await queryTemplate(
-      this.conn,
-      this.parser,
-      `SELECT 1 AS n FROM sksp_secrets WHERE ref = #{ref} LIMIT 1`,
-      { ref },
-    );
-    return rows.length > 0;
-  }
-
-  async set(ref: string, plain: string): Promise<void> {
-    assertValidRef(ref);
+/** Windows DPAPI 加密策略：没有 iv，固定返回 null。 */
+const windowsStrategy: SkspCryptoStrategy = {
+  algo: ALGO,
+  async encrypt(ref, plain) {
     const ciphertext = await protectUtf8(plain, ref);
-    const now = Date.now();
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO sksp_secrets (ref, ciphertext, iv, algo, version, updated_at_ms)
-       VALUES (#{ref}, #{ciphertext}, NULL, #{algo}, 1, #{updatedAtMs})
-       ON CONFLICT(ref) DO UPDATE SET
-         ciphertext = excluded.ciphertext,
-         iv = excluded.iv,
-         algo = excluded.algo,
-         version = excluded.version,
-         updated_at_ms = excluded.updated_at_ms`,
-      {
-        ref,
-        ciphertext,
-        algo: ALGO,
-        updatedAtMs: now,
-      },
-    );
-  }
+    return { ciphertext, iv: null };
+  },
+  async decrypt(ref, row: Row) {
+    return unprotectUtf8(rowCiphertext(row), ref);
+  },
+};
 
-  async delete(ref: string): Promise<boolean> {
-    assertValidRef(ref);
-    const result = await executeTemplate(
-      this.conn,
-      this.parser,
-      `DELETE FROM sksp_secrets WHERE ref = #{ref}`,
-      { ref },
-    );
-    return result.changes > 0;
+/** DPAPI-backed secret store using an open TDBC connection. */
+export class SqliteSecretStore extends BaseSqliteSecretStore {
+  constructor(conn: TdbcConnection) {
+    super(conn, windowsStrategy);
   }
 }
 
