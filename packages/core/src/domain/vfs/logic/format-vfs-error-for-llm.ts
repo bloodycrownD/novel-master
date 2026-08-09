@@ -58,6 +58,19 @@ function formatReplaceNotFound(
       String(details.lcsOccurrences) +
       " times; ensure oldString is unique or include more context.";
   }
+  // 补上 codepoint 转储：肉眼看起来一样的中文引号 / HTML entity，码点一摆出来就露馅。
+  // 这里同时展示 oldString 和文件对应区域的前 100 个码点，方便对比到底差在哪。
+  if (details.oldStringCodepoints || details.fileHintCodepoints) {
+    out += "\nCodepoint dump (first 100 chars, hex):";
+    if (details.oldStringCodepoints) {
+      out += `\n  oldString: ${details.oldStringCodepoints}`;
+    }
+    if (details.fileHintCodepoints) {
+      out += `\n  fileHint:  ${details.fileHintCodepoints}`;
+    }
+    out +=
+      "\nIf you see sequences like 26 6c 64 71 75 6f 3b, that is an unescaped HTML entity (e.g. &ldquo;); 201c is “, 201d is ”, 22 is an ASCII double quote.";
+  }
   return out;
 }
 

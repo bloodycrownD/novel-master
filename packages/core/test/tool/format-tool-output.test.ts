@@ -282,6 +282,28 @@ describe("formatToolErrorForLlm", () => {
     assert.ok(content.includes("Almost no matching text"));
   });
 
+  it("T-ERR-06: REPLACE_NOT_FOUND 携带 codepoint 诊断", () => {
+    // 模拟 bug 3：oldString 里是字面 entity，文件里是真正的中文引号。
+    // codepoint 一摆出来就能看出 26（&）vs 201c（“）的区别。
+    const cause = vfsReplaceNotFound(physicalPath, {
+      oldStringLength: 20,
+      longestCommonSubstring: "你好世界测试",
+      lcsLength: 6,
+      lcsOccurrences: 1,
+      oldStringCodepoints: "26 6c 64 71 75 6f 3b 4f60 597d",
+      fileHintCodepoints: "201c 4f60 597d",
+    });
+    const content = formatToolErrorForLlm(
+      new ToolError("FAILED", "x", { cause }),
+      { vfsScope: sessionScope },
+    );
+    assert.ok(content.includes("Codepoint dump"));
+    assert.ok(content.includes("oldString: 26 6c 64 71 75 6f 3b"));
+    assert.ok(content.includes("fileHint:  201c"));
+    // 提示文案里要点名 &ldquo; 这个典型 entity。
+    assert.ok(content.includes("&ldquo;"));
+  });
+
   it("summarizes INVALID_ARGUMENT zod issues", () => {
     const err = new ToolError("INVALID_ARGUMENT", "Invalid input for tool: write", {
       toolName: "write",
