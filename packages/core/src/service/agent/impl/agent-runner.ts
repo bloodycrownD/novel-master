@@ -204,40 +204,14 @@ export class DefaultAgentRunner implements AgentRunner {
       sessionId: session.workplaceScopeSessionId,
     };
 
-    // turn 起点 = run() 开始时 session 里最后一条消息；abort 后干净回滚到这里
-    // （方案 B：abort 不留 partial assistant）。
-    const turnStartMessages = await session.list();
-    const turnStartMessageId: string | null =
-      turnStartMessages.length > 0
-        ? turnStartMessages[turnStartMessages.length - 1]!.id
-        : null;
-    let turnDirty = false;
-
     /**
-     * 统一 abort 处理：置 stopReason + 回滚本 turn 写入的全部消息。
+     * 统一 abort 处理：置 stopReason，保留已写入的 partial assistant。
      *
-     * 检测点（9 处）与 catch 分支命中 AbortError 都走这里，保证不管 abort 发生在哪个阶段，
-     * 会话状态都干净回到 turn 起点，不留 partial assistant。
+     * 所有检测点与 catch 分支命中 AbortError 都走这里，保证 abort 后 stopReason 一致；
+     * 已写入的 assistant 消息保留（用户能看到模型刚吐出的内容）。
      */
-    const handleAbort = async (branch: string): Promise<void> => {
+    const handleAbort = async (_branch: string): Promise<void> => {
       stopReason = "cancelled";
-      if (!turnDirty) {
-        return;
-      }
-      try {
-        await session.truncateAfterMessage(turnStartMessageId);
-      } catch (err) {
-        // 回滚失败不能阻碍 abort 主路径；只记录日志，下一次 list/capture 会重新对齐
-        console.error("[agent-runner] abort_rollback_failed", {
-          branch,
-          sessionId,
-          projectId,
-          turnStartMessageId,
-          error: err,
-        });
-      }
-      turnDirty = false;
-      assistantAppendCount = 0;
     };
 
     try {
@@ -397,7 +371,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
 
-        // 方案 B：模型返回后如果已经 abort，不写 partial assistant，直接回滚
+        // 模型返回后如果已经 abort，保留 partial assistant，直接退出
         if (signal?.aborted) {
           await handleAbort("post_model");
           break;
@@ -410,7 +384,6 @@ export class DefaultAgentRunner implements AgentRunner {
           assistantMessage = await session.append("assistant", { blocks: result.blocks }, {
             raw: result.raw as Record<string, unknown>,
           });
-          turnDirty = true;
           assistantAppendCount += 1;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -536,7 +509,6 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         await session.append("user", { blocks: toolResults });
-        turnDirty = true;
         if (publishRunLifecycle) {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
@@ -554,7 +526,7 @@ export class DefaultAgentRunner implements AgentRunner {
       }
     } catch (e: unknown) {
       if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
-        // catch 命中 AbortError：同样走统一回滚，防止已写 partial assistant 残留
+        // catch 命中 AbortError：走统一 abort 处理（保留 partial）
         await handleAbort("catch_abort");
       } else {
         runError = e instanceof Error ? e.message : String(e);

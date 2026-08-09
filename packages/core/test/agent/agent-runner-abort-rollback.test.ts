@@ -277,7 +277,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     assertSessionClean(msgs);
   });
 
-  it("检测点 7 post_model：模型返回后 abort，不写 partial assistant", async () => {
+  it("检测点 7 post_model：模型返回后 abort，未写入 partial（append 前退出）", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -355,7 +355,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     assertSessionClean(msgs);
   });
 
-  it("检测点 8 before_tool_run：assistant 已写、tool 未跑前 abort，回滚整 turn", async () => {
+  it("检测点 8 before_tool_run：assistant 已写、tool 未跑前 abort，保留 partial", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -391,11 +391,11 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
     const msgs = await session.list();
-    // 即使上一轮已 append assistant（tool_use），方案 B 也整 turn 回滚
-    assertSessionClean(msgs);
+    // abort 保留 partial：assistant tool_use 仍在 session 里
+    assert.ok(msgs.some((m) => m.role === "assistant"), "应保留已写入的 assistant");
   });
 
-  it("检测点 9 after_tool_checkpoint：tool 跑完、checkpoint 后 abort，回滚整 turn", async () => {
+  it("检测点 9 after_tool_checkpoint：tool 跑完、checkpoint 后 abort，保留 partial", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -450,11 +450,11 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
     const msgs = await session.list();
-    // assistant tool_use 已写、tool_results 尚未 append；方案 B 全回滚
-    assertSessionClean(msgs);
+    // abort 保留 partial：assistant + tool_results 都仍在 session 里
+    assert.ok(msgs.some((m) => m.role === "assistant"), "应保留已写入的 assistant");
   });
 
-  it("catch 分支：依赖外部抛出 AbortError，已写 partial 被清理", async () => {
+  it("catch 分支：依赖外部抛出 AbortError，保留 partial", async () => {
     // 用 ChatAgentSession 路径模拟：让 checkpoint.capture 抛 AbortError，
     // 此时 assistant 已写入；catch 应识别为 abort 并回滚到 turn 起点。
     const session = new InMemoryAgentSession();
@@ -516,7 +516,8 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
     assert.equal(result.stopReason, "cancelled");
     const msgs = await session.list();
-    assertSessionClean(msgs);
+    // abort 保留 partial：assistant 仍在 session 里
+    assert.ok(msgs.some((m) => m.role === "assistant"), "应保留已写入的 assistant");
   });
 
   it("catch 分支：非 AbortError 不回滚，错误向上抛", async () => {
