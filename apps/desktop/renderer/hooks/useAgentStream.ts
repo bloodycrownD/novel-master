@@ -38,7 +38,7 @@ import {
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
-} from "@shared/agent-event-types";
+} from "@novel-master/core/events";
 import { onAgentStream } from "../ipc/client";
 import { useConversationBatch } from "@/features/chat/conversation-batch";
 

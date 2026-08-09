@@ -8,7 +8,10 @@ import type {
   AgentPromptLayout,
   PersistTextPromptBlock,
 } from "../model/agent-prompt-layout.js";
-import { layoutHasWorkplace } from "../model/agent-prompt-layout.js";
+import {
+  layoutHasCustomAttach,
+  layoutHasWorkplace,
+} from "../model/agent-prompt-layout.js";
 
 /** wire / 域对象中的旧 worktree 块形状（读入时 strip，不写入域模型）。 */
 export type LegacyPersistWorktreeWireBlock = {
@@ -62,6 +65,9 @@ export function normalizeAgentPromptLayoutDomain(
     ...(layout.persistEnabled === true ? { persistEnabled: true } : {}),
     ...(layout.dynamicEnabled === true ? { dynamicEnabled: true } : {}),
     ...(layoutHasWorkplace(layout) ? { workplace: layout.workplace } : {}),
+    ...(layoutHasCustomAttach(layout)
+      ? { customAttach: layout.customAttach }
+      : {}),
     persist,
     dynamic: [...layout.dynamic],
   };

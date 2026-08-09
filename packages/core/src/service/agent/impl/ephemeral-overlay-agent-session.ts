@@ -55,4 +55,21 @@ export class EphemeralOverlayAgentSession implements AgentSession {
   hideRange(fromSeq: number, toSeq: number): Promise<number> {
     return this.base.hideRange(fromSeq, toSeq);
   }
+
+  async truncateAfterMessage(afterMessageId: string | null): Promise<void> {
+    // EphemeralOverlayAgentSession 只在 RAM overlay 里追加消息；
+    // base 列表是只读历史，不在本职责范围内截断。
+    if (afterMessageId == null) {
+      this.overlay.length = 0;
+      return;
+    }
+    const idx = this.overlay.findIndex((m) => m.id === afterMessageId);
+    if (idx >= 0) {
+      // anchor 命中 overlay：只截 overlay
+      this.overlay.splice(idx + 1);
+      return;
+    }
+    // anchor 命中 base（turn 起点在历史里）：overlay 整段都是本 turn 写的，全清
+    this.overlay.length = 0;
+  }
 }

@@ -38,10 +38,20 @@ export function parseTemplateToAst(template: string): AstNode[] {
 
 /**
  * Stateful template parser (reusable, no options).
+ *
+ * 同一段模板字符串反复解析纯属浪费——解析是纯函数，输入相同则 AST 必然相同，
+ * 所以这里按模板字符串原文缓存一份 AST，命中就直接返回，省掉重复的词法扫描
+ * 和 AST 构造。模板字符串通常数量有限（来自配置），缓存增长可控，不需要 LRU。
  */
 export class TemplateParser {
+  private readonly astCache = new Map<string, AstNode[]>();
+
   parse(template: string): AstNode[] {
-    return parseTemplateToAst(template);
+    const cached = this.astCache.get(template);
+    if (cached !== undefined) return cached;
+    const ast = parseTemplateToAst(template);
+    this.astCache.set(template, ast);
+    return ast;
   }
 }
 

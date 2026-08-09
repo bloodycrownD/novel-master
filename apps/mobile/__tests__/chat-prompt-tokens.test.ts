@@ -1,4 +1,4 @@
-import {formatPromptTokenUsageLabel} from '../src/utils/format-token-count';
+import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
 import {
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,
@@ -8,7 +8,7 @@ import type {MobileNovelMasterRuntime} from '../src/runtime/types';
 const mockResolveCurrentPromptTokens = jest.fn();
 const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
-const mockResolveApplicationModelId = jest.fn();
+const mockResolveSavedModelId = jest.fn();
 const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
 
 jest.mock('@novel-master/core/provider', () => ({
@@ -21,8 +21,8 @@ jest.mock('@novel-master/core/provider', () => ({
 }));
 
 jest.mock('@novel-master/core/agent', () => ({
-  resolveApplicationModelId: (...args: unknown[]) =>
-    mockResolveApplicationModelId(...args),
+  resolveSavedModelId: (...args: unknown[]) =>
+    mockResolveSavedModelId(...args),
 }));
 
 jest.mock('@novel-master/core/prompt', () => ({
@@ -62,7 +62,7 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveCurrentPromptTokens.mockReset();
     mockResolveTokenCounterModeForModel.mockReset();
     mockBuildSessionPromptInput.mockReset();
-    mockResolveApplicationModelId.mockReset();
+    mockResolveSavedModelId.mockReset();
     mockSerializePromptLlmInput.mockClear();
   });
 
@@ -82,7 +82,7 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveApplicationModelId.mockReturnValue('openai/gpt-4o');
+    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('gemma');
     mockResolveCurrentPromptTokens.mockResolvedValue({
       tokenCount: 24_000,
@@ -109,7 +109,7 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveApplicationModelId.mockReturnValue('openai/gpt-4o');
+    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
     mockResolveCurrentPromptTokens.mockResolvedValue({
       tokenCount: 24_000,
@@ -132,7 +132,7 @@ describe('chat-prompt-tokens.service', () => {
       layout: {persist: [], dynamic: []},
       ctx: {workplaceDisplay: '', messages: []},
     });
-    mockResolveApplicationModelId.mockReturnValue(undefined);
+    mockResolveSavedModelId.mockReturnValue(undefined);
 
     const label = await loadChatPromptTokenLabel(stubRuntime(), {
       sessionId: 's1',

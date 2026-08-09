@@ -11,6 +11,7 @@ import {
 import { chatInvalidArgument, chatNotFound } from '@/errors/chat-errors.js';
 import { sessionApiPromptTokenCache } from '@/infra/tokenizer/logic/session-api-prompt-token-cache.js';
 import type { TdbcConnection } from '@/infra/tdbc/ports/connection.port.js';
+import { CoordinatedWrite } from '@/service/coordinated-write.js';
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
@@ -100,30 +101,74 @@ export class DefaultMessageTranscriptEffectsService
 
     let hiddenCount = 0;
     let shownCount = 0;
+
+    // S-1：hideRange / showRange / clearDomain×2 四步跨资源写塞进 CoordinatedWrite。
+    // hide/show 的补偿是反向 range 操作，恢复可见性计数一致；
+    // rule_snapshot / file_cache 是纯缓存，清空后无法精确重建，按 best-effort no-op 处理。
+    const write = new CoordinatedWrite();
     if (hidePrefix != null) {
-      hiddenCount = await this.deps.messages.hideRange(
-        sessionId,
-        hidePrefix.fromSeq,
-        hidePrefix.toSeq,
-      );
+      write.register({
+        name: 'hide-prefix',
+        execute: async () => {
+          hiddenCount = await this.deps.messages.hideRange(
+            sessionId,
+            hidePrefix.fromSeq,
+            hidePrefix.toSeq,
+          );
+        },
+        rollback: async () => {
+          await this.deps.messages.showRange(
+            sessionId,
+            hidePrefix.fromSeq,
+            hidePrefix.toSeq,
+          );
+        },
+      });
     }
     if (showSuffix != null) {
-      shownCount = await this.deps.messages.showRange(
-        sessionId,
-        showSuffix.fromSeq,
-        showSuffix.toSeq,
-      );
+      write.register({
+        name: 'show-suffix',
+        execute: async () => {
+          shownCount = await this.deps.messages.showRange(
+            sessionId,
+            showSuffix.fromSeq,
+            showSuffix.toSeq,
+          );
+        },
+        rollback: async () => {
+          await this.deps.messages.hideRange(
+            sessionId,
+            showSuffix.fromSeq,
+            showSuffix.toSeq,
+          );
+        },
+      });
     }
-
-    // 置位成功：仅清 rule_snapshot + file_cache（保留 user_vfs_pending / 手改 chip）
-    await this.deps.sessionKkv.clearDomain(
-      sessionId,
-      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-    );
-    await this.deps.sessionKkv.clearDomain(
-      sessionId,
-      SESSION_KKV_DOMAIN_FILE_CACHE,
-    );
+    write.register({
+      name: 'clear-rule-snapshot',
+      execute: async () => {
+        await this.deps.sessionKkv.clearDomain(
+          sessionId,
+          SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+        );
+      },
+      rollback: async () => {
+        // rule_snapshot 是缓存快照，清空后无法重建原值；丢失只触发下次重算，不影响一致性。
+      },
+    });
+    write.register({
+      name: 'clear-file-cache',
+      execute: async () => {
+        await this.deps.sessionKkv.clearDomain(
+          sessionId,
+          SESSION_KKV_DOMAIN_FILE_CACHE,
+        );
+      },
+      rollback: async () => {
+        // file_cache 同为缓存，best-effort 不补偿。
+      },
+    });
+    await write.run();
     sessionApiPromptTokenCache.invalidate(sessionId);
 
     return { hiddenCount, shownCount };

@@ -5,9 +5,13 @@
  * `navigator.product === "ReactNative"`, we use XHR `onprogress` instead.
  * No `stream: false` downgrade on failure.
  *
- * **Fetch path intentionally does not use {@link createSseChunkEmitter}** — only
- * `postSseViaXhr` applies RN byte pacing. See
- * `.apm/kb/docs/Iterations/mobile-sse-stream-resilience/spec.md`.
+ * fetch 与 XHR 两条路径共享 {@link dispatchSseChunk} 分发语义（A-23）：解码后的
+ * chunk 统一经 dispatchSseChunk 转发，首包日志只打一次。pacing 差异仍按传输介质
+ * 区分——fetch 每个 reader.read() 直投 onChunk（Desktop/CLI 的异步读天然让步，无需
+ * 节流），XHR 走 {@link createSseChunkEmitter} 的 32ms 整流（RN burst 平滑）。真正
+ * 的 SSE 帧解析（data: / \n\n / event 字段）由下游 *-sse-parser 经 feedSseLines
+ * 增量处理，跨路径一致。详见
+ * `.apm/kb/docs/Iterations/mobile-sse-stream-resilience/spec.md`。
  *
  * @module infra/llm-protocol/logic/llm-sse-transport
  */
@@ -15,6 +19,10 @@
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { FetchFn } from "../ports/adapter.port.js";
 import { createSseChunkEmitter } from "./sse-chunk-emitter.js";
+import {
+  createSseDispatchState,
+  dispatchSseChunk,
+} from "./dispatch-sse-chunk.js";
 import { assertOk } from "./http-util.js";
 
 export type SseByteHandler = (chunk: string) => void;
@@ -153,7 +161,7 @@ function postSseViaXhr(
   return new Promise((resolve, reject) => {
     const xhr = new XhrCtor();
     let processedLength = 0;
-    let firstChunkLogged = false;
+    const dispatchState = createSseDispatchState();
     let settled = false;
 
     const resolveOnce = (value: { status: number; contentType: string | null }) => {
@@ -176,11 +184,13 @@ function postSseViaXhr(
       }
       const chunk = text.slice(processedLength);
       processedLength = text.length;
-      if (!firstChunkLogged) {
-        firstChunkLogged = true;
-        logSse(logTag, "xhr first chunk", { bytes: chunk.length });
-      }
-      emitter.append(chunk);
+      // 经公共 dispatchSseChunk 转发到 emitter（节流由 emitter 负责），首包日志统一在此。
+      dispatchSseChunk(
+        chunk,
+        dispatchState,
+        (text) => emitter.append(text),
+        (bytes) => logSse(logTag, "xhr first chunk", { bytes }),
+      );
     };
 
     xhr.open(init.method ?? "POST", url);
@@ -277,19 +287,22 @@ async function postSseViaFetch(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let firstChunkLogged = false;
+  const dispatchState = createSseDispatchState();
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
       break;
     }
+    // fetch 在此完成 UTF-8 解码，再经公共 dispatchSseChunk 直投 onChunk（即时转发，
+    // 无节流）；首包日志与 XHR 路径共用同一套分发语义。
     const chunk = decoder.decode(value, { stream: true });
-    if (!firstChunkLogged && chunk.length > 0) {
-      firstChunkLogged = true;
-      logSse(logTag, "fetch first chunk", { bytes: chunk.length });
-    }
-    onChunk(chunk);
+    dispatchSseChunk(
+      chunk,
+      dispatchState,
+      onChunk,
+      (bytes) => logSse(logTag, "fetch first chunk", { bytes }),
+    );
   }
 
   return {

@@ -2,8 +2,10 @@
  * Orchestrates local vs remote version comparison for desktop update checks.
  */
 
-import { compareAppVersions } from "./compare-app-versions.js";
-import { excerptReleaseNotes } from "./excerpt-release-notes.js";
+import {
+  compareAppVersions,
+  excerptReleaseNotes,
+} from "@novel-master/core/common";
 import { resolveLatestRelease, type FetchFn } from "./resolve-latest-release.js";
 import type { UpdateCheckData } from "./types.js";
 

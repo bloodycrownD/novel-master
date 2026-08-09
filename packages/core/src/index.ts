@@ -67,10 +67,13 @@ export {
   scrubProviderTables,
   scrubProviderTablesInDatabase,
   restoreProviderTableSnapshot,
+  ProviderTableSnapshotError,
+  validateProviderTableSnapshot,
 } from "./infra/db-backup/index.js";
 export type {
   ProviderBackupTableName,
   ProviderTableSnapshot,
+  ProviderTableSnapshotErrorCode,
 } from "./infra/db-backup/index.js";
 
 /**
@@ -177,6 +180,7 @@ export type { FileToolName } from "./domain/tool/builtin/vfs-tools.js";
 export type {
   BuiltinToolContext,
   VfsToolContext,
+  ToolResourceQuota,
 } from "./domain/tool/builtin/builtin-tool-context.js";
 
 /**

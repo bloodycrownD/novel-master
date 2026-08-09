@@ -11,7 +11,13 @@ export type SessionFsErrorCode =
   | "ROLLBACK_NO_CHECKPOINT"
   | "RESTORE_REVISION_MISSING"
   | "ROLLBACK_VFS_RESTORE_FAILED"
-  | "ROLLBACK_REVISION_BACKFILL_REQUIRED";
+  | "ROLLBACK_REVISION_BACKFILL_REQUIRED"
+  // S-13 护栏：undo_send 解析出的 targetTree 为空时拒绝删除，
+  // 避免在缺少 baseline checkpoint 的纯文本 chat 路径上把整个会话工作区删光。
+  | "ROLLBACK_UNDO_SEND_EMPTY_TARGET"
+  // A-22 乐观锁：resolveRollbackPlan 读快照与事务写入之间出现并发写入时拒绝，
+  // 让上层重试或提示用户。重试上限耗尽后才向上抛这个错。
+  | "ROLLBACK_CONFLICT";
 
 /**
  * Unified error for session-fs rollback operations.
@@ -23,6 +29,12 @@ export class SessionFsError extends Error {
   readonly logicalPath?: string;
   readonly revisionVersion?: number;
   readonly missingLogicalPaths?: readonly string[];
+  /**
+   * A-22 乐观锁：仅在 ROLLBACK_CONFLICT 下生效，记录快照期与事务内重读到的
+   * 会话消息计数，方便 UI 提示「期间有新消息写入」。
+   */
+  readonly expectedMessageCount?: number;
+  readonly actualMessageCount?: number;
 
   constructor(
     code: SessionFsErrorCode,
@@ -33,6 +45,8 @@ export class SessionFsError extends Error {
       logicalPath?: string;
       revisionVersion?: number;
       missingLogicalPaths?: readonly string[];
+      expectedMessageCount?: number;
+      actualMessageCount?: number;
     },
   ) {
     super(message);
@@ -43,6 +57,8 @@ export class SessionFsError extends Error {
     this.logicalPath = options?.logicalPath;
     this.revisionVersion = options?.revisionVersion;
     this.missingLogicalPaths = options?.missingLogicalPaths;
+    this.expectedMessageCount = options?.expectedMessageCount;
+    this.actualMessageCount = options?.actualMessageCount;
   }
 }
 
@@ -120,6 +136,22 @@ export function sessionFsRollbackNoCheckpoint(
   );
 }
 
+/**
+ * undo_send 的 targetTree 经过 prior + anchor 两轮兜底后仍为空，
+ * 继续删除会把当前会话工作区整体清掉。这里抛错让上层走「仅截断消息」的
+ * 降级路径（skipVfsReconcile），或提示用户该会话缺少 baseline 快照。
+ */
+export function sessionFsRollbackUndoSendEmptyTarget(
+  sessionId: string,
+  messageId: string,
+): SessionFsError {
+  return new SessionFsError(
+    "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
+    "undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区",
+    { sessionId, messageId },
+  );
+}
+
 /** VFS reconcile 失败，UI 可提供仅截断消息的降级回滚。 */
 export function sessionFsRollbackVfsRestoreFailed(
   message: string,
@@ -188,6 +220,32 @@ export function formatRollbackRevisionBackfillAlertMessage(
       ? "其余文件将正常回滚至发送前状态。"
       : "其余文件将正常回滚至锚点。";
   return `快照丢失，将使用最新内容修复。\n\n丢失快照的文件：\n${fileLines}\n\n${tailLine}`;
+}
+
+/**
+ * A-22 乐观锁冲突：resolveRollbackPlan 解析完成到事务开始之间，会话消息计数发生了变化。
+ *
+ * @remarks 事务内重读会话消息计数，与 plan 阶段记录的快照不一致时抛出。上层调用方可以重试
+ *          （rollbackToMessage 本身在重试上限内会自动重试），或提示用户「回滚期间有新消息写入」。
+ */
+export function sessionFsRollbackConflict(
+  sessionId: string,
+  messageId: string,
+  expectedMessageCount: number,
+  actualMessageCount: number,
+): SessionFsError {
+  return new SessionFsError(
+    "ROLLBACK_CONFLICT",
+    `回滚期间会话消息发生了变化（预期 ${expectedMessageCount} 条，实际 ${actualMessageCount} 条），请重试`,
+    { sessionId, messageId, expectedMessageCount, actualMessageCount },
+  );
+}
+
+/** 判断错误是否为乐观锁冲突（含 cause 链）。 */
+export function isRollbackConflictError(
+  error: unknown,
+): error is SessionFsError {
+  return isSessionFsError(error, "ROLLBACK_CONFLICT");
 }
 
 /**

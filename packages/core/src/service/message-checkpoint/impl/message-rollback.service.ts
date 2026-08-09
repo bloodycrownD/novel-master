@@ -33,11 +33,14 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import {
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
   sessionFsRollbackRevisionBackfillRequired,
   sessionFsRollbackVfsRestoreFailed,
+  sessionFsRollbackUndoSendEmptyTarget,
+  sessionFsRollbackConflict,
   isSessionFsError,
 } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
@@ -71,6 +74,11 @@ type RollbackPlan = {
   projectId: string;
   sessionId: string;
   scope: VfsScope;
+  /**
+   * A-22 乐观锁快照：plan 解析时会话消息总数。事务开始时重读会话消息计数，
+   * 与该快照不一致即代表间隙期间有 agent 写入，需要重试或拒。
+   */
+  messageCountSnapshot: number;
 };
 
 function formatDegradableMessage(cause: unknown): string {
@@ -94,6 +102,15 @@ function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
 }
 
 /**
+ * A-22 乐观锁最大重试次数。
+ *
+ * @remarks plan 解析（多次 await 读）与事务开始之间存在 TOCTOU 间隙：agent 可能在此期间写入新消息。
+ * 每次事务开始时重读会话消息计数与快照对比；不一致即重试整个 plan+事务。
+ * 3 次上限是为了避免在高频写入会话上死循环——冲突仍持续时向上报 ROLLBACK_CONFLICT。
+ */
+const ROLLBACK_OPTIMISTIC_RETRY_LIMIT = 3;
+
+/**
  * Forward-restores the workspace to an anchor checkpoint tree and truncates tail state.
  */
 export class DefaultMessageRollbackService implements MessageRollbackService {
@@ -107,50 +124,97 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
   ): Promise<void> {
     assertRollbackOptionsCompatible(options);
 
-    const plan = await this.resolveRollbackPlan(
-      sessionId,
-      projectId,
-      anchorMessageId,
-    );
-
-    if (!options?.skipVfsReconcile) {
-      const missing = await findMissingRevisionPointers(
-        this.deps.revisions,
-        this.deps.entries,
-        plan.scope,
-        plan.targetTree,
-        plan.pathsNeedWrite,
+    // A-22 乐观锁重试循环：plan 解析（多次 await 读）与事务开始之间有 TOCTOU 间隙，
+    // 事务内重读会话消息计数与快照对比，不一致代表间隙期间有 agent 写入，重试整个 plan+事务。
+    // 冲突持续超过上限才向上报 ROLLBACK_CONFLICT，避免在高频写入会话上死循环。
+    for (let attempt = 1; ; attempt++) {
+      const plan = await this.resolveRollbackPlan(
+        sessionId,
+        projectId,
+        anchorMessageId,
       );
-      if (missing.length > 0 && !options?.revisionHeadBackfill) {
-        throw sessionFsRollbackRevisionBackfillRequired(missing, {
-          sessionId,
-          messageId: anchorMessageId,
+
+      // S-13 护栏：undo_send 解析出的 targetTree 为空意味着没有 baseline 快照可对齐，
+      // 一旦进入 reconcileVfsPaths 会把 live 树里所有路径都当「需删除」处理——
+      // 这正是纯文本 chat 路径「聊一轮再 undo_send」把整个会话工作区删光的根因。
+      // 仅当确实要 reconcile VFS 时才拦；skipVfsReconcile 只截断消息、不碰文件，
+      // 空 targetTree 不会造成破坏，仍然放行（例如 DF-U1 的降级回滚）。
+      if (
+        !options?.skipVfsReconcile &&
+        plan.mode === "undo_send" &&
+        plan.targetTree.size === 0
+      ) {
+        throw sessionFsRollbackUndoSendEmptyTarget(sessionId, anchorMessageId);
+      }
+
+      if (!options?.skipVfsReconcile) {
+        const missing = await findMissingRevisionPointers(
+          this.deps.revisions,
+          this.deps.entries,
+          plan.scope,
+          plan.targetTree,
+          plan.pathsNeedWrite,
+        );
+        if (missing.length > 0 && !options?.revisionHeadBackfill) {
+          throw sessionFsRollbackRevisionBackfillRequired(missing, {
+            sessionId,
+            messageId: anchorMessageId,
+          });
+        }
+      }
+
+      try {
+        await this.deps.conn.transaction(async (tx) => {
+          // A-22 乐观锁：事务刚开始，未写任何东西之前重读会话消息计数，
+          // 与 plan 阶段记录的快照不一致代表间隙期间 agent 有写入。
+          // 这里用 tx 作用域的 SqliteMessageRepository——驱动事务持锁期间，
+          // 只有 tx 面能安全查询（不能走 this.deps.messages，那会重入驱动的 mutex 死锁）。
+          // messages 没有独立的 countBySession 方法，这里用 listBySession 的 length 作为快照源，
+          // 与 plan 阶段读路径一致。
+          const txMessages = new SqliteMessageRepository(tx);
+          const currentMessages = await txMessages.listBySession(sessionId);
+          if (currentMessages.length !== plan.messageCountSnapshot) {
+            throw sessionFsRollbackConflict(
+              sessionId,
+              anchorMessageId,
+              plan.messageCountSnapshot,
+              currentMessages.length,
+            );
+          }
+
+          if (!options?.skipVfsReconcile) {
+            try {
+              await this.reconcileVfsPaths(
+                tx,
+                plan,
+                options?.revisionHeadBackfill === true,
+              );
+            } catch (cause) {
+              throw sessionFsRollbackVfsRestoreFailed(
+                formatDegradableMessage(cause),
+                { sessionId, messageId: anchorMessageId },
+              );
+            }
+          }
+          await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+            projectId: plan.projectId,
+            sessionId: plan.sessionId,
+            afterSeq: plan.truncateAfterSeq,
+            sweepRevisions: true,
+          });
         });
+        // 成功 → 跳出重试循环。
+        break;
+      } catch (error) {
+        // 仅乐观锁冲突才重试；其他错误（护栏、backfill required、vfs restore failed）直接向上。
+        const isConflict = isSessionFsError(error, "ROLLBACK_CONFLICT");
+        if (!isConflict || attempt >= ROLLBACK_OPTIMISTIC_RETRY_LIMIT) {
+          throw error;
+        }
+        // 冲突重试前不再做其他事——重新 resolveRollbackPlan 会拉到最新的消息列表。
       }
     }
 
-    await this.deps.conn.transaction(async (tx) => {
-      if (!options?.skipVfsReconcile) {
-        try {
-          await this.reconcileVfsPaths(
-            tx,
-            plan,
-            options?.revisionHeadBackfill === true,
-          );
-        } catch (cause) {
-          throw sessionFsRollbackVfsRestoreFailed(
-            formatDegradableMessage(cause),
-            { sessionId, messageId: anchorMessageId },
-          );
-        }
-      }
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
-        projectId: plan.projectId,
-        sessionId: plan.sessionId,
-        afterSeq: plan.truncateAfterSeq,
-        sweepRevisions: true,
-      });
-    });
     sessionApiPromptTokenCache.invalidate(sessionId);
   }
 
@@ -205,7 +269,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           targetTree = anchorTree;
         }
       }
-      // undo_send 始终按 prior 基线 diff 当前工作区（空树 = 删光会话文件）
+      // undo_send 始终按 prior 基线 diff 当前工作区。空 targetTree 历史上意味着
+      // 「删光会话文件」，但 S-13 护栏已在 rollbackToMessage 拦住空 targetTree 的
+      // reconcile 调用，避免误删；这里保持 hasDirectTargetTree 语义不变。
       hasDirectTargetTree = true;
     } else {
       const directTargetTree = await this.deps.checkpoints.loadFileTree(
@@ -269,6 +335,9 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       projectId,
       sessionId,
       scope,
+      // A-22 快照：listBySession 的 length 即 plan 阶段的会话消息计数，
+      // 事务内重读会话消息计以此为准。
+      messageCountSnapshot: allMessages.length,
     };
   }
 

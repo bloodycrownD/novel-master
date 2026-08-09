@@ -89,6 +89,22 @@ function makeRuntime(overrides: {
   readonly userVfsTurn?: UserVfsTurnService;
   readonly evaluateRuleView?: () => Promise<ReturnType<typeof emptyRuleView>>;
   readonly listKeys?: (sessionId: string, domain: string) => Promise<string[]>;
+  /** 覆盖 messageCheckpoint.capture（默认 no-op）。 */
+  readonly capture?: (
+    sessionId: string,
+    projectId: string,
+    messageId: string,
+  ) => Promise<void>;
+  /** 覆盖 messageCheckpoint.release（默认 no-op；S-1 回滚路径用）。 */
+  readonly release?: (
+    sessionId: string,
+    messageId: string,
+  ) => Promise<void>;
+  /** 覆盖 messageCheckpoint.backfillMissingBaselines（默认 no-op）。 */
+  readonly backfillMissingBaselines?: (
+    sessionId: string,
+    projectId: string,
+  ) => Promise<void>;
   /** 覆盖 agentRegistry.get 返回的 definition（默认 sampleDefinition）。 */
   readonly definition?: AgentDefinition;
 }): AgentTurnRuntimePort {
@@ -116,7 +132,11 @@ function makeRuntime(overrides: {
       delete: overrides.delete ?? (async () => undefined),
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
-      capture: async () => undefined,
+      capture:
+        overrides.capture ?? (async () => undefined),
+      release: overrides.release ?? (async () => undefined),
+      backfillMissingBaselines:
+        overrides.backfillMissingBaselines ?? (async () => undefined),
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
@@ -826,5 +846,132 @@ describe("runAgentTurn", () => {
     );
 
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
+  });
+
+  // T-DS3（S-13 治本）：普通纯文本 chat 路径下，runAgentTurn 必须为新 append
+  // 的 user 消息写 baseline checkpoint。原先仅 userOpsAttachments 非空时才写，
+  // 导致 plain chat 无 baseline → undo_send 时 targetTree 空 → 删光工作区。
+  it("T-DS3a：普通纯文本 chat 路径为新 user 消息写 baseline checkpoint", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const captured: Array<{
+      sessionId: string;
+      projectId: string;
+      messageId: string;
+    }> = [];
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-plain-1" }),
+      capture: async (sessionId, projectId, messageId) => {
+        captured.push({ sessionId, projectId, messageId });
+      },
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "只是一条纯文本消息",
+      );
+    } catch {
+      // runner deps stubbed；走到 capture 即说明 baseline 已写
+    }
+    assert.equal(captured.length, 1, "plain chat 必须为新 user 消息写一次 baseline");
+    assert.deepEqual(captured[0], {
+      sessionId: "s",
+      projectId: "p",
+      messageId: "u-plain-1",
+    });
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  // T-DS3b：baseline checkpoint 写入失败必须向上抛出，不能静默吞掉，否则
+  // 调用方无法感知 baseline 缺失，后续 undo_send 仍会撞护栏。
+  it("T-DS3b：baseline capture 抛错时 runAgentTurn 向上抛出", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-plain-2" }),
+      capture: async () => {
+        throw new Error("baseline capture failed");
+      },
+    });
+    await assert.rejects(
+      () =>
+        runAgentTurn(
+          runtime,
+          { projectId: "p", sessionId: "s" },
+          "纯文本消息",
+        ),
+      /baseline capture failed/,
+    );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  // T-SC1（S-1 迁移）：runAgentTurn 的 append+capture 链走 CoordinatedWrite 后，
+  // capture 步骤抛错时必须逆序回滚——删掉刚 append 的 user 消息，同时入口的
+  // backfillMissingBaselines 已为历史消息写了 baseline，会话仍可回滚。
+  it("T-SC1：capture 抛错时 append 被逆序回滚、baseline checkpoint 仍存在", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const deletedIds: string[] = [];
+    const released: Array<{ sessionId: string; messageId: string }> = [];
+    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-sc1" }),
+      delete: async (id: string) => {
+        deletedIds.push(id);
+      },
+      capture: async () => {
+        throw new Error("capture boom");
+      },
+      release: async (sessionId, messageId) => {
+        released.push({ sessionId, messageId });
+      },
+      backfillMissingBaselines: async (sessionId, projectId) => {
+        backfilled.push({ sessionId, projectId });
+      },
+    });
+    await assert.rejects(
+      () =>
+        runAgentTurn(
+          runtime,
+          { projectId: "p", sessionId: "s" },
+          "会触发 capture 失败的消息",
+        ),
+      /capture boom/,
+    );
+    // 入口 baseline 回填仍执行 → 历史消息的 baseline checkpoint 存在、会话可回滚
+    assert.equal(backfilled.length, 1, "入口必须调一次 backfillMissingBaselines");
+    // append 的补偿动作：刚写入的 user 消息被删
+    assert.deepEqual(deletedIds, ["u-sc1"], "capture 失败后 append 必须被逆序回滚");
+    // capture 的补偿动作（release）在 execute 抛错前未实际写入，这里仅验证调度路径
+    assert.equal(released.length, 0, "capture execute 抛错，其自身回滚不触发");
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  // T-DS5（S-13 扩展）：runAgentTurn 入口必须调一次 backfillMissingBaselines，
+  // 给历史空窗消息补 baseline。Step 9 已保证新消息源头有 baseline，但旧会话里
+  // 可能还留着 Step 9 之前的消息——这里在 turn 开始时幂等补齐。
+  it("T-DS5：runAgentTurn 开始时调一次 backfillMissingBaselines", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const backfilled: Array<{ sessionId: string; projectId: string }> = [];
+    const runtime = makeRuntime({
+      append: async () => ({ id: "u-backfill-1" }),
+      backfillMissingBaselines: async (sessionId, projectId) => {
+        backfilled.push({ sessionId, projectId });
+      },
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "继续聊天",
+      );
+    } catch {
+      // runner deps stubbed；走到断言即说明 backfill 已调
+    }
+    assert.equal(backfilled.length, 1, "每轮发送只能调一次 backfill");
+    assert.deepEqual(backfilled[0], { sessionId: "s", projectId: "p" });
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 });

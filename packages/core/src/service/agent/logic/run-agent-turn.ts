@@ -46,6 +46,7 @@ import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-atta
 import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-source-range.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
+import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -209,6 +210,15 @@ export async function runAgentTurn(
     (a) => a.source === "attach",
   );
 
+  // S-13 扩展：每轮发送开头都尝试 backfill 一下历史空窗消息。Step 9 之后新消息
+  // 在源头就有 baseline 了，但旧会话里可能还留着没有 checkpoint 的历史消息——
+  // 这里幂等地补齐，确保 undo_send 始终能找到可回滚点。已有 checkpoint 的消息不动。
+  stage = "backfill-baseline-checkpoints";
+  await runtime.messageCheckpoint.backfillMissingBaselines(
+    scope.sessionId,
+    scope.projectId,
+  );
+
   stage = "resolve-agent";
   const definition = (
     await mapResolveError(() =>
@@ -239,7 +249,7 @@ export async function runAgentTurn(
     }
   }
 
-  stage = "resolve-model";
+  stage = "resolve-agent";
   const { savedModelId, workspaceModelId } = await mapResolveError(() =>
     resolveApplicationModelIdForRun(runtime, definition, scope.sessionId),
   );
@@ -343,31 +353,64 @@ export async function runAgentTurn(
       userOpsAttachments.length > 0 ||
       hasAnnotateDrafts);
 
+  // S-1：append + capture 这条跨资源写链走 CoordinatedWrite，任一步失败按逆序补偿。
+  // append 的补偿是删掉刚写入的消息；capture 的补偿是 release 刚写的 checkpoint。
+  // reAppended 路径下消息已被 prepareUserVfsTurnForAgentRun 写回，这里只注册 capture。
+  const coordinatedWrite = new CoordinatedWrite();
   if (shouldAppendNewUser) {
     stage = "append-user-message";
-    const appended = await runtime.messages.append(
-      scope.sessionId,
-      "user",
-      textBlocks(trimmed),
-      mergedAttachments.length > 0
-        ? { attachments: mergedAttachments }
-        : undefined,
-    );
-    // Checkpoint still anchors on user append that carries user_ops (P1).
-    if (userOpsAttachments.length > 0) {
-      checkpointAnchorMessageId = appended.id;
-    }
-    await options?.onUserMessageAppended?.();
+    coordinatedWrite.register({
+      name: "append-user-message",
+      execute: async () => {
+        const appended = await runtime.messages.append(
+          scope.sessionId,
+          "user",
+          textBlocks(trimmed),
+          mergedAttachments.length > 0
+            ? { attachments: mergedAttachments }
+            : undefined,
+        );
+        // S-13 治本：每条新 user 消息都写 baseline checkpoint，确保后续步骤失败时
+        // undo_send 仍有可回滚点。原先仅在 userOpsAttachments 非空时才 capture，
+        // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
+        // 这里把不变式上提到源头，user_ops 路径的 anchor 语义保留（仍走同一 capture）。
+        checkpointAnchorMessageId = appended.id;
+        // re-append 也要通知 UI 刷新（否则空续跑写回后列表不更新）
+        await options?.onUserMessageAppended?.();
+      },
+      rollback: async () => {
+        const appendedId = checkpointAnchorMessageId;
+        if (appendedId != null) {
+          await runtime.messages.delete(appendedId);
+        }
+      },
+    });
   }
 
-  if (checkpointAnchorMessageId != null) {
-    stage = "capture-checkpoint-after-user-ops";
-    await runtime.messageCheckpoint.capture(
-      scope.sessionId,
-      scope.projectId,
-      checkpointAnchorMessageId,
-    );
-  }
+  // capture 步骤：anchor 可能来自上面的 append execute，也可能来自 reAppended 路径。
+  // 放进 execute 内取值，保证 append 成功后才读到正确的 anchor。
+  coordinatedWrite.register({
+    name: "capture-baseline-checkpoint",
+    execute: async () => {
+      const anchorId = checkpointAnchorMessageId;
+      if (anchorId == null) return;
+      stage = "capture-baseline-checkpoint";
+      await runtime.messageCheckpoint.capture(
+        scope.sessionId,
+        scope.projectId,
+        anchorId,
+      );
+    },
+    rollback: async () => {
+      const anchorId = checkpointAnchorMessageId;
+      if (anchorId != null) {
+        // release 可选：runtime 未提供时按 best-effort no-op 处理。
+        await runtime.messageCheckpoint.release?.(scope.sessionId, anchorId);
+      }
+    },
+  });
+
+  await coordinatedWrite.run();
 
   stage = "validate-agent-definition";
   const toolProbe = new ToolRegistry<BuiltinToolContext>();
@@ -469,6 +512,10 @@ export async function runAgentTurn(
       parentSignal,
       callableAgents: callable,
     },
+    // A-14 path policy：三端共用走 runAgentTurn，这里统一不限制（undefined）；
+    // 后续若要按 platform / project 收紧，改成 resolveAllowedPaths(...) 即可。
+    allowedPaths: undefined,
+    resourceQuota: undefined,
   };
   const runner = createAgentRunner(
     assembleAgentRunnerDeps({
@@ -662,6 +709,9 @@ async function runChildAgent(args: {
       parentSignal: childController.signal,
       callableAgents: callable,
     },
+    // A-14：子 agent 同样不限制路径。
+    allowedPaths: undefined,
+    resourceQuota: undefined,
   };
 
   const runner = createAgentRunner(

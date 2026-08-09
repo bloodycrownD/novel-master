@@ -1,0 +1,64 @@
+# 持续集成：每个 PR 和非 main 分支的 push 都会跑一遍。
+#
+# 设计要点：
+# - 包管理器和 release.yml 对齐，统一用 npm（npm ci），不用 pnpm
+# - build 步骤是 blocking——core 产物是下游 workspace 测试的依赖，必须先绿
+# - lint / typecheck / test 暂时 continue-on-error，因为仓库里还有既存错误；
+#   先把流水线搭起来，后续逐步修到全绿再去掉 continue-on-error
+#
+# 触发策略：
+# - push 到非 main、非 tag 的分支才跑（main 由 release.yml 负责，避免重复）
+# - pull_request 指向任意分支都跑
+
+name: CI
+
+on:
+  push:
+    branches-ignore:
+      - main
+    tags-ignore:
+      - "**"
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Lint & Typecheck & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # core 等 workspace 的产物是下游包 test 的前置依赖，所以 build 必须先过
+      - name: Build workspaces
+        run: npm run build --workspaces --if-present
+
+      # 下面三步目前仓库里还有既存错误，先就位但允许失败，后续逐步修到全绿
+      - name: Lint
+        continue-on-error: true
+        run: npm run lint --workspaces --if-present
+
+      - name: Typecheck
+        continue-on-error: true
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Test
+        continue-on-error: true
+        run: npm run test --workspaces --if-present

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { createCharacterCardImportService } from "@novel-master/core/vfs";
+import { isSessionFsError } from "@novel-master/core/session-fs";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -67,7 +68,7 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(messages.length, 0);
   });
 
-  it("R2b: plain user undo_send 无 prior 时删光消息并移除后续文件", async () => {
+  it("R2b: plain user undo_send 无 prior 时护栏拒绝删光工作区", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -84,14 +85,25 @@ describe("MessageRollbackService (revision model)", () => {
       blocks: [{ type: "text", text: "thanks" }],
     });
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
-
-    await assert.rejects(() => svfs.read("/poem.md"));
+    // S-13 护栏：user1 是首条 plain user，prior 与 anchor 都没有 baseline 快照，
+    // targetTree 为空——直接 reconcile 会把 /poem.md 当「需删除」清掉。这里应抛
+    // ROLLBACK_UNDO_SEND_EMPTY_TARGET，且不截断消息、不动文件。
+    await assert.rejects(
+      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      (error: unknown) => {
+        assert.equal(
+          isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+          true,
+        );
+        return true;
+      },
+    );
+    assert.equal((await svfs.read("/poem.md")).content, "draft");
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 0);
+    assert.equal(messages.length, 4);
   });
 
-  it("R3: plain user undo_send 无 prior 时纯文本 tail 删锚点并清空工作区", async () => {
+  it("R3: plain user undo_send 无 prior 时护栏拒绝清空工作区", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -104,11 +116,15 @@ describe("MessageRollbackService (revision model)", () => {
     });
     await ctx.messages.append(session.id, "user", textBlocks("bye"));
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
-
-    await assert.rejects(() => svfs.read("/keep.md"));
+    // S-13 护栏：没有任何 baseline checkpoint，targetTree 为空，拒绝 reconcile。
+    await assert.rejects(
+      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      (error: unknown) =>
+        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+    );
+    assert.equal((await svfs.read("/keep.md")).content, "stable");
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 0);
+    assert.equal(messages.length, 3);
   });
 
   it("U1: undo_send 回滚 user₁ 保留 prior 消息并对齐发送前 checkpoint", async () => {
@@ -139,7 +155,7 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(messages[0]!.id, priorAsst.id);
   });
 
-  it("U2: undo_send 首条 plain user 删光消息且 VFS 空树", async () => {
+  it("U2: plain user undo_send 首条无 baseline 时护栏拒删", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -151,11 +167,15 @@ describe("MessageRollbackService (revision model)", () => {
       blocks: [{ type: "text", text: "hi" }],
     });
 
-    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
-
-    await assert.rejects(() => svfs.read("/solo.md"));
+    // S-13 护栏：首条 plain user、无 baseline，targetTree 为空 → 拒绝删除。
+    await assert.rejects(
+      () => ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id),
+      (error: unknown) =>
+        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
+    );
+    assert.equal((await svfs.read("/solo.md")).content, "only");
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 0);
+    assert.equal(messages.length, 2);
   });
 
   it("R-BC1: 角色卡导入 backfill baseline 后 undo_send 回首条 user 保留文件", async () => {

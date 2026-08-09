@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { CloudSyncCoordinator } from "../../src/infra/cloud-sync/impl/cloud-sync-coordinator.js";
 import { CloudSyncError } from "../../src/infra/cloud-sync/errors/cloud-sync-errors.js";
 import { statusKey, snapshotKey } from "../../src/infra/cloud-sync/logic/paths.js";
+import {
+  PushAgentMutex,
+  PushAgentMutexAcquireError,
+} from "../../src/infra/cloud-sync/logic/push-agent-mutex.js";
 import type { CloudSyncStatus } from "../../src/infra/cloud-sync/model/cloud-sync-status.js";
 import type { DbSyncPort } from "../../src/infra/cloud-sync/ports/db-sync.port.js";
 import type { ObjectStoragePort } from "../../src/infra/cloud-sync/ports/object-storage.port.js";
@@ -126,6 +130,10 @@ function createMockDbSync(overrides?: Partial<DbSyncPort>): DbSyncPort & {
 function createCoordinator(
   storage: ObjectStoragePort,
   dbSync: DbSyncPort,
+  options?: {
+    pushMutex?: PushAgentMutex;
+    pushAcquireTimeoutMs?: number;
+  },
 ): CloudSyncCoordinator {
   const snapshotData = new Uint8Array([1, 2, 3, 4]);
   return new CloudSyncCoordinator({
@@ -142,6 +150,9 @@ function createCoordinator(
     },
     readSnapshotBytes: async () => snapshotData,
     getSnapshotBytes: async () => snapshotData.length,
+    // 显式传入新 mutex，避免模块默认单例污染其他测试
+    pushMutex: options?.pushMutex ?? new PushAgentMutex(),
+    pushAcquireTimeoutMs: options?.pushAcquireTimeoutMs,
   });
 }
 
@@ -401,5 +412,226 @@ describe("CloudSyncCoordinator.push", () => {
       forceOverwriteRemote: true,
     });
     assert.equal(result.rev, 6);
+  });
+});
+
+// T-SC10：进程内 push/agent 互斥锁（A-21）
+describe("CloudSyncCoordinator.push 互斥锁 (A-21)", () => {
+  it("T-SC10a: push 进行中启动 agent → agent 启动排队（互斥锁被 push 持有）", async () => {
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 1, lock: null },
+    });
+    const mutex = new PushAgentMutex();
+    // 用 gate 让 push 在上传途中暂停，模拟“push 持锁期间 agent 启动”
+    let releasePush: () => void = () => {};
+    const pushGate = new Promise<void>((resolve) => {
+      releasePush = resolve;
+    });
+    const dbSync = createMockDbSync({
+      async exportSnapshotToPath() {
+        await pushGate; // 等待测试显式放行
+      },
+    });
+    const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
+
+    const pushPromise = coordinator.push({ lastSyncedRev: 1 });
+    // 让 push 有机会拿到锁并进入 export
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(mutex.isHeld(), true, "push 应持锁");
+    assert.equal(mutex.waiterCount(), 0);
+
+    // 模拟 agent 启动入口抢锁：应排队
+    const agentAcquire = mutex.acquire({ timeoutMs: 5000 });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(mutex.waiterCount(), 1, "agent 启动应排队等待");
+
+    // push 放行 → push 完成 → 锁释放 → agent 拿到锁
+    releasePush();
+    const result = await pushPromise;
+    assert.equal(result.rev, 2);
+    const agentHandle = await agentAcquire;
+    assert.equal(mutex.isHeld(), true, "agent 应拿到锁");
+    mutex.release(agentHandle);
+    assert.equal(mutex.isHeld(), false);
+  });
+
+  it("T-SC10b: agent 运行中触发 push → push 排队（互斥锁被 agent 持有）", async () => {
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 1, lock: null },
+    });
+    const mutex = new PushAgentMutex();
+    // 模拟 agent 启动入口先抢到锁
+    const agentHandle = await mutex.acquire({ timeoutMs: 1000 });
+    assert.equal(mutex.isHeld(), true);
+
+    const coordinator = createCoordinator(storage, createMockDbSync(), {
+      pushMutex: mutex,
+      pushAcquireTimeoutMs: 5000,
+    });
+
+    let pushResolved = false;
+    const pushPromise = coordinator
+      .push({ lastSyncedRev: 1 })
+      .then((r) => {
+        pushResolved = true;
+        return r;
+      });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(pushResolved, false, "push 应排队等待");
+    assert.equal(mutex.waiterCount(), 1);
+
+    // agent 结束释放锁 → push 拿到锁继续
+    mutex.release(agentHandle);
+    const result = await pushPromise;
+    assert.equal(result.rev, 2);
+    assert.equal(mutex.isHeld(), false, "push 完成后锁应释放");
+  });
+
+  it("T-SC10c: push 等锁超时 → 降级拒绝（PUSH_MUTEX_TIMEOUT）", async () => {
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 1, lock: null },
+    });
+    const mutex = new PushAgentMutex();
+    // 锁已被 agent 占着
+    const agentHandle = await mutex.acquire({ timeoutMs: 1000 });
+
+    const coordinator = createCoordinator(storage, createMockDbSync(), {
+      pushMutex: mutex,
+      pushAcquireTimeoutMs: 30, // 极短超时，快速触发降级
+    });
+
+    await assert.rejects(
+      () => coordinator.push({ lastSyncedRev: 1 }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "PUSH_MUTEX_TIMEOUT");
+        return true;
+      },
+    );
+    assert.equal(mutex.waiterCount(), 0, "超时后应从等待队列移除");
+    // 锁仍由 agent 持有，不受 push 超时影响
+    assert.equal(mutex.isHeld(), true);
+    mutex.release(agentHandle);
+  });
+
+  it("T-SC10d: 并发 push 请求 → 互斥（第二个 push 等第一个完成）", async () => {
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 1, lock: null },
+    });
+    const mutex = new PushAgentMutex();
+    let releaseFirst: () => void = () => {};
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    let firstEntered = false;
+    let secondStarted = false;
+    const dbSync = createMockDbSync({
+      async exportSnapshotToPath(destPath: string) {
+        if (!firstEntered) {
+          firstEntered = true;
+          await firstGate;
+        } else {
+          secondStarted = true;
+        }
+      },
+    });
+    const coordinator = createCoordinator(storage, dbSync, { pushMutex: mutex });
+
+    const first = coordinator.push({ lastSyncedRev: 1 });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(mutex.isHeld(), true, "第一个 push 持锁");
+
+    // 第二个 push 并发进来：应排队（不会进入 export）
+    const second = coordinator
+      .push({ lastSyncedRev: 1, forceOverwriteRemote: true })
+      .then((r) => {
+        assert.equal(secondStarted, true, "第二个 push 在第一个释放后才进入 export");
+        return r;
+      });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(secondStarted, false, "第二个 push 不应提前进入 export");
+    assert.equal(mutex.waiterCount(), 1);
+
+    releaseFirst();
+    const firstResult = await first;
+    assert.equal(firstResult.rev, 2);
+    // 第二个 push 用 forceOverwriteRemote 跳过 rev 检查（第一个已完成把 remote 推到 rev=2）
+    const secondResult = await second;
+    assert.equal(secondResult.rev, 3, "第二个 push 接着第一个的 rev 递增");
+    assert.equal(mutex.isHeld(), false, "两个 push 都完成后锁应释放");
+  });
+
+  it("T-SC10e: 续租点检测到 agent 抢跑 → 拒绝并清云端锁", async () => {
+    // 这个用例覆盖 apps runtime 未接入互斥锁的兼容场景：
+    // agent 不走 mutex 直接启动，靠续租点的 isAgentActive 复检兜底拒绝
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 1, lock: null },
+    });
+    let agentActive = false;
+    const dbSync = createMockDbSync({
+      isAgentActive: () => agentActive,
+      async exportSnapshotToPath() {
+        // push 导出期间 agent 抢跑
+        agentActive = true;
+      },
+    });
+    const coordinator = createCoordinator(storage, dbSync);
+
+    await assert.rejects(
+      () => coordinator.push({ lastSyncedRev: 1 }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "AGENT_ACTIVE");
+        return true;
+      },
+    );
+
+    // 续租点拒绝后，云端锁应被 finally 清掉
+    const writes = storage.getStatusWrites();
+    const lockAcquired = writes.find((s) => s.lock?.holderDeviceId === DEVICE_ID);
+    assert.ok(lockAcquired != null, "应已抢云端锁");
+    const clearAttempt = writes.find(
+      (s, i) => i > 0 && s.lock === null && s.rev === 1,
+    );
+    assert.ok(clearAttempt != null, "拒绝后应尝试清云端锁");
+  });
+});
+
+describe("PushAgentMutex 单元", () => {
+  it("acquire/release 基本互斥", async () => {
+    const m = new PushAgentMutex();
+    const h1 = await m.acquire({ timeoutMs: 1000 });
+    assert.equal(m.isHeld(), true);
+    const h2Promise = m.acquire({ timeoutMs: 1000 });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(m.waiterCount(), 1);
+    m.release(h1);
+    const h2 = await h2Promise;
+    assert.equal(m.isHeld(), true);
+    m.release(h2);
+    assert.equal(m.isHeld(), false);
+  });
+
+  it("非持锁者 release 安全忽略", async () => {
+    const m = new PushAgentMutex();
+    const h1 = await m.acquire({ timeoutMs: 1000 });
+    const fakeHandle = { id: 99999, acquiredAt: 0 };
+    m.release(fakeHandle); // 不应影响持锁
+    assert.equal(m.isHeld(), true);
+    m.release(h1);
+    assert.equal(m.isHeld(), false);
+  });
+
+  it("超时抛 PushAgentMutexAcquireError", async () => {
+    const m = new PushAgentMutex();
+    await m.acquire({ timeoutMs: 1000 });
+    await assert.rejects(
+      () => m.acquire({ timeoutMs: 20 }),
+      (error: unknown) => {
+        assert.ok(error instanceof PushAgentMutexAcquireError);
+        assert.equal(error.code, "TIMEOUT");
+        return true;
+      },
+    );
   });
 });

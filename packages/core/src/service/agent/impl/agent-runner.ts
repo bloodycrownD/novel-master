@@ -150,7 +150,7 @@ export function extractSubagentSessionIdFromOutcome(
 }
 
 /**
- * Executes agent loops: conditions → LLM → tools → repeat up to maxSteps.
+ * Executes agent loops: conditions → LLM → tools → repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
   private readonly toolRunner: ToolRunner<BuiltinToolContext>;
@@ -204,17 +204,27 @@ export class DefaultAgentRunner implements AgentRunner {
       sessionId: session.workplaceScopeSessionId,
     };
 
+    /**
+     * 统一 abort 处理：置 stopReason，保留已写入的 partial assistant。
+     *
+     * 所有检测点与 catch 分支命中 AbortError 都走这里，保证 abort 后 stopReason 一致；
+     * 已写入的 assistant 消息保留（用户能看到模型刚吐出的内容）。
+     */
+    const handleAbort = async (_branch: string): Promise<void> => {
+      stopReason = "cancelled";
+    };
+
     try {
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("loop_start");
           break;
         }
         let stepCompactionEmitted = false;
 
         let visible = await session.list();
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_session_list");
           break;
         }
         visible = await applyLlmRegexChannelToVisible(
@@ -223,7 +233,7 @@ export class DefaultAgentRunner implements AgentRunner {
           visible,
         );
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_regex_channel");
           break;
         }
 
@@ -239,7 +249,7 @@ export class DefaultAgentRunner implements AgentRunner {
           },
         );
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_assemble_workplace");
           break;
         }
 
@@ -253,7 +263,7 @@ export class DefaultAgentRunner implements AgentRunner {
           workplace: wt,
         });
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_prepare_user_messages");
           break;
         }
 
@@ -285,7 +295,7 @@ export class DefaultAgentRunner implements AgentRunner {
               },
             );
           if (signal?.aborted) {
-            stopReason = "cancelled";
+            await handleAbort("after_compaction_eval");
             break;
           }
           if (shouldCompact && !stepCompactionEmitted) {
@@ -353,7 +363,7 @@ export class DefaultAgentRunner implements AgentRunner {
             signal?.aborted ||
             (e instanceof Error && e.name === "AbortError")
           ) {
-            stopReason = "cancelled";
+            await handleAbort("model_request_catch");
             break;
           }
           throw e;
@@ -361,22 +371,9 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
 
+        // 模型返回后如果已经 abort，保留 partial assistant，直接退出
         if (signal?.aborted) {
-          stopReason = "cancelled";
-          if (result.blocks.length > 0 && meaningful) {
-            await session.append("assistant", { blocks: result.blocks }, {
-              raw: result.raw as Record<string, unknown>,
-            });
-            assistantAppendCount += 1;
-            if (publishRunLifecycle) {
-              bus.publish(EVENT_AGENT_STEP_COMMITTED, {
-                sessionId,
-                projectId,
-                runId,
-                phase: "assistant",
-              });
-            }
-          }
+          await handleAbort("post_model");
           break;
         }
 
@@ -433,7 +430,7 @@ export class DefaultAgentRunner implements AgentRunner {
         });
 
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("before_tool_run");
           break;
         }
 
@@ -508,7 +505,7 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         if (signal?.aborted) {
-          stopReason = "cancelled";
+          await handleAbort("after_tool_checkpoint");
           break;
         }
         await session.append("user", { blocks: toolResults });
@@ -529,7 +526,8 @@ export class DefaultAgentRunner implements AgentRunner {
       }
     } catch (e: unknown) {
       if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
-        stopReason = "cancelled";
+        // catch 命中 AbortError：走统一 abort 处理（保留 partial）
+        await handleAbort("catch_abort");
       } else {
         runError = e instanceof Error ? e.message : String(e);
         // FAILED / 非 Abort throw 不到达 FINISHED：必清 API 缓存，避免残留旧值
@@ -613,16 +611,50 @@ async function applyLlmRegexChannelToVisible(
   return applyRegexChannelToMessages(visible, rules, "llm", depthMap);
 }
 
-/** @internal Exposed for stream-bus deferral unit tests. */
+/**
+ * @internal Exposed for stream-bus deferral unit tests.
+ *
+ * 这里不再为每个 stream event 各自 `queueMicrotask`：那样 N 个 event 会插进 N 条微任务，
+ * 中间可能被其它微任务（订阅者倒序调用、scheduler 等）插入，跨批次顺序不稳。
+ *
+ * 改成单个"合并刷新"：同一同步批次的全部 stream event 先压进 `pendingQueue`，只调度一次
+ * `queueMicrotask(flush)`。flush 里按 FIFO 顺序逐条 publish，保证批次内顺序确定、
+ * 批次间也只有一个微任务槽位，跨批次顺序不会被随机插入打乱。bus.publish 仍然不在调用方
+ * 同步执行（避免订阅者中途回访 runner 产生的重入）。
+ */
 export function wrapStreamForBus(
   bus: SimpleEventBus,
   sessionId: string,
   runId: string,
   userOnStream?: (event: LlmStreamEvent) => void,
 ): ((event: LlmStreamEvent) => void) | undefined {
+  // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
+  const pendingQueue: Array<() => void> = [];
+  let flushScheduled = false;
+
+  const scheduleFlush = (): void => {
+    if (flushScheduled) {
+      return;
+    }
+    flushScheduled = true;
+    queueMicrotask(() => {
+      // 先重置调度标志，让 flush 期间新加入的事件能在下一个微任务里再排（保留批语义）。
+      flushScheduled = false;
+      const drain = pendingQueue.splice(0, pendingQueue.length);
+      for (const publish of drain) {
+        publish();
+      }
+    });
+  };
+
+  const enqueuePublish = (publish: () => void): void => {
+    pendingQueue.push(publish);
+    scheduleFlush();
+  };
+
   const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
     if (ev.type === "text-delta") {
-      queueMicrotask(() =>
+      enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
           sessionId,
           runId,
@@ -630,7 +662,7 @@ export function wrapStreamForBus(
         }),
       );
     } else if (ev.type === "thinking-delta") {
-      queueMicrotask(() =>
+      enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
           sessionId,
           runId,
@@ -638,7 +670,7 @@ export function wrapStreamForBus(
         }),
       );
     } else if (ev.type === "tool-use") {
-      queueMicrotask(() =>
+      enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
           sessionId,
           runId,

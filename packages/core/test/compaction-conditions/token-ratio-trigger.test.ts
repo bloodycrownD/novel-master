@@ -155,4 +155,52 @@ describe("TokenRatioConditionTrigger", () => {
     assert.equal(captured.tokenizerOverride, "heuristic");
     assert.equal(captured.counterKind, "heuristic");
   });
+
+  it("heuristic 计数走保守阈值，比精确档更早触发压缩", async () => {
+    // 用 mock driver 可控返回 counterKind / tokenCount，避免依赖真实 tokenizer 数值。
+    const captured: { counterKind?: string; tokenCount?: number } = {};
+    clearTokenizerDrivers();
+    registerTokenizerDriver({
+      name: "mock",
+      countPromptLlmInput: async () => ({
+        tokenCount: captured.tokenCount ?? 0,
+        counterKind: (captured.counterKind ?? "tiktoken") as never,
+        estimated: captured.counterKind === "heuristic",
+        savedModelId: "openai/test",
+        vendorModelId: "openai/test",
+        tokenizerFamily: "heuristic",
+      }),
+    });
+
+    const session = new InMemoryAgentSession();
+    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const evaluation = systemOnlyEvaluation("sys");
+
+    // contextWindow=100000、tokenRatio=0.8：精确阈值=80000，heuristic 默认阈值=68000。
+    const makeTrigger = (heuristicSafetyFactor?: number) =>
+      new TokenRatioConditionTrigger(
+        {
+          tokenRatio: 0.8,
+          resolveContextWindow: async () => 100_000,
+          resolveTokenizerOverride: async () => "auto",
+          heuristicSafetyFactor,
+        },
+        registry,
+      );
+
+    // 75000 落在「保守阈值之上、精确阈值之下」区间。
+    captured.tokenCount = 75_000;
+
+    captured.counterKind = "tiktoken";
+    assert.equal(await makeTrigger().shouldTrigger(session, evaluation), false);
+
+    captured.counterKind = "heuristic";
+    assert.equal(await makeTrigger().shouldTrigger(session, evaluation), true);
+
+    // safetyFactor=1 时 heuristic 退化回精确阈值，不再提前触发。
+    assert.equal(
+      await makeTrigger(1).shouldTrigger(session, evaluation),
+      false,
+    );
+  });
 });

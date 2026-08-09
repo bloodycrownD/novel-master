@@ -1,0 +1,53 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/check-ct-ui-no-state.mjs",
+        "scripts/check-workplace-rename-gate.mjs",
+        "scripts/migrate-core-imports.mjs",
+        "scripts/verify-oss-cloud-sync.mjs",
+        "eslint.config.base.mjs"
+      ]
+    },
+    "packages/core": {
+      "entry": ["src/index.ts", "src/public/**/*.ts"]
+    },
+    "packages/cloud-sync-driver-s3": { "entry": ["src/index.ts"] },
+    "packages/sksp-android": { "entry": ["src/index.ts"] },
+    "packages/sksp-windows": { "entry": ["src/index.ts"] },
+    "packages/sksp-mac": { "entry": ["src/index.ts"] },
+    "packages/tdbc-driver-better-sqlite3": { "entry": ["src/index.ts"] },
+    "packages/tdbc-driver-rn": { "entry": ["src/index.ts"] },
+    "packages/tdbc-conformance": { "entry": ["src/index.ts"] },
+    "packages/tokenizer-driver-node": { "entry": ["src/index.ts"] },
+    "packages/tokenizer-driver-rn": { "entry": ["src/index.ts"] },
+    "apps/cli": { "entry": ["src/index.ts"] },
+    "apps/desktop": {
+      "entry": [
+        "src/main/main.ts",
+        "renderer/main.tsx",
+        "scripts/run-tests.mjs",
+        "test/**"
+      ],
+      "paths": {
+        "@/*": ["renderer/*"],
+        "@shared/*": ["shared/*"],
+        "@assets/*": ["../../assets/*"]
+      }
+    },
+    "apps/mobile": {
+      "entry": [
+        "index.js",
+        "src/App.tsx",
+        "src/runtime/create-mobile-runtime.ts",
+        "scripts/build-webview.mjs",
+        "e2e/wdio.conf.ts",
+        "e2e/setup.ts",
+        "e2e/specs/**/*.ts",
+        "e2e/scripts/**/*.mjs",
+        "src/web/*/webview/**"
+      ]
+    }
+  }
+}

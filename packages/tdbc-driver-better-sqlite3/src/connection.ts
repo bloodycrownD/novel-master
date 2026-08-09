@@ -167,29 +167,38 @@ export class BetterSqlite3Connection implements TdbcConnection {
   }
 }
 
-/** Transaction-scoped view: sync ops on parent without re-entering the mutex. */
+/**
+ * Transaction-scoped view: sync ops on parent without re-entering the mutex.
+ *
+ * 方法全部走 async，是为了把 sync 层（executeSync/batchSync）抛出的错误
+ * 稳稳包成 rejected Promise。如果用 `Promise.resolve(syncCall())`，一旦
+ * syncCall 同步抛错（比如 batch 里的约束冲突），错误会在 Promise 包装
+ * 之前直接同步逃逸，调用方拿到的不是 rejected Promise 而是一个同步异常——
+ * 这会破坏 TdbcConnection 的 Promise 契约，也会让 assert.rejects 之类的
+ * 断言误判。套上 async 后，无论 sync 层怎么抛，对调用方来说都是 rejection。
+ */
 class TransactionalConnection implements TdbcConnection {
   constructor(private readonly parent: BetterSqlite3Connection) {}
 
-  execute(
+  async execute(
     sql: string,
     parameters?: readonly unknown[],
   ): Promise<ExecuteResult> {
-    return Promise.resolve(this.parent.executeSync(sql, parameters));
+    return this.parent.executeSync(sql, parameters);
   }
 
-  query<T extends Row = Row>(
+  async query<T extends Row = Row>(
     sql: string,
     parameters?: readonly unknown[],
   ): Promise<T[]> {
-    return Promise.resolve(this.parent.querySync<T>(sql, parameters));
+    return this.parent.querySync<T>(sql, parameters);
   }
 
-  batch(
+  async batch(
     sql: string,
     parametersList: readonly (readonly unknown[])[],
   ): Promise<BatchResult> {
-    return Promise.resolve(this.parent.batchSync(sql, parametersList));
+    return this.parent.batchSync(sql, parametersList);
   }
 
   transaction<T>(_fn: (tx: TdbcConnection) => Promise<T>): Promise<T> {

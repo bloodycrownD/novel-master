@@ -15,7 +15,9 @@ export type ToolErrorCode =
   /** Tool input failed schema validation. */
   | "INVALID_ARGUMENT"
   /** Tool execution failed (including output contract violations). */
-  | "FAILED";
+  | "FAILED"
+  /** Tool input was rejected by path policy (A-14). */
+  | "FORBIDDEN";
 
 export type ToolErrorDetails =
   | { readonly issues: readonly ZodIssue[] }
@@ -83,5 +85,23 @@ export function toolFailed(name: string, cause: unknown): ToolError {
     toolName: name,
     cause,
   });
+}
+
+/**
+ * Tool input was rejected by path policy (A-14).
+ *
+ * @remarks
+ * `ToolRunner` 在 schema 校验通过之后、真正调 tool 之前会做一次 path 白名单
+ * 二次校验；只要 input 里的路径不在 `allowedPaths` 任一前缀下就抛这个。
+ */
+export function toolPathForbidden(name: string, path: string): ToolError {
+  return new ToolError(
+    "FORBIDDEN",
+    `Tool path outside allowed scope: ${name} -> ${path}`,
+    {
+      toolName: name,
+      details: { path },
+    },
+  );
 }
 

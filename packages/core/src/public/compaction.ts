@@ -21,4 +21,3 @@ export {
   createCompactionConditionEvaluator,
   type CompactionConditionEvaluator,
 } from "../service/compaction-conditions/create-compaction-condition-evaluator.js";
-export { estimateTokens } from "../domain/compaction-conditions/logic/token-estimate.js";

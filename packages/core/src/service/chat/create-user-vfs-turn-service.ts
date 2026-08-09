@@ -71,6 +71,10 @@ export function createUserVfsTurnServiceBundle(
     sessionId,
     listSessionMessages: () => messageRepo.listBySession(sessionId),
     sessionKkv,
+    // A-14 path policy：用户 VFS turn 走 toolCtx 也走默认不限制语义；
+    // 后续根据 agent 定义 / project 策略收紧时在此注入。
+    allowedPaths: undefined,
+    resourceQuota: undefined,
   });
 
   const userVfsTurn = new DefaultUserVfsTurnService({

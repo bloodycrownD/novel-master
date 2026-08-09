@@ -6,7 +6,9 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { textBlocks } from '@novel-master/core/chat';
 import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
+import { DefaultMessageTranscriptEffectsService } from '../../src/service/chat/impl/message-transcript-effects.service.js';
 import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
+import type { SessionKkvService } from '../../src/service/session-kkv/session-kkv.port.js';
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
@@ -234,6 +236,63 @@ describe('MessageTranscriptEffectsService', () => {
 
     const updated = await ctx.messages.get(m3.id);
     assert.equal(updated.hidden, false);
+  });
+
+  // T-SC3（S-1 迁移）：setMessageFloorAtMessage 的 4 步塞进 CoordinatedWrite 后，
+  // 中间步骤（clear-rule-snapshot）抛错时，前面已执行的 hide/show 必须被逆序回滚，
+  // 恢复可见性计数一致（ref_count 一致）——不能留半隐藏状态。
+  it('T-SC3：setMessageFloorAtMessage 中间失败 → hide/show 回滚、可见性一致', async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    const m1 = await ctx.messages.append(session.id, 'user', textBlocks('u1'));
+    await ctx.messages.append(session.id, 'assistant', {
+      blocks: [{ type: 'text', text: 'a1' }],
+    });
+    const m3 = await ctx.messages.append(session.id, 'user', textBlocks('u2'));
+    await ctx.messages.append(session.id, 'assistant', {
+      blocks: [{ type: 'text', text: 'a2' }],
+    });
+    // 先把后两条隐藏，模拟“旧 floor 在 m3 之前”的历史状态
+    await ctx.messages.hideRange(session.id, 3, 4);
+
+    const before = await ctx.messages.listBySession(session.id);
+    const beforeVisibility = before.map(m => ({ id: m.id, hidden: m.hidden }));
+
+    // 包一层 sessionKkv：clearDomain(RULE_SNAPSHOT) 抛错，模拟第 3 步失败
+    const inner = createSessionKkvService(ctx.conn);
+    const failingKkv: SessionKkvService = {
+      get: (s, d, k) => inner.get(s, d, k),
+      set: (s, d, k, v) => inner.set(s, d, k, v),
+      delete: (s, d, k) => inner.delete(s, d, k),
+      clearSession: s => inner.clearSession(s),
+      listKeys: (s, d) => inner.listKeys(s, d),
+      async clearDomain(s, domain) {
+        if (domain === SESSION_KKV_DOMAIN_RULE_SNAPSHOT) {
+          throw new Error('clear-rule-snapshot boom');
+        }
+        await inner.clearDomain(s, domain);
+      },
+    };
+    const effects = new DefaultMessageTranscriptEffectsService({
+      conn: ctx.conn,
+      messages: ctx.messages,
+      sessionKkv: failingKkv,
+    });
+
+    await assert.rejects(
+      () => effects.setMessageFloorAtMessage(project.id, session.id, m3.id),
+      /clear-rule-snapshot boom/,
+    );
+
+    // 可见性回滚：与调用前完全一致（hide-prefix 的 showRange 补偿 + show-suffix 的 hideRange 补偿）
+    const after = await ctx.messages.listBySession(session.id);
+    assert.deepEqual(
+      after.map(m => ({ id: m.id, hidden: m.hidden })),
+      beforeVisibility,
+      '中间步骤失败后 hide/show 必须逆序回滚，可见性计数与调用前一致',
+    );
   });
 
   it('T-SF7：role=system 抛错', async () => {

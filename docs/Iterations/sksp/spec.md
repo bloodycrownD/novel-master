@@ -130,7 +130,7 @@ export function createCompositeSecretStore(options: {
 
 | 方法 | 行为 |
 |------|------|
-| `get(ref)` | 1）`env.get(ref)` 若返回值非 `undefined`（env 仅当变量存在时返回 string）；2）否则 `db.get(ref)` |
+| `get(ref)` | 1）`env.get(ref)` 若返回非 `null`（空 env 视为未命中，见 Env 后端）；2）否则 `db.get(ref)` |
 | `has(ref)` | `env.has(ref) \|\| db.has(ref)` |
 | `set(ref, plain)` | **仅** `db.set`（env 不落库；CI 靠环境变量只读） |
 | `delete(ref)` | `db.delete`；env 无删除语义 |
@@ -245,15 +245,19 @@ export class EnvSecretStore implements Pick<SecretStore, "get" | "has"> {
     const name = refToEnvVar(ref);
     if (!name) return null;
     const v = process.env[name];
-    return v !== undefined ? v : null; // 未设置 → 交给 composite 走 DB
+    // 安全收紧方向：空 env（未设置 / "" / 纯空白）一律视为未命中 → 返回 null，交给 composite 走 DB。
+    // 这是为了防止空 env 覆盖 DB 中已有的密钥；本语义不允许放宽（保持与 env-secret-store.ts 实现一致）。
+    if (v === undefined || v === "" || v.trim() === "") return null;
+    return v;
   }
   async has(ref: string): Promise<boolean> {
     const v = await this.get(ref);
-    return v !== null && v !== "";
+    return v !== null; // get() 已统一排除空串，has() 不再重复判空，两者语义一致
   }
 }
 ```
 
+- **空 env 语义**：`get()` 与 `has()` 都把「未设置 / 空串 / 纯空白」当作未命中。这是安全收紧方向，禁止放宽——否则空 env 会覆盖 DB 里的真实密钥。
 - `set` / `delete`：不在 env 实现；composite 只调 DB。
 - 通用 ref（非 provider apiKey）：env **不**映射，仅 DB。
 

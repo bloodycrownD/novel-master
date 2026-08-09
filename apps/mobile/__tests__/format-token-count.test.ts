@@ -1,7 +1,7 @@
 import {
   formatPromptTokenUsageLabel,
   formatTokenCount,
-} from '../src/utils/format-token-count';
+} from '@novel-master/core/common';
 
 describe('formatTokenCount', () => {
   it('formats small counts as integers', () => {

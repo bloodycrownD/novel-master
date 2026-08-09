@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { compareAppVersions } from "../../src/main/update-check/compare-app-versions.js";
+import { compareAppVersions } from "@novel-master/core/common";
 
 describe("compareAppVersions", () => {
   it("returns -1 when local is older", () => {

@@ -47,7 +47,7 @@ import {
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
 import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
-import { formatTokenCount } from "@/utils/format-token-count";
+import { formatTokenCount } from "@novel-master/core/common";
 
 interface SessionDetailDrawerProps {
   open: boolean;

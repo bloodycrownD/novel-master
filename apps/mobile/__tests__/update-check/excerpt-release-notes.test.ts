@@ -1,4 +1,4 @@
-import {excerptReleaseNotes} from '../../src/update-check/excerpt-release-notes';
+import {excerptReleaseNotes} from '@novel-master/core/common';
 
 const WORKFLOW_BODY = `# Novel Master v1.0.3
 

@@ -9,13 +9,16 @@ export {
   isSessionFsError,
   isRollbackVfsDegradableError,
   isRollbackRevisionBackfillRequiredError,
+  isRollbackConflictError,
   readRollbackRevisionBackfillMissingPaths,
   formatRollbackRevisionBackfillAlertMessage,
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
   sessionFsRollbackNoCheckpoint,
   sessionFsRollbackRevisionBackfillRequired,
+  sessionFsRollbackUndoSendEmptyTarget,
   sessionFsRollbackVfsRestoreFailed,
+  sessionFsRollbackConflict,
 } from "../errors/session-fs-errors.js";
 export type { SessionFsErrorCode } from "../errors/session-fs-errors.js";
 export type { RollbackOptions } from "../service/message-checkpoint/message-rollback.port.js";

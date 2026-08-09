@@ -4,7 +4,7 @@ import {
   resolveSavedModelId,
   resolveSummarySavedModelId,
 } from "../../src/domain/agent/logic/resolve-saved-model-id.js";
-import { resolveApplicationModelId } from "../../src/domain/agent/logic/resolve-application-model-id.js";
+
 
 describe("resolveSavedModelId（v2，无 workspace 回退）", () => {
   it("agent pin 优先", () => {
@@ -60,12 +60,4 @@ describe("resolveSummarySavedModelId", () => {
   });
 });
 
-describe("resolveApplicationModelId (deprecated alias)", () => {
-  it("delegates to resolveSavedModelId", () => {
-    assert.equal(
-      resolveApplicationModelId({ agentModelId: "agent/pin" }),
-      "agent/pin",
-    );
-    assert.equal(resolveApplicationModelId({}), undefined);
-  });
-});
+

@@ -6,17 +6,20 @@ import {
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
-import { readFile, writeFile } from "node:fs/promises";
 import { CloudSyncError, type ObjectStorageHeadResult, type ObjectStoragePort } from "@novel-master/core";
 import type { S3StorageConfig } from "./s3-config.js";
+import type { FileSystemPort } from "./ports/file-system.port.js";
 
 /** 测试注入用：可传入自定义 S3Client 以 mock SDK。 */
 export type S3ObjectStorageDeps = {
   client?: S3Client;
-  /** 读取本地文件（Mobile 可注入 react-native-blob-util 实现） */
-  readFile?: (path: string) => Promise<Uint8Array>;
-  /** 写入本地文件（Mobile 可注入 react-native-blob-util 实现） */
-  writeFile?: (path: string, bytes: Uint8Array) => Promise<void>;
+  /**
+   * 本地文件系统访问：putFile / getToPath 会用到。
+   *
+   * driver 自身不再静态依赖 `node:fs/promises`，由调用方注入 Node 或 RN 的实现
+   * （对应 A-26）。不注入时，putFile / getToPath 调用会抛错。
+   */
+  fileSystem?: FileSystemPort;
 };
 
 /** 去掉 S3 返回 ETag 两侧引号，供 status.json 条件 PUT 使用。 */
@@ -129,12 +132,25 @@ export function createS3ObjectStorage(
   const client = deps?.client ?? buildS3Client(config);
   const bucket = config.bucket;
   const emulateConditionalPut = isAliyunOssEndpoint(config.endpoint);
-  const readLocalFile = deps?.readFile ?? ((path: string) => readFile(path));
-  const writeLocalFile =
-    deps?.writeFile ??
-    (async (path: string, bytes: Uint8Array) => {
-      await writeFile(path, bytes);
-    });
+  const fileSystem = deps?.fileSystem;
+  const readLocalFile = (path: string): Promise<Uint8Array> => {
+    if (fileSystem == null) {
+      throw new CloudSyncError(
+        "NOT_CONFIGURED",
+        "未注入 FileSystemPort，无法读取本地文件（A-26）",
+      );
+    }
+    return fileSystem.readFile(path);
+  };
+  const writeLocalFile = (path: string, bytes: Uint8Array): Promise<void> => {
+    if (fileSystem == null) {
+      throw new CloudSyncError(
+        "NOT_CONFIGURED",
+        "未注入 FileSystemPort，无法写入本地文件（A-26）",
+      );
+    }
+    return fileSystem.writeFile(path, bytes);
+  };
 
   const storage: ObjectStoragePort = {
     async head(key) {

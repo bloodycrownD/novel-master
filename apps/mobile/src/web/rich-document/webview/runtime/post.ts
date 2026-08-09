@@ -1,26 +1,10 @@
 /**
  * rich-document → RN postMessage 出口（无业务依赖，避免 bridge↔annotate 环）。
+ * 函数体统一在 @web/shared/post；此处仅绑定本 webview 的 BRIDGE_V。
  */
 import { BRIDGE_V } from './document-model';
-
-/** RN WebView 注入的 postMessage 桥（宿主 API）。 */
-type ReactNativeWebViewBridge = {
-  postMessage: (message: string) => void;
-};
-
-declare global {
-  interface Window {
-    ReactNativeWebView?: ReactNativeWebViewBridge;
-  }
-}
+import { post as sharedPost } from '@web/shared/post';
 
 export function post(type: string, payload?: Record<string, unknown>): void {
-  const msg = JSON.stringify({
-    v: BRIDGE_V,
-    type: type,
-    payload: payload || {},
-  });
-  if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-    window.ReactNativeWebView.postMessage(msg);
-  }
+  sharedPost(type, payload, BRIDGE_V);
 }

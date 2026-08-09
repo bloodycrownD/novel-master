@@ -41,8 +41,10 @@ import {
 } from '@novel-master/core/workplace';
 import { createKkvService } from '@novel-master/core/kkv';
 import { createSessionKkvService } from '@novel-master/core/session-kkv';
-import { createCompositeSecretStore } from '@novel-master/core/sksp';
-import { createAndroidSecretStore } from '@novel-master/sksp-android';
+import {
+  createCompositeSecretStore,
+  resolveSkspDriver,
+} from '@novel-master/core/sksp';
 import { getMobileConnection } from '../db/connection';
 import { ensureLlmFetchConfigured } from './setup-llm-fetch';
 import type { MobileNovelMasterRuntime } from './types';
@@ -65,7 +67,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const abortRegistry = createAgentAbortRegistry();
 
   const secretStore = createCompositeSecretStore({
-    db: createAndroidSecretStore(conn),
+    db: resolveSkspDriver('android').createStore(conn),
   });
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({});
