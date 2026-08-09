@@ -317,6 +317,19 @@ export function SubagentSessionScreen() {
     [navigation, projectId],
   );
 
+  // 文件引入卡片点击：导航到文件编辑器，用子会话的 projectId + sessionId 作为 session scope。
+  const onOpenToolFile = useCallback(
+    (path: string) => {
+      navigation.navigate('FileEditor', {
+        path,
+        scopeKind: 'session',
+        projectId,
+        sessionId,
+      });
+    },
+    [navigation, projectId, sessionId],
+  );
+
   const sessionKey = useMemo(
     () => `${projectId}:${sessionId}`,
     [projectId, sessionId],
@@ -365,6 +378,7 @@ export function SubagentSessionScreen() {
           agentRunning={agentRunning}
           defaultScrollToBottom={false}
           onReady={() => setWebviewReady(true)}
+          onOpenToolFile={onOpenToolFile}
           onOpenSubagentSession={onOpenSubagentSession}
         />
       )}
