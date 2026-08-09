@@ -12,7 +12,9 @@ import {
 } from '@novel-master/core/events';
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
 import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
-import {useChatStreamRuntime} from '@/screens/tabs/chat-tab/useChatStreamRuntime';
+import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
+import {useSessionBatch} from '@/screens/tabs/chat-tab/useSessionBatch';
+import {useSessionStream} from '@/screens/tabs/chat-tab/useSessionStream';
 import {
   isMobileAgentActive,
   setMobileAgentActive,
@@ -34,7 +36,12 @@ jest.mock('@/hooks/useRuntime', () => ({
 
 const RUN_ID = 'run-test-1';
 
-describe('useChatStreamRuntime', () => {
+/**
+ * T-M1 回归：拆单元后主会话 stream/abort/batch 行为应与拆分前一致。
+ * 本 file 走与 ChatTabProvider 等价的装配顺序（abort → batch → lifecycle → stream），
+ * 用 compat api.lifecycle 暴露统一接口，保留拆分前的 test case body。
+ */
+describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 回归)', () => {
   let renderer: TestRenderer.ReactTestRenderer | null = null;
 
   beforeEach(() => {
@@ -74,32 +81,92 @@ describe('useChatStreamRuntime', () => {
     const onRunFailed = jest.fn();
     let messageCount = 0;
     const api: {
-      stream?: ReturnType<typeof useChatStreamRuntime>;
+      stream?: ReturnType<typeof useSessionStream>;
       lifecycle?: ReturnType<typeof useAgentRunLifecycle>;
+      abort?: ReturnType<typeof useSessionAbort>;
+      /**
+       * 兼容拆分前的 lifecycle 形态：把 abort 单元的 uiRunning/abortUiRun/
+       * freeze/retain 与 lifecycle 单元的 activeRunId/beginUiRun 聚合到一起，
+       * 让原 test case body 不用大改。
+       */
+      compat?: {
+        uiRunning: boolean;
+        activeRunId: string | null;
+        beginUiRun(): void;
+        abortUiRun(freezeAt?: number): void;
+        resetUiForSessionChange(): void;
+        getTranscriptFreezeCount(): number | null;
+        getAbortRetainPending(): boolean;
+        acceptRunEvent(runId: string | undefined): boolean;
+      };
     } = {};
+
+    // 简易 abort registry mock：记录 abort 调用即可。
+    const abortRegistry = {
+      register: jest.fn(),
+      abort: jest.fn(),
+      unregister: jest.fn(),
+      has: jest.fn(() => false),
+    };
 
     function Harness() {
       const ref = useRef<ChatTranscriptWebViewHandle>(webHandle);
-      const lifecycle = useAgentRunLifecycle();
-      const state = useChatStreamRuntime({
+      const onStreamResetRef = useRef<() => void>(() => undefined);
+      const applySegmentsRef = useRef<
+        (segments: readonly {kind: 'text' | 'thinking'; delta: string}[]) => void
+      >(() => undefined);
+
+      const abort = useSessionAbort({
         sessionId: 's1',
-        uiRunning: lifecycle.uiRunning,
+        abortRegistry: abortRegistry as never,
+        onStreamResetRef,
+      });
+      const lifecycle = useAgentRunLifecycle({
+        onRunUiActivate: abort.markRunStarted,
+        onRunUiDeactivate: abort.markRunEnded,
+        getUiRunning: abort.getUiRunning,
+      });
+      const batch = useSessionBatch({
+        applySegments: segments => applySegmentsRef.current(segments),
+      });
+      const stream = useSessionStream({
+        sessionId: 's1',
         useWebviewTranscript: options?.useWebview ?? true,
-        chatStreamBatchEnabled: options?.batchEnabled ?? true,
+        batchEnabled: options?.batchEnabled ?? true,
         transcriptWebRef: ref,
-        onMessagesChanged,
-        getMessageCount: () => messageCount,
-        getUiRunning: lifecycle.getUiRunning,
-        getTranscriptFreezeCount: lifecycle.getTranscriptFreezeCount,
-        getAbortRetainPending: lifecycle.getAbortRetainPending,
-        clearAbortRetainPending: lifecycle.clearAbortRetainPending,
+        uiRunning: abort.uiRunning,
         acceptRunEvent: lifecycle.acceptRunEvent,
         onRunStarted: lifecycle.onRunStarted,
         onRunFinished: lifecycle.onRunFinished,
         onRunFailed: lifecycle.onRunFailed,
+        getUiRunning: abort.getUiRunning,
+        getTranscriptFreezeCount: abort.getTranscriptFreezeCount,
+        getAbortRetainPending: abort.getAbortRetainPending,
+        clearAbortRetainPending: abort.clearAbortRetainPending,
+        batchIngest: batch.ingestWireChunk,
+        batchClear: batch.clearBuffers,
+        onMessagesChanged,
+        getMessageCount: () => messageCount,
       });
-      api.stream = state;
+      applySegmentsRef.current = stream.applySegments;
+      onStreamResetRef.current = stream.handleStreamReset;
+
+      api.stream = stream;
       api.lifecycle = lifecycle;
+      api.abort = abort;
+      api.compat = {
+        uiRunning: abort.uiRunning,
+        activeRunId: lifecycle.activeRunId,
+        beginUiRun: lifecycle.beginUiRun,
+        abortUiRun: abort.abortUiRun,
+        resetUiForSessionChange: () => {
+          abort.resetForSessionChange();
+          lifecycle.resetUiForSessionChange();
+        },
+        getTranscriptFreezeCount: abort.getTranscriptFreezeCount,
+        getAbortRetainPending: abort.getAbortRetainPending,
+        acceptRunEvent: lifecycle.acceptRunEvent,
+      };
       return null;
     }
 
@@ -109,7 +176,7 @@ describe('useChatStreamRuntime', () => {
 
     if (options?.beginUiRun) {
       act(() => {
-        api.lifecycle!.beginUiRun();
+        api.compat!.beginUiRun();
       });
     }
 
@@ -181,16 +248,20 @@ describe('useChatStreamRuntime', () => {
     expect(api.stream!.streamingText).toBe('body');
   });
 
-  it('RUN_FAILED 触发 flushRunUi 并递减 agentActive', () => {
+  it('RUN_FAILED 触发 flushRunUi 并递减 agentActive', async () => {
     const {startRun} = mountRuntime({beginUiRun: true});
     startRun();
-    act(() => {
+    await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FAILED, {
         sessionId: 's1',
         projectId: 'p1',
         runId: RUN_ID,
         error: 'boom',
       });
+      // flushRunUi().then(failRun) 走两步 microtask。
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
     expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
     expect(isMobileAgentActive()).toBe(false);
@@ -213,9 +284,9 @@ describe('useChatStreamRuntime', () => {
   it('beginUiRun 后 uiRunning 立即为 true', () => {
     const {api} = mountRuntime();
     act(() => {
-      api.lifecycle!.beginUiRun();
+      api.compat!.beginUiRun();
     });
-    expect(api.lifecycle!.uiRunning).toBe(true);
+    expect(api.compat!.uiRunning).toBe(true);
   });
 
   it('仅 TOOL_USE、无 text/thinking delta 时 uiRunning 仍为 true', () => {
@@ -230,7 +301,7 @@ describe('useChatStreamRuntime', () => {
         input: {},
       });
     });
-    expect(api.lifecycle!.uiRunning).toBe(true);
+    expect(api.compat!.uiRunning).toBe(true);
   });
 
   it('chatStreamBatchEnabled=false 时走 pushStreamDelta 保序', () => {
@@ -274,7 +345,7 @@ describe('useChatStreamRuntime', () => {
       });
       await Promise.resolve();
     });
-    expect(api.lifecycle!.uiRunning).toBe(false);
+    expect(api.compat!.uiRunning).toBe(false);
     expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
   });
 
@@ -283,12 +354,12 @@ describe('useChatStreamRuntime', () => {
     startRun();
     setMessageCount(2);
     act(() => {
-      api.lifecycle!.abortUiRun(2);
+      api.compat!.abortUiRun(2);
     });
-    expect(api.lifecycle!.uiRunning).toBe(false);
-    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(2);
-    expect(api.lifecycle!.getAbortRetainPending()).toBe(true);
-    expect(api.lifecycle!.activeRunId).toBe(RUN_ID);
+    expect(api.compat!.uiRunning).toBe(false);
+    expect(api.compat!.getTranscriptFreezeCount()).toBe(2);
+    expect(api.compat!.getAbortRetainPending()).toBe(true);
+    expect(api.compat!.activeRunId).toBe(RUN_ID);
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
         sessionId: 's1',
@@ -298,10 +369,10 @@ describe('useChatStreamRuntime', () => {
       });
       await Promise.resolve();
     });
-    expect(api.lifecycle!.activeRunId).toBe(null);
-    expect(api.lifecycle!.uiRunning).toBe(false);
-    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(null);
-    expect(api.lifecycle!.getAbortRetainPending()).toBe(false);
+    expect(api.compat!.activeRunId).toBe(null);
+    expect(api.compat!.uiRunning).toBe(false);
+    expect(api.compat!.getTranscriptFreezeCount()).toBe(null);
+    expect(api.compat!.getAbortRetainPending()).toBe(false);
     expect(mockFlushRunUi).not.toHaveBeenCalled();
     expect(webHandle.commitAbortOverlaySnapshot).toHaveBeenCalled();
   });
@@ -311,9 +382,9 @@ describe('useChatStreamRuntime', () => {
     startRun();
     setMessageCount(1);
     act(() => {
-      api.lifecycle!.abortUiRun(1);
+      api.compat!.abortUiRun(1);
     });
-    expect(api.lifecycle!.getAbortRetainPending()).toBe(true);
+    expect(api.compat!.getAbortRetainPending()).toBe(true);
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
         sessionId: 's1',
@@ -324,7 +395,7 @@ describe('useChatStreamRuntime', () => {
       await Promise.resolve();
     });
     expect(mockFlushAgentStepUi).toHaveBeenCalledTimes(1);
-    expect(api.lifecycle!.getAbortRetainPending()).toBe(false);
+    expect(api.compat!.getAbortRetainPending()).toBe(false);
     expect(webHandle.resetStream).toHaveBeenCalledTimes(1);
   });
 
@@ -333,7 +404,7 @@ describe('useChatStreamRuntime', () => {
     startRun();
     setMessageCount(1);
     act(() => {
-      api.lifecycle!.abortUiRun(1);
+      api.compat!.abortUiRun(1);
     });
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -364,7 +435,7 @@ describe('useChatStreamRuntime', () => {
     startRun();
     setMessageCount(1);
     act(() => {
-      api.lifecycle!.abortUiRun(1);
+      api.compat!.abortUiRun(1);
     });
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -385,7 +456,7 @@ describe('useChatStreamRuntime', () => {
     startRun();
     setMessageCount(1);
     act(() => {
-      api.lifecycle!.abortUiRun(1);
+      api.compat!.abortUiRun(1);
     });
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -396,7 +467,7 @@ describe('useChatStreamRuntime', () => {
       });
       await Promise.resolve();
     });
-    expect(api.lifecycle!.getAbortRetainPending()).toBe(false);
+    expect(api.compat!.getAbortRetainPending()).toBe(false);
     onMessagesChanged.mockClear();
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -428,7 +499,7 @@ describe('useChatStreamRuntime', () => {
     expect(api.stream!.streamingText).toBe('before');
 
     act(() => {
-      api.lifecycle!.abortUiRun(1);
+      api.compat!.abortUiRun(1);
     });
 
     act(() => {
@@ -453,17 +524,17 @@ describe('useChatStreamRuntime', () => {
     startRun();
     setMessageCount(2);
     act(() => {
-      api.lifecycle!.abortUiRun(2);
+      api.compat!.abortUiRun(2);
     });
-    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(2);
+    expect(api.compat!.getTranscriptFreezeCount()).toBe(2);
 
     act(() => {
-      api.lifecycle!.resetUiForSessionChange();
+      api.compat!.resetUiForSessionChange();
     });
-    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(null);
+    expect(api.compat!.getTranscriptFreezeCount()).toBe(null);
 
     act(() => {
-      api.lifecycle!.beginUiRun();
+      api.compat!.beginUiRun();
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
         sessionId: 's1',
         projectId: 'p1',
