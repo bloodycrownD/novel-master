@@ -14,6 +14,7 @@ import type {
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
+  AgentRunStartedPayload,
   AgentStepCommittedPayload,
 } from '@shared/agent-event-types';
 import { useAgentStream, type UseAgentStreamCallbacks } from '@/hooks/useAgentStream';
@@ -24,6 +25,7 @@ import { useDesktopAgentActive } from '@/hooks/useDesktopAgentActive';
 import {
   ipcAppUiGet,
   ipcAgentAbort,
+  ipcAgentRunIsActive,
   ipcCompactionManual,
   ipcMessagesEdit,
   ipcMessagesFork,
@@ -137,6 +139,8 @@ export function ConversationPanel({
     onRunFinished: finishUiRun,
     onRunFailed: failUiRun,
     resetUiForSessionChange,
+    markExternalRunActive,
+    markExternalRunEnded,
   } = runLifecycle;
 
   const abortUiRun = useCallback(() => {
@@ -427,19 +431,108 @@ export function ConversationPanel({
     ],
   );
 
+  // ===== FR8-1：readOnly 子面板放宽守卫（对齐 mobile SubagentSessionScreen）=====
+  //
+  // readOnly 子会话的典型时序是「面板晚于 run 启动」：mount 时 RUN_STARTED 已是历史。
+  // 主会话的 beginUiRun + shouldAcceptRunEvent 守卫在这个场景断裂（beginUiRun 先把
+  // activeRunId 置 null，迟到 RUN_FINISHED 被守卫拒绝 → uiRunning 卡死）。
+  // 这里另起一套回调：acceptRunEvent 放宽为非空 runId 即接受、不碰 activeRunId、
+  // 只翻 uiRunning + 触发 reload。
+  const readOnlyAcceptRunEvent = useCallback(
+    (runId: string | undefined) => runId != null && runId !== '',
+    [],
+  );
+  const readOnlyOnRunStarted = useCallback(
+    (_payload: AgentRunStartedPayload) => {
+      markExternalRunActive();
+      void reloadMessages();
+    },
+    [markExternalRunActive, reloadMessages],
+  );
+  const readOnlyOnRunFinished = useCallback(
+    (payload: AgentRunFinishedPayload) => {
+      markExternalRunEnded();
+      onStreamReset();
+      if (payload.vfsMutated) {
+        notifyWorkspaceMutated();
+      }
+      void reloadMessages();
+    },
+    [markExternalRunEnded, onStreamReset, reloadMessages, notifyWorkspaceMutated],
+  );
+  const readOnlyOnRunFailed = useCallback(
+    (payload: AgentRunFailedPayload) => {
+      markExternalRunEnded();
+      onStreamReset();
+      if (vfsMutatedInRunRef.current) {
+        notifyWorkspaceMutated();
+      }
+      vfsMutatedInRunRef.current = false;
+      void reloadMessages();
+    },
+    [markExternalRunEnded, onStreamReset, reloadMessages, notifyWorkspaceMutated],
+  );
+
+  // readOnly mount probe：主动查 IPC 该 session 是否有 in-flight run，
+  // 若有则 markExternalRunActive 初始化 uiRunning=true（不调 beginUiRun、不动 activeRunId）。
+  //
+  // FR8-1 风险4 IPC 往返竞态防护：useAgentStream 的 bus 订阅比本 effect 先 mount，
+  // 极端时序下 run 可能在 IPC 往返期间结束——迟到 RUN_FINISHED 先到→markExternalRunEnded
+  // 把 endedRef 置位→markExternalRunActive 退化为 no-op，uiRunning 不会错误翻回 true。
+  // 再补一次复询：若第二次查询返回 false（run 确实已结束），markExternalRunEnded 兑底。
+  useEffect(() => {
+    if (!readOnly || sessionId == null) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const res = await ipcAgentRunIsActive({ sessionId });
+      if (cancelled) {
+        return;
+      }
+      if (res.ok && res.data) {
+        markExternalRunActive();
+        void reloadMessages();
+        // 竞态校正：IPC 往返期间 run 可能已结束，复询一次兑底。
+        const recheck = await ipcAgentRunIsActive({ sessionId });
+        if (cancelled) {
+          return;
+        }
+        if (recheck.ok && !recheck.data) {
+          markExternalRunEnded();
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 mount / sessionId 切换时 probe
+  }, [sessionId, readOnly]);
+
   // Phase 3 Step 20：stream 单元在组件顶部已实例化（拿回 streamingText /
   // streamingTextRef / onStreamReset）。这里把定义完的生命周期回调 + 守卫
   // 同步写入 callbacksRef，让 useAgentStream 的事件订阅现读最新值。
-  streamCallbacksRef.current = {
-    acceptRunEvent,
-    getUiRunning,
-    noteTextDelta: noteMetricsTextDelta,
-    noteThinkingDelta: noteMetricsThinkingDelta,
-    onRunStarted,
-    onStepCommitted,
-    onRunFinished,
-    onRunFailed,
-  };
+  streamCallbacksRef.current = readOnly
+    ? {
+        acceptRunEvent: readOnlyAcceptRunEvent,
+        getUiRunning,
+        noteTextDelta: noteMetricsTextDelta,
+        noteThinkingDelta: noteMetricsThinkingDelta,
+        onRunStarted: readOnlyOnRunStarted,
+        onStepCommitted,
+        onRunFinished: readOnlyOnRunFinished,
+        onRunFailed: readOnlyOnRunFailed,
+      }
+    : {
+        acceptRunEvent,
+        getUiRunning,
+        noteTextDelta: noteMetricsTextDelta,
+        noteThinkingDelta: noteMetricsThinkingDelta,
+        onRunStarted,
+        onStepCommitted,
+        onRunFinished,
+        onRunFailed,
+      };
 
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   useChatMessagesScrollFollow(chatMessagesRef, {

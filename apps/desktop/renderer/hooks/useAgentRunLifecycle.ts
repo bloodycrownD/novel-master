@@ -44,6 +44,19 @@ export type AgentRunLifecycle = {
   onRunFinished(payload: AgentRunFinishedPayload): boolean;
   onRunFailed(payload: AgentRunFailedPayload): boolean;
   resetUiForSessionChange(): void;
+  /**
+   * 只翻 uiRunning=true，**不调 syncActiveRunId、不动 activeRunId、不碰 stale 守卫、
+   * 不 increment agentActive**。供 readOnly 子面板的 mount probe / RUN_STARTED 回调使用。
+   *
+   * 竞态防护（FR8-1 风险4）：一旦 markExternalRunEnded 被调过（迟到 RUN_FINISHED 已处理），
+   * 后续 markExternalRunActive 不再翻 true，避免 IPC stale true 把 uiRunning 错误地翻回 true
+   * 导致停止按钮卡死。endedRef 由 resetUiForSessionChange / beginUiRun 重置。
+   */
+  markExternalRunActive(): void;
+  /** 只翻 uiRunning=false + 设 endedRef；不动 activeRunId。供 readOnly 子面板的 RUN_FINISHED/FAILED 回调使用。 */
+  markExternalRunEnded(): void;
+  /** 同步读 externalRunEndedRef（测试用）。 */
+  getExternalRunEnded(): boolean;
 };
 
 export function useAgentRunLifecycle(): AgentRunLifecycle {
@@ -53,6 +66,8 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
   const uiRunningRef = useRef(false);
   const transcriptFreezeCountRef = useRef<number | null>(null);
   const abortRetainPendingRef = useRef(false);
+  // FR8-1 风险4 竞态防护：markExternalRunEnded 设 true 后，后续 markExternalRunActive 不翻 true。
+  const externalRunEndedRef = useRef(false);
 
   const syncActiveRunId = useCallback((runId: string | null) => {
     activeRunIdRef.current = runId;
@@ -68,6 +83,7 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
     syncActiveRunId(null);
     transcriptFreezeCountRef.current = null;
     abortRetainPendingRef.current = false;
+    externalRunEndedRef.current = false;
     setUiRunningSynced(true);
   }, [syncActiveRunId, setUiRunningSynced]);
 
@@ -139,11 +155,29 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
     [syncActiveRunId, setUiRunningSynced],
   );
 
+  const markExternalRunActive = useCallback(() => {
+    // FR8-1 风险4：迟到 RUN_FINISHED 已把 endedRef 置位时，IPC stale true 不再翻 true。
+    if (externalRunEndedRef.current) {
+      return;
+    }
+    setUiRunningSynced(true);
+  }, [setUiRunningSynced]);
+
+  const markExternalRunEnded = useCallback(() => {
+    externalRunEndedRef.current = true;
+    setUiRunningSynced(false);
+  }, [setUiRunningSynced]);
+
+  const getExternalRunEnded = useCallback((): boolean => {
+    return externalRunEndedRef.current;
+  }, []);
+
   const resetUiForSessionChange = useCallback(() => {
     setUiRunningSynced(false);
     syncActiveRunId(null);
     transcriptFreezeCountRef.current = null;
     abortRetainPendingRef.current = false;
+    externalRunEndedRef.current = false;
   }, [syncActiveRunId, setUiRunningSynced]);
 
   return {
@@ -160,5 +194,8 @@ export function useAgentRunLifecycle(): AgentRunLifecycle {
     onRunFinished,
     onRunFailed,
     resetUiForSessionChange,
+    markExternalRunActive,
+    markExternalRunEnded,
+    getExternalRunEnded,
   };
 }
