@@ -13,10 +13,7 @@ import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
 } from '@novel-master/core/compaction';
-import {
-  createEventsConfigStore,
-  SimpleEventBus,
-} from '@novel-master/core/events';
+import { SimpleEventBus } from '@novel-master/core/events';
 import {
   createChatServices,
   createMessageTranscriptEffectsService,
@@ -73,7 +70,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const tokenCounters = createDefaultTokenCounterRegistry({});
 
   const eventBus = new SimpleEventBus();
-  const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
 
   const chat = createChatServices(conn, { state, agentRegistry });
@@ -125,7 +121,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     preferences,
     kkv,
     eventBus,
-    eventsConfig,
     compactionConditions,
     compactionConditionEvaluator: lazyCompactionConditionEvaluator,
     agentRegistry,

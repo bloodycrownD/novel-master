@@ -20,7 +20,6 @@ export type RootStackParamList = {
   ProviderDetail: {providerId?: string} | undefined;
   ModelSampling: {savedModelId?: string} | undefined;
   CompactionConditions: undefined;
-  EventsConfig: undefined;
   StorageConfig: undefined;
   CloudSyncProgress: {
     op: 'pull' | 'push';

@@ -13,7 +13,6 @@ const coreDistSmokeFiles = [
   'index.js',
   'public/chat.js',
   'public/provider.js',
-  'domain/events-config/model/events-config.schema.js',
   'domain/compaction-conditions/model/compaction-conditions.schema.js',
   'domain/workplace/logic/default-dir-rule.js',
   'infra/tokenizer/logic/resolve-context-window.js',
