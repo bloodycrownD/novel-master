@@ -1,5 +1,10 @@
 /**
  * Manual / condition 压缩：runCompaction / orchestrator.emit 成功后 clear session kkv（无 BlockStore capture）。
+ *
+ * T-IPC1 额外验证：runCompaction 成功后调 notifyComposerStatusAfterFloorOrCompaction
+ * （SPEC L274）。该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer
+ * 广播 COMPOSER_ATTACHMENTS_SUGGEST，用 setComposerAttachmentsSuggestForwardTarget
+ * 注入假 webContents 捕获 send，即可观测调用是否发生（与同目录其他测试同范式）。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -11,6 +16,8 @@ import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleAgentRegistryCreateBlank } from "../src/main/ipc/handlers/agent-registry.js";
 import { handleAgentSetCurrent } from "../src/main/ipc/handlers/agent.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
+import { IPC_CHANNELS } from "../shared/ipc-types.js";
+import { setComposerAttachmentsSuggestForwardTarget } from "../src/main/ipc/forward-composer-attachments-suggest.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -90,6 +97,19 @@ describe("handleCompactionManual", () => {
       pendingJson,
     );
 
+    // SPEC L274：runCompaction 成功后调 notifyComposerStatusAfterFloorOrCompaction，
+    // 该函数最终经 notifyComposerAttachmentsSuggestToRenderer 向 renderer 广播
+    // COMPOSER_ATTACHMENTS_SUGGEST。注入假 webContents 捕获 send（与同目录
+    // notify-composer-status-after-kkv-clear.test.ts 同范式）。
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    setComposerAttachmentsSuggestForwardTarget(() => {
+      return {
+        send(channel: string, payload: unknown) {
+          sent.push({ channel, payload });
+        },
+      } as never;
+    });
+
     const result = await handleCompactionManual({ projectId, sessionId });
     assert.equal(result.ok, true);
     assert.equal(
@@ -104,6 +124,23 @@ describe("handleCompactionManual", () => {
       await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
       pendingJson,
     );
+
+    // notifyComposerStatusAfterFloorOrCompaction 被调用：发出一次 COMPOSER_ATTACHMENTS_SUGGEST，
+    // payload 携带本次 sessionId。
+    const composerBroadcasts = sent.filter(
+      (s) => s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+    );
+    assert.equal(
+      composerBroadcasts.length,
+      1,
+      "notifyComposerStatusAfterFloorOrCompaction should broadcast exactly once after successful runCompaction",
+    );
+    assert.deepEqual(composerBroadcasts[0]?.payload, {
+      sessionId,
+      attachments: [],
+    });
+
+    setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
   it("T-CR5: condition 压缩 orchestrator.emit 成功后亦清 file_cache + rule_snapshot，保留 pending（旧路径仍在）", async () => {
