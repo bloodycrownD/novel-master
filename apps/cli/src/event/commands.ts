@@ -1,41 +1,25 @@
 /**
- * `nm event emit` — run configured event actions for current scope.
+ * `nm event emit` — 旧事件编排器入口。
+ *
+ * Step 8（本轮）已删除 eventOrchestrator 装配，该命令随之失效。
+ * 文件与命令注册保留到 Step 17（phase-delete-cli）统一删除，
+ * 此处仅保留占位实现让编译通过。
  *
  * @module event/commands
  */
 
-import { EVENT_SESSION_COMPACTION_REQUESTED, type EventOrchestrator } from "@novel-master/core/events";
 import type { NovelMasterRuntime } from "../runtime.js";
-import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runEvent(
-  rt: NovelMasterRuntime,
+  _rt: NovelMasterRuntime,
   subcommand: string,
-  args: readonly string[],
+  _args: readonly string[],
 ): Promise<void> {
   if (subcommand !== "emit") {
     throw new Error("Usage: nm event emit <eventType> [--session <id>] [--project <id>]");
   }
-  const { positional, flags } = parseCliArgs(args);
-  const eventType = positional[0];
-  if (eventType == null) {
-    throw new Error("Usage: nm event emit <eventType> [--session <id>] [--project <id>]");
-  }
-
-  const projectId = await rt.scope.resolveProjectId(flags);
-  const sessionId = await rt.scope.resolveSessionId(flags);
-
-  const result = await rt.eventOrchestrator.emit(eventType, {
-    sessionId,
-    projectId,
-    trigger:
-      eventType === EVENT_SESSION_COMPACTION_REQUESTED ? "manual" : undefined,
-  });
-
-  if (!result.ok) {
-    console.error(JSON.stringify(result, null, 2));
-    throw new Error(`event ${eventType} completed with failures`);
-  }
+  // eventOrchestrator 已在 Step 8 移除；该命令将在 Step 17（phase-delete-cli）正式删除。
+  throw new Error(
+    "nm event emit 已随事件编排器移除（Step 8），将在 Step 17 正式删除命令入口",
+  );
 }
-
-export type { EventOrchestrator };

@@ -18,11 +18,8 @@ import {
   type CompactionConditionsStore,
 } from "@novel-master/core/compaction";
 import {
-  createEventOrchestrator,
-  createRunAgentHandlerDeps,
   createEventsConfigStore,
   SimpleEventBus,
-  type EventOrchestrator,
   type EventsConfigStore,
 } from "@novel-master/core/events";
 import {
@@ -136,7 +133,6 @@ export interface NovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
@@ -222,29 +218,6 @@ export async function createNovelMasterRuntime(
   const agentRegistry = createAgentRegistryService(conn, state);
   const streamRegistry = createAgentStreamRegistry();
 
-  const eventOrchestrator = createEventOrchestrator({
-    eventsConfig,
-    eventBus,
-    messages,
-    messageTranscriptEffects,
-    sessionKkv,
-    runAgent: createRunAgentHandlerDeps({
-      messages,
-      messageTranscriptEffects,
-      agentRegistry,
-      modelRequests,
-      savedModels: providerBundle.savedModelRepo,
-      workplace: (s) => createWorkplaceService(conn, s),
-      sessionVfs: (projectId, sessionId) =>
-        createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
-      messageCheckpoint: createMessageCheckpointService(conn),
-      sessionKkv,
-      eventBus,
-      state,
-      regexConfig,
-    }),
-  });
-
   return {
     conn,
     state,
@@ -254,7 +227,6 @@ export async function createNovelMasterRuntime(
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    eventOrchestrator,
     agentRegistry,
     streamRegistry,
     tokenCounters,
