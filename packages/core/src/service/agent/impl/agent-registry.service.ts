@@ -101,9 +101,15 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     if (!(await this.deps.repository.exists(agentId))) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
     }
-    // built-in general 不可删除（运行时虚拟注入的递归基线）
-    const def = await this.deps.repository.get(agentId);
-    if (def?.name === DEFAULT_SUBAGENT_DEFINITION.name) {
+    // built-in general 不可删除（运行时虚拟注入的递归基线）。
+    // 用 getRawWire 取 name 而非 get（解码）：坏数据（decode 失败的行）也必须能删，
+    // 否则非法 prompts_json 的 agent 永远卡在库里删不掉。
+    const wire = await this.deps.repository.getRawWire(agentId);
+    const wireName =
+      wire != null && typeof wire === "object" && !Array.isArray(wire)
+        ? (wire as { name?: unknown }).name
+        : undefined;
+    if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
       throw new AgentConfigError(
         "INVALID_SCHEMA",
         `内置 agent "${DEFAULT_SUBAGENT_DEFINITION.name}" 不可删除`,
