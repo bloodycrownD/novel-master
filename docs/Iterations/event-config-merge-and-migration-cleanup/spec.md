@@ -219,13 +219,15 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 - **Step 7 — phase-mobile-compaction — blocking: yes — qa: manual_user**：`useChatTabMessages.ts` 的 `handleCompactSession`（原 L345-348，以符号搜索为准）和 `SessionDetailScreen.tsx`（原 L155-158）：改调 `runCompaction`（通过 runtime 暴露或直接 import core）。改 Alert 文案从"将按照事件配置压缩上下文"改为"将压缩上下文"。
   - **错误处理调整**：`runCompaction` 返回 `{ ok: boolean }`（无 `failures` 字段）。`handleCompactSession` 现有代码消费 `result.failures[0]?.error` 做错误展示，改后须调整：`!ok` 时展示通用错误文案（如"压缩失败"），不再读 `result.failures`。
 
-### 阶段三：三端 runtime 去装配
+### 阶段三：三端 runtime 去装配（仅 eventOrchestrator）
 
-- **Step 8 — phase-runtime-cli — blocking: yes — qa: auto**：`apps/cli/src/runtime.ts`：删 `createEventOrchestrator` / `createEventsConfigStore` import + 装配 + 返回字段。
+> **执行决策（dev 阶段核实修订）**：`eventsConfig`（eventsConfigStore）有大量独立的事件配置 UI/IPC/yaml 消费方（desktop `EventsConfigScreen`、mobile `EventsConfigScreen`、CLI `nm events` 命令等），这些是阶段五（Step 15-17）才删的内容。若阶段三同时删 `eventsConfig` 装配，从 Step 10 到 Step 15-17 之间三端会持续编译失败，阶段四（core 全量删除）无法在编译不过的状态下独立验证，wave 编排会断。因此 **Step 8-10 本轮只删 `eventOrchestrator`（含其旧路径消费方），保留 `eventsConfig` 装配到 Step 15-17 与 UI 一起删**。这与 PRD「分步清理、保持中间态可编译可验证」的意图一致。
 
-- **Step 9 — phase-runtime-desktop — blocking: yes — qa: auto**：`create-desktop-runtime.ts` + `types.ts`：同上。
+- **Step 8 — phase-runtime-cli — blocking: yes — qa: auto**：`apps/cli/src/runtime.ts`：删 `createEventOrchestrator` import + 装配 + 返回字段（`eventsConfigStore` 保留到 Step 17）。连带清理 `eventOrchestrator` 的旧路径消费方（如 CLI `nm event emit` 命令，若 Step 17 才正式删则先标 skip 或改 mock 让编译通过）。
 
-- **Step 10 — phase-runtime-mobile — blocking: yes — qa: auto**：`create-mobile-runtime.ts` + `types.ts`：同上。
+- **Step 9 — phase-runtime-desktop — blocking: yes — qa: auto**：`create-desktop-runtime.ts` + `types.ts`：同上（只删 `eventOrchestrator`，保留 `eventsConfigStore`）。`compaction-handler.test.ts` 的 T-CR5（测 `rt.eventOrchestrator.emit` 旧路径）会编译失败，改成 `it.skip` + 注释「Step 20 统一改」。
+
+- **Step 10 — phase-runtime-mobile — blocking: yes — qa: auto**：`create-mobile-runtime.ts` + `types.ts`：同上（只删 `eventOrchestrator`，保留 `eventsConfigStore`）。三个 mock runtime 里的 `eventOrchestrator: {emit: jest.fn()}` / `{}` 一并清。
 
 ### 阶段四：全量删除事件配置系统
 
