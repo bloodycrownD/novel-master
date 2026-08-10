@@ -6,7 +6,7 @@ import {
   resolveAgentForProject,
 } from '@novel-master/core/agent';
 
-import { prepareUserMessagesForPrompt } from '@novel-master/core/chat';
+import { prepareUserMessagesForPrompt, type ChatMessage } from '@novel-master/core/chat';
 import {
   buildPromptLlmInputFromLayout,
   type AgentPromptLayout,
@@ -27,6 +27,11 @@ export interface SessionPromptInputBundle {
   readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
   readonly input: PromptLlmInput;
+  /**
+   * `listBySession` 的原始结果（含 hidden 消息），供 cache miss 时回填
+   * `sessionApiPromptTokenCache` 复用，避免再开一次查询。
+   */
+  readonly rawMessages: readonly ChatMessage[];
 }
 
 /** 可见会话消息 + worktree/VFS 上下文 → 当前 Agent 的 LLM 输入。 */
@@ -88,5 +93,5 @@ export async function buildSessionPromptInput(
     vfs,
   };
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
-  return { definition: resolved, layout: resolved.prompts, ctx, input };
+  return { definition: resolved, layout: resolved.prompts, ctx, input, rawMessages: allMessages };
 }

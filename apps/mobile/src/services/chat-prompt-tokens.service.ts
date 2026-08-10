@@ -13,6 +13,7 @@ import { resolveSavedModelId } from "@novel-master/core/agent";
 import { messageBodyText } from "@novel-master/core/prompt";
 
 import {
+  backfillCacheFromMessages,
   resolveCurrentPromptTokens,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
@@ -36,7 +37,10 @@ export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<string> {
-  const {definition, layout, ctx} = await buildSessionPromptInput(runtime, scope);
+  const {definition, layout, ctx, rawMessages} = await buildSessionPromptInput(
+    runtime,
+    scope,
+  );
 
   // core 移除 workspace 回退后，savedModelId 解析优先级为 agent pin → session modelId。
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
@@ -61,13 +65,26 @@ export async function loadChatPromptTokenLabel(
     savedModelId,
   );
 
-  const result = await resolveCurrentPromptTokens(scope.sessionId, {
+  // cache miss → 从 bundle 的 rawMessages 回填，命中就重 resolve 一次（这次
+  // 会走 source=api）。compaction trigger 不走这里，行为不变。
+  let result = await resolveCurrentPromptTokens(scope.sessionId, {
     layout,
     ctx,
     savedModelId,
     registry: runtime.tokenCounters,
     tokenizerOverride,
   });
+  if (result.source === 'local') {
+    if (backfillCacheFromMessages(scope.sessionId, rawMessages)) {
+      result = await resolveCurrentPromptTokens(scope.sessionId, {
+        layout,
+        ctx,
+        savedModelId,
+        registry: runtime.tokenCounters,
+        tokenizerOverride,
+      });
+    }
+  }
 
   const contextWindow =
     await runtime.providerModels.getContextWindow(savedModelId);
