@@ -313,8 +313,17 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
+    // 方案 A：post_model abort 后 stepsExecuted 仍 +1（保留 partial assistant）
+    assert.equal(result.stepsExecuted, 1);
     const msgs = await session.list();
-    assertSessionClean(msgs);
+    // 方案 A：abort 后保留 partial assistant（user + assistant 两条），不写 tool_results
+    assert.equal(msgs.length, 2, "保留 turn 起点的 user 与 partial assistant");
+    assert.equal(msgs[0]!.role, "user");
+    assert.equal(msgs[1]!.role, "assistant");
+    assert.ok(
+      !msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")),
+      "不应残留 tool_results",
+    );
   });
 
   it("检测点 model_request_catch：模型 throw AbortError，session 干净", async () => {

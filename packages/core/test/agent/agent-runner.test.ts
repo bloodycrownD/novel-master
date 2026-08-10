@@ -246,13 +246,15 @@ describe("AgentRunner", () => {
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
-    assert.equal(result.stepsExecuted, 0);
+    // 方案 A：post_model abort 后 stepsExecuted 仍 +1（保留 partial assistant）
+    assert.equal(result.stepsExecuted, 1);
     const msgs = await session.list();
-    // 方案 B：abort 后干净回滚到 turn 起点，不写 partial assistant
-    assert.equal(msgs.length, 1, "仅保留 turn 起点的 user 消息");
+    // 方案 A：abort 后保留 partial assistant（user + assistant 两条），不写 tool_results
+    assert.equal(msgs.length, 2, "保留 turn 起点的 user 与 partial assistant");
     assert.equal(msgs[0]!.role, "user");
+    assert.equal(msgs[1]!.role, "assistant");
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
-    assert.deepEqual(phases, []);
+    assert.deepEqual(phases, ["assistant"]);
   });
 
   it("T-ARP-C2: abort + tool_use blocks ��� assistant������ runParallel���� tool_results", async () => {
@@ -309,13 +311,15 @@ describe("AgentRunner", () => {
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
-    assert.equal(result.stepsExecuted, 0);
+    // 方案 A：post_model abort 后 stepsExecuted 仍 +1（保留 partial assistant）
+    assert.equal(result.stepsExecuted, 1);
     assert.equal(runParallelInvoked, false);
     const msgs = await session.list();
-    // 方案 B：abort 后干净回滚；assistant partial 不应残留
-    assert.equal(msgs.length, 1, "仅保留 turn 起点的 user 消息");
+    // 方案 A：abort 后保留含 tool_use 的 partial assistant，但不跑 tool、不写 tool_results
+    assert.equal(msgs.length, 2, "保留 turn 起点的 user 与 partial assistant");
     assert.equal(msgs[0]!.role, "user");
-    assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_use")));
+    assert.equal(msgs[1]!.role, "assistant");
+    assert.ok(msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_use")));
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
@@ -358,7 +362,8 @@ describe("AgentRunner", () => {
 
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
-    assert.equal(result.stepsExecuted, 0);
+    // 方案 A：post_model abort 后 stepsExecuted 仍 +1（保留 partial assistant）
+    assert.equal(result.stepsExecuted, 1);
   });
 
   it("T-ARP-C4: abort �� tool ִ����ɺ� append ǰ���� tool_results", async () => {
@@ -412,10 +417,12 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
     const msgs = await session.list();
-    // 方案 B：abort 后干净回滚；assistant tool_use partial 不应残留，也不会有 tool_results
-    assert.equal(msgs.length, 1, "仅保留 turn 起点的 user 消息");
+    // 方案 A：after_tool_checkpoint abort 后保留含 tool_use 的 partial assistant；
+    // tool 跑完了但 tool_results 未 append（abort 在 checkpoint 后、append 前）
+    assert.equal(msgs.length, 2, "保留 turn 起点的 user 与 partial assistant");
     assert.equal(msgs[0]!.role, "user");
-    assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_use")));
+    assert.equal(msgs[1]!.role, "assistant");
+    assert.ok(msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_use")));
     assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
