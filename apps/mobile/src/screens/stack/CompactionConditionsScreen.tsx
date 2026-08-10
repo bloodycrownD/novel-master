@@ -16,7 +16,7 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 
 const DEFAULT_CONDITIONS: CompactionConditions = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   enabled: false,
   tokenRatio: 0.8,
   visibleFloor: 20,
@@ -59,7 +59,7 @@ export function CompactionConditionsScreen() {
       return null;
     }
     return {
-      schemaVersion: 3,
+      schemaVersion: 4,
       enabled,
       ...(ratio != null ? {tokenRatio: ratio} : {}),
       ...(floor != null ? {visibleFloor: floor} : {}),

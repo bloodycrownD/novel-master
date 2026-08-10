@@ -12,7 +12,7 @@ import {
   resolveRollbackConfirmMessage,
 } from '@novel-master/core/chat';
 
-import { EVENT_SESSION_COMPACTION_REQUESTED } from '@novel-master/core/events';
+import { runCompaction } from '@novel-master/core/compaction';
 import { formatError } from '@/errors/format-error';
 import { toastMessage } from '@/errors/toast-message';
 import {
@@ -335,23 +335,27 @@ export function useChatTabMessageActions({
     if (projectId == null || sessionId == null) {
       return;
     }
-    Alert.alert('压缩上下文', '将按照事件配置压缩上下文。是否继续？', [
+    Alert.alert('压缩上下文', '将压缩上下文。是否继续？', [
       { text: '取消', style: 'cancel' },
       {
         text: '压缩',
         onPress: () => {
           void (async () => {
             try {
-              const result = await runtime.eventOrchestrator.emit(
-                EVENT_SESSION_COMPACTION_REQUESTED,
-                { sessionId, projectId, trigger: 'manual' },
+              const hideStartDepth =
+                await runtime.compactionConditionEvaluator.getHideStartDepth();
+              const result = await runCompaction(
+                {
+                  sessionKkv: runtime.sessionKkv,
+                  messages: runtime.messages,
+                  messageTranscriptEffects: runtime.messageTranscriptEffects,
+                },
+                { sessionId, projectId, hideStartDepth },
               );
               await reloadMessages(true);
               void refreshChatTokenLabel();
               if (!result.ok) {
-                showToast(
-                  toastMessage('压缩部分失败', result.failures[0]?.error),
-                );
+                showToast(toastMessage('压缩失败'));
               } else {
                 await refreshComposerStatusAfterFloorOrCompaction(runtime, {
                   projectId,

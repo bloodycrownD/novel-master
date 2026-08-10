@@ -47,6 +47,10 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/events.js',
     ),
+    '^@novel-master/core/compaction$': path.join(
+      repoRoot,
+      'packages/core/dist/public/compaction.js',
+    ),
   '^@/(.*)$': '<rootDir>/src/$1',
     '^@novel-master/core/workplace$': path.join(
       repoRoot,

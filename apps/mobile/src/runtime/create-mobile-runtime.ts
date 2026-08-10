@@ -105,6 +105,16 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
         evaluation,
       );
     },
+    getHideStartDepth() {
+      if (compactionConditionEvaluator == null) {
+        compactionConditionEvaluator = createCompactionConditionEvaluator({
+          conditionsStore: compactionConditions,
+          tokenCounters,
+          providerModels: providerBundle.providerModels,
+        });
+      }
+      return compactionConditionEvaluator.getHideStartDepth();
+    },
   };
 
   const eventOrchestrator = createEventOrchestrator({
