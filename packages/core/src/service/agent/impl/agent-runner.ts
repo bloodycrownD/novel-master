@@ -406,6 +406,11 @@ export class DefaultAgentRunner implements AgentRunner {
               runId,
               phase: "assistant",
             });
+            // per-step reset：assistant 消息已落库，下一步从空累积开始，
+            // 避免用户在 step N≥2 重进子会话时拿到 step1+…+stepN 的拼接
+            // （前几步已落库文本被当成大 delta 重复推）。reset 只清累积、
+            // 不换句柄，run 边界的所有权比对仍由 register/unregister 负责。
+            this.deps.streamRegistry?.reset(sessionId);
           }
         }
 
