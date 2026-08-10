@@ -11,7 +11,6 @@ export type SettingsViewId =
   | "providerCreate"
   | "providerEdit"
   | "modelSampling"
-  | "eventsConfig"
   | "regexGroups"
   | "regexRules"
   | "regexRuleEditor";
@@ -31,7 +30,6 @@ export const SETTINGS_NAV = [
   {
     label: "高级",
     items: [
-      { id: "eventsConfig" as const, label: "事件配置", icon: "⚡" },
       { id: "regexGroups" as const, label: "正则过滤", icon: "🛡️" },
     ],
   },
@@ -51,7 +49,6 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   dataManagement: "备份与恢复",
   agentsSettings: "智能体配置",
   providers: "服务商配置",
-  eventsConfig: "事件配置",
   regexGroups: "正则过滤",
 };
 

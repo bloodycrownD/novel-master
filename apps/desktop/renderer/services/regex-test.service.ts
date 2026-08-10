@@ -1,7 +1,10 @@
 /**
  * Regex rule draft validation and preview (ported from mobile).
  */
-import { matchDepth, validateDepthSlice } from "@shared/logic/config-forms-events";
+import {
+  matchDepth,
+  validateDepthSlice,
+} from "@novel-master/core/compaction";
 
 export type RegexChannel = "llm" | "display";
 

@@ -44,13 +44,6 @@ import {
   handleCloudSyncTestConnection,
 } from './handlers/cloud-sync.js';
 import {
-  handleEventsClearConfig,
-  handleEventsExportYaml,
-  handleEventsGetConfig,
-  handleEventsImportYaml,
-  handleEventsSetConfig,
-} from './handlers/events.js';
-import {
   handleAppCheckForUpdates,
   handleAppGetInfo,
   handleAppOpenExternal,
@@ -386,12 +379,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.REGEX_DELETE_RULE, handleRegexDeleteRule);
   bindNoArg(IPC_CHANNELS.REGEX_LIST_PICKER, handleRegexListPicker);
   bindReq(IPC_CHANNELS.REGEX_SET_CURRENT, handleRegexSetCurrent);
-
-  bindNoArg(IPC_CHANNELS.EVENTS_GET_CONFIG, handleEventsGetConfig);
-  bindReq(IPC_CHANNELS.EVENTS_SET_CONFIG, handleEventsSetConfig);
-  bindNoArg(IPC_CHANNELS.EVENTS_CLEAR_CONFIG, handleEventsClearConfig);
-  bindNoArg(IPC_CHANNELS.EVENTS_EXPORT_YAML, handleEventsExportYaml);
-  bindNoArg(IPC_CHANNELS.EVENTS_IMPORT_YAML, handleEventsImportYaml);
 
   bindNoArg(
     IPC_CHANNELS.COMPACTION_CONDITIONS_GET,

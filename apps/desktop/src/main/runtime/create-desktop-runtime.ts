@@ -17,10 +17,7 @@ import {
   createDefaultTokenCounterRegistry,
   createProviderServices,
 } from "@novel-master/core/provider";
-import {
-  createEventsConfigStore,
-  SimpleEventBus,
-} from "@novel-master/core/events";
+import { SimpleEventBus } from "@novel-master/core/events";
 import {
   createMessageService,
   createMessageTranscriptEffectsService,
@@ -92,7 +89,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   });
 
   const eventBus = new SimpleEventBus();
-  const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -116,7 +112,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     preferences,
     kkv,
     eventBus,
-    eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
     agentRegistry,

@@ -12,7 +12,6 @@ import {
   AgentEditorView,
   AgentsSettingsView,
   DataManagementView,
-  EventsConfigView,
   ModelSamplingView,
   ProviderDetailView,
   ProviderFormView,
@@ -119,8 +118,6 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <ProviderDetailView nav={nav} />;
       case "modelSampling":
         return <ModelSamplingView nav={nav} />;
-      case "eventsConfig":
-        return <EventsConfigView />;
       case "regexGroups":
         return <RegexGroupsView nav={nav} />;
       case "regexRules":

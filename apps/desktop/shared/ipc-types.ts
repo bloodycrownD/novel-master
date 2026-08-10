@@ -158,12 +158,6 @@ export const IPC_CHANNELS = {
   REGEX_LIST_PICKER: 'nm:regex/listPicker',
   REGEX_SET_CURRENT: 'nm:regex/setCurrent',
 
-  EVENTS_GET_CONFIG: 'nm:events/getConfig',
-  EVENTS_SET_CONFIG: 'nm:events/setConfig',
-  EVENTS_CLEAR_CONFIG: 'nm:events/clearConfig',
-  EVENTS_EXPORT_YAML: 'nm:events/exportYaml',
-  EVENTS_IMPORT_YAML: 'nm:events/importYaml',
-
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
   COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
 
@@ -1122,21 +1116,6 @@ export type RegexListPickerResponse = {
 
 export type RegexSetCurrentRequest = {
   readonly groupId: string | null;
-};
-
-/**
- * IPC 可序列化的事件配置（与领域 EventsConfig 同构的 plain object）。
- */
-export type EventsConfigPlain = {
-  readonly schemaVersion: 2;
-  readonly events: Readonly<Record<string, readonly unknown[]>>;
-};
-
-/** Events get：main 侧 assess 后返回 health（废止仅 wire 供 renderer assess）。 */
-export type EventsGetConfigResponse = StoredConfigHealthDto<EventsConfigPlain>;
-
-export type EventsSetConfigRequest = {
-  readonly config: unknown;
 };
 
 export type CompactionConditionsDto = {

@@ -54,19 +54,6 @@ describe("handleCompactionManual", () => {
     }
     sessionId = session.data.id;
 
-    const rt = await getDesktopRuntime();
-    // eventsConfig 的 setup 保留到阶段五（Step 15-17 删 UI 时一并清）；
-    // orchestrator 已于 Step 9 移除，runCompaction 直调路径不读 eventsConfig，
-    // 此处仅维持既有 DB 状态以便 T-IPC1 的 runCompaction 断言可复现。
-    await rt.eventsConfig.setConfig({
-      schemaVersion: 2,
-      events: {
-        ["session.compaction.requested"]: [
-          { type: "hide-message", params: { startDepth: 1 } },
-        ],
-      },
-    });
-
     await handleMessagesAppend({ sessionId, role: "user", text: "u1" });
     await handleMessagesAppend({ sessionId, role: "assistant", text: "a1" });
     await handleMessagesAppend({ sessionId, role: "user", text: "u2" });
