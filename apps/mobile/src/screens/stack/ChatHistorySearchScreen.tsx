@@ -24,7 +24,11 @@ import {
 } from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
+import {
+  KeyboardAvoidingView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import type {ChatMessage} from '@novel-master/core/chat';
 import {FormTextInput} from '../../components/form/FormTextInput';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -88,6 +92,14 @@ export function ChatHistorySearchScreen() {
   const [hasSearched, setHasSearched] = useState(false);
   /** 上一批结果是否可能还有更早的（命中 LIMIT 视为可能还有）。 */
   const [hasMore, setHasMore] = useState(false);
+
+  // Android 裁切窗口：与 ScreenFormLayout 同款——用 marginBottom 收缩键盘高度，
+  // 让搜索栏 + 结果列表跟铉缩到键盘以上。iOS 走 KeyboardAvoidingView 的 padding。
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  const clipStyle = useAnimatedStyle(() => {
+    const kb = -keyboardHeightSV.value;
+    return {marginBottom: kb};
+  }, [keyboardHeightSV]);
 
   /** 当前结果集中最小的 seq，作为「加载更早」的 beforeSeq 游标。 */
   const minSeq = useMemo(() => {
@@ -173,12 +185,9 @@ export function ChatHistorySearchScreen() {
     </View>
   ) : null;
 
-  // 用 KeyboardAvoidingView 包裹根部，让软键盘弹起时收缩可视窗口，
-  // 避免搜索框 / 结果列表被键盘盖住（Android 默认 resize 行为不可靠）。
-  return (
-    <KeyboardAvoidingView
-      style={[styles.root, {backgroundColor: tokens.background}]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+  // 搜索栏 + 结果列表主体：抽出来供 iOS / Android 两个分支复用。
+  const body = (
+    <>
       {/* 顶部：搜索栏（关键词输入框 + 搜索按钮），固定区域，不参与滚动。 */}
       <View
         style={[
@@ -236,7 +245,23 @@ export function ChatHistorySearchScreen() {
             : styles.resultContent
         }
       />
+    </>
+  );
+
+  // iOS 走 KeyboardAvoidingView 的 padding；Android 上 react-native-keyboard-controller
+  // 的 KeyboardAvoidingView behavior={undefined} 等于啥也不干，改用 Animated.View 的
+  // marginBottom 收缩裁切窗口（与 ScreenFormLayout 同款范式 A）。
+  return Platform.OS === 'ios' ? (
+    <KeyboardAvoidingView
+      style={[styles.root, {backgroundColor: tokens.background}]}
+      behavior="padding">
+      {body}
     </KeyboardAvoidingView>
+  ) : (
+    <Animated.View
+      style={[styles.root, {backgroundColor: tokens.background}, clipStyle]}>
+      {body}
+    </Animated.View>
   );
 }
 
