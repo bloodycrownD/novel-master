@@ -1,23 +1,26 @@
 import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
+import {formatCounterKindLabel} from '@novel-master/core/provider';
 import {
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,
 } from '../src/services/chat-prompt-tokens.service';
 import type {MobileNovelMasterRuntime} from '../src/runtime/types';
 
-const mockResolveCurrentPromptTokens = jest.fn();
+const mockResolvePromptTokensWithBackfill = jest.fn();
 const mockResolveTokenCounterModeForModel = jest.fn();
 const mockBuildSessionPromptInput = jest.fn();
 const mockResolveSavedModelId = jest.fn();
 const mockSerializePromptLlmInput = jest.fn(() => 'serialized');
 
 jest.mock('@novel-master/core/provider', () => ({
-  resolveCurrentPromptTokens: (...args: unknown[]) =>
-    mockResolveCurrentPromptTokens(...args),
+  resolvePromptTokensWithBackfill: (...args: unknown[]) =>
+    mockResolvePromptTokensWithBackfill(...args),
   resolveTokenCounterModeForModel: (...args: unknown[]) =>
     mockResolveTokenCounterModeForModel(...args),
   serializePromptLlmInput: (...args: unknown[]) =>
     mockSerializePromptLlmInput(...args),
+  formatCounterKindLabel: (kind: string) =>
+    kind === 'api' || kind === 'heuristic' ? '自动' : kind,
 }));
 
 jest.mock('@novel-master/core/agent', () => ({
@@ -53,13 +56,16 @@ function stubRuntime(overrides?: {
     tokenCounters: {
       heuristic: {countText: jest.fn().mockReturnValue(1000)},
     },
+    sessions: {
+      getSessionAgentConfig: jest.fn().mockResolvedValue({}),
+    },
     messages: {listBySession: jest.fn()},
   } as unknown as MobileNovelMasterRuntime;
 }
 
 describe('chat-prompt-tokens.service', () => {
   beforeEach(() => {
-    mockResolveCurrentPromptTokens.mockReset();
+    mockResolvePromptTokensWithBackfill.mockReset();
     mockResolveTokenCounterModeForModel.mockReset();
     mockBuildSessionPromptInput.mockReset();
     mockResolveSavedModelId.mockReset();
@@ -84,7 +90,7 @@ describe('chat-prompt-tokens.service', () => {
     });
     mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('gemma');
-    mockResolveCurrentPromptTokens.mockResolvedValue({
+    mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
       estimated: false,
       counterKind: 'gemma',
@@ -97,8 +103,9 @@ describe('chat-prompt-tokens.service', () => {
     });
 
     expect(label).toBe('19% • 24K/128K · gemma');
-    expect(mockResolveCurrentPromptTokens).toHaveBeenCalledWith(
+    expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledWith(
       's1',
+      expect.any(Array),
       expect.objectContaining({tokenizerOverride: 'gemma'}),
     );
   });
@@ -111,7 +118,7 @@ describe('chat-prompt-tokens.service', () => {
     });
     mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
-    mockResolveCurrentPromptTokens.mockResolvedValue({
+    mockResolvePromptTokensWithBackfill.mockResolvedValue({
       tokenCount: 24_000,
       estimated: false,
       counterKind: 'api',
@@ -123,7 +130,44 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('19% • 24K/128K · api');
+    expect(label).toBe('19% • 24K/128K · 自动');
+  });
+
+  it('T-S6: service 把 buildSessionPromptInput 返回的 rawMessages 透传给 resolvePromptTokensWithBackfill', async () => {
+    // 构造一个可识别的 rawMessages，验证它作为第二参被透传。
+    const rawMessages = [
+      {
+        id: 'm1',
+        role: 'user',
+        content: {blocks: [{type: 'text', text: 'hi'}]},
+        hidden: false,
+      },
+    ];
+    mockBuildSessionPromptInput.mockResolvedValue({
+      definition: {model: 'openai/gpt-4o'},
+      layout: {persist: [], dynamic: []},
+      ctx: {workplaceDisplay: '', messages: []},
+      rawMessages,
+    });
+    mockResolveSavedModelId.mockReturnValue('openai/gpt-4o');
+    mockResolveTokenCounterModeForModel.mockResolvedValue('auto');
+    mockResolvePromptTokensWithBackfill.mockResolvedValue({
+      tokenCount: 24_000,
+      estimated: false,
+      counterKind: 'api',
+      source: 'api',
+    });
+
+    await loadChatPromptTokenLabel(stubRuntime(), {
+      sessionId: 's1',
+      projectId: 'p1',
+    });
+
+    expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledTimes(1);
+    const callArgs = mockResolvePromptTokensWithBackfill.mock.calls[0];
+    // [0]=sessionId, [1]=rawMessages, [2]=params
+    expect(callArgs[0]).toBe('s1');
+    expect(callArgs[1]).toBe(rawMessages);
   });
 
   it('loadChatPromptTokenLabel without model uses heuristic suffix', async () => {
@@ -139,7 +183,7 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('~1K tokens (est.) · heuristic');
+    expect(label).toBe('~1K tokens (est.) · 自动');
   });
 
   it('T7: loadChatPromptTokenLabelResilient falls back to heuristic suffix on build error', async () => {
@@ -159,6 +203,12 @@ describe('chat-prompt-tokens.service', () => {
       projectId: 'p1',
     });
 
-    expect(label).toBe('~1K tokens (est.) · heuristic');
+    expect(label).toBe('~1K tokens (est.) · 自动');
+  });
+
+  it('T-S7: formatCounterKindLabel maps api/heuristic to 自动', () => {
+    expect(formatCounterKindLabel('api')).toBe('自动');
+    expect(formatCounterKindLabel('heuristic')).toBe('自动');
+    expect(formatCounterKindLabel('tiktoken')).toBe('tiktoken');
   });
 });
