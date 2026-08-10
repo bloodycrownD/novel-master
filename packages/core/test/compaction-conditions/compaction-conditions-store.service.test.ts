@@ -65,7 +65,7 @@ describe("compaction conditions store integrity", () => {
     const store = createCompactionConditionsStore(ctx.conn);
     await assert.rejects(
       () =>
-        store.setConditions({ schemaVersion: 3, enabled: true }),
+        store.setConditions({ schemaVersion: 4, enabled: true }),
       (error: unknown) => isCompactionConditionsError(error, "INVALID_SCHEMA"),
     );
     assert.equal(await store.getConditions(), null);
@@ -76,7 +76,7 @@ describe("compaction conditions store integrity", () => {
     const ctx = await openNovelMasterTestConnection();
     const store = createCompactionConditionsStore(ctx.conn);
     const input = {
-      schemaVersion: 3 as const,
+      schemaVersion: 4 as const,
       enabled: true,
       tokenRatio: 0.75,
       visibleFloor: 10,
@@ -87,7 +87,7 @@ describe("compaction conditions store integrity", () => {
     await ctx.conn.close();
   });
 
-  it("S7: v2 document migrates on read and writes v3", async () => {
+  it("S7: v2 document migrates on read and writes v4", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
     const store = createCompactionConditionsStore(ctx.conn);
@@ -102,12 +102,14 @@ describe("compaction conditions store integrity", () => {
       }),
     );
     const first = await store.getConditions();
-    assert.equal(first?.schemaVersion, 3);
+    assert.equal(first?.schemaVersion, 4);
     assert.equal(first?.tokenRatio, 0.8);
     assert.equal(first?.visibleFloor, 20);
+    assert.equal(first?.hideStartDepth, 6);
     const raw = await kkv.get(MODULE, KEY);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    assert.equal(parsed.schemaVersion, 3);
+    assert.equal(parsed.schemaVersion, 4);
+    assert.equal(parsed.hideStartDepth, 6);
     await ctx.conn.close();
   });
 });
