@@ -9,6 +9,8 @@ import type {
   MessageAttachment,
   MessageContent,
 } from "@/domain/chat/model/message.js";
+import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
+import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { MessageSearchQuery } from "@/domain/chat/content/message-content-match.js";
 
@@ -35,6 +37,8 @@ export interface MessageService {
       raw?: Record<string, unknown> | null;
       /** 结构化附件；写入 `attachments_json`，不写入 `content_json`。 */
       attachments?: readonly MessageAttachment[];
+      /** LLM token usage（assistant message 持久化）。 */
+      usage?: MessageUsage;
     },
   ): Promise<ChatMessage>;
 

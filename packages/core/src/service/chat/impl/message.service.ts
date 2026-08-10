@@ -16,6 +16,7 @@ import type {
   ChatMessage,
   MessageAttachment,
 } from "@/domain/chat/model/message.js";
+import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import { messageAttachmentsSchema } from "@/domain/chat/model/message-attachment.schema.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
@@ -109,6 +110,7 @@ export class DefaultMessageService implements MessageService {
       provider?: string | null;
       raw?: Record<string, unknown> | null;
       attachments?: readonly MessageAttachment[];
+      usage?: MessageUsage;
     },
   ): Promise<ChatMessage> {
     const session = await this.deps.sessions.findById(sessionId);
@@ -130,6 +132,7 @@ export class DefaultMessageService implements MessageService {
       createdAtMs: Date.now(),
       hidden: false,
       ...(attachments != null ? { attachments } : {}),
+      ...(options?.usage != null ? { usage: options.usage } : {}),
     };
     await this.deps.messages.insert(message);
     return message;
