@@ -54,6 +54,24 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
       "ALTER TABLE chat_message ADD COLUMN attachments_json TEXT NULL",
   },
   {
+    table: "chat_message",
+    column: "prompt_tokens",
+    addColumnSql:
+      "ALTER TABLE chat_message ADD COLUMN prompt_tokens INTEGER",
+  },
+  {
+    table: "chat_message",
+    column: "completion_tokens",
+    addColumnSql:
+      "ALTER TABLE chat_message ADD COLUMN completion_tokens INTEGER",
+  },
+  {
+    table: "chat_message",
+    column: "total_tokens",
+    addColumnSql:
+      "ALTER TABLE chat_message ADD COLUMN total_tokens INTEGER",
+  },
+  {
     table: "chat_project",
     column: "agent_config_json",
     addColumnSql:

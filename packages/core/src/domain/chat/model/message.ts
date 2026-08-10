@@ -6,9 +6,11 @@
 
 export type { MessageContent } from "./content-block.js";
 export type { MessageAttachment } from "./message-attachment.schema.js";
+export type { MessageUsage } from "./message-usage.js";
 
 import type { MessageContent } from "./content-block.js";
 import type { MessageAttachment } from "./message-attachment.schema.js";
+import type { MessageUsage } from "./message-usage.js";
 
 /** A single message in a session, ordered by `seq`. */
 export interface ChatMessage {
@@ -27,4 +29,9 @@ export interface ChatMessage {
    * 缺列/NULL → `undefined`；`content_json` 永不写 wrap XML。
    */
   readonly attachments?: readonly MessageAttachment[];
+  /**
+   * LLM token usage（assistant message 持久化的 prompt/completion/total tokens）。
+   * 老消息缺列/NULL → `undefined`。
+   */
+  readonly usage?: MessageUsage;
 }

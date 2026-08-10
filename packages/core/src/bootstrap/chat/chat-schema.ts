@@ -36,6 +36,9 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     created_at_ms INTEGER NOT NULL,
     hidden INTEGER NOT NULL DEFAULT 0,
     attachments_json TEXT NULL,
+    prompt_tokens INTEGER,
+    completion_tokens INTEGER,
+    total_tokens INTEGER,
     UNIQUE (session_id, seq)
   )`,
 ];
