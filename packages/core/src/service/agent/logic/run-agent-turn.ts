@@ -63,6 +63,7 @@ import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
+import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
@@ -90,6 +91,13 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * CLI 不注入也能跑（`abortRegistry?.register(...)` 空安全）。
    */
   readonly abortRegistry?: AgentAbortRegistry;
+  /**
+   * Agent stream registry：按 sessionId 索引 in-flight run 的流式累积文本，
+   * 供子会话页首次进入时查询已生成的 partial（eventBus 无 replay）。
+   *
+   * CLI 不注入也能跑（`streamRegistry?.register(...)` 空安全）。
+   */
+  readonly streamRegistry?: AgentStreamRegistry;
   /**
    * 工作区 agent 注册表。父接口 {@link AgentRunRuntimePort} 已声明窄类型
    * `{ listAgentIds, get }`，这里重新声明收窄到完整 {@link AgentRegistryService}
@@ -528,6 +536,9 @@ export async function runAgentTurn(
   );
 
   runtime.abortRegistry?.register(scope.sessionId, internalController);
+  // streamRegistry.register 返回本次 run 的所有权句柄，finally 反注册时回传，
+  // 防止同一 sessionId 并发 run 时 A 的 finally 误删 B 的 partial（与 abortRegistry 对称）。
+  const streamHandle = runtime.streamRegistry?.register(scope.sessionId);
   try {
     stage = "runner.run";
     const maxSteps =
@@ -555,8 +566,9 @@ export async function runAgentTurn(
     });
     throw error;
   } finally {
-    // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller。
+    // 反注册带所有权比对：若期间 sessionId 被新 run 覆盖，不误删新 run 的 controller / partial。
     runtime.abortRegistry?.unregister(scope.sessionId, internalController);
+    runtime.streamRegistry?.unregister(scope.sessionId, streamHandle);
   }
 }
 
@@ -627,9 +639,13 @@ async function runChildAgent(args: {
   // 能按 childSessionId 中断子 run。register 起就纳入 try/finally 包络，
   // 覆盖中间 await（session.append / getCurrentRegexGroupId）抛错路径——
   // 否则一旦这些 await 抛错，finally 不会执行，registry 留下孤儿 controller。
-  // finally 反注册带所有权比对，防误删新 run 的 controller。形态对齐 runAgentTurn。
+  // finally 反注册带所有权比对，防误删新 run 的 controller / partial。形态对齐 runAgentTurn。
+  // streamHandle 在 try 外声明（同 childController），保证 finally 能读到。
+  let streamHandle: string | undefined;
   try {
     runtime.abortRegistry?.register(childSessionId, childController);
+    // 同主 run：register 拿句柄，finally 反注册时回传做所有权比对。
+    streamHandle = runtime.streamRegistry?.register(childSessionId);
 
   // ChatAgentSession 的消息落子 session（独立历史），但工作区归属指向父 session——
   // 子 session 是 createSubSession 新建的、sessionKkv 空，常驻前缀读父的
@@ -741,7 +757,8 @@ async function runChildAgent(args: {
       signal: childController.signal,
     });
   } finally {
-    // 反注册带所有权比对，防误删新 run 的 controller。
+    // 反注册带所有权比对，防误删新 run 的 controller / partial。
     runtime.abortRegistry?.unregister(childSessionId, childController);
+    runtime.streamRegistry?.unregister(childSessionId, streamHandle);
   }
 }
