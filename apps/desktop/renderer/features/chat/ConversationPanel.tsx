@@ -675,6 +675,10 @@ export function ConversationPanel({
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
       }
+      // 通知 SessionDetailDrawer 这类订阅方刷新（与 session-compacted 同范式，按 sessionId 过滤）
+      window.dispatchEvent(
+        new CustomEvent('messages-rollback', { detail: { sessionId } }),
+      );
       // D8：main 已推空 ops；renderer 仅正文 + annotate ∪（禁止用 prev 盖回旧 user_ops chip）
       setComposerText(prevText => {
         const next = resolveComposerDraftAfterRollbackSuccess(

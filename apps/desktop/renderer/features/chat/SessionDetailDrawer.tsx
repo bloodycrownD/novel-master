@@ -154,6 +154,22 @@ export function SessionDetailDrawer({
     });
   }, [open, sessionId, reload]);
 
+  // 回滚成功后 ConversationPanel 会 dispatch 一个 DOM CustomEvent，
+  // 这里订阅一下、按 sessionId 过滤，命中就 reload 抽屉里的 token 统计。
+  useEffect(() => {
+    if (!open || sessionId == null) {
+      return;
+    }
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ sessionId: string }>).detail;
+      if (detail?.sessionId === sessionId) {
+        void reload();
+      }
+    };
+    window.addEventListener('messages-rollback', handler);
+    return () => window.removeEventListener('messages-rollback', handler);
+  }, [open, sessionId, reload]);
+
   // 外部传入的 sessionName 变化时同步草稿（非编辑态下）
   useEffect(() => {
     if (!editingName) {
