@@ -6,9 +6,8 @@
 import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
-  backfillCacheFromMessages,
   countPromptLlmInputHeuristicOnly,
-  resolveCurrentPromptTokens,
+  resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from "@novel-master/core/provider";
@@ -118,12 +117,11 @@ export async function loadChatPromptTokenStats(
     };
     // cache miss → 从 bundle 的 rawMessages 回填，命中就重 resolve 一次（这次
     // 会走 source=api）。compaction trigger 不走这里，行为不变。
-    let result = await resolveCurrentPromptTokens(scope.sessionId, params);
-    if (result.source === "local") {
-      if (backfillCacheFromMessages(scope.sessionId, rawMessages)) {
-        result = await resolveCurrentPromptTokens(scope.sessionId, params);
-      }
-    }
+    const result = await resolvePromptTokensWithBackfill(
+      scope.sessionId,
+      rawMessages,
+      params,
+    );
     const contextWindow =
       await runtime.providerModels.getContextWindow(savedModelId);
     return {
