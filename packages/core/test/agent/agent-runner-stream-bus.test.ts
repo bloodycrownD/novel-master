@@ -41,7 +41,7 @@ describe("agent-runner stream bus", () => {
       published.push("tool-use");
     });
 
-    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID, () => {
+    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID, {}, () => {
       userCalled = true;
       // userOnStream 在 publish 之前同步触发，所以这里 published 必须仍是空的——
       // bus.publish 永远被推迟到 microtask 里跑，避免订阅者重入 runner。

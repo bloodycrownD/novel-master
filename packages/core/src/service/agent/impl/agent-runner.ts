@@ -650,7 +650,7 @@ export function wrapStreamForBus(
   bus: SimpleEventBus,
   sessionId: string,
   runId: string,
-  deps: { readonly streamRegistry?: AgentStreamRegistry },
+  deps: { readonly streamRegistry?: AgentStreamRegistry } = {},
   userOnStream?: (event: LlmStreamEvent) => void,
 ): ((event: LlmStreamEvent) => void) | undefined {
   // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
