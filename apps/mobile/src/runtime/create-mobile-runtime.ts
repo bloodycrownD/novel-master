@@ -14,8 +14,6 @@ import {
   createCompactionConditionsStore,
 } from '@novel-master/core/compaction';
 import {
-  createEventOrchestrator,
-  createRunAgentHandlerDeps,
   createEventsConfigStore,
   SimpleEventBus,
 } from '@novel-master/core/events';
@@ -117,29 +115,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     },
   };
 
-  const eventOrchestrator = createEventOrchestrator({
-    eventsConfig,
-    eventBus,
-    messages,
-    messageTranscriptEffects,
-    sessionKkv,
-    runAgent: createRunAgentHandlerDeps({
-      messages,
-      messageTranscriptEffects,
-      agentRegistry,
-      modelRequests: providerBundle.modelRequests,
-      savedModels: providerBundle.savedModelRepo,
-      workplace: s => createWorkplaceService(conn, s),
-      sessionVfs: (projectId, sessionId) =>
-        createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
-      messageCheckpoint: createMessageCheckpointService(conn),
-      sessionKkv,
-      eventBus,
-      state,
-      regexConfig,
-    }),
-  });
-
   setTimeout(() => {
     ensureLlmFetchConfigured();
   }, 0);
@@ -153,7 +128,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator: lazyCompactionConditionEvaluator,
-    eventOrchestrator,
     agentRegistry,
     abortRegistry,
     streamRegistry,

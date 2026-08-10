@@ -27,7 +27,6 @@ import type {
   CompactionConditionsStore,
 } from '@novel-master/core/compaction';
 import type {
-  EventOrchestrator,
   EventsConfigStore,
   SimpleEventBus,
 } from '@novel-master/core/events';
@@ -71,7 +70,6 @@ export interface MobileNovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;

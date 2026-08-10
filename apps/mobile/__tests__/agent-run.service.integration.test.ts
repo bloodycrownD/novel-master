@@ -57,7 +57,6 @@ function baseRuntime(overrides: Partial<any> = {}) {
       shouldRequestCompaction: async () => false,
       getHideStartDepth: async () => 6,
     },
-    eventOrchestrator: {},
     ...overrides,
   };
 }

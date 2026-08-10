@@ -53,7 +53,6 @@ const mockRuntime: any = {
     getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
     getCurrentRegexGroupId: jest.fn(async () => undefined),
   },
-  eventOrchestrator: {emit: jest.fn()},
   eventBus: new SimpleEventBus(),
   workplace: jest.fn(() => ({})),
   sessionVfs: jest.fn(() => ({})),
