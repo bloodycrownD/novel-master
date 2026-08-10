@@ -41,8 +41,9 @@ export function parseTokenCounterModePref(raw: string | undefined): TokenizerOve
   if (raw == null || raw === "" || raw === "auto") {
     return "auto";
   }
+  // `heuristic` 已从用户可选列表移除（spec 变更点 11），这里把旧数据归一化为 `auto`。
   if (raw === "heuristic") {
-    return "heuristic";
+    return "auto";
   }
   if (VALID_FAMILIES.has(raw)) {
     return raw as TokenizerFamily;

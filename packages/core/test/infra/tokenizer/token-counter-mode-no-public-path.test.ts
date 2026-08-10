@@ -8,6 +8,10 @@ import * as core from "@novel-master/core";
 import * as provider from "@novel-master/core/provider";
 import * as tokenizer from "../../../src/infra/tokenizer/index.js";
 import * as readPref from "../../../src/infra/tokenizer/logic/read-token-counter-mode-pref.js";
+import {
+  TOKEN_COUNTER_MODE_OPTIONS,
+  TOKEN_COUNTER_MODE_SELECT_OPTIONS,
+} from "../../../src/domain/provider/model/token-counter-mode-options.js";
 
 const BANNED_EXPORTS = ["readTokenCounterModeFromPreferences"] as const;
 
@@ -57,5 +61,41 @@ describe("T9 tokenCounter.mode no public read path", () => {
     assert.equal(typeof provider.parseTokenCounterModePref, "function");
     assert.equal(typeof provider.isValidTokenCounterModePref, "function");
     assert.equal(provider.TOKEN_COUNTER_MODE_PREF_KEY, "tokenCounter.mode");
+  });
+});
+
+describe("T-S8 heuristic removed from user-selectable options", () => {
+  it("TOKEN_COUNTER_MODE_OPTIONS no longer lists heuristic", () => {
+    assert.equal(
+      (TOKEN_COUNTER_MODE_OPTIONS as readonly string[]).includes("heuristic"),
+      false,
+    );
+    // 保留六项核心选项
+    assert.deepEqual([...TOKEN_COUNTER_MODE_OPTIONS], [
+      "auto",
+      "tiktoken",
+      "claude",
+      "gemma",
+      "llama3",
+      "mistral",
+    ]);
+  });
+
+  it("TOKEN_COUNTER_MODE_SELECT_OPTIONS no longer lists heuristic", () => {
+    const values = TOKEN_COUNTER_MODE_SELECT_OPTIONS.map((o) => o.value);
+    assert.equal(values.includes("heuristic"), false);
+    assert.equal(values.includes("auto"), true);
+  });
+
+  it("parseTokenCounterModePref normalizes legacy 'heuristic' to 'auto'", () => {
+    assert.equal(readPref.parseTokenCounterModePref("heuristic"), "auto");
+    // 其他正常值不受影响
+    assert.equal(readPref.parseTokenCounterModePref("tiktoken"), "tiktoken");
+    assert.equal(readPref.parseTokenCounterModePref("auto"), "auto");
+  });
+
+  it("isValidTokenCounterModePref still accepts 'heuristic' (VALID_FAMILIES 保留宽容旧数据)", () => {
+    assert.equal(readPref.isValidTokenCounterModePref("heuristic"), true);
+    assert.equal(readPref.isValidTokenCounterModePref("tiktoken"), true);
   });
 });
