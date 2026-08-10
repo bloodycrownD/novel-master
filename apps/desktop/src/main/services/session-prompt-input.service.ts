@@ -5,6 +5,7 @@ import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core
 import { prepareUserMessagesForPrompt } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
+import type { ChatMessage } from "@novel-master/core/chat";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { applyActiveRegexChannel } from "./regex-apply-channel.service.js";
 
@@ -18,6 +19,11 @@ export interface SessionPromptInputBundle {
   readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
   readonly input: PromptLlmInput;
+  /**
+   * `listBySession` 的原始结果（含 hidden 消息），供 cache miss 时回填
+   * `sessionApiPromptTokenCache` 复用，避免再开一次查询。
+   */
+  readonly rawMessages: readonly ChatMessage[];
 }
 
 export async function buildSessionPromptInput(
@@ -74,5 +80,5 @@ export async function buildSessionPromptInput(
   };
   // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
-  return { definition: resolved, layout: resolved.prompts, ctx, input };
+  return { definition: resolved, layout: resolved.prompts, ctx, input, rawMessages: allMessages };
 }

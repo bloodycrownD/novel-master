@@ -6,6 +6,7 @@
 import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
+  backfillCacheFromMessages,
   countPromptLlmInputHeuristicOnly,
   resolveCurrentPromptTokens,
   resolveTokenCounterModeForModel,
@@ -54,8 +55,8 @@ export function formatChatTokenStatsLabel(
 
 // 共用的会话输入快照：避免主路径和 fallback 各自重复读取 sessionConfig。
 type SessionPromptInput = Awaited<ReturnType<typeof buildSessionPromptInput>>;
-// 传给计数分叉的参数，只暴露计数阶段实际需要的三项。
-type CountArgs = Pick<SessionPromptInput, "layout" | "ctx"> & {
+// 传给计数分叉的参数：计数必需的三项 + rawMessages（cache miss 时回填用）。
+type CountArgs = Pick<SessionPromptInput, "layout" | "ctx" | "rawMessages"> & {
   savedModelId: string;
 };
 type CountResult = {
@@ -72,7 +73,7 @@ async function computeChatPromptTokenStats(
   scope: SessionPromptScope,
   countFn: (args: CountArgs) => Promise<CountResult>,
 ): Promise<PromptChatTokenStatsResponse> {
-  const { definition, layout, ctx } = await buildSessionPromptInput(
+  const { definition, layout, ctx, rawMessages } = await buildSessionPromptInput(
     runtime,
     scope,
   );
@@ -93,7 +94,7 @@ async function computeChatPromptTokenStats(
   }
 
   const { tokenCount, estimated, counterKind, contextWindow } =
-    await countFn({ layout, ctx, savedModelId });
+    await countFn({ layout, ctx, savedModelId, rawMessages });
   return buildTokenStats(tokenCount, estimated, counterKind, contextWindow);
 }
 
@@ -102,19 +103,27 @@ export async function loadChatPromptTokenStats(
   scope: SessionPromptScope,
 ): Promise<PromptChatTokenStatsResponse> {
   return computeChatPromptTokenStats(runtime, scope, async (args) => {
-    const { layout, ctx, savedModelId } = args;
+    const { layout, ctx, savedModelId, rawMessages } = args;
     const tokenizerOverride = await resolveTokenCounterModeForModel(
       runtime.providerModels,
       savedModelId,
     );
-    const result = await resolveCurrentPromptTokens(scope.sessionId, {
+    const params = {
       layout,
       ctx,
       savedModelId,
       registry: runtime.tokenCounters,
       tokenizerOverride,
       savedModels: runtime.savedModelRepo,
-    });
+    };
+    // cache miss → 从 bundle 的 rawMessages 回填，命中就重 resolve 一次（这次
+    // 会走 source=api）。compaction trigger 不走这里，行为不变。
+    let result = await resolveCurrentPromptTokens(scope.sessionId, params);
+    if (result.source === "local") {
+      if (backfillCacheFromMessages(scope.sessionId, rawMessages)) {
+        result = await resolveCurrentPromptTokens(scope.sessionId, params);
+      }
+    }
     const contextWindow =
       await runtime.providerModels.getContextWindow(savedModelId);
     return {
