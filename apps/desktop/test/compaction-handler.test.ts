@@ -143,49 +143,10 @@ describe("handleCompactionManual", () => {
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
-  it("T-CR5: condition 压缩 orchestrator.emit 成功后亦清 file_cache + rule_snapshot，保留 pending（旧路径仍在）", async () => {
-    const rt = await getDesktopRuntime();
-    const pendingJson = JSON.stringify([
-      {
-        actionXml: '<action name="mkdir"><path>/keep2</path></action>',
-        tools: [{ id: "t2", name: "vfs_mkdir" }],
-        createdAtMs: 2,
-      },
-    ]);
-    await rt.sessionKkv.set(
-      sessionId,
-      "file_cache",
-      "full:/b.md",
-      JSON.stringify({ body: "y", mtimeMs: 2 }),
-    );
-    await rt.sessionKkv.set(sessionId, "rule_snapshot", "canon", "[]");
-    await rt.sessionKkv.set(
-      sessionId,
-      "user_vfs_pending",
-      "queue",
-      pendingJson,
-    );
-
-    const emitResult = await rt.eventOrchestrator.emit(
-      EVENT_SESSION_COMPACTION_REQUESTED,
-      {
-        sessionId,
-        projectId,
-        trigger: "condition",
-      },
-    );
-    assert.equal(emitResult.ok, true);
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "file_cache", "full:/b.md"),
-      null,
-    );
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "rule_snapshot", "canon"),
-      null,
-    );
-    assert.equal(
-      await rt.sessionKkv.get(sessionId, "user_vfs_pending", "queue"),
-      pendingJson,
-    );
+  // Step 9 已删除 desktop runtime 的 eventOrchestrator 装配，
+  // T-CR5 测的 rt.eventOrchestrator.emit 旧路径不复存在。
+  // 该用例在 Step 20（phase-test-cleanup）统一改为测 runCompaction。
+  it.skip("T-CR5: condition 压缩旧路径（eventOrchestrator.emit）已在 Step 9 移除，Step 20 统一改", async () => {
+    // Step 20 将根据当时的压缩入口重写本用例。
   });
 });

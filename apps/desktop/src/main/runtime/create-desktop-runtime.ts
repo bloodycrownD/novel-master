@@ -18,9 +18,7 @@ import {
   createProviderServices,
 } from "@novel-master/core/provider";
 import {
-  createEventOrchestrator,
   createEventsConfigStore,
-  createRunAgentHandlerDeps,
   SimpleEventBus,
 } from "@novel-master/core/events";
 import {
@@ -111,33 +109,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const abortRegistry = createAgentAbortRegistry();
   const streamRegistry = createAgentStreamRegistry();
 
-  const eventOrchestrator = createEventOrchestrator({
-    eventsConfig,
-    eventBus,
-    messages,
-    messageTranscriptEffects,
-    sessionKkv,
-    runAgent: createRunAgentHandlerDeps({
-      messages,
-      messageTranscriptEffects,
-      agentRegistry,
-      modelRequests: providerBundle.modelRequests,
-      savedModels: providerBundle.savedModelRepo,
-      workplace: (s) => createWorkplaceService(conn, s),
-      sessionVfs: (projectId, sessionId) =>
-        createScopedVfsService(conn, {
-          kind: "session",
-          projectId,
-          sessionId,
-        }),
-      messageCheckpoint: createMessageCheckpointService(conn),
-      sessionKkv,
-      eventBus,
-      state,
-      regexConfig,
-    }),
-  });
-
   return {
     conn,
     dbPath,
@@ -148,7 +119,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    eventOrchestrator,
     agentRegistry,
     abortRegistry,
     streamRegistry,
