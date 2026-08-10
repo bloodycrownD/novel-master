@@ -62,12 +62,13 @@ export interface LlmChatRequest {
   readonly signal?: AbortSignal;
 }
 
-/** Normalized token usage from provider responses. */
-export interface LlmTokenUsage {
-  readonly promptTokens?: number;
-  readonly completionTokens?: number;
-  readonly totalTokens?: number;
-}
+/**
+ * Normalized token usage from provider responses.
+ *
+ * 与 domain 层 `MessageUsage` 结构等价，复用同一类型定义，
+ * 避免两侧各自维护导致字段漂移。
+ */
+export type { MessageUsage as LlmTokenUsage } from "@/domain/chat/model/message-usage.js";
 
 /** finish 路径 arguments JSON 解析失败时收集的元数据；不进入 ToolRunner。 */
 export interface DegradedToolCall {
