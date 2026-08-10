@@ -7,6 +7,7 @@
 import {
   createAgentAbortRegistry,
   createAgentRegistryService,
+  createAgentStreamRegistry,
 } from '@novel-master/core/agent';
 import {
   createCompactionConditionEvaluator,
@@ -65,6 +66,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const regexConfig = createRegexConfigService(conn, state);
   const agentRegistry = createAgentRegistryService(conn, state);
   const abortRegistry = createAgentAbortRegistry();
+  const streamRegistry = createAgentStreamRegistry();
 
   const secretStore = createCompositeSecretStore({
     db: resolveSkspDriver('android').createStore(conn),
@@ -143,6 +145,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventOrchestrator,
     agentRegistry,
     abortRegistry,
+    streamRegistry,
     tokenCounters,
     projects,
     sessions,

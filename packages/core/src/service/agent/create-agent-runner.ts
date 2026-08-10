@@ -20,6 +20,7 @@ import type { CompactionConditionEvaluator } from "../compaction-conditions/crea
 import type { EventOrchestrator } from "../events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "../message-checkpoint/message-checkpoint.port.js";
 import type { AgentRunner } from "./agent.port.js";
+import type { AgentStreamRegistry } from "./agent-stream-registry.port.js";
 import { DefaultAgentRunner } from "./impl/agent-runner.js";
 
 export interface CreateAgentRunnerDeps {
@@ -42,6 +43,8 @@ export interface CreateAgentRunnerDeps {
   readonly eventOrchestrator?: EventOrchestrator;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
+  readonly streamRegistry?: AgentStreamRegistry;
 }
 
 /** Creates an agent runner with injected dependencies. */

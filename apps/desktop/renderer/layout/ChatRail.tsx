@@ -685,7 +685,7 @@ export function ChatRail({
         </div>
 
         <div
-          className={`chat-nav-view$${
+          className={`chat-nav-view${
             viewId === 'conversation' ? ' is-visible' : ''
           }`}
           data-nav-view="conversation"
@@ -706,7 +706,7 @@ export function ChatRail({
         </div>
 
         <div
-          className={`chat-nav-view$${
+          className={`chat-nav-view${
             viewId === 'subagent-conversation' ? ' is-visible' : ''
           }`}
           data-nav-view="subagent-conversation"

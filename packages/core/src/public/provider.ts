@@ -142,6 +142,7 @@ export {
   tokenizerAssetPaths,
   resolveContextWindowTokens,
   seedContextWindowTokens,
+  formatCounterKindLabel,
   getTokenizerDriver,
   resolveTokenizerDriver,
   clearTokenizerDrivers,

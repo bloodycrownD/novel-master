@@ -26,6 +26,7 @@ export interface AssembleAgentRunnerDepsInput {
     | "messageCheckpoint"
     | "eventBus"
     | "sessionKkv"
+    | "streamRegistry"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly regexConfig?: RegexConfigService;
@@ -63,6 +64,7 @@ export function assembleAgentRunnerDeps(
     regexConfig: input.runtime.regexConfig,
     eventBus: input.runtime.eventBus,
     sessionKkv: input.runtime.sessionKkv,
+    streamRegistry: input.runtime.streamRegistry,
     workplace: input.runtime.workplace,
     listAllSessionMessages: () =>
       input.runtime.messages.listBySession(input.toolCtx.sessionId),

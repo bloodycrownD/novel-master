@@ -37,7 +37,7 @@ import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
 import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
-import {SubagentStreamCacheProvider} from '../screens/stack/subagent-stream-cache';
+
 import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {AboutScreen} from '../screens/stack/AboutScreen';
 import {useAutoUpdateCheck} from '../hooks/useAutoUpdateCheck';
@@ -177,7 +177,6 @@ export function RootNavigator() {
     <>
       {autoUpdateUi}
       <NavigationContainer>
-      <SubagentStreamCacheProvider>
       <HeaderProvider>
         <Stack.Navigator
           screenOptions={{
@@ -240,7 +239,6 @@ export function RootNavigator() {
           <Stack.Screen name="About" component={AboutStackScreen} />
         </Stack.Navigator>
       </HeaderProvider>
-      </SubagentStreamCacheProvider>
     </NavigationContainer>
     </>
   );

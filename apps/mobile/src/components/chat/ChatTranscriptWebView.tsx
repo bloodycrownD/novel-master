@@ -918,12 +918,18 @@ export const ChatTranscriptWebView = memo(
         }
 
         if (needsOpenSnapshotRef.current) {
+          if (messages.length === 0) {
+            return;
+          }
           needsOpenSnapshotRef.current = false;
           const { intent, restoreScroll } = resolveOpenScrollIntent(
             initialScrollRef.current,
             defaultScrollToBottomRef.current,
           );
-          sendSessionSnapshot(intent, restoreScroll);
+          // needsOpenSnapshot 建立 WebView rows 基线，必须立即送达——
+          // 不能走 sendSessionSnapshot 的 deferred 路径（uiRunning+streamActive
+          // 时会 pending 到流式结束，导致子会话进入时 user 消息不可见）。
+          sendSessionSnapshotNow(intent, restoreScroll);
           emitScrollRestoreTelemetry(intent, restoreScroll);
           emitChatTranscriptTelemetry({
             name: 'transcript_ready',
@@ -1040,6 +1046,7 @@ export const ChatTranscriptWebView = memo(
         messages,
         uiRunning,
         sendSessionSnapshot,
+        sendSessionSnapshotNow,
         sendPrependPage,
         sendAppendTailRows,
       ]);

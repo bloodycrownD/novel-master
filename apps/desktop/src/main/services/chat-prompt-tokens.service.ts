@@ -7,6 +7,7 @@ import { resolveSavedModelId } from "@novel-master/core/agent";
 
 import {
   countPromptLlmInputHeuristicOnly,
+  formatCounterKindLabel,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
@@ -45,11 +46,11 @@ export function formatChatTokenStatsLabel(
   const current = formatTokenCount(stats.tokenCount);
   if (stats.contextWindow == null || stats.contextWindow <= 0) {
     return stats.estimated
-      ? `${prefix}${current} tokens (est.) · ${stats.counterKind}`
-      : `${current} tokens · ${stats.counterKind}`;
+      ? `${prefix}${current} tokens (est.) · ${formatCounterKindLabel(stats.counterKind)}`
+      : `${current} tokens · ${formatCounterKindLabel(stats.counterKind)}`;
   }
   const pct = stats.pct ?? 0;
-  return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${stats.counterKind}`;
+  return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${formatCounterKindLabel(stats.counterKind)}`;
 }
 
 // 共用的会话输入快照：避免主路径和 fallback 各自重复读取 sessionConfig。

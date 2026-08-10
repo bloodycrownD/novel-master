@@ -7,6 +7,7 @@
 import {
   createAgentAbortRegistry,
   createAgentRegistryService,
+  createAgentStreamRegistry,
 } from "@novel-master/core/agent";
 import {
   createCompactionConditionEvaluator,
@@ -108,6 +109,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
 
   const agentRegistry = createAgentRegistryService(conn, state);
   const abortRegistry = createAgentAbortRegistry();
+  const streamRegistry = createAgentStreamRegistry();
 
   const eventOrchestrator = createEventOrchestrator({
     eventsConfig,
@@ -148,6 +150,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventOrchestrator,
     agentRegistry,
     abortRegistry,
+    streamRegistry,
     tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn, { state, agentRegistry }),

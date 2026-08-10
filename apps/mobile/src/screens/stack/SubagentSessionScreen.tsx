@@ -17,12 +17,6 @@
  * 只读：无 composer；但 agent 运行中时显示停止按钮（调 abortRegistry.abort）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  EVENT_AGENT_STREAM_TEXT_DELTA,
-  EVENT_AGENT_STREAM_THINKING_DELTA,
-  type AgentStreamTextDeltaPayload,
-  type AgentStreamThinkingDeltaPayload,
-} from '@novel-master/core/events';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
@@ -44,7 +38,6 @@ import type {RootStackParamList} from '../../navigation/types';
 import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
 import {useSessionBatch} from '@/screens/tabs/chat-tab/useSessionBatch';
 import {useSessionStream} from '@/screens/tabs/chat-tab/useSessionStream';
-import {useSubagentStreamCache} from '@/screens/stack/subagent-stream-cache';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
@@ -58,9 +51,9 @@ export function SubagentSessionScreen() {
   const route = useRoute<ScreenRoute>();
   const {sessionId, projectId} = route.params;
 
-  // 子会话流式 partial 缓存：pop/unmount 后 remount 时用缓存恢复 partial。
-  // 见 subagent-stream-cache.tsx 的说明。
-  const streamCache = useSubagentStreamCache();
+  // 子会话流式 partial：从 core 的 streamRegistry 直接查询，不依赖 eventBus 订阅时机。
+  // registry 在 run-agent-turn 里按 sessionId register/append/unregister，
+  // 不管用户何时进入子会话，get() 都能拿到从 run 开始的全部累积文本。
 
   const [messages, setMessages] = useState<readonly ChatMessage[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -142,6 +135,8 @@ export function SubagentSessionScreen() {
   );
 
   // 子会话 run 回调：同步 uiRunning + 触发 reload（落库消息接管渲染）。
+  // streamRegistry 的 register/append/unregister 全部在 core 的 run-agent-turn 里管理，
+  // Screen 侧不需要手动操作 registry——只需在 step commit / run 结束时重置注入标记。
   const handleRunStarted = useCallback(
     (_payload: AgentRunStartedPayload) => {
       abort.markRunStarted();
@@ -152,36 +147,25 @@ export function SubagentSessionScreen() {
   const handleRunFinished = useCallback(
     (_payload: AgentRunFinishedPayload) => {
       abort.markRunEnded();
-      // run 结束后 partial 已经落库为正式消息，缓存清掉避免下次同 sessionId
-      // 的新 run 接到旧尾巴上。
-      if (sessionId != null) {
-        streamCache.clear(sessionId);
-      }
       void reload().catch(() => undefined);
     },
-    [abort, reload, streamCache, sessionId],
+    [abort, reload],
   );
   const handleRunFailed = useCallback(
     (_payload: AgentRunFailedPayload) => {
       abort.markRunEnded();
-      if (sessionId != null) {
-        streamCache.clear(sessionId);
-      }
       void reload().catch(() => undefined);
     },
-    [abort, reload, streamCache, sessionId],
+    [abort, reload],
   );
   const handleStepCommitted = useCallback(
     (_payload: AgentStepCommittedPayload) => {
-      // step 提交后 partial 已 flush 为正式消息，缓存清零，下一 step 的 delta
-      // 从空重新累积。
-      if (sessionId != null) {
-        streamCache.clear(sessionId);
-      }
+      // step 提交后 partial 已落库，core 侧 streamRegistry 会重置（下一 step 从空开始）。
+      // Screen 侧重置注入标记，允许下一 step 的新 partial 被注入。
       streamInjectedRef.current = false;
       void reload().catch(() => undefined);
     },
-    [reload, streamCache, sessionId],
+    [reload],
   );
 
   const stream = useSessionStream({
@@ -208,8 +192,7 @@ export function SubagentSessionScreen() {
   applySegmentsRef.current = stream.applySegments;
   onStreamResetRef.current = stream.handleStreamReset;
 
-  // P1-1 stale 守卫：子会话页晚于 run 启动打开时，主动查 registry 合成 markRunStarted，
-  // 避免 uiRunning=false 导致后续 stream delta 被丢弃。
+  // stale 守卫日志已移除（诊断阶段结束）。
   useEffect(() => {
     if (sessionId == null) {
       return;
@@ -221,59 +204,10 @@ export function SubagentSessionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 mount 时检查
   }, [sessionId]);
 
-  // 流式 partial 缓存累加：WebView 路径下 delta 不走 streamingText state，
-  // 直接 pushStreamBatch/Delta 给 webview 内部。screen unmount 后 webview 丢
-  // 得干干净净，重进时没法重放 delta，所以这里并行订阅同一组 bus 事件，把
-  // delta 累加到 Context 缓存。run 结束（uiRunning=false）时不累加，避免把
-  // 下一轮 run 的 delta 接到旧尾巴上。
-  useEffect(() => {
-    if (sessionId == null) {
-      return undefined;
-    }
-    const sid = sessionId;
-    const bus = runtime.eventBus;
-    const subText = bus.subscribe(
-      EVENT_AGENT_STREAM_TEXT_DELTA,
-      (payload: AgentStreamTextDeltaPayload) => {
-        if (payload.sessionId !== sid) {
-          return;
-        }
-        if (!abort.getUiRunning()) {
-          return;
-        }
-        if (payload.text.length === 0) {
-          return;
-        }
-        streamCache.set(sid, {text: payload.text});
-      },
-    );
-    const subThinking = bus.subscribe(
-      EVENT_AGENT_STREAM_THINKING_DELTA,
-      (payload: AgentStreamThinkingDeltaPayload) => {
-        if (payload.sessionId !== sid) {
-          return;
-        }
-        if (!abort.getUiRunning()) {
-          return;
-        }
-        if (payload.text.length === 0) {
-          return;
-        }
-        streamCache.set(sid, {thinking: payload.text});
-      },
-    );
-    return () => {
-      subText.unsubscribe();
-      subThinking.unsubscribe();
-    };
-    // abort.getUiRunning / streamCache 是稳定引用，不放进依赖避免重建订阅。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runtime.eventBus, sessionId]);
-
-  // WebView 路径恢复 partial：重进后新的 webview ready + run 还活跃时，把缓存
-  // 的累积文本一次性 pushStreamDelta 注回去。webview 把它当成一次大 delta 累加
-  // 到空的 stream tail，正好对上重进前的状态。run 已经结束的会话不需要注入——
-  // 落库的消息会从 messages list 正常加载。
+  // 从 core streamRegistry 查询 in-flight 流式 partial 并注入 WebView。
+  // registry 在 run-agent-turn register/append/unregister，不管用户何时进入，
+  // get() 都能拿到从 run 开始的全部累积文本。run 结束后 registry 会 unregister，
+  // get() 返回 undefined——此时落库的消息从 messages list 正常加载。
   useEffect(() => {
     if (streamInjectedRef.current) {
       return;
@@ -287,11 +221,18 @@ export function SubagentSessionScreen() {
     if (sessionId == null) {
       return;
     }
-    const cached = streamCache.get(sessionId);
-    if (cached == null) {
+    // 必须等 messages 加载完再注入——ChatTranscriptWebView 的 messages effect
+    //（child effect，先于本 parent effect 执行）需要先发 sessionSnapshot 把
+    // user 行渲染到 WebView。如果 inject 先于 snapshot 到达，WebView 上 rows
+    // 还是空的，只渲染 stream tail，user 消息不可见。
+    if (messages.length === 0) {
       return;
     }
-    if (cached.text.length === 0 && cached.thinking.length === 0) {
+    const partial = runtime.streamRegistry?.get(sessionId);
+    if (partial == null) {
+      return;
+    }
+    if (partial.text.length === 0 && partial.thinking.length === 0) {
       return;
     }
     const web = transcriptWebRef.current;
@@ -299,13 +240,13 @@ export function SubagentSessionScreen() {
       return;
     }
     streamInjectedRef.current = true;
-    if (cached.text.length > 0) {
-      web.pushStreamDelta('text', cached.text);
+    if (partial.text.length > 0) {
+      web.pushStreamDelta('text', partial.text);
     }
-    if (cached.thinking.length > 0) {
-      web.pushStreamDelta('thinking', cached.thinking);
+    if (partial.thinking.length > 0) {
+      web.pushStreamDelta('thinking', partial.thinking);
     }
-  }, [webviewReady, abort.uiRunning, sessionId, streamCache]);
+  }, [webviewReady, abort.uiRunning, sessionId, runtime.streamRegistry, messages.length]);
 
   const onOpenSubagentSession = useCallback(
     (childSessionId: string) => {

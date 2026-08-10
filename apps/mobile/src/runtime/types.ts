@@ -12,6 +12,7 @@ import type {
 import type {
   AgentAbortRegistry,
   AgentRegistryService,
+  AgentStreamRegistry,
 } from '@novel-master/core/agent';
 import type {
   MessageService,
@@ -85,6 +86,8 @@ export interface MobileNovelMasterRuntime {
   readonly agentRegistry: AgentRegistryService;
   /** 按 sessionId 索引 in-flight run 的 controller，供停止按钮 / IPC 中断。 */
   readonly abortRegistry: AgentAbortRegistry;
+  /** 按 sessionId 索引 in-flight run 的流句柄，供 IPC 订阅 / 取消订阅。 */
+  readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;
   readonly userVfsTurn: UserVfsTurnService;
 }

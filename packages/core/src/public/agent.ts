@@ -39,6 +39,11 @@ export type { AgentRegistryService } from "../service/agent/agent-registry.port.
 export { createAgentRegistryService } from "../service/agent/create-agent-registry-service.js";
 export type { AgentAbortRegistry } from "../service/agent/agent-abort-registry.port.js";
 export { createAgentAbortRegistry } from "../service/agent/create-agent-abort-registry.js";
+export type {
+  AgentStreamRegistry,
+  AgentStreamPartial,
+} from "../service/agent/agent-stream-registry.port.js";
+export { createAgentStreamRegistry } from "../service/agent/create-agent-stream-registry.js";
 export { AgentConfigError } from "../errors/agent-config-errors.js";
 export type { AgentConfigErrorCode } from "../errors/agent-config-errors.js";
 export {

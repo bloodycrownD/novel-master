@@ -13,10 +13,11 @@ import { resolveSavedModelId } from "@novel-master/core/agent";
 import { messageBodyText } from "@novel-master/core/prompt";
 
 import {
+  formatCounterKindLabel,
   resolvePromptTokensWithBackfill,
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
-} from "@novel-master/core/provider";
+} from '@novel-master/core/provider';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
 import {buildSessionPromptInput, type SessionPromptScope} from './session-prompt-input.service';
@@ -28,7 +29,7 @@ function formatChatTokenLabel(
   const base = formatPromptTokenUsageLabel(result.tokenCount, contextWindow, {
     estimated: result.estimated,
   });
-  return `${base} · ${result.counterKind}`;
+  return `${base} · ${formatCounterKindLabel(result.counterKind)}`;
 }
 
 /** Token label for chat header (e.g. `88% • 327/128K · gemma` 或 `· api`). */

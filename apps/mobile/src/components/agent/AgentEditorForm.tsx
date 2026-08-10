@@ -128,7 +128,7 @@ export function AgentEditorForm(props: Props) {
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState('');
   const [savedModelId, setSavedModelId] = useState('');
-  const [vendorModelId, setVendorModelId] = useState('');
+
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState('');
   const [persistEnabled, setPersistEnabled] = useState(false);
@@ -224,14 +224,19 @@ export function AgentEditorForm(props: Props) {
     return list;
   }, [runtime]);
 
-  const loadSavedModels = useCallback(
-    async (pid: string) => {
-      const saved = await runtime.providerModels.savedList(pid);
-      setSavedModels(saved);
-      return saved;
-    },
-    [runtime],
-  );
+
+
+  // 扁平化：聚合所有服务商下的 savedModels，供「专属模型」下拉直接选。
+  // 替代旧的「服务商二级联动」UI——模型 label 已含服务商前缀，无需单独选服务商。
+  const loadAllSavedModels = useCallback(async () => {
+    const providerList = await runtime.providers.list();
+    const all = await Promise.all(
+      providerList.map(p => runtime.providerModels.savedList(p.id)),
+    );
+    const flat = all.flat();
+    setSavedModels(flat);
+    return flat;
+  }, [runtime]);
 
   const populateFormFromDefinition = useCallback(
     async (def: AgentDefinition) => {
@@ -254,54 +259,26 @@ export function AgentEditorForm(props: Props) {
       const toolsWire = toolsSelectionFromDefinition(def);
       setToolsMode(toolsWire.mode);
       setToolsSelected([...toolsWire.selected]);
-      const providerList = await loadProviders();
-      const applySavedModelSelection = (
-        saved: (typeof savedModels)[number] | undefined,
-      ) => {
-        if (saved == null) {
-          setSavedModelId('');
-          setVendorModelId('');
-          return;
-        }
-        setSavedModelId(saved.id);
-        setVendorModelId(saved.vendorModelId);
-      };
-      if (def.model) {
-        setModelEnabled(true);
-        const saved = await runtime.providerModels.getSavedById(def.model);
-        if (saved) {
-          setProviderId(saved.providerId);
-          await loadSavedModels(saved.providerId);
-          applySavedModelSelection(saved);
-        } else {
-          setModelEnabled(false);
-          applySavedModelSelection(undefined);
-        }
-      } else {
-        setModelEnabled(false);
-        const workspaceId = await runtime.state.getCurrentModelId();
-        if (workspaceId) {
-          const saved = await runtime.providerModels.getSavedById(workspaceId);
-          if (saved) {
-            setProviderId(saved.providerId);
-            await loadSavedModels(saved.providerId);
-            applySavedModelSelection(saved);
-          }
-        } else if (providerList.length > 0) {
-          setProviderId(providerList[0].id);
-          const saved = await loadSavedModels(providerList[0].id);
-          applySavedModelSelection(saved[0]);
-        }
-      }
+      // 扁平化：一次性加载全服务商 savedModels，下拉直接选模型，不再二级联动。
+      await loadProviders();
+      const allModels = await loadAllSavedModels();
       const modelEnabledWire = Boolean(def.model);
+      setModelEnabled(modelEnabledWire);
       let baselineProviderId = '';
       let baselineSavedModelId = '';
       if (modelEnabledWire && def.model) {
-        const saved = await runtime.providerModels.getSavedById(def.model);
+        const saved = allModels.find(m => m.id === def.model);
         if (saved) {
+          setProviderId(saved.providerId);
+          setSavedModelId(saved.id);
           baselineProviderId = saved.providerId;
           baselineSavedModelId = def.model;
+        } else {
+          setSavedModelId('');
         }
+      } else {
+        // 跟随聊天模型：下拉停在「默认(跟随)」，不预填具体模型。
+        setSavedModelId('');
       }
       setSavedBaseline(
         formSnapshotJson({
@@ -317,7 +294,7 @@ export function AgentEditorForm(props: Props) {
         }),
       );
     },
-    [loadProviders, loadSavedModels, runtime],
+    [loadProviders, loadAllSavedModels, runtime],
   );
 
   const loadAgent = useCallback(async () => {
@@ -463,22 +440,7 @@ export function AgentEditorForm(props: Props) {
     showToast,
   ]);
 
-  const pinnedModelHint = useMemo(() => {
-    if (!modelEnabled || !savedModelId) {
-      return undefined;
-    }
-    const selected = savedModels.find(m => m.id === savedModelId);
-    if (selected) {
-      const providerLabel =
-        providers.find(p => p.id === selected.providerId)?.label ??
-        '未知服务商';
-      return formatSavedModelDisplayName(
-        providerLabel,
-        selected.modelName,
-      );
-    }
-    return savedModelId;
-  }, [modelEnabled, savedModelId, savedModels]);
+
 
   const handleSave = async () => {
     const built = buildAgentDefinitionFromForm({
@@ -627,24 +589,21 @@ export function AgentEditorForm(props: Props) {
     setDynamic(prev => [...prev, createDefaultDynamicTextBlock(prev.length)]);
   };
 
-  const handleProviderChange = async (pid: string) => {
-    setProviderId(pid);
-    const saved = await loadSavedModels(pid);
-    const first = saved[0];
-    setSavedModelId(first?.id ?? '');
-    setVendorModelId(first?.vendorModelId ?? '');
-  };
-
-  const handleSavedModelChange = (id: string) => {
+  // 扁平化后只有一个下拉：选「默认(跟随)」或某个具体模型。
+  // 空串代表默认(跟随)——与 def.model 缺省语义对齐（buildAgentDefinitionFromForm
+  // 只看 modelEnabled + savedModelId，core 零改动）。
+  const handleModelSelect = (id: string) => {
+    if (id === '') {
+      setModelEnabled(false);
+      setSavedModelId('');
+      return;
+    }
+    setModelEnabled(true);
     setSavedModelId(id);
     const selected = savedModels.find(m => m.id === id);
-    setVendorModelId(selected?.vendorModelId ?? '');
+    setProviderId(selected?.providerId ?? '');
   };
 
-  const providerSelectOptions = providers.map(p => ({
-    value: p.id,
-    label: p.label,
-  }));
   const modelNameCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const model of savedModels) {
@@ -652,15 +611,24 @@ export function AgentEditorForm(props: Props) {
     }
     return counts;
   }, [savedModels]);
-  const modelSelectOptions = savedModels.map(m => ({
-    value: m.id,
-    label: formatSavedModelDisplayName(
-      providers.find(p => p.id === m.providerId)?.label ?? '未知服务商',
-      m.modelName,
-    ),
-    subtitle:
-      (modelNameCounts.get(m.modelName) ?? 0) > 1 ? m.vendorModelId : undefined,
-  }));
+  // 下拉选项：「默认(跟随)」恒在首位，后面是全服务商已保存模型（label 含服务商前缀）。
+  const modelSelectOptions = useMemo(
+    () => [
+      { value: '', label: '默认(跟随)' },
+      ...savedModels.map(m => ({
+        value: m.id,
+        label: formatSavedModelDisplayName(
+          providers.find(p => p.id === m.providerId)?.label ?? '未知服务商',
+          m.modelName,
+        ),
+        subtitle:
+          (modelNameCounts.get(m.modelName) ?? 0) > 1
+            ? m.vendorModelId
+            : undefined,
+      })),
+    ],
+    [savedModels, providers, modelNameCounts],
+  );
 
   if (loading) {
     return (
@@ -892,58 +860,22 @@ export function AgentEditorForm(props: Props) {
           </FormField>
         </FormSectionCard>
 
-        <FormSectionCard
-          title="模型"
-          tokens={tokens}
-          rightAction={
-            <View style={styles.switchRow}>
-              <Text style={{ color: tokens.textSecondary, fontSize: 13 }}>
-                专属模型
-              </Text>
-              <Switch
-                value={modelEnabled}
-                onValueChange={setModelEnabled}
-                trackColor={{ false: tokens.border, true: tokens.primary }}
-              />
-            </View>
-          }
-        >
-          {!modelEnabled ? (
-            <Text style={[styles.hint, { color: tokens.textSecondary }]}>
-              未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。
-            </Text>
-          ) : (
-            <>
-              <FormField label="服务商" tokens={tokens}>
-                <FormSelectField
-                  tokens={tokens}
-                  value={providerId}
-                  onChange={handleProviderChange}
-                  options={providerSelectOptions}
-                  sheetTitle="选择服务商"
-                  placeholder="选择服务商"
-                  emptyLabel="请先在「服务商」页添加"
-                />
-              </FormField>
-              <FormField label="模型" tokens={tokens}>
-                <FormSelectField
-                  tokens={tokens}
-                  value={savedModelId}
-                  onChange={handleSavedModelChange}
-                  options={modelSelectOptions}
-                  sheetTitle="选择模型"
-                  placeholder="选择模型"
-                  emptyLabel={
-                    providerId ? '该服务商下暂无已保存模型' : '请先选择服务商'
-                  }
-                  disabled={!providerId}
-                />
-              </FormField>
-              <Text style={[styles.hint, { color: tokens.textSecondary }]}>
-                model: {pinnedModelHint ?? '—'}
-              </Text>
-            </>
-          )}
+        <FormSectionCard title="模型" tokens={tokens}>
+          <FormField
+            label="专属模型"
+            tokens={tokens}
+            hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。"
+          >
+            <FormSelectField
+              tokens={tokens}
+              value={modelEnabled ? savedModelId : ''}
+              onChange={handleModelSelect}
+              options={modelSelectOptions}
+              sheetTitle="选择专属模型"
+              placeholder="默认(跟随)"
+              emptyLabel="请先在「服务商」页添加模型"
+            />
+          </FormField>
         </FormSectionCard>
 
         <FormSectionCard title="运行时" tokens={tokens}>

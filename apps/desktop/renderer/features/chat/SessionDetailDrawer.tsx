@@ -55,6 +55,7 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
 import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
 import { formatTokenCount } from "@novel-master/core/common";
+import { formatCounterKindLabel } from "@novel-master/core/provider";
 
 interface SessionDetailDrawerProps {
   open: boolean;
@@ -453,7 +454,7 @@ export function SessionDetailDrawer({
                 <span>{tokenCountLabel(tokenStats)}</span>
                 <Tooltip content="分词器" placement="top">
                   <span className="session-detail-drawer__tokens-tokenizer">
-                    {tokenStats.counterKind}
+                    {formatCounterKindLabel(tokenStats.counterKind)}
                   </span>
                 </Tooltip>
               </div>

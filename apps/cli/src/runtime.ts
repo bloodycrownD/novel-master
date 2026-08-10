@@ -10,7 +10,7 @@ import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node
 import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
-import { createAgentRegistryService } from "@novel-master/core/agent";
+import { createAgentRegistryService, createAgentStreamRegistry } from "@novel-master/core/agent";
 import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
@@ -66,7 +66,7 @@ import {
   createSessionKkvService,
   type SessionKkvService,
 } from "@novel-master/core/session-kkv";
-import type { AgentRegistryService } from "@novel-master/core/agent";
+import type { AgentRegistryService, AgentStreamRegistry } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   createCompositeSecretStore,
@@ -155,6 +155,8 @@ export interface NovelMasterRuntime {
   readonly sessionKkv: SessionKkvService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
+  /** 按 sessionId 索引 in-flight run 的流句柄，供订阅 / 取消订阅。 */
+  readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;
   readonly dbPath: string;
 }
@@ -218,6 +220,7 @@ export async function createNovelMasterRuntime(
   });
 
   const agentRegistry = createAgentRegistryService(conn, state);
+  const streamRegistry = createAgentStreamRegistry();
 
   const eventOrchestrator = createEventOrchestrator({
     eventsConfig,
@@ -252,6 +255,7 @@ export async function createNovelMasterRuntime(
     compactionConditionEvaluator,
     eventOrchestrator,
     agentRegistry,
+    streamRegistry,
     tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn, { state, agentRegistry }),

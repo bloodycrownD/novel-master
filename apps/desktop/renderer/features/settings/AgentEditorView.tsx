@@ -52,7 +52,6 @@ import {
   ipcAgentRegistryUpsert,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
-  ipcProviderModelsGetSaved,
   ipcProviderModelsSavedList,
   ipcProvidersList,
 } from "@/ipc/client";
@@ -129,7 +128,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     Array<{ id: string; label: string }>
   >([]);
   const [savedModels, setSavedModels] = useState<
-    Array<{ id: string; vendorModelId: string; displayName: string }>
+    Array<{
+      id: string;
+      vendorModelId: string;
+      displayName: string;
+      providerId: string;
+    }>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -192,36 +196,40 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     ]
   );
 
-  const loadSavedModels = useCallback(async (pid: string) => {
-    const res = await ipcProviderModelsSavedList({ providerId: pid });
-    if (res.ok) {
-      setSavedModels(
-        res.data.map((m) => ({
-          id: m.id,
-          vendorModelId: m.vendorModelId,
-          displayName: m.displayName?.trim() || m.vendorModelId,
-        }))
+  // 扁平化：一次性加载全服务商 savedModels，供「专属模型」下拉直接选。
+  // 替代旧的「服务商二级联动」UI——模型 label 已含服务商前缀，无需单独选服务商。
+  const loadAllSavedModels = useCallback(
+    async (
+      providerRows: Array<{ id: string; label: string }>,
+    ): Promise<
+      Array<{
+        id: string;
+        vendorModelId: string;
+        displayName: string;
+        providerId: string;
+      }>
+    > => {
+      const results = await Promise.all(
+        providerRows.map((p) =>
+          ipcProviderModelsSavedList({ providerId: p.id }).then((res) =>
+            res.ok
+              ? res.data.map((m) => ({
+                  id: m.id,
+                  vendorModelId: m.vendorModelId,
+                  displayName: m.displayName?.trim() || m.vendorModelId,
+                  providerId: p.id,
+                }))
+              : [],
+          ),
+        ),
       );
-    }
-  }, []);
-
-  const resolveSavedModelPin = useCallback(
-    async (modelPin: string | undefined) => {
-      if (modelPin == null || modelPin === "") {
-        return { modelOn: false, providerId: "", savedModelId: "" };
-      }
-      const res = await ipcProviderModelsGetSaved({ savedModelId: modelPin });
-      if (res.ok && res.data != null) {
-        return {
-          modelOn: true,
-          providerId: res.data.providerId,
-          savedModelId: modelPin,
-        };
-      }
-      return { modelOn: false, providerId: "", savedModelId: "" };
+      const flat = results.flat();
+      setSavedModels(flat);
+      return flat;
     },
-    []
+    [],
   );
+
 
   const loadAgent = useCallback(async () => {
     if (!agentId) return;
@@ -276,21 +284,25 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       let baselineProviderId = "";
       let baselineSavedModelId = "";
       let modelOn = false;
-      const resolved = await resolveSavedModelPin(def.model);
-      modelOn = resolved.modelOn;
-      if (modelOn) {
-        setModelEnabled(true);
-        setProviderId(resolved.providerId);
-        baselineProviderId = resolved.providerId;
-        baselineSavedModelId = resolved.savedModelId;
-        setSavedModelId(resolved.savedModelId);
-        await loadSavedModels(resolved.providerId);
-      } else {
-        setModelEnabled(false);
-        if (providerRows.length > 0) {
-          setProviderId(providerRows[0]!.id);
-          await loadSavedModels(providerRows[0]!.id);
+      // 扁平化：全量加载 savedModels，下拉直接选模型。
+      const allModels = await loadAllSavedModels(providerRows);
+      if (def.model) {
+        const pinned = allModels.find((m) => m.id === def.model);
+        if (pinned) {
+          modelOn = true;
+          setModelEnabled(true);
+          setProviderId(pinned.providerId);
+          setSavedModelId(pinned.id);
+          baselineProviderId = pinned.providerId;
+          baselineSavedModelId = pinned.id;
+        } else {
+          setModelEnabled(false);
+          setSavedModelId("");
         }
+      } else {
+        // 跟随聊天模型：下拉停在「默认(跟随)」，不预填具体模型。
+        setModelEnabled(false);
+        setSavedModelId("");
       }
 
       setSavedBaseline(
@@ -309,7 +321,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     } finally {
       setLoading(false);
     }
-  }, [agentId, loadSavedModels, resolveSavedModelPin]);
+  }, [agentId, loadAllSavedModels]);
 
   useEffect(() => {
     void loadAgent();
@@ -421,10 +433,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     );
   }
 
-  const modelHint =
-    savedModels.find((m) => m.id === savedModelId)?.displayName ??
-    savedModelId ??
-    "—";
 
   const save = async () => {
     const built = buildAgentDefinitionFromForm({
@@ -551,22 +559,19 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     setDynamic((prev) => [...prev, createDefaultDynamicTextBlock(prev.length)]);
   };
 
-  const handleProviderChange = async (pid: string) => {
-    setProviderId(pid);
-    const res = await ipcProviderModelsSavedList({ providerId: pid });
-    if (res.ok && res.data.length > 0) {
-      setSavedModelId(res.data[0]!.id);
-      setSavedModels(
-        res.data.map((m) => ({
-          id: m.id,
-          vendorModelId: m.vendorModelId,
-          displayName: m.displayName?.trim() || m.vendorModelId,
-        }))
-      );
-    } else {
+  // 扁平化后只有一个下拉：选「默认(跟随)」或某个具体模型。
+  // 空串代表默认(跟随)——与 def.model 缺省语义对齐（buildAgentDefinitionFromForm
+  // 只看 modelEnabled + savedModelId，core 零改动）。
+  const handleModelSelect = (id: string) => {
+    if (id === "") {
+      setModelEnabled(false);
       setSavedModelId("");
-      setSavedModels([]);
+      return;
     }
+    setModelEnabled(true);
+    setSavedModelId(id);
+    const selected = savedModels.find((m) => m.id === id);
+    setProviderId(selected?.providerId ?? "");
   };
 
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
@@ -684,47 +689,27 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         </SettingsSection>
 
         <SettingsSection title="模型">
-          <SettingsField label="专属模型" row>
-            <Switch
-              checked={modelEnabled}
-              onChange={setModelEnabled}
-              aria-label="专属模型"
-            />
+          <SettingsField
+            label="专属模型"
+            hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。"
+          >
+            <select
+              value={modelEnabled ? savedModelId : ""}
+              onChange={(e) => handleModelSelect(e.target.value)}
+            >
+              <option value="">默认(跟随)</option>
+              {savedModels.map((m) => {
+                const providerLabel =
+                  providers.find((p) => p.id === m.providerId)?.label ??
+                  "未知服务商";
+                return (
+                  <option key={m.id} value={m.id}>
+                    {providerLabel} / {m.displayName}
+                  </option>
+                );
+              })}
+            </select>
           </SettingsField>
-          {!modelEnabled ? (
-            <p className="settings-hint settings-hint--compact">
-              未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。
-            </p>
-          ) : (
-            <>
-              <SettingsField label="服务商">
-                <select
-                  value={providerId}
-                  onChange={(e) => void handleProviderChange(e.target.value)}
-                >
-                  {providers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </SettingsField>
-              <SettingsField label="模型">
-                <select
-                  value={savedModelId}
-                  onChange={(e) => setSavedModelId(e.target.value)}
-                  disabled={!providerId}
-                >
-                  {savedModels.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.displayName}
-                    </option>
-                  ))}
-                </select>
-              </SettingsField>
-              <p className="settings-hint">model: {modelHint}</p>
-            </>
-          )}
         </SettingsSection>
 
         <SettingsSection title="运行时">
