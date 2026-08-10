@@ -9,7 +9,7 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
-import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
+import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
@@ -602,14 +602,10 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "completed");
   });
 
-  it("emits session.message.received after successful assistant append", async () => {
+  it("T-AR2: does not emit session.message.received after successful assistant append", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("hi"));
     const bus = new SimpleEventBus();
-    let received = false;
-    bus.subscribe(EVENT_SESSION_MESSAGE_RECEIVED, () => {
-      received = true;
-    });
     const model = createMockModel([
       {
         assistantText: "ok",
@@ -633,12 +629,14 @@ describe("AgentRunner", () => {
           materializePersistBlock: async () => ({ workplaceDisplay: "WT" }),
         }) as never,
     });
-    await runner.run({
+    // agent-runner 不再 publish session.message.received；
+    // run 正常完成不报错即说明没有残留对该事件的依赖。
+    const result = await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
       ...defaultRunScope,
     });
-    assert.equal(received, true);
+    assert.equal(result.finished, true);
   });
 
   it("emits agent.step.committed after each assistant and tool_results append", async () => {

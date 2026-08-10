@@ -11,6 +11,7 @@ import type { SavedModelRepository } from "@/domain/provider/repositories/saved-
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
+import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { CreateAgentRunnerDeps } from "../create-agent-runner.js";
 import type { ChatAgentSession } from "../impl/chat-agent-session.js";
 import type { AgentTurnRuntimePort } from "./run-agent-turn.js";
@@ -22,6 +23,7 @@ export interface AssembleAgentRunnerDepsInput {
   readonly runtime: Pick<
     AgentTurnRuntimePort,
     | "messages"
+    | "messageTranscriptEffects"
     | "modelRequests"
     | "messageCheckpoint"
     | "eventBus"
@@ -74,9 +76,13 @@ export function assembleAgentRunnerDeps(
     return base;
   }
 
+  // 对话轨：注入压缩执行所需的 messages + messageTranscriptEffects，
+  // 以及压缩条件评估器。agent-runner 检测到 compactionConditions 命中时
+  // 直调 runCompaction，不再经 eventOrchestrator。
   return {
     ...base,
     compactionConditions: input.runtime.compactionConditionEvaluator,
-    eventOrchestrator: input.runtime.eventOrchestrator,
+    messages: input.runtime.messages,
+    messageTranscriptEffects: input.runtime.messageTranscriptEffects,
   };
 }

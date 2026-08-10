@@ -260,6 +260,7 @@ describe("AgentRunner abort rollback (T-DS7)", () => {
             controller.abort();
             return false;
           },
+          getHideStartDepth: async () => 6,
         },
       }),
     );
