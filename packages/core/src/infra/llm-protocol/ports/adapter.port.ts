@@ -68,7 +68,8 @@ export interface LlmChatRequest {
  * 与 domain 层 `MessageUsage` 结构等价，复用同一类型定义，
  * 避免两侧各自维护导致字段漂移。
  */
-export type { MessageUsage as LlmTokenUsage } from "@/domain/chat/model/message-usage.js";
+import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
+export type LlmTokenUsage = MessageUsage;
 
 /** finish 路径 arguments JSON 解析失败时收集的元数据；不进入 ToolRunner。 */
 export interface DegradedToolCall {
