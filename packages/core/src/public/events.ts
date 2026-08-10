@@ -22,18 +22,3 @@ export type {
   AgentStepCommittedPhase,
   SubagentChildSessionCreatedPayload,
 } from "../domain/events/model/event-types.js";
-// events-config 相关导出保留到阶段五（Step 15-17 与三端 UI/CLI 一起删）：
-// eventsConfigStore 仍是三端 runtime 的活装配，EventsConfig/EventAction 等
-// 仍是 desktop/mobile 事件配置 UI 的活类型。
-export type {
-  EventsConfig,
-  EventAction,
-  EventActionNode,
-  EventActionType,
-  HideMessageActionParams,
-  RunAgentActionParams,
-} from "../domain/events-config/model/events-config.js";
-export { eventsConfigSchema } from "../domain/events-config/model/events-config.schema.js";
-export { DEFAULT_EVENTS_CONFIG } from "../domain/events-config/logic/default-events.js";
-export type { EventsConfigStore } from "../service/events-config/events-config-store.port.js";
-export { createEventsConfigStore } from "../service/events-config/create-events-config-store.js";

@@ -16,7 +16,6 @@ import type {
   SessionAgentConfigPatch,
 } from "@novel-master/core/chat";
 import { createCompactionConditionsStore } from "@novel-master/core/compaction";
-import { createEventsConfigStore } from "@novel-master/core/events";
 import { buildPromptAssemblyFromLayout } from "@novel-master/core/prompt";
 import { createProviderServices } from "@novel-master/core/provider";
 import { createRegexConfigService } from "@novel-master/core/regex";
@@ -54,7 +53,6 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(mainEntry.createAgentRegistryService, undefined);
     assert.equal(mainEntry.createMessageService, undefined);
     assert.equal(mainEntry.createCompactionConditionsStore, undefined);
-    assert.equal(mainEntry.createEventsConfigStore, undefined);
     assert.equal(mainEntry.buildPromptAssemblyFromLayout, undefined);
     assert.equal(mainEntry.createProviderServices, undefined);
     assert.equal(mainEntry.createRegexConfigService, undefined);
@@ -77,7 +75,6 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(typeof createAgentRegistryService, "function");
     assert.equal(typeof createMessageService, "function");
     assert.equal(typeof createCompactionConditionsStore, "function");
-    assert.equal(typeof createEventsConfigStore, "function");
     assert.equal(typeof buildPromptAssemblyFromLayout, "function");
     assert.equal(typeof createProviderServices, "function");
     assert.equal(typeof createRegexConfigService, "function");

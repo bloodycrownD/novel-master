@@ -2,11 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { eventsConfigSchema } from "@/domain/events-config/model/events-config.schema.js";
-import { DEFAULT_EVENTS_CONFIG } from "@/domain/events-config/logic/default-events.js";
 import {
   assessAgentDefinitionWire,
-  assessEventsConfigWire,
   buildDefaultAgentDefinitionPreservingName,
   resolveAgentDefinitionFromStorage,
   STORED_CONFIG_LABELS,
@@ -16,75 +13,10 @@ import {
   layoutFromFormInput,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
-import { DefaultEventsConfigStore } from "../../src/service/events-config/impl/events-config-store.service.js";
-import { kkvNotFound } from "../../src/errors/kkv-errors.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
 } from "../helpers/novel-master-fixture.js";
-
-const COMPACTION = "session.compaction.requested";
-
-describe("assessEventsConfigWire", () => {
-  it("T-E1: v1 parallel wire → invalid(outdated_version)", () => {
-    const wire = {
-      schemaVersion: 1,
-      events: {
-        [COMPACTION]: {
-          parallel: [{ "hide-message": { "start-depth": 6 } }],
-        },
-      },
-    };
-    const health = assessEventsConfigWire(wire);
-    assert.equal(health.status, "invalid");
-    if (health.status === "invalid") {
-      assert.equal(health.code, "outdated_version");
-      assert.equal(health.storedSchemaVersion, 1);
-    }
-  });
-
-  it("T-E2: v2 合法 DAG → valid", () => {
-    const wire = encode(DEFAULT_EVENTS_CONFIG, eventsConfigSchema);
-    const health = assessEventsConfigWire(wire);
-    assert.equal(health.status, "valid");
-    if (health.status === "valid") {
-      assert.equal(health.value.schemaVersion, 2);
-      assert.equal(health.value.events[COMPACTION]?.[0]?.type, "hide-message");
-    }
-  });
-
-  it("T-E3: v2 含 refresh-macros → invalid(removed_feature)", () => {
-    const wire = {
-      schemaVersion: 2,
-      events: {
-        [COMPACTION]: ["refresh-macros"],
-      },
-    };
-    const health = assessEventsConfigWire(wire);
-    assert.equal(health.status, "invalid");
-    if (health.status === "invalid") {
-      assert.equal(health.code, "removed_feature");
-      assert.match(health.message, /refresh-macros/i);
-    }
-  });
-
-  it("T-E4: 非 object / 缺 events → invalid(broken_wire)", () => {
-    assert.equal(assessEventsConfigWire(null).status, "invalid");
-    assert.equal(
-      assessEventsConfigWire(null).status === "invalid"
-        ? assessEventsConfigWire(null).code
-        : null,
-      "broken_wire",
-    );
-
-    const missingEvents = { schemaVersion: 2 };
-    const health = assessEventsConfigWire(missingEvents);
-    assert.equal(health.status, "invalid");
-    if (health.status === "invalid") {
-      assert.equal(health.code, "broken_wire");
-    }
-  });
-});
 
 describe("assessAgentDefinitionWire", () => {
   it("T-A1: prompts.blocks agent wire → invalid(removed_feature)", () => {
@@ -195,43 +127,5 @@ describe("getRawWire + assess 集成", () => {
     const health = assessAgentDefinitionWire(raw);
     assert.equal(health.status, "invalid");
     assert.equal(await repo.getRawWire("missing"), null);
-  });
-
-  it("DefaultEventsConfigStore.assessStored：无配置为 valid 默认", async () => {
-    const store = new DefaultEventsConfigStore({
-      async listKeys() {
-        return [];
-      },
-      async get(module, key) {
-        throw kkvNotFound(module, key);
-      },
-      async set() {},
-      async delete() {},
-    });
-
-    const health = await store.assessStored();
-    assert.equal(health.status, "valid");
-    if (health.status === "valid") {
-      assert.equal(health.value.schemaVersion, 2);
-    }
-  });
-
-  it("DefaultEventsConfigStore.assessStored：v1 wire 为 invalid", async () => {
-    const store = new DefaultEventsConfigStore({
-      async listKeys() {
-        return [];
-      },
-      async get() {
-        return JSON.stringify({ schemaVersion: 1, events: {} });
-      },
-      async set() {},
-      async delete() {},
-    });
-
-    const health = await store.assessStored();
-    assert.equal(health.status, "invalid");
-    if (health.status === "invalid") {
-      assert.equal(health.code, "outdated_version");
-    }
   });
 });
