@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { EVENT_SESSION_COMPACTION_REQUESTED } from "@/domain/events/model/event-types.js";
 import { eventsConfigSchema } from "@/domain/events-config/model/events-config.schema.js";
 import { DEFAULT_EVENTS_CONFIG } from "@/domain/events-config/logic/default-events.js";
 import {
@@ -24,7 +23,7 @@ import {
   novelMasterTestFixture,
 } from "../helpers/novel-master-fixture.js";
 
-const COMPACTION = EVENT_SESSION_COMPACTION_REQUESTED;
+const COMPACTION = "session.compaction.requested";
 
 describe("assessEventsConfigWire", () => {
   it("T-E1: v1 parallel wire → invalid(outdated_version)", () => {

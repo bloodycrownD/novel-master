@@ -8,7 +8,6 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core/events";
 import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
 import { handleCompactionManual } from "../src/main/ipc/handlers/compaction.js";
 import { handleMessagesAppend } from "../src/main/ipc/handlers/messages.js";
@@ -56,10 +55,13 @@ describe("handleCompactionManual", () => {
     sessionId = session.data.id;
 
     const rt = await getDesktopRuntime();
+    // eventsConfig 的 setup 保留到阶段五（Step 15-17 删 UI 时一并清）；
+    // orchestrator 已于 Step 9 移除，runCompaction 直调路径不读 eventsConfig，
+    // 此处仅维持既有 DB 状态以便 T-IPC1 的 runCompaction 断言可复现。
     await rt.eventsConfig.setConfig({
       schemaVersion: 2,
       events: {
-        [EVENT_SESSION_COMPACTION_REQUESTED]: [
+        ["session.compaction.requested"]: [
           { type: "hide-message", params: { startDepth: 1 } },
         ],
       },

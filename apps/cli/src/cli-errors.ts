@@ -16,9 +16,6 @@ import { ChatError } from "@novel-master/core/chat";
 import { CompactionConditionsError } from "@novel-master/core/compaction";
 
 
-import { EventsError } from "@novel-master/core/events";
-
-
 import { PromptError } from "@novel-master/core/prompt";
 
 
@@ -45,7 +42,6 @@ export function formatCliError(error: unknown): string {
     error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
     error instanceof CompactionConditionsError ||
-    error instanceof EventsError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||
@@ -72,7 +68,6 @@ export function exitCodeForError(error: unknown): number {
     error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
     error instanceof CompactionConditionsError ||
-    error instanceof EventsError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||

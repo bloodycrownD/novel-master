@@ -1,7 +1,11 @@
 /**
- * hide-message event action: hide visible messages matching a depth slice.
+ * hide-message 动作：按 depth slice 隐藏可见消息。
  *
- * @module service/events/impl/actions/hide-message.handler
+ * 原先住在 `service/events/impl/actions/hide-message.handler.ts`，是事件编排器
+ * 的一个 action。事件编排器移除后，本动作的唯一活消费方是 {@link runCompaction}
+ * （直调化压缩入口），所以搬到压缩域来，跟调用方住一起。
+ *
+ * @module service/compaction-conditions/hide-message.action
  */
 
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";

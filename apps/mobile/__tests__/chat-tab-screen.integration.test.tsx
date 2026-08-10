@@ -59,7 +59,6 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('@novel-master/core', () => ({
-  EVENT_SESSION_COMPACTION_REQUESTED: 'session.compact',
   textBlocks: (text: string) => ({blocks: [{type: 'text', text}]}),
 }));
 

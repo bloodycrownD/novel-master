@@ -13,7 +13,7 @@
  * @module service/compaction-conditions/run-compaction
  */
 
-import { runHideMessageAction } from "@/service/events/impl/actions/hide-message.handler.js";
+import { runHideMessageAction } from "@/service/compaction-conditions/hide-message.action.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { DEFAULT_HIDE_START_DEPTH } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import {

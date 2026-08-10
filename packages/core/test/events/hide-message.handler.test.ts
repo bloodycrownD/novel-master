@@ -9,7 +9,7 @@ import { messageIdsInSlice } from "../../src/domain/depth/logic/depth-slice.js";
 import { listVisibleForDepth } from "../../src/domain/depth/logic/depth-from-tail.js";
 import { resolveHideMessageRange } from "../../src/domain/depth/logic/resolve-hide-message-range.js";
 import { ChatAgentSession } from "../../src/service/agent/impl/chat-agent-session.js";
-import { runHideMessageAction } from "../../src/service/events/impl/actions/hide-message.handler.js";
+import { runHideMessageAction } from "../../src/service/compaction-conditions/hide-message.action.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

@@ -9,8 +9,6 @@ export {
   EVENT_AGENT_STREAM_TOOL_USE,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
-  EVENT_SESSION_MESSAGE_RECEIVED,
-  EVENT_SESSION_COMPACTION_REQUESTED,
 } from "../domain/events/model/event-types.js";
 export type {
   NovelMasterEventType,
@@ -23,9 +21,10 @@ export type {
   AgentStepCommittedPayload,
   AgentStepCommittedPhase,
   SubagentChildSessionCreatedPayload,
-  SessionCompactionRequestedPayload,
-  CompactionTriggerKind,
 } from "../domain/events/model/event-types.js";
+// events-config 相关导出保留到阶段五（Step 15-17 与三端 UI/CLI 一起删）：
+// eventsConfigStore 仍是三端 runtime 的活装配，EventsConfig/EventAction 等
+// 仍是 desktop/mobile 事件配置 UI 的活类型。
 export type {
   EventsConfig,
   EventAction,
@@ -38,11 +37,3 @@ export { eventsConfigSchema } from "../domain/events-config/model/events-config.
 export { DEFAULT_EVENTS_CONFIG } from "../domain/events-config/logic/default-events.js";
 export type { EventsConfigStore } from "../service/events-config/events-config-store.port.js";
 export { createEventsConfigStore } from "../service/events-config/create-events-config-store.js";
-export type { EventOrchestrator, EventEmitContext } from "../service/events/event-orchestrator.port.js";
-export {
-  createEventOrchestrator,
-  createRunAgentHandlerDeps,
-  detachEventOrchestratorFromBus,
-} from "../service/events/create-event-orchestrator.js";
-export type { EventRunResult, EventActionFailure } from "../service/events/event-run-result.js";
-export { EventsError } from "../errors/events-errors.js";

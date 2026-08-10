@@ -5,7 +5,9 @@
  */
 
 import type { EventsConfig } from "../model/events-config.js";
-import { EVENT_SESSION_COMPACTION_REQUESTED } from "@/domain/events/model/event-types.js";
+
+/** session.compaction.requested 事件名（原由 event-types 常量提供，随事件编排器一并移除）。 */
+const SESSION_COMPACTION_REQUESTED = "session.compaction.requested";
 
 /**
  * 出厂默认：压缩时仅 hide-message。
@@ -13,7 +15,7 @@ import { EVENT_SESSION_COMPACTION_REQUESTED } from "@/domain/events/model/event-
 export const DEFAULT_EVENTS_CONFIG: EventsConfig = {
   schemaVersion: 2,
   events: {
-    [EVENT_SESSION_COMPACTION_REQUESTED]: [
+    [SESSION_COMPACTION_REQUESTED]: [
       {
         type: "hide-message",
         params: { startDepth: 6 },

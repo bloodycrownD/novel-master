@@ -16,7 +16,6 @@ const coreDistSmokeFiles = [
   'domain/events-config/model/events-config.schema.js',
   'domain/compaction-conditions/model/compaction-conditions.schema.js',
   'domain/workplace/logic/default-dir-rule.js',
-  'service/events/create-event-orchestrator.js',
   'infra/tokenizer/logic/resolve-context-window.js',
   'infra/tokenizer/logic/count-prompt-llm-input.js',
   'infra/nmtp/logic/registry.js',
