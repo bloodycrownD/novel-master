@@ -17,11 +17,7 @@ import {
   type CompactionConditionEvaluator,
   type CompactionConditionsStore,
 } from "@novel-master/core/compaction";
-import {
-  createEventsConfigStore,
-  SimpleEventBus,
-  type EventsConfigStore,
-} from "@novel-master/core/events";
+import { SimpleEventBus } from "@novel-master/core/events";
 import {
   createMessageService,
   createMessageTranscriptEffectsService,
@@ -130,7 +126,6 @@ export interface NovelMasterRuntime {
   readonly messageCheckpoint: MessageCheckpointService;
   readonly scope: CliScopeResolver;
   readonly eventBus: SimpleEventBus;
-  readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
   globalVfs(): VfsService;
@@ -202,7 +197,6 @@ export async function createNovelMasterRuntime(
   const tokenCounters = createDefaultTokenCounterRegistry({});
 
   const eventBus = new SimpleEventBus();
-  const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -224,7 +218,6 @@ export async function createNovelMasterRuntime(
     preferences,
     dbPath,
     eventBus,
-    eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
     agentRegistry,
