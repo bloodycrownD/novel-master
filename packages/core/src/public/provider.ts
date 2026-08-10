@@ -132,6 +132,7 @@ export {
   formatPromptTokenUsageLabel,
   resolveCurrentPromptTokens,
   pickLastPromptUsage,
+  backfillCacheFromMessages,
   sessionApiPromptTokenCache,
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,

@@ -42,6 +42,7 @@ export {
   type SessionApiPromptTokenCacheEntry,
 } from "./logic/session-api-prompt-token-cache.js";
 export { pickLastPromptUsage } from "./logic/pick-last-prompt-usage.js";
+export { backfillCacheFromMessages } from "./logic/backfill-cache-from-messages.js";
 export {
   resolveCurrentPromptTokens,
   type PromptTokenSource,
