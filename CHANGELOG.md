@@ -6,6 +6,24 @@
 
 ## [Unreleased]
 
+## [1.4.21] - 2026-08-10
+
+### 新增
+
+- **token usage 持久化**：assistant 消息现在会持久化 LLM 返回的 token usage（promptTokens / completionTokens / totalTokens），重启后不丢失；cache 失效后可从历史消息自动回填，无需重新调用 tokenizer
+- **专属模型扁平下拉**：Agent 配置的模型选择从分组列表改为扁平下拉（「默认(跟随) + 全部模型」），更直观
+
+### 修复
+
+- **Desktop 消息列表不滚动**：修复消息增多后列表没有 scroll、输入框被挤没的问题（ChatRail className 笔误）
+- **子会话退出再进入消息消失**（Bug3）：修复子会话在流式输出中退出再进入时，因 `needsOpenSnapshot` 被 deferred 跳过导致消息丢失的问题——新增 AgentStreamRegistry 让子会话流可注册 / 查询，并补齐多步重进与并发场景的稳定性
+- **rewind 后批注草稿残留**（Bug1）：修复 rewind / undo_send 后批注草稿 chip 残留的问题——现在按锚点消息角色区分：assistant 锚点清空全部批注草稿，user 锚点保留未发送草稿并重新投影
+
+### 变更
+
+- **token 标签 UI 简化**：Token 计数标签不再显示 `· api`，统一显示「自动」（涵盖 API 命中 / heuristic 估算 / 模型缺失三种场景）
+- **用户配置移除 heuristic 手动选项**：手动选择模型时不再提供 heuristic 选项（手动选择即明确模型，heuristic 选项无意义）；历史持久化的 heuristic 值在读取时自动归一化为 auto
+
 ## [1.4.20] - 2026-08-09
 
 ### 新增

@@ -1,0 +1,103 @@
+# session-runtime-cr-fix 开发编排状态（code-dev-loop）
+# 记忆槽不放这里；见 .apm/memory/dynamic.md
+
+spec_path: docs/Iterations/session-runtime-cr-fix/spec.md
+prd_path: docs/Iterations/session-runtime-cr-fix/prd.md
+cr_fix_spec_path: docs/Iterations/session-runtime-extract/cr-fix-spec.md
+base_sha: ae5e608326ede2ae16dc3047285a579d0b4975df
+branch: feat/merge-subagent
+
+spec_summary: |
+  闭合 session-runtime-extract CR 的 5 条 must-fix + K1 文档同步。
+  - C-1 (P2, Phase1 core): runChildAgent register 挪进 try
+  - C-2 (P3, Phase1 core): content-block + subagent-tool 注释修正
+  - C-orch-1 (P0, Phase2 desktop): handleAgentRun finally 早退分支补 decrement
+  - FR8-1 (P2, Phase2 desktop): readOnly 子面板 stale 守卫 + ipcAgentRunIsActive 五件套
+  - C-orch-2 (P2, Phase3 mobile): composer finally 改 lifecycle.endUiRunOnError 单一归属
+  - K1 (Phase4 doc): iteration-state.yaml 字段同步
+
+blocking_steps:
+  - Step1 (C-1, blocking yes)
+  - Step2 (C-1-test, blocking yes)
+  - Step4 (core-verify, blocking yes)
+  - Step5 (C-orch-1, blocking yes)
+  - Step6 (C-orch-1-test, blocking yes)
+  - Step7 (FR8-1-ipc, blocking yes)
+  - Step8 (FR8-1-panel, blocking yes)
+  - Step10 (desktop-verify, blocking yes)
+  - Step11 (C-orch-2-lifecycle, blocking yes)
+  - Step12 (C-orch-2-composer, blocking yes)
+  - Step13 (C-orch-2-test, blocking yes)
+  - Step14 (mobile-verify, blocking yes)
+
+# testing baseline (pre-existing fails, 不得新增)
+baseline_core_fails: 13   # fs 集成 / events snapshot / agent registry decode / assembleWorkplaceDisplay
+baseline_desktop_fails: 3 # T-T8 ExplorerPane / openai provider / electron-builder EPERM
+mobile_verify_cmd: npx tsc --noEmit -p apps/mobile/tsconfig.build.json --ignoreDeprecations 6.0
+
+dag_version: 2
+review_round: 0
+status: dev-ready 已确认
+head_sha: d3d3fd8c
+
+wave_plan:
+  - wave-0: [impl-core, impl-mobile, impl-desktop-main, impl-doc-k1]   # done
+  - wave-1: [impl-desktop-panel]                                       # done
+  - wave-2: [verify-core, verify-mobile, verify-desktop]               # done
+  - wave-3: [cr-func-core, cr-func-mobile, cr-func-desktop]            # done, all func-ready yes
+
+node_status:
+  impl-core: { status: done, executor: subagent, head_sha: 2d083e23, scope: "C-1 register 进 try + C-1 单测(T-CF1) + C-2 注释" }
+  impl-mobile: { status: done, executor: subagent, head_sha: 9045388a, scope: "C-orch-2 lifecycle endUiRunOnError+uiActiveRef+守卫 + composer 改调 + 单测(T-CF4)" }
+  impl-desktop-main: { status: done, executor: subagent, head_sha: b2c5dde4, scope: "C-orch-1 finally 补 decrement + 单测(T-CF2) + FR8-1-ipc 五件套" }
+  impl-desktop-panel: { status: done, executor: subagent, head_sha: 40f23234, scope: "FR8-1-panel readOnly 放宽守卫 + lifecycle markExternal* + 单测(T-CF3) + IPC 竞态防护" }
+  impl-doc-k1: { status: done, executor: main, head_sha: d3d3fd8c, scope: "K1 iteration-state.yaml 字段同步" }
+  verify-core: { status: done, executor: subagent, build_pass: true, tests_1802_fail_13_all_preexisting, t_cf1_pass: true }
+  verify-mobile: { status: done, executor: subagent, tsc_preexisting_only_vfsfilemanager, jest_34_34_green }
+  verify-desktop: { status: done, executor: subagent, build_main_pass: true, build_renderer_pass: true, tests_307_fail_1_cancelled_1_all_preexisting, t_cf2_pass: true, t_cf3_pass: true }
+  cr-func-core: { status: done, executor: subagent, readonly: true, func_ready: yes }
+  cr-func-mobile: { status: done, executor: subagent, readonly: true, func_ready: yes }
+  cr-func-desktop: { status: done, executor: subagent, readonly: true, func_ready: yes }
+
+open_must_fix: []
+spec_deviations:
+  - id: CF-D1
+    node: impl-core
+    desc: "T-CF1 实际用 getCurrentRegexGroupId 抛错触发，spec Step2 文字写的是 session.append。两者都在 register 之后、runner.run 之前的 try 内，语义等价。"
+    severity: P3
+    accepted: true
+  - id: CF-D2
+    node: impl-desktop-panel
+    desc: "T-CF3 在 useAgentRunLifecycle 层测 markExternal* 语义 + 本地 readOnlyAcceptRunEvent 复刻，未真 mount ConversationPanel 组件（依赖大量 IPC/mock，lifecycle 层更稳）。覆盖了 spec 关键不变量。"
+    severity: P3
+    accepted: true
+  - id: CF-D3
+    node: impl-desktop-panel
+    desc: "IPC 竞态防护比 spec 风险4 建议更严：endedRef 主防护 + 第二次 IPC 复询兑底（spec 只要求二选一）。正向加固。"
+    severity: P3
+    accepted: true
+
+dev_ready: true
+dev_dag_matrix:
+  impl-core: done
+  impl-mobile: done
+  impl-desktop-main: done
+  impl-desktop-panel: done
+  impl-doc-k1: done (executor main)
+  verify-core: done
+  verify-mobile: done
+  verify-desktop: done
+  cr-func-core: done (func-ready yes)
+  cr-func-mobile: done (func-ready yes)
+  cr-func-desktop: done (func-ready yes)
+
+# 遗留人工验证（不阻塞 dev-ready，qa: manual_user）
+manual_qa_pending:
+  - spec Step9 FR8-1-test 端到端：派子 agent → 立刻进子会话 → 停止按钮可见 + 流式正常
+
+notes: |
+  - IPC 接线五件套：ipc-types.ts → main/handlers/agent.ts → main/ipc/handler-registry.ts(bindReq，漏这步通道不注册) → renderer/ipc/client.ts + invoke-registry.ts
+  - FR8-1 readOnly 分支不能用主会话 beginUiRun + shouldAcceptRunEvent 组合（会卡死 uiRunning），用 mobile SubagentSessionScreen 放宽守卫语义
+  - C-orch-2 删 finally 兜底后必须给 onRunFinished/onRunFailed 补 shouldAcceptRunEvent 守卫，否则迟到 RUN_FINISHED 双递减
+  - core 包名 @novel-master/core，@/ 路径别名；ESM + TS
+  - git commit 不要并行（index.lock 冲突）

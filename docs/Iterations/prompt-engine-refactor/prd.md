@@ -147,8 +147,8 @@ Agent 的提示词配置（`AgentPromptLayout`）把提示词分成三个区域�
 
 ## 验收标准
 
-- **AC-1（tool_result 不被 wrap）**：agent 配了 `customAttach`，执行任意工具调用后，下一轮发给 LLM 的消息历史里 tool_result block 类型完整保留（`toolResultCount > 0`），不报 400 错误。
-- **AC-2（isUserInputMessage 分流）**：`tool_result` 消息和 VFS 语义段消息都返回 `false`；普通用户输入返回 `true`。`prepareUserMessagesForPrompt` 对 `false` 的消息直接透传。
+- **AC-1（tool_result 不被 wrap）**：agent 配了 `customAttach`，执行任意工具调用后，下一轮发给 LLM 的消息历史里 tool_result block 类型完整保留。block 类型保留由 T-S1 单测覆盖；端到端不报 400 错误由手测确认。
+- **AC-2（isUserInputMessage 分流）**：含 `tool_result` 的消息返回 `false`；普通用户输入返回 `true`。`prepareUserMessagesForPrompt` 对 `false` 的消息直接透传。VFS 语义段消息（`user_vfs_action` / `user_vfs_ack`）在当前流程中已被 flush 为 attachments 合并到用户输入消息里，不再是独立的 `role=user` 消息（见 FR-1 注），无需单独判定。
 - **AC-3（WebView task 卡片可点击）**：移动端 WebView 渲染的 task 工具卡片有「点击查看 · 子智能体会话」入口，点击后进入子会话只读浏览页。
 - **AC-4（子会话浏览页正常）**：从 WebView 点击进入 `SubagentSessionScreen`，展示子 agent 的完整消息历史（user prompt + assistant 回复 + tool 调用），不含 composer。
 - **AC-5（RN 原生路径不受影响）**：切换到 `legacy-rn` 引擎时，`ToolCallCard.tsx` 的 `onOpenSubagentSession` 行为不变。
