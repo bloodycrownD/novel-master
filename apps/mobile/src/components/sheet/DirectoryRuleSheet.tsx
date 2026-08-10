@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated from 'react-native-reanimated';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import {
   DEFAULT_WORKPLACE_DIR_RULE,
@@ -24,6 +25,7 @@ import { FormSwitchRow } from '../form/FormSwitchRow';
 import { AppModal } from '../ui/AppModal';
 import { normalizeFillPolicyForMobile } from '../../storage/fill-policy-mobile';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useAndroidModalKeyboardAvoid } from '../../hooks/useAndroidModalKeyboardAvoid';
 
 type Props = {
   visible: boolean;
@@ -62,6 +64,9 @@ export function DirectoryRuleSheet({
 }: Props) {
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
+  // 底部对齐 sheet：键盘弹起后面板紧贴屏幕底部，只移一半还是会被盖住，
+  // 得移整个键盘高度才能贴到键盘上方。
+  const panelAvoidStyle = useAndroidModalKeyboardAvoid(1);
   const [sortField, setSortField] = useState<SortField>(
     DEFAULT_WORKPLACE_DIR_RULE.sortField,
   );
@@ -118,6 +123,92 @@ export function DirectoryRuleSheet({
     }
   };
 
+  const sheetContent = (
+    <View style={styles.backdrop}>
+      <Animated.View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: tokens.surface,
+            paddingBottom: Math.max(insets.bottom, 16),
+          },
+          Platform.OS === 'android' ? panelAvoidStyle : undefined,
+        ]}>
+        <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
+        <ScrollView
+          style={styles.form}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <FormSwitchRow
+            label="规则启用"
+            tokens={tokens}
+            value={ruleEnabled}
+            onValueChange={setRuleEnabled}
+            disabled={rootRuleLocked}
+            description={rootRuleLocked ? '根目录规则不可关闭' : undefined}
+            testID="dir-rule-enabled-switch"
+          />
+          <FieldLabel tokens={tokens} text="排序字段" />
+          <OptionRow
+            options={SORT_FIELDS}
+            value={sortField}
+            onChange={setSortField}
+            tokens={tokens}
+          />
+          <FieldLabel tokens={tokens} text="排序方向" />
+          <OptionRow
+            options={SORT_ORDERS}
+            value={sortOrder}
+            onChange={setSortOrder}
+            tokens={tokens}
+          />
+          <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
+          <TextInput
+            style={[
+              styles.input,
+              { borderColor: tokens.border, color: tokens.text },
+            ]}
+            keyboardType="number-pad"
+            value={headCount}
+            onChangeText={setHeadCount}
+            underlineColorAndroid="transparent"
+          />
+          <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
+          <TextInput
+            style={[
+              styles.input,
+              { borderColor: tokens.border, color: tokens.text },
+            ]}
+            keyboardType="number-pad"
+            value={tailCount}
+            onChangeText={setTailCount}
+            underlineColorAndroid="transparent"
+          />
+          <FieldLabel tokens={tokens} text="其余文件填充" />
+          <OptionRow
+            options={FILL_POLICIES}
+            value={fillPolicy}
+            onChange={setFillPolicy}
+            tokens={tokens}
+          />
+        </ScrollView>
+        <View style={[styles.actions, { borderTopColor: tokens.border }]}>
+          <Pressable onPress={onClose} style={styles.actionBtn}>
+            <Text style={{ color: tokens.textSecondary }}>取消</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => handleSave().catch(() => undefined)}
+            disabled={saving}
+            style={styles.actionBtn}>
+            <Text style={{ color: tokens.primary }}>
+              {saving ? '保存中…' : '保存'}
+            </Text>
+          </Pressable>
+        </View>
+      </Animated.View>
+    </View>
+  );
+
   return (
     <AppModal
       visible={visible}
@@ -125,92 +216,15 @@ export function DirectoryRuleSheet({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.avoidingRoot}>
-        <View style={styles.backdrop}>
-          <View
-            style={[
-              styles.sheet,
-              {
-                backgroundColor: tokens.surface,
-                paddingBottom: Math.max(insets.bottom, 16),
-              },
-            ]}>
-            <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
-            <ScrollView
-              style={styles.form}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}>
-              <FormSwitchRow
-                label="规则启用"
-                tokens={tokens}
-                value={ruleEnabled}
-                onValueChange={setRuleEnabled}
-                disabled={rootRuleLocked}
-                description={rootRuleLocked ? '根目录规则不可关闭' : undefined}
-                testID="dir-rule-enabled-switch"
-              />
-              <FieldLabel tokens={tokens} text="排序字段" />
-              <OptionRow
-                options={SORT_FIELDS}
-                value={sortField}
-                onChange={setSortField}
-                tokens={tokens}
-              />
-              <FieldLabel tokens={tokens} text="排序方向" />
-              <OptionRow
-                options={SORT_ORDERS}
-                value={sortOrder}
-                onChange={setSortOrder}
-                tokens={tokens}
-              />
-              <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
-              <TextInput
-                style={[
-                  styles.input,
-                  { borderColor: tokens.border, color: tokens.text },
-                ]}
-                keyboardType="number-pad"
-                value={headCount}
-                onChangeText={setHeadCount}
-                underlineColorAndroid="transparent"
-              />
-              <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
-              <TextInput
-                style={[
-                  styles.input,
-                  { borderColor: tokens.border, color: tokens.text },
-                ]}
-                keyboardType="number-pad"
-                value={tailCount}
-                onChangeText={setTailCount}
-                underlineColorAndroid="transparent"
-              />
-              <FieldLabel tokens={tokens} text="其余文件填充" />
-              <OptionRow
-                options={FILL_POLICIES}
-                value={fillPolicy}
-                onChange={setFillPolicy}
-                tokens={tokens}
-              />
-            </ScrollView>
-            <View style={[styles.actions, { borderTopColor: tokens.border }]}>
-              <Pressable onPress={onClose} style={styles.actionBtn}>
-                <Text style={{ color: tokens.textSecondary }}>取消</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => handleSave().catch(() => undefined)}
-                disabled={saving}
-                style={styles.actionBtn}>
-                <Text style={{ color: tokens.primary }}>
-                  {saving ? '保存中…' : '保存'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={styles.avoidingRoot}>
+          {sheetContent}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.avoidingRoot}>{sheetContent}</View>
+      )}
     </AppModal>
   );
 }
