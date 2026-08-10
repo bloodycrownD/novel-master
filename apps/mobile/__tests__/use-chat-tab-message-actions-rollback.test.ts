@@ -39,6 +39,7 @@ const mockRollbackToMessage = jest.fn();
 const mockReloadMessages = jest.fn();
 const mockSetDraftRestoreToken = jest.fn();
 const mockShowToast = jest.fn();
+const mockRefreshChatTokenLabel = jest.fn();
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
@@ -119,7 +120,7 @@ function mountActions(chatMessages: ChatMessage[]) {
       agentRunning: false,
       resetStreamingDisplay: jest.fn(),
       showToast: mockShowToast,
-      refreshChatTokenLabel: jest.fn(),
+      refreshChatTokenLabel: mockRefreshChatTokenLabel,
       bumpWorktreeUiToken: jest.fn(),
       reloadLists: jest.fn(),
       setCurrentSession: jest.fn(),
@@ -209,6 +210,21 @@ describe('useChatTabMessageActions rollback', () => {
     expect(mockSetDraftRestoreToken).toHaveBeenCalled();
   });
 
+  it('T-S5: undo_send 成功后 refreshChatTokenLabel 被调用', async () => {
+    const anchor = plainUserMessage('hello');
+    const api = mountActions([anchor]);
+
+    await act(async () => {
+      api.handleMessageMenuAction(anchor, 'rollback');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockRollbackToMessage).toHaveBeenCalled();
+    expect(mockRefreshChatTokenLabel).toHaveBeenCalled();
+  });
+
   it('T-TX2: 编辑打开弹窗不污染 Composer draft；仅 undo_send 回填正文', async () => {
     writeChatComposerDraftState('s1', {
       text: 'keep-me',
@@ -255,7 +271,7 @@ describe('useChatTabMessageActions rollback', () => {
         agentRunning: false,
         resetStreamingDisplay: jest.fn(),
         showToast: mockShowToast,
-        refreshChatTokenLabel: jest.fn(),
+        refreshChatTokenLabel: mockRefreshChatTokenLabel,
         bumpWorktreeUiToken: jest.fn(),
         reloadLists: jest.fn(),
         setCurrentSession: jest.fn(),
