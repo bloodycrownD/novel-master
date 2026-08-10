@@ -10,7 +10,6 @@ import type {
   MessageContent,
 } from "@/domain/chat/model/message.js";
 import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
-import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { MessageSearchQuery } from "@/domain/chat/content/message-content-match.js";
 

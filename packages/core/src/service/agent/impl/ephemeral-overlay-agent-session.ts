@@ -7,7 +7,11 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { ChatMessage, MessageContent } from "@/domain/chat/model/message.js";
+import type {
+  ChatMessage,
+  MessageContent,
+} from "@/domain/chat/model/message.js";
+import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 
 /**
  * {@link AgentSession} that lists base + overlay messages; {@link append} never hits SQLite.
@@ -34,7 +38,11 @@ export class EphemeralOverlayAgentSession implements AgentSession {
   async append(
     role: string,
     content: MessageContent,
-    options?: { provider?: string | null; raw?: Record<string, unknown> | null },
+    options?: {
+      provider?: string | null;
+      raw?: Record<string, unknown> | null;
+      usage?: MessageUsage;
+    },
   ): Promise<ChatMessage> {
     const seq = this.nextSeq++;
     const message: ChatMessage = {
@@ -47,6 +55,7 @@ export class EphemeralOverlayAgentSession implements AgentSession {
       raw: options?.raw ?? null,
       createdAtMs: Date.now(),
       hidden: false,
+      ...(options?.usage != null ? { usage: options.usage } : {}),
     };
     this.overlay.push(message);
     return message;

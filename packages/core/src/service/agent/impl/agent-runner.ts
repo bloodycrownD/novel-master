@@ -50,6 +50,7 @@ import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
+import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -84,6 +85,8 @@ export interface DefaultAgentRunnerDeps {
   readonly compactionConditions?: CompactionConditionEvaluator;
   /** Runs hide-message before prompt build on condition trigger (not bus.publish). */
   readonly eventOrchestrator?: EventOrchestrator;
+  /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
+  readonly streamRegistry?: AgentStreamRegistry;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
 }
@@ -338,7 +341,13 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const onStream =
           options.stream && publishRunLifecycle
-            ? wrapStreamForBus(bus, sessionId, runId, options.onStream)
+            ? wrapStreamForBus(
+                bus,
+                sessionId,
+                runId,
+                { streamRegistry: this.deps.streamRegistry },
+                options.onStream,
+              )
             : options.stream
               ? options.onStream
               : undefined;
@@ -381,9 +390,14 @@ export class DefaultAgentRunner implements AgentRunner {
 
         let assistantMessage: ChatMessage | undefined;
         if (result.blocks.length > 0 && meaningful) {
-          assistantMessage = await session.append("assistant", { blocks: result.blocks }, {
-            raw: result.raw as Record<string, unknown>,
-          });
+          assistantMessage = await session.append(
+            "assistant",
+            { blocks: result.blocks },
+            {
+              raw: result.raw as Record<string, unknown>,
+              ...(result.usage != null ? { usage: result.usage } : {}),
+            },
+          );
           assistantAppendCount += 1;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -631,6 +645,7 @@ export function wrapStreamForBus(
   bus: SimpleEventBus,
   sessionId: string,
   runId: string,
+  deps: { readonly streamRegistry?: AgentStreamRegistry },
   userOnStream?: (event: LlmStreamEvent) => void,
 ): ((event: LlmStreamEvent) => void) | undefined {
   // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
@@ -659,6 +674,7 @@ export function wrapStreamForBus(
 
   const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
     if (ev.type === "text-delta") {
+      deps.streamRegistry?.append(sessionId, { text: ev.text });
       enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
           sessionId,
@@ -667,6 +683,7 @@ export function wrapStreamForBus(
         }),
       );
     } else if (ev.type === "thinking-delta") {
+      deps.streamRegistry?.append(sessionId, { thinking: ev.text });
       enqueuePublish(() =>
         bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
           sessionId,

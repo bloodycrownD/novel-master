@@ -4,7 +4,11 @@
  * @module domain/agent/session/agent-session.port
  */
 
-import type { ChatMessage, MessageContent } from "@/domain/chat/model/message.js";
+import type {
+  ChatMessage,
+  MessageContent,
+} from "@/domain/chat/model/message.js";
+import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 
 /**
  * Session abstraction for agent context (in-memory or chat-backed).
@@ -29,7 +33,11 @@ export interface AgentSession {
   append(
     role: string,
     content: MessageContent,
-    options?: { provider?: string | null; raw?: Record<string, unknown> | null },
+    options?: {
+      provider?: string | null;
+      raw?: Record<string, unknown> | null;
+      usage?: MessageUsage;
+    },
   ): Promise<ChatMessage>;
 
   /** Hides messages in a seq range (compaction). Returns affected count. */

@@ -5,7 +5,11 @@
  */
 
 import { randomUUID } from "@/infra/random-uuid.js";
-import type { ChatMessage, MessageContent } from "@/domain/chat/model/message.js";
+import type {
+  ChatMessage,
+  MessageContent,
+} from "@/domain/chat/model/message.js";
+import type { MessageUsage } from "@/domain/chat/model/message-usage.js";
 import type { AgentSession } from "../agent-session.port.js";
 
 /**
@@ -27,7 +31,11 @@ export class InMemoryAgentSession implements AgentSession {
   async append(
     role: string,
     content: MessageContent,
-    options?: { provider?: string | null; raw?: Record<string, unknown> | null },
+    options?: {
+      provider?: string | null;
+      raw?: Record<string, unknown> | null;
+      usage?: MessageUsage;
+    },
   ): Promise<ChatMessage> {
     this.seq += 1;
     const message: ChatMessage = {
@@ -40,6 +48,7 @@ export class InMemoryAgentSession implements AgentSession {
       raw: options?.raw ?? null,
       createdAtMs: Date.now(),
       hidden: false,
+      ...(options?.usage != null ? { usage: options.usage } : {}),
     };
     this.messages.push(message);
     return message;
