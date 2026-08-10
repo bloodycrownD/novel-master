@@ -139,13 +139,21 @@ Mobile 和 Desktop 把"开关 + 服务商下拉 + 模型下拉"替换为单一�
 
 Mobile `runRollback` 补 `refreshChatTokenLabel()`；Desktop `SessionDetailDrawer` 通过 `messages-rollback` DOM CustomEvent 订阅回滚完成事件。
 
-### 15. Token 标签 UI 展示优化
+### 15. 置位/压缩后 token 计数刷新补全（Bug5）
+
+置位（set floor）和压缩（compaction）会 hide 掉一批消息、清空 session kkv、让 core 层 token cache 失效。经核实，Mobile 顶栏与 Desktop ConversationPanel footer 的 token 计数已有刷新机制（Mobile `refreshChatTokenLabel`、Desktop `reloadMessages→reloadFooter`），**仅 Desktop `SessionDetailDrawer` 不刷新**——它只监听回滚事件 `messages-rollback`，不监听压缩事件 `session-compacted`，置位则无任何事件。需补全：Desktop renderer 侧新增 `context-changed` DOM CustomEvent（或让 drawer 监听 `session-compacted`），置位/手动压缩成功后 dispatch，`SessionDetailDrawer` 订阅后 reload。
+
+### 16. Token 标签 UI 展示优化
 
 `api` 和 `heuristic` 显示为「自动」；具体 tokenizer 名原样显示。
 
-### 16. 用户配置移除 heuristic 手动选项
+### 17. 用户配置移除 heuristic 手动选项
 
 `tokenCounterMode` 可选值移除 `heuristic`；旧数据归一化为 `auto`。
+
+### 18. Mobile Android 键盘避让遗漏修复（Bug6）
+
+v1.4.17/v1.4.18 曾修过 mobile 键盘避让（`ScreenFormLayout` 整页表单 + `MessageEditModal` 弹窗），但覆盖不全：一批弹窗和两个整页用了 `react-native-keyboard-controller` 的 `KeyboardAvoidingView`，却把 Android 的 `behavior` 设为 `undefined`——组件在 Android 上什么都不做，系统默认 resize 在 Modal/透明弹层里又不可靠，导致键盘盖住输入框。不止 textarea，数字输入也一样。需把这批遗漏补齐，统一对齐已落地的两种范式（整页用 `useReanimatedKeyboardAnimation` + `marginBottom` 裁切窗口；弹窗用 `useReanimatedKeyboardAnimation` + `translateY` 上移面板）。
 
 ## 验收标准
 
@@ -256,19 +264,34 @@ Mobile `runRollback` 补 `refreshChatTokenLabel()`；Desktop `SessionDetailDrawe
 - **When** 执行回滚
 - **Then** Mobile 顶栏 / Desktop 抽屉的 token 计数立即更新
 
-### AC-17：Token 标签显示「自动」
+### AC-17：置位/压缩后 Desktop 抽屉 token 计数刷新（Bug5）
+
+- **Given** Desktop 会话抽屉（SessionDetailDrawer）显示 token 计数，会话有较多消息
+- **When** 执行置位（set floor）或手动压缩
+- **Then** SessionDetailDrawer 的 token 计数立即重新拉取并更新（反映 hide 后的可见上下文）
+- **And** 不会停在操作前的旧值
+- **注**：Mobile 顶栏与 Desktop ConversationPanel footer 已有刷新机制，不在本 AC 范围
+
+### AC-18：Token 标签显示「自动」
 
 - **Given** 会话有 API 缓存或走 heuristic 估算
 - **When** 查看 token 标签
 - **Then** 显示「自动」，不显示「api」或「heuristic」
 - **And** 具体 tokenizer 名（如 tiktoken）原样显示
 
-### AC-18：用户配置不含 heuristic 选项
+### AC-19：用户配置不含 heuristic 选项
 
 - **Given** 用户打开 savedModel 的分词器配置下拉
 - **When** 查看可选值
 - **Then** 有「自动」和具体 tokenizer 族，无「启发式估算」
 - **And** 旧数据 `tokenCounterMode === "heuristic"` 归一化为 `"auto"`
+
+### AC-20：Mobile Android 键盘避让遗漏修复（Bug6）
+
+- **Given** Android 设备上任意一个曾遗漏的输入点（`TextPromptModal` 的会话/项目/Agent/正则组新建与重命名、`DirectoryRuleSheet` 的头部/尾部数量、`AddModelModal` 的厂商模型 ID/模型名称、`EditModelNameModal` 的模型名称、`VfsFileManager` 的新建/重命名、`SessionDetailScreen` 的会话名 inline 编辑、`ChatHistorySearchScreen` 的搜索框）
+- **When** 点开输入框、软键盘弹起
+- **Then** 被编辑的输入框完整可见、不被键盘遮挡；顶部内容不被裁掉；内容区可正常上下滚动（整页）或面板上移到键盘上方（弹窗）
+- **And** 数字输入（number-pad，如目录规则的头部/尾部数量）与单行文本表现一致
 
 ## 风险与待确认项
 
