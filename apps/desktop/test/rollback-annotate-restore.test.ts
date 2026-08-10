@@ -1,5 +1,9 @@
 /**
- * T-CR6 / T-UOL7：Desktop Undo 批注反投影；保留 main 已推 ops，禁止 wipe。
+ * T-CR6 / T-UOL7：Desktop Undo 批注反投影（CR-5 闭合后按锚点角色区分）。
+ *
+ * 规则：
+ * - user 锚点（undo_send）：保留未发送草稿，从附件重新投影
+ * - assistant 锚点（rewind）：清空全部批注草稿（含未发送）
  */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
@@ -18,7 +22,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     resetChatAnnotateDraftStoreForTests();
   });
 
-  it("T-UOL7: annotate 附件 → store 新 mint id + chip；与未发送并存；保留 main 已推 ops", () => {
+  it("T-UOL7: user 锚点 → annotate 附件重新投影 + 未发送草稿保留；保留 main 已推 ops", () => {
     addChatAnnotateDraft("s1", {
       id: "unsent-keep",
       path: "/keep.md",
@@ -45,6 +49,8 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
 
     const chips = applyUndoAnnotateRestore(
       "s1",
+      // user 锚点：保留未发送草稿，并从附件重新投影
+      "user",
       [annotateAtt],
       mainPushedOps,
     );
@@ -71,7 +77,14 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     );
   });
 
-  it("T-CR6: 伪 __message__: path 跳过", () => {
+  it("T-CR6: user 锚点 + 伪 __message__: path → 跳过反投影；未发送草稿保留", () => {
+    // 预置一条未发送草稿，验证 user 锚点不会顺手把它清掉
+    addChatAnnotateDraft("s1", {
+      id: "unsent-survivor",
+      path: "/keep.md",
+      originalText: "未发送原文",
+      userAnnotation: "未发送说明",
+    });
     const msgAtt: MessageAttachmentDto = {
       name: "__message__:m-99:d1",
       source: "user_ops",
@@ -81,12 +94,16 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
       path: "__message__:m-99:d1",
       action: "annotate",
     };
-    const chips = applyUndoAnnotateRestore("s1", [msgAtt]);
-    assert.equal(listChatAnnotateDrafts("s1").length, 0);
-    assert.equal(chips.length, 0);
+    const chips = applyUndoAnnotateRestore("s1", "user", [msgAtt]);
+    // __message__: 路径会被 parseAnnotateDraftsFromAttachments 跳过，但未发送草稿仍保留
+    const drafts = listChatAnnotateDrafts("s1");
+    assert.equal(drafts.length, 1);
+    assert.equal(drafts[0]!.id, "unsent-survivor");
+    assert.equal(chips.length, 1);
+    assert.equal(chips[0]!.path, "/keep.md");
   });
 
-  it("T-UOL7: 无 annotate → store 不新增；保留 existing ops", () => {
+  it("T-UOL7: user 锚点 + 无 annotate → store 不新增；保留 existing ops", () => {
     const mainOps: MessageAttachmentDto[] = [
       {
         name: "/a.md",
@@ -99,6 +116,7 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     ];
     const chips = applyUndoAnnotateRestore(
       "s1",
+      "user",
       [
         {
           name: "/x.md",
@@ -116,27 +134,37 @@ describe("applyUndoAnnotateRestore (T-CR6 / T-UOL7)", () => {
     assert.equal(chips[0]?.action, "mkdir");
   });
 
-  it("T-UOL7: 禁止 union([],…) — 无 existing 时仅 annotate chip", () => {
-    const chips = applyUndoAnnotateRestore("s1", []);
+  it("T-UOL7: user 锚点 + 空附件 → 仅 ∪ annotate（未发送草稿保留）", () => {
+    addChatAnnotateDraft("s1", {
+      id: "unsent-only",
+      path: "/keep.md",
+      originalText: "未发送原文",
+      userAnnotation: "未发送说明",
+    });
+    const chips = applyUndoAnnotateRestore("s1", "user", []);
+    // 空附件不会新增 annotate；未发送草稿原样保留，并体现在 chip 中
     assert.deepEqual(chips, chipsFromAnnotateStore("s1"));
-    assert.deepEqual(chips, []);
+    assert.equal(chips.length, 1);
+    assert.equal(chips[0]!.path, "/keep.md");
   });
 
-  it("T-UOL7 rewind: ops 半边空 + 仅 ∪ annotate；不把旧 user_ops 盖回", () => {
+  it("T-UOL7 rewind: assistant 锚点 → 清空全部批注草稿（含未发送）", () => {
     addChatAnnotateDraft("s1", {
       id: "ann-keep",
       path: "/note.md",
       originalText: "原文",
       userAnnotation: "批注",
     });
-    // ConversationPanel rewind：传 existing=[]（main 已推空），禁止传入闭包旧 chip
-    const chips = applyUndoAnnotateRestore("s1", null, []);
-    assert.ok(
-      chips.some((c) => c.path === "/note.md" && c.action === "annotate"),
+    // ConversationPanel rewind：assistant 锚点 + main 已推空，传空 existing 禁止盖回旧 chip
+    const chips = applyUndoAnnotateRestore("s1", "assistant", null, []);
+    assert.equal(
+      listChatAnnotateDrafts("s1").length,
+      0,
+      "assistant 锚点必须清空全部批注草稿（含未发送）",
     );
     assert.equal(
-      chips.some((c) => c.action !== "annotate"),
-      false,
+      chips.length,
+      0,
       "rewind 不得盖回旧非 annotate（手改）chip",
     );
   });

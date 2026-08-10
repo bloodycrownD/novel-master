@@ -689,6 +689,8 @@ export function ConversationPanel({
         setComposerAttachments(
           applyUndoAnnotateRestore(
             sessionId,
+            // undo_send ↔ user 锚点：保留未发送草稿 + 反投影；rewind ↔ assistant 锚点：清空。
+            rollbackMode === 'undo_send' ? 'user' : 'assistant',
             rollbackMode === 'undo_send' ? restoreAttachments : null,
             [],
           ),
