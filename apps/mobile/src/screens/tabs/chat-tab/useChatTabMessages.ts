@@ -28,7 +28,10 @@ import {
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
-import { addChatAnnotateDraft } from '@/storage/chat-annotate-draft';
+import {
+  addChatAnnotateDraft,
+  clearChatAnnotateDrafts,
+} from '@/storage/chat-annotate-draft';
 import {
   applyComposerStatusAttachmentsReplace,
   readChatComposerDraftState,
@@ -423,6 +426,9 @@ export function useChatTabMessageActions({
         return;
       }
 
+      // mode 与锚点角色一一对应（与 desktop applyUndoAnnotateRestore 的 anchorRole 对齐）：
+      // - undo_send ↔ user 锚点：保留未发送草稿，在下方 applyComposerRestore 里从附件反投影
+      // - rewind ↔ assistant 锚点：tail 里没有 user 消息，清空全部批注草稿（含未发送）
       const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
       // 删消息前 snapshot：undo_send 成功后仅解析批注（rewind / undo_send 均清空 ops store）
@@ -474,6 +480,14 @@ export function useChatTabMessageActions({
             options,
           );
           clearUserOpsLog(sessionId);
+          // assistant 锚点（rewind）：tail 里无 user 消息，没有 attach 可反投影，
+          // 批注草稿应清空——与 user 锚点（undo_send）的反投影语义对称。
+          // user 锚点（undo_send）的反投影在下方 applyComposerRestore 里处理：
+          // 不清空 store，只把 parseAnnotateDraftsFromAttachments 的结果 add 进去，
+          // 未发送草稿原样保留。
+          if (mode === 'rewind') {
+            clearChatAnnotateDrafts(sessionId);
+          }
           await refreshComposerStatusAfterSessionKkvCleared(runtime, {
             projectId,
             sessionId,
@@ -481,6 +495,7 @@ export function useChatTabMessageActions({
           resetStreamingDisplay();
           await reloadMessages(true);
           await applyComposerRestore();
+          void refreshChatTokenLabel();
           showToast(
             options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
