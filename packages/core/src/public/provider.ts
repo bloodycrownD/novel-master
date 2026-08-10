@@ -131,6 +131,7 @@ export {
   countPromptLlmInputHeuristicOnly,
   formatPromptTokenUsageLabel,
   resolveCurrentPromptTokens,
+  resolvePromptTokensWithBackfill,
   pickLastPromptUsage,
   backfillCacheFromMessages,
   sessionApiPromptTokenCache,

@@ -48,6 +48,7 @@ export {
   type PromptTokenSource,
   type ResolvedPromptTokens,
 } from "./logic/resolve-current-prompt-tokens.js";
+export { resolvePromptTokensWithBackfill } from "./logic/resolve-prompt-tokens-with-backfill.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
 export {
   countTokens,
