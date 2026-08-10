@@ -811,6 +811,11 @@ export function ConversationPanel({
       await reloadMessages();
       notifyWorkspaceMutated();
       showToast(changed ? '已置位' : '上下文已是最新状态');
+      // 置位改变了上下文范围，token 计数随之变化。派发 context-changed 让
+      // SessionDetailDrawer 这类订阅方按 sessionId 过滤后刷新自己的统计（回滚仍走 messages-rollback，不复用同一事件以免语义混淆）。
+      window.dispatchEvent(
+        new CustomEvent('context-changed', { detail: { sessionId } }),
+      );
     }
   }, [
     confirmState,
@@ -1029,8 +1034,13 @@ export async function runCompaction(
   }
   showToast('已压缩');
   // 压缩成功后 DB 里旧消息的 hidden 已置 true，但前端内存里的消息列表不会自动刷新。
-  // 派发自定义事件，ConversationPanel 监听后重新拉取消息列表，使隐藏样式即时生效。
+  // session-compacted：让 ConversationPanel 重新拉取消息列表，使隐藏样式即时生效。
   window.dispatchEvent(
     new CustomEvent('session-compacted', { detail: { sessionId } }),
+  );
+  // context-changed：上下文范围变了，token 计数也要刷新。SessionDetailDrawer
+  // 订阅它来 reload 自己的统计（与置位共用同一事件，便于统一维护）。
+  window.dispatchEvent(
+    new CustomEvent('context-changed', { detail: { sessionId } }),
   );
 }
