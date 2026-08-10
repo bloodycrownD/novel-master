@@ -11,7 +11,6 @@ import type { SavedModelRepository } from "@/domain/provider/repositories/saved-
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
-import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { CreateAgentRunnerDeps } from "../create-agent-runner.js";
 import type { ChatAgentSession } from "../impl/chat-agent-session.js";
 import type { AgentTurnRuntimePort } from "./run-agent-turn.js";

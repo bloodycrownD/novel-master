@@ -230,6 +230,7 @@ export async function createNovelMasterRuntime(
     sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
+      messageTranscriptEffects,
       agentRegistry,
       modelRequests,
       savedModels: providerBundle.savedModelRepo,

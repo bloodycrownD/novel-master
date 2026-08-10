@@ -1,5 +1,5 @@
 /**
- * Manual / condition 压缩：emit 成功后 clear session kkv（无 BlockStore capture）。
+ * Manual / condition 压缩：runCompaction / orchestrator.emit 成功后 clear session kkv（无 BlockStore capture）。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -67,7 +67,7 @@ describe("handleCompactionManual", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-CR5: manual 压缩 emit 成功后清 file_cache + rule_snapshot，保留 pending", async () => {
+  it("T-IPC1: manual 压缩 runCompaction 成功后清 file_cache + rule_snapshot，保留 pending", async () => {
     const rt = await getDesktopRuntime();
     const pendingJson = JSON.stringify([
       {
@@ -106,7 +106,7 @@ describe("handleCompactionManual", () => {
     );
   });
 
-  it("T-CR5: condition 压缩 orchestrator.emit 成功后亦清 file_cache + rule_snapshot，保留 pending", async () => {
+  it("T-CR5: condition 压缩 orchestrator.emit 成功后亦清 file_cache + rule_snapshot，保留 pending（旧路径仍在）", async () => {
     const rt = await getDesktopRuntime();
     const pendingJson = JSON.stringify([
       {

@@ -17,6 +17,7 @@ import { assembleAgentRunnerDeps } from "@/service/agent/logic/assemble-agent-ru
 import { DEFAULT_AGENT_MAX_STEPS } from "@/service/agent/logic/agent-run-max-steps.js";
 import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
+import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
@@ -31,6 +32,7 @@ import type { EventEmitContext } from "../../event-orchestrator.port.js";
 
 export interface RunAgentHandlerDeps {
   readonly messages: MessageService;
+  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;

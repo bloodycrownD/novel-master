@@ -115,6 +115,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
+      messageTranscriptEffects,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,

@@ -39,6 +39,7 @@ export interface CreateEventOrchestratorDeps {
 /** 为 CLI / Mobile 等 runtime 装配 {@link RunAgentHandlerDeps}。 */
 export function createRunAgentHandlerDeps(input: {
   readonly messages: MessageService;
+  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
@@ -53,6 +54,7 @@ export function createRunAgentHandlerDeps(input: {
 }): RunAgentHandlerDeps {
   return {
     messages: input.messages,
+    messageTranscriptEffects: input.messageTranscriptEffects,
     agentRegistry: input.agentRegistry,
     modelRequests: input.modelRequests,
     savedModels: input.savedModels,

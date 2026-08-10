@@ -119,6 +119,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
+      messageTranscriptEffects,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,

@@ -21,3 +21,9 @@ export {
   createCompactionConditionEvaluator,
   type CompactionConditionEvaluator,
 } from "../service/compaction-conditions/create-compaction-condition-evaluator.js";
+export {
+  runCompaction,
+  type RunCompactionDeps,
+  type RunCompactionParams,
+  type RunCompactionResult,
+} from "../service/compaction-conditions/run-compaction.js";

@@ -8,7 +8,7 @@
  */
 
 import { z } from "zod";
-import { DEFAULT_HIDE_START_DEPTH, type CompactionConditions } from "./compaction-conditions.js";
+import type { CompactionConditions } from "./compaction-conditions.js";
 
 const compactionConditionsDocumentSchema = z
   .object({
