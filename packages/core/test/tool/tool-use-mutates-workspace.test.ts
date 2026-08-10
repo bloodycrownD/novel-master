@@ -24,25 +24,25 @@ describe("tool-use-mutates-workspace", () => {
   });
 
   it("fs ls 只读不突变", () => {
-    assert.equal(toolUseMutatesWorkspace("fs", { command: "ls /" }), false);
+    assert.equal(toolUseMutatesWorkspace("fs", { action: "ls", path: "/" }), false);
     assert.equal(
-      toolUseMutatesWorkspace("fs", { command: "ls -r /dir" }),
+      toolUseMutatesWorkspace("fs", { action: "ls", path: "/dir", recursive: true }),
       false,
     );
   });
 
   it("fs 写操作突变", () => {
-    assert.equal(toolUseMutatesWorkspace("fs", { command: "rm /a" }), true);
-    assert.equal(toolUseMutatesWorkspace("fs", { command: "mkdir /d" }), true);
+    assert.equal(toolUseMutatesWorkspace("fs", { action: "rm", path: "/a" }), true);
+    assert.equal(toolUseMutatesWorkspace("fs", { action: "mkdir", path: "/d" }), true);
     assert.equal(
-      toolUseMutatesWorkspace("fs", { command: "mv /a /b" }),
+      toolUseMutatesWorkspace("fs", { action: "mv", from: "/a", to: "/b" }),
       true,
     );
   });
 
   it("fs 命令解析失败时保守视为突变", () => {
-    assert.equal(toolUseMutatesWorkspace("fs", { command: "bad cmd" }), true);
-    assert.equal(toolUseMutatesWorkspace("fs", { command: "" }), true);
+    assert.equal(toolUseMutatesWorkspace("fs", { action: "bad" }), true);
+    assert.equal(toolUseMutatesWorkspace("fs", { action: "" }), true);
   });
 
   it("anyToolUseMutatesWorkspace 并行任一轮突变即 true", () => {

@@ -120,7 +120,7 @@ describe("ToolRunner.runParallel", () => {
       [
         { name: "read", input: { path: "/x.md" } },
         { name: "read", input: { path: "/y.md" } },
-        { name: "fs", input: { command: "ls /" } },
+        { name: "fs", input: { action: "ls", path: "/" } },
       ],
       ctxForTools,
       { concurrency: 2 },
