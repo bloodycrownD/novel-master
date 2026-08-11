@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SESSION_FS_LABELS, USER_OPS_LABELS } from "@shared/logic/config-forms-shared";
 import {
   ipcAgentListPicker,
@@ -19,10 +19,11 @@ import {
   ipcRegexListPicker,
   ipcRegexSetCurrent,
 } from "@/ipc/client";
-import { Button } from "@/components/ui/Button";
+
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { PickerModal } from "@/components/ui/PickerModal";
+import { Switch } from "@/components/ui/Switch";
 import {
   SettingsField,
   SettingsPanel,
@@ -154,25 +155,48 @@ export function WorkspaceSettingsView() {
     setPicker(kind);
   };
 
-  const saveCompaction = async (nextEnabled = compactionEnabled) => {
-    const res = await ipcCompactionConditionsSet({
-      conditions: {
-        schemaVersion: 4,
-        enabled: nextEnabled,
-        ...(compactionTokenRatio.trim()
-          ? { tokenRatio: Number(compactionTokenRatio) }
-          : {}),
-        ...(compactionHideStartDepth.trim()
-          ? { hideStartDepth: Number(compactionHideStartDepth) }
-          : {}),
-      },
-    });
-    if (res.ok) {
-      toastSettingsSuccess("已保存");
-    } else {
-      toastSettingsError(res.error.message);
+  const saveCompaction = useCallback(
+    async (nextEnabled = compactionEnabled) => {
+      const res = await ipcCompactionConditionsSet({
+        conditions: {
+          schemaVersion: 4,
+          enabled: nextEnabled,
+          ...(compactionTokenRatio.trim()
+            ? { tokenRatio: Number(compactionTokenRatio) }
+            : {}),
+          ...(compactionHideStartDepth.trim()
+            ? { hideStartDepth: Number(compactionHideStartDepth) }
+            : {}),
+        },
+      });
+      if (res.ok) {
+        toastSettingsSuccess("已保存");
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    },
+    [compactionEnabled, compactionTokenRatio, compactionHideStartDepth],
+  );
+
+  // 防抖保存：hideStartDepth / tokenRatio 改动后 600ms 自动保存
+  const compactionSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleCompactionSave = useCallback(() => {
+    if (compactionSaveTimer.current != null) {
+      clearTimeout(compactionSaveTimer.current);
     }
-  };
+    compactionSaveTimer.current = setTimeout(() => {
+      void saveCompaction();
+    }, 600);
+  }, [saveCompaction]);
+
+  // 组件卸载时清掉定时器，避免泄漏
+  useEffect(() => {
+    return () => {
+      if (compactionSaveTimer.current != null) {
+        clearTimeout(compactionSaveTimer.current);
+      }
+    };
+  }, []);
 
   return (
     <SettingsPanel>
@@ -228,11 +252,6 @@ export function WorkspaceSettingsView() {
               await ipcPreferencesSetSessionFsVersionCheck(next);
             }}
           />
-          <p className="settings-hint settings-hint--switch">
-            {sessionFsVersionCheck
-              ? SESSION_FS_LABELS.enabledHint
-              : SESSION_FS_LABELS.disabledHint}
-          </p>
           <SettingsSwitchRow
             label={USER_OPS_LABELS.title}
             checked={userOpsLogEnabled}
@@ -241,32 +260,29 @@ export function WorkspaceSettingsView() {
               await ipcPreferencesSetUserOpsLogEnabled(next);
             }}
           />
-          <p className="settings-hint settings-hint--switch">
-            {userOpsLogEnabled
-              ? USER_OPS_LABELS.enabledHint
-              : USER_OPS_LABELS.disabledHint}
-          </p>
         </SettingsRows>
 
-        <div className="settings-field-grid settings-field-grid--with-action">
+        <div className="settings-field-grid">
           <SettingsField label="隐藏起始深度">
             <input
               type="number"
               min="0"
               value={compactionHideStartDepth}
-              onChange={(e) => setCompactionHideStartDepth(e.target.value)}
+              onChange={(e) => {
+                setCompactionHideStartDepth(e.target.value);
+                scheduleCompactionSave();
+              }}
             />
           </SettingsField>
-          <SettingsSwitchRow
-            label="启用自动压缩"
-            checked={compactionEnabled}
-            onChange={(next) => {
-              setCompactionEnabled(next);
-              if (!next) {
-                void saveCompaction(false);
-              }
-            }}
-          />
+          <SettingsField label="启用自动压缩" row>
+            <Switch
+              checked={compactionEnabled}
+              onChange={(next) => {
+                setCompactionEnabled(next);
+                void saveCompaction(next);
+              }}
+            />
+          </SettingsField>
           {compactionEnabled ? (
             <SettingsField label="Token 比例">
               <input
@@ -275,15 +291,13 @@ export function WorkspaceSettingsView() {
                 min="0.01"
                 max="1"
                 value={compactionTokenRatio}
-                onChange={(e) => setCompactionTokenRatio(e.target.value)}
+                onChange={(e) => {
+                  setCompactionTokenRatio(e.target.value);
+                  scheduleCompactionSave();
+                }}
               />
             </SettingsField>
           ) : null}
-          <div className="settings-field-grid__action">
-            <Button variant="primary" onClick={() => void saveCompaction()}>
-              保存
-            </Button>
-          </div>
         </div>
       </SettingsSection>
 
