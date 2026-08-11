@@ -4,7 +4,9 @@
  * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace（历史只读兼容）；user_ops 不参与。
  * 文件 attach 非首次 → alreadyReferenced 短提示；workplace 非首次 → content 空；目录每次拼树仍计 seen。
  * 增量统一为 `<action name="userAttach|workplaceChange|…">` + JSON（行号正文；无 mtime/createdAt）。
- * `runtime.extraInfo`（来自 agent 配置 customAttach）非空时，wrap 阶段在 `</user-ops>` 后注入 `<extra-info>` 纯文本块。
+ * `runtime.extraInfo`（来自 agent 配置 customAttach）非空时，仅对本次请求里最新一条
+ * 非隐藏 user 输入消息生效——wrap 阶段在 `</user-ops>` 后注入 `<extra-info>` 纯文本块；
+ * 历史 user 消息不再注入（与 dynamic 区 once 语义不同，独立实现）。
  *
  * @module domain/chat/logic/prepare-user-messages-for-prompt
  */
@@ -353,16 +355,20 @@ async function prepareOneUserMessage(
   message: ChatMessage,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
+  isLatestUser: boolean,
 ): Promise<ChatMessage> {
   if (message.hidden) {
     // hidden：不 hydrate/wrap；库内 attachments 保留在原消息上
     return message;
   }
 
+  // extra info（customAttach）只对最新一条 user 消息拼接：历史消息不注入。
+  // 与 dynamic 区 once 语义不同——这里是注入位收窄，不是块级去重。
+  const effectiveExtraInfo = isLatestUser ? runtime.extraInfo : undefined;
   const attachments = message.attachments ?? [];
   const hasExtraInfo =
-    typeof runtime.extraInfo === "string" &&
-    runtime.extraInfo.trim().length > 0;
+    typeof effectiveExtraInfo === "string" &&
+    effectiveExtraInfo.trim().length > 0;
   // 无附件且无 extraInfo：恒等原文，不走 wrap。
   if (attachments.length === 0 && !hasExtraInfo) {
     return message;
@@ -398,7 +404,7 @@ async function prepareOneUserMessage(
   );
 
   const plainText = messageBodyTextFromContent(message.content);
-  const wrapped = wrapUserMessageForLlm(plainText, hydrated, runtime.extraInfo);
+  const wrapped = wrapUserMessageForLlm(plainText, hydrated, effectiveExtraInfo);
 
   return {
     ...message,
@@ -434,8 +440,24 @@ export async function prepareUserMessagesForPrompt(
     extraInfoResolved === undefined
       ? runtime
       : { ...runtime, extraInfo: extraInfoResolved };
+  // extra info 只对最新一条 user 输入消息生效：反向扫一遍找最后一条
+  // role==='user' && isUserInputMessage(message) && !message.hidden 的 index。
+  // hidden 不计入（不进输出）；非用户输入的 user 消息（tool_result）也不计入。
+  let latestUserInputIndex = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]!;
+    if (
+      m.role === "user" &&
+      !m.hidden &&
+      isUserInputMessage(m)
+    ) {
+      latestUserInputIndex = i;
+      break;
+    }
+  }
   const out: ChatMessage[] = [];
-  for (const message of messages) {
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i]!;
     if (message.role !== "user") {
       out.push(message);
       continue;
@@ -446,7 +468,14 @@ export async function prepareUserMessagesForPrompt(
       out.push(message);
       continue;
     }
-    out.push(await prepareOneUserMessage(message, resolvedRuntime, seen));
+    out.push(
+      await prepareOneUserMessage(
+        message,
+        resolvedRuntime,
+        seen,
+        i === latestUserInputIndex,
+      ),
+    );
   }
   return out;
 }
