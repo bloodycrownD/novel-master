@@ -43,7 +43,7 @@ export function ExplorerPane({
     workspaceScope,
     viewId,
     projectId,
-    sessionId,
+    workspaceSessionId,
     treeRefreshToken,
     notifyWorkspaceMutated,
     syncPreviewTabsFromFileRows,
@@ -84,7 +84,7 @@ export function ExplorerPane({
       const mimePayload = mimeRaw ? decodeVfsDragPayload(mimeRaw) : null;
       if (mimePayload != null) {
         await moveVfsPathsToDir({
-          scope: scopeRequest(panelScope, projectId, sessionId),
+          scope: scopeRequest(panelScope, projectId, workspaceSessionId),
           targetDir: "/",
           sourcePaths: mimePayload.paths,
           onMoved: notifyWorkspaceMutated,
@@ -93,14 +93,14 @@ export function ExplorerPane({
       }
 
       await handleTreeDrop({
-        scope: scopeRequest(panelScope, projectId, sessionId),
+        scope: scopeRequest(panelScope, projectId, workspaceSessionId),
         targetDir: "/",
         dataTransfer: e.dataTransfer,
         onNeedsConfirm: setIngestConfirm,
         onMutated: notifyWorkspaceMutated,
       });
     },
-    [projectId, sessionId, notifyWorkspaceMutated],
+    [projectId, workspaceSessionId, notifyWorkspaceMutated],
   );
 
   return (

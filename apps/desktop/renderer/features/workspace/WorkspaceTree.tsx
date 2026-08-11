@@ -59,7 +59,7 @@ export function WorkspaceTree({
 }: WorkspaceTreeProps) {
   const {
     projectId,
-    sessionId,
+    workspaceSessionId,
     previewFile,
     selectPreviewFile,
     treeExpandRequest,
@@ -76,8 +76,8 @@ export function WorkspaceTree({
   const [ingestBusy, setIngestBusy] = useState(false);
 
   const req = useMemo(
-    () => scopeRequest(panelScope, projectId, sessionId),
-    [panelScope, projectId, sessionId],
+    () => scopeRequest(panelScope, projectId, workspaceSessionId),
+    [panelScope, projectId, workspaceSessionId],
   );
 
   const reload = useCallback(async () => {
