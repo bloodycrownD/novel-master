@@ -3074,6 +3074,90 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   flex: 1;
 }
 
+/* trigger 行：折叠态只露一个按钮，文案反映当前选择数量 */
+.tool-policy-picker__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tool-policy-picker__trigger:hover {
+  border-color: var(--border);
+}
+
+.tool-policy-picker__trigger-label {
+  flex: 1;
+  text-align: left;
+}
+
+.tool-policy-picker__trigger-caret {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* 弹层多选列表：比原生 picker-modal 行多一个勾选框，行内容左对齐 */
+.tool-policy-picker__panel {
+  width: min(440px, 100%);
+}
+
+.tool-policy-picker__panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.tool-policy-picker__modal-list {
+  padding: 0 8px;
+}
+
+.tool-policy-picker__modal-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+}
+
+.tool-policy-picker__modal-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  padding: 8px 12px 12px;
+}
+
+.tool-policy-picker__modal-cancel {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tool-policy-picker__modal-confirm {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .settings-page .btn-primary {
   padding: 8px 14px;
   border: none;
