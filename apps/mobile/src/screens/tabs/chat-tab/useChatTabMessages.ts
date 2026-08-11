@@ -447,18 +447,22 @@ export function useChatTabMessageActions({
         mode === 'undo_send' ? (target.attachments ?? []) : null;
 
       const applyComposerRestore = async () => {
-        if (mode !== 'undo_send' || restoreText == null) {
+        // Bug3：批注消息（restoreText 为 null）也要走反投影——拿掉 restoreText == null，
+        // 仅在正文非空时才写 draft，批注反投影独立执行。
+        if (mode !== 'undo_send') {
           return;
         }
-        // T-TX2：仅正文（含 `@路径`）；无 attach chip
-        writeChatComposerDraftState(
-          sessionId,
-          {
-            text: restoreText,
-            attachments: [],
-          },
-          runtime.sessions,
-        );
+        if (restoreText != null) {
+          // T-TX2：仅正文（含 `@路径`）；无 attach chip
+          writeChatComposerDraftState(
+            sessionId,
+            {
+              text: restoreText,
+              attachments: [],
+            },
+            runtime.sessions,
+          );
+        }
         // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
           const restoredAnnotate = parseAnnotateDraftsFromAttachments(

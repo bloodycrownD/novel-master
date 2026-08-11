@@ -296,6 +296,7 @@ export type {
   UserVfsTurnView,
 } from '../domain/chat/logic/user-vfs-turn-view.js';
 export {
+  hasAnnotateAttachment,
   hasToolResult,
   isPlainUserText,
 } from '../domain/chat/logic/message-content-helpers.js';

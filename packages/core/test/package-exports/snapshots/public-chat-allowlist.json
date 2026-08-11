@@ -74,6 +74,7 @@
   "estimateSoftRangeFromPlainOffsets",
   "expandSoftRangeOnce",
   "extractEditableTextFromMessage",
+  "hasAnnotateAttachment",
   "filterAtPathTypeaheadCandidates",
   "findActiveAtQuery",
   "findAllOccurrences",
