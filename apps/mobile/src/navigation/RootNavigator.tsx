@@ -24,7 +24,7 @@ import {ProviderCreateScreen} from '../screens/stack/ProviderCreateScreen';
 import {ProviderEditScreen} from '../screens/stack/ProviderEditScreen';
 import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
-import {CompactionConditionsScreen} from '../screens/stack/CompactionConditionsScreen';
+
 import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
 import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
 import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
@@ -128,10 +128,7 @@ const ModelSamplingStackScreen = withStackLayout(
   'ModelSampling',
   ModelSamplingScreen,
 );
-const CompactionConditionsStackScreen = withStackLayout(
-  'CompactionConditions',
-  CompactionConditionsScreen,
-);
+
 const StorageConfigStackScreen = withStackLayout('StorageConfig', StorageConfigScreen);
 const CloudSyncProgressStackScreen = withStackLayout(
   'CloudSyncProgress',
@@ -198,10 +195,7 @@ export function RootNavigator() {
           <Stack.Screen name="ProviderEdit" component={ProviderEditStackScreen} />
           <Stack.Screen name="ProviderDetail" component={ProviderDetailStackScreen} />
           <Stack.Screen name="ModelSampling" component={ModelSamplingStackScreen} />
-          <Stack.Screen
-            name="CompactionConditions"
-            component={CompactionConditionsStackScreen}
-          />
+
           <Stack.Screen name="StorageConfig" component={StorageConfigStackScreen} />
           <Stack.Screen
             name="CloudSyncProgress"

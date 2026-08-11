@@ -1,10 +1,16 @@
 /**
- * 聊天相关偏好：流式输出、版本校验、富文本消息。
+ * 聊天相关偏好：流式输出、版本校验、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
-import {ScrollView, StyleSheet} from 'react-native';
+import type {CompactionConditions} from '@novel-master/core/compaction';
 import {useFocusEffect} from '@react-navigation/native';
 import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
+import {FormField} from '../../components/form/FormField';
+import {FormSectionCard} from '../../components/form/FormSectionCard';
+import {FormSwitchRow} from '../../components/form/FormSwitchRow';
+import {FormTextInput} from '../../components/form/FormTextInput';
+import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
+import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
@@ -17,15 +23,31 @@ import {
 } from '@novel-master/core/config-forms/shared';
 import {clearAllUserOpsLog} from '@novel-master/core/chat';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
+
+// 对齐 core 的 DEFAULT_HIDE_START_DEPTH
+const DEFAULT_CONDITIONS: CompactionConditions = {
+  schemaVersion: 4,
+  enabled: false,
+  tokenRatio: 0.8,
+  hideStartDepth: 6,
+};
 
 export function ChatConfigScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const {appUi} = useNovelMaster();
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [userOpsLogEnabled, setUserOpsLogEnabled] = useState(true);
+
+  const [compactionEnabled, setCompactionEnabled] = useState(false);
+  const [compactionTokenRatio, setCompactionTokenRatio] = useState('0.8');
+  const [compactionHideStartDepth, setCompactionHideStartDepth] = useState('6');
+  const [compactionSaving, setCompactionSaving] = useState(false);
 
   const refreshStreamPref = useCallback(async () => {
     setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
@@ -48,25 +70,78 @@ export function ChatConfigScreen() {
     setUserOpsLogEnabled(await runtime.preferences.getUserOpsLogEnabled());
   }, [runtime]);
 
+  const refreshCompaction = useCallback(async () => {
+    const stored = await runtime.compactionConditions.getConditions();
+    const c = stored ?? DEFAULT_CONDITIONS;
+    setCompactionEnabled(c.enabled);
+    setCompactionTokenRatio(c.tokenRatio != null ? String(c.tokenRatio) : '');
+    setCompactionHideStartDepth(
+      c.hideStartDepth != null ? String(c.hideStartDepth) : '6',
+    );
+  }, [runtime]);
+
   useFocusEffect(
     useCallback(() => {
       refreshStreamPref().catch(() => undefined);
       refreshSessionFsVersionCheckPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
       refreshUserOpsLogPref().catch(() => undefined);
+      refreshCompaction().catch(() => undefined);
     }, [
       refreshStreamPref,
       refreshSessionFsVersionCheckPref,
       refreshChatRichTextPref,
       refreshUserOpsLogPref,
+      refreshCompaction,
     ]),
   );
 
+  const collectCompaction = (): CompactionConditions | null => {
+    const ratio = compactionTokenRatio.trim()
+      ? Number(compactionTokenRatio)
+      : undefined;
+    const hide = compactionHideStartDepth.trim()
+      ? Number(compactionHideStartDepth)
+      : undefined;
+    if (compactionEnabled && ratio == null) {
+      showToast('启用时至少填写 token 比例');
+      return null;
+    }
+    return {
+      schemaVersion: 4,
+      enabled: compactionEnabled,
+      ...(ratio != null ? {tokenRatio: ratio} : {}),
+      ...(hide != null ? {hideStartDepth: hide} : {}),
+    };
+  };
+
+  const handleSaveCompaction = async () => {
+    const conditions = collectCompaction();
+    if (!conditions) {
+      return;
+    }
+    setCompactionSaving(true);
+    try {
+      await runtime.compactionConditions.setConditions(conditions);
+      showToast('已保存压缩配置');
+    } catch (error) {
+      showToast(toastMessage('保存失败', error));
+    } finally {
+      setCompactionSaving(false);
+    }
+  };
+
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled">
+    <ScreenFormLayout
+      tokens={tokens}
+      footer={
+        <StickyFormFooter
+          tokens={tokens}
+          label="保存"
+          loading={compactionSaving}
+          onPress={() => handleSaveCompaction().catch(() => undefined)}
+        />
+      }>
       <ProfileSwitchItem
         icon="⚡"
         label="流式输出"
@@ -139,11 +214,44 @@ export function ChatConfigScreen() {
           }
         }}
       />
-    </ScrollView>
+
+      <FormSectionCard
+        title="压缩配置"
+        tokens={tokens}
+        hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。">
+        <FormField
+          label="隐藏起始深度"
+          tokens={tokens}
+          hint="压缩时从该深度（tail 0 = 最新）起隐藏前缀消息">
+          <FormTextInput
+            tokens={tokens}
+            value={compactionHideStartDepth}
+            onChangeText={setCompactionHideStartDepth}
+            keyboardType="number-pad"
+            placeholder="6"
+          />
+        </FormField>
+        <FormSwitchRow
+          label="启用自动压缩"
+          tokens={tokens}
+          value={compactionEnabled}
+          onValueChange={setCompactionEnabled}
+        />
+        {compactionEnabled ? (
+          <FormField
+            label="Token 比例"
+            tokens={tokens}
+            hint="基于当前模型上下文上限 × 比例">
+            <FormTextInput
+              tokens={tokens}
+              value={compactionTokenRatio}
+              onChangeText={setCompactionTokenRatio}
+              keyboardType="decimal-pad"
+              placeholder="0.8"
+            />
+          </FormField>
+        ) : null}
+      </FormSectionCard>
+    </ScreenFormLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  scroll: {flex: 1},
-  scrollContent: {paddingTop: 8, paddingBottom: 24},
-});
