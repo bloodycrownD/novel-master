@@ -1123,6 +1123,8 @@ export type CompactionConditionsDto = {
   readonly enabled: boolean;
   readonly tokenRatio?: number;
   readonly visibleFloor?: number;
+  /** hide-message 起始深度（tail 0 = newest），缺省由 core 按 6 处理。 */
+  readonly hideStartDepth?: number;
 };
 
 export type CompactionConditionsSetRequest = {

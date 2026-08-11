@@ -47,6 +47,8 @@ export function WorkspaceSettingsView() {
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
   const [compactionVisibleFloor, setCompactionVisibleFloor] = useState("20");
+  // hideStartDepth 默认值 6，对齐 core 的 DEFAULT_HIDE_START_DEPTH
+  const [compactionHideStartDepth, setCompactionHideStartDepth] = useState("6");
   const [picker, setPicker] = useState<"model" | "agent" | "regex" | null>(null);
   const [modelRows, setModelRows] = useState<Array<{ id: string; label: string }>>([]);
   const [agentRows, setAgentRows] = useState<Array<{ id: string; label: string }>>([]);
@@ -124,6 +126,11 @@ export function WorkspaceSettingsView() {
           ? String(compactionRes.data.visibleFloor)
           : "",
       );
+      setCompactionHideStartDepth(
+        compactionRes.data.hideStartDepth != null
+          ? String(compactionRes.data.hideStartDepth)
+          : "6",
+      );
     }
   }, []);
 
@@ -157,13 +164,16 @@ export function WorkspaceSettingsView() {
   const saveCompaction = async (nextEnabled = compactionEnabled) => {
     const res = await ipcCompactionConditionsSet({
       conditions: {
-        schemaVersion: 3,
+        schemaVersion: 4,
         enabled: nextEnabled,
         ...(compactionTokenRatio.trim()
           ? { tokenRatio: Number(compactionTokenRatio) }
           : {}),
         ...(compactionVisibleFloor.trim()
           ? { visibleFloor: Number(compactionVisibleFloor) }
+          : {}),
+        ...(compactionHideStartDepth.trim()
+          ? { hideStartDepth: Number(compactionHideStartDepth) }
           : {}),
       },
     });
@@ -278,6 +288,14 @@ export function WorkspaceSettingsView() {
                 min="0"
                 value={compactionVisibleFloor}
                 onChange={(e) => setCompactionVisibleFloor(e.target.value)}
+              />
+            </SettingsField>
+            <SettingsField label="隐藏起始深度">
+              <input
+                type="number"
+                min="0"
+                value={compactionHideStartDepth}
+                onChange={(e) => setCompactionHideStartDepth(e.target.value)}
               />
             </SettingsField>
             <div className="settings-field-grid__action">
