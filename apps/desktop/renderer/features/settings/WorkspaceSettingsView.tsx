@@ -46,7 +46,6 @@ export function WorkspaceSettingsView() {
   const [userOpsLogEnabled, setUserOpsLogEnabled] = useState(true);
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
-  const [compactionVisibleFloor, setCompactionVisibleFloor] = useState("20");
   // hideStartDepth 默认值 6，对齐 core 的 DEFAULT_HIDE_START_DEPTH
   const [compactionHideStartDepth, setCompactionHideStartDepth] = useState("6");
   const [picker, setPicker] = useState<"model" | "agent" | "regex" | null>(null);
@@ -121,11 +120,6 @@ export function WorkspaceSettingsView() {
           ? String(compactionRes.data.tokenRatio)
           : "",
       );
-      setCompactionVisibleFloor(
-        compactionRes.data.visibleFloor != null
-          ? String(compactionRes.data.visibleFloor)
-          : "",
-      );
       setCompactionHideStartDepth(
         compactionRes.data.hideStartDepth != null
           ? String(compactionRes.data.hideStartDepth)
@@ -168,9 +162,6 @@ export function WorkspaceSettingsView() {
         enabled: nextEnabled,
         ...(compactionTokenRatio.trim()
           ? { tokenRatio: Number(compactionTokenRatio) }
-          : {}),
-        ...(compactionVisibleFloor.trim()
-          ? { visibleFloor: Number(compactionVisibleFloor) }
           : {}),
         ...(compactionHideStartDepth.trim()
           ? { hideStartDepth: Number(compactionHideStartDepth) }
@@ -258,7 +249,7 @@ export function WorkspaceSettingsView() {
 
       <SettingsFormSection
         title="压缩条件"
-        desc="达到阈值时触发会话压缩。"
+        desc="达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。"
       >
         <SettingsSwitchRow
           label="启用自动压缩"
@@ -270,8 +261,16 @@ export function WorkspaceSettingsView() {
             }
           }}
         />
-        {compactionEnabled ? (
-          <div className="settings-field-grid settings-field-grid--with-action">
+        <div className="settings-field-grid settings-field-grid--with-action">
+          <SettingsField label="隐藏起始深度">
+            <input
+              type="number"
+              min="0"
+              value={compactionHideStartDepth}
+              onChange={(e) => setCompactionHideStartDepth(e.target.value)}
+            />
+          </SettingsField>
+          {compactionEnabled ? (
             <SettingsField label="Token 比例">
               <input
                 type="number"
@@ -282,29 +281,13 @@ export function WorkspaceSettingsView() {
                 onChange={(e) => setCompactionTokenRatio(e.target.value)}
               />
             </SettingsField>
-            <SettingsField label="可见条数阈值">
-              <input
-                type="number"
-                min="0"
-                value={compactionVisibleFloor}
-                onChange={(e) => setCompactionVisibleFloor(e.target.value)}
-              />
-            </SettingsField>
-            <SettingsField label="隐藏起始深度">
-              <input
-                type="number"
-                min="0"
-                value={compactionHideStartDepth}
-                onChange={(e) => setCompactionHideStartDepth(e.target.value)}
-              />
-            </SettingsField>
-            <div className="settings-field-grid__action">
-              <Button variant="primary" onClick={() => void saveCompaction()}>
-                保存
-              </Button>
-            </div>
+          ) : null}
+          <div className="settings-field-grid__action">
+            <Button variant="primary" onClick={() => void saveCompaction()}>
+              保存
+            </Button>
           </div>
-        ) : null}
+        </div>
       </SettingsFormSection>
 
       <PickerModal

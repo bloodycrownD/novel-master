@@ -19,7 +19,6 @@ const DEFAULT_CONDITIONS: CompactionConditions = {
   schemaVersion: 4,
   enabled: false,
   tokenRatio: 0.8,
-  visibleFloor: 20,
   // hideStartDepth 默认值 6，对齐 core 的 DEFAULT_HIDE_START_DEPTH
   hideStartDepth: 6,
 };
@@ -32,7 +31,6 @@ export function CompactionConditionsScreen() {
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [tokenRatio, setTokenRatio] = useState('0.8');
-  const [visibleFloor, setVisibleFloor] = useState('20');
   const [hideStartDepth, setHideStartDepth] = useState('6');
 
   const load = useCallback(async () => {
@@ -42,9 +40,6 @@ export function CompactionConditionsScreen() {
       const c = stored ?? DEFAULT_CONDITIONS;
       setEnabled(c.enabled);
       setTokenRatio(c.tokenRatio != null ? String(c.tokenRatio) : '');
-      setVisibleFloor(
-        c.visibleFloor != null ? String(c.visibleFloor) : '',
-      );
       setHideStartDepth(c.hideStartDepth != null ? String(c.hideStartDepth) : '6');
     } finally {
       setLoading(false);
@@ -57,17 +52,15 @@ export function CompactionConditionsScreen() {
 
   const collect = (): CompactionConditions | null => {
     const ratio = tokenRatio.trim() ? Number(tokenRatio) : undefined;
-    const floor = visibleFloor.trim() ? Number(visibleFloor) : undefined;
     const hide = hideStartDepth.trim() ? Number(hideStartDepth) : undefined;
-    if (enabled && ratio == null && floor == null) {
-      showToast('启用时至少填写 token 比例或可见条数阈值');
+    if (enabled && ratio == null) {
+      showToast('启用时至少填写 token 比例');
       return null;
     }
     return {
       schemaVersion: 4,
       enabled,
       ...(ratio != null ? {tokenRatio: ratio} : {}),
-      ...(floor != null ? {visibleFloor: floor} : {}),
       ...(hide != null ? {hideStartDepth: hide} : {}),
     };
   };
@@ -106,17 +99,29 @@ export function CompactionConditionsScreen() {
       <FormSectionCard
         title="压缩配置"
         tokens={tokens}
-        hint="满足任一条件时自动发出压缩事件；具体消息隐藏动作见「事件配置」。">
+        hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。">
         <FormSwitchRow
           label="启用自动压缩"
           tokens={tokens}
           value={enabled}
           onValueChange={setEnabled}
         />
+        <FormField
+          label="隐藏起始深度"
+          tokens={tokens}
+          hint="压缩时从该深度（tail 0 = 最新）起隐藏前缀消息">
+          <FormTextInput
+            tokens={tokens}
+            value={hideStartDepth}
+            onChangeText={setHideStartDepth}
+            keyboardType="number-pad"
+            placeholder="6"
+          />
+        </FormField>
       </FormSectionCard>
 
       {enabled ? (
-        <FormSectionCard title="触发条件（OR）" tokens={tokens}>
+        <FormSectionCard title="触发条件" tokens={tokens}>
           <FormField
             label="Token 比例"
             tokens={tokens}
@@ -127,30 +132,6 @@ export function CompactionConditionsScreen() {
               onChangeText={setTokenRatio}
               keyboardType="decimal-pad"
               placeholder="0.8"
-            />
-          </FormField>
-          <FormField
-            label="可见条数阈值"
-            tokens={tokens}
-            hint="可见条数 > 该值时满足">
-            <FormTextInput
-              tokens={tokens}
-              value={visibleFloor}
-              onChangeText={setVisibleFloor}
-              keyboardType="number-pad"
-              placeholder="20"
-            />
-          </FormField>
-          <FormField
-            label="隐藏起始深度"
-            tokens={tokens}
-            hint="压缩时从该深度（tail 0 = 最新）起隐藏前缀消息">
-            <FormTextInput
-              tokens={tokens}
-              value={hideStartDepth}
-              onChangeText={setHideStartDepth}
-              keyboardType="number-pad"
-              placeholder="6"
             />
           </FormField>
         </FormSectionCard>
