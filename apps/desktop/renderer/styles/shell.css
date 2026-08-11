@@ -2515,6 +2515,17 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   max-width: 200px;
 }
 
+.compaction-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--settings-item-border);
+  background: var(--settings-item-bg);
+  box-shadow: var(--shadow-card-subtle);
+}
+
 .settings-switch {
   position: relative;
   width: 44px;

@@ -263,41 +263,43 @@ export function WorkspaceSettingsView() {
           />
         </SettingsRows>
 
-        <SettingsField label="隐藏起始深度" row>
-          <input
-            type="number"
-            min="0"
-            value={compactionHideStartDepth}
-            onChange={(e) => {
-              setCompactionHideStartDepth(e.target.value);
-              scheduleCompactionSave();
-            }}
-          />
-        </SettingsField>
-        <SettingsField label="启用自动压缩" row>
-          <Switch
-            checked={compactionEnabled}
-            onChange={(next) => {
-              setCompactionEnabled(next);
-              void saveCompaction(next);
-            }}
-          />
-        </SettingsField>
-        {compactionEnabled ? (
-          <SettingsField label="Token 比例" row>
+        <div className="compaction-card">
+          <SettingsField label="隐藏起始深度" row>
             <input
               type="number"
-              step="0.01"
-              min="0.01"
-              max="1"
-              value={compactionTokenRatio}
+              min="0"
+              value={compactionHideStartDepth}
               onChange={(e) => {
-                setCompactionTokenRatio(e.target.value);
+                setCompactionHideStartDepth(e.target.value);
                 scheduleCompactionSave();
               }}
             />
           </SettingsField>
-        ) : null}
+          <SettingsField label="启用自动压缩" row>
+            <Switch
+              checked={compactionEnabled}
+              onChange={(next) => {
+                setCompactionEnabled(next);
+                void saveCompaction(next);
+              }}
+            />
+          </SettingsField>
+          {compactionEnabled ? (
+            <SettingsField label="Token 比例" row>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max="1"
+                value={compactionTokenRatio}
+                onChange={(e) => {
+                  setCompactionTokenRatio(e.target.value);
+                  scheduleCompactionSave();
+                }}
+              />
+            </SettingsField>
+          ) : null}
+        </div>
       </SettingsSection>
 
       <PickerModal
