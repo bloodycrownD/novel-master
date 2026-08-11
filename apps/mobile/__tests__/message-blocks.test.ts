@@ -697,6 +697,35 @@ describe('message-blocks', () => {
     ).toBe('/notes/a.md');
   });
 
+  it('Bug1: vfsToolFilePath 兼容 file_path 字段名（透传到 core 兑底）', () => {
+    // 某些 LLM 会用 file_path 而非标准的 path，core resolveVfsToolFilePath 已加兼容。
+    expect(
+      vfsToolFilePath({
+        toolUseId: 't5',
+        name: 'write',
+        input: { file_path: 'chapter.md' },
+        status: 'success',
+      }),
+    ).toBe('/chapter.md');
+    expect(
+      vfsToolFilePath({
+        toolUseId: 't6',
+        name: 'edit',
+        input: { file_path: '/续写/a.md' },
+        status: 'success',
+      }),
+    ).toBe('/续写/a.md');
+    // path 优先于 file_path
+    expect(
+      vfsToolFilePath({
+        toolUseId: 't7',
+        name: 'write',
+        input: { path: 'a.md', file_path: 'b.md' },
+        status: 'success',
+      }),
+    ).toBe('/a.md');
+  });
+
   it('T-UO2x: 历史 UA 两段按普通 message，无 user_vfs_turn', () => {
     const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
     const messages = [

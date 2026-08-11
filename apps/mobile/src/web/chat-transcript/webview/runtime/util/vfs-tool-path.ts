@@ -47,7 +47,8 @@ export function resolveVfsToolFilePath(
 ): string | null {
   if (name.indexOf('vfs.') === 0) name = name.slice(4);
   if (!VFS_FILE_TOOLS[name]) return null;
-  const raw = input && input.path;
+  // Bug1 加固：与 core 镜像保持一致，兼容 file_path 字段名。
+  const raw = input && (input.path ?? input.file_path);
   if (typeof raw !== 'string') return null;
   try {
     return resolveLogicalPathForToolCard(raw);

@@ -24,7 +24,9 @@ export function resolveVfsToolFilePath(
 ): string | undefined {
   const name = toolName.startsWith("vfs.") ? toolName.slice(4) : toolName;
   if (!FILE_OPEN_TOOL_NAMES.has(name)) return undefined;
-  const raw = input?.path;
+  // Bug1 加固：某些 LLM 会用 file_path 作为字段名而非标准的 path。
+  // v1 只兜 input.path ?? input.file_path，不强加 filename（等真机日志确认后再扩展）。
+  const raw = input?.path ?? input?.file_path;
   if (typeof raw !== "string") return undefined;
   try {
     return resolveLogicalPath(raw);
