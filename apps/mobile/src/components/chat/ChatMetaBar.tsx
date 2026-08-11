@@ -3,7 +3,7 @@
  *
  * agent / model 两段都可点：传入 onPressAgent / onPressModel 即启用 Pressable
  * 反馈（press 时降透明度）。锁定判据与 SessionDetailScreen 对齐——只有
- * source='session' 才放开，其余（project-custom / none）一律视为锁定，
+ * source='session' 才放开，其余（none）一律视为锁定，
  * 仅作纯展示，不响应点击。
  */
 import React from 'react';
@@ -24,9 +24,8 @@ type Props = {
 export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
   const {tokens} = useTheme();
   const showTokens = meta.tokenLabel.length > 0;
-  // 锁定判据统一收口到 chat-agent-meta 的 helper：source !== 'session' 即锁定
-  // （原先只判 'project-custom' 会漏掉 'none'）。hasDedicatedModel 已是 boolean，
-  // 不再需要 ?? false 兜底。
+  // 锁定判据统一收口到 chat-agent-meta 的 helper：source !== 'session' 即锁定。
+  // hasDedicatedModel 已是 boolean，不再需要 ?? false 兜底。
   const agentLocked = isAgentLocked(meta);
   const modelLocked = isModelLocked(meta);
   return (

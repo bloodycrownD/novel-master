@@ -16,6 +16,9 @@ import {
   vfsEntryIdRedesignV1Migration,
 } from "./vfs-entry-id-redesign-v1.js";
 import { sessionAgentConfigV2Migration } from "./session-agent-config-v2.js";
+import {
+  projectAgentConfigCleanupV1Migration,
+} from "./project-agent-config-cleanup-v1.js";
 
 /**
  * 本版本最低支持 v1.4.08：下面 6 条 migration 的逻辑已并入 canonical DDL，
@@ -28,6 +31,7 @@ import { sessionAgentConfigV2Migration } from "./session-agent-config-v2.js";
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   vfsEntryIdRedesignV1Migration,
   sessionAgentConfigV2Migration,
+  projectAgentConfigCleanupV1Migration,
 ];
 
 /**
@@ -90,3 +94,6 @@ export {
   SESSION_AGENT_CONFIG_V2_ID,
   sessionAgentConfigV2Up,
 } from "./session-agent-config-v2.js";
+export {
+  PROJECT_AGENT_CONFIG_CLEANUP_V1_ID,
+} from "./project-agent-config-cleanup-v1.js";

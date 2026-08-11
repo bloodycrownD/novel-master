@@ -1506,7 +1506,7 @@ describe("AgentRunner", () => {
   });
 
   // T-CA4：runner 注入 extraInfo（prompts.customAttach）零覆盖补齐。
-  it("T-CA4a: definition prompts.customAttach 非空 → 每条 user 消息都含同一份 extra-info", async () => {
+  it("T-CA4a: definition prompts.customAttach 非空 → 只有最新一条 user 消息含 extra-info", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("第一问"));
 
@@ -1555,19 +1555,12 @@ describe("AgentRunner", () => {
       "第二轮 history 里应含两条 user 消息",
     );
     const bodies = userMsgs.map((m) => JSON.stringify(m));
-    // 每条都含 extra-info 块且文本一致（常驻 + 同一份）
-    for (const b of bodies) {
-      assert.match(b, /<extra-info>/);
-      assert.match(b, /笔记内容/);
-      assert.match(b, /<\/extra-info>/);
-    }
-    const firstExtra = extractExtraInfoBlock(bodies[0]!);
-    const secondExtra = extractExtraInfoBlock(bodies[1]!);
-    assert.equal(
-      firstExtra,
-      secondExtra,
-      "两条 user 消息里的 extra-info 必须完全一致",
-    );
+    // 只有最新一条 user 消息含 extra-info（customAttach 注入收窄到最新一条）。
+    assert.doesNotMatch(bodies[0]!, /<extra-info>/);
+    assert.match(bodies[1]!, /<extra-info>/);
+    assert.match(bodies[1]!, /笔记内容/);
+    assert.match(bodies[1]!, /<\/extra-info>/);
+    void extractExtraInfoBlock;
   });
 
   it("T-CA4b: definition 无 customAttach → user 消息 body 不出现 extra-info 段", async () => {

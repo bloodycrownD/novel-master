@@ -124,7 +124,7 @@ async function runUntilRunner(
 }
 
 describe("cli-run-agent-turn parity", () => {
-  it("T-R2：agent 解析走 resolveAgentForProject（项目 custom）", async () => {
+  it("T-R2：项目智能体已下线，agent 解析走 resolveAgentForProject（session 级）", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await registry.upsert(
@@ -148,11 +148,15 @@ describe("cli-run-agent-turn parity", () => {
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    // 旧库残留 custom 配置——resolve 应忽略，走 session.agentId。
     await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: customDefinition,
     });
     const session = await ctx.sessions.create(project.id, "S1");
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "global-agent",
+    });
     const runtime = makeRuntime(ctx, registry);
 
     const captured = await runUntilRunner(
@@ -162,8 +166,9 @@ describe("cli-run-agent-turn parity", () => {
     );
 
     assert.ok(captured != null);
-    assert.equal(captured.name, "项目专属 Agent");
-    assert.equal(captured.prompts.persist[0]?.content, "CUSTOM_PROJECT_PROMPT");
+    // 走 session 级 global-agent，不是项目专属 customDefinition。
+    assert.equal(captured.name, "全局 Agent");
+    assert.equal(captured.prompts.persist[0]?.content, "GLOBAL_PROMPT");
   });
 
   it("T-R2：空续跑 + pending VFS 后 transcript 顺序与 flush 契约一致", async () => {

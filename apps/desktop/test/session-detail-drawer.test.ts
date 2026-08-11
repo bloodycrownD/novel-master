@@ -1,6 +1,6 @@
 /**
  * T-D3：SessionDetailDrawer 渲染聊天名 / agent / model / 操作入口；
- *      project-custom 时 agent 切换禁用；agent 带 pin 时 model 切换禁用。
+ *      agent 解析失败（none）时 agent 切换禁用；agent 带 pin 时 model 切换禁用。
  * T-D4：App.tsx 入口替换——原 #session-actions-menu 不再渲染；
  *      openSessionActions 触发 SessionDetailDrawer。
  *
@@ -73,7 +73,7 @@ describe("SessionDetailDrawer (T-D3)", () => {
     const src = readDrawer();
     // source 默认 'none'（meta 未加载或 session.agentId 指向已删 agent）
     assert.match(src, /meta\?\.source \?\? "none"/);
-    // agent 锁：只有 session 才允许切；none / project-custom 一律锁
+    // agent 锁：只有 session 才允许切；none 一律锁（项目智能体已下线）
     assert.match(src, /agentLocked = source !== "session"/);
     // model 同口径收口（原 agent-pin / hasDedicatedModel 判定已废弃）
     assert.match(src, /modelLocked = source !== "session"/);

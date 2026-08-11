@@ -1,6 +1,10 @@
 /**
  * 项目智能体配置（存于 `chat_project.agent_config_json` 列）。
  *
+ * @deprecated 项目智能体功能已下线，所有项目统一走 session 级智能体选择。
+ * 类型与 schema 仅保留用于 DB 历史数据的读取兼容与迁移，业务代码不再写入；
+ * 列数据由迁移置空（不 DROP COLUMN，保留列以降低老版本回滚风险）。
+ *
  * @module domain/chat/model/project-agent-config
  */
 
@@ -26,6 +30,3 @@ export interface ProjectAgentConfigPatch {
 export const DEFAULT_PROJECT_AGENT_CONFIG: ProjectAgentConfig = {
   mode: "follow",
 };
-
-/** 项目 custom 模式下会话顶栏/底栏展示的固定 Agent 名称。 */
-export const PROJECT_AGENT_META_DISPLAY_LABEL = "项目智能体";

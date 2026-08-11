@@ -106,8 +106,7 @@ export async function loadChatAgentMeta(
 /**
  * Agent 是否被锁定（不可在会话内切换）。
  *
- * 只有 source='session' 才放开，project-custom（项目截断）和 none（解析失败）
- * 一律视为锁定。meta 还没加载出来（undefined）时也按锁定处理，避免异常态误触。
+ * 只有 source='session' 才放开，none（解析失败）一律视为锁定。meta 还没加载出来（undefined）时也按锁定处理，避免异常态误触。
  */
 export function isAgentLocked(meta: ChatAgentMeta | undefined): boolean {
   if (!meta) {

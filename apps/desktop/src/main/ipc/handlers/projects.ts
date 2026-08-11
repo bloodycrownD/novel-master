@@ -1,8 +1,6 @@
 /**
  * Project CRUD IPC handlers.
  */
-import type { ProjectAgentConfigPatch } from "@novel-master/core/chat";
-import { resolveAgentDefinitionFromStorage } from "@novel-master/core/config-forms/stored-config-validity";
 import type {
   IpcResult,
   ProjectAgentConfigDto,
@@ -16,7 +14,6 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
-import { toStoredConfigHealthDto } from "./stored-config-health-dto.js";
 
 function toDto(project: {
   id: string;
@@ -90,47 +87,34 @@ export async function handleProjectsPullTemplate(
   }
 }
 
-function toAgentConfigDto(config: {
-  mode: "follow" | "custom";
-  definition?: unknown;
-}): ProjectAgentConfigDto {
-  if (config.definition === undefined) {
-    return { mode: config.mode };
-  }
-  const health = resolveAgentDefinitionFromStorage(config.definition);
-  return {
-    mode: config.mode,
-    definition: toStoredConfigHealthDto(health) as ProjectAgentConfigDto["definition"],
-  };
-}
-
-/** 读取项目智能体配置。 */
+/**
+ * 读取项目智能体配置（项目智能体已下线，恒返回 follow 默认）。
+ * @deprecated 项目智能体功能已下线，保留 handler 以兼容外部脚本调用，列数据由迁移置空。
+ */
 export async function handleProjectsGetAgentConfig(
-  req: ProjectGetAgentConfigRequest,
+  _req: ProjectGetAgentConfigRequest,
 ): Promise<IpcResult<ProjectAgentConfigDto>> {
   try {
-    const rt = await getDesktopRuntime();
-    const config = await rt.projects.getAgentConfig(req.projectId);
-    return { ok: true, data: toAgentConfigDto(config) };
+    // 项目智能体已下线：恒返回 follow 默认，不读取列内残留数据。
+    return { ok: true, data: { mode: "follow" } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
 }
 
-/** 更新项目智能体配置（不写全局 registry）。 */
+/**
+ * 更新项目智能体配置（项目智能体已下线，no-op）。
+ * @deprecated 项目智能体功能已下线，保留 handler 以兼容外部脚本调用，恒返回 follow 默认。
+ */
 export async function handleProjectsUpdateAgentConfig(
   req: ProjectUpdateAgentConfigRequest,
 ): Promise<IpcResult<ProjectAgentConfigDto>> {
   try {
-    const rt = await getDesktopRuntime();
-    const patch: ProjectAgentConfigPatch = {
-      ...(req.patch.mode !== undefined ? { mode: req.patch.mode } : {}),
-      ...(req.patch.definition !== undefined
-        ? { definition: req.patch.definition as ProjectAgentConfigPatch["definition"] }
-        : {}),
-    };
-    const config = await rt.projects.updateAgentConfig(req.projectId, patch);
-    return { ok: true, data: toAgentConfigDto(config) };
+    void req;
+    console.warn(
+      "[nm-desktop] projects.updateAgentConfig called but project agent feature is removed; returning follow default.",
+    );
+    return { ok: true, data: { mode: "follow" } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
