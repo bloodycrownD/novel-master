@@ -25,11 +25,21 @@ async function collectTsFiles(dir: string): Promise<string[]> {
   return files;
 }
 
-/** schema-migrations 目录内实现 migration 的模块（排除基础设施文件）。 */
+/** schema-migrations 目录内基础设施文件（不注册 migration）。 */
 const SCHEMA_MIGRATION_INFRA = new Set([
   "index.ts",
   "schema-migration.types.ts",
   "schema-migrations-table.ts",
+]);
+
+/** Step 21 后保留的冷回放备份模块：逻辑已融入 canonical DDL，不再注册。 */
+const BASELINE_BACKUP_MODULES = new Set([
+  "saved-model-identity-v1.ts",
+  "provider-identity-v1.ts",
+  "drop-chat-session-user-vfs-pending-v1.ts",
+  "rename-worktree-tables-to-workplace-v1.ts",
+  "vfs-content-blob-zlib-v1.ts",
+  "vfs-revision-ref-count-v1.ts",
 ]);
 
 describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
@@ -78,9 +88,14 @@ describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
       withFileTypes: true,
     });
     const migrationModules = entries
-      .filter((e) => e.isFile() && e.name.endsWith(".ts"))
-      .map((e) => e.name)
-      .filter((name) => !SCHEMA_MIGRATION_INFRA.has(name));
+      .filter(
+        (e) =>
+          e.isFile() &&
+          e.name.endsWith(".ts") &&
+          !SCHEMA_MIGRATION_INFRA.has(e.name) &&
+          !BASELINE_BACKUP_MODULES.has(e.name),
+      )
+      .map((e) => e.name);
 
     const registeredIds = new Set(SCHEMA_MIGRATIONS.map((m) => m.id));
 
