@@ -64,6 +64,8 @@ export type UseChatTabMessagesParams = {
   projectId: string | undefined;
   sessionId: string | undefined;
   chatSubview: ChatSubview;
+  /** 详情页压缩等外部动作触发 session-transcript-changed 后，reload 完调一下，让上层刷新 token 计数。 */
+  onAfterExternalReload?: () => void;
 };
 
 export function useChatTabMessages({
@@ -71,6 +73,7 @@ export function useChatTabMessages({
   projectId,
   sessionId,
   chatSubview,
+  onAfterExternalReload,
 }: UseChatTabMessagesParams) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
@@ -254,18 +257,22 @@ export function useChatTabMessages({
   }, [chatSubview, sessionId, reloadMessages]);
 
   // 详情页压缩/置位后 DB 消息 hidden 已变，但聊天页 chatMessages state 不会自动刷新。
-  // 监听 session-transcript-changed 事件，命中当前 session 时强制 reload。
+  // 监听 session-transcript-changed 事件，命中当前 session 时强制 reload + 刷新 token 计数。
   useEffect(() => {
     if (sessionId == null) {
       return;
     }
     const sub = DeviceEventEmitter.addListener('session-transcript-changed', (e?: { sessionId?: string }) => {
       if (e?.sessionId === sessionId) {
-        reloadMessages(true).catch(() => undefined);
+        reloadMessages(true)
+          .then(() => {
+            onAfterExternalReload?.();
+          })
+          .catch(() => undefined);
       }
     });
     return () => sub.remove();
-  }, [sessionId, reloadMessages]);
+  }, [sessionId, reloadMessages, onAfterExternalReload]);
 
   return {
     chatMessages,

@@ -194,6 +194,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     projectId,
     sessionId,
     chatSubview: scope.chatSubview,
+    onAfterExternalReload: scope.refreshChatTokenLabel,
   });
 
   const { refreshChatMeta } = scope;
