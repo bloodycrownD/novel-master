@@ -255,5 +255,5 @@ export function ChatConfigScreen() {
 
 const styles = StyleSheet.create({
   // row 模式下给输入框限宽，避免撑满整行把标签挤没。数字 / 小数输入 100 够用。
-  compactionInput: {width: 100},
+  compactionInput: {width: 100, textAlign: 'center'},
 });
