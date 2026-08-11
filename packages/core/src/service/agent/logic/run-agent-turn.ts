@@ -577,8 +577,8 @@ export async function runAgentTurn(
  * `runChildAgent` 内部装配：递归派生子 agent runner（P0-2 / P0-3 / P0-4 / P1-6）。
  *
  * 不抛 "暂未实现" ——本函数是 `task` 工具 `runChildAgent` 闭包背后的真正实现：
- * - VFS（P0-4）：子 agent `toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId)`
- *   复用父 session VFS 视图（查大纲设定场景需要能读到文件）。
+ * - VFS（Feature A）：子 agent `toolCtx.vfs = runtime.sessionVfs(projectId, childSessionId)`
+ *   用子 session 自己的 VFS 视图（子会话工作区隔离，从空产生，不再复用父 session）。
  * - abort 派生（P1-6）：`new AbortController()` + `parentSignal.addEventListener("abort", ..., { once: true })`。
  * - registry（P1-10）：`resolveAgentToolRegistry(baseRegistry, def, { depth: parentDepth + 1 })`；
  *   孙 agent（depth >= 2）强制 deny task。
@@ -597,7 +597,6 @@ async function runChildAgent(args: {
   const {
     runtime,
     parentProjectId,
-    parentSessionId,
     parentDepth,
     def,
     childSessionId,
@@ -618,8 +617,8 @@ async function runChildAgent(args: {
     depth: childDepth,
   });
 
-  // VFS（P0-4）：子 agent 用父 session 的 VFS 视图（能读到父会话文件）。
-  const vfs = runtime.sessionVfs(parentProjectId, parentSessionId);
+  // VFS（Feature A：子 agent 用子 session 的 VFS 视图，工作区隔离）。
+  const vfs = runtime.sessionVfs(parentProjectId, childSessionId);
 
   // abort 派生（P1-6）：子 agent 退出/完成不应反向影响父 signal。
   const childController = new AbortController();
@@ -648,13 +647,13 @@ async function runChildAgent(args: {
     // 同主 run：register 拿句柄，finally 反注册时回传做所有权比对。
     streamHandle = runtime.streamRegistry?.register(childSessionId);
 
-  // ChatAgentSession 的消息落子 session（独立历史），但工作区归属指向父 session——
-  // 子 session 是 createSubSession 新建的、sessionKkv 空，常驻前缀读父的
-  // rule_snapshot / file_cache，与父工作区视图一致（VFS 也复用同一父 session）。
+  // ChatAgentSession 的消息落子 session（独立历史），工作区归属也指向子 session——
+  // Feature A 后子会话工作区隔离：子 session 从空产生自己的常驻工作区内容
+  // （rule_snapshot / file_cache / VFS），不再复用父会话工作区缓存。
   const session = new ChatAgentSession(
     runtime.messages,
     childSessionId,
-    parentSessionId,
+    childSessionId,
   );
 
   // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
