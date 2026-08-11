@@ -40,7 +40,6 @@ type Props = {
   onCreateProject: (name: string) => void | Promise<void>;
   onRenameProject: (projectId: string, name: string) => void | Promise<void>;
   onDeleteSelected: (projectIds: string[]) => void | Promise<void>;
-  onOpenAgentConfig?: (projectId: string) => void;
 };
 
 export function ProjectDrawer({
@@ -52,7 +51,6 @@ export function ProjectDrawer({
   onCreateProject,
   onRenameProject,
   onDeleteSelected,
-  onOpenAgentConfig,
 }: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
@@ -240,7 +238,6 @@ export function ProjectDrawer({
         visible={menuProjectId != null}
         items={[
           {label: '重命名', action: 'rename'},
-          {label: '智能体', action: 'agent-config'},
           {label: '删除', action: 'delete', danger: true},
         ]}
         onClose={() => setMenuProjectId(undefined)}
@@ -253,10 +250,6 @@ export function ProjectDrawer({
               projectId: project.id,
               initialName: project.name,
             });
-            return;
-          }
-          if (action === 'agent-config' && project) {
-            onOpenAgentConfig?.(project.id);
             return;
           }
           if (action === 'delete' && project) {

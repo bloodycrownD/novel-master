@@ -48,7 +48,7 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.doesNotMatch(src, /session-detail-pick__source/);
     // 锁定指示仍保留
     assert.match(src, /session-detail-pick__lock/);
-    assert.match(src, /项目锁定/);
+    assert.match(src, /智能体未绑定/);
     assert.match(src, /智能体锁定/);
     // 操作入口 data hook
     assert.match(src, /data-session-detail-action="switch-agent"/);
@@ -77,8 +77,8 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.match(src, /agentLocked = source !== "session"/);
     // model 同口径收口（原 agent-pin / hasDedicatedModel 判定已废弃）
     assert.match(src, /modelLocked = source !== "session"/);
-    // 锁定 toast 引导文案保留
-    assert.match(src, /项目锁定/);
+    // 锁定 toast 引导文案保留（none 口径：未绑定有效智能体）
+    assert.match(src, /未绑定有效智能体/);
     assert.match(src, /已锁定模型/);
     // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
     assert.doesNotMatch(src, /"agent-pin"/);

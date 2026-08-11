@@ -14,8 +14,8 @@
  *
  * 锁定规则（与 mobile/B-1 方案一一致）：
  * - 只有 `source === 'session'`（session.agentId 指向真实 agent）才允许切 agent/model。
- * - `source === 'none'`（agentId 指向已删 agent）/ `source === 'project-custom'`（项目截断）
- *   一律锁卡，避免已删 agent 场景下还能点出 picker。
+ * - `source === 'none'`（agentId 指向已删 agent）一律锁卡，避免已删 agent 场景下还能点出 picker。
+ *   项目智能体已下线，不再有 project-custom 分支。
  *
  * core 移除 workspace 回退后：会话始终持有 agentId（必填）+ modelId（可选），
  * 因此 agent picker 不允许 none；model picker 允许 none（清除会话覆盖，
@@ -209,8 +209,8 @@ export function SessionDetailDrawer({
 
   const source = meta?.source ?? "none";
   // 锁定口径：只有 source === 'session'（session.agentId 指向真实 agent）才允许切；
-  // source === 'none'（session.agentId 指向已删 agent，handler 内层 catch 命中）和
-  // source === 'project-custom'（项目级截断）一律锁，与 mobile/B-1 方案一保持一致。
+  // source === 'none'（session.agentId 指向已删 agent，handler 内层 catch 命中）一律锁，
+  // 与 mobile/B-1 方案一保持一致。项目智能体已下线，不再有 project-custom 分支。
   const agentLocked = source !== "session";
   // model 同口径收口：source !== 'session' 即锁定，避免 source='none' 时 model 卡仍可点
   // （原 agent pin / 专属模型判定已废弃，统一走 source 判定）
@@ -218,7 +218,7 @@ export function SessionDetailDrawer({
 
   const openAgentPicker = async () => {
     if (agentLocked) {
-      showToast("当前会话的智能体已被项目锁定，请在项目设置中修改。");
+      showToast("当前会话未绑定有效智能体，无法在会话内切换。");
       return;
     }
     const result = await ipcAgentListPicker();
@@ -388,7 +388,7 @@ export function SessionDetailDrawer({
                     >
                       🔒
                     </span>
-                    项目锁定
+                    智能体未绑定
                   </span>
                 ) : null}
               </span>

@@ -259,24 +259,6 @@ describe('T-M2 SessionDetailScreen', () => {
     expect(picker.props.sessionId).toBe('s1');
   });
 
-  it('project-custom 时 agent 卡片显示锁图标，点击不进 picker 弹锁定提示', async () => {
-    mockLoadChatAgentMeta.mockResolvedValue(meta({source: 'project-custom'}));
-    let tree!: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<SessionDetailScreen />);
-      await flushPromises();
-    });
-    const json = JSON.stringify(tree.toJSON());
-    // 锁定场景 chevron 换成锁图标
-    expect(json).toContain('🔒');
-    await act(async () => {
-      tree.root.findByProps({testID: 'agent-row'}).props.onPress();
-    });
-    const picker = tree.root.findByProps({testID: 'agent-picker-modal'});
-    expect(picker.props.visible).toBe('false');
-    expect(mockShowToast).toHaveBeenCalled();
-  });
-
   it('agent pin（modelSource=agent-pin）时点击大模型卡片不进 picker，弹锁定提示', async () => {
     mockLoadChatAgentMeta.mockResolvedValue(
       meta({modelSource: 'agent-pin', hasDedicatedModel: true}),

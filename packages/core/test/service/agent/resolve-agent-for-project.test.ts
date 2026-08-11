@@ -28,7 +28,7 @@ function customDefinition(name: string): AgentDefinition {
 }
 
 describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
-  it("project custom 截断：返回 project-custom 且无 agentId", async () => {
+  it("项目智能体已下线：即使 DB 存 custom 配置也忽略，走 session 分支", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     const globalDef = decode(
@@ -44,10 +44,14 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "S1");
+    // 旧库可能残留 custom 配置——resolve 应忽略，不再截断 session。
     const custom = customDefinition("项目专属助手");
     await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: custom,
+    });
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "global-agent",
     });
 
     const runtime = {
@@ -58,42 +62,15 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     };
 
     const resolved = await resolveAgentForProject(runtime, project.id, session.id);
-    assert.equal(resolved.source, "project-custom");
-    if (resolved.source === "project-custom") {
-      assert.equal(resolved.definition.name, "项目专属助手");
-      assert.equal(
-        (resolved as { agentId?: string }).agentId,
-        undefined,
-      );
+    // 项目智能体下线后永远走 session 分支，返回 session 级 definition + agentId。
+    assert.equal(resolved.source, "session");
+    if (resolved.source === "session") {
+      assert.equal(resolved.agentId, "global-agent");
+      assert.equal(resolved.definition.name, "全局助手");
     }
   });
 
-  it("custom 缺 definition 抛 AgentRunResolveError", async () => {
-    const ctx = getNovelMasterTestContext();
-    const registry = createAgentRegistryService(ctx.conn, ctx.state);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-
-    const runtime = {
-      state: ctx.state,
-      agentRegistry: registry,
-      projects: {
-        getAgentConfig: async () => ({
-          mode: "custom" as const,
-          definition: undefined,
-        }),
-      },
-      sessions: {
-        getSessionAgentConfig: async () => ({ agentId: "x" }),
-      },
-    };
-
-    await assert.rejects(
-      () => resolveAgentForProject(runtime, project.id, "sess-unused"),
-      (error: unknown) => error instanceof AgentRunResolveError,
-    );
-  });
-
-  it("T-R2：project custom 时忽略 session.agentId（截断）", async () => {
+  it("custom 缺 definition：项目智能体已下线，resolve 不再读 custom 配置，走 session 分支", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await registry.upsert(
@@ -110,13 +87,67 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
     await ctx.state.setCurrentAgentId("global-agent");
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S1");
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "global-agent",
+    });
+
+    const runtime = {
+      state: ctx.state,
+      agentRegistry: registry,
+      projects: {
+        getAgentConfig: async () => ({
+          mode: "custom" as const,
+          definition: undefined,
+        }),
+      },
+      sessions: ctx.sessions,
+    };
+
+    // 项目智能体下线后，即便 projects.getAgentConfig 返回 custom 缺 definition，
+    // resolve 也不再读取它——直接走 session.agentId，不抛错。
+    const resolved = await resolveAgentForProject(runtime, project.id, session.id);
+    assert.equal(resolved.source, "session");
+    if (resolved.source === "session") {
+      assert.equal(resolved.agentId, "global-agent");
+    }
+  });
+
+  it("T-R2：项目智能体已下线，DB 残留 custom 配置被忽略，session.agentId 正常生效", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    await registry.upsert(
+      "global-agent",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "全局助手",
+          prompts: { persist: {}, dynamic: {} },
+        },
+        agentDefinitionSchema,
+      ),
+    );
+    await ctx.state.setCurrentAgentId("global-agent");
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    // 旧库残留 custom 配置——项目智能体下线后应被忽略。
     const custom = customDefinition("项目专属助手");
     await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: custom,
     });
+    await registry.upsert(
+      "session-agent",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "会话引用助手",
+          prompts: { persist: {}, dynamic: {} },
+        },
+        agentDefinitionSchema,
+      ),
+    );
     const session = await ctx.sessions.create(project.id, "S1");
-    // 会话引用另一个 agent——custom 截断下应被忽略
     await ctx.sessions.updateSessionAgentConfig(session.id, {
       agentId: "session-agent",
       modelId: TEST_SAVED_MODEL_SESSION,
@@ -134,9 +165,11 @@ describe("resolveAgentForProject（v2，无 workspace 回退）", () => {
       project.id,
       session.id,
     );
-    assert.equal(resolved.source, "project-custom");
-    if (resolved.source === "project-custom") {
-      assert.equal(resolved.definition.name, "项目专属助手");
+    // 不再被 custom 截断，走 session 分支拿 session-agent。
+    assert.equal(resolved.source, "session");
+    if (resolved.source === "session") {
+      assert.equal(resolved.agentId, "session-agent");
+      assert.equal(resolved.definition.name, "会话引用助手");
     }
   });
 
