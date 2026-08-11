@@ -18,20 +18,13 @@ import {
 /**
  * 项目域 Agent 解析结果；runner 仅消费 definition。
  *
- * - `session`：会话独立 agentId → registry 取 definition。
- *
- * `project-custom` 分支随项目智能体下线一并移除（历史类型保留以便逐步收敛）。
+ * 项目智能体已下线，只剩 session 分支：会话独立 agentId → registry 取 definition。
  */
-export type ResolvedAgentForProject =
-  | {
-      readonly source: "session";
-      readonly agentId: string;
-      readonly definition: AgentDefinition;
-    }
-  | {
-      readonly source: "project-custom";
-      readonly definition: AgentDefinition;
-    };
+export type ResolvedAgentForProject = {
+  readonly source: "session";
+  readonly agentId: string;
+  readonly definition: AgentDefinition;
+};
 
 /** {@link resolveAgentForProject} 所需 runtime 表面。 */
 export interface ResolveAgentForProjectRuntimePort extends AgentRunRuntimePort {

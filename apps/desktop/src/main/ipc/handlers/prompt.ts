@@ -93,8 +93,7 @@ export async function handlePromptAgentMeta(
         ok: true,
         data: {
           source: "session",
-          agentId:
-            resolved.source === "session" ? resolved.agentId : undefined,
+          agentId: resolved.agentId,
           agentName: definition.name,
           modelLabel,
           hasDedicatedModel,
