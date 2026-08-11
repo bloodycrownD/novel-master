@@ -2510,6 +2510,11 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   margin: 0;
 }
 
+.settings-field--row input,
+.settings-field--row select {
+  max-width: 200px;
+}
+
 .settings-switch {
   position: relative;
   width: 44px;

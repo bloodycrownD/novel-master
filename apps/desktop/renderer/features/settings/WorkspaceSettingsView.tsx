@@ -23,6 +23,7 @@ import {
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { PickerModal } from "@/components/ui/PickerModal";
+import { Switch } from "@/components/ui/Switch";
 
 import {
   SettingsField,
@@ -262,7 +263,7 @@ export function WorkspaceSettingsView() {
           />
         </SettingsRows>
 
-        <SettingsField label="隐藏起始深度">
+        <SettingsField label="隐藏起始深度" row>
           <input
             type="number"
             min="0"
@@ -273,16 +274,17 @@ export function WorkspaceSettingsView() {
             }}
           />
         </SettingsField>
-        <SettingsSwitchRow
-          label="启用自动压缩"
-          checked={compactionEnabled}
-          onChange={(next) => {
-            setCompactionEnabled(next);
-            void saveCompaction(next);
-          }}
-        />
+        <SettingsField label="启用自动压缩" row>
+          <Switch
+            checked={compactionEnabled}
+            onChange={(next) => {
+              setCompactionEnabled(next);
+              void saveCompaction(next);
+            }}
+          />
+        </SettingsField>
         {compactionEnabled ? (
-          <SettingsField label="Token 比例">
+          <SettingsField label="Token 比例" row>
             <input
               type="number"
               step="0.01"
