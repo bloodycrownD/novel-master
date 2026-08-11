@@ -4,10 +4,10 @@
 import React, {useCallback, useState} from 'react';
 import type {CompactionConditions} from '@novel-master/core/compaction';
 import {useFocusEffect} from '@react-navigation/native';
+import {StyleSheet, Switch} from 'react-native';
 import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
 import {FormField} from '../../components/form/FormField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {FormSwitchRow} from '../../components/form/FormSwitchRow';
 import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
@@ -219,35 +219,32 @@ export function ChatConfigScreen() {
         title="压缩配置"
         tokens={tokens}
         hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。">
-        <FormField
-          label="隐藏起始深度"
-          tokens={tokens}
-          hint="压缩时从该深度（tail 0 = 最新）起隐藏前缀消息">
+        <FormField label="隐藏起始深度" tokens={tokens} row>
           <FormTextInput
             tokens={tokens}
             value={compactionHideStartDepth}
             onChangeText={setCompactionHideStartDepth}
             keyboardType="number-pad"
             placeholder="6"
+            style={styles.compactionInput}
           />
         </FormField>
-        <FormSwitchRow
-          label="启用自动压缩"
-          tokens={tokens}
-          value={compactionEnabled}
-          onValueChange={setCompactionEnabled}
-        />
+        <FormField label="启用自动压缩" tokens={tokens} row>
+          <Switch
+            value={compactionEnabled}
+            onValueChange={setCompactionEnabled}
+            trackColor={{false: tokens.border, true: tokens.primary}}
+          />
+        </FormField>
         {compactionEnabled ? (
-          <FormField
-            label="Token 比例"
-            tokens={tokens}
-            hint="基于当前模型上下文上限 × 比例">
+          <FormField label="Token 比例" tokens={tokens} row>
             <FormTextInput
               tokens={tokens}
               value={compactionTokenRatio}
               onChangeText={setCompactionTokenRatio}
               keyboardType="decimal-pad"
               placeholder="0.8"
+              style={styles.compactionInput}
             />
           </FormField>
         ) : null}
@@ -255,3 +252,8 @@ export function ChatConfigScreen() {
     </ScreenFormLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  // row 模式下给输入框限宽，避免撑满整行把标签挤没。数字 / 小数输入 100 够用。
+  compactionInput: {width: 100},
+});
