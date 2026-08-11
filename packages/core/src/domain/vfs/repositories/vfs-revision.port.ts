@@ -102,6 +102,23 @@ export interface VfsRevisionRepository {
   adjustRefCount(entryId: number, version: number, delta: number): Promise<void>;
 
   /**
+   * 批量增减 ref_count。
+   *
+   * delta = +1 时，对缺失的 (entryId, version) 行抛 `VfsError("NOT_FOUND")`——
+   * 这跟逐条 {@link adjustRefCount} 的语义保持一致，用来守护 T-RB-REF-MISSING 不变量；
+   * delta = -1 时缺失行直接 no-op（UPDATE 命不中即跳过）。
+   *
+   * @remarks 内部按 `REVISION_BATCH_CHUNK_SIZE` 分块：先批量查存在性（仅 delta>0 需要），
+   * 再对每个分块发一条 `UPDATE ... WHERE (entry_id, version) IN (...)`。
+   * 入参为空时直接返回，不发任何 SQL。批量场景（seed-fork / copy / delete）用它替换
+   * 逐条 adjustRefCount 的循环，把 N 次 SQL 往返压成 ceil(N/chunk) 次。
+   */
+  batchAdjustRefCount(
+    pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+    delta: 1 | -1,
+  ): Promise<void>;
+
+  /**
    * 批量检查哪些 (entryId, version) 的 revision 行已存在。
    *
    * @returns 已存在的 pair 集合，key 格式为 `${entryId}:${version}`

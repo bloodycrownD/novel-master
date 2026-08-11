@@ -113,20 +113,18 @@ export class SqliteMessageCheckpointRepository
         createdAtMs: input.createdAtMs,
       },
     );
-    for (const file of input.files) {
-      await executeTemplate(
-        this.conn,
-        this.parser,
-        `INSERT INTO message_checkpoint_file
-         (session_id, message_id, entry_id, revision_version)
-         VALUES (#{sessionId}, #{messageId}, #{entryId}, #{revisionVersion})`,
-        {
-          sessionId: input.sessionId,
-          messageId: input.messageId,
-          entryId: file.entryId,
-          revisionVersion: file.revisionVersion,
-        },
-      );
+    // 批量 INSERT message_checkpoint_file——原来逐条 executeTemplate 在文件多时
+    // 会变成 N 次 SQL 往返，seed-fork 500 消息 × 200 文件就是 10 万次，相当卡。
+    // 这里切到 conn.batch（位置占位符 ?），一次调用处理整批。
+    if (input.files.length > 0) {
+      const sql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version) VALUES (?, ?, ?, ?)`;
+      const paramsList = input.files.map((f) => [
+        input.sessionId,
+        input.messageId,
+        f.entryId,
+        f.revisionVersion,
+      ]);
+      await this.conn.batch(sql, paramsList);
     }
 
     if (input.files.length > 0) {

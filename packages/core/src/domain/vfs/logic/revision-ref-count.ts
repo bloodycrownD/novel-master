@@ -55,9 +55,11 @@ export async function incrementRefsForCheckpointFiles(
   revisionRepo: VfsRevisionRepository,
   files: ReadonlyArray<CheckpointFilePointer>,
 ): Promise<void> {
-  for (const file of files) {
-    await adjustRef(revisionRepo, file.entryId, file.revisionVersion, +1);
-  }
+  // 走批量 +1，缺失行会报 NOT_FOUND（守护 T-RB-REF-MISSING），跟原来的逐条语义一致
+  await revisionRepo.batchAdjustRefCount(
+    files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion })),
+    +1,
+  );
 }
 
 /** checkpoint_file 行列表 → 每条 (entryId, version) −1。 */
@@ -65,9 +67,11 @@ export async function decrementRefsForCheckpointFiles(
   revisionRepo: VfsRevisionRepository,
   files: ReadonlyArray<CheckpointFilePointer>,
 ): Promise<void> {
-  for (const file of files) {
-    await adjustRef(revisionRepo, file.entryId, file.revisionVersion, -1);
-  }
+  // 减引用时缺失行 no-op（UPDATE 命不中即跳过），所以不需要前置校验
+  await revisionRepo.batchAdjustRefCount(
+    files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion })),
+    -1,
+  );
 }
 
 /** 前缀打扫：scope + path 前缀下 DELETE ref_count<=0 的 revision 行。 */
@@ -180,7 +184,9 @@ export async function decrementLiveRefsUnderScope(
   pathPrefix: string,
 ): Promise<void> {
   const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
-  for (const head of liveHeads) {
-    await adjustRef(revisionRepo, head.entryId, head.headVersion, -1);
-  }
+  // 批量减引用，避免对每个 live head 发一条 SQL（会话删除场景下文件多会卡）
+  await revisionRepo.batchAdjustRefCount(
+    liveHeads.map((h) => ({ entryId: h.entryId, version: h.headVersion })),
+    -1,
+  );
 }

@@ -319,6 +319,54 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     }
   }
 
+  async batchAdjustRefCount(
+    pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+    delta: 1 | -1,
+  ): Promise<void> {
+    if (pointers.length === 0) {
+      return;
+    }
+
+    // delta = +1 要先校验所有 pair 都存在，守护 T-RB-REF-MISSING 不变量；
+    // delta = -1 命不中即跳过，不需要前置查存在性。
+    if (delta > 0) {
+      const existing = await this.findExistingEntryVersionKeys(pointers);
+      const missing: Array<{ entryId: number; version: number }> = [];
+      for (const p of pointers) {
+        if (!existing.has(revisionPairKey(p.entryId, p.version))) {
+          missing.push({ entryId: p.entryId, version: p.version });
+        }
+      }
+      if (missing.length > 0) {
+        const first = missing[0]!;
+        throw new VfsError(
+          "NOT_FOUND",
+          `Revision not found: entry ${first.entryId}@${first.version} (共 ${missing.length} 条缺失)`,
+          {
+            details: { missing },
+            expectedVersion: first.version,
+          },
+        );
+      }
+    }
+
+    // 按 500 分块发 UPDATE，复用 findExistingEntryVersionKeys 的 (entry_id, version) IN (...) 写法
+    const CHUNK_SIZE = 500;
+    const deltaLiteral = delta > 0 ? "+ 1" : "- 1";
+    for (let offset = 0; offset < pointers.length; offset += CHUNK_SIZE) {
+      const chunk = pointers.slice(offset, offset + CHUNK_SIZE);
+      const placeholders = chunk.map(() => `(?,?)`).join(`,`);
+      const params: unknown[] = [];
+      for (const pair of chunk) {
+        params.push(pair.entryId, pair.version);
+      }
+      await this.conn.execute(
+        `UPDATE vfs_revision SET ref_count = ref_count ${deltaLiteral} WHERE (entry_id, version) IN (${placeholders})`,
+        params,
+      );
+    }
+  }
+
   async repairRefCountFloor(
     entryId: number,
     version: number,
