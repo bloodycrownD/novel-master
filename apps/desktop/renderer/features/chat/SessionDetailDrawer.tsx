@@ -171,6 +171,23 @@ export function SessionDetailDrawer({
     return () => window.removeEventListener('messages-rollback', handler);
   }, [open, sessionId, reload]);
 
+  // 置位（set floor）/ 手动压缩（manual compaction）改变了上下文范围，
+  // ConversationPanel 在这两条路径成功后会 dispatch context-changed（按 sessionId 过滤）。
+  // 这里订阅一下，命中就 reload 抽屉里的 token 统计。回滚仍走 messages-rollback，事件分开以免语义混淆。
+  useEffect(() => {
+    if (!open || sessionId == null) {
+      return;
+    }
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ sessionId: string }>).detail;
+      if (detail?.sessionId === sessionId) {
+        void reload();
+      }
+    };
+    window.addEventListener('context-changed', handler);
+    return () => window.removeEventListener('context-changed', handler);
+  }, [open, sessionId, reload]);
+
   // 外部传入的 sessionName 变化时同步草稿（非编辑态下）
   useEffect(() => {
     if (!editingName) {

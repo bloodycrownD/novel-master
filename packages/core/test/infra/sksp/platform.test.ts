@@ -13,11 +13,8 @@ describe("SKSP platform 解析（A-20）", () => {
     assert.equal(resolveSkspNameFromPlatform("win32"), "windows");
   });
 
-  it("linux（暂无 driver）抛错", () => {
-    assert.throws(
-      () => resolveSkspNameFromPlatform("linux"),
-      /Unsupported SKSP platform: linux/,
-    );
+  it("linux → linux", () => {
+    assert.equal(resolveSkspNameFromPlatform("linux"), "linux");
   });
 
   it("未知 platform 字符串抛错", () => {

@@ -335,8 +335,8 @@ describe("assembleWorkplaceDisplay", () => {
       listSessionMessages: async () => [],
       sessionKkv: sk,
     };
-    await fsTool!.run({ command: "rm /del.md" }, toolCtx);
-    await fsTool!.run({ command: "mv /old.md /new.md" }, toolCtx);
+    await fsTool!.run({ action: "rm", path: "/del.md" }, toolCtx);
+    await fsTool!.run({ action: "mv", from: "/old.md", to: "/new.md" }, toolCtx);
 
     assert.equal(
       await sk.get(session.id, SESSION_KKV_DOMAIN_FILE_CACHE, delKey),

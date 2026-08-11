@@ -204,7 +204,7 @@ describe("Builtin file tools V2 (integration)", () => {
       entries: Array<{ path: string; kind: string }>;
       total: number;
       truncated: boolean;
-    }>("fs", { command: "ls /docs" }, baseCtx);
+    }>("fs", { action: "ls", path: "/docs" }, baseCtx);
     const paths = listed.entries.map((e) => e.path).sort();
     assert.deepEqual(paths, ["/docs/a.md", "/docs/b.txt"].sort());
 
@@ -235,10 +235,10 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { command: "mkdir /agent-dir" }, baseCtx);
+    await runner.call("fs", { action: "mkdir", path: "/agent-dir" }, baseCtx);
     const listed = await runner.call<{
       entries: Array<{ path: string; kind: string }>;
-    }>("fs", { command: "ls /" }, baseCtx);
+    }>("fs", { action: "ls", path: "/" }, baseCtx);
     assert.ok(
       listed.entries.some((e) => e.path === "/agent-dir" && e.kind === "directory"),
     );
@@ -257,7 +257,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { command: "rm /dir" }, baseCtx);
+    await runner.call("fs", { action: "rm", path: "/dir" }, baseCtx);
     await assert.rejects(
       () => vfs.read("/dir/a.txt"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
@@ -277,7 +277,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { command: "rm -r /dir" }, baseCtx);
+    await runner.call("fs", { action: "rm", path: "/dir", recursive: true }, baseCtx);
     await assert.rejects(
       () => vfs.read("/dir/a.txt"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
@@ -296,7 +296,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { command: "mv /old.md /new.md" }, baseCtx);
+    await runner.call("fs", { action: "mv", from: "/old.md", to: "/new.md" }, baseCtx);
     assert.equal((await vfs.read("/new.md")).content, "body");
     await assert.rejects(
       () => vfs.read("/old.md"),
@@ -316,7 +316,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { command: "cp /src/x.md /dst/x.md" }, baseCtx);
+    await runner.call("fs", { action: "cp", from: "/src/x.md", to: "/dst/x.md" }, baseCtx);
     assert.equal((await vfs.read("/src/x.md")).content, "x");
     assert.equal((await vfs.read("/dst/x.md")).content, "x");
   });
@@ -334,7 +334,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { command: "cp -r /src /dst" }, baseCtx);
+    await runner.call("fs", { action: "cp", from: "/src", to: "/dst", recursive: true }, baseCtx);
     assert.equal((await vfs.read("/src/x.md")).content, "x");
     assert.equal((await vfs.read("/dst/x.md")).content, "x");
   });
@@ -377,7 +377,7 @@ describe("Builtin file tools V2 (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("fs", { command: "rm /a.txt" }, baseCtx);
+    await runner.call("fs", { action: "rm", path: "/a.txt" }, baseCtx);
     await assert.rejects(
       () => runner.call("read", { path: "/a.txt" }, baseCtx),
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",

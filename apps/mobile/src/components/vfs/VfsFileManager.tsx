@@ -21,7 +21,9 @@ import {
   View,
 } from 'react-native';
 import { AppModal } from '../ui/AppModal';
+import Animated from 'react-native-reanimated';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useAndroidModalKeyboardAvoid } from '../../hooks/useAndroidModalKeyboardAvoid';
 import { useDismissOverlaysOnBlur } from '../../hooks/useDismissOverlaysOnBlur';
 import {
   type VfsListEntry,
@@ -161,6 +163,9 @@ export const VfsFileManager = forwardRef<
   const [exportingZip, setExportingZip] = useState(false);
   /** 批量移动：目标目录选择器是否打开 */
   const [movePickerOpen, setMovePickerOpen] = useState(false);
+  // 内联 prompt 是居中弹层（promptBackdrop justifyContent center），
+  // 上移键盘高度的一半就能露出输入框。
+  const promptAvoidStyle = useAndroidModalKeyboardAvoid(0.5);
 
   const vfsBatchExit = useCallback(() => {
     setVfsBatchActive(prev => (prev ? false : prev));
@@ -911,6 +916,56 @@ export const VfsFileManager = forwardRef<
     }
   };
 
+  // 内联 prompt 主体：iOS 走 KeyboardAvoidingView 包裹，Android 在 promptBox 上挂 translateY。
+  // promptBox 改用 Animated.View，Android 分支才挂 promptAvoidStyle（translateY）。
+  const promptBody = (
+    <View style={styles.promptBackdrop}>
+      <Animated.View
+        style={[
+          styles.promptBox,
+          { backgroundColor: tokens.surface },
+          Platform.OS === 'android' ? promptAvoidStyle : undefined,
+        ]}
+        onStartShouldSetResponder={() => true}>
+        <Text style={[styles.promptTitle, { color: tokens.text }]}>
+          {prompt?.title}
+        </Text>
+        <TextInput
+          testID="vfs-prompt-input"
+          style={[
+            styles.promptInput,
+            { borderColor: tokens.border, color: tokens.text },
+          ]}
+          placeholder={prompt?.placeholder}
+          placeholderTextColor={tokens.textSecondary}
+          value={promptValue}
+          onChangeText={setPromptValue}
+          autoFocus
+        />
+        <View style={styles.promptActions}>
+          <Pressable onPress={() => setPrompt(null)}>
+            <Text style={{ color: tokens.textSecondary }}>取消</Text>
+          </Pressable>
+          <Pressable
+            testID="vfs-prompt-submit"
+            onPress={() => {
+              const current = prompt;
+              if (!current) {
+                return;
+              }
+              setPrompt(null);
+              current
+                .onSubmit(promptValue)
+                .then(() => reloadVfsListOnly())
+                .catch(err => showToast(toastMessage('失败', err)));
+            }}>
+            <Text style={{ color: tokens.primary }}>确定</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
+    </View>
+  );
+
   return (
     <View style={[styles.root, { backgroundColor: tokens.background }]}>
       <View style={[styles.header, { borderBottomColor: tokens.border }]}>
@@ -1092,51 +1147,16 @@ export const VfsFileManager = forwardRef<
         animationType="fade"
         onRequestClose={() => setPrompt(null)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.promptAvoidingRoot}
-        >
-          <View style={styles.promptBackdrop}>
-            <View style={[styles.promptBox, { backgroundColor: tokens.surface }]}>
-              <Text style={[styles.promptTitle, { color: tokens.text }]}>
-                {prompt?.title}
-              </Text>
-              <TextInput
-                testID="vfs-prompt-input"
-                style={[
-                  styles.promptInput,
-                  { borderColor: tokens.border, color: tokens.text },
-                ]}
-                placeholder={prompt?.placeholder}
-                placeholderTextColor={tokens.textSecondary}
-                value={promptValue}
-                onChangeText={setPromptValue}
-                autoFocus
-              />
-              <View style={styles.promptActions}>
-                <Pressable onPress={() => setPrompt(null)}>
-                  <Text style={{ color: tokens.textSecondary }}>取消</Text>
-                </Pressable>
-                <Pressable
-                  testID="vfs-prompt-submit"
-                  onPress={() => {
-                    const current = prompt;
-                    if (!current) {
-                      return;
-                    }
-                    setPrompt(null);
-                    current
-                      .onSubmit(promptValue)
-                      .then(() => reloadVfsListOnly())
-                      .catch(err => showToast(toastMessage('失败', err)));
-                  }}
-                >
-                  <Text style={{ color: tokens.primary }}>确定</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
+        {Platform.OS === 'ios' ? (
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={styles.promptAvoidingRoot}
+          >
+            {promptBody}
+          </KeyboardAvoidingView>
+        ) : (
+          <View style={styles.promptAvoidingRoot}>{promptBody}</View>
+        )}
       </AppModal>
 
       <FileReferencePicker

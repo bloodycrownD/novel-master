@@ -11,6 +11,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {ChatMessage} from '@novel-master/core/chat';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 
 // ── ChatHistorySearchScreen 依赖 mock ──────────────────────────────────────
 const mockSearchMessages = jest.fn();
@@ -147,6 +148,7 @@ jest.mock('react-native', () => {
         props.children,
       ),
     StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
+    Platform: {OS: 'ios'},
     Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
       RnReact.createElement('Text', {testID}, children),
     View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
@@ -275,5 +277,61 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
     json = JSON.stringify(tree.toJSON());
     expect(json).toContain(longText);
     expect(json).toContain('收起');
+  });
+});
+
+// ── T-KB4 Android 键盘避让（范式 A：marginBottom 裁切窗口） ────────────────
+describe('T-KB4 ChatHistorySearchScreen Android 键盘避让', () => {
+  // 这个 describe 复用上面的 mock（react-native 被 mock，Platform 可直接改）。
+  const RN = require('react-native');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+    mockSearchMessages.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    RN.Platform.OS = 'ios';
+  });
+
+  it('Android 分支：用 marginBottom 裁切窗口，不走 KeyboardAvoidingView', async () => {
+    RN.Platform.OS = 'android';
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+      await new Promise(resolve => setImmediate(resolve));
+    });
+
+    // clipStyle 产出 {marginBottom: -0}（键盘收起时 height=0），找我 marginBottom 样式的节点。
+    const nodesWithMarginBottom = tree.root.findAll(node => {
+      const style = node.props?.style;
+      if (style == null) {
+        return false;
+      }
+      const styles = Array.isArray(style) ? style : [style];
+      return styles.some(
+        s =>
+          s != null &&
+          typeof s === 'object' &&
+          typeof (s as {marginBottom?: unknown}).marginBottom === 'number',
+      );
+    });
+    expect(nodesWithMarginBottom.length).toBeGreaterThanOrEqual(1);
+
+    // Android 分支不再走 KeyboardAvoidingView
+    const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
+    expect(kabvNodes.length).toBe(0);
+  });
+
+  it('iOS 分支：仍走 KeyboardAvoidingView（回归保护）', async () => {
+    RN.Platform.OS = 'ios';
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+      await new Promise(resolve => setImmediate(resolve));
+    });
+    const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
+    expect(kabvNodes.length).toBeGreaterThanOrEqual(1);
   });
 });

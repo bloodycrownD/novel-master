@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SESSION_FS_LABELS, USER_OPS_LABELS } from "@shared/logic/config-forms-shared";
 import {
   ipcAgentListPicker,
@@ -19,13 +19,14 @@ import {
   ipcRegexListPicker,
   ipcRegexSetCurrent,
 } from "@/ipc/client";
-import { Button } from "@/components/ui/Button";
+
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { PickerModal } from "@/components/ui/PickerModal";
+import { Switch } from "@/components/ui/Switch";
+
 import {
   SettingsField,
-  SettingsFormSection,
   SettingsPanel,
   SettingsRow,
   SettingsRows,
@@ -46,7 +47,8 @@ export function WorkspaceSettingsView() {
   const [userOpsLogEnabled, setUserOpsLogEnabled] = useState(true);
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
-  const [compactionVisibleFloor, setCompactionVisibleFloor] = useState("20");
+  // hideStartDepth 默认值 6，对齐 core 的 DEFAULT_HIDE_START_DEPTH
+  const [compactionHideStartDepth, setCompactionHideStartDepth] = useState("6");
   const [picker, setPicker] = useState<"model" | "agent" | "regex" | null>(null);
   const [modelRows, setModelRows] = useState<Array<{ id: string; label: string }>>([]);
   const [agentRows, setAgentRows] = useState<Array<{ id: string; label: string }>>([]);
@@ -119,10 +121,10 @@ export function WorkspaceSettingsView() {
           ? String(compactionRes.data.tokenRatio)
           : "",
       );
-      setCompactionVisibleFloor(
-        compactionRes.data.visibleFloor != null
-          ? String(compactionRes.data.visibleFloor)
-          : "",
+      setCompactionHideStartDepth(
+        compactionRes.data.hideStartDepth != null
+          ? String(compactionRes.data.hideStartDepth)
+          : "6",
       );
     }
   }, []);
@@ -154,25 +156,48 @@ export function WorkspaceSettingsView() {
     setPicker(kind);
   };
 
-  const saveCompaction = async (nextEnabled = compactionEnabled) => {
-    const res = await ipcCompactionConditionsSet({
-      conditions: {
-        schemaVersion: 3,
-        enabled: nextEnabled,
-        ...(compactionTokenRatio.trim()
-          ? { tokenRatio: Number(compactionTokenRatio) }
-          : {}),
-        ...(compactionVisibleFloor.trim()
-          ? { visibleFloor: Number(compactionVisibleFloor) }
-          : {}),
-      },
-    });
-    if (res.ok) {
-      toastSettingsSuccess("已保存");
-    } else {
-      toastSettingsError(res.error.message);
+  const saveCompaction = useCallback(
+    async (nextEnabled = compactionEnabled) => {
+      const res = await ipcCompactionConditionsSet({
+        conditions: {
+          schemaVersion: 4,
+          enabled: nextEnabled,
+          ...(compactionTokenRatio.trim()
+            ? { tokenRatio: Number(compactionTokenRatio) }
+            : {}),
+          ...(compactionHideStartDepth.trim()
+            ? { hideStartDepth: Number(compactionHideStartDepth) }
+            : {}),
+        },
+      });
+      if (res.ok) {
+        toastSettingsSuccess("已保存");
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    },
+    [compactionEnabled, compactionTokenRatio, compactionHideStartDepth],
+  );
+
+  // 防抖保存：hideStartDepth / tokenRatio 改动后 600ms 自动保存
+  const compactionSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleCompactionSave = useCallback(() => {
+    if (compactionSaveTimer.current != null) {
+      clearTimeout(compactionSaveTimer.current);
     }
-  };
+    compactionSaveTimer.current = setTimeout(() => {
+      void saveCompaction();
+    }, 600);
+  }, [saveCompaction]);
+
+  // 组件卸载时清掉定时器，避免泄漏
+  useEffect(() => {
+    return () => {
+      if (compactionSaveTimer.current != null) {
+        clearTimeout(compactionSaveTimer.current);
+      }
+    };
+  }, []);
 
   return (
     <SettingsPanel>
@@ -199,7 +224,10 @@ export function WorkspaceSettingsView() {
         </SettingsRows>
       </SettingsSection>
 
-      <SettingsSection title="聊天偏好" desc="影响消息展示与 LLM 请求行为。">
+      <SettingsSection
+        title="聊天偏好"
+        desc="影响消息展示与 LLM 请求行为。达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。"
+      >
         <SettingsRows>
           <SettingsSwitchRow
             label="流式输出"
@@ -225,11 +253,6 @@ export function WorkspaceSettingsView() {
               await ipcPreferencesSetSessionFsVersionCheck(next);
             }}
           />
-          <p className="settings-hint settings-hint--switch">
-            {sessionFsVersionCheck
-              ? SESSION_FS_LABELS.enabledHint
-              : SESSION_FS_LABELS.disabledHint}
-          </p>
           <SettingsSwitchRow
             label={USER_OPS_LABELS.title}
             checked={userOpsLogEnabled}
@@ -238,56 +261,46 @@ export function WorkspaceSettingsView() {
               await ipcPreferencesSetUserOpsLogEnabled(next);
             }}
           />
-          <p className="settings-hint settings-hint--switch">
-            {userOpsLogEnabled
-              ? USER_OPS_LABELS.enabledHint
-              : USER_OPS_LABELS.disabledHint}
-          </p>
         </SettingsRows>
-      </SettingsSection>
 
-      <SettingsFormSection
-        title="压缩条件"
-        desc="达到阈值时触发会话压缩。"
-      >
-        <SettingsSwitchRow
-          label="启用自动压缩"
-          checked={compactionEnabled}
-          onChange={(next) => {
-            setCompactionEnabled(next);
-            if (!next) {
-              void saveCompaction(false);
-            }
-          }}
-        />
-        {compactionEnabled ? (
-          <div className="settings-field-grid settings-field-grid--with-action">
-            <SettingsField label="Token 比例">
+        <div className="compaction-card">
+          <SettingsField label="隐藏起始深度" row>
+            <input
+              type="number"
+              min="0"
+              value={compactionHideStartDepth}
+              onChange={(e) => {
+                setCompactionHideStartDepth(e.target.value);
+                scheduleCompactionSave();
+              }}
+            />
+          </SettingsField>
+          <SettingsField label="启用自动压缩" row>
+            <Switch
+              checked={compactionEnabled}
+              onChange={(next) => {
+                setCompactionEnabled(next);
+                void saveCompaction(next);
+              }}
+            />
+          </SettingsField>
+          {compactionEnabled ? (
+            <SettingsField label="Token 比例" row>
               <input
                 type="number"
                 step="0.01"
                 min="0.01"
                 max="1"
                 value={compactionTokenRatio}
-                onChange={(e) => setCompactionTokenRatio(e.target.value)}
+                onChange={(e) => {
+                  setCompactionTokenRatio(e.target.value);
+                  scheduleCompactionSave();
+                }}
               />
             </SettingsField>
-            <SettingsField label="可见条数阈值">
-              <input
-                type="number"
-                min="0"
-                value={compactionVisibleFloor}
-                onChange={(e) => setCompactionVisibleFloor(e.target.value)}
-              />
-            </SettingsField>
-            <div className="settings-field-grid__action">
-              <Button variant="primary" onClick={() => void saveCompaction()}>
-                保存
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </SettingsFormSection>
+          ) : null}
+        </div>
+      </SettingsSection>
 
       <PickerModal
         open={picker === "model"}

@@ -16,6 +16,7 @@
   "createAgentAbortRegistry",
   "createAgentRegistryService",
   "createAgentRunner",
+  "createAgentStreamRegistry",
   "promptsDocumentSchema",
   "resolveAgentForProject",
   "resolveAgentToolRegistry",

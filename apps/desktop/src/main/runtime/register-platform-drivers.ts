@@ -4,6 +4,7 @@
  */
 import { registerSkspMacDriver } from "@novel-master/sksp-mac";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
+import { registerSkspLinuxDriver } from "@novel-master/sksp-linux";
 import {
   resolveSkspNameFromPlatform,
   type PlatformSkspName,
@@ -26,6 +27,8 @@ export function registerPlatformSkspDriver(): PlatformSkspName {
   const name = getPlatformSkspName();
   if (name === "macos") {
     registerSkspMacDriver();
+  } else if (name === "linux") {
+    registerSkspLinuxDriver();
   } else {
     registerSkspWindowsDriver();
   }

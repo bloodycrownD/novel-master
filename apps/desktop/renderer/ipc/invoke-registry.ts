@@ -18,7 +18,6 @@ import {
   type BootstrapStatusResponse,
   type ChatMessageDto,
   type CompactionManualRequest,
-  type EventsGetConfigResponse,
   type IpcResult,
   type MessageAttachmentDto,
   type MessagesAppendRequest,
@@ -528,17 +527,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.REGEX_SET_CURRENT,
     ),
-    ipcEventsGetConfig: noArg<IpcResult<EventsGetConfigResponse>>(
-      invoke,
-      IPC_CHANNELS.EVENTS_GET_CONFIG,
-    ),
-    ipcEventsSetConfig: withReq<{ config: unknown }, unknown>(
-      invoke,
-      IPC_CHANNELS.EVENTS_SET_CONFIG,
-    ),
-    ipcEventsClearConfig: noArg(invoke, IPC_CHANNELS.EVENTS_CLEAR_CONFIG),
-    ipcEventsExportYaml: noArg(invoke, IPC_CHANNELS.EVENTS_EXPORT_YAML),
-    ipcEventsImportYaml: noArg(invoke, IPC_CHANNELS.EVENTS_IMPORT_YAML),
     ipcCompactionConditionsGet: noArg(
       invoke,
       IPC_CHANNELS.COMPACTION_CONDITIONS_GET,

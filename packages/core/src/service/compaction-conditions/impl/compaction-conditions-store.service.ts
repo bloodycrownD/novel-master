@@ -5,8 +5,13 @@
  */
 
 import { decode } from "@/infra/serialization/decode.js";
-import { compactionConditionsSchema } from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
-import type { CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
+import {
+  compactionConditionsSchema,
+} from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
+import {
+  DEFAULT_HIDE_START_DEPTH,
+  type CompactionConditions,
+} from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
 import {
   compactionConditionsInvalidSchema,
@@ -26,7 +31,15 @@ function isV2Document(raw: unknown): raw is Record<string, unknown> {
   return doc.schemaVersion === 2 || doc.tokenThreshold != null;
 }
 
-function migrateV2ToV3(raw: Record<string, unknown>): CompactionConditions {
+function isV3Document(raw: unknown): raw is Record<string, unknown> {
+  if (raw == null || typeof raw !== "object") {
+    return false;
+  }
+  const doc = raw as Record<string, unknown>;
+  return doc.schemaVersion === 3;
+}
+
+function migrateV2ToV3(raw: Record<string, unknown>): Record<string, unknown> {
   const visibleFloor =
     typeof raw.visibleFloor === "number"
       ? raw.visibleFloor
@@ -39,6 +52,29 @@ function migrateV2ToV3(raw: Record<string, unknown>): CompactionConditions {
     tokenRatio:
       typeof raw.tokenRatio === "number" ? raw.tokenRatio : 0.8,
     ...(visibleFloor != null ? { visibleFloor } : {}),
+  };
+}
+
+/**
+ * v3 → v4 迁移：补 `hideStartDepth` 默认值（与历史事件配置默认值一致）。
+ *
+ * 返回的是「待 decode 的 v4 wire 原型」，字段约束交给 {@link compactionConditionsSchema} 兜底。
+ */
+function migrateV3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
+  const visibleFloor =
+    typeof raw.visibleFloor === "number"
+      ? raw.visibleFloor
+      : typeof raw["visible-floor"] === "number"
+        ? (raw["visible-floor"] as number)
+        : undefined;
+  const tokenRatio =
+    typeof raw.tokenRatio === "number" ? raw.tokenRatio : undefined;
+  return {
+    schemaVersion: 4,
+    enabled: Boolean(raw.enabled),
+    ...(tokenRatio != null ? { tokenRatio } : {}),
+    ...(visibleFloor != null ? { visibleFloor } : {}),
+    hideStartDepth: DEFAULT_HIDE_START_DEPTH,
   };
 }
 
@@ -91,7 +127,19 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
       );
     }
     if (isV2Document(parsed)) {
-      const migrated = migrateV2ToV3(parsed);
+      // v2 → v3 → v4 两步迁移：先升到 v3 形态，再补 hideStartDepth 升 v4。
+      const v4 = migrateV3ToV4(migrateV2ToV3(parsed));
+      let validatedFromV2: CompactionConditions;
+      try {
+        validatedFromV2 = decode(v4, compactionConditionsSchema);
+      } catch (error) {
+        rethrowDecodeError(error);
+      }
+      await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(validatedFromV2));
+      return validatedFromV2;
+    }
+    if (isV3Document(parsed)) {
+      const migrated = migrateV3ToV4(parsed);
       let validated: CompactionConditions;
       try {
         validated = decode(migrated, compactionConditionsSchema);

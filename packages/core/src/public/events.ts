@@ -9,8 +9,6 @@ export {
   EVENT_AGENT_STREAM_TOOL_USE,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
-  EVENT_SESSION_MESSAGE_RECEIVED,
-  EVENT_SESSION_COMPACTION_REQUESTED,
 } from "../domain/events/model/event-types.js";
 export type {
   NovelMasterEventType,
@@ -23,26 +21,4 @@ export type {
   AgentStepCommittedPayload,
   AgentStepCommittedPhase,
   SubagentChildSessionCreatedPayload,
-  SessionCompactionRequestedPayload,
-  CompactionTriggerKind,
 } from "../domain/events/model/event-types.js";
-export type {
-  EventsConfig,
-  EventAction,
-  EventActionNode,
-  EventActionType,
-  HideMessageActionParams,
-  RunAgentActionParams,
-} from "../domain/events-config/model/events-config.js";
-export { eventsConfigSchema } from "../domain/events-config/model/events-config.schema.js";
-export { DEFAULT_EVENTS_CONFIG } from "../domain/events-config/logic/default-events.js";
-export type { EventsConfigStore } from "../service/events-config/events-config-store.port.js";
-export { createEventsConfigStore } from "../service/events-config/create-events-config-store.js";
-export type { EventOrchestrator, EventEmitContext } from "../service/events/event-orchestrator.port.js";
-export {
-  createEventOrchestrator,
-  createRunAgentHandlerDeps,
-  detachEventOrchestratorFromBus,
-} from "../service/events/create-event-orchestrator.js";
-export type { EventRunResult, EventActionFailure } from "../service/events/event-run-result.js";
-export { EventsError } from "../errors/events-errors.js";

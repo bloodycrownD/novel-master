@@ -5,7 +5,7 @@
  *  1. 新建库 bootstrap 后由 DDL 直接建列；
  *  2. 老库（已升版到 v3，缺 parent_session_id）bootstrap 后由 ALIGN 补列。
  *
- * 另外验证 SCHEMA_BOOT_VERSION 已升到 4，以及复合索引 idx_chat_session_parent 存在。
+ * 另外验证 SCHEMA_BOOT_VERSION 已升到当前版本，以及复合索引 idx_chat_session_parent 存在。
  *
  * @module test/bootstrap/subagent-schema.test
  */
@@ -16,6 +16,7 @@ import {
   bootstrapNovelMaster,
   NOVEL_MASTER_SCHEMA_STATEMENTS,
   open,
+  SCHEMA_BOOT_VERSION,
   type TdbcConnection,
 } from "@novel-master/core";
 import {
@@ -104,20 +105,20 @@ describe("agent-subagent M1 schema（T-S1）", () => {
         false,
       );
 
-      // 触发升级：bootstrap 检测到 user_version=3 < SCHEMA_BOOT_VERSION=4，跑 ALIGN。
+      // 触发升级：bootstrap 检测到 user_version=3 < SCHEMA_BOOT_VERSION，跑 ALIGN。
       await bootstrapNovelMaster(conn);
 
       const columns = await tableColumnNames(conn, "chat_session");
       assert.ok(
         columns.has("parent_session_id"),
-        "v3→v4 升级后应通过 ALIGN 补上 parent_session_id",
+        "老库升级后应通过 ALIGN 补上 parent_session_id",
       );
 
-      // user_version 应已升到 4（快路径再次 bootstrap 不应报错也不重建）。
+      // user_version 应已升到当前 SCHEMA_BOOT_VERSION（快路径再次 bootstrap 不应报错也不重建）。
       const versionRows = await conn.query<{ user_version: number }>(
         "PRAGMA user_version",
       );
-      assert.equal(versionRows[0]!.user_version, 4);
+      assert.equal(versionRows[0]!.user_version, SCHEMA_BOOT_VERSION);
 
       // 索引也应该存在（DDL 在升级路径里会跑 CREATE IF NOT EXISTS）。
       const indexes = await indexNames(conn, "chat_session");

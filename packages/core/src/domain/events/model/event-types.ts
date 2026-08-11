@@ -18,9 +18,6 @@ export const EVENT_AGENT_STEP_COMMITTED = "agent.step.committed" as const;
 /** 子 agent 会话创建：task 工具执行中即可点击进入子会话浏览。 */
 export const EVENT_SUBAGENT_CHILD_SESSION_CREATED =
   "subagent.child-session.created" as const;
-export const EVENT_SESSION_MESSAGE_RECEIVED = "session.message.received" as const;
-export const EVENT_SESSION_COMPACTION_REQUESTED =
-  "session.compaction.requested" as const;
 
 export type NovelMasterEventType =
   | typeof EVENT_AGENT_RUN_STARTED
@@ -30,9 +27,7 @@ export type NovelMasterEventType =
   | typeof EVENT_AGENT_STREAM_THINKING_DELTA
   | typeof EVENT_AGENT_STREAM_TOOL_USE
   | typeof EVENT_AGENT_STEP_COMMITTED
-  | typeof EVENT_SUBAGENT_CHILD_SESSION_CREATED
-  | typeof EVENT_SESSION_MESSAGE_RECEIVED
-  | typeof EVENT_SESSION_COMPACTION_REQUESTED;
+  | typeof EVENT_SUBAGENT_CHILD_SESSION_CREATED;
 
 export interface AgentRunStartedPayload {
   readonly sessionId: string;
@@ -95,19 +90,6 @@ export interface SubagentChildSessionCreatedPayload {
   readonly title: string;
 }
 
-export interface SessionMessageReceivedPayload {
-  readonly sessionId: string;
-  readonly projectId: string;
-}
-
-export type CompactionTriggerKind = "condition" | "manual";
-
-export interface SessionCompactionRequestedPayload {
-  readonly sessionId: string;
-  readonly projectId: string;
-  readonly trigger: CompactionTriggerKind;
-}
-
 export type NovelMasterEventPayload =
   | AgentRunStartedPayload
   | AgentRunFinishedPayload
@@ -116,6 +98,4 @@ export type NovelMasterEventPayload =
   | AgentStreamThinkingDeltaPayload
   | AgentStreamToolUsePayload
   | AgentStepCommittedPayload
-  | SubagentChildSessionCreatedPayload
-  | SessionMessageReceivedPayload
-  | SessionCompactionRequestedPayload;
+  | SubagentChildSessionCreatedPayload;

@@ -1,8 +1,12 @@
 /**
- * Manual compaction IPC — emits session.compaction.requested via event orchestrator.
- * 成功后的 session kkv 清空由 Core EventOrchestrator.emit 统一处理。
+ * 手动压缩 IPC —— 直调 runCompaction（hide-message + kkv 清理 + token cache 失效）。
+ *
+ * 成功后触发 composer status 刷新（置位/压缩同口径：project∪annotate）。
  */
-import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core/events";
+import {
+  runCompaction,
+  type RunCompactionDeps,
+} from "@novel-master/core/compaction";
 import type {
   CompactionManualRequest,
   IpcResult,
@@ -16,14 +20,18 @@ export async function handleCompactionManual(
 ): Promise<IpcResult<{ ok: boolean }>> {
   try {
     const rt = await getDesktopRuntime();
-    const result = await rt.eventOrchestrator.emit(
-      EVENT_SESSION_COMPACTION_REQUESTED,
-      {
-        sessionId: req.sessionId,
-        projectId: req.projectId,
-        trigger: "manual",
-      },
-    );
+    const deps: RunCompactionDeps = {
+      sessionKkv: rt.sessionKkv,
+      messages: rt.messages,
+      messageTranscriptEffects: rt.messageTranscriptEffects,
+    };
+    const hideStartDepth =
+      await rt.compactionConditionEvaluator.getHideStartDepth();
+    const result = await runCompaction(deps, {
+      sessionId: req.sessionId,
+      projectId: req.projectId,
+      hideStartDepth,
+    });
     if (result.ok) {
       // 置位/压缩：project∪annotate；禁止终态强制 []
       await notifyComposerStatusAfterFloorOrCompaction(rt, req.sessionId);

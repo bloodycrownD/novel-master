@@ -17,14 +17,7 @@ import {
   type CompactionConditionEvaluator,
   type CompactionConditionsStore,
 } from "@novel-master/core/compaction";
-import {
-  createEventOrchestrator,
-  createRunAgentHandlerDeps,
-  createEventsConfigStore,
-  SimpleEventBus,
-  type EventOrchestrator,
-  type EventsConfigStore,
-} from "@novel-master/core/events";
+import { SimpleEventBus } from "@novel-master/core/events";
 import {
   createMessageService,
   createMessageTranscriptEffectsService,
@@ -77,6 +70,7 @@ import {
 } from "@novel-master/core/sksp";
 import { registerSkspMacDriver } from "@novel-master/sksp-mac";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
+import { registerSkspLinuxDriver } from "@novel-master/sksp-linux";
 import { createAgentMockModelRequests } from "./agent/mock-llm.js";
 import { installE2eLlmFetchCapture } from "./test/e2e-llm-fetch.js";
 import { CliScopeResolver } from "./config/resolve-scope.js";
@@ -89,9 +83,8 @@ const DEFAULT_DB = "./.novel-master/novel.db";
  *
  * 之所以显式走 `resolveSkspNameFromPlatform`，而不是直接写死 `"windows"`，
  * 是因为之前 macOS/Linux 上跑 CLI 时会静默落到 windows driver，行为不对。
- * 现在改成：darwin→macos、win32→windows，其它平台（比如 Linux）
- * `resolveSkspNameFromPlatform` 会直接抛错——这样无 driver 的平台会
- * 在启动早期就明确报错，而不是悄悄用错驱动。
+ * 现在改成：darwin→macos、win32→windows、linux→linux，其它平台抛错——
+ * 这样无 driver 的平台会在启动早期就明确报错，而不是悄悄用错驱动。
  */
 export function registerPlatformSkspDriver(
   platform: string = process.platform,
@@ -99,6 +92,8 @@ export function registerPlatformSkspDriver(
   const name = resolveSkspNameFromPlatform(platform);
   if (name === "macos") {
     registerSkspMacDriver();
+  } else if (name === "linux") {
+    registerSkspLinuxDriver();
   } else {
     registerSkspWindowsDriver();
   }
@@ -133,10 +128,8 @@ export interface NovelMasterRuntime {
   readonly messageCheckpoint: MessageCheckpointService;
   readonly scope: CliScopeResolver;
   readonly eventBus: SimpleEventBus;
-  readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
@@ -206,7 +199,6 @@ export async function createNovelMasterRuntime(
   const tokenCounters = createDefaultTokenCounterRegistry({});
 
   const eventBus = new SimpleEventBus();
-  const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -222,38 +214,14 @@ export async function createNovelMasterRuntime(
   const agentRegistry = createAgentRegistryService(conn, state);
   const streamRegistry = createAgentStreamRegistry();
 
-  const eventOrchestrator = createEventOrchestrator({
-    eventsConfig,
-    eventBus,
-    messages,
-    messageTranscriptEffects,
-    sessionKkv,
-    runAgent: createRunAgentHandlerDeps({
-      messages,
-      agentRegistry,
-      modelRequests,
-      savedModels: providerBundle.savedModelRepo,
-      workplace: (s) => createWorkplaceService(conn, s),
-      sessionVfs: (projectId, sessionId) =>
-        createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
-      messageCheckpoint: createMessageCheckpointService(conn),
-      sessionKkv,
-      eventBus,
-      state,
-      regexConfig,
-    }),
-  });
-
   return {
     conn,
     state,
     preferences,
     dbPath,
     eventBus,
-    eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    eventOrchestrator,
     agentRegistry,
     streamRegistry,
     tokenCounters,

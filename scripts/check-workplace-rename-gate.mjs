@@ -46,6 +46,7 @@ const TEXT_EXT = new Set([
 /** worktree_dir_rule / worktree_file_rule 允许出现的相对路径（posix）。 */
 const WORKTREE_LEGACY_TABLE_ALLOW = [
   "packages/core/src/bootstrap/schema-migrations/rename-worktree-tables-to-workplace-v1.ts",
+  "packages/core/src/bootstrap/novel-master-bootstrap.ts",
   "packages/core/test/bootstrap/helpers/legacy-db-fixtures.ts",
   "packages/core/test/bootstrap/schema-migrations.test.ts",
 ];

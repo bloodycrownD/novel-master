@@ -8,10 +8,6 @@ import { describe, it, mock } from "node:test";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
-import {
-  isSchemaMigrationApplied,
-  VFS_REVISION_REF_COUNT_V1_ID,
-} from "@/bootstrap/schema-migrations/index.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
@@ -352,57 +348,6 @@ describe("rollback ref_count + deferred blob gc", () => {
       0,
     );
     assert.equal(await revisions.findByEntryAndVersion(eid, version), null);
-  });
-
-  it("T-RB-SESSION-DEL-MIG: migration 未完成时 deleteSessionFsData 走 reachable_set fallback", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    const entries = new SqliteVfsEntryRepository(ctx.conn);
-    const revisions = new SqliteVfsRevisionRepository(ctx.conn);
-    const scope = {
-      kind: "session" as const,
-      projectId: project.id,
-      sessionId: session.id,
-    };
-    const sk = scopeKey(scope);
-
-    const assistant = await ctx.messages.append(session.id, "assistant", {
-      blocks: [{ type: "text", text: "w" }],
-    });
-    await svfs.write("/mig-fallback.md", "keep", { versionCheck: false });
-    const version = (await svfs.read("/mig-fallback.md")).version;
-    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
-
-    const entry = await entries.findByPath(sk, "/mig-fallback.md");
-    assert.ok(entry != null);
-    const eid = entry.entryId;
-
-    const exceptReachableSpy = mock.method(
-      SqliteVfsRevisionRepository.prototype,
-      "deleteExceptReachable",
-    );
-
-    await ctx.conn.execute(`DELETE FROM schema_migrations WHERE id = ?`, [
-      VFS_REVISION_REF_COUNT_V1_ID,
-    ]);
-    assert.equal(
-      await isSchemaMigrationApplied(ctx.conn, VFS_REVISION_REF_COUNT_V1_ID),
-      false,
-    );
-
-    try {
-      await deleteSessionFsData(ctx.conn, session.id, project.id);
-    } finally {
-      exceptReachableSpy.mock.restore();
-    }
-
-    assert.equal(exceptReachableSpy.mock.callCount(), 1);
-    assert.ok(
-      await revisions.findByEntryAndVersion(eid, version),
-      "reachable_set fallback 须保留仍被 live head 引用的 revision",
-    );
   });
 
   it("T-RB-GC-DEFER: sweep 后 runDeferredBlobGc 删除 orphan blob", async () => {

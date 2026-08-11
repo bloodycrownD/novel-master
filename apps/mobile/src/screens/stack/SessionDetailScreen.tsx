@@ -26,9 +26,11 @@ import {
 } from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
+import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {EVENT_SESSION_COMPACTION_REQUESTED} from '@novel-master/core/events';
+import {runCompaction} from '@novel-master/core/compaction';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -145,21 +147,25 @@ export function SessionDetailScreen() {
       showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
       return;
     }
-    Alert.alert('压缩上下文', '将按照事件配置压缩上下文。是否继续？', [
+    Alert.alert('压缩上下文', '将压缩上下文。是否继续？', [
       {text: '取消', style: 'cancel'},
       {
         text: '压缩',
         onPress: () => {
           void (async () => {
             try {
-              const result = await runtime.eventOrchestrator.emit(
-                EVENT_SESSION_COMPACTION_REQUESTED,
-                {sessionId, projectId, trigger: 'manual'},
+              const hideStartDepth =
+                await runtime.compactionConditionEvaluator.getHideStartDepth();
+              const result = await runCompaction(
+                {
+                  sessionKkv: runtime.sessionKkv,
+                  messages: runtime.messages,
+                  messageTranscriptEffects: runtime.messageTranscriptEffects,
+                },
+                {sessionId, projectId, hideStartDepth},
               );
               if (!result.ok) {
-                showToast(
-                  toastMessage('压缩部分失败', result.failures[0]?.error),
-                );
+                showToast(toastMessage('压缩失败'));
               } else {
                 await refreshComposerStatusAfterFloorOrCompaction(runtime, {
                   projectId,
@@ -178,6 +184,14 @@ export function SessionDetailScreen() {
       },
     ]);
   }, [runtime, sessionId, projectId, showToast, load]);
+
+  // Android 裁切窗口：与 ScreenFormLayout 同款——用 marginBottom 收缩键盘高度，
+  // 内容区跟铉缩到键盘以上。不能只 translateY：ScrollView 高度不变的话顶部会被裁掉。
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  const clipStyle = useAnimatedStyle(() => {
+    const kb = -keyboardHeightSV.value;
+    return {marginBottom: kb};
+  }, [keyboardHeightSV]);
 
   if (loading || meta == null) {
     return (
@@ -198,233 +212,241 @@ export function SessionDetailScreen() {
     elevation: 2,
   };
 
+  // 聊天名 inline 编辑时软键盘弹起要抬升内容，TextInput 不被键盘盖住。
+  // iOS 走 KeyboardAvoidingView 的 padding；Android 上 react-native-keyboard-controller
+  // 的 KeyboardAvoidingView behavior={undefined} 等于啥也不干，改用 Animated.View 的
+  // marginBottom 收缩裁切窗口（与 ScreenFormLayout 同款范式 A）。
+  const scrollBody = (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled">
+      {/* 聊天名：大字标题 + 弱化铅笔暗示可编辑，点击切到 TextInput inline 编辑。 */}
+      <View style={styles.titleBlock}>
+        {editingTitle ? (
+          <TextInput
+            testID="session-title-input"
+            style={[
+              styles.titleInput,
+              {color: tokens.text, borderColor: tokens.border},
+            ]}
+            value={titleDraft}
+            autoFocus
+            onChangeText={setTitleDraft}
+            onSubmitEditing={() => commitTitle(titleDraft)}
+            onEndEditing={() => commitTitle(titleDraft)}
+            placeholder="输入会话名称"
+            placeholderTextColor={tokens.textTertiary}
+            accessibilityLabel="会话名称输入框"
+          />
+        ) : (
+          <Pressable
+            testID="session-title"
+            onPress={startEditTitle}
+            accessibilityLabel="编辑会话名称"
+            style={styles.titleRow}>
+            <Text
+              style={[styles.titleValue, {color: tokens.text}]}
+              numberOfLines={2}>
+              {sessionTitle || '（未命名）'}
+            </Text>
+            <Text style={[styles.titleEditGlyph, {color: tokens.textTertiary}]}>
+              ✎
+            </Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* 当前智能体：点击直接弹 AgentPickerModal，locked 时仅提示。 */}
+      <Pressable
+        testID="agent-row"
+        onPress={openAgentPicker}
+        accessibilityLabel="切换智能体"
+        style={[
+          styles.card,
+          cardShadow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+            opacity: agentLocked ? 0.6 : 1,
+          },
+        ]}>
+        <View
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
+          <Text style={styles.iconGlyph}>🤖</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+            当前智能体
+          </Text>
+          <Text
+            style={[styles.cardValue, {color: tokens.text}]}
+            numberOfLines={1}>
+            {meta.agentName}
+          </Text>
+          {agentLocked ? (
+            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
+              {AGENT_LOCK_TOAST}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+          {agentLocked ? '🔒' : '›'}
+        </Text>
+      </Pressable>
+
+      {/* 当前大模型：点击直接弹 ModelPickerModal，locked 时仅提示。 */}
+      <Pressable
+        testID="model-row"
+        onPress={openModelPicker}
+        accessibilityLabel="切换大模型"
+        style={[
+          styles.card,
+          cardShadow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+            opacity: modelLocked ? 0.6 : 1,
+          },
+        ]}>
+        <View
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
+          <Text style={styles.iconGlyph}>⚡</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+            当前大模型
+          </Text>
+          <Text
+            style={[styles.cardValue, {color: tokens.text}]}
+            numberOfLines={1}>
+            {meta.modelLabel}
+          </Text>
+          {modelLocked ? (
+            <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
+              {MODEL_LOCK_TOAST}
+            </Text>
+          ) : null}
+        </View>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+          {modelLocked ? '🔒' : '›'}
+        </Text>
+      </Pressable>
+
+      {/* 聊天记录查询：跳转到 ChatHistorySearch 页面，参数与 SessionDetail 一致。 */}
+      <Pressable
+        testID="chat-history-row"
+        onPress={() =>
+          navigation.navigate('ChatHistorySearch', {projectId, sessionId})
+        }
+        accessibilityLabel="聊天记录查询"
+        style={[
+          styles.card,
+          cardShadow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+          },
+        ]}>
+        <View
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
+          <Text style={styles.iconGlyph}>🔍</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+            聊天记录
+          </Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>
+            查询历史消息
+          </Text>
+        </View>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+      </Pressable>
+
+      {/* 查看提示词：跳转到 RealPromptScreen，预览当前会话实际发送的提示词。 */}
+      <Pressable
+        testID="real-prompt-row"
+        onPress={() => navigation.navigate('RealPrompt')}
+        accessibilityLabel="查看提示词"
+        style={[
+          styles.card,
+          cardShadow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+          },
+        ]}>
+        <View
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
+          <Text style={styles.iconGlyph}>📄</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+            查看提示词
+          </Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>
+            预览提示词
+          </Text>
+        </View>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+      </Pressable>
+
+      {/* 压缩上下文：发 SESSION_COMPACTION_REQUESTED 事件，与聊天页抽屉入口一致。 */}
+      <Pressable
+        testID="compact-row"
+        onPress={handleCompact}
+        accessibilityLabel="压缩上下文"
+        style={[
+          styles.card,
+          cardShadow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+          },
+        ]}>
+        <View
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
+          <Text style={styles.iconGlyph}>🗜️</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+            压缩上下文
+          </Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>
+            减少上下文占用
+          </Text>
+        </View>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+      </Pressable>
+    </ScrollView>
+  );
+
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {/* 用 KeyboardAvoidingView 包裹 ScrollView，让聊天名 inline 编辑时
-          软键盘弹起能抬升内容，TextInput 不被键盘盖住。 */}
-      {/* behavior 仅 iOS 用 padding：Android 上 KeyboardAvoidingView 的 padding 反而
-          会把内容顶过头（Android 窗口默认会 resize），所以 Android 传 undefined 让它不介入。 */}
-      <KeyboardAvoidingView
-        style={styles.scroll}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled">
-        {/* 聊天名：大字标题 + 弱化铅笔暗示可编辑，点击切到 TextInput inline 编辑。 */}
-        <View style={styles.titleBlock}>
-          {editingTitle ? (
-            <TextInput
-              testID="session-title-input"
-              style={[
-                styles.titleInput,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
-              value={titleDraft}
-              autoFocus
-              onChangeText={setTitleDraft}
-              onSubmitEditing={() => commitTitle(titleDraft)}
-              onEndEditing={() => commitTitle(titleDraft)}
-              placeholder="输入会话名称"
-              placeholderTextColor={tokens.textTertiary}
-              accessibilityLabel="会话名称输入框"
-            />
-          ) : (
-            <Pressable
-              testID="session-title"
-              onPress={startEditTitle}
-              accessibilityLabel="编辑会话名称"
-              style={styles.titleRow}>
-              <Text
-                style={[styles.titleValue, {color: tokens.text}]}
-                numberOfLines={2}>
-                {sessionTitle || '（未命名）'}
-              </Text>
-              <Text style={[styles.titleEditGlyph, {color: tokens.textTertiary}]}>
-                ✎
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* 当前智能体：点击直接弹 AgentPickerModal，locked 时仅提示。 */}
-        <Pressable
-          testID="agent-row"
-          onPress={openAgentPicker}
-          accessibilityLabel="切换智能体"
-          style={[
-            styles.card,
-            cardShadow,
-            {
-              backgroundColor: tokens.surface,
-              borderColor: tokens.borderLight,
-              opacity: agentLocked ? 0.6 : 1,
-            },
-          ]}>
-          <View
-            style={[
-              styles.iconBox,
-              {backgroundColor: tokens.primary + '1A'},
-            ]}>
-            <Text style={styles.iconGlyph}>🤖</Text>
-          </View>
-          <View style={styles.cardBody}>
-            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-              当前智能体
-            </Text>
-            <Text
-              style={[styles.cardValue, {color: tokens.text}]}
-              numberOfLines={1}>
-              {meta.agentName}
-            </Text>
-            {agentLocked ? (
-              <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-                {AGENT_LOCK_TOAST}
-              </Text>
-            ) : null}
-          </View>
-          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-            {agentLocked ? '🔒' : '›'}
-          </Text>
-        </Pressable>
-
-        {/* 当前大模型：点击直接弹 ModelPickerModal，locked 时仅提示。 */}
-        <Pressable
-          testID="model-row"
-          onPress={openModelPicker}
-          accessibilityLabel="切换大模型"
-          style={[
-            styles.card,
-            cardShadow,
-            {
-              backgroundColor: tokens.surface,
-              borderColor: tokens.borderLight,
-              opacity: modelLocked ? 0.6 : 1,
-            },
-          ]}>
-          <View
-            style={[
-              styles.iconBox,
-              {backgroundColor: tokens.primary + '1A'},
-            ]}>
-            <Text style={styles.iconGlyph}>⚡</Text>
-          </View>
-          <View style={styles.cardBody}>
-            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-              当前大模型
-            </Text>
-            <Text
-              style={[styles.cardValue, {color: tokens.text}]}
-              numberOfLines={1}>
-              {meta.modelLabel}
-            </Text>
-            {modelLocked ? (
-              <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-                {MODEL_LOCK_TOAST}
-              </Text>
-            ) : null}
-          </View>
-          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-            {modelLocked ? '🔒' : '›'}
-          </Text>
-        </Pressable>
-
-        {/* 聊天记录查询：跳转到 ChatHistorySearch 页面，参数与 SessionDetail 一致。 */}
-        <Pressable
-          testID="chat-history-row"
-          onPress={() =>
-            navigation.navigate('ChatHistorySearch', {projectId, sessionId})
-          }
-          accessibilityLabel="聊天记录查询"
-          style={[
-            styles.card,
-            cardShadow,
-            {
-              backgroundColor: tokens.surface,
-              borderColor: tokens.borderLight,
-            },
-          ]}>
-          <View
-            style={[
-              styles.iconBox,
-              {backgroundColor: tokens.primary + '1A'},
-            ]}>
-            <Text style={styles.iconGlyph}>🔍</Text>
-          </View>
-          <View style={styles.cardBody}>
-            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-              聊天记录
-            </Text>
-            <Text style={[styles.cardValue, {color: tokens.text}]}>
-              查询历史消息
-            </Text>
-          </View>
-          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
-        </Pressable>
-
-        {/* 查看提示词：跳转到 RealPromptScreen，预览当前会话实际发送的提示词。 */}
-        <Pressable
-          testID="real-prompt-row"
-          onPress={() => navigation.navigate('RealPrompt')}
-          accessibilityLabel="查看提示词"
-          style={[
-            styles.card,
-            cardShadow,
-            {
-              backgroundColor: tokens.surface,
-              borderColor: tokens.borderLight,
-            },
-          ]}>
-          <View
-            style={[
-              styles.iconBox,
-              {backgroundColor: tokens.primary + '1A'},
-            ]}>
-            <Text style={styles.iconGlyph}>📄</Text>
-          </View>
-          <View style={styles.cardBody}>
-            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-              查看提示词
-            </Text>
-            <Text style={[styles.cardValue, {color: tokens.text}]}>
-              预览提示词
-            </Text>
-          </View>
-          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
-        </Pressable>
-
-        {/* 压缩上下文：发 SESSION_COMPACTION_REQUESTED 事件，与聊天页抽屉入口一致。 */}
-        <Pressable
-          testID="compact-row"
-          onPress={handleCompact}
-          accessibilityLabel="压缩上下文"
-          style={[
-            styles.card,
-            cardShadow,
-            {
-              backgroundColor: tokens.surface,
-              borderColor: tokens.borderLight,
-            },
-          ]}>
-          <View
-            style={[
-              styles.iconBox,
-              {backgroundColor: tokens.primary + '1A'},
-            ]}>
-            <Text style={styles.iconGlyph}>🗜️</Text>
-          </View>
-          <View style={styles.cardBody}>
-            <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
-              压缩上下文
-            </Text>
-            <Text style={[styles.cardValue, {color: tokens.text}]}>
-              减少上下文占用
-            </Text>
-          </View>
-          <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
-        </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView style={styles.scroll} behavior="padding">
+          {scrollBody}
+        </KeyboardAvoidingView>
+      ) : (
+        <Animated.View style={[styles.scroll, clipStyle]}>
+          {scrollBody}
+        </Animated.View>
+      )}
 
       <ModelPickerModal
         visible={modelPickerOpen}

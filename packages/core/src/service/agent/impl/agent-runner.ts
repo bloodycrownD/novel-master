@@ -49,7 +49,9 @@ import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
-import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
+import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
+import type { MessageService } from "@/service/chat/message.port.js";
+import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
 import {
   EVENT_AGENT_RUN_FAILED,
@@ -59,8 +61,6 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
-  EVENT_SESSION_COMPACTION_REQUESTED,
-  EVENT_SESSION_MESSAGE_RECEIVED,
 } from "@/domain/events/model/event-types.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { generateAgentRunId } from "@/domain/agent/logic/generate-agent-run-id.js";
@@ -83,8 +83,13 @@ export interface DefaultAgentRunnerDeps {
    */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
-  /** Runs hide-message before prompt build on condition trigger (not bus.publish). */
-  readonly eventOrchestrator?: EventOrchestrator;
+  /**
+   * 压缩执行所需的消息服务；条件压缩命中时与 messageTranscriptEffects 同进同退。
+   * 对话轨由 assembleAgentRunnerDeps 注入。
+   */
+  readonly messages?: MessageService;
+  /** 压缩执行所需的 transcript effects；对话轨由 assembleAgentRunnerDeps 注入。 */
+  readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
   readonly regexConfig?: RegexConfigService;
@@ -182,7 +187,6 @@ export class DefaultAgentRunner implements AgentRunner {
     let stepsExecuted = 0;
     let finished = false;
     let stopReason: AgentRunResult["stopReason"] = "max_steps";
-    let assistantAppendCount = 0;
     let runError: string | undefined;
     const signal = options.signal;
     const toolUseWindow: ToolUseBlock[] = [];
@@ -302,17 +306,26 @@ export class DefaultAgentRunner implements AgentRunner {
             break;
           }
           if (shouldCompact && !stepCompactionEmitted) {
-            const orchestrator = this.deps.eventOrchestrator;
-            if (orchestrator == null) {
+            // 条件压缩直调化：不再经 eventOrchestrator.emit，改调 runCompaction。
+            // messages / messageTranscriptEffects 由 assembleAgentRunnerDeps 在
+            // includeCompactionOrchestrator:true 时与 compactionConditions 同注入。
+            const messages = this.deps.messages;
+            const messageTranscriptEffects = this.deps.messageTranscriptEffects;
+            if (messages == null || messageTranscriptEffects == null) {
               throw new Error(
-                "eventOrchestrator is required when compactionConditions are configured",
+                "messages and messageTranscriptEffects are required when compactionConditions are configured",
               );
             }
-            await orchestrator.emit(EVENT_SESSION_COMPACTION_REQUESTED, {
-              sessionId,
-              projectId,
-              trigger: "condition",
-            });
+            const hideStartDepth =
+              await this.deps.compactionConditions!.getHideStartDepth();
+            await runCompaction(
+              {
+                sessionKkv: this.deps.sessionKkv,
+                messages,
+                messageTranscriptEffects,
+              },
+              { sessionId, projectId, hideStartDepth },
+            );
             stepCompactionEmitted = true;
           }
         }
@@ -398,7 +411,6 @@ export class DefaultAgentRunner implements AgentRunner {
               ...(result.usage != null ? { usage: result.usage } : {}),
             },
           );
-          assistantAppendCount += 1;
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
               sessionId,
@@ -566,14 +578,6 @@ export class DefaultAgentRunner implements AgentRunner {
         }
         throw e;
       }
-    }
-
-    /**
-     * session.message.received 不受 publishRunLifecycle 门控；compaction 等 orchestrator action 经 bus 异步执行。
-     * 本方法成功返回不表示下游 action 已成功。
-     */
-    if (persistMessages && assistantAppendCount > 0) {
-      bus.publish(EVENT_SESSION_MESSAGE_RECEIVED, { sessionId, projectId });
     }
 
     if (publishRunLifecycle) {

@@ -12,6 +12,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 
 // ── SessionDetailScreen 依赖 mock（jest.mock 会被 babel 提升到 import 之前） ──
 const mockSessionsGet = jest.fn(async () => ({id: 's1', title: '我的会话'}));
@@ -76,8 +77,21 @@ jest.mock('../src/errors/toast-message', () => ({
 }));
 
 const mockLoadChatAgentMeta = jest.fn();
+// isAgentLocked / isModelLocked 的 mock 跟真实逻辑保持一致，
+// 这样锁定场景的测试（source !== 'session'）能拿到 true。
 jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
+  isAgentLocked: (meta: {source?: string} | undefined) =>
+    !meta || meta.source !== 'session',
+  isModelLocked: (meta: {
+    source?: string;
+    modelSource?: string;
+    hasDedicatedModel?: boolean;
+  } | undefined) =>
+    !meta ||
+    meta.source !== 'session' ||
+    meta.modelSource === 'agent-pin' ||
+    Boolean(meta.hasDedicatedModel),
 }));
 
 jest.mock('../src/components/agent/AgentPickerModal', () => {
@@ -160,6 +174,7 @@ jest.mock('react-native', () => {
         props.children,
       ),
     StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
+    Platform: {OS: 'ios'},
     Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
       RnReact.createElement('Text', {testID}, children),
     View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
@@ -448,5 +463,65 @@ describe('T-MO1 SessionDetailScreen 聊天记录查询入口', () => {
       projectId: 'p1',
       sessionId: 's1',
     });
+  });
+});
+
+// ── T-KB4 Android 键盘避让（范式 A：marginBottom 裁切窗口） ────────────────
+describe('T-KB4 SessionDetailScreen Android 键盘避让', () => {
+  // 这个 describe 里的 mock 与前面共用（react-native 被 mock，Platform 可直接改）。
+  const RN = require('react-native');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+    mockSessionsGet.mockResolvedValue({id: 's1', title: '会话'});
+    mockLoadChatAgentMeta.mockResolvedValue(meta());
+  });
+
+  afterEach(() => {
+    // 还原为 iOS（与其他 describe 默认一致）
+    RN.Platform.OS = 'ios';
+  });
+
+  it('Android 分支：用 marginBottom 裁切窗口（Animated.View + clipStyle），不走 KeyboardAvoidingView', async () => {
+    RN.Platform.OS = 'android';
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+
+    // reanimated mock 把 Animated.View 映射为 View、useAnimatedStyle 执行 factory。
+    // clipStyle 产出 {marginBottom: -0}（键盘收起时 height=0），所以我 marginBottom 样式的节点。
+    const nodesWithMarginBottom = tree.root.findAll(node => {
+      const style = node.props?.style;
+      if (style == null) {
+        return false;
+      }
+      const styles = Array.isArray(style) ? style : [style];
+      return styles.some(
+        s =>
+          s != null &&
+          typeof s === 'object' &&
+          typeof (s as {marginBottom?: unknown}).marginBottom === 'number',
+      );
+    });
+    expect(nodesWithMarginBottom.length).toBeGreaterThanOrEqual(1);
+
+    // Android 分支外层是 Animated.View 不是 KeyboardAvoidingView。
+    // 直接引用 mock 的 KeyboardAvoidingView 函数做类型断言（参照 T-KB1 的做法）。
+    const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
+    expect(kabvNodes.length).toBe(0);
+  });
+
+  it('iOS 分支：仍走 KeyboardAvoidingView（回归保护）', async () => {
+    RN.Platform.OS = 'ios';
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    const kabvNodes = tree.root.findAllByType(KeyboardAvoidingView as never);
+    expect(kabvNodes.length).toBeGreaterThanOrEqual(1);
   });
 });

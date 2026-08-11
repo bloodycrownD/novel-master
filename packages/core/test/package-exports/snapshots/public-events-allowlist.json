@@ -1,5 +1,4 @@
 [
-  "DEFAULT_EVENTS_CONFIG",
   "EVENT_AGENT_RUN_FAILED",
   "EVENT_AGENT_RUN_FINISHED",
   "EVENT_AGENT_RUN_STARTED",
@@ -7,14 +6,6 @@
   "EVENT_AGENT_STREAM_TEXT_DELTA",
   "EVENT_AGENT_STREAM_THINKING_DELTA",
   "EVENT_AGENT_STREAM_TOOL_USE",
-  "EVENT_SESSION_COMPACTION_REQUESTED",
-  "EVENT_SESSION_MESSAGE_RECEIVED",
   "EVENT_SUBAGENT_CHILD_SESSION_CREATED",
-  "EventsError",
-  "SimpleEventBus",
-  "createEventOrchestrator",
-  "createEventsConfigStore",
-  "createRunAgentHandlerDeps",
-  "detachEventOrchestratorFromBus",
-  "eventsConfigSchema"
+  "SimpleEventBus"
 ]

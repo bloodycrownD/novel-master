@@ -47,9 +47,9 @@ import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
-import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
+import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
@@ -112,6 +112,8 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly sessions: SessionService;
   readonly projects: ProjectService;
   readonly messages: MessageService;
+  /** hide/show/truncate 消息 transcript（runCompaction 执行压缩时使用）。 */
+  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly modelRequests: ModelRequestService;
   readonly savedModelRepo: SavedModelRepository;
@@ -119,7 +121,6 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly eventBus: SimpleEventBus;
   readonly regexConfig: RegexConfigService;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly eventOrchestrator: EventOrchestrator;
   /** 用户 VFS U-A-U-A 落库；发送成功路径 flush 前置。 */
   readonly userVfsTurn?: UserVfsTurnService;
   /** write 成功后 upsert `file_cache`；须由 runtime 注入。 */

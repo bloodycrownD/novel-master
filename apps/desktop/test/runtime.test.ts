@@ -23,6 +23,8 @@ describe("createDesktopNovelMasterRuntime", () => {
     const name = registerPlatformSkspDriver();
     if (process.platform === "darwin") {
       assert.equal(name, "macos");
+    } else if (process.platform === "linux") {
+      assert.equal(name, "linux");
     } else {
       assert.equal(name, "windows");
     }

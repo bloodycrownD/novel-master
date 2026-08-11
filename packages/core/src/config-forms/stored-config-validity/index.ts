@@ -6,7 +6,6 @@
 
 export * from "./types.js";
 export * from "./labels.js";
-export { assessEventsConfigWire } from "./assess-events-config-wire.js";
 export {
   assessAgentDefinitionWire,
   resolveAgentDefinitionFromStorage,

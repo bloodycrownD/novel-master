@@ -8,11 +8,7 @@ const distRoot = join(fileURLToPath(new URL("..", import.meta.url)), "dist");
 
 /** Paths re-exported from dist/index.js for event-bus iteration (Metro / CLI). */
 const REQUIRED_DIST_FILES = [
-  "domain/events-config/model/events-config.schema.js",
-  "domain/events-config/logic/default-events.js",
   "domain/compaction-conditions/model/compaction-conditions.schema.js",
-  "service/events/create-event-orchestrator.js",
-  "service/events/impl/actions/run-agent.handler.js",
   "infra/events/simple-event-bus.js",
 ] as const;
 

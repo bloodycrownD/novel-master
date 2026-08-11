@@ -18,8 +18,6 @@ import { runProvider } from "./provider/commands.js";
 import { runModel } from "./model/commands.js";
 import { runAgent } from "./agent/commands.js";
 import { runCompactionConditions } from "./compaction-conditions/commands.js";
-import { runEvents } from "./events/commands.js";
-import { runEvent } from "./event/commands.js";
 import { runRegexGroup } from "./regex-group/commands.js";
 import { runRegex } from "./regex/commands.js";
 import { runSession } from "./session/commands.js";
@@ -127,8 +125,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     top === "model" ||
     top === "agent" ||
     top === "compaction-conditions" ||
-    top === "events" ||
-    top === "event" ||
     top === "regex-group" ||
     top === "regex"
   ) {
@@ -178,12 +174,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           break;
         case "compaction-conditions":
           await runCompactionConditions(rt, sub, rest);
-          break;
-        case "events":
-          await runEvents(rt, sub, rest);
-          break;
-        case "event":
-          await runEvent(rt, sub, rest);
           break;
         case "regex-group":
           await runRegexGroup(rt, sub, rest);

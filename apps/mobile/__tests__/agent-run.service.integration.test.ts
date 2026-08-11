@@ -55,8 +55,8 @@ function baseRuntime(overrides: Partial<any> = {}) {
     modelRequests: {},
     compactionConditionEvaluator: {
       shouldRequestCompaction: async () => false,
+      getHideStartDepth: async () => 6,
     },
-    eventOrchestrator: {},
     ...overrides,
   };
 }

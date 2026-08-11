@@ -12,15 +12,18 @@ import type {
   CompactionConditionTrigger,
   CompactionEvaluationContext,
 } from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";
-import type { CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
+import {
+  DEFAULT_HIDE_START_DEPTH,
+  type CompactionConditions,
+} from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
 import type { ProviderModelService } from "@/service/provider/provider-model.port.js";
 import type { CompactionConditionsStore } from "./compaction-conditions-store.port.js";
 
 /**
- * Evaluates persisted compaction conditions (OR triggers) against a session.
- * Does not hide messages or refresh macros — on true, the caller should
- * {@link EventOrchestrator.emit} `session.compaction.requested` (awaited in AgentRunner).
+ * 评估持久化的压缩条件（OR 触发器），命中时由调用方直调 `runCompaction`。
+ *
+ * 同时暴露当前配置的 `hideStartDepth`，供执行器读取起始深度。
  */
 export interface CompactionConditionEvaluator {
   /** True when enabled conditions match (token ratio and/or visible floor). */
@@ -28,6 +31,11 @@ export interface CompactionConditionEvaluator {
     session: AgentSession,
     evaluation: CompactionEvaluationContext,
   ): Promise<boolean>;
+  /**
+   * 当前持久化配置的 hide-message 起始深度；
+   * 未配置或无文档时回落到 {@link DEFAULT_HIDE_START_DEPTH}。
+   */
+  getHideStartDepth(): Promise<number>;
 }
 
 export interface CreateCompactionConditionEvaluatorDeps {
@@ -82,6 +90,10 @@ export function createCompactionConditionEvaluator(
         return false;
       }
       return trigger.shouldTrigger(session, evaluation);
+    },
+    async getHideStartDepth() {
+      const conditions = await deps.conditionsStore.getConditions();
+      return conditions?.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH;
     },
   };
 }

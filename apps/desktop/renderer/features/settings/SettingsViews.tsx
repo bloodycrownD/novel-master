@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 export { AgentEditorView } from "./AgentEditorView";
 
-export { EventsConfigView } from "./EventsConfigView";
+
 export { ModelSamplingView } from "./ModelSamplingView";
 import { AddModelModal } from "./AddModelModal";
 import { FetchModelsModal } from "./FetchModelsModal";
@@ -35,10 +35,6 @@ import {
   ipcCloudSyncSetConfig,
   ipcCloudSyncSetEnabled,
   ipcCloudSyncTestConnection,
-  ipcEventsExportYaml,
-  ipcEventsGetConfig,
-  ipcEventsImportYaml,
-  ipcEventsSetConfig,
   ipcProviderModelsDeleteSaved,
   ipcProviderModelsEditSaved,
   ipcProviderModelsSavedList,

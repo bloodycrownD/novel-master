@@ -59,8 +59,8 @@ packages/core/src/service/events/                # 整目录（orchestrator + ac
 packages/core/src/service/events-config/         # 整目录
 packages/core/src/config-forms/events/           # 整目录
 packages/core/src/errors/events-errors.ts
-packages/core/src/errors/events-config-errors.ts  # 如存在
-packages/core/test/events/                        # 整目录
+packages/core/src/test/events/                        # 整目录  
+# 注：events-config-errors.ts 经核实不存在，无需删除
 
 apps/cli/src/event/                               # 整目录
 apps/cli/src/events/                              # 整目录
@@ -199,6 +199,7 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 ### 阶段一：Core 基础设施（新建 + 迁移，不删旧代码）
 
 - **Step 1 — phase-compaction-domain — blocking: yes — qa: auto**：`CompactionConditions` 新增 `hideStartDepth?: number`（默认 6），schemaVersion 升 4，更新 zod schema。更新 `compaction-conditions-store.service.ts`：新增 `isV3Document` + `migrateV3ToV4`（v3 补 `hideStartDepth: 6`），在 `parseAndDecode` 里接入。
+  - **不动 `SCHEMA_BOOT_VERSION`**：`hideStartDepth` 是 KKV JSON 字段（存于 `nm-compaction-conditions/policy`），不动 DDL/列对齐。`SCHEMA_BOOT_VERSION` 当前已是 5（Token Usage 已升），本 Step 保持不变。`schemaVersion` 升 4 仅指 CompactionConditions 自身的文档版本号。
 
 - **Step 2 — phase-compaction-executor — blocking: yes — qa: auto**：新建 `packages/core/src/service/compaction-conditions/run-compaction.ts`。从 `events/impl/actions/hide-message.handler.ts` 搬 `runHideMessageAction` 逻辑进来（或 import 它，但这阶段它还在），从 `event-orchestrator.service.ts:155-176` 搬 kkv 清理 + token cache 失效逻辑。`runCompaction` 接受 deps（sessionKkv、sessionApiPromptTokenCache、messages、messageTranscriptEffects）+ params（sessionId、projectId、hideStartDepth），返回 `{ ok: boolean }`。
 
@@ -206,21 +207,27 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 
 ### 阶段二：切换调用方（新旧并存，旧代码仍在）
 
-- **Step 4 — phase-agent-runner-switch — blocking: yes — qa: auto**：`agent-runner.ts` L282-315 条件压缩段：删 `eventOrchestrator` 依赖，改调 `runCompaction(deps, { sessionId, projectId, hideStartDepth })`。`hideStartDepth` 从 `compactionConditions` 的配置读。删 L302-307 的 `if (orchestrator == null) throw`。
+- **Step 4 — phase-agent-runner-switch — blocking: yes — qa: auto**：`agent-runner.ts` 的条件压缩段（原 L282-315，行号可能因前置改动偏移，以符号搜索 `eventOrchestrator.emit` / `EVENT_SESSION_COMPACTION_REQUESTED` 为准）：删 `eventOrchestrator` 依赖，改调 `runCompaction(deps, { sessionId, projectId, hideStartDepth })`。`hideStartDepth` 从 `compactionConditions` 的配置读。删 `if (orchestrator == null) throw`（原 L302-307）。
+  - **不动 abort / partial assistant 逻辑**：`handleAbort`（保留已写入的 partial assistant）属另一个迭代 `abort-retain-partial` 的范围，本 Step 只改条件压缩段的 emit→runCompaction 调用，不碰 `handleAbort` / partial append 逻辑。
 
-- **Step 5 — phase-agent-runner-cleanup — blocking: yes — qa: auto**：`agent-runner.ts` L553-558：删 `bus.publish(EVENT_SESSION_MESSAGE_RECEIVED, ...)`。清理 import 中的 `EVENT_SESSION_MESSAGE_RECEIVED`。
+- **Step 5 — phase-agent-runner-cleanup — blocking: yes — qa: auto**：`agent-runner.ts` 删 `bus.publish(EVENT_SESSION_MESSAGE_RECEIVED, ...)`。该 publish 位于 run 主循环结束后、`EVENT_AGENT_RUN_FINISHED` publish 之前（原 L553-558，行号已偏移约 +22，实际在 L575 附近，以符号搜索为准）。清理 import 中的 `EVENT_SESSION_MESSAGE_RECEIVED`。
+
+  > **行号说明**：本 SPEC 中所有形如「L数字」的引用均为撰写时的快照行号，代码改动后可能偏移。实施时一律以符号搜索（函数名/事件常量/import 语句）为准，不要硬靠行号定位。
 
 - **Step 6 — phase-desktop-compaction-ipc — blocking: yes — qa: auto**：重写 `apps/desktop/src/main/ipc/handlers/compaction.ts`：`handleCompactionManual` 改调 `runCompaction`（通过 runtime 或直接 import），保留成功后的 `notifyComposerStatusAfterFloorOrCompaction`。
 
-- **Step 7 — phase-mobile-compaction — blocking: yes — qa: manual_user**：`useChatTabMessages.ts` L345-348 和 `SessionDetailScreen.tsx` L155-158：改调 `runCompaction`（通过 runtime 暴露或直接 import core）。改 Alert 文案从"将按照事件配置压缩上下文"改为"将压缩上下文"。
+- **Step 7 — phase-mobile-compaction — blocking: yes — qa: manual_user**：`useChatTabMessages.ts` 的 `handleCompactSession`（原 L345-348，以符号搜索为准）和 `SessionDetailScreen.tsx`（原 L155-158）：改调 `runCompaction`（通过 runtime 暴露或直接 import core）。改 Alert 文案从"将按照事件配置压缩上下文"改为"将压缩上下文"。
+  - **错误处理调整**：`runCompaction` 返回 `{ ok: boolean }`（无 `failures` 字段）。`handleCompactSession` 现有代码消费 `result.failures[0]?.error` 做错误展示，改后须调整：`!ok` 时展示通用错误文案（如"压缩失败"），不再读 `result.failures`。
 
-### 阶段三：三端 runtime 去装配
+### 阶段三：三端 runtime 去装配（仅 eventOrchestrator）
 
-- **Step 8 — phase-runtime-cli — blocking: yes — qa: auto**：`apps/cli/src/runtime.ts`：删 `createEventOrchestrator` / `createEventsConfigStore` import + 装配 + 返回字段。
+> **执行决策（dev 阶段核实修订）**：`eventsConfig`（eventsConfigStore）有大量独立的事件配置 UI/IPC/yaml 消费方（desktop `EventsConfigScreen`、mobile `EventsConfigScreen`、CLI `nm events` 命令等），这些是阶段五（Step 15-17）才删的内容。若阶段三同时删 `eventsConfig` 装配，从 Step 10 到 Step 15-17 之间三端会持续编译失败，阶段四（core 全量删除）无法在编译不过的状态下独立验证，wave 编排会断。因此 **Step 8-10 本轮只删 `eventOrchestrator`（含其旧路径消费方），保留 `eventsConfig` 装配到 Step 15-17 与 UI 一起删**。这与 PRD「分步清理、保持中间态可编译可验证」的意图一致。
 
-- **Step 9 — phase-runtime-desktop — blocking: yes — qa: auto**：`create-desktop-runtime.ts` + `types.ts`：同上。
+- **Step 8 — phase-runtime-cli — blocking: yes — qa: auto**：`apps/cli/src/runtime.ts`：删 `createEventOrchestrator` import + 装配 + 返回字段（`eventsConfigStore` 保留到 Step 17）。连带清理 `eventOrchestrator` 的旧路径消费方（如 CLI `nm event emit` 命令，若 Step 17 才正式删则先标 skip 或改 mock 让编译通过）。
 
-- **Step 10 — phase-runtime-mobile — blocking: yes — qa: auto**：`create-mobile-runtime.ts` + `types.ts`：同上。
+- **Step 9 — phase-runtime-desktop — blocking: yes — qa: auto**：`create-desktop-runtime.ts` + `types.ts`：同上（只删 `eventOrchestrator`，保留 `eventsConfigStore`）。`compaction-handler.test.ts` 的 T-CR5（测 `rt.eventOrchestrator.emit` 旧路径）会编译失败，改成 `it.skip` + 注释「Step 20 统一改」。
+
+- **Step 10 — phase-runtime-mobile — blocking: yes — qa: auto**：`create-mobile-runtime.ts` + `types.ts`：同上（只删 `eventOrchestrator`，保留 `eventsConfigStore`）。三个 mock runtime 里的 `eventOrchestrator: {emit: jest.fn()}` / `{}` 一并清。
 
 ### 阶段四：全量删除事件配置系统
 
@@ -284,6 +291,7 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 3. **package.json exports map**：`@novel-master/core/events` 子路径仍需解析到 `public/events.ts`（只是内容变少了），不需要删路径本身。
 4. **CompactionConditions v4 迁移兼容性**：v3→v4 迁移只补 `hideStartDepth: 6`，不破坏既有字段。但需要确保所有读取 `CompactionConditions` 的地方（agent-runner、UI 表单）能正确处理新字段。
 5. **手动压缩入口的"成功后通知"逻辑**：Desktop `notifyComposerStatusAfterFloorOrCompaction`、Mobile `refreshComposerStatusAfterFloorOrCompaction` + `reloadMessages` 这些后置逻辑不能丢。
+6. **Bug5 实现范围收窄**：经核实 Bug5 仅影响 Desktop `SessionDetailDrawer`（Mobile 与 ConversationPanel footer 已有刷新）。修复点在 renderer 侧（`ConversationPanel` dispatch + `SessionDetailDrawer` 监听），不在 main 进程 IPC handler。Step 6 重写 `handleCompactionManual` 时注意：main 进程只负责调 `runCompaction` + `notifyComposerStatusAfterFloorOrCompaction`，Bug5 的 dispatch 由 renderer 侧 `runCompaction` 调用点负责。
 
 ### 回滚方案
 
@@ -320,9 +328,32 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 
 **流式 partial**：新建 core `AgentStreamRegistry`（按 sessionId 存 in-flight 累积文本），`agent-runner` 每条 delta 同时 `streamRegistry.append()`，`run-agent-turn` register/unregister。`SubagentSessionScreen` 从 `runtime.streamRegistry.get()` 读 partial。
 
+**既有 schema 演进提示**：`agent-definition` schema 已从 `prompts.blocks` 迁移到 `prompts.{system, persist, dynamic}`（`agent-definition.schema.ts` 的 `rejectLegacyPromptKeys` 会拒绝 `blocks`/`regions`/`chat` 旧 key）。这不是本迭代要做的改动，而是已完成的既有状态。本迭代如需更新 agent 相关测试 fixture（如 Bug2 的 agent 表单测试、Step 20 的测试清理），须用新结构，否则会被 schema reject。
+
 ### Bug4：ChatRail className 笔误
 
 - `ChatRail.tsx` L688/L709：`` `chat-nav-view$$${...}` `` → `` `chat-nav-view${...}` ``
+
+### Bug5：置位/压缩后 Desktop SessionDetailDrawer 的 token 计数不刷新
+
+**影响范围（经核实收窄）**：仅 Desktop `SessionDetailDrawer`。Mobile 与 Desktop ConversationPanel 的 footer 不受影响：
+- Mobile `handleCompactSession`（L352）和 `runSetFloor`（L612）**已有** `refreshChatTokenLabel()`，无需改动。
+- Desktop ConversationPanel footer token 会刷新：置位→`handleConfirm` set-floor 分支调 `reloadMessages()`→`reloadFooter()`；手动压缩→`runCompaction` dispatch `session-compacted`→`ConversationPanel` 监听调 `reloadMessages()`→`reloadFooter()`。
+- **只有 `SessionDetailDrawer` 不刷新**：它只监听 `messages-rollback`（回滚），不监听 `session-compacted`（手动压缩）；置位则 renderer 侧根本不 dispatch 任何事件。
+
+**根因**：`SessionDetailDrawer` 的 token 刷新只绑在 `messages-rollback`（回滚专用，`executeRollback` dispatch）上。置位（set floor）和手动压缩（manual compaction）走不同路径，不会触发 `messages-rollback`：
+- 手动压缩有自己的事件 `session-compacted`（`ConversationPanel.runCompaction` dispatch），但 `SessionDetailDrawer` 没监听它。
+- 置位 renderer 侧（`ConversationPanel.handleConfirm` 的 set-floor 分支）成功后只调 `reloadMessages()`，不 dispatch 任何 DOM CustomEvent，`SessionDetailDrawer` 无从感知。
+- agent-runner 内自动压缩发生在 run 主循环里（L304-317），run 结束时 `EVENT_AGENT_RUN_FINISHED` 会驱动 footer reload；但若压缩后还有后续 round，中间态的 drawer token 不会刷新。**不过 drawer 在 run 进行中通常不显示实时 token（产品上可接受），且 run 结束后一定会刷新，因此自动压缩的中间态不纳入 Bug5 范围。**
+
+**修复方案（renderer 侧 dispatch，与现有范式一致）**：
+- **DOM CustomEvent dispatch 点必须在 renderer 侧**（`ConversationPanel`），不能在 main 进程 IPC handler（main 进程没有 `window` 对象，不能 dispatch DOM CustomEvent；main→renderer 通知走 Electron IPC 推送如 `webContents.send`）。
+- **不复用 `messages-rollback`**（它专指回滚删消息，语义会混淆）。采用以下方案二选一：
+  - **方案 A（推荐）**：新增 `context-changed` 事件。置位（`handleConfirm` set-floor 分支成功后）和手动压缩（`runCompaction` 成功后）都 dispatch `context-changed`；`SessionDetailDrawer` 监听 `context-changed` 调 `reload()`。回滚仍用 `messages-rollback`。
+  - **方案 B**：让 `SessionDetailDrawer` 同时监听 `messages-rollback` + `session-compacted`，置位补 dispatch `session-compacted`。但"置位 dispatch session-compacted"语义不直观。
+- **Mobile 无需改动**（已有 refresh）。
+- **自动压缩中间态不纳入范围**：run 结束的 `EVENT_AGENT_RUN_FINISHED` 已覆盖 footer；drawer 在 run 进行中不显示实时 token。
+- **与 Step 6 的交叉**：Step 6 重写 `handleCompactionManual`（main 进程 IPC）时，Bug5 的 dispatch 补在 renderer 侧的 `runCompaction` 调用点（`ConversationPanel`），不在 IPC handler 里。两者是不同进程不同函数。
 
 ---
 
@@ -351,8 +382,8 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 | Agent runner | `agent-runner.ts` | `session.append` 传 `result.usage` |
 | 回填函数 | `infra/tokenizer/logic/backfill-cache-from-messages.ts`（新建） | cache miss 时从 messages 末尾找最后一条非 hidden 带 usage 的 assistant message 回填 |
 | 回填接入 | Desktop/Mobile `session-prompt-input.service.ts` + `chat-prompt-tokens.service.ts` | `SessionPromptInputBundle` 加 `rawMessages`；miss 后回填 |
-| Mobile UI | `useChatTabMessages.ts` | `runRollback` 补 `refreshChatTokenLabel()` |
-| Desktop UI | `ConversationPanel.tsx` + `SessionDetailDrawer.tsx` | `messages-rollback` DOM CustomEvent |
+| Mobile UI | `useChatTabMessages.ts` | `runRollback` 补 `refreshChatTokenLabel()`；置位（L612）/压缩（L352）**已有** refresh，Bug5 无需 Mobile 改动 |
+| Desktop UI | `ConversationPanel.tsx` + `SessionDetailDrawer.tsx` | 回滚：`messages-rollback` CustomEvent；Bug5：新增 `context-changed` CustomEvent（置位+手动压缩 dispatch，drawer 监听） |
 | UI 映射 | `format-counter-kind-label.ts`（新建） | `api`/`heuristic` → 「自动」 |
 | 配置 | `token-counter-mode-options.ts` | 移除 `heuristic` 条目 |
 | 配置 | `read-token-counter-mode-pref.ts` | `parseTokenCounterModePref("heuristic")` 归一化为 `"auto"` |
@@ -368,6 +399,14 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 - **Step T7 — phase-desktop-drawer-refresh — blocking: yes — qa: manual_user**：`messages-rollback` CustomEvent
 - **Step T8 — phase-token-label-ui — blocking: no — qa: auto**：`formatCounterKindLabel` + 三处 UI 套用
 - **Step T9 — phase-remove-heuristic — blocking: no — qa: auto**：移除 heuristic 手动选项 + parse 层归一化
+- **Step T10 — phase-floor-compaction-refresh-desktop-drawer — blocking: no — qa: manual_user**（Bug5）：Desktop `SessionDetailDrawer` 补订阅置位/压缩后的刷新。采用「新增 `context-changed` DOM CustomEvent」方案：
+  - 在 `ConversationPanel` 的置位成功路径（`handleConfirm` set-floor 分支，调 `reloadMessages()` 后）补 `window.dispatchEvent(new CustomEvent('context-changed', { detail: { sessionId } }))`
+  - 在 `ConversationPanel` 的手动压缩成功路径（`runCompaction`，现有 dispatch `session-compacted` 处）追加 dispatch `context-changed`（或让 drawer 改为监听 `session-compacted`，二选一，实施者定）
+  - `SessionDetailDrawer` 新增 `context-changed` 监听，调 `reload()`
+  - **dispatch 点必须在 renderer 侧**（main 进程无 `window`，不能 dispatch DOM CustomEvent）
+  - **Mobile 无需改动**（`handleCompactSession` L352、`runSetFloor` L612 已有 `refreshChatTokenLabel()`）
+  - **自动压缩中间态不纳入**：run 结束的 `EVENT_AGENT_RUN_FINISHED` 已覆盖 footer；drawer 在 run 进行中不显示实时 token
+- ~~**Step T11**~~（原 Mobile 置位/压缩 refresh，经核实 Mobile 已有，删除）
 
 ### 测试用例
 
@@ -379,6 +418,9 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 - **T-TU6 — blocking: no**（→ T7）：Desktop messages-rollback 事件 dispatch + drawer reload
 - **T-TU7 — blocking: no**（→ T8）：formatCounterKindLabel 映射正确
 - **T-TU8 — blocking: no**（→ T9）：options 不含 heuristic；旧值归一化为 auto
+- **T-TU9 — blocking: no**（→ T10）：Desktop 置位/手动压缩成功后 dispatch `context-changed`（或在 `runCompaction` 处追加），`SessionDetailDrawer` 监听到后调 `reload()` 刷新 token
+- ~~**T-TU10**~~（原自动压缩中间态，已不纳入范围，删除）
+- ~~**T-TU11**~~（原 Mobile refresh，Mobile 已有，删除）
 
 ### 兼容性说明
 
@@ -390,3 +432,73 @@ packages/core/src/bootstrap/schema-migrations/index.ts  # 移除 6 条 + 加基�
 ### 回填接口设计
 
 `backfillCacheFromMessages` 过滤 `!msg.hidden`，用 `msg.createdAtMs` 作 `updatedAt`。调用方（两端 chat-prompt-tokens.service.ts）通过 `SessionPromptInputBundle.rawMessages` 复用 `buildSessionPromptInput` 内部的 `listBySession`，不另开查询。`resolveCurrentPromptTokens` 是 `async`，伪代码需 `await`。
+
+---
+
+## Bug6：Mobile Android 键盘避让遗漏修复
+
+### 根因
+
+v1.4.17/v1.4.18 修过 mobile 键盘避让，落地了两种范式：
+- **范式 A（整页表单）**：`ScreenFormLayout` Android 分支用 `useReanimatedKeyboardAnimation` + `Animated.View` 的 `marginBottom` 收缩裁切窗口，内容区 `flex:1` 跟着缩到键盘以上。
+- **范式 B（弹窗）**：`MessageEditModal` 用 `useReanimatedKeyboardAnimation` + `Animated.View` 的 `translateY` 上移面板（键盘高度一半）。
+
+但一批弹窗和两个整页**没走这两种范式**，而是用了 `react-native-keyboard-controller` 的 `KeyboardAvoidingView`，写法是 `behavior={Platform.OS === 'ios' ? 'padding' : undefined}`——**Android 上 `behavior` 为 `undefined`，组件什么都不做**。开发者误以为系统默认 resize 兜底，但系统默认在 Modal/透明弹层里不可靠，于是键盘盖住输入框。不止 textarea，数字输入（number-pad）也一样。
+
+### 遗漏清单（7 处，均以符号搜索为准）
+
+| # | 组件 | 文件 | 输入类型 | 触发场景 | 修法 |
+|---|------|------|---------|---------|------|
+| 1 | `TextPromptModal` | `components/ui/TextPromptModal.tsx` | 单行 | 会话/项目/Agent/正则组的新建+重命名（**1 组件影响 4 屏幕**） | 范式 B |
+| 2 | `DirectoryRuleSheet` | `components/sheet/DirectoryRuleSheet.tsx` | 数字 ×2 | 项目设置→目录规则（头部/尾部数量） | 范式 B |
+| 3 | `AddModelModal` | `components/provider/AddModelModal.tsx` | 单行 ×2 | Provider→添加模型（厂商模型 ID + 模型名称） | 范式 B |
+| 4 | `EditModelNameModal` | `components/provider/EditModelNameModal.tsx` | 单行 | 模型列表→重命名 | 范式 B |
+| 5 | `VfsFileManager` | `components/vfs/VfsFileManager.tsx` | 单行 | VFS→新建/重命名文件夹 | 范式 B |
+| 6 | `SessionDetailScreen` | `screens/stack/SessionDetailScreen.tsx` | 单行（inline） | 会话详情→点标题重命名 | 范式 A |
+| 7 | `ChatHistorySearchScreen` | `screens/stack/ChatHistorySearchScreen.tsx` | 单行 | 聊天页→搜索历史 | 范式 A |
+
+（以上文件路径均相对 `apps/mobile/src/`。）
+
+### 修复方案
+
+- **弹窗类（#1-5）**：对齐范式 B。给 panel 包 `Animated.View`，用 `useReanimatedKeyboardAnimation` 的 `translateY` 上移键盘高度的一半。删除或改写现有的 `KeyboardAvoidingView`（Android `behavior={undefined}` 无效写法）。参照 `MessageEditModal.tsx` L55-62 的 `panelAvoidStyle`。
+  - **底部对齐 sheet 注意**：`DirectoryRuleSheet`、`AddModelModal`、`EditModelNameModal` 是底部对齐的（`justifyContent: 'flex-end'`），键盘弹起后它们紧贴键盘顶部。`MessageEditModal` 是居中的、translateY 上移「键盘高度的一半」——对底部 sheet 这个量不够（需要上移接近键盘全高，或动态计算让输入框可见）。实施时不能照搬一半，需针对底部 sheet 调整 translateY 量。
+- **整页类（#6-7）**：对齐范式 A。用 `useReanimatedKeyboardAnimation` + `Animated.View` 的 `marginBottom` 收缩裁切窗口（内容区跟铉缩小、顶部不被裁、底部输入项随之上移）。参照 `ScreenFormLayout.tsx` L28-58 的 `AndroidKeyboardFormBody`。这两个页面不是走 `ScreenFormLayout` 的表单页（它们有自己的滚动列表结构），直接复用 `ScreenFormLayout` 可能不合适，建议抽一个轻量的 `useAndroidKeyboardClip` hook 或直接内联裁切逻辑。
+- **iOS 无需改动**：这些组件现有的 `KeyboardAvoidingView` 在 iOS 上 `behavior="padding"` 是有效的，不要破坏。Android 分支单独处理（`Platform.OS === 'android'` 判断）。
+- **认知陷阱提醒**：`react-native-keyboard-controller` 的 `KeyboardAvoidingView` 与 RN 原生的 `KeyboardAvoidingView` 不同——前者 Android `behavior={undefined}` 是"啥也不干"，不像原生那个会 fallback 到 resize。修复时不要继续依赖 `KeyboardAvoidingView` 在 Android 上的行为，直接用 `useReanimatedKeyboardAnimation`。
+
+### 变更点清单
+
+| 文件 | 改动 |
+|------|------|
+| `components/ui/TextPromptModal.tsx` | 删/改 `KeyboardAvoidingView`；panel 加 `useReanimatedKeyboardAnimation` + `translateY` |
+| `components/sheet/DirectoryRuleSheet.tsx` | 同上 |
+| `components/provider/AddModelModal.tsx` | 同上 |
+| `components/provider/EditModelNameModal.tsx` | 同上 |
+| `components/vfs/VfsFileManager.tsx` | 同上 |
+| `screens/stack/SessionDetailScreen.tsx` | 删 `KeyboardAvoidingView`；内容区加 `useReanimatedKeyboardAnimation` + `marginBottom` 裁切 |
+| `screens/stack/ChatHistorySearchScreen.tsx` | 同上 |
+
+### 详细实现步骤
+
+> Bug6 与主体 Step（事件配置移除 22 Step）**文件不交叉**（全是 mobile UI 弹窗/页面 vs core service/domain），可并行实现。建议作为一个独立 wave 或分散到非阻塞 wave 里。
+
+- **Step K1 — phase-keyboard-modal-batch — blocking: no — qa: manual_user**（Bug6）：统一修复 5 个弹窗类（`TextPromptModal`、`DirectoryRuleSheet`、`AddModelModal`、`EditModelNameModal`、`VfsFileManager`）的 Android 键盘避让。每个弹窗参照 `MessageEditModal` L55-62 接 `useReanimatedKeyboardAnimation` + `panelAvoidStyle`（translateY）。保留 iOS 的 `KeyboardAvoidingView` 分支。可抽一个共用 hook（如 `useAndroidModalKeyboardAvoid`）避免重复。
+- **Step K2 — phase-keyboard-screen-batch — blocking: no — qa: manual_user**（Bug6）：修复 2 个整页类（`SessionDetailScreen`、`ChatHistorySearchScreen`）的 Android 键盘避让。参照 `ScreenFormLayout` L28-58 的 `AndroidKeyboardFormBody`（marginBottom 裁切）。这两个页面有滚动列表，裁切窗口让列表随键盘缩高。
+
+### 测试策略
+
+- **自动化**：Android 键盘避让难以用 jest 单测覆盖（依赖 native 键盘事件 + reanimated runtime）。建议补**结构断言测试**（参照 `screen-form-layout.test.tsx` T-KB1 的做法）：mock `Platform.OS = 'android'`，断言目标组件渲染了 `Animated.View` + 读取到 `useReanimatedKeyboardAnimation` 的接线（而非 `KeyboardAvoidingView` 的 Android 分支）。
+- **手动验收（qa: manual_user）**：Android 真机/模拟器上，逐个打开 7 个输入点，确认键盘弹起后输入框不被遮挡、顶部不被裁、可滚动。重点测数字输入（`DirectoryRuleSheet` 的 number-pad）。
+- **iOS 回归**：确认 iOS 上 `behavior="padding"` 分支未被破坏。
+
+### 测试用例
+
+- **T-KB2 — blocking: no**（→ K1）：`TextPromptModal` 在 Android 分支渲染 `Animated.View`（panel 级 translateY 避让），不再走 `KeyboardAvoidingView` 的 Android 路径
+- **T-KB3 — blocking: no**（→ K1）：`DirectoryRuleSheet` / `AddModelModal` / `EditModelNameModal` / `VfsFileManager` 同上
+- **T-KB4 — blocking: no**（→ K2）：`SessionDetailScreen` / `ChatHistorySearchScreen` 在 Android 分支渲染裁切窗口结构（marginBottom），不再走 `KeyboardAvoidingView` 的 Android 路径
+
+### 与主体迭代的关系
+
+- **文件不交叉**：Bug6 全部在 `apps/mobile/src/` 的 UI 弹窗/页面，主体 22 Step 主要在 `packages/core/` + 三端 runtime + 三端事件配置 UI 删除。唯一可能的交叉是 Step 16（删 mobile 事件配置 UI），但那是删 `EventsConfigScreen`/`EventConfigBlocks`，与 Bug6 的 7 个组件无关。
+- **可并行**：建议 Bug6 作为一个独立非阻塞 wave，与主体 Step 并行实现。`TextPromptModal` 优先级最高（1 组件影响 4 屏幕）。

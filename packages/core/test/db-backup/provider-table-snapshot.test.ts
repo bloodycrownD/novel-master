@@ -19,8 +19,7 @@ import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import { isSchemaMigrationApplied } from "../../src/bootstrap/schema-migrations/index.js";
-import { SAVED_MODEL_IDENTITY_V1_ID } from "../../src/bootstrap/schema-migrations/saved-model-identity-v1.js";
+import { BASELINE_TOO_OLD_MESSAGE } from "../../src/bootstrap/novel-master-bootstrap.js";
 import {
   execLegacySavedModelTable,
   seedLegacySavedModelRows,
@@ -35,16 +34,6 @@ async function openRawMemoryDb(): Promise<TdbcConnection> {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
-}
-
-async function tableColumnNames(
-  conn: TdbcConnection,
-  table: string,
-): Promise<Set<string>> {
-  const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${table}')`,
-  );
-  return new Set(rows.map((row) => row.name));
 }
 
 async function execBootstrapSchemaDdl(conn: TdbcConnection): Promise<void> {
@@ -249,6 +238,9 @@ describe("provider-table-snapshot", () => {
   });
 
   it("T-SM9：legacy snapshot restore 后 rebootstrap 触发 v1 path A", async () => {
+    // Step 22 后最低支持 v1.4.08：legacy saved_model 表（无 id 列）会被
+    // assertMinimumBaseline fail-fast 拦下，本用例场景已由 baseline-check 覆盖。
+    // 原「path A 表重建」逻辑随 saved-model-identity-v1 退役而退役，不再走 runner。
     const source = await openRawMemoryDb();
     const target = await openRawMemoryDb();
     try {
@@ -261,22 +253,10 @@ describe("provider-table-snapshot", () => {
       await execBootstrapSchemaDdl(target);
       await scrubProviderTables(target);
       await restoreProviderTableSnapshot(target, snapshot);
-      await bootstrapNovelMaster(target);
-
-      const columns = await tableColumnNames(target, "llm_saved_model");
-      assert.ok(columns.has("id"));
-      assert.ok(columns.has("model_name"));
-      assert.equal(columns.has("display_name"), false);
-
-      const rows = await target.query<{ id: string; model_name: string }>(
-        `SELECT id, model_name FROM llm_saved_model ORDER BY vendor_model_id`,
-      );
-      assert.equal(rows.length, 2);
-      assert.equal(new Set(rows.map((row) => row.id)).size, 2);
-      assert.match(rows[0]!.id, /^[0-9a-f-]{36}$/i);
-      assert.equal(
-        await isSchemaMigrationApplied(target, SAVED_MODEL_IDENTITY_V1_ID),
-        true,
+      await assert.rejects(
+        bootstrapNovelMaster(target),
+        (err: unknown) => err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+        "legacy saved_model 表无 id 列 → 应被 baseline 检查拦下",
       );
     } finally {
       await source.close();

@@ -1,0 +1,94 @@
+# event-config-merge-and-migration-cleanup 编排状态
+# 注意：docs/.iteration-state.yaml 归 agent-subagent 迭代，本文件是本迭代专用。
+
+spec_path: docs/Iterations/event-config-merge-and-migration-cleanup/spec.md
+prd_path: docs/Iterations/event-config-merge-and-migration-cleanup/prd.md
+branch: feat/event-config-merge-and-migration-cleanup
+base_sha: f5b6494
+
+# 待实现范围
+# - 回归清理：20 个 core 测试失败
+# - 主体 Step 1-22（事件配置移除 + 压缩直调化）
+# - Bug5（Step T10，Desktop SessionDetailDrawer token 刷新）
+# - Bug6（Step K1/K2，Mobile Android 键盘避让 7 处）
+
+dag_version: 6
+
+# wave 进度：
+# wave-0~5 全部 done
+# cr-func-final: dev-ready yes, 无阻塞
+# 全部 Step 1-22 + Bug5 + Bug6 + 20个测试失败全修 完成
+wave_plan:
+  - [impl-step15-17, impl-bug6, impl-bug5]
+  - [cr-func-wave4]
+  - [impl-step18-19]              # 阶段六 压缩配置 UI 补全
+  - [impl-step20]                 # 阶段七 测试清理
+  - [impl-step21-22]              # 阶段八 Migration 清理
+  - [verify-final, cr-func-final]
+
+node_status:
+  all_steps: done
+  cr-func-final: { status: done, dev_ready: yes }
+  total_commits: 32
+  core_test: 1886 pass / 0 fail
+  desktop_typecheck: 0 errors
+  spec_deviations: []
+  open_must_fix: []
+
+# wave-1 cr-func must-fix（待 fix-cr-wave1 闭合）
+cr_wave1_must_fix:
+  T-AR1:
+    severity: high
+    problem: SPEC L272 要求的 T-AR1（agent-runner 条件压缩段调 runCompaction 不再 emit）测试完全缺失
+    fix: 新建 packages/core/test/agent/agent-runner-compaction.test.ts 或加进 agent-runner.test.ts，构造 shouldRequestCompaction=true 的 mock + mock runCompaction，断言被调用 + 收到正确 hideStartDepth + 不调 eventOrchestrator.emit
+  T-IPC1-assert:
+    severity: mid
+    problem: compaction-handler.test.ts 的 T-IPC1 未断言 notifyComposerStatusAfterFloorOrCompaction 被调用（SPEC L274 要求）；且 before hook native sqlite 失败跑不起来
+    fix: 在 T-IPC1 里 spy notifyComposerStatusAfterFloorOrCompaction，成功路径后 assert.calledOnce；排查 before hook runtime 初始化（base 就有）
+
+# fix-test-failures 拆解（来自 probe 报告）
+fix_test_failures_plan:
+  fix-1-fs-input:
+    failures: 11
+    files:
+      - packages/core/test/tool/vfs-tools.test.ts (8 个 it)
+      - packages/core/test/tool/tool-use-mutates-workspace.test.ts (1 个 it)
+      - packages/core/test/workplace/assemble-workplace-display.test.ts:338 (T-FC3)
+      - packages/core/test/tool/tool-runner-parallel.test.ts:123
+    method: '{command:"ls /"}' → '{action:"ls",path:"/"}'，对齐 vfs-tools.ts inputSchema
+  fix-2-abort-contract:
+    failures: 5
+    decision: 按现状（实现保留 partial assistant，方案 A），改测试对齐
+    files:
+      - packages/core/test/agent/agent-runner-abort-rollback.test.ts:280 (检测点7)
+      - packages/core/test/agent/agent-runner.test.ts:203/258/320/362 (T-ARP-C1..C4)
+    method: 测试断言从「仅剩 user/msgs.length===1」改为「保留 partial assistant/msgs.length===2」
+  fix-3-delete-no-decode:
+    failures: 1
+    files:
+      - packages/core/src/service/agent/impl/agent-registry.service.ts:100-108
+    method: delete() 里 repository.get（会解码）换成不解码的查询
+  fix-4-schema-version:
+    failures: 1
+    files:
+      - packages/core/test/bootstrap/subagent-schema.test.ts:107/120
+    method: 硬编码 v4 改为读真实 SCHEMA_BOOT_VERSION 常量（当前=5）
+  fix-5-snapshot:
+    failures: 2
+    files:
+      - packages/core/test/package-exports/snapshots/public-agent-allowlist.json (补 createAgentStreamRegistry)
+      - packages/core/test/package-exports/snapshots/public-provider-allowlist.json (补 backfillCacheFromMessages/formatCounterKindLabel/resolvePromptTokensWithBackfill)
+    method: 补新导出到快照 JSON
+
+open_must_fix: []
+spec_deviations: []
+blocking_steps: [step1, step2, step3, step4, step5, step6, step7, step8, step9, step10, step11, step12, step13, step14, step20, step22]
+
+# 环境备忘（给子代理的 prompt 用）
+env:
+  nvm_load: 'export NVM_DIR="$HOME/.nvm"; [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"'
+  proxy: 'HTTP_PROXY=http://127.0.0.1:7890 HTTPS_PROXY=http://127.0.0.1:7890'
+  core_test_cmd: 'npm run test:fast -w @novel-master/core'
+  core_test_runner: 'tsx --test（不是 jest）'
+  subagent_sqlite_warning: '子代理进程内 better-sqlite3 native binding 会 ERR_DLOPEN_FAILED，子代理无法实际跑测试，只能代码层面判断；主代理环境能跑。'
+  glob_bug: 'find_path/grep 的深层 glob 在本仓库有 bug（如 packages/core/test/**/*.ts 零命中），验证文件存在性用 list_directory + read_file。'

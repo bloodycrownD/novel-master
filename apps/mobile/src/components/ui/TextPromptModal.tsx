@@ -3,8 +3,10 @@
  */
 import React, {useEffect, useState} from 'react';
 import {Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useAndroidModalKeyboardAvoid} from '../../hooks/useAndroidModalKeyboardAvoid';
 import {AppModal} from './AppModal';
 
 type Props = {
@@ -31,6 +33,10 @@ export function TextPromptModal({
   const {tokens} = useTheme();
   const [value, setValue] = useState(initialValue);
   const [saving, setSaving] = useState(false);
+  // Android Modal 是独立 window，useReanimatedKeyboardAnimation 走 native event emitter
+  // 在 Modal 内也能正常收事件。只给面板加 translateY，遮罩不动，不触发 flex layout。
+  // 居中弹窗上移键盘高度的一半，露出输入框又不顶到屏幕顶部。
+  const panelAvoidStyle = useAndroidModalKeyboardAvoid(0.5);
 
   useEffect(() => {
     if (visible) {
@@ -54,20 +60,19 @@ export function TextPromptModal({
     }
   };
 
-  return (
-    <AppModal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.avoidingRoot}
-        keyboardVerticalOffset={24}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.panel, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+  // backdrop + panel：iOS 走 KeyboardAvoidingView 包裹，Android 在 panel 上挂 translateY。
+  // Android 上 react-native-keyboard-controller 的 KeyboardAvoidingView behavior={undefined}
+  // 等于啥也不干，所以改用 Animated.View + useAndroidModalKeyboardAvoid 自己避让。
+  const backdrop = (
+    <Pressable style={styles.backdrop} onPress={onClose}>
+      <Animated.View
+        style={[
+          styles.panel,
+          {backgroundColor: tokens.surface},
+          Platform.OS === 'android' ? panelAvoidStyle : undefined,
+        ]}
+        onStartShouldSetResponder={() => true}>
+        <Pressable onPress={e => e.stopPropagation()}>
           <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
           {label ? (
             <Text style={[styles.label, {color: tokens.textSecondary}]}>
@@ -112,8 +117,26 @@ export function TextPromptModal({
             </Pressable>
           </View>
         </Pressable>
-      </Pressable>
-      </KeyboardAvoidingView>
+      </Animated.View>
+    </Pressable>
+  );
+
+  return (
+    <AppModal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}>
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView
+          behavior="padding"
+          style={styles.avoidingRoot}
+          keyboardVerticalOffset={24}>
+          {backdrop}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.avoidingRoot}>{backdrop}</View>
+      )}
     </AppModal>
   );
 }

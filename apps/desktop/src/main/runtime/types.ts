@@ -25,11 +25,7 @@ import type {
   CompactionConditionEvaluator,
   CompactionConditionsStore,
 } from "@novel-master/core/compaction";
-import type {
-  EventOrchestrator,
-  EventsConfigStore,
-  SimpleEventBus,
-} from "@novel-master/core/events";
+import type { SimpleEventBus } from "@novel-master/core/events";
 import type {
   SecretStore,
   ModelRequestService,
@@ -68,10 +64,8 @@ export interface DesktopNovelMasterRuntime {
   readonly sessionFs: SessionFsService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly eventBus: SimpleEventBus;
-  readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;

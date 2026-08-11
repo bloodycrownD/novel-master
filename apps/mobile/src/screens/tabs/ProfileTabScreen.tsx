@@ -41,8 +41,6 @@ const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackPar
     {icon: '🔌', label: '服务商配置', route: 'Providers'},
     {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
     {icon: '💾', label: '存储配置', route: 'StorageConfig'},
-    {icon: '🗜️', label: '压缩配置', route: 'CompactionConditions'},
-    {icon: '⚡', label: '事件配置', route: 'EventsConfig'},
     {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
   ];
 

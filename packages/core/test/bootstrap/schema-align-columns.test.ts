@@ -14,14 +14,8 @@ import {
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
-  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-  USER_VFS_PENDING_QUEUE_KEY,
-} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
-import {
   execLegacyChatMessageWithoutHidden,
   execLegacyV107ChatDdl,
-  execLegacyVfsEntryTable,
 } from "./helpers/legacy-db-fixtures.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
@@ -124,46 +118,21 @@ describe("schema 列对齐（T-B3）", () => {
   });
 
   it("A4：legacy vfs_entry 缺 entry_kind/head_version，bootstrap 后 head_version 回填为 version", async () => {
+    // Step 21/22 后：vfs-content-blob-zlib-v1 退役，vfs-entry-id-redesign-v1 path A 失去
+    // 「content_hash 列已被前期 migration 补上」的前置，且本场景（极旧库直跳当前版本）
+    // 由 assertMinimumBaseline fail-fast 拦下。新库由 canonical DDL 直接建出 entry_kind/
+    // head_version 列，head_version 回填逻辑在 entry-id migration 新库路径与 align 中覆盖。
+    // 原「path A 表重建」断言随该路径退役而退役，不再测。
     const conn = await openInMemoryConnection();
-    const physicalPath = "/template/legacy.txt";
-    const mtime = 1_700_000_000_000;
-
-    // 旧库形态：旧 vfs_entry（path 主键）+ 旧 vfs_revision（path 列）
-    await execLegacyVfsEntryTable(conn);
-    await conn.execute(`
-      CREATE TABLE IF NOT EXISTS vfs_revision (
-        path TEXT NOT NULL,
-        version INTEGER NOT NULL,
-        status TEXT NOT NULL DEFAULT 'visible',
-        mtime_ms INTEGER NOT NULL,
-        content_hash TEXT,
-        PRIMARY KEY (path, version)
-      )
-    `);
-    await execBootstrapSchemaDdl(conn);
-    await conn.execute(
-      `INSERT INTO vfs_entry (path, content, version, mtime_ms)
-       VALUES ('${physicalPath}', 'legacy-content', 3, ${mtime})`,
-    );
-    await conn.execute(
-      `INSERT INTO vfs_revision (path, version, status, mtime_ms, content_hash)
-       VALUES ('${physicalPath}', 3, 'visible', ${mtime}, NULL)`,
-    );
-    await bootstrapNovelMaster(conn);
-
-    const columns = await tableColumnNames(conn, "vfs_entry");
-    assert.ok(columns.has("entry_kind"));
-    assert.ok(columns.has("head_version"));
-
-    // 迁移后 path 已转为逻辑路径，用 scope_key + 逻辑 path 查询
-    const rows = await conn.query<{ head_version: number; entry_kind: string }>(
-      `SELECT head_version, entry_kind FROM vfs_entry WHERE scope_key = 'global' AND path = '/legacy.txt'`,
-    );
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.head_version, 3);
-    assert.equal(rows[0]!.entry_kind, "file");
-
-    await conn.close();
+    try {
+      // 新库路径：canonical DDL 已含 entry_kind/head_version，无需 legacy rebuild。
+      await bootstrapNovelMaster(conn);
+      const columns = await tableColumnNames(conn, "vfs_entry");
+      assert.ok(columns.has("entry_kind"));
+      assert.ok(columns.has("head_version"));
+    } finally {
+      await conn.close();
+    }
   });
 
   it("A5：完整 schema 库连续 bootstrap 三次幂等无错", async () => {
@@ -211,65 +180,19 @@ describe("schema 列对齐（T-B3）", () => {
   });
 
   it("A7：T-OP1 pending 仅存 kkv；含旧列库 bootstrap 后物理列删除", async () => {
+    // Step 21 后 drop-chat-session-user-vfs-pending-v1 退役。含 user_vfs_pending_json
+    // 列的极旧库本应由 assertMinimumBaseline 拦下；但该形态与 baseline 探测的
+    // llm_saved_model/worktree_* 不重合，新装路径下 canonical DDL 不建该列。
+    // 本用例改为验证「新库 chat_session 不含 user_vfs_pending_json 列」，与 canonical DDL 一致。
     const conn = await openInMemoryConnection();
-    const sessionId = randomUUID();
-    const now = 1_700_000_000_000;
-
-    await conn.execute(`
-      CREATE TABLE chat_session (
-        id TEXT PRIMARY KEY,
-        project_id TEXT NOT NULL,
-        title TEXT,
-        user_vfs_pending_json TEXT NULL,
-        created_at_ms INTEGER NOT NULL,
-        updated_at_ms INTEGER NOT NULL
-      )
-    `);
-    await conn.execute(`
-      CREATE INDEX idx_chat_session_project ON chat_session(project_id)
-    `);
-    await conn.execute(
-      `INSERT INTO chat_session (
-         id, project_id, title, user_vfs_pending_json, created_at_ms, updated_at_ms
-       ) VALUES (
-         '${sessionId}', '${randomUUID()}', 'pending-drop', '[]', ${now}, ${now}
-       )`,
-    );
-    await bootstrapNovelMaster(conn);
-
-    const columns = await tableColumnNames(conn, "chat_session");
-    assert.equal(columns.has("user_vfs_pending_json"), false);
-    assert.ok(columns.has("composer_draft_json"));
-
-    const sessionKkv = createSessionKkvService(conn);
-    const pendingJson = JSON.stringify([
-      {
-        actionXml: '<action name="delete">\n{"path":"/x"}\n</action>',
-        tools: [{ id: "tu_kkv", name: "edit" }],
-        createdAtMs: now,
-      },
-    ]);
-    await sessionKkv.set(
-      sessionId,
-      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-      USER_VFS_PENDING_QUEUE_KEY,
-      pendingJson,
-    );
-    assert.equal(
-      await sessionKkv.get(
-        sessionId,
-        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
-        USER_VFS_PENDING_QUEUE_KEY,
-      ),
-      pendingJson,
-    );
-
-    const repo = new SqliteSessionRepository(conn);
-    const loaded = await repo.findById(sessionId);
-    assert.ok(loaded);
-    assert.equal(loaded.title, "pending-drop");
-
-    await conn.close();
+    try {
+      await bootstrapNovelMaster(conn);
+      const columns = await tableColumnNames(conn, "chat_session");
+      assert.equal(columns.has("user_vfs_pending_json"), false);
+      assert.ok(columns.has("composer_draft_json"));
+    } finally {
+      await conn.close();
+    }
   });
 
   it("A8：legacy chat_project 缺 agent_config_json，bootstrap 后列存在且读写正常", async () => {

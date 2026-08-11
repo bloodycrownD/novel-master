@@ -3,9 +3,11 @@
  */
 import React, {useEffect, useState} from 'react';
 import {Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useAndroidModalKeyboardAvoid} from '../../hooks/useAndroidModalKeyboardAvoid';
 
 type Props = {
   visible: boolean;
@@ -23,6 +25,8 @@ export function EditModelNameModal({
   const {tokens} = useTheme();
   const [modelName, setModelName] = useState('');
   const [saving, setSaving] = useState(false);
+  // 底部对齐 sheet：键盘弹起后紧贴屏幕底部，移整个键盘高度才能贴到键盘上方。
+  const panelAvoidStyle = useAndroidModalKeyboardAvoid(1);
 
   useEffect(() => {
     if (visible) {
@@ -44,19 +48,16 @@ export function EditModelNameModal({
     }
   };
 
-  return (
-    <AppModal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.avoidingRoot}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+  const body = (
+    <Pressable style={styles.backdrop} onPress={onClose}>
+      <Animated.View
+        style={[
+          styles.sheet,
+          {backgroundColor: tokens.surface},
+          Platform.OS === 'android' ? panelAvoidStyle : undefined,
+        ]}
+        onStartShouldSetResponder={() => true}>
+        <Pressable onPress={e => e.stopPropagation()}>
           <Text style={[styles.title, {color: tokens.text}]}>重命名模型</Text>
           <Text style={[styles.label, {color: tokens.textSecondary}]}>
             模型名称
@@ -87,8 +88,23 @@ export function EditModelNameModal({
             </Pressable>
           </View>
         </Pressable>
-      </Pressable>
-      </KeyboardAvoidingView>
+      </Animated.View>
+    </Pressable>
+  );
+
+  return (
+    <AppModal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}>
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView behavior="padding" style={styles.avoidingRoot}>
+          {body}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.avoidingRoot}>{body}</View>
+      )}
     </AppModal>
   );
 }

@@ -156,3 +156,45 @@ describe("App.tsx 入口替换 (T-D4)", () => {
     assert.match(appSrc, /setSessionDetailOpen\(true\)/);
   });
 });
+
+describe("Bug5：置位/手动压缩后 SessionDetailDrawer token 计数刷新", () => {
+  it("SessionDetailDrawer 源码：监听 context-changed，命中后 reload", () => {
+    const src = readDrawer();
+    // 新增 context-changed 监听（与 messages-rollback 同范式）
+    assert.match(src, /addEventListener\(['"]context-changed['"]\s*,\s*handler\)/);
+    assert.match(src, /removeEventListener\(['"]context-changed['"]\s*,\s*handler\)/);
+    // 命中后调 reload（与 messages-rollback 块共用同一个 handler 形状）
+    assert.match(src, /context-changed[\s\S]*?void reload\(\)/);
+  });
+
+  it("ConversationPanel 源码：置位（set-floor）成功后 dispatch context-changed", () => {
+    const convSrc = readFileSync(
+      join(rendererRoot, "features", "chat", "ConversationPanel.tsx"),
+      "utf8",
+    );
+    // set-floor 分支成功路径里 dispatch context-changed
+    assert.match(
+      convSrc,
+      /kind === ['"]set-floor['"][\s\S]*?dispatchEvent\([\s\S]*?context-changed[\s\S]*?\)/,
+    );
+    // 语义不复用 messages-rollback：context-changed 是独立事件
+    assert.match(convSrc, /new CustomEvent\(['"]context-changed['"]\s*,/);
+  });
+
+  it("ConversationPanel 源码：手动压缩（runCompaction）成功后 dispatch context-changed", () => {
+    const convSrc = readFileSync(
+      join(rendererRoot, "features", "chat", "ConversationPanel.tsx"),
+      "utf8",
+    );
+    // runCompaction 里同时保留 session-compacted（驱动消息列表刷新）
+    // 和新增的 context-changed（驱动 SessionDetailDrawer token 刷新）
+    assert.match(
+      convSrc,
+      /session-compacted[\s\S]*?runCompaction|[\s\S]*?session-compacted/,
+    );
+    assert.match(
+      convSrc,
+      /runCompaction[\s\S]*?new CustomEvent\(['"]context-changed['"]\s*,/,
+    );
+  });
+});

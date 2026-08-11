@@ -37,7 +37,6 @@ const mockRuntime: any = {
     getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
     getCurrentRegexGroupId: jest.fn(async () => undefined),
   },
-  eventOrchestrator: {emit: jest.fn()},
   eventBus: new SimpleEventBus(),
   workplace: jest.fn(() => ({})),
   sessionVfs: jest.fn(() => ({})),
@@ -60,7 +59,6 @@ jest.mock('react-native-safe-area-context', () => ({
 }));
 
 jest.mock('@novel-master/core', () => ({
-  EVENT_SESSION_COMPACTION_REQUESTED: 'session.compact',
   textBlocks: (text: string) => ({blocks: [{type: 'text', text}]}),
 }));
 

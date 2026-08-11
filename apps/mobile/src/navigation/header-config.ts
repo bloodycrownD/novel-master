@@ -24,8 +24,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   ProviderEdit: {title: '编辑服务商', showBack: true, showNav: false},
   ProviderDetail: {title: '模型管理', showBack: true, showNav: false},
   ModelSampling: {title: '采样配置', showBack: true, showNav: false},
-  CompactionConditions: {title: '压缩配置', showBack: true, showNav: false},
-  EventsConfig: {title: '事件配置', showBack: true, showNav: false},
+
   StorageConfig: {title: '存储配置', showBack: true, showNav: false},
   CloudSyncProgress: {title: '云同步', showBack: true, showNav: false},
   ChatConfig: {title: '聊天配置', showBack: true, showNav: false},

@@ -13,12 +13,7 @@ import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
 } from '@novel-master/core/compaction';
-import {
-  createEventOrchestrator,
-  createRunAgentHandlerDeps,
-  createEventsConfigStore,
-  SimpleEventBus,
-} from '@novel-master/core/events';
+import { SimpleEventBus } from '@novel-master/core/events';
 import {
   createChatServices,
   createMessageTranscriptEffectsService,
@@ -75,7 +70,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const tokenCounters = createDefaultTokenCounterRegistry({});
 
   const eventBus = new SimpleEventBus();
-  const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
 
   const chat = createChatServices(conn, { state, agentRegistry });
@@ -105,29 +99,17 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
         evaluation,
       );
     },
+    getHideStartDepth() {
+      if (compactionConditionEvaluator == null) {
+        compactionConditionEvaluator = createCompactionConditionEvaluator({
+          conditionsStore: compactionConditions,
+          tokenCounters,
+          providerModels: providerBundle.providerModels,
+        });
+      }
+      return compactionConditionEvaluator.getHideStartDepth();
+    },
   };
-
-  const eventOrchestrator = createEventOrchestrator({
-    eventsConfig,
-    eventBus,
-    messages,
-    messageTranscriptEffects,
-    sessionKkv,
-    runAgent: createRunAgentHandlerDeps({
-      messages,
-      agentRegistry,
-      modelRequests: providerBundle.modelRequests,
-      savedModels: providerBundle.savedModelRepo,
-      workplace: s => createWorkplaceService(conn, s),
-      sessionVfs: (projectId, sessionId) =>
-        createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
-      messageCheckpoint: createMessageCheckpointService(conn),
-      sessionKkv,
-      eventBus,
-      state,
-      regexConfig,
-    }),
-  });
 
   setTimeout(() => {
     ensureLlmFetchConfigured();
@@ -139,10 +121,8 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     preferences,
     kkv,
     eventBus,
-    eventsConfig,
     compactionConditions,
     compactionConditionEvaluator: lazyCompactionConditionEvaluator,
-    eventOrchestrator,
     agentRegistry,
     abortRegistry,
     streamRegistry,

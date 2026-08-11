@@ -17,12 +17,7 @@ import {
   createDefaultTokenCounterRegistry,
   createProviderServices,
 } from "@novel-master/core/provider";
-import {
-  createEventOrchestrator,
-  createEventsConfigStore,
-  createRunAgentHandlerDeps,
-  SimpleEventBus,
-} from "@novel-master/core/events";
+import { SimpleEventBus } from "@novel-master/core/events";
 import {
   createMessageService,
   createMessageTranscriptEffectsService,
@@ -94,7 +89,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   });
 
   const eventBus = new SimpleEventBus();
-  const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -111,32 +105,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const abortRegistry = createAgentAbortRegistry();
   const streamRegistry = createAgentStreamRegistry();
 
-  const eventOrchestrator = createEventOrchestrator({
-    eventsConfig,
-    eventBus,
-    messages,
-    messageTranscriptEffects,
-    sessionKkv,
-    runAgent: createRunAgentHandlerDeps({
-      messages,
-      agentRegistry,
-      modelRequests: providerBundle.modelRequests,
-      savedModels: providerBundle.savedModelRepo,
-      workplace: (s) => createWorkplaceService(conn, s),
-      sessionVfs: (projectId, sessionId) =>
-        createScopedVfsService(conn, {
-          kind: "session",
-          projectId,
-          sessionId,
-        }),
-      messageCheckpoint: createMessageCheckpointService(conn),
-      sessionKkv,
-      eventBus,
-      state,
-      regexConfig,
-    }),
-  });
-
   return {
     conn,
     dbPath,
@@ -144,10 +112,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     preferences,
     kkv,
     eventBus,
-    eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    eventOrchestrator,
     agentRegistry,
     abortRegistry,
     streamRegistry,
