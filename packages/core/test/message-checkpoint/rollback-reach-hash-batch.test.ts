@@ -91,6 +91,7 @@ describe("rollback reach hash batch", () => {
       listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
       adjustRefCount: async () => undefined,
+      batchAdjustRefCount: async () => undefined,
       repairRefCountFloor: async () => false,
       deleteUnreferencedUnderScope: async () => 0,
     };
@@ -160,6 +161,7 @@ describe("rollback reach hash batch", () => {
       listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
       adjustRefCount: async () => undefined,
+      batchAdjustRefCount: async () => undefined,
       repairRefCountFloor: async () => false,
       deleteUnreferencedUnderScope: async () => 0,
     };

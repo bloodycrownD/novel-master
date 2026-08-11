@@ -105,6 +105,7 @@ describe("rollback version short-circuit", () => {
       listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
       adjustRefCount: async () => undefined,
+      batchAdjustRefCount: async () => undefined,
       repairRefCountFloor: async () => false,
       deleteUnreferencedUnderScope: async () => 0,
     };
@@ -170,6 +171,7 @@ describe("rollback version short-circuit", () => {
       listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
       adjustRefCount: async () => undefined,
+      batchAdjustRefCount: async () => undefined,
       repairRefCountFloor: async () => false,
       deleteUnreferencedUnderScope: async () => 0,
     };
@@ -252,6 +254,7 @@ describe("rollback version short-circuit", () => {
       listKeysUnderScope: async () => [],
       deleteExceptReachable: async () => 0,
       adjustRefCount: async () => undefined,
+      batchAdjustRefCount: async () => undefined,
       repairRefCountFloor: async () => false,
       deleteUnreferencedUnderScope: async () => 0,
     };
