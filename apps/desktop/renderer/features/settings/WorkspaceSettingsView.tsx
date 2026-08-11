@@ -23,7 +23,7 @@ import {
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { PickerModal } from "@/components/ui/PickerModal";
-import { Switch } from "@/components/ui/Switch";
+
 import {
   SettingsField,
   SettingsPanel,
@@ -262,43 +262,40 @@ export function WorkspaceSettingsView() {
           />
         </SettingsRows>
 
-        <div className="settings-field-grid">
-          <SettingsField label="隐藏起始深度">
+        <SettingsField label="隐藏起始深度">
+          <input
+            type="number"
+            min="0"
+            value={compactionHideStartDepth}
+            onChange={(e) => {
+              setCompactionHideStartDepth(e.target.value);
+              scheduleCompactionSave();
+            }}
+          />
+        </SettingsField>
+        <SettingsSwitchRow
+          label="启用自动压缩"
+          checked={compactionEnabled}
+          onChange={(next) => {
+            setCompactionEnabled(next);
+            void saveCompaction(next);
+          }}
+        />
+        {compactionEnabled ? (
+          <SettingsField label="Token 比例">
             <input
               type="number"
-              min="0"
-              value={compactionHideStartDepth}
+              step="0.01"
+              min="0.01"
+              max="1"
+              value={compactionTokenRatio}
               onChange={(e) => {
-                setCompactionHideStartDepth(e.target.value);
+                setCompactionTokenRatio(e.target.value);
                 scheduleCompactionSave();
               }}
             />
           </SettingsField>
-          <SettingsField label="启用自动压缩" row>
-            <Switch
-              checked={compactionEnabled}
-              onChange={(next) => {
-                setCompactionEnabled(next);
-                void saveCompaction(next);
-              }}
-            />
-          </SettingsField>
-          {compactionEnabled ? (
-            <SettingsField label="Token 比例">
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max="1"
-                value={compactionTokenRatio}
-                onChange={(e) => {
-                  setCompactionTokenRatio(e.target.value);
-                  scheduleCompactionSave();
-                }}
-              />
-            </SettingsField>
-          ) : null}
-        </div>
+        ) : null}
       </SettingsSection>
 
       <PickerModal
