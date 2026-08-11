@@ -12,32 +12,28 @@ base_sha: f5b6494
 # - Bug5（Step T10，Desktop SessionDetailDrawer token 刷新）
 # - Bug6（Step K1/K2，Mobile Android 键盘避让 7 处）
 
-dag_version: 4
+dag_version: 6
 
 # wave 进度：
-# wave-0 done: probe + impl-step1-3 ✅
-# wave-1 done: fix-test-failures + impl-step4-7 ✅ (cr-func: func-ready yes, 2 must-fix)
-# wave-2 done: fix-cr-wave1 (T-AR1+T-IPC1 补全) + impl-step8-10 ✅ (方案2: 只删 eventOrchestrator)
-#   - SPEC L222-228 已修订（Step 8-10 只删 eventOrchestrator，保留 eventsConfigStore 到 Step 15-17）
-# wave-3: cr-func-wave2 + impl-step11-14（并行）
+# wave-0~5 全部 done
+# cr-func-final: dev-ready yes, 无阻塞
+# 全部 Step 1-22 + Bug5 + Bug6 + 20个测试失败全修 完成
 wave_plan:
-  - [cr-func-wave2, impl-step11-14]
-  - [impl-step15-17, impl-bug6-k1, impl-bug6-k2]  # 阶段五 UI 删除 + Bug6 并行
-  - [impl-step18-19, impl-bug5]  # 阶段六 压缩配置 UI + Bug5
-  - [impl-step20]                # 阶段七 测试清理
-  - [impl-step21-22]             # 阶段八 Migration 清理
+  - [impl-step15-17, impl-bug6, impl-bug5]
+  - [cr-func-wave4]
+  - [impl-step18-19]              # 阶段六 压缩配置 UI 补全
+  - [impl-step20]                 # 阶段七 测试清理
+  - [impl-step21-22]              # 阶段八 Migration 清理
   - [verify-final, cr-func-final]
 
 node_status:
-  probe-test-failures: { status: done, executor: subagent, readonly: true }
-  impl-step1-3: { status: done, executor: subagent, head_sha: 111685b }
-  fix-test-failures: { status: done, executor: subagent, head_sha: 11e6877 }
-  impl-step4-7: { status: done, executor: subagent, head_sha: c6b05a5 }
-  cr-func-wave1: { status: done, func_ready: yes, must_fix: [T-AR1, T-IPC1-assert] }
-  fix-cr-wave1: { status: done, executor: subagent, head_sha: df34f05 }
-  impl-step8-10: { status: done, executor: subagent, head_sha: 8368fc3 }
-  cr-func-wave2: { status: pending, executor: subagent, readonly: true }
-  impl-step11-14: { status: pending, executor: subagent }
+  all_steps: done
+  cr-func-final: { status: done, dev_ready: yes }
+  total_commits: 32
+  core_test: 1886 pass / 0 fail
+  desktop_typecheck: 0 errors
+  spec_deviations: []
+  open_must_fix: []
 
 # wave-1 cr-func must-fix（待 fix-cr-wave1 闭合）
 cr_wave1_must_fix:
