@@ -24,15 +24,18 @@ const generalDef: AgentDefinition = {
 };
 
 /**
- * T-T9 / P0-4：子 agent run 的 toolCtx.vfs 与父 session 的 VFS 是同一视图。
+ * T-T9 / P0-4：task 工具在父 agent 上下文中的 ctx.vfs 是父 session 的 VFS。
  *
- * task 工具 run 时，ctx.vfs 即装配期注入的 toolCtx.vfs；runChildAgent 内部
- * 再 `vfs = runtime.sessionVfs(parentProjectId, parentSessionId)` 装配子 agent toolCtx.vfs。
- * 本测试用 task 工具的 ctx.vfs 间接验证（同一装配来源：父 session VFS）。
+ * 注意（Feature A 后）：本测试验证的是 **task 工具本身** 在父 agent 上下文中的
+ * ctx.vfs——它是父 agent 的 VFS 视图。子 agent 运行时的 toolCtx.vfs 已改为
+ * 指向子 session（Feature A：子会话工作区隔离），那条路径由
+ * `subsession-workspace-isolation.test.ts` 的 T-SS-3/4 覆盖。本测试里的
+ * `runChildAgent` 是 mock，不跑真实装配。
  */
 describe("子代理 VFS 可见性（T-T9 / P0-4）", () => {
   it("task 工具 ctx.vfs 是父 session VFS（预置文件可读）", async () => {
-    // 父 session VFS 视图（mock）：含 /outline.md
+    // 父 session VFS 视图（mock）：含 /outline.md。注意这是父 agent 上下文的 VFS，
+    // 子 agent 的 VFS 在 Feature A 后指向子 session（见 T-SS-3/4）。
     const parentVfs = {
       read: async () => ({ content: "# 大纲\n主角：林白" }),
     } as never;
