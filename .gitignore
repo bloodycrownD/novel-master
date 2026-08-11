@@ -48,3 +48,6 @@ tmp/
 
 # 本地 worktree（agent 工作区）
 .worktree/
+
+# Git worktrees for parallel feature development
+.woktree/
