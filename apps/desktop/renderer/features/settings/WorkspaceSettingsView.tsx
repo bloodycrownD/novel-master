@@ -25,7 +25,6 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 import { PickerModal } from "@/components/ui/PickerModal";
 import {
   SettingsField,
-  SettingsFormSection,
   SettingsPanel,
   SettingsRow,
   SettingsRows,
@@ -200,7 +199,10 @@ export function WorkspaceSettingsView() {
         </SettingsRows>
       </SettingsSection>
 
-      <SettingsSection title="聊天偏好" desc="影响消息展示与 LLM 请求行为。">
+      <SettingsSection
+        title="聊天偏好"
+        desc="影响消息展示与 LLM 请求行为。达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。"
+      >
         <SettingsRows>
           <SettingsSwitchRow
             label="流式输出"
@@ -245,22 +247,7 @@ export function WorkspaceSettingsView() {
               : USER_OPS_LABELS.disabledHint}
           </p>
         </SettingsRows>
-      </SettingsSection>
 
-      <SettingsFormSection
-        title="压缩条件"
-        desc="达到阈值时触发会话压缩；隐藏起始深度对自动和手动压缩均生效。"
-      >
-        <SettingsSwitchRow
-          label="启用自动压缩"
-          checked={compactionEnabled}
-          onChange={(next) => {
-            setCompactionEnabled(next);
-            if (!next) {
-              void saveCompaction(false);
-            }
-          }}
-        />
         <div className="settings-field-grid settings-field-grid--with-action">
           <SettingsField label="隐藏起始深度">
             <input
@@ -270,6 +257,16 @@ export function WorkspaceSettingsView() {
               onChange={(e) => setCompactionHideStartDepth(e.target.value)}
             />
           </SettingsField>
+          <SettingsSwitchRow
+            label="启用自动压缩"
+            checked={compactionEnabled}
+            onChange={(next) => {
+              setCompactionEnabled(next);
+              if (!next) {
+                void saveCompaction(false);
+              }
+            }}
+          />
           {compactionEnabled ? (
             <SettingsField label="Token 比例">
               <input
@@ -288,7 +285,7 @@ export function WorkspaceSettingsView() {
             </Button>
           </div>
         </div>
-      </SettingsFormSection>
+      </SettingsSection>
 
       <PickerModal
         open={picker === "model"}
