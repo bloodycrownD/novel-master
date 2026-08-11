@@ -15,7 +15,6 @@ export type RootStackParamList = {
   RealPrompt: undefined;
   Providers: undefined;
   ProviderCreate: undefined;
-  ProviderEdit: {providerId?: string} | undefined;
   ProviderDetail: {providerId?: string} | undefined;
   ModelSampling: {savedModelId?: string} | undefined;
 

@@ -212,10 +212,7 @@ export function ProvidersScreen() {
       )}
       <BottomSheetMenu
         visible={menuProviderId != null}
-        items={[
-          {label: '编辑', action: 'edit'},
-          {label: '删除', action: 'delete', danger: true},
-        ]}
+        items={[{label: '删除', action: 'delete', danger: true}]}
         onClose={() => setMenuProviderId(undefined)}
         onSelect={action => {
           const id = menuProviderId;
@@ -223,9 +220,7 @@ export function ProvidersScreen() {
           if (!id) {
             return;
           }
-          if (action === 'edit') {
-            navigation.navigate('ProviderEdit', {providerId: id});
-          } else if (action === 'delete') {
+          if (action === 'delete') {
             handleDelete(id);
           }
         }}
