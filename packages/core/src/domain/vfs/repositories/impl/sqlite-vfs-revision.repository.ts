@@ -323,12 +323,19 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
     delta: 1 | -1,
   ): Promise<void> {
-    if (pointers.length === 0) {
+    await this.batchAdjustRefCountWithDelta(pointers, delta);
+  }
+
+  async batchAdjustRefCountWithDelta(
+    pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+    delta: number,
+  ): Promise<void> {
+    if (pointers.length === 0 || delta === 0) {
       return;
     }
 
-    // delta = +1 要先校验所有 pair 都存在，守护 T-RB-REF-MISSING 不变量；
-    // delta = -1 命不中即跳过，不需要前置查存在性。
+    // delta > 0 要先校验所有 pair 都存在，守护 T-RB-REF-MISSING 不变量；
+    // delta < 0 命不中即跳过，不需要前置查存在性。
     if (delta > 0) {
       const existing = await this.findExistingEntryVersionKeys(pointers);
       const missing: Array<{ entryId: number; version: number }> = [];
@@ -352,7 +359,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
     // 按 500 分块发 UPDATE，复用 findExistingEntryVersionKeys 的 (entry_id, version) IN (...) 写法
     const CHUNK_SIZE = 500;
-    const deltaLiteral = delta > 0 ? "+ 1" : "- 1";
+    const deltaLiteral = delta > 0 ? `+ ${delta}` : `${delta}`;
     for (let offset = 0; offset < pointers.length; offset += CHUNK_SIZE) {
       const chunk = pointers.slice(offset, offset + CHUNK_SIZE);
       const placeholders = chunk.map(() => `(?,?)`).join(`,`);

@@ -138,6 +138,45 @@ export class SqliteMessageCheckpointRepository
     }
   }
 
+  async seedCheckpoints(
+    sessionId: string,
+    messages: ReadonlyArray<{ readonly id: string }>,
+    files: ReadonlyArray<{
+      readonly entryId: number;
+      readonly revisionVersion: number;
+    }>,
+    createdAtMs: number,
+  ): Promise<void> {
+    if (messages.length === 0 || files.length === 0) {
+      return;
+    }
+
+    const msgCount = messages.length;
+
+    // 批量插入锚点行：每条消息一行 message_checkpoint
+    const anchorSql = `INSERT INTO message_checkpoint (session_id, message_id, created_at_ms) VALUES (?, ?, ?)`;
+    const anchorParams = messages.map((m) => [sessionId, m.id, createdAtMs]);
+    await this.conn.batch(anchorSql, anchorParams);
+
+    // 批量插入文件指针行：消息数 × 文件数，一次性全插
+    const fileSql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version) VALUES (?, ?, ?, ?)`;
+    const fileParams: unknown[][] = [];
+    for (const msg of messages) {
+      for (const file of files) {
+        fileParams.push([sessionId, msg.id, file.entryId, file.revisionVersion]);
+      }
+    }
+    await this.conn.batch(fileSql, fileParams);
+
+    // 批量递增 ref_count：每个文件指针的 revision ref_count 加 msgCount。
+    // 直接用 IN 子句 + 固定 delta，比 expand 成 N 份再调 batchAdjustRefCount 更高效——
+    // 不需要构造 100,000 元素的数组，也不需要逐条存在性查询（seed 场景 revision 刚 append 完）。
+    const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
+    const pointers = files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion }));
+    // 复用 batchAdjustRefCount 的存在性校验（守护 NOT_FOUND 不变量）
+    await revisionRepo.batchAdjustRefCountWithDelta(pointers, msgCount);
+  }
+
   async loadFileTree(
     sessionId: string,
     messageId: string,

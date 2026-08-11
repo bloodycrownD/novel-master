@@ -119,6 +119,18 @@ export interface VfsRevisionRepository {
   ): Promise<void>;
 
   /**
+   * 批量增减 ref_count（自定义 delta，seed 场景用）。
+   *
+   * 与 {@link batchAdjustRefCount} 相同，但 delta 可以是任意正整数——seed 场景
+   * 一次性加 `msgCount`，比 expand 成 N 份再调 +1 更高效。delta > 0 做存在性校验，
+   * delta < 0 时缺失行 no-op。
+   */
+  batchAdjustRefCountWithDelta(
+    pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+    delta: number,
+  ): Promise<void>;
+
+  /**
    * 批量检查哪些 (entryId, version) 的 revision 行已存在。
    *
    * @returns 已存在的 pair 集合，key 格式为 `${entryId}:${version}`

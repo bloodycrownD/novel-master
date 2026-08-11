@@ -39,6 +39,29 @@ export interface MessageCheckpointRepository {
   insertCheckpoint(input: MessageCheckpointInsertInput): Promise<void>;
 
   /**
+   * 批量播种 checkpoint（seed 场景专用：目标 session 全新，无需 DELETE 旧行）。
+   *
+   * 一次性写入所有消息的锚点行 + 文件行，并对每个文件指针的 revision ref_count
+   * 批量 +count（count = 消息数）。比循环调 insertCheckpoint 快一到两个数量级。
+   *
+   * @param sessionId  目标会话
+   * @param messages   要挂 checkpoint 的消息 ID 列表
+   * @param files      文件指针列表（所有消息共享同一组文件树快照）
+   * @param createdAtMs 创建时间戳
+   *
+   * @remarks 仅用于 fork/copy 的 seed 路径；capture 路径仍走 insertCheckpoint（需要处理旧行）。
+   */
+  seedCheckpoints(
+    sessionId: string,
+    messages: ReadonlyArray<{ readonly id: string }>,
+    files: ReadonlyArray<{
+      readonly entryId: number;
+      readonly revisionVersion: number;
+    }>,
+    createdAtMs: number,
+  ): Promise<void>;
+
+  /**
    * Loads the file tree for a message checkpoint.
    *
    * @returns `null` when no checkpoint exists for the message.
