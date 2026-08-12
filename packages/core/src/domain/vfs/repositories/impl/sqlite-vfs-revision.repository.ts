@@ -443,6 +443,21 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return count;
   }
 
+  async deleteGlobalOrphans(): Promise<number> {
+    // 不依赖 vfs_entry JOIN（孤儿 revision 的 entry 已删，JOIN 不到），
+    // 直接按「ref_count<=0 且 entry_id 不存在」全表清扫。
+    // revision DELETE 触发器会连带维护 vfs_content_blob.ref_count 并回收归零 blob。
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM vfs_revision
+       WHERE ref_count <= 0
+         AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
+      {},
+    );
+    return Number(result.changes);
+  }
+
   private async rowToRevision(row: Row): Promise<VfsRevision> {
     const statusRaw = String(row.status);
     const status: VfsRevisionStatus =
