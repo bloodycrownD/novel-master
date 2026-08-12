@@ -165,6 +165,26 @@ export interface VfsRevisionRepository {
   ): Promise<boolean>;
 
   /**
+   * 批量版本 {@link repairRefCountFloor}，把 N 次 SELECT + N 次 UPDATE 压成
+   * ceil(N/500) 次 SELECT + ceil(N/500) 次 batch UPDATE。
+   *
+   * @remarks 内部按 `REVISION_REPAIR_CHUNK_SIZE`（500）分块：先批量 SELECT 所有
+   * (entry_id, version) 的当前 ref_count，再在内存里算 diff（只挑 current < expected
+   * 的项），最后用 `conn.batch(UPDATE ... SET ref_count = ? WHERE entry_id = ? AND
+   * version = ?)` 一次性写回。保持「只增不减」语义——current >= expected 的行不碰，
+   * 缺失行（revision 已被 GC）也 no-op，跟逐条 {@link repairRefCountFloor} 完全一致。
+   *
+   * @returns 实际发生上调的行数
+   */
+  repairRefCountFloorBatch(
+    items: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+      readonly expected: number;
+    }>,
+  ): Promise<number>;
+
+  /**
    * 删除 scope 下某逻辑路径前缀内 ref_count <= 0 的 revision 行。
    *
    * @returns 删除行数

@@ -36,6 +36,9 @@ import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
 /** 批量 SQL 的分块大小（避免单条语句过长）。 */
 const REVISION_BATCH_CHUNK_SIZE = 100;
 
+/** repairRefCountFloorBatch 的 SELECT / UPDATE 分块大小（对齐 v1.4.24 的 500）。 */
+const REVISION_REPAIR_CHUNK_SIZE = 500;
+
 /**
  * TDBC-backed vfs_revision repository（append-only；正文经 ContentStore）。
  */
@@ -402,6 +405,79 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       { entryId, version, expected },
     );
     return true;
+  }
+
+  async repairRefCountFloorBatch(
+    items: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+      readonly expected: number;
+    }>,
+  ): Promise<number> {
+    if (items.length === 0) {
+      return 0;
+    }
+
+    // Step 1：批量 SELECT 当前 ref_count。复用 (entry_id, version) IN (...) 写法，
+    // 按 500 分块避免单条 SQL 太长。缺失行（revision 已被 GC）自然不会进 currentMap，
+    // 后面 diff 时当作 no-op，跟逐条 repairRefCountFloor 的 row == null 分支一致。
+    const currentMap = new Map<string, number>();
+    for (
+      let offset = 0;
+      offset < items.length;
+      offset += REVISION_REPAIR_CHUNK_SIZE
+    ) {
+      const chunk = items.slice(offset, offset + REVISION_REPAIR_CHUNK_SIZE);
+      const placeholders = chunk.map(() => `(?,?)`).join(`,`);
+      const params: unknown[] = [];
+      for (const item of chunk) {
+        params.push(item.entryId, item.version);
+      }
+      const rows = await this.conn.query<{ entry_id: number; version: number; ref_count: number }>(
+        `SELECT entry_id, version, ref_count FROM vfs_revision WHERE (entry_id, version) IN (${placeholders})`,
+        params,
+      );
+      for (const row of rows) {
+        currentMap.set(
+          revisionPairKey(Number(row.entry_id), Number(row.version)),
+          Number(row.ref_count),
+        );
+      }
+    }
+
+    // Step 2：内存算 diff，只挑 current < expected 的项（保持「只增不减」语义）。
+    const toUpdate: Array<[number, number, number]> = [];
+    for (const item of items) {
+      const current = currentMap.get(
+        revisionPairKey(item.entryId, item.version),
+      );
+      if (current == null) {
+        continue;
+      }
+      if (current < item.expected) {
+        toUpdate.push([item.expected, item.entryId, item.version]);
+      }
+    }
+    if (toUpdate.length === 0) {
+      return 0;
+    }
+
+    // Step 3：conn.batch 写回。每条参数是 [expected, entryId, version]，对应
+    // `UPDATE ... SET ref_count = ? WHERE entry_id = ? AND version = ?`。batch 把
+    // N 行压成一次原生调用，counter 侧只计 1 条 SQL（同文本）。同样按 500 分块，
+    // 避免单次 batch 参数列表过长。
+    const sql = `UPDATE vfs_revision SET ref_count = ? WHERE entry_id = ? AND version = ?`;
+    let adjusted = 0;
+    for (
+      let offset = 0;
+      offset < toUpdate.length;
+      offset += REVISION_REPAIR_CHUNK_SIZE
+    ) {
+      const chunk = toUpdate.slice(offset, offset + REVISION_REPAIR_CHUNK_SIZE);
+      await this.conn.batch(sql, chunk);
+      adjusted += chunk.length;
+    }
+    return adjusted;
   }
 
   async deleteUnreferencedUnderScope(

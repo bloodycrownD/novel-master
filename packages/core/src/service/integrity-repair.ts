@@ -21,9 +21,10 @@
  *   - `vfs_content_blob.ref_count`：SQLite 触发器维护（revision INSERT/DELETE/UPDATE
  *     OF content_hash 时 ±1），表示「有几条 revision 行引用这个 blob」，用于 blob 回收。
  *
- * 关键不变量：`repairRefCounts` 只走 `repairRefCountFloor`，而后者只更新 `ref_count` 列、
- * 不碰 `content_hash`，所以 `AFTER UPDATE OF content_hash` 触发器**不会 fire**——
- * 应用层修复 revision 可达性计数时，绝不会顺带 bump blob 侧的计数器，两条路径不重复计数。
+ * 关键不变量：`repairRefCounts` 只走 `repairRefCountFloorBatch`（以及保留的逐条 `repairRefCountFloor`），
+ * 而这两者都只更新 `ref_count` 列、不碰 `content_hash`，所以 `AFTER UPDATE OF content_hash`
+ * 触发器**不会 fire**——应用层修复 revision 可达性计数时，绝不会顺带 bump blob 侧的计数器，
+ * 两条路径不重复计数。
  *
  * @module service/integrity-repair
  */
