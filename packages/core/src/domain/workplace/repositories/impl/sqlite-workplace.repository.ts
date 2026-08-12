@@ -108,6 +108,54 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     );
   }
 
+  async batchUpsertDirRules(rules: readonly WorkplaceDirRule[]): Promise<void> {
+    // 空数组直接返回：copyScope 在源 scope 无目录规则时不用特殊判断，
+    // 也避免驱动对空 parametersList 的行为分歧。
+    if (rules.length === 0) {
+      return;
+    }
+    // 位置占位符 SQL（和本 worktree 其它 batch 实现一致），一次 conn.batch 提交全部行。
+    // 调用方负责先清空目标 scope，这里只做 INSERT … ON CONFLICT，不重复 DELETE。
+    const sql = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
+        scope_key, logical_path, rule_enabled, sort_field, sort_order,
+        head_count, tail_count, fill_policy
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(scope_key, logical_path) DO UPDATE SET
+        rule_enabled = excluded.rule_enabled,
+        sort_field = excluded.sort_field,
+        sort_order = excluded.sort_order,
+        head_count = excluded.head_count,
+        tail_count = excluded.tail_count,
+        fill_policy = excluded.fill_policy`;
+    const paramsList = rules.map((rule) => [
+      rule.scopeKey,
+      normalizePath(rule.logicalPath),
+      rule.ruleEnabled ? 1 : 0,
+      rule.sortField,
+      rule.sortOrder,
+      rule.headCount,
+      rule.tailCount,
+      rule.fillPolicy,
+    ]);
+    await this.conn.batch(sql, paramsList);
+  }
+
+  async batchUpsertFileRules(rules: readonly WorkplaceFileRule[]): Promise<void> {
+    if (rules.length === 0) {
+      return;
+    }
+    const sql = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
+      VALUES (?, ?, ?)
+      ON CONFLICT(scope_key, logical_path) DO UPDATE SET
+        inclusion_mode = excluded.inclusion_mode`;
+    const paramsList = rules.map((rule) => [
+      rule.scopeKey,
+      normalizePath(rule.logicalPath),
+      rule.inclusionMode,
+    ]);
+    await this.conn.batch(sql, paramsList);
+  }
+
   async deleteScope(scopeKey: string): Promise<void> {
     await executeTemplate(
       this.conn,
@@ -188,23 +236,23 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     toScopeKey: string,
     mapLogicalPath: (logical: string) => string,
   ): Promise<void> {
+    // 先清空目标 scope（覆盖目标 scope 原有、但不在源 scope 的规则），语义保持不变。
     await this.deleteScope(toScopeKey);
     const dirs = await this.listDirRules(fromScopeKey);
     const files = await this.listFileRules(fromScopeKey);
-    for (const d of dirs) {
-      await this.upsertDirRule({
-        ...d,
-        scopeKey: toScopeKey,
-        logicalPath: mapLogicalPath(d.logicalPath),
-      });
-    }
-    for (const f of files) {
-      await this.upsertFileRule({
-        ...f,
-        scopeKey: toScopeKey,
-        logicalPath: mapLogicalPath(f.logicalPath),
-      });
-    }
+    // 收集两组规则后各调一次 batch，把原来「规则数 × 1」条 INSERT 压成每表 1 条 batch INSERT。
+    const mappedDirs = dirs.map((d) => ({
+      ...d,
+      scopeKey: toScopeKey,
+      logicalPath: mapLogicalPath(d.logicalPath),
+    }));
+    const mappedFiles = files.map((f) => ({
+      ...f,
+      scopeKey: toScopeKey,
+      logicalPath: mapLogicalPath(f.logicalPath),
+    }));
+    await this.batchUpsertDirRules(mappedDirs);
+    await this.batchUpsertFileRules(mappedFiles);
   }
 
   async deleteRulesUnderLogicalPrefix(
