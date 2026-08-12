@@ -16,6 +16,7 @@ import {
   vfsEntryIdRedesignV1Migration,
 } from "./vfs-entry-id-redesign-v1.js";
 import { sessionAgentConfigV2Migration } from "./session-agent-config-v2.js";
+import { orphanRevisionGcV1Migration } from "./orphan-revision-gc-v1.js";
 
 /**
  * 本版本最低支持 v1.4.08：下面 6 条 migration 的逻辑已并入 canonical DDL，
@@ -28,6 +29,8 @@ import { sessionAgentConfigV2Migration } from "./session-agent-config-v2.js";
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   vfsEntryIdRedesignV1Migration,
   sessionAgentConfigV2Migration,
+  // orphan-revision-gc-v1 必须排在未来的 table-constraints-v1 之前（SPEC P1-5 顺序约束）。
+  orphanRevisionGcV1Migration,
 ];
 
 /**
