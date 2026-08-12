@@ -192,6 +192,37 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return new TextDecoder().decode(plainUtf8);
   }
 
+  async getMany(
+    hashes: readonly string[],
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    if (hashes.length === 0) {
+      return result;
+    }
+    // 分块 500：SQLite 的 IN (?) 占位上限远高于此，但 500 既能一次性覆盖多数扫描结果，
+    // 又避免单条 SQL 绑参过多导致的额外开销。
+    const CHUNK_SIZE = 500;
+    for (let offset = 0; offset < hashes.length; offset += CHUNK_SIZE) {
+      const chunk = hashes.slice(offset, offset + CHUNK_SIZE);
+      const placeholders = chunk.map(() => `?`).join(`,`);
+      const rows = await this.conn.query<{
+        content_hash: string;
+        encoding: string;
+        bytes: SqlValue;
+      }>(
+        `SELECT content_hash, encoding, bytes FROM vfs_content_blob WHERE content_hash IN (${placeholders})`,
+        chunk,
+      );
+      for (const row of rows) {
+        const encoding = String(row.encoding);
+        const compressed = decodeCompressedBytes(encoding, row.bytes);
+        const plainUtf8 = decompressZlib(compressed);
+        result.set(String(row.content_hash), new TextDecoder().decode(plainUtf8));
+      }
+    }
+    return result;
+  }
+
   async collectAllReferencedHashes(): Promise<Set<string>> {
     const hashes = new Set<string>();
     const entryRows = await queryTemplate<{ content_hash: string }>(
@@ -256,27 +287,19 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return this.put(fallbackPlain);
   }
 
-  async gc(referencedHashes: ReadonlySet<string>): Promise<number> {
-    const rows = await queryTemplate<{ content_hash: string }>(
+  async gc(): Promise<number> {
+    // 一条 NOT IN 子查询清扫孤立 blob：子查询里显式过滤 NULL content_hash，
+    // 避免 NOT IN 遇 NULL 的语义陷阱（NULL 会让整个 NOT IN 结果为空）。
+    const result = await executeTemplate(
       this.conn,
       this.parser,
-      `SELECT content_hash FROM vfs_content_blob`,
+      `DELETE FROM vfs_content_blob WHERE content_hash NOT IN (
+        SELECT content_hash FROM vfs_entry WHERE content_hash IS NOT NULL
+        UNION
+        SELECT content_hash FROM vfs_revision WHERE content_hash IS NOT NULL
+      )`,
       {},
     );
-    let deleted = 0;
-    for (const row of rows) {
-      const hash = String(row.content_hash);
-      if (referencedHashes.has(hash)) {
-        continue;
-      }
-      await executeTemplate(
-        this.conn,
-        this.parser,
-        `DELETE FROM vfs_content_blob WHERE content_hash = #{contentHash}`,
-        { contentHash: hash },
-      );
-      deleted++;
-    }
-    return deleted;
+    return result.changes;
   }
 }

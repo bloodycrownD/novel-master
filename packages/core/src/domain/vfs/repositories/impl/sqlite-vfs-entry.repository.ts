@@ -454,6 +454,23 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }
   }
 
+  async deleteRecursiveIfAny(
+    scopeKey: string,
+    prefix: string,
+  ): Promise<number> {
+    // 先探测：prefix 下无任何 entry 时静默返回 0，避免 recursive:true 分支的 vfsNotFound。
+    const base = normalizePrefix(prefix);
+    const entries = await this.listEntriesUnderPrefix(scopeKey, base);
+    if (entries.length === 0) {
+      return 0;
+    }
+    // base 为空串时 normalizePath 会抛 INVALID_PATH；空串与根 "/" 在 childLikePattern 下
+    // 都匹配 "/%"（即全部以 / 开头的路径），语义等价，这里用 "/" 替代空串。
+    const deletePath = base === "" ? "/" : base;
+    await this.delete(scopeKey, deletePath, { recursive: true });
+    return entries.length;
+  }
+
   async listAllPaths(scopeKey: string): Promise<string[]> {
     const rows = await queryTemplate<{ path: string }>(
       this.conn,
@@ -740,13 +757,36 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   ): Promise<
     ReadonlyArray<{ entryId: number; path: string; content: string }>
   > {
+    // 先收集所有非空 content_hash，一次 getMany 批量读取，避免逐条 get 的 N+1。
+    const hashes = new Set<string>();
+    for (const row of rows) {
+      const h = nullableText(row.content_hash);
+      if (h != null && h.length > 0) {
+        hashes.add(h);
+      }
+    }
+    const contentMap =
+      hashes.size > 0
+        ? await this.contentStore.getMany([...hashes])
+        : new Map<string, string>();
+
     const out: Array<{ entryId: number; path: string; content: string }> = [];
     for (const row of rows) {
-      const plain = await resolveEntryPlainContent(this.contentStore, {
-        entryKind: "file",
-        content: null,
-        contentHash: nullableText(row.content_hash),
-      });
+      const h = nullableText(row.content_hash);
+      let plain: string;
+      if (h != null && h.length > 0) {
+        // scanContents 这条路径只查 entry_kind='file' 的行，正文从 blob 读。
+        const cached = contentMap.get(h);
+        if (cached == null) {
+          throw new Error(`vfs_content_blob 缺失: ${h}`);
+        }
+        plain = cached;
+      } else {
+        // content=NULL 且 content_hash=NULL 的 active 文件行视为正文损坏。
+        throw new Error(
+          "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL",
+        );
+      }
       out.push({
         entryId: Number(row.entry_id),
         path: String(row.path),

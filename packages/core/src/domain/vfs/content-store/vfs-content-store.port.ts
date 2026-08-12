@@ -23,12 +23,19 @@ export interface VfsContentStore {
   get(contentHash: string): Promise<string>;
 
   /**
-   * 删除不在 `referencedHashes` 内的 blob 行。
+   * 批量按 hash 解出 UTF-8 明文（分块下发 `IN (...)` 查询，避免逐条 get 的 N+1）。
    *
-   * @remarks 调用方必须传入**全库** entry∪revision 引用集，禁止 session 局部 keepSet。
+   * @returns 键为命中的 content_hash，值为对应明文；未命中的 hash 不出现在结果中。
+   */
+  getMany(hashes: readonly string[]): Promise<Map<string, string>>;
+
+  /**
+   * 清扫未被 `vfs_entry` ∪ `vfs_revision` 引用的孤立 blob 行（一条 NOT IN 子查询完成）。
+   *
+   * @remarks 全库引用集由 SQL 子查询当场计算，调用方无需再传 referencedHashes。
    * @returns 删除的行数
    */
-  gc(referencedHashes: ReadonlySet<string>): Promise<number>;
+  gc(): Promise<number>;
 
   /**
    * 收集全库仍被 `vfs_entry` ∪ `vfs_revision` 引用的非空 `content_hash`。

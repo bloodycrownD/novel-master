@@ -115,6 +115,21 @@ export interface VfsEntryRepository {
 
   delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<void>;
 
+  /**
+   * 递归删除 scope+prefix 下所有 entry；prefix 下无任何 entry 时静默返回 0。
+   *
+   * @remarks
+   * 与 {@link delete} 的 `recursive:true` 分支的区别：后者在 `changes()===0` 时抛
+   * `vfsNotFound`，而本方法先用 {@link listEntriesUnderPrefix} 探测，空前缀直接返回，
+   * 避免 `deleteVfsPrefix` / `sweepRevisionsUnderScope` 对空目录抛错中断 revision GC。
+   *
+   * @returns 实际删除的行数（探测为空时返回 0）
+   */
+  deleteRecursiveIfAny(
+    scopeKey: string,
+    prefix: string,
+  ): Promise<number>;
+
   /** scope 下所有文件路径（glob 用）。 */
   listAllPaths(scopeKey: string): Promise<string[]>;
 
