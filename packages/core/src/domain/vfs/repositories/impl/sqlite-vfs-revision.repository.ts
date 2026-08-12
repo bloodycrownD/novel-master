@@ -429,9 +429,12 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     await executeTemplate(
       this.conn,
       this.parser,
+      // 用复合 PK (entry_id, version) 寻址而非 rowid，这样 vfs_revision 可以安全地
+      // 切换到 WITHOUT ROWID（决策 4）。rowid 表和 WITHOUT ROWID 表都支持这种写法，
+      // 所以这条改动本身不改变 rowid 表上的行为。
       `DELETE FROM vfs_revision
-       WHERE rowid IN (
-         SELECT r.rowid
+       WHERE (entry_id, version) IN (
+         SELECT r.entry_id, r.version
          FROM vfs_revision r
          JOIN vfs_entry e ON e.entry_id = r.entry_id
          WHERE e.scope_key = #{scopeKey}
