@@ -132,4 +132,122 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
       "revision GC 已连带回收 blob，延期 blob GC 应无残留",
     );
   });
+
+  it("部分删：删 5 个文件后，被删的孤儿 revision 清掉、存活的 5 个不受影响", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-orphan-partial-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
+
+    // 造 10 个单版本文件（每个只有一个 head revision，ref_count>0，不是 orphan）。
+    // 单版本避免双版本里旧版 ref_count=0 被 path-scoped 扫掉，干扰「存活不变」断言。
+    const totalFiles = 10;
+    const deleteCount = 5;
+    for (let i = 0; i < totalFiles; i++) {
+      await vfs.write(`/orphan-partial/file-${i}.txt`, `body-${i}`, {
+        versionCheck: false,
+      });
+    }
+    // 只删前 5 个：这些文件的 active revision 会成为 JOIN 孤儿（entry 已删、ref_count<=0）。
+    for (let i = 0; i < deleteCount; i++) {
+      await vfs.delete(`/orphan-partial/file-${i}.txt`);
+    }
+
+    const swept = await sweepSessionRevisions(
+      revRepo,
+      entryRepo,
+      checkpointRepo,
+      project.id,
+      session.id,
+      ctx.conn,
+    );
+    await runDeferredBlobGc(ctx.conn);
+
+    // 被删的 5 个文件的 active revision（有 content_hash）应被全清。
+    const orphanActiveRev = await ctx.conn.query<{ cnt: number }>(
+      `SELECT COUNT(*) AS cnt FROM vfs_revision
+       WHERE status = 'active' AND content_hash IS NOT NULL
+         AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
+    );
+    assert.equal(
+      Number(orphanActiveRev[0]!.cnt),
+      0,
+      "部分删后，被删文件的有 hash active 孤儿 revision 应全清",
+    );
+    assert.ok(
+      swept >= deleteCount,
+      `部分删后 sweep 应清掉至少 ${deleteCount} 条被删文件的 revision，实际 ${swept}`,
+    );
+
+    // 存活的 5 个文件不受影响：entry 还在、内容还能读。
+    const survivorFiles = await ctx.conn.query<{ cnt: number }>(
+      `SELECT COUNT(*) AS cnt FROM vfs_entry
+       WHERE scope_key = ? AND entry_kind = 'file'`,
+      [`session:${project.id}:${session.id}`],
+    );
+    assert.equal(
+      Number(survivorFiles[0]!.cnt),
+      totalFiles - deleteCount,
+      "应保留 5 个存活文件 entry",
+    );
+    for (let i = deleteCount; i < totalFiles; i++) {
+      const content = await vfs.read(`/orphan-partial/file-${i}.txt`);
+      assert.equal(
+        content.content,
+        `body-${i}`,
+        `存活文件 file-${i}.txt 内容应不变`,
+      );
+    }
+  });
+
+  it("无孤儿：全部存活时跑 sweep，返回 0 且 revision 行数不变", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-orphan-none-${suffix}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const revRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
+
+    // 造 10 个单版本文件，都不删 → 没有任何 ref_count<=0 的 revision，也没有孤儿。
+    const totalFiles = 10;
+    for (let i = 0; i < totalFiles; i++) {
+      await vfs.write(`/orphan-none/file-${i}.txt`, `body-${i}`, {
+        versionCheck: false,
+      });
+    }
+
+    const beforeRev = await ctx.conn.query<{ cnt: number }>(
+      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status = 'active'`,
+    );
+    const revisionsBefore = Number(beforeRev[0]!.cnt);
+
+    const swept = await sweepSessionRevisions(
+      revRepo,
+      entryRepo,
+      checkpointRepo,
+      project.id,
+      session.id,
+      ctx.conn,
+    );
+
+    assert.equal(
+      swept,
+      0,
+      "无孤儿时 sweep 应返回 0（所有 active revision ref_count>0，不在清扫范围）",
+    );
+    const afterRev = await ctx.conn.query<{ cnt: number }>(
+      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status = 'active'`,
+    );
+    assert.equal(
+      Number(afterRev[0]!.cnt),
+      revisionsBefore,
+      "无孤儿时 active revision 行数不应变化",
+    );
+  });
 });
