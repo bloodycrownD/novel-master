@@ -49,6 +49,28 @@ function norm(sql: string): string {
   return sql.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+/**
+ * 逐条比对 fork/copy 出的消息与源消息：seq / role / content / hidden 应完全一致。
+ *
+ * fork 和 copy 都应原样复制消息体（只换 id / sessionId / createdAtMs），所以这四列
+ * 必须逐条对齐——只看条数会漏掉「内容被篡改」的回归。
+ */
+function assertMessagesClone(
+  source: ReadonlyArray<{ seq: number; role: string; content: unknown; hidden: boolean }>,
+  target: ReadonlyArray<{ seq: number; role: string; content: unknown; hidden: boolean }>,
+  label: string,
+): void {
+  assert.equal(target.length, source.length, `${label}: 条数应一致`);
+  for (let i = 0; i < source.length; i++) {
+    const s = source[i]!;
+    const t = target[i]!;
+    assert.equal(t.seq, s.seq, `${label}#${i}: seq 应一致`);
+    assert.equal(t.role, s.role, `${label}#${i}: role 应一致`);
+    assert.deepEqual(t.content, s.content, `${label}#${i}: content 应一致`);
+    assert.equal(t.hidden, s.hidden, `${label}#${i}: hidden 应一致`);
+  }
+}
+
 describe("T-FK2 fork/copy 消息批量化", () => {
   it(`fork ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
     const c = getCtx();
@@ -93,9 +115,11 @@ describe("T-FK2 fork/copy 消息批量化", () => {
       "chat_message INSERT 应走 batch 路径（batchInsert）",
     );
 
-    // 正确性：fork 出的会话消息数 = 源会话。
+    // 正确性：fork 出的会话消息数 = 源会话，且逐条 seq/role/content/hidden 一致。
+    const sourceMsgs = await c.messages.listBySession(session.id);
     const forkedMsgs = await c.messages.listBySession(forked.id);
     assert.equal(forkedMsgs.length, MSG_COUNT);
+    assertMessagesClone(sourceMsgs, forkedMsgs, "fork");
   });
 
   it(`copy ${MSG_COUNT} 条消息：INSERT INTO chat_message 只发 1 条（batch）`, async () => {
@@ -137,5 +161,8 @@ describe("T-FK2 fork/copy 消息批量化", () => {
 
     const copiedMsgs = await c.messages.listBySession(copied.id);
     assert.equal(copiedMsgs.length, MSG_COUNT);
+    // 逐条校验 copy 也保留 seq/role/content/hidden。
+    const sourceMsgs = await c.messages.listBySession(session.id);
+    assertMessagesClone(sourceMsgs, copiedMsgs, "copy");
   });
 });
