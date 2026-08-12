@@ -198,7 +198,8 @@ describe("fail restore compensation (sessionVfs)", () => {
     );
     assert.equal(afterRows.length, 0, "x.md 的 entry 应已被清理");
 
-    // sweep 删 ref_count <= 0 的 revision（entry 已无，JOIN 后直接删 orphan revision）
+    // sweep 现在含 deleteGlobalOrphans：entry 已删、ref_count<=0 的 orphan revision
+    // 会被全局清扫回收（findings 发现 14 修复）。
     const deleted = await sweepSessionRevisions(
       revisions,
       entries,
@@ -207,21 +208,16 @@ describe("fail restore compensation (sessionVfs)", () => {
       session.id,
       ctx.conn,
     );
+    assert.ok(deleted >= 1, "sweep 应通过全局孤儿清扫回收到 entry 已删的 orphan revision");
 
-    // sweep 必须通过 entry JOIN 才能找到 revision；entry 已删的 orphan 不会被 sweep 删
-    // 这是新架构的合理行为——orphan revision 会在 GC 的其他阶段清理
-    assert.ok(deleted >= 0);
-
-    // re-create entry 后 sweep 应能清理该 entry 下 ref_count <= 0 的 revision
+    // re-create entry 后旧 entry_id 的 revision 已被上一步 sweep 清掉（不再残留）
     await vfs.mkdir("/empty");
     await vfs.write("/empty/x.md", "x", { versionCheck: false });
-    // 新 entry 有新 entry_id，旧 revision 仍为 orphan，不在 sweep 范围内
-    // 验证旧 entry_id 的 revision 行还存在（被孤立了）
     const revRows = await ctx.conn.query<{ n: number }>(
       `SELECT COUNT(*) AS n FROM vfs_revision WHERE entry_id = ?`,
       [xEntryId],
     );
-    assert.equal(Number(revRows[0]!.n), 1);
+    assert.equal(Number(revRows[0]!.n), 0, "旧 entry_id 的 orphan revision 应已被 sweep 回收");
   });
 
   it("T-FR-D3: directory 两文件改写后均拨回，无额外写回 version", async () => {

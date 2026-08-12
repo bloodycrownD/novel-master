@@ -296,10 +296,17 @@ describe("rollback ref_count + deferred blob gc", () => {
       await revisions.findByEntryAndVersion(entryA.entryId, vTail),
       null,
     );
-    // tail-only.md 的 entry 仍被 live head 引用（文件本身未被截断），ref_count 从 2 降到 1，不会 sweep
-    // 只验证其 revision 仍存在，ref_count 已降
-    const tailRev = await revisions.findByEntryAndVersion(entryTail.entryId, vOrphan);
-    assert.ok(tailRev != null, "tail-only.md 的 live head 引用应保留 revision");
+    // tail-only.md 在 cp2 tail checkpoint 里且不在 cp1 targetTree 里，回滚时
+    // reconcileVfsPaths 会 vfs.delete 它（entry 被删）+ truncateTail 的 checkpoint
+    // 引用 -1，vOrphan ref_count 归零、entry 不存在 → 成为全局孤儿，被
+    // deleteGlobalOrphans 回收（findings 发现 14 修复后不再残留）。
+    const tailEntryAfter = await entries.findByPath(sk, "/tail-only.md");
+    assert.equal(tailEntryAfter, null, "tail-only.md 回滚后 entry 应被删");
+    assert.equal(
+      await revisions.findByEntryAndVersion(entryTail.entryId, vOrphan),
+      null,
+      "tail-only.md 的 vOrphan revision 应被全局孤儿清扫回收",
+    );
 
     assert.ok(await revisions.findByEntryAndVersion(entryA.entryId, vAnchor));
     const anchorRef = await ctx.conn.query<{ ref_count: number }>(
