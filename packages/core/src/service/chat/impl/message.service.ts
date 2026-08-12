@@ -238,18 +238,16 @@ export class DefaultMessageService implements MessageService {
 
       const newMessages: { id: string }[] = [];
       let seq = 1;
+      // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
+      const forkedMessages: ChatMessage[] = [];
       for (const msg of toCopy) {
         const id = randomUUID();
         // Preserve hidden state when forking
-        await r.messages.insert({
-          ...msg,
-          id,
-          sessionId: forked.id,
-          seq,
-        });
+        forkedMessages.push({ ...msg, id, sessionId: forked.id, seq });
         newMessages.push({ id });
         seq++;
       }
+      await r.messages.batchInsert(forkedMessages);
       await seedForkCopyParity(tx, {
         projectId: source.projectId,
         sourceSessionId: source.id,

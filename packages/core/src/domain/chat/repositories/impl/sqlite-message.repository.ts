@@ -27,6 +27,41 @@ import type { MessageRepository } from "../message.port.js";
 const MESSAGE_SELECT_COLUMNS =
   `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens`;
 
+/**
+ * chat_message 的 INSERT 语句（`?` 占位），insert 与 batchInsert 共用。
+ *
+ * 列顺序与 {@link toMessageParams} 的参数顺序一一对应，改一处必须同步另一处。
+ */
+const MESSAGE_INSERT_SQL =
+  `INSERT INTO chat_message ` +
+  `(id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens) ` +
+  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+/**
+ * 把 ChatMessage 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
+ *
+ * insert 走 executeTemplate 时由 SqlTemplateParser 按 `#{xxx}` 出现顺序收集参数，
+ * 这里手写数组必须保持同一顺序——两边的列/`?`/参数三者完全对齐。
+ */
+function toMessageParams(message: ChatMessage): unknown[] {
+  return [
+    message.id,
+    message.sessionId,
+    message.seq,
+    message.role,
+    JSON.stringify(message.content),
+    message.provider,
+    message.raw == null ? null : JSON.stringify(message.raw),
+    message.createdAtMs,
+    // Convert boolean to integer: true = 1, false = 0
+    message.hidden ? 1 : 0,
+    serializeAttachmentsJson(message.attachments),
+    message.usage?.promptTokens ?? null,
+    message.usage?.completionTokens ?? null,
+    message.usage?.totalTokens ?? null,
+  ];
+}
+
 function parseContent(json: string) {
   return parseMessageContent(json);
 }
@@ -90,6 +125,17 @@ export class SqliteMessageRepository implements MessageRepository {
       { sessionId },
     );
     return rows.map(rowToMessage);
+  }
+
+  async countBySession(sessionId: string): Promise<number> {
+    const rows = await queryTemplate<{ n: number }>(
+      this.conn,
+      this.parser,
+      `SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId}`,
+      { sessionId },
+    );
+    // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
+    return Number(rows[0]!.n);
   }
 
   async listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]> {
@@ -171,28 +217,18 @@ export class SqliteMessageRepository implements MessageRepository {
   }
 
   async insert(message: ChatMessage): Promise<void> {
-    await executeTemplate(
-      this.conn,
-      this.parser,
-      `INSERT INTO chat_message
-       (id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens)
-       VALUES (#{id}, #{sessionId}, #{seq}, #{role}, #{contentJson}, #{provider}, #{rawJson}, #{createdAtMs}, #{hidden}, #{attachmentsJson}, #{promptTokens}, #{completionTokens}, #{totalTokens})`,
-      {
-        id: message.id,
-        sessionId: message.sessionId,
-        seq: message.seq,
-        role: message.role,
-        contentJson: JSON.stringify(message.content),
-        provider: message.provider,
-        rawJson: message.raw == null ? null : JSON.stringify(message.raw),
-        createdAtMs: message.createdAtMs,
-        // Convert boolean to integer: true = 1, false = 0
-        hidden: message.hidden ? 1 : 0,
-        attachmentsJson: serializeAttachmentsJson(message.attachments),
-        promptTokens: message.usage?.promptTokens ?? null,
-        completionTokens: message.usage?.completionTokens ?? null,
-        totalTokens: message.usage?.totalTokens ?? null,
-      },
+    await this.conn.execute(MESSAGE_INSERT_SQL, toMessageParams(message));
+  }
+
+  async batchInsert(messages: readonly ChatMessage[]): Promise<void> {
+    // 空数组直接返回，避免驱动对空 parametersList 的行为分歧，
+    // 也让 fork/copy 在源会话无消息时不用特殊判断。
+    if (messages.length === 0) {
+      return;
+    }
+    await this.conn.batch(
+      MESSAGE_INSERT_SQL,
+      messages.map((m) => toMessageParams(m)),
     );
   }
 

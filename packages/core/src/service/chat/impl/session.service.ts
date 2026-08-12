@@ -337,15 +337,13 @@ export class DefaultSessionService implements SessionService {
       );
       const messages = await r.messages.listBySession(source.id);
       const newMessages: { id: string }[] = [];
-      for (const msg of messages) {
+      // 逐条 INSERT 改成先构造数组再一次 batchInsert，把 M 次 round-trip 收敛成 1 次。
+      const copyMessages = messages.map((msg) => {
         const id = randomUUID();
-        await r.messages.insert({
-          ...msg,
-          id,
-          sessionId: copy.id,
-        });
         newMessages.push({ id });
-      }
+        return { ...msg, id, sessionId: copy.id };
+      });
+      await r.messages.batchInsert(copyMessages);
       await seedForkCopyParity(tx, {
         projectId: source.projectId,
         sourceSessionId: source.id,
