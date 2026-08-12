@@ -469,6 +469,11 @@ describe("T-CT2: 16 表 rebuild 后约束生效（table-constraints-v1）", () =
       () => true,
       "message_checkpoint 不应有 rowid 列",
     );
+    await assert.rejects(
+      () => conn.query(`SELECT rowid FROM message_checkpoint_file LIMIT 1`),
+      () => true,
+      "message_checkpoint_file 不应有 rowid 列",
+    );
 
     // —— UNIQUE(group_id, sort_order) ——
     await conn.execute(
@@ -529,6 +534,106 @@ describe("T-CT2: 16 表 rebuild 后约束生效（table-constraints-v1）", () =
        VALUES ('ja', 'not json', 1, 1)`,
       [],
       "agent_definition.prompts_json 非法 JSON",
+    );
+
+    await conn.close();
+  });
+});
+
+describe("T-CT2-extra: 新库路径冗余索引 idx_vfs_entry_scope_path 被 DROP（cr-p1-1）", () => {
+  it("新库 bootstrap 形态下，tableConstraintsV1Up 仍 DROP 冗余索引", async () => {
+    const conn = await openMemoryConn();
+    // 模拟新库：vfs_revision 已是 WITHOUT ROWID 形态（触发 isAlreadyConstrained 早退），
+    // 并由 vfs-entry-id-redesign-v1 的 rebuildIndexes 建出冗余索引
+    //（UNIQUE(scope_key, path) 隐式索引已覆盖它的用途）。
+    await conn.execute(`CREATE TABLE vfs_entry (
+      entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope_key TEXT NOT NULL,
+      path TEXT NOT NULL,
+      content_hash TEXT NULL,
+      head_version INTEGER NOT NULL DEFAULT 1,
+      mtime_ms INTEGER NOT NULL,
+      entry_kind TEXT NOT NULL DEFAULT 'file',
+      content TEXT NULL,
+      UNIQUE(scope_key, path)
+    )`);
+    await conn.execute(`CREATE TABLE vfs_revision (
+      entry_id INTEGER NOT NULL,
+      version INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      mtime_ms INTEGER NOT NULL,
+      content_hash TEXT NULL,
+      ref_count INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (entry_id, version)
+    ) WITHOUT ROWID`);
+    await conn.execute(
+      `CREATE INDEX idx_vfs_entry_scope_path ON vfs_entry(scope_key, path)`,
+    );
+
+    // 跑 migration：新库路径会早退，但 DROP INDEX 必须在早退之前执行。
+    await tableConstraintsV1Up(conn);
+
+    const idx = await conn.query<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_vfs_entry_scope_path'`,
+    );
+    assert.equal(
+      idx.length,
+      0,
+      "新库 bootstrap 后冗余索引 idx_vfs_entry_scope_path 应被 DROP（早退前执行）",
+    );
+
+    await conn.close();
+  });
+});
+
+describe("T-CT2-extra: 下界清洗 PK 冲突防护（cr-p2-4）", () => {
+  it("seq=0 与 seq=1 同 session 脏数据下，migration 不卡死", async () => {
+    const conn = await openMemoryConn();
+    await seedLegacyUnconstrainedSchema(conn);
+
+    // 同一 session 下既有合法 seq=1，又有脏 seq=0。直接 SET seq=1 会撞
+    // UNIQUE(session_id, seq) 报错；走挪位方案应把 seq=0 改成 MAX(seq)+1=2。
+    await conn.execute(
+      `INSERT INTO chat_message (id, session_id, seq, role, content_json, created_at_ms)
+       VALUES ('legit', 'ss', 1, 'user', '{}', 1)`,
+    );
+    await conn.execute(
+      `INSERT INTO chat_message (id, session_id, seq, role, content_json, created_at_ms)
+       VALUES ('dirty', 'ss', 0, 'user', '{}', 1)`,
+    );
+    // 同理 vfs_revision：同 entry 下合法 version=1 + 脏 version=0。
+    await conn.execute(
+      `INSERT INTO vfs_entry (scope_key, path, mtime_ms) VALUES ('g', '/p', 1)`,
+    );
+    await conn.execute(
+      `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
+       VALUES (1, 1, 'deleted', 1, NULL, 0)`,
+    );
+    await conn.execute(
+      `INSERT INTO vfs_revision (entry_id, version, status, mtime_ms, content_hash, ref_count)
+       VALUES (1, 0, 'deleted', 1, NULL, 0)`,
+    );
+
+    // migration 不抛错即说明挪位生效（SET = 1 会撞 PK）。不能原生 catch 抛错后放行——
+    // 这里直接 await，抛错测试就挂。
+    await tableConstraintsV1Up(conn);
+
+    const dirtyRow = await conn.query<{ seq: number }>(
+      `SELECT seq FROM chat_message WHERE id = 'dirty'`,
+    );
+    assert.equal(
+      dirtyRow[0]!.seq,
+      2,
+      "seq=0 脏行应挪位到 MAX(seq)+1=2，避免撞已有 seq=1",
+    );
+    const dirtyRev = await conn.query<{ version: number }>(
+      `SELECT version FROM vfs_revision WHERE entry_id = 1 AND status = 'deleted' ORDER BY version`,
+    );
+    const versions = dirtyRev.map((r) => Number(r.version));
+    assert.deepEqual(
+      versions,
+      [1, 2],
+      "version=0 脏行应挪位到 2，与合法 version=1 共存",
     );
 
     await conn.close();

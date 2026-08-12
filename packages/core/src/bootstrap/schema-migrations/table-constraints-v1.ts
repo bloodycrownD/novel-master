@@ -186,6 +186,62 @@ async function rebuildTable(
   }
 }
 
+/**
+ * 下界清洗的「挪位」方案：把 `${col} < lowerBound` 的脏行按 groupKey 分组，
+ * 重新分配从「该组内合法最大值 + 1」起递增的新值，避免 SET col = lowerBound 撞同组
+ * 已存在的合法行 PK/UNIQUE（chat_message 的 UNIQUE(session_id, seq)、
+ * vfs_revision 的 PRIMARY KEY(entry_id, version)）。
+ *
+ * 清洗时表还是旧形态（rowid 表），用 rowid 定位行、按 rowid 排序保证幂等确定。
+ * 没有合法行的组从 lowerBound 开始分配。@returns 被挪位的行数。
+ */
+async function renumberLowerBound(
+  tx: TdbcConnection,
+  table: string,
+  col: string,
+  groupKey: string,
+  lowerBound: number,
+): Promise<number> {
+  const dirty = await tx.query<{ g: string | number }>(
+    `SELECT ${groupKey} AS g FROM ${table}
+     WHERE ${col} < ${lowerBound}
+     GROUP BY ${groupKey}`,
+  );
+  if (dirty.length === 0) {
+    return 0;
+  }
+  let fixed = 0;
+  for (const d of dirty) {
+    const g = d.g;
+    const maxRows = await tx.query<{ m: number | null }>(
+      `SELECT MAX(${col}) AS m FROM ${table}
+       WHERE ${groupKey} = ? AND ${col} >= ${lowerBound}`,
+      [g],
+    );
+    let next = Number(maxRows[0]?.m ?? lowerBound - 1);
+    const rows = await tx.query<{ rid: number }>(
+      `SELECT rowid AS rid FROM ${table}
+       WHERE ${groupKey} = ? AND ${col} < ${lowerBound}
+       ORDER BY rowid`,
+      [g],
+    );
+    for (const r of rows) {
+      next += 1;
+      await tx.execute(
+        `UPDATE ${table} SET ${col} = ? WHERE rowid = ?`,
+        [next, Number(r.rid)],
+      );
+      fixed++;
+    }
+  }
+  if (fixed > 0) {
+    console.warn(
+      `[table-constraints-v1] ${table}.${col}: 挪位 ${fixed} 条下界脏行（< ${lowerBound} → 递增分配，避免 PK 冲突）`,
+    );
+  }
+  return fixed;
+}
+
 /** Step 11：脏值预扫描 + 清洗。每个要加 CHECK/NOT NULL/UNIQUE 的列先扫后清。 */
 async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
   // —— 声明了 FK 的表先清孤儿引用行，rebuild INSERT 时 FK 才不会炸 ——
@@ -294,8 +350,11 @@ async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
   );
 
   // —— 下界 CHECK 清洗（负值 / 小于下界）——
-  await clean(tx, "chat_message", "seq = 1", "seq < 1");
-  await clean(tx, "vfs_revision", "version = 1", "version < 1");
+  // seq / version 不能简单 SET = 1：同 session/entry 可能已有合法的 seq=1 / version=1 行，
+  // 直接改写会撞 UNIQUE(session_id, seq) / PRIMARY KEY(entry_id, version) 导致 migration 卡死。
+  // 改走「挪位」：把脏行按组重新分配到该组内合法最大值 +1 起递增的新值，保证不冲突。
+  await renumberLowerBound(tx, "chat_message", "seq", "session_id", 1);
+  await renumberLowerBound(tx, "vfs_revision", "version", "entry_id", 1);
   await clean(tx, "vfs_revision", "ref_count = 0", "ref_count < 0");
   await clean(tx, "vfs_content_blob", "ref_count = 0", "ref_count < 0");
   await clean(tx, "message_checkpoint_file", "revision_version = 1", "revision_version < 1");
@@ -612,6 +671,12 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
 }
 
 async function up(tx: TdbcConnection): Promise<void> {
+  // 发现 24：DROP 冗余索引 idx_vfs_entry_scope_path。必须放在 isAlreadyConstrained 早退
+  // 之前——新库路径（canonical DDL 已是带约束形态，早退 return）也会被
+  // vfs-entry-id-redesign-v1 的 rebuildIndexes 建出这个冗余索引（UNIQUE(scope_key, path)
+  // 隐式索引已覆盖它的全部用途），不在这里 DROP 就会永久残留。
+  await tx.execute(`DROP INDEX IF EXISTS idx_vfs_entry_scope_path`);
+
   if (await isAlreadyConstrained(tx)) {
     return;
   }
@@ -619,9 +684,8 @@ async function up(tx: TdbcConnection): Promise<void> {
   await scanAndCleanDirtyValues(tx);
   await rebuildAllTables(tx);
 
-  // 发现 24：DROP 冗余索引 idx_vfs_entry_scope_path（vfs_entry rebuild 时已随 DROP TABLE
-  // 删掉，这里再 IF EXISTS 兜底一次，保证最终态干净）。
-  await tx.execute(`DROP INDEX IF EXISTS idx_vfs_entry_scope_path`);
+  // vfs_entry rebuild（DROP TABLE）时该索引已随表一起删掉，上面那条 DROP IF EXISTS 已兜底，
+  // 无需重复执行。
 }
 
 /** 表设计约束补全 rebuild migration（NOT NULL / CHECK / WITHOUT ROWID / UNIQUE / json_valid）。 */
