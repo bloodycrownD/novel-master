@@ -32,6 +32,7 @@ import type {
 import { VfsError } from "@/errors/vfs-errors.js";
 import { revisionPairKey } from "../../logic/revision-pair-key.js";
 import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
+import { ORPHAN_REVISION_GC_SQL } from "@/bootstrap/schema-migrations/orphan-revision-gc-v1.js";
 
 /** 批量 SQL 的分块大小（避免单条语句过长）。 */
 const REVISION_BATCH_CHUNK_SIZE = 100;
@@ -450,12 +451,11 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     // 不依赖 vfs_entry JOIN（孤儿 revision 的 entry 已删，JOIN 不到），
     // 直接按「ref_count<=0 且 entry_id 不存在」全表清扫。
     // revision DELETE 触发器会连带维护 vfs_content_blob.ref_count 并回收归零 blob。
+    // SQL 与 orphan-revision-gc-v1 migration 共享同一常量，避免两份逐字漂移。
     const result = await executeTemplate(
       this.conn,
       this.parser,
-      `DELETE FROM vfs_revision
-       WHERE ref_count <= 0
-         AND entry_id NOT IN (SELECT entry_id FROM vfs_entry)`,
+      ORPHAN_REVISION_GC_SQL,
       {},
     );
     return Number(result.changes);
