@@ -394,28 +394,48 @@ async function resolveMaxRevision(
   return revisionRepo.findMaxVersionForEntry(entry.entryId);
 }
 
+/**
+ * 给子树里每个 live file head 追加一条 deleted revision（墓碑），并同步调整 ref_count。
+ *
+ * 实现走批量：先 {@link VfsEntryRepository.listFileHeadsUnderPrefix} 一次查出前缀下所有
+ * live file head 的 `(entryId, headVersion)`，再用 `batchAdjustRefCount` 一次性 −1 旧 head、
+ * `batchAppendWithRefCount` 一次性落 deleted 行。这样把原来「逐文件 findByPath + adjustRef +
+ * append + adjustRef」的 3N 次 SQL 压成 3 条（分块 100，100 文件以内各一条）。
+ *
+ * 注意 deleted 行的 ref_count 直接以 `refCount=1` 落库——`batchAppendWithRefCount` 是
+ * `INSERT ... ref_count = ?`，等价于「逐条 append(ref_count=0) + adjustRef(+1)」，
+ * 所以不再额外发一轮 `batchAdjustRefCount +1`（语义完全一致，SQL 更少）。
+ */
 async function appendDeletedRevisionsForSubtree(
   entryRepo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   path: string,
 ): Promise<void> {
-  const files = await entryRepo.scanContents(scopeKey, path);
-  for (const file of files) {
-    if (file.path === path) {
-      continue;
-    }
-    const fileEntry = await entryRepo.findByPath(scopeKey, file.path);
-    if (fileEntry == null || fileEntry.entryKind !== "file") {
-      continue;
-    }
-    await adjustRef(revisionRepo, fileEntry.entryId, fileEntry.version, -1);
-    await appendDeletedRevision(
-      revisionRepo,
-      fileEntry.entryId,
-      fileEntry.version,
-    );
+  // listFileHeadsUnderPrefix 只返回 file head（目录自身不在内），保险起见仍过滤掉 path 命中。
+  const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, path);
+  const liveHeads = heads.filter((h) => h.path !== path);
+  if (liveHeads.length === 0) {
+    return;
   }
+
+  const oldPointers = liveHeads.map((h) => ({
+    entryId: h.entryId,
+    version: h.headVersion,
+  }));
+  await revisionRepo.batchAdjustRefCount(oldPointers, -1);
+
+  const mtimeMs = Date.now();
+  await revisionRepo.batchAppendWithRefCount(
+    liveHeads.map((h) => ({
+      entryId: h.entryId,
+      version: h.headVersion + 1,
+      contentHash: null,
+      status: "deleted",
+      mtimeMs,
+      refCount: 1,
+    })),
+  );
 }
 
 async function deleteWithRevision(
