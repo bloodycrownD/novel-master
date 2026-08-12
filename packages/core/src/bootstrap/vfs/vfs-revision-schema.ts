@@ -9,17 +9,21 @@
  * @module bootstrap/vfs/vfs-revision-schema
  */
 
-/** Creates vfs_revision table if missing (entry_id 主键形态). */
+/** Creates vfs_revision table if missing (entry_id 主键形态，WITHOUT ROWID + 约束).
+ *
+ * 决策 4：切 WITHOUT ROWID 后生产代码里的 deleteUnreferencedUnderScope 已改用
+ * `(entry_id, version) IN (...)` 复合 PK 寻址，不再依赖 rowid。 */
 export const VFS_REVISION_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_revision (
   entry_id INTEGER NOT NULL,
-  version INTEGER NOT NULL,
-  status TEXT NOT NULL,
+  version INTEGER NOT NULL CHECK (version >= 1),
+  status TEXT NOT NULL CHECK (status IN ('active', 'deleted')),
   mtime_ms INTEGER NOT NULL,
   content_hash TEXT NULL,
-  ref_count INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (entry_id, version)
-)`.trim();
+  ref_count INTEGER NOT NULL DEFAULT 0 CHECK (ref_count >= 0),
+  PRIMARY KEY (entry_id, version),
+  CHECK (NOT (status = 'active' AND content_hash IS NULL))
+) WITHOUT ROWID`.trim();
 
 /** entry_id 查询索引，用于 revision GC / restore / scope 扫描。 */
 export const VFS_REVISION_ENTRY_INDEX_DDL = `

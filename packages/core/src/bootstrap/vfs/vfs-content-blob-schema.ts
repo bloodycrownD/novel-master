@@ -8,15 +8,15 @@
  * @module bootstrap/vfs/vfs-content-blob-schema
  */
 
-/** 若不存在则创建 vfs_content_blob 表（含 ref_count 列）。 */
+/** 若不存在则创建 vfs_content_blob 表（含 ref_count 列，WITHOUT ROWID + 约束）. */
 export const VFS_CONTENT_BLOB_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_content_blob (
-  content_hash TEXT PRIMARY KEY,
-  encoding TEXT NOT NULL,
+  content_hash TEXT NOT NULL PRIMARY KEY,
+  encoding TEXT NOT NULL CHECK (encoding IN ('zlib', 'zlib-b64')),
   bytes BLOB NOT NULL,
   byte_len INTEGER NOT NULL,
-  ref_count INTEGER NOT NULL DEFAULT 0
-)`.trim();
+  ref_count INTEGER NOT NULL DEFAULT 0 CHECK (ref_count >= 0)
+) WITHOUT ROWID`.trim();
 
 /** vfs_content_blob bootstrap 语句。 */
 export const VFS_CONTENT_BLOB_SCHEMA_STATEMENTS: readonly string[] = [

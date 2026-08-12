@@ -9,7 +9,7 @@
  * @module bootstrap/vfs/vfs-schema
  */
 
-/** 若不存在则创建 vfs_entry 表（entry_id 主键形态）。 */
+/** 若不存在则创建 vfs_entry 表（entry_id 主键形态，entry_kind CHECK）. */
 export const VFS_ENTRY_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_entry (
   entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS vfs_entry (
   content_hash TEXT NULL,
   head_version INTEGER NOT NULL DEFAULT 1,
   mtime_ms INTEGER NOT NULL,
-  entry_kind TEXT NOT NULL DEFAULT 'file',
+  entry_kind TEXT NOT NULL DEFAULT 'file' CHECK (entry_kind IN ('file', 'directory')),
   content TEXT NULL,
   UNIQUE(scope_key, path)
 )`.trim();
