@@ -30,9 +30,9 @@ import type {
 } from "@/domain/workplace/model/workplace-types.js";
 
 import {
-  CountingConnection,
+  CountingTdbcConnection,
   SqlCounter,
-} from "../vfs/n-plus-1-counting-connection.js";
+} from "../helpers/sql-counting-connection.js";
 
 interface CountedCtx {
   readonly conn: TdbcConnection;
@@ -47,7 +47,7 @@ async function openCountedCtx(): Promise<CountedCtx> {
     filename: ":memory:",
   });
   const counter = new SqlCounter();
-  const conn: TdbcConnection = new CountingConnection(rawConn, counter);
+  const conn: TdbcConnection = new CountingTdbcConnection(rawConn, counter);
   await bootstrapNovelMaster(conn);
   return { conn, counter, repo: new SqliteWorkplaceRepository(conn) };
 }

@@ -35,10 +35,6 @@ describe("rollback ref_count + deferred blob gc", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const collectSpy = mock.method(
-      SqliteVfsContentStore.prototype,
-      "collectAllReferencedHashes",
-    );
     const gcSpy = mock.method(SqliteVfsContentStore.prototype, "gc");
 
     const assistant1 = await ctx.messages.append(session.id, "assistant", {
@@ -61,11 +57,9 @@ describe("rollback ref_count + deferred blob gc", () => {
         assistant1.id,
       );
     } finally {
-      collectSpy.mock.restore();
       gcSpy.mock.restore();
     }
 
-    assert.equal(collectSpy.mock.callCount(), 0);
     assert.equal(gcSpy.mock.callCount(), 0);
     assert.equal((await svfs.read("/hot.md")).content, "anchor");
   });

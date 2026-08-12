@@ -26,6 +26,12 @@ import {
 import type { VfsContentStore } from "../vfs-content-store.port.js";
 
 /**
+ * {@link SqliteVfsContentStore.getMany} 的分块大小：500 既能一次性覆盖多数扫描结果，
+ * 又避免单条 SQL 绑参过多带来的额外开销。提至模块级，便于全局调整。
+ */
+const CONTENT_GETMANY_CHUNK_SIZE = 500;
+
+/**
  * ContentStore 构造可选注入，便于单测强制 RN / Node 落库形态。
  */
 export type SqliteVfsContentStoreOptions = {
@@ -199,11 +205,8 @@ export class SqliteVfsContentStore implements VfsContentStore {
     if (hashes.length === 0) {
       return result;
     }
-    // 分块 500：SQLite 的 IN (?) 占位上限远高于此，但 500 既能一次性覆盖多数扫描结果，
-    // 又避免单条 SQL 绑参过多导致的额外开销。
-    const CHUNK_SIZE = 500;
-    for (let offset = 0; offset < hashes.length; offset += CHUNK_SIZE) {
-      const chunk = hashes.slice(offset, offset + CHUNK_SIZE);
+    for (let offset = 0; offset < hashes.length; offset += CONTENT_GETMANY_CHUNK_SIZE) {
+      const chunk = hashes.slice(offset, offset + CONTENT_GETMANY_CHUNK_SIZE);
       const placeholders = chunk.map(() => `?`).join(`,`);
       const rows = await this.conn.query<{
         content_hash: string;
@@ -221,29 +224,6 @@ export class SqliteVfsContentStore implements VfsContentStore {
       }
     }
     return result;
-  }
-
-  async collectAllReferencedHashes(): Promise<Set<string>> {
-    const hashes = new Set<string>();
-    const entryRows = await queryTemplate<{ content_hash: string }>(
-      this.conn,
-      this.parser,
-      `SELECT content_hash FROM vfs_entry WHERE content_hash IS NOT NULL`,
-      {},
-    );
-    for (const row of entryRows) {
-      hashes.add(String(row.content_hash));
-    }
-    const revisionRows = await queryTemplate<{ content_hash: string }>(
-      this.conn,
-      this.parser,
-      `SELECT content_hash FROM vfs_revision WHERE content_hash IS NOT NULL`,
-      {},
-    );
-    for (const row of revisionRows) {
-      hashes.add(String(row.content_hash));
-    }
-    return hashes;
   }
 
   async findExistingBlobHashes(

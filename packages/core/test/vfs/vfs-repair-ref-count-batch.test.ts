@@ -2,7 +2,7 @@
  * T-RP1：repairRefCounts 批量化验证。
  *
  * 之前 {@link repairRefCounts} 内部对每条 revision 走一次 SELECT + 一次 UPDATE，
- * 200 条 revision 就要发 400 次 SQL。改成 {@link repairRefCountFloorBatch} 之后，
+ * 200 条 revision 就要发 400 次 SQL。改成 {@link batchRepairRefCountFloor} 之后，
  * SELECT 和 UPDATE 各自按 500 分块，200 条只需 1 + 1 = 2 次。这里就守护这个上限。
  *
  * @module test/vfs/vfs-repair-ref-count-batch
@@ -11,24 +11,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
-import {
-  bootstrapNovelMaster,
-  createPersistentState,
-  decode,
-  open,
-  type PersistentState,
-  type TdbcConnection,
-} from "@novel-master/core";
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-} from "@novel-master/core/agent";
-import { createProjectService } from "@novel-master/core/chat";
-import { createScopedVfsService } from "@novel-master/core/vfs";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+import { openSqlCountingNovelMasterTestConnection } from "../helpers/sql-counting-connection.js";
 
 import { repairRefCounts } from "@/domain/vfs/logic/revision-ref-count.js";
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -36,58 +19,12 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 
-import {
-  CountingConnection,
-  SqlCounter,
-} from "./n-plus-1-counting-connection.js";
-
-interface Ctx {
-  readonly conn: TdbcConnection;
-  readonly counter: SqlCounter;
-  readonly state: PersistentState;
-  readonly projects: ReturnType<typeof createProjectService>;
-  projectVfs(projectId: string): ReturnType<typeof createScopedVfsService>;
-}
-
-async function openCtx(): Promise<Ctx> {
-  registerBetterSqlite3Driver();
-  const rawConn = await open("tdbc:sqlite:file::memory:", {
-    driver: BETTER_SQLITE3_DRIVER_NAME,
-    filename: ":memory:",
-  });
-  const counter = new SqlCounter();
-  const conn: TdbcConnection = new CountingConnection(rawConn, counter);
-  await bootstrapNovelMaster(conn);
-
-  const state = createPersistentState(conn);
-  const agentRegistry = createAgentRegistryService(conn, state);
-  await agentRegistry.upsert(
-    "test-default-agent",
-    decode(
-      {
-        schemaVersion: 1,
-        name: "测试默认 Agent",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema,
-    ),
-  );
-  await state.setCurrentAgentId("test-default-agent");
-
-  return {
-    conn,
-    counter,
-    state,
-    projects: createProjectService(conn),
-    projectVfs: (projectId) =>
-      createScopedVfsService(conn, { kind: "project", projectId }),
-  };
-}
+type Ctx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;
 
 let ctx: Ctx | undefined;
 
 before(async () => {
-  ctx = await openCtx();
+  ctx = await openSqlCountingNovelMasterTestConnection();
 });
 
 after(async () => {

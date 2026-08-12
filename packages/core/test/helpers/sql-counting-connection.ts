@@ -92,6 +92,17 @@ export class SqlCounter {
     return this.records.filter((r) => r.kind === upper).length;
   }
 
+  /**
+   * 按子串筛选的调用次数之和。
+   *
+   * 同一类操作可能因分块 / 不同分支产生多条不同文本的 SQL，用子串聚合更稳——
+   * 比如所有查 `vfs_content_blob` 的 SELECT 都含 `FROM vfs_content_blob`，
+   * 所有删 `vfs_entry` 的 DELETE 都含 `DELETE FROM vfs_entry`。
+   */
+  countBySubstring(needle: string): number {
+    return this.records.filter((r) => r.sql.includes(needle)).length;
+  }
+
   /** 已记录的全部 SQL（只读视图）。 */
   all(): readonly RecordedSql[] {
     return this.records;

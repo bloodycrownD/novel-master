@@ -12,32 +12,8 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 
 import {
-  bootstrapNovelMaster,
-  createPersistentPreferences,
-  createPersistentState,
-  decode,
-  open,
-  type PersistentPreferences,
-  type PersistentState,
-  type TdbcConnection,
-} from "@novel-master/core";
-import {
-  agentDefinitionSchema,
-  createAgentRegistryService,
-} from "@novel-master/core/agent";
-import {
-  createMessageService,
-  createProjectService,
-  createSessionService,
-} from "@novel-master/core/chat";
-import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
-import { createSessionFsService } from "@novel-master/core/session-fs";
-import { createSessionKkvService } from "@novel-master/core/session-kkv";
-import { createScopedVfsService } from "@novel-master/core/vfs";
-import {
-  BETTER_SQLITE3_DRIVER_NAME,
-  registerBetterSqlite3Driver,
-} from "@novel-master/tdbc-driver-better-sqlite3";
+  openSqlCountingNovelMasterTestConnection,
+} from "../helpers/sql-counting-connection.js";
 
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
@@ -45,76 +21,13 @@ import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 
-import {
-  CountingConnection,
-  SqlCounter,
-} from "./n-plus-1-counting-connection.js";
-
 /** 带 SQL 计数的测试上下文：conn 是装饰过的，counter 和它一对一。 */
-interface CountedCtx {
-  readonly conn: TdbcConnection;
-  readonly counter: SqlCounter;
-  readonly state: PersistentState;
-  readonly preferences: PersistentPreferences;
-  readonly projects: ReturnType<typeof createProjectService>;
-  readonly sessions: ReturnType<typeof createSessionService>;
-  readonly messages: ReturnType<typeof createMessageService>;
-  readonly sessionFs: ReturnType<typeof createSessionFsService>;
-  readonly sessionKkv: ReturnType<typeof createSessionKkvService>;
-  readonly messageCheckpoint: ReturnType<typeof createMessageCheckpointService>;
-  projectVfs(projectId: string): ReturnType<typeof createScopedVfsService>;
-}
-
-/**
- * 复刻 openNovelMasterTestConnection 的步骤，但在 open() 拿到 conn 后立刻包一层
- * CountingConnection——services 构造时拿到的就是这个装饰过的 conn，后续所有业务
- * SQL 都会被 counter 记到。
- */
-async function openCountedNovelMaster(): Promise<CountedCtx> {
-  registerBetterSqlite3Driver();
-  const rawConn = await open("tdbc:sqlite:file::memory:", {
-    driver: BETTER_SQLITE3_DRIVER_NAME,
-    filename: ":memory:",
-  });
-  const counter = new SqlCounter();
-  const conn: TdbcConnection = new CountingConnection(rawConn, counter);
-  await bootstrapNovelMaster(conn);
-
-  const state = createPersistentState(conn);
-  const agentRegistry = createAgentRegistryService(conn, state);
-  await agentRegistry.upsert(
-    "test-default-agent",
-    decode(
-      {
-        schemaVersion: 1,
-        name: "测试默认 Agent",
-        prompts: { persist: {}, dynamic: {} },
-      },
-      agentDefinitionSchema,
-    ),
-  );
-  await state.setCurrentAgentId("test-default-agent");
-
-  return {
-    conn,
-    counter,
-    state,
-    preferences: createPersistentPreferences(conn),
-    projects: createProjectService(conn),
-    sessions: createSessionService(conn, { state, agentRegistry }),
-    messages: createMessageService(conn),
-    sessionFs: createSessionFsService(conn),
-    sessionKkv: createSessionKkvService(conn),
-    messageCheckpoint: createMessageCheckpointService(conn),
-    projectVfs: (projectId) =>
-      createScopedVfsService(conn, { kind: "project", projectId }),
-  };
-}
+type CountedCtx = Awaited<ReturnType<typeof openSqlCountingNovelMasterTestConnection>>;
 
 let ctx: CountedCtx | undefined;
 
 before(async () => {
-  ctx = await openCountedNovelMaster();
+  ctx = await openSqlCountingNovelMasterTestConnection();
 });
 
 after(async () => {
@@ -249,19 +162,29 @@ describe("T-GC2 blob GC 单条 DELETE", () => {
       `DELETE FROM vfs_content_blob 次数应为 1，实际 ${blobDeletes}`,
     );
 
-    // runDeferredBlobGc 不应再调 collectAllReferencedHashes（那条全表 SELECT 已冗余）。
-    // 注意：gc 的 NOT IN 子查询本身嵌了同文本的 SELECT，但它作为 DELETE 语句的一部分
-    // 被记录，不会单独成为 key；所以这里检查独立的、以 SELECT 开头的 query key。
-    let standaloneReferencedSelects = 0;
-    for (const sql of c.counter.entries().keys()) {
-      if (sql.startsWith("SELECT content_hash FROM vfs_entry")) {
-        standaloneReferencedSelects += 1;
-      }
-    }
+    // cr-p1-2 删掉 collectAllReferencedHashes 后，runDeferredBlobGc 不再独立发出
+    // 「扫 entry / revision 引用集」的 SELECT——gc 的 NOT IN 子查询嵌在同一条 DELETE
+    // 语句里，不会单独成为 query 记录。这里双保险：断言 entry 和 revision 两条引用集
+    // SELECT 都没有作为独立语句发出。
+    const standaloneEntrySelects = c.counter
+      .all()
+      .filter((r) =>
+        r.sql.startsWith("SELECT content_hash FROM vfs_entry"),
+      ).length;
+    const standaloneRevisionSelects = c.counter
+      .all()
+      .filter((r) =>
+        r.sql.startsWith("SELECT content_hash FROM vfs_revision"),
+      ).length;
     assert.equal(
-      standaloneReferencedSelects,
+      standaloneEntrySelects,
       0,
-      `不应再独立发出 collectAllReferencedHashes 的 SELECT，实际 ${standaloneReferencedSelects}`,
+      `不应再独立发出 vfs_entry 引用集 SELECT，实际 ${standaloneEntrySelects}`,
+    );
+    assert.equal(
+      standaloneRevisionSelects,
+      0,
+      `不应再独立发出 vfs_revision 引用集 SELECT，实际 ${standaloneRevisionSelects}`,
     );
   });
 });
