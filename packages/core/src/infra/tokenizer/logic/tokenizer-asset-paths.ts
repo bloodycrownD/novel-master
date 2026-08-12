@@ -37,6 +37,8 @@ export function tokenizerAssetPaths(family: TokenizerFamily): {
       return { primary: "web/nemo.json", fallback: "llama3.json", kind: "json" };
     case "deepseek":
       return { primary: "web/deepseek.json", fallback: "llama3.json", kind: "json" };
+    case "glm":
+      return { primary: "web/glm.json", fallback: "llama3.json", kind: "json" };
     default:
       return null;
   }

@@ -21,6 +21,7 @@ const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
   "command-a",
   "nemo",
   "deepseek",
+  "glm",
 ]);
 
 const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([

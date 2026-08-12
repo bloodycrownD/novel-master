@@ -73,7 +73,12 @@ internal class TokenizerEngine(private val context: Context) {
 
   private fun tryLoadWebTokenizer(path: String): HuggingFaceTokenizer? {
     return try {
-      HuggingFaceTokenizer.newInstance(Paths.get(path))
+      // DJL 默认 truncation=true + maxLength=512，长文本会被截断。
+      // 显式关闭 truncation，让 encode 返回完整 token 数。
+      HuggingFaceTokenizer.newInstance(
+        Paths.get(path),
+        mapOf("truncation" to "false"),
+      )
     } catch (_: Throwable) {
       null
     }

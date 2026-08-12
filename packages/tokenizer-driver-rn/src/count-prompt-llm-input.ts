@@ -46,6 +46,7 @@ const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
   "command-a",
   "nemo",
   "deepseek",
+  "glm",
 ]);
 
 /** SentencePiece families — M1 native on Android. */

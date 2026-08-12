@@ -98,6 +98,16 @@ export function resolveTokenizerFamily(
   if (id.includes("deepseek")) {
     return "deepseek";
   }
+  // 智谱 GLM 系列（glm-4 / glm-4-plus / glm-4-flash / glm-4-air / chatglm 等）。
+  // GLM-4 使用 BPE，HuggingFace 上有官方 tokenizer.json。
+  if (id.includes("glm") || id.includes("chatglm")) {
+    return "glm";
+  }
+  // 月之暗面 Kimi / Moonshot 系列。
+  // Moonshot 官方说 tokenizer 与 OpenAI tiktoken 兼容，直接复用 tiktoken。
+  if (id.includes("moonshot") || id.includes("kimi")) {
+    return "tiktoken";
+  }
   if (id.includes("gemma") || id.includes("gemini") || id.includes("learnlm")) {
     return "gemma";
   }

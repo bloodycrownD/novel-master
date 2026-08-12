@@ -73,6 +73,7 @@ export async function loadChatPromptTokenLabel(
     savedModelId,
     registry: runtime.tokenCounters,
     tokenizerOverride,
+    savedModels: { findById: (id) => runtime.providerModels.getSavedById(id) },
   });
 
   const contextWindow =

@@ -22,6 +22,7 @@ export type TokenizerFamily =
   | "command-a"
   | "nemo"
   | "deepseek"
+  | "glm"
   | "gpt2";
 
 /** Implementation kind for observability (CLI stderr, debug). */

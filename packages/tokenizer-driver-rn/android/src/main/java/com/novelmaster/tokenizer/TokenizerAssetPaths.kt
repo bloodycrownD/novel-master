@@ -22,6 +22,7 @@ internal object TokenizerAssetPaths {
       "command-a" -> AssetPathSpec("web/command-a.json", "llama3.json", "json")
       "nemo" -> AssetPathSpec("web/nemo.json", "llama3.json", "json")
       "deepseek" -> AssetPathSpec("web/deepseek.json", "llama3.json", "json")
+      "glm" -> AssetPathSpec("web/glm.json", "llama3.json", "json")
       else -> null
     }
   }
