@@ -176,7 +176,7 @@ export interface VfsRevisionRepository {
    *
    * @returns 实际发生上调的行数
    */
-  repairRefCountFloorBatch(
+  batchRepairRefCountFloor(
     items: ReadonlyArray<{
       readonly entryId: number;
       readonly version: number;

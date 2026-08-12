@@ -19,15 +19,16 @@ export interface WorkplaceRepository {
   upsertFileRule(rule: WorkplaceFileRule): Promise<void>;
 
   /**
-   * 批量 upsert 目录规则：一次 `conn.batch` 提交所有行，消除 copyScope 的逐条 round-trip。
+   * 批量 upsert 目录规则：走 `INSERT ... ON CONFLICT DO UPDATE`（upsert 语义），
+   * 一次 `conn.batch` 提交所有行，消除 copyScope 的逐条 round-trip。
    *
-   * 调用方需保证目标 scope 已清空（例如 copyScope 先调 deleteScope），本方法只做 INSERT，
-   * 不重复 DELETE。空数组是 no-op（不发出 SQL）。
+   * 因为是 upsert，调用方若想要覆盖式写入（不让残留行留下），需先清空目标 scope
+   * （例如 copyScope 先调 deleteScope）。空数组是 no-op（不发出 SQL）。
    */
   batchUpsertDirRules(rules: readonly WorkplaceDirRule[]): Promise<void>;
 
   /**
-   * 批量 upsert 文件规则：语义同 {@link batchUpsertDirRules}，针对 workplace_file_rule。
+   * 批量 upsert 文件规则：语义同 {@link batchUpsertDirRules}（同样走 upsert），针对 workplace_file_rule。
    */
   batchUpsertFileRules(rules: readonly WorkplaceFileRule[]): Promise<void>;
 

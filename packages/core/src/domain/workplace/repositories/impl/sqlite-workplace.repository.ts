@@ -115,7 +115,8 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       return;
     }
     // 位置占位符 SQL（和本 worktree 其它 batch 实现一致），一次 conn.batch 提交全部行。
-    // 调用方负责先清空目标 scope，这里只做 INSERT … ON CONFLICT，不重复 DELETE。
+    // 调用方负责先清空目标 scope，这里走 INSERT … ON CONFLICT DO UPDATE（upsert 语义）。
+    // 注意：SQL 与单条 upsertDirRule 保持一致，改一处务必同步另一处。
     const sql = `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
         scope_key, logical_path, rule_enabled, sort_field, sort_order,
         head_count, tail_count, fill_policy
@@ -144,6 +145,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     if (rules.length === 0) {
       return;
     }
+    // SQL 与单条 upsertFileRule 保持一致，改一处务必同步另一处。
     const sql = `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
       VALUES (?, ?, ?)
       ON CONFLICT(scope_key, logical_path) DO UPDATE SET

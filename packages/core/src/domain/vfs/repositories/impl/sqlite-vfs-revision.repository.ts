@@ -36,7 +36,7 @@ import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
 /** 批量 SQL 的分块大小（避免单条语句过长）。 */
 const REVISION_BATCH_CHUNK_SIZE = 100;
 
-/** repairRefCountFloorBatch 的 SELECT / UPDATE 分块大小（对齐 v1.4.24 的 500）。 */
+/** batchRepairRefCountFloor 的 SELECT / UPDATE 分块大小（对齐 v1.4.24 的 500）。 */
 const REVISION_REPAIR_CHUNK_SIZE = 500;
 
 /**
@@ -407,7 +407,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return true;
   }
 
-  async repairRefCountFloorBatch(
+  async batchRepairRefCountFloor(
     items: ReadonlyArray<{
       readonly entryId: number;
       readonly version: number;

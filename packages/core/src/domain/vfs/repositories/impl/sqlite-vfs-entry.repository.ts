@@ -410,7 +410,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     options: VfsDeleteOptions,
-  ): Promise<void> {
+  ): Promise<number> {
     const normalized = normalizePath(path);
     const pattern = childLikePattern(normalized);
 
@@ -438,7 +438,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       if (result.changes === 0) {
         throw vfsNotFound(normalized);
       }
-      return;
+      return result.changes;
     }
 
     const result = await executeTemplate(
@@ -452,6 +452,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     if (result.changes === 0) {
       throw vfsNotFound(normalized);
     }
+    return result.changes;
   }
 
   async deleteRecursiveIfAny(
@@ -467,8 +468,10 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     // base 为空串时 normalizePath 会抛 INVALID_PATH；空串与根 "/" 在 childLikePattern 下
     // 都匹配 "/%"（即全部以 / 开头的路径），语义等价，这里用 "/" 替代空串。
     const deletePath = base === "" ? "/" : base;
-    await this.delete(scopeKey, deletePath, { recursive: true });
-    return entries.length;
+    // delete() 现在透出 changes（实际删除行数），比之前返回探测命中数更准——
+    // 探测与删除在同一 scope+prefix 内，两者通常一致，但用真实 changes 避免「探测与删除之间
+    // 出现并发写入」这类极端情况下的偏差。
+    return await this.delete(scopeKey, deletePath, { recursive: true });
   }
 
   async listAllPaths(scopeKey: string): Promise<string[]> {
