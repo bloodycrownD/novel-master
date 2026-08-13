@@ -25,8 +25,8 @@ describe('ProviderDetailScreen (mobile) — T-T1', () => {
     expect(detailSource).toMatch(/\{value: 'models', label: '模型管理'\}/);
   });
 
-  it('默认 tab 是「模型管理」（高频）', () => {
-    expect(detailSource).toMatch(/useState<'config' \| 'models'>\('models'\)/);
+  it('默认 tab 是「服务商配置」（create 后直接可编辑）', () => {
+    expect(detailSource).toMatch(/useState<'config' \| 'models'>\('config'\)/);
   });
 
   it('服务商配置 tab 内嵌 ProviderForm mode="edit"', () => {

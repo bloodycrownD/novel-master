@@ -71,7 +71,7 @@ export function ProviderDetailScreen() {
   const {setStackOverride} = useHeaderContext();
 
   // 默认「模型管理」（高频），与「服务商配置」tab 并列；顶部 SegmentedControl 切换。
-  const [activeTab, setActiveTab] = useState<'config' | 'models'>('models');
+  const [activeTab, setActiveTab] = useState<'config' | 'models'>('config');
 
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [loading, setLoading] = useState(true);

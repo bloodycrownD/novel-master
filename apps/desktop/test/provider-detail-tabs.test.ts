@@ -34,8 +34,8 @@ test("T-T1: ProviderDetailView 改 tab 容器，含两个 tab 选项（服务商
   );
 });
 
-test("T-T1: 默认 tab 是「模型管理」（高频）", () => {
-  assert.match(source, /useState<ProviderTab>\("models"\)/);
+test("T-T1: 默认 tab 是「服务商配置」（create 后直接可编辑）", () => {
+  assert.match(source, /useState<ProviderTab>\("config"\)/);
 });
 
 test("T-T4: ProvidersView ContextMenu 无「编辑」项；handler 无 edit 分支", () => {

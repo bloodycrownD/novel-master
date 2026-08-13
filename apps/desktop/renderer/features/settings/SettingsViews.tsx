@@ -1140,7 +1140,7 @@ export function ProviderFormView({
 export function ProviderDetailView({ nav }: { nav: Nav }) {
   type ProviderTab = "config" | "models";
   // 默认「模型管理」（高频），与服务商配置 tab 并列；点服务商行进来后可直接切到「服务商配置」改连接信息。
-  const [activeTab, setActiveTab] = useState<ProviderTab>("models");
+  const [activeTab, setActiveTab] = useState<ProviderTab>("config");
   const batch = useBatchSelection();
   const providerId = nav.navState.editingProviderId;
   const [models, setModels] = useState<
