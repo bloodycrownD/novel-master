@@ -80,6 +80,7 @@ describe("SessionDetailDrawer (T-D3)", () => {
     // 锁定 toast 引导文案保留（none 口径：未绑定有效智能体）
     assert.match(src, /未绑定有效智能体/);
     assert.match(src, /已锁定模型/);
+    assert.match(src, /会话内无法覆盖/);
     // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
     assert.doesNotMatch(src, /"agent-pin"/);
     assert.doesNotMatch(src, /hasDedicatedModel/);

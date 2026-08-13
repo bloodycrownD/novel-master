@@ -208,7 +208,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.doesNotMatch(messageBodyText(prepared[1]!), /<extra-info>/);
   });
 
-  it("T-EA4: hidden user 不影响「最新一条」判定，hidden 不进输出", async () => {
+  it("T-EA4: hidden user 不影响「最新一条」判定，hidden 原样进输出但不注入", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);

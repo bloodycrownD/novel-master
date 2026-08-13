@@ -26,12 +26,6 @@ function minimalDefinition(): AgentDefinition {
   };
 }
 
-/** 从 stringify 后的 user 消息里抽出 <extra-info>...</extra-info> 片段用于一致性比对。 */
-function extractExtraInfoBlock(s: string): string {
-  const match = s.match(/<extra-info>[\s\S]*?<\/extra-info>/);
-  return match ? match[0] : "";
-}
-
 const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
@@ -1560,7 +1554,6 @@ describe("AgentRunner", () => {
     assert.match(bodies[1]!, /<extra-info>/);
     assert.match(bodies[1]!, /笔记内容/);
     assert.match(bodies[1]!, /<\/extra-info>/);
-    void extractExtraInfoBlock;
   });
 
   it("T-CA4b: definition 无 customAttach → user 消息 body 不出现 extra-info 段", async () => {

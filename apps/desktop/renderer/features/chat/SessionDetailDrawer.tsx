@@ -232,7 +232,7 @@ export function SessionDetailDrawer({
 
   const openModelPicker = async () => {
     if (modelLocked) {
-      showToast("当前智能体已锁定模型，请先在智能体配置中修改。");
+      showToast("当前智能体已锁定模型，会话内无法覆盖。");
       return;
     }
     const result = await ipcModelListPicker();
