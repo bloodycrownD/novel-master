@@ -510,7 +510,6 @@ export async function runAgentTurn(
         return runChildAgent({
           runtime,
           parentProjectId: scope.projectId,
-          parentSessionId: scope.sessionId,
           parentDepth: 0,
           def,
           childSessionId,
@@ -588,7 +587,6 @@ export async function runAgentTurn(
 async function runChildAgent(args: {
   readonly runtime: AgentTurnRuntimePort;
   readonly parentProjectId: string;
-  readonly parentSessionId: string;
   readonly parentDepth: number;
   readonly def: AgentDefinition;
   readonly childSessionId: string;
@@ -714,7 +712,6 @@ async function runChildAgent(args: {
         return runChildAgent({
           runtime,
           parentProjectId,
-          parentSessionId: childSessionId,
           parentDepth: childDepth,
           def: grandchildDef,
           childSessionId: grandchildSessionId,
