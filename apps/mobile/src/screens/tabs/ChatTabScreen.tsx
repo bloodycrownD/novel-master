@@ -208,10 +208,6 @@ function ChatTabScreenContent({
         onCreateProject={ctx.scope.handleCreateProject}
         onRenameProject={ctx.scope.handleRenameProject}
         onDeleteSelected={ctx.scope.handleDeleteProjects}
-        onOpenAgentConfig={id => {
-          ctx.scope.setProjectDrawerOpen(false);
-          navigation.navigate('ProjectAgentConfig', { projectId: id });
-        }}
       />
     </View>
   );

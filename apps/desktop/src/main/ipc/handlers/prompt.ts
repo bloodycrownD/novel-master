@@ -7,7 +7,6 @@ import {
   resolveSavedModelId,
 } from "@novel-master/core/agent";
 import { savedModelDisplayName } from "@novel-master/core/provider";
-import { PROJECT_AGENT_META_DISPLAY_LABEL } from "@novel-master/core/chat";
 import type {
   IpcResult,
   PromptAgentMetaResponse,
@@ -89,24 +88,13 @@ export async function handlePromptAgentMeta(
       const modelSource: 'agent-pin' | 'session' = hasDedicatedModel
         ? 'agent-pin'
         : 'session';
-      if (resolved.source === "session") {
-        return {
-          ok: true,
-          data: {
-            source: "session",
-            agentId: resolved.agentId,
-            agentName: definition.name,
-            modelLabel,
-            hasDedicatedModel,
-            modelSource,
-          },
-        };
-      }
+      // 项目智能体已下线：resolve 永远走 session 分支。
       return {
         ok: true,
         data: {
-          source: "project-custom",
-          agentName: PROJECT_AGENT_META_DISPLAY_LABEL,
+          source: "session",
+          agentId: resolved.agentId,
+          agentName: definition.name,
           modelLabel,
           hasDedicatedModel,
           modelSource,

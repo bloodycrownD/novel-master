@@ -137,6 +137,117 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.equal(body, expected);
   });
 
+  it("T-EA1: extra info 只对最新一条 user 消息拼接，历史消息不注入", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const first = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("第一条"),
+    );
+    const second = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("第二条"),
+    );
+    const third = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("第三条"),
+    );
+    const sk = createSessionKkvService(ctx.conn);
+    const prepared = await prepareUserMessagesForPrompt(
+      [first, second, third],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs: ctx.sessionVfs(project.id, session.id),
+        extraInfo: "背景说明",
+      },
+    );
+    const body1 = messageBodyText(prepared[0]!);
+    const body2 = messageBodyText(prepared[1]!);
+    const body3 = messageBodyText(prepared[2]!);
+    // 只有最新（第三条）含 <extra-info>
+    assert.doesNotMatch(body1, /<extra-info>/);
+    assert.doesNotMatch(body2, /<extra-info>/);
+    assert.match(body3, /<extra-info>/);
+    assert.match(body3, /背景说明/);
+    // 历史消息保持原文恒等（无附件 + extraInfo 不注入 → wrap 恒等）
+    assert.equal(body1, "第一条");
+    assert.equal(body2, "第二条");
+  });
+
+  it("T-EA2: extraInfo 为空时所有 user 消息都不注入（与现状一致）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const first = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("第一条"),
+    );
+    const second = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("第二条"),
+    );
+    const sk = createSessionKkvService(ctx.conn);
+    const prepared = await prepareUserMessagesForPrompt(
+      [first, second],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs: ctx.sessionVfs(project.id, session.id),
+        // extraInfo 全空白
+        extraInfo: "   ",
+      },
+    );
+    assert.doesNotMatch(messageBodyText(prepared[0]!), /<extra-info>/);
+    assert.doesNotMatch(messageBodyText(prepared[1]!), /<extra-info>/);
+  });
+
+  it("T-EA4: hidden user 不影响「最新一条」判定，hidden 原样进输出但不注入", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const visible1 = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("可见一"),
+    );
+    const visible2 = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("可见二"),
+    );
+    // hidden user 出现在最后，但不该被当作「最新一条」。
+    // messages.append 不支持 hidden 参数，用内存对象构造（对齐 T-HD1 做法）。
+    const hiddenMsg = userMsg("隐藏消息", {
+      sessionId: session.id,
+      hidden: true,
+    });
+    const sk = createSessionKkvService(ctx.conn);
+    const prepared = await prepareUserMessagesForPrompt(
+      [visible1, visible2, hiddenMsg],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs: ctx.sessionVfs(project.id, session.id),
+        extraInfo: "背景说明",
+      },
+    );
+    // hidden 透传但未 wrap（原文恒等）
+    const bodyHidden = messageBodyText(prepared[2]!);
+    assert.equal(bodyHidden, "隐藏消息");
+    assert.doesNotMatch(bodyHidden, /<extra-info>/);
+    // 最新一条非隐藏 user（visible2）才注入
+    assert.doesNotMatch(messageBodyText(prepared[0]!), /<extra-info>/);
+    assert.match(messageBodyText(prepared[1]!), /<extra-info>/);
+    assert.match(messageBodyText(prepared[1]!), /背景说明/);
+  });
+
   it("T-AT2: user_ops + text → wrap 含 user-ops 与 user-input；库内仍为原文", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

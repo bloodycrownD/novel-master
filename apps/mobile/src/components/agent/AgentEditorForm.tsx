@@ -89,35 +89,17 @@ function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
   return agentId;
 }
 
-type RegistryEditorProps = {
-  editorMode?: 'registry';
+type Props = {
   agentId: string;
-  projectId?: never;
-  initialDefinition?: never;
   onDirtyChange?: (dirty: boolean) => void;
   onSaved?: () => void | Promise<void>;
 };
-
-type ProjectEditorProps = {
-  editorMode: 'project';
-  projectId: string;
-  initialDefinition: AgentDefinition;
-  agentId?: never;
-  onDirtyChange?: (dirty: boolean) => void;
-  onSaved?: () => void | Promise<void>;
-};
-
-type Props = RegistryEditorProps | ProjectEditorProps;
 
 // 自定义附加信息输入框文案（core 未导出，UI 层自管）。
 const CUSTOM_ATTACH_TEXT_LABEL = '附加信息内容';
 
 export function AgentEditorForm(props: Props) {
-  const { onDirtyChange, onSaved } = props;
-  const isProjectMode = props.editorMode === 'project';
-  const agentId = !isProjectMode ? props.agentId : '';
-  const projectId = isProjectMode ? props.projectId : '';
-  const initialDefinition = isProjectMode ? props.initialDefinition : undefined;
+  const { onDirtyChange, onSaved, agentId } = props;
   const { tokens } = useTheme();
   const { showToast } = useToast();
   const navigation = useNavigation<StackNav>();
@@ -298,26 +280,6 @@ export function AgentEditorForm(props: Props) {
   );
 
   const loadAgent = useCallback(async () => {
-    if (isProjectMode) {
-      if (initialDefinition == null) {
-        setLoadError('缺少项目专属 Agent 定义');
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setLoadError(null);
-      setInvalidConfig(null);
-      try {
-        await populateFormFromDefinition(initialDefinition);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setLoadError(message);
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
     setLoading(true);
     setLoadError(null);
     setInvalidConfig(null);
@@ -343,8 +305,6 @@ export function AgentEditorForm(props: Props) {
     }
   }, [
     agentId,
-    initialDefinition,
-    isProjectMode,
     populateFormFromDefinition,
     runtime,
   ]);
@@ -379,14 +339,9 @@ export function AgentEditorForm(props: Props) {
   }, [agentId, displayName, navigation, runtime, showToast]);
 
   const handleOverwriteDefault = useCallback(() => {
-    const preservedName = isProjectMode
-      ? initialDefinition?.name?.trim() || '项目专属'
-      : undefined;
     Alert.alert(
       '覆盖为默认模板',
-      isProjectMode
-        ? '将用默认 prompts 与运行时覆盖当前项目专属配置，并保留显示名称。是否继续？'
-        : '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
+      '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
       [
         { text: '取消', style: 'cancel' },
         {
@@ -395,27 +350,16 @@ export function AgentEditorForm(props: Props) {
             void (async () => {
               setRecovering(true);
               try {
-                let displayName = preservedName ?? agentId;
-                if (!isProjectMode) {
-                  const raw = await runtime.agentRegistry.getRawWire(agentId);
-                  displayName = agentDisplayNameFromWire(raw, agentId);
-                }
+                const raw = await runtime.agentRegistry.getRawWire(agentId);
+                const displayName = agentDisplayNameFromWire(raw, agentId);
                 const def = buildDefaultAgentDefinitionPreservingName(
-                  displayName.trim() || agentId || '项目专属',
+                  displayName.trim() || agentId,
                 );
                 const probe = new ToolRegistry();
                 registerBuiltinTools(probe);
-                if (isProjectMode) {
-                  await runtime.projects.updateAgentConfig(
-                    projectId,
-                    { mode: 'custom', definition: def },
-                    { registeredToolNames: probe.list() },
-                  );
-                } else {
-                  await runtime.agentRegistry.upsert(agentId, def, {
-                    registeredToolNames: probe.list(),
-                  });
-                }
+                await runtime.agentRegistry.upsert(agentId, def, {
+                  registeredToolNames: probe.list(),
+                });
                 await loadAgent();
                 await onSaved?.();
                 showToast('已用默认模板覆盖并保存');
@@ -431,11 +375,8 @@ export function AgentEditorForm(props: Props) {
     );
   }, [
     agentId,
-    initialDefinition?.name,
-    isProjectMode,
     loadAgent,
     onSaved,
-    projectId,
     runtime,
     showToast,
   ]);
@@ -480,20 +421,12 @@ export function AgentEditorForm(props: Props) {
     try {
       const probe = new ToolRegistry();
       registerBuiltinTools(probe);
-      if (isProjectMode) {
-        await runtime.projects.updateAgentConfig(
-          projectId,
-          { mode: 'custom', definition: def },
-          { registeredToolNames: probe.list() },
-        );
-      } else {
-        await runtime.agentRegistry.upsert(agentId, def, {
-          registeredToolNames: probe.list(),
-        });
-      }
+      await runtime.agentRegistry.upsert(agentId, def, {
+        registeredToolNames: probe.list(),
+      });
       setSavedBaseline(snapshot);
       await onSaved?.();
-      showToast(isProjectMode ? '已保存项目专属配置' : '已保存智能体配置');
+      showToast('已保存智能体配置');
     } catch (error) {
       showToast(toastMessage('保存失败', error));
     } finally {
@@ -695,22 +628,20 @@ export function AgentEditorForm(props: Props) {
                 </Text>
               </Pressable>
             ) : null}
-            {!isProjectMode ? (
-              <Pressable
-                disabled={recovering}
-                onPress={handleDeleteBrokenAgent}
+            <Pressable
+              disabled={recovering}
+              onPress={handleDeleteBrokenAgent}
+            >
+              <Text
+                style={{
+                  color: tokens.danger,
+                  fontSize: 14,
+                  fontWeight: '600',
+                }}
               >
-                <Text
-                  style={{
-                    color: tokens.danger,
-                    fontSize: 14,
-                    fontWeight: '600',
-                  }}
-                >
-                  {STORED_CONFIG_LABELS.agentDelete}
-                </Text>
-              </Pressable>
-            ) : null}
+                {STORED_CONFIG_LABELS.agentDelete}
+              </Text>
+            </Pressable>
           </View>
         </View>
       </View>
@@ -809,26 +740,20 @@ export function AgentEditorForm(props: Props) {
         }
       >
         <FormSectionCard title="基本信息" tokens={tokens}>
-          {!isProjectMode ? (
-            <View style={styles.yamlActions}>
-              <Pressable onPress={() => handleImportYaml()}>
-                <Text style={{ color: tokens.primary, fontWeight: '600' }}>
-                  导入 YAML
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => handleExportYaml().catch(() => undefined)}
-              >
-                <Text style={{ color: tokens.primary, fontWeight: '600' }}>
-                  导出 YAML
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <Text style={[styles.hint, { color: tokens.textSecondary }]}>
-              项目专属配置，不会写入全局智能体列表。
-            </Text>
-          )}
+          <View style={styles.yamlActions}>
+            <Pressable onPress={() => handleImportYaml()}>
+              <Text style={{ color: tokens.primary, fontWeight: '600' }}>
+                导入 YAML
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => handleExportYaml().catch(() => undefined)}
+            >
+              <Text style={{ color: tokens.primary, fontWeight: '600' }}>
+                导出 YAML
+              </Text>
+            </Pressable>
+          </View>
           <FormField label="名称" tokens={tokens}>
             <FormTextInput
               tokens={tokens}

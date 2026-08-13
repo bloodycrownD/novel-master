@@ -182,6 +182,9 @@ export class DefaultProjectService implements ProjectService {
     );
   }
 
+  /**
+   * @deprecated 项目智能体已下线，保留用于 DB 历史数据读取兼容。
+   */
   async getAgentConfig(id: string): Promise<ProjectAgentConfig> {
     await this.get(id);
     const json = await this.deps.projects.getAgentConfig(id);
@@ -191,6 +194,9 @@ export class DefaultProjectService implements ProjectService {
     return parseStoredAgentConfig(json);
   }
 
+  /**
+   * @deprecated 项目智能体已下线，保留用于 DB 历史数据读取兼容。
+   */
   async updateAgentConfig(
     id: string,
     patch: ProjectAgentConfigPatch,

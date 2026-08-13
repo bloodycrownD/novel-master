@@ -8,7 +8,6 @@
  *
  * 锁定规则（与 desktop SessionDetailDrawer 对齐）：
  * - `source === 'session'` → agent / model 都允许在会话内切（model 仍受 agent-pin 压制）。
- * - `source === 'project-custom'` → 项目截断，agent / model 卡片都锁定，引导去项目设置改。
  * - `source === 'none'`（agent 解析失败，例如会话 agentId 指向已删 agent）→ 两张卡片都锁定，
  *   避免在异常态误操作。只有 session 才放开，所以锁定判据统一收口为 `source !== 'session'`。
  */
@@ -53,7 +52,7 @@ type ScreenNavigation = NativeStackNavigationProp<
   'SessionDetail'
 >;
 
-const AGENT_LOCK_TOAST = '智能体已被项目锁定，无法在会话内切换，请到「项目智能体配置」修改';
+const AGENT_LOCK_TOAST = '当前会话未绑定有效智能体，无法在会话内切换。';
 const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 
 export function SessionDetailScreen() {

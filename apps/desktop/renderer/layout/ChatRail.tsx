@@ -7,7 +7,6 @@ import { ContextMenu } from '../components/ui/ContextMenu';
 import { TextPromptModal } from '../components/ui/TextPromptModal';
 import { showToast } from '../components/ui/show-toast';
 import { ConversationPanel } from '../features/chat/ConversationPanel';
-import { ProjectAgentConfigView } from '../features/settings/ProjectAgentConfigView';
 import { useBatchSelection } from '../hooks/useBatchSelection';
 import {
   ipcAgentAbort,
@@ -60,7 +59,6 @@ export function ChatRail({
     goBackToProjects,
     goBackToSessions,
     showNavView,
-    notifyAgentConfigChanged,
   } = useShellNav();
 
   // 子智能体只读会话面板的 sessionId 在 ChatRail 本地维护，避免污染全局导航状态
@@ -122,10 +120,6 @@ export function ChatRail({
   const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [listMenu, setListMenu] = useState<ListMenuState | null>(null);
-  const [agentConfigProject, setAgentConfigProject] = useState<{
-    projectId: string;
-    projectName: string;
-  } | null>(null);
 
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
@@ -374,11 +368,6 @@ export function ChatRail({
             mode: 'rename-project',
             projectId: project.id,
             initialName: project.name,
-          });
-        } else if (action === 'agent-config') {
-          setAgentConfigProject({
-            projectId: project.id,
-            projectName: project.name,
           });
         } else if (action === 'delete') {
           setConfirmState({
@@ -768,9 +757,6 @@ export function ChatRail({
         y={listMenu?.y ?? 0}
         items={[
           { label: '重命名', action: 'rename' },
-          ...(listMenu?.kind === 'project'
-            ? [{ label: '智能体配置', action: 'agent-config' }]
-            : []),
           { label: '删除', action: 'delete', danger: true },
         ]}
         onSelect={handleListMenuSelect}
@@ -800,15 +786,6 @@ export function ChatRail({
         onCancel={() => setConfirmState(null)}
       />
 
-      {agentConfigProject ? (
-        <ProjectAgentConfigView
-          open
-          projectId={agentConfigProject.projectId}
-          projectName={agentConfigProject.projectName}
-          onClose={() => setAgentConfigProject(null)}
-          onSaved={() => notifyAgentConfigChanged()}
-        />
-      ) : null}
     </>
   );
 }

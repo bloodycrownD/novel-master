@@ -1,6 +1,6 @@
 /**
  * T-D3：SessionDetailDrawer 渲染聊天名 / agent / model / 操作入口；
- *      project-custom 时 agent 切换禁用；agent 带 pin 时 model 切换禁用。
+ *      agent 解析失败（none）时 agent 切换禁用；agent 带 pin 时 model 切换禁用。
  * T-D4：App.tsx 入口替换——原 #session-actions-menu 不再渲染；
  *      openSessionActions 触发 SessionDetailDrawer。
  *
@@ -48,7 +48,7 @@ describe("SessionDetailDrawer (T-D3)", () => {
     assert.doesNotMatch(src, /session-detail-pick__source/);
     // 锁定指示仍保留
     assert.match(src, /session-detail-pick__lock/);
-    assert.match(src, /项目锁定/);
+    assert.match(src, /智能体未绑定/);
     assert.match(src, /智能体锁定/);
     // 操作入口 data hook
     assert.match(src, /data-session-detail-action="switch-agent"/);
@@ -73,13 +73,14 @@ describe("SessionDetailDrawer (T-D3)", () => {
     const src = readDrawer();
     // source 默认 'none'（meta 未加载或 session.agentId 指向已删 agent）
     assert.match(src, /meta\?\.source \?\? "none"/);
-    // agent 锁：只有 session 才允许切；none / project-custom 一律锁
+    // agent 锁：只有 session 才允许切；none 一律锁（项目智能体已下线）
     assert.match(src, /agentLocked = source !== "session"/);
     // model 同口径收口（原 agent-pin / hasDedicatedModel 判定已废弃）
     assert.match(src, /modelLocked = source !== "session"/);
-    // 锁定 toast 引导文案保留
-    assert.match(src, /项目锁定/);
+    // 锁定 toast 引导文案保留（none 口径：未绑定有效智能体）
+    assert.match(src, /未绑定有效智能体/);
     assert.match(src, /已锁定模型/);
+    assert.match(src, /会话内无法覆盖/);
     // 旧的 agent-pin / hasDedicatedModel 判定不应再出现
     assert.doesNotMatch(src, /"agent-pin"/);
     assert.doesNotMatch(src, /hasDedicatedModel/);

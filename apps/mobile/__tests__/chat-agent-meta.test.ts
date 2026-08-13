@@ -1,10 +1,8 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
-import {PROJECT_AGENT_META_DISPLAY_LABEL} from '@novel-master/core/chat';
 import {loadChatAgentMeta} from '../src/services/chat-agent-meta';
 
 const globalDefinition = buildDefaultAgentDefinitionPreservingName('全局助手');
-const projectDefinition = buildDefaultAgentDefinitionPreservingName('项目副本');
 const sessionAgentDefinition = buildDefaultAgentDefinitionPreservingName('会话引用助手');
 
 // core 移除 workspace 回退层后，SessionAgentConfig = { agentId, modelId? }。
@@ -73,24 +71,6 @@ describe('loadChatAgentMeta', () => {
     expect(meta.modelSource).toBe('session');
   });
 
-  it('project custom 截断 session.agentId，source 为 project-custom 且不暴露 agentId', async () => {
-    const meta = await loadChatAgentMeta(
-      mockRuntime({
-        agentConfig: {mode: 'custom', definition: projectDefinition},
-        // 即使 session 配了 agentId，custom 截断后也不该走 session
-        sessionAgentConfig: {agentId: 'session-agent-x'},
-      }) as never,
-      'proj-1',
-      'sess-1',
-    );
-    expect(meta.source).toBe('project-custom');
-    expect(meta.agentId).toBeUndefined();
-    expect(meta.agentName).toBe(PROJECT_AGENT_META_DISPLAY_LABEL);
-    expect(meta.agentName).toBe('项目智能体');
-    // custom 路径不读 session，hasDedicatedModel 由 projectDefinition.model 决定（默认空）→ session
-    expect(meta.modelSource).toBe('session');
-  });
-
   it('modelSource=agent-pin：agent definition 自带 model 压制一切', async () => {
     const pinned = buildDefaultAgentDefinitionPreservingName('带 pin 助手');
     pinned.model = 'openai:pinned-model';
@@ -110,23 +90,5 @@ describe('loadChatAgentMeta', () => {
     );
     expect(meta.hasDedicatedModel).toBe(true);
     expect(meta.modelSource).toBe('agent-pin');
-  });
-
-  it('project-custom 时 session.modelId 不参与 savedModelId（截断）', async () => {
-    const meta = await loadChatAgentMeta(
-      mockRuntime({
-        agentConfig: {mode: 'custom', definition: projectDefinition},
-        sessionAgentConfig: {
-          agentId: 'session-agent-x',
-          modelId: 'openai:session-override',
-        },
-      }) as never,
-      'proj-1',
-      'sess-1',
-    );
-    // custom 截断后 modelSource 仍由 hasDedicatedModel 决定（projectDefinition 默认无 pin）→ session
-    expect(meta.source).toBe('project-custom');
-    expect(meta.hasDedicatedModel).toBe(false);
-    expect(meta.modelSource).toBe('session');
   });
 });

@@ -777,13 +777,13 @@ export type PromptPreviewSegmentDto = {
 };
 
 export type PromptAgentMetaResponse = {
-  readonly source: 'project-custom' | 'session' | 'none';
+  readonly source: 'session' | 'none';
   readonly agentId?: string;
   readonly agentName: string;
   readonly modelLabel: string;
   readonly hasDedicatedModel: boolean;
   /**
-   * 模型来源优先级链（workspace 层已移除）：
+   * 模型来源优先级链（项目智能体已下线，会话始终走 session 级）：
    * - `agent-pin`：agent definition 自带 model，压制 session 覆盖。
    * - `session`：会话级 modelId（agent 无 pin 时生效）。
    * `source: 'none'` 时省略。

@@ -100,7 +100,7 @@ function makeRuntime(
 }
 
 describe("runAgentTurn project agent config", () => {
-  it("custom 项目使用专属 definition（非全局 Agent）", async () => {
+  it("项目智能体已下线：custom 配置被忽略，走 session 级 agent", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
     await registry.upsert(
@@ -124,11 +124,15 @@ describe("runAgentTurn project agent config", () => {
     await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    // 旧库残留 custom 配置——runner 应忽略它，走 session 级。
     await ctx.projects.updateAgentConfig(project.id, {
       mode: "custom",
       definition: customDefinition,
     });
     const session = await ctx.sessions.create(project.id, "S1");
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "global-agent",
+    });
 
     const runtime = makeRuntime(ctx, registry);
     let capturedDefinition: AgentDefinition | undefined;
@@ -149,10 +153,11 @@ describe("runAgentTurn project agent config", () => {
     }
 
     assert.ok(capturedDefinition != null);
-    assert.equal(capturedDefinition.name, "项目专属 Agent");
+    // 走 session 级 global-agent，不是项目专属 customDefinition。
+    assert.equal(capturedDefinition.name, "全局 Agent");
     assert.equal(
       capturedDefinition.prompts.persist[0]?.content,
-      "CUSTOM_PROJECT_PROMPT",
+      "GLOBAL_PROMPT",
     );
   });
 

@@ -17,7 +17,6 @@ import {ChatTabScreen} from '../screens/tabs/ChatTabScreen';
 import {ProfileTabScreen} from '../screens/tabs/ProfileTabScreen';
 import {AgentsSettingsScreen} from '../screens/stack/AgentsSettingsScreen';
 import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
-import {ProjectAgentConfigScreen} from '../screens/stack/ProjectAgentConfigScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
 import {ProviderCreateScreen} from '../screens/stack/ProviderCreateScreen';
@@ -109,10 +108,6 @@ const AgentsSettingsStackScreen = withStackLayout(
   AgentsSettingsScreen,
 );
 const AgentEditorStackScreen = withStackLayout('AgentEditor', AgentEditorScreen);
-const ProjectAgentConfigStackScreen = withStackLayout(
-  'ProjectAgentConfig',
-  ProjectAgentConfigScreen,
-);
 const RealPromptStackScreen = withStackLayout('RealPrompt', RealPromptScreen);
 const ProvidersStackScreen = withStackLayout('Providers', ProvidersScreen);
 const ProviderCreateStackScreen = withStackLayout(
@@ -181,10 +176,6 @@ export function RootNavigator() {
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="AgentsSettings" component={AgentsSettingsStackScreen} />
           <Stack.Screen name="AgentEditor" component={AgentEditorStackScreen} />
-          <Stack.Screen
-            name="ProjectAgentConfig"
-            component={ProjectAgentConfigStackScreen}
-          />
           <Stack.Screen
             name="RealPrompt"
             component={RealPromptStackScreen}

@@ -1,10 +1,10 @@
 /**
  * Chat header meta: current agent name + resolved model label (PRD D4)。
  *
- * source 用于区分 agent 来源（会话级引用 / 项目自定义）。
+ * source 用于区分 agent 来源（会话级引用）。
  * modelSource 用于区分生效模型来源（agent pin / 会话）。
  *
- * workspace 层已在 core 移除：会话始终独立持有 agentId（必填），
+ * 项目智能体已下线：会话始终独立持有 agentId（必填），
  * 可选 modelId 覆盖 agent pin。meta 这里只把 core 的解析结果翻译成 UI 标签。
  */
 import {
@@ -12,19 +12,18 @@ import {
   resolveAgentForProject,
   resolveSavedModelId,
 } from '@novel-master/core/agent';
-import {PROJECT_AGENT_META_DISPLAY_LABEL} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from '../provider/model-display-label';
 
 /**
  * modelSource 与 desktop `PromptAgentMetaResponse.modelSource` 同语义
- * （不含 desktop 独有的 'cli'）。workspace 层移除后只剩两档：
+ * （不含 desktop 独有的 'cli'）：
  * agent 自带 pin 压制 → 否则跟随会话配置。
  */
 export type ChatAgentModelSource = 'agent-pin' | 'session';
 
 export interface ChatAgentMeta {
-  readonly source: 'project-custom' | 'session' | 'none';
+  readonly source: 'session' | 'none';
   readonly agentId: string | undefined;
   readonly agentName: string;
   readonly modelLabel: string;
@@ -39,8 +38,8 @@ export interface ChatAgentMeta {
 /**
  * 按项目 + 会话解析 Agent 元信息。
  *
- * - `project-custom`：项目 custom 截断，不含 agentId，不读 session。
- * - `session`：会话独立 agentId 解析得到的 registry definition。
+ * 项目智能体已下线：所有项目统一走 session 级——会话独立 agentId 解析得到
+ * registry definition。
  *
  * modelSource 两档：agent definition 自带 model 压制一切，
  * 否则跟随会话（session.modelId 可选，作为 savedModelId 兜底）。
@@ -59,16 +58,13 @@ export async function loadChatAgentMeta(
     const {definition} = resolved;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
-    // 仅 session 来源才读 sessionConfig：custom 截断会话，modelId 不参与。
-    // core 的 resolveSavedModelId 优先级为 agent pin → session modelId；
-    // workspace 已移除，无可用来源时 savedModelId 为 undefined。
-    const sessionConfig =
-      resolved.source === 'session'
-        ? await runtime.sessions.getSessionAgentConfig(sessionId)
-        : undefined;
+    // 会话级 agentId 解析后读 sessionConfig 拿 modelId，用于 savedModelId 兜底。
+    const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+      sessionId,
+    );
     const savedModelId = resolveSavedModelId({
       agentModelId: definition.model,
-      sessionModelId: sessionConfig?.modelId,
+      sessionModelId: sessionConfig.modelId,
     });
     let modelLabel = '未选择模型';
     if (savedModelId) {
@@ -82,21 +78,10 @@ export async function loadChatAgentMeta(
     const modelSource: ChatAgentModelSource = hasDedicatedModel
       ? 'agent-pin'
       : 'session';
-    if (resolved.source === 'session') {
-      return {
-        source: 'session',
-        agentId: resolved.agentId,
-        agentName: definition.name,
-        modelLabel,
-        tokenLabel: '',
-        hasDedicatedModel,
-        modelSource,
-      };
-    }
     return {
-      source: 'project-custom',
-      agentId: undefined,
-      agentName: PROJECT_AGENT_META_DISPLAY_LABEL,
+      source: 'session',
+      agentId: resolved.agentId,
+      agentName: definition.name,
       modelLabel,
       tokenLabel: '',
       hasDedicatedModel,
@@ -121,8 +106,7 @@ export async function loadChatAgentMeta(
 /**
  * Agent 是否被锁定（不可在会话内切换）。
  *
- * 只有 source='session' 才放开，project-custom（项目截断）和 none（解析失败）
- * 一律视为锁定。meta 还没加载出来（undefined）时也按锁定处理，避免异常态误触。
+ * 只有 source='session' 才放开，none（解析失败）一律视为锁定。meta 还没加载出来（undefined）时也按锁定处理，避免异常态误触。
  */
 export function isAgentLocked(meta: ChatAgentMeta | undefined): boolean {
   if (!meta) {
