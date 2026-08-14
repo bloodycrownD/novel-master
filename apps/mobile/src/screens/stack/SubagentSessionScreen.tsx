@@ -49,7 +49,7 @@ export function SubagentSessionScreen() {
   const {appUi} = useNovelMaster();
   const navigation = useNavigation();
   const route = useRoute<ScreenRoute>();
-  const {sessionId, projectId} = route.params;
+  const {sessionId, projectId, parentSessionId} = route.params;
 
   // 子会话流式 partial：从 core 的 streamRegistry 直接查询，不依赖 eventBus 订阅时机。
   // registry 在 run-agent-turn 里按 sessionId register/append/unregister，
@@ -248,27 +248,32 @@ export function SubagentSessionScreen() {
     }
   }, [webviewReady, abort.uiRunning, sessionId, runtime.streamRegistry, messages.length]);
 
+  // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
+  // 而不是当前子会话的 id。
   const onOpenSubagentSession = useCallback(
     (childSessionId: string) => {
       navigation.navigate('SubagentSessionView', {
         projectId,
         sessionId: childSessionId,
+        parentSessionId,
       });
     },
-    [navigation, projectId],
+    [navigation, projectId, parentSessionId],
   );
 
-  // 文件引入卡片点击：导航到文件编辑器，用子会话的 projectId + sessionId 作为 session scope。
+  // 文件引入卡片点击：导航到文件编辑器。文件在共享的父会话工作区，
+  // 所以 session scope 用 parentSessionId（而非当前子会话 id），
+  // 否则 FileEditor 按子 session VFS 查不到文件会报「文件不存在或已删除」。
   const onOpenToolFile = useCallback(
     (path: string) => {
       navigation.navigate('FileEditor', {
         path,
         scopeKind: 'session',
         projectId,
-        sessionId,
+        sessionId: parentSessionId,
       });
     },
-    [navigation, projectId, sessionId],
+    [navigation, projectId, parentSessionId],
   );
 
   const sessionKey = useMemo(

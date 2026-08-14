@@ -361,17 +361,20 @@ export function useChatTabScope({
 
   // 点击 task 工具卡片跳转到子会话只读浏览页。子会话与当前主会话同属一个项目，
   // 故 projectId 取当前会话的项目，sessionId 用入参（子会话 id）。
+  // 文件只有一个共享工作区（父会话 session VFS），子 agent 在父工作区干活，
+  // 所以把父会话 sessionId 一并传下去，供文件卡片点击时以父 session scope 打开。
   const openSubagentSession = useCallback(
     (childSessionId: string) => {
-      if (projectId == null) {
+      if (projectId == null || sessionId == null) {
         return;
       }
       navigation.navigate('SubagentSessionView', {
         projectId,
         sessionId: childSessionId,
+        parentSessionId: sessionId,
       });
     },
-    [navigation, projectId],
+    [navigation, projectId, sessionId],
   );
 
   const sessionVfs = useMemo(
