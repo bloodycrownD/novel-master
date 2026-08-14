@@ -24,9 +24,8 @@ prompt-block-lifecycle 引入的 `lifecycle=always` dynamic 块与 customAttach�
 
 ### 不包含范围
 
-- `assembleWorkplaceDisplay`（常驻工作区前缀）的每 step 组装与快照策略——它由 session kkv 管理快照语义，且 persist 区不做宏展开。
 - 三区布局顺序调整（dynamic 区位于消息序列尾部带来的位置性缓存损耗）。
-- persist 区块（本就不做宏展开）。
+- 常驻工作区前缀（`assembleWorkplaceDisplay`）：它本身已被 session kkv 缓存保障回合内冻结——`loadOrFillFileCache` 命中无条件返回（无 mtime 校验），`rule_snapshot` 回合内只读；仅用户改规则（`refreshRuleSnapshot`）或压缩/置位会重写，均为用户/设计内操作，无需快照化。
 
 ## 影响模块与接口
 
