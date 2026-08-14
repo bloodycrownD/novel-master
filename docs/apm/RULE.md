@@ -25,7 +25,9 @@
 
 - **会话智能体（session agent）**：每个会话独立持有必填 `agentId`（引用 agent registry，不内联 definition），可选 `modelId` 覆盖 agent pin 的模型。`resolveAgentForProject` 现在永远走 session 分支。
 - **项目智能体（已下线）**：曾经的项目级内联智能体定义（`chat_project.agent_config_json`），v1.4.26 起已移除 UI 入口和解析分支，DB 列置空保留。历史概念，新代码不要再依赖。
-- **子会话（subagent session）**：主 agent 通过 `task` 工具派生子代理时创建的会话，消息历史独立落库，跑完以 tool_result 回流父会话。`parentSessionId` 非空；在共享父工作区干活（仅规则快照隔离）；递归上限 depth >= 2 禁用 task 工具。内置虚拟 `general` 子代理（`DEFAULT_SUBAGENT_DEFINITION`，registry list 注入、禁止同名 upsert）已开启 `prompts.workplace`（确记语 `i have seen workplace`），每轮注入 `<workplace>` 前缀。
+- **子会话（subagent session）**：主 agent 通过 `task` 工具派生子代理时创建的会话，消息历史独立落库，跑完以 tool_result 回流父会话。`parentSessionId` 非空；在共享父工作区干活（仅规则快照隔离）；递归上限 depth >= 2 禁用 task 工具。内置虚拟 `general` 子代理（`DEFAULT_SUBAGENT_DEFINITION`，registry list 注入、禁止同名 upsert）已开启 `prompts.workplace`（确记语 `i have seen workplace`），每轮注入 `<workplace>` 前缀。mobile 子会话路由参数携带 `parentSessionId`（嵌套时透传根父），文件卡片用它打开 FileEditor。
+- **vfsScope（ToolResultBlock）**：工具结果块上标记「该工具操作落在哪个 VFS scope」的字段。子 agent 的写入落父 session scope，故取 `session.workplaceScopeSessionId`（而非消息归属的子 session）——UI 按它打开文件才能对准共享工作区。与 run 事件的 `sessionId`（会话树语义，永远是子 session）是两个概念，勿混。
+- **子会话写入刷新（desktop）**：子 agent 写入落父 scope 但 step/run 事件挂子 session 的 run，`useAgentStream` 守卫拒收——ShellNavProvider 旁路订阅 agent stream，见 `vfsMutated` 且 projectId 匹配即刷文件树（跳过本会话 run 避免双触发）。mobile 无此问题：工作区面板是切换式视图，每次切入全量 reload。
 
 ## 协作红线
 
@@ -37,7 +39,7 @@ merge 到 main、push、发版等改变共享状态的操作，必须等用户�
 
 ## 子会话工作区共享 + 规则快照隔离（Feature A 最终语义，2026-08-14 用户拍板推翻初版）
 
-子会话**没有独立工作区**：子 agent 的全部 VFS 工具（read/write/edit/glob/grep）在**父 session 的 VFS scope** 上操作，写入直接出现在父工作区；嵌套时孙 agent 也指向根父会话。隔离的只有**规则快照**：`workplaceScopeSessionId` 对子 session 指向父（规则评估 + workplace 服务按父工作区），`kkvScopeSessionId` 恒等自身（rule_snapshot/file_cache 存子 session 自己的 KKV，`assembleWorkplaceDisplay` 的 `kkvSessionId` 参数路由）。UI：mobile 子会话文件卡片用路由传入的 `parentSessionId` 打开 FileEditor；desktop `workspaceSessionId` 恒等 `sessionId`。初版「从空产生独立工作区」语义已废弃，`initializeEmptySessionWorkspace` 已删（在 feature-d-bug-fixes 分支重做，待合并）。
+子会话**没有独立工作区**：子 agent 的全部 VFS 工具（read/write/edit/glob/grep）在**父 session 的 VFS scope** 上操作，写入直接出现在父工作区；嵌套时孙 agent 也指向根父会话。隔离的只有**规则快照**：`workplaceScopeSessionId` 对子 session 指向父（规则评估 + workplace 服务按父工作区），`kkvScopeSessionId` 恒等自身（rule_snapshot/file_cache 存子 session 自己的 KKV，`assembleWorkplaceDisplay` 的 `kkvSessionId` 参数路由）。UI：mobile 子会话文件卡片用路由传入的 `parentSessionId` 打开 FileEditor；desktop `workspaceSessionId` 恒等 `sessionId`。初版「从空产生独立工作区」语义已废弃，`initializeEmptySessionWorkspace` 已删（已随 v1.4.27 合并发版）。
 
 ## extra info 注入规则（Feature B 决策）
 
