@@ -32,6 +32,12 @@ import type {
   WorkspaceMutatedPayload,
   WorkspacePanelScope,
 } from "@shared/ipc-types";
+import {
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_STEP_COMMITTED,
+  type AgentRunFinishedPayload,
+  type AgentStepCommittedPayload,
+} from "@novel-master/core/events";
 import { previewTabKey } from "../layout/preview-tab-utils";
 
 import {
@@ -39,6 +45,8 @@ import {
   ipcProjectsList,
 
   ipcSessionsListByProject,
+
+  onAgentStream,
 
   onWorkspaceMutated,
 
@@ -292,6 +300,37 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       if (workspaceMutatedMatchesNav(payload, projectId, workspaceSessionId)) {
         notifyWorkspaceMutated();
       }
+    });
+  }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
+
+  // 子 agent（子 session）的 VFS 写入落在父 session scope（共享父工作区），
+  // 但 step / run 事件挂在子 session 的 run 上——ConversationPanel 的
+  // useAgentStream 守卫（sessionId + acceptRunEvent）只放行本面板自己的
+  // run，子 session 的事件被拒收，父面板文件树就不会刷新。main 侧其实把
+  // 所有事件都转发到了 renderer（forward-event-bus），所以这里旁路订阅
+  // agent stream：只看 STEP_COMMITTED / RUN_FINISHED，按 projectId 匹配
+  // （与 workspaceMutatedMatchesNav 对 session scope 只匹配 projectId 的
+  // 口径一致）。本会话自己的 run 已由 ConversationPanel 处理，跳过它避免
+  // 双触发（防抖下无害，跳过更干净）。notifyWorkspaceMutated 自带 100ms
+  // 防抖，重复触发无副作用。
+  useEffect(() => {
+    return onAgentStream((envelope) => {
+      const { type, payload } = envelope;
+      if (
+        type !== EVENT_AGENT_STEP_COMMITTED &&
+        type !== EVENT_AGENT_RUN_FINISHED
+      ) {
+        return;
+      }
+      const p = payload as AgentStepCommittedPayload | AgentRunFinishedPayload;
+      if (
+        p.vfsMutated !== true ||
+        p.projectId !== projectId ||
+        p.sessionId === workspaceSessionId
+      ) {
+        return;
+      }
+      notifyWorkspaceMutated();
     });
   }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
