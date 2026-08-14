@@ -9,7 +9,6 @@ export type SettingsViewId =
   | "providers"
   | "providerDetail"
   | "providerCreate"
-  | "providerEdit"
   | "modelSampling"
   | "regexGroups"
   | "regexRules"
@@ -57,8 +56,7 @@ export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewI
   if (
     viewId === "providerDetail" ||
     viewId === "modelSampling" ||
-    viewId === "providerCreate" ||
-    viewId === "providerEdit"
+    viewId === "providerCreate"
   ) {
     return "providers";
   }

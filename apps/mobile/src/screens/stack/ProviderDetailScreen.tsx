@@ -24,12 +24,18 @@ import {ManageHeader} from '../../components/batch/ManageHeader';
 import {AddModelModal} from '../../components/provider/AddModelModal';
 import {EditModelNameModal} from '../../components/provider/EditModelNameModal';
 import {FetchModelsSheet} from '../../components/provider/FetchModelsSheet';
+import {
+  ProviderForm,
+  providerFormToEditPatch,
+  type ProviderFormValues,
+} from '../../components/provider/ProviderForm';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {
   PrimaryButton,
   SecondaryButton,
 } from '../../components/ui/PrototypeButtons';
+import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -63,6 +69,9 @@ export function ProviderDetailScreen() {
   const route = useRoute<DetailRoute>();
   const providerId = route.params?.providerId;
   const {setStackOverride} = useHeaderContext();
+
+  // 默认「模型管理」（高频），与「服务商配置」tab 并列；顶部 SegmentedControl 切换。
+  const [activeTab, setActiveTab] = useState<'config' | 'models'>('config');
 
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -218,6 +227,25 @@ export function ProviderDetailScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
+      <SegmentedControl
+        tokens={tokens}
+        value={activeTab}
+        onChange={value => setActiveTab(value)}
+        options={[
+          {value: 'config', label: '服务商配置'},
+          {value: 'models', label: '模型管理'},
+        ]}
+      />
+      {activeTab === 'config' ? (
+        providerId ? (
+          <ProviderConfigTab providerId={providerId} />
+        ) : (
+          <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+            缺少 providerId
+          </Text>
+        )
+      ) : (
+        <>
       <ManageHeader
         title="已保存模型"
         batchMode={batch.active}
@@ -318,7 +346,7 @@ export function ProviderDetailScreen() {
         visible={menuSavedModelId != null}
         items={[
           {label: '重命名', action: 'rename'},
-          {label: '删除模型', action: 'delete', danger: true},
+          {label: '删除', action: 'delete', danger: true},
         ]}
         onClose={() => setMenuSavedModelId(undefined)}
         onSelect={action => {
@@ -332,12 +360,108 @@ export function ProviderDetailScreen() {
           }
         }}
       />
+        </>
+      )}
+    </View>
+  );
+}
+
+/**
+ * 服务商配置 tab：内嵌原 ProviderEditScreen 的加载/保存逻辑。
+ * 从 ProviderDetailScreen 接收 providerId（不再走 navigation route），
+ * 保存后不 goBack（现在在 tab 内，不能跳走），只 toast。
+ */
+function ProviderConfigTab({providerId}: {providerId: string}) {
+  const {tokens} = useTheme();
+  const {showToast} = useToast();
+  const runtime = useRuntime();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [initial, setInitial] = useState<Partial<ProviderFormValues>>();
+  const [isBuiltin, setIsBuiltin] = useState(false);
+  const [apiKeyStatus, setApiKeyStatus] = useState<'set' | 'not set'>('not set');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const provider = await runtime.providers.get(providerId);
+      const listed = (await runtime.providers.list()).find(
+        p => p.id === providerId,
+      );
+      setIsBuiltin(provider.isBuiltin);
+      setApiKeyStatus(listed?.apiKeyStatus ?? 'not set');
+      setInitial({
+        displayName: provider.displayName,
+        protocol: provider.protocol,
+        baseUrl: provider.baseUrl,
+        headersJson:
+          Object.keys(provider.headers).length > 0
+            ? JSON.stringify(provider.headers)
+            : '',
+        apiKey: '',
+      });
+    } catch (error) {
+      showToast(toastMessage('加载失败', error));
+    } finally {
+      setLoading(false);
+    }
+  }, [runtime, providerId, showToast]);
+
+  useEffect(() => {
+    load().catch(() => undefined);
+  }, [load]);
+
+  if (loading || !initial) {
+    return (
+      <View style={styles.configRoot}>
+        <ActivityIndicator style={styles.loader} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.configRoot, {backgroundColor: tokens.background}]}>
+      {isBuiltin ? (
+        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+          内置服务商不可修改协议。
+        </Text>
+      ) : null}
+      <ProviderForm
+        mode="edit"
+        initial={initial}
+        isBuiltin={isBuiltin}
+        apiKeyStatus={apiKeyStatus}
+        saving={saving}
+        onSubmit={async values => {
+          setSaving(true);
+          try {
+            const patch = providerFormToEditPatch(values);
+            if (!isBuiltin && values.protocol !== initial.protocol) {
+              await runtime.providers.edit(providerId, {
+                ...patch,
+                protocol: values.protocol,
+              });
+            } else {
+              await runtime.providers.edit(providerId, patch);
+            }
+            showToast('已保存');
+            // tab 内不 goBack，重新拉取以反映 protocol 等不可变字段的现状
+            await load();
+          } catch (err) {
+            showToast(toastMessage('保存失败', err));
+          } finally {
+            setSaving(false);
+          }
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {flex: 1},
+  configRoot: {flex: 1, paddingHorizontal: 16},
+  hint: {paddingTop: 12, fontSize: 13},
   listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
   emptyWrap: {alignItems: 'center', padding: 32, gap: 16},

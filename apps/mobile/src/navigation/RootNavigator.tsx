@@ -20,7 +20,6 @@ import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
 import {ProviderCreateScreen} from '../screens/stack/ProviderCreateScreen';
-import {ProviderEditScreen} from '../screens/stack/ProviderEditScreen';
 import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
 
@@ -114,7 +113,6 @@ const ProviderCreateStackScreen = withStackLayout(
   'ProviderCreate',
   ProviderCreateScreen,
 );
-const ProviderEditStackScreen = withStackLayout('ProviderEdit', ProviderEditScreen);
 const ProviderDetailStackScreen = withStackLayout(
   'ProviderDetail',
   ProviderDetailScreen,
@@ -183,7 +181,6 @@ export function RootNavigator() {
           />
           <Stack.Screen name="Providers" component={ProvidersStackScreen} />
           <Stack.Screen name="ProviderCreate" component={ProviderCreateStackScreen} />
-          <Stack.Screen name="ProviderEdit" component={ProviderEditStackScreen} />
           <Stack.Screen name="ProviderDetail" component={ProviderDetailStackScreen} />
           <Stack.Screen name="ModelSampling" component={ModelSamplingStackScreen} />
 

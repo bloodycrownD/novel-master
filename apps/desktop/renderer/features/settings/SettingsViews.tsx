@@ -865,11 +865,6 @@ export function ProvidersView({ nav }: { nav: Nav }) {
       });
       return;
     }
-    if (action === "edit") {
-      nav.navState.editingProviderId = row.id;
-      nav.push("providerEdit");
-      return;
-    }
     if (action === "delete") {
       setDeleteConfirm({
         kind: "single",
@@ -969,7 +964,6 @@ export function ProvidersView({ nav }: { nav: Nav }) {
         x={providerMenu?.x ?? 0}
         y={providerMenu?.y ?? 0}
         items={[
-          { label: "编辑", action: "edit" },
           { label: "重命名", action: "rename" },
           { label: "删除", action: "delete", danger: true },
         ]}
@@ -1144,6 +1138,9 @@ export function ProviderFormView({
 }
 
 export function ProviderDetailView({ nav }: { nav: Nav }) {
+  type ProviderTab = "config" | "models";
+  // 默认「模型管理」（高频），与服务商配置 tab 并列；点服务商行进来后可直接切到「服务商配置」改连接信息。
+  const [activeTab, setActiveTab] = useState<ProviderTab>("config");
   const batch = useBatchSelection();
   const providerId = nav.navState.editingProviderId;
   const [models, setModels] = useState<
@@ -1273,7 +1270,22 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
   }, {});
 
   return (
-    <SettingsPanel>
+    <div className="provider-detail">
+      <div className="provider-detail__tabs">
+        <SegmentedControl<ProviderTab>
+          value={activeTab}
+          onChange={setActiveTab}
+          aria-label="服务商详情 tab"
+          options={[
+            { value: "config", label: "服务商配置" },
+            { value: "models", label: "模型管理" },
+          ]}
+        />
+      </div>
+      {activeTab === "config" ? (
+        <ProviderFormView nav={nav} mode="edit" />
+      ) : (
+        <SettingsPanel>
       <SettingsListSection
         header={
           <ManageHeader
@@ -1394,7 +1406,9 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
         }}
         onCancel={() => setDeleteConfirm(null)}
       />
-    </SettingsPanel>
+        </SettingsPanel>
+      )}
+    </div>
   );
 }
 

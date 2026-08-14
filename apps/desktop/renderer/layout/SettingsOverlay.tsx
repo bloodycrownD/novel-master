@@ -38,7 +38,6 @@ function getSettingsMainTitle(
   }
   if (viewId === "providerDetail") return "模型管理";
   if (viewId === "providerCreate") return "新建服务商";
-  if (viewId === "providerEdit") return "编辑服务商";
   if (viewId === "modelSampling") return "采样配置";
   if (viewId === "regexRules") return "正则规则";
   if (viewId === "regexRuleEditor") return navState.editingRegexRuleId ? "编辑规则" : "新规则";
@@ -112,8 +111,6 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <ProvidersView nav={nav} />;
       case "providerCreate":
         return <ProviderFormView nav={nav} mode="create" />;
-      case "providerEdit":
-        return <ProviderFormView nav={nav} mode="edit" />;
       case "providerDetail":
         return <ProviderDetailView nav={nav} />;
       case "modelSampling":

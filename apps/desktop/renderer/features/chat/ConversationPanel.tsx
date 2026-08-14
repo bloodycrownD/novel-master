@@ -65,6 +65,7 @@ import {
 import { MessageList } from './MessageList';
 import { RealPromptPanel } from './RealPromptPanel';
 import { AgentStreamMetricsBar } from './AgentStreamMetricsBar';
+import { useReadOnlyRunProbe } from './useReadOnlyRunProbe';
 
 interface ConversationPanelProps {
   projectId: string;
@@ -508,6 +509,21 @@ export function ConversationPanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 mount / sessionId 切换时 probe
   }, [sessionId, readOnly]);
+
+  // ===== readOnly 子面板「生成中」状态兜底（避免事件丢失导致 uiRunning 永久残留） =====
+  //
+  // 逻辑抽到 useReadOnlyRunProbe，这里只注入依赖。跨进程查 main 的 in-flight 状态，
+  // 比.mobile 的 registry 查询语义更强；但 IPC 可能短暂抖动，所以 hook 内部查到 false 后会复询一次防抖。
+  useReadOnlyRunProbe({
+    enabled: readOnly,
+    sessionId,
+    isRunActive: getUiRunning,
+    onRunEnded: () => {
+      markExternalRunEnded();
+      onStreamReset();
+      void reloadMessages();
+    },
+  });
 
   // Phase 3 Step 20：stream 单元在组件顶部已实例化（拿回 streamingText /
   // streamingTextRef / onStreamReset）。这里把定义完的生命周期回调 + 守卫
