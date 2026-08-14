@@ -29,6 +29,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
+import { initializeEmptySessionWorkspace } from "@/service/template/logic/initialize-empty-session-workspace.js";
 import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
 import type { SessionService } from "../session.port.js";
 
@@ -136,13 +137,12 @@ export class DefaultSessionService implements SessionService {
     projectId: string,
     title?: string | null,
   ): Promise<ChatSession> {
-    // SPEC agent-subagent / P0-4：子 session 仅 insert（带 parentSessionId），
-    // 完全不碰 VFS——不调 initializeSessionWorkspace、不创建 child scope、
-    // 不调 copyVfsTree，也不复制项目模板。子 agent run 的 VFS 访问在 runChildAgent
-    // 装配期通过 toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId) 指向父 scope。
+    // Feature A（子会话工作区隔离）：子 session 用自己的 sessionId 从空产生常驻
+    // 工作区内容，不再复用父会话工作区缓存。createSubSession 在 insert session 记录
+    // 后，为子 session 初始化空工作区（不拷贝项目模板、不拷贝父快照）。
     //
-    // 父 session 必须存在且属于该项目；这里只校验父在，不强校验父子同项目
-    // （调用方 runChildAgent 自己保证）。
+    // 父 session 校验在事务外读（对齐主 session create 的风格：校验在事务外，
+    // insert + 初始化在事务内）；事务内用 reposFor(tx) 的 repo。
     const parent = await this.deps.sessions.findById(parentSessionId);
     if (parent == null) {
       throw chatNotFound("session", parentSessionId);
@@ -152,17 +152,22 @@ export class DefaultSessionService implements SessionService {
         `createSubSession: parent projectId ${parent.projectId} !== ${projectId}`,
       );
     }
-    const now = Date.now();
-    const session: ChatSession = {
-      id: randomUUID(),
-      projectId,
-      title: title ?? null,
-      parentSessionId,
-      createdAtMs: now,
-      updatedAtMs: now,
-    };
-    await this.deps.sessions.insert(session);
-    return session;
+    return this.deps.conn.transaction(async (tx) => {
+      const r = reposFor(tx);
+      const now = Date.now();
+      const session: ChatSession = {
+        id: randomUUID(),
+        projectId,
+        title: title ?? null,
+        parentSessionId,
+        createdAtMs: now,
+        updatedAtMs: now,
+      };
+      await r.sessions.insert(session);
+      // 为子 session 初始化空工作区（不拷贝项目模板/父快照，只保证 scope 起点为空）。
+      await initializeEmptySessionWorkspace(tx, projectId, session.id);
+      return session;
+    });
   }
 
   async rename(id: string, title: string): Promise<ChatSession> {

@@ -202,9 +202,9 @@ export class DefaultAgentRunner implements AgentRunner {
       options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
     const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
-    // 常驻工作区前缀 scope：从 session 拿归属 id。子 session 的归属指向父 session
-    //（子 session 新建、kkv 空，工作区前缀读父的 rule_snapshot / file_cache），
-    // 主 session 的归属是自身。VFS 也复用同一归属 session 视图。
+    // 常驻工作区前缀 scope：从 session 拿归属 id。主 session 与子 session 的归属
+    // 都是自身（Feature A 后子会话工作区隔离，子 session 从空产生自己的工作区
+    // 内容，不再读父的 rule_snapshot / file_cache）。VFS 也用同一归属 session 视图。
     const wtScope: VfsScope = {
       kind: "session",
       projectId,

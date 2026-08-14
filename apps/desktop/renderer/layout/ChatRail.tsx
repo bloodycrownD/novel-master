@@ -61,40 +61,30 @@ export function ChatRail({
     goBackToSessions,
     showNavView,
     notifyAgentConfigChanged,
+    // Feature A：子会话工作区隔离——subagentSessionId 提升到 ShellNavProvider，
+    // 让 ExplorerPane / WorkspaceTree 通过 workspaceSessionId 读到子 session。
+    openSubagentSession,
+    exitSubagentSession,
+    subagentSessionId: navSubagentSessionId,
+    subagentSessionName: navSubagentSessionName,
   } = useShellNav();
 
-  // 子智能体只读会话面板的 sessionId 在 ChatRail 本地维护，避免污染全局导航状态
-  // （P2-11：全局 nav 仍指向父会话，子会话只在面板栈层切换）。
-  const [subagentSessionId, setSubagentSessionId] = useState<string | null>(
-    null,
-  );
-  const [subagentSessionName, setSubagentSessionName] = useState<string>('');
-  // Phase 3 Step 23：只读子会话面板的运行态——ConversationPanel 通过
-  // onRunningChange 上报，停止按钮据此显示/隐藏。
+  // 子会话只读面板的运行态（ConversationPanel 通过 onRunningChange 上报）。
+  // subagentSessionId / subagentSessionName 已提升到 Provider，这里只保留 running 态。
   const [subagentRunning, setSubagentRunning] = useState(false);
 
-  const openSubagentSession = useCallback(
-    (childSessionId: string, label?: string) => {
-      setSubagentSessionId(childSessionId);
-      setSubagentSessionName(label ?? '子智能体会话');
-      showNavView('subagent-conversation');
-    },
-    [showNavView],
-  );
-
   // Bug 2：子会话面板 keep-alive——返回父会话时只切 viewId，不清空子会话状态。
-  // 这样 ConversationPanel 始终保持挂载，streamingText 等 local state 不会因卸载而丢失，
+  // 这样 ConversationPanel 始终保持挂载，streamingText 等 local state 不会因卸载而丢失。
   // 用户退出再进入子会话还能看到正在进行的流式内容。面板的显隐完全交给外层 hidden 控制。
   const goBackToConversation = useCallback(() => {
-    showNavView('conversation');
-  }, [showNavView]);
+    exitSubagentSession();
+  }, [exitSubagentSession]);
 
-  // Phase 3 Step 23：只读面板停止按钮——点击调 ipcAgentAbort（最终走
-  // rt.abortRegistry.abort）。abort 本身幂等，运行中才显示按钮所以不会误触。
+  // 只读面板停止按钮——点击调 ipcAgentAbort。
   const stopSubagentRun = useCallback(async () => {
-    if (subagentSessionId == null) return;
-    await ipcAgentAbort({ sessionId: subagentSessionId });
-  }, [subagentSessionId]);
+    if (navSubagentSessionId == null) return;
+    await ipcAgentAbort({ sessionId: navSubagentSessionId });
+  }, [navSubagentSessionId]);
 
   const {
     active: projectBatchActive,
@@ -478,7 +468,7 @@ export function ChatRail({
             </span>
           ) : viewId === 'subagent-conversation' ? (
             <span className="column-header__title column-header__title--truncate">
-              {subagentSessionName || '子智能体会话'}
+              {navSubagentSessionName || '子智能体会话'}
             </span>
           ) : (
             <span className="column-header__title">
@@ -712,7 +702,7 @@ export function ChatRail({
           data-nav-view="subagent-conversation"
           hidden={viewId !== 'subagent-conversation'}
         >
-          {projectId && subagentSessionId ? (
+          {projectId && navSubagentSessionId ? (
             <>
               {subagentRunning ? (
                 <div className="subagent-stop-bar" role="toolbar">
@@ -732,7 +722,7 @@ export function ChatRail({
               ) : null}
               <ConversationPanel
                 projectId={projectId}
-                sessionId={subagentSessionId}
+                sessionId={navSubagentSessionId}
                 onOpenSessionActions={() => undefined}
                 readOnly
                 onRunningChange={setSubagentRunning}

@@ -76,6 +76,28 @@ export interface ShellNavContextValue {
 
   sessionId: string | undefined;
 
+  /**
+   * 工作区展示用的 effective session id。
+   *
+   * Feature A（子会话工作区隔离）：子会话 view（subagent-conversation）下指向
+   * 子 session，其他 view 等于 sessionId（父或 undefined）。ExplorerPane /
+   * WorkspaceTree 读这个字段组装 VFS scope，使子会话预览展示子 session 自己的工作区。
+   * 全局导航态 sessionId 不变（仍指向父会话，不污染持久化 nav state）。
+   */
+  workspaceSessionId: string | undefined;
+
+  /** 进入子会话只读 view：记录子 sessionId 并切到 subagent-conversation view。 */
+  openSubagentSession: (childSessionId: string, label?: string) => void;
+
+  /** 退出子会话只读 view：回到主会话 conversation view。 */
+  exitSubagentSession: () => void;
+
+  /** 当前子会话 view 的子 sessionId（供 ChatRail 标题 / 停止按钮等使用）。 */
+  subagentSessionId: string | undefined;
+
+  /** 当前子会话 view 的展示名。 */
+  subagentSessionName: string | undefined;
+
   sessionName: string | undefined;
 
   updateSessionName: (name: string) => void;
@@ -216,6 +238,17 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const [sessionName, setSessionName] = useState<string | undefined>();
 
+  // Feature A：子会话只读 view 的 sessionId 在 Provider 层维护（不进持久化 nav state）。
+  // 全局 sessionId 仍指向父会话；workspaceSessionId 在子会话 view 下返回子 session，
+  // 供 ExplorerPane / WorkspaceTree 展示子 session 自己的工作区。
+  const [subagentSessionId, setSubagentSessionId] = useState<string | undefined>();
+  const [subagentSessionName, setSubagentSessionName] = useState<string | undefined>();
+
+  // effective 工作区 session id：子会话 view 下返回子 session，其他 view 同 sessionId。
+  // 放在 state 声明区，供 workspaceMutatedMatchesNav 的 useEffect deps 同步读取。
+  const workspaceSessionId =
+    viewId === "subagent-conversation" ? subagentSessionId : sessionId;
+
   const [previewTabs, setPreviewTabs] = useState<PreviewFileSelection[]>([]);
   const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null);
   const [treeRefreshToken, setTreeRefreshToken] = useState(0);
@@ -258,11 +291,11 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return onWorkspaceMutated((payload) => {
-      if (workspaceMutatedMatchesNav(payload, projectId, sessionId)) {
+      if (workspaceMutatedMatchesNav(payload, projectId, workspaceSessionId)) {
         notifyWorkspaceMutated();
       }
     });
-  }, [projectId, sessionId, notifyWorkspaceMutated]);
+  }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
   const selectPreviewFile = useCallback(
     (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
@@ -451,6 +484,21 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     setWorkspaceScope(syncWorkspaceWithNav(nextViewId));
 
   }, []);
+
+  // Feature A：子会话只读 view 进入 / 退出。子 sessionId 在 Provider 层维护，
+  // workspaceSessionId 派生自 viewId + subagentSessionId。
+  const openSubagentSession = useCallback(
+    (childSessionId: string, label?: string) => {
+      setSubagentSessionId(childSessionId);
+      setSubagentSessionName(label ?? "子智能体会话");
+      showNavView("subagent-conversation");
+    },
+    [showNavView],
+  );
+
+  const exitSubagentSession = useCallback(() => {
+    showNavView("conversation");
+  }, [showNavView]);
 
 
 
@@ -684,6 +732,16 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       sessionId,
 
+      workspaceSessionId,
+
+      openSubagentSession,
+
+      exitSubagentSession,
+
+      subagentSessionId,
+
+      subagentSessionName,
+
       sessionName,
 
       updateSessionName,
@@ -757,6 +815,16 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       projectName,
 
       sessionId,
+
+      workspaceSessionId,
+
+      openSubagentSession,
+
+      exitSubagentSession,
+
+      subagentSessionId,
+
+      subagentSessionName,
 
       sessionName,
 

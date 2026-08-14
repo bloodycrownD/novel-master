@@ -19,10 +19,9 @@ export interface AgentSession {
   /**
    * 常驻工作区前缀读取的归属 session id。
    *
-   * 主 session 等于自身 sessionId；子 session 指向父 session——子 session 是
-   * createSubSession 新建的、sessionKkv 空，常驻前缀读父 session 的
-   * rule_snapshot / file_cache，与父工作区视图一致（VFS 也复用同一归属 session）。
-   * agent-runner 据此组装 wtScope，无需区分主 / 子。
+   * 主 session 等于自身 sessionId；子 session 也等于自身（Feature A：子会话工作区
+   * 隔离，从空产生常驻工作区内容，不再复用父会话工作区缓存）。agent-runner 据此
+   * 组装 wtScope，无需区分主 / 子。
    */
   readonly workplaceScopeSessionId: string;
 

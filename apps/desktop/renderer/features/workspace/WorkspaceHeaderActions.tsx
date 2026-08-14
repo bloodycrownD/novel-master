@@ -26,7 +26,7 @@ export function WorkspaceHeaderActions({
   panelScope,
   onRefresh,
 }: WorkspaceHeaderActionsProps) {
-  const { projectId, sessionId } = useShellNav();
+  const { projectId, workspaceSessionId } = useShellNav();
   const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,8 +44,8 @@ export function WorkspaceHeaderActions({
         } else {
           showToast(result.error.message);
         }
-      } else if (panelScope === "chat" && sessionId) {
-        const result = await ipcSessionsPullTemplate({ sessionId });
+      } else if (panelScope === "chat" && workspaceSessionId) {
+        const result = await ipcSessionsPullTemplate({ sessionId: workspaceSessionId });
         if (result.ok) {
           onRefresh();
           showToast("已从项目工作区同步");
@@ -57,7 +57,7 @@ export function WorkspaceHeaderActions({
       setBusy(false);
       setConfirmKind(null);
     }
-  }, [panelScope, projectId, sessionId, onRefresh]);
+  }, [panelScope, projectId, workspaceSessionId, onRefresh]);
 
   const menuItems = useMemo((): readonly ContextMenuItem[] => {
     const items: ContextMenuItem[] = [];
