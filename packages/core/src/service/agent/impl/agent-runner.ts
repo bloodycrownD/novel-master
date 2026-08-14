@@ -202,9 +202,9 @@ export class DefaultAgentRunner implements AgentRunner {
       options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
     const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
-    // 常驻工作区前缀 scope：从 session 拿归属 id。主 session 与子 session 的归属
-    // 都是自身（Feature A 后子会话工作区隔离，子 session 从空产生自己的工作区
-    // 内容，不再读父的 rule_snapshot / file_cache）。VFS 也用同一归属 session 视图。
+    // 常驻工作区前缀 scope：从 session 拿归属 id。主 session 等于自身；子 session
+    // 指向父 session（子 agent 在父 session 工作区工作，规则评估与文件列表都按
+    // 父工作区）。VFS 也用同一归属 session 视图。
     const wtScope: VfsScope = {
       kind: "session",
       projectId,
@@ -245,6 +245,8 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
+        // 规则评估按 wtScope（子 agent 时=父工作区）；rule_snapshot / file_cache
+        // 的 KKV 存取按 session.kkvScopeSessionId（永远=自身，子会话快照隔离）。
         const wt = this.deps.workplace(wtScope);
         const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(
           wtScope,
@@ -254,6 +256,7 @@ export class DefaultAgentRunner implements AgentRunner {
             vfs: this.deps.toolCtx.vfs,
             layout: options.definition.prompts,
           },
+          { kkvSessionId: session.kkvScopeSessionId },
         );
         if (signal?.aborted) {
           await handleAbort("after_assemble_workplace");
@@ -509,7 +512,12 @@ export class DefaultAgentRunner implements AgentRunner {
         const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
           buildToolResultBlock(tu.id, outcomes[i]!, {
             toolName: tu.name,
-            vfsScope: { kind: "session", projectId, sessionId },
+            // 工具操作落到的 VFS scope 归属者（子 agent 写入落父 session scope）。
+            vfsScope: {
+              kind: "session",
+              projectId,
+              sessionId: session.workplaceScopeSessionId,
+            },
             // task 工具输出对象含 subagentSessionId：透传到 ToolResultBlock.meta（P0-1）。
             // buildToolResultBlock 内部还会从 outcome.output.subagentSessionId 自动检测。
             subagentSessionId: extractSubagentSessionIdFromOutcome(outcomes[i]!),

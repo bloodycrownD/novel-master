@@ -60,24 +60,37 @@ function wrapWorkplaceDisplay(display: string): string {
   return `<workplace>\n${display}\n</workplace>`;
 }
 
+/** {@link assembleWorkplaceDisplay} 可选参数。 */
+export interface AssembleWorkplaceDisplayOptions {
+  /**
+   * rule_snapshot / file_cache 的 KKV 归属 session id；缺省用 `scope.sessionId`。
+   *
+   * 子 agent 场景传子 session 自身 id（快照隔离）：规则评估按 scope（父工作区）
+   * 进行，但快照与缓存写进子 session 自己的 KKV。
+   */
+  readonly kkvSessionId?: string;
+}
+
 /**
  * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
  *
  * 1. 无 workplace 块 → `{ workplaceDisplay: "", prefixPaths: [] }`，不触 kkv
- * 2. 读 `rule_snapshot`/`canon`；空 → 规则引擎 → 写快照
- * 3. 按 path/status 读 `file_cache`；miss → VFS → 写缓存
+ * 2. 读 `rule_snapshot`/`canon`（按 `options.kkvSessionId` 路由）；空 → 规则引擎（按
+ *    scope 评估）→ 写快照（写回 kkvSessionId）
+ * 3. 按 path/status 读 `file_cache`（kkvSessionId）；miss → VFS（scope 视图）→ 写缓存
  * 4. `renderFileBlock` + `joinFileBlocks`；返回前包 `<workplace>`；`prefixPaths` = 快照全部可见 path（规范化）
  */
 export async function assembleWorkplaceDisplay(
   scope: Extract<VfsScope, { kind: "session" }>,
   deps: AssembleWorkplaceDisplayDeps,
+  options?: AssembleWorkplaceDisplayOptions,
 ): Promise<AssembleWorkplaceDisplayResult> {
   if (!layoutHasWorkplace(deps.layout)) {
     return { workplaceDisplay: "", prefixPaths: [] };
   }
 
-  const sessionId = scope.sessionId;
-  const entries = await loadOrCreateRuleSnapshot(sessionId, deps);
+  const kkvSessionId = options?.kkvSessionId ?? scope.sessionId;
+  const entries = await loadOrCreateRuleSnapshot(kkvSessionId, deps);
   if (entries.length === 0) {
     return { workplaceDisplay: "", prefixPaths: [] };
   }
@@ -87,7 +100,7 @@ export async function assembleWorkplaceDisplay(
   for (const entry of entries) {
     prefixPaths.push(normalizePromptSeenPath(entry.path));
     const cached = await loadOrFillFileCache({
-      sessionId,
+      sessionId: kkvSessionId,
       sessionKkv: deps.sessionKkv,
       vfs: deps.vfs,
       path: entry.path,
