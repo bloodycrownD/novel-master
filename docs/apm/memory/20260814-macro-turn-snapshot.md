@@ -19,3 +19,15 @@ Step 1 已判定：类型 feature，所属迭代 prompt-block-lifecycle（lifecy
 
 assistant:
 探索子代理返回三个关键事实：①宏展开的每步实时发生在三条独立链路（dynamic 区、customAttach、compaction token 计数）；②agent-runner 每 step 经工厂 new 一个新 WorkplaceService，liveViewInflight 并发去重跨 step 失效；③promptRenderCtx 原本不传 now，dynamic 区每步兑底 new Date()。实现走 trivial 豁免由主代理直接完成（agent-runner 快照 + 三个 ctx 加可选 filetree 字段透传），已提交 c14e7fe：回合内 renderFileTree 只调 1 次、$time/$filetree 跨 step 逐字一致、不含宏零预取。验证：typecheck + build + 111 例回归全绿；TDDBC 系测试本机环境挂起（main 基线复现，与改动无关）。留痕文档在 docs/Iterations/prompt-block-lifecycle/features/macro-turn-snapshot/{prd,spec}.md。待用户确认。
+
+user:
+常驻工作区前缀不是有 cache 吗？应该不会出现前缀变化吧？
+
+assistant:
+用户说得对，已修正留痕文档：`assembleWorkplaceDisplay` 虽每步重跑，但读的是 rule_snapshot + file_cache 纯缓存，命中无条件返回（无 mtime 校验），agent 回合中写盘不会改变前缀。改写缓存的只有用户改规则、压缩/置位、会话删除，都是回合边界外或显式操作。之前暗示的「下一个优化点」不成立（commit 6b9f14f）。
+
+user:
+merge 吧，然后 RULE.md 术语有更新或者新增吗？
+
+assistant:
+已 merge 到 main（fast-forward 至 6b9f14f，未 push，等指令）。RULE.md 更新三处：新增「回合快照」术语（dynamic 宏与 customAttach 的展开时机语义）；extra info 条目补「展开值取回合快照」；常驻工作区条目补「前缀回合内天然冻结（file_cache 命中无条件返回）+ workplace 工厂每次 new 新实例的坑」。敏捷项完成。
