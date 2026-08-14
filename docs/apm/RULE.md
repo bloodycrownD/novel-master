@@ -1,5 +1,31 @@
 # 项目持久规则
 
+## 术语定义
+
+面向新加入项目的开发者/agent，解释 novel-master 专属名词。定义以 main 当前代码为准。
+
+### 消息与提示词层
+
+- **attach（会话附加内容）**：用户发消息时随消息落库的结构化附件（`chat_message.attachments_json`），提示词拼装时 hydrate 成 `<action name="userAttach">` 注入。可附文本文件（带行号全文）、目录（ASCII 树）、图片/二进制（只给文件名不喂正文）。逐消息、消息级。
+- **extra info（附加信息 / customAttach）**：agent 配置里的一段自定义文本（`AgentDefinition.prompts.customAttach`），发提示词时经宏展开后以 `<extra-info>` 块注入**最新一条**非 hidden user 消息（历史不注入）。agent 级、同轮共享、只在拼装时不落库。
+- **批注（annotate）**：用户在文件预览上划词选中原文并写意见，发送时转成 `source: "user_ops"` + `action: "annotate"` 附件（含 `path`、划词原文、用户意见、定位坐标）。批注草稿存进程内 draft store，不进 composer 草稿。
+- **hidden 消息**：对 LLM 提示词渲染隐藏的标记——落库保留但不进提示词。只由两种操作产生：压缩和置位。
+- **置位（set floor）**：用户显式选一条 user 消息当「地板」，隐藏它之前的全部前缀（锚点必须是 user 消息）。副作用：清空 `rule_snapshot` + `file_cache`，可见历史首次引用状态重置。
+- **压缩（compaction）**：系统按 token 条件自动从尾部隐藏最旧一段消息。副作用同置位。
+- **短提示（alreadyReferenced）**：去重机制——同一路径在可见历史第二次进提示词时不再拼全文，只落 `{ path, alreadyReferenced: true }` 短标记。判定按可见序共享 seen 集合（初值是常驻前缀 S0），置位/压缩后重置。
+
+### 工作区与存储层
+
+- **常驻工作区（workplace）**：按会话级「规则快照 + 文件缓存」拼装、每轮提示词固定注入在消息前缀的文件树正文（`<workplace>` 块）。归属由 `workplaceScopeSessionId` 定义：主会话和子会话都指向自身。S0 指常驻前缀的 path 集合，作为短提示判定的初始 seen 集。
+- **VFS**：项目的虚拟文件系统（逻辑路径树），agent 的 read/write/edit/fs/glob/grep 工具全在它上操作，写入走版本链配合 checkpoint 回滚。scope 分 global/project/session 三层。
+- **KKV（session KKV）**：按 sessionId 路由的键值存储，只有三个域：`rule_snapshot`（工作区规则快照）、`file_cache`（展示正文缓存，性能优化）、`user_vfs_pending`（用户操作 FIFO 队列）。`file_cache` 不能当「前文是否引用过」的判断依据。
+
+### 智能体与会话层
+
+- **会话智能体（session agent）**：每个会话独立持有必填 `agentId`（引用 agent registry，不内联 definition），可选 `modelId` 覆盖 agent pin 的模型。`resolveAgentForProject` 现在永远走 session 分支。
+- **项目智能体（已下线）**：曾经的项目级内联智能体定义（`chat_project.agent_config_json`），v1.4.26 起已移除 UI 入口和解析分支，DB 列置空保留。历史概念，新代码不要再依赖。
+- **子会话（subagent session）**：主 agent 通过 `task` 工具派生子代理时创建的会话，消息历史独立落库，跑完以 tool_result 回流父会话。`parentSessionId` 非空；从空工作区开始（不拷贝模板/父快照）；递归上限 depth >= 2 禁用 task 工具。
+
 ## 协作红线
 
 merge 到 main、push、发版等改变共享状态的操作，必须等用户明确指令才可执行，不得基于「合理的下一步」自行推进。记忆的 `user:` 字段只记用户实际表达过的原话或其摘要，禁止添加用户未表达的内容（尤其不得把 agent 自己的推断写成用户指令倒填进记忆）。
