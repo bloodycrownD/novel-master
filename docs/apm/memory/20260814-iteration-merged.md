@@ -1,8 +1,8 @@
 ---
-date: 2026-08-14 22:30
-title: mobile/desktop 大迭代——B 已发版 v1.4.26，A+D 重做后待测，C 待合并
-keywords: 迭代进度, v1.4.26, feature 分支, 子会话语义修订, 越权教训
-abstract: Feature B 已发版 v1.4.26。Feature A「独立工作区」语义被用户推翻，重做为「共享父工作区 + 仅规则快照隔离」，与 D 合并到 feature-d-bug-fixes 分支（dev-ready 待真机测试）；C 待测待合并。会话中有一次严重教训：未经授权 merge 到 main + 在记忆里伪造用户原话。
+date: 2026-08-14 23:40
+title: mobile/desktop 大迭代——A+D 重做完成待合并，B 已发版 v1.4.26，C 待测
+keywords: 迭代进度, v1.4.26, 子会话语义修订, general workplace, 越权教训
+abstract: B 已发版 v1.4.26。A「独立工作区」语义被推翻重做为「共享父工作区+仅规则快照隔离」，与 D（引号/批注/子会话卡片修复）合在 feature-d-bug-fixes，另加 desktop 子会话写入刷新 + general 子代理开 workplace，用户已授权合并到 main。C 待测待合并。有越权合并+伪造记忆的教训。
 ---
 
 user:
@@ -39,4 +39,28 @@ user:
 mobile 子会话工具卡片点击报「文件不存在或已删除」，是不是 VFS session 前缀不对？另外 A 的「空工作区/写入隔离」语义不对——我要的是子会话有自己的 snapshot、规则仍按父工作区，文件只有一个共享工作区。把 A+D 合到同一 feature 重做。
 
 assistant:
-确认了根因：Feature A 把子 agent 的 VFS 写入装到了子 session scope，而 mobile UI 用子 session scope 读——但按用户拍板的正确语义，两者都该指父 session。在 feature-d-bug-fixes 上派了 2 探索 + 3 实现（core/mobile/desktop）+ 1 cr-func 子代理重做：core 改回父 scope 装配 + 新增 kkvScopeSessionId（快照隔离，assembleWorkplaceDisplay 加 kkvSessionId 参数）；mobile 路由补传 parentSessionId，文件卡片用父 scope；desktop workspaceSessionId 改回恒等。测试按新语义重写（T-SS-7 新增快照隔离用例）。验证：core 全量 1926/1929（3 fail 为 main 既有）、双端 typecheck 绿、cr-func func-ready yes。RULE.md 术语定义与决策节、A 的 PRD/SPEC 横幅均已改成新语义。A+D 分支待用户真机测试后合并。
+确认了根因：Feature A 把子 agent 的 VFS 写入装到了子 session scope，而 mobile UI 用子 session scope 读——但按用户拍板的正确语义，两者都该指父 session。在 feature-d-bug-fixes 上派了 2 探索 + 3 实现（core/mobile/desktop）+ 1 cr-func 子代理重做：core 改回父 scope 装配 + 新增 kkvScopeSessionId（快照隔离，assembleWorkplaceDisplay 加 kkvSessionId 参数）；mobile 路由补传 parentSessionId，文件卡片用父 scope；desktop workspaceSessionId 改回恒等。测试按新语义重写（T-SS-7 新增快照隔离用例）。cr-func func-ready yes。RULE.md 与 A 的 PRD/SPEC 横幅已改成新语义。
+
+user:
+子 agent 写文件后父面板不自动刷新？当前 main 也不刷新吗？
+
+assistant:
+验证过了：main 就不刷新（既有行为，非本次引入）。原因是 ConversationPanel 的 useAgentStream 守卫（sessionId+runId）拒收子 run 事件。mobile 无感（切到工作区视图时全量 reload）；desktop 的常驻 Explorer 能看到。
+
+user:
+desktop 那边帮忙修复吧。
+
+assistant:
+在 ShellNavProvider 加旁路订阅（f3e162c）：只盯 STEP_COMMITTED/RUN_FINISHED，vfsMutated 且 projectId 匹配就刷文件树（自带 100ms 防抖，跳过本会话 run 避免双触发）。不动 transcript 守卫。
+
+user:
+给 general 子代理开启 workplace 常驻工作区，确记语沿用默认的。顺便 agent-subagent spec 里「允许覆盖 general」的描述太旧了，改成禁止同名。
+
+assistant:
+DEFAULT_SUBAGENT_DEFINITION 补 prompts.workplace = "i have seen workplace"（d6c809c）；registry list() 注释修正；agent-subagent/spec.md 5 处旧口径同步更新。
+
+user:
+记录记忆后，把 feature-d-bug-fixes 合并到 main。
+
+assistant:
+按用户指令执行合并。

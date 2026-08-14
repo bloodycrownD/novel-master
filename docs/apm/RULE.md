@@ -25,7 +25,7 @@
 
 - **会话智能体（session agent）**：每个会话独立持有必填 `agentId`（引用 agent registry，不内联 definition），可选 `modelId` 覆盖 agent pin 的模型。`resolveAgentForProject` 现在永远走 session 分支。
 - **项目智能体（已下线）**：曾经的项目级内联智能体定义（`chat_project.agent_config_json`），v1.4.26 起已移除 UI 入口和解析分支，DB 列置空保留。历史概念，新代码不要再依赖。
-- **子会话（subagent session）**：主 agent 通过 `task` 工具派生子代理时创建的会话，消息历史独立落库，跑完以 tool_result 回流父会话。`parentSessionId` 非空；从空工作区开始（不拷贝模板/父快照）；递归上限 depth >= 2 禁用 task 工具。
+- **子会话（subagent session）**：主 agent 通过 `task` 工具派生子代理时创建的会话，消息历史独立落库，跑完以 tool_result 回流父会话。`parentSessionId` 非空；在共享父工作区干活（仅规则快照隔离）；递归上限 depth >= 2 禁用 task 工具。内置虚拟 `general` 子代理（`DEFAULT_SUBAGENT_DEFINITION`，registry list 注入、禁止同名 upsert）已开启 `prompts.workplace`（确记语 `i have seen workplace`），每轮注入 `<workplace>` 前缀。
 
 ## 协作红线
 
