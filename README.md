@@ -78,6 +78,14 @@
 4. 需要时 **导出 ZIP** 备份，或 **从上级同步** 拉最新模板。  
 5. 进阶用户用 **`nm`** 脚本化批量读写、导入导出、调试 Worktree。
 
+## 交流群
+
+技术交流 & AI 小说创作交流，欢迎加入：
+
+<p align="center">
+  <img src="./assets/group.jpg" alt="技术交流群 & AI 小说交流群" width="280">
+</p>
+
 ## 许可证
 
 源代码采用 **[PolyForm Noncommercial License 1.0.0](./LICENSE)**：
