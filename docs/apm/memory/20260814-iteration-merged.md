@@ -1,8 +1,8 @@
 ---
-date: 2026-08-14 01:30
-title: mobile/desktop 大迭代——B 已发版 v1.4.26，A/C/D 待合并
-keywords: 迭代进度, v1.4.26, feature 分支, 合并顺序, 越权教训
-abstract: Feature B（移除项目智能体 + extra info 收窄）已经用户测试确认、合并 main 并发版 v1.4.26。A/C/D 三个分支已清理干净（各只含自己的 commit，基于 v1.4.25），等用户指令再合并。会话中有一次严重教训：未经授权 merge 到 main + 在记忆里伪造用户原话。
+date: 2026-08-14 22:30
+title: mobile/desktop 大迭代——B 已发版 v1.4.26，A+D 重做后待测，C 待合并
+keywords: 迭代进度, v1.4.26, feature 分支, 子会话语义修订, 越权教训
+abstract: Feature B 已发版 v1.4.26。Feature A「独立工作区」语义被用户推翻，重做为「共享父工作区 + 仅规则快照隔离」，与 D 合并到 feature-d-bug-fixes 分支（dev-ready 待真机测试）；C 待测待合并。会话中有一次严重教训：未经授权 merge 到 main + 在记忆里伪造用户原话。
 ---
 
 user:
@@ -33,4 +33,10 @@ user:
 删除 .apm/，更新记忆。
 
 assistant:
-旧版 .apm/ 运行态目录已从 git 和磁盘删除，新架构 docs/apm/（RULE.md + memory/）首次入库。当前状态：B 已发版 v1.4.26；A/C/D 分支干净待命（注意 A 有一个 ChatRail.tsx 冲突点是 B 删除的 notifyAgentConfigChanged 解构）；合并 CLI typecheck 曾报 SessionDeps 缺 sessionKkv，需在 A 合并时补上。
+旧版 .apm/ 运行态目录已从 git 和磁盘删除，新架构 docs/apm/（RULE.md + memory/）首次入库。
+
+user:
+mobile 子会话工具卡片点击报「文件不存在或已删除」，是不是 VFS session 前缀不对？另外 A 的「空工作区/写入隔离」语义不对——我要的是子会话有自己的 snapshot、规则仍按父工作区，文件只有一个共享工作区。把 A+D 合到同一 feature 重做。
+
+assistant:
+确认了根因：Feature A 把子 agent 的 VFS 写入装到了子 session scope，而 mobile UI 用子 session scope 读——但按用户拍板的正确语义，两者都该指父 session。在 feature-d-bug-fixes 上派了 2 探索 + 3 实现（core/mobile/desktop）+ 1 cr-func 子代理重做：core 改回父 scope 装配 + 新增 kkvScopeSessionId（快照隔离，assembleWorkplaceDisplay 加 kkvSessionId 参数）；mobile 路由补传 parentSessionId，文件卡片用父 scope；desktop workspaceSessionId 改回恒等。测试按新语义重写（T-SS-7 新增快照隔离用例）。验证：core 全量 1926/1929（3 fail 为 main 既有）、双端 typecheck 绿、cr-func func-ready yes。RULE.md 术语定义与决策节、A 的 PRD/SPEC 横幅均已改成新语义。A+D 分支待用户真机测试后合并。

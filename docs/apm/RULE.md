@@ -17,7 +17,7 @@
 
 ### 工作区与存储层
 
-- **常驻工作区（workplace）**：按会话级「规则快照 + 文件缓存」拼装、每轮提示词固定注入在消息前缀的文件树正文（`<workplace>` 块）。归属由 `workplaceScopeSessionId` 定义：主会话和子会话都指向自身。S0 指常驻前缀的 path 集合，作为短提示判定的初始 seen 集。前缀回合内天然冻结：`loadOrFillFileCache` 命中无条件返回（无 mtime 校验），agent 回合中写盘不会改变前缀；改写缓存的只有用户改规则（`refreshRuleSnapshot`）、压缩/置位、会话删除。另注：`workplace` 工厂每次调用 new 新服务实例，循环内反复获取会使 `liveViewInFlight` 并发去重跨 step 失效——agent-runner 已提升到循环外，新调用方勿再踩。
+- **常驻工作区（workplace）**：按会话级「规则快照 + 文件缓存」拼装、每轮提示词固定注入在消息前缀的文件树正文（`<workplace>` 块）。归属由 `workplaceScopeSessionId` 定义：主会话指向自身；子会话指向**父会话**（共享父工作区，规则评估按父）。KKV 归属由 `kkvScopeSessionId` 决定（恒等自身——子会话的快照/缓存存自己 KKV，内容从共享 VFS 读）。S0 指常驻前缀的 path 集合，作为短提示判定的初始 seen 集。前缀回合内天然冻结：`loadOrFillFileCache` 命中无条件返回（无 mtime 校验），agent 回合中写盘不会改变前缀；改写缓存的只有用户改规则（`refreshRuleSnapshot`）、压缩/置位、会话删除。另注：`workplace` 工厂每次调用 new 新服务实例，循环内反复获取会使 `liveViewInFlight` 并发去重跨 step 失效——agent-runner 已提升到循环外，新调用方勿再踩。
 - **VFS**：项目的虚拟文件系统（逻辑路径树），agent 的 read/write/edit/fs/glob/grep 工具全在它上操作，写入走版本链配合 checkpoint 回滚。scope 分 global/project/session 三层。
 - **KKV（session KKV）**：按 sessionId 路由的键值存储，只有三个域：`rule_snapshot`（工作区规则快照）、`file_cache`（展示正文缓存，性能优化）、`user_vfs_pending`（用户操作 FIFO 队列）。`file_cache` 不能当「前文是否引用过」的判断依据。
 
@@ -35,9 +35,9 @@ merge 到 main、push、发版等改变共享状态的操作，必须等用户�
 
 大迭代放 `docs/Iterations/<迭代名>/`，下面分 `features/<feature名>/` 子目录，每个 feature 有自己的 `prd.md` + `spec.md`。迭代总纲 PRD 在迭代根目录。
 
-## 子会话工作区隔离（Feature A 决策）
+## 子会话工作区共享 + 规则快照隔离（Feature A 最终语义，2026-08-14 用户拍板推翻初版）
 
-子会话用自己 sessionId 从空产生常驻工作区（不拷贝项目模板、不拷贝父快照）。`createSubSession` 包事务调 `initializeEmptySessionWorkspace`（只清 VFS entry，不碰 KKV——子 session 新建时 KKV 天然无行即空）。`workplaceScopeSessionId` 对子 session 指向自身。desktop UI 用 `workspaceSessionId` 派生字段（ShellNavProvider 内 useState，不进持久化 nav state）。
+子会话**没有独立工作区**：子 agent 的全部 VFS 工具（read/write/edit/glob/grep）在**父 session 的 VFS scope** 上操作，写入直接出现在父工作区；嵌套时孙 agent 也指向根父会话。隔离的只有**规则快照**：`workplaceScopeSessionId` 对子 session 指向父（规则评估 + workplace 服务按父工作区），`kkvScopeSessionId` 恒等自身（rule_snapshot/file_cache 存子 session 自己的 KKV，`assembleWorkplaceDisplay` 的 `kkvSessionId` 参数路由）。UI：mobile 子会话文件卡片用路由传入的 `parentSessionId` 打开 FileEditor；desktop `workspaceSessionId` 恒等 `sessionId`。初版「从空产生独立工作区」语义已废弃，`initializeEmptySessionWorkspace` 已删（在 feature-d-bug-fixes 分支重做，待合并）。
 
 ## extra info 注入规则（Feature B 决策）
 
