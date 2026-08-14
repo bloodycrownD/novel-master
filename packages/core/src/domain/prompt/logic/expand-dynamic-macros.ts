@@ -13,6 +13,11 @@ import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
 export interface DynamicMacroContext {
   readonly now?: Date;
   readonly workplace?: WorkplaceService;
+  /**
+   * 回合快照形式的 `{{$filetree}}` 预渲染结果；
+   * 传入时优先使用（不再实时调 renderFileTree），缺省回退实时渲染。
+   */
+  readonly filetree?: string;
 }
 
 /**
@@ -24,8 +29,10 @@ export async function expandDynamicMacros(
 ): Promise<string> {
   const now = ctx.now ?? new Date();
   let filetree = "";
-  if (content.includes("$filetree") && ctx.workplace != null) {
-    filetree = await ctx.workplace.renderFileTree();
+  if (content.includes("$filetree")) {
+    filetree =
+      ctx.filetree ??
+      (ctx.workplace != null ? await ctx.workplace.renderFileTree() : "");
   }
   const root = {
     time: formatLocalDateTime(now),

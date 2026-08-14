@@ -16,6 +16,8 @@ export interface PromptRenderContext {
   readonly now?: Date;
   /** Workplace 服务，供 `{{$filetree}}` 实时渲染。 */
   readonly workplace?: WorkplaceService;
+  /** 回合快照的 `{{$filetree}}` 预渲染结果；传入时优先于 {@link workplace} 实时渲染。 */
+  readonly filetree?: string;
   /** Session VFS（其他调用方仍可传；`{{$filetree}}` 不再读取）。 */
   readonly vfs?: VfsService;
 }

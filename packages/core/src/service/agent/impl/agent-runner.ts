@@ -47,6 +47,7 @@ import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
@@ -211,6 +212,11 @@ export class DefaultAgentRunner implements AgentRunner {
       sessionId: session.workplaceScopeSessionId,
     };
 
+    // 宏展开回合快照：时间戳与 $filetree 在 run 开始时取一次，回合内所有 step 复用。
+    // 回合内的变更只来自 agent 自己的工具调用（模型已从工具轮次得知），
+    // 固定快照不丢信息，且让回合内每步请求成为前一步的纯追加，提升 provider 前缀缓存命中。
+    const turnNow = new Date();
+
     /**
      * 统一 abort 处理：置 stopReason，保留已写入的 partial assistant。
      *
@@ -222,6 +228,13 @@ export class DefaultAgentRunner implements AgentRunner {
     };
 
     try {
+      // wt 提升到循环外（仅取一次）：工厂每次调用会 new 新服务实例，
+      // 每步重建会让 liveViewInFlight 并发去重跨 step 失效。
+      const wt = this.deps.workplace(wtScope);
+      const turnFiletree = await resolveTurnFiletreeSnapshot(
+        options.definition.prompts,
+        wt,
+      );
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
           await handleAbort("loop_start");
@@ -245,7 +258,6 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
-        const wt = this.deps.workplace(wtScope);
         const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(
           wtScope,
           {
@@ -266,8 +278,9 @@ export class DefaultAgentRunner implements AgentRunner {
           vfs: this.deps.toolCtx.vfs,
           seenPaths: prefixPaths,
           extraInfo: options.definition.prompts.customAttach,
-          now: new Date(),
+          now: turnNow,
           workplace: wt,
+          filetree: turnFiletree,
         });
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
@@ -278,7 +291,9 @@ export class DefaultAgentRunner implements AgentRunner {
           workplaceDisplay,
           messages: visible,
           vfs: this.deps.toolCtx.vfs,
+          now: turnNow,
           workplace: wt,
+          filetree: turnFiletree,
         };
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
@@ -721,4 +736,35 @@ export function wrapStreamForBus(
     scheduleStreamPublish(ev);
     userOnStream(ev);
   };
+}
+
+/**
+ * 汇总会参与宏展开的文本：customAttach（trim 非空即生效）与开启 dynamic 区的块内容。
+ * persist 区不做宏展开（原样注入），不参与预检。
+ */
+function collectMacroExpandableText(layout: AgentPromptLayout): string {
+  const parts: string[] = [];
+  if (typeof layout.customAttach === "string") {
+    parts.push(layout.customAttach);
+  }
+  if (layout.dynamicEnabled === true) {
+    for (const block of layout.dynamic) {
+      parts.push(block.content);
+    }
+  }
+  return parts.join("\n");
+}
+
+/**
+ * 回合快照预取：文本含 `$filetree` 时渲染一次供回合内全部 step 复用，
+ * 否则返回 undefined（回退实时渲染，等价旧行为——不含该宏时也不会走到渲染）。
+ */
+async function resolveTurnFiletreeSnapshot(
+  layout: AgentPromptLayout,
+  workplace: WorkplaceService,
+): Promise<string | undefined> {
+  if (!collectMacroExpandableText(layout).includes("$filetree")) {
+    return undefined;
+  }
+  return workplace.renderFileTree();
 }

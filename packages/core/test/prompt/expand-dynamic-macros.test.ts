@@ -13,4 +13,17 @@ describe("expandDynamicMacros", () => {
     assert.equal(renderFileTree.mock.callCount(), 1);
     assert.match(out, /note\.md 全部加载/);
   });
+
+  it("T-SNAP1：ctx.filetree 快照优先，不调实时 renderFileTree", async () => {
+    const renderFileTree = mock.fn(async () => "/live-tree");
+    const worktree = { renderFileTree } as unknown as WorkplaceService;
+
+    const out = await expandDynamicMacros("树: {{$filetree}}", {
+      workplace: worktree,
+      filetree: "/snapshot-tree",
+    });
+
+    assert.equal(renderFileTree.mock.callCount(), 0);
+    assert.match(out, /\/snapshot-tree/);
+  });
 });

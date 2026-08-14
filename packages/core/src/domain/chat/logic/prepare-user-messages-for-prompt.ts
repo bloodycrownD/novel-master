@@ -61,8 +61,10 @@ export interface PrepareUserMessagesForPromptRuntime {
   readonly extraInfo?: string;
   /** 宏展开所需的当前时间（默认取 new Date()）。 */
   readonly now?: Date;
-  /** 宏展开所需的 workplace 服务（用于 $filetree）。 */
+  /** 宏展开所需的 workplace 服务（用于 $filetree 实时渲染）。 */
   readonly workplace?: WorkplaceService;
+  /** 回合快照的 `{{$filetree}}` 预渲染结果；传入时优先于实时渲染。 */
+  readonly filetree?: string;
 }
 
 async function resolveWorkplaceStatus(
@@ -434,6 +436,7 @@ export async function prepareUserMessagesForPrompt(
       ? await expandDynamicMacros(runtime.extraInfo, {
           now: runtime.now,
           workplace: runtime.workplace,
+          filetree: runtime.filetree,
         })
       : undefined;
   const resolvedRuntime: PrepareUserMessagesForPromptRuntime =
