@@ -30,7 +30,8 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
 
   async list(): Promise<readonly AgentDefinition[]> {
     const dbDefs = await this.deps.repository.list();
-    // 仅 list 合并虚拟 general：DB 同名优先（允许用户 upsert 覆盖出厂 seed）。
+    // 内置 general 为虚拟 agent 且禁止用户同名覆盖（upsert 拒绝同名），
+    // 因此 DB 不可能含同名项；防御性保留同名检查以免未来放开 upsert 限制时行为分叉。
     if (dbDefs.some((def) => def.name === DEFAULT_SUBAGENT_DEFINITION.name)) {
       return dbDefs;
     }

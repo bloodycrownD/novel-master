@@ -32,6 +32,12 @@ import type {
   WorkspaceMutatedPayload,
   WorkspacePanelScope,
 } from "@shared/ipc-types";
+import {
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_STEP_COMMITTED,
+  type AgentRunFinishedPayload,
+  type AgentStepCommittedPayload,
+} from "@novel-master/core/events";
 import { previewTabKey } from "../layout/preview-tab-utils";
 
 import {
@@ -39,6 +45,8 @@ import {
   ipcProjectsList,
 
   ipcSessionsListByProject,
+
+  onAgentStream,
 
   onWorkspaceMutated,
 
@@ -75,6 +83,27 @@ export interface ShellNavContextValue {
   projectName: string | undefined;
 
   sessionId: string | undefined;
+
+  /**
+   * 工作区展示用的 session id。
+   *
+   * 子会话面板与父会话共享工作区（子会话没有独立工作区），因此该字段
+   * 恒等于 sessionId（父 session）。保留字段本身做恒等映射，
+   * ExplorerPane / WorkspaceTree 等消费方无需感知这一语义。
+   */
+  workspaceSessionId: string | undefined;
+
+  /** 进入子会话只读 view：记录子 sessionId 并切到 subagent-conversation view。 */
+  openSubagentSession: (childSessionId: string, label?: string) => void;
+
+  /** 退出子会话只读 view：回到主会话 conversation view。 */
+  exitSubagentSession: () => void;
+
+  /** 当前子会话 view 的子 sessionId（供 ChatRail 标题 / 停止按钮等使用）。 */
+  subagentSessionId: string | undefined;
+
+  /** 当前子会话 view 的展示名。 */
+  subagentSessionName: string | undefined;
 
   sessionName: string | undefined;
 
@@ -216,6 +245,16 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const [sessionName, setSessionName] = useState<string | undefined>();
 
+  // 子会话只读 view 的 sessionId 在 Provider 层维护（不进持久化 nav state），
+  // 仅供导航展示（ChatRail 标题 / 停止按钮等）使用。子会话与父会话共享工作区，
+  // workspaceSessionId 恒等 sessionId，不随子会话 view 切换。
+  const [subagentSessionId, setSubagentSessionId] = useState<string | undefined>();
+  const [subagentSessionName, setSubagentSessionName] = useState<string | undefined>();
+
+  // 工作区 session id：子会话没有独立工作区，恒等于 sessionId（父 session）。
+  // 保留这个派生字段做恒等映射，消费组件（ExplorerPane / WorkspaceTree 等）零改动。
+  const workspaceSessionId = sessionId;
+
   const [previewTabs, setPreviewTabs] = useState<PreviewFileSelection[]>([]);
   const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null);
   const [treeRefreshToken, setTreeRefreshToken] = useState(0);
@@ -258,11 +297,42 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return onWorkspaceMutated((payload) => {
-      if (workspaceMutatedMatchesNav(payload, projectId, sessionId)) {
+      if (workspaceMutatedMatchesNav(payload, projectId, workspaceSessionId)) {
         notifyWorkspaceMutated();
       }
     });
-  }, [projectId, sessionId, notifyWorkspaceMutated]);
+  }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
+
+  // 子 agent（子 session）的 VFS 写入落在父 session scope（共享父工作区），
+  // 但 step / run 事件挂在子 session 的 run 上——ConversationPanel 的
+  // useAgentStream 守卫（sessionId + acceptRunEvent）只放行本面板自己的
+  // run，子 session 的事件被拒收，父面板文件树就不会刷新。main 侧其实把
+  // 所有事件都转发到了 renderer（forward-event-bus），所以这里旁路订阅
+  // agent stream：只看 STEP_COMMITTED / RUN_FINISHED，按 projectId 匹配
+  // （与 workspaceMutatedMatchesNav 对 session scope 只匹配 projectId 的
+  // 口径一致）。本会话自己的 run 已由 ConversationPanel 处理，跳过它避免
+  // 双触发（防抖下无害，跳过更干净）。notifyWorkspaceMutated 自带 100ms
+  // 防抖，重复触发无副作用。
+  useEffect(() => {
+    return onAgentStream((envelope) => {
+      const { type, payload } = envelope;
+      if (
+        type !== EVENT_AGENT_STEP_COMMITTED &&
+        type !== EVENT_AGENT_RUN_FINISHED
+      ) {
+        return;
+      }
+      const p = payload as AgentStepCommittedPayload | AgentRunFinishedPayload;
+      if (
+        p.vfsMutated !== true ||
+        p.projectId !== projectId ||
+        p.sessionId === workspaceSessionId
+      ) {
+        return;
+      }
+      notifyWorkspaceMutated();
+    });
+  }, [projectId, workspaceSessionId, notifyWorkspaceMutated]);
 
   const selectPreviewFile = useCallback(
     (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
@@ -451,6 +521,21 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     setWorkspaceScope(syncWorkspaceWithNav(nextViewId));
 
   }, []);
+
+  // 子会话只读 view 进入 / 退出。子 sessionId 在 Provider 层维护，仅用于导航展示，
+  // 工作区 scope 不受影响（子会话与父会话共享工作区）。
+  const openSubagentSession = useCallback(
+    (childSessionId: string, label?: string) => {
+      setSubagentSessionId(childSessionId);
+      setSubagentSessionName(label ?? "子智能体会话");
+      showNavView("subagent-conversation");
+    },
+    [showNavView],
+  );
+
+  const exitSubagentSession = useCallback(() => {
+    showNavView("conversation");
+  }, [showNavView]);
 
 
 
@@ -684,6 +769,16 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       sessionId,
 
+      workspaceSessionId,
+
+      openSubagentSession,
+
+      exitSubagentSession,
+
+      subagentSessionId,
+
+      subagentSessionName,
+
       sessionName,
 
       updateSessionName,
@@ -757,6 +852,16 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       projectName,
 
       sessionId,
+
+      workspaceSessionId,
+
+      openSubagentSession,
+
+      exitSubagentSession,
+
+      subagentSessionId,
+
+      subagentSessionName,
 
       sessionName,
 

@@ -40,8 +40,8 @@ export type RootStackParamList = {
   };
   /** 会话详情页：承载原 SessionActionsDrawer 五项能力 + agent/model 来源展示。 */
   SessionDetail: { projectId: string; sessionId: string };
-  /** 子代理会话只读浏览页：主会话点击 task 工具卡片跳转到此。 */
-  SubagentSessionView: { projectId: string; sessionId: string };
+  /** 子代理会话只读浏览页：主会话点击 task 工具卡片跳转到此。文件在共享的父会话工作区，parentSessionId 用于 FileEditor 的 session scope。 */
+  SubagentSessionView: { projectId: string; sessionId: string; parentSessionId: string };
   /** 聊天记录查询页：参数与 SessionDetail 一致，限定单会话范围搜索。 */
   ChatHistorySearch: { projectId: string; sessionId: string };
   About: undefined;

@@ -40,6 +40,7 @@ type SessionDeps = Pick<
   | "sessions"
   | "sessionFs"
   | "sessionVfs"
+  | "sessionKkv"
   | "scope"
   | "workplace"
 >;

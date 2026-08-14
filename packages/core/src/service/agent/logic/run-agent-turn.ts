@@ -510,6 +510,8 @@ export async function runAgentTurn(
         return runChildAgent({
           runtime,
           parentProjectId: scope.projectId,
+          // 根父会话 id：子 agent 的 VFS / 工作区归属指向它（嵌套时孙 agent 也
+          // 指向根父，不指向中间子会话）。
           parentSessionId: scope.sessionId,
           parentDepth: 0,
           def,
@@ -577,8 +579,12 @@ export async function runAgentTurn(
  * `runChildAgent` 内部装配：递归派生子 agent runner（P0-2 / P0-3 / P0-4 / P1-6）。
  *
  * 不抛 "暂未实现" ——本函数是 `task` 工具 `runChildAgent` 闭包背后的真正实现：
- * - VFS（P0-4）：子 agent `toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId)`
- *   复用父 session VFS 视图（查大纲设定场景需要能读到文件）。
+ * - VFS（工作区共享）：子 agent `toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId)`
+ *   用父 session 的 VFS 视图——文件只有一个工作区（父 session VFS scope），子 agent 的
+ *   read/write/edit/glob/grep 直接落在父工作区；嵌套时孙 agent 同样指向根父会话。
+ * - 规则快照隔离：ChatAgentSession 构造时第三位传 parentSessionId（规则评估按父
+ *   工作区），第四位 kkvScopeSessionId 走默认值=自身（rule_snapshot / file_cache
+ *   存子 session 自己的 KKV）。
  * - abort 派生（P1-6）：`new AbortController()` + `parentSignal.addEventListener("abort", ..., { once: true })`。
  * - registry（P1-10）：`resolveAgentToolRegistry(baseRegistry, def, { depth: parentDepth + 1 })`；
  *   孙 agent（depth >= 2）强制 deny task。
@@ -588,6 +594,7 @@ export async function runAgentTurn(
 async function runChildAgent(args: {
   readonly runtime: AgentTurnRuntimePort;
   readonly parentProjectId: string;
+  /** 根父会话 id（工作区归属；嵌套时透传，不指向中间子会话）。 */
   readonly parentSessionId: string;
   readonly parentDepth: number;
   readonly def: AgentDefinition;
@@ -618,7 +625,7 @@ async function runChildAgent(args: {
     depth: childDepth,
   });
 
-  // VFS（P0-4）：子 agent 用父 session 的 VFS 视图（能读到父会话文件）。
+  // VFS（工作区共享）：子 agent 用父 session 的 VFS 视图——写入直接落在父工作区。
   const vfs = runtime.sessionVfs(parentProjectId, parentSessionId);
 
   // abort 派生（P1-6）：子 agent 退出/完成不应反向影响父 signal。
@@ -648,9 +655,9 @@ async function runChildAgent(args: {
     // 同主 run：register 拿句柄，finally 反注册时回传做所有权比对。
     streamHandle = runtime.streamRegistry?.register(childSessionId);
 
-  // ChatAgentSession 的消息落子 session（独立历史），但工作区归属指向父 session——
-  // 子 session 是 createSubSession 新建的、sessionKkv 空，常驻前缀读父的
-  // rule_snapshot / file_cache，与父工作区视图一致（VFS 也复用同一父 session）。
+  // ChatAgentSession 的消息落子 session（独立历史）；工作区归属指向父 session
+  // （子 agent 在父 session 工作区工作，规则评估按父工作区）；KKV 归属走默认值
+  // =自身（rule_snapshot / file_cache 存子 session 自己的 KKV，仅快照隔离）。
   const session = new ChatAgentSession(
     runtime.messages,
     childSessionId,
@@ -715,7 +722,8 @@ async function runChildAgent(args: {
         return runChildAgent({
           runtime,
           parentProjectId,
-          parentSessionId: childSessionId,
+          // 透传根父会话 id：孙 agent 的工作区同样指向根父，不指向中间子会话。
+          parentSessionId,
           parentDepth: childDepth,
           def: grandchildDef,
           childSessionId: grandchildSessionId,

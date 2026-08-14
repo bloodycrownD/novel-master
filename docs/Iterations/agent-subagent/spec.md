@@ -20,7 +20,7 @@ date: 2026-08-05
 | 工具命名 | `task` | PRD 已定稿 |
 | 子 session id 协议传递 | 方案 B（P0-1 定稿）：`task` 工具 `outcome.output` 约定为 `{ text: string; subagentSessionId: string }`；`agent-runner.ts` L443 处的 `buildToolResultBlock(tu.id, outcome, meta)` 通过新增 `BuildToolResultBlockMeta.subagentSessionId` 透传；`format-tool-output.ts` 先剩掉 `subagentSessionId`，再提取 `text` 返回原始文本（不走 `JSON.stringify`）。最终 `ToolResultBlock.meta.subagentSessionId` 持久化供 UI 读，**不依赖 LLM adapter 显式剥离**（见下一行） | 方案 A 写的「在 agent-runner 拼 LLM messages 处剥离」找不到对应代码位置——content mapper 只读 `toolUseId + content`，天然忽略 `summary`/`ok`/`meta`。方案 B 把 UI-only 标记收敛到 build 阶段，更稳 |
 | `meta` 与 `summary`/`ok` 的 LLM 可见性（P1-8 定稿） | `meta` 与 `summary`/`ok` 同语义：LLM adapter 的 content mapper（anthropic / openai / gemini）发请求时只读 `toolUseId + content`，**天然忽略** `meta`/`summary`/`ok`，**无需额外剥离代码改动** | 已核对三个 mapper：`blocksToAnthropicContent` 的 `tool_result` 分支只取 `tool_use_id`+`content`；`chatMessagesToOpenAi` 同；`toolResultToGeminiPart` 同。原 C15 / Step 14「剥离 meta」基于错误前提，已删除 |
-| registry seed「不可移除」 | 运行时虚拟注入：仅 `list()` 合并虚拟 `general`（DB 同名优先）；`get(agentId)` **不合并**（保持现状，入参是 UUID）；`task` 工具只用 `list().find(name)`。虚拟 general「不可删」是自然结果（DB 不存在 → delete 报 `AGENT_NOT_FOUND`） | `get` 入参是 UUID id，虚拟 general 没有 id；强行让 `get` 合并需要额外的 name→id 映射，不划算 |
+| registry seed「不可移除」 | 运行时虚拟注入：仅 `list()` 合并虚拟 `general`；`get(agentId)` **不合并**（保持现状，入参是 UUID）；`task` 工具只用 `list().find(name)`。虚拟 general「不可删」是自然结果（DB 不存在 → delete 报 `AGENT_NOT_FOUND`） | `get` 入参是 UUID id，虚拟 general 没有 id；强行让 `get` 合并需要额外的 name→id 映射，不划算 |
 | 子 session 创建路径 | 新增 `SessionService.createSubSession`，**不复用** `create` | `create` 会复制项目模板、写 workspace agent 配置，子 session 不应触发 |
 | 子 agent VFS scope（P0-4 定稿） | `createSubSession` **完全不碰 VFS**——不调 `initializeSessionWorkspace`、不创建 child scope、不调 `copyVfsTree`，仅 `insert`（带 `parentSessionId`）。子 agent run 的 `BuiltinToolContext.vfs` 在 `runChildAgent` 装配期指向**父 session 的 VFS**：`vfs = runtime.sessionVfs(projectId, parentSessionId)`。子 session delete 时的 `deleteVfsPrefix(session:{pid}:{childId})` 是无害空操作（child scope 根本没建过），不需要 special-case 跳过 | PRD 核心场景是「子 agent 帮忙查大纲设定」，空 scope 下 read/glob/grep 读不到任何文件，场景跑不通；VFS scope 按 `session:{projectId}:{sessionId}` 字面索引，child scope 不可能「复用」parent 视图——能复用的只有 `toolCtx.vfs` 指向 parent 的 `sessionVfs`。若建空 child scope 又用不上，反而会留孤儿数据 |
 | 模型解析 | 子 agent `model` pin → 父 agent `savedModelId` → 报错（不走 workspace fallback） | `resolveSavedModelId` 已剥离 workspace 层；不走 `runRunAgentAction` 的 deviation 老路 |
@@ -205,10 +205,12 @@ const DEFAULT_SUBAGENT_DEFINITION: AgentDefinition = {
 };
 ```
 
-`AgentRegistryService.list` 实现里合并：先查 DB，再把 `DEFAULT_SUBAGENT_DEFINITION` 合进去（如果 DB 里没有同名 `general`）。用户若 upsert 了同名 `general`，DB 版本优先（允许覆盖）。
+`AgentRegistryService.list` 实现里合并：先查 DB，再把 `DEFAULT_SUBAGENT_DEFINITION` 合进去（如果 DB 里没有同名 `general`）。
+
+> **注（后续迭代 agent-mode-refactor 已收紧）**：`upsert` 现已**禁止**创建同名 `general`（抛 `INVALID_SCHEMA`），DB 不可能存在同名项，list 的同名检查仅为防御性保留。
 
 **`get` / `delete` 语义（P1-5 定稿）**：
-- `list()` 合并虚拟 `general`（DB 同名优先）；
+- `list()` 合并虚拟 `general`；
 - `get(agentId)` **不合并**虚拟——入参是 UUID id，虚拟 general 没有 id，保持现状（DB 不存在报 `AGENT_NOT_FOUND`）。`task` 工具只用 `list().find(name)`，不走 `get(id)`；
 - `delete(agentId)` 传虚拟 general 的 name 当 id 查不到 DB 行，自然报 `AGENT_NOT_FOUND`——「不可删」是自然结果，非必须不转义友好错误（如需友好错误，可在 `delete` 里按 name 特判，但本次不做）。
 - export 时排除虚拟 agent（虚拟 agent 不在 DB 里，走 DB 导出路径天然排除）。
@@ -337,7 +339,7 @@ examples/agents.yaml                                 # 加 general 模板参考
 - Step 4 — phase-schema-data — blocking: yes — qa: auto：`ToolResultBlock.meta`（C5 + C36）：`content-block.ts` 加 `meta?: { subagentSessionId?: string }`；`parse-message-content.ts` 的 `parseBlock` 在 `tool_result` 分支同步加 `meta` 可选解析（同 `summary`/`ok` 模式，否则持久化重读会丢 `subagentSessionId`）；序列化/反序列化覆盖。
 - Step 5 — phase-agent-config — blocking: yes — qa: auto：AgentDefinition 加 `subagentCallable`（C9, C10）：model 接口 + wire schema 双向（照 `customAttach` 模板，schemaVersion 不升）。
 - Step 6 — phase-agent-config — blocking: yes — qa: auto：CLI bundle schema 补 `tools` + `subagentCallable`（C21）；更新 `agents-bundle.test.ts`、`agent-registry-e2e.test.ts` 适配。
-- Step 7 — phase-agent-config — blocking: yes — qa: auto：registry seed 虚拟注入（C18, C19）：新增 `default-subagent-definition.ts`；`AgentRegistryService.list` 合并虚拟 `general`（DB 同名优先）；`get`/`delete` **不改动**（P1-5：虚拟 general 没有 id，自然报 AGENT_NOT_FOUND）；export 排除虚拟（走 DB 导出路径天然排除）。`examples/agents.yaml` 加 `general` 参考（C31）。
+- Step 7 — phase-agent-config — blocking: yes — qa: auto：registry seed 虚拟注入（C18, C19）：新增 `default-subagent-definition.ts`；`AgentRegistryService.list` 合并虚拟 `general`；`get`/`delete` **不改动**（P1-5：虚拟 general 没有 id，自然报 AGENT_NOT_FOUND）；export 排除虚拟（走 DB 导出路径天然排除）。`examples/agents.yaml` 加 `general` 参考（C31）。
 - Step 8 — phase-agent-config — blocking: no — qa: auto：config-forms + UI 开关（C20, C30）：`AgentEditorFormInput` 加 `subagentCallable`；mobile `AgentEditorForm` + desktop `AgentEditorView` 加开关控件。
 - Step 9 — phase-core-tool — blocking: yes — qa: auto：`BuiltinToolContext` 扩展 + `AgentRegistryService.list()` 新增（C12, C19 前半）：加可选 `subagent` 子对象；registry 新增 `list(): AgentDefinition[]` 方法（DB + 虚拟 seed 合并）。
 - Step 10 — phase-core-tool — blocking: yes — qa: auto：新增 `subagent-tool.ts` + 工厂函数（C13, C16, C32, C33）：`createSubagentTool(availableNames: string[])` 返回 Tool 实例，description 拼上可选 name；`task` 工具实现——入参校验、`ctx.subagent` 存在性检查、depth 拦截、`agentRegistry.list()` → `find(name === subagentName)` + `subagentCallable` 校验、`createChildSession(title = input.description?.trim() ? input.description : input.prompt.slice(0, 40))`（P2-12）、`resolveChildModelId`、`runChildAgent`、跑完 `messages.listBySession(childSessionId)` 取末条 assistant text。**`outputSchema` 定稿为对象 `{ text: string; subagentSessionId: string }`**（P0-1 方案 B）；`text` 取末条 assistant 文本，**fallback（P1-7）**：`result.stopReason !== "completed"` 或末条 assistant 无 text block 时，`text` 返回形如 `[子代理未完成任务: stopReason=max_steps]` 的可读文本，`subagentSessionId` 仍填上（供 UI 跳转看半成品）。返回值由 agent-runner.ts L443 处的 buildToolResultBlock 透传到 `ToolResultBlock.meta`（C32/C34），`format-tool-output` 先剩掉 `subagentSessionId` 再提取 `text` 返回原始文本（C33，不走 `JSON.stringify`）。
@@ -378,7 +380,7 @@ examples/agents.yaml                                 # 加 general 模板参考
 - T-T8 — phase-core-tool — blocking: yes（P1-7）：子 agent 非正常结束 fallback：mock 子 agent `result.stopReason = "max_steps"`，`task` 工具返回的 `text` 形如 `[子代理未完成任务: stopReason=max_steps]`，`subagentSessionId` 仍存在；主 agent 的 `tool_result.content` 等于该文本，`tool_result.meta.subagentSessionId` 正确，UI 仍可跳转子会话。
 - T-T9 — phase-core-tool — blocking: yes（P0-4）：子 agent VFS 可见性：子 agent run 的 `toolCtx.vfs` 与父 session 的 VFS 是同一视图；mock 父 session VFS 中预置文件 `/outline.md`，子 agent 调 `read`/`glob`/`grep` 能读到该文件（若 scope 独立空，读不到 → 场景破裂）。
 - T-C1 — phase-agent-config — blocking: yes：wire schema 双向：`subagentCallable` 序列化/反序列化；旧文档（无该字段）兼容。
-- T-C2 — phase-agent-config — blocking: yes（P1-5 改写）：registry seed：`list` 包含虚拟 `general`（`subagentCallable=false`）；`get("<不存在的 uuid>")` 报 `AGENT_NOT_FOUND`（`get` 不合并虚拟）；`delete("general")` 走 DB 路径报 `AGENT_NOT_FOUND`（自然不可删）；export 排除虚拟；upsert 同名 `general` 后 DB 版本优先于虚拟。
+- T-C2 — phase-agent-config — blocking: yes（P1-5 改写）：registry seed：`list` 包含虚拟 `general`（`subagentCallable=false`）；`get("<不存在的 uuid>")` 报 `AGENT_NOT_FOUND`（`get` 不合并虚拟）；`delete("general")` 走 DB 路径报 `AGENT_NOT_FOUND`（自然不可删）；export 排除虚拟；upsert 同名 `general` 报 `INVALID_SCHEMA`（后续迭代收紧，见「注」）。
 - T-C3 — phase-agent-config — blocking: yes：CLI bundle schema：`tools` + `subagentCallable` 导入导出闭环。
 - T-C4 — phase-agent-config — blocking: yes（P1-9）：`validateAgentToolPolicy` 内置 task 白名单：用户配 `tools.allow: ["task"]` 或 `tools.deny: ["task"]` 不报 `INVALID_TOOL_POLICY`（白名单生效，不依赖 probe 注册）；但配 `tools.allow: ["unknown_tool"]` 仍报错。
 - T-M1 — phase-core-tool — blocking: yes：LLM messages 不含 `meta`：直接调三个 mapper（`chatMessagesToAnthropic` / `chatMessagesToOpenAi` / `chatMessagesToGeminiContents`），入参含带 `meta.subagentSessionId` 的 `tool_result` 块，断言出参 wire 中**不含** `meta`/`summary`/`ok` 字段——验证 mapper 天然忽略（P1-8）。

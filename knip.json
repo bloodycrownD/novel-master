@@ -3,10 +3,6 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/check-ct-ui-no-state.mjs",
-        "scripts/check-workplace-rename-gate.mjs",
-        "scripts/migrate-core-imports.mjs",
-        "scripts/verify-oss-cloud-sync.mjs",
         "eslint.config.base.mjs"
       ]
     },

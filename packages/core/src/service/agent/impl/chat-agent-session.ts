@@ -13,14 +13,18 @@ import type { AgentSession } from "@/domain/agent/session/agent-session.port.js"
 /**
  * Agent session adapter over {@link MessageService}.
  *
- * workplaceScopeSessionId 默认等于 sessionId（主 session）；子 agent 场景
- * 由 runChildAgent 装配时传父 session id，使常驻工作区前缀读父 session。
+ * workplaceScopeSessionId 决定规则评估与 workplace 服务的 scope：主 session 等于
+ * 自身；子 session 指向父 session（子 agent 在父 session 工作区工作）。
+ * kkvScopeSessionId 决定 rule_snapshot / file_cache 的 KKV 归属：永远等于自身
+ * sessionId（子会话仅做规则快照隔离）。runChildAgent 装配子 agent 时显式传入
+ * parentSessionId 作为第三位位置参数，第四位走默认值（= childSessionId）。
  */
 export class ChatAgentSession implements AgentSession {
   constructor(
     private readonly messages: MessageService,
     readonly sessionId: string,
     readonly workplaceScopeSessionId: string = sessionId,
+    readonly kkvScopeSessionId: string = sessionId,
   ) {}
 
   async list(): Promise<readonly ChatMessage[]> {

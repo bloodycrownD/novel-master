@@ -56,6 +56,9 @@ function DesktopOverlays() {
   const {
     projectId,
     sessionId,
+    // 工作区操作（context menu / 规则编辑 / 文件增删）统一读 workspaceSessionId。
+    // 子会话与父会话共享工作区，它恒等于 sessionId（父 session）。
+    workspaceSessionId,
     sessionName,
     updateSessionName,
     notifyWorkspaceMutated,
@@ -163,7 +166,7 @@ function DesktopOverlays() {
           return;
         }
         const req = {
-          ...scopeRequestFromTarget(target, projectId, sessionId),
+          ...scopeRequestFromTarget(target, projectId, workspaceSessionId),
           directoryPath,
         };
         const result = await ipcVfsZipExport(req);
@@ -194,7 +197,7 @@ function DesktopOverlays() {
         });
       }
     },
-    [projectId, sessionId],
+    [projectId, workspaceSessionId],
   );
 
   const handleWorkspacePromptConfirm = useCallback(
@@ -211,7 +214,7 @@ function DesktopOverlays() {
           'file',
           value,
           projectId,
-          sessionId,
+          workspaceSessionId,
         );
       } else if (prompt.kind === 'create-folder') {
         result = await createWorkspaceEntry(
@@ -219,14 +222,14 @@ function DesktopOverlays() {
           'folder',
           value,
           projectId,
-          sessionId,
+          workspaceSessionId,
         );
       } else {
         result = await renameWorkspaceEntry(
           prompt.target,
           value,
           projectId,
-          sessionId,
+          workspaceSessionId,
         );
         if (result.ok && prompt.target.kind === 'row') {
           const row = prompt.target.row;
@@ -247,7 +250,7 @@ function DesktopOverlays() {
     [
       workspacePrompt,
       projectId,
-      sessionId,
+      workspaceSessionId,
       notifyWorkspaceMutated,
       renamePreviewTab,
     ],
@@ -263,7 +266,7 @@ function DesktopOverlays() {
       const result = await deleteWorkspaceEntry(
         confirm.target,
         projectId,
-        sessionId,
+        workspaceSessionId,
       );
       if (result.ok) {
         if (confirm.target.kind === 'row') {
@@ -280,7 +283,7 @@ function DesktopOverlays() {
     }
     if (confirm.kind === 'import-zip') {
       const req = {
-        ...scopeRequestFromTarget(confirm.target, projectId, sessionId),
+        ...scopeRequestFromTarget(confirm.target, projectId, workspaceSessionId),
         confirmed: true,
         directoryPath: confirm.directoryPath,
       };
@@ -295,7 +298,7 @@ function DesktopOverlays() {
     }
     if (confirm.kind === 'import-character-card') {
       const req = {
-        ...scopeRequestFromTarget(confirm.target, projectId, sessionId),
+        ...scopeRequestFromTarget(confirm.target, projectId, workspaceSessionId),
         confirmed: true,
         directoryPath: confirm.directoryPath,
       };
@@ -310,7 +313,7 @@ function DesktopOverlays() {
   }, [
     workspaceConfirm,
     projectId,
-    sessionId,
+    workspaceSessionId,
     notifyWorkspaceMutated,
     markPreviewTabsDeletedUnderPath,
   ]);
@@ -452,7 +455,7 @@ function DesktopOverlays() {
         open={dirRuleTarget != null}
         target={dirRuleTarget}
         projectId={projectId}
-        sessionId={sessionId}
+        sessionId={workspaceSessionId}
         onClose={() => setDirRuleTarget(null)}
         onSaved={() => {
           notifyWorkspaceMutated();
@@ -464,7 +467,7 @@ function DesktopOverlays() {
         open={fileInclusionTarget != null}
         target={fileInclusionTarget}
         projectId={projectId}
-        sessionId={sessionId}
+        sessionId={workspaceSessionId}
         onClose={() => setFileInclusionTarget(null)}
         onSaved={() => notifyWorkspaceMutated()}
       />

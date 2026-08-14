@@ -33,3 +33,17 @@ describe("longestCommonSubstring", () => {
     assert.ok(truncated.length <= MAX_LCS_SNIPPET_CHARS + 1);
   });
 });
+
+describe("longestCommonSubstring 中文引号场景", () => {
+  it("T-LCS-CN: 弯引号 vs 直引号能找到公共子串（诊断可读性）", () => {
+    // edit 失败时 LCS 诊断要把「除了引号其他都对得上」这件事摆出来，
+    // 所以这里验证弯引号与直引号之间至少能命中一段不含引号的公共子串。
+    const fileContent = `他说“你好”`;
+    const oldString = `他说“你好”`;
+    const result = longestCommonSubstring(oldString, fileContent);
+    assert.ok(result.length >= MIN_LCS_LENGTH);
+    assert.ok(fileContent.includes(result.substring));
+    // 主体「你好」应该出现在公共子串里（撇开引号差异）
+    assert.ok(result.substring.includes("你好"));
+  });
+});

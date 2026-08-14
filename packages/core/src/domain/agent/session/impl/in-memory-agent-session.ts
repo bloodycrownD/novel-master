@@ -22,6 +22,7 @@ export class InMemoryAgentSession implements AgentSession {
   constructor(
     readonly sessionId = "in-memory",
     readonly workplaceScopeSessionId = sessionId,
+    readonly kkvScopeSessionId = sessionId,
   ) {}
 
   async list(): Promise<readonly ChatMessage[]> {

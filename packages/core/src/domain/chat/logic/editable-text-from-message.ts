@@ -6,7 +6,10 @@
 
 import type { ChatMessage } from "../model/message.js";
 import { readMessageMetadata } from "../model/message-metadata.js";
-import { hasToolResult } from "./message-content-helpers.js";
+import {
+  hasAnnotateAttachment,
+  hasToolResult,
+} from "./message-content-helpers.js";
 
 /**
  * 提取可编辑正文（仅 `text` 块；thinking / tool_use 等排除）。
@@ -27,7 +30,11 @@ export function extractEditableTextFromMessage(
 /**
  * 是否为 plain text user Undo Send 锚点（可撤销发送并恢复 Composer 原文）。
  *
- * @remarks 须排除 `user_vfs_action` synthetic 与含 `tool_result` 的 user 行。
+ * @remarks
+ * 须排除 `user_vfs_action` synthetic 与含 `tool_result` 的 user 行。
+ * 「只有批注、无正文」的 user 消息也允许走 `undo_send`——回滚后批注附件
+ * 从 `attachments` 反投影回 Composer，正文则不恢复（`extractEditableTextFromMessage`
+ * 对纯批注消息返回 null，由各端的 restore 容忍处理）。
  */
 export function isPlainUserUndoSendEligible(message: ChatMessage): boolean {
   if (message.role !== "user") {
@@ -39,5 +46,6 @@ export function isPlainUserUndoSendEligible(message: ChatMessage): boolean {
   if (readMessageMetadata(message.raw)?.kind === "user_vfs_action") {
     return false;
   }
-  return extractEditableTextFromMessage(message) != null;
+  if (extractEditableTextFromMessage(message) != null) return true;
+  return hasAnnotateAttachment(message);
 }

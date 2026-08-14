@@ -16,7 +16,8 @@ export const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
   projects: "global",
   sessions: "session",
   conversation: "chat",
-  // 子智能体只读会话面板与父会话共享聊天工作区预览面板（P2-11）
+  // 子会话面板与父会话共享工作区（父 session VFS），
+  // chat scope + sessionId 即父 session（见 ShellNavProvider 的恒等映射）
   "subagent-conversation": "chat",
 };
 

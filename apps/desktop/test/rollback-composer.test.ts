@@ -127,4 +127,36 @@ describe('resolveComposerDraftAfterRollbackSuccess', () => {
       false,
     );
   });
+
+  it('T-B3: 批注消息 undo_send（restoreText:null + restoreAttachments:非空）正文不覆盖、attach 恒空（批注反投影由 applyUndoAnnotateRestore 独立处理）', () => {
+    // 「只有批注、无正文」的 user 消息：isPlainUserUndoSendEligible 返回 true（走 undo_send），
+    // 但 extractEditableText 返回 null。desktop 已解耦——正文恢复（本函数）与批注反投影
+    // （applyUndoAnnotateRestore）是两次独立调用，restoreText:null 只导致正文不恢复，
+    // 不影响批注附件反投影。这里验证 resolveComposerDraftAfterRollbackSuccess 在该输入下
+    // 保留当前正文、attach 恒空（批注反投影走另一条路径，不在本函数职责内）。
+    const annotateAttachment: MessageAttachmentDto = {
+      name: '/a.md',
+      source: 'user_ops',
+      type: 'text',
+      content: null,
+      path: '/a.md',
+      action: 'annotate',
+    };
+    const { rollbackMode, restoreText, restoreAttachments } =
+      resolveRollbackContext(
+        msg([], 'user', [annotateAttachment]),
+      );
+
+    assert.equal(rollbackMode, 'undo_send');
+    assert.equal(restoreText, null);
+    assert.deepEqual(restoreAttachments, [annotateAttachment]);
+
+    const next = resolveComposerDraftAfterRollbackSuccess(
+      { text: 'composer 不被覆盖', attachments: [] },
+      rollbackMode,
+      { text: restoreText, attachments: restoreAttachments },
+    );
+    assert.equal(next.text, 'composer 不被覆盖');
+    assert.equal(next.attachments.length, 0);
+  });
 });

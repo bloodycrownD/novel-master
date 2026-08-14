@@ -136,13 +136,11 @@ export class DefaultSessionService implements SessionService {
     projectId: string,
     title?: string | null,
   ): Promise<ChatSession> {
-    // SPEC agent-subagent / P0-4：子 session 仅 insert（带 parentSessionId），
-    // 完全不碰 VFS——不调 initializeSessionWorkspace、不创建 child scope、
-    // 不调 copyVfsTree，也不复制项目模板。子 agent run 的 VFS 访问在 runChildAgent
-    // 装配期通过 toolCtx.vfs = runtime.sessionVfs(projectId, parentSessionId) 指向父 scope。
+    // 子会话不初始化任何工作区：文件只有一个工作区（父 session VFS），子 agent
+    // 的工具操作由 runChildAgent 装配期直接指向父 session scope。这里只 insert
+    // session 记录（带 parentSessionId），不碰 VFS / KKV。
     //
-    // 父 session 必须存在且属于该项目；这里只校验父在，不强校验父子同项目
-    // （调用方 runChildAgent 自己保证）。
+    // 父 session 校验在事务外读（对齐主 session create 的风格：校验在事务外）。
     const parent = await this.deps.sessions.findById(parentSessionId);
     if (parent == null) {
       throw chatNotFound("session", parentSessionId);

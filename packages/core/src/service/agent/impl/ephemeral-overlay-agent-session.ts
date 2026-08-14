@@ -30,6 +30,11 @@ export class EphemeralOverlayAgentSession implements AgentSession {
     return this.base.workplaceScopeSessionId;
   }
 
+  /** KKV 归属透传 base——overlay 不改变 rule_snapshot / file_cache 的归属。 */
+  get kkvScopeSessionId(): string {
+    return this.base.kkvScopeSessionId;
+  }
+
   async list(): Promise<readonly ChatMessage[]> {
     const base = await this.base.list();
     return [...base, ...this.overlay];
