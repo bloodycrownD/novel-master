@@ -37,26 +37,8 @@ merge 到 main、push、发版等改变共享状态的操作，必须等用户�
 
 大迭代放 `docs/Iterations/<迭代名>/`，下面分 `features/<feature名>/` 子目录，每个 feature 有自己的 `prd.md` + `spec.md`。迭代总纲 PRD 在迭代根目录。
 
-## 子会话工作区共享 + 规则快照隔离
+## 实现禁令与坑
 
-子会话**没有独立工作区**：子 agent 的全部 VFS 工具（read/write/edit/glob/grep）在**父 session 的 VFS scope** 上操作，写入直接出现在父工作区；嵌套时孙 agent 也指向根父会话。隔离的只有**规则快照**：`workplaceScopeSessionId` 对子 session 指向父（规则评估 + workplace 服务按父工作区），`kkvScopeSessionId` 恒等自身（rule_snapshot/file_cache 存子 session 自己的 KKV，`assembleWorkplaceDisplay` 的 `kkvSessionId` 参数路由）。UI：mobile 子会话文件卡片用路由传入的 `parentSessionId` 打开 FileEditor；desktop `workspaceSessionId` 恒等 `sessionId`。初版「从空产生独立工作区」语义已废弃，`initializeEmptySessionWorkspace` 已删。
-
-## extra info 注入规则
-
-`customAttach`（extra info）只对最新一条非 hidden 的 user 输入消息注入 `<extra-info>` 块，历史消息不再注入。判定口径：`role === 'user' && isUserInputMessage(message) && !message.hidden` 的最后一条。hidden user 原样进 prepare 输出但不计入判定。
-
-## 项目智能体已下线
-
-项目级内联智能体定义（follow/custom 模式）已移除。`resolveAgentForProject` 永远走 session 分支。`ProjectAgentConfig` 类型保留 `@deprecated`（与 DB 列保留策略一致，列置空但不 DROP，下一迭代可彻底清理）。双端锁定 UI 保留 `source !== 'session'` 判定覆盖 none 场景，toast 文案改成 none 口径（不引导去已删除的"项目智能体配置"入口）。
-
-## edit 工具引号归一化
-
-`compute-replace-result.ts` 匹配层加引号归一化（`normalize-for-match.ts`），v1 只做 1:1 映射（弯引号→直引号、「」『』→直引号、全角空格→半角），省略号推迟 v2。**replaceAll 路径严禁用 split/join**（会悄悄改写未替换段引号），必须用归一化定位 + 原文切片拼接。
-
-## 批注消息判定
-
-"只有批注、没文字"的 user 消息也算有效 user 消息。`hasAnnotateAttachment`（检查 `attachment.action === "annotate"`）作为 `isPlainUserText` 和 `isPlainUserUndoSendEligible` 的回退判定。mobile `applyComposerRestore` 的提前 return 条件拿掉 `restoreText == null`，写正文加 `restoreText != null` 守卫。
-
-## worktree 并行开发
-
-`.woktree/` 目录用于 git worktree 并行 feature 开发，已在 `.gitignore` 忽略。注意 worktree 的 node_modules 共享主仓，apps 级 typecheck/测试前需确认 core 解析落点或建本地 symlink。
+- **edit 工具 replaceAll 路径严禁用 split/join**：会悄悄改写未被替换段的引号。必须用引号归一化定位 + 原文切片拼接（`packages/core/src/domain/vfs/logic/normalize-for-match.ts`）。
+- **worktree 并行开发**：`.woktree/` 目录用于 git worktree 并行 feature 开发，已在 `.gitignore` 忽略。注意 worktree 的 node_modules 共享主仓，apps 级 typecheck/测试前需确认 core 解析落点或建本地 symlink。
+- **发版 bump 版本号后必须验证 package.json 可解析**：曾有版本行尾逗号丢失导致 JSON 语法错误，`npm ci` 报误导性「lock 不存在」，CI 三平台全挂。提交前跑 `node -e "require('./package.json')"` 逐个验证。
