@@ -16,3 +16,6 @@ user:
 
 assistant:
 Step 1 已判定：类型 feature，所属迭代 prompt-block-lifecycle（lifecycle=always 的引入迭代，本次正是把「每轮更新带入」收窄为「每回合快照」，挂它下面最合适），敏捷名称 macro-turn-snapshot，分支 feature/macro-turn-snapshot（从 main 切，工作区已确认干净）。已派 1 个 readonly 探索子代理确认 expandDynamicMacros 全部调用点、renderFileTree 接口与成本、测试覆盖现状、agent-runner step 循环外的一次性初始化插入点。实现计划走 trivial 豁免由主代理直接改（改动集中在 expand-dynamic-macros.ts + agent-runner.ts + 测试）。
+
+assistant:
+探索子代理返回三个关键事实：①宏展开的每步实时发生在三条独立链路（dynamic 区、customAttach、compaction token 计数）；②agent-runner 每 step 经工厂 new 一个新 WorkplaceService，liveViewInflight 并发去重跨 step 失效；③promptRenderCtx 原本不传 now，dynamic 区每步兑底 new Date()。实现走 trivial 豁免由主代理直接完成（agent-runner 快照 + 三个 ctx 加可选 filetree 字段透传），已提交 c14e7fe：回合内 renderFileTree 只调 1 次、$time/$filetree 跨 step 逐字一致、不含宏零预取。验证：typecheck + build + 111 例回归全绿；TDDBC 系测试本机环境挂起（main 基线复现，与改动无关）。留痕文档在 docs/Iterations/prompt-block-lifecycle/features/macro-turn-snapshot/{prd,spec}.md。待用户确认。
