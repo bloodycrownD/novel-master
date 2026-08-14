@@ -346,7 +346,7 @@ export function ProviderDetailScreen() {
         visible={menuSavedModelId != null}
         items={[
           {label: '重命名', action: 'rename'},
-          {label: '删除模型', action: 'delete', danger: true},
+          {label: '删除', action: 'delete', danger: true},
         ]}
         onClose={() => setMenuSavedModelId(undefined)}
         onSelect={action => {
