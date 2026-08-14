@@ -61,8 +61,8 @@ export function ChatRail({
     goBackToSessions,
     showNavView,
     notifyAgentConfigChanged,
-    // Feature A：子会话工作区隔离——subagentSessionId 提升到 ShellNavProvider，
-    // 让 ExplorerPane / WorkspaceTree 通过 workspaceSessionId 读到子 session。
+    // subagentSessionId 提升到 ShellNavProvider，供子会话面板导航展示使用；
+    // 子会话与父会话共享工作区，工作区 scope 仍由父 session 决定。
     openSubagentSession,
     exitSubagentSession,
     subagentSessionId: navSubagentSessionId,

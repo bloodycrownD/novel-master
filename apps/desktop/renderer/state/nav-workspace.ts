@@ -16,8 +16,8 @@ export const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
   projects: "global",
   sessions: "session",
   conversation: "chat",
-  // panelScope 仍为 "chat"（session 级 VFS），但 workspaceSessionId 在子会话 view 下指向子 session
-  // （见 ShellNavProvider），实际展示子 session 自己的工作区，不再与父会话共享
+  // 子会话面板与父会话共享工作区（父 session VFS），
+  // chat scope + sessionId 即父 session（见 ShellNavProvider 的恒等映射）
   "subagent-conversation": "chat",
 };
 

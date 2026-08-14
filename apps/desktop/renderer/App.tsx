@@ -56,8 +56,8 @@ function DesktopOverlays() {
   const {
     projectId,
     sessionId,
-    // Feature A：工作区操作（context menu / 规则编辑 / 文件增删）在子会话 view 下
-    // 针对子 session 的工作区，读 workspaceSessionId 而非全局 sessionId。
+    // 工作区操作（context menu / 规则编辑 / 文件增删）统一读 workspaceSessionId。
+    // 子会话与父会话共享工作区，它恒等于 sessionId（父 session）。
     workspaceSessionId,
     sessionName,
     updateSessionName,

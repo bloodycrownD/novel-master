@@ -77,12 +77,11 @@ export interface ShellNavContextValue {
   sessionId: string | undefined;
 
   /**
-   * 工作区展示用的 effective session id。
+   * 工作区展示用的 session id。
    *
-   * Feature A（子会话工作区隔离）：子会话 view（subagent-conversation）下指向
-   * 子 session，其他 view 等于 sessionId（父或 undefined）。ExplorerPane /
-   * WorkspaceTree 读这个字段组装 VFS scope，使子会话预览展示子 session 自己的工作区。
-   * 全局导航态 sessionId 不变（仍指向父会话，不污染持久化 nav state）。
+   * 子会话面板与父会话共享工作区（子会话没有独立工作区），因此该字段
+   * 恒等于 sessionId（父 session）。保留字段本身做恒等映射，
+   * ExplorerPane / WorkspaceTree 等消费方无需感知这一语义。
    */
   workspaceSessionId: string | undefined;
 
@@ -238,16 +237,15 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const [sessionName, setSessionName] = useState<string | undefined>();
 
-  // Feature A：子会话只读 view 的 sessionId 在 Provider 层维护（不进持久化 nav state）。
-  // 全局 sessionId 仍指向父会话；workspaceSessionId 在子会话 view 下返回子 session，
-  // 供 ExplorerPane / WorkspaceTree 展示子 session 自己的工作区。
+  // 子会话只读 view 的 sessionId 在 Provider 层维护（不进持久化 nav state），
+  // 仅供导航展示（ChatRail 标题 / 停止按钮等）使用。子会话与父会话共享工作区，
+  // workspaceSessionId 恒等 sessionId，不随子会话 view 切换。
   const [subagentSessionId, setSubagentSessionId] = useState<string | undefined>();
   const [subagentSessionName, setSubagentSessionName] = useState<string | undefined>();
 
-  // effective 工作区 session id：子会话 view 下返回子 session，其他 view 同 sessionId。
-  // 放在 state 声明区，供 workspaceMutatedMatchesNav 的 useEffect deps 同步读取。
-  const workspaceSessionId =
-    viewId === "subagent-conversation" ? subagentSessionId : sessionId;
+  // 工作区 session id：子会话没有独立工作区，恒等于 sessionId（父 session）。
+  // 保留这个派生字段做恒等映射，消费组件（ExplorerPane / WorkspaceTree 等）零改动。
+  const workspaceSessionId = sessionId;
 
   const [previewTabs, setPreviewTabs] = useState<PreviewFileSelection[]>([]);
   const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null);
@@ -485,8 +483,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   }, []);
 
-  // Feature A：子会话只读 view 进入 / 退出。子 sessionId 在 Provider 层维护，
-  // workspaceSessionId 派生自 viewId + subagentSessionId。
+  // 子会话只读 view 进入 / 退出。子 sessionId 在 Provider 层维护，仅用于导航展示，
+  // 工作区 scope 不受影响（子会话与父会话共享工作区）。
   const openSubagentSession = useCallback(
     (childSessionId: string, label?: string) => {
       setSubagentSessionId(childSessionId);
