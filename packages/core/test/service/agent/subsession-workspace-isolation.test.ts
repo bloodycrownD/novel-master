@@ -1,19 +1,27 @@
 /**
- * Feature A — 子会话工作区隔离 测试。
+ * 子会话工作区语义测试（共享父工作区 + 规则快照隔离）。
  *
- * 覆盖 SPEC 测试策略：
- * - T-SS-1：createSubSession 后子 session 工作区为空（无文件、无 rule_snapshot /
- *   file_cache），父 session 工作区不变；事务包裹正确。
- * - T-SS-2：ChatAgentSession 的 workplaceScopeSessionId —— 主 session 等于自身，
- *   子 session 也等于自身（Feature A 后语义变更）。
- * - T-SS-3：runChildAgent 装配的 VFS 指向 childSessionId（mock 入参验证）。
- * - T-SS-4：子 agent 写文件落到子 session scope；父 session 工作区不变。
- * - T-SS-5：子 agent 能 read/glob/grep 自己刚写的文件。
- * - T-SS-6：子 agent VFS 变更后父会话收到 vfsMutated 标志（通知机制不变）。
- * - T-SS-8：三层嵌套（父→子→孙）工作区独立。
+ * 正确语义（Feature A 修正后）：
+ * - 文件只有一个工作区——父 session 的 VFS。子 agent 的 read/write/edit/glob/grep
+ *   全部在父 session VFS scope 操作，写入直接出现在父工作区。
+ * - 仅规则快照隔离：子会话拼常驻工作区前缀时，rule_snapshot / file_cache 存取走
+ *   子 session 自己的 KKV，但规则评估按父工作区（wtScope = 父 session）。
+ * - 嵌套时孙 agent 也指向根父会话工作区（不是中间子会话）。
  *
- * T-SS-7（回归）由现有 subagent/template 测试套件覆盖（session.subsession /
- * subagent-tool-* / initialize-session-workspace 等）。
+ * 覆盖用例：
+ * - T-SS-1：createSubSession 仅 insert session 记录——子 session 的 VFS scope
+ *   天然为空、不初始化任何工作区，父 session 工作区不变。
+ * - T-SS-2：ChatAgentSession 的 workplaceScopeSessionId 子 session 指向父；
+ *   kkvScopeSessionId 恒等自身。
+ * - T-SS-3：runChildAgent 装配的 VFS 指向 parentSessionId（mock 入参验证）。
+ * - T-SS-4：子 agent 写文件落到父 session scope；子 session scope 仍为空。
+ * - T-SS-5：子 agent 写文件后能经父 scope 视图 read 回来。
+ * - T-SS-6：子 agent VFS 变更后 vfsMutated 事件仍按会话树语义通知
+ *   （payload sessionId = childSessionId，机制不变）。
+ * - T-SS-7：子会话首次装配 workplace 后 rule_snapshot / file_cache 写入子 session
+ *   自己的 KKV、父 KKV 无这两域，且文件内容来自父 VFS。
+ * - T-SS-8：三层嵌套（父→子→孙）工作区归属都指向根父；同一父会话连派的
+ *   两个子 agent 写入落同一父工作区（共享语义）。
  *
  * @module test/service/agent/subsession-workspace-isolation.test
  */
@@ -41,6 +49,13 @@ import type { VfsService } from "@novel-master/core/vfs";
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
+  fileCacheKey,
+  RULE_SNAPSHOT_CANON_KEY,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { parseFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
   testIsolationSuffix,
@@ -56,6 +71,12 @@ const childAgentDef: AgentDefinition = {
   prompts: { persist: [], dynamic: [] },
   model: PROJECT_MODEL_ID,
   mode: "subagent",
+};
+
+/** T-SS-7 用：开启常驻工作区的子 agent（触发 workplace 装配 + KKV 快照写入）。 */
+const workplaceChildAgentDef: AgentDefinition = {
+  ...childAgentDef,
+  prompts: { persist: [], dynamic: [], workplace: "i have seen workplace" },
 };
 
 function mockUserVfsTurn(): UserVfsTurnService {
@@ -81,6 +102,21 @@ function writeToolUseResponse(
         id: toolUseId,
         name: "write",
         input: { path: filePath, content },
+      },
+    ],
+    raw: {},
+  };
+}
+
+function readToolUseResponse(toolUseId: string, filePath: string): LlmChatResult {
+  return {
+    assistantText: "",
+    blocks: [
+      {
+        type: "tool_use",
+        id: toolUseId,
+        name: "read",
+        input: { path: filePath },
       },
     ],
     raw: {},
@@ -184,6 +220,7 @@ function makeRuntime(
     readonly modelRequests: ModelRequestService;
     readonly abortRegistry: AgentAbortRegistry;
     readonly sessionVfsOverride?: AgentTurnRuntimePort["sessionVfs"];
+    readonly workplaceOverride?: AgentTurnRuntimePort["workplace"];
   },
 ): AgentTurnRuntimePort {
   const registry = createAgentRegistryService(ctx.conn, ctx.state);
@@ -231,16 +268,18 @@ function makeRuntime(
       undefined as unknown as AgentTurnRuntimePort["eventOrchestrator"],
     sessionKkv: ctx.sessionKkv,
     sessionVfs: args.sessionVfsOverride ?? ((p, s) => ctx.sessionVfs(p, s)),
-    workplace: () =>
-      ({
-        renderDisplay: async () => "",
-        buildListRows: async () => [],
-        materializePersistBlock: async () => ({ workplaceDisplay: "" }),
-        evaluateRuleView: async () => ({
-          rows: [],
-          displayByPath: new Map(),
-        }),
-      }) as ReturnType<AgentTurnRuntimePort["workplace"]>,
+    workplace:
+      args.workplaceOverride ??
+      (() =>
+        ({
+          renderDisplay: async () => "",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+          evaluateRuleView: async () => ({
+            rows: [],
+            displayByPath: new Map(),
+          }),
+        }) as ReturnType<AgentTurnRuntimePort["workplace"]>),
     userVfsTurn: mockUserVfsTurn(),
     sessions: ctx.sessions,
   };
@@ -259,9 +298,10 @@ async function ensureDefaultAgentModel(
 
 async function seedChildAgent(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
+  def: AgentDefinition = childAgentDef,
 ): Promise<void> {
   const registry = createAgentRegistryService(ctx.conn, ctx.state);
-  await registry.upsert("child-worker", childAgentDef);
+  await registry.upsert(def.name, def);
 }
 
 /** 包一层 sessions.createSubSession 捕获每个 childSessionId。 */
@@ -287,12 +327,29 @@ function captureChildSessions(
   }) as AgentTurnRuntimePort["sessions"];
 }
 
+/** 从 session 消息里提取全部 tool_result 文本，供共享工作区读回断言。 */
+async function collectToolResultTexts(
+  ctx: ReturnType<typeof getNovelMasterTestContext>,
+  sessionId: string,
+): Promise<string[]> {
+  const messages = await ctx.messages.listBySession(sessionId);
+  const texts: string[] = [];
+  for (const m of messages) {
+    for (const block of m.content.blocks) {
+      if (block.type === "tool_result") {
+        texts.push(block.content);
+      }
+    }
+  }
+  return texts;
+}
+
 // ===========================================================================
-// T-SS-1：createSubSession 后子 session 工作区为空，父 session 工作区不变
+// T-SS-1：createSubSession 仅 insert——子 session scope 天然为空，父工作区不变
 // ===========================================================================
 
-describe("Feature A T-SS-1：createSubSession 初始化空工作区", () => {
-  it("子 session 工作区为空（无 vfs_entry / 无 KKV），父 session 工作区不变", async () => {
+describe("T-SS-1：createSubSession 不初始化任何工作区", () => {
+  it("子 session 的 VFS scope 天然为空（无 vfs_entry / 无 KKV），父 session 工作区不变", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     // 给项目模板写一些文件，这样主 session create 后会有内容。
@@ -313,13 +370,13 @@ describe("Feature A T-SS-1：createSubSession 初始化空工作区", () => {
       "子",
     );
 
-    // 子 session 工作区应为空：无 vfs_entry。
+    // 子 session 的 VFS scope 天然为空：createSubSession 从不为其写入任何 entry。
     const childVfs = ctx.sessionVfs(project.id, child.id);
     const childEntries = await childVfs.list("/", { recursive: true });
     assert.equal(
       childEntries.length,
       0,
-      "子 session 工作区应为空（无文件）",
+      "子 session 的 VFS scope 应为空（无文件）",
     );
 
     // 直查 vfs_entry 表确认子 scope 没有任何行。
@@ -332,7 +389,7 @@ describe("Feature A T-SS-1：createSubSession 初始化空工作区", () => {
     const entryRows = await entryRepo.listEntriesUnderPrefix(sk, "/");
     assert.equal(entryRows.length, 0, "子 session scope 的 vfs_entry 表应为空");
 
-    // 子 session 的 KKV 也应为空（rule_snapshot / file_cache 缺失返回 null）。
+    // 子 session 的 KKV 也为空（不预写 rule_snapshot / file_cache）。
     const ruleSnap = await ctx.sessionKkv.get(child.id, "rule_snapshot", "any");
     assert.equal(ruleSnap, null, "子 session rule_snapshot 应为空");
     const fileCache = await ctx.sessionKkv.get(child.id, "file_cache", "any");
@@ -361,60 +418,59 @@ describe("Feature A T-SS-1：createSubSession 初始化空工作区", () => {
     const paths = (await childVfs.list("/", { recursive: true })).map((e) =>
       e.path,
     );
-    assert.ok(!paths.includes("/a.md"), "子 session 不应含项目模板 /a.md");
+    assert.ok(!paths.includes("/a.md"), "子 session scope 不应含项目模板 /a.md");
     assert.ok(
       !paths.includes("/sub/b.md"),
-      "子 session 不应含项目模板 /sub/b.md",
+      "子 session scope 不应含项目模板 /sub/b.md",
     );
-    assert.equal(paths.length, 0, "子 session 应完全为空");
+    assert.equal(paths.length, 0, "子 session scope 应完全为空");
   });
 });
 
 // ===========================================================================
-// T-SS-2：ChatAgentSession.workplaceScopeSessionId 语义
+// T-SS-2：workplaceScopeSessionId 子 session 指向父；kkvScopeSessionId 恒等自身
 // ===========================================================================
 
-describe("Feature A T-SS-2：ChatAgentSession.workplaceScopeSessionId 语义", () => {
-  it("主 session：workplaceScopeSessionId === sessionId（默认值）", () => {
+describe("T-SS-2：ChatAgentSession 工作区 / KKV 归属语义", () => {
+  it("主 session：workplaceScopeSessionId 与 kkvScopeSessionId 都等于 sessionId（默认值）", () => {
     const messages = {} as MessageService;
     const session = new ChatAgentSession(messages, "sess-main");
     assert.equal(session.sessionId, "sess-main");
     assert.equal(session.workplaceScopeSessionId, "sess-main");
+    assert.equal(session.kkvScopeSessionId, "sess-main");
   });
 
-  it("子 session：显式传 childSessionId 作为第三位，workplaceScopeSessionId === childSessionId", () => {
+  it("子 session：workplaceScopeSessionId 指向父，kkvScopeSessionId 恒等自身", () => {
     const messages = {} as MessageService;
-    // runChildAgent 装配形态：new ChatAgentSession(messages, childSessionId, childSessionId)
+    // runChildAgent 装配形态：new ChatAgentSession(messages, childSessionId, parentSessionId)
+    // 第三位 = 工作区归属（父）；第四位 kkvScopeSessionId 走默认值 = 自身。
     const session = new ChatAgentSession(
       messages,
       "child-sess",
-      "child-sess",
+      "parent-sess",
     );
     assert.equal(session.sessionId, "child-sess");
-    assert.equal(session.workplaceScopeSessionId, "child-sess");
-  });
-
-  it("子 session 不再指向父 session（Feature A 语义变更）", () => {
-    const messages = {} as MessageService;
-    // 验证构造时不会误传 parentSessionId——Feature A 后第三位必须是 childSessionId。
-    const session = new ChatAgentSession(
-      messages,
-      "child-sess",
-      "child-sess",
+    assert.equal(
+      session.workplaceScopeSessionId,
+      "parent-sess",
+      "子 session 的工作区归属应指向父 session",
     );
-    assert.notEqual(session.workplaceScopeSessionId, "parent-sess");
-    assert.equal(session.workplaceScopeSessionId, session.sessionId);
+    assert.equal(
+      session.kkvScopeSessionId,
+      "child-sess",
+      "子 session 的 KKV 归属应恒等自身（快照隔离）",
+    );
   });
 });
 
 // ===========================================================================
-// T-SS-3：runChildAgent 装配的 VFS 指向 childSessionId（mock 入参验证）
-// T-SS-4：子 agent 写文件落到子 session scope；父 session 工作区不变
-// T-SS-5：子 agent 能读到自己刚写的文件
+// T-SS-3：runChildAgent 装配的 VFS 指向 parentSessionId（mock 入参验证）
+// T-SS-4：子 agent 写文件落到父 session scope
+// T-SS-5：子 agent 能经父 scope 视图读回刚写的文件
 // ===========================================================================
 
-describe("Feature A T-SS-3/4/5：runChildAgent VFS 装配指向子 session + 读写隔离", () => {
-  it("T-SS-3：runChildAgent 装配时 sessionVfs 入参是 childSessionId（非 parentSessionId）", async () => {
+describe("T-SS-3/4/5：runChildAgent VFS 装配指向父 session + 共享读写", () => {
+  it("T-SS-3：runChildAgent 装配时 sessionVfs 入参是 parentSessionId（非 childSessionId）", async () => {
     const ctx = getNovelMasterTestContext();
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
@@ -434,22 +490,6 @@ describe("Feature A T-SS-3/4/5：runChildAgent VFS 装配指向子 session + 读
         textDoneResponse("子完成"),
         textDoneResponse("主完成"),
       ],
-      onCall: {
-        // 子 agent model 调用窗口（index=1）：此时 runChildAgent 已装配 VFS。
-        1: () => {
-          // sessionVfs 应已被调用过，且其中一次的 sessionId 是 childSessionId。
-          assert.ok(childIds.length > 0, "应已创建子 session");
-          const childId = childIds[0]!;
-          const childVfsCall = vfsCalls.find((c) => c.sessionId === childId);
-          assert.ok(
-            childVfsCall != null,
-            `runChildAgent 装配的 sessionVfs 入参应是 childSessionId（${childId}），但观察到: ${JSON.stringify(vfsCalls)}`,
-          );
-          // 也不应有以 parentSessionId 为 sessionId 的 VFS 装配发生在子 agent 装配后
-          // （主 agent 自己的 VFS 装配会带 parentSessionId，但那在子 agent 装配前）。
-          // 这里只断言「childSessionId 至少出现一次」。
-        },
-      },
     });
 
     const runtime = makeRuntime(ctx, {
@@ -473,16 +513,23 @@ describe("Feature A T-SS-3/4/5：runChildAgent VFS 装配指向子 session + 读
       { stream: false, onStream: () => {} },
     );
 
-    // 全程 sessionVfs 的入参里，childSessionId 至少出现一次（子 agent 装配）。
     assert.ok(childIds.length === 1, "应只创建 1 个子 session");
     const childId = childIds[0]!;
+    // 子 agent 装配的 sessionVfs 入参是 parentSessionId：主装配 1 次 + 子装配 1 次，
+    // 共 2 次都以 parent.id 为 sessionId。
+    const parentCalls = vfsCalls.filter((c) => c.sessionId === parent.id);
     assert.ok(
-      vfsCalls.some((c) => c.sessionId === childId),
-      "子 agent 装配应触发 sessionVfs(childSessionId)",
+      parentCalls.length >= 2,
+      `runChildAgent 装配应以 parentSessionId 调 sessionVfs（期望 >=2 次，实际 ${parentCalls.length}）：${JSON.stringify(vfsCalls)}`,
+    );
+    // 全程不应有任何以 childSessionId 装配的 VFS。
+    assert.ok(
+      !vfsCalls.some((c) => c.sessionId === childId),
+      `不应以 childSessionId 装配 VFS：${JSON.stringify(vfsCalls)}`,
     );
   });
 
-  it("T-SS-4：子 agent 写文件落到子 session scope；父 session 工作区不变", async () => {
+  it("T-SS-4：子 agent 写文件落到父 session scope；子 session scope 仍为空", async () => {
     const ctx = getNovelMasterTestContext();
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
@@ -529,32 +576,33 @@ describe("Feature A T-SS-3/4/5：runChildAgent VFS 装配指向子 session + 读
     assert.ok(childIds.length === 1, "应创建 1 个子 session");
     const childId = childIds[0]!;
 
-    // 子 session 工作区应含子 agent 写的 /outline.md。
-    const childVfs = ctx.sessionVfs(project.id, childId);
-    const childPaths = (await childVfs.list("/", { recursive: true })).map((e) =>
-      e.path,
-    );
-    assert.ok(
-      childPaths.includes("/outline.md"),
-      "子 session 工作区应含子 agent 写的 /outline.md",
-    );
-
-    // 父 session 工作区不应含 /outline.md（隔离）。
+    // 父 session 工作区应含子 agent 写的 /outline.md（共享工作区语义）。
     const parentPathsAfter = (await parentVfs.list("/", { recursive: true }))
       .map((e) => e.path)
       .sort();
     assert.ok(
-      !parentPathsAfter.includes("/outline.md"),
-      "父 session 工作区不应含子 agent 写的 /outline.md",
+      parentPathsAfter.includes("/outline.md"),
+      "父 session 工作区应含子 agent 写的 /outline.md",
     );
     assert.deepEqual(
       parentPathsAfter,
-      parentPathsBefore,
-      "父 session 工作区在子 agent 运行前后应完全不变",
+      [...parentPathsBefore, "/outline.md"].sort(),
+      "父 session 工作区除子 agent 写入外应无其他变化",
+    );
+
+    // 子 session 自己的 scope 仍为空（子 agent 从不在子 scope 写文件）。
+    const childVfs = ctx.sessionVfs(project.id, childId);
+    const childPaths = (await childVfs.list("/", { recursive: true })).map((e) =>
+      e.path,
+    );
+    assert.equal(
+      childPaths.length,
+      0,
+      "子 session 自己的 VFS scope 应始终为空",
     );
   });
 
-  it("T-SS-5：子 agent 写文件后能 read 自己刚写的文件（全链路用子 session scope）", async () => {
+  it("T-SS-5：子 agent 写文件后能 read 回来（读写都经父 scope 视图）", async () => {
     const ctx = getNovelMasterTestContext();
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
@@ -564,37 +612,20 @@ describe("Feature A T-SS-3/4/5：runChildAgent VFS 装配指向子 session + 读
 
     const abortRegistry = createAgentAbortRegistry();
     const childIds: string[] = [];
-    let childReadResult: { content: string } | null | undefined;
 
     const modelRequests = scriptedModel({
       // index 0：主 agent 派生 task；
       // index 1：子 agent 调 write 写 /note.md；
-      // index 2：子 agent 调 read 读 /note.md（验证能读到）；
+      // index 2：子 agent 调 read 读 /note.md（经父 scope 视图，应能读到）；
       // index 3：子 agent 返回完成文本；
       // index 4：主 agent 返回完成文本。
       responses: [
         taskToolUseResponse("tu-t5", "写后读"),
         writeToolUseResponse("tu-t5-w", "/note.md", "子代理笔记"),
-        {
-          assistantText: "",
-          blocks: [
-            {
-              type: "tool_use",
-              id: "tu-t5-r",
-              name: "read",
-              input: { path: "/note.md" },
-            },
-          ],
-          raw: {},
-        },
+        readToolUseResponse("tu-t5-r", "/note.md"),
         textDoneResponse("子完成"),
         textDoneResponse("主完成"),
       ],
-      onCall: {
-        // 子 agent read 之后的下一次 model 调用（index=3，子 agent 完成轮）：
-        // 此时 read 工具已执行，tool_result 已注入。我们在子 agent 完成轮捕获不到
-        // read 的返回值（它在 tool 执行层）。改为 run 结束后直查子 VFS 确认文件存在。
-      },
     });
 
     const runtime = makeRuntime(ctx, { modelRequests, abortRegistry });
@@ -611,24 +642,32 @@ describe("Feature A T-SS-3/4/5：runChildAgent VFS 装配指向子 session + 读
       { stream: false, onStream: () => {} },
     );
 
+    // 子 agent read/write 走同一父 scope 视图：read 的 tool_result 应含刚写的内容。
     const childId = childIds[0]!;
-    const childVfs = ctx.sessionVfs(project.id, childId);
-    // 子 agent 写的文件在子 session scope 可读（read 工具走同一 VFS scope）。
-    childReadResult = await childVfs.read("/note.md");
-    assert.equal(
-      childReadResult.content,
-      "子代理笔记",
-      "子 agent 应能 read 自己刚写的文件（子 session scope）",
+    const toolResults = await collectToolResultTexts(ctx, childId);
+    assert.ok(
+      toolResults.some((t) => t.includes("子代理笔记")),
+      "子 agent read 应能读到刚写的文件内容（经父 scope 视图）",
     );
+
+    // 父 VFS 直接可读（写入落在父 scope）。
+    const parentVfs = ctx.sessionVfs(project.id, parent.id);
+    const readBack = await parentVfs.read("/note.md");
+    assert.equal(readBack.content, "子代理笔记");
+    // 子 session 自己的 scope 仍为空。
+    const childPaths = (await ctx.sessionVfs(project.id, childId).list("/", {
+      recursive: true,
+    })).map((e) => e.path);
+    assert.equal(childPaths.length, 0, "子 session 自己的 VFS scope 应为空");
   });
 });
 
 // ===========================================================================
-// T-SS-6：子 agent VFS 变更后父会话收到 vfsMutated 标志
+// T-SS-6：子 agent VFS 变更通知（vfsMutated 标志，payload 保持会话树语义）
 // ===========================================================================
 
-describe("Feature A T-SS-6：子 agent VFS 变更通知（vfsMutated 标志）", () => {
-  it("子 agent 写文件后 STEP_COMMITTED / RUN_FINISHED 事件携带 vfsMutated=true", async () => {
+describe("T-SS-6：子 agent VFS 变更通知（vfsMutated 标志）", () => {
+  it("子 agent 写文件后 STEP_COMMITTED / RUN_FINISHED 事件携带 vfsMutated=true（sessionId=子会话）", async () => {
     const ctx = getNovelMasterTestContext();
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
@@ -680,6 +719,9 @@ describe("Feature A T-SS-6：子 agent VFS 变更通知（vfsMutated 标志）",
     const childId = childIds[0]!;
 
     // 子 agent 的 STEP_COMMITTED（tool_results phase）应带 vfsMutated=true。
+    // payload 的 sessionId 保持会话树语义（= childSessionId）：子会话浏览页靠它
+    // 匹配刷新 transcript / 生命周期。写入落点（父 scope）由 ToolResultBlock 的
+    // vfsScope 元数据表达，不占用生命周期事件的 sessionId。
     const childStepCommitted = stepCommittedPayloads.filter(
       (p) => p.sessionId === childId,
     );
@@ -700,41 +742,160 @@ describe("Feature A T-SS-6：子 agent VFS 变更通知（vfsMutated 标志）",
 });
 
 // ===========================================================================
-// T-SS-8：三层嵌套（父→子→孙）工作区独立
+// T-SS-7：子会话首次装配 workplace——KKV 写子 session，内容来自父 VFS
 // ===========================================================================
 
-describe("Feature A T-SS-8：嵌套 / 多子 session 工作区独立", () => {
-  it("装配层：父子孙三层 ChatAgentSession 各自的 workplaceScopeSessionId 都等于自身", () => {
+describe("T-SS-7：子会话首次装配 workplace 的 KKV 快照隔离", () => {
+  it("rule_snapshot / file_cache 写入子 session 自己的 KKV，父 KKV 无这两域，内容来自父 VFS", async () => {
+    const ctx = getNovelMasterTestContext();
+    await seedChildAgent(ctx, workplaceChildAgentDef);
+    await ensureDefaultAgentModel(ctx);
+
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const parent = await ctx.sessions.create(project.id, "父-T7");
+
+    const abortRegistry = createAgentAbortRegistry();
+    const childIds: string[] = [];
+
+    const modelRequests = scriptedModel({
+      // index 0：主 agent 派生 task；
+      // index 1：子 agent 调 write 写 /outline.md（成功后 upsert file_cache 到子 KKV）；
+      // index 2：子 agent 返回完成文本（该 step 装配 workplace：评估规则按父工作区，
+      //          快照与缓存写入子 KKV）；
+      // index 3：主 agent 返回完成文本。
+      responses: [
+        taskToolUseResponse("tu-t7", "写 outline"),
+        writeToolUseResponse("tu-t7-write", "/outline.md", "# 子代理产出"),
+        textDoneResponse("子完成"),
+        textDoneResponse("主完成"),
+      ],
+    });
+
+    // workplace mock：evaluateRuleView 恒返回 /outline.md 的 full 行（规则视图）。
+    // 注意 mock 不区分 scope——真实实现按 wtScope（=父 scope）评估，与本测试意图一致。
+    const runtime = makeRuntime(ctx, {
+      modelRequests,
+      abortRegistry,
+      workplaceOverride: (() =>
+        ({
+          renderDisplay: async () => "",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ workplaceDisplay: "" }),
+          evaluateRuleView: async () => ({
+            rows: [
+              {
+                kind: "file",
+                path: "/outline.md",
+                inclusionMode: "show",
+                displayState: "full",
+              },
+            ],
+            displayByPath: new Map([["/outline.md", "full"]]),
+          }),
+        }) as ReturnType<AgentTurnRuntimePort["workplace"]>),
+    });
+    captureChildSessions(runtime, childIds);
+    runtime.eventBus = realEventBus();
+
+    await ctx.state.setCurrentAgentId("test-default-agent");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+
+    await runAgentTurn(
+      runtime,
+      { projectId: project.id, sessionId: parent.id },
+      "派生子代理装配工作区",
+      { stream: false, onStream: () => {} },
+    );
+
+    assert.ok(childIds.length === 1, "应创建 1 个子 session");
+    const childId = childIds[0]!;
+
+    // 子 session 自己的 KKV：rule_snapshot 快照含 /outline.md。
+    const childSnapshotRaw = await ctx.sessionKkv.get(
+      childId,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+    );
+    assert.ok(
+      childSnapshotRaw != null && childSnapshotRaw.includes("/outline.md"),
+      "子 session 的 rule_snapshot 应已写入且含 /outline.md",
+    );
+
+    // 子 session 自己的 KKV：file_cache 缓存了来自父 VFS 的文件内容。
+    const childCacheRaw = await ctx.sessionKkv.get(
+      childId,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      fileCacheKey("full", "/outline.md"),
+    );
+    assert.ok(childCacheRaw != null, "子 session 的 file_cache 应已写入");
+    const parsed = parseFileCachePayload(childCacheRaw);
+    assert.equal(
+      parsed?.body,
+      "# 子代理产出",
+      "file_cache 内容应来自父 VFS 中的文件",
+    );
+
+    // 父 session 的 KKV：两域均未写入（快照隔离——父的 KKV 不被子会话装配触碰）。
+    const parentSnapshot = await ctx.sessionKkv.get(
+      parent.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+    );
+    assert.equal(
+      parentSnapshot,
+      null,
+      "父 session 的 rule_snapshot 不应被子会话装配写入",
+    );
+    const parentCache = await ctx.sessionKkv.get(
+      parent.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      fileCacheKey("full", "/outline.md"),
+    );
+    assert.equal(
+      parentCache,
+      null,
+      "父 session 的 file_cache 不应被子会话装配写入",
+    );
+
+    // 文件本体在父 VFS（快照指向的内容来自父工作区）。
+    const parentRead = await ctx
+      .sessionVfs(project.id, parent.id)
+      .read("/outline.md");
+    assert.equal(parentRead.content, "# 子代理产出");
+  });
+});
+
+// ===========================================================================
+// T-SS-8：三层嵌套工作区归属指向根父；多子 agent 写入落同一父工作区（共享）
+// ===========================================================================
+
+describe("T-SS-8：嵌套 / 多子 session 共享父工作区", () => {
+  it("装配层：父子孙三层 workplaceScopeSessionId 都指向根父；kkvScopeSessionId 各自等于自身", () => {
     const messages = {} as MessageService;
-    // Feature A 后，runChildAgent 递归装配时每层都 new ChatAgentSession(msg, childId, childId)，
-    // 即每层的 workplaceScopeSessionId 都是该层自己的 sessionId。验证这个不变式：
-    // 不论嵌套多深，每层 session 的归属都是自身，不会串到父或祖父。
-    const parentSession = new ChatAgentSession(messages, "parent", "parent");
-    const childSession = new ChatAgentSession(messages, "child", "child");
-    const grandchildSession = new ChatAgentSession(
-      messages,
-      "grandchild",
-      "grandchild",
-    );
-    assert.equal(parentSession.workplaceScopeSessionId, "parent");
-    assert.equal(childSession.workplaceScopeSessionId, "child");
-    assert.equal(grandchildSession.workplaceScopeSessionId, "grandchild");
-    // 每层都不会串到其他层。
-    assert.notEqual(
-      childSession.workplaceScopeSessionId,
-      parentSession.workplaceScopeSessionId,
-      "子层归属不应串到父层",
-    );
+    // runChildAgent 装配：主 session 归属自身；子 session 传 parentSessionId（根父）；
+    // 递归装配孙 session 时透传同一 parentSessionId（根父），不指向中间子会话。
+    const parentSession = new ChatAgentSession(messages, "root", "root");
+    const childSession = new ChatAgentSession(messages, "child", "root");
+    const grandchildSession = new ChatAgentSession(messages, "grandchild", "root");
+    // 三层工作区归属都指向根父。
+    assert.equal(parentSession.workplaceScopeSessionId, "root");
+    assert.equal(childSession.workplaceScopeSessionId, "root");
+    assert.equal(grandchildSession.workplaceScopeSessionId, "root");
+    // KKV 归属恒等自身（快照隔离，各层独立）。
+    assert.equal(parentSession.kkvScopeSessionId, "root");
+    assert.equal(childSession.kkvScopeSessionId, "child");
+    assert.equal(grandchildSession.kkvScopeSessionId, "grandchild");
+    // 孙层归属不串到中间子会话。
     assert.notEqual(
       grandchildSession.workplaceScopeSessionId,
-      childSession.workplaceScopeSessionId,
-      "孙层归属不应串到子层",
+      childSession.sessionId,
+      "孙层归属不应指向中间子会话",
     );
   });
 
-  it("行为层：同一父会话连续派生两个子 agent，两个子 session 工作区互不污染", async () => {
+  it("行为层：同一父会话连续派生两个子 agent，两个子写入都落同一父工作区（共享）", async () => {
     // task 工具在 depth>=2 deny 孙 agent（递归上限），但同一父可连派多个子 agent。
-    // 本用例验证：子 A 的工作区不会泄漏到子 B，每个子 session 独立。
+    // 本用例验证共享语义：子 B 能看到子 A 写入父工作区的文件。
     const ctx = getNovelMasterTestContext();
     await seedChildAgent(ctx);
     await ensureDefaultAgentModel(ctx);
@@ -750,14 +911,16 @@ describe("Feature A T-SS-8：嵌套 / 多子 session 工作区独立", () => {
       // index 1：子 A 写 /a.md；
       // index 2：子 A 返回完成；
       // index 3：主 agent 收到 A 结果后派生子 B（task）；
-      // index 4：子 B 写 /b.md；
-      // index 5：子 B 返回完成；
-      // index 6：主 agent 返回完成。
+      // index 4：子 B read /a.md（共享工作区：应能读到子 A 的产出）；
+      // index 5：子 B 写 /b.md；
+      // index 6：子 B 返回完成；
+      // index 7：主 agent 返回完成。
       responses: [
         taskToolUseResponse("tu-t8a", "子A写文件", "child-worker"),
         writeToolUseResponse("tu-t8a-w", "/a.md", "A 产出"),
         textDoneResponse("A完成"),
-        taskToolUseResponse("tu-t8b", "子B写文件", "child-worker"),
+        taskToolUseResponse("tu-t8b", "子B读写文件", "child-worker"),
+        readToolUseResponse("tu-t8b-r", "/a.md"),
         writeToolUseResponse("tu-t8b-w", "/b.md", "B 产出"),
         textDoneResponse("B完成"),
         textDoneResponse("主完成"),
@@ -781,17 +944,30 @@ describe("Feature A T-SS-8：嵌套 / 多子 session 工作区独立", () => {
     assert.equal(childIds.length, 2, "应创建 2 个兄弟子 session");
     const [childA, childB] = childIds;
 
-    const childAVfs = ctx.sessionVfs(project.id, childA!);
-    const childBVfs = ctx.sessionVfs(project.id, childB!);
-    const aPaths = (await childAVfs.list("/", { recursive: true })).map((e) =>
-      e.path,
+    // 两个子的写入都落同一父工作区。
+    const parentVfs = ctx.sessionVfs(project.id, parent.id);
+    const parentPaths = (await parentVfs.list("/", { recursive: true })).map(
+      (e) => e.path,
     );
-    const bPaths = (await childBVfs.list("/", { recursive: true })).map((e) =>
-      e.path,
+    assert.ok(parentPaths.includes("/a.md"), "父工作区应含子 A 写的 /a.md");
+    assert.ok(parentPaths.includes("/b.md"), "父工作区应含子 B 写的 /b.md");
+
+    // 子 B 能看到子 A 写入的文件（共享语义，不再是隔离）：read 的 tool_result 含内容。
+    const childBToolResults = await collectToolResultTexts(ctx, childB!);
+    assert.ok(
+      childBToolResults.some((t) => t.includes("A 产出")),
+      "子 B 应能 read 到子 A 写入父工作区的 /a.md",
     );
-    assert.ok(aPaths.includes("/a.md"), "子 A 工作区应含 /a.md");
-    assert.ok(!aPaths.includes("/b.md"), "子 A 工作区不应含子 B 的 /b.md");
-    assert.ok(bPaths.includes("/b.md"), "子 B 工作区应含 /b.md");
-    assert.ok(!bPaths.includes("/a.md"), "子 B 工作区不应含子 A 的 /a.md");
+
+    // 两个子 session 自己的 scope 仍各自为空。
+    for (const [label, childId] of [
+      ["子 A", childA],
+      ["子 B", childB],
+    ] as const) {
+      const paths = (
+        await ctx.sessionVfs(project.id, childId!).list("/", { recursive: true })
+      ).map((e) => e.path);
+      assert.equal(paths.length, 0, `${label} 自己的 VFS scope 应为空`);
+    }
   });
 });
