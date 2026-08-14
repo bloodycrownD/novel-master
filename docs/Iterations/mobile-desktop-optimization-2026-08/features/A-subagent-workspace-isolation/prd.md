@@ -5,6 +5,8 @@ dependency: mobile-desktop-optimization-2026-08/prd.md
 
 # Feature A — 子会话工作区隔离 PRD
 
+> **⚠️ 语义修订（2026-08-14，用户拍板）**：本文及 spec 所述「子会话从空产生独立工作区」的语义已被推翻。最终语义：**子会话共享父会话工作区**（子 agent 的 VFS 工具全部在父 session scope 操作，写入出现在父工作区，嵌套时孙指向根父）；**仅规则快照隔离**（rule_snapshot/file_cache 存子 session 自己的 KKV，规则评估按父工作区，`kkvScopeSessionId` 恒等自身）。实现已在 feature-d-bug-fixes 分支重做（commit 82903df/a6700b2/c4c9ae2/94810a4）。阅读本文时以下章节按新语义理解。
+
 ## 背景
 
 Novel Master 的子会话（subagent）能力在 `agent-subagent` 迭代落地：主 agent 通过 `task` 工具派生子 agent 执行子任务，子 agent 的对话历史落在独立的 `chat_session`（`parent_session_id` 指向父），UI 上可点工具卡片进入只读浏览页。
