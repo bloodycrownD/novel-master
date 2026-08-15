@@ -105,7 +105,8 @@ describe('chat-prompt-tokens.service', () => {
     expect(label).toBe('19% • 24K/128K · gemma');
     expect(mockResolvePromptTokensWithBackfill).toHaveBeenCalledWith(
       's1',
-      expect.any(Array),
+      // rawMessages 已无实际用途（回填废弃），仅签名兼容保留；mock bundle 不携带时为 undefined
+      undefined,
       expect.objectContaining({tokenizerOverride: 'gemma'}),
     );
   });

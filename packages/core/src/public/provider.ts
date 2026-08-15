@@ -133,7 +133,6 @@ export {
   resolveCurrentPromptTokens,
   resolvePromptTokensWithBackfill,
   pickLastPromptUsage,
-  backfillCacheFromMessages,
   sessionApiPromptTokenCache,
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,
