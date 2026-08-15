@@ -32,6 +32,7 @@ import type {
 import { VfsError } from "@/errors/vfs-errors.js";
 import { revisionPairKey } from "../../logic/revision-pair-key.js";
 import { escapeLike, normalizePrefix } from "./scope-prefix-helpers.js";
+import { ORPHAN_REVISION_GC_SQL } from "@/bootstrap/schema-migrations/orphan-revision-gc-v1.js";
 
 /** 批量 SQL 的分块大小（避免单条语句过长）。 */
 const REVISION_BATCH_CHUNK_SIZE = 100;
@@ -429,9 +430,12 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     await executeTemplate(
       this.conn,
       this.parser,
+      // 用复合 PK (entry_id, version) 寻址而非 rowid，这样 vfs_revision 可以安全地
+      // 切换到 WITHOUT ROWID（决策 4）。rowid 表和 WITHOUT ROWID 表都支持这种写法，
+      // 所以这条改动本身不改变 rowid 表上的行为。
       `DELETE FROM vfs_revision
-       WHERE rowid IN (
-         SELECT r.rowid
+       WHERE (entry_id, version) IN (
+         SELECT r.entry_id, r.version
          FROM vfs_revision r
          JOIN vfs_entry e ON e.entry_id = r.entry_id
          WHERE e.scope_key = #{scopeKey}
@@ -441,6 +445,20 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       { scopeKey, path: base, pattern },
     );
     return count;
+  }
+
+  async deleteGlobalOrphans(): Promise<number> {
+    // 不依赖 vfs_entry JOIN（孤儿 revision 的 entry 已删，JOIN 不到），
+    // 直接按「ref_count<=0 且 entry_id 不存在」全表清扫。
+    // revision DELETE 触发器会连带维护 vfs_content_blob.ref_count 并回收归零 blob。
+    // SQL 与 orphan-revision-gc-v1 migration 共享同一常量，避免两份逐字漂移。
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      ORPHAN_REVISION_GC_SQL,
+      {},
+    );
+    return Number(result.changes);
   }
 
   private async rowToRevision(row: Row): Promise<VfsRevision> {

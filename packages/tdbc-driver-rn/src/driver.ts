@@ -39,6 +39,10 @@ export class RnDriver implements TdbcDriver {
         name,
         location: options.location,
       });
+      // 显式开启 foreign_keys：OP-SQLite / quick-sqlite 默认 off，
+      // 不开的话 mobile 端 ON DELETE CASCADE 形同虚设。PRAGMA 不能
+      // 在事务内执行，所以放在连接刚建立、任何事务之前的这个位置。
+      await adapter.execute("PRAGMA foreign_keys = ON");
       return new RnConnection(adapter);
     } catch (cause) {
       throw new TdbcError("SQLITE_ERROR", "Failed to open database", {

@@ -173,4 +173,16 @@ export interface VfsRevisionRepository {
     scopeKey: string,
     pathPrefix: string,
   ): Promise<number>;
+
+  /**
+   * 全局清扫：删除 ref_count<=0 且 entry_id 已不在 vfs_entry 的 revision 行。
+   *
+   * 用于回收「删文件后遗留的 JOIN 孤儿」——deleteUnreferencedUnderScope 靠
+   * `JOIN vfs_entry` 用 (scope_key, path) 圈定范围，扫不到 entry 已删的 revision。
+   * 这条全局清扫不依赖 entry 存在，把 entry 已删且 ref_count<=0 的 revision 全清掉，
+   * revision DELETE 触发器会连带回收归零的 blob。
+   *
+   * @returns 删除行数
+   */
+  deleteGlobalOrphans(): Promise<number>;
 }

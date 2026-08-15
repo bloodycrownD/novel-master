@@ -15,17 +15,17 @@ CREATE TABLE IF NOT EXISTS message_checkpoint (
   message_id TEXT NOT NULL,
   created_at_ms INTEGER NOT NULL,
   PRIMARY KEY (session_id, message_id)
-)`.trim();
+) WITHOUT ROWID`.trim();
 
-/** File entry → revision version pointer at capture time (entry_id 形态). */
+/** File entry → revision version pointer at capture time (entry_id 形态，WITHOUT ROWID). */
 export const MESSAGE_CHECKPOINT_FILE_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS message_checkpoint_file (
   session_id TEXT NOT NULL,
   message_id TEXT NOT NULL,
   entry_id INTEGER NOT NULL,
-  revision_version INTEGER NOT NULL,
+  revision_version INTEGER NOT NULL CHECK (revision_version >= 1),
   PRIMARY KEY (session_id, message_id, entry_id)
-)`.trim();
+) WITHOUT ROWID`.trim();
 
 /** Session-scoped checkpoint lookup. */
 export const MESSAGE_CHECKPOINT_SESSION_INDEX_DDL = `
