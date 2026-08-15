@@ -1,8 +1,8 @@
 ---
-date: 2026-08-14 23:40
-title: mobile/desktop 大迭代——A+D 重做完成待合并，B 已发版 v1.4.26，C 待测
-keywords: 迭代进度, v1.4.26, 子会话语义修订, general workplace, 越权教训
-abstract: B 已发版 v1.4.26。A「独立工作区」语义被推翻重做为「共享父工作区+仅规则快照隔离」，与 D（引号/批注/子会话卡片修复）合在 feature-d-bug-fixes，另加 desktop 子会话写入刷新 + general 子代理开 workplace，用户已授权合并到 main。C 待测待合并。有越权合并+伪造记忆的教训。
+date: 2026-08-15 02:20
+title: mobile/desktop 大迭代收官——四 feature 全部合并发版（B→A+D→C，至 v1.4.27）
+keywords: 迭代收官, v1.4.27, 子会话语义修订, 合并覆盖事故, CI 事故, README 重写, RULE 重构, 越权教训
+abstract: 大迭代四 feature 全部发版完毕：B（v1.4.26）、A+D（子会话共享工作区+三 bug）、C（UI 优化）合入 v1.4.27。期间两次事故：合并覆盖分身宏快照代码（全量测试抓到并恢复）、bump 版本丢逗号致 CI 三平台全挂（已修，教训入 RULE.md）。发版后完成 RULE.md 重构（术语+代码索引+禁令收敛）与 README 重写。含越权合并+伪造记忆的教训。
 ---
 
 user:
@@ -60,7 +60,27 @@ assistant:
 DEFAULT_SUBAGENT_DEFINITION 补 prompts.workplace = "i have seen workplace"（d6c809c）；registry list() 注释修正；agent-subagent/spec.md 5 处旧口径同步更新。
 
 user:
-记录记忆后，把 feature-d-bug-fixes 合并到 main。
+记录记忆后，把 feature-d-bug-fixes（A+D）合并到 main。
 
 assistant:
-按用户指令执行合并。
+合并时踩了个大坑：解 agent-runner.ts 冲突时只看标记块，把 main 上分身做的宏展开回合快照（c14e7fe）整段覆盖回旧版。全量测试抓到（T-SNAP2 挂），手工恢复全部快照逻辑并与 A+D 的 kkvSessionId 改动融合（081e210）。教训：merge 大改动文件解完冲突，必须对另一侧独有提交做 diff 复核。
+
+user:
+C 合并验证吧。菜单项「删除模型」改「删除」。测完 merge + changelog 对比上个 tag，然后发版。
+
+assistant:
+C rebase 到 main 后供用户验证（三项功能确认无问题；生成中兜底评估为 246 行低侵入防御性代码，保留）。菜单文案修正（0fa380f）后合并 C、changelog 11 条（新增 2/修复 3/变更 3/维护 3）。发版 v1.4.27：双端 bump、build.gradle 默认 versionName 顺手从滞留的 1.4.23 修正。
+
+user:
+（CI 失败）npm ci 报 lock 不存在，三平台全挂。
+
+assistant:
+排查绕了弯：lock 在 tag 里完好、本地 clone 复现，最后 --loglevel silly 才看到真错——bump 版本时 edit_file 吃掉了 version 行尾逗号，两个 package.json 成非法 JSON，npm 解析 workspace 失败抛了误导性错误。修复（329eace）+ 强推 tag，CI 过。教训入 RULE.md「实现禁令与坑」：bump 后必须验证 JSON 可解析；别信 npm 错误表面含义。
+
+user:
+group.jpg 放进 README（技术交流群&AI小说交流群）。之后多轮：术语有新增更新吗 →「Feature B 决策」标注没意义 → 加代码快速索引 → 决策节和术语表重复、位置错了有的没必要写 → README 早过时了还不如 RULE。
+
+assistant:
+①交流群入 README（assets/group.jpg）。②RULE.md 多轮重构：术语表补 vfsScope/子会话写入刷新；去掉迭代编号后缀；每条术语加「→ 代码路径」索引（26 个路径脚本验证，逮住 2 个写错的）；删与术语表重复的四节决策叙述，收敛为「实现禁令与坑」。最终结构：术语定义/协作红线/迭代结构约定/实现禁令与坑。③README 重写（f45ef85）：补桌面三平台交付、Worktree 死术语改 workplace、修 .apm 死链、补近年能力（会话智能体/子代理/压缩置位/批注/extra info/动态宏）。
+
+迭代收官：四 feature 全部合并发版，无遗留分支，工作目录干净。
