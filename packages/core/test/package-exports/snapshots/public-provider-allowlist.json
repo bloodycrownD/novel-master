@@ -13,7 +13,6 @@
   "TokenizerError",
   "applySavedModelSettingsPatch",
   "assertSavedModelUuid",
-  "backfillCacheFromMessages",
   "clearProtocolAdapters",
   "clearTokenizerDrivers",
   "configureLlmFetch",

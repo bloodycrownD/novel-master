@@ -116,8 +116,8 @@ export async function loadChatPromptTokenStats(
       tokenizerOverride,
       savedModels: runtime.savedModelRepo,
     };
-    // cache miss → 从 bundle 的 rawMessages 回填，命中就重 resolve 一次（这次
-    // 会走 source=api）。compaction trigger 不走这里，行为不变。
+    // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
+    // 统一走本地 tokenizer 重算）。compaction trigger 不走这里，行为不变。
     const result = await resolvePromptTokensWithBackfill(
       scope.sessionId,
       rawMessages,
