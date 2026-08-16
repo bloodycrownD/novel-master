@@ -1,0 +1,42 @@
+{
+  "name": "@novel-master/tdbc-driver-op-sqlite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "import": "./dist/native.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "lint": "eslint src test",
+    "test": "tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@novel-master/core": "*",
+    "@op-engineering/op-sqlite": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@novel-master/tdbc-conformance": "*",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^11.10.0",
+    "tsx": "^4.21.0"
+  },
+  "peerDependenciesMeta": {
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    }
+  }
+}
