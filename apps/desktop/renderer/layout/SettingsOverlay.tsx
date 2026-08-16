@@ -22,6 +22,12 @@ import {
 } from "../features/settings/SettingsViews";
 import { AboutView } from "../features/settings/AboutView";
 import { WorkspaceSettingsView } from "../features/settings/WorkspaceSettingsView";
+import { SkillsManageView } from "../features/settings/SkillsManageView";
+import { SkillDetailView } from "../features/settings/SkillDetailView";
+import {
+  OPEN_SETTINGS_VIEW_EVENT,
+  type OpenSettingsViewDetail,
+} from "../features/skills/skill-ui";
 
 interface SettingsOverlayProps {
   open: boolean;
@@ -41,6 +47,11 @@ function getSettingsMainTitle(
   if (viewId === "modelSampling") return "采样配置";
   if (viewId === "regexRules") return "正则规则";
   if (viewId === "regexRuleEditor") return navState.editingRegexRuleId ? "编辑规则" : "新规则";
+  if (viewId === "skillDetail") {
+    return navState.viewingSkillRef != null
+      ? `技能 · ${navState.viewingSkillRef.name}`
+      : "技能详情";
+  }
   return SETTINGS_TOP_LEVEL[viewId] ?? "设置";
 }
 
@@ -94,6 +105,26 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
   const highlightId = getSettingsNavHighlightId(viewId);
   const showBack = !isSettingsTopLevelView(viewId);
 
+  // 会话技能面板 / 工具卡片 → 设置栈跨组件跳转（App 监听同名事件打开设置页）。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<OpenSettingsViewDetail>).detail;
+      if (detail == null) {
+        return;
+      }
+      if (detail.view === "skillsManage") {
+        navigateTopLevel("skillsManage");
+        return;
+      }
+      navStateRef.current.viewingSkillRef = detail.skillRef;
+      if (viewId !== "skillDetail") {
+        pushView("skillDetail");
+      }
+    };
+    window.addEventListener(OPEN_SETTINGS_VIEW_EVENT, handler);
+    return () => window.removeEventListener(OPEN_SETTINGS_VIEW_EVENT, handler);
+  }, [navigateTopLevel, pushView, viewId]);
+
   const renderContent = () => {
     switch (viewId) {
       case "workspace":
@@ -121,6 +152,10 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <RegexRulesView nav={nav} />;
       case "regexRuleEditor":
         return <RegexRuleEditorView nav={nav} />;
+      case "skillsManage":
+        return <SkillsManageView nav={nav} />;
+      case "skillDetail":
+        return <SkillDetailView nav={nav} />;
       default:
         return null;
     }

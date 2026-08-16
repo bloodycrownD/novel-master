@@ -6515,3 +6515,214 @@ html[data-theme="dark"] .chat-batch-bar {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ===== 技能管理（设置 · skillsManage / skillDetail / 会话面板 / $ 引用） ===== */
+
+.skills-manage__tabs {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.skills-manage__group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.skill-domain-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.skill-override-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.skill-invalid-tag {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--danger, #c0392b);
+  color: var(--danger, #c0392b);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.new-skill-modal__desc {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.new-skill-modal__error {
+  margin: 8px 0 0;
+  color: var(--danger, #c0392b);
+  font-size: 12px;
+}
+
+.skill-detail__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.skill-detail__name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.skill-detail__body {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+  min-height: 320px;
+}
+
+.skill-detail__files {
+  width: 220px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.skill-detail__files-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.skill-detail__file-add {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.skill-detail__file-row {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.skill-detail__file-row.is-active {
+  background: var(--bg-secondary, rgba(127, 127, 127, 0.12));
+}
+
+.skill-detail__file-open {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  text-align: left;
+  padding: 6px 6px;
+  cursor: pointer;
+}
+
+.skill-detail__file-open span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-detail__entry-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.skill-detail__file-delete {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 6px;
+  opacity: 0.6;
+}
+
+.skill-detail__file-delete:hover {
+  color: var(--danger, #c0392b);
+  opacity: 1;
+}
+
+.skill-detail__editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skill-detail__editor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skill-detail__path-chip {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.skill-detail__empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.skill-detail__content {
+  flex: 1;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  overflow-y: auto;
+}
+
+.skill-detail__status {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
