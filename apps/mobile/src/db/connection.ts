@@ -29,7 +29,24 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
       registerOpSqliteDriver();
       registerSkspAndroidDriver();
       registerTokenizerRnDriver();
-      const c = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
+      let c: TdbcConnection;
+      try {
+        c = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
+      } catch (openErr: unknown) {
+        // open 阶段的错误同样打出 cause 链：驱动层的 TdbcError 会把原始
+        // 错误（JSI 异常、路径不可写等）包在 cause 里，UI 只显示主文案。
+        console.error('[nm-boot] open 失败:', openErr);
+        let openCause: unknown =
+          openErr instanceof Error ? openErr.cause : undefined;
+        let openDepth = 0;
+        while (openCause && openDepth < 5) {
+          console.error(`[nm-boot] open cause[${openDepth}]:`, openCause);
+          openCause =
+            openCause instanceof Error ? openCause.cause : undefined;
+          openDepth++;
+        }
+        throw openErr;
+      }
       try {
         await bootstrapNovelMaster(c);
       } catch (bootErr: unknown) {

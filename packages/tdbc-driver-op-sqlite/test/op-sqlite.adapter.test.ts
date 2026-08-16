@@ -74,8 +74,10 @@ describe("BaseOpSqliteAdapter", () => {
     const adapter = new BaseOpSqliteAdapter(bindings);
     await adapter.open({ name: "novel_master_vfs", location: "default" });
 
+    // undefined 键不应传给原生层（C++ 侧 hasProperty 后直接 asString/asBool，
+    // 键存在但值为 undefined 会抛 JSI 错误）。
     assert.deepEqual(bindings.openCalls, [
-      { name: "novel_master_vfs", location: "default", failOnCreate: undefined },
+      { name: "novel_master_vfs", location: "default" },
     ]);
 
     await adapter.close();
@@ -202,7 +204,7 @@ describe("OpSqliteDriver.open (legacy layout probe)", () => {
         location: "/data/user/0/app/files/default",
         failOnCreate: true,
       },
-      { name: "novel_master_vfs", location: undefined, failOnCreate: undefined },
+      { name: "novel_master_vfs" },
     ]);
   });
 
@@ -220,7 +222,7 @@ describe("OpSqliteDriver.open (legacy layout probe)", () => {
     });
 
     assert.deepEqual(bindings.openCalls, [
-      { name: "novel_master_vfs", location: "custom", failOnCreate: undefined },
+      { name: "novel_master_vfs", location: "custom" },
     ]);
   });
 });

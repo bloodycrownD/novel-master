@@ -81,11 +81,19 @@ export class BaseOpSqliteAdapter implements OpSqliteAdapter {
     failOnCreate?: boolean;
   }): Promise<void> {
     // 持住 DB 连接对象：execute/executeSync/close/getDbPath 都走实例方法。
-    this.db = this.bindings.open({
+    // 注意：undefined 值的键不能传给原生层——op-sqlite C++ 侧用
+    // hasProperty 探测后直接 asString/asBool，键存在但值为 undefined
+    // 会抛 JSI 错误（真机事故：fallback open 传 location: undefined 直接炸）。
+    const nativeOptions: {name: string; location?: string; failOnCreate?: boolean} = {
       name: options.name,
-      location: options.location,
-      failOnCreate: options.failOnCreate,
-    });
+    };
+    if (options.location !== undefined) {
+      nativeOptions.location = options.location;
+    }
+    if (options.failOnCreate !== undefined) {
+      nativeOptions.failOnCreate = options.failOnCreate;
+    }
+    this.db = this.bindings.open(nativeOptions);
   }
 
   async close(): Promise<void> {
