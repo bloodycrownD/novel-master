@@ -3,7 +3,6 @@ import type { MessageAttachmentDto, WorkplaceListRowDto } from "@shared/ipc-type
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
-  replaceComposerStatusAttachments,
   TOOL_TURN_BRIDGE_TEXT,
 } from "@shared/logic/chat";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -131,13 +130,7 @@ export function ChatComposer({
         return;
       }
       onAttachmentsChange(
-        unionComposerStatusWithAnnotate(
-          replaceComposerStatusAttachments(
-            attachmentsRef.current,
-            payload.attachments,
-          ),
-          sessionId,
-        ),
+        unionComposerStatusWithAnnotate(payload.attachments, sessionId),
       );
     });
   }, [sessionId, onAttachmentsChange]);
@@ -336,13 +329,7 @@ export function ChatComposer({
       if (statusRes.ok) {
         // 用 live ref：若 append 已晚清 attachments，避免 stale previous 写回
         onAttachmentsChange(
-          unionComposerStatusWithAnnotate(
-            replaceComposerStatusAttachments(
-              attachmentsRef.current,
-              statusRes.data,
-            ),
-            sessionId,
-          ),
+          unionComposerStatusWithAnnotate(statusRes.data, sessionId),
         );
       }
       return true;

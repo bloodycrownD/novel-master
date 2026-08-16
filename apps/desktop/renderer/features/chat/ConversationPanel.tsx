@@ -1,7 +1,6 @@
 import {
   isPlainUserUndoSendEligible,
   parseComposerDraftJson,
-  replaceComposerStatusAttachments,
   resolveRollbackConfirmMessage,
   serializeComposerDraftJson,
   type RollbackMode,
@@ -269,12 +268,9 @@ export function ConversationPanel({
       const status = statusRes.ok ? statusRes.data : [];
       setComposerText(draft.text);
       // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
-      // replace 后再 ∪ annotate（切会话回来 store 未清则 chip 仍在）
+      // 投影直接作状态条，再 ∪ annotate（切会话回来 store 未清则 chip 仍在）
       setComposerAttachments(
-        unionComposerStatusWithAnnotate(
-          replaceComposerStatusAttachments([], status),
-          sessionId,
-        ),
+        unionComposerStatusWithAnnotate(status, sessionId),
       );
       composerDraftHydratedRef.current = true;
     })();
