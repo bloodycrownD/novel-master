@@ -3,6 +3,9 @@
  *
  * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace（历史只读兼容）；user_ops 不参与。
  * 文件 attach 非首次 → alreadyReferenced 短提示；workplace 非首次 → content 空；目录每次拼树仍计 seen。
+ * skillAttach（`$技能名`）走 `skill:{name}` 命名空间 seen：首次读生效副本 SKILL.md 全文
+ * （跨域读不经 session file_cache，直接 SkillService）；不存在 → 一行提示且不写 seen（自愈）；
+ * 常驻索引不计入「已出现」，被压缩/置位重置随可见窗口自动继承。
  * 增量统一为 `<action name="userAttach|workplaceChange|…">` + JSON（行号正文；无 mtime/createdAt）。
  * `runtime.extraInfo`（来自 agent 配置 customAttach）非空时，仅对本次请求里最新一条
  * 非隐藏 user 输入消息生效——wrap 阶段在 `</user-ops>` 后注入 `<extra-info>` 纯文本块；
@@ -32,6 +35,7 @@ import {
 import { isUserInputMessage } from "./message-content-helpers.js";
 import {
   buildAlreadyReferencedActionXml,
+  buildAttachmentActionXml,
   buildDirTreeActionXml,
   buildFileRefActionXml,
 } from "./build-attachment-action-xml.js";
@@ -39,10 +43,12 @@ import {
   createPromptPathSeenSet,
   tryNormalizePromptSeenPath,
 } from "./prompt-path-seen.js";
+import { skillSeenKey } from "./scan-skill-attachments.js";
 import { renderDirAttachTree } from "./render-dir-attach-tree.js";
 import { wrapUserMessageForLlm } from "./wrap-user-message-for-llm.js";
 import { expandDynamicMacros } from "@/domain/prompt/logic/expand-dynamic-macros.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
+import type { SkillService } from "@/service/skills/skills.port.js";
 
 /** {@link prepareUserMessagesForPrompt} 运行时依赖与可选初始 seen。 */
 export interface PrepareUserMessagesForPromptRuntime {
@@ -65,6 +71,13 @@ export interface PrepareUserMessagesForPromptRuntime {
   readonly workplace?: WorkplaceService;
   /** 回合快照的 `{{$filetree}}` 预渲染结果；传入时优先于实时渲染。 */
   readonly filetree?: string;
+  /**
+   * 技能服务（skillAttach 附件 hydrate 用）。缺省时 skillAttach 附件原样带过
+   * （不读盘、不写 seen），调用方接线后自动生效。
+   */
+  readonly skills?: SkillService;
+  /** skillAttach 存在性判定与生效副本读取的解析上下文。 */
+  readonly projectId?: string;
 }
 
 async function resolveWorkplaceStatus(
@@ -269,14 +282,90 @@ function stripLegacyFileWrap(content: string, logicalPath: string): string {
   return trimmed;
 }
 
+/** skillAttach 不存在 / 读盘竞态失败时的一行提示（不附全文）。 */
+const SKILL_ATTACH_MISSING_NOTE = "技能不存在或已删除";
+
+/** skillAttach 不存在提示行 XML（不写 seen：技能后续创建可自愈重附全文）。 */
+function buildSkillAttachMissingXml(name: string): string {
+  return buildAttachmentActionXml("skillAttach", {
+    name,
+    missing: true,
+    note: SKILL_ATTACH_MISSING_NOTE,
+  });
+}
+
 /**
- * attach 源：目录每次树；文本首次全文 / 其后短提示；image/binary 不套短提示仍计 seen。
+ * skillAttach 附件：skill:{name} 命名空间 seen（与路径 seen 同集合）。
+ * 首次读生效副本 SKILL.md 全文；非首次 alreadyReferenced 短标记；
+ * 存在性按合并视图（含无效技能，禁用不影响）判定，不存在 → 一行提示且不写 seen。
+ * skills 服务未接线时原样带过（不读盘、不写 seen）。
+ */
+async function hydrateSkillAttachWithSeen(
+  attachment: MessageAttachment,
+  runtime: PrepareUserMessagesForPromptRuntime,
+  seen: Set<string>,
+  resolveSkillNames: () => Promise<Set<string>>,
+): Promise<MessageAttachment> {
+  const name = attachment.skillName;
+  if (typeof name !== "string" || name === "") {
+    return attachment;
+  }
+  const key = skillSeenKey(name);
+  if (seen.has(key)) {
+    return {
+      ...attachment,
+      action: "skillAttach",
+      content: buildAttachmentActionXml("skillAttach", {
+        name,
+        alreadyReferenced: true,
+      }),
+    };
+  }
+  if (runtime.skills == null || runtime.projectId == null) {
+    return attachment;
+  }
+  // 存在性按合并视图（global ∪ 当前项目，含无效技能；禁用不影响）
+  const names = await resolveSkillNames();
+  if (!names.has(name)) {
+    return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
+  }
+  try {
+    // 跨域读不经 session file_cache：直接读生效副本 SKILL.md 全文（含无效技能原文）
+    const file = await runtime.skills.readSkillFile(
+      undefined,
+      name,
+      undefined,
+      runtime.projectId,
+    );
+    seen.add(key);
+    return {
+      ...attachment,
+      action: "skillAttach",
+      content: buildAttachmentActionXml("skillAttach", {
+        name,
+        content: file.content,
+      }),
+    };
+  } catch {
+    // 存在性判定与读盘之间被删除等竞态：按不存在处理（不写 seen）
+    return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
+  }
+}
+
+/**
+ * attach 源：目录每次树；文本首次全文 / 其后短提示；image/binary 不套短提示仍计 seen；
+ * skillAttach 走技能专用 hydrate（skill: 命名空间）。
  */
 async function hydrateAttachWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
+  resolveSkillNames: () => Promise<Set<string>>,
 ): Promise<MessageAttachment> {
+  // skillAttach：无 path，不走路径规范化/文件 hydrate
+  if (attachment.action === "skillAttach") {
+    return hydrateSkillAttachWithSeen(attachment, runtime, seen, resolveSkillNames);
+  }
   const rawPath = attachment.path;
   if (rawPath == null || rawPath === "") {
     return attachment;
@@ -358,6 +447,7 @@ async function prepareOneUserMessage(
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
   isLatestUser: boolean,
+  resolveSkillNames: () => Promise<Set<string>>,
 ): Promise<ChatMessage> {
   if (message.hidden) {
     // hidden：不 hydrate/wrap；库内 attachments 保留在原消息上
@@ -386,7 +476,7 @@ async function prepareOneUserMessage(
   for (const att of attachList) {
     hydratedBySource.set(
       att,
-      await hydrateAttachWithSeen(att, runtime, seen),
+      await hydrateAttachWithSeen(att, runtime, seen, resolveSkillNames),
     );
   }
   for (const att of workplaceList) {
@@ -459,6 +549,23 @@ export async function prepareUserMessagesForPrompt(
     }
   }
   const out: ChatMessage[] = [];
+  // 每轮 prepare 预算一次合并视图技能名集合（skillAttach 存在性判定用）；
+  // 惰性求值——本轮没有命中存在性判定的 skillAttach 时不产生 IO
+  let skillNames: Promise<Set<string>> | null = null;
+  const resolveSkillNames = (): Promise<Set<string>> => {
+    skillNames ??= (async () => {
+      if (runtime.skills == null || runtime.projectId == null) {
+        return new Set<string>();
+      }
+      try {
+        const list = await runtime.skills.effectiveSkills(runtime.projectId);
+        return new Set(list.map((s) => s.name));
+      } catch {
+        return new Set<string>();
+      }
+    })();
+    return skillNames;
+  };
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]!;
     if (message.role !== "user") {
@@ -477,6 +584,7 @@ export async function prepareUserMessagesForPrompt(
         resolvedRuntime,
         seen,
         i === latestUserInputIndex,
+        resolveSkillNames,
       ),
     );
   }
