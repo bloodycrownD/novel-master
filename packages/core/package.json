@@ -86,6 +86,10 @@
       "types": "./dist/public/session-kkv.d.ts",
       "import": "./dist/public/session-kkv.js"
     },
+    "./skills": {
+      "types": "./dist/public/skills.d.ts",
+      "import": "./dist/public/skills.js"
+    },
     "./config-forms": {
       "types": "./dist/config-forms/index.d.ts",
       "import": "./dist/config-forms/index.js"
