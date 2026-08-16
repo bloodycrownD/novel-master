@@ -6726,3 +6726,119 @@ html[data-theme="dark"] .chat-batch-bar {
   font-size: 12px;
   color: var(--text-secondary);
 }
+
+.session-detail-pick__icon--skills {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.session-skill-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+}
+
+.session-skill-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-skill-panel__summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.session-skill-panel__action {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.session-skill-panel__action:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.session-skill-panel__action--primary {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.session-skill-panel__error {
+  margin: 0;
+  color: var(--danger, #c0392b);
+  font-size: 12px;
+}
+
+.session-skill-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-skill-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.session-skill-panel__row.is-off .session-skill-panel__name {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.session-skill-panel__row.is-invalid {
+  opacity: 0.7;
+}
+
+.session-skill-panel__info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.session-skill-panel__name {
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.session-skill-panel__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.session-skill-panel__empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
