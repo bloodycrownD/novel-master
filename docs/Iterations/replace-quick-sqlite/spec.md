@@ -78,6 +78,7 @@ journal_mode 保持 SQLite 默认（DELETE），本迭代不引入 WAL——最�
 quick-sqlite `open({location: 'default'})` 把库落在 `files/default/novel_master_vfs`；op-sqlite 的默认落盘路径不同（待真机核对）。策略：
 
 1. 新包 `OpSqliteDriver.open` 时优先探测旧布局绝对路径（`DocumentDir/default/novel_master_vfs`），存在则以**绝对路径**打开旧文件（op-sqlite `open` 的 `location` 支持绝对路径，实施时以 `getDbPath()` 日志验证）。
+   > 实现补记（cr-func 核对）：实际采用 `failOnCreate: true` 试开策略——探测命中后以「创建即失败」模式打开旧文件，打开失败（说明路径不存在）则落回 op-sqlite 默认布局。相比「先探测再打开」多防一层竞态：避免探测通过但打开瞬间新建空库掩盖旧数据。旧目录解析与实际路径查询提升为 adapter 可选方法 `getLegacyDefaultDir()` / `getDbPath()`（新包自有契约，不波及旧包与 core；mock 不实现后两者）。
 2. 旧文件不存在（新装用户）→ 走 op-sqlite 默认布局。
 3. `apps/mobile/src/db/db-file-path.ts` 的候选路径集合同步扩充两种布局（备份/恢复是文件级拷贝，依赖此函数），保留 quick-sqlite 旧布局候选以兼容未升级完成的存量与回滚场景。
 
@@ -135,7 +136,8 @@ package-lock.json                     # 更新
 
 - Step 1 — phase-deps — blocking: yes — qa: auto：安装依赖与编译配置。`apps/mobile/package.json` 加 `@op-engineering/op-sqlite@18.0.0`（**quick-sqlite 不删**，作回滚线）；仓库根 `package.json` 加 `op-sqlite.sqliteFlags` 配置块；`npm install` 更新 lockfile。注意：worktree 的 node_modules 是主仓软链，安装会物理写主仓 `node_modules`——安装期间确保主仓无并行 Metro/gradle 构建。
 - Step 2 — phase-package-scaffold — blocking: yes — qa: auto：新包骨架。创建 `packages/tdbc-driver-op-sqlite`（package.json / tsconfig / npm test 脚本照抄 tdbc-driver-rn；根 workspaces 若为 `packages/*` 通配则自动纳入）；复制协议层六文件（adapter / connection / driver / mutex / row-mapper / bindings）与 index/native 入口，类型同步更名（`Rn*` → `OpSqlite*`），驱动注册名 `"op-sqlite"`。此步完成后包能空转 build 通过（adapter 实现为占位）。
-- Step 3 — phase-adapter — blocking: yes — qa: auto：实现 adapter。`impl/op-sqlite.adapter.ts`（`open` 持住返回的 `DB` 对象；`execute → db.execute`（异步）、`executeSync → db.executeSync`；`metadata` 的 `name → columnName` 转换；`rows` 数组形态直接透传）+ native/dynamic 两个入口变体（op-sqlite 自带 TS 类型，无手写 .d.ts）。
+- Step 3 — phase-adapter — blocking: yes — qa: auto：实现 adapter。`impl/op-sqlite.adapter.ts`（`open` 持住返回的 `DB` 对象；`execute → db.execute`（异步）、`executeSync → db.executeSync`；`metadata` 的 `name → columnName` 转换；`rows` 数组形态直接透传）+ native/dynamic 两个入口变体。
+  > 实现补记（cr-func 核对）：op-sqlite 18.0.0 发布的 `lib/typescript/src/index.d.ts` 存在 `export * from "./functions"` 无扩展名导入的 bug，NodeNext 模块解析下静默解析为空导致 typecheck 挂。故新增 `src/op-sqlite.d.ts` 最小 ambient 补丁（约 70 行，仅覆盖新包用到的 API 面）。**升级 op-sqlite 到修复版后应删除此文件**（文件头注释已标注）。
 - Step 4 — phase-driver-open — blocking: yes — qa: auto：`OpSqliteDriver.open` 增强：追加 `PRAGMA temp_store = MEMORY`（运行期兑底编译 flag）；旧布局路径探测——`DocumentDir/default/novel_master_vfs` 存在时以绝对路径 open（保持存量库原地可用），并在 open 后执行 `getDbPath()` 打日志核对实际落盘路径（真机验证的证据输出）。
 - Step 5 — phase-mobile-switch — blocking: yes — qa: auto：mobile 切换与路径兼容。`src/db/connection.ts` 与 `src/services/db-backup.service.ts` 各改两行（import + driver 名）；`db-file-path.ts` 候选路径集合扩充 op-sqlite 布局 + 保留 quick-sqlite 旧布局；同步更新 `__tests__/connection.test.ts` 断言。
 - Step 6 — phase-tests — blocking: yes — qa: auto：测试复制改写。conformance（C1-C11）/ nested-batch parity（NB 系列）/ transaction-batch / mock-adapter 复制到新包（import 改指本包，断言零改动）；`op-sqlite.adapter.test.ts` 重写（fake bindings 为连接对象形状：`execute`/`executeSync` 实例方法、纯数组 rows、`{name}` metadata）；`bindings` / `row-mapper` 用例同步。
