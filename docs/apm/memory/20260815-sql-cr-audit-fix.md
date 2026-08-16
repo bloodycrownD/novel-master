@@ -58,3 +58,21 @@ user:
 
 assistant:
 wt-B（dd74f1b）合入 d3f3d09：预判的 session.service.ts 冲突未发生，git 自动合并成功（+5/-7）。合并门槛全过：core 全量 1951/1951 零失败（1937 + wt-B 新增 14 条，含 fork-copy-batch-insert / vfs-delete-batch / rollback-optimistic-lock-count / workplace-copy-scope-batch / vfs-repair-ref-count-batch / sql-counting-connection 等新测试文件）、core+mobile typecheck 双绿（cr-p1-2 删 collectAllReferencedHashes 的 merge gate 过）、新旧驱动包 31/25 全过。P1 批量写 × P2 CHECK 约束交叉场景由全量套件覆盖（所有测试跑在合并后的同一 schema+代码上）。坑：npm test 的 `!(performance)` extglob 在 dash 下炸，要 bash -c + shopt -s extglob 跑。剩余：真机验收（wt-B 的回滚/复制性能体感）+ 发版前 rebase main。
+
+user:
+真机验收发现：migration 过了、数据核对全对，但会话复制比 v1.4.27 还卡，为什么？
+
+assistant:
+三连根因追杀，全部修复并真机验证：①事务定时器——fe59d81 把事务内改 executeSync 防真机 disk I/O error 时顺手加了每语句 setTimeout(0)，1.5w~2w 条小语句的复制路径被定时器往返放大成几十秒；改为 16ms 时间量子让步（af3c5a9），让步次数 O(语句数)→O(时长/16ms)。教训：改 dist 消费的包必须重建 dist，否则真机跑的还是旧代码，白测一轮。②seedForkCopyParity 逐 head 三往返（ensureBlob+append+adjustRef）改 batchAppendWithRefCount 一次批量 INSERT（08b4e15）——node 上看不出差（同步驱动往返近零），别被基准麻痹。③真大头：seedCheckpoints 的 conn.batch 在两个驱动层都是逐行 JSI 往返，checkpoint_file 行数=消息数×文件数（200 文件×500 消息=10 万行），真机每行 10~30µs 纯往返 1~3s；改 insertMultiValues 多值 INSERT 分块（900 变量上限，fc7c713），往返 O(行数)→O(行数/块)。真机最终：复制从几十秒降到 1s 级（余下为手机 SQLite 引擎 15 万行插入的物理底价，debug APK 再放大一部分，属可接受）。工具坑：terminal 工具对 heredoc 解析会截断（"tool input was not fully received"），长文件用 write_file；create_directory 新建目录后 write_file 仍报 not in project，写到既有目录即可。基准脚本留存 packages/core/test/session-copy.perf.ts（.perf.ts 后缀不入套件），带分段计时复刻，回归时可复用。
+
+user:
+rollback 还慢；这些修复有价值吗？顺便把 rollback 留 issue，docs/issues 也该更新了。
+
+assistant:
+rollback 慢是 reconcileVfsPaths 逐 path（发现 10b，fix-spec 决策 2 明确留后续）：每条 path outcome 不同（same_version/same_hash/restored/deleted）+ backfill 路径间有依赖，不能像 checkpoint 那样一条多值 INSERT 打包。已登记 docs/issues/rollback-reconcile-vfs-paths-batching.md（2000 文件=26099 次 SQL 实测、现状复核、按 outcome 分组批量化的修复方向）；两个存量 issue 同步复核——stream-freeze 标已闭环、lightweight-refresh 标注 onOpenDrawer 待办过时（4365b7a）。价值判断：quick-sqlite 是先烂的（官方废弃+SIGSEGV 内存损坏），驱动替换不是为修复买单而是地基更换；28 条发现修了 22 条，性能（复制几十秒→1s）、完整性（约束拦截+孤儿 GC）、稳定性（migration 真机可跑）三维收益。CHANGELOG Unreleased 按用户视角归五条（681b42b），过程 bug（migration 崩溃/metro 三连/定时器回归）按规范不写修复段。
+
+user:
+验收了，发布吧。
+
+assistant:
+发版执行：确认无需 rebase（fd527af 已同步 main，main 完全包含于 HEAD，快进合并即可）；git 代理 7890 未开，用 -c http.proxy= 直连 fetch 成功。版本 1.4.28：CHANGELOG Unreleased→[1.4.28]、双端 package.json bump、build.gradle 默认 versionName 同步。APM 文件（skill-capability-design）有并行会话未提交改动，stash 过渡绕开。
