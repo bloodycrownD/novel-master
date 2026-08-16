@@ -14,10 +14,15 @@ function baseRuntime(overrides: Partial<any> = {}) {
         mode: 'custom',
         definition: {
           name: 'x',
-          prompts: { persist: [], dynamic: [] },
+          prompts: {persist: [], dynamic: []},
           model: 'openai/gpt',
         },
       }),
+    },
+    // chat-session-detail-page 起：项目智能体下线，会话独立持有 agentId，
+    // resolveAgentForProject 改从 sessions.getSessionAgentConfig 取 agentId。
+    sessions: {
+      getSessionAgentConfig: async () => ({ agentId: 'a1' }),
     },
     agentRegistry: {
       listAgentIds: async () => ['a1'],
