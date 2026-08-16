@@ -22,8 +22,16 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
+// 真实 useFocusEffect 只在 focus 时调 cb；若每次 render 都调，会与
+// refreshChatMeta 每次 setAgentMeta 新对象组成无限重渲染循环，act 永不结束。
+let mockFocusInvoked = false;
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: (cb: () => void) => cb(),
+  useFocusEffect: (cb: () => void) => {
+    if (!mockFocusInvoked) {
+      mockFocusInvoked = true;
+      cb();
+    }
+  },
   useNavigation: () => ({navigate: jest.fn(), setOptions: jest.fn()}),
   useIsFocused: () => true,
 }));
