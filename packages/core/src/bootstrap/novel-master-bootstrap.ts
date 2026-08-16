@@ -24,6 +24,7 @@ import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
 import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
+import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
@@ -56,7 +57,7 @@ import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sq
  * 否则已升版库会走快路径而漏建表/漏补列。新增 schema migration 不必改此值
  * （快路径仍会执行 pending migration）。
  */
-export const SCHEMA_BOOT_VERSION = 5;
+export const SCHEMA_BOOT_VERSION = 6;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -69,6 +70,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKPLACE_SCHEMA_STATEMENTS,
+  ...SKILLS_SCHEMA_STATEMENTS,
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
   ...REGEX_SCHEMA_STATEMENTS,
