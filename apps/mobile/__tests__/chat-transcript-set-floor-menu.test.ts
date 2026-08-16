@@ -21,14 +21,13 @@ function buildWebViewMenuActions(
   const items: string[] = [];
   if (row.text) items.push('edit');
   items.push('copy');
-  if (row.hidden) items.push('unhide');
   const showSetFloor =
     row.kind === 'message' &&
     row.role === 'user' &&
     !hitEl?.closest?.('.tool-card, .tool-group-item');
   if (showSetFloor) items.push('set-floor');
   items.push('fork');
-  if (!row.hidden) items.push('rollback');
+  items.push('rollback');
   return items;
 }
 
@@ -74,24 +73,23 @@ describe('WebView buildMenuItems set-floor eligibility', () => {
   });
 });
 
-describe('WebView buildMenuItems unhide（T-UH3 镜像）', () => {
-  it('hidden 行含 unhide，位置在 copy 之后、无 rollback', () => {
+describe('WebView buildMenuItems 回滚（T-UH3 订正）', () => {
+  it('hidden 行同样含 rollback、无 unhide', () => {
     const actions = buildWebViewMenuActions({
       kind: 'message',
       role: 'user',
       text: 'hi',
       hidden: true,
     });
-    expect(actions).toEqual(['edit', 'copy', 'unhide', 'set-floor', 'fork']);
+    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 
-  it('非 hidden 行不含 unhide', () => {
+  it('非 hidden 行菜单顺序不变', () => {
     const actions = buildWebViewMenuActions({
       kind: 'message',
       role: 'user',
       text: 'hi',
     });
-    expect(actions).not.toContain('unhide');
     expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 });

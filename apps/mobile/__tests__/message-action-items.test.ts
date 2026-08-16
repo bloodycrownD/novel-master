@@ -2,7 +2,6 @@ import { type ChatMessage } from '@novel-master/core/chat';
 import {
   buildMessageActionItems,
   isSetFloorEligibleMessage,
-  isUnhideEligibleMessage,
 } from '../src/components/chat/message-edit';
 
 function msg(
@@ -41,17 +40,6 @@ describe('isSetFloorEligibleMessage', () => {
   });
 });
 
-describe('isUnhideEligibleMessage', () => {
-  it('仅 hidden 消息可取消隐藏', () => {
-    expect(
-      isUnhideEligibleMessage({ ...msg([{ type: 'text', text: 'hi' }]), hidden: true }),
-    ).toBe(true);
-    expect(isUnhideEligibleMessage(msg([{ type: 'text', text: 'hi' }]))).toBe(
-      false,
-    );
-  });
-});
-
 describe('buildMessageActionItems', () => {
   it('T-MN1: includes edit, copy, set-floor, fork, rollback for editable messages', () => {
     const actions = buildMessageActionItems(
@@ -83,31 +71,20 @@ describe('buildMessageActionItems', () => {
     expect(actions).toEqual(['copy', 'fork', 'rollback']);
   });
 
-  it('hidden 消息含置位与取消隐藏、无 rollback（T-UH1）', () => {
+  it('hidden 消息同样含 rollback、无 unhide（T-UH1 订正）', () => {
     const actions = buildMessageActionItems({
       ...msg([{ type: 'text', text: 'hi' }]),
       hidden: true,
     }).map(i => i.action);
-    expect(actions).toEqual(['edit', 'copy', 'unhide', 'set-floor', 'fork']);
-  });
-
-  it('非 hidden 消息不含取消隐藏（T-UH1）', () => {
-    const actions = buildMessageActionItems(
-      msg([{ type: 'text', text: 'hi' }]),
-    ).map(i => i.action);
     expect(actions).not.toContain('unhide');
     expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 
-  it('unhide 在 copy 之后、set-floor 之前（hidden 时）', () => {
-    const items = buildMessageActionItems({
-      ...msg([{ type: 'text', text: 'hi' }]),
-      hidden: true,
-    });
-    const copyIdx = items.findIndex(i => i.action === 'copy');
-    const unhideIdx = items.findIndex(i => i.action === 'unhide');
-    expect(copyIdx).toBeGreaterThanOrEqual(0);
-    expect(unhideIdx).toBe(copyIdx + 1);
+  it('非 hidden 消息菜单顺序不变', () => {
+    const actions = buildMessageActionItems(
+      msg([{ type: 'text', text: 'hi' }]),
+    ).map(i => i.action);
+    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 
   it('set-floor 在 copy 之后、fork 之前', () => {
