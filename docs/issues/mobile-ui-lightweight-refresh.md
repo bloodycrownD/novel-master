@@ -1,9 +1,15 @@
 # Mobile UI 轻量刷新（局部 patch 替代整页 reload）
 
-> **类型**：性能 / UX 优化（部分已落地，其余待办）  
-> **平台**：Android Mobile（`apps/mobile`）  
-> **关联迭代**：`mobile-fix-v2`、`mobile-vfs-markdown-webview`、`codebase-audit-remediation`  
+> **类型**：性能 / UX 优化（部分已落地，其余待办）
+> **平台**：Android Mobile（`apps/mobile`）
+> **关联迭代**：`mobile-fix-v2`、`mobile-vfs-markdown-webview`、`codebase-audit-remediation`
 > **背景**：2026-06 调试 `Maximum update depth exceeded`（主页会话列表）与 VFS「状态变更」整表 loading 时沉淀
+
+## 2026-08-16 复核
+
+- **仍有效**：VFS mutation 后 `reload()` 全量重拉仍在（`VfsFileManager.tsx` L352/356/381/621 等）；「Mutation 分级」等横切约定仍适用。
+- **已过时**：P2「Header / 导航上下文」中 `onOpenDrawer` 已从 `HeaderContext` 移除（仅剩 `navigation/types.ts` 类型定义），该条不再作为待办。
+- **部分推进**：`ChatTabScreen` 已大量 `useCallback` 稳定化；会话列表单行 patch 是否落地未逐项验证，下文 P1 待办以代码现状为准。
 
 ## 问题
 

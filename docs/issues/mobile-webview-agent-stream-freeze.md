@@ -1,9 +1,10 @@
 # Mobile WebView Agent 流式卡顿与工具 loading 假死
 
-> **类型**：性能 / UI 状态 Bug（已修复，2026-06）  
-> **平台**：Android Mobile（`chatTranscriptEngine = webview`）  
-> **分支**：`fix/mobile-sse-stream-resilience`  
-> **关联迭代**：`chat-tool-turn-phase-ui`、`chat-rollback-vfs-tool-fixes`、`mobile-llm-streaming`、`mobile-chat-stability-fixes`、`mobile-sse-stream-resilience`  
+> **类型**：性能 / UI 状态 Bug（已修复，2026-06）
+> **状态**：✅ 已闭环（2026-06 合并；2026-08-16 复核仍有效，保留作防复发知识沉淀，不作为待办）
+> **平台**：Android Mobile（`chatTranscriptEngine = webview`）
+> **分支**：`fix/mobile-sse-stream-resilience`
+> **关联迭代**：`chat-tool-turn-phase-ui`、`chat-rollback-vfs-tool-fixes`、`mobile-llm-streaming`、`mobile-chat-stability-fixes`、`mobile-sse-stream-resilience`
 > **调试会话**：`debug-ef0802`（`.cursor/debug-ef0802.log`）
 
 ## 现象
