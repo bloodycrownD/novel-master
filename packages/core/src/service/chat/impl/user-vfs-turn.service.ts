@@ -4,7 +4,7 @@
  * @module service/chat/impl/user-vfs-turn.service
  */
 
-import type { UserOpsActionSummary } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
+
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -148,21 +148,4 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     return { ok: true };
   }
 
-  /**
-   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。
-   */
-  async previewUserOpsActions(
-    _sessionId: string,
-  ): Promise<readonly UserOpsActionSummary[]> {
-    return [];
-  }
-
-  /**
-   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。门闩请改读 hasPendingTurns / log store。
-   */
-  async previewUserOpsChangedPaths(
-    _sessionId: string,
-  ): Promise<readonly string[]> {
-    return [];
-  }
 }

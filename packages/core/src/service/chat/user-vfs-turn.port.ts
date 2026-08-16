@@ -5,7 +5,6 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import type { UserOpsActionSummary } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
 
 /** 单次 VFS 操作中的 tool 调用规格（含 flush 配对用 id）。 */
 export interface UserVfsTurnToolSpec {
@@ -36,18 +35,6 @@ export interface UserVfsTurnService {
     sessionId: string,
     op: UserVfsTurnOp,
   ): Promise<UserVfsTurnExecuteResult>;
-
-  /**
-   * @deprecated 净 diff 热路径已拆除；实现恒返回 `[]`。
-   */
-  previewUserOpsActions(
-    sessionId: string,
-  ): Promise<readonly UserOpsActionSummary[]>;
-
-  /**
-   * @deprecated 净 diff 热路径已拆除；实现恒返回 `[]`。
-   */
-  previewUserOpsChangedPaths(sessionId: string): Promise<readonly string[]>;
 }
 
 /** 桥接 assistant 追加函数（maxSteps 弹窗场景；deps 由工厂绑定）。 */
