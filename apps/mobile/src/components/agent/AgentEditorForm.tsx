@@ -651,6 +651,7 @@ export function AgentEditorForm(props: Props) {
   /** 四区小标题；旧 core 包缺键时用本地兜底，避免标题空白。 */
   const promptSectionLabels = {
     system: PROMPT_REGION_LABELS.systemBlocks ?? '系统区',
+    skills: PROMPT_REGION_LABELS.skillsBlocks ?? '技能索引区',
     persist: PROMPT_REGION_LABELS.persistBlocks,
     chat: PROMPT_REGION_LABELS.chatBlocks ?? '会话区',
     dynamic: PROMPT_REGION_LABELS.dynamicBlocks,
@@ -879,6 +880,39 @@ export function AgentEditorForm(props: Props) {
                 {PROMPT_REGION_LABELS.systemDisabledHint}
               </Text>
             )}
+          </View>
+
+          {/* 技能索引占位卡：运行时自动注入，无开关无输入框，不可配置 */}
+          {renderPromptSectionHead(promptSectionLabels.skills)}
+          <View
+            style={[
+              styles.chatSlotCard,
+              {
+                backgroundColor: tokens.background,
+                borderColor: tokens.borderLight,
+                borderLeftColor: tokens.primary,
+              },
+            ]}
+          >
+            <View style={styles.chatSlotHeader}>
+              <View
+                style={[
+                  styles.chatSlotTag,
+                  {backgroundColor: `${tokens.primary}18`},
+                ]}
+              >
+                <Text
+                  style={[styles.chatSlotTagText, {color: tokens.primary}]}
+                >
+                  {PROMPT_REGION_LABELS.skillsTag}
+                </Text>
+              </View>
+            </View>
+            <Text
+              style={[styles.chatSlotHint, {color: tokens.textSecondary}]}
+            >
+              {PROMPT_REGION_LABELS.skillsReadonlyHint}
+            </Text>
           </View>
 
           {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL)}

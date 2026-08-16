@@ -16,6 +16,9 @@ function segmentTitleLabel(title: string): string {
   if (title === 'system') {
     return ROLE_LABEL.system;
   }
+  if (title === 'skills') {
+    return '技能索引';
+  }
   return title;
 }
 

@@ -138,7 +138,7 @@ export const PROMPT_REGION_LABELS = {
   persistBlocks: "持久区",
   dynamicBlocks: "动态区",
   persistRegionHint: "持久区禁止宏与生命周期。",
-  layoutOrder: "系统 → 常驻工作区 → 持久区 → 会话历史 → 动态区",
+  layoutOrder: "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区",
   layoutOrderPrefix: "纵向顺序与模型组装一致：",
   layoutOrderPrefixShort: "纵向顺序：",
   systemDisabledHint: "关闭时不写入系统提示词。",
@@ -155,6 +155,11 @@ export const PROMPT_REGION_LABELS = {
   chatBlocks: "会话区",
   chatReadonlyHint:
     "运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。",
+  skills: "技能索引",
+  skillsTag: "技能",
+  skillsBlocks: "技能索引区",
+  skillsReadonlyHint:
+    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。不可编辑、不可关闭；无生效技能或工具策略禁用 skill_opt 时不发送。",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 

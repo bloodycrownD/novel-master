@@ -793,6 +793,20 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </div>
           </div>
 
+          {/* 技能索引占位卡：运行时自动注入，无开关无输入框，不可配置 */}
+          <div className="config-block-card config-block-card--prompt config-block-card--chat-slot">
+            <div className="config-block-card__header config-block-card__header--chat-slot">
+              <span className="config-block-card__badge">
+                {PROMPT_REGION_LABELS.skillsTag}
+              </span>
+            </div>
+            <div className="config-block-card__body">
+              <p className="config-block-card__hint">
+                {PROMPT_REGION_LABELS.skillsReadonlyHint}
+              </p>
+            </div>
+          </div>
+
           <AgentWorkplaceBlockCard
             checked={workplaceEnabled}
             onChange={(next) => {
