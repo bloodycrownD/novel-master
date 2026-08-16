@@ -614,8 +614,18 @@ export type ContentBlockDto =
       readonly content: string;
       readonly ok?: boolean;
       readonly summary?: string;
-      /** UI-only 旁路字段；task 工具携带 `subagentSessionId` 供卡片跳转子会话。 */
-      readonly meta?: { readonly subagentSessionId?: string };
+      /**
+       * UI-only 旁路字段：task 工具携带 `subagentSessionId` 供卡片跳转子会话；
+       * skill_opt 携带 `skillRef`（read 由工具输出解析透传，write/edit 由输入侧解析）。
+       */
+      readonly meta?: {
+        readonly subagentSessionId?: string;
+        readonly skillRef?: {
+          readonly domain: 'global' | 'project';
+          readonly projectId?: string;
+          readonly name: string;
+        };
+      };
     };
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */

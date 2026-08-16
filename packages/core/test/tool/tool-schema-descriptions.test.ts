@@ -20,10 +20,10 @@ describe("toolsFromRegistry parameter descriptions", () => {
     assert.match(schema.properties!.oldString!.description!, /唯一/);
   });
 
-  it("registers 7 builtin tools without chat_grep", () => {
+  it("registers 8 builtin tools without chat_grep", () => {
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    assert.equal(registry.list().length, 7);
+    assert.equal(registry.list().length, 8);
     assert.ok(!registry.list().includes("chat_grep"));
   });
 });

@@ -536,6 +536,9 @@ export class DefaultAgentRunner implements AgentRunner {
             // task 工具输出对象含 subagentSessionId：透传到 ToolResultBlock.meta（P0-1）。
             // buildToolResultBlock 内部还会从 outcome.output.subagentSessionId 自动检测。
             subagentSessionId: extractSubagentSessionIdFromOutcome(outcomes[i]!),
+            // skill_opt：read 缺省域命中生效副本的解析结果由输出携带，
+            // projectId 上下文从这里补进 meta.skillRef（T-SK8）。
+            skillProjectId: projectId,
           }),
         );
 

@@ -8,7 +8,11 @@
  * @module domain/tool/logic/build-tool-result-block
  */
 
-import type { ToolResultBlock } from "@/domain/chat/model/content-block.js";
+import type {
+  SkillToolRef,
+  ToolResultBlock,
+} from "@/domain/chat/model/content-block.js";
+import { resolveSkillToolRefFromOutput } from "@/domain/chat/logic/skill-tool-ref.js";
 import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
@@ -25,6 +29,11 @@ export interface BuildToolResultBlockMeta {
    * 调用方可从 `outcome.output.subagentSessionId` 或独立源头传入；任一来源均为 string 时生效。
    */
   readonly subagentSessionId?: string;
+  /**
+   * `skill_opt` project 域解析上下文（当前会话 projectId）。read 缺省域命中
+   * 生效副本时输出只携带命中 domain/name，projectId 由这里补进 `meta.skillRef`。
+   */
+  readonly skillProjectId?: string;
 }
 
 /** UI / legacy: explicit `ok` wins; otherwise infer from `Error:` prefix only. */
@@ -153,6 +162,13 @@ export function buildToolResultBlock(
       outcome.output,
       meta?.subagentSessionId,
     );
+    // skill_opt 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
+    // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
+    const skillRef = resolveSkillToolRefFromOutcome(
+      meta?.toolName,
+      outcome.output,
+      meta?.skillProjectId,
+    );
 
     // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
     // 子 agent 被用户中断。tool-result 要标 ok=false（主 agent 区分「用户停止」与「崩溃」），
@@ -184,8 +200,13 @@ export function buildToolResultBlock(
       ok: true,
       content,
       ...(summary != null ? { summary } : {}),
-      ...(subagentSessionId != null
-        ? { meta: { subagentSessionId } }
+      ...(subagentSessionId != null || skillRef != null
+        ? {
+            meta: {
+              ...(subagentSessionId != null ? { subagentSessionId } : {}),
+              ...(skillRef != null ? { skillRef } : {}),
+            },
+          }
         : {}),
     };
   }
@@ -254,4 +275,19 @@ function resolveSubagentSessionIdFromOutcome(
   return typeof fallback === "string" && fallback.length > 0
     ? fallback
     : undefined;
+}
+
+/**
+ * 从 skill_opt 成功输出提取跳转三元组（失败 outcome 一律 undefined）。
+ *
+ * 仅 `meta.toolName === "skill_opt"` 时有意义；实际判定在
+ * `resolveSkillToolRefFromOutput` 内（工具名 + 输出形态双门控）。
+ */
+function resolveSkillToolRefFromOutcome(
+  toolName: string | undefined,
+  output: unknown,
+  skillProjectId?: string,
+): SkillToolRef | undefined {
+  if (toolName == null) return undefined;
+  return resolveSkillToolRefFromOutput(toolName, output, skillProjectId);
 }

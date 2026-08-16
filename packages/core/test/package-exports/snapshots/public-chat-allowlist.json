@@ -145,6 +145,7 @@
   "resolveComposerSendIntent",
   "resolveRenameOrMoveAction",
   "resolveRollbackConfirmMessage",
+  "resolveSkillToolRefFromInput",
   "resolveVfsToolFilePath",
   "scanAtPathAttachments",
   "selectAnnotateOccurrenceStarts",
