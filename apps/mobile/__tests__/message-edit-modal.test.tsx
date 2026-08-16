@@ -211,7 +211,9 @@ describe('MessageEditModal', () => {
     expect(onConfirm).toHaveBeenCalledWith('line1\nline2');
   });
 
-  it('T6: backdrop uses symmetric spacers for vertical centering', () => {
+  it('T6: backdrop uses justifyContent center for vertical centering', () => {
+    // event-config-merge-and-migration-cleanup 起，居中改回 justifyContent center，
+    // 键盘避让换 panel translateY（范式 B），spacer 方案废弃。
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
@@ -224,32 +226,18 @@ describe('MessageEditModal', () => {
         />,
       );
     });
-    const topSpacer = tree.root.findByProps({testID: 'message-edit-top-spacer'});
-    const bottomSpacer = tree.root.findByProps({
-      testID: 'message-edit-bottom-spacer',
+    let backdrop: TestRenderer.ReactTestInstance | null = tree.root.findByProps({
+      testID: 'message-edit-input',
     });
-    expect(topSpacer.props.style).toEqual(
-      expect.objectContaining({
-        flex: 1,
-        flexShrink: 0,
-        minHeight: 0,
-      }),
-    );
-    expect(bottomSpacer.props.style).toEqual(
-      expect.objectContaining({
-        flex: 1,
-        flexShrink: 1,
-        minHeight: 0,
-      }),
-    );
-    let backdrop: TestRenderer.ReactTestInstance | null = topSpacer.parent;
-    while (backdrop && backdrop.type !== 'Pressable') {
+    // 从输入框往上找第一个带 style 的 Pressable，即 backdrop（内层 stopPropagation 的 Pressable 无 style）。
+    while (
+      backdrop &&
+      !(backdrop.type === 'Pressable' && backdrop.props.style != null)
+    ) {
       backdrop = backdrop.parent;
     }
     expect(backdrop?.props.style).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({flexDirection: 'column'}),
-      ]),
+      expect.objectContaining({justifyContent: 'center'}),
     );
   });
 
