@@ -32,15 +32,15 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
       const c = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
       try {
         await bootstrapNovelMaster(c);
-      } catch (bootErr) {
+      } catch (bootErr: unknown) {
         // 打出 cause 链：migration 失败时原始错误可能被驱动层的包装错误盖住
         // （真机事故教训：ROLLBACK 失败曾掩盖 disk I/O error）。
         console.error('[nm-boot] bootstrap 失败:', bootErr);
-        let cause = bootErr?.cause;
+        let cause: unknown = bootErr instanceof Error ? bootErr.cause : undefined;
         let depth = 0;
         while (cause && depth < 5) {
           console.error(`[nm-boot] cause[${depth}]:`, cause);
-          cause = cause?.cause;
+          cause = cause instanceof Error ? cause.cause : undefined;
           depth++;
         }
         throw bootErr;
