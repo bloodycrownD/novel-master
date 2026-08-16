@@ -12,11 +12,7 @@ import {
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
-  appendUserOpsLog,
   buildAnnotateAttachmentFromDraft,
-  buildUserOpsAttachmentFromLogEntry,
-  listUserOpsLog,
-  resetUserOpsLogStoreForTests,
   type ChatMessage,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -140,7 +136,6 @@ describe('useChatTabMessageActions rollback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetChatAnnotateDraftStoreForTests();
-    resetUserOpsLogStoreForTests();
     mockRollbackToMessage.mockResolvedValue(undefined);
     mockReloadMessages.mockResolvedValue([]);
     mockSetDraftRestoreToken.mockImplementation(
@@ -154,7 +149,6 @@ describe('useChatTabMessageActions rollback', () => {
 
   afterEach(() => {
     resetChatAnnotateDraftStoreForTests();
-    resetUserOpsLogStoreForTests();
   });
 
   it('T-M1: plain user 确认文案含「及之后」', async () => {
@@ -434,27 +428,19 @@ describe('useChatTabMessageActions rollback', () => {
     expect(readChatComposerDraft('s1')).toBe('消息批注 Undo');
     expect(listChatAnnotateDrafts('s1')).toEqual([]);
     expect(chipsFromAnnotateStore('s1')).toEqual([]);
-    expect(listUserOpsLog('s1')).toEqual([]);
     expect(readChatComposerDraftState('s1').attachments ?? []).toEqual([]);
   });
 
-  it('T-UD4/T-UOL7: undo_send 含 user_ops → log store 清空、无 user_ops chip；正文恢复', async () => {
-    appendUserOpsLog('s1', {
-      id: 'uol-unsent',
-      createdAtMs: 1,
-      actionXml: `<action name="write">\n${JSON.stringify({ path: '/keep.md', content: 'k' }, null, 2)}\n</action>`,
-      action: 'write',
-      path: '/keep.md',
-      content: 'k',
-    });
-    const opsAtt = buildUserOpsAttachmentFromLogEntry({
-      id: 'uol-sent',
-      createdAtMs: 2,
-      actionXml: `<action name="edit">\n${JSON.stringify({ path: '/chapter/a.md', oldString: 'a', newString: 'b' }, null, 2)}\n</action>`,
-      action: 'edit',
+  it('T-UD4/T-UOL7: undo_send 含历史 user_ops 附件 → 无 user_ops chip；正文恢复', async () => {
+    // 历史消息手改附件（展示兼容保留的 DTO 形状）；ops store 已拆除，验证不映回 chip
+    const opsAtt: MessageAttachment = {
+      name: '/chapter/a.md',
+      source: 'user_ops',
+      type: 'text',
+      content: null,
       path: '/chapter/a.md',
-      hunks: [{ oldString: 'a', newString: 'b' }],
-    });
+      action: 'edit',
+    };
     const anchor = plainUserMessage('请看手改', [opsAtt]);
     const api = mountActions([anchor]);
 
@@ -467,21 +453,24 @@ describe('useChatTabMessageActions rollback', () => {
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
     expect(readChatComposerDraft('s1')).toBe('请看手改');
-    expect(listUserOpsLog('s1')).toEqual([]);
     const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
     expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
-    expect(draftAttachments.some(a => a.source === 'user_ops')).toBe(false);
+    expect(
+      draftAttachments.some(
+        a => a.source === 'user_ops' && a.action !== 'annotate',
+      ),
+    ).toBe(false);
   });
 
   it('T-UD5/T-UOL7: rewind 不映回消息手改附件', async () => {
-    const opsAtt = buildUserOpsAttachmentFromLogEntry({
-      id: 'uol-asst-should-not',
-      createdAtMs: 1,
-      actionXml: `<action name="write">\n${JSON.stringify({ path: '/no.md', content: 'x' }, null, 2)}\n</action>`,
-      action: 'write',
+    const opsAtt: MessageAttachment = {
+      name: '/no.md',
+      source: 'user_ops',
+      type: 'text',
+      content: null,
       path: '/no.md',
-      content: 'x',
-    });
+      action: 'write',
+    };
     // assistant 锚点 → rewind；即便误带 user_ops 也不映回
     const asst: ChatMessage = {
       ...assistantMessage(),
@@ -497,19 +486,10 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(listUserOpsLog('s1')).toEqual([]);
     expect(mockSetDraftRestoreToken).not.toHaveBeenCalled();
   });
 
-  it('T-UD6/G-1: rewind 前预置未发送 ops → store 空、无 user_ops chip', async () => {
-    appendUserOpsLog('s1', {
-      id: 'uol-unsent',
-      createdAtMs: 1,
-      actionXml: `<action name="write">\n${JSON.stringify({ path: '/keep.md', content: 'k' }, null, 2)}\n</action>`,
-      action: 'write',
-      path: '/keep.md',
-      content: 'k',
-    });
+  it('T-UD6/G-1: rewind 前预置 user_ops chip → 上条清除、无非 annotate user_ops chip', async () => {
     writeChatComposerDraftState('s1', {
       text: 'draft',
       attachments: [
@@ -533,8 +513,11 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(listUserOpsLog('s1')).toEqual([]);
     const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
-    expect(draftAttachments.some(a => a.source === 'user_ops')).toBe(false);
+    expect(
+      draftAttachments.some(
+        a => a.source === 'user_ops' && a.action !== 'annotate',
+      ),
+    ).toBe(false);
   });
 });

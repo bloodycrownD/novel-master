@@ -35,7 +35,6 @@ describe('chat-annotate-draft wiring', () => {
       hasComposerSendableInput({
         text: '',
         attachmentCount: 0,
-        hasPendingUserOps: false,
         hasAnnotateDrafts: true,
       }),
     ).toBe(true);

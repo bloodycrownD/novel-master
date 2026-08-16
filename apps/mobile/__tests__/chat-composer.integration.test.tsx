@@ -105,11 +105,7 @@ jest.mock('../src/services/agent-run.service', () => ({
   runAgentTurn: (...args: any[]) => mockRunAgentTurn(...args),
 }));
 
-import {
-  appendUserOpsLog,
-  resetUserOpsLogStoreForTests,
-  serializeComposerDraftJson,
-} from '@novel-master/core/chat';
+import {serializeComposerDraftJson} from '@novel-master/core/chat';
 import { ChatComposer } from '../src/components/chat/ChatComposer';
 import { useAgentRunLifecycle } from '../src/hooks/useAgentRunLifecycle';
 import { useSessionAbort } from '../src/screens/tabs/chat-tab/useSessionAbort';
@@ -178,7 +174,6 @@ describe('ChatComposer integration', () => {
     mockProjectComposerStatus.mockReset();
     mockProjectComposerStatus.mockResolvedValue([]);
     clearChatComposerDraft('s');
-    resetUserOpsLogStoreForTests();
   });
   it('running-state “终止” action aborts current run', async () => {
     let tree: TestRenderer.ReactTestRenderer;
@@ -403,33 +398,6 @@ describe('ChatComposer integration', () => {
     };
     expect(opts.allowResumeWithoutInput).toBe(true);
     expect(opts.attachments).toBeUndefined();
-    await act(async () => {
-      (tree as TestRenderer.ReactTestRenderer).unmount();
-    });
-  });
-
-  it('T-UOL9: 仅未发送手改日志、无正文无批注 → 可发送', async () => {
-    mockRunAgentTurn.mockImplementationOnce(async () => undefined);
-    appendUserOpsLog('s', {
-      id: 'uol-gate',
-      createdAtMs: 1,
-      actionXml: `<action name="write">\n${JSON.stringify({ path: '/a.md', content: 'x' }, null, 2)}\n</action>`,
-      action: 'write',
-      path: '/a.md',
-      content: 'x',
-    });
-    let tree: TestRenderer.ReactTestRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
-    });
-    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
-      node => node.props?.accessibilityLabel === '发送',
-    );
-    expect(sendBtn.props.disabled).toBe(false);
-    await act(async () => {
-      sendBtn.props.onPress();
-    });
-    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });
