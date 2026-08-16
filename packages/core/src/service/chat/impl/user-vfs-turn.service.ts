@@ -1,18 +1,10 @@
 /**
- * 用户 VFS：execute → 操作日志 → flush 产出 user_ops 附件（不再落 UA；停写 pending kkv）。
+ * 用户 VFS：execute 即时执行合成 tool（磁盘写链路 + 失败回滚 restore；不再写 pending kkv）。
  *
  * @module service/chat/impl/user-vfs-turn.service
  */
 
-import { buildUserOpsAttachmentsFromLogEntries } from "@/domain/chat/logic/build-user-ops-attachment.js";
-import {
-  appendUserOpsLog,
-  clearUserOpsLog,
-  hasUnsentUserOpsLog,
-  listUserOpsLog,
-} from "@/domain/chat/logic/chat-user-ops-log-store.js";
 import type { UserOpsActionSummary } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
-import { userOpsLogEntryFromTurnOp } from "@/domain/chat/logic/user-ops-log-from-turn-op.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -34,11 +26,9 @@ import {
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
-import type { PersistentPreferences } from "@/service/persistent-preferences/persistent-preferences.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";
 import type {
-  UserVfsFlushResult,
   UserVfsTurnExecuteResult,
   UserVfsTurnOp,
   UserVfsTurnService,
@@ -71,12 +61,10 @@ export interface UserVfsTurnServiceDeps {
    * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
    */
   readonly messageCheckpoint: MessageCheckpointService;
-  /** user ops 总开关偏好（关闭时不写操作日志）。 */
-  readonly preferences: PersistentPreferences;
 }
 
 /**
- * 编排 execute → 操作日志、flush → user_ops 附件（清空 store，不落 UA）。
+ * 编排 execute（写盘 + 失败回滚 restore）。
  */
 export class DefaultUserVfsTurnService implements UserVfsTurnService {
   constructor(private readonly deps: UserVfsTurnServiceDeps) {}
@@ -156,42 +144,12 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { ok: false, error: failed.error, partialFailure: true };
     }
 
-    // 写盘已成功：先判总开关。关闭时不写操作日志（直接返回，不回滚已成功写盘）。
-    if (!(await this.deps.preferences.getUserOpsLogEnabled())) {
-      return { ok: true, logAppended: false };
-    }
-
-    // 日志失败不回滚盘（D1）
-    try {
-      const entry = userOpsLogEntryFromTurnOp(op);
-      appendUserOpsLog(sessionId, entry);
-      return { ok: true, logAppended: true };
-    } catch (logAppendError: unknown) {
-      // toast / 记错由上层；此处不回滚已成功写盘
-      return { ok: true, logAppended: false, logAppendError };
-    }
-  }
-
-  async flushPendingUserVfsTurns(
-    sessionId: string,
-  ): Promise<UserVfsFlushResult> {
-    const session = await this.deps.sessions.findById(sessionId);
-    if (session == null) {
-      throw chatNotFound("session", sessionId);
-    }
-
-    const entries = listUserOpsLog(sessionId);
-    if (entries.length === 0) {
-      return { flushed: false, attachments: [] };
-    }
-
-    const attachments = buildUserOpsAttachmentsFromLogEntries(entries);
-    clearUserOpsLog(sessionId);
-    return { flushed: true, attachments };
+    // 写盘已成功：不再记操作日志（user ops 拆除，E-core）。
+    return { ok: true };
   }
 
   /**
-   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。状态条请改读 UserOpsLogStore。
+   * @deprecated 净 diff 热路径已拆除；恒返回 `[]`。
    */
   async previewUserOpsActions(
     _sessionId: string,
@@ -206,9 +164,5 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     _sessionId: string,
   ): Promise<readonly string[]> {
     return [];
-  }
-
-  async hasPendingTurns(sessionId: string): Promise<boolean> {
-    return hasUnsentUserOpsLog(sessionId);
   }
 }

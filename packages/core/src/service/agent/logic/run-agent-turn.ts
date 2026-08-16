@@ -1,21 +1,18 @@
 /**
- * 聊天发送编排（编排 2 步 + runner 内 2 步）。
+ * 聊天发送编排（编排 1 步 + runner 内 2 步）。
  *
  * ## 编排（本模块）
- * 1. `prepareUserVfsTurnForAgentRun`：flush pending → `user_ops`；
- *    re-append merge = trailing∪flush∪attach（无 workplace materialize）。
- * 2. 外层新 append（`!reAppended`）：直 concat =
- *    flush `user_ops`∪attach(@扫描)∪annotate → append(user, 原文, attachments)。
+ * 1. 外层新 append：直 concat = attach(@扫描)∪annotate → append(user, 原文, attachments)。
  *
  * ## Runner 内（agent-runner 每 step；本模块不调用 wrap/assemble）
- * 3. `assembleWorkplaceDisplay` → layout → normalize → protocol map
- * 4. `prepareUserMessagesForPrompt`（hydrate+wrap；S0）
+ * 2. `assembleWorkplaceDisplay` → layout → normalize → protocol map
+ * 3. `prepareUserMessagesForPrompt`（hydrate+wrap；S0）
  *
  * ## 契约
  * - App `attachments` 入参仅 `source===attach` 生效；误传的 `user_ops` 预览一律丢弃；
  *   `@` 扫描仍由 Core 合并；禁止 composer status 原样当 payload。
  * - workplace 不再走附件通道：规则变更靠 `refreshRuleSnapshot` + 常驻前缀 S0 注入。
- * - `hasInput` / `shouldAppendNewUser`：正文 / attach / pending / annotateDrafts。
+ * - `hasInput` / `shouldAppendNewUser`：正文 / attach / annotateDrafts。
  * - 有 `annotateDrafts` 时本轮视 `allowResumeWithoutInput` 为 false（禁空续跑 re-append）。
  * - annotate 附件 **concat** 追加，禁止 `mergeAttachmentsByPath` / path 去重。
  * - wrap/assemble **不**在本模块写库（T-SR0）；双渲染只读。
@@ -64,7 +61,6 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
-import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
@@ -74,7 +70,6 @@ import {
   resolveApplicationModelIdForRun,
   type AgentRunRuntimePort,
 } from "./agent-run-shared.js";
-import { prepareUserVfsTurnForAgentRun } from "./prepare-user-vfs-turn-for-agent-run.js";
 import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 
 export interface AgentTurnScope {
@@ -235,15 +230,8 @@ export async function runAgentTurn(
     )
   ).definition;
 
-  const hasPending =
-    isUserVfsUnifiedToolTurnEnabled() &&
-    runtime.userVfsTurn != null &&
-    (await runtime.userVfsTurn.hasPendingTurns(scope.sessionId));
   const hasInput =
-    trimmed !== "" ||
-    composerAttachOnly.length > 0 ||
-    hasPending ||
-    hasAnnotateDrafts;
+    trimmed !== "" || composerAttachOnly.length > 0 || hasAnnotateDrafts;
 
   if (!hasInput && !allowResumeWithoutInput) {
     throw new AgentTurnError("消息不能为空");
@@ -277,37 +265,7 @@ export async function runAgentTurn(
     composerAttachOnly,
   );
 
-  let userOpsAttachments: Awaited<
-    ReturnType<typeof prepareUserVfsTurnForAgentRun>
-  >["attachments"] = [];
   let checkpointAnchorMessageId: string | undefined;
-  let reAppended = false;
-
-  // Flush when we can attach user_ops to a user message.
-  if (
-    isUserVfsUnifiedToolTurnEnabled() &&
-    runtime.userVfsTurn != null &&
-    (hasInput || allowResumeWithoutInput)
-  ) {
-    stage = "flush-pending-user-vfs-turns";
-    const prepared = await prepareUserVfsTurnForAgentRun({
-      messages: runtime.messages,
-      userVfsTurn: runtime.userVfsTurn,
-      sessionId: scope.sessionId,
-      trimmedInput: trimmed,
-      allowResumeWithoutInput,
-      composerAttachments: scannedComposer,
-    });
-    userOpsAttachments = prepared.attachments;
-    if (prepared.reAppendedUserMessageId != null) {
-      reAppended = true;
-      if (prepared.flushed) {
-        checkpointAnchorMessageId = prepared.reAppendedUserMessageId;
-      }
-      // re-append 也要通知 UI 刷新（否则空续跑写回后列表不更新）
-      await options?.onUserMessageAppended?.();
-    }
-  }
 
   // annotate：concat 追加（禁止 mergeAttachmentsByPath / path 去重，以免同 path 丢条）
   // 上游划词创建草稿时只传了 renderStart/renderEnd，没填 startLine/endLine，
@@ -348,23 +306,16 @@ export async function runAgentTurn(
     }),
   );
 
-  // 新 append：user_ops ∪ scannedComposer 直 concat；再 concat annotate（禁 path 去重）
-  const mergedAttachments = [
-    ...userOpsAttachments,
-    ...scannedComposer,
-    ...annotateAttachments,
-  ];
+  // 新 append：scannedComposer ∪ annotate 直 concat（禁 path 去重）
+  const mergedAttachments = [...scannedComposer, ...annotateAttachments];
 
   const shouldAppendNewUser =
-    !reAppended &&
-    (trimmed !== "" ||
-      scannedComposer.length > 0 ||
-      userOpsAttachments.length > 0 ||
-      hasAnnotateDrafts);
+    trimmed !== "" ||
+    scannedComposer.length > 0 ||
+    hasAnnotateDrafts;
 
   // S-1：append + capture 这条跨资源写链走 CoordinatedWrite，任一步失败按逆序补偿。
   // append 的补偿是删掉刚写入的消息；capture 的补偿是 release 刚写的 checkpoint。
-  // reAppended 路径下消息已被 prepareUserVfsTurnForAgentRun 写回，这里只注册 capture。
   const coordinatedWrite = new CoordinatedWrite();
   if (shouldAppendNewUser) {
     stage = "append-user-message";
@@ -380,11 +331,10 @@ export async function runAgentTurn(
             : undefined,
         );
         // S-13 治本：每条新 user 消息都写 baseline checkpoint，确保后续步骤失败时
-        // undo_send 仍有可回滚点。原先仅在 userOpsAttachments 非空时才 capture，
+        // undo_send 仍有可回滚点。原先仅在 user_ops 附件非空时才 capture，
         // 导致普通纯文本 chat 路径无 baseline，undo_send 时 targetTree 空 → 删光工作区。
-        // 这里把不变式上提到源头，user_ops 路径的 anchor 语义保留（仍走同一 capture）。
+        // 这里把不变式上提到源头（所有 user append 统一走同一 capture）。
         checkpointAnchorMessageId = appended.id;
-        // re-append 也要通知 UI 刷新（否则空续跑写回后列表不更新）
         await options?.onUserMessageAppended?.();
       },
       rollback: async () => {
@@ -396,8 +346,7 @@ export async function runAgentTurn(
     });
   }
 
-  // capture 步骤：anchor 可能来自上面的 append execute，也可能来自 reAppended 路径。
-  // 放进 execute 内取值，保证 append 成功后才读到正确的 anchor。
+  // capture 步骤：anchor 来自上面的 append execute（execute 内取值，保证 append 成功后才读到）。
   coordinatedWrite.register({
     name: "capture-baseline-checkpoint",
     execute: async () => {
