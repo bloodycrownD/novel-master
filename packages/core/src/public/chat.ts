@@ -97,6 +97,11 @@ export {
   mergeAttachmentsWithScannedAtPaths,
   scanAtPathAttachments,
 } from '../domain/chat/logic/scan-at-path-attachments.js';
+export {
+  mergeAttachmentsWithScannedSkills,
+  scanSkillAttachments,
+  skillSeenKey,
+} from '../domain/chat/logic/scan-skill-attachments.js';
 export type {
   ContentBlock,
   TextBlock,
@@ -172,7 +177,7 @@ export {
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
 } from '../domain/chat/logic/composer-at-path.js';
-export type { AtPathRef } from '../domain/chat/logic/composer-at-path.js';
+export type { AtPathRef, ComposerTrigger } from '../domain/chat/logic/composer-at-path.js';
 export {
   addChatAnnotateDraft,
   chipsFromAnnotateStore,

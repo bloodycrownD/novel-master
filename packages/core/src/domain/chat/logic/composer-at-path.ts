@@ -13,6 +13,9 @@ export type AtPathRef = {
   readonly kind: "file" | "dir";
 };
 
+/** 触发字符：`@` 路径引用 / `$` 技能引用（双端 typeahead 共享语义）。 */
+export type ComposerTrigger = "@" | "$";
+
 /** 插入正文的 `@path`（目录带尾 `/`，落库扫描后带前导 `/`）。 */
 export function formatComposerAtPathToken(
   path: string,
@@ -42,16 +45,18 @@ export function atPathTokensFromPickerSelection(
 }
 
 /**
- * 光标处未完成的 `@…` 查询；无活跃 token 时返回 null。
- * `query` 不含 `@`；`start` 为 `@` 下标。
+ * 光标处未完成的 `@…` / `$…` 查询；无活跃 token 时返回 null。
+ * `query` 不含触发字符；`start` 为触发字符下标。
+ * `trigger` 缺省 `@`（既有行为不变）；`$` 供技能 typeahead 复用。
  */
 export function findActiveAtQuery(
   text: string,
   cursor: number,
+  trigger: ComposerTrigger = "@",
 ): { readonly start: number; readonly query: string } | null {
   const safeCursor = Math.max(0, Math.min(cursor, text.length));
   const before = text.slice(0, safeCursor);
-  const at = before.lastIndexOf("@");
+  const at = before.lastIndexOf(trigger);
   if (at < 0) {
     return null;
   }
@@ -68,7 +73,7 @@ export function findActiveAtQuery(
   return { start: at, query };
 }
 
-/** 用完整 token 替换 `[start, cursor)`，并在末尾补空格（若尚无）。 */
+/** 用完整 token 替换 `[start, cursor)`，并在末尾补空格（若尚无）；与触发字符无关（纯位置替换）。 */
 export function replaceActiveAtWithToken(
   text: string,
   cursor: number,

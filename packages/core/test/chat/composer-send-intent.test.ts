@@ -33,6 +33,19 @@ describe("resolveComposerSendIntent", () => {
     assert.equal(intent.hasSendable, true);
   });
 
+  it("T-SK11: 纯 `$技能` 无正文可发送（门闩计入 $ 扫描）", () => {
+    const intent = resolveComposerSendIntent({
+      text: "$demo-skill",
+      attachments: [],
+      hasPendingUserOps: false,
+      canResumeWithoutInput: false,
+      hasModel: true,
+    });
+    assert.equal(intent.hasSendable, true);
+    assert.equal(intent.sendDisabled, false);
+    assert.equal(intent.allowResumeWithoutInput, false);
+  });
+
   it("空输入 + 不可 resume → 禁用发送", () => {
     const intent = resolveComposerSendIntent({
       text: "",

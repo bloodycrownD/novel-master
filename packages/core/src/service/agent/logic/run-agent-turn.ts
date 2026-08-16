@@ -47,6 +47,7 @@ import type { MessageAttachment } from "@/domain/chat/model/message-attachment.s
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-source-range.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
+import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/scan-skill-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -302,10 +303,10 @@ export async function runAgentTurn(
     stream,
   });
 
-  // Scan typed @path into attach; dedupe with chips; keep tokens in body text.
-  const scannedComposer = mergeAttachmentsWithScannedAtPaths(
+  // Scan typed @path / $skill into attach; dedupe with chips; keep tokens in body text.
+  const scannedComposer = mergeAttachmentsWithScannedSkills(
     trimmed,
-    composerAttachOnly,
+    mergeAttachmentsWithScannedAtPaths(trimmed, composerAttachOnly),
   );
 
   let userOpsAttachments: Awaited<
