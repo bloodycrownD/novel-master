@@ -545,6 +545,15 @@ export const ChatTranscriptWebView = memo(
         [uiRunning, sendSessionSnapshotNow],
       );
 
+      // sendSessionSnapshot 的闭包身份随渲染变化（内部挂着每次渲染重建的
+      // transcriptListOptions 与 messages）。pendingSubagentSessions 快照重发
+      // 只应由映射本身的变化触发，否则任何无关重渲染（如 streamingText 更新）
+      // 都会多发一次全量 sessionSnapshot——用 ref 取最新实现，依赖里只留映射。
+      const sendSessionSnapshotRef = useRef(sendSessionSnapshot);
+      useEffect(() => {
+        sendSessionSnapshotRef.current = sendSessionSnapshot;
+      });
+
       const sendAppendTailRows = useCallback(
         (tailMessages: readonly ChatMessage[]) => {
           if (tailMessages.length === 0) {
@@ -915,12 +924,14 @@ export const ChatTranscriptWebView = memo(
 
       // pendingSubagentSessions 变化时（task 工具创建子会话事件到达），
       // 重发 snapshot 让 pending task 卡片立即获得 subagentSessionId 可点击。
+      // 注意经 ref 调用：不能把 sendSessionSnapshot 放进依赖（闭包身份不稳定，
+      // 会退化成每次重渲染都发全量快照）。
       useEffect(() => {
         if (!webReady) {
           return;
         }
-        sendSessionSnapshot('preserve');
-      }, [webReady, pendingSubagentSessions, sendSessionSnapshot]);
+        sendSessionSnapshotRef.current('preserve');
+      }, [webReady, pendingSubagentSessions]);
 
       useEffect(() => {
         if (!webReady) {
