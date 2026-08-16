@@ -31,9 +31,11 @@ export type RootStackParamList = {
   RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
   FileEditor: {
     path: string;
-    scopeKind: 'global' | 'project' | 'session';
+    scopeKind: 'global' | 'project' | 'session' | 'skill';
     projectId?: string;
     sessionId?: string;
+    /** skill 域引用：按域取 globalVfs/projectVfs，路由 path 为 /meta/skills/{name}/{rel}。 */
+    skillRef?: {domain: 'global' | 'project'; name: string; projectId?: string};
     /** Called after a successful session-scope save (refreshes workspace list). */
     onSessionVfsSaved?: () => void;
   };

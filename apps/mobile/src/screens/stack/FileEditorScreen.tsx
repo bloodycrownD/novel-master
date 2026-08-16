@@ -16,7 +16,9 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
-import {useRoute, type RouteProp} from '@react-navigation/native';
+import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {DeviceEventEmitter} from 'react-native';
 import type {RootStackParamList} from '../../navigation/types';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
@@ -35,6 +37,11 @@ import {
   type CodeEditorWebViewHandle,
 } from '../../components/vfs/CodeEditorWebView';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
+import {
+  SKILL_FILE_DELETED_EVENT,
+  type SkillFileDeletedPayload,
+} from '../../components/skills/skill-file-events';
+import {skillDomainBadgeLabel} from '../../components/skills/skill-ui';
 import {formatCharCount} from '@novel-master/core/format';
 
 /**
@@ -84,8 +91,10 @@ export function FileEditorScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<FileEditorRoute>();
-  const {path, scopeKind, projectId, sessionId, onSessionVfsSaved} =
+  const {path, scopeKind, projectId, sessionId, skillRef, onSessionVfsSaved} =
     route.params;
 
   const [content, setContent] = useState('');
@@ -118,8 +127,20 @@ export function FileEditorScreen() {
           throw new Error('缺少 projectId 或 sessionId');
         }
         return runtime.sessionVfs(projectId, sessionId);
+      case 'skill':
+        // 技能域 VFS 与普通两域同源，仅路由 path 锚定 /meta/skills/{name}/ 前缀
+        if (!skillRef) {
+          throw new Error('缺少 skillRef');
+        }
+        if (skillRef.domain === 'global') {
+          return runtime.globalVfs();
+        }
+        if (!skillRef.projectId) {
+          throw new Error('项目域技能缺少 projectId');
+        }
+        return runtime.projectVfs(skillRef.projectId);
     }
-  }, [runtime, scopeKind, projectId, sessionId]);
+  }, [runtime, scopeKind, projectId, sessionId, skillRef]);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,6 +175,29 @@ export function FileEditorScreen() {
   useEffect(() => {
     setPreviewRenderKind(isMarkdownPreviewPath(path) ? 'markdown' : 'txt');
   }, [path]);
+
+  // 技能辅助文件在详情页被删除时踢回，避免停留在已不存在的文件上
+  useEffect(() => {
+    if (scopeKind !== 'skill' || !skillRef) {
+      return;
+    }
+    const prefix = `/meta/skills/${skillRef.name}/`;
+    const subscription = DeviceEventEmitter.addListener(
+      SKILL_FILE_DELETED_EVENT,
+      (payload: SkillFileDeletedPayload) => {
+        if (
+          payload.domain === skillRef.domain &&
+          payload.name === skillRef.name &&
+          payload.projectId === skillRef.projectId &&
+          path === `${prefix}${payload.relPath}`
+        ) {
+          showToast('该文件已被删除');
+          navigation.goBack();
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, [scopeKind, skillRef, path, showToast, navigation]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -241,6 +285,31 @@ export function FileEditorScreen() {
 
   const editorBody = (
     <>
+      {scopeKind === 'skill' && skillRef ? (
+        <View style={[styles.skillBar, {borderBottomColor: tokens.border}]}>
+          <Text
+            style={[styles.skillBarName, {color: tokens.text}]}
+            numberOfLines={1}>
+            技能 · {skillRef.name}
+          </Text>
+          <Text
+            style={[
+              styles.skillChip,
+              {color: tokens.textSecondary, borderColor: tokens.border},
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="middle">
+            {path.replace(/^\//, '')}
+          </Text>
+          <Text
+            style={[
+              styles.skillChip,
+              {color: tokens.primary, borderColor: tokens.border},
+            ]}>
+            {skillDomainBadgeLabel(skillRef.domain, false)}
+          </Text>
+        </View>
+      ) : null}
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
           style={styles.toolbarBtn}
@@ -386,6 +455,24 @@ const styles = StyleSheet.create({
   center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
   keyboardLiftBody: {flex: 1, minHeight: 0},
+  skillBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  skillBarName: {fontSize: 13, fontWeight: '600', flexShrink: 0},
+  skillChip: {
+    flexShrink: 1,
+    fontSize: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
