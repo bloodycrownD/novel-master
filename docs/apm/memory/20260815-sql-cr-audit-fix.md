@@ -1,8 +1,8 @@
 ---
-date: 2026-08-15 03:10
-title: SQL 全量 CR 迭代——28 条 finding 修复 + 15 条 cr-fix 全部 dev-ready，两 worktree 待合并（base 已落后 main 55 commit）
-keywords: sql-cr-audit, worktree, N+1, migration, 孤儿GC, CHECK约束, 待合并, rebase
-abstract: 六轮 CR 产出 28 条 finding，fix-spec 14 步 + spec-check 3 轮后由两个 worktree 并行开发完毕，再经 code-review-loop 收敛 15 条 cr-fix 也全部闭合（wt-A 1896 / wt-B 1890 全绿）。两个分支尚未合并，base 是 v1.4.24 而 main 已到 v1.4.27+（55 commit），合并前须 rebase 并重点核对 schema-migrations/index.ts 与 session.service.ts 冲突。
+date: 2026-08-15 22:30
+title: SQL 全量 CR 迭代——wt-A 已合入集成分支全绿（1937/1937），wt-B 待用户验证后合并
+keywords: sql-cr-audit, worktree, N+1, migration, 孤儿GC, CHECK约束, 待合并, 集成分支
+abstract: 六轮 CR 产出 28 条 finding，两个 worktree 开发 + cr-fix 全部 dev-ready。wt-A（migration 侧）已合入集成分支 feat/sql-cr-fixes-integration（e325267），仅 schema-migrations/index.ts 一处冲突（保住 orphan GC 排序约束），同步 main 的 tokenizer 清理后 1937/1937 零失败。wt-B（N+1 侧）待用户验证 wt-A 后合并，预判冲突 session.service.ts。
 ---
 
 user:
@@ -45,4 +45,10 @@ user:
 让你分身干活了，你需要恢复下记忆。
 
 assistant:
-apm read 恢复后发现本迭代全程没写过记忆，补记此条。同时发现关键风险：两个 worktree 的 base 是 bc18100（v1.4.24），而 main 已推进 55 commit 到 v1.4.27+（含 mobile/desktop 四 feature 合并 + README/RULE 重构）。git diff 预判冲突点：schema-migrations/index.ts（main 新增了 project-agent-config-cleanup-v1 注册，wt-A 也追加了两条 migration，数组末尾相撞，rebase 时须保证 orphan-revision-gc-v1 仍排在 table-constraints-v1 之前）；session.service.ts（main 改过分身相关逻辑，wt-B 改了 copy 的 batchInsert）。合并顺序：先 wt-A 后 wt-B；合并后必跑三套交叉测试（orphan-revision-gc + vfs-repair-ref-count-batch + vfs-n-plus-1-fixes）+ 全 workspace typecheck（cr-p1-2 删方法的 merge gate）+ P1 批量写 × P2 CHECK 约束交叉场景。按协作红线，合并等用户明确指令。
+apm read 恢复后发现本迭代全程没写过记忆，补记此条。同时发现关键风险：两个 worktree 的 base 是 bc18100（v1.4.24），而 main 已推进 55 commit 到 v1.4.27+。git diff 预判冲突点：schema-migrations/index.ts 与 session.service.ts。合并顺序：先 wt-A 后 wt-B；合并后必跑三套交叉测试 + 全 workspace typecheck（cr-p1-2 删方法的 merge gate）+ P1 批量写 × P2 CHECK 约束交叉场景。按协作红线，合并等用户明确指令。
+
+user:
+合并一个 worktree 到主 worktree 的 feature 分支吧，我一个一个地验证。恢复记忆，让其他分身帮你修复了。
+
+assistant:
+wt-A 已合入：在主仓新建集成分支 feat/sql-cr-fixes-integration（基于 main 4e20a23），merge feat/sql-fix-migration 得 e325267，仅 schema-migrations/index.ts 一处冲突——解法是三个 migration 全保留（projectAgentConfigCleanupV1 在前，orphanRevisionGcV1 + tableConstraintsV1 在后，保住 P1-5 顺序约束）。合并后发现并行会话的两大修复：一是 tokenizer 回填链路清理（6bc88ba）把 backfill-cache-from-messages.test.ts 的 3 个存量失败连根修掉了（v1.4.25 掏空实现后没清现场）；二是 RULE.md 新增「提交前确认当前分支」红线——那个会话曾误提交到本集成分支后 cherry-pick 摘回，且我自己也差点在 main 上直接 merge（被 no-op 兜住）。集成分支同步 main 后全量 1937/1937 零失败。另一个虚惊：feat/event-config-merge-and-migration-cleanup（v1.5.0）分支反向 diff 看似删了 batchAdjustRefCount，实为 8 月 11 日已合并的老分支（领先 main 0、落后 68），对合并零风险。剩余：wt-B（dd74f1b）等用户验证完合入，预判 session.service.ts 冲突，合并后跑三套交叉测试 + 全 workspace typecheck。
