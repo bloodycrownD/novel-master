@@ -1,5 +1,9 @@
 /**
  * resolve-hide-message-range 单测。
+ *
+ * 最终口径：`startDepth` 是启发式起点，从 slice 最新边界向更旧方向找第一条
+ * 真用户输入（user 且非 tool_result），只隐藏严格更旧的消息；锚点起的整轮
+ * 保持可见，压缩后可见历史以 user 开头且条数 ≥ startDepth+1（可以超出 6）。
  */
 
 import assert from "node:assert/strict";
@@ -30,8 +34,7 @@ function makeMsg(
 }
 
 describe("resolveHideMessageRange", () => {
-  // 协议约束：会话消息严格 user/assistant 交替且以 user 开头
-  // （fixture 早期以 assistant 开头，不合法，已订正；seq/depth 映射不变）。
+  // 协议约束：会话消息严格 user/assistant 交替且以 user 开头。
   const all = [
     makeMsg("m1", 1, "user"),
     makeMsg("m2", 2, "assistant"),
@@ -43,33 +46,7 @@ describe("resolveHideMessageRange", () => {
   ];
   const visible = listVisibleForDepth(all);
 
-  // 原「depth6 为 assistant 时从该 seq 起 hide」用例依赖旧 fixture 的非法
-  // assistant 开头序列；fixture 订正后该分支由下方 PRD 用例（depth6 恰为
-  // assistant 命中 anchor）覆盖，此处不再单列。
-
-  it("startDepth=6 且 depth6 为 user 时校验 assistant 后返回 slice min~max", () => {
-    const withUserAt6 = [
-      makeMsg("m1", 1, "user"),
-      makeMsg("m2", 2, "assistant"),
-      makeMsg("m3", 3, "user"),
-      makeMsg("m4", 4, "user"),
-      makeMsg("m5", 5, "assistant"),
-      makeMsg("m6", 6, "assistant"),
-      makeMsg("m7", 7, "assistant"),
-      makeMsg("m8", 8, "assistant"),
-      makeMsg("m9", 9, "assistant"),
-      makeMsg("m10", 10, "assistant"),
-    ];
-    const vis = listVisibleForDepth(withUserAt6);
-    const slice = { startDepth: 6 };
-    const ids = messageIdsInSlice(vis, slice);
-    const range = resolveHideMessageRange(vis, slice, ids);
-    assert.ok(range);
-    assert.equal(range.fromSeq, 1);
-    assert.equal(range.toSeq, 4);
-  });
-
-  it("PRD：10 条可见 startDepth 6 时 range 覆盖 depth 6-9 全部", () => {
+  it("PRD：10 条可见 startDepth 6 时隐藏锚点以旧，保留 8 条", () => {
     const tenVisible = Array.from({ length: 10 }, (_, i) =>
       makeMsg(`m${i}`, i + 1, i % 2 === 0 ? "user" : "assistant"),
     );
@@ -79,35 +56,98 @@ describe("resolveHideMessageRange", () => {
     assert.equal(ids.length, 4);
     const range = resolveHideMessageRange(vis, slice, ids);
     assert.ok(range);
+    // 边界 seq4 是 assistant，向旧走到 seq3 真用户输入，隐藏 1..2；
+    // 保留 seq3..seq10 共 8 条（≥ 7），可见开头为 user。
     assert.equal(range.fromSeq, 1);
-    assert.equal(range.toSeq, 4);
+    assert.equal(range.toSeq, 2);
   });
 
-  it("范围内无 assistant 时不 hide", () => {
-    const onlyUsers = [
-      makeMsg("u1", 1, "user"),
-      makeMsg("u2", 2, "user"),
-      makeMsg("u3", 3, "user"),
+  it("T-CF1：边界切断轮次时向旧锚定，锚点整轮保留（复刻 Metro 场景）", () => {
+    const msgs = [
+      makeMsg("m1", 1, "user"),
+      makeMsg("m2", 2, "assistant"),
+      makeMsg("m3", 3, "user"),
+      makeMsg("m4", 4, "assistant", [
+        { type: "tool_use", id: "t1", name: "read", input: {} },
+      ]),
+      makeMsg("m5", 5, "user", [
+        { type: "tool_result", toolUseId: "t1", content: "ok" },
+      ]),
+      makeMsg("m6", 6, "assistant", [
+        { type: "tool_use", id: "t2", name: "read", input: {} },
+      ]),
+      makeMsg("m7", 7, "user", [
+        { type: "tool_result", toolUseId: "t2", content: "ok" },
+      ]),
+      makeMsg("m8", 8, "assistant"),
+      makeMsg("m9", 9, "user"),
+      makeMsg("m10", 10, "assistant"),
+      makeMsg("m11", 11, "user"),
+      makeMsg("m12", 12, "assistant"),
     ];
-    const vis = listVisibleForDepth(onlyUsers);
-    const slice = { startDepth: 1 };
+    const vis = listVisibleForDepth(msgs);
+    // n=12，startDepth=6 → seq ≤ 6；边界切在轮中段（seq4..8 是同一轮的
+    // tool 往返）。向旧锚定到 seq3 真用户输入，只隐藏 1..2；保留
+    // seq3..seq12，可见开头 = user, assistant(tool_use), user(tool_result),
+    // …——用户期望的「user assistant tool call tool result」形态。
+    const slice = { startDepth: 6 };
     const ids = messageIdsInSlice(vis, slice);
     const range = resolveHideMessageRange(vis, slice, ids);
-    assert.equal(range, null);
+    assert.ok(range);
+    assert.equal(range.fromSeq, 1);
+    assert.equal(range.toSeq, 2);
   });
 
-  it("有 endDepth 时仍用 slice 内 min~max seq", () => {
+  it("T-CF2：边界恰落在真用户输入上时隐藏其以旧全部", () => {
+    const msgs = [
+      makeMsg("m1", 1, "user"),
+      makeMsg("m2", 2, "assistant"),
+      makeMsg("m3", 3, "user"),
+      makeMsg("m4", 4, "assistant"),
+      makeMsg("m5", 5, "user"),
+      makeMsg("m6", 6, "assistant"),
+      makeMsg("m7", 7, "user"),
+      makeMsg("m8", 8, "assistant"),
+      makeMsg("m9", 9, "user"),
+      makeMsg("m10", 10, "assistant"),
+      makeMsg("m11", 11, "user"),
+      makeMsg("m12", 12, "assistant"),
+    ];
+    const vis = listVisibleForDepth(msgs);
+    // n=12，startDepth=3 → seq ≤ 9；seq9 恰为真用户输入，锚点即边界，
+    // 隐藏 1..8，保留 9..12。
+    const slice = { startDepth: 3 };
+    const ids = messageIdsInSlice(vis, slice);
+    const range = resolveHideMessageRange(vis, slice, ids);
+    assert.ok(range);
+    assert.equal(range.fromSeq, 1);
+    assert.equal(range.toSeq, 8);
+  });
+
+  it("T-CF3：bounded slice 同规则，隐藏区间止于锚点前一条", () => {
+    // n=7，depth 2..4 → seq 3..5；seq5 是真用户输入 → 隐藏 3..4。
     const slice = { startDepth: 2, endDepth: 4 };
     const ids = messageIdsInSlice(visible, slice);
     const range = resolveHideMessageRange(visible, slice, ids);
     assert.ok(range);
     assert.equal(range.fromSeq, 3);
-    assert.equal(range.toSeq, 5);
+    assert.equal(range.toSeq, 4);
   });
 
-  it("T-CF1：fromSeq 向上锚定到真用户输入（user 且非 tool_result），整个 tool 往返入区", () => {
+  it("T-CF4：锚点即 slice 最老消息时无可隐藏，返回 null", () => {
+    // n=7，startDepth=6 → 仅 seq1（user）命中；锚点=最老候选，没有更旧的
+    // 可隐藏，跳过本次压缩。
+    const slice = { startDepth: 6 };
+    const ids = messageIdsInSlice(visible, slice);
+    const range = resolveHideMessageRange(visible, slice, ids);
+    assert.equal(range, null);
+  });
+
+  it("T-CF5：slice 内无真用户输入（病态残留）时不触发压缩", () => {
     const msgs = [
-      makeMsg("m1", 1, "user"),
+      makeMsg("m1", 1, "user", [
+        { type: "tool_result", toolUseId: "t0", content: "ok" },
+      ]),
       makeMsg("m2", 2, "assistant", [
         { type: "tool_use", id: "t1", name: "read", input: {} },
       ]),
@@ -118,126 +158,14 @@ describe("resolveHideMessageRange", () => {
       makeMsg("m5", 5, "user"),
       makeMsg("m6", 6, "assistant"),
       makeMsg("m7", 7, "user"),
+      makeMsg("m8", 8, "assistant"),
+      makeMsg("m9", 9, "user"),
     ];
     const vis = listVisibleForDepth(msgs);
-    // n=7，depth 2..4 → seq 3..5：fromSeq 边缘 seq3 是 user(tool_result)，
-    // 向上跳过 seq2 assistant(tool_use)，锚定 seq1 真用户输入——隐藏区间
-    // 第一条必为 user 且非 tool_result，配对随整轮入区天然完整。
-    const slice = { startDepth: 2, endDepth: 4 };
-    const ids = messageIdsInSlice(vis, slice);
-    const range = resolveHideMessageRange(vis, slice, ids);
-    assert.ok(range);
-    assert.equal(range.fromSeq, 1);
-    assert.equal(range.toSeq, 5);
-  });
-
-  it("T-CF2：toSeq 边缘为 assistant(tool_use) 且 tool_result 在 range 外时向外扩展纳入", () => {
-    const msgs = [
-      makeMsg("m1", 1, "user"),
-      makeMsg("m2", 2, "assistant"),
-      makeMsg("m3", 3, "user"),
-      makeMsg("m4", 4, "assistant", [
-        { type: "tool_use", id: "t2", name: "read", input: {} },
-      ]),
-      makeMsg("m5", 5, "user", [
-        { type: "tool_result", toolUseId: "t2", content: "ok" },
-      ]),
-      makeMsg("m6", 6, "assistant", [
-        { type: "tool_use", id: "t3", name: "write", input: {} },
-      ]),
-      makeMsg("m7", 7, "user", [
-        { type: "tool_result", toolUseId: "t3", content: "ok" },
-      ]),
-    ];
-    const vis = listVisibleForDepth(msgs);
-    // n=7，depth 1..3 → seq 4..6：fromSeq 边缘 seq4 是 assistant，向上锚定
-    // 到 seq3 真用户输入；toSeq 边缘 seq6 是 assistant(tool_use t3)，
-    // 配对 tool_result 在 seq7（range 外更新侧），应向外（更新侧）扩展纳入。
-    const slice = { startDepth: 1, endDepth: 3 };
-    const ids = messageIdsInSlice(vis, slice);
-    const range = resolveHideMessageRange(vis, slice, ids);
-    assert.ok(range);
-    assert.equal(range.fromSeq, 3);
-    assert.equal(range.toSeq, 7);
-  });
-
-  it("T-CF2b：toSeq 边缘为 assistant(tool_use) 但后续 user 只含其他 toolUseId 的 result 时不外扩", () => {
-    const msgs = [
-      makeMsg("m1", 1, "user"),
-      makeMsg("m2", 2, "assistant"),
-      makeMsg("m3", 3, "user"),
-      makeMsg("m4", 4, "assistant"),
-      makeMsg("m5", 5, "user"),
-      makeMsg("m6", 6, "assistant", [
-        { type: "tool_use", id: "t_x", name: "read", input: {} },
-      ]),
-      makeMsg("m7", 7, "user", [
-        { type: "tool_result", toolUseId: "t_other", content: "ok" },
-      ]),
-    ];
-    const vis = listVisibleForDepth(msgs);
-    // n=7，depth 1..3 → seq 4..6：fromSeq 边缘 seq4 是 assistant，向上锚定
-    // 到 seq3 真用户输入；toSeq 边缘 seq6 是 assistant(tool_use t_x)，
-    // 但后续 user 消息 seq7 只含其他 toolUseId（t_other）的 result，找不到
-    // 配对（崩溃残留场景），不应外扩，toSeq 保持 6。
-    const slice = { startDepth: 1, endDepth: 3 };
-    const ids = messageIdsInSlice(vis, slice);
-    const range = resolveHideMessageRange(vis, slice, ids);
-    assert.ok(range);
-    assert.equal(range.fromSeq, 3);
-    assert.equal(range.toSeq, 6);
-  });
-
-  it("T-CF3：无配对拆开时 range 与原行为完全一致（回归保护）", () => {
-    // 全文本消息（无 tool blocks），扩展逻辑不应改变任何边界。
-    const slice = { startDepth: 2, endDepth: 4 };
-    const ids = messageIdsInSlice(visible, slice);
-    const range = resolveHideMessageRange(visible, slice, ids);
-    assert.ok(range);
-    assert.equal(range.fromSeq, 3);
-    assert.equal(range.toSeq, 5);
-  });
-
-  it("T-CF3：配对消息不在 visible 列表内时保持原边界", () => {
-    const msgs = [
-      makeMsg("m1", 1, "user"),
-      {
-        ...makeMsg("m2", 2, "assistant", [
-          { type: "tool_use", id: "t1", name: "read", input: {} },
-        ]),
-        hidden: true,
-      },
-      makeMsg("m3", 3, "user", [
-        { type: "tool_result", toolUseId: "t1", content: "ok" },
-      ]),
-      makeMsg("m4", 4, "assistant"),
-      makeMsg("m5", 5, "user"),
-      makeMsg("m6", 6, "assistant"),
-      makeMsg("m7", 7, "user"),
-    ];
-    const vis = listVisibleForDepth(msgs);
-    // seq2 被 hidden 掉后 visible 为 6 条（seq1,3,4,5,6,7），depth 2..4 → seq 3..5；
-    // fromSeq 边缘 seq3 是 user(tool_result)，且配对 assistant(seq2) 不在
-    // visible 内（病态残留）——新口径下仍向上锚定到 seq1 真用户输入，
-    // 隐藏区间第一条保持 user 且非 tool_result。
-    const slice = { startDepth: 2, endDepth: 4 };
-    const ids = messageIdsInSlice(vis, slice);
-    const range = resolveHideMessageRange(vis, slice, ids);
-    assert.ok(range);
-    assert.equal(range.fromSeq, 1);
-    assert.equal(range.toSeq, 5);
-  });
-
-  it("T-CF4：全 user（含 tool_result）无 assistant 时仍返回 null", () => {
-    const onlyUsers = [
-      makeMsg("u1", 1, "user"),
-      makeMsg("u2", 2, "user", [
-        { type: "tool_result", toolUseId: "t9", content: "ok" },
-      ]),
-      makeMsg("u3", 3, "user"),
-    ];
-    const vis = listVisibleForDepth(onlyUsers);
-    const slice = { startDepth: 0 };
+    // n=9，depth 5..8 → seq 1..4：范围内只有 tool 往返和 assistant，
+    // 找不到真用户输入（seq1 真用户输入已隐藏的病态残留形态）——
+    // 放弃压缩返回 null，避免压缩后可见历史以 assistant 开头。
+    const slice = { startDepth: 5, endDepth: 8 };
     const ids = messageIdsInSlice(vis, slice);
     const range = resolveHideMessageRange(vis, slice, ids);
     assert.equal(range, null);
