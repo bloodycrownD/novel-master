@@ -48,6 +48,7 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
 import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
+import type { PromptSkillIndexEntry } from "@/domain/prompt/model/prompt-render-context.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
@@ -95,6 +96,30 @@ export interface DefaultAgentRunnerDeps {
   readonly streamRegistry?: AgentStreamRegistry;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+}
+
+/**
+ * 从装配期 toolCtx.skills 预算提示词技能索引（Step 10 / D4）。
+ *
+ * runAgentTurn 装配期已按本会话 projectId 调 SkillService.effectiveSkills
+ * 预算生效清单并挂在 toolCtx.skills（与 skill_opt 工具同源）；resolve 后
+ * registry 不含 skill_opt（policy deny）时该闭包为空，skillsIndex 随之置空
+ * ——工具与索引同进退。
+ */
+function budgetSkillsIndexEntries(
+  toolCtx: BuiltinToolContext
+): PromptSkillIndexEntry[] | undefined {
+  const skills = toolCtx.skills;
+  if (skills == null) {
+    return undefined;
+  }
+  return skills.effective
+    .filter((s) => s.effective)
+    .map((s) => ({
+      name: s.name,
+      description: s.description ?? "",
+      domain: s.domain,
+    }));
 }
 
 function truncateRaw(raw: string, maxLen: number): string {
@@ -203,6 +228,10 @@ export class DefaultAgentRunner implements AgentRunner {
       options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
     const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
+    // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
+    // 回合内技能启停不即时反映）；skill_opt 被 policy 禁用时闭包为空，
+    // 索引随之置空（D4：工具与索引同进退）。
+    const skillsIndex = budgetSkillsIndexEntries(this.deps.toolCtx);
     // 常驻工作区前缀 scope：从 session 拿归属 id。主 session 等于自身；子 session
     // 指向父 session（子 agent 在父 session 工作区工作，规则评估与文件列表都按
     // 父工作区）。VFS 也用同一归属 session 视图。
@@ -297,6 +326,7 @@ export class DefaultAgentRunner implements AgentRunner {
           now: turnNow,
           workplace: wt,
           filetree: turnFiletree,
+          skillsIndex,
         };
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
@@ -352,6 +382,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
           agentStepIndex: step,
           workplaceDisplay,
+          skillsIndex,
         });
         const protocol = await inferLlmProtocolFromSavedModelId(
           options.savedModelId,
