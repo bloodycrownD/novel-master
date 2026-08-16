@@ -53,8 +53,6 @@ interface ChatComposerProps {
   running: boolean;
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
-  /** 会话有 pending→user_ops（空发门闩）。 */
-  hasPendingUserOps: boolean;
   /** 末条 user 含 tool_result。 */
   lastMessageHasToolResult: boolean;
   /** 末条为 plain user 文本时禁用输入。 */
@@ -89,7 +87,6 @@ export function ChatComposer({
   onAttachmentsChange,
   running,
   canResumeWithoutInput,
-  hasPendingUserOps,
   lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   error: controlledError,
@@ -372,7 +369,6 @@ export function ChatComposer({
     const intent = resolveComposerSendIntent({
       text: value,
       attachments,
-      hasPendingUserOps,
       canResumeWithoutInput,
       hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
       hasModel,
@@ -422,7 +418,6 @@ export function ChatComposer({
   const sendDisabled = resolveComposerSendIntent({
     text: value,
     attachments,
-    hasPendingUserOps,
     canResumeWithoutInput,
     hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
     hasModel,

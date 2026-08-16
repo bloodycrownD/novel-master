@@ -66,7 +66,6 @@ import {
   type SessionSetComposerDraftRequest,
   type SessionSetModelOverrideRequest,
 
-  type UserVfsHasPendingRequest,
   type VfsBatchClearStagingRequest,
   type VfsBatchExportStageRequest,
   type VfsBatchExportStageResult,
@@ -270,10 +269,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       VfsBatchClearStagingRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING),
-    ipcUserVfsHasPending: withReq<
-      UserVfsHasPendingRequest,
-      IpcResult<boolean>
-    >(invoke, IPC_CHANNELS.USER_VFS_HAS_PENDING),
     ipcProjectsPullTemplate: withReq<
       ProjectPullTemplateRequest,
       IpcResult<void>

@@ -35,8 +35,6 @@ import {
   ipcSessionsGetComposerDraft,
   ipcSessionsProjectComposerStatus,
   ipcSessionsSetComposerDraft,
-  ipcUserVfsHasPending,
-  onWorkspaceMutated,
 } from '@/ipc/client';
 import { useShellNav } from '@/providers/ShellNavProvider';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -194,7 +192,6 @@ export function ConversationPanel({
     MessageAttachmentDto[]
   >([]);
   const composerDraftHydratedRef = useRef(false);
-  const [hasPendingUserOps, setHasPendingUserOps] = useState(false);
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -207,22 +204,14 @@ export function ConversationPanel({
   } | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
-  const refreshPendingUserOps = useCallback(async () => {
-    const result = await ipcUserVfsHasPending({ sessionId });
-    if (result.ok) {
-      setHasPendingUserOps(result.data);
-    }
-  }, [sessionId]);
-
   const reloadMessages = useCallback(async () => {
     const result = await ipcMessagesList({ sessionId });
     if (result.ok) {
       setMessages(result.data);
     }
-    await refreshPendingUserOps();
     // messages changed → 刷新页脚 token（与 Mobile refreshChatTokenLabel 对称）
     reloadFooter();
-  }, [sessionId, refreshPendingUserOps, reloadFooter]);
+  }, [sessionId, reloadFooter]);
 
   const composerSendState = useMemo(
     () => deriveComposerSendState(findLastVisibleMessageDto(messages)),
@@ -251,20 +240,11 @@ export function ConversationPanel({
     }
   }, [viewPromptRequest]);
 
-  useEffect(() => {
-    return onWorkspaceMutated(payload => {
-      if (payload.sessionId === sessionId) {
-        void refreshPendingUserOps();
-      }
-    });
-  }, [sessionId, refreshPendingUserOps]);
-
   // 切换会话：重置 UI 运行态；从 DB 水化 attach+text 并投影状态条
   useEffect(() => {
     resetUiForSessionChange();
     onStreamReset();
     setComposerError(undefined);
-    setHasPendingUserOps(false);
     composerDraftHydratedRef.current = false;
     setComposerText('');
     setComposerAttachments([]);
@@ -989,7 +969,6 @@ export function ConversationPanel({
             onAttachmentsChange={setComposerAttachments}
             running={running}
             canResumeWithoutInput={composerSendState.canResumeWithoutInput}
-            hasPendingUserOps={hasPendingUserOps}
             lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
             lastMessageIsPlainUserText={
               composerSendState.lastMessageIsPlainUserText

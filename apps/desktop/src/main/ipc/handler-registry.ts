@@ -140,7 +140,6 @@ import {
   handleSessionsSetModelOverride,
 } from './handlers/sessions.js';
 import {
-  handleUserVfsHasPending,
   handleVfsBatchClearStaging,
   handleVfsBatchExportStage,
   handleVfsBatchIngestFromPaths,
@@ -247,7 +246,6 @@ export function registerHandlersFromRegistry(): void {
       handleVfsStartDrag(event, req);
     },
   );
-  bindReq(IPC_CHANNELS.USER_VFS_HAS_PENDING, handleUserVfsHasPending);
 
   bindReq(IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS, handleWorkplaceBuildListRows);
   bindReq(IPC_CHANNELS.WORKPLACE_SET_DIR_RULE, handleWorkplaceSetDirRule);

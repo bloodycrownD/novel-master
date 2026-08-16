@@ -76,7 +76,6 @@ export const {
   ipcVfsBatchIngestFromPaths,
   ipcVfsBatchExportStage,
   ipcVfsBatchClearStaging,
-  ipcUserVfsHasPending,
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
   ipcMessagesList,
