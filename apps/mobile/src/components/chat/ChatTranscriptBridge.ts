@@ -46,7 +46,8 @@ export type TranscriptAttachmentView = {
     | 'move'
     | 'workplaceChange'
     | 'userAttach'
-    | 'annotate';
+    | 'annotate'
+    | 'skillAttach';
   readonly content?: string | null;
 };
 
