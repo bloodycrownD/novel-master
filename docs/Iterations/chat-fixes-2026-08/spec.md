@@ -32,7 +32,7 @@ date: 2026-08-16
 - **D2 ops prompt 生效范围**：不只删构造端，渲染层同步过滤——`wrap-user-message-for-llm` 对 `source === "user_ops"` 附件仅保留 `action === "annotate"`，历史消息的手改附件一并不再进 prompt。
 - **D3 chip 判定收窄**：`isComposerStatusAttachment` 的 `user_ops` 分支加 `action === "annotate"` 条件，不能按 source 一刀切（annotate chip 共用此判定）。
 - **D4 force 快照语义**：`sendSessionSnapshot` 增加 `force` 参数——force 时消费 `pendingSnapshotRef`（沿用其 intent）、取消 defer timer、绕过 `streamActiveRef` 检查直接 `sendSessionSnapshotNow`。与 `needsOpenSnapshot` 必须直发的既有先例（`ChatTranscriptWebView.tsx` L920-934 注释）同课同补。
-- **D5 压缩边界只向外扩展**：配对感知的边界调整只允许把 range 向外扩（hide 更多），不允许收缩，保住 `2f5bb4b4`「hide 区间覆盖完整切片」的约定；禁止回退 `fromSeq: anchor.seq` 旧写法。
+- **D5 压缩边界只向外扩展（含订正）**：边界调整只允许把 range 向外扩（hide 更多），不允许收缩，保住 `2f5bb4b4`「hide 区间覆盖完整切片」的约定；禁止回退 `fromSeq: anchor.seq` 旧写法。订正后 from 侧口径：楼层第一条必须锚定在「user 且非 tool_result」的真用户输入上（严格交替协议，见 A 项订正记录）——向上锚定只可能让 fromSeq 更小，与只扩不收缩兼容。
 - **D6 `hasPendingTurns` 彻底删除**：`UserVfsTurnService.hasPendingTurns`（`packages/core/src/service/chat/user-vfs-turn.port.ts` L83）随 ops 拆除一并删除，不留替代实现。连带：desktop `handlers/vfs.ts` L404-409 的 `USER_VFS_HAS_PENDING` IPC 通道删除（`handler-registry.ts` L145/L252 绑定、`invoke-registry.ts` L273-276、`client.ts` L79、`shared/ipc-types.ts` 类型同步清理），`ConversationPanel`/`ChatComposer` 的 pending 轮询链随之拆除；core `run-agent-turn.ts` L238-246 的 hasInput 判定同步收口（删 `hasPending` 项）。空续跑 re-append 分支（`prepare-user-vfs-turn-for-agent-run.ts` L101）的前提本就是 `hasPendingTurns`（并非 `hasUnsentUserOpsLog`），该分支随删除整体评估去留。
 - **D7 状态条收窄为仅 annotate（推送函数与 pull 通道均收窄保留，非删除）**：desktop composer 状态条的推送内容与 pull 返回都收窄为仅 annotate（对齐 mobile 侧口径）。push 侧：`notify-composer-status-after-kkv-clear.ts` 的 `notifyComposerStatusAfterFloorOrCompaction` / `notifyComposerStatusAfterSessionKkvCleared` 收窄为仅 annotate 版本——其依赖的 `projectComposerStatusForSession` → `projectComposerStatusAttachments` ops 投影链删除后，内部改走仅 annotate 投影，函数与调用点保留不删；`compaction.ts` 的调用点随收窄版自然收窄。pull 侧：`SESSIONS_PROJECT_COMPOSER_STATUS` IPC 通道**保留**，`handleSessionsProjectComposerStatus`（`handlers/sessions.ts` L23/L135）收窄返回仅 annotate 投影；renderer 消费点（`invoke-registry.ts` L189-192 / `client.ts` L57 / `ConversationPanel.tsx` L281 / `ChatComposer.tsx` L338）不删通道、随投影变化自然收窄。行为由 T-UO4 覆盖（仅 annotate 推送或停推后不炸）。
 
@@ -49,7 +49,9 @@ date: 2026-08-16
 
 ### A. 压缩楼层配对感知（core）
 
-- `packages/core/src/domain/depth/logic/resolve-hide-message-range.ts`：新增边界后处理——若 `fromSeq` 边缘消息是含 `tool_result` 的 user 消息，向外（更旧侧）扩展 `fromSeq` 纳入其配对的 `assistant(tool_use)`；若 `toSeq` 边缘消息是含 `tool_use` 的 assistant 且配对的 tool_result 在 range 外（更新侧），向外（更新侧）扩展 `toSeq` 纳入该 tool_result 消息。配对匹配用 `toolUseId`——`hasToolResult` 直接复用 `message-content-helpers.ts`（`packages/core/src/domain/chat/logic/`）的既有导出；`toolUseIdsFromMessage` 并不在该文件，它是 `packages/core/src/domain/message-checkpoint/logic/resolve-rollback-anchor.ts` L10 的私有实现（未导出），实现时参考其写法自行内联提取，不动 checkpoint 侧代码。锚定存在性校验逻辑不动；`messageIdsInSlice` 签名不动（regex/events 复用）。
+> 订正记录（2026-08-16，用户澄清）：消息流严格 user/assistant 交替（tool_result 挂 user role），压缩楼层第一条必须是**真用户输入**（user 且非 tool_result）。首版实现成「边缘 tool_result 时外扩一步纳入配对 assistant」，导致隐藏区间第一条可为 assistant，口径错误；已改为**向上锚定**（见下）。
+
+- `packages/core/src/domain/depth/logic/resolve-hide-message-range.ts`：from 侧楼层锚定——边缘为 assistant 或 user(tool_result) 时，持续向更旧侧扩展，跳过整个 tool 往返，落在最近一条「user 且非 tool_result」的真用户输入上；严格交替下配对随整轮入区天然完整，无需逐个配对外扩。to 侧保留原配对感知外扩：`toSeq` 边缘是含 `tool_use` 的 assistant 且配对 tool_result 在 range 外时向外（更新侧）纳入，防孤儿 result。配对匹配用 `toolUseId`；`hasToolResult` 复用 `message-content-helpers.ts` 既有导出。锚定存在性校验逻辑不动；`messageIdsInSlice` 签名不动（regex/events 复用）。
 - blocks 在该链路已全量解析（`listBySession` 全列 SELECT + `parseMessageContent`），零额外查询。
 - `packages/core/src/service/prompt/normalize-orphan-tool-results-for-llm.ts` 兜底**保留不删**（仍覆盖上一轮 run 崩溃产生的孤儿）。
 
@@ -144,7 +146,7 @@ desktop：
 
 - T-FK1 — blocking: yes — fork 后新会话 `getSessionAgentConfig` 等于源会话配置（→ Step 2）。
 - T-FK2 — blocking: yes — 源配置为 NULL（repo 层手动清空）时 fork 不抛错、新会话配置为 NULL（→ Step 1/2）。
-- T-CF1 — blocking: yes — fromSeq 边缘为 user(tool_result) 时，range 向外扩展纳入配对 assistant(tool_use)（→ Step 3/4）。
+- T-CF1 — blocking: yes — fromSeq 向上锚定到真用户输入（user 且非 tool_result），隐藏区间第一条必为 user；边缘 assistant 或 user(tool_result) 均向上跳过整个 tool 往返（→ Step 3/4，订正后口径）。
 - T-CF2 — blocking: yes — toSeq 边缘为 assistant(tool_use) 且 tool_result 在 range 外时，toSeq 向外扩展纳入 tool_result 消息（→ Step 3/4）。
 - T-CF3 — blocking: yes — 无配对拆开时 range 与原行为完全一致（回归保护，→ Step 3/4）。
 - T-CF4 — blocking: yes — 全 user 无 assistant 时仍返回 null（既有行为不变，→ Step 4）。
