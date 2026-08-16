@@ -16,7 +16,6 @@ import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js"
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -65,33 +64,50 @@ export async function seedForkCopyParity(
   const fileMetas = await entries.scanFileEntriesWithMeta(targetScopeKey, "/");
   const metaByEntryId = new Map(fileMetas.map((m) => [m.entryId, m]));
 
-  for (const head of heads) {
-    const meta = metaByEntryId.get(head.entryId);
-    if (meta == null) {
-      // entry 缺失 / 非文件行，钉 deleted revision 兜底，防止脏 head 污染
-      await revisions.append({
+  if (heads.length > 0) {
+    // 批量验 blob 存在性：同库 fork/copy 时 copyVfsTree 已确保 blob 落位，
+    // 一次 IN 查询替代逐 head ensureBlob；缺失时保持与 ensureBlob 相同的报错语义。
+    const hashes = [
+      ...new Set(
+        heads
+          .map((h) => metaByEntryId.get(h.entryId)?.contentHash)
+          .filter((h): h is string => h != null),
+      ),
+    ];
+    if (hashes.length > 0) {
+      const existingBlobs = await contentStore.findExistingBlobHashes(hashes);
+      const missing = hashes.find((h) => !existingBlobs.has(h));
+      if (missing != null) {
+        throw new Error(`vfs_content_blob 缺失且无可回退明文: ${missing}`);
+      }
+    }
+
+    // 一次批量 INSERT 落全部 revision（ref_count 直接置 1，等价于逐条
+    // append + adjustRef(+1)，且省去 adjustRef 的存在性回查）。
+    const now = Date.now();
+    const items = heads.map((head) => {
+      const meta = metaByEntryId.get(head.entryId);
+      if (meta == null) {
+        // entry 缺失 / 非文件行，钉 deleted revision 兜底，防止脏 head 污染
+        return {
+          entryId: head.entryId,
+          version: head.headVersion,
+          contentHash: null,
+          status: "deleted",
+          mtimeMs: now,
+          refCount: 1,
+        };
+      }
+      return {
         entryId: head.entryId,
         version: head.headVersion,
-        content: null,
-        status: "deleted",
-        mtimeMs: Date.now(),
-      });
-      await adjustRef(revisions, head.entryId, head.headVersion, +1);
-      continue;
-    }
-    const contentHash = meta.contentHash;
-    if (contentHash != null) {
-      await contentStore.ensureBlob(contentHash, null);
-    }
-    await revisions.append({
-      entryId: head.entryId,
-      version: head.headVersion,
-      content: null,
-      contentHash,
-      status: "active",
-      mtimeMs: meta.mtimeMs,
+        contentHash: meta.contentHash,
+        status: "active",
+        mtimeMs: meta.mtimeMs,
+        refCount: 1,
+      };
     });
-    await adjustRef(revisions, head.entryId, head.headVersion, +1);
+    await revisions.batchAppendWithRefCount(items);
   }
 
   await workplace.copyScope(
