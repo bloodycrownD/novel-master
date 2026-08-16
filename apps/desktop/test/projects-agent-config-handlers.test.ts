@@ -38,7 +38,7 @@ describe("projects agent-config IPC handlers", () => {
     }
   });
 
-  it("updateAgentConfig custom round-trip（assessed definition health）", async () => {
+  it("updateAgentConfig 已下线为 no-op，custom patch 恒返回 follow 默认", async () => {
     const created = await handleProjectsCreate({ name: "Custom Agent" });
     assert.equal(created.ok, true);
     if (!created.ok) {
@@ -50,6 +50,7 @@ describe("projects agent-config IPC handlers", () => {
       prompts: { persist: [], dynamic: [] },
     };
 
+    // 项目智能体 1.4.26 已下线：update 恒返回 follow 默认，不落盘 custom
     const saved = await handleProjectsUpdateAgentConfig({
       projectId: created.data.id,
       patch: { mode: "custom", definition },
@@ -58,26 +59,20 @@ describe("projects agent-config IPC handlers", () => {
     if (!saved.ok) {
       return;
     }
-    assert.equal(saved.data.mode, "custom");
-    assert.equal(saved.data.definition?.status, "valid");
-    if (saved.data.definition?.status === "valid") {
-      assert.equal(saved.data.definition.value.name, "项目专属");
-    }
+    assert.equal(saved.data.mode, "follow");
+    assert.equal(saved.data.definition, undefined);
 
     const loaded = await handleProjectsGetAgentConfig({
       projectId: created.data.id,
     });
     assert.equal(loaded.ok, true);
     if (loaded.ok) {
-      assert.equal(loaded.data.mode, "custom");
-      assert.equal(loaded.data.definition?.status, "valid");
-      if (loaded.data.definition?.status === "valid") {
-        assert.equal(loaded.data.definition.value.name, "项目专属");
-      }
+      assert.equal(loaded.data.mode, "follow");
+      assert.equal(loaded.data.definition, undefined);
     }
   });
 
-  it("切回 follow 保留 definition 草稿（assessed）", async () => {
+  it("切回 follow 同样为 no-op，不残留 definition", async () => {
     const created = await handleProjectsCreate({ name: "Follow Draft" });
     assert.equal(created.ok, true);
     if (!created.ok) {
@@ -101,10 +96,7 @@ describe("projects agent-config IPC handlers", () => {
     assert.equal(follow.ok, true);
     if (follow.ok) {
       assert.equal(follow.data.mode, "follow");
-      assert.equal(follow.data.definition?.status, "valid");
-      if (follow.data.definition?.status === "valid") {
-        assert.equal(follow.data.definition.value.name, "草稿");
-      }
+      assert.equal(follow.data.definition, undefined);
     }
   });
 });
