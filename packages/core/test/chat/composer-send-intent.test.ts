@@ -10,7 +10,6 @@ describe("resolveComposerSendIntent", () => {
     const intent = resolveComposerSendIntent({
       text: "",
       attachments: [{ source: "workplace" }],
-      hasPendingUserOps: false,
       canResumeWithoutInput: false,
       hasModel: true,
     });
@@ -24,7 +23,6 @@ describe("resolveComposerSendIntent", () => {
     const intent = resolveComposerSendIntent({
       text: "见 @/a.md",
       attachments: [{ source: "attach" }],
-      hasPendingUserOps: false,
       canResumeWithoutInput: true,
       hasModel: true,
     });
@@ -37,7 +35,6 @@ describe("resolveComposerSendIntent", () => {
     const intent = resolveComposerSendIntent({
       text: "",
       attachments: [],
-      hasPendingUserOps: false,
       canResumeWithoutInput: false,
       hasModel: true,
     });
@@ -49,7 +46,6 @@ describe("resolveComposerSendIntent", () => {
     const without = resolveComposerSendIntent({
       text: "",
       attachments: [],
-      hasPendingUserOps: false,
       canResumeWithoutInput: false,
       hasModel: true,
     });
@@ -59,7 +55,6 @@ describe("resolveComposerSendIntent", () => {
     const withAnnotate = resolveComposerSendIntent({
       text: "",
       attachments: [],
-      hasPendingUserOps: false,
       canResumeWithoutInput: false,
       hasAnnotateDrafts: true,
       hasModel: true,
@@ -73,7 +68,6 @@ describe("resolveComposerSendIntent", () => {
     const intent = resolveComposerSendIntent({
       text: "",
       attachments: [],
-      hasPendingUserOps: false,
       canResumeWithoutInput: false,
       hasModel: true,
       running: true,

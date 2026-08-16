@@ -171,7 +171,7 @@ describe("cli-run-agent-turn parity", () => {
     assert.equal(captured.prompts.persist[0]?.content, "GLOBAL_PROMPT");
   });
 
-  it("T-R2：空续跑 + pending VFS 后 transcript 顺序与 flush 契约一致", async () => {
+  it("T-R2：空续跑 + 已执行 VFS 写后 transcript 顺序不变（无 ops 注入，E-core）", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     refreshUserVfsUnifiedToolTurnSnapshot(true);
 
@@ -183,7 +183,11 @@ describe("cli-run-agent-turn parity", () => {
     const runtime = makeRuntime(ctx, registry);
 
     await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
-    await ctx.messages.append(session.id, "user", textBlocks("用户续跑"));
+    const originalUser = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("用户续跑"),
+    );
     await runtime.userVfsTurn!.executeOp(
       session.id,
       writeOp("/parity.md", "content"),
@@ -206,7 +210,12 @@ describe("cli-run-agent-turn parity", () => {
       ),
       false,
     );
-    assert.equal(listed[1]!.attachments?.[0]?.source, "user_ops");
+    // user ops 拆除：末条 user 原样保留，不再重排、不注入 user_ops 附件
+    assert.equal(listed[1]!.id, originalUser.id);
+    assert.equal(
+      (listed[1]!.attachments ?? []).some((a) => a.source === "user_ops"),
+      false,
+    );
 
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });

@@ -94,36 +94,4 @@ describe("PersistentPreferences", () => {
       );
     });
   });
-
-  describe("userOpsLogEnabled", () => {
-    it("defaults to true when unset", async () => {
-      const ctx = getNovelMasterTestContext();
-      assert.equal(await ctx.preferences.getUserOpsLogEnabled(), true);
-    });
-
-    it("set false / true round-trips", async () => {
-      const ctx = getNovelMasterTestContext();
-      await ctx.preferences.setUserOpsLogEnabled(false);
-      assert.equal(await ctx.preferences.getUserOpsLogEnabled(), false);
-      await ctx.preferences.setUserOpsLogEnabled(true);
-      assert.equal(await ctx.preferences.getUserOpsLogEnabled(), true);
-    });
-
-    it("reset restores default true", async () => {
-      const ctx = getNovelMasterTestContext();
-      await ctx.preferences.setUserOpsLogEnabled(false);
-      await ctx.preferences.resetUserOpsLogEnabled();
-      assert.equal(await ctx.preferences.getUserOpsLogEnabled(), true);
-    });
-
-    it("throws PreferencesError on invalid stored boolean", async () => {
-      const ctx = getNovelMasterTestContext();
-      const kkv = createKkvService(ctx.conn);
-      await kkv.set("nm-preferences", "chat.userOpsLogEnabled", "not-a-bool");
-      await assert.rejects(
-        () => ctx.preferences.getUserOpsLogEnabled(),
-        (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
-      );
-    });
-  });
 });

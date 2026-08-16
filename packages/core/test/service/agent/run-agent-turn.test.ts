@@ -1,45 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import { buildUserOpsAttachmentFromEntry } from "@/domain/chat/logic/build-user-ops-attachment.js";
 import {
   refreshUserVfsUnifiedToolTurnSnapshot,
   resetUserVfsUnifiedToolTurnSnapshotForTests,
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
-import { buildUserVfsSaveWriteActionXml } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import {
   AgentTurnError,
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
-import { prepareUserVfsTurnForAgentRun } from "@/service/agent/logic/prepare-user-vfs-turn-for-agent-run.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 
-/** 与生产 flush 同源：`buildUserOpsAttachmentFromEntry`（含 path/action）。 */
-function flushWriteUserOpsAttachment(path: string, content = "") {
-  return buildUserOpsAttachmentFromEntry({
-    action: "write",
-    path,
-    xml: buildUserVfsSaveWriteActionXml(path, "new-file", content),
-  });
-}
-
-function mockUserVfsTurn(overrides: {
-  readonly flushPendingUserVfsTurns?: UserVfsTurnService["flushPendingUserVfsTurns"];
-  readonly hasPendingTurns?: UserVfsTurnService["hasPendingTurns"];
-  readonly previewUserOpsChangedPaths?: UserVfsTurnService["previewUserOpsChangedPaths"];
-  readonly previewUserOpsActions?: UserVfsTurnService["previewUserOpsActions"];
-}): UserVfsTurnService {
+function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
-    flushPendingUserVfsTurns:
-      overrides.flushPendingUserVfsTurns ??
-      (async () => ({ flushed: false, attachments: [] })),
-    previewUserOpsChangedPaths:
-      overrides.previewUserOpsChangedPaths ?? (async () => []),
-    previewUserOpsActions: overrides.previewUserOpsActions ?? (async () => []),
-    hasPendingTurns:
-      overrides.hasPendingTurns ?? (async () => false),
+    previewUserOpsChangedPaths: async () => [],
+    previewUserOpsActions: async () => [],
   };
 }
 
@@ -234,233 +211,7 @@ describe("runAgentTurn", () => {
     );
   });
 
-  it("flag 关闭时不调用 flush", async () => {
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-    refreshUserVfsUnifiedToolTurnSnapshot(false);
-    let flushCalled = false;
-    const runtime = makeRuntime({
-      userVfsTurn: mockUserVfsTurn({
-        flushPendingUserVfsTurns: async () => {
-          flushCalled = true;
-          return { flushed: false, attachments: [] };
-        },
-      }),
-      append: async () => ({ id: "m-new" }),
-    });
-    try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "hello");
-    } catch {
-      // runner deps stubbed
-    }
-    assert.equal(flushCalled, false);
-    resetUserVfsUnifiedToolTurnSnapshotForTests();
-  });
-
-  it("flushPendingUserVfsTurns 在 append user 之前调用", async () => {
-    const order: string[] = [];
-    const runtime = makeRuntime({
-      userVfsTurn: mockUserVfsTurn({
-        flushPendingUserVfsTurns: async () => {
-          order.push("flush");
-          return { flushed: false, attachments: [] };
-        },
-      }),
-      append: async () => {
-        order.push("append");
-        return { id: "m-new" };
-      },
-    });
-    try {
-      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "hello");
-    } catch {
-      // runner deps stubbed
-    }
-    assert.deepEqual(order, ["flush", "append"]);
-  });
-
-  it("空请求续跑时 flush 在跑 Agent 之前、不 append 新 user", async () => {
-    const order: string[] = [];
-    let appended = false;
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        { id: "u-trail", role: "user", content: { blocks: [] } },
-      ],
-      delete: async (id) => {
-        order.push(`delete:${id}`);
-      },
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => {
-          order.push("flush");
-          return {
-            flushed: true,
-            attachments: [flushWriteUserOpsAttachment("/x.md")],
-          };
-        },
-      }),
-      append: async () => {
-        appended = true;
-        order.push("append");
-        return { id: "m-new" };
-      },
-    });
-    try {
-      await runAgentTurn(
-        runtime,
-        { projectId: "p", sessionId: "s" },
-        "",
-        { allowResumeWithoutInput: true },
-      );
-    } catch {
-      // runner deps stubbed
-    }
-    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
-    // append 仅用于写回末条 user，非新正文
-    assert.equal(appended, true);
-  });
-
-  it("空续跑且末条 user 时 delete→flush→reappend 顺序", async () => {
-    const order: string[] = [];
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        { id: "a1", role: "assistant", content: { blocks: [] } },
-        {
-          id: "u-trail",
-          role: "user",
-          content: { blocks: [{ type: "text", text: "续跑" }] },
-          raw: { marker: 1 },
-        },
-      ],
-      delete: async (id) => {
-        order.push(`delete:${id}`);
-      },
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => {
-          order.push("flush");
-          return { flushed: true, attachments: [] };
-        },
-      }),
-      append: async () => {
-        order.push("append");
-        return { id: "u-reappended" };
-      },
-    });
-
-    await prepareUserVfsTurnForAgentRun({
-      messages: runtime.messages,
-      userVfsTurn: runtime.userVfsTurn!,
-      sessionId: "s",
-      trimmedInput: "",
-      allowResumeWithoutInput: true,
-    });
-
-    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
-  });
-
-  it("net diff 空 flush 返回 flushed:false 时仍重排末条 user", async () => {
-    const order: string[] = [];
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        {
-          id: "u-trail",
-          role: "user",
-          content: { blocks: [{ type: "text", text: "续跑" }] },
-        },
-      ],
-      delete: async (id) => {
-        order.push(`delete:${id}`);
-      },
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => {
-          order.push("flush");
-          return { flushed: false, attachments: [] };
-        },
-      }),
-      append: async () => {
-        order.push("append");
-        return { id: "u-reappended" };
-      },
-    });
-
-    await prepareUserVfsTurnForAgentRun({
-      messages: runtime.messages,
-      userVfsTurn: runtime.userVfsTurn!,
-      sessionId: "s",
-      trimmedInput: "",
-      allowResumeWithoutInput: true,
-    });
-
-    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
-  });
-
-  it("pending 为空时空续跑不重排末条 user", async () => {
-    const order: string[] = [];
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        { id: "u-trail", role: "user", content: { blocks: [] } },
-      ],
-      delete: async (id) => {
-        order.push(`delete:${id}`);
-      },
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => false,
-        flushPendingUserVfsTurns: async () => {
-          order.push("flush");
-          return { flushed: false, attachments: [] };
-        },
-      }),
-      append: async () => {
-        order.push("append");
-        return { id: "u-reappended" };
-      },
-    });
-
-    await prepareUserVfsTurnForAgentRun({
-      messages: runtime.messages,
-      userVfsTurn: runtime.userVfsTurn!,
-      sessionId: "s",
-      trimmedInput: "",
-      allowResumeWithoutInput: true,
-    });
-
-    assert.deepEqual(order, ["flush"]);
-  });
-
-  it("无 allowResumeWithoutInput 时 trimmed 空不删末条 user", async () => {
-    const order: string[] = [];
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        { id: "u-trail", role: "user", content: { blocks: [] } },
-      ],
-      delete: async (id) => {
-        order.push(`delete:${id}`);
-      },
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => {
-          order.push("flush");
-          return { flushed: true, attachments: [] };
-        },
-      }),
-      append: async () => {
-        order.push("append");
-        return { id: "u-reappended" };
-      },
-    });
-
-    await prepareUserVfsTurnForAgentRun({
-      messages: runtime.messages,
-      userVfsTurn: runtime.userVfsTurn!,
-      sessionId: "s",
-      trimmedInput: "",
-    });
-
-    assert.deepEqual(order, ["flush"]);
-  });
-
-  // 落库 path 一律带前导 `/`（composer-at-token-prompt-dedup SPEC / scanAtPathAttachments）
+  // T-AT5（落库 path 一律带前导 `/`；composer-at-token-prompt-dedup SPEC / scanAtPathAttachments）
   it("T-AT5: 手输 @path 入库 attachments 且 content 保留 token", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     refreshUserVfsUnifiedToolTurnSnapshot(false);
@@ -555,7 +306,7 @@ describe("runAgentTurn", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-SR1：丢弃预览 workplace/user_ops；不 materialize workplace；user_ops 来自 flush", async () => {
+  it("T-SR1：丢弃预览 workplace/user_ops；不 materialize workplace（user ops 拆除后无 flush 注入）", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     let appendedOpts:
       | {
@@ -568,18 +319,11 @@ describe("runAgentTurn", () => {
           }[];
         }
       | undefined;
-    const flushAtt = flushWriteUserOpsAttachment("/delta.md");
     const runtime = makeRuntime({
       definition: workplaceOnDefinition,
       evaluateRuleView: async () => ruleViewWithFile("/delta.md"),
       listKeys: async () => [],
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => ({
-          flushed: true,
-          attachments: [flushAtt],
-        }),
-      }),
+      userVfsTurn: mockUserVfsTurn(),
       append: async (_sid, _role, _content, opts) => {
         appendedOpts = opts;
         return { id: "m-sr1" };
@@ -624,12 +368,11 @@ describe("runAgentTurn", () => {
       false,
       "不得原样保留预览 workplace",
     );
-    const ops = atts.filter((a) => a.source === "user_ops");
-    assert.equal(ops.length, 1);
-    assert.equal(ops[0]?.path, "/delta.md");
-    assert.equal(ops[0]?.action, "write");
-    assert.equal(ops[0]?.name, "/delta.md");
-    assert.equal(ops[0]?.content, flushAtt.content);
+    assert.equal(
+      atts.some((a) => a.source === "user_ops"),
+      false,
+      "误传的 user_ops 预览一律丢弃（flush 已拆除）",
+    );
     assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
@@ -734,118 +477,6 @@ describe("runAgentTurn", () => {
     );
     assert.equal(appendCount, 0);
     resetUserVfsUnifiedToolTurnSnapshotForTests();
-  });
-
-  it("T-SR8：re-append merge 不含 workplace 且不丢 flush/attach/trailing", async () => {
-    let reAppendedAtts:
-      | readonly { source?: string; path?: string }[]
-      | undefined;
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        {
-          id: "u-trail",
-          role: "user",
-          content: { blocks: [{ type: "text", text: "续跑" }] },
-          attachments: [
-            {
-              name: "/prior.md",
-              source: "attach",
-              type: "text",
-              content: null,
-              path: "/prior.md",
-            },
-          ],
-        },
-      ],
-      delete: async () => undefined,
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => ({
-          flushed: true,
-          attachments: [flushWriteUserOpsAttachment("/x.md")],
-        }),
-      }),
-      append: async (_sid, _role, _content, opts) => {
-        reAppendedAtts = opts?.attachments as
-          | readonly { source?: string; path?: string; action?: string }[]
-          | undefined;
-        return { id: "u-re" };
-      },
-    });
-
-    const result = await prepareUserVfsTurnForAgentRun({
-      messages: runtime.messages,
-      userVfsTurn: runtime.userVfsTurn!,
-      sessionId: "s",
-      trimmedInput: "",
-      allowResumeWithoutInput: true,
-      composerAttachments: [
-        {
-          name: "chip.md",
-          source: "attach",
-          type: "text",
-          content: null,
-          path: "/chip.md",
-        },
-      ],
-    });
-
-    assert.ok(result.reAppendedUserMessageId);
-    assert.equal(result.attachments.length, 0);
-    const atts = reAppendedAtts ?? [];
-    assert.ok(atts.some((a) => a.source === "attach" && a.path === "/prior.md"));
-    assert.ok(atts.some((a) => a.source === "attach" && a.path === "/chip.md"));
-    assert.ok(
-      atts.some(
-        (a) =>
-          a.source === "user_ops" && a.path === "/x.md" && a.action === "write",
-      ),
-    );
-    assert.ok(
-      !atts.some((a) => a.source === "workplace"),
-      "re-append merge 不得含 workplace materialize",
-    );
-  });
-
-  it("flush 失败时仍写回已删末条 user", async () => {
-    const order: string[] = [];
-    const runtime = makeRuntime({
-      listBySession: async () => [
-        {
-          id: "u-trail",
-          role: "user",
-          content: { blocks: [{ type: "text", text: "续跑" }] },
-        },
-      ],
-      delete: async (id) => {
-        order.push(`delete:${id}`);
-      },
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => {
-          order.push("flush");
-          throw new Error("flush failed");
-        },
-      }),
-      append: async () => {
-        order.push("append");
-        return { id: "u-reappended" };
-      },
-    });
-
-    await assert.rejects(
-      () =>
-        prepareUserVfsTurnForAgentRun({
-          messages: runtime.messages,
-          userVfsTurn: runtime.userVfsTurn!,
-          sessionId: "s",
-          trimmedInput: "",
-          allowResumeWithoutInput: true,
-        }),
-      /flush failed/,
-    );
-
-    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
   });
 
   // T-DS3（S-13 治本）：普通纯文本 chat 路径下，runAgentTurn 必须为新 append
