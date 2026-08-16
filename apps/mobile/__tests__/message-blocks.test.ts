@@ -533,7 +533,7 @@ describe('message-blocks', () => {
     }
   });
 
-  it('T-SR3: 空正文 + attachments 仍进 buildChatListItems', () => {
+  it('T-SR3: 空正文 + attachments 仍进 buildChatListItems；仅遗留 user_ops 操作日志则丢弃', () => {
     const emptyBodyWithAttach: ChatMessage = {
       ...msg('u-att', 'user', [{ type: 'text', text: '' }], 1),
       attachments: [
@@ -557,12 +557,23 @@ describe('message-blocks', () => {
     expect(items[0]?.kind).toBe('message');
     if (items[0]?.kind === 'message') {
       expect(items[0].textParts).toEqual([]);
+      // 原始 message.attachments 不被篡改；丢弃只发生在展示层。
       expect(items[0].message.attachments).toHaveLength(2);
-      expect(items[0].message.attachments?.map(a => a.source)).toEqual([
-        'workplace',
-        'user_ops',
-      ]);
     }
+
+    // 空正文且仅遗留 user_ops 操作日志（非 annotate）：不再生成空行。
+    const opsOnly: ChatMessage = {
+      ...msg('u-ops2', 'user', [{ type: 'text', text: '' }], 2),
+      attachments: [
+        {
+          name: 'mkdir:/notes',
+          source: 'user_ops',
+          type: 'text',
+          content: '<action name="mkdir">\n{"path":"/notes"}\n</action>',
+        },
+      ],
+    };
+    expect(buildChatListItems([opsOnly])).toHaveLength(0);
   });
 
   it('omits tool_results-only user messages from list', () => {
