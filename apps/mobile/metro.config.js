@@ -202,7 +202,7 @@ function resolveSmithySerdeNative(moduleName) {
     'node_modules/@smithy/core/dist-cjs/submodules/serde/index.native.js',
   );
   if (fs.existsSync(nativePath)) {
-    return {type: 'sourceFile', filePath: nativePath};
+    return nativePath;
   }
   return null;
 }
