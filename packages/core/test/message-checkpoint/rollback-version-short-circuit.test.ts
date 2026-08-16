@@ -29,7 +29,6 @@ function createNoGetContentStore(): VfsContentStore {
       throw new Error("exists 检测不应解压正文");
     },
     gc: async () => 0,
-    collectAllReferencedHashes: async () => new Set(),
     ensureBlob: async () => undefined,
     size: async () => 0,
   };

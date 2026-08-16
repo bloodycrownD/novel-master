@@ -114,16 +114,17 @@ export async function repairRefCounts(
     bump(head.entryId, head.headVersion);
   }
 
-  let rowsAdjusted = 0;
   const keys = await revisionRepo.listKeysUnderScope(scopeKey, pathPrefix);
-  for (const { entryId, version } of keys) {
-    const key = `${entryId}:${version}`;
-    const want = expected.get(key) ?? 0;
-    const adjusted = await revisionRepo.repairRefCountFloor(entryId, version, want);
-    if (adjusted) {
-      rowsAdjusted++;
-    }
-  }
+  // 批量化：以前是逐条 repairRefCountFloor（每条 1 SELECT + 1 UPDATE），
+  // 200 revision 会发 200 + 200 条 SQL。现在一次性把所有 (entryId, version, expected)
+  // 丢给 batchRepairRefCountFloor，它内部按 500 分块批量 SELECT + conn.batch UPDATE，
+  // round-trip 数从 2N 压成 ceil(N/500) × 2。
+  const items = keys.map(({ entryId, version }) => ({
+    entryId,
+    version,
+    expected: expected.get(`${entryId}:${version}`) ?? 0,
+  }));
+  const rowsAdjusted = await revisionRepo.batchRepairRefCountFloor(items);
 
   return { rowsAdjusted, rowsExamined: keys.length };
 }
@@ -132,11 +133,11 @@ export async function repairRefCounts(
  * 把 {@link repairRefCounts} 包成 `repair` 类型的 {@link IntegrityRepairOperation}。
  *
  * detect 只读地扫一眼 scope 下有没有 revision 行：有的话保守地标记 needsRepair=true，
- * 具体偏差交给幂等的 repair 自己处理（`repairRefCountFloor` 只增不减，重复跑安全）。
+ * 具体偏差交给幂等的 repair 自己处理（`batchRepairRefCountFloor` 只增不减，重复跑安全）。
  *
  * 注意：这条路径只动 `vfs_revision.ref_count`，**完全不碰** `vfs_content_blob.ref_count`
  * ——后者由 SQLite 触发器在 revision INSERT/DELETE/UPDATE OF content_hash 时维护。
- * `repairRefCountFloor` 只更新 `ref_count` 列、不改 `content_hash`，触发器不会 fire，
+ * `batchRepairRefCountFloor` 只更新 `ref_count` 列、不改 `content_hash`，触发器不会 fire，
  * 所以应用层修复和触发器维护两条路径不会重复计数（T-SC5 守护的不变量）。
  */
 export function createRevisionRefCountRepairOperation(args: {

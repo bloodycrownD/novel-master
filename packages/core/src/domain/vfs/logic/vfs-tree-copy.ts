@@ -304,6 +304,9 @@ export async function releaseAndDeleteVfsPrefix(
 
 /**
  * Deletes all vfs entries under a scope + logical path prefix.
+ *
+ * @remarks 走 {@link VfsEntryRepository.deleteRecursiveIfAny}：先用 listEntriesUnderPrefix
+ * 探测，空 prefix 静默返回（不抛 vfsNotFound），非空则一条批量 DELETE...LIKE 清掉整棵子树。
  */
 export async function deleteVfsPrefix(
   repo: VfsEntryRepository,
@@ -311,9 +314,5 @@ export async function deleteVfsPrefix(
   prefix: string,
 ): Promise<void> {
   const base = normalizePrefix(prefix);
-  const entries = await repo.listEntriesUnderPrefix(scopeKey, base);
-  const sorted = [...entries].sort((a, b) => b.path.length - a.path.length);
-  for (const entry of sorted) {
-    await repo.delete(scopeKey, entry.path, { recursive: false });
-  }
+  await repo.deleteRecursiveIfAny(scopeKey, base);
 }

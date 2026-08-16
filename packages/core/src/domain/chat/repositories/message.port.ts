@@ -10,6 +10,14 @@ import type { MessageSearchQuery } from "../content/message-content-match.js";
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
   listBySession(sessionId: string): Promise<ChatMessage[]>;
+
+  /**
+   * 统计会话消息行数（`SELECT COUNT(*) ... WHERE session_id = ?`）。
+   *
+   * 乐观锁只需要计数对比，不必把整行捞回内存——用这个替代 `listBySession().length`，
+   * 1000 条消息从拉 1000 行退化成拉 1 行。
+   */
+  countBySession(sessionId: string): Promise<number>;
   listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]>;
   listBySessionPage(
     sessionId: string,
@@ -22,6 +30,13 @@ export interface MessageRepository {
   nextSeq(sessionId: string): Promise<number>;
 
   insert(message: ChatMessage): Promise<void>;
+
+  /**
+   * 批量写入消息：一次 `conn.batch` 提交所有行，消除 fork/copy 的逐条 INSERT。
+   *
+   * 空数组是 no-op（不发出 SQL），方便调用方在不判断长度时直接传入。
+   */
+  batchInsert(messages: readonly ChatMessage[]): Promise<void>;
 
   /** Replaces stored content JSON. Returns false when the row is missing. */
   updateContent(id: string, contentJson: string): Promise<boolean>;

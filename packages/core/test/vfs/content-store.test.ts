@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   bytesToBase64,
   VFS_CONTENT_ENCODING_ZLIB_B64,
@@ -145,22 +146,25 @@ describe("VfsContentStore", () => {
     assert.equal(await rnStore.get(hash), plain);
   });
 
-  it("gc：全库引用集保留他 session 仍引用的 blob", async () => {
+  it("gc：删除孤立 blob，保留被 vfs_entry 引用的 blob", async () => {
     const { conn } = getNovelMasterTestContext();
     const store = new SqliteVfsContentStore(conn);
+    const entryRepo = new SqliteVfsEntryRepository(conn);
     const suffix = testIsolationSuffix();
+    const sk = `test-scope-gc-${suffix}`;
 
-    const hashA = await store.put(`session-a-${suffix}`);
-    const hashB = await store.put(`session-b-${suffix}`);
+    // hashA 被 vfs_entry 引用 → gc 后应保留。
+    const hashA = await store.put(`entry-referenced-${suffix}`);
+    await entryRepo.insertWithContentHash(sk, "/kept.md", hashA);
 
-    // 全库引用集含 A∪B 时，B 不得被删（他 session 仍引用）
-    await store.gc(new Set([hashA, hashB]));
-    assert.equal(await store.get(hashA), `session-a-${suffix}`);
-    assert.equal(await store.get(hashB), `session-b-${suffix}`);
+    // hashB 无人引用 → 孤立，gc 后应被删。
+    const hashB = await store.put(`orphan-${suffix}`);
 
-    // 若错误地只传 session A 引用集，会误删 B（合同提醒：必须全库）
-    await store.gc(new Set([hashA]));
+    const deleted = await store.gc();
+    // 共享内存库里可能有先前用例遗留的孤立 blob，所以只断言「至少删了 hashB」。
+    assert.ok(deleted >= 1, `gc 应至少清扫 1 个孤立 blob，实际 ${deleted}`);
+
+    assert.equal(await store.get(hashA), `entry-referenced-${suffix}`);
     await assert.rejects(() => store.get(hashB));
-    assert.equal(await store.get(hashA), `session-a-${suffix}`);
   });
 });

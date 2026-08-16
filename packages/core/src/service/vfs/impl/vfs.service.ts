@@ -185,7 +185,7 @@ export class DefaultVfsService implements InternalVfsService {
     return grepContents(filtered, pattern, options);
   }
 
-  delete(
+  async delete(
     scopeKey: string,
     path: string,
     options?: { recursive?: boolean },
@@ -194,7 +194,7 @@ export class DefaultVfsService implements InternalVfsService {
     if (normalized === "/") {
       throw vfsInvalidPath(path, "cannot delete root");
     }
-    return this.repo.delete(scopeKey, normalized, {
+    await this.repo.delete(scopeKey, normalized, {
       recursive: options?.recursive === true,
     });
   }

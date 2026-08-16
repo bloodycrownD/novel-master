@@ -169,16 +169,16 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           // 与 plan 阶段记录的快照不一致代表间隙期间 agent 有写入。
           // 这里用 tx 作用域的 SqliteMessageRepository——驱动事务持锁期间，
           // 只有 tx 面能安全查询（不能走 this.deps.messages，那会重入驱动的 mutex 死锁）。
-          // messages 没有独立的 countBySession 方法，这里用 listBySession 的 length 作为快照源，
-          // 与 plan 阶段读路径一致。
+          // 乐观锁只需要计数对比，用 countBySession（COUNT(*) 返回 1 行）代替
+          // listBySession（拉全量行），避免大会话上拉回几百上千行只为取 length。
           const txMessages = new SqliteMessageRepository(tx);
-          const currentMessages = await txMessages.listBySession(sessionId);
-          if (currentMessages.length !== plan.messageCountSnapshot) {
+          const currentCount = await txMessages.countBySession(sessionId);
+          if (currentCount !== plan.messageCountSnapshot) {
             throw sessionFsRollbackConflict(
               sessionId,
               anchorMessageId,
               plan.messageCountSnapshot,
-              currentMessages.length,
+              currentCount,
             );
           }
 
@@ -335,8 +335,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       projectId,
       sessionId,
       scope,
-      // A-22 快照：listBySession 的 length 即 plan 阶段的会话消息计数，
-      // 事务内重读会话消息计以此为准。
+      // A-22 快照：plan 阶段本来就要 listBySession 拿消息内容，顺手取 length 作为计数快照；
+      // 事务内用 countBySession 重读同一口径（会话消息总行数）对比，不一致即判冲突。
       messageCountSnapshot: allMessages.length,
     };
   }

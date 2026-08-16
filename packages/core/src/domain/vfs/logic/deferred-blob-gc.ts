@@ -1,5 +1,5 @@
 /**
- * 延期 blob GC 唯一入口（collectAllReferencedHashes + ContentStore.gc）。
+ * 延期 blob GC 唯一入口（ContentStore.gc 内部用 NOT IN 子查询算全库引用集）。
  *
  * @module domain/vfs/logic/deferred-blob-gc
  */
@@ -14,6 +14,5 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
  */
 export async function runDeferredBlobGc(conn: TdbcConnection): Promise<number> {
   const contentStore = new SqliteVfsContentStore(conn);
-  const referenced = await contentStore.collectAllReferencedHashes();
-  return contentStore.gc(referenced);
+  return contentStore.gc();
 }

@@ -113,7 +113,31 @@ export interface VfsEntryRepository {
     },
   ): Promise<void>;
 
-  delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<void>;
+  /**
+   * 删除 entry 行；递归模式下连子路径一起删。
+   *
+   * @returns 实际删除的行数（changes）；命中 0 行时抛 `vfsNotFound`。
+   */
+  delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<number>;
+
+  /**
+   * 递归删除 scope+prefix 下所有 entry；prefix 下无任何 entry 时静默返回 0。
+   *
+   * @remarks
+   * 与 {@link delete} 的 `recursive:true` 分支的区别：后者在 `changes()===0` 时抛
+   * `vfsNotFound`，而本方法先用 {@link listEntriesUnderPrefix} 探测，空前缀直接返回，
+   * 避免 `deleteVfsPrefix` / `sweepRevisionsUnderScope` 对空目录抛错中断 revision GC。
+   *
+   * 命名说明：本仓库其他批量方法统一用 `batchXxx` 前缀，这里用 `deleteRecursiveIfAny`
+   * 是刻意的语义型命名——强调「有则递归删、空则静默」的容错语义，而非单纯的「批量」。
+   * 作为约定例外保留。
+   *
+   * @returns 实际删除的行数（探测为空时返回 0）
+   */
+  deleteRecursiveIfAny(
+    scopeKey: string,
+    prefix: string,
+  ): Promise<number>;
 
   /** scope 下所有文件路径（glob 用）。 */
   listAllPaths(scopeKey: string): Promise<string[]>;
