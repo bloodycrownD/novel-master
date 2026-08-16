@@ -40,8 +40,9 @@ describe('code-editor WebView boot (dist)', () => {
     expect(script).toContain('setDocument');
     expect(script).toContain('themeUpdate');
     expect(script).toContain('blurEditor');
-    expect(script).toContain('post("ready"');
-    expect(script).toContain('post("change"');
+    // esbuild 打包时同名 post 会被去重重命名为 post2 等形态，断言需兼容 postN。
+    expect(script).toMatch(/post\d*\("ready"/);
+    expect(script).toMatch(/post\d*\("change"/);
   });
 
   it('T-CE-CSS-01: editor shell CSS for full height + touch scroll', () => {
