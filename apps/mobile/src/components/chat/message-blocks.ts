@@ -318,7 +318,12 @@ export function buildChatListItems(
     }
 
     const hasToolUse = toolUses.length > 0;
-    const hasAttachments = (message.attachments?.length ?? 0) > 0;
+    // user ops 已拆除：遗留的 user_ops 操作日志附件（非 annotate）不再兼容展示，
+    // 直接丢弃——仅保留批注（annotate）与其它来源附件。
+    const displayAttachments = (message.attachments ?? []).filter(
+      a => !(a.source === 'user_ops' && a.action !== 'annotate'),
+    );
+    const hasAttachments = displayAttachments.length > 0;
     const unpairedStatus = hasToolUse
       ? resolveUnpairedToolStatus(message, messages, agentRunning, runUiStopped)
       : undefined;
@@ -330,7 +335,8 @@ export function buildChatListItems(
       return view;
     });
 
-    // 空正文但有 attachments（如仅 flush 的 user_ops）仍须进列表；否则真实提示词看得到、UI 没有
+    // 空正文但有 attachments 仍须进列表；否则真实提示词看得到、UI 没有。
+    // user_ops 遗留操作日志已丢弃：仅剩 ops 日志的旧消息不再生成空行。
     if (
       textParts.length > 0 ||
       thinkingParts.length > 0 ||
@@ -383,17 +389,23 @@ export function buildTranscriptRows(
   const rows: TranscriptRow[] = [];
 
   for (const item of items) {
+    // 与 buildChatListItems 同口径：丢弃 user_ops 遗留操作日志（非 annotate），
+    // 仅保留批注与其它来源附件。
     const userAttachments =
       item.message.role === 'user' &&
       (item.message.attachments?.length ?? 0) > 0
-        ? item.message.attachments!.map(a => ({
-            source: a.source,
-            type: a.type,
-            name: a.name,
-            path: a.path ?? a.name,
-            ...(a.action != null ? { action: a.action } : {}),
-            ...(a.content !== undefined ? { content: a.content } : {}),
-          }))
+        ? item.message
+            .attachments!.filter(
+              a => !(a.source === 'user_ops' && a.action !== 'annotate'),
+            )!
+            .map(a => ({
+              source: a.source,
+              type: a.type,
+              name: a.name,
+              path: a.path ?? a.name,
+              ...(a.action != null ? { action: a.action } : {}),
+              ...(a.content !== undefined ? { content: a.content } : {}),
+            }))
         : undefined;
     rows.push({
       kind: 'message',

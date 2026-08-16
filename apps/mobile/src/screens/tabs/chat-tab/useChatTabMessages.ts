@@ -6,7 +6,6 @@ import { Alert, DeviceEventEmitter } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   type ChatMessage,
-  clearUserOpsLog,
   isPlainUserUndoSendEligible,
   parseAnnotateDraftsFromAttachments,
   resolveRollbackConfirmMessage,
@@ -494,7 +493,6 @@ export function useChatTabMessageActions({
             targetMessageId,
             options,
           );
-          clearUserOpsLog(sessionId);
           // assistant 锚点（rewind）：tail 里无 user 消息，没有 attach 可反投影，
           // 批注草稿应清空——与 user 锚点（undo_send）的反投影语义对称。
           // user 锚点（undo_send）的反投影在下方 applyComposerRestore 里处理：
@@ -695,6 +693,12 @@ export function useChatTabMessageActions({
       handleForkFromMessage,
       handleSetFloorFromMessage,
       handleRollbackFromMessage,
+      sessionId,
+      projectId,
+      agentRunning,
+      runtime,
+      reloadMessages,
+      refreshChatTokenLabel,
       setMessageEditPrompt,
       showToast,
     ],

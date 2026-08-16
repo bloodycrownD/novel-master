@@ -5,7 +5,8 @@ import {formatVfsError} from '../src/vfs/errors';
 describe('formatVfsError', () => {
   it('formats VfsError message', () => {
     const err = new VfsError('NOT_FOUND', 'Path not found: /x', {path: '/x'});
-    expect(formatVfsError(err)).toBe('Path not found: /x');
+    // vfs-tool-error-diagnostics 起，用户可见层走 formatVfsErrorForUser 按 code 映射中文
+    expect(formatVfsError(err)).toBe('文件不存在或已被删除。');
   });
 
   it('formats TdbcError message', () => {

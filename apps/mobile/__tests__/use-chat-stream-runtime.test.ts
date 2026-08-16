@@ -145,6 +145,7 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
         clearAbortRetainPending: abort.clearAbortRetainPending,
         batchIngest: batch.ingestWireChunk,
         batchClear: batch.clearBuffers,
+        batchFlush: batch.flushBuffers,
         onMessagesChanged,
         getMessageCount: () => messageCount,
       });
@@ -633,5 +634,118 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
     });
     expect(tryCommit).toHaveBeenCalledTimes(1);
     expect(webHandle.resetStream).not.toHaveBeenCalled();
+  });
+
+  it('T-ST2: STEP_COMMITTED(assistant) 前 batch 缓冲先 flush，无 delta 丢弃', async () => {
+    const {webHandle, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
+    act(() => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: RUN_ID,
+        text: 'a',
+      });
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
+        sessionId: 's1',
+        runId: RUN_ID,
+        text: 'b',
+      });
+    });
+    // fake timers 未推进：32ms/64ms 缓冲未到期，delta 仍滞留 batch 内
+    expect(webHandle.pushStreamBatch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    // 边界事件前缓冲已被同步冲刷，且先于 flushAgentStepUi 到达
+    expect(webHandle.pushStreamBatch).toHaveBeenCalledTimes(1);
+    const payload = (webHandle.pushStreamBatch as jest.Mock).mock.calls[0]![0];
+    expect(payload.segments).toEqual([
+      {kind: 'text', delta: 'a'},
+      {kind: 'thinking', delta: 'b'},
+    ]);
+    const batchOrder = (webHandle.pushStreamBatch as jest.Mock).mock
+      .invocationCallOrder[0]!;
+    const stepFlushOrder = mockFlushAgentStepUi.mock.invocationCallOrder[0]!;
+    expect(batchOrder).toBeLessThan(stepFlushOrder);
+  });
+
+  it('T-ST2: RUN_FINISHED 前 batch 缓冲先 flush 再 clear，无 delta 丢弃', async () => {
+    const {webHandle, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
+    act(() => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: RUN_ID,
+        text: 'x',
+      });
+    });
+    expect(webHandle.pushStreamBatch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        stopReason: 'end_turn',
+      });
+      await Promise.resolve();
+    });
+    expect(webHandle.pushStreamBatch).toHaveBeenCalledTimes(1);
+    const payload = (webHandle.pushStreamBatch as jest.Mock).mock.calls[0]![0];
+    expect(payload.segments).toEqual([{kind: 'text', delta: 'x'}]);
+    const batchOrder = (webHandle.pushStreamBatch as jest.Mock).mock
+      .invocationCallOrder[0]!;
+    const runFlushOrder = mockFlushRunUi.mock.invocationCallOrder[0]!;
+    // flush 先于 reload 收尾（后续 clear），delta 不丢
+    expect(batchOrder).toBeLessThan(runFlushOrder);
+
+    // flush 后缓冲已清空：后续边界事件不会重复下发旧 delta
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FAILED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        error: 'late',
+      });
+      await Promise.resolve();
+    });
+    expect(webHandle.pushStreamBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('T-ST2: RUN_FAILED 前 batch 缓冲先 flush，无 delta 丢弃', async () => {
+    const {webHandle, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
+    act(() => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: RUN_ID,
+        text: 'f',
+      });
+    });
+    expect(webHandle.pushStreamBatch).not.toHaveBeenCalled();
+
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FAILED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        error: 'boom',
+      });
+      await Promise.resolve();
+    });
+    expect(webHandle.pushStreamBatch).toHaveBeenCalledTimes(1);
+    const payload = (webHandle.pushStreamBatch as jest.Mock).mock.calls[0]![0];
+    expect(payload.segments).toEqual([{kind: 'text', delta: 'f'}]);
+    const batchOrder = (webHandle.pushStreamBatch as jest.Mock).mock
+      .invocationCallOrder[0]!;
+    const runFlushOrder = mockFlushRunUi.mock.invocationCallOrder[0]!;
+    expect(batchOrder).toBeLessThan(runFlushOrder);
   });
 });

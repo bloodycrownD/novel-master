@@ -1,5 +1,5 @@
 /**
- * 会话 scope 用户 VFS 操作经 UserVfsTurnService 执行（写盘即时 + append 操作日志）。
+ * 会话 scope 用户 VFS 操作经 UserVfsTurnService 执行（写盘即时）。
  *
  * @module services/user-vfs-turn-execute.service
  */
@@ -22,7 +22,7 @@ export type ExecuteSessionUserVfsOpOptions = {
   /**
    * 批量移动等场景：跳过每次 op 后的状态条刷新，批次末统一
    * {@link refreshComposerStatusAfterUserVfsOps}。
-   * **非**净 diff defer——投影已改读 UserOpsLogStore；本开关仅合并批次末 notify。
+   * 投影已收窄为仅 annotate；本开关仅合并批次末 notify。
    */
   readonly skipComposerStatusRefresh?: boolean;
 };
@@ -44,7 +44,7 @@ export async function executeSessionUserVfsOp(
   await refreshComposerStatusAfterUserVfsOps(runtime, sessionId);
 }
 
-/** 批次结束后补一次状态条投影（读 UserOpsLogStore，无净 diff）。 */
+/** 批次结束后补一次状态条投影（仅 annotate，无净 diff）。 */
 export async function refreshComposerStatusAfterUserVfsOps(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,

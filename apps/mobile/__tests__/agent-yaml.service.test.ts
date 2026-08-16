@@ -29,6 +29,13 @@ jest.mock('@novel-master/core', () => ({
   validateAgentDefinition: (...args: any[]) => mockValidateAgentDefinition(...args),
 }));
 
+// 实现从 @novel-master/core/agent 子路径导入 schema/校验（jest moduleNameMapper 指向真实 dist），
+// 须单独 mock，根入口 mock 拦不住子路径导入。
+jest.mock('@novel-master/core/agent', () => ({
+  agentDefinitionSchema: {toWire: (x: any) => x},
+  validateAgentDefinition: (...args: any[]) => mockValidateAgentDefinition(...args),
+}));
+
 jest.mock('react-native-blob-util', () => ({
   fs: {
     dirs: {CacheDir: '/tmp'},

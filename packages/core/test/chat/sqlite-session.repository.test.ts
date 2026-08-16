@@ -7,7 +7,7 @@ import {
   parseComposerDraftJson,
   serializeComposerDraftJson,
 } from "../../src/domain/chat/model/composer-draft.schema.js";
-import { projectComposerStatusAttachments } from "../../src/domain/chat/logic/project-composer-status-attachments.js";
+import { hasChatAnnotateDrafts } from "../../src/domain/chat/logic/chat-annotate-draft-store.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_USER_VFS_PENDING,
@@ -153,10 +153,8 @@ describe("SqliteSessionRepository", () => {
       null,
     );
 
-    const status = await projectComposerStatusAttachments(session.id, {
-      previewUserOpsActions: async () => [],
-    });
-    assert.deepEqual(status, []);
+    // user ops 投影链已拆除：clearSession 后无批注草稿残留即可佐证状态层清空
+    assert.equal(hasChatAnnotateDrafts(session.id), false);
   });
 });
 

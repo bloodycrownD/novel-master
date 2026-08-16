@@ -37,13 +37,9 @@ describe("WorkspaceFooter reload wiring (T-T8)", () => {
     assert.equal(typeof reload, "function");
   });
 
-  it("ShellNavProvider / ExplorerPane / ConversationPanel 均接线 reloadFooter", () => {
+  it("ShellNavProvider / ConversationPanel 接线 reloadFooter", () => {
     const shellNav = readFileSync(
       join(rendererRoot, "providers", "ShellNavProvider.tsx"),
-      "utf8",
-    );
-    const explorer = readFileSync(
-      join(rendererRoot, "layout", "ExplorerPane.tsx"),
       "utf8",
     );
     const conversation = readFileSync(
@@ -55,10 +51,8 @@ describe("WorkspaceFooter reload wiring (T-T8)", () => {
     assert.match(shellNav, /reloadFooter/);
     assert.match(shellNav, /footerKey/);
     assert.match(shellNav, /notifyAgentConfigChanged[\s\S]*reloadFooter\(\)/);
-
-    assert.match(explorer, /EVENT_AGENT_RUN_FINISHED/);
-    assert.match(explorer, /reloadFooter/);
-    assert.match(explorer, /key=\{footerKey\}/);
+    // run 事件订阅已收口到 ShellNavProvider（ExplorerPane 不再单独接线）
+    assert.match(shellNav, /EVENT_AGENT_RUN_FINISHED/);
 
     assert.match(conversation, /reloadFooter/);
     assert.match(conversation, /reloadFooter\(\)/);

@@ -16,7 +16,6 @@ export type ComposerSendIntentAttachment = {
 export type ComposerSendIntentInput = {
   text: string;
   attachments: readonly ComposerSendIntentAttachment[];
-  hasPendingUserOps: boolean;
   canResumeWithoutInput: boolean;
   /** 本会话有未发送批注草稿（须透传 hasComposerSendableInput）。 */
   hasAnnotateDrafts?: boolean;
@@ -41,7 +40,6 @@ export function resolveComposerSendIntent(
   const hasSendable = hasComposerSendableInput({
     text: content,
     attachmentCount: scannedCount,
-    hasPendingUserOps: input.hasPendingUserOps,
     hasAnnotateDrafts: input.hasAnnotateDrafts === true,
   });
   const allowResumeWithoutInput =

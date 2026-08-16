@@ -72,7 +72,6 @@ test("T-ATD4: 删除正文 @path 后门闩扫描无该 path；draft attach 不�
   const withAt = resolveComposerSendIntent({
     text: "看 @/a.md",
     attachments: [],
-    hasPendingUserOps: false,
     canResumeWithoutInput: false,
     hasModel: true,
   });
@@ -85,7 +84,6 @@ test("T-ATD4: 删除正文 @path 后门闩扫描无该 path；draft attach 不�
     attachments: [
       att({ source: "attach", type: "text", path: "/a.md", name: "a.md" }),
     ],
-    hasPendingUserOps: false,
     canResumeWithoutInput: false,
     hasModel: true,
   });
@@ -100,7 +98,6 @@ test("T-CR3/门闩: 仅状态 workplace → 不可发；attachOnly 恒空", () =
     attachments: [
       att({ source: "workplace", type: "text", path: "/w.md", name: "w.md" }),
     ],
-    hasPendingUserOps: false,
     canResumeWithoutInput: false,
     hasModel: true,
   });

@@ -1,9 +1,9 @@
 /**
  * session kkv / Undo / 置位压缩后的 Composer 状态条推送。
  *
- * - 置位 / 压缩：project(ops) 推送；renderer ∪ annotate（禁止终态 `attachments:[]`）。
- * - Undo `undo_send` / `rewind`：main `clearUserOpsLog` 后推空条（见 messages.ts）。
- * - 手动重置：推空条；须先 clearUserOpsLog。
+ * - 置位 / 压缩：project(仅 annotate) 推送；renderer ∪ annotate（禁止终态 `attachments:[]`）。
+ * - Undo `undo_send` / `rewind`：推空条（annotate store 的清空见 messages.ts）。
+ * - 手动重置：推空条。
  * 不清 composer_draft（正文+attach 保留）。
  */
 import { notifyComposerAttachmentsSuggestToRenderer } from "../ipc/forward-composer-attachments-suggest.js";
@@ -25,7 +25,7 @@ export async function notifyComposerStatusAfterSessionKkvCleared(
 }
 
 /**
- * 置位 / 压缩成功：project(ops) 推送；终态非强制 `[]`。
+ * 置位 / 压缩成功：project(仅 annotate) 推送；终态非强制 `[]`。
  * Annotate chip 由 renderer `unionComposerStatusWithAnnotate` 合并。
  * （Undo undo_send / rewind 走 {@link notifyComposerStatusAfterSessionKkvCleared} 推空。）
  */

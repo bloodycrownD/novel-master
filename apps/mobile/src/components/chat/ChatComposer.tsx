@@ -16,10 +16,7 @@ import {
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import {
-  clearUserOpsLog,
-  hasUnsentUserOpsLog,
   resolveComposerSendIntent,
-  subscribeUserOpsLog,
   TOOL_TURN_BRIDGE_TEXT,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -149,8 +146,6 @@ export function ChatComposer({
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
   /** 文件批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算。 */
   const [annotateEpoch, setAnnotateEpoch] = useState(0);
-  /** 手改日志 store 变更时 bump，驱动 hasPendingUserOps 重算。 */
-  const [opsLogEpoch, setOpsLogEpoch] = useState(0);
   const inputRef = useRef<TextInput>(null);
   /** 程序化插入 @path tag 走 mentions 提交路径。 */
   const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
@@ -171,9 +166,6 @@ export function ChatComposer({
 
   const hasAnnotateDrafts = hasChatAnnotateDrafts(sessionId);
   void annotateEpoch;
-  // 门闩真源：UserOpsLogStore（与 hasPendingTurns 同读 store；本地同步更稳）
-  const hasPendingUserOps = hasUnsentUserOpsLog(sessionId);
-  void opsLogEpoch;
 
   useEffect(() => {
     if (activeAt == null) {
@@ -283,15 +275,6 @@ export function ChatComposer({
     });
   }, [sessionId]);
 
-  useEffect(() => {
-    return subscribeUserOpsLog(changedSessionId => {
-      if (changedSessionId !== sessionId) {
-        return;
-      }
-      setOpsLogEpoch(n => n + 1);
-    });
-  }, [sessionId]);
-
   const executeRun = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
       if (isMobileAgentActive()) {
@@ -302,10 +285,10 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
 
-      // 有正文 / pending → 成功后清输入；pending 仍可发（门闩）
+      // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
       const shouldClearComposer =
-        content.trim() !== '' || hasPendingUserOps;
+        content.trim() !== '' || hasAnnotateDrafts;
       let composerCleared = false;
       const clearComposerNow = () => {
         if (composerCleared) {
@@ -328,20 +311,19 @@ export function ChatComposer({
           annotateDrafts:
             annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
-            // append 成功后再清输入 + 批注 + 手改日志，避免失败时丢草稿
+            // append 成功后再清输入 + 批注，避免失败时丢草稿
             clearChatAnnotateDrafts(sessionId);
-            clearUserOpsLog(sessionId);
             clearComposerNow();
             void Promise.resolve(
               streamHandlersRef.current.onMessagesChanged(),
             ).catch(() => undefined);
           },
         });
-        // 空续跑 / 仅 flush 等路径可能不走 append 回调
+        // 空续跑等路径可能不走 append 回调
         if (shouldClearComposer) {
           clearComposerNow();
         }
-        // 发送 flush 后 pending 空 → 上条应空；以投影为准刷新 chip
+        // 以投影为准刷新 chip（仅 annotate）
         try {
           const status = await projectComposerStatusForSession(
             runtime,
@@ -390,7 +372,7 @@ export function ChatComposer({
       beginUiRun,
       endUiRunOnError,
       onStreamReset,
-      hasPendingUserOps,
+      hasAnnotateDrafts,
     ],
   );
 
@@ -510,7 +492,6 @@ export function ChatComposer({
     const intent = resolveComposerSendIntent({
       text,
       attachments,
-      hasPendingUserOps,
       canResumeWithoutInput,
       hasAnnotateDrafts,
       hasModel,
@@ -532,7 +513,6 @@ export function ChatComposer({
     running,
     text,
     attachments,
-    hasPendingUserOps,
     canResumeWithoutInput,
     lastMessageIsPlainUserText,
     abortUiRun,
@@ -545,7 +525,6 @@ export function ChatComposer({
   const sendDisabled = resolveComposerSendIntent({
     text,
     attachments,
-    hasPendingUserOps,
     canResumeWithoutInput,
     hasAnnotateDrafts,
     hasModel,

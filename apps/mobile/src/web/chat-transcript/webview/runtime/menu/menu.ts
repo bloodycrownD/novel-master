@@ -160,9 +160,7 @@ export function buildMenuItems(
     !(hitElement && hitElement.closest && hitElement.closest('.tool-card, .tool-group-item'));
   if (showSetFloor) items.push({ label: '置位', action: 'set-floor' });
   items.push({ label: '分叉', action: 'fork' });
-  if (!row.hidden) {
-    items.push({ label: '回滚', action: 'rollback', danger: true });
-  }
+  items.push({ label: '回滚', action: 'rollback', danger: true });
   return items;
 }
 

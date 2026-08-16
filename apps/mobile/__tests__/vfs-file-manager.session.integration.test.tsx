@@ -141,7 +141,10 @@ const fixedListRows = [
 ];
 
 const buildListRows = jest.fn(async () => fixedListRows);
-const list = jest.fn(async () => []);
+// reload 现以 vfs.list() 为权威源（worktree 仅作元数据补丁）：
+// 不在 vfs.list 结果里的路径会被当孤儿残留过滤掉，因此 list 需返回
+// /note.md 的 VFS 条目，行才会渲染出行菜单按钮。
+const list = jest.fn(async () => [{ path: '/note.md', kind: 'file' as const }]);
 const getDirRule = jest.fn(async () => null);
 const setDirRule = jest.fn(async () => undefined);
 

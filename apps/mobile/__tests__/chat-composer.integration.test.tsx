@@ -105,11 +105,7 @@ jest.mock('../src/services/agent-run.service', () => ({
   runAgentTurn: (...args: any[]) => mockRunAgentTurn(...args),
 }));
 
-import {
-  appendUserOpsLog,
-  resetUserOpsLogStoreForTests,
-  serializeComposerDraftJson,
-} from '@novel-master/core/chat';
+import {serializeComposerDraftJson} from '@novel-master/core/chat';
 import { ChatComposer } from '../src/components/chat/ChatComposer';
 import { useAgentRunLifecycle } from '../src/hooks/useAgentRunLifecycle';
 import { useSessionAbort } from '../src/screens/tabs/chat-tab/useSessionAbort';
@@ -123,6 +119,10 @@ import {
   clearChatComposerDraft,
   writeChatComposerDraft,
 } from '../src/storage/chat-composer-draft';
+import {
+  addChatAnnotateDraft,
+  resetChatAnnotateDraftStoreForTests,
+} from '../src/storage/chat-annotate-draft';
 
 function Harness(props: {
   canResumeWithoutInput: boolean;
@@ -178,7 +178,7 @@ describe('ChatComposer integration', () => {
     mockProjectComposerStatus.mockReset();
     mockProjectComposerStatus.mockResolvedValue([]);
     clearChatComposerDraft('s');
-    resetUserOpsLogStoreForTests();
+    resetChatAnnotateDraftStoreForTests();
   });
   it('running-state “终止” action aborts current run', async () => {
     let tree: TestRenderer.ReactTestRenderer;
@@ -408,16 +408,8 @@ describe('ChatComposer integration', () => {
     });
   });
 
-  it('T-UOL9: 仅未发送手改日志、无正文无批注 → 可发送', async () => {
-    mockRunAgentTurn.mockImplementationOnce(async () => undefined);
-    appendUserOpsLog('s', {
-      id: 'uol-gate',
-      createdAtMs: 1,
-      actionXml: `<action name="write">\n${JSON.stringify({ path: '/a.md', content: 'x' }, null, 2)}\n</action>`,
-      action: 'write',
-      path: '/a.md',
-      content: 'x',
-    });
+  it('T-UO3 镜像: 无正文 + 仅 annotate 草稿时发送键可点，且 runAgentTurn 收到 annotateDrafts', async () => {
+    // 前置：无正文、无批注、不可 resume → 不可发
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
@@ -425,11 +417,44 @@ describe('ChatComposer integration', () => {
     const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
       node => node.props?.accessibilityLabel === '发送',
     );
+    expect(sendBtn.props.disabled).toBe(true);
+
+    // 仅加 annotate 草稿（无正文）→ 门闩放行，非 resume 通道
+    // store 订阅 listener 会同步 setState，须包 act 避免警告
+    await act(async () => {
+      addChatAnnotateDraft('s', {
+        id: 'anno-1',
+        path: '/a.md',
+        originalText: 'hello',
+        userAnnotation: 'note',
+        renderStart: 0,
+        renderEnd: 5,
+      });
+    });
+    await act(async () => {
+      tree!.update(<Harness canResumeWithoutInput={false} />);
+    });
     expect(sendBtn.props.disabled).toBe(false);
+
     await act(async () => {
       sendBtn.props.onPress();
     });
     expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
+    const opts = mockRunAgentTurn.mock.calls[0]?.[3] as {
+      allowResumeWithoutInput?: boolean;
+      annotateDrafts?: unknown[];
+    };
+    expect(opts.allowResumeWithoutInput).toBe(false);
+    expect(opts.annotateDrafts).toEqual([
+      {
+        id: 'anno-1',
+        path: '/a.md',
+        originalText: 'hello',
+        userAnnotation: 'note',
+        renderStart: 0,
+        renderEnd: 5,
+      },
+    ]);
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });

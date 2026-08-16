@@ -4,6 +4,7 @@ import { type TdbcConnection } from "@novel-master/core";
 
 import { type MessageContent } from "@novel-master/core/chat";
 import { textBlocks } from "@novel-master/core/chat";
+import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -247,6 +248,43 @@ describe("Chat services", () => {
 
     const second = await ctx.messages.fork(session.id, m1.id);
     assert.equal(second.title, "新会话1_ckpt_2");
+  });
+
+  it("message fork 继承源会话的 agent 配置", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    // 先设一个非默认配置（agentId + modelId 都改掉），再 fork 验证继承。
+    await ctx.sessions.updateSessionAgentConfig(session.id, {
+      agentId: "agent-fk-src",
+      modelId: "model-fk-x",
+    });
+
+    const forked = await ctx.messages.fork(session.id, m1.id);
+    assert.deepEqual(
+      await ctx.sessions.getSessionAgentConfig(forked.id),
+      { agentId: "agent-fk-src", modelId: "model-fk-x" },
+    );
+  });
+
+  it("message fork 源会话 agent 配置为 NULL 时不抛错且新会话保持 NULL", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    // service 层 updateSessionAgentConfig 不允许置空 agentId，
+    // 这里走 repo 层直接把源会话 agent_config_json 清成 NULL。
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+    assert.equal(
+      await sessionRepo.setSessionAgentConfig(session.id, null, Date.now()),
+      true,
+    );
+    assert.equal(await sessionRepo.getSessionAgentConfig(session.id), null);
+
+    const forked = await ctx.messages.fork(session.id, m1.id);
+    // service 层 getSessionAgentConfig 对 NULL 会抛，断言走 repo 层。
+    assert.equal(await sessionRepo.getSessionAgentConfig(forked.id), null);
   });
 
   it("message fork then append on forked session does not affect source", async () => {

@@ -35,9 +35,9 @@ import {
 } from '@/services/chat-agent-meta';
 import type {ThemeTokens} from '@/theme/tokens';
 
-// 锁定提示文案与 SessionDetailScreen 对齐（项目级锁定 / agent-pin 压制）。
+// 锁定提示文案与 SessionDetailScreen 对齐（会话未绑定有效智能体）。
 const AGENT_LOCK_TOAST =
-  '智能体已被项目锁定，无法在会话内切换，请到「项目智能体配置」修改';
+  '当前会话未绑定有效智能体，请到会话详情确认智能体配置';
 const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabWorkspaceBackState } from './ChatTabNavigationProvider';

@@ -51,7 +51,7 @@ export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
   return message.role === 'user';
 }
 
-/** 消息操作菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */
+/** 消息操作菜单：编辑、复制、置位、分叉、回滚（无 hide/delete；隐藏消息同样可回滚，回滚不改变可见性）。 */
 export function buildMessageActionItems(
   message: ChatMessage,
 ): MessageActionMenuItem[] {
@@ -64,8 +64,6 @@ export function buildMessageActionItems(
     items.push({ label: '置位', action: 'set-floor' });
   }
   items.push({ label: '分叉', action: 'fork' });
-  if (!message.hidden) {
-    items.push({ label: '回滚', action: 'rollback', danger: true });
-  }
+  items.push({ label: '回滚', action: 'rollback', danger: true });
   return items;
 }

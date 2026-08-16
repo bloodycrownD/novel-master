@@ -38,6 +38,24 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
+jest.mock('@react-native-clipboard/clipboard', () => ({
+  __esModule: true,
+  default: {setString: jest.fn()},
+}));
+
+// sanitize-html 嵌套依赖 htmlparser2 为 ESM，Jest 默认不转换——与既有测试文件
+// 同款透传 mock，本文件只关心 postMessage 序列不关心 sanitize 结果。
+jest.mock('sanitize-html', () => {
+  const fn = jest.fn((html: string) => html);
+  (fn as {defaults?: unknown}).defaults = {
+    allowedTags: ['p', 'a', 'span', 'div'],
+    allowedAttributes: {
+      a: ['href', 'name', 'target', 'rel'],
+    },
+  };
+  return fn;
+});
+
 jest.mock('../src/services/chat-transcript-telemetry', () => ({
   emitChatTranscriptTelemetry: jest.fn(),
 }));
@@ -774,6 +792,80 @@ describe('ChatTranscriptWebView', () => {
     const typesAfterCommit = messageTypesSince(baseline);
     expect(typesAfterCommit).toContain('sessionSnapshot');
     expect(typesAfterCommit).not.toContain('appendTailRows');
+  });
+
+  it('T-ST1: needsFullSnapshot 快照不被重启的 streamActive 拦截，snapshot 先于后续 delta', async () => {
+    const initialMessages = [sampleMessage('u1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref =
+      React.createRef<
+        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+    await flushAnimationFrame();
+
+    // 流式进行中：先推一段 delta 激活 streamActive
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'partial-a');
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    // needsFullSnapshot：assistant 含 tool_use 落库（uiRunning && grew）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[...initialMessages, assistantWithToolUse('a1', 2)]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+
+    // 不等 defer timer：force 快照必须同步发出，不被 streamActive 拦截成 pending
+    const typesImmediate = messageTypesSince(baseline);
+    expect(typesImmediate).toContain('sessionSnapshot');
+
+    // 后续 delta（下一 step 流式）继续追加
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'partial-b');
+    });
+    await flushAnimationFrame();
+
+    const msgs = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw));
+    const snapshotIdx = msgs.findIndex(m => m.type === 'sessionSnapshot');
+    const laterDeltaIdx = msgs.findIndex(
+      m => m.type === 'streamDelta' && m.payload.delta === 'partial-b',
+    );
+    expect(snapshotIdx).toBeGreaterThanOrEqual(0);
+    expect(laterDeltaIdx).toBeGreaterThan(snapshotIdx);
+    // 无内容回跳：快照只发一次，且基线已包含新落库的 tool_use 行
+    expect(msgs.filter(m => m.type === 'sessionSnapshot')).toHaveLength(1);
+    const snapshotMsg = msgs[snapshotIdx]!;
+    if (snapshotMsg.type === 'sessionSnapshot') {
+      const rowIds = snapshotMsg.payload.rows
+        .filter(r => r.kind === 'message')
+        .map(r => r.id);
+      expect(rowIds).toContain('a1');
+    }
   });
 
   it('T-W1: tool_results-only user 落库走 sessionSnapshot', async () => {

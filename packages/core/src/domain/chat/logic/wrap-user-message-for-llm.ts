@@ -1,7 +1,8 @@
 /**
  * 将用户原文 + 已 hydrate 附件 wrap 为 LLM 可见 XML（不写回 content_json）。
  *
- * 增量统一为单一 `<user-ops>`；action 顺序钉死：attach → workplace（历史只读兼容）→ user_ops/annotate。
+ * 增量统一为单一 `<user-ops>`；action 顺序钉死：attach → workplace（历史只读兼容）→ annotate。
+ * 手改 user_ops 附件不进 prompt（D2：仅 `action === "annotate"` 保留，含历史消息）。
  * 可保留外层 `<attachment>` 与 `<user-input>` 分界。
  * 送模型时 body 每行非空前缀 4 空格；落库 action XML 保持顶格（本函数不改附件 content）。
  * 运行时可选注入 `<extra-info>` 纯文本块（customAttach），位置在 `</user-ops>` 之后、`</attachment>` 之前。
@@ -56,11 +57,14 @@ export function wrapUserMessageForLlm(
   const hasAttachments = attachments != null && attachments.length > 0;
   let body = "";
   if (hasAttachments) {
-    // 顺序钉死：attach → workplace（历史只读兼容）→ user_ops（含 annotate）
+    // 顺序钉死：attach → workplace（历史只读兼容）→ annotate（user_ops 中仅批注，D2）
     const attach = attachments!.filter((a) => a.source === "attach");
     const workplace = attachments!.filter((a) => a.source === "workplace");
-    const userOps = attachments!.filter((a) => a.source === "user_ops");
-    body = sectionBody([...attach, ...workplace, ...userOps]);
+    // D2：user_ops 仅保留批注附件；历史手改附件（write/edit 等）不再进 prompt
+    const annotate = attachments!.filter(
+      (a) => a.source === "user_ops" && a.action === "annotate",
+    );
+    body = sectionBody([...attach, ...workplace, ...annotate]);
   }
 
   const extraInfoBody =

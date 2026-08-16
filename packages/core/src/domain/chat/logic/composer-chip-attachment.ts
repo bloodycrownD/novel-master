@@ -1,6 +1,6 @@
 /**
  * Composer 状态 chip 判定与拆分（T-X2-1 / T-ATD1 / T-AT1）。
- * 现状仅投影 user_ops；workplace 分支保留为历史只读兼容（历史消息气泡渲染可能命中）。
+ * 现状仅投影 annotate；workplace 分支保留为历史只读兼容（历史消息气泡渲染可能命中）。
  * 排除 userAttach 与 source===attach。
  *
  * @module domain/chat/logic/composer-chip-attachment
@@ -12,14 +12,17 @@ export type ComposerChipAttachment = {
   readonly action?: string;
 };
 
-/** 是否为状态条附件（user_ops 投影；workplace 为历史只读兼容；不含 attach/userAttach）。 */
+/**
+ * 是否为状态条附件（annotate 投影；workplace 为历史只读兼容；不含 attach/userAttach）。
+ * D3：user_ops 分支须 `action === "annotate"`，不能按 source 一刀切（手改附件不再是状态 chip）。
+ */
 export function isComposerStatusAttachment(
   a: ComposerChipAttachment,
 ): boolean {
   if (a.action === "userAttach" || a.source === "attach") {
     return false;
   }
-  return a.source === "workplace" || a.source === "user_ops";
+  return a.source === "workplace" || (a.source === "user_ops" && a.action === "annotate");
 }
 
 /**

@@ -41,14 +41,19 @@ describe("isComposerStatusAttachment", () => {
     );
   });
 
-  it("workplace / user_ops（无 userAttach）为状态 chip", () => {
+  it("workplace 仍为状态 chip；手改 user_ops（write）不再是（D3）", () => {
     assert.equal(
       isComposerStatusAttachment(chip({ source: "workplace" })),
       true,
     );
     assert.equal(
       isComposerStatusAttachment(chip({ source: "user_ops", action: "write" })),
-      true,
+      false,
+    );
+    // 无 action 的 user_ops（历史手改附件）也按非状态处理，防按 source 一刀切误判
+    assert.equal(
+      isComposerStatusAttachment(chip({ source: "user_ops" })),
+      false,
     );
   });
 });
@@ -57,13 +62,13 @@ describe("partitionComposerChipAttachments", () => {
   it("T-ATD1: 仅状态 attachments → 仅 status，无 attach 可叉行", () => {
     const items = [
       chip({ source: "workplace" }),
-      chip({ source: "user_ops" }),
+      chip({ source: "user_ops", action: "annotate" }),
     ];
     const { status, attach: attachOnly } =
       partitionComposerChipAttachments(items);
     assert.deepEqual(
-      status.map((a) => a.source),
-      ["workplace", "user_ops"],
+      status.map((a) => a.action ?? a.source),
+      ["workplace", "annotate"],
     );
     assert.equal(attachOnly.length, 0);
     assert.ok(status.every(isComposerStatusAttachment));

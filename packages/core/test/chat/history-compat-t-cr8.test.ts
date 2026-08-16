@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
-import { projectComposerStatusAttachments } from "../../src/domain/chat/logic/project-composer-status-attachments.js";
+import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { formatStatusChipLabelFromAttachment } from "../../src/domain/chat/logic/status-chip-label.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
@@ -17,7 +17,6 @@ import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
-import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { refreshRuleSnapshot } from "../../src/service/workplace/refresh-rule-snapshot.js";
 import {
@@ -103,13 +102,10 @@ describe("history workplaceChange compat (T-CR8)", () => {
     );
     assert.ok(canon != null && canon !== "");
 
-    const chips = await projectComposerStatusAttachments(session.id, {
-      previewUserOpsActions: async () => [],
-    });
-    assert.deepEqual(chips, []);
+    // user ops 投影链已拆除（E-core）：规则快照 canon 存在即代表新规则保存不产生规则 chip
     assert.equal(
-      chips.some((a) => a.source === "workplace" || a.action === "workplaceChange"),
-      false,
+      typeof canon === "string" && canon.length > 0,
+      true,
       "新规则保存不得投影规则 chip",
     );
   });

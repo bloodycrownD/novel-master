@@ -225,6 +225,15 @@ export class DefaultMessageService implements MessageService {
         updatedAtMs: now,
       };
       await r.sessions.insert(forked);
+      // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
+      // 刻意不复制 composer_draft_json（维持现状）
+      // agent_config_json：继承源会话配置（与 copy 一致）。必须走 repo 层——
+      // NULL 静默跳过；service 层 getSessionAgentConfig 对 NULL 会抛且不在本事务上。
+      const sourceAgentConfigJson =
+        await r.sessions.getSessionAgentConfig(source.id);
+      if (sourceAgentConfigJson != null) {
+        await r.sessions.setSessionAgentConfig(forked.id, sourceAgentConfigJson, now);
+      }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
       await copyVfsTree(

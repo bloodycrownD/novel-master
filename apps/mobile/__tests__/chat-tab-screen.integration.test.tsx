@@ -3,8 +3,21 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
 
-const mockLoadTail = jest.fn(async () => [{id: 'm2', seq: 2, role: 'assistant'}]);
-const mockLoadPage = jest.fn(async () => [{id: 'm1', seq: 1, role: 'user'}]);
+// 消息体需带 content.blocks，deriveComposerSendState 会读 message.content.blocks。
+const mockTailMessage = {
+  id: 'm2',
+  seq: 2,
+  role: 'assistant',
+  content: {blocks: [{type: 'text', text: 'hi'}]},
+};
+const mockOlderMessage = {
+  id: 'm1',
+  seq: 1,
+  role: 'user',
+  content: {blocks: [{type: 'text', text: 'old'}]},
+};
+const mockLoadTail = jest.fn(async () => [mockTailMessage]);
+const mockLoadPage = jest.fn(async () => [mockOlderMessage]);
 const mockStreamBufferPush = jest.fn();
 let mockLatestMessageListProps: any;
 let mockStreamFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,8 +61,17 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
+// 真实 useFocusEffect 只在 focus 时调 cb；若每次 render 都调，会与
+// refreshChatMeta 每次 setAgentMeta 新对象组成无限重渲染循环，act 永不结束。
+// 与 chat-tab-screen-legacy-scroll.test.tsx 保持同一契约：仅在首次 focus 时调一次。
+let mockFocusInvoked = false;
 jest.mock('@react-navigation/native', () => ({
-  useFocusEffect: (cb: () => void) => cb(),
+  useFocusEffect: (cb: () => void) => {
+    if (!mockFocusInvoked) {
+      mockFocusInvoked = true;
+      cb();
+    }
+  },
   useNavigation: () => ({navigate: jest.fn(), setOptions: jest.fn()}),
   useIsFocused: () => true,
 }));
@@ -231,7 +253,10 @@ jest.mock('../src/components/chat/MessageList', () => {
 
 jest.mock('../src/components/chat/ChatComposer', () => {
   const ReactNative = require('react-native');
-  const {EVENT_AGENT_STREAM_TEXT_DELTA} = require('@novel-master/core/events');
+  const {
+    EVENT_AGENT_RUN_STARTED,
+    EVENT_AGENT_STREAM_TEXT_DELTA,
+  } = require('@novel-master/core/events');
   return {
     ChatComposer: (props: any) => (
       <ReactNative.View>
@@ -239,16 +264,26 @@ jest.mock('../src/components/chat/ChatComposer', () => {
           accessibilityLabel="emit-bursty-stream"
           onPress={() => {
             const bus = mockRuntime.eventBus;
+            // 真实契约：UI 先 beginUiRun 置位 uiRunning，RUN_STARTED 才不会被
+            // stale 守卫丢弃；delta 再带同一 runId 才能过 acceptRunEvent 守卫。
+            props.beginUiRun?.();
+            bus.publish(EVENT_AGENT_RUN_STARTED, {
+              sessionId: 's1',
+              runId: 'r1',
+            });
             bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
               sessionId: 's1',
+              runId: 'r1',
               text: 'A',
             });
             bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
               sessionId: 's1',
+              runId: 'r1',
               text: 'B',
             });
             bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
               sessionId: 's1',
+              runId: 'r1',
               text: 'C',
             });
           }}
@@ -284,6 +319,7 @@ function findPressableByText(
 describe('ChatTabScreen integration', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    mockFocusInvoked = false;
     mockLatestMessageListProps = undefined;
     mockLoadTail.mockClear();
     mockLoadPage.mockClear();
@@ -352,12 +388,19 @@ describe('ChatTabScreen integration', () => {
     await act(async () => {
       emit.props.onPress();
     });
+    // useSessionBatch 先过 32ms ingress 合并 queue，delta 不会同步进 apply buffer。
+    expect(mockStreamBufferPush).not.toHaveBeenCalled();
+    expect(mockLatestMessageListProps.streamingText).toBe('');
+
+    await act(async () => {
+      jest.advanceTimersByTime(32);
+    });
+    // 合并后仅一块 text chunk 进 apply buffer。
     expect(mockStreamBufferPush).toHaveBeenCalledTimes(1);
     expect(mockStreamBufferPush).toHaveBeenCalledWith('text', 'ABC');
     expect(mockLatestMessageListProps.streamingText).toBe('');
 
     await act(async () => {
-      jest.advanceTimersByTime(32);
       jest.advanceTimersByTime(41);
     });
     expect(mockLatestMessageListProps.streamingText).toBe('ABC');

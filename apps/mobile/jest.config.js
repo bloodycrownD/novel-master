@@ -8,9 +8,16 @@ const repoRoot = path.resolve(__dirname, '../..');
 module.exports = {
   preset: '@react-native/jest-preset',
   // @noble/hashes v2 为纯 ESM；须经 babel-jest，否则 Jest 报 Cannot use import statement
+  // sanitize-html@2.17 嵌套依赖 htmlparser2@12（ESM-only），其 domhandler/domutils/
+  // dom-serializer/domelementtype/entities 全家同为 ESM，须一并纳入 babel transform；
+  // 嵌套路径 node_modules/sanitize-html/node_modules/htmlparser2 的每层 node_modules
+  // 都要能命中白名单，否则该层仍会被忽略并按 CJS require 报错。
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@noble/hashes)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering)/)',
   ],
+  // __tests__/helpers 下是测试辅助函数（如 read-webview-dist），不是测试套件，
+  // 别让 Jest 当测试跑而报 "must contain at least one test"。
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/__tests__/helpers/'],
 
   moduleNameMapper: {
     '^react-native-reanimated$':
@@ -18,6 +25,14 @@ module.exports = {
     '^react-native-keyboard-controller$':
       '<rootDir>/test-utils/react-native-keyboard-controller-mock.tsx',
     '^react-native-webview$': '<rootDir>/test-utils/react-native-webview-mock.tsx',
+    // 原生包在 Jest 环境顶层即抛错（blob-util 的 NativeEventEmitter / op-sqlite 的
+    // turbo module），挂全局 stub 保证未被局部 mock 的套件也能加载；
+    // 测试文件内的 jest.mock 仍会覆盖这里的映射。
+    '^react-native-blob-util$':
+      '<rootDir>/test-utils/react-native-blob-util-mock.ts',
+    '^@op-engineering/op-sqlite$': '<rootDir>/test-utils/op-sqlite-mock.ts',
+    '^@react-native-documents/picker$':
+      '<rootDir>/test-utils/document-picker-mock.ts',
     '^tiktoken$': '<rootDir>/src/shims/tiktoken.js',
     // RN Jest resolves package "browser"/"default" exports; yaml's browser entry
     // is ESM and breaks. Force the Node CJS build (also needed once core/vfs
@@ -34,6 +49,12 @@ module.exports = {
     '^@novel-master/core/common$': path.join(
       repoRoot,
       'packages/core/dist/common/index.js',
+    ),
+    // tsconfig paths 里 @web/* 指向 src/web/*（WebView 运行时源码），Jest 需同样映射。
+    '^@web/(.*)$': '<rootDir>/src/web/$1',
+    '^@novel-master/core/regex$': path.join(
+      repoRoot,
+      'packages/core/dist/public/regex.js',
     ),
     '^@novel-master/core/agent$': path.join(
       repoRoot,
@@ -67,6 +88,30 @@ module.exports = {
     '^@novel-master/core/nmtp$': path.join(
       repoRoot,
       'packages/core/dist/infra/nmtp/index.js',
+    ),
+    '^@novel-master/core/sksp$': path.join(
+      repoRoot,
+      'packages/core/dist/infra/sksp/index.js',
+    ),
+    '^@novel-master/core/kkv$': path.join(
+      repoRoot,
+      'packages/core/dist/public/kkv.js',
+    ),
+    '^@novel-master/core/message-checkpoint$': path.join(
+      repoRoot,
+      'packages/core/dist/public/message-checkpoint.js',
+    ),
+    '^@novel-master/core/session-kkv$': path.join(
+      repoRoot,
+      'packages/core/dist/public/session-kkv.js',
+    ),
+    '^@novel-master/core/tdbc$': path.join(
+      repoRoot,
+      'packages/core/dist/infra/tdbc/index.js',
+    ),
+    '^@novel-master/sksp-android$': path.join(
+      repoRoot,
+      'packages/sksp-android/dist/index.js',
     ),
     '^@novel-master/tdbc-driver-rn/native$': path.join(
       repoRoot,

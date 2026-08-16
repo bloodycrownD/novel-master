@@ -3,7 +3,6 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { replaceComposerStatusAttachments } from "../../src/domain/chat/logic/project-composer-status-attachments.js";
 import {
   addChatAnnotateDraft,
   chipsFromAnnotateStore,
@@ -62,7 +61,7 @@ describe("chat-annotate-draft-store", () => {
     assert.equal(listChatAnnotateDrafts(sessionId).length, 2);
   });
 
-  it("T-X2-3/T-AN1: replace projected 后再 ∪ annotate，chip 不被冲掉", () => {
+  it("T-X2-3/T-AN1: workplace 状态 ∪ annotate，chip 不被冲掉", () => {
     const sessionId = "s-an1-union";
     addChatAnnotateDraft(sessionId, {
       id: "a1",
@@ -70,11 +69,10 @@ describe("chat-annotate-draft-store", () => {
       originalText: "x",
       userAnnotation: "y",
     });
-    const replaced = replaceComposerStatusAttachments(
-      [workplace("/old.md")],
+    const merged = unionComposerStatusWithAnnotate(
       [workplace("/new.md")],
+      sessionId,
     );
-    const merged = unionComposerStatusWithAnnotate(replaced, sessionId);
     assert.deepEqual(
       merged.map((a) => `${a.action}:${a.path}`),
       ["workplaceChange:/new.md", "annotate:/keep.md"],
@@ -90,7 +88,7 @@ describe("chat-annotate-draft-store", () => {
       userAnnotation: "b",
     });
     const hydrated = unionComposerStatusWithAnnotate(
-      replaceComposerStatusAttachments([], [workplace("/w.md")]),
+      [workplace("/w.md")],
       sessionId,
     );
     assert.ok(
@@ -98,7 +96,7 @@ describe("chat-annotate-draft-store", () => {
     );
     clearChatAnnotateDrafts(sessionId);
     const afterClear = unionComposerStatusWithAnnotate(
-      replaceComposerStatusAttachments([], [workplace("/w.md")]),
+      [workplace("/w.md")],
       sessionId,
     );
     assert.equal(

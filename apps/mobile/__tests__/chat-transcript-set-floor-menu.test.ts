@@ -27,7 +27,7 @@ function buildWebViewMenuActions(
     !hitEl?.closest?.('.tool-card, .tool-group-item');
   if (showSetFloor) items.push('set-floor');
   items.push('fork');
-  if (!row.hidden) items.push('rollback');
+  items.push('rollback');
   return items;
 }
 
@@ -70,5 +70,26 @@ describe('WebView buildMenuItems set-floor eligibility', () => {
     });
     expect(actions).not.toContain('set-floor');
     expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
+  });
+});
+
+describe('WebView buildMenuItems 回滚（T-UH3 订正）', () => {
+  it('hidden 行同样含 rollback、无 unhide', () => {
+    const actions = buildWebViewMenuActions({
+      kind: 'message',
+      role: 'user',
+      text: 'hi',
+      hidden: true,
+    });
+    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
+  });
+
+  it('非 hidden 行菜单顺序不变', () => {
+    const actions = buildWebViewMenuActions({
+      kind: 'message',
+      role: 'user',
+      text: 'hi',
+    });
+    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 });

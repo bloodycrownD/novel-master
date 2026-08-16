@@ -3,7 +3,6 @@
  *
  * @module services/workplace-block.service
  */
-import { clearUserOpsLog } from '@novel-master/core/chat';
 import { assembleWorkplaceDisplay } from '@novel-master/core/workplace';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 import { refreshComposerStatusAfterSessionKkvCleared } from './project-composer-status.service';
@@ -33,15 +32,14 @@ export async function assembleWorkplaceForMobile(
 }
 
 /**
- * 手动重置常驻工作区缓存：clear session kkv + clearUserOpsLog，并清 Composer 上条。
- * 与置位不对称（置位保留未发送 ops-log）；不必清 annotate store。
+ * 手动重置常驻工作区缓存：clear session kkv，并清 Composer 上条。
+ * 不必清 annotate store。
  */
 export async function clearSessionWorkplaceKkv(
   runtime: MobileNovelMasterRuntime,
   scope: SessionWorkplaceBlockScope,
 ) {
   await runtime.sessionKkv.clearSession(scope.sessionId);
-  clearUserOpsLog(scope.sessionId);
   await refreshComposerStatusAfterSessionKkvCleared(runtime, scope);
   return { workplaceDisplay: '', capturedAtMs: Date.now() };
 }

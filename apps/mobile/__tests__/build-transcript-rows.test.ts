@@ -89,7 +89,7 @@ describe('buildTranscriptRows', () => {
     ).toBeUndefined();
   });
 
-  it('T-SR3: 空正文 + 仅 user_ops attachments 仍进 transcript（与真实提示词一致）', () => {
+  it('T-SR3: 仅遗留 user_ops 操作日志（非 annotate）的空正文消息不进 transcript（直接丢弃）', () => {
     const opsOnly: ChatMessage = {
       ...msg('u-ops', 'user', [{ type: 'text', text: '' }], 3),
       attachments: [
@@ -101,7 +101,26 @@ describe('buildTranscriptRows', () => {
         },
       ],
     };
-    const rows = buildTranscriptRows([opsOnly]);
+    // user ops 已拆除：遗留操作日志不再兼容展示，空正文且无其它附件 → 不生成行。
+    expect(buildTranscriptRows([opsOnly])).toHaveLength(0);
+  });
+
+  it('T-SR3b: 空正文 + 仅 annotate 附件仍进 transcript（批注保留）', () => {
+    const annotateOnly: ChatMessage = {
+      ...msg('u-ann', 'user', [{ type: 'text', text: '' }], 3),
+      attachments: [
+        {
+          name: '/c.md',
+          source: 'user_ops',
+          type: 'text',
+          path: '/c.md',
+          action: 'annotate',
+          content:
+            '<action name="annotate">\n{"path":"/c.md","userAnnotation":"批一下"}\n</action>',
+        },
+      ],
+    };
+    const rows = buildTranscriptRows([annotateOnly]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       kind: 'message',
@@ -110,13 +129,13 @@ describe('buildTranscriptRows', () => {
       attachments: [
         {
           source: 'user_ops',
-          name: 'mkdir:/notes',
+          action: 'annotate',
         },
       ],
     });
   });
 
-  it('T-CHIP: transcript 透传 action/content，供气泡中文 action:path', () => {
+  it('T-CHIP: transcript 透传 annotate/workplace 的 action/content；遗留 user_ops 操作日志被丢弃', () => {
     const withAction: ChatMessage = {
       ...msg('u-act', 'user', [{type: 'text', text: 'hi'}], 4),
       attachments: [
@@ -139,16 +158,10 @@ describe('buildTranscriptRows', () => {
       ],
     };
     const row = buildTranscriptRows([withAction])[0];
+    // user_ops write 是遗留操作日志，丢弃；workplace 照常透传。
     expect(row).toMatchObject({
       kind: 'message',
       attachments: [
-        {
-          source: 'user_ops',
-          name: '/a.md',
-          path: '/a.md',
-          action: 'write',
-          content: '<action name="write">\n{"path":"/a.md"}\n</action>',
-        },
         {
           source: 'workplace',
           path: '/r.md',

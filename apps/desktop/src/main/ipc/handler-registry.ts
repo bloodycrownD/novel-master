@@ -55,10 +55,8 @@ import {
 import {
   handlePreferencesGetLlmStream,
   handlePreferencesGetSessionFsVersionCheck,
-  handlePreferencesGetUserOpsLogEnabled,
   handlePreferencesSetLlmStream,
   handlePreferencesSetSessionFsVersionCheck,
-  handlePreferencesSetUserOpsLogEnabled,
 } from './handlers/preferences.js';
 import {
   handleProviderModelsDeleteSaved,
@@ -142,7 +140,6 @@ import {
   handleSessionsSetModelOverride,
 } from './handlers/sessions.js';
 import {
-  handleUserVfsHasPending,
   handleVfsBatchClearStaging,
   handleVfsBatchExportStage,
   handleVfsBatchIngestFromPaths,
@@ -249,7 +246,6 @@ export function registerHandlersFromRegistry(): void {
       handleVfsStartDrag(event, req);
     },
   );
-  bindReq(IPC_CHANNELS.USER_VFS_HAS_PENDING, handleUserVfsHasPending);
 
   bindReq(IPC_CHANNELS.WORKPLACE_BUILD_LIST_ROWS, handleWorkplaceBuildListRows);
   bindReq(IPC_CHANNELS.WORKPLACE_SET_DIR_RULE, handleWorkplaceSetDirRule);
@@ -303,14 +299,6 @@ export function registerHandlersFromRegistry(): void {
   bindBool(
     IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
     handlePreferencesSetSessionFsVersionCheck,
-  );
-  bindNoArg(
-    IPC_CHANNELS.PREFERENCES_GET_USER_OPS_LOG_ENABLED,
-    handlePreferencesGetUserOpsLogEnabled,
-  );
-  bindBool(
-    IPC_CHANNELS.PREFERENCES_SET_USER_OPS_LOG_ENABLED,
-    handlePreferencesSetUserOpsLogEnabled,
   );
   bindNoArg(
     IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,

@@ -124,7 +124,6 @@ export {
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
-  PREF_KEY_CHAT_USER_OPS_LOG,
 } from "./service/persistent-preferences/impl/preference-keys.js";
 export {
   WORKSPACE_STATE_MODULE,

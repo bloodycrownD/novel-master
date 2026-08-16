@@ -84,7 +84,7 @@ describe('resolveComposerDraftAfterRollbackSuccess', () => {
     );
   });
 
-  it('T-W2: assistant rewind 保留正文与 @，剥掉 attach；ops 半边空（禁止闭包旧 chip 盖回）', () => {
+  it('T-W2: assistant rewind 保留正文与 @，剥掉 attach（禁止闭包旧 chip 盖回）', () => {
     const { rollbackMode, restoreText, restoreAttachments } =
       resolveRollbackContext(
         msg([{ type: 'text', text: 'assistant reply' }], 'assistant'),
@@ -117,7 +117,7 @@ describe('resolveComposerDraftAfterRollbackSuccess', () => {
       { text: restoreText, attachments: restoreAttachments },
     );
     assert.equal(next.text, 'draft with @/keep.md');
-    assert.equal(next.attachments.length, 0, 'ops 留给 main suggest；禁止盖回旧 chip');
+    assert.equal(next.attachments.length, 0, '状态条留给 main suggest；禁止盖回旧 chip');
     assert.equal(
       next.attachments.some((a) => a.source === 'attach'),
       false,

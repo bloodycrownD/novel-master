@@ -96,13 +96,20 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.match(body, /<user-input>\n继续\n<\/user-input>/);
   });
 
-  it("T-EI4: user_ops 附件 + extraInfo 非空 → </user-ops> 后 <extra-info> 嵌 attachment 内、顺序钉死", async () => {
+  it("T-EI4: annotate 附件 + extraInfo 非空 → </user-ops> 后 <extra-info> 嵌 attachment 内、顺序钉死", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const actionXml = `<action name="write">\n{"path":"/x.md","content":""}\n</action>`;
+    const annotateXml = `<action name="annotate">\n{"path":"/x.md","note":"备注"}\n</action>`;
     const attachments: MessageAttachment[] = [
-      { name: "ops", source: "user_ops", type: "text", content: actionXml },
+      {
+        name: "/x.md",
+        source: "user_ops",
+        type: "text",
+        content: annotateXml,
+        path: "/x.md",
+        action: "annotate",
+      },
     ];
     const stored = await ctx.messages.append(
       session.id,
@@ -122,8 +129,8 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     const expected = [
       "<attachment>",
       "  <user-ops>",
-      "    <action name=\"write\">",
-      '    {"path":"/x.md","content":""}',
+      "    <action name=\"annotate\">",
+      '    {"path":"/x.md","note":"备注"}',
       "    </action>",
       "  </user-ops>",
       "  <extra-info>",
@@ -248,17 +255,27 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.match(messageBodyText(prepared[1]!), /背景说明/);
   });
 
-  it("T-AT2: user_ops + text → wrap 含 user-ops 与 user-input；库内仍为原文", async () => {
+  it("T-AT2 / T-UO1: user_ops 手改(write)附件不进 prompt，annotate 附件仍进；库内仍为原文", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const actionXml = `<action name="write">\n{"path":"/x.md","content":""}\n</action>`;
+    // 历史 write 手改附件：无 action 字段（D2 下不进 prompt）
+    const writeXml = `<action name="write">\n{"path":"/x.md","content":""}\n</action>`;
+    const annotateXml = `<action name="annotate">\n{"path":"/n.md","note":"批注"}\n</action>`;
     const attachments: MessageAttachment[] = [
       {
-        name: "ops",
+        name: "write",
         source: "user_ops",
         type: "text",
-        content: actionXml,
+        content: writeXml,
+      },
+      {
+        name: "/n.md",
+        source: "user_ops",
+        type: "text",
+        content: annotateXml,
+        path: "/n.md",
+        action: "annotate",
       },
     ];
     const stored = await ctx.messages.append(
@@ -277,8 +294,10 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       vfs: ctx.sessionVfs(project.id, session.id),
     });
     const body = messageBodyText(prepared[0]!);
+    // D2：user_ops 仅 annotate 进 <user-ops>；write 手改附件被过滤
     assert.match(body, /<user-ops>/);
-    assert.match(body, /<action name="write">/);
+    assert.doesNotMatch(body, /<action name="write">/);
+    assert.match(body, /<action name="annotate">/);
     assert.match(body, /<user-input>\n继续\n<\/user-input>/);
     assert.ok((prepared[0]!.attachments?.length ?? 0) > 0);
 
@@ -535,8 +554,8 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     await vfs.write("/wp.md", "workplace-body");
     const sk = createSessionKkvService(ctx.conn);
 
-    const actionXml =
-      '<action name="write">\n{"path":"/ops.md","content":""}\n</action>';
+    const annotateXml =
+      '<action name="annotate">\n{"path":"/ops.md","note":"批注"}\n</action>';
     const stored = await ctx.messages.append(
       session.id,
       "user",
@@ -551,10 +570,12 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
             path: "/wp.md",
           },
           {
-            name: "write",
+            name: "/ops.md",
             source: "user_ops",
             type: "text",
-            content: actionXml,
+            content: annotateXml,
+            path: "/ops.md",
+            action: "annotate",
           },
           {
             name: "/wp.md",
@@ -604,7 +625,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     // 同 path：attach 优先，workplace 不进；二者同源；单一 <user-ops>
     assert.match(agentUserWrap, /<user-ops>/);
     assert.match(agentUserWrap, /<action name="userAttach">/);
-    assert.match(agentUserWrap, /<action name="write">/);
+    assert.match(agentUserWrap, /<action name="annotate">/);
     assert.match(agentUserWrap, /<user-input>\n继续\n<\/user-input>/);
     assert.equal(
       agentUserWrap.includes("<workplace>"),
@@ -612,10 +633,10 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       "同 path 时 workplace 应被 attach 抢先 seen 后省略",
     );
     assert.equal(agentUserWrap.includes("<attach>"), false);
-    // T-PR1：action 顺序 attach → workplace → user_ops（本例无 workplace 内容）
+    // T-PR1：action 顺序 attach → workplace → user_ops annotate（本例无 workplace 内容）
     const attachIdx = agentUserWrap.indexOf('name="userAttach"');
-    const writeIdx = agentUserWrap.indexOf('name="write"');
-    assert.ok(attachIdx >= 0 && writeIdx > attachIdx);
+    const annotateIdx = agentUserWrap.indexOf('name="annotate"');
+    assert.ok(attachIdx >= 0 && annotateIdx > attachIdx);
     assert.equal(
       realPromptUserWrap,
       agentUserWrap,

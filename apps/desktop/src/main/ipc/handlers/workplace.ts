@@ -12,7 +12,6 @@ import type {
   WorkplaceSetDirRuleRequest,
   WorkplaceSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
-import { clearUserOpsLog } from "@novel-master/core/chat";
 import { refreshRuleSnapshot } from "@novel-master/core/workplace";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
@@ -147,8 +146,7 @@ export async function handleWorkplaceCaptureSessionBlock(
   try {
     const rt = await getDesktopRuntime();
     await rt.sessionKkv.clearSession(req.sessionId);
-    // D10：手动重置清 kkv 且 clearUserOpsLog（不必清 annotate）
-    clearUserOpsLog(req.sessionId);
+    // D10：手动重置清 kkv（不必清 annotate）
     await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {

@@ -141,17 +141,6 @@ export {
   deriveDirPathsFromFileTree,
   emptyWorkspaceFlushSnapshot,
 } from '../domain/chat/logic/workspace-flush-snapshot.js';
-export {
-  buildUserOpsAttachmentFromLogEntry,
-  buildUserOpsAttachmentsFromLogEntries,
-  previewPendingUserOpsAttachment,
-} from '../domain/chat/logic/build-user-ops-attachment.js';
-export {
-  buildComposerStatusAttachments,
-  projectComposerStatusAttachments,
-  replaceComposerStatusAttachments,
-} from '../domain/chat/logic/project-composer-status-attachments.js';
-export type { ProjectComposerStatusAttachmentsDeps } from '../domain/chat/logic/project-composer-status-attachments.js';
 export { hasComposerSendableInput } from '../domain/chat/logic/composer-sendable-input.js';
 export { resolveComposerSendIntent } from '../domain/chat/logic/composer-send-intent.js';
 export type {
@@ -186,32 +175,6 @@ export {
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,
 } from '../domain/chat/logic/chat-annotate-draft-store.js';
-export {
-  appendUserOpsLog,
-  chipsFromUserOpsLogStore,
-  clearAllUserOpsLog,
-  clearUserOpsLog,
-  hasUnsentUserOpsLog,
-  listUserOpsLog,
-  replaceUserOpsLog,
-  resetUserOpsLogStoreForTests,
-  subscribeUserOpsLog,
-} from '../domain/chat/logic/chat-user-ops-log-store.js';
-export { aggregateUserOpsLogChips } from '../domain/chat/logic/aggregate-user-ops-log-chips.js';
-export { parseUserOpsLogFromAttachments } from '../domain/chat/logic/parse-user-ops-log-from-attachments.js';
-export { userOpsLogEntryFromTurnOp } from '../domain/chat/logic/user-ops-log-from-turn-op.js';
-export type { UserOpsLogTurnOpInput } from '../domain/chat/logic/user-ops-log-from-turn-op.js';
-export {
-  userOpsLogEntriesSchema,
-  userOpsLogEntryChipPath,
-  userOpsLogEntrySchema,
-  userOpsLogHunkSchema,
-} from '../domain/chat/model/user-ops-log.schema.js';
-export type {
-  UserOpsLogEntries,
-  UserOpsLogEntry,
-  UserOpsLogHunk,
-} from '../domain/chat/model/user-ops-log.schema.js';
 export {
   buildFlatTextIndex,
   findAllOccurrences,
@@ -359,7 +322,6 @@ export type {
   UserVfsTurnOp,
   UserVfsTurnToolSpec,
   UserVfsTurnExecuteResult,
-  UserVfsFlushResult,
   AppendToolTurnBridgeFn,
 } from '../service/chat/user-vfs-turn.port.js';
 export type { ProjectService } from '../service/chat/project.port.js';

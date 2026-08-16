@@ -11,7 +11,7 @@ date: 2026-08-16
 1. 压缩（hide-message）楼层寻找算法不区分 user 输入与 tool result 消息，需按消息 blocks 做配对感知优化。
 2. 移除「手改操作日志（user ops）」能力：文件写/编辑等行为日志不再进入 Composer chip 与 LLM prompt；`source: "user_ops"` 附件通道保留，未来仅供批注（annotate）使用。
 3. Bug：分叉（fork）后的会话 agent/model 选择器被锁（提示被「项目智能体」占用），会话详情页无法打开。根因：`fork` 不写 `agent_config_json`。**用户确认：无存量 fork 会话，不做迁移。**
-4. 隐藏的消息支持「回归」（取消隐藏）菜单。
+4. 隐藏的消息支持「回归」（回滚）菜单。（2026-08-16 订正：首版误读为「取消隐藏」，已拆除并改为放开回滚入口；回滚不改变消息可见性。）
 5. Bug：主会话流式中途内容丢失、结束回刷（mobile webview 路径，与子会话历史问题同根）。
 
 ## 设计目标
@@ -19,7 +19,7 @@ date: 2026-08-16
 - 压缩边界不再拆开 `assistant(tool_use)` ↔ `user(tool_result)` 配对，从源头消除孤儿 tool 消息（渲染层兜底保留）。
 - 手改 ops 全链路拆除（store、flush、chip、开关、prompt 渲染），批注链路零损伤；历史消息里的手改附件也不再进 prompt。
 - fork 出的会话继承源会话 agent 配置，选择器/详情页/发消息恢复正常。
-- mobile 双菜单（native + webview）均提供「取消隐藏」入口，走协调写口径。
+- mobile 双菜单（native + webview）对隐藏消息放开「回滚」入口；回滚不改变消息可见性。
 - mobile 主会话流式：pending snapshot 不再被重新置位的 `streamActiveRef` 无限挂起；step/finish 事件前先 flush 缓冲再清理，对齐 desktop。
 
 ## 总体方案
@@ -28,11 +28,11 @@ date: 2026-08-16
 
 关键决策（已拍板，探索报告支撑）：
 
-- **D1 取消隐藏口径**：走 `messageTranscriptEffects.showMessagesInRange(projectId, sessionId, seq, seq)`（与置位/压缩同口径；端口无单条 show，range 直通等价）。后处理只做 `reloadMessages(true)` + `refreshChatTokenLabel()`，**不**做 kkv/worktree 刷新（show 不改变 workspace 状态）；`agentRunning` 时拦截。
+- **D1 隐藏消息回滚口径（订正后）**：仅放开菜单前置（去掉 `!hidden`），复用既有 rollback handler；core 回滚链路不碰 hidden 状态，无后处理差异。首版 D1 的 unhide/showMessagesInRange 口径已废弃。
 - **D2 ops prompt 生效范围**：不只删构造端，渲染层同步过滤——`wrap-user-message-for-llm` 对 `source === "user_ops"` 附件仅保留 `action === "annotate"`，历史消息的手改附件一并不再进 prompt。
 - **D3 chip 判定收窄**：`isComposerStatusAttachment` 的 `user_ops` 分支加 `action === "annotate"` 条件，不能按 source 一刀切（annotate chip 共用此判定）。
 - **D4 force 快照语义**：`sendSessionSnapshot` 增加 `force` 参数——force 时消费 `pendingSnapshotRef`（沿用其 intent）、取消 defer timer、绕过 `streamActiveRef` 检查直接 `sendSessionSnapshotNow`。与 `needsOpenSnapshot` 必须直发的既有先例（`ChatTranscriptWebView.tsx` L920-934 注释）同课同补。
-- **D5 压缩边界只向外扩展**：配对感知的边界调整只允许把 range 向外扩（hide 更多），不允许收缩，保住 `2f5bb4b4`「hide 区间覆盖完整切片」的约定；禁止回退 `fromSeq: anchor.seq` 旧写法。
+- **D5 压缩边界只向外扩展（含订正）**：边界调整只允许把 range 向外扩（hide 更多），不允许收缩，保住 `2f5bb4b4`「hide 区间覆盖完整切片」的约定；禁止回退 `fromSeq: anchor.seq` 旧写法。订正后 from 侧口径：楼层第一条必须锚定在「user 且非 tool_result」的真用户输入上（严格交替协议，见 A 项订正记录）——向上锚定只可能让 fromSeq 更小，与只扩不收缩兼容。
 - **D6 `hasPendingTurns` 彻底删除**：`UserVfsTurnService.hasPendingTurns`（`packages/core/src/service/chat/user-vfs-turn.port.ts` L83）随 ops 拆除一并删除，不留替代实现。连带：desktop `handlers/vfs.ts` L404-409 的 `USER_VFS_HAS_PENDING` IPC 通道删除（`handler-registry.ts` L145/L252 绑定、`invoke-registry.ts` L273-276、`client.ts` L79、`shared/ipc-types.ts` 类型同步清理），`ConversationPanel`/`ChatComposer` 的 pending 轮询链随之拆除；core `run-agent-turn.ts` L238-246 的 hasInput 判定同步收口（删 `hasPending` 项）。空续跑 re-append 分支（`prepare-user-vfs-turn-for-agent-run.ts` L101）的前提本就是 `hasPendingTurns`（并非 `hasUnsentUserOpsLog`），该分支随删除整体评估去留。
 - **D7 状态条收窄为仅 annotate（推送函数与 pull 通道均收窄保留，非删除）**：desktop composer 状态条的推送内容与 pull 返回都收窄为仅 annotate（对齐 mobile 侧口径）。push 侧：`notify-composer-status-after-kkv-clear.ts` 的 `notifyComposerStatusAfterFloorOrCompaction` / `notifyComposerStatusAfterSessionKkvCleared` 收窄为仅 annotate 版本——其依赖的 `projectComposerStatusForSession` → `projectComposerStatusAttachments` ops 投影链删除后，内部改走仅 annotate 投影，函数与调用点保留不删；`compaction.ts` 的调用点随收窄版自然收窄。pull 侧：`SESSIONS_PROJECT_COMPOSER_STATUS` IPC 通道**保留**，`handleSessionsProjectComposerStatus`（`handlers/sessions.ts` L23/L135）收窄返回仅 annotate 投影；renderer 消费点（`invoke-registry.ts` L189-192 / `client.ts` L57 / `ConversationPanel.tsx` L281 / `ChatComposer.tsx` L338）不删通道、随投影变化自然收窄。行为由 T-UO4 覆盖（仅 annotate 推送或停推后不炸）。
 
@@ -49,7 +49,9 @@ date: 2026-08-16
 
 ### A. 压缩楼层配对感知（core）
 
-- `packages/core/src/domain/depth/logic/resolve-hide-message-range.ts`：新增边界后处理——若 `fromSeq` 边缘消息是含 `tool_result` 的 user 消息，向外（更旧侧）扩展 `fromSeq` 纳入其配对的 `assistant(tool_use)`；若 `toSeq` 边缘消息是含 `tool_use` 的 assistant 且配对的 tool_result 在 range 外（更新侧），向外（更新侧）扩展 `toSeq` 纳入该 tool_result 消息。配对匹配用 `toolUseId`——`hasToolResult` 直接复用 `message-content-helpers.ts`（`packages/core/src/domain/chat/logic/`）的既有导出；`toolUseIdsFromMessage` 并不在该文件，它是 `packages/core/src/domain/message-checkpoint/logic/resolve-rollback-anchor.ts` L10 的私有实现（未导出），实现时参考其写法自行内联提取，不动 checkpoint 侧代码。锚定存在性校验逻辑不动；`messageIdsInSlice` 签名不动（regex/events 复用）。
+> 订正记录（2026-08-16，用户澄清）：消息流严格 user/assistant 交替（tool_result 挂 user role），压缩楼层第一条必须是**真用户输入**（user 且非 tool_result）。首版实现成「边缘 tool_result 时外扩一步纳入配对 assistant」，导致隐藏区间第一条可为 assistant，口径错误；已改为**向上锚定**（见下）。
+
+- `packages/core/src/domain/depth/logic/resolve-hide-message-range.ts`：from 侧楼层锚定——边缘为 assistant 或 user(tool_result) 时，持续向更旧侧扩展，跳过整个 tool 往返，落在最近一条「user 且非 tool_result」的真用户输入上；严格交替下配对随整轮入区天然完整，无需逐个配对外扩。to 侧保留原配对感知外扩：`toSeq` 边缘是含 `tool_use` 的 assistant 且配对 tool_result 在 range 外时向外（更新侧）纳入，防孤儿 result。配对匹配用 `toolUseId`；`hasToolResult` 复用 `message-content-helpers.ts` 既有导出。锚定存在性校验逻辑不动；`messageIdsInSlice` 签名不动（regex/events 复用）。
 - blocks 在该链路已全量解析（`listBySession` 全列 SELECT + `parseMessageContent`），零额外查询。
 - `packages/core/src/service/prompt/normalize-orphan-tool-results-for-llm.ts` 兜底**保留不删**（仍覆盖上一轮 run 崩溃产生的孤儿）。
 
@@ -61,12 +63,15 @@ date: 2026-08-16
   - `apps/mobile/src/services/chat-agent-meta.ts` / `useChatTabScope.ts` / `SessionDetailScreen.tsx`：`loadChatAgentMeta` 的 catch 把 `ChatError` 也归一为 `source: 'none'`，详情页不再卡「加载中…」（显示未绑定引导）。
 - 不做存量迁移（用户确认无 fork 会话）。
 
-### C. 取消隐藏菜单（mobile，desktop 可选）
+### C. 隐藏消息支持回滚（mobile）
 
-- `apps/mobile/src/components/chat/message-edit.ts` `buildMessageActionItems`：`message.hidden` 时推入 `{ label: '取消隐藏', action: 'unhide' }`（位置放在「复制」之后；`rollback` 已有 `!message.hidden` 前置，保持对称）。
-- `apps/mobile/src/screens/tabs/chat-tab/useChatTabMessages.ts` `handleMessageMenuAction` 加 `unhide` 分支：`agentRunning` 拦截（toast 同置位）→ `showMessagesInRange(projectId, sessionId, seq, seq)` → `reloadMessages(true)` → `refreshChatTokenLabel()`。
-- `apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts` `buildMenuItems` 同步加 item（`row.hidden` 时），选中走既有 `messageMenuAction` 通道；**改后重建 webview-dist**。
-- desktop（非阻塞、可选）：`apps/desktop/renderer/features/chat/message-edit.ts` 加同名 item，调已注册的 `ipcMessagesShow`。
+> 订正记录（2026-08-16，用户澄清）：原需求「隐藏的消息希望支持回归菜单」中的「回归」指**回滚**，首版 spec 误读为「取消隐藏」并实现了一套 unhide 菜单；已按用户决定全部拆除（见下）。回滚语义：**不改变消息可见性**——锚点消息及存留消息的 hidden 状态保持原样，回滚只做消息删除与文件恢复。
+
+- `apps/mobile/src/components/chat/message-edit.ts` `buildMessageActionItems`：去掉 `rollback` 的 `!message.hidden` 前置，隐藏消息同样展示「回滚」。
+- `apps/mobile/src/web/chat-transcript/webview/runtime/menu/menu.ts` `buildMenuItems`：同步去掉 `rollback` 的 `!row.hidden` 前置；**改后重建 webview-dist**。
+- core 回滚链路（checkpoint 删除 + 文件恢复）不碰 hidden 状态，无需改动。
+- 已拆除（首版误读产物）：`unhide` 菜单项（native + webview）、`handleMessageMenuAction` 的 `unhide` 分支、`isUnhideEligibleMessage`、`use-chat-tab-message-actions-unhide.test.ts`；`showMessagesInRange` 为 core 既有端口（desktop 置位/显示链路仍在用），保留。
+- desktop（非阻塞、可选）：desktop 菜单本无 rollback 项，不涉及。
 
 ### D. 主会话流式修复（mobile）
 
@@ -120,9 +125,9 @@ desktop：
 - Step 2 — phase-fork-agent-config — blocking: yes — qa: auto：`chat.services.test.ts` 补 fork 用例：fork 后 `ctx.sessions.getSessionAgentConfig(forked.id)` 等于源配置（fixture 见 `test/helpers/novel-master-fixture.ts`）。
 - Step 3 — phase-compaction-floor — blocking: yes — qa: auto：`resolve-hide-message-range.ts` 实现配对感知边界扩展（A，D5 约束）。
 - Step 4 — phase-compaction-floor — blocking: yes — qa: auto：`test/depth/resolve-hide-message-range.test.ts` 补 tool blocks 用例（`makeMsg` helper 扩展 blocks：`{ type: "tool_result", toolUseId, content }`，字段见 `content-block.ts` L39-46）。
-- Step 5 — phase-unhide-menu — blocking: yes — qa: auto：mobile native 菜单 + handler + 刷新（C，D1 口径）。
+- Step 5 — phase-unhide-menu — blocking: yes — qa: auto：mobile native 菜单去掉 rollback 的 `!hidden` 前置（C，订正后口径；首版 unhide 实现已拆除）。
 - Step 6 — phase-unhide-menu — blocking: yes — qa: auto：webview `menu.ts` 同步 + 重建 webview-dist + 更新 `message-action-items.test.ts` / `chat-transcript-set-floor-menu.test.ts` 断言（items 顺序敏感）。
-- Step 7 — phase-unhide-menu — blocking: no — qa: auto：desktop 菜单项（可选，IPC 已就绪）。
+- Step 7 — phase-unhide-menu — blocking: no — qa: auto：desktop 菜单项（可选；desktop 菜单本无 rollback 项，订正后不涉及）。
 - Step 8 — phase-stream-pending-snapshot — blocking: yes — qa: auto：`sendSessionSnapshot` 加 force 参数（D，D4 语义），needsFullSnapshot 分支传 force。
 - Step 9 — phase-stream-pending-snapshot — blocking: yes — qa: auto：`useSessionBatch` 加 `flushBuffers`，`useSessionStream` 三事件 handler 在 `acceptRunEvent` 守卫后、分支前先 flush（D），装配方补参。
 - Step 10 — phase-stream-pending-snapshot — blocking: yes — qa: auto：mobile 测试：`use-chat-stream-runtime.test.ts`（batch flush 时序）+ `chat-transcript-webview.test.tsx`（force 快照 postMessage 序列：snapshot 不被 streamActive 拦截、delta 继续追加无回跳）。
@@ -141,13 +146,13 @@ desktop：
 
 - T-FK1 — blocking: yes — fork 后新会话 `getSessionAgentConfig` 等于源会话配置（→ Step 2）。
 - T-FK2 — blocking: yes — 源配置为 NULL（repo 层手动清空）时 fork 不抛错、新会话配置为 NULL（→ Step 1/2）。
-- T-CF1 — blocking: yes — fromSeq 边缘为 user(tool_result) 时，range 向外扩展纳入配对 assistant(tool_use)（→ Step 3/4）。
+- T-CF1 — blocking: yes — fromSeq 向上锚定到真用户输入（user 且非 tool_result），隐藏区间第一条必为 user；边缘 assistant 或 user(tool_result) 均向上跳过整个 tool 往返（→ Step 3/4，订正后口径）。
 - T-CF2 — blocking: yes — toSeq 边缘为 assistant(tool_use) 且 tool_result 在 range 外时，toSeq 向外扩展纳入 tool_result 消息（→ Step 3/4）。
 - T-CF3 — blocking: yes — 无配对拆开时 range 与原行为完全一致（回归保护，→ Step 3/4）。
 - T-CF4 — blocking: yes — 全 user 无 assistant 时仍返回 null（既有行为不变，→ Step 4）。
-- T-UH1 — blocking: yes — `buildMessageActionItems`：hidden 消息含「取消隐藏」、非 hidden 不含；既有 items 顺序断言更新（→ Step 5/6）。
-- T-UH2 — blocking: yes — `unhide` action 走 `showMessagesInRange(seq, seq)` 并触发 `reloadMessages(true)`；`agentRunning` 时拦截（→ Step 5）。
-- T-UH3 — blocking: no — webview `buildMenuItems` 镜像断言（→ Step 6）。
+- T-UH1 — blocking: yes — `buildMessageActionItems`：hidden 消息同样含「回滚」、无「取消隐藏」；items 顺序断言更新（→ Step 5/6，订正后口径）。
+- T-UH2 — blocking: no — 已废弃（首版 unhide 链路用例，随实现一并拆除）。
+- T-UH3 — blocking: no — webview `buildMenuItems` 镜像断言：hidden 行同样含 rollback（→ Step 6）。
 - T-ST1 — blocking: yes — 多轮 tool run：step commit 后 needsFullSnapshot 快照不被重启的 streamActive 拦截，postMessage 序列中 snapshot 先于后续 delta、无内容回跳（→ Step 8/10）。
 - T-ST2 — blocking: yes — STEP_COMMITTED/RUN_FINISHED/RUN_FAILED 前 batch 缓冲先 flush 再 clear，无 delta 丢弃（→ Step 9/10）。
 - T-ST3 — blocking: no — Android 真机 + webview + richText：3+ 轮 tool run，每步正文在 STEP_COMMITTED 后不消失（manual_user，合并后用户验收）。
@@ -162,5 +167,5 @@ desktop：
 - **force 快照（D）**：语义钉死为「消费 pending + 取消 timer + 直发」；风险是 snapshot rows 过期导致一帧回跳——T-ST1 用 postMessage 序列断言钉住。回滚：去掉 force 参数及其唯一传参点。
 - **batchFlush（D）**：flush 与 reload 后 `tryCommitStreamTail` 是同内容双通道，靠 `lastStreamCommitIdsRef` 去重接住（desktop 已验证同模式）。回滚：移除 `batchFlush` 三处调用与接口。
 - **ops 拆除（E）**：最大风险是 chip 判定误伤 annotate（D3 已防）与 rollback 链路拆错（annotate 反投影保留已列明）；历史附件 prompt 过滤是行为变化（D2 已拍板）；跨端删除的编译炸点（core `index.ts` L127 re-export、desktop `workplace.ts`、双端 `project-composer-status.service.ts` 的 ops 投影 import）已列入 E 清单，其中双端 composer-status 服务按 D7 **收窄保留不删**，import 炸点以改写收口，实施时以三端 build 为准；`hasPendingTurns` 删除（D6）与推送收窄（D7）波及 desktop 轮询链与空续跑分支，均有步骥钉住。回滚：按文件 revert；DB 无 schema 变更、无数据迁移，回滚零成本。
-- **webview-dist**：menu.ts 改动后必须重建（`__tests__` 有直接读产物的镜像测试），漏重建会被 T-UH3 拦住。
+- **webview-dist**：menu.ts 改动后必须重建（`__tests__` 有直接读产物的镜像测试）；漏重建不用担心——mobile 的 pretest 会自动执行 `npm run build:webview` 重建产物兜底，T-UH3 的镜像断言随后校验重建结果。
 - 共同约束：`.woktree/` 下有同构副本，所有 grep/改动以主工作区为准。

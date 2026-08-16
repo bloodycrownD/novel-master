@@ -500,7 +500,25 @@ export const ChatTranscriptWebView = memo(
         (
           intent: TranscriptScrollIntent,
           restoreScroll?: TranscriptRestoreScroll,
+          force?: boolean,
         ) => {
+          if (force) {
+            // D4：force 直发——消费 pending（沿用其 intent/restoreScroll）、
+            // 取消 defer timer、绕过 streamActiveRef 拦截，且不再设置新的 defer timer。
+            // needsFullSnapshot 场景下快照必须先于后续 streamDelta 到达，
+            // 否则 web 端会先渲染旧基线再被快照回跳。
+            if (snapshotDeferTimerRef.current != null) {
+              clearTimeout(snapshotDeferTimerRef.current);
+              snapshotDeferTimerRef.current = null;
+            }
+            const pending = pendingSnapshotRef.current;
+            pendingSnapshotRef.current = null;
+            sendSessionSnapshotNow(
+              pending?.intent ?? intent,
+              pending?.restoreScroll ?? restoreScroll,
+            );
+            return;
+          }
           if (!uiRunning) {
             sendSessionSnapshotNow(intent, restoreScroll);
             return;
@@ -526,6 +544,15 @@ export const ChatTranscriptWebView = memo(
         },
         [uiRunning, sendSessionSnapshotNow],
       );
+
+      // sendSessionSnapshot 的闭包身份随渲染变化（内部挂着每次渲染重建的
+      // transcriptListOptions 与 messages）。pendingSubagentSessions 快照重发
+      // 只应由映射本身的变化触发，否则任何无关重渲染（如 streamingText 更新）
+      // 都会多发一次全量 sessionSnapshot——用 ref 取最新实现，依赖里只留映射。
+      const sendSessionSnapshotRef = useRef(sendSessionSnapshot);
+      useEffect(() => {
+        sendSessionSnapshotRef.current = sendSessionSnapshot;
+      });
 
       const sendAppendTailRows = useCallback(
         (tailMessages: readonly ChatMessage[]) => {
@@ -897,12 +924,14 @@ export const ChatTranscriptWebView = memo(
 
       // pendingSubagentSessions 变化时（task 工具创建子会话事件到达），
       // 重发 snapshot 让 pending task 卡片立即获得 subagentSessionId 可点击。
+      // 注意经 ref 调用：不能把 sendSessionSnapshot 放进依赖（闭包身份不稳定，
+      // 会退化成每次重渲染都发全量快照）。
       useEffect(() => {
         if (!webReady) {
           return;
         }
-        sendSessionSnapshot('preserve');
-      }, [webReady, pendingSubagentSessions, sendSessionSnapshot]);
+        sendSessionSnapshotRef.current('preserve');
+      }, [webReady, pendingSubagentSessions]);
 
       useEffect(() => {
         if (!webReady) {
@@ -1014,7 +1043,9 @@ export const ChatTranscriptWebView = memo(
                 message.role === 'assistant' && messageHasToolUse(message),
             );
           if (needsFullSnapshot) {
-            sendSessionSnapshot('preserve');
+            // force：流式 tail 可能仍在追加（streamActiveRef 为 true），
+            // 但含 tool_use/tool_result 的落库行必须立即进快照基线，不能 pending。
+            sendSessionSnapshot('preserve', undefined, true);
           } else {
             sendAppendTailRows(added);
           }

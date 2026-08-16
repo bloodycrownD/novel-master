@@ -71,12 +71,20 @@ describe('buildMessageActionItems', () => {
     expect(actions).toEqual(['copy', 'fork', 'rollback']);
   });
 
-  it('hidden 消息含置位、无 rollback', () => {
+  it('hidden 消息同样含 rollback、无 unhide（T-UH1 订正）', () => {
     const actions = buildMessageActionItems({
       ...msg([{ type: 'text', text: 'hi' }]),
       hidden: true,
     }).map(i => i.action);
-    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork']);
+    expect(actions).not.toContain('unhide');
+    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
+  });
+
+  it('非 hidden 消息菜单顺序不变', () => {
+    const actions = buildMessageActionItems(
+      msg([{ type: 'text', text: 'hi' }]),
+    ).map(i => i.action);
+    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 
   it('set-floor 在 copy 之后、fork 之前', () => {
