@@ -158,7 +158,7 @@ export function ChatComposer({
   }, [sessionId, onAttachmentsChange]);
 
   // 仅 append 成功推送后清 annotate + 正文（禁止 started:true 清；B4 对齐 Mobile）。
-  // 手改 log：main prepare/flush 已 clearUserOpsLog；此处清 chip 即可（禁止 renderer 写 ops store）。
+  // annotate：发送后 main 已清 store；此处清 chip 即可（禁止 renderer 直接写 store）。
   // 始终按 payload.sessionId 清 annotate store，避免切会话后漏清、再回来重带旧批注。
   useEffect(() => {
     return onUserMessageAppended((payload) => {
