@@ -84,6 +84,37 @@ function summarizeToolSuccess(
     return `${count} entries`;
   }
 
+  // skill_opt：按输出携带的 action 分发（read 行数 / write 域+路径 / edit 替换数 / list 条数）。
+  // 必须在下方 generic matches/paths 分支之前——list 输出的 entries+total 会撞上。
+  if (name === "skill_opt" && typeof output.action === "string") {
+    if (output.action === "read") {
+      const returned = output.returnedLines;
+      const total = output.totalLines;
+      if (typeof returned === "number" && typeof total === "number") {
+        if (output.truncated === true) {
+          return `truncated · ${returned}/${total} lines`;
+        }
+        return `${returned} lines`;
+      }
+    }
+    if (
+      (output.action === "write" || output.action === "edit") &&
+      typeof output.domain === "string" &&
+      typeof output.name === "string" &&
+      typeof output.path === "string"
+    ) {
+      if (output.action === "edit" && typeof output.replacements === "number") {
+        return output.replacements === 1
+          ? `${output.domain}:${output.name}/${output.path}`
+          : `${output.replacements} replacements · ${output.domain}:${output.name}/${output.path}`;
+      }
+      return `${output.domain}:${output.name}/${output.path}`;
+    }
+    if (output.action === "list" && Array.isArray(output.entries)) {
+      return `${output.entries.length} skills`;
+    }
+  }
+
   const matchItems = output.matches ?? output.paths;
   if (Array.isArray(matchItems) && typeof output.total === "number") {
     const n = matchItems.length;
