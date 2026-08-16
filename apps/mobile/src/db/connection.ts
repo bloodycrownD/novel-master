@@ -2,7 +2,7 @@
  * Single SQLite connection for mobile (VFS + SKSP share one DB).
  */
 import {bootstrapNovelMaster, open, type TdbcConnection} from '@novel-master/core';
-import {registerRnDriver} from '@novel-master/tdbc-driver-rn/native';
+import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
 import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
@@ -26,10 +26,10 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
   }
   if (!initPromise) {
     initPromise = (async () => {
-      registerRnDriver();
+      registerOpSqliteDriver();
       registerSkspAndroidDriver();
       registerTokenizerRnDriver();
-      const c = await open(MOBILE_TDBC_URL, {driver: 'rn'});
+      const c = await open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
       try {
         await bootstrapNovelMaster(c);
       } catch (bootErr) {

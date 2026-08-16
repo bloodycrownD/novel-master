@@ -25,9 +25,9 @@
     "e2e:build-apk": "npm run build:webview:native && cd android && gradlew.bat assembleDebug",
     "e2e:tsc": "tsc -p e2e/tsconfig.json",
     "icons": "node scripts/generate-app-icons.mjs",
-    "prestart": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn && npm run build:webview",
-    "preandroid": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn && npm run build:webview:native",
-    "preios": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn && npm run build:webview:native"
+    "prestart": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tdbc-driver-op-sqlite -w @novel-master/tokenizer-driver-rn && npm run build:webview",
+    "preandroid": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tdbc-driver-op-sqlite -w @novel-master/tokenizer-driver-rn && npm run build:webview:native",
+    "preios": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tdbc-driver-op-sqlite -w @novel-master/tokenizer-driver-rn && npm run build:webview:native"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.1.2",
@@ -35,6 +35,7 @@
     "@novel-master/cloud-sync-driver-s3": "*",
     "@novel-master/core": "*",
     "@novel-master/sksp-android": "*",
+    "@novel-master/tdbc-driver-op-sqlite": "*",
     "@novel-master/tdbc-driver-rn": "*",
     "@novel-master/tokenizer-driver-rn": "*",
     "@op-engineering/op-sqlite": "18.0.0",

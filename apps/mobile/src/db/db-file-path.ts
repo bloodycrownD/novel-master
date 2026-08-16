@@ -1,5 +1,5 @@
 /**
- * On-disk path for the mobile VFS SQLite file (aligned with quick-sqlite layout).
+ * On-disk path for the mobile VFS SQLite file (quick-sqlite 旧布局 + op-sqlite 默认布局).
  *
  * @module db/db-file-path
  */
@@ -8,6 +8,18 @@ import {MOBILE_VFS_DB_NAME} from '../vfs/constants';
 
 /** Subfolder under app files dir used by quick-sqlite when `location: 'default'`. */
 export const QUICK_SQLITE_DEFAULT_LOCATION = 'default';
+
+/**
+ * op-sqlite Android 默认库目录：`Context.getDatabasePath()` 指向的 databases
+ * 目录，也就是 files 目录（react-native-blob-util 的 DocumentDir）的兄弟目录。
+ * iOS 默认落在 DocumentDir 根部，已被 `base/name` 候选覆盖，无需额外推导。
+ */
+function opSqliteAndroidDatabasesDir(base: string): string | undefined {
+  if (!base.endsWith('/files')) {
+    return undefined;
+  }
+  return `${base.slice(0, -'/files'.length)}/databases`;
+}
 
 let cachedDbFilePath: string | undefined;
 
@@ -35,7 +47,14 @@ function defaultQuickSqliteBaseDir(
   return base;
 }
 
-/** Paths quick-sqlite may use for `novel_master_vfs` (newest layout first). */
+/**
+ * Candidate paths for `novel_master_vfs` across driver layouts.
+ *
+ * quick-sqlite 旧布局排在前面：驱动层 open 时对旧布局绝对路径优先探测，
+ * 这里保持同样的优先级，保证备份拷贝的目标与驱动实际打开的文件一致。
+ * op-sqlite 默认布局（Android databases 目录，文件名不带 `.db` 后缀）追加在后；
+ * `.db` 变体一并保留，兜底真机 `getDbPath()` 核对前的不确定性。
+ */
 export function buildMobileDatabaseFilePathCandidates(
   dirs: typeof ReactNativeBlobUtil.fs.dirs = blobFs().dirs,
 ): string[] {
@@ -45,6 +64,12 @@ export function buildMobileDatabaseFilePathCandidates(
   for (const name of fileNames) {
     paths.push(`${base}/${QUICK_SQLITE_DEFAULT_LOCATION}/${name}`);
     paths.push(`${base}/${name}`);
+  }
+  const opSqliteBase = opSqliteAndroidDatabasesDir(base);
+  if (opSqliteBase != null) {
+    for (const name of fileNames) {
+      paths.push(`${opSqliteBase}/${name}`);
+    }
   }
   return paths;
 }

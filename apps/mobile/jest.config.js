@@ -76,6 +76,14 @@ module.exports = {
       repoRoot,
       'packages/tdbc-driver-rn/dist/index.js',
     ),
+    '^@novel-master/tdbc-driver-op-sqlite/native$': path.join(
+      repoRoot,
+      'packages/tdbc-driver-op-sqlite/dist/native.js',
+    ),
+    '^@novel-master/tdbc-driver-op-sqlite$': path.join(
+      repoRoot,
+      'packages/tdbc-driver-op-sqlite/dist/index.js',
+    ),
     '^@novel-master/tokenizer-driver-rn/native$': path.join(
       repoRoot,
       'packages/tokenizer-driver-rn/dist/native.js',

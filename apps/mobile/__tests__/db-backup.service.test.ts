@@ -41,8 +41,8 @@ jest.mock('@novel-master/core', () => ({
   open: (...args: unknown[]) => mockOpen(...args),
 }));
 
-jest.mock('@novel-master/tdbc-driver-rn/native', () => ({
-  registerRnDriver: jest.fn(),
+jest.mock('@novel-master/tdbc-driver-op-sqlite/native', () => ({
+  registerOpSqliteDriver: jest.fn(),
 }));
 
 jest.mock('../src/db/connection', () => ({

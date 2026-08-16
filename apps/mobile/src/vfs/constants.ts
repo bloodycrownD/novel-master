@@ -5,5 +5,5 @@
 /** quick-sqlite logical database name in app private storage. */
 export const MOBILE_VFS_DB_NAME = 'novel_master_vfs';
 
-/** TDBC URL passed to {@link open} with the RN driver. */
+/** TDBC URL passed to {@link open} with the mobile SQLite driver. */
 export const MOBILE_TDBC_URL = `tdbc:sqlite:file:${MOBILE_VFS_DB_NAME}`;

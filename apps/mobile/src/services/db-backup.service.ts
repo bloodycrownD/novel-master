@@ -22,7 +22,7 @@ import {
   scrubProviderTablesInDatabase,
   type TdbcConnection,
 } from '@novel-master/core';
-import {registerRnDriver} from '@novel-master/tdbc-driver-rn/native';
+import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
 import {
   checkpointMobileDatabase,
   closeMobileConnection,
@@ -116,8 +116,8 @@ async function writeBytesToFileChunked(
  * 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
  */
 async function openDbForProviderRestore(): Promise<TdbcConnection> {
-  registerRnDriver();
-  return open(MOBILE_TDBC_URL, {driver: 'rn'});
+  registerOpSqliteDriver();
+  return open(MOBILE_TDBC_URL, {driver: 'op-sqlite'});
 }
 
 /**
