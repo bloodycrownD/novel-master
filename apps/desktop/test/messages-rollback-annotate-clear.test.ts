@@ -2,7 +2,7 @@
  * T-UO4：Desktop main handleMessagesRollback — undo_send / rewind 均清 main 侧 annotate store 并推空。
  */
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { after, before, beforeEach, describe, it } from "node:test";
 import {
   addChatAnnotateDraft,
   listChatAnnotateDrafts,
@@ -27,6 +27,10 @@ import {
 describe("handleMessagesRollback (T-UO4 / D8)", () => {
   let tempDir: string;
   let projectId: string;
+
+  beforeEach(() => {
+    resetChatAnnotateDraftStoreForTests();
+  });
 
   before(async () => {
     ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-rollback-uol-"));
