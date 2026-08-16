@@ -394,14 +394,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
     ),
-    ipcPreferencesGetUserOpsLogEnabled: noArg<IpcResult<boolean>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_GET_USER_OPS_LOG_ENABLED,
-    ),
-    ipcPreferencesSetUserOpsLogEnabled: withBool<IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_SET_USER_OPS_LOG_ENABLED,
-    ),
     ipcPreferencesGetLlmStream: noArg<IpcResult<boolean>>(
       invoke,
       IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,

@@ -55,10 +55,8 @@ import {
 import {
   handlePreferencesGetLlmStream,
   handlePreferencesGetSessionFsVersionCheck,
-  handlePreferencesGetUserOpsLogEnabled,
   handlePreferencesSetLlmStream,
   handlePreferencesSetSessionFsVersionCheck,
-  handlePreferencesSetUserOpsLogEnabled,
 } from './handlers/preferences.js';
 import {
   handleProviderModelsDeleteSaved,
@@ -303,14 +301,6 @@ export function registerHandlersFromRegistry(): void {
   bindBool(
     IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
     handlePreferencesSetSessionFsVersionCheck,
-  );
-  bindNoArg(
-    IPC_CHANNELS.PREFERENCES_GET_USER_OPS_LOG_ENABLED,
-    handlePreferencesGetUserOpsLogEnabled,
-  );
-  bindBool(
-    IPC_CHANNELS.PREFERENCES_SET_USER_OPS_LOG_ENABLED,
-    handlePreferencesSetUserOpsLogEnabled,
   );
   bindNoArg(
     IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,
