@@ -3,7 +3,6 @@
  */
 import {
   clearChatAnnotateDrafts,
-  clearUserOpsLog,
   readMessageMetadata,
   textBlocks,
   type ChatMessage,
@@ -358,11 +357,9 @@ export async function handleMessagesRollback(
       rollbackOptions,
     );
 
-    // D8：undo_send / rewind 均 clearUserOpsLog 后推空。
-    // main 进程拿不到 mode（mode 由 renderer 算），且 annotate store 是进程内的——
-    // main 侧只能无条件清自己进程里的 annotate store；renderer 侧的清空 / 反投影
+    // D8：undo_send / rewind 均推空状态条；main 侧 annotate store 一并清。
+    // main 进程拿不到 mode（mode 由 renderer 算）——renderer 侧的清空 / 反投影
     // 由 renderer 的 applyUndoAnnotateRestore 按锚点角色区分处理（CR-5）。
-    clearUserOpsLog(req.sessionId);
     clearChatAnnotateDrafts(req.sessionId);
     await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };

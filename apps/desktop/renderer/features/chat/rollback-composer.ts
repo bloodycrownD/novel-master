@@ -7,9 +7,9 @@ export type ComposerDraftSnapshot = {
 };
 
 /**
- * undo_send：恢复锚点原文（含 `@路径`）；attachments 恒空（ops 由 main suggest 推；annotate 另 ∪）。
- * rewind：保留当前正文；attachments 恒空——禁止把闭包里旧 user_ops chip 写回
- *（main 已 clear + 推空；renderer 再 ∪ annotate）。
+ * undo_send：恢复锚点原文（含 `@路径`）；attachments 恒空（状态条由 main suggest 推；annotate 另 ∪）。
+ * rewind：保留当前正文；attachments 恒空——禁止把闭包里旧 chip 写回
+ *（main 已推空；renderer 再 ∪ annotate）。
  */
 export function resolveComposerDraftAfterRollbackSuccess(
   current: ComposerDraftSnapshot,
