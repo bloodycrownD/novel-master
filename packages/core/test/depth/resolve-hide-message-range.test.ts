@@ -162,6 +162,32 @@ describe("resolveHideMessageRange", () => {
     assert.equal(range.toSeq, 7);
   });
 
+  it("T-CF2b：toSeq 边缘为 assistant(tool_use) 但后续 user 只含其他 toolUseId 的 result 时不外扩", () => {
+    const msgs = [
+      makeMsg("m1", 1, "user"),
+      makeMsg("m2", 2, "assistant"),
+      makeMsg("m3", 3, "user"),
+      makeMsg("m4", 4, "assistant"),
+      makeMsg("m5", 5, "user"),
+      makeMsg("m6", 6, "assistant", [
+        { type: "tool_use", id: "t_x", name: "read", input: {} },
+      ]),
+      makeMsg("m7", 7, "user", [
+        { type: "tool_result", toolUseId: "t_other", content: "ok" },
+      ]),
+    ];
+    const vis = listVisibleForDepth(msgs);
+    // n=7，depth 1..3 → seq 4..6：toSeq 边缘 seq6 是 assistant(tool_use t_x)，
+    // 但后续 user 消息 seq7 只含其他 toolUseId（t_other）的 result，找不到
+    // 配对（崩溃残留场景），不应外扩，toSeq 保持 6。
+    const slice = { startDepth: 1, endDepth: 3 };
+    const ids = messageIdsInSlice(vis, slice);
+    const range = resolveHideMessageRange(vis, slice, ids);
+    assert.ok(range);
+    assert.equal(range.fromSeq, 4);
+    assert.equal(range.toSeq, 6);
+  });
+
   it("T-CF3：无配对拆开时 range 与原行为完全一致（回归保护）", () => {
     // 全文本消息（无 tool blocks），扩展逻辑不应改变任何边界。
     const slice = { startDepth: 2, endDepth: 4 };
