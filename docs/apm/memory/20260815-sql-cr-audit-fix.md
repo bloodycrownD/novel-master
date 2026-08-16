@@ -1,8 +1,8 @@
 ---
-date: 2026-08-15 22:30
-title: SQL 全量 CR 迭代——wt-A 已合入集成分支全绿（1937/1937），wt-B 待用户验证后合并
-keywords: sql-cr-audit, worktree, N+1, migration, 孤儿GC, CHECK约束, 待合并, 集成分支
-abstract: 六轮 CR 产出 28 条 finding，两个 worktree 开发 + cr-fix 全部 dev-ready。wt-A（migration 侧）已合入集成分支 feat/sql-cr-fixes-integration（e325267），仅 schema-migrations/index.ts 一处冲突（保住 orphan GC 排序约束），同步 main 的 tokenizer 清理后 1937/1937 零失败。wt-B（N+1 侧）待用户验证 wt-A 后合并，预判冲突 session.service.ts。
+date: 2026-08-16 20:10
+title: SQL 全量 CR 迭代——wt-A/wt-B 均已合入集成分支（d3f3d09），1951/1951 全绿，真机验证进行中
+keywords: sql-cr-audit, worktree, N+1, migration, 孤儿GC, CHECK约束, 集成分支, op-sqlite
+abstract: 六轮 CR 产出 28 条 finding，两个 worktree 开发 + cr-fix 全部 dev-ready。wt-A（migration 侧）与 wt-B（N+1 侧）均已合入 feat/sql-cr-fixes-integration（wt-B 合入 d3f3d09，预判的 session.service.ts 冲突未发生，自动合并成功）；合并后全量 1951/1951 零失败、core+mobile typecheck 双绿、新旧驱动包 31/25 全过。后续：真机验收（含 wt-B 的回滚/复制性能改善体感）+ 发版前 rebase main。
 ---
 
 user:
@@ -52,3 +52,9 @@ user:
 
 assistant:
 wt-A 已合入：在主仓新建集成分支 feat/sql-cr-fixes-integration（基于 main 4e20a23），merge feat/sql-fix-migration 得 e325267，仅 schema-migrations/index.ts 一处冲突——解法是三个 migration 全保留（projectAgentConfigCleanupV1 在前，orphanRevisionGcV1 + tableConstraintsV1 在后，保住 P1-5 顺序约束）。合并后发现并行会话的两大修复：一是 tokenizer 回填链路清理（6bc88ba）把 backfill-cache-from-messages.test.ts 的 3 个存量失败连根修掉了（v1.4.25 掏空实现后没清现场）；二是 RULE.md 新增「提交前确认当前分支」红线——那个会话曾误提交到本集成分支后 cherry-pick 摘回，且我自己也差点在 main 上直接 merge（被 no-op 兜住）。集成分支同步 main 后全量 1937/1937 零失败。另一个虚惊：feat/event-config-merge-and-migration-cleanup（v1.5.0）分支反向 diff 看似删了 batchAdjustRefCount，实为 8 月 11 日已合并的老分支（领先 main 0、落后 68），对合并零风险。剩余：wt-B（dd74f1b）等用户验证完合入，预判 session.service.ts 冲突，合并后跑三套交叉测试 + 全 workspace typecheck。
+
+user:
+把 B 也合并到当前 feature 分支，两个 worktree 一起测。
+
+assistant:
+wt-B（dd74f1b）合入 d3f3d09：预判的 session.service.ts 冲突未发生，git 自动合并成功（+5/-7）。合并门槛全过：core 全量 1951/1951 零失败（1937 + wt-B 新增 14 条，含 fork-copy-batch-insert / vfs-delete-batch / rollback-optimistic-lock-count / workplace-copy-scope-batch / vfs-repair-ref-count-batch / sql-counting-connection 等新测试文件）、core+mobile typecheck 双绿（cr-p1-2 删 collectAllReferencedHashes 的 merge gate 过）、新旧驱动包 31/25 全过。P1 批量写 × P2 CHECK 约束交叉场景由全量套件覆盖（所有测试跑在合并后的同一 schema+代码上）。坑：npm test 的 `!(performance)` extglob 在 dash 下炸，要 bash -c + shopt -s extglob 跑。剩余：真机验收（wt-B 的回滚/复制性能体感）+ 发版前 rebase main。
