@@ -57,6 +57,9 @@ jest.mock('../src/components/agent/AgentPickerModal', () => ({
 jest.mock('../src/components/chrome/SessionActionsDrawer', () => ({
   SessionActionsDrawer: () => null,
 }));
+jest.mock('../src/components/chrome/ToastHost', () => ({
+  useToast: () => ({ showToast: jest.fn() }),
+}));
 
 import { ChatConversationPanel } from '../src/screens/tabs/chat-tab/ChatConversationPanel';
 import type { VfsFileManagerHandle } from '../src/components/vfs/VfsFileManager';
