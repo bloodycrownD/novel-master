@@ -6571,6 +6571,72 @@ html[data-theme="dark"] .chat-batch-bar {
   font-family: inherit;
 }
 
+/* composer `$` 技能 typeahead（Step20） */
+.chat-composer__typeahead-item--skill {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-composer__skill-name {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.chat-composer__skill-desc {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-composer__skill-off {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* `$` 按钮拉起的技能选择器弹层（Step20，复用 file-ref-picker 骨架） */
+.skill-picker__row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.skill-picker__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.skill-picker__meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-picker__off {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .new-skill-modal__error {
   margin: 8px 0 0;
   color: var(--danger, #c0392b);

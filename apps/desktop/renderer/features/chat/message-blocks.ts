@@ -179,6 +179,18 @@ function summarizeToolInput(
   name: string,
   input: Record<string, unknown>,
 ): string {
+  // skill_opt 摘要：`action domain:name`；read 缺省域时只展示 action + name
+  if (name === "skill_opt") {
+    const action = typeof input.action === "string" ? input.action : "";
+    const skillName = typeof input.name === "string" ? input.name : "";
+    const domain =
+      input.domain === "global" || input.domain === "project"
+        ? input.domain
+        : undefined;
+    return domain != null
+      ? `${action} ${domain}:${skillName}`
+      : `${action} ${skillName}`.trim();
+  }
   const path = input.path ?? input.dir ?? input.from;
   if (typeof path === "string") {
     return path;

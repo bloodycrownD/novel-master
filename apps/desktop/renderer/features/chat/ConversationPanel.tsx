@@ -924,6 +924,7 @@ export function ConversationPanel({
         <div ref={chatMessagesRef} className="chat-messages" id="chat-messages">
           <MessageList
             messages={messages}
+            projectId={projectId}
             uiRunning={running}
             streamingText={running ? streamingText : undefined}
             streamingThinking={running ? streamingThinking : undefined}
