@@ -36,6 +36,38 @@ function rowToFilePointer(row: Row): MessageCheckpointFile {
   };
 }
 
+/** 多值 INSERT 每块变量数上限（≤ 老版 SQLITE_MAX_VARIABLE_NUMBER=999，留余量）。 */
+const MULTI_VALUES_MAX_VARS = 900;
+
+/**
+ * 分块多值 INSERT：`INSERT INTO … VALUES (?,?,…),(?,?,…)…`。
+ *
+ * 逐行 conn.batch 在驱动层是逐行 JSI 往返（better-sqlite3 / op-sqlite 均如此），
+ * 行数平方级增长的批量播种场景下往返开销远超 SQLite 执行本身。
+ * 块内失败时抛错，由外层事务整体回滚（调用方均在事务内）。
+ */
+async function insertMultiValues(
+  conn: TdbcConnection,
+  insertPrefix: string,
+  rows: ReadonlyArray<readonly unknown[]>,
+): Promise<void> {
+  if (rows.length === 0) {
+    return;
+  }
+  const paramsPerRow = rows[0]!.length;
+  const chunkSize = Math.max(1, Math.floor(MULTI_VALUES_MAX_VARS / paramsPerRow));
+  const rowPlaceholder = `(${Array.from({ length: paramsPerRow }, () => "?").join(",")})`;
+  for (let offset = 0; offset < rows.length; offset += chunkSize) {
+    const chunk = rows.slice(offset, offset + chunkSize);
+    const placeholders = chunk.map(() => rowPlaceholder).join(",");
+    const params: unknown[] = [];
+    for (const row of chunk) {
+      params.push(...row);
+    }
+    await conn.execute(`${insertPrefix} VALUES ${placeholders}`, params);
+  }
+}
+
 /**
  * TDBC-backed message checkpoint repository.
  */
@@ -153,20 +185,27 @@ export class SqliteMessageCheckpointRepository
 
     const msgCount = messages.length;
 
-    // 批量插入锚点行：每条消息一行 message_checkpoint
-    const anchorSql = `INSERT INTO message_checkpoint (session_id, message_id, created_at_ms) VALUES (?, ?, ?)`;
-    const anchorParams = messages.map((m) => [sessionId, m.id, createdAtMs]);
-    await this.conn.batch(anchorSql, anchorParams);
-
-    // 批量插入文件指针行：消息数 × 文件数，一次性全插
-    const fileSql = `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version) VALUES (?, ?, ?, ?)`;
-    const fileParams: unknown[][] = [];
+    // 多值 INSERT 分块：逐行 conn.batch 在驱动层是逐行 JSI 往返
+    //（better-sqlite3 / op-sqlite 均如此），消息数×文件数平方级行数时
+    //（200 文件 × 500 消息 = 10 万行）往返开销淹没 SQLite 本身。改为
+    // 每 chunk 一条多值 INSERT，往返次数从 O(行数) 降到 O(行数/块)。
+    // 块大小按 900 变量上限切（≤999，老版 SQLITE_MAX_VARIABLE_NUMBER 也安全）。
+    await insertMultiValues(
+      this.conn,
+      `INSERT INTO message_checkpoint (session_id, message_id, created_at_ms)`,
+      messages.map((m) => [sessionId, m.id, createdAtMs]),
+    );
+    const fileRows: unknown[][] = [];
     for (const msg of messages) {
       for (const file of files) {
-        fileParams.push([sessionId, msg.id, file.entryId, file.revisionVersion]);
+        fileRows.push([sessionId, msg.id, file.entryId, file.revisionVersion]);
       }
     }
-    await this.conn.batch(fileSql, fileParams);
+    await insertMultiValues(
+      this.conn,
+      `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version)`,
+      fileRows,
+    );
 
     // 批量递增 ref_count：每个文件指针的 revision ref_count 加 msgCount。
     // 直接用 IN 子句 + 固定 delta，比 expand 成 N 份再调 batchAdjustRefCount 更高效——
