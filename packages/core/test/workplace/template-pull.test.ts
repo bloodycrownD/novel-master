@@ -4,6 +4,8 @@ import { textBlocks } from "@novel-master/core/chat";
 
 import { createTemplatePullService, createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -163,5 +165,60 @@ describe("template pull", () => {
       .map((e) => e.path)
       .sort();
     assert.deepEqual(paths, ["/a.md"]);
+  });
+
+  it("project pull 不复制/不删除/不重置 meta/skills（T-SK2）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+
+    // global 技能域有内容：pull 后不应镜像到 project（放在真实 meta/skills 前缀下，
+    // 子目录带 suffix 避免跨用例冲突）
+    const gvfs = ctx.globalVfs();
+    await gvfs.write(`/g-${suffix}.md`, "G");
+    await gvfs.write(`/meta/skills/global-only-${suffix}/SKILL.md`, "global-skill");
+
+    // project 域预置技能（含历史旧版 revision）
+    const project = await ctx.projects.create(`P-${suffix}`);
+    const projectScope = `project:${project.id}`;
+    const pvfs = ctx.projectVfs(project.id);
+    const skillPath = "/meta/skills/proj-skill/SKILL.md";
+    await pvfs.write(skillPath, "v1");
+    await pvfs.write(skillPath, "v2-final", { versionCheck: false });
+    await pvfs.write("/replaced.md", "old");
+
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const skillEntry = await entryRepo.findByPath(projectScope, skillPath);
+    assert.ok(skillEntry != null);
+    const refsBefore = await ctx.conn.query<{ version: number; ref_count: number }>(
+      `SELECT version, ref_count FROM vfs_revision WHERE entry_id = ? ORDER BY version`,
+      [skillEntry.entryId],
+    );
+    assert.equal(refsBefore.length, 2, "技能文件应有 v1/v2 两条 revision");
+
+    await createTemplatePullService(ctx.conn).projectTemplatePull(project.id);
+
+    // 拷贝侧：global 技能不镜像到 project
+    const paths = (await pvfs.list("/", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path);
+    assert.ok(
+      paths.every((p) => !p.startsWith(`/meta/skills/global-only-${suffix}`)),
+      `global 技能不应镜像到 project，实际：${paths.join(", ")}`,
+    );
+    // 其余照常替换：旧文件被删、global 文件被拷入
+    assert.ok(!paths.includes("/replaced.md"), "/replaced.md 应被替换删除");
+    assert.ok(paths.includes(`/g-${suffix}.md`), "global 文件应被拷入");
+
+    // 删除侧：project 技能 entry 保留、内容不变、revision/ref_count 不变
+    const skillEntryAfter = await entryRepo.findByPath(projectScope, skillPath);
+    assert.ok(skillEntryAfter != null, "project 技能 entry 应保留");
+    assert.equal(skillEntryAfter.entryId, skillEntry.entryId);
+    assert.equal((await pvfs.read(skillPath)).content, "v2-final");
+    const refsAfter = await ctx.conn.query<{ version: number; ref_count: number }>(
+      `SELECT version, ref_count FROM vfs_revision WHERE entry_id = ? ORDER BY version`,
+      [skillEntry.entryId],
+    );
+    assert.deepEqual(refsAfter, refsBefore, "技能 revision 行与 ref_count 应完全不变");
   });
 });
