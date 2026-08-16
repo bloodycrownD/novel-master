@@ -91,6 +91,8 @@ jobs:
           npm run build -w @novel-master/core
           npm run build -w @novel-master/cloud-sync-driver-s3
           npm run build -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
+          # dist gitignore，CI 须逐包构建；漏列会让 metro 解析 exports（./native → dist/native.js）失败
+          npm run build -w @novel-master/tdbc-driver-op-sqlite
 
       # WebView 产物 gitignore；assemble 前必须拷入 android_asset，否则聊天页 net::ERR_FILE_NOT_FOUND
       - name: Build WebView native assets
