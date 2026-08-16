@@ -19,6 +19,7 @@ import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm
 import type {
   PromptLlmInput,
   PromptRenderContext,
+  PromptSkillIndexEntry,
 } from "../../domain/prompt/model/prompt-render-context.js";
 
 export type {
@@ -52,11 +53,15 @@ export interface PromptAssemblyOptions {
 /**
  * 计算 `buildPromptLlmInputFromLayout` 输出 messages 的三区边界。
  *
- * @remarks 传入 `workplaceDisplay` 时与注入逻辑一致：空串不算 workplace 双段。
+ * @remarks 传入 `workplaceDisplay` 时与注入逻辑一致：空串不算 workplace 双段；
+ * `skillsIndex` 非空时计入 persist 前缀（技能索引合成消息 1 条）。
  */
 export function computeLlmExportZonesFromLayout(
   layout: AgentPromptLayout,
-  options?: PromptAssemblyOptions & { readonly workplaceDisplay?: string }
+  options?: PromptAssemblyOptions & {
+    readonly workplaceDisplay?: string;
+    readonly skillsIndex?: readonly PromptSkillIndexEntry[];
+  }
 ): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
   const injectWorkplace =
@@ -65,6 +70,7 @@ export function computeLlmExportZonesFromLayout(
       options.workplaceDisplay.trim() !== "");
   const textBlockCount = layout.persist.length;
   const persistCount =
+    (options?.skillsIndex?.length ? 1 : 0) +
     (injectWorkplace ? 2 : 0) +
     (layout.persistEnabled === true ? textBlockCount : 0);
   let dynamicCount = 0;
@@ -147,6 +153,55 @@ function syntheticWorkplaceDoneMessage(
   };
 }
 
+/** 技能索引段正文：每条「名称：描述（来源域）」，模型据此自主决定是否取用。 */
+function formatSkillsIndexBody(
+  entries: readonly PromptSkillIndexEntry[]
+): string {
+  const lines = entries.map((entry) => {
+    const description = entry.description.trim();
+    const descSuffix = description !== "" ? `：${description}` : "";
+    return `- ${entry.name}${descSuffix}（${entry.domain}）`;
+  });
+  return [
+    "当前可用技能（每条为 名称：描述（来源域），正文经 skill_opt 工具按需读取）：",
+    ...lines,
+  ].join("\n");
+}
+
+function syntheticSkillsIndexMessage(
+  body: string,
+  ctx: PromptRenderContext
+): ChatMessage {
+  return {
+    id: "prompt:skills",
+    sessionId: ctx.messages[0]?.sessionId ?? "",
+    seq: 0,
+    role: "user",
+    content: textBlocks(body),
+    provider: null,
+    raw: null,
+    createdAtMs: 0,
+    hidden: false,
+  };
+}
+
+/** `skillsIndex` 空/缺省不产生段；固定 id `prompt-skills` / title `skills`。 */
+function appendSkillsIndexSegmentIfPresent(
+  ctx: PromptRenderContext,
+  segments: PromptAssemblySegment[]
+): void {
+  if (ctx.skillsIndex == null || ctx.skillsIndex.length === 0) {
+    return;
+  }
+  segments.push({
+    id: "prompt-skills",
+    role: "user",
+    title: "skills",
+    body: formatSkillsIndexBody(ctx.skillsIndex),
+    source: "template",
+  });
+}
+
 /** `workplace` 开且展示非空时追加 user 文件树 + assistant 配置确认语。 */
 function appendWorkplacePairIfPresent(
   layout: AgentPromptLayout,
@@ -188,7 +243,8 @@ function appendWorkplacePairSegmentsIfPresent(
 }
 
 /**
- * 三区 layout 单次遍历：system → workplace 双段（若开启）→ persist 文本 → chat → dynamic。
+ * 三区 layout 单次遍历：system → skills 索引（若预算非空）→ workplace 双段（若开启）
+ * → persist 文本 → chat → dynamic。
  */
 export async function buildPromptAssemblyFromLayout(
   layout: AgentPromptLayout,
@@ -208,6 +264,8 @@ export async function buildPromptAssemblyFromLayout(
       source: "system",
     });
   }
+
+  appendSkillsIndexSegmentIfPresent(ctx, segments);
 
   appendWorkplacePairSegmentsIfPresent(layout, ctx, segments);
 
@@ -279,6 +337,12 @@ export async function buildPromptLlmInputFromLayout(
 ): Promise<PromptLlmInput> {
   const agentStepIndex = resolveAgentStepIndex(options);
   const messages: ChatMessage[] = [];
+
+  if (ctx.skillsIndex != null && ctx.skillsIndex.length > 0) {
+    messages.push(
+      syntheticSkillsIndexMessage(formatSkillsIndexBody(ctx.skillsIndex), ctx)
+    );
+  }
 
   appendWorkplacePairIfPresent(layout, ctx, messages);
 
