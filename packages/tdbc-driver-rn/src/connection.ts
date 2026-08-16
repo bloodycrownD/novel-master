@@ -60,14 +60,32 @@ export class RnConnection implements TdbcConnection {
       this.inTransaction = true;
       const txConn = new TransactionalConnection(this);
 
-      // --- transaction boundary: BEGIN / COMMIT / ROLLBACK via adapter ---
-      await this.adapter.execute("BEGIN");
+      // --- transaction boundary: BEGIN / COMMIT / ROLLBACK via runAdapter ---
+      // 事务内语句一律同步 executeSync（runAdapter 按标志分流）：真机实测
+      // quick-sqlite 的 async execute 在事务内执行中大体积写语句（分块
+      // INSERT...SELECT、CREATE INDEX、DDL）会稳定报 disk I/O error 或 SIGSEGV
+      // （后台线程与 JS 线程并发使用同一连接所致）；同步 JSI 全程单线程，无此问题。
+      // ANR 风险由 runAdapter 的逐语句让出事件循环兑冲（历史上触发 ANR 的是
+      // 逐行小语句的 3 万次往返，不是单条毫秒级的引擎内搬运）。
+      await this.runAdapter("BEGIN", undefined);
       try {
         const value = await fn(txConn);
-        await this.adapter.execute("COMMIT");
+        await this.runAdapter("COMMIT", undefined);
         return value;
       } catch (cause) {
-        await this.adapter.execute("ROLLBACK");
+        // ROLLBACK 失败不能掩盖原始错误：某些 SQLite 错误会自动中断事务
+        // （此时 ROLLBACK 报 "no transaction is active"），吞掉它只打日志，
+        // 原始错误照常抛出，否则用户只看到回滚失败而真正的病因被吞。
+        try {
+          await this.runAdapter("ROLLBACK", undefined);
+        } catch (rollbackError) {
+          console.warn(
+            "[rn-tdbc] ROLLBACK 失败（事务可能已被自动中断）:",
+            rollbackError instanceof Error
+              ? rollbackError.message
+              : String(rollbackError),
+          );
+        }
         if (cause instanceof TdbcError) {
           throw cause;
         }
@@ -94,7 +112,7 @@ export class RnConnection implements TdbcConnection {
   ): Promise<T[]> {
     this.assertOpen();
     try {
-      const result = await this.adapter.execute(
+      const result = await this.runAdapter(
         sql,
         normalizeQuickSqliteBindings(parameters),
       );
@@ -111,7 +129,7 @@ export class RnConnection implements TdbcConnection {
   ): Promise<ExecuteResult> {
     this.assertOpen();
     try {
-      const result = await this.adapter.execute(
+      const result = await this.runAdapter(
         sql,
         normalizeQuickSqliteBindings(parameters),
       );
@@ -137,7 +155,7 @@ export class RnConnection implements TdbcConnection {
     const runStatements = async (): Promise<BatchResult> => {
       let totalChanges = 0;
       for (const params of parametersList) {
-        const result = await this.adapter.execute(
+        const result = await this.runAdapter(
           sql,
           normalizeQuickSqliteBindings(params),
         );
@@ -152,16 +170,26 @@ export class RnConnection implements TdbcConnection {
       // transaction stays open and usable, matching better-sqlite3's
       // db.transaction() nesting semantics. ---
       const sp = `tdbc_sp_${++this.savepointDepth}`;
-      await this.adapter.execute(`SAVEPOINT ${sp}`);
+      await this.runAdapter(`SAVEPOINT ${sp}`, undefined);
       try {
         const result = await runStatements();
-        await this.adapter.execute(`RELEASE ${sp}`);
+        await this.runAdapter(`RELEASE ${sp}`, undefined);
         return result;
       } catch (cause) {
         // Roll back to the savepoint and drop it before surfacing the
         // error, so the outer transaction is left in a clean state.
-        await this.adapter.execute(`ROLLBACK TO ${sp}`);
-        await this.adapter.execute(`RELEASE ${sp}`);
+        // 回滚失败不能掩盖原始错误（事务可能已被自动中断），只打日志。
+        try {
+          await this.runAdapter(`ROLLBACK TO ${sp}`, undefined);
+          await this.runAdapter(`RELEASE ${sp}`, undefined);
+        } catch (rollbackError) {
+          console.warn(
+            "[rn-tdbc] SAVEPOINT 回滚失败（事务可能已被自动中断）:",
+            rollbackError instanceof Error
+              ? rollbackError.message
+              : String(rollbackError),
+          );
+        }
         throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
           driver: "rn",
           cause,
@@ -172,13 +200,23 @@ export class RnConnection implements TdbcConnection {
     }
 
     // --- batch boundary: standalone transaction via adapter ---
-    await this.adapter.execute("BEGIN");
+    await this.runAdapter("BEGIN", undefined);
     try {
       const result = await runStatements();
-      await this.adapter.execute("COMMIT");
+      await this.runAdapter("COMMIT", undefined);
       return result;
     } catch (cause) {
-      await this.adapter.execute("ROLLBACK");
+      // 回滚失败不能掩盖原始错误（事务可能已被自动中断），只打日志。
+      try {
+        await this.runAdapter("ROLLBACK", undefined);
+      } catch (rollbackError) {
+        console.warn(
+          "[rn-tdbc] batch ROLLBACK 失败（事务可能已被自动中断）:",
+          rollbackError instanceof Error
+            ? rollbackError.message
+            : String(rollbackError),
+        );
+      }
       throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
         driver: "rn",
         cause,
@@ -192,6 +230,32 @@ export class RnConnection implements TdbcConnection {
         driver: "rn",
       });
     }
+  }
+
+  /**
+   * 语句执行分流：事务内（inTransaction）用同步 executeSync，事务外保持
+   * async execute。原因：quick-sqlite 的 async execute 在后台线程与 JS 线程
+   * 并发使用同一连接，事务内连续中大体积语句时真机稳定复现 disk I/O error
+   * / SIGSEGV；同步 JSI 单线程执行无此缺陷，单条语句（分块搬运 ≤100 行）
+   * 毫秒级，不会长期霸占 JS 线程。adapter 无 executeSync 能力时（如测试
+   * mock）落回 async，行为与旧版一致。
+   */
+  private async runAdapter(
+    sql: string,
+    params: readonly unknown[] | undefined,
+  ): Promise<import("./adapter.js").QuickSqliteResult> {
+    if (this.inTransaction && this.adapter.executeSync) {
+      const result = this.adapter.executeSync(
+        sql,
+        params as unknown[] | undefined,
+      );
+      // 同步语句之间让出事件循环（macrotask），避免连续同步执行剥夺 RN
+      // 事件循环响应、触发系统 ANR（输入分发图 5s）。单次 setTimeout 开销
+      // 几毫秒，migration 级别语句量（数百条）总代价可接受。
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      return result;
+    }
+    return this.adapter.execute(sql, params as unknown[] | undefined);
   }
 
   private wrapSqlite(cause: unknown): TdbcError {

@@ -54,4 +54,11 @@ export class QuickSqliteAdapter implements RnSqliteAdapter {
     }
     return delegate.execute(sql, params);
   }
+
+  executeSync(sql: string, params?: unknown[]): QuickSqliteResult {
+    if (!this.delegate) {
+      throw new Error("Adapter not open");
+    }
+    return this.delegate.executeSync(sql, params);
+  }
 }

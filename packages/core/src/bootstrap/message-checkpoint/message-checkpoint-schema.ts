@@ -27,7 +27,13 @@ CREATE TABLE IF NOT EXISTS message_checkpoint_file (
   PRIMARY KEY (session_id, message_id, entry_id)
 ) WITHOUT ROWID`.trim();
 
-/** Session-scoped checkpoint lookup. */
+/** Session-scoped checkpoint lookup.
+ *
+ * 冗余索引，已退役：WITHOUT ROWID 表 PK (session_id, message_id) 的 B-tree
+ * 天然支持 session_id 前缀查询，二级索引纯属写放大。且部分真机的 quick-sqlite
+ * 对「WITHOUT ROWID 表 + CREATE INDEX」报 disk I/O error（实测），不再创建。
+ * 常量保留供老库路径 DROP 清理时引用。
+ */
 export const MESSAGE_CHECKPOINT_SESSION_INDEX_DDL = `
 CREATE INDEX IF NOT EXISTS idx_message_checkpoint_session
   ON message_checkpoint(session_id)`.trim();
@@ -36,5 +42,4 @@ CREATE INDEX IF NOT EXISTS idx_message_checkpoint_session
 export const MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS: readonly string[] = [
   MESSAGE_CHECKPOINT_TABLE_DDL,
   MESSAGE_CHECKPOINT_FILE_TABLE_DDL,
-  MESSAGE_CHECKPOINT_SESSION_INDEX_DDL,
 ];

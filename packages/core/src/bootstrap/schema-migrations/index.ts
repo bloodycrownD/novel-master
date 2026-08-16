@@ -20,7 +20,7 @@ import {
   projectAgentConfigCleanupV1Migration,
 } from "./project-agent-config-cleanup-v1.js";
 import { orphanRevisionGcV1Migration } from "./orphan-revision-gc-v1.js";
-import { tableConstraintsV1Migration } from "./table-constraints-v1.js";
+import { tableConstraintsV1Migration } from "./table-constraints-v1b.js";
 
 /**
  * 本版本最低支持 v1.4.08：下面 6 条 migration 的逻辑已并入 canonical DDL，

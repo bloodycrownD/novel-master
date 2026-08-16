@@ -23,7 +23,7 @@ import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
-import { tableConstraintsV1Up } from "@/bootstrap/schema-migrations/table-constraints-v1.js";
+import { tableConstraintsV1Up } from "@/bootstrap/schema-migrations/table-constraints-v1b.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
   getNovelMasterTestContext,

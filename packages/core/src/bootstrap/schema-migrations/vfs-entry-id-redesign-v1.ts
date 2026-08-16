@@ -306,21 +306,16 @@ async function swapTables(tx: TdbcConnection): Promise<void> {
   await tx.execute(`DROP TABLE _migration_path_map`);
 }
 
-/** Step 8：重建索引（按新 schema 形态）。 */
-async function rebuildIndexes(tx: TdbcConnection): Promise<void> {
-  // UNIQUE(scope_key, path) 已自带唯一索引，这里另建复合索引用于前缀扫描。
-  await tx.execute(`
-    CREATE INDEX IF NOT EXISTS idx_vfs_entry_scope_path
-      ON vfs_entry(scope_key, path)
-  `);
-  await tx.execute(`
-    CREATE INDEX IF NOT EXISTS idx_vfs_revision_entry
-      ON vfs_revision(entry_id)
-  `);
-  await tx.execute(`
-    CREATE INDEX IF NOT EXISTS idx_message_checkpoint_session
-      ON message_checkpoint(session_id)
-  `);
+/** Step 8：重建索引（按新 schema 形态）。已无需要重建的索引，保留函数骨架供注释说明。
+ *
+ * - UNIQUE(scope_key, path) 自带唯一索引。
+ * - idx_vfs_revision_entry / idx_message_checkpoint_session 不建：两者都是各自
+ *   复合 PK 的左前缀，查询能力被 PK B-tree 完全覆盖，纯写放大；且部分真机
+ *   quick-sqlite 对「WITHOUT ROWID 表 + CREATE INDEX」报 disk I/O error。
+ *   存量冗余索引由 table-constraints-v1 统一 DROP 清理。
+ */
+async function rebuildIndexes(_tx: TdbcConnection): Promise<void> {
+  // 刻意空实现，见上方注释。
 }
 
 /** Step 9：创建 3 个 blob ref_count 维护触发器（DDL 常量与 canonical DDL 同源）。 */

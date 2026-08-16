@@ -27,7 +27,12 @@ import {
 } from "../vfs/vfs-revision-schema.js";
 import type { SchemaMigration } from "./schema-migration.types.js";
 
-export const TABLE_CONSTRAINTS_V1_ID = "table-constraints-v1";
+/**
+ * id 带 b 后缀：v1 在个别真机上因 disk I/O error 中间态被误标记 applied
+ * （up 早退但 rebuild 未执行），升 id 让这类库重跑；已完成的库探测到
+ * WITHOUT ROWID 后 no-op，三态安全。
+ */
+export const TABLE_CONSTRAINTS_V1_ID = "table-constraints-v1b";
 
 /**
  * 探测 vfs_revision 是否已是 WITHOUT ROWID 形态（即本 migration 是否已 apply）。
@@ -39,9 +44,14 @@ async function isAlreadyConstrained(tx: TdbcConnection): Promise<boolean> {
   const rows = await tx.query<{ sql: string }>(
     `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vfs_revision'`,
   );
-  if (rows.length === 0) {
-    // 表不存在（理论不该发生），保守按已迁移处理。
-    return true;
+  if (rows.length === 0 || rows[0]?.sql == null) {
+    // 查询异常/空结果的保守方向是 false（重跑）：rebuild 幂等、重复执行无害；
+    // 误判 true 会让约束永远缺失（真机事故：disk I/O error 后中间态下探测异常，
+    // up 早退却标记 applied，16 表 rebuild 从未执行）。
+    console.warn(
+      "[table-constraints-v1] 探测 vfs_revision 形态失败（sqlite_master 无结果），按未迁移处理",
+    );
+    return false;
   }
   return /WITHOUT\s+ROWID/i.test(String(rows[0]?.sql ?? ""));
 }
@@ -153,11 +163,12 @@ async function dedupRegexSortOrder(tx: TdbcConnection): Promise<number> {
  * 在 bootstrap 流程里跑在 alignSchemaColumns 之前，老库可能有列尚未补齐。
  */
 async function rebuildTable(
-  tx: TdbcConnection,
+  txOrig: TdbcConnection,
   table: string,
   newBodyDdl: string,
   recreateSqls: readonly string[] = [],
 ): Promise<void> {
+  const tx = txOrig;
   const tmp = `${table}__nm_tc_new`;
   // 读旧表列名（顺序敏感，决定 INSERT 列序）。
   const oldCols = await tx.query<{ name: string }>(
@@ -175,9 +186,34 @@ async function rebuildTable(
   const newColSet = new Set(newCols.map((r) => String(r.name)));
   const common = oldColNames.filter((c) => newColSet.has(c));
   const colList = common.map((c) => `"${c}"`).join(", ");
-  await tx.execute(
-    `INSERT INTO ${tmp} (${colList}) SELECT ${colList} FROM ${table}`,
-  );
+
+  // 旧表此刻仍是 rowid 表，按 rowid 游标分块搬运，而不是单条整表
+  // `INSERT ... SELECT`。原因：
+  // 1) quick-sqlite 的 async execute 对无 LIMIT 的整表 INSERT SELECT 会挂起
+  //    （真机实测 promise 永远 pending）；分块后单条执行时间短，async 稳定。
+  // 2) 不能改用逐条参数化 INSERT：真机实测 3 万行逐条同步执行霸占 JS 线程
+  //    4 分钟以上，触发 ANR 被杀；块状 INSERT SELECT 是引擎内部搬运，快得多。
+  // 3) 真机上曾疑似的「INSERT 报 disk I/O error」实为 recreateSql 里的冗余索引
+  //    CREATE INDEX 所致（WITHOUT ROWID 表 + CREATE INDEX 触发，见 up 头部注释），
+  //    冗余索引已移除，搬运本身在真机验证稳定。
+  const COPY_CHUNK = 100;
+  let cursor = -1;
+  for (;;) {
+    const batch = await tx.query<{ r: number | bigint }>(
+      `SELECT rowid AS r FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ${COPY_CHUNK}`,
+      [cursor],
+    );
+    if (batch.length === 0) {
+      break;
+    }
+    const lo = Number(batch[0]!.r);
+    const hi = Number(batch[batch.length - 1]!.r);
+    await tx.execute(
+      `INSERT INTO ${tmp} (${colList}) SELECT ${colList} FROM ${table} WHERE rowid >= ? AND rowid <= ?`,
+      [lo, hi],
+    );
+    cursor = hi;
+  }
 
   await tx.execute(`DROP TABLE ${table}`);
   await tx.execute(`ALTER TABLE ${tmp} RENAME TO ${table}`);
@@ -506,9 +542,6 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       created_at_ms INTEGER NOT NULL,
       PRIMARY KEY (session_id, message_id)
     ) WITHOUT ROWID`,
-    [
-      `CREATE INDEX IF NOT EXISTS idx_message_checkpoint_session ON message_checkpoint(session_id)`,
-    ],
   );
 
   await rebuildTable(
@@ -570,7 +603,6 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       CHECK (NOT (status = 'active' AND content_hash IS NULL))
     ) WITHOUT ROWID`,
     [
-      `CREATE INDEX IF NOT EXISTS idx_vfs_revision_entry ON vfs_revision(entry_id)`,
       VFS_REVISION_INSERT_TRIGGER_DDL,
       VFS_REVISION_DELETE_TRIGGER_DDL,
       VFS_REVISION_UPDATE_TRIGGER_DDL,
@@ -676,8 +708,14 @@ async function up(tx: TdbcConnection): Promise<void> {
   // vfs-entry-id-redesign-v1 的 rebuildIndexes 建出这个冗余索引（UNIQUE(scope_key, path)
   // 隐式索引已覆盖它的全部用途），不在这里 DROP 就会永久残留。
   await tx.execute(`DROP INDEX IF EXISTS idx_vfs_entry_scope_path`);
+  // 同批清理两个 PK 左前缀冗余索引（vfs_revision / message_checkpoint 的复合
+  // PK B-tree 完全覆盖它们）；且部分真机 quick-sqlite 对 WITHOUT ROWID 表建
+  // 索引报 disk I/O error，不能再建。
+  await tx.execute(`DROP INDEX IF EXISTS idx_vfs_revision_entry`);
+  await tx.execute(`DROP INDEX IF EXISTS idx_message_checkpoint_session`);
 
-  if (await isAlreadyConstrained(tx)) {
+  const constrained = await isAlreadyConstrained(tx);
+  if (constrained) {
     return;
   }
 

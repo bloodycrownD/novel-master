@@ -66,4 +66,10 @@ export class BaseQuickSqliteAdapter implements RnSqliteAdapter {
     }
     return engine.execute(this.dbName, sql, params ?? []);
   }
+
+  executeSync(sql: string, params?: unknown[]): QuickSqliteResult {
+    // 同步 execute：JSI 直调、JS 线程阻塞执行，供事务内切换使用
+    // （async execute 在长事务内有挂起/disk I/O error 的 native 缺陷）。
+    return this.bindings.QuickSQLite.execute(this.dbName, sql, params ?? []);
+  }
 }
