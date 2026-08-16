@@ -15,8 +15,6 @@ import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
-    previewUserOpsChangedPaths: async () => [],
-    previewUserOpsActions: async () => [],
   };
 }
 

@@ -48,8 +48,6 @@ const childAgentDef: AgentDefinition = {
 function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
-    previewUserOpsChangedPaths: async () => [],
-    previewUserOpsActions: async () => [],
   };
 }
 
