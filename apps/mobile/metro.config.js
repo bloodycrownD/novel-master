@@ -202,7 +202,27 @@ function resolveSmithySerdeNative(moduleName) {
     'node_modules/@smithy/core/dist-cjs/submodules/serde/index.native.js',
   );
   if (fs.existsSync(nativePath)) {
-    return nativePath;
+    return {type: 'sourceFile', filePath: nativePath};
+  }
+  return null;
+}
+
+/**
+ * op-sqlite 的 exports 里 browser（web 构建）排在 react-native 之前，
+ * 而 unstable_conditionNames 含 browser（aws-sdk 需要），exports 匹配会先
+ * 命中 browser 拿到 index.web.js（SQL.js 后端，同步 open() 直接抛错）。
+ * 强制定向到 RN 原生构建。
+ */
+function resolveOpSqliteNative(moduleName) {
+  if (moduleName !== '@op-engineering/op-sqlite') {
+    return null;
+  }
+  const nativePath = path.join(
+    monorepoRoot,
+    'node_modules/@op-engineering/op-sqlite/lib/module/index.js',
+  );
+  if (fs.existsSync(nativePath)) {
+    return {type: 'sourceFile', filePath: nativePath};
   }
   return null;
 }
@@ -246,6 +266,11 @@ const config = {
       const smithySerdeNative = resolveSmithySerdeNative(moduleName);
       if (smithySerdeNative != null) {
         return {type: 'sourceFile', filePath: smithySerdeNative};
+      }
+
+      const opSqliteNative = resolveOpSqliteNative(moduleName);
+      if (opSqliteNative != null) {
+        return {type: 'sourceFile', filePath: opSqliteNative};
       }
 
       if (isTiktokenModule(moduleName)) {
