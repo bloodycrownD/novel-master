@@ -65,6 +65,8 @@ export type UseSessionStreamParams = {
   // batch 入口（注入）
   batchIngest: (chunk: StreamWireChunk) => void;
   batchClear: () => void;
+  /** 边界事件（STEP_COMMITTED / RUN_FINISHED / RUN_FAILED）前手动冲刷 batch 缓冲。 */
+  batchFlush: () => void;
   // messages
   onMessagesChanged: FlushMessagesChanged;
   getMessageCount: () => number;
@@ -103,6 +105,7 @@ export function useSessionStream({
   clearAbortRetainPending,
   batchIngest,
   batchClear,
+  batchFlush,
   onMessagesChanged,
   getMessageCount,
   onStepCommitted,
@@ -162,6 +165,8 @@ export function useSessionStream({
   batchIngestRef.current = batchIngest;
   const batchClearRef = useRef(batchClear);
   batchClearRef.current = batchClear;
+  const batchFlushRef = useRef(batchFlush);
+  batchFlushRef.current = batchFlush;
   // abort fallback commit：内部定义后赋值（见下），这里占位。
   const commitAbortOverlayRef = useRef<() => Promise<void>>(async () => undefined);
 
@@ -358,6 +363,10 @@ export function useSessionStream({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
+        // step commit 前 batch 里可能还残留 delta，先 flush 避免被后续 reload/clear 丢弃
+        // （对齐 desktop useAgentStream 的「先 flush 再回调」模式，插入点钉死在
+        // acceptRunEvent 守卫后、phase 分支前，tool_results / assistant 两分支都覆盖）。
+        batchFlushRef.current();
         const uiRunning = abortGuardsRef.current.getUiRunning();
         const freezeCount = abortGuardsRef.current.getTranscriptFreezeCount();
         const cb = callbacksRef.current;
@@ -409,6 +418,8 @@ export function useSessionStream({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
+        // run 结束前先 flush，保证缓冲 delta 先于 flushRunUi 的 reload/clear 到达。
+        batchFlushRef.current();
         // refcount 归属 lifecycle 单元——这里只通知 lifecycle，不直接 decrement。
         const uiRunning = abortGuardsRef.current.getUiRunning();
         const freezeCount = abortGuardsRef.current.getTranscriptFreezeCount();
@@ -449,6 +460,8 @@ export function useSessionStream({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
+        // run 失败前同样先 flush，失败路径的 reload/clear 不应吞掉已到达的 delta。
+        batchFlushRef.current();
         // refcount 归属 lifecycle 单元——这里只通知 lifecycle，不直接 decrement。
         const uiRunning = abortGuardsRef.current.getUiRunning();
         const freezeCount = abortGuardsRef.current.getTranscriptFreezeCount();

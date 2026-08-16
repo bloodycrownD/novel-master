@@ -5,7 +5,6 @@
  */
 import type {
   IpcResult,
-  UserVfsHasPendingRequest,
   VfsBatchClearStagingRequest,
   VfsBatchExportStageRequest,
   VfsBatchExportStageResult,
@@ -394,21 +393,5 @@ export function handleVfsStartDrag(
     if (!event.sender.isDestroyed()) {
       event.sender.send(IPC_CHANNELS.VFS_START_DRAG_FAILED, payload);
     }
-  }
-}
-
-/**
- * Composer 空发门闩：会话是否有未发送手改日志。
- * `hasPendingTurns` 已改读 main 进程 UserOpsLogStore（与 flush 同真源）。
- */
-export async function handleUserVfsHasPending(
-  req: UserVfsHasPendingRequest,
-): Promise<IpcResult<boolean>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const has = await rt.userVfsTurn.hasPendingTurns(req.sessionId);
-    return { ok: true, data: has };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
   }
 }

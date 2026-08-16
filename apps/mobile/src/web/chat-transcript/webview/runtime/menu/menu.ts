@@ -153,6 +153,7 @@ export function buildMenuItems(
   const items: MenuItem[] = [];
   if ('text' in row && row.text) items.push({ label: '编辑', action: 'edit' });
   items.push({ label: '复制', action: 'copy' });
+  if (row.hidden) items.push({ label: '取消隐藏', action: 'unhide' });
   const hitElement = hitEl as Element | null;
   const showSetFloor =
     row.kind === 'message' &&

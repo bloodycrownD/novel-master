@@ -3,7 +3,6 @@ import type { MessageAttachmentDto, WorkplaceListRowDto } from "@shared/ipc-type
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
-  replaceComposerStatusAttachments,
   TOOL_TURN_BRIDGE_TEXT,
 } from "@shared/logic/chat";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -53,8 +52,6 @@ interface ChatComposerProps {
   running: boolean;
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
-  /** 会话有 pending→user_ops（空发门闩）。 */
-  hasPendingUserOps: boolean;
   /** 末条 user 含 tool_result。 */
   lastMessageHasToolResult: boolean;
   /** 末条为 plain user 文本时禁用输入。 */
@@ -89,7 +86,6 @@ export function ChatComposer({
   onAttachmentsChange,
   running,
   canResumeWithoutInput,
-  hasPendingUserOps,
   lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   error: controlledError,
@@ -134,13 +130,7 @@ export function ChatComposer({
         return;
       }
       onAttachmentsChange(
-        unionComposerStatusWithAnnotate(
-          replaceComposerStatusAttachments(
-            attachmentsRef.current,
-            payload.attachments,
-          ),
-          sessionId,
-        ),
+        unionComposerStatusWithAnnotate(payload.attachments, sessionId),
       );
     });
   }, [sessionId, onAttachmentsChange]);
@@ -161,7 +151,7 @@ export function ChatComposer({
   }, [sessionId, onAttachmentsChange]);
 
   // 仅 append 成功推送后清 annotate + 正文（禁止 started:true 清；B4 对齐 Mobile）。
-  // 手改 log：main prepare/flush 已 clearUserOpsLog；此处清 chip 即可（禁止 renderer 写 ops store）。
+  // annotate：发送后 main 已清 store；此处清 chip 即可（禁止 renderer 直接写 store）。
   // 始终按 payload.sessionId 清 annotate store，避免切会话后漏清、再回来重带旧批注。
   useEffect(() => {
     return onUserMessageAppended((payload) => {
@@ -339,13 +329,7 @@ export function ChatComposer({
       if (statusRes.ok) {
         // 用 live ref：若 append 已晚清 attachments，避免 stale previous 写回
         onAttachmentsChange(
-          unionComposerStatusWithAnnotate(
-            replaceComposerStatusAttachments(
-              attachmentsRef.current,
-              statusRes.data,
-            ),
-            sessionId,
-          ),
+          unionComposerStatusWithAnnotate(statusRes.data, sessionId),
         );
       }
       return true;
@@ -372,7 +356,6 @@ export function ChatComposer({
     const intent = resolveComposerSendIntent({
       text: value,
       attachments,
-      hasPendingUserOps,
       canResumeWithoutInput,
       hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
       hasModel,
@@ -422,7 +405,6 @@ export function ChatComposer({
   const sendDisabled = resolveComposerSendIntent({
     text: value,
     attachments,
-    hasPendingUserOps,
     canResumeWithoutInput,
     hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
     hasModel,

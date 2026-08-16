@@ -82,10 +82,6 @@ const workplaceChildAgentDef: AgentDefinition = {
 function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
-    flushPendingUserVfsTurns: async () => ({ flushed: false, attachments: [] }),
-    previewUserOpsChangedPaths: async () => [],
-    previewUserOpsActions: async () => [],
-    hasPendingTurns: async () => false,
   };
 }
 

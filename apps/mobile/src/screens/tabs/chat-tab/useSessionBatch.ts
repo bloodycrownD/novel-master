@@ -32,6 +32,12 @@ export type UseSessionBatchResult = {
   ingestWireChunk(chunk: StreamWireChunk): void;
   /** 清空 ingress queue + apply buffer（stream reset / stream end 时调用）。 */
   clearBuffers(): void;
+  /**
+   * 手动冲刷：ingress queue 合并进 apply buffer 后立即 flush 下发。
+   * STEP_COMMITTED / RUN_FINISHED / RUN_FAILED 等边界事件前调用，
+   * 保证缓冲里的 delta 先于落库 reload 到达，不被后续 clear 丢弃。
+   */
+  flushBuffers(): void;
 };
 
 /**
@@ -97,6 +103,16 @@ export function useSessionBatch({
     applyBuffer.reset();
   }, [applyBuffer]);
 
+  const flushBuffers = useCallback(() => {
+    // 先取消 ingress 的 32ms 合并 timer 并把队列压进 apply buffer，
+    // 再手动 flush 绕过 64ms 节流——两段缓冲一次清空，同步下发。
+    if (ingressTimerRef.current != null) {
+      clearTimeout(ingressTimerRef.current);
+      flushIngressToApplyBuffer();
+    }
+    applyBuffer.flush();
+  }, [flushIngressToApplyBuffer, applyBuffer]);
+
   // applyBuffer 自带定时器，组件卸载时一并清掉。
   useEffect(() => {
     return () => {
@@ -107,5 +123,5 @@ export function useSessionBatch({
     };
   }, [applyBuffer]);
 
-  return { ingestWireChunk, clearBuffers };
+  return { ingestWireChunk, clearBuffers, flushBuffers };
 }

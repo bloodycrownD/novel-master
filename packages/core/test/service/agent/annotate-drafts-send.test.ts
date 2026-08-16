@@ -35,20 +35,9 @@ function emptyRuleView() {
   return { rows: [] as const, displayByPath: new Map() };
 }
 
-function mockUserVfsTurn(
-  overrides: {
-    readonly flushPendingUserVfsTurns?: UserVfsTurnService["flushPendingUserVfsTurns"];
-    readonly hasPendingTurns?: UserVfsTurnService["hasPendingTurns"];
-  } = {},
-): UserVfsTurnService {
+function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
-    flushPendingUserVfsTurns:
-      overrides.flushPendingUserVfsTurns ??
-      (async () => ({ flushed: false, attachments: [] })),
-    previewUserOpsChangedPaths: async () => [],
-    previewUserOpsActions: async () => [],
-    hasPendingTurns: overrides.hasPendingTurns ?? (async () => false),
   };
 }
 
@@ -131,7 +120,6 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
       hasComposerSendableInput({
         text: "",
         attachmentCount: 0,
-        hasPendingUserOps: false,
         hasAnnotateDrafts: true,
       }),
       true,
@@ -156,22 +144,7 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
         appended.push({ attachments: opts?.attachments });
         return { id: "u-new" };
       },
-      userVfsTurn: mockUserVfsTurn({
-        hasPendingTurns: async () => true,
-        flushPendingUserVfsTurns: async () => ({
-          flushed: true,
-          attachments: [
-            {
-              name: "/p.md",
-              source: "user_ops",
-              type: "text",
-              content: '<action name="write">\n{}\n</action>',
-              path: "/p.md",
-              action: "write",
-            },
-          ],
-        }),
-      }),
+      userVfsTurn: mockUserVfsTurn(),
     });
 
     // stub runner：避免真实 LLM；runAgentTurn 在 append 后会进 runner
@@ -205,7 +178,8 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.ok(appended.length >= 1, "须新 append");
     const atts = appended[0]!.attachments ?? [];
     assert.ok(atts.some((a) => a.action === "annotate"));
-    assert.ok(atts.some((a) => a.action === "write"));
+    // user ops 拆除（E-core）：手改 write 附件不再随发送产生
+    assert.equal(atts.some((a) => a.action === "write"), false);
 
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });

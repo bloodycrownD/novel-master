@@ -89,7 +89,6 @@ export {
   removeChatAnnotateDraft,
   removeChatAnnotateDraftsByPath,
   replaceActiveAtWithToken,
-  replaceComposerStatusAttachments,
   annotateOccurrenceOrdinal,
   countAnnotateOccurrencesInSource,
   selectAnnotateOccurrenceStarts,

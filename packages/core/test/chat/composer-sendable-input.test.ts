@@ -8,7 +8,6 @@ describe("hasComposerSendableInput", () => {
       hasComposerSendableInput({
         text: "  hi  ",
         attachmentCount: 0,
-        hasPendingUserOps: false,
       }),
       true,
     );
@@ -19,29 +18,16 @@ describe("hasComposerSendableInput", () => {
       hasComposerSendableInput({
         text: "   ",
         attachmentCount: 1,
-        hasPendingUserOps: false,
       }),
       true,
     );
   });
 
-  it("仅 pending→user_ops → 可发（空发门闩）", () => {
+  it("T-CR3：空正文无 attach/批注不可发（pending 门闩已随 user ops 拆除废止）", () => {
     assert.equal(
       hasComposerSendableInput({
         text: "",
         attachmentCount: 0,
-        hasPendingUserOps: true,
-      }),
-      true,
-    );
-  });
-
-  it("T-CR3：仅规则差集语义废止 → 空正文无 pending/批注不可发", () => {
-    assert.equal(
-      hasComposerSendableInput({
-        text: "",
-        attachmentCount: 0,
-        hasPendingUserOps: false,
       }),
       false,
     );
@@ -52,7 +38,6 @@ describe("hasComposerSendableInput", () => {
       hasComposerSendableInput({
         text: "",
         attachmentCount: 0,
-        hasPendingUserOps: false,
         hasAnnotateDrafts: true,
       }),
       true,
@@ -64,27 +49,17 @@ describe("hasComposerSendableInput", () => {
       hasComposerSendableInput({
         text: "",
         attachmentCount: 0,
-        hasPendingUserOps: false,
         hasAnnotateDrafts: false,
       }),
       false,
     );
   });
 
-  it("T-CR4：有 pending 或批注 → 可发", () => {
+  it("T-CR4：仅批注草稿 → 可发", () => {
     assert.equal(
       hasComposerSendableInput({
         text: "",
         attachmentCount: 0,
-        hasPendingUserOps: true,
-      }),
-      true,
-    );
-    assert.equal(
-      hasComposerSendableInput({
-        text: "",
-        attachmentCount: 0,
-        hasPendingUserOps: false,
         hasAnnotateDrafts: true,
       }),
       true,
@@ -96,7 +71,6 @@ describe("hasComposerSendableInput", () => {
       hasComposerSendableInput({
         text: "",
         attachmentCount: 0,
-        hasPendingUserOps: false,
       }),
       false,
     );

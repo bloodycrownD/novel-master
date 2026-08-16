@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SESSION_FS_LABELS, USER_OPS_LABELS } from "@shared/logic/config-forms-shared";
+import { SESSION_FS_LABELS } from "@shared/logic/config-forms-shared";
 import {
   ipcAgentListPicker,
   ipcAgentResolveCurrent,
@@ -12,10 +12,8 @@ import {
   ipcModelSetCurrent,
   ipcPreferencesGetLlmStream,
   ipcPreferencesGetSessionFsVersionCheck,
-  ipcPreferencesGetUserOpsLogEnabled,
   ipcPreferencesSetLlmStream,
   ipcPreferencesSetSessionFsVersionCheck,
-  ipcPreferencesSetUserOpsLogEnabled,
   ipcRegexListPicker,
   ipcRegexSetCurrent,
 } from "@/ipc/client";
@@ -44,7 +42,6 @@ export function WorkspaceSettingsView() {
   const [llmStream, setLlmStream] = useState(true);
   const [chatRichText, setChatRichText] = useState(true);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(false);
-  const [userOpsLogEnabled, setUserOpsLogEnabled] = useState(true);
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
   // hideStartDepth 默认值 6，对齐 core 的 DEFAULT_HIDE_START_DEPTH
@@ -58,7 +55,7 @@ export function WorkspaceSettingsView() {
   const [currentRegexId, setCurrentRegexId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
-    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes, userOpsRes, compactionRes] =
+    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes, compactionRes] =
       await Promise.all([
         ipcAgentResolveCurrent(),
         ipcModelListPicker(),
@@ -66,7 +63,6 @@ export function WorkspaceSettingsView() {
         ipcPreferencesGetLlmStream(),
         ipcAppUiGet(KEY_CHAT_RICH_TEXT),
         ipcPreferencesGetSessionFsVersionCheck(),
-        ipcPreferencesGetUserOpsLogEnabled(),
         ipcCompactionConditionsGet(),
       ]);
     if (agentRes.ok) {
@@ -110,9 +106,6 @@ export function WorkspaceSettingsView() {
     }
     if (vfsRes.ok) {
       setSessionFsVersionCheck(vfsRes.data);
-    }
-    if (userOpsRes.ok) {
-      setUserOpsLogEnabled(userOpsRes.data);
     }
     if (compactionRes.ok && compactionRes.data) {
       setCompactionEnabled(compactionRes.data.enabled);
@@ -251,14 +244,6 @@ export function WorkspaceSettingsView() {
             onChange={async (next) => {
               setSessionFsVersionCheck(next);
               await ipcPreferencesSetSessionFsVersionCheck(next);
-            }}
-          />
-          <SettingsSwitchRow
-            label={USER_OPS_LABELS.title}
-            checked={userOpsLogEnabled}
-            onChange={async (next) => {
-              setUserOpsLogEnabled(next);
-              await ipcPreferencesSetUserOpsLogEnabled(next);
             }}
           />
         </SettingsRows>

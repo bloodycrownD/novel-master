@@ -500,7 +500,25 @@ export const ChatTranscriptWebView = memo(
         (
           intent: TranscriptScrollIntent,
           restoreScroll?: TranscriptRestoreScroll,
+          force?: boolean,
         ) => {
+          if (force) {
+            // D4：force 直发——消费 pending（沿用其 intent/restoreScroll）、
+            // 取消 defer timer、绕过 streamActiveRef 拦截，且不再设置新的 defer timer。
+            // needsFullSnapshot 场景下快照必须先于后续 streamDelta 到达，
+            // 否则 web 端会先渲染旧基线再被快照回跳。
+            if (snapshotDeferTimerRef.current != null) {
+              clearTimeout(snapshotDeferTimerRef.current);
+              snapshotDeferTimerRef.current = null;
+            }
+            const pending = pendingSnapshotRef.current;
+            pendingSnapshotRef.current = null;
+            sendSessionSnapshotNow(
+              pending?.intent ?? intent,
+              pending?.restoreScroll ?? restoreScroll,
+            );
+            return;
+          }
           if (!uiRunning) {
             sendSessionSnapshotNow(intent, restoreScroll);
             return;
@@ -1014,7 +1032,9 @@ export const ChatTranscriptWebView = memo(
                 message.role === 'assistant' && messageHasToolUse(message),
             );
           if (needsFullSnapshot) {
-            sendSessionSnapshot('preserve');
+            // force：流式 tail 可能仍在追加（streamActiveRef 为 true），
+            // 但含 tool_use/tool_result 的落库行必须立即进快照基线，不能 pending。
+            sendSessionSnapshot('preserve', undefined, true);
           } else {
             sendAppendTailRows(added);
           }

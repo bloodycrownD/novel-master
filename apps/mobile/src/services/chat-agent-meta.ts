@@ -12,6 +12,7 @@ import {
   resolveAgentForProject,
   resolveSavedModelId,
 } from '@novel-master/core/agent';
+import {ChatError} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from '../provider/model-display-label';
 
@@ -88,7 +89,10 @@ export async function loadChatAgentMeta(
       modelSource,
     };
   } catch (error) {
-    if (error instanceof AgentRunResolveError) {
+    // AgentRunResolveError（agentId 指向已删 agent）与 ChatError（如配置缺失/
+    // 迁移未跑）都归一为 source='none' 的安全默认 meta：调用方（详情页、
+    // chat tab）拿到非 undefined meta 渲染未绑定引导，不再卡「加载中…」。
+    if (error instanceof AgentRunResolveError || error instanceof ChatError) {
       return {
         source: 'none',
         agentId: undefined,

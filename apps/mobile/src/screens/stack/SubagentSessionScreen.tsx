@@ -188,6 +188,7 @@ export function SubagentSessionScreen() {
     clearAbortRetainPending: abort.clearAbortRetainPending,
     batchIngest: batch.ingestWireChunk,
     batchClear: batch.clearBuffers,
+    batchFlush: batch.flushBuffers,
     onMessagesChanged: reload,
     getMessageCount: () => messagesCountRef.current,
     onStepCommitted: handleStepCommitted,

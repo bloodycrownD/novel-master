@@ -5,7 +5,6 @@
 
 import {
   parseComposerDraftJson,
-  replaceComposerStatusAttachments,
   serializeComposerDraftJson,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -145,7 +144,7 @@ export function clearChatComposerDraft(
 
 /**
  * 从 DB 水化缓存（仅 text+attach）；再与现有状态条合并进 UI 缓存。
- * 调用方随后应 `projectComposerStatusAttachments` 整表替换状态条。
+ * 调用方随后应 `projectComposerStatusForSession` 整表替换状态条。
  */
 export async function hydrateChatComposerDraftFromDb(
   sessionId: string,
@@ -186,10 +185,7 @@ export function applyComposerStatusAttachmentsReplace(payload: {
     return;
   }
   const prev = bySession.get(sessionId) ?? EMPTY;
-  const replaced = replaceComposerStatusAttachments(
-    prev.attachments,
-    statusProjected,
-  );
+  const replaced = [...statusProjected];
   const merged = unionComposerStatusWithAnnotate(replaced, sessionId);
   if (!prev.text && merged.length === 0) {
     bySession.delete(sessionId);

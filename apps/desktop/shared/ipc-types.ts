@@ -16,8 +16,6 @@ export const IPC_CHANNELS = {
   COMPOSER_ATTACHMENTS_SUGGEST: 'nm:composer/attachmentsSuggest',
   /** Main → renderer：用户消息已 append（清 annotate；勿与 started/RUN_* 混用） */
   AGENT_USER_MESSAGE_APPENDED: 'nm:agent/userMessageAppended',
-  /** Renderer → main：会话是否有 pending→user_ops（Composer 空发门闩） */
-  USER_VFS_HAS_PENDING: 'nm:userVfs/hasPending',
 
   SCOPE_GET: 'nm:scope/get',
   SCOPE_SET_PROJECT: 'nm:scope/setProject',
@@ -112,10 +110,6 @@ export const IPC_CHANNELS = {
     'nm:preferences/getSessionFsVersionCheck',
   PREFERENCES_SET_SESSION_FS_VERSION_CHECK:
     'nm:preferences/setSessionFsVersionCheck',
-  PREFERENCES_GET_USER_OPS_LOG_ENABLED:
-    'nm:preferences/getUserOpsLogEnabled',
-  PREFERENCES_SET_USER_OPS_LOG_ENABLED:
-    'nm:preferences/setUserOpsLogEnabled',
   PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
   PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
 
@@ -886,10 +880,6 @@ export type ComposerAttachmentsSuggestPayload = {
 
 /** Main → renderer：用户消息 append 成功（清 annotate store）。 */
 export type AgentUserMessageAppendedPayload = {
-  readonly sessionId: string;
-};
-
-export type UserVfsHasPendingRequest = {
   readonly sessionId: string;
 };
 

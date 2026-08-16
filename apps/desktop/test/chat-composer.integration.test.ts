@@ -29,7 +29,6 @@ test("T-CR3: 仅状态条 workplace → 不可发；入参无预览 chip", () =>
         name: "w.md",
       }),
     ],
-    hasPendingUserOps: false,
     canResumeWithoutInput: false,
     hasModel: true,
   });
@@ -50,7 +49,6 @@ test("T-ATD*: 正文含 @path 可发；draft attach chip 不计入门闩", () =>
         name: "ignored.md",
       }),
     ],
-    hasPendingUserOps: false,
     canResumeWithoutInput: true,
     hasModel: true,
   });
@@ -63,7 +61,6 @@ test("空输入 + 不可 resume → 禁用发送", () => {
   const intent = resolveComposerSendIntent({
     text: "",
     attachments: [],
-    hasPendingUserOps: false,
     canResumeWithoutInput: false,
     hasModel: true,
   });
@@ -75,7 +72,6 @@ test("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
   const without = resolveComposerSendIntent({
     text: "",
     attachments: [],
-    hasPendingUserOps: false,
     canResumeWithoutInput: false,
     hasModel: true,
   });
@@ -85,7 +81,6 @@ test("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
   const withAnnotate = resolveComposerSendIntent({
     text: "",
     attachments: [],
-    hasPendingUserOps: false,
     canResumeWithoutInput: false,
     hasAnnotateDrafts: true,
     hasModel: true,
@@ -93,26 +88,4 @@ test("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
   assert.equal(withAnnotate.hasSendable, true);
   assert.equal(withAnnotate.sendDisabled, false);
   assert.equal(withAnnotate.allowResumeWithoutInput, false);
-});
-
-test("T-UOL9/T-CR4: 仅 hasPendingUserOps（未发送日志）→ 可发；全空不可发", () => {
-  const empty = resolveComposerSendIntent({
-    text: "",
-    attachments: [],
-    hasPendingUserOps: false,
-    canResumeWithoutInput: false,
-    hasModel: true,
-  });
-  assert.equal(empty.hasSendable, false);
-  assert.equal(empty.sendDisabled, true);
-
-  const pendingOnly = resolveComposerSendIntent({
-    text: "",
-    attachments: [],
-    hasPendingUserOps: true,
-    canResumeWithoutInput: false,
-    hasModel: true,
-  });
-  assert.equal(pendingOnly.hasSendable, true);
-  assert.equal(pendingOnly.sendDisabled, false);
 });

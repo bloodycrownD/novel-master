@@ -1,6 +1,6 @@
 /**
  * Desktop Undo（undo_send / rewind）：从锚点附件反投影工作区批注草稿 + chip。
- * 手改 ops 由 main `clearUserOpsLog` 后推空；本函数仅 ∪ annotate。
+ * 状态条由 main 推空；本函数仅 ∪ annotate。
  */
 import {
   parseAnnotateDraftsFromAttachments,
@@ -60,7 +60,7 @@ export function applyUndoAnnotateRestore(
       }
     }
   }
-  // Undo 时 main 已推空 ops；仅 ∪ annotate（D8）
+  // Undo 时 main 已推空状态条；仅 ∪ annotate（D8）
   const opsHalf = existingStatusAttachments.filter(
     (a) => a.action !== "annotate",
   );

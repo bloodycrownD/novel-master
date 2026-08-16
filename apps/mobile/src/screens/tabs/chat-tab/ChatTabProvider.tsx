@@ -332,6 +332,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     clearAbortRetainPending: abort.clearAbortRetainPending,
     batchIngest: batch.ingestWireChunk,
     batchClear: batch.clearBuffers,
+    batchFlush: batch.flushBuffers,
     onMessagesChanged: handleMessagesChanged,
     getMessageCount: () => chatMessageCountRef.current,
   });
