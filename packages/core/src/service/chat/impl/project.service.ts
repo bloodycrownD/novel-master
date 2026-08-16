@@ -31,6 +31,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import type { ProjectService } from "../project.port.js";
 
@@ -165,7 +166,9 @@ export class DefaultProjectService implements ProjectService {
         );
       }
       await r.sessions.deleteByProject(id);
-      // 项目 scope 只剩 template（会话都有自己的 scope）
+      // 项目 scope 只剩 template（会话都有自己的 scope）；技能负清单行一并清理，
+      // 避免留下指向已删项目的孤儿禁用行。
+      await new SqliteSkillDisabledRuleRepository(tx).removeScope(`project:${id}`);
       await deleteVfsPrefix(r.vfs, `project:${id}`, "/");
       const deleted = await r.projects.delete(id);
       if (!deleted) {
@@ -243,6 +246,8 @@ export class DefaultProjectService implements ProjectService {
         await r.projects.updateAgentConfig(copy.id, clonedJson, now);
       }
       // entry_id 化后项目模板独立 scope：project:{id}，逻辑前缀为 "/"
+      // 整树复制不排除 meta/skills（D1：项目复制携带技能文件），
+      // 负清单行不往 VFS，需按 scope_key 显式复制。
       const contentStore = new SqliteVfsContentStore(tx);
       await copyVfsTree(
         r.vfs,
@@ -251,6 +256,10 @@ export class DefaultProjectService implements ProjectService {
         { scopeKey: `project:${copy.id}` },
         "/",
         { contentStore },
+      );
+      await new SqliteSkillDisabledRuleRepository(tx).copyScopeRules(
+        `project:${id}`,
+        `project:${copy.id}`,
       );
       await seedLiveHeadRevisionsUnderPrefix(
         r.vfs,

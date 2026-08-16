@@ -37,6 +37,7 @@ import {
 } from '@novel-master/core/workplace';
 import { createKkvService } from '@novel-master/core/kkv';
 import { createSessionKkvService } from '@novel-master/core/session-kkv';
+import { createSkillsService } from '@novel-master/core/skills';
 import {
   createCompositeSecretStore,
   resolveSkspDriver,
@@ -141,6 +142,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     sessionVfs: (projectId, sessionId) =>
       createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
+    skills: () => createSkillsService(conn),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

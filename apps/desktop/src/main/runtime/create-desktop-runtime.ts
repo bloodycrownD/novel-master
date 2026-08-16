@@ -46,6 +46,7 @@ import {
 } from "@novel-master/core/workplace";
 import { createKkvService } from "@novel-master/core/kkv";
 import { createSessionKkvService } from "@novel-master/core/session-kkv";
+import { createSkillsService } from "@novel-master/core/skills";
 import {
   createCompositeSecretStore,
   createEnvSecretStore,
@@ -136,6 +137,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
         sessionId,
       }),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
+    skills: () => createSkillsService(conn),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

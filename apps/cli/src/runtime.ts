@@ -59,6 +59,7 @@ import {
   createSessionKkvService,
   type SessionKkvService,
 } from "@novel-master/core/session-kkv";
+import { createSkillsService, type SkillService } from "@novel-master/core/skills";
 import type { AgentRegistryService, AgentStreamRegistry } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
@@ -134,6 +135,8 @@ export interface NovelMasterRuntime {
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
+  /** 两域技能服务（清单 / 合并视图 / 读写 / 启停 / 复制删除）。 */
+  skills(): SkillService;
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
@@ -243,6 +246,7 @@ export async function createNovelMasterRuntime(
         sessionId,
       }),
     workplace: (scope) => createWorkplaceService(conn, scope),
+    skills: () => createSkillsService(conn),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
