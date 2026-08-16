@@ -222,7 +222,7 @@ function resolveOpSqliteNative(moduleName) {
     'node_modules/@op-engineering/op-sqlite/lib/module/index.js',
   );
   if (fs.existsSync(nativePath)) {
-    return {type: 'sourceFile', filePath: nativePath};
+    return nativePath;
   }
   return null;
 }
