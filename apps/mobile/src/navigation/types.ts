@@ -37,6 +37,16 @@ export type RootStackParamList = {
     /** Called after a successful session-scope save (refreshes workspace list). */
     onSessionVfsSaved?: () => void;
   };
+  /** 会话技能面板：当前项目合并视图 + 启停开关（写项目负清单）。 */
+  SkillPanel: { projectId: string };
+  /** 设置·技能管理页：全局默认 / 项目分组双 tab。 */
+  SkillsSettings: undefined;
+  /** 技能详情页：文件浏览 + 新建/删除辅助文件。 */
+  SkillDetail: {
+    domain: 'global' | 'project';
+    name: string;
+    projectId?: string;
+  };
   /** 会话详情页：承载原 SessionActionsDrawer 五项能力 + agent/model 来源展示。 */
   SessionDetail: { projectId: string; sessionId: string };
   /** 子代理会话只读浏览页：主会话点击 task 工具卡片跳转到此。文件在共享的父会话工作区，parentSessionId 用于 FileEditor 的 session scope。 */

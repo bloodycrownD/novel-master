@@ -71,6 +71,11 @@ export function SessionDetailScreen() {
   const [titleDraft, setTitleDraft] = useState('');
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  // 技能汇总「n/m 启用」：m 为有效技能数（剔除无效），n 为其中启用数
+  const [skillSummary, setSkillSummary] = useState<{
+    enabled: number;
+    valid: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,6 +84,17 @@ export function SessionDetailScreen() {
       setSessionTitle(session.title ?? '');
       const agentMeta = await loadChatAgentMeta(runtime, projectId, sessionId);
       setMeta(agentMeta);
+      // 技能汇总单独容错：skills 服务异常时卡片降级为「—」，不阻塞其余详情加载
+      try {
+        const effective = await runtime.skills().effectiveSkills(projectId);
+        const valid = effective.filter(s => s.valid);
+        setSkillSummary({
+          valid: valid.length,
+          enabled: valid.filter(s => !s.disabled).length,
+        });
+      } catch {
+        setSkillSummary(null);
+      }
     } catch (error) {
       showToast(toastMessage('加载会话详情失败', error));
     } finally {
@@ -428,6 +444,39 @@ export function SessionDetailScreen() {
           </Text>
           <Text style={[styles.cardValue, {color: tokens.text}]}>
             减少上下文占用
+          </Text>
+        </View>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+      </Pressable>
+
+      {/* 技能：当前项目合并视图汇总（n/m 启用，剔除无效），点击进会话技能面板。 */}
+      <Pressable
+        testID="skills-row"
+        onPress={() => navigation.navigate('SkillPanel', {projectId})}
+        accessibilityLabel="技能"
+        style={[
+          styles.card,
+          cardShadow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+          },
+        ]}>
+        <View
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
+          <Text style={styles.iconGlyph}>🧩</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+            技能
+          </Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>
+            {skillSummary == null
+              ? '—'
+              : `${skillSummary.enabled}/${skillSummary.valid} 启用`}
           </Text>
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>

@@ -34,6 +34,7 @@ import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
 import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
+import {SkillPanelScreen} from '../screens/stack/SkillPanelScreen';
 
 import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {AboutScreen} from '../screens/stack/AboutScreen';
@@ -151,6 +152,7 @@ const SubagentSessionStackScreen = withStackLayout(
   'SubagentSessionView',
   SubagentSessionScreen,
 );
+const SkillPanelStackScreen = withStackLayout('SkillPanel', SkillPanelScreen);
 const ChatHistorySearchStackScreen = withStackLayout(
   'ChatHistorySearch',
   ChatHistorySearchScreen,
@@ -211,6 +213,7 @@ export function RootNavigator() {
             name="SubagentSessionView"
             component={SubagentSessionStackScreen}
           />
+          <Stack.Screen name="SkillPanel" component={SkillPanelStackScreen} />
           <Stack.Screen
             name="ChatHistorySearch"
             component={ChatHistorySearchStackScreen}
