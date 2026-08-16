@@ -167,10 +167,13 @@ export interface VfsRevisionRepository {
   /**
    * 删除 scope 下某逻辑路径前缀内 ref_count <= 0 的 revision 行。
    *
+   * @param excludePrefixes - 非空时，这些逻辑路径前缀下的 revision 不参与 GC
+   *   （隔离豁免，如 `meta/skills`）；前缀可带或不带前导 `/`。
    * @returns 删除行数
    */
   deleteUnreferencedUnderScope(
     scopeKey: string,
     pathPrefix: string,
+    excludePrefixes?: readonly string[],
   ): Promise<number>;
 }
