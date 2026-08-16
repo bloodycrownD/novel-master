@@ -21,6 +21,8 @@ export class RnConnection implements TdbcConnection {
   private inTransaction = false;
   /** Nesting depth for SAVEPOINT naming inside an outer transaction. */
   private savepointDepth = 0;
+  /** 上次让出事件循环的时间戳（事务内按时间量子让步，而非逐语句）。 */
+  private lastYieldAt = 0;
   private readonly mutex = new AsyncMutex();
 
   constructor(private readonly adapter: RnSqliteAdapter) {}
@@ -58,6 +60,7 @@ export class RnConnection implements TdbcConnection {
       }
 
       this.inTransaction = true;
+      this.lastYieldAt = Date.now();
       const txConn = new TransactionalConnection(this);
 
       // --- transaction boundary: BEGIN / COMMIT / ROLLBACK via runAdapter ---
@@ -249,10 +252,15 @@ export class RnConnection implements TdbcConnection {
         sql,
         params as unknown[] | undefined,
       );
-      // 同步语句之间让出事件循环（macrotask），避免连续同步执行剥夺 RN
-      // 事件循环响应、触发系统 ANR（输入分发图 5s）。单次 setTimeout 开销
-      // 几毫秒，migration 级别语句量（数百条）总代价可接受。
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      // 按时间量子让出事件循环（16ms）：防 ANR 只需事件循环不被长期剥夺，
+      // 逐语句 setTimeout(0) 会让大批量小语句（会话复制 2 万条）每条都付
+      // 一次定时器往返；量子化后让步次数从 O(语句数) 降到 O(总时长/16ms)，
+      // ANR 防护等价、开销摊薄到可忽略（与 op-sqlite 驱动同款修复）。
+      const now = Date.now();
+      if (now - this.lastYieldAt >= 16) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        this.lastYieldAt = Date.now();
+      }
       return result;
     }
     return this.adapter.execute(sql, params as unknown[] | undefined);
