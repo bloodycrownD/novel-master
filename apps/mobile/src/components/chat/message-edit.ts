@@ -51,7 +51,12 @@ export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
   return message.role === 'user';
 }
 
-/** 消息操作菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */
+/** 仅已隐藏的消息可取消隐藏。 */
+export function isUnhideEligibleMessage(message: ChatMessage): boolean {
+  return message.hidden;
+}
+
+/** 消息操作菜单：编辑、复制、取消隐藏、置位、分叉、回滚（无 hide/delete）。 */
 export function buildMessageActionItems(
   message: ChatMessage,
 ): MessageActionMenuItem[] {
@@ -60,6 +65,9 @@ export function buildMessageActionItems(
     items.push({ label: '编辑', action: 'edit' });
   }
   items.push({ label: '复制', action: 'copy' });
+  if (isUnhideEligibleMessage(message)) {
+    items.push({ label: '取消隐藏', action: 'unhide' });
+  }
   if (isSetFloorEligibleMessage(message)) {
     items.push({ label: '置位', action: 'set-floor' });
   }

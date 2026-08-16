@@ -685,6 +685,30 @@ export function useChatTabMessageActions({
         showToast('已复制');
       } else if (action === 'fork') {
         handleForkFromMessage(target.id).catch(() => undefined);
+      } else if (action === 'unhide') {
+        if (sessionId == null || projectId == null) {
+          return;
+        }
+        if (agentRunning) {
+          showToast(toastMessage('请稍候', 'Agent 运行中无法取消隐藏'));
+          return;
+        }
+        void (async () => {
+          try {
+            // D1：show 不改变 workspace 状态，不做 kkv/worktree 刷新。
+            await runtime.messageTranscriptEffects.showMessagesInRange(
+              projectId,
+              sessionId,
+              target.seq,
+              target.seq,
+            );
+            await reloadMessages(true);
+            void refreshChatTokenLabel();
+            showToast('已取消隐藏');
+          } catch (error) {
+            showToast(toastMessage('取消隐藏失败', error));
+          }
+        })();
       } else if (action === 'set-floor') {
         handleSetFloorFromMessage(target.id);
       } else if (action === 'rollback') {
@@ -695,6 +719,12 @@ export function useChatTabMessageActions({
       handleForkFromMessage,
       handleSetFloorFromMessage,
       handleRollbackFromMessage,
+      sessionId,
+      projectId,
+      agentRunning,
+      runtime,
+      reloadMessages,
+      refreshChatTokenLabel,
       setMessageEditPrompt,
       showToast,
     ],
