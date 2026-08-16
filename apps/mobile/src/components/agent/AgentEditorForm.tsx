@@ -537,31 +537,36 @@ export function AgentEditorForm(props: Props) {
     setProviderId(selected?.providerId ?? '');
   };
 
+  // 重复计数与 ModelPickerModal 同口径：按 providerId+modelName 统计。
+  // 不能只按 modelName 全局计数——同一模型名挂在两个服务商下时各算一条，
+  // 否则会误判重复、每行都露出与模型名相同的 vendorModelId 副标题，
+  // 看起来像一行展示了两个模型 id。
   const modelNameCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const model of savedModels) {
-      counts.set(model.modelName, (counts.get(model.modelName) ?? 0) + 1);
+      const key = `${model.providerId}\0${model.modelName}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return counts;
   }, [savedModels]);
-  // 下拉选项：「默认(跟随)」恒在首位，后面是全服务商已保存模型（label 含服务商前缀）。
-  const modelSelectOptions = useMemo(
-    () => [
-      { value: '', label: '默认(跟随)' },
-      ...savedModels.map(m => ({
+  // 下拉选项：「默认(跟随)」恒在首位，后面是全服务商已保存模型（label 含服务商前缀，
+  // 按字母排序与工作区模型下拉一致）。
+  const modelSelectOptions = useMemo(() => {
+    const modelOptions = savedModels
+      .map(m => ({
         value: m.id,
         label: formatSavedModelDisplayName(
           providers.find(p => p.id === m.providerId)?.label ?? '未知服务商',
           m.modelName,
         ),
         subtitle:
-          (modelNameCounts.get(m.modelName) ?? 0) > 1
+          (modelNameCounts.get(`${m.providerId}\0${m.modelName}`) ?? 0) > 1
             ? m.vendorModelId
             : undefined,
-      })),
-    ],
-    [savedModels, providers, modelNameCounts],
-  );
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return [{value: '', label: '默认(跟随)'}, ...modelOptions];
+  }, [savedModels, providers, modelNameCounts]);
 
   if (loading) {
     return (
