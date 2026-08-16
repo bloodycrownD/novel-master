@@ -116,7 +116,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly eventBus: SimpleEventBus;
   readonly regexConfig: RegexConfigService;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  /** 用户 VFS U-A-U-A 落库；发送成功路径 flush 前置。 */
+  /** 用户 VFS 写入端口：executeOp 由 VFS 写链路直接消费，本模块不再使用该成员。 */
   readonly userVfsTurn?: UserVfsTurnService;
   /** write 成功后 upsert `file_cache`；须由 runtime 注入。 */
   readonly sessionKkv: SessionKkvService;
