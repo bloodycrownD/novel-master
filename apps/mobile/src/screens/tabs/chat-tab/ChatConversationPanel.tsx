@@ -257,6 +257,7 @@ export function ChatConversationPanel({
           onLoadOlder={onLoadOlderMessages}
           onOpenToolFile={scope.openSessionFilePreview}
           onOpenSubagentSession={scope.openSubagentSession}
+          onOpenSkillDetail={scope.openSkillDetail}
           pendingSubagentSessions={pendingSubagentSessions}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
           onMessageMenuAction={controller.onWebMessageMenuAction}
@@ -277,6 +278,7 @@ export function ChatConversationPanel({
           onMessageLongPress={controller.handleMessageLongPress}
           onOpenToolFile={scope.openSessionFilePreview}
           onOpenSubagentSession={scope.openSubagentSession}
+          onOpenSkillDetail={scope.openSkillDetail}
           pendingSubagentSessions={pendingSubagentSessions}
           listHeaderComponent={
             hasMoreMessages ? (

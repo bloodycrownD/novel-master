@@ -185,6 +185,14 @@ export type TranscriptToHostMessage =
     >
   | BridgeEnvelope<'openToolFile', { path: string }>
   | BridgeEnvelope<'openSubagentSession', { sessionId: string }>
+  | BridgeEnvelope<
+      'openSkillDetail',
+      {
+        domain: 'global' | 'project';
+        projectId?: string;
+        name: string;
+      }
+    >
   | BridgeEnvelope<'messageMenuAction', { messageId: string; action: string }>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>

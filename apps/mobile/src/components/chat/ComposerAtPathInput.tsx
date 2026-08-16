@@ -32,6 +32,7 @@ import {
   mentionValueToPlain,
   mergeProgrammaticPlainIntoMentionValue,
   suggestionFromAtPathToken,
+  suggestionFromSkillToken,
   tryAtomicMentionDelete,
   type ComposerTriggersConfig,
 } from './composer-at-path-mention';
@@ -43,10 +44,10 @@ export type ComposerAtPathInputHandle = {
    */
   replaceCommittedText: (text: string, cursor?: number) => void;
   /**
-   * 程序化替换当前活跃 `@`（typeahead 点选）。
+   * 程序化替换当前活跃 `@` / `$`（typeahead 点选）。
    * 走 mentions `onSelect`；无活跃 keyword 时返回 false。
    */
-  replaceActiveAt: (token: string) => boolean;
+  replaceActiveAt: (token: string, trigger?: 'atPath' | 'skill') => boolean;
 };
 
 export type ComposerAtPathInputProps = {
@@ -117,6 +118,17 @@ export const ComposerAtPathInput = forwardRef<
         // 展示为 @/path（name 已含前导 /）
         getPlainString: mention => `@${mention.name}`,
       },
+      // `$技能名` 显式引用：与 @path 同款着色 / 原子删 / 尾空格
+      skill: {
+        trigger: '$',
+        allowedSpacesCount: 0,
+        isInsertSpaceAfterMention: true,
+        textStyle: {
+          color: tokens.primary,
+          backgroundColor: `${tokens.primary}22`,
+        },
+        getPlainString: mention => `$${mention.name}`,
+      },
     }),
     [tokens.primary],
   );
@@ -145,7 +157,7 @@ export const ComposerAtPathInput = forwardRef<
   const {textInputProps, triggers} = useMentions({
     value: mentionValue,
     onChange: emitMentionValue,
-    triggersConfig: triggersConfig as TriggersConfig<'atPath'>,
+    triggersConfig: triggersConfig as TriggersConfig<'atPath' | 'skill'>,
     onSelectionChange: sel => {
       // 原生已应用选区后解除短暂受控（对照 PromptMacroTextInput）
       setPendingSelection(null);
@@ -184,12 +196,16 @@ export const ComposerAtPathInput = forwardRef<
             : text.length;
         applyPendingSelection(pos, pos);
       },
-      replaceActiveAt(token: string) {
-        const t = triggersRef.current?.atPath;
+      replaceActiveAt(token: string, trigger: 'atPath' | 'skill' = 'atPath') {
+        const t = triggersRef.current?.[trigger];
         if (t == null || t.keyword == null) {
           return false;
         }
-        t.onSelect(suggestionFromAtPathToken(token));
+        t.onSelect(
+          trigger === 'skill'
+            ? suggestionFromSkillToken(token)
+            : suggestionFromAtPathToken(token),
+        );
         return true;
       },
     }),

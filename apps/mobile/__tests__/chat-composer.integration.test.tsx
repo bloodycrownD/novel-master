@@ -33,6 +33,10 @@ jest.mock('../src/components/chat/FileReferencePicker', () => ({
   FileReferencePicker: () => null,
 }));
 
+jest.mock('../src/components/skills/SkillPicker', () => ({
+  SkillPicker: () => null,
+}));
+
 jest.mock('../src/components/chat/AttachmentDraftChips', () => {
   const actual = jest.requireActual(
     '../src/components/chat/AttachmentDraftChips',

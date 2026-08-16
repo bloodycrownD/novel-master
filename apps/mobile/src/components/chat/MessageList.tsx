@@ -19,7 +19,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import type { MessageMenuAnchor } from './MessageActionMenu';
-import { type ChatMessage } from '@novel-master/core/chat';
+import { type ChatMessage, type SkillToolRef } from '@novel-master/core/chat';
 import { RichContentBody } from '@/components/rich-content/RichContentBody';
 import { isRichContentOverLimit } from '@/components/rich-content/rich-content-limits';
 import type { ChatListScrollSnapshot } from '@/services/chat-list-scroll-cache';
@@ -50,6 +50,8 @@ type Props = {
   onOpenToolFile?: (path: string) => void;
   /** 点击 task 工具卡片跳转到子会话只读浏览页。 */
   onOpenSubagentSession?: (sessionId: string) => void;
+  /** skill_opt 卡片点击跳技能详情。 */
+  onOpenSkillDetail?: (ref: SkillToolRef) => void;
   /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
   pendingSubagentSessions?: ReadonlyMap<string, string>;
   /** Restored scroll position after panel remount (workspace ↔ chat). */
@@ -129,6 +131,7 @@ export function MessageList({
   listHeaderComponent,
   onOpenToolFile,
   onOpenSubagentSession,
+  onOpenSkillDetail,
   pendingSubagentSessions,
   initialScroll = null,
   onScrollSnapshot,
@@ -430,6 +433,7 @@ export function MessageList({
             dimmed={hidden}
             onOpenFile={onOpenToolFile}
             onOpenSubagentSession={onOpenSubagentSession}
+            onOpenSkillDetail={onOpenSkillDetail}
             embedded
           />
         ) : null}
