@@ -1,8 +1,8 @@
 ---
-date: 2026-08-15 05:30
-title: skill 能力设计探索——global+project 两域存储与 UI 挂点结论
-keywords: skill, SKILL.md, VFS scope, 提示词注入, 设置管理页, brain-storm
-abstract: 用户想给应用加 skill 能力（类 AI IDE 的 SKILL.md）。第一轮定下存储（VFS global+project 两域）与注入（索引常驻+工具按需）方案；第二轮澄清真正难点是 agent 编辑 skill 的能力与会话隔离的冲突，补探索后拍板方向：skill 放 .agents/skills/ 约定目录（project/global scope、不进 session 复制链），agent 编辑走专用 skill 工具（默认写 project、global 留给用户 UI 编辑），skill 写入显式脱离 session checkpoint 回滚体系。
+date: 2026-08-16 00:10
+title: skill 能力设计→原型→PRD：meta/skills 两域方案与 mobile 交互拍板
+keywords: skill, SKILL.md, VFS scope, meta/skills, 提示词注入, 技能管理页, UI 原型, PRD
+abstract: 用户要给应用加 skill 能力（类 AI IDE SKILL.md）。已拍板：VFS global+project 两域 meta/skills/ 目录式存储（SKILL.md 入口+辅助文件），不进 session 复制链，AI 对两域技能均可读写，负清单启停，同名 project 覆盖 global；mobile 原型已在 worktree feat/skill-ui-prototype 完成。PRD 已定稿（含 $ 引用、skill_opt 工具、提示词配置/预览体现），SPEC 已落盘 docs/Iterations/agent-skills/spec.md，待用户确认。
 ---
 
 user:
@@ -21,101 +21,75 @@ assistant:
 待拍板：触发方式（索引+skill 工具 vs 全文常驻）、同名覆盖语义、启用开关存哪、desktop 项目内 global 树可见性缺口要不要顺手补。
 
 user:
-不不不，我纠结的会话隔离难点是智能体编辑 skill 文件的能力。skill 放哪还没想好——是否像 IDE 一样放 .agents/skill 目录？而且由于会话隔离，agent 根本无法编辑 global，这才是我纠结的地方。
+不不不，我考虑会话隔离的难点在于智能体编辑 skill 文件的能力。.agents 在 novel master 没意义——每个 session 是隔离的而不是共享的，改完只会在当前 session 生效。既然都是专用的工具了，还有必要放到 .agents 目录吗？感觉完全可以放到之前保留的 meta 目录。要设计就设计完整，不要说 v1 v2，我需要知道怎么设计 skill 的启用和关闭、怎么区分全局和项目。
 
 assistant:
-补派一轮聚焦探索（VFS 写路径 + checkpoint 的 scope 交互），关键事实与结论：
+与用户多轮收敛后拍板完整设计：
 
-1. agent 的 write/edit 工具走 toolCtx.vfs，是 session scope 钉死的单实例（run-agent-turn.ts L440 装配 sessionVfs），工具层没有按路径路由 scope 的先例；用户编辑链 executeOp 同样是 session scope。
-2. checkpoint/回滚硬编码 session scope：listSessionFileHeads 只扫 session scopeKey，message-rollback 的 resolveRollbackPlan 硬编码 {kind:"session"}。project 写入会被静默漏掉（不报错但不进撤销体系）。版本链本身 per-scope（entry 属于 scope_key+path），project scope 写入依然有乐观锁和 append-only revision 保护。
-3. copyVfsTree/copyScope 无过滤参数，replaceVfsSubtree 先删后拷：skill 若留在 session，re-pull/置位会被全量冲掉。
-4. 拍板方向：skill 放 .agents/skills/{name}/SKILL.md 于 project/global 两域（core/apps 零引用、全新命名空间）；不进 session 复制链（需给复制加排除，成本是分段复制或暂存恢复）；agent 编辑走专用 skill 工具（内部 createScopedVfsService 按 project/global 建实例），默认写 project、global 编辑权留给用户 UI——skill 写入脱离 session 回滚是显式设计（跨会话资产不应被会话回滚卷走）；并发冲突靠 VFS 乐观锁（expectedVersion CONFLICT）兜底。write/edit 普通工具对 .agents/skills/ 前缀应显式拒绝，避免模型绕过专用工具造成「session 假真源」。
-
-未验证：mobile runtime 装配（推测与 desktop/cli 一致）；分段复制排除的具体实现成本。
+1. 存储：VFS 两域 meta/skills/{name}/，skill 是目录（SKILL.md 入口 + references/ 等辅助文件），不是单 snippet。
+2. 不进 session 复制链：技能读写直连 global/project scopeKey，绕开 initializeSessionWorkspace（project→session）与 projectTemplatePull（global→project）两条整树先删后拷的链，真实现需给两处加排除。
+3. AI 权限：对 project/global 两域技能文件均可读写，无限制（用户明确撤掉早期「global 只读」设想）。
+4. 启停：负清单（默认启用，禁用=写行），按域+项目分组；开关不进 front matter、不进 session KKV。
+5. 合并解析：同名 project 副本覆盖 global；禁用判定 project 行优先。
+6. 视角分离：会话技能面板=当前项目+全局合并视图；设置管理页=全局语境、按项目分组展示所有项目技能。
+7. UI 三入口：会话操作抽屉「技能」→ 面板；我的→技能管理（双 tab，全局在前默认、项目在后）；聊天工具卡片跳详情。技能详情页复用文件浏览器（skillDetail 伪 scope）。
 
 user:
-那 UI 怎么设计？skill 不在 session 域，很难复用现有聊天工作区吧？还有既然都是专用工具了，还有必要放 .agents 目录吗？感觉可以放到之前保留的 meta 目录。
+新建个 worktree 吧，然后改下 examples/mobile/index.html，我想看看 UI 操作逻辑，对我来说 UI 交互更重要。另外 skill 规范是支持 reference 或其他文件的，不只有一个 skill 文件。还有 agent 可以改 global，没什么不能改的，这里没必要限制。项目 skill 那里你得展示所有项目 skill。全局技能和项目技能做成双 tab，全局在前默认，项目在后。不能只改标题啊，其他相应的也得改啊。
 
 assistant:
-又补两路探索（meta 目录现状、vfsScope/文件卡片链路），关键事实与结论：
-
-1. meta 目录是死约定：只在 chat-project-vfs 迭代文档里出现（spec 明说首期仅路径约定不建表），代码里零存在——没有常量、没有复制排除、没有 UI 入口。放 meta 下不省任何接线，还有语义冲突（meta 的既定定位是 project/session 元数据）。目录名是品味决定不是技术决定，两成本完全一样；维持 .agents/skills/（对齐 AI IDE 心智）。
-2. 新发现：projectTemplatePull（global→project）也是整树先删后拷——复制排除要做两处（pull 链 + session 初始化链），上一轮只强调了后者。
-3. 文件卡片链路现状：ToolResultBlock.meta 实际只有 subagentSessionId/failureReason，没有持久化 vfsScope（RULE.md 的 vfsScope 描述与当前代码不符，待核实）；FILE_OPEN_TOOL_NAMES 只认 read/write/edit，skill 工具卡片默认不可点；两端卡片回调签名都是 (path) 单参、scope 硬编码（mobile 固定 session，desktop 固定 chat panel）。
-4. UI 设计拍板：三层分工——浏览零成本（mobile 项目工作区 tab 和 desktop 会话视图树本来就是 project 域，skill 目录自然出现；desktop 的 'session' panel 实际映射 core project 域，命名错位但可用）；聊天卡片跳转需四处线性小改（ToolResultBlock.meta 加 scope、FILE_OPEN_TOOL_NAMES 扩入 skill 工具名、两端回调加 scope 参数、mobile webview openToolFile 消息加字段）；设置管理页照 agent 管理骨架做目录视图，mobile 跳 FileEditorScreen(scopeKind)、desktop 设置内页内栈 push 编辑视图。
+在 worktree .woktree/skill-ui-prototype（分支 feat/skill-ui-prototype，基于 origin/main）改 examples/mobile 三个文件实现原型：会话面板（合并解析+开关+覆盖徽标+无效标签）、设置管理页双 tab（项目 tab 按项目分组展示所有项目、批量管理、跨项目复制/提升全局带项目选择弹层）、新建弹窗（域分段全局在前+所属项目下拉）、详情页（文件浏览器复用、子目录导航、新建/删除辅助文件、SKILL.md 保留名）、编辑器复用（路径 chip meta/skills/…+域徽标带项目名）、聊天 create/update 工具卡片。内联脚本验证 13 项全过。教训：调换 tab 顺序必须整块交换面板内容，只改按钮和 active 类会全局面板装着项目内容，且验证要断言容器实际内容归属。
 
 user:
-不是，用户也只能看当前工作区内容啊。你没懂我 UI 设计的难点。我提 meta 是因为 .agents 在 novel-master 没意义——每个 session 隔离，skill 放进会话工作区改完只在本 session 生效。除非放到不同的地方，与现有工作区隔离。
+原型设计的差不多了，可以生成 prd 了。
 
 assistant:
-第三轮澄清后明确真正难点：用户心智锚在会话工作区（用户可见可改的是 session 域内容），skill 必须跨会话共享就得活在会话之外，隔离后会话内不可见——可见性设计才是核心。拍板设计：
-
-1. 呈现与存储分离：存储仍用 VFS project/global 域（白拿编辑器/版本链/乐观锁），但呈现上 skill 不以「文件」身份见人，以「会话可用的能力」身份走专属入口；工作区树对 meta/ 默认 hidden（补 workplace 默认目录规则），避免用户误当工作区内容、也避免误编 session 副本。
-2. 同意目录改用 meta/skills/：专属入口后目录名用户几乎不可见，novel-master 自有约定比借用 IDE 的 .agents 语义更干净（meta 在 chat-project-vfs 文档里本就是预留的元数据落点）。
-3. 三层入口：会话内技能面板（agent/模型选择器同层，发现+开关+跳编辑，mobile 走 stack screen、desktop 走会话头部入口）+ 聊天工具卡片跳转（上一轮的四处小改）+ 设置管理页（agent 管理骨架，列表+域徽标+开关，编辑跳 scope 编辑器）。
-4. 事实再澄清：skill 工具写的就是 project 域，不存在「只在本 session 生效」；那个风险只在 skill 出现在 session 树里才成立，所以隔离是对的。
+按 prd-generate 走完探索（三路子代理：docs 惯例与前置 PRD、原型交互全清单、主仓业务现状），准备落 docs/Iterations/<迭代名>/prd.md。命名建议 agent-skills（英文 kebab-case 惯例）；dependency 候选：vfs-unified-root（域路径语义基准）、chat-project-vfs（VfsScope/ScopedVfsService 奠基）、agent-subagent（skill 工具仿 task 的 description lambda 先例），待用户确认后落盘。原型两处语义留待 PRD 定夺：全局 tab「被项目副本覆盖」标签的判定范围（现按当前项目）；全局域禁用行无 UI 写入路径（是否补设置页全局开关）。
 
 user:
-所以 AI 还是可以编辑更改 skill？用户也能方便的管理和编辑 skill？要设计就设计完整，不要说 v1v2。我需要知道 skill 的启用和关闭怎么设计、怎么区分全局和项目。
+这都小问题，我只关注 prd 内容。
 
 assistant:
-第四轮给出完整设计定稿（无 v1/v2 分期）：
-
-1. 权限矩阵：AI 经 skill 工具对 project 域完整读写删（list/read/create/update/delete），对 global 域只读（read 生效版本可读，update 报错引导 create 同名 project 覆盖，显式不隐式）；禁用/启用/删除全局提升等管理动作不给 AI，只能在回复里建议。用户三入口：会话面板（合并解析列表+开关+跳编辑）、设置管理页（项目/全局分区两段列表+域转换）、聊天卡片（按 scope 跳编辑器）。
-2. 启用/关闭：负清单设计——新建 skill 零配置默认启用；禁用 = 在对应域写一行禁用记录（skill_state 表，scope_key + skill_name 主键，照 workplace 规则表模式）。开关不进 front matter（AI 改文件不碰状态）、不进 session KKV（避开压缩/置位清理）。开关是项目/全局级不是会话级——会话级细腻需求由「索引+模型自选」天然兑底。
-3. 解析算法：生效版本 = project 副本 ?? global 版本（同名覆盖）；禁用判定 = project 域有禁用行→禁；生效域为 global 时再看 global 域禁用行。推论：项目副本不受全局下架影响；「全局默认关、某项目开」用 project 副本覆盖表达，两态开关+覆盖副本=完整表达力，无需三态。
-4. 域区分：存储靠 scope 本身（meta/skills/ 在 global/project 两域）；UI 靠徽标（全局/项目/项目覆盖全局）+管理页分「项目技能/全局技能」两段；域转换：「复制到项目」（本地化定制）/「提升为全局」（需确认，全局影响）；同名且 front matter name 与目录名不一致以目录名为准标警告。
-5. front matter：name（显示名）+ description（索引+模型选择依据），缺 description/解析失败标 warn 不进索引；编辑器直接编 yaml 源文件，保存时校验。
+PRD 已落盘 docs/Iterations/agent-skills/prd.md（date 2026-08-16，dependency 三项：vfs-unified-root / chat-project-vfs / agent-subagent）。结构：背景（两大冲突：会话隔离、AI 无跨域通道）→ 目标（5 条成功指标）→ 用户与场景 → 范围（含隔离豁免、不含市场/版本/组合）→ 核心需求 7 条（存储与两域/AI 能力/启停/会话面板/设置管理页/新建详情编辑/聊天卡片）→ 验收标准 8 组 GWT（含隔离豁免专门一组）→ 风险与待确认 4 项（覆盖标签判定范围、全局禁用无 UI 通路、desktop global 树不可见、索引体积增长）。待用户最终确认 PRD。
 
 user:
-新建个 worktree，改 examples/mobile/index.html，我想看 UI 操作逻辑的实现效果，UI 交互对我更重要。
+想起一个重要的实现问题：输入框已有 @ 引用，这次也加上 / 引用，UI 与 @ 完全一致（按钮+手动输入）；去重也一样，不重复加载，只有第一个 / 引用加载。
 
 assistant:
-在 .woktree/skill-ui-prototype（分支 feat/skill-ui-prototype，基于 origin/main）实现了移动端交互原型，三入口全部落地：
-
-1. 入口一·会话技能面板：会话操作抽屉新增「技能」项+摘要行（N/M 启用）；面板为合并解析后的生效列表（项目覆盖全局带橙色徽标、无效技能红标、每行开关），开关写项目域禁用记录（toast 说明不影响其他项目），点行进编辑器。
-2. 入口二·技能管理页（我的→技能管理）：项目/全局两段库存，各自批量管理+新建；全局被同名项目副本覆盖时标「被项目副本覆盖」；⋮ 菜单：编辑/复制到项目（全局→项目）/提升为全局（带覆盖确认）/删除；新建弹窗含名称/描述/域分段选择器（域选择带 AI 权限提示）。
-3. 入口三·聊天工具卡片：聊天流里新增 skill create 成功卡（可点，跳编辑器）和 skill update 全局被拒卡（展示 AI 权限边界）+ AI 解释消息。
-4. 编辑器复用 fileEditorPage：标题变「技能 · name」，工具栏域徽标（项目域·AI 可编辑 / 全局域·AI 只读），正文为 front matter 源文件。
-5. 冒烟测试（linkedom，22 项全过）验证三入口、覆盖解析、禁用、新建、域转换链路。
+派子代理核清 @ 引用全链路（双端 ChatComposer/AtPathTypeahead/FileReferencePicker + core 的 scan-at-path-attachments/prepare-user-messages-for-prompt/prompt-path-seen，以及置位/压缩的 seen 重置），PRD 增补技能引用需求。关键拍板（用户已确认同意）：常驻索引不计入「已出现」（索引只有名称+描述，首次引用仍附全文）；已关闭技能可被显式引用（明示意图优先于负清单，选择器标注关闭态）。触发符号用户提出 / 不好用可换 $，最终定 $：/ 与 @/path 的路径前缀天然冲突，$ 无色栉；用户同时拍板选择器直接平铺技能列表，不套文件浏览器层级 UI。注意：纯 $ 引用无正文需计入发送门闩；examples/mobile 原型尚未覆盖 $ 引用交互，待用户决定是否补。
 
 user:
-有个问题：skill 规范支持 reference 等其他文件，不只有一个 SKILL.md，它不是简单 snippet——这也是我想要项目工作区/文件浏览器的另一个原因。
+skill 描述提示词得在智能体提示词配置中体现，类似会话区：虽然没法控制，但得体现存在和位置，所见即所得。
 
 assistant:
-承认遇漏并修正：skill = 目录（SKILL.md 入口 + references/ 等辅助文件），存储设计本就是目录所以不动，但 UI 需要加一层。原型更新：
-
-1. 数据模型改为 files 数组（path + content），SKILL.md 的 front matter 含 name/description；mock 数据给 chinese-narrative（项目）挂 references/character-quirks.md、worldbuilding-qa 挂 checklist/contradiction-checklist.md、plot-consistency（全局）挂 references/timeline.md，SKILL.md 正文内用相对路径链接引用它们。
-2. 新增技能详情页（skillDetailPage）：行点击（面板/管理页/聊天卡片）先进详情看目录内容，再点具体文件进编辑器；编辑器标题「技能 · name」+ 路径 chip（meta/skills/name/path）+ 域徽标。
-3. 详情页支持新建文件（路径可含子目录，SKILL.md 保留名禁止）与删除（入口文件不可删）；保存按钮回写 files 内容。
-4. 对 core 设计的推论：skill 工具 read 返回 SKILL.md 全文 + 辅助文件清单，模型再按需读单个文件；复制/提升为全局 = 整目录拷贝；会话技能面板与索引仍只看 SKILL.md 的 front matter，辅助文件不进索引。
+派子代理核清提示词配置与预览链路：配置 UI 分区是纵向卡片序列（系统→常驻工作区→持久→会话→动态，顺序由 PROMPT_REGION_LABELS.layoutOrder 文案钉住且有测试断言），不可控区块的呈现模式是「固定位置占位卡片 + 无任何控件 + 说明文案」（会话区 chat-slot 卡片）；预览三端共用 buildPromptAssemblyFromLayout 单次遍历，core 加 segment 三端自动出现；computeLlmExportZonesFromLayout 的 persistCount 需计入新块否则 token 分区错位；AgentDefinitionEditorForm.tsx 在 desktop 无引用疑似遗留。PRD 增补：核心需求 2 加注入位置（系统区之后、常驻工作区之前，我定的待用户确认）、配置 UI 占位卡片（照会话区模式）、预览独立分段三条；验收新增「提示词配置与预览」组（含三处顺序一致性断言）；范围加「提示词配置与预览的体现」条目。实现时注意 layoutOrder 断言测试要同步改。
 
 user:
-测试没必要，只改 demo 文件。另外这个文件浏览还不如复用文件浏览器呢。还有 agent 可以改 global，没什么不能改的，没必要限制。
+$ 引用候选列表显示 skill 名字和描述就够了吧？agent 的 skill 工具我期望是通用单工具 skill_opt(action, params) 这样。
 
 assistant:
-三点修正全部落地（并删掉了 smoke-test.cjs，验证改为内联一次性脚本不留文件）：
-
-1. 技能详情页改为复用现成 vfs-browser：注册 skillDetail 伪 scope（VFS_SCOPE_ROOT/vfsNavState 加 '/'），打开技能时 syncSkillDetailCatalog 把 files 数组同步成目录树喂给现成渲染器——上导航、目录进入、⋯ 更多菜单、⋯ 新建文件、行单击/双击打开全部复用现有交互；skillFile 条目在状态栏标「入口文件/技能辅助文件 + 行数」，不显示纳入规则徽标；⋯ 行菜单只留打开/删除（SKILL.md 不可删）；⋯ 面板菜单只留新建文件。
-2. AI 权限限制全面移除：聊天卡片的「update 全局被拒」改为成功卡（全局域写入成功、对所有项目生效），编辑器域徽标文案改为「项目域 · 仅本项目生效 / 全局域 · 所有项目生效」，新建弹窗 hint 改为「两个域 AI 都可读写」。设计层面拍板：AI 对 project/global 两域技能文件均有读写权限，不再设全局只读限制。
-3. 内联验证 9 项全过：详情页激活、vfs-browser 复用渲染、SKILL.md 置顶、子目录导航、单击进编辑器、路径 chip、域徽标文案、全局卡片跳详情。
+确认 $ 候选列表就是平铺名字+描述（加域/覆盖/关闭三个标记，无效不出现），PRD 已是该语义。skill_opt 单工具分发方案赞成并落 PRD：小内聚域+统一权限档位，拆多工具只多付 schema token。四处打磨：params 用扁平显式字段不用不透明包（准确率）；action 四个 read/write/edit/list（read 缺省按生效副本解析，list 供查重与辅助文件发现，索引只有名称+描述）；path 限定技能目录内禁 ..；AI 不给 delete（创建/更新开放，删整技能仅用户 UI）。代价：单工具 policy 粒度全有或全无，当前无限制拍板下可接受。验收补了 read/edit 行为、path 越界与 write 缺域报错两条。
 
 user:
-skill 设置的项目技能段应展示所有项目的技能——从「我的」进入时没有当前项目语境，语义上也不应该只展示当前项目。
+（附 spec-generate skill）原型设计的差不多了，可以生成 spec 了。
 
 assistant:
-拍板并落地：管理页与会话面板的视角分离——管理页（全局语境）按项目分组展示所有项目的技能；会话面板仍是当前项目+全局的合并解析视图。原型更新：
-
-1. 数据模型改为 skillCatalog.projects（按 projectId 字典，mock 给 novel-2 历史小说加了 dynasty-etiquette 技能含 references 辅助文件）+ skillCatalog.global；skillDisabled 也按项目分组（projects 字典）。
-2. 管理页项目段：按 MOCK_PROJECTS 分组渲染，每组带📚分组头（项目名），行引用 data-id/open/menu 改为 project|pid|name 三段载荷；计数为跨项目总数（如「3 · 2 个项目」）。
-3. 上下文语义：详情页标题/编辑器域徽标显式带项目名（「项目域 · 历史小说」）；新建弹窗项目域时出现「所属项目」下拉（预选当前项目，全局域时隐藏）；复制到项目/其他项目用项目选择底部弹层（排除源项目）；删除确认文案带项目名。
-4. 会话面板、聊天卡片等会话语径仍默认 currentProjectId（findSkill 第三参缺省）；跨项目场景（管理页点击）显式传 pid。
-5. 内联验证 15 项全过：分组渲染、跨项目详情/徽标、项目选择弹层排除源项目、新建下拉、全局复制到指定项目、会话面板不混入其他项目技能。
+按 spec-generate 流程：读 PRD+三份前置 PRD（vfs-unified-root/chat-project-vfs/agent-subagent），另派三路子代理探 core 存储数据层、工具提示词层、双端 UI 集成点，SPEC 落盘 docs/Iterations/agent-skills/spec.md。关键技术结论：技能文件即 global/project 域 VFS /meta/skills/ 文件（逻辑路径无限制，assertLogicalPathAllowed 只拦 /template）；负清单照 workplace_dir_rule 建独立表 skill_disabled_rule（SCHEMA_BOOT_VERSION 5→6，不用 KKV）；复制链排除动 replaceVfsSubtree 的 excludePrefixes（删/拷/seed 三侧，revision GC 最易错）；skill_opt 照 fs 工具单工具多 action + task 工具 description lambda 先例，AgentTurnRuntimePort 扩 skills()，主/子两装配点；卡片跳详情照 subagentSessionId 的 meta 自动透传，需同步 desktop DTO+双端 message-blocks+mobile WebView 镜像；提示词 PromptRenderContext 加预解析 skillsIndex（render 纯函数），两套遍历（assembly+LLM input）都要插段否则三方一致性验收不过，zones persistCount 计入，layoutOrder 断言测试同步；$ 引用 composer-at-path 参数化 trigger+新 scan-skill-attachments+skillAttach 枚举+skill: seen key（S0 不预填）。SPEC 新拍板设计决策：D1 项目复制携带技能与负清单；D2 子代理同样注入技能索引与 skill_opt；D3 mobile 技能详情新建轻量 SkillFileManager 不硬复用 VfsFileManager（workplace 深耦合）。另修正大坑：mobile「会话操作抽屉」实际已迁移为 SessionDetailScreen（五卡片），技能入口加第六张卡。
 
 user:
-全局技能和项目技能做成双 tab，不要纵向排列。
+补充一点，skill_opt 工具也要可以像 task 工具一样是可配置的。
 
 assistant:
-已改：管理页顶部改为双 Tab（复用 chat-top-tabs 样式，全局在前项目在后，默认全局 tab），计数内嵌在 tab 文案里，两个面板各带自己的 manage-header（管理/新建/批量删除）。细节：底部 hint 随 tab 切换文案（全局 tab 提示同名覆盖规则）；批量模式中切 tab 自动退出；新建按钮显式 hint 优先、否则默认当前 tab 域；顺手清掉全局新建按钮上误留的 data-skill-domain-opt。内联验证 12 项全过。
+补深工具策略链路后更新 PRD+SPEC。关键发现：validateAgentToolPolicy 无静态白名单常量，是 probe 驱动（registerBuiltinTools 注册即合法，用户已确认此机制）；BUILTIN_TOOL_CATALOG 手工同步关系，task 已在 catalog 首条——agent-subagent PRD 的「task 不进 catalog / subagentCallable」描述已过时（subagentCallable 已废弃改 mode），以代码为准。skill_opt 可配置只需两处：registerBuiltinTools（校验/运行时自动生效）+ catalog 条目（双端 picker 自动出现、计数变 8）；附带三处写死「7 个」文案改 8 + 双端 picker 测试硬编码数字。新拍板 D4：agent deny skill_opt 时其 run 不注入技能索引（工具与索引同进退，避免看得见用不了），$ 引用不受影响（注入全文不依赖工具）；子代理按子定义自己的 policy 判定不继承父。SPEC 加 Step 7a/T-SK7a，Step 10 与 T-SK 扩 D4 联动。
 
-后续补改（用户指出只改了标题不够）：全局优先贯穿所有相关处——新建弹窗存储域分段全局在前且默认全局（默认域跟随当前 tab，显式 hint 优先；会话面板新建仍默认项目域因有当前项目语境）、弹窗 hint 文案全局在前、默认 newSkillDomain='global'。修 bug：上轮换 tab 顺序时只改了面板 id 没换内容，导致 skillsTabPanelGlobal 里装的是项目内容（面板错位，已有验证未覆盖内容归属而漏网），已修正。内联验证 13 项全过（含面板内容归属、新建默认域链路）。教训：验证要断言容器内容归属而不止 active 类切换。
+user:
+标注废弃吧。
+
+assistant:
+在 docs/Iterations/agent-subagent/prd.md 顶部加废弃横幅（三条更正：subagentCallable 已废弃改 mode；task 已进 catalog 首条；无静态白名单常量、probe 驱动），并在 subagentCallable 字段、核心需求 4「配置可控」、约束与依赖「工具白名单口径」三处加内联 ⚠️ 已废弃标注，均指向 agent-skills/spec.md 的以代码为准结论。目的：防止后续实现者被旧 PRD 带偏。
+
+user:
+（附 spec-check-loop skill）对 agent-skills 的 PRD/SPEC 跑审查循环。
+
+assistant:
+进入 spec-check-loop：第 1 轮审查 No-Go（0 P0，3 P1：desktop 会话面板缺失、skillAttach 与 superRefine 相撞、$ 扫描正则错+容错未定义；另有 3 P2）。主代理拍板修复方向后派 doc-fix 子代理一轮闭合全部六条（含新增 D5 覆盖标签任意项目判定、SKILL_NAME_PATTERN 常量、desktop 挂点 SessionDetailDrawer 含 App.tsx 调用链证据、skillAttach 专用 skillName 字案+superRefine 分支、不存在技能不写 seen key 自愈）。第 2 轮审查 Go（execute-ready）：上轮六项全部核实修复、PRD↔SPEC 映射完整、代码行号抽查全部命中；遗留 1 P1（正则 $ 未转义，照抄必挂）+3 P2（一句话级），满足 trivial 豁免由主代理直接修复（已注明）：正则改 /(?<!\S)\$([^\s$/@]+)/g、strict schema 补 skillName object 层声明、attachmentDedupeKey 加 skillAttach 分支、无效技能引用附原文不视为不存在。待用户确认 execute-ready。

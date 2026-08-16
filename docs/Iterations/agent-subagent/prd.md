@@ -5,6 +5,12 @@ dependency: [Iterations/agent-system/prd.md, Iterations/tool-system-v2/prd.md]
 
 # Agent Subagent（子代理工具）PRD
 
+> ⚠️ **部分描述已废弃（2026-08-16 核实）**：以下内容与当前代码不符，以代码为准，新增实现勿按本文档执行——
+> 1. `subagentCallable` 字段已废弃（strict schema 拒绝该字段），「谁能被 task 调用」改由 agent `mode` 字段控制（`mode !== "primary"` 即可被调度）；
+> 2. 「task 不进 `BUILTIN_TOOL_CATALOG`」已过时：task 现为 catalog 首条目；
+> 3. 「validateAgentToolPolicy 的内置已知名白名单」不存在：校验是 probe 驱动（`registerBuiltinTools` 注册即合法），无静态白名单常量。
+> 详见 `docs/Iterations/agent-skills/spec.md` 探索结论与「以代码为准」备注。
+
 ## 背景
 
 Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentRunner`（`maxSteps` 控制的多轮 model↔tool 循环）+ `AgentSession`（含 `EphemeralOverlayAgentSession` 不落库实现）+ `AgentToolPolicy`（allow/deny 工具策略）+ `AgentRegistryService`（工作区级 agent 注册表）+ 事件触发的嵌套 agent run（`run-agent` action / `runRunAgentAction`，跑在 `EphemeralOverlayAgentSession` 上、不持久化）。
@@ -47,7 +53,7 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 
 **Core — Agent 定义与配置**
 
-- `AgentDefinition` 新增布尔字段（如 `subagentCallable` 或等价，SPEC 定稿）：标识此 agent 是否允许被 subagent 工具调用。缺省 `false`。
+- **`AgentDefinition` 新增布尔字段（如 `subagentCallable` 或等价，SPEC 定稿）：标识此 agent 是否允许被 subagent 工具调用。缺省 `false`。** ⚠️ 已废弃：改为 `mode` 字段控制，`subagentCallable` 字段被 strict schema 拒绝。
 - 出厂默认提供一个通用 subagent（如 `general`）：工具权限全开（读写可用），`subagentCallable: false`（禁止递归，作为递归基线）。通过默认 registry seed 或 `examples/agents.yaml` 等方式交付。
 - agent 配置 UI（mobile `AgentEditorForm` / desktop `AgentEditorView`）展示并允许编辑此开关。
 
@@ -88,7 +94,7 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 1. **subagent 工具闭环**：模型调用工具 → 创建子 session（带 parent 关联）→ 复用 `AgentRunner` 跑子 agent → 取最后一条 assistant 文本回流主 agent 的 `tool_result`；子 agent 的中间 tool 调用不回流主 agent。
 2. **子会话持久化与隔离**：子 agent 对话落独立 `chat_session`（`parent_session_id` 指向父），不污染主对话历史；主会话列表默认不展示子会话。
 3. **可观察性**：用户可从主会话的工具卡片点击进入子会话只读浏览页，查看子 agent 完整对话记录（只读、不支持继续对话）。
-4. **配置可控**：agent 配置页提供「允许子 agent 调用」开关；只有开启的 agent 才出现在 subagent 工具的可选范围；递归深度上限 2 层。
+4. **配置可控**：agent 配置页提供「允许子 agent 调用」开关；只有开启的 agent 才出现在 subagent 工具的可选范围；递归深度上限 2 层。 ⚠️ 已废弃：「开关」改为 `mode` 字段，非 primary 模式即可被调度。
 5. **出厂通用 subagent**：默认 registry seed 注入一个工具全开、自身禁止递归的通用 agent，开箱即用。
 6. **并行派生**：主 agent 单条消息内可并行派生多个子 agent。
 7. **abort 级联**：主 agent 中断（abort）时，级联 kill 正在运行的子 agent。
@@ -159,7 +165,7 @@ Novel Master 已具备完整的 Agent 运行能力：`AgentDefinition` + `AgentR
 - 依赖已合并的 **agent-system**、**tool-system-v2**、**content-blocks**、**agent-config-shape**、**event-bus-compaction-conditions**（`run-agent` action 不受影响，并行存在）。
 - subagent 工具实现位于 `@novel-master/core`；apps 层负责 UI 入口与子会话浏览页。
 - 数据模型变更：`chat_session` 加 `parent_session_id` 列，`SCHEMA_BOOT_VERSION` 递增；走现有 `SCHEMA_COLUMN_ALIGNMENTS` 的 `ALTER TABLE ADD COLUMN` 路径。
-- 工具白名单口径：`task` 不进 UI 的 `BUILTIN_TOOL_CATALOG`（「谁能被调」由 `subagentCallable` 单点控制，避免正交概念混淆）；但其名字需在 `validateAgentToolPolicy` 的内置已知名白名单中（不依赖 probe 注册），使用户配 `tools.allow/deny: ["task"]` 能正确生效。
+- 工具白名单口径：`task` 不进 UI 的 `BUILTIN_TOOL_CATALOG`（「谁能被调」由 `subagentCallable` 单点控制，避免正交概念混淆）；但其名字需在 `validateAgentToolPolicy` 的内置已知名白名单中（不依赖 probe 注册），使用户配 `tools.allow/deny: ["task"]` 能正确生效。 ⚠️ 已废弃：task 现在就在 `BUILTIN_TOOL_CATALOG` 中；validateAgentToolPolicy 无静态白名单常量，probe 驱动（registerBuiltinTools 注册即合法）；subagentCallable 已由 mode 取代。
 
 ## 非功能需求（业务/体验）
 
