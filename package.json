@@ -8,6 +8,11 @@
     "packages/*",
     "apps/*"
   ],
+  "op-sqlite": {
+    "sqliteFlags": [
+      "-DSQLITE_TEMP_STORE=2"
+    ]
+  },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
