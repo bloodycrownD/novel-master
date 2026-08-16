@@ -11,13 +11,6 @@ export const SESSION_FS_LABELS = {
   disabledHint: "已关闭版本校验",
 } as const;
 
-/** 用户操作记录（user ops 总开关）文案。 */
-export const USER_OPS_LABELS = {
-  title: "用户操作记录",
-  enabledHint: "手动改动的文件会作为上下文附带发送",
-  disabledHint: "不记录手动改动，不产生操作提示与附件",
-} as const;
-
 /** 正则规则编辑器深度与通道文案。 */
 export const REGEX_UI_LABELS = {
   startDepth: "开始深度",
