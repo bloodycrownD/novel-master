@@ -17,6 +17,7 @@ import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js
 import { type VfsService } from "@novel-master/core/vfs";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+import type { SkillService } from "../../src/service/skills/skills.port.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function minimalDefinition(): AgentDefinition {
@@ -113,10 +114,98 @@ function createMockModel(
   };
 }
 
+/**
+ * fake SkillService：仅实现 skillAttach hydrate 用到的两个方法
+ * （fix-wiring 集成用例：验证 runner 链路 `$技能` 首次引用附全文）。
+ */
+function fakeSkillService(): SkillService {
+  return {
+    effectiveSkills: async () => [
+      {
+        name: "demo",
+        description: null,
+        domain: "project",
+        overridden: false,
+        disabled: false,
+        valid: true,
+        effective: true,
+      },
+    ],
+    readSkillFile: async () => ({
+      domain: "project",
+      name: "demo",
+      path: "SKILL.md",
+      content:
+        "---\nname: demo\ndescription: 演示\n---\n# 演示技能\n正文内容",
+      version: 1,
+    }),
+  } as unknown as SkillService;
+}
+
 
 novelMasterTestFixture();
 
 describe("AgentRunner", () => {
+  // fix-wiring：hydrate 运行时接线后，agent-runner 链路 `$技能` 首次引用
+  // 在发给 LLM 的 history 中附 SKILL.md 全文（skillAttach 附件不吞不漏）。
+  it("skillAttach hydrate：$技能 首次引用在 LLM history 附 SKILL.md 全文", async () => {
+    const session = new InMemoryAgentSession();
+    const userMsg = await session.append("user", textBlocks("用 $demo 改一下"));
+    // InMemoryAgentSession.append 不收 attachments；返回对象与内部存储同
+    // 引用，直接补字段（skillAttach 附件：无 path、skillName 为准）。
+    Object.assign(userMsg, {
+      attachments: [
+        {
+          name: "demo",
+          source: "attach",
+          type: "text",
+          content: null,
+          skillName: "demo",
+          action: "skillAttach",
+        },
+      ],
+    });
+
+    const histories: unknown[] = [];
+    const model: ModelRequestService = {
+      request: async (_savedModelId, _userContent, options) => {
+        histories.push(options?.history);
+        return {
+          assistantText: "ok",
+          blocks: [{ type: "text", text: "ok" }],
+          raw: {},
+        };
+      },
+    };
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+        // fix-wiring：hydrate 用的技能服务工厂（与生产装配同形）。
+        skills: () => fakeSkillService(),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    const historyText = JSON.stringify(histories[0]);
+    assert.match(historyText, /<action name=\\"skillAttach\\">/);
+    // SKILL.md 全文（含 front matter 原样）
+    assert.match(historyText, /# 演示技能/);
+    // 正文 token 原样保留
+    assert.match(historyText, /用 \$demo 改一下/);
+  });
+
   it("returns stopReason=cancelled when aborted before run", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));

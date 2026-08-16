@@ -71,6 +71,9 @@ export async function buildSessionPromptInput(
     extraInfo: resolved.prompts.customAttach,
     now: new Date(),
     workplace: wt,
+    // skillAttach hydrate（`$技能` 首次引用附全文），与 agent-runner 同源。
+    skills: runtime.skills(),
+    projectId: scope.projectId,
   });
   const ctx: PromptRenderContext = {
     workplaceDisplay,

@@ -37,6 +37,7 @@ import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-ll
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
 import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import type { SkillService } from "@/service/skills/skills.port.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
@@ -76,6 +77,13 @@ export interface DefaultAgentRunnerDeps {
   readonly providers?: Pick<ProviderRepository, "findById">;
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
+  /**
+   * skillAttach 附件 hydrate（`$技能` 首次引用附 SKILL.md 全文）的技能服务
+   * 工厂；与 toolCtx.skills 同一 SkillService 实例，但不随 D4（skill_opt
+   * 被 policy deny）置空——显式引用不受工具禁用影响（SPEC「$ 引用」节）。
+   * 未注入时 hydrate 走「原样带过」降级路径。
+   */
+  readonly skills?: () => SkillService;
   readonly eventBus: SimpleEventBus;
   readonly sessionKkv: SessionKkvService;
   readonly workplace: (scope: VfsScope) => WorkplaceService;
@@ -313,6 +321,11 @@ export class DefaultAgentRunner implements AgentRunner {
           now: turnNow,
           workplace: wt,
           filetree: turnFiletree,
+          // skillAttach hydrate：`$技能` 首次引用附 SKILL.md 全文。
+          // 用 deps.skills 而非 toolCtx.skills——后者在 skill_opt 被 policy
+          // deny（D4）时置空，而显式引用不受工具禁用影响。
+          skills: this.deps.skills?.(),
+          projectId,
         });
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");

@@ -67,6 +67,9 @@ function makeStubRuntime(): MobileNovelMasterRuntime {
     regexConfig: {},
     workplace: jest.fn(() => ({})),
     sessionVfs: jest.fn(() => ({})),
+    // skillAttach hydrate 用的技能服务工厂；本用例消息无 skillAttach 附件，
+    // prepare 惰性预算不会真正调用，给个空壳即可。
+    skills: jest.fn(() => ({})),
     sessionKkv: {
       get: jest.fn(async () => null),
       set: jest.fn(async () => undefined),

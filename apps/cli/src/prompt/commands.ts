@@ -5,7 +5,13 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { formatPromptLlmInputForCliFromLayout } from "@novel-master/core/prompt";
+import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { resolveAgentToolRegistry } from "@novel-master/core/agent";
+import {
+  formatPromptLlmInputForCliFromLayout,
+  type AgentPromptLayout,
+  type PromptSkillIndexEntry,
+} from "@novel-master/core/prompt";
 
 import {
   countPromptLlmInput,
@@ -18,6 +24,40 @@ import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
+
+/** 与 core skill-tool 的 SKILL_TOOL_NAME 同值（core 未公开导出，本地常量）。 */
+const SKILL_TOOL_NAME = "skill_opt";
+
+/**
+ * 预算提示词技能索引（与 desktop/mobile 的 prompt-preview.service 同模式）。
+ *
+ * CLI 的 YAML 只含 prompts 三区、无 tools policy，壳 definition 走
+ * resolveAgentToolRegistry 的「无 policy → 全量工具」分支；不含
+ * skill_opt（D4）时返回 undefined，预览不出现技能索引段。
+ */
+async function budgetSkillsIndex(
+  rt: Pick<NovelMasterRuntime, "skills">,
+  projectId: string,
+  layout: AgentPromptLayout,
+): Promise<readonly PromptSkillIndexEntry[] | undefined> {
+  const probe = new ToolRegistry();
+  registerBuiltinTools(probe);
+  const registry = resolveAgentToolRegistry(probe, {
+    name: "cli-prompt-preview",
+    prompts: layout,
+  });
+  if (!registry.list().includes(SKILL_TOOL_NAME)) {
+    return undefined;
+  }
+  const effective = await rt.skills().effectiveSkills(projectId);
+  return effective
+    .filter((s) => s.effective)
+    .map((s) => ({
+      name: s.name,
+      description: s.description ?? "",
+      domain: s.domain,
+    }));
+}
 
 export async function runPrompt(
   rt: Pick<
@@ -32,6 +72,7 @@ export async function runPrompt(
     | "tokenCounters"
     | "providerModels"
     | "savedModels"
+    | "skills"
   >,
   subcommand: string,
   args: readonly string[],
@@ -69,7 +110,14 @@ export async function runPrompt(
     vfs,
     layout,
   });
-  const ctx = { workplaceDisplay, messages, vfs };
+  // 技能索引预算：与双端预览同模式（probe + resolve 判 skill_opt，D4 联动）。
+  const skillsIndex = await budgetSkillsIndex(rt, projectId, layout);
+  const ctx = {
+    workplaceDisplay,
+    messages,
+    vfs,
+    ...(skillsIndex != null ? { skillsIndex } : {}),
+  };
   const text = await formatPromptLlmInputForCliFromLayout(layout, ctx);
   if (text.length > 0) {
     process.stdout.write(text);

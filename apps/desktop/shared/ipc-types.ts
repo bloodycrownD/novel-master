@@ -839,7 +839,8 @@ export type MessageAttachmentActionDto =
   | 'move'
   | 'workplaceChange'
   | 'userAttach'
-  | 'annotate';
+  | 'annotate'
+  | 'skillAttach';
 
 /** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
 export type MessageAttachmentDto = {
@@ -848,6 +849,8 @@ export type MessageAttachmentDto = {
   readonly type: 'text' | 'image' | 'dir';
   readonly content: string | null;
   readonly path?: string;
+  /** skillAttach 专用：技能名（无 path，chip 文案以此为准）。 */
+  readonly skillName?: string;
   /** 结构化 action；新写入应带；历史可缺省。 */
   readonly action?: MessageAttachmentActionDto;
 };
