@@ -93,6 +93,17 @@ import {
   handleRegexUpdateRule,
 } from './handlers/regex.js';
 import {
+  handleSkillsCopy,
+  handleSkillsDelete,
+  handleSkillsEdit,
+  handleSkillsEffective,
+  handleSkillsList,
+  handleSkillsPromote,
+  handleSkillsRead,
+  handleSkillsToggle,
+  handleSkillsWrite,
+} from './handlers/skills.js';
+import {
   handleMessagesAppend,
   handleMessagesAppendToolTurnBridge,
   handleMessagesDelete,
@@ -379,6 +390,16 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.REGEX_DELETE_RULE, handleRegexDeleteRule);
   bindNoArg(IPC_CHANNELS.REGEX_LIST_PICKER, handleRegexListPicker);
   bindReq(IPC_CHANNELS.REGEX_SET_CURRENT, handleRegexSetCurrent);
+
+  bindReq(IPC_CHANNELS.SKILLS_LIST, handleSkillsList);
+  bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);
+  bindReq(IPC_CHANNELS.SKILLS_READ, handleSkillsRead);
+  bindReq(IPC_CHANNELS.SKILLS_WRITE, handleSkillsWrite);
+  bindReq(IPC_CHANNELS.SKILLS_EDIT, handleSkillsEdit);
+  bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
+  bindReq(IPC_CHANNELS.SKILLS_COPY, handleSkillsCopy);
+  bindReq(IPC_CHANNELS.SKILLS_PROMOTE, handleSkillsPromote);
+  bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
 
   bindNoArg(
     IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
