@@ -122,10 +122,12 @@ describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
 
     expect(mockEncodingForModel).toHaveBeenCalledWith('gpt-4o');
     expect(mockCountPrompt).not.toHaveBeenCalled();
+    // cr-fix-spec D1-06 整改：RN 的 js-tiktoken 包装粒度比 Node precise 档粗，
+    // counterKind 诚实标 heuristic，不能冒充精确 tiktoken（否则 compaction 按精确阈值判定易超限）。
     expect(result).toEqual({
       count: 9,
-      counterKind: 'tiktoken',
-      estimated: false,
+      counterKind: 'heuristic',
+      estimated: true,
     });
   });
 
