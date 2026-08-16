@@ -9,8 +9,10 @@ React Native app scaffold for monorepo VFS validation on device (Android Debug).
 | react-native | 0.85.3 |
 | react | 19.2.3 |
 | @react-native-community/cli | 20.1.0 |
-| react-native-quick-sqlite | ^8.2.7 |
+| @op-engineering/op-sqlite | 18.0.0 |
 | Node | 22.22.0 (see repo `.nvmrc`) |
+
+SQLite 驱动已于 2026-08 从废弃的 `react-native-quick-sqlite`（^8.2.7）迁移至 `@op-engineering/op-sqlite`；旧依赖与 `tdbc-driver-rn` 包保留作回滚线（mobile 侧两行 import + driver 名切回即回滚）。
 
 ## Prerequisites
 
@@ -47,7 +49,7 @@ Workspace packages must be compiled before Metro bundles them:
 
 ```bash
 # from repo root
-npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn
+npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn -w @novel-master/tdbc-driver-op-sqlite
 ```
 
 `prestart` and `preandroid` in this package run the same build automatically.
@@ -80,7 +82,7 @@ From the monorepo root:
 
 ```bash
 npm install
-npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn
+npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn -w @novel-master/tdbc-driver-op-sqlite
 ```
 
 ## Run (Android)
@@ -115,9 +117,9 @@ adb logcat *:S ReactNative:V ReactNativeJS:V
 
 开发构建下，在 runtime 启动时会注册 LLM 日志 fetch；`mobile:log` 或 Metro 里搜 **`[novel-master/llm]`**、**`[novel-master/chat]`**。发送一条聊天消息即可看到请求与 `hasBody`。
 
-**注意**：若开启 Chrome 远程调试，quick-sqlite（JSI）会失败；请用 on-device 调试。
+**注意**：若开启 Chrome 远程调试，op-sqlite（JSI）会失败；请用 on-device 调试。
 
-若报 `quick-sqlite is not installed or failed to load`：先 `npm run mobile:start -- --reset-cache`，再 `npm run mobile:android` 重装（需 Metro 把 native 模块打进 bundle）。
+若原生驱动加载失败（op-sqlite 模块未打入 bundle）：先 `npm run mobile:start -- --reset-cache`，再 `npm run mobile:android` 重装（需 Metro 把 native 模块打进 bundle）。
 
 ## VFS dev screen
 
@@ -125,7 +127,7 @@ adb logcat *:S ReactNative:V ReactNativeJS:V
 2. Tap **Open VFS dev screen** for list / read / write / replace / delete / glob.
 3. Use VFS paths starting with `/` (e.g. `/dev/note.md`).
 
-Device DB name: `novel_master_vfs` (quick-sqlite app-private storage). This is **not** the CLI file `.novel-master/novel.db`. VFS runtime registers the driver via `@novel-master/tdbc-driver-rn/native`.
+Device DB name: `novel_master_vfs` (app-private storage). The op-sqlite driver probes the legacy quick-sqlite layout (`files/default/novel_master_vfs`) first and opens the existing DB file in place, so upgrades keep the same file. This is **not** the CLI file `.novel-master/novel.db`. VFS runtime registers the driver via `@novel-master/tdbc-driver-op-sqlite/native`.
 
 ### CLI对照 (same semantics, different DB)
 
@@ -301,7 +303,7 @@ Optional repository secrets for Android production signing (otherwise the debug 
 
 ## Known issues
 
-- **New Architecture**: init enables `newArchEnabled=true` in `android/gradle.properties`. If `react-native-quick-sqlite` fails to link, set `newArchEnabled=false` and rebuild.
+- **New Architecture**: init enables `newArchEnabled=true` in `android/gradle.properties`. If the SQLite driver (`@op-engineering/op-sqlite`) fails to link, set `newArchEnabled=false` and rebuild.
 - iOS directory is generated but **not** validated in this iteration.
 
 ## Init reproduction

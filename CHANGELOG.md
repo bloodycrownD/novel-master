@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### 维护
+
+- **移动端 SQLite 驱动替换**：从已停止维护的 react-native-quick-sqlite 迁移至 @op-engineering/op-sqlite，旧驱动原样保留作回滚线（回滚仅需移动端两行改动）——根因是 Android 12 及以下部分设备的临时目录不可写，大事务触发 SQLite 写磁盘临时表时稳定报 disk I/O error；现通过编译期 SQLITE_TEMP_STORE=2 与运行期 PRAGMA temp_store=MEMORY 双保险把临时表固定在内存
+
 ## [1.4.27] - 2026-08-14
 
 ### 新增
