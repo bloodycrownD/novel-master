@@ -99,7 +99,7 @@ export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
 /** 供三侧（拷贝/删除/seed）统一取排除前缀，缺省为空数组。 */
 function resolveExcludePrefixes(
   excludePrefixes: readonly string[] | undefined,
-): string[] {
+): readonly string[] {
   return excludePrefixes ?? [];
 }
 
