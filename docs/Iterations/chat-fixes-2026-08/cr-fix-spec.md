@@ -1,6 +1,7 @@
 # CR Fix Spec: chat-fixes-2026-08
 
-> 状态：draft ｜ review_round 2 ｜ dag_version 4
+> 状态：executed ｜ review_round 2 ｜ dag_version 4
+> 7 条 must-fix 已于 2026-08-16 全部修复并提交（7478bad…ee5ec3c，共 7 笔）；K 节建议已闭合（三端定向测试/typecheck 绿，业务 spec L165 T-UH3 措辞已订正）。
 > 本 spec 只约束修复项，不改动业务行为定义；业务口径以 [spec.md](./spec.md) 为准（只读参考）。
 
 ## 元信息

@@ -162,5 +162,5 @@ desktop：
 - **force 快照（D）**：语义钉死为「消费 pending + 取消 timer + 直发」；风险是 snapshot rows 过期导致一帧回跳——T-ST1 用 postMessage 序列断言钉住。回滚：去掉 force 参数及其唯一传参点。
 - **batchFlush（D）**：flush 与 reload 后 `tryCommitStreamTail` 是同内容双通道，靠 `lastStreamCommitIdsRef` 去重接住（desktop 已验证同模式）。回滚：移除 `batchFlush` 三处调用与接口。
 - **ops 拆除（E）**：最大风险是 chip 判定误伤 annotate（D3 已防）与 rollback 链路拆错（annotate 反投影保留已列明）；历史附件 prompt 过滤是行为变化（D2 已拍板）；跨端删除的编译炸点（core `index.ts` L127 re-export、desktop `workplace.ts`、双端 `project-composer-status.service.ts` 的 ops 投影 import）已列入 E 清单，其中双端 composer-status 服务按 D7 **收窄保留不删**，import 炸点以改写收口，实施时以三端 build 为准；`hasPendingTurns` 删除（D6）与推送收窄（D7）波及 desktop 轮询链与空续跑分支，均有步骥钉住。回滚：按文件 revert；DB 无 schema 变更、无数据迁移，回滚零成本。
-- **webview-dist**：menu.ts 改动后必须重建（`__tests__` 有直接读产物的镜像测试），漏重建会被 T-UH3 拦住。
+- **webview-dist**：menu.ts 改动后必须重建（`__tests__` 有直接读产物的镜像测试）；漏重建不用担心——mobile 的 pretest 会自动执行 `npm run build:webview` 重建产物兜底，T-UH3 的镜像断言随后校验重建结果。
 - 共同约束：`.woktree/` 下有同构副本，所有 grep/改动以主工作区为准。
