@@ -700,12 +700,19 @@ export function useChatTabMessageActions({
               target.seq,
               target.seq,
             );
-            await reloadMessages(true);
-            void refreshChatTokenLabel();
-            showToast('已取消隐藏');
           } catch (error) {
             showToast(toastMessage('取消隐藏失败', error));
+            return;
           }
+          // 走到这里 DB 已生效；reload 失败只降级提示，不再误报「取消隐藏失败」。
+          try {
+            await reloadMessages(true);
+          } catch {
+            showToast('已取消隐藏，但列表刷新失败');
+            return;
+          }
+          void refreshChatTokenLabel();
+          showToast('已取消隐藏');
         })();
       } else if (action === 'set-floor') {
         handleSetFloorFromMessage(target.id);

@@ -122,6 +122,24 @@ describe('useChatTabMessageActions unhide', () => {
     expect(order[1]).toBeLessThan(order[2]!);
   });
 
+  it('A-1: showMessagesInRange 成功但 reload 失败时，提示「已取消隐藏，但列表刷新失败」', async () => {
+    mockReloadMessages.mockRejectedValueOnce(new Error('reload fail'));
+    const api = mountActions();
+
+    await act(async () => {
+      api.handleMessageMenuAction(hiddenMessage(), 'unhide');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mockShowMessagesInRange).toHaveBeenCalledWith('p1', 's1', 3, 3);
+    expect(mockReloadMessages).toHaveBeenCalledWith(true);
+    // DB 已生效：不再误报「取消隐藏失败」，只降级提示刷新失败。
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    expect(mockShowToast).toHaveBeenCalledWith('已取消隐藏，但列表刷新失败');
+  });
+
   it('T-UH2: agentRunning 时拦截，不调 showMessagesInRange', async () => {
     mockAgentRunning = true;
     const api = mountActions();
