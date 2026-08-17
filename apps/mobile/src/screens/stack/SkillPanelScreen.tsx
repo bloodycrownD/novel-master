@@ -6,7 +6,7 @@
  * - 点行（开关区域外）进技能详情页；关闭态行整体弱化。
  * - 头部动作：「整理」跳设置·技能管理页；「新建」弹窗默认项目域。
  */
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -47,48 +47,62 @@ export function SkillPanelScreen() {
 
   const [skills, setSkills] = useState<EffectiveSkill[]>([]);
   const [loading, setLoading] = useState(true);
-  const [togglingName, setTogglingName] = useState<string | undefined>();
+  // 防连点用 ref：不驱动渲染，避免开关 disabled 灰态与 value 更量叠加造成抖动
+  const togglingRef = useRef(false);
   const [createOpen, setCreateOpen] = useState(false);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      setSkills(await runtime.skills().effectiveSkills(projectId));
-    } catch (error) {
-      // 技能根目录尚不存在 = 空列表（与服务层向 NOT_FOUND 语义对齐），不弹错
-      if (isVfsError(error, 'NOT_FOUND')) {
-        setSkills([]);
-      } else {
-        showToast(toastMessage('加载技能失败', error));
+  const reload = useCallback(
+    async (opts?: {silent?: boolean}) => {
+      // 静默刷新（聚焦返回）不拉下拉指示器、不重建列表视觉
+      if (!opts?.silent) {
+        setLoading(true);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [runtime, projectId, showToast]);
+      try {
+        setSkills(await runtime.skills().effectiveSkills(projectId));
+      } catch (error) {
+        // 技能根目录尚不存在 = 空列表（与服务层向 NOT_FOUND 语义对齐），不弹错
+        if (isVfsError(error, 'NOT_FOUND')) {
+          setSkills([]);
+        } else {
+          showToast(toastMessage('加载技能失败', error));
+        }
+      } finally {
+        // 结尾无条件清 loading：静默刷新若给 loading 置过 true 也要复位
+        setLoading(false);
+      }
+    },
+    [runtime, projectId, showToast],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      reload().catch(() => undefined);
+      reload({silent: true}).catch(() => undefined);
     }, [reload]),
   );
 
   const toggleDisabled = useCallback(
     async (skill: EffectiveSkill, nextEnabled: boolean) => {
-      setTogglingName(skill.name);
+      if (togglingRef.current) {
+        return;
+      }
+      togglingRef.current = true;
+      // 乐观更新：拨动瞬间即翻转 value，失败再回滚（无中间灰态/回跳）
+      const flip = (enabled: boolean) =>
+        setSkills(prev =>
+          prev.map(s =>
+            s.name === skill.name ? {...s, disabled: !enabled} : s,
+          ),
+        );
+      flip(nextEnabled);
       try {
         await runtime
           .skills()
           .setDisabled(projectId, skill.name, !nextEnabled);
-        // 乐观刷新本地行，避免整页 reload 的闪烁
-        setSkills(prev =>
-          prev.map(s =>
-            s.name === skill.name ? {...s, disabled: !nextEnabled} : s,
-          ),
-        );
       } catch (error) {
+        flip(!nextEnabled);
         showToast(toastMessage(nextEnabled ? '启用失败' : '关闭失败', error));
       } finally {
-        setTogglingName(undefined);
+        togglingRef.current = false;
       }
     },
     [runtime, projectId, showToast],
@@ -134,7 +148,7 @@ export function SkillPanelScreen() {
           keyExtractor={item => `${item.domain}:${item.name}`}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={reload} />
+            <RefreshControl refreshing={loading} onRefresh={() => reload()} />
           }
           ListEmptyComponent={
             <View style={styles.empty}>
@@ -194,7 +208,7 @@ export function SkillPanelScreen() {
               </View>
               <Switch
                 value={!item.disabled}
-                disabled={!item.valid || togglingName === item.name}
+                disabled={!item.valid}
                 onValueChange={next => toggleDisabled(item, next).catch(() => undefined)}
                 trackColor={{false: tokens.border, true: tokens.primary}}
               />
