@@ -16,9 +16,7 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
-import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
-import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {DeviceEventEmitter} from 'react-native';
+import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
@@ -37,10 +35,6 @@ import {
   type CodeEditorWebViewHandle,
 } from '../../components/vfs/CodeEditorWebView';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
-import {
-  SKILL_FILE_DELETED_EVENT,
-  type SkillFileDeletedPayload,
-} from '../../components/skills/skill-file-events';
 import {skillDomainBadgeLabel} from '../../components/skills/skill-ui';
 import {formatCharCount} from '@novel-master/core/format';
 
@@ -91,8 +85,6 @@ export function FileEditorScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<FileEditorRoute>();
   const {path, scopeKind, projectId, sessionId, skillRef, onSessionVfsSaved} =
     route.params;
@@ -169,7 +161,7 @@ export function FileEditorScreen() {
     return () => {
       cancelled = true;
     };
-  }, [path, resolveVfs]);
+  }, [path, resolveVfs, showToast]);
 
   // Reset preview tab default when opening a different file.
   useEffect(() => {
@@ -177,28 +169,6 @@ export function FileEditorScreen() {
   }, [path]);
 
   // 技能辅助文件在详情页被删除时踢回，避免停留在已不存在的文件上
-  useEffect(() => {
-    if (scopeKind !== 'skill' || !skillRef) {
-      return;
-    }
-    const prefix = `/meta/skills/${skillRef.name}/`;
-    const subscription = DeviceEventEmitter.addListener(
-      SKILL_FILE_DELETED_EVENT,
-      (payload: SkillFileDeletedPayload) => {
-        if (
-          payload.domain === skillRef.domain &&
-          payload.name === skillRef.name &&
-          payload.projectId === skillRef.projectId &&
-          path === `${prefix}${payload.relPath}`
-        ) {
-          showToast('该文件已被删除');
-          navigation.goBack();
-        }
-      },
-    );
-    return () => subscription.remove();
-  }, [scopeKind, skillRef, path, showToast, navigation]);
-
   const handleSave = async () => {
     setSaving(true);
     try {

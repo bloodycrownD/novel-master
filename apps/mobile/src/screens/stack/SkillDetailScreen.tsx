@@ -21,7 +21,8 @@ import {
 } from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {SkillListItem} from '@novel-master/core/skills';
-import {SkillFileManager} from '@/components/skills/SkillFileManager';
+import type {VfsScope} from '@novel-master/core/vfs';
+import {VfsFileManager} from '@/components/vfs/VfsFileManager';
 import {
   skillDomainBadgeColor,
   skillDomainBadgeLabel,
@@ -81,10 +82,22 @@ export function SkillDetailScreen() {
     }, [reload]),
   );
 
+  const skillRoot = `/meta/skills/${name}`;
+  // 技能域直接复用 VfsFileManager（workplace 不传，纳入/目录规则菜单自动隐藏）。
+  // SKILL.md 是技能入口，拦截删除/重命名/移动，其余文件全功能开放（含新建目录）。
+  const fileScope: VfsScope =
+    domain === 'global'
+      ? {kind: 'global'}
+      : {kind: 'project', projectId: projectId!};
+  const fileVfs =
+    domain === 'global'
+      ? runtime.globalVfs()
+      : runtime.projectVfs(projectId!);
+
   const openFile = useCallback(
-    (relPath: string) => {
+    (fullPath: string) => {
       navigation.navigate('FileEditor', {
-        path: `/meta/skills/${name}/${relPath}`,
+        path: fullPath,
         scopeKind: 'skill',
         skillRef: {
           domain,
@@ -145,13 +158,16 @@ export function SkillDetailScreen() {
           </Text>
         ) : null}
       </View>
-      <SkillFileManager
-        domain={domain}
-        name={name}
-        {...(domain === 'project' && projectId != null ? {projectId} : {})}
-        files={item.files}
-        onFilesChanged={() => reload().catch(() => undefined)}
+      <VfsFileManager
+        scope={fileScope}
+        vfs={fileVfs}
+        rootPath={skillRoot}
         onOpenFile={openFile}
+        isProtectedPath={path =>
+          path === `${skillRoot}/SKILL.md`
+            ? 'SKILL.md 是技能入口文件，不能删除或重命名'
+            : null
+        }
       />
     </View>
   );
