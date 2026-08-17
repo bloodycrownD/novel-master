@@ -581,24 +581,27 @@ export const VfsFileManager = forwardRef<
         : undefined)
     : undefined;
 
-  // 无 workplace（非工作区域，如技能目录）时隐藏纳入/目录规则/角色卡菜单。
+  // 无 workplace（非工作区域，如技能目录）时隐藏纳入/目录规则/角色卡/ZIP 导入导出菜单
+  // （技能包的导入导出在技能管理页提供）。
   const entityMenuItems: SheetMenuItem[] = menuRow
     ? menuRow.kind === 'dir'
       ? [
-          { label: '导出 ZIP', action: 'export-zip' },
-          { label: '导入 ZIP', action: 'import-zip' },
           ...(workplace != null
-            ? [{ label: '导入角色卡', action: 'import-character-card' }]
-            : []),
-          ...(workplace != null
-            ? [{ label: '状态变更', action: 'toggle-include' }]
+            ? [
+                { label: '导出 ZIP', action: 'export-zip' },
+                { label: '导入 ZIP', action: 'import-zip' },
+                { label: '导入角色卡', action: 'import-character-card' },
+                { label: '状态变更', action: 'toggle-include' },
+              ]
             : []),
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
         ]
       : [
           ...(workplace != null
-            ? [{ label: '状态变更', action: 'toggle-include' }]
+            ? [
+                { label: '状态变更', action: 'toggle-include' },
+              ]
             : []),
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
@@ -608,10 +611,10 @@ export const VfsFileManager = forwardRef<
   const moreMenuItems: SheetMenuItem[] = [
     { label: '新建目录', action: 'create-directory' },
     { label: '新建文件', action: 'create-file' },
-    { label: '导入 ZIP', action: 'import-zip' },
-    { label: '导出 ZIP', action: 'export-zip' },
     ...(workplace != null
       ? [
+          { label: '导入 ZIP', action: 'import-zip' },
+          { label: '导出 ZIP', action: 'export-zip' },
           { label: '导入角色卡', action: 'import-character-card' },
           { label: '目录规则', action: 'directory-rule' },
         ]

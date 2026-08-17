@@ -23,11 +23,13 @@ import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatProject} from '@novel-master/core/chat';
 import type {SkillDomain, SkillListItem} from '@novel-master/core/skills';
+import type {VfsScope} from '@novel-master/core/vfs';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {exportVfsZip, importVfsZip} from '@/services/vfs-zip.service';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -49,6 +51,11 @@ type SkillRow = {
 
 type MenuTarget = SkillRow | undefined;
 
+/** 技能包导入导出的目标域：全局 tab 直接全局，项目 tab 先选项目。 */
+type ZipTarget =
+  | {kind: 'global'}
+  | {kind: 'project'; projectId: string};
+
 const GLOBAL_TAB_HINT =
   '全局技能对所有项目生效。若任意项目存在同名副本，该项目优先使用副本——该全局版仅对无副本的项目生效。';
 const PROJECT_TAB_HINT =
@@ -68,9 +75,14 @@ export function SkillsSettingsScreen() {
   const batch = useBatchSelection();
   const [menuTarget, setMenuTarget] = useState<MenuTarget>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
-  /** 复制 / 提升目标的项目选择弹层。 */
+  const [moreOpen, setMoreOpen] = useState(false);
+  /** 项目 tab 下导入导出前的目标项目选择弹层。 */
+  const [zipProjectPick, setZipProjectPick] = useState<
+    'export' | 'import' | undefined
+  >(undefined);
+  const [zipBusy, setZipBusy] = useState(false);
+  /** 跨项目复制的目标项目选择弹层。 */
   const [copyContext, setCopyContext] = useState<
-    | {kind: 'copyToProject'; skill: SkillRow}
     | {kind: 'crossProjectCopy'; skill: SkillRow}
     | undefined
   >(undefined);
@@ -241,6 +253,86 @@ export function SkillsSettingsScreen() {
     }
   };
 
+  // ── 技能包导入导出（zip 根 = 目标域的 /meta/skills，zip 内为各技能目录）──
+
+  const zipScopeFor = (target: ZipTarget): VfsScope =>
+    target.kind === 'global'
+      ? {kind: 'global'}
+      : {kind: 'project', projectId: target.projectId};
+
+  const runZipExport = async (target: ZipTarget) => {
+    if (zipBusy) {
+      return;
+    }
+    setZipBusy(true);
+    try {
+      const result = await exportVfsZip(runtime, zipScopeFor(target), {
+        directoryPath: '/meta/skills',
+      });
+      if (result === 'saved') {
+        showToast('ZIP 已保存到所选位置');
+      }
+    } catch (error) {
+      showToast(toastMessage('导出失败', error));
+    } finally {
+      setZipBusy(false);
+    }
+  };
+
+  const runZipImport = async (target: ZipTarget) => {
+    if (zipBusy) {
+      return;
+    }
+    const scopeText =
+      target.kind === 'global' ? '全局技能' : '该项目技能';
+    Alert.alert(
+      '导入技能包',
+      `ZIP 内的技能目录将合并到${scopeText}根下，同名内容会被覆盖，是否继续？`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '导入',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setZipBusy(true);
+              try {
+                await importVfsZip(runtime, zipScopeFor(target), {
+                  confirmed: true,
+                  directoryPath: '/meta/skills',
+                });
+                showToast('ZIP 导入完成');
+                await reload();
+              } catch (error) {
+                showToast(toastMessage('导入失败', error));
+              } finally {
+                setZipBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  // 更多菜单动作：全局 tab 直接执行；项目 tab 先弹目标项目选择
+  const handleMoreAction = (action: string) => {
+    setMoreOpen(false);
+    if (action !== 'export-zip' && action !== 'import-zip') {
+      return;
+    }
+    if (tab === 'global') {
+      const target: ZipTarget = {kind: 'global'};
+      if (action === 'export-zip') {
+        runZipExport(target).catch(() => undefined);
+      } else {
+        runZipImport(target).catch(() => undefined);
+      }
+      return;
+    }
+    setZipProjectPick(action === 'export-zip' ? 'export' : 'import');
+  };
+
   const menuItems: SheetMenuItem[] = useMemo(() => {
     if (menuTarget == null) {
       return [];
@@ -249,9 +341,7 @@ export function SkillsSettingsScreen() {
       {label: '编辑', action: 'edit'},
       {label: '删除', action: 'delete', danger: true},
     ];
-    if (menuTarget.domain === 'global') {
-      items.splice(1, 0, {label: '复制到项目…', action: 'copyToProject'});
-    } else {
+    if (menuTarget.domain !== 'global') {
       items.splice(1, 0, {label: '复制到其他项目…', action: 'crossProjectCopy'});
       items.splice(2, 0, {label: '提升为全局', action: 'promote'});
     }
@@ -271,9 +361,6 @@ export function SkillsSettingsScreen() {
       case 'delete':
         confirmDeleteRows([target]);
         break;
-      case 'copyToProject':
-        setCopyContext({kind: 'copyToProject', skill: target});
-        break;
       case 'crossProjectCopy':
         setCopyContext({kind: 'crossProjectCopy', skill: target});
         break;
@@ -290,10 +377,7 @@ export function SkillsSettingsScreen() {
     if (copyContext == null) {
       return [];
     }
-    if (copyContext.kind === 'crossProjectCopy') {
-      return projects.filter(p => p.id !== copyContext.skill.projectId);
-    }
-    return projects;
+    return projects.filter(p => p.id !== copyContext.skill.projectId);
   }, [copyContext, projects]);
 
   const renderRow = (row: SkillRow) => {
@@ -399,11 +483,19 @@ export function SkillsSettingsScreen() {
         }
         hint="选择要删除的技能"
         normalActions={
-          <PrimaryButton
-            label="新建"
-            tokens={tokens}
-            onPress={() => setCreateOpen(true)}
-          />
+          <>
+            <SecondaryButton
+              label="更多"
+              tokens={tokens}
+              disabled={zipBusy}
+              onPress={() => setMoreOpen(true)}
+            />
+            <PrimaryButton
+              label="新建"
+              tokens={tokens}
+              onPress={() => setCreateOpen(true)}
+            />
+          </>
         }
       />
       <SegmentedControl
@@ -472,11 +564,7 @@ export function SkillsSettingsScreen() {
       />
       <BottomSheetMenu
         visible={copyContext != null}
-        title={
-          copyContext?.kind === 'crossProjectCopy'
-            ? '复制到其他项目'
-            : '复制到项目'
-        }
+        title="复制到其他项目"
         items={copyTargetProjects.map(p => ({label: p.name, action: p.id}))}
         onSelect={action => {
           const ctx = copyContext;
@@ -486,6 +574,39 @@ export function SkillsSettingsScreen() {
           }
         }}
         onClose={() => setCopyContext(undefined)}
+      />
+      <BottomSheetMenu
+        visible={moreOpen}
+        title="更多操作"
+        items={[
+          {label: '导出技能包 (ZIP)', action: 'export-zip'},
+          {label: '导入技能包 (ZIP)', action: 'import-zip'},
+        ]}
+        onSelect={handleMoreAction}
+        onClose={() => setMoreOpen(false)}
+      />
+      <BottomSheetMenu
+        visible={zipProjectPick != null}
+        title={
+          zipProjectPick === 'export'
+            ? '导出到哪个项目的技能'
+            : '导入到哪个项目的技能'
+        }
+        items={projects.map(p => ({label: p.name, action: p.id}))}
+        onSelect={action => {
+          const mode = zipProjectPick;
+          setZipProjectPick(undefined);
+          if (mode == null) {
+            return;
+          }
+          const target: ZipTarget = {kind: 'project', projectId: action};
+          if (mode === 'export') {
+            runZipExport(target).catch(() => undefined);
+          } else {
+            runZipImport(target).catch(() => undefined);
+          }
+        }}
+        onClose={() => setZipProjectPick(undefined)}
       />
       <NewSkillModal
         visible={createOpen}

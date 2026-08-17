@@ -9,6 +9,7 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   StyleSheet,
   Text,
   View,
@@ -22,7 +23,10 @@ import {
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {SkillListItem} from '@novel-master/core/skills';
 import type {VfsScope} from '@novel-master/core/vfs';
-import {VfsFileManager} from '@/components/vfs/VfsFileManager';
+import {
+  VfsFileManager,
+  type VfsFileManagerHandle,
+} from '@/components/vfs/VfsFileManager';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useHeaderContext} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
@@ -67,12 +71,30 @@ export function SkillDetailScreen() {
     }
   }, [runtime, domain, projectId, name, showToast, navigation]);
 
-  // 标题 = 技能名（栈顶 header 动态覆盖）
+  // 标题 = 技能名；系统返回/侧滑与 header 返回在子目录时逐级上翻而非退出页面
   const {setStackOverride} = useHeaderContext();
+  const fileRef = useRef<VfsFileManagerHandle>(null);
+  const goUpOrExit = useCallback(() => {
+    if (fileRef.current?.canGoUp()) {
+      fileRef.current.goUp();
+    } else {
+      navigation.goBack();
+    }
+  }, [navigation]);
   useEffect(() => {
-    setStackOverride({title: name});
+    setStackOverride({title: name, onBack: goUpOrExit});
     return () => setStackOverride(undefined);
-  }, [name, setStackOverride]);
+  }, [name, setStackOverride, goUpOrExit]);
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (fileRef.current?.canGoUp()) {
+        fileRef.current.goUp();
+        return true;
+      }
+      return false;
+    });
+    return () => sub.remove();
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -126,6 +148,7 @@ export function SkillDetailScreen() {
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <VfsFileManager
+        ref={fileRef}
         scope={fileScope}
         vfs={fileVfs}
         rootPath={skillRoot}
