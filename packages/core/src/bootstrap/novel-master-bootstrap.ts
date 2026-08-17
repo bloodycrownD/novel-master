@@ -56,8 +56,12 @@ import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sq
  * 变更 {@link NOVEL_MASTER_SCHEMA_STATEMENTS} 或 `SCHEMA_COLUMN_ALIGNMENTS` 时必须 +1，
  * 否则已升版库会走快路径而漏建表/漏补列。新增 schema migration 不必改此值
  * （快路径仍会执行 pending migration）。
+ *
+ * v7：v6 版本号曾在两条分支各自使用（main 侧 v1.4.29 与 skills 分支各自 +1），
+ * 导致被 main v6 迁移过的库缺 skill_disabled_rule 表。 v7 强制重跑全量幂等 DDL
+ * 补齐（CREATE TABLE IF NOT EXISTS，已存在的表不受影响）。
  */
-export const SCHEMA_BOOT_VERSION = 6;
+export const SCHEMA_BOOT_VERSION = 7;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [

@@ -3,7 +3,8 @@
  *
  * - 空库 bootstrap 后表与索引存在。
  * - 存量库（schema boot version 5、无 skill_disabled_rule）bootstrap 后
- *   幂等补建表并升 version 6；重复 bootstrap 不报错、表结构不重复。
+ *   幂等补建表并升 version；重复 bootstrap 不报错、表结构不重复。
+ * - v6 撞车库（main 侧 v1.4.29 的 v6 与 skills 分支的 v6 内容不同）：重跑 DDL 补齐。
  *
  * @module test/bootstrap/skills-schema
  */
@@ -55,6 +56,25 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     await conn.close();
   });
 
+  it("v6 撞车库（被 main 侧 v1.4.29 的 v6 迁移过、无 skill_disabled_rule）重跑 DDL 补齐", async () => {
+    const conn = await openMemory();
+    // v6 版本号曾在两条分支各自使用：main v1.4.29 与 skills 分支各自 +1。
+    // 被前者迁移过的库 user_version=6 但没有技能表——必须靠 v7 重跑全量 DDL 补建。
+    await conn.execute("PRAGMA user_version = 6");
+    assert.equal(await tableExists(conn, "skill_disabled_rule"), false);
+
+    await bootstrapNovelMaster(conn);
+
+    assert.equal(await tableExists(conn, "skill_disabled_rule"), true, "v6 撞车库应补建技能表");
+    assert.equal(await indexExists(conn, "idx_skill_disabled_scope"), true);
+    const versionRows = await conn.query<{ user_version: number }>(
+      "PRAGMA user_version",
+    );
+    assert.equal(Number(versionRows[0]!.user_version), 7, "boot version 应升到 7");
+
+    await conn.close();
+  });
+
   it("存量库（boot version 5）升级：幂等补建表并升 6，重复 bootstrap 安全", async () => {
     const conn = await openMemory();
     // 模拟 v5 存量库：版本号停在 5，且没有 skill_disabled_rule 表
@@ -68,7 +88,7 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     const versionRows = await conn.query<{ user_version: number }>(
       "PRAGMA user_version",
     );
-    assert.equal(Number(versionRows[0]!.user_version), 6, "boot version 应升到 6");
+    assert.equal(Number(versionRows[0]!.user_version), 7, "boot version 应升到 7");
 
     // 复合主键形态：重复 (scope_key, skill_name) 插入应被拒绝
     await conn.execute(
