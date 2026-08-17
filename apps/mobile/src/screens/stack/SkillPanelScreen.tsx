@@ -124,8 +124,7 @@ export function SkillPanelScreen() {
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <View style={[styles.header, {borderBottomColor: tokens.border}]}>
         <Text style={[styles.headerHint, {color: tokens.textSecondary}]}>
-          全局与当前项目合并展示；同名只显示项目副本。{enabledCount}/{validCount}{' '}
-          启用（不含无效技能）
+          {enabledCount}/{validCount} 启用
         </Text>
         <View style={styles.headerActions}>
           <SecondaryButton
