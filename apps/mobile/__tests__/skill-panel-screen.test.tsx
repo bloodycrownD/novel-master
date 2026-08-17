@@ -65,6 +65,10 @@ jest.mock('../src/navigation/HeaderContext', () => ({
   }),
 }));
 
+jest.mock('../src/components/icons/TabIcons', () => ({
+  ManageListIcon: () => null,
+}));
+
 jest.mock('../src/components/skills/NewSkillModal', () => ({
   NewSkillModal: () => null,
 }));
