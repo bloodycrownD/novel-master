@@ -35,7 +35,6 @@ import {
   type CodeEditorWebViewHandle,
 } from '../../components/vfs/CodeEditorWebView';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
-import {skillDomainBadgeLabel} from '../../components/skills/skill-ui';
 import {formatCharCount} from '@novel-master/core/format';
 
 /**
@@ -255,33 +254,6 @@ export function FileEditorScreen() {
 
   const editorBody = (
     <>
-      {scopeKind === 'skill' && skillRef ? (
-        <View style={[styles.skillBar, {borderBottomColor: tokens.border}]}>
-          <Text
-            style={[styles.skillBarName, {color: tokens.text}]}
-            numberOfLines={1}>
-            技能 · {skillRef.name}
-          </Text>
-          <Text
-            style={[
-              styles.skillChip,
-              {color: tokens.textSecondary, borderColor: tokens.border},
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="middle">
-            {path.startsWith(`/meta/skills/${skillRef.name}/`)
-              ? `/${path.slice(`/meta/skills/${skillRef.name}/`.length)}`
-              : path.replace(/^\//, '')}
-          </Text>
-          <Text
-            style={[
-              styles.skillChip,
-              {color: tokens.primary, borderColor: tokens.border},
-            ]}>
-            {skillDomainBadgeLabel(skillRef.domain, false)}
-          </Text>
-        </View>
-      ) : null}
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
           style={styles.toolbarBtn}
@@ -427,24 +399,6 @@ const styles = StyleSheet.create({
   center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
   keyboardLiftBody: {flex: 1, minHeight: 0},
-  skillBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  skillBarName: {fontSize: 13, fontWeight: '600', flexShrink: 0},
-  skillChip: {
-    flexShrink: 1,
-    fontSize: 11,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    overflow: 'hidden',
-  },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
