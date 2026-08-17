@@ -113,7 +113,55 @@ describe("messageAttachmentSchema", () => {
     );
   });
 
-  it("parseAttachmentsJson / serializeAttachmentsJson round-trip", () => {
+  it("T-SK11: skillAttach 附件——skillName 必填、跳过 name===path 规则；严格模式仍拒未知键", () => {
+    const att = messageAttachmentSchema.parse({
+      name: "demo",
+      source: "attach",
+      type: "text",
+      content: null,
+      skillName: "demo",
+      action: "skillAttach",
+    });
+    assert.equal(att.action, "skillAttach");
+    assert.equal(att.skillName, "demo");
+    assert.equal(att.path, undefined);
+
+    // 缺 skillName → 拒绝（分支内必填校验）
+    assert.throws(() =>
+      messageAttachmentSchema.parse({
+        name: "demo",
+        source: "attach",
+        type: "text",
+        content: null,
+        action: "skillAttach",
+      }),
+    );
+    assert.throws(() =>
+      messageAttachmentSchema.parse({
+        name: "demo",
+        source: "attach",
+        type: "text",
+        content: null,
+        skillName: "",
+        action: "skillAttach",
+      }),
+    );
+
+    // messageAttachmentObjectSchema 是 .strict()：skillName 已声明可解，其余未知键仍拒
+    assert.throws(() =>
+      messageAttachmentSchema.parse({
+        name: "demo",
+        source: "attach",
+        type: "text",
+        content: null,
+        skillName: "demo",
+        action: "skillAttach",
+        extra: 1,
+      }),
+    );
+  });
+
+  it("parseAttachmentsJson / serializeAttachmentsJson round-trip（含 skillAttach）", () => {
     const list = [
       {
         name: "/ops.md",
@@ -122,6 +170,14 @@ describe("messageAttachmentSchema", () => {
         content: "<a/>",
         path: "/ops.md",
         action: "write" as const,
+      },
+      {
+        name: "demo",
+        source: "attach" as const,
+        type: "text" as const,
+        content: null,
+        skillName: "demo",
+        action: "skillAttach" as const,
       },
     ];
     const json = serializeAttachmentsJson(list);

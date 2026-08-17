@@ -114,3 +114,13 @@ test("Step5: 高亮层 HTML 含 @token class；契约仍为纯字符串 value", 
   assert.equal(typeof text, "string");
   assert.equal(text.includes("<span"), false);
 });
+
+test("Step20: `$技能` token 同样高亮，且不与 `@` token 互相吞并", () => {
+  const html = renderComposerAtPathHighlightHtml("用 $write-docs 和 @/a.md 孤立 $");
+  const spans = html.match(/<span class="chat-composer__at-token">([^<]*)<\/span>/g) ?? [];
+  assert.ok(spans.includes('<span class="chat-composer__at-token">$write-docs</span>'));
+  assert.ok(spans.includes('<span class="chat-composer__at-token">@/a.md</span>'));
+  assert.equal(spans.length, 2);
+  // 孤立 `$`（后接空白）不成 token，保持原文
+  assert.match(html, /孤立 \$/);
+});

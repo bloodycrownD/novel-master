@@ -159,4 +159,57 @@ describe("T-G2: projectTemplatePull 后无 orphan blob", () => {
       "projectTemplatePull 后不应有 orphan blob",
     );
   });
+
+  it("T-SK2/GC：pull 隔离豁免后无 orphan blob，且技能 blob ref_count 不变", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+
+    // global 模板文件 + project 域已有技能
+    await ctx.globalVfs().write(`/g-${suffix}.md`, `G-${suffix}`);
+    const project = await ctx.projects.create(`P-${suffix}`);
+    const projectScope = `project:${project.id}`;
+    const pvfs = ctx.projectVfs(project.id);
+    const skillPath = "/meta/skills/gc-skill/SKILL.md";
+    await pvfs.write(skillPath, `skill-${suffix}`);
+    // 会被替换删除的旧文件（其 blob 应随 sweep 正常回收）
+    await pvfs.write("/old.md", `old-${suffix}`);
+
+    const skillHash = (
+      await new SqliteVfsEntryRepository(ctx.conn).findContentHash(
+        projectScope,
+        skillPath,
+      )
+    )!;
+    const refBefore = await ctx.conn.query<{ ref_count: number }>(
+      `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
+      [skillHash],
+    );
+    assert.equal(Number(refBefore[0]!.ref_count), 1, "技能 blob 初始 ref_count=1");
+
+    await createTemplatePullService(ctx.conn).projectTemplatePull(project.id);
+
+    // 技能未被触碰：blob 仍被 live head revision 引用，ref_count 不变
+    const refAfter = await ctx.conn.query<{ ref_count: number }>(
+      `SELECT ref_count FROM vfs_content_blob WHERE content_hash = ?`,
+      [skillHash],
+    );
+    assert.equal(
+      Number(refAfter[0]!.ref_count),
+      1,
+      "隔离豁免后技能 blob ref_count 不应变化",
+    );
+
+    // 无 orphan blob（含被替换文件的 blob 已被触发器回收）
+    const orphanRows = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM vfs_content_blob b
+       WHERE NOT EXISTS (
+         SELECT 1 FROM vfs_revision r WHERE r.content_hash = b.content_hash
+       )`,
+    );
+    assert.equal(
+      Number(orphanRows[0]!.n),
+      0,
+      "pull 隔离豁免后不应有 orphan blob",
+    );
+  });
 });

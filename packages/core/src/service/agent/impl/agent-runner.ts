@@ -37,6 +37,7 @@ import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-ll
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
 import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import type { SkillService } from "@/service/skills/skills.port.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
@@ -48,6 +49,7 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
 import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
+import type { PromptSkillIndexEntry } from "@/domain/prompt/model/prompt-render-context.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
@@ -75,6 +77,13 @@ export interface DefaultAgentRunnerDeps {
   readonly providers?: Pick<ProviderRepository, "findById">;
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
+  /**
+   * skillAttach 附件 hydrate（`$技能` 首次引用附 SKILL.md 全文）的技能服务
+   * 工厂；与 toolCtx.skills 同一 SkillService 实例，但不随 D4（skill_opt
+   * 被 policy deny）置空——显式引用不受工具禁用影响（SPEC「$ 引用」节）。
+   * 未注入时 hydrate 走「原样带过」降级路径。
+   */
+  readonly skills?: () => SkillService;
   readonly eventBus: SimpleEventBus;
   readonly sessionKkv: SessionKkvService;
   readonly workplace: (scope: VfsScope) => WorkplaceService;
@@ -95,6 +104,30 @@ export interface DefaultAgentRunnerDeps {
   readonly streamRegistry?: AgentStreamRegistry;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+}
+
+/**
+ * 从装配期 toolCtx.skills 预算提示词技能索引（Step 10 / D4）。
+ *
+ * runAgentTurn 装配期已按本会话 projectId 调 SkillService.effectiveSkills
+ * 预算生效清单并挂在 toolCtx.skills（与 skill_opt 工具同源）；resolve 后
+ * registry 不含 skill_opt（policy deny）时该闭包为空，skillsIndex 随之置空
+ * ——工具与索引同进退。
+ */
+function budgetSkillsIndexEntries(
+  toolCtx: BuiltinToolContext
+): PromptSkillIndexEntry[] | undefined {
+  const skills = toolCtx.skills;
+  if (skills == null) {
+    return undefined;
+  }
+  return skills.effective
+    .filter((s) => s.effective)
+    .map((s) => ({
+      name: s.name,
+      description: s.description ?? "",
+      domain: s.domain,
+    }));
 }
 
 function truncateRaw(raw: string, maxLen: number): string {
@@ -203,6 +236,10 @@ export class DefaultAgentRunner implements AgentRunner {
       options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
     const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
+    // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
+    // 回合内技能启停不即时反映）；skill_opt 被 policy 禁用时闭包为空，
+    // 索引随之置空（D4：工具与索引同进退）。
+    const skillsIndex = budgetSkillsIndexEntries(this.deps.toolCtx);
     // 常驻工作区前缀 scope：从 session 拿归属 id。主 session 等于自身；子 session
     // 指向父 session（子 agent 在父 session 工作区工作，规则评估与文件列表都按
     // 父工作区）。VFS 也用同一归属 session 视图。
@@ -284,6 +321,11 @@ export class DefaultAgentRunner implements AgentRunner {
           now: turnNow,
           workplace: wt,
           filetree: turnFiletree,
+          // skillAttach hydrate：`$技能` 首次引用附 SKILL.md 全文。
+          // 用 deps.skills 而非 toolCtx.skills——后者在 skill_opt 被 policy
+          // deny（D4）时置空，而显式引用不受工具禁用影响。
+          skills: this.deps.skills?.(),
+          projectId,
         });
         if (signal?.aborted) {
           await handleAbort("after_prepare_user_messages");
@@ -297,6 +339,7 @@ export class DefaultAgentRunner implements AgentRunner {
           now: turnNow,
           workplace: wt,
           filetree: turnFiletree,
+          skillsIndex,
         };
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
@@ -352,6 +395,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
           agentStepIndex: step,
           workplaceDisplay,
+          skillsIndex,
         });
         const protocol = await inferLlmProtocolFromSavedModelId(
           options.savedModelId,
@@ -536,6 +580,9 @@ export class DefaultAgentRunner implements AgentRunner {
             // task 工具输出对象含 subagentSessionId：透传到 ToolResultBlock.meta（P0-1）。
             // buildToolResultBlock 内部还会从 outcome.output.subagentSessionId 自动检测。
             subagentSessionId: extractSubagentSessionIdFromOutcome(outcomes[i]!),
+            // skill_opt：read 缺省域命中生效副本的解析结果由输出携带，
+            // projectId 上下文从这里补进 meta.skillRef（T-SK8）。
+            skillProjectId: projectId,
           }),
         );
 

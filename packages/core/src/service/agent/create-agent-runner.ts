@@ -22,6 +22,7 @@ import type { MessageTranscriptEffectsService } from "../chat/message-transcript
 import type { MessageCheckpointService } from "../message-checkpoint/message-checkpoint.port.js";
 import type { AgentRunner } from "./agent.port.js";
 import type { AgentStreamRegistry } from "./agent-stream-registry.port.js";
+import type { SkillService } from "@/service/skills/skills.port.js";
 import { DefaultAgentRunner } from "./impl/agent-runner.js";
 
 export interface CreateAgentRunnerDeps {
@@ -31,6 +32,11 @@ export interface CreateAgentRunnerDeps {
   readonly providers?: Pick<ProviderRepository, "findById">;
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
+  /**
+   * skillAttach hydrate（`$技能` 首次引用附全文）的技能服务工厂；不随 D4
+   * （skill_opt deny）置空——显式引用不受工具禁用影响。
+   */
+  readonly skills?: () => SkillService;
   readonly eventBus: SimpleEventBus;
   /** 常驻工作区前缀经 {@link assembleWorkplaceDisplay} 读写。 */
   readonly sessionKkv: SessionKkvService;

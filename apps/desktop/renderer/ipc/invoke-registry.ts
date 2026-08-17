@@ -88,6 +88,18 @@ import {
   type WorkplaceListRowDto,
   type WorkplaceSetDirRuleRequest,
   type WorkplaceSetFileRuleRequest,
+  type EffectiveSkillDto,
+  type SkillListItemDto,
+  type SkillsCopyRequest,
+  type SkillsDeleteRequest,
+  type SkillsEditRequest,
+  type SkillsEffectiveRequest,
+  type SkillsListRequest,
+  type SkillsPromoteRequest,
+  type SkillsReadRequest,
+  type SkillsReadResponse,
+  type SkillsToggleRequest,
+  type SkillsWriteRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -513,6 +525,42 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcRegexSetCurrent: withReq<{ groupId: string | null }, unknown>(
       invoke,
       IPC_CHANNELS.REGEX_SET_CURRENT,
+    ),
+    ipcSkillsList: withReq<
+      SkillsListRequest,
+      IpcResult<SkillListItemDto[]>
+    >(invoke, IPC_CHANNELS.SKILLS_LIST),
+    ipcSkillsEffective: withReq<
+      SkillsEffectiveRequest,
+      IpcResult<EffectiveSkillDto[]>
+    >(invoke, IPC_CHANNELS.SKILLS_EFFECTIVE),
+    ipcSkillsRead: withReq<
+      SkillsReadRequest,
+      IpcResult<SkillsReadResponse>
+    >(invoke, IPC_CHANNELS.SKILLS_READ),
+    ipcSkillsWrite: withReq<
+      SkillsWriteRequest,
+      IpcResult<{ version: number }>
+    >(invoke, IPC_CHANNELS.SKILLS_WRITE),
+    ipcSkillsEdit: withReq<
+      SkillsEditRequest,
+      IpcResult<{ version: number; replacements: number }>
+    >(invoke, IPC_CHANNELS.SKILLS_EDIT),
+    ipcSkillsToggle: withReq<SkillsToggleRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_TOGGLE,
+    ),
+    ipcSkillsCopy: withReq<SkillsCopyRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_COPY,
+    ),
+    ipcSkillsPromote: withReq<SkillsPromoteRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_PROMOTE,
+    ),
+    ipcSkillsDelete: withReq<SkillsDeleteRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_DELETE,
     ),
     ipcCompactionConditionsGet: noArg(
       invoke,

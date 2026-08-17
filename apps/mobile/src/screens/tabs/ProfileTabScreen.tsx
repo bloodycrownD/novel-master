@@ -35,6 +35,12 @@ const WORKSPACE_GLOBAL_MENU = {
   route: 'GlobalTemplate',
 } as const;
 
+const WORKSPACE_SKILLS_MENU = {
+  icon: '🧩',
+  label: '技能管理',
+  route: 'SkillsSettings',
+} as const;
+
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
   [
     {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
@@ -50,6 +56,8 @@ export function ProfileTabScreen() {
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
   const [agentLabel, setAgentLabel] = useState('—');
+  // 技能计数「项目 X · 全局 Y」：X 为所有项目技能总数，Y 为全局技能数
+  const [skillsLabel, setSkillsLabel] = useState('');
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [agentPickerVisible, setAgentPickerVisible] = useState(false);
 
@@ -81,11 +89,32 @@ export function ProfileTabScreen() {
     }
   }, [runtime]);
 
+  const refreshSkillsLabel = useCallback(async () => {
+    try {
+      const skills = runtime.skills();
+      const [projects, globalList] = await Promise.all([
+        runtime.projects.list(),
+        skills.listSkills('global'),
+      ]);
+      const perProjectCounts = await Promise.all(
+        projects.map(p => skills.listSkills({projectId: p.id})),
+      );
+      const projectCount = perProjectCounts.reduce(
+        (sum, list) => sum + list.length,
+        0,
+      );
+      setSkillsLabel(`项目 ${projectCount} · 全局 ${globalList.length}`);
+    } catch {
+      setSkillsLabel('');
+    }
+  }, [runtime]);
+
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
       refreshAgentLabel().catch(() => setAgentLabel('—'));
-    }, [refreshModelLabel, refreshAgentLabel]),
+      refreshSkillsLabel().catch(() => setSkillsLabel(''));
+    }, [refreshModelLabel, refreshAgentLabel, refreshSkillsLabel]),
   );
 
   const navigateTo = (route: keyof RootStackParamList) => {
@@ -122,6 +151,13 @@ export function ProfileTabScreen() {
           label={WORKSPACE_GLOBAL_MENU.label}
           tokens={tokens}
           onPress={() => navigateTo(WORKSPACE_GLOBAL_MENU.route)}
+        />
+        <ProfileMenuItem
+          icon={WORKSPACE_SKILLS_MENU.icon}
+          label={WORKSPACE_SKILLS_MENU.label}
+          value={skillsLabel}
+          tokens={tokens}
+          onPress={() => navigateTo(WORKSPACE_SKILLS_MENU.route)}
         />
         <ListSectionTitle title="配置" tokens={tokens} />
         {CONFIG_MENU.map(item => (

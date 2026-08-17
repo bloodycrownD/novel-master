@@ -54,6 +54,10 @@ import {
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
 import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
+import { SessionSkillPanel } from "./SessionSkillPanel";
+import { skillEnableSummary } from "@/features/skills/skill-ui";
+import type { EffectiveSkillDto } from "@shared/ipc-types";
+import { ipcSkillsEffective } from "@/ipc/client";
 import { formatTokenCount } from "@novel-master/core/common";
 import { formatCounterKindLabel } from "@novel-master/core/provider";
 
@@ -102,6 +106,8 @@ export function SessionDetailDrawer({
   >([]);
   const [compactOpen, setCompactOpen] = useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const [skillsPanelOpen, setSkillsPanelOpen] = useState(false);
+  const [skillsSummary, setSkillsSummary] = useState<string | undefined>();
 
   // 聊天名行内编辑状态
   const [editingName, setEditingName] = useState(false);
@@ -111,15 +117,20 @@ export function SessionDetailDrawer({
   const submittingRef = useRef(false);
 
   const reload = useCallback(async () => {
-    const [metaRes, tokens] = await Promise.all([
+    const [metaRes, tokens, skillsRes] = await Promise.all([
       ipcPromptAgentMeta({ projectId, sessionId }),
       ipcPromptChatTokenLabel({ projectId, sessionId }),
+      ipcSkillsEffective({ projectId }),
     ]);
     if (metaRes.ok) {
       setMeta(metaRes.data);
     }
     if (tokens.ok) {
       setTokenStats(tokens.data);
+    }
+    if (skillsRes.ok) {
+      const rows: readonly EffectiveSkillDto[] = skillsRes.data;
+      setSkillsSummary(skillEnableSummary(rows));
     }
   }, [projectId, sessionId]);
 
@@ -320,6 +331,11 @@ export function SessionDetailDrawer({
             sessionId={sessionId}
             onClose={() => setSearchPanelOpen(false)}
           />
+        ) : skillsPanelOpen ? (
+          <SessionSkillPanel
+            projectId={projectId}
+            onClose={() => setSkillsPanelOpen(false)}
+          />
         ) : (
         <div className="session-detail-drawer__body">
           {/* 聊天名：点击进入行内编辑 */}
@@ -358,6 +374,34 @@ export function SessionDetailDrawer({
             )}
           </div>
 
+          <div className="session-detail-drawer__pick">
+            <button
+              type="button"
+              className="session-detail-pick"
+              data-session-detail-action="open-skills"
+              aria-label="查看会话技能"
+              onClick={() => setSkillsPanelOpen(true)}
+            >
+              <span
+                className="session-detail-pick__icon session-detail-pick__icon--skills"
+                aria-hidden="true"
+              >
+                ⚡
+              </span>
+              <span className="session-detail-pick__body">
+                <span className="session-detail-pick__label">技能</span>
+                <span className="session-detail-pick__value">
+                  {skillsSummary ?? "—"}
+                </span>
+              </span>
+              <span
+                className="session-detail-pick__chevron"
+                aria-hidden="true"
+              >
+                ›
+              </span>
+            </button>
+          </div>
           <div className="session-detail-drawer__pick">
             <button
               type="button"

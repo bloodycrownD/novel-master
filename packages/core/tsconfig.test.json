@@ -23,6 +23,7 @@
       "@novel-master/core/sksp": ["./src/infra/sksp/index.ts"],
       "@novel-master/core/nmtp": ["./src/infra/nmtp/index.ts"],
       "@novel-master/core/kkv": ["./src/service/kkv/index.ts"],
+      "@novel-master/core/skills": ["./src/public/skills.ts"],
       "@novel-master/core/config-forms": ["./src/config-forms/index.ts"],
       "@novel-master/core/config-forms/agent": ["./src/config-forms/agent/index.ts"],
       "@novel-master/core/config-forms/events": ["./src/config-forms/events/index.ts"],

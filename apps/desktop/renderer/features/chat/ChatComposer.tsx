@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { MessageAttachmentDto, WorkplaceListRowDto } from "@shared/ipc-types";
+import type {
+  EffectiveSkillDto,
+  MessageAttachmentDto,
+  WorkplaceListRowDto,
+} from "@shared/ipc-types";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
@@ -13,6 +17,7 @@ import {
   ipcPreferencesGetLlmStream,
   ipcPromptAgentMeta,
   ipcSessionsProjectComposerStatus,
+  ipcSkillsEffective,
   ipcWorkplaceBuildListRows,
   onComposerAttachmentsSuggest,
   onUserMessageAppended,
@@ -41,6 +46,8 @@ import {
 } from "./composer-body-clear";
 import { resolveComposerSendIntent } from "./composer-send-intent";
 import { FileReferencePicker } from "./FileReferencePicker";
+import { SkillTypeahead } from "./SkillTypeahead";
+import { SkillPicker } from "@/features/skills/SkillPicker";
 
 interface ChatComposerProps {
   projectId: string;
@@ -105,8 +112,10 @@ export function ChatComposer({
   );
   const [bridgeBusy, setBridgeBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRowDto[]>([]);
+  const [skillRows, setSkillRows] = useState<EffectiveSkillDto[]>([]);
 
   const checkModel = useCallback(async () => {
     const result = await ipcPromptAgentMeta({ projectId, sessionId });
@@ -177,6 +186,12 @@ export function ChatComposer({
     [value, cursor],
   );
 
+  // `$技能名` 手输查询：与 `@` 共用参数化 trigger，空白边界天然互斥
+  const activeSkill = useMemo(
+    () => findActiveAtQuery(value, cursor, "$"),
+    [value, cursor],
+  );
+
   useEffect(() => {
     if (activeAt == null) {
       return;
@@ -196,6 +211,24 @@ export function ChatComposer({
     };
   }, [activeAt != null, projectId, sessionId]);
 
+  // 技能候选走 IPC effective（合并视图），不走工作区浏览器
+  useEffect(() => {
+    if (activeSkill == null) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const result = await ipcSkillsEffective({ projectId });
+      if (cancelled || !result.ok) {
+        return;
+      }
+      setSkillRows(result.data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSkill != null, projectId]);
+
   const typeaheadCandidates = useMemo(() => {
     if (activeAt == null) {
       return [];
@@ -206,6 +239,22 @@ export function ChatComposer({
       5,
     );
   }, [activeAt, typeaheadRows]);
+
+  // 名称/描述模糊匹配，最多 5 条；无效技能不出现（手打 token 由 hydrate 容错）
+  const skillTypeaheadCandidates = useMemo(() => {
+    if (activeSkill == null) {
+      return [];
+    }
+    const q = activeSkill.query.toLowerCase();
+    return skillRows
+      .filter((s) => s.valid)
+      .filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          (s.description ?? "").toLowerCase().includes(q),
+      )
+      .slice(0, 5);
+  }, [activeSkill, skillRows]);
 
   const isControlled = onErrorChange != null;
   const displayError = isControlled ? controlledError : localError;
@@ -229,9 +278,10 @@ export function ChatComposer({
       const el = textareaRef.current;
       const selStart = el?.selectionStart ?? value.length;
       const selEnd = el?.selectionEnd ?? selStart;
-      // 有未完成 @… 时从 @ 起替换到光标，避免残留半截查询
-      const replaceStart = activeAt != null ? activeAt.start : selStart;
-      const replaceEnd = activeAt != null ? selStart : selEnd;
+      // 有未完成 @…/$… 时从 trigger 起替换到光标，避免残留半截查询
+      const activeTokenQuery = activeAt ?? activeSkill;
+      const replaceStart = activeTokenQuery != null ? activeTokenQuery.start : selStart;
+      const replaceEnd = activeTokenQuery != null ? selStart : selEnd;
       const before = value.slice(0, replaceStart);
       const after = value.slice(replaceEnd);
       const gapBefore =
@@ -253,7 +303,7 @@ export function ChatComposer({
         }
       });
     },
-    [activeAt, onChange, value],
+    [activeAt, activeSkill, onChange, value],
   );
 
   const applyTypeaheadToken = useCallback(
@@ -278,6 +328,31 @@ export function ChatComposer({
       });
     },
     [activeAt, cursor, onChange, value],
+  );
+
+  // 点选技能建议：插 `$技能名` token 并补尾空格
+  const applySkillToken = useCallback(
+    (name: string) => {
+      if (activeSkill == null) {
+        return;
+      }
+      const next = replaceActiveAtWithToken(
+        value,
+        cursor,
+        activeSkill.start,
+        `$${name}`,
+      );
+      onChange(next.text);
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (ta != null) {
+          ta.focus();
+          ta.setSelectionRange(next.cursor, next.cursor);
+          setCursor(next.cursor);
+        }
+      });
+    },
+    [activeSkill, cursor, onChange, value],
   );
 
   const runAgent = useCallback(
@@ -433,6 +508,11 @@ export function ChatComposer({
               candidates={typeaheadCandidates}
               onSelect={applyTypeaheadToken}
             />
+            <SkillTypeahead
+              open={activeSkill != null && !inputDisabled}
+              candidates={skillTypeaheadCandidates}
+              onSelect={applySkillToken}
+            />
             <ComposerAtPathInput
               textareaRef={textareaRef}
               value={value}
@@ -478,6 +558,17 @@ export function ChatComposer({
                 @
               </button>
             </Tooltip>
+            <Tooltip content="引用技能">
+              <button
+                type="button"
+                className="chat-composer__at"
+                aria-label="引用技能"
+                disabled={inputDisabled}
+                onClick={() => setSkillPickerOpen(true)}
+              >
+                $
+              </button>
+            </Tooltip>
             <Tooltip content={running ? "停止" : "发送"}>
               <button
                 type="button"
@@ -497,6 +588,14 @@ export function ChatComposer({
         projectId={projectId}
         sessionId={sessionId}
         onClose={() => setPickerOpen(false)}
+        onConfirm={(tokens) => {
+          insertTokensIntoComposer(tokens);
+        }}
+      />
+      <SkillPicker
+        open={skillPickerOpen}
+        projectId={projectId}
+        onClose={() => setSkillPickerOpen(false)}
         onConfirm={(tokens) => {
           insertTokensIntoComposer(tokens);
         }}

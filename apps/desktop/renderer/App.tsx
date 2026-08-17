@@ -31,6 +31,10 @@ import {
   ipcVfsZipExport,
   ipcVfsZipImport,
 } from './ipc/client';
+import {
+  OPEN_SETTINGS_VIEW_EVENT,
+  type OpenSettingsViewDetail,
+} from './features/skills/skill-ui';
 
 type WorkspaceMenuState = WorkspaceContextTarget & {
   items: ReturnType<typeof workspaceMenuItems>;
@@ -71,6 +75,18 @@ function DesktopOverlays() {
   const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(
     null,
   );
+
+  // 会话技能面板 / 工具卡片请求打开设置：SettingsOverlay 监听同名事件做栈内导航。
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<OpenSettingsViewDetail>).detail;
+      if (detail != null) {
+        setSettingsOpen(true);
+      }
+    };
+    window.addEventListener(OPEN_SETTINGS_VIEW_EVENT, handler);
+    return () => window.removeEventListener(OPEN_SETTINGS_VIEW_EVENT, handler);
+  }, []);
   const [workspacePrompt, setWorkspacePrompt] =
     useState<WorkspacePromptState | null>(null);
   const [workspaceConfirm, setWorkspaceConfirm] =

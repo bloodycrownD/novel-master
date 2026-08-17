@@ -165,4 +165,55 @@ describe("agent tool policy", () => {
       (e: unknown) => e instanceof ToolError && e.code === "NOT_FOUND",
     );
   });
+
+  // T-SK7a：skill_opt 可配置（allow / deny 校验通过，deny 后运行时 registry 不含它）
+  it("T-SK7a: skill_opt 在 allow / deny 名单中均校验通过", () => {
+    // allow 名单含 skill_opt：校验通过
+    validateAgentToolPolicy(
+      { allow: ["skill_opt", "read"] },
+      registryNames,
+    );
+    // deny 名单含 skill_opt：校验同样通过
+    validateAgentToolPolicy(
+      { deny: ["skill_opt"] },
+      registryNames,
+    );
+    // 未知名 + skill_opt 仍报错（skill_opt 不是白名单里的例外）
+    assert.throws(
+      () => validateAgentToolPolicy({ allow: ["skill_opt", "vfs.nope"] }, registryNames),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
+    );
+  });
+
+  it("T-SK7a: deny skill_opt 后运行时 resolve 产物不含 skill_opt（其余工具不受影响）", () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      tools: { deny: ["skill_opt"] },
+    };
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    assert.ok(!filtered.list().includes("skill_opt"));
+    assert.ok(filtered.list().includes("read"));
+    assert.ok(filtered.list().includes("task"));
+    assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
+    // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
+    assert.ok(
+      !toolsFromRegistry(filtered, mockToolCtx).some((t) => t.name === "skill_opt"),
+    );
+    // TODO(Step 10)：deny 后 skillsIndex 置空的 D4 联动在提示词预算侧验证；
+    // `$` 引用不受影响（注入全文不依赖工具），属后续步骤验收。
+  });
+
+  it("T-SK7a: allow 仅 skill_opt 时 registry 只剩它", () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      tools: { allow: ["skill_opt"] },
+    };
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    assert.deepEqual(filtered.list(), ["skill_opt"]);
+  });
 });

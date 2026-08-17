@@ -37,6 +37,8 @@ export class DefaultTemplatePullService implements TemplatePullService {
         {
           revisions,
           contentStore: new SqliteVfsContentStore(tx),
+          // 隔离豁免：全局技能域不随模板同步镜像到 project，project 域已有技能也不被替换清除
+          excludePrefixes: ["meta/skills"],
         },
       );
       await worktree.copyScope(

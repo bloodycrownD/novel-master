@@ -59,6 +59,19 @@ export function onRowsClick(event: MouseEvent): void {
     if (sessionId) post('openSubagentSession', { sessionId: sessionId });
     return;
   }
+  if (action === 'open-skill') {
+    const domain = actionEl.getAttribute('data-domain');
+    const projectId = actionEl.getAttribute('data-project-id');
+    const name = actionEl.getAttribute('data-name');
+    if (name && domain) {
+      post('openSkillDetail', {
+        domain: domain,
+        name: name,
+        ...(projectId != null ? { projectId: projectId } : {}),
+      });
+    }
+    return;
+  }
   if (action === 'load-older') {
     requestLoadOlder();
   }

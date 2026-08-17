@@ -27,6 +27,12 @@ const mockStateGetCurrentAgentId = jest.fn(async () => 'workspace-agent');
 const mockStateGetCurrentModelId = jest.fn(async () => 'model-ws');
 const mockStateSetCurrentModelId = jest.fn(async () => undefined);
 const mockStateSetCurrentAgentId = jest.fn(async () => undefined);
+// 技能汇总：两条有效（一条禁用）+ 一条无效，验证 n/m 剔除无效口径
+const mockEffectiveSkills = jest.fn(async () => [
+  {name: 'a', domain: 'global', valid: true, disabled: false},
+  {name: 'b', domain: 'global', valid: true, disabled: true},
+  {name: 'broken', domain: 'project', valid: false, disabled: false},
+]);
 
 const mockRuntime = {
   sessions: {
@@ -41,6 +47,9 @@ const mockRuntime = {
     setCurrentModelId: mockStateSetCurrentModelId,
     setCurrentAgentId: mockStateSetCurrentAgentId,
   },
+  skills: () => ({
+    effectiveSkills: mockEffectiveSkills,
+  }),
 };
 
 const mockShowToast = jest.fn();

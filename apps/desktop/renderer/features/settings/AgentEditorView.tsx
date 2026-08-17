@@ -748,8 +748,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </SettingsField>
           ) : (
             <p className="settings-hint">
-              未配置时使用全部内置工具（7
-              个）：task、read、write、edit、fs、glob、grep。
+              未配置时使用全部内置工具（8
+              个）：task、read、write、edit、fs、glob、grep、skill_opt。
             </p>
           )}
         </SettingsSection>
@@ -790,6 +790,20 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   {PROMPT_REGION_LABELS.systemDisabledHint}
                 </p>
               )}
+            </div>
+          </div>
+
+          {/* 技能索引占位卡：运行时自动注入，无开关无输入框，不可配置 */}
+          <div className="config-block-card config-block-card--prompt config-block-card--chat-slot">
+            <div className="config-block-card__header config-block-card__header--chat-slot">
+              <span className="config-block-card__badge">
+                {PROMPT_REGION_LABELS.skillsTag}
+              </span>
+            </div>
+            <div className="config-block-card__body">
+              <p className="config-block-card__hint">
+                {PROMPT_REGION_LABELS.skillsReadonlyHint}
+              </p>
             </div>
           </div>
 

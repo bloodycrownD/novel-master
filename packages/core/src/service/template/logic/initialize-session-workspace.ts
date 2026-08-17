@@ -43,6 +43,8 @@ export async function initializeSessionWorkspace(
     {
       revisions,
       contentStore: new SqliteVfsContentStore(tx),
+      // 隔离豁免：session 域本就不该有 skills；若意外存在也不随重置清除
+      excludePrefixes: ["meta/skills"],
     },
   );
   await worktree.copyScope(

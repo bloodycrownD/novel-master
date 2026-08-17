@@ -163,4 +163,63 @@ describe("session create / workspace initialize (core 层)", () => {
     const read = await svfs.read("/keep.md");
     assert.equal(read.content, "KEEP");
   });
+
+  it("(e) meta/skills 隔离豁免：project 技能不随会话初始化镜像/重置（T-SK2）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-${suffix}`);
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/a.md", "A-content");
+    // project 域已有技能（含辅助文件），revision 已 seed
+    await pvfs.write("/meta/skills/my-skill/SKILL.md", `skill-${suffix}`);
+    await pvfs.write("/meta/skills/my-skill/references/timeline.md", `timeline-${suffix}`);
+
+    const projectScope = `project:${project.id}`;
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const skillEntry = await entryRepo.findByPath(
+      projectScope,
+      "/meta/skills/my-skill/SKILL.md",
+    );
+    assert.ok(skillEntry != null);
+    const skillRefsBefore = await revisionRepo.listKeysUnderScope(
+      projectScope,
+      "/meta/skills",
+    );
+    assert.ok(skillRefsBefore.length >= 1, "技能文件应已有 seed revision");
+
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    // 拷贝侧：session 不镜像 project 技能目录
+    const sessionPaths = (await svfs.list("/", { recursive: true }))
+      .map((e) => e.path);
+    assert.ok(
+      sessionPaths.every((p) => !p.startsWith("/meta/skills")),
+      `session 不应镜像技能目录，实际：${sessionPaths.join(", ")}`,
+    );
+    assert.ok(sessionPaths.includes("/a.md"), "非排除前缀照常拷贝");
+
+    // 删除侧：project 技能 entry / revision 不因 session 初始化被重置
+    const skillEntryAfter = await entryRepo.findByPath(
+      projectScope,
+      "/meta/skills/my-skill/SKILL.md",
+    );
+    assert.ok(skillEntryAfter != null, "project 技能 entry 应保留");
+    assert.equal(
+      skillEntryAfter.entryId,
+      skillEntry.entryId,
+      "project 技能 entry 不应被删除重建",
+    );
+    assert.deepEqual(
+      await revisionRepo.listKeysUnderScope(projectScope, "/meta/skills"),
+      skillRefsBefore,
+      "project 技能 revision 集合应保持不变",
+    );
+    assert.equal(
+      await pvfs.read("/meta/skills/my-skill/SKILL.md").then((r) => r.content),
+      `skill-${suffix}`,
+      "project 技能内容不变",
+    );
+  });
 });

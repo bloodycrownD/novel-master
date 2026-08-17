@@ -27,6 +27,7 @@ export interface AssembleAgentRunnerDepsInput {
     | "eventBus"
     | "sessionKkv"
     | "streamRegistry"
+    | "skills"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly regexConfig?: RegexConfigService;
@@ -59,6 +60,8 @@ export function assembleAgentRunnerDeps(
     providers,
     registry: input.registry,
     toolCtx: input.toolCtx,
+    // skillAttach hydrate 用的技能服务工厂（透传 runtime.skills）。
+    skills: input.runtime.skills,
     messageCheckpoint: input.runtime.messageCheckpoint,
     regexConfig: input.runtime.regexConfig,
     eventBus: input.runtime.eventBus,

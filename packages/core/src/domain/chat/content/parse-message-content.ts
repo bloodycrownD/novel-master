@@ -11,6 +11,7 @@ import type {
   ImageSource,
   MessageContent,
   RedactedThinkingBlock,
+  SkillToolRef,
   TextBlock,
   ThinkingBlock,
   ToolResultBlock,
@@ -39,6 +40,30 @@ function optionalBoolean(value: unknown): boolean | undefined {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 解析 `meta.skillRef`（skill_opt 跳转三元组）：字段不合法时抛错，
+ * 缺省/未携带时返回 undefined（与其他具名 meta 字段同一口径）。
+ */
+function parseSkillRefMeta(value: unknown, label: string): SkillToolRef | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    throw chatInvalidArgument(`${label}: meta.skillRef must be an object`);
+  }
+  const domain = value.domain;
+  if (domain !== "global" && domain !== "project") {
+    throw chatInvalidArgument(
+      `${label}: meta.skillRef.domain must be "global" or "project"`,
+    );
+  }
+  const name = requireString(value, "name", `${label} meta.skillRef`);
+  const projectId = optionalString(value.projectId);
+  return {
+    domain,
+    name,
+    ...(projectId != null ? { projectId } : {}),
+  };
 }
 
 function requireString(obj: Record<string, unknown>, key: string, label: string): string {
@@ -134,7 +159,12 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       }
       // meta 同 summary/ok 语义：UI-only 旁路字段，允许不存在。
       // 存在时必须是 record；具名称字段类型检查，未知字段静默忽略（向前兼容）。
-      let meta: { subagentSessionId?: string } | undefined;
+      let meta:
+        | {
+            subagentSessionId?: string;
+            skillRef?: SkillToolRef;
+          }
+        | undefined;
       if ("meta" in value && value.meta !== undefined) {
         const metaValue = value.meta;
         if (!isRecord(metaValue)) {
@@ -148,9 +178,15 @@ function parseBlock(value: unknown, index: number): ContentBlock {
             `${label}: meta.subagentSessionId must be a string`,
           );
         }
+        const skillRef = parseSkillRefMeta(metaValue.skillRef, label);
         const subagentSessionId = optionalString(metaValue.subagentSessionId);
         meta =
-          subagentSessionId != null ? { subagentSessionId } : undefined;
+          subagentSessionId != null || skillRef != null
+            ? {
+                ...(subagentSessionId != null ? { subagentSessionId } : {}),
+                ...(skillRef != null ? { skillRef } : {}),
+              }
+            : undefined;
       }
       const ok = optionalBoolean(value.ok);
       const summary = optionalString(value.summary);

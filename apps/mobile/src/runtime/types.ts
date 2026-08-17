@@ -44,6 +44,7 @@ import type {
 } from '@novel-master/core/workplace';
 import type { KkvService } from '@novel-master/core/kkv';
 import type { SessionKkvService } from '@novel-master/core/session-kkv';
+import type { SkillService } from '@novel-master/core/skills';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
 export interface MobileNovelMasterRuntime {
@@ -70,6 +71,8 @@ export interface MobileNovelMasterRuntime {
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
+  /** 两域技能服务（清单 / 合并视图 / 读写 / 启停 / 复制删除）。 */
+  skills(): SkillService;
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;

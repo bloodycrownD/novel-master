@@ -51,6 +51,28 @@ describe("composer-at-path", () => {
     assert.equal(findActiveAtQuery(`${bare} `, `${bare} `.length), null);
   });
 
+  it("T-SK11: trigger 缺省 '@'（既有行为回归锁死）；'$' 查询同语义", () => {
+    // 缺省 trigger='@'：既有调用行为不变
+    const active = findActiveAtQuery("见 @ab", 5);
+    assert.ok(active);
+    assert.equal(active!.query, "ab");
+    assert.equal(active!.start, 2);
+    assert.equal(findActiveAtQuery("@", 1)!.query, "");
+  });
+
+  it("T-SK11: trigger='$' 查询与 '@' 同语义；前导边界与触发字符互不串扰", () => {
+    const active = findActiveAtQuery("用 $de", 5, "$");
+    assert.ok(active);
+    assert.equal(active!.query, "de");
+    assert.equal(active!.start, 2);
+    // '@' 文本在 '$' 触发下不激活（反之亦然）
+    assert.equal(findActiveAtQuery("见 @ab", 5, "$"), null);
+    assert.equal(findActiveAtQuery("用 $de", 5, "@"), null);
+    // 前导边界：触发字符前须为空白/行首；带尾空格则关闭
+    assert.equal(findActiveAtQuery("a$b", 3, "$"), null);
+    assert.equal(findActiveAtQuery("用 $de ", 6, "$"), null);
+  });
+
   it("T-ATD4: 删除正文 @path 后扫描为空", () => {
     assert.equal(countScannedAtPathAttachments("看 @/a.md"), 1);
     assert.equal(countScannedAtPathAttachments("看"), 0);

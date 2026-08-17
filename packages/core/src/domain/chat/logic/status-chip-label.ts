@@ -24,6 +24,7 @@ export const STATUS_CHIP_ZH: Readonly<
   workplaceChange: "规则",
   userAttach: "", // 不进状态 chip；映射表仍保留
   annotate: "批注",
+  skillAttach: "", // 不进状态 chip；chip 文案以附件 skillName 为准
 };
 
 const LEGACY_ACTION_PREFIX_RE = /^(\w+):(.*)$/;

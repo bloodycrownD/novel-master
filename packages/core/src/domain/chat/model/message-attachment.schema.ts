@@ -34,6 +34,8 @@ export const messageAttachmentActionSchema = z.enum([
   "workplaceChange",
   "userAttach",
   "annotate",
+  /** `$技能名` 引用：无 path，专用字段 `skillName` 为解析与展示唯一依据。 */
+  "skillAttach",
 ]);
 
 export type MessageAttachmentAction = z.infer<
@@ -55,6 +57,8 @@ export const messageAttachmentObjectSchema = z
     content: z.string().nullable(),
     /** workplace/attach/user_ops 的逻辑 path。workplace 为历史只读兼容，新数据不再产生。 */
     path: z.string().optional(),
+    /** skillAttach 专用：引用的技能名（该形态无 path，chip 文案以此为准）。 */
+    skillName: z.string().optional(),
     /** 结构化 action；新写入应必填；历史可缺省。 */
     action: messageAttachmentActionSchema.optional(),
   })
@@ -63,6 +67,17 @@ export const messageAttachmentObjectSchema = z
 /** 单条消息附件（含新写入 name 禁展示 tag / 须等于 storage name 校验）。 */
 export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine(
   (val, ctx) => {
+    // skillAttach：无 path，跳过 path/name 规则；skillName 必填校验在本分支内做
+    if (val.action === "skillAttach") {
+      if (typeof val.skillName !== "string" || val.skillName === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "skillAttach 附件必须携带非空 skillName",
+          path: ["skillName"],
+        });
+      }
+      return;
+    }
     // 新写入（带 action）禁止把展示 tag 写入 name
     if (val.action != null && DISPLAY_TAG_NAME_RE.test(val.name)) {
       ctx.addIssue({

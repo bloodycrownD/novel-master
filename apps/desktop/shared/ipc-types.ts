@@ -152,6 +152,16 @@ export const IPC_CHANNELS = {
   REGEX_LIST_PICKER: 'nm:regex/listPicker',
   REGEX_SET_CURRENT: 'nm:regex/setCurrent',
 
+  SKILLS_LIST: 'nm:skills/list',
+  SKILLS_EFFECTIVE: 'nm:skills/effective',
+  SKILLS_READ: 'nm:skills/read',
+  SKILLS_WRITE: 'nm:skills/write',
+  SKILLS_EDIT: 'nm:skills/edit',
+  SKILLS_TOGGLE: 'nm:skills/toggle',
+  SKILLS_COPY: 'nm:skills/copy',
+  SKILLS_PROMOTE: 'nm:skills/promote',
+  SKILLS_DELETE: 'nm:skills/delete',
+
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
   COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
 
@@ -608,8 +618,18 @@ export type ContentBlockDto =
       readonly content: string;
       readonly ok?: boolean;
       readonly summary?: string;
-      /** UI-only 旁路字段；task 工具携带 `subagentSessionId` 供卡片跳转子会话。 */
-      readonly meta?: { readonly subagentSessionId?: string };
+      /**
+       * UI-only 旁路字段：task 工具携带 `subagentSessionId` 供卡片跳转子会话；
+       * skill_opt 携带 `skillRef`（read 由工具输出解析透传，write/edit 由输入侧解析）。
+       */
+      readonly meta?: {
+        readonly subagentSessionId?: string;
+        readonly skillRef?: {
+          readonly domain: 'global' | 'project';
+          readonly projectId?: string;
+          readonly name: string;
+        };
+      };
     };
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
@@ -823,7 +843,8 @@ export type MessageAttachmentActionDto =
   | 'move'
   | 'workplaceChange'
   | 'userAttach'
-  | 'annotate';
+  | 'annotate'
+  | 'skillAttach';
 
 /** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
 export type MessageAttachmentDto = {
@@ -832,6 +853,8 @@ export type MessageAttachmentDto = {
   readonly type: 'text' | 'image' | 'dir';
   readonly content: string | null;
   readonly path?: string;
+  /** skillAttach 专用：技能名（无 path，chip 文案以此为准）。 */
+  readonly skillName?: string;
   /** 结构化 action；新写入应带；历史可缺省。 */
   readonly action?: MessageAttachmentActionDto;
 };
@@ -1107,6 +1130,120 @@ export type RegexListPickerResponse = {
 export type RegexSetCurrentRequest = {
   readonly groupId: string | null;
 };
+
+/** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */
+export type SkillDomainDto = 'global' | 'project';
+
+/** 技能定位引用（跳详情 / 卡片透传 / copy-delete 入参）。 */
+export type SkillRefDto = {
+  readonly domain: SkillDomainDto;
+  /** project 域必带；global 域缺省。 */
+  readonly projectId?: string;
+  readonly name: string;
+};
+
+/** 技能清单条目（listSkills）：front matter 元数据 + 有效性 + 文件列表。 */
+export type SkillListItemDto = {
+  readonly name: string;
+  readonly description: string | null;
+  readonly domain: SkillDomainDto;
+  readonly valid: boolean;
+  readonly invalidReason?: string;
+  /** 相对技能目录的文件路径（含 SKILL.md，若有）。 */
+  readonly files: readonly string[];
+};
+
+/** 合并视图条目（effectiveSkills）：同名项目副本覆盖 global、负名单标记。 */
+export type EffectiveSkillDto = {
+  readonly name: string;
+  readonly description: string | null;
+  readonly domain: SkillDomainDto;
+  /** project 副本覆盖同名 global 技能时为 true。 */
+  readonly overridden: boolean;
+  /** 命中当前项目负清单时为 true（显式 `$` 引用仍允许）。 */
+  readonly disabled: boolean;
+  readonly valid: boolean;
+  readonly invalidReason?: string;
+  /** valid && !disabled：计入索引 / `$` 候选 / 启用统计。 */
+  readonly effective: boolean;
+};
+
+/** 清单查询域：global 全局域，或某个项目域。 */
+export type SkillsListRequest = {
+  readonly domain: SkillDomainDto;
+  /** domain === 'project' 时必带。 */
+  readonly projectId?: string;
+};
+
+export type SkillsEffectiveRequest = {
+  readonly projectId: string;
+};
+
+/**
+ * 读取技能文件。`domain` 缺省按生效副本解析（同名项目副本优先，
+ * `projectId` 提供解析上下文）；显式传 domain 时读对应域原件。
+ */
+export type SkillsReadRequest = {
+  readonly domain?: SkillDomainDto;
+  readonly name: string;
+  /** 相对技能目录，缺省 SKILL.md。 */
+  readonly path?: string;
+  readonly projectId?: string;
+};
+
+export type SkillsReadResponse = {
+  /** 实际命中的域（生效副本解析后）。 */
+  readonly domain: SkillDomainDto;
+  readonly name: string;
+  readonly path: string;
+  readonly content: string;
+  readonly version: number;
+};
+
+/** 写技能文件（整文件覆盖）；新建技能 = 写新目录的 SKILL.md。 */
+export type SkillsWriteRequest = {
+  /** 写入必须显式域（core 缺域报错）。 */
+  readonly domain?: SkillDomainDto;
+  readonly name: string;
+  readonly path?: string;
+  readonly content: string;
+  readonly projectId?: string;
+};
+
+/** 局部修改（同 edit 工具的 normalize-for-match 语义）；须显式域。 */
+export type SkillsEditRequest = {
+  readonly domain?: SkillDomainDto;
+  readonly name: string;
+  readonly path?: string;
+  readonly projectId?: string;
+  readonly oldString: string;
+  readonly newString: string;
+  readonly replaceAll?: boolean;
+};
+
+/** 负清单读写：只写当前项目的禁用记录。 */
+export type SkillsToggleRequest = {
+  readonly projectId: string;
+  readonly name: string;
+  readonly disabled: boolean;
+};
+/** 整目录复制；目标同名整包覆盖。 */
+export type SkillsCopyRequest = {
+  readonly from: SkillRefDto;
+  readonly to: SkillRefDto;
+};
+
+/**
+ * 项目技能提升为全局。`overwrite=false` 且全局已有同名时返回
+ * `SKILL_EXISTS` 错误，由 UI 弹覆盖确认后携 `overwrite=true` 重试。
+ */
+export type SkillsPromoteRequest = {
+  readonly projectId: string;
+  readonly name: string;
+  readonly overwrite: boolean;
+};
+
+export type SkillsDeleteRequest = SkillRefDto;
 
 export type CompactionConditionsDto = {
   readonly schemaVersion: number;
