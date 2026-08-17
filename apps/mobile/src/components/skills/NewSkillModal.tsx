@@ -261,7 +261,7 @@ export function NewSkillModal({
             {creating ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={{color: '#fff', fontWeight: '600'}}>创建并编辑</Text>
+              <Text style={{color: '#fff', fontWeight: '600'}}>创建</Text>
             )}
           </Pressable>
         </View>
