@@ -117,15 +117,9 @@ export function SkillPanelScreen() {
     });
   };
 
-  const validCount = skills.filter(s => s.valid).length;
-  const enabledCount = skills.filter(s => s.valid && !s.disabled).length;
-
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <View style={[styles.header, {borderBottomColor: tokens.border}]}>
-        <Text style={[styles.headerHint, {color: tokens.textSecondary}]}>
-          {enabledCount}/{validCount} 启用
-        </Text>
         <View style={styles.headerActions}>
           <SecondaryButton
             label="整理"
@@ -237,11 +231,9 @@ const styles = StyleSheet.create({
   root: {flex: 1},
   header: {
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerHint: {fontSize: 12, lineHeight: 16},
   headerActions: {flexDirection: 'row', justifyContent: 'flex-end', gap: 8},
   loader: {marginTop: 32},
   listContent: {padding: 12, gap: 8, paddingBottom: 24},
