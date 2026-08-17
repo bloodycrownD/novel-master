@@ -103,6 +103,27 @@ export function MenuIcon({color, size = 22}: IconProps) {
   );
 }
 
+/** 列表管理（技能面板右上角）：三行条目 + 右侧滑块，区别于菜单汉堡。 */
+export function ManageListIcon({color, size = 22}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Line x1={4} y1={6} x2={12} y2={6} stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Line x1={4} y1={12} x2={12} y2={12} stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Line x1={4} y1={18} x2={12} y2={18} stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Line
+        x1={16.5}
+        y1={4.5}
+        x2={16.5}
+        y2={19.5}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Circle cx={14} cy={9} r={2.6} fill="none" stroke={color} strokeWidth={2} />
+    </Svg>
+  );
+}
+
 /** Header back icon. */
 export function BackIcon({color, size = 22}: IconProps) {
   return (

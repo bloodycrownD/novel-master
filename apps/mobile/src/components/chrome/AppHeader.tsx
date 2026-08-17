@@ -32,6 +32,7 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
         title: stackOverride.title ?? base.title,
         showBack: stackOverride.showBack ?? base.showBack,
         showMenu: stackOverride.showMenu ?? false,
+        menuIcon: stackOverride.menuIcon,
         onBack: stackOverride.onBack ?? onBack,
         onMenu: stackOverride.onMenu ?? onMenu,
       };
@@ -63,6 +64,7 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
       title: base.title,
       showBack: base.showBack,
       showMenu: false,
+      menuIcon: undefined,
       onBack,
       onMenu,
     };
@@ -114,7 +116,7 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
             onPress={resolved.onMenu}
             style={styles.iconBtn}
             accessibilityLabel={menuLabel}>
-            <MenuIcon color={tokens.text} />
+            {resolved.menuIcon ?? <MenuIcon color={tokens.text} />}
           </Pressable>
         ) : (
           <View style={styles.iconPlaceholder} />

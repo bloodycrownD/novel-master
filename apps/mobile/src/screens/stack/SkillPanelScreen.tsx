@@ -27,6 +27,7 @@ import {
   skillDomainBadgeColor,
   skillDomainBadgeLabel,
 } from '@/components/skills/skill-ui';
+import {ManageListIcon} from '@/components/icons/TabIcons';
 import {SecondaryButton} from '@/components/ui/PrototypeButtons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useHeaderContext} from '@/navigation/HeaderContext';
@@ -81,15 +82,16 @@ export function SkillPanelScreen() {
     }, [reload]),
   );
 
-  // 右上角 header 菜单位 = 「管理」入口（跳技能管理页），替代原头部「整理」按钮
+  // 右上角 header 菜单位 = 「管理」入口（跳技能管理页），列表管理 icon 区别于菜单汉堡
   const {setStackOverride} = useHeaderContext();
   useEffect(() => {
     setStackOverride({
       showMenu: true,
+      menuIcon: <ManageListIcon color={tokens.text} />,
       onMenu: () => navigation.navigate('SkillsSettings'),
     });
     return () => setStackOverride(undefined);
-  }, [setStackOverride, navigation]);
+  }, [setStackOverride, navigation, tokens.text]);
 
   const toggleDisabled = useCallback(
     async (skill: EffectiveSkill, nextEnabled: boolean) => {
