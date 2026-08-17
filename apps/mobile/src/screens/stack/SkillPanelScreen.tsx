@@ -21,6 +21,7 @@ import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native'
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
+import {isVfsError} from '@novel-master/core/vfs';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {
   skillDomainBadgeColor,
@@ -54,7 +55,12 @@ export function SkillPanelScreen() {
     try {
       setSkills(await runtime.skills().effectiveSkills(projectId));
     } catch (error) {
-      showToast(toastMessage('加载技能失败', error));
+      // 技能根目录尚不存在 = 空列表（与服务层向 NOT_FOUND 语义对齐），不弹错
+      if (isVfsError(error, 'NOT_FOUND')) {
+        setSkills([]);
+      } else {
+        showToast(toastMessage('加载技能失败', error));
+      }
     } finally {
       setLoading(false);
     }

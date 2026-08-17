@@ -35,15 +35,10 @@ const WORKSPACE_GLOBAL_MENU = {
   route: 'GlobalTemplate',
 } as const;
 
-const WORKSPACE_SKILLS_MENU = {
-  icon: '🧩',
-  label: '技能管理',
-  route: 'SkillsSettings',
-} as const;
-
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
   [
     {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
+    {icon: '🧩', label: '技能管理', route: 'SkillsSettings'},
     {icon: '🔌', label: '服务商配置', route: 'Providers'},
     {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
     {icon: '💾', label: '存储配置', route: 'StorageConfig'},
@@ -152,19 +147,16 @@ export function ProfileTabScreen() {
           tokens={tokens}
           onPress={() => navigateTo(WORKSPACE_GLOBAL_MENU.route)}
         />
-        <ProfileMenuItem
-          icon={WORKSPACE_SKILLS_MENU.icon}
-          label={WORKSPACE_SKILLS_MENU.label}
-          value={skillsLabel}
-          tokens={tokens}
-          onPress={() => navigateTo(WORKSPACE_SKILLS_MENU.route)}
-        />
         <ListSectionTitle title="配置" tokens={tokens} />
         {CONFIG_MENU.map(item => (
           <ProfileMenuItem
             key={item.route}
             icon={item.icon}
             label={item.label}
+            // 技能管理项附带「项目 X · 全局 Y」计数，其余配置项无 value
+            value={
+              item.route === 'SkillsSettings' ? skillsLabel : undefined
+            }
             tokens={tokens}
             onPress={() => navigateTo(item.route)}
           />

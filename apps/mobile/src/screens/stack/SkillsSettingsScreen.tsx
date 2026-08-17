@@ -28,6 +28,7 @@ import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
@@ -405,38 +406,23 @@ export function SkillsSettingsScreen() {
           />
         }
       />
-      <View style={styles.tabRow}>
-        <Pressable
-          testID="skills-settings-tab-global"
-          style={[
-            styles.tab,
-            tab === 'global' && {borderBottomColor: tokens.primary, borderBottomWidth: 2},
-          ]}
-          onPress={() => switchTab('global')}>
-          <Text
-            style={[
-              styles.tabLabel,
-              {color: tab === 'global' ? tokens.text : tokens.textSecondary},
-            ]}>
-            全局技能（{globalRows.length}）
-          </Text>
-        </Pressable>
-        <Pressable
-          testID="skills-settings-tab-project"
-          style={[
-            styles.tab,
-            tab === 'project' && {borderBottomColor: tokens.primary, borderBottomWidth: 2},
-          ]}
-          onPress={() => switchTab('project')}>
-          <Text
-            style={[
-              styles.tabLabel,
-              {color: tab === 'project' ? tokens.text : tokens.textSecondary},
-            ]}>
-            项目技能（{projectSkills.length}）
-          </Text>
-        </Pressable>
-      </View>
+      <SegmentedControl
+        options={[
+          {
+            value: 'global',
+            label: `全局技能（${globalRows.length}）`,
+            testID: 'skills-settings-tab-global',
+          },
+          {
+            value: 'project',
+            label: `项目技能（${projectSkills.length}）`,
+            testID: 'skills-settings-tab-project',
+          },
+        ]}
+        value={tab}
+        onChange={switchTab}
+        tokens={tokens}
+      />
       <Text style={[styles.tabHint, {color: tokens.textSecondary}]}>
         {tab === 'global' ? GLOBAL_TAB_HINT : PROJECT_TAB_HINT}
       </Text>
@@ -520,14 +506,6 @@ export function SkillsSettingsScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  tabRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 12,
-    marginTop: 8,
-    gap: 16,
-  },
-  tab: {paddingVertical: 6},
-  tabLabel: {fontSize: 15, fontWeight: '600'},
   tabHint: {
     paddingHorizontal: 12,
     paddingVertical: 6,
