@@ -6,7 +6,7 @@
  * - 点行（开关区域外）进技能详情页；关闭态行整体弱化。
  * - 头部动作：「整理」跳设置·技能管理页；「新建」弹窗默认项目域。
  */
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -29,6 +29,7 @@ import {
 } from '@/components/skills/skill-ui';
 import {SecondaryButton} from '@/components/ui/PrototypeButtons';
 import {useRuntime} from '@/hooks/useRuntime';
+import {useHeaderContext} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -80,6 +81,16 @@ export function SkillPanelScreen() {
     }, [reload]),
   );
 
+  // 右上角 header 菜单位 = 「管理」入口（跳技能管理页），替代原头部「整理」按钮
+  const {setStackOverride} = useHeaderContext();
+  useEffect(() => {
+    setStackOverride({
+      showMenu: true,
+      onMenu: () => navigation.navigate('SkillsSettings'),
+    });
+    return () => setStackOverride(undefined);
+  }, [setStackOverride, navigation]);
+
   const toggleDisabled = useCallback(
     async (skill: EffectiveSkill, nextEnabled: boolean) => {
       if (togglingRef.current) {
@@ -119,20 +130,6 @@ export function SkillPanelScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <View style={[styles.header, {borderBottomColor: tokens.border}]}>
-        <View style={styles.headerActions}>
-          <SecondaryButton
-            label="整理"
-            tokens={tokens}
-            onPress={() => navigation.navigate('SkillsSettings')}
-          />
-          <SecondaryButton
-            label="新建"
-            tokens={tokens}
-            onPress={() => setCreateOpen(true)}
-          />
-        </View>
-      </View>
       {loading && skills.length === 0 ? (
         <ActivityIndicator style={styles.loader} color={tokens.primary} />
       ) : (
@@ -229,12 +226,6 @@ export function SkillPanelScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  header: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerActions: {flexDirection: 'row', justifyContent: 'flex-end', gap: 8},
   loader: {marginTop: 32},
   listContent: {padding: 12, gap: 8, paddingBottom: 24},
   row: {

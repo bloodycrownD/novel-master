@@ -59,6 +59,12 @@ jest.mock('@react-navigation/native', () => ({
     }, []),
 }));
 
+jest.mock('../src/navigation/HeaderContext', () => ({
+  useHeaderContext: () => ({
+    setStackOverride: jest.fn(),
+  }),
+}));
+
 jest.mock('../src/components/skills/NewSkillModal', () => ({
   NewSkillModal: () => null,
 }));
