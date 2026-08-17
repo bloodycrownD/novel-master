@@ -7,12 +7,16 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {ChatProject} from '@novel-master/core/chat';
 import {
   validateSkillName,
@@ -22,6 +26,7 @@ import {AppModal} from '@/components/ui/AppModal';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {buildNewSkillDoc} from './skill-ui';
+import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -61,6 +66,9 @@ export function NewSkillModal({
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // 底部 sheet 键盘避让：Android 在 panel 上挂 translateY（fraction=1 整个键盘高度，
+  // 照 DirectoryRuleSheet 先例）；iOS 走 KeyboardAvoidingView padding 分支。
+  const panelAvoidStyle = useAndroidModalKeyboardAvoid(1);
 
   useEffect(() => {
     if (!visible) {
@@ -153,12 +161,21 @@ export function NewSkillModal({
     }
   };
 
-  return (
-    <AppModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
-          <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
+  const sheetContent = (
+    <View style={styles.overlay}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <Animated.View
+        style={[
+          styles.panel,
+          {backgroundColor: tokens.surface},
+          Platform.OS === 'android' ? panelAvoidStyle : undefined,
+        ]}>
+        <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
+        <ScrollView
+          style={styles.form}
+          contentContainerStyle={styles.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
           <Text
             style={[styles.label, {color: tokens.textSecondary}]}
             testID="new-skill-name-label">
@@ -228,27 +245,39 @@ export function NewSkillModal({
           {error ? (
             <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
           ) : null}
-          <View style={styles.foot}>
-            <Pressable onPress={onClose} style={styles.footBtn}>
-              <Text style={{color: tokens.textSecondary}}>取消</Text>
-            </Pressable>
-            <Pressable
-              testID="new-skill-submit"
-              style={[
-                styles.footBtn,
-                {backgroundColor: canSubmit ? tokens.primary : tokens.border},
-              ]}
-              disabled={!canSubmit}
-              onPress={() => handleCreate().catch(() => undefined)}>
-              {creating ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={{color: '#fff', fontWeight: '600'}}>创建并编辑</Text>
-              )}
-            </Pressable>
-          </View>
+        </ScrollView>
+        <View style={styles.foot}>
+          <Pressable onPress={onClose} style={styles.footBtn}>
+            <Text style={{color: tokens.textSecondary}}>取消</Text>
+          </Pressable>
+          <Pressable
+            testID="new-skill-submit"
+            style={[
+              styles.footBtn,
+              {backgroundColor: canSubmit ? tokens.primary : tokens.border},
+            ]}
+            disabled={!canSubmit}
+            onPress={() => handleCreate().catch(() => undefined)}>
+            {creating ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={{color: '#fff', fontWeight: '600'}}>创建并编辑</Text>
+            )}
+          </Pressable>
         </View>
-      </View>
+      </Animated.View>
+    </View>
+  );
+
+  return (
+    <AppModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView behavior="padding" style={styles.avoidingRoot}>
+          {sheetContent}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.avoidingRoot}>{sheetContent}</View>
+      )}
       <BottomSheetMenu
         visible={projectMenuOpen}
         title="选择所属项目"
@@ -261,6 +290,7 @@ export function NewSkillModal({
 }
 
 const styles = StyleSheet.create({
+  avoidingRoot: {flex: 1},
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -273,6 +303,8 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     gap: 8,
   },
+  form: {flexGrow: 0},
+  formContent: {gap: 8},
   title: {fontSize: 18, fontWeight: '600'},
   label: {fontSize: 13, marginTop: 4},
   input: {
