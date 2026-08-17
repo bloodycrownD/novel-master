@@ -6,7 +6,7 @@
  *   /meta/skills/{name}/{rel}）。
  * - 文件结构变化（新建/删除辅助文件）后刷新清单。
  */
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
@@ -23,12 +23,8 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {SkillListItem} from '@novel-master/core/skills';
 import type {VfsScope} from '@novel-master/core/vfs';
 import {VfsFileManager} from '@/components/vfs/VfsFileManager';
-import {
-  skillDomainBadgeColor,
-  skillDomainBadgeLabel,
-  skillDomainHintLabel,
-} from '@/components/skills/skill-ui';
 import {useRuntime} from '@/hooks/useRuntime';
+import {useHeaderContext} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -46,7 +42,6 @@ export function SkillDetailScreen() {
   const {domain, name, projectId} = route.params;
 
   const [item, setItem] = useState<SkillListItem | null>(null);
-  const [projectName, setProjectName] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   // 踢回只做一次：reload 多次 notFound 也只弹一次 toast + goBack
   const kickedRef = useRef(false);
@@ -65,16 +60,19 @@ export function SkillDetailScreen() {
         navigation.goBack();
         return;
       }
-      if (domain === 'project' && projectId != null) {
-        const projects = await runtime.projects.list();
-        setProjectName(projects.find(p => p.id === projectId)?.name);
-      }
     } catch (error) {
       showToast(toastMessage('加载技能失败', error));
     } finally {
       setLoading(false);
     }
   }, [runtime, domain, projectId, name, showToast, navigation]);
+
+  // 标题 = 技能名（栈顶 header 动态覆盖）
+  const {setStackOverride} = useHeaderContext();
+  useEffect(() => {
+    setStackOverride({title: name});
+    return () => setStackOverride(undefined);
+  }, [name, setStackOverride]);
 
   useFocusEffect(
     useCallback(() => {
@@ -127,37 +125,6 @@ export function SkillDetailScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <View style={[styles.meta, {borderBottomColor: tokens.border}]}>
-        <View style={styles.metaTitleRow}>
-          <Text style={[styles.metaName, {color: tokens.text}]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text
-            style={[
-              styles.badge,
-              {
-                color: skillDomainBadgeColor(item.domain, tokens),
-                borderColor: tokens.border,
-              },
-            ]}>
-            {skillDomainBadgeLabel(item.domain, false)}
-          </Text>
-        </View>
-        <Text style={[styles.metaHint, {color: tokens.textTertiary}]} numberOfLines={1}>
-          {skillDomainHintLabel(item.domain, projectName)}
-        </Text>
-        {!item.valid ? (
-          <Text style={[styles.invalidTag, {color: tokens.danger}]} numberOfLines={2}>
-            无效 · {item.invalidReason ?? 'front matter 不合法'}
-          </Text>
-        ) : item.description ? (
-          <Text
-            style={[styles.metaDesc, {color: tokens.textSecondary}]}
-            numberOfLines={2}>
-            {item.description}
-          </Text>
-        ) : null}
-      </View>
       <VfsFileManager
         scope={fileScope}
         vfs={fileVfs}
@@ -168,6 +135,9 @@ export function SkillDetailScreen() {
             ? 'SKILL.md 是技能入口文件，不能删除或重命名'
             : null
         }
+        pathLabel={path =>
+          path === skillRoot ? '/' : path.slice(skillRoot.length)
+        }
       />
     </View>
   );
@@ -176,29 +146,4 @@ export function SkillDetailScreen() {
 const styles = StyleSheet.create({
   root: {flex: 1},
   center: {justifyContent: 'center', alignItems: 'center'},
-  meta: {
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 4,
-    gap: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  metaTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  metaName: {fontSize: 17, fontWeight: '700'},
-  badge: {
-    fontSize: 11,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    overflow: 'hidden',
-  },
-  metaHint: {fontSize: 12},
-  metaDesc: {fontSize: 13, lineHeight: 18},
-  invalidTag: {fontSize: 12, lineHeight: 16},
 });

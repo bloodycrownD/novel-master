@@ -124,6 +124,11 @@ export type VfsFileManagerProps = {
    * SKILL.md）；返回 null/undefined = 不保护。仅拦截变更操作，不影响浏览。
    */
   isProtectedPath?: (path: string) => string | null;
+  /**
+   * 顶栏路径显示替换钩子：如技能目录把 `/meta/skills/foo` 前缀隐藏为 `/`。
+   * 只改显示，不影响导航与逻辑路径。
+   */
+  pathLabel?: (path: string) => string;
 };
 
 type PromptState = {
@@ -146,6 +151,7 @@ export const VfsFileManager = forwardRef<
     pullFromParent,
     onDirectoryChange,
     isProtectedPath,
+    pathLabel,
   },
   ref,
 ) {
@@ -350,14 +356,20 @@ export const VfsFileManager = forwardRef<
         }
         return mapVfsListEntry({ path, kind: 'file' });
       });
-      setRows(mapped);
+      // 无 workplace（非工作区域，如技能目录）：剥掉纳入状态/目录规则 tag 与
+      // subtitle（跟随·全内容等是工作区语义，在此无意义）。
+      setRows(
+        workplace == null
+          ? mapped.map(row => ({ ...row, subtitle: '', badge: null }))
+          : mapped,
+      );
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
       reloadInFlightRef.current = false;
       setLoading(false);
     }
-  }, [currentPath, fetchWorktreeRows, showToast]);
+  }, [currentPath, fetchWorktreeRows, showToast, workplace]);
 
   const reloadVfsListOnly = useCallback(async () => {
     await reload();
@@ -1049,7 +1061,7 @@ export const VfsFileManager = forwardRef<
             numberOfLines={1}
             ellipsizeMode="middle"
           >
-            {currentPath}
+            {pathLabel ? pathLabel(currentPath) : currentPath}
           </Text>
         </View>
         <View style={styles.toolbarActions}>

@@ -269,7 +269,9 @@ export function FileEditorScreen() {
             ]}
             numberOfLines={1}
             ellipsizeMode="middle">
-            {path.replace(/^\//, '')}
+            {path.startsWith(`/meta/skills/${skillRef.name}/`)
+              ? `/${path.slice(`/meta/skills/${skillRef.name}/`.length)}`
+              : path.replace(/^\//, '')}
           </Text>
           <Text
             style={[
