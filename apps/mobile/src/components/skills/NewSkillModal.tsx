@@ -1,5 +1,7 @@
 /**
- * 新建技能弹窗：技能名 + 描述 + 存储域分段（全局 / 项目）+ 所属项目下拉。
+ * 新建技能弹窗：技能名 + 描述。存储域由调用方拍板（管理页跟当前 tab，
+ * 会话面板固定当前项目域），弹窗内不再切换，避免项目下拉出现/消失
+ * 引发布局跳动。
  *
  * 创建 = 向目标域写仅含 SKILL.md 的新目录（front matter 自动填
  * name/description）；「创建并编辑」成功后由父组件跳技能详情页。
@@ -24,7 +26,6 @@ import {
 } from '@novel-master/core/skills';
 import {AppModal} from '@/components/ui/AppModal';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {buildNewSkillDoc} from './skill-ui';
 import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -38,9 +39,9 @@ export type NewSkillTarget = {
 
 type Props = {
   visible: boolean;
-  /** 打开时预选的域（面板默认 project，管理页按当前 tab 预选）。 */
-  defaultDomain: SkillDomain;
-  /** 预选项目（选项目域时的默认所属项目）。 */
+  /** 存储域（固定）：管理页跟当前 tab，会话面板固定当前项目域。 */
+  domain: SkillDomain;
+  /** 预选项目（选项目域时的默认所属项目，传入则不再显示下拉）。 */
   defaultProjectId?: string;
   onClose: () => void;
   /** 创建成功（writeSkillFile 已落盘）；父组件负责跳详情与刷新。 */
@@ -49,7 +50,7 @@ type Props = {
 
 export function NewSkillModal({
   visible,
-  defaultDomain,
+  domain,
   defaultProjectId,
   onClose,
   onCreated,
@@ -58,7 +59,6 @@ export function NewSkillModal({
   const runtime = useRuntime();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [domain, setDomain] = useState<SkillDomain>(defaultDomain);
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [projectId, setProjectId] = useState<string | undefined>(
     defaultProjectId,
@@ -76,13 +76,15 @@ export function NewSkillModal({
     }
     setName('');
     setDescription('');
-    setDomain(defaultDomain);
     setProjectId(defaultProjectId);
     setError(undefined);
-  }, [visible, defaultDomain, defaultProjectId]);
+  }, [visible, defaultProjectId]);
+
+  // 项目下拉仅在「项目域且调用方未锁定项目」（管理页项目 tab）时需要。
+  const needsProjectPicker = domain === 'project' && defaultProjectId == null;
 
   useEffect(() => {
-    if (!visible) {
+    if (!visible || !needsProjectPicker) {
       return;
     }
     let cancelled = false;
@@ -107,7 +109,7 @@ export function NewSkillModal({
     return () => {
       cancelled = true;
     };
-  }, [visible, runtime]);
+  }, [visible, runtime, needsProjectPicker]);
 
   const selectedProject = useMemo(
     () => projects.find(p => p.id === projectId),
@@ -224,18 +226,12 @@ export function NewSkillModal({
             placeholderTextColor={tokens.textSecondary}
             multiline
           />
-          <Text style={[styles.label, {color: tokens.textSecondary}]}>存储域</Text>
-          <SegmentedControl
-            options={[
-              {value: 'global', label: '全局'},
-              {value: 'project', label: '项目'},
-            ]}
-            value={domain}
-            onChange={setDomain}
-            tokens={tokens}
-          />
-          {domain === 'project' ? (
-            <Pressable
+          {needsProjectPicker ? (
+            <>
+              <Text style={[styles.label, {color: tokens.textSecondary}]}>
+                所属项目
+              </Text>
+              <Pressable
               testID="new-skill-project-picker"
               style={[styles.projectPicker, {borderColor: tokens.border}]}
               onPress={() => setProjectMenuOpen(true)}>
@@ -244,6 +240,7 @@ export function NewSkillModal({
               </Text>
               <Text style={{color: tokens.textSecondary}}>▾</Text>
             </Pressable>
+            </>
           ) : null}
           {error ? (
             <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>

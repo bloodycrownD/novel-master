@@ -489,7 +489,7 @@ export function SkillsSettingsScreen() {
       />
       <NewSkillModal
         visible={createOpen}
-        defaultDomain={tab === 'global' ? 'global' : 'project'}
+        domain={tab === 'global' ? 'global' : 'project'}
         onClose={() => setCreateOpen(false)}
         onCreated={target => {
           showToast('已创建');

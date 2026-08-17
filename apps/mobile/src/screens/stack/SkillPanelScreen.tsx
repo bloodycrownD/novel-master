@@ -204,7 +204,7 @@ export function SkillPanelScreen() {
       )}
       <NewSkillModal
         visible={createOpen}
-        defaultDomain="project"
+        domain="project"
         defaultProjectId={projectId}
         onClose={() => setCreateOpen(false)}
         onCreated={target => {
