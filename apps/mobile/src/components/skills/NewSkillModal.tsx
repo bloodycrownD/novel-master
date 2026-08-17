@@ -168,6 +168,9 @@ export function NewSkillModal({
         style={[
           styles.panel,
           {backgroundColor: tokens.surface},
+          // Android 键盘避让是整块 translateY 上移，面板高度上限需收紧到键盘上方
+          // 可见区域内（否则面板顶到 85% 高再上移，标题与技能名会被顶出屏幕）。
+          Platform.OS === 'android' ? styles.panelAndroid : undefined,
           Platform.OS === 'android' ? panelAvoidStyle : undefined,
         ]}>
         <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
@@ -303,7 +306,10 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     gap: 8,
   },
-  form: {flexGrow: 0},
+  panelAndroid: {maxHeight: '60%'},
+  // flexGrow:0 防止表单区反向撑开面板；flexShrink:1 在内容超高时收缩内部滚动，
+  // 保住标题与底部按钮的可见性。
+  form: {flexGrow: 0, flexShrink: 1},
   formContent: {gap: 8},
   title: {fontSize: 18, fontWeight: '600'},
   label: {fontSize: 13, marginTop: 4},
@@ -316,6 +322,8 @@ const styles = StyleSheet.create({
   },
   descriptionInput: {
     minHeight: 72,
+    // 多行输入限高：防止超长描述把输入框撑到占据整个面板
+    maxHeight: 140,
     textAlignVertical: 'top',
   },
   projectPicker: {
