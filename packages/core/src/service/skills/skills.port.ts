@@ -35,7 +35,7 @@ export interface SkillEditMatch {
   readonly replaceAll?: boolean;
 }
 
-/** 技能位置（copySkill / deleteSkill 的入参形态）。 */
+/** 技能位置（deleteSkill 的入参形态）。 */
 export interface SkillLocation {
   readonly domain: SkillDomain;
   /** project 域必带；global 域缺省。 */
@@ -107,11 +107,7 @@ export interface SkillService {
   ): Promise<void>;
 
   /**
-   * 整目录复制技能。目标同名技能整包覆盖（旧目录连同其 SKILL.md 一并
-   * 替换，无效状态随覆盖消除）；目标名须过 SKILL_NAME_PATTERN 校验。
+   * 整目录删除技能，连带清理负清单行（global 域清所有项目行）。
    */
-  copySkill(from: SkillLocation, to: SkillLocation): Promise<void>;
-
-  /** 整目录删除技能，连带清理负清单行（global 域清所有项目行）。 */
   deleteSkill(location: SkillLocation): Promise<void>;
 }

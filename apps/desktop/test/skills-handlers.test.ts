@@ -1,16 +1,14 @@
 /**
  * Skills IPC handlers：真实 DB 集成测（新建/清单/合并视图/读生效副本/
- * 负清单开关/提升全局覆盖确认/整目录复制/删除/缺域拒绝）。
+ * 负清单开关/删除/缺域拒绝/辅助文件）。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import {
-  handleSkillsCopy,
   handleSkillsDelete,
   handleSkillsEffective,
   handleSkillsList,
-  handleSkillsPromote,
   handleSkillsRead,
   handleSkillsToggle,
   handleSkillsWrite,
@@ -205,49 +203,14 @@ describe("skills IPC handlers", () => {
     }
   });
 
-  it("promote：全局同名时 SKILL_EXISTS，overwrite=true 整目录提升", async () => {
-    const conflict = await handleSkillsPromote({
-      projectId,
-      name: "foo",
-      overwrite: false,
-    });
-    assert.equal(conflict.ok, false);
-    if (!conflict.ok) {
-      assert.equal(conflict.error.code, "SKILL_EXISTS");
-    }
-
-    const promoted = await handleSkillsPromote({
-      projectId,
-      name: "foo",
-      overwrite: true,
-    });
-    assert.equal(promoted.ok, true);
-
-    const globalRead = await handleSkillsRead({
-      domain: "global",
-      name: "foo",
-    });
-    assert.equal(globalRead.ok, true);
-    if (globalRead.ok) {
-      assert.match(globalRead.data.content, /项目域技能/);
-    }
-  });
-
-  it("copy 跨项目整目录复制；delete 后清单与合并视图同步移除", async () => {
-    const copied = await handleSkillsCopy({
-      from: { domain: "project", projectId, name: "foo" },
-      to: { domain: "project", projectId: otherProjectId, name: "foo" },
-    });
-    assert.equal(copied.ok, true);
-
-    const otherList = await handleSkillsList({
+  it("delete 后清单与合并视图同步移除", async () => {
+    const write = await handleSkillsWrite({
       domain: "project",
       projectId: otherProjectId,
+      name: "foo",
+      content: skillDoc("foo", "其他项目技能"),
     });
-    assert.equal(otherList.ok, true);
-    if (otherList.ok) {
-      assert.ok(otherList.data.some((s) => s.name === "foo"));
-    }
+    assert.equal(write.ok, true);
 
     const removed = await handleSkillsDelete({
       domain: "project",

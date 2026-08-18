@@ -158,8 +158,6 @@ export const IPC_CHANNELS = {
   SKILLS_WRITE: 'nm:skills/write',
   SKILLS_EDIT: 'nm:skills/edit',
   SKILLS_TOGGLE: 'nm:skills/toggle',
-  SKILLS_COPY: 'nm:skills/copy',
-  SKILLS_PROMOTE: 'nm:skills/promote',
   SKILLS_DELETE: 'nm:skills/delete',
 
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
@@ -1226,21 +1224,6 @@ export type SkillsToggleRequest = {
   readonly projectId: string;
   readonly name: string;
   readonly disabled: boolean;
-};
-/** 整目录复制；目标同名整包覆盖。 */
-export type SkillsCopyRequest = {
-  readonly from: SkillRefDto;
-  readonly to: SkillRefDto;
-};
-
-/**
- * 项目技能提升为全局。`overwrite=false` 且全局已有同名时返回
- * `SKILL_EXISTS` 错误，由 UI 弹覆盖确认后携 `overwrite=true` 重试。
- */
-export type SkillsPromoteRequest = {
-  readonly projectId: string;
-  readonly name: string;
-  readonly overwrite: boolean;
 };
 
 export type SkillsDeleteRequest = SkillRefDto;

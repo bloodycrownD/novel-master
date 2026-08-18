@@ -1,5 +1,5 @@
 /**
- * `skill` 工具实现：读取与管理两域技能（read / write / edit / list）。
+ * `skill` 工具实现：读取与管理两域技能（load / read / write / edit / list）。
  *
  * 形态照 `fs` 工具先例——单工具多 action 分发 + 扁平显式字段。
  * 工具内部经 `ctx.skills` 闭包调 {@link SkillService}，**不直接持有 vfs**；
@@ -8,6 +8,12 @@
  * description 是 lambda（照 `subagent-tool` 先例）：从装配期预算好的
  * `ctx.skills.effective` 清单拼「可用技能」文案。求值时机 `toolsFromRegistry`
  * 每 run 一次——回合内技能启停不即时反映，与 task 工具一致，有意行为。
+ *
+ * load 与 read 是两个语义层：load 是「使用」技能（读生效副本 SKILL.md
+ * 全文 + 附属文件清单，无域/路径/分页参数），read 是「文件访问」（任意
+ * path、分页）。load 与 `$` 引用共享 seen：本请求提示词已注入过该技能
+ * 全文时（`ctx.skills.referencedNames`，agent-runner 每步 prepare 后回填）
+ * 返回短提示，避免同一正文注入两遍。
  *
  * @module domain/tool/builtin/skill-tool
  */
@@ -34,7 +40,7 @@ const SKILL_DEFAULT_ENTRY = "SKILL.md";
 
 /** `skill` 工具输入（扁平显式字段；action 决定哪些字段必填，run 内校验）。 */
 export interface SkillToolInput {
-  readonly action: "read" | "write" | "edit" | "list";
+  readonly action: "load" | "read" | "write" | "edit" | "list";
   readonly name?: string;
   readonly domain?: "global" | "project";
   /** 相对技能目录的路径，缺省 SKILL.md；禁 `..` 段。 */
@@ -49,6 +55,22 @@ export interface SkillToolInput {
   /** read 分页参数（照 read 工具；offset 1-based）。 */
   readonly offset?: number;
   readonly limit?: number;
+}
+
+/** load 输出：生效副本 SKILL.md 全文 + 附属文件清单（`domain` 是解析后的实际命中域）。 */
+export interface SkillToolLoadOutput {
+  readonly action: "load";
+  readonly domain: "global" | "project";
+  readonly name: string;
+  readonly path: string;
+  readonly content: string;
+  readonly version: number;
+  /** 附属文件相对路径（不含 SKILL.md，字典序）；alreadyReferenced 时为空。 */
+  readonly files: readonly string[];
+  /** 超出输出上限时截断（无分页参数，长文续读走 read 的 offset/limit）。 */
+  readonly truncated: boolean;
+  /** 本请求提示词已含该技能全文（$ 引用或先前 load）→ content 为短提示。 */
+  readonly alreadyReferenced?: boolean;
 }
 
 /** read 输出（`domain` 是生效副本解析后的实际命中域）。 */
@@ -99,6 +121,7 @@ export interface SkillToolListOutput {
 }
 
 export type SkillToolOutput =
+  | SkillToolLoadOutput
   | SkillToolReadOutput
   | SkillToolWriteOutput
   | SkillToolEditOutput
@@ -135,6 +158,10 @@ function formatEffectiveSkills(
     .join("\n");
 }
 
+/** load 已在提示词中时的短提示（与 $ 引用的 alreadyReferenced 同语义）。 */
+const SKILL_LOAD_SEEN_TIP =
+  "该技能 SKILL.md 全文已在本请求提示词中（$ 引用或先前 load），无需重复装载；附属文件可用 read 按需读取。";
+
 /**
  * 静态 `skill` 工具实例。
  *
@@ -153,6 +180,7 @@ export const skillTool: Tool<SkillToolInput, SkillToolOutput, BuiltinToolContext
 ${formatEffectiveSkills(effective)}
 
 action 说明：
+- load：装载技能开工。name 必填，读生效副本（项目副本优先）的 SKILL.md 全文并附附属文件清单；若全文已在本请求提示词中则返回短提示
 - read：读取技能文件。name 必填；path 缺省 SKILL.md；domain 缺省读生效副本（项目副本优先，输出 domain 为实际命中域）
 - write：整文件覆盖写入。name / content 必填；domain 缺省 project；向新目录写 SKILL.md 即新建技能
 - edit：局部查找替换。name / oldString / newString 必填（可配 replaceAll）；domain 缺省 project
@@ -167,8 +195,8 @@ action 说明：
     },
     inputSchema: z.object({
       action: z
-        .enum(["read", "write", "edit", "list"])
-        .describe("动作类型：read 读取 / write 覆盖写 / edit 局部替换 / list 列清单"),
+        .enum(["load", "read", "write", "edit", "list"])
+        .describe("动作类型：load 装载技能 / read 读取 / write 覆盖写 / edit 局部替换 / list 列清单"),
       name: z
         .string()
         .min(1)
@@ -198,6 +226,17 @@ action 说明：
       limit: z.number().int().min(1).optional().describe("read 分页行数上限"),
     }),
     outputSchema: z.discriminatedUnion("action", [
+      z.object({
+        action: z.literal("load"),
+        domain: z.enum(["global", "project"]),
+        name: z.string(),
+        path: z.string(),
+        content: z.string(),
+        version: z.number(),
+        files: z.array(z.string()),
+        truncated: z.boolean(),
+        alreadyReferenced: z.boolean().optional(),
+      }),
       z.object({
         action: z.literal("read"),
         domain: z.enum(["global", "project"]),
@@ -254,6 +293,56 @@ action 说明：
       const service: SkillService = skills.service;
 
       switch (input.action) {
+        case "load": {
+          const name = requireString("load", "name", input.name);
+          const result = await service.readSkillFile(
+            undefined,
+            name,
+            undefined,
+            skills.projectId,
+          );
+          // seen 共享（方向 A）：本请求提示词已注入该技能全文（$ 引用）→ 短提示
+          if (skills.referencedNames?.has(name)) {
+            return {
+              action: "load",
+              domain: result.domain,
+              name,
+              path: result.path,
+              content: SKILL_LOAD_SEEN_TIP,
+              version: result.version,
+              files: [],
+              truncated: false,
+              alreadyReferenced: true,
+            };
+          }
+          // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
+          const lines = result.content.split("\n");
+          const { slice } = sliceLinesFromOffset(lines, 1, TOOL_OUTPUT_MAX_LINES);
+          const truncatedLines = slice.map((line) => truncateLine(line).line);
+          const byteCapped = capUtf8Bytes(truncatedLines);
+          const truncated =
+            byteCapped.truncated || byteCapped.lines.length < lines.length;
+          // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
+          const list = await service.listSkills(
+            result.domain === "global"
+              ? "global"
+              : { projectId: skills.projectId },
+          );
+          const files =
+            list
+              .find((entry) => entry.name === name)
+              ?.files.filter((f) => f !== "SKILL.md") ?? [];
+          return {
+            action: "load",
+            domain: result.domain,
+            name,
+            path: result.path,
+            content: byteCapped.lines.join("\n"),
+            version: result.version,
+            files,
+            truncated,
+          };
+        }
         case "read": {
           const name = requireString("read", "name", input.name);
           const result = await service.readSkillFile(

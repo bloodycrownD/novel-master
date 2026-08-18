@@ -332,6 +332,26 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
+        // skill load seen 共享（方向 A）：把本请求可见窗口内 `$` 引用过的
+        // 技能名回填进 skills 闭包，load 工具据此返回短提示（与 $ 附件
+        // 同一可见窗口口径；压缩隐藏后自动重置，下次 load 重新附全文）。
+        const skillsSeenCtx = this.deps.toolCtx.skills;
+        if (skillsSeenCtx?.referencedNames != null) {
+          const names = skillsSeenCtx.referencedNames;
+          names.clear();
+          for (const m of visible) {
+            for (const a of m.attachments ?? []) {
+              if (
+                a.action === "skillAttach" &&
+                typeof a.skillName === "string" &&
+                a.skillName !== ""
+              ) {
+                names.add(a.skillName);
+              }
+            }
+          }
+        }
+
         const promptRenderCtx = {
           workplaceDisplay,
           messages: visible,

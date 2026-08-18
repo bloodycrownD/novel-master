@@ -2,7 +2,7 @@
 date: 2026-08-18 00:00
 title: skill 能力全链路：设计→实现→合并→mobile 打磨（含 v6 版本撞车修复）
 keywords: skill, SKILL.md, VFS scope, meta/skills, 提示词注入, 技能管理页, code-dev-loop, feat/skills-integration, SCHEMA_BOOT_VERSION 撞车, VfsFileManager 复用, mobile UI 打磨
-abstract: skill 能力从设计到实现到合并到双端打磨的全记录：两域 meta/skills 存储、skill_opt 工具、提示词索引、$ 引用、双端管理 UI（dev-loop 6 wave 交付后合并入 feat/skills-integration）；合并后修复 SCHEMA_BOOT_VERSION v6 撞车（升 7）；mobile 侧持续打磨——NewSkillModal 域固定+键盘避让、SkillDetail 改为复用 VfsFileManager（workplace 可选化）、侧滑逐级上翻、技能 ⋮ 菜单提供单技能 ZIP 导入导出。
+abstract: skill 能力从设计到实现到合并到双端打磨的全记录：两域 meta/skills 存储、skill_opt 工具、提示词索引、$ 引用、双端管理 UI（dev-loop 6 wave 交付后合并入 feat/skills-integration）；合并后修复 SCHEMA_BOOT_VERSION v6 撞车（升 7）；mobile 侧持续打磨——NewSkillModal 域固定+键盘避让、SkillDetail 改为复用 VfsFileManager（workplace 可选化）、侧滑逐级上翻、技能 ⋮ 菜单提供单技能 ZIP 导入导出；后续用户拍板移除「跨域复制/提升为全局」两能力，desktop 侧整链拆除（IPC channel+类型+handler+菜单/弹窗+测试）。
 ---
 
 user:
@@ -217,3 +217,17 @@ skill opt 工具改名 skill 吧，顺便给我看看当前工具的 schema。
 
 assistant:
 功能未发版无存量数据，直接全量替换 skill_opt→skill（136 处，sed 一次性覆盖 core src/test + cli + desktop + mobile，含注释）。关键落点：skill-tool.ts 的 SKILL_TOOL_NAME、skill-tool-ref.ts（core/cli/desktop/mobile 四处本地同名常量）、build-tool-result-block.ts 的 name === "skill"、agent-tool-catalog 第 8 条（label/description 同步）。core rebuild 后 2005 全绿；desktop typecheck+全量测试、mobile typecheck + message-blocks(32)/tool-policy-picker/skill-panel/vfs session 回归全过。注意 mobile message-blocks 测试是 .ts 后缀，jest glob 别写 .tsx。
+
+user:
+「跨域复制（复制到其他项目）」和「提升为全局」两个能力整个移除，desktop 侧由子代理拆，core/mobile 主代理并行处理，不要切分支不要 commit。
+
+assistant:
+desktop 侧整链拆除（两能力底层都是 core 的 copySkill，desktop 引用清零）：① handlers/skills.ts 删 handleSkillsCopy/handleSkillsPromote 及 SkillsCopyRequest/SkillsPromoteRequest 导入；② handler-registry.ts 删对应 import+bindReq；③ shared/ipc-types.ts 删 SKILLS_COPY/SKILLS_PROMOTE channel 与两个请求类型（SKILL_EXISTS 错误码随之消亡）；④ invoke-registry.ts/client.ts 删 ipcSkillsCopy/ipcSkillsPromote；⑤ SkillsManageView.tsx 删三个菜单项（复制到项目/复制到其他项目/提升为全局）、copyTarget/promoteConfirm 状态、PickerModal 目标选择弹窗与覆盖确认 ConfirmModal，PickerModal import 一并清（导出/导入 ZIP、删除、编辑未动，preload 是通用 invoke 透传无需改）；⑥ test/skills-handlers.test.ts 删 promote/copy 用例，delete 用例改用 write 造数据。typecheck 干净（core copySkill 尚未移除也不影响），skills-handlers 测试 7/7 过。
+
+user:
+skill 工具加 load action（与 read 分语义层）；load 与 $ 引用共享 seen；跨域复制（复制到其他项目/提升为全局）UI 和整条链路全部移除（用的少，且 skill 无 checkpoint 版本管理，要保险）。
+
+assistant:
+分三块落地：① core 加 load：读生效副本 SKILL.md 全文 + files 附属文件清单（不含 SKILL.md，来自 SkillListItem.files），无域/路径/分页参数；seen 双向共享——方向 A（$ 已附全文→load 回短提示）：BuiltinToolSkillsContext 加 referencedNames 可变集合，assembleSkillsToolContext 建集合、agent-runner 每步 prepare 后扫 visible 附件回填；方向 B（load 已发生→后续 $ 短提示）：prepareUserMessagesForPrompt 入口扫可见 assistant 的 skill tool_use(action=load) 预填 seen，read 不预填（可能截断）。压缩/置位隐藏后随可见窗口自动重置。② 跨域复制整链移除：core SkillService.copySkill（port+impl+测试）、desktop SKILLS_COPY/SKILLS_PROMOTE IPC 通道与 SkillsManageView 菜单（子代理完成）、mobile SkillsSettingsScreen 的 confirmPromote/runCopy/copyContext/copyTargetProjects/菜单项/弹层。③ 摘要/跳转：buildToolResultBlock 加 load 分支（domain:name · n files / 已在提示词中），skill-tool-ref 的 REF_ACTIONS 与输出解析加 load。core 2010 全绿，desktop typecheck 干净 + 328/328（--test-concurrency=1 单并发 72s），mobile typecheck + 42/42。
+
+坑：desktop 全量测试在高负载机器（opencode+llama-server 抢 CPU）并发模式会雪崩到数分钟，单并发 --test-concurrency=1 稳定，以后全量都带。另：本会话中 skill-tool.ts 与 SkillsSettingsScreen.tsx 两次被并行进程（疑似 opencode 会话/编辑器旧缓冲）写回旧内容——改完立刻提交 + 提交前全仓 grep 防脏写。

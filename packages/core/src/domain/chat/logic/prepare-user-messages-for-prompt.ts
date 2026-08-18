@@ -44,6 +44,9 @@ import {
   tryNormalizePromptSeenPath,
 } from "./prompt-path-seen.js";
 import { skillSeenKey } from "./scan-skill-attachments.js";
+
+/** 与 `domain/tool/builtin/skill-tool.ts` 注册名同字符串（方向 B 扫描用）。 */
+const SKILL_TOOL_NAME = "skill";
 import { renderDirAttachTree } from "./render-dir-attach-tree.js";
 import { wrapUserMessageForLlm } from "./wrap-user-message-for-llm.js";
 import { expandDynamicMacros } from "@/domain/prompt/logic/expand-dynamic-macros.js";
@@ -519,6 +522,21 @@ export async function prepareUserMessagesForPrompt(
   runtime: PrepareUserMessagesForPromptRuntime,
 ): Promise<ChatMessage[]> {
   const seen = createPromptPathSeenSet(runtime.seenPaths);
+  // seen 共享（方向 B）：可见历史里 assistant 已通过 skill 工具 load 过的
+  // 技能预填进 seen——load 的全文以 tool_result 形式留在可见历史，后续
+  // `$` 引用走 alreadyReferenced 短提示，防止同一正文注入两遍。压缩隐藏
+  // 后不在窗口内，自然重置（与附件 seen 同口径自愈）。
+  for (const message of messages) {
+    if (message.role !== "assistant" || message.hidden) continue;
+    for (const block of message.content.blocks) {
+      if (block.type !== "tool_use" || block.name !== SKILL_TOOL_NAME) continue;
+      const action = block.input?.action;
+      const name = block.input?.name;
+      if (action === "load" && typeof name === "string" && name !== "") {
+        seen.add(skillSeenKey(name));
+      }
+    }
+  }
   // 每轮 prepare 展开一次 customAttach 宏（与 dynamic 区每步展开对齐），同一轮内所有 user 消息复用同一份文本。
   const extraInfoResolved =
     typeof runtime.extraInfo === "string" &&

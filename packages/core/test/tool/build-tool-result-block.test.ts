@@ -154,6 +154,33 @@ describe("buildToolResultBlock", () => {
     });
   });
 
+  it("T-SK8: skill load 成功输出也透传 meta.skillRef，摘要含文件数", () => {
+    const block = buildToolResultBlock(
+      "tu-skill-load",
+      {
+        ok: true,
+        output: {
+          action: "load",
+          domain: "project",
+          name: "demo",
+          path: "SKILL.md",
+          content: "# 演示",
+          version: 1,
+          files: ["references/x.md", "assets/tpl.txt"],
+          truncated: false,
+        },
+      },
+      { toolName: "skill", skillProjectId: "proj-1" },
+    );
+    assert.equal(block.ok, true);
+    assert.deepEqual(block.meta?.skillRef, {
+      domain: "project",
+      projectId: "proj-1",
+      name: "demo",
+    });
+    assert.equal(block.summary, "project:demo · 2 files");
+  });
+
   it("T-SK8: skill write 输出也透传（global 域不带 projectId）", () => {
     const block = buildToolResultBlock(
       "tu-skill-w",

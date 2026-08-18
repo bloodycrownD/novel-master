@@ -93,9 +93,22 @@ function summarizeToolSuccess(
     return `${count} entries`;
   }
 
-  // skill：按输出携带的 action 分发（read 行数 / write 域+路径 / edit 替换数 / list 条数）。
-  // 必须在下方 generic matches/paths 分支之前——list 输出的 entries+total 会撞上。
+  // skill：按输出携带的 action 分发（load 域+文件数 / read 行数 / write 域+路径 /
+  // edit 替换数 / list 条数）。必须在下方 generic matches/paths 分支之前——
+  // list 输出的 entries+total 会撞上。
   if (name === "skill" && typeof output.action === "string") {
+    if (output.action === "load") {
+      const parts: string[] = [];
+      if (typeof output.domain === "string" && typeof output.name === "string") {
+        parts.push(`${output.domain}:${output.name}`);
+      }
+      if (output.alreadyReferenced === true) {
+        parts.push("已在提示词中");
+      } else if (Array.isArray(output.files)) {
+        parts.push(`${output.files.length} files`);
+      }
+      if (parts.length > 0) return parts.join(" · ");
+    }
     if (output.action === "read") {
       const returned = output.returnedLines;
       const total = output.totalLines;

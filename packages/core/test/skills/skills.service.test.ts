@@ -3,7 +3,7 @@
  *
  * 覆盖：listSkills 清单与有效性、read 生效副本解析、`..` 路径拒绝、
  * write 缺域报错、SKILL_NAME_PATTERN 校验、edit 局部改、setDisabled /
- * effectiveSkills、copySkill 整包覆盖、deleteSkill 清理负清单。
+ * effectiveSkills、deleteSkill 清理负清单。
  *
  * @module test/skills/skills.service
  */
@@ -262,76 +262,6 @@ describe("SkillService（T-SK5）", () => {
     assert.equal(view.find((s) => s.name === "g-skill")?.effective, true);
   });
 
-  it("copySkill 整目录复制：目标同名整包覆盖（旧文件清除）", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
-    const suffix = testIsolationSuffix();
-    const project = await ctx.projects.create(`P-${suffix}`);
-
-    // 源：global 技能，带辅助子目录文件
-    await skills.writeSkillFile("global", "src-skill", undefined, entry("src-skill", "源描述"));
-    await ctx.globalVfs().write(
-      "/meta/skills/src-skill/guide/usage.md",
-      "用法说明",
-    );
-    // 目标：project 域已有同名技能，内容不同 + 目标独有的旧文件
-    await skills.writeSkillFile(
-      "project",
-      "src-skill",
-      undefined,
-      entry("src-skill", "项目旧版"),
-      project.id,
-    );
-    await ctx.projectVfs(project.id).write(
-      "/meta/skills/src-skill/legacy.md",
-      "旧文件应被整包覆盖清掉",
-    );
-
-    await skills.copySkill(
-      { domain: "global", name: "src-skill" },
-      { domain: "project", projectId: project.id, name: "src-skill" },
-    );
-
-    const projectList = await skills.listSkills({ projectId: project.id });
-    const copied = projectList.find((s) => s.name === "src-skill");
-    assert.ok(copied != null);
-    assert.equal(copied.description, "源描述", "SKILL.md 应为源版本");
-    // 目标独有的 legacy.md 被整包覆盖清除；源的子目录文件带上
-    assert.deepEqual(copied.files, ["SKILL.md", "guide/usage.md"]);
-    const usage = await skills.readSkillFile(
-      "project",
-      "src-skill",
-      "guide/usage.md",
-      project.id,
-    );
-    assert.equal(usage.content, "用法说明");
-  });
-
-  it("copySkill 目标名非法 / 源不存在时报错", async () => {
-    const ctx = getNovelMasterTestContext();
-    const skills = createSkillsService(ctx.conn);
-    const suffix = testIsolationSuffix();
-
-    await skills.writeSkillFile("global", "copy-src", undefined, entry("copy-src", "源"));
-    await assert.rejects(
-      () =>
-        skills.copySkill(
-          { domain: "global", name: "copy-src" },
-          { domain: "global", name: ".bad-name" },
-        ),
-      (error: unknown) =>
-        error instanceof SkillError && error.code === "INVALID_NAME",
-    );
-    await assert.rejects(
-      () =>
-        skills.copySkill(
-          { domain: "global", name: `missing-${suffix}` },
-          { domain: "global", name: "copy-dst" },
-        ),
-      (error: unknown) =>
-        error instanceof SkillError && error.code === "NOT_FOUND",
-    );
-  });
 
   it("deleteSkill project 域：清目录且只清本项目负清单行", async () => {
     const ctx = getNovelMasterTestContext();

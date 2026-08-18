@@ -90,12 +90,10 @@ import {
   type WorkplaceSetFileRuleRequest,
   type EffectiveSkillDto,
   type SkillListItemDto,
-  type SkillsCopyRequest,
   type SkillsDeleteRequest,
   type SkillsEditRequest,
   type SkillsEffectiveRequest,
   type SkillsListRequest,
-  type SkillsPromoteRequest,
   type SkillsReadRequest,
   type SkillsReadResponse,
   type SkillsToggleRequest,
@@ -549,14 +547,6 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcSkillsToggle: withReq<SkillsToggleRequest, IpcResult<void>>(
       invoke,
       IPC_CHANNELS.SKILLS_TOGGLE,
-    ),
-    ipcSkillsCopy: withReq<SkillsCopyRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SKILLS_COPY,
-    ),
-    ipcSkillsPromote: withReq<SkillsPromoteRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SKILLS_PROMOTE,
     ),
     ipcSkillsDelete: withReq<SkillsDeleteRequest, IpcResult<void>>(
       invoke,

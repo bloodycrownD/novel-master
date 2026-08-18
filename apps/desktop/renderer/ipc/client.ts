@@ -147,8 +147,6 @@ export const {
   ipcSkillsWrite,
   ipcSkillsEdit,
   ipcSkillsToggle,
-  ipcSkillsCopy,
-  ipcSkillsPromote,
   ipcSkillsDelete,
   ipcCompactionConditionsGet,
   ipcCompactionConditionsSet,

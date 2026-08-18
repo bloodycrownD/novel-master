@@ -110,6 +110,26 @@ describe("resolveSkillToolRefFromOutput（工具输出侧自动检测）", () =>
     );
   });
 
+  it("load 输出携带生效副本命中域：透传并补 skillProjectId", () => {
+    assert.deepEqual(
+      resolveSkillToolRefFromOutput(
+        "skill",
+        {
+          action: "load",
+          domain: "project",
+          name: "demo",
+          path: "SKILL.md",
+          content: "...",
+          version: 1,
+          files: ["references/x.md"],
+          truncated: false,
+        },
+        "proj-1",
+      ),
+      { domain: "project", projectId: "proj-1", name: "demo" },
+    );
+  });
+
   it("read 命中 global 副本：不带 projectId", () => {
     assert.deepEqual(
       resolveSkillToolRefFromOutput(

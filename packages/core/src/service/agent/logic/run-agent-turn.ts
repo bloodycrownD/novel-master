@@ -163,7 +163,8 @@ export async function assembleSkillsToolContext(
   if (service == null) return undefined;
   if (!registry.list().includes(SKILL_TOOL_NAME)) return undefined;
   const effective = await service.effectiveSkills(projectId);
-  return { service, projectId, effective };
+  // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
+  return { service, projectId, effective, referencedNames: new Set<string>() };
 }
 
 export interface RunAgentTurnAfterResolveContext {

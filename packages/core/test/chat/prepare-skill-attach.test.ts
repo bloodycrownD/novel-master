@@ -2,7 +2,8 @@
  * T-SK12（hydrate 侧）：skillAttach 附件 hydrate 与 seen 去重（镜像 T-PD2/T-PD3 写法）。
  * 首次全文 / alreadyReferenced 短标记 / skill: 命名空间与路径 seen 隔离 /
  * 不存在技能名提示行且不写 seen（自愈）/ 无效与禁用技能仍附原文 /
- * 置位压缩重置随可见窗口继承 / skills 未接线原样带过。
+ * 置位压缩重置随可见窗口继承 / skills 未接线原样带过 /
+ * seen 共享方向 B：assistant 已 load 过的技能，后续 $ 引用走短标记。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -59,6 +60,34 @@ function skillAttach(name: string): MessageAttachment {
     content: null,
     skillName: name,
     action: "skillAttach",
+  };
+}
+
+/** 可见历史里的 assistant 消息（带 skill 工具 tool_use 块，方向 B 扫描用）。 */
+function assistantSkillLoadMsg(
+  action: string,
+  skillName: string,
+  id = "a1",
+): ChatMessage {
+  return {
+    id,
+    sessionId: "s1",
+    seq: 2,
+    role: "assistant",
+    content: {
+      blocks: [
+        {
+          type: "tool_use",
+          id: "tu1",
+          name: "skill",
+          input: { action, name: skillName },
+        },
+      ],
+    },
+    provider: null,
+    raw: null,
+    createdAtMs: 0,
+    hidden: false,
   };
 }
 
@@ -348,6 +377,65 @@ describe("prepareUserMessagesForPrompt skillAttach (T-SK12)", () => {
       },
     );
     const body = messageBodyText(prepared[0]!);
+    assert.match(body, /# 演示技能/);
+    assert.equal(body.includes('"alreadyReferenced"'), false);
+  });
+
+  it("方向 B：可见历史 assistant 已 load 过的技能 → 后续 $ 引用 alreadyReferenced，不重复附全文", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const skills = fakeSkillService({ names: ["demo"] });
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        // load 的全文以 tool_result 形式留在可见历史，无需再附
+        assistantSkillLoadMsg("load", "demo"),
+        userMsg("再用 $demo 检查", {
+          id: "u1",
+          sessionId: session.id,
+          attachments: [skillAttach("demo")],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs: ctx.sessionVfs(project.id, session.id),
+        skills,
+        projectId: project.id,
+      },
+    );
+    const body = messageBodyText(prepared.at(-1)!);
+    assert.match(body, /"alreadyReferenced": true/);
+    assert.equal(body.includes("# 演示技能"), false);
+  });
+
+  it("方向 B 边界：assistant 的 read tool_use 不预填 seen（read 可能截断，与 load 不同语义）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const skills = fakeSkillService({ names: ["demo"] });
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        assistantSkillLoadMsg("read", "demo"),
+        userMsg("用 $demo", {
+          id: "u1",
+          sessionId: session.id,
+          attachments: [skillAttach("demo")],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs: ctx.sessionVfs(project.id, session.id),
+        skills,
+        projectId: project.id,
+      },
+    );
+    const body = messageBodyText(prepared.at(-1)!);
     assert.match(body, /# 演示技能/);
     assert.equal(body.includes('"alreadyReferenced"'), false);
   });

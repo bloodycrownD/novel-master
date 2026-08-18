@@ -91,12 +91,10 @@ import {
   handleRegexUpdateRule,
 } from './handlers/regex.js';
 import {
-  handleSkillsCopy,
   handleSkillsDelete,
   handleSkillsEdit,
   handleSkillsEffective,
   handleSkillsList,
-  handleSkillsPromote,
   handleSkillsRead,
   handleSkillsToggle,
   handleSkillsWrite,
@@ -385,8 +383,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SKILLS_WRITE, handleSkillsWrite);
   bindReq(IPC_CHANNELS.SKILLS_EDIT, handleSkillsEdit);
   bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
-  bindReq(IPC_CHANNELS.SKILLS_COPY, handleSkillsCopy);
-  bindReq(IPC_CHANNELS.SKILLS_PROMOTE, handleSkillsPromote);
   bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
 
   bindNoArg(

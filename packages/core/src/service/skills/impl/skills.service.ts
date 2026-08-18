@@ -2,7 +2,7 @@
  * DefaultSkillService：两域技能读写 / 合并视图 / 启停 / 复制删除。
  *
  * 文件读写走 ScopedVfsService（逻辑前缀 `/meta/skills/{name}/`），
- * 整目录复制删除走 repo 层 `copyVfsTree` / `sweepRevisionsUnderScope`
+ * 整目录删除走 repo 层 `sweepRevisionsUnderScope`
  * （同 project copy 的装配），负清单走 `skill_disabled_rule` repository。
  *
  * @module service/skills/impl/skills.service
@@ -12,11 +12,10 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { copyVfsTree, sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { sweepRevisionsUnderScope } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
+
 import { isVfsError } from "@/errors/vfs-errors.js";
 import {
   skillInvalidName,
@@ -318,55 +317,12 @@ export class SkillsService implements SkillService {
     }
   }
 
-  async copySkill(from: SkillLocation, to: SkillLocation): Promise<void> {
-    assertValidSkillName(from.name);
-    assertValidSkillName(to.name);
-    const fromKey = scopeKeyOfLocation(from);
-    const toKey = scopeKeyOfLocation(to);
-    const fromPrefix = `${SKILLS_ROOT}/${from.name}`;
-    const toPrefix = `${SKILLS_ROOT}/${to.name}`;
-
-    // 存在性检查放事务外：NOT_FOUND 以纯 SkillError 抛出，
-    // 不被连接层的事务包装器裹成 TdbcError。
-    await this.assertSkillDirExists(
-      new SqliteVfsEntryRepository(this.deps.conn),
-      fromKey,
-      fromPrefix,
-    );
-
-    await this.deps.conn.transaction(async (tx) => {
-      const entryRepo = new SqliteVfsEntryRepository(tx);
-      const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      const contentStore = new SqliteVfsContentStore(tx);
-
-      // 目标同名整包覆盖：先 sweep（entry + revision 引用 + GC），旧的
-      // SKILL.md（可能携带无效 front matter）随整目录替换，覆盖后有效性
-      // 以复制过来的内容重新解析为准。
-      await sweepRevisionsUnderScope(entryRepo, revisionRepo, toKey, toPrefix);
-      await copyVfsTree(
-        entryRepo,
-        { scopeKey: fromKey },
-        fromPrefix,
-        { scopeKey: toKey },
-        toPrefix,
-        { contentStore },
-      );
-      await seedLiveHeadRevisionsUnderPrefix(
-        entryRepo,
-        revisionRepo,
-        toKey,
-        toPrefix,
-        contentStore,
-      );
-    });
-  }
-
   async deleteSkill(location: SkillLocation): Promise<void> {
     assertValidSkillName(location.name);
     const scopeKey = scopeKeyOfLocation(location);
     const prefix = `${SKILLS_ROOT}/${location.name}`;
 
-    // 存在性检查放事务外（同 copySkill，避免错误被事务包装器包裹）。
+    // 存在性检查放事务外（避免错误被事务包装器包裹）。
     await this.assertSkillDirExists(
       new SqliteVfsEntryRepository(this.deps.conn),
       scopeKey,

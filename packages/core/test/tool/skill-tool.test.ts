@@ -21,7 +21,7 @@ import { assembleSkillsToolContext } from "../../src/service/agent/logic/run-age
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tool-registry.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
-/** 构造 fake SkillService：只实现 skill 用到的四个方法，按调用记录断言。 */
+/** 构造 fake SkillService：实现 skill 工具用到的服务方法，按调用记录断言。 */
 function fakeSkillService(overrides?: {
   readonly read?: SkillService["readSkillFile"];
   readonly write?: SkillService["writeSkillFile"];
@@ -93,7 +93,6 @@ function fakeSkillService(overrides?: {
       overrides?.list ?? (async () => []),
     ) as SkillService["listSkills"],
     setDisabled: record("setDisabled", async () => undefined),
-    copySkill: record("copySkill", async () => undefined),
     deleteSkill: record("deleteSkill", async () => undefined),
   } as unknown as SkillService & {
     readonly calls: { readonly method: string; readonly args: unknown[] }[];
@@ -104,13 +103,14 @@ function fakeSkillService(overrides?: {
 function skillToolCtx(
   service: SkillService,
   effective: readonly EffectiveSkill[] = [],
+  referencedNames?: Set<string>,
 ): BuiltinToolContext {
   return {
     vfs: {} as never,
     projectId: "proj-1",
     sessionId: "sess-1",
     listSessionMessages: async () => [],
-    skills: { service, projectId: "proj-1", effective },
+    skills: { service, projectId: "proj-1", effective, ...(referencedNames != null ? { referencedNames } : {}) },
   };
 }
 
@@ -128,6 +128,94 @@ describe("skill 工具", () => {
     const { registry } = makeRunner();
     assert.ok(registry.list().includes(SKILL_TOOL_NAME));
     assert.equal(registry.list().length, 8);
+  });
+
+  it("load：读生效副本 SKILL.md 全文并附附属文件清单（过滤 SKILL.md）", async () => {
+    const { runner } = makeRunner();
+    const svc = fakeSkillService({
+      read: async () => ({
+        domain: "project",
+        name: "demo",
+        path: "SKILL.md",
+        content: "技能正文",
+        version: 3,
+      }),
+      list: async () => [
+        {
+          name: "demo",
+          description: "演示",
+          domain: "project",
+          valid: true,
+          files: ["SKILL.md", "references/x.md", "assets/tpl.txt"],
+        },
+      ],
+    });
+    const out = await runner.call(
+      SKILL_TOOL_NAME,
+      { action: "load", name: "demo" },
+      skillToolCtx(svc),
+    );
+    const parsed = out as {
+      action: string;
+      domain: string;
+      content: string;
+      files: string[];
+      truncated: boolean;
+      version: number;
+    };
+    assert.equal(parsed.action, "load");
+    assert.equal(parsed.domain, "project");
+    assert.equal(parsed.content, "技能正文");
+    assert.deepEqual(parsed.files, ["references/x.md", "assets/tpl.txt"]);
+    assert.equal(parsed.truncated, false);
+    assert.equal(parsed.version, 3);
+    // read 走缺省域（undefined 由服务层解析生效副本）
+    const readCall = svc.calls.find((c) => c.method === "readSkillFile");
+    assert.deepEqual(readCall?.args.slice(0, 3), [undefined, "demo", undefined]);
+  });
+
+  it("load：本请求提示词已引用（referencedNames 命中）→ 短提示不重复注入", async () => {
+    const { runner } = makeRunner();
+    const svc = fakeSkillService({
+      read: async () => ({
+        domain: "global",
+        name: "demo",
+        path: "SKILL.md",
+        content: "很长的正文",
+        version: 4,
+      }),
+    });
+    const referenced = new Set(["demo"]);
+    const out = await runner.call(
+      SKILL_TOOL_NAME,
+      { action: "load", name: "demo" },
+      skillToolCtx(svc, [], referenced),
+    );
+    const parsed = out as {
+      content: string;
+      files: string[];
+      alreadyReferenced?: boolean;
+      domain: string;
+    };
+    assert.equal(parsed.alreadyReferenced, true);
+    assert.ok(parsed.content.includes("已在"));
+    assert.deepEqual(parsed.files, []);
+    assert.equal(parsed.domain, "global");
+    // 短提示路径不查文件清单
+    assert.equal(svc.calls.some((c) => c.method === "listSkills"), false);
+  });
+
+  it("load：name 缺失报 INVALID_ARGUMENT", async () => {
+    const { runner } = makeRunner();
+    await assert.rejects(
+      () =>
+        runner.call(
+          SKILL_TOOL_NAME,
+          { action: "load" },
+          skillToolCtx(fakeSkillService()),
+        ),
+      (e: unknown) => e instanceof ToolError && e.code === "INVALID_ARGUMENT",
+    );
   });
 
   it("read：缺省域透传 undefined 由服务层解析生效副本，输出携带实际命中域", async () => {

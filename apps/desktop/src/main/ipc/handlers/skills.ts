@@ -1,20 +1,15 @@
 /**
  * Skills IPC handlers：直调 runtime `skills()`（SkillService 端口）。
- *
- * promote 是 copySkill 的封装（project → global），overwrite=false 且
- * 全局已有同名时返回 `SKILL_EXISTS`，由 UI 弹覆盖确认后携 true 重试。
  */
 import type {
   EffectiveSkillDto,
   IpcResult,
   SkillListItemDto,
   SkillRefDto,
-  SkillsCopyRequest,
   SkillsDeleteRequest,
   SkillsEditRequest,
   SkillsEffectiveRequest,
   SkillsListRequest,
-  SkillsPromoteRequest,
   SkillsReadRequest,
   SkillsReadResponse,
   SkillsToggleRequest,
@@ -161,48 +156,6 @@ export async function handleSkillsToggle(
   try {
     const rt = await getDesktopRuntime();
     await rt.skills().setDisabled(req.projectId, req.name, req.disabled);
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleSkillsCopy(
-  req: SkillsCopyRequest,
-): Promise<IpcResult<void>> {
-  try {
-    const rt = await getDesktopRuntime();
-    await rt
-      .skills()
-      .copySkill(toSkillLocation(req.from), toSkillLocation(req.to));
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleSkillsPromote(
-  req: SkillsPromoteRequest,
-): Promise<IpcResult<void>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const service = rt.skills();
-    if (!req.overwrite) {
-      const globalSkills = await service.listSkills("global");
-      if (globalSkills.some((s) => s.name === req.name)) {
-        return {
-          ok: false,
-          error: {
-            code: "SKILL_EXISTS",
-            message: `全局域已存在同名技能「${req.name}」，覆盖后全局版将被整目录替换。`,
-          },
-        };
-      }
-    }
-    await service.copySkill(
-      { domain: "project", projectId: req.projectId, name: req.name },
-      { domain: "global", name: req.name },
-    );
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

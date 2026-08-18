@@ -80,7 +80,7 @@ export interface BuiltinToolSubagentContext {
  * 工作区」语义一致）。
  */
 export interface BuiltinToolSkillsContext {
-  /** SkillService 实例（read/write/edit/list 四 action 全走它）。 */
+  /** SkillService 实例（load/read/write/edit/list 五 action 全走它）。 */
   readonly service: SkillService;
   /** 解析上下文：当前会话（子代理时为父会话）的 projectId。 */
   readonly projectId: string;
@@ -90,6 +90,13 @@ export interface BuiltinToolSkillsContext {
    * 回合内技能启停不即时反映（与 task 工具一致，有意行为）。
    */
   readonly effective: readonly EffectiveSkill[];
+  /**
+   * 本请求提示词可见窗口内已 `$` 引用（skillAttach）的技能名集合
+   * （seen 共享方向 A）：装配点建空集合，agent-runner 每步 prepare
+   * 后回填；`load` 命中时返回短提示，避免同一技能全文注入两遍。
+   * 可选字段：旧测试 ctx 可不传（load 视作未引用）。
+   */
+  readonly referencedNames?: Set<string>;
 }
 
 /**

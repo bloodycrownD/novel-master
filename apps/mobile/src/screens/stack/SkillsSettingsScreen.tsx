@@ -4,9 +4,9 @@
  * - 管理页是全局语境：项目 tab 展示**所有项目**的项目技能（分组头项目名）。
  * - 批量：useBatchSelection + BatchCheckbox 先例，两个 tab 各自独立，
  *   切 tab 自动退出批量模式；删除文案区分「影响所有项目」/「仅该项目生效」。
- * - 行 ⋮ 菜单：导出/导入 ZIP / 删除；项目域加
- *   「复制到其他项目」「提升为全局」（目标同名整包覆盖，提升前确认）；
- *   点行即进技能详情编辑，菜单不再单列「编辑」。
+ * - 行 ⋮ 菜单：导出/导入 ZIP / 删除；点行即进技能详情编辑。
+ *   跨域复制（复制到其他项目 / 提升为全局）已按需求移除：使用频率低，
+ *   且技能域无 checkpoint 版本管理，破坏性跨域操作收归 UI 确认链路之外。
  * - D5：全局 tab「被项目副本覆盖」灰标签按「任意项目存在同名副本」判定；
  *   tab hint 注明该全局版仅对无副本的项目生效。
  */
@@ -72,11 +72,6 @@ export function SkillsSettingsScreen() {
   const [menuTarget, setMenuTarget] = useState<MenuTarget>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [zipBusy, setZipBusy] = useState(false);
-  /** 跨项目复制的目标项目选择弹层。 */
-  const [copyContext, setCopyContext] = useState<
-    | {kind: 'crossProjectCopy'; skill: SkillRow}
-    | undefined
-  >(undefined);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -195,57 +190,6 @@ export function SkillsSettingsScreen() {
     );
   };
 
-  const confirmPromote = (skill: SkillRow) => {
-    const hasConflict = globalSkills.some(g => g.name === skill.name);
-    const run = async () => {
-      try {
-        await runtime
-          .skills()
-          .copySkill(
-            {domain: 'project', projectId: skill.projectId!, name: skill.name},
-            {domain: 'global', name: skill.name},
-          );
-        showToast('已提升为全局');
-        await reload();
-      } catch (error) {
-        showToast(toastMessage('提升失败', error));
-      }
-    };
-    if (!hasConflict) {
-      void run();
-      return;
-    }
-    Alert.alert(
-      '覆盖全局技能',
-      `全局域已存在同名技能「${skill.name}」，提升将整包覆盖全局版（影响所有使用全局版的项目）。是否继续？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {text: '覆盖提升', style: 'destructive', onPress: () => void run()},
-      ],
-    );
-  };
-
-  const runCopy = async (skill: SkillRow, targetProjectId: string) => {
-    try {
-      await runtime.skills().copySkill(
-        {
-          domain: skill.domain,
-          name: skill.name,
-          ...(skill.domain === 'project' && skill.projectId != null
-            ? {projectId: skill.projectId}
-            : {}),
-        },
-        {domain: 'project', projectId: targetProjectId, name: skill.name},
-      );
-      showToast('已复制');
-      await reload();
-    } catch (error) {
-      showToast(toastMessage('复制失败', error));
-    }
-  };
-
-  // ── 单个技能的导入导出（zip 根 = 该技能目录 /meta/skills/{name}）──
-
   const zipScopeFor = (skill: SkillRow): VfsScope =>
     skill.domain === 'global'
       ? {kind: 'global'}
@@ -313,10 +257,6 @@ export function SkillsSettingsScreen() {
       {label: '导入 ZIP', action: 'import-zip'},
       {label: '删除', action: 'delete', danger: true},
     ];
-    if (menuTarget.domain !== 'global') {
-      items.splice(2, 0, {label: '复制到其他项目…', action: 'crossProjectCopy'});
-      items.splice(3, 0, {label: '提升为全局', action: 'promote'});
-    }
     return items;
   }, [menuTarget]);
 
@@ -336,24 +276,10 @@ export function SkillsSettingsScreen() {
       case 'delete':
         confirmDeleteRows([target]);
         break;
-      case 'crossProjectCopy':
-        setCopyContext({kind: 'crossProjectCopy', skill: target});
-        break;
-      case 'promote':
-        confirmPromote(target);
-        break;
       default:
         break;
     }
   };
-
-  // 复制目标项目列表：跨项目复制排除源项目
-  const copyTargetProjects = useMemo(() => {
-    if (copyContext == null) {
-      return [];
-    }
-    return projects.filter(p => p.id !== copyContext.skill.projectId);
-  }, [copyContext, projects]);
 
   const renderRow = (row: SkillRow) => {
     const selected = batch.isSelected(rowKey(row));
@@ -528,19 +454,6 @@ export function SkillsSettingsScreen() {
         items={menuItems}
         onSelect={handleMenuSelect}
         onClose={() => setMenuTarget(undefined)}
-      />
-      <BottomSheetMenu
-        visible={copyContext != null}
-        title="复制到其他项目"
-        items={copyTargetProjects.map(p => ({label: p.name, action: p.id}))}
-        onSelect={action => {
-          const ctx = copyContext;
-          setCopyContext(undefined);
-          if (ctx != null) {
-            void runCopy(ctx.skill, action);
-          }
-        }}
-        onClose={() => setCopyContext(undefined)}
       />
       <NewSkillModal
         visible={createOpen}

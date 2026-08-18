@@ -4,8 +4,7 @@
  * - 全局 tab「被项目副本覆盖」标签按「任意项目存在同名副本」判定（SPEC D5），
  *   说明文案注明该全局版仅对无副本的项目生效。
  * - 批量模式复用 ManageHeader + useBatchSelection；切换 tab 自动退出批量。
- * - ⋮ 菜单：编辑 / 删除（文案区分影响范围）/ 复制到项目（全局域）/
- *   跨项目复制（排除源项目）/ 提升为全局（同名覆盖需确认）。
+ * - ⋮ 菜单：编辑 / 删除（文案区分影响范围）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
@@ -13,12 +12,15 @@ import type {
   SkillListItemDto,
   SkillRefDto,
 } from "@shared/ipc-types";
-import { ipcProjectsList, ipcSkillsCopy, ipcSkillsDelete, ipcSkillsList, ipcSkillsPromote } from "@/ipc/client";
+import {
+  ipcProjectsList,
+  ipcSkillsDelete,
+  ipcSkillsList,
+} from "@/ipc/client";
 import { ManageHeader } from "@/components/batch/ManageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { PickerModal } from "@/components/ui/PickerModal";
 import { showToast } from "@/components/ui/show-toast";
 import { useBatchSelection } from "@/hooks/useBatchSelection";
 import type { SettingsNavHandle } from "./settings-nav";
@@ -61,14 +63,6 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     refs: SkillRefDto[];
     label: string;
     scopeLabel: string;
-  } | null>(null);
-  const [copyTarget, setCopyTarget] = useState<{
-    ref: SkillRefDto;
-    excludeProjectId?: string;
-  } | null>(null);
-  const [promoteConfirm, setPromoteConfirm] = useState<{
-    projectId: string;
-    name: string;
   } | null>(null);
 
   const reload = useCallback(async () => {
@@ -132,14 +126,10 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     if (menu == null) {
       return [];
     }
-    const items: ContextMenuItem[] = [{ label: "编辑", action: "edit" }];
-    if (menu.ref.domain === "global") {
-      items.push({ label: "复制到项目", action: "copyToProject" });
-    } else {
-      items.push({ label: "复制到其他项目", action: "copyCrossProject" });
-      items.push({ label: "提升为全局", action: "promote" });
-    }
-    items.push({ label: "删除", action: "delete", danger: true });
+    const items: ContextMenuItem[] = [
+      { label: "编辑", action: "edit" },
+      { label: "删除", action: "delete", danger: true },
+    ];
     return items;
   }, [menu]);
 
@@ -163,49 +153,8 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
         label: current.label,
         scopeLabel,
       });
-      return;
-    }
-    if (action === "copyToProject" || action === "copyCrossProject") {
-      setCopyTarget({
-        ref: current.ref,
-        ...(action === "copyCrossProject"
-          ? { excludeProjectId: current.ref.projectId }
-          : {}),
-      });
-      return;
-    }
-    if (action === "promote") {
-      void (async () => {
-        const res = await ipcSkillsPromote({
-          projectId: current.ref.projectId ?? "",
-          name: current.ref.name,
-          overwrite: false,
-        });
-        if (res.ok) {
-          showToast("已提升为全局技能");
-          await reload();
-          return;
-        }
-        if (res.error.code === "SKILL_EXISTS") {
-          setPromoteConfirm({
-            projectId: current.ref.projectId ?? "",
-            name: current.ref.name,
-          });
-          return;
-        }
-        showToast(res.error.message);
-      })();
     }
   };
-
-  const copyPickerRows = useMemo(() => {
-    if (copyTarget == null) {
-      return [];
-    }
-    return projects
-      .filter((p) => p.id !== copyTarget.excludeProjectId)
-      .map((p) => ({ id: p.id, label: p.name }));
-  }, [copyTarget, projects]);
 
   const handleBatchDelete = () => {
     const refs = [...batch.selectedIds]
@@ -377,65 +326,6 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
           })();
         }}
         onCancel={() => setDeleteConfirm(null)}
-      />
-
-      {copyTarget != null ? (
-        <PickerModal
-          open
-          title="选择目标项目"
-          rows={copyPickerRows}
-          onClose={() => setCopyTarget(null)}
-          onSelect={(targetProjectId) => {
-            const source = copyTarget;
-            setCopyTarget(null);
-            if (!source || targetProjectId == null) {
-              return;
-            }
-            void (async () => {
-              const res = await ipcSkillsCopy({
-                from: source.ref,
-                to: {
-                  domain: "project",
-                  projectId: targetProjectId,
-                  name: source.ref.name,
-                },
-              });
-              if (!res.ok) {
-                showToast(res.error.message);
-                return;
-              }
-              showToast("已复制技能（整目录）");
-              await reload();
-            })();
-          }}
-        />
-      ) : null}
-
-      <ConfirmModal
-        open={promoteConfirm != null}
-        title="覆盖全局技能"
-        message={`全局域已存在同名技能「${promoteConfirm?.name ?? ""}」，确认后全局版将被整目录替换（含辅助文件）。是否继续？`}
-        danger
-        onConfirm={() => {
-          const target = promoteConfirm;
-          setPromoteConfirm(null);
-          if (!target) {
-            return;
-          }
-          void (async () => {
-            const res = await ipcSkillsPromote({
-              ...target,
-              overwrite: true,
-            });
-            if (!res.ok) {
-              showToast(res.error.message);
-              return;
-            }
-            showToast("已提升为全局技能");
-            await reload();
-          })();
-        }}
-        onCancel={() => setPromoteConfirm(null)}
       />
 
       <NewSkillModal
