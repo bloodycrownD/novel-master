@@ -14,6 +14,7 @@ import {
   type PersistTextPromptBlock,
 } from "@shared/logic/prompt";
 import {
+  DEFAULT_SKILLS_INDEX_PREFIX,
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   MODE_OPTIONS,
@@ -119,6 +120,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [customAttachText, setCustomAttachText] = useState("");
   // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
   const [skillsEnabled, setSkillsEnabled] = useState(true);
+  // 技能索引前缀语（索引段首行，缺省默认文案）。
+  const [skillsPrefixText, setSkillsPrefixText] = useState(
+    DEFAULT_SKILLS_INDEX_PREFIX
+  );
   // 人类可读的 agent 描述（对应域 description，多行文本）。
   const [description, setDescription] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
@@ -172,6 +177,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         customAttachEnabled,
         customAttachText,
         skillsEnabled,
+        skillsPrefixText,
         description,
         persist,
         dynamic,
@@ -194,6 +200,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       customAttachEnabled,
       customAttachText,
       skillsEnabled,
+      skillsPrefixText,
       description,
       persist,
       dynamic,
@@ -269,6 +276,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
       setCustomAttachEnabled(promptForm.customAttachEnabled);
       setSkillsEnabled(promptForm.skillsEnabled ?? true);
+      setSkillsPrefixText(
+        promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX
+      );
       setCustomAttachText(promptForm.customAttachText);
       setDescription(promptForm.description ?? "");
       setPersist([...promptForm.persist]);
@@ -458,6 +468,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       customAttachEnabled,
       customAttachText,
       skillsEnabled,
+      skillsPrefixText,
       description,
       persist,
       dynamic,
@@ -811,11 +822,21 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 aria-label="开启技能注入与 skill 工具"
               />
             </div>
-            <div className="config-block-card__body">
-              <p className="config-block-card__hint">
-                {PROMPT_REGION_LABELS.skillsReadonlyHint}
-              </p>
-            </div>
+            {skillsEnabled ? (
+              <div className="config-block-card__body">
+                <p className="config-block-card__hint">
+                  {PROMPT_REGION_LABELS.skillsReadonlyHint}
+                </p>
+                <SettingsField label="索引前缀语">
+                  <textarea
+                    rows={2}
+                    value={skillsPrefixText}
+                    onChange={(e) => setSkillsPrefixText(e.target.value)}
+                    placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
+                  />
+                </SettingsField>
+              </div>
+            ) : null}
           </div>
 
           <AgentWorkplaceBlockCard

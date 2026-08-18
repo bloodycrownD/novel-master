@@ -2,7 +2,15 @@
  * Agent definition editor: name, model pin, maxSteps, three-region prompt layout.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { type AgentDefinition } from '@novel-master/core/agent';
@@ -13,6 +21,7 @@ import {
   type PersistTextPromptBlock,
 } from '@novel-master/core/prompt';
 import {
+  DEFAULT_SKILLS_INDEX_PREFIX,
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   MODE_OPTIONS,
@@ -121,6 +130,10 @@ export function AgentEditorForm(props: Props) {
   const [customAttachText, setCustomAttachText] = useState('');
   // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
   const [skillsEnabled, setSkillsEnabled] = useState(true);
+  // 技能索引前缀语（索引段首行，缺省默认文案）。
+  const [skillsPrefixText, setSkillsPrefixText] = useState(
+    DEFAULT_SKILLS_INDEX_PREFIX,
+  );
   // 人类可读的 agent 描述（对应域 description，多行文本）。
   const [description, setDescription] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
@@ -237,6 +250,9 @@ export function AgentEditorForm(props: Props) {
       setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
       setCustomAttachText(promptForm.customAttachText ?? '');
       setSkillsEnabled(promptForm.skillsEnabled ?? true);
+      setSkillsPrefixText(
+        promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX,
+      );
       setDescription(promptForm.description ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
@@ -405,6 +421,7 @@ export function AgentEditorForm(props: Props) {
       customAttachEnabled,
       customAttachText,
       skillsEnabled,
+      skillsPrefixText,
       description,
       persist,
       dynamic,
@@ -479,6 +496,7 @@ export function AgentEditorForm(props: Props) {
     customAttachEnabled,
     customAttachText,
     skillsEnabled,
+    skillsPrefixText,
     persist,
     dynamic,
   });
@@ -923,11 +941,27 @@ export function AgentEditorForm(props: Props) {
                 trackColor={{false: tokens.border, true: tokens.primary}}
               />
             </View>
-            <Text
-              style={[styles.chatSlotHint, {color: tokens.textSecondary}]}
-            >
-              {PROMPT_REGION_LABELS.skillsReadonlyHint}
-            </Text>
+            {skillsEnabled ? (
+              <>
+                <Text
+                  style={[styles.chatSlotHint, {color: tokens.textSecondary}]}
+                >
+                  {PROMPT_REGION_LABELS.skillsReadonlyHint}
+                </Text>
+                <TextInput
+                  testID="agent-skills-prefix-input"
+                  style={[
+                    styles.skillsPrefixInput,
+                    {color: tokens.text, borderColor: tokens.border},
+                  ]}
+                  value={skillsPrefixText}
+                  onChangeText={setSkillsPrefixText}
+                  placeholder="索引前缀语（首行）"
+                  placeholderTextColor={tokens.textSecondary}
+                  multiline
+                />
+              </>
+            ) : null}
           </View>
 
           {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL)}
@@ -1399,6 +1433,16 @@ const styles = StyleSheet.create({
   chatSlotTagText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  skillsPrefixInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    minHeight: 60,
+    maxHeight: 120,
+    textAlignVertical: 'top',
   },
   chatSlotHint: {
     fontSize: 13,

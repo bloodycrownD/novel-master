@@ -9,6 +9,7 @@ import type {
   PersistTextPromptBlock,
 } from "@/domain/prompt/model/agent-prompt-layout.js";
 import {
+  DEFAULT_SKILLS_INDEX_PREFIX,
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   layoutHasCustomAttach,
   layoutHasWorkplace,
@@ -52,7 +53,7 @@ export const ROLE_OPTIONS = PROMPT_BLOCK_ROLES.map((role) => ({
   label: ROLE_LABELS[role],
 }));
 
-export { DEFAULT_WORKPLACE_ASSISTANT_TEXT };
+export { DEFAULT_WORKPLACE_ASSISTANT_TEXT, DEFAULT_SKILLS_INDEX_PREFIX };
 
 /** Agent 编辑器表单（三区 layout，非扁平 prompts）。 */
 export type AgentEditorFormInput = {
@@ -79,6 +80,8 @@ export type AgentEditorFormInput = {
   customAttachText?: string;
   /** 技能能力总开关（与域 `prompts.skillsEnabled` 对应；缺省开）。 */
   skillsEnabled?: boolean;
+  /** 技能索引前缀语（与域 `prompts.skillsPrefix` 对应；等于默认值时 omit）。 */
+  skillsPrefixText?: string;
   /** 人类可读的 agent 描述（与域 `description` 对应；多行文本，空则 omit）。 */
   description?: string;
   persist: readonly EditorPersistPromptBlock[];
@@ -117,7 +120,7 @@ export const WORKPLACE_BLOCK_LABEL = "常驻工作区";
 
 /** 常驻工作区说明（用户可见；强调可编辑确认语，仅常驻前缀）。 */
 export const WORKPLACE_BLOCK_HINT =
-  "开启后可编辑助手确认语（默认如 i have seen workplace）；用户侧文件树包在 <workplace> 内，仅表常驻前缀。";
+  "开启后可编辑助手确认语（默认如 我看到工作区了）；用户侧文件树包在 <workplace> 内，仅表常驻前缀。";
 
 /** 常驻工作区助手确认语字段标签。 */
 export const WORKPLACE_ASSISTANT_TEXT_LABEL = "助手确认语";
@@ -161,7 +164,7 @@ export const PROMPT_REGION_LABELS = {
   skillsTag: "技能",
   skillsBlocks: "技能索引区",
   skillsReadonlyHint:
-    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。默认开启；关闭后不注入索引且不注册 skill 工具（正文 $ 引用不受影响）；无生效技能或工具策略禁用 skill 时不发送。",
+    "运行时注入生效技能索引；关闭后不注入索引且不注册 skill 工具（正文 $ 引用不受影响）。",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 
@@ -463,6 +466,7 @@ export function definitionToForm(
   | "customAttachEnabled"
   | "customAttachText"
   | "skillsEnabled"
+  | "skillsPrefixText"
   | "description"
   | "persist"
   | "dynamic"
@@ -483,6 +487,7 @@ export function definitionToForm(
     customAttachEnabled: layoutHasCustomAttach(def.prompts),
     customAttachText,
     skillsEnabled: def.prompts.skillsEnabled ?? true,
+    skillsPrefixText: def.prompts.skillsPrefix ?? DEFAULT_SKILLS_INDEX_PREFIX,
     description: def.description ?? "",
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
@@ -502,6 +507,7 @@ export function layoutFromFormInput(
     | "customAttachEnabled"
     | "customAttachText"
     | "skillsEnabled"
+    | "skillsPrefixText"
     | "persist"
     | "dynamic"
   >
@@ -524,6 +530,12 @@ export function layoutFromFormInput(
       ? { customAttach: customAttachText }
       : {}),
     ...(input.skillsEnabled === false ? { skillsEnabled: false } : {}),
+    // 前缀语等于默认值 / 空时 omit（落库省噪音；关闭时前缀无意义一并 omit）
+    ...((input.skillsPrefixText ?? "").trim() !== "" &&
+    (input.skillsPrefixText ?? "").trim() !== DEFAULT_SKILLS_INDEX_PREFIX.trim() &&
+    input.skillsEnabled !== false
+      ? { skillsPrefix: (input.skillsPrefixText ?? "").trim() }
+      : {}),
     persist: [...textBlocks],
     dynamic: [...input.dynamic],
   };
@@ -552,6 +564,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     customAttachEnabled: input.customAttachEnabled ?? false,
     customAttachText: input.customAttachText ?? "",
     skillsEnabled: input.skillsEnabled ?? true,
+    skillsPrefixText: input.skillsPrefixText ?? "",
     description: input.description ?? "",
     persist: input.persist,
     dynamic: input.dynamic,

@@ -270,3 +270,11 @@ assistant:
 
 assistant:
 （补坑）python 文本模式改文件把 AgentEditorView/AgentEditorForm/agent-editor-state 三个 CRLF 文件洗成 LF，提交出现全文件假 diff（+3360/-3279）——file 命令看行尾即知。修复：二进制模式 LF→CRLF 转回 + git commit --amend。教训：**改 CRLF 文件禁用 python open() 文本模式，用 'rb'/'wb' 或 edit_file 工具**；提交前看 diff --stat 行数对称异常即行尾问题。
+
+user:
+skill 块描述精简、关闭时不显示；开关打开时出现输入框——作用是 skill 索引前缀语（如「当前支持的skill如下：」），参考会话区模式。常驻工作区默认文本改成「我看到工作区了」。
+
+assistant:
+三改：① DEFAULT_WORKPLACE_ASSISTANT_TEXT 从 "i have seen workplace" 改为「我看到工作区了」（WORKPLACE_BLOCK_HINT 文案同步，测试断言更新——test 多用常量引用所以只改两处硬编码）。② 新增 prompts.skillsPrefix（索引前缀语）：模型层 AgentPromptLayout + validate + wire schema（trim 非空，omit-when-default）；渲染层 formatSkillsIndexBody(entries, prefix?) 头行用 layout.skillsPrefix ?? DEFAULT_SKILLS_INDEX_PREFIX（常量=原默认头行文案），synthetic 消息与 segment 两处消费，三端预览走 buildPromptLlmInputFromLayout(layout) 自动生效无需改；渲染层补双保险——skillsEnabled===false 时即便 ctx 携带 skillsIndex 也不注入。③ 编辑器：skillsPrefixText 表单字段（definitionToForm 缺省回填默认前缀；layoutFromFormInput 等于默认/空/开关关时 omit），双端技能卡=header Switch + 开时（精简 hint + 前缀输入框 mobile TextInput/desktop textarea），关时 hint 整体不显示。skillsReadonlyHint 精简为「运行时注入生效技能索引；关闭后不注入索引且不注册 skill 工具（正文 $ 引用不受影响）。」。core 2018 全绿（+3 前缀测试）。
+
+坑（更新）：并行进程本轮第 4/5 次脏写 agent-editor-state.ts（skillsPrefix patch 被洗，用 edit_file 重做）；且发现 edit_file 对 CRLF 文件写出 LF（AgentEditorForm 被 edit 后行尾变 LF）——CRLF 文件 edit 后必须检查 file 命令 + 必要时二进制转回，否则全文件假 diff。

@@ -49,7 +49,11 @@ export type DynamicPromptBlock = {
 export const WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT = "【done】";
 
 /** Agent 编辑器首次开启常驻工作区时的默认助手确认语。 */
-export const DEFAULT_WORKPLACE_ASSISTANT_TEXT = "i have seen workplace";
+export const DEFAULT_WORKPLACE_ASSISTANT_TEXT = "我看到工作区了";
+
+/** 技能索引段默认前缀语（`prompts.skillsPrefix` 缺省/空时使用）。 */
+export const DEFAULT_SKILLS_INDEX_PREFIX =
+  "当前可用技能（每条为 名称：描述（来源域），正文经 skill 工具按需读取）：";
 
 /**
  * 布局是否启用常驻工作区（开 = 非空 string）。
@@ -96,6 +100,11 @@ export interface AgentPromptLayout {
    * D4 联动随之生效）；用户显式 `$` 引用不受影响。
    */
   readonly skillsEnabled?: boolean;
+  /**
+   * 技能索引前缀语；缺省/空 = {@link DEFAULT_SKILLS_INDEX_PREFIX}。
+   * 仅 `skillsEnabled !== false` 时有意义。
+   */
+  readonly skillsPrefix?: string;
   /** 持久区文本块（不含 worktree 块）。 */
   readonly persist: readonly PersistTextPromptBlock[];
   readonly dynamic: readonly DynamicPromptBlock[];

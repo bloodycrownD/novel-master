@@ -12,7 +12,10 @@ import type {
   DynamicPromptBlock,
   PersistTextPromptBlock,
 } from "../../domain/prompt/model/agent-prompt-layout.js";
-import { layoutHasWorkplace } from "../../domain/prompt/model/agent-prompt-layout.js";
+import {
+  DEFAULT_SKILLS_INDEX_PREFIX,
+  layoutHasWorkplace,
+} from "../../domain/prompt/model/agent-prompt-layout.js";
 import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
 import { shouldIncludeDynamicBlock } from "../../domain/prompt/logic/should-include-dynamic-block.js";
 import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm-export.js";
@@ -153,19 +156,21 @@ function syntheticWorkplaceDoneMessage(
   };
 }
 
-/** 技能索引段正文：每条「名称：描述（来源域）」，模型据此自主决定是否取用。 */
+/** 技能索引段正文：前缀语（缺省默认）+ 每条「名称：描述（来源域）」。 */
 function formatSkillsIndexBody(
-  entries: readonly PromptSkillIndexEntry[]
+  entries: readonly PromptSkillIndexEntry[],
+  prefix?: string
 ): string {
   const lines = entries.map((entry) => {
     const description = entry.description.trim();
     const descSuffix = description !== "" ? `：${description}` : "";
     return `- ${entry.name}${descSuffix}（${entry.domain}）`;
   });
-  return [
-    "当前可用技能（每条为 名称：描述（来源域），正文经 skill 工具按需读取）：",
-    ...lines,
-  ].join("\n");
+  const header =
+    prefix != null && prefix.trim().length > 0
+      ? prefix.trim()
+      : DEFAULT_SKILLS_INDEX_PREFIX;
+  return [header, ...lines].join("\n");
 }
 
 function syntheticSkillsIndexMessage(
@@ -188,7 +193,8 @@ function syntheticSkillsIndexMessage(
 /** `skillsIndex` 空/缺省不产生段；固定 id `prompt-skills` / title `skills`。 */
 function appendSkillsIndexSegmentIfPresent(
   ctx: PromptRenderContext,
-  segments: PromptAssemblySegment[]
+  segments: PromptAssemblySegment[],
+  skillsPrefix?: string
 ): void {
   if (ctx.skillsIndex == null || ctx.skillsIndex.length === 0) {
     return;
@@ -197,7 +203,7 @@ function appendSkillsIndexSegmentIfPresent(
     id: "prompt-skills",
     role: "user",
     title: "skills",
-    body: formatSkillsIndexBody(ctx.skillsIndex),
+    body: formatSkillsIndexBody(ctx.skillsIndex, skillsPrefix),
     source: "template",
   });
 }
@@ -265,7 +271,11 @@ export async function buildPromptAssemblyFromLayout(
     });
   }
 
-  appendSkillsIndexSegmentIfPresent(ctx, segments);
+  // skillsEnabled=false（技能总开关关）：不注入索引段（resolve 侧已摘 skill 工具，
+  // 此处渲染层双保险——ctx 直接携带 skillsIndex 也不注入）。
+  if (layout.skillsEnabled !== false) {
+    appendSkillsIndexSegmentIfPresent(ctx, segments, layout.skillsPrefix);
+  }
 
   appendWorkplacePairSegmentsIfPresent(layout, ctx, segments);
 
@@ -338,9 +348,16 @@ export async function buildPromptLlmInputFromLayout(
   const agentStepIndex = resolveAgentStepIndex(options);
   const messages: ChatMessage[] = [];
 
-  if (ctx.skillsIndex != null && ctx.skillsIndex.length > 0) {
+  if (
+    layout.skillsEnabled !== false &&
+    ctx.skillsIndex != null &&
+    ctx.skillsIndex.length > 0
+  ) {
     messages.push(
-      syntheticSkillsIndexMessage(formatSkillsIndexBody(ctx.skillsIndex), ctx)
+      syntheticSkillsIndexMessage(
+        formatSkillsIndexBody(ctx.skillsIndex, layout.skillsPrefix),
+        ctx
+      )
     );
   }
 
