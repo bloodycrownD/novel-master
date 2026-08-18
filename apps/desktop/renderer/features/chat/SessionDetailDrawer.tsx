@@ -55,9 +55,6 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 import { runCompaction } from "./ConversationPanel";
 import { ChatHistorySearchPanel } from "./ChatHistorySearchPanel";
 import { SessionSkillPanel } from "./SessionSkillPanel";
-import { skillEnableSummary } from "@/features/skills/skill-ui";
-import type { EffectiveSkillDto } from "@shared/ipc-types";
-import { ipcSkillsEffective } from "@/ipc/client";
 import { formatTokenCount } from "@novel-master/core/common";
 import { formatCounterKindLabel } from "@novel-master/core/provider";
 
@@ -107,7 +104,6 @@ export function SessionDetailDrawer({
   const [compactOpen, setCompactOpen] = useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
   const [skillsPanelOpen, setSkillsPanelOpen] = useState(false);
-  const [skillsSummary, setSkillsSummary] = useState<string | undefined>();
 
   // 聊天名行内编辑状态
   const [editingName, setEditingName] = useState(false);
@@ -117,20 +113,15 @@ export function SessionDetailDrawer({
   const submittingRef = useRef(false);
 
   const reload = useCallback(async () => {
-    const [metaRes, tokens, skillsRes] = await Promise.all([
+    const [metaRes, tokens] = await Promise.all([
       ipcPromptAgentMeta({ projectId, sessionId }),
       ipcPromptChatTokenLabel({ projectId, sessionId }),
-      ipcSkillsEffective({ projectId }),
     ]);
     if (metaRes.ok) {
       setMeta(metaRes.data);
     }
     if (tokens.ok) {
       setTokenStats(tokens.data);
-    }
-    if (skillsRes.ok) {
-      const rows: readonly EffectiveSkillDto[] = skillsRes.data;
-      setSkillsSummary(skillEnableSummary(rows));
     }
   }, [projectId, sessionId]);
 
@@ -391,7 +382,7 @@ export function SessionDetailDrawer({
               <span className="session-detail-pick__body">
                 <span className="session-detail-pick__label">技能</span>
                 <span className="session-detail-pick__value">
-                  {skillsSummary ?? "—"}
+                  查看与管理
                 </span>
               </span>
               <span

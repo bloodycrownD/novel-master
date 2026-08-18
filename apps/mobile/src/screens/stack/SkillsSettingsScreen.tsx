@@ -395,12 +395,12 @@ export function SkillsSettingsScreen() {
         options={[
           {
             value: 'global',
-            label: `全局技能（${globalRows.length}）`,
+            label: '全局技能',
             testID: 'skills-settings-tab-global',
           },
           {
             value: 'project',
-            label: `项目技能（${projectSkills.length}）`,
+            label: '项目技能',
             testID: 'skills-settings-tab-project',
           },
         ]}

@@ -220,11 +220,8 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
           aria-label="技能域"
           value={tab}
           options={[
-            { value: "global", label: `全局技能（${globalRows.length}）` },
-            {
-              value: "project",
-              label: `项目技能（${projectGroups.reduce((n, g) => n + g.rows.length, 0)}）`,
-            },
+            { value: "global", label: "全局技能" },
+            { value: "project", label: "项目技能" },
           ]}
           onChange={(next) => switchTab(next as SkillTab)}
         />

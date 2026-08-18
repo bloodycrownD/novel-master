@@ -237,3 +237,9 @@ user:
 
 assistant:
 可以，但别直接 revert 0bc2152（它是 load 新增+复制移除的混合提交，revert 会连带回滚 load）。正确挖法：git show 0bc2152 看删除侧 hunks——copySkill 的 port/impl（事务内 sweepRevisionsUnderScope + copyVfsTree + seedLiveHeadRevisions 整包覆盖）、desktop SKILLS_COPY/SKILLS_PROMOTE 通道、mobile confirmPromote/runCopy/弹层，按需重新应用；设计意图看 docs/Iterations/agent-skills/spec.md 与本记忆文件。
+
+user:
+skill 列表 UI 上所有「X/Y 启用」文本移除（实时性差、没用），「全局技能（M）/项目技能（N）」tab 计数也一并移除。
+
+assistant:
+四处清理：mobile SessionDetailScreen 技能卡的 n/m 启用（state+load 里的 effectiveSkills 汇总一并删，卡片值改「查看与管理」）；desktop SessionDetailDrawer 的技能 n/m 启用（连带 skill-ui.ts 的 skillEnableSummary 删除、ipcSkillsEffective/EffectiveSkillDto 导入清理，卡片值改「查看与管理」）；mobile/desktop 技能管理页 SegmentedControl tab label 的计数后缀全部去掉，只留「全局技能/项目技能」。desktop tsc 干净 + skills-handlers 测试过，mobile tsc 干净 + skill-panel/session 回归过。本轮 SkillsSettingsScreen 第三次被并行进程写回 copySkill 旧代码，再清后立即提交。

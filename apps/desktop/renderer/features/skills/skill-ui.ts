@@ -4,11 +4,7 @@
  * 会话技能面板（SessionDetailDrawer 内）与设置·技能管理页共用。
  */
 import { SKILL_NAME_PATTERN } from "@novel-master/core/skills";
-import type {
-  EffectiveSkillDto,
-  SkillDomainDto,
-  SkillRefDto,
-} from "@shared/ipc-types";
+import type { SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
 
 /** 域徽标文案：项目副本覆盖同名全局技能时标「项目 · 覆盖全局」。 */
 export function skillDomainLabel(
@@ -56,12 +52,6 @@ export function toSkillRef(
   };
 }
 
-/** 会话面板汇总文案：「技能 n/m 启用」（n 剔除无效技能）。 */
-export function skillEnableSummary(rows: readonly EffectiveSkillDto[]): string {
-  const validCount = rows.filter((r) => r.valid).length;
-  const enabledCount = rows.filter((r) => r.effective).length;
-  return `技能 ${enabledCount}/${validCount} 启用`;
-}
 
 /** 批量选择/列表 key：`global/{name}` 或 `project/{projectId}/{name}`。 */
 export function skillKey(ref: SkillRefDto): string {
