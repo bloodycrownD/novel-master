@@ -267,3 +267,6 @@ desktop 也同步导入并入新建弹窗；另外给智能体配置的 skill �
 
 assistant:
 两件事：① desktop 导入并入新建（子代理完成）：新 IPC 通道 VFS_ZIP_PICK（弹框选 zip 回传字节到 renderer）+ VFS_ZIP_IMPORT_BYTES（字节直写目标子树），previewSkillZip 在 renderer 跑，NewSkillModal 加「从 ZIP 导入…」，withFrontMatterValues/yamlScalar 落 desktop skill-ui；desktop ⋮ 菜单本来就没有导入项（mobile 那轮的移除无对应物）。② 技能总开关 skillsEnabled：AgentPromptLayout 加可选字段（缺省 true，wire 关=显式 false，照 customAttach 的 omit-when-on 模式）；关键设计——resolveAgentToolRegistry 里 skillsEnabled===false 时照 task 强制移除先例 delete("skill")，D4 联动自动串起一切（registry 无 skill → assembleSkillsToolContext 返回 undefined → toolCtx.skills 缺席 → skillsIndex 置空 → LLM 看不到工具）；$ 引用不受影响（deps.skills 独立于 toolCtx.skills，与 D4 deny 语义一致）。双端 agent 编辑器技能卡加 Switch（mobile chatSlotHeader 右侧 / desktop 卡头右侧），skillsReadonlyHint 文案更新（「不可关闭」不再成立）。测试：T-SK13（开关强制移除/缺省保留）+ 文案断言更新，core 2015 全绿。
+
+assistant:
+（补坑）python 文本模式改文件把 AgentEditorView/AgentEditorForm/agent-editor-state 三个 CRLF 文件洗成 LF，提交出现全文件假 diff（+3360/-3279）——file 命令看行尾即知。修复：二进制模式 LF→CRLF 转回 + git commit --amend。教训：**改 CRLF 文件禁用 python open() 文本模式，用 'rb'/'wb' 或 edit_file 工具**；提交前看 diff --stat 行数对称异常即行尾问题。
