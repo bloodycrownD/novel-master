@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Switch,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -948,18 +947,15 @@ export function AgentEditorForm(props: Props) {
                 >
                   {PROMPT_REGION_LABELS.skillsReadonlyHint}
                 </Text>
-                <TextInput
-                  testID="agent-skills-prefix-input"
-                  style={[
-                    styles.skillsPrefixInput,
-                    {color: tokens.text, borderColor: tokens.border},
-                  ]}
-                  value={skillsPrefixText}
-                  onChangeText={setSkillsPrefixText}
-                  placeholder="索引前缀语（首行）"
-                  placeholderTextColor={tokens.textSecondary}
-                  multiline
-                />
+                <FormField label="索引前缀语" tokens={tokens}>
+                  <FormTextInput
+                    tokens={tokens}
+                    value={skillsPrefixText}
+                    onChangeText={setSkillsPrefixText}
+                    multiline
+                    placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
+                  />
+                </FormField>
               </>
             ) : null}
           </View>
@@ -1433,16 +1429,6 @@ const styles = StyleSheet.create({
   chatSlotTagText: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  skillsPrefixInput: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    minHeight: 60,
-    maxHeight: 120,
-    textAlignVertical: 'top',
   },
   chatSlotHint: {
     fontSize: 13,
