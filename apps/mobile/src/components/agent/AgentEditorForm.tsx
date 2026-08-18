@@ -119,6 +119,8 @@ export function AgentEditorForm(props: Props) {
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState('');
+  // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
+  const [skillsEnabled, setSkillsEnabled] = useState(true);
   // 人类可读的 agent 描述（对应域 description，多行文本）。
   const [description, setDescription] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
@@ -234,6 +236,7 @@ export function AgentEditorForm(props: Props) {
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
       setCustomAttachText(promptForm.customAttachText ?? '');
+      setSkillsEnabled(promptForm.skillsEnabled ?? true);
       setDescription(promptForm.description ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
@@ -401,6 +404,7 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      skillsEnabled,
       description,
       persist,
       dynamic,
@@ -474,6 +478,7 @@ export function AgentEditorForm(props: Props) {
     workplaceAssistantText,
     customAttachEnabled,
     customAttachText,
+    skillsEnabled,
     persist,
     dynamic,
   });
@@ -912,6 +917,11 @@ export function AgentEditorForm(props: Props) {
                   {PROMPT_REGION_LABELS.skillsTag}
                 </Text>
               </View>
+              <Switch
+                value={skillsEnabled}
+                onValueChange={setSkillsEnabled}
+                trackColor={{false: tokens.border, true: tokens.primary}}
+              />
             </View>
             <Text
               style={[styles.chatSlotHint, {color: tokens.textSecondary}]}

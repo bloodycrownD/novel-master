@@ -206,6 +206,32 @@ describe("agent tool policy", () => {
     // `$` 引用不受影响（注入全文不依赖工具），属后续步骤验收。
   });
 
+  // T-SK13：技能能力总开关（prompts.skillsEnabled）
+  it("T-SK13: skillsEnabled=false 强制移除 skill 工具（即便 allow 名单含它）；缺省/true 保留", () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      prompts: {...BASE_DEF.prompts, skillsEnabled: false},
+      tools: { allow: ["skill", "read"] },
+    };
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    assert.ok(!filtered.list().includes("skill"));
+    assert.ok(filtered.list().includes("read"));
+
+    // 缺省（字段未写）与显式 true 均保留
+    const defDefault: AgentDefinition = { ...BASE_DEF, tools: { allow: ["skill"] } };
+    assert.ok(
+      resolveAgentToolRegistry(base, defDefault).list().includes("skill"),
+    );
+    const defOn: AgentDefinition = {
+      ...BASE_DEF,
+      prompts: { ...BASE_DEF.prompts, skillsEnabled: true },
+      tools: { allow: ["skill"] },
+    };
+    assert.ok(resolveAgentToolRegistry(base, defOn).list().includes("skill"));
+  });
+
   it("T-SK7a: allow 仅 skill 时 registry 只剩它", () => {
     const def: AgentDefinition = {
       ...BASE_DEF,

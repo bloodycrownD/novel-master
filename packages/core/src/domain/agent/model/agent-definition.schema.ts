@@ -108,6 +108,8 @@ const promptsDocumentSchema = z.preprocess(
           message: "prompts.customAttach 如填写则须为非空字符串",
         })
         .optional(),
+      /** 技能能力总开关：wire 缺省 = 开；仅显式 false 表示关闭。 */
+      skillsEnabled: z.boolean().optional(),
     })
     .strict(),
 );
@@ -185,6 +187,7 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
       dynamicEnabled: doc.prompts.dynamicEnabled,
       workplace: doc.prompts.workplace,
       customAttach: doc.prompts.customAttach,
+      skillsEnabled: doc.prompts.skillsEnabled,
     },
   );
   const tools = wireToolsToDomain(doc.tools);
@@ -228,6 +231,9 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
       ...(typeof def.prompts.customAttach === "string" &&
       def.prompts.customAttach.trim().length > 0
         ? { customAttach: def.prompts.customAttach }
+        : {}),
+      ...(def.prompts.skillsEnabled === false
+        ? { skillsEnabled: false }
         : {}),
       persist,
       dynamic,

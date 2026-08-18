@@ -217,6 +217,8 @@ export function validateAgentPromptLayoutFromMaps(
     readonly workplace?: boolean | string;
     /** 自定义附加信息纯文本；trim 后空视为关（不注入）。 */
     readonly customAttach?: string;
+    /** 技能能力总开关；缺省 true。`false` 时不注入技能索引且不注册 skill 工具。 */
+    readonly skillsEnabled?: boolean;
   }
 ): AgentPromptLayout {
   if (system != null && system.trim() === "") {
@@ -301,6 +303,7 @@ export function validateAgentPromptLayoutFromMaps(
     ...(dynamicEnabled ? { dynamicEnabled: true } : {}),
     ...(workplace != null ? { workplace } : {}),
     ...(customAttach != null ? { customAttach } : {}),
+    ...(options?.skillsEnabled === false ? { skillsEnabled: false } : {}),
     persist,
     dynamic,
   };
@@ -349,6 +352,7 @@ export function validateAgentPromptLayout(
       dynamicEnabled: layout.dynamicEnabled,
       workplace: layout.workplace,
       customAttach: layout.customAttach,
+      skillsEnabled: layout.skillsEnabled,
     }
   );
 }

@@ -77,6 +77,8 @@ export type AgentEditorFormInput = {
   customAttachEnabled?: boolean;
   /** 自定义附加信息文本（开但 trim 空时静默省略，不阻断保存）。 */
   customAttachText?: string;
+  /** 技能能力总开关（与域 `prompts.skillsEnabled` 对应；缺省开）。 */
+  skillsEnabled?: boolean;
   /** 人类可读的 agent 描述（与域 `description` 对应；多行文本，空则 omit）。 */
   description?: string;
   persist: readonly EditorPersistPromptBlock[];
@@ -159,7 +161,7 @@ export const PROMPT_REGION_LABELS = {
   skillsTag: "技能",
   skillsBlocks: "技能索引区",
   skillsReadonlyHint:
-    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。不可编辑、不可关闭；无生效技能或工具策略禁用 skill 时不发送。",
+    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。默认开启；关闭后不注入索引且不注册 skill 工具（正文 $ 引用不受影响）；无生效技能或工具策略禁用 skill 时不发送。",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 
@@ -460,7 +462,7 @@ export function definitionToForm(
   | "workplaceAssistantText"
   | "customAttachEnabled"
   | "customAttachText"
-  | "description"
+  | "skillsEnabled"
   | "description"
   | "persist"
   | "dynamic"
@@ -480,6 +482,7 @@ export function definitionToForm(
     workplaceAssistantText: workplaceText,
     customAttachEnabled: layoutHasCustomAttach(def.prompts),
     customAttachText,
+    skillsEnabled: def.prompts.skillsEnabled ?? true,
     description: def.description ?? "",
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
@@ -498,6 +501,7 @@ export function layoutFromFormInput(
     | "workplaceAssistantText"
     | "customAttachEnabled"
     | "customAttachText"
+    | "skillsEnabled"
     | "persist"
     | "dynamic"
   >
@@ -519,6 +523,7 @@ export function layoutFromFormInput(
     ...(input.customAttachEnabled && customAttachText !== ""
       ? { customAttach: customAttachText }
       : {}),
+    ...(input.skillsEnabled === false ? { skillsEnabled: false } : {}),
     persist: [...textBlocks],
     dynamic: [...input.dynamic],
   };
@@ -546,6 +551,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     workplaceAssistantText: input.workplaceAssistantText,
     customAttachEnabled: input.customAttachEnabled ?? false,
     customAttachText: input.customAttachText ?? "",
+    skillsEnabled: input.skillsEnabled ?? true,
     description: input.description ?? "",
     persist: input.persist,
     dynamic: input.dynamic,

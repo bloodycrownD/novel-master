@@ -117,6 +117,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   // 自定义附加信息开关 / 文本（对应域 prompts.customAttach）。
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState("");
+  // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
+  const [skillsEnabled, setSkillsEnabled] = useState(true);
   // 人类可读的 agent 描述（对应域 description，多行文本）。
   const [description, setDescription] = useState("");
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
@@ -169,6 +171,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         workplaceAssistantText,
         customAttachEnabled,
         customAttachText,
+        skillsEnabled,
         description,
         persist,
         dynamic,
@@ -190,6 +193,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      skillsEnabled,
       description,
       persist,
       dynamic,
@@ -264,6 +268,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       // customAttach 从域 layout 反推开关，customAttachText 直读 prompts.customAttach。
       setCustomAttachEnabled(promptForm.customAttachEnabled);
+      setSkillsEnabled(promptForm.skillsEnabled ?? true);
       setCustomAttachText(promptForm.customAttachText);
       setDescription(promptForm.description ?? "");
       setPersist([...promptForm.persist]);
@@ -452,6 +457,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      skillsEnabled,
       description,
       persist,
       dynamic,
@@ -793,12 +799,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </div>
           </div>
 
-          {/* 技能索引占位卡：运行时自动注入，无开关无输入框，不可配置 */}
+          {/* 技能索引占位卡：运行时自动注入；总开关关 = 不注入索引且不注册 skill 工具 */}
           <div className="config-block-card config-block-card--prompt config-block-card--chat-slot">
             <div className="config-block-card__header config-block-card__header--chat-slot">
               <span className="config-block-card__badge">
                 {PROMPT_REGION_LABELS.skillsTag}
               </span>
+              <Switch
+                checked={skillsEnabled}
+                onChange={setSkillsEnabled}
+                aria-label="开启技能注入与 skill 工具"
+              />
             </div>
             <div className="config-block-card__body">
               <p className="config-block-card__hint">

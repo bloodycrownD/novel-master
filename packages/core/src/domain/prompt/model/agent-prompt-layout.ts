@@ -90,6 +90,12 @@ export interface AgentPromptLayout {
    * 开 = trim 后非空 string（空则静默省略）。
    */
   readonly customAttach?: string;
+  /**
+   * 技能能力总开关；缺省视为 `true`（注入技能索引 + 注册 skill 工具）。
+   * `false` = 不注入索引且不注册 skill 工具（resolveAgentToolRegistry 摘除，
+   * D4 联动随之生效）；用户显式 `$` 引用不受影响。
+   */
+  readonly skillsEnabled?: boolean;
   /** 持久区文本块（不含 worktree 块）。 */
   readonly persist: readonly PersistTextPromptBlock[];
   readonly dynamic: readonly DynamicPromptBlock[];
