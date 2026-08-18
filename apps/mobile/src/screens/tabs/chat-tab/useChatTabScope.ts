@@ -377,7 +377,7 @@ export function useChatTabScope({
     [navigation, projectId, sessionId],
   );
 
-  // skill_opt 卡片跳技能详情。write/edit 缺省域解析出的 project 三元组不带
+  // skill 卡片跳技能详情。write/edit 缺省域解析出的 project 三元组不带
   // projectId（webview / 卡片无会话上下文），这里按当前会话项目补齐。
   const openSkillDetail = useCallback(
     (ref: SkillToolRef) => {

@@ -1,5 +1,5 @@
 /**
- * `skill_opt` 工具实现：读取与管理两域技能（read / write / edit / list）。
+ * `skill` 工具实现：读取与管理两域技能（read / write / edit / list）。
  *
  * 形态照 `fs` 工具先例——单工具多 action 分发 + 扁平显式字段。
  * 工具内部经 `ctx.skills` 闭包调 {@link SkillService}，**不直接持有 vfs**；
@@ -27,12 +27,12 @@ import {
 } from "../logic/tool-output-limits.js";
 
 /** 工具注册名（catalog / policy / 卡片解析四处同名字符串）。 */
-export const SKILL_TOOL_NAME = "skill_opt";
+export const SKILL_TOOL_NAME = "skill";
 
 /** 技能入口文件（`path` 缺省值，与服务层 SKILL_ENTRY_FILE 同值）。 */
 const SKILL_DEFAULT_ENTRY = "SKILL.md";
 
-/** `skill_opt` 工具输入（扁平显式字段；action 决定哪些字段必填，run 内校验）。 */
+/** `skill` 工具输入（扁平显式字段；action 决定哪些字段必填，run 内校验）。 */
 export interface SkillToolInput {
   readonly action: "read" | "write" | "edit" | "list";
   readonly name?: string;
@@ -113,7 +113,7 @@ function requireString(
   if (typeof value !== "string" || value.length === 0) {
     throw new ToolError(
       "INVALID_ARGUMENT",
-      `skill_opt 的 ${action} 动作必须提供非空 ${field}`,
+      `skill 的 ${action} 动作必须提供非空 ${field}`,
       { toolName: SKILL_TOOL_NAME },
     );
   }
@@ -136,7 +136,7 @@ function formatEffectiveSkills(
 }
 
 /**
- * 静态 `skill_opt` 工具实例。
+ * 静态 `skill` 工具实例。
  *
  * 域缺省语义：read 缺省读生效副本（项目副本优先回落 global，由 SkillService
  * 解析，输出携带实际命中域）；write / edit 缺省写 project 域（服务层要求
@@ -247,7 +247,7 @@ action 说明：
       if (skills == null) {
         throw new ToolError(
           "FAILED",
-          "skill_opt 工具未装配 skills 上下文（当前运行时未注入技能服务）",
+          "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）",
           { toolName: SKILL_TOOL_NAME },
         );
       }

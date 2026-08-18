@@ -159,7 +159,7 @@ export const PROMPT_REGION_LABELS = {
   skillsTag: "技能",
   skillsBlocks: "技能索引区",
   skillsReadonlyHint:
-    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。不可编辑、不可关闭；无生效技能或工具策略禁用 skill_opt 时不发送。",
+    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。不可编辑、不可关闭；无生效技能或工具策略禁用 skill 时不发送。",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 

@@ -738,13 +738,13 @@ describe('message-blocks', () => {
     ).toBe('/a.md');
   });
 
-  it('T-SK8: skill_opt tool_result meta.skillRef 透传进 ToolCallView，skillToolRef 优先取 meta', () => {
+  it('T-SK8: skill tool_result meta.skillRef 透传进 ToolCallView，skillToolRef 优先取 meta', () => {
     const messages = [
       msg('a1', 'assistant', [
         {
           type: 'tool_use',
           id: 'tu-skill',
-          name: 'skill_opt',
+          name: 'skill',
           input: { action: 'read', name: 'demo' },
         } as never,
       ], 1),
@@ -782,7 +782,7 @@ describe('message-blocks', () => {
       skillToolRef(
         {
           toolUseId: 't-w',
-          name: 'skill_opt',
+          name: 'skill',
           input: { action: 'write', name: 'demo', content: 'x' },
           status: 'pending',
         },
@@ -793,7 +793,7 @@ describe('message-blocks', () => {
     expect(
       skillToolRef({
         toolUseId: 't-r',
-        name: 'skill_opt',
+        name: 'skill',
         input: { action: 'read', name: 'demo' },
         status: 'pending',
       }),

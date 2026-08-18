@@ -13,7 +13,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 interface MessageListProps {
   messages: readonly ChatMessageDto[];
-  /** 当前会话项目 id；skill_opt 卡片跳设置详情需要。 */
+  /** 当前会话项目 id；skill 卡片跳设置详情需要。 */
   projectId?: string;
   uiRunning?: boolean;
   streamingText?: string;

@@ -130,8 +130,8 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
   /**
-   * 技能服务惰性工厂（skill_opt 工具用）。三端 runtime 均已暴露；
-   * 声明为可选是为了不强制旧测试 mock 补字段——未注入时 skill_opt
+   * 技能服务惰性工厂（skill 工具用）。三端 runtime 均已暴露；
+   * 声明为可选是为了不强制旧测试 mock 补字段——未注入时 skill
    * 的 run 抛 ToolError，且 description 预算跳过（不产生 IO）。
    */
   readonly skills?: () => SkillService;
@@ -145,10 +145,10 @@ export class AgentTurnError extends Error {
 }
 
 /**
- * 预算并装配 `skill_opt` 工具上下文（主 / 子两个装配点共用，D2）。
+ * 预算并装配 `skill` 工具上下文（主 / 子两个装配点共用，D2）。
  *
  * 清单按传入 projectId 解析（子代理传父会话 projectId，与「子代理共享
- * 父工作区」语义一致）。resolve 后 registry 不含 skill_opt（policy deny，
+ * 父工作区」语义一致）。resolve 后 registry 不含 skill（policy deny，
  * D4）时跳过 effectiveSkills 预算、返回 undefined——工具仍注册在 probe，
  * 但本 run 的 toolCtx 不带 skills 闭包，LLM 也看不到该工具。
  *
@@ -421,8 +421,8 @@ export async function runAgentTurn(
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
   const registry = resolveAgentToolRegistry(toolProbe, definition, { depth: 0 });
-  // skill_opt 工具读取：装配期预算生效技能清单（description lambda 用）。
-  // deny 后 registry 不含 skill_opt → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
+  // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
+  // deny 后 registry 不含 skill → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
   const skillsCtx = await assembleSkillsToolContext(
     runtime,
     scope.projectId,
@@ -456,7 +456,7 @@ export async function runAgentTurn(
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
-    // skill_opt 工具读取：生效清单按本会话 projectId 解析（装配期预算，每 run 一次）。
+    // skill 工具读取：生效清单按本会话 projectId 解析（装配期预算，每 run 一次）。
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
     subagent: {
@@ -615,7 +615,7 @@ async function runChildAgent(args: {
     depth: childDepth,
   });
 
-  // skill_opt（D2）：子代理同样注入，清单按父会话 projectId 解析——
+  // skill（D2）：子代理同样注入，清单按父会话 projectId 解析——
   // 与「子代理共享父工作区」语义一致。子 agent 自己的 policy 同样生效（deny 时不注入）。
   const skillsCtx = await assembleSkillsToolContext(
     runtime,
@@ -675,7 +675,7 @@ async function runChildAgent(args: {
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(childSessionId),
     sessionKkv: runtime.sessionKkv,
-    // skill_opt（D2）：子代理同样注入，清单按父会话 projectId 解析。
+    // skill（D2）：子代理同样注入，清单按父会话 projectId 解析。
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
     subagent: {

@@ -188,7 +188,7 @@ test("T-SK8：skillToolRef 输入侧解析（write 缺省 project；read 缺省�
     skillToolRef(
       {
         toolUseId: "s1",
-        name: "skill_opt",
+        name: "skill",
         input: { action: "write", name: "demo", content: "x" },
         status: "success",
       },
@@ -200,7 +200,7 @@ test("T-SK8：skillToolRef 输入侧解析（write 缺省 project；read 缺省�
   assert.equal(
     skillToolRef({
       toolUseId: "s2",
-      name: "skill_opt",
+      name: "skill",
       input: { action: "read", name: "demo" },
       status: "pending",
     }),
@@ -210,7 +210,7 @@ test("T-SK8：skillToolRef 输入侧解析（write 缺省 project；read 缺省�
   assert.equal(
     skillToolRef({
       toolUseId: "s3",
-      name: "skill_opt",
+      name: "skill",
       input: { action: "list" },
       status: "success",
     }),
@@ -232,7 +232,7 @@ test("T-SK8：tool_result meta.skillRef 透传进 ToolCallView 且优先于输�
         {
           type: "tool_use",
           id: "tu-skill",
-          name: "skill_opt",
+          name: "skill",
           input: { action: "read", name: "demo" },
         },
       ],

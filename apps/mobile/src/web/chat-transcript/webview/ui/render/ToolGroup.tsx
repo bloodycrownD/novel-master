@@ -39,7 +39,7 @@ function ToolGroupItem({ tool }: { tool: ToolCallRow }) {
       );
     }
   }
-  // 子会话优先；其次 skill_opt 三元组；最后回退到文件路径打开。
+  // 子会话优先；其次 skill 三元组；最后回退到文件路径打开。
   const subagentSessionId = tool.subagentSessionId;
   const hasSubagent = subagentSessionId != null;
   // projectId 缺省时由宿主按会话上下文补齐（webview 无会话上下文）

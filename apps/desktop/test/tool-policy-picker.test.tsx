@@ -33,7 +33,7 @@ test("T-P4: trigger 文案边界——未选择与全选", () => {
     "fs",
     "glob",
     "grep",
-    "skill_opt",
+    "skill",
   ];
   const full = renderToStaticMarkup(
     <ToolPolicyPicker selected={all} onChange={() => {}} />,

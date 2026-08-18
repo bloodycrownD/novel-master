@@ -29,7 +29,7 @@ export interface ToolCallView {
    */
   readonly subagentSessionId?: string;
   /**
-   * skill_opt 跳转三元组：read 由 tool_result meta 透传（实际命中域在结果侧）；
+   * skill 跳转三元组：read 由 tool_result meta 透传（实际命中域在结果侧）；
    * write/edit 从 tool_use 输入解析（见 skillToolRef）。
    */
   readonly skillRef?: SkillToolRef;
@@ -248,7 +248,7 @@ export function vfsToolFilePath(tool: ToolCallView): string | undefined {
 }
 
 /**
- * 解析 skill_opt 卡片的跳转三元组：优先 tool_result meta 透传的 skillRef
+ * 解析 skill 卡片的跳转三元组：优先 tool_result meta 透传的 skillRef
  * （read 缺省域命中生效副本的解析结果），否则从 tool_use 输入解析
  * （write/edit 必含；read 缺省域在 pending 时解析不出，返回 undefined）。
  */

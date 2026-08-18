@@ -4,7 +4,7 @@ import { ToolCallCard } from "./ToolCallCard";
 type ToolCallGroupCardProps = {
   tools: readonly ToolCallView[];
   dimmed?: boolean;
-  /** 当前会话项目 id；透传给 skill_opt 卡片解析 project 域三元组。 */
+  /** 当前会话项目 id；透传给 skill 卡片解析 project 域三元组。 */
   projectId?: string;
   onOpenFile?: (path: string) => void;
   onOpenSubagentSession?: (sessionId: string) => void;

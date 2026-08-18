@@ -30,7 +30,7 @@ export interface BuildToolResultBlockMeta {
    */
   readonly subagentSessionId?: string;
   /**
-   * `skill_opt` project 域解析上下文（当前会话 projectId）。read 缺省域命中
+   * `skill` project 域解析上下文（当前会话 projectId）。read 缺省域命中
    * 生效副本时输出只携带命中 domain/name，projectId 由这里补进 `meta.skillRef`。
    */
   readonly skillProjectId?: string;
@@ -93,9 +93,9 @@ function summarizeToolSuccess(
     return `${count} entries`;
   }
 
-  // skill_opt：按输出携带的 action 分发（read 行数 / write 域+路径 / edit 替换数 / list 条数）。
+  // skill：按输出携带的 action 分发（read 行数 / write 域+路径 / edit 替换数 / list 条数）。
   // 必须在下方 generic matches/paths 分支之前——list 输出的 entries+total 会撞上。
-  if (name === "skill_opt" && typeof output.action === "string") {
+  if (name === "skill" && typeof output.action === "string") {
     if (output.action === "read") {
       const returned = output.returnedLines;
       const total = output.totalLines;
@@ -162,7 +162,7 @@ export function buildToolResultBlock(
       outcome.output,
       meta?.subagentSessionId,
     );
-    // skill_opt 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
+    // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
     // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
     const skillRef = resolveSkillToolRefFromOutcome(
       meta?.toolName,
@@ -278,9 +278,9 @@ function resolveSubagentSessionIdFromOutcome(
 }
 
 /**
- * 从 skill_opt 成功输出提取跳转三元组（失败 outcome 一律 undefined）。
+ * 从 skill 成功输出提取跳转三元组（失败 outcome 一律 undefined）。
  *
- * 仅 `meta.toolName === "skill_opt"` 时有意义；实际判定在
+ * 仅 `meta.toolName === "skill"` 时有意义；实际判定在
  * `resolveSkillToolRefFromOutput` 内（工具名 + 输出形态双门控）。
  */
 function resolveSkillToolRefFromOutcome(

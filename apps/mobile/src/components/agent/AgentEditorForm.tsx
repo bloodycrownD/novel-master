@@ -848,7 +848,7 @@ export function AgentEditorForm(props: Props) {
           ) : (
             <Text style={[styles.hint, { color: tokens.textSecondary }]}>
               未配置时使用全部内置工具（8
-              个）：task、read、write、edit、fs、glob、grep、skill_opt。
+              个）：task、read、write、edit、fs、glob、grep、skill。
             </Text>
           )}
         </FormSectionCard>

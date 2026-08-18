@@ -1,5 +1,5 @@
 /**
- * `skill_opt` 工具卡片跳转三元组解析：从 tool_use 输入 / 工具输出解析
+ * `skill` 工具卡片跳转三元组解析：从 tool_use 输入 / 工具输出解析
  * domain + projectId + name。
  *
  * 对称 `resolveVfsToolFilePath`（`domain/tool/logic/vfs-tool-file-path.ts`）
@@ -14,7 +14,7 @@
 import type { SkillToolRef } from "@/domain/chat/model/content-block.js";
 
 /** 与 `domain/tool/builtin/skill-tool.ts` 的注册名同字符串（四处同名字符串之一）。 */
-const SKILL_TOOL_NAME = "skill_opt";
+const SKILL_TOOL_NAME = "skill";
 
 /** 输入里可解析出跳转三元组的 action（list 无目标技能，不产生跳转）。 */
 const REF_ACTIONS: ReadonlySet<string> = new Set(["read", "write", "edit"]);
@@ -30,7 +30,7 @@ function parseName(raw: unknown): string | undefined {
 /**
  * 从 tool_use 输入解析技能跳转三元组（供 UI 卡片「跳详情」门控使用）。
  *
- * - 仅 `skill_opt` 处理；action 为 list、name 非非空字符串时返回 undefined，不抛错。
+ * - 仅 `skill` 处理；action 为 list、name 非非空字符串时返回 undefined，不抛错。
  * - domain 缺省：write/edit 补工具同款默认 `project`；read 缺省读生效副本，
  *   实际命中域只有工具输出知道——此时返回 undefined，等 `meta.skillRef`。
  * - `projectId` 仅 project 域携带（global 域剥离，避免误导跳转）。
@@ -56,7 +56,7 @@ export function resolveSkillToolRefFromInput(
 }
 
 /**
- * 从 skill_opt 工具输出解析跳转三元组（供 `buildToolResultBlock` 自动检测
+ * 从 skill 工具输出解析跳转三元组（供 `buildToolResultBlock` 自动检测
  * 透传进 `meta.skillRef`，照 `subagentSessionId` 的双来源模式）。
  *
  * read/write/edit 成功输出均携带实际 domain/name；list 输出无目标技能。

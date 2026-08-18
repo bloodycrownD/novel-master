@@ -26,14 +26,14 @@ import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layou
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 /** 与 core skill-tool 的 SKILL_TOOL_NAME 同值（core 未公开导出，本地常量）。 */
-const SKILL_TOOL_NAME = "skill_opt";
+const SKILL_TOOL_NAME = "skill";
 
 /**
  * 预算提示词技能索引（与 desktop/mobile 的 prompt-preview.service 同模式）。
  *
  * CLI 的 YAML 只含 prompts 三区、无 tools policy，壳 definition 走
  * resolveAgentToolRegistry 的「无 policy → 全量工具」分支；不含
- * skill_opt（D4）时返回 undefined，预览不出现技能索引段。
+ * skill（D4）时返回 undefined，预览不出现技能索引段。
  */
 async function budgetSkillsIndex(
   rt: Pick<NovelMasterRuntime, "skills">,
@@ -110,7 +110,7 @@ export async function runPrompt(
     vfs,
     layout,
   });
-  // 技能索引预算：与双端预览同模式（probe + resolve 判 skill_opt，D4 联动）。
+  // 技能索引预算：与双端预览同模式（probe + resolve 判 skill，D4 联动）。
   const skillsIndex = await budgetSkillsIndex(rt, projectId, layout);
   const ctx = {
     workplaceDisplay,

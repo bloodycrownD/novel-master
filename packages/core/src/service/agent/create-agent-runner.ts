@@ -34,7 +34,7 @@ export interface CreateAgentRunnerDeps {
   readonly toolCtx: BuiltinToolContext;
   /**
    * skillAttach hydrate（`$技能` 首次引用附全文）的技能服务工厂；不随 D4
-   * （skill_opt deny）置空——显式引用不受工具禁用影响。
+   * （skill deny）置空——显式引用不受工具禁用影响。
    */
   readonly skills?: () => SkillService;
   readonly eventBus: SimpleEventBus;

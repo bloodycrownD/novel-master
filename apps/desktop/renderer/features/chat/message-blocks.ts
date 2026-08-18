@@ -16,7 +16,7 @@ export interface ToolCallView {
   readonly summary?: string;
   /** task 工具产生的子会话 id；存在则卡片可点跳转子会话。 */
   readonly subagentSessionId?: string;
-  /** skill_opt 跳转三元组（read 由 meta 透传，实际命中域在 tool_result 侧）；write/edit 的输入侧解析见 {@link skillToolRef}。 */
+  /** skill 跳转三元组（read 由 meta 透传，实际命中域在 tool_result 侧）；write/edit 的输入侧解析见 {@link skillToolRef}。 */
   readonly skillRef?: {
     readonly domain: 'global' | 'project';
     readonly projectId?: string;
@@ -179,8 +179,8 @@ function summarizeToolInput(
   name: string,
   input: Record<string, unknown>,
 ): string {
-  // skill_opt 摘要：`action domain:name`；read 缺省域时只展示 action + name
-  if (name === "skill_opt") {
+  // skill 摘要：`action domain:name`；read 缺省域时只展示 action + name
+  if (name === "skill") {
     const action = typeof input.action === "string" ? input.action : "";
     const skillName = typeof input.name === "string" ? input.name : "";
     const domain =
@@ -213,7 +213,7 @@ export function vfsToolFilePath(tool: ToolCallView): string | undefined {
 }
 
 /**
- * 解析 skill_opt 卡片的跳转三元组：优先 tool_result meta 透传的 skillRef
+ * 解析 skill 卡片的跳转三元组：优先 tool_result meta 透传的 skillRef
  * （read 缺省域命中生效副本的解析结果），否则从 tool_use 输入解析
  * （write/edit 必含；read 缺省域在 pending 时解析不出，返回 undefined）。
  */

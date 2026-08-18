@@ -73,7 +73,7 @@ export interface BuiltinToolSubagentContext {
 }
 
 /**
- * `skill_opt` 工具读取的技能闭包；装配点（runAgentTurn / runChildAgent）注入。
+ * `skill` 工具读取的技能闭包；装配点（runAgentTurn / runChildAgent）注入。
  *
  * 工具内部只经 `service` 调 SkillService，不直接持有 vfs；`projectId` 是
  * 解析上下文（D2：子代理按父会话 projectId 解析清单，与「子代理共享父
@@ -85,7 +85,7 @@ export interface BuiltinToolSkillsContext {
   /** 解析上下文：当前会话（子代理时为父会话）的 projectId。 */
   readonly projectId: string;
   /**
-   * 装配期预算好的生效技能清单（name + 描述），`skill_opt` 的
+   * 装配期预算好的生效技能清单（name + 描述），`skill` 的
    * description lambda 从这里拼「可用技能」文案。每 run 预算一次，
    * 回合内技能启停不即时反映（与 task 工具一致，有意行为）。
    */
@@ -144,10 +144,10 @@ export type BuiltinToolContext = {
    */
   readonly subagent?: BuiltinToolSubagentContext;
   /**
-   * 可选：仅 `skill_opt` 工具读取。vfs-tools / task 完全不感知。
+   * 可选：仅 `skill` 工具读取。vfs-tools / task 完全不感知。
    *
    * 主 agent run 与子 agent run 两个装配点都会注入（D2）；未注入时
-   * skill_opt 的 run 抛 ToolError（FAILED）。是否对 LLM 可见由
+   * skill 的 run 抛 ToolError（FAILED）。是否对 LLM 可见由
    * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
    */
   readonly skills?: BuiltinToolSkillsContext;

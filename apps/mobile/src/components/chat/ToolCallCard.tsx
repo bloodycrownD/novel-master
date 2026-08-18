@@ -21,7 +21,7 @@ type Props = {
   onOpenFile?: (path: string) => void;
   /** 当 tool 带 subagentSessionId 时，点击跳转子会话只读浏览。 */
   onOpenSubagentSession?: (sessionId: string) => void;
-  /** skill_opt 卡片点击跳技能详情（project 域缺 projectId 时由调用方补会话项目）。 */
+  /** skill 卡片点击跳技能详情（project 域缺 projectId 时由调用方补会话项目）。 */
   onOpenSkillDetail?: (ref: SkillToolRef) => void;
 };
 
@@ -64,7 +64,7 @@ export function ToolCallCard({
   const { tokens } = useTheme();
   const filePath = vfsToolFilePath(tool);
   const subagentSessionId = tool.subagentSessionId;
-  // skill_opt 跳转三元组：meta 透传优先，否则从 input 解析（write/edit）。
+  // skill 跳转三元组：meta 透传优先，否则从 input 解析（write/edit）。
   // projectId 由最终导航方按会话上下文补齐，这里不传。
   const skillRef = onOpenSkillDetail != null ? skillToolRef(tool) : undefined;
   // canOpen 对称 vfs 文件路径：任一可跳转目标存在即视为可点。

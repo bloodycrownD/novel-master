@@ -211,3 +211,9 @@ user:
 
 assistant:
 两处精简：① SkillPanelScreen 移除右上角 ManageListIcon 管理入口（stackOverride.showMenu+menuIcon 整个 useEffect 删掉，连带 useHeaderContext/ManageListIcon 导入）——不稳定根源是它和 SkillDetail 的 stackOverride 清理时序打架，跳转 icon 会时隐时现泄漏到详情页；管理页仍可从设置进入。② SkillsSettingsScreen ⋮ 菜单移除「编辑」项（handleMenuSelect 的 case 'edit' 一并删，项目域 splice 插入位从 3/4 改 2/3），菜单变为：导出 ZIP/导入 ZIP/[复制到其他项目…/提升为全局]/删除。typecheck 干净，skill-panel 测试 + session 文件管理器集成回归（6/6）通过。
+
+user:
+skill opt 工具改名 skill 吧，顺便给我看看当前工具的 schema。
+
+assistant:
+功能未发版无存量数据，直接全量替换 skill_opt→skill（136 处，sed 一次性覆盖 core src/test + cli + desktop + mobile，含注释）。关键落点：skill-tool.ts 的 SKILL_TOOL_NAME、skill-tool-ref.ts（core/cli/desktop/mobile 四处本地同名常量）、build-tool-result-block.ts 的 name === "skill"、agent-tool-catalog 第 8 条（label/description 同步）。core rebuild 后 2005 全绿；desktop typecheck+全量测试、mobile typecheck + message-blocks(32)/tool-policy-picker/skill-panel/vfs session 回归全过。注意 mobile message-blocks 测试是 .ts 后缀，jest glob 别写 .tsx。

@@ -14,7 +14,7 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   { name: "fs", label: "fs", description: "文件系统命令（ls/rm/mv/cp/mkdir/rmdir）" },
   { name: "glob", label: "glob", description: "按 glob 模式查找路径" },
   { name: "grep", label: "grep", description: "在工作区文件内容中搜索（支持正则/反选/上下文）" },
-  { name: "skill_opt", label: "skill_opt", description: "读取与管理技能（read/write/edit/list）" },
+  { name: "skill", label: "skill", description: "读取与管理技能（read/write/edit/list）" },
 ] as const;
 
 export function buildToolsPolicyFromSelection(

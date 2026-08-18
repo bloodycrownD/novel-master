@@ -19,11 +19,11 @@ export type TranscriptToolView = {
   readonly summary?: string;
   /** task 工具的子会话跳转 id（对称 vfs 工具卡片的可点路径）。 */
   readonly subagentSessionId?: string;
-  /** skill_opt 跳转三元组（read 由 tool_result meta 透传；write/edit 由 Web 侧从 input 解析）。 */
+  /** skill 跳转三元组（read 由 tool_result meta 透传；write/edit 由 Web 侧从 input 解析）。 */
   readonly skillRef?: TranscriptSkillRef;
 };
 
-/** skill_opt 卡片跳详情三元组（与 core SkillToolRef 同形，桥接层独立声明避免拉入 core 类型）。 */
+/** skill 卡片跳详情三元组（与 core SkillToolRef 同形，桥接层独立声明避免拉入 core 类型）。 */
 export type TranscriptSkillRef = {
   readonly domain: 'global' | 'project';
   readonly projectId?: string;

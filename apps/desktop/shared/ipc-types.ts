@@ -620,7 +620,7 @@ export type ContentBlockDto =
       readonly summary?: string;
       /**
        * UI-only 旁路字段：task 工具携带 `subagentSessionId` 供卡片跳转子会话；
-       * skill_opt 携带 `skillRef`（read 由工具输出解析透传，write/edit 由输入侧解析）。
+       * skill 携带 `skillRef`（read 由工具输出解析透传，write/edit 由输入侧解析）。
        */
       readonly meta?: {
         readonly subagentSessionId?: string;

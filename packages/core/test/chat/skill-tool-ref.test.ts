@@ -10,7 +10,7 @@ describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
   it("write 缺省域补 project，携带会话 projectId", () => {
     assert.deepEqual(
       resolveSkillToolRefFromInput(
-        "skill_opt",
+        "skill",
         { action: "write", name: "demo", content: "x" },
         "proj-1",
       ),
@@ -21,7 +21,7 @@ describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
   it("edit 显式 global 域：不带 projectId（global 无需定位上下文）", () => {
     assert.deepEqual(
       resolveSkillToolRefFromInput(
-        "skill_opt",
+        "skill",
         { action: "edit", name: "demo", domain: "global", oldString: "a", newString: "b" },
         "proj-1",
       ),
@@ -32,7 +32,7 @@ describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
   it("read 缺省域返回 undefined——实际命中域只有工具输出知道，等 meta.skillRef", () => {
     assert.equal(
       resolveSkillToolRefFromInput(
-        "skill_opt",
+        "skill",
         { action: "read", name: "demo" },
         "proj-1",
       ),
@@ -43,7 +43,7 @@ describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
   it("read 显式 project 域可解析（pending 卡片也能跳）", () => {
     assert.deepEqual(
       resolveSkillToolRefFromInput(
-        "skill_opt",
+        "skill",
         { action: "read", name: "demo", domain: "project" },
         "proj-1",
       ),
@@ -53,12 +53,12 @@ describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
 
   it("list 无目标技能，返回 undefined", () => {
     assert.equal(
-      resolveSkillToolRefFromInput("skill_opt", { action: "list" }, "p"),
+      resolveSkillToolRefFromInput("skill", { action: "list" }, "p"),
       undefined,
     );
   });
 
-  it("非 skill_opt 工具一律返回 undefined", () => {
+  it("非 skill 工具一律返回 undefined", () => {
     assert.equal(
       resolveSkillToolRefFromInput("write", { action: "write", name: "demo" }),
       undefined,
@@ -67,12 +67,12 @@ describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
 
   it("name 缺失返回 undefined；非法 domain 值按缺省回落（镜像工具层默认）", () => {
     assert.equal(
-      resolveSkillToolRefFromInput("skill_opt", { action: "write" }),
+      resolveSkillToolRefFromInput("skill", { action: "write" }),
       undefined,
     );
     // 非法 domain 值在工具 schema 层已被拒；这里防御性按缺省处理（write/edit → project）
     assert.deepEqual(
-      resolveSkillToolRefFromInput("skill_opt", {
+      resolveSkillToolRefFromInput("skill", {
         action: "write",
         name: "demo",
         domain: "team",
@@ -83,7 +83,7 @@ describe("resolveSkillToolRefFromInput（tool_use 输入侧解析）", () => {
 
   it("projectId 缺省时 project 域 ref 不带该字段", () => {
     assert.deepEqual(
-      resolveSkillToolRefFromInput("skill_opt", {
+      resolveSkillToolRefFromInput("skill", {
         action: "write",
         name: "demo",
       }),
@@ -96,7 +96,7 @@ describe("resolveSkillToolRefFromOutput（工具输出侧自动检测）", () =>
   it("read 输出携带生效副本命中域：透传并补 skillProjectId", () => {
     assert.deepEqual(
       resolveSkillToolRefFromOutput(
-        "skill_opt",
+        "skill",
         {
           action: "read",
           domain: "project",
@@ -113,7 +113,7 @@ describe("resolveSkillToolRefFromOutput（工具输出侧自动检测）", () =>
   it("read 命中 global 副本：不带 projectId", () => {
     assert.deepEqual(
       resolveSkillToolRefFromOutput(
-        "skill_opt",
+        "skill",
         { action: "read", domain: "global", name: "demo" },
         "proj-1",
       ),
@@ -123,7 +123,7 @@ describe("resolveSkillToolRefFromOutput（工具输出侧自动检测）", () =>
 
   it("write/edit 输出同样可解析（输出必带实际 domain/name）", () => {
     assert.deepEqual(
-      resolveSkillToolRefFromOutput("skill_opt", {
+      resolveSkillToolRefFromOutput("skill", {
         action: "edit",
         domain: "global",
         name: "demo",
@@ -136,7 +136,7 @@ describe("resolveSkillToolRefFromOutput（工具输出侧自动检测）", () =>
 
   it("list 输出无目标技能，返回 undefined", () => {
     assert.equal(
-      resolveSkillToolRefFromOutput("skill_opt", {
+      resolveSkillToolRefFromOutput("skill", {
         action: "list",
         entries: [],
         total: 0,
@@ -145,7 +145,7 @@ describe("resolveSkillToolRefFromOutput（工具输出侧自动检测）", () =>
     );
   });
 
-  it("非 skill_opt 工具名或非对象输出返回 undefined", () => {
+  it("非 skill 工具名或非对象输出返回 undefined", () => {
     assert.equal(
       resolveSkillToolRefFromOutput("read", {
         action: "read",
@@ -155,11 +155,11 @@ describe("resolveSkillToolRefFromOutput（工具输出侧自动检测）", () =>
       undefined,
     );
     assert.equal(
-      resolveSkillToolRefFromOutput("skill_opt", "not-an-object"),
+      resolveSkillToolRefFromOutput("skill", "not-an-object"),
       undefined,
     );
     assert.equal(
-      resolveSkillToolRefFromOutput("skill_opt", null),
+      resolveSkillToolRefFromOutput("skill", null),
       undefined,
     );
   });

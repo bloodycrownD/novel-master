@@ -50,7 +50,7 @@ type Props = {
   onOpenToolFile?: (path: string) => void;
   /** 点击 task 工具卡片跳转到子会话只读浏览页。 */
   onOpenSubagentSession?: (sessionId: string) => void;
-  /** skill_opt 卡片点击跳技能详情。 */
+  /** skill 卡片点击跳技能详情。 */
   onOpenSkillDetail?: (ref: SkillToolRef) => void;
   /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
   pendingSubagentSessions?: ReadonlyMap<string, string>;

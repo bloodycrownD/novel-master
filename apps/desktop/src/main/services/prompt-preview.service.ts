@@ -22,12 +22,12 @@ export interface PromptPreviewScope {
 }
 
 /** 与 core skill-tool 的 SKILL_TOOL_NAME 同值（core 未公开导出，本地常量）。 */
-const SKILL_TOOL_NAME = "skill_opt";
+const SKILL_TOOL_NAME = "skill";
 
 /**
  * 预算技能索引（与 agent-runner 同源：effectiveSkills 生效清单）。
  *
- * D4 联动：resolve 后 registry 不含 skill_opt（policy 禁用）时返回 undefined，
+ * D4 联动：resolve 后 registry 不含 skill（policy 禁用）时返回 undefined，
  * 预览不出现技能索引段——工具与索引同进退。
  */
 async function budgetSkillsIndex(

@@ -1,14 +1,14 @@
 /**
- * skill_opt 卡片跳转三元组解析（core `domain/chat/logic/skill-tool-ref.ts` 的 WebView 镜像）。
+ * skill 卡片跳转三元组解析（core `domain/chat/logic/skill-tool-ref.ts` 的 WebView 镜像）。
  *
  * write/edit 的三元组必含于 tool_use 输入，这里直接解析；read 缺省域命中
  * 生效副本的解析结果由宿主经行数据 `skillRef` 透传（tool_result meta），
- * `skillToolRef` 优先取它。漏了这份镜像，transcript 内的 skill_opt 卡片
+ * `skillToolRef` 优先取它。漏了这份镜像，transcript 内的 skill 卡片
  * 将不可点（对称 `vfs-tool-path.ts` 的镜像先例）。
  */
 import type { SkillRefMeta, ToolCallRow } from '../state/state';
 
-const SKILL_TOOL_NAME = 'skill_opt';
+const SKILL_TOOL_NAME = 'skill';
 
 /** 输入里可解析出跳转三元组的 action（list 无目标技能）。 */
 const REF_ACTIONS: Record<string, number> = {

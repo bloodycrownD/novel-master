@@ -163,7 +163,7 @@ function formatSkillsIndexBody(
     return `- ${entry.name}${descSuffix}（${entry.domain}）`;
   });
   return [
-    "当前可用技能（每条为 名称：描述（来源域），正文经 skill_opt 工具按需读取）：",
+    "当前可用技能（每条为 名称：描述（来源域），正文经 skill 工具按需读取）：",
     ...lines,
   ].join("\n");
 }

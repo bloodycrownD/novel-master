@@ -135,9 +135,9 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     expect(after).toContain('write');
 
     // 勾选 write 行：write 同时出现在 sheet 列表，找列表行（排除 trigger）。
-    // skill_opt 的描述文案含「write」字样，须排除，否则误中 skill_opt 行。
+    // skill 的描述文案含「write」字样，须排除，否则误中 skill 行。
     const writeRows = findAllPressablesByChildText(renderer.root, 'write').filter(
-      (row: any) => !collectOwnText(row).includes('skill_opt'),
+      (row: any) => !collectOwnText(row).includes('skill'),
     );
     expect(writeRows.length).toBeGreaterThanOrEqual(1);
     act(() => {
@@ -219,7 +219,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
       'fs',
       'glob',
       'grep',
-      'skill_opt',
+      'skill',
     ];
     let r2: any;
     act(() => {

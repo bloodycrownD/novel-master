@@ -11,13 +11,13 @@ import { subagentTool } from "./subagent-tool.js";
 import { skillTool } from "./skill-tool.js";
 
 /**
- * 注册内置工具：6 个 vfs 工具 + 静态 `task` 工具 + 静态 `skill_opt` 工具。
+ * 注册内置工具：6 个 vfs 工具 + 静态 `task` 工具 + 静态 `skill` 工具。
  *
- * task / skill_opt 是静态对象，description 是 lambda，装配期由
+ * task / skill 是静态对象，description 是 lambda，装配期由
  * `toolsFromRegistry` 分别读 `ctx.subagent.callableAgents` /
  * `ctx.skills.effective` 求值。task 是否对 LLM 可见由
  * `resolveAgentToolRegistry` 的 depth 判断控制（孙 agent depth>=2 deny）；
- * skill_opt 由 tools.allow/deny 控制（与 task 同机制，无静态白名单）。
+ * skill 由 tools.allow/deny 控制（与 task 同机制，无静态白名单）。
  */
 export function registerBuiltinTools(
   registry: ToolRegistry<BuiltinToolContext>,

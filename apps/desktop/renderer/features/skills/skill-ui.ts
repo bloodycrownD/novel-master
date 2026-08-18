@@ -33,7 +33,7 @@ export function buildNewSkillDoc(name: string, description: string): string {
     "",
     description,
     "",
-    "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill_opt 工具按需读取。 -->",
+    "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->",
     "",
   ].join("\n");
 }

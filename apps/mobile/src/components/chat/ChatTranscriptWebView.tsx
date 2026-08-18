@@ -87,7 +87,7 @@ export type ChatTranscriptWebViewProps = {
   readonly onOpenToolFile?: (path: string) => void;
   /** 点击 task 工具卡片跳转子会话只读浏览（webview web app 发 openSubagentSession）。 */
   readonly onOpenSubagentSession?: (sessionId: string) => void;
-  /** 点击 skill_opt 卡片跳技能详情（webview web app 发 openSkillDetail；project 域缺 projectId 时由调用方补齐）。 */
+  /** 点击 skill 卡片跳技能详情（webview web app 发 openSkillDetail；project 域缺 projectId 时由调用方补齐）。 */
   readonly onOpenSkillDetail?: (ref: TranscriptSkillRef) => void;
   readonly onOpenMessageMenu?: (
     messageId: string,

@@ -21,7 +21,7 @@ import { assembleSkillsToolContext } from "../../src/service/agent/logic/run-age
 import { resolveAgentToolRegistry } from "../../src/domain/agent/logic/resolve-agent-tool-registry.js";
 import type { AgentDefinition } from "../../src/domain/agent/model/agent-definition.js";
 
-/** 构造 fake SkillService：只实现 skill_opt 用到的四个方法，按调用记录断言。 */
+/** 构造 fake SkillService：只实现 skill 用到的四个方法，按调用记录断言。 */
 function fakeSkillService(overrides?: {
   readonly read?: SkillService["readSkillFile"];
   readonly write?: SkillService["writeSkillFile"];
@@ -123,8 +123,8 @@ function makeRunner(): {
   return { runner: new ToolRunner(registry), registry };
 }
 
-describe("skill_opt 工具", () => {
-  it("registerBuiltinTools 注册 skill_opt（共 8 个内置工具）", () => {
+describe("skill 工具", () => {
+  it("registerBuiltinTools 注册 skill（共 8 个内置工具）", () => {
     const { registry } = makeRunner();
     assert.ok(registry.list().includes(SKILL_TOOL_NAME));
     assert.equal(registry.list().length, 8);
@@ -377,7 +377,7 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
     assert.equal(ctx, undefined);
   });
 
-  it("registry 含 skill_opt 时预算 effective 清单并注入 projectId", async () => {
+  it("registry 含 skill 时预算 effective 清单并注入 projectId", async () => {
     const svc = fakeSkillService();
     const runtime = { skills: () => svc as SkillService };
     const ctx = await assembleSkillsToolContext(
@@ -393,7 +393,7 @@ describe("assembleSkillsToolContext（主/子两装配点共用）", () => {
     assert.equal(effCall.args[0], "proj-9");
   });
 
-  it("deny skill_opt 后 registry 不含它：不注入闭包且不产生预算 IO（D4 注册表侧联动）", async () => {
+  it("deny skill 后 registry 不含它：不注入闭包且不产生预算 IO（D4 注册表侧联动）", async () => {
     const svc = fakeSkillService();
     const runtime = { skills: () => svc as SkillService };
     const registry = registryWithSkillOpt(true);

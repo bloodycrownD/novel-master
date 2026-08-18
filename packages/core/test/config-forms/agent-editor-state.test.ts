@@ -57,7 +57,7 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.skillsBlocks, "技能索引区");
   assert.equal(
     PROMPT_REGION_LABELS.skillsReadonlyHint,
-    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。不可编辑、不可关闭；无生效技能或工具策略禁用 skill_opt 时不发送。"
+    "运行时自动注入当前生效技能的索引（名称、描述与来源域），固定位于系统区与常驻工作区之间。不可编辑、不可关闭；无生效技能或工具策略禁用 skill 时不发送。"
   );
   assert.equal(
     PROMPT_REGION_LABELS.persistRegionHint,

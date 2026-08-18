@@ -16,7 +16,7 @@ type ToolCallCardProps = {
   onOpenFile?: (path: string) => void;
   /** task 工具携带子会话 id 时可点击跳转只读子会话面板。 */
   onOpenSubagentSession?: (sessionId: string) => void;
-  /** 当前会话项目 id；skill_opt 卡片跳设置详情需要（project 域补全三元组）。 */
+  /** 当前会话项目 id；skill 卡片跳设置详情需要（project 域补全三元组）。 */
   projectId?: string;
 };
 

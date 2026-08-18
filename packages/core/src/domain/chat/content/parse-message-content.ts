@@ -43,7 +43,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * 解析 `meta.skillRef`（skill_opt 跳转三元组）：字段不合法时抛错，
+ * 解析 `meta.skillRef`（skill 跳转三元组）：字段不合法时抛错，
  * 缺省/未携带时返回 undefined（与其他具名 meta 字段同一口径）。
  */
 function parseSkillRefMeta(value: unknown, label: string): SkillToolRef | undefined {
