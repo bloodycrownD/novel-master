@@ -6571,6 +6571,46 @@ html[data-theme="dark"] .chat-batch-bar {
   font-family: inherit;
 }
 
+/* 新建弹窗 ZIP 导入：入口按钮与已导入提示行 */
+.new-skill-modal__import-btn {
+  margin-bottom: 4px;
+  padding: 8px 12px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--primary, #4a90d9);
+  cursor: pointer;
+}
+
+.new-skill-modal__import-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.new-skill-modal__import-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.new-skill-modal__import-info {
+  flex: 1;
+  color: var(--text-secondary, #888);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.new-skill-modal__import-clear {
+  border: none;
+  background: transparent;
+  color: var(--primary, #4a90d9);
+  cursor: pointer;
+  padding: 0;
+}
+
 /* composer `$` 技能 typeahead（Step20） */
 .chat-composer__typeahead-item--skill {
   display: flex;

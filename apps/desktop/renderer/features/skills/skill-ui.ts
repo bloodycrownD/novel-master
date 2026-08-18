@@ -3,7 +3,7 @@
  *
  * 会话技能面板（SessionDetailDrawer 内）与设置·技能管理页共用。
  */
-import { SKILL_NAME_PATTERN } from "@novel-master/core/skills";
+import { SKILL_NAME_PATTERN } from "@shared/logic/skills";
 import type { SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
 
 /** 域徽标文案：项目副本覆盖同名全局技能时标「项目 · 覆盖全局」。 */
@@ -32,6 +32,40 @@ export function buildNewSkillDoc(name: string, description: string): string {
     "<!-- 在这里编写技能说明。可添加辅助文件（如 references/x.md），模型会经 skill 工具按需读取。 -->",
     "",
   ].join("\n");
+}
+
+/** YAML 双引号标量：含冒号/换行不出错（front matter 重写用）。 */
+export function yamlScalar(value: string): string {
+  return JSON.stringify(value);
+}
+
+/**
+ * 以表单最终值为准重写 SKILL.md front matter（保留其余键与正文）。
+ * 无 front matter 块时前置补一个；技能 ZIP 导入创建时表单值与 zip
+ * 元数据不一致则用它回写，一致则保留 zip 原文。
+ */
+export function withFrontMatterValues(
+  source: string,
+  name: string,
+  description: string,
+): string {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  const fmLine = (key: string, value: string) => `${key}: ${yamlScalar(value)}`;
+  if (match == null) {
+    return `---\n${fmLine("name", name)}\n${fmLine("description", description)}\n---\n\n${source}`;
+  }
+  let fm = match[1]!;
+  const values: ReadonlyArray<[string, string]> = [
+    ["name", name],
+    ["description", description],
+  ];
+  for (const [key, value] of values) {
+    const re = new RegExp(`^${key}:.*$`, "m");
+    fm = re.test(fm)
+      ? fm.replace(re, fmLine(key, value))
+      : `${fm}\n${fmLine(key, value)}`;
+  }
+  return source.replace(match[0], `---\n${fm}\n---\n`);
 }
 
 /** 技能名展示校验（与 core SKILL_NAME_PATTERN 同口径：禁空白与 `/`、不以 `.` 开头、非保留名）。 */

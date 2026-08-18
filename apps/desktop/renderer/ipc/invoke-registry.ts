@@ -81,6 +81,8 @@ import {
   type VfsCharacterCardImportResult,
   type VfsZipExportResult,
   type VfsZipImportResult,
+  type VfsZipPickResult,
+  type VfsZipBytesImportRequest,
   type VfsZipRequest,
   type WorkplaceBuildListRowsRequest,
   type WorkplaceGetDirRuleRequest,
@@ -263,6 +265,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.VFS_ZIP_IMPORT,
     ),
+    ipcVfsZipPick: noArg<IpcResult<VfsZipPickResult>>(
+      invoke,
+      IPC_CHANNELS.VFS_ZIP_PICK,
+    ),
+    ipcVfsZipImportBytes: withReq<
+      VfsZipBytesImportRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES),
     ipcVfsCharacterCardImport: withReq<
       VfsCharacterCardImportRequest,
       IpcResult<VfsCharacterCardImportResult>

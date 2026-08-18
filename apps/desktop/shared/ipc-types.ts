@@ -53,6 +53,10 @@ export const IPC_CHANNELS = {
   VFS_RENAME: 'nm:vfs/rename',
   VFS_ZIP_EXPORT: 'nm:vfs/zipExport',
   VFS_ZIP_IMPORT: 'nm:vfs/zipImport',
+  /** 弹框选 zip 读字节（技能导入预检用，预检在 Renderer） */
+  VFS_ZIP_PICK: 'nm:vfs/zipPick',
+  /** 字节直写导入（不弹框；技能新建弹窗创建时整包落盘用） */
+  VFS_ZIP_IMPORT_BYTES: 'nm:vfs/zipImportBytes',
   /** 角色卡导入（PNG/JSON → 子树替换） */
   VFS_CHARACTER_CARD_IMPORT: 'nm:vfs/characterCardImport',
   /** 本机路径批量 ingest（plan + 可选 apply） */
@@ -447,6 +451,17 @@ export type VfsZipRequest = VfsScopeRequest & {
 
 export type VfsZipExportResult = 'saved' | 'cancelled';
 export type VfsZipImportResult = 'imported' | 'cancelled';
+
+/** zipPick 结果：所选文件字节；null = 用户取消。 */
+export type VfsZipPickResult = Uint8Array | null;
+
+/** 字节导入请求：选文件（zipPick）与确认（Renderer 预检）已前置，不再弹框。 */
+export type VfsZipBytesImportRequest = VfsScopeRequest & {
+  readonly bytes: Uint8Array;
+  readonly confirmed?: boolean;
+  /** 子树目标目录；缺省 ≡ `/`（整域） */
+  readonly directoryPath?: string;
+};
 
 /** 角色卡导入请求：与 {@link VfsZipRequest} 同构（确认在 Renderer，选文件在 Main）。 */
 export type VfsCharacterCardImportRequest = VfsScopeRequest & {

@@ -162,6 +162,8 @@ import {
   handleVfsCharacterCardImport,
   handleVfsZipExport,
   handleVfsZipImport,
+  handleVfsZipPick,
+  handleVfsZipImportBytes,
 } from './handlers/vfs.js';
 import type { VfsStartDragRequest } from '../../../shared/ipc-types.js';
 import {
@@ -244,6 +246,8 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.VFS_RENAME, handleVfsRename);
   bindReq(IPC_CHANNELS.VFS_ZIP_EXPORT, handleVfsZipExport);
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
+  bindNoArg(IPC_CHANNELS.VFS_ZIP_PICK, handleVfsZipPick);
+  bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES, handleVfsZipImportBytes);
   bindReq(IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT, handleVfsCharacterCardImport);
   bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, handleVfsBatchIngestFromPaths);
   bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);

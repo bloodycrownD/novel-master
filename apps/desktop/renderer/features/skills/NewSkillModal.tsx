@@ -1,15 +1,37 @@
 /**
- * 新建技能弹窗：技能名 + 描述 + 存储域分段（全局/项目）+ 项目下拉。
+ * 新建技能弹窗：手进模板或从 ZIP 导入预填（技能名 + 描述 + 存储域分段 + 项目下拉）。
  *
- * 创建即写仅含 SKILL.md 的技能目录（front matter 自动填 name/description），
- * 成功后回调 `onCreated`（调用方负责直达技能详情页）。
+ * 导入 = 选 zip（本产品导出格式：根即技能目录）→ 预填 name/description
+ * （可改）→ 创建时 zip 内全部文件落入新技能目录，SKILL.md 的 front
+ * matter 以表单最终值为准重写（表单未改则不重写）。手进创建 = 向目标
+ * 域写仅含 SKILL.md 的新目录。
  * 会话技能面板（默认项目域）与设置·技能管理页（预选当前 tab 域）共用。
  */
 import { useEffect, useState } from "react";
+import {
+  previewSkillZip,
+  type SkillZipPreview,
+} from "@shared/logic/skills";
 import type { ProjectDto, SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
-import { ipcSkillsList, ipcSkillsWrite } from "@/ipc/client";
+import {
+  ipcSkillsList,
+  ipcSkillsWrite,
+  ipcVfsZipImportBytes,
+  ipcVfsZipPick,
+} from "@/ipc/client";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { buildNewSkillDoc, isValidSkillNameInput, toSkillRef } from "./skill-ui";
+import {
+  buildNewSkillDoc,
+  isValidSkillNameInput,
+  toSkillRef,
+  withFrontMatterValues,
+} from "./skill-ui";
+
+/** 导入态：zip 字节（创建时落盘）+ 预检结果（预填与 front matter 重写判定）。 */
+type ImportedSkill = {
+  readonly bytes: Uint8Array;
+  readonly preview: SkillZipPreview;
+};
 
 type NewSkillModalProps = {
   open: boolean;
@@ -36,6 +58,8 @@ export function NewSkillModal({
   const [projectId, setProjectId] = useState(defaultProjectId ?? projects[0]?.id ?? "");
   const [error, setError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ImportedSkill | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -44,6 +68,7 @@ export function NewSkillModal({
       setDomain(defaultDomain);
       setProjectId(defaultProjectId ?? projects[0]?.id ?? "");
       setError(undefined);
+      setImported(null);
     }
   }, [open, defaultDomain, defaultProjectId, projects]);
 
@@ -55,6 +80,37 @@ export function NewSkillModal({
   const trimmedDesc = description.trim();
   const canSubmit =
     !saving && trimmedName.length > 0 && trimmedDesc.length > 0;
+
+  /** 选 zip → 预检 → 预填 name/description（可改）；取消选择不动表单。 */
+  const handleImport = async () => {
+    if (importing) {
+      return;
+    }
+    setImporting(true);
+    setError(undefined);
+    try {
+      const pickRes = await ipcVfsZipPick();
+      if (!pickRes.ok) {
+        setError(pickRes.error.message);
+        return;
+      }
+      if (pickRes.data == null) {
+        return;
+      }
+      const preview = previewSkillZip(pickRes.data);
+      if (preview.skillMd == null) {
+        setError("ZIP 根目录缺少 SKILL.md（导出格式：zip 根即技能目录）");
+        return;
+      }
+      setImported({ bytes: pickRes.data, preview });
+      setName(preview.name ?? "");
+      setDescription(preview.description ?? "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleConfirm = async () => {
     if (!canSubmit) {
@@ -87,15 +143,50 @@ export function NewSkillModal({
           return;
         }
       }
-      const res = await ipcSkillsWrite({
-        domain,
-        ...(domain === "project" ? { projectId } : {}),
-        name: trimmedName,
-        content: buildNewSkillDoc(trimmedName, trimmedDesc),
-      });
-      if (!res.ok) {
-        setError(res.error.message);
-        return;
+      if (imported != null) {
+        // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
+        // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
+        const importRes = await ipcVfsZipImportBytes({
+          workspaceScope: domain === "global" ? "global" : "session",
+          ...(domain === "project" ? { projectId } : {}),
+          bytes: imported.bytes,
+          confirmed: true,
+          directoryPath: `/meta/skills/${trimmedName}`,
+        });
+        if (!importRes.ok) {
+          setError(importRes.error.message);
+          return;
+        }
+        if (
+          imported.preview.name !== trimmedName ||
+          imported.preview.description !== trimmedDesc
+        ) {
+          const rewriteRes = await ipcSkillsWrite({
+            domain,
+            ...(domain === "project" ? { projectId } : {}),
+            name: trimmedName,
+            content: withFrontMatterValues(
+              imported.preview.skillMd!,
+              trimmedName,
+              trimmedDesc,
+            ),
+          });
+          if (!rewriteRes.ok) {
+            setError(rewriteRes.error.message);
+            return;
+          }
+        }
+      } else {
+        const res = await ipcSkillsWrite({
+          domain,
+          ...(domain === "project" ? { projectId } : {}),
+          name: trimmedName,
+          content: buildNewSkillDoc(trimmedName, trimmedDesc),
+        });
+        if (!res.ok) {
+          setError(res.error.message);
+          return;
+        }
       }
       onCreated(toSkillRef(domain, trimmedName, projectId));
       onClose();
@@ -116,6 +207,27 @@ export function NewSkillModal({
         <h3 id="new-skill-title" className="text-prompt-modal__title">
           新建技能
         </h3>
+        {imported != null ? (
+          <div className="new-skill-modal__import-row">
+            <span className="new-skill-modal__import-info">{`已导入 ZIP · ${imported.preview.fileCount} 个文件（创建后全部带入）`}</span>
+            <button
+              type="button"
+              className="new-skill-modal__import-clear"
+              onClick={() => setImported(null)}
+            >
+              移除
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="new-skill-modal__import-btn"
+            disabled={importing}
+            onClick={() => void handleImport()}
+          >
+            {importing ? "读取中…" : "从 ZIP 导入…"}
+          </button>
+        )}
         <p className="text-prompt-modal__label">技能名（创建后不可改）</p>
         <input
           className="text-prompt-modal__input"

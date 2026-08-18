@@ -25,6 +25,8 @@ import type {
   VfsCharacterCardImportResult,
   VfsZipExportResult,
   VfsZipImportResult,
+  VfsZipPickResult,
+  VfsZipBytesImportRequest,
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
 import { IPC_CHANNELS } from "../../../../shared/ipc-types.js";
@@ -57,7 +59,9 @@ import {
 import { importCharacterCardWithDialog } from "../../services/vfs-character-card.service.js";
 import {
   exportVfsZipWithDialog,
+  importVfsZipBytes,
   importVfsZipWithDialog,
+  pickVfsZipBytesWithDialog,
 } from "../../services/vfs-zip.service.js";
 import {
   getVfsForScope,
@@ -305,6 +309,37 @@ export async function handleVfsZipImport(
       focusedWindow(),
     );
     return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/** 弹框选 zip 读字节：技能新建弹窗预检用，预检（previewSkillZip）在 Renderer。 */
+export async function handleVfsZipPick(): Promise<
+  IpcResult<VfsZipPickResult>
+> {
+  try {
+    const bytes = await pickVfsZipBytesWithDialog(focusedWindow());
+    return { ok: true, data: bytes };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/** 字节直写导入（不弹框）：新建弹窗创建时整包落入技能目录。 */
+export async function handleVfsZipImportBytes(
+  req: VfsZipBytesImportRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    await importVfsZipBytes(rt, scope, {
+      bytes: req.bytes,
+      confirmed: req.confirmed === true,
+      directoryPath: req.directoryPath,
+    });
+    pushWorkspaceMutated(req);
+    return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

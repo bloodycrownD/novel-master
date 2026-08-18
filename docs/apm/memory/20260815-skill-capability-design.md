@@ -255,3 +255,15 @@ user:
 
 assistant:
 mobile 落地：① core 新增 previewSkillZip（public/skills 导出）——parseVfsZip+parseSkillFrontMatter 复用，返回 name/description/skillMd 全文/fileCount/valid，约定 zip 根即技能目录（本产品导出格式），嵌套目录返回 skillMd=null；② vfs-zip.service 导出 pickZipFileBytes（选 zip+读字节，取消返回 null），importVfsZip 复用之；③ NewSkillModal：标题下「从 ZIP 导入…」按钮 → 预检 → 预填 name/description（可改），已导入态显示「已导入 ZIP · N 个文件（创建后全部带入）」+移除；创建分支：zipSvc.import 整包落入 /meta/skills/{name}（新目录为空无覆盖风险），表单值与 zip 元数据不一致时重写 SKILL.md front matter（withFrontMatterValues：保留其余键与正文，YAML 双引号标量）；④ SkillsSettingsScreen ⋮ 菜单删「导入 ZIP」项+case+runSkillZipImport，zipScopeFor 保留（导出仍用）。core 新测试 4/4，mobile typecheck 干净+回归过。desktop 未动（⋮ 菜单仍有导入 ZIP，新建弹窗无导入），待用户确认是否对齐。
+
+user:
+把 mobile 已落地的「技能 ZIP 导入并入新建弹窗」同步到 desktop（参考 9a04dee）。
+
+assistant:
+desktop 落地（上一条的续）：① 文件选择走新 IPC 通道——VFS_ZIP_PICK（nm:vfs/zipPick，bindNoArg，主进程 dialog.showOpenDialog 选 zip 读字节回传，取消返回 null）+ VFS_ZIP_IMPORT_BYTES（nm:vfs/zipImportBytes，字节直写不弹框）；vfs-zip.service 拆出 pickVfsZipBytesWithDialog/importVfsZipBytes，旧 importVfsZipWithDialog 复用两者；② NewSkillModal 加「从 ZIP 导入…」：pick→previewSkillZip（renderer 纯函数）→预填可改→创建时 importBytes 整包落 /meta/skills/{name}+表单值不一致时 withFrontMatterValues 重写 front matter（yamlScalar/withFrontMatterValues 落在 desktop skill-ui.ts）；③ SkillsManageView 无需移除——desktop ⋮ 菜单从未有过「导入 ZIP」（c4dae36 建页时就只有编辑/删除，App.tsx 的导入 ZIP 是 workspace 通用菜单），mobile 侧移除项在 desktop 无对应物；④ eslint 禁 renderer 直接 import core，新建 shared/logic/skills.ts 薄转发 previewSkillZip/SKILL_NAME_PATTERN，顺带把 skill-ui.ts 存量违规 import 一并改走转发。测试 skill-zip-import.test.tsx 8/8（handler 整包落盘+非法 zip 拒绝+front matter 重写+弹窗渲染）；desktop typecheck 干净。坑：VfsZipError 在 formatIpcError 无专门分支，code 落 err.name（"VfsZipError"）而非 INVALID_ZIP，断言按现状写。
+
+user:
+desktop 也同步导入并入新建弹窗；另外给智能体配置的 skill 块加总开关，默认开启，关闭后关闭 skill 注入并移除 skill 工具注册——给用户完全控制。
+
+assistant:
+两件事：① desktop 导入并入新建（子代理完成）：新 IPC 通道 VFS_ZIP_PICK（弹框选 zip 回传字节到 renderer）+ VFS_ZIP_IMPORT_BYTES（字节直写目标子树），previewSkillZip 在 renderer 跑，NewSkillModal 加「从 ZIP 导入…」，withFrontMatterValues/yamlScalar 落 desktop skill-ui；desktop ⋮ 菜单本来就没有导入项（mobile 那轮的移除无对应物）。② 技能总开关 skillsEnabled：AgentPromptLayout 加可选字段（缺省 true，wire 关=显式 false，照 customAttach 的 omit-when-on 模式）；关键设计——resolveAgentToolRegistry 里 skillsEnabled===false 时照 task 强制移除先例 delete("skill")，D4 联动自动串起一切（registry 无 skill → assembleSkillsToolContext 返回 undefined → toolCtx.skills 缺席 → skillsIndex 置空 → LLM 看不到工具）；$ 引用不受影响（deps.skills 独立于 toolCtx.skills，与 D4 deny 语义一致）。双端 agent 编辑器技能卡加 Switch（mobile chatSlotHeader 右侧 / desktop 卡头右侧），skillsReadonlyHint 文案更新（「不可关闭」不再成立）。测试：T-SK13（开关强制移除/缺省保留）+ 文案断言更新，core 2015 全绿。
