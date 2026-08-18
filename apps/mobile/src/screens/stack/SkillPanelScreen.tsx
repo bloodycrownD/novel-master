@@ -4,9 +4,8 @@
  * - 列表行：技能名 + 域徽标三态 + 无效标签（含原因）+ 描述 + 启用开关；
  *   开关写当前项目的负清单（关闭只影响当前项目）。
  * - 点行（开关区域外）进技能详情页；关闭态行整体弱化。
- * - 头部动作：「整理」跳设置·技能管理页；「新建」弹窗默认项目域。
  */
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -27,10 +26,8 @@ import {
   skillDomainBadgeColor,
   skillDomainBadgeLabel,
 } from '@/components/skills/skill-ui';
-import {ManageListIcon} from '@/components/icons/TabIcons';
 import {SecondaryButton} from '@/components/ui/PrototypeButtons';
 import {useRuntime} from '@/hooks/useRuntime';
-import {useHeaderContext} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -81,17 +78,6 @@ export function SkillPanelScreen() {
       reload({silent: true}).catch(() => undefined);
     }, [reload]),
   );
-
-  // 右上角 header 菜单位 = 「管理」入口（跳技能管理页），列表管理 icon 区别于菜单汉堡
-  const {setStackOverride} = useHeaderContext();
-  useEffect(() => {
-    setStackOverride({
-      showMenu: true,
-      menuIcon: <ManageListIcon color={tokens.text} />,
-      onMenu: () => navigation.navigate('SkillsSettings'),
-    });
-    return () => setStackOverride(undefined);
-  }, [setStackOverride, navigation, tokens.text]);
 
   const toggleDisabled = useCallback(
     async (skill: EffectiveSkill, nextEnabled: boolean) => {

@@ -4,8 +4,9 @@
  * - 管理页是全局语境：项目 tab 展示**所有项目**的项目技能（分组头项目名）。
  * - 批量：useBatchSelection + BatchCheckbox 先例，两个 tab 各自独立，
  *   切 tab 自动退出批量模式；删除文案区分「影响所有项目」/「仅该项目生效」。
- * - 行 ⋮ 菜单：编辑 / 删除；全局域加「复制到项目」，项目域加
- *   「复制到其他项目」「提升为全局」（目标同名整包覆盖，提升前确认）。
+ * - 行 ⋮ 菜单：导出/导入 ZIP / 删除；项目域加
+ *   「复制到其他项目」「提升为全局」（目标同名整包覆盖，提升前确认）；
+ *   点行即进技能详情编辑，菜单不再单列「编辑」。
  * - D5：全局 tab「被项目副本覆盖」灰标签按「任意项目存在同名副本」判定；
  *   tab hint 注明该全局版仅对无副本的项目生效。
  */
@@ -308,14 +309,13 @@ export function SkillsSettingsScreen() {
       return [];
     }
     const items: SheetMenuItem[] = [
-      {label: '编辑', action: 'edit'},
       {label: '导出 ZIP', action: 'export-zip'},
       {label: '导入 ZIP', action: 'import-zip'},
       {label: '删除', action: 'delete', danger: true},
     ];
     if (menuTarget.domain !== 'global') {
-      items.splice(3, 0, {label: '复制到其他项目…', action: 'crossProjectCopy'});
-      items.splice(4, 0, {label: '提升为全局', action: 'promote'});
+      items.splice(2, 0, {label: '复制到其他项目…', action: 'crossProjectCopy'});
+      items.splice(3, 0, {label: '提升为全局', action: 'promote'});
     }
     return items;
   }, [menuTarget]);
@@ -327,9 +327,6 @@ export function SkillsSettingsScreen() {
       return;
     }
     switch (action) {
-      case 'edit':
-        openDetail(target);
-        break;
       case 'export-zip':
         runSkillZipExport(target).catch(() => undefined);
         break;

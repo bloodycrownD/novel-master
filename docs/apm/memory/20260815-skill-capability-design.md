@@ -1,8 +1,8 @@
 ---
-date: 2026-08-16 00:10
-title: skill 能力设计→原型→PRD：meta/skills 两域方案与 mobile 交互拍板
-keywords: skill, SKILL.md, VFS scope, meta/skills, 提示词注入, 技能管理页, UI 原型, PRD
-abstract: 用户要给应用加 skill 能力（类 AI IDE SKILL.md）。已拍板：VFS global+project 两域 meta/skills/ 目录式存储（SKILL.md 入口+辅助文件），不进 session 复制链，AI 对两域技能均可读写，负清单启停，同名 project 覆盖 global；mobile 原型已在 worktree feat/skill-ui-prototype 完成。PRD 已定稿（含 $ 引用、skill_opt 工具、提示词配置/预览体现），SPEC 已落盘 docs/Iterations/agent-skills/spec.md，待用户确认。
+date: 2026-08-18 00:00
+title: skill 能力全链路：设计→实现→合并→mobile 打磨（含 v6 版本撞车修复）
+keywords: skill, SKILL.md, VFS scope, meta/skills, 提示词注入, 技能管理页, code-dev-loop, feat/skills-integration, SCHEMA_BOOT_VERSION 撞车, VfsFileManager 复用, mobile UI 打磨
+abstract: skill 能力从设计到实现到合并到双端打磨的全记录：两域 meta/skills 存储、skill_opt 工具、提示词索引、$ 引用、双端管理 UI（dev-loop 6 wave 交付后合并入 feat/skills-integration）；合并后修复 SCHEMA_BOOT_VERSION v6 撞车（升 7）；mobile 侧持续打磨——NewSkillModal 域固定+键盘避让、SkillDetail 改为复用 VfsFileManager（workplace 可选化）、侧滑逐级上翻、技能 ⋮ 菜单提供单技能 ZIP 导入导出。
 ---
 
 user:
@@ -93,3 +93,121 @@ user:
 
 assistant:
 进入 spec-check-loop：第 1 轮审查 No-Go（0 P0，3 P1：desktop 会话面板缺失、skillAttach 与 superRefine 相撞、$ 扫描正则错+容错未定义；另有 3 P2）。主代理拍板修复方向后派 doc-fix 子代理一轮闭合全部六条（含新增 D5 覆盖标签任意项目判定、SKILL_NAME_PATTERN 常量、desktop 挂点 SessionDetailDrawer 含 App.tsx 调用链证据、skillAttach 专用 skillName 字案+superRefine 分支、不存在技能不写 seen key 自愈）。第 2 轮审查 Go（execute-ready）：上轮六项全部核实修复、PRD↔SPEC 映射完整、代码行号抽查全部命中；遗留 1 P1（正则 $ 未转义，照抄必挂）+3 P2（一句话级），满足 trivial 豁免由主代理直接修复（已注明）：正则改 /(?<!\S)\$([^\s$/@]+)/g、strict schema 补 skillName object 层声明、attachmentDedupeKey 加 skillAttach 分支、无效技能引用附原文不视为不存在。待用户确认 execute-ready。
+
+user:
+（附 code-dev-loop skill）新建 worktree 开发吧。
+
+assistant:
+在 .woktree/skill-dev（分支 feat/agent-skills，base 574c6de）按 code-dev-loop 走完全程，dag_version 2（一次 fix-wiring 重编排）：
+- wave-0 存储（3056204）：vfs-tree-copy excludePrefixes 三侧排除 meta/skills、两条 pull 链、skill_disabled_rule 表升 SCHEMA_BOOT_VERSION 6、domain/skills 纯函数。
+- wave-1 服务（e250d7c）：SkillService 两域读写/启停/复制删除 + 三端 runtime skills() 工厂 + 项目复制携带技能（D1）。
+- wave-2 工具（d5dde67/b3fa2df/5b40a39）：skill_opt 四 action 单工具 + description lambda + catalog 第 8 条 + meta.skillRef 透传（desktop DTO/双端 message-blocks/mobile WebView 镜像 skill-tool-ref）。
+- wave-3 并行 prompt（7bb16ba/87d8678/91f434a）+ attach（112dda8/32bef7c）：skillsIndex 常驻段（两套遍历、D4 deny 置空、三端预览含 CLI budgetSkillsIndex）+ $ 扫描（/(?<!\S)\$([^\s$/@]+)/g）+ skillAttach schema（skillName 专用字段、strict 声明、superRefine 分支）+ hydrate 首次全文/skill: seen/不存在自愈。
+- fix-wiring（01642cb）：agent-runner/双端 session-prompt-input 传 skills+projectId（hydrate 独立于 D4，$ 显式引用不受工具禁用影响）、desktop DTO 补 skillName、CLI 预览补预算。
+- wave-4 verify+cr-func：mobile TranscriptAttachmentView 漏 skillAttach 枚举一行修（62a20ad）；func-ready。
+- wave-5 并行双端 UI：mobile f7c94a9/0ba891a/fcb4c3b/cf4a1e9（面板/双 tab 管理页/详情+SkillFileManager(D3)/composer $+卡片跳转+WebView 链路）；desktop 72c3e6f/b5da8c0/c4dae36/4bcc17f（IPC 四件套九 channel/SessionDetailDrawer 面板/skillsManage+skillDetail 设置视图/composer $+跳设置详情）。
+- wave-6 verify-final+cr-func-final：core 2038/desktop 40/mobile 61 全绿，双 cr-func func-ready，dev-ready 达成。
+spec_deviations 已认定 8 条（vfs-exclude-prefixes 独立文件、deleteUnreferencedUnderScope 加参、祖先目录连带保留、replaceVfsSubtree 改调 sweep、事务外抛错、delete 清负清单孤儿、+2 条 spec 内含扩展：hydrate 独立接线、CLI 壳 definition 预算）。待用户拍板 1 条：skill_opt write 缺省域实现为补 project（携会话 projectId），PRD L181 写报错拒绝——建议对齐文档（现实现更友好，服务层缺域仍报 MISSING_DOMAIN，两层各自自洽）。
+遗留：Step 22 真机走查（manual_user，核验点清单在 wave-5 报告）；worktree 环境存量不阻塞（cli e2e、mobile webview 两项、packaging/smoke）；examples/mobile 原型因主仓并行会话切分支丢失（PRD/SPEC 已被 766c81c 收编保住，spec 内决策完整，未阻塞实现）。worktree 的 docs/Iterations/agent-skills/ 仍 untracked，是否随分支提交待用户定。
+
+user:
+将当前分支合并到主 worktree 的 feature。
+
+assistant:
+主 worktree 当时停在 main（v1.4.29，chat-fixes 已并入），无检出中的 feature 分支，遂从 main 新建 feat/skills-integration 承接合并（main 未动；若要直接进 main 指针可再挪）。25 个文件双向改动重叠但真冲突仅 2 处：① vfs-tree-copy.deleteVfsPrefix——main 侧 N+1 优化改成批量 deleteRecursiveIfAny，我们侧是 excludePrefixes 逐条豁免，解法为双路径并存（无排除走批量快路径、有排除退逐条）；② run-agent-turn 的 import——isUserVfsUnifiedToolTurnEnabled 门控被 main 的 chat-fixes 整体移除（flag 模块仍在但 run 链路不再用），按 main 新行为丢弃该 import，我们分支基点 574c6de 携带的旧门控代码不保留。自动合并后核验 skills 装配点（L427/L621）、$ 扫描合并（L296）、skills() 端口全部存活。合并提交 da12f98，验证：core 2003/0、desktop typecheck+5 测试文件 0 fail、mobile typecheck+71/71。主仓 AGENTS.md 与本记忆文件的未提交改动保持未提交（AGENTS.md 非本会话所改，不碰）。
+
+user:
+修一些小问题：1）聊天详情页点技能，空的会报错 tip；2）技能管理应放配置组、排智能体配置后面；3）全局/项目技能要用 tab 样式。
+
+assistant:
+三个 mobile 小修（280a551）：① SkillPanelScreen reload 对 isVfsError(NOT_FOUND) 静默置空不弹 toast（补 skill-panel-screen.test 两条用例锁行为；core 补 empty-state.test 锁服务层空态返回 []）；② 技能管理从「工作区」组移入「配置」组第二位（智能体配置后，value 计数照旧）；③ SkillsSettingsScreen 双 tab 从自制 Pressable+下划线换成标准 SegmentedControl（全局在前项目在后保持）。排查 #1 时的重要发现：用户桌面正式版 DB（~/.config/@novel-master/desktop/novel.db）还在 user_version=5、无 skill_disabled_rule 表——正式版 app 未跑过 skills 代码；当前合并代码在该 DB 副本上跑 effectiveSkills 空态零报错（bootstrap 先迁移建表）。真机报错推测是旧 bundle/未迁移 DB 的环境错配（如热重载混新旧 runtime），代码路径已证清白；若复现需看 toast 具体文案。
+
+user:
+问题 1 报错的是 no such table。
+
+assistant:
+根因实锤：SCHEMA_BOOT_VERSION 版本号撞车——main v1.4.29 与 skills 分支各自把版本升到 6（内容不同）。真机 DB 被 main 的 v6 迁移过后，合并代码看 6>=6 走快路径跳过建表，skill_disabled_rule 永远建不出来，effectiveSkills 查表报 no such table。修复（709dd40）：SCHEMA_BOOT_VERSION 升 7，强制所有 v6 库重跑全量幂等 DDL（CREATE TABLE IF NOT EXISTS 补齐缺失表，已存在表不受影响）；bootstrap 注释记录撞车原因；skills-schema.test 改断言升 7 并新增「v6 撞车库补建」回归用例。教训：并行分支各自 bump 全局 schema 版本号必然撞车，合并时必须检查对方是否也动了 SCHEMA_BOOT_VERSION——这次合并时只解了两个文本冲突，漏了这处语义冲突。core 全量 2005 pass。
+
+user:
+技能管理放到服务商配置后面，我不是说三字在前二字在后吗。
+
+assistant:
+改了（ef970f9）：配置组顺序为 智能体配置 → 服务商配置 → 技能管理 → 聊天配置 → 存储配置 → 正则配置。用户原话「三字在前二字在后」指名称字数排序的长前短后，我此前误解为「紧跟智能体配置」。
+
+user:
+老问题，所有输入框的位置没有适配键盘顶起。
+
+assistant:
+定位：技能 UI 里唯一漏避让的是 NewSkillModal（底部 sheet 弹窗，面板和技能管理页共用），键盘弹起直接盖住输入框；SkillFileManager 新建文件走的 TextPromptModal 已有避让，FileEditorScreen 是存量编辑器不涉及。修复（9485c02）照项目标准双平台模式：iOS 用 react-native-keyboard-controller 的 KeyboardAvoidingView behavior=padding 包裹；Android 给 panel 挂 useAndroidModalKeyboardAvoid(1)（底部 sheet 传 fraction=1 上移整个键盘高度，DirectoryRuleSheet/AddModelModal 同款），表单区套 ScrollView 键盘弹起时内部可滚。排查入口：grep TextInput 于 skills 组件 + 对照 ui/sheet 下既有弹窗的 KeyboardAvoidingView/useAndroidModalKeyboardAvoid 先例——以后新增带输入的弹窗都要走这套。
+
+user:
+描述太长会直接把名称顶出页面。
+
+assistant:
+NewSkillModal 三处修（键盘避让修复的连带问题）：① 表单区 ScrollView 从 flexGrow:0 改 flexGrow:0+flexShrink:1——内容超高时收缩内部滚动，保住标题与底部按钮；② 描述多行输入加 maxHeight:140，防止单输入框占据整个面板；③ Android 面板 maxHeight 从 85% 收紧到 60%（panelAndroid 平台样式）——translateY 式避让是整块上移键盘高度，面板若到 85% 高再上移，顶部（标题+技能名输入框）会被顶出屏幕；iOS 的 KeyboardAvoidingView padding 会自动压缩可用高度不受影响。根因链：长描述→面板撑到 maxHeight→键盘 translateY 上移→顶部出界。
+
+user:
+技能详情直接复用文件编辑器不行吗？现在这样都没办法创建文件夹。如果不好复用，可以抽象一个通用文件管理器。
+
+assistant:
+推翻 D3 自建 SkillFileManager 的拍板，改为复用 VfsFileManager（17498a7，净删 310 行）。评估结论：workplace 实际耦合点仅 8 处（reload 的 buildListRows/getDirRule、rename/move 的 migrateWorkplaceDirRename、导入与新建目录后的 setDirRule、纳入/目录规则/角色卡菜单），可选化后即成通用文件管理器——无需大抽象重构（那会波及 session/project 现网场景）。改动：workplace? 可选（空时排序退化纯 VFS、目录计数缺省、菜单条件隐藏）；新增 isProtectedPath 钩子拦删除/重命名/批量删除/移动（skill 域保护 SKILL.md 入口）；SkillDetailScreen 传 scope+vfs+rootPath=/meta/skills/{name} 直接内嵌；删 SkillFileManager 与 skill-file-events（编辑器被删踢回改为返回时刷新暴露，与 session 工作区行为对齐）。现网回归：vfs-file-manager.session.integration 4/4 通过验证可选化无破坏。
+
+user:
+优化点：技能详情标题改技能名；全局域那堆 head 全移除；/meta/skills/{name} 前缀隐藏替换为 /；跟随/全展示 tag 不展示；不能影响工作区 UI。
+
+assistant:
+四处收敛（均 gate 在 skill 场景，工作区零改动）：① 标题走 setStackOverride({title: name})（ProviderDetailScreen 同款，useEffect 卸载清 undefined）；② SkillDetailScreen 整个 meta 头删掉（含域徽标/描述/无效原因/项目名），item 仅剩存在性判断；③ VfsFileManager 新增 pathLabel prop 只改顶栏显示（skill 传 p => p===root?'/':p.slice(root.length)），编辑器 skillBar chip 改按技能根截取显示 /rel；④ 跟随/全展示来源是 mapVfsListEntry 兜底映射的硬编码 subtitle/badge——reload 里 workplace==null 时统一剥掉（badge: null + subtitle ''），工作区路径（workplace 传了）不受影响。回归：vfs-file-manager.session.integration 4/4 确认工作区 UI 无破坏。
+
+user:
+技能 全局|这个文件详情的 head 也移除吧。
+
+assistant:
+FileEditorScreen 的 skillBar（「技能 · 名称」+ 路径 chip + 全局/项目域徽标）整行删除，连带 skillBar/skillChip 样式与 skillDomainBadgeLabel import 清理。技能文件编辑器现在与其他文件编辑器同构：栈标题「编辑文件」+ 工具栏 basename。
+
+user:
+新建 skill，选择项目/全局的 tab 不要放在下面——因项目下拉出现而变动。移除，当前在什么 tab 就创建什么领域的 skill。
+
+assistant:
+NewSkillModal 移除存储域 SegmentedControl 与内部 domain state：prop 改为 domain（固定），管理页传当前 tab 域、会话面板固定 project+当前项目。项目下拉仅在 domain==='project' && defaultProjectId==null（即管理页项目 tab）时显示并懒加载项目列表——面板场景直接建在当前项目，布局不再跳动。
+
+user:
+聊天详情页面的 skill 开关出现抖动问题。
+
+assistant:
+SkillPanelScreen 开关抖动三因叠加（bcadcd7）：① 切换时 togglingName 驱动 Switch disabled 灰态 + await 后才翻转 value + 行透明度变化，三段渲染视觉来回跳；② useFocusEffect 每次聚焦 reload 都 setLoading(true)，从详情返回时 RefreshControl 闪、整列表重建；③ value 受控更新滞后于拨动手势。修法：乐观更新提前到 onValueChange 同步 flip（失败回滚+toast）；防连点改 togglingRef 不驱动渲染，Switch disabled 只留无效技能；reload 加 silent 参数（聚焦返回静默刷新不拉 loading，手动下拉照旧）——注意 silent 只能静默开头，finally 必须无条件 setLoading(false) 否则首屏 loader 卡死（测试抓到）。
+
+user:
+整理/新建两个按钮也移除，右上角空白位置加管理按钮或管理 icon。
+
+assistant:
+SkillPanelScreen 头部按钮行整行删除；「管理」入口走 stackOverride({showMenu: true, onMenu: 跳 SkillsSettings})——AppHeader 右上角菜单位（汉堡 icon，与主题切换按钮并排），卸载自动清。新建入口保留在管理页头部与空态卡（面板空态仍有新建按钮）。测试补 useHeaderContext mock。
+
+user:
+skill 文件管理器侧滑应逐级返回上一目录而非直接回管理页；菜单导入/导出 zip 全移除，skill 管理的更多菜单应有导入导出；复制到项目直接移除。
+
+assistant:
+三改（gate 在 skill 场景，工作区零影响，session 集成 4/4 回归过）：① SkillDetail 用 VfsFileManagerHandle ref + BackHandler（hardwareBackPress：canGoUp 则 goUp 拦截，否则放行 pop），header 返回按钮同逻辑（stackOverride.onBack=goUpOrExit）；② VfsFileManager 实体/更多菜单的导入导出 ZIP、角色卡、纳入全部并入 workplace!=null 条件——skill 域菜单只剩新建目录/文件+重命名/删除；③ SkillsSettings 头部加「更多」按钮：导出/导入技能包 (ZIP)，zip 根=目标域 /meta/skills（zip 内为各技能目录），全局 tab 直接执行、项目 tab 先弹目标项目选择，导入前 Alert 覆盖确认；全局技能 ⋮ 菜单移除「复制到项目…」，copyContext 类型收窄只剩 crossProjectCopy。
+
+user:
+不是在上面加更多，而是技能管理每个技能的更多按钮菜单里加导入/导出 zip。
+
+assistant:
+纠正上一轮的理解错误（6234e08 把导入导出做成了管理页头部的「更多」按钮+域级 zip）：头部更多按钮、zipProjectPick 项目选择弹层、ZipTarget 类型全部拆除；导入/导出改为每个技能 ⋮ 菜单项（编辑/导出 ZIP/导入 ZIP/[复制到其他项目…/提升为全局]/删除），zip 根=该技能目录 /meta/skills/{name}（导出即整个技能包，导入把 zip 内文件合并进该技能目录、同名覆盖、Alert 确认）。skill-panel 测试补 TabIcons mock（ManageListIcon 的 react-native-svg 依赖在测试环境会挂）。
+
+user:
+（补记漏掉的几轮 mobile 打磨）按钮文本 创建并编辑 改为 创建；技能页面的提示文字太长了，移除；2/2启用 也不需要，移除。
+
+assistant:
+三个文案精简提交：cae4124（NewSkillModal 按钮「创建并编辑」→「创建」，行为不变仍创建后跳详情）；bdd0993（面板头部提示精简为「n/m 启用」）；809bd47（n/m 计数也移除，头部只剩整理/新建按钮——此提交手滑删过整行 header 连按钮一起，当即恢复）。
+
+user:
+更多icon改成其他的吧，因为容易让人混淆。
+
+assistant:
+d7ea5a0：右上角管理入口的汉堡 icon 换成新画的 ManageListIcon（三行条目+右侧竖杆滑块的列表管理语义）。实现：HeaderOverride 加可选 menuIcon 字段（ReactNode），AppHeader 菜单位 fallback MenuIcon——聊天页等其它汉堡菜单使用方零改动；SkillPanel 传新 icon。后续演进：f472941 把整理/新建按钮行整个移除、管理入口挪到右上角 stackOverride showMenu；6234e08 又给 SkillDetail 加了侧滑逐级上翻（BackHandler + goUpOrExit）。
+
+user:
+聊天详情页的技能详情右上角跳转 icon 不稳定，移除；技能管理页 ⋮ 菜单的「编辑」也移除，点技能本来就能进编辑。
+
+assistant:
+两处精简：① SkillPanelScreen 移除右上角 ManageListIcon 管理入口（stackOverride.showMenu+menuIcon 整个 useEffect 删掉，连带 useHeaderContext/ManageListIcon 导入）——不稳定根源是它和 SkillDetail 的 stackOverride 清理时序打架，跳转 icon 会时隐时现泄漏到详情页；管理页仍可从设置进入。② SkillsSettingsScreen ⋮ 菜单移除「编辑」项（handleMenuSelect 的 case 'edit' 一并删，项目域 splice 插入位从 3/4 改 2/3），菜单变为：导出 ZIP/导入 ZIP/[复制到其他项目…/提升为全局]/删除。typecheck 干净，skill-panel 测试 + session 文件管理器集成回归（6/6）通过。
