@@ -231,3 +231,9 @@ assistant:
 分三块落地：① core 加 load：读生效副本 SKILL.md 全文 + files 附属文件清单（不含 SKILL.md，来自 SkillListItem.files），无域/路径/分页参数；seen 双向共享——方向 A（$ 已附全文→load 回短提示）：BuiltinToolSkillsContext 加 referencedNames 可变集合，assembleSkillsToolContext 建集合、agent-runner 每步 prepare 后扫 visible 附件回填；方向 B（load 已发生→后续 $ 短提示）：prepareUserMessagesForPrompt 入口扫可见 assistant 的 skill tool_use(action=load) 预填 seen，read 不预填（可能截断）。压缩/置位隐藏后随可见窗口自动重置。② 跨域复制整链移除：core SkillService.copySkill（port+impl+测试）、desktop SKILLS_COPY/SKILLS_PROMOTE IPC 通道与 SkillsManageView 菜单（子代理完成）、mobile SkillsSettingsScreen 的 confirmPromote/runCopy/copyContext/copyTargetProjects/菜单项/弹层。③ 摘要/跳转：buildToolResultBlock 加 load 分支（domain:name · n files / 已在提示词中），skill-tool-ref 的 REF_ACTIONS 与输出解析加 load。core 2010 全绿，desktop typecheck 干净 + 328/328（--test-concurrency=1 单并发 72s），mobile typecheck + 42/42。
 
 坑：desktop 全量测试在高负载机器（opencode+llama-server 抢 CPU）并发模式会雪崩到数分钟，单并发 --test-concurrency=1 稳定，以后全量都带。另：本会话中 skill-tool.ts 与 SkillsSettingsScreen.tsx 两次被并行进程（疑似 opencode 会话/编辑器旧缓冲）写回旧内容——改完立刻提交 + 提交前全仓 grep 防脏写。
+
+user:
+跨域复制未来要加回来的时候，可以参考 git 历史吧？
+
+assistant:
+可以，但别直接 revert 0bc2152（它是 load 新增+复制移除的混合提交，revert 会连带回滚 load）。正确挖法：git show 0bc2152 看删除侧 hunks——copySkill 的 port/impl（事务内 sweepRevisionsUnderScope + copyVfsTree + seedLiveHeadRevisions 整包覆盖）、desktop SKILLS_COPY/SKILLS_PROMOTE 通道、mobile confirmPromote/runCopy/弹层，按需重新应用；设计意图看 docs/Iterations/agent-skills/spec.md 与本记忆文件。
