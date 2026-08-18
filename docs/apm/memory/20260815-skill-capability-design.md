@@ -249,3 +249,9 @@ mobile 的技能管理入口还有「项目 XX · 全局 YY」计数。
 
 assistant:
 漏网之鱼在 ProfileTabScreen（设置 tab）：技能管理入口行的 value 文案「项目 N · 全局 M」，refreshSkillsLabel 每次聚焦 listSkills 全局 + 逐项目各查一次（性能差根源）。整链删除：state/refresh 函数/useFocusEffect 调用/入口行 value 条件传参。教训：上一轮只扫了 SkillsSettingsScreen/SkillsManageView/SessionDetail* 三处，没扫设置入口页（ProfileTabScreen）；双端 skill 相关文案清理应全仓 grep「全局.*\${|项目.*\${」而不是只盯已知文件。
+
+user:
+技能管理 ⋮ 菜单移除「导入 ZIP」，导入功能挪进新建弹窗：导入后自动预填技能名与描述（可改），创建后就是导入的技能。这样设计更好。
+
+assistant:
+mobile 落地：① core 新增 previewSkillZip（public/skills 导出）——parseVfsZip+parseSkillFrontMatter 复用，返回 name/description/skillMd 全文/fileCount/valid，约定 zip 根即技能目录（本产品导出格式），嵌套目录返回 skillMd=null；② vfs-zip.service 导出 pickZipFileBytes（选 zip+读字节，取消返回 null），importVfsZip 复用之；③ NewSkillModal：标题下「从 ZIP 导入…」按钮 → 预检 → 预填 name/description（可改），已导入态显示「已导入 ZIP · N 个文件（创建后全部带入）」+移除；创建分支：zipSvc.import 整包落入 /meta/skills/{name}（新目录为空无覆盖风险），表单值与 zip 元数据不一致时重写 SKILL.md front matter（withFrontMatterValues：保留其余键与正文，YAML 双引号标量）；④ SkillsSettingsScreen ⋮ 菜单删「导入 ZIP」项+case+runSkillZipImport，zipScopeFor 保留（导出仍用）。core 新测试 4/4，mobile typecheck 干净+回归过。desktop 未动（⋮ 菜单仍有导入 ZIP，新建弹窗无导入），待用户确认是否对齐。

@@ -169,6 +169,18 @@ export async function exportVfsZip(
   }
 }
 
+/** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null。 */
+export async function pickZipFileBytes(): Promise<Uint8Array | null> {
+  const [file] = await pick({
+    type: [types.zip],
+    allowMultiSelection: false,
+  });
+  if (file == null) {
+    return null;
+  }
+  return readPickedZipAsBytes(file.uri);
+}
+
 export async function importVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
@@ -176,11 +188,8 @@ export async function importVfsZip(
     readonly directoryPath?: string;
   },
 ): Promise<void> {
-  const [file] = await pick({
-    type: [types.zip],
-    allowMultiSelection: false,
-  });
-  if (file == null) {
+  const zipBytes = await pickZipFileBytes();
+  if (zipBytes == null) {
     return;
   }
 
@@ -188,7 +197,6 @@ export async function importVfsZip(
     options.directoryPath == null || options.directoryPath.trim() === ''
       ? '/'
       : options.directoryPath;
-  const zipBytes = await readPickedZipAsBytes(file.uri);
   const zipSvc = createVfsZipIoService(runtime.conn);
   await zipSvc.import(scope, zipBytes, {
     confirmed: options.confirmed,

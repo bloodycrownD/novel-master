@@ -23,6 +23,8 @@ export type {
 } from "../domain/skills/logic/effective-skills.js";
 export { parseSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
 export type { ParsedSkillFrontMatter } from "../domain/skills/logic/parse-skill-front-matter.js";
+export { previewSkillZip } from "../domain/skills/logic/preview-skill-zip.js";
+export type { SkillZipPreview } from "../domain/skills/logic/preview-skill-zip.js";
 export type {
   SkillDomain,
   SkillFrontMatter,

@@ -1,10 +1,12 @@
 /**
- * 新建技能弹窗：技能名 + 描述。存储域由调用方拍板（管理页跟当前 tab，
- * 会话面板固定当前项目域），弹窗内不再切换，避免项目下拉出现/消失
- * 引发布局跳动。
+ * 新建技能弹窗：手进模板或从 ZIP 导入预填。存储域由调用方拍板（管理页跟
+ * 当前 tab，会话面板固定当前项目域），弹窗内不再切换，避免项目下拉
+ * 出现/消失引发布局跳动。
  *
- * 创建 = 向目标域写仅含 SKILL.md 的新目录（front matter 自动填
- * name/description）；「创建并编辑」成功后由父组件跳技能详情页。
+ * 导入 = 选 zip（本产品导出格式：根即技能目录）→ 预填 name/description
+ * （可改）→ 创建时 zip 内全部文件落入新技能目录，SKILL.md 的 front
+ * matter 以表单最终值为准重写（表单未改则不重写）。手进创建 = 向目标
+ * 域写仅含 SKILL.md 的新目录。
  */
 import React, {useEffect, useMemo, useState} from 'react';
 import {
@@ -21,12 +23,16 @@ import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {ChatProject} from '@novel-master/core/chat';
 import {
+  previewSkillZip,
   validateSkillName,
   type SkillDomain,
+  type SkillZipPreview,
 } from '@novel-master/core/skills';
+import {createVfsZipIoService, type VfsScope} from '@novel-master/core/vfs';
 import {AppModal} from '@/components/ui/AppModal';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {buildNewSkillDoc} from './skill-ui';
+import {buildNewSkillDoc, yamlScalar} from './skill-ui';
+import {pickZipFileBytes} from '@/services/vfs-zip.service';
 import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -44,9 +50,41 @@ type Props = {
   /** 预选项目（选项目域时的默认所属项目，传入则不再显示下拉）。 */
   defaultProjectId?: string;
   onClose: () => void;
-  /** 创建成功（writeSkillFile 已落盘）；父组件负责跳详情与刷新。 */
+  /** 创建成功（zip 导入或模板创建已落盘）；父组件负责跳详情与刷新。 */
   onCreated: (target: NewSkillTarget) => void;
 };
+
+/** 导入态：zip 字节（创建时落盘）+ 预检结果（预填与 front matter 重写判定）。 */
+type ImportedSkill = {
+  readonly bytes: Uint8Array;
+  readonly preview: SkillZipPreview;
+};
+
+/**
+ * 以表单最终值为准重写 SKILL.md front matter（保留其余键与正文）。
+ * 无 front matter 块时前置补一个；值用 YAML 双引号标量，含冒号/换行不出错。
+ */
+function withFrontMatterValues(
+  source: string,
+  name: string,
+  description: string,
+): string {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  const fmLine = (key: string, value: string) => `${key}: ${yamlScalar(value)}`;
+  if (match == null) {
+    return `---\n${fmLine('name', name)}\n${fmLine('description', description)}\n---\n\n${source}`;
+  }
+  let fm = match[1]!;
+  const values: ReadonlyArray<[string, string]> = [
+    ['name', name],
+    ['description', description],
+  ];
+  for (const [key, value] of values) {
+    const re = new RegExp(`^${key}:.*$`, 'm');
+    fm = re.test(fm) ? fm.replace(re, fmLine(key, value)) : `${fm}\n${fmLine(key, value)}`;
+  }
+  return source.replace(match[0], `---\n${fm}\n---\n`);
+}
 
 export function NewSkillModal({
   visible,
@@ -65,6 +103,8 @@ export function NewSkillModal({
   );
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ImportedSkill | null>(null);
   const [error, setError] = useState<string | undefined>();
   // 底部 sheet 键盘避让：Android 在 panel 上挂 translateY（fraction=1 整个键盘高度，
   // 照 DirectoryRuleSheet 先例）；iOS 走 KeyboardAvoidingView padding 分支。
@@ -77,6 +117,7 @@ export function NewSkillModal({
     setName('');
     setDescription('');
     setProjectId(defaultProjectId);
+    setImported(null);
     setError(undefined);
   }, [visible, defaultProjectId]);
 
@@ -128,6 +169,33 @@ export function NewSkillModal({
     projectIssue == null &&
     !creating;
 
+  /** 选 zip → 预检 → 预填 name/description（可改）；取消选择不动表单。 */
+  const handleImport = async () => {
+    if (importing) {
+      return;
+    }
+    setImporting(true);
+    setError(undefined);
+    try {
+      const bytes = await pickZipFileBytes();
+      if (bytes == null) {
+        return;
+      }
+      const preview = previewSkillZip(bytes);
+      if (preview.skillMd == null) {
+        setError('ZIP 根目录缺少 SKILL.md（导出格式：zip 根即技能目录）');
+        return;
+      }
+      setImported({bytes, preview});
+      setName(preview.name ?? '');
+      setDescription(preview.description ?? '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!canSubmit) {
       return;
@@ -143,13 +211,39 @@ export function NewSkillModal({
         setError(`目标域已存在同名技能「${name}」`);
         return;
       }
-      await runtime.skills().writeSkillFile(
-        domain,
-        name,
-        'SKILL.md',
-        buildNewSkillDoc(name, description),
-        domain === 'project' ? projectId : undefined,
-      );
+      if (imported != null) {
+        // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
+        // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
+        const scope: VfsScope =
+          domain === 'global'
+            ? {kind: 'global'}
+            : {kind: 'project', projectId: projectId!};
+        const zipSvc = createVfsZipIoService(runtime.conn);
+        await zipSvc.import(scope, imported.bytes, {
+          confirmed: true,
+          directoryPath: `/meta/skills/${name}`,
+        });
+        if (
+          imported.preview.name !== name ||
+          imported.preview.description !== description
+        ) {
+          await runtime.skills().writeSkillFile(
+            domain,
+            name,
+            'SKILL.md',
+            withFrontMatterValues(imported.preview.skillMd!, name, description),
+            domain === 'project' ? projectId : undefined,
+          );
+        }
+      } else {
+        await runtime.skills().writeSkillFile(
+          domain,
+          name,
+          'SKILL.md',
+          buildNewSkillDoc(name, description),
+          domain === 'project' ? projectId : undefined,
+        );
+      }
       onCreated({
         domain,
         name,
@@ -176,6 +270,33 @@ export function NewSkillModal({
           Platform.OS === 'android' ? panelAvoidStyle : undefined,
         ]}>
         <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
+        {imported != null ? (
+          <View style={styles.importRow}>
+            <Text
+              style={{color: tokens.textSecondary, flex: 1}}
+              numberOfLines={1}>
+              已导入 ZIP · {imported.preview.fileCount} 个文件（创建后全部带入）
+            </Text>
+            <Pressable
+              testID="new-skill-import-clear"
+              onPress={() => setImported(null)}
+              hitSlop={8}>
+              <Text style={{color: tokens.primary}}>移除</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            testID="new-skill-import-btn"
+            style={[styles.importBtn, {borderColor: tokens.border}]}
+            disabled={importing}
+            onPress={() => handleImport().catch(() => undefined)}>
+            {importing ? (
+              <ActivityIndicator size="small" color={tokens.primary} />
+            ) : (
+              <Text style={{color: tokens.primary}}>从 ZIP 导入…</Text>
+            )}
+          </Pressable>
+        )}
         <ScrollView
           style={styles.form}
           contentContainerStyle={styles.formContent}
@@ -309,6 +430,18 @@ const styles = StyleSheet.create({
   form: {flexGrow: 0, flexShrink: 1},
   formContent: {gap: 8},
   title: {fontSize: 18, fontWeight: '600'},
+  importBtn: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  importRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   label: {fontSize: 13, marginTop: 4},
   input: {
     borderWidth: StyleSheet.hairlineWidth,

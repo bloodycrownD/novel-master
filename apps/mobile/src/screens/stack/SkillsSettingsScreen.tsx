@@ -4,7 +4,8 @@
  * - 管理页是全局语境：项目 tab 展示**所有项目**的项目技能（分组头项目名）。
  * - 批量：useBatchSelection + BatchCheckbox 先例，两个 tab 各自独立，
  *   切 tab 自动退出批量模式；删除文案区分「影响所有项目」/「仅该项目生效」。
- * - 行 ⋮ 菜单：导出/导入 ZIP / 删除；点行即进技能详情编辑。
+ * - 行 ⋮ 菜单：导出 ZIP / 删除；点行即进技能详情编辑。ZIP 导入
+ *   并入新建弹窗（导入即预填，创建时整包落盘）。
  *   跨域复制（复制到其他项目 / 提升为全局）已按需求移除：使用频率低，
  *   且技能域无 checkpoint 版本管理，破坏性跨域操作收归 UI 确认链路之外。
  * - D5：全局 tab「被项目副本覆盖」灰标签按「任意项目存在同名副本」判定；
@@ -30,7 +31,7 @@ import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/PrototypeButtons';
-import {exportVfsZip, importVfsZip} from '@/services/vfs-zip.service';
+import {exportVfsZip} from '@/services/vfs-zip.service';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -214,47 +215,12 @@ export function SkillsSettingsScreen() {
     }
   };
 
-  const runSkillZipImport = (skill: SkillRow) => {
-    if (zipBusy) {
-      return;
-    }
-    Alert.alert(
-      `导入到技能 ${skill.name}`,
-      `ZIP 内的文件将合并到该技能目录下，同名文件会被覆盖，是否继续？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '导入',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              setZipBusy(true);
-              try {
-                await importVfsZip(runtime, zipScopeFor(skill), {
-                  confirmed: true,
-                  directoryPath: `/meta/skills/${skill.name}`,
-                });
-                showToast('ZIP 导入完成');
-                await reload();
-              } catch (error) {
-                showToast(toastMessage('导入失败', error));
-              } finally {
-                setZipBusy(false);
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
-
   const menuItems: SheetMenuItem[] = useMemo(() => {
     if (menuTarget == null) {
       return [];
     }
     const items: SheetMenuItem[] = [
       {label: '导出 ZIP', action: 'export-zip'},
-      {label: '导入 ZIP', action: 'import-zip'},
       {label: '删除', action: 'delete', danger: true},
     ];
     return items;
@@ -269,9 +235,6 @@ export function SkillsSettingsScreen() {
     switch (action) {
       case 'export-zip':
         runSkillZipExport(target).catch(() => undefined);
-        break;
-      case 'import-zip':
-        runSkillZipImport(target);
         break;
       case 'delete':
         confirmDeleteRows([target]);
