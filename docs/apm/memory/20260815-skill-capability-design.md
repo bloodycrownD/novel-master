@@ -243,3 +243,9 @@ skill 列表 UI 上所有「X/Y 启用」文本移除（实时性差、没用）
 
 assistant:
 四处清理：mobile SessionDetailScreen 技能卡的 n/m 启用（state+load 里的 effectiveSkills 汇总一并删，卡片值改「查看与管理」）；desktop SessionDetailDrawer 的技能 n/m 启用（连带 skill-ui.ts 的 skillEnableSummary 删除、ipcSkillsEffective/EffectiveSkillDto 导入清理，卡片值改「查看与管理」）；mobile/desktop 技能管理页 SegmentedControl tab label 的计数后缀全部去掉，只留「全局技能/项目技能」。desktop tsc 干净 + skills-handlers 测试过，mobile tsc 干净 + skill-panel/session 回归过。本轮 SkillsSettingsScreen 第三次被并行进程写回 copySkill 旧代码，再清后立即提交。
+
+user:
+mobile 的技能管理入口还有「项目 XX · 全局 YY」计数。
+
+assistant:
+漏网之鱼在 ProfileTabScreen（设置 tab）：技能管理入口行的 value 文案「项目 N · 全局 M」，refreshSkillsLabel 每次聚焦 listSkills 全局 + 逐项目各查一次（性能差根源）。整链删除：state/refresh 函数/useFocusEffect 调用/入口行 value 条件传参。教训：上一轮只扫了 SkillsSettingsScreen/SkillsManageView/SessionDetail* 三处，没扫设置入口页（ProfileTabScreen）；双端 skill 相关文案清理应全仓 grep「全局.*\${|项目.*\${」而不是只盯已知文件。

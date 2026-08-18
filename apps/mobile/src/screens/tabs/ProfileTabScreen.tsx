@@ -51,8 +51,6 @@ export function ProfileTabScreen() {
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
   const [agentLabel, setAgentLabel] = useState('—');
-  // 技能计数「项目 X · 全局 Y」：X 为所有项目技能总数，Y 为全局技能数
-  const [skillsLabel, setSkillsLabel] = useState('');
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [agentPickerVisible, setAgentPickerVisible] = useState(false);
 
@@ -84,32 +82,11 @@ export function ProfileTabScreen() {
     }
   }, [runtime]);
 
-  const refreshSkillsLabel = useCallback(async () => {
-    try {
-      const skills = runtime.skills();
-      const [projects, globalList] = await Promise.all([
-        runtime.projects.list(),
-        skills.listSkills('global'),
-      ]);
-      const perProjectCounts = await Promise.all(
-        projects.map(p => skills.listSkills({projectId: p.id})),
-      );
-      const projectCount = perProjectCounts.reduce(
-        (sum, list) => sum + list.length,
-        0,
-      );
-      setSkillsLabel(`项目 ${projectCount} · 全局 ${globalList.length}`);
-    } catch {
-      setSkillsLabel('');
-    }
-  }, [runtime]);
-
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
       refreshAgentLabel().catch(() => setAgentLabel('—'));
-      refreshSkillsLabel().catch(() => setSkillsLabel(''));
-    }, [refreshModelLabel, refreshAgentLabel, refreshSkillsLabel]),
+    }, [refreshModelLabel, refreshAgentLabel]),
   );
 
   const navigateTo = (route: keyof RootStackParamList) => {
@@ -153,10 +130,6 @@ export function ProfileTabScreen() {
             key={item.route}
             icon={item.icon}
             label={item.label}
-            // 技能管理项附带「项目 X · 全局 Y」计数，其余配置项无 value
-            value={
-              item.route === 'SkillsSettings' ? skillsLabel : undefined
-            }
             tokens={tokens}
             onPress={() => navigateTo(item.route)}
           />
