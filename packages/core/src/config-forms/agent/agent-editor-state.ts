@@ -119,8 +119,7 @@ export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 export const WORKPLACE_BLOCK_LABEL = "常驻工作区";
 
 /** 常驻工作区开启态说明（仅讲可编辑项；机制描述留给关闭态）。 */
-export const WORKPLACE_BLOCK_HINT =
-  "可编辑助手确认语（默认：我看到工作区了）。";
+export const WORKPLACE_BLOCK_HINT = "可编辑助手确认语。";
 
 /** 常驻工作区关闭态说明。 */
 export const WORKPLACE_DISABLED_HINT = "关闭时不注入项目文件树。";

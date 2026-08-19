@@ -91,10 +91,7 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
 });
 
 test("WORKPLACE_BLOCK_HINT 新文案", () => {
-  assert.equal(
-    WORKPLACE_BLOCK_HINT,
-    "可编辑助手确认语（默认：我看到工作区了）。"
-  );
+  assert.equal(WORKPLACE_BLOCK_HINT, "可编辑助手确认语。");
   assert.equal(
     WORKPLACE_DISABLED_HINT,
     "关闭时不注入项目文件树。"
