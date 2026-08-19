@@ -322,7 +322,7 @@ export function WorkspaceTree({
                 {isDir ? "▾" : ""}
               </span>
               <span className="tree-node__icon">{isDir ? "📁" : "📄"}</span>
-              <span className="tree-node__label">{entryName(row.path)}</span>
+              <span className="tree-node__label">{(row.kind === 'dir' && row.label) || entryName(row.path)}</span>
               <span className="tree-node__meta">
                 {isPhysical ? "" : vfsEntryStatusText(row)}
               </span>
