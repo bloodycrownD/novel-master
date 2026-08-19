@@ -913,12 +913,8 @@ export function AgentEditorForm(props: Props) {
           {renderPromptSectionHead(promptSectionLabels.skills)}
           <View
             style={[
-              styles.chatSlotCard,
-              {
-                backgroundColor: tokens.surface,
-                borderColor: tokens.border,
-                borderLeftColor: tokens.primary,
-              },
+              styles.blockCard,
+              { backgroundColor: tokens.surface, borderColor: tokens.border },
             ]}
           >
             <View style={styles.chatSlotHeader}>
@@ -1159,12 +1155,8 @@ export function AgentEditorForm(props: Props) {
           {renderPromptSectionHead(promptSectionLabels.chat)}
           <View
             style={[
-              styles.chatSlotCard,
-              {
-                backgroundColor: tokens.surface,
-                borderColor: tokens.border,
-                borderLeftColor: tokens.primary,
-              },
+              styles.blockCard,
+              { backgroundColor: tokens.surface, borderColor: tokens.border },
             ]}
           >
             <View style={styles.chatSlotHeader}>
@@ -1408,13 +1400,7 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
-  chatSlotCard: {
-    borderWidth: 1,
-    borderLeftWidth: 3,
-    borderRadius: 10,
-    padding: 12,
-    gap: 10,
-  },
+
   chatSlotHeader: {
     flexDirection: 'row',
     alignItems: 'center',
