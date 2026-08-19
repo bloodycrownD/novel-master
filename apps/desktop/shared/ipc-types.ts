@@ -76,7 +76,6 @@ export const IPC_CHANNELS = {
   WORKPLACE_GET_DIR_RULE: 'nm:workplace/getDirRule',
   WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
-  PROJECTS_PULL_TEMPLATE: 'nm:projects/pullTemplate',
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
 
   MESSAGES_LIST: 'nm:messages/list',
@@ -599,10 +598,6 @@ export type SessionFsRollbackRequest = {
   readonly skipVfsReconcile?: boolean;
   /** 为 true 时 revision 缺失 path 使用 head 回补，其余 path 正常回滚。 */
   readonly revisionHeadBackfill?: boolean;
-};
-
-export type ProjectPullTemplateRequest = {
-  readonly projectId: string;
 };
 
 export type SessionPullTemplateRequest = {

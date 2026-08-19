@@ -8,7 +8,6 @@ import type {
   ProjectDeleteRequest,
   ProjectDto,
   ProjectGetAgentConfigRequest,
-  ProjectPullTemplateRequest,
   ProjectRenameRequest,
   ProjectUpdateAgentConfigRequest,
 } from "../../../../shared/ipc-types.js";
@@ -69,18 +68,6 @@ export async function handleProjectsDelete(
   try {
     const rt = await getDesktopRuntime();
     await rt.projects.delete(req.id);
-    return { ok: true, data: undefined };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleProjectsPullTemplate(
-  req: ProjectPullTemplateRequest,
-): Promise<IpcResult<void>> {
-  try {
-    const rt = await getDesktopRuntime();
-    await rt.projects.pullTemplate(req.projectId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

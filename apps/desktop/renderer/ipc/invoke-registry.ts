@@ -41,7 +41,6 @@ import {
   type ProjectAgentConfigDto,
   type ProjectDto,
   type ProjectGetAgentConfigRequest,
-  type ProjectPullTemplateRequest,
   type ProjectRenameRequest,
   type ProjectUpdateAgentConfigRequest,
   type PromptAgentMetaResponse,
@@ -289,10 +288,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       VfsBatchClearStagingRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING),
-    ipcProjectsPullTemplate: withReq<
-      ProjectPullTemplateRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.PROJECTS_PULL_TEMPLATE),
     ipcSessionsPullTemplate: withReq<
       SessionPullTemplateRequest,
       IpcResult<void>

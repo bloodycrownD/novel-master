@@ -78,7 +78,6 @@ export const {
   ipcVfsBatchIngestFromPaths,
   ipcVfsBatchExportStage,
   ipcVfsBatchClearStaging,
-  ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
   ipcMessagesList,
   ipcMessagesSearch,

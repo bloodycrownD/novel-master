@@ -4,10 +4,7 @@ import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { IconButton } from "@/components/ui/IconButton";
 import { showToast } from "@/components/ui/show-toast";
-import {
-  ipcProjectsPullTemplate,
-  ipcSessionsPullTemplate,
-} from "@/ipc/client";
+import { ipcSessionsPullTemplate } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 
 type ConfirmKind = "pull-template";
@@ -26,25 +23,18 @@ export function WorkspaceHeaderActions({
   panelScope,
   onRefresh,
 }: WorkspaceHeaderActionsProps) {
-  const { projectId, workspaceSessionId } = useShellNav();
+  const { workspaceSessionId } = useShellNav();
   const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const showSync = panelScope === "session" || panelScope === "chat";
+  // 仅 chat 面板保留同步（从项目工作区拉模板）；project 域 pull 已拆除。
+  const showSync = panelScope === "chat";
 
   const pullTemplate = useCallback(async () => {
     setBusy(true);
     try {
-      if (panelScope === "session" && projectId) {
-        const result = await ipcProjectsPullTemplate({ projectId });
-        if (result.ok) {
-          onRefresh();
-          showToast("已从全局工作区同步");
-        } else {
-          showToast(result.error.message);
-        }
-      } else if (panelScope === "chat" && workspaceSessionId) {
+      if (workspaceSessionId) {
         const result = await ipcSessionsPullTemplate({ sessionId: workspaceSessionId });
         if (result.ok) {
           onRefresh();
@@ -57,7 +47,7 @@ export function WorkspaceHeaderActions({
       setBusy(false);
       setConfirmKind(null);
     }
-  }, [panelScope, projectId, workspaceSessionId, onRefresh]);
+  }, [workspaceSessionId, onRefresh]);
 
   const menuItems = useMemo((): readonly ContextMenuItem[] => {
     const items: ContextMenuItem[] = [];
@@ -79,9 +69,7 @@ export function WorkspaceHeaderActions({
   }
 
   const confirmMessage =
-    panelScope === "session"
-      ? "将从全局工作区覆盖当前项目工作区，本地修改将丢失。确定继续？"
-      : "将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？";
+    "将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？";
 
   return (
     <>

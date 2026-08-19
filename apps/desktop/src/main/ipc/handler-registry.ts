@@ -125,7 +125,6 @@ import {
   handleProjectsDelete,
   handleProjectsGetAgentConfig,
   handleProjectsList,
-  handleProjectsPullTemplate,
   handleProjectsRename,
   handleProjectsUpdateAgentConfig,
 } from './handlers/projects.js';
@@ -210,7 +209,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.PROJECTS_CREATE, handleProjectsCreate);
   bindReq(IPC_CHANNELS.PROJECTS_RENAME, handleProjectsRename);
   bindReq(IPC_CHANNELS.PROJECTS_DELETE, handleProjectsDelete);
-  bindReq(IPC_CHANNELS.PROJECTS_PULL_TEMPLATE, handleProjectsPullTemplate);
   bindReq(IPC_CHANNELS.PROJECTS_GET_AGENT_CONFIG, handleProjectsGetAgentConfig);
   bindReq(
     IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG,
