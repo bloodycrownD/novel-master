@@ -51,10 +51,10 @@ const SKILL_ENTRY_FILE = "SKILL.md";
 /** Dependencies for {@link SkillsService}。 */
 export interface SkillsServiceDeps {
   readonly conn: TdbcConnection;
-  /** global 域 VFS 惰性工厂（对齐 runtime 工厂风格）。 */
-  readonly globalVfs: () => VfsService;
-  /** project 域 VFS 惰性工厂。 */
-  readonly projectVfs: (projectId: string) => VfsService;
+  /** global-meta 域 VFS 惰性工厂（技能存储，逻辑前缀 /meta/skills/）。 */
+  readonly globalMetaVfs: () => VfsService;
+  /** project-meta 域 VFS 惰性工厂。 */
+  readonly projectMetaVfs: (projectId: string) => VfsService;
   /** 负清单 repository（缺省用 SQLite 实现）。 */
   readonly disabledRules?: SkillDisabledRuleRepository;
 }
@@ -83,15 +83,26 @@ function resolveSkillRelPath(name: string, path: string | undefined): string {
   return logical.slice(dirPrefix.length);
 }
 
-/** 位置 → scopeKey（project 域缺 projectId 时抛错）。 */
-function scopeKeyOfLocation(location: SkillLocation): string {
+/** 位置 → VFS meta 域 scopeKey（entry/revision 清理用；project 域缺 projectId 时抛错）。 */
+function vfsScopeKeyOfLocation(location: SkillLocation): string {
   if (location.domain === "global") {
-    return "global";
+    return "global:meta";
   }
   if (location.projectId == null || location.projectId.length === 0) {
     throw skillMissingProjectId(location.name);
   }
-  return `project:${location.projectId}`;
+  return `project:${location.projectId}:meta`;
+}
+
+/**
+ * 位置 → 负清单 scopeKey。
+ *
+ * `skill_disabled_rule` 行的 scopeKey 语义固定为 `project:{pid}`
+ * （setDisabled / effectiveSkills / 项目删除的 removeScope 同源），
+ * 与 VFS 重定位到 meta 域无关，不得跟随改写。
+ */
+function disabledScopeKeyOfProject(projectId: string): string {
+  return `project:${projectId}`;
 }
 
 /** 显式校验技能名（write/edit/copy 目标、delete 输入）。 */
@@ -124,20 +135,20 @@ export class SkillsService implements SkillService {
 
   private vfsForDomain(domain: SkillDomain, projectId?: string): VfsService {
     if (domain === "global") {
-      return this.deps.globalVfs();
+      return this.deps.globalMetaVfs();
     }
     if (projectId == null || projectId.length === 0) {
       throw skillMissingProjectId("");
     }
-    return this.deps.projectVfs(projectId);
+    return this.deps.projectMetaVfs(projectId);
   }
 
   private vfsForScope(scope: SkillListScope): { vfs: VfsService; domain: SkillDomain } {
     if (scope === "global") {
-      return { vfs: this.deps.globalVfs(), domain: "global" };
+      return { vfs: this.deps.globalMetaVfs(), domain: "global" };
     }
     return {
-      vfs: this.deps.projectVfs(scope.projectId),
+      vfs: this.deps.projectMetaVfs(scope.projectId),
       domain: "project",
     };
   }
@@ -309,7 +320,7 @@ export class SkillsService implements SkillService {
     disabled: boolean,
   ): Promise<void> {
     assertValidSkillName(name);
-    const scopeKey = `project:${projectId}`;
+    const scopeKey = disabledScopeKeyOfProject(projectId);
     if (disabled) {
       await this.disabledRules.upsert(scopeKey, name);
     } else {
@@ -319,26 +330,33 @@ export class SkillsService implements SkillService {
 
   async deleteSkill(location: SkillLocation): Promise<void> {
     assertValidSkillName(location.name);
-    const scopeKey = scopeKeyOfLocation(location);
+    // VFS 清理用 meta 域 key；负清单行的 scopeKey 仍是 project:{pid}，两者分开取
+    const vfsScopeKey = vfsScopeKeyOfLocation(location);
     const prefix = `${SKILLS_ROOT}/${location.name}`;
 
     // 存在性检查放事务外（避免错误被事务包装器包裹）。
     await this.assertSkillDirExists(
       new SqliteVfsEntryRepository(this.deps.conn),
-      scopeKey,
+      vfsScopeKey,
       prefix,
     );
 
     await this.deps.conn.transaction(async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      await sweepRevisionsUnderScope(entryRepo, revisionRepo, scopeKey, prefix);
+      await sweepRevisionsUnderScope(entryRepo, revisionRepo, vfsScopeKey, prefix);
 
       // 连带清理负清单行：project 域只清本项目行；global 域清所有项目行，
       // 否则会留下指向不存在技能的孤儿禁用行。
       const ruleRepo = new SqliteSkillDisabledRuleRepository(tx);
       if (location.domain === "project") {
-        await ruleRepo.remove(scopeKey, location.name);
+        if (location.projectId == null || location.projectId.length === 0) {
+          throw skillMissingProjectId(location.name);
+        }
+        await ruleRepo.remove(
+          disabledScopeKeyOfProject(location.projectId),
+          location.name,
+        );
       } else {
         await ruleRepo.removeAllScopesByName(location.name);
       }

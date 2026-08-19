@@ -53,6 +53,8 @@ export interface NovelMasterTestContext {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
+  globalMetaVfs(): VfsService;
+  projectMetaVfs(projectId: string): VfsService;
 }
 
 export async function openNovelMasterTestConnection(): Promise<NovelMasterTestContext> {
@@ -98,5 +100,8 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
         projectId,
         sessionId,
       }),
+    globalMetaVfs: () => createScopedVfsService(conn, { kind: "global-meta" }),
+    projectMetaVfs: (projectId) =>
+      createScopedVfsService(conn, { kind: "project-meta", projectId }),
   };
 }

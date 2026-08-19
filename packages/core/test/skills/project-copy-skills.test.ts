@@ -30,7 +30,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
     const suffix = testIsolationSuffix();
     const source = await ctx.projects.create(`P-${suffix}`);
 
-    // 项目域技能（SKILL.md + 辅助文件）
+    // 项目域技能（SKILL.md + 辅助文件，辅助文件直接写 meta 域 vfs）
     await skills.writeSkillFile(
       "project",
       "novel-helper",
@@ -38,7 +38,7 @@ describe("项目复制携带技能与负清单（T-SK6 / D1）", () => {
       entry("novel-helper", "项目技能"),
       source.id,
     );
-    await ctx.projectVfs(source.id).write(
+    await ctx.projectMetaVfs(source.id).write(
       "/meta/skills/novel-helper/prompt.md",
       "辅助提示词",
     );

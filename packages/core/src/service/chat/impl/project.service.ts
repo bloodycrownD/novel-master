@@ -170,6 +170,9 @@ export class DefaultProjectService implements ProjectService {
       // 避免留下指向已删项目的孤儿禁用行。
       await new SqliteSkillDisabledRuleRepository(tx).removeScope(`project:${id}`);
       await deleteVfsPrefix(r.vfs, `project:${id}`, "/");
+      // 技能已重定位到独立 meta 域：deleteVfsPrefix 按 scope_key 精确匹配，
+      // 不补这条会留下 project:{pid}:meta 的孤儿 entry 行
+      await deleteVfsPrefix(r.vfs, `project:${id}:meta`, "/");
       const deleted = await r.projects.delete(id);
       if (!deleted) {
         throw chatNotFound("project", id);
@@ -246,14 +249,22 @@ export class DefaultProjectService implements ProjectService {
         await r.projects.updateAgentConfig(copy.id, clonedJson, now);
       }
       // entry_id 化后项目模板独立 scope：project:{id}，逻辑前缀为 "/"
-      // 整树复制不排除 meta/skills（D1：项目复制携带技能文件），
-      // 负清单行不往 VFS，需按 scope_key 显式复制。
+      // 技能已重定位到独立 meta 域（project:{id}:meta），复制时单独整树拷贝
+      // （D1：项目复制携带技能文件）；负清单行不往 VFS，需按 scope_key 显式复制。
       const contentStore = new SqliteVfsContentStore(tx);
       await copyVfsTree(
         r.vfs,
         { scopeKey: `project:${id}` },
         "/",
         { scopeKey: `project:${copy.id}` },
+        "/",
+        { contentStore },
+      );
+      await copyVfsTree(
+        r.vfs,
+        { scopeKey: `project:${id}:meta` },
+        "/",
+        { scopeKey: `project:${copy.id}:meta` },
         "/",
         { contentStore },
       );
@@ -265,6 +276,13 @@ export class DefaultProjectService implements ProjectService {
         r.vfs,
         r.revisions,
         `project:${copy.id}`,
+        "/",
+        contentStore,
+      );
+      await seedLiveHeadRevisionsUnderPrefix(
+        r.vfs,
+        r.revisions,
+        `project:${copy.id}:meta`,
         "/",
         contentStore,
       );

@@ -60,8 +60,8 @@ describe("SkillService（T-SK5）", () => {
       undefined,
       "没有 front matter 的正文",
     );
-    // 只有辅助文件、没有 SKILL.md 的技能目录
-    await ctx.globalVfs().write(
+    // 只有辅助文件、没有 SKILL.md 的技能目录（技能落 meta 域）
+    await ctx.globalMetaVfs().write(
       `/meta/skills/no-entry-${suffix}/notes.md`,
       "辅助文件",
     );
@@ -131,7 +131,7 @@ describe("SkillService（T-SK5）", () => {
     );
     // 隔壁技能目录未被写脏
     await assert.rejects(
-      () => ctx.globalVfs().read("/meta/skills/victim.md"),
+      () => ctx.globalMetaVfs().read("/meta/skills/victim.md"),
       (error: unknown) => isVfsError(error, "NOT_FOUND"),
     );
   });
