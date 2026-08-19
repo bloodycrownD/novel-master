@@ -49,3 +49,12 @@ user:
 
 assistant:
 补齐完成：T-SR3 用例尾部在 delete() 后显式再跑一遍幂等的 runDeferredBlobGc(ctx.conn)（服务内事务后其实已调度过一次），然后对 vfs_content_blob 表跑 NOT EXISTS 反查 vfs_revision 的 orphan 计数断言为零。定向 4/4 绿，全量 2029/2029 绿。提交 17553d9。
+
+---
+
+date: 2026-08-19
+user:
+执行 spec-fix-cr1 节点（code-review-loop 第 1 轮，dag_version 2）：创建 docs/Iterations/global-fs-manager/cr-fix-spec.md，把全部 must-fix 按 P0→P1→P2 写入（base 5f8aba0 / head fb7cf95，状态 draft），只改文档不改实现。
+
+assistant:
+创建完成，12 条 must-fix 全部写入：1 P0（meta/C-orch-1 meta 域逻辑路径双前缀——SkillsService 写 /meta/skills/... 而物理树再拼一次前缀落 /meta/meta/...，物理侧统一：global-meta 前缀按空串、project-meta 按 /projects/{pid}）、1 P1（desktop/B-1 physical BFS 无错误隔离，per-directory try/catch）、10 P2（core 排序键/整洁/两测试缺口、mobile beforeRemove 无条件 preventDefault+测试缺口、desktop 批量接口/死分支/label 断言、cli 负向断言）。另写 3 条 open spec deviations（label 增强、三路拦截、BFS 全树 vs 懒加载，均附回写 spec 建议）+ 4 条 open questions。核对确认：mobile 拦截器在 apps/mobile/src/screens/stack/GlobalTemplateScreen.tsx L53-59；T-PB1/T-PB2 在 packages/core/test/vfs/physical-vfs.test.ts。状态 draft，待下轮 review 校验后由主代理判定是否 fix-spec-ready。
