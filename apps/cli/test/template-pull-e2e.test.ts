@@ -12,6 +12,29 @@ import {
 } from "./helpers.js";
 
 describe("template pull CLI e2e", () => {
+  it("T4 project template pull 已下线：非 0 退出且 stderr 含 usage（G-2）", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-tpl-neg-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      const result = runNm([
+        "project",
+        "template",
+        "pull",
+        "--project",
+        "x",
+        "--db",
+        dbPath,
+      ]);
+      assert.notEqual(result.status, 0, "已下线命令应非 0 退出");
+      assert.ok(
+        result.stderr.includes("Usage: nm project"),
+        `stderr 应含 usage 文案，实际: ${result.stderr}`,
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("T3 session pull restores template vfs and clears checkpoints", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-tpl-"));
     const dbPath = join(dir, "novel.db");
