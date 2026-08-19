@@ -29,6 +29,9 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
   const mermaidFailedCode = selectors
     .map((s) => `${s} pre.mermaid-failed > code.language-mermaid`)
     .join(', ');
+  const mermaidChartActive = selectors
+    .map((s) => `${s} .mermaid-block__chart:active`)
+    .join(', ');
   const nestedList = selectors
     .map((s) => `${s} ul ul, ${s} ol ol, ${s} ul ol, ${s} ol ul`)
     .join(', ');
@@ -75,8 +78,10 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
       border-radius: 6px;
       background: rgba(0,0,0,0.03);
     }
-    ${mermaidChart} { margin: 0; }
+    ${mermaidChart} { margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     ${mermaidChartSvg} { max-width: 100%; height: auto; }
+    /* 全屏入口按压暗示：成功图表可点（失败态源码回退不匹配 chart 选择器，不可进） */
+    ${mermaidChartActive} { opacity: 0.72; }
     ${mermaidSource} { display: none; margin: 0; padding: 0; }
     /* 失败：源码保留显示 + 失败标识 */
     ${mermaidSourceVisible} { display: block; }

@@ -52,7 +52,7 @@ export function openMermaidViewer(chart: Element): void {
   if (!svg) {
     return;
   }
-  const svgClone = svg.cloneNode(true);
+  const svgClone = svg.cloneNode(true) as Element;
   _open = true;
   document.body.classList.add('mermaid-viewer-open');
   if (_renderView) {

@@ -136,6 +136,7 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
 .tool-open-hint { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--primary, #007aff); }
 .load-older { align-self: center; padding: 10px 16px; font-size: 14px; color: var(--primary, #007aff); background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 /* __RICH_CSS__ */
+/* __MERMAID_FULLSCREEN_CSS__ */
 .bubble-body.rich { white-space: normal; }
 .row.assistant .bubble.bubble--fill-width { width: 85%; max-width: 85%; box-sizing: border-box; }
 .row.user.vfs-turn-row .bubble.bubble--fill-width { width: 85%; max-width: 85%; box-sizing: border-box; }

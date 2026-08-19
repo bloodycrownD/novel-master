@@ -48,3 +48,4 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
   background-color: color-mix(in srgb, var(--primary, #007aff) 22%, transparent);
 }
 /* __RICH_CSS__ */
+/* __MERMAID_FULLSCREEN_CSS__ */

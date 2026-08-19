@@ -126,6 +126,41 @@ describe('mermaid 全屏查看器 RN 返回键契约 (T-MF4)', () => {
   });
 });
 
+describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
+  it('两包 app.js 含全屏模块标识；app.css 含 .mermaid-fullscreen 样式；index.html 含 portal', () => {
+    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
+      const appJs = readWebViewDistFile(pkg, 'app.js');
+      expect(appJs).toContain('mermaidViewerOpened');
+      expect(appJs).toContain('mermaidViewerClosed');
+      expect(appJs).toContain('closeMermaidViewer');
+      // esbuild 打印层会把单引号规范化为双引号，dist 断言用双引号形态
+      expect(appJs).toContain('closest(".mermaid-block__chart")');
+      expect(appJs).toContain('cloneNode(true)');
+
+      const appCss = readWebViewDistFile(pkg, 'app.css');
+      expect(appCss).toContain('.mermaid-fullscreen-backdrop');
+      expect(appCss).toContain('.mermaid-fullscreen-close');
+      expect(appCss).toContain('body.mermaid-viewer-open');
+    }
+    expect(readWebViewDistFile('rich-document', 'index.html')).toContain(
+      'overlay-portal',
+    );
+    expect(readWebViewDistFile('chat-transcript', 'index.html')).toContain(
+      'mermaid-viewer-portal',
+    );
+  });
+
+  it('按压暗示进入两包富文本样式（rich-content-styles 单源）', () => {
+    const styles = webSrc('shared/rich-content-styles.ts');
+    expect(styles).toContain('.mermaid-block__chart:active');
+    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
+      expect(readWebViewDistFile(pkg, 'app.css')).toContain(
+        '.mermaid-block__chart:active',
+      );
+    }
+  });
+});
+
 describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
   it('pinch 缩放 clamp：不小于 min、不大于 max、非法值回退 min', () => {
     expect(clampMermaidViewerScale(0.3)).toBe(MERMAID_VIEWER_MIN_SCALE);
