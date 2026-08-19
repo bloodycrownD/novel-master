@@ -192,7 +192,6 @@ function ChatTabScreenContent({
           ctx.scope.handleCopySession(sid).catch(() => undefined)
         }
         onConfirmDeleteSession={ctx.scope.confirmDeleteSession}
-        bumpWorktreeUiToken={ctx.bumpWorktreeUiToken}
         onOpenFileEditor={ctx.onOpenFileEditor}
       />
       {sessionRenameModal}

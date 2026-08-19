@@ -92,9 +92,8 @@ import {
   resolveMoveDestination,
 } from './vfs-move-path';
 
-export type VfsFileManagerPullScope =
-  | { kind: 'project'; projectId: string }
-  | { kind: 'session'; sessionId: string };
+/** 仅支持 session 域 pull（project 域 pull 已拆除）。 */
+export type VfsFileManagerPullScope = { kind: 'session'; sessionId: string };
 
 /** 供父组件控制系统返回时逐级退出目录，并在切入工作区时刷新列表。 */
 export type VfsFileManagerHandle = {
