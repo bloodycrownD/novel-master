@@ -1,7 +1,7 @@
 /**
  * Template pull orchestration (VFS replace + worktree replace).
  *
- * global → project 的 projectTemplatePull 已拆除；本服务仅保留
+ * global → project 的模板拉取链已随全局文件管理器迭代拆除；本服务仅保留
  * project → session 的初始化链（{@link initializeSessionWorkspace}）。
  *
  * @module service/template/impl/template-pull.service
