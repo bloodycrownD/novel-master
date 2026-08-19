@@ -1,5 +1,6 @@
 /**
- * Global template VFS browser (profile → 全局模板).
+ * 全局文件浏览器（profile 入口）：只读物理树视图。
+ * 数据源为跨域拼接的 physicalVfs（根 `/`），不提供任何写操作。
  */
 import React, {useCallback} from 'react';
 import {StyleSheet, View} from 'react-native';
@@ -22,7 +23,7 @@ export function GlobalTemplateScreen() {
     (path: string) => {
       navigation.navigate('FileEditor', {
         path,
-        scopeKind: 'global',
+        scopeKind: 'physical',
       });
     },
     [navigation],
@@ -33,14 +34,15 @@ export function GlobalTemplateScreen() {
       <View style={styles.bannerWrap}>
         <FormSectionCard
           tokens={tokens}
-          hint="全应用共享；项目可通过「从上级同步」拉取此处工作区内容。"
+          hint="全库文件只读浏览：全局模板、技能与各项目/会话拼接为统一视图，仅供查看。"
         />
       </View>
       <VfsFileManager
+        // 只读模式下 scope 不参与任何写调用，仅满足 prop 形状。
         scope={{kind: 'global'}}
-        vfs={runtime.globalVfs()}
-        workplace={runtime.workplace({kind: 'global'})}
+        vfs={runtime.physicalVfs()}
         rootPath="/"
+        readOnly
         onOpenFile={openFile}
       />
     </View>

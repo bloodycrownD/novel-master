@@ -16,17 +16,24 @@ const mockRead = jest.fn(async () => ({
 const mockWrite = jest.fn(async () => undefined);
 
 const mockRuntime = {
-  globalVfs: () => ({read: mockRead, write: mockWrite}),
-  projectVfs: () => ({read: mockRead, write: mockWrite}),
-  sessionVfs: () => ({read: mockRead, write: mockWrite}),
+  globalVfs: () => ({ read: mockRead, write: mockWrite }),
+  projectVfs: () => ({ read: mockRead, write: mockWrite }),
+  sessionVfs: () => ({ read: mockRead, write: mockWrite }),
+  physicalVfs: () => ({ read: mockRead }),
+};
+
+// 路由参数可变：默认 global，physical 用例自行覆盖。
+const mockRouteParams: {
+  path: string;
+  scopeKind: 'global' | 'project' | 'session' | 'skill' | 'physical';
+} = {
+  path: '/notes/readme.md',
+  scopeKind: 'global',
 };
 
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({
-    params: {
-      path: '/notes/readme.md',
-      scopeKind: 'global',
-    },
+    params: mockRouteParams,
   }),
   useNavigation: () => ({
     addListener: jest.fn(() => jest.fn()),
@@ -242,6 +249,8 @@ describe('FileEditorScreen', () => {
     mockRead.mockClear();
     mockWrite.mockClear();
     mockCodeEditorBlur.mockClear();
+    mockRouteParams.path = '/notes/readme.md';
+    mockRouteParams.scopeKind = 'global';
     mockRead.mockResolvedValue({
       content: '# Hello\n\nworld',
       version: 1,
@@ -371,5 +380,31 @@ describe('FileEditorScreen', () => {
     });
     const dirtyPath = findToolbarPathText(tree.root, '未保存');
     expect(styleHasTextAlignCenter(dirtyPath.props.style)).toBe(true);
+  });
+
+  it('T-PB3: physical 只读分支——经 physicalVfs().read 读取，保存禁用且无编辑切换', async () => {
+    mockRouteParams.path = '/projects/p1/template/note.md';
+    mockRouteParams.scopeKind = 'physical';
+    const tree = await renderLoadedScreen();
+
+    // 数据源：只读物理树（无 write 方法）。
+    expect(mockRead).toHaveBeenCalledWith('/projects/p1/template/note.md');
+    expect(mockWrite).not.toHaveBeenCalled();
+
+    // 保存按钮禁用（既有只读样式：置灰 + disabled）。
+    const saveBtn = tree.root.findByProps({ testID: 'file-editor-save' });
+    expect(saveBtn.props.disabled).toBe(true);
+
+    // 不提供编辑切换（纯只读预览）。
+    const editBtn = tree.root.findAll(
+      node => node.type === 'Text' && node.props.children === '编辑',
+    );
+    expect(editBtn).toHaveLength(0);
+
+    // 预览主体仍正常渲染。
+    expect(
+      findOptionalByTestId(tree.root, 'file-markdown-preview'),
+    ).toBeTruthy();
+    expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
   });
 });

@@ -27,7 +27,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   CloudSyncProgress: {title: '云同步', showBack: true, showNav: false},
   ChatConfig: {title: '聊天配置', showBack: true, showNav: false},
   CloudSyncConfig: {title: '云存储配置', showBack: true, showNav: false},
-  GlobalTemplate: {title: '全局工作区', showBack: true, showNav: false},
+  GlobalTemplate: {title: '文件浏览器', showBack: true, showNav: false},
   RegexGroups: {title: '正则配置', showBack: true, showNav: false},
   RegexRules: {title: '正则规则', showBack: true, showNav: false},
   RegexRuleEditor: {title: '规则详情', showBack: true, showNav: false},
