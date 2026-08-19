@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import type {ThemeTokens} from '../../theme/tokens';
 import {FormTextInput} from '../form/FormTextInput';
+import {inlineTagTextStyle} from '../chat/ComposerAtPathInput';
 import {
   PROMPT_INSERTABLE_MACROS,
   insertTextAtSelection,
@@ -96,12 +97,7 @@ export function PromptMacroTextInput({
               segment.kind === 'macro' ? (
                 <Text
                   key={`m-${index}-${segment.value}`}
-                  style={{
-                    color: tokens.primary,
-                    backgroundColor: `${tokens.primary}22`,
-                    borderRadius: 6,
-                    paddingHorizontal: 3,
-                  }}>
+                  style={inlineTagTextStyle(tokens.primary)}>
                   {segment.value}
                 </Text>
               ) : (
