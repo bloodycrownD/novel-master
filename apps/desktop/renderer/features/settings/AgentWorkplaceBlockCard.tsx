@@ -5,6 +5,7 @@
 import {
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
+  WORKPLACE_DISABLED_HINT,
   WORKPLACE_ASSISTANT_TEXT_LABEL,
 } from "@shared/logic/config-forms-agent";
 import { Switch } from "@/components/ui/Switch";
@@ -61,9 +62,7 @@ export function AgentWorkplaceBlockCard({
               </SettingsField>
             </>
           ) : (
-            <p className="config-block-card__hint">
-              关闭时不注入项目文件树。
-            </p>
+            <p className="config-block-card__hint">{WORKPLACE_DISABLED_HINT}</p>
           )}
         </div>
       </div>

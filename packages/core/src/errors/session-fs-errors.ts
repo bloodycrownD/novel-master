@@ -251,7 +251,8 @@ export function isRollbackConflictError(
 /**
  * 判断错误是否可降级为仅截断消息（含 cause 链）。
  *
- * @remarks 当 error 或其 cause 链中存在 `ROLLBACK_VFS_RESTORE_FAILED` 时返回 true。
+ * @remarks 当 error 或其 cause 链中存在 `ROLLBACK_VFS_RESTORE_FAILED` 或
+ * `ROLLBACK_UNDO_SEND_EMPTY_TARGET`（undo_send 无 baseline 且 live 树非空）时返回 true。
  */
 export function isRollbackVfsDegradableError(error: unknown): boolean {
   return (

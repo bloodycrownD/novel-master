@@ -7,6 +7,7 @@ import {
   isSessionFsError,
   SessionFsError,
   sessionFsRollbackMessageNotFound,
+  sessionFsRollbackUndoSendEmptyTarget,
   sessionFsRollbackVfsRestoreFailed,
 } from "@novel-master/core/session-fs";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -201,6 +202,13 @@ describe("MessageRollbackService (degraded fallback)", () => {
     assert.equal(
       isRollbackVfsDegradableError(
         sessionFsRollbackVfsRestoreFailed("工作区无法恢复：测试"),
+      ),
+      true,
+    );
+    // undo_send 无 baseline（live 树非空）：同样可降级为仅截断消息
+    assert.equal(
+      isRollbackVfsDegradableError(
+        sessionFsRollbackUndoSendEmptyTarget("s-1", "m-1"),
       ),
       true,
     );
