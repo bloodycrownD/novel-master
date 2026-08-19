@@ -95,6 +95,37 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
   });
 });
 
+describe('mermaid 全屏查看器 RN 返回键契约 (T-MF4)', () => {
+  it('ChatTranscriptWebView 两消息上浮；hook 拦截位在 menu 前；RichDocumentWebView 自注册 BackHandler', () => {
+    // chat：两消息照 menuOpened→onWebMenuOpenChange 先例上浮
+    const chatWeb = rnSrc('components/chat/ChatTranscriptWebView.tsx');
+    expect(chatWeb).toContain("message.type === 'mermaidViewerOpened'");
+    expect(chatWeb).toContain("message.type === 'mermaidViewerClosed'");
+    expect(chatWeb).toContain('onWebMermaidViewerOpenChange');
+    // 返回键关闭下发通道（照 menuCloseSignal 先例）
+    expect(chatWeb).toContain("type: 'closeMermaidViewer'");
+
+    // hook：拦截位存在且排在 menu 拦截之前（盖在一切会话 surface 之上）
+    const hook = rnSrc('hooks/useAndroidChatBackHandler.ts');
+    expect(hook).toContain('mermaidViewerOpen');
+    expect(hook).toContain('closeMermaidViewer');
+    const mermaidIdx = hook.indexOf('if (mermaidViewerOpen)');
+    const menuIdx = hook.indexOf('if (messageMenuOpen)');
+    expect(mermaidIdx).toBeGreaterThan(-1);
+    expect(menuIdx).toBeGreaterThan(-1);
+    expect(mermaidIdx).toBeLessThan(menuIdx);
+
+    // rich-document：组件内自注册（Android only、随 focus、判 isFocused 防吞上层返回）
+    const richWeb = rnSrc('components/vfs/RichDocumentWebView.tsx');
+    expect(richWeb).toContain('BackHandler.addEventListener');
+    expect(richWeb).toContain("Platform.OS !== 'android'");
+    expect(richWeb).toContain('navigation.isFocused()');
+    expect(richWeb).toContain("type: 'closeMermaidViewer'");
+    expect(richWeb).toContain("message.type === 'mermaidViewerOpened'");
+    expect(richWeb).toContain("message.type === 'mermaidViewerClosed'");
+  });
+});
+
 describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
   it('pinch 缩放 clamp：不小于 min、不大于 max、非法值回退 min', () => {
     expect(clampMermaidViewerScale(0.3)).toBe(MERMAID_VIEWER_MIN_SCALE);
