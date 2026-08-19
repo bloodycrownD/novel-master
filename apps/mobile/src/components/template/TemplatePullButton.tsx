@@ -1,5 +1,5 @@
 /**
- * Confirm + run projects.pullTemplate or sessions.pullTemplate (§14 M6).
+ * Confirm + run sessions.pullTemplate（§14 M6；project 域 pull 已拆除，仅支持 session 域）。
  */
 import React, {useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, StyleSheet, Text} from 'react-native';
@@ -10,9 +10,7 @@ import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 
 type Props = {
-  scope:
-    | {kind: 'project'; projectId: string}
-    | {kind: 'session'; sessionId: string};
+  scope: {kind: 'session'; sessionId: string};
   onPulled?: () => void;
   /** Inline toolbar: smaller padding, no border box. */
   compact?: boolean;
@@ -20,10 +18,7 @@ type Props = {
   iconOnly?: boolean;
 };
 
-function confirmMessage(scope: Props['scope']): string {
-  if (scope.kind === 'project') {
-    return '将从全局工作区覆盖当前项目工作区，本地修改将丢失。确定继续？';
-  }
+function confirmMessage(): string {
   return '将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？';
 }
 
@@ -41,11 +36,7 @@ export function TemplatePullButton({
   const runPull = async () => {
     setPulling(true);
     try {
-      if (scope.kind === 'project') {
-        await runtime.projects.pullTemplate(scope.projectId);
-      } else {
-        await runtime.sessions.pullTemplate(scope.sessionId);
-      }
+      await runtime.sessions.pullTemplate(scope.sessionId);
       onPulled?.();
       showToast('同步完成');
     } catch (error) {
@@ -56,7 +47,7 @@ export function TemplatePullButton({
   };
 
   const confirmPull = () => {
-    Alert.alert('从上级同步', confirmMessage(scope), [
+    Alert.alert('从上级同步', confirmMessage(), [
       {text: '取消', style: 'cancel'},
       {
         text: '同步',

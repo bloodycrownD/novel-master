@@ -13,6 +13,7 @@ import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revisi
 import type {
   IntegrityRepairOperation,
 } from "@/service/integrity-repair.js";
+import { isVfsPathExcluded } from "./vfs-exclude-prefixes.js";
 
 /** checkpoint 文件指针（entry_id 形态）。 */
 export type CheckpointFilePointer = {
@@ -74,13 +75,20 @@ export async function decrementRefsForCheckpointFiles(
   );
 }
 
-/** 前缀打扫：scope + path 前缀下 DELETE ref_count<=0 的 revision 行。 */
+/** 前缀打扫：scope + path 前缀下 DELETE ref_count<=0 的 revision 行。
+ *
+ * `excludePrefixes` 非空时，排除前缀下的 revision 不参与 GC（隔离豁免）。 */
 export async function deleteUnreferencedUnderScope(
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   pathPrefix: string,
+  excludePrefixes?: readonly string[],
 ): Promise<number> {
-  return revisionRepo.deleteUnreferencedUnderScope(scopeKey, pathPrefix);
+  return revisionRepo.deleteUnreferencedUnderScope(
+    scopeKey,
+    pathPrefix,
+    excludePrefixes,
+  );
 }
 
 /**
@@ -177,17 +185,23 @@ export function createRevisionRefCountRepairOperation(args: {
   };
 }
 
-/** scope + path 前缀下全部 live file head 批量 −1（会话删除 Step 2）。 */
+/** scope + path 前缀下全部 live file head 批量 −1（会话删除 Step 2）。
+ *
+ * `excludePrefixes` 非空时，排除前缀下的 live head 引用不减（隔离豁免）。 */
 export async function decrementLiveRefsUnderScope(
   revisionRepo: VfsRevisionRepository,
   entryRepo: VfsEntryRepository,
   scopeKey: string,
   pathPrefix: string,
+  excludePrefixes?: readonly string[],
 ): Promise<void> {
+  const excludes = excludePrefixes ?? [];
   const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
   // 批量减引用，避免对每个 live head 发一条 SQL（会话删除场景下文件多会卡）
   await revisionRepo.batchAdjustRefCount(
-    liveHeads.map((h) => ({ entryId: h.entryId, version: h.headVersion })),
+    liveHeads
+      .filter((h) => !isVfsPathExcluded(h.path, excludes))
+      .map((h) => ({ entryId: h.entryId, version: h.headVersion })),
     -1,
   );
 }

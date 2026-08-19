@@ -24,6 +24,7 @@ import {
   type TranscriptRestoreScroll,
   type TranscriptRow,
   type TranscriptScrollIntent,
+  type TranscriptSkillRef,
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
 import { enrichTranscriptRows } from './enrich-transcript-rows';
@@ -86,6 +87,8 @@ export type ChatTranscriptWebViewProps = {
   readonly onOpenToolFile?: (path: string) => void;
   /** 点击 task 工具卡片跳转子会话只读浏览（webview web app 发 openSubagentSession）。 */
   readonly onOpenSubagentSession?: (sessionId: string) => void;
+  /** 点击 skill 卡片跳技能详情（webview web app 发 openSkillDetail；project 域缺 projectId 时由调用方补齐）。 */
+  readonly onOpenSkillDetail?: (ref: TranscriptSkillRef) => void;
   readonly onOpenMessageMenu?: (
     messageId: string,
     pageX: number,
@@ -228,6 +231,7 @@ export const ChatTranscriptWebView = memo(
         onLoadOlder,
         onOpenToolFile,
         onOpenSubagentSession,
+        onOpenSkillDetail,
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
@@ -792,6 +796,16 @@ export const ChatTranscriptWebView = memo(
             onOpenSubagentSession?.(message.payload.sessionId);
             return;
           }
+          if (message.type === 'openSkillDetail') {
+            onOpenSkillDetail?.({
+              domain: message.payload.domain,
+              name: message.payload.name,
+              ...(message.payload.projectId != null
+                ? {projectId: message.payload.projectId}
+                : {}),
+            });
+            return;
+          }
           if (message.type === 'openMessageMenu') {
             if (uiRunning) {
               return;
@@ -826,6 +840,7 @@ export const ChatTranscriptWebView = memo(
           onLoadOlder,
           onOpenToolFile,
           onOpenSubagentSession,
+          onOpenSkillDetail,
           onOpenMessageMenu,
           onMessageMenuAction,
           onWebMenuOpenChange,

@@ -53,6 +53,32 @@ export function entryName(path: string): string {
   return path.slice(idx + 1);
 }
 
+/**
+ * 面包屑展示：用缓存的名字逐段替换路径中的段（如项目/会话 UUID → 名称）。
+ *
+ * @remarks labelByPath 由导航过程中每次 list 的合成目录行携带（label 字段），
+ * 查不到的段回退原文；只影响展示，不改导航与逻辑路径。
+ */
+export function pathWithLabels(
+  path: string,
+  labelByPath: ReadonlyMap<string, string>,
+): string {
+  if (path === '/') {
+    return '/';
+  }
+  const segments = path.split('/');
+  let acc = '';
+  return segments
+    .map((seg, i) => {
+      if (i === 0) {
+        return '';
+      }
+      acc = `${acc}/${seg}`;
+      return labelByPath.get(acc) ?? seg;
+    })
+    .join('/');
+}
+
 /** Count file rows whose parent directory is `dirPath`. */
 export function countFilesInDir(
   rows: readonly WorkplaceListRow[],
@@ -134,10 +160,12 @@ export function mapWorktreeRow(
 
 /** Fallback row when VFS has a path not yet in worktree listing. */
 export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
+  // label 为物理树合成目录行的展示名（项目名/会话名）；未填充时回退路径末段。
+  const name = entry.label ?? entryName(entry.path);
   if (entry.kind === 'directory') {
     return {
       path: entry.path,
-      name: entryName(entry.path),
+      name,
       kind: 'dir',
       subtitle: '',
       badge: dirRuleBadge(false),
@@ -146,7 +174,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
   }
   return {
     path: entry.path,
-    name: entryName(entry.path),
+    name,
     kind: 'file',
     subtitle: '跟随·全内容',
     badge: { label: '跟随', tone: 'follow' },

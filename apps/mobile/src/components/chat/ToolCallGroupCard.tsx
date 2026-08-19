@@ -4,6 +4,7 @@
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
+import type {SkillToolRef} from '@novel-master/core/chat';
 import type {ToolCallView} from './message-blocks';
 import {ToolCallCard} from './ToolCallCard';
 
@@ -15,6 +16,8 @@ type Props = {
   onOpenFile?: (path: string) => void;
   /** 点击 task 工具卡片时，跳转到对应子会话只读浏览页。 */
   onOpenSubagentSession?: (sessionId: string) => void;
+  /** skill 卡片点击跳技能详情。 */
+  onOpenSkillDetail?: (ref: SkillToolRef) => void;
   showDividerBelow?: boolean;
 };
 
@@ -25,6 +28,7 @@ export function ToolCallGroupCard({
   defaultExpanded = false,
   onOpenFile,
   onOpenSubagentSession,
+  onOpenSkillDetail,
   showDividerBelow = false,
 }: Props) {
   const {tokens} = useTheme();
@@ -72,6 +76,7 @@ export function ToolCallGroupCard({
               groupItem
               onOpenFile={onOpenFile}
               onOpenSubagentSession={onOpenSubagentSession}
+              onOpenSkillDetail={onOpenSkillDetail}
             />
           ))}
         </View>

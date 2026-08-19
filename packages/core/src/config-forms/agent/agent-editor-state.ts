@@ -9,6 +9,7 @@ import type {
   PersistTextPromptBlock,
 } from "@/domain/prompt/model/agent-prompt-layout.js";
 import {
+  DEFAULT_SKILLS_INDEX_PREFIX,
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   layoutHasCustomAttach,
   layoutHasWorkplace,
@@ -52,7 +53,7 @@ export const ROLE_OPTIONS = PROMPT_BLOCK_ROLES.map((role) => ({
   label: ROLE_LABELS[role],
 }));
 
-export { DEFAULT_WORKPLACE_ASSISTANT_TEXT };
+export { DEFAULT_WORKPLACE_ASSISTANT_TEXT, DEFAULT_SKILLS_INDEX_PREFIX };
 
 /** Agent 编辑器表单（三区 layout，非扁平 prompts）。 */
 export type AgentEditorFormInput = {
@@ -77,6 +78,10 @@ export type AgentEditorFormInput = {
   customAttachEnabled?: boolean;
   /** 自定义附加信息文本（开但 trim 空时静默省略，不阻断保存）。 */
   customAttachText?: string;
+  /** 技能能力总开关（与域 `prompts.skillsEnabled` 对应；缺省开）。 */
+  skillsEnabled?: boolean;
+  /** 技能索引前缀语（与域 `prompts.skillsPrefix` 对应；等于默认值时 omit）。 */
+  skillsPrefixText?: string;
   /** 人类可读的 agent 描述（与域 `description` 对应；多行文本，空则 omit）。 */
   description?: string;
   persist: readonly EditorPersistPromptBlock[];
@@ -113,9 +118,11 @@ export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 /** 常驻工作区在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
 export const WORKPLACE_BLOCK_LABEL = "常驻工作区";
 
-/** 常驻工作区说明（用户可见；强调可编辑确认语，仅常驻前缀）。 */
-export const WORKPLACE_BLOCK_HINT =
-  "开启后可编辑助手确认语（默认如 i have seen workplace）；用户侧文件树包在 <workplace> 内，仅表常驻前缀。";
+/** 常驻工作区开启态说明（仅讲可编辑项；机制描述留给关闭态）。 */
+export const WORKPLACE_BLOCK_HINT = "可编辑助手确认语。";
+
+/** 常驻工作区关闭态说明。 */
+export const WORKPLACE_DISABLED_HINT = "关闭时不注入项目文件树。";
 
 /** 常驻工作区助手确认语字段标签。 */
 export const WORKPLACE_ASSISTANT_TEXT_LABEL = "助手确认语";
@@ -138,7 +145,7 @@ export const PROMPT_REGION_LABELS = {
   persistBlocks: "持久区",
   dynamicBlocks: "动态区",
   persistRegionHint: "持久区禁止宏与生命周期。",
-  layoutOrder: "系统 → 常驻工作区 → 持久区 → 会话历史 → 动态区",
+  layoutOrder: "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区",
   layoutOrderPrefix: "纵向顺序与模型组装一致：",
   layoutOrderPrefixShort: "纵向顺序：",
   systemDisabledHint: "关闭时不写入系统提示词。",
@@ -155,6 +162,12 @@ export const PROMPT_REGION_LABELS = {
   chatBlocks: "会话区",
   chatReadonlyHint:
     "运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。",
+  skills: "技能索引",
+  skillsTag: "技能",
+  skillsBlocks: "技能索引区",
+  skillsReadonlyHint: "运行时注入生效技能索引。",
+  skillsDisabledHint:
+    "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 
@@ -455,7 +468,8 @@ export function definitionToForm(
   | "workplaceAssistantText"
   | "customAttachEnabled"
   | "customAttachText"
-  | "description"
+  | "skillsEnabled"
+  | "skillsPrefixText"
   | "description"
   | "persist"
   | "dynamic"
@@ -475,6 +489,8 @@ export function definitionToForm(
     workplaceAssistantText: workplaceText,
     customAttachEnabled: layoutHasCustomAttach(def.prompts),
     customAttachText,
+    skillsEnabled: def.prompts.skillsEnabled ?? true,
+    skillsPrefixText: def.prompts.skillsPrefix ?? DEFAULT_SKILLS_INDEX_PREFIX,
     description: def.description ?? "",
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
@@ -493,6 +509,8 @@ export function layoutFromFormInput(
     | "workplaceAssistantText"
     | "customAttachEnabled"
     | "customAttachText"
+    | "skillsEnabled"
+    | "skillsPrefixText"
     | "persist"
     | "dynamic"
   >
@@ -513,6 +531,13 @@ export function layoutFromFormInput(
       : {}),
     ...(input.customAttachEnabled && customAttachText !== ""
       ? { customAttach: customAttachText }
+      : {}),
+    ...(input.skillsEnabled === false ? { skillsEnabled: false } : {}),
+    // 前缀语等于默认值 / 空时 omit（落库省噪音；关闭时前缀无意义一并 omit）
+    ...((input.skillsPrefixText ?? "").trim() !== "" &&
+    (input.skillsPrefixText ?? "").trim() !== DEFAULT_SKILLS_INDEX_PREFIX.trim() &&
+    input.skillsEnabled !== false
+      ? { skillsPrefix: (input.skillsPrefixText ?? "").trim() }
       : {}),
     persist: [...textBlocks],
     dynamic: [...input.dynamic],
@@ -541,6 +566,8 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     workplaceAssistantText: input.workplaceAssistantText,
     customAttachEnabled: input.customAttachEnabled ?? false,
     customAttachText: input.customAttachText ?? "",
+    skillsEnabled: input.skillsEnabled ?? true,
+    skillsPrefixText: input.skillsPrefixText ?? "",
     description: input.description ?? "",
     persist: input.persist,
     dynamic: input.dynamic,

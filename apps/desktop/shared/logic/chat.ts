@@ -95,6 +95,7 @@ export {
   resetChatAnnotateDraftStoreForTests,
   resolveComposerSendIntent,
   resolveRollbackConfirmMessage,
+  resolveSkillToolRefFromInput,
   resolveVfsToolFilePath,
   scanAtPathAttachments,
   selectTailBatchEligibleIdsFromAnchor,

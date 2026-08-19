@@ -1,5 +1,5 @@
 /**
- * Desktop：透明 textarea + 高亮层着色 `@路径`（落库仍为纯字符串）。
+ * Desktop：透明 textarea + 高亮层着色 `@路径` / `$技能`（落库仍为纯字符串）。
  */
 import {
   useMemo,
@@ -9,7 +9,9 @@ import {
   type UIEvent,
 } from "react";
 
-const AT_TOKEN_RE = /@([^\s@]+)/g;
+// `@路径` 与 `$技能` 共用高亮；token 内排除另一 trigger，避免 `@a$b` 整段误吞。
+// `$` 在字符类外是行尾锚，必须转义。
+const AT_TOKEN_RE = /@([^\s@$]+)|\$([^\s$@]+)/g;
 
 function escapeHtml(s: string): string {
   return s
@@ -19,7 +21,7 @@ function escapeHtml(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** 将正文中的 `@path` 标成高亮 span；其余转义。 */
+/** 将正文中的 `@path` / `$技能` 标成高亮 span；其余转义。 */
 export function renderComposerAtPathHighlightHtml(text: string): string {
   if (text === "") {
     return "";

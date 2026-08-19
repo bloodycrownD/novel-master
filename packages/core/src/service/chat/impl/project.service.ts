@@ -31,7 +31,7 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
-import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
+import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { ProjectService } from "../project.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -165,21 +165,19 @@ export class DefaultProjectService implements ProjectService {
         );
       }
       await r.sessions.deleteByProject(id);
-      // 项目 scope 只剩 template（会话都有自己的 scope）
+      // 项目 scope 只剩 template（会话都有自己的 scope）；技能负清单行一并清理，
+      // 避免留下指向已删项目的孤儿禁用行。
+      await new SqliteSkillDisabledRuleRepository(tx).removeScope(`project:${id}`);
       await deleteVfsPrefix(r.vfs, `project:${id}`, "/");
+      // 技能已重定位到独立 meta 域：deleteVfsPrefix 按 scope_key 精确匹配，
+      // 不补这条会留下 project:{pid}:meta 的孤儿 entry 行
+      await deleteVfsPrefix(r.vfs, `project:${id}:meta`, "/");
       const deleted = await r.projects.delete(id);
       if (!deleted) {
         throw chatNotFound("project", id);
       }
     });
     await runDeferredBlobGc(this.deps.conn);
-  }
-
-  async pullTemplate(projectId: string): Promise<void> {
-    await this.get(projectId);
-    await new DefaultTemplatePullService(this.deps.conn).projectTemplatePull(
-      projectId,
-    );
   }
 
   /**
@@ -243,6 +241,8 @@ export class DefaultProjectService implements ProjectService {
         await r.projects.updateAgentConfig(copy.id, clonedJson, now);
       }
       // entry_id 化后项目模板独立 scope：project:{id}，逻辑前缀为 "/"
+      // 技能已重定位到独立 meta 域（project:{id}:meta），复制时单独整树拷贝
+      // （D1：项目复制携带技能文件）；负清单行不往 VFS，需按 scope_key 显式复制。
       const contentStore = new SqliteVfsContentStore(tx);
       await copyVfsTree(
         r.vfs,
@@ -252,10 +252,29 @@ export class DefaultProjectService implements ProjectService {
         "/",
         { contentStore },
       );
+      await copyVfsTree(
+        r.vfs,
+        { scopeKey: `project:${id}:meta` },
+        "/",
+        { scopeKey: `project:${copy.id}:meta` },
+        "/",
+        { contentStore },
+      );
+      await new SqliteSkillDisabledRuleRepository(tx).copyScopeRules(
+        `project:${id}`,
+        `project:${copy.id}`,
+      );
       await seedLiveHeadRevisionsUnderPrefix(
         r.vfs,
         r.revisions,
         `project:${copy.id}`,
+        "/",
+        contentStore,
+      );
+      await seedLiveHeadRevisionsUnderPrefix(
+        r.vfs,
+        r.revisions,
+        `project:${copy.id}:meta`,
         "/",
         contentStore,
       );

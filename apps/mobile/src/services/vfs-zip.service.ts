@@ -6,13 +6,11 @@
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import { createVfsZipIoService, type VfsScope, type VfsZipImportOptions, VfsZipError } from "@novel-master/core/vfs";
 import {
-  errorCodes,
-  isErrorWithCode,
   keepLocalCopy,
-  pick,
   saveDocuments,
   types,
 } from '@react-native-documents/picker';
+import {isUserCancelledPick, pickSingleDocument} from './document-pick';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
@@ -22,6 +20,12 @@ function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
       : `-${directoryPath.replace(/^\//, '').replace(/\//g, '-')}`;
   if (scope.kind === 'global') {
     return `vfs-global${pathSuffix}.zip`;
+  }
+  if (scope.kind === 'global-meta') {
+    return `vfs-global-meta${pathSuffix}.zip`;
+  }
+  if (scope.kind === 'project-meta') {
+    return `vfs-project-${scope.projectId}-meta${pathSuffix}.zip`;
   }
   if (scope.kind === 'project') {
     return `vfs-project-${scope.projectId}${pathSuffix}.zip`;
@@ -160,13 +164,22 @@ export async function exportVfsZip(
     }
     return 'saved';
   } catch (error) {
-    if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+    if (isUserCancelledPick(error)) {
       return 'cancelled';
     }
     throw error;
   } finally {
     await ReactNativeBlobUtil.fs.unlink(tmpPath).catch(() => undefined);
   }
+}
+
+/** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null。 */
+export async function pickZipFileBytes(): Promise<Uint8Array | null> {
+  const file = await pickSingleDocument({type: [types.zip]});
+  if (file == null) {
+    return null;
+  }
+  return readPickedZipAsBytes(file.uri);
 }
 
 export async function importVfsZip(
@@ -176,11 +189,8 @@ export async function importVfsZip(
     readonly directoryPath?: string;
   },
 ): Promise<void> {
-  const [file] = await pick({
-    type: [types.zip],
-    allowMultiSelection: false,
-  });
-  if (file == null) {
+  const zipBytes = await pickZipFileBytes();
+  if (zipBytes == null) {
     return;
   }
 
@@ -188,7 +198,6 @@ export async function importVfsZip(
     options.directoryPath == null || options.directoryPath.trim() === ''
       ? '/'
       : options.directoryPath;
-  const zipBytes = await readPickedZipAsBytes(file.uri);
   const zipSvc = createVfsZipIoService(runtime.conn);
   await zipSvc.import(scope, zipBytes, {
     confirmed: options.confirmed,

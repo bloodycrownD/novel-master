@@ -114,16 +114,16 @@ function renderPicker(props: {
 }
 
 describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
-  it('T-P1: trigger 显示「已选工具（N/7）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
+  it('T-P1: trigger 显示「已选工具（N/8）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
     const json = JSON.stringify(renderer.toJSON());
-    expect(json).toContain('已选工具（1/7）');
+    expect(json).toContain('已选工具（1/8）');
     expect(json).toContain('▼');
 
     // trigger 是 trigger 样式（含 minHeight），靠文案定位
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/7）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/8）');
     expect(trigger).toBeTruthy();
     act(() => {
       trigger.props.onPress();
@@ -134,8 +134,11 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     expect(after).toContain('read');
     expect(after).toContain('write');
 
-    // 勾选 write 行：write 同时出现在 sheet 列表，找列表行（排除 trigger）
-    const writeRows = findAllPressablesByChildText(renderer.root, 'write');
+    // 勾选 write 行：write 同时出现在 sheet 列表，找列表行（排除 trigger）。
+    // skill 的描述文案含「write」字样，须排除，否则误中 skill 行。
+    const writeRows = findAllPressablesByChildText(renderer.root, 'write').filter(
+      (row: any) => !collectOwnText(row).includes('skill'),
+    );
     expect(writeRows.length).toBeGreaterThanOrEqual(1);
     act(() => {
       writeRows[writeRows.length - 1].props.onPress();
@@ -155,7 +158,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/7）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/8）');
     act(() => {
       trigger.props.onPress();
     });
@@ -177,14 +180,14 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     // 关闭后 trigger 文案仍是原值（草稿被丢弃）
-    expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/7）');
+    expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/8）');
   });
 
   it('T-P3: 选中行有 ✓；渲染树不含 ☑ / ☐ 字符', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/7）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/8）');
     act(() => {
       trigger.props.onPress();
     });
@@ -206,9 +209,18 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         </FormOverlayProvider>,
       );
     });
-    expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/7）');
+    expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/8）');
 
-    const all = ['task', 'read', 'write', 'edit', 'fs', 'glob', 'grep'];
+    const all = [
+      'task',
+      'read',
+      'write',
+      'edit',
+      'fs',
+      'glob',
+      'grep',
+      'skill',
+    ];
     let r2: any;
     act(() => {
       r2 = TestRenderer.create(
@@ -221,6 +233,6 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         </FormOverlayProvider>,
       );
     });
-    expect(JSON.stringify(r2.toJSON())).toContain('全部工具（7/7）');
+    expect(JSON.stringify(r2.toJSON())).toContain('全部工具（8/8）');
   });
 });

@@ -43,6 +43,7 @@ export async function initializeSessionWorkspace(
     {
       revisions,
       contentStore: new SqliteVfsContentStore(tx),
+      // 技能已重定位到独立 meta 域，project 域全部内容都带入 session，无需排除项
     },
   );
   await worktree.copyScope(

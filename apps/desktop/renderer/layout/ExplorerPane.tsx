@@ -27,6 +27,9 @@ interface ExplorerPaneProps {
   onBlankContextMenu: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
 }
 
+// projects 视图换只读物理树浏览器；global 面板不再展示，session/chat 面板行为不变
+const PANEL_SCOPES = ["physical", "session", "chat"] as const;
+
 function scopeRequest(
   panelScope: WorkspacePanelScope,
   projectId?: string,
@@ -116,8 +119,10 @@ export function ExplorerPane({
       </header>
       <section id="explorer-pane" aria-label="工作区">
         <div className="workspace-trees">
-          {(["global", "session", "chat"] as const).map((scope) => {
+          {PANEL_SCOPES.map((scope) => {
             const visible = workspaceScope === scope;
+            // physical 面板只读：不接受拖入、不弹空白区写菜单
+            const readOnly = scope === "physical";
             return (
               <div
                 key={scope}
@@ -136,10 +141,15 @@ export function ExplorerPane({
                     }
                     notifyWorkspaceMutated();
                   }}
-                  onDragOver={handleBlankDragOver}
+                  onDragOver={readOnly ? undefined : handleBlankDragOver}
                   onDragLeave={() => setDropHighlightRoot(false)}
-                  onDrop={(e) => void handleBlankDrop(e, scope)}
+                  onDrop={
+                    readOnly ? undefined : (e) => void handleBlankDrop(e, scope)
+                  }
                   onContextMenu={(e) => {
+                    if (readOnly) {
+                      return;
+                    }
                     if ((e.target as HTMLElement).closest(".tree-node")) {
                       return;
                     }

@@ -38,6 +38,7 @@ import {
   createSessionFsService,
 } from "@novel-master/core/session-fs";
 import {
+  createPhysicalVfsService,
   createScopedVfsService,
   type VfsScope,
 } from "@novel-master/core/vfs";
@@ -46,6 +47,7 @@ import {
 } from "@novel-master/core/workplace";
 import { createKkvService } from "@novel-master/core/kkv";
 import { createSessionKkvService } from "@novel-master/core/session-kkv";
+import { createSkillsService } from "@novel-master/core/skills";
 import {
   createCompositeSecretStore,
   createEnvSecretStore,
@@ -135,7 +137,12 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
         projectId,
         sessionId,
       }),
+    globalMetaVfs: () => createScopedVfsService(conn, { kind: "global-meta" }),
+    projectMetaVfs: (projectId) =>
+      createScopedVfsService(conn, { kind: "project-meta", projectId }),
+    physicalVfs: () => createPhysicalVfsService(conn),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
+    skills: () => createSkillsService(conn),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

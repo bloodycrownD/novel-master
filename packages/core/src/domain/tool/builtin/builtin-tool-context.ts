@@ -12,6 +12,8 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { SessionService } from "@/service/chat/session.port.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
+import type { SkillService } from "@/service/skills/skills.port.js";
+import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
 export interface ResolveChildModelIdResult {
@@ -71,6 +73,33 @@ export interface BuiltinToolSubagentContext {
 }
 
 /**
+ * `skill` 工具读取的技能闭包；装配点（runAgentTurn / runChildAgent）注入。
+ *
+ * 工具内部只经 `service` 调 SkillService，不直接持有 vfs；`projectId` 是
+ * 解析上下文（D2：子代理按父会话 projectId 解析清单，与「子代理共享父
+ * 工作区」语义一致）。
+ */
+export interface BuiltinToolSkillsContext {
+  /** SkillService 实例（load/read/write/edit/list 五 action 全走它）。 */
+  readonly service: SkillService;
+  /** 解析上下文：当前会话（子代理时为父会话）的 projectId。 */
+  readonly projectId: string;
+  /**
+   * 装配期预算好的生效技能清单（name + 描述），`skill` 的
+   * description lambda 从这里拼「可用技能」文案。每 run 预算一次，
+   * 回合内技能启停不即时反映（与 task 工具一致，有意行为）。
+   */
+  readonly effective: readonly EffectiveSkill[];
+  /**
+   * 本请求提示词可见窗口内已 `$` 引用（skillAttach）的技能名集合
+   * （seen 共享方向 A）：装配点建空集合，agent-runner 每步 prepare
+   * 后回填；`load` 命中时返回短提示，避免同一技能全文注入两遍。
+   * 可选字段：旧测试 ctx 可不传（load 视作未引用）。
+   */
+  readonly referencedNames?: Set<string>;
+}
+
+/**
  * 资源配额占位（A-14）。
  *
  * @remarks
@@ -121,6 +150,14 @@ export type BuiltinToolContext = {
    * 故孙 agent 的 LLM 看不到 `task` 工具，不会尝试调用。
    */
   readonly subagent?: BuiltinToolSubagentContext;
+  /**
+   * 可选：仅 `skill` 工具读取。vfs-tools / task 完全不感知。
+   *
+   * 主 agent run 与子 agent run 两个装配点都会注入（D2）；未注入时
+   * skill 的 run 抛 ToolError（FAILED）。是否对 LLM 可见由
+   * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
+   */
+  readonly skills?: BuiltinToolSkillsContext;
 };
 
 /** @deprecated Use {@link BuiltinToolContext}. */

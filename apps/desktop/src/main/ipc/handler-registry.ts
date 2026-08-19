@@ -91,6 +91,15 @@ import {
   handleRegexUpdateRule,
 } from './handlers/regex.js';
 import {
+  handleSkillsDelete,
+  handleSkillsEdit,
+  handleSkillsEffective,
+  handleSkillsList,
+  handleSkillsRead,
+  handleSkillsToggle,
+  handleSkillsWrite,
+} from './handlers/skills.js';
+import {
   handleMessagesAppend,
   handleMessagesAppendToolTurnBridge,
   handleMessagesDelete,
@@ -116,7 +125,6 @@ import {
   handleProjectsDelete,
   handleProjectsGetAgentConfig,
   handleProjectsList,
-  handleProjectsPullTemplate,
   handleProjectsRename,
   handleProjectsUpdateAgentConfig,
 } from './handlers/projects.js';
@@ -140,6 +148,10 @@ import {
   handleSessionsSetModelOverride,
 } from './handlers/sessions.js';
 import {
+  handlePhysicalList,
+  handlePhysicalRead,
+} from './handlers/physical.js';
+import {
   handleVfsBatchClearStaging,
   handleVfsBatchExportStage,
   handleVfsBatchIngestFromPaths,
@@ -153,6 +165,8 @@ import {
   handleVfsCharacterCardImport,
   handleVfsZipExport,
   handleVfsZipImport,
+  handleVfsZipPick,
+  handleVfsZipImportBytes,
 } from './handlers/vfs.js';
 import type { VfsStartDragRequest } from '../../../shared/ipc-types.js';
 import {
@@ -199,7 +213,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.PROJECTS_CREATE, handleProjectsCreate);
   bindReq(IPC_CHANNELS.PROJECTS_RENAME, handleProjectsRename);
   bindReq(IPC_CHANNELS.PROJECTS_DELETE, handleProjectsDelete);
-  bindReq(IPC_CHANNELS.PROJECTS_PULL_TEMPLATE, handleProjectsPullTemplate);
   bindReq(IPC_CHANNELS.PROJECTS_GET_AGENT_CONFIG, handleProjectsGetAgentConfig);
   bindReq(
     IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG,
@@ -229,12 +242,17 @@ export function registerHandlersFromRegistry(): void {
 
   bindReq(IPC_CHANNELS.VFS_LIST, handleVfsList);
   bindReq(IPC_CHANNELS.VFS_READ, handleVfsRead);
+  // 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道）
+  bindReq(IPC_CHANNELS.PHYSICAL_LIST, handlePhysicalList);
+  bindReq(IPC_CHANNELS.PHYSICAL_READ, handlePhysicalRead);
   bindReq(IPC_CHANNELS.VFS_WRITE, handleVfsWrite);
   bindReq(IPC_CHANNELS.VFS_MKDIR, handleVfsMkdir);
   bindReq(IPC_CHANNELS.VFS_DELETE, handleVfsDelete);
   bindReq(IPC_CHANNELS.VFS_RENAME, handleVfsRename);
   bindReq(IPC_CHANNELS.VFS_ZIP_EXPORT, handleVfsZipExport);
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
+  bindNoArg(IPC_CHANNELS.VFS_ZIP_PICK, handleVfsZipPick);
+  bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES, handleVfsZipImportBytes);
   bindReq(IPC_CHANNELS.VFS_CHARACTER_CARD_IMPORT, handleVfsCharacterCardImport);
   bindReq(IPC_CHANNELS.VFS_BATCH_INGEST_FROM_PATHS, handleVfsBatchIngestFromPaths);
   bindReq(IPC_CHANNELS.VFS_BATCH_EXPORT_STAGE, handleVfsBatchExportStage);
@@ -367,6 +385,14 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.REGEX_DELETE_RULE, handleRegexDeleteRule);
   bindNoArg(IPC_CHANNELS.REGEX_LIST_PICKER, handleRegexListPicker);
   bindReq(IPC_CHANNELS.REGEX_SET_CURRENT, handleRegexSetCurrent);
+
+  bindReq(IPC_CHANNELS.SKILLS_LIST, handleSkillsList);
+  bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);
+  bindReq(IPC_CHANNELS.SKILLS_READ, handleSkillsRead);
+  bindReq(IPC_CHANNELS.SKILLS_WRITE, handleSkillsWrite);
+  bindReq(IPC_CHANNELS.SKILLS_EDIT, handleSkillsEdit);
+  bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
+  bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
 
   bindNoArg(
     IPC_CHANNELS.COMPACTION_CONDITIONS_GET,

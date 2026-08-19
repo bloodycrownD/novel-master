@@ -84,6 +84,13 @@ export function mergeAttachmentsByPath(
 }
 
 function attachmentDedupeKey(a: MessageAttachment): string | null {
+  // skillAttach：无 path，判重唯一键 = skillName（`skill:{name}`，与
+  // scan-skill-attachments 的 skillSeenKey / 提示词 seen key 同形）
+  if (a.action === "skillAttach") {
+    return typeof a.skillName === "string" && a.skillName !== ""
+      ? `skill:${a.skillName}`
+      : null;
+  }
   if (a.path != null && a.path !== "") {
     const seenKey = tryNormalizePromptSeenPath(a.path);
     return `path:${seenKey ?? a.path}`;

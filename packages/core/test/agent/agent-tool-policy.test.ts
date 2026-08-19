@@ -165,4 +165,81 @@ describe("agent tool policy", () => {
       (e: unknown) => e instanceof ToolError && e.code === "NOT_FOUND",
     );
   });
+
+  // T-SK7a：skill 可配置（allow / deny 校验通过，deny 后运行时 registry 不含它）
+  it("T-SK7a: skill 在 allow / deny 名单中均校验通过", () => {
+    // allow 名单含 skill：校验通过
+    validateAgentToolPolicy(
+      { allow: ["skill", "read"] },
+      registryNames,
+    );
+    // deny 名单含 skill：校验同样通过
+    validateAgentToolPolicy(
+      { deny: ["skill"] },
+      registryNames,
+    );
+    // 未知名 + skill 仍报错（skill 不是白名单里的例外）
+    assert.throws(
+      () => validateAgentToolPolicy({ allow: ["skill", "vfs.nope"] }, registryNames),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
+    );
+  });
+
+  it("T-SK7a: deny skill 后运行时 resolve 产物不含 skill（其余工具不受影响）", () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      tools: { deny: ["skill"] },
+    };
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    assert.ok(!filtered.list().includes("skill"));
+    assert.ok(filtered.list().includes("read"));
+    assert.ok(filtered.list().includes("task"));
+    assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
+    // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
+    assert.ok(
+      !toolsFromRegistry(filtered, mockToolCtx).some((t) => t.name === "skill"),
+    );
+    // TODO(Step 10)：deny 后 skillsIndex 置空的 D4 联动在提示词预算侧验证；
+    // `$` 引用不受影响（注入全文不依赖工具），属后续步骤验收。
+  });
+
+  // T-SK13：技能能力总开关（prompts.skillsEnabled）
+  it("T-SK13: skillsEnabled=false 强制移除 skill 工具（即便 allow 名单含它）；缺省/true 保留", () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      prompts: {...BASE_DEF.prompts, skillsEnabled: false},
+      tools: { allow: ["skill", "read"] },
+    };
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    assert.ok(!filtered.list().includes("skill"));
+    assert.ok(filtered.list().includes("read"));
+
+    // 缺省（字段未写）与显式 true 均保留
+    const defDefault: AgentDefinition = { ...BASE_DEF, tools: { allow: ["skill"] } };
+    assert.ok(
+      resolveAgentToolRegistry(base, defDefault).list().includes("skill"),
+    );
+    const defOn: AgentDefinition = {
+      ...BASE_DEF,
+      prompts: { ...BASE_DEF.prompts, skillsEnabled: true },
+      tools: { allow: ["skill"] },
+    };
+    assert.ok(resolveAgentToolRegistry(base, defOn).list().includes("skill"));
+  });
+
+  it("T-SK7a: allow 仅 skill 时 registry 只剩它", () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      tools: { allow: ["skill"] },
+    };
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    assert.deepEqual(filtered.list(), ["skill"]);
+  });
 });

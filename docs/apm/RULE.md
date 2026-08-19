@@ -46,4 +46,6 @@ merge 到 main、push、发版等改变共享状态的操作，必须等用户�
 - **worktree 并行开发**：`.woktree/` 目录用于 git worktree 并行 feature 开发，已在 `.gitignore` 忽略。注意 worktree 的 node_modules 是**独立目录非主仓软链**，新 worktree 或大版本切换后须重跑 `npm install`；workspace 包解析报 `subpath not defined` 是 exports 设计使然非故障。
 - **发版 bump 版本号后必须验证 package.json 可解析**：曾有版本行尾逗号丢失导致 JSON 语法错误，`npm ci` 报误导性「lock 不存在」，CI 三平台全挂。提交前跑 `node -e "require('./package.json')"` 逐个验证。
 - **改 dist 消费的包必须重建 dist**：Metro/vite 解析的是 exports 指向的 `dist/` 产物（gitignore），src 改完不 `npm run build -w <pkg>`，本地 dev/reload 跑的还是旧代码——v1.4.28 会话复制性能验证曾因 op-sqlite 驱动 dist 停在旧版白测一轮。
+- **mobile webview 改动是三层产物链，reload 无效**：chat-transcript 等 WebView 页面加载的是打进 APK 的 assets（`file:///android_asset/webview/...`），链路 = 改 src → `npm run build:webview`（出 webview-dist）→ `build:webview:native`（拷 android assets）→ gradle assembleDebug → adb install。metro reload 碰不到它；且注意编译与资产拷贝的时间差（先拷再编才作数）。webview 内 JS 按老浏览器环境写：禁 lookbehind 等新正则特性（es2018 target 不转译正则）。调试可用 bridge 协议的 `log` 消息通道接 console。
+- **视觉「元素消失/看不见」先查颜色叠加再怪代码**：用户气泡是 primary 蓝底白字，往里塞主题色前景的元素会蓝上蓝隐形；引用胶囊曾因此两轮误判（怪正则、怪构建），日志实锤渲染链路本正常。
 - **release.yml Android job 构建清单须覆盖 mobile 全部 workspace 依赖**：dist 不进仓库，CI 逐包 `npm run build -w`；给 mobile 新增 workspace 依赖包时必须同步补清单，否则本地绿、发版 CI 炸（v1.4.28 曾漏 tdbc-driver-op-sqlite）。

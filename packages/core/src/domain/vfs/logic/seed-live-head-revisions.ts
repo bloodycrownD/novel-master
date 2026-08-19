@@ -11,12 +11,15 @@ import { adjustRef } from "@/domain/vfs/logic/revision-ref-count.js";
 import type { VfsContentStore } from "@/domain/vfs/content-store/vfs-content-store.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import { isVfsPathExcluded } from "./vfs-exclude-prefixes.js";
 
 /**
  * 为 scope + 前缀下每个 live file head 补种缺失的 revision 行，并 +1 live ref。
  *
  * @returns 新写入的 revision 行数
  * @remarks 已存在的 (entryId, version) 跳过（不二次 +1）。
+ * `excludePrefixes` 非空时跳过排除前缀下的 head（隔离豁免，与 replaceVfsSubtree
+ * 三侧对齐；防御性——排除前缀下本就不该被本次拷贝触碰）。
  */
 export async function seedLiveHeadRevisionsUnderPrefix(
   entryRepo: VfsEntryRepository,
@@ -24,8 +27,11 @@ export async function seedLiveHeadRevisionsUnderPrefix(
   scopeKey: string,
   pathPrefix: string,
   contentStore?: VfsContentStore,
+  excludePrefixes?: readonly string[],
 ): Promise<number> {
-  const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
+  const excludes = excludePrefixes ?? [];
+  const heads = (await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix))
+    .filter((h) => !isVfsPathExcluded(h.path, excludes));
   if (heads.length === 0) {
     return 0;
   }

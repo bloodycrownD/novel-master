@@ -30,6 +30,15 @@ export type ToolCallRow = {
   resultContent?: unknown;
   /** 子智能体会话 id：非空时卡片可点击进入子会话只读浏览。applySnapshot 是浅引用赋值，运行时数据已挂在对象上，这里只是补类型声明。 */
   subagentSessionId?: string;
+  /** skill 跳转三元组：read 由 tool_result meta 透传；write/edit 由 skill-tool-ref.ts 从 input 解析。 */
+  skillRef?: SkillRefMeta;
+};
+
+/** skill 卡片跳详情三元组（与 core SkillToolRef 同形）。 */
+export type SkillRefMeta = {
+  domain: 'global' | 'project';
+  projectId?: string;
+  name: string;
 };
 
 /** 消息附件芯片。 */

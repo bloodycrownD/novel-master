@@ -2,7 +2,14 @@
  * Agent definition editor: name, model pin, maxSteps, three-region prompt layout.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { type AgentDefinition } from '@novel-master/core/agent';
@@ -13,14 +20,15 @@ import {
   type PersistTextPromptBlock,
 } from '@novel-master/core/prompt';
 import {
+  DEFAULT_SKILLS_INDEX_PREFIX,
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
+  WORKPLACE_DISABLED_HINT,
   WORKPLACE_ASSISTANT_TEXT_LABEL,
-  blockTypeLabel,
   buildAgentDefinitionFromForm,
   countFormPromptSources,
   createDefaultDynamicTextBlock,
@@ -119,6 +127,12 @@ export function AgentEditorForm(props: Props) {
   const [workplaceAssistantText, setWorkplaceAssistantText] = useState('');
   const [customAttachEnabled, setCustomAttachEnabled] = useState(false);
   const [customAttachText, setCustomAttachText] = useState('');
+  // 技能能力总开关（缺省开）：关 = 不注入技能索引且不注册 skill 工具。
+  const [skillsEnabled, setSkillsEnabled] = useState(true);
+  // 技能索引前缀语（索引段首行，缺省默认文案）。
+  const [skillsPrefixText, setSkillsPrefixText] = useState(
+    DEFAULT_SKILLS_INDEX_PREFIX,
+  );
   // 人类可读的 agent 描述（对应域 description，多行文本）。
   const [description, setDescription] = useState('');
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
@@ -234,6 +248,10 @@ export function AgentEditorForm(props: Props) {
       setWorkplaceAssistantText(promptForm.workplaceAssistantText);
       setCustomAttachEnabled(promptForm.customAttachEnabled ?? false);
       setCustomAttachText(promptForm.customAttachText ?? '');
+      setSkillsEnabled(promptForm.skillsEnabled ?? true);
+      setSkillsPrefixText(
+        promptForm.skillsPrefixText ?? DEFAULT_SKILLS_INDEX_PREFIX,
+      );
       setDescription(promptForm.description ?? '');
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
@@ -401,6 +419,8 @@ export function AgentEditorForm(props: Props) {
       workplaceAssistantText,
       customAttachEnabled,
       customAttachText,
+      skillsEnabled,
+      skillsPrefixText,
       description,
       persist,
       dynamic,
@@ -474,6 +494,8 @@ export function AgentEditorForm(props: Props) {
     workplaceAssistantText,
     customAttachEnabled,
     customAttachText,
+    skillsEnabled,
+    skillsPrefixText,
     persist,
     dynamic,
   });
@@ -656,10 +678,21 @@ export function AgentEditorForm(props: Props) {
   /** 四区小标题；旧 core 包缺键时用本地兜底，避免标题空白。 */
   const promptSectionLabels = {
     system: PROMPT_REGION_LABELS.systemBlocks ?? '系统区',
+    skills: PROMPT_REGION_LABELS.skillsBlocks ?? '技能索引区',
     persist: PROMPT_REGION_LABELS.persistBlocks,
     chat: PROMPT_REGION_LABELS.chatBlocks ?? '会话区',
     dynamic: PROMPT_REGION_LABELS.dynamicBlocks,
   };
+
+  /** 内层区块卡片统一样式：白底常规边框 + 左侧主题色粗边。 */
+  const blockCardStyle = [
+    styles.blockCard,
+    {
+      backgroundColor: tokens.surface,
+      borderColor: tokens.border,
+      borderLeftColor: tokens.primary,
+    },
+  ];
 
   const renderPromptSectionHead = (
     label: string,
@@ -846,8 +879,8 @@ export function AgentEditorForm(props: Props) {
             </FormField>
           ) : (
             <Text style={[styles.hint, { color: tokens.textSecondary }]}>
-              未配置时使用全部内置工具（7
-              个）：task、read、write、edit、fs、glob、grep。
+              未配置时使用全部内置工具（8
+              个）：task、read、write、edit、fs、glob、grep、skill。
             </Text>
           )}
         </FormSectionCard>
@@ -860,12 +893,7 @@ export function AgentEditorForm(props: Props) {
             switchValue: systemEnabled,
             onSwitchChange: setSystemEnabled,
           })}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             {systemEnabled ? (
               <FormField
                 label={PROMPT_REGION_LABELS.systemContent}
@@ -886,38 +914,50 @@ export function AgentEditorForm(props: Props) {
             )}
           </View>
 
-          {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL)}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
-            <View style={styles.blockHeader}>
-              <View
-                style={[
-                  styles.typeBadge,
-                  { backgroundColor: `${tokens.primary}1A` },
-                ]}
-              >
-                <Text style={[styles.typeBadgeText, { color: tokens.primary }]}>
-                  {WORKPLACE_BLOCK_LABEL}
+          {/* 技能索引占位卡：运行时自动注入，不可配置 */}
+          {renderPromptSectionHead(promptSectionLabels.skills, {
+            switchValue: skillsEnabled,
+            onSwitchChange: setSkillsEnabled,
+          })}
+          <View style={blockCardStyle}>
+            {skillsEnabled ? (
+              <>
+                <Text
+                  style={[styles.chatSlotHint, {color: tokens.textSecondary}]}
+                >
+                  {PROMPT_REGION_LABELS.skillsReadonlyHint}
                 </Text>
-              </View>
-              <View style={styles.blockHeaderSpacer} />
-              <Switch
-                value={workplaceEnabled}
-                onValueChange={next => {
-                  const patched = withWorkplaceToggle(
-                    next,
-                    workplaceAssistantText,
-                  );
-                  setWorkplaceEnabled(patched.workplaceEnabled);
-                  setWorkplaceAssistantText(patched.workplaceAssistantText);
-                }}
-                trackColor={{ false: tokens.border, true: tokens.primary }}
-              />
-            </View>
+                <FormField label="索引前缀语" tokens={tokens}>
+                  <FormTextInput
+                    tokens={tokens}
+                    value={skillsPrefixText}
+                    onChangeText={setSkillsPrefixText}
+                    multiline
+                    placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
+                  />
+                </FormField>
+              </>
+            ) : (
+              <Text
+                style={[styles.chatSlotHint, {color: tokens.textSecondary}]}
+              >
+                {PROMPT_REGION_LABELS.skillsDisabledHint}
+              </Text>
+            )}
+          </View>
+
+          {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL, {
+            switchValue: workplaceEnabled,
+            onSwitchChange: next => {
+              const patched = withWorkplaceToggle(
+                next,
+                workplaceAssistantText,
+              );
+              setWorkplaceEnabled(patched.workplaceEnabled);
+              setWorkplaceAssistantText(patched.workplaceAssistantText);
+            },
+          })}
+          <View style={blockCardStyle}>
             {workplaceEnabled ? (
               <>
                 <Text
@@ -940,7 +980,7 @@ export function AgentEditorForm(props: Props) {
               </>
             ) : (
               <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
-                关闭时不注入项目文件树。
+                {WORKPLACE_DISABLED_HINT}
               </Text>
             )}
           </View>
@@ -950,12 +990,7 @@ export function AgentEditorForm(props: Props) {
             onSwitchChange: setPersistEnabled,
             ...(persistEnabled ? { onAdd: addPersistTextBlock } : {}),
           })}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             {persistEnabled ? (
               <View style={styles.blockList}>
                 {persist.filter(
@@ -980,30 +1015,9 @@ export function AgentEditorForm(props: Props) {
                   .map((block, index, textBlocks) => (
                   <View
                     key={`persist-block-${index}`}
-                    style={[
-                      styles.blockCard,
-                      {
-                        backgroundColor: tokens.surface,
-                        borderColor: tokens.border,
-                      },
-                    ]}
+                    style={blockCardStyle}
                   >
                     <View style={styles.blockHeader}>
-                      <View
-                        style={[
-                          styles.typeBadge,
-                          { backgroundColor: `${tokens.primary}1A` },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.typeBadgeText,
-                            { color: tokens.primary },
-                          ]}
-                        >
-                          {blockTypeLabel(block.type)}
-                        </Text>
-                      </View>
                       <Text
                         style={[styles.blockName, { color: tokens.text }]}
                         numberOfLines={1}
@@ -1082,36 +1096,11 @@ export function AgentEditorForm(props: Props) {
             )}
           </View>
 
-          {renderPromptSectionHead(promptSectionLabels.chat)}
-          <View
-            style={[
-              styles.chatSlotCard,
-              {
-                backgroundColor: tokens.background,
-                borderColor: tokens.borderLight,
-                borderLeftColor: tokens.primary,
-              },
-            ]}
-          >
-            <View style={styles.chatSlotHeader}>
-              <View
-                style={[
-                  styles.chatSlotTag,
-                  { backgroundColor: `${tokens.primary}18` },
-                ]}
-              >
-                <Text
-                  style={[styles.chatSlotTagText, { color: tokens.primary }]}
-                >
-                  {PROMPT_REGION_LABELS.chatTag}
-                </Text>
-              </View>
-              <Switch
-                value={customAttachEnabled}
-                onValueChange={next => setCustomAttachEnabled(next)}
-                trackColor={{ false: tokens.border, true: tokens.primary }}
-              />
-            </View>
+          {renderPromptSectionHead(promptSectionLabels.chat, {
+            switchValue: customAttachEnabled,
+            onSwitchChange: setCustomAttachEnabled,
+          })}
+          <View style={blockCardStyle}>
             <Text
               style={[styles.chatSlotHint, { color: tokens.textSecondary }]}
             >
@@ -1134,12 +1123,7 @@ export function AgentEditorForm(props: Props) {
             onSwitchChange: setDynamicEnabled,
             ...(dynamicEnabled ? { onAdd: addDynamicBlock } : {}),
           })}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             {dynamicEnabled ? (
               <View style={styles.blockList}>
                 {dynamic.length === 0 ? (
@@ -1158,30 +1142,9 @@ export function AgentEditorForm(props: Props) {
                 {dynamic.map((block, index) => (
                   <View
                     key={`dynamic-block-${index}`}
-                    style={[
-                      styles.blockCard,
-                      {
-                        backgroundColor: tokens.surface,
-                        borderColor: tokens.border,
-                      },
-                    ]}
+                    style={blockCardStyle}
                   >
                     <View style={styles.blockHeader}>
-                      <View
-                        style={[
-                          styles.typeBadge,
-                          { backgroundColor: `${tokens.primary}1A` },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.typeBadgeText,
-                            { color: tokens.primary },
-                          ]}
-                        >
-                          {blockTypeLabel(block.type)}
-                        </Text>
-                      </View>
                       <Text
                         style={[styles.blockName, { color: tokens.text }]}
                         numberOfLines={1}
@@ -1330,37 +1293,16 @@ const styles = StyleSheet.create({
   blockList: { gap: 12 },
   blockCard: {
     borderWidth: 1,
+    borderLeftWidth: 3,
     borderRadius: 10,
     padding: 12,
     gap: 10,
   },
-  chatSlotCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderLeftWidth: 3,
-    borderRadius: 12,
-    padding: 14,
-    gap: 6,
-  },
-  chatSlotHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  chatSlotTag: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  chatSlotTagText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
+
   chatSlotHint: {
     fontSize: 13,
     lineHeight: 20,
   },
-  readonlyCard: { opacity: 0.85 },
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1368,19 +1310,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 2,
   },
-  typeBadge: {
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  typeBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
   blockName: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   blockHeaderSpacer: { flex: 1 },

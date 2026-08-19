@@ -52,11 +52,24 @@ export interface ToolResultBlock {
    *   供 UI 工具卡片点击跳转子会话只读浏览。
    * - `failureReason`：phase-1-abort-reflow 中断回流时，子 agent 被用户停止
    *   的失败原因文案，让 UI 能在卡片上提示「用户停止」而非笼统失败。
+   * - `skillRef`：`skill` 的跳转三元组（domain/projectId/name）。read 缺省
+   *   域命中生效副本时实际命中域只有工具输出知道，由 `buildToolResultBlock`
+   *   从输出自动检测透传到这里；write/edit 必含于 tool_use 输入，UI 侧照
+   *   `resolveSkillToolRefFromInput` 解析即可。
    */
   readonly meta?: {
     readonly subagentSessionId?: string;
     readonly failureReason?: string;
+    readonly skillRef?: SkillToolRef;
   };
+}
+
+/** 技能跳转三元组（`skill` 卡片跳详情用；UI 与 meta 共用形态）。 */
+export interface SkillToolRef {
+  readonly domain: "global" | "project";
+  /** project 域定位用；由解析方按会话上下文补齐，global 域缺省。 */
+  readonly projectId?: string;
+  readonly name: string;
 }
 
 export interface ThinkingBlock {

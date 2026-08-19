@@ -8,6 +8,13 @@ import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
+/** 技能索引条目（生产方预解析；render-prompt 只做纯拼装，无 IO）。 */
+export interface PromptSkillIndexEntry {
+  readonly name: string;
+  readonly description: string;
+  readonly domain: "global" | "project";
+}
+
 /** Workplace + 会话消息 + VFS 上下文（dynamic 宏展开）。 */
 export interface PromptRenderContext {
   readonly workplaceDisplay: string;
@@ -20,6 +27,11 @@ export interface PromptRenderContext {
   readonly filetree?: string;
   /** Session VFS（其他调用方仍可传；`{{$filetree}}` 不再读取）。 */
   readonly vfs?: VfsService;
+  /**
+   * 生效技能索引（名称 + 描述 + 来源域），由生产方按 projectId 预算
+   * （`SkillService.effectiveSkills`）；空/缺省不产生技能索引段。
+   */
+  readonly skillsIndex?: readonly PromptSkillIndexEntry[];
 }
 
 /** Structured input for model request services. */

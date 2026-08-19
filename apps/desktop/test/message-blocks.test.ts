@@ -8,6 +8,7 @@ import {
 import {
   buildChatListItems,
   isTurnToolExecuting,
+  skillToolRef,
   vfsToolFilePath,
 } from "@/features/chat/message-blocks";
 
@@ -178,6 +179,92 @@ test("vfsToolFilePath：相对 path 规范化为绝对逻辑路径", () => {
       status: "success",
     }),
     "/relative.md",
+  );
+});
+
+test("T-SK8：skillToolRef 输入侧解析（write 缺省 project；read 缺省域等 meta）", () => {
+  // write/edit：三元组必含于 tool_use 输入，缺省域补 project 并携带会话 projectId
+  assert.deepEqual(
+    skillToolRef(
+      {
+        toolUseId: "s1",
+        name: "skill",
+        input: { action: "write", name: "demo", content: "x" },
+        status: "success",
+      },
+      "proj-1",
+    ),
+    { domain: "project", projectId: "proj-1", name: "demo" },
+  );
+  // read 缺省域：pending 阶段解析不出（实际命中域只有 tool_result meta 知道）
+  assert.equal(
+    skillToolRef({
+      toolUseId: "s2",
+      name: "skill",
+      input: { action: "read", name: "demo" },
+      status: "pending",
+    }),
+    undefined,
+  );
+  // list 无目标技能
+  assert.equal(
+    skillToolRef({
+      toolUseId: "s3",
+      name: "skill",
+      input: { action: "list" },
+      status: "success",
+    }),
+    undefined,
+  );
+});
+
+test("T-SK8：tool_result meta.skillRef 透传进 ToolCallView 且优先于输入侧解析", () => {
+  const messages: ChatMessageDto[] = [
+    {
+      id: "a1",
+      sessionId: "s1",
+      seq: 1,
+      role: "assistant",
+      hidden: false,
+      createdAtMs: 1,
+      bodyText: "",
+      contentBlocks: [
+        {
+          type: "tool_use",
+          id: "tu-skill",
+          name: "skill",
+          input: { action: "read", name: "demo" },
+        },
+      ],
+    },
+    {
+      id: "u1",
+      sessionId: "s1",
+      seq: 2,
+      role: "user",
+      hidden: true,
+      createdAtMs: 2,
+      bodyText: "",
+      contentBlocks: [
+        {
+          type: "tool_result",
+          toolUseId: "tu-skill",
+          content: "ok",
+          ok: true,
+          meta: {
+            skillRef: { domain: "global", name: "demo" },
+          },
+        },
+      ],
+    },
+  ];
+  const items = buildChatListItems(messages);
+  const tools = items[0]?.kind === "message" ? items[0].tools : [];
+  assert.deepEqual(tools[0]?.skillRef, { domain: "global", name: "demo" });
+  assert.deepEqual(
+    skillToolRef(tools[0]),
+    { domain: "global", name: "demo" },
+    "meta 透传的命中域应优先于输入侧（read 缺省域解析不出，不冲突但顺序要对）",
   );
 });
 

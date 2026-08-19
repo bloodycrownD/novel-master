@@ -42,59 +42,6 @@ describe("template pull", () => {
     assert.equal(dirRoot.ruleState, "rule_on");
   });
 
-  it("project pull does not change existing session vfs or messages", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    await ctx.projectVfs(project.id).write("/base.md", "BASE");
-    const session = await ctx.sessions.create(project.id);
-    const svfs = ctx.sessionVfs(project.id, session.id);
-    await svfs.write("/only-in-session.md", "session-only");
-    await ctx.messages.append(session.id, "user", textBlocks("keep me"));
-
-    const globalFile = `/pull-${testIsolationSuffix()}.md`;
-    await ctx.globalVfs().write(globalFile, "G");
-    await createTemplatePullService(ctx.conn).projectTemplatePull(project.id);
-
-    const sessionPaths = (await svfs.list("/", { recursive: true }))
-      .filter((e) => e.kind === "file")
-      .map((e) => e.path);
-    assert.deepEqual(sessionPaths.sort(), ["/base.md", "/only-in-session.md"]);
-    assert.equal((await svfs.read("/only-in-session.md")).content, "session-only");
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
-  });
-
-  it("project pull replaces vfs orphans and worktree from global", async () => {
-    const ctx = getNovelMasterTestContext();
-    const tag = testIsolationSuffix();
-    const globalFile = `/g-${tag}.md`;
-    const gvfs = ctx.globalVfs();
-    await gvfs.write(globalFile, "G");
-    const gwt = createWorkplaceService(ctx.conn, { kind: "global" });
-    await gwt.setFileRule({
-      logicalPath: globalFile,
-      inclusionMode: "hide",
-    });
-
-    const project = await ctx.projects.create(`P-${tag}`);
-    const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/p.md", "P");
-    const pull = createTemplatePullService(ctx.conn);
-    await pull.projectTemplatePull(project.id);
-
-    const paths = (await pvfs.list("/", { recursive: true }))
-      .filter((e) => e.kind === "file")
-      .map((e) => e.path);
-    assert.ok(paths.includes(globalFile));
-    assert.ok(!paths.includes("/p.md"));
-    const pwt = createWorkplaceService(ctx.conn, {
-      kind: "project",
-      projectId: project.id,
-    });
-    const rule = await pwt.buildListRows();
-    const gRow = rule.find((r) => r.path === globalFile);
-    assert.equal(gRow?.inclusionMode, "hide");
-  });
-
   it("session pull clears message checkpoints but keeps messages", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

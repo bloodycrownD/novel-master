@@ -1,12 +1,14 @@
 /**
  * Composer 发送门闩 / 入参清洗（T-ATD* / T-CR3）。
- * 文件引用以正文 `@` 扫描为准；draft attach 恒空；workplace 预览不进 payload、不可空发。
+ * 文件引用以正文 `@` 扫描、技能引用以正文 `$` 扫描为准；draft attach 恒空；
+ * workplace 预览不进 payload、不可空发。
  *
  * @module domain/chat/logic/composer-send-intent
  */
 
 import { hasComposerSendableInput } from "./composer-sendable-input.js";
 import { scanAtPathAttachments } from "./scan-at-path-attachments.js";
+import { scanSkillAttachments } from "./scan-skill-attachments.js";
 
 /** 门闩只读 `source`；与 MessageAttachment / DTO 结构兼容。 */
 export type ComposerSendIntentAttachment = {
@@ -36,7 +38,9 @@ export function resolveComposerSendIntent(
   input: ComposerSendIntentInput,
 ): ComposerSendIntent {
   const content = input.text.trim();
-  const scannedCount = scanAtPathAttachments(input.text).length;
+  const scannedCount =
+    scanAtPathAttachments(input.text).length +
+    scanSkillAttachments(input.text).length;
   const hasSendable = hasComposerSendableInput({
     text: content,
     attachmentCount: scannedCount,

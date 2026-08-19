@@ -26,6 +26,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useAndroidModalKeyboardAvoid } from '../../hooks/useAndroidModalKeyboardAvoid';
 import { useDismissOverlaysOnBlur } from '../../hooks/useDismissOverlaysOnBlur';
 import {
+  type PhysicalVfsService,
   type VfsListEntry,
   type VfsScope,
   type VfsService,
@@ -49,6 +50,7 @@ import {
   mapWorktreeRow,
   parentLogicalPath,
   patchDirRuleRow,
+  pathWithLabels,
   remapDirectChildRows,
   type MappedVfsRow,
 } from './vfs-row-mapper';
@@ -92,9 +94,8 @@ import {
   resolveMoveDestination,
 } from './vfs-move-path';
 
-export type VfsFileManagerPullScope =
-  | { kind: 'project'; projectId: string }
-  | { kind: 'session'; sessionId: string };
+/** 仅支持 session 域 pull（project 域 pull 已拆除）。 */
+export type VfsFileManagerPullScope = { kind: 'session'; sessionId: string };
 
 /** 供父组件控制系统返回时逐级退出目录，并在切入工作区时刷新列表。 */
 export type VfsFileManagerHandle = {
@@ -105,8 +106,16 @@ export type VfsFileManagerHandle = {
 
 export type VfsFileManagerProps = {
   scope: VfsScope;
-  vfs: VfsService;
-  workplace: WorkplaceService;
+  /**
+   * 列表数据源：单 scope VFS，或只读物理树（配合 readOnly 使用）。
+   * 物理树只有 list/read，写操作入口由 readOnly 分支整体隐藏。
+   */
+  vfs: VfsService | PhysicalVfsService;
+  /**
+   * 工作区服务（纳入状态/目录规则/排序元数据）。可选：非工作区域（如技能目录）
+   * 不传，列表退化为纯 VFS 排序，纳入/目录规则相关菜单自动隐藏。
+   */
+  workplace?: WorkplaceService;
   onOpenFile: (path: string) => void;
   rootPath?: string;
   pullFromParent?: {
@@ -115,6 +124,22 @@ export type VfsFileManagerProps = {
   };
   /** 当前目录变化时通知父组件（用于同步系统返回状态）。 */
   onDirectoryChange?: () => void;
+  /**
+   * 只读模式：隐藏新建/重命名/删除/移动/ZIP 导入导出/批量/规则与
+   * 「更多」菜单等全部写操作入口，仅保留目录导航与文件打开。
+   * 默认（false 或不传）行为与现状完全一致，既有调用点零影响。
+   */
+  readOnly?: boolean;
+  /**
+   * 路径保护钩子：返回非空字符串 = 拒绝删除/重命名/移动的原因（如技能入口
+   * SKILL.md）；返回 null/undefined = 不保护。仅拦截变更操作，不影响浏览。
+   */
+  isProtectedPath?: (path: string) => string | null;
+  /**
+   * 顶栏路径显示替换钩子：如技能目录把 `/meta/skills/foo` 前缀隐藏为 `/`。
+   * 只改显示，不影响导航与逻辑路径。
+   */
+  pathLabel?: (path: string) => string;
 };
 
 type PromptState = {
@@ -135,13 +160,19 @@ export const VfsFileManager = forwardRef<
     onOpenFile,
     rootPath,
     pullFromParent,
+    readOnly,
     onDirectoryChange,
+    isProtectedPath,
+    pathLabel,
   },
   ref,
 ) {
   const { tokens } = useTheme();
   const { showToast } = useToast();
   const runtime = useRuntime();
+  // readOnly 模式下全部写入口已隐藏，此引用仅供写路径调用
+  // （物理树类型层面无写方法，运行时不可能被写入）。
+  const writableVfs = vfs as VfsService;
   const root = rootPath ?? vfsScopeRootPath(scope);
   const sessionId = scope.kind === 'session' ? scope.sessionId : undefined;
   const useUserVfsTurn = sessionId != null && isUserVfsUnifiedToolTurnEnabled();
@@ -254,16 +285,20 @@ export const VfsFileManager = forwardRef<
   const workplaceRef = useRef(workplace);
   const scopeRef = useRef(scope);
   const reloadInFlightRef = useRef(false);
+  // 面包屑名字缓存：导航中每次 list 的合成目录行携带 label（项目名/会话名），
+// 逐段累积，供顶栏路径展示替换 UUID；只影响展示，不参与导航。
+  const labelByPathRef = useRef(new Map<string, string>());
   vfsRef.current = vfs;
   workplaceRef.current = workplace;
   scopeRef.current = scope;
 
-  const fetchWorktreeRows = useCallback(async (): Promise<
-    WorkplaceListRow[]
-  > => {
-    const worktreeSvc = workplaceRef.current;
-    return worktreeSvc.buildListRows();
-  }, []);
+  const fetchWorktreeRows = useCallback(
+    async (): Promise<WorkplaceListRow[]> => {
+      const worktreeSvc = workplaceRef.current;
+      return (await worktreeSvc?.buildListRows()) ?? [];
+    },
+    [],
+  );
 
   const applyWorktreeRowsToVisibleList = useCallback(
     (allRows: WorkplaceListRow[]) => {
@@ -290,8 +325,14 @@ export const VfsFileManager = forwardRef<
       const [listEntries, allRows, dirRule] = await Promise.all([
         vfsSvc.list(currentPath),
         fetchWorktreeRows(),
-        worktreeSvc.getDirRule(currentPath),
+        worktreeSvc?.getDirRule(currentPath) ?? Promise.resolve(null),
       ]);
+      // 面包屑名字缓存：记录带 label 的合成目录行（项目/会话名）。
+      for (const entry of listEntries) {
+        if (entry.label != null) {
+          labelByPathRef.current.set(entry.path, entry.label);
+        }
+      }
       setWorktreeRows(allRows);
       const metaByPath = new Map<string, WorkplaceListRow>();
       for (const row of allRows) {
@@ -339,14 +380,20 @@ export const VfsFileManager = forwardRef<
         }
         return mapVfsListEntry({ path, kind: 'file' });
       });
-      setRows(mapped);
+      // 无 workplace（非工作区域，如技能目录）：剥掉纳入状态/目录规则 tag 与
+      // subtitle（跟随·全内容等是工作区语义，在此无意义）。
+      setRows(
+        workplace == null
+          ? mapped.map(row => ({ ...row, subtitle: '', badge: null }))
+          : mapped,
+      );
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
       reloadInFlightRef.current = false;
       setLoading(false);
     }
-  }, [currentPath, fetchWorktreeRows, showToast]);
+  }, [currentPath, fetchWorktreeRows, showToast, workplace]);
 
   const reloadVfsListOnly = useCallback(async () => {
     await reload();
@@ -354,7 +401,7 @@ export const VfsFileManager = forwardRef<
 
   const reloadAfterRuleChange = useCallback(async () => {
     await reload();
-    if (sessionId != null) {
+    if (sessionId != null && workplace != null) {
       try {
         await refreshRuleSnapshotAfterRuleChange(
           runtime,
@@ -395,6 +442,13 @@ export const VfsFileManager = forwardRef<
     if (paths.length === 0) {
       return;
     }
+    const blocked = paths
+      .map(p => (isProtectedPath ? isProtectedPath(p) : null))
+      .filter((reason): reason is string => reason != null);
+    if (blocked.length > 0) {
+      showToast(`选中项含受保护路径：${blocked[0]}`);
+      return;
+    }
     Alert.alert('确认删除', `确定删除选中的 ${paths.length} 项？`, [
       { text: '取消', style: 'cancel' },
       {
@@ -404,7 +458,7 @@ export const VfsFileManager = forwardRef<
           void (async () => {
             try {
               for (const path of paths) {
-                await deleteScopedVfsEntry(runtime, scope, vfs, path, {
+                await deleteScopedVfsEntry(runtime, scope, writableVfs, path, {
                   recursive: true,
                   useUserVfsTurn,
                   sessionId,
@@ -428,6 +482,7 @@ export const VfsFileManager = forwardRef<
     scope,
     useUserVfsTurn,
     sessionId,
+    isProtectedPath,
   ]);
 
   const runBatchMove = useCallback(
@@ -451,6 +506,14 @@ export const VfsFileManager = forwardRef<
         }
         const kind = kindByPath.get(sourcePath);
         const isDir = kind === 'dir' || dirPathSet.has(sourcePath);
+        const protectReason = isProtectedPath
+          ? isProtectedPath(sourcePath)
+          : null;
+        if (protectReason != null) {
+          showToast(protectReason);
+          skipped += 1;
+          continue;
+        }
         try {
           // WHY: 批量时跳过每次 op 后的 composer 投影；批次结束统一刷一次。
           // 投影收窄为仅 annotate；本开关仅合并批次末 notify。
@@ -467,9 +530,11 @@ export const VfsFileManager = forwardRef<
                 renameOpts,
               );
             } else {
-              await renameVfsDirectory(vfs, sourcePath, newPath);
+              await renameVfsDirectory(writableVfs, sourcePath, newPath);
             }
-            await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
+            if (workplace != null) {
+              await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
+            }
             if (
               currentPath === sourcePath ||
               currentPath.startsWith(`${sourcePath}/`)
@@ -488,7 +553,7 @@ export const VfsFileManager = forwardRef<
                 renameOpts,
               );
             } else {
-              await renameVfsFile(vfs, sourcePath, newPath);
+              await renameVfsFile(writableVfs, sourcePath, newPath);
             }
           }
           moved += 1;
@@ -524,7 +589,7 @@ export const VfsFileManager = forwardRef<
       currentPath,
       reloadVfsListOnly,
       showToast,
-      scope.kind,
+      isProtectedPath,
     ],
   );
 
@@ -540,31 +605,48 @@ export const VfsFileManager = forwardRef<
         : undefined)
     : undefined;
 
-  const entityMenuItems: SheetMenuItem[] = menuRow
-    ? menuRow.kind === 'dir'
+  // 无 workplace（非工作区域，如技能目录）时隐藏纳入/目录规则/角色卡/ZIP 导入导出菜单
+  // （技能包的导入导出在技能管理页提供）；readOnly 模式下整体置空（无任何入口可打开）。
+  const entityMenuItems: SheetMenuItem[] =
+    readOnly || !menuRow
+      ? []
+      : menuRow.kind === 'dir'
       ? [
-          { label: '导出 ZIP', action: 'export-zip' },
-          { label: '导入 ZIP', action: 'import-zip' },
-          { label: '导入角色卡', action: 'import-character-card' },
-          { label: '状态变更', action: 'toggle-include' },
+          ...(workplace != null
+            ? [
+                { label: '导出 ZIP', action: 'export-zip' },
+                { label: '导入 ZIP', action: 'import-zip' },
+                { label: '导入角色卡', action: 'import-character-card' },
+                { label: '状态变更', action: 'toggle-include' },
+              ]
+            : []),
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
         ]
       : [
-          { label: '状态变更', action: 'toggle-include' },
+          ...(workplace != null
+            ? [
+                { label: '状态变更', action: 'toggle-include' },
+              ]
+            : []),
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
-        ]
-    : [];
+        ];
 
-  const moreMenuItems: SheetMenuItem[] = [
-    { label: '新建目录', action: 'create-directory' },
-    { label: '新建文件', action: 'create-file' },
-    { label: '导入 ZIP', action: 'import-zip' },
-    { label: '导出 ZIP', action: 'export-zip' },
-    { label: '导入角色卡', action: 'import-character-card' },
-    { label: '目录规则', action: 'directory-rule' },
-  ];
+  const moreMenuItems: SheetMenuItem[] = readOnly
+    ? []
+    : [
+        { label: '新建目录', action: 'create-directory' },
+        { label: '新建文件', action: 'create-file' },
+        ...(workplace != null
+          ? [
+              { label: '导入 ZIP', action: 'import-zip' },
+              { label: '导出 ZIP', action: 'export-zip' },
+              { label: '导入角色卡', action: 'import-character-card' },
+              { label: '目录规则', action: 'directory-rule' },
+            ]
+          : []),
+      ];
 
   const openPrompt = (state: PromptState) => {
     setPromptValue(state.defaultValue);
@@ -576,8 +658,21 @@ export const VfsFileManager = forwardRef<
       return;
     }
     const meta = worktreeRows.find(r => r.path === menuPath);
+    const protectReason = action === 'rename' || action === 'delete'
+      ? isProtectedPath
+        ? isProtectedPath(menuPath)
+        : null
+      : null;
+    if (protectReason != null) {
+      showToast(protectReason);
+      return;
+    }
     try {
       if (action === 'toggle-include' && meta) {
+        // 纳入状态依赖 workplace；非工作区域（如技能目录）菜单已隐藏，防御双保险
+        if (workplace == null) {
+          return;
+        }
         if (menuRow.kind === 'file' && meta.kind === 'file') {
           await cycleFileInclusion(workplace, menuPath, meta.inclusionMode);
           await refreshVisibleRowsFromWorktree();
@@ -657,7 +752,7 @@ export const VfsFileManager = forwardRef<
                     newPath,
                   );
                 } else {
-                  await renameVfsFile(vfs, menuPath, newPath);
+                  await renameVfsFile(writableVfs, menuPath, newPath);
                 }
               } else {
                 if (useUserVfsTurn) {
@@ -668,9 +763,11 @@ export const VfsFileManager = forwardRef<
                     newPath,
                   );
                 } else {
-                  await renameVfsDirectory(vfs, menuPath, newPath);
+                  await renameVfsDirectory(writableVfs, menuPath, newPath);
                 }
-                await migrateWorkplaceDirRename(workplace, menuPath, newPath);
+                if (workplace != null) {
+                  await migrateWorkplaceDirRename(workplace, menuPath, newPath);
+                }
                 if (
                   currentPath === menuPath ||
                   currentPath.startsWith(`${menuPath}/`)
@@ -700,7 +797,7 @@ export const VfsFileManager = forwardRef<
             style: 'destructive',
             onPress: () => {
               const runDelete = async () => {
-                await deleteScopedVfsEntry(runtime, scope, vfs, menuPath, {
+                await deleteScopedVfsEntry(runtime, scope, writableVfs, menuPath, {
                   recursive: true,
                   useUserVfsTurn,
                   sessionId,
@@ -790,7 +887,9 @@ export const VfsFileManager = forwardRef<
                   continue;
                 }
                 try {
-                  await workplace.setDirRule(defaultDirRuleForm(entry.path));
+                  if (workplace != null) {
+                    await workplace.setDirRule(defaultDirRuleForm(entry.path));
+                  }
                 } catch {
                   // 单个目录规则写入失败不阻断整体导入流程。
                 }
@@ -837,7 +936,7 @@ export const VfsFileManager = forwardRef<
           if (useUserVfsTurn) {
             await sessionCreateVfsFile(runtime, sessionId!, path);
           } else {
-            await createVfsFile(vfs, path);
+            await createVfsFile(writableVfs, path);
           }
           await reloadVfsListOnly();
         },
@@ -859,15 +958,22 @@ export const VfsFileManager = forwardRef<
           if (useUserVfsTurn) {
             await sessionCreateVfsDirectory(runtime, sessionId!, path);
           } else {
-            await createVfsDirectory(vfs, path);
+            await createVfsDirectory(writableVfs, path);
           }
-          await workplace.setDirRule(defaultDirRuleForm(path));
-          await reloadAfterRuleChange();
+          if (workplace != null) {
+            await workplace.setDirRule(defaultDirRuleForm(path));
+            await reloadAfterRuleChange();
+          } else {
+            await reloadVfsListOnly();
+          }
         },
       });
       return;
     }
     if (action === 'directory-rule') {
+      if (workplace == null) {
+        return;
+      }
       void (async () => {
         try {
           const existing = await workplace.getDirRule(currentPath);
@@ -981,31 +1087,36 @@ export const VfsFileManager = forwardRef<
             />
           </Pressable>
           <Text
+            testID="vfs-current-path"
             style={[styles.path, { color: tokens.text }]}
             numberOfLines={1}
             ellipsizeMode="middle"
           >
-            {currentPath}
+            {pathLabel
+              ? pathLabel(currentPath)
+              : pathWithLabels(currentPath, labelByPathRef.current)}
           </Text>
         </View>
         <View style={styles.toolbarActions}>
-          {pullFromParent ? (
+          {!readOnly && pullFromParent ? (
             <TemplatePullButton
               iconOnly
               scope={pullFromParent.scope}
               onPulled={pullFromParent.onPulled}
             />
           ) : null}
-          <Pressable
-            testID="vfs-more-action"
-            accessibilityLabel="更多操作"
-            onPress={() => setMoreOpen(true)}
-            style={styles.iconBtn}
-          >
-            <Text style={{ color: tokens.text, fontSize: 20, lineHeight: 22 }}>
-              ⋯
-            </Text>
-          </Pressable>
+          {!readOnly ? (
+            <Pressable
+              testID="vfs-more-action"
+              accessibilityLabel="更多操作"
+              onPress={() => setMoreOpen(true)}
+              style={styles.iconBtn}
+            >
+              <Text style={{ color: tokens.text, fontSize: 20, lineHeight: 22 }}>
+                ⋯
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -1047,6 +1158,7 @@ export const VfsFileManager = forwardRef<
                   </View>
                 ) : null}
                 <Pressable
+                  testID={`vfs-row-item-${item.name}`}
                   style={styles.item}
                   onPress={() => {
                     if (vfsBatch.active) {
@@ -1059,9 +1171,13 @@ export const VfsFileManager = forwardRef<
                       onOpenFile(item.path);
                     }
                   }}
-                  onLongPress={() => {
-                    vfsBatch.longPress(item.path);
-                  }}
+                  onLongPress={
+                    readOnly
+                      ? undefined
+                      : () => {
+                          vfsBatch.longPress(item.path);
+                        }
+                  }
                 >
                   <Text style={styles.kind}>
                     {item.kind === 'dir' ? '📁' : '📄'}
@@ -1098,7 +1214,7 @@ export const VfsFileManager = forwardRef<
                     </View>
                   ) : null}
                 </Pressable>
-                {vfsBatch.active ? null : (
+                {vfsBatch.active || readOnly ? null : (
                   <Pressable
                     testID={`vfs-row-menu-${item.name}`}
                     onPress={() => setMenuPath(item.path)}
@@ -1135,7 +1251,7 @@ export const VfsFileManager = forwardRef<
         rootRuleLocked={currentPath === root}
         onClose={() => setDirRuleOpen(false)}
         onSave={async input => {
-          await workplace.setDirRule(input);
+          await workplace!.setDirRule(input);
           setDirRuleInitial(input);
           await reloadAfterRuleChange();
         }}

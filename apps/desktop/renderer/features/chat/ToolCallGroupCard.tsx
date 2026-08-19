@@ -4,6 +4,8 @@ import { ToolCallCard } from "./ToolCallCard";
 type ToolCallGroupCardProps = {
   tools: readonly ToolCallView[];
   dimmed?: boolean;
+  /** 当前会话项目 id；透传给 skill 卡片解析 project 域三元组。 */
+  projectId?: string;
   onOpenFile?: (path: string) => void;
   onOpenSubagentSession?: (sessionId: string) => void;
 };
@@ -11,6 +13,7 @@ type ToolCallGroupCardProps = {
 export function ToolCallGroupCard({
   tools,
   dimmed = false,
+  projectId,
   onOpenFile,
   onOpenSubagentSession,
 }: ToolCallGroupCardProps) {
@@ -27,6 +30,7 @@ export function ToolCallGroupCard({
             key={tool.toolUseId}
             tool={tool}
             groupItem
+            projectId={projectId}
             onOpenFile={onOpenFile}
             onOpenSubagentSession={onOpenSubagentSession}
           />

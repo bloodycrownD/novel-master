@@ -31,11 +31,24 @@ export type RootStackParamList = {
   RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
   FileEditor: {
     path: string;
-    scopeKind: 'global' | 'project' | 'session';
+    /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */
+    scopeKind: 'global' | 'project' | 'session' | 'skill' | 'physical';
     projectId?: string;
     sessionId?: string;
+    /** skill 域引用：按域取 globalMetaVfs/projectMetaVfs，路由 path 为 /meta/skills/{name}/{rel}。 */
+    skillRef?: {domain: 'global' | 'project'; name: string; projectId?: string};
     /** Called after a successful session-scope save (refreshes workspace list). */
     onSessionVfsSaved?: () => void;
+  };
+  /** 会话技能面板：当前项目合并视图 + 启停开关（写项目负清单）。 */
+  SkillPanel: { projectId: string };
+  /** 设置·技能管理页：全局默认 / 项目分组双 tab。 */
+  SkillsSettings: undefined;
+  /** 技能详情页：文件浏览 + 新建/删除辅助文件。 */
+  SkillDetail: {
+    domain: 'global' | 'project';
+    name: string;
+    projectId?: string;
   };
   /** 会话详情页：承载原 SessionActionsDrawer 五项能力 + agent/model 来源展示。 */
   SessionDetail: { projectId: string; sessionId: string };

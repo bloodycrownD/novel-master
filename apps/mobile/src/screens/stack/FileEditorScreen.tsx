@@ -18,6 +18,7 @@ import {
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
+import type {VfsService} from '@novel-master/core/vfs';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {toastMessage} from '../../errors/toast-message';
@@ -85,7 +86,7 @@ export function FileEditorScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const route = useRoute<FileEditorRoute>();
-  const {path, scopeKind, projectId, sessionId, onSessionVfsSaved} =
+  const {path, scopeKind, projectId, sessionId, skillRef, onSessionVfsSaved} =
     route.params;
 
   const [content, setContent] = useState('');
@@ -104,8 +105,27 @@ export function FileEditorScreen() {
   const isDirty = content !== savedContent;
   useUnsavedGuard(isDirty);
 
+  // physical = 全局文件浏览器只读分支：保存入口禁用，也不提供编辑切换。
+  const isReadOnly = scopeKind === 'physical';
+
+  // 冷启动优化：物理树文件普遍较大（整章正文等），推屏转场期间同步挂
+  // WebView 会卡住转场动画。只读分支延迟到交互空闲后再挂重预览；
+  // 其余分支（会话工作区等既有路径）行为不变。
+  const [heavyPreviewReady, setHeavyPreviewReady] = useState(!isReadOnly);
+  useEffect(() => {
+    if (heavyPreviewReady) {
+      return;
+    }
+    // 短延时让推屏转场先启动，之后才挂 WebView（冷启动大文件不再卡转场）。
+    const timer = setTimeout(() => setHeavyPreviewReady(true), 80);
+    return () => clearTimeout(timer);
+  }, [heavyPreviewReady]);
+
   const resolveVfs = useCallback(() => {
     switch (scopeKind) {
+      case 'physical':
+        // 全局文件浏览器：跨域拼接的只读物理树（无任何写方法）。
+        return runtime.physicalVfs();
       case 'global':
         return runtime.globalVfs();
       case 'project':
@@ -118,8 +138,27 @@ export function FileEditorScreen() {
           throw new Error('缺少 projectId 或 sessionId');
         }
         return runtime.sessionVfs(projectId, sessionId);
+      case 'skill':
+        // 技能已重定位到独立 meta 域，路由 path 仍锚定 /meta/skills/{name}/ 前缀
+        if (!skillRef) {
+          throw new Error('缺少 skillRef');
+        }
+        if (skillRef.domain === 'global') {
+          return runtime.globalMetaVfs();
+        }
+        if (!skillRef.projectId) {
+          throw new Error('项目域技能缺少 projectId');
+        }
+        return runtime.projectMetaVfs(skillRef.projectId);
     }
-  }, [runtime, scopeKind, projectId, sessionId]);
+  }, [runtime, scopeKind, projectId, sessionId, skillRef]);
+
+  // 保存路径专用：physical 分支类型层面无写方法且保存已禁用，
+  // 其余分支均为单 scope 可写 VFS，收窄仅为满足写接口签名。
+  const resolveWritableVfs = useCallback(
+    () => resolveVfs() as VfsService,
+    [resolveVfs],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -148,17 +187,21 @@ export function FileEditorScreen() {
     return () => {
       cancelled = true;
     };
-  }, [path, resolveVfs]);
+  }, [path, resolveVfs, showToast]);
 
   // Reset preview tab default when opening a different file.
   useEffect(() => {
     setPreviewRenderKind(isMarkdownPreviewPath(path) ? 'markdown' : 'txt');
   }, [path]);
 
+  // 技能辅助文件在详情页被删除时踢回，避免停留在已不存在的文件上
   const handleSave = async () => {
+    if (isReadOnly) {
+      return;
+    }
     setSaving(true);
     try {
-      const vfs = resolveVfs();
+      const vfs = resolveWritableVfs();
       if (
         scopeKind === 'session' &&
         sessionId &&
@@ -243,13 +286,14 @@ export function FileEditorScreen() {
     <>
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
+          testID="file-editor-save"
           style={styles.toolbarBtn}
           onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving || !isDirty || previewMode}>
+          disabled={saving || !isDirty || previewMode || isReadOnly}>
           <Text
             style={{
               color:
-                isDirty && !saving && !previewMode
+                isDirty && !saving && !previewMode && !isReadOnly
                   ? tokens.primary
                   : tokens.textSecondary,
             }}>
@@ -286,11 +330,16 @@ export function FileEditorScreen() {
             {isDirty ? '未保存' : vfsBasename(path)}
           </Text>
         )}
-        <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
-          <Text style={{color: previewMode ? tokens.primary : tokens.textSecondary}}>
-            {previewMode ? '编辑' : '预览'}
-          </Text>
-        </Pressable>
+        {!isReadOnly ? (
+          <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
+            <Text
+              style={{
+                color: previewMode ? tokens.primary : tokens.textSecondary,
+              }}>
+              {previewMode ? '编辑' : '预览'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       {mtimeMs != null ? (
         editorFocused && !previewMode ? (
@@ -332,15 +381,21 @@ export function FileEditorScreen() {
       {previewMode ? (
         /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
         <View style={[styles.preview, {backgroundColor: tokens.surface}]}>
-          <FileMarkdownPreview
-            path={path}
-            content={content}
-            tokens={tokens}
-            previewFill
-            renderKind={previewRenderKind}
-            annotateEnabled={annotateEnabled}
-            sessionId={annotateEnabled ? sessionId : undefined}
-          />
+          {heavyPreviewReady ? (
+            <FileMarkdownPreview
+              path={path}
+              content={content}
+              tokens={tokens}
+              previewFill
+              renderKind={previewRenderKind}
+              annotateEnabled={annotateEnabled}
+              sessionId={annotateEnabled ? sessionId : undefined}
+            />
+          ) : (
+            <View style={styles.previewLoading}>
+              <ActivityIndicator size="large" color={tokens.primary} />
+            </View>
+          )}
         </View>
       ) : (
         <CodeEditorWebView
@@ -413,5 +468,6 @@ const styles = StyleSheet.create({
   },
   statsText: {fontSize: 12},
   preview: {flex: 1, minHeight: 0, padding: 12},
+  previewLoading: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   editor: {flex: 1, minHeight: 0},
 });

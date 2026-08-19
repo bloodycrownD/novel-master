@@ -16,6 +16,12 @@ function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
   if (scope.kind === "global") {
     return `vfs-global${pathSuffix}.zip`;
   }
+  if (scope.kind === "global-meta") {
+    return `vfs-global-meta${pathSuffix}.zip`;
+  }
+  if (scope.kind === "project-meta") {
+    return `vfs-project-${scope.projectId}-meta${pathSuffix}.zip`;
+  }
   if (scope.kind === "project") {
     return `vfs-project-${scope.projectId}${pathSuffix}.zip`;
   }
@@ -73,13 +79,10 @@ export async function exportVfsZipWithDialog(
   return "saved";
 }
 
-export async function importVfsZipWithDialog(
-  runtime: DesktopNovelMasterRuntime,
-  scope: VfsScope,
-  options: { readonly confirmed: boolean; readonly directoryPath?: string },
+/** 弹框选择 zip 并读字节（新建弹窗预检用）；用户取消返回 null。 */
+export async function pickVfsZipBytesWithDialog(
   parentWindow?: BrowserWindow | null,
-): Promise<"imported" | "cancelled"> {
-  const directoryPath = resolveDirectoryPath(options.directoryPath);
+): Promise<Uint8Array | null> {
   const win = parentWindow ?? undefined;
   const result = win
     ? await dialog.showOpenDialog(win, {
@@ -91,15 +94,46 @@ export async function importVfsZipWithDialog(
         properties: ["openFile"],
       });
   if (result.canceled || result.filePaths.length === 0) {
-    return "cancelled";
+    return null;
   }
-
   const bytes = new Uint8Array(await readFile(result.filePaths[0]!));
   assertZipArchive(bytes);
+  return bytes;
+}
+
+/** 字节直写导入（不弹框）：选文件与确认已在 Renderer 前置完成。 */
+export async function importVfsZipBytes(
+  runtime: DesktopNovelMasterRuntime,
+  scope: VfsScope,
+  options: {
+    readonly bytes: Uint8Array;
+    readonly confirmed: boolean;
+    readonly directoryPath?: string;
+  },
+): Promise<void> {
+  const directoryPath = resolveDirectoryPath(options.directoryPath);
+  assertZipArchive(options.bytes);
   const zipSvc = createVfsZipIoService(runtime.conn);
-  await zipSvc.import(scope, bytes, {
+  await zipSvc.import(scope, options.bytes, {
     confirmed: options.confirmed,
     directoryPath,
+  });
+}
+
+export async function importVfsZipWithDialog(
+  runtime: DesktopNovelMasterRuntime,
+  scope: VfsScope,
+  options: { readonly confirmed: boolean; readonly directoryPath?: string },
+  parentWindow?: BrowserWindow | null,
+): Promise<"imported" | "cancelled"> {
+  const bytes = await pickVfsZipBytesWithDialog(parentWindow);
+  if (bytes == null) {
+    return "cancelled";
+  }
+  await importVfsZipBytes(runtime, scope, {
+    bytes,
+    confirmed: options.confirmed,
+    directoryPath: options.directoryPath,
   });
   return "imported";
 }

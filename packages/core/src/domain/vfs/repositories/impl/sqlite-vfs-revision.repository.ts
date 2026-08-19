@@ -484,10 +484,32 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
   async deleteUnreferencedUnderScope(
     scopeKey: string,
     pathPrefix: string,
+    excludePrefixes?: readonly string[],
   ): Promise<number> {
     const base = normalizePrefix(pathPrefix);
     const escaped = escapeLike(base);
     const pattern = base === "/" ? "/%" : `${escaped}/%`;
+    // 隔离豁免：排除前缀下的 revision 不参与 GC（NOT (path = excl OR path LIKE excl/%)）
+    const excludes = excludePrefixes ?? [];
+    const excludeClauses: string[] = [];
+    const bindings: Record<string, string | number> = {
+      scopeKey,
+      path: base,
+      pattern,
+    };
+    for (let i = 0; i < excludes.length; i++) {
+      const exclRaw = excludes[i]!;
+      const excl = normalizePrefix(
+        exclRaw.startsWith("/") ? exclRaw : `/${exclRaw}`,
+      );
+      bindings[`exclPath${i}`] = excl;
+      bindings[`exclPattern${i}`] = `${escapeLike(excl)}/%`;
+      excludeClauses.push(
+        `(e.path = #{exclPath${i}} OR e.path LIKE #{exclPattern${i}} ESCAPE '\\')`,
+      );
+    }
+    const excludeSql =
+      excludeClauses.length > 0 ? ` AND NOT (${excludeClauses.join(" OR ")})` : "";
     const before = await queryTemplate<{ n: number }>(
       this.conn,
       this.parser,
@@ -495,9 +517,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
        FROM vfs_revision r
        JOIN vfs_entry e ON e.entry_id = r.entry_id
        WHERE e.scope_key = #{scopeKey}
-         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')
+         AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql}
          AND r.ref_count <= 0`,
-      { scopeKey, path: base, pattern },
+      bindings,
     );
     const count = Number(before[0]?.n ?? 0);
     if (count === 0) {
@@ -515,10 +537,10 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
          FROM vfs_revision r
          JOIN vfs_entry e ON e.entry_id = r.entry_id
          WHERE e.scope_key = #{scopeKey}
-           AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')
+           AND (e.path = #{path} OR e.path LIKE #{pattern} ESCAPE '\\')${excludeSql}
            AND r.ref_count <= 0
        )`,
-      { scopeKey, path: base, pattern },
+      bindings,
     );
     return count;
   }

@@ -31,7 +31,9 @@ import {useTheme} from '@/theme/ThemeProvider';
 import {
   mentionValueToPlain,
   mergeProgrammaticPlainIntoMentionValue,
+  promotePlainMentions,
   suggestionFromAtPathToken,
+  suggestionFromSkillToken,
   tryAtomicMentionDelete,
   type ComposerTriggersConfig,
 } from './composer-at-path-mention';
@@ -43,10 +45,10 @@ export type ComposerAtPathInputHandle = {
    */
   replaceCommittedText: (text: string, cursor?: number) => void;
   /**
-   * 程序化替换当前活跃 `@`（typeahead 点选）。
+   * 程序化替换当前活跃 `@` / `$`（typeahead 点选）。
    * 走 mentions `onSelect`；无活跃 keyword 时返回 false。
    */
-  replaceActiveAt: (token: string) => boolean;
+  replaceActiveAt: (token: string, trigger?: 'atPath' | 'skill') => boolean;
 };
 
 export type ComposerAtPathInputProps = {
@@ -88,8 +90,45 @@ export const ComposerAtPathInput = forwardRef<
   ref,
 ) {
   const {tokens} = useTheme();
-  /** 内部 mention 值（可含 `{@}[…](…)`）；对外只发展示 plain。 */
-  const [mentionValue, setMentionValue] = useState(value);
+
+  const triggersConfig: ComposerTriggersConfig = useMemo(
+    () => ({
+      atPath: {
+        trigger: '@',
+        // 路径无空格；避免把后续字吞进 keyword
+        allowedSpacesCount: 0,
+        isInsertSpaceAfterMention: true,
+        // 字色 + 轻底胶囊，与柔和 selection tint 可区分
+        textStyle: {
+          color: tokens.primary,
+          backgroundColor: `${tokens.primary}22`,
+          borderRadius: 6,
+          paddingHorizontal: 3,
+        },
+        // 展示为 @/path（name 已含前导 /）
+        getPlainString: mention => `@${mention.name}`,
+      },
+      // `$技能名` 显式引用：与 @path 同款着色 / 原子删 / 尾空格
+      skill: {
+        trigger: '$',
+        allowedSpacesCount: 0,
+        isInsertSpaceAfterMention: true,
+        textStyle: {
+          color: tokens.primary,
+          backgroundColor: `${tokens.primary}22`,
+          borderRadius: 6,
+          paddingHorizontal: 3,
+        },
+        getPlainString: mention => `$${mention.name}`,
+      },
+    }),
+    [tokens.primary],
+  );
+
+  /** 内部 mention 值（可含 `{@}[…](…)`）；对外只发展示 plain。初次挂载即提升完整 token，恢复 tag 效果。 */
+  const [mentionValue, setMentionValue] = useState(() =>
+    promotePlainMentions(value, triggersConfig),
+  );
   /** 仅程序化写入时短暂传入 TextInput；用户划选后清空，避免全程受控。 */
   const [pendingSelection, setPendingSelection] = useState<{
     start: number;
@@ -100,25 +139,6 @@ export const ComposerAtPathInput = forwardRef<
   mentionValueRef.current = mentionValue;
   const triggersRef = useRef<ReturnType<typeof useMentions>['triggers'] | null>(
     null,
-  );
-
-  const triggersConfig: ComposerTriggersConfig = useMemo(
-    () => ({
-      atPath: {
-        trigger: '@',
-        // 路径无空格；避免把后续字吞进 keyword
-        allowedSpacesCount: 0,
-        isInsertSpaceAfterMention: true,
-        // 字色 + 轻底，与柔和 selection tint 可区分
-        textStyle: {
-          color: tokens.primary,
-          backgroundColor: `${tokens.primary}22`,
-        },
-        // 展示为 @/path（name 已含前导 /）
-        getPlainString: mention => `@${mention.name}`,
-      },
-    }),
-    [tokens.primary],
   );
 
   const emitMentionValue = useCallback(
@@ -145,7 +165,7 @@ export const ComposerAtPathInput = forwardRef<
   const {textInputProps, triggers} = useMentions({
     value: mentionValue,
     onChange: emitMentionValue,
-    triggersConfig: triggersConfig as TriggersConfig<'atPath'>,
+    triggersConfig: triggersConfig as TriggersConfig<'atPath' | 'skill'>,
     onSelectionChange: sel => {
       // 原生已应用选区后解除短暂受控（对照 PromptMacroTextInput）
       setPendingSelection(null);
@@ -156,17 +176,18 @@ export const ComposerAtPathInput = forwardRef<
   });
   triggersRef.current = triggers;
 
-  // 外部 value（草稿水化 / 清空）→ 内部；纯文本不成 tag
+  // 外部 value（草稿水化 / 清空）→ 内部；提升完整 token 恢复 tag，纯文本不成 tag 的语义不变
   useLayoutEffect(() => {
     if (value === lastPlainRef.current) {
       return;
     }
     lastPlainRef.current = value;
-    mentionValueRef.current = value;
-    setMentionValue(value);
+    const hydrated = promotePlainMentions(value, triggersConfig);
+    mentionValueRef.current = hydrated;
+    setMentionValue(hydrated);
     const pos = Math.max(0, Math.min(cursor, value.length));
     applyPendingSelection(pos, pos);
-  }, [value, cursor, applyPendingSelection]);
+  }, [value, cursor, applyPendingSelection, triggersConfig]);
 
   useImperativeHandle(
     ref,
@@ -184,12 +205,16 @@ export const ComposerAtPathInput = forwardRef<
             : text.length;
         applyPendingSelection(pos, pos);
       },
-      replaceActiveAt(token: string) {
-        const t = triggersRef.current?.atPath;
+      replaceActiveAt(token: string, trigger: 'atPath' | 'skill' = 'atPath') {
+        const t = triggersRef.current?.[trigger];
         if (t == null || t.keyword == null) {
           return false;
         }
-        t.onSelect(suggestionFromAtPathToken(token));
+        t.onSelect(
+          trigger === 'skill'
+            ? suggestionFromSkillToken(token)
+            : suggestionFromAtPathToken(token),
+        );
         return true;
       },
     }),

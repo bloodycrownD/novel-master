@@ -41,7 +41,6 @@ import {
   type ProjectAgentConfigDto,
   type ProjectDto,
   type ProjectGetAgentConfigRequest,
-  type ProjectPullTemplateRequest,
   type ProjectRenameRequest,
   type ProjectUpdateAgentConfigRequest,
   type PromptAgentMetaResponse,
@@ -81,13 +80,27 @@ import {
   type VfsCharacterCardImportResult,
   type VfsZipExportResult,
   type VfsZipImportResult,
+  type VfsZipPickResult,
+  type VfsZipBytesImportRequest,
   type VfsZipRequest,
+  type PhysicalListRequest,
+  type PhysicalReadRequest,
   type WorkplaceBuildListRowsRequest,
   type WorkplaceGetDirRuleRequest,
   type WorkplaceCaptureSessionBlockRequest,
   type WorkplaceListRowDto,
   type WorkplaceSetDirRuleRequest,
   type WorkplaceSetFileRuleRequest,
+  type EffectiveSkillDto,
+  type SkillListItemDto,
+  type SkillsDeleteRequest,
+  type SkillsEditRequest,
+  type SkillsEffectiveRequest,
+  type SkillsListRequest,
+  type SkillsReadRequest,
+  type SkillsReadResponse,
+  type SkillsToggleRequest,
+  type SkillsWriteRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -229,6 +242,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.VFS_READ,
     ),
+    ipcPhysicalList: withReq<
+      PhysicalListRequest,
+      IpcResult<WorkplaceListRowDto[]>
+    >(invoke, IPC_CHANNELS.PHYSICAL_LIST),
+    ipcPhysicalRead: withReq<PhysicalReadRequest, IpcResult<VfsReadResultDto>>(
+      invoke,
+      IPC_CHANNELS.PHYSICAL_READ,
+    ),
     ipcVfsWrite: withReq<VfsWriteRequest, IpcResult<void>>(
       invoke,
       IPC_CHANNELS.VFS_WRITE,
@@ -253,6 +274,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.VFS_ZIP_IMPORT,
     ),
+    ipcVfsZipPick: noArg<IpcResult<VfsZipPickResult>>(
+      invoke,
+      IPC_CHANNELS.VFS_ZIP_PICK,
+    ),
+    ipcVfsZipImportBytes: withReq<
+      VfsZipBytesImportRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.VFS_ZIP_IMPORT_BYTES),
     ipcVfsCharacterCardImport: withReq<
       VfsCharacterCardImportRequest,
       IpcResult<VfsCharacterCardImportResult>
@@ -269,10 +298,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       VfsBatchClearStagingRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.VFS_BATCH_CLEAR_STAGING),
-    ipcProjectsPullTemplate: withReq<
-      ProjectPullTemplateRequest,
-      IpcResult<void>
-    >(invoke, IPC_CHANNELS.PROJECTS_PULL_TEMPLATE),
     ipcSessionsPullTemplate: withReq<
       SessionPullTemplateRequest,
       IpcResult<void>
@@ -513,6 +538,34 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcRegexSetCurrent: withReq<{ groupId: string | null }, unknown>(
       invoke,
       IPC_CHANNELS.REGEX_SET_CURRENT,
+    ),
+    ipcSkillsList: withReq<
+      SkillsListRequest,
+      IpcResult<SkillListItemDto[]>
+    >(invoke, IPC_CHANNELS.SKILLS_LIST),
+    ipcSkillsEffective: withReq<
+      SkillsEffectiveRequest,
+      IpcResult<EffectiveSkillDto[]>
+    >(invoke, IPC_CHANNELS.SKILLS_EFFECTIVE),
+    ipcSkillsRead: withReq<
+      SkillsReadRequest,
+      IpcResult<SkillsReadResponse>
+    >(invoke, IPC_CHANNELS.SKILLS_READ),
+    ipcSkillsWrite: withReq<
+      SkillsWriteRequest,
+      IpcResult<{ version: number }>
+    >(invoke, IPC_CHANNELS.SKILLS_WRITE),
+    ipcSkillsEdit: withReq<
+      SkillsEditRequest,
+      IpcResult<{ version: number; replacements: number }>
+    >(invoke, IPC_CHANNELS.SKILLS_EDIT),
+    ipcSkillsToggle: withReq<SkillsToggleRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_TOGGLE,
+    ),
+    ipcSkillsDelete: withReq<SkillsDeleteRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_DELETE,
     ),
     ipcCompactionConditionsGet: noArg(
       invoke,

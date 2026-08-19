@@ -9,6 +9,7 @@ import {
   isTurnToolExecuting,
   messageHasToolUse,
   resolveToolResultsMessageId,
+  skillToolRef,
   toolCallViewFromUse,
   toolUseIdsFromMessage,
   turnToolResultsComplete,
@@ -735,6 +736,68 @@ describe('message-blocks', () => {
         status: 'success',
       }),
     ).toBe('/a.md');
+  });
+
+  it('T-SK8: skill tool_result meta.skillRef 透传进 ToolCallView，skillToolRef 优先取 meta', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {
+          type: 'tool_use',
+          id: 'tu-skill',
+          name: 'skill',
+          input: { action: 'read', name: 'demo' },
+        } as never,
+      ], 1),
+      msg(
+        'u1',
+        'user',
+        [
+          {
+            type: 'tool_result',
+            toolUseId: 'tu-skill',
+            content: 'ok',
+            ok: true,
+            meta: { skillRef: { domain: 'global', name: 'demo' } },
+          } as never,
+        ],
+        2,
+        true,
+      ),
+    ];
+    const results = buildToolResultByUseId(messages);
+    const use = messages[0]!.content.blocks[0] as never as {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    };
+    const view = toolCallViewFromUse(use, results);
+    expect(view.skillRef).toEqual({ domain: 'global', name: 'demo' });
+    // meta 透传优先；输入侧（read 缺省域）解析不出也不影响
+    expect(skillToolRef(view)).toEqual({ domain: 'global', name: 'demo' });
+  });
+
+  it('T-SK8: skillToolRef 输入侧解析 write 缺省 project 域并携带 projectId', () => {
+    expect(
+      skillToolRef(
+        {
+          toolUseId: 't-w',
+          name: 'skill',
+          input: { action: 'write', name: 'demo', content: 'x' },
+          status: 'pending',
+        },
+        'proj-1',
+      ),
+    ).toEqual({ domain: 'project', projectId: 'proj-1', name: 'demo' });
+    // read 缺省域 pending：解析不出（等 tool_result meta）
+    expect(
+      skillToolRef({
+        toolUseId: 't-r',
+        name: 'skill',
+        input: { action: 'read', name: 'demo' },
+        status: 'pending',
+      }),
+    ).toBeUndefined();
   });
 
   it('T-UO2x: 历史 UA 两段按普通 message，无 user_vfs_turn', () => {

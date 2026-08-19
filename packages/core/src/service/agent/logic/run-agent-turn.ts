@@ -29,6 +29,8 @@ import {
   registerBuiltinTools,
 } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext, RunChildAgentOptions } from "@/domain/tool/builtin/builtin-tool-context.js";
+import type { BuiltinToolSkillsContext } from "@/domain/tool/builtin/builtin-tool-context.js";
+import { SKILL_TOOL_NAME } from "@/domain/tool/builtin/skill-tool.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -42,6 +44,7 @@ import type { MessageAttachment } from "@/domain/chat/model/message-attachment.s
 import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { estimateSoftRangeFromOriginalText } from "@/domain/chat/logic/annotate-source-range.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
+import { mergeAttachmentsWithScannedSkills } from "@/domain/chat/logic/scan-skill-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -61,6 +64,7 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
+import type { SkillService } from "@/service/skills/skills.port.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
@@ -125,6 +129,12 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   };
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
+  /**
+   * 技能服务惰性工厂（skill 工具用）。三端 runtime 均已暴露；
+   * 声明为可选是为了不强制旧测试 mock 补字段——未注入时 skill
+   * 的 run 抛 ToolError，且 description 预算跳过（不产生 IO）。
+   */
+  readonly skills?: () => SkillService;
 }
 
 export class AgentTurnError extends Error {
@@ -132,6 +142,29 @@ export class AgentTurnError extends Error {
     super(message);
     this.name = "AgentTurnError";
   }
+}
+
+/**
+ * 预算并装配 `skill` 工具上下文（主 / 子两个装配点共用，D2）。
+ *
+ * 清单按传入 projectId 解析（子代理传父会话 projectId，与「子代理共享
+ * 父工作区」语义一致）。resolve 后 registry 不含 skill（policy deny，
+ * D4）时跳过 effectiveSkills 预算、返回 undefined——工具仍注册在 probe，
+ * 但本 run 的 toolCtx 不带 skills 闭包，LLM 也看不到该工具。
+ *
+ * 注：skillsIndex（提示词技能索引）的 D4 置空联动属 Step 10，不在本函数范围。
+ */
+export async function assembleSkillsToolContext(
+  runtime: Pick<AgentTurnRuntimePort, "skills">,
+  projectId: string,
+  registry: ToolRegistry<BuiltinToolContext>,
+): Promise<BuiltinToolSkillsContext | undefined> {
+  const service = runtime.skills?.();
+  if (service == null) return undefined;
+  if (!registry.list().includes(SKILL_TOOL_NAME)) return undefined;
+  const effective = await service.effectiveSkills(projectId);
+  // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
+  return { service, projectId, effective, referencedNames: new Set<string>() };
 }
 
 export interface RunAgentTurnAfterResolveContext {
@@ -259,10 +292,10 @@ export async function runAgentTurn(
     stream,
   });
 
-  // Scan typed @path into attach; dedupe with chips; keep tokens in body text.
-  const scannedComposer = mergeAttachmentsWithScannedAtPaths(
+  // Scan typed @path / $skill into attach; dedupe with chips; keep tokens in body text.
+  const scannedComposer = mergeAttachmentsWithScannedSkills(
     trimmed,
-    composerAttachOnly,
+    mergeAttachmentsWithScannedAtPaths(trimmed, composerAttachOnly),
   );
 
   let checkpointAnchorMessageId: string | undefined;
@@ -389,6 +422,13 @@ export async function runAgentTurn(
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
   const registry = resolveAgentToolRegistry(toolProbe, definition, { depth: 0 });
+  // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
+  // deny 后 registry 不含 skill → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
+  const skillsCtx = await assembleSkillsToolContext(
+    runtime,
+    scope.projectId,
+    registry,
+  );
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
   // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
@@ -417,6 +457,8 @@ export async function runAgentTurn(
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
+    // skill 工具读取：生效清单按本会话 projectId 解析（装配期预算，每 run 一次）。
+    ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
     subagent: {
       agentRegistry: runtime.agentRegistry,
@@ -574,6 +616,14 @@ async function runChildAgent(args: {
     depth: childDepth,
   });
 
+  // skill（D2）：子代理同样注入，清单按父会话 projectId 解析——
+  // 与「子代理共享父工作区」语义一致。子 agent 自己的 policy 同样生效（deny 时不注入）。
+  const skillsCtx = await assembleSkillsToolContext(
+    runtime,
+    parentProjectId,
+    registry,
+  );
+
   // VFS（工作区共享）：子 agent 用父 session 的 VFS 视图——写入直接落在父工作区。
   const vfs = runtime.sessionVfs(parentProjectId, parentSessionId);
 
@@ -626,6 +676,8 @@ async function runChildAgent(args: {
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(childSessionId),
     sessionKkv: runtime.sessionKkv,
+    // skill（D2）：子代理同样注入，清单按父会话 projectId 解析。
+    ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
     subagent: {
       agentRegistry: runtime.agentRegistry,

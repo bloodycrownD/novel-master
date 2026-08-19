@@ -432,6 +432,37 @@ export function SessionDetailScreen() {
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
       </Pressable>
+
+      {/* 技能：点击进会话技能面板。 */}
+      <Pressable
+        testID="skills-row"
+        onPress={() => navigation.navigate('SkillPanel', {projectId})}
+        accessibilityLabel="技能"
+        style={[
+          styles.card,
+          cardShadow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+          },
+        ]}>
+        <View
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
+          <Text style={styles.iconGlyph}>🧩</Text>
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardLabel, {color: tokens.textSecondary}]}>
+            技能
+          </Text>
+          <Text style={[styles.cardValue, {color: tokens.text}]}>
+            查看与管理
+          </Text>
+        </View>
+        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>›</Text>
+      </Pressable>
     </ScrollView>
   );
 

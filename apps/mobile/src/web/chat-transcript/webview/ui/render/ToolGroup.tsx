@@ -8,6 +8,7 @@ import {
   toolStatusLabel,
 } from '../../runtime/render/tool-logic';
 import { vfsToolFilePath } from '../../runtime/util/vfs-tool-path';
+import { skillToolRef } from '../../runtime/util/skill-tool-ref';
 
 export type ToolGroupProps = {
   tools: ToolCallRow[];
@@ -38,22 +39,38 @@ function ToolGroupItem({ tool }: { tool: ToolCallRow }) {
       );
     }
   }
-  // 子会话优先：有 subagentSessionId 时跳子会话，否则回退到文件路径打开。
+  // 子会话优先；其次 skill 三元组；最后回退到文件路径打开。
   const subagentSessionId = tool.subagentSessionId;
   const hasSubagent = subagentSessionId != null;
-  const canOpen = filePath != null || hasSubagent;
+  // projectId 缺省时由宿主按会话上下文补齐（webview 无会话上下文）
+  const skillRef = skillToolRef(tool);
+  const hasSkill = !hasSubagent && skillRef != null;
+  const canOpen = filePath != null || hasSubagent || hasSkill;
   const summary = toolCallSummary(tool);
   const statusClass = toolStatusClass(tool.status);
   const statusInner = toolStatusLabel(tool.status);
   const openHint = hasSubagent
     ? '点击查看 · 子会话'
-    : '点击查看 · 聊天工作区';
+    : hasSkill
+      ? '点击查看 · 技能'
+      : '点击查看 · 聊天工作区';
   return (
     <div
       className={'tool-group-item tool-card' + (canOpen ? ' tappable' : '')}
-      data-action={hasSubagent ? 'open-subagent-session' : canOpen ? 'open-tool-file' : undefined}
+      data-action={
+        hasSubagent
+          ? 'open-subagent-session'
+          : hasSkill
+            ? 'open-skill'
+            : canOpen
+              ? 'open-tool-file'
+              : undefined
+      }
       data-session-id={hasSubagent ? subagentSessionId : undefined}
-      data-path={!hasSubagent && canOpen ? filePath! : undefined}
+      data-domain={hasSkill ? skillRef!.domain : undefined}
+      data-project-id={hasSkill ? (skillRef!.projectId ?? undefined) : undefined}
+      data-name={hasSkill ? skillRef!.name : undefined}
+      data-path={!hasSubagent && !hasSkill && canOpen ? filePath! : undefined}
     >
       <div className="tool-header">
         <span className="tool-name">{tool.name || ''}</span>

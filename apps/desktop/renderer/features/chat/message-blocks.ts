@@ -1,7 +1,7 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import { resolveVfsToolFilePath } from "@shared/logic/chat";
+import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from "@shared/logic/chat";
 import { resolveToolResultOk } from "@shared/logic/root";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
@@ -16,6 +16,12 @@ export interface ToolCallView {
   readonly summary?: string;
   /** task 工具产生的子会话 id；存在则卡片可点跳转子会话。 */
   readonly subagentSessionId?: string;
+  /** skill 跳转三元组（read 由 meta 透传，实际命中域在 tool_result 侧）；write/edit 的输入侧解析见 {@link skillToolRef}。 */
+  readonly skillRef?: {
+    readonly domain: 'global' | 'project';
+    readonly projectId?: string;
+    readonly name: string;
+  };
 }
 
 
@@ -163,6 +169,9 @@ export function toolCallViewFromUse(
     ...(result.meta?.subagentSessionId != null
       ? { subagentSessionId: result.meta.subagentSessionId }
       : {}),
+    ...(result.meta?.skillRef != null
+      ? { skillRef: result.meta.skillRef }
+      : {}),
   };
 }
 
@@ -170,6 +179,18 @@ function summarizeToolInput(
   name: string,
   input: Record<string, unknown>,
 ): string {
+  // skill 摘要：`action domain:name`；read 缺省域时只展示 action + name
+  if (name === "skill") {
+    const action = typeof input.action === "string" ? input.action : "";
+    const skillName = typeof input.name === "string" ? input.name : "";
+    const domain =
+      input.domain === "global" || input.domain === "project"
+        ? input.domain
+        : undefined;
+    return domain != null
+      ? `${action} ${domain}:${skillName}`
+      : `${action} ${skillName}`.trim();
+  }
   const path = input.path ?? input.dir ?? input.from;
   if (typeof path === "string") {
     return path;
@@ -189,6 +210,19 @@ function summarizeToolInput(
 /** 解析工具卡片对应的 VFS 文件路径；不可打开时返回 undefined。 */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
   return resolveVfsToolFilePath(tool.name, tool.input);
+}
+
+/**
+ * 解析 skill 卡片的跳转三元组：优先 tool_result meta 透传的 skillRef
+ * （read 缺省域命中生效副本的解析结果），否则从 tool_use 输入解析
+ * （write/edit 必含；read 缺省域在 pending 时解析不出，返回 undefined）。
+ */
+export function skillToolRef(
+  tool: ToolCallView,
+  projectId?: string,
+): ToolCallView["skillRef"] {
+  if (tool.skillRef != null) return tool.skillRef;
+  return resolveSkillToolRefFromInput(tool.name, tool.input, projectId);
 }
 
 export function toolCallSummary(tool: ToolCallView): string {

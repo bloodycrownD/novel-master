@@ -1,98 +1,24 @@
-# agent-subagent 迭代编排状态（code-dev-loop）
-# 维护方：主代理；子代理只读参考
+# global-fs-manager CR-fix 开发编排状态（code-dev-loop 终态）
 
-spec_path: docs/Iterations/agent-subagent/spec.md
-prd_path: docs/Iterations/agent-subagent/prd.md
-worktree: D:/Dev/Js/novel-master/.worktree/agent-subagent
-branch: feat/agent-subagent
-base_sha: f09a5cdb
+spec_path: docs/Iterations/global-fs-manager/cr-fix-spec.md
+prd_path: docs/Iterations/global-fs-manager/prd.md
+iteration: global-fs-manager-cr-fix
+branch: feat/skills-integration（主仓）
+base_sha: 63f59df
 
-dag_version: 1
-current_wave: wave-0
-status: in-progress
-
-# 初始 DAG（含 cr-func 边）
-wave_plan:
-  - wave-0: [impl-m1-data, impl-agent-config]          # 并行，无文件冲突（chat vs agent 域）
-  - wave-1: [cr-func-wave0]                              # readonly 审查 wave-0
-  - wave-2: [impl-core-tool]                             # Step 7后半 + 9-15 core，大节点
-  - wave-3: [verify-core, cr-func-core]                 # core 验证 + 功能小检
-  - wave-4: [impl-config-ui, impl-ui-mobile, impl-ui-desktop, impl-cli-doc]  # 并行 4，无冲突
-  - wave-5: [cr-func-final]                              # 全量功能检查
-
+dag_version: 2
+wave_plan: []
 node_status:
-  impl-m1-data: { status: pending, spec_steps: [1,2,3,4], blocking: yes }
-  impl-agent-config: { status: pending, spec_steps: [5,6,7-C18], blocking: yes }
-  cr-func-wave0: { status: pending }
-  impl-core-tool: { status: pending, spec_steps: [7后半-C19, 9,10,11,12,13,14,15-core], blocking: yes }
-  verify-core: { status: pending }
-  cr-func-core: { status: pending }
-  impl-config-ui: { status: pending, spec_steps: [8], blocking: no }
-  impl-ui-mobile: { status: pending, spec_steps: [15-mobile,16,17], blocking: no }
-  impl-ui-desktop: { status: pending, spec_steps: [15-desktop,16-desktop,18], blocking: no }
-  impl-cli-doc: { status: pending, spec_steps: [19], blocking: no }
-  cr-func-final: { status: pending }
-
+  impl-cr-core: { status: done, head_sha: 6fbb4ce, executor: subagent, items: "P0 双前缀 + listTree + core/B-1 C-1 G-1 G-2，core 全量 2036/0" }
+  impl-cr-desktop: { status: done, head_sha: 5da4e76, executor: subagent, items: "desktop/B-1(P1) + B-2 消费侧 + C-1 + G-1 + cli/G-2" }
+  impl-cr-mobile: { status: done, head_sha: d85777c, executor: subagent, items: "mobile/B-1 + G-1" }
+  cr-func-cr: { status: done, func_ready: yes, note: "子代理上下文耗尽提前收尾（12 条矩阵全过、归因一钉死）；三项未复核由主代理补齐（mobile 24/24、core 2036/0、typecheck）；归因二由主代理补查并修复（7e2e98a）" }
+  fix-tocorevfsscope: { status: done, head_sha: 7e2e98a, executor: main, note: "CR 漏网：toCoreVfsScope 未穷尽 physical/meta（renderer 独立 tsconfig 盲区，本迭代 ea6faf5/1f96b06 引入）" }
 open_must_fix: []
-spec_deviations: []
+spec_deviations: []  # CR 3 条 deviations 用户「按 cr spec 开发」指令视同按现状接受
+status: dev-ready
 
-# 文件冲突矩阵（用于动态重编排时判断能否并行）
-scope_ownership:
-  impl-m1-data:
-    - packages/core/src/bootstrap/chat/chat-schema.ts
-    - packages/core/src/bootstrap/schema-align/schema-column-alignments.ts
-    - packages/core/src/bootstrap/novel-master-bootstrap.ts
-    - packages/core/src/domain/chat/model/session.ts
-    - packages/core/src/domain/chat/model/content-block.ts
-    - packages/core/src/domain/chat/content/parse-message-content.ts
-    - packages/core/src/domain/chat/repositories/session.port.ts
-    - packages/core/src/domain/chat/repositories/impl/sqlite-session.repository.ts
-    - packages/core/src/service/chat/session.port.ts
-    - packages/core/src/service/chat/impl/session.service.ts
-  impl-agent-config:
-    - packages/core/src/domain/agent/model/agent-definition.ts
-    - packages/core/src/domain/agent/model/agent-definition.schema.ts
-    - packages/core/src/service/agent/default-subagent-definition.ts   # C18 新增
-    - apps/cli/src/agent/schemas/agents-bundle.schema.ts                # C21
-    - examples/agents.yaml                                              # C31
-  impl-core-tool:
-    - packages/core/src/domain/tool/builtin/subagent-tool.ts           # C16 新增
-    - packages/core/src/domain/tool/logic/subagent-tool-session-id.ts  # C17 新增
-    - packages/core/src/domain/tool/builtin/builtin-tool-context.ts    # C12
-    - packages/core/src/domain/tool/builtin/register-builtin-tools.ts  # C13
-    - packages/core/src/domain/tool/logic/build-tool-result-block.ts   # C32
-    - packages/core/src/domain/tool/logic/format-tool-output.ts        # C33
-    - packages/core/src/domain/agent/logic/resolve-agent-tool-registry.ts  # C11
-    - packages/core/src/domain/agent/logic/validate-agent-tool-policy.ts   # C13后半
-    - packages/core/src/service/agent/agent-registry.port.ts           # C19 list()
-    - packages/core/src/service/agent/impl/agent-registry.service.ts   # C19 list() 实现
-    - packages/core/src/service/agent/logic/run-agent-turn.ts          # C14
-    - packages/core/src/service/agent/impl/agent-runner.ts             # C34
-    - packages/core/src/config-forms/agent/agent-tool-catalog.ts
-    - apps/cli/src/runtime.ts                                          # C35
-    # desktop/mobile runtime 装配也涉及，但放 wave-4 UI 节点更合适
-  impl-config-ui:
-    - packages/core/src/config-forms/agent/agent-editor-state.ts       # C20
-    - apps/mobile/src/components/agent/AgentEditorForm.tsx             # C30
-    - apps/desktop/src/renderer/features/settings/AgentEditorView.tsx  # C30
-  impl-ui-mobile:
-    - apps/mobile/src/components/chat/message-blocks.ts                # C22
-    - apps/mobile/src/components/chat/ToolCallCard.tsx                 # C23
-    - apps/mobile/src/components/chat/ToolCallGroupCard.tsx            # C24
-    - apps/mobile/src/screens/tabs/chat-tab/ChatConversationPanel.tsx  # C24
-    - apps/mobile/src/screens/stack/SubagentSessionScreen.tsx          # C25 新增
-    - apps/mobile/src/navigation/types.ts                             # C25
-    - apps/mobile/src/navigation/RootNavigator.tsx                    # C25
-    - apps/mobile/src/runtime/                                        # C35 mobile runtime
-  impl-ui-desktop:
-    - apps/desktop/shared/ipc-types.ts                                # C29
-    - apps/desktop/src/main/ipc/handlers/sessions.ts                  # C29
-    - apps/desktop/src/main/ipc/handlers/messages.ts                  # C29
-    - apps/desktop/src/renderer/features/chat/message-blocks.ts       # C26
-    - apps/desktop/src/renderer/features/chat/ToolCallCard.tsx        # C27
-    - apps/desktop/src/renderer/features/chat/ConversationPanel.tsx   # C28
-    - apps/desktop/src/renderer/layout/ChatRail.tsx                   # C28
-    - apps/desktop/src/renderer/state/nav-workspace.ts                # C28
-    - apps/desktop/src/main/services/                                 # C35 desktop runtime
-  impl-cli-doc:
-    - docs/ （CLI 验收文档说明）
+# 归因存档
+# CLI template-pull-e2e T3 红灯 = 预存缺陷（v1.4.21/dc28290 即红，早于本迭代；方向：session pull 子树替换删除侧）
+#   → 建议另立迭代条目跟踪，不阻塞本次 CR-fix
+# renderer tsconfig.renderer.json 非 门禁，含 293 个预存错误（修掉 toCoreVfsScope 后 292），不属本迭代 scope

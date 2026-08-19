@@ -31,12 +31,17 @@ import {
 import { createRegexConfigService } from '@novel-master/core/regex';
 import { createMessageCheckpointService } from '@novel-master/core/message-checkpoint';
 import { createSessionFsService } from '@novel-master/core/session-fs';
-import { createScopedVfsService, type VfsScope } from '@novel-master/core/vfs';
+import {
+  createPhysicalVfsService,
+  createScopedVfsService,
+  type VfsScope,
+} from '@novel-master/core/vfs';
 import {
   createWorkplaceService,
 } from '@novel-master/core/workplace';
 import { createKkvService } from '@novel-master/core/kkv';
 import { createSessionKkvService } from '@novel-master/core/session-kkv';
+import { createSkillsService } from '@novel-master/core/skills';
 import {
   createCompositeSecretStore,
   resolveSkspDriver,
@@ -140,7 +145,12 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       createScopedVfsService(conn, { kind: 'project', projectId }),
     sessionVfs: (projectId, sessionId) =>
       createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
+    globalMetaVfs: () => createScopedVfsService(conn, { kind: 'global-meta' }),
+    projectMetaVfs: projectId =>
+      createScopedVfsService(conn, { kind: 'project-meta', projectId }),
+    physicalVfs: () => createPhysicalVfsService(conn),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
+    skills: () => createSkillsService(conn),
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,

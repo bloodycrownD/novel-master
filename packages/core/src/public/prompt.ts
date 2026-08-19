@@ -49,5 +49,6 @@ export type {
 } from "../service/prompt/render-prompt.js";
 export type {
   PromptRenderContext,
+  PromptSkillIndexEntry,
   PromptLlmInput,
 } from "../domain/prompt/model/prompt-render-context.js";

@@ -31,7 +31,7 @@ const WORKSPACE_AGENT_MENU = {
 
 const WORKSPACE_GLOBAL_MENU = {
   icon: '🌐',
-  label: '全局工作区',
+  label: '文件浏览器',
   route: 'GlobalTemplate',
 } as const;
 
@@ -39,6 +39,7 @@ const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackPar
   [
     {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
     {icon: '🔌', label: '服务商配置', route: 'Providers'},
+    {icon: '🧩', label: '技能管理', route: 'SkillsSettings'},
     {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
     {icon: '💾', label: '存储配置', route: 'StorageConfig'},
     {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},

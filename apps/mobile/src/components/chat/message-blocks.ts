@@ -9,7 +9,8 @@ import {
 } from '@novel-master/core/chat';
 import { resolveToolResultOk } from '@novel-master/core';
 
-import { resolveVfsToolFilePath } from '@novel-master/core/chat';
+import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from '@novel-master/core/chat';
+import type { SkillToolRef } from '@novel-master/core/chat';
 import type { TranscriptRow } from './ChatTranscriptBridge';
 import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
 
@@ -27,6 +28,11 @@ export interface ToolCallView {
    * 这里从 result.meta 读出来供工具卡片点击跳转子会话只读浏览（对称 vfsToolFilePath）。
    */
   readonly subagentSessionId?: string;
+  /**
+   * skill 跳转三元组：read 由 tool_result meta 透传（实际命中域在结果侧）；
+   * write/edit 从 tool_use 输入解析（见 skillToolRef）。
+   */
+  readonly skillRef?: SkillToolRef;
 }
 
 export interface MessageListItem {
@@ -201,6 +207,7 @@ export function toolCallViewFromUse(
     return view;
   }
   const subagentSessionId = result.meta?.subagentSessionId;
+  const skillRef = result.meta?.skillRef;
   return {
     toolUseId: use.id,
     name: use.name,
@@ -211,6 +218,7 @@ export function toolCallViewFromUse(
     ...(typeof subagentSessionId === 'string' && subagentSessionId.length > 0
       ? { subagentSessionId }
       : {}),
+    ...(skillRef != null ? { skillRef } : {}),
   };
 }
 
@@ -237,6 +245,19 @@ function summarizeToolInput(
 /** 工具卡片可打开的逻辑文件路径；不可打开时返回 undefined。 */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
   return resolveVfsToolFilePath(tool.name, tool.input);
+}
+
+/**
+ * 解析 skill 卡片的跳转三元组：优先 tool_result meta 透传的 skillRef
+ * （read 缺省域命中生效副本的解析结果），否则从 tool_use 输入解析
+ * （write/edit 必含；read 缺省域在 pending 时解析不出，返回 undefined）。
+ */
+export function skillToolRef(
+  tool: ToolCallView,
+  projectId?: string,
+): SkillToolRef | undefined {
+  if (tool.skillRef != null) return tool.skillRef;
+  return resolveSkillToolRefFromInput(tool.name, tool.input, projectId);
 }
 
 export function toolCallSummary(tool: ToolCallView): string {
@@ -427,6 +448,7 @@ export function buildTranscriptRows(
               ...(t.subagentSessionId != null
                 ? { subagentSessionId: t.subagentSessionId }
                 : {}),
+              ...(t.skillRef != null ? { skillRef: t.skillRef } : {}),
             })),
           }
         : {}),

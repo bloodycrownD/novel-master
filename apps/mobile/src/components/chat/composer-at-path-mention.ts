@@ -1,6 +1,6 @@
 /**
  * Mobile mention 专属：controlled-mentions 内部格式 ↔ 对外纯字符串。
- * `@path` → `@/path`。禁止进 core（T-X2-2）。
+ * `@path` → `@/path`、`$skill` → `$技能名`。禁止进 core（T-X2-2）。
  */
 import {
   generateValueFromMentionStateAndChangedText,
@@ -9,15 +9,26 @@ import {
   type TriggersConfig,
 } from 'react-native-controlled-mentions';
 
-/** Composer `@path` mention triggers。 */
-export type ComposerTriggersConfig = TriggersConfig<'atPath'>;
+/** Composer mention triggers：`@path` 文件引用 + `$skill` 技能引用（skill 可缺省，旧调用兼容）。 */
+export type ComposerTriggersConfig = TriggersConfig<'atPath'> &
+  Partial<TriggersConfig<'skill'>>;
 
 /** @deprecated 兼容旧测试别名；请用 ComposerTriggersConfig。 */
 export type ComposerAtPathTriggersConfig = ComposerTriggersConfig;
 
-/** mention 内部值 → 对外展示 plain。 */
+/** 全部非空调 trigger 配置（parseValue / 原子删等内部共用）。 */
+function activeTriggerConfigs(config: ComposerTriggersConfig) {
+  return [config.atPath, config.skill].filter(
+    (c): c is NonNullable<typeof c> => c != null,
+  );
+}
+
+/** mention 内部值 → 对外展示 plain（按各自 trigger 字符还原）。 */
 export function mentionValueToPlain(mentionValue: string): string {
-  return replaceTriggerValues(mentionValue, ({name}) => `@${name}`);
+  return replaceTriggerValues(
+    mentionValue,
+    ({name, trigger}) => `${trigger}${name}`,
+  );
 }
 
 /** `@/path` token → mention suggestion（name/id = 逻辑 path）。 */
@@ -29,9 +40,23 @@ export function suggestionFromAtPathToken(token: string): {
   return {id: path, name: path};
 }
 
+/** `$skill` token → mention suggestion（name/id = 技能名）。 */
+export function suggestionFromSkillToken(token: string): {
+  id: string;
+  name: string;
+} {
+  const name = token.startsWith('$') ? token.slice(1) : token;
+  return {id: name, name};
+}
+
 /** 默认 `@path` mention 标记串（与库 getTriggerValue 同形）。 */
 export function formatAtPathMentionMarkup(path: string): string {
   return `{@}[${path}](${path})`;
+}
+
+/** `$skill` mention 标记串（与库 getTriggerValue 同形）。 */
+export function formatSkillMentionMarkup(name: string): string {
+  return `{$}[${name}](${name})`;
 }
 
 /**
@@ -43,7 +68,7 @@ export function tryAtomicMentionDelete(
   changedPlain: string,
   triggersConfig: ComposerTriggersConfig,
 ): string | null {
-  const configs = [triggersConfig.atPath];
+  const configs = activeTriggerConfigs(triggersConfig);
   const state = parseValue(mentionValue, configs);
   const {parts, plainText} = state;
   if (changedPlain.length >= plainText.length) {
@@ -88,7 +113,7 @@ export function tryAtomicMentionDelete(
 }
 
 /**
- * 程序化写入纯文本：保留既有 mention；仅在新增片段内把完整 `@path` 提成 mention。
+ * 程序化写入纯文本：保留既有 mention；仅在新增片段内把完整 `@path` / `$skill` 提成 mention。
  * 手输已存在的纯文本 `@/path` 落在未改区间，不会被提升。
  */
 export function mergeProgrammaticPlainIntoMentionValue(
@@ -96,9 +121,7 @@ export function mergeProgrammaticPlainIntoMentionValue(
   nextPlain: string,
   triggersConfig: ComposerTriggersConfig,
 ): string {
-  const configs = [triggersConfig.atPath].filter(
-    (c): c is NonNullable<typeof c> => c != null,
-  );
+  const configs = activeTriggerConfigs(triggersConfig);
   const prev = parseValue(prevMentionValue, configs);
   if (prev.plainText === nextPlain) {
     return prevMentionValue;
@@ -142,7 +165,21 @@ function findSingleAddedRange(
 }
 
 /**
- * 在 plain 坐标 `[start,end)` 内，把完整 `@path` 纯文本片段提成 mention markup。
+ * 全篇提升：草稿水化（重进会话）等场景，把完整 `@path` / `$skill` 全部提为 mention。
+ * 对外 plain 不变，仅恢复 tag 着色 / 原子删效果。
+ */
+export function promotePlainMentions(
+  plain: string,
+  triggersConfig: ComposerTriggersConfig,
+): string {
+  return promotePlainAtPathsInRange(plain, triggersConfig, {
+    start: 0,
+    end: plain.length,
+  });
+}
+
+/**
+ * 在 plain 坐标 `[start,end)` 内，把完整 `@path` / `$skill` 纯文本片段提成 mention markup。
  */
 function promotePlainAtPathsInRange(
   mentionValue: string,
@@ -151,10 +188,14 @@ function promotePlainAtPathsInRange(
 ): string {
   const plain = mentionValueToPlain(mentionValue);
   const slice = plain.slice(range.start, range.end);
-  // 与 scan / 历史 token 同口径：@ + 非空白非 @
-  const tokenRe = /@([^\s@]+)/g;
-  const promotions: Array<{absStart: number; absEnd: number; path: string}> =
-    [];
+  // 与 scan / 历史 token 同口径：@/$ + 非空白非 @/$；技能名不含 /
+  const tokenRe = /([@$])([^\s@$]+)/g;
+  const promotions: Array<{
+    absStart: number;
+    absEnd: number;
+    trigger: string;
+    value: string;
+  }> = [];
   let m: RegExpExecArray | null;
   while ((m = tokenRe.exec(slice)) != null) {
     const absStart = range.start + m.index;
@@ -171,14 +212,19 @@ function promotePlainAtPathsInRange(
         continue;
       }
     }
-    promotions.push({absStart, absEnd, path: m[1]!});
+    promotions.push({
+      absStart,
+      absEnd,
+      trigger: m[1]!,
+      value: m[2]!,
+    });
   }
   if (promotions.length === 0) {
     return mentionValue;
   }
 
   // 按 plain 坐标把「已是 mention 的区间」与「待提升」合并重建 markup
-  const state = parseValue(mentionValue, [triggersConfig.atPath]);
+  const state = parseValue(mentionValue, activeTriggerConfigs(triggersConfig));
   const mentionSpans = state.parts
     .filter(p => p.data != null)
     .map(p => ({
@@ -189,7 +235,13 @@ function promotePlainAtPathsInRange(
 
   type Span =
     | {kind: 'mention'; start: number; end: number; original: string}
-    | {kind: 'promote'; start: number; end: number; path: string};
+    | {
+        kind: 'promote';
+        start: number;
+        end: number;
+        trigger: string;
+        value: string;
+      };
   const spans: Span[] = [
     ...mentionSpans.map(s => ({
       kind: 'mention' as const,
@@ -206,7 +258,8 @@ function promotePlainAtPathsInRange(
         kind: 'promote' as const,
         start: p.absStart,
         end: p.absEnd,
-        path: p.path,
+        trigger: p.trigger,
+        value: p.value,
       })),
   ].sort((a, b) => a.start - b.start);
 
@@ -220,7 +273,10 @@ function promotePlainAtPathsInRange(
     if (span.kind === 'mention') {
       out += span.original;
     } else {
-      out += formatAtPathMentionMarkup(span.path);
+      out +=
+        span.trigger === '$'
+          ? formatSkillMentionMarkup(span.value)
+          : formatAtPathMentionMarkup(span.value);
     }
     cursor = span.end;
   }

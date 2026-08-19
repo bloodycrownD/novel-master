@@ -12,7 +12,9 @@ export type SettingsViewId =
   | "modelSampling"
   | "regexGroups"
   | "regexRules"
-  | "regexRuleEditor";
+  | "regexRuleEditor"
+  | "skillsManage"
+  | "skillDetail";
 
 export const SETTINGS_NAV = [
   {
@@ -30,6 +32,7 @@ export const SETTINGS_NAV = [
     label: "高级",
     items: [
       { id: "regexGroups" as const, label: "正则过滤", icon: "🛡️" },
+      { id: "skillsManage" as const, label: "技能管理", icon: "⚡" },
     ],
   },
   {
@@ -49,6 +52,7 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   agentsSettings: "智能体配置",
   providers: "服务商配置",
   regexGroups: "正则过滤",
+  skillsManage: "技能管理",
 };
 
 export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewId {
@@ -61,6 +65,7 @@ export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewI
     return "providers";
   }
   if (viewId === "regexRules" || viewId === "regexRuleEditor") return "regexGroups";
+  if (viewId === "skillDetail") return "skillsManage";
   return viewId;
 }
 
@@ -84,4 +89,6 @@ export interface SettingsNavState {
   readonly editingSavedModelId?: string;
   readonly editingRegexGroupId?: string;
   readonly editingRegexRuleId?: string;
+  /** skillDetail 页定位的技能（域 + 项目 + 名称）。 */
+  viewingSkillRef?: import("@shared/ipc-types").SkillRefDto;
 }

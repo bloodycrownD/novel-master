@@ -16,6 +16,10 @@ import {
   deleteUnreferencedUnderScope,
 } from "./revision-ref-count.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "./seed-live-head-revisions.js";
+import {
+  isVfsPathAncestorOfExcluded,
+  isVfsPathExcluded,
+} from "./vfs-exclude-prefixes.js";
 
 /** 轻量 scope 引用（只需 scopeKey 字符串）。 */
 export interface VfsCopyScope {
@@ -76,6 +80,12 @@ export type CopyVfsTreeOptions = {
 
   /** content store：共享 blob 写入前执行 ensureBlob / findExistingBlobHashes。 */
   readonly contentStore: VfsContentStore;
+
+  /**
+   * 隔离豁免：拷贝源时跳过这些逻辑路径前缀（如 `meta/skills`），
+   * 默认空数组 = 现行为完全不变。前缀可带或不带前导 `/`。
+   */
+  readonly excludePrefixes?: string[];
 };
 
 export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
@@ -85,6 +95,13 @@ export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
    */
   revisions?: VfsRevisionRepository;
 };
+
+/** 供三侧（拷贝/删除/seed）统一取排除前缀，缺省为空数组。 */
+function resolveExcludePrefixes(
+  excludePrefixes: readonly string[] | undefined,
+): readonly string[] {
+  return excludePrefixes ?? [];
+}
 
 /**
  * Copies all vfs entries under `(fromScope, fromPathPrefix)` to `(toScope, toPathPrefix)`。
@@ -99,6 +116,7 @@ export async function copyVfsTree(
   toPathPrefix: string,
   options?: CopyVfsTreeOptions,
 ): Promise<void> {
+  const excludePrefixes = resolveExcludePrefixes(options?.excludePrefixes);
   // --- 目录：批量检查存在 + 批量 INSERT ---
   const dirPaths = await repo.listDirectoryPathsUnderPrefix(
     fromScope.scopeKey,
@@ -106,6 +124,17 @@ export async function copyVfsTree(
   );
   const targetDirPaths: string[] = [];
   for (const dirPath of dirPaths) {
+    if (isVfsPathExcluded(dirPath, excludePrefixes)) {
+      continue;
+    }
+    // 排除前缀的祖先目录不镜像到目标，避免残留空目录链（如只排除 meta/skills
+    // 时，源里单独为它存在的 /meta 不该出现在目标）。
+    if (
+      excludePrefixes.length > 0 &&
+      isVfsPathAncestorOfExcluded(dirPath, excludePrefixes)
+    ) {
+      continue;
+    }
     const relative = relativeUnderPrefix(dirPath, fromPathPrefix);
     if (relative.length === 0) {
       continue;
@@ -136,6 +165,9 @@ export async function copyVfsTree(
     mtimeMs: number;
   }> = [];
   for (const entry of fileEntries) {
+    if (isVfsPathExcluded(entry.path, excludePrefixes)) {
+      continue;
+    }
     const relative = relativeUnderPrefix(entry.path, fromPathPrefix);
     if (relative.length === 0) {
       continue;
@@ -256,10 +288,17 @@ export async function replaceVfsSubtree(
   toPathPrefix: string,
   options?: ReplaceVfsSubtreeOptions,
 ): Promise<void> {
+  const excludePrefixes = resolveExcludePrefixes(options?.excludePrefixes);
   if (options?.revisions != null) {
-    await releaseAndDeleteVfsPrefix(repo, options.revisions, toScope.scopeKey, toPathPrefix);
+    await sweepRevisionsUnderScope(
+      repo,
+      options.revisions,
+      toScope.scopeKey,
+      toPathPrefix,
+      excludePrefixes,
+    );
   } else {
-    await deleteVfsPrefix(repo, toScope.scopeKey, toPathPrefix);
+    await deleteVfsPrefix(repo, toScope.scopeKey, toPathPrefix, excludePrefixes);
   }
   await copyVfsTree(repo, fromScope, fromPathPrefix, toScope, toPathPrefix, options);
   if (options?.revisions != null) {
@@ -268,6 +307,8 @@ export async function replaceVfsSubtree(
       options.revisions,
       toScope.scopeKey,
       toPathPrefix,
+      undefined,
+      excludePrefixes,
     );
   }
 }
@@ -275,17 +316,31 @@ export async function replaceVfsSubtree(
 /**
  * 泛化 sweep：释放 scope+前缀下 live head 引用 → 删 entry → GC 无引用 revision。
  *
- * 三 scope（project/session/template）通用。
+ * 三 scope（project/session/template）通用。`excludePrefixes` 非空时，
+ * 排除前缀下的 entry 不删、live ref 不减、revision 不 GC（隔离豁免，
+ * 如 project 域 `meta/skills/` 已有技能不随模板替换被清掉）。
  */
 export async function sweepRevisionsUnderScope(
   repo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   pathPrefix: string,
+  excludePrefixes?: readonly string[],
 ): Promise<void> {
-  await decrementLiveRefsUnderScope(revisionRepo, repo, scopeKey, pathPrefix);
-  await deleteVfsPrefix(repo, scopeKey, pathPrefix);
-  await deleteUnreferencedUnderScope(revisionRepo, scopeKey, pathPrefix);
+  await decrementLiveRefsUnderScope(
+    revisionRepo,
+    repo,
+    scopeKey,
+    pathPrefix,
+    excludePrefixes,
+  );
+  await deleteVfsPrefix(repo, scopeKey, pathPrefix, excludePrefixes);
+  await deleteUnreferencedUnderScope(
+    revisionRepo,
+    scopeKey,
+    pathPrefix,
+    excludePrefixes,
+  );
 }
 
 /**
@@ -307,12 +362,32 @@ export async function releaseAndDeleteVfsPrefix(
  *
  * @remarks 走 {@link VfsEntryRepository.deleteRecursiveIfAny}：先用 listEntriesUnderPrefix
  * 探测，空 prefix 静默返回（不抛 vfsNotFound），非空则一条批量 DELETE...LIKE 清掉整棵子树。
+ * `excludePrefixes` 非空时跳过排除前缀下的条目（隔离豁免），退回逐条删除路径。
  */
 export async function deleteVfsPrefix(
   repo: VfsEntryRepository,
   scopeKey: string,
   prefix: string,
+  excludePrefixes?: readonly string[],
 ): Promise<void> {
+  const excludes = excludePrefixes ?? [];
   const base = normalizePrefix(prefix);
-  await repo.deleteRecursiveIfAny(scopeKey, base);
+  if (excludes.length === 0) {
+    // 无排除前缀时走批量快路径（一条 DELETE...LIKE 清整棵子树）。
+    await repo.deleteRecursiveIfAny(scopeKey, base);
+    return;
+  }
+  const entries = await repo.listEntriesUnderPrefix(scopeKey, base);
+  const sorted = [...entries].sort((a, b) => b.path.length - a.path.length);
+  for (const entry of sorted) {
+    if (isVfsPathExcluded(entry.path, excludes)) {
+      continue;
+    }
+    // 祖先目录也保留：排除子树里的 entry 不删，承载它的目录层级不能删，
+    // 否则会因「目录非空」失败。
+    if (excludes.length > 0 && isVfsPathAncestorOfExcluded(entry.path, excludes)) {
+      continue;
+    }
+    await repo.delete(scopeKey, entry.path, { recursive: false });
+  }
 }

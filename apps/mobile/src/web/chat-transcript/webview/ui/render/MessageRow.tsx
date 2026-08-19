@@ -10,6 +10,7 @@ import { openContextMenuFromAnchor } from '../../runtime/menu/menu';
 import { assistantBubbleExtraClasses } from '../../runtime/stream/stream';
 import { AttachGroup } from './AttachGroup';
 import { AssistantBubbleInner } from './AssistantBubble';
+import { RefTokenText } from './RefTokenText';
 
 export type MessageRowProps = {
   row: MessageRowModel;
@@ -58,7 +59,9 @@ export function MessageRow({ row }: MessageRowProps) {
           <div className="bubble bubble--fill-width bubble--user-compose">
             {menuRow}
             {hasText ? (
-              <div className="bubble-body">{String(row.text)}</div>
+              <div className="bubble-body">
+                <RefTokenText text={String(row.text)} />
+              </div>
             ) : null}
             <AttachGroup
               attachments={attachments}
@@ -72,7 +75,9 @@ export function MessageRow({ row }: MessageRowProps) {
         bubble = (
           <div className="bubble">
             {menuRow}
-            <div className="bubble-body">{String(row.text)}</div>
+            <div className="bubble-body">
+              <RefTokenText text={String(row.text)} />
+            </div>
           </div>
         );
       }

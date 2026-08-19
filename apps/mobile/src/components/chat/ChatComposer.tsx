@@ -66,6 +66,12 @@ import {composerDockBottomPadding} from './composer-dock-padding';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import { FileReferencePicker } from './FileReferencePicker';
+import { SkillPicker } from '@/components/skills/SkillPicker';
+import {
+  SkillTypeahead,
+  filterSkillTypeaheadCandidates,
+} from './SkillTypeahead';
+import type {EffectiveSkill} from '@novel-master/core/skills';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
@@ -142,8 +148,11 @@ export function ChatComposer({
   ]);
   const [error, setError] = useState<string | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const [typeaheadRows, setTypeaheadRows] = useState<WorkplaceListRow[]>([]);
+  /** `$` 技能 typeahead 候选源（当前项目合并视图，不走会话工作区）。 */
+  const [skillRows, setSkillRows] = useState<EffectiveSkill[]>([]);
   /** 文件批注 store 变更时 bump，驱动 hasAnnotateDrafts 重算。 */
   const [annotateEpoch, setAnnotateEpoch] = useState(0);
   const inputRef = useRef<TextInput>(null);
@@ -163,6 +172,8 @@ export function ChatComposer({
   runtimeRef.current = runtime;
 
   const activeAt = findActiveAtQuery(text, cursor);
+  // `$` 技能引用查询（行首/空白/制表符边界，与 @ 同口径）
+  const activeSkill = findActiveAtQuery(text, cursor, '$');
 
   const hasAnnotateDrafts = hasChatAnnotateDrafts(sessionId);
   void annotateEpoch;
@@ -195,6 +206,31 @@ export function ChatComposer({
     };
   }, [activeAt != null, sessionId]);
 
+  // `$` 技能候选：当前项目合并视图（显式引用含已关闭技能，标注交给展示层）
+  useEffect(() => {
+    if (activeSkill == null) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await runtimeRef.current
+          .skills()
+          .effectiveSkills(scope.projectId);
+        if (!cancelled) {
+          setSkillRows(list);
+        }
+      } catch {
+        if (!cancelled) {
+          setSkillRows([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSkill != null, scope.projectId]);
+
   const typeaheadCandidates = (() => {
     if (activeAt == null) {
       return [] as AtPathRef[];
@@ -207,6 +243,11 @@ export function ChatComposer({
       }));
     return filterAtPathTypeaheadCandidates(refs, activeAt.query, 5);
   })();
+
+  const skillTypeaheadCandidates =
+    activeSkill == null
+      ? []
+      : filterSkillTypeaheadCandidates(skillRows, activeSkill.query, 5);
 
   const persistDraft = useCallback(
     (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
@@ -477,6 +518,65 @@ export function ChatComposer({
     [activeAt, attachments, cursor, persistDraft, text],
   );
 
+  /** `$` typeahead 点选：插 `$技能名` token（mention tag + 尾空格）。 */
+  const applySkillTypeaheadToken = useCallback(
+    (skillName: string) => {
+      const token = `$${skillName}`;
+      if (atPathInputRef.current?.replaceActiveAt(token, 'skill')) {
+        return;
+      }
+      if (activeSkill == null) {
+        return;
+      }
+      const next = replaceActiveAtWithToken(
+        text,
+        cursor,
+        activeSkill.start,
+        token,
+      );
+      if (atPathInputRef.current) {
+        atPathInputRef.current.replaceCommittedText(next.text, next.cursor);
+        return;
+      }
+      const statusOnly = attachments.filter(
+        a => a.source === 'workplace' || a.source === 'user_ops',
+      );
+      setText(next.text);
+      persistDraft(next.text, statusOnly);
+      setCursor(next.cursor);
+    },
+    [activeSkill, attachments, cursor, persistDraft, text],
+  );
+
+  /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名` token。 */
+  const insertSkillToken = useCallback(
+    (skillName: string) => {
+      const token = `$${skillName}`;
+      // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询
+      const replaceStart = activeSkill != null ? activeSkill.start : cursor;
+      const before = text.slice(0, replaceStart);
+      const after = text.slice(cursor);
+      const gapBefore =
+        before.length === 0 || /\s$/.test(before) ? '' : ' ';
+      const gapAfter =
+        after.length === 0 || !/^\s/.test(after) ? ' ' : '';
+      const inserted = `${gapBefore}${token}${gapAfter}`;
+      const next = `${before}${inserted}${after}`;
+      const nextCursor = before.length + inserted.length;
+      if (atPathInputRef.current) {
+        atPathInputRef.current.replaceCommittedText(next, nextCursor);
+        return;
+      }
+      const statusOnly = attachments.filter(
+        a => a.source === 'workplace' || a.source === 'user_ops',
+      );
+      setText(next);
+      persistDraft(next, statusOnly);
+      setCursor(nextCursor);
+    },
+    [activeSkill, attachments, cursor, persistDraft, text],
+  );
+
   const send = useCallback(async () => {
     if (!hasModel) {
       onNeedModel();
@@ -569,6 +669,11 @@ export function ChatComposer({
           candidates={typeaheadCandidates}
           onSelect={applyTypeaheadToken}
         />
+        <SkillTypeahead
+          open={activeSkill != null && !inputDisabled}
+          candidates={skillTypeaheadCandidates}
+          onSelect={applySkillTypeaheadToken}
+        />
         <ComposerAtPathInput
           ref={atPathInputRef}
           inputRef={inputRef}
@@ -617,6 +722,16 @@ export function ChatComposer({
             </Text>
           </Pressable>
           <Pressable
+            onPress={() => setSkillPickerOpen(true)}
+            disabled={inputDisabled}
+            style={[styles.toolBtn, { borderColor: tokens.border }]}
+            accessibilityLabel="引用技能"
+          >
+            <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>
+              $
+            </Text>
+          </Pressable>
+          <Pressable
             onPress={send}
             disabled={sendDisabled}
             style={[
@@ -644,6 +759,13 @@ export function ChatComposer({
         onConfirm={pathTokens => {
           insertTokensIntoComposer(pathTokens);
         }}
+      />
+
+      <SkillPicker
+        visible={skillPickerOpen}
+        projectId={scope.projectId}
+        onClose={() => setSkillPickerOpen(false)}
+        onConfirm={skillName => insertSkillToken(skillName)}
       />
     </Animated.View>
   );

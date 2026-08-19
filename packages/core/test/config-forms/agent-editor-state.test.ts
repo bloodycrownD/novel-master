@@ -18,6 +18,7 @@ import {
   withDynamicBlockPersistence,
   hasAnyPromptRegionEnabled,
   WORKPLACE_BLOCK_HINT,
+  WORKPLACE_DISABLED_HINT,
   WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE,
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   withWorkplaceToggle,
@@ -50,7 +51,18 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
   assert.equal(
     PROMPT_REGION_LABELS.layoutOrder,
-    "系统 → 常驻工作区 → 持久区 → 会话历史 → 动态区"
+    "系统 → 技能索引 → 常驻工作区 → 持久区 → 会话历史 → 动态区"
+  );
+  assert.equal(PROMPT_REGION_LABELS.skills, "技能索引");
+  assert.equal(PROMPT_REGION_LABELS.skillsTag, "技能");
+  assert.equal(PROMPT_REGION_LABELS.skillsBlocks, "技能索引区");
+  assert.equal(
+    PROMPT_REGION_LABELS.skillsReadonlyHint,
+    "运行时注入生效技能索引。"
+  );
+  assert.equal(
+    PROMPT_REGION_LABELS.skillsDisabledHint,
+    "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。"
   );
   assert.equal(
     PROMPT_REGION_LABELS.persistRegionHint,
@@ -79,9 +91,10 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
 });
 
 test("WORKPLACE_BLOCK_HINT 新文案", () => {
+  assert.equal(WORKPLACE_BLOCK_HINT, "可编辑助手确认语。");
   assert.equal(
-    WORKPLACE_BLOCK_HINT,
-    "开启后可编辑助手确认语（默认如 i have seen workplace）；用户侧文件树包在 <workplace> 内，仅表常驻前缀。"
+    WORKPLACE_DISABLED_HINT,
+    "关闭时不注入项目文件树。"
   );
 });
 

@@ -7,11 +7,20 @@
 import { vfsInvalidPath } from "@/errors/vfs-errors.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
-/** VFS visibility scope (global, project, or session). */
+/** VFS visibility scope (global, project, session, and meta domains). */
 export type VfsScope =
   | { kind: "global" }
   | { kind: "project"; projectId: string }
-  | { kind: "session"; projectId: string; sessionId: string };
+  | { kind: "session"; projectId: string; sessionId: string }
+  | { kind: "global-meta" }
+  | { kind: "project-meta"; projectId: string };
+
+/**
+ * global-meta 域的物理挂载前缀为**空串**：域内逻辑路径自带 `/meta` 段
+ * （SkillsService 约定写 `/meta/skills/...`），物理路径 = 逻辑路径原样，
+ * 再叠前缀会拼出 `/meta/meta/...` 双前缀废路径。
+ */
+const GLOBAL_META_PHYSICAL_PREFIX = "";
 
 /** Physical mount prefix for global template storage (not exposed as logical `/template`). */
 const GLOBAL_PHYSICAL_PREFIX = "/template";
@@ -95,6 +104,17 @@ export function toPhysicalPath(scope: VfsScope, logical: string): string {
       }
       return `${prefix}${normalized}`;
     }
+    case "global-meta":
+      // 域内逻辑路径自带 /meta 段，物理 = 逻辑原样（前缀为空串）
+      return normalized;
+    case "project-meta": {
+      // 域内逻辑路径自带 /meta 段，物理仅再拼 /projects/{pid} 项目段
+      const prefix = `/projects/${scope.projectId}`;
+      if (normalized === "/") {
+        return prefix;
+      }
+      return `${prefix}${normalized}`;
+    }
   }
 }
 
@@ -138,6 +158,23 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
       }
       return normalized.slice(prefix.length);
     }
+    case "global-meta":
+      // 物理 = 逻辑原样（域内逻辑路径自带 /meta 段），不再剥挂载段
+      return normalized;
+    case "project-meta": {
+      const prefix = `/projects/${scope.projectId}`;
+      const metaPrefix = `${prefix}/meta`;
+      // 域内逻辑路径自带 /meta 段：物理必须形如 /projects/{pid}/meta[...]，
+      // 否则是同项目其他子域（如 template）的路径，不属于 project-meta 域
+      if (
+        normalized !== metaPrefix &&
+        !normalized.startsWith(`${metaPrefix}/`)
+      ) {
+        throw vfsInvalidPath(physical, "not in project meta scope");
+      }
+      // 剥掉 /projects/{pid} 项目段，保留域内自带的 /meta 段
+      return normalized.slice(prefix.length);
+    }
   }
 }
 
@@ -155,6 +192,10 @@ export function scopeKey(scope: VfsScope): string {
       return `project:${scope.projectId}`;
     case "session":
       return `session:${scope.projectId}:${scope.sessionId}`;
+    case "global-meta":
+      return "global:meta";
+    case "project-meta":
+      return `project:${scope.projectId}:meta`;
   }
 }
 
@@ -167,6 +208,12 @@ export function scopePhysicalPrefix(scope: VfsScope): string {
       return `/projects/${scope.projectId}/template`;
     case "session":
       return `/projects/${scope.projectId}/sessions/${scope.sessionId}`;
+    case "global-meta":
+      // 逻辑路径自带 /meta 段，无额外挂载前缀
+      return GLOBAL_META_PHYSICAL_PREFIX;
+    case "project-meta":
+      // 逻辑路径自带 /meta 段，挂载前缀仅 /projects/{pid} 项目段
+      return `/projects/${scope.projectId}`;
   }
 }
 

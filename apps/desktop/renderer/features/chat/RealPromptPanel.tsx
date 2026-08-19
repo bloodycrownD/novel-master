@@ -21,6 +21,9 @@ function segmentTitleLabel(title: string): string {
   if (title === "system") {
     return PROMPT_REGION_LABELS.system;
   }
+  if (title === "skills") {
+    return PROMPT_REGION_LABELS.skills;
+  }
   return title;
 }
 

@@ -6,52 +6,6 @@ import { describe, it } from "node:test";
 import { runNm } from "./helpers.js";
 
 describe("workplace CLI e2e", () => {
-  it("T1 project pull aligns workplace list with global", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "nm-wt-"));
-    const dbPath = join(dir, "novel.db");
-    try {
-      runNm(
-        ["vfs", "write", "/t.md", "--db", dbPath],
-        { input: "t" },
-      );
-      runNm([
-        "vfs",
-        "workplace",
-        "file",
-        "/t.md",
-        "--mode",
-        "hide",
-        "--db",
-        dbPath,
-      ]);
-      const create = runNm(["project", "create", "--name", "P", "--db", dbPath]);
-      const projectId = create.stdout.trim();
-      runNm([
-        "project",
-        "template",
-        "pull",
-        "--project",
-        projectId,
-        "--db",
-        dbPath,
-      ]);
-      const list = runNm([
-        "project",
-        "workplace",
-        "list",
-        "--project",
-        projectId,
-        "--db",
-        dbPath,
-      ]);
-      assert.equal(list.status, 0, list.stderr);
-      assert.match(list.stdout, /\thide\thidden/);
-      assert.match(list.stdout, /\/t\.md/);
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
-  });
-
   it("T2 session create inherits mapped workplace", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-wt-"));
     const dbPath = join(dir, "novel.db");

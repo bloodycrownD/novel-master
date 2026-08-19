@@ -15,6 +15,8 @@ export interface HeaderOverride {
   title?: string;
   showBack?: boolean;
   showMenu?: boolean;
+  /** 自定义菜单 icon（如技能面板用列表管理 icon 区别于菜单汉堡）。 */
+  menuIcon?: ReactNode;
   onBack?: () => void;
   onMenu?: () => void;
 }

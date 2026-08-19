@@ -1,5 +1,10 @@
 import type { ToolCallView } from "./message-blocks";
-import { toolCallSummary, vfsToolFilePath } from "./message-blocks";
+import {
+  skillToolRef,
+  toolCallSummary,
+  vfsToolFilePath,
+} from "./message-blocks";
+import { dispatchOpenSettingsView } from "@/features/skills/skill-ui";
 
 type ToolCallCardProps = {
   tool: ToolCallView;
@@ -11,6 +16,8 @@ type ToolCallCardProps = {
   onOpenFile?: (path: string) => void;
   /** task 工具携带子会话 id 时可点击跳转只读子会话面板。 */
   onOpenSubagentSession?: (sessionId: string) => void;
+  /** 当前会话项目 id；skill 卡片跳设置详情需要（project 域补全三元组）。 */
+  projectId?: string;
 };
 
 function statusLabel(status: ToolCallView["status"]): string {
@@ -34,28 +41,40 @@ export function ToolCallCard({
   groupItem = false,
   onOpenFile,
   onOpenSubagentSession,
+  projectId,
 }: ToolCallCardProps) {
   const filePath = vfsToolFilePath(tool);
   const subagentSessionId = tool.subagentSessionId;
+  const skillRef = skillToolRef(tool, projectId);
   const canOpenFile = filePath != null && onOpenFile != null;
   const canOpenSubagent =
     subagentSessionId != null && onOpenSubagentSession != null;
-  const canOpen = canOpenFile || canOpenSubagent;
+  const canOpenSkill = skillRef != null;
+  const canOpen = canOpenFile || canOpenSubagent || canOpenSkill;
   const summary = toolCallSummary(tool);
   const detail = showFullParams
     ? JSON.stringify(tool.input, null, 2)
     : summary;
 
-  const openHint = canOpenSubagent ? "点击查看 · 子智能体会话" : "点击查看 · 聊天工作区";
+  const openHint = canOpenSubagent
+    ? "点击查看 · 子智能体会话"
+    : canOpenSkill
+      ? "点击查看 · 技能"
+      : "点击查看 · 聊天工作区";
 
   const handleClick = () => {
-    // 文件路径优先（同一张卡理论上不会同时具备两种入口，仍以文件优先兜底）
+    // 文件路径优先（同一张卡理论上不会同时具备多种入口，仍以文件优先兜底）
     if (canOpenFile && filePath != null) {
       onOpenFile!(filePath);
       return;
     }
     if (canOpenSubagent && subagentSessionId != null) {
       onOpenSubagentSession!(subagentSessionId);
+      return;
+    }
+    if (canOpenSkill && skillRef != null) {
+      // 跳设置技能详情页（App 监听事件开设置页 + 导航栈 push skillDetail）
+      dispatchOpenSettingsView({ view: "skillDetail", skillRef });
     }
   };
 
@@ -63,7 +82,9 @@ export function ToolCallCard({
     ? `打开文件 ${filePath}`
     : canOpenSubagent
       ? `查看子智能体会话 ${subagentSessionId}`
-      : "";
+      : canOpenSkill
+        ? `查看技能 ${skillRef?.name}`
+        : "";
 
   const content = (
     <>

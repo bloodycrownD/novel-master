@@ -24,6 +24,7 @@ import { SESSION_KKV_SCHEMA_STATEMENTS } from "./session-kkv/session-kkv-schema.
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
 import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
+import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
@@ -55,8 +56,12 @@ import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sq
  * 变更 {@link NOVEL_MASTER_SCHEMA_STATEMENTS} 或 `SCHEMA_COLUMN_ALIGNMENTS` 时必须 +1，
  * 否则已升版库会走快路径而漏建表/漏补列。新增 schema migration 不必改此值
  * （快路径仍会执行 pending migration）。
+ *
+ * v7：v6 版本号曾在两条分支各自使用（main 侧 v1.4.29 与 skills 分支各自 +1），
+ * 导致被 main v6 迁移过的库缺 skill_disabled_rule 表。 v7 强制重跑全量幂等 DDL
+ * 补齐（CREATE TABLE IF NOT EXISTS，已存在的表不受影响）。
  */
-export const SCHEMA_BOOT_VERSION = 6;
+export const SCHEMA_BOOT_VERSION = 7;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -69,6 +74,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKPLACE_SCHEMA_STATEMENTS,
+  ...SKILLS_SCHEMA_STATEMENTS,
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
   ...REGEX_SCHEMA_STATEMENTS,

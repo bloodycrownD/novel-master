@@ -4,7 +4,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert} from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import { type ChatProject, type ChatSession } from "@novel-master/core/chat";
+import { type ChatProject, type ChatSession, type SkillToolRef } from "@novel-master/core/chat";
 import {toastMessage} from '@/errors/toast-message';
 import {
   loadChatAgentMeta,
@@ -377,6 +377,24 @@ export function useChatTabScope({
     [navigation, projectId, sessionId],
   );
 
+  // skill 卡片跳技能详情。write/edit 缺省域解析出的 project 三元组不带
+  // projectId（webview / 卡片无会话上下文），这里按当前会话项目补齐。
+  const openSkillDetail = useCallback(
+    (ref: SkillToolRef) => {
+      const targetProjectId =
+        ref.domain === 'project' ? (ref.projectId ?? projectId) : undefined;
+      if (ref.domain === 'project' && targetProjectId == null) {
+        return;
+      }
+      navigation.navigate('SkillDetail', {
+        domain: ref.domain,
+        name: ref.name,
+        ...(targetProjectId != null ? {projectId: targetProjectId} : {}),
+      });
+    },
+    [navigation, projectId],
+  );
+
   const sessionVfs = useMemo(
     () =>
       projectId != null && sessionId != null
@@ -447,6 +465,7 @@ export function useChatTabScope({
     openFileEditor,
     openSessionFilePreview,
     openSubagentSession,
+    openSkillDetail,
     sessionVfs,
     sessionWorktree,
     projectVfs,

@@ -12,6 +12,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
+import { createSkillsService } from "@novel-master/core/skills";
 import { createWorkplaceService } from "@novel-master/core/workplace";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -162,5 +163,55 @@ describe("session create / workspace initialize (core 层)", () => {
     // 回滚后：没有残留的 template 复制（session 保持 create 时那份旧的）
     const read = await svfs.read("/keep.md");
     assert.equal(read.content, "KEEP");
+  });
+
+  it("(e) 技能重定位后无排除项：project 域全部带入 session，技能天然不在 project 域（T-SR2）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-${suffix}`);
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/a.md", "A-content");
+    await pvfs.write("/sub/deep/b.md", "B-content");
+
+    // 技能经 SkillService 落独立 meta 域，project template 域不再有 /meta/skills 内容
+    const skills = createSkillsService(ctx.conn);
+    await skills.writeSkillFile(
+      "project",
+      "my-skill",
+      undefined,
+      `---\nname: my-skill\ndescription: 演示\n---\n\nskill-${suffix}`,
+      project.id,
+    );
+    const entryRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const templateSkillRows = await entryRepo.listEntriesUnderPrefix(
+      `project:${project.id}`,
+      "/meta/skills",
+    );
+    assert.equal(
+      templateSkillRows.filter((e) => e.path.startsWith("/meta/skills")).length,
+      0,
+      "技能不应再落 project template 域",
+    );
+    const metaSkillRows = await entryRepo.listEntriesUnderPrefix(
+      `project:${project.id}:meta`,
+      "/meta/skills",
+    );
+    assert.ok(
+      metaSkillRows.some((e) => e.path === "/meta/skills/my-skill/SKILL.md"),
+      "技能应落 project:{pid}:meta 域",
+    );
+
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    // project 域全部内容带入 session（无排除项）
+    const sessionPaths = (await svfs.list("/", { recursive: true }))
+      .map((e) => e.path);
+    assert.ok(sessionPaths.includes("/a.md"), "普通文件照常带入");
+    assert.ok(sessionPaths.includes("/sub/deep/b.md"), "子目录文件照常带入");
+    assert.ok(
+      sessionPaths.every((p) => !p.startsWith("/meta/skills")),
+      "技能目录天然不在 project 域，session 不会带入",
+    );
   });
 });

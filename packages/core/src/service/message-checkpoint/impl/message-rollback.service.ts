@@ -137,14 +137,24 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       // S-13 护栏：undo_send 解析出的 targetTree 为空意味着没有 baseline 快照可对齐，
       // 一旦进入 reconcileVfsPaths 会把 live 树里所有路径都当「需删除」处理——
       // 这正是纯文本 chat 路径「聊一轮再 undo_send」把整个会话工作区删光的根因。
-      // 仅当确实要 reconcile VFS 时才拦；skipVfsReconcile 只截断消息、不碰文件，
-      // 空 targetTree 不会造成破坏，仍然放行（例如 DF-U1 的降级回滚）。
+      // 但空 targetTree 只有在 live 树非空时才有破坏力：会话本身无文件
+      // （纯聊天 / 仅 $skill 引用等未写盘场景，capture 不写空快照）时删无可删，
+      // 正常放行，回滚表现为纯截断。仅 live 树非空时才拦，上层走降级弹窗。
+      // skipVfsReconcile 只截断消息、不碰文件，空 targetTree 不会造成破坏，
+      // 仍然放行（例如 DF-U1 的降级回滚）。
       if (
         !options?.skipVfsReconcile &&
         plan.mode === "undo_send" &&
         plan.targetTree.size === 0
       ) {
-        throw sessionFsRollbackUndoSendEmptyTarget(sessionId, anchorMessageId);
+        const liveHeads = await listSessionFileHeads(
+          this.deps.entries,
+          projectId,
+          sessionId,
+        );
+        if (liveHeads.length > 0) {
+          throw sessionFsRollbackUndoSendEmptyTarget(sessionId, anchorMessageId);
+        }
       }
 
       if (!options?.skipVfsReconcile) {

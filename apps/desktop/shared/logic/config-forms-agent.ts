@@ -31,4 +31,5 @@ export {
   WORKPLACE_ASSISTANT_TEXT_LABEL,
   WORKPLACE_BLOCK_HINT,
   WORKPLACE_BLOCK_LABEL,
+  WORKPLACE_DISABLED_HINT,
 } from "@novel-master/core/config-forms/agent";

@@ -124,4 +124,93 @@ describe("buildToolResultBlock", () => {
     );
     assert.equal(globBlock.content, "/a.ts\n/b.ts");
   });
+
+  it("T-SK8: skill read 成功输出自动检测透传 meta.skillRef（含 skillProjectId）", () => {
+    const block = buildToolResultBlock(
+      "tu-skill",
+      {
+        ok: true,
+        output: {
+          action: "read",
+          domain: "project",
+          name: "demo",
+          path: "SKILL.md",
+          content: "---\nname: demo\n---",
+          version: 1,
+          offset: 1,
+          limit: 2000,
+          totalLines: 3,
+          returnedLines: 3,
+          truncated: false,
+        },
+      },
+      { toolName: "skill", skillProjectId: "proj-1" },
+    );
+    assert.equal(block.ok, true);
+    assert.deepEqual(block.meta?.skillRef, {
+      domain: "project",
+      projectId: "proj-1",
+      name: "demo",
+    });
+  });
+
+  it("T-SK8: skill load 成功输出也透传 meta.skillRef，摘要含文件数", () => {
+    const block = buildToolResultBlock(
+      "tu-skill-load",
+      {
+        ok: true,
+        output: {
+          action: "load",
+          domain: "project",
+          name: "demo",
+          path: "SKILL.md",
+          content: "# 演示",
+          version: 1,
+          files: ["references/x.md", "assets/tpl.txt"],
+          truncated: false,
+        },
+      },
+      { toolName: "skill", skillProjectId: "proj-1" },
+    );
+    assert.equal(block.ok, true);
+    assert.deepEqual(block.meta?.skillRef, {
+      domain: "project",
+      projectId: "proj-1",
+      name: "demo",
+    });
+    assert.equal(block.summary, "project:demo · 2 files");
+  });
+
+  it("T-SK8: skill write 输出也透传（global 域不带 projectId）", () => {
+    const block = buildToolResultBlock(
+      "tu-skill-w",
+      {
+        ok: true,
+        output: { action: "write", domain: "global", name: "demo", path: "SKILL.md", version: 2 },
+      },
+      { toolName: "skill", skillProjectId: "proj-1" },
+    );
+    assert.deepEqual(block.meta?.skillRef, { domain: "global", name: "demo" });
+  });
+
+  it("T-SK8: 非 skill 工具同形态输出不透传 skillRef", () => {
+    // domain/name 字段撞名的输出（如未来工具）不应误命中：工具名门控兜底
+    const block = buildToolResultBlock(
+      "tu-other",
+      {
+        ok: true,
+        output: { action: "read", domain: "project", name: "demo" },
+      },
+      { toolName: "read", skillProjectId: "proj-1" },
+    );
+    assert.equal(block.meta?.skillRef, undefined);
+  });
+
+  it("T-SK8: skill 失败 outcome 不透传 skillRef", () => {
+    const block = buildToolResultBlock("tu-skill-e", {
+      ok: false,
+      error: new ToolError("NOT_FOUND", "Skill not found"),
+    });
+    assert.equal(block.meta?.skillRef, undefined);
+  });
 });
