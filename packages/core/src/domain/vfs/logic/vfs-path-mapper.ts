@@ -7,11 +7,16 @@
 import { vfsInvalidPath } from "@/errors/vfs-errors.js";
 import { normalizePath } from "../repositories/impl/normalize-path.js";
 
-/** VFS visibility scope (global, project, or session). */
+/** VFS visibility scope (global, project, session, and meta domains). */
 export type VfsScope =
   | { kind: "global" }
   | { kind: "project"; projectId: string }
-  | { kind: "session"; projectId: string; sessionId: string };
+  | { kind: "session"; projectId: string; sessionId: string }
+  | { kind: "global-meta" }
+  | { kind: "project-meta"; projectId: string };
+
+/** Physical mount prefix for global skill storage (meta domain, logical `/meta`). */
+const GLOBAL_META_PHYSICAL_PREFIX = "/meta";
 
 /** Physical mount prefix for global template storage (not exposed as logical `/template`). */
 const GLOBAL_PHYSICAL_PREFIX = "/template";
@@ -95,6 +100,19 @@ export function toPhysicalPath(scope: VfsScope, logical: string): string {
       }
       return `${prefix}${normalized}`;
     }
+    case "global-meta": {
+      if (normalized === "/") {
+        return GLOBAL_META_PHYSICAL_PREFIX;
+      }
+      return `${GLOBAL_META_PHYSICAL_PREFIX}${normalized}`;
+    }
+    case "project-meta": {
+      const prefix = `/projects/${scope.projectId}/meta`;
+      if (normalized === "/") {
+        return prefix;
+      }
+      return `${prefix}${normalized}`;
+    }
   }
 }
 
@@ -138,6 +156,28 @@ export function toLogicalPath(scope: VfsScope, physical: string): string {
       }
       return normalized.slice(prefix.length);
     }
+    case "global-meta": {
+      if (
+        normalized !== GLOBAL_META_PHYSICAL_PREFIX &&
+        !normalized.startsWith(`${GLOBAL_META_PHYSICAL_PREFIX}/`)
+      ) {
+        throw vfsInvalidPath(physical, "not in global meta scope");
+      }
+      if (normalized === GLOBAL_META_PHYSICAL_PREFIX) {
+        return "/";
+      }
+      return normalized.slice(GLOBAL_META_PHYSICAL_PREFIX.length);
+    }
+    case "project-meta": {
+      const prefix = `/projects/${scope.projectId}/meta`;
+      if (normalized === prefix) {
+        return "/";
+      }
+      if (!normalized.startsWith(`${prefix}/`)) {
+        throw vfsInvalidPath(physical, "not in project meta scope");
+      }
+      return normalized.slice(prefix.length);
+    }
   }
 }
 
@@ -155,6 +195,10 @@ export function scopeKey(scope: VfsScope): string {
       return `project:${scope.projectId}`;
     case "session":
       return `session:${scope.projectId}:${scope.sessionId}`;
+    case "global-meta":
+      return "global:meta";
+    case "project-meta":
+      return `project:${scope.projectId}:meta`;
   }
 }
 
@@ -167,6 +211,10 @@ export function scopePhysicalPrefix(scope: VfsScope): string {
       return `/projects/${scope.projectId}/template`;
     case "session":
       return `/projects/${scope.projectId}/sessions/${scope.sessionId}`;
+    case "global-meta":
+      return GLOBAL_META_PHYSICAL_PREFIX;
+    case "project-meta":
+      return `/projects/${scope.projectId}/meta`;
   }
 }
 

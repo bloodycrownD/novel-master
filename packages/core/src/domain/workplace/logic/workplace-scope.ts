@@ -17,6 +17,10 @@ export function workplaceScopeKey(scope: WorkplaceScope): string {
       return `project:${scope.projectId}`;
     case "session":
       return `session:${scope.sessionId}`;
+    case "global-meta":
+      return "global:meta";
+    case "project-meta":
+      return `project:${scope.projectId}:meta`;
   }
 }
 
