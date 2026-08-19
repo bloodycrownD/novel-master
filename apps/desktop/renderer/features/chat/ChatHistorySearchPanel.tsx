@@ -246,7 +246,7 @@ export function ChatHistorySearchPanel({
           <p className="chat-history-search__empty">未找到匹配的聊天记录</p>
         ) : (
           <>
-            <MessageList messages={results} chatRichText />
+            <MessageList messages={results} chatRichText collapsibleMessageBody />
             {hasMore && results.length > 0 ? (
               <div className="chat-history-search__more">
                 <button

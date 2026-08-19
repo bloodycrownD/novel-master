@@ -3948,6 +3948,22 @@ html[data-theme="dark"] .chat-message {
   min-width: 0;
 }
 
+/* 长消息默认折叠（搜索结果等场景）：line-clamp 截 4 行，点击切换展开，无动画。 */
+.chat-message__body-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.chat-message__body-clamp--expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  cursor: auto;
+}
+
 .chat-message > p {
   margin: 0;
 }

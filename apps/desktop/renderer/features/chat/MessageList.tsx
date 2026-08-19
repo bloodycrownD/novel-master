@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MermaidMarkdown } from '../../components/MermaidMarkdown';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import { buildChatListItems } from './message-blocks';
@@ -28,6 +29,8 @@ interface MessageListProps {
   onOpenToolFile?: (path: string) => void;
   /** 点击 task 工具卡片时跳转只读子会话面板。 */
   onOpenSubagentSession?: (sessionId: string) => void;
+  /** 搜索结果等场景：长文本消息默认折叠（line-clamp 4 行），点击切换展开；默认关闭。 */
+  collapsibleMessageBody?: boolean;
 }
 
 function MessageBody({
@@ -49,6 +52,39 @@ function MessageBody({
   return <p>{text}</p>;
 }
 
+/** 与 mobile MessageResultCard 一致的静态溢出规则：超 200 字符或含换行即可折叠。 */
+function isCollapsibleText(text: string): boolean {
+  return text.length > 200 || text.includes('\n');
+}
+
+/** 长文本消息折叠 wrapper：默认 line-clamp 截 4 行，点击切换展开（无动画）。 */
+function CollapsibleMessageBody({
+  text,
+  richText,
+  alwaysRichText = false,
+}: {
+  text: string;
+  richText: boolean;
+  alwaysRichText?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (!isCollapsibleText(text)) {
+    return (
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+    );
+  }
+  return (
+    <div
+      className={`chat-message__body-clamp${
+        expanded ? ' chat-message__body-clamp--expanded' : ''
+      }`}
+      onClick={() => setExpanded(v => !v)}
+    >
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+    </div>
+  );
+}
+
 export function MessageList({
   messages,
   projectId,
@@ -61,6 +97,7 @@ export function MessageList({
   onOpenMessageMenu,
   onOpenToolFile,
   onOpenSubagentSession,
+  collapsibleMessageBody = false,
 }: MessageListProps) {
   const hasStreaming = uiRunning;
 
@@ -127,11 +164,19 @@ export function MessageList({
                 </details>
               ) : null}
               {text ? (
-                <MessageBody
-                  text={text}
-                  richText={chatRichText}
-                  alwaysRichText={msg.role === 'assistant'}
-                />
+                collapsibleMessageBody ? (
+                  <CollapsibleMessageBody
+                    text={text}
+                    richText={chatRichText}
+                    alwaysRichText={msg.role === 'assistant'}
+                  />
+                ) : (
+                  <MessageBody
+                    text={text}
+                    richText={chatRichText}
+                    alwaysRichText={msg.role === 'assistant'}
+                  />
+                )
               ) : null}
               {msg.role === "user" &&
               (msg.attachments?.length ?? 0) > 0 ? (
