@@ -350,12 +350,13 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
 
     const svc = createPhysicalVfsService(ctx.conn);
     const rows = await svc.listTree("/meta");
-    // 全部层级行一次返回（目录行在前、文件行在后，同层按展示键排序）
+    // 全部层级行一次返回；目录行在前、文件行在后，同层按展示键
+    // （无 label 用路径末段）排序，故目录间按 basename 而非全路径排
     const expected = [
+      { path: `/meta/skills/${name}/notes/deep`, kind: "directory" },
+      { path: `/meta/skills/${name}/notes`, kind: "directory" },
       { path: "/meta/skills", kind: "directory" },
       { path: `/meta/skills/${name}`, kind: "directory" },
-      { path: `/meta/skills/${name}/notes`, kind: "directory" },
-      { path: `/meta/skills/${name}/notes/deep`, kind: "directory" },
       { path: `/meta/skills/${name}/SKILL.md`, kind: "file" },
       { path: `/meta/skills/${name}/notes/deep/ref.md`, kind: "file" },
     ];
@@ -425,5 +426,138 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
       assert.equal(err.code, "NOT_FOUND");
       return true;
     });
+  });
+});
+
+describe("core/B-1: 排序键统一 label ?? 路径末段", () => {
+  it("命名/未命名项目混排按展示键稳定排序，未命名不再恒排最前", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    // "0-" 在字典序上恒小于任何 UUID 首段（十六进制 0-9a-f，且 '-' 小于全部
+    // 十六进制字符），而旧排序键 "/projects/{uuid}" 恒小于 "0-..."：
+    // 本构造下新旧排序顺序必然相反，可确定性地回归旧缺陷（未命名恒排最前）
+    const unnamed = await ctx.projects.create(`z占位-${suffix}`);
+    const named = await ctx.projects.create(`0-${suffix}`);
+
+    const svc = createPhysicalVfsService(ctx.conn);
+    const rows = (await svc.list("/projects")).filter(
+      (r) =>
+        r.path === `/projects/${named.id}` ||
+        r.path === `/projects/${unnamed.id}`,
+    );
+    assert.deepEqual(
+      rows.map((r) => r.path),
+      [`/projects/${named.id}`, `/projects/${unnamed.id}`],
+    );
+  });
+});
+
+describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
+  it("主会话带多层子 agent 会话：sessions 目录 BFS 展开子/孙会话目录行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-g1-${suffix}`);
+    const main = await ctx.sessions.create(project.id, `主会话-${suffix}`);
+    const child = await ctx.sessions.createSubSession(
+      main.id,
+      project.id,
+      `子会话-${suffix}`,
+    );
+    const grand = await ctx.sessions.createSubSession(
+      child.id,
+      project.id,
+      `孙会话-${suffix}`,
+    );
+
+    const svc = createPhysicalVfsService(ctx.conn);
+    const rows = await svc.list(`/projects/${project.id}/sessions`);
+    const paths = rows.map((r) => r.path);
+    assert.ok(
+      paths.includes(`/projects/${project.id}/sessions/${main.id}`),
+      "主会话目录行应出现",
+    );
+    assert.ok(
+      paths.includes(`/projects/${project.id}/sessions/${child.id}`),
+      "子 agent 会话目录行应 BFS 展开",
+    );
+    assert.ok(
+      paths.includes(`/projects/${project.id}/sessions/${grand.id}`),
+      "孙 agent 会话目录行应逐层展开",
+    );
+    const childRow = rows.find(
+      (r) => r.path === `/projects/${project.id}/sessions/${child.id}`,
+    );
+    assert.equal(childRow?.label, `子会话-${suffix}`);
+  });
+
+  it("A 项目路径 + B 项目 sid：list/read 均报 NOT_FOUND", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const projectA = await ctx.projects.create(`PA-g1-${suffix}`);
+    const projectB = await ctx.projects.create(`PB-g1-${suffix}`);
+    const sessionB = await ctx.sessions.create(projectB.id, `B会话-${suffix}`);
+
+    const svc = createPhysicalVfsService(ctx.conn);
+    await assert.rejects(
+      svc.list(`/projects/${projectA.id}/sessions/${sessionB.id}`),
+      (err: unknown) => {
+        assert.ok(isVfsError(err));
+        assert.equal(err.code, "NOT_FOUND");
+        return true;
+      },
+    );
+    await assert.rejects(
+      svc.read(`/projects/${projectA.id}/sessions/${sessionB.id}/x.md`),
+      (err: unknown) => {
+        assert.ok(isVfsError(err));
+        assert.equal(err.code, "NOT_FOUND");
+        return true;
+      },
+    );
+  });
+});
+
+describe("core/G-2: read 挂载点根一律 NOT_FOUND", () => {
+  it("六处挂载点根 read 均报 NOT_FOUND（目录行归一为无此文件）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-g2-${suffix}`);
+    // 种上技能，让 /meta 与 /projects/{pid}/meta 落在显式目录行上
+    //（否则查无 entry，测不到 IS_DIRECTORY → NOT_FOUND 归一分支）
+    const skills = createSkillsService(ctx.conn);
+    await skills.writeSkillFile(
+      "global",
+      `g2-global-${suffix}`,
+      undefined,
+      "全局",
+    );
+    await skills.writeSkillFile(
+      "project",
+      `g2-project-${suffix}`,
+      undefined,
+      "项目",
+      project.id,
+    );
+    const session = await ctx.sessions.create(project.id);
+
+    const svc = createPhysicalVfsService(ctx.conn);
+    const mountRoots = [
+      "/template",
+      "/meta",
+      `/projects/${project.id}`,
+      `/projects/${project.id}/template`,
+      `/projects/${project.id}/meta`,
+      `/projects/${project.id}/sessions/${session.id}`,
+    ];
+    for (const path of mountRoots) {
+      await assert.rejects(
+        svc.read(path),
+        (err: unknown) => {
+          assert.ok(isVfsError(err), `${path} 应抛 VfsError`);
+          assert.equal(err.code, "NOT_FOUND", `${path} 应为 NOT_FOUND`);
+          return true;
+        },
+      );
+    }
   });
 });

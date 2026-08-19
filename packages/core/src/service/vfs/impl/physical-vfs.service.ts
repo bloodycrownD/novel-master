@@ -86,13 +86,19 @@ function resolvePhysicalPath(normalized: string): ResolvedPhysical | null {
   return null;
 }
 
-/** 目录行优先、再按展示名（无则路径）字典序；合成行按项目名/会话名排而非 UUID。 */
+/** 路径末段（basename），无 label 行的排序回退键。 */
+function basenameOf(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  return segments[segments.length - 1] ?? path;
+}
+
+/** 目录行优先、再按展示键（label，无则路径末段）字典序；合成行按项目名/会话名排而非 UUID。 */
 function compareEntries(a: VfsListEntry, b: VfsListEntry): number {
   if (a.kind !== b.kind) {
     return a.kind === "directory" ? -1 : 1;
   }
-  const ka = a.label ?? a.path;
-  const kb = b.label ?? b.path;
+  const ka = a.label ?? basenameOf(a.path);
+  const kb = b.label ?? basenameOf(b.path);
   return ka < kb ? -1 : ka > kb ? 1 : 0;
 }
 
