@@ -17,7 +17,6 @@ import React, {
   type RefObject,
 } from 'react';
 import {
-  Platform,
   StyleSheet,
   TextInput,
   type NativeSyntheticEvent,
@@ -99,7 +98,13 @@ export const ComposerAtPathInput = forwardRef<
         // 路径无空格；避免把后续字吞进 keyword
         allowedSpacesCount: 0,
         isInsertSpaceAfterMention: true,
-        textStyle: inlineTagTextStyle(tokens.primary),
+        // 字色 + 轻底胶囊，与柔和 selection tint 可区分
+        textStyle: {
+          color: tokens.primary,
+          backgroundColor: `${tokens.primary}22`,
+          borderRadius: 6,
+          paddingHorizontal: 3,
+        },
         // 展示为 @/path（name 已含前导 /）
         getPlainString: mention => `@${mention.name}`,
       },
@@ -108,7 +113,12 @@ export const ComposerAtPathInput = forwardRef<
         trigger: '$',
         allowedSpacesCount: 0,
         isInsertSpaceAfterMention: true,
-        textStyle: inlineTagTextStyle(tokens.primary),
+        textStyle: {
+          color: tokens.primary,
+          backgroundColor: `${tokens.primary}22`,
+          borderRadius: 6,
+          paddingHorizontal: 3,
+        },
         getPlainString: mention => `$${mention.name}`,
       },
     }),
@@ -269,19 +279,3 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
 });
-
-/**
- * 行内 tag 样式：iOS 用圆角胶囊；Android 行内嵌套 Text 不支持圆角背景，
- * 改用主题色加粗文字（避免方角色块）。
- */
-export function inlineTagTextStyle(primary: string): TextStyle {
-  if (Platform.OS === 'ios') {
-    return {
-      color: primary,
-      backgroundColor: `${primary}22`,
-      borderRadius: 6,
-      paddingHorizontal: 3,
-    };
-  }
-  return {color: primary, fontWeight: '600'};
-}
