@@ -913,17 +913,12 @@ export function AgentEditorForm(props: Props) {
             )}
           </View>
 
-          {/* 技能索引占位卡：运行时自动注入，无开关无输入框，不可配置 */}
-          {renderPromptSectionHead(promptSectionLabels.skills)}
+          {/* 技能索引占位卡：运行时自动注入，不可配置 */}
+          {renderPromptSectionHead(promptSectionLabels.skills, {
+            switchValue: skillsEnabled,
+            onSwitchChange: setSkillsEnabled,
+          })}
           <View style={blockCardStyle}>
-            <View style={styles.chatSlotHeader}>
-              <View style={styles.blockHeaderSpacer} />
-              <Switch
-                value={skillsEnabled}
-                onValueChange={setSkillsEnabled}
-                trackColor={{false: tokens.border, true: tokens.primary}}
-              />
-            </View>
             {skillsEnabled ? (
               <>
                 <Text
@@ -944,23 +939,18 @@ export function AgentEditorForm(props: Props) {
             ) : null}
           </View>
 
-          {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL)}
+          {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL, {
+            switchValue: workplaceEnabled,
+            onSwitchChange: next => {
+              const patched = withWorkplaceToggle(
+                next,
+                workplaceAssistantText,
+              );
+              setWorkplaceEnabled(patched.workplaceEnabled);
+              setWorkplaceAssistantText(patched.workplaceAssistantText);
+            },
+          })}
           <View style={blockCardStyle}>
-            <View style={styles.blockHeader}>
-              <View style={styles.blockHeaderSpacer} />
-              <Switch
-                value={workplaceEnabled}
-                onValueChange={next => {
-                  const patched = withWorkplaceToggle(
-                    next,
-                    workplaceAssistantText,
-                  );
-                  setWorkplaceEnabled(patched.workplaceEnabled);
-                  setWorkplaceAssistantText(patched.workplaceAssistantText);
-                }}
-                trackColor={{ false: tokens.border, true: tokens.primary }}
-              />
-            </View>
             {workplaceEnabled ? (
               <>
                 <Text
@@ -1099,16 +1089,11 @@ export function AgentEditorForm(props: Props) {
             )}
           </View>
 
-          {renderPromptSectionHead(promptSectionLabels.chat)}
+          {renderPromptSectionHead(promptSectionLabels.chat, {
+            switchValue: customAttachEnabled,
+            onSwitchChange: setCustomAttachEnabled,
+          })}
           <View style={blockCardStyle}>
-            <View style={styles.chatSlotHeader}>
-              <View style={styles.blockHeaderSpacer} />
-              <Switch
-                value={customAttachEnabled}
-                onValueChange={next => setCustomAttachEnabled(next)}
-                trackColor={{ false: tokens.border, true: tokens.primary }}
-              />
-            </View>
             <Text
               style={[styles.chatSlotHint, { color: tokens.textSecondary }]}
             >
@@ -1307,12 +1292,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  chatSlotHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 8,
-  },
   chatSlotHint: {
     fontSize: 13,
     lineHeight: 20,
