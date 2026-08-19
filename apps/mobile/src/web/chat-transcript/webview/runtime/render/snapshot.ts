@@ -9,6 +9,7 @@ import {
 import { closeContextMenu } from '../menu/menu';
 import { renderRows } from './row-logic';
 import { setStreamToolInvokingDom } from '../stream/stream';
+import { scheduleMermaidScan } from '../mermaid';
 
 export type RestoreScroll = {
   nearBottom?: boolean;
@@ -89,6 +90,8 @@ export function applySnapshot(payload: SnapshotPayload): void {
       scroller.scrollTop = 0;
     }
     renderRows();
+    // 历史行渲染后触发 mermaid 扫描（防抖；流式尾不扫）
+    scheduleMermaidScan();
     if (payload.generating) {
       setStreamToolInvokingDom(true);
     }
@@ -115,6 +118,7 @@ export function applyAppendTailRows(payload: RowsPayload): void {
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
   state.rows = state.rows.concat(newRows);
   renderRows();
+  scheduleMermaidScan();
   if (scroller) {
     if (wasNearBottom) {
       stickToBottom(scroller);
@@ -167,6 +171,7 @@ export function applyStreamCommit(payload: RowsPayload): void {
   }
   if (toAppend.length === 0) {
     renderRows();
+    scheduleMermaidScan();
     return;
   }
   const scroller = document.getElementById('scroller');
@@ -180,6 +185,8 @@ export function applyStreamCommit(payload: RowsPayload): void {
   if (!promoted) {
     renderRows();
   }
+  // 定稿行落库后触发 mermaid 扫描（流式期保留的源码占位在此转图表）
+  scheduleMermaidScan();
   const scrollIntent = payload.scrollIntent || 'preserve';
   if (scroller) {
     if (scrollIntent === 'preserve' && wasNearBottom) {
@@ -207,6 +214,7 @@ export function applyPrependPage(payload: RowsPayload): void {
   state.rows = newRows.concat(state.rows);
   state.loadOlderArmed = true;
   renderRows();
+  scheduleMermaidScan();
   if (scroller) {
     const nextScrollHeight = scroller.scrollHeight;
     scroller.scrollTop =

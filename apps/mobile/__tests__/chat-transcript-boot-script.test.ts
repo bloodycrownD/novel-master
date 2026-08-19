@@ -182,10 +182,11 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('updateStreamBubble(tail)');
     expect(script).toContain('if (!tail)');
     expect(script).toContain('renderRows()');
-    expect(script).toContain('if (state.flags.richText && !html)');
+    // mermaid 打进同 bundle 后 esbuild 会给撞名的参数 html 加后缀（如 html2），容忍重命名
+    expect(script).toMatch(/if \(state\.flags\.richText && !html\w*\)/);
     expect(script).toContain('} else if (kind === "text")');
-    // 可改为 token：DRY 后局部名 textBody；增量走 appendEscapedDelta helper
-    expect(script).toContain('const textBody = ensureStreamTextBody(bubble)');
+    // 可改为 token：DRY 后局部名 textBody；增量走 appendEscapedDelta helper（bubble 可能被 esbuild 重命名）
+    expect(script).toMatch(/const textBody = ensureStreamTextBody\(bubble\w*\)/);
     expect(script).toContain('appendEscapedDelta');
     expect(script).toContain('getStreamThinkingBody');
     // tool-invoking 单路径：壳归 Preact ToolInvokingBar；runtime 不得再拼串/createElement 插条
