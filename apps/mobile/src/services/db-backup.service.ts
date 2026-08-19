@@ -8,13 +8,11 @@
 import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
-  errorCodes,
-  isErrorWithCode,
   keepLocalCopy,
-  pick,
   saveDocuments,
   types,
 } from '@react-native-documents/picker';
+import {isUserCancelledPick, pickSingleDocument} from './document-pick';
 import {
   dumpProviderTableSnapshot,
   open,
@@ -223,7 +221,7 @@ export async function exportDatabaseBackup(
     }
     return 'saved';
   } catch (error) {
-    if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+    if (isUserCancelledPick(error)) {
       return 'cancelled';
     }
     throw error;
@@ -244,10 +242,7 @@ export async function importDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导入数据库');
   }
 
-  const [file] = await pick({
-    type: [types.allFiles],
-    allowMultiSelection: false,
-  });
+  const file = await pickSingleDocument({type: [types.allFiles]});
   if (file == null) {
     return;
   }

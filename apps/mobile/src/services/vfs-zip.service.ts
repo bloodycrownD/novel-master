@@ -6,13 +6,11 @@
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import { createVfsZipIoService, type VfsScope, type VfsZipImportOptions, VfsZipError } from "@novel-master/core/vfs";
 import {
-  errorCodes,
-  isErrorWithCode,
   keepLocalCopy,
-  pick,
   saveDocuments,
   types,
 } from '@react-native-documents/picker';
+import {isUserCancelledPick, pickSingleDocument} from './document-pick';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
@@ -166,7 +164,7 @@ export async function exportVfsZip(
     }
     return 'saved';
   } catch (error) {
-    if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+    if (isUserCancelledPick(error)) {
       return 'cancelled';
     }
     throw error;
@@ -177,10 +175,7 @@ export async function exportVfsZip(
 
 /** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null。 */
 export async function pickZipFileBytes(): Promise<Uint8Array | null> {
-  const [file] = await pick({
-    type: [types.zip],
-    allowMultiSelection: false,
-  });
+  const file = await pickSingleDocument({type: [types.zip]});
   if (file == null) {
     return null;
   }

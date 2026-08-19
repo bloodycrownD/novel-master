@@ -9,7 +9,8 @@ import {
   type CharacterCardImportOptions,
   type VfsScope,
 } from '@novel-master/core/vfs';
-import {keepLocalCopy, pick} from '@react-native-documents/picker';
+import {keepLocalCopy} from '@react-native-documents/picker';
+import {pickSingleDocument} from './document-pick';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {
   assertCharacterCardFileName,
@@ -72,9 +73,8 @@ export async function importCharacterCard(
     readonly directoryPath?: string;
   },
 ): Promise<void> {
-  const [file] = await pick({
+  const file = await pickSingleDocument({
     type: characterCardImportPickTypes(),
-    allowMultiSelection: false,
   });
   if (file == null) {
     return;

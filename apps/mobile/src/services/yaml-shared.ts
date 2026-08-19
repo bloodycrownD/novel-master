@@ -9,16 +9,14 @@
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
-  errorCodes,
-  isErrorWithCode,
   keepLocalCopy,
-  pick,
   saveDocuments,
 } from '@react-native-documents/picker';
 
 export {normalizeYamlError} from '@novel-master/core/common';
 
 import {assertYamlFileName, yamlImportPickTypes} from './yaml-document-pick';
+import {isUserCancelledPick, pickSingleDocument} from './document-pick';
 
 /**
  * 取 `react-native-blob-util` 的 fs 模块。
@@ -60,7 +58,7 @@ export async function exportYamlFile(
     });
     return 'saved';
   } catch (error) {
-    if (isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED) {
+    if (isUserCancelledPick(error)) {
       return 'cancelled';
     }
     throw error;
@@ -79,10 +77,7 @@ export async function exportYamlFile(
 export async function importYamlFile(
   consume: (yamlText: string) => Promise<void>,
 ): Promise<void> {
-  const [file] = await pick({
-    type: yamlImportPickTypes(),
-    allowMultiSelection: false,
-  });
+  const file = await pickSingleDocument({type: yamlImportPickTypes()});
   if (file == null) {
     return;
   }
