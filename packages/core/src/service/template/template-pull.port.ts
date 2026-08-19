@@ -4,14 +4,13 @@
  * @module service/template/template-pull.port
  */
 
-/** Pulls template VFS + worktree from parent scope (overwrite). */
+/**
+ * Project → session：镜像 project 模板、映射 worktree，
+ * 并清空 session-fs 数据（不含消息）。
+ *
+ * global → project 的模板拉取链已随全局文件管理器迭代拆除
+ * （项目模板直接在 project 域维护，不再从 global 镜像）。
+ */
 export interface TemplatePullService {
-  /** Global → project: mirrors `/template` and global worktree. */
-  projectTemplatePull(projectId: string): Promise<void>;
-
-  /**
-   * Project → session: mirrors project template, maps worktree,
-   * and clears session-fs data (not messages).
-   */
   sessionTemplatePull(sessionId: string): Promise<void>;
 }

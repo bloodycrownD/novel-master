@@ -31,3 +31,12 @@ assistant:
 - T-G2 换载体归 Step 2（拆 projectTemplatePull 即编译失败），其豁免断言语义随重定位消失，改盯 replaceVfsSubtree
 
 状态：execute-ready 达成（无 P0、P1 已写入 SPEC），待用户确认后按 SPEC 8 步开工（基于 feat/skills-integration 分支形态）。
+
+---
+
+date: 2026-08-19
+user:
+执行 impl-s2s4-core 节点（Step 2 + Step 4）：core 拆 projectTemplatePull / ProjectService.pullTemplate（session 侧全保留）；新建只读 PhysicalVfsService（list/read/虚拟目录合成/五前缀解析，无任何写方法）+ 三端 runtime 挂 physicalVfs() 工厂；template-pull.test.ts 拆 3 例、vfs-gc-trigger.test.ts T-G2 两例换载体；新建 T-PB1/T-PB2 单测。工作在 .woktree/global-fs（分支 feat/global-fs-manager），与 Step 3 子代理并行，不碰 desktop IPC/mobile UI/CLI 命令文件。
+
+assistant:
+承接执行。关键核对结论：vfs_entry.path 存 scope 内纯逻辑路径，「物理路径」是应用层拼接视图（/template、/meta、/projects/{pid}/template|meta|sessions/{sid}）；PhysicalVfsService.list 用 listEntriesUnderPrefix（idx_vfs_entry_scope_path 已确认存在，UNIQUE(scope_key,path) 隐式覆盖）逐 scope 查询后拼前缀，虚拟目录从 chat_project/chat_session 枚举合成；read 前缀解析顺序敏感（session → project-meta → project → /meta → /template → 无此文件）后走 ScopedVfsService.read。T-G2 换载体：第一例 sessionTemplatePull、第二例直调 replaceVfsSubtree 盯通用 sweep/GC。core exports 指向 dist，改后必须 npm run build 测试才能解析新导出。

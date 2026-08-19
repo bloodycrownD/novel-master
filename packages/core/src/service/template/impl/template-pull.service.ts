@@ -1,16 +1,13 @@
 /**
  * Template pull orchestration (VFS replace + worktree replace).
  *
+ * global → project 的 projectTemplatePull 已拆除；本服务仅保留
+ * project → session 的初始化链（{@link initializeSessionWorkspace}）。
+ *
  * @module service/template/impl/template-pull.service
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
-import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { chatNotFound } from "@/errors/chat-errors.js";
 import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
@@ -18,37 +15,10 @@ import { initializeSessionWorkspace } from "@/service/template/logic/initialize-
 import type { TemplatePullService } from "../template-pull.port.js";
 
 /**
- * Default template pull: delete target subtree then copy from parent.
+ * Default template pull: replace session subtree from project template.
  */
 export class DefaultTemplatePullService implements TemplatePullService {
   constructor(private readonly conn: TdbcConnection) {}
-
-  async projectTemplatePull(projectId: string): Promise<void> {
-    await this.conn.transaction(async (tx) => {
-      const vfs = new SqliteVfsEntryRepository(tx);
-      const revisions = new SqliteVfsRevisionRepository(tx);
-      const worktree = new SqliteWorkplaceRepository(tx);
-      await replaceVfsSubtree(
-        vfs,
-        { scopeKey: "global" },
-        "/",
-        { scopeKey: `project:${projectId}` },
-        "/",
-        {
-          revisions,
-          contentStore: new SqliteVfsContentStore(tx),
-          // 隔离豁免：全局技能域不随模板同步镜像到 project，project 域已有技能也不被替换清除
-          excludePrefixes: ["meta/skills"],
-        },
-      );
-      await worktree.copyScope(
-        workplaceScopeKey({ kind: "global" }),
-        workplaceScopeKey({ kind: "project", projectId }),
-        (p) => p,
-      );
-    });
-    await runDeferredBlobGc(this.conn);
-  }
 
   async sessionTemplatePull(sessionId: string): Promise<void> {
     const sessions = new SqliteSessionRepository(this.conn);

@@ -32,7 +32,6 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
-import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import type { ProjectService } from "../project.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -179,13 +178,6 @@ export class DefaultProjectService implements ProjectService {
       }
     });
     await runDeferredBlobGc(this.deps.conn);
-  }
-
-  async pullTemplate(projectId: string): Promise<void> {
-    await this.get(projectId);
-    await new DefaultTemplatePullService(this.deps.conn).projectTemplatePull(
-      projectId,
-    );
   }
 
   /**
