@@ -26,6 +26,8 @@ export type ChatTabNavigationActions = {
   readonly backFromConversation: () => void;
   readonly showChatPanel: () => void;
   readonly closeSessionDrawer: () => void;
+  /** 返回键关闭 mermaid 全屏查看器（下发 closeMermaidViewer）。 */
+  readonly closeMermaidViewer: () => void;
   readonly closeProjectDrawer: () => void;
   readonly showSessionsPanel: () => void;
   readonly openDrawer: () => void;
@@ -117,6 +119,7 @@ export function ChatTabNavigationProvider({
       backFromConversation: ctx.scope.backFromConversation,
       showChatPanel: () => ctx.setConversationPanel('chat'),
       closeSessionDrawer: () => ctx.setSessionDrawerOpen(false),
+      closeMermaidViewer: ctx.closeMermaidViewer,
       closeProjectDrawer: () => ctx.scope.setProjectDrawerOpen(false),
       showSessionsPanel: () => ctx.scope.setSessionListPanel('sessions'),
       openDrawer: () => {

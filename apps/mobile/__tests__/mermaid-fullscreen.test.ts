@@ -124,6 +124,36 @@ describe('mermaid 全屏查看器 RN 返回键契约 (T-MF4)', () => {
     expect(richWeb).toContain("message.type === 'mermaidViewerOpened'");
     expect(richWeb).toContain("message.type === 'mermaidViewerClosed'");
   });
+
+  it('chat 链路把 mermaid viewer 开关态接到 useAndroidChatBackHandler（照 menu 同款模式）', () => {
+    // Provider：拦截态 + 下发信号 + 关闭回调（照 webMenuOpen/webMenuCloseSignal 先例）
+    const provider = rnSrc('screens/tabs/chat-tab/ChatTabProvider.tsx');
+    expect(provider).toContain('mermaidViewerOpen');
+    expect(provider).toContain('mermaidViewerCloseSignal');
+    expect(provider).toContain('closeMermaidViewer');
+
+    // ConversationPanel：两 props 从 context 下传到 ChatTranscriptWebView
+    const panel = rnSrc('screens/tabs/chat-tab/ChatConversationPanel.tsx');
+    expect(panel).toContain(
+      'mermaidViewerCloseSignal={mermaidViewerCloseSignal}',
+    );
+    expect(panel).toContain(
+      'onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}',
+    );
+
+    // NavigationProvider：closeMermaidViewer 转发（照 closeMessageMenu 先例）
+    const navProvider = rnSrc(
+      'screens/tabs/chat-tab/ChatTabNavigationProvider.tsx',
+    );
+    expect(navProvider).toContain('closeMermaidViewer: ctx.closeMermaidViewer');
+
+    // Screen：back state 拦截位 + 关闭动作接线
+    const screen = rnSrc('screens/tabs/ChatTabScreen.tsx');
+    expect(screen).toContain('mermaidViewerOpen: ctx.mermaidViewerOpen');
+    expect(screen).toContain(
+      'closeMermaidViewer: nav.actions.closeMermaidViewer',
+    );
+  });
 });
 
 describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
