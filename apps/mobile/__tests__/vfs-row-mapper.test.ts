@@ -5,12 +5,31 @@ import {
   mapVfsListEntry,
   mapWorktreeRow,
   patchDirRuleRow,
+  pathWithLabels,
   remapDirectChildRows,
   type MappedVfsRow,
 } from '../src/components/vfs/vfs-row-mapper';
 import { type WorkplaceListRow } from '@novel-master/core/workplace';
 
 describe('vfs-row-mapper', () => {
+  describe('pathWithLabels（面包屑逐段替换）', () => {
+    it('项目/会话段用缓存名替换，未命中的段回退原文', () => {
+      const cache = new Map([
+        ['/projects/p1', '我的小说'],
+        ['/projects/p1/sessions/s9', '第三章草稿'],
+      ]);
+      expect(
+        pathWithLabels('/projects/p1/sessions/s9/chapter.md', cache),
+      ).toBe('/projects/我的小说/sessions/第三章草稿/chapter.md');
+    });
+
+    it('无缓存时原样返回；根路径返回 /', () => {
+      expect(pathWithLabels('/projects/p1/sessions', new Map())).toBe(
+        '/projects/p1/sessions',
+      );
+      expect(pathWithLabels('/', new Map())).toBe('/');
+    });
+  });
   const dirRow: WorkplaceListRow = {
     kind: 'dir',
     path: '/shared',

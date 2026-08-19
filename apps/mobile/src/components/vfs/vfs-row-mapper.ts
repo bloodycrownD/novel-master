@@ -53,6 +53,32 @@ export function entryName(path: string): string {
   return path.slice(idx + 1);
 }
 
+/**
+ * 面包屑展示：用缓存的名字逐段替换路径中的段（如项目/会话 UUID → 名称）。
+ *
+ * @remarks labelByPath 由导航过程中每次 list 的合成目录行携带（label 字段），
+ * 查不到的段回退原文；只影响展示，不改导航与逻辑路径。
+ */
+export function pathWithLabels(
+  path: string,
+  labelByPath: ReadonlyMap<string, string>,
+): string {
+  if (path === '/') {
+    return '/';
+  }
+  const segments = path.split('/');
+  let acc = '';
+  return segments
+    .map((seg, i) => {
+      if (i === 0) {
+        return '';
+      }
+      acc = `${acc}/${seg}`;
+      return labelByPath.get(acc) ?? seg;
+    })
+    .join('/');
+}
+
 /** Count file rows whose parent directory is `dirPath`. */
 export function countFilesInDir(
   rows: readonly WorkplaceListRow[],

@@ -50,6 +50,7 @@ import {
   mapWorktreeRow,
   parentLogicalPath,
   patchDirRuleRow,
+  pathWithLabels,
   remapDirectChildRows,
   type MappedVfsRow,
 } from './vfs-row-mapper';
@@ -284,6 +285,9 @@ export const VfsFileManager = forwardRef<
   const workplaceRef = useRef(workplace);
   const scopeRef = useRef(scope);
   const reloadInFlightRef = useRef(false);
+  // 面包屑名字缓存：导航中每次 list 的合成目录行携带 label（项目名/会话名），
+// 逐段累积，供顶栏路径展示替换 UUID；只影响展示，不参与导航。
+  const labelByPathRef = useRef(new Map<string, string>());
   vfsRef.current = vfs;
   workplaceRef.current = workplace;
   scopeRef.current = scope;
@@ -323,6 +327,12 @@ export const VfsFileManager = forwardRef<
         fetchWorktreeRows(),
         worktreeSvc?.getDirRule(currentPath) ?? Promise.resolve(null),
       ]);
+      // 面包屑名字缓存：记录带 label 的合成目录行（项目/会话名）。
+      for (const entry of listEntries) {
+        if (entry.label != null) {
+          labelByPathRef.current.set(entry.path, entry.label);
+        }
+      }
       setWorktreeRows(allRows);
       const metaByPath = new Map<string, WorkplaceListRow>();
       for (const row of allRows) {
@@ -1081,7 +1091,9 @@ export const VfsFileManager = forwardRef<
             numberOfLines={1}
             ellipsizeMode="middle"
           >
-            {pathLabel ? pathLabel(currentPath) : currentPath}
+            {pathLabel
+              ? pathLabel(currentPath)
+              : pathWithLabels(currentPath, labelByPathRef.current)}
           </Text>
         </View>
         <View style={styles.toolbarActions}>
