@@ -6,6 +6,22 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
 .row.user { align-items: flex-end; }
 .row.assistant, .row.stream, .row.tool { align-items: flex-start; }
 .bubble { position: relative; max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
+
+/* 用户气泡内 `@路径` / `$技能` 引用胶囊（与 composer tag 视觉对齐） */
+.ref-token {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 999px;
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--primary, #007aff);
+  font-weight: 600;
+}
+@supports (background: color-mix(in srgb, red 10%, transparent)) {
+  .ref-token {
+    background: color-mix(in srgb, var(--primary, #007aff) 12%, transparent);
+  }
+}
 /* 消息顶行：角色标签 + ⋯（对齐 Desktop；占一行、正文全宽） */
 .message-menu-row {
   display: flex;
