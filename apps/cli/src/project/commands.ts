@@ -6,7 +6,6 @@
 
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveProjectUseId } from "../config/resolve-entity.js";
-import { runProjectTemplate } from "./template.js";
 import { runProjectWorkplace } from "./workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
@@ -73,17 +72,9 @@ export async function runProject(
     case "workplace":
       await runProjectWorkplace(rt, args);
       return;
-    case "template": {
-      const templateSub = args[0];
-      if (templateSub == null) {
-        throw new Error("Usage: nm project template pull ...");
-      }
-      await runProjectTemplate(rt, templateSub, args.slice(1));
-      return;
-    }
     default:
       throw new Error(
-        "Usage: nm project <list|create|use|current|delete|copy|vfs|workplace|template> ...",
+        "Usage: nm project <list|create|use|current|delete|copy|vfs|workplace> ...",
       );
   }
 }
