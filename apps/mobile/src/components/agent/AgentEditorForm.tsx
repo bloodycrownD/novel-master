@@ -915,8 +915,8 @@ export function AgentEditorForm(props: Props) {
             style={[
               styles.chatSlotCard,
               {
-                backgroundColor: tokens.background,
-                borderColor: tokens.borderLight,
+                backgroundColor: tokens.surface,
+                borderColor: tokens.border,
                 borderLeftColor: tokens.primary,
               },
             ]}
@@ -1161,8 +1161,8 @@ export function AgentEditorForm(props: Props) {
             style={[
               styles.chatSlotCard,
               {
-                backgroundColor: tokens.background,
-                borderColor: tokens.borderLight,
+                backgroundColor: tokens.surface,
+                borderColor: tokens.border,
                 borderLeftColor: tokens.primary,
               },
             ]}
@@ -1409,11 +1409,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   chatSlotCard: {
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderLeftWidth: 3,
-    borderRadius: 12,
-    padding: 14,
-    gap: 6,
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
   },
   chatSlotHeader: {
     flexDirection: 'row',
