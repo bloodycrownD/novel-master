@@ -1,8 +1,8 @@
 ---
-date: 2026-08-20 00:40
-title: 迭代后续反馈：mermaid 全屏缩放、查询页卡片化重设计、migration 清理探索
-keywords: mermaid全屏, pinch缩放, 查询页重设计, 可折叠表单, migration清理, 基线, chat-improvements
-abstract: 用户真机验证 mermaid 渲染成功后提两条新需求（图表全屏+放大、查询页改可折叠卡片式表单），另要求探索「10 个 tag 以前的 migration 清理」。探索结论：全屏通路现成缺 pinch 先例；mobile 长消息折叠其实已有、真正缺的是可折叠表单；migration 在 v1.4.22 已清过一轮（6 条出注册表），现存 5 条全在 10 tag 窗口内，再清需抬最低基线。
+date: 2026-08-20 02:30
+title: mermaid 全屏与查询页卡片化：开发 DAG 完成，dev-ready 待真机验收
+keywords: mermaid全屏, pinch缩放, 查询页重设计, 可折叠表单, code-dev-loop, dev-ready, chat-improvements-integration
+abstract: mermaid 全屏查看器与双端查询页折叠卡片化两个迭代经 code-dev-loop 完成（wave-0 双 impl 并行 → fix 补 chat 返回键接线 → 双 verify → 双 cr-func 均 func-ready），11 笔提交落在 feat/chat-improvements-integration（HEAD 7fcd0d8）；测试全绿、三条红线零触碰；剩余 manual_user 真机验收。
 ---
 
 user:
@@ -33,3 +33,12 @@ assistant:
 - **mermaid-fullscreen-viewer/spec.md**：共享模块 `web/shared/mermaid-fullscreen/`（runtime+Preact 组件+样式），document 级事件委托 `closest('.mermaid-block__chart')`（失败态天然不匹配），克隆 SVG 不动原图；手势纯函数放 webview-host（照 menu-overlay-guards 样板 Jest 直测），手势中写 transform 不 setState；返回键照 menuOpened/Closed 对称消息模式（chat 接 useAndroidChatBackHandler、rich 在组件内自注册判 isFocused）。红线：不动 snapshot.ts 5 处调用、stream.ts 不得出现 mermaid 字样、mermaid-core 既有语句不删。Step 1-7，T-MF1-6。
 - **chat-search-collapsible-form/spec.md**：mobile 收起采「卸载输入框」方案，**T-MO3 翻页用例需同步适配**（改输入前先点卡片头展开）——这是探索发现的最大冲突点；自动收起条件必须带 `batch.length > 0`（现状空结果也算成功）；RN mock 需补 Keyboard。desktop MessageList 加默认关闭的 collapsibleMessageBody prop（ConversationPanel 零感知），line-clamp 无先例可新写；三个源码正则锁定字符串保留即过。Step 1-5，T-CF1-6。
 状态：两份 spec 待用户确认后走实现。
+
+user:
+开发吧（code-dev-loop）。
+
+assistant:
+DAG 收敛完成（dag_version 2，wave-0 双 impl 并行 → not-ready 插 fix 补 chat 返回键接线 → wave-2 双 verify → wave-3 双 cr-func，均 func-ready、无 must-fix）：
+- **mermaid 全屏**（8 笔）：手势纯函数（pinch 1x~6x clamp、双击 300ms 防抖、pan 以视口为基准）→ 共享三件套 web/shared/mermaid-fullscreen（事件委托+克隆 SVG+transform 不 setState）→ 两管线 portal 接线 → Android 返回键（chat 接 dismissAllOverlays 并入、rich 自注册判 isFocused；fix 节点补上 Provider→Panel→Screen 接线，7fcd0d8）→ 样式独立占位 __MERMAID_FULLSCREEN_CSS__ 注入两包。验证：mermaid-fullscreen 12/12、mermaid-webview 9/9 红线全绿、menu 系 25/25、typecheck 干净；三条红线（snapshot 5 处/stream 无 mermaid/mermaid-core 零改）独立复核零触碰。范围外必要改动（均已判合理）：build-webview.mjs 泛化 loadWebModule、tsconfig exclude 照 shared/ui 先例、jest transform 白名单加 @react-navigation、三个既有测试补 mock。非阻塞观察：RichDocumentWebView 的 mermaidViewerOpenRef 若 WebView 被杀重建会残留 true（边缘场景，webReady 重置时顺带清 ref 可修）。
+- **折叠表单**（3 笔）：mobile 折叠卡片（deriveFilterSummary 从 state 派生、收起条件 !append && batch.length > 0）；desktop filter-card（button+aria-expanded、T-CF5 显式 doesNotMatch(<details)）+ MessageList collapsibleMessageBody 默认 false 零感知。验证：mobile 13/13（T-CF1-4 + T-MO2/MO3/KB4 不破）、desktop 21/21、双端 typecheck 零错。
+HEAD 7fcd0d8，剩余：mf Step7 真机 + cf Step5 双端手动验收；存量孤儿测试 use-chat-tab-message-actions-unhide 3 例仍失败（与本次无关）。
