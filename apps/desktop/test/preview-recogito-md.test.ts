@@ -87,9 +87,10 @@ describe("T-RG2 Desktop 退役插锚 / 搜字主路径", () => {
     assert.match(mermaid, /from "react-markdown"/);
     assert.match(mermaid, /remarkGfm/);
     assert.match(mermaid, /remarkPlugins=\{\[remarkGfm\]\}/);
-    // T-MD4：MessageList 两处（MessageBody + 流式尾）均用共享组件
+    // T-MD4：MessageList 两处（MessageBody + 流式尾）均用共享组件（matchAll 计数钉死两处）
     const messageList = readFileSync(messageListPath, "utf8");
-    assert.match(messageList, /MermaidMarkdown/);
+    const mermaidUsages = messageList.match(/<MermaidMarkdown /g) ?? [];
+    assert.equal(mermaidUsages.length, 2, `期望两处 MermaidMarkdown，实际 ${mermaidUsages.length} 处`);
     assert.doesNotMatch(messageList, /from "react-markdown"|from 'react-markdown'/);
   });
 
