@@ -1,5 +1,14 @@
 # 2026-08-19 global-fs-manager 迭代执行（多轮）
 
+## 2026-08-19 终态：code-dev-loop dev-ready（主代理收尾汇总）
+
+- DAG（3 版）：wave-0 impl-s1 → verify(main) → wave-2 [impl-s2s4-core ∥ impl-s3-clients] → verify(main)+cr-func-s1-s4(func-ready) → wave-5 [fix-sr3-blob ∥ impl-s5 ∥ impl-s6] → cr-func-s5-s6(func-ready) → s7 文案，executor: main。
+- 结果：spec 8 步中 1-7 全闭合，Step 8 真机走查留用户；blocking 测试 T-SR1/2/3、T-PR1/2/3、T-PB1/2/3/4 全绿；core 2029 pass；T-PR3 全仓 grep 零命中；schema 零 diff、SCHEMA_BOOT_VERSION=7 未动。
+- 主代理修复：resolve-vfs-scope 重复 case "session" 死代码（impl-s1 手误，2898f49）；Step 7 文案（17ad044：README 流程、monorepo 删 pull 命令行、ProfileTab 入口「文件浏览器」、spec 下拉刷新措辞对齐）。
+- 记录级偏差（不阻塞）：desktop physical list 为 BFS 一次拉全树（非逐层懒加载，单机可接受观察项）；T-SR3 orphan SQL 只反查 vfs_revision（比声称范围窄，方向假阳性非假阴性）。
+- 已知预存问题（非本送代）：CLI e2e T2/T6 基线即败（agent registry 校验根因）；mobile tsconfig.build.json baseUrl 弃用告警需 --ignoreDeprecations 6.0；worktree 借主仓 node_modules 缺 markdown-it 致 chat-tab-screen.integration 无法启动；desktop 全量 4 fail 为 dist 构建产物缺失。
+- 分支 feat/global-fs-manager（worktree .woktree/global-fs），基于 feat/skills-integration@5f8aba0，未合未 push。
+
 ## 2026-08-19 第 4 轮：impl-s6-desktop（Step 6）
 
 - 节点：impl-s6-desktop，worktree `.woktree/global-fs`，分支 `feat/global-fs-manager`，基线 2898f49。
