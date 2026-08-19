@@ -449,7 +449,9 @@ export function FileMarkdownPreview({
   // plain/文本 Tab：禁用批注（无 WebView annotate / 无 Recogito / 无菜单）
   if (renderKind === 'txt') {
     const plain = (
-      <Text style={[styles.plain, {color: tokens.text}]}>{content}</Text>
+      <Text selectable style={[styles.plain, {color: tokens.text}]}>
+        {content}
+      </Text>
     );
     return (
       <PreviewScrollWrap previewFill={previewFill}>{plain}</PreviewScrollWrap>
