@@ -19,6 +19,15 @@ export function resolveVfsScopeFromRequest(req: VfsScopeRequest): VfsScope {
   switch (req.workspaceScope) {
     case "global":
       return { kind: "global" };
+    case "global-meta":
+      // 技能存储重定位后的全局 meta 域（逻辑前缀 /meta/skills/）
+      return { kind: "global-meta" };
+    case "project-meta":
+      if (req.projectId == null || req.projectId === "") {
+        throw new VfsScopeError("缺少 projectId");
+      }
+      return { kind: "project-meta", projectId: req.projectId };
+    case "session":
     case "session":
       if (req.projectId == null || req.projectId === "") {
         throw new VfsScopeError("缺少 projectId");
@@ -48,6 +57,10 @@ export function getVfsForScope(
   switch (scope.kind) {
     case "global":
       return rt.globalVfs();
+    case "global-meta":
+      return rt.globalMetaVfs();
+    case "project-meta":
+      return rt.projectMetaVfs(scope.projectId);
     case "project":
       return rt.projectVfs(scope.projectId);
     case "session":

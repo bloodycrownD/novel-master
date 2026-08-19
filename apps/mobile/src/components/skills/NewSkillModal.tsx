@@ -214,10 +214,11 @@ export function NewSkillModal({
       if (imported != null) {
         // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
+        // 技能已重定位到独立 meta 域，导入 scope 取 meta 域。
         const scope: VfsScope =
           domain === 'global'
-            ? {kind: 'global'}
-            : {kind: 'project', projectId: projectId!};
+            ? {kind: 'global-meta'}
+            : {kind: 'project-meta', projectId: projectId!};
         const zipSvc = createVfsZipIoService(runtime.conn);
         await zipSvc.import(scope, imported.bytes, {
           confirmed: true,

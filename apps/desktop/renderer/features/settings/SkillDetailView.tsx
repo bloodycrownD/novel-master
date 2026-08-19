@@ -204,10 +204,10 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
       showToast("SKILL.md 是保留入口文件，不可删除。");
       return;
     }
-    // 技能文件 = VFS 文件（逻辑路径 /meta/skills/{name}/{rel}，两域 scope 均可定位）；
+    // 技能文件 = VFS 文件（逻辑路径 /meta/skills/{name}/{rel}，已重定位到 meta 域）；
     // core SkillService 暂无单文件删除端口，这里复用 VFS delete（与技能写入同存储）。
     const res = await ipcVfsDelete({
-      workspaceScope: domain === "global" ? "global" : "session",
+      workspaceScope: domain === "global" ? "global-meta" : "project-meta",
       ...(domain === "project" ? { projectId: ref?.projectId } : {}),
       path: `/meta/skills/${ref?.name ?? ""}/${path}`,
     });

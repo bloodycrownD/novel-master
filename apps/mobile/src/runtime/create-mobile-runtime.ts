@@ -141,6 +141,9 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       createScopedVfsService(conn, { kind: 'project', projectId }),
     sessionVfs: (projectId, sessionId) =>
       createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
+    globalMetaVfs: () => createScopedVfsService(conn, { kind: 'global-meta' }),
+    projectMetaVfs: projectId =>
+      createScopedVfsService(conn, { kind: 'project-meta', projectId }),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
     skills: () => createSkillsService(conn),
     secretStore,

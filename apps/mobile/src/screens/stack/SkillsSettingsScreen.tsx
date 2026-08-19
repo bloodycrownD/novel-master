@@ -193,8 +193,8 @@ export function SkillsSettingsScreen() {
 
   const zipScopeFor = (skill: SkillRow): VfsScope =>
     skill.domain === 'global'
-      ? {kind: 'global'}
-      : {kind: 'project', projectId: skill.projectId!};
+      ? {kind: 'global-meta'}
+      : {kind: 'project-meta', projectId: skill.projectId!};
 
   const runSkillZipExport = async (skill: SkillRow) => {
     if (zipBusy) {

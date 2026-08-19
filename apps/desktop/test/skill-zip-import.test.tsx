@@ -56,7 +56,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
 
   it("项目域整包导入：SKILL.md 与附属文件均落盘", async () => {
     const res = await handleVfsZipImportBytes({
-      workspaceScope: "session",
+      workspaceScope: "project-meta",
       projectId,
       bytes: skillZipBytes("zip-skill", "来自 zip 的技能"),
       confirmed: true,
@@ -98,7 +98,7 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
 
   it("全局域整包导入：落入全局技能目录", async () => {
     const res = await handleVfsZipImportBytes({
-      workspaceScope: "global",
+      workspaceScope: "global-meta",
       bytes: skillZipBytes("zip-global-skill", "全局 zip 技能"),
       confirmed: true,
       directoryPath: "/meta/skills/zip-global-skill",
@@ -116,9 +116,9 @@ describe("VFS zipImportBytes handler（技能整包落盘）", () => {
     );
   });
 
-  it("非 zip 字节拒绝（VfsZipError 落 name 兜底路径，message 含 not a ZIP）", async () => {
+  it("非 zip 字节拒绝（VfsZipError 落 name 兕底路径，message 含 not a ZIP）", async () => {
     const res = await handleVfsZipImportBytes({
-      workspaceScope: "global",
+      workspaceScope: "global-meta",
       bytes: new Uint8Array([0x01, 0x02, 0x03, 0x04]),
       confirmed: true,
       directoryPath: "/meta/skills/bad",

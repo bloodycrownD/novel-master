@@ -23,6 +23,12 @@ function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
   if (scope.kind === 'global') {
     return `vfs-global${pathSuffix}.zip`;
   }
+  if (scope.kind === 'global-meta') {
+    return `vfs-global-meta${pathSuffix}.zip`;
+  }
+  if (scope.kind === 'project-meta') {
+    return `vfs-project-${scope.projectId}-meta${pathSuffix}.zip`;
+  }
   if (scope.kind === 'project') {
     return `vfs-project-${scope.projectId}${pathSuffix}.zip`;
   }

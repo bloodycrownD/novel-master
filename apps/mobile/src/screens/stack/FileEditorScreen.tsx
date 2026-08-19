@@ -119,17 +119,17 @@ export function FileEditorScreen() {
         }
         return runtime.sessionVfs(projectId, sessionId);
       case 'skill':
-        // 技能域 VFS 与普通两域同源，仅路由 path 锚定 /meta/skills/{name}/ 前缀
+        // 技能已重定位到独立 meta 域，路由 path 仍锚定 /meta/skills/{name}/ 前缀
         if (!skillRef) {
           throw new Error('缺少 skillRef');
         }
         if (skillRef.domain === 'global') {
-          return runtime.globalVfs();
+          return runtime.globalMetaVfs();
         }
         if (!skillRef.projectId) {
           throw new Error('项目域技能缺少 projectId');
         }
-        return runtime.projectVfs(skillRef.projectId);
+        return runtime.projectMetaVfs(skillRef.projectId);
     }
   }, [runtime, scopeKind, projectId, sessionId, skillRef]);
 

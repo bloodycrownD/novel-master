@@ -70,6 +70,9 @@ export interface MobileNovelMasterRuntime {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
+  /** meta 域（技能存储）：global:meta / project:{pid}:meta。 */
+  globalMetaVfs(): VfsService;
+  projectMetaVfs(projectId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
   /** 两域技能服务（清单 / 合并视图 / 读写 / 启停 / 复制删除）。 */
   skills(): SkillService;

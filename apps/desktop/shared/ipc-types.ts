@@ -403,7 +403,12 @@ export type AppOpenExternalRequest = {
 };
 
 /** Workspace panel scope for VFS IPC (maps chat nav → VFS domain). */
-export type WorkspacePanelScope = 'global' | 'session' | 'chat';
+export type WorkspacePanelScope =
+  | 'global'
+  | 'session'
+  | 'chat'
+  | 'global-meta'
+  | 'project-meta';
 
 export type VfsScopeRequest = {
   readonly workspaceScope: WorkspacePanelScope;

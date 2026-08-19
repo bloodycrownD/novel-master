@@ -104,15 +104,16 @@ export function SkillDetailScreen() {
 
   const skillRoot = `/meta/skills/${name}`;
   // 技能域直接复用 VfsFileManager（workplace 不传，纳入/目录规则菜单自动隐藏）。
+  // 技能已重定位到独立 meta 域，这里取 meta 域 vfs/scope（逻辑路径 /meta/skills 不变）。
   // SKILL.md 是技能入口，拦截删除/重命名/移动，其余文件全功能开放（含新建目录）。
   const fileScope: VfsScope =
     domain === 'global'
-      ? {kind: 'global'}
-      : {kind: 'project', projectId: projectId!};
+      ? {kind: 'global-meta'}
+      : {kind: 'project-meta', projectId: projectId!};
   const fileVfs =
     domain === 'global'
-      ? runtime.globalVfs()
-      : runtime.projectVfs(projectId!);
+      ? runtime.globalMetaVfs()
+      : runtime.projectMetaVfs(projectId!);
 
   const openFile = useCallback(
     (fullPath: string) => {

@@ -136,6 +136,9 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
         projectId,
         sessionId,
       }),
+    globalMetaVfs: () => createScopedVfsService(conn, { kind: "global-meta" }),
+    projectMetaVfs: (projectId) =>
+      createScopedVfsService(conn, { kind: "project-meta", projectId }),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
     skills: () => createSkillsService(conn),
     secretStore,

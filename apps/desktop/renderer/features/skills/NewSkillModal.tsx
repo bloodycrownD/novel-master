@@ -146,8 +146,10 @@ export function NewSkillModal({
       if (imported != null) {
         // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
+        // 技能已重定位到独立 meta 域，导入走 meta 域 workspaceScope。
         const importRes = await ipcVfsZipImportBytes({
-          workspaceScope: domain === "global" ? "global" : "session",
+          workspaceScope:
+            domain === "global" ? "global-meta" : "project-meta",
           ...(domain === "project" ? { projectId } : {}),
           bytes: imported.bytes,
           confirmed: true,
