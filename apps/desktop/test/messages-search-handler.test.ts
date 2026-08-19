@@ -1,5 +1,5 @@
 /**
- * 聊天记录查询 IPC handler 测试（T-DI1 ~ T-DI6）。
+ * 聊天记录查询 IPC handler 测试（T-DI1 ~ T-DI7）。
  *
  * 直接调 handleMessagesSearch（不走 IPC bridge），用真实 sqlite 验证
  * handler 对 core searchMessages 的透传、字段完整性、翻页与错误转换。
@@ -204,6 +204,44 @@ describe('handleMessagesSearch', () => {
     } finally {
       (rt.messages as unknown as { searchMessages: unknown }).searchMessages =
         original;
+    }
+  });
+
+  it('T-DI7: 请求带 fromSeq/toSeq 时透传到 core 并影响结果', async () => {
+    const sessionId = await createSession('di7');
+    for (let i = 1; i <= 6; i++) {
+      await appendMessage(sessionId, 'user', `range message ${i}`);
+    }
+
+    // 闭区间 2-4：应只返回 seq 2/3/4，按 seq 倒序。
+    const result = await handleMessagesSearch({
+      sessionId,
+      keyword: '',
+      limit: 50,
+      fromSeq: 2,
+      toSeq: 4,
+    });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.deepEqual(
+        result.data.map((dto) => dto.seq),
+        [4, 3, 2],
+      );
+    }
+
+    // 仅 fromSeq=5：返回 seq >= 5。
+    const fromOnly = await handleMessagesSearch({
+      sessionId,
+      keyword: '',
+      limit: 50,
+      fromSeq: 5,
+    });
+    assert.equal(fromOnly.ok, true);
+    if (fromOnly.ok) {
+      assert.deepEqual(
+        fromOnly.data.map((dto) => dto.seq),
+        [6, 5],
+      );
     }
   });
 });
