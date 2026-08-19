@@ -4,7 +4,11 @@ import type {
   WorkplaceListRowDto,
   WorkspacePanelScope,
 } from "@shared/ipc-types";
-import { ipcWorkplaceBuildListRows, vfsScope } from "@/ipc/client";
+import {
+  ipcPhysicalList,
+  ipcWorkplaceBuildListRows,
+  vfsScope,
+} from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import type { WorkspaceContextTarget } from "./workspace-context";
@@ -80,10 +84,15 @@ export function WorkspaceTree({
     [panelScope, projectId, workspaceSessionId],
   );
 
+  // physical 面板只读：数据源换物理树（跨域拼接视图），不依赖 projectId/sessionId
+  const isPhysical = panelScope === "physical";
+
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await ipcWorkplaceBuildListRows(req);
+      const result = isPhysical
+        ? await ipcPhysicalList({ path: "/" })
+        : await ipcWorkplaceBuildListRows(req);
       if (result.ok) {
         setRows(result.data);
         onRowsLoaded?.(result.data);
@@ -98,7 +107,7 @@ export function WorkspaceTree({
     } finally {
       setLoading(false);
     }
-  }, [req, onRowsLoaded]);
+  }, [isPhysical, req, onRowsLoaded]);
 
   useEffect(() => {
     void reload();
@@ -187,15 +196,21 @@ export function WorkspaceTree({
 
   const handleRowPointerDown = useCallback(
     (e: React.PointerEvent, row: WorkplaceListRowDto) => {
+      if (isPhysical) {
+        return;
+      }
       e.stopPropagation();
       // 失败时 prefetchExportStage 内部已 toast
       void prefetchExportStage({ scope: req, logicalPath: row.path });
     },
-    [req],
+    [isPhysical, req],
   );
 
   const handleRowDragStart = useCallback(
     (e: React.DragEvent, row: WorkplaceListRowDto) => {
+      if (isPhysical) {
+        return;
+      }
       try {
         e.dataTransfer.setData(
           NM_VFS_PATHS_MIME,
@@ -211,7 +226,7 @@ export function WorkspaceTree({
         dragEvent: e.nativeEvent,
       });
     },
-    [],
+    [isPhysical],
   );
 
   if (loading) {
@@ -245,7 +260,7 @@ export function WorkspaceTree({
               style={{ paddingLeft: `${10 + depth * 14}px` }}
               role="button"
               tabIndex={0}
-              draggable
+              draggable={!isPhysical}
               aria-expanded={isDir ? expanded : undefined}
               onPointerDown={(e) => handleRowPointerDown(e, row)}
               onDragStart={(e) => handleRowDragStart(e, row)}
@@ -253,9 +268,19 @@ export function WorkspaceTree({
                 finalizeRowDrag(row.path);
                 setDropHighlight(null);
               }}
-              onDragOver={(e) => handleRowDragOver(e, row)}
+              onDragOver={(e) => {
+                if (isPhysical) {
+                  return;
+                }
+                handleRowDragOver(e, row);
+              }}
               onDragLeave={() => setDropHighlight(null)}
-              onDrop={(e) => void handleRowDrop(e, row)}
+              onDrop={(e) => {
+                if (isPhysical) {
+                  return;
+                }
+                void handleRowDrop(e, row);
+              }}
               onClick={() => {
                 if (isDir) {
                   toggleDir(row.path);
@@ -264,6 +289,10 @@ export function WorkspaceTree({
                 selectPreviewFile(panelScope, row.path);
               }}
               onContextMenu={(e) => {
+                if (isPhysical) {
+                  // 只读浏览：不弹任何写操作菜单
+                  return;
+                }
                 e.preventDefault();
                 e.stopPropagation();
                 onOpenContextMenu({
@@ -294,7 +323,9 @@ export function WorkspaceTree({
               </span>
               <span className="tree-node__icon">{isDir ? "📁" : "📄"}</span>
               <span className="tree-node__label">{entryName(row.path)}</span>
-              <span className="tree-node__meta">{vfsEntryStatusText(row)}</span>
+              <span className="tree-node__meta">
+                {isPhysical ? "" : vfsEntryStatusText(row)}
+              </span>
             </div>
           );
         })

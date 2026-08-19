@@ -235,7 +235,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const [workspaceScope, setWorkspaceScope] =
 
-    useState<WorkspaceScope>("global");
+    useState<WorkspaceScope>("physical");
 
   const [projectId, setProjectId] = useState<string | undefined>();
 

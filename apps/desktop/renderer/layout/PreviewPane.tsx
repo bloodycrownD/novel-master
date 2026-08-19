@@ -16,7 +16,12 @@ import "@recogito/text-annotator/text-annotator.css";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { CodeEditor } from "../components/ui/CodeEditor";
-import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
+import {
+  ipcPhysicalRead,
+  ipcVfsRead,
+  ipcVfsWrite,
+  vfsScope,
+} from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
 import { formatVfsErrorForUser, type VfsScope } from "@shared/logic/vfs";
 import type { AnnotateDraft } from "@shared/logic/chat";
@@ -96,6 +101,9 @@ export function PreviewPane() {
       ? shouldRenderMarkdownPreview(previewFile.path, content)
       : false;
 
+  // physical 面板只读预览：无编辑模式、无保存，仅读内容展示
+  const physicalReadOnly = previewFile?.workspaceScope === "physical";
+
   const annotateEnabled = isPreviewAnnotateEnabled(
     mode,
     previewFile?.workspaceScope,
@@ -135,14 +143,16 @@ export function PreviewPane() {
     setLoading(true);
     setFileMissing(false);
     try {
-      const result = await ipcVfsRead({
-        ...vfsScope(
-          previewFile.workspaceScope,
-          projectId,
-          sessionId,
-        ),
-        path: previewFile.path,
-      });
+      const result = physicalReadOnly
+        ? await ipcPhysicalRead({ path: previewFile.path })
+        : await ipcVfsRead({
+            ...vfsScope(
+              previewFile.workspaceScope,
+              projectId,
+              sessionId,
+            ),
+            path: previewFile.path,
+          });
       if (result.ok) {
         setContent(result.data.content);
         setSavedContent(result.data.content);
@@ -154,7 +164,7 @@ export function PreviewPane() {
     } finally {
       setLoading(false);
     }
-  }, [previewFile, projectId, sessionId]);
+  }, [previewFile, projectId, sessionId, physicalReadOnly]);
 
   useEffect(() => {
     void loadFile();
@@ -357,15 +367,17 @@ export function PreviewPane() {
       <header className="column-header" id="preview-header" aria-label="文件预览">
         <PreviewEditorTabs />
         <div className="column-header__actions">
-          <SegmentedControl
-            aria-label="预览模式"
-            value={mode}
-            options={[
-              { value: "read", label: "预览" },
-              { value: "edit", label: "编辑" },
-            ]}
-            onChange={setMode}
-          />
+          {physicalReadOnly ? null : (
+            <SegmentedControl
+              aria-label="预览模式"
+              value={mode}
+              options={[
+                { value: "read", label: "预览" },
+                { value: "edit", label: "编辑" },
+              ]}
+              onChange={setMode}
+            />
+          )}
           {previewFile && mode === "edit" && !showMissing ? (
             <Button
               variant="primary"
