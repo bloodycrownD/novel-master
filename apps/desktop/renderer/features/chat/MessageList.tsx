@@ -1,5 +1,4 @@
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { MermaidMarkdown } from '../../components/MermaidMarkdown';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import { buildChatListItems } from './message-blocks';
 import { ToolCallGroupCard } from './ToolCallGroupCard';
@@ -43,7 +42,7 @@ function MessageBody({
   if (richText || alwaysRichText) {
     return (
       <div className="chat-message__markdown">
-        <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+        <MermaidMarkdown content={text} />
       </div>
     );
   }
@@ -166,7 +165,7 @@ export function MessageList({
             ) : null}
             {streamingText ? (
               <div className="chat-message__markdown">
-                <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
+                <MermaidMarkdown content={streamingText} />
               </div>
             ) : null}
             {uiRunning ? (
