@@ -5,8 +5,9 @@
  * `MessageList` 渲染命中消息（包含隐藏消息，靠 MessageList 自带的
  * hidden 角标 + dimmed 区分，不再叠加 hiddenFilter）。
  *
- * 查询只保留关键词（大小写不敏感，由 core 统一处理），支持 beforeSeq
- * 翻页。搜索基于原始文本，不套 regex-apply。
+ * 查询支持关键词（大小写不敏感，由 core 统一处理）、seq 编号区间
+ * （fromSeq/toSeq 闭区间，可只填一端）与 beforeSeq 翻页。搜索基于原始文本，
+ * 不套 regex-apply。
  */
 import { useCallback, useMemo, useState } from 'react';
 import type { ChatMessageDto } from '@shared/ipc-types';
@@ -21,12 +22,24 @@ interface ChatHistorySearchPanelProps {
 
 const SEARCH_LIMIT = 50;
 
+/** 归一编号输入：空串 / 非数字统一归一为 undefined（该侧不设限）。 */
+function normalizeSeqInput(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 export function ChatHistorySearchPanel({
   projectId: _projectId,
   sessionId,
   onClose,
 }: ChatHistorySearchPanelProps) {
   const [keyword, setKeyword] = useState('');
+  const [fromSeqText, setFromSeqText] = useState('');
+  const [toSeqText, setToSeqText] = useState('');
 
   const [results, setResults] = useState<ChatMessageDto[]>([]);
   const [loading, setLoading] = useState(false);
@@ -47,6 +60,13 @@ export function ChatHistorySearchPanel({
 
   const runQuery = useCallback(
     async (opts?: { beforeSeq?: number; append?: boolean }) => {
+      const fromSeq = normalizeSeqInput(fromSeqText);
+      const toSeq = normalizeSeqInput(toSeqText);
+      // 倒挂区间不发请求，给行内提示（PRD 验收 #6）。
+      if (fromSeq != null && toSeq != null && fromSeq > toSeq) {
+        setError('编号区间无效：起始编号不能大于截止编号');
+        return;
+      }
       const append = opts?.append ?? false;
       if (append) {
         setLoadingMore(true);
@@ -62,6 +82,8 @@ export function ChatHistorySearchPanel({
           keyword: keyword.trim() || undefined,
           limit: SEARCH_LIMIT,
           beforeSeq: opts?.beforeSeq,
+          fromSeq,
+          toSeq,
         });
         if (!result.ok) {
           setError(result.error ?? '查询失败');
@@ -91,7 +113,7 @@ export function ChatHistorySearchPanel({
         }
       }
     },
-    [sessionId, keyword],
+    [sessionId, keyword, fromSeqText, toSeqText],
   );
 
   const onSubmit = useCallback(
@@ -142,6 +164,26 @@ export function ChatHistorySearchPanel({
           >
             {loading ? '查询中…' : '查询'}
           </button>
+        </div>
+        <div className="chat-history-search__input-row">
+          <input
+            type="text"
+            inputMode="numeric"
+            className="chat-history-search__keyword"
+            data-session-detail-action="search-history-from-seq"
+            placeholder="起始编号，留空不限"
+            value={fromSeqText}
+            onChange={(e) => setFromSeqText(e.target.value)}
+          />
+          <input
+            type="text"
+            inputMode="numeric"
+            className="chat-history-search__keyword"
+            data-session-detail-action="search-history-to-seq"
+            placeholder="截止编号，留空不限"
+            value={toSeqText}
+            onChange={(e) => setToSeqText(e.target.value)}
+          />
         </div>
       </form>
 
