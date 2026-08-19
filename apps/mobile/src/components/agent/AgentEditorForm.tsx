@@ -28,7 +28,6 @@ import {
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
   WORKPLACE_ASSISTANT_TEXT_LABEL,
-  blockTypeLabel,
   buildAgentDefinitionFromForm,
   countFormPromptSources,
   createDefaultDynamicTextBlock,
@@ -684,6 +683,16 @@ export function AgentEditorForm(props: Props) {
     dynamic: PROMPT_REGION_LABELS.dynamicBlocks,
   };
 
+  /** 内层区块卡片统一样式：白底常规边框 + 左侧主题色粗边。 */
+  const blockCardStyle = [
+    styles.blockCard,
+    {
+      backgroundColor: tokens.surface,
+      borderColor: tokens.border,
+      borderLeftColor: tokens.primary,
+    },
+  ];
+
   const renderPromptSectionHead = (
     label: string,
     opts?: {
@@ -883,12 +892,7 @@ export function AgentEditorForm(props: Props) {
             switchValue: systemEnabled,
             onSwitchChange: setSystemEnabled,
           })}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             {systemEnabled ? (
               <FormField
                 label={PROMPT_REGION_LABELS.systemContent}
@@ -911,25 +915,9 @@ export function AgentEditorForm(props: Props) {
 
           {/* 技能索引占位卡：运行时自动注入，无开关无输入框，不可配置 */}
           {renderPromptSectionHead(promptSectionLabels.skills)}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             <View style={styles.chatSlotHeader}>
-              <View
-                style={[
-                  styles.chatSlotTag,
-                  {backgroundColor: `${tokens.primary}18`},
-                ]}
-              >
-                <Text
-                  style={[styles.chatSlotTagText, {color: tokens.primary}]}
-                >
-                  {PROMPT_REGION_LABELS.skillsTag}
-                </Text>
-              </View>
+              <View style={styles.blockHeaderSpacer} />
               <Switch
                 value={skillsEnabled}
                 onValueChange={setSkillsEnabled}
@@ -957,23 +945,8 @@ export function AgentEditorForm(props: Props) {
           </View>
 
           {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL)}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             <View style={styles.blockHeader}>
-              <View
-                style={[
-                  styles.typeBadge,
-                  { backgroundColor: `${tokens.primary}1A` },
-                ]}
-              >
-                <Text style={[styles.typeBadgeText, { color: tokens.primary }]}>
-                  {WORKPLACE_BLOCK_LABEL}
-                </Text>
-              </View>
               <View style={styles.blockHeaderSpacer} />
               <Switch
                 value={workplaceEnabled}
@@ -1020,12 +993,7 @@ export function AgentEditorForm(props: Props) {
             onSwitchChange: setPersistEnabled,
             ...(persistEnabled ? { onAdd: addPersistTextBlock } : {}),
           })}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             {persistEnabled ? (
               <View style={styles.blockList}>
                 {persist.filter(
@@ -1050,30 +1018,9 @@ export function AgentEditorForm(props: Props) {
                   .map((block, index, textBlocks) => (
                   <View
                     key={`persist-block-${index}`}
-                    style={[
-                      styles.blockCard,
-                      {
-                        backgroundColor: tokens.surface,
-                        borderColor: tokens.border,
-                      },
-                    ]}
+                    style={blockCardStyle}
                   >
                     <View style={styles.blockHeader}>
-                      <View
-                        style={[
-                          styles.typeBadge,
-                          { backgroundColor: `${tokens.primary}1A` },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.typeBadgeText,
-                            { color: tokens.primary },
-                          ]}
-                        >
-                          {blockTypeLabel(block.type)}
-                        </Text>
-                      </View>
                       <Text
                         style={[styles.blockName, { color: tokens.text }]}
                         numberOfLines={1}
@@ -1153,25 +1100,9 @@ export function AgentEditorForm(props: Props) {
           </View>
 
           {renderPromptSectionHead(promptSectionLabels.chat)}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             <View style={styles.chatSlotHeader}>
-              <View
-                style={[
-                  styles.chatSlotTag,
-                  { backgroundColor: `${tokens.primary}18` },
-                ]}
-              >
-                <Text
-                  style={[styles.chatSlotTagText, { color: tokens.primary }]}
-                >
-                  {PROMPT_REGION_LABELS.chatTag}
-                </Text>
-              </View>
+              <View style={styles.blockHeaderSpacer} />
               <Switch
                 value={customAttachEnabled}
                 onValueChange={next => setCustomAttachEnabled(next)}
@@ -1200,12 +1131,7 @@ export function AgentEditorForm(props: Props) {
             onSwitchChange: setDynamicEnabled,
             ...(dynamicEnabled ? { onAdd: addDynamicBlock } : {}),
           })}
-          <View
-            style={[
-              styles.blockCard,
-              { backgroundColor: tokens.surface, borderColor: tokens.border },
-            ]}
-          >
+          <View style={blockCardStyle}>
             {dynamicEnabled ? (
               <View style={styles.blockList}>
                 {dynamic.length === 0 ? (
@@ -1224,30 +1150,9 @@ export function AgentEditorForm(props: Props) {
                 {dynamic.map((block, index) => (
                   <View
                     key={`dynamic-block-${index}`}
-                    style={[
-                      styles.blockCard,
-                      {
-                        backgroundColor: tokens.surface,
-                        borderColor: tokens.border,
-                      },
-                    ]}
+                    style={blockCardStyle}
                   >
                     <View style={styles.blockHeader}>
-                      <View
-                        style={[
-                          styles.typeBadge,
-                          { backgroundColor: `${tokens.primary}1A` },
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.typeBadgeText,
-                            { color: tokens.primary },
-                          ]}
-                        >
-                          {blockTypeLabel(block.type)}
-                        </Text>
-                      </View>
                       <Text
                         style={[styles.blockName, { color: tokens.text }]}
                         numberOfLines={1}
@@ -1396,6 +1301,7 @@ const styles = StyleSheet.create({
   blockList: { gap: 12 },
   blockCard: {
     borderWidth: 1,
+    borderLeftWidth: 3,
     borderRadius: 10,
     padding: 12,
     gap: 10,
@@ -1404,23 +1310,13 @@ const styles = StyleSheet.create({
   chatSlotHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     gap: 8,
-  },
-  chatSlotTag: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  chatSlotTagText: {
-    fontSize: 12,
-    fontWeight: '700',
   },
   chatSlotHint: {
     fontSize: 13,
     lineHeight: 20,
   },
-  readonlyCard: { opacity: 0.85 },
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1428,19 +1324,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 2,
   },
-  typeBadge: {
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  typeBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
   blockName: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
   },
   blockHeaderSpacer: { flex: 1 },
