@@ -13,6 +13,8 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+import fs from 'fs';
+import path from 'path';
 
 // ── SessionDetailScreen 依赖 mock（jest.mock 会被 babel 提升到 import 之前） ──
 const mockSessionsGet = jest.fn(async () => ({id: 's1', title: '我的会话'}));
@@ -188,6 +190,10 @@ jest.mock('react-native', () => {
       RnReact.createElement('Text', {testID}, children),
     View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
       RnReact.createElement('View', {testID}, children),
+    // 工厂内不能引用外部变量（react-native 会在 keyboard-controller 等 import
+    // 阶段被提前 require，此时外部 const 尚在 TDZ，工厂抛错会回退真实模块），
+    // 故内联 jest.fn()，断言处用 require('react-native') 取 emit（同 T-KB4 范式）。
+    DeviceEventEmitter: {emit: jest.fn()},
   };
 });
 
@@ -383,6 +389,59 @@ describe('T-M2 SessionDetailScreen', () => {
       input.props.onSubmitEditing();
     });
     expect(mockSessionsRename).not.toHaveBeenCalled();
+  });
+});
+
+// ── T-SD1 改名成功后广播 session-renamed ──────────────────────────────
+describe('T-SD1 SessionDetailScreen 改名广播', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+    mockSessionsGet.mockResolvedValue({id: 's1', title: '我的会话'});
+    mockLoadChatAgentMeta.mockResolvedValue(meta());
+  });
+
+  it('改名成功后 emit session-renamed，payload 含 sessionId 与新标题', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<SessionDetailScreen />);
+      await flushPromises();
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'session-title'}).props.onPress();
+    });
+    const input = tree.root.findByProps({testID: 'session-title-input'});
+    await act(async () => {
+      input.props.onChangeText('新名字');
+    });
+    await act(async () => {
+      input.props.onSubmitEditing();
+      await flushPromises();
+    });
+    expect(mockSessionsRename).toHaveBeenCalledWith('s1', '新名字');
+    const {DeviceEventEmitter} = require('react-native') as {
+      DeviceEventEmitter: {emit: jest.Mock};
+    };
+    expect(DeviceEventEmitter.emit).toHaveBeenCalledWith('session-renamed', {
+      sessionId: 's1',
+      title: '新名字',
+    });
+  });
+});
+
+// ── T-SD2 useChatTabScope session-renamed 订阅契约（源码正则断言） ────────
+describe('T-SD2 useChatTabScope session-renamed 订阅契约', () => {
+  it('源码含 session-renamed 订阅、reloadLists 调用与 sub.remove() 清理', () => {
+    const source = fs.readFileSync(
+      path.join(
+        __dirname,
+        '../src/screens/tabs/chat-tab/useChatTabScope.ts',
+      ),
+      'utf8',
+    );
+    expect(source).toMatch(/DeviceEventEmitter\.addListener\(\s*'session-renamed'/);
+    expect(source).toMatch(/reloadLists\(\)\.catch/);
+    expect(source).toMatch(/return \(\) => sub\.remove\(\)/);
   });
 });
 
