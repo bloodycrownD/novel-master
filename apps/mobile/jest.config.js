@@ -13,7 +13,9 @@ module.exports = {
   // 嵌套路径 node_modules/sanitize-html/node_modules/htmlparser2 的每层 node_modules
   // 都要能命中白名单，否则该层仍会被忽略并按 CJS require 报错。
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering)/)',
+    // @react-navigation 系列发布 ESM（module 字段）；RichDocumentWebView
+    // 自注册 BackHandler 引入 useFocusEffect 后须纳入 babel transform
+    'node_modules/(?!((jest-)?react-native|@react-native(-community|-documents)?|@react-navigation|@noble/hashes|sanitize-html|htmlparser2|domhandler|domutils|dom-serializer|domelementtype|entities|react-native-blob-util|@op-engineering)/)',
   ],
   // __tests__/helpers 下是测试辅助函数（如 read-webview-dist），不是测试套件，
   // 别让 Jest 当测试跑而报 "must contain at least one test"。
