@@ -1,4 +1,31 @@
+---
+date: 2026-08-20 00:30
+title: global-fs-manager 全程：dev→CR→真机修复（BackHandler 聚焦守卫为最终钥匙）
+keywords: global-fs-manager, BackHandler, 聚焦守卫, 侧滑, native-stack, gestureEnabled, 子 agent 会话, 延迟挂载
+abstract: global-fs-manager 从 code-dev-loop 到 CR-fix 再到真机走查修复的全程记录；真机阶段侧滑失效最终由日志实锤为 BackHandler 全局性缺乏 isFocused 守卫，教训是交互 bug 别猜根因、直接埋日志。
+---
+
 # 2026-08-19 global-fs-manager 迭代执行（多轮）
+
+## 2026-08-19/20 真机走查修复轮（侧滑退出 + 冷启动 + 子会话目录）
+
+用户真机反馈三问题与最终修复（提交均在 feat/skills-integration）：
+
+1. **详情页侧滑无法退出（偶发连坐退出浏览器）**——历经三错一中对：
+   - ❌ `56037c8` 猜「幽灵 POP」350ms 窗口吞事件：无效，模块+测试已在 `69a932f` 删除
+   - ❌ 误诊为浏览器列表页子目录问题，又在容器层面绕了两轮（纯讨论未改码）
+   - ⚠️ 用户怒斥「找不到问题就打日志」→ 埋 `[swipe-debug]`（`68072fe`），日志一发钉死：**详情页在栈顶时，底下浏览器的 BackHandler 抢走返回事件偷偷 goUp**（日志铁证：FileEditor mount 后出现 `Browser hardwareBack canGoUp=true`，且全程无 FileEditor beforeRemove）
+   - ✅ `7c4f8c8` 修法：BackHandler 回调开头加 `if (!navigation.isFocused()) return false`——GlobalTemplateScreen 与 SkillDetailScreen（同款雷）一起修
+2. **冷启动卡顿**（`dc0a131`）：只读详情页延迟 80ms 挂 WebView，转场先跑、loading 圈顶上；预览管线本有 12K 超限保护，卡的是推屏转场与 WebView 创建同帧
+3. **子 agent 会话空目录刷屏**（`b7812e7`）：真相是子 agent 共享父会话 VFS（run-agent-turn 注释明说），createSubSession 不建独立工作区；空目录行是物理树 BFS 合成的展示产物非数据残留。修法：子会话仅当有 VFS 条目（历史残留）才显示，主会话保持空也显示
+- 副作用盘点（用户问「要不要回滚」）：无功能副作用；可感知变化仅三点——空目录消失、大文件先 loading 再出内容、**iOS 子目录侧滑无反应**（走返回箭头；安卓侧滑走 BackHandler 链不受影响，上翻正常）
+
+### 纪律（跨会话有效）
+
+- **RN BackHandler 是全局广播，不看栈顶**：任何屏幕注册 hardwareBackPress 必须加 `navigation.isFocused()` 守卫，否则会吞掉上层屏幕的返回/侧滑（安卓侧滑返回走 BackHandler 链）
+- **native-stack 的 beforeRemove+preventDefault 拦不住手势 pop**：手势发起的原生转换已开始，JS 拦不干净还破坏后续手势；要禁用侧滑用 `gestureEnabled: false`（一等公民开关），不要嵌套容器绕（手势活在导航层不在组件树，View 嵌套挡不住）
+- **交互 bug 两轮猜不中就必须埋日志**：focus/blur/beforeRemove/关键时序 + 时间戳，让用户发 metro 日志实锤；本轮省掉两轮弯路
+- **Tab 内无侧滑行为是「问题不存在」不是「问题被解决」**：聊天工作区没侧滑问题是因为 Tab 导航无手势，非实现更优
 
 ## 2026-08-19 终态：code-dev-loop dev-ready（主代理收尾汇总）
 
