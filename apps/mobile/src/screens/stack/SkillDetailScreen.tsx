@@ -87,6 +87,11 @@ export function SkillDetailScreen() {
   }, [name, setStackOverride, goUpOrExit]);
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      // 仅在本屏聚焦时拦截：BackHandler 是全局的，FileEditor 等上层屏幕
+      // 在栈顶时若不判聚焦，详情页的返回/侧滑会被本屏吞成目录上翻。
+      if (!navigation.isFocused()) {
+        return false;
+      }
       if (fileRef.current?.canGoUp()) {
         fileRef.current.goUp();
         return true;
@@ -94,7 +99,7 @@ export function SkillDetailScreen() {
       return false;
     });
     return () => sub.remove();
-  }, []);
+  }, [navigation]);
 
   useFocusEffect(
     useCallback(() => {
