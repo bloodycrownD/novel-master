@@ -400,7 +400,15 @@ describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
     );
     assert.ok(
       tree.some(
-        (r) => r.path === `/projects/${project.id}/sessions/${child.id}`,
+        (r) =>
+          r.path === `/projects/${project.id}/sessions/${main.id}`,
+      ),
+    );
+    // 子 agent 会话无独立工作区（无条目）：listTree 同样不合成空目录行。
+    assert.ok(
+      !tree.some(
+        (r) =>
+          r.path === `/projects/${project.id}/sessions/${child.id}`,
       ),
     );
     // 与逐层 list 的 BFS 展开对拍：同一棵树、同一批行
@@ -453,7 +461,7 @@ describe("core/B-1: 排序键统一 label ?? 路径末段", () => {
 });
 
 describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
-  it("主会话带多层子 agent 会话：sessions 目录 BFS 展开子/孙会话目录行", async () => {
+  it("主会话带多层子 agent 会话：无条目的子会话隐藏，有残留条目的才显示", async () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`P-g1-${suffix}`);
@@ -468,21 +476,24 @@ describe("core/G-1: 子 agent 会话展开 + 跨项目 sid 守卫", () => {
       project.id,
       `孙会话-${suffix}`,
     );
+    // 子 agent 会话共享父会话 VFS，本无独立工作区；只有历史残留条目
+    // （田版本写入过）才应显示。给 child 造一条残留，grand 保持无条目。
+    await ctx.sessionVfs(project.id, child.id).write(`/left-${suffix}.md`, "R");
 
     const svc = createPhysicalVfsService(ctx.conn);
     const rows = await svc.list(`/projects/${project.id}/sessions`);
     const paths = rows.map((r) => r.path);
     assert.ok(
       paths.includes(`/projects/${project.id}/sessions/${main.id}`),
-      "主会话目录行应出现",
+      "主会话目录行应无条件出现（空会话也显示）",
     );
     assert.ok(
       paths.includes(`/projects/${project.id}/sessions/${child.id}`),
-      "子 agent 会话目录行应 BFS 展开",
+      "有残留条目的子会话应显示",
     );
     assert.ok(
-      paths.includes(`/projects/${project.id}/sessions/${grand.id}`),
-      "孙 agent 会话目录行应逐层展开",
+      !paths.includes(`/projects/${project.id}/sessions/${grand.id}`),
+      "无条目的孙会话不应合成空目录行",
     );
     const childRow = rows.find(
       (r) => r.path === `/projects/${project.id}/sessions/${child.id}`,

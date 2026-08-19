@@ -277,6 +277,18 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     throw vfsNotFound(`/projects/${projectId}${rest}`);
   }
 
+  /** 会话域内是否有任意 VFS 条目（用于过滤无工作区文件的子 agent 会话）。 */
+  private async hasSessionEntries(
+    projectId: string,
+    sessionId: string,
+  ): Promise<boolean> {
+    const entries = await this.entryRepo.listEntriesUnderPrefix(
+      scopeKey({ kind: "session", projectId, sessionId }),
+      "/",
+    );
+    return entries.length > 0;
+  }
+
   /** `/projects/{pid}/sessions[/...]`：会话目录行枚举 + 会话域内列目录。 */
   private async listSessionsUnderProject(
     projectId: string,
@@ -285,6 +297,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     if (rest === "/") {
       // 主会话 + 子 agent 会话 BFS 展开；空项目返回空列表。
       // title 为 null（未命名会话）不填 label，展示层回退 UUID。
+      // 主会话无条件显示（PRD：空会话也显示目录行）；子 agent 会话共享
+      // 父会话 VFS、本无独立工作区，仅当存在历史残留条目时才显示，
+      // 否则会堆出一排无意义的空目录。
       const sessions: ChatSession[] = [];
       const queue = [...(await this.sessions.listByProject(projectId))];
       while (queue.length > 0) {
@@ -292,8 +307,17 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
         sessions.push(s);
         queue.push(...(await this.sessions.listByParentSession(s.id)));
       }
-      return sessions
-        .map((s) =>
+      const withVisibility = await Promise.all(
+        sessions.map(async (s) => ({
+          s,
+          visible:
+            s.parentSessionId == null ||
+            (await this.hasSessionEntries(projectId, s.id)),
+        })),
+      );
+      return withVisibility
+        .filter(({visible}) => visible)
+        .map(({s}) =>
           syntheticDir(
             `/projects/${projectId}/sessions/${s.id}`,
             s.title ?? undefined,
@@ -474,12 +498,20 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     rest: string,
   ): Promise<VfsListEntry[]> {
     if (rest === "/") {
-      // 空项目返回空列表；子会话目录行与其子树均 BFS 展平
+      // 空项目返回空列表；子会话目录行与其子树均 BFS 展平。
+      // 子 agent 会话仅当存在 VFS 条目（历史残留）时才输出（同 list 侧
+      // 过滤语义），避免空目录刷屏。
       const rows: VfsListEntry[] = [];
       const queue = [...(await this.sessions.listByProject(projectId))];
       while (queue.length > 0) {
         const s = queue.shift()!;
         queue.push(...(await this.sessions.listByParentSession(s.id)));
+        if (s.parentSessionId != null) {
+          const hasEntries = await this.hasSessionEntries(projectId, s.id);
+          if (!hasEntries) {
+            continue;
+          }
+        }
         rows.push(
           syntheticDir(
             `/projects/${projectId}/sessions/${s.id}`,
