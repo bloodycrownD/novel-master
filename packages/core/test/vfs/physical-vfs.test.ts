@@ -9,6 +9,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { createSkillsService } from "@novel-master/core/skills";
 import {
   createPhysicalVfsService,
   isVfsError,
@@ -47,10 +48,15 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     const ctx = getNovelMasterTestContext();
     const suffix = testIsolationSuffix();
     await ctx.globalVfs().write(`/root-${suffix}.md`, "G");
-    await ctx.globalMetaVfs().mkdir("/skills");
-    await ctx
-      .globalMetaVfs()
-      .write(`/skills/global-skill-${suffix}/SKILL.md`, "S");
+    // 技能造数必须经 SkillsService（写 /meta/skills/... 约定），
+    // 禁止 meta 域 vfs 直写（旧 /skills/... 直写是错误约定，会掩盖双前缀冲突）
+    const skills = createSkillsService(ctx.conn);
+    await skills.writeSkillFile(
+      "global",
+      `global-skill-${suffix}`,
+      undefined,
+      "S",
+    );
 
     const svc = createPhysicalVfsService(ctx.conn);
     const templateRows = await svc.list("/template");
@@ -79,9 +85,14 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     // 项目 1：三个子域都有内容 + 一个会话
     const p1 = await ctx.projects.create(`P1-${suffix}`);
     await ctx.projectVfs(p1.id).write(`/p1-${suffix}.md`, "P1");
-    await ctx
-      .projectMetaVfs(p1.id)
-      .write(`/skills/proj-skill-${suffix}/SKILL.md`, "PS");
+    // 项目技能同样经 SkillsService 造数（meta 域约定）
+    await createSkillsService(ctx.conn).writeSkillFile(
+      "project",
+      `proj-skill-${suffix}`,
+      undefined,
+      "PS",
+      p1.id,
+    );
     const s1 = await ctx.sessions.create(p1.id, `首个会话-${suffix}`);
     const s1vfs = ctx.sessionVfs(p1.id, s1.id);
     await s1vfs.write(`/s-only-${suffix}.md`, "SESSION");
@@ -189,14 +200,21 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
     const suffix = testIsolationSuffix();
 
     await ctx.globalVfs().write(`/g-${suffix}.md`, "GLOBAL");
-    await ctx
-      .globalMetaVfs()
-      .write(`/skills/gm-${suffix}/SKILL.md`, "GLOBAL-META");
+    await createSkillsService(ctx.conn).writeSkillFile(
+      "global",
+      `gm-${suffix}`,
+      undefined,
+      "GLOBAL-META",
+    );
     const project = await ctx.projects.create(`P-${suffix}`);
     await ctx.projectVfs(project.id).write(`/pt-${suffix}.md`, "PROJECT");
-    await ctx
-      .projectMetaVfs(project.id)
-      .write(`/skills/pm-${suffix}/SKILL.md`, "PROJECT-META");
+    await createSkillsService(ctx.conn).writeSkillFile(
+      "project",
+      `pm-${suffix}`,
+      undefined,
+      "PROJECT-META",
+      project.id,
+    );
     const session = await ctx.sessions.create(project.id);
     await ctx
       .sessionVfs(project.id, session.id)

@@ -61,41 +61,35 @@ describe("vfs-path-mapper", () => {
     );
   });
 
-  it("global-meta：物理前缀 /meta，scopeKey global:meta", () => {
+  it("global-meta：物理 = 逻辑原样（自带 /meta 段），scopeKey global:meta", () => {
     const scope = { kind: "global-meta" as const };
-    assert.equal(toPhysicalPath(scope, "/"), "/meta");
     assert.equal(
-      toPhysicalPath(scope, "/skills/foo/SKILL.md"),
+      toPhysicalPath(scope, "/meta/skills/foo/SKILL.md"),
       "/meta/skills/foo/SKILL.md",
     );
     assert.equal(
       toLogicalPath(scope, "/meta/skills/foo/SKILL.md"),
-      "/skills/foo/SKILL.md",
+      "/meta/skills/foo/SKILL.md",
     );
-    assert.equal(toLogicalPath(scope, "/meta"), "/");
     assert.equal(scopeKey(scope), "global:meta");
-    assert.equal(scopePhysicalPrefix(scope), "/meta");
-    // 域外物理路径拒绝
-    assert.throws(
-      () => toLogicalPath(scope, "/template/a.md"),
-      (e: unknown) => isVfsError(e, "INVALID_PATH"),
-    );
+    // 逻辑路径自带 /meta 段，挂载前缀为空串
+    assert.equal(scopePhysicalPrefix(scope), "");
   });
 
-  it("project-meta：物理前缀 /projects/{pid}/meta，scopeKey project:{pid}:meta", () => {
+  it("project-meta：物理前缀 /projects/{pid}（逻辑自带 /meta 段），scopeKey project:{pid}:meta", () => {
     const scope = { kind: "project-meta" as const, projectId: "p1" };
-    assert.equal(toPhysicalPath(scope, "/"), "/projects/p1/meta");
     assert.equal(
-      toPhysicalPath(scope, "/skills/foo/SKILL.md"),
+      toPhysicalPath(scope, "/meta/skills/foo/SKILL.md"),
       "/projects/p1/meta/skills/foo/SKILL.md",
     );
     assert.equal(
       toLogicalPath(scope, "/projects/p1/meta/skills/foo/SKILL.md"),
-      "/skills/foo/SKILL.md",
+      "/meta/skills/foo/SKILL.md",
     );
-    assert.equal(toLogicalPath(scope, "/projects/p1/meta"), "/");
+    assert.equal(toLogicalPath(scope, "/projects/p1/meta"), "/meta");
     assert.equal(scopeKey(scope), "project:p1:meta");
-    assert.equal(scopePhysicalPrefix(scope), "/projects/p1/meta");
+    // 逻辑路径自带 /meta 段，挂载前缀仅项目段
+    assert.equal(scopePhysicalPrefix(scope), "/projects/p1");
     // 不得误吃同项目 template / 隔壁项目 meta 前缀
     assert.throws(
       () => toLogicalPath(scope, "/projects/p1/template/a.md"),
