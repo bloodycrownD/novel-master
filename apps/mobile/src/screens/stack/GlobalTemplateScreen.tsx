@@ -4,12 +4,11 @@
  */
 import React, {useCallback, useEffect, useRef} from 'react';
 import {BackHandler, StyleSheet, View} from 'react-native';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import type {VfsFileManagerHandle} from '../../components/vfs/VfsFileManager';
-import {isGhostPop, shouldInterceptBackRemove} from './global-template-back';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
@@ -47,49 +46,18 @@ export function GlobalTemplateScreen() {
     });
     return () => sub.remove();
   }, []);
-  // 本屏最近一次聚焦时刻：用于吞掉从详情页侧滑返回时重放的手势残余 POP
-  // （详见 global-template-back.ts 的 isGhostPop 说明）。
-  const focusedAtRef = useRef(0);
-  useFocusEffect(
-    useCallback(() => {
-      focusedAtRef.current = Date.now();
-    }, []),
-  );
-  useEffect(() => {
-    // iOS 侧滑手势不走 BackHandler，会直接触发路由 pop；在此拦截
-    // 并转为逐级上翻。仅拦截 POP 类返回动作——RESET/POP_TO_TOP 等
-    // 清栈导航（如登出）必须放行，不能被吞成上翻。goUpOrExit 中
-    // goBack 仅在根目录调用，不会被本拦截器因 canGoUp 为 false 而
-    // 自我阻断。
-    const sub = navigation.addListener('beforeRemove', e => {
-      const actionType = e.data.action.type;
-      // 幽灵 POP（从详情页侧滑返回时重放的手势残余）：吞掉，既不退出也不上翻，
-      // 否则根目录下浏览器会被连坐退出。
-      if (
-        isGhostPop({
-          actionType,
-          focusedAtMs: focusedAtRef.current,
-          nowMs: Date.now(),
-        })
-      ) {
-        e.preventDefault();
-        return;
-      }
-      const handle = fileRef.current;
-      if (
-        handle == null ||
-        !shouldInterceptBackRemove({
-          actionType,
-          canGoUp: handle.canGoUp(),
-        })
-      ) {
-        return;
-      }
-      e.preventDefault();
-      handle.goUp();
+  // iOS 侧滑不用 beforeRemove 拦截：手势发起的 pop 在原生侧转换已开始，
+  // JS preventDefault 拦不住退出，还会破坏后续手势（native-stack 已知
+  // 行为）。改为动态开关手势：根目录开（侧滑=原生退出，零拦截），
+  // 子目录关（侧滑无效，防误退；上翻走 header 返回箭头与硬件返回）。
+  const syncGestureEnabled = useCallback(() => {
+    navigation.setOptions({
+      gestureEnabled: !fileRef.current?.canGoUp(),
     });
-    return sub;
   }, [navigation]);
+  useEffect(() => {
+    syncGestureEnabled();
+  }, [syncGestureEnabled]);
 
   const openFile = useCallback(
     (path: string) => {
@@ -111,6 +79,8 @@ export function GlobalTemplateScreen() {
       </View>
       <VfsFileManager
         ref={fileRef}
+        // 目录变化时同步侧滑手势开关：根目录开（侧滑退出），子目录关（防误退）。
+        onDirectoryChange={syncGestureEnabled}
         // 只读模式下 scope 不参与任何写调用，仅满足 prop 形状。
         scope={{kind: 'global'}}
         vfs={runtime.physicalVfs()}
