@@ -5,7 +5,8 @@
  *   project 技能落 `project:{pid}:meta` 域（物理 `/projects/{pid}/meta/skills/...`）；
  *   上层（effectiveSkills / readSkillFile / 项目副本覆盖）行为不变。
  * - T-SR3：`ProjectService.delete()` 后 `project:{pid}:meta` 与 `project:{pid}`、
- *   `session:{pid}:{sid}` 同样零 entry 残留。
+ *   `session:{pid}:{sid}` 同样零 entry 残留；随后的 `runDeferredBlobGc`
+ *   后无 orphan blob。
  *
  * @module test/skills/skill-relocate
  */
@@ -14,6 +15,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { runDeferredBlobGc } from "@/domain/vfs/logic/deferred-blob-gc.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -214,5 +216,20 @@ describe("项目删除无孤儿（T-SR3）", () => {
         `${scopeKey} 删除后不应残留 entry`,
       );
     }
+
+    // delete() 事务提交后已调度过一次 GC；这里再显式跑一遍幂等的
+    // runDeferredBlobGc，按全库引用集（entry ∪ revision 反查）验证无 orphan blob。
+    await runDeferredBlobGc(ctx.conn);
+    const orphanRows = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM vfs_content_blob b
+       WHERE NOT EXISTS (
+         SELECT 1 FROM vfs_revision r WHERE r.content_hash = b.content_hash
+       )`,
+    );
+    assert.equal(
+      Number(orphanRows[0]!.n),
+      0,
+      "runDeferredBlobGc 后不应有 orphan blob",
+    );
   });
 });
