@@ -40,3 +40,12 @@ user:
 
 assistant:
 承接执行。关键核对结论：vfs_entry.path 存 scope 内纯逻辑路径，「物理路径」是应用层拼接视图（/template、/meta、/projects/{pid}/template|meta|sessions/{sid}）；PhysicalVfsService.list 用 listEntriesUnderPrefix（idx_vfs_entry_scope_path 已确认存在，UNIQUE(scope_key,path) 隐式覆盖）逐 scope 查询后拼前缀，虚拟目录从 chat_project/chat_session 枚举合成；read 前缀解析顺序敏感（session → project-meta → project → /meta → /template → 无此文件）后走 ScopedVfsService.read。T-G2 换载体：第一例 sessionTemplatePull、第二例直调 replaceVfsSubtree 盯通用 sweep/GC。core exports 指向 dist，改后必须 npm run build 测试才能解析新导出。
+
+---
+
+date: 2026-08-19
+user:
+执行 fix-sr3-blob 节点（fix）：cr-func 审查发现 SPEC blocking 测试 T-SR3 只落地了一半断言——skill-relocate.test.ts 只断言了 ProjectService.delete() 后三域 entry 零残留，缺「随后的 runDeferredBlobGc 后无 orphan blob」这段；要求复用 vfs-gc-trigger.test.ts 的 orphan SQL 断言模式，只改测试文件，不碰 apps/**。
+
+assistant:
+补齐完成：T-SR3 用例尾部在 delete() 后显式再跑一遍幂等的 runDeferredBlobGc(ctx.conn)（服务内事务后其实已调度过一次），然后对 vfs_content_blob 表跑 NOT EXISTS 反查 vfs_revision 的 orphan 计数断言为零。定向 4/4 绿，全量 2029/2029 绿。提交 17553d9。
