@@ -38,7 +38,11 @@ import type {
 import type { RegexConfigService } from '@novel-master/core/regex';
 import type { MessageCheckpointService } from '@novel-master/core/message-checkpoint';
 import type { SessionFsService } from '@novel-master/core/session-fs';
-import type { VfsScope, VfsService } from '@novel-master/core/vfs';
+import type {
+  PhysicalVfsService,
+  VfsScope,
+  VfsService,
+} from '@novel-master/core/vfs';
 import type {
   WorkplaceService,
 } from '@novel-master/core/workplace';
@@ -73,6 +77,8 @@ export interface MobileNovelMasterRuntime {
   /** meta 域（技能存储）：global:meta / project:{pid}:meta。 */
   globalMetaVfs(): VfsService;
   projectMetaVfs(projectId: string): VfsService;
+  /** 只读物理树（全局文件浏览器）：跨域拼接只读视图，无任何写方法。 */
+  physicalVfs(): PhysicalVfsService;
   workplace(scope: VfsScope): WorkplaceService;
   /** 两域技能服务（清单 / 合并视图 / 读写 / 启停 / 复制删除）。 */
   skills(): SkillService;

@@ -47,7 +47,9 @@ import {
   type SessionFsService,
 } from "@novel-master/core/session-fs";
 import {
+  createPhysicalVfsService,
   createScopedVfsService,
+  type PhysicalVfsService,
   type VfsScope,
   type VfsService,
 } from "@novel-master/core/vfs";
@@ -134,6 +136,8 @@ export interface NovelMasterRuntime {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
+  /** 只读物理树（全局文件浏览器）：跨域拼接只读视图，无任何写方法。 */
+  physicalVfs(): PhysicalVfsService;
   workplace(scope: VfsScope): WorkplaceService;
   /** 两域技能服务（清单 / 合并视图 / 读写 / 启停 / 复制删除）。 */
   skills(): SkillService;
@@ -245,6 +249,7 @@ export async function createNovelMasterRuntime(
         projectId,
         sessionId,
       }),
+    physicalVfs: () => createPhysicalVfsService(conn),
     workplace: (scope) => createWorkplaceService(conn, scope),
     skills: () => createSkillsService(conn),
     secretStore,

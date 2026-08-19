@@ -17,6 +17,7 @@
   "characterCardJsonToMdTree",
   "copyVfsPath",
   "createCharacterCardImportService",
+  "createPhysicalVfsService",
   "createScopedVfsService",
   "createVfsBatchIoService",
   "createVfsService",

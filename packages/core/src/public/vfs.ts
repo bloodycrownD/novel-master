@@ -4,6 +4,8 @@ export type { VfsEntry, VfsEntryKind } from "../domain/vfs/model/vfs-entry.js";
 export type { VfsListEntry } from "../domain/vfs/model/vfs-list-entry.js";
 export { createVfsService } from "../service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "../service/vfs/create-scoped-vfs-service.js";
+export { createPhysicalVfsService } from "../service/vfs/create-physical-vfs-service.js";
+export type { PhysicalVfsService } from "../service/vfs/physical-vfs.port.js";
 export { createVfsZipIoService } from "../service/vfs/create-vfs-zip-io-service.js";
 export { createCharacterCardImportService } from "../service/vfs/create-character-card-import-service.js";
 export type { CreateCharacterCardImportServiceOptions } from "../service/vfs/create-character-card-import-service.js";

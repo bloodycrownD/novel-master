@@ -38,6 +38,7 @@ import {
   createSessionFsService,
 } from "@novel-master/core/session-fs";
 import {
+  createPhysicalVfsService,
   createScopedVfsService,
   type VfsScope,
 } from "@novel-master/core/vfs";
@@ -139,6 +140,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     globalMetaVfs: () => createScopedVfsService(conn, { kind: "global-meta" }),
     projectMetaVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project-meta", projectId }),
+    physicalVfs: () => createPhysicalVfsService(conn),
     workplace: (scope: VfsScope) => createWorkplaceService(conn, scope),
     skills: () => createSkillsService(conn),
     secretStore,
