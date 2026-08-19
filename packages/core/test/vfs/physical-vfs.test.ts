@@ -82,25 +82,33 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
     await ctx
       .projectMetaVfs(p1.id)
       .write(`/skills/proj-skill-${suffix}/SKILL.md`, "PS");
-    const s1 = await ctx.sessions.create(p1.id);
+    const s1 = await ctx.sessions.create(p1.id, `首个会话-${suffix}`);
     const s1vfs = ctx.sessionVfs(p1.id, s1.id);
     await s1vfs.write(`/s-only-${suffix}.md`, "SESSION");
+    // 未命名会话（title 为 null）：不填 label，展示层回退 UUID
+    const sUntitled = await ctx.sessions.create(p1.id);
 
     // 项目 2：空项目、无会话
     const p2 = await ctx.projects.create(`P2-${suffix}`);
 
     const svc = createPhysicalVfsService(ctx.conn);
 
-    // /projects 下两个项目目录行（含空项目）
+    // /projects 下两个项目目录行（含空项目），label = 项目名（展示用，替代 UUID）
     const projectRows = await svc.list("/projects");
     assert.ok(
       projectRows.some(
-        (r) => r.kind === "directory" && r.path === `/projects/${p1.id}`,
+        (r) =>
+          r.kind === "directory" &&
+          r.path === `/projects/${p1.id}` &&
+          r.label === `P1-${suffix}`,
       ),
     );
     assert.ok(
       projectRows.some(
-        (r) => r.kind === "directory" && r.path === `/projects/${p2.id}`,
+        (r) =>
+          r.kind === "directory" &&
+          r.path === `/projects/${p2.id}` &&
+          r.label === `P2-${suffix}`,
       ),
     );
 
@@ -127,10 +135,16 @@ describe("T-PB1: 物理树列目录（合成目录 + 各域拼接）", () => {
           r.path === `/projects/${p1.id}/meta/skills`,
       ),
     );
-    // 会话目录行 + 会话域文件行
-    assert.deepEqual(await svc.list(`/projects/${p1.id}/sessions`), [
-      { path: `/projects/${p1.id}/sessions/${s1.id}`, kind: "directory" },
-    ]);
+    // 会话目录行：有 title 的带 label，未命名的无 label 键（回退 UUID）；按名字排在前
+    const sessionRows = await svc.list(`/projects/${p1.id}/sessions`);
+    const s1Row = sessionRows.find(
+      (r) => r.path === `/projects/${p1.id}/sessions/${s1.id}`,
+    );
+    assert.ok(s1Row != null && s1Row.label === `首个会话-${suffix}`);
+    const untitledRow = sessionRows.find(
+      (r) => r.path === `/projects/${p1.id}/sessions/${sUntitled.id}`,
+    );
+    assert.ok(untitledRow != null && untitledRow.label === undefined);
     const s1Rows = await svc.list(`/projects/${p1.id}/sessions/${s1.id}`);
     assert.ok(
       s1Rows.some(

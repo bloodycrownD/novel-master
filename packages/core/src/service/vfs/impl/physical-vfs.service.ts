@@ -22,6 +22,7 @@ import {
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
+import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { VfsListEntry } from "@/domain/vfs/model/vfs-list-entry.js";
 import type { VfsReadResult } from "@/domain/vfs/ports/vfs-service.port.js";
 import { vfsNotFound } from "@/errors/vfs-errors.js";
@@ -79,17 +80,19 @@ function resolvePhysicalPath(normalized: string): ResolvedPhysical | null {
   return null;
 }
 
-/** 目录行优先、再按路径字典序。 */
+/** 目录行优先、再按展示名（无则路径）字典序；合成行按项目名/会话名排而非 UUID。 */
 function compareEntries(a: VfsListEntry, b: VfsListEntry): number {
   if (a.kind !== b.kind) {
     return a.kind === "directory" ? -1 : 1;
   }
-  return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+  const ka = a.label ?? a.path;
+  const kb = b.label ?? b.path;
+  return ka < kb ? -1 : ka > kb ? 1 : 0;
 }
 
 /** 挂载点根的合成目录行（`/template`、`/meta`、`/projects` 域根无表行）。 */
-function syntheticDir(path: string): VfsListEntry {
-  return { path, kind: "directory" };
+function syntheticDir(path: string, label?: string): VfsListEntry {
+  return label == null ? { path, kind: "directory" } : { path, kind: "directory", label };
 }
 
 /** Default read-only physical VFS service. */
@@ -119,7 +122,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     if (normalized === "/projects") {
       const projects = await this.projects.list();
       return projects
-        .map((p) => syntheticDir(`/projects/${p.id}`))
+        .map((p) => syntheticDir(`/projects/${p.id}`, p.name))
         .sort(compareEntries);
     }
 
@@ -211,16 +214,22 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     rest: string,
   ): Promise<VfsListEntry[]> {
     if (rest === "/") {
-      // 主会话 + 子 agent 会话 BFS 展开；空项目返回空列表
-      const ids: string[] = [];
+      // 主会话 + 子 agent 会话 BFS 展开；空项目返回空列表。
+      // title 为 null（未命名会话）不填 label，展示层回退 UUID。
+      const sessions: ChatSession[] = [];
       const queue = [...(await this.sessions.listByProject(projectId))];
       while (queue.length > 0) {
         const s = queue.shift()!;
-        ids.push(s.id);
+        sessions.push(s);
         queue.push(...(await this.sessions.listByParentSession(s.id)));
       }
-      return ids
-        .map((sid) => syntheticDir(`/projects/${projectId}/sessions/${sid}`))
+      return sessions
+        .map((s) =>
+          syntheticDir(
+            `/projects/${projectId}/sessions/${s.id}`,
+            s.title ?? undefined,
+          ),
+        )
         .sort(compareEntries);
     }
     const sidMatch = rest.match(/^\/([^/]+)(\/.*)?$/);

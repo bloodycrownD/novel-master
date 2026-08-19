@@ -134,10 +134,12 @@ export function mapWorktreeRow(
 
 /** Fallback row when VFS has a path not yet in worktree listing. */
 export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
+  // label 为物理树合成目录行的展示名（项目名/会话名）；未填充时回退路径末段。
+  const name = entry.label ?? entryName(entry.path);
   if (entry.kind === 'directory') {
     return {
       path: entry.path,
-      name: entryName(entry.path),
+      name,
       kind: 'dir',
       subtitle: '',
       badge: dirRuleBadge(false),
@@ -146,7 +148,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
   }
   return {
     path: entry.path,
-    name: entryName(entry.path),
+    name,
     kind: 'file',
     subtitle: '跟随·全内容',
     badge: { label: '跟随', tone: 'follow' },
