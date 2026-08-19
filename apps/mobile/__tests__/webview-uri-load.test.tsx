@@ -46,6 +46,12 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: { setString: jest.fn(), getString: jest.fn(async () => '') },
 }));
 
+// mermaid 全屏返回键自注册用（RichDocumentWebView 组件不在 NavigationContainer 内渲染）
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({isFocused: () => true}),
+  useFocusEffect: () => {},
+}));
+
 jest.mock('react-native-blob-util', () => ({
   __esModule: true,
   default: {
