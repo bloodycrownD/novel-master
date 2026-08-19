@@ -174,6 +174,31 @@ title: Test
     expect(combined).toContain('title: Test');
   });
 
+  it('renderKind txt renders selectable Text for long-press copy (T-FP1)', async () => {
+    const content = '# Hello\n\nplain body';
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/readme.txt"
+          content={content}
+          tokens={tokens}
+          renderKind="txt"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const Text = require('react-native').Text as React.ComponentType;
+    const textNodes = tree!.root.findAllByType(Text);
+    const bodyNode = textNodes.find(n =>
+      String(n.props.children).includes('# Hello'),
+    );
+    expect(bodyNode).toBeTruthy();
+    expect(bodyNode!.props.selectable).toBe(true);
+  });
+
   it('renderKind markdown (default) still mounts WebView when webview engine', async () => {
     const content = `---
 title: Test

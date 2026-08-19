@@ -13,6 +13,7 @@ import {
   destroyAnnotator,
   refreshAnnotateAfterDocument,
 } from './runtime/annotate';
+import { renderMermaidBlocks } from './runtime/mermaid';
 import { DocumentApp } from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
@@ -22,7 +23,10 @@ registerSetDocumentView((payload) => {
   destroyAnnotator();
   if (!docRoot) return;
   render(h(DocumentApp, { payload }), docRoot);
-  refreshAnnotateAfterDocument();
+  // 先渲 mermaid（会移动源码 pre 进保留容器），再重建 Recogito，批注文本流按最终 DOM 计算
+  void renderMermaidBlocks(docRoot).finally(() => {
+    refreshAnnotateAfterDocument();
+  });
 });
 
 bindAnnotateUi();

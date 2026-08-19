@@ -330,12 +330,16 @@ export class SqliteMessageRepository implements MessageRepository {
          ${roleFilter}
          ${likeFilter}
          AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
+         AND (#{fromSeq} IS NULL OR seq >= #{fromSeq})
+         AND (#{toSeq} IS NULL OR seq <= #{toSeq})
        ORDER BY seq DESC
        LIMIT #{limit}`,
       {
         sessionId,
         likePattern,
         beforeSeq: query.beforeSeq ?? null,
+        fromSeq: query.fromSeq ?? null,
+        toSeq: query.toSeq ?? null,
         limit: clampedLimit,
       },
     );

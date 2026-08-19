@@ -5,9 +5,11 @@
  * 逻辑。结果列表自渲染精简卡片（不复用 chat/MessageList，因为 MessageList 没有
  * onEndReached 透传、且绑定 streaming 语境，搜索结果场景错配）。
  *
+ * 搜索支持关键词（大小写不敏感，由 core 统一处理）、seq 编号区间
+ * （fromSeq/toSeq 闭区间，可只填一端）与向上翻页，三者可自由组合。
  * 搜索始终包含隐藏消息——hidden 的卡片整体降透明度，与「已隐藏」语义一致。
  *
- * 布局只有一排搜索栏（关键词输入框 + 搜索按钮），下方 FlatList 占满剩余屏幕。
+ * 布局搜索栏（关键词 + 搜索按钮）下方一排编号区间输入，再下方 FlatList 占满剩余屏幕。
  * 返回由导航 header 的 showBack 处理，组件内不再单独放返回按钮。
  *
  * 点击卡片可以展开/收起完整文本内容，避免长消息被摘要截断后无法阅读。
@@ -39,6 +41,16 @@ import type {RootStackParamList} from '../../navigation/types';
 type ScreenRoute = RouteProp<RootStackParamList, 'ChatHistorySearch'>;
 
 const SEARCH_LIMIT = 50;
+
+/** 归一编号输入：空串 / 非数字统一归一为 undefined（该侧不设限）。 */
+function normalizeSeqInput(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 /**
  * 把消息里的 TextBlock 拼成单行摘要（忽略 tool_use / thinking 等非对话块）。
@@ -83,6 +95,8 @@ export function ChatHistorySearchScreen() {
   const {sessionId} = route.params;
 
   const [keyword, setKeyword] = useState('');
+  const [fromSeqText, setFromSeqText] = useState('');
+  const [toSeqText, setToSeqText] = useState('');
 
   const [results, setResults] = useState<readonly ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,6 +125,13 @@ export function ChatHistorySearchScreen() {
 
   const runQuery = useCallback(
     async (opts?: {beforeSeq?: number; append?: boolean}) => {
+      const fromSeq = normalizeSeqInput(fromSeqText);
+      const toSeq = normalizeSeqInput(toSeqText);
+      // 倒挂区间不发请求，给提示（PRD 验收 #6）。
+      if (fromSeq != null && toSeq != null && fromSeq > toSeq) {
+        setError('编号区间无效：起始编号不能大于截止编号');
+        return;
+      }
       const append = opts?.append ?? false;
       if (append) {
         setLoadingMore(true);
@@ -126,6 +147,8 @@ export function ChatHistorySearchScreen() {
           keyword: trimmed.length > 0 ? trimmed : undefined,
           limit: SEARCH_LIMIT,
           beforeSeq: opts?.beforeSeq,
+          fromSeq,
+          toSeq,
         });
         setHasMore(batch.length >= SEARCH_LIMIT);
         if (append) {
@@ -144,7 +167,7 @@ export function ChatHistorySearchScreen() {
         setLoadingMore(false);
       }
     },
-    [runtime, sessionId, keyword],
+    [runtime, sessionId, keyword, fromSeqText, toSeqText],
   );
 
   const onSubmitSearch = useCallback(() => {
@@ -219,6 +242,30 @@ export function ChatHistorySearchScreen() {
               <Text style={styles.submitText}>搜索</Text>
             )}
           </Pressable>
+        </View>
+
+        {/* 编号区间行：起始/截止编号，均可留空表示该侧不设限。 */}
+        <View style={styles.seqRow}>
+          <FormTextInput
+            testID="chat-history-search-from-seq"
+            tokens={tokens}
+            value={fromSeqText}
+            onChangeText={setFromSeqText}
+            placeholder="起始编号，留空不限"
+            keyboardType="numeric"
+            accessibilityLabel="起始编号输入框"
+            style={styles.seqInput}
+          />
+          <FormTextInput
+            testID="chat-history-search-to-seq"
+            tokens={tokens}
+            value={toSeqText}
+            onChangeText={setToSeqText}
+            placeholder="截止编号，留空不限"
+            keyboardType="numeric"
+            accessibilityLabel="截止编号输入框"
+            style={styles.seqInput}
+          />
         </View>
 
         {/* 错误信息紧凑显示在搜索栏下方 */}
@@ -330,6 +377,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  seqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  seqInput: {flex: 1},
   keywordInput: {flex: 1},
   submitBtn: {
     width: 56,

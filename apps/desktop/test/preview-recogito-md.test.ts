@@ -52,10 +52,25 @@ const previewAnnotateUiPath = path.join(
   "layout",
   "PreviewAnnotateUi.tsx",
 );
+const mermaidMarkdownPath = path.join(
+  __dirname,
+  "..",
+  "renderer",
+  "components",
+  "MermaidMarkdown.tsx",
+);
+const messageListPath = path.join(
+  __dirname,
+  "..",
+  "renderer",
+  "features",
+  "chat",
+  "MessageList.tsx",
+);
 const packageJsonPath = path.join(__dirname, "..", "package.json");
 
 describe("T-RG2 Desktop 退役插锚 / 搜字主路径", () => {
-  it("PreviewPane 不调用 buildAnnotatedSource；干净 react-markdown", () => {
+  it("PreviewPane 不调用 buildAnnotatedSource；markdown 渲染经共享 MermaidMarkdown", () => {
     const pane = readFileSync(previewPanePath, "utf8");
     assert.doesNotMatch(pane, /buildAnnotatedSource/);
     assert.doesNotMatch(pane, /sanitizeAnnotatePreviewHtml/);
@@ -64,8 +79,19 @@ describe("T-RG2 Desktop 退役插锚 / 搜字主路径", () => {
     assert.doesNotMatch(pane, /isPreviewAnnotateDomSearchFallbackEnabled/);
     assert.doesNotMatch(pane, /domSearchFallback/);
     assert.doesNotMatch(pane, /setPreviewAnnotateDomSearchFallbackForTests/);
-    assert.match(pane, /react-markdown|from "react-markdown"/);
-    assert.match(pane, /<Markdown remarkPlugins=\{\[remarkGfm\]\}>\{content\}<\/Markdown>/);
+    // T-MD1：改用共享 MermaidMarkdown（react-markdown 契约已转移到 MermaidMarkdown.tsx）
+    assert.doesNotMatch(pane, /from "react-markdown"/);
+    assert.match(pane, /MermaidMarkdown/);
+    assert.match(pane, /<MermaidMarkdown content=\{content\} \/>/);
+    const mermaid = readFileSync(mermaidMarkdownPath, "utf8");
+    assert.match(mermaid, /from "react-markdown"/);
+    assert.match(mermaid, /remarkGfm/);
+    assert.match(mermaid, /remarkPlugins=\{\[remarkGfm\]\}/);
+    // T-MD4：MessageList 两处（MessageBody + 流式尾）均用共享组件（matchAll 计数钉死两处）
+    const messageList = readFileSync(messageListPath, "utf8");
+    const mermaidUsages = messageList.match(/<MermaidMarkdown /g) ?? [];
+    assert.equal(mermaidUsages.length, 2, `期望两处 MermaidMarkdown，实际 ${mermaidUsages.length} 处`);
+    assert.doesNotMatch(messageList, /from "react-markdown"|from 'react-markdown'/);
   });
 
   it("DOM 搜字 fallback 开关永久关闭（调用无效）", () => {

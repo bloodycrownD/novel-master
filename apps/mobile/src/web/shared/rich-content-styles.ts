@@ -7,6 +7,28 @@
 export function buildRichContentCssRules(selectors: readonly string[]): string {
   const group = selectors.join(', ');
   const child = (tag: string) => selectors.map((s) => `${s} ${tag}`).join(', ');
+  const mermaidBlock = selectors.map((s) => `${s} .mermaid-block`).join(', ');
+  const mermaidChart = selectors
+    .map((s) => `${s} .mermaid-block__chart`)
+    .join(', ');
+  const mermaidChartSvg = selectors
+    .map((s) => `${s} .mermaid-block__chart svg`)
+    .join(', ');
+  const mermaidSource = selectors
+    .map((s) => `${s} .mermaid-block__source`)
+    .join(', ');
+  const mermaidSourceVisible = selectors
+    .flatMap((s) => [
+      `${s} .mermaid-block.mermaid-failed .mermaid-block__source`,
+      `${s} pre.mermaid-failed`,
+    ])
+    .join(', ');
+  const mermaidPending = selectors
+    .map((s) => `${s} pre > code.language-mermaid`)
+    .join(', ');
+  const mermaidFailedCode = selectors
+    .map((s) => `${s} pre.mermaid-failed > code.language-mermaid`)
+    .join(', ');
   const nestedList = selectors
     .map((s) => `${s} ul ul, ${s} ol ol, ${s} ul ol, ${s} ol ul`)
     .join(', ');
@@ -46,6 +68,26 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
       margin: 0.35em 0;
     }
     ${child('a')} { color: var(--primary, #007aff); }
+    /* Mermaid 图表：成功态源码 display:none 保留（批注文本流不偏移）；SVG 缩放适配宽度 */
+    ${mermaidBlock} {
+      margin: 0.35em 0;
+      padding: 0.4em 0.2em;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.03);
+    }
+    ${mermaidChart} { margin: 0; }
+    ${mermaidChartSvg} { max-width: 100%; height: auto; }
+    ${mermaidSource} { display: none; margin: 0; padding: 0; }
+    /* 失败：源码保留显示 + 失败标识 */
+    ${mermaidSourceVisible} { display: block; }
+    /* 流式占位：未定稿的 mermaid 源码弱化展示（预渲染，非失败） */
+    ${mermaidPending}::before {
+      content: "Mermaid 源码";
+      display: block;
+      font-size: 0.85em;
+      opacity: 0.6;
+    }
+    ${mermaidFailedCode}::before { content: "图表渲染失败，已回退源码"; color: var(--danger, #d92d20); opacity: 0.9; }
   `.trim();
 }
 

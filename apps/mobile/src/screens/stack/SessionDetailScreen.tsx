@@ -107,6 +107,8 @@ export function SessionDetailScreen() {
       try {
         await runtime.sessions.rename(sessionId, next);
         setSessionTitle(next);
+        // 改名成功后广播，聊天页订阅 session-renamed 后刷新顶栏标题与列表。
+        DeviceEventEmitter.emit('session-renamed', {sessionId, title: next});
         showToast('已重命名');
       } catch (error) {
         showToast(toastMessage('重命名失败', error));

@@ -4807,6 +4807,65 @@ html[data-theme="dark"] .chat-batch-bar {
   border-top: 1px solid var(--border-light);
 }
 
+/* Mermaid 图表块（预览 + 聊天消息共用；源码保留隐藏，失败/流式占位时可见） */
+.mermaid-block {
+  position: relative;
+  margin: 0.75em 0;
+  padding: 12px;
+  background: var(--background);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.mermaid-block__chart {
+  overflow-x: auto;
+}
+
+.mermaid-block__chart svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-block .mermaid-block__source {
+  display: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  background: transparent;
+  border: none;
+}
+
+.mermaid-block .mermaid-block__source code {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.mermaid-block--pending {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.mermaid-block--pending .mermaid-block__source {
+  display: block;
+}
+
+.mermaid-block.mermaid-failed {
+  border-color: var(--danger);
+}
+
+.mermaid-block.mermaid-failed .mermaid-block__source {
+  display: block;
+}
+
+.mermaid-block__failed-badge {
+  display: block;
+  margin-bottom: 0.5em;
+  font-size: 0.85em;
+  color: var(--danger);
+}
+
 .preview-text {
   padding: 16px;
   white-space: pre-wrap;
