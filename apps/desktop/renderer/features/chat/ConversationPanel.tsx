@@ -648,7 +648,10 @@ export function ConversationPanel({
           });
           return;
         }
-        if (result.error.code === 'ROLLBACK_VFS_RESTORE_FAILED') {
+        if (
+          result.error.code === 'ROLLBACK_VFS_RESTORE_FAILED' ||
+          result.error.code === 'ROLLBACK_UNDO_SEND_EMPTY_TARGET'
+        ) {
           setConfirmState({
             kind: 'rollback-degraded',
             messageId,

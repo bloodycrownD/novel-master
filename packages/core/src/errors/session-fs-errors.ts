@@ -254,5 +254,9 @@ export function isRollbackConflictError(
  * @remarks 当 error 或其 cause 链中存在 `ROLLBACK_VFS_RESTORE_FAILED` 时返回 true。
  */
 export function isRollbackVfsDegradableError(error: unknown): boolean {
-  return isSessionFsError(error, "ROLLBACK_VFS_RESTORE_FAILED");
+  return (
+    isSessionFsError(error, "ROLLBACK_VFS_RESTORE_FAILED") ||
+    // undo_send 无 baseline：live 树非空时拒绝清空，上层可走「仅截断消息」降级
+    isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET")
+  );
 }

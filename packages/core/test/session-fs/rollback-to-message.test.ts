@@ -153,9 +153,10 @@ describe("rollbackToMessage", () => {
     assert.equal(left[0]!.id, m1.id);
   });
 
-  it("rollback 默认路径首条 plain user 被护栏拦截", async () => {
-    // 与下一条 skipVfsReconcile 用例呼应：首条 plain user 无 baseline 时，
-    // 默认 reconcile 路径会被 S-13 护栏拦下；要走「仅截断」需显式降级。
+  it("rollback 默认路径首条 plain user（无文件会话）放行仅截断", async () => {
+    // 与下一条 skipVfsReconcile 用例呼应：无文件会话（纯聊天 / 仅 $skill 引用，
+    // capture 不写空快照）空 targetTree 无破坏力，S-13 护栏放行，回滚表现为纯截断；
+    // 有文件无基线才拦（见上用例），上层走「仅截断」降级弹窗。
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -166,13 +167,10 @@ describe("rollbackToMessage", () => {
       blocks: [{ type: "text", text: "bye" }],
     });
 
-    await assert.rejects(
-      () => rollback.rollbackToMessage(session.id, project.id, user1.id),
-      (error: unknown) =>
-        isSessionFsError(error, "ROLLBACK_UNDO_SEND_EMPTY_TARGET"),
-    );
+    await rollback.rollbackToMessage(session.id, project.id, user1.id);
+    // undo_send 语义：锚点 user 消息一并删除（还原为草稿），后续 assistant 同截
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 2);
+    assert.equal(messages.length, 0);
   });
 
   it("skipVfsReconcile 截断消息", async () => {
