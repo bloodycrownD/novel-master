@@ -45,6 +45,8 @@ export function ChatHistorySearchPanel({
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  /** 筛选表单折叠卡片是否展开（默认展开；查询命中后自动收起）。 */
+  const [formExpanded, setFormExpanded] = useState(true);
   /** 是否已经发起过一次查询，用来区分「初始空态」与「未命中」。 */
   const [hasSearched, setHasSearched] = useState(false);
   /** 上一批结果是否还有更早的可翻页（命中 LIMIT 视为可能还有）。 */
@@ -98,6 +100,10 @@ export function ChatHistorySearchPanel({
           setResults((prev) => [...prev, ...batch]);
         } else {
           setResults(batch);
+          // 首次查询命中才收起表单：空结果算「未命中」不算成功，倒挂与异常分支不会走到这里。
+          if (batch.length > 0) {
+            setFormExpanded(false);
+          }
           setHasSearched(true);
         }
       } catch (err) {
@@ -131,6 +137,21 @@ export function ChatHistorySearchPanel({
 
   const showEmpty = hasSearched && !loading && results.length === 0;
 
+  // 收起态摘要直接从筛选项 state 派生，不另存一份；输入值在收起卸载表单时不丢。
+  const filterSummary = useMemo(() => {
+    const parts: string[] = [];
+    const trimmedKeyword = keyword.trim();
+    if (trimmedKeyword.length > 0) {
+      parts.push(`关键词 "${trimmedKeyword}"`);
+    }
+    const fromSeq = normalizeSeqInput(fromSeqText);
+    const toSeq = normalizeSeqInput(toSeqText);
+    if (fromSeq != null || toSeq != null) {
+      parts.push(`#${fromSeq ?? "起"}–${toSeq ?? "止"}`);
+    }
+    return parts.length > 0 ? parts.join(" · ") : "未设置筛选条件";
+  }, [keyword, fromSeqText, toSeqText]);
+
   return (
     <div className="chat-history-search" data-session-detail-action="search-history-panel">
       <div className="chat-history-search__head">
@@ -146,46 +167,71 @@ export function ChatHistorySearchPanel({
         <span className="chat-history-search__title">查找聊天记录</span>
       </div>
 
-      <form className="chat-history-search__form" onSubmit={onSubmit}>
-        <div className="chat-history-search__input-row">
-          <input
-            type="text"
-            className="chat-history-search__keyword"
-            data-session-detail-action="search-history-keyword"
-            placeholder="输入关键词，回车搜索"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="chat-history-search__submit"
-            data-session-detail-action="search-history-submit"
-            disabled={loading}
-          >
-            {loading ? '查询中…' : '查询'}
-          </button>
-        </div>
-        <div className="chat-history-search__input-row">
-          <input
-            type="text"
-            inputMode="numeric"
-            className="chat-history-search__keyword"
-            data-session-detail-action="search-history-from-seq"
-            placeholder="起始编号，留空不限"
-            value={fromSeqText}
-            onChange={(e) => setFromSeqText(e.target.value)}
-          />
-          <input
-            type="text"
-            inputMode="numeric"
-            className="chat-history-search__keyword"
-            data-session-detail-action="search-history-to-seq"
-            placeholder="截止编号，留空不限"
-            value={toSeqText}
-            onChange={(e) => setToSeqText(e.target.value)}
-          />
-        </div>
-      </form>
+      <div
+        className={`chat-history-search__filter-card${
+          formExpanded ? "" : " chat-history-search__filter-card--collapsed"
+        }`}
+      >
+        <button
+          type="button"
+          className="chat-history-search__filter-toggle"
+          data-session-detail-action="search-history-filter-toggle"
+          aria-expanded={formExpanded}
+          onClick={() => setFormExpanded((v) => !v)}
+        >
+          <span className="chat-history-search__filter-title">筛选条件</span>
+          {!formExpanded ? (
+            <span className="chat-history-search__filter-summary">
+              {filterSummary}
+            </span>
+          ) : null}
+          <span className="chat-history-search__filter-chevron">
+            {formExpanded ? "▼" : "▶"}
+          </span>
+        </button>
+        {formExpanded ? (
+          <form className="chat-history-search__form" onSubmit={onSubmit}>
+            <div className="chat-history-search__input-row">
+              <input
+                type="text"
+                className="chat-history-search__keyword"
+                data-session-detail-action="search-history-keyword"
+                placeholder="输入关键词，回车搜索"
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+              />
+              <button
+                type="submit"
+                className="chat-history-search__submit"
+                data-session-detail-action="search-history-submit"
+                disabled={loading}
+              >
+                {loading ? "查询中…" : "查询"}
+              </button>
+            </div>
+            <div className="chat-history-search__input-row">
+              <input
+                type="text"
+                inputMode="numeric"
+                className="chat-history-search__keyword"
+                data-session-detail-action="search-history-from-seq"
+                placeholder="起始编号，留空不限"
+                value={fromSeqText}
+                onChange={(e) => setFromSeqText(e.target.value)}
+              />
+              <input
+                type="text"
+                inputMode="numeric"
+                className="chat-history-search__keyword"
+                data-session-detail-action="search-history-to-seq"
+                placeholder="截止编号，留空不限"
+                value={toSeqText}
+                onChange={(e) => setToSeqText(e.target.value)}
+              />
+            </div>
+          </form>
+        ) : null}
+      </div>
 
       {error ? (
         <p className="chat-history-search__error" role="alert">
