@@ -28,6 +28,22 @@ export interface PhysicalVfsService {
   list(physicalPath: string): Promise<VfsListEntry[]>;
 
   /**
+   * 批量列物理目录下**全部层级**的行（递归，含隐含中间目录行与虚拟目录合成）。
+   *
+   * @remarks
+   * 供 desktop 等全树拉取场景一次消费：每个 scope 仅一次
+   * `listEntriesUnderPrefix` 前缀查询，应用层按段递归切出全部层级行，
+   * 消除逐层 `list` 的 O(行数×深度) 重复读；projects/sessions 枚举
+   * （虚拟目录）同样在本接口内合成，调用方无需再逐目录展开。
+   *
+   * 返回根目录自身以外的全部后代行（目录行在前、同层按展示键排序，
+   * 与 {@link list} 一致）；空目录返回空数组。
+   *
+   * @throws {import("@/errors/vfs-errors.js").VfsError} `NOT_FOUND` 当路径不落在任何域前缀下，或项目/会话不存在
+   */
+  listTree(physicalPath: string): Promise<VfsListEntry[]>;
+
+  /**
    * 读物理路径对应的文件内容。
    *
    * @remarks

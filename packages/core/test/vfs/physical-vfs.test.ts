@@ -24,10 +24,13 @@ import {
 novelMasterTestFixture();
 
 /**
- * 编译期断言：`PhysicalVfsService` 除 list/read 外不得有任何成员
+ * 编译期断言：`PhysicalVfsService` 除 list/read/listTree 外不得有任何成员
  * （一旦出现写方法，此赋值的类型不再收窄为 true，tsc 会报错）。
  */
-type PhysicalNoWriteMethods = Exclude<keyof PhysicalVfsService, "list" | "read">;
+type PhysicalNoWriteMethods = Exclude<
+  keyof PhysicalVfsService,
+  "list" | "read" | "listTree"
+>;
 const assertNoWriteMethods: PhysicalNoWriteMethods extends never
   ? true
   : { 出现了写方法: PhysicalNoWriteMethods } = true;
@@ -304,5 +307,123 @@ describe("T-PB2: read 五前缀解析 + 无写方法", () => {
     }
     // 编译期断言见文件顶部 assertNoWriteMethods
     void assertNoWriteMethods;
+  });
+});
+
+describe("listTree: 批量全树拉取（desktop/B-2 core 半边）", () => {
+  /** 逐层 list 的 BFS 展开（懒加载参照实现，用于与 listTree 对拍）。 */
+  async function expandByList(
+    svc: PhysicalVfsService,
+    dir: string,
+  ): Promise<VfsListEntry[]> {
+    const rows = await svc.list(dir);
+    const out: VfsListEntry[] = [];
+    for (const row of rows) {
+      out.push(row);
+      if (row.kind === "directory") {
+        out.push(...(await expandByList(svc, row.path)));
+      }
+    }
+    return out;
+  }
+
+  /** 排序归一（path+kind+label）后比较两个行集是否一致。 */
+  function normalize(rows: VfsListEntry[]): string[] {
+    return rows
+      .map((r) => `${r.kind}|${r.path}|${r.label ?? ""}`)
+      .sort();
+  }
+
+  it("单 scope 一次前缀查询后递归切出全部层级行（global-meta 技能树）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    // 经 SkillsService 造数（/meta/skills/... 约定），含辅助文件形成多层
+    const skills = createSkillsService(ctx.conn);
+    const name = `tree-skill-${suffix}`;
+    await skills.writeSkillFile("global", name, undefined, "入口");
+    await skills.writeSkillFile(
+      "global",
+      name,
+      "notes/deep/ref.md",
+      "深层辅助文件",
+    );
+
+    const svc = createPhysicalVfsService(ctx.conn);
+    const rows = await svc.listTree("/meta");
+    // 全部层级行一次返回（目录行在前、文件行在后，同层按展示键排序）
+    const expected = [
+      { path: "/meta/skills", kind: "directory" },
+      { path: `/meta/skills/${name}`, kind: "directory" },
+      { path: `/meta/skills/${name}/notes`, kind: "directory" },
+      { path: `/meta/skills/${name}/notes/deep`, kind: "directory" },
+      { path: `/meta/skills/${name}/SKILL.md`, kind: "file" },
+      { path: `/meta/skills/${name}/notes/deep/ref.md`, kind: "file" },
+    ];
+    assert.deepEqual(
+      rows.filter((r) => r.path.startsWith(`/meta/skills/${name}`) || r.path === "/meta/skills"),
+      expected,
+    );
+  });
+
+  it("虚拟目录（projects/sessions 枚举）也在本接口合成，与逐层 list 结果一致", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-tree-${suffix}`);
+    await ctx.projectVfs(project.id).write(`/pt-${suffix}.md`, "P");
+    await createSkillsService(ctx.conn).writeSkillFile(
+      "project",
+      `pt-skill-${suffix}`,
+      undefined,
+      "PS",
+      project.id,
+    );
+    const main = await ctx.sessions.create(project.id, `主会话-${suffix}`);
+    await ctx.sessionVfs(project.id, main.id).write(`/s-${suffix}.md`, "S");
+    const child = await ctx.sessions.createSubSession(
+      main.id,
+      project.id,
+      `子会话-${suffix}`,
+    );
+    await ctx.globalVfs().write(`/g-${suffix}.md`, "G");
+
+    const svc = createPhysicalVfsService(ctx.conn);
+    const tree = await svc.listTree("/");
+    // 根树包含三挂载点与项目/会话虚拟目录行（子会话目录行同样合成）
+    assert.ok(tree.some((r) => r.path === "/template" && r.kind === "directory"));
+    assert.ok(
+      tree.some(
+        (r) =>
+          r.path === `/projects/${project.id}` &&
+          r.label === `P-tree-${suffix}`,
+      ),
+    );
+    assert.ok(
+      tree.some(
+        (r) => r.path === `/projects/${project.id}/sessions/${child.id}`,
+      ),
+    );
+    // 与逐层 list 的 BFS 展开对拍：同一棵树、同一批行
+    assert.deepEqual(normalize(tree), normalize(await expandByList(svc, "/")));
+  });
+
+  it("子树入口与不存在路径：子树只含后代行，非域前缀报 NOT_FOUND", async () => {
+    const ctx = getNovelMasterTestContext();
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-sub-${suffix}`);
+    await ctx.projectVfs(project.id).write(`/a/${suffix}.md`, "A");
+    const svc = createPhysicalVfsService(ctx.conn);
+
+    const subTree = await svc.listTree(`/projects/${project.id}/template`);
+    // 子树只含后代行（含隐含中间目录行），根自身不返回
+    assert.deepEqual(subTree, [
+      { path: `/projects/${project.id}/template/a`, kind: "directory" },
+      { path: `/projects/${project.id}/template/a/${suffix}.md`, kind: "file" },
+    ]);
+
+    await assert.rejects(svc.listTree("/nope"), (err: unknown) => {
+      assert.ok(isVfsError(err));
+      assert.equal(err.code, "NOT_FOUND");
+      return true;
+    });
   });
 });
