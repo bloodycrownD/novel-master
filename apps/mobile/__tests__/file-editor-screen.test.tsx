@@ -401,10 +401,20 @@ describe('FileEditorScreen', () => {
     );
     expect(editBtn).toHaveLength(0);
 
-    // 预览主体仍正常渲染。
-    expect(
-      findOptionalByTestId(tree.root, 'file-markdown-preview'),
-    ).toBeTruthy();
+    // 预览主体仍正常渲染（只读分支延迟挂重预览：等交互空闲，轮询等待）。
+    let previewNode = null;
+    for (let i = 0; i < 20 && previewNode == null; i++) {
+      previewNode = findOptionalByTestId(tree.root, 'file-markdown-preview');
+      if (previewNode == null) {
+        await act(
+          () =>
+            new Promise<void>(resolve => {
+              setTimeout(resolve, 10);
+            }),
+        );
+      }
+    }
+    expect(previewNode).toBeTruthy();
     expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
   });
 });

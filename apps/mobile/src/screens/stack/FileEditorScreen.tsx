@@ -108,6 +108,19 @@ export function FileEditorScreen() {
   // physical = 全局文件浏览器只读分支：保存入口禁用，也不提供编辑切换。
   const isReadOnly = scopeKind === 'physical';
 
+  // 冷启动优化：物理树文件普遍较大（整章正文等），推屏转场期间同步挂
+  // WebView 会卡住转场动画。只读分支延迟到交互空闲后再挂重预览；
+  // 其余分支（会话工作区等既有路径）行为不变。
+  const [heavyPreviewReady, setHeavyPreviewReady] = useState(!isReadOnly);
+  useEffect(() => {
+    if (heavyPreviewReady) {
+      return;
+    }
+    // 短延时让推屏转场先启动，之后才挂 WebView（冷启动大文件不再卡转场）。
+    const timer = setTimeout(() => setHeavyPreviewReady(true), 80);
+    return () => clearTimeout(timer);
+  }, [heavyPreviewReady]);
+
   const resolveVfs = useCallback(() => {
     switch (scopeKind) {
       case 'physical':
@@ -368,15 +381,21 @@ export function FileEditorScreen() {
       {previewMode ? (
         /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
         <View style={[styles.preview, {backgroundColor: tokens.surface}]}>
-          <FileMarkdownPreview
-            path={path}
-            content={content}
-            tokens={tokens}
-            previewFill
-            renderKind={previewRenderKind}
-            annotateEnabled={annotateEnabled}
-            sessionId={annotateEnabled ? sessionId : undefined}
-          />
+          {heavyPreviewReady ? (
+            <FileMarkdownPreview
+              path={path}
+              content={content}
+              tokens={tokens}
+              previewFill
+              renderKind={previewRenderKind}
+              annotateEnabled={annotateEnabled}
+              sessionId={annotateEnabled ? sessionId : undefined}
+            />
+          ) : (
+            <View style={styles.previewLoading}>
+              <ActivityIndicator size="large" color={tokens.primary} />
+            </View>
+          )}
         </View>
       ) : (
         <CodeEditorWebView
@@ -449,5 +468,6 @@ const styles = StyleSheet.create({
   },
   statsText: {fontSize: 12},
   preview: {flex: 1, minHeight: 0, padding: 12},
+  previewLoading: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   editor: {flex: 1, minHeight: 0},
 });
