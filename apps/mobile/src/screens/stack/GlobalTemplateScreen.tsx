@@ -13,6 +13,7 @@ import {useHeaderContext} from '../../navigation/HeaderContext';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
+import {shouldInterceptBackRemove} from './global-template-back';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -48,14 +49,23 @@ export function GlobalTemplateScreen() {
   }, []);
   useEffect(() => {
     // iOS 侧滑手势不走 BackHandler，会直接触发路由 pop；在此拦截
-    // 并转为逐级上翻。goUpOrExit 中 goBack 仅在根目录调用，不会被
-    // 本拦截器因 canGoUp 为 false 而自我阻断。
+    // 并转为逐级上翻。仅拦截 POP 类返回动作——RESET/POP_TO_TOP 等
+    // 清栈导航（如登出）必须放行，不能被吞成上翻。goUpOrExit 中
+    // goBack 仅在根目录调用，不会被本拦截器因 canGoUp 为 false 而
+    // 自我阻断。
     const sub = navigation.addListener('beforeRemove', e => {
-      if (!fileRef.current?.canGoUp()) {
+      const handle = fileRef.current;
+      if (
+        handle == null ||
+        !shouldInterceptBackRemove({
+          actionType: e.data.action.type,
+          canGoUp: handle.canGoUp(),
+        })
+      ) {
         return;
       }
       e.preventDefault();
-      fileRef.current.goUp();
+      handle.goUp();
     });
     return sub;
   }, [navigation]);

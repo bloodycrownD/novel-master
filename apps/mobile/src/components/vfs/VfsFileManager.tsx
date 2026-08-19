@@ -1087,6 +1087,7 @@ export const VfsFileManager = forwardRef<
             />
           </Pressable>
           <Text
+            testID="vfs-current-path"
             style={[styles.path, { color: tokens.text }]}
             numberOfLines={1}
             ellipsizeMode="middle"
