@@ -24,3 +24,13 @@
 - 提交：171a6f6（readOnly+FileEditor 基础）、33877b4（换源+文案+T-PB3 测试）。
 - 验证：mobile tsc -p tsconfig.build.json --ignoreDeprecations 6.0 通过；jest 8 套件 30 例全绿（readOnly 3 例 + file-editor 8 例含 T-PB3 + session 集成 4 例 + 键盘/会话面板/角色卡菜单/legacy-scroll）。
 - 已知环境预存问题：`chat-tab-screen.integration.test.tsx` 因主仓库 node_modules 缺 `markdown-it` 无法启动（worktree 借主仓库依赖），与本轮改动无关。
+
+## 2026-08-19 CR-fix 轮（code-dev-loop 执行 cr-fix-spec）
+
+- DAG：wave-0 impl-cr-core（P0 meta 双前缀修复 + listTree 批量接口 + core 四条，2036/0）→ wave-1 [impl-cr-desktop ∥ impl-cr-mobile] → cr-func（子代理上下文耗尽提前收尾，主代理补齐三项复核与归因二）→ fix toCoreVfsScope（main）。
+- 关键修复：P0 双前缀按 fix-spec「list 输入侧传物理目录作 base」执行；desktop BFS 改单次 listTree + per-scope 错误隔离；mobile beforeRemove 仅拦 POP；cli 补下线负向断言。
+- 新踩坑与纪律：
+  - desktop `tsconfig.json` 仅含 src/main+shared，**renderer 是独立 tsconfig 且非门禁**（293 预存错误）——renderer 侧类型错误不会被发现，改动 WorkspacePanelScope 等 shared union 时须手动 grep renderer 的 switch 穷尽性（本次 toCoreVfsScope TS2366 即此盲区漏网）。
+  - CLI `template-pull-e2e.test.ts` T3 红灯为**预存缺陷**（v1.4.21 即红），根因方向 sessionTemplatePull→replaceVfsSubtree 删除侧不彻底，待另立条目。
+  - cr-func 子代理在 /tmp 建 4 个临时 worktree 做归因实验，上下文耗尽后遗留未清——派遣做 worktree 实验的子代理须在 prompt 里强调自清。
+- 状态：dev-ready；CR 3 条 spec deviations（label 增强/返回拦截/BFS 全树）随「按 cr spec 开发」指令视同接受，后续回写 spec 附录。
