@@ -420,4 +420,182 @@ describe("聊天记录查询 core 基座", () => {
       assert.equal(result.length, 1);
     });
   });
+
+  describe("T-CS11：fromSeq/toSeq 闭区间过滤，倒序返回", () => {
+    it("区间 40-60 只返回 seq 40..60（含边界），按 seq DESC", async () => {
+      const { sessionId, repo } = await newSession();
+      for (let i = 1; i <= 100; i++) {
+        await repo.insert(
+          makeMessage({
+            sessionId,
+            seq: i,
+            role: "user",
+            createdAtMs: i,
+            content: textBlocks(`m-${i}`),
+          }),
+        );
+      }
+
+      const result = await repo.searchMessages(sessionId, {
+        keyword: "",
+        limit: 50,
+        fromSeq: 40,
+        toSeq: 60,
+      });
+      assert.equal(result.length, 21);
+      assert.equal(result[0]!.seq, 60);
+      assert.equal(result[result.length - 1]!.seq, 40);
+    });
+  });
+
+  describe("T-CS12：仅 fromSeq 返回 seq >= fromSeq", () => {
+    it("fromSeq=80 返回 seq 80..100，倒序", async () => {
+      const { sessionId, repo } = await newSession();
+      for (let i = 1; i <= 100; i++) {
+        await repo.insert(
+          makeMessage({
+            sessionId,
+            seq: i,
+            role: "user",
+            createdAtMs: i,
+            content: textBlocks(`m-${i}`),
+          }),
+        );
+      }
+
+      const result = await repo.searchMessages(sessionId, {
+        keyword: "",
+        limit: 50,
+        fromSeq: 80,
+      });
+      assert.equal(result.length, 21);
+      assert.equal(result[0]!.seq, 100);
+      assert.equal(result[result.length - 1]!.seq, 80);
+    });
+  });
+
+  describe("T-CS13：仅 toSeq 返回 seq <= toSeq", () => {
+    it("toSeq=20 返回 seq 1..20，倒序", async () => {
+      const { sessionId, repo } = await newSession();
+      for (let i = 1; i <= 100; i++) {
+        await repo.insert(
+          makeMessage({
+            sessionId,
+            seq: i,
+            role: "user",
+            createdAtMs: i,
+            content: textBlocks(`m-${i}`),
+          }),
+        );
+      }
+
+      const result = await repo.searchMessages(sessionId, {
+        keyword: "",
+        limit: 50,
+        toSeq: 20,
+      });
+      assert.equal(result.length, 20);
+      assert.equal(result[0]!.seq, 20);
+      assert.equal(result[result.length - 1]!.seq, 1);
+    });
+  });
+
+  describe("T-CS14：倒挂区间返回空数组不报错", () => {
+    it("fromSeq=60 > toSeq=40 时返回空", async () => {
+      const { sessionId, repo } = await newSession();
+      for (let i = 1; i <= 100; i++) {
+        await repo.insert(
+          makeMessage({
+            sessionId,
+            seq: i,
+            role: "user",
+            createdAtMs: i,
+            content: textBlocks(`m-${i}`),
+          }),
+        );
+      }
+
+      const result = await repo.searchMessages(sessionId, {
+        keyword: "",
+        limit: 50,
+        fromSeq: 60,
+        toSeq: 40,
+      });
+      assert.deepEqual(result, []);
+    });
+  });
+
+  describe("T-CS15：keyword 与区间组合取交集", () => {
+    it("keyword=灵石 且区间 10-50 只返回区间内命中关键词的消息", async () => {
+      const { sessionId, repo } = await newSession();
+      const seqs = [5, 15, 25, 35, 55];
+      for (const seq of seqs) {
+        await repo.insert(
+          makeMessage({
+            sessionId,
+            seq,
+            role: "user",
+            createdAtMs: seq,
+            content: textBlocks(`灵石矿脉在第 ${seq} 层`),
+          }),
+        );
+      }
+      // 一条区间内但不含关键词的消息，验证取交集而非并集。
+      await repo.insert(
+        makeMessage({
+          sessionId,
+          seq: 30,
+          role: "user",
+          createdAtMs: 30,
+          content: textBlocks("区间内的普通消息"),
+        }),
+      );
+
+      const result = await repo.searchMessages(sessionId, {
+        keyword: "灵石",
+        limit: 50,
+        fromSeq: 10,
+        toSeq: 50,
+      });
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        [35, 25, 15],
+      );
+    });
+  });
+
+  describe("T-CS16：区间内含单条删除空洞时正确返回现存消息", () => {
+    it("区间 25-35 中 seq 30 已删除时返回 10 条（25-29、31-35）", async () => {
+      const { sessionId, repo } = await newSession();
+      for (let i = 25; i <= 35; i++) {
+        const msg = makeMessage({
+          sessionId,
+          seq: i,
+          role: "user",
+          createdAtMs: i,
+          content: textBlocks(`m-${i}`),
+        });
+        await repo.insert(msg);
+        if (i === 30) {
+          await repo.delete(msg.id);
+        }
+      }
+
+      const result = await repo.searchMessages(sessionId, {
+        keyword: "",
+        limit: 50,
+        fromSeq: 25,
+        toSeq: 35,
+      });
+      assert.equal(result.length, 10);
+      assert.equal(
+        result.some((m) => m.seq === 30),
+        false,
+      );
+      assert.deepEqual(
+        result.map((m) => m.seq),
+        [35, 34, 33, 32, 31, 29, 28, 27, 26, 25],
+      );
+    });
+  });
 });
