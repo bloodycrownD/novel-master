@@ -49,7 +49,7 @@ date: 2026-08-19
 
 **desktop**：`ipc-types.ts`（删 `PROJECTS_PULL_TEMPLATE`；`WorkspacePanelScope` 加 `'physical'` + 只读行/读文件请求类型）、`handlers/projects.ts`/`handler-registry.ts`（删 handler；注册物理浏览 handler）、`resolve-vfs-scope.ts`（physical 分流）、`invoke-registry.ts`/`client.ts`、`renderer/features/workspace/WorkspaceHeaderActions.tsx`（删 session 分支 pull）、`nav-workspace.ts`+`ExplorerPane.tsx`+`WorkspaceTree.tsx`（projects 视图全局面板换只读物理树源；行 DTO 复用 `WorkplaceListRowDto`，纳入字段缺省；隐藏写操作菜单）、`PreviewPane`（只读预览路由）。
 
-**mobile**：`GlobalTemplateScreen.tsx`（banner 删「从上级同步」；数据源换 `runtime.physicalVfs()` + 根 `/`；标题语义改「文件浏览器」）、`VfsFileManager.tsx`（新增 `readOnly` 模式：隐藏新建/重命名/删除/移动/ZIP/批量/规则等全部写操作与更多菜单，保留导航与下拉刷新；`pullFromParent` 收窄 session-only）、`FileEditorScreen.tsx`+`navigation/types.ts`（`scopeKind` 加 `physical` 只读分支：前缀解析后走单 scope read，保存按钮禁用）、`ChatSessionListPanel.tsx`（删 `projectPullFromParent`）、`TemplatePullButton.tsx`（缩窄）。
+**mobile**：`GlobalTemplateScreen.tsx`（banner 删「从上级同步」；数据源换 `runtime.physicalVfs()` + 根 `/`；标题语义改「文件浏览器」）、`VfsFileManager.tsx`（新增 `readOnly` 模式：隐藏新建/重命名/删除/移动/ZIP/批量/规则等全部写操作与更多菜单，保留目录导航；`pullFromParent` 收窄 session-only）、`FileEditorScreen.tsx`+`navigation/types.ts`（`scopeKind` 加 `physical` 只读分支：前缀解析后走单 scope read，保存按钮禁用）、`ChatSessionListPanel.tsx`（删 `projectPullFromParent`）、`TemplatePullButton.tsx`（缩窄）。
 
 **CLI**：删 `project/template.ts` + `commands.ts` 对应 case；`session/template.ts` 保留。
 

@@ -48,7 +48,6 @@
   nm vfs worktree list                           # global worktree TSV (template paths)
   nm project worktree dir /template --head 2     # directory rules under /template
   nm project worktree file /template/a.md --mode show
-  nm project template pull                       # overwrite project template from global
   nm session worktree display                    # <file> blocks for visible files
   nm session template pull                       # overwrite session from project; clears session-fs
   ```

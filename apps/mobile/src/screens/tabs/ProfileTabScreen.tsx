@@ -31,7 +31,7 @@ const WORKSPACE_AGENT_MENU = {
 
 const WORKSPACE_GLOBAL_MENU = {
   icon: '🌐',
-  label: '全局工作区',
+  label: '文件浏览器',
   route: 'GlobalTemplate',
 } as const;
 
