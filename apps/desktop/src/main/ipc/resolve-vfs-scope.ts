@@ -28,7 +28,6 @@ export function resolveVfsScopeFromRequest(req: VfsScopeRequest): VfsScope {
       }
       return { kind: "project-meta", projectId: req.projectId };
     case "session":
-    case "session":
       if (req.projectId == null || req.projectId === "") {
         throw new VfsScopeError("缺少 projectId");
       }
