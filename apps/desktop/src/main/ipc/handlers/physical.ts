@@ -13,6 +13,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { getPhysicalVfs } from "../resolve-vfs-scope.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { isVfsError } from "@novel-master/core/vfs";
 
 /** VfsListEntry.kind → WorkplaceListRowDto.kind */
 function toRowKind(kind: string): "dir" | "file" {
@@ -43,9 +44,17 @@ function toPhysicalRow(entry: {
   };
 }
 
+/** 物理根下的顶层挂载点：根请求按此拆分逐 scope 拉取（见 handlePhysicalList）。 */
+const ROOT_SCOPE_DIRS = ["/meta", "/template", "/projects"];
+
 /**
- * 列物理子树全部行（BFS 收敛）：根行自身不出现在结果里，
+ * 列物理子树全部行（单次批量拉取）：根行自身不出现在结果里，
  * 虚拟目录（/projects、/projects/{pid}/sessions 等）同样合成目录行。
+ *
+ * 根请求按顶层挂载点拆成多次 listTree（core 单次调用内部同为逐 scope
+ * 查询，查询量等价），由此获得 per-scope 错误隔离：某子树拉取抛
+ * NOT_FOUND（如项目/会话被并发删除）或其他异常时跳过该子树，
+ * 其余域行照常返回，不再一个子树失败拖垮整树（ok:false 整树空白）。
  */
 export async function handlePhysicalList(
   req: PhysicalListRequest,
@@ -53,16 +62,29 @@ export async function handlePhysicalList(
   try {
     const rt = await getDesktopRuntime();
     const vfs = getPhysicalVfs(rt);
+    const isRoot = req.path === "/";
+    const scopeDirs = isRoot ? ROOT_SCOPE_DIRS : [req.path];
     const rows: WorkplaceListRowDto[] = [];
-    const queue: string[] = [req.path];
-    while (queue.length > 0) {
-      const dir = queue.shift()!;
-      const entries = await vfs.list(dir);
-      for (const entry of entries) {
-        rows.push(toPhysicalRow(entry));
-        if (entry.kind === "directory") {
-          queue.push(entry.path);
+    if (isRoot) {
+      // 三个挂载点根目录行自身（listTree 不含查询根行，补齐供面板顶层展示）
+      for (const dir of ROOT_SCOPE_DIRS) {
+        rows.push(toPhysicalRow({ path: dir, kind: "directory" }));
+      }
+    }
+    for (const scopeDir of scopeDirs) {
+      try {
+        rows.push(
+          ...(await vfs.listTree(scopeDir)).map((entry) =>
+            toPhysicalRow(entry),
+          ),
+        );
+      } catch (err) {
+        // vfsNotFound：子树已不存在（如项目被并发删除）→ 跳过该子树；
+        // 其他异常同样降级跳过（不中断整树），留 warn 便于排查
+        if (!isVfsError(err, "NOT_FOUND")) {
+          console.warn("[physical-list] 子树拉取失败，已跳过:", scopeDir, err);
         }
+        continue;
       }
     }
     return { ok: true, data: rows };

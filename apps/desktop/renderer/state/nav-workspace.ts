@@ -10,7 +10,7 @@ export type NavViewId =
   | "conversation"
   | "subagent-conversation";
 
-export type WorkspaceScope = "global" | "session" | "chat" | "physical";
+export type WorkspaceScope = "session" | "chat" | "physical";
 
 export const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
   // projects 视图换只读物理树浏览器（跨域拼接视图；原 global 面板不再展示）
@@ -23,7 +23,6 @@ export const NAV_TO_WORKSPACE: Record<NavViewId, WorkspaceScope> = {
 };
 
 export const WORKSPACE_TITLES: Record<WorkspaceScope, string> = {
-  global: "全局工作区",
   session: "会话工作区",
   chat: "聊天工作区",
   physical: "文件浏览器",
@@ -31,7 +30,7 @@ export const WORKSPACE_TITLES: Record<WorkspaceScope, string> = {
 
 /** Sync explorer title/panel with current chat nav view. */
 export function syncWorkspaceWithNav(viewId: NavViewId): WorkspaceScope {
-  return NAV_TO_WORKSPACE[viewId] ?? "global";
+  return NAV_TO_WORKSPACE[viewId] ?? "physical";
 }
 
 export function workspaceTitleForScope(scope: WorkspaceScope): string {
