@@ -1,32 +1,25 @@
-# global-fs-manager 开发编排状态（Context Bundle / code-dev-loop 终态）
-# 本文件为工作流状态，勿写入 APM 记忆
+# global-fs-manager CR-fix 开发编排状态（code-dev-loop，执行 cr-fix-spec.md）
 
-spec_path: docs/Iterations/global-fs-manager/spec.md
+spec_path: docs/Iterations/global-fs-manager/cr-fix-spec.md
 prd_path: docs/Iterations/global-fs-manager/prd.md
-iteration: global-fs-manager
-branch: feat/global-fs-manager
-worktree: .woktree/global-fs
-base_sha: 5f8aba0
+iteration: global-fs-manager-cr-fix
+branch: feat/skills-integration（主仓，勿在 .woktree 落改）
+base_sha: 26787db
 
-spec_summary: 只读物理树浏览器（拼接视图）+ 技能存储重定位 meta 域（零迁移）+ 拆除 global→project pullTemplate 全链；零 DDL、SCHEMA_BOOT_VERSION=7 不动
+must_fix_inventory:
+  P0: [meta/C-orch-1]
+  P1: [desktop/B-1]
+  P2: [core/B-1, core/C-1, core/G-1, core/G-2, mobile/B-1, mobile/G-1, desktop/B-2, desktop/C-1, desktop/G-1, cli/G-2]
 
-blocking_steps: [s1, s2, s3, s4, s5, s6]
+spec_deviations: []  # CR 3 条 deviations：用户「按 cr spec 开发」指令视同按现状接受；dev-ready 时随记忆记录
 
-dag_version: 3
-wave_plan: []
+dag_version: 1
+wave_plan: [[impl-cr-core], [impl-cr-desktop, impl-cr-mobile], [cr-func-cr]]
 node_status:
-  impl-s1: { status: done, head_sha: 1f96b06, executor: subagent }
-  verify-s1: { status: done, executor: main }
-  impl-s2s4-core: { status: done, head_sha: d0df419, executor: subagent }
-  impl-s3-clients: { status: done, head_sha: 413d0fe, executor: subagent }
-  cr-func-s1-s4: { status: done, func_ready: yes }
-  fix-sr3-blob: { status: done, head_sha: 17553d9, executor: subagent }
-  fix-resolve-scope-deadcode: { status: done, head_sha: 2898f49, executor: main }
-  impl-s5-mobile: { status: done, head_sha: 33877b4, executor: subagent }
-  impl-s6-desktop: { status: done, head_sha: ea6faf5, executor: subagent }
-  cr-func-s5-s6: { status: done, func_ready: yes }
-  impl-s7-docs: { status: done, head_sha: 17ad044, executor: main }
+  # core 6 条 + desktop/B-2 core 侧：全部触碰 physical-vfs.service/physical-vfs.test 同文件族，强制单节点
+  impl-cr-core: { status: pending, items: "meta/C-orch-1(P0) + core/B-1 + core/C-1 + core/G-1 + core/G-2 + desktop/B-2 core 侧" }
+  # desktop 4 条 + cli 1 条：apps/desktop 与 apps/cli 无冲突（B-2 消费侧改 physical.ts handler）
+  impl-cr-desktop: { status: pending, items: "desktop/B-1(P1) + desktop/G-1 + desktop/B-2 消费侧 + desktop/C-1 + cli/G-2" }
+  impl-cr-mobile: { status: pending, items: "mobile/B-1 + mobile/G-1" }
+  cr-func-cr: { status: pending }
 open_must_fix: []
-spec_deviations: []  # 记录级观察项见 memory：desktop BFS 全树、T-SR3 orphan SQL 范围
-status: dev-ready（Step 8 真机走查待用户 manual 验收）
-# Step 8 真机走查为 manual_user，不入 DAG，合并后用户验收
