@@ -6518,6 +6518,50 @@ html[data-theme="dark"] .chat-batch-bar {
   border-color: var(--primary);
 }
 
+/* 小节标题（关键词 / 编号区间），对齐配置页分区表单的层次 */
+.chat-history-search__section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.chat-history-search__section-label--with-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-history-search__section-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* 编号区间输入：窄宽数字框，与关键词框区分 */
+.chat-history-search__seq {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.chat-history-search__seq:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.chat-history-search__seq-dash {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
 .chat-history-search__toggles {
   display: inline-flex;
   align-items: center;

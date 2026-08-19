@@ -191,12 +191,13 @@ export function ChatHistorySearchPanel({
         </button>
         {formExpanded ? (
           <form className="chat-history-search__form" onSubmit={onSubmit}>
+            <div className="chat-history-search__section-label">关键词</div>
             <div className="chat-history-search__input-row">
               <input
                 type="text"
                 className="chat-history-search__keyword"
                 data-session-detail-action="search-history-keyword"
-                placeholder="输入关键词，回车搜索"
+                placeholder="关键词"
                 value={keyword}
                 onChange={(e) => setKeyword(e.target.value)}
               />
@@ -209,22 +210,27 @@ export function ChatHistorySearchPanel({
                 {loading ? "查询中…" : "查询"}
               </button>
             </div>
+            <div className="chat-history-search__section-label chat-history-search__section-label--with-hint">
+              编号区间
+              <span className="chat-history-search__section-hint">留空不限</span>
+            </div>
             <div className="chat-history-search__input-row">
               <input
                 type="text"
                 inputMode="numeric"
-                className="chat-history-search__keyword"
+                className="chat-history-search__seq"
                 data-session-detail-action="search-history-from-seq"
-                placeholder="起始编号，留空不限"
+                placeholder="从 #"
                 value={fromSeqText}
                 onChange={(e) => setFromSeqText(e.target.value)}
               />
+              <span className="chat-history-search__seq-dash">–</span>
               <input
                 type="text"
                 inputMode="numeric"
-                className="chat-history-search__keyword"
+                className="chat-history-search__seq"
                 data-session-detail-action="search-history-to-seq"
-                placeholder="截止编号，留空不限"
+                placeholder="到 #"
                 value={toSeqText}
                 onChange={(e) => setToSeqText(e.target.value)}
               />

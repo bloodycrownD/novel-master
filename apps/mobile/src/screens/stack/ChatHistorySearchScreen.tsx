@@ -280,13 +280,18 @@ export function ChatHistorySearchScreen() {
           </Pressable>
           {formExpanded ? (
             <View style={styles.formCardBody}>
+              <View style={styles.sectionLabelRow}>
+                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
+                  关键词
+                </Text>
+              </View>
               <View style={styles.searchRow}>
                 <FormTextInput
                   testID="chat-history-search-keyword"
                   tokens={tokens}
                   value={keyword}
                   onChangeText={setKeyword}
-                  placeholder="输入关键词，留空列出全部"
+                  placeholder="关键词"
                   accessibilityLabel="搜索关键词输入框"
                   style={styles.keywordInput}
                 />
@@ -310,24 +315,33 @@ export function ChatHistorySearchScreen() {
                 </Pressable>
               </View>
 
-              {/* 编号区间行：起始/截止编号，均可留空表示该侧不设限。 */}
+              {/* 编号区间节：两个数字输入并排，均可留空表示该侧不设限。 */}
+              <View style={styles.sectionLabelRow}>
+                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
+                  编号区间
+                </Text>
+                <Text style={[styles.sectionHint, {color: tokens.textTertiary}]}>
+                  留空不限
+                </Text>
+              </View>
               <View style={styles.seqRow}>
                 <FormTextInput
                   testID="chat-history-search-from-seq"
                   tokens={tokens}
                   value={fromSeqText}
                   onChangeText={setFromSeqText}
-                  placeholder="起始编号，留空不限"
+                  placeholder="从 #"
                   keyboardType="numeric"
                   accessibilityLabel="起始编号输入框"
                   style={styles.seqInput}
                 />
+                <Text style={[styles.seqDash, {color: tokens.textTertiary}]}>–</Text>
                 <FormTextInput
                   testID="chat-history-search-to-seq"
                   tokens={tokens}
                   value={toSeqText}
                   onChangeText={setToSeqText}
-                  placeholder="截止编号，留空不限"
+                  placeholder="到 #"
                   keyboardType="numeric"
                   accessibilityLabel="截止编号输入框"
                   style={styles.seqInput}
@@ -486,6 +500,15 @@ const styles = StyleSheet.create({
   formCardSummary: {fontSize: 12, lineHeight: 17, marginTop: 2},
   formCardChevron: {fontSize: 10, paddingTop: 4},
   formCardBody: {gap: 8, marginTop: 10},
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  sectionLabel: {fontSize: 13, fontWeight: '600'},
+  sectionHint: {fontSize: 12},
+  seqDash: {fontSize: 14, paddingHorizontal: 2},
   resultList: {flex: 1},
   resultContent: {padding: 16, gap: 10},
   resultContentEmpty: {flex: 1, padding: 16, gap: 10},
