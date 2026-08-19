@@ -60,6 +60,13 @@ function toCoreVfsScope(
       return { kind: "project", projectId };
     case "global":
       return { kind: "global" };
+    case "global-meta":
+      return { kind: "global-meta" };
+    case "project-meta":
+      return { kind: "project-meta", projectId };
+    default:
+      // physical 为只读预览，保存流程不可达；仅作错误格式化的类型兜底。
+      return { kind: "global" };
   }
 }
 
