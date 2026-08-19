@@ -27,6 +27,7 @@ import {
   PROMPT_REGION_LABELS,
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
+  WORKPLACE_DISABLED_HINT,
   WORKPLACE_ASSISTANT_TEXT_LABEL,
   buildAgentDefinitionFromForm,
   countFormPromptSources,
@@ -936,7 +937,13 @@ export function AgentEditorForm(props: Props) {
                   />
                 </FormField>
               </>
-            ) : null}
+            ) : (
+              <Text
+                style={[styles.chatSlotHint, {color: tokens.textSecondary}]}
+              >
+                {PROMPT_REGION_LABELS.skillsDisabledHint}
+              </Text>
+            )}
           </View>
 
           {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL, {
@@ -973,7 +980,7 @@ export function AgentEditorForm(props: Props) {
               </>
             ) : (
               <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
-                关闭时不注入项目文件树。
+                {WORKPLACE_DISABLED_HINT}
               </Text>
             )}
           </View>

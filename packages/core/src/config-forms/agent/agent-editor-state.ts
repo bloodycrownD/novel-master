@@ -118,9 +118,12 @@ export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 /** 常驻工作区在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
 export const WORKPLACE_BLOCK_LABEL = "常驻工作区";
 
-/** 常驻工作区说明（用户可见；强调可编辑确认语，仅常驻前缀）。 */
+/** 常驻工作区开启态说明（仅讲可编辑项；机制描述留给关闭态）。 */
 export const WORKPLACE_BLOCK_HINT =
-  "开启后可编辑助手确认语（默认如 我看到工作区了）；用户侧文件树包在 <workplace> 内，仅表常驻前缀。";
+  "可编辑助手确认语（默认：我看到工作区了）。";
+
+/** 常驻工作区关闭态说明。 */
+export const WORKPLACE_DISABLED_HINT = "关闭时不注入项目文件树。";
 
 /** 常驻工作区助手确认语字段标签。 */
 export const WORKPLACE_ASSISTANT_TEXT_LABEL = "助手确认语";
@@ -163,8 +166,9 @@ export const PROMPT_REGION_LABELS = {
   skills: "技能索引",
   skillsTag: "技能",
   skillsBlocks: "技能索引区",
-  skillsReadonlyHint:
-    "运行时注入生效技能索引；关闭后不注入索引且不注册 skill 工具（正文 $ 引用不受影响）。",
+  skillsReadonlyHint: "运行时注入生效技能索引。",
+  skillsDisabledHint:
+    "关闭后不注入索引且不注册 skill 工具；手动引用 skill 不受影响。",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 
