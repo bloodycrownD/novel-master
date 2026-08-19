@@ -77,7 +77,9 @@ export type HostToRichDocumentMessage =
       }
     >
   /** 关闭详情弹窗后清 Recogito 选中，避免二次点击卡顿。 */
-  | BridgeEnvelope<'clearAnnotateSelection', Record<string, never>>;
+  | BridgeEnvelope<'clearAnnotateSelection', Record<string, never>>
+  /** Android 返回键：RN 拦截后下发，关闭 mermaid 全屏查看器。 */
+  | BridgeEnvelope<'closeMermaidViewer', Record<string, never>>;
 
 /** Document WebView → host */
 export type RichDocumentToHostMessage =
@@ -94,7 +96,11 @@ export type RichDocumentToHostMessage =
   | BridgeEnvelope<'selectionCollect', RichDocumentSelectionCollectPayload>
   | BridgeEnvelope<'recogitoCreate', RichDocumentRecogitoCreatePayload>
   /** 同文多条时 ids 含全部可改删项；单条时长度为 1。 */
-  | BridgeEnvelope<'annotateOpen', {ids: readonly string[]}>;
+  | BridgeEnvelope<'annotateOpen', {ids: readonly string[]}>
+  /** mermaid 全屏查看器开（点击图表进全屏；RN 侧登记返回键拦截态）。 */
+  | BridgeEnvelope<'mermaidViewerOpened', Record<string, never>>
+  /** mermaid 全屏查看器关（点空白/关闭按钮/返回键；RN 侧复位拦截态）。 */
+  | BridgeEnvelope<'mermaidViewerClosed', Record<string, never>>;
 
 export function encodeHostToRichDocument(
   message: HostToRichDocumentMessage,

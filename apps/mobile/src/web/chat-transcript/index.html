@@ -9,6 +9,8 @@
   <div id="scroller"><div id="rows"></div></div>
   <!-- Portal 等价宿主：MenuOverlay 由 main render 至此，避免与 #rows 互毁 -->
   <div id="menu-portal"></div>
+  <!-- Mermaid 全屏覆盖层宿主：与 #menu-portal 平级，renderRows 重建不冲掉 -->
+  <div id="mermaid-viewer-portal"></div>
   <script src="./app.js"></script>
 </body>
 </html>

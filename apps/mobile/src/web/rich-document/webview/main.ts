@@ -14,6 +14,12 @@ import {
   refreshAnnotateAfterDocument,
 } from './runtime/annotate';
 import { renderMermaidBlocks } from './runtime/mermaid';
+import {
+  attachMermaidViewerDelegation,
+  closeMermaidViewer,
+  registerMermaidViewerView,
+} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import { MermaidViewerOverlay } from '@web/shared/mermaid-fullscreen/MermaidViewerOverlay';
 import { DocumentApp } from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
@@ -30,6 +36,24 @@ registerSetDocumentView((payload) => {
 });
 
 bindAnnotateUi();
+
+// Mermaid 全屏查看器：模块初始化处一次性挂接（不进 setDocument 视图刷新链路）
+const overlayPortal = document.getElementById('overlay-portal');
+registerMermaidViewerView((props) => {
+  if (!overlayPortal) return;
+  if (!props) {
+    render(null, overlayPortal);
+    return;
+  }
+  render(
+    h(MermaidViewerOverlay, {
+      svgClone: props.svgClone,
+      onClose: () => closeMermaidViewer(true),
+    }),
+    overlayPortal,
+  );
+});
+attachMermaidViewerDelegation(post);
 
 document.addEventListener('message', function (e: Event) {
   const ev = e as MessageEvent;

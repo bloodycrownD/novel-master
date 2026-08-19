@@ -22,6 +22,79 @@ const webSrc = (rel: string) =>
 const rnSrc = (rel: string) =>
   readFileSync(join(__dirname, '../src', rel), 'utf8');
 
+describe('mermaid 全屏查看器共享模块源码契约 (T-MF1)', () => {
+  it('runtime 含委托/克隆/post 双向通知，不含失败态匹配', () => {
+    const runtime = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
+    // document 级 click 事件委托：整树重建不丢监听
+    expect(runtime).toContain("closest('.mermaid-block__chart')");
+    // 克隆不移动：原图 DOM 零改动
+    expect(runtime).toContain('cloneNode(true)');
+    expect(runtime).toContain('querySelector(\'svg\')');
+    // 对称消息模式：开/关都通知 RN
+    expect(runtime).toContain("'mermaidViewerOpened'");
+    expect(runtime).toContain("'mermaidViewerClosed'");
+    // 失败态（源码回退）不匹配选择器，天然不可进全屏
+    expect(runtime).not.toContain('.mermaid-failed');
+    expect(runtime).toContain("classList.add('mermaid-viewer-open')");
+  });
+
+  it('样式常量：主题变量 + z-index 对齐 menu 量级 + 禁滚动', () => {
+    const styles = webSrc(
+      'shared/mermaid-fullscreen/mermaid-fullscreen-styles.ts',
+    );
+    expect(styles).toContain('MERMAID_FULLSCREEN_CSS');
+    expect(styles).toContain('var(--bg');
+    expect(styles).toContain('var(--surface');
+    expect(styles).toContain('var(--text');
+    expect(styles).toMatch(/9998/);
+    expect(styles).toContain('.mermaid-fullscreen-backdrop');
+    expect(styles).toContain('body.mermaid-viewer-open');
+  });
+});
+
+describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
+  it('两 index.html 含 portal 宿主；两 main.ts 含注册与委托；两 bridge 含 closeMermaidViewer 分支', () => {
+    // rich-document：#overlay-portal 与 #doc 平级；chat：#mermaid-viewer-portal 与 #menu-portal 平级
+    expect(webSrc('rich-document/index.html')).toContain(
+      'id="overlay-portal"',
+    );
+    expect(webSrc('chat-transcript/index.html')).toContain(
+      'id="mermaid-viewer-portal"',
+    );
+
+    // 两 main.ts：注册渲染入口 + 事件委托挂接（模块初始化处，不进渲染链路）
+    for (const rel of [
+      'rich-document/webview/main.ts',
+      'chat-transcript/webview/main.ts',
+    ]) {
+      const main = webSrc(rel);
+      expect(main).toContain('registerMermaidViewerView');
+      expect(main).toContain('attachMermaidViewerDelegation');
+      expect(main).toContain('MermaidViewerOverlay');
+    }
+
+    // 两 bridge：closeMermaidViewer 分支（关覆盖层 + post closed）
+    expect(webSrc('rich-document/webview/runtime/bridge.ts')).toContain(
+      "msg.type === 'closeMermaidViewer'",
+    );
+    expect(webSrc('chat-transcript/webview/runtime/bridge/bridge.ts')).toContain(
+      "case 'closeMermaidViewer':",
+    );
+  });
+
+  it('rich-document main 挂接不进 setDocument 视图刷新链路（T-MV1 顺序不变）', () => {
+    const main = webSrc('rich-document/webview/main.ts');
+    // T-MV1 钉住的顺序仍成立
+    expect(main).toMatch(
+      /renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/,
+    );
+    // 全屏注册在 registerSetDocumentView 回调之外（模块初始化处）
+    expect(main).toMatch(
+      /\}\);\n\nbindAnnotateUi[\s\S]*registerMermaidViewerView/,
+    );
+  });
+});
+
 describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
   it('pinch 缩放 clamp：不小于 min、不大于 max、非法值回退 min', () => {
     expect(clampMermaidViewerScale(0.3)).toBe(MERMAID_VIEWER_MIN_SCALE);

@@ -10,6 +10,13 @@ import {
 } from './runtime/menu/menu';
 import { registerRenderRows } from './runtime/render/row-logic';
 import { startTranscriptBoot } from './runtime/boot/boot-transcript';
+import { post } from './runtime/bridge/bridge';
+import {
+  attachMermaidViewerDelegation,
+  closeMermaidViewer,
+  registerMermaidViewerView,
+} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import { MermaidViewerOverlay } from '@web/shared/mermaid-fullscreen/MermaidViewerOverlay';
 import { MenuOverlay } from './ui/menu/MenuOverlay';
 import { RowList } from './ui/render/RowList';
 
@@ -31,6 +38,24 @@ registerRenderRows(() => {
   if (!list) return;
   render(h(RowList, null), list);
 });
+
+// Mermaid 全屏查看器：模块初始化处一次性挂接（不进 renderRows 链路）
+const mermaidViewerPortal = document.getElementById('mermaid-viewer-portal');
+registerMermaidViewerView((props) => {
+  if (!mermaidViewerPortal) return;
+  if (!props) {
+    render(null, mermaidViewerPortal);
+    return;
+  }
+  render(
+    h(MermaidViewerOverlay, {
+      svgClone: props.svgClone,
+      onClose: () => closeMermaidViewer(true),
+    }),
+    mermaidViewerPortal,
+  );
+});
+attachMermaidViewerDelegation(post);
 
 startTranscriptBoot();
 

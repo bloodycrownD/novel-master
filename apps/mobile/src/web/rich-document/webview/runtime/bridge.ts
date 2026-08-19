@@ -14,6 +14,7 @@ import {
   clearAnnotateSelection,
   type AnnotateRenderMark,
 } from './annotate';
+import { closeMermaidViewer } from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 
 /**
  * P0-3：setDocument 视图刷新注册门面。
@@ -93,5 +94,10 @@ export function handleHostMessage(raw: unknown): void {
   }
   if (msg.type === 'clearAnnotateSelection') {
     clearAnnotateSelection();
+    return;
+  }
+  // Android 返回键：RN 拦截后下发关闭；关闭后回发 mermaidViewerClosed 复位 RN 态
+  if (msg.type === 'closeMermaidViewer') {
+    closeMermaidViewer(true);
   }
 }

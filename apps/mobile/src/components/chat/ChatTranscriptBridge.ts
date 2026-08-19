@@ -156,6 +156,8 @@ export type HostToTranscriptMessage =
   | BridgeEnvelope<'themeUpdate', { theme: TranscriptTheme }>
   | BridgeEnvelope<'flagsUpdate', { flags: TranscriptFlags }>
   | BridgeEnvelope<'closeMenu', Record<string, never>>
+  /** Android 返回键：RN 拦截后下发，关闭 mermaid 全屏查看器。 */
+  | BridgeEnvelope<'closeMermaidViewer', Record<string, never>>
   /** 键盘抬高输入框后：若当前贴底则重新 stick，避免最后几条被挡在输入框下。 */
   | BridgeEnvelope<'stickIfNearBottom', Record<string, never>>;
 
@@ -196,6 +198,10 @@ export type TranscriptToHostMessage =
   | BridgeEnvelope<'messageMenuAction', { messageId: string; action: string }>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>
+  /** mermaid 全屏查看器开（点击图表进全屏；RN 侧登记返回键拦截态）。 */
+  | BridgeEnvelope<'mermaidViewerOpened', Record<string, never>>
+  /** mermaid 全屏查看器关（点空白/关闭按钮/返回键；RN 侧复位拦截态）。 */
+  | BridgeEnvelope<'mermaidViewerClosed', Record<string, never>>
   | BridgeEnvelope<
       'log',
       { level: string; message: string; fields?: Record<string, unknown> }

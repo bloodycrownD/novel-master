@@ -12,6 +12,7 @@ import {
 } from '../stream/stream';
 import { clearStreamRichUpgrade } from '../stream/stream-markdown';
 import { closeContextMenu } from '../menu/menu';
+import { closeMermaidViewer } from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import { flagsEqual, renderRows } from '../render/row-logic';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';
 
@@ -134,6 +135,10 @@ export function handleHostMessage(raw: unknown): void {
       break;
     case 'closeMenu':
       closeContextMenu(true);
+      break;
+    // Android 返回键：RN 拦截后下发关闭；关闭后回发 mermaidViewerClosed 复位 RN 态
+    case 'closeMermaidViewer':
+      closeMermaidViewer(true);
       break;
     case 'stickIfNearBottom':
       scheduleStickIfNearBottom();
