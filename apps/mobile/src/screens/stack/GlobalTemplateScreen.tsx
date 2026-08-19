@@ -4,16 +4,16 @@
  */
 import React, {useCallback, useEffect, useRef} from 'react';
 import {BackHandler, StyleSheet, View} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import type {VfsFileManagerHandle} from '../../components/vfs/VfsFileManager';
+import {isGhostPop, shouldInterceptBackRemove} from './global-template-back';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
-import {shouldInterceptBackRemove} from './global-template-back';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -47,6 +47,14 @@ export function GlobalTemplateScreen() {
     });
     return () => sub.remove();
   }, []);
+  // 本屏最近一次聚焦时刻：用于吞掉从详情页侧滑返回时重放的手势残余 POP
+  // （详见 global-template-back.ts 的 isGhostPop 说明）。
+  const focusedAtRef = useRef(0);
+  useFocusEffect(
+    useCallback(() => {
+      focusedAtRef.current = Date.now();
+    }, []),
+  );
   useEffect(() => {
     // iOS 侧滑手势不走 BackHandler，会直接触发路由 pop；在此拦截
     // 并转为逐级上翻。仅拦截 POP 类返回动作——RESET/POP_TO_TOP 等
@@ -54,11 +62,24 @@ export function GlobalTemplateScreen() {
     // goBack 仅在根目录调用，不会被本拦截器因 canGoUp 为 false 而
     // 自我阻断。
     const sub = navigation.addListener('beforeRemove', e => {
+      const actionType = e.data.action.type;
+      // 幽灵 POP（从详情页侧滑返回时重放的手势残余）：吞掉，既不退出也不上翻，
+      // 否则根目录下浏览器会被连坐退出。
+      if (
+        isGhostPop({
+          actionType,
+          focusedAtMs: focusedAtRef.current,
+          nowMs: Date.now(),
+        })
+      ) {
+        e.preventDefault();
+        return;
+      }
       const handle = fileRef.current;
       if (
         handle == null ||
         !shouldInterceptBackRemove({
-          actionType: e.data.action.type,
+          actionType,
           canGoUp: handle.canGoUp(),
         })
       ) {

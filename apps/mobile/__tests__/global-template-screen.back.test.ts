@@ -1,4 +1,7 @@
-import {shouldInterceptBackRemove} from '../src/screens/stack/global-template-back';
+import {
+  isGhostPop,
+  shouldInterceptBackRemove,
+} from '../src/screens/stack/global-template-back';
 
 /**
  * mobile/G-1 用例②：beforeRemove 拦截判定。
@@ -30,6 +33,26 @@ describe('GlobalTemplateScreen beforeRemove 拦截判定', () => {
     ).toBe(false);
     expect(
       shouldInterceptBackRemove({actionType: 'NAVIGATE', canGoUp: true}),
+    ).toBe(false);
+  });
+});
+
+describe('isGhostPop 幽灵 POP（侧滑返回时的手势残余）', () => {
+  it('刚聚焦后窗口内的 POP → 判为残余，吞掉', () => {
+    expect(
+      isGhostPop({actionType: 'POP', focusedAtMs: 1000, nowMs: 1200}),
+    ).toBe(true);
+  });
+
+  it('窗口外的 POP → 非残余（用户真实侧滑，正常处理）', () => {
+    expect(
+      isGhostPop({actionType: 'POP', focusedAtMs: 1000, nowMs: 2000}),
+    ).toBe(false);
+  });
+
+  it('非 POP 动作永不判为残余（清栈导航始终放行）', () => {
+    expect(
+      isGhostPop({actionType: 'RESET', focusedAtMs: 1000, nowMs: 1001}),
     ).toBe(false);
   });
 });
