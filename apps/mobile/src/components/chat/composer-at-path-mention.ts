@@ -165,6 +165,20 @@ function findSingleAddedRange(
 }
 
 /**
+ * 全篇提升：草稿水化（重进会话）等场景，把完整 `@path` / `$skill` 全部提为 mention。
+ * 对外 plain 不变，仅恢复 tag 着色 / 原子删效果。
+ */
+export function promotePlainMentions(
+  plain: string,
+  triggersConfig: ComposerTriggersConfig,
+): string {
+  return promotePlainAtPathsInRange(plain, triggersConfig, {
+    start: 0,
+    end: plain.length,
+  });
+}
+
+/**
  * 在 plain 坐标 `[start,end)` 内，把完整 `@path` / `$skill` 纯文本片段提成 mention markup。
  */
 function promotePlainAtPathsInRange(

@@ -23,6 +23,7 @@ import {
   formatAtPathMentionMarkup,
   mentionValueToPlain,
   mergeProgrammaticPlainIntoMentionValue,
+  promotePlainMentions,
   suggestionFromAtPathToken,
   tryAtomicMentionDelete,
   type ComposerAtPathTriggersConfig,
@@ -226,5 +227,30 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
 
     const input = tree!.root.findByType(TextInput);
     expect(input.props.selection).toEqual({ start: 9, end: 9 });
+  });
+});
+
+describe('promotePlainMentions（草稿水化恢复 tag）', () => {
+  it('完整 @path / $skill 全部提为 mention，plain 不变', () => {
+    const config: import('../src/components/chat/composer-at-path-mention').ComposerTriggersConfig =
+      {
+        atPath: triggersConfig.atPath,
+        skill: {
+          trigger: '$',
+          allowedSpacesCount: 0,
+          isInsertSpaceAfterMention: true,
+          getPlainString: mention => `$${mention.name}`,
+        },
+      };
+    const plain = '看 @/chapters/01.md 与 $写作技能 再回我';
+    const promoted = promotePlainMentions(plain, config);
+    expect(promoted).toContain('{@}[/chapters/01.md](/chapters/01.md)');
+    expect(promoted).toContain('{$}[写作技能](写作技能)');
+    expect(mentionValueToPlain(promoted)).toBe(plain);
+  });
+
+  it('空串 / 无 token 原样返回', () => {
+    expect(promotePlainMentions('', triggersConfig)).toBe('');
+    expect(promotePlainMentions('普通文本', triggersConfig)).toBe('普通文本');
   });
 });

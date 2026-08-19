@@ -99,6 +99,8 @@ export function PromptMacroTextInput({
                   style={{
                     color: tokens.primary,
                     backgroundColor: `${tokens.primary}22`,
+                    borderRadius: 6,
+                    paddingHorizontal: 3,
                   }}>
                   {segment.value}
                 </Text>
