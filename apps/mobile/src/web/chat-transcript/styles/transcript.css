@@ -22,6 +22,17 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
     background: color-mix(in srgb, var(--primary, #007aff) 12%, transparent);
   }
 }
+
+/* 用户气泡是 primary 底白字：胶囊反色，避免蓝上蓝隐形 */
+.row.user .ref-token {
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
+}
+@supports (background: color-mix(in srgb, red 10%, transparent)) {
+  .row.user .ref-token {
+    background: color-mix(in srgb, #fff 26%, transparent);
+  }
+}
 /* 消息顶行：角色标签 + ⋯（对齐 Desktop；占一行、正文全宽） */
 .message-menu-row {
   display: flex;
