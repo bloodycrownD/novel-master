@@ -38,6 +38,9 @@ export function GlobalTemplateScreen() {
   }, [setStackOverride, goUpOrExit]);
   useEffect(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      console.log(
+        `[swipe-debug] Browser hardwareBack canGoUp=${fileRef.current?.canGoUp() ?? '?'} @${Date.now()}`,
+      );
       if (fileRef.current?.canGoUp()) {
         fileRef.current.goUp();
         return true;
@@ -46,13 +49,33 @@ export function GlobalTemplateScreen() {
     });
     return () => sub.remove();
   }, []);
+  // [swipe-debug] 临时诊断：focus / beforeRemove 事件流（核对侧滑产生的 POP
+  // 是否到达浏览器、是否连坐退出），确认后移除。
+  useEffect(() => {
+    const focusSub = navigation.addListener('focus', () =>
+      console.log(`[swipe-debug] Browser focus @${Date.now()}`),
+    );
+    const removeSub = navigation.addListener('beforeRemove', e =>
+      console.log(
+        `[swipe-debug] Browser beforeRemove type=${e.data.action.type} canGoUp=${fileRef.current?.canGoUp() ?? '?'} @${Date.now()}`,
+      ),
+    );
+    return () => {
+      focusSub();
+      removeSub();
+    };
+  }, [navigation]);
   // iOS 侧滑不用 beforeRemove 拦截：手势发起的 pop 在原生侧转换已开始，
   // JS preventDefault 拦不住退出，还会破坏后续手势（native-stack 已知
   // 行为）。改为动态开关手势：根目录开（侧滑=原生退出，零拦截），
   // 子目录关（侧滑无效，防误退；上翻走 header 返回箭头与硬件返回）。
   const syncGestureEnabled = useCallback(() => {
+    const canGoUp = fileRef.current?.canGoUp() ?? false;
+    console.log(
+      `[swipe-debug] Browser setOptions gestureEnabled=${!canGoUp} @${Date.now()}`,
+    );
     navigation.setOptions({
-      gestureEnabled: !fileRef.current?.canGoUp(),
+      gestureEnabled: !canGoUp,
     });
   }, [navigation]);
   useEffect(() => {

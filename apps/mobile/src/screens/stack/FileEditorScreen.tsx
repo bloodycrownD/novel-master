@@ -16,7 +16,8 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
-import {useRoute, type RouteProp} from '@react-navigation/native';
+import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../../navigation/types';
 import type {VfsService} from '@novel-master/core/vfs';
 import {useRuntime} from '../../hooks/useRuntime';
@@ -86,6 +87,31 @@ export function FileEditorScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const route = useRoute<FileEditorRoute>();
+  // [swipe-debug] 临时诊断日志（定位侧滑退出失效，确认后移除）：
+  // focus/blur/beforeRemove 事件流 + 内容加载时序，核对侧滑是否产生 POP、
+  // 以及手势时刻 JS 是否正被渲染占着。
+  const dbgNav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  useEffect(() => {
+    console.log(
+      `[swipe-debug] FileEditor mount path=${route.params.path} scope=${route.params.scopeKind} @${Date.now()}`,
+    );
+    const focusSub = dbgNav.addListener('focus', () =>
+      console.log(`[swipe-debug] FileEditor focus @${Date.now()}`),
+    );
+    const blurSub = dbgNav.addListener('blur', () =>
+      console.log(`[swipe-debug] FileEditor blur @${Date.now()}`),
+    );
+    const removeSub = dbgNav.addListener('beforeRemove', e =>
+      console.log(
+        `[swipe-debug] FileEditor beforeRemove type=${e.data.action.type} @${Date.now()}`,
+      ),
+    );
+    return () => {
+      focusSub();
+      blurSub();
+      removeSub();
+    };
+  }, [dbgNav, route.params.path, route.params.scopeKind]);
   const {path, scopeKind, projectId, sessionId, skillRef, onSessionVfsSaved} =
     route.params;
 
@@ -117,7 +143,12 @@ export function FileEditorScreen() {
       return;
     }
     // 短延时让推屏转场先启动，之后才挂 WebView（冷启动大文件不再卡转场）。
-    const timer = setTimeout(() => setHeavyPreviewReady(true), 80);
+    const timer = setTimeout(() => {
+      console.log(
+        `[swipe-debug] FileEditor heavy preview mounting (WebView) @${Date.now()}`,
+      );
+      setHeavyPreviewReady(true);
+    }, 80);
     return () => clearTimeout(timer);
   }, [heavyPreviewReady]);
 
@@ -174,6 +205,9 @@ export function FileEditorScreen() {
         setSavedContent(result.content);
         setVersion(result.version);
         setMtimeMs(result.mtimeMs);
+        console.log(
+          `[swipe-debug] FileEditor content loaded len=${result.content.length} @${Date.now()}`,
+        );
       } catch (error) {
         if (!cancelled) {
           showToast(toastMessage('读取失败', error));
