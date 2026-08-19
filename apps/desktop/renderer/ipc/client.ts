@@ -66,6 +66,8 @@ export const {
   ipcWorkplaceGetDirRule,
   ipcWorkplaceCaptureSessionBlock,
   ipcVfsRead,
+  ipcPhysicalList,
+  ipcPhysicalRead,
   ipcVfsWrite,
   ipcVfsMkdir,
   ipcVfsDelete,

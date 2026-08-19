@@ -148,6 +148,10 @@ import {
   handleSessionsSetModelOverride,
 } from './handlers/sessions.js';
 import {
+  handlePhysicalList,
+  handlePhysicalRead,
+} from './handlers/physical.js';
+import {
   handleVfsBatchClearStaging,
   handleVfsBatchExportStage,
   handleVfsBatchIngestFromPaths,
@@ -238,6 +242,9 @@ export function registerHandlersFromRegistry(): void {
 
   bindReq(IPC_CHANNELS.VFS_LIST, handleVfsList);
   bindReq(IPC_CHANNELS.VFS_READ, handleVfsRead);
+  // 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道）
+  bindReq(IPC_CHANNELS.PHYSICAL_LIST, handlePhysicalList);
+  bindReq(IPC_CHANNELS.PHYSICAL_READ, handlePhysicalRead);
   bindReq(IPC_CHANNELS.VFS_WRITE, handleVfsWrite);
   bindReq(IPC_CHANNELS.VFS_MKDIR, handleVfsMkdir);
   bindReq(IPC_CHANNELS.VFS_DELETE, handleVfsDelete);

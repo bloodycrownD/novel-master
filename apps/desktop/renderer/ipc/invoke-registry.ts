@@ -83,6 +83,8 @@ import {
   type VfsZipPickResult,
   type VfsZipBytesImportRequest,
   type VfsZipRequest,
+  type PhysicalListRequest,
+  type PhysicalReadRequest,
   type WorkplaceBuildListRowsRequest,
   type WorkplaceGetDirRuleRequest,
   type WorkplaceCaptureSessionBlockRequest,
@@ -239,6 +241,14 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcVfsRead: withReq<VfsReadRequest, IpcResult<VfsReadResultDto>>(
       invoke,
       IPC_CHANNELS.VFS_READ,
+    ),
+    ipcPhysicalList: withReq<
+      PhysicalListRequest,
+      IpcResult<WorkplaceListRowDto[]>
+    >(invoke, IPC_CHANNELS.PHYSICAL_LIST),
+    ipcPhysicalRead: withReq<PhysicalReadRequest, IpcResult<VfsReadResultDto>>(
+      invoke,
+      IPC_CHANNELS.PHYSICAL_READ,
     ),
     ipcVfsWrite: withReq<VfsWriteRequest, IpcResult<void>>(
       invoke,

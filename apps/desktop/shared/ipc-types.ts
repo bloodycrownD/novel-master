@@ -47,6 +47,9 @@ export const IPC_CHANNELS = {
 
   VFS_LIST: 'nm:vfs/list',
   VFS_READ: 'nm:vfs/read',
+  /** 只读物理树浏览（跨域拼接视图；仅 list/read，无任何写通道） */
+  PHYSICAL_LIST: 'nm:physical/list',
+  PHYSICAL_READ: 'nm:physical/read',
   VFS_WRITE: 'nm:vfs/write',
   VFS_MKDIR: 'nm:vfs/mkdir',
   VFS_DELETE: 'nm:vfs/delete',
@@ -407,7 +410,9 @@ export type WorkspacePanelScope =
   | 'session'
   | 'chat'
   | 'global-meta'
-  | 'project-meta';
+  | 'project-meta'
+  /** 只读物理树浏览域（跨域拼接视图，不落单 scope；仅 list/read） */
+  | 'physical';
 
 export type VfsScopeRequest = {
   readonly workspaceScope: WorkspacePanelScope;
@@ -564,6 +569,20 @@ export type WorkplaceListRowDto =
     };
 
 export type WorkplaceBuildListRowsRequest = VfsScopeRequest;
+
+/**
+ * 只读物理树列目录请求：列 `path` 子树全部行（BFS 收敛）。
+ * 行 DTO 复用 {@link WorkplaceListRowDto}；规则类字段（ruleState /
+ * inclusionMode / displayState）对物理树无意义，恒为缺省值。
+ */
+export type PhysicalListRequest = {
+  readonly path: string;
+};
+
+/** 只读物理树读文件请求：前缀解析后走对应域单 scope read。 */
+export type PhysicalReadRequest = {
+  readonly path: string;
+};
 
 export type WorkplaceSetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
