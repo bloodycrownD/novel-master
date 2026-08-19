@@ -31,7 +31,8 @@ export type RootStackParamList = {
   RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
   FileEditor: {
     path: string;
-    scopeKind: 'global' | 'project' | 'session' | 'skill';
+    /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */
+    scopeKind: 'global' | 'project' | 'session' | 'skill' | 'physical';
     projectId?: string;
     sessionId?: string;
     /** skill 域引用：按域取 globalMetaVfs/projectMetaVfs，路由 path 为 /meta/skills/{name}/{rel}。 */

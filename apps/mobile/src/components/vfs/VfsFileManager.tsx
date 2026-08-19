@@ -26,6 +26,7 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useAndroidModalKeyboardAvoid } from '../../hooks/useAndroidModalKeyboardAvoid';
 import { useDismissOverlaysOnBlur } from '../../hooks/useDismissOverlaysOnBlur';
 import {
+  type PhysicalVfsService,
   type VfsListEntry,
   type VfsScope,
   type VfsService,
@@ -104,7 +105,11 @@ export type VfsFileManagerHandle = {
 
 export type VfsFileManagerProps = {
   scope: VfsScope;
-  vfs: VfsService;
+  /**
+   * 列表数据源：单 scope VFS，或只读物理树（配合 readOnly 使用）。
+   * 物理树只有 list/read，写操作入口由 readOnly 分支整体隐藏。
+   */
+  vfs: VfsService | PhysicalVfsService;
   /**
    * 工作区服务（纳入状态/目录规则/排序元数据）。可选：非工作区域（如技能目录）
    * 不传，列表退化为纯 VFS 排序，纳入/目录规则相关菜单自动隐藏。
@@ -118,6 +123,12 @@ export type VfsFileManagerProps = {
   };
   /** 当前目录变化时通知父组件（用于同步系统返回状态）。 */
   onDirectoryChange?: () => void;
+  /**
+   * 只读模式：隐藏新建/重命名/删除/移动/ZIP 导入导出/批量/规则与
+   * 「更多」菜单等全部写操作入口，仅保留目录导航与文件打开。
+   * 默认（false 或不传）行为与现状完全一致，既有调用点零影响。
+   */
+  readOnly?: boolean;
   /**
    * 路径保护钩子：返回非空字符串 = 拒绝删除/重命名/移动的原因（如技能入口
    * SKILL.md）；返回 null/undefined = 不保护。仅拦截变更操作，不影响浏览。
@@ -148,6 +159,7 @@ export const VfsFileManager = forwardRef<
     onOpenFile,
     rootPath,
     pullFromParent,
+    readOnly,
     onDirectoryChange,
     isProtectedPath,
     pathLabel,
@@ -157,6 +169,9 @@ export const VfsFileManager = forwardRef<
   const { tokens } = useTheme();
   const { showToast } = useToast();
   const runtime = useRuntime();
+  // readOnly 模式下全部写入口已隐藏，此引用仅供写路径调用
+  // （物理树类型层面无写方法，运行时不可能被写入）。
+  const writableVfs = vfs as VfsService;
   const root = rootPath ?? vfsScopeRootPath(scope);
   const sessionId = scope.kind === 'session' ? scope.sessionId : undefined;
   const useUserVfsTurn = sessionId != null && isUserVfsUnifiedToolTurnEnabled();
@@ -433,7 +448,7 @@ export const VfsFileManager = forwardRef<
           void (async () => {
             try {
               for (const path of paths) {
-                await deleteScopedVfsEntry(runtime, scope, vfs, path, {
+                await deleteScopedVfsEntry(runtime, scope, writableVfs, path, {
                   recursive: true,
                   useUserVfsTurn,
                   sessionId,
@@ -505,7 +520,7 @@ export const VfsFileManager = forwardRef<
                 renameOpts,
               );
             } else {
-              await renameVfsDirectory(vfs, sourcePath, newPath);
+              await renameVfsDirectory(writableVfs, sourcePath, newPath);
             }
             if (workplace != null) {
               await migrateWorkplaceDirRename(workplace, sourcePath, newPath);
@@ -528,7 +543,7 @@ export const VfsFileManager = forwardRef<
                 renameOpts,
               );
             } else {
-              await renameVfsFile(vfs, sourcePath, newPath);
+              await renameVfsFile(writableVfs, sourcePath, newPath);
             }
           }
           moved += 1;
@@ -581,9 +596,11 @@ export const VfsFileManager = forwardRef<
     : undefined;
 
   // 无 workplace（非工作区域，如技能目录）时隐藏纳入/目录规则/角色卡/ZIP 导入导出菜单
-  // （技能包的导入导出在技能管理页提供）。
-  const entityMenuItems: SheetMenuItem[] = menuRow
-    ? menuRow.kind === 'dir'
+  // （技能包的导入导出在技能管理页提供）；readOnly 模式下整体置空（无任何入口可打开）。
+  const entityMenuItems: SheetMenuItem[] =
+    readOnly || !menuRow
+      ? []
+      : menuRow.kind === 'dir'
       ? [
           ...(workplace != null
             ? [
@@ -604,21 +621,22 @@ export const VfsFileManager = forwardRef<
             : []),
           { label: '重命名', action: 'rename' },
           { label: '删除', action: 'delete', danger: true },
-        ]
-    : [];
+        ];
 
-  const moreMenuItems: SheetMenuItem[] = [
-    { label: '新建目录', action: 'create-directory' },
-    { label: '新建文件', action: 'create-file' },
-    ...(workplace != null
-      ? [
-          { label: '导入 ZIP', action: 'import-zip' },
-          { label: '导出 ZIP', action: 'export-zip' },
-          { label: '导入角色卡', action: 'import-character-card' },
-          { label: '目录规则', action: 'directory-rule' },
-        ]
-      : []),
-  ];
+  const moreMenuItems: SheetMenuItem[] = readOnly
+    ? []
+    : [
+        { label: '新建目录', action: 'create-directory' },
+        { label: '新建文件', action: 'create-file' },
+        ...(workplace != null
+          ? [
+              { label: '导入 ZIP', action: 'import-zip' },
+              { label: '导出 ZIP', action: 'export-zip' },
+              { label: '导入角色卡', action: 'import-character-card' },
+              { label: '目录规则', action: 'directory-rule' },
+            ]
+          : []),
+      ];
 
   const openPrompt = (state: PromptState) => {
     setPromptValue(state.defaultValue);
@@ -724,7 +742,7 @@ export const VfsFileManager = forwardRef<
                     newPath,
                   );
                 } else {
-                  await renameVfsFile(vfs, menuPath, newPath);
+                  await renameVfsFile(writableVfs, menuPath, newPath);
                 }
               } else {
                 if (useUserVfsTurn) {
@@ -735,7 +753,7 @@ export const VfsFileManager = forwardRef<
                     newPath,
                   );
                 } else {
-                  await renameVfsDirectory(vfs, menuPath, newPath);
+                  await renameVfsDirectory(writableVfs, menuPath, newPath);
                 }
                 if (workplace != null) {
                   await migrateWorkplaceDirRename(workplace, menuPath, newPath);
@@ -769,7 +787,7 @@ export const VfsFileManager = forwardRef<
             style: 'destructive',
             onPress: () => {
               const runDelete = async () => {
-                await deleteScopedVfsEntry(runtime, scope, vfs, menuPath, {
+                await deleteScopedVfsEntry(runtime, scope, writableVfs, menuPath, {
                   recursive: true,
                   useUserVfsTurn,
                   sessionId,
@@ -908,7 +926,7 @@ export const VfsFileManager = forwardRef<
           if (useUserVfsTurn) {
             await sessionCreateVfsFile(runtime, sessionId!, path);
           } else {
-            await createVfsFile(vfs, path);
+            await createVfsFile(writableVfs, path);
           }
           await reloadVfsListOnly();
         },
@@ -930,7 +948,7 @@ export const VfsFileManager = forwardRef<
           if (useUserVfsTurn) {
             await sessionCreateVfsDirectory(runtime, sessionId!, path);
           } else {
-            await createVfsDirectory(vfs, path);
+            await createVfsDirectory(writableVfs, path);
           }
           if (workplace != null) {
             await workplace.setDirRule(defaultDirRuleForm(path));
@@ -1067,23 +1085,25 @@ export const VfsFileManager = forwardRef<
           </Text>
         </View>
         <View style={styles.toolbarActions}>
-          {pullFromParent ? (
+          {!readOnly && pullFromParent ? (
             <TemplatePullButton
               iconOnly
               scope={pullFromParent.scope}
               onPulled={pullFromParent.onPulled}
             />
           ) : null}
-          <Pressable
-            testID="vfs-more-action"
-            accessibilityLabel="更多操作"
-            onPress={() => setMoreOpen(true)}
-            style={styles.iconBtn}
-          >
-            <Text style={{ color: tokens.text, fontSize: 20, lineHeight: 22 }}>
-              ⋯
-            </Text>
-          </Pressable>
+          {!readOnly ? (
+            <Pressable
+              testID="vfs-more-action"
+              accessibilityLabel="更多操作"
+              onPress={() => setMoreOpen(true)}
+              style={styles.iconBtn}
+            >
+              <Text style={{ color: tokens.text, fontSize: 20, lineHeight: 22 }}>
+                ⋯
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -1125,6 +1145,7 @@ export const VfsFileManager = forwardRef<
                   </View>
                 ) : null}
                 <Pressable
+                  testID={`vfs-row-item-${item.name}`}
                   style={styles.item}
                   onPress={() => {
                     if (vfsBatch.active) {
@@ -1137,9 +1158,13 @@ export const VfsFileManager = forwardRef<
                       onOpenFile(item.path);
                     }
                   }}
-                  onLongPress={() => {
-                    vfsBatch.longPress(item.path);
-                  }}
+                  onLongPress={
+                    readOnly
+                      ? undefined
+                      : () => {
+                          vfsBatch.longPress(item.path);
+                        }
+                  }
                 >
                   <Text style={styles.kind}>
                     {item.kind === 'dir' ? '📁' : '📄'}
@@ -1176,7 +1201,7 @@ export const VfsFileManager = forwardRef<
                     </View>
                   ) : null}
                 </Pressable>
-                {vfsBatch.active ? null : (
+                {vfsBatch.active || readOnly ? null : (
                   <Pressable
                     testID={`vfs-row-menu-${item.name}`}
                     onPress={() => setMenuPath(item.path)}

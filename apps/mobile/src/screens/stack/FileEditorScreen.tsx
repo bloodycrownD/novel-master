@@ -18,6 +18,7 @@ import {
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
+import type {VfsService} from '@novel-master/core/vfs';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {toastMessage} from '../../errors/toast-message';
@@ -104,8 +105,14 @@ export function FileEditorScreen() {
   const isDirty = content !== savedContent;
   useUnsavedGuard(isDirty);
 
+  // physical = 全局文件浏览器只读分支：保存入口禁用，也不提供编辑切换。
+  const isReadOnly = scopeKind === 'physical';
+
   const resolveVfs = useCallback(() => {
     switch (scopeKind) {
+      case 'physical':
+        // 全局文件浏览器：跨域拼接的只读物理树（无任何写方法）。
+        return runtime.physicalVfs();
       case 'global':
         return runtime.globalVfs();
       case 'project':
@@ -132,6 +139,13 @@ export function FileEditorScreen() {
         return runtime.projectMetaVfs(skillRef.projectId);
     }
   }, [runtime, scopeKind, projectId, sessionId, skillRef]);
+
+  // 保存路径专用：physical 分支类型层面无写方法且保存已禁用，
+  // 其余分支均为单 scope 可写 VFS，收窄仅为满足写接口签名。
+  const resolveWritableVfs = useCallback(
+    () => resolveVfs() as VfsService,
+    [resolveVfs],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -169,9 +183,12 @@ export function FileEditorScreen() {
 
   // 技能辅助文件在详情页被删除时踢回，避免停留在已不存在的文件上
   const handleSave = async () => {
+    if (isReadOnly) {
+      return;
+    }
     setSaving(true);
     try {
-      const vfs = resolveVfs();
+      const vfs = resolveWritableVfs();
       if (
         scopeKind === 'session' &&
         sessionId &&
@@ -256,13 +273,14 @@ export function FileEditorScreen() {
     <>
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
+          testID="file-editor-save"
           style={styles.toolbarBtn}
           onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving || !isDirty || previewMode}>
+          disabled={saving || !isDirty || previewMode || isReadOnly}>
           <Text
             style={{
               color:
-                isDirty && !saving && !previewMode
+                isDirty && !saving && !previewMode && !isReadOnly
                   ? tokens.primary
                   : tokens.textSecondary,
             }}>
@@ -299,11 +317,16 @@ export function FileEditorScreen() {
             {isDirty ? '未保存' : vfsBasename(path)}
           </Text>
         )}
-        <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
-          <Text style={{color: previewMode ? tokens.primary : tokens.textSecondary}}>
-            {previewMode ? '编辑' : '预览'}
-          </Text>
-        </Pressable>
+        {!isReadOnly ? (
+          <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
+            <Text
+              style={{
+                color: previewMode ? tokens.primary : tokens.textSecondary,
+              }}>
+              {previewMode ? '编辑' : '预览'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       {mtimeMs != null ? (
         editorFocused && !previewMode ? (
