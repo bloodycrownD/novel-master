@@ -9,7 +9,14 @@
 import type { ComponentChildren } from 'preact';
 
 const AT_PATH_TOKEN_RE = /@([^\s@]+)/g;
-const SKILL_TOKEN_RE = /(?<!\S)\$([^\s$/@]+)/g;
+// 勿用 lookbehind（(?<!\S)）：老安卓 WebView 不支持，正则字面量在解析阶段直接 SyntaxError
+const SKILL_TOKEN_RE = /\$([^\s$/@]+)/g;
+
+/** token 前导边界：行首或空白（等价 lookbehind (?<!\S)，手动判前字符）。 */
+function hasWordBoundaryBefore(text: string, index: number): boolean {
+  if (index === 0) return true;
+  return /\s/.test(text[index - 1]!);
+}
 
 type RefSpan =
   | { kind: 'text'; text: string }
@@ -28,6 +35,8 @@ export function splitRefTokenSpans(text: string): RefSpan[] {
   while ((m = SKILL_TOKEN_RE.exec(text)) != null) {
     // 首字符 `.` 不是合法技能名（SKILL_NAME_PATTERN）：视作正文
     if (m[1]!.startsWith('.')) continue;
+    // 前导边界：行首/空白后（a$b 不算引用）
+    if (!hasWordBoundaryBefore(text, m.index)) continue;
     matches.push({ index: m.index, end: m.index + m[0].length, text: m[0], kind: 'skill' });
   }
   matches.sort((a, b) => a.index - b.index);
