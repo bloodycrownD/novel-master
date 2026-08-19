@@ -23,9 +23,17 @@ function toRowKind(kind: string): "dir" | "file" {
 function toPhysicalRow(entry: {
   path: string;
   kind: string;
+  label?: string;
 }): WorkplaceListRowDto {
   if (toRowKind(entry.kind) === "dir") {
-    return { kind: "dir", path: entry.path, ruleState: "rule_off" };
+    return entry.label == null
+      ? { kind: "dir", path: entry.path, ruleState: "rule_off" }
+      : {
+          kind: "dir",
+          path: entry.path,
+          ruleState: "rule_off",
+          label: entry.label,
+        };
   }
   return {
     kind: "file",

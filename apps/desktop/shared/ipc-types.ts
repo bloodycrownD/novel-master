@@ -560,6 +560,8 @@ export type WorkplaceListRowDto =
       readonly kind: 'dir';
       readonly path: string;
       readonly ruleState: WorkplaceRuleState;
+      /** 展示名（物理树合成目录行的项目名/会话名）；未填充时用路径末段。 */
+      readonly label?: string;
     }
   | {
       readonly kind: 'file';
