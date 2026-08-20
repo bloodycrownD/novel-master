@@ -8,6 +8,7 @@ import {
 } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
+import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { isVfsError } from "@novel-master/core/vfs";
 import { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../../src/domain/tool/logic/tool-output-limits.js";
@@ -89,6 +90,70 @@ describe("Builtin file tools V2 (unit)", () => {
     assert.equal(writes[0].path, "/drafts/a.md");
     // file_cache key 用同一规范路径，不再抛 INVALID_PATH
     assert.equal(kkvSets[0].key, "full:/drafts/a.md");
+  });
+
+  it("write 嵌套新路径各层祖先目录补默认规则，已有 rule_off 行不覆盖", async () => {
+    const vfs = {
+      write: async () => ({ version: 1 }),
+    } as unknown as BuiltinToolContext["vfs"];
+    const setCalls: Array<{ logicalPath: string }> = [];
+    const workplace = {
+      // "/off" 预置一条 rule_off 行：已有行不应被覆盖
+      getDirRule: async (logicalPath: string) =>
+        logicalPath === "/off"
+          ? { scopeKey: "session:s", logicalPath, ruleEnabled: false }
+          : undefined,
+      setDirRule: async (input: { logicalPath: string }) => {
+        setCalls.push({ logicalPath: input.logicalPath });
+      },
+    };
+    const ctx: BuiltinToolContext = {
+      ...toolCtx(vfs, "p", "s"),
+      workplace,
+    };
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+
+    // 全新嵌套路径：各层祖先（跳过根、不含文件自身）都补上默认规则
+    await runner.call("write", { path: "x/y/z/n.md", content: "hi" }, ctx);
+    assert.deepEqual(setCalls, [
+      { logicalPath: "/x" },
+      { logicalPath: "/x/y" },
+      { logicalPath: "/x/y/z" },
+    ]);
+
+    // 已有 rule_off 行的层级不覆盖，只补后面的新层级
+    setCalls.length = 0;
+    await runner.call("write", { path: "off/deeper/a.md", content: "hi" }, ctx);
+    assert.deepEqual(setCalls, [{ logicalPath: "/off/deeper" }]);
+  });
+
+  it("fs mkdir 为新目录及其祖先补默认规则", async () => {
+    const vfs = {
+      mkdir: async () => {},
+    } as unknown as BuiltinToolContext["vfs"];
+    const setCalls: Array<{ logicalPath: string }> = [];
+    const workplace = {
+      getDirRule: async () => undefined,
+      setDirRule: async (input: { logicalPath: string }) => {
+        setCalls.push({ logicalPath: input.logicalPath });
+      },
+    };
+    const ctx: BuiltinToolContext = {
+      ...toolCtx(vfs, "p", "s"),
+      workplace,
+    };
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+
+    await runner.call("fs", { action: "mkdir", path: "m/n" }, ctx);
+    // mkdir 自身也是新目录：连同祖先一起补
+    assert.deepEqual(setCalls, [
+      { logicalPath: "/m" },
+      { logicalPath: "/m/n" },
+    ]);
   });
 });
 
@@ -477,5 +542,39 @@ describe("Builtin file tools V2 (integration)", () => {
         return true;
       },
     );
+  });
+
+  it("write/mkdir 对接真实 workplace 服务：新层级规则 on、rule_off 不覆盖", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const workplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx: BuiltinToolContext = {
+      ...toolCtx(vfs, project.id, session.id),
+      workplace,
+    };
+
+    // 预置一条 rule_off：write 补规则时不应覆盖
+    await workplace.setDirRule({ logicalPath: "/w", ruleEnabled: false });
+
+    await runner.call("write", { path: "/w/x/y/a.md", content: "hi" }, baseCtx);
+    assert.equal((await workplace.getDirRule("/w"))?.ruleEnabled, false);
+    assert.equal((await workplace.getDirRule("/w/x"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/w/x/y"))?.ruleEnabled, true);
+
+    // 真实 VFS 的 mkdir 不递归：逐层创建，每层都应补上默认规则
+    await runner.call("fs", { action: "mkdir", path: "/m" }, baseCtx);
+    await runner.call("fs", { action: "mkdir", path: "/m/n" }, baseCtx);
+    assert.equal((await workplace.getDirRule("/m"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/m/n"))?.ruleEnabled, true);
   });
 });
