@@ -44,3 +44,20 @@ user:
 
 assistant:
 五条均小改动，按逻辑块拆 5 个 commit（46a0fcb/b1fe80b/195b869/a12f1c2/a10373d）。关键决策：C-1 泛型修法是把 annotate.ts 模块级变量显式声明为 createTextAnnotator 工厂的实际返回类型 TextAnnotator<TextAnnotationLike, TextAnnotationLike>（工厂默认 I/E 均为 TextAnnotationLike，与别名默认 TextAnnotation 不兼容）；A-1 用模块级 setDocumentSeq 自增而非 useRef（webview 侧非 React 组件作用域），finally 里 seq !== setDocumentSeq 则跳过 refreshAnnotateAfterDocument；A-2 attach 守卫仍先更新 _post 再早退（重复调用刷新 post 引用无害且保留语义）；测试沿用本仓「RN 环境无 jsdom，读源码+dist 断言」惯例，三处新增契约断言分别落在 annotate-recogito-preview（T-RG3 追加）、mermaid-fullscreen（T-MF1 追加）、rich-content-styles。typecheck 脚本改为 tsconfig.build.json && src/web/tsconfig.json 串联（移动端同伴修复时特意留给我改）。dist 验证：两包 app.css 不再含 .mermaid-block.mermaid-failed，mermaid-block__chart:active 与 recogito CSS 注入完整。
+
+---
+date: 2026-08-20（同日第四批）
+title: chat-improvements CR 修复 desktop 四条（节点 fix-desktop）
+keywords: CR fix, desktop, CollapsibleMessageBody 富文本回退, runQuery 竞态, 请求序号守卫, svgCache LRU, 失败占位 TTL, react-test-renderer 双 react 副本
+abstract: 节点 fix-desktop：在 feat/chat-improvements-integration 落地 cr-fix-spec 的 desktop 四条——A-1 CollapsibleMessageBody 富文本（richText||alwaysRichText）直接渲染不进 clamp wrapper；C-orch-1 查询/加载更早两按钮互斥 disabled={loading||loadingMore} + requestSeqRef 序号守卫丢弃晚到旧响应；G-1 补富文本不折叠与竞态行为用例；C-1 svgCache LRU 上限 150 + 失败占位 TTL 30s。验证：指定 6 个测试文件 35 用例全过 + npm run typecheck 零错。
+---
+
+user:
+按 cr-fix-spec 只做 desktop 部分 4 条（A-1/C-orch-1/G-1/C-1），改动限 apps/desktop，按逻辑块提交、只 add 自己文件（有并行同伴）；锁定字符串 ipcMessagesSearch/MessageList/未找到匹配的聊天记录保留，ConversationPanel 不传 collapsibleMessageBody 零感知。
+
+assistant:
+按逻辑块拆 3 个 commit（A-1+富文本用例 / C-orch-1+竞态用例 / C-1+mermaid 用例）。关键决策：
+- 竞态行为用例踩了双 react 副本坑：根 node_modules 的 react-test-renderer@19.2.3（传递依赖）绑定根 react@19.2.3，而桌面工作区自带 react@19.2.7，组件用工作区副本时 hooks dispatcher 为 null（Cannot read properties of null reading useState）。解法：新建 test/react-alias-hook.mjs 解析钩子，在测试文件里先 register 再动态导入面板与 act，把整棵依赖树的 react（含 react/jsx-*）重定向到根副本；又因 ESM 模块缓存共享，静态导入过 MessageList 的 chat-search-collapsible-form.test.tsx 不能与该用例同进程，独立成 chat-search-race-guard.test.tsx（node --test 按文件分进程天然隔离）。受控时序 mock 拦在 window.novelMasterDesktop.invoke（ipcMessagesSearch 底层出口），不改产品代码注入点。
+- C-1 失败占位选 TTL（30s）而非「不缓存失败」：既有 T-MD2 断言失败后 isMermaidKnownFailed 为 true，不缓存会破坏该语义；TTL 用 node:test mock.timers 控 Date.now，无真实等待。LRU 用 Map 迭代序（命中 delete+set 提升为新最新，写入超限从头部淘汰，连带 failedAtCache）。
+- 竞态守卫的 finally 不做 seq 校验：过期分支也要清掉自己占住的 loading/loadingMore 标志，且互斥下同类请求不会同时在途，不会误伤最新请求。
+- 全量 npm test（含重型 sqlite 原生用例）15 分钟超时未跑完，按任务指定的 6 文件子集验证（35 用例全过）。
