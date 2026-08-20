@@ -778,6 +778,9 @@ export const ChatTranscriptWebView = memo(
           if (message.type === 'ready') {
             setWebReady(true);
             onReady?.();
+            // WebView 被系统回收重建后，webview 侧全屏层已不存在；对称复位
+            // 上浮给外层的全屏开合状态，避免外层返回键拦截态关真。
+            onWebMermaidViewerOpenChange?.(false);
             return;
           }
           if (message.type === 'scrollSnapshot') {
