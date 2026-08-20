@@ -21,7 +21,6 @@ import {
   type SortField,
   type SortOrder,
 } from '@novel-master/core/workplace';
-import { FormSwitchRow } from '../form/FormSwitchRow';
 import { AppModal } from '../ui/AppModal';
 import { normalizeFillPolicyForMobile } from '../../storage/fill-policy-mobile';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -139,15 +138,8 @@ export function DirectoryRuleSheet({
           style={styles.form}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <FormSwitchRow
-            label="规则启用"
-            tokens={tokens}
-            value={ruleEnabled}
-            onValueChange={setRuleEnabled}
-            disabled={rootRuleLocked}
-            description={rootRuleLocked ? '根目录规则不可关闭' : undefined}
-            testID="dir-rule-enabled-switch"
-          />
+          {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
+              ruleEnabled 沿用打开时的既有状态原样保存。 */}
           <FieldLabel tokens={tokens} text="排序字段" />
           <OptionRow
             options={SORT_FIELDS}
