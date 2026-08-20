@@ -13,6 +13,7 @@ export {
   countFormPromptSources,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,
+  DEFAULT_SKILLS_INDEX_PREFIX,
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   definitionToForm,
   deletePersistTextBlock,
