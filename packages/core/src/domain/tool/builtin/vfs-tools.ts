@@ -252,6 +252,8 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       });
       // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
       await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
+      // 新路径各层祖先目录补默认目录规则（文件本身不是目录，只补父链）
+      await ensureDirRulesForNewPath(ctx, parentDirOfLogicalPath(logicalPath));
       return result;
     },
   };
@@ -369,7 +371,12 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     ]),
     async run(input, ctx) {
       const parsed = parseFsCommand(input);
-      return await executeFsCommand(ctx.vfs, parsed);
+      const result = await executeFsCommand(ctx.vfs, parsed);
+      // mkdir 成功后为新目录及其祖先补默认目录规则；其余子命令不碰
+      if (parsed.kind === "mkdir") {
+        await ensureDirRulesForNewPath(ctx, resolveLogicalPath(parsed.path));
+      }
+      return result;
     },
   };
 
@@ -540,6 +547,46 @@ async function upsertFileCacheAfterWrite(
     key,
     serializeFileCachePayload({ body: content, mtimeMs: Date.now() }),
   );
+}
+
+/** 取逻辑路径的父目录（`/a/b/c.md` → `/a/b`；顶层则回 `/`）。 */
+function parentDirOfLogicalPath(logicalPath: string): string {
+  const idx = logicalPath.lastIndexOf("/");
+  return idx <= 0 ? "/" : logicalPath.slice(0, idx);
+}
+
+/**
+ * 新建路径后为其目录链（含自身目录，跳过根）补默认目录规则行。
+ *
+ * WHY：无 `workplace_dir_rule` 行的目录在规则评估时被判 rule_off，
+ * 而 write / mkdir 创建新目录的预期是默认启用规则。这里对链上每个
+ * 目录先 `getDirRule` 查询，仅无行时 `setDirRule({ logicalPath })`
+ * （缺省字段即默认启用）；已有行——含显式 rule_off——不覆盖。
+ *
+ * 目录规则是辅助展示配置：任何失败只吞掉，不让 write / mkdir 失败。
+ * 无 `workplace` 注入时跳过（旧测试 ctx / 未装配运行时）。
+ */
+async function ensureDirRulesForNewPath(
+  ctx: BuiltinToolContext,
+  dirLogicalPath: string,
+): Promise<void> {
+  if (ctx.workplace == null || dirLogicalPath === "/") {
+    return;
+  }
+  try {
+    // 入参已是规范化逻辑路径（write 侧经 resolveLogicalPath，mkdir 侧同样）。
+    const parts = dirLogicalPath.split("/").filter((p) => p !== "");
+    let current = "";
+    for (const part of parts) {
+      current += `/${part}`;
+      const existing = await ctx.workplace.getDirRule(current);
+      if (existing == null) {
+        await ctx.workplace.setDirRule({ logicalPath: current });
+      }
+    }
+  } catch {
+    // 吞错：补规则失败不影响主流程（文件已写入成功）
+  }
 }
 
 export type { VfsReadResult };
