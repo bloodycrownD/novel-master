@@ -66,3 +66,15 @@ user:
 
 assistant:
 三件全部落地：①开关移除（9171e37）：双端表单删开关 UI 与 import，ruleEnabled state 保留、从加载/initial 原样流入保存链路（启停由文件管理菜单快捷开关负责，表单仅编辑规则内容）；测试无引用、双端 typecheck 过。②seq 数字过滤（fe3f94b）：双端四输入框 onChange 加 /[^0-9]/g。③write 工具默认规则（子代理，d8685b7~d207a4b）：BuiltinToolContext 加可选 workplace（Pick setDirRule/getDirRule）；vfs-tools 新 ensureDirRulesForNewPath（逐层祖先查无行才补、不覆盖已有 rule_off、try/catch 吞错）；write 取文件父目录链、fs mkdir 含目录自身；run-agent-turn 主/子 agent（子按 parentSessionId）注入；core 587/587 全绿。另：探索结论存 docs/apm/memory/20260820-write-default-dir-rule.md（子代理已提交）。注意：core 源码改动后双端测试前需重 build core dist。
+
+user:
+对本分支跑 CR（code-review-loop）。
+
+assistant:
+两轮收敛（wave-0 四个并行 scope 评审 → spec-fix 落盘 → review-full 终审）：P0=0、P1=3、P2=13。P1：core/B-1（write 编辑已有文件也回补祖先规则，超出「创建时」口径，需 write 前探测存在性）；desktop/A-1（富文本消息进 line-clamp 截断不可预期，spec 回退条款未落地，改回退不折叠）；desktop/C-orch-1（查询与加载更早竞态，旧 append 晚到拼接错乱，改按钮互斥+请求序号守卫）。P2 要点：返回键残留复位×2（ready 分支复位）、查询页收起态错误不可见、svgCache LRU、user_ops 链路补注入、listDirRules 批量化、injectCss 的 $ 展开坑、web tsconfig 门禁等。fix-spec：docs/Iterations/chat-improvements-cr/cr-fix-spec.md（b969f71），终审 fix-spec-ready yes；三处微调（B-2 补 service 透传步骤、A-2 成对校验、A-1 补实现注）已按 trivial 豁免直接落地。待用户确认后按 fix-spec 开修。
+
+user:
+readonly scope 评审（节点 review-scope-mobile-rn，BASE 515da9d / HEAD dc16a99，维度 A+B+C+C-orch+G）：mobile 非 web src + __tests__，重点 session-renamed 事件链、mermaid 返回键 4 文件接线、开关移除、查询页折叠卡片。
+
+assistant:
+scope 评审结论 scope-ready yes（3 条 P2 must-fix，无 P0/P1）：①RichDocumentWebView 的 mermaidViewerOpenRef 在 WebView 被杀重建后永久残留 true——web 端 closeMermaidViewer 在 !_open 时直接 return 不回 mermaidViewerClosed，ref 无法自愈，该屏返回键永久被吞（cr-func 观察项升级 must-fix）；②chat 侧同根因对称问题：ChatTabProvider.mermaidViewerOpen state 同样残留，影响主界面返回键（本轮新发现）；两处修法对称：handleMessage 收到 ready 消息时复位 open 态（各一行）。③查询页翻页失败的错误提示渲染在收起态表单体内不可见。验证：session-detail/chat-history-search/FileMarkdownPreview 三测试文件 43/43 全绿，stream.ts mermaid 计数 0（红线守住），L449 批注注释保留，ruleEnabled 原样保存链路完好（加载 L104/保存 L117），session-renamed 链与 4 文件接线逐环一致，新增 listener 均带 sub.remove() 清理。cr-fix-spec 尚未创建，本轮结论可作其输入。
