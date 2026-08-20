@@ -14,6 +14,7 @@ import type { SessionService } from "@/service/chat/session.port.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
 import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
+import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
 export interface ResolveChildModelIdResult {
@@ -158,6 +159,12 @@ export type BuiltinToolContext = {
    * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
    */
   readonly skills?: BuiltinToolSkillsContext;
+  /**
+   * 可选：仅 `write` / `fs(mkdir)` 读取——新建路径时为各层祖先目录补
+   * 默认目录规则（无 `workplace_dir_rule` 行的目录会被判 rule_off，
+   * 新目录默认应启用规则）。未注入时跳过，行为向后兼容。
+   */
+  readonly workplace?: Pick<WorkplaceService, "setDirRule" | "getDirRule">;
 };
 
 /** @deprecated Use {@link BuiltinToolContext}. */
