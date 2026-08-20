@@ -88,7 +88,8 @@ function injectCss(shellCss, richCss, placeholder, label) {
   if (!shellCss.includes(placeholder)) {
     throw new Error(`shell CSS 缺少 ${placeholder} 占位（${label}）`);
   }
-  return shellCss.replace(placeholder, richCss);
+  // 函数形式替换：字符串形式会把 richCss 里的 $$/$&/$' 等当替换模式展开，静默破坏注入
+  return shellCss.replace(placeholder, () => richCss);
 }
 
 const RICH_CSS_PLACEHOLDER = '/* __RICH_CSS__ */';
