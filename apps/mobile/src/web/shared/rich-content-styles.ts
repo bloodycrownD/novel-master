@@ -17,11 +17,10 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
   const mermaidSource = selectors
     .map((s) => `${s} .mermaid-block__source`)
     .join(', ');
+  // 失败态源码回退：pre 只加 mermaid-failed（不进 .mermaid-block 容器），
+  // 成功态源码 pre 才带 mermaid-block__source（display:none）
   const mermaidSourceVisible = selectors
-    .flatMap((s) => [
-      `${s} .mermaid-block.mermaid-failed .mermaid-block__source`,
-      `${s} pre.mermaid-failed`,
-    ])
+    .map((s) => `${s} pre.mermaid-failed`)
     .join(', ');
   const mermaidPending = selectors
     .map((s) => `${s} pre > code.language-mermaid`)

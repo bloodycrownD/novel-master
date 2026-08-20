@@ -36,4 +36,12 @@ describe('rich-content-styles', () => {
       expect(css).not.toContain('overflow-x: auto');
     }
   });
+
+  it('失败态源码回退只走 pre.mermaid-failed，不含不可达的 .mermaid-block 组合', () => {
+    for (const css of [CHAT_TRANSCRIPT_RICH_CSS, RICH_DOCUMENT_RICH_CSS]) {
+      expect(css).toContain('pre.mermaid-failed');
+      // 失败态 pre 不进 .mermaid-block 容器，组合选择器不可达
+      expect(css).not.toContain('.mermaid-block.mermaid-failed');
+    }
+  });
 });
