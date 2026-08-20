@@ -24,13 +24,21 @@ import { DocumentApp } from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
 
+/** 连续刷新防护：每轮 setDocument 自增，异步链回来时序号已过期则放弃刷新。 */
+let setDocumentSeq = 0;
+
 registerSetDocumentView((payload) => {
+  const seq = ++setDocumentSeq;
   // 换文档前先销毁 Recogito，避免挂在已卸载 DOM 上
   destroyAnnotator();
   if (!docRoot) return;
   render(h(DocumentApp, { payload }), docRoot);
-  // 先渲 mermaid（会移动源码 pre 进保留容器），再重建 Recogito，批注文本流按最终 DOM 计算
+  // 先渲 mermaid（会移动源码 pre 进保留容器），再重建 Recogito，批注文本流按最终 DOM 计算；
+  // 序号过期说明已有更新一轮 setDocument，按中间态重建 Recogito 会错乱
   void renderMermaidBlocks(docRoot).finally(() => {
+    if (seq !== setDocumentSeq) {
+      return;
+    }
     refreshAnnotateAfterDocument();
   });
 });

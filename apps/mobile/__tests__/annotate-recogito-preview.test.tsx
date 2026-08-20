@@ -150,7 +150,7 @@ describe('T-RG2 无插锚预览主路径', () => {
 });
 
 describe('T-RG3 Mobile Recogito 初始化与草稿映射接线', () => {
-  it('annotate.ts / main.ts 含 createTextAnnotator、annotatingEnabled=false 与 destroy', () => {
+  it('main.ts 含 createTextAnnotator、annotatingEnabled=false 与 destroy', () => {
     const annotate = readSrc('web/rich-document/webview/runtime/annotate.ts');
     const main = readSrc('web/rich-document/webview/main.ts');
     expect(annotate).toContain('createTextAnnotator');
@@ -158,9 +158,18 @@ describe('T-RG3 Mobile Recogito 初始化与草稿映射接线', () => {
     expect(annotate).toContain('setAnnotations');
     expect(annotate).toContain('destroy');
     expect(annotate).toContain('draftsToRecogitoAnnotations');
-    expect(annotate).not.toMatch(/\.on\(\s*['\"]createAnnotation['\"]/);
+    expect(annotate).not.toMatch(/\.on\(\s*['"]createAnnotation['"]/);
     expect(main).toContain('refreshAnnotateAfterDocument');
     expect(main).toContain('destroyAnnotator');
+  });
+
+  it('setDocument 自增序号：连续刷新时旧异步链不按中间态重建 Recogito', () => {
+    const main = readSrc('web/rich-document/webview/main.ts');
+    // 每轮自增 + finally 里序号过期则放弃刷新（防 Recogito 按中间态建层）
+    expect(main).toMatch(/\+\+setDocumentSeq/);
+    expect(main).toMatch(
+      /seq !== setDocumentSeq[\s\S]*?refreshAnnotateAfterDocument/,
+    );
   });
 
   it('MD annotateEnabled 向 WebView 传 annotations（render 坐标）', async () => {
