@@ -42,3 +42,27 @@ DAG 收敛完成（dag_version 2，wave-0 双 impl 并行 → not-ready 插 fix 
 - **mermaid 全屏**（8 笔）：手势纯函数（pinch 1x~6x clamp、双击 300ms 防抖、pan 以视口为基准）→ 共享三件套 web/shared/mermaid-fullscreen（事件委托+克隆 SVG+transform 不 setState）→ 两管线 portal 接线 → Android 返回键（chat 接 dismissAllOverlays 并入、rich 自注册判 isFocused；fix 节点补上 Provider→Panel→Screen 接线，7fcd0d8）→ 样式独立占位 __MERMAID_FULLSCREEN_CSS__ 注入两包。验证：mermaid-fullscreen 12/12、mermaid-webview 9/9 红线全绿、menu 系 25/25、typecheck 干净；三条红线（snapshot 5 处/stream 无 mermaid/mermaid-core 零改）独立复核零触碰。范围外必要改动（均已判合理）：build-webview.mjs 泛化 loadWebModule、tsconfig exclude 照 shared/ui 先例、jest transform 白名单加 @react-navigation、三个既有测试补 mock。非阻塞观察：RichDocumentWebView 的 mermaidViewerOpenRef 若 WebView 被杀重建会残留 true（边缘场景，webReady 重置时顺带清 ref 可修）。
 - **折叠表单**（3 笔）：mobile 折叠卡片（deriveFilterSummary 从 state 派生、收起条件 !append && batch.length > 0）；desktop filter-card（button+aria-expanded、T-CF5 显式 doesNotMatch(<details)）+ MessageList collapsibleMessageBody 默认 false 零感知。验证：mobile 13/13（T-CF1-4 + T-MO2/MO3/KB4 不破）、desktop 21/21、双端 typecheck 零错。
 HEAD 7fcd0d8，剩余：mf Step7 真机 + cf Step5 双端手动验收；存量孤儿测试 use-chat-tab-message-actions-unhide 3 例仍失败（与本次无关）。
+
+user:
+查询表单被吐槽：placeholder 太长丑、seq 不是数字输入框视觉、应该像 agent 配置那样用嵌套卡片分区。
+
+assistant:
+UI 打磨落地（8004904）：双端表单展开态分「关键词」「编号区间」两小节（小节标题+hint，对齐配置页分区层次）；placeholder 全部缩短（输入关键词留空列出全部→关键词，起始/截止编号留空不限→从#/到#，「留空不限」语义移到节标题旁 hint）；desktop seq 输入换专用 __seq 类（窄宽、居中、tabular-nums 数字字体）并加 – 分隔符；mobile 本就有 keyboardType=numeric，两框间同样加 –。验证：mobile 13/13、desktop 17/17、双端 typecheck 干净。教训：edit_file 的 old_text 带下一条规则开头时 new_text 必须同样带回，否则会吃掉选择器（本次 shell.css toggles 被吃已及时修复）。
+
+user:
+RN 没有专用数字输入框吗？
+
+assistant:
+没有。RN TextInput 无 type 属性，keyboardType/inputMode 只管键盘样式不拦截输入，需 onChange 里自己止 /[^0-9]/g 过滤。
+
+user:
+另外发现 bug：聊天工作区目录规则配置表单怎么又有开关了？谁加的？
+
+assistant:
+git -S 全历史追踪：双端开关（mobile FormSwitchRow「规则启用」dir-rule-enabled-switch / desktop Switch）都来自 dc28290（v1.4.21 初始导入，2026-08-10），从未被移除过；blame 指到的 d3a8b17 只是键盘避让重构重排行。误会可能来自史前版本（仓库入库前）。
+
+user:
+移除开关；数字过滤也做；另外 write 工具创建文件/文件夹时目录规则默认启用。
+
+assistant:
+三件全部落地：①开关移除（9171e37）：双端表单删开关 UI 与 import，ruleEnabled state 保留、从加载/initial 原样流入保存链路（启停由文件管理菜单快捷开关负责，表单仅编辑规则内容）；测试无引用、双端 typecheck 过。②seq 数字过滤（fe3f94b）：双端四输入框 onChange 加 /[^0-9]/g。③write 工具默认规则（子代理，d8685b7~d207a4b）：BuiltinToolContext 加可选 workplace（Pick setDirRule/getDirRule）；vfs-tools 新 ensureDirRulesForNewPath（逐层祖先查无行才补、不覆盖已有 rule_off、try/catch 吞错）；write 取文件父目录链、fs mkdir 含目录自身；run-agent-turn 主/子 agent（子按 parentSessionId）注入；core 587/587 全绿。另：探索结论存 docs/apm/memory/20260820-write-default-dir-rule.md（子代理已提交）。注意：core 源码改动后双端测试前需重 build core dist。
