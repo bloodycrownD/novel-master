@@ -178,6 +178,9 @@ export function RichDocumentWebView({
       const message = decodeRichDocumentToHost(event.nativeEvent.data);
       if (message.type === 'ready') {
         setWebReady(true);
+        // WebView 被系统回收重建后，webview 侧全屏层已不存在；视为全屏已关，
+        // 复位返回键拦截态，避免残留的 true 吞掉返回键。
+        mermaidViewerOpenRef.current = false;
         return;
       }
       if (message.type === 'recogitoCreate') {
