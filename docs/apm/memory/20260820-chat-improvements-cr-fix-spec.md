@@ -18,3 +18,16 @@ assistant:
 - Open questions 5 项（filterSummary 文案建议 #≥10/#≤50、UI mkdir/cp/mv 不补规则是否接受、rm 后 dir_rule 残留是否范围外、boot-script 正则对 dist 变量名确认、三轮 UI 反馈回填 spec）；Spec deviations 无 open（memo 升级 svgCache 记正向偏差）；合并后 QA 三条（cf Step5 双端 / mf Step7 真机 / A-1 视觉把关）；K 节建议 4 条（CI typecheck continue-on-error 移除、双端测试前重 build core dist、双链路 ctx 构造收敛单一工厂、webview 全局态模式标配 attach 幂等 + ready 复位）。
 
 产物：docs/Iterations/chat-improvements-cr/cr-fix-spec.md（新建，状态 draft）。实现代码零改动。
+
+---
+date: 2026-08-20（同日第二批）
+title: chat-improvements CR 修复 mobile-rn 三条（节点 fix-mobile-rn）
+keywords: CR fix, mobile-rn, mermaidViewerOpenRef, ready 复位, onWebMermaidViewerOpenChange, ChatHistorySearchScreen, 错误恒显
+abstract: 节点 fix-mobile-rn：在 feat/chat-improvements-integration 主工作区落地 cr-fix-spec 的 mobile-rn 三条 P2——A-1 RichDocumentWebView ready 分支复位 mermaidViewerOpenRef；A-2 ChatTranscriptWebView ready 分支调 onWebMermaidViewerOpenChange?.(false)；A-3 ChatHistorySearchScreen 错误文本移出折叠卡片恒显。验证：三个相关 jest 套件 36 用例全过 + npx tsc --noEmit -p tsconfig.build.json 零错。
+---
+
+user:
+按 cr-fix-spec 只做 mobile-rn 部分 3 条（A-1/A-2/A-3），改动范围限 apps/mobile/src/components 与 src/screens，按逻辑块提交、只 add 自己文件（有并行同伴），typecheck 用 npx tsc --noEmit -p tsconfig.build.json（npm run typecheck 脚本同伴在改，不动）。
+
+assistant:
+三条都是小改动：A-1 在 RichDocumentWebView.tsx handleMessage 的 ready 分支补 mermaidViewerOpenRef.current = false（该 ref 仅供 BackHandler 拦截判定，无渲染依赖，deps [] 不受影响）；A-2 在 ChatTranscriptWebView.tsx 同位置补 onWebMermaidViewerOpenChange?.(false)（该回调已在 handleMessage 的 deps 数组里，无遗漏）；A-3 把 ChatHistorySearchScreen.tsx 的错误 Text 从 formExpanded 条件块内移到折叠卡片外、header 内恒显——背景是首次查询命中会自动收起表单，之后翻页 append 失败的 error 在旧布局下藏在意卡片里不可见。既有测试未断言错误在卡片内部，改动后 36 用例全过（输出里的 act 警告是既有测试写法提示非失败）。
