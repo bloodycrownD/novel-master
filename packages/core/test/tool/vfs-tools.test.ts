@@ -707,4 +707,53 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal((await workplace.getDirRule("/e/f"))?.ruleEnabled, true);
     assert.equal((await workplace.getDirRule("/e/f/h"))?.ruleEnabled, true);
   });
+
+  it("补目录规则失败不阻断 write/mkdir 主流程（吞错契约，G-1）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const realWorkplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    // 规则存储整体抛错：write/mkdir 仍应成功且文件/目录落盘
+    const brokenWorkplace: BuiltinToolContext["workplace"] = {
+      getDirRule: async () => {
+        throw new Error("rule store down");
+      },
+      listDirRules: async () => {
+        throw new Error("rule store down");
+      },
+      setDirRule: async () => {
+        throw new Error("rule store down");
+      },
+    };
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx: BuiltinToolContext = {
+      ...toolCtx(vfs, project.id, session.id),
+      workplace: brokenWorkplace,
+    };
+
+    const written = await runner.call<{ version: number }>(
+      "write",
+      { path: "/boom/x/a.md", content: "hi" },
+      baseCtx,
+    );
+    assert.ok(written.version >= 1);
+    assert.equal((await vfs.read("/boom/x/a.md")).content, "hi");
+
+    await runner.call("fs", { action: "mkdir", path: "/boom/d" }, baseCtx);
+    const listed = await vfs.list("/boom");
+    assert.ok(
+      listed.some((e) => e.path === "/boom/d" && e.kind === "directory"),
+    );
+
+    // 规则存储全程不可用：不应有残留规则行写入
+    assert.deepEqual(await realWorkplace.listDirRules(), []);
+  });
 });
