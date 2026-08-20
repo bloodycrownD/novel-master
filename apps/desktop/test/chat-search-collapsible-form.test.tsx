@@ -4,6 +4,9 @@
  *        session-detail-drawer.test.ts 正则锁定的字符串原样保留。
  * T-CF6：MessageList 传 collapsibleMessageBody 时长文本渲染带 clamp 类、短消息不带；
  *        不传时零变化（与 message-list-stream.test.tsx 同风格 renderToStaticMarkup 断言）。
+ *        富文本（richText/alwaysRichText）不进 clamp wrapper（desktop/A-1 回退条款）。
+ *        注：desktop/C-orch-1 的竞态行为用例在 chat-search-race-guard.test.tsx
+ *        （需独立进程隔离 react 副本，见该文件头部注释）。
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -108,5 +111,54 @@ describe("MessageList 长消息折叠 (T-CF6)", () => {
     );
     assert.doesNotMatch(html, /chat-message__body-clamp/);
     assert.match(html, new RegExp(longText));
+  });
+
+  it("富文本消息（chatRichText / alwaysRichText）不进 clamp wrapper（A-1 回退条款）", () => {
+    const richText = "| a | b |\n|---|---|\n| 1 | 2 |\n\n[链接](https://example.com)";
+    const html = renderToStaticMarkup(
+      <MessageList
+        messages={[
+          makeMessage({ id: "m-assistant-rich", text: richText, role: "assistant" }),
+          makeMessage({ id: "m-user-rich", text: richText, role: "user" }),
+        ]}
+        chatRichText
+        collapsibleMessageBody
+      />,
+    );
+    // 富文本走 markdown 容器直渲，不进 clamp wrapper
+    assert.match(html, /chat-message__markdown/);
+    assert.doesNotMatch(html, /chat-message__body-clamp/);
+    assert.match(html, /链接/);
+  });
+
+  it("同一长文本：富文本路径不折叠、纯文本仍折叠（A-1 边界回归）", () => {
+    const longMulti = "这是一段很长的文本\n含换行".repeat(20);
+    // chatRichText 打开：用户消息也走富文本，不折叠
+    const richHtml = renderToStaticMarkup(
+      <MessageList
+        messages={[makeMessage({ id: "m-rich", text: longMulti })]}
+        chatRichText
+        collapsibleMessageBody
+      />,
+    );
+    assert.doesNotMatch(richHtml, /chat-message__body-clamp/);
+    // assistant 消息 alwaysRichText：即使不开 chatRichText 也不折叠
+    const assistantHtml = renderToStaticMarkup(
+      <MessageList
+        messages={[
+          makeMessage({ id: "m-assistant", text: longMulti, role: "assistant" }),
+        ]}
+        collapsibleMessageBody
+      />,
+    );
+    assert.doesNotMatch(assistantHtml, /chat-message__body-clamp/);
+    // 纯文本长消息（user、无 chatRichText）：维持既有折叠行为
+    const plainHtml = renderToStaticMarkup(
+      <MessageList
+        messages={[makeMessage({ id: "m-plain", text: longMulti })]}
+        collapsibleMessageBody
+      />,
+    );
+    assert.match(plainHtml, /chat-message__body-clamp(?!--expanded)/);
   });
 });

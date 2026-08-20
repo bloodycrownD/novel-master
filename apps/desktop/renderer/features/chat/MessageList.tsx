@@ -57,7 +57,15 @@ function isCollapsibleText(text: string): boolean {
   return text.length > 200 || text.includes('\n');
 }
 
-/** 长文本消息折叠 wrapper：默认 line-clamp 截 4 行，点击切换展开（无动画）。 */
+/**
+ * 长文本消息折叠 wrapper：默认 line-clamp 截 4 行，点击切换展开（无动画）。
+ *
+ * 实现注（spec 风险节回退条款）：富文本（richText || alwaysRichText）不进 clamp
+ * wrapper、不折叠，直接渲染 MessageBody——markdown 富文本天然多行且含块级元素
+ * （表格 / SVG / 嵌套块），line-clamp 按行数截断对块级元素的截断形态不可预期，
+ * 且折叠容器的 onClick 会拦截富文本内链接的点击。纯文本消息维持
+ * isCollapsibleText 静态溢出规则的折叠行为不变。
+ */
 function CollapsibleMessageBody({
   text,
   richText,
@@ -68,6 +76,11 @@ function CollapsibleMessageBody({
   alwaysRichText?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  if (richText || alwaysRichText) {
+    return (
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+    );
+  }
   if (!isCollapsibleText(text)) {
     return (
       <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
