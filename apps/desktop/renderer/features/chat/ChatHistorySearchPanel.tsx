@@ -9,7 +9,7 @@
  * （fromSeq/toSeq 闭区间，可只填一端）与 beforeSeq 翻页。搜索基于原始文本，
  * 不套 regex-apply。
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import { ipcMessagesSearch } from '@/ipc/client';
 import { MessageList } from './MessageList';
@@ -51,6 +51,12 @@ export function ChatHistorySearchPanel({
   const [hasSearched, setHasSearched] = useState(false);
   /** 上一批结果是否还有更早的可翻页（命中 LIMIT 视为可能还有）。 */
   const [hasMore, setHasMore] = useState(false);
+  /**
+   * 请求序号守卫：发请求前自增，响应落地前校验仍是最新序号，否则丢弃。
+   * 与按钮互斥（loading || loadingMore）双保险：互斥挡住绝大多数场景，
+   * 序号守卫兑住已发出的在途请求——旧 append 晚于新查询到达时不落地。
+   */
+  const requestSeqRef = useRef(0);
 
   /** 当前结果集中最小的 seq，用作「加载更早」的 beforeSeq 游标。 */
   const minSeq = useMemo(() => {
@@ -70,6 +76,7 @@ export function ChatHistorySearchPanel({
         return;
       }
       const append = opts?.append ?? false;
+      const seq = ++requestSeqRef.current;
       if (append) {
         setLoadingMore(true);
       } else {
@@ -87,6 +94,10 @@ export function ChatHistorySearchPanel({
           fromSeq,
           toSeq,
         });
+        // 旧响应晚到（序号已过期）：丢弃，不落地 results/hasMore/表单收起等任何状态。
+        if (seq !== requestSeqRef.current) {
+          return;
+        }
         if (!result.ok) {
           setError(result.error ?? '查询失败');
           if (!append) {
@@ -107,11 +118,17 @@ export function ChatHistorySearchPanel({
           setHasSearched(true);
         }
       } catch (err) {
+        // 过期请求的异常同样不进 UI（旧请求的报错不该覆盖新查询的状态）。
+        if (seq !== requestSeqRef.current) {
+          return;
+        }
         setError(err instanceof Error ? err.message : String(err));
         if (!append) {
           setHasSearched(true);
         }
       } finally {
+        // loading 标志由各自请求自行复位：互斥下同一时刻只有一条本类请求在途，
+        // 过期分支在这里清掉自己占住的标志，不会误伤最新请求。
         if (append) {
           setLoadingMore(false);
         } else {
@@ -205,7 +222,7 @@ export function ChatHistorySearchPanel({
                 type="submit"
                 className="chat-history-search__submit"
                 data-session-detail-action="search-history-submit"
-                disabled={loading}
+                disabled={loading || loadingMore}
               >
                 {loading ? "查询中…" : "查询"}
               </button>
@@ -260,7 +277,7 @@ export function ChatHistorySearchPanel({
                   className="chat-history-search__more-btn"
                   data-session-detail-action="search-history-load-more"
                   onClick={onLoadEarlier}
-                  disabled={loadingMore}
+                  disabled={loading || loadingMore}
                 >
                   {loadingMore ? '加载中…' : '加载更早'}
                 </button>
