@@ -160,11 +160,15 @@ export type BuiltinToolContext = {
    */
   readonly skills?: BuiltinToolSkillsContext;
   /**
-   * 可选：仅 `write` / `fs(mkdir)` 读取——新建路径时为各层祖先目录补
-   * 默认目录规则（无 `workplace_dir_rule` 行的目录会被判 rule_off，
-   * 新目录默认应启用规则）。未注入时跳过，行为向后兼容。
+   * 可选：仅 `write`（新建文件时）/ `fs(mkdir)` 读取——新建路径时为各层
+   * 祖先目录补默认目录规则（无 `workplace_dir_rule` 行的目录会被判
+   * rule_off，新目录默认应启用规则）；编辑已有文件不补，不融存量状态。
+   * 未注入时跳过，行为向后兼容。
    */
-  readonly workplace?: Pick<WorkplaceService, "setDirRule" | "getDirRule">;
+  readonly workplace?: Pick<
+    WorkplaceService,
+    "setDirRule" | "getDirRule" | "listDirRules"
+  >;
 };
 
 /** @deprecated Use {@link BuiltinToolContext}. */

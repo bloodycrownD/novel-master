@@ -27,6 +27,7 @@ import {
   truncateLine,
 } from "../logic/tool-output-limits.js";
 import { ToolError } from "@/errors/tool-errors.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import {
   fileCacheKey,
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -244,6 +245,11 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       // 入口统一规范化：相对路径补 / 后规范化，避免「写入宽容、file_cache 校验严格」
       // 两套口径不一致导致写成功却报 INVALID_PATH。
       const logicalPath = resolveLogicalPath(input.path);
+      // B-1：仅新建文件时补父链规则——编辑已有文件不得静默把存量无行目录翻成 rule_on。
+      // 未注入 workplace 时无补规则可谈，连探测也一并跳过（旧 ctx 的 vfs 可能没有 read）。
+      const isNewFile =
+        ctx.workplace != null &&
+        (await probeFileAbsentForWrite(ctx, logicalPath));
       const result = await ctx.vfs.write(logicalPath, input.content, {
         versionCheck,
         ...(input.options?.expectedVersion != null
@@ -252,8 +258,10 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       });
       // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
       await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
-      // 新路径各层祖先目录补默认目录规则（文件本身不是目录，只补父链）
-      await ensureDirRulesForNewPath(ctx, parentDirOfLogicalPath(logicalPath));
+      // 仅新建：为各层祖先目录补默认目录规则（文件本身不是目录，只补父链）
+      if (isNewFile) {
+        await ensureDirRulesForNewPath(ctx, parentDirOfLogicalPath(logicalPath));
+      }
       return result;
     },
   };
@@ -556,14 +564,43 @@ function parentDirOfLogicalPath(logicalPath: string): string {
 }
 
 /**
+ * write 前探测目标文件是否不存在（即本次是否为新建）。
+ *
+ * WHY（B-1）：只有新建文件才补父链默认目录规则，编辑已有文件不得静默
+ * 把存量无行目录翻成 rule_on。探测原语用 `vfs.read`（工具上下文内唯一
+ * 可用的存在性探测）：NOT_FOUND → 新建；其余结果（读到内容、撞目录行、
+ * 探测自身出错）一律保守视作「已存在」跳过补规则——宁可少补、不可误翻存量。
+ */
+async function probeFileAbsentForWrite(
+  ctx: BuiltinToolContext,
+  logicalPath: string,
+): Promise<boolean> {
+  try {
+    await ctx.vfs.read(logicalPath);
+    return false;
+  } catch (error) {
+    if (isVfsError(error, "NOT_FOUND")) {
+      return true;
+    }
+    console.debug(
+      `[vfs-tools] write 前探测 ${logicalPath} 失败，保守跳过补规则:`,
+      error,
+    );
+    return false;
+  }
+}
+
+/**
  * 新建路径后为其目录链（含自身目录，跳过根）补默认目录规则行。
  *
  * WHY：无 `workplace_dir_rule` 行的目录在规则评估时被判 rule_off，
- * 而 write / mkdir 创建新目录的预期是默认启用规则。这里对链上每个
- * 目录先 `getDirRule` 查询，仅无行时 `setDirRule({ logicalPath })`
- * （缺省字段即默认启用）；已有行——含显式 rule_off——不覆盖。
+ * 而 write / mkdir 创建新目录的预期是默认启用规则。这里一次
+ * `listDirRules` 拉全量后在内存求差集（B-2：替代逐层 getDirRule 的
+ * N 次查询），仅对无行层级 `setDirRule({ logicalPath })`（缺省字段
+ * 即默认启用）；已有行——含显式 rule_off——不覆盖。
  *
- * 目录规则是辅助展示配置：任何失败只吞掉，不让 write / mkdir 失败。
+ * 目录规则是辅助展示配置：任何失败只吞掉，不让 write / mkdir 失败，
+ * 但 catch 里留一行 debug trace（失败路径 + 错误信息）便于排查。
  * 无 `workplace` 注入时跳过（旧测试 ctx / 未装配运行时）。
  */
 async function ensureDirRulesForNewPath(
@@ -576,16 +613,22 @@ async function ensureDirRulesForNewPath(
   try {
     // 入参已是规范化逻辑路径（write 侧经 resolveLogicalPath，mkdir 侧同样）。
     const parts = dirLogicalPath.split("/").filter((p) => p !== "");
+    const existing = new Set(
+      (await ctx.workplace.listDirRules()).map((rule) => rule.logicalPath),
+    );
     let current = "";
     for (const part of parts) {
       current += `/${part}`;
-      const existing = await ctx.workplace.getDirRule(current);
-      if (existing == null) {
+      if (!existing.has(current)) {
         await ctx.workplace.setDirRule({ logicalPath: current });
       }
     }
-  } catch {
-    // 吞错：补规则失败不影响主流程（文件已写入成功）
+  } catch (error) {
+    // 吞错但不无声：文件/目录已落盘，补规则失败不阻断主流程。
+    console.debug(
+      `[vfs-tools] 补目录规则失败（${dirLogicalPath}）:`,
+      error,
+    );
   }
 }
 
