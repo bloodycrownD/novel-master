@@ -2,7 +2,6 @@ import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
 import { useEffect, useState } from "react";
 import type { WorkplaceSetDirRuleRequest } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
-import { Switch } from "@/components/ui/Switch";
 import { showToast } from "@/components/ui/show-toast";
 import {
   entryLabelForTarget,
@@ -163,21 +162,8 @@ export function DirectoryRuleModal({
           <p className="dir-rule-modal__loading">加载中…</p>
         ) : (
           <div className="dir-rule-modal__form">
-            <div className="dir-rule-modal__switch-field">
-              <div className="dir-rule-modal__switch-head">
-                <FieldLabel text="规则启用" />
-                <Switch
-                  checked={ruleEnabled}
-                  disabled={rootRuleLocked}
-                  onChange={setRuleEnabled}
-                  aria-label="规则启用"
-                />
-              </div>
-              {rootRuleLocked ? (
-                <p className="dir-rule-modal__hint">根目录规则不可关闭</p>
-              ) : null}
-            </div>
-
+            {/* 规则启用/关闭由工作区右键菜单的快捷开关负责，表单内不再提供开关，
+                仅编辑规则内容；ruleEnabled 沿用加载到的既有状态原样保存。 */}
             <FieldLabel text="排序字段" />
             <OptionChips
               options={SORT_FIELDS}

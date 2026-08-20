@@ -457,6 +457,12 @@ export async function runAgentTurn(
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(scope.sessionId),
     sessionKkv: runtime.sessionKkv,
+    // 目录规则默认启用：write / mkdir 新路径时按本会话工作区补默认 workplace_dir_rule 行。
+    workplace: runtime.workplace({
+      kind: "session",
+      projectId: scope.projectId,
+      sessionId: scope.sessionId,
+    }),
     // skill 工具读取：生效清单按本会话 projectId 解析（装配期预算，每 run 一次）。
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
@@ -676,6 +682,13 @@ async function runChildAgent(args: {
     listSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(childSessionId),
     sessionKkv: runtime.sessionKkv,
+    // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
+    // 补规则也写父工作区的 workplace_dir_rule。
+    workplace: runtime.workplace({
+      kind: "session",
+      projectId: parentProjectId,
+      sessionId: parentSessionId,
+    }),
     // skill（D2）：子代理同样注入，清单按父会话 projectId 解析。
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。

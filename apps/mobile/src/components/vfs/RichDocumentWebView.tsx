@@ -3,7 +3,15 @@
  * MD 批注：干净 HTML + Recogito 仅投影；新建走原生选区菜单「复制/批注」+ inject 采集。
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
+import {
+  BackHandler,
+  Platform,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 import Clipboard from '@react-native-clipboard/clipboard';
 import type {ThemeTokens} from '../../theme/tokens';
@@ -119,8 +127,11 @@ export function RichDocumentWebView({
   clearAnnotateSelectionSignal = 0,
 }: RichDocumentWebViewProps) {
   const {tokens} = useTheme();
+  const navigation = useNavigation();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
+  // mermaid 全屏查看器开关态（ref 即可：无渲染依赖，仅供返回键拦截判定）
+  const mermaidViewerOpenRef = useRef(false);
   const onRecogitoCreateRef = useRef(onRecogitoCreate);
   const onAnnotateOpenRef = useRef(onAnnotateOpen);
   onRecogitoCreateRef.current = onRecogitoCreate;
@@ -167,6 +178,9 @@ export function RichDocumentWebView({
       const message = decodeRichDocumentToHost(event.nativeEvent.data);
       if (message.type === 'ready') {
         setWebReady(true);
+        // WebView 被系统回收重建后，webview 侧全屏层已不存在；视为全屏已关，
+        // 复位返回键拦截态，避免残留的 true 吞掉返回键。
+        mermaidViewerOpenRef.current = false;
         return;
       }
       if (message.type === 'recogitoCreate') {
@@ -202,6 +216,14 @@ export function RichDocumentWebView({
         if (ids.length > 0) {
           onAnnotateOpenRef.current?.(ids);
         }
+        return;
+      }
+      if (message.type === 'mermaidViewerOpened') {
+        mermaidViewerOpenRef.current = true;
+        return;
+      }
+      if (message.type === 'mermaidViewerClosed') {
+        mermaidViewerOpenRef.current = false;
       }
     } catch {
       // ignore malformed messages
@@ -294,6 +316,27 @@ export function RichDocumentWebView({
     clearAnnotateSelectionSignal,
     postToWeb,
   ]);
+
+  /**
+   * Android 返回键：全屏查看器开着时先关它（完全内聚，不影响使用方）。
+   * 随 focus 注册/注销；判 navigation.isFocused() 防吞上层屏返回
+   * （GlobalTemplateScreen 注释先例：BackHandler 是全局的）。
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== 'android') {
+        return;
+      }
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (!mermaidViewerOpenRef.current || !navigation.isFocused()) {
+          return false;
+        }
+        postToWeb({v: 1, type: 'closeMermaidViewer', payload: {}});
+        return true;
+      });
+      return () => sub.remove();
+    }, [navigation, postToWeb]),
+  );
 
   return (
     <View style={[styles.fill, style]}>

@@ -1,5 +1,5 @@
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { useState } from 'react';
+import { MermaidMarkdown } from '../../components/MermaidMarkdown';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import { buildChatListItems } from './message-blocks';
 import { ToolCallGroupCard } from './ToolCallGroupCard';
@@ -29,6 +29,8 @@ interface MessageListProps {
   onOpenToolFile?: (path: string) => void;
   /** 点击 task 工具卡片时跳转只读子会话面板。 */
   onOpenSubagentSession?: (sessionId: string) => void;
+  /** 搜索结果等场景：长文本消息默认折叠（line-clamp 4 行），点击切换展开；默认关闭。 */
+  collapsibleMessageBody?: boolean;
 }
 
 function MessageBody({
@@ -43,11 +45,57 @@ function MessageBody({
   if (richText || alwaysRichText) {
     return (
       <div className="chat-message__markdown">
-        <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+        <MermaidMarkdown content={text} />
       </div>
     );
   }
   return <p>{text}</p>;
+}
+
+/** 与 mobile MessageResultCard 一致的静态溢出规则：超 200 字符或含换行即可折叠。 */
+function isCollapsibleText(text: string): boolean {
+  return text.length > 200 || text.includes('\n');
+}
+
+/**
+ * 长文本消息折叠 wrapper：默认 line-clamp 截 4 行，点击切换展开（无动画）。
+ *
+ * 实现注（spec 风险节回退条款）：富文本（richText || alwaysRichText）不进 clamp
+ * wrapper、不折叠，直接渲染 MessageBody——markdown 富文本天然多行且含块级元素
+ * （表格 / SVG / 嵌套块），line-clamp 按行数截断对块级元素的截断形态不可预期，
+ * 且折叠容器的 onClick 会拦截富文本内链接的点击。纯文本消息维持
+ * isCollapsibleText 静态溢出规则的折叠行为不变。
+ */
+function CollapsibleMessageBody({
+  text,
+  richText,
+  alwaysRichText = false,
+}: {
+  text: string;
+  richText: boolean;
+  alwaysRichText?: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (richText || alwaysRichText) {
+    return (
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+    );
+  }
+  if (!isCollapsibleText(text)) {
+    return (
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+    );
+  }
+  return (
+    <div
+      className={`chat-message__body-clamp${
+        expanded ? ' chat-message__body-clamp--expanded' : ''
+      }`}
+      onClick={() => setExpanded(v => !v)}
+    >
+      <MessageBody text={text} richText={richText} alwaysRichText={alwaysRichText} />
+    </div>
+  );
 }
 
 export function MessageList({
@@ -62,6 +110,7 @@ export function MessageList({
   onOpenMessageMenu,
   onOpenToolFile,
   onOpenSubagentSession,
+  collapsibleMessageBody = false,
 }: MessageListProps) {
   const hasStreaming = uiRunning;
 
@@ -128,11 +177,19 @@ export function MessageList({
                 </details>
               ) : null}
               {text ? (
-                <MessageBody
-                  text={text}
-                  richText={chatRichText}
-                  alwaysRichText={msg.role === 'assistant'}
-                />
+                collapsibleMessageBody ? (
+                  <CollapsibleMessageBody
+                    text={text}
+                    richText={chatRichText}
+                    alwaysRichText={msg.role === 'assistant'}
+                  />
+                ) : (
+                  <MessageBody
+                    text={text}
+                    richText={chatRichText}
+                    alwaysRichText={msg.role === 'assistant'}
+                  />
+                )
               ) : null}
               {msg.role === "user" &&
               (msg.attachments?.length ?? 0) > 0 ? (
@@ -166,7 +223,7 @@ export function MessageList({
             ) : null}
             {streamingText ? (
               <div className="chat-message__markdown">
-                <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
+                <MermaidMarkdown content={streamingText} />
               </div>
             ) : null}
             {uiRunning ? (

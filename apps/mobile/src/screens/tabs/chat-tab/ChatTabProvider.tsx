@@ -132,6 +132,11 @@ export type ChatTabContextValue = {
   readonly webMenuCloseSignal: number;
   readonly webMenuOpen: boolean;
   readonly setWebMenuOpen: (open: boolean) => void;
+  /** mermaid 全屏查看器开着（WebView 上浮；Android 返回键据此先关全屏）。 */
+  readonly mermaidViewerOpen: boolean;
+  readonly setMermaidViewerOpen: (open: boolean) => void;
+  /** 递增时由 ChatTranscriptWebView 下发 closeMermaidViewer（照 webMenuCloseSignal 先例）。 */
+  readonly mermaidViewerCloseSignal: number;
   readonly beginUiRun: () => void;
   /** UI run 异常收尾（composer catch 路径用）。 */
   readonly endUiRunOnError: () => void;
@@ -153,6 +158,8 @@ export type ChatTabContextValue = {
   readonly runtime: ReturnType<typeof useRuntime>;
   readonly setCurrentSession: (sessionId: string) => Promise<void>;
   readonly closeMessageMenu: () => void;
+  /** 返回键关闭 mermaid 全屏查看器：复位拦截态并递增下发信号。 */
+  readonly closeMermaidViewer: () => void;
 };
 
 const ChatTabCtx = createContext<ChatTabContextValue | null>(null);
@@ -247,6 +254,8 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
   >();
   const [webMenuOpen, setWebMenuOpen] = useState(false);
   const [webMenuCloseSignal, setWebMenuCloseSignal] = useState(0);
+  const [mermaidViewerOpen, setMermaidViewerOpen] = useState(false);
+  const [mermaidViewerCloseSignal, setMermaidViewerCloseSignal] = useState(0);
   const [messageEditPrompt, setMessageEditPrompt] = useState<
     { messageId: string; initialText: string } | undefined
   >();
@@ -353,6 +362,11 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     setWebMenuCloseSignal(signal => signal + 1);
   }, []);
 
+  const closeMermaidViewer = useCallback(() => {
+    setMermaidViewerOpen(false);
+    setMermaidViewerCloseSignal(signal => signal + 1);
+  }, []);
+
   const {
     setProjectDrawerOpen,
     setSessionDrawerOpen,
@@ -366,11 +380,13 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     setModelPickerOpen(false);
     setAgentPickerOpen(false);
     closeMessageMenu();
+    closeMermaidViewer();
     setMessageEditPrompt(undefined);
     setSessionRenamePrompt(undefined);
     setMenuSessionId(undefined);
   }, [
     closeMessageMenu,
+    closeMermaidViewer,
     setProjectDrawerOpen,
     setSessionDrawerOpen,
     setSessionRenamePrompt,
@@ -464,6 +480,9 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       webMenuCloseSignal,
       webMenuOpen,
       setWebMenuOpen,
+      mermaidViewerOpen,
+      setMermaidViewerOpen,
+      mermaidViewerCloseSignal,
       beginUiRun: lifecycle.beginUiRun,
       endUiRunOnError: lifecycle.endUiRunOnError,
       abortUiRun: abortUiRunWithFreeze,
@@ -482,6 +501,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       runtime,
       setCurrentSession,
       closeMessageMenu,
+      closeMermaidViewer,
     }),
     [
       projectId,
@@ -505,11 +525,14 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       richRenderEpoch,
       webMenuCloseSignal,
       webMenuOpen,
+      mermaidViewerOpen,
+      mermaidViewerCloseSignal,
       navigation,
       showToast,
       runtime,
       setCurrentSession,
       closeMessageMenu,
+      closeMermaidViewer,
       abortUiRunWithFreeze,
     ],
   );

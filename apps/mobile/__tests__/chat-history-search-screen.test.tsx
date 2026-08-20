@@ -1,8 +1,10 @@
 /**
- * 聊天记录查询页 mobile 组件测试（T-MO2）。
+ * 聊天记录查询页 mobile 组件测试（T-MO2、T-MO3）。
  *
  * - T-MO2：点击查询触发 runtime.messages.searchMessages，结果渲染到自渲染列表；
  *          空结果时显示「未找到匹配的聊天记录」。
+ * - T-MO3：编号区间输入归一后进入 searchMessages 入参；倒挂区间提示且不调用；
+ *          修改区间后「加载更早」翻页仍携带新区间。
  *
  * 返回由导航 header 的 showBack 处理，组件内不再单独放返回按钮，因此不再需要
  * 单独的返回测试。
@@ -85,6 +87,7 @@ jest.mock('react-native', () => {
       keyExtractor?: (item: unknown) => string;
       ListEmptyComponent?: React.ReactNode;
       ListFooterComponent?: React.ReactNode;
+      onEndReached?: () => void;
       testID?: string;
     }) => {
       const items = props.data ?? [];
@@ -99,7 +102,10 @@ jest.mock('react-native', () => {
       );
       return RnReact.createElement(
         'FlatList',
-        {testID: props.testID},
+        {
+          testID: props.testID,
+          onEndReached: props.onEndReached,
+        },
         items.length === 0 && props.ListEmptyComponent
           ? props.ListEmptyComponent
           : [...body, props.ListFooterComponent ?? null],
@@ -136,6 +142,8 @@ jest.mock('react-native', () => {
       onPress?: () => void;
       disabled?: boolean;
       accessibilityLabel?: string;
+      accessibilityRole?: string;
+      accessibilityState?: {expanded?: boolean};
       testID?: string;
     }) =>
       RnReact.createElement(
@@ -144,9 +152,12 @@ jest.mock('react-native', () => {
           testID: props.testID ?? props.accessibilityLabel,
           onPress: props.onPress,
           disabled: String(props.disabled ?? false),
+          accessibilityRole: props.accessibilityRole,
+          accessibilityState: props.accessibilityState,
         },
         props.children,
       ),
+    Keyboard: {dismiss: jest.fn()},
     StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
     Platform: {OS: 'ios'},
     Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
@@ -277,6 +288,294 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
     json = JSON.stringify(tree.toJSON());
     expect(json).toContain(longText);
     expect(json).toContain('收起');
+  });
+});
+
+// ── T-MO3 编号区间输入与翻页贯通 ──────────────────────────────────────
+describe('T-MO3 ChatHistorySearchScreen 编号区间', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+  });
+
+  it('填入区间后查询，searchMessages 入参含 fromSeq/toSeq', async () => {
+    mockSearchMessages.mockResolvedValue([]);
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-from-seq'})
+        .props.onChangeText(' 10 ');
+      tree.root
+        .findByProps({testID: 'chat-history-search-to-seq'})
+        .props.onChangeText('50');
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+
+    // 两端输入均归一为数字后进入入参（含前后空宗归一）。
+    expect(mockSearchMessages).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({fromSeq: 10, toSeq: 50}),
+    );
+  });
+
+  it('倒挂区间提示且不调用 searchMessages', async () => {
+    mockSearchMessages.mockResolvedValue([]);
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-from-seq'})
+        .props.onChangeText('60');
+      tree.root
+        .findByProps({testID: 'chat-history-search-to-seq'})
+        .props.onChangeText('40');
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+
+    expect(mockSearchMessages).not.toHaveBeenCalled();
+    const json = JSON.stringify(tree.toJSON());
+    expect(json).toContain('编号区间无效');
+  });
+
+  it('修改区间后「加载更早」翻页仍携带新区间', async () => {
+    // 两批都返回 50 条（命中 SEARCH_LIMIT → hasMore=true），最小 seq 为 51。
+    const makeBatch = () =>
+      Array.from({length: 50}, (_, i) =>
+        makeMessage({seq: 100 - i, text: `m-${100 - i}`}),
+      );
+    mockSearchMessages
+      .mockResolvedValueOnce(makeBatch())
+      .mockResolvedValueOnce(makeBatch())
+      .mockResolvedValueOnce([]);
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+
+    // 第一次查询：区间 1-100。
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-from-seq'})
+        .props.onChangeText('1');
+      tree.root
+        .findByProps({testID: 'chat-history-search-to-seq'})
+        .props.onChangeText('100');
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+    expect(mockSearchMessages).toHaveBeenLastCalledWith(
+      's1',
+      expect.objectContaining({fromSeq: 1, toSeq: 100}),
+    );
+
+    // 首次查询命中后表单卡片自动收起（卸载输入框），改输入前先点卡片头展开。
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-form-toggle'})
+        .props.onPress();
+    });
+
+    // 修改起始编号为 50 后重新查询：入参应携带新区间。
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-from-seq'})
+        .props.onChangeText('50');
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+    expect(mockSearchMessages).toHaveBeenLastCalledWith(
+      's1',
+      expect.objectContaining({fromSeq: 50, toSeq: 100}),
+    );
+
+    // 触发 FlatList 翻页：应携带新区间 + 当前最小 seq 作为 beforeSeq。
+    await act(async () => {
+      tree.root.findByType('FlatList').props.onEndReached();
+      await flushPromises();
+    });
+    expect(mockSearchMessages).toHaveBeenLastCalledWith(
+      's1',
+      expect.objectContaining({fromSeq: 50, toSeq: 100, beforeSeq: 51}),
+    );
+  });
+});
+
+// ── T-CF 筛选表单折叠卡片（卡片化重设计） ──────────────────────────
+describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
+  const RN = require('react-native');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRouteParams = {projectId: 'p1', sessionId: 's1'};
+  });
+
+  /** 查卡片头当前的 expanded 无障碍状态。 */
+  function formToggleState(
+    tree: TestRenderer.ReactTestRenderer,
+  ): {expanded?: boolean} {
+    return tree.root
+      .findByProps({testID: 'chat-history-search-form-toggle'})
+      .props.accessibilityState;
+  }
+
+  it('T-CF1：进入页面表单卡片默认展开，各输入 testID 可直查', async () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+
+    expect(formToggleState(tree).expanded).toBe(true);
+    // 输入框与提交按钮均未卸载，可直接查到。
+    expect(() =>
+      tree.root.findByProps({testID: 'chat-history-search-keyword'}),
+    ).not.toThrow();
+    expect(() =>
+      tree.root.findByProps({testID: 'chat-history-search-from-seq'}),
+    ).not.toThrow();
+    expect(() =>
+      tree.root.findByProps({testID: 'chat-history-search-to-seq'}),
+    ).not.toThrow();
+    expect(() =>
+      tree.root.findByProps({testID: 'chat-history-search-submit'}),
+    ).not.toThrow();
+  });
+
+  it('T-CF2：查询命中后表单自动收起，摘要正确且 Keyboard.dismiss 被调用', async () => {
+    mockSearchMessages.mockResolvedValue([
+      makeMessage({seq: 12, text: '命中结果'}),
+    ]);
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-keyword'})
+        .props.onChangeText('魔法');
+      tree.root
+        .findByProps({testID: 'chat-history-search-from-seq'})
+        .props.onChangeText('10');
+      tree.root
+        .findByProps({testID: 'chat-history-search-to-seq'})
+        .props.onChangeText('50');
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+
+    // 自动收起：卡片头 expanded=false，输入框被卸载。
+    expect(formToggleState(tree).expanded).toBe(false);
+    expect(() =>
+      tree.root.findByProps({testID: 'chat-history-search-keyword'}),
+    ).toThrow();
+    // 收起态摘要从筛选 state 派生：关键词 + 编号区间（JSON 序列化后引号带转义）。
+    const json = JSON.stringify(tree.toJSON());
+    expect(json).toContain('关键词 \\"魔法\\"');
+    expect(json).toContain('#10–50');
+    // 收起时顺带收起键盘。
+    expect(RN.Keyboard.dismiss).toHaveBeenCalled();
+  });
+
+  it('T-CF3：空结果与区间倒挂时表单不收起、输入框仍可用', async () => {
+    // 空结果：不算命中，不收起。
+    mockSearchMessages.mockResolvedValue([]);
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+    expect(formToggleState(tree).expanded).toBe(true);
+    expect(() =>
+      tree.root.findByProps({testID: 'chat-history-search-keyword'}),
+    ).not.toThrow();
+
+    // 区间倒挂：提前 return，不收起（先清掉上段的调用记录）。
+    tree.unmount();
+    mockSearchMessages.mockClear();
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-from-seq'})
+        .props.onChangeText('60');
+      tree.root
+        .findByProps({testID: 'chat-history-search-to-seq'})
+        .props.onChangeText('40');
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+    expect(mockSearchMessages).not.toHaveBeenCalled();
+    expect(formToggleState(tree).expanded).toBe(true);
+    expect(() =>
+      tree.root.findByProps({testID: 'chat-history-search-from-seq'}),
+    ).not.toThrow();
+    const json = JSON.stringify(tree.toJSON());
+    expect(json).toContain('编号区间无效');
+  });
+
+  it('T-CF4：收起后再点卡片头展开，输入值保留上次内容', async () => {
+    mockSearchMessages.mockResolvedValue([
+      makeMessage({seq: 7, text: '命中结果'}),
+    ]);
+
+    let tree!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatHistorySearchScreen />);
+    });
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-keyword'})
+        .props.onChangeText('保留关键词');
+      tree.root
+        .findByProps({testID: 'chat-history-search-from-seq'})
+        .props.onChangeText('7');
+    });
+    await act(async () => {
+      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      await flushPromises();
+    });
+    expect(formToggleState(tree).expanded).toBe(false);
+
+    // 点卡片头重新展开：输入值应从 screen 级 state 回填。
+    await act(async () => {
+      tree.root
+        .findByProps({testID: 'chat-history-search-form-toggle'})
+        .props.onPress();
+    });
+    expect(formToggleState(tree).expanded).toBe(true);
+    expect(
+      tree.root.findByProps({testID: 'chat-history-search-keyword'}).props.value,
+    ).toBe('保留关键词');
+    expect(
+      tree.root.findByProps({testID: 'chat-history-search-from-seq'}).props
+        .value,
+    ).toBe('7');
   });
 });
 

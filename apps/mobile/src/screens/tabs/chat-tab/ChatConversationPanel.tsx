@@ -116,6 +116,7 @@ export function ChatConversationPanel({
     pendingSubagentSessions,
     richRenderEpoch,
     webMenuCloseSignal,
+    mermaidViewerCloseSignal,
     restoredTranscriptScroll,
     defaultChatScrollToBottom,
     cachedChatScroll,
@@ -251,6 +252,7 @@ export function ChatConversationPanel({
           toolInvoking={uiRunning}
           flags={transcriptFlags}
           menuCloseSignal={webMenuCloseSignal}
+          mermaidViewerCloseSignal={mermaidViewerCloseSignal}
           initialScroll={restoredTranscriptScroll ?? null}
           defaultScrollToBottom={defaultChatScrollToBottom}
           onScrollSnapshot={onChatScrollSnapshot}
@@ -260,6 +262,7 @@ export function ChatConversationPanel({
           onOpenSkillDetail={scope.openSkillDetail}
           pendingSubagentSessions={pendingSubagentSessions}
           onWebMenuOpenChange={controller.onWebMenuOpenChange}
+          onWebMermaidViewerOpenChange={ctx.setMermaidViewerOpen}
           onMessageMenuAction={controller.onWebMessageMenuAction}
         />
       ) : (

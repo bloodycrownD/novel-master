@@ -30,7 +30,7 @@ const webRoot = join(mobileRoot, 'src', 'web');
 const distRoot = join(mobileRoot, 'webview-dist');
 const copyNative = process.argv.includes('--copy-native');
 
-/** @type {{ id: string, entryRel: string, cssRel: string, htmlRel: string, richCssKey?: 'CHAT_TRANSCRIPT_RICH_CSS' | 'RICH_DOCUMENT_RICH_CSS' }[]} */
+/** @type {{ id: string, entryRel: string, cssRel: string, htmlRel: string, richCssKey?: 'CHAT_TRANSCRIPT_RICH_CSS' | 'RICH_DOCUMENT_RICH_CSS', mermaidFullscreenCss?: boolean }[]} */
 const PACKAGES = [
   {
     id: 'chat-transcript',
@@ -38,6 +38,7 @@ const PACKAGES = [
     cssRel: 'chat-transcript/styles/transcript.css',
     htmlRel: 'chat-transcript/index.html',
     richCssKey: 'CHAT_TRANSCRIPT_RICH_CSS',
+    mermaidFullscreenCss: true,
   },
   {
     id: 'rich-document',
@@ -45,6 +46,7 @@ const PACKAGES = [
     cssRel: 'rich-document/styles/document.css',
     htmlRel: 'rich-document/index.html',
     richCssKey: 'RICH_DOCUMENT_RICH_CSS',
+    mermaidFullscreenCss: true,
   },
   {
     id: 'code-editor',
@@ -59,14 +61,15 @@ function readWeb(rel) {
 }
 
 /**
- * 从 shared/rich-content-styles.ts 加载富文本 CSS（单源，禁止内嵌第二份规则）。
+ * 从 src/web 下指定入口加载模块（esbuild bundle 后 data: import；
+ * 样式常量单源：禁止在 assemble/build 内再嵌第二份规则）。
  */
 /** WebView boot 路径别名：`@web/*` → `src/web/*`（勿与 RN Metro `@/` 混用） */
 const webAlias = { '@web': webRoot };
 
-async function loadRichContentStyles() {
+async function loadWebModule(entryRel) {
   const result = await esbuild.build({
-    entryPoints: [join(webRoot, 'shared/rich-content-styles.ts')],
+    entryPoints: [join(webRoot, entryRel)],
     bundle: true,
     write: false,
     format: 'esm',
@@ -81,12 +84,16 @@ async function loadRichContentStyles() {
   return mod;
 }
 
-function injectCss(shellCss, richCss) {
-  if (!shellCss.includes('/* __RICH_CSS__ */')) {
-    throw new Error('shell CSS 缺少 /* __RICH_CSS__ */ 占位');
+function injectCss(shellCss, richCss, placeholder, label) {
+  if (!shellCss.includes(placeholder)) {
+    throw new Error(`shell CSS 缺少 ${placeholder} 占位（${label}）`);
   }
-  return shellCss.replace('/* __RICH_CSS__ */', richCss);
+  // 函数形式替换：字符串形式会把 richCss 里的 $$/$&/$' 等当替换模式展开，静默破坏注入
+  return shellCss.replace(placeholder, () => richCss);
 }
+
+const RICH_CSS_PLACEHOLDER = '/* __RICH_CSS__ */';
+const MERMAID_FULLSCREEN_CSS_PLACEHOLDER = '/* __MERMAID_FULLSCREEN_CSS__ */';
 
 /**
  * @param {string} pkgId
@@ -152,8 +159,9 @@ function copyDistToNativeSinks() {
 /**
  * @param {typeof PACKAGES[number]} pkg
  * @param {Record<string, string>} richStyles
+ * @param {string} mermaidFullscreenCss
  */
-async function buildPackage(pkg, richStyles) {
+async function buildPackage(pkg, richStyles, mermaidFullscreenCss) {
   const entryAbs = join(webRoot, pkg.entryRel);
   let css = readWeb(pkg.cssRel);
   if (pkg.richCssKey) {
@@ -161,7 +169,21 @@ async function buildPackage(pkg, richStyles) {
     if (typeof richCss !== 'string' || !richCss) {
       throw new Error(`缺少富文本 CSS：${pkg.richCssKey}`);
     }
-    css = injectCss(css, richCss);
+    css = injectCss(
+      css,
+      richCss,
+      RICH_CSS_PLACEHOLDER,
+      pkg.richCssKey,
+    );
+  }
+  // mermaid 全屏查看器样式（选择器不带 .bubble.rich 前缀 → 独立注入位）
+  if (pkg.mermaidFullscreenCss) {
+    css = injectCss(
+      css,
+      mermaidFullscreenCss,
+      MERMAID_FULLSCREEN_CSS_PLACEHOLDER,
+      'MERMAID_FULLSCREEN_CSS',
+    );
   }
   const html = readWeb(pkg.htmlRel);
   const outDir = join(distRoot, pkg.id);
@@ -190,10 +212,17 @@ async function buildPackage(pkg, richStyles) {
 }
 
 async function main() {
-  const richStyles = await loadRichContentStyles();
+  const richStyles = await loadWebModule('shared/rich-content-styles.ts');
+  const fullscreenStyles = await loadWebModule(
+    'shared/mermaid-fullscreen/mermaid-fullscreen-styles.ts',
+  );
+  const mermaidFullscreenCss = fullscreenStyles.MERMAID_FULLSCREEN_CSS;
+  if (typeof mermaidFullscreenCss !== 'string' || !mermaidFullscreenCss) {
+    throw new Error('缺少 mermaid 全屏 CSS：MERMAID_FULLSCREEN_CSS');
+  }
   mkdirSync(distRoot, { recursive: true });
   for (const pkg of PACKAGES) {
-    await buildPackage(pkg, richStyles);
+    await buildPackage(pkg, richStyles, mermaidFullscreenCss);
   }
   if (copyNative) {
     copyDistToNativeSinks();

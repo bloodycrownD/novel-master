@@ -31,6 +31,12 @@ jest.mock('@/webview-host/rich-document/uri', () => ({
   getRichDocumentPackageDirUri: () => 'file:///rich-document/',
 }));
 
+// mermaid 全屏返回键自注册用（组件不在 NavigationContainer 内渲染；聚焦恒真即可）
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({isFocused: () => true}),
+  useFocusEffect: () => {},
+}));
+
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {

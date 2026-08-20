@@ -5,9 +5,11 @@
  * 逻辑。结果列表自渲染精简卡片（不复用 chat/MessageList，因为 MessageList 没有
  * onEndReached 透传、且绑定 streaming 语境，搜索结果场景错配）。
  *
+ * 搜索支持关键词（大小写不敏感，由 core 统一处理）、seq 编号区间
+ * （fromSeq/toSeq 闭区间，可只填一端）与向上翻页，三者可自由组合。
  * 搜索始终包含隐藏消息——hidden 的卡片整体降透明度，与「已隐藏」语义一致。
  *
- * 布局只有一排搜索栏（关键词输入框 + 搜索按钮），下方 FlatList 占满剩余屏幕。
+ * 布局搜索栏（关键词 + 搜索按钮）下方一排编号区间输入，再下方 FlatList 占满剩余屏幕。
  * 返回由导航 header 的 showBack 处理，组件内不再单独放返回按钮。
  *
  * 点击卡片可以展开/收起完整文本内容，避免长消息被摘要截断后无法阅读。
@@ -16,6 +18,7 @@ import React, {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -39,6 +42,16 @@ import type {RootStackParamList} from '../../navigation/types';
 type ScreenRoute = RouteProp<RootStackParamList, 'ChatHistorySearch'>;
 
 const SEARCH_LIMIT = 50;
+
+/** 归一编号输入：空串 / 非数字统一归一为 undefined（该侧不设限）。 */
+function normalizeSeqInput(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 /**
  * 把消息里的 TextBlock 拼成单行摘要（忽略 tool_use / thinking 等非对话块）。
@@ -76,6 +89,25 @@ function roleLabel(role: string): string {
   return '系统';
 }
 
+/** 从当前筛选输入派生收起态摘要（如 `关键词 "xx" · #10–50`；无筛选时给占位文案）。 */
+function deriveFilterSummary(
+  keyword: string,
+  fromSeqText: string,
+  toSeqText: string,
+): string {
+  const parts: string[] = [];
+  const trimmedKeyword = keyword.trim();
+  if (trimmedKeyword.length > 0) {
+    parts.push(`关键词 "${trimmedKeyword}"`);
+  }
+  const fromSeq = normalizeSeqInput(fromSeqText);
+  const toSeq = normalizeSeqInput(toSeqText);
+  if (fromSeq != null || toSeq != null) {
+    parts.push(`#${fromSeq ?? '起'}–${toSeq ?? '止'}`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : '未设置筛选条件';
+}
+
 export function ChatHistorySearchScreen() {
   const {tokens} = useTheme();
   const runtime = useRuntime();
@@ -83,11 +115,15 @@ export function ChatHistorySearchScreen() {
   const {sessionId} = route.params;
 
   const [keyword, setKeyword] = useState('');
+  const [fromSeqText, setFromSeqText] = useState('');
+  const [toSeqText, setToSeqText] = useState('');
 
   const [results, setResults] = useState<readonly ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
+  /** 筛选表单折叠卡片是否展开（默认展开；查询成功且有结果时自动收起）。 */
+  const [formExpanded, setFormExpanded] = useState(true);
   /** 是否已经发起过一次查询，用于区分初始空态与「未命中」。 */
   const [hasSearched, setHasSearched] = useState(false);
   /** 上一批结果是否可能还有更早的（命中 LIMIT 视为可能还有）。 */
@@ -111,6 +147,13 @@ export function ChatHistorySearchScreen() {
 
   const runQuery = useCallback(
     async (opts?: {beforeSeq?: number; append?: boolean}) => {
+      const fromSeq = normalizeSeqInput(fromSeqText);
+      const toSeq = normalizeSeqInput(toSeqText);
+      // 倒挂区间不发请求，给提示（PRD 验收 #6）。
+      if (fromSeq != null && toSeq != null && fromSeq > toSeq) {
+        setError('编号区间无效：起始编号不能大于截止编号');
+        return;
+      }
       const append = opts?.append ?? false;
       if (append) {
         setLoadingMore(true);
@@ -126,12 +169,19 @@ export function ChatHistorySearchScreen() {
           keyword: trimmed.length > 0 ? trimmed : undefined,
           limit: SEARCH_LIMIT,
           beforeSeq: opts?.beforeSeq,
+          fromSeq,
+          toSeq,
         });
         setHasMore(batch.length >= SEARCH_LIMIT);
         if (append) {
           setResults(prev => [...prev, ...batch]);
         } else {
           setResults(batch);
+          // 首次查询命中才收起表单：空结果算「未命中」不算成功，倒挂与异常分支不会走到这里。
+          if (batch.length > 0) {
+            setFormExpanded(false);
+            Keyboard.dismiss();
+          }
         }
         setHasSearched(true);
       } catch (err) {
@@ -144,7 +194,7 @@ export function ChatHistorySearchScreen() {
         setLoadingMore(false);
       }
     },
-    [runtime, sessionId, keyword],
+    [runtime, sessionId, keyword, fromSeqText, toSeqText],
   );
 
   const onSubmitSearch = useCallback(() => {
@@ -159,6 +209,9 @@ export function ChatHistorySearchScreen() {
   }, [hasMore, loading, loadingMore, minSeq, runQuery]);
 
   const showEmpty = hasSearched && !loading && results.length === 0;
+
+  // 收起态摘要直接从筛选项 state 派生，不另存一份；输入值在收起卸载表单时不丢。
+  const filterSummary = deriveFilterSummary(keyword, fromSeqText, toSeqText);
 
   const renderItem = useCallback(
     ({item}: {item: ChatMessage}) => (
@@ -188,42 +241,121 @@ export function ChatHistorySearchScreen() {
   // 搜索栏 + 结果列表主体：抽出来供 iOS / Android 两个分支复用。
   const body = (
     <>
-      {/* 顶部：搜索栏（关键词输入框 + 搜索按钮），固定区域，不参与滚动。 */}
+      {/* 顶部：筛选表单折叠卡片（默认展开；成功命中后自动收起，收起态显示摘要）。 */}
       <View
         style={[
           styles.header,
           {borderBottomColor: tokens.borderLight},
         ]}>
-        <View style={styles.searchRow}>
-          <FormTextInput
-            testID="chat-history-search-keyword"
-            tokens={tokens}
-            value={keyword}
-            onChangeText={setKeyword}
-            placeholder="输入关键词，留空列出全部"
-            accessibilityLabel="搜索关键词输入框"
-            style={styles.keywordInput}
-          />
+        <View
+          style={[
+            styles.formCard,
+            {
+              backgroundColor: tokens.surfaceElevated,
+              borderColor: tokens.borderLight,
+            },
+          ]}>
           <Pressable
-            testID="chat-history-search-submit"
-            onPress={onSubmitSearch}
-            disabled={loading}
-            style={[
-              styles.submitBtn,
-              {backgroundColor: tokens.primary, opacity: loading ? 0.6 : 1},
-            ]}
-            accessibilityLabel="查询聊天记录">
-            {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.submitText}>搜索</Text>
-            )}
+            testID="chat-history-search-form-toggle"
+            style={styles.formCardHeader}
+            onPress={() => setFormExpanded(v => !v)}
+            accessibilityRole="button"
+            accessibilityState={{expanded: formExpanded}}
+            accessibilityLabel="筛选条件">
+            <View style={styles.formCardHeaderText}>
+              <Text style={[styles.formCardTitle, {color: tokens.text}]}>
+                筛选条件
+              </Text>
+              {!formExpanded ? (
+                <Text
+                  style={[styles.formCardSummary, {color: tokens.textSecondary}]}
+                  numberOfLines={1}>
+                  {filterSummary}
+                </Text>
+              ) : null}
+            </View>
+            <Text style={[styles.formCardChevron, {color: tokens.textTertiary}]}>
+              {formExpanded ? '▼' : '▶'}
+            </Text>
           </Pressable>
-        </View>
+          {formExpanded ? (
+            <View style={styles.formCardBody}>
+              <View style={styles.sectionLabelRow}>
+                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
+                  关键词
+                </Text>
+              </View>
+              <View style={styles.searchRow}>
+                <FormTextInput
+                  testID="chat-history-search-keyword"
+                  tokens={tokens}
+                  value={keyword}
+                  onChangeText={setKeyword}
+                  placeholder="关键词"
+                  accessibilityLabel="搜索关键词输入框"
+                  style={styles.keywordInput}
+                />
+                <Pressable
+                  testID="chat-history-search-submit"
+                  onPress={onSubmitSearch}
+                  disabled={loading}
+                  style={[
+                    styles.submitBtn,
+                    {
+                      backgroundColor: tokens.primary,
+                      opacity: loading ? 0.6 : 1,
+                    },
+                  ]}
+                  accessibilityLabel="查询聊天记录">
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.submitText}>搜索</Text>
+                  )}
+                </Pressable>
+              </View>
 
-        {/* 错误信息紧凑显示在搜索栏下方 */}
+              {/* 编号区间节：两个数字输入并排，均可留空表示该侧不设限。 */}
+              <View style={styles.sectionLabelRow}>
+                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
+                  编号区间
+                </Text>
+                <Text style={[styles.sectionHint, {color: tokens.textTertiary}]}>
+                  留空不限
+                </Text>
+              </View>
+              <View style={styles.seqRow}>
+                <FormTextInput
+                  testID="chat-history-search-from-seq"
+                  tokens={tokens}
+                  value={fromSeqText}
+                  onChangeText={(t) => setFromSeqText(t.replace(/[^0-9]/g, ''))}
+                  placeholder="从 #"
+                  keyboardType="numeric"
+                  accessibilityLabel="起始编号输入框"
+                  style={styles.seqInput}
+                />
+                <Text style={[styles.seqDash, {color: tokens.textTertiary}]}>–</Text>
+                <FormTextInput
+                  testID="chat-history-search-to-seq"
+                  tokens={tokens}
+                  value={toSeqText}
+                  onChangeText={(t) => setToSeqText(t.replace(/[^0-9]/g, ''))}
+                  placeholder="到 #"
+                  keyboardType="numeric"
+                  accessibilityLabel="截止编号输入框"
+                  style={styles.seqInput}
+                />
+              </View>
+            </View>
+          ) : null}
+        </View>
+        {/* 错误恒显在折叠卡片外：首次查询成功后表单自动收起，若翻页 append
+            失败，收起态下错误仍可见，不会藏在卡片里丢失反馈。 */}
         {error != null ? (
-          <Text style={[styles.error, {color: tokens.danger}]} numberOfLines={2}>
+          <Text
+            style={[styles.error, {color: tokens.danger}]}
+            numberOfLines={2}>
             {error}
           </Text>
         ) : null}
@@ -330,6 +462,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  seqRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  seqInput: {flex: 1},
   keywordInput: {flex: 1},
   submitBtn: {
     width: 56,
@@ -340,6 +478,37 @@ const styles = StyleSheet.create({
   },
   submitText: {color: '#FFFFFF', fontSize: 15, fontWeight: '700'},
   error: {fontSize: 12, paddingHorizontal: 2},
+  // 折叠卡片容器：样式值对齐 FormSectionCard（圆角 16 + hairline 描边 + shadow/elevation 2）。
+  formCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  // 卡片头：结构对齐 PromptPreviewSegmentCard（Pressable + 摘要 + ▶/▼ 文字 chevron）。
+  formCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  formCardHeaderText: {flex: 1, minWidth: 0},
+  formCardTitle: {fontSize: 15, fontWeight: '600'},
+  formCardSummary: {fontSize: 12, lineHeight: 17, marginTop: 2},
+  formCardChevron: {fontSize: 10, paddingTop: 4},
+  formCardBody: {gap: 8, marginTop: 10},
+  sectionLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  sectionLabel: {fontSize: 13, fontWeight: '600'},
+  sectionHint: {fontSize: 12},
+  seqDash: {fontSize: 14, paddingHorizontal: 2},
   resultList: {flex: 1},
   resultContent: {padding: 16, gap: 10},
   resultContentEmpty: {flex: 1, padding: 16, gap: 10},

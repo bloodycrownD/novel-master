@@ -8,6 +8,8 @@ import {
 } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
+import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
+import { vfsNotFound } from "../../src/errors/vfs-errors.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { isVfsError } from "@novel-master/core/vfs";
 import { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../../src/domain/tool/logic/tool-output-limits.js";
@@ -89,6 +91,151 @@ describe("Builtin file tools V2 (unit)", () => {
     assert.equal(writes[0].path, "/drafts/a.md");
     // file_cache key 用同一规范路径，不再抛 INVALID_PATH
     assert.equal(kkvSets[0].key, "full:/drafts/a.md");
+  });
+
+  it("write 嵌套新路径各层祖先目录补默认规则，已有 rule_off 行不覆盖", async () => {
+    const vfs = {
+      // B-1：write 前用 vfs.read 探测存在性——NOT_FOUND 即新建
+      read: async (path: string) => {
+        throw vfsNotFound(path);
+      },
+      write: async () => ({ version: 1 }),
+    } as unknown as BuiltinToolContext["vfs"];
+    const setCalls: Array<{ logicalPath: string }> = [];
+    const workplace = {
+      getDirRule: async () => undefined,
+      // 预置 "/off" 一条 rule_off 行：已有行不应被覆盖
+      listDirRules: async () => [
+        { scopeKey: "session:s", logicalPath: "/off", ruleEnabled: false },
+      ],
+      setDirRule: async (input: { logicalPath: string }) => {
+        setCalls.push({ logicalPath: input.logicalPath });
+      },
+    };
+    const ctx: BuiltinToolContext = {
+      ...toolCtx(vfs, "p", "s"),
+      workplace,
+    };
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+
+    // 全新嵌套路径：各层祖先（跳过根、不含文件自身）都补上默认规则
+    await runner.call("write", { path: "x/y/z/n.md", content: "hi" }, ctx);
+    assert.deepEqual(setCalls, [
+      { logicalPath: "/x" },
+      { logicalPath: "/x/y" },
+      { logicalPath: "/x/y/z" },
+    ]);
+
+    // 已有 rule_off 行的层级不覆盖，只补后面的新层级
+    setCalls.length = 0;
+    await runner.call("write", { path: "off/deeper/a.md", content: "hi" }, ctx);
+    assert.deepEqual(setCalls, [{ logicalPath: "/off/deeper" }]);
+  });
+
+  it("fs mkdir 为新目录及其祖先补默认规则", async () => {
+    const vfs = {
+      mkdir: async () => {},
+    } as unknown as BuiltinToolContext["vfs"];
+    const setCalls: Array<{ logicalPath: string }> = [];
+    const workplace = {
+      getDirRule: async () => undefined,
+      listDirRules: async () => [],
+      setDirRule: async (input: { logicalPath: string }) => {
+        setCalls.push({ logicalPath: input.logicalPath });
+      },
+    };
+    const ctx: BuiltinToolContext = {
+      ...toolCtx(vfs, "p", "s"),
+      workplace,
+    };
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+
+    await runner.call("fs", { action: "mkdir", path: "m/n" }, ctx);
+    // mkdir 自身也是新目录：连同祖先一起补
+    assert.deepEqual(setCalls, [
+      { logicalPath: "/m" },
+      { logicalPath: "/m/n" },
+    ]);
+  });
+
+  it("write 编辑已有文件不补父链规则（B-1：仅新建补）", async () => {
+    const writes: Array<{ path: string; content: string }> = [];
+    const vfs = {
+      // read 探测到内容 → 已存在 → 走纯编辑路径，不补规则
+      read: async (path: string) => ({
+        path,
+        content: "old",
+        version: 1,
+        mtimeMs: 0,
+      }),
+      write: async (path: string, content: string) => {
+        writes.push({ path, content });
+        return { version: 2 };
+      },
+    } as unknown as BuiltinToolContext["vfs"];
+    const setCalls: Array<{ logicalPath: string }> = [];
+    const workplace = {
+      getDirRule: async () => undefined,
+      listDirRules: async () => [],
+      setDirRule: async (input: { logicalPath: string }) => {
+        setCalls.push({ logicalPath: input.logicalPath });
+      },
+    };
+    const ctx: BuiltinToolContext = {
+      ...toolCtx(vfs, "p", "s"),
+      workplace,
+    };
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+
+    const result = await runner.call<{ version: number }>(
+      "write",
+      { path: "/e/f/g/a.md", content: "new" },
+      ctx,
+    );
+    assert.equal(result.version, 2);
+    assert.deepEqual(writes, [{ path: "/e/f/g/a.md", content: "new" }]);
+    // 编辑已有文件：祖先目录一条规则都不补
+    assert.deepEqual(setCalls, []);
+  });
+
+  it("write 前探测失败时保守跳过补规则（B-1：宁可少补、不可误翻存量）", async () => {
+    const vfs = {
+      // 探测原语自身抛错（非 NOT_FOUND）→ 保守视作已存在
+      read: async () => {
+        throw new Error("probe boom");
+      },
+      write: async () => ({ version: 1 }),
+    } as unknown as BuiltinToolContext["vfs"];
+    const setCalls: Array<{ logicalPath: string }> = [];
+    const workplace = {
+      getDirRule: async () => undefined,
+      listDirRules: async () => [],
+      setDirRule: async (input: { logicalPath: string }) => {
+        setCalls.push({ logicalPath: input.logicalPath });
+      },
+    };
+    const ctx: BuiltinToolContext = {
+      ...toolCtx(vfs, "p", "s"),
+      workplace,
+    };
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+
+    // write 主流程不受探测失败影响，但补规则被保守跳过
+    const result = await runner.call<{ version: number }>(
+      "write",
+      { path: "/p/q/a.md", content: "hi" },
+      ctx,
+    );
+    assert.equal(result.version, 1);
+    assert.deepEqual(setCalls, []);
   });
 });
 
@@ -477,5 +624,136 @@ describe("Builtin file tools V2 (integration)", () => {
         return true;
       },
     );
+  });
+
+  it("write/mkdir 对接真实 workplace 服务：新层级规则 on、rule_off 不覆盖", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const workplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx: BuiltinToolContext = {
+      ...toolCtx(vfs, project.id, session.id),
+      workplace,
+    };
+
+    // 预置一条 rule_off：write 补规则时不应覆盖
+    await workplace.setDirRule({ logicalPath: "/w", ruleEnabled: false });
+
+    await runner.call("write", { path: "/w/x/y/a.md", content: "hi" }, baseCtx);
+    assert.equal((await workplace.getDirRule("/w"))?.ruleEnabled, false);
+    assert.equal((await workplace.getDirRule("/w/x"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/w/x/y"))?.ruleEnabled, true);
+
+    // 真实 VFS 的 mkdir 不递归：逐层创建，每层都应补上默认规则
+    await runner.call("fs", { action: "mkdir", path: "/m" }, baseCtx);
+    await runner.call("fs", { action: "mkdir", path: "/m/n" }, baseCtx);
+    assert.equal((await workplace.getDirRule("/m"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/m/n"))?.ruleEnabled, true);
+  });
+
+  it("write 编辑已有文件祖先目录仍无规则行；同树新建才补父链（B-1）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const workplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx: BuiltinToolContext = {
+      ...toolCtx(vfs, project.id, session.id),
+      workplace,
+    };
+
+    // 预置：直写 vfs（不经工具）造已有文件，祖先目录均无 dir_rule 行
+    await vfs.write("/e/f/g/a.md", "v1");
+    assert.equal(await workplace.getDirRule("/e"), undefined);
+    assert.equal(await workplace.getDirRule("/e/f"), undefined);
+    assert.equal(await workplace.getDirRule("/e/f/g"), undefined);
+
+    // 编辑：经工具 write 同一路径，内容更新但祖先目录仍无规则行
+    const edited = await runner.call<{ version: number }>(
+      "write",
+      { path: "/e/f/g/a.md", content: "v2" },
+      baseCtx,
+    );
+    assert.ok(edited.version >= 2);
+    assert.equal((await vfs.read("/e/f/g/a.md")).content, "v2");
+    assert.equal(await workplace.getDirRule("/e"), undefined);
+    assert.equal(await workplace.getDirRule("/e/f"), undefined);
+    assert.equal(await workplace.getDirRule("/e/f/g"), undefined);
+
+    // 同树新建：父链各层补上 rule_on（现有行为回归保护）
+    await runner.call(
+      "write",
+      { path: "/e/f/h/b.md", content: "hi" },
+      baseCtx,
+    );
+    assert.equal((await workplace.getDirRule("/e"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/e/f"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/e/f/h"))?.ruleEnabled, true);
+  });
+
+  it("补目录规则失败不阻断 write/mkdir 主流程（吞错契约，G-1）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const realWorkplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    // 规则存储整体抛错：write/mkdir 仍应成功且文件/目录落盘
+    const brokenWorkplace: BuiltinToolContext["workplace"] = {
+      getDirRule: async () => {
+        throw new Error("rule store down");
+      },
+      listDirRules: async () => {
+        throw new Error("rule store down");
+      },
+      setDirRule: async () => {
+        throw new Error("rule store down");
+      },
+    };
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx: BuiltinToolContext = {
+      ...toolCtx(vfs, project.id, session.id),
+      workplace: brokenWorkplace,
+    };
+
+    const written = await runner.call<{ version: number }>(
+      "write",
+      { path: "/boom/x/a.md", content: "hi" },
+      baseCtx,
+    );
+    assert.ok(written.version >= 1);
+    assert.equal((await vfs.read("/boom/x/a.md")).content, "hi");
+
+    await runner.call("fs", { action: "mkdir", path: "/boom/d" }, baseCtx);
+    const listed = await vfs.list("/boom");
+    assert.ok(
+      listed.some((e) => e.path === "/boom/d" && e.kind === "directory"),
+    );
+
+    // 规则存储全程不可用：不应有残留规则行写入
+    assert.deepEqual(await realWorkplace.listDirRules(), []);
   });
 });

@@ -9,6 +9,7 @@
     "**/Pods",
     "__tests__/**/*",
     "src/web/**/webview/**",
-    "src/web/shared/ui/**"
+    "src/web/shared/ui/**",
+    "src/web/shared/mermaid-fullscreen/**"
   ]
 }

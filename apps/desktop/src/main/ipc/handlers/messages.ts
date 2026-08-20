@@ -110,6 +110,8 @@ export async function handleMessagesSearch(
       keyword: req.keyword,
       limit: req.limit,
       beforeSeq: req.beforeSeq,
+      fromSeq: req.fromSeq,
+      toSeq: req.toSeq,
     });
     return { ok: true, data: messages.map(toDto) };
   } catch (err) {

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
 import { createUserVfsTurnServiceBundle, readMessageMetadata, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import {
   fileCacheKey,
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -149,6 +150,30 @@ describe("UserVfsTurnService", () => {
       (await ctx.sessionVfs(project.id, session.id).read("/ok.md")).content,
       "hello",
     );
+  });
+
+  it("user_ops write 新建文件补父链目录规则（与 agent 链路一致，C-orch-1）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    const ok = await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/u/v/w/a.md", "hello", "tu_wr"),
+    );
+    assert.equal(ok.ok, true);
+
+    // resolveToolCtx 注入了 session scope workplace：
+    // 新建文件的父链各层应补上默认 rule_on，与 agent 链路同款
+    const workplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    assert.equal((await workplace.getDirRule("/u"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/u/v"))?.ruleEnabled, true);
+    assert.equal((await workplace.getDirRule("/u/v/w"))?.ruleEnabled, true);
   });
 
   it("appendToolTurnBridge 追加 kind=tool_turn_bridge assistant", async () => {

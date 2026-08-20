@@ -76,6 +76,8 @@ export type ChatTranscriptWebViewProps = {
   readonly uiRunning?: boolean;
   readonly toolInvoking?: boolean;
   readonly menuCloseSignal?: number;
+  /** 递增时下发 closeMermaidViewer（Android 返回键先关全屏；照 menuCloseSignal 先例）。 */
+  readonly mermaidViewerCloseSignal?: number;
   /**
    * Bumped when Android IME lifts the composer; web stick-if-near-bottom so
    * the last messages stay above the input after the viewport shrinks.
@@ -96,6 +98,8 @@ export type ChatTranscriptWebViewProps = {
   ) => void;
   readonly onMessageMenuAction?: (messageId: string, action: string) => void;
   readonly onWebMenuOpenChange?: (open: boolean) => void;
+  /** mermaid 全屏查看器开/关上浮（照 menuOpened→onWebMenuOpenChange 先例；RN 侧据此拦返回键）。 */
+  readonly onWebMermaidViewerOpenChange?: (open: boolean) => void;
   /** pending task 工具的子会话映射（title → childSessionId），让执行中的 task 卡片可点击。 */
   readonly pendingSubagentSessions?: ReadonlyMap<string, string>;
 };
@@ -126,6 +130,7 @@ function chatTranscriptWebViewPropsEqual(
     prev.toolInvoking === next.toolInvoking &&
     prev.defaultScrollToBottom === next.defaultScrollToBottom &&
     prev.menuCloseSignal === next.menuCloseSignal &&
+    prev.mermaidViewerCloseSignal === next.mermaidViewerCloseSignal &&
     prev.keyboardLiftNonce === next.keyboardLiftNonce &&
     prev.initialScroll === next.initialScroll &&
     transcriptFlagsEqual(prev.flags, next.flags) &&
@@ -225,6 +230,7 @@ export const ChatTranscriptWebView = memo(
         uiRunning: uiRunningProp,
         toolInvoking = false,
         menuCloseSignal = 0,
+        mermaidViewerCloseSignal = 0,
         keyboardLiftNonce = 0,
         onScrollSnapshot,
         onReady,
@@ -235,6 +241,7 @@ export const ChatTranscriptWebView = memo(
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
+        onWebMermaidViewerOpenChange,
         pendingSubagentSessions,
       },
       ref,
@@ -771,6 +778,9 @@ export const ChatTranscriptWebView = memo(
           if (message.type === 'ready') {
             setWebReady(true);
             onReady?.();
+            // WebView 被系统回收重建后，webview 侧全屏层已不存在；对称复位
+            // 上浮给外层的全屏开合状态，避免外层返回键拦截态关真。
+            onWebMermaidViewerOpenChange?.(false);
             return;
           }
           if (message.type === 'scrollSnapshot') {
@@ -833,6 +843,14 @@ export const ChatTranscriptWebView = memo(
             onWebMenuOpenChange?.(false);
             return;
           }
+          if (message.type === 'mermaidViewerOpened') {
+            onWebMermaidViewerOpenChange?.(true);
+            return;
+          }
+          if (message.type === 'mermaidViewerClosed') {
+            onWebMermaidViewerOpenChange?.(false);
+            return;
+          }
         },
         [
           onReady,
@@ -844,6 +862,7 @@ export const ChatTranscriptWebView = memo(
           onOpenMessageMenu,
           onMessageMenuAction,
           onWebMenuOpenChange,
+          onWebMermaidViewerOpenChange,
           uiRunning,
         ],
       );
@@ -913,6 +932,13 @@ export const ChatTranscriptWebView = memo(
         }
         postToWeb({ v: 1, type: 'closeMenu', payload: {} });
       }, [webReady, menuCloseSignal, postToWeb]);
+
+      useEffect(() => {
+        if (!webReady || mermaidViewerCloseSignal === 0) {
+          return;
+        }
+        postToWeb({ v: 1, type: 'closeMermaidViewer', payload: {} });
+      }, [webReady, mermaidViewerCloseSignal, postToWeb]);
 
       useEffect(() => {
         if (!webReady || keyboardLiftNonce === 0) {

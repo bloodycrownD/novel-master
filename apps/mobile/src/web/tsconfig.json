@@ -13,6 +13,7 @@
     "rich-document/webview/**/*.ts",
     "rich-document/webview/**/*.tsx",
     "shared/**/*.ts",
-    "shared/**/*.tsx"
+    "shared/**/*.tsx",
+    "webview-host/**/*.ts"
   ]
 }

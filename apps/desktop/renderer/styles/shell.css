@@ -3948,6 +3948,22 @@ html[data-theme="dark"] .chat-message {
   min-width: 0;
 }
 
+/* 长消息默认折叠（搜索结果等场景）：line-clamp 截 4 行，点击切换展开，无动画。 */
+.chat-message__body-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.chat-message__body-clamp--expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  cursor: auto;
+}
+
 .chat-message > p {
   margin: 0;
 }
@@ -4805,6 +4821,65 @@ html[data-theme="dark"] .chat-batch-bar {
   margin: 1.2em 0;
   border: none;
   border-top: 1px solid var(--border-light);
+}
+
+/* Mermaid 图表块（预览 + 聊天消息共用；源码保留隐藏，失败/流式占位时可见） */
+.mermaid-block {
+  position: relative;
+  margin: 0.75em 0;
+  padding: 12px;
+  background: var(--background);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.mermaid-block__chart {
+  overflow-x: auto;
+}
+
+.mermaid-block__chart svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-block .mermaid-block__source {
+  display: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  background: transparent;
+  border: none;
+}
+
+.mermaid-block .mermaid-block__source code {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.mermaid-block--pending {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.mermaid-block--pending .mermaid-block__source {
+  display: block;
+}
+
+.mermaid-block.mermaid-failed {
+  border-color: var(--danger);
+}
+
+.mermaid-block.mermaid-failed .mermaid-block__source {
+  display: block;
+}
+
+.mermaid-block__failed-badge {
+  display: block;
+  margin-bottom: 0.5em;
+  font-size: 0.85em;
+  color: var(--danger);
 }
 
 .preview-text {
@@ -6362,10 +6437,62 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--text-primary);
 }
 
+/* 筛选表单折叠卡片：视觉对齐 .config-block-card（border-light / radius 10 / surface-muted / shadow-card-subtle）。 */
+.chat-history-search__filter-card {
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--surface-muted);
+  box-shadow: var(--shadow-card-subtle);
+  overflow: hidden;
+}
+
+.chat-history-search__filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 8px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-history-search__filter-card--collapsed .chat-history-search__filter-toggle {
+  border-bottom: none;
+}
+
+.chat-history-search__filter-title {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-history-search__filter-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chat-history-search__filter-chevron {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
 .chat-history-search__form {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 10px 14px 12px;
 }
 
 .chat-history-search__input-row {
@@ -6389,6 +6516,50 @@ html[data-theme="dark"] .chat-batch-bar {
 .chat-history-search__keyword:focus {
   outline: none;
   border-color: var(--primary);
+}
+
+/* 小节标题（关键词 / 编号区间），对齐配置页分区表单的层次 */
+.chat-history-search__section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.chat-history-search__section-label--with-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.chat-history-search__section-hint {
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* 编号区间输入：窄宽数字框，与关键词框区分 */
+.chat-history-search__seq {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.chat-history-search__seq:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.chat-history-search__seq-dash {
+  color: var(--text-tertiary);
+  font-size: 13px;
 }
 
 .chat-history-search__toggles {

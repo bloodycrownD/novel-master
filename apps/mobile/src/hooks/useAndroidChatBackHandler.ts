@@ -12,6 +12,8 @@ export type AndroidChatBackState = {
   conversationPanel: 'chat' | 'workspace';
   sessionListPanel: 'sessions' | 'template';
   sessionDrawerOpen: boolean;
+  /** mermaid 全屏查看器开着（WebView 上浮）；返回键先关全屏。可选：未接线时无拦截。 */
+  mermaidViewerOpen?: boolean;
   messageMenuOpen: boolean;
   messageEditOpen: boolean;
   modelPickerOpen: boolean;
@@ -29,6 +31,8 @@ export type AndroidChatBackActions = {
   backFromConversation: () => void;
   showChatPanel: () => void;
   closeSessionDrawer: () => void;
+  /** 返回键关闭 mermaid 全屏查看器（下发 closeMermaidViewer）。 */
+  closeMermaidViewer?: () => void;
   closeMessageMenu: () => void;
   closeMessageEdit: () => void;
   closeModelPicker: () => void;
@@ -49,6 +53,7 @@ export function useAndroidChatBackHandler(
     conversationPanel,
     sessionListPanel,
     sessionDrawerOpen,
+    mermaidViewerOpen,
     messageMenuOpen,
     messageEditOpen,
     modelPickerOpen,
@@ -64,6 +69,7 @@ export function useAndroidChatBackHandler(
     backFromConversation,
     showChatPanel,
     closeSessionDrawer,
+    closeMermaidViewer,
     closeMessageMenu,
     closeMessageEdit,
     closeModelPicker,
@@ -75,6 +81,11 @@ export function useAndroidChatBackHandler(
   } = actions;
 
   const handler = useCallback((): boolean => {
+    // Mermaid 全屏查看器盖在一切会话 surface 之上：返回键最先关全屏。
+    if (mermaidViewerOpen) {
+      closeMermaidViewer?.();
+      return true;
+    }
     // Conversation overlays: dismiss before leaving the message surface.
     if (sessionDrawerOpen) {
       closeSessionDrawer();
@@ -130,6 +141,7 @@ export function useAndroidChatBackHandler(
 
     return false;
   }, [
+    mermaidViewerOpen,
     sessionDrawerOpen,
     messageMenuOpen,
     messageEditOpen,
@@ -146,6 +158,7 @@ export function useAndroidChatBackHandler(
     backFromConversation,
     showChatPanel,
     closeSessionDrawer,
+    closeMermaidViewer,
     closeMessageMenu,
     closeMessageEdit,
     closeModelPicker,

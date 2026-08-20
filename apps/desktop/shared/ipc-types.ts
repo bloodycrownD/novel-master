@@ -635,6 +635,10 @@ export interface MessagesSearchRequest {
   readonly keyword?: string;
   readonly limit: number;
   readonly beforeSeq?: number;
+  /** 区间下界（闭区间，含 hidden 消息）：为空/undefined 时不设下界。 */
+  readonly fromSeq?: number;
+  /** 区间上界（闭区间，含 hidden 消息）：为空/undefined 时不设上界。 */
+  readonly toSeq?: number;
 }
 
 export type ContentBlockDto =

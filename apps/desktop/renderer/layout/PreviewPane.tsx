@@ -5,8 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MermaidMarkdown } from "../components/MermaidMarkdown";
 import {
   createTextAnnotator,
   type TextAnnotator,
@@ -415,7 +414,7 @@ export function PreviewPane() {
           <div className="preview-body" id="preview-body">
             {isMarkdown ? (
               <div className="preview-markdown" ref={mdRootRef}>
-                <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
+                <MermaidMarkdown content={content} />
               </div>
             ) : (
               <pre className="preview-text">{content || "（空文件）"}</pre>

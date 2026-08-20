@@ -1,8 +1,8 @@
 ---
-date: 2026-08-19 23:59
-title: 四项交互问题：开发 DAG 完成，dev-ready 待用户真机验收
-keywords: seq区间筛选, 会话改名不刷新, mermaid, 文本复制, code-dev-loop, dev-ready, worktree, chat-improvements-2026-08
-abstract: 四项需求经 spec-check-loop 后进入 code-dev-loop，三波次（3 impl 并行 → 3 verify 并行 → 3 cr-func 并行）全部完成：12 笔功能提交落在 worktree 分支 feat/chat-improvements-2026-08（HEAD 2ceb123），blocking 测试全绿、cr-func 均 func-ready；剩余 manual_user 真机验收留给用户。
+date: 2026-08-20 00:20
+title: 四项交互问题：已合并入集成分支，用户验证中
+keywords: seq区间筛选, 会话改名不刷新, mermaid, 文本复制, code-dev-loop, dev-ready, 集成分支, chat-improvements-integration
+abstract: 四项需求开发完成后，feat/chat-improvements-2026-08（13 笔）已合入从 main 拉的集成分支 feat/chat-improvements-integration，零冲突；主 worktree 重建依赖/dist 后三端冒烟全绿，待用户真机验证。
 ---
 
 user:
@@ -59,3 +59,12 @@ DAG 三波次全部完成（dag_version 1，无 not-ready 重编排）：
 - 主代理 trivial 补丁：T-MD4 断言改 matchAll 计数钉死 MessageList 两处用法（2ceb123）。
 - HEAD 2ceb123，工作区干净；子代理散落的过程记忆已合并清理。
 待办：manual_user 真机验收（seq Step6 PRD#1-8 / mermaid Step7 PRD#1-10 / fix Step4 PRD#1-8）；存量问题代报：mobile use-chat-tab-message-actions-unhide.test.ts 是 77d3b69 拆卸功能时漏拆的孤儿测试（与本次无关）；desktop 4 个构建产物类测试需先 npm run build。
+
+assistant:
+impl-mermaid 分身留下的实现级教训（合并自其过程记忆）：1）mermaid 打进 IIFE 后 esbuild 会因顶层符号撞名把 stream.ts 参数 html/bubble 重命名成 html2/bubble3，boot-script 契约测按字面匹配会挂，需容忍 \w* 后缀的正则；2）desktop memo 缓存 key 是 fence 内源码（remark 剥围栏留尾换行），不是整段 markdown；3）mobile jest 依赖 core/cloud-sync/tokenizer 各包 dist 先构建，改 core 源码后要先 npm run build 再测双端；4）并行子代理同分支工作时提交只 add 自己文件清单，同伴边提交边跑测试会造成批量假失败（复跑即恢复）。
+
+user:
+回复记忆，你的分身干活了。然后 merge 到主 worktree 的 feature 分支，我要进行验证。
+
+assistant:
+从 main（v1.5.0，领先基线 65 笔）拉集成分支 feat/chat-improvements-integration，--no-ff 合入 feat/chat-improvements-2026-08（13 笔），零冲突。主 worktree 环境重建：npm install（+mermaid）、packages/core build、apps/mobile build:webview（webview-dist 不进 git，换 worktree 必须重建，否则 mermaid-webview.test 盯 dist 的 T-MV2/T-MT1 会挂）。冒烟全绿：core 17/17、desktop 25/25（handler+recogito+mermaid-markdown）、mobile 48/48。子代理过程记忆已去重合并清理。状态：待用户真机验证。

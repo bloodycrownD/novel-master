@@ -102,6 +102,10 @@ export class DefaultWorkplaceService implements WorkplaceService {
     return rule ?? undefined;
   }
 
+  async listDirRules(): Promise<WorkplaceDirRule[]> {
+    return this.deps.workplace.listDirRules(workplaceScopeKey(this.scope));
+  }
+
   async setFileRule(input: SetFileRuleInput): Promise<void> {
     const logicalPath = normalizePath(input.logicalPath);
     assertLogicalPathAllowed(this.scope, logicalPath);
