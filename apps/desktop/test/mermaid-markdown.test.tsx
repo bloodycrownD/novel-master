@@ -167,6 +167,67 @@ test("T-MD2: 每次 render 唯一 id", () => {
   assert.equal(ids.size, 100);
 });
 
+test("T-MD2(C-1): svgCache LRU 上限——超限淘汰最旧、最新可命中、被淘汰后重跑", async () => {
+  resetMermaidCacheForTests();
+  // 与组件内 SVG_CACHE_MAX 保持一致
+  const SVG_CACHE_MAX = 150;
+  let calls = 0;
+  setMermaidSvgRendererForTests(async (_id, source) => {
+    calls += 1;
+    return `<svg>${source.slice(0, 8)}</svg>`;
+  });
+  const first = "flowchart TD\nA-->B\n";
+  const last = `graph LR\nn${SVG_CACHE_MAX - 1}-->m\n`;
+  try {
+    await resolveMermaidSvg(first, "default");
+    // 再写入 SVG_CACHE_MAX 条不同源码，总数超上限一条 → 最早的 first 被淘汰
+    for (let i = 0; i < SVG_CACHE_MAX; i += 1) {
+      await resolveMermaidSvg(`graph LR\nn${i}-->m\n`, "default");
+    }
+    assert.equal(calls, SVG_CACHE_MAX + 1);
+    // 最早条目被淘汰，最新条目仍可命中
+    assert.equal(lookupMermaidSvg("default", first), null);
+    assert.equal(
+      lookupMermaidSvg("default", last),
+      `<svg>${last.slice(0, 8)}</svg>`,
+    );
+    // 被淘汰后再次请求：重跑渲染（而非拿旧缓存）
+    await resolveMermaidSvg(first, "default");
+    assert.equal(calls, SVG_CACHE_MAX + 2);
+  } finally {
+    setMermaidSvgRendererForTests(null);
+    resetMermaidCacheForTests();
+  }
+});
+
+test("T-MD2(C-1): 失败占位 TTL——TTL 内视为已知失败，过期后清除并允许重试", async (t) => {
+  resetMermaidCacheForTests();
+  // 与组件内 FAILED_TTL_MS 保持一致
+  const FAILED_TTL_MS = 30_000;
+  t.mock.timers.enable({ now: 1_000 });
+  let calls = 0;
+  setMermaidSvgRendererForTests(async () => {
+    calls += 1;
+    throw new Error("transient render failure");
+  });
+  const source = "not-a-diagram\n";
+  try {
+    await assert.rejects(() => resolveMermaidSvg(source, "default"));
+    assert.equal(isMermaidKnownFailed("default", source), true);
+    // TTL 内：仍视为已知失败（不重试）
+    t.mock.timers.tick(FAILED_TTL_MS - 1);
+    assert.equal(isMermaidKnownFailed("default", source), true);
+    // 过期：占位被清除，允许重试
+    t.mock.timers.tick(1);
+    assert.equal(isMermaidKnownFailed("default", source), false);
+    await assert.rejects(() => resolveMermaidSvg(source, "default"));
+    assert.equal(calls, 2);
+  } finally {
+    setMermaidSvgRendererForTests(null);
+    resetMermaidCacheForTests();
+  }
+});
+
 test("T-MD3: 主题切换——data-theme 监听重渲染、清理 observer（源码契约）", () => {
   assert.equal(resolveMermaidTheme("dark"), "dark");
   assert.equal(resolveMermaidTheme("light"), "default");

@@ -17,6 +17,9 @@ import type { Components } from "react-markdown";
  *   静态渲染测试不跑 effect）；成功后源码 <pre> 以 display:none 保留在 DOM，
  *   保证批注 renderStart/End 的文本流不被破坏。
  * - 按「主题 + 源码」memo 缓存：流式每帧全量重渲时源码不变不重跑 mermaid.render。
+ *   svgCache 为 LRU（上限 SVG_CACHE_MAX，超出淘汰最旧），失败占位带 TTL
+ *   （FAILED_TTL_MS 内视为已知失败，过期后允许重试），防长会话内存只增不减、
+ *   临时性渲染失败（如并发初始化冲突）变永久失败。
  * - 未闭合 fence（流式进行中）的最后一个 mermaid 块按占位样式显示源码，
  *   不触发渲染、不挂失败标识；remark 解析会丢失「是否闭合」信息，
  *   因此围栏配对检测在组件层对原始 content 做，再经块序号传给渲染器。
@@ -96,19 +99,51 @@ export function mermaidCacheKey(theme: MermaidTheme, source: string): string {
   return `${theme}\u0000${source}`;
 }
 
-/** 源码 → SVG 的结果缓存（含失败占位），跨组件实例复用。 */
+/** svgCache 的 LRU 上限：超出淘汰最旧（spec desktop/C-1，建议 100~200 取中）。 */
+const SVG_CACHE_MAX = 150;
+/** 失败占位 TTL：过期后视为未失败，下次渲染重走一次 mermaid.render。 */
+const FAILED_TTL_MS = 30_000;
+
+/** 源码 → SVG 的结果缓存（含失败占位），跨组件实例复用；Map 迭代序即 LRU 新旧序。 */
 const svgCache = new Map<string, string>();
+/** 失败占位的写入时间（与 svgCache 的 key 同步维护）。 */
+const failedAtCache = new Map<string, number>();
 const FAILED_PLACEHOLDER = "\u0000__failed__";
 const inflight = new Map<string, Promise<string>>();
+
+/** LRU 命中即提升为最新（Map 尾部）。 */
+function touchCacheKey(key: string): void {
+  const value = svgCache.get(key);
+  if (value !== undefined) {
+    svgCache.delete(key);
+    svgCache.set(key, value);
+  }
+}
+
+/** LRU 写入：覆盖或新增后若超上限，从 Map 头部淘汰最旧（连带失败时间戳）。 */
+function writeCacheKey(key: string, value: string): void {
+  svgCache.delete(key);
+  svgCache.set(key, value);
+  while (svgCache.size > SVG_CACHE_MAX) {
+    const oldest = svgCache.keys().next().value;
+    if (oldest === undefined) {
+      break;
+    }
+    svgCache.delete(oldest);
+    failedAtCache.delete(oldest);
+  }
+}
 
 export function lookupMermaidSvg(
   theme: MermaidTheme,
   source: string,
 ): string | null {
-  const cached = svgCache.get(mermaidCacheKey(theme, source));
+  const key = mermaidCacheKey(theme, source);
+  const cached = svgCache.get(key);
   if (cached == null || cached === FAILED_PLACEHOLDER) {
     return null;
   }
+  touchCacheKey(key);
   return cached;
 }
 
@@ -116,7 +151,19 @@ export function isMermaidKnownFailed(
   theme: MermaidTheme,
   source: string,
 ): boolean {
-  return svgCache.get(mermaidCacheKey(theme, source)) === FAILED_PLACEHOLDER;
+  const key = mermaidCacheKey(theme, source);
+  if (svgCache.get(key) !== FAILED_PLACEHOLDER) {
+    return false;
+  }
+  const failedAt = failedAtCache.get(key) ?? 0;
+  if (Date.now() - failedAt >= FAILED_TTL_MS) {
+    // 失败占位过期：清掉占位，允许下次渲染重试。
+    svgCache.delete(key);
+    failedAtCache.delete(key);
+    return false;
+  }
+  touchCacheKey(key);
+  return true;
 }
 
 /** 可注入的渲染实现（默认动态 import mermaid；测试替换以断言调用次数）。 */
@@ -159,6 +206,7 @@ export async function resolveMermaidSvg(
   const key = mermaidCacheKey(theme, source);
   const cached = svgCache.get(key);
   if (cached != null && cached !== FAILED_PLACEHOLDER) {
+    touchCacheKey(key);
     return cached;
   }
   const pending = inflight.get(key);
@@ -167,11 +215,13 @@ export async function resolveMermaidSvg(
   }
   const job = renderMermaidSvgImpl(nextMermaidId(), source, theme)
     .then((svg) => {
-      svgCache.set(key, svg);
+      writeCacheKey(key, svg);
+      failedAtCache.delete(key);
       return svg;
     })
     .catch((err) => {
-      svgCache.set(key, FAILED_PLACEHOLDER);
+      writeCacheKey(key, FAILED_PLACEHOLDER);
+      failedAtCache.set(key, Date.now());
       throw err;
     })
     .finally(() => {
@@ -181,9 +231,10 @@ export async function resolveMermaidSvg(
   return job;
 }
 
-/** 测试隔离：清空 memo 缓存与失败标记。 */
+/** 测试隔离：清空 memo 缓存、失败标记与失败时间戳。 */
 export function resetMermaidCacheForTests(): void {
   svgCache.clear();
+  failedAtCache.clear();
   inflight.clear();
 }
 
