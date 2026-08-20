@@ -43,6 +43,9 @@ export interface WorkplaceService {
 
   getDirRule(logicalPath: string): Promise<WorkplaceDirRule | undefined>;
 
+  /** 拉取本 scope 全部目录规则行（工具侧一次取全量、内存求差集用）。 */
+  listDirRules(): Promise<WorkplaceDirRule[]>;
+
   setFileRule(input: SetFileRuleInput): Promise<void>;
 
   /** 删除路径及其子路径下的 workplace 纳入/目录规则（VFS 删除后清理 Explorer 幽灵目录）。 */
