@@ -17,6 +17,7 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import { createMessageCheckpointService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { createWorkplaceService } from "@/service/workplace/create-workplace-service.js";
 import { DefaultMessageService } from "./impl/message.service.js";
 import { DefaultUserVfsTurnService } from "./impl/user-vfs-turn.service.js";
 import { createAppendToolTurnBridge } from "./impl/append-tool-turn-bridge.js";
@@ -70,6 +71,13 @@ export function createUserVfsTurnServiceBundle(
     sessionId,
     listSessionMessages: () => messageRepo.listBySession(sessionId),
     sessionKkv,
+    // 目录规则默认启用：与 agent 链路（runAgentTurn）同款注入 session scope
+    // workplace，保证 write / mkdir 的补规则行为在两条链路一致。
+    workplace: createWorkplaceService(conn, {
+      kind: "session",
+      projectId,
+      sessionId,
+    }),
     // A-14 path policy：用户 VFS turn 走 toolCtx 也走默认不限制语义；
     // 后续根据 agent 定义 / project 策略收紧时在此注入。
     allowedPaths: undefined,
