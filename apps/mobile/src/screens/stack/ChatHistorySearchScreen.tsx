@@ -329,7 +329,7 @@ export function ChatHistorySearchScreen() {
                   testID="chat-history-search-from-seq"
                   tokens={tokens}
                   value={fromSeqText}
-                  onChangeText={setFromSeqText}
+                  onChangeText={(t) => setFromSeqText(t.replace(/[^0-9]/g, ''))}
                   placeholder="从 #"
                   keyboardType="numeric"
                   accessibilityLabel="起始编号输入框"
@@ -340,7 +340,7 @@ export function ChatHistorySearchScreen() {
                   testID="chat-history-search-to-seq"
                   tokens={tokens}
                   value={toSeqText}
-                  onChangeText={setToSeqText}
+                  onChangeText={(t) => setToSeqText(t.replace(/[^0-9]/g, ''))}
                   placeholder="到 #"
                   keyboardType="numeric"
                   accessibilityLabel="截止编号输入框"

@@ -222,7 +222,7 @@ export function ChatHistorySearchPanel({
                 data-session-detail-action="search-history-from-seq"
                 placeholder="从 #"
                 value={fromSeqText}
-                onChange={(e) => setFromSeqText(e.target.value)}
+                onChange={(e) => setFromSeqText(e.target.value.replace(/[^0-9]/g, ""))}
               />
               <span className="chat-history-search__seq-dash">–</span>
               <input
@@ -232,7 +232,7 @@ export function ChatHistorySearchPanel({
                 data-session-detail-action="search-history-to-seq"
                 placeholder="到 #"
                 value={toSeqText}
-                onChange={(e) => setToSeqText(e.target.value)}
+                onChange={(e) => setToSeqText(e.target.value.replace(/[^0-9]/g, ""))}
               />
             </div>
           </form>
