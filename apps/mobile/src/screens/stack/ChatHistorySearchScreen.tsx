@@ -347,18 +347,18 @@ export function ChatHistorySearchScreen() {
                   style={styles.seqInput}
                 />
               </View>
-
-              {/* 错误信息紧凑显示在表单内下方（倒挂提前 return 不收起，错误始终可见） */}
-              {error != null ? (
-                <Text
-                  style={[styles.error, {color: tokens.danger}]}
-                  numberOfLines={2}>
-                  {error}
-                </Text>
-              ) : null}
             </View>
           ) : null}
         </View>
+        {/* 错误恒显在折叠卡片外：首次查询成功后表单自动收起，若翻页 append
+            失败，收起态下错误仍可见，不会藏在卡片里丢失反馈。 */}
+        {error != null ? (
+          <Text
+            style={[styles.error, {color: tokens.danger}]}
+            numberOfLines={2}>
+            {error}
+          </Text>
+        ) : null}
       </View>
 
       {/* 结果列表：FlatList 占满剩余屏幕，同时承担分页加载。 */}
