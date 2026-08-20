@@ -5,7 +5,11 @@
  * **禁止**划词即 createAnnotation（否则选区变蓝、抢走原生复制/批注菜单）。
  * 新建批注：RN menuItems「批注」→ inject 采集 → recogitoCreate。
  */
-import { createTextAnnotator, type TextAnnotator } from '@recogito/text-annotator';
+import {
+  createTextAnnotator,
+  type TextAnnotator,
+  type TextAnnotationLike,
+} from '@recogito/text-annotator';
 import { post } from './post';
 import {
   draftsToRecogitoAnnotations,
@@ -22,7 +26,8 @@ export type AnnotateRenderMark = {
 
 let annotateEnabled = false;
 let annotations: AnnotateRenderMark[] = [];
-let annotator: TextAnnotator | null = null;
+// createTextAnnotator 工厂返回 TextAnnotationLike 形态（未 revive 的注解），变量类型与之对齐
+let annotator: TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null = null;
 /** 已由宿主确认并 setAnnotations 的 draft id；用于 selectionChanged 打开详情。 */
 const knownDraftIds = new Set<string>();
 
