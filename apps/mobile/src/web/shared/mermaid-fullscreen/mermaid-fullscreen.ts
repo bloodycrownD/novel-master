@@ -33,6 +33,7 @@ export type MermaidViewerPost = (
 let _renderView: RenderMermaidViewerView | null = null;
 let _post: MermaidViewerPost | null = null;
 let _open = false;
+let _delegationAttached = false;
 
 /** 由各管线 main 注册 Preact 覆盖层渲染/卸载实现。 */
 export function registerMermaidViewerView(fn: RenderMermaidViewerView): void {
@@ -46,6 +47,10 @@ export function isMermaidViewerOpen(): boolean {
 /** 从图表容器打开全屏：克隆 SVG（原图零改动）→ 渲染覆盖层 → 通知 RN。 */
 export function openMermaidViewer(chart: Element): void {
   if (_open) {
+    return;
+  }
+  // 开门前成对校验：渲染器缺失会白屏，post 缺失会无法通知 RN 拦截返回键
+  if (!_renderView || !_post) {
     return;
   }
   const svg = chart.querySelector('svg');
@@ -84,6 +89,11 @@ export function closeMermaidViewer(notifyHost: boolean = true): void {
  */
 export function attachMermaidViewerDelegation(post: MermaidViewerPost): void {
   _post = post;
+  // 幂等守卫：重复调用只更新 post，不叠加 document 监听器
+  if (_delegationAttached) {
+    return;
+  }
+  _delegationAttached = true;
   document.addEventListener('click', (event) => {
     if (_open) {
       return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）

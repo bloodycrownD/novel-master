@@ -38,6 +38,14 @@ describe('mermaid 全屏查看器共享模块源码契约 (T-MF1)', () => {
     expect(runtime).toContain("classList.add('mermaid-viewer-open')");
   });
 
+  it('attach 幂等守卫 + open 前成对校验 _renderView/_post（防叠加监听/白屏开门）', () => {
+    const runtime = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
+    // 重复 attach 只更新 post，不叠加 document 监听器
+    expect(runtime).toMatch(/if \(_delegationAttached\)/);
+    // 开门前成对校验：渲染器缺失白屏、post 缺失无法通知 RN 关闭
+    expect(runtime).toMatch(/if \(!_renderView \|\| !_post\)/);
+  });
+
   it('样式常量：主题变量 + z-index 对齐 menu 量级 + 禁滚动', () => {
     const styles = webSrc(
       'shared/mermaid-fullscreen/mermaid-fullscreen-styles.ts',
