@@ -74,6 +74,12 @@ assistant:
 两轮收敛（wave-0 四个并行 scope 评审 → spec-fix 落盘 → review-full 终审）：P0=0、P1=3、P2=13。P1：core/B-1（write 编辑已有文件也回补祖先规则，超出「创建时」口径，需 write 前探测存在性）；desktop/A-1（富文本消息进 line-clamp 截断不可预期，spec 回退条款未落地，改回退不折叠）；desktop/C-orch-1（查询与加载更早竞态，旧 append 晚到拼接错乱，改按钮互斥+请求序号守卫）。P2 要点：返回键残留复位×2（ready 分支复位）、查询页收起态错误不可见、svgCache LRU、user_ops 链路补注入、listDirRules 批量化、injectCss 的 $ 展开坑、web tsconfig 门禁等。fix-spec：docs/Iterations/chat-improvements-cr/cr-fix-spec.md（b969f71），终审 fix-spec-ready yes；三处微调（B-2 补 service 透传步骤、A-2 成对校验、A-1 补实现注）已按 trivial 豁免直接落地。待用户确认后按 fix-spec 开修。
 
 user:
+修吧。
+
+assistant:
+16 条全部修复完成（四模块并行 fix 子代理，16 笔提交 8727ca6~6352ad9）：三 P1 全落地——B-1 write 前 vfs.read 探测已存在/探测失败均保守跳过补规则；A-1 富文本回退不折叠+实现注；C-orch-1 按钮互斥+requestSeqRef 序号守卫（旧响应全状态不落地）。P2 要点：listDirRules 批量求差（service 无参透传，正向偏离）、user_ops 链路补注入、返回键 ready 复位×2、错误恒显、svgCache LRU 150+失败 TTL 30s、injectCss 函数形式、annotate 泛型修复+web tsconfig 挂进门禁、不可达选择器删除、setDocument 序号防中间态建 Recogito、attach 幂等+开门成对校验。verify 跨包回归（core dist 重建后）：core 87/87、desktop 36/36、mobile 55/55、红线三项全过；cr-func 终检 16/16 落地、func-ready yes、两处合理偏离（竞态用例独立成 chat-search-race-guard.test.tsx 因双 react 副本需分进程隔离；listDirRules 无参化）。坑：desktop 真渲测试用根 node_modules 的 react-test-renderer（未声明传递依赖，转正需加 devDependencies）；desktop 全量测试本机 OOM 需分批；desktop 单测要传路径形式参数。剩余：合并后 QA 真机项（WebView 重建返回键、富文本视觉、流式定稿图表）。
+
+user:
 readonly scope 评审（节点 review-scope-mobile-rn，BASE 515da9d / HEAD dc16a99，维度 A+B+C+C-orch+G）：mobile 非 web src + __tests__，重点 session-renamed 事件链、mermaid 返回键 4 文件接线、开关移除、查询页折叠卡片。
 
 assistant:
