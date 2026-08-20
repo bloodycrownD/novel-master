@@ -1,8 +1,8 @@
 ---
-date: 2026-08-20 02:30
-title: mermaid 全屏与查询页卡片化：开发 DAG 完成，dev-ready 待真机验收
-keywords: mermaid全屏, pinch缩放, 查询页重设计, 可折叠表单, code-dev-loop, dev-ready, chat-improvements-integration
-abstract: mermaid 全屏查看器与双端查询页折叠卡片化两个迭代经 code-dev-loop 完成（wave-0 双 impl 并行 → fix 补 chat 返回键接线 → 双 verify → 双 cr-func 均 func-ready），11 笔提交落在 feat/chat-improvements-integration（HEAD 7fcd0d8）；测试全绿、三条红线零触碰；剩余 manual_user 真机验收。
+date: 2026-08-21 00:30
+title: v1.5.1 已发版：chat-improvements 全量合入 main，tag 已推 CI 构建中
+keywords: 发版, v1.5.1, publish, semver, 前导零, chat-improvements-integration
+abstract: feat/chat-improvements-integration 全部内容（四迭代+CR 修复 16 条+changelog）合入 main 并打 v1.5.1 tag 推送，CI 构建中。另查明 1.5.01 失败原因：semver 禁止 patch 前导零，CI 的 npm version 会挂；1.4.0x 是史前版本从未走过这条链路。
 ---
 
 user:
@@ -84,3 +84,9 @@ readonly scope 评审（节点 review-scope-mobile-rn，BASE 515da9d / HEAD dc16
 
 assistant:
 scope 评审结论 scope-ready yes（3 条 P2 must-fix，无 P0/P1）：①RichDocumentWebView 的 mermaidViewerOpenRef 在 WebView 被杀重建后永久残留 true——web 端 closeMermaidViewer 在 !_open 时直接 return 不回 mermaidViewerClosed，ref 无法自愈，该屏返回键永久被吞（cr-func 观察项升级 must-fix）；②chat 侧同根因对称问题：ChatTabProvider.mermaidViewerOpen state 同样残留，影响主界面返回键（本轮新发现）；两处修法对称：handleMessage 收到 ready 消息时复位 open 态（各一行）。③查询页翻页失败的错误提示渲染在收起态表单体内不可见。验证：session-detail/chat-history-search/FileMarkdownPreview 三测试文件 43/43 全绿，stream.ts mermaid 计数 0（红线守住），L449 批注注释保留，ruleEnabled 原样保存链路完好（加载 L104/保存 L117），session-renamed 链与 4 文件接线逐环一致，新增 listener 均带 sub.remove() 清理。cr-fix-spec 尚未创建，本轮结论可作其输入。
+
+user:
+之前发 1.5.01 失败说不允许这样的 tag，那 1.4.0x 怎么发出来的？行，发行吧。
+
+assistant:
+查证：仓库 tag 全量为 v1.4.21~v1.4.29 + v1.5.0，1.4.0x 是入库前史前版本、从未走过这条 git tag+CI 链路；1.5.01 挂在 semver 前导零校验（patch 段 01 非法），CI 的 npm version 步骤会报 Invalid version，规范写法是 1.5.1。按 publish checklist 发版 v1.5.1：CHANGELOG Unreleased→[1.5.1] 定稿；双端 package.json bump + build.gradle 默认 versionName 1.4.29→1.5.1；集成分支提交 21ffae7 后合入 main。过程中发现本地 main 落后 origin 一笔（1ac9f4c，v1.5.0 的 CI 修复：shared 转出口补 DEFAULT_SKILLS_INDEX_PREFIX），先合入再打 tag。tag v1.5.1 打在 be31c18，已推 tag+main，CI 构建中（Android APK + Win NSIS + macOS DMG 并行）。
