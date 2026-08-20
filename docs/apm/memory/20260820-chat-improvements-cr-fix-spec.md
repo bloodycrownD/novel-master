@@ -31,3 +31,16 @@ user:
 
 assistant:
 三条都是小改动：A-1 在 RichDocumentWebView.tsx handleMessage 的 ready 分支补 mermaidViewerOpenRef.current = false（该 ref 仅供 BackHandler 拦截判定，无渲染依赖，deps [] 不受影响）；A-2 在 ChatTranscriptWebView.tsx 同位置补 onWebMermaidViewerOpenChange?.(false)（该回调已在 handleMessage 的 deps 数组里，无遗漏）；A-3 把 ChatHistorySearchScreen.tsx 的错误 Text 从 formExpanded 条件块内移到折叠卡片外、header 内恒显——背景是首次查询命中会自动收起表单，之后翻页 append 失败的 error 在旧布局下藏在意卡片里不可见。既有测试未断言错误在卡片内部，改动后 36 用例全过（输出里的 act 警告是既有测试写法提示非失败）。
+
+---
+date: 2026-08-20（同日第三批）
+title: chat-improvements CR 修复 mobile-web 五条（节点 fix-mobile-web）
+keywords: CR fix, mobile-web, injectCss, setDocument token, mermaid-fullscreen 幂等, TextAnnotator 泛型, typecheck 门禁, 不可达选择器
+abstract: 节点 fix-mobile-web：在 feat/chat-improvements-integration 落地 cr-fix-spec 的 mobile-web 五条 P2——G-1 build-webview injectCss 改函数形式替换；A-1 rich-document main.ts setDocument 自增 setDocumentSeq 防 Recogito 按中间态建层；A-2 mermaid-fullscreen attach 幂等守卫 + open 前 _renderView/_post 成对校验；C-1 修 annotate.ts 泛型错并把 tsc -p src/web/tsconfig.json 挂进 typecheck；C-2 删 .mermaid-block.mermaid-failed .mermaid-block__source 不可达分支。验证：15 个 jest 套件 84 用例全过 + npm run typecheck（含新挂 web tsconfig）零错 + build:webview 重建后 dist 核对（不可达选择器已消失、注入 CSS 完整）。
+---
+
+user:
+按 cr-fix-spec 只做 mobile-web 部分 5 条（G-1/A-1/A-2/C-1/C-2），改动限 apps/mobile 的 web 层与构建脚本，按逻辑块提交、只 add 自己文件（有并行同伴）；红线：不动 snapshot.ts 5 处调用、stream.ts 不引 mermaid、mermaid-core 被测断言不删、webview JS 禁 lookbehind、改 runtime 后重建 webview。
+
+assistant:
+五条均小改动，按逻辑块拆 5 个 commit（46a0fcb/b1fe80b/195b869/a12f1c2/a10373d）。关键决策：C-1 泛型修法是把 annotate.ts 模块级变量显式声明为 createTextAnnotator 工厂的实际返回类型 TextAnnotator<TextAnnotationLike, TextAnnotationLike>（工厂默认 I/E 均为 TextAnnotationLike，与别名默认 TextAnnotation 不兼容）；A-1 用模块级 setDocumentSeq 自增而非 useRef（webview 侧非 React 组件作用域），finally 里 seq !== setDocumentSeq 则跳过 refreshAnnotateAfterDocument；A-2 attach 守卫仍先更新 _post 再早退（重复调用刷新 post 引用无害且保留语义）；测试沿用本仓「RN 环境无 jsdom，读源码+dist 断言」惯例，三处新增契约断言分别落在 annotate-recogito-preview（T-RG3 追加）、mermaid-fullscreen（T-MF1 追加）、rich-content-styles。typecheck 脚本改为 tsconfig.build.json && src/web/tsconfig.json 串联（移动端同伴修复时特意留给我改）。dist 验证：两包 app.css 不再含 .mermaid-block.mermaid-failed，mermaid-block__chart:active 与 recogito CSS 注入完整。
