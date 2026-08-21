@@ -1,20 +1,24 @@
-# protocol-merge-agent-tool-mermaid-sharp SPEC 评审第 1 轮 fix
+---
+date: 2026-08-22 00:10
+title: 三合一迭代 spec 评审与合并记录
+keywords: spec-check-loop, execute-ready, 烘焙钳制, 删桥清单, agents 闭包, --no-ff 合并
+abstract: protocol-merge-agent-tool-mermaid-sharp 的 spec 两轮评审达 execute-ready（7 条 must-fix 闭合 + 2 条 trivial 豁免），worktree 分支 18 笔 --no-ff 合入主仓 feat/pms-integration（26a6f90）。
+---
 
-- 日期：2026-08-21
-- 范围：只改 PRD/SPEC 文档（`docs/Iterations/protocol-merge-agent-tool-mermaid-sharp/`），不改实现代码
-- 修复：spec 全部 must-fix（P0-1、P1-1~3、P2-1~3）
+user:
+（@spec-check-loop）审查三合一迭代 `docs/Iterations/protocol-merge-agent-tool-mermaid-sharp/` 的 PRD/SPEC 是否 execute-ready。
 
-## 关键结论（证据均已在主仓库抽查核实）
+assistant:
+第 1 轮 fix 要点（证据均已在主仓实证核对）：
+- **P0-1 烘焙方案**：`mermaid-fullscreen-styles.ts` 的 `svg { max-width:100%; max-height:100% }` 会把烘焙 px 钳回 viewport 盒；fit 态基准渲染尺寸 = fitRatio × viewBox（非盒、非 viewBox 原值）；pan clamp 旧公式 `viewport*(scale-1)/2` 在烘焙归一 scale=1 后退化为 0。SPEC 改为烘焙同步置 maxWidth/maxHeight='none' + `computeBakedSvgSize(baseRendered, scale)` + clamp 公式 `max(0,(contentRendered-stage)/2)`。
+- **P1-1 删桥清单**：双端 runtime types+factory 在 `src/runtime/` 而非 `src/services/`；workplace-done 系用例断言的是 prompt 机制，改法是 `TOOL_TURN_BRIDGE_TEXT` import 内联字面量。
+- **P1-2 agents 闭包**：toolsFromRegistry 的 description 同步求值（tool-definitions.ts L25）而 agentRegistry.list() 返 Promise——装配期预算快照（主装配点复用 allDefs、runChildAgent 复用 childAllDefs）。
+- **P2**：summarizeToolSuccess 在 core `build-tool-result-block.ts` L54；计数硬编码不止 mobile AgentEditorForm，desktop 两处也要；ToolPolicyPicker 走 catalog.length 自动适应。
+grep 注意：`.woktree/*` 工作树按字母序排前会刷屏，要翻页或直读主树文件确认。
+第 2 轮复审：7 条 must-fix 全部对照代码实证闭合，结论 Go（execute-ready）；余 2 条 P2 由主代理 trivial 豁免直接闭合——①A5 补更新 `packages/core/test/package-exports/snapshots/public-chat-allowlist.json`（移除 TOOL_TURN_BRIDGE_TEXT，否则导出快照失配）；②C1/T-MS1 明确 contentRendered = 视觉尺寸（布局 × gesture.scale），手势中与烘焙后两态各一条 clamp 用例。
 
-- **P0-1 烘焙方案**：`mermaid-fullscreen-styles.ts` L28 的 `svg { max-width:100%; max-height:100% }` 会把烘焙 px 钳回 viewport 盒；`MermaidViewerOverlay.tsx` fit 态是 width/height 100% + preserveAspectRatio meet（基准渲染尺寸 = fitRatio × viewBox，非 viewBox 原始值）；pan clamp 旧公式 `viewport*(scale-1)/2` 在烘焙归一 scale=1 后退化为 0。SPEC D8/C1/C2 已改为：烘焙同步置 `svg.style.maxWidth/maxHeight='none'`、`computeBakedSvgSize(baseRendered, scale)`、clamp 公式 `max(0,(contentRendered-stage)/2)`。
-- **P1-1 删桥清单**：主仓库全量引用已核（core public/chat.ts L323/334 re-export、desktop shared/logic/chat.ts、ipc-types.ts、renderer ipc client/invoke-registry、main ipc handler-registry/handlers/messages、双端 runtime types+factory 在 `src/runtime/` 而非 `src/services/`）。注意：grep 时 `.woktree/*` 工作树会刷屏（按字母序排前），要翻页或直读主树文件确认。7 处测试引用里，workplace-done 双消息系列用例断言的是 prompt 机制不是桥本身，改法是 `TOOL_TURN_BRIDGE_TEXT` import 内联为 `"【done】"` 字面量。
-- **P1-2 agents 闭包**：`toolsFromRegistry` 的 description 同步求值（tool-definitions.ts L25），`agentRegistry.list()` 返回 Promise；`BuiltinToolAgentsContext.agents` 装配期预算快照（主装配点复用 `allDefs`、runChildAgent 复用 `childAllDefs`）。
-- **P1-3 mapper 测试**：`packages/core/test/infra/llm-protocol/` 下 gemini/openai-content-mapper.test.ts 已存在、anthropic 不存在（新建）。
-- **P2-2 归属**：`summarizeToolSuccess` 在 `packages/core/src/domain/tool/logic/build-tool-result-block.ts` L54（core）；计数硬编码仅 mobile `AgentEditorForm.tsx` L882；双端 ToolPolicyPicker 走 `BUILTIN_TOOL_CATALOG.length` 自动适应无需改。
-- PRD 仅同步一句（核心需求 10 烘焙公式改为 fit 基准渲染尺寸 × scale）；验收 1/7 的用例映射由新增 T-PM5 与 T-AG4 deny 路径补齐。
+user:
+继续干吧（实现完成后合并回主仓）。
 
-## 第 2 轮复审（同日）
-
-- 7 条 must-fix 全部对照代码实证闭合（D8 三件套按到 mermaid-fullscreen-styles.ts L28 / gestures L47-48 / Overlay L197-201 验证；A4 逐文件命中；B2 allDefs L415/childAllDefs L615 数据可得）。
-- 结论 Go（execute-ready）。余 2 条 P2 由主代理 trivial 豁免直接闭合：①A5 补更新 `packages/core/test/package-exports/snapshots/public-chat-allowlist.json`（移除 TOOL_TURN_BRIDGE_TEXT，否则导出快照失配）；②C1/T-MS1 明确 contentRendered = 视觉尺寸（布局 × gesture.scale），手势中与烘焙后两态各一条 clamp 用例。
-- 状态：execute-ready 达成，待用户确认后按 spec 开工（Step A1-A5 / B1-B4 / C1-C4）。
+assistant:
+合并记录：worktree 分支 feat/protocol-merge-agent-tool-mermaid-sharp（398860d，18 笔）已 --no-ff 合入主仓 feat/pms-integration（26a6f90，基于 main 409ceca），72 文件 +2517/-325。合并前处理：主仓未跟踪的 7 个原始文档副本（与分支同源，spec.md 分支版多实现注为新版）移除后合并；.gitignore 经 checkout 恢复后由合并带回；主仓用户未提交改动（AGENTS.md、.vscode 删除）未受影响。注意主仓 dist/webview-dist 为旧产物，验证新行为前需重建（core `npm run build` + mobile `npm run build:webview`，或走各端 dev 流程）。

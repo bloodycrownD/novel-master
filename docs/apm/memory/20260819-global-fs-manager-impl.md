@@ -27,6 +27,13 @@ abstract: global-fs-manager 从 code-dev-loop 到 CR-fix 再到真机走查修�
 - **交互 bug 两轮猜不中就必须埋日志**：focus/blur/beforeRemove/关键时序 + 时间戳，让用户发 metro 日志实锤；本轮省掉两轮弯路
 - **Tab 内无侧滑行为是「问题不存在」不是「问题被解决」**：聊天工作区没侧滑问题是因为 Tab 导航无手势，非实现更优
 
+## 2026-08-19 追记：impl-s1（skill 存储重定位）要点（合并自节点报告 global-fs-skill-relocate.md）
+
+- 三笔：6ae0445 mapper+脱敏+workplaceScopeKey；4d18789 core 重定位主体+T-SR1/2/3；1f96b06 desktop/mobile 域指向跟随。
+- **scopeKeyOfLocation 双用途坑**：skills.service 域解析改 meta 域后，VFS 清理用 meta key，但负清单（`skill_disabled_rule`）仍用 `project:{pid}`——否则删除技能后禁用行残留。另注意 `strip-known-physical-prefixes.ts` 补 meta 剥离要先具体后泛化。
+- worktree 无 node_modules 的解法：在 worktree 根建 `node_modules/@novel-master/*` 软链（指向 worktree 包并逐个 tsc 构建 dist），yaml 软链自主仓，`apps/desktop/node_modules` 整体软链主仓，加 .git/info/exclude 本地排除，后续节点可复用。
+- desktop 技能 zip 导入/单文件删除走 `workspaceScope: 'global-meta'/'project-meta'`（WorkspacePanelScope 扩展 + resolve-vfs-scope 分流）。
+
 ## 2026-08-19 终态：code-dev-loop dev-ready（主代理收尾汇总）
 
 - DAG（3 版）：wave-0 impl-s1 → verify(main) → wave-2 [impl-s2s4-core ∥ impl-s3-clients] → verify(main)+cr-func-s1-s4(func-ready) → wave-5 [fix-sr3-blob ∥ impl-s5 ∥ impl-s6] → cr-func-s5-s6(func-ready) → s7 文案，executor: main。
