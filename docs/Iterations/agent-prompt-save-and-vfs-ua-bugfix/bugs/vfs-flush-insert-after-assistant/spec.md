@@ -31,6 +31,8 @@ flushPendingUserVfsTurns()
 | plain user 末条 | UI | 禁止 **带文字** 发送（`lastMessageIsPlainUserText`），仅可空发续跑 |
 | VFS flush | Core | **无** 成对检查；pending 非空则 flush，**始终 append 到末尾** |
 
+> 注（2026-08-21）：表中「tool_result 末条 + 带文字发送」一行的 `appendToolTurnBridge`（【done】）桥机制已在 `protocol-merge-agent-tool-mermaid-sharp` 迭代移除——末条 user 含 tool_result 时用户输入直发 `runAgent`，相邻 user 消息由协议层出站合并兜底（anthropic/gemini），见 `docs/Iterations/protocol-merge-agent-tool-mermaid-sharp/spec.md`。本表描述的是桥移除前的历史行为。
+
 因此：**底层对「末条 user 不成对」有空发续跑闸门，但没有在 flush 时重排消息**；不是「先自动插桥再发」，空发是 **直接** flush + 跑 Agent。
 
 ---
