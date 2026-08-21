@@ -78,14 +78,17 @@ function mockWindow(invoke: (channel: string, payload: unknown) => Promise<unkno
 }
 
 /** 挂载并等待 open effect 的 load 走完（fetch + suggestList 均已落地）。 */
-async function mountModal(calls: string[]): Promise<ReactTestRenderer> {
+async function mountModal(
+  calls: string[],
+  savedVendorIds: string[] = [],
+): Promise<ReactTestRenderer> {
   let renderer: ReactTestRenderer | undefined;
   await act(async () => {
     renderer = TestRenderer.create(
       <FetchModelsModal
         open
         providerId="p1"
-        savedVendorIds={[]}
+        savedVendorIds={savedVendorIds}
         onClose={() => {}}
         onSaved={() => {}}
       />,
@@ -159,7 +162,7 @@ function statusText(root: ReactTestRendererRoot): string | undefined {
     : (statusNode.children as unknown[]).map((c) => String(c)).join("");
 }
 
-describe("FetchModelsModal 过滤输入框 (T-FM5-7)", () => {
+describe("FetchModelsModal 过滤输入框 (T-FM5-8)", () => {
   it("T-FM5：输入即过滤（大小写不敏感双字段）+ 空结果「无匹配模型」+ 清空恢复", async () => {
     const calls: string[] = [];
     const restore = mockWindow(makeInvoke(SUGGESTIONS, calls));
@@ -276,6 +279,30 @@ describe("FetchModelsModal 过滤输入框 (T-FM5-7)", () => {
         "",
       );
       assert.equal(rowClassNames(root).length, 3);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  // T-FM8：is-saved（已添加）行同样参与过滤——匹配则显示（禁用态），不匹配则隐藏（PRD 验收第 4 条）
+  it("T-FM8: is-saved 行参与过滤", async () => {
+    const calls: string[] = [];
+    const restore = mockWindow(makeInvoke(SUGGESTIONS, calls));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountModal(calls, ["gpt-4o"]);
+      const root = renderer.root;
+
+      // 过滤 "gpt"：saved 行（gpt-4o）匹配则显示，与 mini 并列
+      await typeQuery(root, "gpt");
+      assert.equal(rowClassNames(root).length, 2);
+
+      // 过滤 "claude"：saved 行不匹配被隐藏
+      await typeQuery(root, "claude");
+      assert.equal(rowClassNames(root).length, 1);
     } finally {
       await act(async () => {
         renderer?.unmount();
