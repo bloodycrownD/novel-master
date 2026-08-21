@@ -125,7 +125,6 @@ export function ChatConversationPanel({
     loadingMoreMessages,
     hasWorkspaceModel,
     canResumeWithoutInput,
-    lastMessageHasToolResult,
     lastMessageIsPlainUserText,
     draftRestoreToken,
     vfsRefreshKey,
@@ -311,7 +310,6 @@ export function ChatConversationPanel({
         onMessagesChanged={onMessagesChanged}
         onNeedModel={onNeedModel}
         canResumeWithoutInput={canResumeWithoutInput}
-        lastMessageHasToolResult={lastMessageHasToolResult}
         lastMessageIsPlainUserText={lastMessageIsPlainUserText}
         draftRestoreToken={draftRestoreToken}
         // 「更多」按钮已在 ChatComposer 内注释隐藏，这里不再传 onOpenMore，

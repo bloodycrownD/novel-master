@@ -82,8 +82,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
 
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
-  const { userVfsTurn, appendToolTurnBridge } =
-    createUserVfsTurnServiceBundle(conn);
+  const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   let compactionConditionEvaluator:
     | ReturnType<typeof createCompactionConditionEvaluator>
@@ -136,7 +135,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     sessions,
     messages,
     messageTranscriptEffects,
-    appendToolTurnBridge,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
     sessionKkv,
