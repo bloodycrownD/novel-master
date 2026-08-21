@@ -134,3 +134,10 @@ apps/mobile/
 - **B 同步遗漏**：Step B3 checklist 逐项 grep 硬编码数字；漏一处不阻塞功能但文案计数错，验收时三端各截一张工具策略图。
 - **C 超大图烘焙重排耗时**：仅落定时发生；真机若 6x 巨型图重排 >300ms 再评估限流（如烘焙前 loading 态），不回退 transform 方案。
 - **C 回滚**：烘焙调用收敛在 Overlay 落定两处（onTouchEnd/transition 后），注释掉即回退为纯 transform 行为。
+
+## 实现注（开发过程补记，cr-func 闭合项）
+
+- **T-PM4 为隐式覆盖**：存量桥兼容无专属新增用例，靠既有测试覆盖——OpenAI 出站由 `normalize-for-llm-export.test.ts` 的「剔除空 tool_turn_bridge」管，UI 显示由 `message-blocks`/`user-vfs-turn-view` 存量 fixture 管；anthropic/gemini 侧存量桥是普通 assistant 纯文本，出站天然合法（D3）。后续可补显式三协议用例，非阻塞。
+- **SD-1 勘误**：B3 原文「mobile 唯一硬编码计数点」不准——desktop `AgentDefinitionEditorForm.tsx` 与 `AgentEditorView.tsx` 另有两处「8 个」文案，已同步改 9，mobile 侧加源码正则锁测试防再漏。
+- **C 线实现补充行为**（D8 坐标系自洽的必要补充，均已成对实现且有测试锁定）：①烘焙时同步置 `svg.style.flexShrink='0'`——flex 容器默认收缩会把烘焙 px 压回容器宽，坐标系失真；②pinch 起点与双击 toggle 先解除烘焙（unbake，恢复 100% 布局与绝对倍率档位）——否则从烘焙态起捏的 clamp `[1,6]` 会变成相对上次落定值，捏不回 fit 档；③`bake()` 对 total≤1（回 fit 档）跳过——scale=1 时烘 px 与 100% 布局视觉等价，跳过避免取整误差。
+- **B 线 backlog（非阻塞 nit）**：①update by-agentId 走 upsert 语义，过期 id 会静默新建而非报「未找到」，可补 `getRawWire` 判空；②get 的 name 未 trim 而 update trim 了，可对齐。
