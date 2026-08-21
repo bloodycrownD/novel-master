@@ -29,8 +29,12 @@ import {
   registerBuiltinTools,
 } from "@/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext, RunChildAgentOptions } from "@/domain/tool/builtin/builtin-tool-context.js";
-import type { BuiltinToolSkillsContext } from "@/domain/tool/builtin/builtin-tool-context.js";
+import type {
+  BuiltinToolAgentsContext,
+  BuiltinToolSkillsContext,
+} from "@/domain/tool/builtin/builtin-tool-context.js";
 import { SKILL_TOOL_NAME } from "@/domain/tool/builtin/skill-tool.js";
+import { AGENT_TOOL_NAME } from "@/domain/tool/builtin/agent-tool.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -165,6 +169,37 @@ export async function assembleSkillsToolContext(
   const effective = await service.effectiveSkills(projectId);
   // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
   return { service, projectId, effective, referencedNames: new Set<string>() };
+}
+
+/**
+ * 预算并装配 `agent` 管理工具上下文（主 / 子两个装配点共用，B2）。
+ *
+ * 数据零新增 IO：`agents` 快照复用装配点已取的 `agentRegistry.list()`
+ * 全量定义（主装配点 allDefs / runChildAgent 的 childAllDefs），映射为
+ * { name, description, mode }（含虚拟 seed general）；`registeredToolNames`
+ * 复用 probe 注册表名单，透传给工具内 upsert 的工具策略校验。resolve 后
+ * registry 不含 `agent`（子/孙摘除 D6 或用户 policy deny）时返回
+ * undefined——闭包不注入，工具的 run 抛 ToolError（FAILED）。
+ *
+ * 注：`agentRegistry.list()` 返回 Promise，而工具 description lambda 是同步
+ * 求值——所以快照必须装配期预算（照 skills / task 同款模式），不能 lambda 现查。
+ */
+export function assembleAgentsToolContext(
+  agentRegistry: AgentRegistryService,
+  allDefs: readonly AgentDefinition[],
+  probeNames: readonly string[],
+  registry: ToolRegistry<BuiltinToolContext>,
+): BuiltinToolAgentsContext | undefined {
+  if (!registry.list().includes(AGENT_TOOL_NAME)) return undefined;
+  return {
+    registry: agentRegistry,
+    agents: allDefs.map((d) => ({
+      name: d.name,
+      ...(d.description != null ? { description: d.description } : {}),
+      mode: d.mode ?? "all",
+    })),
+    registeredToolNames: [...probeNames],
+  };
 }
 
 export interface RunAgentTurnAfterResolveContext {
@@ -429,6 +464,14 @@ export async function runAgentTurn(
     scope.projectId,
     registry,
   );
+  // agent 管理工具读取：快照复用上方 allDefs（零新增 IO）；probe 名单透传给
+  // 工具内 upsert 的策略校验。registry 不含 agent（子/孙摘除或 deny）时不注入。
+  const agentsCtx = assembleAgentsToolContext(
+    runtime.agentRegistry,
+    allDefs,
+    toolProbe.list(),
+    registry,
+  );
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
   // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
@@ -465,6 +508,8 @@ export async function runAgentTurn(
     }),
     // skill 工具读取：生效清单按本会话 projectId 解析（装配期预算，每 run 一次）。
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
+    // agent 管理工具读取：装配期同步快照（description lambda / list 动作用）。
+    ...(agentsCtx != null ? { agents: agentsCtx } : {}),
     // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
     subagent: {
       agentRegistry: runtime.agentRegistry,
@@ -629,6 +674,14 @@ async function runChildAgent(args: {
     parentProjectId,
     registry,
   );
+  // agent 管理工具：快照复用上方 childAllDefs；probe 名单用 baseRegistry。
+  // 子 agent（mode==="subagent"）与孙 agent（depth>=2）被 resolve 摘除，不注入。
+  const childAgentsCtx = assembleAgentsToolContext(
+    runtime.agentRegistry,
+    childAllDefs,
+    baseRegistry.list(),
+    registry,
+  );
 
   // VFS（工作区共享）：子 agent 用父 session 的 VFS 视图——写入直接落在父工作区。
   const vfs = runtime.sessionVfs(parentProjectId, parentSessionId);
@@ -691,6 +744,8 @@ async function runChildAgent(args: {
     }),
     // skill（D2）：子代理同样注入，清单按父会话 projectId 解析。
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
+    // agent 管理工具：mode==="all" 的子 agent 且 depth<2 时才可能注入（D6 摘除后不注入）。
+    ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
     // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
     subagent: {
       agentRegistry: runtime.agentRegistry,
