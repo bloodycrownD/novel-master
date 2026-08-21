@@ -117,4 +117,40 @@ describe('useAdaptiveKeyboardSheetStyle', () => {
     expect(style.maxHeight).toBe(screenH - 500);
     harness.unmount();
   });
+
+  it('iosTranslateY 默认 false：iOS 键盘弹起仅 maxHeight 收缩，无 translateY', () => {
+    // Platform.OS 默认 ios（afterEach 也会恢复或默认），不传选项即默认 false
+    const harness = mountStyle(0.75);
+    __setKeyboardHeightForTests(-500);
+    harness.rerender();
+    const style = harness.read() as {maxHeight: number; transform?: unknown};
+    expect(style.transform).toBeUndefined();
+    expect(style.maxHeight).toBe(screenH - 500);
+    harness.unmount();
+  });
+
+  it('iosTranslateY: true：iOS 也输出 translateY = 键盘高度（同 Android 公式）', () => {
+    const harness = mountStyle(0.75, {iosTranslateY: true});
+    __setKeyboardHeightForTests(-500);
+    harness.rerender();
+    const style = harness.read() as {
+      maxHeight: number;
+      transform: {translateY: number}[];
+    };
+    expect(style.transform).toEqual([{translateY: -500}]);
+    expect(style.maxHeight).toBe(screenH - 500);
+    harness.unmount();
+  });
+
+  it('Android 两态都含 translateY：iosTranslateY 显式 false 也不丢', () => {
+    (RN.Platform as {OS: string}).OS = 'android';
+    for (const iosTranslateY of [false, true]) {
+      const harness = mountStyle(0.75, {iosTranslateY});
+      __setKeyboardHeightForTests(-300);
+      harness.rerender();
+      const style = harness.read() as {transform: {translateY: number}[]};
+      expect(style.transform).toEqual([{translateY: -300}]);
+      harness.unmount();
+    }
+  });
 });

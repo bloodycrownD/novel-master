@@ -13,6 +13,11 @@
 
 四个 scope 并行（A 协议线/B 工具线/C mobile UI 线/D 内置技能线）→ spec-fix 落盘 → review-full。7+1 条 must-fix：D-1 P0（ZIP 导入绕过保留名）、A-1/D-2 P1（edadb49 带回桥类型两段——spec-fix 曾误报整链带回，主代理 grep+diff 复核修正）、C-1 P1（ToolPolicyPicker iOS 避让退化）、MF-8 P1（mobile ZIP 重写漏传乐观锁，edadb49 只修了 desktop）、C-2/D-3/D-4/B-nit1 P2。B 线唯一 scope-ready。fix-spec：docs/Iterations/pms-integration-cr/cr-fix-spec.md，待用户确认后开工。review-full 顺带跑了 core 202 用例全绿。
 
+## 2026-08-22（fix-C1C2 节点）
+- 请求：闭合 must-fix C-1 [P1]（ToolPolicyPicker iOS 键盘避让退化，选定推荐方案 b）与 C-2 [P2]（DirectoryRuleSheet 缺 flexShrink）。
+- 实改：hook 加 iosTranslateY 选项（默认 false，Android 不受影响，条件改为 OS==='android' || iosTranslateY），ToolPolicyPicker 传 true；DirectoryRuleSheet styles.form 补 flexShrink: 1；hook 测试扩两态三用例（Platform 切换沿用 RN.Platform.OS 直改写），tool-policy-picker 测试补源码契约（iosTranslateY: true），新建 directory-rule-sheet.test.ts 钉 flexShrink 契约。
+- 验证：mobile typecheck 通过；三套件 14 用例全绿。
+
 ## 2026-08-22（fix-P2core 节点：闭合 D-3 / D-4 / B-nit1 三条 P2）
 - D-3：empty-state.test.ts 改 import BUILTIN_SKILL_NAMES（src/bootstrap/skills/seed-builtin-skills.js 相对路径），两处 filter 改「除内置名单外为空」；project 域断言不动。
 - D-4：agent-tool get by-name 的 input.name 先 trim 再匹配（对齐 update L401 样板），未命中报错文案同步用 trim 后名字。

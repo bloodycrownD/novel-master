@@ -297,7 +297,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heading: { fontSize: 18, fontWeight: '600', marginBottom: 12 },
-  form: { maxHeight: 360 },
+  // maxHeight 收缩时内容要向内收缩，否则底部按钮行被裁（对齐 ToolPolicyPicker list）
+  form: {maxHeight: 360, flexShrink: 1},
   label: { fontSize: 12, marginTop: 12, marginBottom: 6 },
   input: {
     borderWidth: 1,

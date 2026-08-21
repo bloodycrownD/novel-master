@@ -13,10 +13,11 @@
  *
  * 两套渲染体系的接入方式相同——面板容器换成 Animated.View 后把返回样式挂上去：
  * - AppModal 体系（FetchModelsSheet / DirectoryRuleSheet / NewSkillModal）：
- *   iOS 外层已有 KeyboardAvoidingView padding 分支，本 hook 的 translateY 仅
- *   Android 生效，maxHeight 收缩两平台都生效。
+ *   iOS 外层已有 KeyboardAvoidingView padding 分支，保持 iosTranslateY 默认
+ *   false（translateY 仅 Android 生效，避免与 KAV 双重避让），maxHeight 收缩
+ *   两平台都生效。
  * - FormOverlayHost 体系（ToolPolicyPicker）：渲染层是普通 View 无任何避让，
- *   全靠本 hook 在 sheet 自身处理。
+ *   传 iosTranslateY: true 让 iOS 也由本 hook translateY，避让全靠 sheet 自身。
  */
 import {Platform, useWindowDimensions} from 'react-native';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
@@ -27,6 +28,12 @@ export type Options = {
   topMargin?: number;
   /** maxHeight 收缩下限（px），默认 160，防止键盘比屏高还高时面板被压没。 */
   minPanelHeight?: number;
+  /**
+   * iOS 是否也输出 translateY（默认 false）。AppModal 体系 iOS 外层已有
+   * KeyboardAvoidingView，开启会双重避让；仅 FormOverlayHost 体系（无 KAV
+   * 外壳）的消费者开启，iOS 位移由 sheet 自身完成。Android 不受此开关影响。
+   */
+  iosTranslateY?: boolean;
 };
 
 /**
@@ -38,6 +45,7 @@ export function useAdaptiveKeyboardSheetStyle(
 ) {
   const topMargin = opts?.topMargin ?? 0;
   const minPanelHeight = opts?.minPanelHeight ?? 160;
+  const iosTranslateY = opts?.iosTranslateY ?? false;
   const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
   const {height: screenH} = useWindowDimensions();
   return useAnimatedStyle(
@@ -45,14 +53,22 @@ export function useAdaptiveKeyboardSheetStyle(
       // hook 返回的 height 键盘弹起时为负值，Math.min(0, ...) 兜底防正值下推。
       const kb = Math.min(0, keyboardHeightSV.value);
       const available = screenH + kb - topMargin;
+      const useTranslateY = Platform.OS === 'android' || iosTranslateY;
       return {
-        ...(Platform.OS === 'android' ? {transform: [{translateY: kb}]} : {}),
+        ...(useTranslateY ? {transform: [{translateY: kb}]} : {}),
         maxHeight: Math.max(
           minPanelHeight,
           Math.min(screenH * maxHeightRatio, available),
         ),
       };
     },
-    [keyboardHeightSV, screenH, maxHeightRatio, topMargin, minPanelHeight],
+    [
+      keyboardHeightSV,
+      screenH,
+      maxHeightRatio,
+      topMargin,
+      minPanelHeight,
+      iosTranslateY,
+    ],
   );
 }

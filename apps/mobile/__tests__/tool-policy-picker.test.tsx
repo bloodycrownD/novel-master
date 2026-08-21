@@ -8,6 +8,8 @@
  * sheet 通过 FormOverlayHost 顶起，所以测试要在 FormOverlayProvider 内渲染。
  */
 import React from 'react';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
@@ -235,5 +237,18 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
       );
     });
     expect(JSON.stringify(r2.toJSON())).toContain('全部工具（9/9）');
+  });
+});
+
+describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（源码契约）', () => {
+  it('hook 调用传 iosTranslateY: true（FormOverlayHost 无 KAV 外壳，iOS 由 hook 位移）', () => {
+    const src = readFileSync(
+      join(__dirname, '..', 'src', 'components', 'agent', 'ToolPolicyPicker.tsx'),
+      'utf8',
+    );
+    expect(src).toContain(
+      'useAdaptiveKeyboardSheetStyle(0.75, {',
+    );
+    expect(src).toContain('iosTranslateY: true');
   });
 });

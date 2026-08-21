@@ -100,8 +100,11 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
   const triggerLabel = buildTriggerLabel(selected);
 
   // 键盘避让（上移 + maxHeight 收缩）由公共 hook 统一处理：
-  // FormOverlayHost 是普通 View 渲染层无任何避让，必须在 sheet 自身处理。
-  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.75);
+  // FormOverlayHost 是普通 View 渲染层无任何避让，iOS 也要并 iosTranslateY
+  // 让 hook 自己 translateY，否则面板底部被键盘盖住 kb 高度、顶部留 kb 空隙。
+  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.75, {
+    iosTranslateY: true,
+  });
 
   useEffect(() => {
     if (!open || !overlay) {
