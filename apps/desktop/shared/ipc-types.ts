@@ -164,6 +164,7 @@ export const IPC_CHANNELS = {
   SKILLS_EDIT: 'nm:skills/edit',
   SKILLS_TOGGLE: 'nm:skills/toggle',
   SKILLS_DELETE: 'nm:skills/delete',
+  SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',
 
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
   COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
@@ -1261,6 +1262,17 @@ export type SkillsToggleRequest = {
   readonly projectId: string;
   readonly name: string;
   readonly disabled: boolean;
+};
+
+/**
+ * 新建前保留名校验（ZIP 导入等不经 writeSkillFile 的新建通道落盘前调用，
+ * D2② 门独立暴露）。名单外放行；名单内且该域目录不存在时拒绝（中文 message）。
+ */
+export type SkillsAssertCreateNameRequest = {
+  /** 须显式域（project 域必带 projectId）。 */
+  readonly domain: SkillDomainDto;
+  readonly name: string;
+  readonly projectId?: string;
 };
 
 export type SkillsDeleteRequest = SkillRefDto;

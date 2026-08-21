@@ -14,6 +14,7 @@ import {
 } from "@shared/logic/skills";
 import type { ProjectDto, SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
 import {
+  ipcSkillsAssertCreateName,
   ipcSkillsList,
   ipcSkillsRead,
   ipcSkillsWrite,
@@ -145,6 +146,17 @@ export function NewSkillModal({
         }
       }
       if (imported != null) {
+        // ZIP 是第二条新建通道（不经 writeSkillFile 的 D2② 门）：落盘前
+        // 先过保留名校验，拒绝时不落盘（CR D-1）。
+        const assertRes = await ipcSkillsAssertCreateName({
+          domain,
+          ...(domain === "project" ? { projectId } : {}),
+          name: trimmedName,
+        });
+        if (!assertRes.ok) {
+          setError(assertRes.error.message);
+          return;
+        }
         // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
         // 技能已重定位到独立 meta 域，导入走 meta 域 workspaceScope。

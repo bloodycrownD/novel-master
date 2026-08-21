@@ -213,6 +213,14 @@ export function NewSkillModal({
         return;
       }
       if (imported != null) {
+        // ZIP 是第二条新建通道（不经 writeSkillFile 的 D2② 门）：落盘前
+        // 先过保留名校验，拒绝时不落盘（CR D-1）。SkillError 的中文
+        // message 由 catch 分支冒泡展示。
+        await runtime.skills().assertSkillNameNotReservedForCreate(
+          domain,
+          name,
+          domain === 'project' ? projectId : undefined,
+        );
         // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
         // 技能已重定位到独立 meta 域，导入 scope 取 meta 域。
@@ -229,12 +237,21 @@ export function NewSkillModal({
           imported.preview.name !== name ||
           imported.preview.description !== description
         ) {
+          // 重写目标是刚导入落盘的 SKILL.md（已存在文件），不带版本会被
+          // VFS 乐观锁拒绝（CONFLICT）：先 read 拿版本再写入（对齐 desktop）。
+          const read = await runtime.skills().readSkillFile(
+            domain,
+            name,
+            'SKILL.md',
+            domain === 'project' ? projectId : undefined,
+          );
           await runtime.skills().writeSkillFile(
             domain,
             name,
             'SKILL.md',
             withFrontMatterValues(imported.preview.skillMd!, name, description),
             domain === 'project' ? projectId : undefined,
+            {expectedVersion: read.version},
           );
         }
       } else {

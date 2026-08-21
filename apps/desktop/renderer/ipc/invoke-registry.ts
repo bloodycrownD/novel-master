@@ -93,6 +93,7 @@ import {
   type EffectiveSkillDto,
   type SkillListItemDto,
   type SkillsDeleteRequest,
+  type SkillsAssertCreateNameRequest,
   type SkillsEditRequest,
   type SkillsEffectiveRequest,
   type SkillsListRequest,
@@ -562,6 +563,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.SKILLS_DELETE,
     ),
+    ipcSkillsAssertCreateName: withReq<
+      SkillsAssertCreateNameRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME),
     ipcCompactionConditionsGet: noArg(
       invoke,
       IPC_CHANNELS.COMPACTION_CONDITIONS_GET,

@@ -3,14 +3,18 @@
  * - 主进程 zipImportBytes：字节直写 /meta/skills/{name}（SKILL.md + 附属文件），
  *   非 zip 字节拒绝；global/project 两域各自落盘。
  * - withFrontMatterValues：表单值重写 front matter（保留其余键与正文）。
- * - NewSkillModal：默认渲染「从 ZIP 导入…」入口。
+ * - NewSkillModal：默认渲染「从 ZIP 导入…」入口；imported 分支落盘前过
+ *   保留名新建门（ipcSkillsAssertCreateName，CR D-1）。
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildVfsZip } from "@novel-master/core/vfs";
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import {
+  handleSkillsAssertCreateName,
   handleSkillsList,
   handleSkillsRead,
 } from "../src/main/ipc/handlers/skills.js";
@@ -175,5 +179,61 @@ describe("NewSkillModal（ZIP 导入入口）", () => {
       />,
     );
     assert.equal(html, "");
+  });
+});
+
+describe("ZIP 导入保留名新建门（CR D-1）", () => {
+  let tempDir: string;
+  let projectId: string;
+
+  before(async () => {
+    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-skill-zip-guard-"));
+    const project = await handleProjectsCreate({ name: "skill-zip-reserved" });
+    assert.equal(project.ok, true);
+    if (!project.ok) {
+      return;
+    }
+    projectId = project.data.id;
+  });
+
+  after(async () => {
+    await teardownDesktopDbTestEnv(tempDir);
+  });
+
+  it("handler：project 域保留名（目录不存在）拒绝且中文文案，非名单名放行", async () => {
+    const denied = await handleSkillsAssertCreateName({
+      domain: "project",
+      projectId,
+      name: "agent-config",
+    });
+    assert.equal(denied.ok, false);
+    if (!denied.ok) {
+      assert.equal(denied.error.code, "BUILTIN_SKILL_NAME_RESERVED");
+      assert.match(denied.error.message, /「agent-config」为内置技能保留名/);
+    }
+
+    const allowed = await handleSkillsAssertCreateName({
+      domain: "project",
+      projectId,
+      name: "zip-plain-skill",
+    });
+    assert.equal(allowed.ok, true);
+  });
+
+  it("源码契约：imported 分支在 ipcVfsZipImportBytes 之前过保留名校验", () => {
+    const src = readFileSync(
+      fileURLToPath(new URL("../renderer/features/skills/NewSkillModal.tsx", import.meta.url)),
+      "utf8",
+    );
+    const assertIdx = src.indexOf("ipcSkillsAssertCreateName({");
+    const importIdx = src.indexOf("ipcVfsZipImportBytes({");
+    assert.ok(assertIdx >= 0, "NewSkillModal 应调用 ipcSkillsAssertCreateName");
+    assert.ok(importIdx >= 0, "NewSkillModal 应调用 ipcVfsZipImportBytes");
+    assert.ok(
+      assertIdx < importIdx,
+      "保留名校验必须发生在 zip 落盘之前",
+    );
+    // 被拒时中文提示且不落盘：错误分支 return
+    assert.match(src, /if \(!assertRes\.ok\) \{[\s\S]*?setError\(assertRes\.error\.message\);[\s\S]*?return;/);
   });
 });

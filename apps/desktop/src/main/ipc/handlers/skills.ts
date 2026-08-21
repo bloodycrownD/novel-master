@@ -6,6 +6,7 @@ import type {
   IpcResult,
   SkillListItemDto,
   SkillRefDto,
+  SkillsAssertCreateNameRequest,
   SkillsDeleteRequest,
   SkillsEditRequest,
   SkillsEffectiveRequest,
@@ -171,6 +172,25 @@ export async function handleSkillsDelete(
   try {
     const rt = await getDesktopRuntime();
     await rt.skills().deleteSkill(toSkillLocation(req));
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/** 新建前保留名校验（D2② 门独立暴露）：拒绝时 message 已是中文文案。 */
+export async function handleSkillsAssertCreateName(
+  req: SkillsAssertCreateNameRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt
+      .skills()
+      .assertSkillNameNotReservedForCreate(
+        req.domain,
+        req.name,
+        req.projectId,
+      );
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

@@ -91,6 +91,7 @@ import {
   handleRegexUpdateRule,
 } from './handlers/regex.js';
 import {
+  handleSkillsAssertCreateName,
   handleSkillsDelete,
   handleSkillsEdit,
   handleSkillsEffective,
@@ -388,6 +389,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SKILLS_EDIT, handleSkillsEdit);
   bindReq(IPC_CHANNELS.SKILLS_TOGGLE, handleSkillsToggle);
   bindReq(IPC_CHANNELS.SKILLS_DELETE, handleSkillsDelete);
+  bindReq(IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME, handleSkillsAssertCreateName);
 
   bindNoArg(
     IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
