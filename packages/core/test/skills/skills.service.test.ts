@@ -343,4 +343,106 @@ describe("SkillService（T-SK5）", () => {
         error instanceof SkillError && error.code === "MISSING_PROJECT_ID",
     );
   });
+
+  it("deleteSkill global 域内置名抛 BUILTIN_SKILL（中文 message）且目录仍在（T-AS2）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const skills = createSkillsService(ctx.conn);
+
+    // 测试库经 bootstrap 种入，global 域 agent-config 目录存在
+    await assert.rejects(
+      () => skills.deleteSkill({ domain: "global", name: "agent-config" }),
+      (error: unknown) =>
+        error instanceof SkillError &&
+        error.code === "BUILTIN_SKILL" &&
+        /内置技能不支持删除：agent-config/.test(error.message),
+    );
+
+    // 拦截后技能目录仍在，清单还能查到
+    const item = (await skills.listSkills("global")).find(
+      (s) => s.name === "agent-config",
+    );
+    assert.ok(item != null, "内置技能目录应仍在");
+    assert.equal(item.valid, true);
+  });
+
+  it("deleteSkill project 域历史同名副本可正常删（T-AS2）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const skills = createSkillsService(ctx.conn);
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-AC-${suffix}`);
+
+    // 升级前建的 project 域同名副本：writeSkillFile 的新建拦截会挡住正常通道，
+    // 存量数据只能经 VFS 直写落盘（模拟）
+    await ctx
+      .projectMetaVfs(project.id)
+      .write("/meta/skills/agent-config/SKILL.md", entry("agent-config", "项目域历史副本"));
+
+    await skills.deleteSkill({
+      domain: "project",
+      projectId: project.id,
+      name: "agent-config",
+    });
+
+    const list = await skills.listSkills({ projectId: project.id });
+    assert.equal(
+      list.find((s) => s.name === "agent-config"),
+      undefined,
+      "project 域同名副本应可正常删除",
+    );
+  });
+
+  it("writeSkillFile 内置保留名：目录已存在编辑放行，目录不存在新建拒绝（T-AS6）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const skills = createSkillsService(ctx.conn);
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-ACR-${suffix}`);
+
+    // global 域目录已存在（bootstrap 种入）：编辑放行。SKILL.md 整文件覆盖
+    // 有乐观锁墙（writeSkillFile 不透传 expectedVersion），编辑本体走
+    // editSkillFile；另用向内置目录写辅助文件覆盖 writeSkillFile 的放行路径
+    await skills.writeSkillFile(
+      "global",
+      "agent-config",
+      "notes.md",
+      "内置技能的辅助文件",
+    );
+    const note = await skills.readSkillFile("global", "agent-config", "notes.md");
+    assert.equal(note.content, "内置技能的辅助文件");
+
+    const edit = await skills.editSkillFile(
+      "global",
+      "agent-config",
+      undefined,
+      { oldString: "agent 配置指南", newString: "用户改过的指南" },
+    );
+    assert.equal(edit.replacements, 1, "内置本体编辑应放行");
+
+    // project 域目录不存在 = 新建，拒绝（中文 message）
+    await assert.rejects(
+      () =>
+        skills.writeSkillFile(
+          "project",
+          "agent-config",
+          undefined,
+          VALID_SKILL_MD,
+          project.id,
+        ),
+      (error: unknown) =>
+        error instanceof SkillError &&
+        error.code === "BUILTIN_SKILL_NAME_RESERVED" &&
+        /「agent-config」为内置技能保留名，不能用于新建/.test(error.message),
+    );
+
+    // global 域模拟 seed 缺失：物理清掉内置目录后，新建同样拒绝
+    await ctx
+      .globalMetaVfs()
+      .hardDelete("/meta/skills/agent-config", { recursive: true });
+    await assert.rejects(
+      () =>
+        skills.writeSkillFile("global", "agent-config", undefined, VALID_SKILL_MD),
+      (error: unknown) =>
+        error instanceof SkillError &&
+        error.code === "BUILTIN_SKILL_NAME_RESERVED",
+    );
+  });
 });
