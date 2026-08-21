@@ -49,6 +49,35 @@ describe("SkillService（T-SK5）", () => {
     assert.deepEqual(item.files, ["SKILL.md"]);
   });
 
+  it("write 对已存在文件：带 expectedVersion 正向覆盖，不带撞 CONFLICT", async () => {
+    const ctx = getNovelMasterTestContext();
+    const skills = createSkillsService(ctx.conn);
+    const name = `ovw-${testIsolationSuffix()}`;
+
+    await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD);
+    const read = await skills.readSkillFile("global", name);
+
+    // 不带版本：VFS 乐观锁拒绝（vfs write 对已存在文件要求 expectedVersion）
+    await assert.rejects(
+      () => skills.writeSkillFile("global", name, undefined, "# 重写"),
+      (err: unknown) =>
+        String((err as Error).message).includes("expectedVersion required"),
+    );
+
+    // 带 read 返回的版本：整文件覆盖成功且版本递增
+    const rewritten = await skills.writeSkillFile(
+      "global",
+      name,
+      undefined,
+      "# 重写",
+      undefined,
+      { expectedVersion: read.version },
+    );
+    assert.ok(rewritten.version > read.version, "覆盖后版本应递增");
+    const after = await skills.readSkillFile("global", name);
+    assert.equal(after.content, "# 重写");
+  });
+
   it("listSkills：front matter 坏 / 缺 SKILL.md 的技能标无效", async () => {
     const ctx = getNovelMasterTestContext();
     const skills = createSkillsService(ctx.conn);
@@ -397,9 +426,10 @@ describe("SkillService（T-SK5）", () => {
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`P-ACR-${suffix}`);
 
-    // global 域目录已存在（bootstrap 种入）：编辑放行。SKILL.md 整文件覆盖
-    // 有乐观锁墙（writeSkillFile 不透传 expectedVersion），编辑本体走
-    // editSkillFile；另用向内置目录写辅助文件覆盖 writeSkillFile 的放行路径
+    // global 域目录已存在（bootstrap 种入）：编辑放行。writeSkillFile 已支持
+    // expectedVersion 透传（CR MF-8 相关修复），整文件覆盖需带 read 返回的
+    // 版本；不带则撞 VFS 乐观锁 CONFLICT。这里用辅助文件覆盖放行路径，
+    // 带 expectedVersion 的正向覆盖见下一条用例
     await skills.writeSkillFile(
       "global",
       "agent-config",
