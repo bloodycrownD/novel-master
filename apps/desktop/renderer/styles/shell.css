@@ -5523,6 +5523,28 @@ html[data-theme="dark"] .chat-batch-bar {
   border-radius: 10px;
 }
 
+.fetch-models-modal__filter {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.fetch-models-modal__filter::placeholder {
+  color: var(--text-secondary);
+}
+
+.fetch-models-modal__filter:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
 .fetch-models-modal__row {
   width: 100%;
   display: flex;

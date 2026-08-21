@@ -32,11 +32,27 @@ export function FetchModelsModal({
 }: FetchModelsModalProps) {
   const { exit, toggle, isSelected, selectedCount } = useBatchSelection();
   const [rows, setRows] = useState<SuggestionRow[]>([]);
+  const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
   const savedSet = useMemo(() => new Set(savedVendorIds), [savedVendorIds]);
+
+  // 过滤只作用展示层：displayName 为空（含纯空白）时只按 vendorModelId 匹配。
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) {
+      return rows;
+    }
+    return rows.filter((row) => {
+      const name = row.displayName.trim();
+      return (
+        (name !== "" && name.toLowerCase().includes(q)) ||
+        row.vendorModelId.toLowerCase().includes(q)
+      );
+    });
+  }, [rows, query]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +89,7 @@ export function FetchModelsModal({
     }
     exit();
     setRows([]);
+    setQuery("");
     setError(undefined);
     void load();
   }, [open, load, exit]);
@@ -146,47 +163,60 @@ export function FetchModelsModal({
             未拉取到可用模型，请检查 API Key 与 Base URL。
           </p>
         ) : (
-          <ul className="fetch-models-modal__list">
-            {rows.map((row) => {
-              const saved = savedSet.has(row.vendorModelId);
-              const selected = isSelected(row.vendorModelId);
-              const title = row.displayName.trim() || row.vendorModelId;
-              const showMeta =
-                row.displayName.trim() && row.displayName.trim() !== row.vendorModelId;
-              return (
-                <li key={row.vendorModelId}>
-                  <button
-                    type="button"
-                    className={`fetch-models-modal__row${selected ? " is-selected" : ""}${saved ? " is-saved" : ""}`}
-                    disabled={saved || saving}
-                    onClick={() => {
-                      if (!saved) {
-                        toggle(row.vendorModelId);
-                      }
-                    }}
-                  >
-                    {saved ? (
-                      <span className="fetch-models-modal__row-spacer" aria-hidden="true" />
-                    ) : (
-                      <BatchCheckbox
-                        checked={selected}
-                        onToggle={() => toggle(row.vendorModelId)}
-                      />
-                    )}
-                    <span className="fetch-models-modal__row-text">
-                      <span className="fetch-models-modal__row-title">{title}</span>
-                      {showMeta ? (
-                        <span className="fetch-models-modal__row-meta">{row.vendorModelId}</span>
-                      ) : null}
-                    </span>
-                    {saved ? (
-                      <span className="fetch-models-modal__row-badge">已添加</span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <>
+            <input
+              type="text"
+              className="fetch-models-modal__filter"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="过滤模型…"
+            />
+            {filteredRows.length === 0 ? (
+              <p className="fetch-models-modal__status">无匹配模型</p>
+            ) : (
+              <ul className="fetch-models-modal__list">
+                {filteredRows.map((row) => {
+                  const saved = savedSet.has(row.vendorModelId);
+                  const selected = isSelected(row.vendorModelId);
+                  const title = row.displayName.trim() || row.vendorModelId;
+                  const showMeta =
+                    row.displayName.trim() && row.displayName.trim() !== row.vendorModelId;
+                  return (
+                    <li key={row.vendorModelId}>
+                      <button
+                        type="button"
+                        className={`fetch-models-modal__row${selected ? " is-selected" : ""}${saved ? " is-saved" : ""}`}
+                        disabled={saved || saving}
+                        onClick={() => {
+                          if (!saved) {
+                            toggle(row.vendorModelId);
+                          }
+                        }}
+                      >
+                        {saved ? (
+                          <span className="fetch-models-modal__row-spacer" aria-hidden="true" />
+                        ) : (
+                          <BatchCheckbox
+                            checked={selected}
+                            onToggle={() => toggle(row.vendorModelId)}
+                          />
+                        )}
+                        <span className="fetch-models-modal__row-text">
+                          <span className="fetch-models-modal__row-title">{title}</span>
+                          {showMeta ? (
+                            <span className="fetch-models-modal__row-meta">{row.vendorModelId}</span>
+                          ) : null}
+                        </span>
+                        {saved ? (
+                          <span className="fetch-models-modal__row-badge">已添加</span>
+                        ) : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
         )}
 
         {!loading && selectableRows.length > 0 ? (
