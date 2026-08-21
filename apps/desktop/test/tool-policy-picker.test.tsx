@@ -13,7 +13,7 @@ test("T-P4: 折叠态渲染 trigger 文案且不常驻弹层", () => {
     <ToolPolicyPicker selected={["read"]} onChange={() => {}} />,
   );
   // trigger 文案反映选择数量
-  assert.match(html, /已选工具（1\/8）/);
+  assert.match(html, /已选工具（1\/9）/);
   assert.match(html, /▼/);
   // 折叠态下不渲染弹层（picker-modal 由 open=true 才挂）
   assert.doesNotMatch(html, /picker-modal/);
@@ -23,7 +23,7 @@ test("T-P4: trigger 文案边界——未选择与全选", () => {
   const none = renderToStaticMarkup(
     <ToolPolicyPicker selected={[]} onChange={() => {}} />,
   );
-  assert.match(none, /未选择工具（0\/8）/);
+  assert.match(none, /未选择工具（0\/9）/);
 
   const all = [
     "task",
@@ -34,9 +34,10 @@ test("T-P4: trigger 文案边界——未选择与全选", () => {
     "glob",
     "grep",
     "skill",
+    "agent",
   ];
   const full = renderToStaticMarkup(
     <ToolPolicyPicker selected={all} onChange={() => {}} />,
   );
-  assert.match(full, /全部工具（8\/8）/);
+  assert.match(full, /全部工具（9\/9）/);
 });
