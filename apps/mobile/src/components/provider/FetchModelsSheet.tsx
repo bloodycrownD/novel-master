@@ -10,15 +10,18 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
+import {
+  KeyboardAvoidingView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
 import {useRuntime} from '../../hooks/useRuntime';
 import {formatError} from '../../errors/format-error';
 import {AppModal} from '../ui/AppModal';
 import {FormTextInput} from '../form/FormTextInput';
 import {useTheme} from '../../theme/ThemeProvider';
-import {useAndroidModalKeyboardAvoid} from '../../hooks/useAndroidModalKeyboardAvoid';
 
 type SuggestionRow = {
   vendorModelId: string;
@@ -62,8 +65,20 @@ export function FetchModelsSheet({
     );
   }, [rows, query]);
 
-  // 底部对齐 sheet：键盘弹起后紧贴屏幕底部，移整个键盘高度才能贴到键盘上方。
-  const panelAvoidStyle = useAndroidModalKeyboardAvoid(1);
+  // 键盘避让：高面板（maxHeight 75%）不能只做位移——整体上移键盘高度后顶部（标题/过滤框）
+  // 会被顶出屏幕（useAndroidModalKeyboardAvoid 的 fraction=1 只适合矮 sheet，如 AddModelModal）。
+  // 这里在上移的同时让 maxHeight 随键盘收缩：面板高度不超过屏幕剩余空间，
+  // 底部贴键盘顶（Android translateY / iOS KeyboardAvoidingView padding）且顶部不出屏。
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  const {height: screenH} = useWindowDimensions();
+  const panelAvoidStyle = useAnimatedStyle(() => {
+    const kb = Math.min(0, keyboardHeightSV.value);
+    const available = screenH + kb - 24; // 顶部留 24px 余量
+    return {
+      ...(Platform.OS === 'android' ? {transform: [{translateY: kb}]} : {}),
+      maxHeight: Math.max(160, Math.min(screenH * 0.75, available)),
+    };
+  });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,7 +129,7 @@ export function FetchModelsSheet({
         style={[
           styles.sheet,
           {backgroundColor: tokens.surface},
-          Platform.OS === 'android' ? panelAvoidStyle : undefined,
+          panelAvoidStyle,
         ]}
         onStartShouldSetResponder={() => true}>
         <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
@@ -257,7 +272,7 @@ const styles = StyleSheet.create({
   loader: {marginVertical: 32},
   center: {alignItems: 'center', gap: 12, padding: 24},
   error: {textAlign: 'center', lineHeight: 20},
-  list: {maxHeight: 420},
+  list: {maxHeight: 420, flexShrink: 1},
   empty: {textAlign: 'center', padding: 24},
   searchWrap: {paddingHorizontal: 16, paddingBottom: 8},
   row: {
