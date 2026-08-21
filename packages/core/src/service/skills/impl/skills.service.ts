@@ -294,18 +294,10 @@ export class SkillsService implements SkillService {
     const vfs = this.vfsForDomain(domain, projectId);
     // D2②：内置保留名 + 该域目录不存在 = 新建，拒绝（目录已存在 = 编辑
     // 内置本体或历史副本，放行）。seed 通道带 builtinSeed 豁免首次种入；
-    // 存在性判定与 deleteSkill 的 assertSkillDirExists 同源。
+    // 判定逻辑抽至 assertSkillNameNotReservedForCreate（ZIP 导入等第二条
+    // 新建通道复用同一道门）。
     if (BUILTIN_SKILL_NAMES.has(name) && options?.builtinSeed !== true) {
-      const scopeKey =
-        domain === "global" ? "global:meta" : `project:${projectId}:meta`;
-      const dirExists = await this.skillDirExists(
-        new SqliteVfsEntryRepository(this.deps.conn),
-        scopeKey,
-        `${SKILLS_ROOT}/${name}`,
-      );
-      if (!dirExists) {
-        throw skillBuiltinNameReserved(name);
-      }
+      await this.assertSkillNameNotReservedForCreate(domain, name, projectId);
     }
     // write 对不存在的文件会自动补父目录——新建技能即向新目录写 SKILL.md。
     // 已存在文件（编辑）须带 expectedVersion 乐观锁，否则 VFS 拒绝（CONFLICT）。
@@ -393,6 +385,38 @@ export class SkillsService implements SkillService {
         await ruleRepo.removeAllScopesByName(location.name);
       }
     });
+  }
+
+  /**
+   * 新建语义的内置保留名门（D2②，writeSkillFile 同源判定独立暴露）：
+   *
+   * 名单外直接放行；名单内且该域技能目录不存在（= 新建语义）抛
+   * `SkillError(BUILTIN_SKILL_NAME_RESERVED)`（中文文案）；目录已存在
+   * （编辑内置本体或历史副本）放行。ZIP 导入等不经 writeSkillFile 的
+   * 新建通道，落盘前须先过这道门（CR D-1）。project 域须带 projectId
+   * （缺失抛 `SkillError(MISSING_PROJECT_ID)`）。
+   */
+  async assertSkillNameNotReservedForCreate(
+    domain: SkillDomain,
+    name: string,
+    projectId?: string,
+  ): Promise<void> {
+    if (!BUILTIN_SKILL_NAMES.has(name)) {
+      return;
+    }
+    if (domain === "project" && (projectId == null || projectId.length === 0)) {
+      throw skillMissingProjectId(name);
+    }
+    const scopeKey =
+      domain === "global" ? "global:meta" : `project:${projectId}:meta`;
+    const dirExists = await this.skillDirExists(
+      new SqliteVfsEntryRepository(this.deps.conn),
+      scopeKey,
+      `${SKILLS_ROOT}/${name}`,
+    );
+    if (!dirExists) {
+      throw skillBuiltinNameReserved(name);
+    }
   }
 
   /** 技能目录存在性判定（目录行或其下任一 entry 存在即视为存在）。 */

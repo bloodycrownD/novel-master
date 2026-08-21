@@ -106,6 +106,18 @@ export interface SkillService {
   ): Promise<{ version: number }>;
 
   /**
+   * 新建语义的内置保留名校验（D2② 门独立暴露，供 ZIP 导入等不经
+   * writeSkillFile 的新建通道复用）：名单外放行；名单内且该域技能目录
+   * 不存在（= 新建）抛 `SkillError(BUILTIN_SKILL_NAME_RESERVED)`；
+   * 目录已存在（内置本体 / 历史副本）放行。project 域须带 projectId。
+   */
+  assertSkillNameNotReservedForCreate(
+    domain: SkillDomain,
+    name: string,
+    projectId?: string,
+  ): Promise<void>;
+
+  /**
    * 局部修改技能文件（匹配语义复用 normalize-for-match，同 edit 工具）。
    * 与 write 一致须显式域。
    */

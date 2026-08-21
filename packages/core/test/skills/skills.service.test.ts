@@ -445,4 +445,57 @@ describe("SkillService（T-SK5）", () => {
         error.code === "BUILTIN_SKILL_NAME_RESERVED",
     );
   });
+
+  it("assertSkillNameNotReservedForCreate：ZIP 新建通道的保留名门（D-1）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const skills = createSkillsService(ctx.conn);
+    const suffix = testIsolationSuffix();
+    const project = await ctx.projects.create(`P-D1-${suffix}`);
+
+    // 非名单名：任意域直接放行（不抛）
+    await skills.assertSkillNameNotReservedForCreate(
+      "project",
+      `plain-${suffix}`,
+      project.id,
+    );
+    await skills.assertSkillNameNotReservedForCreate("global", `plain-${suffix}`);
+
+    // 名单内 + project 域目录不存在（= 新建，ZIP 导入场景）拒绝，中文 message
+    await assert.rejects(
+      () =>
+        skills.assertSkillNameNotReservedForCreate(
+          "project",
+          "agent-config",
+          project.id,
+        ),
+      (error: unknown) =>
+        error instanceof SkillError &&
+        error.code === "BUILTIN_SKILL_NAME_RESERVED" &&
+        /「agent-config」为内置技能保留名，不能用于新建/.test(error.message),
+    );
+
+    // project 域缺 projectId：与 writeSkillFile 的 vfsForDomain 校验同源拒绝
+    await assert.rejects(
+      () => skills.assertSkillNameNotReservedForCreate("project", "agent-config"),
+      (error: unknown) =>
+        error instanceof SkillError && error.code === "MISSING_PROJECT_ID",
+    );
+
+    // builtinSeed 豁免仍仅 seed 通道有效：新入口无豁免参数（同一目录不存在
+    // 场景恒拒绝）；writeSkillFile 带 builtinSeed 写入后目录已存在，新入口
+    // 转为放行（编辑语义）。用例自建目录，不依赖其他用例的 global 域残留。
+    await skills.writeSkillFile(
+      "project",
+      "agent-config",
+      undefined,
+      VALID_SKILL_MD,
+      project.id,
+      { builtinSeed: true },
+    );
+    await skills.assertSkillNameNotReservedForCreate(
+      "project",
+      "agent-config",
+      project.id,
+    );
+  });
 });
