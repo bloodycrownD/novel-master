@@ -10,7 +10,9 @@ export type SkillErrorCode =
   | "MISSING_DOMAIN"
   | "MISSING_PROJECT_ID"
   | "INVALID_PATH"
-  | "NOT_FOUND";
+  | "NOT_FOUND"
+  | "BUILTIN_SKILL"
+  | "BUILTIN_SKILL_NAME_RESERVED";
 
 /**
  * Unified error for skill service operations.
@@ -101,5 +103,21 @@ export function skillNotFound(
       ? `Skill not found: ${name}`
       : `Skill file not found: ${name}/${path}`,
     { skillName: name, path },
+  );
+}
+
+/** 删除内置技能（global 域内置名）。 */
+export function skillBuiltin(name: string): SkillError {
+  return new SkillError("BUILTIN_SKILL", `内置技能不支持删除：${name}`, {
+    skillName: name,
+  });
+}
+
+/** 用内置保留名新建技能（两域均拒；目录已存在的本体/副本编辑放行）。 */
+export function skillBuiltinNameReserved(name: string): SkillError {
+  return new SkillError(
+    "BUILTIN_SKILL_NAME_RESERVED",
+    `「${name}」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑`,
+    { skillName: name },
   );
 }

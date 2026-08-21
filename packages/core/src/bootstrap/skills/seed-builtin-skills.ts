@@ -148,5 +148,8 @@ export async function seedBuiltinSkills(conn: TdbcConnection): Promise<void> {
     "agent-config",
     undefined,
     AGENT_CONFIG_SKILL_MD,
+    undefined,
+    // 首次种入时目录必不存在，需 seed 特权豁免 D2② 的新建拦截。
+    { builtinSeed: true },
   );
 }
