@@ -14,11 +14,15 @@
 import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
+import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
 import {FormTextInput} from '../form/FormTextInput';
@@ -97,6 +101,20 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
 
   const triggerLabel = buildTriggerLabel(selected);
 
+  // 键盘避让（同 FetchModelsSheet 修法）：高面板（maxHeight 75%）只做位移会把
+  // 标题/搜索框顶出屏幕；上移同时让 maxHeight 随键盘收缩，面板不超过屏幕剩余空间。
+  // FormOverlayHost 是普通 View 渲染层无任何避让，必须在 sheet 自身处理。
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  const {height: screenH} = useWindowDimensions();
+  const panelAvoidStyle = useAnimatedStyle(() => {
+    const kb = Math.min(0, keyboardHeightSV.value);
+    const available = screenH + kb - 24; // 顶部留 24px 余量
+    return {
+      ...(Platform.OS === 'android' ? {transform: [{translateY: kb}]} : {}),
+      maxHeight: Math.max(160, Math.min(screenH * 0.75, available)),
+    };
+  });
+
   useEffect(() => {
     if (!open || !overlay) {
       overlay?.hide(overlayKey);
@@ -106,9 +124,9 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
     overlay.show(
       overlayKey,
       <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+        <Animated.View
+          style={[styles.sheet, {backgroundColor: tokens.surface}, panelAvoidStyle]}
+          onStartShouldSetResponder={() => true}>
           <Text style={[styles.sheetTitle, {color: tokens.text}]}>
             选择工具
           </Text>
@@ -156,7 +174,9 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
                 paddingBottom: Math.max(insets.bottom, 16),
               },
             ]}>
-            <Pressable onPress={close} style={styles.actionBtn}>
+            <Pressable
+              onPress={close}
+              style={styles.actionBtn}>
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
             <Pressable
@@ -168,7 +188,7 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
               <Text style={styles.confirmText}>确定</Text>
             </Pressable>
           </View>
-        </Pressable>
+        </Animated.View>
       </Pressable>,
     );
 
@@ -240,7 +260,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   searchWrap: {paddingHorizontal: 16, paddingBottom: 8},
-  list: {maxHeight: 320},
+  list: {maxHeight: 320, flexShrink: 1},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
