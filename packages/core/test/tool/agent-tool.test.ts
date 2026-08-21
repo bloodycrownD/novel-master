@@ -142,6 +142,27 @@ describe("agent 管理工具", () => {
     assert.match(withoutAgents, /（暂无）|当前可管理 agent 名单/);
   });
 
+  it("description 瘦身契约：含 skill load agent-config 指路，无参数说明段，非名单正文有长度上限（T-AS3）", () => {
+    const bare: BuiltinToolContext = {
+      vfs: {} as never,
+      projectId: "p",
+      sessionId: "s",
+      listSessionMessages: async () => [],
+    };
+    const desc = agentTool.description(bare) as string;
+    // 指路句（空名单场景下也必须携带——字段细节已全部迁入内置技能）
+    assert.match(desc, /skill load agent-config/);
+    // 被删段落不残留：参数说明段与 definition 字段清单关键词
+    assert.ok(!desc.includes("参数说明"));
+    assert.ok(!/savedModelId|skillsPrefix|workplace|doomLoop/.test(desc));
+    // 非名单正文长度上限（PRD：不含名单 ≤ 200 字，汉字口径约 150；
+    // 此处按字符口径设上限，含英文 / 标点，空名单场景全文即非名单正文）
+    assert.ok(
+      desc.length <= 380,
+      `非名单正文过长：${desc.length} 字符`,
+    );
+  });
+
   // T-AG1：action 分派与字段校验——缺必填报 INVALID_ARGUMENT 且错误信息含字段名。
   it("T-AG1：get 缺 name 与 agentId 报 INVALID_ARGUMENT 且文案含字段名", async () => {
     const runner = makeRunner();

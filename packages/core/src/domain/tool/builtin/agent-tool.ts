@@ -239,23 +239,16 @@ export const agentTool: Tool<AgentToolInput, AgentToolOutput, BuiltinToolContext
     name: AGENT_TOOL_NAME,
     description: (ctx) => {
       const agents = ctx.agents?.agents ?? [];
-      return `管理 agent 定义（list / get / create / update）。agent 是可配置的智能体（提示词布局 + 可选模型 pin + 工具策略），创建后可在 task 工具中作为子代理调用。
+      return `管理 agent 定义（list / get / create / update）：可配置智能体（提示词布局 + 模型 pin + 工具策略），可在 task 工具中作为子代理调用。
 
 当前可管理 agent 名单（装配期快照，回合内变更不即时反映）：
 ${formatAgentEntries(agents)}
 
-action 说明：
-- list：列出全部 agent 的 name / 描述 / mode（含内置 general），无必填参数
-- get：查看单个 agent 完整定义。name 或 agentId 至少提供一个，name 优先（name 可命中内置 general）
-- create：新建 agent。definition 必填（完整定义体对象），agentId 由工具自动生成
-- update：更新已有 agent。name 或 agentId 定位目标（name 优先）+ definition 必填（整体覆盖，非增量合并）
+action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位，name 优先）/ create 新建（definition 必填，agentId 自动生成）/ update 整体覆盖更新（定位同 get + definition 必填）。
 
-参数说明：
-- name：agent 名称（get / update 定位用）
-- agentId：agent 持久化 id（get / update 定位用；create 时无需提供）
-- definition：完整 agent 定义体对象，主要字段：name（必填）、description、mode（primary / subagent / all）、prompts（提示词布局：system / persist / dynamic 等区段）、model（可选 savedModelId pin）、runtime（maxSteps 等）、tools（allow / deny 策略，名字须为已注册工具）；语义校验由服务层完成，不通过会返回具体原因
+配置字段详情与完整示例请先 skill load agent-config。
 
-注意：本工具不提供删除动作——删除 agent 请使用用户界面的 agent 管理。定义保存后将在下一次会话生效（当前运行中的会话不受影响）。`;
+注意：无删除动作（删除走用户界面 agent 管理）；定义保存后下一次会话生效。`;
     },
     inputSchema: z.object({
       action: z
@@ -276,8 +269,7 @@ action 说明：
         .passthrough()
         .optional()
         .describe(
-          "create/update 必填：完整 agent 定义体对象（name / description / mode / prompts / model / runtime / tools）；" +
-            "schema 层不校验内部结构，语义校验由服务层完成",
+          "create/update 必填：完整定义体对象，语义校验由服务层完成，字段详情先 skill load agent-config",
         ),
     }),
     outputSchema: z.discriminatedUnion("action", [
