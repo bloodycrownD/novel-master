@@ -33,7 +33,7 @@ import {AppModal} from '@/components/ui/AppModal';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {buildNewSkillDoc, yamlScalar} from './skill-ui';
 import {pickZipFileBytes} from '@/services/vfs-zip.service';
-import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
+import {useAdaptiveKeyboardSheetStyle} from '@/hooks/useAdaptiveKeyboardSheetStyle';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -106,9 +106,10 @@ export function NewSkillModal({
   const [importing, setImporting] = useState(false);
   const [imported, setImported] = useState<ImportedSkill | null>(null);
   const [error, setError] = useState<string | undefined>();
-  // 底部 sheet 键盘避让：Android 在 panel 上挂 translateY（fraction=1 整个键盘高度，
-  // 照 DirectoryRuleSheet 先例）；iOS 走 KeyboardAvoidingView padding 分支。
-  const panelAvoidStyle = useAndroidModalKeyboardAvoid(1);
+  // 底部高面板 + 技能名/描述输入：键盘避让用「上移 + maxHeight 收缩」公共 hook
+  //（面板高度随键盘收紧，不再需要 panelAndroid 硬压 60% 的补丁）；
+  // iOS 走 KeyboardAvoidingView padding 分支。
+  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.85);
 
   useEffect(() => {
     if (!visible) {
@@ -265,10 +266,7 @@ export function NewSkillModal({
         style={[
           styles.panel,
           {backgroundColor: tokens.surface},
-          // Android 键盘避让是整块 translateY 上移，面板高度上限需收紧到键盘上方
-          // 可见区域内（否则面板顶到 85% 高再上移，标题与技能名会被顶出屏幕）。
-          Platform.OS === 'android' ? styles.panelAndroid : undefined,
-          Platform.OS === 'android' ? panelAvoidStyle : undefined,
+          panelAvoidStyle,
         ]}>
         <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
         {imported != null ? (
@@ -419,13 +417,12 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   panel: {
-    maxHeight: '85%',
+    // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
     padding: 16,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     gap: 8,
   },
-  panelAndroid: {maxHeight: '60%'},
   // flexGrow:0 防止表单区反向撑开面板；flexShrink:1 在内容超高时收缩内部滚动，
   // 保住标题与底部按钮的可见性。
   form: {flexGrow: 0, flexShrink: 1},

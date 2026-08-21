@@ -14,19 +14,17 @@
 import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import {
   FlatList,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
-import Animated, {useAnimatedStyle} from 'react-native-reanimated';
-import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
+import Animated from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
 import {FormTextInput} from '../form/FormTextInput';
 import {useFormOverlay} from '../form/FormOverlayHost';
+import {useAdaptiveKeyboardSheetStyle} from '../../hooks/useAdaptiveKeyboardSheetStyle';
 import type {ThemeTokens} from '../../theme/tokens';
 
 type Props = {
@@ -101,19 +99,9 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
 
   const triggerLabel = buildTriggerLabel(selected);
 
-  // 键盘避让（同 FetchModelsSheet 修法）：高面板（maxHeight 75%）只做位移会把
-  // 标题/搜索框顶出屏幕；上移同时让 maxHeight 随键盘收缩，面板不超过屏幕剩余空间。
+  // 键盘避让（上移 + maxHeight 收缩）由公共 hook 统一处理：
   // FormOverlayHost 是普通 View 渲染层无任何避让，必须在 sheet 自身处理。
-  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
-  const {height: screenH} = useWindowDimensions();
-  const panelAvoidStyle = useAnimatedStyle(() => {
-    const kb = Math.min(0, keyboardHeightSV.value);
-    const available = screenH + kb - 24; // 顶部留 24px 余量
-    return {
-      ...(Platform.OS === 'android' ? {transform: [{translateY: kb}]} : {}),
-      maxHeight: Math.max(160, Math.min(screenH * 0.75, available)),
-    };
-  });
+  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.75);
 
   useEffect(() => {
     if (!open || !overlay) {
@@ -248,7 +236,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    maxHeight: '75%',
+    // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     paddingTop: 8,
