@@ -15,6 +15,7 @@ import {
 import type { ProjectDto, SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
 import {
   ipcSkillsList,
+  ipcSkillsRead,
   ipcSkillsWrite,
   ipcVfsZipImportBytes,
   ipcVfsZipPick,
@@ -163,6 +164,17 @@ export function NewSkillModal({
           imported.preview.name !== trimmedName ||
           imported.preview.description !== trimmedDesc
         ) {
+          // 重写目标是刚导入落盘的 SKILL.md（已存在文件），不带版本会被
+          // VFS 乐观锁拒绝（CONFLICT）：先 read 拿版本再回传写入。
+          const readRes = await ipcSkillsRead({
+            domain,
+            ...(domain === "project" ? { projectId } : {}),
+            name: trimmedName,
+          });
+          if (!readRes.ok) {
+            setError(readRes.error.message);
+            return;
+          }
           const rewriteRes = await ipcSkillsWrite({
             domain,
             ...(domain === "project" ? { projectId } : {}),
@@ -172,6 +184,7 @@ export function NewSkillModal({
               trimmedName,
               trimmedDesc,
             ),
+            version: readRes.data.version,
           });
           if (!rewriteRes.ok) {
             setError(rewriteRes.error.message);

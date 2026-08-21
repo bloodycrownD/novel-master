@@ -48,9 +48,13 @@ export interface SkillLocation {
  *
  * builtinSeed 仅供 core 内置技能 seed 通道（bootstrap）使用：绕过内置保留名
  * 的新建拦截完成首次种入。用户路径（UI / IPC / LLM 工具）一律不传。
+ *
+ * expectedVersion 是 VFS 乐观锁版本：编辑已存在文件时必须传 read 返回的
+ * 版本，否则 VFS write 抛 CONFLICT；新建文件（目录不存在）不传。
  */
 export interface SkillWriteOptions {
   readonly builtinSeed?: boolean;
+  readonly expectedVersion?: number;
 }
 
 /**

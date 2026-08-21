@@ -121,6 +121,9 @@ export async function handleSkillsWrite(
       req.path,
       req.content,
       req.projectId,
+      req.version != null
+        ? { expectedVersion: req.version }
+        : undefined,
     );
     return { ok: true, data: result };
   } catch (err) {
