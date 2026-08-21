@@ -349,12 +349,14 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
           // name 优先：registry.list() 合并虚拟 seed，by-name 可命中内置 general。
           if (input.name != null && input.name.length > 0) {
             const defs = await agentsCtx.registry.list();
-            const def = defs.find((d) => d.name === input.name);
+            // 输入侧 trim 后再匹配（对齐 update，指南正文承诺两侧 trim）。
+            const targetName = input.name.trim();
+            const def = defs.find((d) => d.name === targetName);
             if (def == null) {
               const names = agentsCtx.agents.map((a) => a.name).join(", ");
               throw new ToolError(
                 "FAILED",
-                `未找到名为 "${input.name}" 的 agent；可选：${names || "（暂无）"}`,
+                `未找到名为 "${targetName}" 的 agent；可选：${names || "（暂无）"}`,
                 { toolName: AGENT_TOOL_NAME },
               );
             }
@@ -420,6 +422,16 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
             agentId = resolved;
           } else {
             agentId = input.agentId!;
+            // 过期/拼错的 id 不应静默当作 create 语义落盘：先判存在
+            //（对齐 get by-agentId 的 getRawWire 判空样板）。
+            const wire = await agentsCtx.registry.getRawWire(agentId);
+            if (wire == null) {
+              throw new ToolError(
+                "INVALID_ARGUMENT",
+                `未找到该 agentId 对应的 agent：${agentId}`,
+                { toolName: AGENT_TOOL_NAME },
+              );
+            }
           }
           await upsertWithTranslatedError(agentsCtx, agentId, definition);
           return {

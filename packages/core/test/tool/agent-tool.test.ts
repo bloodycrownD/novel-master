@@ -270,6 +270,18 @@ describe("agent 管理工具", () => {
     assert.ok(registry.calls.some((c) => c.method === "get"));
   });
 
+  it("T-AG2：get by-name 输入侧 trim——带空白的名字仍可命中（D-4）", async () => {
+    const registry = fakeAgentRegistry();
+    const runner = makeRunner();
+    const out = await runner.call<{
+      action: "get";
+      definition: AgentDefinition;
+    }>("agent", { action: "get", name: "  beta  " }, makeCtx(registry));
+
+    assert.equal(out.action, "get");
+    assert.equal(out.definition.name, "beta");
+  });
+
   it("T-AG2：get 未命中（by-name / by-agentId）报 FAILED 且文案含目标", async () => {
     const runner = makeRunner();
     const ctx = makeCtx(fakeAgentRegistry());
@@ -391,7 +403,7 @@ describe("agent 管理工具", () => {
     );
   });
 
-  it("T-AG3：update by-agentId 直达持久化行（不解析名字）", async () => {
+  it("T-AG3：update by-agentId 先 getRawWire 判存在再直达持久化行（B-nit1）", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
     const out = await runner.call<{ action: "update"; agentId: string }>(
@@ -400,8 +412,31 @@ describe("agent 管理工具", () => {
       makeCtx(registry),
     );
     assert.equal(out.agentId, "agent-1");
-    assert.ok(!registry.calls.some((c) => c.method === "getRawWire"));
-    assert.ok(registry.calls.some((c) => c.method === "upsert"));
+    // 存在性检查先行，随后 upsert 覆盖同一持久化行。
+    assert.ok(registry.calls.some((c) => c.method === "getRawWire"));
+    const upsert = registry.calls.find((c) => c.method === "upsert");
+    assert.ok(upsert);
+    assert.equal(upsert.args[0], "agent-1");
+  });
+
+  it("T-AG3：update by-agentId 过期 id 报 INVALID_ARGUMENT 且不静默新建（B-nit1）", async () => {
+    const registry = fakeAgentRegistry();
+    const runner = makeRunner();
+    await assert.rejects(
+      () =>
+        runner.call(
+          "agent",
+          { action: "update", agentId: "agent-404", definition: { name: "ghost" } },
+          makeCtx(registry),
+        ),
+      (e: unknown) =>
+        e instanceof ToolError &&
+        e.code === "INVALID_ARGUMENT" &&
+        e.message.includes("agent-404") &&
+        e.message.includes("未找到"),
+    );
+    // 过期 id 不应被 upsert 静默新建成新行。
+    assert.ok(!registry.calls.some((c) => c.method === "upsert"));
   });
 });
 
