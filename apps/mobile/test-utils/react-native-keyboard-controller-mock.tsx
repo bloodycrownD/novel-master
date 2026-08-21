@@ -29,17 +29,27 @@ export function KeyboardAvoidingView({
   );
 }
 
+// 测试注入用：默认 0（与真实环境键盘收起时一致），既有用例不注入则行为不变。
+// useAdaptiveKeyboardSheetStyle 的测试靠它驱动键盘高度变化（配合 reanimated
+// mock 的 useAnimatedStyle 直接执行 factory，样式即普通对象可断言）。
+let keyboardHeightForTests = 0;
+
+/** 仅测试用：注入键盘高度（弹起传负值，与真实 hook 语义一致）。 */
+export function __setKeyboardHeightForTests(height: number) {
+  keyboardHeightForTests = height;
+}
+
 export function useReanimatedKeyboardAnimation() {
   return {
-    height: { value: 0 },
-    progress: { value: 0 },
+    height: {value: keyboardHeightForTests},
+    progress: {value: 0},
   };
 }
 
 export function useKeyboardAnimation() {
   return {
-    height: { value: 0 },
-    progress: { value: 0 },
+    height: {value: keyboardHeightForTests},
+    progress: {value: 0},
   };
 }
 
