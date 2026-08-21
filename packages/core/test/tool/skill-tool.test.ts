@@ -124,10 +124,10 @@ function makeRunner(): {
 }
 
 describe("skill 工具", () => {
-  it("registerBuiltinTools 注册 skill（共 8 个内置工具）", () => {
+  it("registerBuiltinTools 注册 skill（共 9 个内置工具）", () => {
     const { registry } = makeRunner();
     assert.ok(registry.list().includes(SKILL_TOOL_NAME));
-    assert.equal(registry.list().length, 8);
+    assert.equal(registry.list().length, 9);
   });
 
   it("load：读生效副本 SKILL.md 全文并附附属文件清单（过滤 SKILL.md）", async () => {

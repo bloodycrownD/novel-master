@@ -137,6 +137,32 @@ function summarizeToolSuccess(
     }
   }
 
+  // agent：按输出 action 分发（list 条数 / get 定义名 / create+update 保存名）。
+  // 与 skill 同理必须在下方 generic matches/paths 分支之前——list 输出的
+  // entries+total 会撞上。
+  if (name === "agent" && typeof output.action === "string") {
+    if (output.action === "list" && Array.isArray(output.entries)) {
+      const count = output.entries.length;
+      const total = typeof output.total === "number" ? output.total : count;
+      if (output.truncated === true) {
+        return `${count}/${total} agents`;
+      }
+      return `${count} agents`;
+    }
+    if (output.action === "get") {
+      const def = output.definition;
+      if (isRecord(def) && typeof def.name === "string") {
+        return def.name;
+      }
+    }
+    if (
+      (output.action === "create" || output.action === "update") &&
+      typeof output.name === "string"
+    ) {
+      return `已保存 ${output.name}`;
+    }
+  }
+
   const matchItems = output.matches ?? output.paths;
   if (Array.isArray(matchItems) && typeof output.total === "number") {
     const n = matchItems.length;
