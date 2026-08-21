@@ -20,7 +20,6 @@ import type {
   ProjectService,
   SessionService,
   UserVfsTurnService,
-  AppendToolTurnBridgeFn,
 } from '@novel-master/core/chat';
 import type {
   CompactionConditionEvaluator,
@@ -64,8 +63,6 @@ export interface MobileNovelMasterRuntime {
   readonly messages: MessageService;
   /** hide/show/truncate 消息 transcript（不 capture worktree 块）。 */
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
-  /** maxSteps 截断后用户确认的 tool turn 桥接 assistant 追加。 */
-  readonly appendToolTurnBridge: AppendToolTurnBridgeFn;
   readonly sessionFs: SessionFsService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly eventBus: SimpleEventBus;

@@ -95,7 +95,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
-  const { userVfsTurn, appendToolTurnBridge } = createUserVfsTurnServiceBundle(conn);
+  const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
     conditionsStore: compactionConditions,
@@ -124,7 +124,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     sessions: createSessionService(conn, { state, agentRegistry }),
     messages,
     messageTranscriptEffects,
-    appendToolTurnBridge,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
     sessionKkv,

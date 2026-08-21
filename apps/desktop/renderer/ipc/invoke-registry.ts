@@ -21,7 +21,6 @@ import {
   type IpcResult,
   type MessageAttachmentDto,
   type MessagesAppendRequest,
-  type MessagesAppendToolTurnBridgeRequest,
   type MessagesDeleteRequest,
   type MessagesEditRequest,
   type MessagesForkRequest,
@@ -314,10 +313,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       MessagesAppendRequest,
       IpcResult<ChatMessageDto>
     >(invoke, IPC_CHANNELS.MESSAGES_APPEND),
-    ipcMessagesAppendToolTurnBridge: withReq<
-      MessagesAppendToolTurnBridgeRequest,
-      IpcResult<ChatMessageDto>
-    >(invoke, IPC_CHANNELS.MESSAGES_APPEND_TOOL_TURN_BRIDGE),
     ipcMessagesEdit: withReq<MessagesEditRequest, IpcResult<ChatMessageDto>>(
       invoke,
       IPC_CHANNELS.MESSAGES_EDIT,

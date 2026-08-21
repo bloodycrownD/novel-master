@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
-import { TOOL_TURN_BRIDGE_TEXT } from "../../src/service/chat/impl/append-tool-turn-bridge.js";
 import { normalizeForLlmExport } from "../../src/domain/prompt/logic/normalize-for-llm-export.js";
 import { messageBodyText } from "../../src/domain/prompt/logic/message-body.js";
 
@@ -131,7 +130,7 @@ describe("normalizeForLlmExport", () => {
   it("T-WT9: worktree 双消息 persistCount=2 与 chat 跨区不 merge", () => {
     const messages = [
       msg("user", "tree", { id: "prompt:workplace" }),
-      msg("assistant", TOOL_TURN_BRIDGE_TEXT, {
+      msg("assistant", "【done】", {
         id: "prompt:workplace:done",
       }),
       msg("user", "chat", { id: "c1" }),
@@ -142,7 +141,7 @@ describe("normalizeForLlmExport", () => {
     });
     assert.equal(out.length, 3);
     assert.equal(messageBodyText(out[0]!), "tree");
-    assert.equal(messageBodyText(out[1]!), TOOL_TURN_BRIDGE_TEXT);
+    assert.equal(messageBodyText(out[1]!), "【done】");
     assert.equal(messageBodyText(out[2]!), "chat");
   });
 

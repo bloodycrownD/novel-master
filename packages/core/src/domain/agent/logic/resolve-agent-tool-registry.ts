@@ -29,6 +29,9 @@ function allowedToolNames(
 /** 递归上限（P1-10）：depth >= 2（孙 agent）时 task 被 deny，孙 agent LLM 看不到它。 */
 const SUBAGENT_TOOL_NAME = "task";
 
+/** agent 管理工具名：与 task 同分支摘除（D6）——子/孙 agent 不得管理 agent。 */
+const AGENT_MANAGE_TOOL_NAME = "agent";
+
 /** 技能能力总开关关闭（prompts.skillsEnabled === false）时摘除的工具。 */
 const SKILL_TOOL_POLICY_NAME = "skill";
 
@@ -41,9 +44,10 @@ export interface ResolveAgentToolRegistryOptions {
  * Returns a new registry containing only tools permitted for the agent.
  *
  * 两层硬性过滤（覆盖用户 policy，防递归）：
- * 1. mode === "subagent" 的智能体强制移除 task——子智能体不能再生子智能体。
- * 2. depth >= 2（孙 agent）也强制移除 task——递归上限双保险。
- * 用户在 tools.allow/deny 里配 task 是合法的，但对子智能体无效（装配时忽略）。
+ * 1. mode === "subagent" 的智能体强制移除 task——子智能体不能再生子智能体；
+ *    同分支移除 agent——子智能体不能改写 agent 定义（含自身，防自我改造）。
+ * 2. depth >= 2（孙 agent）也强制移除 task / agent——递归上限双保险。
+ * 用户在 tools.allow/deny 里配 task / agent 是合法的，但对子智能体无效（装配时忽略）。
  *
  * 另一层配置过滤：prompts.skillsEnabled === false（技能总开关关）时强制移除
  * skill 工具——与 task 同摘除模式。D4 联动随 registry 不含 skill 自动生效：
@@ -57,9 +61,11 @@ export function resolveAgentToolRegistry<Ctx>(
 ): ToolRegistry<Ctx> {
   const allNames = baseRegistry.list();
   const allowed = new Set(allowedToolNames(definition, allNames));
-  // 子智能体强制移除 task（防递归）；孙 agent 同理（递归上限）。
+  // 子智能体强制移除 task（防递归）与 agent（不可管理 agent，D6）；
+  // 孙 agent 同理（递归上限双保险）。
   if (definition.mode === "subagent" || (options?.depth ?? 0) >= 2) {
     allowed.delete(SUBAGENT_TOOL_NAME);
+    allowed.delete(AGENT_MANAGE_TOOL_NAME);
   }
   // 技能能力总开关关闭：移除 skill 工具（索引注入随 D4 联动同关）。
   if (definition.prompts.skillsEnabled === false) {

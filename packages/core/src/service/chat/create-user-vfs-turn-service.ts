@@ -20,16 +20,11 @@ import { createSessionKkvService } from "@/service/session-kkv/create-session-kk
 import { createWorkplaceService } from "@/service/workplace/create-workplace-service.js";
 import { DefaultMessageService } from "./impl/message.service.js";
 import { DefaultUserVfsTurnService } from "./impl/user-vfs-turn.service.js";
-import { createAppendToolTurnBridge } from "./impl/append-tool-turn-bridge.js";
-import type {
-  AppendToolTurnBridgeFn,
-  UserVfsTurnService,
-} from "./user-vfs-turn.port.js";
+import type { UserVfsTurnService } from "./user-vfs-turn.port.js";
 
 /** `createUserVfsTurnServiceBundle` 杩斿洖鍊笺€?*/
 export interface UserVfsTurnServiceBundle {
   readonly userVfsTurn: UserVfsTurnService;
-  readonly appendToolTurnBridge: AppendToolTurnBridgeFn;
 }
 
 /**
@@ -100,7 +95,6 @@ export function createUserVfsTurnServiceBundle(
 
   return {
     userVfsTurn,
-    appendToolTurnBridge: createAppendToolTurnBridge(messages),
   };
 }
 

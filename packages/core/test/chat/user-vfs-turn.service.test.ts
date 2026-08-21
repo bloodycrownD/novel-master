@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
-import { createUserVfsTurnServiceBundle, readMessageMetadata, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+import { createUserVfsTurnServiceBundle } from "@novel-master/core/chat";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
 import {
@@ -174,21 +174,6 @@ describe("UserVfsTurnService", () => {
     assert.equal((await workplace.getDirRule("/u"))?.ruleEnabled, true);
     assert.equal((await workplace.getDirRule("/u/v"))?.ruleEnabled, true);
     assert.equal((await workplace.getDirRule("/u/v/w"))?.ruleEnabled, true);
-  });
-
-  it("appendToolTurnBridge 追加 kind=tool_turn_bridge assistant", async () => {
-    const ctx = getNovelMasterTestContext();
-    const { appendToolTurnBridge } = createUserVfsTurnServiceBundle(ctx.conn);
-    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-
-    const bridge = await appendToolTurnBridge(session.id);
-    assert.equal(bridge.role, "assistant");
-    assert.equal(readMessageMetadata(bridge.raw)?.kind, "tool_turn_bridge");
-    assert.equal(bridge.content.blocks[0]?.type, "text");
-    if (bridge.content.blocks[0]?.type === "text") {
-      assert.equal(bridge.content.blocks[0].text, TOOL_TURN_BRIDGE_TEXT);
-    }
   });
 
   it("execute 使用会抛错的 tool 时不写 pending", async () => {

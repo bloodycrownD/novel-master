@@ -280,7 +280,6 @@ export function useChatTabMessages({
     setHasMoreMessages,
     loadingMoreMessages,
     canResumeWithoutInput,
-    lastMessageHasToolResult: composerSendState.lastMessageHasToolResult,
     lastMessageIsPlainUserText: composerSendState.lastMessageIsPlainUserText,
     reloadMessages,
     loadOlderMessages,

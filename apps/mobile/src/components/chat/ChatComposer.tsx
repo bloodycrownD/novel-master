@@ -5,7 +5,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
-  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -17,7 +16,6 @@ import Svg, { Path, Rect } from 'react-native-svg';
 
 import {
   resolveComposerSendIntent,
-  TOOL_TURN_BRIDGE_TEXT,
   type MessageAttachment,
 } from '@novel-master/core/chat';
 import type { WorkplaceListRow } from '@novel-master/core/workplace';
@@ -97,9 +95,6 @@ type Props = {
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
 
-  /** 末条 user 含 tool_result。 */
-  lastMessageHasToolResult: boolean;
-
   /** 末条为 plain user 文本时禁用输入。 */
   lastMessageIsPlainUserText: boolean;
 
@@ -124,7 +119,6 @@ export function ChatComposer({
   onMessagesChanged,
   onNeedModel,
   canResumeWithoutInput,
-  lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   draftRestoreToken,
 }: Props) {
@@ -417,45 +411,6 @@ export function ChatComposer({
     ],
   );
 
-  const sendWithBridgeIfNeeded = useCallback(
-    async (content: string, allowResumeWithoutInput: boolean) => {
-      if (content && lastMessageHasToolResult) {
-        return new Promise<void>(resolve => {
-          Alert.alert(
-            '插入桥接消息',
-            `为保证对话连续，将插入 Assistant 消息「${TOOL_TURN_BRIDGE_TEXT}」，再发送您的消息。`,
-            [
-              {
-                text: '取消',
-                style: 'cancel',
-                onPress: () => resolve(),
-              },
-              {
-                text: '确认并发送',
-                onPress: () => {
-                  void (async () => {
-                    try {
-                      await runtime.appendToolTurnBridge(sessionId);
-                      await streamHandlersRef.current.onMessagesChanged();
-                      await executeRun(content, false);
-                    } catch (err) {
-                      setError(formatError(err));
-                    } finally {
-                      resolve();
-                    }
-                  })();
-                },
-              },
-            ],
-          );
-        });
-      }
-
-      await executeRun(content, allowResumeWithoutInput);
-    },
-    [lastMessageHasToolResult, runtime, sessionId, executeRun],
-  );
-
   const insertTokensIntoComposer = useCallback(
     (pathTokens: readonly string[]) => {
       if (pathTokens.length === 0) {
@@ -607,7 +562,7 @@ export function ChatComposer({
       return;
     }
 
-    await sendWithBridgeIfNeeded(content, allowResumeWithoutInput);
+    await executeRun(content, allowResumeWithoutInput);
   }, [
     hasModel,
     running,
@@ -617,7 +572,7 @@ export function ChatComposer({
     lastMessageIsPlainUserText,
     abortUiRun,
     onNeedModel,
-    sendWithBridgeIfNeeded,
+    executeRun,
     hasAnnotateDrafts,
   ]);
 

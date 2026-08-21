@@ -93,7 +93,6 @@ export const IPC_CHANNELS = {
   MESSAGES_FORK: 'nm:messages/fork',
   MESSAGES_ROLLBACK: 'nm:messages/rollback',
   MESSAGES_SET_FLOOR: 'nm:messages/setFloor',
-  MESSAGES_APPEND_TOOL_TURN_BRIDGE: 'nm:messages/appendToolTurnBridge',
   MESSAGES_SEARCH: 'nm:messages/search',
 
   AGENT_RUN: 'nm:agent/run',
@@ -750,10 +749,6 @@ export type MessagesSetFloorPayload = {
 export type MessagesSetFloorResult = {
   readonly hiddenCount: number;
   readonly shownCount: number;
-};
-
-export type MessagesAppendToolTurnBridgeRequest = {
-  readonly sessionId: string;
 };
 
 export type AgentRunRequest = {

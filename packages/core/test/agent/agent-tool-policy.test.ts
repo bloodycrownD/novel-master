@@ -242,4 +242,57 @@ describe("agent tool policy", () => {
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list(), ["skill"]);
   });
+
+  // T-AG4：agent 管理工具的摘除与策略路径（对应 PRD 验收 7）
+  it("T-AG4: mode 为 subagent 或 depth>=2 的注册表不含 agent（与 task 同分支摘除）", () => {
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+
+    // 子 agent（mode === "subagent"）：task / agent 均强制移除
+    const subDef: AgentDefinition = { ...BASE_DEF, mode: "subagent" };
+    const sub = resolveAgentToolRegistry(base, subDef);
+    assert.ok(!sub.list().includes("agent"));
+    assert.ok(!sub.list().includes("task"));
+    assert.ok(sub.list().includes("read"));
+    // LLM 侧定义也不暴露（toolsFromRegistry 只遍历 resolve 后的 registry）
+    assert.ok(
+      !toolsFromRegistry(sub, mockToolCtx).some((t) => t.name === "agent"),
+    );
+
+    // 孙 agent（depth >= 2，递归上限双保险）：即使 allow 显式含 agent 也移除
+    const grandDef: AgentDefinition = {
+      ...BASE_DEF,
+      tools: { allow: ["agent", "read"] },
+    };
+    const grand = resolveAgentToolRegistry(base, grandDef, { depth: 2 });
+    assert.ok(!grand.list().includes("agent"));
+    assert.ok(!grand.list().includes("task"));
+    assert.ok(grand.list().includes("read"));
+
+    // 主 agent（depth=0、非 subagent）保留 agent
+    const main = resolveAgentToolRegistry(base, BASE_DEF);
+    assert.ok(main.list().includes("agent"));
+  });
+
+  it("T-AG4: deny 含 agent → 摘除；allow 显式含 agent → 保留（主 agent 策略路径）", () => {
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
+
+    // deny 名单校验通过（agent 是合法策略名）
+    validateAgentToolPolicy({ deny: ["agent"] }, registryNames);
+    const denied = resolveAgentToolRegistry(
+      base,
+      { ...BASE_DEF, tools: { deny: ["agent"] } },
+    );
+    assert.ok(!denied.list().includes("agent"));
+    assert.equal(denied.list().length, vfsRegistryNames().length - 1);
+
+    // allow 名单校验通过，且主 agent 显式 allow 含 agent 时保留
+    validateAgentToolPolicy({ allow: ["agent", "read"] }, registryNames);
+    const allowed = resolveAgentToolRegistry(
+      base,
+      { ...BASE_DEF, tools: { allow: ["agent", "read"] } },
+    );
+    assert.deepEqual(allowed.list().sort(), ["agent", "read"]);
+  });
 });

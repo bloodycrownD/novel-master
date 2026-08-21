@@ -114,16 +114,16 @@ function renderPicker(props: {
 }
 
 describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
-  it('T-P1: trigger 显示「已选工具（N/8）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
+  it('T-P1: trigger 显示「已选工具（N/9）」；打开 sheet 勾选后确定 → onChange 收到新数组', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
     const json = JSON.stringify(renderer.toJSON());
-    expect(json).toContain('已选工具（1/8）');
+    expect(json).toContain('已选工具（1/9）');
     expect(json).toContain('▼');
 
     // trigger 是 trigger 样式（含 minHeight），靠文案定位
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/8）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/9）');
     expect(trigger).toBeTruthy();
     act(() => {
       trigger.props.onPress();
@@ -158,7 +158,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/8）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/9）');
     act(() => {
       trigger.props.onPress();
     });
@@ -180,14 +180,14 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     // 关闭后 trigger 文案仍是原值（草稿被丢弃）
-    expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/8）');
+    expect(JSON.stringify(renderer.toJSON())).toContain('已选工具（1/9）');
   });
 
   it('T-P3: 选中行有 ✓；渲染树不含 ☑ / ☐ 字符', () => {
     const onChange = jest.fn();
     const renderer = renderPicker({selected: ['read'], onChange});
 
-    const trigger = findPressableByChildText(renderer.root, '已选工具（1/8）');
+    const trigger = findPressableByChildText(renderer.root, '已选工具（1/9）');
     act(() => {
       trigger.props.onPress();
     });
@@ -209,7 +209,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         </FormOverlayProvider>,
       );
     });
-    expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/8）');
+    expect(JSON.stringify(r1.toJSON())).toContain('未选择工具（0/9）');
 
     const all = [
       'task',
@@ -220,6 +220,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
       'glob',
       'grep',
       'skill',
+      'agent',
     ];
     let r2: any;
     act(() => {
@@ -233,6 +234,6 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
         </FormOverlayProvider>,
       );
     });
-    expect(JSON.stringify(r2.toJSON())).toContain('全部工具（8/8）');
+    expect(JSON.stringify(r2.toJSON())).toContain('全部工具（9/9）');
   });
 });

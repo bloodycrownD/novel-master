@@ -1,6 +1,7 @@
 import React from 'react';
-import { describe, expect, it, jest } from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
+import {describe, expect, it, jest} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
+import {Alert} from 'react-native';
 
 jest.mock('../src/errors/format-error', () => ({
   formatError: (err: unknown) => String(err),
@@ -79,7 +80,6 @@ jest.mock('../src/hooks/useRuntime', () => ({
       get: async () => ({ projectId: 'p' }),
     },
     workplace: () => ({}),
-    appendToolTurnBridge: async () => undefined,
   }),
 }));
 
@@ -130,7 +130,6 @@ import {
 
 function Harness(props: {
   canResumeWithoutInput: boolean;
-  lastMessageHasToolResult?: boolean;
   lastMessageIsPlainUserText?: boolean;
   draftRestoreToken?: number;
 }) {
@@ -165,7 +164,6 @@ function Harness(props: {
         onMessagesChanged={() => undefined}
         onNeedModel={() => undefined}
         canResumeWithoutInput={props.canResumeWithoutInput}
-        lastMessageHasToolResult={props.lastMessageHasToolResult ?? false}
         lastMessageIsPlainUserText={props.lastMessageIsPlainUserText ?? false}
         draftRestoreToken={props.draftRestoreToken}
       />
@@ -308,6 +306,35 @@ describe('ChatComposer integration', () => {
       );
     });
     expect(input.props.value).toBe('after rollback');
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T-PM5: 末条 user 含 tool_result 时输入直发、不弹窗、不调桥', async () => {
+    // A4 后 composer 不再感知 tool_result 状态：旧「插入桥接消息」确认弹窗与
+    // appendToolTurnBridge 已移除，用户输入一律直接走 runAgentTurn（PRD 验收 1）。
+    const alertSpy = jest.spyOn(Alert, 'alert');
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.testID === 'chat-composer-input',
+    );
+    await act(async () => {
+      input.props.onChangeText('after tool result');
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
+    expect(mockRunAgentTurn.mock.calls[0]?.[2]).toBe('after tool result');
+    expect(alertSpy).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });

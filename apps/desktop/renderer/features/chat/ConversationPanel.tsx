@@ -969,7 +969,6 @@ export function ConversationPanel({
             onAttachmentsChange={setComposerAttachments}
             running={running}
             canResumeWithoutInput={composerSendState.canResumeWithoutInput}
-            lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
             lastMessageIsPlainUserText={
               composerSendState.lastMessageIsPlainUserText
             }

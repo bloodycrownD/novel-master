@@ -85,7 +85,6 @@ export type ChatTabContextValue = {
   readonly loadingMoreMessages: boolean;
   readonly onMessagesChanged: () => void;
   readonly canResumeWithoutInput: boolean;
-  readonly lastMessageHasToolResult: boolean;
   readonly lastMessageIsPlainUserText: boolean;
   readonly draftRestoreToken: number;
   readonly sessionVfs: VfsService | null;
@@ -448,7 +447,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       onMessagesChanged: () =>
         handleMessagesChanged().catch(() => undefined),
       canResumeWithoutInput: messages.canResumeWithoutInput,
-      lastMessageHasToolResult: messages.lastMessageHasToolResult,
       lastMessageIsPlainUserText: messages.lastMessageIsPlainUserText,
       draftRestoreToken: messages.draftRestoreToken,
       sessionVfs: scope.sessionVfs,
