@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode, ConfigDecodeError } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import {
   DEFAULT_WORKPLACE_ASSISTANT_TEXT,
   WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT,
@@ -157,7 +156,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
     });
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(messageBodyText(input.messages[1]!), custom);
-    assert.notEqual(messageBodyText(input.messages[1]!), TOOL_TURN_BRIDGE_TEXT);
+    assert.notEqual(messageBodyText(input.messages[1]!), "【done】");
 
     const segments = await buildPromptAssemblyFromLayout(layout, {
       workplaceDisplay: "<workplace>\n<body/>\n</workplace>",
@@ -168,7 +167,7 @@ describe("workplace assemble / render（T-WP4–T-WP5）", () => {
     assert.equal(done?.body, custom);
   });
 
-  it("T-WP5b: tool-turn bridge 仍为【done】（与常驻文案解耦）", () => {
-    assert.equal(TOOL_TURN_BRIDGE_TEXT, "【done】");
+  it("T-WP5b: 历史桥文案【done】与常驻文案解耦（桥机制已移除）", () => {
+    assert.notEqual(DEFAULT_WORKPLACE_ASSISTANT_TEXT, "【done】");
   });
 });

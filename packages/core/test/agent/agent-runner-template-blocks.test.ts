@@ -7,7 +7,7 @@ import {
   type CreateAgentRunnerDeps,
   type BuiltinToolContext,
 } from "@novel-master/core/agent";
-import { textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+import { textBlocks } from "@novel-master/core/chat";
 import { messageBodyText } from "@novel-master/core/prompt";
 import {
   type LlmChatResult,
@@ -178,7 +178,7 @@ describe("AgentRunner template blocks", () => {
     assert.equal(history[0]!.id, "prompt:workplace");
     assert.match(messageBodyText(history[0]!), new RegExp(SNAPSHOT_BODY));
     assert.equal(history[1]!.id, "prompt:workplace:done");
-    assert.equal(messageBodyText(history[1]!), TOOL_TURN_BRIDGE_TEXT);
+    assert.equal(messageBodyText(history[1]!), "【done】");
     assert.equal(history[2]!.role, "user");
   });
 
@@ -268,7 +268,7 @@ describe("AgentRunner template blocks", () => {
       );
       assert.equal(
         doneMsg != null ? messageBodyText(doneMsg) : "",
-        TOOL_TURN_BRIDGE_TEXT,
+        "【done】",
       );
     }
   });
