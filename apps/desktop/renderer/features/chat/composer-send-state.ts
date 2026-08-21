@@ -1,7 +1,7 @@
 /**
  * Composer 三分支发送状态（基于 core message-content-helpers）。
  */
-import { hasToolResult, isPlainUserText, type ChatMessage, type ContentBlock } from "@shared/logic/chat";
+import { isPlainUserText, type ChatMessage, type ContentBlock } from "@shared/logic/chat";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 function blockFromDto(dto: ContentBlockDto): ContentBlock | null {
@@ -55,8 +55,6 @@ export function chatMessageFromDto(dto: ChatMessageDto): ChatMessage {
 export type ComposerSendState = {
   /** 末条为 user 时可空发续跑。 */
   readonly canResumeWithoutInput: boolean;
-  /** 末条 user 含 tool_result（maxSteps 截断场景）。 */
-  readonly lastMessageHasToolResult: boolean;
   /** 末条为 plain user 文本（禁止带文字发送）。 */
   readonly lastMessageIsPlainUserText: boolean;
 };
@@ -81,14 +79,12 @@ export function deriveComposerSendState(
   if (lastMessage == null) {
     return {
       canResumeWithoutInput: false,
-      lastMessageHasToolResult: false,
       lastMessageIsPlainUserText: false,
     };
   }
   const msg = chatMessageFromDto(lastMessage);
   return {
     canResumeWithoutInput: lastMessage.role === "user",
-    lastMessageHasToolResult: hasToolResult(msg),
     lastMessageIsPlainUserText: isPlainUserText(msg),
   };
 }

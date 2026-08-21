@@ -84,7 +84,6 @@ export const {
   ipcMessagesList,
   ipcMessagesSearch,
   ipcMessagesAppend,
-  ipcMessagesAppendToolTurnBridge,
   ipcMessagesEdit,
   ipcMessagesHide,
   ipcMessagesShow,
