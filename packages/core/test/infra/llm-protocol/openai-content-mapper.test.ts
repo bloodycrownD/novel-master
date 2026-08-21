@@ -227,9 +227,55 @@ describe("openai-content-mapper", () => {
         hidden: false,
       },
     ];
+
     const out = chatMessagesToOpenAi(messages);
     assert.equal(out.length, 1);
     assert.equal(out[0]!.role, "user");
     assert.equal(out[0]!.content, "hi");
+  });
+
+  // T-PM3：OpenAI 出站不做相邻 user 合并（零改动锁定）
+  it("T-PM3: tool_result user + 纯文本 user 出站为 tool → user 两消息，不合并不报错", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "u1",
+        sessionId: "s1",
+        seq: 1,
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "call_abc",
+              content: "file contents here",
+            },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+      {
+        id: "u2",
+        sessionId: "s1",
+        seq: 2,
+        role: "user",
+        content: {
+          blocks: [{ type: "text", text: "换个话题" }],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 1,
+        hidden: false,
+      },
+    ];
+
+    const out = chatMessagesToOpenAi(messages);
+    assert.equal(out.length, 2);
+    assert.equal(out[0]!.role, "tool");
+    assert.equal(out[0]!.tool_call_id, "call_abc");
+    assert.equal(out[1]!.role, "user");
+    assert.equal(out[1]!.content, "换个话题");
   });
 });

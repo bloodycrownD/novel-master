@@ -286,6 +286,103 @@ describe("gemini-content-mapper", () => {
     }
   });
 
+  it("T-PM2: 相邻 user 合并后 functionResponse part 与 text part 同 content，且前置", () => {
+    const messages: ChatMessage[] = [
+      {
+        role: "assistant",
+        content: {
+          blocks: [
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "read",
+              input: { path: "/a" },
+            },
+          ],
+        },
+      },
+      {
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "call_1",
+              content: "file body",
+            },
+          ],
+        },
+      },
+      {
+        role: "user",
+        content: {
+          blocks: [{ type: "text", text: "继续读下一个文件" }],
+        },
+      },
+    ];
+
+    const contents = chatMessagesToGeminiContents(messages);
+    const userTurns = contents.filter((c) => c.role === "user");
+    assert.equal(userTurns.length, 1);
+    const parts = userTurns[0]!.parts;
+    assert.equal(parts.length, 2);
+    assert.ok(parts[0]?.functionResponse != null);
+    assert.equal(
+      (parts[0]!.functionResponse as { name: string }).name,
+      "read",
+    );
+    assert.equal(parts[1]?.text, "继续读下一个文件");
+  });
+
+  it("T-PM2: 合成 model turn 修补后再合并相邻 user，model turn 不被吞", () => {
+    const lookupMessages: ChatMessage[] = [
+      {
+        role: "assistant",
+        content: {
+          blocks: [
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "read",
+              input: { path: "/a" },
+            },
+          ],
+        },
+      },
+    ];
+    const visible: ChatMessage[] = [
+      {
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "call_1",
+              content: "file body",
+            },
+          ],
+        },
+      },
+      {
+        role: "user",
+        content: {
+          blocks: [{ type: "text", text: "换个话题" }],
+        },
+      },
+    ];
+
+    const contents = chatMessagesToGeminiContents(visible, {
+      toolLookupMessages: lookupMessages,
+    });
+    assert.equal(contents.length, 2);
+    assert.equal(contents[0]?.role, "model");
+    assert.ok(contents[0]?.parts.some((p) => p.functionCall != null));
+    assert.equal(contents[1]?.role, "user");
+    const parts = contents[1]!.parts;
+    assert.ok(parts[0]?.functionResponse != null);
+    assert.equal(parts[1]?.text, "换个话题");
+  });
+
   it("toolsToGeminiFunctionDeclarations wraps schemas", () => {
     const tools = toolsToGeminiFunctionDeclarations([
       { name: "read", description: "read", inputSchema: { type: "object" } },
