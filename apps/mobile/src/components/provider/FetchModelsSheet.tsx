@@ -5,14 +5,19 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
+import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import {useRuntime} from '../../hooks/useRuntime';
 import {formatError} from '../../errors/format-error';
 import {AppModal} from '../ui/AppModal';
+import {FormTextInput} from '../form/FormTextInput';
+import {useAdaptiveKeyboardSheetStyle} from '../../hooks/useAdaptiveKeyboardSheetStyle';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type SuggestionRow = {
@@ -40,8 +45,25 @@ export function FetchModelsSheet({
   const [error, setError] = useState<string | undefined>();
   const [savingId, setSavingId] = useState<string | undefined>();
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
+  const [query, setQuery] = useState('');
 
   const addedSet = useMemo(() => new Set(addedIds), [addedIds]);
+
+  // 过滤只作用展示层：addedIds / savingId 不随过滤词变化。
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q === '') {
+      return rows;
+    }
+    return rows.filter(
+      item =>
+        item.displayName?.trim().toLowerCase().includes(q) ||
+        item.vendorModelId.toLowerCase().includes(q),
+    );
+  }, [rows, query]);
+
+  // 键盘避让（上移 + maxHeight 收缩）由公共 hook 统一处理，见 hook 头注释。
+  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.75);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +83,7 @@ export function FetchModelsSheet({
   useEffect(() => {
     if (visible) {
       setAddedIds(new Set());
+      setQuery('');
       load().catch(() => undefined);
     }
   }, [visible, load]);
@@ -85,40 +108,56 @@ export function FetchModelsSheet({
     }
   };
 
-  return (
-    <AppModal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
-          <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
-          <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
-            从服务商获取可用模型，点击即可保存
-          </Text>
-          {loading ? (
-            <ActivityIndicator style={styles.loader} />
-          ) : error ? (
-            <View style={styles.center}>
-              <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-              <Pressable onPress={() => load().catch(() => undefined)}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  重试
-                </Text>
-              </Pressable>
+  const body = (
+    <Pressable style={styles.backdrop} onPress={onClose}>
+      <Animated.View
+        style={[
+          styles.sheet,
+          {backgroundColor: tokens.surface},
+          panelAvoidStyle,
+        ]}
+        onStartShouldSetResponder={() => true}>
+        <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
+        <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
+          从服务商获取可用模型，点击即可保存
+        </Text>
+        {loading ? (
+          <ActivityIndicator style={styles.loader} />
+        ) : error ? (
+          <View style={styles.center}>
+            <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+            <Pressable onPress={() => load().catch(() => undefined)}>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                重试
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.searchWrap}>
+              <FormTextInput
+                tokens={tokens}
+                value={query}
+                onChangeText={setQuery}
+                placeholder="过滤模型…"
+              />
             </View>
-          ) : (
+            {/* key 技巧：过滤词变化时重建 FlatList，滚动位置归零 */}
             <FlatList
-              data={rows}
+              data={filteredRows}
+              key={query}
               keyExtractor={item => item.vendorModelId}
               style={styles.list}
               ListEmptyComponent={
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                  未拉取到可用模型，请检查 API Key 与 Base URL。
-                </Text>
+                rows.length === 0 ? (
+                  <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                    未拉取到可用模型，请检查 API Key 与 Base URL。
+                  </Text>
+                ) : (
+                  <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                    无匹配模型
+                  </Text>
+                )
               }
               renderItem={({item}) => {
                 const saved = addedSet.has(item.vendorModelId);
@@ -158,24 +197,46 @@ export function FetchModelsSheet({
                 );
               }}
             />
-          )}
-          <Pressable onPress={onClose} style={styles.doneBtn}>
-            <Text style={{color: tokens.textSecondary}}>完成</Text>
-          </Pressable>
+          </>
+        )}
+        <Pressable onPress={onClose} style={styles.doneBtn}>
+          <Text style={{color: tokens.textSecondary}}>完成</Text>
         </Pressable>
-      </Pressable>
+      </Animated.View>
+    </Pressable>
+  );
+
+  return (
+    <AppModal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}>
+      {Platform.OS === 'ios' ? (
+        <KeyboardAvoidingView behavior="padding" style={styles.avoidingRoot}>
+          {body}
+        </KeyboardAvoidingView>
+      ) : (
+        <View style={styles.avoidingRoot}>{body}</View>
+      )}
     </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
+  // 背景色放在 avoidingRoot：KeyboardAvoidingView 加的 paddingBottom 区域
+  // 也属于 avoidingRoot 的 padding box，会被 backgroundColor 覆盖，
+  // 这样键盘弹起后底部不会透出白条。backdrop 不再单独设背景色。
+  avoidingRoot: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    maxHeight: '75%',
+    // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     paddingTop: 16,
@@ -196,8 +257,9 @@ const styles = StyleSheet.create({
   loader: {marginVertical: 32},
   center: {alignItems: 'center', gap: 12, padding: 24},
   error: {textAlign: 'center', lineHeight: 20},
-  list: {maxHeight: 420},
+  list: {maxHeight: 420, flexShrink: 1},
   empty: {textAlign: 'center', padding: 24},
+  searchWrap: {paddingHorizontal: 16, paddingBottom: 8},
   row: {
     flexDirection: 'row',
     alignItems: 'center',

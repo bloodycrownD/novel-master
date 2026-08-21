@@ -24,7 +24,7 @@ import {
 import { AppModal } from '../ui/AppModal';
 import { normalizeFillPolicyForMobile } from '../../storage/fill-policy-mobile';
 import { useTheme } from '../../theme/ThemeProvider';
-import { useAndroidModalKeyboardAvoid } from '../../hooks/useAndroidModalKeyboardAvoid';
+import { useAdaptiveKeyboardSheetStyle } from '../../hooks/useAdaptiveKeyboardSheetStyle';
 
 type Props = {
   visible: boolean;
@@ -63,9 +63,9 @@ export function DirectoryRuleSheet({
 }: Props) {
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
-  // 底部对齐 sheet：键盘弹起后面板紧贴屏幕底部，只移一半还是会被盖住，
-  // 得移整个键盘高度才能贴到键盘上方。
-  const panelAvoidStyle = useAndroidModalKeyboardAvoid(1);
+  // 85% 高面板 + 两个数字输入：键盘避让不能只做位移（useAndroidModalKeyboardAvoid(1)
+  // 会把标题顶出屏），改用「上移 + maxHeight 收缩」公共 hook，面板不超过屏幕剩余空间。
+  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.85);
   const [sortField, setSortField] = useState<SortField>(
     DEFAULT_WORKPLACE_DIR_RULE.sortField,
   );
@@ -131,7 +131,7 @@ export function DirectoryRuleSheet({
             backgroundColor: tokens.surface,
             paddingBottom: Math.max(insets.bottom, 16),
           },
-          Platform.OS === 'android' ? panelAvoidStyle : undefined,
+          panelAvoidStyle,
         ]}>
         <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
         <ScrollView
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    maxHeight: '85%',
+    // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     paddingHorizontal: 16,
@@ -297,7 +297,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   heading: { fontSize: 18, fontWeight: '600', marginBottom: 12 },
-  form: { maxHeight: 360 },
+  // maxHeight 收缩时内容要向内收缩，否则底部按钮行被裁（对齐 ToolPolicyPicker list）
+  form: {maxHeight: 360, flexShrink: 1},
   label: { fontSize: 12, marginTop: 12, marginBottom: 6 },
   input: {
     borderWidth: 1,

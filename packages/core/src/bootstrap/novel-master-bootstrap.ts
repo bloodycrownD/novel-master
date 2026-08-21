@@ -30,6 +30,7 @@ import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
+import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
 import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 import {
   ensureSchemaMigrationsTable,
@@ -207,6 +208,18 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     _entryIdMigrationJustApplied = entryIdApplied;
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
+
+  // D1：内置技能 seed 挂事务之后的公共路径（快/慢两分支共用本出口；放事务内
+  // 会与 createSkillsService 内部基于外层 conn 的 VfsService 装配嵌套冲突）。
+  // 种入属可选内容——失败仅记日志不阻断启动，下次启动幂等重试。
+  try {
+    await seedBuiltinSkills(conn);
+  } catch (error) {
+    console.warn(
+      "[bootstrap] 内置技能种入失败（不阻断启动，下次启动重试）:",
+      error,
+    );
+  }
 
   // W3：entry-id migration 刚跑完时，异步走统一完整性修复注册表作为安全网。
   //

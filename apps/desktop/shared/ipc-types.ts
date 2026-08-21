@@ -93,7 +93,6 @@ export const IPC_CHANNELS = {
   MESSAGES_FORK: 'nm:messages/fork',
   MESSAGES_ROLLBACK: 'nm:messages/rollback',
   MESSAGES_SET_FLOOR: 'nm:messages/setFloor',
-  MESSAGES_APPEND_TOOL_TURN_BRIDGE: 'nm:messages/appendToolTurnBridge',
   MESSAGES_SEARCH: 'nm:messages/search',
 
   AGENT_RUN: 'nm:agent/run',
@@ -165,6 +164,7 @@ export const IPC_CHANNELS = {
   SKILLS_EDIT: 'nm:skills/edit',
   SKILLS_TOGGLE: 'nm:skills/toggle',
   SKILLS_DELETE: 'nm:skills/delete',
+  SKILLS_ASSERT_CREATE_NAME: 'nm:skills/assert-create-name',
 
   COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
   COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
@@ -752,10 +752,6 @@ export type MessagesSetFloorResult = {
   readonly shownCount: number;
 };
 
-export type MessagesAppendToolTurnBridgeRequest = {
-  readonly sessionId: string;
-};
-
 export type AgentRunRequest = {
   readonly projectId: string;
   readonly sessionId: string;
@@ -1246,6 +1242,8 @@ export type SkillsWriteRequest = {
   readonly path?: string;
   readonly content: string;
   readonly projectId?: string;
+  /** 编辑已存在文件时传 read 返回的版本（VFS 乐观锁）；新建文件不传。 */
+  readonly version?: number;
 };
 
 /** 局部修改（同 edit 工具的 normalize-for-match 语义）；须显式域。 */
@@ -1264,6 +1262,17 @@ export type SkillsToggleRequest = {
   readonly projectId: string;
   readonly name: string;
   readonly disabled: boolean;
+};
+
+/**
+ * 新建前保留名校验（ZIP 导入等不经 writeSkillFile 的新建通道落盘前调用，
+ * D2② 门独立暴露）。名单外放行；名单内且该域目录不存在时拒绝（中文 message）。
+ */
+export type SkillsAssertCreateNameRequest = {
+  /** 须显式域（project 域必带 projectId）。 */
+  readonly domain: SkillDomainDto;
+  readonly name: string;
+  readonly projectId?: string;
 };
 
 export type SkillsDeleteRequest = SkillRefDto;

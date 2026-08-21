@@ -41,6 +41,8 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
+  /** 最近一次落盘版本（read/write 返回），编辑保存时作 VFS 乐观锁回传。 */
+  const [savedVersion, setSavedVersion] = useState<number | undefined>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [missing, setMissing] = useState(false);
@@ -93,6 +95,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
         }
         setContent(res.data.content);
         setSavedContent(res.data.content);
+        setSavedVersion(res.data.version);
       } finally {
         setLoading(false);
       }
@@ -152,17 +155,21 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
         name: ref.name,
         path: selected,
         content,
+        // 编辑已存在文件必须带 read 拿到的版本，否则 VFS 拒绝（CONFLICT）；
+        // 新建辅助文件（createFile）不走这里，无版本写入不受影响。
+        version: savedVersion,
       });
       if (!res.ok) {
         showToast(`保存失败：${res.error.message}`);
         return;
       }
       setSavedContent(content);
+      setSavedVersion(res.data.version);
       showToast("已保存技能文件");
     } finally {
       setSaving(false);
     }
-  }, [ref, isDirty, selected, content]);
+  }, [ref, isDirty, selected, content, savedVersion]);
 
   const createFile = async (rawPath: string) => {
     const path = rawPath.trim().replace(/^\/+/, "");

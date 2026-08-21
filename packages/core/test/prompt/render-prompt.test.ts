@@ -11,7 +11,6 @@ import {
   messageBodyText,
   type AgentPromptLayout,
 } from "@novel-master/core/prompt";
-import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
@@ -71,7 +70,7 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(messageBodyText(input.messages[0]!), "WT");
     assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyText(input.messages[1]!), TOOL_TURN_BRIDGE_TEXT);
+    assert.equal(messageBodyText(input.messages[1]!), "【done】");
   });
 
   it("T-WT5: 无 worktree 块时不注入双消息", async () => {
@@ -106,7 +105,7 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
     assert.equal(wt?.role, "user");
     assert.equal(wt?.body, "WT");
     assert.equal(done?.role, "assistant");
-    assert.equal(done?.body, TOOL_TURN_BRIDGE_TEXT);
+    assert.equal(done?.body, "【done】");
     assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
   });
 
@@ -370,7 +369,7 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     const input = await buildPromptLlmInputFromLayout(layout, ctx);
     assert.equal(input.messages[0]!.role, "user");
     assert.equal(input.messages[1]!.role, "assistant");
-    assert.equal(messageBodyText(input.messages[1]!), TOOL_TURN_BRIDGE_TEXT);
+    assert.equal(messageBodyText(input.messages[1]!), "【done】");
 
     const segments = await buildPromptAssemblyFromLayout(layout, ctx);
     const wt = segments.find((s) => s.id === "prompt-workplace");

@@ -19,10 +19,12 @@ import {
   Text,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
 import {FormTextInput} from '../form/FormTextInput';
 import {useFormOverlay} from '../form/FormOverlayHost';
+import {useAdaptiveKeyboardSheetStyle} from '../../hooks/useAdaptiveKeyboardSheetStyle';
 import type {ThemeTokens} from '../../theme/tokens';
 
 type Props = {
@@ -97,6 +99,13 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
 
   const triggerLabel = buildTriggerLabel(selected);
 
+  // 键盘避让（上移 + maxHeight 收缩）由公共 hook 统一处理：
+  // FormOverlayHost 是普通 View 渲染层无任何避让，iOS 也要并 iosTranslateY
+  // 让 hook 自己 translateY，否则面板底部被键盘盖住 kb 高度、顶部留 kb 空隙。
+  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.75, {
+    iosTranslateY: true,
+  });
+
   useEffect(() => {
     if (!open || !overlay) {
       overlay?.hide(overlayKey);
@@ -106,9 +115,9 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
     overlay.show(
       overlayKey,
       <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+        <Animated.View
+          style={[styles.sheet, {backgroundColor: tokens.surface}, panelAvoidStyle]}
+          onStartShouldSetResponder={() => true}>
           <Text style={[styles.sheetTitle, {color: tokens.text}]}>
             选择工具
           </Text>
@@ -156,7 +165,9 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
                 paddingBottom: Math.max(insets.bottom, 16),
               },
             ]}>
-            <Pressable onPress={close} style={styles.actionBtn}>
+            <Pressable
+              onPress={close}
+              style={styles.actionBtn}>
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
             <Pressable
@@ -168,7 +179,7 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
               <Text style={styles.confirmText}>确定</Text>
             </Pressable>
           </View>
-        </Pressable>
+        </Animated.View>
       </Pressable>,
     );
 
@@ -228,7 +239,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    maxHeight: '75%',
+    // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     paddingTop: 8,
@@ -240,7 +251,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   searchWrap: {paddingHorizontal: 16, paddingBottom: 8},
-  list: {maxHeight: 320},
+  list: {maxHeight: 320, flexShrink: 1},
   row: {
     flexDirection: 'row',
     alignItems: 'center',

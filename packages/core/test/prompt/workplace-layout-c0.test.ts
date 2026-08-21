@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decode, encode } from "@novel-master/core";
 import { agentDefinitionSchema } from "@novel-master/core/agent";
-import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import {
   buildPromptAssemblyFromLayout,
   buildPromptLlmInputFromLayout,
@@ -139,7 +138,7 @@ describe("Workplace C0 协议", () => {
     assert.equal(wt?.role, "user");
     assert.equal(wt?.body, "WT");
     assert.equal(done?.role, "assistant");
-    assert.equal(done?.body, TOOL_TURN_BRIDGE_TEXT);
+    assert.equal(done?.body, "【done】");
   });
 
   it("T-W6: 写出 wire 为 string 且无 type:worktree", () => {

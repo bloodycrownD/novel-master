@@ -14,7 +14,9 @@ import {
 } from "@shared/logic/skills";
 import type { ProjectDto, SkillDomainDto, SkillRefDto } from "@shared/ipc-types";
 import {
+  ipcSkillsAssertCreateName,
   ipcSkillsList,
+  ipcSkillsRead,
   ipcSkillsWrite,
   ipcVfsZipImportBytes,
   ipcVfsZipPick,
@@ -144,6 +146,17 @@ export function NewSkillModal({
         }
       }
       if (imported != null) {
+        // ZIP 是第二条新建通道（不经 writeSkillFile 的 D2② 门）：落盘前
+        // 先过保留名校验，拒绝时不落盘（CR D-1）。
+        const assertRes = await ipcSkillsAssertCreateName({
+          domain,
+          ...(domain === "project" ? { projectId } : {}),
+          name: trimmedName,
+        });
+        if (!assertRes.ok) {
+          setError(assertRes.error.message);
+          return;
+        }
         // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
         // 技能已重定位到独立 meta 域，导入走 meta 域 workspaceScope。
@@ -163,6 +176,17 @@ export function NewSkillModal({
           imported.preview.name !== trimmedName ||
           imported.preview.description !== trimmedDesc
         ) {
+          // 重写目标是刚导入落盘的 SKILL.md（已存在文件），不带版本会被
+          // VFS 乐观锁拒绝（CONFLICT）：先 read 拿版本再回传写入。
+          const readRes = await ipcSkillsRead({
+            domain,
+            ...(domain === "project" ? { projectId } : {}),
+            name: trimmedName,
+          });
+          if (!readRes.ok) {
+            setError(readRes.error.message);
+            return;
+          }
           const rewriteRes = await ipcSkillsWrite({
             domain,
             ...(domain === "project" ? { projectId } : {}),
@@ -172,6 +196,7 @@ export function NewSkillModal({
               trimmedName,
               trimmedDesc,
             ),
+            version: readRes.data.version,
           });
           if (!rewriteRes.ok) {
             setError(rewriteRes.error.message);

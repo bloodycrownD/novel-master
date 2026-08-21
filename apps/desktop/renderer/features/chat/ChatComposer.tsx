@@ -6,14 +6,9 @@ import type {
 } from "@shared/ipc-types";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
-import {
-  TOOL_TURN_BRIDGE_TEXT,
-} from "@shared/logic/chat";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
   ipcAgentRun,
-  ipcMessagesAppendToolTurnBridge,
   ipcPreferencesGetLlmStream,
   ipcPromptAgentMeta,
   ipcSessionsProjectComposerStatus,
@@ -59,8 +54,6 @@ interface ChatComposerProps {
   running: boolean;
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
-  /** 末条 user 含 tool_result。 */
-  lastMessageHasToolResult: boolean;
   /** 末条为 plain user 文本时禁用输入。 */
   lastMessageIsPlainUserText: boolean;
   /** 受控内联错误（由 ConversationPanel 提升状态）。 */
@@ -93,7 +86,6 @@ export function ChatComposer({
   onAttachmentsChange,
   running,
   canResumeWithoutInput,
-  lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   error: controlledError,
   onErrorChange,
@@ -107,10 +99,6 @@ export function ChatComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [localError, setLocalError] = useState<string | undefined>();
   const [hasModel, setHasModel] = useState(false);
-  const [bridgePendingText, setBridgePendingText] = useState<string | null>(
-    null,
-  );
-  const [bridgeBusy, setBridgeBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
@@ -446,33 +434,7 @@ export function ChatComposer({
       return;
     }
 
-    if (content && lastMessageHasToolResult) {
-      setBridgePendingText(content);
-      return;
-    }
-
     await runAgent(content, allowResumeWithoutInput);
-  };
-
-  const confirmBridge = async () => {
-    const content = bridgePendingText?.trim();
-    if (!content) {
-      setBridgePendingText(null);
-      return;
-    }
-    setBridgeBusy(true);
-    try {
-      const bridgeResult = await ipcMessagesAppendToolTurnBridge({ sessionId });
-      if (!bridgeResult.ok) {
-        reportError(bridgeResult.error.message);
-        return;
-      }
-      await onMessagesChanged();
-      setBridgePendingText(null);
-      await runAgent(content, false);
-    } finally {
-      setBridgeBusy(false);
-    }
   };
 
   const inputDisabled =
@@ -598,17 +560,6 @@ export function ChatComposer({
         onClose={() => setSkillPickerOpen(false)}
         onConfirm={(tokens) => {
           insertTokensIntoComposer(tokens);
-        }}
-      />
-      <ConfirmModal
-        open={bridgePendingText != null}
-        title="插入桥接消息"
-        message={`为保证对话连续，将插入 Assistant 消息「${TOOL_TURN_BRIDGE_TEXT}」，再发送您的消息。`}
-        confirmLabel="确认并发送"
-        busy={bridgeBusy}
-        onConfirm={() => void confirmBridge()}
-        onCancel={() => {
-          setBridgePendingText(null);
         }}
       />
     </>

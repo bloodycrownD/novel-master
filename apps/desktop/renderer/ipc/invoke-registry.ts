@@ -21,7 +21,6 @@ import {
   type IpcResult,
   type MessageAttachmentDto,
   type MessagesAppendRequest,
-  type MessagesAppendToolTurnBridgeRequest,
   type MessagesDeleteRequest,
   type MessagesEditRequest,
   type MessagesForkRequest,
@@ -94,6 +93,7 @@ import {
   type EffectiveSkillDto,
   type SkillListItemDto,
   type SkillsDeleteRequest,
+  type SkillsAssertCreateNameRequest,
   type SkillsEditRequest,
   type SkillsEffectiveRequest,
   type SkillsListRequest,
@@ -314,10 +314,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       MessagesAppendRequest,
       IpcResult<ChatMessageDto>
     >(invoke, IPC_CHANNELS.MESSAGES_APPEND),
-    ipcMessagesAppendToolTurnBridge: withReq<
-      MessagesAppendToolTurnBridgeRequest,
-      IpcResult<ChatMessageDto>
-    >(invoke, IPC_CHANNELS.MESSAGES_APPEND_TOOL_TURN_BRIDGE),
     ipcMessagesEdit: withReq<MessagesEditRequest, IpcResult<ChatMessageDto>>(
       invoke,
       IPC_CHANNELS.MESSAGES_EDIT,
@@ -567,6 +563,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.SKILLS_DELETE,
     ),
+    ipcSkillsAssertCreateName: withReq<
+      SkillsAssertCreateNameRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME),
     ipcCompactionConditionsGet: noArg(
       invoke,
       IPC_CHANNELS.COMPACTION_CONDITIONS_GET,

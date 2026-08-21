@@ -213,4 +213,59 @@ describe("buildToolResultBlock", () => {
     });
     assert.equal(block.meta?.skillRef, undefined);
   });
+
+  // T-AG5 附带：agent 工具成功输出的摘要分支（Step B3 同步项）
+  it("T-AG5: agent list/get/create 输出带动作语义摘要（不落入 generic matches 分支）", () => {
+    const listBlock = buildToolResultBlock(
+      "tu-agent-l",
+      {
+        ok: true,
+        output: {
+          action: "list",
+          entries: [
+            { name: "general", mode: "all" },
+            { name: "beta", mode: "subagent" },
+          ],
+          total: 2,
+        },
+      },
+      { toolName: "agent" },
+    );
+    assert.equal(listBlock.summary, "2 agents");
+
+    const listTruncated = buildToolResultBlock(
+      "tu-agent-lt",
+      {
+        ok: true,
+        output: {
+          action: "list",
+          entries: [{ name: "general", mode: "all" }],
+          total: 5,
+          truncated: true,
+        },
+      },
+      { toolName: "agent" },
+    );
+    assert.equal(listTruncated.summary, "1/5 agents");
+
+    const getBlock = buildToolResultBlock(
+      "tu-agent-g",
+      {
+        ok: true,
+        output: { action: "get", definition: { name: "beta" } },
+      },
+      { toolName: "agent" },
+    );
+    assert.equal(getBlock.summary, "beta");
+
+    const createBlock = buildToolResultBlock(
+      "tu-agent-c",
+      {
+        ok: true,
+        output: { action: "create", name: "gamma", agentId: "agent-1", message: "ok" },
+      },
+      { toolName: "agent" },
+    );
+    assert.equal(createBlock.summary, "已保存 gamma");
+  });
 });

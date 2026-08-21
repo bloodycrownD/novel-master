@@ -16,7 +16,6 @@ import type {
   ContentBlockDto,
   IpcResult,
   MessagesAppendRequest,
-  MessagesAppendToolTurnBridgeRequest,
   MessagesDeleteRequest,
   MessagesEditRequest,
   MessagesForkRequest,
@@ -114,18 +113,6 @@ export async function handleMessagesSearch(
       toSeq: req.toSeq,
     });
     return { ok: true, data: messages.map(toDto) };
-  } catch (err) {
-    return { ok: false, error: formatIpcError(err) };
-  }
-}
-
-export async function handleMessagesAppendToolTurnBridge(
-  req: MessagesAppendToolTurnBridgeRequest,
-): Promise<IpcResult<ChatMessageDto>> {
-  try {
-    const rt = await getDesktopRuntime();
-    const msg = await rt.appendToolTurnBridge(req.sessionId);
-    return { ok: true, data: toDto(msg) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

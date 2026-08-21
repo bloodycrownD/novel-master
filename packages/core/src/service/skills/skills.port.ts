@@ -44,6 +44,20 @@ export interface SkillLocation {
 }
 
 /**
+ * writeSkillFile 选项。
+ *
+ * builtinSeed 仅供 core 内置技能 seed 通道（bootstrap）使用：绕过内置保留名
+ * 的新建拦截完成首次种入。用户路径（UI / IPC / LLM 工具）一律不传。
+ *
+ * expectedVersion 是 VFS 乐观锁版本：编辑已存在文件时必须传 read 返回的
+ * 版本，否则 VFS write 抛 CONFLICT；新建文件（目录不存在）不传。
+ */
+export interface SkillWriteOptions {
+  readonly builtinSeed?: boolean;
+  readonly expectedVersion?: number;
+}
+
+/**
  * 技能应用服务。
  *
  * @remarks 读写经 ScopedVfsService 落 `vfs_entry`（两域逻辑前缀
@@ -77,7 +91,10 @@ export interface SkillService {
    * 写技能文件（整文件覆盖）。
    *
    * 须显式域（缺域抛 `SkillError(MISSING_DOMAIN)`）；新建技能 = 向新
-   * 目录写 SKILL.md，技能名须过 SKILL_NAME_PATTERN 校验。
+   * 目录写 SKILL.md，技能名须过 SKILL_NAME_PATTERN 校验。内置保留名在
+   * 目录不存在（= 新建）时抛 `SkillError(BUILTIN_SKILL_NAME_RESERVED)`；
+   * 目录已存在（内置本体 / 历史副本）的编辑放行；seed 通道传
+   * `options.builtinSeed` 豁免新建拦截。
    */
   writeSkillFile(
     domain: SkillDomain | undefined,
@@ -85,7 +102,20 @@ export interface SkillService {
     path: string | undefined,
     content: string,
     projectId?: string,
+    options?: SkillWriteOptions,
   ): Promise<{ version: number }>;
+
+  /**
+   * 新建语义的内置保留名校验（D2② 门独立暴露，供 ZIP 导入等不经
+   * writeSkillFile 的新建通道复用）：名单外放行；名单内且该域技能目录
+   * 不存在（= 新建）抛 `SkillError(BUILTIN_SKILL_NAME_RESERVED)`；
+   * 目录已存在（内置本体 / 历史副本）放行。project 域须带 projectId。
+   */
+  assertSkillNameNotReservedForCreate(
+    domain: SkillDomain,
+    name: string,
+    projectId?: string,
+  ): Promise<void>;
 
   /**
    * 局部修改技能文件（匹配语义复用 normalize-for-match，同 edit 工具）。

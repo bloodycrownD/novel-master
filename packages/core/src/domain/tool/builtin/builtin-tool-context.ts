@@ -101,6 +101,35 @@ export interface BuiltinToolSkillsContext {
 }
 
 /**
+ * `agent` 管理工具读取的闭包；装配点（runAgentTurn / runChildAgent）注入。
+ *
+ * `agents` 是装配期同步预算好的名单快照：工具的 description lambda 由
+ * `toolsFromRegistry` 同步求值（`(ctx) => string`），而
+ * `agentRegistry.list()` 返回 Promise，lambda 内不能现查——照 skills
+ * (`effective`) / task (`callableAgents`) 的装配期预算模式，每 run 一次。
+ */
+export interface BuiltinToolAgentsContext {
+  /** AgentRegistryService 实例（get / create / update 走它）。 */
+  readonly registry: AgentRegistryService;
+  /**
+   * 装配期预算好的 agent 名单快照（name + 描述 + mode，含虚拟 seed
+   * general），`agent` 的 description lambda 与 list 动作从这里取数。
+   * mode 缺省按 "all" 解释（与 AgentDefinition 消费侧 fallback 一致）。
+   */
+  readonly agents: readonly {
+    readonly name: string;
+    readonly description?: string;
+    readonly mode: NonNullable<AgentDefinition["mode"]>;
+  }[];
+  /** probe 注册表名单（透传给 upsert 的工具策略校验）。 */
+  readonly registeredToolNames: readonly string[];
+  /** 可选：校验 model pin 指向已保存模型（照 ValidateAgentDefinitionOptions）。 */
+  readonly assertSavedModel?: (
+    savedModelId: string,
+  ) => void | Promise<void>;
+}
+
+/**
  * 资源配额占位（A-14）。
  *
  * @remarks
@@ -159,6 +188,15 @@ export type BuiltinToolContext = {
    * `resolveAgentToolRegistry` 的 tools.allow/deny 控制。
    */
   readonly skills?: BuiltinToolSkillsContext;
+  /**
+   * 可选：仅 `agent` 管理工具读取。vfs-tools / task / skill 完全不感知。
+   *
+   * 主 agent run 与子 agent run 两个装配点都会按「resolve 后注册表含
+   * `agent` 才注入」注入（照 skills 的 D4 闭包模式）；子 / 孙 agent 由
+   * `resolveAgentToolRegistry` 在摘 `task` 的同一分支强制摘除（D6），
+   * 闭包不注入，run 抛 ToolError（FAILED）。
+   */
+  readonly agents?: BuiltinToolAgentsContext;
   /**
    * 可选：仅 `write`（新建文件时）/ `fs(mkdir)` 读取——新建路径时为各层
    * 祖先目录补默认目录规则（无 `workplace_dir_rule` 行的目录会被判

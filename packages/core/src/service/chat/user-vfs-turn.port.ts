@@ -4,8 +4,6 @@
  * @module service/chat/user-vfs-turn.port
  */
 
-import type { ChatMessage } from "@/domain/chat/model/message.js";
-
 /** 单次 VFS 操作中的 tool 调用规格（含 flush 配对用 id）。 */
 export interface UserVfsTurnToolSpec {
   readonly id: string;
@@ -36,8 +34,3 @@ export interface UserVfsTurnService {
     op: UserVfsTurnOp,
   ): Promise<UserVfsTurnExecuteResult>;
 }
-
-/** 桥接 assistant 追加函数（maxSteps 弹窗场景；deps 由工厂绑定）。 */
-export type AppendToolTurnBridgeFn = (
-  sessionId: string,
-) => Promise<ChatMessage>;

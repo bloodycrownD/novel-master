@@ -106,7 +106,6 @@ export {
   splitSourceLines,
   subscribeChatAnnotateDraft,
   tailBatchDeleteAfterSeq,
-  TOOL_TURN_BRIDGE_TEXT,
   transcriptSelectableRole,
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,

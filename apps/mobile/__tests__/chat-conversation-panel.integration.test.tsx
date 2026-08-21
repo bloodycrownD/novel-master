@@ -115,7 +115,6 @@ function makeMockContext(
     loadingMoreMessages: false,
     onMessagesChanged: jest.fn(),
     canResumeWithoutInput: false,
-    lastMessageHasToolResult: false,
     lastMessageIsPlainUserText: false,
     sessionVfs: {} as any,
     sessionWorktree: {} as any,

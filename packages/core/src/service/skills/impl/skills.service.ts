@@ -18,12 +18,15 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 
 import { isVfsError } from "@/errors/vfs-errors.js";
 import {
+  skillBuiltin,
+  skillBuiltinNameReserved,
   skillInvalidName,
   skillInvalidPath,
   skillMissingDomain,
   skillMissingProjectId,
   skillNotFound,
 } from "@/errors/skill-errors.js";
+import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
 import { computeEffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
 import type {
@@ -40,6 +43,7 @@ import type {
   SkillListScope,
   SkillLocation,
   SkillService,
+  SkillWriteOptions,
 } from "../skills.port.js";
 
 /** 两域技能的逻辑根前缀。 */
@@ -280,6 +284,7 @@ export class SkillsService implements SkillService {
     path: string | undefined,
     content: string,
     projectId?: string,
+    options?: SkillWriteOptions,
   ): Promise<{ version: number }> {
     if (domain == null) {
       throw skillMissingDomain(name);
@@ -287,8 +292,20 @@ export class SkillsService implements SkillService {
     assertValidSkillName(name);
     const rel = resolveSkillRelPath(name, path);
     const vfs = this.vfsForDomain(domain, projectId);
-    // write 对不存在的文件会自动补父目录——新建技能即向新目录写 SKILL.md
-    return vfs.write(`${SKILLS_ROOT}/${name}/${rel}`, content);
+    // D2②：内置保留名 + 该域目录不存在 = 新建，拒绝（目录已存在 = 编辑
+    // 内置本体或历史副本，放行）。seed 通道带 builtinSeed 豁免首次种入；
+    // 判定逻辑抽至 assertSkillNameNotReservedForCreate（ZIP 导入等第二条
+    // 新建通道复用同一道门）。
+    if (BUILTIN_SKILL_NAMES.has(name) && options?.builtinSeed !== true) {
+      await this.assertSkillNameNotReservedForCreate(domain, name, projectId);
+    }
+    // write 对不存在的文件会自动补父目录——新建技能即向新目录写 SKILL.md。
+    // 已存在文件（编辑）须带 expectedVersion 乐观锁，否则 VFS 拒绝（CONFLICT）。
+    return vfs.write(`${SKILLS_ROOT}/${name}/${rel}`, content, {
+      ...(options?.expectedVersion != null
+        ? { expectedVersion: options.expectedVersion }
+        : {}),
+    });
   }
 
   async editSkillFile(
@@ -330,6 +347,13 @@ export class SkillsService implements SkillService {
 
   async deleteSkill(location: SkillLocation): Promise<void> {
     assertValidSkillName(location.name);
+    // D2①：global 域内置名不可删（project 域历史同名副本仍可删）。
+    if (
+      location.domain === "global" &&
+      BUILTIN_SKILL_NAMES.has(location.name)
+    ) {
+      throw skillBuiltin(location.name);
+    }
     // VFS 清理用 meta 域 key；负清单行的 scopeKey 仍是 project:{pid}，两者分开取
     const vfsScopeKey = vfsScopeKeyOfLocation(location);
     const prefix = `${SKILLS_ROOT}/${location.name}`;
@@ -363,20 +387,59 @@ export class SkillsService implements SkillService {
     });
   }
 
-  /** 技能目录存在性检查（目录行或其下任一 entry 存在即视为存在）。 */
+  /**
+   * 新建语义的内置保留名门（D2②，writeSkillFile 同源判定独立暴露）：
+   *
+   * 名单外直接放行；名单内且该域技能目录不存在（= 新建语义）抛
+   * `SkillError(BUILTIN_SKILL_NAME_RESERVED)`（中文文案）；目录已存在
+   * （编辑内置本体或历史副本）放行。ZIP 导入等不经 writeSkillFile 的
+   * 新建通道，落盘前须先过这道门（CR D-1）。project 域须带 projectId
+   * （缺失抛 `SkillError(MISSING_PROJECT_ID)`）。
+   */
+  async assertSkillNameNotReservedForCreate(
+    domain: SkillDomain,
+    name: string,
+    projectId?: string,
+  ): Promise<void> {
+    if (!BUILTIN_SKILL_NAMES.has(name)) {
+      return;
+    }
+    if (domain === "project" && (projectId == null || projectId.length === 0)) {
+      throw skillMissingProjectId(name);
+    }
+    const scopeKey =
+      domain === "global" ? "global:meta" : `project:${projectId}:meta`;
+    const dirExists = await this.skillDirExists(
+      new SqliteVfsEntryRepository(this.deps.conn),
+      scopeKey,
+      `${SKILLS_ROOT}/${name}`,
+    );
+    if (!dirExists) {
+      throw skillBuiltinNameReserved(name);
+    }
+  }
+
+  /** 技能目录存在性判定（目录行或其下任一 entry 存在即视为存在）。 */
+  private async skillDirExists(
+    entryRepo: SqliteVfsEntryRepository,
+    scopeKey: string,
+    prefix: string,
+  ): Promise<boolean> {
+    const entries = await entryRepo.listEntriesUnderPrefix(scopeKey, prefix);
+    return entries.some(
+      (entry) =>
+        entry.path === prefix || entry.path.startsWith(`${prefix}/`),
+    );
+  }
+
+  /** 技能目录不存在时抛 NOT_FOUND（存在性判定与 writeSkillFile 新建拦截同源）。 */
   private async assertSkillDirExists(
     entryRepo: SqliteVfsEntryRepository,
     scopeKey: string,
     prefix: string,
   ): Promise<void> {
-    const name = prefix.slice(SKILLS_ROOT.length + 1);
-    const entries = await entryRepo.listEntriesUnderPrefix(scopeKey, prefix);
-    const exists = entries.some(
-      (entry) =>
-        entry.path === prefix || entry.path.startsWith(`${prefix}/`),
-    );
-    if (!exists) {
-      throw skillNotFound(name);
+    if (!(await this.skillDirExists(entryRepo, scopeKey, prefix))) {
+      throw skillNotFound(prefix.slice(SKILLS_ROOT.length + 1));
     }
   }
 }
