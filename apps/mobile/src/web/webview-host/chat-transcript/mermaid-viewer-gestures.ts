@@ -23,6 +23,9 @@ export type MermaidViewerPan = { x: number; y: number };
 
 export type MermaidViewerTransform = { scale: number; pan: MermaidViewerPan };
 
+/** 尺寸（px）。 */
+export type MermaidViewerSize = { width: number; height: number };
+
 /** pinch 缩放 clamp：不小于原始档、不大于最大档；NaN 回退原始档。 */
 export function clampMermaidViewerScale(scale: number): number {
   if (Number.isNaN(scale)) {
@@ -35,17 +38,23 @@ export function clampMermaidViewerScale(scale: number): number {
 }
 
 /**
- * 平移边界 clamp：内容以容器中心为原点放量，
- * 当前缩放下可达范围为 ±size*(scale-1)/2，越界收回到边缘。
+ * 平移边界 clamp（烘焙坐标系）：内容以舞台中心为原点居中放量，
+ * 可达范围为 ±max(0, (contentRendered - stage) / 2)，越界收回到边缘。
+ * contentRendered 为当前视觉内容尺寸 = 布局尺寸 × gesture.scale
+ * （手势中 scale>1 时布局仍是 fit 尺寸，必须乘 scale；烘焙后布局即
+ * 烘焙 px、scale=1），stage 取舞台尺寸，双参显式传入。
+ * 旧公式 viewport*(scale-1)/2 在烘焙归一 scale=1 后退化为 0（无法
+ * 平移），不可沿用。
  */
 export function clampMermaidViewerPan(
   pan: MermaidViewerPan,
-  scale: number,
-  viewportWidth: number,
-  viewportHeight: number,
+  contentRenderedWidth: number,
+  contentRenderedHeight: number,
+  stageWidth: number,
+  stageHeight: number,
 ): MermaidViewerPan {
-  const maxX = Math.max(0, (viewportWidth * (scale - 1)) / 2);
-  const maxY = Math.max(0, (viewportHeight * (scale - 1)) / 2);
+  const maxX = Math.max(0, (contentRenderedWidth - stageWidth) / 2);
+  const maxY = Math.max(0, (contentRenderedHeight - stageHeight) / 2);
   // `+ 0` 归一 -0（clamp 边界会产出 -0，deep equal 时与 0 不等）
   return {
     x: Math.min(maxX, Math.max(-maxX, pan.x)) + 0,
@@ -56,6 +65,8 @@ export function clampMermaidViewerPan(
 /**
  * pinch 变换：以双指中点为锚缩放（中点处内容视口坐标稳定），
  * 返回 clamp 后的 scale/pan。focusX/Y 为中点相对容器中心的坐标。
+ * layoutWidth/Height 为当前布局尺寸（手势中布局保持 fit 基准尺寸，
+ * 烘焙态为烘焙 px），视觉内容尺寸 = 布局 × scale，pan clamp 按它算边界。
  */
 export function computeMermaidViewerPinch(
   prev: MermaidViewerTransform,
@@ -63,8 +74,10 @@ export function computeMermaidViewerPinch(
   currentDistance: number,
   focusX: number,
   focusY: number,
-  viewportWidth: number,
-  viewportHeight: number,
+  layoutWidth: number,
+  layoutHeight: number,
+  stageWidth: number,
+  stageHeight: number,
 ): MermaidViewerTransform {
   const ratio = startDistance > 0 ? currentDistance / startDistance : 1;
   const scale = clampMermaidViewerScale(prev.scale * ratio);
@@ -75,9 +88,10 @@ export function computeMermaidViewerPinch(
       x: focusX - (focusX - prev.pan.x) * factor,
       y: focusY - (focusY - prev.pan.y) * factor,
     },
-    scale,
-    viewportWidth,
-    viewportHeight,
+    layoutWidth * scale,
+    layoutHeight * scale,
+    stageWidth,
+    stageHeight,
   );
   return { scale, pan };
 }
@@ -85,6 +99,39 @@ export function computeMermaidViewerPinch(
 export type MermaidViewerDoubleTap =
   | { kind: 'ignore' }
   | { kind: 'toggle'; scale: number };
+
+/**
+ * 烘焙尺寸换算：SVG width/height 落定的 px = fit 基准渲染尺寸 × scale。
+ * baseRendered 是 fit 态（width/height 100% + preserveAspectRatio meet）
+ * 的实际渲染尺寸（= fitRatio × viewBox 尺寸），不是 viewBox 原始值——
+ * 后者与 CSS 百分比布局基准脱节，烘焙后会跳变。scale 为相对 fit 的
+ * 视觉总倍率（NaN 等非法值按 1 兜底）。
+ */
+export function computeBakedSvgSize(
+  baseRendered: MermaidViewerSize,
+  scale: number,
+): MermaidViewerSize {
+  const factor = Number.isFinite(scale) ? scale : 1;
+  return {
+    width: baseRendered.width * factor,
+    height: baseRendered.height * factor,
+  };
+}
+
+/**
+ * 烘焙后 pan 残差换算：scale 烘进 SVG 布局尺寸、transform 复位为纯
+ * translate后，求视觉等价的新 pan。
+ * 几何上这是恒等映射：内容中心经 flex 居中 + meet 居中始终与 viewport
+ * 中心（transform-origin）重合，烘焙只改布局尺寸不动中心对齐，pan
+ * （translate 的屏幕像素偏移）参考点与单位都不变。独立成函数是给
+ * 坐标系锁定断言留挂点（未来若烘焙 px 取整需补偿，改这里）。
+ */
+export function rebasePanAfterBake(
+  pan: MermaidViewerPan,
+  _scale: number,
+): MermaidViewerPan {
+  return { x: pan.x + 0, y: pan.y + 0 };
+}
 
 /**
  * 双击状态机：上次轻触时间戳在阈值内 → 原始 ↔ 放大档位切换；
