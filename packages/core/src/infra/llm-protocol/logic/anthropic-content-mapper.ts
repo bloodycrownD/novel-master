@@ -178,6 +178,30 @@ export function anthropicContentToBlocks(
   return blocks;
 }
 
+/** 相邻 user 消息合并：content 按序拼接，tool_result 块前置（D2 规则，出站单向操作，不回写内部消息列表）。 */
+function mergeAdjacentUserTurns(
+  messages: Array<{ role: string; content: AnthropicContentItem[] }>,
+): Array<{ role: string; content: AnthropicContentItem[] }> {
+  const out: Array<{ role: string; content: AnthropicContentItem[] }> = [];
+  for (const msg of messages) {
+    const last = out[out.length - 1];
+    if (msg.role !== "user" || last == null || last.role !== "user") {
+      out.push({ role: msg.role, content: [...msg.content] });
+      continue;
+    }
+    const toolResultFirst = [
+      ...last.content.filter((item) => item.type === "tool_result"),
+      ...msg.content.filter((item) => item.type === "tool_result"),
+    ];
+    const rest = [
+      ...last.content.filter((item) => item.type !== "tool_result"),
+      ...msg.content.filter((item) => item.type !== "tool_result"),
+    ];
+    last.content = [...toolResultFirst, ...rest];
+  }
+  return out;
+}
+
 /** Session history ??Anthropic `messages[]` (tool_result ??user role). */
 export function chatMessagesToAnthropic(
   messages: readonly ChatMessage[],
@@ -203,5 +227,5 @@ export function chatMessagesToAnthropic(
     }
   }
 
-  return out;
+  return mergeAdjacentUserTurns(out);
 }

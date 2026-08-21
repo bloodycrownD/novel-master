@@ -294,6 +294,30 @@ export function geminiPartsToBlocks(
   return blocks;
 }
 
+/** 相邻 user content 合并：parts 按序拼接，functionResponse part 前置（D2 规则，出站单向操作，不回写内部消息列表）。 */
+function mergeAdjacentUserContents(
+  contents: readonly GeminiContent[],
+): GeminiContent[] {
+  const out: GeminiContent[] = [];
+  for (const content of contents) {
+    const last = out[out.length - 1];
+    if (content.role !== "user" || last == null || last.role !== "user") {
+      out.push({ role: content.role, parts: [...content.parts] });
+      continue;
+    }
+    const functionResponseFirst = [
+      ...last.parts.filter((part) => part.functionResponse != null),
+      ...content.parts.filter((part) => part.functionResponse != null),
+    ];
+    const rest = [
+      ...last.parts.filter((part) => part.functionResponse == null),
+      ...content.parts.filter((part) => part.functionResponse == null),
+    ];
+    last.parts = [...functionResponseFirst, ...rest];
+  }
+  return out;
+}
+
 /** Session history → Gemini `contents[]`. */
 export function chatMessagesToGeminiContents(
   messages: readonly ChatMessage[],
@@ -348,7 +372,8 @@ export function chatMessagesToGeminiContents(
     }
   }
 
-  return out;
+  // 先完成 model turn 修补，再合并相邻 user（Step A2 顺序约束）。
+  return mergeAdjacentUserContents(out);
 }
 
 /** NM tool definitions → Gemini `tools` array entry. */
