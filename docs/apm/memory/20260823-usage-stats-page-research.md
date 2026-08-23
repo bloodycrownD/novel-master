@@ -78,3 +78,9 @@ user:
 
 assistant:
 Step 1 完成（分支 feat/token-usage-stats）：① chat-schema.ts DDL 加 cache_read_tokens/cache_creation_tokens/model_name 三列 + idx_chat_message_created_at 索引；② schema-column-alignments 三条 ALIGN 条目；③ SCHEMA_BOOT_VERSION 7→8（含 v8 注释）；④ 新建 usage-cache-model-backfill-v1.ts 占位（up no-op，**未登记**进 SCHEMA_MIGRATIONS——空 up 提前登记会被老库记为已执行、Step 4 无法重跑，登记由 Step 4 完成）；⑤ 新增 test/bootstrap/usage-cache-model-schema.test.ts（新库直建 + user_version=7 老库升级，legacy-db-fixtures 加 execLegacyV7ChatMessageDdl）。连带修复：bootstrap-no-migrate.test.ts 加 PENDING_PLACEHOLDER_MODULES 豁免集（占位未登记触发目录注册守卫）；skills-schema.test.ts 两处「应升到 7」断言随 bump 改 8。验证：test/bootstrap 42 pass / round-trip 5 pass / typecheck 过 / 改动文件 eslint 干净（库存量 lint 错与本次无关）。
+
+user:
+（impl-s2-parse）执行 Step 2：usage 解析扩展 + Anthropic 流式双槽合并修复。
+
+assistant:
+Step 2 完成（工作区未提交）：① MessageUsage 加 cacheReadTokens/cacheCreationTokens 可选字段（LlmTokenUsage 为 alias 自动跟进）；② usage-parser 三 parser 各读 cache 字段——OpenAI prompt_tokens_details.cached_tokens、Anthropic cache_read_input_tokens + cache_creation_input_tokens（兼容嵌套 cache_creation.input_tokens）、Gemini cachedContentTokenCount，新增 positiveNum（>0 才果）+ cacheFields（值存在才展开，无 cache 字段时返回不含该二字段）；③ anthropic-sse-parser 拆 messageStartRaw/messageDeltaRaw 双槽，新增 mergeAnthropicStreamRaw（usage = start 输入侧 + delta 累计 output_tokens，model 取 start，stop_reason 等顶层字段保留 delta；单槽有值原样返回、双槽皆空 partial 降级 {streamed:true,aborted:true}），消费方仅 anthropic.adapter 的 parseAnthropicUsage(streamRaw)，顶层 usage 形态可直接吃。主树 grep 核实无其他 streamRaw 消费方。测试：usage-parser.test.ts 加 8 例、anthropic-sse-parser.test.ts 加 3 例（含 partial 断流、降级不抛错）。此修复顺带解决存量 Anthropic 流式行 prompt_tokens 缺失问题。

@@ -1,24 +1,38 @@
-# global-fs-manager CR-fix 开发编排状态（code-dev-loop 终态）
+# token-usage-stats 开发 DAG 编排状态（code-dev-loop）
+# spec: docs/Iterations/token-usage-stats/spec.md（execute-ready 已确认）
+# branch: feat/token-usage-stats（base aa32a19）
 
-spec_path: docs/Iterations/global-fs-manager/cr-fix-spec.md
-prd_path: docs/Iterations/global-fs-manager/prd.md
-iteration: global-fs-manager-cr-fix
-branch: feat/skills-integration（主仓）
-base_sha: 63f59df
-
-dag_version: 2
-wave_plan: []
+spec_path: docs/Iterations/token-usage-stats/spec.md
+prd_path: docs/Iterations/token-usage-stats/prd.md
+branch: feat/token-usage-stats
+dag_version: 1
+wave_plan: [
+  [impl-s1-schema],
+  [impl-s2-parse, impl-s3-persist],
+  [impl-s4-backfill, impl-s5-stats],
+  [verify-core],
+  [cr-func-core],
+  [impl-s6-desktop-ipc, impl-s8-mobile],
+  [impl-s7-desktop-view],
+  [verify-ui],
+  [cr-func-final]
+]
 node_status:
-  impl-cr-core: { status: done, head_sha: 6fbb4ce, executor: subagent, items: "P0 双前缀 + listTree + core/B-1 C-1 G-1 G-2，core 全量 2036/0" }
-  impl-cr-desktop: { status: done, head_sha: 5da4e76, executor: subagent, items: "desktop/B-1(P1) + B-2 消费侧 + C-1 + G-1 + cli/G-2" }
-  impl-cr-mobile: { status: done, head_sha: d85777c, executor: subagent, items: "mobile/B-1 + G-1" }
-  cr-func-cr: { status: done, func_ready: yes, note: "子代理上下文耗尽提前收尾（12 条矩阵全过、归因一钉死）；三项未复核由主代理补齐（mobile 24/24、core 2036/0、typecheck）；归因二由主代理补查并修复（7e2e98a）" }
-  fix-tocorevfsscope: { status: done, head_sha: 7e2e98a, executor: main, note: "CR 漏网：toCoreVfsScope 未穷尽 physical/meta（renderer 独立 tsconfig 盲区，本迭代 ea6faf5/1f96b06 引入）" }
+  impl-s1-schema: { status: pending, step: Step1, executor: subagent }
+  impl-s2-parse: { status: pending, step: Step2, executor: subagent }
+  impl-s3-persist: { status: pending, step: Step3, executor: subagent }
+  impl-s4-backfill: { status: pending, step: Step4, executor: subagent }
+  impl-s5-stats: { status: pending, step: Step5, executor: subagent }
+  verify-core: { status: pending, scope: T-S1~S5, executor: subagent }
+  cr-func-core: { status: pending, step: Step1-5, executor: subagent }
+  impl-s6-desktop-ipc: { status: pending, step: Step6, executor: subagent }
+  impl-s7-desktop-view: { status: pending, step: Step7, executor: subagent }
+  impl-s8-mobile: { status: pending, step: Step8, executor: subagent }
+  verify-ui: { status: pending, scope: T-S6~S7, executor: subagent }
+  cr-func-final: { status: pending, step: Step6-8, executor: subagent }
 open_must_fix: []
-spec_deviations: []  # CR 3 条 deviations 用户「按 cr spec 开发」指令视同按现状接受
-status: dev-ready
-
-# 归因存档
-# CLI template-pull-e2e T3 红灯 = 预存缺陷（v1.4.21/dc28290 即红，早于本迭代；方向：session pull 子树替换删除侧）
-#   → 建议另立迭代条目跟踪，不阻塞本次 CR-fix
-# renderer tsconfig.renderer.json 非 门禁，含 293 个预存错误（修掉 toCoreVfsScope 后 292），不属本迭代 scope
+spec_deviations: []
+notes: >
+  Step 9 (manual_user) 不入 DAG。依赖：s2/s3/s4/s5 依赖 s1；s6 依赖 s5；s7 依赖 s6；
+  s8 依赖 s5。s2 与 s3 文件不重叠可并行；s4（新迁移文件+占位已由 s1 登记）与 s5 无冲突。
+  工作区遗留用户自身改动（.vscode 删除、AGENTS.md、package-lock.json）——禁止触碰、禁止提交。
