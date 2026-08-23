@@ -43,6 +43,7 @@ import { RENAME_WORKTREE_TABLES_TO_WORKPLACE_V1_ID } from "./schema-migrations/r
 import { VFS_CONTENT_BLOB_ZLIB_V1_ID } from "./schema-migrations/vfs-content-blob-zlib-v1.js";
 import { VFS_REVISION_REF_COUNT_V1_ID } from "./schema-migrations/vfs-revision-ref-count-v1.js";
 import { createRevisionRefCountRepairOperation } from "@/domain/vfs/logic/revision-ref-count.js";
+import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
 import { createProviderIdentityRepairOperation } from "@/domain/provider/logic/provider-identity-repair.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -215,6 +216,18 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
   //   2. provider 双身份键形态校验（migration 后 assertMigratedShape 的运行时镜像）。
   //
   // 两条路径各自独立，互不干扰。不阻塞启动，丢 rejection 也不崩。
+  // 发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
+  // + sqlite_sequence 回退时，新建文件会撞 vfs_revision(entry_id, version)
+  // 唯一键（导入旧备份库实测）。两条聚合查询成本可忽。
+  try {
+    await new IntegrityRepairRegistry()
+      .register(createVfsEntrySequenceRepairOperation(conn))
+      .runAll();
+  } catch {
+    // 修复失败不阻断启动（与下方 registry 同口径）；极端场景下
+    // 新建仍可能撞唯一键，但可重试（下次启动再修）。
+  }
+
   if (_entryIdMigrationJustApplied) {
     const revisionRepo = new SqliteVfsRevisionRepository(conn);
     const entryRepo = new SqliteVfsEntryRepository(conn);
