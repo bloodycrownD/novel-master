@@ -1269,6 +1269,9 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     return acc;
   }, {});
 
+  const allModelsSelected =
+    models.length > 0 && models.every((m) => batch.selectedIds.has(m.id));
+
   return (
     <div className="provider-detail">
       <div className="provider-detail__tabs">
@@ -1294,6 +1297,10 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
             selectedCount={batch.selectedCount}
             onEnterBatch={batch.enter}
             onCancelBatch={batch.exit}
+            allSelected={allModelsSelected}
+            onSelectAll={() =>
+              batch.selectRange(allModelsSelected ? [] : models.map((m) => m.id))
+            }
             onDelete={() => {
               if (batch.selectedCount === 0) {
                 return;

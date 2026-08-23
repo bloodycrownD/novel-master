@@ -30,7 +30,7 @@ export function FetchModelsModal({
   onSaved,
   onError,
 }: FetchModelsModalProps) {
-  const { exit, toggle, isSelected, selectedCount } = useBatchSelection();
+  const { exit, toggle, isSelected, selectedCount, selectRange } = useBatchSelection();
   const [rows, setRows] = useState<SuggestionRow[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -99,6 +99,19 @@ export function FetchModelsModal({
   }
 
   const selectableRows = rows.filter((r) => !savedSet.has(r.vendorModelId));
+  // 过滤后可选（未保存）行：全选只作用于这部分，避免混入被过滤掉的旧勾选。
+  const selectableFilteredRows = filteredRows.filter(
+    (r) => !savedSet.has(r.vendorModelId),
+  );
+  const allFilteredSelected =
+    selectableFilteredRows.length > 0 &&
+    selectableFilteredRows.every((r) => isSelected(r.vendorModelId));
+  const handleSelectAll = () => {
+    // 全选重置为「过滤后可选行全选」；全不选清空全部勾选。
+    selectRange(
+      allFilteredSelected ? [] : selectableFilteredRows.map((r) => r.vendorModelId),
+    );
+  };
   const confirmLabel =
     selectedCount > 0 ? `添加 (${selectedCount})` : "添加";
 
@@ -164,13 +177,23 @@ export function FetchModelsModal({
           </p>
         ) : (
           <>
-            <input
-              type="text"
-              className="fetch-models-modal__filter"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="过滤模型…"
-            />
+            <div className="fetch-models-modal__filter-bar">
+              <input
+                type="text"
+                className="fetch-models-modal__filter"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="过滤模型…"
+              />
+              <button
+                type="button"
+                className="fetch-models-modal__select-all"
+                disabled={saving || selectableFilteredRows.length === 0}
+                onClick={handleSelectAll}
+              >
+                {allFilteredSelected ? "全不选" : "全选"}
+              </button>
+            </div>
             {filteredRows.length === 0 ? (
               <p className="fetch-models-modal__status">无匹配模型</p>
             ) : (
