@@ -14,6 +14,23 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+/** cache 计数仅在 >0 时才有意义（0 表示未命中/未写入，视为字段缺席）。 */
+function positiveNum(value: unknown): number | undefined {
+  const n = num(value);
+  return n != null && n > 0 ? n : undefined;
+}
+
+/** 仅在值存在时展开字段，保持「无 cache 字段 → 返回对象不含该二字段」的契约。 */
+function cacheFields(
+  cacheReadTokens?: number,
+  cacheCreationTokens?: number,
+): Pick<LlmTokenUsage, "cacheReadTokens" | "cacheCreationTokens"> {
+  return {
+    ...(cacheReadTokens != null ? { cacheReadTokens } : {}),
+    ...(cacheCreationTokens != null ? { cacheCreationTokens } : {}),
+  };
+}
+
 /** Parses OpenAI chat completion `usage` object. */
 export function parseOpenAiUsage(raw: unknown): LlmTokenUsage | undefined {
   if (!isRecord(raw)) {
@@ -33,7 +50,10 @@ export function parseOpenAiUsage(raw: unknown): LlmTokenUsage | undefined {
   ) {
     return undefined;
   }
-  return { promptTokens, completionTokens, totalTokens };
+  // OpenAI 无 cache write 概念，只读命中侧 cached_tokens。
+  const details = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : undefined;
+  const cacheReadTokens = positiveNum(details?.cached_tokens);
+  return { promptTokens, completionTokens, totalTokens, ...cacheFields(cacheReadTokens) };
 }
 
 /** Parses Anthropic messages API `usage` object (non-stream or stream events). */
@@ -57,7 +77,17 @@ export function parseAnthropicUsage(raw: unknown): LlmTokenUsage | undefined {
     promptTokens != null && completionTokens != null
       ? promptTokens + completionTokens
       : undefined;
-  return { promptTokens, completionTokens, totalTokens };
+  const cacheReadTokens = positiveNum(usage.cache_read_input_tokens);
+  // cache_creation 有两种 wire 形态：新版嵌套 cache_creation.input_tokens，旧版扁平 cache_creation_input_tokens。
+  const cacheCreation = isRecord(usage.cache_creation)
+    ? positiveNum(usage.cache_creation.input_tokens)
+    : positiveNum(usage.cache_creation_input_tokens);
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    ...cacheFields(cacheReadTokens, cacheCreation),
+  };
 }
 
 /** Parses Gemini generateContent `usageMetadata` object. */
@@ -79,5 +109,6 @@ export function parseGeminiUsage(raw: unknown): LlmTokenUsage | undefined {
   ) {
     return undefined;
   }
-  return { promptTokens, completionTokens, totalTokens };
+  const cacheReadTokens = positiveNum(meta.cachedContentTokenCount);
+  return { promptTokens, completionTokens, totalTokens, ...cacheFields(cacheReadTokens) };
 }
