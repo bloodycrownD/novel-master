@@ -4,6 +4,12 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### 修复
+
+- **导入旧备份后新建技能/文件报错**：修复导入旧版本备份后，创建技能或写入文件时报「UNIQUE constraint failed」的问题——应用启动时会自动校正内部编号，旧备份不再阻塞新建操作
+
 ## [1.5.0] - 2026-08-20
 
 ### 新增
