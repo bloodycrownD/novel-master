@@ -84,3 +84,21 @@ user:
 
 assistant:
 Step 2 完成（工作区未提交）：① MessageUsage 加 cacheReadTokens/cacheCreationTokens 可选字段（LlmTokenUsage 为 alias 自动跟进）；② usage-parser 三 parser 各读 cache 字段——OpenAI prompt_tokens_details.cached_tokens、Anthropic cache_read_input_tokens + cache_creation_input_tokens（兼容嵌套 cache_creation.input_tokens）、Gemini cachedContentTokenCount，新增 positiveNum（>0 才果）+ cacheFields（值存在才展开，无 cache 字段时返回不含该二字段）；③ anthropic-sse-parser 拆 messageStartRaw/messageDeltaRaw 双槽，新增 mergeAnthropicStreamRaw（usage = start 输入侧 + delta 累计 output_tokens，model 取 start，stop_reason 等顶层字段保留 delta；单槽有值原样返回、双槽皆空 partial 降级 {streamed:true,aborted:true}），消费方仅 anthropic.adapter 的 parseAnthropicUsage(streamRaw)，顶层 usage 形态可直接吃。主树 grep 核实无其他 streamRaw 消费方。测试：usage-parser.test.ts 加 8 例、anthropic-sse-parser.test.ts 加 3 例（含 partial 断流、降级不抛错）。此修复顺带解决存量 Anthropic 流式行 prompt_tokens 缺失问题。
+
+user:
+（impl-s4-backfill）执行 Step 4：实现 usage-cache-model-backfill-v1 历史数据回填迁移 + 登记 SCHEMA_MIGRATIONS + 恢复 no-migrate 守卫 + T-S4 测试。
+
+assistant:
+Step 4 完成（工作区未提交）：① 回填实现——形状判协议（gemini usageMetadata → openai usage.prompt_tokens 形态 → anthropic type/message_start/usage.input_tokens，判不出跳过），provider 仅 NULL 时写、cache 两列仅能提取且 NULL 时写、model_name 能提取即写、不重写 prompt_tokens；② 两个关键坑：残缺流式行补不出 model_name 致「model IS NULL」条件恒真，不能套 vfs-content-blob-zlib 的「更新后不再命中」循环，改 id keyset 分页（批 256）单趟扫描保终止；bootstrap 顺序是 DDL→migration→align，老库 chat_message 在 migration 时还没有三新列（CREATE TABLE IF NOT EXISTS 不补列），up 开头仿 ensureRevisionContentHash 自己 ALTER 补列，align 后幂等 no-op；③ index.ts 登记（数组尾部），bootstrap-no-migrate.test.ts 移除 PENDING_PLACEHOLDER_MODULES 豁免；④ T-S4 新建 usage-cache-model-backfill.test.ts 10 例（三协议非流式、message_start 嵌套、delta 残缺只写协议、占位/坏 JSON 跳过、provider/cache 不覆盖但补模型、幂等=快照+第二趟零 UPDATE（CountingTdbcConnection）、260 行跨批、登记表尾部）。验证：test/bootstrap 52 pass / test/chat 362 pass / typecheck / eslint 干净。
+
+user:
+（impl-s5-stats）执行 Step 5：UsageStatsService 聚合服务（port + impl + bundle/工厂/public 导出）+ T-S5 测试。
+
+assistant:
+Step 5 完成（工作区未提交）：① 新建 usage-stats.port.ts（Range/Filter/Summary/Today/Bucket/ModelRow/Service 七类型，model 三态：undefined=全部/null=未记录桶 IS NULL/字符串=指定模型）；② impl/usage-stats.service.ts——分母 SQL 按 spec 决策 1（SUM CASE anthropic 行 prompt+cache_read+cache_creation，FILTER 只对 cache 列非 NULL 行），JS 本地时区桶边界（Date 构造本地 0 点逐桶参数化 SUM，hourly 24 桶、DST 空钟点直接零值桶，custom 首尾部分天取交集），last7/last30=今日 0 点回退 N 天到明日 0 点（含今日），custom 校验必填/from<=to/跨度<=366 天，hidden 与子会话不过滤，listModels 只回非 NULL（未记录桶 UI 补），getSummary 附 today 子对象独立查询；③ ChatServiceBundle 加 usageStats 字段 + createUsageStatsService 工厂；public/chat.ts 补类型与工厂导出；④ T-S5 测试 11 例，时区断言全部「相对本地 0 点 ±固定偏移」构造、机器时区无关。测试坑：fixture 整文件共享一条 :memory: 库而统计扫全表，用例间数据互污——beforeEach DELETE FROM chat_message 隔离。验证：新测试 11 pass / chat.services+round-trip+message-search 51 pass / typecheck 过。
+
+user:
+（impl-s6-desktop-ipc）执行 Step 6：desktop 主进程 IPC 链路（shared DTO → handler → registry → runtime 装配 → invoke-registry → client）+ T-S6 handler 测试。不含设置页 UI（Step 7）。
+
+assistant:
+Step 6 完成（工作区未提交）：① shared/ipc-types.ts 加 USAGE_STATS_QUERY 单 channel + 8 个独立 DTO（Range/Filter/Today/Summary/Bucket/ModelRow/QueryRequest/QueryResponse 联合，结构等效 core 但不引 core 类型，满足 renderer X1 门禁）；② 新建 handlers/usage-stats.ts——getDesktopRuntime() 后按 kind 五路分发 rt.usageStats.*，toCoreFilter 显式转 filter（model 三态保留），toSummary/toBucket/toModelRow 显式映射 DTO，hourly 缺 dayLocalDate 传空串由服务层拒绝，错误 formatIpcError 包 IpcResult，switch default 加 never 兼容；③ handler-registry 注册 bindReq；④ runtime/types + create-desktop-runtime 加 usageStats 字段并 createUsageStatsService(conn) 装配；⑤ invoke-registry 加 ipcUsageStatsQuery，client.ts 解构导出；⑥ T-S6 测试 usage-stats-ipc.test.ts 7 例——runtime mock 走 module hook（usage-stats-runtime-hook.mjs 把 desktop-runtime-singleton 重定向到 globalThis 取 stub 的替身，Node 22 无 mock.module；register-then-import 与 fetch-models 范式一致）。两个环境发现：A) packages/core/dist 是旧构建（Step 5 导出缺失致 typecheck 报错），重建后修复；B) 重建暴露 skills-handlers.test.ts 2 例失败——core HEAD 的 seed-builtin-skills 会种内置 agent-config 技能（global 域），旧测试期望未含；且 run-tests.mjs 的 glob `test/**/*.test.*` 在 sh 下 ** 退化单层，根下 76 个测试文件从未被 npm test 跑到（既有 bug，未修，避免 npm test 变红，留给主代理决策）。验证：npm test 40 项全绿 / 手动全量（find 展开 + NODE_OPTIONS 注入 register-electron-mock）373 测试 371 pass，仅上述 skills 2 例既有漂移 / typecheck 过 / 改动文件 eslint 干净。
