@@ -72,3 +72,9 @@ user:
 
 assistant:
 核实主树后修复：① P0-1——`formatTokenCount` 实际已存在且已导出（当初的 grep 裁决本身就是误判，大概率搜错了路径/worktree），spec 五处「新建」全部改为「复用既有导出」（设计目标/项目结构/变更点 8/Step 5/T-S5），兼容性章节的「全新导出」也一并修正；设计目标其余现状断言抽查均属实（列存在、SCHEMA_BOOT_VERSION=7、streamRaw L180-182、ChatMessage 无 modelName、desktop runtime 无 usageStats）。② P1-1 变更点 3 补 `domain/chat/model/message.ts` 的 `ChatMessage.modelName?: string | null`。③ P1-2 变更点 6 补 desktop runtime 两文件（types.ts + create-desktop-runtime.ts）。④ P1-3 变更点 5 `getSummary` 附带独立于 filter 的 `today` 子对象（本地 0 点起算），IPC DTO 同构，T-S5 同步断言。⑤ P2-1 回填失败语义改为「本次启动失败、事务回滚、下次重试」。⑥ P2-2/P2-3 T-S5 补 hidden+子会计入总和、`listModels()` 含「未记录」断言。⑦ P2-4 PRD 风险表两行 Anthropic 处置同步为「spec 阶段已验证并纳入本迭代（双槽合并修复）」。查重核实 core 无 formatTokenCount 专项单测（仅导出白名单快照提及 formatPromptTokenUsageLabel），T-S5 改为不安排专项断言、由 T-S6/S7 渲染间接覆盖。
+
+user:
+（impl-s1-schema）执行 Step 1：chat_message 加 cache/模型列 + 索引 + ALIGN + SCHEMA_BOOT_VERSION 7→8 + 回填迁移占位 + T-S1 测试。
+
+assistant:
+Step 1 完成（分支 feat/token-usage-stats）：① chat-schema.ts DDL 加 cache_read_tokens/cache_creation_tokens/model_name 三列 + idx_chat_message_created_at 索引；② schema-column-alignments 三条 ALIGN 条目；③ SCHEMA_BOOT_VERSION 7→8（含 v8 注释）；④ 新建 usage-cache-model-backfill-v1.ts 占位（up no-op，**未登记**进 SCHEMA_MIGRATIONS——空 up 提前登记会被老库记为已执行、Step 4 无法重跑，登记由 Step 4 完成）；⑤ 新增 test/bootstrap/usage-cache-model-schema.test.ts（新库直建 + user_version=7 老库升级，legacy-db-fixtures 加 execLegacyV7ChatMessageDdl）。连带修复：bootstrap-no-migrate.test.ts 加 PENDING_PLACEHOLDER_MODULES 豁免集（占位未登记触发目录注册守卫）；skills-schema.test.ts 两处「应升到 7」断言随 bump 改 8。验证：test/bootstrap 42 pass / round-trip 5 pass / typecheck 过 / 改动文件 eslint 干净（库存量 lint 错与本次无关）。
