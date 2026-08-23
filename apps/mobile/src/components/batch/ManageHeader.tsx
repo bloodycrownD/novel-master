@@ -13,6 +13,10 @@ type Props = {
   onEnterBatch: () => void;
   onCancelBatch: () => void;
   onDelete?: () => void;
+  /** 批量模式全选/全不选回调；不传则不渲染全选按钮（其它调用方零影响）。 */
+  onSelectAll?: () => void;
+  /** 当前是否已全选，控制按钮文案「全不选」/「全选」。 */
+  allSelected?: boolean;
   primaryActionLabel?: string;
   onPrimaryAction?: () => void;
   primaryActionTone?: 'danger' | 'primary';
@@ -27,6 +31,8 @@ export function ManageHeader({
   onEnterBatch,
   onCancelBatch,
   onDelete,
+  onSelectAll,
+  allSelected,
   primaryActionLabel = '删除',
   onPrimaryAction,
   primaryActionTone = 'danger',
@@ -45,9 +51,18 @@ export function ManageHeader({
           <Pressable onPress={onCancelBatch}>
             <Text style={{color: tokens.text}}>取消</Text>
           </Pressable>
-          <Text style={{color: tokens.textSecondary}}>
-            已选 {selectedCount} 项
-          </Text>
+          <View style={styles.batchCenter}>
+            {onSelectAll ? (
+              <Pressable onPress={onSelectAll} hitSlop={8}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                  {allSelected ? '全不选' : '全选'}
+                </Text>
+              </Pressable>
+            ) : null}
+            <Text style={{color: tokens.textSecondary}}>
+              已选 {selectedCount} 项
+            </Text>
+          </View>
           <Pressable onPress={runPrimary} disabled={selectedCount === 0}>
             <Text
               style={{
@@ -99,5 +114,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  batchCenter: {flexDirection: 'row', alignItems: 'center', gap: 12},
   hint: {fontSize: 12, lineHeight: 16},
 });

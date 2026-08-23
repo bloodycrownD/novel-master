@@ -40,6 +40,12 @@ describe('ProviderDetailScreen (mobile) — T-T1', () => {
     expect(detailSource).toMatch(/navigation\.navigate\('ModelSampling'/);
   });
 
+  it('删模型批量模式接入全选（onSelectAll + allSelected，全选后可清空）', () => {
+    expect(detailSource).toMatch(/onSelectAll=\{/);
+    expect(detailSource).toMatch(/allSelected=\{/);
+    expect(detailSource).toMatch(/rows\.map\(row => row\.savedModelId\)/);
+  });
+
   it('ProviderEdit 路由已删除（无 import / navigate ProviderEdit）', () => {
     expect(detailSource).not.toMatch(/navigate\('ProviderEdit'/);
   });

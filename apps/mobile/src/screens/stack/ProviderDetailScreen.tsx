@@ -250,6 +250,14 @@ export function ProviderDetailScreen() {
         title="已保存模型"
         batchMode={batch.active}
         selectedCount={batch.selectedCount}
+        allSelected={rows.length > 0 && batch.selectedCount === rows.length}
+        onSelectAll={() =>
+          batch.selectRange(
+            batch.selectedCount === rows.length
+              ? []
+              : rows.map(row => row.savedModelId),
+          )
+        }
         onEnterBatch={batch.enter}
         onCancelBatch={batch.exit}
         onDelete={confirmBatchDelete}
