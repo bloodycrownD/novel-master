@@ -18,6 +18,7 @@ import type {
   MessageTranscriptEffectsService,
   ProjectService,
   SessionService,
+  UsageStatsService,
   UserVfsTurnService,
 } from "@novel-master/core/chat";
 import type {
@@ -61,6 +62,8 @@ export interface DesktopNovelMasterRuntime {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
+  /** Token 用量统计（summary / 桶 / 分模型，设置页数据源）。 */
+  readonly usageStats: UsageStatsService;
   /** hide/show/truncate 消息 transcript（不 capture worktree 块）。 */
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly sessionFs: SessionFsService;
