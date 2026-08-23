@@ -14,15 +14,18 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import { DefaultProjectService } from "./impl/project.service.js";
 import { DefaultSessionService } from "./impl/session.service.js";
 import { DefaultMessageService } from "./impl/message.service.js";
+import { DefaultUsageStatsService } from "./impl/usage-stats.service.js";
 import type { ProjectService } from "./project.port.js";
 import type { SessionService } from "./session.port.js";
 import type { MessageService } from "./message.port.js";
+import type { UsageStatsService } from "./usage-stats.port.js";
 
-/** Shared chat repositories wired from one connection. */
+/** Shared chat services wired from one connection. */
 export interface ChatServiceBundle {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
+  readonly usageStats: UsageStatsService;
 }
 
 /**
@@ -84,7 +87,9 @@ export function createChatServices(
     revisions: revisionRepo,
   });
 
-  return { projects, sessions, messages };
+  const usageStats = new DefaultUsageStatsService(conn);
+
+  return { projects, sessions, messages, usageStats };
 }
 
 /** Creates a {@link ProjectService} instance. */
@@ -103,6 +108,13 @@ export function createSessionService(
 /** Creates a {@link MessageService} instance. */
 export function createMessageService(conn: TdbcConnection): MessageService {
   return createChatServices(conn, _stubSessionDeps()).messages;
+}
+
+/** Creates a {@link UsageStatsService} instance. */
+export function createUsageStatsService(
+  conn: TdbcConnection,
+): UsageStatsService {
+  return createChatServices(conn, _stubSessionDeps()).usageStats;
 }
 
 /**
