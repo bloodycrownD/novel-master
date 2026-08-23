@@ -68,6 +68,12 @@ assistant:
 审查循环 2 轮收敛：第 1 轮 No-Go（1 P0 + 3 P1 + 4 P2），doc-fix 子代理闭合 8/8。P0 教训：主代理此前用 grep 裁决「主树无 formatTokenCount」是误判——include_pattern 未算项目根前缀导致漏匹配，实际 packages/core/src/common/format-token-count.ts 一直存在（.woktree 里还有 7 份副本）；审查子代理核实推翻。第 2 轮 Go（8/8 修复核验通过，AC↔Step/T 映射 11/11，现状抽查全部属实，顺带发现 ConversationPanel.tsx 存量 eslint X1 违规与本迭代无关）。剩余 2 条 P2（hourly 断言、366 天上限入 PRD）由主代理 trivial 豁免直接闭合。状态：execute-ready，待用户确认后可按 Step 1 开工。
 
 user:
+（code-dev-loop）按 spec 开发。
+
+assistant:
+deve 分支 feat/token-usage-stats（base aa32a19 文档 commit），9 wave 12 节点全部 done，**dev-ready**（cr-func-core + cr-func-final 均 func-ready，AC-1~11 全过）。实现 commit：Step1 d520cfc / Step2 f814dc7 / Step3 a3e487b / Step4 abce19b / Step5 cf06b46+快照 / Step6-8 desktop IPC+view+mobile 各一。验证：core 全量 2139/2142（3 失败=main 基线既有 vfs，基线 worktree 归因）、desktop 手动全量 347/349（2 失败=skills-handlers 既有漂移）、mobile 821/824（3 失败=既有 unhide）；双端 typecheck 过。DEV-1（未记录选项 UI 侧补）已闭合。坑与注记：①并行节点禁 git commit 由主代理分组提交；②s4 发现 bootstrap 顺序 DDL→migration→align 使老库 migration 时新列未建，up 内自行 ALTER（cr 已接受）；③desktop run-tests.mjs glob 既有 bug 官方 npm test 只覆盖部分文件，全量要 find 展开；④renderer 禁 import core，formatTokenCount 在 desktop 侧等价复制；⑤用户工作区同期在做 vfs entry-sequence-repair（bootstrap 未提交段+untracked），全程未触碰；test/skills/ 下 4 个他人 untracked 复现文件未碰。Step 9 真机验收待用户。
+
+user:
 （第 1 轮 fix wave）非 readonly 修复 PRD/SPEC，闭合 8 条 must-fix（P0-1、P1-1~3、P2-1~4），只改文档不改实现。
 
 assistant:
@@ -102,3 +108,9 @@ user:
 
 assistant:
 Step 6 完成（工作区未提交）：① shared/ipc-types.ts 加 USAGE_STATS_QUERY 单 channel + 8 个独立 DTO（Range/Filter/Today/Summary/Bucket/ModelRow/QueryRequest/QueryResponse 联合，结构等效 core 但不引 core 类型，满足 renderer X1 门禁）；② 新建 handlers/usage-stats.ts——getDesktopRuntime() 后按 kind 五路分发 rt.usageStats.*，toCoreFilter 显式转 filter（model 三态保留），toSummary/toBucket/toModelRow 显式映射 DTO，hourly 缺 dayLocalDate 传空串由服务层拒绝，错误 formatIpcError 包 IpcResult，switch default 加 never 兼容；③ handler-registry 注册 bindReq；④ runtime/types + create-desktop-runtime 加 usageStats 字段并 createUsageStatsService(conn) 装配；⑤ invoke-registry 加 ipcUsageStatsQuery，client.ts 解构导出；⑥ T-S6 测试 usage-stats-ipc.test.ts 7 例——runtime mock 走 module hook（usage-stats-runtime-hook.mjs 把 desktop-runtime-singleton 重定向到 globalThis 取 stub 的替身，Node 22 无 mock.module；register-then-import 与 fetch-models 范式一致）。两个环境发现：A) packages/core/dist 是旧构建（Step 5 导出缺失致 typecheck 报错），重建后修复；B) 重建暴露 skills-handlers.test.ts 2 例失败——core HEAD 的 seed-builtin-skills 会种内置 agent-config 技能（global 域），旧测试期望未含；且 run-tests.mjs 的 glob `test/**/*.test.*` 在 sh 下 ** 退化单层，根下 76 个测试文件从未被 npm test 跑到（既有 bug，未修，避免 npm test 变红，留给主代理决策）。验证：npm test 40 项全绿 / 手动全量（find 展开 + NODE_OPTIONS 注入 register-electron-mock）373 测试 371 pass，仅上述 skills 2 例既有漂移 / typecheck 过 / 改动文件 eslint 干净。
+
+user:
+（impl-s7-desktop-view）执行 Step 7：设置页「数据统计」视图——settings-nav 三处注册 + SettingsOverlay case + TokenUsageStatsView + shell.css 样式 + T-S6 view 测试。
+
+assistant:
+Step 7 完成（工作区未提交）：① settings-nav 三处（SettingsViewId 加 tokenUsageStats、数据分组加项 icon 📊、SETTINGS_TOP_LEVEL 加标题）；② SettingsOverlay 加 import + case；③ 新建 TokenUsageStatsView.tsx——SettingsPanel/SettingsSection 容器，双 SegmentedControl（时间范围+指标 tab），自定义区间原生 date input ×2（切到自定义时预填最近 7 天，from=起始日 0 点/to=结束日次日 0 点，>366 天或 from>to 行内提示且 filter memo 返回 null 暂停重查，对应 mobile「阻止确认」语义）；模型下拉三态哨兵 __all__/__unlogged__（DEV-1 未记录选项 UI 侧补）；总览 5 卡+今日 2 卡（data-metric 属性供测试定位）；TokenStatsChart 内部组件（CSS div 柱：--primary 输入下+--text-secondary 输出上堆叠 / 命中率 --success、无 cache 桶 3px 置灰柱，title+aria-label tooltip，点选 toggle 选中天→hourly 24 桶+当天汇总行）；分模型表 data-model 属性、用量降序；formatTokenCount 等价复制自 core 并注明来源口径（renderer X1 禁 import core）；④ shell.css 追加 token-stats-view__*/token-stats-chart__*/token-stats-models__* 全 var() 取色；⑤ 新测试 token-usage-stats-view.test.tsx 5 例（fetch-models 范式：react-alias-hook + react-test-renderer + mock invoke 按 kind 路由；断言卡片数值、柱序、未记录行、空态、kind/filter 参数切换、custom 超限不发查询、hourly dayLocalDate+24 桶+再点取消）。坑两枚：tsx 跑 @/ 别名必须带 --tsconfig tsconfig.renderer.json（run-tests.mjs 内置，手动单跑要自己加）；命中率卡 value span 带 --success 修饰类，测试断言用前缀匹配而非全等。验证：新测试 5 pass / npm test（官方，glob bug 只覆盖子目录）73 pass / find 展开手动全量 360 例 358 pass 仅 skills-handlers 2 例既有漂移 / typecheck 过 / 改动文件 eslint 0 错误（SettingsOverlay pageStack/showView 2 warning 为 HEAD 既有）。
