@@ -16,11 +16,18 @@ import {
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
-import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
+import {
+  defaultSavedModelSettings,
+  type LlmChatResult,
+  type ModelRequestService,
+  type SavedModel,
+} from "@novel-master/core/provider";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import { SimpleEventBus } from "@novel-master/core/events";
+import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
+import { BUILTIN_PROVIDER_UUID_OPENAI } from "../../src/domain/provider/logic/builtin-providers.js";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
@@ -40,9 +47,7 @@ const defaultRunScope = {
   workspaceModelId: RUN_MODEL_ID,
 };
 
-function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "workplace" | "savedModels">,
-): CreateAgentRunnerDeps {
+function runnerDeps(deps: RunnerDepsInput): CreateAgentRunnerDeps {
   return {
     savedModels: noopSavedModelRepository(),
     ...deps,
@@ -57,6 +62,13 @@ function runnerDeps(
       }) as never,
   };
 }
+
+// runnerDeps 的入参类型：savedModels 可覆盖（T-S3 用 stub repo 替换默认 noop）。
+type RunnerDepsInput = Omit<
+  CreateAgentRunnerDeps,
+  "eventBus" | "sessionKkv" | "workplace" | "savedModels"
+> &
+  Partial<Pick<CreateAgentRunnerDeps, "savedModels">>;
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
@@ -109,6 +121,29 @@ function createMockModel(responses: LlmChatResult[]): ModelRequestService {
       }
       return r;
     }),
+  };
+}
+
+/** 返回固定 saved model 的 stub repo（协议推断 + modelName 落库都用它）。 */
+function stubSavedModelRepository(saved: SavedModel | null): SavedModelRepository {
+  const noop = noopSavedModelRepository();
+  return {
+    ...noop,
+    findById: async () => saved,
+  };
+}
+
+function savedModelFixture(overrides: Partial<SavedModel> = {}): SavedModel {
+  return {
+    id: RUN_MODEL_ID,
+    // 内置 OpenAI 固定 UUID → 协议推断为 openai（区别于 fallback anthropic）。
+    providerId: BUILTIN_PROVIDER_UUID_OPENAI,
+    vendorModelId: "gpt-5.2",
+    modelName: "GPT-5.2",
+    settings: defaultSavedModelSettings("gpt-5.2"),
+    createdAtMs: 0,
+    updatedAtMs: 0,
+    ...overrides,
   };
 }
 
@@ -235,5 +270,86 @@ describe("agent-runner usage passthrough (T-S2)", () => {
     assert.equal(assistants.length, 2, "两轮各一条 assistant");
     assert.deepEqual(assistants[0]!.usage, firstUsage);
     assert.deepEqual(assistants[1]!.usage, secondUsage);
+  });
+});
+
+describe("agent-runner provider/modelName 落库（T-S3）", () => {
+  it("assistant append 携带 provider=推断协议、modelName=vendorModelId", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const model = createMockModel([
+      {
+        assistantText: "hi",
+        blocks: [{ type: "text", text: "hi" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+        // 覆盖 runnerDeps 默认的 noop repo，让协议推断命中内置 OpenAI UUID。
+        savedModels: stubSavedModelRepository(savedModelFixture()),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    const msgs = await session.list();
+    const assistant = msgs.find((m) => m.role === "assistant");
+    assert.ok(assistant, "应 append 一条 assistant message");
+    // provider 记协议而非服务商；modelName 记厂商模型 id。
+    assert.equal(assistant!.provider, "openai");
+    assert.equal(assistant!.modelName, "gpt-5.2");
+  });
+
+  it("saved model 查不到 → modelName 降级不传（null），provider 仍为推断协议", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const model = createMockModel([
+      {
+        assistantText: "hi",
+        blocks: [{ type: "text", text: "hi" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    // runnerDeps 默认即 noopSavedModelRepository（findById → null）。
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    const msgs = await session.list();
+    const assistant = msgs.find((m) => m.role === "assistant");
+    assert.ok(assistant);
+    // 查不到 saved → 协议推断 fallback anthropic，modelName 降级为 null。
+    assert.equal(assistant!.provider, "anthropic");
+    assert.equal(assistant!.modelName, null);
   });
 });

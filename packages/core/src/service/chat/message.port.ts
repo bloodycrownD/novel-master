@@ -33,6 +33,8 @@ export interface MessageService {
     content: MessageContent,
     options?: {
       provider?: string | null;
+      /** 厂商模型 id（写入 `model_name` 列，统计页接续/筛选用）。 */
+      modelName?: string | null;
       raw?: Record<string, unknown> | null;
       /** 结构化附件；写入 `attachments_json`，不写入 `content_json`。 */
       attachments?: readonly MessageAttachment[];

@@ -4,6 +4,12 @@
  * - 新建库 `chat_message` 有 prompt_tokens / completion_tokens / total_tokens 三列；
  * - INSERT assistant message 带 usage 后 SELECT 能读回；
  * - 不带 usage / 三列全 NULL 的老消息不展开 usage 字段（兼容路径）。
+ *
+ * T-S3（→ Step 3）：cache 两列 + model_name 读写 round-trip。
+ *
+ * - assistant 消息带 provider + modelName + cache 字段 → 读回保持；
+ * - cache 两列全 NULL → usage 不含 cacheReadTokens/cacheCreationTokens；
+ * - 仅 cache 有值（基础三列 NULL）→ usage 只含 cache 字段。
  */
 
 import assert from "node:assert/strict";
@@ -30,6 +36,17 @@ describe("message usage round-trip (T-S1)", () => {
     assert.equal(names.includes("prompt_tokens"), true);
     assert.equal(names.includes("completion_tokens"), true);
     assert.equal(names.includes("total_tokens"), true);
+  });
+
+  it("新建库 chat_message 含 cache 两列与 model_name 列（T-S3）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const columns = await ctx.conn.query<{ name: string }>(
+      `SELECT name FROM pragma_table_info('chat_message')`,
+    );
+    const names = columns.map((c) => c.name);
+    assert.equal(names.includes("cache_read_tokens"), true);
+    assert.equal(names.includes("cache_creation_tokens"), true);
+    assert.equal(names.includes("model_name"), true);
   });
 
   it("INSERT assistant message 带 usage → SELECT 读回三个字段", async () => {
@@ -136,5 +153,139 @@ describe("message usage round-trip (T-S1)", () => {
 
     const byId = await ctx.messages.get(appended.id);
     assert.deepEqual(byId.usage, { promptTokens: 99 });
+  });
+});
+
+describe("message cache/model_name round-trip (T-S3)", () => {
+  it("assistant 带 provider + modelName + cache 字段 → 读回保持", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "cache-round-trip");
+
+    const usage = {
+      promptTokens: 100,
+      completionTokens: 40,
+      totalTokens: 140,
+      cacheReadTokens: 2048,
+      cacheCreationTokens: 512,
+    };
+    const appended = await ctx.messages.append(
+      session.id,
+      "assistant",
+      textBlocks("cached"),
+      {
+        provider: "anthropic",
+        modelName: "claude-sonnet-4-5",
+        usage,
+      },
+    );
+    assert.equal(appended.provider, "anthropic");
+    assert.equal(appended.modelName, "claude-sonnet-4-5");
+    assert.deepEqual(appended.usage, usage);
+
+    const byId = await ctx.messages.get(appended.id);
+    assert.equal(byId.provider, "anthropic");
+    assert.equal(byId.modelName, "claude-sonnet-4-5");
+    assert.deepEqual(byId.usage, usage);
+
+    const listed = await ctx.messages.listBySession(session.id);
+    const reloaded = listed.find((m) => m.id === appended.id);
+    assert.ok(reloaded);
+    assert.equal(reloaded!.provider, "anthropic");
+    assert.equal(reloaded!.modelName, "claude-sonnet-4-5");
+    assert.deepEqual(reloaded!.usage, usage);
+  });
+
+  it("不传 modelName → 落库 NULL，读回 null（老消息兼容）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "model-name-null");
+
+    const appended = await ctx.messages.append(
+      session.id,
+      "assistant",
+      textBlocks("no-model"),
+    );
+    assert.equal(appended.modelName, null);
+
+    const byId = await ctx.messages.get(appended.id);
+    assert.equal(byId.modelName, null);
+  });
+
+  it("cache 两列全 NULL → usage 不含 cache 字段（老消息兼容）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "cache-null");
+
+    const appended = await ctx.messages.append(
+      session.id,
+      "assistant",
+      textBlocks("no-cache"),
+      {
+        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      },
+    );
+    const byId = await ctx.messages.get(appended.id);
+    assert.deepEqual(byId.usage, {
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    });
+    assert.equal("cacheReadTokens" in byId.usage!, false);
+    assert.equal("cacheCreationTokens" in byId.usage!, false);
+  });
+
+  it("仅 cache 有值（基础三列 NULL）→ usage 只含 cache 字段", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "cache-only");
+
+    const repo = new SqliteMessageRepository(ctx.conn);
+    const message: ChatMessage = {
+      id: randomUUID(),
+      sessionId: session.id,
+      seq: 1,
+      role: "assistant",
+      content: textBlocks("cache-only"),
+      provider: "openai",
+      modelName: "gpt-5.2",
+      raw: null,
+      createdAtMs: Date.now(),
+      hidden: false,
+      usage: { cacheReadTokens: 33 },
+    };
+    await repo.insert(message);
+
+    const read = await repo.findById(message.id);
+    assert.ok(read);
+    assert.deepEqual(read!.usage, { cacheReadTokens: 33 });
+    assert.equal(read!.provider, "openai");
+    assert.equal(read!.modelName, "gpt-5.2");
+  });
+
+  it("repo 直接 insert 五列全 NULL 的老消息 → usage 为 undefined（不展开空对象）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "legacy-null-cache");
+
+    const repo = new SqliteMessageRepository(ctx.conn);
+    const legacy: ChatMessage = {
+      id: randomUUID(),
+      sessionId: session.id,
+      seq: 1,
+      role: "assistant",
+      content: textBlocks("legacy"),
+      provider: null,
+      raw: null,
+      createdAtMs: Date.now(),
+      hidden: false,
+    };
+    await repo.insert(legacy);
+
+    const read = await repo.findById(legacy.id);
+    assert.ok(read);
+    assert.equal(read!.usage, undefined);
+    assert.equal("usage" in read!, false);
+    assert.equal(read!.modelName, null);
   });
 });

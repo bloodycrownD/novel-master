@@ -551,6 +551,7 @@ describe("AgentRunner", () => {
       modelRequests: model,
       registry,
       toolCtx: mockToolCtx(mockVfs()),
+      savedModels: noopSavedModelRepository(),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
       workplace: () =>
@@ -702,6 +703,7 @@ describe("AgentRunner", () => {
       modelRequests: model,
       registry,
       toolCtx: mockToolCtx(mockVfs()),
+      savedModels: noopSavedModelRepository(),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
       workplace: () =>
@@ -757,6 +759,7 @@ describe("AgentRunner", () => {
       modelRequests: model,
       registry,
       toolCtx: mockToolCtx(mockVfs()),
+      savedModels: noopSavedModelRepository(),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
       workplace: () =>
@@ -829,6 +832,7 @@ describe("AgentRunner", () => {
       modelRequests: model,
       registry,
       toolCtx: mockToolCtx(mockVfs()),
+      savedModels: noopSavedModelRepository(),
       eventBus: bus,
       sessionKkv: createMemorySessionKkv(),
       workplace: () =>
