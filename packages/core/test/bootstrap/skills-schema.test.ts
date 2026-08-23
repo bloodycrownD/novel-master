@@ -70,12 +70,12 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     const versionRows = await conn.query<{ user_version: number }>(
       "PRAGMA user_version",
     );
-    assert.equal(Number(versionRows[0]!.user_version), 7, "boot version 应升到 7");
+    assert.equal(Number(versionRows[0]!.user_version), 8, "boot version 应升到 8");
 
     await conn.close();
   });
 
-  it("存量库（boot version 5）升级：幂等补建表并升 6，重复 bootstrap 安全", async () => {
+  it("存量库（boot version 5）升级：幂等补建表并升级，重复 bootstrap 安全", async () => {
     const conn = await openMemory();
     // 模拟 v5 存量库：版本号停在 5，且没有 skill_disabled_rule 表
     await conn.execute("PRAGMA user_version = 5");
@@ -88,7 +88,7 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     const versionRows = await conn.query<{ user_version: number }>(
       "PRAGMA user_version",
     );
-    assert.equal(Number(versionRows[0]!.user_version), 7, "boot version 应升到 7");
+    assert.equal(Number(versionRows[0]!.user_version), 8, "boot version 应升到 8");
 
     // 复合主键形态：重复 (scope_key, skill_name) 插入应被拒绝
     await conn.execute(

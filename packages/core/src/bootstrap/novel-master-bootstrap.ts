@@ -61,8 +61,13 @@ import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sq
  * v7：v6 版本号曾在两条分支各自使用（main 侧 v1.4.29 与 skills 分支各自 +1），
  * 导致被 main v6 迁移过的库缺 skill_disabled_rule 表。 v7 强制重跑全量幂等 DDL
  * 补齐（CREATE TABLE IF NOT EXISTS，已存在的表不受影响）。
+ *
+ * v8：chat_message 新增 cache_read_tokens / cache_creation_tokens / model_name
+ * 三列与 idx_chat_message_created_at 索引。老库（v7）靠本轮 bump 走慢路径，
+ * 由 DDL 建索引 + ALIGN 补列；新列的存量回填由 usage-cache-model-backfill-v1
+ * migration 承担（见 schema-migrations 目录）。
  */
-export const SCHEMA_BOOT_VERSION = 7;
+export const SCHEMA_BOOT_VERSION = 8;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [

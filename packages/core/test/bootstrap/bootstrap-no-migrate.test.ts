@@ -42,6 +42,14 @@ const BASELINE_BACKUP_MODULES = new Set([
   "vfs-revision-ref-count-v1.ts",
 ]);
 
+/**
+ * 待实现占位模块：Step 1 只建文件骨架，up 为空时提前登记会被老库记为已执行，
+ * Step 4 实现回填逻辑后登记进 SCHEMA_MIGRATIONS 并从本清单移除。
+ */
+const PENDING_PLACEHOLDER_MODULES = new Set([
+  "usage-cache-model-backfill-v1.ts",
+]);
+
 describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
   it("源码中不存在未登记的 migrate-*.ts 模块（schema-migrations 外）", async () => {
     const files = await collectTsFiles(CORE_SRC);
@@ -93,7 +101,8 @@ describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
           e.isFile() &&
           e.name.endsWith(".ts") &&
           !SCHEMA_MIGRATION_INFRA.has(e.name) &&
-          !BASELINE_BACKUP_MODULES.has(e.name),
+          !BASELINE_BACKUP_MODULES.has(e.name) &&
+          !PENDING_PLACEHOLDER_MODULES.has(e.name),
       )
       .map((e) => e.name);
 
