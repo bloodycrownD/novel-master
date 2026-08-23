@@ -1,7 +1,7 @@
 /**
  * React Navigation param lists (prototype pageId → route names).
  */
-import type {NavigatorScreenParams} from '@react-navigation/native';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type MainTabParamList = {
   Chat: undefined;
@@ -11,12 +11,12 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   AgentsSettings: undefined;
-  AgentEditor: {agentId?: string} | undefined;
+  AgentEditor: { agentId?: string } | undefined;
   RealPrompt: undefined;
   Providers: undefined;
   ProviderCreate: undefined;
-  ProviderDetail: {providerId?: string} | undefined;
-  ModelSampling: {savedModelId?: string} | undefined;
+  ProviderDetail: { providerId?: string } | undefined;
+  ModelSampling: { savedModelId?: string } | undefined;
 
   StorageConfig: undefined;
   CloudSyncProgress: {
@@ -27,8 +27,8 @@ export type RootStackParamList = {
   CloudSyncConfig: undefined;
   GlobalTemplate: undefined;
   RegexGroups: undefined;
-  RegexRules: {groupId?: string} | undefined;
-  RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
+  RegexRules: { groupId?: string } | undefined;
+  RegexRuleEditor: { groupId?: string; ruleId?: string } | undefined;
   FileEditor: {
     path: string;
     /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */
@@ -36,7 +36,11 @@ export type RootStackParamList = {
     projectId?: string;
     sessionId?: string;
     /** skill 域引用：按域取 globalMetaVfs/projectMetaVfs，路由 path 为 /meta/skills/{name}/{rel}。 */
-    skillRef?: {domain: 'global' | 'project'; name: string; projectId?: string};
+    skillRef?: {
+      domain: 'global' | 'project';
+      name: string;
+      projectId?: string;
+    };
     /** Called after a successful session-scope save (refreshes workspace list). */
     onSessionVfsSaved?: () => void;
   };
@@ -53,9 +57,15 @@ export type RootStackParamList = {
   /** 会话详情页：承载原 SessionActionsDrawer 五项能力 + agent/model 来源展示。 */
   SessionDetail: { projectId: string; sessionId: string };
   /** 子代理会话只读浏览页：主会话点击 task 工具卡片跳转到此。文件在共享的父会话工作区，parentSessionId 用于 FileEditor 的 session scope。 */
-  SubagentSessionView: { projectId: string; sessionId: string; parentSessionId: string };
+  SubagentSessionView: {
+    projectId: string;
+    sessionId: string;
+    parentSessionId: string;
+  };
   /** 聊天记录查询页：参数与 SessionDetail 一致，限定单会话范围搜索。 */
   ChatHistorySearch: { projectId: string; sessionId: string };
+  /** 数据统计页：Token 用量与缓存命中率（无参数，筛选在页内进行）。 */
+  TokenUsageStats: undefined;
   About: undefined;
 };
 
