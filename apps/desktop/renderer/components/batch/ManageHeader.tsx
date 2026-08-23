@@ -7,6 +7,10 @@ type ManageHeaderProps = {
   onEnterBatch: () => void;
   onCancelBatch: () => void;
   onDelete?: () => void;
+  /** 批量模式下追加的「全选/全不选」动作；不传则不渲染该按钮。 */
+  onSelectAll?: () => void;
+  /** 当前是否已全选（决定按钮文案「全不选」/「全选」）。 */
+  allSelected?: boolean;
   hint?: string;
   normalActions?: ReactNode;
 };
@@ -18,6 +22,8 @@ export function ManageHeader({
   onEnterBatch,
   onCancelBatch,
   onDelete,
+  onSelectAll,
+  allSelected,
   hint,
   normalActions,
 }: ManageHeaderProps) {
@@ -29,6 +35,11 @@ export function ManageHeader({
             取消
           </button>
           <span className="list-manage-header__count">已选 {selectedCount} 项</span>
+          {onSelectAll ? (
+            <button type="button" className="list-manage-header__link" onClick={onSelectAll}>
+              {allSelected ? "全不选" : "全选"}
+            </button>
+          ) : null}
           <button
             type="button"
             className="list-manage-header__link list-manage-header__link--danger"

@@ -30,14 +30,20 @@ export function FetchModelsModal({
   onSaved,
   onError,
 }: FetchModelsModalProps) {
-  const { exit, toggle, isSelected, selectedCount } = useBatchSelection();
+  const { exit, toggle, isSelected, selectedCount, selectRange } = useBatchSelection();
   const [rows, setRows] = useState<SuggestionRow[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // 已保存成功的行（与 mobile FetchModelsSheet 的 addedIds 同语义）：
+  // 部分失败重试时跳过已保存行，避免重复 save。
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
 
-  const savedSet = useMemo(() => new Set(savedVendorIds), [savedVendorIds]);
+  const savedSet = useMemo(
+    () => new Set([...savedVendorIds, ...addedIds]),
+    [savedVendorIds, addedIds],
+  );
 
   // 过滤只作用展示层：displayName 为空（含纯空白）时只按 vendorModelId 匹配。
   const filteredRows = useMemo(() => {
@@ -88,6 +94,7 @@ export function FetchModelsModal({
       return;
     }
     exit();
+    setAddedIds(new Set());
     setRows([]);
     setQuery("");
     setError(undefined);
@@ -99,6 +106,19 @@ export function FetchModelsModal({
   }
 
   const selectableRows = rows.filter((r) => !savedSet.has(r.vendorModelId));
+  // 过滤后可选（未保存）行：全选只作用于这部分，避免混入被过滤掉的旧勾选。
+  const selectableFilteredRows = filteredRows.filter(
+    (r) => !savedSet.has(r.vendorModelId),
+  );
+  const allFilteredSelected =
+    selectableFilteredRows.length > 0 &&
+    selectableFilteredRows.every((r) => isSelected(r.vendorModelId));
+  const handleSelectAll = () => {
+    // 全选重置为「过滤后可选行全选」；全不选清空全部勾选。
+    selectRange(
+      allFilteredSelected ? [] : selectableFilteredRows.map((r) => r.vendorModelId),
+    );
+  };
   const confirmLabel =
     selectedCount > 0 ? `添加 (${selectedCount})` : "添加";
 
@@ -109,7 +129,11 @@ export function FetchModelsModal({
     setSaving(true);
     try {
       const selected = rows.filter(
-        (r) => isSelected(r.vendorModelId) && !savedSet.has(r.vendorModelId),
+        (r) =>
+          isSelected(r.vendorModelId) &&
+          !savedSet.has(r.vendorModelId) &&
+          // 跳过本弹窗内已保存成功的行（部分失败重试不重复 save）
+          !addedIds.has(r.vendorModelId),
       );
       for (const row of selected) {
         const res = await ipcProviderModelsSave({
@@ -118,9 +142,12 @@ export function FetchModelsModal({
           modelName: row.displayName !== row.vendorModelId ? row.displayName : undefined,
         });
         if (!res.ok) {
+          // 对齐 mobile：失败即停；已成功行标已添加，失败行保留勾选方便重试
           onError?.(res.error.message);
+          setAddedIds((prev) => new Set(prev).add(row.vendorModelId));
           return;
         }
+        setAddedIds((prev) => new Set(prev).add(row.vendorModelId));
       }
       await onSaved();
       onClose();
@@ -164,13 +191,23 @@ export function FetchModelsModal({
           </p>
         ) : (
           <>
-            <input
-              type="text"
-              className="fetch-models-modal__filter"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="过滤模型…"
-            />
+            <div className="fetch-models-modal__filter-bar">
+              <input
+                type="text"
+                className="fetch-models-modal__filter"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="过滤模型…"
+              />
+              <button
+                type="button"
+                className="fetch-models-modal__select-all"
+                disabled={saving || selectableFilteredRows.length === 0}
+                onClick={handleSelectAll}
+              >
+                {allFilteredSelected ? "全不选" : "全选"}
+              </button>
+            </div>
             {filteredRows.length === 0 ? (
               <p className="fetch-models-modal__status">无匹配模型</p>
             ) : (

@@ -5545,6 +5545,41 @@ html[data-theme="dark"] .chat-batch-bar {
   border-color: var(--primary);
 }
 
+/* 过滤输入框与全选按钮同行；输入框的 8px 底边距由本容器接管。 */
+.fetch-models-modal__filter-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.fetch-models-modal__filter-bar .fetch-models-modal__filter {
+  width: auto;
+  flex: 1;
+  margin: 0;
+}
+
+.fetch-models-modal__select-all {
+  flex-shrink: 0;
+  padding: 0 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fetch-models-modal__select-all:hover:not(:disabled) {
+  background: var(--bg-secondary);
+}
+
+.fetch-models-modal__select-all:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
 .fetch-models-modal__row {
   width: 100%;
   display: flex;

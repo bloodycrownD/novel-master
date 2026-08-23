@@ -311,3 +311,113 @@ describe("FetchModelsModal 过滤输入框 (T-FM5-8)", () => {
     }
   });
 });
+
+describe("FetchModelsModal 全选/全不选 (T-FM9-11)", () => {
+  /** 点击「全选/全不选」按钮（fetch-models-modal__select-all）。 */
+  async function clickSelectAll(root: ReactTestRendererRoot): Promise<void> {
+    await act(async () => {
+      const btn = root.findByProps({ className: "fetch-models-modal__select-all" });
+      assert.equal(btn.props.disabled, false, "全选按钮应可用");
+      btn.props.onClick();
+    });
+  }
+
+  function selectAllLabel(root: ReactTestRendererRoot): string {
+    const btn = root.findByProps({ className: "fetch-models-modal__select-all" });
+    return (btn.children as unknown[]).map((c) => String(c)).join("");
+  }
+
+  it("T-FM9：全选选中全部未保存行，再点变全不选并清空", async () => {
+    const calls: string[] = [];
+    const restore = mockWindow(makeInvoke(SUGGESTIONS, calls));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountModal(calls);
+      const root = renderer.root;
+
+      assert.equal(selectAllLabel(root), "全选");
+      await clickSelectAll(root);
+      assert.equal(
+        rowClassNames(root).filter((c) => c.includes("is-selected")).length,
+        3,
+      );
+      assert.equal(selectedCountText(root), "已选 3 项");
+      assert.equal(selectAllLabel(root), "全不选");
+
+      await clickSelectAll(root);
+      assert.equal(
+        rowClassNames(root).filter((c) => c.includes("is-selected")).length,
+        0,
+      );
+      assert.equal(selectedCountText(root), "已选 0 项");
+      assert.equal(selectAllLabel(root), "全选");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("T-FM10：全选只作用未保存行，已添加行不选中", async () => {
+    const calls: string[] = [];
+    const restore = mockWindow(makeInvoke(SUGGESTIONS, calls));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountModal(calls, ["gpt-4o"]);
+      const root = renderer.root;
+
+      // 全量全选：saved 的 gpt-4o 不参与，只选中剩下 2 行
+      await clickSelectAll(root);
+      assert.equal(selectedCountText(root), "已选 2 项");
+      assert.ok(
+        rowClassNames(root)[0].includes("is-saved") &&
+          !rowClassNames(root)[0].includes("is-selected"),
+        "saved 行不应被选中",
+      );
+
+      // 过滤 "gpt"：可选行只剩 mini 且已选 → 文案切为全不选，点击后连同隐藏的 claude 一起清空
+      await typeQuery(root, "gpt");
+      assert.equal(selectAllLabel(root), "全不选");
+      await clickSelectAll(root);
+      await typeQuery(root, "");
+      assert.equal(
+        rowClassNames(root).filter((c) => c.includes("is-selected")).length,
+        0,
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("T-FM11：过滤后全选重置为「过滤后可选行全选」，被过滤隐藏的旧勾选不混入", async () => {
+    const calls: string[] = [];
+    const restore = mockWindow(makeInvoke(SUGGESTIONS, calls));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountModal(calls);
+      const root = renderer.root;
+
+      // 先勾选 claude，再过滤 gpt 后全选：勾选重置为过滤后可选的两行 gpt，claude 被清掉
+      await clickRow(root, "Claude 3.5 Sonnet");
+      await typeQuery(root, "gpt");
+      await clickSelectAll(root);
+      assert.equal(selectedCountText(root), "已选 2 项");
+      assert.equal(selectAllLabel(root), "全不选");
+
+      // 清空过滤：只有两行 gpt 选中，claude 不选
+      await typeQuery(root, "");
+      const selected = rowClassNames(root).filter((c) => c.includes("is-selected"));
+      assert.equal(selected.length, 2);
+      assert.equal(selectedCountText(root), "已选 2 项");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+});
