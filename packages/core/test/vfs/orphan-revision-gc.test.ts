@@ -55,21 +55,29 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     }
 
     const beforeActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL`,
+      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
+       AND entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
+      [`session:${project.id}:${session.id}`],
     );
     const beforeBlob = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_content_blob`,
+      // 按 body-v1/v2 前缀限定：内置技能种子（agent-config）也占 1 个 blob
+      `SELECT COUNT(*) AS cnt FROM vfs_content_blob
+       WHERE content_hash IN (SELECT content_hash FROM vfs_revision
+         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?))`,
+      [`session:${project.id}:${session.id}`],
     );
     // 10 文件 × 2 版 active = 20 条；20 个不同内容 = 20 个 blob。
+    // revision 计数按 session scope 过滤：bootstrap 会无条件种入内置技能
+    // （global:meta 的 agent-config/SKILL.md，v1.5.2 起），全局计数会多 1 条。
     assert.equal(
       Number(beforeActiveRev[0]!.cnt),
       totalFiles * 2,
-      "造数据后应有 20 条 active+有hash revision",
+      "造数据后 session scope 应有 20 条 active+有hash revision",
     );
     assert.equal(
       Number(beforeBlob[0]!.cnt),
       totalFiles * 2,
-      "造数据后应有 20 个 blob",
+      "造数据后 session scope 相关 blob 应有 20 个",
     );
 
     // 删掉全部文件：entry 被删，旧版 active revision 成为 JOIN 孤儿。
@@ -102,10 +110,15 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
     const gcBlobs = await runDeferredBlobGc(ctx.conn);
 
     const afterActiveRev = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL`,
+      `SELECT COUNT(*) AS cnt FROM vfs_revision WHERE status='active' AND content_hash IS NOT NULL
+       AND entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?)`,
+      [`session:${project.id}:${session.id}`],
     );
     const afterBlob = await ctx.conn.query<{ cnt: number }>(
-      `SELECT COUNT(*) AS cnt FROM vfs_content_blob`,
+      `SELECT COUNT(*) AS cnt FROM vfs_content_blob
+       WHERE content_hash IN (SELECT content_hash FROM vfs_revision
+         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = ?))`,
+      [`session:${project.id}:${session.id}`],
     );
 
     // swept 应包含全部 20 条 active 孤儿 revision（v1 旧版 + v2 旧 head，ref_count 均归 0）。
@@ -119,11 +132,11 @@ describe("T-GC1: orphan revision + blob GC（findings 发现 14）", () => {
       0,
       "GC 后有 content_hash 的 active revision 应为 0（孤儿全清）",
     );
-    // blob 全清（revision DELETE 触发器连带回收）。
+    // blob 全清（revision DELETE 触发器连带回收；仅计 session scope 相关 blob）。
     assert.equal(
       Number(afterBlob[0]!.cnt),
       0,
-      "GC 后 vfs_content_blob 应为 0（trigger 连带删）",
+      "GC 后 session scope 相关 blob 应为 0（trigger 连带删）",
     );
     // 延期 GC 兜底应无残留可清。
     assert.equal(

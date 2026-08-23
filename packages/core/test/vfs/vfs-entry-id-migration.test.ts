@@ -283,6 +283,15 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
       );
 
       // vfs_entry 行数 + entry_id 唯一自增
+      // 计数限定在造数据的三个旧 scope：bootstrap 会无条件种入内置技能
+      // （global:meta 的 agent-config，v1.5.2 起），全局计数会多出种子行。
+      // scope_key LIKE 'session:%' 会误命中 'session:...' 与旧 'session:pid:sid'
+      // 同形问题——这里造数据用固定 PROJECT/SESSION，直接枚举三个 scope 最稳。
+      const MIGRATED_SCOPES = [
+        `session:${PROJECT_ID}:${SESSION_ID}`,
+        `project:${PROJECT_ID}`,
+        `global`,
+      ];
       const entryRows = await conn.query<{
         n: number;
         min_id: number;
@@ -293,8 +302,8 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
                MIN(entry_id) AS min_id,
                MAX(entry_id) AS max_id,
                COUNT(entry_id) - COUNT(DISTINCT entry_id) AS dup
-        FROM vfs_entry
-      `);
+        FROM vfs_entry WHERE scope_key IN (?, ?, ?)
+      `, MIGRATED_SCOPES);
       assert.equal(Number(entryRows[0]!.n), expected.totalEntries);
       assert.equal(Number(entryRows[0]!.dup), 0, "entry_id 必须唯一");
       assert.equal(
@@ -303,9 +312,11 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
         "entry_id 必须连续自增",
       );
 
-      // revision 行数 + 按 entry_id 寻址
+      // revision 行数 + 按 entry_id 寻址（同样限定迁移 scope，排除内置技能种子）
       const revRows = await conn.query<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM vfs_revision`,
+        `SELECT COUNT(*) AS n FROM vfs_revision
+         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key IN (?, ?, ?))`,
+        MIGRATED_SCOPES,
       );
       assert.equal(Number(revRows[0]!.n), expected.totalRevisions);
 
@@ -323,7 +334,8 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
       const blobRows = await conn.query<{
         content_hash: string;
         ref_count: number;
-      }>(`SELECT content_hash, ref_count FROM vfs_content_blob ORDER BY content_hash`);
+      }>(`SELECT content_hash, ref_count FROM vfs_content_blob
+          WHERE content_hash LIKE 'blob\_%' ESCAPE '\\' ORDER BY content_hash`);
       assert.equal(blobRows.length, expected.totalEntries);
       for (const row of blobRows) {
         assert.equal(
@@ -712,17 +724,23 @@ describe("vfs-entry-id-redesign-v1 migration", () => {
       // 不应抛错
       await bootstrapNovelMaster(conn);
 
-      // 正常 entry 迁移成功
+      // 正常 entry 迁移成功（只看迁移 scope：bootstrap 还会种入内置技能 entry）
       const entries = await conn.query<{ scope_key: string; path: string }>(
-        `SELECT scope_key, path FROM vfs_entry ORDER BY path`,
+        `SELECT scope_key, path FROM vfs_entry WHERE scope_key = 'session:p:s'`,
       );
-      assert.equal(entries.length, 1, "只保留正常 entry");
+      assert.equal(entries.length, 1, "session scope 只保留正常 entry");
       assert.equal(entries[0]!.scope_key, "session:p:s");
       assert.equal(entries[0]!.path, "/real.md");
+      // 脏 entry 确认丢弃（无 scope_key 能匹配到脏 path）
+      const dirtyEntries = await conn.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM vfs_entry WHERE path LIKE '/random/%' OR path = '/projects/p'`,
+      );
+      assert.equal(Number(dirtyEntries[0]!.n), 0, "脏 entry 应被丢弃");
 
-      // 正常 revision 迁移成功，脏 revision 丢弃
+      // 正常 revision 迁移成功，脏 revision 丢弃（限定 session:p:s，排除内置技能种子）
       const revs = await conn.query<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM vfs_revision`,
+        `SELECT COUNT(*) AS n FROM vfs_revision
+         WHERE entry_id IN (SELECT entry_id FROM vfs_entry WHERE scope_key = 'session:p:s')`,
       );
       assert.equal(Number(revs[0]!.n), 1, "脏 entry 的 revision 应一起丢弃");
 
