@@ -330,6 +330,39 @@ describe('FetchModelsSheet 勾选批量与全选 (T-FM5-7)', () => {
     expect(json(renderer)).not.toContain('添加 (3)');
   });
 
+  it('T-FM5b: 全选为重置语义——被过滤隐藏的旧勾选会被清掉（对齐 desktop T-FM11）', async () => {
+    const {renderer} = await renderSheet();
+    // 先勾选 claude 行
+    act(() => {
+      findClickableByText(renderer.root, 'Claude 3 Sonnet')!.props.onPress();
+    });
+    expect(json(renderer)).toContain('已选 1 项');
+    // 过滤 gpt（claude 被隐藏）后全选：重置为 gpt 行全选，claude 旧勾选被清
+    typeQuery(renderer.root, 'gpt');
+    act(() => {
+      findClickableByText(renderer.root, '全选')!.props.onPress();
+    });
+    expect(json(renderer)).toContain('已选 1 项');
+    expect(json(renderer)).toContain('添加 (1)');
+    // 清空过滤确认：只剩 gpt 勾选，claude 未勾
+    typeQuery(renderer.root, '');
+    expect(json(renderer)).toContain('已选 1 项');
+  });
+
+  it('T-FM5c: 过滤后无可选行时计数条仍显示（隐藏勾选可见可清，对齐 desktop）', async () => {
+    const {renderer} = await renderSheet();
+    act(() => {
+      findClickableByText(renderer.root, '全选')!.props.onPress();
+    });
+    expect(json(renderer)).toContain('已选 3 项');
+    // 过滤词命中 0 行可选（无匹配）：全量计数基准下计数条仍在，勾选数可见
+    typeQuery(renderer.root, 'zzz-no-hit');
+    expect(json(renderer)).toContain('已选 3 项');
+    expect(json(renderer)).toContain('添加 (3)');
+    // 全选按钮隐藏（无可选行），但计数保留
+    expect(json(renderer)).not.toContain("全选'");
+  });
+
   it('T-FM6: 批量添加逐个保存，成功后清空勾选并标「已添加」', async () => {
     const {renderer, onSaved} = await renderSheet();
     act(() => {

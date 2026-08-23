@@ -10,11 +10,11 @@ desktop 端「服务商管理」的删模型与加模型（拉取模型弹窗）
 
 assistant:
 双入口实现（分支 feat/model-select-all）：
-- ManageHeader（components/batch/ManageHeader.tsx）：加可选 props `onSelectAll?/allSelected?`，批量行「已选 N 项」后渲染「全选/全不选」link 按钮，不传 props 时 UI 与原来完全一致（调用方 AgentsSettingsView/ProvidersView/ChatRail 均未动）。
+- ManageHeader（components/batch/ManageHeader.tsx）：加可选 props `onSelectAll?/allSelected?`，批量行「已选 N 项」后渲染「全选/全不选」link 按钮，不传 props 时 UI 与原来完全一致（desktop 调用方 AgentsSettingsView/ProvidersView/ChatRail/SkillsManageView 均未动）。
 - ProviderDetailView 删模型（SettingsViews.tsx）：`allModelsSelected = models.length > 0 && models.every(m => batch.selectedIds.has(m.id))`，onSelectAll 走 `batch.selectRange(allModelsSelected ? [] : models.map(m => m.id))`（selectRange 本身是重置语义）。
 - FetchModelsModal：过滤输入框与全选按钮包进 `fetch-models-modal__filter-bar`（flex 同行，输入框 margin 由容器接管）；`selectableFilteredRows = filteredRows.filter(未保存)`，全选= selectRange 重置为过滤后可选行全选（被过滤掉的旧勾选会被清掉，用户拍板的重置语义），全不选= selectRange([])；saving 或无可选行时禁用；allFilteredSelected 要求 length>0 且全选中。样式在 shell.css 的 fetch-models-modal 段。
 - 测试：fetch-models-modal.test.tsx 追加 T-FM9-11（全选/全不选切换、saved 行不参与且过滤后可选行已全选时文案切全不选、重置语义不混入隐藏旧勾选）。坑：全量全选后再过滤到只剩已选行，此时按钮走「全不选」分支会清空而非继续加选，编排用例时要注意；计数段落只要存在可选行就渲染「已选 0 项」，不会消失。
-- 验证：typecheck 过；fetch-models-modal 7/7、provider-detail-tabs + settings-agents-delete-confirm 5/5 全绿。worktree apps/desktop 无 node_modules 但根 workspace 有，脚本直接跑通无需 install。
+- 验证：typecheck 过；desktop 侧 fetch-models-modal 7/7、settings-agents-delete-confirm 全绿；mobile 侧 provider-detail-tabs 源码断言同批补齐（分属两端测试，别混看）。worktree apps/desktop 无 node_modules 但根 workspace 有，脚本直接跑通无需 install。
 
 user（同日第二轮）：
 mobile 端同主题：删模型接入全选 + FetchModelsSheet 从「点行即存」改勾选批量添加，仍在 feat/model-select-all 分支，只改 worktree 文件。

@@ -74,6 +74,12 @@ export function FetchModelsSheet({
     () => filteredRows.filter(item => !addedSet.has(item.vendorModelId)),
     [filteredRows, addedSet],
   );
+  // 全量（未过滤）可选行：计数条展示基准。过滤后无可选行时计数仍需可见
+  // （隐藏勾选无处清空），与 desktop FetchModelsModal 口径一致。
+  const allSelectableCount = useMemo(
+    () => rows.filter(item => !addedSet.has(item.vendorModelId)).length,
+    [rows, addedSet],
+  );
 
   const allSelected =
     selectableRows.length > 0 &&
@@ -201,13 +207,15 @@ export function FetchModelsSheet({
                 placeholder="过滤模型…"
               />
             </View>
-            {selectableRows.length > 0 ? (
+            {allSelectableCount > 0 ? (
               <View style={styles.selectBar}>
-                <Pressable onPress={toggleSelectAll} disabled={saving} hitSlop={8}>
-                  <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                    {allSelected ? '全不选' : '全选'}
-                  </Text>
-                </Pressable>
+                {selectableRows.length > 0 ? (
+                  <Pressable onPress={toggleSelectAll} disabled={saving} hitSlop={8}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                      {allSelected ? '全不选' : '全选'}
+                    </Text>
+                  </Pressable>
+                ) : null}
                 <Text
                   style={{color: tokens.textSecondary, fontSize: 13}}>
                   已选 {batch.selectedCount} 项

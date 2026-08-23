@@ -38,6 +38,17 @@ test("T-T1: 默认 tab 是「服务商配置」（create 后直接可编辑）",
   assert.match(source, /useState<ProviderTab>\("config"\)/);
 });
 
+test("T-SA1: 删模型批量模式接入全选（ManageHeader 传 onSelectAll/allSelected，重置语义）", () => {
+  // ProviderDetailView 的 ManageHeader 传了全选 props
+  assert.match(source, /allSelected=\{allModelsSelected\}/);
+  assert.match(source, /onSelectAll=\{\(\) =>/);
+  // 全选 = 重置为全部模型 id；已全选 = 清空
+  assert.match(
+    source,
+    /allModelsSelected \? \[\] : models\.map\(\(m\) => m\.id\)/,
+  );
+});
+
 test("T-T4: ProvidersView ContextMenu 无「编辑」项；handler 无 edit 分支", () => {
   // ProvidersView 的 ContextMenu items 不再含 编辑（重命名/删除保留）
   // 注意 ProviderDetailView 的模型菜单也有「编辑」项（模型编辑入口，保留），

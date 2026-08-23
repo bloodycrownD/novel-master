@@ -36,8 +36,14 @@ export function FetchModelsModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  // 已保存成功的行（与 mobile FetchModelsSheet 的 addedIds 同语义）：
+  // 部分失败重试时跳过已保存行，避免重复 save。
+  const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
 
-  const savedSet = useMemo(() => new Set(savedVendorIds), [savedVendorIds]);
+  const savedSet = useMemo(
+    () => new Set([...savedVendorIds, ...addedIds]),
+    [savedVendorIds, addedIds],
+  );
 
   // 过滤只作用展示层：displayName 为空（含纯空白）时只按 vendorModelId 匹配。
   const filteredRows = useMemo(() => {
@@ -88,6 +94,7 @@ export function FetchModelsModal({
       return;
     }
     exit();
+    setAddedIds(new Set());
     setRows([]);
     setQuery("");
     setError(undefined);
@@ -122,7 +129,11 @@ export function FetchModelsModal({
     setSaving(true);
     try {
       const selected = rows.filter(
-        (r) => isSelected(r.vendorModelId) && !savedSet.has(r.vendorModelId),
+        (r) =>
+          isSelected(r.vendorModelId) &&
+          !savedSet.has(r.vendorModelId) &&
+          // 跳过本弹窗内已保存成功的行（部分失败重试不重复 save）
+          !addedIds.has(r.vendorModelId),
       );
       for (const row of selected) {
         const res = await ipcProviderModelsSave({
@@ -131,9 +142,12 @@ export function FetchModelsModal({
           modelName: row.displayName !== row.vendorModelId ? row.displayName : undefined,
         });
         if (!res.ok) {
+          // 对齐 mobile：失败即停；已成功行标已添加，失败行保留勾选方便重试
           onError?.(res.error.message);
+          setAddedIds((prev) => new Set(prev).add(row.vendorModelId));
           return;
         }
+        setAddedIds((prev) => new Set(prev).add(row.vendorModelId));
       }
       await onSaved();
       onClose();
