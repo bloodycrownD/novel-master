@@ -94,6 +94,16 @@ export async function renderMermaidSvg(
   }
 }
 
+/**
+ * 统一错误消息提取口径（双端一致）：Error 取 message，
+ * mermaid DetailedError 取 str，其余 String 兑底。
+ */
+export function extractMermaidErrorMessage(err: unknown): string {
+  return err instanceof Error
+    ? err.message
+    : String((err as { str?: unknown }).str ?? err);
+}
+
 export interface MermaidSourceCache {
   lookup(theme: MermaidTheme, source: string): string | null;
   isFailed(theme: MermaidTheme, source: string): boolean;
@@ -214,7 +224,9 @@ export async function renderMermaidCodeBlocks(
       pre.classList.add('mermaid-block__source');
       block.appendChild(pre);
       pre.setAttribute('data-mermaid', 'done');
-    } catch {
+    } catch (err) {
+      // 错误消息挂 code：CSS ::before 的 attr() 只能读伪元素宿主自身属性（pre 上的读不到）
+      code.setAttribute('data-mermaid-error', extractMermaidErrorMessage(err));
       pre.setAttribute('data-mermaid', 'failed');
       pre.classList.add('mermaid-failed');
     }

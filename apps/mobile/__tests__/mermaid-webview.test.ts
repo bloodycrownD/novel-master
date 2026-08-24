@@ -11,6 +11,7 @@ import {
 } from '../src/web/shared/rich-content-styles';
 import {
   createMermaidSourceCache,
+  extractMermaidErrorMessage,
   inferMermaidThemeFromBg,
   parseColorToRgb,
 } from '../src/web/shared/mermaid-core';
@@ -68,6 +69,16 @@ describe('mermaid shared core (T-MV2 纯逻辑)', () => {
     expect(failCalls).toBe(1);
     expect(cache.isFailed('default', 'broken')).toBe(true);
 
+    // T-MV2: 失败后 reject 的原因可按统一口径提取错误消息
+    const reason = await cache
+      .getOrCreate('default', 'broken', renderFail)
+      .catch((e: unknown) => e);
+    expect(extractMermaidErrorMessage(reason)).toBe('parse error');
+    expect(extractMermaidErrorMessage({str: 'Parse error on line 2'})).toBe(
+      'Parse error on line 2',
+    );
+    expect(extractMermaidErrorMessage('boom')).toBe('boom');
+
     // 主题不同 → key 不同，须重跑
     await expect(
       cache.getOrCreate('dark', 'graph TD\nA-->B', renderOk),
@@ -94,6 +105,8 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
       expect(css).toContain('language-mermaid');
       expect(css).toContain('mermaid-failed');
       expect(css).toContain('max-width: 100%');
+      // 失败原因展示：attr 带 fallback，旧 DOM（无属性）退回原文案
+      expect(css).toContain('attr(data-mermaid-error');
     }
   });
 
@@ -103,6 +116,10 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
     expect(core).toContain("classList.add('mermaid-block__source')");
     expect(core).toContain("pre.setAttribute('data-mermaid', 'done')");
     expect(core).toContain("classList.add('mermaid-failed')");
+    // 失败原因：catch 接住 err，提取消息写入 data-mermaid-error
+    expect(core).toContain('} catch (err) {');
+    expect(core).toContain("setAttribute('data-mermaid-error'");
+    expect(core).toContain('extractMermaidErrorMessage');
     // 只操作 mermaid 节点自身：源码 pre 移入新建容器，文本流顺序不变
     expect(core).toContain('insertBefore(block, pre)');
     expect(core).toContain('block.appendChild(pre)');
@@ -114,6 +131,17 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
     expect(dist).toContain('renderMermaidBlocks');
     expect(dist).toContain('language-mermaid');
     expect(dist).toContain('mermaid.initialize');
+    expect(dist).toContain('data-mermaid-error');
+
+    // dist 两管线均含错误属性（JS）与 attr 展示（CSS）
+    for (const pkg of ['chat-transcript', 'rich-document'] as const) {
+      expect(readWebViewDistFile(pkg, 'app.js')).toContain(
+        'data-mermaid-error',
+      );
+      expect(readWebViewDistFile(pkg, 'app.css')).toContain(
+        'attr(data-mermaid-error',
+      );
+    }
   });
 });
 

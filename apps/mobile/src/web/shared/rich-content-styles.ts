@@ -91,7 +91,7 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
       font-size: 0.85em;
       opacity: 0.6;
     }
-    ${mermaidFailedCode}::before { content: "图表渲染失败，已回退源码"; color: var(--danger, #d92d20); opacity: 0.9; }
+    ${mermaidFailedCode}::before { content: attr(data-mermaid-error, "图表渲染失败，已回退源码"); color: var(--danger, #d92d20); opacity: 0.9; }
   `.trim();
 }
 
