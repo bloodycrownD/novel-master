@@ -74,6 +74,12 @@ assistant:
 deve 分支 feat/token-usage-stats（base aa32a19 文档 commit），9 wave 12 节点全部 done，**dev-ready**（cr-func-core + cr-func-final 均 func-ready，AC-1~11 全过）。实现 commit：Step1 d520cfc / Step2 f814dc7 / Step3 a3e487b / Step4 abce19b / Step5 cf06b46+快照 / Step6-8 desktop IPC+view+mobile 各一。验证：core 全量 2139/2142（3 失败=main 基线既有 vfs，基线 worktree 归因）、desktop 手动全量 347/349（2 失败=skills-handlers 既有漂移）、mobile 821/824（3 失败=既有 unhide）；双端 typecheck 过。DEV-1（未记录选项 UI 侧补）已闭合。坑与注记：①并行节点禁 git commit 由主代理分组提交；②s4 发现 bootstrap 顺序 DDL→migration→align 使老库 migration 时新列未建，up 内自行 ALTER（cr 已接受）；③desktop run-tests.mjs glob 既有 bug 官方 npm test 只覆盖部分文件，全量要 find 展开；④renderer 禁 import core，formatTokenCount 在 desktop 侧等价复制；⑤用户工作区同期在做 vfs entry-sequence-repair（bootstrap 未提交段+untracked），全程未触碰；test/skills/ 下 4 个他人 untracked 复现文件未碰。Step 9 真机验收待用户。
 
 user:
+（测试反馈）手机五指标卡挤；用量/命中率 tab 没必要改汇总/明细；明细不要命中率列。
+
+assistant:
+UI 重构落地（integration 分支 3053e18）：筛选栏置顶双页签共享；汇总页签=五指标卡 2×2 网格+命中率/今日宽卡（mobile）或一行五卡（desktop）；明细页签=按天图+24h 钻取（当天汇总行保留命中率，AC-6 不变）+分模型列表去掉命中率列；StackedBars 删 mode/hitRate 模式；PRD 核心需求 3/5 与 spec 变更点 6/7 同步。双端测试改写后 mobile 15/15、desktop 5/5。改动在 feat/token-usage-stats-integration，未回写 feat/token-usage-stats（可用 cherry-pick 同步）。
+
+user:
 （第 1 轮 fix wave）非 readonly 修复 PRD/SPEC，闭合 8 条 must-fix（P0-1、P1-1~3、P2-1~4），只改文档不改实现。
 
 assistant:
