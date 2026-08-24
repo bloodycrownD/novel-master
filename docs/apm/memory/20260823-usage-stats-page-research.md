@@ -89,7 +89,13 @@ user:
 模型选择器选项应与服务商配置同源（当前已保存模型），不要按历史记录 distinct（历史模型会堆积过时）；全部模型保留。
 
 assistant:
-已改（executor: main，trivial）：listModels 改查 `SELECT DISTINCT vendor_model_id FROM llm_saved_model`，不再 distinct chat_message——[3] 前缀类历史名不再出现在选择器；「全部模型」「未记录」保留；分模型 breakdown 列表仍按历史 model_name 聚合（历史模型名仍可见，预期行为）。port 注释/PRD 核心需求 2 + AC-11/spec 变更点 5 + T-S5 同步。测试：core 11/11 + 双端 16/16、5/5 全绿。注：ctx.conn.execute 直插 llm_provider+llm_saved_model 做 seed。
+已改（executor: main，trivial）：listModels 改查 `SELECT DISTINCT vendor_model_id FROM llm_saved_model`，不再 distinct chat_message——[3] 前缀类历史名不再出现在选择器；「全部模型」「未记录」保留；分模型 breakdown 列表仍按历史 model_name 聚合。port 注释/PRD 核心需求 2 + AC-11/spec 变更点 5 + T-S5 同步。测试：core 11/11 + 双端 16/16、5/5 全绿。
+
+user:
+对不上吧？应是全部模型/服务商配置模型/其他模型（null 与非配置历史都归入，模糊可接受），未记录范围太小。
+
+assistant:
+用户指出缺口：非 NULL 但非当前配置的历史模型（[3]gemini 等）筛不到。已改「其他模型」桶 = model_name IS NULL OR NOT IN (SELECT DISTINCT vendor_model_id FROM llm_saved_model)（子查询免动态参数，四处查询共用 modelFilterSql 片断改一处全生效）；getModelBreakdown 返回前把非配置行与 null 行归并成一行 null（JS 层，多一次轻量 listModels 查询）+按用量降序重排；双端 label「未记录」→「其他模型」（下拉）/「其他」（列表行），常量与 testID 保留 __unlogged__。无 saved model 时其他=全部行。测试 core 12/12 + 双端 16/16、5/5。坑：mobile 子代理违规新建记忆文件已并入主文件删除；core 测试 beforeEach 需清 llm_saved_model/llm_provider 防跨用例污染。
 
 user:
 （第 1 轮 fix wave）非 readonly 修复 PRD/SPEC，闭合 8 条 must-fix（P0-1、P1-1~3、P2-1~4），只改文档不改实现。
