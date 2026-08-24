@@ -21,6 +21,13 @@ type Props = {
 /** 周一开头（中文月历惯例）。 */
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日'];
 
+/**
+ * 压 primary 底的恒亮文字色：月历选中日数字与「确定」按钮文字都坐在
+ * primary 色块上，明暗主题均取纯白。刻意不新增 token（仅此两处使用，
+ * 其余取色仍走 useTheme tokens）。
+ */
+const TEXT_ON_PRIMARY = '#FFFFFF';
+
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -199,7 +206,7 @@ export function MonthRangePickerSheet({
                     style={[
                       styles.dayText,
                       {
-                        color: state === 'edge' ? '#FFFFFF' : tokens.text,
+                        color: state === 'edge' ? TEXT_ON_PRIMARY : tokens.text,
                       },
                     ]}
                   >
@@ -323,7 +330,7 @@ const styles = StyleSheet.create({
   },
   confirmBtn: {},
   confirmText: {
-    color: '#FFFFFF',
+    color: TEXT_ON_PRIMARY,
     fontWeight: '600',
   },
 });

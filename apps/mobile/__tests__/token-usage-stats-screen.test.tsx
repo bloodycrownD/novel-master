@@ -9,6 +9,10 @@
  *   filter 参数；
  * - 柱状图数据映射：样例桶数据 → 柱高顺序 / 标签文本；
  * - 空态文案；
+ * - 刷新单通道（mobile/B-2）：挂载与筛选切换各只触发一轮三连查询；
+ * - 主查询竞态（cross/B-1）：旧响应后到不覆盖新数据；
+ * - 空态区分（mobile/A-1）：库全空冷启动引导 vs 范围内无数据保留今日卡；
+ * - 加载失败（mobile/C-orch-2）：常驻错误条 + 不渲染 0 兜底卡片；
  * - MonthRangePickerSheet 组件级选值回调 + 自定义区间正常路径与 366 天上限。
  *
  * 照 session-detail-screen.test.tsx 范式：mock useRuntime 返回固定引用 runtime
@@ -100,10 +104,11 @@ jest.mock('@react-navigation/native', () => {
       goBack: jest.fn(),
       getParent: () => ({ navigate: mockNavigate }),
     }),
-    // 近似真实 focus 行为：挂载时执行一次（每次渲染直调会让 async effect
-    // 无限重渲染）；筛选变化的重查由页面自身的 useEffect([reload]) 驱动。
+    // 近似真实 focus 行为（mobile/B-2）：挂载时执行一次；回调标识变化
+    // （reload 引用随筛选刷新）时重跑。页面已收敛为 useFocusEffect 单通道，
+    // 筛选变化的重查由这里驱动——mock 须锁定该真实行为而非绕开它。
     useFocusEffect: (cb: () => void | (() => void)) => {
-      mockReact.useEffect(cb, []);
+      mockReact.useEffect(cb, [cb]);
     },
     useIsFocused: () => true,
   };
@@ -214,6 +219,15 @@ const SAMPLE_MODEL_ROWS = [
 
 function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
+}
+
+/** 可控 promise：竞态测试用它手动控制每轮查询的 resolve 时机。 */
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(res => {
+    resolve = res;
+  });
+  return { promise, resolve };
 }
 
 function findByTestId(
@@ -498,7 +512,91 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(json).not.toContain('命中率');
   });
 
-  it('空数据时展示引导文案而非空白', async () => {
+  it('刷新单通道：挂载与筛选切换各只触发一轮三连查询（mobile/B-2）', async () => {
+    const renderer = await renderScreen();
+    // 挂载只跑一轮（不再 useEffect + useFocusEffect 双通道各一轮）。
+    expect(mockGetSummary).toHaveBeenCalledTimes(1);
+    expect(mockGetDailyBuckets).toHaveBeenCalledTimes(1);
+    expect(mockGetModelBreakdown).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      findByTestId(renderer.root, 'range-last30')!.props.onPress();
+      await flushPromises();
+    });
+    // 筛选切换也只重查一轮（三连查询各恰好 2 次，而非 3 次）。
+    expect(mockGetSummary).toHaveBeenCalledTimes(2);
+    expect(mockGetDailyBuckets).toHaveBeenCalledTimes(2);
+    expect(mockGetModelBreakdown).toHaveBeenCalledTimes(2);
+  });
+
+  it('主查询竞态：旧响应后到不覆盖新数据（cross/B-1）', async () => {
+    // 每轮三连查询各自挂到可控 promise 上，按调用序号取轮次。
+    const rounds = Array.from({ length: 2 }, () => ({
+      summary: deferred<unknown>(),
+      buckets: deferred<unknown>(),
+      rows: deferred<unknown>(),
+    }));
+    let summaryCalls = 0;
+    let bucketCalls = 0;
+    let rowCalls = 0;
+    mockGetSummary.mockImplementation(
+      () => rounds[summaryCalls++].summary.promise,
+    );
+    mockGetDailyBuckets.mockImplementation(
+      () => rounds[bucketCalls++].buckets.promise,
+    );
+    mockGetModelBreakdown.mockImplementation(
+      () => rounds[rowCalls++].rows.promise,
+    );
+
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(<TokenUsageStatsScreen />);
+    });
+    // 第一轮（last7）仍在途时立刻切 last30，触发第二轮。
+    await act(async () => {
+      findByTestId(renderer!.root, 'range-last30')!.props.onPress();
+    });
+    // 第二轮先 resolve：落地新数据。
+    const round1Summary = {
+      ...SAMPLE_SUMMARY,
+      promptTokens: 800,
+      completionTokens: 88,
+      totalTokens: 888,
+      calls: 42,
+    };
+    await act(async () => {
+      rounds[1].summary.resolve(round1Summary);
+      rounds[1].buckets.resolve([]);
+      rounds[1].rows.resolve([]);
+      await flushPromises();
+    });
+    expect(nodeText(findByTestId(renderer!.root, 'summary-metric-total')!)).toContain(
+      '888',
+    );
+    expect(
+      nodeText(findByTestId(renderer!.root, 'summary-metric-calls')!),
+    ).toContain('42');
+    // 第一轮（旧响应）后到：应被序号守卫丢弃，新数据不被覆盖回旧值。
+    await act(async () => {
+      rounds[0].summary.resolve(SAMPLE_SUMMARY);
+      rounds[0].buckets.resolve(SAMPLE_BUCKETS);
+      rounds[0].rows.resolve(SAMPLE_MODEL_ROWS);
+      await flushPromises();
+    });
+    expect(
+      nodeText(findByTestId(renderer!.root, 'summary-metric-total')!),
+    ).toContain('888');
+    expect(
+      nodeText(findByTestId(renderer!.root, 'summary-metric-total')!),
+    ).not.toContain('1550');
+    expect(
+      nodeText(findByTestId(renderer!.root, 'summary-metric-calls')!),
+    ).toContain('42');
+  });
+
+  it('空态区分：库全空显示冷启动引导文案（mobile/A-1）', async () => {
+    // listModels 为空 → 库全空信号：冷启动引导而非「该区间无数据」。
+    mockListModels.mockResolvedValue([]);
     mockGetSummary.mockResolvedValue({
       calls: 0,
       promptTokens: 0,
@@ -512,8 +610,57 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     mockGetDailyBuckets.mockResolvedValue([]);
     mockGetModelBreakdown.mockResolvedValue([]);
     const renderer = await renderScreen();
+    expect(findByTestId(renderer.root, 'empty-cold-start')).toBeTruthy();
     const json = JSON.stringify(renderer.toJSON());
-    expect(json).toContain('暂无用量数据');
+    expect(json).toContain('自记录功能上线起开始积累');
+    expect(json).not.toContain('该区间无数据');
+    // 库全空时今日也必然无数据，不渲染今日卡。
+    expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
+  });
+
+  it('空态区分：范围内无数据提示该区间，今日卡仍渲染（mobile/A-1）', async () => {
+    // 库非空（listModels 返回模型）但当前范围空：区间提示 + 保留今日卡。
+    mockGetSummary.mockResolvedValue({
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      billedInputTokens: 0,
+      today: { totalTokens: 500, calls: 2 },
+    });
+    mockGetDailyBuckets.mockResolvedValue([]);
+    mockGetModelBreakdown.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    const json = JSON.stringify(renderer.toJSON());
+    expect(json).toContain('该区间无数据');
+    expect(json).not.toContain('自记录功能上线起开始积累');
+    // 今日卡独立于筛选：范围空态下仍渲染且数值来自 today 子对象。
+    const today = nodeText(findByTestId(renderer.root, 'today-card')!);
+    expect(today).toContain('500');
+    expect(today).toContain('2');
+  });
+
+  it('首查失败渲染常驻错误条而非 0 值卡片，成功后清除（mobile/C-orch-2）', async () => {
+    mockGetSummary.mockRejectedValueOnce(new Error('db locked'));
+    const renderer = await renderScreen();
+    // 常驻错误条在场且带错误信息；toast 仍然提示。
+    const errorBar = findByTestId(renderer.root, 'load-error');
+    expect(errorBar).toBeTruthy();
+    expect(nodeText(errorBar!)).toContain('db locked');
+    expect(mockShowToast).toHaveBeenCalledTimes(1);
+    // 无旧数据时不渲染 0 兑底卡片（误导性的「一排 0」）。
+    expect(findByTestId(renderer.root, 'summary-metric-total')).toBeUndefined();
+    expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
+    // 切范围重查成功（mock 回落 resolvedValue）→ 错误条清除、数据恢复。
+    await act(async () => {
+      findByTestId(renderer.root, 'range-last30')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'load-error')).toBeUndefined();
+    expect(findByTestId(renderer.root, 'summary-metric-total')).toBeTruthy();
   });
 
   it('自定义区间：sheet 选起止日后以 custom range 重查', async () => {

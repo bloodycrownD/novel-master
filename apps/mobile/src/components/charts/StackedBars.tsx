@@ -7,6 +7,7 @@
  */
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { formatTokenCount } from '@novel-master/core/common';
 import type { ThemeTokens } from '../../theme/tokens';
 
 export interface StackedBarsDatum {
@@ -15,6 +16,8 @@ export interface StackedBarsDatum {
   primary: number;
   /** 输出 token（柱上半段，缺省 0）。 */
   secondary?: number;
+  /** 调用次数（供无障碍标签，缺省不展示该段）。 */
+  calls?: number;
 }
 
 type Props = {
@@ -97,11 +100,22 @@ export function StackedBars({
                 ? Math.max(1, Math.round((datum.primary / total) * height))
                 : 0;
             const secondaryHeight = height - primaryHeight;
+            // 读屏文案与 desktop 侧 bucketTooltip 同口径：日期 · 输入 · 输出 · 调用次数。
+            const barA11yLabel = [
+              label,
+              `输入 ${formatTokenCount(datum.primary)}`,
+              `输出 ${formatTokenCount(datum.secondary ?? 0)}`,
+              ...(datum.calls != null ? [`调用 ${datum.calls} 次`] : []),
+            ].join(' · ');
             return (
               <Pressable
                 key={datum.key}
                 testID={`bar-col-${datum.key}`}
                 onPress={onSelect ? () => onSelect(datum.key) : undefined}
+                // 仅可点选的柱子（如按天图）标 button；无 onSelect 的柱子
+                // 标成 button 会让读屏用户以为可激活（参照 desktop/J-1 的教训）。
+                accessibilityRole={onSelect ? 'button' : undefined}
+                accessibilityLabel={barA11yLabel}
                 style={styles.barCol}
               >
                 <View

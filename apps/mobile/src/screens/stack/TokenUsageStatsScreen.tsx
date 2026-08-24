@@ -13,9 +13,19 @@
  * - 模型筛选（listModels 只返回非 NULL 模型名，「其他模型」选项由 UI 侧补上，
  *   对应 NULL + 非当前配置历史模型的归并口径）；
  * - 命中率 = cacheReadTokens / billedInputTokens，展示层计算；
- *   分母为 0（无 cache 数据）显示「暂无数据」而非 0%。
+ *   分母为 0（无 cache 数据）显示「暂无数据」而非 0%；
+ * - 刷新单通道（useFocusEffect 依赖 reload，mobile/B-2）：主查询带请求
+ *   序号守卫（cross/B-1），旧响应后到整体丢弃；失败落 loadError 常驻
+ *   错误条且不渲染 0 兜底卡片（mobile/C-orch-2）；空态区分库全空
+ *   （冷启动引导）与范围内无数据（提示 + 保留今日卡，mobile/A-1）。
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -126,6 +136,58 @@ function SummaryTile({
   );
 }
 
+/**
+ * 今日卡：独立于筛选（服务层 today 子对象口径），范围空态下也保留渲染
+ *（mobile/A-1）。
+ */
+function TodayCard({
+  summary,
+  tokens,
+}: {
+  summary: UsageStatsSummary | null;
+  tokens: ThemeTokens;
+}) {
+  return (
+    <View
+      testID="today-card"
+      style={[
+        styles.tile,
+        styles.tileWide,
+        styles.todayCard,
+        { backgroundColor: tokens.bgSecondary },
+      ]}
+    >
+      <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+        今日 · 不受时间范围与模型筛选影响
+      </Text>
+      <View style={styles.todayRow}>
+        <View style={styles.todayMetric}>
+          <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+            总 token
+          </Text>
+          <Text
+            style={[styles.tileValue, { color: tokens.text }]}
+            numberOfLines={1}
+          >
+            {formatTokenCount(summary?.today.totalTokens ?? 0)}
+          </Text>
+        </View>
+        <View style={styles.todayMetric}>
+          <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+            调用次数
+          </Text>
+          <Text
+            style={[styles.tileValue, { color: tokens.text }]}
+            numberOfLines={1}
+          >
+            {String(summary?.today.calls ?? 0)}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export function TokenUsageStatsScreen() {
   const { tokens } = useTheme();
   const { showToast } = useToast();
@@ -149,6 +211,12 @@ export function TokenUsageStatsScreen() {
     null,
   );
   const [loading, setLoading] = useState(false);
+  // 首查失败/最近一轮失败的常驻错误文案（mobile/C-orch-2）：成功后清除；
+  // 失败且无旧数据时内容区整体让位给错误条，不渲染 0 兜底卡片。
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // 主查询请求序号（cross/B-1）：快速切筛选时旧响应可能后到，落地前校验
+  // 序号，过期响应（含报错与 loading 复位）整体丢弃，不覆盖新一轮数据。
+  const reloadSeqRef = useRef(0);
 
   const filter = useMemo<UsageStatsFilter>(() => {
     // 自定义区间：from 为所选日 0 点，to 取结束日次日 0 点（含结束日全天，
@@ -158,7 +226,12 @@ export function TokenUsageStatsScreen() {
         range: {
           kind: 'custom',
           fromMs: customFrom.getTime(),
-          toMs: customTo.getTime() + MS_PER_DAY,
+          // 日历加法取次日 0 点：固定毫秒加法在 DST 切换日会差 1 小时。
+          toMs: new Date(
+            customTo.getFullYear(),
+            customTo.getMonth(),
+            customTo.getDate() + 1,
+          ).getTime(),
         },
         model: modelFilter,
       };
@@ -168,6 +241,7 @@ export function TokenUsageStatsScreen() {
 
   // 页签切换只切换展示，不参与 filter/reload 依赖——筛选跨页签保留、不重查。
   const reload = useCallback(async () => {
+    const seq = ++reloadSeqRef.current;
     setLoading(true);
     try {
       const usage = runtime.usageStats;
@@ -176,22 +250,32 @@ export function TokenUsageStatsScreen() {
         usage.getDailyBuckets(filter),
         usage.getModelBreakdown(filter),
       ]);
+      if (seq !== reloadSeqRef.current) {
+        return; // 过期响应：新一轮查询已在途，丢弃本轮结果。
+      }
       setSummary(nextSummary);
       setDailyBuckets(nextBuckets);
       setModelRows(nextRows);
       setSelectedDay(null);
       setHourlyBuckets(null);
+      setLoadError(null);
     } catch (err) {
-      showToast(toastMessage('加载统计失败', err));
+      if (seq !== reloadSeqRef.current) {
+        return; // 过期请求的报错不覆盖新一轮状态。
+      }
+      const message = toastMessage('加载统计失败', err);
+      setLoadError(message);
+      showToast(message);
     } finally {
-      setLoading(false);
+      if (seq === reloadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [runtime, filter, showToast]);
 
-  useEffect(() => {
-    reload().catch(() => undefined);
-  }, [reload]);
-
+  // 刷新单通道（mobile/B-2）：只挂 useFocusEffect（依赖 reload），不再并挂
+  // useEffect——挂载由首焦覆盖，筛选变化由 reload 引用刷新驱动，避免双通道
+  // 重复三连查询放大 cross/B-1 竞态窗口（与 StorageConfigScreen 惯例一致）。
   useFocusEffect(
     useCallback(() => {
       reload().catch(() => undefined);
@@ -268,6 +352,7 @@ export function TokenUsageStatsScreen() {
       key: toLocalDayKey(b.bucketStartMs),
       primary: b.promptTokens,
       secondary: b.completionTokens,
+      calls: b.calls,
     }));
   }, [dailyBuckets]);
 
@@ -279,6 +364,7 @@ export function TokenUsageStatsScreen() {
       key: String(index),
       primary: b.promptTokens,
       secondary: b.completionTokens,
+      calls: b.calls,
     }));
   }, [hourlyBuckets]);
 
@@ -303,7 +389,11 @@ export function TokenUsageStatsScreen() {
       ? '近 30 天'
       : '近 7 天';
 
-  const empty =
+  // 空态区分（mobile/A-1）：库全空（listModels 为空且已落地一轮查询）显示
+  // 冷启动引导；范围内无数据提示「该区间无数据」并保留今日卡。summary 非空
+  // 条件避免首查在途时闪现空态。
+  const libraryEmpty = models.length === 0 && summary != null;
+  const rangeEmpty =
     summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
   return (
@@ -367,12 +457,30 @@ export function TokenUsageStatsScreen() {
         tokens={tokens}
       />
       {loading ? <ActivityIndicator style={styles.loader} /> : null}
-      {empty ? (
-        <View style={styles.empty}>
+      {/* 常驻错误条（mobile/C-orch-2）：失败保留旧数据；首查失败无旧数据时
+          内容区整体让位，不再渲染一排 0 值卡片。 */}
+      {loadError != null ? (
+        <View
+          testID="load-error"
+          style={[styles.errorBar, { borderColor: tokens.danger }]}
+        >
+          <Text style={{ color: tokens.danger }}>{loadError}</Text>
+        </View>
+      ) : null}
+      {loadError != null && summary == null ? null : libraryEmpty ? (
+        <View style={styles.empty} testID="empty-cold-start">
           <Text style={[styles.emptyText, { color: tokens.textSecondary }]}>
-            当前筛选范围内暂无用量数据。Token
+            Token
             用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录。
           </Text>
+        </View>
+      ) : rangeEmpty ? (
+        <View style={styles.empty} testID="empty-range">
+          <Text style={[styles.emptyText, { color: tokens.textSecondary }]}>
+            该区间无数据
+          </Text>
+          {/* 今日卡独立于筛选：范围空态下保留渲染。 */}
+          <TodayCard summary={summary} tokens={tokens} />
         </View>
       ) : pageTab === 'summary' ? (
         <>
@@ -416,44 +524,7 @@ export function TokenUsageStatsScreen() {
             wide
             tokens={tokens}
           />
-          <View
-            testID="today-card"
-            style={[styles.tile, styles.tileWide, styles.todayCard, {
-              backgroundColor: tokens.bgSecondary,
-            }]}
-          >
-            <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
-              今日 · 不受时间范围与模型筛选影响
-            </Text>
-            <View style={styles.todayRow}>
-              <View style={styles.todayMetric}>
-                <Text
-                  style={[styles.tileLabel, { color: tokens.textSecondary }]}
-                >
-                  总 token
-                </Text>
-                <Text
-                  style={[styles.tileValue, { color: tokens.text }]}
-                  numberOfLines={1}
-                >
-                  {formatTokenCount(summary?.today.totalTokens ?? 0)}
-                </Text>
-              </View>
-              <View style={styles.todayMetric}>
-                <Text
-                  style={[styles.tileLabel, { color: tokens.textSecondary }]}
-                >
-                  调用次数
-                </Text>
-                <Text
-                  style={[styles.tileValue, { color: tokens.text }]}
-                  numberOfLines={1}
-                >
-                  {String(summary?.today.calls ?? 0)}
-                </Text>
-              </View>
-            </View>
-          </View>
+          <TodayCard summary={summary} tokens={tokens} />
           {/* 聚合数据归汇总页签：分模型列表跟随五指标卡与今日卡展示。 */}
           <ListSectionTitle title="分模型汇总" tokens={tokens} />
           {sortedModelRows.map(row => {
@@ -612,6 +683,14 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
   },
   loader: {
+    marginVertical: 8,
+  },
+  errorBar: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginHorizontal: 16,
     marginVertical: 8,
   },
   empty: {
