@@ -691,6 +691,64 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       model: undefined,
     });
   });
+
+  it('自定义区间结束日跨 DST 边界：toMs 为次日本地 0 点日历加法（cross/B-2）', async () => {
+    // 照 desktop test 的做法：运行时切纽约时区再断言；TZ 不可控则跳过
+    // （new Date(y, m, d + 1) 的日历推进天然正确，固定 +86400000 在
+    // 23 小时日会晚 1 小时）。jest 没有 node:test 的 t.skip，这里以
+    // 探测失败即返回兼底，避免假失败。
+    const prevTz = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    // 2026 年纽约春季拨快在 03-08（3 月第二个周日）：当天本地只有 23 小时。
+    // 结束日选在切换日本身，锢定起始日或结束日的固定加法回归都能被抓住。
+    const dstActive = dayMs(2026, 2, 9) - dayMs(2026, 2, 8) !== MS_PER_DAY;
+    if (!dstActive) {
+      process.env.TZ = prevTz;
+      console.warn('当前环境 TZ 不可控，跳过 DST 边界断言（cross/B-2）');
+      return;
+    }
+    try {
+      const renderer = await renderScreen();
+      await act(async () => {
+        findByTestId(renderer.root, 'range-custom')!.props.onPress();
+      });
+      // 从当前月翻回 2026 年 3 月。
+      const now = new Date();
+      const monthsBack =
+        (now.getFullYear() - 2026) * 12 + (now.getMonth() - 2);
+      for (let i = 0; i < Math.abs(monthsBack); i++) {
+        await act(async () => {
+          findByTestId(
+            renderer.root,
+            monthsBack >= 0 ? 'month-range-prev' : 'month-range-next',
+          )!.props.onPress();
+        });
+      }
+      // 两次点选分开 act：state 更新需要落定后下一次点选才能读到。
+      await act(async () => {
+        findByTestId(renderer.root, 'month-range-day-7')!.props.onPress();
+      });
+      await act(async () => {
+        findByTestId(renderer.root, 'month-range-day-8')!.props.onPress();
+      });
+      await act(async () => {
+        findByTestId(renderer.root, 'month-range-confirm')!.props.onPress();
+        await flushPromises();
+      });
+      expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
+        range: {
+          kind: 'custom',
+          fromMs: dayMs(2026, 2, 7),
+          // 03-08 本地只有 23 小时：固定 +86400000 会得到 03-09 01:00，
+          // 日历加法 new Date(2026, 2, 9) 恰为 03-09 本地 0 点。
+          toMs: dayMs(2026, 2, 9),
+        },
+        model: undefined,
+      });
+    } finally {
+      process.env.TZ = prevTz;
+    }
+  });
 });
 
 describe('T-S7 MonthRangePickerSheet 组件级', () => {

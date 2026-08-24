@@ -1,21 +1,21 @@
 /**
  * Profile tab: menu items navigate to stack screens.
  */
-import React, { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AgentPickerModal } from '../../components/agent/AgentPickerModal';
-import { ModelPickerModal } from '../../components/provider/ModelPickerModal';
-import { AppHeader } from '../../components/chrome/AppHeader';
-import { ListSectionTitle } from '../../components/ui/ListSectionTitle';
-import { ProfileMenuItem } from '../../components/ui/ProfileMenuItem';
-import { useDismissOverlaysOnBlur } from '../../hooks/useDismissOverlaysOnBlur';
-import { useRuntime } from '../../hooks/useRuntime';
-import { resolveModelDisplayLabel } from '../../provider/model-display-label';
-import { resolveCurrentAgentDisplayLabel } from '../../services/agent-display-label';
-import type { RootStackParamList } from '../../navigation/types';
-import { useTheme } from '../../theme/ThemeProvider';
+import React, {useCallback, useState} from 'react';
+import {ScrollView, StyleSheet, View} from 'react-native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
+import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
+import {AppHeader} from '../../components/chrome/AppHeader';
+import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
+import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
+import {useRuntime} from '../../hooks/useRuntime';
+import {resolveModelDisplayLabel} from '../../provider/model-display-label';
+import {resolveCurrentAgentDisplayLabel} from '../../services/agent-display-label';
+import type {RootStackParamList} from '../../navigation/types';
+import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -35,22 +35,19 @@ const WORKSPACE_GLOBAL_MENU = {
   route: 'GlobalTemplate',
 } as const;
 
-const CONFIG_MENU: Array<{
-  icon: string;
-  label: string;
-  route: keyof RootStackParamList;
-}> = [
-  { icon: '🤖', label: '智能体配置', route: 'AgentsSettings' },
-  { icon: '🔌', label: '服务商配置', route: 'Providers' },
-  { icon: '🧩', label: '技能管理', route: 'SkillsSettings' },
-  { icon: '💬', label: '聊天配置', route: 'ChatConfig' },
-  { icon: '💾', label: '存储配置', route: 'StorageConfig' },
-  { icon: '📊', label: '数据统计', route: 'TokenUsageStats' },
-  { icon: '🛡️', label: '正则配置', route: 'RegexGroups' },
-];
+const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
+  [
+    {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
+    {icon: '🔌', label: '服务商配置', route: 'Providers'},
+    {icon: '🧩', label: '技能管理', route: 'SkillsSettings'},
+    {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
+    {icon: '💾', label: '存储配置', route: 'StorageConfig'},
+    {icon: '📊', label: '数据统计', route: 'TokenUsageStats'},
+    {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
+  ];
 
 export function ProfileTabScreen() {
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
@@ -101,13 +98,12 @@ export function ProfileTabScreen() {
   };
 
   return (
-    <View style={[styles.root, { backgroundColor: tokens.background }]}>
+    <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="profile" />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
+        keyboardShouldPersistTaps="handled">
         <ListSectionTitle title="工作区" tokens={tokens} />
         <ProfileMenuItem
           icon={WORKSPACE_MODEL_MENU.icon}
@@ -162,7 +158,7 @@ export function ProfileTabScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
-  scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 24 },
+  root: {flex: 1},
+  scroll: {flex: 1},
+  scrollContent: {paddingBottom: 24},
 });
