@@ -19,6 +19,15 @@ import {
   buildBrokenPngBytes,
   buildPngWithTextChara,
 } from "./helpers/png-chara-fixture.js";
+import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { DefaultCharacterCardImportService } from "../../src/service/vfs/impl/character-card-import.service.js";
+import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 
 novelMasterTestFixture();
 
@@ -344,5 +353,157 @@ describe("CharacterCardImportService", () => {
     await assert.doesNotReject(() =>
       ctx.messageCheckpoint.capture(session.id, project.id, user2.id),
     );
+  });
+
+  it("T-IC1: session scope 导入后清空 rule_snapshot/file_cache 并失效 token cache", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tic1-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 预置脏数据：两域 + pending + token cache
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      "canon",
+      "snap",
+    );
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      "full:/a.md",
+      "a",
+    );
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      "queue",
+      "[]",
+    );
+    sessionApiPromptTokenCache.set(session.id, {
+      promptTokens: 99,
+      updatedAt: Date.now(),
+    });
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    await svc.import(scope, tree, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+
+    // 导入本体已落库
+    assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
+    // 三件套对齐：两域清空 + token cache 失效；pending 保留
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+    );
+    assert.equal(
+      await ctx.sessionKkv.get(
+        session.id,
+        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+        "queue",
+      ),
+      "[]",
+    );
+    assert.equal(sessionApiPromptTokenCache.get(session.id), undefined);
+  });
+
+  it("T-IC3: project scope 导入后 session KKV 与 token cache 均不动", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tic3-${testIsolationSuffix()}`);
+    // session 仅用来埋脏数据，验证导入走 project scope 时三件套不触发
+    const session = await ctx.sessions.create(project.id);
+    const pvfs = ctx.projectVfs(project.id);
+
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      "canon",
+      "snap",
+    );
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      "full:/a.md",
+      "a",
+    );
+    sessionApiPromptTokenCache.set(session.id, {
+      promptTokens: 11,
+      updatedAt: Date.now(),
+    });
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+    await svc.import(
+      { kind: "project", projectId: project.id },
+      tree,
+      { confirmed: true, directoryPath: "/角色" },
+    );
+
+    assert.equal((await pvfs.read("/角色/角色描述.md")).content, "导入描述");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      ["canon"],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      ["full:/a.md"],
+    );
+    assert.ok(sessionApiPromptTokenCache.get(session.id) != null);
+  });
+
+  it("T-IC4: sessionKkv 清空抛错时导入仍成功不抛（best-effort 吞错）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tic4-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const throwingKkv = Object.assign(createMemorySessionKkv(), {
+      clearDomain: async (): Promise<void> => {
+        throw new Error("kkv-boom");
+      },
+    });
+    const svc = new DefaultCharacterCardImportService(
+      ctx.conn,
+      new SqliteVfsEntryRepository(ctx.conn),
+      { sessionKkv: throwingKkv },
+    );
+
+    const originalWarn = console.warn;
+    const warnCalls: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      warnCalls.push(args);
+    };
+    try {
+      const tree = parseCharacterCardToMdTree(JSON.stringify(SAMPLE_V2));
+      await assert.doesNotReject(() =>
+        svc.import(scope, tree, {
+          confirmed: true,
+          directoryPath: "/角色",
+        }),
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    // 导入本体已落库，缓存对齐失败仅 warn 留痕
+    assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
+    assert.ok(warnCalls.length >= 1);
   });
 });

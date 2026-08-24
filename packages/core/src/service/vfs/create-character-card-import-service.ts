@@ -7,6 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { CharacterCardImportService } from "@/domain/vfs/ports/character-card-import.port.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import {
   DefaultCharacterCardImportService,
   type CharacterCardImportTestHook,
@@ -27,5 +28,7 @@ export function createCharacterCardImportService(
   const repo = new SqliteVfsEntryRepository(conn);
   return new DefaultCharacterCardImportService(conn, repo, {
     testHook: options.testHook,
+    // 对外签名 (conn, options?) 不变；sessionKkv 在工厂内部自建并注入。
+    sessionKkv: createSessionKkvService(conn),
   });
 }

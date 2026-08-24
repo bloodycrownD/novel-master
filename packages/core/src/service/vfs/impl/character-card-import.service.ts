@@ -32,6 +32,8 @@ import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
+import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
 /** @internal 导入事务回滚单测钩子 */
 export type CharacterCardImportTestHook = {
   readonly throwOnInsertLogical?: string;
@@ -84,6 +86,11 @@ export type DefaultCharacterCardImportServiceOptions = {
    * 默认开启；仅对 session scope 生效。
    */
   readonly backfillBaseline?: boolean;
+  /**
+   * session scope 导入事务提交后清空提示词缓存三件套用。
+   * 缺省**不清空**——由工厂负责注入；测试可直接构造 Default 验证旧行为或做故障注入。
+   */
+  readonly sessionKkv?: SessionKkvService;
 };
 
 export class DefaultCharacterCardImportService
@@ -91,6 +98,7 @@ export class DefaultCharacterCardImportService
 {
   private readonly testHook?: CharacterCardImportTestHook;
   private readonly backfillBaseline: boolean;
+  private readonly sessionKkv?: SessionKkvService;
 
   constructor(
     private readonly conn: TdbcConnection,
@@ -99,6 +107,7 @@ export class DefaultCharacterCardImportService
   ) {
     this.testHook = options.testHook;
     this.backfillBaseline = options.backfillBaseline ?? true;
+    this.sessionKkv = options.sessionKkv;
   }
 
   async import(
@@ -158,6 +167,11 @@ export class DefaultCharacterCardImportService
       const message =
         error instanceof Error ? error.message : "import transaction failed";
       throw characterCardError("IMPORT_FAILED", message);
+    }
+
+    // 事务成功提交后再对齐提示词缓存；helper 自吞错（best-effort），不影响导入结果。
+    if (this.sessionKkv && scope.kind === "session") {
+      await clearSessionPromptCaches(scope.sessionId, this.sessionKkv);
     }
   }
 

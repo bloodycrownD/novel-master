@@ -2,9 +2,18 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
 import { createVfsZipIoService, VfsZipError } from "@novel-master/core/vfs";
-import { type VfsService } from "@novel-master/core/vfs";
+import {
+  createCharacterCardImportService,
+  parseCharacterCardToMdTree,
+  type VfsService,
+} from "@novel-master/core/vfs";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
+import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
 
@@ -674,6 +683,159 @@ describe("VfsZipIoService", () => {
     assert.equal((await vfs.read("/a/foo.txt")).content, "foo");
     await assert.rejects(() => vfs.read("/a/old.txt"));
     assert.equal((await vfs.read("/b/sib.txt")).content, "sib");
+  });
+
+  it("T-IC2: session scope ZIP 导入后清空 rule_snapshot/file_cache 并失效 token cache", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tic2-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      "canon",
+      "snap",
+    );
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      "full:/a.md",
+      "a",
+    );
+    sessionApiPromptTokenCache.set(session.id, {
+      promptTokens: 88,
+      updatedAt: Date.now(),
+    });
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(scope, buildVfsZip(new Map([["a.md", "zip-a"]])), {
+      confirmed: true,
+    });
+
+    assert.equal((await vfs.read("/a.md")).content, "zip-a");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      [],
+    );
+    assert.equal(sessionApiPromptTokenCache.get(session.id), undefined);
+  });
+
+  it("T-IC3: global scope ZIP 导入后 session KKV 与 token cache 均不动", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tic3z-${testIsolationSuffix()}`);
+    // session 仅用来埋脏数据；导入走 global scope（非 session kind，三件套不触发）
+    const session = await ctx.sessions.create(project.id);
+
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      "canon",
+      "snap",
+    );
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      "full:/a.md",
+      "a",
+    );
+    sessionApiPromptTokenCache.set(session.id, {
+      promptTokens: 12,
+      updatedAt: Date.now(),
+    });
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(
+      { kind: "global" },
+      buildVfsZip(new Map([["readme.md", "global-r"]])),
+      { confirmed: true },
+    );
+
+    assert.equal((await ctx.globalVfs().read("/readme.md")).content, "global-r");
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      ["canon"],
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_FILE_CACHE),
+      ["full:/a.md"],
+    );
+    assert.ok(sessionApiPromptTokenCache.get(session.id) != null);
+  });
+
+  it("T-IC5: 两个工厂单参可构造且 sessionKkv 已内部装配（对外签名回归钉死）", async () => {
+    const ctx = getNovelMasterTestContext();
+    // 单参构造不抛（mobile 测试钉死 calls[0]?.[1] === undefined 的签名契约）
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    const cardSvc = createCharacterCardImportService(ctx.conn);
+    assert.equal(typeof zipSvc.import, "function");
+    assert.equal(typeof cardSvc.import, "function");
+
+    // 内部装配行为验证：单参工厂创建的服务导入后三件套对齐生效
+    const project = await ctx.projects.create(`P-tic5-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      "canon",
+      "snap",
+    );
+    sessionApiPromptTokenCache.set(session.id, {
+      promptTokens: 5,
+      updatedAt: Date.now(),
+    });
+    await zipSvc.import(scope, buildVfsZip(new Map([["b.md", "b"]])), {
+      confirmed: true,
+    });
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT),
+      [],
+    );
+    assert.equal(sessionApiPromptTokenCache.get(session.id), undefined);
+
+    const session2 = await ctx.sessions.create(project.id);
+    const scope2 = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session2.id,
+    };
+    await ctx.sessionKkv.set(
+      session2.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      "canon",
+      "snap",
+    );
+    await cardSvc.import(
+      scope2,
+      parseCharacterCardToMdTree(
+        JSON.stringify({
+          spec: "chara_card_v2",
+          data: { description: "d" },
+        }),
+      ),
+      { confirmed: true, directoryPath: "/角色" },
+    );
+    assert.deepEqual(
+      await ctx.sessionKkv.listKeys(
+        session2.id,
+        SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      ),
+      [],
+    );
   });
 
 });
