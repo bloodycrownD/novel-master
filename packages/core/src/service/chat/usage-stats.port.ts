@@ -94,6 +94,10 @@ export interface UsageStatsService {
   /** 分模型汇总（含 `modelName` 为 null 的「未记录」桶）。 */
   getModelBreakdown(filter: UsageStatsFilter): Promise<UsageStatsModelRow[]>;
 
-  /** 库内已记录的模型名列表（「未记录」桶由 UI 侧补齐）。 */
+  /**
+   * 可选模型列表：来自当前服务商配置的已保存模型（vendor_model_id 去重，
+   * 与全局模型选择器同源），不从历史消息 distinct——历史已下线模型不出现；
+   * 「未记录」桶由 UI 侧补齐。
+   */
   listModels(): Promise<string[]>;
 }

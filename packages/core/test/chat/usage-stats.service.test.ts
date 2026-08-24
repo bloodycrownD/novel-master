@@ -7,7 +7,7 @@
  * - NULL usage 行、无 cache 行不入命中率分母；
  * - model_name IS NULL 归「未记录」桶；模型 × 时间组合过滤；
  * - getSummary 附带的 today 子对象独立于 filter；
- * - listModels 含已记录模型；
+ * - listModels 来自服务商配置的已保存模型（不 distinct 历史消息）；
  * - billedInputTokens 含 anthropic 加法项（命中率原料）。
  *
  * 时区相关断言不依赖运行机器时区：统一以「本地今日 0 点 ± 固定偏移」构造时间戳。
@@ -375,24 +375,32 @@ describe("usage stats service (T-S5)", () => {
     assert.deepEqual(s2.today, expectedToday);
   });
 
-  it("listModels 含已记录模型、不含 null", async () => {
+  it("listModels 来自服务商配置的已保存模型，不从历史消息 distinct", async () => {
     const { ctx, session } = await seedSession();
     const now = Date.now();
+    // 历史消息里存在 model-legacy（已下线）与未记录行——不应出现在选项里。
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: now,
-      modelName: "model-b",
+      modelName: "model-legacy",
       usage: { prompt: 1 },
     });
     await seedMsg(ctx, session.id, 2, {
       createdAtMs: now,
-      modelName: "model-a",
-      usage: { prompt: 2 },
-    });
-    await seedMsg(ctx, session.id, 3, {
-      createdAtMs: now,
       modelName: null,
       usage: { prompt: 3 },
     });
+    // 服务商配置：model-b、model-a（同模型两个服务商，去重后一个）。
+    const ts = String(now);
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('stats-provider', 'openai', 'https://example.com', 'Stats Provider', '{}', 0, ${ts}, ${ts})`,
+    );
+    const insertModel =
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES (?, 'stats-provider', ?, ?, '{}', ${ts}, ${ts})`;
+    await ctx.conn.execute(insertModel, ["sm-1", "model-b", "model-b"]);
+    await ctx.conn.execute(insertModel, ["sm-2", "model-a", "model-a"]);
+    await ctx.conn.execute(insertModel, ["sm-3", "model-b", "model-b"]);
 
     const svc = createUsageStatsService(ctx.conn);
     assert.deepEqual(await svc.listModels(), ["model-a", "model-b"]);

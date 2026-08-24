@@ -203,15 +203,16 @@ export class DefaultUsageStatsService implements UsageStatsService {
   }
 
   async listModels(): Promise<string[]> {
-    const rows = await queryTemplate<{ model_name: string }>(
+    // 选项与服务商配置的模型列表同源（vendor_model_id 去重），
+    // 不从 chat_message 历史记录 distinct——历史模型会随模型更替不断堆积。
+    const rows = await queryTemplate<{ vendor_model_id: string }>(
       this.conn,
       this.parser,
-      `SELECT DISTINCT model_name FROM chat_message
-       WHERE model_name IS NOT NULL
-       ORDER BY model_name ASC`,
+      `SELECT DISTINCT vendor_model_id FROM llm_saved_model
+       ORDER BY vendor_model_id ASC`,
       {},
     );
-    return rows.map((row) => String(row.model_name));
+    return rows.map((row) => String(row.vendor_model_id));
   }
 
   /**
