@@ -1,12 +1,16 @@
 /**
  * 数据统计页（Mobile）：Token 用量与缓存命中率。
  *
- * - 顶部时间范围 SegmentedControl（近 7 天 / 近 30 天 / 自定义 →
- *   MonthRangePickerSheet，区间 ≤ 366 天校验）+ 用量 / 命中率指标 tab；
- * - 总览卡（跟随筛选）+ 今日卡（独立于筛选，服务层 today 子对象口径）；
- * - 按天 StackedBars 主图，点选某天 → 24 小时分布 + 该天汇总行；
+ * - 「汇总 / 明细」双页签（SegmentedControl）；筛选栏（时间范围
+ *   SegmentedControl 近 7 天 / 近 30 天 / 自定义 → MonthRangePickerSheet，
+ *   区间 ≤ 366 天校验 + 模型筛选）置顶，两个页签共享——切换页签不触发
+ *   重查，筛选状态跨页签保留；
+ * - 汇总页签：范围内总 token / 输入 / 输出 / 调用次数四卡按 2 列网格铺开
+ *   + 命中率宽卡 + 今日宽卡（今日独立于筛选，服务层 today 子对象口径）；
+ * - 明细页签：按天用量 StackedBars（纯用量堆叠，无命中率图表模式），
+ *   点选某天 → 24 小时分布 + 该天汇总行（汇总行保留命中率）；分模型列表
+ *   （模型名 / 用量 / 占比 / 调用次数，按用量降序，不提供命中率列）；
  * - 模型筛选（listModels 只返回非 NULL 模型名，「未记录」由 UI 侧补上）；
- * - 分模型汇总列表（用量降序，null 模型显示「未记录」）；
  * - 命中率 = cacheReadTokens / billedInputTokens，展示层计算；
  *   分母为 0（无 cache 数据）显示「暂无数据」而非 0%。
  */
@@ -29,7 +33,6 @@ import type {
 import { formatTokenCount } from '@novel-master/core/common';
 import { AppModal } from '../../components/ui/AppModal';
 import { ListSectionTitle } from '../../components/ui/ListSectionTitle';
-import { ProfileStatusCard } from '../../components/ui/ProfileStatusCard';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
 import { MonthRangePickerSheet } from '../../components/ui/MonthRangePickerSheet';
 import { StackedBars } from '../../components/charts/StackedBars';
@@ -37,9 +40,11 @@ import { useToast } from '../../components/chrome/ToastHost';
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { useTheme } from '../../theme/ThemeProvider';
+import type { ThemeTokens } from '../../theme/tokens';
 
 type RangeKind = 'last7' | 'last30' | 'custom';
-type MetricTab = 'usage' | 'hitRate';
+/** 页面主结构页签：汇总（指标卡）/ 明细（图表 + 分模型列表）。 */
+type PageTab = 'summary' | 'detail';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -75,6 +80,47 @@ function formatHitRate(rate: number | null): string {
   return rate == null ? '暂无数据' : `${Math.round(rate * 100)}%`;
 }
 
+/** 汇总页签指标小卡；宽卡（wide）独占一行，用于命中率与今日。 */
+function SummaryTile({
+  label,
+  value,
+  tokens,
+  tone = 'default',
+  wide = false,
+  testID,
+}: {
+  label: string;
+  value: string;
+  tokens: ThemeTokens;
+  tone?: 'default' | 'success';
+  wide?: boolean;
+  testID?: string;
+}) {
+  return (
+    <View
+      testID={testID}
+      style={[
+        styles.tile,
+        wide && styles.tileWide,
+        { backgroundColor: tokens.bgSecondary },
+      ]}
+    >
+      <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+        {label}
+      </Text>
+      <Text
+        style={[
+          styles.tileValue,
+          { color: tone === 'success' ? tokens.success : tokens.text },
+        ]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 export function TokenUsageStatsScreen() {
   const { tokens } = useTheme();
   const { showToast } = useToast();
@@ -84,7 +130,7 @@ export function TokenUsageStatsScreen() {
   const [customFrom, setCustomFrom] = useState<Date | null>(null);
   const [customTo, setCustomTo] = useState<Date | null>(null);
   const [rangeSheetVisible, setRangeSheetVisible] = useState(false);
-  const [metricTab, setMetricTab] = useState<MetricTab>('usage');
+  const [pageTab, setPageTab] = useState<PageTab>('summary');
   const [modelFilter, setModelFilter] = useState<string | null | undefined>(
     undefined,
   );
@@ -115,6 +161,7 @@ export function TokenUsageStatsScreen() {
     return { range: { kind: rangeKind }, model: modelFilter };
   }, [rangeKind, customFrom, customTo, modelFilter]);
 
+  // 页签切换只切换展示，不参与 filter/reload 依赖——筛选跨页签保留、不重查。
   const reload = useCallback(async () => {
     setLoading(true);
     try {
@@ -212,40 +259,23 @@ export function TokenUsageStatsScreen() {
       : undefined;
 
   const dailyData = useMemo(() => {
-    return dailyBuckets.map(b => {
-      const key = toLocalDayKey(b.bucketStartMs);
-      if (metricTab === 'hitRate') {
-        const rate = hitRate(b.cacheReadTokens, b.billedInputTokens);
-        return {
-          key,
-          primary: rate == null ? 0 : Math.round(rate * 100),
-          noData: rate == null,
-        };
-      }
-      return { key, primary: b.promptTokens, secondary: b.completionTokens };
-    });
-  }, [dailyBuckets, metricTab]);
+    return dailyBuckets.map(b => ({
+      key: toLocalDayKey(b.bucketStartMs),
+      primary: b.promptTokens,
+      secondary: b.completionTokens,
+    }));
+  }, [dailyBuckets]);
 
   const hourlyData = useMemo(() => {
     if (hourlyBuckets == null) {
       return [];
     }
-    return hourlyBuckets.map((b, index) => {
-      if (metricTab === 'hitRate') {
-        const rate = hitRate(b.cacheReadTokens, b.billedInputTokens);
-        return {
-          key: String(index),
-          primary: rate == null ? 0 : Math.round(rate * 100),
-          noData: rate == null,
-        };
-      }
-      return {
-        key: String(index),
-        primary: b.promptTokens,
-        secondary: b.completionTokens,
-      };
-    });
-  }, [hourlyBuckets, metricTab]);
+    return hourlyBuckets.map((b, index) => ({
+      key: String(index),
+      primary: b.promptTokens,
+      secondary: b.completionTokens,
+    }));
+  }, [hourlyBuckets]);
 
   const sortedModelRows = useMemo(
     () => [...modelRows].sort((a, b) => b.totalTokens - a.totalTokens),
@@ -277,6 +307,7 @@ export function TokenUsageStatsScreen() {
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
     >
+      {/* 筛选栏置顶：时间范围 + 模型筛选，两个页签共享。 */}
       <SegmentedControl
         options={[
           {
@@ -299,21 +330,35 @@ export function TokenUsageStatsScreen() {
         onChange={onRangeKindChange}
         tokens={tokens}
       />
+      <Pressable
+        testID="model-filter-entry"
+        onPress={() => setModelPickerVisible(true)}
+        style={[
+          styles.modelFilterRow,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: tokens.borderLight,
+          },
+        ]}
+      >
+        <Text style={{ color: tokens.text }}>{modelFilterLabel}</Text>
+        <Text style={{ color: tokens.textSecondary }}>切换 ›</Text>
+      </Pressable>
       <SegmentedControl
         options={[
           {
-            value: 'usage' as MetricTab,
-            label: '用量',
-            testID: 'metric-usage',
+            value: 'summary' as PageTab,
+            label: '汇总',
+            testID: 'stats-tab-summary',
           },
           {
-            value: 'hitRate' as MetricTab,
-            label: '命中率',
-            testID: 'metric-hitRate',
+            value: 'detail' as PageTab,
+            label: '明细',
+            testID: 'stats-tab-detail',
           },
         ]}
-        value={metricTab}
-        onChange={setMetricTab}
+        value={pageTab}
+        onChange={setPageTab}
         tokens={tokens}
       />
       {loading ? <ActivityIndicator style={styles.loader} /> : null}
@@ -324,74 +369,93 @@ export function TokenUsageStatsScreen() {
             用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录。
           </Text>
         </View>
-      ) : (
+      ) : pageTab === 'summary' ? (
         <>
           <ListSectionTitle title={`总览 · ${rangeLabel}`} tokens={tokens} />
-          <ProfileStatusCard
-            title="用量汇总"
-            hint="跟随当前时间范围与模型筛选"
-            metrics={[
-              {
-                label: '总 token',
-                value: formatTokenCount(summary?.totalTokens ?? 0),
-              },
-              {
-                label: '输入',
-                value: formatTokenCount(summary?.promptTokens ?? 0),
-              },
-              {
-                label: '输出',
-                value: formatTokenCount(summary?.completionTokens ?? 0),
-              },
-              { label: '调用次数', value: String(summary?.calls ?? 0) },
-              {
-                label: '命中率',
-                value: formatHitRate(
-                  hitRate(
-                    summary?.cacheReadTokens ?? 0,
-                    summary?.billedInputTokens ?? 0,
-                  ),
-                ),
-                tone: 'success',
-              },
-            ]}
+          <View style={styles.summaryGrid}>
+            <SummaryTile
+              testID="summary-metric-total"
+              label="总 token"
+              value={formatTokenCount(summary?.totalTokens ?? 0)}
+              tokens={tokens}
+            />
+            <SummaryTile
+              testID="summary-metric-input"
+              label="输入"
+              value={formatTokenCount(summary?.promptTokens ?? 0)}
+              tokens={tokens}
+            />
+            <SummaryTile
+              testID="summary-metric-output"
+              label="输出"
+              value={formatTokenCount(summary?.completionTokens ?? 0)}
+              tokens={tokens}
+            />
+            <SummaryTile
+              testID="summary-metric-calls"
+              label="调用次数"
+              value={String(summary?.calls ?? 0)}
+              tokens={tokens}
+            />
+          </View>
+          <SummaryTile
+            testID="summary-metric-hitRate"
+            label="命中率"
+            value={formatHitRate(
+              hitRate(
+                summary?.cacheReadTokens ?? 0,
+                summary?.billedInputTokens ?? 0,
+              ),
+            )}
+            tone="success"
+            wide
             tokens={tokens}
           />
-          <ProfileStatusCard
-            title="今日"
-            hint="不受时间范围与模型筛选影响"
-            metrics={[
-              {
-                label: '总 token',
-                value: formatTokenCount(summary?.today.totalTokens ?? 0),
-              },
-              { label: '调用次数', value: String(summary?.today.calls ?? 0) },
-            ]}
-            tokens={tokens}
-          />
-          <ListSectionTitle title="模型筛选" tokens={tokens} />
-          <Pressable
-            testID="model-filter-entry"
-            onPress={() => setModelPickerVisible(true)}
-            style={[
-              styles.modelFilterRow,
-              {
-                backgroundColor: tokens.surface,
-                borderColor: tokens.borderLight,
-              },
-            ]}
+          <View
+            testID="today-card"
+            style={[styles.tile, styles.tileWide, styles.todayCard, {
+              backgroundColor: tokens.bgSecondary,
+            }]}
           >
-            <Text style={{ color: tokens.text }}>{modelFilterLabel}</Text>
-            <Text style={{ color: tokens.textSecondary }}>切换 ›</Text>
-          </Pressable>
-          <ListSectionTitle
-            title={metricTab === 'usage' ? '按天用量' : '按天命中率'}
-            tokens={tokens}
-          />
+            <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+              今日 · 不受时间范围与模型筛选影响
+            </Text>
+            <View style={styles.todayRow}>
+              <View style={styles.todayMetric}>
+                <Text
+                  style={[styles.tileLabel, { color: tokens.textSecondary }]}
+                >
+                  总 token
+                </Text>
+                <Text
+                  style={[styles.tileValue, { color: tokens.text }]}
+                  numberOfLines={1}
+                >
+                  {formatTokenCount(summary?.today.totalTokens ?? 0)}
+                </Text>
+              </View>
+              <View style={styles.todayMetric}>
+                <Text
+                  style={[styles.tileLabel, { color: tokens.textSecondary }]}
+                >
+                  调用次数
+                </Text>
+                <Text
+                  style={[styles.tileValue, { color: tokens.text }]}
+                  numberOfLines={1}
+                >
+                  {String(summary?.today.calls ?? 0)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </>
+      ) : (
+        <>
+          <ListSectionTitle title="按天用量" tokens={tokens} />
           <StackedBars
             testID="daily-chart"
             data={dailyData}
-            mode={metricTab}
             selectedKey={selectedDay ?? undefined}
             onSelect={setSelectedDay}
             tokens={tokens}
@@ -421,7 +485,6 @@ export function TokenUsageStatsScreen() {
               <StackedBars
                 testID="hourly-chart"
                 data={hourlyData}
-                mode={metricTab}
                 tokens={tokens}
                 formatLabel={key => `${Number(key)}时`}
               />
@@ -459,10 +522,6 @@ export function TokenUsageStatsScreen() {
                   ]}
                 >
                   用量 {formatTokenCount(row.totalTokens)} · 调用 {row.calls} 次
-                  · 命中率{' '}
-                  {formatHitRate(
-                    hitRate(row.cacheReadTokens, row.billedInputTokens),
-                  )}
                 </Text>
               </View>
             );
@@ -540,24 +599,86 @@ export function TokenUsageStatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 24 },
-  loader: { marginVertical: 12 },
-  empty: { padding: 32, gap: 16, alignItems: 'center' },
-  emptyText: { fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 32,
+  },
+  loader: {
+    marginVertical: 8,
+  },
+  empty: {
+    padding: 20,
+    gap: 8,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
   modelFilterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
     paddingVertical: 12,
+    marginHorizontal: 12,
+    marginVertical: 8,
   },
-  dayDetail: { marginTop: 12, gap: 8 },
-  dayDetailTitle: { fontSize: 15, fontWeight: '600' },
-  dayDetailSummary: { fontSize: 13 },
-  modelRow: {
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  tile: {
+    flexGrow: 1,
+    flexBasis: '47%',
     borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  tileWide: {
+    flexBasis: '100%',
+    marginTop: 10,
+  },
+  tileLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  tileValue: {
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  todayCard: {
+    gap: 8,
+  },
+  todayRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  todayMetric: {
+    flex: 1,
+    gap: 4,
+  },
+  dayDetail: {
+    marginTop: 16,
+    gap: 8,
+  },
+  dayDetailTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  dayDetailSummary: {
+    fontSize: 13,
+  },
+  modelRow: {
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -569,21 +690,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  modelRowDetail: { fontSize: 13 },
+  modelRowDetail: {
+    fontSize: 13,
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
   },
   pickerSheet: {
-    maxHeight: '70%',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    maxHeight: 420,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     paddingTop: 16,
-    paddingBottom: 24,
+    paddingBottom: 32,
   },
   pickerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 8,
@@ -592,7 +715,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 8,

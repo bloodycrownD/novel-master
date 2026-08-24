@@ -1,7 +1,9 @@
 /**
  * 设置页「数据统计」视图（spec 变更点 6 / Step 7）：
- * 时间范围（近 7 / 近 30 / 自定义日期区间）× 模型筛选 → 总览卡片（含独立于筛选的
- * 今日卡片）、按天 CSS 柱状图（点选某天钻取 24 小时分布）、分模型汇总表。
+ * 「汇总 / 明细」双页签，筛选栏（时间范围：近 7 / 近 30 / 自定义区间 × 模型）置顶、
+ * 两页签共享（切换页签保留筛选、不重查）。汇总页签：范围内五指标卡片 + 独立于筛选的
+ * 今日卡；明细页签：按天 CSS 柱状图（点选某天钻取 24 小时分布 + 当天汇总行）+ 分模型表
+ * （不含命中率列，命中率出口在汇总卡片与选中天汇总行）。
  * 数据统一经 ipcUsageStatsQuery（nm:usageStats/query 单 channel 按 kind 分发）获取；
  * 功能口径对齐 mobile 侧 TokenUsageStatsScreen，交互按桌面惯例。
  */
@@ -17,7 +19,7 @@ import type {
 import { SettingsListEmpty, SettingsPanel, SettingsSection } from "./settings-ui";
 
 type RangeKind = "last7" | "last30" | "custom";
-type MetricTab = "usage" | "hitRate";
+type PageTab = "summary" | "detail";
 
 const MS_PER_DAY = 86_400_000;
 /** 自定义区间上限（天，含首尾；与 mobile 侧同口径，避免超长区间查询变慢）。 */
@@ -80,22 +82,19 @@ function formatHitRate(rate: number | null): string {
   return rate == null ? "暂无数据" : `${Math.round(rate * 100)}%`;
 }
 
-/** 桶 tooltip 文案（当天/该小时 输入输出命中率与调用数）。 */
+/**
+ * 桶 tooltip 文案（当天/该小时 输入输出与调用数）。
+ * 明细图表不再展示命中率——命中率出口仅保留在汇总卡片与选中天汇总行。
+ */
 function bucketTooltip(key: string, b: UsageStatsBucketDto): string {
   return `${key} · 输入 ${formatTokenCount(b.promptTokens)} · 输出 ${formatTokenCount(
     b.completionTokens,
-  )} · 命中率 ${formatHitRate(hitRate(b.cacheReadTokens, b.billedInputTokens))} · 调用 ${
-    b.calls
-  } 次`;
+  )} · 调用 ${b.calls} 次`;
 }
 
-/**
- * CSS div 柱状图：用量 tab 输入（--primary）下 + 输出（--text-secondary）上堆叠，
- * 命中率 tab 单柱走 --success（无 cache 数据的桶置灰短柱）。
- */
+/** CSS div 柱状图：输入（--primary）下 + 输出（--text-secondary）上堆叠（仅用量模式）。 */
 function TokenStatsChart({
   buckets,
-  metricTab,
   chart,
   keyOf,
   labelOf,
@@ -103,7 +102,6 @@ function TokenStatsChart({
   onSelect,
 }: {
   buckets: UsageStatsBucketDto[];
-  metricTab: MetricTab;
   /** 图表标识（daily / hourly），供测试与样式区分。 */
   chart: string;
   /** 桶 → 键（按天用日期键，按小时用小时序号）。 */
@@ -112,12 +110,7 @@ function TokenStatsChart({
   selectedKey?: string;
   onSelect?: (key: string) => void;
 }) {
-  const maxValue = Math.max(
-    1,
-    ...buckets.map((b) =>
-      metricTab === "usage" ? b.promptTokens + b.completionTokens : 100,
-    ),
-  );
+  const maxValue = Math.max(1, ...buckets.map((b) => b.promptTokens + b.completionTokens));
   return (
     <div
       className={`token-stats-chart${chart === "hourly" ? " token-stats-chart--hourly" : ""}`}
@@ -125,7 +118,6 @@ function TokenStatsChart({
     >
       {buckets.map((b, index) => {
         const key = keyOf(b, index);
-        const rate = metricTab === "hitRate" ? hitRate(b.cacheReadTokens, b.billedInputTokens) : null;
         const usagePct = (value: number) => `${Math.min(100, (value / maxValue) * 100)}%`;
         return (
           <button
@@ -138,25 +130,14 @@ function TokenStatsChart({
             onClick={onSelect ? () => onSelect(key) : undefined}
           >
             <span className="token-stats-chart__bars">
-              {metricTab === "usage" ? (
-                <>
-                  <span
-                    className="token-stats-chart__bar token-stats-chart__bar--output"
-                    style={{ height: usagePct(b.completionTokens) }}
-                  />
-                  <span
-                    className="token-stats-chart__bar token-stats-chart__bar--input"
-                    style={{ height: usagePct(b.promptTokens) }}
-                  />
-                </>
-              ) : rate == null ? (
-                <span className="token-stats-chart__bar token-stats-chart__bar--nodata" />
-              ) : (
-                <span
-                  className="token-stats-chart__bar token-stats-chart__bar--rate"
-                  style={{ height: usagePct(rate * 100) }}
-                />
-              )}
+              <span
+                className="token-stats-chart__bar token-stats-chart__bar--output"
+                style={{ height: usagePct(b.completionTokens) }}
+              />
+              <span
+                className="token-stats-chart__bar token-stats-chart__bar--input"
+                style={{ height: usagePct(b.promptTokens) }}
+              />
             </span>
             <span className="token-stats-chart__label">{labelOf(key)}</span>
           </button>
@@ -170,7 +151,7 @@ export function TokenUsageStatsView() {
   const [rangeKind, setRangeKind] = useState<RangeKind>("last7");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [metricTab, setMetricTab] = useState<MetricTab>("usage");
+  const [pageTab, setPageTab] = useState<PageTab>("summary");
   const [modelFilter, setModelFilter] = useState<string | null | undefined>(undefined);
   const [models, setModels] = useState<string[]>([]);
   const [summary, setSummary] = useState<UsageStatsSummaryDto | null>(null);
@@ -341,15 +322,6 @@ export function TokenUsageStatsView() {
             ]}
             onChange={handleRangeKindChange}
           />
-          <SegmentedControl
-            aria-label="指标"
-            value={metricTab}
-            options={[
-              { value: "usage" as MetricTab, label: "用量" },
-              { value: "hitRate" as MetricTab, label: "命中率" },
-            ]}
-            onChange={setMetricTab}
-          />
         </div>
         {rangeKind === "custom" ? (
           <div className="token-stats-view__custom-range">
@@ -401,16 +373,27 @@ export function TokenUsageStatsView() {
         {loadError != null ? <p className="token-stats-view__error">{loadError}</p> : null}
       </SettingsSection>
 
+      <div className="token-stats-view__tabs">
+        <SegmentedControl
+          aria-label="视图页签"
+          value={pageTab}
+          options={[
+            { value: "summary" as PageTab, label: "汇总" },
+            { value: "detail" as PageTab, label: "明细" },
+          ]}
+          onChange={setPageTab}
+        />
+      </div>
+
       {empty ? (
         <SettingsSection title="数据统计">
           <SettingsListEmpty>
             当前筛选范围内暂无用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录。
           </SettingsListEmpty>
         </SettingsSection>
-      ) : (
-        <>
+      ) : pageTab === "summary" ? (
           <SettingsSection title={`总览 · ${rangeLabel}`} desc="跟随当前时间范围与模型筛选">
-            <div className="token-stats-cards">
+            <div className="token-stats-cards token-stats-cards--metrics">
               <div className="token-stats-card" data-metric="totalTokens">
                 <span className="token-stats-card__label">总 token</span>
                 <span className="token-stats-card__value">
@@ -445,7 +428,7 @@ export function TokenUsageStatsView() {
             <div className="token-stats-view__today">
               <span className="token-stats-view__today-title">今日</span>
               <span className="token-stats-view__today-hint">不受时间范围与模型筛选影响</span>
-              <div className="token-stats-cards">
+              <div className="token-stats-cards token-stats-cards--today">
                 <div className="token-stats-card" data-metric="todayTotalTokens">
                   <span className="token-stats-card__label">总 token</span>
                   <span className="token-stats-card__value">
@@ -461,11 +444,11 @@ export function TokenUsageStatsView() {
               </div>
             </div>
           </SettingsSection>
-
-          <SettingsSection title={metricTab === "usage" ? "按天用量" : "按天命中率"}>
+      ) : (
+        <>
+          <SettingsSection title="按天用量">
             <TokenStatsChart
               buckets={dailyBuckets}
-              metricTab={metricTab}
               chart="daily"
               keyOf={(b) => toLocalDayKey(b.bucketStartMs)}
               labelOf={(key) => key.slice(8)}
@@ -488,7 +471,6 @@ export function TokenUsageStatsView() {
                 </p>
                 <TokenStatsChart
                   buckets={hourlyBuckets ?? []}
-                  metricTab={metricTab}
                   chart="hourly"
                   keyOf={(_b, index) => String(index)}
                   labelOf={(key) => `${Number(key)}时`}
@@ -497,13 +479,13 @@ export function TokenUsageStatsView() {
             ) : null}
           </SettingsSection>
 
-          <SettingsSection title="分模型汇总">
+          <SettingsSection title="分模型汇总" desc="不含命中率列——命中率出口在汇总卡片与选中天汇总行">
             <div className="token-stats-models">
               <div className="token-stats-models__row token-stats-models__row--head">
                 <span>模型</span>
                 <span>用量</span>
                 <span>占比</span>
-                <span>命中率</span>
+                <span>调用次数</span>
               </div>
               {sortedModelRows.map((row) => {
                 const share =
@@ -521,9 +503,7 @@ export function TokenUsageStatsView() {
                     </span>
                     <span>{formatTokenCount(row.totalTokens)}</span>
                     <span>{share == null ? "—" : `${Math.round(share * 100)}%`}</span>
-                    <span>
-                      {formatHitRate(hitRate(row.cacheReadTokens, row.billedInputTokens))}
-                    </span>
+                    <span>{String(row.calls)}</span>
                   </div>
                 );
               })}

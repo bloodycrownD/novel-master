@@ -7186,6 +7186,12 @@ html[data-theme="dark"] .chat-batch-bar {
   gap: 12px;
 }
 
+/* 「汇总 / 明细」双页签切换行（筛选栏下方，两页签共享筛选）。 */
+.token-stats-view__tabs {
+  display: flex;
+  margin-bottom: 16px;
+}
+
 .token-stats-view__custom-range {
   display: flex;
   flex-wrap: wrap;
@@ -7233,6 +7239,17 @@ html[data-theme="dark"] .chat-batch-bar {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 8px;
+}
+
+/* 汇总页签独占布局：五指标卡一行放宽，不再挤在通用 auto-fit 里。 */
+.token-stats-cards--metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.token-stats-cards--today {
+  grid-template-columns: repeat(2, minmax(0, 200px));
+  gap: 12px;
 }
 
 .token-stats-card {
@@ -7329,15 +7346,6 @@ html[data-theme="dark"] .chat-batch-bar {
 
 .token-stats-chart__bar--output {
   background: var(--text-secondary);
-}
-
-.token-stats-chart__bar--rate {
-  background: var(--success);
-}
-
-.token-stats-chart__bar--nodata {
-  height: 3px;
-  background: var(--border-light);
 }
 
 .token-stats-chart__label {

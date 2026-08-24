@@ -1,7 +1,7 @@
 /**
  * TokenUsageStatsView 渲染与交互（spec T-S6 的 view 部分 / Step 7）：
- * - 总览卡片数值文本（formatTokenCount 口径 + 今日卡独立渲染）；
- * - 按天柱状图容器数量与顺序（data-day 序列）、分模型汇总含「未记录」行且按用量降序；
+ * - 「汇总 / 明细」双页签：默认汇总（五指标卡 + 今日卡）；切页签不重查、筛选共享；
+ * - 明细页签：按天柱状图（data-day 序列）、分模型表（无命中率列，含「未记录」行、按用量降序）；
  * - 空态（SettingsListEmpty）；自定义区间 ≤366 天校验（超限行内提示且不再发查询）；
  * - kind / filter 参数随筛选（时间范围 × 模型三态）切换正确；点选某天 → hourly 钻取。
  *
@@ -276,7 +276,7 @@ async function clickDayCol(root: ReactTestRendererRoot, day: string): Promise<vo
 }
 
 describe("TokenUsageStatsView（T-S6 view 部分）", () => {
-  it("总览卡片数值 + 按天柱状图数量与顺序 + 分模型汇总含「未记录」行（降序）", async () => {
+  it("汇总页签：五指标卡 + 今日卡；明细页签：按天柱 + 分模型表（无命中率列）；页签共享筛选不重查", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -284,7 +284,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       renderer = await mountView();
       const root = renderer.root;
 
-      // 总览卡（跟随筛选）：总 3K / 输入 1K / 输出 2K / 调用 12 / 命中率 400÷2000=20%
+      // 默认落在「汇总」页签：五指标卡（总 3K / 输入 1K / 输出 2K / 调用 12 / 命中率 400÷2000=20%）
       assert.equal(metricText(root, "totalTokens"), "3K");
       assert.equal(metricText(root, "promptTokens"), "1K");
       assert.equal(metricText(root, "completionTokens"), "2K");
@@ -294,6 +294,15 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       // 今日卡（独立于筛选）
       assert.equal(metricText(root, "todayTotalTokens"), "550");
       assert.equal(metricText(root, "todayCalls"), "3");
+
+      // 汇总页签不渲染明细图表与分模型表
+      assert.deepEqual(chartCols(root, "daily"), []);
+      assert.equal(modelRowKeys(root).length, 0);
+
+      // 切到「明细」：页签共享筛选与数据，不触发任何新查询
+      requests.length = 0;
+      await clickSegmented(root, "明细");
+      assert.equal(requests.length, 0, "切换页签不应重新查询");
 
       // 按天柱：3 根、顺序与 daily 桶一致（data-day 为本地日期键）
       assert.deepEqual(chartCols(root, "daily"), DAILY.map((b) => toDayKey(b.bucketStartMs)));
@@ -310,7 +319,25 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
         "未记录行应展示「未记录」名称",
       );
 
-      // 模型下拉：全部 / 库内模型 / 未记录（DEV-1：UI 侧补「未记录」选项）
+      // 表头无命中率列：模型 / 用量 / 占比 / 调用次数
+      const headRow = root.findAll(
+        (node) =>
+          typeof node.props.className === "string" &&
+          node.props.className.includes("token-stats-models__row--head"),
+      )[0]!;
+      const headTexts = (headRow.children as unknown[]).map((c) =>
+        String((c as { props: { children: unknown } }).props.children),
+      );
+      assert.deepEqual(headTexts, ["模型", "用量", "占比", "调用次数"]);
+
+      // 数据行单元格：名称 / 用量 / 占比 / 调用次数（不再有命中率出口）
+      const gptRow = root.findAll((node) => node.props["data-model"] === "gpt-4o")[0]!;
+      const cellTexts = (gptRow.children as unknown[]).map((c) =>
+        String((c as { props: { children: unknown } }).props.children),
+      );
+      assert.deepEqual(cellTexts, ["gpt-4o", "1.2K", "40%", "10"]);
+
+      // 模型下拉（共享筛选栏，两页签都在）：全部 / 库内模型 / 未记录（DEV-1：UI 侧补「未记录」选项）
       const select = root.findByProps({ className: "token-stats-view__model-select" });
       const optionValues = select.children.map(
         (c: { props: { value: string } }) => c.props.value,
@@ -321,6 +348,12 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
         "gpt-4o",
         "__unlogged__",
       ]);
+
+      // 切回「汇总」：卡片仍在，明细内容隐藏（筛选与数据保持）
+      await clickSegmented(root, "汇总");
+      assert.equal(metricText(root, "totalTokens"), "3K");
+      assert.deepEqual(chartCols(root, "daily"), []);
+      assert.equal(modelRowKeys(root).length, 0);
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -349,6 +382,11 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       const empty = root.findByProps({ className: "settings-list__empty" });
       const emptyText = (empty.children as unknown[]).map((c) => String(c)).join("");
       assert.ok(emptyText.includes("暂无用量数据"), "空态文案应说明暂无用量数据");
+      assert.deepEqual(chartCols(root, "daily"), []);
+      assert.equal(modelRowKeys(root).length, 0);
+
+      // 空态对两个页签一致：切到「明细」仍展示空态，不渲染图表与分模型表
+      await clickSegmented(root, "明细");
       assert.deepEqual(chartCols(root, "daily"), []);
       assert.equal(modelRowKeys(root).length, 0);
     } finally {
@@ -398,6 +436,18 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       requests.length = 0;
       await selectModel(root, "__all__");
       assert.ok(requests.length > 0 && requests.every((r) => r.filter.model === undefined));
+
+      // 页签共享筛选：切「明细」不重查；在明细页签下改时间范围仍触发三连查询
+      // （当前已是近 30 天，切回近 7 天验证）
+      requests.length = 0;
+      await clickSegmented(root, "明细");
+      assert.equal(requests.length, 0, "切换页签不应重新查询");
+      await clickSegmented(root, "近 7 天");
+      assert.deepEqual(
+        requests.map((r) => r.kind).sort(),
+        ["daily", "modelBreakdown", "summary"],
+      );
+      assert.ok(requests.every((r) => r.filter.range.kind === "last7"));
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -438,7 +488,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     }
   });
 
-  it("点选某天 → hourly 钻取（dayLocalDate + 24 小时柱 + 当天汇总行）；再点取消", async () => {
+  it("点选某天 → hourly 钻取（dayLocalDate + 24 小时柱 + 当天汇总行含命中率）；再点取消", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -446,6 +496,8 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       renderer = await mountView();
       const root = renderer.root;
 
+      // 按天图在「明细」页签：先切过去再点选
+      await clickSegmented(root, "明细");
       const dayKey = toDayKey(DAILY[0]!.bucketStartMs);
       requests.length = 0;
       await clickDayCol(root, dayKey);
@@ -456,14 +508,16 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       assert.equal(hourly[0]!.dayLocalDate, dayKey);
       assert.equal(hourly[0]!.filter.range.kind, "last7");
 
-      // 24 小时柱 + 当天汇总行（标题含选中日期）
+      // 24 小时柱 + 当天汇总行（标题含选中日期；汇总行保留命中率出口：400÷1000=40%）
       assert.equal(chartCols(root, "hourly").length, 24);
       const detail = root.findByProps({ "data-day-detail": dayKey });
-      const detailTitle = detail.children
-        .filter((c: { props?: { className?: string } }) => c.props?.className === "token-stats-view__day-detail-title")
-        .map((c: { props: { children: unknown } }) => String(c.props.children))
+      const detailSummary = detail.children
+        .filter((c: { props?: { className?: string } }) => c.props?.className === "token-stats-view__day-detail-summary")
+        .map((c: { props: { children: unknown[] } }) =>
+          (c.props.children as unknown[]).map((x) => String(x)).join(""),
+        )
         .join("");
-      assert.ok(detailTitle.includes(dayKey));
+      assert.ok(detailSummary.includes("40%"), "当天汇总行应保留命中率");
 
       // 再点同一根柱 → 取消选中
       await clickDayCol(root, dayKey);

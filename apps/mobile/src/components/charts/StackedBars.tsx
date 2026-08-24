@@ -1,11 +1,7 @@
 /**
- * 纯 RN View 柱状图（数据统计页专用）。
+ * 纯 RN View 双段堆叠柱状图（数据统计页专用）。
  *
- * - `usage` 模式：双段堆叠柱（下段输入 primary、上段输出 secondary），高度按
- *   全量数据归一化；
- * - `hitRate` 模式：单值柱（primary 传 0-100 百分比），高度按 100% 满刻度；
- *   无 cache 数据的桶高度为 0，用浅色底座与「真 0%」区分。
- *
+ * 下段为输入（primary）、上段为输出（secondary），柱高按全量数据归一化。
  * 不依赖 react-native-svg：柱宽按容器宽度自适应（柱数少时变宽），30 天数据
  * 超宽时由横向 ScrollView 自然滚动。
  */
@@ -15,12 +11,10 @@ import type { ThemeTokens } from '../../theme/tokens';
 
 export interface StackedBarsDatum {
   key: string;
-  /** usage 模式 = 输入 token；hitRate 模式 = 命中率百分比（0-100）。 */
+  /** 输入 token（柱下半段）。 */
   primary: number;
-  /** usage 模式 = 输出 token；hitRate 模式忽略。 */
+  /** 输出 token（柱上半段，缺省 0）。 */
   secondary?: number;
-  /** hitRate 模式下标记「无 cache 数据」的桶（高度 0 且视觉区分于 0%）。 */
-  noData?: boolean;
 }
 
 type Props = {
@@ -28,7 +22,6 @@ type Props = {
   selectedKey?: string;
   onSelect?: (key: string) => void;
   tokens: ThemeTokens;
-  mode: 'usage' | 'hitRate';
   /** x 轴标签（缺省用 key 原文）。 */
   formatLabel?: (key: string, index: number) => string;
   testID?: string;
@@ -45,7 +38,6 @@ export function StackedBars({
   selectedKey,
   onSelect,
   tokens,
-  mode,
   formatLabel,
   testID,
 }: Props) {
@@ -69,25 +61,17 @@ export function StackedBars({
       : MIN_BAR_WIDTH;
 
   const maxTotal = data.reduce((max, d) => {
-    const total =
-      mode === 'usage'
-        ? d.primary + (d.secondary ?? 0)
-        : Math.max(d.primary, 0);
+    const total = d.primary + (d.secondary ?? 0);
     return total > max ? total : max;
   }, 0);
-
-  const legend =
-    mode === 'usage'
-      ? [
-          { label: '输入', color: tokens.primary },
-          { label: '输出', color: tokens.textSecondary },
-        ]
-      : [{ label: '命中率', color: tokens.success }];
 
   return (
     <View testID={testID} onLayout={onLayout}>
       <View style={styles.legendRow}>
-        {legend.map(item => (
+        {[
+          { label: '输入', color: tokens.primary },
+          { label: '输出', color: tokens.textSecondary },
+        ].map(item => (
           <View key={item.label} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
             <Text style={[styles.legendLabel, { color: tokens.textSecondary }]}>
@@ -103,63 +87,16 @@ export function StackedBars({
             const label = formatLabel
               ? formatLabel(datum.key, index)
               : datum.key;
-            let barContent: React.ReactNode;
-            if (mode === 'usage') {
-              const total = datum.primary + (datum.secondary ?? 0);
-              const height =
-                maxTotal > 0 && total > 0
-                  ? Math.max(2, Math.round((total / maxTotal) * CHART_HEIGHT))
-                  : 0;
-              const primaryHeight =
-                height > 0 && total > 0
-                  ? Math.max(1, Math.round((datum.primary / total) * height))
-                  : 0;
-              const secondaryHeight = height - primaryHeight;
-              barContent =
-                height === 0 ? null : (
-                  <View
-                    testID={`bar-${datum.key}`}
-                    style={[
-                      styles.bar,
-                      { height, width: barWidth, overflow: 'hidden' },
-                    ]}
-                  >
-                    <View
-                      style={{ flex: 1, backgroundColor: tokens.primary }}
-                    />
-                    {secondaryHeight > 0 ? (
-                      <View
-                        style={{
-                          height: secondaryHeight,
-                          backgroundColor: tokens.textSecondary,
-                        }}
-                      />
-                    ) : null}
-                  </View>
-                );
-            } else {
-              // hitRate：无数据桶高度 0（浅色底座标记）；有数据按百分比取高。
-              const pct = Math.min(100, Math.max(0, datum.primary));
-              const height = datum.noData
-                ? 2
-                : Math.max(2, Math.round((pct / 100) * CHART_HEIGHT));
-              barContent = (
-                <View
-                  testID={`bar-${datum.key}`}
-                  style={[
-                    styles.bar,
-                    {
-                      height,
-                      width: barWidth,
-                      backgroundColor: datum.noData
-                        ? tokens.borderLight
-                        : tokens.success,
-                      opacity: datum.noData ? 0.6 : 1,
-                    },
-                  ]}
-                />
-              );
-            }
+            const total = datum.primary + (datum.secondary ?? 0);
+            const height =
+              maxTotal > 0 && total > 0
+                ? Math.max(2, Math.round((total / maxTotal) * CHART_HEIGHT))
+                : 0;
+            const primaryHeight =
+              height > 0 && total > 0
+                ? Math.max(1, Math.round((datum.primary / total) * height))
+                : 0;
+            const secondaryHeight = height - primaryHeight;
             return (
               <Pressable
                 key={datum.key}
@@ -170,7 +107,27 @@ export function StackedBars({
                 <View
                   style={{ height: CHART_HEIGHT, justifyContent: 'flex-end' }}
                 >
-                  {barContent}
+                  {height === 0 ? null : (
+                    <View
+                      testID={`bar-${datum.key}`}
+                      style={[
+                        styles.bar,
+                        { height, width: barWidth, overflow: 'hidden' },
+                      ]}
+                    >
+                      <View
+                        style={{ flex: 1, backgroundColor: tokens.primary }}
+                      />
+                      {secondaryHeight > 0 ? (
+                        <View
+                          style={{
+                            height: secondaryHeight,
+                            backgroundColor: tokens.textSecondary,
+                          }}
+                        />
+                      ) : null}
+                    </View>
+                  )}
                 </View>
                 <Text
                   testID={`bar-label-${datum.key}`}

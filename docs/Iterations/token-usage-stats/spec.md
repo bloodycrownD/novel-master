@@ -92,12 +92,12 @@ apps/desktop/test/token-usage-stats-view.test.tsx
 - `renderer/ipc/invoke-registry.ts` + `client.ts`：`ipcUsageStatsQuery(req)`。
 - `features/settings/settings-nav.ts`：`SettingsViewId` 加 `"tokenUsageStats"`、`SETTINGS_NAV`「数据」分组加项（icon `📊`）、`SETTINGS_TOP_LEVEL` 加标题（三处缺一会出现返回键判定错乱）。
 - `layout/SettingsOverlay.tsx`：`renderContent` 加 case。
-- `renderer/features/settings/TokenUsageStatsView.tsx` + `styles/shell.css`：`SettingsPanel`/`SettingsSection` 容器 + SegmentedControl（复用 `components/ui/SegmentedControl`）+ CSS div 柱状图（`--primary` 输入 / `--text-secondary` 输出 / `--success` 命中率）+ `<input type="date">` ×2 + `SettingsListEmpty` 空态。
+- `renderer/features/settings/TokenUsageStatsView.tsx` + `styles/shell.css`：「汇总/明细」双页签（筛选栏置顶共享）；`SettingsPanel`/`SettingsSection` 容器 + SegmentedControl（复用 `components/ui/SegmentedControl`）+ CSS div 柱状图（`--primary` 输入 / `--text-secondary` 输出，无命中率图表模式）+ `<input type="date">` ×2 + `SettingsListEmpty` 空态；分模型表不含命中率列。
 
 ### 7. Mobile（apps/mobile）
 
 - `navigation/types.ts`（`TokenUsageStats: undefined`）、`header-config.ts`（title「数据统计」）、`RootNavigator.tsx`（**模块级** `withStackLayout` 包装 + 注册）、`screens/tabs/ProfileTabScreen.tsx`（`CONFIG_MENU` 加项 icon `📊`）。
-- `screens/stack/TokenUsageStatsScreen.tsx`：`useRuntime()` + `useFocusEffect` 刷新（`StorageConfigScreen` 惯例）；`useTheme()` tokens 取色（不写字面量）；SegmentedControl（时间范围 + 用量/命中率 tab）；`StackedBars`（纯 View，30 天横向滚动）；选中天 → 24 小时桶 + 该天汇总行；`MonthRangePickerSheet`（自定义区间）；空态内联 `Text`（`SkillsSettingsScreen` 惯例）。
+- `screens/stack/TokenUsageStatsScreen.tsx`：`useRuntime()` + `useFocusEffect` 刷新（`StorageConfigScreen` 惯例）；`useTheme()` tokens 取色（不写字面量）；「汇总/明细」双页签（筛选栏置顶共享，SegmentedControl）；`StackedBars`（纯 View，仅用量堆叠模式，30 天横向滚动）；选中天 → 24 小时桶 + 该天汇总行（含命中率）；`MonthRangePickerSheet`（自定义区间）；空态内联 `Text`（`SkillsSettingsScreen` 惯例）。
 - `runtime/types.ts` + `create-mobile-runtime.ts`：runtime 加 `usageStats` 字段（走 bundle）。
 
 ### 8. 公共工具（core）——复用既有导出

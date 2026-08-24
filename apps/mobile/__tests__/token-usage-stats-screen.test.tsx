@@ -2,9 +2,12 @@
  * 数据统计页（TokenUsageStatsScreen）mobile UI 测试（T-S7）。
  *
  * - 入口：ProfileTabScreen CONFIG_MENU「数据统计」项 navigate TokenUsageStats；
+ * - 「汇总 / 明细」双页签：筛选栏置顶共享（切页签不重查、筛选状态跨页签
+ *   保留）；汇总页签五指标卡 + 今日卡（命中率无数据显示「暂无数据」）；
+ *   明细页签柱状图 / 小时钻取 / 分模型列表（无命中率列）；
  * - 筛选切换重查：时间范围 / 模型筛选切换后 stub 的 usageStats 方法收到新
  *   filter 参数；
- * - 柱状图数据映射：样例桶数据 → 柱高顺序 / 标签文本 / noData 桶视觉区分；
+ * - 柱状图数据映射：样例桶数据 → 柱高顺序 / 标签文本；
  * - 空态文案；
  * - MonthRangePickerSheet 组件级选值回调 + 自定义区间正常路径与 366 天上限。
  *
@@ -157,7 +160,7 @@ const SAMPLE_SUMMARY = {
   today: { totalTokens: 500, calls: 2 },
 };
 
-// 三天样例：高度递减；第三天 billed=0（无 cache 数据 → hitRate noData 桶）。
+// 三天样例：总用量递减（900+100 / 400+100 / 50+0），柱高随之递减。
 const SAMPLE_BUCKETS = [
   {
     bucketStartMs: dayMs(2026, 7, 21),
@@ -265,6 +268,16 @@ async function renderScreen() {
   return renderer!;
 }
 
+/** 切到「明细」页签（柱状图 / 小时钻取 / 分模型列表都在明细页签）。 */
+async function switchToDetailTab(
+  renderer: TestRenderer.ReactTestRenderer,
+): Promise<void> {
+  await act(async () => {
+    findByTestId(renderer.root, 'stats-tab-detail')!.props.onPress();
+    await flushPromises();
+  });
+}
+
 beforeEach(() => {
   mockGetSummary.mockReset().mockResolvedValue(SAMPLE_SUMMARY);
   mockGetDailyBuckets.mockReset().mockResolvedValue(SAMPLE_BUCKETS);
@@ -341,6 +354,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
 
   it('柱状图数据映射：柱高随桶用量递减，标签为日期文本', async () => {
     const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
     const bar1 = findByTestId(renderer.root, 'bar-2026-08-21');
     const bar2 = findByTestId(renderer.root, 'bar-2026-08-22');
     const bar3 = findByTestId(renderer.root, 'bar-2026-08-23');
@@ -359,25 +373,67 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     );
   });
 
-  it('命中率模式：无 cache 数据桶用 borderLight 底座与命中桶区分', async () => {
+  it('页签切换共享筛选：切页签不重查，明细页签改范围后回汇总保留', async () => {
     const renderer = await renderScreen();
+    const callsBefore = mockGetDailyBuckets.mock.calls.length;
+    await switchToDetailTab(renderer);
+    // 切页签只切展示，不触发重查。
+    expect(mockGetDailyBuckets.mock.calls.length).toBe(callsBefore);
     await act(async () => {
-      findByTestId(renderer.root, 'metric-hitRate')!.props.onPress();
+      findByTestId(renderer.root, 'range-last30')!.props.onPress();
       await flushPromises();
     });
-    const noDataBar = findByTestId(renderer.root, 'bar-2026-08-23')!;
-    const hitBar = findByTestId(renderer.root, 'bar-2026-08-21')!;
-    expect(styleValue(noDataBar.props.style, 'backgroundColor')).toBe(
-      '#e0e0e0',
-    );
-    expect(styleValue(hitBar.props.style, 'backgroundColor')).toBe('#34c759');
-    // 命中率 500/600 ≈ 83% → 高度 116；无数据桶高度为底座 2。
-    expect(styleValue(hitBar.props.style, 'height')).toBe(116);
-    expect(styleValue(noDataBar.props.style, 'height')).toBe(2);
+    expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
+      range: { kind: 'last30' },
+      model: undefined,
+    });
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-summary')!.props.onPress();
+      await flushPromises();
+    });
+    // 回汇总页签：筛选状态保留（总览标题仍为近 30 天，未重置回近 7 天）。
+    expect(JSON.stringify(renderer.toJSON())).toContain('近 30 天');
   });
 
-  it('点选某天加载 24 小时桶并渲染该天汇总行', async () => {
+  it('汇总页签：五指标卡与今日卡，命中率 80%', async () => {
+    const renderer = await renderScreen(); // 默认汇总页签
+    expect(findByTestId(renderer.root, 'summary-metric-total')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'summary-metric-input')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'summary-metric-output')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'summary-metric-calls')).toBeTruthy();
+    expect(
+      nodeText(findByTestId(renderer.root, 'summary-metric-output')!),
+    ).toContain('200');
+    expect(nodeText(findByTestId(renderer.root, 'summary-metric-calls')!)).toContain(
+      '6',
+    );
+    // 命中率 = 800/1000 = 80%。
+    expect(
+      nodeText(findByTestId(renderer.root, 'summary-metric-hitRate')!),
+    ).toContain('80%');
+    // 今日卡独立于筛选：today 子对象数值。
+    const today = nodeText(findByTestId(renderer.root, 'today-card')!);
+    expect(today).toContain('500');
+    expect(today).toContain('2');
+  });
+
+  it('汇总页签：命中率无 cache 数据时显示「暂无数据」而非 0%', async () => {
+    mockGetSummary.mockResolvedValue({
+      ...SAMPLE_SUMMARY,
+      cacheReadTokens: 0,
+      billedInputTokens: 0,
+    });
     const renderer = await renderScreen();
+    const hitTile = nodeText(
+      findByTestId(renderer.root, 'summary-metric-hitRate')!,
+    );
+    expect(hitTile).toContain('暂无数据');
+    expect(hitTile).not.toContain('0%');
+  });
+
+  it('点选某天加载 24 小时桶并渲染该天汇总行（含命中率）', async () => {
+    const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
     await act(async () => {
       findByTestId(renderer.root, 'bar-col-2026-08-21')!.props.onPress();
       await flushPromises();
@@ -401,18 +457,24 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       ),
     ];
     expect(hourLabels).toHaveLength(24);
+    // 该天汇总行保留命中率出口：500/600 ≈ 83%。
+    const json = JSON.stringify(renderer.toJSON());
+    expect(json).toContain('命中率');
+    expect(json).toContain('83%');
   });
 
-  it('总览/今日卡与分模型列表：命中率 80%、未记录行按用量降序在前', async () => {
+  it('明细页签分模型列表：未记录行按用量降序在前，不提供命中率列', async () => {
     const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
     const json = JSON.stringify(renderer.toJSON());
-    expect(json).toContain('80%'); // 800/1000
-    expect(json).toContain('未记录');
     // 降序：gpt-4o（950）在未记录（600）前。
     const gptIndex = json.indexOf('gpt-4o');
     const unloggedIndex = json.indexOf('未记录');
     expect(gptIndex).toBeGreaterThanOrEqual(0);
     expect(gptIndex).toBeLessThan(unloggedIndex);
+    // 分模型列表只有模型名/用量/占比/调用次数；未选天时整个明细页签无命中率出口。
+    expect(json).toContain('占比');
+    expect(json).not.toContain('命中率');
   });
 
   it('空数据时展示引导文案而非空白', async () => {
