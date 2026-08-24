@@ -76,3 +76,9 @@ user:
 
 assistant:
 dev-ready 收官。从 main（2f1c4fc）开 feat/import-cache-mermaid-error 分支（token-usage-stats 30 commits 留在原分支未合并）。wave-0 三 impl 并行落地（c2d54a3/ba241ac/1af701e，子代理禁 commit 主代理分组提交）；wave-1 三包 verify 全绿（core 2111/2111 + typecheck 干净；desktop 373 仅 2 例既有 skills 漂移；mobile 821 仅 3 例既有 unhide）；wave-2 cr-func func-ready yes 无 must-fix。两处插曲：①desktop 子代理在 shell.css 误混入 token-stats 样式 245 行，主代理剔除重写（最终 +13 纯 mermaid 样式）；教训——子代理外部改文件后 Zed buffer 过期，edit_file 会写回旧内容，须用 shell 直写。②mobile 把 data-mermaid-error 挂 code 而非 spec 字面 pre，核实为 spec 笔误（CSS attr() 只读伪元素宿主属性），spec 已补勘误。遗留：Step 4 真机 manual QA 合并后用户执行；core npm test 脚本 extglob 在 sh 下报语法错误（既有，用 test:fast）。
+
+user:
+（publish）发布吧。
+
+assistant:
+v1.5.4 发版完成：迭代 ff 合入 main，CHANGELOG Unreleased 定版为 [1.5.4] - 2026-08-25，双端 package.json bump 1.5.4，android build.gradle 兜底 versionName 从陈旧的 1.5.1 对齐到 1.5.4（该文件含非 UTF-8 字节，须字节级替换；desktop package.json 是 CRLF 行尾，json.dump 重写会产生全文 diff——版本 bump 用字节替换只动版本行）。tag v1.5.4 已推送触发 Release CI，main 已同步（2f1c4fc..3fe0e16）。本次发布不含 token-usage-stats（仍在 feat/token-usage-stats-integration 未合并，留下次）。测试证据沿用 dev-loop wave-1 verify（ff 合并树一致）。
