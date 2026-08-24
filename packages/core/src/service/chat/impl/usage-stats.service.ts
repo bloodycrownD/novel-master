@@ -47,13 +47,19 @@ const AGG_SELECT_SQL =
 const USAGE_NOT_NULL_SQL =
   `role = 'assistant' AND (prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
 
-/** 模型筛选片断：undefined = 全部；null = 未记录桶；字符串 = 指定模型。 */
+/**
+ * 模型筛选片断：undefined = 全部；null = 「其他」桶（未记录 + 不在
+ * 已保存模型集合内）；字符串 = 指定模型。子查询免动态参数。
+ */
 function modelFilterSql(model: string | null | undefined): string {
   if (model === undefined) {
     return "";
   }
   if (model === null) {
-    return "AND model_name IS NULL";
+    return (
+      "AND (model_name IS NULL OR model_name NOT IN " +
+      "(SELECT DISTINCT vendor_model_id FROM llm_saved_model))"
+    );
   }
   return "AND model_name = #{modelName}";
 }
@@ -191,7 +197,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
        ORDER BY total_tokens DESC, model_name ASC`,
       { fromMs, toMs, modelName: filter.model ?? null },
     );
-    return rows.map((row) => ({
+    const mapped = rows.map((row) => ({
       modelName: row.model_name == null ? null : String(row.model_name),
       calls: Number(row.calls),
       promptTokens: Number(row.prompt_tokens),
@@ -200,6 +206,33 @@ export class DefaultUsageStatsService implements UsageStatsService {
       cacheReadTokens: Number(row.cache_read_tokens),
       billedInputTokens: Number(row.billed_input_tokens),
     }));
+    // 「其他」桶归并：modelName 不在当前配置集合（listModels 同源查询）的行
+    // 与 null 行合并成一行（各用量字段相加），配置模型各成一行；
+    // 归并后重排保持按用量降序。
+    const configured = new Set(await this.listModels());
+    const merged = new Map<string | null, UsageStatsModelRow>();
+    for (const row of mapped) {
+      const key =
+        row.modelName != null && configured.has(row.modelName)
+          ? row.modelName
+          : null;
+      const prev = merged.get(key);
+      merged.set(key, {
+        modelName: key,
+        calls: (prev?.calls ?? 0) + row.calls,
+        promptTokens: (prev?.promptTokens ?? 0) + row.promptTokens,
+        completionTokens: (prev?.completionTokens ?? 0) + row.completionTokens,
+        totalTokens: (prev?.totalTokens ?? 0) + row.totalTokens,
+        cacheReadTokens: (prev?.cacheReadTokens ?? 0) + row.cacheReadTokens,
+        billedInputTokens:
+          (prev?.billedInputTokens ?? 0) + row.billedInputTokens,
+      });
+    }
+    return [...merged.values()].sort(
+      (a, b) =>
+        b.totalTokens - a.totalTokens ||
+        (a.modelName ?? "").localeCompare(b.modelName ?? ""),
+    );
   }
 
   async listModels(): Promise<string[]> {

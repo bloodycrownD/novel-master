@@ -5,7 +5,7 @@
  * - hourly 24 桶且桶边界按本地时区（AC-4 小时粒度）；
  * - hidden 行与子会话（parent_session_id 非空）行计入总和（AC-2 口径）；
  * - NULL usage 行、无 cache 行不入命中率分母；
- * - model_name IS NULL 归「未记录」桶；模型 × 时间组合过滤；
+ * - model_name 为 NULL 或不在已保存模型集合的行归「其他」桶；模型 × 时间组合过滤；
  * - getSummary 附带的 today 子对象独立于 filter；
  * - listModels 来自服务商配置的已保存模型（不 distinct 历史消息）；
  * - billedInputTokens 含 anthropic 加法项（命中率原料）。
@@ -29,10 +29,13 @@ import {
 
 novelMasterTestFixture();
 
-// 统计查询扫全表，而 fixture 是整文件共享一条库：每个用例前清空消息表隔离数据。
+// 统计查询扫全表，而 fixture 是整文件共享一条库：每个用例前清空消息表
+// 与模型配置表隔离数据（llm_saved_model 外键引用 llm_provider，先删子表）。
 beforeEach(async () => {
   const ctx = getNovelMasterTestContext();
   await ctx.conn.execute("DELETE FROM chat_message");
+  await ctx.conn.execute("DELETE FROM llm_saved_model");
+  await ctx.conn.execute("DELETE FROM llm_provider");
 });
 
 /** 本地今日 0 点（ms）。 */
@@ -260,9 +263,10 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(todayBucket!.cacheReadTokens, 2048 + 50);
   });
 
-  it("model_name IS NULL 归「未记录」，getModelBreakdown 含 null 行", async () => {
+  it("「其他」桶：NULL 与非配置模型归并，配置模型独立", async () => {
     const { ctx, session } = await seedSession();
     const today0 = localDayStart(Date.now());
+    // 历史行：未记录（null）、非配置模型（中转站标注名/已下线）、配置模型各一条。
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: today0 + 10 * MIN,
       modelName: null,
@@ -270,8 +274,72 @@ describe("usage stats service (T-S5)", () => {
     });
     await seedMsg(ctx, session.id, 2, {
       createdAtMs: today0 + 20 * MIN,
-      modelName: "model-a",
+      modelName: "[3]gemini-legacy",
       usage: { prompt: 20, total: 20 },
+    });
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 30 * MIN,
+      modelName: "model-a",
+      usage: { prompt: 30, total: 5 },
+    });
+    // 服务商配置：仅 model-a 在已保存模型集合内。
+    const ts = String(Date.now());
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('stats-other-provider', 'openai', 'https://example.com', 'Stats Other Provider', '{}', 0, ${ts}, ${ts})`,
+    );
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('som-1', 'stats-other-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`,
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    const filter = {
+      range: {
+        kind: "custom" as const,
+        fromMs: today0,
+        toMs: localAddDays(today0, 1),
+      },
+    };
+    // 非配置行与 null 行归并成一个「其他」行（用量相加），配置模型独立成行。
+    const breakdown = await svc.getModelBreakdown(filter);
+    assert.equal(breakdown.length, 2);
+    const other = breakdown.find((r) => r.modelName === null);
+    const modelA = breakdown.find((r) => r.modelName === "model-a");
+    assert.ok(other, "breakdown 应含归并后的「其他」行");
+    assert.ok(!breakdown.some((r) => r.modelName === "[3]gemini-legacy"));
+    assert.ok(modelA);
+    assert.equal(other!.calls, 2);
+    assert.equal(other!.promptTokens, 30);
+    assert.equal(other!.totalTokens, 30);
+    assert.equal(modelA!.calls, 1);
+    // 归并后仍按用量降序：「其他」30 在 model-a 5 之前。
+    assert.equal(breakdown[0]!.modelName, null);
+
+    // model: null → 只查「其他」桶（NULL + 非配置），不含配置模型行。
+    const summaryNull = await svc.getSummary({ ...filter, model: null });
+    assert.equal(summaryNull.calls, 2);
+    assert.equal(summaryNull.promptTokens, 30);
+  });
+
+  it("无任何 saved model 时「其他」桶 = 全部行", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // beforeEach 已清空 llm_saved_model：所有非 NULL 模型均不在配置集合内。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      modelName: "model-a",
+      usage: { prompt: 10, total: 10 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      modelName: "model-b",
+      usage: { prompt: 20, total: 20 },
+    });
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 30 * MIN,
+      modelName: null,
+      usage: { prompt: 5, total: 5 },
     });
 
     const svc = createUsageStatsService(ctx.conn);
@@ -282,19 +350,15 @@ describe("usage stats service (T-S5)", () => {
         toMs: localAddDays(today0, 1),
       },
     };
-    const breakdown = await svc.getModelBreakdown(filter);
-    const unrecorded = breakdown.find((r) => r.modelName === null);
-    const modelA = breakdown.find((r) => r.modelName === "model-a");
-    assert.ok(unrecorded, "breakdown 应含「未记录」行");
-    assert.ok(modelA);
-    assert.equal(unrecorded!.calls, 1);
-    assert.equal(unrecorded!.totalTokens, 10);
-    assert.equal(modelA!.calls, 1);
-
-    // model: null → 只查未记录桶。
     const summaryNull = await svc.getSummary({ ...filter, model: null });
-    assert.equal(summaryNull.calls, 1);
-    assert.equal(summaryNull.promptTokens, 10);
+    assert.equal(summaryNull.calls, 3);
+    assert.equal(summaryNull.promptTokens, 35);
+
+    const breakdown = await svc.getModelBreakdown(filter);
+    assert.equal(breakdown.length, 1);
+    assert.equal(breakdown[0]!.modelName, null);
+    assert.equal(breakdown[0]!.calls, 3);
+    assert.equal(breakdown[0]!.totalTokens, 35);
   });
 
   it("模型 × 时间组合过滤", async () => {

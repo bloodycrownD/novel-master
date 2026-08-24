@@ -10,7 +10,8 @@
  *   + 分模型列表（模型名 / 用量 / 占比 / 调用次数，按用量降序，不提供命中率列）；
  * - 明细页签：按天用量 StackedBars（纯用量堆叠，无命中率图表模式），
  *   点选某天 → 24 小时分布 + 该天汇总行（汇总行保留命中率）；
- * - 模型筛选（listModels 只返回非 NULL 模型名，「未记录」由 UI 侧补上）；
+ * - 模型筛选（listModels 只返回非 NULL 模型名，「其他模型」选项由 UI 侧补上，
+ *   对应 NULL + 非当前配置历史模型的归并口径）；
  * - 命中率 = cacheReadTokens / billedInputTokens，展示层计算；
  *   分母为 0（无 cache 数据）显示「暂无数据」而非 0%。
  */
@@ -48,7 +49,11 @@ type PageTab = 'summary' | 'detail';
 
 const MS_PER_DAY = 86_400_000;
 
-/** 模型筛选选项的三态哨兵：全部 / 未记录（对应 filter.model 的 undefined / null）。 */
+/**
+ * 模型筛选选项的三态哨兵：全部 / 其他模型（对应 filter.model 的 undefined / null）。
+ * 注意：常量名沿用 unlogged，但语义已从「未记录」（仅 NULL）扩展为「其他模型」——
+ * NULL 与非当前配置的历史模型统一归并到该项，filter.model = null 的筛选语义由 core 侧负责。
+ */
 const MODEL_OPTION_ALL = '__all__';
 const MODEL_OPTION_UNLOGGED = '__unlogged__';
 
@@ -193,8 +198,8 @@ export function TokenUsageStatsScreen() {
     }, [reload]),
   );
 
-  // 模型选项：listModels 只返回非 NULL 模型名，「未记录」桶由 UI 侧补上
-  //（DEV-1，spec T-S5/AC-11）。
+  // 模型选项：listModels 只返回非 NULL 模型名，「其他模型」选项由 UI 侧补上
+  //（DEV-1，spec T-S5/AC-11；语义 = NULL + 非当前配置历史模型归并）。
   const reloadModels = useCallback(async () => {
     try {
       setModels(await runtime.usageStats.listModels());
@@ -286,7 +291,7 @@ export function TokenUsageStatsScreen() {
     modelFilter === undefined
       ? '全部模型'
       : modelFilter === null
-      ? '未记录'
+      ? '其他模型'
       : modelFilter;
 
   const rangeLabel =
@@ -469,7 +474,7 @@ export function TokenUsageStatsScreen() {
               >
                 <View style={styles.modelRowHead}>
                   <Text style={{ color: tokens.text }} numberOfLines={1}>
-                    {row.modelName ?? '未记录'}
+                    {row.modelName ?? '其他'}
                   </Text>
                   <Text style={{ color: tokens.textSecondary }}>
                     占比 {share == null ? '—' : `${Math.round(share * 100)}%`}
@@ -555,7 +560,7 @@ export function TokenUsageStatsScreen() {
             {[
               { id: MODEL_OPTION_ALL, label: '全部模型' },
               ...models.map(m => ({ id: m, label: m })),
-              { id: MODEL_OPTION_UNLOGGED, label: '未记录' },
+              { id: MODEL_OPTION_UNLOGGED, label: '其他模型' },
             ].map(option => {
               const selected =
                 option.id === MODEL_OPTION_ALL

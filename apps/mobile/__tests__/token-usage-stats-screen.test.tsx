@@ -332,12 +332,12 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     });
   });
 
-  it('模型筛选：「未记录」选项由 UI 补上，选中具体模型后 filter.model 生效', async () => {
+  it('模型筛选：「其他模型」选项由 UI 补上，选中具体模型后 filter.model 生效', async () => {
     const renderer = await renderScreen();
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
-    // DEV-1：listModels 只返回非 NULL 模型名，「未记录」必须由 UI 侧补上。
+    // DEV-1：listModels 只返回非 NULL 模型名，「其他模型」（NULL + 非当前配置历史模型归并）必须由 UI 侧补上。
     expect(findByTestId(renderer.root, 'model-option-gpt-4o')).toBeTruthy();
     expect(
       findByTestId(renderer.root, 'model-option-__unlogged__'),
@@ -349,6 +349,18 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(mockGetSummary).toHaveBeenLastCalledWith({
       range: { kind: 'last7' },
       model: 'gpt-4o',
+    });
+    // 语义断言：选中「其他模型」时 filter.model 传 null，归并筛选由 core 侧解释。
+    await act(async () => {
+      findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
+    });
+    await act(async () => {
+      findByTestId(renderer.root, 'model-option-__unlogged__')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockGetSummary).toHaveBeenLastCalledWith({
+      range: { kind: 'last7' },
+      model: null,
     });
   });
 
@@ -463,14 +475,14 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(json).toContain('83%');
   });
 
-  it('汇总页签分模型列表：未记录行按用量降序在前，不提供命中率列', async () => {
+  it('汇总页签分模型列表：其他行按用量降序在前，不提供命中率列', async () => {
     const renderer = await renderScreen(); // 默认汇总页签，无需切页签
     const json = JSON.stringify(renderer.toJSON());
-    // 降序：gpt-4o（950）在未记录（600）前。
+    // 降序：gpt-4o（950）在其他（600）前。
     const gptIndex = json.indexOf('gpt-4o');
-    const unloggedIndex = json.indexOf('未记录');
+    const otherIndex = json.indexOf('其他');
     expect(gptIndex).toBeGreaterThanOrEqual(0);
-    expect(gptIndex).toBeLessThan(unloggedIndex);
+    expect(gptIndex).toBeLessThan(otherIndex);
     // 分模型列表提供模型名/用量/占比/调用次数。
     expect(json).toContain('占比');
     expect(json).toContain('用量');

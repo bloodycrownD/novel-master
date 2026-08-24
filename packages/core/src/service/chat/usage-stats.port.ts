@@ -22,7 +22,9 @@ export interface UsageStatsRange {
  *
  * `model` 三态：
  * - `undefined`：全部模型；
- * - `null`：只统计「未记录」桶（`model_name IS NULL` 的历史行）；
+ * - `null`：只统计「其他」桶——`model_name IS NULL`，或 `model_name`
+ *   不在当前已保存模型集合（`llm_saved_model.vendor_model_id`）内的历史行
+ *   （如中转站标注名、已下线模型）；
  * - 具体字符串：只统计 `model_name` 相等的行。
  */
 export interface UsageStatsFilter {
@@ -63,7 +65,10 @@ export interface UsageStatsBucket {
   readonly billedInputTokens: number;
 }
 
-/** 分模型汇总行（`modelName` 为 null 表示「未记录」桶）。 */
+/**
+ * 分模型汇总行（`modelName` 为 null 表示「其他」桶：未记录行与不在
+ * 当前已保存模型集合内的行归并成一行）。
+ */
 export interface UsageStatsModelRow {
   readonly modelName: string | null;
   readonly calls: number;
@@ -91,13 +96,13 @@ export interface UsageStatsService {
     filter: UsageStatsFilter,
   ): Promise<UsageStatsBucket[]>;
 
-  /** 分模型汇总（含 `modelName` 为 null 的「未记录」桶）。 */
+  /** 分模型汇总（非配置模型与未记录行归并为 `modelName` 为 null 的「其他」桶）。 */
   getModelBreakdown(filter: UsageStatsFilter): Promise<UsageStatsModelRow[]>;
 
   /**
    * 可选模型列表：来自当前服务商配置的已保存模型（vendor_model_id 去重，
    * 与全局模型选择器同源），不从历史消息 distinct——历史已下线模型不出现；
-   * 「未记录」桶由 UI 侧补齐。
+   * 「其他」桶由 UI 侧补齐。
    */
   listModels(): Promise<string[]>;
 }

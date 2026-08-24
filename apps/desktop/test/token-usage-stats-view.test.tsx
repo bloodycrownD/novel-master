@@ -298,7 +298,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       // 汇总页签不渲染明细图表
       assert.deepEqual(chartCols(root, "daily"), []);
 
-      // 分模型汇总（挂在汇总页签）：按用量降序（gpt-4o 1200 → 未记录 800），null 行显示「未记录」
+      // 分模型汇总（挂在汇总页签）：按用量降序（gpt-4o 1200 → 其他 800），null 行显示「其他」
       assert.deepEqual(modelRowKeys(root), ["gpt-4o", "__unlogged__"]);
       const unloggedRow = root.findAll(
         (node) => node.props["data-model"] === "__unlogged__",
@@ -306,8 +306,8 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       assert.ok(
         unloggedRow
           .findAll((n) => n.props.className === "token-stats-models__name")
-          .some((n) => (n.children as unknown[]).includes("未记录")),
-        "未记录行应展示「未记录」名称",
+          .some((n) => (n.children as unknown[]).includes("其他")),
+        "其他模型行（null）应展示「其他」名称",
       );
 
       // 表头无命中率列：模型 / 用量 / 占比 / 调用次数
@@ -328,7 +328,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       );
       assert.deepEqual(cellTexts, ["gpt-4o", "1.2K", "40%", "10"]);
 
-      // 模型下拉（共享筛选栏，两页签都在）：全部 / 库内模型 / 未记录（DEV-1：UI 侧补「未记录」选项）
+      // 模型下拉（共享筛选栏，两页签都在）：全部 / 库内模型 / 其他模型（DEV-1：UI 侧补「其他模型」选项，语义为 NULL + 非当前配置历史模型）
       const select = root.findByProps({ className: "token-stats-view__model-select" });
       const optionValues = select.children.map(
         (c: { props: { value: string } }) => c.props.value,
@@ -339,6 +339,15 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
         "gpt-4o",
         "__unlogged__",
       ]);
+      // 下拉文案：哨兵选项展示「其他模型」（value 名保留 __unlogged__ 历史命名）
+      assert.ok(
+        select.children.some(
+          (c: { props: { value: string; children: unknown } }) =>
+            c.props.value === "__unlogged__" &&
+            (c.props.children as unknown[]).includes("其他模型"),
+        ),
+        "哨兵选项文案应为「其他模型」",
+      );
 
       // 切到「明细」：页签共享筛选与数据，不触发任何新查询；只剩按天柱，不含分模型表
       requests.length = 0;

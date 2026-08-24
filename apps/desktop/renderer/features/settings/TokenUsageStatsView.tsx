@@ -25,7 +25,7 @@ const MS_PER_DAY = 86_400_000;
 /** 自定义区间上限（天，含首尾；与 mobile 侧同口径，避免超长区间查询变慢）。 */
 const CUSTOM_RANGE_MAX_DAYS = 366;
 
-/** 模型下拉的三态哨兵：全部 / 未记录（对应 filter.model 的 undefined / null）。 */
+/** 模型下拉的三态哨兵：全部 / 其他模型（对应 filter.model 的 undefined / null）。「其他模型」= NULL 记录 + 非当前配置的历史模型归并。 */
 const MODEL_OPTION_ALL = "__all__";
 const MODEL_OPTION_UNLOGGED = "__unlogged__";
 
@@ -367,7 +367,8 @@ export function TokenUsageStatsView() {
                 {m}
               </option>
             ))}
-            <option value={MODEL_OPTION_UNLOGGED}>未记录</option>
+            {/* 常量与 value 名保留 __unlogged__（历史命名），语义已升级为「其他模型」：NULL + 非当前配置历史模型 */}
+            <option value={MODEL_OPTION_UNLOGGED}>其他模型</option>
           </select>
         </label>
         {loadError != null ? <p className="token-stats-view__error">{loadError}</p> : null}
@@ -466,7 +467,7 @@ export function TokenUsageStatsView() {
                     data-model={row.modelName ?? MODEL_OPTION_UNLOGGED}
                   >
                     <span className="token-stats-models__name">
-                      {row.modelName ?? "未记录"}
+                      {row.modelName ?? "其他"}
                     </span>
                     <span>{formatTokenCount(row.totalTokens)}</span>
                     <span>{share == null ? "—" : `${Math.round(share * 100)}%`}</span>
