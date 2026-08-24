@@ -106,6 +106,7 @@ export const {
   ipcPromptChatTokenLabel,
   ipcPromptAgentMeta,
   ipcCompactionManual,
+  ipcUsageStatsQuery,
   ipcPreferencesGetSessionFsVersionCheck,
   ipcPreferencesSetSessionFsVersionCheck,
   ipcPreferencesGetLlmStream,

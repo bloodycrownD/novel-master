@@ -45,6 +45,7 @@ export class EphemeralOverlayAgentSession implements AgentSession {
     content: MessageContent,
     options?: {
       provider?: string | null;
+      modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
     },
@@ -57,6 +58,7 @@ export class EphemeralOverlayAgentSession implements AgentSession {
       role,
       content,
       provider: options?.provider ?? null,
+      modelName: options?.modelName ?? null,
       raw: options?.raw ?? null,
       createdAtMs: Date.now(),
       hidden: false,

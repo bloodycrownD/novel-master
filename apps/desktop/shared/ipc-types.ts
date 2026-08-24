@@ -184,6 +184,8 @@ export const IPC_CHANNELS = {
   SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
   SHELL_OPEN_EXTERNAL: 'nm:shell/openExternal',
 
+  USAGE_STATS_QUERY: 'nm:usageStats/query',
+
   APP_GET_INFO: 'nm:app/getInfo',
   APP_CHECK_FOR_UPDATES: 'nm:app/checkForUpdates',
 } as const;
@@ -846,6 +848,74 @@ export type PromptChatTokenStatsResponse = {
   readonly pct?: number;
   readonly estimated: boolean;
   readonly counterKind: string;
+};
+
+/** Token 用量统计：时间范围（结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
+export type UsageStatsRangeDto = {
+  readonly kind: 'last7' | 'last30' | 'custom';
+  readonly fromMs?: number;
+  readonly toMs?: number;
+};
+
+/** Token 用量统计：筛选条件（model 三态——undefined 全部 / null「未记录」桶 / 字符串指定模型）。 */
+export type UsageStatsFilterDto = {
+  readonly range: UsageStatsRangeDto;
+  readonly model?: string | null;
+};
+
+/** 今日卡片子对象（本地时区当日 0 点起算，独立于 filter）。 */
+export type UsageStatsTodayDto = {
+  readonly totalTokens: number;
+  readonly calls: number;
+};
+
+/** 范围内汇总（命中率由展示层用 cacheReadTokens / billedInputTokens 计算）。 */
+export type UsageStatsSummaryDto = {
+  readonly calls: number;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly totalTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheCreationTokens: number;
+  /** 计费口径全部输入：anthropic 行为 prompt + cache_read + cache_creation，其余协议为 prompt。 */
+  readonly billedInputTokens: number;
+  readonly today: UsageStatsTodayDto;
+};
+
+/** 天 / 小时桶（bucketStartMs 为桶起点，本地时区边界）。 */
+export type UsageStatsBucketDto = {
+  readonly bucketStartMs: number;
+  readonly calls: number;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheCreationTokens: number;
+  readonly billedInputTokens: number;
+};
+
+/** 分模型汇总行（modelName 为 null 表示「未记录」桶）。 */
+export type UsageStatsModelRowDto = {
+  readonly modelName: string | null;
+  readonly calls: number;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly totalTokens: number;
+  readonly cacheReadTokens: number;
+  readonly billedInputTokens: number;
+};
+
+/** `nm:usageStats/query` 响应体：一次调用按 kind 分发（避免五个 channel）。 */
+export type UsageStatsQueryResponse =
+  | UsageStatsSummaryDto
+  | UsageStatsBucketDto[]
+  | UsageStatsModelRowDto[]
+  | string[];
+
+/** `nm:usageStats/query` 请求体（dayLocalDate 仅 kind='hourly' 使用，本地日期 `YYYY-MM-DD`）。 */
+export type UsageStatsQueryRequest = {
+  readonly kind: 'summary' | 'daily' | 'hourly' | 'models' | 'modelBreakdown';
+  readonly filter: UsageStatsFilterDto;
+  readonly dayLocalDate?: string;
 };
 
 export type CompactionManualRequest = PromptScopeRequest;

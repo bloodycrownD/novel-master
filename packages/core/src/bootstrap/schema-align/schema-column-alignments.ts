@@ -72,6 +72,23 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
       "ALTER TABLE chat_message ADD COLUMN total_tokens INTEGER",
   },
   {
+    table: "chat_message",
+    column: "cache_read_tokens",
+    addColumnSql:
+      "ALTER TABLE chat_message ADD COLUMN cache_read_tokens INTEGER NULL",
+  },
+  {
+    table: "chat_message",
+    column: "cache_creation_tokens",
+    addColumnSql:
+      "ALTER TABLE chat_message ADD COLUMN cache_creation_tokens INTEGER NULL",
+  },
+  {
+    table: "chat_message",
+    column: "model_name",
+    addColumnSql: "ALTER TABLE chat_message ADD COLUMN model_name TEXT NULL",
+  },
+  {
     table: "chat_project",
     column: "agent_config_json",
     addColumnSql:

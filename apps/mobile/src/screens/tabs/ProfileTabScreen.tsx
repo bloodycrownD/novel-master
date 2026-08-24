@@ -42,6 +42,7 @@ const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackPar
     {icon: '🧩', label: '技能管理', route: 'SkillsSettings'},
     {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
     {icon: '💾', label: '存储配置', route: 'StorageConfig'},
+    {icon: '📊', label: '数据统计', route: 'TokenUsageStats'},
     {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
   ];
 

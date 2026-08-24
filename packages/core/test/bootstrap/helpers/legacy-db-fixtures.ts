@@ -95,6 +95,30 @@ export async function execLegacyChatMessageWithoutHidden(
   `);
 }
 
+/** v7 风格 chat_message（有 hidden/usage 列，无 cache_read_tokens/cache_creation_tokens/model_name）。 */
+export async function execLegacyV7ChatMessageDdl(
+  conn: TdbcConnection,
+): Promise<void> {
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS chat_message (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      content_json TEXT NOT NULL,
+      provider TEXT,
+      raw_json TEXT,
+      created_at_ms INTEGER NOT NULL,
+      hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
+      attachments_json TEXT NULL,
+      prompt_tokens INTEGER,
+      completion_tokens INTEGER,
+      total_tokens INTEGER,
+      UNIQUE (session_id, seq)
+    )
+  `);
+}
+
 /** 旧 vfs_entry（无 entry_kind / head_version）。 */
 export async function execLegacyVfsEntryTable(conn: TdbcConnection): Promise<void> {
   await conn.execute(`

@@ -37,6 +37,7 @@ export class ChatAgentSession implements AgentSession {
     content: MessageContent,
     options?: {
       provider?: string | null;
+      modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
     },

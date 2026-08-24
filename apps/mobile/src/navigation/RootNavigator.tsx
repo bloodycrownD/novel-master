@@ -39,6 +39,7 @@ import {SkillsSettingsScreen} from '../screens/stack/SkillsSettingsScreen';
 import {SkillDetailScreen} from '../screens/stack/SkillDetailScreen';
 
 import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
+import {TokenUsageStatsScreen} from '../screens/stack/TokenUsageStatsScreen';
 import {AboutScreen} from '../screens/stack/AboutScreen';
 import {useAutoUpdateCheck} from '../hooks/useAutoUpdateCheck';
 
@@ -164,6 +165,7 @@ const ChatHistorySearchStackScreen = withStackLayout(
   'ChatHistorySearch',
   ChatHistorySearchScreen,
 );
+const TokenUsageStatsStackScreen = withStackLayout('TokenUsageStats', TokenUsageStatsScreen);
 const AboutStackScreen = withStackLayout('About', AboutScreen);
 
 export function RootNavigator() {
@@ -229,6 +231,10 @@ export function RootNavigator() {
           <Stack.Screen
             name="ChatHistorySearch"
             component={ChatHistorySearchStackScreen}
+          />
+          <Stack.Screen
+            name="TokenUsageStats"
+            component={TokenUsageStatsStackScreen}
           />
           <Stack.Screen name="About" component={AboutStackScreen} />
         </Stack.Navigator>

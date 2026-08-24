@@ -313,6 +313,7 @@ export {
   createProjectService,
   createSessionService,
   createMessageService,
+  createUsageStatsService,
 } from '../service/chat/create-chat-services.js';
 export type { ChatServiceBundle, ChatServicesSessionDeps } from '../service/chat/create-chat-services.js';
 export {
@@ -334,6 +335,15 @@ export type {
 export type { ProjectService } from '../service/chat/project.port.js';
 export type { SessionService } from '../service/chat/session.port.js';
 export type { MessageService } from '../service/chat/message.port.js';
+export type {
+  UsageStatsService,
+  UsageStatsRange,
+  UsageStatsFilter,
+  UsageStatsSummary,
+  UsageStatsToday,
+  UsageStatsBucket,
+  UsageStatsModelRow,
+} from '../service/chat/usage-stats.port.js';
 export type {
   MessageTranscriptEffectsService,
   SetMessageFloorResult,

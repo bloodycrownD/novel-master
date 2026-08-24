@@ -5,7 +5,9 @@ import {
   createAnthropicSseParserState,
   feedAnthropicSseChunk,
   finishAnthropicSse,
+  finishAnthropicSsePartial,
 } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
+import { parseAnthropicUsage } from "../../../src/infra/llm-protocol/logic/usage-parser.js";
 
 describe("anthropic-sse-parser", () => {
   it("T3: incremental text, thinking, and tool_use", () => {
@@ -167,6 +169,54 @@ describe("anthropic-sse-parser", () => {
     const toolUse = blocks.find((b) => b.type === "tool_use");
     assert.ok(toolUse && toolUse.type === "tool_use");
     assert.deepEqual(toolUse.input, {});
+  });
+
+  it("T-S2: message_start 输入侧 + message_delta 累计 output 合并后都在", () => {
+    const state = createAnthropicSseParserState();
+    feedAnthropicSseChunk(
+      state,
+      [
+        'data: {"type":"message_start","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"cache_read_input_tokens":60,"cache_creation_input_tokens":30,"output_tokens":1}}}',
+        "",
+        'data: {"type":"content_block_start","content_block":{"type":"text","text":""}}',
+        "",
+        'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}',
+        "",
+        'data: {"type":"content_block_stop"}',
+        "",
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":42}}',
+        "",
+      ].join("\n"),
+    );
+    const { streamRaw } = finishAnthropicSse(state);
+    const usage = parseAnthropicUsage(streamRaw);
+    assert.equal(usage?.promptTokens, 100);
+    assert.equal(usage?.completionTokens, 42);
+    assert.equal(usage?.totalTokens, 142);
+    assert.equal(usage?.cacheReadTokens, 60);
+    assert.equal(usage?.cacheCreationTokens, 30);
+    const raw = streamRaw as Record<string, unknown>;
+    assert.equal(raw.model, "claude-sonnet-4");
+    assert.deepEqual(raw.delta, { stop_reason: "end_turn", stop_sequence: null });
+  });
+
+  it("T-S2: 只有 message_start 没有 message_delta（中途断流）时输入侧仍在", () => {
+    const state = createAnthropicSseParserState();
+    feedAnthropicSseChunk(
+      state,
+      'data: {"type":"message_start","message":{"model":"claude-sonnet-4","usage":{"input_tokens":100,"cache_read_input_tokens":60}}}\n\n',
+    );
+    const { streamRaw } = finishAnthropicSsePartial(state);
+    const usage = parseAnthropicUsage(streamRaw);
+    assert.equal(usage?.promptTokens, 100);
+    assert.equal(usage?.cacheReadTokens, 60);
+  });
+
+  it("T-S2: 双槽皆空时降级 {streamed:true,aborted:true} 且不抛错", () => {
+    const state = createAnthropicSseParserState();
+    const { streamRaw } = finishAnthropicSsePartial(state);
+    assert.deepEqual(streamRaw, { streamed: true, aborted: true });
+    assert.equal(parseAnthropicUsage(streamRaw), undefined);
   });
 
 });

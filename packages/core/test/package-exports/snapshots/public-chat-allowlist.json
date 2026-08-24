@@ -50,6 +50,7 @@
   "createProjectService",
   "createPromptPathSeenSet",
   "createSessionService",
+  "createUsageStatsService",
   "createUserVfsTurnService",
   "createUserVfsTurnServiceBundle",
   "deriveDirPathsFromFileTree",

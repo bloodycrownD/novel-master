@@ -39,7 +39,10 @@ export type AnthropicSseParserState = SseParseDiagnostics & {
   blocks: ContentBlock[];
   active: ActiveBlock | null;
   toolUses: ToolUseAccumulator[];
-  streamRaw: unknown;
+  /** message_start 事件原文（输入侧 usage / model 在这里，message_delta 会覆盖不到它）。 */
+  messageStartRaw: unknown;
+  /** message_delta 事件原文（累计 output_tokens / stop_reason 在这里）。 */
+  messageDeltaRaw: unknown;
   degradedToolCalls: DegradedToolCall[];
 };
 
@@ -49,7 +52,8 @@ export function createAnthropicSseParserState(): AnthropicSseParserState {
     blocks: [],
     active: null,
     toolUses: [],
-    streamRaw: undefined,
+    messageStartRaw: undefined,
+    messageDeltaRaw: undefined,
     malformedLineCount: 0,
     degradedToolCalls: [],
   };
@@ -177,8 +181,10 @@ function processAnthropicSseLine(
     return;
   }
   const type = event.type;
-  if (type === "message_start" || type === "message_delta") {
-    state.streamRaw = event;
+  if (type === "message_start") {
+    state.messageStartRaw = event;
+  } else if (type === "message_delta") {
+    state.messageDeltaRaw = event;
   }
   if (type === "content_block_start") {
     flushActiveBlock(state, onStream, toolNames);
@@ -252,6 +258,58 @@ export function feedAnthropicSseChunk(
   );
 }
 
+/**
+ * 合并 message_start / message_delta 双槽为单个 raw。
+ *
+ * usage 取 start 的输入侧（input_tokens + cache 字段）+ delta 的累计 output_tokens；
+ * model 取 start；stop_reason 等其他顶层字段保留 delta 的。
+ * 仅单槽有值时原样返回；两槽皆空返回 undefined（调用方自行降级）。
+ */
+function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
+  const start = state.messageStartRaw;
+  const delta = state.messageDeltaRaw;
+  if (!isRecord(start)) {
+    return delta;
+  }
+  if (!isRecord(delta)) {
+    return start;
+  }
+  const merged: Record<string, unknown> = { ...delta };
+  // message_start 的 model / usage 嵌在 message 下，非流式形态才是顶层，两种都兼容。
+  const startMessage = isRecord(start.message) ? start.message : undefined;
+  if (typeof startMessage?.model === "string") {
+    merged.model = startMessage.model;
+  } else if (typeof start.model === "string") {
+    merged.model = start.model;
+  }
+  const startUsage = isRecord(startMessage?.usage)
+    ? startMessage!.usage
+    : isRecord(start.usage)
+      ? start.usage
+      : undefined;
+  const usage: Record<string, unknown> = {};
+  if (startUsage != null) {
+    const inputSideKeys = [
+      "input_tokens",
+      "cache_read_input_tokens",
+      "cache_creation_input_tokens",
+      "cache_creation",
+    ];
+    for (const key of inputSideKeys) {
+      if (startUsage[key] != null) {
+        usage[key] = startUsage[key];
+      }
+    }
+  }
+  if (isRecord(delta.usage) && delta.usage.output_tokens != null) {
+    usage.output_tokens = delta.usage.output_tokens;
+  }
+  if (Object.keys(usage).length > 0) {
+    merged.usage = usage;
+  }
+  return merged;
+}
+
 /** Finalize parser state into content blocks (normal stream end). */
 export function finishAnthropicSse(
   state: AnthropicSseParserState,
@@ -271,7 +329,7 @@ export function finishAnthropicSse(
   assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
   return {
     blocks: state.blocks,
-    streamRaw: state.streamRaw,
+    streamRaw: mergeAnthropicStreamRaw(state),
     degradedToolCalls: state.degradedToolCalls,
   };
 }
@@ -315,7 +373,9 @@ export function finishAnthropicSsePartial(
 
   return {
     blocks,
-    streamRaw: state.streamRaw ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+    streamRaw:
+      mergeAnthropicStreamRaw(state) ??
+      ({ streamed: true, aborted: true } as Record<string, unknown>),
     degradedToolCalls: [],
   };
 }

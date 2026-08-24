@@ -1,28 +1,15 @@
-# import-cache-align-and-mermaid-error 开发 DAG 编排状态（code-dev-loop 终态）
+# 编排状态（两迭代均 dev-ready 并已合入 main，随 v1.5.4 发布）
 
-spec_path: docs/Iterations/import-cache-align-and-mermaid-error/spec.md
-prd_path: docs/Iterations/import-cache-align-and-mermaid-error/prd.md
-branch: feat/import-cache-mermaid-error
-base_sha: 2f1c4fc（= main）
-head_sha: 8ba0ab2（见 git log，docs 终态笔）
-status: dev-ready
+import-cache-align-and-mermaid-error:
+  branch: feat/import-cache-mermaid-error（已 ff 合入 main）
+  status: dev-ready（core 2111/2111、双端零新增失败、cr-func func-ready yes）
+  spec: docs/Iterations/import-cache-align-and-mermaid-error/spec.md
+  遗留: Step 4 真机 manual QA 合并后用户执行
 
-dag_version: 2
-dev_dag_matrix:
-  impl-core: done（c2d54a3；helper + 双 service 接入 + 工厂内部装配，T-IC1-5 落地）
-  impl-desktop: done（ba241ac；failedErrorCache 四处连带清理 + 失败态文本节点，T-MD1-3 落地）
-  impl-mobile: done（1af701e；catch(err) + data-mermaid-error 挂 code + CSS attr()，T-MV1-2 落地）
-  verify-core: done（2111/2111 全绿 + typecheck 干净）
-  verify-desktop: done（373 测试仅 2 例既有 skills-handlers 漂移零新增；renderer typecheck MermaidMarkdown 0 错误）
-  verify-mobile: done（821 测试仅 3 例既有 unhide 失败零新增 + typecheck 零错误）
-  cr-func-all: func-ready yes（矩阵全对照、无 must-fix）
+token-usage-stats:
+  branch: feat/token-usage-stats-integration（已 merge 合入 main，30 commits）
+  status: dev-ready（CR-fix 17/17 闭合、cr-func 附条件收尾）
+  spec: docs/Iterations/token-usage-stats/spec.md、cr-fix-spec.md
+  遗留: 真机 QA；[3] 前缀历史模型名清洗未拍板
 
-spec_deviations: []
-已认定 spec 勘误（非 deviation）: mobile data-mermaid-error 宿主为 code 而非原稿 pre——CSS attr() 只能读伪元素宿主属性，挂 pre 永远落 fallback；cr-func 核实实现符合 spec 意图，spec 已补勘误行
-主代理干预记录:
-  - desktop 子代理曾在 shell.css 混入 token-stats 样式 245 行（误混入），主代理 restore 后以纯 shell 重写 mermaid 样式块（最终 +13/-0，cr-func 确认干净）
-  - 教训：子代理外部改文件后 Zed 编辑器 buffer 过期，edit_file 会写回旧内容——改这类文件须用 shell 直写
-遗留（非本循环范围）:
-  - Step 4 真机/桌面 manual QA（导入后对话看 workplace 前缀、含错 mermaid 看错误文案）——合并后用户执行
-  - core `npm run test` 脚本 extglob 在 sh 下语法错误（既有，用 test:fast 替代）
-  - desktop T-MV/T-MD 测试 id 前缀与旧迭代重名（cr-func 建议，后续迭代换前缀）
+发版: v1.5.4 = 两迭代合计（CHANGELOG 补数据统计条目后重打 tag）

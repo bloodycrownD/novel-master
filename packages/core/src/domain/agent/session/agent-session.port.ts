@@ -41,6 +41,8 @@ export interface AgentSession {
     content: MessageContent,
     options?: {
       provider?: string | null;
+      /** 厂商模型 id（透传到 `chat_message.model_name`）。 */
+      modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
     },

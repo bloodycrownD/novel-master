@@ -20,6 +20,11 @@ export interface ChatMessage {
   readonly role: string;
   readonly content: MessageContent;
   readonly provider: string | null;
+  /**
+   * 产生本条 assistant 消息的厂商模型 id（`llm_saved_model.vendor_model_id`，
+   * 映射 `chat_message.model_name` 列）。老消息缺列/NULL → `null`。
+   */
+  readonly modelName?: string | null;
   readonly raw: Record<string, unknown> | null;
   readonly createdAtMs: number;
   /** Whether this message is hidden from LLM prompt rendering. */

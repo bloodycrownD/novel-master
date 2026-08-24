@@ -36,9 +36,7 @@ import {
   createScopedVfsService,
   type VfsScope,
 } from '@novel-master/core/vfs';
-import {
-  createWorkplaceService,
-} from '@novel-master/core/workplace';
+import { createWorkplaceService } from '@novel-master/core/workplace';
 import { createKkvService } from '@novel-master/core/kkv';
 import { createSessionKkvService } from '@novel-master/core/session-kkv';
 import { createSkillsService } from '@novel-master/core/skills';
@@ -78,7 +76,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const compactionConditions = createCompactionConditionsStore(conn);
 
   const chat = createChatServices(conn, { state, agentRegistry });
-  const { projects, sessions, messages } = chat;
+  const { projects, sessions, messages, usageStats } = chat;
 
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
@@ -134,6 +132,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     projects,
     sessions,
     messages,
+    usageStats,
     messageTranscriptEffects,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
