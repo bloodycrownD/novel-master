@@ -82,3 +82,9 @@ user:
 
 assistant:
 v1.5.4 发版完成：迭代 ff 合入 main，CHANGELOG Unreleased 定版为 [1.5.4] - 2026-08-25，双端 package.json bump 1.5.4，android build.gradle 兜底 versionName 从陈旧的 1.5.1 对齐到 1.5.4（该文件含非 UTF-8 字节，须字节级替换；desktop package.json 是 CRLF 行尾，json.dump 重写会产生全文 diff——版本 bump 用字节替换只动版本行）。tag v1.5.4 已推送触发 Release CI，main 已同步（2f1c4fc..3fe0e16）。本次发布不含 token-usage-stats（仍在 feat/token-usage-stats-integration 未合并，留下次）。测试证据沿用 dev-loop wave-1 verify（ff 合并树一致）。
+
+user:
+changelog 有问题，缺少数据统计新功能。
+
+assistant:
+用户指出 v1.5.4 漏了 token-usage-stats——该分支（feat/token-usage-stats-integration，30 commits）当时未合并。补发：merge 进 main（仅 docs/.iteration-state.yaml 一处冲突，手写合并终态解决；shell.css/MermaidMarkdown 自动合并经抽查完整）；三包 verify 子代理并行回归全绿（core 2168/2168、desktop 379 仅 2 例既有 skills 漂移、mobile 844 仅 3 例既有 unhide，零合并引入）；CHANGELOG [1.5.4] 新增段补「数据统计」条目（commit 00a5cbe）；git tag -f v1.5.4 强推重触发 Release CI。教训：发版前要过一遍「未合并的功能分支清单」，别只看当前迭代。
