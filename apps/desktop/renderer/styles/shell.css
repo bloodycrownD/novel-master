@@ -7176,3 +7176,228 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+/* ===== 数据统计视图（token-stats-view） ===== */
+
+.token-stats-view__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.token-stats-view__custom-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.token-stats-view__date,
+.token-stats-view__model-select {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.token-stats-view__range-sep {
+  color: var(--text-tertiary);
+}
+
+.token-stats-view__range-error,
+.token-stats-view__error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.token-stats-view__model-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.token-stats-view__model-select {
+  min-width: 180px;
+}
+
+.token-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.token-stats-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--settings-item-border, var(--border-light));
+  background: var(--settings-item-bg, var(--surface));
+}
+
+.token-stats-card__label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.token-stats-card__value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.token-stats-card__value--success {
+  color: var(--success);
+}
+
+.token-stats-view__today {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.token-stats-view__today-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.token-stats-view__today-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.token-stats-chart {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 150px;
+}
+
+.token-stats-chart--hourly {
+  height: 120px;
+  margin-top: 8px;
+}
+
+.token-stats-chart__col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  border: none;
+  background: transparent;
+  padding: 0 0 2px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.token-stats-chart__col:hover,
+.token-stats-chart__col.is-selected {
+  background: var(--primary-muted);
+}
+
+.token-stats-chart__bars {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 1px;
+  height: calc(100% - 16px);
+}
+
+.token-stats-chart__bar {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  border-radius: 2px 2px 0 0;
+}
+
+.token-stats-chart__bar--input {
+  background: var(--primary);
+}
+
+.token-stats-chart__bar--output {
+  background: var(--text-secondary);
+}
+
+.token-stats-chart__bar--rate {
+  background: var(--success);
+}
+
+.token-stats-chart__bar--nodata {
+  height: 3px;
+  background: var(--border-light);
+}
+
+.token-stats-chart__label {
+  height: 16px;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.token-stats-view__day-detail {
+  margin-top: 12px;
+}
+
+.token-stats-view__day-detail-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.token-stats-view__day-detail-summary {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.token-stats-models {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-item-border, var(--border-light));
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.token-stats-models__row {
+  display: grid;
+  grid-template-columns: minmax(140px, 2fr) 1fr 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.token-stats-models__row--head {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.token-stats-models__row + .token-stats-models__row {
+  border-top: 1px solid var(--border-light);
+}
+
+.token-stats-models__name {
+  color: var(--text);
+  font-weight: 600;
+  word-break: break-all;
+}

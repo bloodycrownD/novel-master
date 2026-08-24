@@ -254,6 +254,12 @@ export class DefaultAgentRunner implements AgentRunner {
     // 固定快照不丢信息，且让回合内每步请求成为前一步的纯追加，提升 provider 前缀缓存命中。
     const turnNow = new Date();
 
+    // assistant 落库的 model_name 来源（vendorModelId）；每 run 查一次即可。
+    // saved model 可能已被删除（悬空引用）：查不到时降级不传该字段。
+    const savedModelForAppend = await this.deps.savedModels.findById(
+      options.savedModelId,
+    );
+
     /**
      * 统一 abort 处理：置 stopReason，保留已写入的 partial assistant。
      *
@@ -489,6 +495,12 @@ export class DefaultAgentRunner implements AgentRunner {
             "assistant",
             { blocks: result.blocks },
             {
+              // 统计页协议分桶依据：provider 记协议（anthropic/openai/gemini），
+              // 与 saved model 的服务商解耦。
+              provider: protocol,
+              ...(savedModelForAppend != null
+                ? { modelName: savedModelForAppend.vendorModelId }
+                : {}),
               raw: result.raw as Record<string, unknown>,
               ...(result.usage != null ? { usage: result.usage } : {}),
             },

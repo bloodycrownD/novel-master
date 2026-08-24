@@ -21,6 +21,7 @@ import {
   RegexRulesView,
 } from "../features/settings/SettingsViews";
 import { AboutView } from "../features/settings/AboutView";
+import { TokenUsageStatsView } from "../features/settings/TokenUsageStatsView";
 import { WorkspaceSettingsView } from "../features/settings/WorkspaceSettingsView";
 import { SkillsManageView } from "../features/settings/SkillsManageView";
 import { SkillDetailView } from "../features/settings/SkillDetailView";
@@ -133,6 +134,8 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <AboutView />;
       case "dataManagement":
         return <DataManagementView />;
+      case "tokenUsageStats":
+        return <TokenUsageStatsView />;
       case "agentsSettings":
         return <AgentsSettingsView nav={nav} />;
       case "agentEditor":

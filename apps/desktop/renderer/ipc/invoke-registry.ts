@@ -64,6 +64,8 @@ import {
   type SessionSetComposerDraftRequest,
   type SessionSetModelOverrideRequest,
 
+  type UsageStatsQueryRequest,
+  type UsageStatsQueryResponse,
   type VfsBatchClearStagingRequest,
   type VfsBatchExportStageRequest,
   type VfsBatchExportStageResult,
@@ -402,6 +404,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       CompactionManualRequest,
       IpcResult<{ ok: boolean }>
     >(invoke, IPC_CHANNELS.COMPACTION_MANUAL),
+    ipcUsageStatsQuery: withReq<
+      UsageStatsQueryRequest,
+      IpcResult<UsageStatsQueryResponse>
+    >(invoke, IPC_CHANNELS.USAGE_STATS_QUERY),
     ipcPreferencesGetSessionFsVersionCheck: noArg<IpcResult<boolean>>(
       invoke,
       IPC_CHANNELS.PREFERENCES_GET_SESSION_FS_VERSION_CHECK,

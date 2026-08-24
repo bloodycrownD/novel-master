@@ -23,6 +23,7 @@ import {
   createMessageTranscriptEffectsService,
   createProjectService,
   createSessionService,
+  createUsageStatsService,
   createUserVfsTurnServiceBundle,
 } from "@novel-master/core/chat";
 import {
@@ -93,6 +94,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const eventBus = new SimpleEventBus();
   const compactionConditions = createCompactionConditionsStore(conn);
   const messages = createMessageService(conn);
+  const usageStats = createUsageStatsService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
@@ -123,6 +125,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     projects: createProjectService(conn),
     sessions: createSessionService(conn, { state, agentRegistry }),
     messages,
+    usageStats,
     messageTranscriptEffects,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),

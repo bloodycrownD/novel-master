@@ -1,24 +1,35 @@
-# global-fs-manager CR-fix 开发编排状态（code-dev-loop 终态）
+# token-usage-stats 开发 DAG 编排状态（code-dev-loop 终态）
 
-spec_path: docs/Iterations/global-fs-manager/cr-fix-spec.md
-prd_path: docs/Iterations/global-fs-manager/prd.md
-iteration: global-fs-manager-cr-fix
-branch: feat/skills-integration（主仓）
-base_sha: 63f59df
-
-dag_version: 2
-wave_plan: []
-node_status:
-  impl-cr-core: { status: done, head_sha: 6fbb4ce, executor: subagent, items: "P0 双前缀 + listTree + core/B-1 C-1 G-1 G-2，core 全量 2036/0" }
-  impl-cr-desktop: { status: done, head_sha: 5da4e76, executor: subagent, items: "desktop/B-1(P1) + B-2 消费侧 + C-1 + G-1 + cli/G-2" }
-  impl-cr-mobile: { status: done, head_sha: d85777c, executor: subagent, items: "mobile/B-1 + G-1" }
-  cr-func-cr: { status: done, func_ready: yes, note: "子代理上下文耗尽提前收尾（12 条矩阵全过、归因一钉死）；三项未复核由主代理补齐（mobile 24/24、core 2036/0、typecheck）；归因二由主代理补查并修复（7e2e98a）" }
-  fix-tocorevfsscope: { status: done, head_sha: 7e2e98a, executor: main, note: "CR 漏网：toCoreVfsScope 未穷尽 physical/meta（renderer 独立 tsconfig 盲区，本迭代 ea6faf5/1f96b06 引入）" }
-open_must_fix: []
-spec_deviations: []  # CR 3 条 deviations 用户「按 cr spec 开发」指令视同按现状接受
+spec_path: docs/Iterations/token-usage-stats/spec.md
+prd_path: docs/Iterations/token-usage-stats/prd.md
+branch: feat/token-usage-stats
+base_sha: aa32a19
+head_sha: 待填（最后一笔提交后）
 status: dev-ready
 
-# 归因存档
-# CLI template-pull-e2e T3 红灯 = 预存缺陷（v1.4.21/dc28290 即红，早于本迭代；方向：session pull 子树替换删除侧）
-#   → 建议另立迭代条目跟踪，不阻塞本次 CR-fix
-# renderer tsconfig.renderer.json 非 门禁，含 293 个预存错误（修掉 toCoreVfsScope 后 292），不属本迭代 scope
+dag_version: 3
+dev_dag_matrix:
+  impl-s1-schema: done（d520cfc，T-S1 42/42）
+  impl-s2-parse: done（f814dc7，T-S2 145/145）
+  impl-s3-persist: done（a3e487b，T-S3 601/601）
+  impl-s4-backfill: done（abce19b，T-S4 52+362）
+  impl-s5-stats: done（cf06b46 + 快照 commit，T-S5 11/11）
+  verify-core: done（executor: main；全量 2139/2142，3 失败为 main 基线既有 vfs 失败，基线 worktree 复跑归因；typecheck 过）
+  cr-func-core: func-ready yes（矩阵 5/5，4 条实现注记 deviation 已接受）
+  impl-s6-desktop-ipc: done（T-S6 handler 7/7）
+  impl-s7-desktop-view: done（T-S6 view 5/5）
+  impl-s8-mobile: done（T-S7 13/13）
+  verify-ui: done（executor: main；desktop 手动全量 347/349 + mobile 821/824，失败均为既有且已归因；双端 typecheck 过）
+  cr-func-final: func-ready yes（Step 6-8 矩阵全过；AC-1~AC-11 全局对照 11/11；DEV-1 已闭合——双端「未记录」选项代码+测试双落实）
+
+spec_deviations: []  # DEV-1 已闭合；4 条实现注记已接受（keyset 分页、up 内 ALTER、占位延后登记、findById 前置）
+
+blocking_steps_closed: [Step 1-8]   # Step 9 为 manual_user，合并后用户真机验收
+
+工作区遗留（非本迭代，禁止触碰）：
+- 用户自身：.vscode 删除、AGENTS.md、package-lock.json、vfs entry-sequence-repair（bootstrap 未提交段 + 2 个 untracked 文件）
+- 他人遗留 untracked：packages/core/test/skills/ 下 4 个复现文件
+已知既有失败（与零本迭代交集，均有归因）：
+- core：test/vfs/orphan-revision-gc（1）+ vfs-entry-id-migration（2）——main 基线即红
+- mobile：use-chat-tab-message-actions-unhide（3）——此前迭代 stash 对照归因
+- desktop：skills-handlers（2）——core dist 重建暴露的种子技能断言漂移；另 run-tests.mjs glob 既有 bug 使官方 npm test 只覆盖部分文件（全量需 find 展开手动跑）

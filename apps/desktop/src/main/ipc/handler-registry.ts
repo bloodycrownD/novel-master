@@ -120,6 +120,7 @@ import {
   handlePromptChatTokenLabel,
   handlePromptRealPreview,
 } from './handlers/prompt.js';
+import { handleUsageStatsQuery } from './handlers/usage-stats.js';
 import {
   handleProjectsCreate,
   handleProjectsDelete,
@@ -287,6 +288,8 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.MESSAGES_FORK, handleMessagesFork);
   bindReq(IPC_CHANNELS.MESSAGES_ROLLBACK, handleMessagesRollback);
   bindReq(IPC_CHANNELS.MESSAGES_SET_FLOOR, handleMessagesSetFloor);
+
+  bindReq(IPC_CHANNELS.USAGE_STATS_QUERY, handleUsageStatsQuery);
 
   bindReq(IPC_CHANNELS.AGENT_RUN, handleAgentRun);
   bindReq(IPC_CHANNELS.AGENT_ABORT, handleAgentAbort);

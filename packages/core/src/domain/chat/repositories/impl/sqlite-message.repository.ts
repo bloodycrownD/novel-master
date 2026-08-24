@@ -25,7 +25,7 @@ import type { MessageUsage } from "../../model/message-usage.js";
 import type { MessageRepository } from "../message.port.js";
 
 const MESSAGE_SELECT_COLUMNS =
-  `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens`;
+  `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name`;
 
 /**
  * chat_message 的 INSERT 语句（`?` 占位），insert 与 batchInsert 共用。
@@ -34,8 +34,8 @@ const MESSAGE_SELECT_COLUMNS =
  */
 const MESSAGE_INSERT_SQL =
   `INSERT INTO chat_message ` +
-  `(id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens) ` +
-  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  `(id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name) ` +
+  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * 把 ChatMessage 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
@@ -59,6 +59,9 @@ function toMessageParams(message: ChatMessage): unknown[] {
     message.usage?.promptTokens ?? null,
     message.usage?.completionTokens ?? null,
     message.usage?.totalTokens ?? null,
+    message.usage?.cacheReadTokens ?? null,
+    message.usage?.cacheCreationTokens ?? null,
+    message.modelName ?? null,
   ];
 }
 
@@ -78,6 +81,7 @@ function rowToMessage(row: Row): ChatMessage {
     role: String(row.role),
     content: parseContent(String(row.content_json)),
     provider: row.provider == null ? null : String(row.provider),
+    modelName: row.model_name == null ? null : String(row.model_name),
     raw:
       row.raw_json == null
         ? null
@@ -94,10 +98,14 @@ function parseUsage(row: Row): MessageUsage | undefined {
   const promptTokens = row.prompt_tokens;
   const completionTokens = row.completion_tokens;
   const totalTokens = row.total_tokens;
+  const cacheReadTokens = row.cache_read_tokens;
+  const cacheCreationTokens = row.cache_creation_tokens;
   if (
     promptTokens == null &&
     completionTokens == null &&
-    totalTokens == null
+    totalTokens == null &&
+    cacheReadTokens == null &&
+    cacheCreationTokens == null
   ) {
     return undefined;
   }
@@ -107,6 +115,12 @@ function parseUsage(row: Row): MessageUsage | undefined {
       ? { completionTokens: Number(completionTokens) }
       : {}),
     ...(totalTokens != null ? { totalTokens: Number(totalTokens) } : {}),
+    ...(cacheReadTokens != null
+      ? { cacheReadTokens: Number(cacheReadTokens) }
+      : {}),
+    ...(cacheCreationTokens != null
+      ? { cacheCreationTokens: Number(cacheCreationTokens) }
+      : {}),
   };
 }
 
