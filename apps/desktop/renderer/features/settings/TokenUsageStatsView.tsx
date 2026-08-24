@@ -392,6 +392,7 @@ export function TokenUsageStatsView() {
           </SettingsListEmpty>
         </SettingsSection>
       ) : pageTab === "summary" ? (
+        <>
           <SettingsSection title={`总览 · ${rangeLabel}`} desc="跟随当前时间范围与模型筛选">
             <div className="token-stats-cards token-stats-cards--metrics">
               <div className="token-stats-card" data-metric="totalTokens">
@@ -444,40 +445,6 @@ export function TokenUsageStatsView() {
               </div>
             </div>
           </SettingsSection>
-      ) : (
-        <>
-          <SettingsSection title="按天用量">
-            <TokenStatsChart
-              buckets={dailyBuckets}
-              chart="daily"
-              keyOf={(b) => toLocalDayKey(b.bucketStartMs)}
-              labelOf={(key) => key.slice(8)}
-              selectedKey={selectedDay ?? undefined}
-              onSelect={(key) => setSelectedDay((prev) => (prev === key ? null : key))}
-            />
-            {selectedDay != null && selectedDayBucket != null ? (
-              <div className="token-stats-view__day-detail" data-day-detail={selectedDay}>
-                <p className="token-stats-view__day-detail-title">{selectedDay} · 按小时分布</p>
-                <p className="token-stats-view__day-detail-summary">
-                  输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出{" "}
-                  {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{" "}
-                  {formatHitRate(
-                    hitRate(
-                      selectedDayBucket.cacheReadTokens,
-                      selectedDayBucket.billedInputTokens,
-                    ),
-                  )}{" "}
-                  · 调用 {selectedDayBucket.calls} 次
-                </p>
-                <TokenStatsChart
-                  buckets={hourlyBuckets ?? []}
-                  chart="hourly"
-                  keyOf={(_b, index) => String(index)}
-                  labelOf={(key) => `${Number(key)}时`}
-                />
-              </div>
-            ) : null}
-          </SettingsSection>
 
           <SettingsSection title="分模型汇总" desc="不含命中率列——命中率出口在汇总卡片与选中天汇总行">
             <div className="token-stats-models">
@@ -510,6 +477,39 @@ export function TokenUsageStatsView() {
             </div>
           </SettingsSection>
         </>
+      ) : (
+        <SettingsSection title="按天用量">
+          <TokenStatsChart
+            buckets={dailyBuckets}
+            chart="daily"
+            keyOf={(b) => toLocalDayKey(b.bucketStartMs)}
+            labelOf={(key) => key.slice(8)}
+            selectedKey={selectedDay ?? undefined}
+            onSelect={(key) => setSelectedDay((prev) => (prev === key ? null : key))}
+          />
+          {selectedDay != null && selectedDayBucket != null ? (
+            <div className="token-stats-view__day-detail" data-day-detail={selectedDay}>
+              <p className="token-stats-view__day-detail-title">{selectedDay} · 按小时分布</p>
+              <p className="token-stats-view__day-detail-summary">
+                输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出{" "}
+                {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{" "}
+                {formatHitRate(
+                  hitRate(
+                    selectedDayBucket.cacheReadTokens,
+                    selectedDayBucket.billedInputTokens,
+                  ),
+                )}{" "}
+                · 调用 {selectedDayBucket.calls} 次
+              </p>
+              <TokenStatsChart
+                buckets={hourlyBuckets ?? []}
+                chart="hourly"
+                keyOf={(_b, index) => String(index)}
+                labelOf={(key) => `${Number(key)}时`}
+              />
+            </div>
+          ) : null}
+        </SettingsSection>
       )}
     </SettingsPanel>
   );

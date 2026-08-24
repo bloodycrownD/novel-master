@@ -1,7 +1,7 @@
 /**
  * TokenUsageStatsView 渲染与交互（spec T-S6 的 view 部分 / Step 7）：
- * - 「汇总 / 明细」双页签：默认汇总（五指标卡 + 今日卡）；切页签不重查、筛选共享；
- * - 明细页签：按天柱状图（data-day 序列）、分模型表（无命中率列，含「未记录」行、按用量降序）；
+ * - 「汇总 / 明细」双页签：默认汇总（五指标卡 + 今日卡 + 分模型表）；切页签不重查、筛选共享；
+ * - 汇总页签：分模型表（无命中率列，含「未记录」行、按用量降序）；明细页签：按天柱状图（data-day 序列）；
  * - 空态（SettingsListEmpty）；自定义区间 ≤366 天校验（超限行内提示且不再发查询）；
  * - kind / filter 参数随筛选（时间范围 × 模型三态）切换正确；点选某天 → hourly 钻取。
  *
@@ -276,7 +276,7 @@ async function clickDayCol(root: ReactTestRendererRoot, day: string): Promise<vo
 }
 
 describe("TokenUsageStatsView（T-S6 view 部分）", () => {
-  it("汇总页签：五指标卡 + 今日卡；明细页签：按天柱 + 分模型表（无命中率列）；页签共享筛选不重查", async () => {
+  it("汇总页签：五指标卡 + 今日卡 + 分模型表（无命中率列）；明细页签：按天柱；页签共享筛选不重查", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -295,19 +295,10 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       assert.equal(metricText(root, "todayTotalTokens"), "550");
       assert.equal(metricText(root, "todayCalls"), "3");
 
-      // 汇总页签不渲染明细图表与分模型表
+      // 汇总页签不渲染明细图表
       assert.deepEqual(chartCols(root, "daily"), []);
-      assert.equal(modelRowKeys(root).length, 0);
 
-      // 切到「明细」：页签共享筛选与数据，不触发任何新查询
-      requests.length = 0;
-      await clickSegmented(root, "明细");
-      assert.equal(requests.length, 0, "切换页签不应重新查询");
-
-      // 按天柱：3 根、顺序与 daily 桶一致（data-day 为本地日期键）
-      assert.deepEqual(chartCols(root, "daily"), DAILY.map((b) => toDayKey(b.bucketStartMs)));
-
-      // 分模型汇总：按用量降序（gpt-4o 1200 → 未记录 800），null 行显示「未记录」
+      // 分模型汇总（挂在汇总页签）：按用量降序（gpt-4o 1200 → 未记录 800），null 行显示「未记录」
       assert.deepEqual(modelRowKeys(root), ["gpt-4o", "__unlogged__"]);
       const unloggedRow = root.findAll(
         (node) => node.props["data-model"] === "__unlogged__",
@@ -349,11 +340,18 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
         "__unlogged__",
       ]);
 
-      // 切回「汇总」：卡片仍在，明细内容隐藏（筛选与数据保持）
+      // 切到「明细」：页签共享筛选与数据，不触发任何新查询；只剩按天柱，不含分模型表
+      requests.length = 0;
+      await clickSegmented(root, "明细");
+      assert.equal(requests.length, 0, "切换页签不应重新查询");
+      assert.deepEqual(chartCols(root, "daily"), DAILY.map((b) => toDayKey(b.bucketStartMs)));
+      assert.equal(modelRowKeys(root).length, 0, "明细页签不应渲染分模型表");
+
+      // 切回「汇总」：卡片与分模型表仍在，明细图表隐藏（筛选与数据保持）
       await clickSegmented(root, "汇总");
       assert.equal(metricText(root, "totalTokens"), "3K");
       assert.deepEqual(chartCols(root, "daily"), []);
-      assert.equal(modelRowKeys(root).length, 0);
+      assert.deepEqual(modelRowKeys(root), ["gpt-4o", "__unlogged__"]);
     } finally {
       await act(async () => {
         renderer?.unmount();

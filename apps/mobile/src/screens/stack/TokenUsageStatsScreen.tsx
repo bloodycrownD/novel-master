@@ -6,10 +6,10 @@
  *   区间 ≤ 366 天校验 + 模型筛选）置顶，两个页签共享——切换页签不触发
  *   重查，筛选状态跨页签保留；
  * - 汇总页签：范围内总 token / 输入 / 输出 / 调用次数四卡按 2 列网格铺开
- *   + 命中率宽卡 + 今日宽卡（今日独立于筛选，服务层 today 子对象口径）；
+ *   + 命中率宽卡 + 今日宽卡（今日独立于筛选，服务层 today 子对象口径）
+ *   + 分模型列表（模型名 / 用量 / 占比 / 调用次数，按用量降序，不提供命中率列）；
  * - 明细页签：按天用量 StackedBars（纯用量堆叠，无命中率图表模式），
- *   点选某天 → 24 小时分布 + 该天汇总行（汇总行保留命中率）；分模型列表
- *   （模型名 / 用量 / 占比 / 调用次数，按用量降序，不提供命中率列）；
+ *   点选某天 → 24 小时分布 + 该天汇总行（汇总行保留命中率）；
  * - 模型筛选（listModels 只返回非 NULL 模型名，「未记录」由 UI 侧补上）；
  * - 命中率 = cacheReadTokens / billedInputTokens，展示层计算；
  *   分母为 0（无 cache 数据）显示「暂无数据」而非 0%。
@@ -43,7 +43,7 @@ import { useTheme } from '../../theme/ThemeProvider';
 import type { ThemeTokens } from '../../theme/tokens';
 
 type RangeKind = 'last7' | 'last30' | 'custom';
-/** 页面主结构页签：汇总（指标卡）/ 明细（图表 + 分模型列表）。 */
+/** 页面主结构页签：汇总（指标卡 + 分模型列表）/ 明细（按天图表钻取）。 */
 type PageTab = 'summary' | 'detail';
 
 const MS_PER_DAY = 86_400_000;
@@ -449,6 +449,43 @@ export function TokenUsageStatsScreen() {
               </View>
             </View>
           </View>
+          {/* 聚合数据归汇总页签：分模型列表跟随五指标卡与今日卡展示。 */}
+          <ListSectionTitle title="分模型汇总" tokens={tokens} />
+          {sortedModelRows.map(row => {
+            const share =
+              summary != null && summary.totalTokens > 0
+                ? row.totalTokens / summary.totalTokens
+                : null;
+            return (
+              <View
+                key={row.modelName ?? '__unlogged__'}
+                style={[
+                  styles.modelRow,
+                  {
+                    backgroundColor: tokens.surface,
+                    borderColor: tokens.borderLight,
+                  },
+                ]}
+              >
+                <View style={styles.modelRowHead}>
+                  <Text style={{ color: tokens.text }} numberOfLines={1}>
+                    {row.modelName ?? '未记录'}
+                  </Text>
+                  <Text style={{ color: tokens.textSecondary }}>
+                    占比 {share == null ? '—' : `${Math.round(share * 100)}%`}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.modelRowDetail,
+                    { color: tokens.textSecondary },
+                  ]}
+                >
+                  用量 {formatTokenCount(row.totalTokens)} · 调用 {row.calls} 次
+                </Text>
+              </View>
+            );
+          })}
         </>
       ) : (
         <>
@@ -490,42 +527,6 @@ export function TokenUsageStatsScreen() {
               />
             </View>
           ) : null}
-          <ListSectionTitle title="分模型汇总" tokens={tokens} />
-          {sortedModelRows.map(row => {
-            const share =
-              summary != null && summary.totalTokens > 0
-                ? row.totalTokens / summary.totalTokens
-                : null;
-            return (
-              <View
-                key={row.modelName ?? '__unlogged__'}
-                style={[
-                  styles.modelRow,
-                  {
-                    backgroundColor: tokens.surface,
-                    borderColor: tokens.borderLight,
-                  },
-                ]}
-              >
-                <View style={styles.modelRowHead}>
-                  <Text style={{ color: tokens.text }} numberOfLines={1}>
-                    {row.modelName ?? '未记录'}
-                  </Text>
-                  <Text style={{ color: tokens.textSecondary }}>
-                    占比 {share == null ? '—' : `${Math.round(share * 100)}%`}
-                  </Text>
-                </View>
-                <Text
-                  style={[
-                    styles.modelRowDetail,
-                    { color: tokens.textSecondary },
-                  ]}
-                >
-                  用量 {formatTokenCount(row.totalTokens)} · 调用 {row.calls} 次
-                </Text>
-              </View>
-            );
-          })}
         </>
       )}
       <MonthRangePickerSheet

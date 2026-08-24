@@ -3,8 +3,8 @@
  *
  * - 入口：ProfileTabScreen CONFIG_MENU「数据统计」项 navigate TokenUsageStats；
  * - 「汇总 / 明细」双页签：筛选栏置顶共享（切页签不重查、筛选状态跨页签
- *   保留）；汇总页签五指标卡 + 今日卡（命中率无数据显示「暂无数据」）；
- *   明细页签柱状图 / 小时钻取 / 分模型列表（无命中率列）；
+ *   保留）；汇总页签五指标卡 + 今日卡（命中率无数据显示「暂无数据」）
+ *   + 分模型列表（聚合数据归汇总）；明细页签只留柱状图 / 小时钻取；
  * - 筛选切换重查：时间范围 / 模型筛选切换后 stub 的 usageStats 方法收到新
  *   filter 参数；
  * - 柱状图数据映射：样例桶数据 → 柱高顺序 / 标签文本；
@@ -268,7 +268,7 @@ async function renderScreen() {
   return renderer!;
 }
 
-/** 切到「明细」页签（柱状图 / 小时钻取 / 分模型列表都在明细页签）。 */
+/** 切到「明细」页签（按天柱状图与 24 小时钻取在明细页签）。 */
 async function switchToDetailTab(
   renderer: TestRenderer.ReactTestRenderer,
 ): Promise<void> {
@@ -463,17 +463,26 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(json).toContain('83%');
   });
 
-  it('明细页签分模型列表：未记录行按用量降序在前，不提供命中率列', async () => {
-    const renderer = await renderScreen();
-    await switchToDetailTab(renderer);
+  it('汇总页签分模型列表：未记录行按用量降序在前，不提供命中率列', async () => {
+    const renderer = await renderScreen(); // 默认汇总页签，无需切页签
     const json = JSON.stringify(renderer.toJSON());
     // 降序：gpt-4o（950）在未记录（600）前。
     const gptIndex = json.indexOf('gpt-4o');
     const unloggedIndex = json.indexOf('未记录');
     expect(gptIndex).toBeGreaterThanOrEqual(0);
     expect(gptIndex).toBeLessThan(unloggedIndex);
-    // 分模型列表只有模型名/用量/占比/调用次数；未选天时整个明细页签无命中率出口。
+    // 分模型列表提供模型名/用量/占比/调用次数。
     expect(json).toContain('占比');
+    expect(json).toContain('用量');
+    expect(json).toContain('调用');
+  });
+
+  it('明细页签不含分模型列表，未选天时无命中率出口', async () => {
+    const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
+    const json = JSON.stringify(renderer.toJSON());
+    expect(json).not.toContain('分模型汇总');
+    expect(json).not.toContain('占比');
     expect(json).not.toContain('命中率');
   });
 
