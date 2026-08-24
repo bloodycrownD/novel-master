@@ -1,35 +1,24 @@
-# token-usage-stats 开发 DAG 编排状态（code-dev-loop 终态）
+# token-usage-stats CR-fix 开发 DAG 编排状态（code-dev-loop 终态）
 
-spec_path: docs/Iterations/token-usage-stats/spec.md
+spec_path: docs/Iterations/token-usage-stats/cr-fix-spec.md
 prd_path: docs/Iterations/token-usage-stats/prd.md
-branch: feat/token-usage-stats
-base_sha: aa32a19
-head_sha: 待填（最后一笔提交后）
-status: dev-ready
+branch: feat/token-usage-stats-integration
+base_sha: 7dbba5f（fix-spec 落盘 commit）
+head_sha: 见 git log（末笔 mobile 收尾）
+status: dev-ready（CR 修复循环）
 
-dag_version: 3
+dag_version: 2
 dev_dag_matrix:
-  impl-s1-schema: done（d520cfc，T-S1 42/42）
-  impl-s2-parse: done（f814dc7，T-S2 145/145）
-  impl-s3-persist: done（a3e487b，T-S3 601/601）
-  impl-s4-backfill: done（abce19b，T-S4 52+362）
-  impl-s5-stats: done（cf06b46 + 快照 commit，T-S5 11/11）
-  verify-core: done（executor: main；全量 2139/2142，3 失败为 main 基线既有 vfs 失败，基线 worktree 复跑归因；typecheck 过）
-  cr-func-core: func-ready yes（矩阵 5/5，4 条实现注记 deviation 已接受）
-  impl-s6-desktop-ipc: done（T-S6 handler 7/7）
-  impl-s7-desktop-view: done（T-S6 view 5/5）
-  impl-s8-mobile: done（T-S7 13/13）
-  verify-ui: done（executor: main；desktop 手动全量 347/349 + mobile 821/824，失败均为既有且已归因；双端 typecheck 过）
-  cr-func-final: func-ready yes（Step 6-8 矩阵全过；AC-1~AC-11 全局对照 11/11；DEV-1 已闭合——双端「未记录」选项代码+测试双落实）
+  fix-core: done（00a36f0；B-1 显式 0 入分母 + G-1 不变量 + G-1/G-2 边界与 DST 测试，core 全量 2160/2160）
+  fix-desktop: done（25143ed；竞态守卫/头注释/DST toMs/formatTokenCount 迁 shared/错误路径/hourly a11y/空态并档，17/17）
+  fix-mobile-screen: done（8d4c66e 部分；竞态守卫/单通道/空态/loadError，20/20）
+  fix-mobile-misc: done（8d4c66e 部分；J-1 色值常量/J-2 无障碍 + stacked-bars 测试）
+  fix-docs: done（executor: main；PRD L86、spec 测试路径与变更点 8 回写、core 互指注释、cross/B-2 mobile toMs 与 calls 映射合入）
+  verify-all: done（executor: main；core 2160/2160、desktop 356/358（2 既有 skills 漂移）、mobile 840/843（3 既有 unhide））
+  cr-func-fix: func-ready yes（附条件：#14 格式还原 + mobile DST 用例）
+  fix-mobile-tail: done（mobile/C-1 还原至 +6/+1 纯增量、DST 用例补齐 21/21）
 
-spec_deviations: []  # DEV-1 已闭合；4 条实现注记已接受（keyset 分页、up 内 ALTER、占位延后登记、findById 前置）
-
-blocking_steps_closed: [Step 1-8]   # Step 9 为 manual_user，合并后用户真机验收
-
-工作区遗留（非本迭代，禁止触碰）：
-- 用户自身：.vscode 删除、AGENTS.md、package-lock.json、vfs entry-sequence-repair（bootstrap 未提交段 + 2 个 untracked 文件）
-- 他人遗留 untracked：packages/core/test/skills/ 下 4 个复现文件
-已知既有失败（与零本迭代交集，均有归因）：
-- core：test/vfs/orphan-revision-gc（1）+ vfs-entry-id-migration（2）——main 基线即红
-- mobile：use-chat-tab-message-actions-unhide（3）——此前迭代 stash 对照归因
-- desktop：skills-handlers（2）——core dist 重建暴露的种子技能断言漂移；另 run-tests.mjs glob 既有 bug 使官方 npm test 只覆盖部分文件（全量需 find 展开手动跑）
+must_fix_closure: 17/17（cross/B-1 P0、4 P1、12 P2 全闭合）
+spec_deviations: 全部闭合（T-S4 路径回写、注册行还原、formatTokenCount 措辞回写）
+已知收窄（双方子代理声明 + cr-func 接受）: mobile 库全空信号用 listModels（=无已保存模型配置），desktop 用 365 天探底；窄场景文案差异，合并后 QA 目视或后续统一
+遗留（非本循环范围）: stash@{0} 为 feature-c-ui-optimization 旧 WIP（用户自己的）；desktop run-tests.mjs glob bug、skills-handlers 2 例漂移（既有）；[3] 前缀历史模型名清洗未拍板

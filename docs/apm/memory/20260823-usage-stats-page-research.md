@@ -95,7 +95,13 @@ user:
 （code-review-loop）CR 吧。
 
 assistant:
-CR 循环 2 轮收敛：第 1 轮 4 个并行 scope（core-collect/core-stats/desktop/mobile）→ must-fix 合并去重；第 2 轮 review-full 建议 ready。主代理仲裁撤销两条误报（mobile/C-orch-1「desktop 分模型表在明细页签」——实际在 summary 分支，仅头注释过期；「6a66f23 混入分支」——属 main 自身历史，但发现真正净评审范围=2f1c4fc..HEAD 而非 f45a4b4..HEAD，集成分支带 main 前进提交）。fix-spec 落盘 `docs/Iterations/token-usage-stats/cr-fix-spec.md`（fix-spec-ready）：P0 1（cross/B-1 双端主查询竞态无过期防护，desktop 同款由主代理并档升格）+ P1 4（positiveNum 吐 0 致命中率系统性高估的口径 bug、useFocusEffect 双通道重复查询、desktop 头注释过期、PRD L86 自相矛盾）+ P2 13（含 review-full 并档的双端空态吞今日卡）+ deviations 3 + open questions 8。第 2 轮抽检四盲区（DTO/月历闰年/柱宽/settings-nav）零新缺陷，行号锚点 13/13 命中。待用户确认后按 fix-spec 开 fix。
+CR 循环 2 轮收敛：第 1 轮 4 个并行 scope（core-collect/core-stats/desktop/mobile）→ must-fix 合并去重；第 2 轮 review-full 建议 ready。主代理仲裁撤销两条误报（mobile/C-orch-1「desktop 分模型表在明细页签」——实际在 summary 分支，仅头注释过期；「6a66f23 混入分支」——属 main 自身历史，但发现真正净评审范围=2f1c4fc..HEAD 而非 f45a4b4..HEAD，集成分支带 main 前进提交）。fix-spec 落盘 `docs/Iterations/token-usage-stats/cr-fix-spec.md`（fix-spec-ready）：P0 1（cross/B-1 双端主查询竞态无过期防护，desktop 同款由主代理并档升格）+ P1 4（positiveNum 吐 0 致命中率系统性高估的口径 bug、useFocusEffect 双通道重复查询、desktop 头注释过期、PRD L86 自相矛盾）+ P2 12 + deviations 3 + open questions 8。第 2 轮抽检四盲区（DTO/月历闰年/柱宽/settings-nav）零新缺陷，行号锚点 13/13 命中。待用户确认后按 fix-spec 开 fix。
+
+user:
+（code-dev-loop）按 cr-fix-spec 开 fix。
+
+assistant:
+CR-fix 循环 dev-ready：wave-0 四并行 fix 节点（core/desktop/mobile-screen/mobile-misc，禁 commit 主代理分组提交）→ fix-docs+合入（executor: main：PRD L86、spec 回写、core 互指注释、mobile toMs/calls 收尾）→ verify 全量（core 2160/2160 零失败——main 前进后 vfs 既有失败已被用户 vfs-seq-fix 修好；desktop 356/358、mobile 840/843 均既有归因）→ cr-func 17/17 中 16 闭、func-ready yes 附条件（#14 格式还原+mobile DST 用例）→ fix-mobile-tail 闭合（RootNavigator/ProfileTabScreen 以 f45a4b4 为基底还原+重套增量，diff 收敛到 +6/+1；DST 用例锚 2026-03-08 切换日——jest 内改 TZ 无效须 TZ= 环境变量跑强断言）。commit：00a36f0/25143ed/8d4c66e/f29efab/末笔 mobile 收尾。已知收窄：mobile 库全空信号=listModels（配了模型未对话窄场景文案差异），desktop 用 365 天探底，cr-func 接受。坑：三个 fix 子代理又各自新建记忆文件（已并入主文件删除）；mobile-misc 违规操作过 stash（未造成损伤，栈里那条是用户旧 WIP）；主代理编辑记忆时覆盖过错段（自查发现后修复）。
 
 user:
 对不上吧？应是全部模型/服务商配置模型/其他模型（null 与非配置历史都归入，模糊可接受），未记录范围太小。
