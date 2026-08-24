@@ -87,7 +87,7 @@ apps/mobile/__tests__/rich-content-styles.test.ts                    # （可选
 
 ### 4. mobile mermaid 错误展示
 
-- `mermaid-core.ts` 的 `renderMermaidCodeBlocks` L217 裸 catch 改 `catch (err)`：提取消息（统一口径）后 `pre.setAttribute('data-mermaid-error', msg)`，原 `data-mermaid='failed'` + `classList.add('mermaid-failed')` 照旧；消息可能含引号/换行——`setAttribute` 原样存，CSS `attr()` 原样取
+- `mermaid-core.ts` 的 `renderMermaidCodeBlocks` L217 裸 catch 改 `catch (err)`：提取消息（统一口径）后 `code.setAttribute('data-mermaid-error', msg)`（勘误：原稿写 pre，但 CSS `attr()` 只能读伪元素宿主自身属性，而 `mermaidFailedCode` 选择器匹配的是 code——挂 pre 会永远落 fallback，实现按 code 落地），原 `data-mermaid='failed'` + `classList.add('mermaid-failed')` 照旧；消息可能含引号/换行——`setAttribute` 原样存，CSS `attr()` 原样取
 - `rich-content-styles.ts` L94 的 `mermaidFailedCode::before` 改为 `content: attr(data-mermaid-error, "图表渲染失败，已回退源码")`（attr 带 fallback：有错误消息显示消息，无则保留原文案——旧渲染的 DOM 无该属性也安全）
 - 约束：不引入 `.mermaid-block.mermaid-failed` 组合选择器；不加 `overflow-x: auto`（测试禁止）；`pre-wrap` 折行已就绪
 - 改完执行 `npm run build:webview`（dist 产物被测试断言）
@@ -117,7 +117,7 @@ apps/mobile/__tests__/rich-content-styles.test.ts                    # （可选
 - **T-MD1 — blocking: yes**（→ Step 2）：desktop render 失败后静态渲染显示错误消息（mock renderer throw 'parse error on line 3'，断言消息文本出现）、badge/源码保留（AC-5）。
 - **T-MD2 — blocking: yes**（→ Step 2）：缓存命中重挂载仍显示原因（二次静态渲染不重新 render，错误文本仍在）+ TTL 过期后错误缓存同步清除（timers mock）。
 - **T-MD3 — blocking: yes**（→ Step 2）：成功覆盖失败时错误缓存被清（LRU/成功路径连带，防泄漏）。
-- **T-MV1 — blocking: yes**（→ Step 3）：mobile 源码契约——mermaid-core 含 `setAttribute('data-mermaid-error'`、catch 带 err；CSS 含 `attr(data-mermaid-error`；dist 产物两管线均含（AC-6）。
+- **T-MV1 — blocking: yes**（→ Step 3）：mobile 源码契约——mermaid-core 含 `setAttribute('data-mermaid-error'`（宿主为 code，见变更点 4 勘误）、catch 带 err；CSS 含 `attr(data-mermaid-error`；dist 产物两管线均含（AC-6）。
 - **T-MV2 — blocking: yes**（→ Step 3）：纯逻辑——getOrCreate 失败后错误消息可从 reject 中提取（现有用例扩展）。
 - **T-MV3 — blocking: no**（→ Step 4）：真机双管线目视错误文案折行（manual_user）。
 

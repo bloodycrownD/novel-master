@@ -1,8 +1,8 @@
 ---
-date: 2026-08-24
+date: 2026-08-25
 title: 导入后快照不刷新 + mermaid 报错无原因 两项问题调研
 keywords: 导入角色卡, importVfsZip, rule_snapshot, file_cache, sessionApiPromptTokenCache, clearDomain, assemble-workplace-display, mermaid, MermaidMarkdown, mermaid-core, failedCache, parse error
-abstract: 调研两项问题：①导入角色卡/zip 后提示词与文件不一致——根因是导入链路缺了置位/压缩同款的「清 rule_snapshot + file_cache + 失效 token cache」三件套，workplace 前缀抱旧缓存；②mermaid 渲染失败不显示原因——双端错误对象全程在手，只是最后一层 catch 丢弃（mobile 甚至已缓存进 failedCache 无人读），最小改动在消费端接住并展示。
+abstract: import-cache-align-and-mermaid-error 迭代全程：调研→PRD→spec→code-dev-loop dev-ready（core 2111/2111、双端零新增失败）。①session 导入后三件套清缓存已落地（helper 吞错 best-effort、工厂签名不变）；②双端 mermaid 失败原因展示已落地（desktop failedErrorCache 四处连带；mobile data-mermaid-error 挂 code + CSS attr()——spec 原稿写 pre 是字面错误，attr() 只读宿主属性）。
 ---
 
 user:
@@ -58,3 +58,21 @@ user:
 
 assistant:
 impl-core 完成（无 commit，交主代理统一提交）：①新建 helper clearSessionPromptCaches（顺序 clearDomain(rule_snapshot) → clearDomain(file_cache) → sessionApiPromptTokenCache.invalidate，整体吞错 warn，注释写明与置位/压缩裸 await 有意不同的原因）；②character-card-import / vfs-zip-io 两个 Default 构造 options 加可选 sessionKkv，事务成功提交后按 scope.kind === "session" 门闸调用；③两工厂内部自建 sessionKkv 注入，签名 (conn, options?) 不变（mobile 钉死），backfillBaseline 不透传现状保持。测试：新建 clear-session-prompt-caches.test.ts（createMemorySessionKkv 故障注入，验 pending 域保留 + 吞错短路）；character-card-import.test.ts 扩 T-IC1/3/4（T-IC3 用 project scope 负例）；vfs-zip-io.test.ts 扩 T-IC2/3（global 形态负例）/5（双工厂单参构造 + 内部装配行为验证）。验证：聚焦三文件 42/42 绿，vfs + character-card 全目录 295/295 绿，core src typecheck 干净；tsc 直跑 tsconfig.test.json 有 347 个既有 TS6059（rootDir 配置噪音，全仓库都有，非本期引入）。工具路径陷阱：本项目工具路径需带 novel-master/ 前缀（create_directory 用裸 packages/... 会报 outside project）。
+
+user:
+（verify-mobile 节点）验证 mobile 全量 jest + typecheck，确认 Step 3（wave-0 提交 1af701e）没引入回归。只跑验证不改代码。
+
+assistant:
+verify-mobile 通过。①`npx jest`（apps/mobile，注意 npx 不触发 pretest）：158 套件 157 过 1 挂，821 测试 818 过 3 挂——失败全部集中在 `__tests__/use-chat-tab-message-actions-unhide.test.ts`（T-UH2 两例 + A-1 一例），正是既有 unhide 3 例基准，与本迭代无关，无新增失败；DST 相关用例这次普通跑也全过。②`npm run typecheck`（= tsc --noEmit tsconfig.build.json && tsc --noEmit src/web/tsconfig.json，build+web 两套）：零错误通过。结论：mobile 侧 Step 3 无回归。
+
+user:
+（verify-desktop 节点）验证 desktop 全量测试，确认 Step 2（wave-0 提交 ba241ac：MermaidMarkdown 错误缓存 + shell.css + 三用例）没引入回归。只跑验证不改代码。
+
+assistant:
+verify-desktop 通过。全量跑法绕开 run-tests.mjs 的 glob 漏文件 bug：`find test -type f \( -name '*.test.ts' -o ... \) -print0 | xargs -0 npm test --`（80 个文件全展开）。结果：373 测试 / 371 过 / 2 挂，失败仅 skills-handlers.test.ts 两例既有漂移（list 域清单与 effective 合并视图，actual 多出 'agent-config'，与本迭代无关）；mermaid-markdown.test.tsx 全过（T-MD 系列含静态渲染/副作用用例均 ok），无新增失败。renderer typecheck（tsconfig.renderer.json）未跑——impl-desktop 阶段已确认全量 tsc 有几十处历史遗留错误（ToastHost/Tooltip/settings/TTL mock timers），与 MermaidMarkdown 无关，本次以全量测试为准。结论：desktop 侧 Step 2 无回归。
+
+user:
+（code-dev-loop）开发吧。
+
+assistant:
+dev-ready 收官。从 main（2f1c4fc）开 feat/import-cache-mermaid-error 分支（token-usage-stats 30 commits 留在原分支未合并）。wave-0 三 impl 并行落地（c2d54a3/ba241ac/1af701e，子代理禁 commit 主代理分组提交）；wave-1 三包 verify 全绿（core 2111/2111 + typecheck 干净；desktop 373 仅 2 例既有 skills 漂移；mobile 821 仅 3 例既有 unhide）；wave-2 cr-func func-ready yes 无 must-fix。两处插曲：①desktop 子代理在 shell.css 误混入 token-stats 样式 245 行，主代理剔除重写（最终 +13 纯 mermaid 样式）；教训——子代理外部改文件后 Zed buffer 过期，edit_file 会写回旧内容，须用 shell 直写。②mobile 把 data-mermaid-error 挂 code 而非 spec 字面 pre，核实为 spec 笔误（CSS attr() 只读伪元素宿主属性），spec 已补勘误。遗留：Step 4 真机 manual QA 合并后用户执行；core npm test 脚本 extglob 在 sh 下报语法错误（既有，用 test:fast）。
