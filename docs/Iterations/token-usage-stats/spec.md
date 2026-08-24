@@ -46,7 +46,7 @@ apps/mobile/src/components/ui/MonthRangePickerSheet.tsx   # 自定义区间起�
 apps/desktop/renderer/features/settings/TokenUsageStatsView.tsx
 apps/desktop/src/main/ipc/handlers/usage-stats.ts
 packages/core/test/chat/usage-stats.service.test.ts
-packages/core/test/chat/usage-cache-backfill.test.ts
+packages/core/test/bootstrap/usage-cache-model-backfill.test.ts
 apps/mobile/__tests__/token-usage-stats-screen.test.tsx
 apps/desktop/test/token-usage-stats-view.test.tsx
 ```
@@ -102,7 +102,7 @@ apps/desktop/test/token-usage-stats-view.test.tsx
 
 ### 8. 公共工具（core）——复用既有导出
 
-- 格式化**复用**主树既有的 `common/format-token-count.ts`（`formatTokenCount` 999 以下原样 / K / M 一位小数压缩），该文件已经 `common/index.ts` 导出，本迭代**不新建、不修改**；双端视图直接从 `@novel-master/core/common` 引入（与 PRD「复用 `formatTokenCount` 口径」一致）。
+- 格式化**复用**主树既有的 `common/format-token-count.ts`（`formatTokenCount` 999 以下原样 / K / M 一位小数压缩），该文件已经 `common/index.ts` 导出，本迭代**不新建、不修改**。引入方式：mobile 直接从 `@novel-master/core/common` 引入；desktop renderer 受 X1 门禁禁止 import core，CR 修复阶段在 `apps/desktop/shared/logic/format-token-count.ts` 落了等价镜像（注释与 core 版互指，双向同步）——与 PRD「复用 `formatTokenCount` 口径」一致。
 
 ## 详细实现步骤
 
