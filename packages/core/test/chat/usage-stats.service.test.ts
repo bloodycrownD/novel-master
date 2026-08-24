@@ -21,11 +21,17 @@ import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { ChatError } from "../../src/errors/chat-errors.js";
 import { createUsageStatsService } from "../../src/service/chat/create-chat-services.js";
+import { daySpanBetweenLocalDays } from "../../src/service/chat/impl/usage-stats.service.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
+
+// G-2 DST：固定日期断言需要可控时区。node:test 每个文件独立进程，在 fixture
+// 初始化前把本地时区固定为带 DST 切换的 America/New_York；既有用例全部以
+// 「本地今日 0 点 ± 偏移」相对构造，与具体时区取值无关，换时区后依然自洽。
+process.env.TZ = "America/New_York";
 
 novelMasterTestFixture();
 
@@ -530,5 +536,194 @@ describe("usage stats service (T-S5)", () => {
       svc.getHourlyBuckets("not-a-date", { range: { kind: "last7" } }),
       ChatError,
     );
+  });
+
+  it("B-1: cache_read_tokens = 0 的行计入命中率分母（显式 0 ≠ 缺席）", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // OpenAI 渠道常态：cached_tokens 显式为 0（上报的「未命中」，非未上报）。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      provider: "openai",
+      usage: { prompt: 100, total: 100, cacheRead: 0 },
+    });
+    // 对照：无 cache 字段的行不入分母（PRD 口径）。
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      provider: "openai",
+      usage: { prompt: 50, total: 50 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const summary = await svc.getSummary({
+      range: {
+        kind: "custom",
+        fromMs: today0,
+        toMs: localAddDays(today0, 1),
+      },
+    });
+    assert.equal(summary.calls, 2);
+    assert.equal(summary.cacheReadTokens, 0);
+    // 0 值行入分母、无 cache 行不入：分母 = 100 而非 0，命中率不被抬高。
+    assert.equal(summary.billedInputTokens, 100);
+  });
+
+  it("G-1: custom 区间 fromMs 落在日中（12 点）→ 首桶只含下午数据", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 11 * HOUR, // 上午 11 点：在筛选区间外。
+      usage: { prompt: 11, total: 11 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 13 * HOUR + 30 * MIN, // 下午 13:30：入首桶。
+      usage: { prompt: 13, total: 13 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const buckets = await svc.getDailyBuckets({
+      range: {
+        kind: "custom",
+        fromMs: today0 + 12 * HOUR,
+        toMs: localAddDays(today0, 1),
+      },
+    });
+    // 首尾部分天取交集：只有今日一个桶，桶起点仍对齐本地日 0 点。
+    assert.equal(buckets.length, 1);
+    assert.equal(buckets[0]!.bucketStartMs, today0);
+    assert.equal(buckets[0]!.calls, 1);
+    assert.equal(buckets[0]!.promptTokens, 13);
+  });
+
+  it("G-1: custom 区间跨度恰好 366 天不抛错，桶数正确", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      usage: { prompt: 5, total: 5 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const range = {
+      kind: "custom" as const,
+      fromMs: localAddDays(today0, -365),
+      toMs: localAddDays(today0, 1),
+    };
+    const summary = await svc.getSummary({ range });
+    assert.equal(summary.calls, 1);
+    // 跨度恰好 366 天（今日 0 点往回 365 天 + 今日全天）：不抛错；
+    // 桶数 = 日历日数 366（D-365 … D 每天一桶）。
+    const buckets = await svc.getDailyBuckets({ range });
+    assert.equal(buckets.length, 366);
+  });
+
+  it("G-1: getModelBreakdown × model:null → 非 null 行全归并成一行", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      modelName: null,
+      usage: { prompt: 30, total: 30 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      modelName: "model-b",
+      usage: { prompt: 20, total: 20 },
+    });
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 30 * MIN,
+      modelName: "model-a",
+      usage: { prompt: 10, total: 10 },
+    });
+    // 服务商配置：仅 model-a 在已保存模型集合内。
+    const ts = String(Date.now());
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('stats-null-model-provider', 'openai', 'https://example.com', 'Stats Null Model Provider', '{}', 0, ${ts}, ${ts})`,
+    );
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('som-null-1', 'stats-null-model-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`,
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    // model: null = 「其他模型」筛选：NULL 行与非配置模型（model-b）行全部归并成一行。
+    const breakdown = await svc.getModelBreakdown({
+      range: {
+        kind: "custom",
+        fromMs: today0,
+        toMs: localAddDays(today0, 1),
+      },
+      model: null,
+    });
+    assert.equal(breakdown.length, 1);
+    const row = breakdown[0]!;
+    assert.equal(row.modelName, null);
+    assert.equal(row.calls, 2);
+    assert.equal(row.promptTokens, 50);
+    assert.equal(row.totalTokens, 50);
+  });
+
+  it("G-2: daySpanBetweenLocalDays 对 DST 23/25 小时天做 Math.round 补偿", () => {
+    const DAY = 86_400_000;
+    const H = 3_600_000;
+    // 常规日 24h → 1 天。
+    assert.equal(daySpanBetweenLocalDays(0, DAY), 1);
+    // 春季拨快日（日 0 点差 23h）与秋季拨慢日（25h）：round 后均为 1 天。
+    assert.equal(daySpanBetweenLocalDays(0, 23 * H), 1);
+    assert.equal(daySpanBetweenLocalDays(0, 25 * H), 1);
+    // 常规天 + 拨快天 = 47h → 2 天；常规 + 拨慢 + 常规 = 73h → 3 天。
+    assert.equal(daySpanBetweenLocalDays(0, 47 * H), 2);
+    assert.equal(daySpanBetweenLocalDays(0, 73 * H), 3);
+    // 366 天上限：整 366 天合法；跨 DST 的 366 个日历日（毫秒差 ± 1h）仍为 366。
+    assert.equal(daySpanBetweenLocalDays(0, 366 * DAY), 366);
+    assert.equal(daySpanBetweenLocalDays(0, 366 * DAY + 2 * H), 366);
+  });
+
+  it("G-2 DST: 春季拨快日（2026-03-08 NYC）缺失钟点出空桶、桶数仍 24", async () => {
+    const { ctx, session } = await seedSession();
+    // 02:00 不存在（拨快到 03:00）；seed 一条 03:10 的消息。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: new Date(2026, 2, 8, 3, 10).getTime(),
+      usage: { prompt: 7, total: 7 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const buckets = await svc.getHourlyBuckets("2026-03-08", {
+      range: { kind: "last7" },
+    });
+    assert.equal(buckets.length, 24);
+    // 缺失钟点（本地 2 点）退化为零值空桶，bucketStartMs 与下一桶重合
+    //（Date 构造器把不存在的 02:00 折叠到 03:00）。
+    assert.equal(buckets[2]!.calls, 0);
+    assert.equal(buckets[2]!.bucketStartMs, buckets[3]!.bucketStartMs);
+    // 03 点桶含 seed 的 03:10 消息。
+    assert.equal(buckets[3]!.calls, 1);
+    assert.equal(buckets[3]!.promptTokens, 7);
+  });
+
+  it("G-2 DST: 秋季拨慢日（2026-11-01 NYC）重复钟点桶加宽（25 小时天）", async () => {
+    const { ctx, session } = await seedSession();
+    // 两次本地 01:10：EDT 一次（05:10 UTC，Date 构造器取第一次出现）与 EST 一次（06:10 UTC）。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: new Date(2026, 10, 1, 1, 10).getTime(),
+      usage: { prompt: 1, total: 1 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: Date.UTC(2026, 10, 1, 6, 10),
+      usage: { prompt: 2, total: 2 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const buckets = await svc.getHourlyBuckets("2026-11-01", {
+      range: { kind: "last7" },
+    });
+    assert.equal(buckets.length, 24);
+    // 重复钟点（本地 1 点）桶加宽：1 点桶（01:00 EDT 起）到 2 点桶（02:00 EST 起）跨 2 小时。
+    assert.equal(buckets[2]!.bucketStartMs - buckets[1]!.bucketStartMs, 2 * HOUR);
+    assert.equal(buckets[1]!.bucketStartMs - buckets[0]!.bucketStartMs, HOUR);
+    // 两个 01:10 实例都落在加宽的 1 点桶里。
+    assert.equal(buckets[1]!.calls, 2);
+    assert.equal(buckets[1]!.promptTokens, 3);
   });
 });

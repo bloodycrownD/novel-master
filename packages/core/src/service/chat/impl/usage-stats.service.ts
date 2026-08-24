@@ -112,6 +112,18 @@ const ZERO_AGG_ROW: Row = {
   billed_input_tokens: 0,
 };
 
+/**
+ * custom 区间跨度（天）：本地日 0 点差 ÷ 24h。
+ * Math.round 补偿 DST 的 23/25 小时天（春季拨快日差 23h、秋季拨慢日差 25h），
+ * 避免 366 天上限在 DST 日被误判为 366.04 之类而拒收合法区间。
+ */
+export function daySpanBetweenLocalDays(
+  fromDayStartMs: number,
+  toDayStartMs: number,
+): number {
+  return Math.round((toDayStartMs - fromDayStartMs) / 86_400_000);
+}
+
 /** TDBC-backed 默认统计服务。 */
 export class DefaultUsageStatsService implements UsageStatsService {
   private readonly parser = new SqlTemplateParser();
@@ -272,9 +284,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     if (fromMs > toMs) {
       throw chatInvalidArgument("custom 区间 fromMs 不能晚于 toMs");
     }
-    const daySpan = Math.round(
-      (startOfLocalDay(toMs).getTime() - startOfLocalDay(fromMs).getTime()) /
-        86_400_000,
+    const daySpan = daySpanBetweenLocalDays(
+      startOfLocalDay(fromMs).getTime(),
+      startOfLocalDay(toMs).getTime(),
     );
     if (daySpan > 366) {
       throw chatInvalidArgument("custom 区间跨度不能超过 366 天");

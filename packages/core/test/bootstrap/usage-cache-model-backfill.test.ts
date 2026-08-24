@@ -284,6 +284,87 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
     }
   });
 
+  it("B-1: raw 里显式 0 的 cache 字段 → 回填 0 而非跳过（与 usage-parser 口径一致）", async () => {
+    const conn = await openMemoryConn();
+    try {
+      await seedMessage(
+        conn,
+        "msg-openai-zero",
+        JSON.stringify({
+          model: "gpt-4o",
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 20,
+            total_tokens: 120,
+            prompt_tokens_details: { cached_tokens: 0 },
+          },
+        }),
+      );
+      await seedMessage(
+        conn,
+        "msg-anthropic-zero",
+        JSON.stringify({
+          type: "message",
+          model: "claude-sonnet-4",
+          usage: {
+            input_tokens: 50,
+            output_tokens: 10,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        }),
+      );
+
+      await usageCacheModelBackfillV1Up(conn);
+
+      const openaiRow = await readMessage(conn, "msg-openai-zero");
+      assert.equal(openaiRow?.provider, "openai");
+      assert.equal(openaiRow?.cache_read_tokens, 0);
+      const anthropicRow = await readMessage(conn, "msg-anthropic-zero");
+      assert.equal(anthropicRow?.provider, "anthropic");
+      assert.equal(anthropicRow?.cache_read_tokens, 0);
+      assert.equal(anthropicRow?.cache_creation_tokens, 0);
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("G-1 不变量：回填后凡 cache 列非 NULL 的行 provider 必非 NULL", async () => {
+    const conn = await openMemoryConn();
+    try {
+      await seedMessage(conn, "msg-openai", OPENAI_RAW, { promptTokens: 12 });
+      await seedMessage(conn, "msg-gemini", GEMINI_RAW);
+      await seedMessage(conn, "msg-anthropic", ANTHROPIC_RAW);
+      await seedMessage(
+        conn,
+        "msg-placeholder",
+        JSON.stringify({ streamed: true, aborted: true }),
+      );
+
+      await usageCacheModelBackfillV1Up(conn);
+
+      // spec 关键决策 1 声明的不变量：cache 列能提出值 ⟸ 判出了协议 ⟸ provider 已写或被补。
+      const violated = await conn.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM chat_message
+         WHERE (cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)
+           AND provider IS NULL`,
+      );
+      assert.equal(
+        violated[0]?.n,
+        0,
+        "cache 列非 NULL 的行 provider 不能是 NULL",
+      );
+      // 对照：确有 cache 非 NULL 的行存在（防断言空转）。
+      const cached = await conn.query<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM chat_message
+         WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL`,
+      );
+      assert.equal((cached[0]?.n ?? 0) > 0, true);
+    } finally {
+      await conn.close();
+    }
+  });
+
   it("已填 provider / cache 的行不被覆盖，但 model_name 仍补齐", async () => {
     const conn = await openMemoryConn();
     try {

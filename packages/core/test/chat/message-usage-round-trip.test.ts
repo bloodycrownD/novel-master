@@ -235,6 +235,84 @@ describe("message cache/model_name round-trip (T-S3)", () => {
     assert.equal("cacheCreationTokens" in byId.usage!, false);
   });
 
+  it("G-1 不变量（新消息来源）：带 cache 的消息落库后 provider 必非 NULL", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "invariant-new-msg");
+
+    // append 带 provider + cache 的正常路径消息。
+    await ctx.messages.append(session.id, "assistant", textBlocks("inv"), {
+      provider: "anthropic",
+      modelName: "claude-sonnet-4-5",
+      usage: {
+        promptTokens: 10,
+        totalTokens: 10,
+        cacheReadTokens: 4,
+        cacheCreationTokens: 2,
+      },
+    });
+    // repo 直接 insert 带 cache 的消息（同样走 provider 列写入）。
+    const repo = new SqliteMessageRepository(ctx.conn);
+    await repo.insert({
+      id: randomUUID(),
+      sessionId: session.id,
+      seq: 2,
+      role: "assistant",
+      content: textBlocks("inv-repo"),
+      provider: "openai",
+      modelName: "gpt-5.2",
+      raw: null,
+      createdAtMs: Date.now(),
+      hidden: false,
+      usage: { cacheReadTokens: 3 },
+    });
+
+    // spec 关键决策 1：凡 cache 列非 NULL 的行，provider 必非 NULL（新消息由请求侧写入）。
+    const violated = await ctx.conn.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM chat_message
+       WHERE (cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)
+         AND provider IS NULL
+         AND session_id = ?`,
+      [session.id],
+    );
+    assert.equal(violated[0]?.n, 0, "cache 列非 NULL 的行 provider 不能是 NULL");
+  });
+
+  it("G-1 现状快照：append 带 usage（含 cache）不带 provider → provider 落 NULL、cache 照写", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "no-provider-snapshot");
+
+    const appended = await ctx.messages.append(
+      session.id,
+      "assistant",
+      textBlocks("no-provider"),
+      {
+        usage: {
+          promptTokens: 10,
+          totalTokens: 10,
+          cacheReadTokens: 5,
+        },
+      },
+    );
+
+    // 锁定现状：append 不强制「cache 非 NULL ⟹ provider 非 NULL」不变量，
+    // 该不变量由请求侧（正常路径必写 provider）与回填（判出协议才提 cache）保证；
+    // 此用例防止无意识漂移（如 append 开始拒绝或静默丢 cache）。
+    assert.equal(appended.provider, null);
+    assert.equal(appended.usage?.cacheReadTokens, 5);
+
+    const row = await ctx.conn.query<{
+      provider: string | null;
+      cache_read_tokens: number | null;
+    }>(
+      `SELECT provider, cache_read_tokens FROM chat_message WHERE id = ?`,
+      [appended.id],
+    );
+    assert.equal(row[0]?.provider, null);
+    assert.equal(row[0]?.cache_read_tokens, 5);
+  });
+
   it("仅 cache 有值（基础三列 NULL）→ usage 只含 cache 字段", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

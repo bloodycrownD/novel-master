@@ -48,10 +48,10 @@ function finiteNum(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-/** cache 计数仅在 >0 时才有意义（0 表示未命中/未写入，与 usage-parser 口径一致）。 */
-function positiveNum(value: unknown): number | undefined {
+/** cache 计数：非负有限数即保留（显式 0 回填 0 而非跳过，与 usage-parser 口径一致；仅字段缺失视为缺席）。 */
+function nonNegativeNum(value: unknown): number | undefined {
   const n = finiteNum(value);
-  return n != null && n > 0 ? n : undefined;
+  return n != null && n >= 0 ? n : undefined;
 }
 
 function str(value: unknown): string | undefined {
@@ -144,7 +144,7 @@ function extractByProtocol(
   if (protocol === "gemini") {
     const meta = isRecord(raw.usageMetadata) ? raw.usageMetadata : undefined;
     return {
-      cacheReadTokens: positiveNum(meta?.cachedContentTokenCount),
+      cacheReadTokens: nonNegativeNum(meta?.cachedContentTokenCount),
       modelName: str(raw.modelVersion),
     };
   }
@@ -156,7 +156,7 @@ function extractByProtocol(
         ? usage.prompt_tokens_details
         : undefined;
     return {
-      cacheReadTokens: positiveNum(details?.cached_tokens),
+      cacheReadTokens: nonNegativeNum(details?.cached_tokens),
       modelName: str(raw.model),
     };
   }
@@ -169,10 +169,10 @@ function extractByProtocol(
       ? message.usage
       : undefined;
   const cacheCreation = isRecord(usage?.cache_creation)
-    ? positiveNum(usage.cache_creation.input_tokens)
-    : positiveNum(usage?.cache_creation_input_tokens);
+    ? nonNegativeNum(usage.cache_creation.input_tokens)
+    : nonNegativeNum(usage?.cache_creation_input_tokens);
   return {
-    cacheReadTokens: positiveNum(usage?.cache_read_input_tokens),
+    cacheReadTokens: nonNegativeNum(usage?.cache_read_input_tokens),
     cacheCreationTokens: cacheCreation,
     modelName: str(raw.model) ?? str(message?.model),
   };

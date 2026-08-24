@@ -14,10 +14,10 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-/** cache 计数仅在 >0 时才有意义（0 表示未命中/未写入，视为字段缺席）。 */
-function positiveNum(value: unknown): number | undefined {
+/** cache 计数：非负有限数即保留——显式 0 是供应商上报的「未命中」，落库 0 计入分母；仅字段缺失（undefined / 非有限数 / 负数）视为缺席。 */
+function nonNegativeNum(value: unknown): number | undefined {
   const n = num(value);
-  return n != null && n > 0 ? n : undefined;
+  return n != null && n >= 0 ? n : undefined;
 }
 
 /** 仅在值存在时展开字段，保持「无 cache 字段 → 返回对象不含该二字段」的契约。 */
@@ -52,7 +52,7 @@ export function parseOpenAiUsage(raw: unknown): LlmTokenUsage | undefined {
   }
   // OpenAI 无 cache write 概念，只读命中侧 cached_tokens。
   const details = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : undefined;
-  const cacheReadTokens = positiveNum(details?.cached_tokens);
+  const cacheReadTokens = nonNegativeNum(details?.cached_tokens);
   return { promptTokens, completionTokens, totalTokens, ...cacheFields(cacheReadTokens) };
 }
 
@@ -77,11 +77,11 @@ export function parseAnthropicUsage(raw: unknown): LlmTokenUsage | undefined {
     promptTokens != null && completionTokens != null
       ? promptTokens + completionTokens
       : undefined;
-  const cacheReadTokens = positiveNum(usage.cache_read_input_tokens);
+  const cacheReadTokens = nonNegativeNum(usage.cache_read_input_tokens);
   // cache_creation 有两种 wire 形态：新版嵌套 cache_creation.input_tokens，旧版扁平 cache_creation_input_tokens。
   const cacheCreation = isRecord(usage.cache_creation)
-    ? positiveNum(usage.cache_creation.input_tokens)
-    : positiveNum(usage.cache_creation_input_tokens);
+    ? nonNegativeNum(usage.cache_creation.input_tokens)
+    : nonNegativeNum(usage.cache_creation_input_tokens);
   return {
     promptTokens,
     completionTokens,
@@ -109,6 +109,6 @@ export function parseGeminiUsage(raw: unknown): LlmTokenUsage | undefined {
   ) {
     return undefined;
   }
-  const cacheReadTokens = positiveNum(meta.cachedContentTokenCount);
+  const cacheReadTokens = nonNegativeNum(meta.cachedContentTokenCount);
   return { promptTokens, completionTokens, totalTokens, ...cacheFields(cacheReadTokens) };
 }

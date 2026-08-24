@@ -4,6 +4,10 @@
  * 大数值会用 K / M 后缀压缩（例如 2500 → "2.5K"），避免 UI 上挤一长串数字。
  * `formatPromptTokenUsageLabel` 在已知 context window 时会输出百分比 + 占比
  * 形式（`88% • 327/128K`），未知时退回纯计数。
+ *
+ * desktop renderer 因 X1 门禁不能 import core，那边在
+ * `apps/desktop/shared/logic/format-token-count.ts` 维护等价镜像，
+ * 改动本文件时须同步那份（两份注释互指）。
  */
 
 function trimTrailingZeros(s: string): string {
