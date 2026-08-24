@@ -89,7 +89,13 @@ user:
 模型选择器选项应与服务商配置同源（当前已保存模型），不要按历史记录 distinct（历史模型会堆积过时）；全部模型保留。
 
 assistant:
-已改（executor: main，trivial）：listModels 改查 `SELECT DISTINCT vendor_model_id FROM llm_saved_model`，不再 distinct chat_message——[3] 前缀类历史名不再出现在选择器；「全部模型」「未记录」保留；分模型 breakdown 列表仍按历史 model_name 聚合。port 注释/PRD 核心需求 2 + AC-11/spec 变更点 5 + T-S5 同步。测试：core 11/11 + 双端 16/16、5/5 全绿。
+已改（executor: main，trivial）：listModels 改查 `SELECT DISTINCT vendor_model_id FROM llm_saved_model`，不再 distinct chat_message；「全部模型」「未记录」保留；port 注释/PRD 核心需求 2 + AC-11/spec 变更点 5 + T-S5 同步。测试：core 11/11 + 双端 16/16、5/5 全绿。
+
+user:
+（code-review-loop）CR 吧。
+
+assistant:
+CR 循环 2 轮收敛：第 1 轮 4 个并行 scope（core-collect/core-stats/desktop/mobile）→ must-fix 合并去重；第 2 轮 review-full 建议 ready。主代理仲裁撤销两条误报（mobile/C-orch-1「desktop 分模型表在明细页签」——实际在 summary 分支，仅头注释过期；「6a66f23 混入分支」——属 main 自身历史，但发现真正净评审范围=2f1c4fc..HEAD 而非 f45a4b4..HEAD，集成分支带 main 前进提交）。fix-spec 落盘 `docs/Iterations/token-usage-stats/cr-fix-spec.md`（fix-spec-ready）：P0 1（cross/B-1 双端主查询竞态无过期防护，desktop 同款由主代理并档升格）+ P1 4（positiveNum 吐 0 致命中率系统性高估的口径 bug、useFocusEffect 双通道重复查询、desktop 头注释过期、PRD L86 自相矛盾）+ P2 13（含 review-full 并档的双端空态吞今日卡）+ deviations 3 + open questions 8。第 2 轮抽检四盲区（DTO/月历闰年/柱宽/settings-nav）零新缺陷，行号锚点 13/13 命中。待用户确认后按 fix-spec 开 fix。
 
 user:
 对不上吧？应是全部模型/服务商配置模型/其他模型（null 与非配置历史都归入，模糊可接受），未记录范围太小。
