@@ -1,24 +1,32 @@
-# global-fs-manager CR-fix 开发编排状态（code-dev-loop 终态）
+# import-cache-align-and-mermaid-error 开发 DAG 编排状态（code-dev-loop）
 
-spec_path: docs/Iterations/global-fs-manager/cr-fix-spec.md
-prd_path: docs/Iterations/global-fs-manager/prd.md
-iteration: global-fs-manager-cr-fix
-branch: feat/skills-integration（主仓）
-base_sha: 63f59df
+spec_path: docs/Iterations/import-cache-align-and-mermaid-error/spec.md
+prd_path: docs/Iterations/import-cache-align-and-mermaid-error/prd.md
+branch: feat/import-cache-mermaid-error
+base_sha: 2f1c4fc（= main）
+status: in-progress（wave-0 impl 并行中）
 
-dag_version: 2
-wave_plan: []
+dag_version: 1
+wave_plan: [[impl-core, impl-desktop, impl-mobile], [verify-core, verify-desktop, verify-mobile], [cr-func-all]]
 node_status:
-  impl-cr-core: { status: done, head_sha: 6fbb4ce, executor: subagent, items: "P0 双前缀 + listTree + core/B-1 C-1 G-1 G-2，core 全量 2036/0" }
-  impl-cr-desktop: { status: done, head_sha: 5da4e76, executor: subagent, items: "desktop/B-1(P1) + B-2 消费侧 + C-1 + G-1 + cli/G-2" }
-  impl-cr-mobile: { status: done, head_sha: d85777c, executor: subagent, items: "mobile/B-1 + G-1" }
-  cr-func-cr: { status: done, func_ready: yes, note: "子代理上下文耗尽提前收尾（12 条矩阵全过、归因一钉死）；三项未复核由主代理补齐（mobile 24/24、core 2036/0、typecheck）；归因二由主代理补查并修复（7e2e98a）" }
-  fix-tocorevfsscope: { status: done, head_sha: 7e2e98a, executor: main, note: "CR 漏网：toCoreVfsScope 未穷尽 physical/meta（renderer 独立 tsconfig 盲区，本迭代 ea6faf5/1f96b06 引入）" }
-open_must_fix: []
-spec_deviations: []  # CR 3 条 deviations 用户「按 cr spec 开发」指令视同按现状接受
-status: dev-ready
+  impl-core: { status: pending, executor: subagent }    # Step 1：helper + 双 service 接入 + 工厂 + T-IC1-5
+  impl-desktop: { status: pending, executor: subagent } # Step 2：MermaidMarkdown 错误缓存 + T-MD1-3
+  impl-mobile: { status: pending, executor: subagent }  # Step 3：mermaid-core catch + CSS attr + T-MV1-2
+  verify-core: { status: pending }
+  verify-desktop: { status: pending }
+  verify-mobile: { status: pending }
+  cr-func-all: { status: pending }
 
-# 归因存档
-# CLI template-pull-e2e T3 红灯 = 预存缺陷（v1.4.21/dc28290 即红，早于本迭代；方向：session pull 子树替换删除侧）
-#   → 建议另立迭代条目跟踪，不阻塞本次 CR-fix
-# renderer tsconfig.renderer.json 非 门禁，含 293 个预存错误（修掉 toCoreVfsScope 后 292），不属本迭代 scope
+blocking_steps: [Step 1, Step 2, Step 3]   # Step 4 = manual_user 不阻塞
+contracts:
+  - clearSessionPromptCaches(sessionId, sessionKkv) helper，整体 try/catch 吞错
+  - 工厂对外签名 (conn, options?) 不变；sessionKkv 工厂内部 createSessionKkvService(conn) 自建
+  - kind 门闸 scope.kind === "session"（保护 meta-scope）
+  - lookupMermaidFailedError(theme, source) 导出
+  - mobile data-mermaid-error dataset + CSS attr(data-mermaid-error, fallback)
+spec_deviations: []
+open_must_fix: []
+
+备注：
+- 并行子代理禁 git commit；主代理按节点分组统一提交
+- 主 worktree 用户未提交改动（.vscode 删除、AGENTS.md、package-lock.json）与 core/test/skills untracked——永不触碰、永不提交
