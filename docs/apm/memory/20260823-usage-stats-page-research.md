@@ -86,6 +86,12 @@ assistant:
 分模型列表已移入汇总页签（双端，第 2 轮反馈 commit）。「{3}」实为「[3]」：拉真机库（adb run-as com.novelmaster，files/default/novel_master_vfs）查实 model_name='[3]gemini-3.1-pro-preview'（230 行），llm_saved_model 里无此值——全是历史回填从中转站响应的 raw.model 读来的，[3] 是中转站自己加的通道标注；新消息走请求侧 vendorModelId 不带。后果：同一模型可能分裂成两个条目（[3]xxx 历史回填 vs xxx 新消息）。可选后续：回填时清洗 ^[\d+] 前缀或列表归并，用户未拍板。
 
 user:
+模型选择器选项应与服务商配置同源（当前已保存模型），不要按历史记录 distinct（历史模型会堆积过时）；全部模型保留。
+
+assistant:
+已改（executor: main，trivial）：listModels 改查 `SELECT DISTINCT vendor_model_id FROM llm_saved_model`，不再 distinct chat_message——[3] 前缀类历史名不再出现在选择器；「全部模型」「未记录」保留；分模型 breakdown 列表仍按历史 model_name 聚合（历史模型名仍可见，预期行为）。port 注释/PRD 核心需求 2 + AC-11/spec 变更点 5 + T-S5 同步。测试：core 11/11 + 双端 16/16、5/5 全绿。注：ctx.conn.execute 直插 llm_provider+llm_saved_model 做 seed。
+
+user:
 （第 1 轮 fix wave）非 readonly 修复 PRD/SPEC，闭合 8 条 must-fix（P0-1、P1-1~3、P2-1~4），只改文档不改实现。
 
 assistant:
