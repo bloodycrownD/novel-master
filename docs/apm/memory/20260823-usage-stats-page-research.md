@@ -80,6 +80,12 @@ assistant:
 UI 重构落地（integration 分支 3053e18）：筛选栏置顶双页签共享；汇总页签=五指标卡 2×2 网格+命中率/今日宽卡（mobile）或一行五卡（desktop）；明细页签=按天图+24h 钻取（当天汇总行保留命中率，AC-6 不变）+分模型列表去掉命中率列；StackedBars 删 mode/hitRate 模式；PRD 核心需求 3/5 与 spec 变更点 6/7 同步。双端测试改写后 mobile 15/15、desktop 5/5。改动在 feat/token-usage-stats-integration，未回写 feat/token-usage-stats（可用 cherry-pick 同步）。
 
 user:
+分模型汇总应放汇总页；模型选择器出现 {3}xxx-model 是为什么？
+
+assistant:
+分模型列表已移入汇总页签（双端，第 2 轮反馈 commit）。「{3}」实为「[3]」：拉真机库（adb run-as com.novelmaster，files/default/novel_master_vfs）查实 model_name='[3]gemini-3.1-pro-preview'（230 行），llm_saved_model 里无此值——全是历史回填从中转站响应的 raw.model 读来的，[3] 是中转站自己加的通道标注；新消息走请求侧 vendorModelId 不带。后果：同一模型可能分裂成两个条目（[3]xxx 历史回填 vs xxx 新消息）。可选后续：回填时清洗 ^[\d+] 前缀或列表归并，用户未拍板。
+
+user:
 （第 1 轮 fix wave）非 readonly 修复 PRD/SPEC，闭合 8 条 must-fix（P0-1、P1-1~3、P2-1~4），只改文档不改实现。
 
 assistant:
