@@ -2,12 +2,12 @@
  * 设置页「数据统计」视图（spec 变更点 6 / Step 7）：
  * 「汇总 / 明细」双页签，筛选栏（时间范围：近 7 / 近 30 / 自定义区间 × 模型）置顶、
  * 两页签共享（切换页签保留筛选、不重查）。汇总页签：范围内五指标卡片 + 独立于筛选的
- * 今日卡；明细页签：按天 CSS 柱状图（点选某天钻取 24 小时分布 + 当天汇总行）+ 分模型表
+ * 今日卡；明细页签：按天图 + 24 小时钻取 + 当天汇总行；分模型表在汇总页签
  * （不含命中率列，命中率出口在汇总卡片与选中天汇总行）。
  * 数据统一经 ipcUsageStatsQuery（nm:usageStats/query 单 channel 按 kind 分发）获取；
  * 功能口径对齐 mobile 侧 TokenUsageStatsScreen，交互按桌面惯例。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ipcUsageStatsQuery } from "@/ipc/client";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type {
@@ -17,6 +17,7 @@ import type {
   UsageStatsSummaryDto,
 } from "@shared/ipc-types";
 import { SettingsListEmpty, SettingsPanel, SettingsSection } from "./settings-ui";
+import { formatTokenCount } from "@shared/logic/format-token-count";
 
 type RangeKind = "last7" | "last30" | "custom";
 type PageTab = "summary" | "detail";
@@ -28,27 +29,6 @@ const CUSTOM_RANGE_MAX_DAYS = 366;
 /** 模型下拉的三态哨兵：全部 / 其他模型（对应 filter.model 的 undefined / null）。「其他模型」= NULL 记录 + 非当前配置的历史模型归并。 */
 const MODEL_OPTION_ALL = "__all__";
 const MODEL_OPTION_UNLOGGED = "__unlogged__";
-
-/**
- * token 数量紧凑格式化（999 以下原样 / K / M 一位小数压缩）。
- * 结构等价复制自 packages/core/src/common/format-token-count.ts 的 formatTokenCount
- * ——renderer 禁止 import core（eslint X1 门禁），故在此自备同口径实现。
- */
-function formatTokenCount(n: number): string {
-  if (!Number.isFinite(n) || n < 0) {
-    return "—";
-  }
-  const rounded = Math.round(n);
-  if (rounded < 1000) {
-    return String(rounded);
-  }
-  if (rounded < 1_000_000) {
-    const k = rounded / 1000;
-    return k >= 100 ? `${Math.round(k)}K` : `${k.toFixed(1).replace(/\.0$/, "")}K`;
-  }
-  const m = rounded / 1_000_000;
-  return m >= 100 ? `${Math.round(m)}M` : `${m.toFixed(1).replace(/\.0$/, "")}M`;
-}
 
 /** ms → 本地日期键 `YYYY-MM-DD`（天/小时桶都用它定位天边界）。 */
 function toLocalDayKey(ms: number): string {
@@ -119,16 +99,10 @@ function TokenStatsChart({
       {buckets.map((b, index) => {
         const key = keyOf(b, index);
         const usagePct = (value: number) => `${Math.min(100, (value / maxValue) * 100)}%`;
-        return (
-          <button
-            key={key}
-            type="button"
-            className={`token-stats-chart__col${selectedKey === key ? " is-selected" : ""}`}
-            data-day={key}
-            title={bucketTooltip(key, b)}
-            aria-label={bucketTooltip(key, b)}
-            onClick={onSelect ? () => onSelect(key) : undefined}
-          >
+        const tooltip = bucketTooltip(key, b);
+        const className = `token-stats-chart__col${selectedKey === key ? " is-selected" : ""}`;
+        const content = (
+          <>
             <span className="token-stats-chart__bars">
               <span
                 className="token-stats-chart__bar token-stats-chart__bar--output"
@@ -140,7 +114,26 @@ function TokenStatsChart({
               />
             </span>
             <span className="token-stats-chart__label">{labelOf(key)}</span>
+          </>
+        );
+        // 仅可交互（有 onSelect，如按天柱）时才用 button；纯展示柱（如 hourly）用
+        // role="img" 的 div，避免无 onClick 的 button 被键盘聚焦、回车无响应。
+        return onSelect != null ? (
+          <button
+            key={key}
+            type="button"
+            className={className}
+            data-day={key}
+            title={tooltip}
+            aria-label={tooltip}
+            onClick={() => onSelect(key)}
+          >
+            {content}
           </button>
+        ) : (
+          <div key={key} role="img" className={className} data-day={key} title={tooltip} aria-label={tooltip}>
+            {content}
+          </div>
         );
       })}
     </div>
@@ -184,20 +177,35 @@ export function TokenUsageStatsView() {
       const to = parseLocalDate(customTo);
       if (from == null || to == null) return null;
       // to 取结束日次日 0 点（含结束日全天，与 last7/last30 覆盖到本地明日 0 点一致）。
+      // 用 Date 日历推进而非固定毫秒加法：DST 切换日实际只有 23/25 小时，
+      // 固定 +MS_PER_DAY 会让边界偏移 1 小时（与预填逻辑同款构造）。
       return {
-        range: { kind: "custom", fromMs: from.getTime(), toMs: to.getTime() + MS_PER_DAY },
+        range: {
+          kind: "custom",
+          fromMs: from.getTime(),
+          toMs: new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1).getTime(),
+        },
         model: modelFilter,
       };
     }
     return { range: { kind: rangeKind }, model: modelFilter };
   }, [rangeKind, customFrom, customTo, customRangeError, modelFilter]);
 
+  // 主链路竞态守卫：请求序号自增，旧一轮响应落地前发现序号已过期即整体丢弃
+  // （与 hourly/models 副链路的 cancelled 标志同款语义；错误路径同样受守卫约束，
+  // 过期请求的报错不覆盖新一轮的 loading/数据状态）。
+  const reloadSeqRef = useRef(0);
+
   const reload = useCallback(async (f: UsageStatsFilterDto) => {
+    const seq = ++reloadSeqRef.current;
     const [sumRes, dailyRes, rowsRes] = await Promise.all([
       ipcUsageStatsQuery({ kind: "summary", filter: f }),
       ipcUsageStatsQuery({ kind: "daily", filter: f }),
       ipcUsageStatsQuery({ kind: "modelBreakdown", filter: f }),
     ]);
+    if (seq !== reloadSeqRef.current) {
+      return;
+    }
     if (!sumRes.ok) {
       setLoadError(sumRes.error.message);
       return;
@@ -308,6 +316,62 @@ export function TokenUsageStatsView() {
 
   const empty = summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
+  // 空态区分（库全空 vs 范围内无数据）：仅在出现空态时懒发一次探底查询——
+  // 近一年宽度的 custom 范围 summary（core custom 上限 366 天，故取 365 天）。功能上线
+  // 不足一年，一年内无任何记录 ⇔ 库全空；非空场景零额外查询。探底失败保持 null，
+  // 按范围内无数据展示（保留今日卡，不阻塞用户）。
+  const [libraryEmpty, setLibraryEmpty] = useState<boolean | null>(null);
+  const libraryProbedRef = useRef(false);
+  useEffect(() => {
+    if (!empty || libraryProbedRef.current) {
+      return;
+    }
+    libraryProbedRef.current = true;
+    let cancelled = false;
+    const now = new Date();
+    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 365);
+    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    void ipcUsageStatsQuery({
+      kind: "summary",
+      filter: { range: { kind: "custom", fromMs: from.getTime(), toMs: to.getTime() } },
+    }).then((res) => {
+      const sum = res.ok ? res.data : null;
+      if (
+        !cancelled &&
+        typeof sum === "object" &&
+        sum != null &&
+        "today" in sum
+      ) {
+        setLibraryEmpty((sum as UsageStatsSummaryDto).calls === 0 && (sum as UsageStatsSummaryDto).totalTokens === 0);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [empty]);
+
+  // 今日卡独立于筛选，非空与「范围内无数据」空态两个分支共用。
+  const todayCard = (
+    <div className="token-stats-view__today">
+      <span className="token-stats-view__today-title">今日</span>
+      <span className="token-stats-view__today-hint">不受时间范围与模型筛选影响</span>
+      <div className="token-stats-cards token-stats-cards--today">
+        <div className="token-stats-card" data-metric="todayTotalTokens">
+          <span className="token-stats-card__label">总 token</span>
+          <span className="token-stats-card__value">
+            {formatTokenCount(summary?.today.totalTokens ?? 0)}
+          </span>
+        </div>
+        <div className="token-stats-card" data-metric="todayCalls">
+          <span className="token-stats-card__label">调用次数</span>
+          <span className="token-stats-card__value">
+            {String(summary?.today.calls ?? 0)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <SettingsPanel>
       <SettingsSection title="筛选">
@@ -388,9 +452,17 @@ export function TokenUsageStatsView() {
 
       {empty ? (
         <SettingsSection title="数据统计">
-          <SettingsListEmpty>
-            当前筛选范围内暂无用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录。
-          </SettingsListEmpty>
+          {libraryEmpty ? (
+            <SettingsListEmpty>
+              库里还没有任何用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录。
+            </SettingsListEmpty>
+          ) : (
+            <>
+              <SettingsListEmpty>当前筛选范围内暂无用量数据，可调整时间范围或模型筛选后再试。</SettingsListEmpty>
+              {/* 今日卡独立于筛选，不随范围空态消失（mobile/A-1 并档双端） */}
+              {todayCard}
+            </>
+          )}
         </SettingsSection>
       ) : pageTab === "summary" ? (
         <>
@@ -427,24 +499,8 @@ export function TokenUsageStatsView() {
                 </span>
               </div>
             </div>
-            <div className="token-stats-view__today">
-              <span className="token-stats-view__today-title">今日</span>
-              <span className="token-stats-view__today-hint">不受时间范围与模型筛选影响</span>
-              <div className="token-stats-cards token-stats-cards--today">
-                <div className="token-stats-card" data-metric="todayTotalTokens">
-                  <span className="token-stats-card__label">总 token</span>
-                  <span className="token-stats-card__value">
-                    {formatTokenCount(summary?.today.totalTokens ?? 0)}
-                  </span>
-                </div>
-                <div className="token-stats-card" data-metric="todayCalls">
-                  <span className="token-stats-card__label">调用次数</span>
-                  <span className="token-stats-card__value">
-                    {String(summary?.today.calls ?? 0)}
-                  </span>
-                </div>
-              </div>
-            </div>
+            {/* 今日卡见 todayCard（非空分支同样独立于筛选） */}
+            {todayCard}
           </SettingsSection>
 
           <SettingsSection title="分模型汇总" desc="不含命中率列——命中率出口在汇总卡片与选中天汇总行">
