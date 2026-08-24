@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import {
   MermaidMarkdown,
   isMermaidKnownFailed,
+  lookupMermaidFailedError,
   lookupMermaidSvg,
   nextMermaidId,
   resetMermaidCacheForTests,
@@ -250,4 +251,116 @@ test("T-MD2/T-MD3: mermaid 副作用只进 useEffect（动态 import 不在 rend
   const fnEnd = src.indexOf("\n}", fnStart);
   const fnBody = src.slice(fnStart, fnEnd);
   assert.match(fnBody, /mermaid\.render/);
+});
+
+test("T-MD1: render 失败后静态渲染显示错误消息（badge/源码保留）", async () => {
+  resetMermaidCacheForTests();
+  setMermaidSvgRendererForTests(async () => {
+    throw new Error("parse error on line 3");
+  });
+  try {
+    // 先让 resolveMermaidSvg 落缓存（静态渲染不跑 effect，靠 useState 初始化查错误缓存）
+    await assert.rejects(() => resolveMermaidSvg("not-a-diagram\n", "default"));
+    assert.equal(
+      lookupMermaidFailedError("default", "not-a-diagram\n"),
+      "parse error on line 3",
+    );
+
+    const html = renderToStaticMarkup(
+      <MermaidMarkdown
+        content={"正文\n\n```mermaid\nnot-a-diagram\n```"}
+      />,
+    );
+    // 错误消息文本出现在失败原因节点；badge 与源码保留，无图表容器
+    assert.match(html, /mermaid-block__failed-reason/);
+    assert.match(html, /parse error on line 3/);
+    assert.match(html, /mermaid-block__failed-badge/);
+    assert.match(html, /not-a-diagram/);
+    assert.doesNotMatch(html, /mermaid-block__chart/);
+
+    // 非 Error 形态（mermaid DetailedError 的 str 字段）也走统一提取口径
+    setMermaidSvgRendererForTests(async () => {
+      throw { str: "detailed-error-msg" };
+    });
+    await assert.rejects(() => resolveMermaidSvg("other-diagram\n", "default"));
+    assert.equal(
+      lookupMermaidFailedError("default", "other-diagram\n"),
+      "detailed-error-msg",
+    );
+  } finally {
+    setMermaidSvgRendererForTests(null);
+    resetMermaidCacheForTests();
+  }
+});
+
+test("T-MD2: 缓存命中重挂载仍显示错误原因；TTL 过期后错误缓存同步清除", async (t) => {
+  resetMermaidCacheForTests();
+  // 与组件内 FAILED_TTL_MS 保持一致
+  const FAILED_TTL_MS = 30_000;
+  t.mock.timers.enable({ now: 1_000 });
+  let calls = 0;
+  setMermaidSvgRendererForTests(async () => {
+    calls += 1;
+    throw new Error("boom-render");
+  });
+  const source = "not-a-diagram\n";
+  try {
+    await assert.rejects(() => resolveMermaidSvg(source, "default"));
+    assert.equal(calls, 1);
+
+    // 二次静态渲染（重挂载）：命中失败缓存不重跑 render，错误文本仍在
+    for (let i = 0; i < 2; i += 1) {
+      const html = renderToStaticMarkup(
+        <MermaidMarkdown content={"```mermaid\nnot-a-diagram\n```"} />,
+      );
+      assert.match(html, /mermaid-block__failed-reason/);
+      assert.match(html, /boom-render/);
+    }
+    assert.equal(calls, 1);
+
+    // TTL 过期：失败占位与错误消息缓存一起被清除
+    t.mock.timers.tick(FAILED_TTL_MS + 1);
+    assert.equal(isMermaidKnownFailed("default", source), false);
+    assert.equal(lookupMermaidFailedError("default", source), null);
+  } finally {
+    t.mock.timers.reset();
+    setMermaidSvgRendererForTests(null);
+    resetMermaidCacheForTests();
+  }
+});
+
+test("T-MD3: 成功覆盖失败 / LRU 淘汰时错误缓存连带清除（防泄漏）", async () => {
+  resetMermaidCacheForTests();
+  // 与组件内 SVG_CACHE_MAX 保持一致
+  const SVG_CACHE_MAX = 150;
+  let failFlaky = true;
+  setMermaidSvgRendererForTests(async (_id, source) => {
+    if (source === "flaky\n" && failFlaky) {
+      throw new Error("first-fail");
+    }
+    if (source === "victim\n") {
+      throw new Error("victim-fail");
+    }
+    return "<svg>ok-now</svg>";
+  });
+  try {
+    // 成功路径连带：失败后重试成功，错误缓存被清
+    await assert.rejects(() => resolveMermaidSvg("flaky\n", "default"));
+    assert.equal(lookupMermaidFailedError("default", "flaky\n"), "first-fail");
+    failFlaky = false;
+    await resolveMermaidSvg("flaky\n", "default");
+    assert.equal(lookupMermaidSvg("default", "flaky\n"), "<svg>ok-now</svg>");
+    assert.equal(lookupMermaidFailedError("default", "flaky\n"), null);
+
+    // LRU 淘汰连带：失败占位被挤出 svgCache 时错误缓存同步删除
+    await assert.rejects(() => resolveMermaidSvg("victim\n", "default"));
+    assert.equal(lookupMermaidFailedError("default", "victim\n"), "victim-fail");
+    for (let i = 0; i < SVG_CACHE_MAX; i += 1) {
+      await resolveMermaidSvg(`graph LR\ne${i}-->m\n`, "default");
+    }
+    assert.equal(lookupMermaidFailedError("default", "victim\n"), null);
+  } finally {
+    setMermaidSvgRendererForTests(null);
+    resetMermaidCacheForTests();
+  }
 });

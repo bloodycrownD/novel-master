@@ -4882,6 +4882,19 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--danger);
 }
 
+/* 失败原因文本：消息可能较长，等宽小字折行展示，溢出不断行 */
+.mermaid-block__failed-reason {
+  margin: 0 0 0.75em;
+  padding: 0;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8em;
+  color: var(--danger);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: transparent;
+  border: none;
+}
+
 .preview-text {
   padding: 16px;
   white-space: pre-wrap;

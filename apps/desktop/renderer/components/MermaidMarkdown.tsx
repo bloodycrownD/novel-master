@@ -99,6 +99,16 @@ export function mermaidCacheKey(theme: MermaidTheme, source: string): string {
   return `${theme}\u0000${source}`;
 }
 
+/**
+ * 统一错误消息提取口径（与 mobile 端 mermaid-core 一致）：
+ * Error 取 message；mermaid 的 DetailedError 非Error形态取 str 字段，其余 String() 兑底。
+ */
+function extractMermaidErrorMessage(err: unknown): string {
+  return err instanceof Error
+    ? err.message
+    : String((err as { str?: string }).str ?? err);
+}
+
 /** svgCache 的 LRU 上限：超出淘汰最旧（spec desktop/C-1，建议 100~200 取中）。 */
 const SVG_CACHE_MAX = 150;
 /** 失败占位 TTL：过期后视为未失败，下次渲染重走一次 mermaid.render。 */
@@ -108,6 +118,8 @@ const FAILED_TTL_MS = 30_000;
 const svgCache = new Map<string, string>();
 /** 失败占位的写入时间（与 svgCache 的 key 同步维护）。 */
 const failedAtCache = new Map<string, number>();
+/** 失败错误消息缓存（key 与 svgCache 一致；LRU 淘汰 / TTL 过期 / 成功覆盖 / reset 四处连带清理）。 */
+const failedErrorCache = new Map<string, string>();
 const FAILED_PLACEHOLDER = "\u0000__failed__";
 const inflight = new Map<string, Promise<string>>();
 
@@ -131,6 +143,7 @@ function writeCacheKey(key: string, value: string): void {
     }
     svgCache.delete(oldest);
     failedAtCache.delete(oldest);
+    failedErrorCache.delete(oldest);
   }
 }
 
@@ -160,10 +173,19 @@ export function isMermaidKnownFailed(
     // 失败占位过期：清掉占位，允许下次渲染重试。
     svgCache.delete(key);
     failedAtCache.delete(key);
+    failedErrorCache.delete(key);
     return false;
   }
   touchCacheKey(key);
   return true;
+}
+
+/** 查询已缓存的失败错误消息（静态渲染不跑 effect，失败态文案靠这条兜底）。 */
+export function lookupMermaidFailedError(
+  theme: MermaidTheme,
+  source: string,
+): string | null {
+  return failedErrorCache.get(mermaidCacheKey(theme, source)) ?? null;
 }
 
 /** 可注入的渲染实现（默认动态 import mermaid；测试替换以断言调用次数）。 */
@@ -217,11 +239,13 @@ export async function resolveMermaidSvg(
     .then((svg) => {
       writeCacheKey(key, svg);
       failedAtCache.delete(key);
+      failedErrorCache.delete(key);
       return svg;
     })
     .catch((err) => {
       writeCacheKey(key, FAILED_PLACEHOLDER);
       failedAtCache.set(key, Date.now());
+      failedErrorCache.set(key, extractMermaidErrorMessage(err));
       throw err;
     })
     .finally(() => {
@@ -231,10 +255,11 @@ export async function resolveMermaidSvg(
   return job;
 }
 
-/** 测试隔离：清空 memo 缓存、失败标记与失败时间戳。 */
+/** 测试隔离：清空 memo 缓存、失败标记、失败时间戳与失败错误消息。 */
 export function resetMermaidCacheForTests(): void {
   svgCache.clear();
   failedAtCache.clear();
+  failedErrorCache.clear();
   inflight.clear();
 }
 
@@ -279,6 +304,11 @@ const MermaidBlock = memo(function MermaidBlock({
   const [failed, setFailed] = useState(() =>
     pending ? false : isMermaidKnownFailed(theme, source),
   );
+  // 错误文案双通道：静态渲染（renderToStaticMarkup 不跑 effect）靠初始化查缓存；
+  // 挂载后置 effect 路径靠 catch 时 setState。
+  const [failedError, setFailedError] = useState<string | null>(() =>
+    pending ? null : lookupMermaidFailedError(theme, source),
+  );
 
   useEffect(() => {
     if (pending) {
@@ -288,11 +318,13 @@ const MermaidBlock = memo(function MermaidBlock({
     if (cached != null) {
       setSvg(cached);
       setFailed(false);
+      setFailedError(null);
       return;
     }
     if (isMermaidKnownFailed(theme, source)) {
       setSvg(null);
       setFailed(true);
+      setFailedError(lookupMermaidFailedError(theme, source));
       return;
     }
     let cancelled = false;
@@ -301,12 +333,14 @@ const MermaidBlock = memo(function MermaidBlock({
         if (!cancelled) {
           setSvg(rendered);
           setFailed(false);
+          setFailedError(null);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
           setSvg(null);
           setFailed(true);
+          setFailedError(extractMermaidErrorMessage(err));
         }
       });
     return () => {
@@ -325,7 +359,12 @@ const MermaidBlock = memo(function MermaidBlock({
   return (
     <div className={cls}>
       {failed ? (
-        <span className="mermaid-block__failed-badge">图表渲染失败，已显示源码</span>
+        <>
+          <span className="mermaid-block__failed-badge">图表渲染失败，已显示源码</span>
+          {failedError ? (
+            <pre className="mermaid-block__failed-reason">{failedError}</pre>
+          ) : null}
+        </>
       ) : null}
       {svg ? (
         <div
