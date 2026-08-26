@@ -42,6 +42,8 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     cache_read_tokens INTEGER NULL,
     cache_creation_tokens INTEGER NULL,
     model_name TEXT NULL,
+    first_token_ms INTEGER NULL,
+    duration_ms INTEGER NULL,
     UNIQUE (session_id, seq)
   )`,
   `CREATE INDEX IF NOT EXISTS idx_chat_message_created_at

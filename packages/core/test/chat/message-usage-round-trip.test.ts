@@ -156,6 +156,91 @@ describe("message usage round-trip (T-S1)", () => {
   });
 });
 
+describe("message timing fields round-trip (T-MU1)", () => {
+  it("新字段随 usage 往返保真（token + 耗时齐全）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "timing-round-trip");
+
+    const usage = {
+      promptTokens: 100,
+      completionTokens: 40,
+      totalTokens: 140,
+      firstTokenMs: 320,
+      durationMs: 2100,
+    };
+    const appended = await ctx.messages.append(
+      session.id,
+      "assistant",
+      textBlocks("timed"),
+      { usage },
+    );
+    assert.deepEqual(appended.usage, usage);
+
+    const byId = await ctx.messages.get(appended.id);
+    assert.deepEqual(byId.usage, usage);
+  });
+
+  it("仅 token 无耗时 → usage 不含 firstTokenMs/durationMs（老数据形态）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "token-only");
+
+    const appended = await ctx.messages.append(
+      session.id,
+      "assistant",
+      textBlocks("token-only"),
+      {
+        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      },
+    );
+    const byId = await ctx.messages.get(appended.id);
+    assert.deepEqual(byId.usage, {
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    });
+    assert.equal("firstTokenMs" in byId.usage!, false);
+    assert.equal("durationMs" in byId.usage!, false);
+  });
+
+  it("仅耗时无 token → usage 只含耗时字段（token 统计不受影响）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "timing-only");
+
+    const repo = new SqliteMessageRepository(ctx.conn);
+    const message: ChatMessage = {
+      id: randomUUID(),
+      sessionId: session.id,
+      seq: 1,
+      role: "assistant",
+      content: textBlocks("timing-only"),
+      provider: "openai",
+      modelName: "gpt-5.2",
+      raw: null,
+      createdAtMs: Date.now(),
+      hidden: false,
+      usage: { firstTokenMs: 500, durationMs: 500 },
+    };
+    await repo.insert(message);
+
+    const read = await repo.findById(message.id);
+    assert.ok(read);
+    assert.deepEqual(read!.usage, { firstTokenMs: 500, durationMs: 500 });
+  });
+
+  it("新建库 chat_message 含 first_token_ms / duration_ms 两列", async () => {
+    const ctx = getNovelMasterTestContext();
+    const columns = await ctx.conn.query<{ name: string }>(
+      `SELECT name FROM pragma_table_info('chat_message')`,
+    );
+    const names = columns.map((c) => c.name);
+    assert.equal(names.includes("first_token_ms"), true);
+    assert.equal(names.includes("duration_ms"), true);
+  });
+});
+
 describe("message cache/model_name round-trip (T-S3)", () => {
   it("assistant 带 provider + modelName + cache 字段 → 读回保持", async () => {
     const ctx = getNovelMasterTestContext();
