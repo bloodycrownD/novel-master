@@ -12,8 +12,10 @@ import {
   ipcModelSetCurrent,
   ipcPreferencesGetLlmStream,
   ipcPreferencesGetSessionFsVersionCheck,
+  ipcPreferencesGetThinkingContext,
   ipcPreferencesSetLlmStream,
   ipcPreferencesSetSessionFsVersionCheck,
+  ipcPreferencesSetThinkingContext,
   ipcRegexListPicker,
   ipcRegexSetCurrent,
 } from "@/ipc/client";
@@ -40,6 +42,7 @@ export function WorkspaceSettingsView() {
   const [agentLabel, setAgentLabel] = useState("—");
   const [regexLabel, setRegexLabel] = useState("不启用");
   const [llmStream, setLlmStream] = useState(true);
+  const [thinkingContext, setThinkingContext] = useState(true);
   const [chatRichText, setChatRichText] = useState(true);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(false);
   const [compactionEnabled, setCompactionEnabled] = useState(false);
@@ -55,7 +58,7 @@ export function WorkspaceSettingsView() {
   const [currentRegexId, setCurrentRegexId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
-    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes, compactionRes] =
+    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes, compactionRes, thinkingRes] =
       await Promise.all([
         ipcAgentResolveCurrent(),
         ipcModelListPicker(),
@@ -64,6 +67,7 @@ export function WorkspaceSettingsView() {
         ipcAppUiGet(KEY_CHAT_RICH_TEXT),
         ipcPreferencesGetSessionFsVersionCheck(),
         ipcCompactionConditionsGet(),
+        ipcPreferencesGetThinkingContext(),
       ]);
     if (agentRes.ok) {
       setAgentLabel(agentRes.data.agentName);
@@ -98,6 +102,9 @@ export function WorkspaceSettingsView() {
     }
     if (streamRes.ok) {
       setLlmStream(streamRes.data);
+    }
+    if (thinkingRes.ok) {
+      setThinkingContext(thinkingRes.data);
     }
     if (richRes.ok) {
       setChatRichText(
@@ -228,6 +235,14 @@ export function WorkspaceSettingsView() {
             onChange={async (next) => {
               setLlmStream(next);
               await ipcPreferencesSetLlmStream(next);
+            }}
+          />
+          <SettingsSwitchRow
+            label="思考进入上下文"
+            checked={thinkingContext}
+            onChange={async (next) => {
+              setThinkingContext(next);
+              await ipcPreferencesSetThinkingContext(next);
             }}
           />
           <SettingsSwitchRow

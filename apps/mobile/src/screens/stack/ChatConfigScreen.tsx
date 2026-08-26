@@ -1,5 +1,5 @@
 /**
- * 聊天相关偏好：流式输出、版本校验、富文本消息，以及压缩配置。
+ * 聊天相关偏好：流式输出、思考进入上下文、版本校验、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
 import type {CompactionConditions} from '@novel-master/core/compaction';
@@ -36,6 +36,7 @@ export function ChatConfigScreen() {
   const runtime = useRuntime();
   const {appUi} = useNovelMaster();
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
+  const [thinkingContextEnabled, setThinkingContextEnabled] = useState(true);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
 
@@ -46,6 +47,12 @@ export function ChatConfigScreen() {
 
   const refreshStreamPref = useCallback(async () => {
     setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
+  }, [runtime]);
+
+  const refreshThinkingContextPref = useCallback(async () => {
+    setThinkingContextEnabled(
+      await runtime.preferences.getThinkingContextEnabled(),
+    );
   }, [runtime]);
 
   const refreshSessionFsVersionCheckPref = useCallback(async () => {
@@ -74,11 +81,13 @@ export function ChatConfigScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshStreamPref().catch(() => undefined);
+      refreshThinkingContextPref().catch(() => undefined);
       refreshSessionFsVersionCheckPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
       refreshCompaction().catch(() => undefined);
     }, [
       refreshStreamPref,
+      refreshThinkingContextPref,
       refreshSessionFsVersionCheckPref,
       refreshChatRichTextPref,
       refreshCompaction,
@@ -145,6 +154,23 @@ export function ChatConfigScreen() {
           setLlmStreamEnabled(enabled);
           runtime.preferences
             .setLlmStreamEnabled(enabled)
+            .catch(() => undefined);
+        }}
+      />
+      <ProfileSwitchItem
+        icon="🧠"
+        label="思考进入上下文"
+        subtitle={
+          thinkingContextEnabled
+            ? '仅最新一轮的思考内容随提示词发送'
+            : '历史思考内容不进入提示词'
+        }
+        value={thinkingContextEnabled}
+        tokens={tokens}
+        onValueChange={enabled => {
+          setThinkingContextEnabled(enabled);
+          runtime.preferences
+            .setThinkingContextEnabled(enabled)
             .catch(() => undefined);
         }}
       />
