@@ -137,7 +137,7 @@ docs/Iterations/markdown-code-block-render/spec.md
 
 | # | 文件 / 符号 | 变更 |
 |---|-------------|------|
-| C-1 | `apps/desktop/package.json` dependencies | 新增 `rehype-highlight`（^7） |
+| C-1 | `apps/desktop/package.json` dependencies | 新增 `rehype-highlight`（^7）；并新增 `highlight.js`（^11.12.0）直接依赖——`languages` 选项需直接 import `highlight.js/lib/languages/*` 语言子模块传入，插件侧不 re-export（CR 第一轮后补记，与实际依赖对齐） |
 | C-2 | `apps/mobile/package.json` dependencies | 新增 `highlight.js`（^11，仅用 `highlight.js/lib/core` + 按需语言子模块） |
 | C-3 | `apps/desktop/renderer/components/MermaidMarkdown.tsx` `MermaidMarkdown` | `Markdown` 挂 `rehypePlugins: [rehypeHighlight({ languages: { 10 语言模块显式注册 }, aliases: { bash: ['shell'] }, plainText: ['mermaid'], detect: false })]`（v7 无 `ignoreMissing` 选项、`subset` 对显式 `language-*` 无效，见兼容性事实 6/7；`shell` 非 bash 内置别名，须显式注册，见语言清单节）；`components.pre` mermaid 特判放宽为 `className?.includes("language-mermaid")`（原严格相等 `===` 在多类名时失配），非 mermaid 分支改为 `renderCodeBlock`（解析子 code 的 `language-*`，归一化后输出 `<pre data-lang={norm}>`；未知/无语言输出裸 `<pre>`，且剥掉插件注入的空 `hljs` 类） |
 | C-4 | `apps/desktop/renderer/styles/shell.css` `.preview-markdown pre` / `.chat-message__markdown pre`（L4778-4791、L5863-5878） | 背景改独立观感（`var(--surface-inset)`），与行内 code（`--background` + `--border-light`）拉开；`pre[data-lang]::before` 语言标签样式；`.chat-message--user .chat-message__markdown code/pre` 用户气泡覆盖规则同步（现 L5914-5922）：`pre` 覆盖改 `var(--surface-inset)`、行内 `code` 覆盖改 `var(--background)`（边框仍 `--accent-user-border`），与新块级形态的变量分工一致（块级 `--surface-inset` / 行内 `--background`）——现状两者同为 `--surface`，新形态下若不改会趋同不可区分 |
