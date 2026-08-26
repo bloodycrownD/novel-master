@@ -27,6 +27,7 @@ function createService(
   settings: SavedModelSettings,
   protocol: "openai" | "anthropic" | "gemini",
   onChat: (req: LlmChatRequest) => void,
+  vendorModelId = "test-model",
 ) {
   const providerRepo: ProviderRepository = {
     list: async () => [],
@@ -52,8 +53,8 @@ function createService(
     findById: async () => ({
       id: TEST_SAVED_MODEL_ID,
       providerId: protocol,
-      vendorModelId: "test-model",
-      modelName: "test-model",
+      vendorModelId,
+      modelName: vendorModelId,
       settings,
       createdAtMs: 0,
       updatedAtMs: 0,
@@ -136,6 +137,46 @@ describe("DefaultModelRequestService thinking", () => {
       protocol: "openai",
       openai: { reasoning_effort: "medium" },
     });
+  });
+
+  it("GLM vendorModelId 与 gpt-* 解析结果一致", async () => {
+    let captured: LlmChatRequest | undefined;
+    const settings: SavedModelSettings = {
+      ...defaultSavedModelSettings("glm-4.7"),
+      generation: {
+        sampling: { enabled: false },
+        thinkingLevel: "medium",
+      },
+    };
+    const svc = createService(settings, "openai", (req) => {
+      captured = req;
+    }, "glm-4.7");
+
+    await svc.request(TEST_SAVED_MODEL_ID, "hello");
+
+    assert.equal(captured?.vendorModelId, "glm-4.7");
+    assert.deepEqual(captured?.thinking, {
+      protocol: "openai",
+      openai: { reasoning_effort: "medium" },
+    });
+  });
+
+  it("GLM vendorModelId 档位为 off 时不向 adapter 传 thinking", async () => {
+    let captured: LlmChatRequest | undefined;
+    const settings: SavedModelSettings = {
+      ...defaultSavedModelSettings("glm-4.7"),
+      generation: {
+        sampling: { enabled: false },
+        thinkingLevel: "off",
+      },
+    };
+    const svc = createService(settings, "openai", (req) => {
+      captured = req;
+    }, "glm-4.7");
+
+    await svc.request(TEST_SAVED_MODEL_ID, "hello");
+
+    assert.equal(captured?.thinking, undefined);
   });
 
   it("options.thinking 覆盖已保存设置", async () => {
