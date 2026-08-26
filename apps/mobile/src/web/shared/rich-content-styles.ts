@@ -36,6 +36,26 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     .join(', ');
   const liAdjacent = selectors.map((s) => `${s} li + li`).join(', ');
   const liParagraph = selectors.map((s) => `${s} li > p`).join(', ');
+  // 块级代码：pre 内 code 重置行内形态（透明背景/零 padding/无圆角）
+  const preCode = selectors.map((s) => `${s} pre code`).join(', ');
+  const preLangLabel = selectors
+    .map((s) => `${s} pre[data-lang]::before`)
+    .join(', ');
+  // 高亮 token 两套配色：默认亮色，html[data-nm-mode="dark"]（bridge applyTheme 推断写入）覆盖暗色
+  // 色值与 desktop shell.css 的 --hljs-* 变量一致（双端一致性）
+  const hljsTokens: Array<[string, string, string]> = [
+    ['hljs-keyword', '#cf222e', '#ff7b72'],
+    ['hljs-string', '#0a3069', '#a5d6ff'],
+    ['hljs-comment', '#6e7781', '#8b949e'],
+    ['hljs-number', '#0550ae', '#79c0ff'],
+    ['hljs-title', '#8250df', '#d2a8ff'],
+    ['hljs-attr', '#116329', '#7ee787'],
+    ['hljs-literal', '#005cc5', '#79c0ff'],
+    ['hljs-built_in', '#953800', '#ffa657'],
+    ['hljs-meta', '#cf222e', '#ff7b72'],
+    ['hljs-tag', '#116329', '#7ee787'],
+    ['hljs-symbol', '#0550ae', '#79c0ff'],
+  ];
   return `
     ${group} { white-space: normal; overflow-wrap: anywhere; }
     ${child('p')} { margin: 0.35em 0; }
@@ -63,12 +83,31 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     ${child('h3')} { font-size: 1em; font-weight: 700; margin: 0.35em 0; }
     ${child('code')} { font-family: ui-monospace, monospace; font-size: 0.9em; background: rgba(0,0,0,0.06); padding: 0.1em 0.25em; border-radius: 4px; }
     /* 覆盖 UA white-space:pre；折行后勿用 overflow-x:auto，避免内层滚动抢 transcript 竖滑 */
+    /* 块级独立形态：背景叠层 + 边框 + padding，与行内 code（rgba 背景 + 无边框）拉开 */
     ${child('pre')} {
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       overflow-x: visible;
       margin: 0.35em 0;
+      padding: 0.55em 0.7em;
+      border: 1px solid var(--border, #e5e5ea);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.045);
     }
+    ${preCode} { background: transparent; padding: 0; border-radius: 0; }
+    /* 语言标签：伪元素不进 textContent，批注文本流零偏移（同桌面端 pre[data-lang]::before） */
+    ${preLangLabel} {
+      content: attr(data-lang);
+      display: block;
+      margin-bottom: 0.35em;
+      font-size: 0.78em;
+      opacity: 0.65;
+      text-transform: lowercase;
+      letter-spacing: 0.04em;
+    }
+    ${hljsTokens
+      .map(([cls, light, dark]) => `.${cls} { color: ${light}; }\n    html[data-nm-mode="dark"] .${cls} { color: ${dark}; }`)
+      .join('\n    ')}
     ${child('a')} { color: var(--primary, #007aff); }
     /* Mermaid 图表：成功态源码 display:none 保留（批注文本流不偏移）；SVG 缩放适配宽度 */
     ${mermaidBlock} {

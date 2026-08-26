@@ -12,8 +12,9 @@ import {
 } from '../stream/stream';
 import { clearStreamRichUpgrade } from '../stream/stream-markdown';
 import { closeContextMenu } from '../menu/menu';
-import { closeMermaidViewer } from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
-import { flagsEqual, renderRows } from '../render/row-logic';
+import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import {inferThemeModeFromBg} from '@web/shared/theme-mode';
+import {flagsEqual, renderRows} from '../render/row-logic';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';
 
 /** 宿主下发的主题 token（最小字段）。 */
@@ -47,6 +48,9 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
   root.style.setProperty('--danger', theme.danger || '#d92d20');
   root.style.setProperty('--surface', theme.surface || '#f2f2f7');
   root.style.setProperty('--border', theme.borderLight || '#e5e5ea');
+  // 代码高亮 token 配色：按背景亮度推断 dark|light（init 与 themeUpdate 都走这里），
+  // token CSS 写两套静态规则（html[data-nm-mode="dark"] 覆盖），不扩展 HostTheme payload
+  root.dataset.nmMode = inferThemeModeFromBg(theme.background);
 }
 
 export function handleHostMessage(raw: unknown): void {

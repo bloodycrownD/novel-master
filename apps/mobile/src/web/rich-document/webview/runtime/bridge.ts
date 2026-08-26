@@ -14,7 +14,8 @@ import {
   clearAnnotateSelection,
   type AnnotateRenderMark,
 } from './annotate';
-import { closeMermaidViewer } from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
+import {inferThemeModeFromBg} from '@web/shared/theme-mode';
 
 /**
  * P0-3：setDocument 视图刷新注册门面。
@@ -53,6 +54,11 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
   if (theme.primary) root.style.setProperty('--primary', theme.primary);
   if (theme.surface) root.style.setProperty('--surface', theme.surface);
   if (theme.borderLight) root.style.setProperty('--border', theme.borderLight);
+  // 代码高亮 token 配色：按背景亮度推断 dark|light（init 与 themeUpdate 都走这里），
+  // token CSS 写两套静态规则（html[data-nm-mode="dark"] 覆盖），不扩展 HostTheme payload
+  if (theme.background) {
+    root.dataset.nmMode = inferThemeModeFromBg(theme.background);
+  }
 }
 
 /** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
