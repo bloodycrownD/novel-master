@@ -123,6 +123,7 @@ export {
   PREFERENCES_MODULE,
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
+  PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 } from "./service/persistent-preferences/impl/preference-keys.js";
 export {
