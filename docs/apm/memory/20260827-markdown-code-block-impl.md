@@ -20,3 +20,16 @@ assistant:
 - worktree 新环境需先 build workspace 包否则全量测试挂构建产物缺失：desktop prebuild（sksp-* 等）+ build:icons/build:renderer/build:main/build:preload 后 91/91；mobile 需 build tdbc-driver-op-sqlite 等 4 包后 838/841。use-chat-tab-message-actions-unhide 3 例失败为主 worktree 基线（b3429b0）同败，与本迭代无关。
 - 体积：build:webview 后 chat-transcript app.css 15902→17841（+1.9KB）、rich-document 7734→9543（+1.8KB），均 < 3KB/包预算。
 剩余：Step 10 manual_user 真机验收（四场景明暗主题、批注 T-CB14、流式 T-CB15）未做（按任务要求跳过）。
+
+---
+
+date: 2026-08-27（追加）
+title: markdown-code-block-render CR 第一轮 fix-spec 落盘
+keywords: cr-fix-spec, MF-1, MF-2, 内置别名, escapeHtml, C-1 回写
+abstract: 节点 spec-fix-markdown-code-block-render（DAG v2，只改文档不改代码）：新建 docs/Iterations/markdown-code-block-render/cr-fix-spec.md（base b3429b0 / head 1fad168 / review_round 1 / 状态 draft），写入 2 条 P2 + 1 条 spec 回写，并同步执行 C-1 回写（spec 变更点 C-1 补记 desktop highlight.js@^11.12.0 直接依赖，languages 选项需直接 import 语言子模块）。MF-1 [P2][B]：hljs 模块内置别名（javascript 含 mjs/cjs、typescript 含 mts/cts、xml 含 xhtml/rss/atom/xsd/xsl 等）随 languages 注册进 lowlight，desktop ```mjs 高亮但无 data-lang，mobile 被 LANG_ALIAS 门控走纯文本，双端不一致与 spec「清单外不高亮」冲突，T-CB13 样例未覆盖；推荐改法 b（spec 回写 deviation + 样例补 mjs 块钉死），备选 a（双端表同步补别名，范围变更）。MF-2 [P2][D]：prepare-transcript-rich-html.ts L23 手拼 class="language-${rawLang} hljs" 未转义，当前不可利用（表 key 全字母数字，含引号必查表失败走默认 fence 且 sanitize 兜底）但隐式依赖无防护；改法 rawLang 过 md.utils.escapeHtml 再拼 + 补引号 lang 测试。Open questions 待拍板：a/b 方案、RN bundle 实测数字回填、Step 10 是否补做、双端色表无契约锁、缩进 code block 防回归。commit：docs(cr): 记录 code-review 第一轮 fix-spec（含 spec.md C-1 回写）。
+
+user:
+spec-fix-markdown-code-block-render 节点，worktree .woktree/markdown-code-block-render，只改文档不改实现代码；fix-spec 路径 docs/Iterations/markdown-code-block-render/cr-fix-spec.md，commit 到 feat/markdown-code-block-render，message 固定 docs(cr): 记录 code-review 第一轮 fix-spec；spec.md/prd.md 只读参考（C-1 回写为明确授权的例外）。结构：元信息/Must-fix/Spec deviations/Open questions（待拍板）/已豁免（空）/合并后 QA/K 节建议。
+
+assistant:
+核实了双端源码差异后落盘：desktop ```mjs 实际表现是「rehype-highlight AST 层命中内置别名生成高亮 span，renderCodeBlock 归一化失败后剥 hljs 类、不出 data-lang」；mobile 则整体走默认 fence。C-1 回写直接改 spec 变更点清单 C-1 行（补 highlight.js ^11.12.0 直接依赖及原因），与 fix-spec 同一 commit。
