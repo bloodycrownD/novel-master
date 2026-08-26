@@ -4,6 +4,12 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### 新增
+
+- **Markdown 代码块语法高亮**（双端）：文件预览与聊天消息里的代码块改为独立块级展示（背景/边框/圆角，与行内代码明显区分）并高亮语法，顶部标注语言名（别名自动归一，如 `ts` 显示为 `typescript`）；支持 TypeScript、JavaScript、JSON、Python、Bash/Shell、SQL、Markdown、YAML、HTML、CSS 等语言，配色跟随明暗主题；未标注或不支持的语言（如 Rust）按纯文本块级展示，Mermaid 图表渲染不受影响，移动端长行仍自动折行不抢竖滑手势
+
 ## [1.5.4] - 2026-08-25
 
 ### 修复
