@@ -7,8 +7,21 @@ import {
   type ReactNode,
 } from "react";
 import Markdown from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
+import bash from "highlight.js/lib/languages/bash";
+import css from "highlight.js/lib/languages/css";
+import javascript from "highlight.js/lib/languages/javascript";
+import json from "highlight.js/lib/languages/json";
+import markdown from "highlight.js/lib/languages/markdown";
+import python from "highlight.js/lib/languages/python";
+import sql from "highlight.js/lib/languages/sql";
+import typescript from "highlight.js/lib/languages/typescript";
+import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import type { PluggableList } from "unified";
+import { renderCodeBlock } from "./code-block";
 
 /**
  * 共享 Markdown 渲染组件：react-markdown + remarkGfm + mermaid 图表。
@@ -401,6 +414,37 @@ export interface MermaidMarkdownProps {
   content: string;
 }
 
+/**
+ * 高亮语言注册表（与 mobile highlight-code.ts 的 core 注册同源；任一端增删须双端同步）。
+ * html 由 xml 模块内置别名承载；shell 不在 bash 模块内置 aliases（仅 sh/zsh），须显式注册。
+ */
+const HIGHLIGHT_LANGUAGES = {
+  typescript,
+  javascript,
+  json,
+  python,
+  bash,
+  sql,
+  markdown,
+  yaml,
+  xml,
+  css,
+};
+
+const rehypePlugins: PluggableList = [
+  [
+    rehypeHighlight,
+    {
+      // 显式注册即整体替换缺省 common 集（37 语言），注册表外的 rust 等不会被高亮
+      languages: HIGHLIGHT_LANGUAGES,
+      aliases: { bash: ["shell"] },
+      // mermaid code 连 hljs 空类也不加：命中在加类之前 return，extractChildCode 仍取纯文本
+      plainText: ["mermaid"],
+      detect: false,
+    },
+  ],
+];
+
 export function MermaidMarkdown({ content }: MermaidMarkdownProps) {
   const theme = useMermaidTheme();
   const scan = useMemo(() => scanMermaidFences(content), [content]);
@@ -412,21 +456,26 @@ export function MermaidMarkdown({ content }: MermaidMarkdownProps) {
     () => ({
       pre({ children }) {
         const { className, source } = extractChildCode(children);
-        if (className === "language-mermaid") {
+        // mermaid 特判放宽为 includes：className 含多个类时严格相等会失配（双保险兜底）
+        if (className?.includes("language-mermaid")) {
           const index = mermaidIndexRef.current;
           mermaidIndexRef.current += 1;
           const pending =
             scan.unclosedMermaid && index === scan.mermaidCount - 1;
           return <MermaidBlock source={source} pending={pending} theme={theme} />;
         }
-        return <pre>{children}</pre>;
+        return renderCodeBlock(children);
       },
     }),
     [theme, scan],
   );
 
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={components}>
+    <Markdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={rehypePlugins}
+      components={components}
+    >
       {content}
     </Markdown>
   );
