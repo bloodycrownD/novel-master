@@ -111,6 +111,8 @@ export const {
   ipcPreferencesSetSessionFsVersionCheck,
   ipcPreferencesGetLlmStream,
   ipcPreferencesSetLlmStream,
+  ipcPreferencesGetThinkingContext,
+  ipcPreferencesSetThinkingContext,
   ipcProvidersList,
   ipcProvidersGet,
   ipcProvidersCreate,
