@@ -3,7 +3,7 @@
 ## 元信息
 - repo: novel-master（worktree .woktree/fetch-tool，分支 feat/fetch-tool）
 - base_sha: b3429b0（main）
-- head_sha: 8a2810d
+- head_sha: 8a2810d（被评审代码基线；其后 6b31c01/3791972 两个 docs-only commit，代码零变动）
 - prd_path / spec_path: docs/Iterations/fetch-tool/prd.md、docs/Iterations/fetch-tool/spec.md（只读参考，本轮不改）
 - review_round: 1 / dag_version: 2
 - 状态: draft（fix-spec 已落盘，修复待下游 wave 执行）
@@ -15,7 +15,7 @@
 - 文件：`packages/core/src/domain/tool/builtin/fetch-tool.ts` L207-209（clearTimeout 位置）、L235-248（text() 阶段及不可达的 aborted 分支）
 - 问题：`clearTimeout(timer)` 落在 `doFetch` 的 `finally`（L207-209），响应头一到计时器就被清掉，`response.text()`（L237）下载正文阶段不再有任何超时覆盖——慢滴流 body（服务器每隔一段时间滴一个字节维持连接）会让工具无限挂起、整个回合卡死。连带后果：`text()` catch 里的 `controller.signal.aborted` 分支（L239-246）因计时器已清永远不可达，是一段死代码。spec §3 的意图是「请求结束（无论成功或失败）后 clearTimeout」，请求应包含正文读取全程，实现与 spec 意图不符（详见 Spec deviations #2）。
 - 改法：把 `clearTimeout` 移到 `fetch + text()` 整体结束后的 `finally`——用同一个 try/finally 包住两个阶段（或把 `text()` 挪进 `doFetch` 的 try 块）；abort 语义随之覆盖 body 阶段：超时 abort 后 `text()` 会 reject 并进入 aborted 分支，拿到可读的超时文案。
-- 验收/测试：`packages/core/test/tool/fetch-tool.test.ts` 补 body 阶段挂起用例——mock `ctx.fetchFn` 立即返回 headers（复用文件内 fake Response helper），`text()` 永不 resolve；`mock.timers.tick(30_000)` 推进时钟后断言得到 ToolError FAILED 且文案含 `timed out` 与 URL（照 T-FT4 先例，L201-228）；既有 T-FT1~T-FT13 零回归。
+- 验收/测试：`packages/core/test/tool/fetch-tool.test.ts` 补 body 阶段挂起用例——mock `ctx.fetchFn` 立即返回 headers（复用文件内 fake Response helper），`text()` 返回**监听 `init.signal` 的挂起 Promise**（abort 时 reject AbortError，模拟 undici 对 body 读取的中断语义；不可用纯挂起 Promise——不监听 signal 的话即使修复正确测试也会永久挂起，node:test 默认无超时，fake Response helper 需加挂起选项）；`mock.timers.tick(30_000)` 推进时钟后断言得到 ToolError FAILED 且文案含 `timed out` 与 URL（照 T-FT4 先例，L201-228）；既有 T-FT1~T-FT13 零回归。（R2 校验补正，trivial 直接执行）
 - 来源：review round 1
 
 ### MF-2 [P2] description 宣称回流 JSON 对象，模型实际看到的是可读文本
