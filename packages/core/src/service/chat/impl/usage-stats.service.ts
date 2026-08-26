@@ -33,6 +33,16 @@ const BILLED_INPUT_SUM_SQL =
   `ELSE prompt_tokens END) ` +
   `FILTER (WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)`;
 
+/**
+ * 速率聚合的有效行 FILTER（summary 与桶查询共用）：token 三列与耗时两列
+ * 均非 NULL，且 duration_ms > first_token_ms（非流式行 first=duration
+ * 与时钟毛刺行不入分母，避免除零与负速率）。
+ */
+const RATE_FILTER_SQL =
+  `WHERE completion_tokens IS NOT NULL ` +
+  `AND first_token_ms IS NOT NULL ` +
+  `AND duration_ms IS NOT NULL AND duration_ms > first_token_ms`;
+
 /** 聚合 SELECT 列表（bucket 复用后丢弃 total_tokens）。 */
 const AGG_SELECT_SQL =
   `COUNT(*) AS calls, ` +
@@ -41,7 +51,10 @@ const AGG_SELECT_SQL =
   `COALESCE(SUM(total_tokens), 0) AS total_tokens, ` +
   `COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens, ` +
   `COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens, ` +
-  `COALESCE(${BILLED_INPUT_SUM_SQL}, 0) AS billed_input_tokens`;
+  `COALESCE(${BILLED_INPUT_SUM_SQL}, 0) AS billed_input_tokens, ` +
+  `AVG(first_token_ms) AS avg_first_token_ms, ` +
+  `CAST(SUM(completion_tokens) FILTER (${RATE_FILTER_SQL}) AS REAL) ` +
+  `/ (SUM(duration_ms - first_token_ms) FILTER (${RATE_FILTER_SQL}) / 1000.0) AS avg_tokens_per_second`;
 
 /** usage 非空判定的公共片断（NULL usage 行不计任何求和与次数）。 */
 const USAGE_NOT_NULL_SQL =
@@ -110,6 +123,8 @@ const ZERO_AGG_ROW: Row = {
   cache_read_tokens: 0,
   cache_creation_tokens: 0,
   billed_input_tokens: 0,
+  avg_first_token_ms: null,
+  avg_tokens_per_second: null,
 };
 
 /**
@@ -142,6 +157,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
       cacheReadTokens: Number(row.cache_read_tokens),
       cacheCreationTokens: Number(row.cache_creation_tokens),
       billedInputTokens: Number(row.billed_input_tokens),
+      avgFirstTokenMs:
+        row.avg_first_token_ms == null ? null : Number(row.avg_first_token_ms),
+      avgTokensPerSecond:
+        row.avg_tokens_per_second == null
+          ? null
+          : Number(row.avg_tokens_per_second),
       today,
     };
   }
@@ -343,6 +364,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
       cacheReadTokens: Number(row.cache_read_tokens),
       cacheCreationTokens: Number(row.cache_creation_tokens),
       billedInputTokens: Number(row.billed_input_tokens),
+      avgFirstTokenMs:
+        row.avg_first_token_ms == null ? null : Number(row.avg_first_token_ms),
+      avgTokensPerSecond:
+        row.avg_tokens_per_second == null
+          ? null
+          : Number(row.avg_tokens_per_second),
     };
   }
 }

@@ -51,6 +51,19 @@ export interface UsageStatsSummary {
    * 其余协议为 prompt；仅对 cache 列非 NULL 的行求和（缺失行不入分母）。
    */
   readonly billedInputTokens: number;
+  /**
+   * 平均首字延迟（ms）：AVG(first_token_ms)，仅对非 NULL 行求均值；
+   * 非流式请求的 first_token_ms = duration_ms（按完成时刻计），
+   * 会进入均值。存量数据全 NULL 时返回 null（UI 空态依据）。
+   */
+  readonly avgFirstTokenMs: number | null;
+  /**
+   * 平均 token 速率（tokens/s）：SUM(completion_tokens) ÷
+   * SUM(duration_ms − first_token_ms) / 1000 的加权口径，仅统计两列
+   * 非 NULL 且 duration_ms > first_token_ms 的行（排除等待首字的纯生成
+   * 速率；非流式行 first=duration 不入分母）。无有效行为 null。
+   */
+  readonly avgTokensPerSecond: number | null;
   readonly today: UsageStatsToday;
 }
 
@@ -63,6 +76,10 @@ export interface UsageStatsBucket {
   readonly cacheReadTokens: number;
   readonly cacheCreationTokens: number;
   readonly billedInputTokens: number;
+  /** 桶内平均首字延迟（ms）；无有效行为 null（口径同 UsageStatsSummary）。 */
+  readonly avgFirstTokenMs: number | null;
+  /** 桶内平均 token 速率（tokens/s）；无有效行为 null（口径同 UsageStatsSummary）。 */
+  readonly avgTokensPerSecond: number | null;
 }
 
 /**
