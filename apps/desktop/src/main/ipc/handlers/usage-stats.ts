@@ -44,6 +44,8 @@ function toSummaryDto(summary: UsageStatsSummary): UsageStatsSummaryDto {
     cacheReadTokens: summary.cacheReadTokens,
     cacheCreationTokens: summary.cacheCreationTokens,
     billedInputTokens: summary.billedInputTokens,
+    avgFirstTokenMs: summary.avgFirstTokenMs,
+    avgTokensPerSecond: summary.avgTokensPerSecond,
     today: {
       totalTokens: summary.today.totalTokens,
       calls: summary.today.calls,
@@ -60,6 +62,8 @@ function toBucketDto(bucket: UsageStatsBucket): UsageStatsBucketDto {
     cacheReadTokens: bucket.cacheReadTokens,
     cacheCreationTokens: bucket.cacheCreationTokens,
     billedInputTokens: bucket.billedInputTokens,
+    avgFirstTokenMs: bucket.avgFirstTokenMs,
+    avgTokensPerSecond: bucket.avgTokensPerSecond,
   };
 }
 
