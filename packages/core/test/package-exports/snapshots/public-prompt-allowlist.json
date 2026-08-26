@@ -3,6 +3,7 @@
   "DEFAULT_WORKPLACE_ASSISTANT_TEXT",
   "PromptError",
   "WORKPLACE_TRUE_COMPAT_ASSISTANT_TEXT",
+  "applyThinkingContextForLlm",
   "buildPromptAssemblyFromLayout",
   "buildPromptLlmInputFromLayout",
   "buildPromptPreviewSegmentsFromLayout",
