@@ -22,6 +22,11 @@ export interface PersistentPreferences {
   setLlmStreamEnabled(enabled: boolean): Promise<void>;
   resetLlmStreamEnabled(): Promise<void>;
 
+  /** 思考内容进入上下文（未设置时默认 true）。 */
+  getThinkingContextEnabled(): Promise<boolean>;
+  setThinkingContextEnabled(enabled: boolean): Promise<void>;
+  resetThinkingContextEnabled(): Promise<void>;
+
   /** User VFS 统一 tool turn（未设置时默认 true）。 */
   getUserVfsUnifiedToolTurn(): Promise<boolean>;
   setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void>;

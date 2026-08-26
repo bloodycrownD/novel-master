@@ -84,14 +84,29 @@ describe("PersistentPreferences", () => {
       assert.equal(await ctx.preferences.getUserVfsUnifiedToolTurn(), true);
     });
 
+  describe("chat.thinkingContext", () => {
+    it("defaults to true when unset", async () => {
+      const ctx = getNovelMasterTestContext();
+      assert.equal(await ctx.preferences.getThinkingContextEnabled(), true);
+    });
+
+    it("set false 后 get 为 false，reset 后回到 true", async () => {
+      const ctx = getNovelMasterTestContext();
+      await ctx.preferences.setThinkingContextEnabled(false);
+      assert.equal(await ctx.preferences.getThinkingContextEnabled(), false);
+      await ctx.preferences.resetThinkingContextEnabled();
+      assert.equal(await ctx.preferences.getThinkingContextEnabled(), true);
+    });
+
     it("throws PreferencesError on invalid stored boolean", async () => {
       const ctx = getNovelMasterTestContext();
       const kkv = createKkvService(ctx.conn);
-      await kkv.set("nm-preferences", "vfs.userVfsUnifiedToolTurn", "not-a-bool");
+      await kkv.set("nm-preferences", "chat.thinkingContext", "not-a-bool");
       await assert.rejects(
-        () => ctx.preferences.getUserVfsUnifiedToolTurn(),
+        () => ctx.preferences.getThinkingContextEnabled(),
         (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
       );
     });
   });
+});
 });
