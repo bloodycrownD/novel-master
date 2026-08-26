@@ -76,6 +76,18 @@
   --editor-gutter-border: #d8e4f4;
   --editor-active-line: rgba(0, 102, 232, 0.05);
   --editor-selection: rgba(0, 102, 232, 0.14);
+  /* 代码块语法高亮 token（亮色；暗色在 html[data-theme="dark"] 覆盖） */
+  --hljs-keyword: #cf222e;
+  --hljs-string: #0a3069;
+  --hljs-comment: #6e7781;
+  --hljs-number: #0550ae;
+  --hljs-title: #8250df;
+  --hljs-attr: #116329;
+  --hljs-literal: #005cc5;
+  --hljs-built_in: #953800;
+  --hljs-meta: #cf222e;
+  --hljs-tag: #116329;
+  --hljs-symbol: #0550ae;
   color-scheme: light;
 }
 
@@ -127,6 +139,18 @@ html[data-theme="dark"] {
   --editor-gutter-border: #262b35;
   --editor-active-line: rgba(61, 139, 253, 0.08);
   --editor-selection: rgba(61, 139, 253, 0.22);
+  /* 代码块语法高亮 token（暗色） */
+  --hljs-keyword: #ff7b72;
+  --hljs-string: #a5d6ff;
+  --hljs-comment: #8b949e;
+  --hljs-number: #79c0ff;
+  --hljs-title: #d2a8ff;
+  --hljs-attr: #7ee787;
+  --hljs-literal: #79c0ff;
+  --hljs-built_in: #ffa657;
+  --hljs-meta: #ff7b72;
+  --hljs-tag: #7ee787;
+  --hljs-symbol: #79c0ff;
   color-scheme: dark;
 }
 
@@ -4779,9 +4803,21 @@ html[data-theme="dark"] .chat-batch-bar {
   margin: 0.75em 0;
   padding: 12px;
   overflow: auto;
-  background: var(--background);
+  /* 块级独立观感：与行内 code（--background + --border-light）拉开 */
+  background: var(--surface-inset);
   border: 1px solid var(--border-light);
   border-radius: 8px;
+}
+
+/* 语言标签：伪元素不进 textContent，批注文本流零偏移 */
+.preview-markdown pre[data-lang]::before {
+  content: attr(data-lang);
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.78em;
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
 }
 
 .preview-markdown pre code {
@@ -4789,6 +4825,19 @@ html[data-theme="dark"] .chat-batch-bar {
   padding: 0;
   background: transparent;
 }
+
+/* 语法高亮 token（rehype-highlight 输出 .hljs-* 类） */
+.hljs-keyword { color: var(--hljs-keyword); }
+.hljs-string { color: var(--hljs-string); }
+.hljs-comment { color: var(--hljs-comment); }
+.hljs-number { color: var(--hljs-number); }
+.hljs-title { color: var(--hljs-title); }
+.hljs-attr { color: var(--hljs-attr); }
+.hljs-literal { color: var(--hljs-literal); }
+.hljs-built_in { color: var(--hljs-built_in); }
+.hljs-meta { color: var(--hljs-meta); }
+.hljs-tag { color: var(--hljs-tag); }
+.hljs-symbol { color: var(--hljs-symbol); }
 
 .preview-markdown a {
   color: var(--primary);
@@ -5864,10 +5913,22 @@ html[data-theme="dark"] .chat-batch-bar {
   margin: 0.5em 0;
   padding: 10px;
   overflow: auto;
-  background: var(--background);
+  /* 块级独立观感：与行内 code（--background + --border-light）拉开 */
+  background: var(--surface-inset);
   border: 1px solid var(--border-light);
   border-radius: 6px;
   font-size: 0.9em;
+}
+
+/* 语言标签：伪元素不进 textContent，批注文本流零偏移 */
+.chat-message__markdown pre[data-lang]::before {
+  content: attr(data-lang);
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.78em;
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
 }
 
 .chat-message__markdown pre code {
@@ -5912,12 +5973,13 @@ html[data-theme="dark"] .chat-batch-bar {
 }
 
 .chat-message--user .chat-message__markdown code {
-  background: var(--surface);
+  /* 行内 code 保持 --background：与新块级形态的 --surface-inset 分工，用户气泡内仍可区分 */
+  background: var(--background);
   border-color: var(--accent-user-border);
 }
 
 .chat-message--user .chat-message__markdown pre {
-  background: var(--surface);
+  background: var(--surface-inset);
   border-color: var(--accent-user-border);
 }
 
