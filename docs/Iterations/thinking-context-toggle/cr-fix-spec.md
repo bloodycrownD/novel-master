@@ -4,7 +4,7 @@
 
 - repo: novel-master（worktree `.woktree/thinking-context-toggle`）
 - base: `b3429b0`（main，五迭代 PRD/SPEC 定稿点）
-- head: `6e7e595`（feat/thinking-context-toggle，base..HEAD 共 11 个 commit）
+- head: `6e7e595`（被评审代码基线；其后 666661b/54f98c3 两个 docs-only commit，代码零变动）
 - review_round: 1
 - dag_version: 2
 - 状态: draft
