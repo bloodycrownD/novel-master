@@ -42,7 +42,7 @@ function toDayKey(ms: number): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
-/** 桶工厂（字段与 UsageStatsBucketDto 一致）。 */
+/** 桶工厂（字段与 UsageStatsBucketDto 一致；timing 缺省为存量 null 形态）。 */
 function bucket(
   bucketStartMs: number,
   calls: number,
@@ -50,6 +50,7 @@ function bucket(
   completionTokens: number,
   cacheReadTokens: number,
   billedInputTokens: number,
+  timing?: { avgFirstTokenMs?: number | null; avgTokensPerSecond?: number | null },
 ) {
   return {
     bucketStartMs,
@@ -59,6 +60,8 @@ function bucket(
     cacheReadTokens,
     cacheCreationTokens: 0,
     billedInputTokens,
+    avgFirstTokenMs: timing?.avgFirstTokenMs ?? null,
+    avgTokensPerSecond: timing?.avgTokensPerSecond ?? null,
   };
 }
 
@@ -70,12 +73,17 @@ const SUMMARY = {
   cacheReadTokens: 400,
   cacheCreationTokens: 600,
   billedInputTokens: 2000,
+  avgFirstTokenMs: 1200,
+  avgTokensPerSecond: 45.5,
   today: { totalTokens: 550, calls: 3 },
 };
 
 /** 3 个有量的天（today-6 / -5 / -2），中间夹杂无 cache 数据（billed=0）的桶。 */
 const DAILY = [
-  bucket(localMidnight(-6), 3, 1200, 800, 400, 1000),
+  bucket(localMidnight(-6), 3, 1200, 800, 400, 1000, {
+    avgFirstTokenMs: 900,
+    avgTokensPerSecond: 25,
+  }),
   bucket(localMidnight(-5), 1, 300, 200, 0, 0),
   bucket(localMidnight(-2), 2, 900_000, 100_000, 750_000, 900_000),
 ];
@@ -781,6 +789,238 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       });
       restore();
       process.env.TZ = prevTz;
+    }
+  });
+});
+
+describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
+  it("图表渲染图例行与 3 条网格刻度（含 max 标注）；柱节点不再有 title 属性（T-DT1）", async () => {
+    const restore = mockWindow(makeInvoke({}));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      await clickSegmented(root, "明细");
+
+      const container = root.findAll(
+        (node) => node.props["data-chart"] === "daily",
+      )[0]!;
+
+      // 图例行：输入 / 输出两项与色块类名
+      const legend = container.findAll(
+        (node) =>
+          typeof node.props.className === "string" &&
+          node.props.className === "token-stats-chart__legend",
+      )[0]!;
+      const legendText = legend.children
+        .map((c: { props: { children: unknown[] } }) =>
+          (c.props.children as unknown[]).map(String).join(""),
+        )
+        .join("");
+      assert.ok(legendText.includes("输入"));
+      assert.ok(legendText.includes("输出"));
+      assert.ok(
+        legend.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className.includes("token-stats-chart__legend-dot--input"),
+        ).length === 1,
+      );
+      assert.ok(
+        legend.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className.includes("token-stats-chart__legend-dot--output"),
+        ).length === 1,
+      );
+
+      // 3 条网格刻度线（max / mid / zero）与 max 数值标注（1_000_000 → 1M）
+      for (const mod of ["--max", "--mid", "--zero"]) {
+        assert.ok(
+          container.findAll(
+            (node) =>
+              typeof node.props.className === "string" &&
+              node.props.className.includes(
+                `token-stats-chart__grid-line${mod}`,
+              ),
+          ).length === 1,
+          `应有 ${mod} 网格线`,
+        );
+      }
+      const maxLabel = container.findAll(
+        (node) =>
+          typeof node.props.className === "string" &&
+          node.props.className.includes("token-stats-chart__grid-label--max"),
+      )[0]!;
+      assert.equal((maxLabel.children as unknown[]).map(String).join(""), "1M");
+
+      // 柱节点不再有原生 title 属性（hover 详情改受控卡片）
+      const cols = container.findAll(
+        (node) =>
+          typeof node.props.className === "string" &&
+          /^token-stats-chart__col( |$)/.test(node.props.className),
+      );
+      assert.equal(cols.length, DAILY.length);
+      for (const col of cols) {
+        assert.equal(col.props.title, undefined, "柱节点不应再带原生 title");
+      }
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("hover 柱子出现 data-tooltip 卡片且文案为 bucketTooltip 口径；离开后消失；aria-label 保留（T-DT2）", async () => {
+    const restore = mockWindow(makeInvoke({}));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      await clickSegmented(root, "明细");
+
+      const dayKey = toDayKey(DAILY[0]!.bucketStartMs);
+      const col = root
+        .findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            /^token-stats-chart__col( |$)/.test(node.props.className),
+        )
+        .find((node) => node.props["data-day"] === dayKey)!;
+
+      // 初始无卡片
+      assert.equal(
+        root.findAll((node) => node.props["data-tooltip"] != null).length,
+        0,
+      );
+
+      await act(async () => {
+        col.props.onMouseEnter();
+      });
+      const tooltip = root.findAll(
+        (node) => node.props["data-tooltip"] != null,
+      )[0]!;
+      assert.equal(tooltip.props["data-tooltip"], dayKey);
+      const text = (tooltip.children as unknown[]).map(String).join("");
+      assert.ok(text.includes(`输入 ${"1.2K"}`), "卡片文案应为 bucketTooltip 口径");
+      assert.ok(text.includes("输出 800"));
+      assert.ok(text.includes("调用 3 次"));
+
+      // aria-label 保留（读屏不回退）
+      assert.equal(col.props["aria-label"], text);
+
+      await act(async () => {
+        col.props.onMouseLeave();
+      });
+      assert.equal(
+        root.findAll((node) => node.props["data-tooltip"] != null).length,
+        0,
+        "离开柱子后卡片应消失",
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("汇总页新增平均速率 / 平均首字延迟两张指标卡；null 时显示「暂无数据」而非 0（T-DT3）", async () => {
+    const restore = mockWindow(makeInvoke({}));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      assert.equal(metricText(root, "avgTokensPerSecond"), "45.5 tok/s");
+      assert.equal(metricText(root, "avgFirstTokenMs"), "1.2 s");
+      // 口径注记随卡展示
+      const ttftCard = root.findByProps({ "data-metric": "avgFirstTokenMs" });
+      assert.ok(
+        ttftCard
+          .findAll(
+            (node) => node.props.className === "token-stats-card__hint",
+          )
+          .some((n) =>
+            (n.children as unknown[]).map(String).join("").includes("非流式"),
+          ),
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("新指标空态：summary 两字段 null → 卡片显示「暂无数据」而非 0（T-DT3）", async () => {
+    const restore = mockWindow(
+      makeInvoke({
+        summary: {
+          ...SUMMARY,
+          avgFirstTokenMs: null,
+          avgTokensPerSecond: null,
+        },
+      }),
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      assert.equal(metricText(root, "avgTokensPerSecond"), "暂无数据");
+      assert.equal(metricText(root, "avgFirstTokenMs"), "暂无数据");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("点选某天后汇总行含当日平均速率 / 首字延迟（有值与 null 两种形态）（T-DT4）", async () => {
+    const restore = mockWindow(makeInvoke({}));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      await clickSegmented(root, "明细");
+
+      // 有值形态：DAILY[0] avgTokensPerSecond=25、avgFirstTokenMs=900
+      const dayWithValues = toDayKey(DAILY[0]!.bucketStartMs);
+      await clickDayCol(root, dayWithValues);
+      let detail = root.findByProps({ "data-day-detail": dayWithValues });
+      let summaryText = detail.children
+        .filter(
+          (c: { props?: { className?: string } }) =>
+            c.props?.className === "token-stats-view__day-detail-summary",
+        )
+        .map((c: { props: { children: unknown[] } }) =>
+          (c.props.children as unknown[]).map(String).join(""),
+        )
+        .join("");
+      assert.ok(summaryText.includes("25.0 tok/s"), "当日平均速率");
+      assert.ok(summaryText.includes("900 ms"), "当日平均首字延迟");
+
+      // null 形态：DAILY[1] 无 timing → 「暂无数据」
+      const dayNull = toDayKey(DAILY[1]!.bucketStartMs);
+      await clickDayCol(root, dayNull);
+      detail = root.findByProps({ "data-day-detail": dayNull });
+      summaryText = detail.children
+        .filter(
+          (c: { props?: { className?: string } }) =>
+            c.props?.className === "token-stats-view__day-detail-summary",
+        )
+        .map((c: { props: { children: unknown[] } }) =>
+          (c.props.children as unknown[]).map(String).join(""),
+        )
+        .join("");
+      assert.ok(summaryText.includes("平均速率 暂无数据"));
+      assert.ok(summaryText.includes("平均首字延迟 暂无数据"));
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
     }
   });
 });
