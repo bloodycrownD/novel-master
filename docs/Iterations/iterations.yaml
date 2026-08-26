@@ -108,6 +108,37 @@ iterations:
       以 message 级整树 checkpoint + VFS revision 取代 batch/action/snapshot
       回滚模型；工具层与 checkpoint 解耦并支持并发。
 
+  # ---- 2026-08-25 新增五个迭代（PRD 定稿待确认）----
+  - id: token-usage-stats-enhance
+    status: active
+    notes: >
+      用量统计增强：mobile 明细条形图居中 + 双端图表样式精修 +
+      token 速率/首字延迟（TTFT）采集与展示。依赖 token-usage-stats。
+
+  - id: thinking-openai-unify
+    status: active
+    notes: >
+      思考强度 openai 协议统一：拆 GLM 特判，统一只发 reasoning_effort
+      （关档不发）。anthropic/gemini 分支零改动。依赖 thinking-level。
+
+  - id: thinking-context-toggle
+    status: active
+    notes: >
+      thinking 进入上下文开关（全局级，聊天设置）：开=仅最新一轮进上下文
+      （工具循环内保留），关=全剥离（协议强制保留除外）。默认开。
+      依赖 thinking-level。
+
+  - id: fetch-tool
+    status: active
+    notes: >
+      agent 内置 fetch 网络请求工具（GET + 截断保护 + 工具目录登记）。
+
+  - id: markdown-code-block-render
+    status: active
+    notes: >
+      markdown 代码块渲染：块级形态 + 语言标签 + 语法高亮（双端），
+      保留 mobile 折行与批注/mermaid 兼容。依赖 markdown-preview-mermaid。
+
 # ---- S-2 漂移对齐跟踪表（9 处）----
 # #1 sksp/spec.md L248            —— fixed（Step 16, 6dadb65e）
 # #2 agent-prompt-abstract-block  —— fixed（superseded-by event-bus-compaction-conditions）

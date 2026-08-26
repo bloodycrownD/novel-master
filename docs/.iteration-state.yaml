@@ -1,15 +1,48 @@
-# 编排状态（两迭代均 dev-ready 并已合入 main，随 v1.5.4 发布）
+# spec-check-loop 编排状态（novel-master，2026-08-26 起）
+# 五个迭代并行审查，各自独立计轮
 
-import-cache-align-and-mermaid-error:
-  branch: feat/import-cache-mermaid-error（已 ff 合入 main）
-  status: dev-ready（core 2111/2111、双端零新增失败、cr-func func-ready yes）
-  spec: docs/Iterations/import-cache-align-and-mermaid-error/spec.md
-  遗留: Step 4 真机 manual QA 合并后用户执行
+iterations:
+  token-usage-stats-enhance:
+    dag_version: 3
+    review_round: 2
+    prd_path: docs/Iterations/token-usage-stats-enhance/prd.md
+    spec_path: docs/Iterations/token-usage-stats-enhance/spec.md
+    open_must_fix: []
+    doc_fix_plan: []
+    status: execute-ready（主代理等效认定，待用户确认）
 
-token-usage-stats:
-  branch: feat/token-usage-stats-integration（已 merge 合入 main，30 commits）
-  status: dev-ready（CR-fix 17/17 闭合、cr-func 附条件收尾）
-  spec: docs/Iterations/token-usage-stats/spec.md、cr-fix-spec.md
-  遗留: 真机 QA；[3] 前缀历史模型名清洗未拍板
+  thinking-openai-unify:
+    dag_version: 3
+    review_round: 2
+    prd_path: docs/Iterations/thinking-openai-unify/prd.md
+    spec_path: docs/Iterations/thinking-openai-unify/spec.md
+    open_must_fix: []
+    doc_fix_plan: []
+    status: execute-ready（主代理等效认定，待用户确认）
 
-发版: v1.5.4 = 两迭代合计（CHANGELOG 补数据统计条目后重打 tag）
+  thinking-context-toggle:
+    dag_version: 5
+    review_round: 4
+    prd_path: docs/Iterations/thinking-context-toggle/prd.md
+    spec_path: docs/Iterations/thinking-context-toggle/spec.md
+    open_must_fix: []
+    doc_fix_plan: []
+    status: execute-ready（第 4 轮审查 Go，待用户确认）
+
+  fetch-tool:
+    dag_version: 3
+    review_round: 2
+    prd_path: docs/Iterations/fetch-tool/prd.md
+    spec_path: docs/Iterations/fetch-tool/spec.md
+    open_must_fix: []
+    doc_fix_plan: []
+    status: execute-ready（第 2 轮审查 Go + trivial 修复，待用户确认）
+
+  markdown-code-block-render:
+    dag_version: 3
+    review_round: 2
+    prd_path: docs/Iterations/markdown-code-block-render/prd.md
+    spec_path: docs/Iterations/markdown-code-block-render/spec.md
+    open_must_fix: []
+    doc_fix_plan: []
+    status: execute-ready（第 2 轮审查 Go + trivial 修复，待用户确认）
