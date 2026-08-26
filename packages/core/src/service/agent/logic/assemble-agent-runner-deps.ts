@@ -28,6 +28,7 @@ export interface AssembleAgentRunnerDepsInput {
     | "sessionKkv"
     | "streamRegistry"
     | "skills"
+    | "preferences"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
     readonly regexConfig?: RegexConfigService;
@@ -70,6 +71,8 @@ export function assembleAgentRunnerDeps(
     workplace: input.runtime.workplace,
     listAllSessionMessages: () =>
       input.runtime.messages.listBySession(input.toolCtx.sessionId),
+    // 思考上下文偏好窄切片透传（可选；未注入时 runner 等同默认开）。
+    preferences: input.runtime.preferences,
   };
 
   if (!input.includeCompactionOrchestrator) {

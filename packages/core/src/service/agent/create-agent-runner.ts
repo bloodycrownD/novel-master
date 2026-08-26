@@ -20,6 +20,7 @@ import type { CompactionConditionEvaluator } from "../compaction-conditions/crea
 import type { MessageService } from "../chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "../chat/message-transcript-effects.port.js";
 import type { MessageCheckpointService } from "../message-checkpoint/message-checkpoint.port.js";
+import type { PersistentPreferences } from "../persistent-preferences/persistent-preferences.port.js";
 import type { AgentRunner } from "./agent.port.js";
 import type { AgentStreamRegistry } from "./agent-stream-registry.port.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
@@ -58,6 +59,11 @@ export interface CreateAgentRunnerDeps {
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
+  /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
+  readonly preferences?: Pick<
+    PersistentPreferences,
+    "getThinkingContextEnabled"
+  >;
 }
 
 /** Creates an agent runner with injected dependencies. */

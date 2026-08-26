@@ -35,6 +35,7 @@ import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-
 import type { ModelRequestService } from "../../provider/model-request.port.js";import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "../../prompt/render-prompt.js";
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
+import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
 import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
@@ -55,7 +56,8 @@ import type { CompactionConditionEvaluator } from "@/service/compaction-conditio
 import { runCompaction } from "@/service/compaction-conditions/run-compaction.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
-import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
+import type { AgentStreamRegistry } from "../agent-stream-registry.port.js";
+import type { PersistentPreferences } from "../../persistent-preferences/persistent-preferences.port.js";
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -104,6 +106,11 @@ export interface DefaultAgentRunnerDeps {
   readonly streamRegistry?: AgentStreamRegistry;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+  /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
+  readonly preferences?: Pick<
+    PersistentPreferences,
+    "getThinkingContextEnabled"
+  >;
 }
 
 /**
@@ -259,6 +266,19 @@ export class DefaultAgentRunner implements AgentRunner {
     const savedModelForAppend = await this.deps.savedModels.findById(
       options.savedModelId,
     );
+
+    // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
+    // run 中途切换开关不影响进行中的 run，同 run 内各 step 口径一致。
+    const thinkingContextEnabled =
+      (await this.deps.preferences?.getThinkingContextEnabled()) ?? true;
+
+    // 档位前置门快照：与 model-request.service 的 thinking 解析同口径
+    // （thinkingLevel !== "off" 时才写 body.thinking）。savedModelForAppend
+    // 为 null 时取 true——保守保留方向（该请求本身会随 MODEL_NOT_SAVED
+    // 校验失败，取值仅占位）。
+    const requestThinkingEnabled =
+      savedModelForAppend == null ||
+      savedModelForAppend.settings.generation.thinkingLevel !== "off";
 
     /**
      * 统一 abort 处理：置 stopReason，保留已写入的 partial assistant。
@@ -433,7 +453,16 @@ export class DefaultAgentRunner implements AgentRunner {
           protocol,
           zones,
         );
-        const llmMessages = normalizeOrphanToolResultsForLlm(exportMessages);
+        // 思考上下文剥离：normalizeForLlmExport 之后、orphan 归一化之前——
+        // orphan 归一化会把孤立 tool_result 拍平成 text 块，拍平后的 user
+        // 消息会误判为「真实用户输入」把边界错误前移。
+        const strippedMessages = applyThinkingContextForLlm(exportMessages, {
+          enabled: thinkingContextEnabled,
+          protocol,
+          retainProtocolMinimum: true,
+          requestThinkingEnabled,
+        });
+        const llmMessages = normalizeOrphanToolResultsForLlm(strippedMessages);
 
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
         if (this.deps.listAllSessionMessages != null) {
