@@ -19,6 +19,7 @@ import {
 } from "./format-tool-output.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ParallelToolOutcome } from "./tool-runner.js";
+import { FETCH_MAX_BODY_BYTES } from "../builtin/fetch-tool.js";
 
 export interface BuildToolResultBlockMeta {
   readonly toolName?: string;
@@ -49,6 +50,18 @@ export function resolveToolResultOk(block: ToolResultBlock): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** 字节数格式化：1024 进位（B/KB/MB）、保留 1 位小数（整数位不带 .0）。 */
+function formatByteSize(bytes: number): string {
+  const trimFraction = (n: number): string => {
+    const s = n.toFixed(1);
+    return s.endsWith(".0") ? s.slice(0, -2) : s;
+  };
+  if (bytes < 1024) return `${bytes}B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${trimFraction(kb)}KB`;
+  return `${trimFraction(kb / 1024)}MB`;
 }
 
 function summarizeToolSuccess(
@@ -160,6 +173,29 @@ function summarizeToolSuccess(
       typeof output.name === "string"
     ) {
       return `已保存 ${output.name}`;
+    }
+  }
+
+  // fetch：状态 · 原始体积（如 `200 · 12.3KB`）；截断时保留量/原始量
+  // （如 `truncated · 50KB/1.2MB`）。保留量即字节预算（截断的正文部分
+  // ≤ FETCH_MAX_BODY_BYTES），非文本占位与预检占位很小，照 body 现算。
+  if (name === "fetch") {
+    const status = output.status;
+    const originalBytes = output.originalBytes;
+    if (typeof status === "number" && typeof originalBytes === "number") {
+      if (output.truncated === true) {
+        const bodyBytes =
+          typeof output.body === "string"
+            ? new TextEncoder().encode(output.body as string).byteLength
+            : undefined;
+        // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
+        const kept =
+          bodyBytes != null && bodyBytes < FETCH_MAX_BODY_BYTES
+            ? bodyBytes
+            : FETCH_MAX_BODY_BYTES;
+        return `truncated · ${formatByteSize(kept)}/${formatByteSize(originalBytes)}`;
+      }
+      return `${status} · ${formatByteSize(originalBytes)}`;
     }
   }
 
