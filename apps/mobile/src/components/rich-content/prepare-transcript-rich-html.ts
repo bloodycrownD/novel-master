@@ -3,9 +3,28 @@ import {
   decodeAfterSanitize,
   decodeForMarkdownInput,
 } from './decode-literal-html-entities';
+import {normalizeFenceLang, resolveHighlight} from './highlight-code';
 import {sanitizeRichHtml} from './sanitize-rich-html';
 
 const markdown = new MarkdownIt({html: true, linkify: true});
+
+// 代码块唯一高亮出口：覆盖 renderer.rules.fence（不挂 markdown-it highlight 选项，
+// fence 被覆盖后该选项不再被 fence 路径消费，双轨冗余）。
+// 清单内语言出 pre[data-lang] + hljs 类；无语言/不支持（含 mermaid）走默认 fence
+// escape，不出 data-lang、不出 hljs 类，mermaid-core 扫描 language-mermaid 不回归。
+const defaultFence = markdown.renderer.rules.fence!;
+markdown.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const token = tokens[idx]!;
+  const rawLang = token.info.trim().split(/\s+/)[0] || '';
+  const normalized = normalizeFenceLang(rawLang);
+  if (normalized) {
+    const highlighted = resolveHighlight(token.content, normalized);
+    if (highlighted) {
+      return `<pre data-lang="${normalized}"><code class="language-${rawLang} hljs">${highlighted}</code></pre>\n`;
+    }
+  }
+  return defaultFence(tokens, idx, options, env, self);
+};
 
 /**
  * Markdown → 消毒 HTML，供 WebView transcript 气泡（browser innerHTML）。
