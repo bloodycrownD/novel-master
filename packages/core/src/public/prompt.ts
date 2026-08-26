@@ -30,6 +30,8 @@ export type {
   LlmExportZones,
   LlmExportZone,
 } from "../domain/prompt/logic/normalize-for-llm-export.js";
+export { applyThinkingContextForLlm } from "../service/prompt/apply-thinking-context-for-llm.js";
+export type { ThinkingContextOptions } from "../service/prompt/apply-thinking-context-for-llm.js";
 export {
   ALLOWED_DYNAMIC_ROOT_MACROS,
   validateDynamicMacros,
