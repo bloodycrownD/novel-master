@@ -183,10 +183,15 @@ describe("agent-runner usage passthrough (T-S2)", () => {
     const msgs = await session.list();
     const assistant = msgs.find((m) => m.role === "assistant");
     assert.ok(assistant, "应 append 一条 assistant message");
-    assert.deepEqual(assistant!.usage, usage);
+    // token 字段原样透传；耗时字段自未次迭代起随 usage 一并采集（T-AR）。
+    const { firstTokenMs, durationMs, ...tokenUsage } = assistant!.usage!;
+    assert.ok(tokenUsage != null);
+    assert.deepEqual(tokenUsage, usage);
+    assert.ok(typeof firstTokenMs === "number");
+    assert.ok(typeof durationMs === "number");
   });
 
-  it("LLM 响应无 usage（undefined）→ assistant message 不挂 usage 字段（兼容）", async () => {
+  it("LLM 响应无 usage（undefined）→ assistant usage 仅含耗时字段（兼容）", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -220,8 +225,9 @@ describe("agent-runner usage passthrough (T-S2)", () => {
     const msgs = await session.list();
     const assistant = msgs.find((m) => m.role === "assistant");
     assert.ok(assistant);
-    assert.equal(assistant!.usage, undefined);
-    assert.equal("usage" in assistant!, false);
+    // 无 token usage 时 usage 仅含两个耗时字段（token 统计不受影响）。
+    const keys = Object.keys(assistant!.usage ?? {}).sort();
+    assert.deepEqual(keys, ["durationMs", "firstTokenMs"]);
   });
 
   it("多 round tool-call 每条 assistant 各自带 usage", async () => {
@@ -268,8 +274,12 @@ describe("agent-runner usage passthrough (T-S2)", () => {
     const msgs = await session.list();
     const assistants = msgs.filter((m) => m.role === "assistant");
     assert.equal(assistants.length, 2, "两轮各一条 assistant");
-    assert.deepEqual(assistants[0]!.usage, firstUsage);
-    assert.deepEqual(assistants[1]!.usage, secondUsage);
+    for (const [i, expected] of [firstUsage, secondUsage].entries()) {
+      const { firstTokenMs, durationMs, ...tokenUsage } = assistants[i]!.usage!;
+      assert.deepEqual(tokenUsage, expected);
+      assert.ok(typeof firstTokenMs === "number");
+      assert.ok(typeof durationMs === "number");
+    }
   });
 });
 
