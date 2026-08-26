@@ -51,3 +51,29 @@ export async function handlePreferencesSetLlmStream(
     return { ok: false, error: formatIpcError(err) };
   }
 }
+
+export async function handlePreferencesGetThinkingContext(): Promise<
+  IpcResult<boolean>
+> {
+  try {
+    const rt = await getDesktopRuntime();
+    return {
+      ok: true,
+      data: await rt.preferences.getThinkingContextEnabled(),
+    };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handlePreferencesSetThinkingContext(
+  enabled: boolean,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.preferences.setThinkingContextEnabled(enabled);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}

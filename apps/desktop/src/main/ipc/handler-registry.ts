@@ -55,8 +55,10 @@ import {
 import {
   handlePreferencesGetLlmStream,
   handlePreferencesGetSessionFsVersionCheck,
+  handlePreferencesGetThinkingContext,
   handlePreferencesSetLlmStream,
   handlePreferencesSetSessionFsVersionCheck,
+  handlePreferencesSetThinkingContext,
 } from './handlers/preferences.js';
 import {
   handleProviderModelsDeleteSaved,
@@ -324,6 +326,14 @@ export function registerHandlersFromRegistry(): void {
   bindBool(
     IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
     handlePreferencesSetLlmStream,
+  );
+  bindNoArg(
+    IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT,
+    handlePreferencesGetThinkingContext,
+  );
+  bindBool(
+    IPC_CHANNELS.PREFERENCES_SET_THINKING_CONTEXT,
+    handlePreferencesSetThinkingContext,
   );
 
   bindNoArg(IPC_CHANNELS.PROVIDERS_LIST, handleProvidersList);
