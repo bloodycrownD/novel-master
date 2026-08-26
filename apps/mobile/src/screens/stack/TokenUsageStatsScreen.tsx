@@ -95,6 +95,37 @@ function formatHitRate(rate: number | null): string {
   return rate == null ? '暂无数据' : `${Math.round(rate * 100)}%`;
 }
 
+/** 平均 token 速率展示：`x.x tok/s`；无数据时空态文案（汇总卡口径）。 */
+function formatTokensPerSecond(v: number | null): string {
+  if (v == null) {
+    return '暂无数据，自本版本起开始积累';
+  }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
+}
+
+/** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时空态文案。 */
+function formatFirstTokenMs(ms: number | null): string {
+  if (ms == null) {
+    return '暂无数据，自本版本起开始积累';
+  }
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+/** 选中天汇总行的新指标格式化（空态用简短版，区别于汇总卡的积累说明）。 */
+function formatDayTokensPerSecond(v: number | null): string {
+  if (v == null) {
+    return '暂无数据';
+  }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
+}
+
+function formatDayFirstTokenMs(ms: number | null): string {
+  if (ms == null) {
+    return '暂无数据';
+  }
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
 /** 汇总页签指标小卡；宽卡（wide）独占一行，用于命中率与今日。 */
 function SummaryTile({
   label,
@@ -210,6 +241,9 @@ export function TokenUsageStatsScreen() {
   const [hourlyBuckets, setHourlyBuckets] = useState<UsageStatsBucket[] | null>(
     null,
   );
+  // 长按详情：记录当前长按检视的柱 key（daily/hourly 共用；详情以图下方
+  // 固定行呈现而非浮层，规避长按与横向滚动的手势冲突）。
+  const [inspectedKey, setInspectedKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   // 首查失败/最近一轮失败的常驻错误文案（mobile/C-orch-2）：成功后清除；
   // 失败且无旧数据时内容区整体让位给错误条，不渲染 0 兜底卡片。
@@ -368,6 +402,16 @@ export function TokenUsageStatsScreen() {
     }));
   }, [hourlyBuckets]);
 
+  // 长按检视的柱：分别往两图数据里找（key 域不同：daily 为日期、hourly 为序号）
+  const dailyInspected =
+    inspectedKey != null
+      ? dailyData.find(d => d.key === inspectedKey)
+      : undefined;
+  const hourlyInspected =
+    inspectedKey != null
+      ? hourlyData.find(d => d.key === inspectedKey)
+      : undefined;
+
   const sortedModelRows = useMemo(
     () => [...modelRows].sort((a, b) => b.totalTokens - a.totalTokens),
     [modelRows],
@@ -471,7 +515,7 @@ export function TokenUsageStatsScreen() {
         <View style={styles.empty} testID="empty-cold-start">
           <Text style={[styles.emptyText, { color: tokens.textSecondary }]}>
             Token
-            用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录。
+            用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
           </Text>
         </View>
       ) : rangeEmpty ? (
@@ -524,6 +568,21 @@ export function TokenUsageStatsScreen() {
             wide
             tokens={tokens}
           />
+          {/* 新指标卡：无有效行为 null → 空态文案而非 0 */}
+          <SummaryTile
+            testID="summary-metric-avgTokensPerSecond"
+            label="平均速率"
+            value={formatTokensPerSecond(summary?.avgTokensPerSecond ?? null)}
+            wide
+            tokens={tokens}
+          />
+          <SummaryTile
+            testID="summary-metric-avgFirstTokenMs"
+            label="平均首字延迟"
+            value={formatFirstTokenMs(summary?.avgFirstTokenMs ?? null)}
+            wide
+            tokens={tokens}
+          />
           <TodayCard summary={summary} tokens={tokens} />
           {/* 聚合数据归汇总页签：分模型列表跟随五指标卡与今日卡展示。 */}
           <ListSectionTitle title="分模型汇总" tokens={tokens} />
@@ -571,9 +630,20 @@ export function TokenUsageStatsScreen() {
             data={dailyData}
             selectedKey={selectedDay ?? undefined}
             onSelect={setSelectedDay}
+            onLongPress={setInspectedKey}
             tokens={tokens}
             formatLabel={key => key.slice(8)}
           />
+          {dailyInspected != null ? (
+            <View testID="bar-inspect" style={styles.inspectRow}>
+              <Text style={[styles.inspectText, { color: tokens.textSecondary }]}>
+                {dailyInspected.key.slice(8)} 日 · 输入{' '}
+                {formatTokenCount(dailyInspected.primary)} · 输出{' '}
+                {formatTokenCount(dailyInspected.secondary ?? 0)} · 调用{' '}
+                {dailyInspected.calls ?? 0} 次
+              </Text>
+            </View>
+          ) : null}
           {selectedDay != null && selectedDayBucket != null ? (
             <View style={styles.dayDetail}>
               <Text style={[styles.dayDetailTitle, { color: tokens.text }]}>
@@ -593,14 +663,30 @@ export function TokenUsageStatsScreen() {
                     selectedDayBucket.billedInputTokens,
                   ),
                 )}{' '}
-                · 调用 {selectedDayBucket.calls} 次
+                · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
+                {formatDayTokensPerSecond(selectedDayBucket.avgTokensPerSecond)}{' '}
+                · 平均首字延迟{' '}
+                {formatDayFirstTokenMs(selectedDayBucket.avgFirstTokenMs)}
               </Text>
               <StackedBars
                 testID="hourly-chart"
                 data={hourlyData}
+                onLongPress={setInspectedKey}
                 tokens={tokens}
                 formatLabel={key => `${Number(key)}时`}
               />
+              {hourlyInspected != null ? (
+                <View testID="bar-inspect" style={styles.inspectRow}>
+                  <Text
+                    style={[styles.inspectText, { color: tokens.textSecondary }]}
+                  >
+                    {Number(hourlyInspected.key)}时 · 输入{' '}
+                    {formatTokenCount(hourlyInspected.primary)} · 输出{' '}
+                    {formatTokenCount(hourlyInspected.secondary ?? 0)} · 调用{' '}
+                    {hourlyInspected.calls ?? 0} 次
+                  </Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
         </>
@@ -760,7 +846,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   dayDetailSummary: {
-    fontSize: 13,
+    fontSize: 12,
+  },
+  /* 长按详情固定行：图下方常驻展示，不用浮层（规避手势冲突） */
+  inspectRow: {
+    marginTop: 6,
+  },
+  inspectText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   modelRow: {
     borderRadius: 10,
