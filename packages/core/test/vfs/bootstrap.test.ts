@@ -8,7 +8,7 @@ import {
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
-} from "../helpers/novel-master-fixture.js";;
+} from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
