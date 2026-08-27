@@ -922,30 +922,28 @@ export function AgentEditorForm(props: Props) {
           })}
           <View style={blockCardStyle}>
             {systemEnabled ? (
-              <FormField
+              <ExpandablePromptInput
                 label={PROMPT_REGION_LABELS.systemContent}
-                tokens={tokens}
-              >
-                <ExpandablePromptInput
-                  openEditor={() =>
-                    openPromptEditor(
-                      PROMPT_REGION_LABELS.systemContent,
-                      systemContent,
-                      setSystemContent,
-                    )
-                  }
-                  renderInline={ctx => (
-                    <FormTextInput
-                      tokens={tokens}
-                      value={systemContent}
-                      onChangeText={setSystemContent}
-                      multiline
-                      style={ctx.style}
-                      placeholder={PROMPT_REGION_LABELS.systemPlaceholderShort}
-                    />
-                  )}
-                />
-              </FormField>
+                openEditor={() =>
+                  openPromptEditor(
+                    PROMPT_REGION_LABELS.systemContent,
+                    systemContent,
+                    setSystemContent,
+                  )
+                }
+                renderInline={ctx => (
+                  <FormTextInput
+                    tokens={tokens}
+                    value={systemContent}
+                    onChangeText={setSystemContent}
+                    multiline
+                    style={ctx.style}
+                    selection={ctx.selection}
+                    onSelectionChange={ctx.onSelectionChange}
+                    placeholder={PROMPT_REGION_LABELS.systemPlaceholderShort}
+                  />
+                )}
+              />
             ) : (
               <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
                 {PROMPT_REGION_LABELS.systemDisabledHint}
@@ -966,27 +964,28 @@ export function AgentEditorForm(props: Props) {
                 >
                   {PROMPT_REGION_LABELS.skillsReadonlyHint}
                 </Text>
-                <FormField label="索引前缀语" tokens={tokens}>
-                  <ExpandablePromptInput
-                    openEditor={() =>
-                      openPromptEditor(
-                        '索引前缀语',
-                        skillsPrefixText,
-                        setSkillsPrefixText,
-                      )
-                    }
-                    renderInline={ctx => (
-                      <FormTextInput
-                        tokens={tokens}
-                        value={skillsPrefixText}
-                        onChangeText={setSkillsPrefixText}
-                        multiline
-                        style={ctx.style}
-                        placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
-                      />
-                    )}
-                  />
-                </FormField>
+                <ExpandablePromptInput
+                  label="索引前缀语"
+                  openEditor={() =>
+                    openPromptEditor(
+                      '索引前缀语',
+                      skillsPrefixText,
+                      setSkillsPrefixText,
+                    )
+                  }
+                  renderInline={ctx => (
+                    <FormTextInput
+                      tokens={tokens}
+                      value={skillsPrefixText}
+                      onChangeText={setSkillsPrefixText}
+                      multiline
+                      style={ctx.style}
+                      selection={ctx.selection}
+                      onSelectionChange={ctx.onSelectionChange}
+                      placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
+                    />
+                  )}
+                />
               </>
             ) : (
               <Text
@@ -1016,30 +1015,28 @@ export function AgentEditorForm(props: Props) {
                 >
                   {WORKPLACE_BLOCK_HINT}
                 </Text>
-                <FormField
+                <ExpandablePromptInput
                   label={WORKPLACE_ASSISTANT_TEXT_LABEL}
-                  tokens={tokens}
-                >
-                  <ExpandablePromptInput
-                    openEditor={() =>
-                      openPromptEditor(
-                        WORKPLACE_ASSISTANT_TEXT_LABEL,
-                        workplaceAssistantText,
-                        setWorkplaceAssistantText,
-                      )
-                    }
-                    renderInline={ctx => (
-                      <FormTextInput
-                        tokens={tokens}
-                        value={workplaceAssistantText}
-                        onChangeText={setWorkplaceAssistantText}
-                        multiline
-                        style={ctx.style}
-                        placeholder={WORKPLACE_ASSISTANT_TEXT_LABEL}
-                      />
-                    )}
-                  />
-                </FormField>
+                  openEditor={() =>
+                    openPromptEditor(
+                      WORKPLACE_ASSISTANT_TEXT_LABEL,
+                      workplaceAssistantText,
+                      setWorkplaceAssistantText,
+                    )
+                  }
+                  renderInline={ctx => (
+                    <FormTextInput
+                      tokens={tokens}
+                      value={workplaceAssistantText}
+                      onChangeText={setWorkplaceAssistantText}
+                      multiline
+                      style={ctx.style}
+                      selection={ctx.selection}
+                      onSelectionChange={ctx.onSelectionChange}
+                      placeholder={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                    />
+                  )}
+                />
               </>
             ) : (
               <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
@@ -1135,37 +1132,38 @@ export function AgentEditorForm(props: Props) {
                     >
                       {PROMPT_REGION_LABELS.persistRegionHint}
                     </Text>
-                    <FormField label="内容" tokens={tokens}>
-                      {(() => {
-                        // persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。
-                        const updatePersistContent = (v: string) =>
-                          setPersist(prev =>
-                            mapPersistTextBlocks(prev, (b, i) =>
-                              i === index ? { ...b, content: v } : b,
-                            ),
-                          );
-                        return (
-                          <ExpandablePromptInput
-                            openEditor={() =>
-                              openPromptEditor(
-                                block.name,
-                                block.content,
-                                updatePersistContent,
-                              )
-                            }
-                            renderInline={ctx => (
-                              <FormTextInput
-                                tokens={tokens}
-                                value={block.content}
-                                onChangeText={updatePersistContent}
-                                multiline
-                                style={ctx.style}
-                              />
-                            )}
-                          />
+                    {(() => {
+                      // persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。
+                      const updatePersistContent = (v: string) =>
+                        setPersist(prev =>
+                          mapPersistTextBlocks(prev, (b, i) =>
+                            i === index ? { ...b, content: v } : b,
+                          ),
                         );
-                      })()}
-                    </FormField>
+                      return (
+                        <ExpandablePromptInput
+                          label="内容"
+                          openEditor={() =>
+                            openPromptEditor(
+                              block.name,
+                              block.content,
+                              updatePersistContent,
+                            )
+                          }
+                          renderInline={ctx => (
+                            <FormTextInput
+                              tokens={tokens}
+                              value={block.content}
+                              onChangeText={updatePersistContent}
+                              multiline
+                              style={ctx.style}
+                              selection={ctx.selection}
+                              onSelectionChange={ctx.onSelectionChange}
+                            />
+                          )}
+                        />
+                      );
+                    })()}
                   </View>
                 ))}
               </View>
@@ -1187,26 +1185,27 @@ export function AgentEditorForm(props: Props) {
               用户聊天历史，开启后可给每次输入附加额外内容
             </Text>
             {customAttachEnabled ? (
-              <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
-                <ExpandablePromptInput
-                  openEditor={() =>
-                    openPromptEditor(
-                      CUSTOM_ATTACH_TEXT_LABEL,
-                      customAttachText,
-                      setCustomAttachText,
-                    )
-                  }
-                  renderInline={ctx => (
-                    <PromptMacroTextInput
-                      tokens={tokens}
-                      value={customAttachText}
-                      onChangeText={setCustomAttachText}
-                      placeholder="支持 $time、$week_cn、$filetree…"
-                      style={ctx.style}
-                    />
-                  )}
-                />
-              </FormField>
+              <ExpandablePromptInput
+                label={CUSTOM_ATTACH_TEXT_LABEL}
+                openEditor={() =>
+                  openPromptEditor(
+                    CUSTOM_ATTACH_TEXT_LABEL,
+                    customAttachText,
+                    setCustomAttachText,
+                  )
+                }
+                renderInline={ctx => (
+                  <PromptMacroTextInput
+                    tokens={tokens}
+                    value={customAttachText}
+                    onChangeText={setCustomAttachText}
+                    placeholder="支持 $time、$week_cn、$filetree…"
+                    style={ctx.style}
+                    selection={ctx.selection}
+                    onSelectionChange={ctx.onSelectionChange}
+                  />
+                )}
+              />
             ) : null}
           </View>
 
@@ -1307,36 +1306,37 @@ export function AgentEditorForm(props: Props) {
                         {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
                       </Text>
                     ) : null}
-                    <FormField label="内容" tokens={tokens}>
-                      {(() => {
-                        const updateDynamicContent = (v: string) =>
-                          setDynamic(prev =>
-                            prev.map((b, i) =>
-                              i === index ? { ...b, content: v } : b,
-                            ),
-                          );
-                        return (
-                          <ExpandablePromptInput
-                            openEditor={() =>
-                              openPromptEditor(
-                                block.name,
-                                block.content,
-                                updateDynamicContent,
-                              )
-                            }
-                            renderInline={ctx => (
-                              <PromptMacroTextInput
-                                tokens={tokens}
-                                value={block.content}
-                                onChangeText={updateDynamicContent}
-                                placeholder="支持 $time、$week_cn、$filetree…"
-                                style={ctx.style}
-                              />
-                            )}
-                          />
+                    {(() => {
+                      const updateDynamicContent = (v: string) =>
+                        setDynamic(prev =>
+                          prev.map((b, i) =>
+                            i === index ? { ...b, content: v } : b,
+                          ),
                         );
-                      })()}
-                    </FormField>
+                      return (
+                        <ExpandablePromptInput
+                          label="内容"
+                          openEditor={() =>
+                            openPromptEditor(
+                              block.name,
+                              block.content,
+                              updateDynamicContent,
+                            )
+                          }
+                          renderInline={ctx => (
+                            <PromptMacroTextInput
+                              tokens={tokens}
+                              value={block.content}
+                              onChangeText={updateDynamicContent}
+                              placeholder="支持 $time、$week_cn、$filetree…"
+                              style={ctx.style}
+                              selection={ctx.selection}
+                              onSelectionChange={ctx.onSelectionChange}
+                            />
+                          )}
+                        />
+                      );
+                    })()}
                   </View>
                 ))}
               </View>

@@ -1,88 +1,122 @@
 /**
- * 提示词内联输入包装（UX 简化）：内联编辑器经 ctx.style 限高 5 行
- * （超出部分输入框内部滚动，仍可正常输入），右上角浮一枚常驻「全屏编辑」
- * 小按钮（trailing overlay，标准做法）跳转 PromptEditor 全屏页
- * （保存才回填，取消不动）。按钮叠加在输入区内，内联输入以 paddingRight
- * 让出按钮下方空间，避免文字钻到图标下面。
+ * 提示词内联输入包装（UX 简化）：完整字段结构——label 行（label 文本居左、
+ * 「全屏编辑」小按钮居右，标准表单动作位）+ 输入区。内联编辑器经 ctx.style
+ * 限高 8 行（超出部分输入框内部滚动，仍可正常输入），点按钮跳转
+ * PromptEditor 全屏页（保存才回填，取消不动）。
+ *
+ * 初始视口置顶：Android 受控 multiline TextInput 挂载带长文时，原生默认把
+ * 光标放到文末，输入框内部滚动跟随光标，初始视口落在文本尾部。这里挂载后
+ * 一拍短暂把 selection 置 0（仿 ComposerAtPathInput 的 pendingSelection 模式）
+ * 把视口拉回顶部；原生应用后回报 selectionChange 即解除受控，用户交互不再
+ * 被干预。真机行为待验收确认。
  */
-import React, {useCallback} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   Pressable,
   StyleSheet,
   Text,
   View,
+  type NativeSyntheticEvent,
   type StyleProp,
+  type TextInputSelectionChangeEventData,
   type TextStyle,
 } from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
 import {PROMPT_INLINE_MAX_HEIGHT} from './prompt-collapse';
 
-/** 内联输入右侧让位宽度（≈ 按钮宽 + 右边距），文字不钻到图标下面。 */
-export const PROMPT_INLINE_PADDING_RIGHT = 32;
+type PromptSelection = {start: number; end: number};
 
 type InlineRenderContext = {
-  /** 内联输入补充样式：maxHeight 限 5 行 + paddingRight 让位右上角按钮。 */
+  /** 内联输入补充样式：maxHeight 限 8 行。 */
   style: StyleProp<TextStyle>;
+  /** 短暂受控的初始光标位置（挂载置顶用），用户交互后回到 undefined。 */
+  selection?: PromptSelection;
+  /** 内联输入的 selectionChange：任何回报都解除初始受控。 */
+  onSelectionChange: (
+    event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
+  ) => void;
 };
 
 type Props = {
-  /** 渲染内联编辑器（宏能力保留；限高/让位样式经 ctx.style 传给输入框）。 */
+  /** 字段 label（由本组件统一渲染在 label 行左侧）。 */
+  label: string;
+  /** 渲染内联编辑器（宏能力保留；限高/置顶样式与事件经 ctx 传给输入框）。 */
   renderInline: (ctx: InlineRenderContext) => React.ReactNode;
   /** 打开全屏编辑页（保存才回填，取消不动）。 */
   openEditor: () => void;
   testID?: string;
 };
 
-export function ExpandablePromptInput({renderInline, openEditor, testID}: Props) {
+export function ExpandablePromptInput({
+  label,
+  renderInline,
+  openEditor,
+  testID,
+}: Props) {
   const {tokens} = useTheme();
+  const [initialSelection, setInitialSelection] =
+    useState<PromptSelection | null>(null);
+
+  // 挂载后一拍才置 0：避开原生初始把光标放文末的定位过程，
+  // 我们的 selection 生效后视口随光标回到顶部。
+  useEffect(() => {
+    const timer = setTimeout(() => setInitialSelection({start: 0, end: 0}), 0);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleOpenPress = useCallback(() => {
     openEditor();
   }, [openEditor]);
 
+  const handleInlineSelectionChange = useCallback(() => {
+    setInitialSelection(null);
+  }, []);
+
   return (
     <View testID={testID} style={styles.root}>
-      {renderInline({style: styles.inlineInput})}
-      <Pressable
-        testID={testID ? `${testID}-fullscreen` : undefined}
-        onPress={handleOpenPress}
-        accessibilityLabel="全屏编辑"
-        style={[
-          styles.openBtn,
-          {
-            backgroundColor: tokens.bgSecondary,
-            borderColor: tokens.borderLight,
-          },
-        ]}
-        hitSlop={8}>
-        <Text style={[styles.openGlyph, {color: tokens.textSecondary}]}>
-          ⤢
+      <View style={styles.labelRow}>
+        <Text
+          style={[styles.labelText, {color: tokens.textSecondary}]}
+          numberOfLines={1}>
+          {label}
         </Text>
-      </Pressable>
+        <Pressable
+          testID={testID ? `${testID}-fullscreen` : undefined}
+          onPress={handleOpenPress}
+          accessibilityLabel="全屏编辑"
+          style={styles.openBtn}
+          hitSlop={8}>
+          <Text style={[styles.openGlyph, {color: tokens.textSecondary}]}>
+            ⤢ 全屏
+          </Text>
+        </Pressable>
+      </View>
+      {renderInline({
+        style: styles.inlineInput,
+        selection: initialSelection ?? undefined,
+        onSelectionChange: handleInlineSelectionChange,
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // 相对定位容器：按钮以 absolute 浮在输入区右上角（不再单独占一列）。
-  root: {position: 'relative'},
-  // 集中管理内联限高（5 行）与右侧让位，调用点统一吃这份补充样式。
+  // 对齐 FormField 的 wrap（label 与控件间距 6）。
+  root: {gap: 6},
+  // label 行：label 居左、全屏按钮居右（标准表单动作位，按钮不再浮在输入区上）。
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  // 对齐 FormField 的 label 样式。
+  labelText: {fontSize: 13, fontWeight: '500', flexShrink: 1},
+  // 轻量文字按钮：与 label 同行，不抢输入视线。
+  openBtn: {flexShrink: 0},
+  openGlyph: {fontSize: 12, fontWeight: '600', lineHeight: 16},
+  // 集中管理内联限高（8 行），调用点统一吃这份补充样式。
   inlineInput: {
     maxHeight: PROMPT_INLINE_MAX_HEIGHT,
-    paddingRight: PROMPT_INLINE_PADDING_RIGHT,
   },
-  // 小尺寸浮层按钮：恒定轻透明度，不抢输入视线（RN 简化，不做 hover/focus 态）。
-  openBtn: {
-    position: 'absolute',
-    top: 2,
-    right: 2,
-    width: 28,
-    height: 28,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0.6,
-  },
-  openGlyph: {fontSize: 14, lineHeight: 18},
 });
