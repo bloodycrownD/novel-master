@@ -212,55 +212,6 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     }
   });
 
-  it('T-C3: 纯打字且 mention 集合未变时复用 children，不重推原生（tag 闪烁治理）', () => {
-    const onChangeText = jest.fn();
-    let tree: TestRenderer.ReactTestRenderer;
-    act(() => {
-      tree = TestRenderer.create(
-        <ComposerAtPathInput value="见 @/a.md 后文" onChangeText={onChangeText} />,
-      );
-    });
-    let input = tree!.root.findByType(TextInput);
-    const childrenBefore = input.props.children;
-
-    // 追加纯文本：mention 集合不变，children 元素应复用（引用不变 → RN 不重推原生）
-    act(() => {
-      input.props.onChangeText('见 @/a.md 后文多');
-    });
-    input = tree!.root.findByType(TextInput);
-    expect(input.props.children).toBe(childrenBefore);
-
-    // 光标移动等无文本变化的置渲染同样复用
-    act(() => {
-      input.props.onChangeText('见 @/a.md 后文多');
-    });
-    input = tree!.root.findByType(TextInput);
-    expect(input.props.children).toBe(childrenBefore);
-  });
-
-  it('T-C4: 程序化 replaceCommittedText 推进新 children', () => {
-    const handleRef = React.createRef<ComposerAtPathInputHandle>();
-    const onChangeText = jest.fn();
-    let tree: TestRenderer.ReactTestRenderer;
-    act(() => {
-      tree = TestRenderer.create(
-        <ComposerAtPathInput
-          ref={handleRef}
-          value="见 @/a.md 后文"
-          onChangeText={onChangeText}
-        />,
-      );
-    });
-    let input = tree!.root.findByType(TextInput);
-    const childrenBefore = input.props.children;
-
-    act(() => {
-      handleRef.current!.replaceCommittedText('看 @/b.md');
-    });
-    input = tree!.root.findByType(TextInput);
-    expect(input.props.children).not.toBe(childrenBefore);
-  });
-
   it('T-SC1: selectionColor 用 tokens.selection，≠ primary 原色', () => {
     expect(lightTheme.selection).not.toBe(lightTheme.primary);
     expect(darkTheme.selection).not.toBe(darkTheme.primary);

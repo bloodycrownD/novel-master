@@ -38,16 +38,6 @@ import {
   type ComposerTriggersConfig,
 } from './composer-at-path-mention';
 
-/** mention 集合签名：按序拼接各 mention 段文本；纯打字不改签名时无需重推 children。 */
-function mentionSetSignature(
-  parts: readonly {config?: unknown; text: string}[],
-): string {
-  return parts
-    .filter(part => part.config != null)
-    .map(part => part.text)
-    .join('\u0000');
-}
-
 export type ComposerAtPathInputHandle = {
   /**
    * 程序化整段写入（选择器插入等）。
@@ -172,7 +162,7 @@ export const ComposerAtPathInput = forwardRef<
     [onSelectionChange],
   );
 
-  const {textInputProps, triggers, mentionState} = useMentions({
+  const {textInputProps, triggers} = useMentions({
     value: mentionValue,
     onChange: emitMentionValue,
     triggersConfig: triggersConfig as TriggersConfig<'atPath' | 'skill'>,
@@ -185,30 +175,6 @@ export const ComposerAtPathInput = forwardRef<
     },
   });
   triggersRef.current = triggers;
-
-  // tag 闪烁治理：打字后原生侧文本已最新，重推 children 只会重建 spannable
-  // （背景胶囊闪一下）。仅当「新 children 的纯文本 == 原生最近上报的文本」
-  // 且 mention 集合未变时复用上一份 children（元素引用不变则 RN 不重推原生
-  // 文本）；程序化写入/水化/typeahead 点选/原子删都会改变两者之一，自然重推。
-  const plainOfMentionState = mentionState.parts
-    .map(part => part.text)
-    .join('');
-  const lastNativePlainRef = useRef(mentionValueToPlain(mentionValue));
-  const lastChildrenRef = useRef<React.ReactNode>(textInputProps.children);
-  const lastSignatureRef = useRef(mentionSetSignature(mentionState.parts));
-
-  const currentSignature = mentionSetSignature(mentionState.parts);
-  if (
-    plainOfMentionState === lastNativePlainRef.current &&
-    currentSignature === lastSignatureRef.current
-  ) {
-    // 原生文本已最新且 mention 集合未变：复用 children，跳过原生重推
-  } else {
-    lastNativePlainRef.current = plainOfMentionState;
-    lastChildrenRef.current = textInputProps.children;
-    lastSignatureRef.current = currentSignature;
-  }
-  const stableChildren = lastChildrenRef.current;
 
   // 外部 value（草稿水化 / 清空）→ 内部；提升完整 token 恢复 tag，纯文本不成 tag 的语义不变
   useLayoutEffect(() => {
@@ -272,13 +238,9 @@ export const ComposerAtPathInput = forwardRef<
         triggersConfig,
       );
       if (atomic != null) {
-        // 原子删改变 mention 集合，需要重推 children 清理残留胶囊 span
-        lastNativePlainRef.current = changedPlain;
         emitMentionValue(atomic);
         return;
       }
-      // 记录原生上报的最新文本：随后渲染据此判断是否可复用 children
-      lastNativePlainRef.current = changedPlain;
       textInputProps.onChangeText(changedPlain);
     },
     [emitMentionValue, mentionValue, textInputProps, triggersConfig],
@@ -300,7 +262,7 @@ export const ComposerAtPathInput = forwardRef<
       onChangeText={handleChangeText}
       onSelectionChange={textInputProps.onSelectionChange}
     >
-      {stableChildren}
+      {textInputProps.children}
     </TextInput>
   );
 });
