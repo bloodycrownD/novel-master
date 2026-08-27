@@ -8,8 +8,9 @@ import {
   Text,
   View,
   type NativeSyntheticEvent,
-  type TextInputContentSizeChangeEventData,
   type TextInputSelectionChangeEventData,
+  type StyleProp,
+  type TextStyle,
 } from 'react-native';
 import type {ThemeTokens} from '../../theme/tokens';
 import {FormTextInput} from '../form/FormTextInput';
@@ -25,12 +26,8 @@ type Props = {
   value: string;
   onChangeText: (next: string) => void;
   placeholder?: string;
-  /** 透传给内部 FormTextInput 的焦点/尺寸事件（超长折叠层需要感知聚焦/失焦与内容高度）。 */
-  onFocus?: () => void;
-  onBlur?: () => void;
-  onContentSizeChange?: (
-    event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>,
-  ) => void;
+  /** 透传给内部 FormTextInput 的样式（内联限高 maxHeight 等） */
+  style?: StyleProp<TextStyle>;
 };
 
 export function PromptMacroTextInput({
@@ -38,9 +35,7 @@ export function PromptMacroTextInput({
   value,
   onChangeText,
   placeholder,
-  onFocus,
-  onBlur,
-  onContentSizeChange,
+  style,
 }: Props) {
   const selectionRef = useRef({start: value.length, end: value.length});
   const prevValueRef = useRef(value);
@@ -94,14 +89,12 @@ export function PromptMacroTextInput({
         tokens={tokens}
         onChangeText={handleChangeText}
         onSelectionChange={handleSelectionChange}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        onContentSizeChange={onContentSizeChange}
         selection={pendingSelection ?? undefined}
         multiline
         placeholder={placeholder}
         autoCapitalize="none"
-        autoCorrect={false}>
+        autoCorrect={false}
+        style={style}>
         {/* RN TextInput：value 与 children 互斥；由 children 着色，onChangeText 驱动纯文本 */}
         {value.length === 0 ? null : (
           <Text>

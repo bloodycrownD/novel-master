@@ -19,7 +19,7 @@ date: 2026-08-27
 1. **R1（mobile composer）**：根因定位为 mention 胶囊 `paddingHorizontal: 3` 使 tag 比同长度纯文本宽 6px，多行文本接近换行阈值时，JS 侧带样式测量与原生测量的换行点在两次渲染间来回跳，行数 ±1 导致输入框在 56~160 的高度档位间跳变。修复：去掉两个 trigger `textStyle` 的水平 padding，保留 `backgroundColor + borderRadius` 胶囊（不改水平测量）。真机验收后追加第二层修复（变更点 #17）：库的 children 全量重建机制仍在，但纯打字时原生侧文本已最新、重推是冗余的——在 wrapper 层对「新 children 纯文本 == 原生最近上报文本且 mention 集合未变」的场景复用 children 元素，跳过原生 spannable 重推，消除 tag 每键闪烁。
 2. **R2（mobile 项目工作区返回）**：`VfsFileManager` 已通过 `useImperativeHandle` 暴露 `canGoUp()/goUp()` 并支持 `onDirectoryChange` 回调，聊天工作区（`ChatConversationPanel`）已把该状态注册进 `ChatTabNavigationProvider` 的 `WorkspaceBackCtx`；项目工作区（`ChatSessionListPanel`）缺 ref 接线与注册，且 `useAndroidChatBackHandler` 的 `template` 分支无条件 `showSessionsPanel()`。修复：补齐接线（面板不可见时注册 `null`，与聊天工作区互斥），handler 分支改为「先 `workspaceGoUp()`，根目录才 `showSessionsPanel()`」。
 3. **R3（双端提示词折叠 + 全屏编辑）**：
-   - **mobile**：新建 `ExpandablePromptInput` 包装组件（render-prop 注入 `onBlur`，因为 RN 事件不冒泡）+ 新建轻量 stack 路由 `PromptEditor`（函数作路由参数，仿 `FileEditor` 的 `onSessionVfsSaved` 先例），全屏编辑内核复用仓库内 `CodeEditorWebView`（受控 `value/onChange`，伪路径 `prompt.txt` 走纯文本高亮）。`PromptMacroTextInput` 补可选 `onFocus`/`onBlur` 透传。
+   - **mobile**：新建 `ExpandablePromptInput` 包装组件 + 新建轻量 stack 路由 `PromptEditor`（函数作路由参数，仿 `FileEditor` 的 `onSessionVfsSaved` 先例），全屏编辑内核复用仓库内 `CodeEditorWebView`（受控 `value/onChange`，伪路径 `prompt.txt` 走纯文本高亮）。（第二轮验收后简化：不再做折叠态，内联限高 5 行 + 常驻全屏按钮，见变更点 #19）
    - **desktop**：新建自包含 `PromptCollapsibleField` 组件（children 承载内联编辑器以保留 `PromptMacroTextarea` 宏能力与 Enter 快捷键；React 合成 focus 事件冒泡，外层 div 可捕获 focus/blur 做失焦折叠），全屏编辑用内嵌 Modal（复用 `.text-prompt-overlay`）+ 现成 `CodeEditor`（`languagePath="prompt.txt"` 即纯文本），草稿副本编辑、保存才回填。
    - 阈值常量双端各自定义（mobile `components/agent/prompt-collapse.ts`、desktop `features/settings/prompt-collapse.ts`；后经拍板改为行数/高度判定：`PROMPT_INLINE_MAX_LINES = 5` + 实测高度/DOM 溢出判定 + `PROMPT_PREVIEW_LINES = 3`，见变更点 #18），便于测试与调整。
 
@@ -82,7 +82,10 @@ apps/desktop/renderer/
 | 15 | `apps/desktop/renderer/features/settings/AgentWorkplaceBlockCard.tsx` | 组件内部 L55-61 的 textarea 换 `PromptCollapsibleField`（组件完全受控、props 不变，两个调用方零改动） | 探索报告 B2 |
 | 16 | `apps/desktop/renderer/styles/shell.css` | 新增 `.prompt-field-clamp`（3 行 line-clamp，仿 `.chat-message__body-clamp` L3949）与 `.prompt-editor-modal`（近全屏内容区，overlay 复用 `.text-prompt-overlay` L5182） | 探索报告 B2 |
 | 17 | `apps/mobile/src/components/chat/ComposerAtPathInput.tsx` | 真机验收追加：children 复用治理——新 children 纯文本 == 原生最近上报文本（handleChangeText 维护 lastNativePlainRef）且 mention 集合签名未变时复用上一份 children 元素，跳过原生 spannable 重推；程序化写入/水化/typeahead 点选/原子删自然重推（99f5299，T-C3/T-C4） | 用户真机反馈 |
-| 18 | 双端 `prompt-collapse.ts` 及折叠组件 | 阈值拍板变更：从「600 字符」改为「超过 5 行折叠、预览 3 行」——mobile 以 onContentSizeChange 实测内容高度（>110px）判定、未测量前以换行数初判；desktop 以 DOM 实测（textarea scrollHeight > clientHeight + 1，含 1px 防亚像素容差）判定，useLayoutEffect 防首帧闪撑（259973e/238400a/b907dba） | 用户验收反馈 |
+| 18 | 双端 `prompt-collapse.ts` 及折叠组件 | 【已实施后被 #19 取代】阈值从「600 字符」改为「超过 5 行折叠、预览 3 行」（mobile 实测高度 / desktop DOM 溢出，259973e/238400a/b907dba） | 用户验收反馈 |
+| 19 | 双端提示词字段（第三轮拍板，取代 #6/#13/#18 的折叠机制） | UX 简化：废弃「超长折叠成省略预览 + 失焦折叠 + 测量/初判」整套机制，改为**内联输入限高 5 行**（mobile maxHeight 110 与 minHeight 88 共存；desktop CSS `.prompt-field-inline textarea { max-height: 5 行 }`）+ 字段旁常驻**全屏编辑按钮**（mobile ⤢ / desktop ⛶）进全屏编辑（mobile 路由 / desktop Modal 均保留）；PromptEditorScreen 补键盘顶起（Android keyboard-controller / iOS KeyboardAvoidingView）+ 顶栏左右两角「取消/保存」（照 FileEditorScreen 模式）；desktop 删 prompt-collapse.ts，mobile 仅留两个常量（e3f89c0/cb5c019/cb592d4） | 用户验收反馈 |
+| 20 | `apps/mobile/src/components/chat/ComposerAtPathInput.tsx` | 变更点 #17（children 复用）真机验收翻车（打字后 tag 消失），已整体回滚（e8aac80）；追加 metro 调试日志（typing/children-push/hydrate，仅 __DEV__，290646b）供真机重新定位闪烁根因；T-C3/T-C4 随回滚移除 | 用户真机反馈 |
+| 21 | `apps/mobile/src/components/agent/AgentEditorForm.tsx` | dirty 标记修复：「有未保存的更改」banner 改为渲染期随 snapshot 同帧派生（不依赖跨组件 effect 时序——native-stack 转场 freeze 下 effect 通知不可靠是真机不刷新的根因）；`onDirtyChange` 保留驱动 useUnsavedGuard；新增 agent-editor-form-dirty.test.tsx 回归（413e0a9） | 用户验收反馈 |
 
 ## 详细实现步骤
 
@@ -100,9 +103,12 @@ apps/desktop/renderer/
 - Step 12 — phase-prompt-collapse-desktop — blocking: yes — qa: auto：新增 `prompt-collapse.ts` 与 `PromptCollapsibleField.tsx`（#12、#13）。
 - Step 13 — phase-prompt-collapse-desktop — blocking: yes — qa: manual_user：`AgentEditorView` 5 点 + `AgentWorkplaceBlockCard` 内部替换（#14、#15）；desktop 手动验收（T-PD1）。
 - Step 14 — phase-verify — blocking: yes — qa: auto：mobile `npm run typecheck` + `npm run test`；desktop `npm run typecheck`（含 `npx tsc --noEmit -p tsconfig.renderer.json` 兜底）+ `npm run lint`。
-- Step 15 — phase-composer-stable — blocking: yes — qa: auto：真机验收反馈追加：children 复用治理消除 tag 每键闪烁（变更点 #17，T-C3/T-C4）。
-- Step 16 — phase-prompt-collapse-mobile — blocking: yes — qa: auto：阈值改行数：实测内容高度 + 换行数初判（变更点 #18 mobile 部分）。
-- Step 17 — phase-prompt-collapse-desktop — blocking: yes — qa: manual_user：阈值改行数：DOM 实测溢出判定（变更点 #18 desktop 部分）。
+- Step 15 — phase-composer-stable — blocking: yes — qa: auto：真机验收反馈追加：children 复用治理消除 tag 每键闪烁（变更点 #17，T-C3/T-C4）。【已回滚：真机 tag 消失，见变更点 #20】
+- Step 16 — phase-prompt-collapse-mobile — blocking: yes — qa: auto：阈值改行数：实测内容高度 + 换行数初判（变更点 #18 mobile 部分）。【已被 Step 19 简化方案取代】
+- Step 17 — phase-prompt-collapse-desktop — blocking: yes — qa: manual_user：阈值改行数：DOM 实测溢出判定（变更点 #18 desktop 部分，含 1px 防亚像素容差）。【已被 Step 19 简化方案取代】
+- Step 18 — phase-composer-stable — blocking: yes — qa: manual_user：回滚变更点 #17 并追加 metro 调试日志，真机重新定位闪烁根因（变更点 #20）。
+- Step 19 — phase-prompt-ux — blocking: yes — qa: manual_user：UX 简化：双端内联限高 5 行 + 全屏按钮，废弃折叠机制（变更点 #19）；mobile 补键盘顶起与左右两角按钮。
+- Step 20 — phase-prompt-ux — blocking: yes — qa: auto：dirty 标记随 snapshot 同帧派生修复不刷新（变更点 #21，agent-editor-form-dirty.test.tsx）。
 
 ## 测试策略
 
