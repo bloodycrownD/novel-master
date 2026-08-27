@@ -1,5 +1,5 @@
 ---
-date: 2026-08-27 17:00
+date: 2026-08-27 18:30
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -180,3 +180,9 @@ user:
 
 assistant:
 诚实交代：reasoning_content 分端点不保证——DeepSeek 官方明确消费且要求回传；GLM 智谱文档口径「推理内容不入上下文」，回传大概率被忽略（用户实测不行，大概率即此）；OpenAI 官方不认识该字段直接忽略。上轮「GLM 大概率也吃」系推断，被用户实测证伪。用户提的标签文本方案可行且最保底（思考变普通文本任何端点都看得到，deepseek-harness 的 requiresThinkingAsText 同模式）；拼接位置给用户两个选项：a) 拼 user 提示词（其提议，但模型会认为思考是用户说的、与真实输入混淆）b) 拼上一轮 assistant 消息 content 开头 <thinking>…</thinking>\n\n正文（推荐，模型读到自己的历史发言带思考，CoT 提示通用惯例、不污染 user 消息）。待用户确认：测试端是否重载（desktop 主进程需重启/build）、用的哪个模型、拼接位置拍板。
+
+user:
+算了，本期简单做吧，就按照标准方案实现，把所有思考都进入 reasoning_content，没有容量 1 了。我想标准方案有它的道理？而且谁知道只传一个 reasoning_content 会不会有 bug 不兼容的问题？
+
+assistant:
+用户拍板对齐标准方案（563a1f7）：撤销容量 1，开态=全量保留（消息原样返回含全部 thinking/redacted 与签名），openai 出站全量回传 reasoning_content；关态协议最低保留与档位前置门不变。动机：全量回传是 opencode/deepseek-harness 双双验证的主流路径，端点兼容性有背书；自创部分回传语义（容量1/仅最新一条）有未知兼容风险——用户推测 GLM 实测看不到可能与此有关（待全量验证）。中途插曲：reasoning_content 非数组、是挂每条 assistant 消息上的字符串字段，占不占上下文取决于端点是否消费（消费=占+可见，忽略=不占+不可见）；用户质疑「之前不传也不报错」推翻了 deepseek-harness 注释转述的『不回传会被拒』（二手信息，用户实证更硬）。文本方案（<thinking> 拼 assistant content）作为备选写入 spec 已知限制（若 GLM 全量回传仍看不到即端点忽略字段，届时再切换）。测试：开态用例全部改为全量断言（17+15+10 定向 42 pass），core 全量 2202 pass，双端 typecheck 过。双端文案定稿「开启后，模型的思考内容进入后续提示词，关闭则不进入。」
