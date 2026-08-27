@@ -1,10 +1,11 @@
 /**
- * 全屏提示词编辑页（R3）：CodeEditorWebView 草稿副本编辑，保存才回填（onSaved），
+ * 全屏提示词编辑页（R3）：CodeEditorWebView 草稿副本编辑，保存才回填，
  * 取消/Android 返回键不动原值。伪路径 prompt.txt 让编辑器按纯文本高亮。
+ * 回调不走路由参数（不可序列化），挂载时从模块级存取取走（读后即清）。
  * 键盘顶起与顶栏 follow FileEditorScreen：Android 以 marginBottom 收缩键盘高度，
  * iOS 用 KeyboardAvoidingView padding；顶栏左右两角——左「取消」右「保存」。
  */
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
 import {
   KeyboardAvoidingView,
@@ -20,6 +21,10 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../../navigation/types';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {CodeEditorWebView} from '../../components/vfs/CodeEditorWebView';
+import {
+  takePromptEditorOnSaved,
+  type PromptEditorOnSaved,
+} from '../../components/agent/prompt-editor-callback';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type PromptEditorRoute = RouteProp<RootStackParamList, 'PromptEditor'>;
@@ -54,8 +59,13 @@ export function PromptEditorScreen() {
   const {tokens} = useTheme();
   const navigation = useNavigation<PromptEditorNav>();
   const route = useRoute<PromptEditorRoute>();
-  const {title, initialText, onSaved} = route.params;
+  const {title, initialText} = route.params;
   const {setStackOverride} = useHeaderContext();
+  // 回调走模块级存取（路由参数必须可序列化）：挂载时读走并清空，
+  // 取消/卸载不消费即随 ref 一起丢弃，不残留旧回调。
+  const onSavedRef = useRef<PromptEditorOnSaved | null>(
+    takePromptEditorOnSaved(),
+  );
   // 屏内草稿：只在保存时才把草稿回填给调用方，取消不动。
   const [draft, setDraft] = useState(initialText);
 
@@ -94,7 +104,7 @@ export function PromptEditorScreen() {
         <Pressable
           testID="prompt-editor-save"
           onPress={() => {
-            onSaved?.(draft);
+            onSavedRef.current?.(draft);
             navigation.goBack();
           }}
           style={styles.toolbarBtn}

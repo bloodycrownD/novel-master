@@ -1,5 +1,7 @@
 /**
- * T-PE3：PromptEditorScreen 保存以草稿回填 onSaved 并 goBack；取消不回填。
+ * T-PE3：PromptEditorScreen 保存以草稿回填回调并 goBack；取消不回填。
+ * 回调不走路由参数（不可序列化）：先 setPromptEditorOnSaved 再渲染 Screen，
+ * 保存时回调被调；未 set 时保存仅 goBack 不抛错。
  * 顶栏 follow FileEditorScreen：左右两角——左取消右保存；键盘顶起双分支适配。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -9,11 +11,7 @@ import TestRenderer, {act} from 'react-test-renderer';
 
 const mockGoBack = jest.fn();
 const mockRoute = {
-  params: {initialText: '初稿'} as {
-    title?: string;
-    initialText: string;
-    onSaved?: (text: string) => void;
-  },
+  params: {initialText: '初稿'} as {title?: string; initialText: string},
 };
 // 捕获 CodeEditorWebView stub 的 props，模拟编辑器回传 onChange（jest.mock 工厂仅可引用 mock 前缀变量）。
 const mockEditorProps: {
@@ -56,6 +54,10 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 }));
 
 import {PromptEditorScreen} from '../src/screens/stack/PromptEditorScreen';
+import {
+  setPromptEditorOnSaved,
+  takePromptEditorOnSaved,
+} from '../src/components/agent/prompt-editor-callback';
 
 function renderScreen() {
   let tree: TestRenderer.ReactTestRenderer;
@@ -69,13 +71,14 @@ describe('PromptEditorScreen (T-PE3)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockEditorProps.length = 0;
+    // 清空模块级回调残留，各用例自行决定是否 set。
+    takePromptEditorOnSaved();
   });
 
   afterEach(() => {
     mockRoute.params = {initialText: '初稿'} as {
       title?: string;
       initialText: string;
-      onSaved?: (text: string) => void;
     };
   });
 
@@ -86,9 +89,10 @@ describe('PromptEditorScreen (T-PE3)', () => {
     expect(mockEditorProps[0]!.path).toBe('prompt.txt');
   });
 
-  it('保存：以草稿调用 onSaved 并 goBack', () => {
+  it('保存：以草稿调用模块级回调并 goBack', () => {
     const onSaved = jest.fn();
-    mockRoute.params = {initialText: '初稿', onSaved};
+    setPromptEditorOnSaved(onSaved);
+    mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();
 
     // 模拟编辑器改稿后再保存
@@ -103,7 +107,7 @@ describe('PromptEditorScreen (T-PE3)', () => {
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 
-  it('未提供 onSaved 时保存仅 goBack，不抛错', () => {
+  it('未 set 回调时保存仅 goBack，不抛错', () => {
     mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();
     act(() => {
@@ -112,9 +116,10 @@ describe('PromptEditorScreen (T-PE3)', () => {
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 
-  it('取消：直接 goBack，不调用 onSaved', () => {
+  it('取消：直接 goBack，不调用回调', () => {
     const onSaved = jest.fn();
-    mockRoute.params = {initialText: '初稿', onSaved};
+    setPromptEditorOnSaved(onSaved);
+    mockRoute.params = {initialText: '初稿'};
     const tree = renderScreen();
     act(() => {
       mockEditorProps[0]!.onChange('不落盘的改动');
@@ -150,7 +155,8 @@ describe('PromptEditorScreen (T-PE3)', () => {
     (Platform as {OS: string}).OS = 'android';
     try {
       const onSaved = jest.fn();
-      mockRoute.params = {initialText: '初稿', onSaved};
+      setPromptEditorOnSaved(onSaved);
+      mockRoute.params = {initialText: '初稿'};
       const tree = renderScreen();
       act(() => {
         mockEditorProps[0]!.onChange('安卓键盘下改稿');

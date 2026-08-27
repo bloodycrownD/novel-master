@@ -64,6 +64,7 @@ import { FormSelectField } from '../form/FormSelectField';
 import { FormTextInput } from '../form/FormTextInput';
 import { PromptMacroTextInput } from './PromptMacroTextInput';
 import { ExpandablePromptInput } from './ExpandablePromptInput';
+import { setPromptEditorOnSaved } from './prompt-editor-callback';
 import { ScreenFormLayout } from '../form/ScreenFormLayout';
 import { StickyFormFooter } from '../form/StickyFormFooter';
 import { useRuntime } from '../../hooks/useRuntime';
@@ -550,10 +551,12 @@ export function AgentEditorForm(props: Props) {
     setDynamic(prev => [...prev, createDefaultDynamicTextBlock(prev.length)]);
   };
 
-  // 全屏编辑入口：push 全屏编辑页，保存才用现有 setter 回填（自动触发 dirty，不另接线）。
+  // 全屏编辑入口：回调先写进模块级存取再 push（路由参数必须可序列化，
+  // 不再放函数），保存才用现有 setter 回填（自动触发 dirty，不另接线）。
   const openPromptEditor = useCallback(
     (title: string, text: string, onSaved: (text: string) => void) => {
-      navigation.push('PromptEditor', {title, initialText: text, onSaved});
+      setPromptEditorOnSaved(onSaved);
+      navigation.push('PromptEditor', {title, initialText: text});
     },
     [navigation],
   );
