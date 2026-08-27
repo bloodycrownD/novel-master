@@ -233,17 +233,29 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
   //   1. vfs revision ref_count 修复（只动 vfs_revision.ref_count，不碰 blob 侧触发器计数）；
   //   2. provider 双身份键形态校验（migration 后 assertMigratedShape 的运行时镜像）。
   //
-  // 两条路径各自独立，互不干扰。不阻塞启动，丢 rejection 也不崩。
+  // 两条路径各自独立，互不干扰。不阻塞启动，但失败要有日志可查。
   // 发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
   // + sqlite_sequence 回退时，新建文件会撞 vfs_revision(entry_id, version)
   // 唯一键（导入旧备份库实测）。两条聚合查询成本可忽。
   try {
-    await new IntegrityRepairRegistry()
+    const reports = await new IntegrityRepairRegistry()
       .register(createVfsEntrySequenceRepairOperation(conn))
       .runAll();
-  } catch {
-    // 修复失败不阻断启动（与下方 registry 同口径）；极端场景下
-    // 新建仍可能撞唯一键，但可重试（下次启动再修）。
+    for (const report of reports) {
+      if (report.error != null) {
+        console.warn(
+          `[bootstrap] 发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）:`,
+          report.error,
+        );
+      }
+    }
+  } catch (error) {
+    // runAll 对单步失败已兜底挂报告，这里是 registry 编排层异常的保险：
+    // 同样只记日志不阻断启动（可重试）。
+    console.warn(
+      "[bootstrap] 发号器完整性修复运行异常（不阻断启动，下次启动重试）:",
+      error,
+    );
   }
 
   if (_entryIdMigrationJustApplied) {
@@ -263,7 +275,12 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
         }),
       )
       .register(createProviderIdentityRepairOperation({ providerRepo }));
-    // global scope 兜底修复；不阻塞启动，丢 rejection 也不崩
-    registry.runAll().catch(() => {});
+    // global scope 兜底修复；不阻塞启动，失败记日志（丢 rejection 也不崩）
+    registry.runAll().catch((error) => {
+      console.warn(
+        "[bootstrap] global scope 兜底完整性修复失败（不阻断启动）:",
+        error,
+      );
+    });
   }
 }
