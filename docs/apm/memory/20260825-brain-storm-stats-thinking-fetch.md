@@ -1,5 +1,5 @@
 ---
-date: 2026-08-27 18:30
+date: 2026-08-27 19:00
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -186,3 +186,9 @@ user:
 
 assistant:
 用户拍板对齐标准方案（563a1f7）：撤销容量 1，开态=全量保留（消息原样返回含全部 thinking/redacted 与签名），openai 出站全量回传 reasoning_content；关态协议最低保留与档位前置门不变。动机：全量回传是 opencode/deepseek-harness 双双验证的主流路径，端点兼容性有背书；自创部分回传语义（容量1/仅最新一条）有未知兼容风险——用户推测 GLM 实测看不到可能与此有关（待全量验证）。中途插曲：reasoning_content 非数组、是挂每条 assistant 消息上的字符串字段，占不占上下文取决于端点是否消费（消费=占+可见，忽略=不占+不可见）；用户质疑「之前不传也不报错」推翻了 deepseek-harness 注释转述的『不回传会被拒』（二手信息，用户实证更硬）。文本方案（<thinking> 拼 assistant content）作为备选写入 spec 已知限制（若 GLM 全量回传仍看不到即端点忽略字段，届时再切换）。测试：开态用例全部改为全量断言（17+15+10 定向 42 pass），core 全量 2202 pass，双端 typecheck 过。双端文案定稿「开启后，模型的思考内容进入后续提示词，关闭则不进入。」
+
+user:
+（build 报错）apply-thinking-context-for-llm.ts:100 TS4104 readonly 不能赋给可变 ChatMessage[]。
+
+assistant:
+52ec100 修复：开态全量保留分支 return messages 直返 readonly 数组撞 TS4104，改为 return [...messages] 浅拷贝（元素保持原引用，不可变惯例不破）；T-TC6 的 assert.equal(onOut, input) 同步改逐元素断言。core build 过、定向 17/17 过。教训：test:fast 的 tsx 只转译不做类型检查，readonly 类错误只有 tsc --build 能抓——core 改动后 build+test 两把都过才算验证完整（此坑记 RULE.md 级别经验）。
