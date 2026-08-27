@@ -1,17 +1,15 @@
 /**
- * T-PE1 / T-PE2（UX 简化 + overlay 微调）：
- * ExpandablePromptInput 渲染内联编辑器 + 常驻「全屏编辑」按钮，点击触发 openEditor；
- * 按钮以 trailing overlay 浮在输入区右上角（容器 relative / 按钮 absolute），
- * ctx.style 给内联输入 maxHeight 限 5 行 + paddingRight 让位（文字不钻到图标下面）。
+ * T-PE1 / T-PE2（R5：label 行按钮 + 视口置顶）：
+ * ExpandablePromptInput 渲染完整字段结构——label 行（label 居左、「全屏编辑」
+ * 按钮居右）+ 内联编辑器；点击按钮触发 openEditor；ctx.style 给内联输入
+ * maxHeight 限 8 行（无 paddingRight 让位——按钮不再 overlay）。
+ * 初始视口置顶：挂载一拍后 ctx.selection 短暂置 {0,0}，selectionChange 后解除。
  */
-import {describe, expect, it, jest} from '@jest/globals';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import React from 'react';
-import {View, StyleSheet, Text, TextInput} from 'react-native';
+import {StyleSheet, Text, TextInput} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
-import {
-  ExpandablePromptInput,
-  PROMPT_INLINE_PADDING_RIGHT,
-} from '../src/components/agent/ExpandablePromptInput';
+import {ExpandablePromptInput} from '../src/components/agent/ExpandablePromptInput';
 import {
   PROMPT_INLINE_MAX_HEIGHT,
   PROMPT_INLINE_MAX_LINES,
@@ -37,32 +35,40 @@ function InlineMarker() {
   return null;
 }
 
-/** 展平 RN style（含 StyleSheet 注册 id / 数组）为单对象，方便 toMatchObject 断言。 */
-function flattenStyle(style: unknown): Record<string, unknown> {
-  return StyleSheet.flatten(style as never) as Record<string, unknown>;
-}
-
-describe('ExpandablePromptInput 内联 + 全屏按钮（UX 简化）', () => {
-  it('限高常量：5 行 × lineHeight 22 = 110', () => {
-    expect(PROMPT_INLINE_MAX_LINES).toBe(5);
-    expect(PROMPT_INLINE_MAX_HEIGHT).toBe(110);
+describe('ExpandablePromptInput 内联 + 全屏按钮（R5）', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
-  it('T-PE1: 渲染 inline 编辑器与常驻全屏按钮，无折叠预览', () => {
+  it('限高常量：8 行 × lineHeight 22 = 176', () => {
+    expect(PROMPT_INLINE_MAX_LINES).toBe(8);
+    expect(PROMPT_INLINE_MAX_HEIGHT).toBe(176);
+  });
+
+  it('T-PE1: 渲染 label 行 + 内联编辑器 + 右侧常驻全屏按钮，无折叠预览', () => {
     const openEditor = jest.fn();
     let tree: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
         <ExpandablePromptInput
           testID="prompt-input"
+          label="系统提示词"
           renderInline={() => <InlineMarker />}
           openEditor={openEditor}
         />,
       );
     });
+    // label 文本在场（由本组件统一渲染）
+    const texts = tree!
+      .root.findAll(node => typeof node.children?.[0] === 'string')
+      .map(node => String(node.children[0]));
+    expect(texts).toContain('系统提示词');
     // inline 在场
     expect(tree!.root.findAllByType(InlineMarker)).toHaveLength(1);
-    // 常驻全屏按钮在场（无论内容长短；testID 不随无障碍语义传播）
+    // 常驻全屏按钮在场（label 行右侧）
     const openButtons = tree!.root.findAllByProps({
       testID: 'prompt-input-fullscreen',
     });
@@ -70,9 +76,11 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（UX 简化）', () => {
     expect(
       openButtons.filter(n => typeof n.props.onPress === 'function'),
     ).toHaveLength(1);
-    // 旧的折叠预览不存在
+    // 旧的折叠预览不存在（label 单行截断不算折叠预览）
     expect(
-      tree!.root.findAllByType(Text).filter(t => t.props.numberOfLines != null),
+      tree!
+        .root.findAllByType(Text)
+        .filter(t => (t.props.numberOfLines ?? 1) > 1),
     ).toHaveLength(0);
   });
 
@@ -83,6 +91,7 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（UX 简化）', () => {
       tree = TestRenderer.create(
         <ExpandablePromptInput
           testID="prompt-input"
+          label="系统提示词"
           renderInline={() => <InlineMarker />}
           openEditor={openEditor}
         />,
@@ -101,53 +110,83 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（UX 简化）', () => {
     expect(tree!.root.findAllByType(InlineMarker)).toHaveLength(1);
   });
 
-  it('全屏按钮为输入区右上角 overlay：容器 relative、按钮 absolute 且半透明', () => {
+  it('全屏按钮在 label 行内右侧：无 overlay 定位（不再 absolute）', () => {
     const openEditor = jest.fn();
     let tree: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
         <ExpandablePromptInput
           testID="prompt-input"
+          label="系统提示词"
           renderInline={ctx => <TextInput multiline style={ctx.style} />}
           openEditor={openEditor}
         />,
       );
     });
-    // 容器（root）相对定位：absolute 按钮以它为定位基准
-    // （findByProps 会命中组件自身节点，改按 View 实例 + testID 定位容器）
-    const root = tree!.root.find(
-      node => node.type === View && node.props.testID === 'prompt-input',
-    );
-    expect(flattenStyle(root.props.style)).toMatchObject({
-      position: 'relative',
-    });
-    // 按钮浮在容器内右上角，且不单独占列、恒定轻透明度
     const button = tree!.root.findAllByProps({
       testID: 'prompt-input-fullscreen',
     })[0]!;
-    expect(flattenStyle(button.props.style)).toMatchObject({
-      position: 'absolute',
-      top: expect.any(Number),
-      right: expect.any(Number),
-      opacity: expect.any(Number),
-    });
+    const buttonStyle = flattenStyle(button.props.style);
+    // R5：按钮进 label 行（标准表单动作位），彻底放弃 overlay/独立列
+    expect(buttonStyle.position).not.toBe('absolute');
   });
 
-  it('ctx.style 给内联输入透传 maxHeight 限高 + paddingRight 让位', () => {
+  it('ctx.style 给内联输入透传 maxHeight 限高，无 paddingRight 让位', () => {
     const openEditor = jest.fn();
     let tree: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
         <ExpandablePromptInput
+          label="系统提示词"
           renderInline={ctx => <TextInput multiline style={ctx.style} />}
           openEditor={openEditor}
         />,
       );
     });
     const input = tree!.root.findByType(TextInput);
-    expect(input.props.style).toMatchObject({
-      maxHeight: PROMPT_INLINE_MAX_HEIGHT,
-      paddingRight: PROMPT_INLINE_PADDING_RIGHT,
+    const style = flattenStyle(input.props.style);
+    expect(style.maxHeight).toBe(PROMPT_INLINE_MAX_HEIGHT);
+    expect(style.paddingRight).toBeUndefined();
+  });
+
+  it('初始视口置顶：挂载一拍后 selection 置 {0,0}，selectionChange 后解除', () => {
+    const openEditor = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <ExpandablePromptInput
+          label="系统提示词"
+          renderInline={ctx => (
+            <TextInput
+              multiline
+              style={ctx.style}
+              selection={ctx.selection}
+              onSelectionChange={ctx.onSelectionChange}
+            />
+          )}
+          openEditor={openEditor}
+        />,
+      );
     });
+    const input = tree!.root.findByType(TextInput);
+    // 挂载当拍：尚未置位（先让原生完成初始定位）
+    expect(input.props.selection).toBeUndefined();
+    // 一拍后：短暂受控置 0，把初始视口拉回顶部
+    act(() => {
+      jest.runAllTimers();
+    });
+    expect(input.props.selection).toEqual({start: 0, end: 0});
+    // 原生回报 selectionChange 后解除受控，用户交互不再被干预
+    act(() => {
+      input.props.onSelectionChange({
+        nativeEvent: {selection: {start: 3, end: 3}},
+      });
+    });
+    expect(tree!.root.findByType(TextInput).props.selection).toBeUndefined();
   });
 });
+
+/** 展平 RN style（含 StyleSheet 注册 id / 数组）为单对象，方便断言。 */
+function flattenStyle(style: unknown): Record<string, unknown> {
+  return StyleSheet.flatten(style as never) as Record<string, unknown>;
+}

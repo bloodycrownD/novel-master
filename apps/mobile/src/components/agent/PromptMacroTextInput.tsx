@@ -28,6 +28,12 @@ type Props = {
   placeholder?: string;
   /** 透传给内部 FormTextInput 的样式（内联限高 maxHeight 等） */
   style?: StyleProp<TextStyle>;
+  /** 外部短暂受控的选区（挂载视口置顶用）；内部程序化选区优先。 */
+  selection?: {start: number; end: number};
+  /** 外部 selectionChange：与内部共用一个回调链，两边都收到。 */
+  onSelectionChange?: (
+    event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
+  ) => void;
 };
 
 export function PromptMacroTextInput({
@@ -36,6 +42,8 @@ export function PromptMacroTextInput({
   onChangeText,
   placeholder,
   style,
+  selection,
+  onSelectionChange,
 }: Props) {
   const selectionRef = useRef({start: value.length, end: value.length});
   const prevValueRef = useRef(value);
@@ -48,8 +56,9 @@ export function PromptMacroTextInput({
     (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
       selectionRef.current = event.nativeEvent.selection;
       setPendingSelection(null);
+      onSelectionChange?.(event);
     },
-    [],
+    [onSelectionChange],
   );
 
   const handleChangeText = useCallback(
@@ -89,7 +98,7 @@ export function PromptMacroTextInput({
         tokens={tokens}
         onChangeText={handleChangeText}
         onSelectionChange={handleSelectionChange}
-        selection={pendingSelection ?? undefined}
+        selection={pendingSelection ?? selection}
         multiline
         placeholder={placeholder}
         autoCapitalize="none"
