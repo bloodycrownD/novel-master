@@ -151,17 +151,32 @@ jest.mock('../src/services/agent-yaml.service', () => ({
   importAgentYaml: jest.fn(),
 }));
 
-// PromptEditor 的编辑器 stub：记录 onChange 供测试驱动。
+// PromptEditor 的编辑器 stub：记录 onChange 供测试驱动（forwardRef：真组件接 codeEditorRef）。
 const mockEditorProps: {
   value: string;
   onChange: (text: string) => void;
 }[] = [];
 
-jest.mock('../src/components/vfs/CodeEditorWebView', () => ({
-  CodeEditorWebView: (props: {value: string; onChange: (t: string) => void}) => {
-    mockEditorProps[0] = props;
-    return null;
-  },
+jest.mock('../src/components/vfs/CodeEditorWebView', () => {
+  const mockReact = require('react');
+  return {
+    CodeEditorWebView: mockReact.forwardRef(function CodeEditorWebViewStub(
+      props: {value: string; onChange: (t: string) => void},
+      _ref: unknown,
+    ) {
+      mockEditorProps[0] = props;
+      return null;
+    }),
+  };
+});
+
+// R5：PromptEditorScreen 预览态依赖（内部 RichDocumentWebView/core 依赖重，stub 掉）。
+jest.mock('../src/components/vfs/FileMarkdownPreview', () => ({
+  FileMarkdownPreview: () => null,
+}));
+
+jest.mock('../src/components/ui/SegmentedControl', () => ({
+  SegmentedControl: () => null,
 }));
 
 jest.mock('../src/navigation/HeaderContext', () => ({
