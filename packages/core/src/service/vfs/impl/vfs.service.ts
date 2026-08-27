@@ -124,7 +124,7 @@ export class DefaultVfsService implements InternalVfsService {
         { path: normalized },
       );
     }
-    return this.repo.update(scopeKey, normalized, content, {
+    return this.repo.update(scopeKey, normalized, content, existing.version + 1, {
       expectedVersion: options?.expectedVersion,
       versionCheck,
     });
@@ -146,10 +146,16 @@ export class DefaultVfsService implements InternalVfsService {
       options,
     );
 
-    const result = await this.repo.update(scopeKey, path, nextContent, {
-      expectedVersion: current.version,
-      versionCheck: true,
-    });
+    const result = await this.repo.update(
+      scopeKey,
+      path,
+      nextContent,
+      current.version + 1,
+      {
+        expectedVersion: current.version,
+        versionCheck: true,
+      },
+    );
     return { version: result.version, replacements };
   }
 

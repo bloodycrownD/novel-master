@@ -58,6 +58,28 @@ function joinLogical(prefix: string, relative: string): string {
 }
 
 /**
+ * 计算 update 落 head 的目标版本号：`max(head_version, MAX(version)) + 1`。
+ *
+ * `revisions` 未提供时（fork/copy 直调场景，目标 entry 无 revision 语义）
+ * 退回 head + 1，与既有行为等价；`known` 传 null 时内部补一次 findByPath。
+ */
+async function nextUpdateVersion(
+  repo: VfsEntryRepository,
+  revisions: VfsRevisionRepository | undefined,
+  scopeKey: string,
+  path: string,
+  known: { entryId: number; version: number } | null,
+): Promise<number> {
+  const existing =
+    known ?? (await repo.findByPath(scopeKey, path));
+  if (existing == null || revisions == null) {
+    return (existing?.version ?? 0) + 1;
+  }
+  const maxStored = await revisions.findMaxVersionForEntry(existing.entryId);
+  return Math.max(existing.version, maxStored ?? 0) + 1;
+}
+
+/**
  * 用 scanContents 解出 scope+prefix 下所有文件的明文，返回 path→content 映射。
  *
  * @remarks 仅在回退路径（blob 缺失或无 hash）调用；快路径不触发。
@@ -86,6 +108,13 @@ export type CopyVfsTreeOptions = {
    * 默认空数组 = 现行为完全不变。前缀可带或不带前导 `/`。
    */
   readonly excludePrefixes?: string[];
+
+  /**
+   * 可选 revision repo：仅在目标 entry 已存在、需要 update 落 head 时使用，
+   * 按 `max(head_version, MAX(version)) + 1` 发号（统一语义防边角）。
+   * 不传时（fork/copy 直调场景）维持 head + 1 现状，行为不变。
+   */
+  readonly revisions?: VfsRevisionRepository;
 };
 
 export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
@@ -213,10 +242,18 @@ export async function copyVfsTree(
       }
       // 已存在的目标用逐条 update（tree-copy 到清空 scope 时不会走到）
       for (const f of blobFiles.filter((f) => existingTargets.has(f.targetPath))) {
+        const nextVersion = await nextUpdateVersion(
+          repo,
+          options?.revisions,
+          toScope.scopeKey,
+          f.targetPath,
+          null,
+        );
         await repo.updateWithContentHash(
           toScope.scopeKey,
           f.targetPath,
           f.contentHash!,
+          nextVersion,
           { versionCheck: false },
         );
       }
@@ -242,10 +279,18 @@ export async function copyVfsTree(
             f.contentHash!,
           );
         } else {
+          const nextVersion = await nextUpdateVersion(
+            repo,
+            options?.revisions,
+            toScope.scopeKey,
+            f.targetPath,
+            { entryId: existing.entryId, version: existing.version },
+          );
           await repo.updateWithContentHash(
             toScope.scopeKey,
             f.targetPath,
             f.contentHash!,
+            nextVersion,
             { versionCheck: false },
           );
         }
@@ -269,7 +314,14 @@ export async function copyVfsTree(
       if (existing == null) {
         await repo.insert(toScope.scopeKey, f.targetPath, content);
       } else {
-        await repo.update(toScope.scopeKey, f.targetPath, content, {
+        const nextVersion = await nextUpdateVersion(
+          repo,
+          options?.revisions,
+          toScope.scopeKey,
+          f.targetPath,
+          { entryId: existing.entryId, version: existing.version },
+        );
+        await repo.update(toScope.scopeKey, f.targetPath, content, nextVersion, {
           versionCheck: false,
         });
       }
