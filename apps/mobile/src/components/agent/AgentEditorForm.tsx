@@ -63,6 +63,7 @@ import { FormSectionCard } from '../form/FormSectionCard';
 import { FormSelectField } from '../form/FormSelectField';
 import { FormTextInput } from '../form/FormTextInput';
 import { PromptMacroTextInput } from './PromptMacroTextInput';
+import { ExpandablePromptInput } from './ExpandablePromptInput';
 import { ScreenFormLayout } from '../form/ScreenFormLayout';
 import { StickyFormFooter } from '../form/StickyFormFooter';
 import { useRuntime } from '../../hooks/useRuntime';
@@ -548,6 +549,14 @@ export function AgentEditorForm(props: Props) {
     setDynamic(prev => [...prev, createDefaultDynamicTextBlock(prev.length)]);
   };
 
+  // 超长折叠层的展开入口：push 全屏编辑页，保存才用现有 setter 回填（自动触发 dirty，不另接线）。
+  const openPromptEditor = useCallback(
+    (title: string, text: string, onSaved: (text: string) => void) => {
+      navigation.push('PromptEditor', {title, initialText: text, onSaved});
+    },
+    [navigation],
+  );
+
   // 扁平化后只有一个下拉：选「默认(跟随)」或某个具体模型。
   // 空串代表默认(跟随)——与 def.model 缺省语义对齐（buildAgentDefinitionFromForm
   // 只看 modelEnabled + savedModelId，core 零改动）。
@@ -903,12 +912,27 @@ export function AgentEditorForm(props: Props) {
                 label={PROMPT_REGION_LABELS.systemContent}
                 tokens={tokens}
               >
-                <FormTextInput
-                  tokens={tokens}
+                <ExpandablePromptInput
                   value={systemContent}
                   onChangeText={setSystemContent}
-                  multiline
-                  placeholder={PROMPT_REGION_LABELS.systemPlaceholderShort}
+                  openEditor={() =>
+                    openPromptEditor(
+                      PROMPT_REGION_LABELS.systemContent,
+                      systemContent,
+                      setSystemContent,
+                    )
+                  }
+                  renderInline={events => (
+                    <FormTextInput
+                      tokens={tokens}
+                      value={systemContent}
+                      onChangeText={setSystemContent}
+                      onFocus={events.onFocus}
+                      onBlur={events.onBlur}
+                      multiline
+                      placeholder={PROMPT_REGION_LABELS.systemPlaceholderShort}
+                    />
+                  )}
                 />
               </FormField>
             ) : (
@@ -932,12 +956,27 @@ export function AgentEditorForm(props: Props) {
                   {PROMPT_REGION_LABELS.skillsReadonlyHint}
                 </Text>
                 <FormField label="索引前缀语" tokens={tokens}>
-                  <FormTextInput
-                    tokens={tokens}
+                  <ExpandablePromptInput
                     value={skillsPrefixText}
                     onChangeText={setSkillsPrefixText}
-                    multiline
-                    placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
+                    openEditor={() =>
+                      openPromptEditor(
+                        '索引前缀语',
+                        skillsPrefixText,
+                        setSkillsPrefixText,
+                      )
+                    }
+                    renderInline={events => (
+                      <FormTextInput
+                        tokens={tokens}
+                        value={skillsPrefixText}
+                        onChangeText={setSkillsPrefixText}
+                        onFocus={events.onFocus}
+                        onBlur={events.onBlur}
+                        multiline
+                        placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
+                      />
+                    )}
                   />
                 </FormField>
               </>
@@ -973,12 +1012,27 @@ export function AgentEditorForm(props: Props) {
                   label={WORKPLACE_ASSISTANT_TEXT_LABEL}
                   tokens={tokens}
                 >
-                  <FormTextInput
-                    tokens={tokens}
+                  <ExpandablePromptInput
                     value={workplaceAssistantText}
                     onChangeText={setWorkplaceAssistantText}
-                    multiline
-                    placeholder={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                    openEditor={() =>
+                      openPromptEditor(
+                        WORKPLACE_ASSISTANT_TEXT_LABEL,
+                        workplaceAssistantText,
+                        setWorkplaceAssistantText,
+                      )
+                    }
+                    renderInline={events => (
+                      <FormTextInput
+                        tokens={tokens}
+                        value={workplaceAssistantText}
+                        onChangeText={setWorkplaceAssistantText}
+                        onFocus={events.onFocus}
+                        onBlur={events.onBlur}
+                        multiline
+                        placeholder={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                      />
+                    )}
                   />
                 </FormField>
               </>
@@ -1077,18 +1131,38 @@ export function AgentEditorForm(props: Props) {
                       {PROMPT_REGION_LABELS.persistRegionHint}
                     </Text>
                     <FormField label="内容" tokens={tokens}>
-                      <FormTextInput
-                        tokens={tokens}
-                        value={block.content}
-                        onChangeText={v =>
+                      {(() => {
+                        // persist 是 filter 后 text 块的 index，闭包捕获当次渲染的 index 回填。
+                        const updatePersistContent = (v: string) =>
                           setPersist(prev =>
                             mapPersistTextBlocks(prev, (b, i) =>
                               i === index ? { ...b, content: v } : b,
                             ),
-                          )
-                        }
-                        multiline
-                      />
+                          );
+                        return (
+                          <ExpandablePromptInput
+                            value={block.content}
+                            onChangeText={updatePersistContent}
+                            openEditor={() =>
+                              openPromptEditor(
+                                block.name,
+                                block.content,
+                                updatePersistContent,
+                              )
+                            }
+                            renderInline={events => (
+                              <FormTextInput
+                                tokens={tokens}
+                                value={block.content}
+                                onChangeText={updatePersistContent}
+                                onFocus={events.onFocus}
+                                onBlur={events.onBlur}
+                                multiline
+                              />
+                            )}
+                          />
+                        );
+                      })()}
                     </FormField>
                   </View>
                 ))}
@@ -1112,11 +1186,26 @@ export function AgentEditorForm(props: Props) {
             </Text>
             {customAttachEnabled ? (
               <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
-                <PromptMacroTextInput
-                  tokens={tokens}
+                <ExpandablePromptInput
                   value={customAttachText}
                   onChangeText={setCustomAttachText}
-                  placeholder="支持 $time、$week_cn、$filetree…"
+                  openEditor={() =>
+                    openPromptEditor(
+                      CUSTOM_ATTACH_TEXT_LABEL,
+                      customAttachText,
+                      setCustomAttachText,
+                    )
+                  }
+                  renderInline={events => (
+                    <PromptMacroTextInput
+                      tokens={tokens}
+                      value={customAttachText}
+                      onChangeText={setCustomAttachText}
+                      placeholder="支持 $time、$week_cn、$filetree…"
+                      onFocus={events.onFocus}
+                      onBlur={events.onBlur}
+                    />
+                  )}
                 />
               </FormField>
             ) : null}
@@ -1220,18 +1309,37 @@ export function AgentEditorForm(props: Props) {
                       </Text>
                     ) : null}
                     <FormField label="内容" tokens={tokens}>
-                      <PromptMacroTextInput
-                        tokens={tokens}
-                        value={block.content}
-                        onChangeText={v =>
+                      {(() => {
+                        const updateDynamicContent = (v: string) =>
                           setDynamic(prev =>
                             prev.map((b, i) =>
                               i === index ? { ...b, content: v } : b,
                             ),
-                          )
-                        }
-                        placeholder="支持 $time、$week_cn、$filetree…"
-                      />
+                          );
+                        return (
+                          <ExpandablePromptInput
+                            value={block.content}
+                            onChangeText={updateDynamicContent}
+                            openEditor={() =>
+                              openPromptEditor(
+                                block.name,
+                                block.content,
+                                updateDynamicContent,
+                              )
+                            }
+                            renderInline={events => (
+                              <PromptMacroTextInput
+                                tokens={tokens}
+                                value={block.content}
+                                onChangeText={updateDynamicContent}
+                                placeholder="支持 $time、$week_cn、$filetree…"
+                                onFocus={events.onFocus}
+                                onBlur={events.onBlur}
+                              />
+                            )}
+                          />
+                        );
+                      })()}
                     </FormField>
                   </View>
                 ))}
