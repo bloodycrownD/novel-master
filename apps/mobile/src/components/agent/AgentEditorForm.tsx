@@ -64,6 +64,7 @@ import { FormSelectField } from '../form/FormSelectField';
 import { FormTextInput } from '../form/FormTextInput';
 import { PromptMacroTextInput } from './PromptMacroTextInput';
 import { ExpandablePromptInput } from './ExpandablePromptInput';
+import { PROMPT_INLINE_MAX_HEIGHT } from './prompt-collapse';
 import { ScreenFormLayout } from '../form/ScreenFormLayout';
 import { StickyFormFooter } from '../form/StickyFormFooter';
 import { useRuntime } from '../../hooks/useRuntime';
@@ -913,8 +914,6 @@ export function AgentEditorForm(props: Props) {
                 tokens={tokens}
               >
                 <ExpandablePromptInput
-                  value={systemContent}
-                  onChangeText={setSystemContent}
                   openEditor={() =>
                     openPromptEditor(
                       PROMPT_REGION_LABELS.systemContent,
@@ -922,15 +921,13 @@ export function AgentEditorForm(props: Props) {
                       setSystemContent,
                     )
                   }
-                  renderInline={events => (
+                  renderInline={() => (
                     <FormTextInput
                       tokens={tokens}
                       value={systemContent}
                       onChangeText={setSystemContent}
-                      onFocus={events.onFocus}
-                      onBlur={events.onBlur}
-                      onContentSizeChange={events.onContentSizeChange}
                       multiline
+                      style={styles.promptInlineInput}
                       placeholder={PROMPT_REGION_LABELS.systemPlaceholderShort}
                     />
                   )}
@@ -958,8 +955,6 @@ export function AgentEditorForm(props: Props) {
                 </Text>
                 <FormField label="索引前缀语" tokens={tokens}>
                   <ExpandablePromptInput
-                    value={skillsPrefixText}
-                    onChangeText={setSkillsPrefixText}
                     openEditor={() =>
                       openPromptEditor(
                         '索引前缀语',
@@ -967,15 +962,13 @@ export function AgentEditorForm(props: Props) {
                         setSkillsPrefixText,
                       )
                     }
-                    renderInline={events => (
+                    renderInline={() => (
                       <FormTextInput
                         tokens={tokens}
                         value={skillsPrefixText}
                         onChangeText={setSkillsPrefixText}
-                        onFocus={events.onFocus}
-                        onBlur={events.onBlur}
-                        onContentSizeChange={events.onContentSizeChange}
                         multiline
+                        style={styles.promptInlineInput}
                         placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
                       />
                     )}
@@ -1015,8 +1008,6 @@ export function AgentEditorForm(props: Props) {
                   tokens={tokens}
                 >
                   <ExpandablePromptInput
-                    value={workplaceAssistantText}
-                    onChangeText={setWorkplaceAssistantText}
                     openEditor={() =>
                       openPromptEditor(
                         WORKPLACE_ASSISTANT_TEXT_LABEL,
@@ -1024,15 +1015,13 @@ export function AgentEditorForm(props: Props) {
                         setWorkplaceAssistantText,
                       )
                     }
-                    renderInline={events => (
+                    renderInline={() => (
                       <FormTextInput
                         tokens={tokens}
                         value={workplaceAssistantText}
                         onChangeText={setWorkplaceAssistantText}
-                        onFocus={events.onFocus}
-                        onBlur={events.onBlur}
-                        onContentSizeChange={events.onContentSizeChange}
                         multiline
+                        style={styles.promptInlineInput}
                         placeholder={WORKPLACE_ASSISTANT_TEXT_LABEL}
                       />
                     )}
@@ -1144,8 +1133,6 @@ export function AgentEditorForm(props: Props) {
                           );
                         return (
                           <ExpandablePromptInput
-                            value={block.content}
-                            onChangeText={updatePersistContent}
                             openEditor={() =>
                               openPromptEditor(
                                 block.name,
@@ -1153,15 +1140,13 @@ export function AgentEditorForm(props: Props) {
                                 updatePersistContent,
                               )
                             }
-                            renderInline={events => (
+                            renderInline={() => (
                               <FormTextInput
                                 tokens={tokens}
                                 value={block.content}
                                 onChangeText={updatePersistContent}
-                                onFocus={events.onFocus}
-                                onBlur={events.onBlur}
-                                onContentSizeChange={events.onContentSizeChange}
                                 multiline
+                                style={styles.promptInlineInput}
                               />
                             )}
                           />
@@ -1191,8 +1176,6 @@ export function AgentEditorForm(props: Props) {
             {customAttachEnabled ? (
               <FormField label={CUSTOM_ATTACH_TEXT_LABEL} tokens={tokens}>
                 <ExpandablePromptInput
-                  value={customAttachText}
-                  onChangeText={setCustomAttachText}
                   openEditor={() =>
                     openPromptEditor(
                       CUSTOM_ATTACH_TEXT_LABEL,
@@ -1200,15 +1183,13 @@ export function AgentEditorForm(props: Props) {
                       setCustomAttachText,
                     )
                   }
-                  renderInline={events => (
+                  renderInline={() => (
                     <PromptMacroTextInput
                       tokens={tokens}
                       value={customAttachText}
                       onChangeText={setCustomAttachText}
                       placeholder="支持 $time、$week_cn、$filetree…"
-                      onFocus={events.onFocus}
-                      onBlur={events.onBlur}
-                      onContentSizeChange={events.onContentSizeChange}
+                      style={styles.promptInlineInput}
                     />
                   )}
                 />
@@ -1323,8 +1304,6 @@ export function AgentEditorForm(props: Props) {
                           );
                         return (
                           <ExpandablePromptInput
-                            value={block.content}
-                            onChangeText={updateDynamicContent}
                             openEditor={() =>
                               openPromptEditor(
                                 block.name,
@@ -1332,15 +1311,13 @@ export function AgentEditorForm(props: Props) {
                                 updateDynamicContent,
                               )
                             }
-                            renderInline={events => (
+                            renderInline={() => (
                               <PromptMacroTextInput
                                 tokens={tokens}
                                 value={block.content}
                                 onChangeText={updateDynamicContent}
                                 placeholder="支持 $time、$week_cn、$filetree…"
-                                onFocus={events.onFocus}
-                                onBlur={events.onBlur}
-                                onContentSizeChange={events.onContentSizeChange}
+                                style={styles.promptInlineInput}
                               />
                             )}
                           />
@@ -1363,6 +1340,8 @@ export function AgentEditorForm(props: Props) {
 }
 
 const styles = StyleSheet.create({
+  // 内联提示词输入限高 5 行：超出部分输入框内部滚动，全屏编辑走旁边按钮。
+  promptInlineInput: {maxHeight: PROMPT_INLINE_MAX_HEIGHT},
   loadingWrap: {
     flex: 1,
     alignItems: 'center',
