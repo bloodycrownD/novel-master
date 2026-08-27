@@ -5203,25 +5203,33 @@ html[data-theme="dark"] .chat-batch-bar {
   max-width: 480px;
 }
 
-/* 超长提示词折叠预览：视觉对齐 .settings-field textarea，3 行省略，点击进入全屏编辑（仿 .chat-message__body-clamp）。 */
-.prompt-field-clamp {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 8px 12px;
-  border: 1px solid var(--border-light);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--text);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
-  cursor: pointer;
-  white-space: pre-wrap;
-  word-break: break-word;
+/* 提示词内联限高（约 5 行）：内容超出后 textarea 内部滚动，输入不受限。
+   行数语义为 5 行（PROMPT_INLINE_MAX_LINES，实际限高以这里为准）：
+   5 × line-height 1.45em ≈ 95px 内容 + 上下 padding 16px + 边框 2px（border-box）。 */
+.prompt-field-inline {
+  position: relative;
+}
+
+.prompt-field-inline textarea {
+  max-height: calc(5 * 1.45em + 18px);
+  overflow-y: auto;
+}
+
+/* 全屏编辑按钮：复用 .icon-btn 基础样式，悬浮字段右上角，平时半透明不抢视线。 */
+.prompt-field-inline__expand {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.prompt-field-inline__expand:hover,
+.prompt-field-inline__expand:focus-visible {
+  opacity: 1;
 }
 
 /* 提示词全屏编辑 Modal：近全屏、纵向 flex（CodeEditor 编辑区 + 底部按钮条），overlay 复用 .text-prompt-overlay。 */
