@@ -5205,13 +5205,13 @@ html[data-theme="dark"] .chat-batch-bar {
 
 /* 提示词内联限高（约 5 行）：内容超出后 textarea 内部滚动，输入不受限。
    行数语义为 5 行（PROMPT_INLINE_MAX_LINES，实际限高以这里为准）：
-   5 × line-height 1.45em ≈ 95px 内容 + 上下 padding 16px + 边框 2px（border-box）。 */
+   8 × line-height 1.45em ≈ 151px 内容 + 上下 padding 16px + 边框 2px（border-box）。 */
 .prompt-field-inline {
   position: relative;
 }
 
 .prompt-field-inline textarea {
-  max-height: calc(5 * 1.45em + 18px);
+  max-height: calc(8 * 1.45em + 18px);
   overflow-y: auto;
 }
 

@@ -80,7 +80,7 @@ export function PromptCollapsibleField({
           >
             <CodeEditor
               value={draft}
-              languagePath="prompt.txt"
+              languagePath="prompt.md"
               onChange={setDraft}
               onSave={saveEditor}
               aria-label={ariaLabel}
