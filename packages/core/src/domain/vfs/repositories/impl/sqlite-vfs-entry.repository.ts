@@ -269,25 +269,40 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     content: string,
+    nextVersion: number,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }> {
     const contentHash = await this.contentStore.put(content);
-    return this.applyContentHashUpdate(scopeKey, path, contentHash, options);
+    return this.applyContentHashUpdate(
+      scopeKey,
+      path,
+      contentHash,
+      nextVersion,
+      options,
+    );
   }
 
   async updateWithContentHash(
     scopeKey: string,
     path: string,
     contentHash: string,
+    nextVersion: number,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }> {
-    return this.applyContentHashUpdate(scopeKey, path, contentHash, options);
+    return this.applyContentHashUpdate(
+      scopeKey,
+      path,
+      contentHash,
+      nextVersion,
+      options,
+    );
   }
 
   private async applyContentHashUpdate(
     scopeKey: string,
     path: string,
     contentHash: string,
+    nextVersion: number,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
@@ -301,11 +316,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         `UPDATE vfs_entry
          SET content = NULL,
              content_hash = #{contentHash},
-             head_version = head_version + 1,
+             head_version = #{nextVersion},
              mtime_ms = #{mtimeMs}
          WHERE scope_key = #{scopeKey} AND path = #{path}
            AND head_version = #{expectedVersion} AND entry_kind = 'file'`,
-        { scopeKey, contentHash, mtimeMs, path: normalized, expectedVersion },
+        { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized, expectedVersion },
       );
       if (result.changes === 0) {
         const rows = await queryTemplate<{ head_version: number }>(
@@ -331,10 +346,10 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         `UPDATE vfs_entry
          SET content = NULL,
              content_hash = #{contentHash},
-             head_version = head_version + 1,
+             head_version = #{nextVersion},
              mtime_ms = #{mtimeMs}
          WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'`,
-        { scopeKey, contentHash, mtimeMs, path: normalized },
+        { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized },
       );
       if (result.changes === 0) {
         throw vfsNotFound(normalized);

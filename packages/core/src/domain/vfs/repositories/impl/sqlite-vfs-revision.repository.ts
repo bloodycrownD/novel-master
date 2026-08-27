@@ -65,6 +65,38 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
     return max == null ? null : Number(max);
   }
 
+  async findMaxVersionsForEntries(
+    entryIds: number[],
+  ): Promise<Map<number, number>> {
+    const result = new Map<number, number>();
+    if (entryIds.length === 0) {
+      return result;
+    }
+    for (let offset = 0; offset < entryIds.length; offset += REVISION_BATCH_CHUNK_SIZE) {
+      const chunk = entryIds.slice(offset, offset + REVISION_BATCH_CHUNK_SIZE);
+      const bindings: Record<string, number> = {};
+      const inList = chunk
+        .map((entryId, index) => {
+          bindings[`entryId${index}`] = entryId;
+          return `#{entryId${index}}`;
+        })
+        .join(", ");
+      const rows = await queryTemplate<{ entry_id: number; max_version: number }>(
+        this.conn,
+        this.parser,
+        `SELECT entry_id, MAX(version) AS max_version
+         FROM vfs_revision
+         WHERE entry_id IN (${inList})
+         GROUP BY entry_id`,
+        bindings,
+      );
+      for (const row of rows) {
+        result.set(Number(row.entry_id), Number(row.max_version));
+      }
+    }
+    return result;
+  }
+
   async findByEntryAndVersion(
     entryId: number,
     version: number,
