@@ -1,8 +1,8 @@
 ---
-date: 2026-08-26 01:30
-title: 五需求从头脑风暴到 PRD/SPEC：统计、思考强度、thinking开关、fetch、代码块
-keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 进上下文开关, fetch工具, PRD, SPEC, 代码块渲染
-abstract: 五需求头脑风暴并转 PRD 阶段：统计UI/TTFT速率、思考强度 openai 统一、thinking 进上下文开关（聊天设置）、fetch 工具、markdown 代码块渲染。PRD 拆 4+1 份。关键结论——mobile StackedBars 缺水平居中；TTFT 无数据字段需全链路加列；openai 拆 GLM 特判统一发 reasoning_effort；thinking 现状 anthropic/gemini 全透传 openai 全丢，开关放聊天设置（全局级）；fetch 双端同构无需分包；代码块问题根源在 mobile rich-content-styles 的 pre 无块级样式且无 pre code 重置（desktop 是同色值低区分度）。
+date: 2026-08-27 14:00
+title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
+keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
+abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
 ---
 
 user:
@@ -39,11 +39,15 @@ user:
 补充需求并挂 prd-generate：希望 thinking 是否进入上下文做成可控开关，位置放到聊天设置。开始为五个需求出 PRD。
 
 assistant:
-补派子代理探索了「聊天设置」现状：双端聊天设置（desktop 设置→常规→聊天偏好 / mobile 我的→聊天配置）都是全局级（流式输出、富文本、版本校验、压缩配置），存储在 KKV nm-preferences；会话级目前只有 agent 绑定+模型覆盖（chat_session.agent_config_json），无布尔开关先例；思考强度在模型级 settings_json。thinking 进上下文现状：完全由协议决定（anthropic/gemini 回传、openai 过滤），无任何用户开关；「查看提示词」预览与 wire 口径分裂；openai mapper 遇 thinking 会 throw。PRD 落盘路径按项目惯例是 docs/Iterations/<名称>/prd.md（大写 I，front matter dependency 写 Iterations/...）。user:
+补派子代理探索了「聊天设置」现状：双端聊天设置（desktop 设置→常规→聊天偏好 / mobile 我的→聊天配置）都是全局级（流式输出、富文本、版本校验、压缩配置），存储在 KKV nm-preferences；会话级目前只有 agent 绑定+模型覆盖（chat_session.agent_config_json），无布尔开关先例；思考强度在模型级 settings_json。thinking 进上下文现状：完全由协议决定（anthropic/gemini 回传、openai 过滤），无任何用户开关；「查看提示词」预览与 wire 口径分裂；openai mapper 遇 thinking 会 throw。PRD 落盘路径按项目惯例是 docs/Iterations/<名称>/prd.md（大写 I，front matter dependency 写 Iterations/...）。
+
+user:
 PRD 拆成四份，另加新需求：markdown 预览对代码块渲染支持不好，渲染效果和行内代码一样了。
 
 assistant:
-派子代理探索 markdown 渲染链路：共 5 条管线 3 类场景（desktop 预览/聊天用 react-markdown；mobile 聊天与 .md 预览用 markdown-it+WebView 共用 rich-content-styles.ts 单源；mobile 另有 RN 回退路径）。现象根源：mobile WebView 主路径的 pre 只有折行规则、无背景/边框/padding 且无 pre code 重置，内层 code 带行内样式——与用户描述完全吻合；desktop 有块级规则但与行内 code 同用 CSS 变量且无高亮，区分度弱。全链路无语法高亮，唯一特判语言是 mermaid。约束：mobile pre 折行是故意设计（避免内层滚动抢竖滑）；批注以渲染后 DOM 文本流为坐标基准（高亮插 span 需评估影响）；sanitize 白名单可能约束高亮输出。user:
+派子代理探索 markdown 渲染链路：共 5 条管线 3 类场景（desktop 预览/聊天用 react-markdown；mobile 聊天与 .md 预览用 markdown-it+WebView 共用 rich-content-styles.ts 单源；mobile 另有 RN 回退路径）。现象根源：mobile WebView 主路径的 pre 只有折行规则、无背景/边框/padding 且无 pre code 重置，内层 code 带行内样式——与用户描述完全吻合；desktop 有块级规则但与行内 code 同用 CSS 变量且无高亮，区分度弱。全链路无语法高亮，唯一特判语言是 mermaid。约束：mobile pre 折行是故意设计（避免内层滚动抢竖滑）；批注以渲染后 DOM 文本流为坐标基准（高亮插 span 需评估影响）；sanitize 白名单可能约束高亮输出。
+
+user:
 代码块要做到第三档（块级形态+语言标签+语法高亮）；thinking 开关选 B：仅最新一轮进上下文，历史剥离；确认历史 thinking 没意义、常见做法也是只留最新。
 
 assistant:
@@ -75,4 +79,86 @@ user:
 确认 execute-ready。清理 .woktree 旧 worktree（四个：model-select-all/sql-cr-validation/token-usage-stats/vfs-seq-fix），新建五个 worktree 给五个 spec 开发用。
 
 assistant:
-删除前盘点了四个旧 worktree：三个（model-select-all/token-usage-stats/vfs-seq-fix）相对 main 零领先且干净，直接删；sql-cr-validation 领先 1 个 wip 提交（sql-cr-audit harness 约 9800 行）+未提交改动——先把未提交改动以 wip 提交落到 feat/sql-cr-validation 分支（6b6e024，分支保留可找回）再删。新建五个 worktree 均基于 main 9f39807：.woktree/{token-usage-stats-enhance,thinking-openai-unify,thinking-context-toggle,fetch-tool,markdown-code-block-render}，分支同名 feat/<name>。用户已确认五份 spec execute-ready。
+删除前盘点了四个旧 worktree：三个（model-select-all/token-usage-stats/vfs-seq-fix）相对 main 零领先且干净，直接删；sql-cr-validation 领先 1 个 wip 提交（sql-cr-audit harness 约 9800 行）+未提交改动——先把未提交改动以 wip 提交落到 feat/sql-cr-validation 分支（6b6e024，分支保留可找回）再删。新建五个 worktree 基于当时 main 9f39807，分支同名 feat/<name>。
+
+user:
+挂 code-dev-loop，五个迭代并发开发（各自 worktree/分支）。前置：主仓把五迭代 PRD/SPEC 文档提交到 main（b3429b0），各 worktree ff 同步。
+
+assistant:
+wave-0 五个 impl 子代理并行（各自 worktree 内 npm install+按 spec 全 Step 实现+自测提交），全部完成：①token-usage-stats-enhance 6 commits（head db9e5a0），全量验证过；②thinking-openai-unify 5 commits（5574069），core 全量 2157 通过、三基线零改动；③thinking-context-toggle 12 commits（6e7e595），core 2174/desktop 84 通过；④fetch-tool 8 commits（8a2810d），core 全量 2169；⑤markdown-code-block-render 11 commits（1fad168），desktop 91/mobile 838 通过、webview CSS 增量 1.9K/1.8K 达标。存量基线失败（非本轮引入）：mobile use-chat-tab-message-actions-unhide 3 例、CLI e2e 若干、core lint 2 error。wave-2 五个 cr-func 并行全部 func-ready: yes，无 must-fix。已知轻微项：persistent-preferences.test.ts 的 vfs 坏值用例被改写为 thinkingContext（vfs 坏值覆盖待补）、truncateToByteBudget 块边界代理对理论窄险、desktop highlight.js 直接依赖 11.12.0 与 lowlight 传递 11.11.2 并存（T-CB13 实证双端一致）。LOW 补丁（changelog 体积说明）由主代理 trivial 豁免直接补（1fad168）。最终 dev-ready。环境坑沉淀：worktree 首次跑测试要先 build core 与 tdbc-driver-better-sqlite3 的 dist，否则 tsc/测试会解析到主仓旧 dist；npm run test 的 extglob 通配需 bash 包层跑。
+
+manual_user 待验收清单：统计 Step 11（旧库升级/速率量级/长按手势/reduced-motion）、thinking 开关 T-UI1/2 与关态工具循环冒烟、fetch 的 UI 工具清单确认、代码块 Step 10（四场景明暗主题/批注/流式）。
+
+user:
+挂 code-review-loop，对五个迭代分支全维 CR 并产出 fix-spec。
+
+assistant:
+第一波 5 个 readonly 评审子代理（fetch-tool 首次无响应重试成功）：①token-usage-stats-enhance 通过，仅 1 P2（mobile 四个格式化函数 DRY）；②thinking-openai-unify 通过零 must-fix（open question：CHANGELOG 条目路径待拍板）；③thinking-context-toggle 4 P2（测试分组嵌套+vfs 坏值覆盖丢失、双端 preview helper 44 行逐字重复应下沉 core、偏好读取无容错会炸 run、CHANGELOG 缺语义变化条目）；④fetch-tool 1 P1+4 P2（P1：clearTimeout 在响应头后就清，body 下载无超时，慢滴流挂死回合且 aborted 分支死代码；P2：description 措辞/CHANGELOG/非文本全量下载/二次 encode）；⑤markdown-code-block-render 2 P2（hljs 内置别名 mjs/cjs 等双端分叉——desktop 随模块注册高亮 mobile 被门控；rawLang 未转义隐式依赖表 key 字符集）+C-1 spec 回写。spec-fix 子代理 3 个并行落盘 cr-fix-spec.md（各 worktree 分支提交），统计与 openai 两份 trivial 豁免由主代理直接写。第二波 3 个 R2 校验全部 fix-spec-ready: yes；fetch 的 R2 揪出 fix-spec 内 MF-1 验收 mock 设计缺陷（纯挂起 Promise 不监听 signal 会挂死测试，须 abort reject），trivial 直接补正并刷新 head 基线说明。最终五份 fix-spec-ready 待用户确认。待拍板项：markdown MF-1 的 a/b 方案（推荐 b：spec 回写 deviation+样例补 mjs 块）、fetch URL 内嵌凭证是否拦截、各迭代 CHANGELOG 条目时机。
+
+user:
+五个迭代一个个合：先合一个到主仓的 feature 分支，告知变动。
+
+assistant:
+主仓从 main 建集成分支 feat/2026-08-iterations，第一个合入 thinking-openai-unify（--no-ff 合并节点 a42ea24，理由：改动最小零 must-fix 先校准流程）。变动 9 文件 +195/-134：拆 GLM 特判签名收窄、删 openai-glm-thinking.ts 及其测试、统一断言、补 GLM 锁定用例、cr-fix-spec 空壳。主仓定向验证 29/29（含三基线）。后续四个待合：thinking-context-toggle（建议第二，含 4 P2 fix）、fetch-tool（P1 修复建议先做再合）、token-usage-stats-enhance、markdown-code-block-render。
+
+user:
+这个分支测试没问题，可以合并到主分支了。
+
+assistant:
+main 已 fast-forward 到 a42ea24（feat/2026-08-iterations 同步指向），thinking-openai-unify 正式进 main。未 push 远端（用户未要求）。主仓工作区仍有用户自己的未提交改动（.vscode 删除、AGENTS.md、package-lock、perf-conventions 删除、iteration-state、memory）未动。剩余四迭代待 fix-wave 后逐个合入集成分支。
+
+user:
+再新建一个 feature 分支，合并第二个迭代。
+
+assistant:
+从 main(a42ea24) 新建 feat/2026-08-thinking-context-toggle 合入 thinking-context-toggle（--no-ff 节点 93a066b，33 文件 +1148/-18）。合并时被主仓工作区未提交的 package-lock 挡住：用户侧是 npm install 残留的 1.5.1→1.5.2 同步，分支侧是 1.5.1→1.5.4（与 package.json 一致更正确），stash 保存用户旧改动后合并带入 1.5.4（stash 保留未 pop）。主仓定向验证 30/30 通过（纯函数/偏好/render-prompt/run-agent-turn）。注意：该迭代 fix-spec 的 4 条 P2（测试分组嵌套+vfs 坏值覆盖、双端 preview helper 重复下沉、偏好读取容错、CHANGELOG 语义变化条目）尚未修复，建议在本分支修完再回 main。
+
+user:
+先修复吧，修完我再测试。
+
+assistant:
+fix 子代理在 feat/2026-08-thinking-context-toggle 上修完 4 条 P2（d56b0ed/70f1279/fe6f42d/9e8d956）：MF-1 测试分组闭合+vfs 坏值补回；MF-2 预览口径下沉 core 新 helper resolve-preview-thinking-context（端口 Pick 入参，LlmProtocolKind 经 public/provider.ts 本就可见，导出快照同步）；MF-3 偏好读取 catch PreferencesError 回退 true+标签日志；MF-4 CHANGELOG Unreleased（新增开关+变更语义与缓存抖动提示）。core 全量 2198 pass，双端 typecheck 过。待用户测试后合回 main。
+
+user:
+开关描述改成：开启后，最新一轮的思考内容进入提示词，历史思考不进入。
+
+assistant:
+trivial 直接改（4f94fb6）：mobile subtitle 改为固定描述（原来按开关态两态切换）；desktop SettingsSwitchRow 组件加可选 desc prop（配 settings-row__desc 小字灰色样式），思考开关传同一描述。双端 typecheck 过（mobile 需用 tsconfig.build.json，tsconfig.json 的 TS6307 是存量配置问题）。
+
+user:
+label 你怎么不改？
+
+assistant:
+a325f90：双端 label「思考进入上下文」→「思考提示词」（用户原话是「旧 - 新」格式，第一遍理解偏了只改了描述）；CHANGELOG Unreleased 条目同步新名；代码与 CHANGELOG 旧名零残留（docs/Iterations 历史 spec 保留原案不改）。最终双端口径：label 思考提示词，描述「开启后，最新一轮的思考内容进入提示词，历史思考不进入。」分支 head a325f90 待用户测试后合回 main。
+
+user:
+thinking 内容能进上下文的话，查看提示词的页面就应该能看到 thinking 内容对吧？
+
+assistant:
+确认能看到，且双端预览与 wire 同口径已实现。链路：mobile RealPromptScreen 与 desktop RealPromptPanel（IPC nm:prompt/realPreview → handlePromptRealPreview）都走各自的 buildRealPromptPreviewSegments（apps/mobile/src/services/prompt-preview.service.ts、apps/desktop/src/main/services/prompt-preview.service.ts），内部同用 core 的 resolvePreviewThinkingContext（偏好开关+档位前置门+协议推断）→ applyThinkingContextForLlm（与 wire 同一段过滤代码）→ buildPromptPreviewSegmentsFromLayout 传 includeThinkingBlocks。行为：开关开+档位非 off 时最新一轮 assistant 消息渲染出 thinking 段卡片，历史轮被剥；开关关或档位 off 时预览无 thinking 段。唯一刻意差异：预览 retainProtocolMinimum=false（wire 侧为 anthropic/gemini 工具循环被迫保留的最后一条 assistant thinking 不向用户展示）。
+
+user:
+llm 的 thinking 进入上下文有专门参数吗？我问 AI 能否看到上一轮思考，ta 说看不到。另外帮我调研 .reference/deepseek-harness 和 .reference/opencode 两个参考项目是怎么实现思考进入上下文的。
+
+assistant:
+确认无专门参数：请求侧 thinking/reasoning_effort 只控制生成本轮思考，历史思考进上下文靠把 thinking 块塞回 messages 历史。用户测得「AI 看不到上一轮思考」符合当前设计：applyThinkingContextForLlm 边界=最后一条真实用户输入，跨用户轮一律剥离（PRD 拍板的「历史思考不进入」，省 token）；开关真正生效处是同回合工具循环（开态保留本回合全部思考步骤）。协议差异：anthropic 回传 thinking 块（带签名验签）、gemini 回传 thought_signature、openai 出站直接丢弃 thinking 块（openai-content-mapper.ts 过滤，reasoning_content 只入站不回传）——openai 系模型必然看不到。
+
+并行派两个探索子代理调研参考项目（已抽查关键代码证实）：deepseek-harness 与 opencode 都是「默认全保留、跨轮不剥离」：deriveMessages/to-llm-message 原样投影历史 thinking，无用户级回传开关；openai 系出站均回传 reasoning_content（DeepSeek 官方要求工具轮回传 CoT，issue #399 不回传会被拒）；opencode 按 sameModel 划分——换模型降级为普通文本而非丢弃，签名分协议存 providerMetadata；deepseek-harness 签名放消息 source 的 replayState 信封，失配降级单条不挂请求。与我们的差异：我们跨轮剥离+openai 丢弃，比业界保守。待用户拍板：是否将「思考提示词」语义改为对齐业界（跨轮保留+openai mapper 补 reasoning_content 回传），以及待验证风险——DeepSeek 官方 API 工具循环下我们出站剥 thinking 可能 400。
+
+user:
+按倒数第二条用户输入划边界，工具调用场景会不会看到两个 thinking？我的想法是把 thinking 当作一个容量只有 1 的 message，自然刷新和跨轮存储，不存在两条 thinking 并存。
+
+assistant:
+确认用户指出的缺陷：按倒数第二条用户输入划边界，上一回合也是工具循环时会出现多条 thinking 并存（上一回合全部+本回合全部）。拍板改为「容量 1」语义：上下文中只保留最新一条 assistant 消息的思考块（跨轮自然可见、新一轮自动刷新旧思考），A3 生成时见 A2 的思考、A3 工具循环第二步时只见 A3 第一步的。实现落点：applyThinkingContextForLlm 开态改为「保留最后一条含 thinking 的 assistant 消息的全部思考块，其余剥离」——与关态协议最低保留（最后一条含 tool_use 的 assistant）结构对称，anthropic 已被生产验证容忍单条 thinking 回传。待确认细节：同一消息内多个 thinking 块整条保留（块与签名绑定不拆）。计划：spec 补 deviation → 改纯函数+测试（跨轮保留/刷新/容量1）→ 开关文案改「最近一次思考进入提示词」→ 用户统一测试。
+
+user:
+一条 assistant 消息里如果有多个 thinking 块，这是什么场景？
+
+assistant:
+两种真实场景：1) anthropic 交错思考（interleaved-thinking beta 头，单次响应内 thinking 穿插 text/tool_use 多次）——我们未启用该 beta（grep 无 interleaved），主路径单消息单 thinking 块；2) thinking 与 redacted_thinking 混合——anthropic 安全过滤命中时把思考段替换成加密 redacted_thinking 块（内容不可见、协议要求原样回传），触发时机不受我们控制，随时可能出现混合组合，我们 content-block 模型与双协议 mapper 已建模、stripThinkingBlocks 同剥两种。gemini 流式也天然可能多段 thought part。结论：容量 1 以「整条消息」为单位最稳——拆开保留会单独剥 redacted_thinking 有 anthropic 验签失败风险。方案确认开工：spec 补 deviation → applyThinkingContextForLlm 开态改「保留最后一条含 thinking 的 assistant 消息整条思考块」→ 补测试（跨轮保留/自动刷新/容量1/混合块整条保留）→ 开关文案同步。
+
+user:
+换个说法：就算 thinking 不进上下文，anthropic 协议本身也要把加密内容放到 API 吧？这和容量 1 不冲突吧？
+
+assistant:
+确认不冲突，是包含关系：anthropic 协议强制下限（工具循环中带 tool_use 的 assistant 回传时 thinking/redacted_thinking 必须原样带回验签，即关态协议最低保留）与容量 1 开态策略推演全场景兼容——工具循环中容量 1 命中的恰好就是协议要求那条（自动满足）；纯对话跨轮保留是超出下限但协议允许；开态无需叠加协议最低保留逻辑（已是超集）。定稿三层结构：档位 off→全剥；开关关→协议最低保留（现状不动）；开关开→容量 1（跨轮保留最新一条含 thinking 的 assistant 整条思考块）。

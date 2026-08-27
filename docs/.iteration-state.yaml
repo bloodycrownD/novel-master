@@ -1,48 +1,41 @@
-# spec-check-loop 编排状态（novel-master，2026-08-26 起）
-# 五个迭代并行审查，各自独立计轮
+# code-dev-loop 编排状态（novel-master，2026-08-26 起）
+# 五迭代并行开发，各自 worktree：.woktree/<name>，分支 feat/<name>，base b3429b0
+# DAG：wave-0 impl（内含定向+全量验证证据，verify 等效闭合）→ wave-2 cr-func
+
+dev_dag_version: 3
+base_sha: b3429b0
+status: dev-ready（全部 cr-func func-ready: yes；manual_user 验收项待用户执行）
 
 iterations:
   token-usage-stats-enhance:
-    dag_version: 3
-    review_round: 2
-    prd_path: docs/Iterations/token-usage-stats-enhance/prd.md
+    worktree: .woktree/token-usage-stats-enhance
     spec_path: docs/Iterations/token-usage-stats-enhance/spec.md
-    open_must_fix: []
-    doc_fix_plan: []
-    status: execute-ready（主代理等效认定，待用户确认）
+    wave_plan: [[impl+verify], [cr-func]]
+    node_status: { impl: done(head db9e5a0, 6 commits), verify: done(core 533+55/desktop 23/mobile 31/typecheck 全过), cr-func: done(func-ready yes) }
 
   thinking-openai-unify:
-    dag_version: 3
-    review_round: 2
-    prd_path: docs/Iterations/thinking-openai-unify/prd.md
+    worktree: .woktree/thinking-openai-unify
     spec_path: docs/Iterations/thinking-openai-unify/spec.md
-    open_must_fix: []
-    doc_fix_plan: []
-    status: execute-ready（主代理等效认定，待用户确认）
+    wave_plan: [[impl+verify], [cr-func]]
+    node_status: { impl: done(head 5574069, 5 commits), verify: done(core 全量 2157/typecheck 过), cr-func: done(func-ready yes) }
 
   thinking-context-toggle:
-    dag_version: 5
-    review_round: 4
-    prd_path: docs/Iterations/thinking-context-toggle/prd.md
+    worktree: .woktree/thinking-context-toggle
     spec_path: docs/Iterations/thinking-context-toggle/spec.md
-    open_must_fix: []
-    doc_fix_plan: []
-    status: execute-ready（第 4 轮审查 Go，待用户确认）
+    wave_plan: [[impl+verify], [cr-func]]
+    node_status: { impl: done(head 6e7e595, 12 commits), verify: done(core 2174/desktop 84/CLI smoke 过；mobile 3 失败为存量基线), cr-func: done(func-ready yes) }
 
   fetch-tool:
-    dag_version: 3
-    review_round: 2
-    prd_path: docs/Iterations/fetch-tool/prd.md
+    worktree: .woktree/fetch-tool
     spec_path: docs/Iterations/fetch-tool/spec.md
-    open_must_fix: []
-    doc_fix_plan: []
-    status: execute-ready（第 2 轮审查 Go + trivial 修复，待用户确认）
+    wave_plan: [[impl+verify], [cr-func]]
+    node_status: { impl: done(head 8a2810d, 8 commits), verify: done(core 全量 2169/typecheck/eslint 过), cr-func: done(func-ready yes) }
 
   markdown-code-block-render:
-    dag_version: 3
-    review_round: 2
-    prd_path: docs/Iterations/markdown-code-block-render/prd.md
+    worktree: .woktree/markdown-code-block-render
     spec_path: docs/Iterations/markdown-code-block-render/spec.md
-    open_must_fix: []
-    doc_fix_plan: []
-    status: execute-ready（第 2 轮审查 Go + trivial 修复，待用户确认）
+    wave_plan: [[impl+verify], [cr-func]]
+    node_status: { impl: done(head 1fad168, 11 commits), verify: done(desktop 91/mobile 838(3 存量)/build:webview 增量 1.9K+1.8K 达标), cr-func: done(func-ready yes；LOW 补丁 changelog 体积说明已补 1fad168) }
+
+# 存量基线失败（非本轮引入，合并不阻塞）：mobile use-chat-tab-message-actions-unhide 3 例；CLI e2e 若干；
+# core lint 2 error（sanitize-entry-filename no-control-regex / annotate-source-range prefer-const）
