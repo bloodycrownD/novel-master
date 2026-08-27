@@ -302,14 +302,18 @@ describe("applyThinkingContextForLlm", () => {
     const input = [u1, a1, u2, a2];
     const snapshot = JSON.stringify(input);
 
-    // 开态：全量保留，返回原数组
+    // 开态：全量保留，元素保持原引用（浅拷贝新数组）
     const onOut = applyThinkingContextForLlm(input, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
-    assert.equal(onOut, input);
+    assert.equal(onOut.length, input.length);
+    assert.equal(onOut[0], u1);
+    assert.equal(onOut[1], a1);
+    assert.equal(onOut[2], u2);
+    assert.equal(onOut[3], a2);
 
     // 关态（openai，全剥）：被剥消息新对象，其余原引用，入参不变
     const offOut = applyThinkingContextForLlm(input, {

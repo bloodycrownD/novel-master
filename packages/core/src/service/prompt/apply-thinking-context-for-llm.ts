@@ -95,9 +95,10 @@ export function applyThinkingContextForLlm(
   }
 
   if (enabled) {
-    // 标准方案：全量保留，消息原样返回（含全部 thinking / redacted_thinking
-    // 与签名）。开关开的保留集合 ⊇ 协议最低保留，无需叠加判定。
-    return messages;
+    // 标准方案：全量保留（含全部 thinking / redacted_thinking 与签名）。
+    // 开关开的保留集合 ⊇ 协议最低保留，无需叠加判定；
+    // 浅拷贝满足可变返回类型，元素保持原引用（不可变惯例）。
+    return [...messages];
   }
 
   // 关态：全剥，仅协议最低保留（anthropic / gemini）跳过。
