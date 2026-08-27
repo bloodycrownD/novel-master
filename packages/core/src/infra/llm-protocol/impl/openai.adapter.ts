@@ -130,7 +130,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     if (req.sampling?.protocol === "openai") {
       Object.assign(body, req.sampling.openai);
     }
-    applyOpenAiThinkingToBody(body, req.thinking, req.vendorModelId);
+    applyOpenAiThinkingToBody(body, req.thinking);
     if (
       stream &&
       req.tools != null &&
@@ -155,7 +155,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       messages: [{ role: "user", content: userText }],
       ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
     };
-    applyOpenAiThinkingToBody(body, req.thinking, req.vendorModelId);
+    applyOpenAiThinkingToBody(body, req.thinking);
 
     const raw = await fetchJson(this.fetchFn, url, {
       method: "POST",

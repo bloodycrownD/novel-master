@@ -27,6 +27,27 @@ describe("thinkingLevelToModelThinkingParams", () => {
     );
   });
 
+  it("GLM 型号与 gpt-* 输出完全一致，无型号差异", () => {
+    for (const model of ["glm-4.7", "glm-5.2"]) {
+      assert.equal(
+        thinkingLevelToModelThinkingParams("off", "openai", model, samplingOff),
+        undefined,
+      );
+      assert.deepEqual(
+        thinkingLevelToModelThinkingParams("low", "openai", model, samplingOff),
+        { protocol: "openai", openai: { reasoning_effort: "low" } },
+      );
+      assert.deepEqual(
+        thinkingLevelToModelThinkingParams("medium", "openai", model, samplingOff),
+        { protocol: "openai", openai: { reasoning_effort: "medium" } },
+      );
+      assert.deepEqual(
+        thinkingLevelToModelThinkingParams("high", "openai", model, samplingOff),
+        { protocol: "openai", openai: { reasoning_effort: "high" } },
+      );
+    }
+  });
+
   it("Anthropic 档位 budget 受 effective max_tokens 钳制", () => {
     const params = thinkingLevelToModelThinkingParams(
       "high",
