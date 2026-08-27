@@ -1,7 +1,7 @@
 /**
  * Chat tab sessions subview: session list, template workspace.
  */
-import React, {useMemo} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {
   FlatList,
   Pressable,
@@ -19,10 +19,14 @@ import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {PrimaryButton} from '@/components/ui/PrototypeButtons';
-import {VfsFileManager} from '@/components/vfs/VfsFileManager';
+import {
+  VfsFileManager,
+  type VfsFileManagerHandle,
+} from '@/components/vfs/VfsFileManager';
 import type {ThemeTokens} from '@/theme/tokens';
 import {formatRelativeTimeMs} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
+import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
 
 export type ChatSessionListPanelProps = {
   tokens: ThemeTokens;
@@ -86,6 +90,35 @@ function ChatSessionListPanelInner({
     return {kind: 'project', projectId};
   }, [projectId]);
 
+  // 同 ChatConversationPanel：把项目工作区的「可回上级目录」状态注册进
+  // WorkspaceBackCtx，供 Android 返回键逐级退目录；面板不可见时注销，
+  // 避免与聊天工作区的注册相互覆盖。
+  const projectVfsRef = useRef<VfsFileManagerHandle | null>(null);
+  const setWorkspaceBackState = useChatTabWorkspaceBackState();
+
+  const emitWorkspaceBackState = useCallback(() => {
+    if (setWorkspaceBackState == null) {
+      return;
+    }
+    if (!visible || sessionListPanel !== 'template') {
+      setWorkspaceBackState(null);
+      return;
+    }
+    const handle = projectVfsRef.current;
+    if (!handle) {
+      setWorkspaceBackState(null);
+      return;
+    }
+    setWorkspaceBackState({
+      canGoUp: handle.canGoUp(),
+      goUp: () => handle.goUp(),
+    });
+  }, [visible, sessionListPanel, setWorkspaceBackState]);
+
+  useEffect(() => {
+    emitWorkspaceBackState();
+  }, [emitWorkspaceBackState, vfsRefreshKey]);
+
   return (
     <View
       style={[styles.subviewFill, !visible && styles.panelHidden]}
@@ -104,11 +137,13 @@ function ChatSessionListPanelInner({
           <View style={styles.flexFill}>
             <VfsFileManager
               key={`project-template-${vfsRefreshKey}`}
+              ref={projectVfsRef}
               scope={projectVfsScope!}
               vfs={projectVfs}
               workplace={projectWorktree}
               rootPath="/"
               onOpenFile={path => onOpenFileEditor(path, 'project')}
+              onDirectoryChange={emitWorkspaceBackState}
             />
           </View>
         ) : (
