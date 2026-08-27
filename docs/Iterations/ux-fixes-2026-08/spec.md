@@ -82,7 +82,7 @@ apps/desktop/renderer/
 | 15 | `apps/desktop/renderer/features/settings/AgentWorkplaceBlockCard.tsx` | 组件内部 L55-61 的 textarea 换 `PromptCollapsibleField`（组件完全受控、props 不变，两个调用方零改动） | 探索报告 B2 |
 | 16 | `apps/desktop/renderer/styles/shell.css` | 新增 `.prompt-field-clamp`（3 行 line-clamp，仿 `.chat-message__body-clamp` L3949）与 `.prompt-editor-modal`（近全屏内容区，overlay 复用 `.text-prompt-overlay` L5182） | 探索报告 B2 |
 | 17 | `apps/mobile/src/components/chat/ComposerAtPathInput.tsx` | 真机验收追加：children 复用治理——新 children 纯文本 == 原生最近上报文本（handleChangeText 维护 lastNativePlainRef）且 mention 集合签名未变时复用上一份 children 元素，跳过原生 spannable 重推；程序化写入/水化/typeahead 点选/原子删自然重推（99f5299，T-C3/T-C4） | 用户真机反馈 |
-| 18 | 双端 `prompt-collapse.ts` 及折叠组件 | 阈值拍板变更：从「600 字符」改为「超过 5 行折叠、预览 3 行」——mobile 以 onContentSizeChange 实测内容高度（>110px）判定、未测量前以换行数初判；desktop 以 DOM 实测（textarea scrollHeight > clientHeight）判定，useLayoutEffect 防首帧闪撑（259973e/238400a/b907dba） | 用户验收反馈 |
+| 18 | 双端 `prompt-collapse.ts` 及折叠组件 | 阈值拍板变更：从「600 字符」改为「超过 5 行折叠、预览 3 行」——mobile 以 onContentSizeChange 实测内容高度（>110px）判定、未测量前以换行数初判；desktop 以 DOM 实测（textarea scrollHeight > clientHeight + 1，含 1px 防亚像素容差）判定，useLayoutEffect 防首帧闪撑（259973e/238400a/b907dba） | 用户验收反馈 |
 
 ## 详细实现步骤
 
