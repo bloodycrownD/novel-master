@@ -9,6 +9,7 @@ import {
   WORKPLACE_ASSISTANT_TEXT_LABEL,
 } from "@shared/logic/config-forms-agent";
 import { Switch } from "@/components/ui/Switch";
+import { PromptCollapsibleField } from "./PromptCollapsibleField";
 import { SettingsField } from "./settings-ui";
 
 type Props = {
@@ -52,13 +53,19 @@ export function AgentWorkplaceBlockCard({
             <>
               <p className="config-block-card__hint">{WORKPLACE_BLOCK_HINT}</p>
               <SettingsField label={WORKPLACE_ASSISTANT_TEXT_LABEL}>
-                <textarea
-                  rows={3}
+                <PromptCollapsibleField
                   value={assistantText}
-                  disabled={disabled}
-                  onChange={(e) => onAssistantTextChange(e.target.value)}
-                  aria-label={WORKPLACE_ASSISTANT_TEXT_LABEL}
-                />
+                  onChange={onAssistantTextChange}
+                  ariaLabel={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                >
+                  <textarea
+                    rows={3}
+                    value={assistantText}
+                    disabled={disabled}
+                    onChange={(e) => onAssistantTextChange(e.target.value)}
+                    aria-label={WORKPLACE_ASSISTANT_TEXT_LABEL}
+                  />
+                </PromptCollapsibleField>
               </SettingsField>
             </>
           ) : (
