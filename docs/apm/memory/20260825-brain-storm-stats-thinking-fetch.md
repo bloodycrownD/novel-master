@@ -1,5 +1,5 @@
 ---
-date: 2026-08-27 19:30
+date: 2026-08-27 20:00
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -198,3 +198,9 @@ user:
 
 assistant:
 5fd2526 默认值改关：偏好默认 true→false（persistent-preferences.service），agent-runner 兜底链（未注入 preferences / KKV 坏值回退）同步 false（原「保守保留方向」注释改为跟随默认关）。默认行为与旧版一致：openai 不发 reasoning_content（零兼容风险），anthropic/gemini 关态仅协议最低保留。T-PF1（unset→false、set true/reset 回 false）与 MF-3（坏值回退关态、无 tool_use 的 thinking 不进历史、fallback:false）更新。build+定向 58/58+全量 2202 全过。spec 偏离记录第三次修订、CHANGELOG「默认关闭」同步。至此迭代形态定稿：开关默认关，开=全量回传（anthropic/gemini 原生块、openai reasoning_content），关=不进上下文+协议最低保留，档位 off 全剥。
+
+user:
+档位 off 是什么意思？思考关闭吗？
+
+assistant:
+解释术语：档位=模型设置里的思考等级（thinkingLevel/reasoning_effort，thinking-openai-unify 统一的那个），控制这轮生不生成思考（生成侧）；与「思考提示词」开关（历史思考进不进上下文）是两个维度。档位 off 时全剥的两个原因：anthropic body 未开 thinking 时消息含 thinking 块直接 400；模型不思考时历史思考无意义白占 token。三层判定定稿：档位 off→全剥；档位 on+开关关（默认）→不进上下文+协议最低保留；档位 on+开关开→全量进上下文。提醒用户测试时确认模型思考档位非 off。
