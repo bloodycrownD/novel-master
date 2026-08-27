@@ -84,6 +84,17 @@ describe("PersistentPreferences", () => {
       assert.equal(await ctx.preferences.getUserVfsUnifiedToolTurn(), true);
     });
 
+    it("throws PreferencesError on invalid stored boolean", async () => {
+      const ctx = getNovelMasterTestContext();
+      const kkv = createKkvService(ctx.conn);
+      await kkv.set("nm-preferences", "vfs.userVfsUnifiedToolTurn", "not-a-bool");
+      await assert.rejects(
+        () => ctx.preferences.getUserVfsUnifiedToolTurn(),
+        (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
+      );
+    });
+  });
+
   describe("chat.thinkingContext", () => {
     it("defaults to true when unset", async () => {
       const ctx = getNovelMasterTestContext();
@@ -108,5 +119,4 @@ describe("PersistentPreferences", () => {
       );
     });
   });
-});
 });
