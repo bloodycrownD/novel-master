@@ -98,17 +98,18 @@ export const ComposerAtPathInput = forwardRef<
         // 路径无空格；避免把后续字吞进 keyword
         allowedSpacesCount: 0,
         isInsertSpaceAfterMention: true,
-        // 字色 + 轻底胶囊，与柔和 selection tint 可区分
+        // 字色 + 轻底胶囊，与柔和 selection tint 可区分。
+        // 注意：胶囊不加水平 padding——额外宽度会改变文本测量，
+        // 多行文本时 tag 靠近行尾会让换行点在两次渲染间来回跳（输入框上下抖动）。
         textStyle: {
           color: tokens.primary,
           backgroundColor: `${tokens.primary}22`,
           borderRadius: 6,
-          paddingHorizontal: 3,
         },
         // 展示为 @/path（name 已含前导 /）
         getPlainString: mention => `@${mention.name}`,
       },
-      // `$技能名` 显式引用：与 @path 同款着色 / 原子删 / 尾空格
+      // `$技能名` 显式引用：与 @path 同款着色 / 原子删 / 尾空格（胶囊同样不加水平 padding）
       skill: {
         trigger: '$',
         allowedSpacesCount: 0,
@@ -117,7 +118,6 @@ export const ComposerAtPathInput = forwardRef<
           color: tokens.primary,
           backgroundColor: `${tokens.primary}22`,
           borderRadius: 6,
-          paddingHorizontal: 3,
         },
         getPlainString: mention => `$${mention.name}`,
       },
