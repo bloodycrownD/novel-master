@@ -160,7 +160,7 @@ export function ChatConfigScreen() {
       <ProfileSwitchItem
         icon="🧠"
         label="思考提示词"
-        subtitle="开启后，最新一轮的思考内容进入提示词，历史思考不进入。"
+        subtitle="开启后，最近一次的思考内容进入提示词，更早的不进入。"
         value={thinkingContextEnabled}
         tokens={tokens}
         onValueChange={enabled => {

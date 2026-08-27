@@ -73,7 +73,7 @@ export async function buildRealPromptPreviewSegments(
     scope.projectId,
     definition,
   );
-  // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 边界判定单点在 core 纯函数）；
+  // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 容量 1 保留单点在 core 纯函数）；
   // 判定链已下沉 core（resolvePreviewThinkingContext），本地不再持有副本。
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(
     scope.sessionId,
@@ -85,8 +85,8 @@ export async function buildRealPromptPreviewSegments(
     agentModelId: definition.model,
     sessionModelId: sessionConfig.modelId,
   });
-  // 预览输入 ctx.messages 不含合成消息（"prompt:" 排除规则为 no-op），
-  // 但判定代码与 wire 侧同一段，两侧剥离集合一致（T-PV2）。
+  // 预览输入 ctx.messages 不含合成消息，但容量 1 判定只看 assistant 消息，
+  // 判定代码与 wire 侧同一段，两侧保留集合一致（T-PV2）。
   const filteredMessages = applyThinkingContextForLlm(ctx.messages, {
     enabled: thinking.enabled,
     protocol: thinking.protocol,

@@ -1,5 +1,6 @@
 /**
- * applyThinkingContextForLlm 单测（spec §测试策略 T-TC1 ~ T-TC8、T-PV2 纯函数部分）。
+ * applyThinkingContextForLlm 单测（spec §测试策略 T-TC1 ~ T-TC8、T-PV2 纯函数部分；
+ * 开态为容量 1 语义——见 spec「实现偏离记录」）。
  */
 
 import assert from "node:assert/strict";
@@ -80,25 +81,45 @@ function thinkingBlocks(message: ChatMessage): ContentBlock[] {
 }
 
 describe("applyThinkingContextForLlm", () => {
-  it("T-TC1 开·历史剥离：边界前 assistant thinking 剥离，其余块原样", () => {
+  it("T-TC1 开·容量 1 历史剥离：更早轮 thinking 剥离、其余块原样，仅最新一条 assistant 保留", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
-    const messages = [user("u1", "u-1"), a1, user("u2", "u-2"), msg("assistant", { id: "a2" })];
+    const a2 = assistantThinking({ id: "a2", withSignature: true });
+    const messages = [user("u1", "u-1"), a1, user("u2", "u-2"), a2];
     const out = applyThinkingContextForLlm(messages, {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
+    // a1 被剥（仅留 text），a2 整条原样
     assert.equal(thinkingBlocks(out[1]!).length, 0);
     assert.equal(out[1]!.content.blocks.length, 1);
     assert.equal(out[1]!.content.blocks[0]!.type, "text");
+    assert.equal(out[3], a2);
     // 其余消息原样（引用不变）
     assert.equal(out[0], messages[0]);
     assert.equal(out[2], messages[2]);
-    assert.equal(out[3], messages[3]);
   });
 
-  it("T-TC2 开·最新轮与工具循环保留：边界后 thinking/redacted 原样回传（签名、顺序、逐字节不变）", () => {
+  it("T-TC1 开·多轮自动刷新：三轮 thinking 仅最新一条保留，更早两条全剥", () => {
+    const a1 = assistantThinking({ id: "a1", withSignature: true });
+    const a2 = assistantThinking({ id: "a2", withSignature: true });
+    const a3 = assistantThinking({ id: "a3", withSignature: true });
+    const out = applyThinkingContextForLlm(
+      [user("u1", "u-1"), a1, user("u2", "u-2"), a2, user("u3", "u-3"), a3],
+      {
+        enabled: true,
+        protocol: "anthropic",
+        retainProtocolMinimum: true,
+        requestThinkingEnabled: true,
+      },
+    );
+    assert.equal(thinkingBlocks(out[1]!).length, 0);
+    assert.equal(thinkingBlocks(out[3]!).length, 0);
+    assert.equal(out[5], a3);
+  });
+
+  it("T-TC2 开·工具循环容量 1：仅最后一条含思考块的 assistant 保留（thinking+redacted 混合整条原样，签名、顺序不变）", () => {
     const u = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withToolUse: true, withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
@@ -115,10 +136,24 @@ describe("applyThinkingContextForLlm", () => {
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
-    assert.equal(out[1], a1);
+    // 容量 1：循环内更早的 a1 被剥，仅最新 a2 整条保留（含混合块）
+    assert.equal(thinkingBlocks(out[1]!).length, 0);
     assert.equal(out[3], a2);
-    assert.deepEqual(out[1]!.content.blocks, a1.content.blocks);
     assert.deepEqual(out[3]!.content.blocks, a2.content.blocks);
+  });
+
+  it("T-TC2 开·跨轮纯文本回复的思考保留：上一轮非工具回复的 thinking 对新一轮可见", () => {
+    const a1 = assistantThinking({ id: "a1", withSignature: true });
+    const out = applyThinkingContextForLlm(
+      [user("u1", "u-1"), a1, user("u2", "u-2")],
+      {
+        enabled: true,
+        protocol: "anthropic",
+        retainProtocolMinimum: true,
+        requestThinkingEnabled: true,
+      },
+    );
+    assert.equal(out[1], a1);
   });
 
   it("T-TC3 关·anthropic 最低保留：仅最后一条含 tool_use 的 assistant 保留，其余全剥", () => {
@@ -211,7 +246,8 @@ describe("applyThinkingContextForLlm", () => {
 
   it("T-TC4 开·openai 行为与 anthropic 相同口径（剥离不改变 openai 过滤语义）", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
-    const messages = [user("u1", "u-1"), a1, user("u2", "u-2"), msg("assistant", { id: "a2" })];
+    const a2 = assistantThinking({ id: "a2", withSignature: true });
+    const messages = [user("u1", "u-1"), a1, user("u2", "u-2"), a2];
     const anthropicOut = applyThinkingContextForLlm(messages, {
       enabled: true,
       protocol: "anthropic",
@@ -227,21 +263,7 @@ describe("applyThinkingContextForLlm", () => {
     assert.deepEqual(openaiOut, anthropicOut);
   });
 
-  it("T-TC5 tool_result 载体 user 消息不重置边界（边界仍在更早的真实输入）", () => {
-    const u1 = user("u1", "u-1");
-    const a1 = assistantThinking({ id: "a1", withToolUse: true, withSignature: true });
-    const r1 = toolResultUser("tu_a1", "r-1");
-    // r1 不算真实用户输入：边界是 u1，a1 属于最新轮、保留
-    const out = applyThinkingContextForLlm([u1, a1, r1], {
-      enabled: true,
-      protocol: "anthropic",
-      retainProtocolMinimum: true,
-      requestThinkingEnabled: true,
-    });
-    assert.equal(out[1], a1);
-  });
-
-  it("T-TC5 无任何真实 user 消息时全历史剥离", () => {
+  it("T-TC5 容量 1 不依赖 user 消息：无任何 user 输入时最后一条含思考块的 assistant 仍保留", () => {
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
     const out = applyThinkingContextForLlm([a1, r1], {
@@ -250,50 +272,39 @@ describe("applyThinkingContextForLlm", () => {
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
-    assert.equal(thinkingBlocks(out[0]!).length, 0);
+    assert.equal(out[0], a1);
   });
 
-  it("T-TC5 user_vfs_action 合成消息重置边界（其后的 assistant thinking 保留）", () => {
+  it("T-TC5 容量 1 不受合成/载体消息影响：user_vfs_action、tool_turn_bridge、tool_result 载体均不改变保留位置", () => {
     const u1 = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const vfsAction = msg("user", {
       id: "vfs-1",
       raw: { metadata: { kind: "user_vfs_action", source: "user" } },
     });
-    const a2 = assistantThinking({ id: "a2", withSignature: true });
-    const out = applyThinkingContextForLlm([u1, a1, vfsAction, a2], {
-      enabled: true,
-      protocol: "anthropic",
-      retainProtocolMinimum: true,
-      requestThinkingEnabled: true,
-    });
-    assert.equal(thinkingBlocks(out[1]!).length, 0);
-    assert.equal(out[3], a2);
-  });
-
-  it("T-TC5 tool_turn_bridge（assistant 合成）不参与边界判定", () => {
-    const u1 = user("u1", "u-1");
     const bridge = msg("assistant", {
       id: "bridge-1",
       raw: { metadata: { kind: "tool_turn_bridge", synthetic: true } },
     });
     const a2 = assistantThinking({ id: "a2", withSignature: true });
-    const out = applyThinkingContextForLlm([u1, bridge, a2], {
+    const r2 = toolResultUser("tu_a2", "r-2");
+    const out = applyThinkingContextForLlm([u1, a1, vfsAction, bridge, a2, r2], {
       enabled: true,
       protocol: "anthropic",
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
-    // 边界是 u1；bridge 与 a2 都在最新轮，thinking 原样
-    assert.equal(out[2], a2);
+    // 判定只看 assistant：最新含思考块的是 a2，a1 被刷掉
+    assert.equal(thinkingBlocks(out[1]!).length, 0);
+    assert.equal(out[4], a2);
   });
 
-  it("T-TC6 不可变性：无 thinking 的消息返回原对象引用；入参不被修改", () => {
+  it("T-TC6 不可变性：被剥消息返回新对象、无变更消息返回原引用；入参不被修改", () => {
     const u1 = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const u2 = user("u2", "u-2");
-    const plain = msg("assistant", { id: "a-plain" });
-    const input = [u1, a1, u2, plain];
+    const a2 = assistantThinking({ id: "a2", withSignature: true });
+    const input = [u1, a1, u2, a2];
     const snapshot = JSON.stringify(input);
     const out = applyThinkingContextForLlm(input, {
       enabled: true,
@@ -303,13 +314,14 @@ describe("applyThinkingContextForLlm", () => {
     });
     assert.equal(out[0], u1);
     assert.equal(out[2], u2);
-    assert.equal(out[3], plain);
     assert.equal(JSON.stringify(input), snapshot);
+    // a1 被剥 → 新对象；a2 保留 → 原引用
     assert.notEqual(out[1], a1);
     assert.equal(a1.content.blocks.length, 2);
+    assert.equal(out[3], a2);
   });
 
-  it("T-TC7 合成消息不重置边界：prompt: 前缀 user 合成消息之后的 assistant thinking 仍按边界剥离", () => {
+  it("T-TC7 容量 1 不受 prompt: 合成消息影响：persist / dynamic / workplace / skills 区 user 合成消息不改变保留集合", () => {
     const u1 = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withSignature: true });
     const u2 = user("u2", "u-2");
@@ -340,12 +352,12 @@ describe("applyThinkingContextForLlm", () => {
       retainProtocolMinimum: true,
       requestThinkingEnabled: true,
     });
-    // 边界仍在 u2（合成消息不重置）：a1 在边界前被剥离，a2 在最新轮保留
+    // 合成消息均为 user 角色，容量 1 判定只看 assistant：a1 剥、a2 留
     assert.equal(thinkingBlocks(out[1]!).length, 0);
     assert.equal(out[3], a2);
   });
 
-  it("T-TC8 档位前置全局门：开态 + 档位 off 时全部剥离（最新轮也不保留）", () => {
+  it("T-TC8 档位前置全局门：开态 + 档位 off 时全部剥离（容量 1 保留也不生效）", () => {
     const u = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withToolUse: true, withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
@@ -389,7 +401,7 @@ describe("applyThinkingContextForLlm", () => {
     assert.deepEqual(offOff, onOff);
   });
 
-  it("T-PV2 预览口径：retainProtocolMinimum false 时关态输出不含任何 thinking；开态与 wire 可见集合一致；含合成消息两侧剥离集合一致", () => {
+  it("T-PV2 预览口径：retainProtocolMinimum false 时关态输出不含任何 thinking；开态容量 1 与 wire 可见集合一致；含合成消息两侧剥离集合一致", () => {
     const u = user("u1", "u-1");
     const a1 = assistantThinking({ id: "a1", withToolUse: true, withSignature: true });
     const r1 = toolResultUser("tu_a1", "r-1");
@@ -406,7 +418,8 @@ describe("applyThinkingContextForLlm", () => {
       assert.equal(thinkingBlocks(message).length, 0);
     }
 
-    // wire 形态（含 prompt: 合成消息）与预览形态（无合成消息）开态剥离集合一致
+    // wire 形态（含 prompt: 合成消息）与预览形态（无合成消息）开态剥离集合一致：
+    // 容量 1 判定只看 assistant，合成 user 消息天然不影响两侧集合
     const synthetic = msg("user", {
       id: "prompt:dynamic",
       blocks: [{ type: "text", text: "<dynamic/>" }],

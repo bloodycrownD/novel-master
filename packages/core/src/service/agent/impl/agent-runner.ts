@@ -471,9 +471,9 @@ export class DefaultAgentRunner implements AgentRunner {
           protocol,
           zones,
         );
-        // 思考上下文剥离：normalizeForLlmExport 之后、orphan 归一化之前——
-        // orphan 归一化会把孤立 tool_result 拍平成 text 块，拍平后的 user
-        // 消息会误判为「真实用户输入」把边界错误前移。
+        // 思考上下文剥离：normalizeForLlmExport 之后、orphan 归一化之前。
+        // 容量 1 判定只看 assistant 消息，与 orphan 归一化顺序无耦合，
+        // 此处保持既有插入位置（历史顺序、避免无关行为差异）。
         const strippedMessages = applyThinkingContextForLlm(exportMessages, {
           enabled: thinkingContextEnabled,
           protocol,
