@@ -16,12 +16,12 @@ date: 2026-08-27
 
 三条独立的修复线，互不依赖，可并行实现：
 
-1. **R1（mobile composer）**：根因定位为 mention 胶囊 `paddingHorizontal: 3` 使 tag 比同长度纯文本宽 6px，多行文本接近换行阈值时，JS 侧带样式测量与原生测量的换行点在两次渲染间来回跳，行数 ±1 导致输入框在 56~160 的高度档位间跳变。修复：去掉两个 trigger `textStyle` 的水平 padding，保留 `backgroundColor + borderRadius` 胶囊（不改水平测量）。库的 children 全量重建机制（`react-native-controlled-mentions` 的 `useMentions` 每次渲染重建 Text 树）**不动**——已论证「仅 mention 结构变化才更新 children」不可行（普通文本段每次击键都变，跳过更新会造成 JS 旧文本回写覆盖用户输入）。若去 padding 后真机仍抖，则升级为「高亮层与输入分离」方案，超出本 spec 范围。
+1. **R1（mobile composer）**：根因定位为 mention 胶囊 `paddingHorizontal: 3` 使 tag 比同长度纯文本宽 6px，多行文本接近换行阈值时，JS 侧带样式测量与原生测量的换行点在两次渲染间来回跳，行数 ±1 导致输入框在 56~160 的高度档位间跳变。修复：去掉两个 trigger `textStyle` 的水平 padding，保留 `backgroundColor + borderRadius` 胶囊（不改水平测量）。真机验收后追加第二层修复（变更点 #17）：库的 children 全量重建机制仍在，但纯打字时原生侧文本已最新、重推是冗余的——在 wrapper 层对「新 children 纯文本 == 原生最近上报文本且 mention 集合未变」的场景复用 children 元素，跳过原生 spannable 重推，消除 tag 每键闪烁。
 2. **R2（mobile 项目工作区返回）**：`VfsFileManager` 已通过 `useImperativeHandle` 暴露 `canGoUp()/goUp()` 并支持 `onDirectoryChange` 回调，聊天工作区（`ChatConversationPanel`）已把该状态注册进 `ChatTabNavigationProvider` 的 `WorkspaceBackCtx`；项目工作区（`ChatSessionListPanel`）缺 ref 接线与注册，且 `useAndroidChatBackHandler` 的 `template` 分支无条件 `showSessionsPanel()`。修复：补齐接线（面板不可见时注册 `null`，与聊天工作区互斥），handler 分支改为「先 `workspaceGoUp()`，根目录才 `showSessionsPanel()`」。
 3. **R3（双端提示词折叠 + 全屏编辑）**：
    - **mobile**：新建 `ExpandablePromptInput` 包装组件（render-prop 注入 `onBlur`，因为 RN 事件不冒泡）+ 新建轻量 stack 路由 `PromptEditor`（函数作路由参数，仿 `FileEditor` 的 `onSessionVfsSaved` 先例），全屏编辑内核复用仓库内 `CodeEditorWebView`（受控 `value/onChange`，伪路径 `prompt.txt` 走纯文本高亮）。`PromptMacroTextInput` 补可选 `onFocus`/`onBlur` 透传。
    - **desktop**：新建自包含 `PromptCollapsibleField` 组件（children 承载内联编辑器以保留 `PromptMacroTextarea` 宏能力与 Enter 快捷键；React 合成 focus 事件冒泡，外层 div 可捕获 focus/blur 做失焦折叠），全屏编辑用内嵌 Modal（复用 `.text-prompt-overlay`）+ 现成 `CodeEditor`（`languagePath="prompt.txt"` 即纯文本），草稿副本编辑、保存才回填。
-   - 阈值常量双端各自定义（mobile `components/agent/prompt-collapse.ts`、desktop `features/settings/prompt-collapse.ts`，均为 `PROMPT_COLLAPSE_THRESHOLD = 600` + `isPromptCollapsed(value)` 纯函数），便于测试与调整。
+   - 阈值常量双端各自定义（mobile `components/agent/prompt-collapse.ts`、desktop `features/settings/prompt-collapse.ts`；后经拍板改为行数/高度判定：`PROMPT_INLINE_MAX_LINES = 5` + 实测高度/DOM 溢出判定 + `PROMPT_PREVIEW_LINES = 3`，见变更点 #18），便于测试与调整。
 
 ## 最终项目结构
 
@@ -81,6 +81,8 @@ apps/desktop/renderer/
 | 14 | `apps/desktop/renderer/features/settings/AgentEditorView.tsx` | 5 输入点（L796/L831/L964/L1013/L1153 附近）textarea/PromptMacroTextarea 外包 `PromptCollapsibleField`（children 承载原编辑器，Enter 快捷键与宏 chips 保留在 inline 态） | 探索报告 B2 |
 | 15 | `apps/desktop/renderer/features/settings/AgentWorkplaceBlockCard.tsx` | 组件内部 L55-61 的 textarea 换 `PromptCollapsibleField`（组件完全受控、props 不变，两个调用方零改动） | 探索报告 B2 |
 | 16 | `apps/desktop/renderer/styles/shell.css` | 新增 `.prompt-field-clamp`（3 行 line-clamp，仿 `.chat-message__body-clamp` L3949）与 `.prompt-editor-modal`（近全屏内容区，overlay 复用 `.text-prompt-overlay` L5182） | 探索报告 B2 |
+| 17 | `apps/mobile/src/components/chat/ComposerAtPathInput.tsx` | 真机验收追加：children 复用治理——新 children 纯文本 == 原生最近上报文本（handleChangeText 维护 lastNativePlainRef）且 mention 集合签名未变时复用上一份 children 元素，跳过原生 spannable 重推；程序化写入/水化/typeahead 点选/原子删自然重推（99f5299，T-C3/T-C4） | 用户真机反馈 |
+| 18 | 双端 `prompt-collapse.ts` 及折叠组件 | 阈值拍板变更：从「600 字符」改为「超过 5 行折叠、预览 3 行」——mobile 以 onContentSizeChange 实测内容高度（>110px）判定、未测量前以换行数初判；desktop 以 DOM 实测（textarea scrollHeight > clientHeight）判定，useLayoutEffect 防首帧闪撑（259973e/238400a/b907dba） | 用户验收反馈 |
 
 ## 详细实现步骤
 
@@ -98,6 +100,9 @@ apps/desktop/renderer/
 - Step 12 — phase-prompt-collapse-desktop — blocking: yes — qa: auto：新增 `prompt-collapse.ts` 与 `PromptCollapsibleField.tsx`（#12、#13）。
 - Step 13 — phase-prompt-collapse-desktop — blocking: yes — qa: manual_user：`AgentEditorView` 5 点 + `AgentWorkplaceBlockCard` 内部替换（#14、#15）；desktop 手动验收（T-PD1）。
 - Step 14 — phase-verify — blocking: yes — qa: auto：mobile `npm run typecheck` + `npm run test`；desktop `npm run typecheck`（含 `npx tsc --noEmit -p tsconfig.renderer.json` 兜底）+ `npm run lint`。
+- Step 15 — phase-composer-stable — blocking: yes — qa: auto：真机验收反馈追加：children 复用治理消除 tag 每键闪烁（变更点 #17，T-C3/T-C4）。
+- Step 16 — phase-prompt-collapse-mobile — blocking: yes — qa: auto：阈值改行数：实测内容高度 + 换行数初判（变更点 #18 mobile 部分）。
+- Step 17 — phase-prompt-collapse-desktop — blocking: yes — qa: manual_user：阈值改行数：DOM 实测溢出判定（变更点 #18 desktop 部分）。
 
 ## 测试策略
 
@@ -107,6 +112,8 @@ apps/desktop/renderer/
 ### 测试用例
 
 - T-C1 — blocking: yes — qa: auto（Step 1）：渲染 `ComposerAtPathInput`，从 `TextInput` 的 children 树中找带 `backgroundColor` 的 Text，断言其 `style` 不含 `paddingHorizontal`（仿 `composer-at-path.test.tsx` T-SC1 的断言手法）。
+- T-C3 — blocking: yes — qa: auto（Step 15）：纯打字（原生 onChangeText 上报）且 mention 集合未变时，`TextInput.children` 元素引用复用不变（不重推原生）。
+- T-C4 — blocking: yes — qa: auto（Step 15）：程序化 `replaceCommittedText` 推进新 children（引用变化）。
 - T-C2 — blocking: yes — qa: manual_user（Step 2）：Android 真机，引用 tag + 多行文本连续输入/删除，内容无上下抖动、tag 胶囊正常、无 tag 场景无回归。
 - T-B5b — blocking: yes — qa: auto（Step 3/5）：`sessionListPanel: 'template'` 且 `workspaceCanGoUp: true` 时 handler 调 `workspaceGoUp`、不调 `showSessionsPanel`；根目录（false）才 `showSessionsPanel`（T-B5 原用例保持）。
 - T-PM1 — blocking: yes — qa: auto（Step 6）：`PromptMacroTextInput` 透传的 `onFocus/onBlur` 能被触发。
