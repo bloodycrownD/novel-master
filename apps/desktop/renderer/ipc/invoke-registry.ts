@@ -424,6 +424,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
     ),
+    ipcPreferencesGetThinkingContext: noArg<IpcResult<boolean>>(
+      invoke,
+      IPC_CHANNELS.PREFERENCES_GET_THINKING_CONTEXT,
+    ),
+    ipcPreferencesSetThinkingContext: withBool<IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.PREFERENCES_SET_THINKING_CONTEXT,
+    ),
     ipcProvidersList: noArg(invoke, IPC_CHANNELS.PROVIDERS_LIST),
     ipcProvidersGet: withReq<{ providerId: string }, unknown>(
       invoke,

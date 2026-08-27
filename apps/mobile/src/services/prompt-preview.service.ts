@@ -2,12 +2,15 @@
  * Real prompt preview: agent prompts + llm-channel regex + structured segments.
  */
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
+import {inferLlmProtocolFromSavedModelId} from '@novel-master/core/provider';
 import {
   resolveAgentForProject,
   resolveAgentToolRegistry,
+  resolveSavedModelId,
   type AgentDefinition,
 } from '@novel-master/core/agent';
 import {
+  applyThinkingContextForLlm,
   buildPromptPreviewSegmentsFromLayout,
   type PromptPreviewSegment,
   type PromptRenderContext,
@@ -51,6 +54,50 @@ async function budgetSkillsIndex(
     }));
 }
 
+/**
+ * 思考上下文预过滤：与 wire 侧同源（共用 core 纯函数，边界判定不依赖 zones）。
+ *
+ * - `requestThinkingEnabled` 取值路径与 wire 侧 `resolveSavedModelId` 同优先级：
+ *   agent pin 模型 → 会话 `modelId` 覆盖，再 `savedModels.findById` 读档位
+ *   （`thinkingLevel !== "off"`）；取不到模型时按 true 兜底（档位按开态参与判定）。
+ * - 预览不展示协议最低保留（`retainProtocolMinimum: false`，不向用户暴露）。
+ */
+async function resolvePreviewThinkingContext(
+  runtime: MobileNovelMasterRuntime,
+  scope: PromptPreviewScope,
+  definition: AgentDefinition,
+): Promise<{
+  readonly enabled: boolean;
+  readonly requestThinkingEnabled: boolean;
+  readonly protocol: 'openai' | 'anthropic' | 'gemini';
+}> {
+  const enabled = await runtime.preferences.getThinkingContextEnabled();
+  const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+    scope.sessionId,
+  );
+  const savedModelId = resolveSavedModelId({
+    agentModelId: definition.model,
+    sessionModelId: sessionConfig.modelId,
+  });
+  let requestThinkingEnabled = true;
+  if (savedModelId != null && savedModelId !== '') {
+    const saved = await runtime.savedModelRepo.findById(savedModelId);
+    if (saved != null) {
+      requestThinkingEnabled =
+        saved.settings.generation.thinkingLevel !== 'off';
+    }
+  }
+  const protocol =
+    savedModelId != null && savedModelId !== ''
+      ? await inferLlmProtocolFromSavedModelId(
+          savedModelId,
+          runtime.savedModelRepo,
+          runtime.providerRepo,
+        )
+      : 'anthropic';
+  return {enabled, requestThinkingEnabled, protocol};
+}
+
 /** Ordered segments for collapsible real-prompt UI (one card per bubble). */
 export async function buildRealPromptPreviewSegments(
   runtime: MobileNovelMasterRuntime,
@@ -71,7 +118,25 @@ export async function buildRealPromptPreviewSegments(
     scope.projectId,
     definition,
   );
+  // 思考上下文偏好：预览与 wire 同口径（档位前置门 + 边界判定单点在 core 纯函数）。
+  const thinking = await resolvePreviewThinkingContext(
+    runtime,
+    scope,
+    definition,
+  );
+  // 预览输入 ctx.messages 不含合成消息（"prompt:" 排除规则为 no-op），
+  // 但判定代码与 wire 侧同一段，两侧剥离集合一致（T-PV2）。
+  const filteredMessages = applyThinkingContextForLlm(ctx.messages, {
+    enabled: thinking.enabled,
+    protocol: thinking.protocol,
+    retainProtocolMinimum: false,
+    requestThinkingEnabled: thinking.requestThinkingEnabled,
+  });
   const previewCtx: PromptRenderContext =
-    skillsIndex != null ? {...ctx, skillsIndex} : ctx;
-  return await buildPromptPreviewSegmentsFromLayout(layout, previewCtx);
+    skillsIndex != null
+      ? {...ctx, skillsIndex, messages: filteredMessages}
+      : {...ctx, messages: filteredMessages};
+  return await buildPromptPreviewSegmentsFromLayout(layout, previewCtx, {
+    includeThinkingBlocks: thinking.enabled,
+  });
 }

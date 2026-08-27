@@ -51,6 +51,11 @@ export interface PromptPreviewSegment {
 export interface PromptAssemblyOptions {
   /** Agent run step index; 0 = first LLM round after user action. */
   readonly agentStepIndex?: number;
+  /**
+   * 预览时是否产出 thinking 段（opt-in，默认 false）：CLI 文本与
+   * `serializePromptLlmInput` token 计数 parity 沿用不含 thinking 的现状。
+   */
+  readonly includeThinkingBlocks?: boolean;
 }
 
 /**
@@ -300,7 +305,9 @@ export async function buildPromptAssemblyFromLayout(
     if (message.hidden) {
       continue;
     }
-    const messageSegments = formatChatMessageForCliPreview(message);
+    const messageSegments = formatChatMessageForCliPreview(message, {
+      includeThinking: options?.includeThinkingBlocks === true,
+    });
     for (let i = 0; i < messageSegments.length; i++) {
       const segment = messageSegments[i]!;
       segments.push({

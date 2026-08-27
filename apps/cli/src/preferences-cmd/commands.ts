@@ -7,6 +7,7 @@
 import type { PersistentPreferences } from "@novel-master/core";
 import {
   PREF_KEY_CHAT_LLM_STREAM,
+  PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 } from "@novel-master/core";
@@ -16,6 +17,7 @@ import { parseCliArgs } from "../vfs/parse-args.js";
 const KNOWN_KEYS = [
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
+  PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 ] as const;
 
@@ -57,6 +59,10 @@ async function getValue(
       const enabled = await preferences.getLlmStreamEnabled();
       return enabled ? "true" : "false";
     }
+    case PREF_KEY_CHAT_THINKING_CONTEXT: {
+      const enabled = await preferences.getThinkingContextEnabled();
+      return enabled ? "true" : "false";
+    }
     case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN: {
       const vfsEnabled = await preferences.getUserVfsUnifiedToolTurn();
       return vfsEnabled ? "true" : "false";
@@ -76,6 +82,9 @@ async function setValue(
         return;
       case PREF_KEY_CHAT_LLM_STREAM:
         await preferences.setLlmStreamEnabled(parseBooleanArg(raw, key));
+        return;
+      case PREF_KEY_CHAT_THINKING_CONTEXT:
+        await preferences.setThinkingContextEnabled(parseBooleanArg(raw, key));
         return;
       case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN:
         await preferences.setUserVfsUnifiedToolTurn(parseBooleanArg(raw, key));
@@ -99,6 +108,9 @@ async function resetValue(
       return;
     case PREF_KEY_CHAT_LLM_STREAM:
       await preferences.resetLlmStreamEnabled();
+      return;
+    case PREF_KEY_CHAT_THINKING_CONTEXT:
+      await preferences.resetThinkingContextEnabled();
       return;
     case PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN:
       await preferences.resetUserVfsUnifiedToolTurn();

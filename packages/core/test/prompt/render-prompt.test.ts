@@ -201,6 +201,47 @@ describe("formatPromptLlmInputForCliFromLayout", () => {
   });
 });
 
+describe("includeThinkingBlocks 预览（T-PV1）", () => {
+  const thinkingMessage: ChatMessage = {
+    ...message("assistant", "", 1),
+    content: {
+      blocks: [
+        { type: "thinking", text: "让我想想" },
+        { type: "redacted_thinking", data: "opaque" },
+        { type: "text", text: "回答" },
+      ],
+    },
+  };
+
+  it("includeThinkingBlocks true 时产出 role:thinking 段，redacted 用占位，块序保持在消息内位置", async () => {
+    const segments = await buildPromptPreviewSegmentsFromLayout(
+      sampleLayout,
+      { messages: [thinkingMessage], now: fixedNow },
+      { includeThinkingBlocks: true },
+    );
+    const roles = segments.map((s) => s.role);
+    assert.deepEqual(
+      roles.filter((r) => r === "thinking"),
+      ["thinking", "thinking"],
+    );
+    const thinkingBodies = segments
+      .filter((s) => s.role === "thinking")
+      .map((s) => s.body);
+    assert.deepEqual(thinkingBodies, ["让我想想", "[redacted thinking]"]);
+    // thinking 段位于 text 段之前（块序保持）
+    assert.ok(roles.indexOf("thinking") < roles.indexOf("assistant"));
+  });
+
+  it("默认 false 时无 thinking 段（CLI 文本与 token 计数 parity 不变）", async () => {
+    const segments = await buildPromptPreviewSegmentsFromLayout(
+      sampleLayout,
+      { messages: [thinkingMessage], now: fixedNow },
+    );
+    assert.equal(segments.filter((s) => s.role === "thinking").length, 0);
+    assert.ok(segments.some((s) => s.body === "回答"));
+  });
+});
+
 describe("buildPromptAssemblyFromLayout", () => {
   it("includes system segment first", async () => {
     const segments = await buildPromptAssemblyFromLayout(sampleLayout, {

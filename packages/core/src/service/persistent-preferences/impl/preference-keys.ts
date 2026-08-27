@@ -13,5 +13,8 @@ export const PREF_KEY_SESSION_FS_VERSION_CHECK = "session-fs.versionCheck";
 /** v2: LLM chat SSE streaming. */
 export const PREF_KEY_CHAT_LLM_STREAM = "chat.llmStream";
 
+/** v2: 思考内容进入上下文（默认 true）。 */
+export const PREF_KEY_CHAT_THINKING_CONTEXT = "chat.thinkingContext";
+
 /** User VFS 统一 tool turn（默认 true）。关闭时回滚直写 VFS + 跳过 flush。 */
 export const PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN = "vfs.userVfsUnifiedToolTurn";

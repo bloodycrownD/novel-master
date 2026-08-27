@@ -69,6 +69,7 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { AgentAbortRegistry } from "@/service/agent/agent-abort-registry.port.js";
 import type { AgentStreamRegistry } from "@/service/agent/agent-stream-registry.port.js";
 import type { SkillService } from "@/service/skills/skills.port.js";
+import type { PersistentPreferences } from "@/service/persistent-preferences/persistent-preferences.port.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
@@ -139,6 +140,15 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
    * 的 run 抛 ToolError，且 description 预算跳过（不产生 IO）。
    */
   readonly skills?: () => SkillService;
+  /**
+   * 思考上下文偏好窄切片。三端 runtime 对象均已携带完整
+   * `preferences: PersistentPreferences` 字段，结构化兼容无需 app 端改动；
+   * 声明为可选是为了不强制旧测试 mock 补字段（未注入时等同默认开）。
+   */
+  readonly preferences?: Pick<
+    PersistentPreferences,
+    "getThinkingContextEnabled"
+  >;
 }
 
 export class AgentTurnError extends Error {

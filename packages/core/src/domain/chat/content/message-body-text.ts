@@ -73,6 +73,7 @@ export function messageBodyText(m: ChatMessage): string {
 /** Role-prefixed segments for CLI / real-prompt preview (tool_result → `tool`; tool_use → `tool_call`). */
 export function formatChatMessageForCliPreview(
   message: ChatMessage,
+  options?: { readonly includeThinking?: boolean },
 ): ReadonlyArray<{ readonly role: string; readonly body: string }> {
   const segments: Array<{ role: string; body: string }> = [];
 
@@ -103,11 +104,20 @@ export function formatChatMessageForCliPreview(
   };
 
   for (const block of message.content.blocks) {
-    if (
-      block.type === "tool_result" ||
-      block.type === "thinking" ||
-      block.type === "redacted_thinking"
-    ) {
+    if (block.type === "tool_result") {
+      continue;
+    }
+    if (block.type === "thinking" || block.type === "redacted_thinking") {
+      // opt-in：仅预览（includeThinking）时产出 thinking 段，块序保持在消息内位置；
+      // 默认 false 保持 CLI 文本与 token 计数 parity 现状。
+      if (options?.includeThinking === true) {
+        flushText();
+        segments.push({
+          role: "thinking",
+          body:
+            block.type === "thinking" ? block.text : "[redacted thinking]",
+        });
+      }
       continue;
     }
     if (block.type === "tool_use") {

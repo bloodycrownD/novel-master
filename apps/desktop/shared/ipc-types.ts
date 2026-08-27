@@ -117,6 +117,8 @@ export const IPC_CHANNELS = {
     'nm:preferences/setSessionFsVersionCheck',
   PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
   PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
+  PREFERENCES_GET_THINKING_CONTEXT: 'nm:preferences/getThinkingContext',
+  PREFERENCES_SET_THINKING_CONTEXT: 'nm:preferences/setThinkingContext',
 
   PROVIDERS_LIST: 'nm:providers/list',
   PROVIDERS_GET: 'nm:providers/get',

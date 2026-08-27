@@ -242,6 +242,11 @@ function makeRuntime(
         protocolModelId: "claude-test",
         thinkingEnabled: false,
         createdAt: 0,
+        settings: {
+          schemaVersion: 2,
+          internal: { contextWindowTokens: 100000, tokenCounterMode: "auto" },
+          generation: { sampling: { enabled: false }, thinkingLevel: "off" },
+        },
       }),
     } as AgentTurnRuntimePort["savedModelRepo"],
     providerRepo: {
