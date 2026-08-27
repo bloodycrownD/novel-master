@@ -8,6 +8,7 @@ import {
   Text,
   View,
   type NativeSyntheticEvent,
+  type TextInputContentSizeChangeEventData,
   type TextInputSelectionChangeEventData,
 } from 'react-native';
 import type {ThemeTokens} from '../../theme/tokens';
@@ -24,9 +25,12 @@ type Props = {
   value: string;
   onChangeText: (next: string) => void;
   placeholder?: string;
-  /** 透传给内部 FormTextInput 的焦点事件（超长折叠层需要感知聚焦/失焦）。 */
+  /** 透传给内部 FormTextInput 的焦点/尺寸事件（超长折叠层需要感知聚焦/失焦与内容高度）。 */
   onFocus?: () => void;
   onBlur?: () => void;
+  onContentSizeChange?: (
+    event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>,
+  ) => void;
 };
 
 export function PromptMacroTextInput({
@@ -36,6 +40,7 @@ export function PromptMacroTextInput({
   placeholder,
   onFocus,
   onBlur,
+  onContentSizeChange,
 }: Props) {
   const selectionRef = useRef({start: value.length, end: value.length});
   const prevValueRef = useRef(value);
@@ -91,6 +96,7 @@ export function PromptMacroTextInput({
         onSelectionChange={handleSelectionChange}
         onFocus={onFocus}
         onBlur={onBlur}
+        onContentSizeChange={onContentSizeChange}
         selection={pendingSelection ?? undefined}
         multiline
         placeholder={placeholder}

@@ -929,6 +929,7 @@ export function AgentEditorForm(props: Props) {
                       onChangeText={setSystemContent}
                       onFocus={events.onFocus}
                       onBlur={events.onBlur}
+                      onContentSizeChange={events.onContentSizeChange}
                       multiline
                       placeholder={PROMPT_REGION_LABELS.systemPlaceholderShort}
                     />
@@ -973,6 +974,7 @@ export function AgentEditorForm(props: Props) {
                         onChangeText={setSkillsPrefixText}
                         onFocus={events.onFocus}
                         onBlur={events.onBlur}
+                        onContentSizeChange={events.onContentSizeChange}
                         multiline
                         placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
                       />
@@ -1029,6 +1031,7 @@ export function AgentEditorForm(props: Props) {
                         onChangeText={setWorkplaceAssistantText}
                         onFocus={events.onFocus}
                         onBlur={events.onBlur}
+                        onContentSizeChange={events.onContentSizeChange}
                         multiline
                         placeholder={WORKPLACE_ASSISTANT_TEXT_LABEL}
                       />
@@ -1157,6 +1160,7 @@ export function AgentEditorForm(props: Props) {
                                 onChangeText={updatePersistContent}
                                 onFocus={events.onFocus}
                                 onBlur={events.onBlur}
+                                onContentSizeChange={events.onContentSizeChange}
                                 multiline
                               />
                             )}
@@ -1204,6 +1208,7 @@ export function AgentEditorForm(props: Props) {
                       placeholder="支持 $time、$week_cn、$filetree…"
                       onFocus={events.onFocus}
                       onBlur={events.onBlur}
+                      onContentSizeChange={events.onContentSizeChange}
                     />
                   )}
                 />
@@ -1335,6 +1340,7 @@ export function AgentEditorForm(props: Props) {
                                 placeholder="支持 $time、$week_cn、$filetree…"
                                 onFocus={events.onFocus}
                                 onBlur={events.onBlur}
+                                onContentSizeChange={events.onContentSizeChange}
                               />
                             )}
                           />
