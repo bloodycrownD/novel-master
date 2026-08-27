@@ -12,6 +12,7 @@ import { textBlocks } from "@novel-master/core/chat";
 import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
+import { PreferencesError } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
@@ -1678,6 +1679,79 @@ describe("AgentRunner", () => {
     const userMsgs = opts.history.filter((m) => m.role === "user");
     for (const m of userMsgs) {
       assert.doesNotMatch(JSON.stringify(m), /<extra-info>/);
+    }
+  });
+
+  // MF-3：KKV 坏值（PreferencesError）不应炸掉整个 run。
+  it("thinking 偏好抛 PreferencesError 时回退 true，run 正常完成并记标签日志", async () => {
+    const consoleErrors: Array<{ tag: unknown; payload: unknown }> = [];
+    const originalError = console.error;
+    console.error = ((tag: unknown, payload: unknown) => {
+      consoleErrors.push({ tag, payload });
+    }) as typeof console.error;
+    try {
+      const session = new InMemoryAgentSession();
+      await session.append("user", textBlocks("go"));
+      // 最新一轮（最后真实用户输入之后）的 assistant thinking：开态回退时应原样保留。
+      await session.append("assistant", {
+        blocks: [
+          { type: "thinking", text: "latest-turn-thinking" },
+          { type: "text", text: "prev" },
+        ],
+      });
+
+      const histories: unknown[] = [];
+      const model: ModelRequestService = {
+        request: async (_savedModelId, _userContent, options) => {
+          histories.push(options?.history);
+          return {
+            assistantText: "ok",
+            blocks: [{ type: "text", text: "ok" }],
+            raw: {},
+          };
+        },
+      };
+
+      const registry = new ToolRegistry();
+      registerBuiltinTools(registry);
+      const runner = createAgentRunner(
+        runnerDeps({
+          session,
+          modelRequests: model,
+          registry,
+          toolCtx: mockToolCtx(mockVfs()),
+          preferences: {
+            getThinkingContextEnabled: async () => {
+              throw new PreferencesError(
+                "INVALID_VALUE",
+                "not-a-bool",
+                { key: "chat.thinkingContext" },
+              );
+            },
+          },
+        }),
+      );
+
+      const result = await runner.run({
+        maxSteps: 1,
+        definition: minimalDefinition(),
+        ...defaultRunScope,
+      });
+
+      // run 正常完成，不因坏值炸掉
+      assert.equal(result.stopReason, "completed");
+      // 回退 true（开态）：最新一轮 assistant thinking 原样进入请求历史
+      const historyText = JSON.stringify(histories[0]);
+      assert.match(historyText, /latest-turn-thinking/);
+      // 标签式日志：含偏好 key 与错误码
+      assert.equal(consoleErrors.length, 1);
+      assert.equal(consoleErrors[0]!.tag, "[agent-runner] thinking_context_pref_read_failed");
+      const payload = consoleErrors[0]!.payload as Record<string, unknown>;
+      assert.equal(payload.key, "chat.thinkingContext");
+      assert.equal(payload.code, "INVALID_VALUE");
+      assert.equal(payload.fallback, true);
+    } finally {
+      console.error = originalError;
     }
   });
 });

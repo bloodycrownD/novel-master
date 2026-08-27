@@ -28,6 +28,7 @@ import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner, type ParallelToolOutcome, type ToolCall } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ProviderError } from "@/errors/provider-errors.js";
+import { PreferencesError } from "@/errors/preferences-errors.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
@@ -269,8 +270,25 @@ export class DefaultAgentRunner implements AgentRunner {
 
     // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
     // run 中途切换开关不影响进行中的 run，同 run 内各 step 口径一致。
-    const thinkingContextEnabled =
-      (await this.deps.preferences?.getThinkingContextEnabled()) ?? true;
+    // KKV 存了坏值（如手工写入 not-a-bool）时 PreferencesError 不炸 run：
+    // 回退 true（保守保留方向）并记标签日志；GUI 无自愈入口，
+    // 用户重置偏好后自然恢复。
+    let thinkingContextEnabled = true;
+    try {
+      thinkingContextEnabled =
+        (await this.deps.preferences?.getThinkingContextEnabled()) ?? true;
+    } catch (error) {
+      if (!(error instanceof PreferencesError)) {
+        throw error;
+      }
+      console.error("[agent-runner] thinking_context_pref_read_failed", {
+        stage: "thinking_context_pref",
+        key: "chat.thinkingContext",
+        code: error.code,
+        fallback: true,
+        error,
+      });
+    }
 
     // 档位前置门快照：与 model-request.service 的 thinking 解析同口径
     // （thinkingLevel !== "off" 时才写 body.thinking）。savedModelForAppend
