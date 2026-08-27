@@ -37,6 +37,7 @@ import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
 import {SkillPanelScreen} from '../screens/stack/SkillPanelScreen';
 import {SkillsSettingsScreen} from '../screens/stack/SkillsSettingsScreen';
 import {SkillDetailScreen} from '../screens/stack/SkillDetailScreen';
+import {PromptEditorScreen} from '../screens/stack/PromptEditorScreen';
 
 import {ChatHistorySearchScreen} from '../screens/stack/ChatHistorySearchScreen';
 import {TokenUsageStatsScreen} from '../screens/stack/TokenUsageStatsScreen';
@@ -161,6 +162,10 @@ const SkillsSettingsStackScreen = withStackLayout(
   SkillsSettingsScreen,
 );
 const SkillDetailStackScreen = withStackLayout('SkillDetail', SkillDetailScreen);
+const PromptEditorStackScreen = withStackLayout(
+  'PromptEditor',
+  PromptEditorScreen,
+);
 const ChatHistorySearchStackScreen = withStackLayout(
   'ChatHistorySearch',
   ChatHistorySearchScreen,
@@ -223,6 +228,10 @@ export function RootNavigator() {
             component={SubagentSessionStackScreen}
           />
           <Stack.Screen name="SkillPanel" component={SkillPanelStackScreen} />
+          <Stack.Screen
+            name="PromptEditor"
+            component={PromptEditorStackScreen}
+          />
           <Stack.Screen
             name="SkillsSettings"
             component={SkillsSettingsStackScreen}
