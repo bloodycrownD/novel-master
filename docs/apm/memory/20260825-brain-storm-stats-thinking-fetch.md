@@ -1,5 +1,5 @@
 ---
-date: 2026-08-27 15:00
+date: 2026-08-27 16:00
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -168,3 +168,9 @@ user:
 
 assistant:
 容量 1 实现完成（b4f95bd + docs 1156351，分支 feat/2026-08-thinking-context-toggle）：applyThinkingContextForLlm 开态改为 findCapacityOneRetainIndex（最后一条含思考块的 assistant 整条保留），删除用户输入边界判定（isRealUserInput/findRealUserBoundaryIndex/prompt: 前缀排除）；测试重写 17 用例全过（多轮刷新/工具循环容量1/跨轮纯文本回复可见/混合块整条保留/合成消息不影响），core 全量 2198 pass，双端 typecheck 过（desktop + mobile build + mobile web）；agent-runner 注释同步（顺序保持、边界误判理由已不存在）、双端预览服务注释同步；开关文案改「开启后，最近一次的思考内容进入提示词，更早的不进入。」，CHANGELOG 两条口径同步，spec 补「实现偏离记录（2026-08-27）」章节。用户工作区改动（.vscode/AGENTS.md/perf-conventions）未触碰。待用户手动测试后合回 main。
+
+user:
+还是看不到啊，openai 协议支持吗？……把 openai 出站的 reasoning_content 回传补上。
+
+assistant:
+确认根因：用户以 openai 兼容模型测试，openai-content-mapper 的 chatMessagesToOpenAi 出站把 thinking 块过滤丢弃，容量 1 保留的块到 mapper 也被扔——openai 协议此前整条路不通（anthropic/gemini 不受影响）。补齐（fcd9279）：thinking 块文本拼接为 reasoning_content 随 assistant 消息回传（openai 兼容生态通用约定，DeepSeek 官方要求工具轮回传 CoT，对齐 opencode/deepseek-harness 实践），redacted_thinking 丢弃；纯 thinking 消息出站不丢（content 置 null + reasoning_content），防御性 continue 条件补上 reasoning_content 判定（RC3 抓到的 bug）。存量断言 protocol-openai.test「omits thinking blocks」按新行为改为断言回传。core 全量 2202 pass（新增 4 用例：RC1 回传正文分离/RC2 多块拼接+redacted 丢弃/RC3 纯思考不丢/RC4 与容量 1 联动开态仅最新一条、关态无字段）。spec 偏离记录追加 openai 出站补齐说明，CHANGELOG 条目补三家协议一致。三家协议至此行为统一，待用户重测（openai 模型应能看到上一轮思考了）。
