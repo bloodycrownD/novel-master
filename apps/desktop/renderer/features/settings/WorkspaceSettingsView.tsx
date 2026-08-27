@@ -239,6 +239,7 @@ export function WorkspaceSettingsView() {
           />
           <SettingsSwitchRow
             label="思考进入上下文"
+            desc="开启后，最新一轮的思考内容进入提示词，历史思考不进入。"
             checked={thinkingContext}
             onChange={async (next) => {
               setThinkingContext(next);

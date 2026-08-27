@@ -51,16 +51,22 @@ export function SettingsRow({
 
 export function SettingsSwitchRow({
   label,
+  desc,
   checked,
   onChange,
 }: {
   label: string;
+  /** 可选：标签下方的一句说明（小字灰色），双端与 mobile subtitle 同口径 */
+  desc?: string;
   checked: boolean;
   onChange: (next: boolean) => void;
 }) {
   return (
     <div className="settings-row settings-row--switch">
-      <span className="settings-row__label">{label}</span>
+      <span className="settings-row__label">
+        {label}
+        {desc ? <span className="settings-row__desc">{desc}</span> : null}
+      </span>
       <Switch checked={checked} onChange={onChange} aria-label={label} />
     </div>
   );
