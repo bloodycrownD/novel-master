@@ -87,6 +87,8 @@ apps/desktop/renderer/
 | 20 | `apps/mobile/src/components/chat/ComposerAtPathInput.tsx` | 变更点 #17（children 复用）真机验收翻车（打字后 tag 消失），已整体回滚（e8aac80）；追加 metro 调试日志（typing/children-push/hydrate，仅 __DEV__，290646b）供真机重新定位闪烁根因；T-C3/T-C4 随回滚移除 | 用户真机反馈 |
 | 21 | `apps/mobile/src/components/agent/AgentEditorForm.tsx` | dirty 标记修复：「有未保存的更改」banner 改为渲染期随 snapshot 同帧派生（不依赖跨组件 effect 时序——native-stack 转场 freeze 下 effect 通知不可靠是真机不刷新的根因）；`onDirtyChange` 保留驱动 useUnsavedGuard；新增 agent-editor-form-dirty.test.tsx 回归（413e0a9） | 用户验收反馈 |
 | 22 | mobile 提示词字段与路由（第四轮微调） | ①全屏按钮从单独一列改为**输入区右上角 overlay**（容器 relative + 按钮 absolute，输入 paddingRight 32，maxHeight/paddingRight 经 renderInline 的 ctx.style 集中下发，0033f88）；②PromptEditor 路由参数去函数化：新建 prompt-editor-callback.ts（set/take 语义，take 即清空防串台），params 只传 {title?, initialText}，修复 React Navigation Non-serializable 警告（8868a00）。metro 日志同时坐实闪烁源：每键一条 children-push（typing 与 push 一一对应） | 用户真机反馈 |
+| 23 | 双端提示词字段与全屏页（第五轮） | ①全屏按钮最终定局：**label 同行右侧**（ExpandablePromptInput 接管完整字段结构：label 左 + ⤢ 全屏按钮右，六处调用点去外层 FormField，308114d；overlay/独立列方案废弃）；②内联限高 5→8 行（mobile 176px / desktop calc(8×1.45em+18px)）；③初始视口置顶：Android 受控 multiline 长文挂载后光标在文末致视口落尾部，挂载一拍短暂 selection 置 0（pendingSelection 模式，308114d）；④全屏页对齐工作区文件编辑页：复用 FileMarkdownPreview（仅依赖内存 content，零 VFS 适配）+ 编辑/预览切换 + prompt.md 高亮（mobile 4171622；desktop languagePath 同改 prompt.md） | 用户验收反馈 |
+| 24 | mobile 全屏页顶栏与 label 按钮（第六轮） | ①顶栏完全照搬工作区文件编辑页三段式：左「保存」（预览态/干净态禁用）+ 中标题/dirty「未保存」+ 右「编辑/预览」单按钮互切；保存＝onSaved 回调 + 清 dirty + toast，停留当前页不 goBack；退出靠返回手势 + useUnsavedGuard 未保存拦截（复用同一 hook，确认离开即丢弃），取消按钮删除（eb2eafc）；②label 行按钮去文字只留 ⛶ icon（fontSize 20，触达 28×28，与 desktop 同字形，89274ae）。工作区实际行为与用户描述略有出入（左保存+右互切，非单按钮），已按代码为准并告知用户 | 用户验收反馈 |
 
 ## 详细实现步骤
 
@@ -110,7 +112,9 @@ apps/desktop/renderer/
 - Step 18 — phase-composer-stable — blocking: yes — qa: manual_user：回滚变更点 #17 并追加 metro 调试日志，真机重新定位闪烁根因（变更点 #20）。
 - Step 19 — phase-prompt-ux — blocking: yes — qa: manual_user：UX 简化：双端内联限高 5 行 + 全屏按钮，废弃折叠机制（变更点 #19）；mobile 补键盘顶起与左右两角按钮。
 - Step 20 — phase-prompt-ux — blocking: yes — qa: auto：dirty 标记随 snapshot 同帧派生修复不刷新（变更点 #21，agent-editor-form-dirty.test.tsx）。
-- Step 21 — phase-prompt-ux — blocking: yes — qa: manual_user：全屏按钮内嵌右上角 overlay + PromptEditor 路由参数去函数化（变更点 #22）。
+- Step 21 — phase-prompt-ux — blocking: yes — qa: manual_user：全屏按钮内嵌右上角 overlay + PromptEditor 路由参数去函数化（变更点 #22）。【overlay 方案已被 Step 22 的 label 行方案取代】
+- Step 22 — phase-prompt-ux — blocking: yes — qa: manual_user：label 同行全屏按钮（定局）+ 限高 8 行 + 初始视口置顶 + 全屏页对齐工作区（markdown 预览/编辑，变更点 #23）。
+- Step 23 — phase-prompt-ux — blocking: yes — qa: manual_user：全屏页顶栏照搬工作区三段式（保存/标题/编辑预览互切 + useUnsavedGuard 拦截）+ label 按钮纯 ⛶ icon（变更点 #24）。
 
 ## 测试策略
 

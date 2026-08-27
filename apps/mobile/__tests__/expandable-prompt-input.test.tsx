@@ -1,8 +1,8 @@
 /**
- * T-PE1 / T-PE2（R5：label 行按钮 + 视口置顶）：
+ * T-PE1 / T-PE2（R5：label 行按钮 + 视口置顶；R6：icon 化）：
  * ExpandablePromptInput 渲染完整字段结构——label 行（label 居左、「全屏编辑」
- * 按钮居右）+ 内联编辑器；点击按钮触发 openEditor；ctx.style 给内联输入
- * maxHeight 限 8 行（无 paddingRight 让位——按钮不再 overlay）。
+ * icon 按钮居右，⛶ 字形与 desktop 一致）+ 内联编辑器；点击按钮触发
+ * openEditor；ctx.style 给内联输入 maxHeight 限 8 行（无 paddingRight 让位）。
  * 初始视口置顶：挂载一拍后 ctx.selection 短暂置 {0,0}，selectionChange 后解除。
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
@@ -35,7 +35,7 @@ function InlineMarker() {
   return null;
 }
 
-describe('ExpandablePromptInput 内联 + 全屏按钮（R5）', () => {
+describe('ExpandablePromptInput 内联 + 全屏按钮（R5 + R6）', () => {
   beforeEach(() => {
     jest.useFakeTimers();
   });
@@ -76,12 +76,46 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（R5）', () => {
     expect(
       openButtons.filter(n => typeof n.props.onPress === 'function'),
     ).toHaveLength(1);
+    // R6：icon 化——只留 ⛶ 字形（与 desktop 一致），不带「全屏」文字。
+    expect(texts).toContain('⛶');
+    expect(texts.filter(t => t.includes('全屏'))).toHaveLength(0);
+    // accessibilityLabel 保留（无障碍仍可读出「全屏编辑」）。
+    expect(
+      openButtons.some(n => n.props.accessibilityLabel === '全屏编辑'),
+    ).toBe(true);
     // 旧的折叠预览不存在（label 单行截断不算折叠预览）
     expect(
       tree!
         .root.findAllByType(Text)
         .filter(t => (t.props.numberOfLines ?? 1) > 1),
     ).toHaveLength(0);
+  });
+
+  it('R6: icon 尺寸 18-20、触达区 ≥28（icon-only 后仍好点）', () => {
+    const openEditor = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <ExpandablePromptInput
+          testID="prompt-input"
+          label="系统提示词"
+          renderInline={() => <InlineMarker />}
+          openEditor={openEditor}
+        />,
+      );
+    });
+    const button = tree!
+      .root.findAllByProps({testID: 'prompt-input-fullscreen'})
+      .find(n => typeof n.props.onPress === 'function')!;
+    const buttonStyle = flattenStyle(button.props.style);
+    // 触达区至少 28×28（另有 hitSlop 8 外扩）。
+    expect(buttonStyle.minWidth).toBeGreaterThanOrEqual(28);
+    expect(buttonStyle.minHeight).toBeGreaterThanOrEqual(28);
+    // 字形放大到 18-20 区间（取 20）。
+    const glyph = button.findAllByType(Text)[0]!;
+    const glyphStyle = flattenStyle(glyph.props.style);
+    expect(glyphStyle.fontSize).toBeGreaterThanOrEqual(18);
+    expect(glyphStyle.fontSize).toBeLessThanOrEqual(20);
   });
 
   it('T-PE2: 点击全屏按钮触发 openEditor', () => {

@@ -1,6 +1,8 @@
 /**
  * T-AD1（dirty 链路回归）：全屏提示词编辑保存回填后「有未保存的更改」标记
  * 随 snapshot 同帧出现；表单保存后随 savedBaseline 同帧消失。
+ * R6：PromptEditor 保存不再 goBack（工作区语义：保存后停留），
+ * 未保存离开（卸载/返回）不回填、不消费回调。
  * 背景是真机验收反馈：跨组件 effect 通知的标记在转场下刷新时机不可靠，
  * 修复为 AgentEditorForm 渲染期同步派生（banner 下放表单内）。
  */
@@ -261,7 +263,8 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
         .findByProps({testID: 'prompt-editor-save'})
         .props.onPress();
     });
-    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    // 工作区语义：保存后停留在全屏页，不自动 goBack。
+    expect(mockGoBack).not.toHaveBeenCalled();
 
     // 回填后：标记与内容同帧出现
     expect(findBanner(editorTree.root)).toHaveLength(1);
@@ -277,7 +280,7 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
     expect(findBanner(editorTree.root)).toHaveLength(0);
   });
 
-  it('全屏取消（不保存）不回填，标记不出现', async () => {
+  it('全屏未保存离开（不保存直接退出）不回填，标记不出现', async () => {
     const editorTree = await renderAgentEditor();
     pressFullscreenButton(editorTree.root);
     const route = mockPush.mock.calls[0]![1] as {
@@ -293,10 +296,9 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
     await act(async () => {
       mockEditorProps[0]!.onChange('不会落盘的改动');
     });
+    // R6：取消按钮已删（退出走返回 + 未保存拦截）；未保存直接卸载离开 = 确认离开丢弃。
     await act(async () => {
-      promptTree.root
-        .findByProps({testID: 'prompt-editor-cancel'})
-        .props.onPress();
+      promptTree.unmount();
     });
     expect(findBanner(editorTree.root)).toHaveLength(0);
   });
