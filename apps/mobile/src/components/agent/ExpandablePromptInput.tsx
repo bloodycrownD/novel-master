@@ -1,8 +1,11 @@
 /**
  * 提示词内联输入包装（UX 简化）：完整字段结构——label 行（label 文本居左、
- * 「全屏编辑」小按钮居右，标准表单动作位）+ 输入区。内联编辑器经 ctx.style
+ * 「全屏编辑」icon 按钮居右，标准表单动作位）+ 输入区。内联编辑器经 ctx.style
  * 限高 8 行（超出部分输入框内部滚动，仍可正常输入），点按钮跳转
- * PromptEditor 全屏页（保存才回填，取消不动）。
+ * PromptEditor 全屏页（保存才回填，离开未保存即丢弃）。
+ *
+ * R6：按钮去文字只留 ⛶ 字形（与 desktop 一致，四角全屏框更醒目），
+ * 尺寸放大到 20，触达区收紧到 28×28（含 hitSlop 更大）。
  *
  * 初始视口置顶：Android 受控 multiline TextInput 挂载带长文时，原生默认把
  * 光标放到文末，输入框内部滚动跟随光标，初始视口落在文本尾部。这里挂载后
@@ -87,7 +90,7 @@ export function ExpandablePromptInput({
           style={styles.openBtn}
           hitSlop={8}>
           <Text style={[styles.openGlyph, {color: tokens.textSecondary}]}>
-            ⤢ 全屏
+            ⛶
           </Text>
         </Pressable>
       </View>
@@ -112,9 +115,15 @@ const styles = StyleSheet.create({
   },
   // 对齐 FormField 的 label 样式。
   labelText: {fontSize: 13, fontWeight: '500', flexShrink: 1},
-  // 轻量文字按钮：与 label 同行，不抢输入视线。
-  openBtn: {flexShrink: 0},
-  openGlyph: {fontSize: 12, fontWeight: '600', lineHeight: 16},
+  // icon 按钮：28×28 触达区（hitSlop 再外扩 8），字形与 desktop 同款 ⛶。
+  openBtn: {
+    flexShrink: 0,
+    minWidth: 28,
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  openGlyph: {fontSize: 20, lineHeight: 24, fontWeight: '600'},
   // 集中管理内联限高（8 行），调用点统一吃这份补充样式。
   inlineInput: {
     maxHeight: PROMPT_INLINE_MAX_HEIGHT,
