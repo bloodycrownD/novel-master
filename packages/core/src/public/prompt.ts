@@ -32,6 +32,11 @@ export type {
 } from "../domain/prompt/logic/normalize-for-llm-export.js";
 export { applyThinkingContextForLlm } from "../service/prompt/apply-thinking-context-for-llm.js";
 export type { ThinkingContextOptions } from "../service/prompt/apply-thinking-context-for-llm.js";
+export { resolvePreviewThinkingContext } from "../service/prompt/resolve-preview-thinking-context.js";
+export type {
+  ResolvePreviewThinkingContextInput,
+  ResolvedPreviewThinkingContext,
+} from "../service/prompt/resolve-preview-thinking-context.js";
 export {
   ALLOWED_DYNAMIC_ROOT_MACROS,
   validateDynamicMacros,
