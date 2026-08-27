@@ -1,5 +1,5 @@
 /**
- * 聊天相关偏好：流式输出、思考进入上下文、版本校验、富文本消息，以及压缩配置。
+ * 聊天相关偏好：流式输出、思考提示词、版本校验、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
 import type {CompactionConditions} from '@novel-master/core/compaction';
@@ -159,7 +159,7 @@ export function ChatConfigScreen() {
       />
       <ProfileSwitchItem
         icon="🧠"
-        label="思考进入上下文"
+        label="思考提示词"
         subtitle="开启后，最新一轮的思考内容进入提示词，历史思考不进入。"
         value={thinkingContextEnabled}
         tokens={tokens}
