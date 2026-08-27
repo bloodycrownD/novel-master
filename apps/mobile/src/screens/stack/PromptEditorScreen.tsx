@@ -1,9 +1,16 @@
 /**
  * 全屏提示词编辑页（R3）：CodeEditorWebView 草稿副本编辑，保存才回填（onSaved），
  * 取消/Android 返回键不动原值。伪路径 prompt.txt 让编辑器按纯文本高亮。
+ * 键盘顶起与顶栏 follow FileEditorScreen：Android 以 marginBottom 收缩键盘高度，
+ * iOS 用 KeyboardAvoidingView padding；顶栏左右两角——左「取消」右「保存」。
  */
 import React, {useEffect, useState} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {
+  KeyboardAvoidingView,
+  useReanimatedKeyboardAnimation,
+} from 'react-native-keyboard-controller';
+import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {
   useNavigation,
   useRoute,
@@ -20,6 +27,28 @@ type PromptEditorNav = NativeStackNavigationProp<
   RootStackParamList,
   'PromptEditor'
 >;
+
+/**
+ * Android：与 FileEditorScreen 同款——裁切窗口用 marginBottom 收缩键盘高度，
+ * 内容区（flex:1）跟着缩到键盘以上，编辑区与顶栏保存按钮保持可见。
+ */
+function AndroidKeyboardPromptEditorBody({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
+  // hook 返回的 height 是负数，取反得到正的键盘高度。
+  const clipStyle = useAnimatedStyle(() => {
+    return {marginBottom: -keyboardHeightSV.value};
+  }, [keyboardHeightSV]);
+
+  return (
+    <Animated.View style={[styles.keyboardClip, clipStyle]}>
+      <View style={styles.keyboardLiftBody}>{children}</View>
+    </Animated.View>
+  );
+}
 
 export function PromptEditorScreen() {
   const {tokens} = useTheme();
@@ -39,51 +68,92 @@ export function PromptEditorScreen() {
     return () => setStackOverride(undefined);
   }, [title, setStackOverride]);
 
-  return (
-    <View style={styles.root}>
-      <View style={[styles.actionRow, {borderBottomColor: tokens.borderLight}]}>
+  const editorBody = (
+    <>
+      <View style={[styles.toolbar, {borderBottomColor: tokens.borderLight}]}>
         <Pressable
           testID="prompt-editor-cancel"
           onPress={() => navigation.goBack()}
-          style={[styles.actionBtn, {borderColor: tokens.borderLight}]}
+          style={styles.toolbarBtn}
           accessibilityLabel="取消">
-          <Text style={[styles.actionText, {color: tokens.textSecondary}]}>
+          <Text style={[styles.toolbarText, {color: tokens.textSecondary}]}>
             取消
           </Text>
         </Pressable>
+        <View style={styles.toolbarTitle}>
+          <Text
+            style={[
+              styles.toolbarTitleText,
+              {color: tokens.textSecondary},
+            ]}
+            numberOfLines={1}
+            ellipsizeMode="tail">
+            {title ?? '提示词'}
+          </Text>
+        </View>
         <Pressable
           testID="prompt-editor-save"
           onPress={() => {
             onSaved?.(draft);
             navigation.goBack();
           }}
-          style={[styles.actionBtn, styles.saveBtn, {backgroundColor: tokens.primary}]}
+          style={styles.toolbarBtn}
           accessibilityLabel="保存">
-          <Text style={[styles.actionText, {color: tokens.surface}]}>保存</Text>
+          <Text style={[styles.toolbarText, {color: tokens.primary}]}>
+            保存
+          </Text>
         </Pressable>
       </View>
-      <CodeEditorWebView value={draft} path="prompt.txt" onChange={setDraft} />
-    </View>
+      <CodeEditorWebView
+        value={draft}
+        path="prompt.txt"
+        onChange={setDraft}
+        style={styles.editor}
+      />
+    </>
+  );
+
+  // 键盘顶起与 FileEditorScreen 编辑态一致：Android 抬升裁切，iOS padding。
+  if (Platform.OS === 'android') {
+    return (
+      <View style={[styles.root, {backgroundColor: tokens.background}]}>
+        <AndroidKeyboardPromptEditorBody>
+          {editorBody}
+        </AndroidKeyboardPromptEditorBody>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={[styles.root, {backgroundColor: tokens.background}]}
+      behavior="padding"
+      automaticOffset>
+      {editorBody}
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  actionRow: {
+  keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
+  keyboardLiftBody: {flex: 1, minHeight: 0},
+  toolbar: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  actionBtn: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  toolbarBtn: {flexShrink: 0},
+  toolbarTitle: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    justifyContent: 'center',
   },
-  saveBtn: {borderWidth: 0},
-  actionText: {fontSize: 14, fontWeight: '600'},
+  toolbarTitleText: {textAlign: 'center', fontSize: 13},
+  toolbarText: {fontSize: 14, fontWeight: '600'},
+  editor: {flex: 1, minHeight: 0},
 });
