@@ -206,13 +206,14 @@ export function AgentEditorForm(props: Props) {
     ],
   );
 
+  // 渲染期同步派生：与 snapshot 同帧计算，外部「有未保存的更改」标记不依赖
+  // effect 时序（全屏保存回填、表单保存后均与内容同帧刷新）；effect 仅向
+  // 外层同步 useUnsavedGuard 需要的脏状态。
+  const isDirty = savedBaseline != null && snapshot !== savedBaseline;
+
   useEffect(() => {
-    if (savedBaseline == null) {
-      onDirtyChange?.(false);
-      return;
-    }
-    onDirtyChange?.(snapshot !== savedBaseline);
-  }, [snapshot, savedBaseline, onDirtyChange]);
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   const loadProviders = useCallback(async () => {
     const list = await runtime.providers.list();
@@ -780,6 +781,16 @@ export function AgentEditorForm(props: Props) {
 
   return (
     <>
+      {/* 未保存标记随 snapshot 同帧派生，避免跨组件 effect 通知在真机转场下刷新不及时 */}
+      {isDirty ? (
+        <View style={styles.unsavedWrap}>
+          <FormSectionCard tokens={tokens}>
+            <Text style={[styles.unsaved, {color: tokens.danger}]}>
+              有未保存的更改
+            </Text>
+          </FormSectionCard>
+        </View>
+      ) : null}
       <ScreenFormLayout
         tokens={tokens}
         footer={
@@ -1342,6 +1353,8 @@ export function AgentEditorForm(props: Props) {
 const styles = StyleSheet.create({
   // 内联提示词输入限高 5 行：超出部分输入框内部滚动，全屏编辑走旁边按钮。
   promptInlineInput: {maxHeight: PROMPT_INLINE_MAX_HEIGHT},
+  unsavedWrap: {marginHorizontal: 5, paddingTop: 8},
+  unsaved: {fontSize: 14, fontWeight: '600'},
   loadingWrap: {
     flex: 1,
     alignItems: 'center',

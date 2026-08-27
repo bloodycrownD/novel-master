@@ -6,7 +6,6 @@ import {StyleSheet, Text, View} from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {AgentEditorForm} from '../../components/agent/AgentEditorForm';
-import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -17,6 +16,8 @@ export function AgentEditorScreen() {
   const {tokens} = useTheme();
   const route = useRoute<EditorRoute>();
   const agentId = route.params?.agentId;
+  // 「有未保存的更改」标记由 AgentEditorForm 随 snapshot 同帧渲染（下放展示层）；
+  // 这里的 dirty 仅驱动返回确认（useUnsavedGuard）。
   const [dirty, setDirty] = useState(false);
 
   useUnsavedGuard(dirty);
@@ -33,15 +34,6 @@ export function AgentEditorScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      {dirty ? (
-        <View style={styles.unsavedWrap}>
-          <FormSectionCard tokens={tokens}>
-            <Text style={[styles.unsaved, {color: tokens.danger}]}>
-              有未保存的更改
-            </Text>
-          </FormSectionCard>
-        </View>
-      ) : null}
       <AgentEditorForm
         agentId={agentId}
         onDirtyChange={setDirty}
@@ -53,6 +45,4 @@ export function AgentEditorScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  unsavedWrap: {marginHorizontal: 5, paddingTop: 8},
-  unsaved: {fontSize: 14, fontWeight: '600'},
 });
