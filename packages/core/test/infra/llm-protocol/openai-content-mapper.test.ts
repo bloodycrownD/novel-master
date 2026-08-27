@@ -358,7 +358,7 @@ describe("openai-content-mapper", () => {
     assert.equal(out[0]!.content, null);
   });
 
-  it("RC4: 与容量 1 剥离联动：历史 thinking 被剥后仅最新一条的 reasoning_content 回传；关态全剥时无 reasoning_content 字段", () => {
+  it("RC4: 与全量保留联动：开态所有历史 thinking 均以 reasoning_content 回传；关态全剥时无 reasoning_content 字段", () => {
     const mk = (id: string, thinking: string): ChatMessage => ({
       id,
       sessionId: "s1",
@@ -396,7 +396,7 @@ describe("openai-content-mapper", () => {
         requestThinkingEnabled: true,
       }),
     );
-    assert.equal(onOut[1]!.reasoning_content, undefined);
+    assert.equal(onOut[1]!.reasoning_content, "第一轮思考");
     assert.equal(onOut[3]!.reasoning_content, "第二轮思考");
 
     const offOut = chatMessagesToOpenAi(

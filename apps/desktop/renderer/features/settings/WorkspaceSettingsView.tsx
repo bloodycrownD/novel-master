@@ -239,7 +239,7 @@ export function WorkspaceSettingsView() {
           />
           <SettingsSwitchRow
             label="思考提示词"
-            desc="开启后，最近一次的思考内容进入提示词，更早的不进入。"
+            desc="开启后，模型的思考内容进入后续提示词，关闭则不进入。"
             checked={thinkingContext}
             onChange={async (next) => {
               setThinkingContext(next);
