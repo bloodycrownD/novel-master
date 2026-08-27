@@ -86,6 +86,7 @@ apps/desktop/renderer/
 | 19 | 双端提示词字段（第三轮拍板，取代 #6/#13/#18 的折叠机制） | UX 简化：废弃「超长折叠成省略预览 + 失焦折叠 + 测量/初判」整套机制，改为**内联输入限高 5 行**（mobile maxHeight 110 与 minHeight 88 共存；desktop CSS `.prompt-field-inline textarea { max-height: 5 行 }`）+ 字段旁常驻**全屏编辑按钮**（mobile ⤢ / desktop ⛶）进全屏编辑（mobile 路由 / desktop Modal 均保留）；PromptEditorScreen 补键盘顶起（Android keyboard-controller / iOS KeyboardAvoidingView）+ 顶栏左右两角「取消/保存」（照 FileEditorScreen 模式）；desktop 删 prompt-collapse.ts，mobile 仅留两个常量（e3f89c0/cb5c019/cb592d4） | 用户验收反馈 |
 | 20 | `apps/mobile/src/components/chat/ComposerAtPathInput.tsx` | 变更点 #17（children 复用）真机验收翻车（打字后 tag 消失），已整体回滚（e8aac80）；追加 metro 调试日志（typing/children-push/hydrate，仅 __DEV__，290646b）供真机重新定位闪烁根因；T-C3/T-C4 随回滚移除 | 用户真机反馈 |
 | 21 | `apps/mobile/src/components/agent/AgentEditorForm.tsx` | dirty 标记修复：「有未保存的更改」banner 改为渲染期随 snapshot 同帧派生（不依赖跨组件 effect 时序——native-stack 转场 freeze 下 effect 通知不可靠是真机不刷新的根因）；`onDirtyChange` 保留驱动 useUnsavedGuard；新增 agent-editor-form-dirty.test.tsx 回归（413e0a9） | 用户验收反馈 |
+| 22 | mobile 提示词字段与路由（第四轮微调） | ①全屏按钮从单独一列改为**输入区右上角 overlay**（容器 relative + 按钮 absolute，输入 paddingRight 32，maxHeight/paddingRight 经 renderInline 的 ctx.style 集中下发，0033f88）；②PromptEditor 路由参数去函数化：新建 prompt-editor-callback.ts（set/take 语义，take 即清空防串台），params 只传 {title?, initialText}，修复 React Navigation Non-serializable 警告（8868a00）。metro 日志同时坐实闪烁源：每键一条 children-push（typing 与 push 一一对应） | 用户真机反馈 |
 
 ## 详细实现步骤
 
@@ -109,6 +110,7 @@ apps/desktop/renderer/
 - Step 18 — phase-composer-stable — blocking: yes — qa: manual_user：回滚变更点 #17 并追加 metro 调试日志，真机重新定位闪烁根因（变更点 #20）。
 - Step 19 — phase-prompt-ux — blocking: yes — qa: manual_user：UX 简化：双端内联限高 5 行 + 全屏按钮，废弃折叠机制（变更点 #19）；mobile 补键盘顶起与左右两角按钮。
 - Step 20 — phase-prompt-ux — blocking: yes — qa: auto：dirty 标记随 snapshot 同帧派生修复不刷新（变更点 #21，agent-editor-form-dirty.test.tsx）。
+- Step 21 — phase-prompt-ux — blocking: yes — qa: manual_user：全屏按钮内嵌右上角 overlay + PromptEditor 路由参数去函数化（变更点 #22）。
 
 ## 测试策略
 
