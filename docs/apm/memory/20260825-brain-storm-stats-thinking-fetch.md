@@ -1,5 +1,5 @@
 ---
-date: 2026-08-27 20:00
+date: 2026-08-27 20:30
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -204,3 +204,9 @@ user:
 
 assistant:
 解释术语：档位=模型设置里的思考等级（thinkingLevel/reasoning_effort，thinking-openai-unify 统一的那个），控制这轮生不生成思考（生成侧）；与「思考提示词」开关（历史思考进不进上下文）是两个维度。档位 off 时全剥的两个原因：anthropic body 未开 thinking 时消息含 thinking 块直接 400；模型不思考时历史思考无意义白占 token。三层判定定稿：档位 off→全剥；档位 on+开关关（默认）→不进上下文+协议最低保留；档位 on+开关开→全量进上下文。提醒用户测试时确认模型思考档位非 off。
+
+user:
+直接 merge 吧。
+
+assistant:
+thinking-context-toggle 已 ff 合回 main（a42ea24→70a4cb6，45 文件 +1685/-69，含迭代全部提交：偏好三件套、容量1两次语义变更史、全量回传+openai reasoning_content、默认关、TS4104 修复、spec 三次偏离修订、apm 记忆）。main 本地领先 origin 9 提交未 push（约定不主动 push）。五迭代合并进度：thinking-openai-unify ✅、thinking-context-toggle ✅；剩 token-usage-stats-enhance（1 P2）、fetch-tool（1 P1+4 P2）、markdown-code-block-render（2 P2+MF-1 待拍板 a/b）。下一步建议从 fetch-tool（有 P1）或 token-usage-stats-enhance（最轻）开始，流程同前：main 新建 feature 分支 → --no-ff 合并迭代分支 → fix-spec 修复 → 用户测 → 合 main。
