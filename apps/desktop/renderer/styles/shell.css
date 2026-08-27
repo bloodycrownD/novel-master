@@ -5211,6 +5211,50 @@ html[data-theme="dark"] .chat-batch-bar {
   max-width: 480px;
 }
 
+/* 超长提示词折叠预览：视觉对齐 .settings-field textarea，3 行省略，点击进入全屏编辑（仿 .chat-message__body-clamp）。 */
+.prompt-field-clamp {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  cursor: pointer;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 提示词全屏编辑 Modal：近全屏、纵向 flex（CodeEditor 编辑区 + 底部按钮条），overlay 复用 .text-prompt-overlay。 */
+.prompt-editor-modal {
+  width: 100%;
+  max-width: min(1100px, 92vw);
+  height: min(92vh, 1000px);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.prompt-editor-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-top: 12px;
+}
+
 .project-agent-config-modal {
   max-width: min(92vw, 720px);
   max-height: min(90vh, 860px);

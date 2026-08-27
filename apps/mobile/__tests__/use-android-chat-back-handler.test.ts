@@ -184,6 +184,23 @@ describe('useAndroidChatBackHandler', () => {
     expect(showSessionsPanel).toHaveBeenCalledTimes(1);
   });
 
+  it('T-B5b: project template panel goes up a directory before returning to session list', () => {
+    const workspaceGoUp = jest.fn();
+    const showSessionsPanel = jest.fn();
+    const handler = mountAndGetHandler(
+      defaultState({
+        sessionListPanel: 'template',
+        workspaceCanGoUp: true,
+        workspaceGoUp,
+      }),
+      defaultActions({ showSessionsPanel }),
+    );
+
+    expect(handler()).toBe(true);
+    expect(workspaceGoUp).toHaveBeenCalledTimes(1);
+    expect(showSessionsPanel).not.toHaveBeenCalled();
+  });
+
   it('T-B4: agent picker closes first without leaving conversation', () => {
     const backFromConversation = jest.fn();
     const closeAgentPicker = jest.fn();

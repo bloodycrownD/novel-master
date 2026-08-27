@@ -39,6 +39,7 @@ import {
   type ToolsMode,
 } from "@shared/logic/config-forms-agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
+import { PromptCollapsibleField } from "./PromptCollapsibleField";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -794,13 +795,19 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             <div className="config-block-card__body">
               {systemEnabled ? (
                 <SettingsField label={PROMPT_REGION_LABELS.systemContent}>
-                  <textarea
-                    rows={4}
+                  <PromptCollapsibleField
                     value={systemContent}
-                    onChange={(e) => setSystemContent(e.target.value)}
-                    onKeyDown={handlePromptTextareaKeyDown}
-                    placeholder={PROMPT_REGION_LABELS.systemPlaceholder}
-                  />
+                    onChange={setSystemContent}
+                    ariaLabel={PROMPT_REGION_LABELS.systemContent}
+                  >
+                    <textarea
+                      rows={4}
+                      value={systemContent}
+                      onChange={(e) => setSystemContent(e.target.value)}
+                      onKeyDown={handlePromptTextareaKeyDown}
+                      placeholder={PROMPT_REGION_LABELS.systemPlaceholder}
+                    />
+                  </PromptCollapsibleField>
                 </SettingsField>
               ) : (
                 <p className="config-block-card__hint">
@@ -828,12 +835,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   {PROMPT_REGION_LABELS.skillsReadonlyHint}
                 </p>
                 <SettingsField label="索引前缀语">
-                  <textarea
-                    rows={2}
+                  <PromptCollapsibleField
                     value={skillsPrefixText}
-                    onChange={(e) => setSkillsPrefixText(e.target.value)}
-                    placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
-                  />
+                    onChange={setSkillsPrefixText}
+                    ariaLabel="索引前缀语"
+                  >
+                    <textarea
+                      rows={2}
+                      value={skillsPrefixText}
+                      onChange={(e) => setSkillsPrefixText(e.target.value)}
+                      placeholder={DEFAULT_SKILLS_INDEX_PREFIX}
+                    />
+                  </PromptCollapsibleField>
                 </SettingsField>
               </div>
             ) : null}
@@ -961,19 +974,31 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             {PROMPT_REGION_LABELS.persistRegionHint}
                           </p>
                           <SettingsField label="内容">
-                            <textarea
-                              rows={4}
+                            <PromptCollapsibleField
                               value={block.content}
-                              onChange={(e) =>
+                              onChange={(content) =>
                                 setPersist((prev) =>
                                   mapPersistTextBlocks(prev, (b, i) =>
-                                    i === index
-                                      ? { ...b, content: e.target.value }
-                                      : b
+                                    i === index ? { ...b, content } : b
                                   )
                                 )
                               }
-                            />
+                              ariaLabel={`常驻块 ${block.name} 内容`}
+                            >
+                              <textarea
+                                rows={4}
+                                value={block.content}
+                                onChange={(e) =>
+                                  setPersist((prev) =>
+                                    mapPersistTextBlocks(prev, (b, i) =>
+                                      i === index
+                                        ? { ...b, content: e.target.value }
+                                        : b
+                                    )
+                                  )
+                                }
+                              />
+                            </PromptCollapsibleField>
                           </SettingsField>
                         </div>
                       </div>
@@ -1010,13 +1035,19 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               </p>
               {customAttachEnabled ? (
                 <SettingsField label="附加信息文本">
-                  <textarea
-                    rows={4}
+                  <PromptCollapsibleField
                     value={customAttachText}
-                    onChange={(e) => setCustomAttachText(e.target.value)}
-                    onKeyDown={handlePromptTextareaKeyDown}
-                    placeholder="每条用户消息都会附带这段文本给模型"
-                  />
+                    onChange={setCustomAttachText}
+                    ariaLabel="附加信息文本"
+                  >
+                    <textarea
+                      rows={4}
+                      value={customAttachText}
+                      onChange={(e) => setCustomAttachText(e.target.value)}
+                      onKeyDown={handlePromptTextareaKeyDown}
+                      placeholder="每条用户消息都会附带这段文本给模型"
+                    />
+                  </PromptCollapsibleField>
                 </SettingsField>
               ) : null}
             </div>
@@ -1150,16 +1181,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                             </p>
                           ) : null}
                           <SettingsField label="内容">
-                            <PromptMacroTextarea
-                              textareaRef={
-                                dynamicInsertIndex === index
-                                  ? dynamicTextareaRef
-                                  : inactiveDynamicTextareaRef
-                              }
-                              rows={4}
+                            <PromptCollapsibleField
                               value={block.content}
-                              onFocus={() => setDynamicInsertIndex(index)}
-                              onKeyDown={handlePromptTextareaKeyDown}
                               onChange={(content) =>
                                 setDynamic((prev) =>
                                   prev.map((b, i) =>
@@ -1167,7 +1190,27 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                   )
                                 )
                               }
-                            />
+                              ariaLabel={`动态块 ${block.name} 内容`}
+                            >
+                              <PromptMacroTextarea
+                                textareaRef={
+                                  dynamicInsertIndex === index
+                                    ? dynamicTextareaRef
+                                    : inactiveDynamicTextareaRef
+                                }
+                                rows={4}
+                                value={block.content}
+                                onFocus={() => setDynamicInsertIndex(index)}
+                                onKeyDown={handlePromptTextareaKeyDown}
+                                onChange={(content) =>
+                                  setDynamic((prev) =>
+                                    prev.map((b, i) =>
+                                      i === index ? { ...b, content } : b
+                                    )
+                                  )
+                                }
+                              />
+                            </PromptCollapsibleField>
                           </SettingsField>
                           <div className="config-dep-chips">
                             <span className="config-block-card__hint">
