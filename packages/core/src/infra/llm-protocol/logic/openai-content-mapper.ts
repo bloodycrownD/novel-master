@@ -132,6 +132,11 @@ function toolCallsFromBlocks(
 
 /**
  * Session history → OpenAI `messages[]` (`tool_result` → `role: tool`; assistant `tool_use` → `tool_calls`).
+ *
+ * assistant 思考内容回传：thinking 块文本拼接为 `reasoning_content` 字段随 assistant
+ * 消息回传（openai 兼容生态通用约定，DeepSeek 官方要求工具轮回传 CoT；上游
+ * `applyThinkingContextForLlm` 已按容量 1 / 档位门完成取舍，此处原样透传）。
+ * redacted_thinking 是 anthropic 加密负载，openai 无对应字段，丢弃。
  */
 export function chatMessagesToOpenAi(
   messages: readonly ChatMessage[],
@@ -141,11 +146,15 @@ export function chatMessagesToOpenAi(
   for (const msg of messages) {
     const toolResults = msg.content.blocks.filter((b) => b.type === "tool_result");
     const toolUses = msg.content.blocks.filter((b) => b.type === "tool_use");
+    const thinkingTexts = msg.content.blocks
+      .filter((b) => b.type === "thinking")
+      .map((b) => b.text);
     const other = msg.content.blocks.filter(
       (b) =>
         b.type !== "tool_result" &&
         b.type !== "tool_use" &&
-        b.type !== "thinking",
+        b.type !== "thinking" &&
+        b.type !== "redacted_thinking",
     );
 
     for (const tr of toolResults) {
@@ -156,7 +165,8 @@ export function chatMessagesToOpenAi(
       });
     }
 
-    if (other.length > 0 || toolUses.length > 0) {
+    const hasReasoning = msg.role === "assistant" && thinkingTexts.length > 0;
+    if (other.length > 0 || toolUses.length > 0 || hasReasoning) {
       const role = msg.role === "assistant" ? "assistant" : "user";
       const message: OpenAiChatMessage = { role };
 
@@ -169,13 +179,26 @@ export function chatMessagesToOpenAi(
 
       if (toolUses.length > 0) {
         message.tool_calls = toolCallsFromBlocks(toolUses);
+      }
+
+      if (hasReasoning) {
+        message.reasoning_content = thinkingTexts.join("");
+      }
+
+      if (message.tool_calls != null || message.reasoning_content != null) {
+        // 有 tool_calls / reasoning_content 但无正文：content 显式 null
+        //（与纯工具轮既有行为一致，部分网关不接受 content 字段缺省）。
         if (message.content == null) {
           message.content = null;
         }
       }
 
-      // 无 content 且无 tool_calls → OpenAI 兼容网关会 400 invalid_request_error
-      if (message.content == null && message.tool_calls == null) {
+      // 无 content 且无 tool_calls 且无 reasoning_content → OpenAI 兼容网关会 400 invalid_request_error
+      if (
+        message.content == null &&
+        message.tool_calls == null &&
+        message.reasoning_content == null
+      ) {
         continue;
       }
 

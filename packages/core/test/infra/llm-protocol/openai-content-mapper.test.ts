@@ -7,6 +7,7 @@ import {
   chatMessagesToOpenAi,
   openAiChoiceToBlocks,
 } from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
+import { applyThinkingContextForLlm } from "../../../src/service/prompt/apply-thinking-context-for-llm.js";
 
 describe("openai-content-mapper", () => {
   it("O1: text + tool_use �?assistant message with tool_calls", () => {
@@ -277,5 +278,137 @@ describe("openai-content-mapper", () => {
     assert.equal(out[0]!.tool_call_id, "call_abc");
     assert.equal(out[1]!.role, "user");
     assert.equal(out[1]!.content, "换个话题");
+  });
+
+  it("RC1: assistant thinking 块以 reasoning_content 回传，正文进 content", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "a1",
+        sessionId: "s1",
+        seq: 1,
+        role: "assistant",
+        content: {
+          blocks: [
+            { type: "thinking", text: "先分析一下…" },
+            { type: "text", text: "回答" },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+    ];
+
+    const out = chatMessagesToOpenAi(messages);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.role, "assistant");
+    assert.equal(out[0]!.reasoning_content, "先分析一下…");
+    assert.equal(out[0]!.content, "回答");
+  });
+
+  it("RC2: 多个 thinking 块拼接为一条 reasoning_content；redacted_thinking 丢弃不进任何字段", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "a1",
+        sessionId: "s1",
+        seq: 1,
+        role: "assistant",
+        content: {
+          blocks: [
+            { type: "thinking", text: "第一段。" },
+            { type: "redacted_thinking", data: "opaque" },
+            { type: "thinking", text: "第二段。" },
+            { type: "tool_use", id: "call_1", name: "read", input: {} },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+    ];
+
+    const out = chatMessagesToOpenAi(messages);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.reasoning_content, "第一段。第二段。");
+    assert.ok(!JSON.stringify(out[0]).includes("opaque"));
+    assert.equal(out[0]!.content, null);
+  });
+
+  it("RC3: 纯 thinking 的 assistant 消息不丢：content 置 null + reasoning_content 回传", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "a1",
+        sessionId: "s1",
+        seq: 1,
+        role: "assistant",
+        content: { blocks: [{ type: "thinking", text: "只有思考" }] },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+    ];
+
+    const out = chatMessagesToOpenAi(messages);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.role, "assistant");
+    assert.equal(out[0]!.reasoning_content, "只有思考");
+    assert.equal(out[0]!.content, null);
+  });
+
+  it("RC4: 与容量 1 剥离联动：历史 thinking 被剥后仅最新一条的 reasoning_content 回传；关态全剥时无 reasoning_content 字段", () => {
+    const mk = (id: string, thinking: string): ChatMessage => ({
+      id,
+      sessionId: "s1",
+      seq: 1,
+      role: "assistant",
+      content: {
+        blocks: [
+          { type: "thinking", text: thinking },
+          { type: "text", text: "回答" },
+        ],
+      },
+      provider: null,
+      raw: null,
+      createdAtMs: 0,
+      hidden: false,
+    });
+    const userMsg = (id: string): ChatMessage => ({
+      id,
+      sessionId: "s1",
+      seq: 1,
+      role: "user",
+      content: { blocks: [{ type: "text", text: "问" }] },
+      provider: null,
+      raw: null,
+      createdAtMs: 0,
+      hidden: false,
+    });
+    const history = [userMsg("u1"), mk("a1", "第一轮思考"), userMsg("u2"), mk("a2", "第二轮思考")];
+
+    const onOut = chatMessagesToOpenAi(
+      applyThinkingContextForLlm(history, {
+        enabled: true,
+        protocol: "openai",
+        retainProtocolMinimum: true,
+        requestThinkingEnabled: true,
+      }),
+    );
+    assert.equal(onOut[1]!.reasoning_content, undefined);
+    assert.equal(onOut[3]!.reasoning_content, "第二轮思考");
+
+    const offOut = chatMessagesToOpenAi(
+      applyThinkingContextForLlm(history, {
+        enabled: false,
+        protocol: "openai",
+        retainProtocolMinimum: true,
+        requestThinkingEnabled: true,
+      }),
+    );
+    for (const message of offOut) {
+      assert.equal(message.reasoning_content, undefined);
+    }
   });
 });

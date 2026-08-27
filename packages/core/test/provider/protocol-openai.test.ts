@@ -386,7 +386,7 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     assert.equal(result.blocks[0]!.text, "你好");
   });
 
-  it("omits thinking blocks from outbound history", async () => {
+  it("passes thinking blocks outbound as reasoning_content", async () => {
     const calls: Array<{ body: string }> = [];
     const fetchFn = async (_url: string, init?: RequestInit) => {
       calls.push({ body: String(init?.body ?? "") });
@@ -428,10 +428,15 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     });
 
     const parsed = JSON.parse(calls[0]!.body) as {
-      messages?: Array<{ role: string; content?: string }>;
+      messages?: Array<{
+        role: string;
+        content?: string;
+        reasoning_content?: string;
+      }>;
     };
     const assistant = parsed.messages?.find((m) => m.role === "assistant");
     assert.equal(assistant?.content, "visible reply");
-    assert.ok(!JSON.stringify(parsed).includes("internal reasoning"));
+    // openai 出站以 reasoning_content 回传思考（容量 1 剥离后的保留集合）
+    assert.equal(assistant?.reasoning_content, "internal reasoning");
   });
 });
