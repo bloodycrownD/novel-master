@@ -24,6 +24,9 @@ type Props = {
   value: string;
   onChangeText: (next: string) => void;
   placeholder?: string;
+  /** 透传给内部 FormTextInput 的焦点事件（超长折叠层需要感知聚焦/失焦）。 */
+  onFocus?: () => void;
+  onBlur?: () => void;
 };
 
 export function PromptMacroTextInput({
@@ -31,6 +34,8 @@ export function PromptMacroTextInput({
   value,
   onChangeText,
   placeholder,
+  onFocus,
+  onBlur,
 }: Props) {
   const selectionRef = useRef({start: value.length, end: value.length});
   const prevValueRef = useRef(value);
@@ -84,6 +89,8 @@ export function PromptMacroTextInput({
         tokens={tokens}
         onChangeText={handleChangeText}
         onSelectionChange={handleSelectionChange}
+        onFocus={onFocus}
+        onBlur={onBlur}
         selection={pendingSelection ?? undefined}
         multiline
         placeholder={placeholder}
