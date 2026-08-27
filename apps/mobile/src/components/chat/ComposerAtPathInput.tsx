@@ -38,6 +38,14 @@ import {
   type ComposerTriggersConfig,
 } from './composer-at-path-mention';
 
+
+/** metro 调试日志：定位 tag 闪烁/消失问题（ux-fixes-2026-08 验收反馈），仅 __DEV__ 输出。 */
+function logTagDebug(label: string, detail: Record<string, unknown>): void {
+  if (__DEV__) {
+    console.log(`[ComposerAtPathInput] ${label}`, detail);
+  }
+}
+
 export type ComposerAtPathInputHandle = {
   /**
    * 程序化整段写入（选择器插入等）。
@@ -162,7 +170,7 @@ export const ComposerAtPathInput = forwardRef<
     [onSelectionChange],
   );
 
-  const {textInputProps, triggers} = useMentions({
+  const {textInputProps, triggers, mentionState} = useMentions({
     value: mentionValue,
     onChange: emitMentionValue,
     triggersConfig: triggersConfig as TriggersConfig<'atPath' | 'skill'>,
@@ -176,6 +184,20 @@ export const ComposerAtPathInput = forwardRef<
   });
   triggersRef.current = triggers;
 
+  // metro 调试：children 元素引用变化即触发一次原生 spannable 重推（tag 闪烁的直接相关事件）
+  const prevChildrenRef = useRef<React.ReactNode | null>(null);
+  if (prevChildrenRef.current !== textInputProps.children) {
+    prevChildrenRef.current = textInputProps.children;
+    logTagDebug('children-push', {
+      mentionParts: mentionState.parts.filter(part => part.config != null)
+        .length,
+      plainLen: mentionState.parts.reduce(
+        (total, part) => total + part.text.length,
+        0,
+      ),
+    });
+  }
+
   // 外部 value（草稿水化 / 清空）→ 内部；提升完整 token 恢复 tag，纯文本不成 tag 的语义不变
   useLayoutEffect(() => {
     if (value === lastPlainRef.current) {
@@ -185,6 +207,7 @@ export const ComposerAtPathInput = forwardRef<
     const hydrated = promotePlainMentions(value, triggersConfig);
     mentionValueRef.current = hydrated;
     setMentionValue(hydrated);
+    logTagDebug('hydrate', {valueLen: value.length, cursor});
     const pos = Math.max(0, Math.min(cursor, value.length));
     applyPendingSelection(pos, pos);
   }, [value, cursor, applyPendingSelection, triggersConfig]);
@@ -237,6 +260,11 @@ export const ComposerAtPathInput = forwardRef<
         changedPlain,
         triggersConfig,
       );
+      logTagDebug('typing', {
+        plainLen: changedPlain.length,
+        tail: changedPlain.slice(-8),
+        atomic: atomic != null,
+      });
       if (atomic != null) {
         emitMentionValue(atomic);
         return;
