@@ -77,7 +77,6 @@ const mockRouteParams: {
   agentId?: string;
   title?: string;
   initialText?: string;
-  onSaved?: (text: string) => void;
 } = {agentId: 'agent-a'};
 
 jest.mock('@react-navigation/native', () => ({
@@ -172,6 +171,7 @@ jest.mock('../src/navigation/HeaderContext', () => ({
 import {AgentEditorScreen} from '../src/screens/stack/AgentEditorScreen';
 import {AgentEditorForm} from '../src/components/agent/AgentEditorForm';
 import {PromptEditorScreen} from '../src/screens/stack/PromptEditorScreen';
+import {takePromptEditorOnSaved} from '../src/components/agent/prompt-editor-callback';
 
 function findBanner(root: TestRenderer.ReactTestInstance) {
   return root
@@ -210,7 +210,8 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
     mockRouteParams.agentId = 'agent-a';
     mockRouteParams.title = undefined;
     mockRouteParams.initialText = undefined;
-    mockRouteParams.onSaved = undefined;
+    // 清空模块级回调残留（回调不走路由参数，改由 openPromptEditor 写入）。
+    takePromptEditorOnSaved();
   });
 
   it('初始无标记；全屏保存回填后标记出现；表单保存后标记消失', async () => {
@@ -219,20 +220,19 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
     // 初始：与已保存基线一致，无「有未保存的更改」
     expect(findBanner(editorTree.root)).toHaveLength(0);
 
-    // 常驻「全屏编辑」按钮 → push 全屏页
+    // 常驻「全屏编辑」按钮 → push 全屏页（回调已写进模块级存取，路由参数只传可序列化字段）
     pressFullscreenButton(editorTree.root);
     expect(mockPush).toHaveBeenCalledWith(
       'PromptEditor',
       expect.objectContaining({initialText: longSystem}),
     );
     const route = mockPush.mock.calls[0]![1] as {
+      title?: string;
       initialText: string;
-      onSaved: (text: string) => void;
     };
 
     // 全屏页（栈顶）：改稿并保存 → 回填栈底表单
     mockRouteParams.initialText = route.initialText;
-    mockRouteParams.onSaved = route.onSaved;
     let promptTree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       promptTree = TestRenderer.create(<PromptEditorScreen />);
@@ -266,12 +266,11 @@ describe('AgentEditor dirty 链路（T-AD1）', () => {
     const editorTree = await renderAgentEditor();
     pressFullscreenButton(editorTree.root);
     const route = mockPush.mock.calls[0]![1] as {
+      title?: string;
       initialText: string;
-      onSaved: (text: string) => void;
     };
 
     mockRouteParams.initialText = route.initialText;
-    mockRouteParams.onSaved = route.onSaved;
     let promptTree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       promptTree = TestRenderer.create(<PromptEditorScreen />);

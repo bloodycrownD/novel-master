@@ -1,13 +1,17 @@
 /**
- * T-PE1 / T-PE2（UX 简化后）：
+ * T-PE1 / T-PE2（UX 简化 + overlay 微调）：
  * ExpandablePromptInput 渲染内联编辑器 + 常驻「全屏编辑」按钮，点击触发 openEditor；
- * 内联输入框带 maxHeight 限 5 行（超出内部滚动，不再折叠）。
+ * 按钮以 trailing overlay 浮在输入区右上角（容器 relative / 按钮 absolute），
+ * ctx.style 给内联输入 maxHeight 限 5 行 + paddingRight 让位（文字不钻到图标下面）。
  */
 import {describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
-import {Text, TextInput} from 'react-native';
+import {View, StyleSheet, Text, TextInput} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
-import {ExpandablePromptInput} from '../src/components/agent/ExpandablePromptInput';
+import {
+  ExpandablePromptInput,
+  PROMPT_INLINE_PADDING_RIGHT,
+} from '../src/components/agent/ExpandablePromptInput';
 import {
   PROMPT_INLINE_MAX_HEIGHT,
   PROMPT_INLINE_MAX_LINES,
@@ -31,6 +35,11 @@ jest.mock('../src/theme/ThemeProvider', () => {
 /** 内联编辑器占位组件：断言 inline 形态是否渲染。 */
 function InlineMarker() {
   return null;
+}
+
+/** 展平 RN style（含 StyleSheet 注册 id / 数组）为单对象，方便 toMatchObject 断言。 */
+function flattenStyle(style: unknown): Record<string, unknown> {
+  return StyleSheet.flatten(style as never) as Record<string, unknown>;
 }
 
 describe('ExpandablePromptInput 内联 + 全屏按钮（UX 简化）', () => {
@@ -92,15 +101,45 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（UX 简化）', () => {
     expect(tree!.root.findAllByType(InlineMarker)).toHaveLength(1);
   });
 
-  it('内联输入框透传 maxHeight 限高样式（5 行）', () => {
+  it('全屏按钮为输入区右上角 overlay：容器 relative、按钮 absolute 且半透明', () => {
     const openEditor = jest.fn();
     let tree: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
         <ExpandablePromptInput
-          renderInline={() => (
-            <TextInput multiline style={{maxHeight: PROMPT_INLINE_MAX_HEIGHT}} />
-          )}
+          testID="prompt-input"
+          renderInline={ctx => <TextInput multiline style={ctx.style} />}
+          openEditor={openEditor}
+        />,
+      );
+    });
+    // 容器（root）相对定位：absolute 按钮以它为定位基准
+    // （findByProps 会命中组件自身节点，改按 View 实例 + testID 定位容器）
+    const root = tree!.root.find(
+      node => node.type === View && node.props.testID === 'prompt-input',
+    );
+    expect(flattenStyle(root.props.style)).toMatchObject({
+      position: 'relative',
+    });
+    // 按钮浮在容器内右上角，且不单独占列、恒定轻透明度
+    const button = tree!.root.findAllByProps({
+      testID: 'prompt-input-fullscreen',
+    })[0]!;
+    expect(flattenStyle(button.props.style)).toMatchObject({
+      position: 'absolute',
+      top: expect.any(Number),
+      right: expect.any(Number),
+      opacity: expect.any(Number),
+    });
+  });
+
+  it('ctx.style 给内联输入透传 maxHeight 限高 + paddingRight 让位', () => {
+    const openEditor = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <ExpandablePromptInput
+          renderInline={ctx => <TextInput multiline style={ctx.style} />}
           openEditor={openEditor}
         />,
       );
@@ -108,6 +147,7 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（UX 简化）', () => {
     const input = tree!.root.findByType(TextInput);
     expect(input.props.style).toMatchObject({
       maxHeight: PROMPT_INLINE_MAX_HEIGHT,
+      paddingRight: PROMPT_INLINE_PADDING_RIGHT,
     });
   });
 });
