@@ -272,6 +272,7 @@ describe("RevisionAwareVfsService (integration)", () => {
     const vfs = createVfsService(conn);
     const root = `/${testIsolationSuffix()}`;
     const dir = `${root}/tv3`;
+    await vfs.mkdir(GLOBAL_SCOPE, root);
     await vfs.mkdir(GLOBAL_SCOPE, dir);
 
     // a.txt 写到 v3 后拨回 v1（v3 被 checkpoint 钉住）；b/c 正常 v1
