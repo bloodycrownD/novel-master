@@ -271,12 +271,12 @@ export class DefaultAgentRunner implements AgentRunner {
     // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
     // run 中途切换开关不影响进行中的 run，同 run 内各 step 口径一致。
     // KKV 存了坏值（如手工写入 not-a-bool）时 PreferencesError 不炸 run：
-    // 回退 true（保守保留方向）并记标签日志；GUI 无自愈入口，
-    // 用户重置偏好后自然恢复。
-    let thinkingContextEnabled = true;
+    // 回退 false（跟随默认关，与旧版「思考不进上下文」行为一致、无兼容风险）
+    // 并记标签日志；GUI 无自愈入口，用户重置偏好后自然恢复。
+    let thinkingContextEnabled = false;
     try {
       thinkingContextEnabled =
-        (await this.deps.preferences?.getThinkingContextEnabled()) ?? true;
+        (await this.deps.preferences?.getThinkingContextEnabled()) ?? false;
     } catch (error) {
       if (!(error instanceof PreferencesError)) {
         throw error;
@@ -285,7 +285,7 @@ export class DefaultAgentRunner implements AgentRunner {
         stage: "thinking_context_pref",
         key: "chat.thinkingContext",
         code: error.code,
-        fallback: true,
+        fallback: false,
         error,
       });
     }

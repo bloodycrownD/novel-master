@@ -56,7 +56,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async getThinkingContextEnabled(): Promise<boolean> {
-    return this.getBooleanPref(PREF_KEY_CHAT_THINKING_CONTEXT, true);
+    return this.getBooleanPref(PREF_KEY_CHAT_THINKING_CONTEXT, false);
   }
 
   async setThinkingContextEnabled(enabled: boolean): Promise<void> {

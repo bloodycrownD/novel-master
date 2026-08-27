@@ -96,17 +96,17 @@ describe("PersistentPreferences", () => {
   });
 
   describe("chat.thinkingContext", () => {
-    it("defaults to true when unset", async () => {
+    it("defaults to false when unset", async () => {
       const ctx = getNovelMasterTestContext();
-      assert.equal(await ctx.preferences.getThinkingContextEnabled(), true);
+      assert.equal(await ctx.preferences.getThinkingContextEnabled(), false);
     });
 
-    it("set false 后 get 为 false，reset 后回到 true", async () => {
+    it("set true 后 get 为 true，reset 后回到 false", async () => {
       const ctx = getNovelMasterTestContext();
-      await ctx.preferences.setThinkingContextEnabled(false);
-      assert.equal(await ctx.preferences.getThinkingContextEnabled(), false);
-      await ctx.preferences.resetThinkingContextEnabled();
+      await ctx.preferences.setThinkingContextEnabled(true);
       assert.equal(await ctx.preferences.getThinkingContextEnabled(), true);
+      await ctx.preferences.resetThinkingContextEnabled();
+      assert.equal(await ctx.preferences.getThinkingContextEnabled(), false);
     });
 
     it("throws PreferencesError on invalid stored boolean", async () => {

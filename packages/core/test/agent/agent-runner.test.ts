@@ -1683,7 +1683,7 @@ describe("AgentRunner", () => {
   });
 
   // MF-3：KKV 坏值（PreferencesError）不应炸掉整个 run。
-  it("thinking 偏好抛 PreferencesError 时回退 true，run 正常完成并记标签日志", async () => {
+  it("thinking 偏好抛 PreferencesError 时回退 false（默认关），run 正常完成并记标签日志", async () => {
     const consoleErrors: Array<{ tag: unknown; payload: unknown }> = [];
     const originalError = console.error;
     console.error = ((tag: unknown, payload: unknown) => {
@@ -1692,7 +1692,7 @@ describe("AgentRunner", () => {
     try {
       const session = new InMemoryAgentSession();
       await session.append("user", textBlocks("go"));
-      // 最新一轮（最后真实用户输入之后）的 assistant thinking：开态回退时应原样保留。
+      // 历史含一条无 tool_use 的 assistant thinking：回退关态时被剥离。
       await session.append("assistant", {
         blocks: [
           { type: "thinking", text: "latest-turn-thinking" },
@@ -1740,16 +1740,16 @@ describe("AgentRunner", () => {
 
       // run 正常完成，不因坏值炸掉
       assert.equal(result.stopReason, "completed");
-      // 回退 true（开态）：最新一轮 assistant thinking 原样进入请求历史
+      // 回退 false（关态）：无 tool_use 的 assistant thinking 不进请求历史
       const historyText = JSON.stringify(histories[0]);
-      assert.match(historyText, /latest-turn-thinking/);
+      assert.doesNotMatch(historyText, /latest-turn-thinking/);
       // 标签式日志：含偏好 key 与错误码
       assert.equal(consoleErrors.length, 1);
       assert.equal(consoleErrors[0]!.tag, "[agent-runner] thinking_context_pref_read_failed");
       const payload = consoleErrors[0]!.payload as Record<string, unknown>;
       assert.equal(payload.key, "chat.thinkingContext");
       assert.equal(payload.code, "INVALID_VALUE");
-      assert.equal(payload.fallback, true);
+      assert.equal(payload.fallback, false);
     } finally {
       console.error = originalError;
     }
