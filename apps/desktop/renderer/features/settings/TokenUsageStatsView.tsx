@@ -59,13 +59,13 @@ function hitRate(cacheRead: number, billed: number): number | null {
 }
 
 function formatHitRate(rate: number | null): string {
-  return rate == null ? "暂无数据" : `${Math.round(rate * 100)}%`;
+  return rate == null ? "—" : `${Math.round(rate * 100)}%`;
 }
 
 /** 平均 token 速率展示：`x.x tok/s`（≥100 取整避免小数位过长）；无数据显示空态。 */
 function formatTokensPerSecond(v: number | null): string {
   if (v == null) {
-    return "暂无数据";
+    return "—";
   }
   return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
 }
@@ -73,7 +73,7 @@ function formatTokensPerSecond(v: number | null): string {
 /** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据显示空态。 */
 function formatFirstTokenMs(ms: number | null): string {
   if (ms == null) {
-    return "暂无数据";
+    return "—";
   }
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }

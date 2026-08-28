@@ -92,11 +92,12 @@ export function isCustomRangeValid(from: Date, to: Date): boolean {
 }
 
 function formatHitRate(rate: number | null): string {
-  return rate == null ? '暂无数据' : `${Math.round(rate * 100)}%`;
+  return rate == null ? '—' : `${Math.round(rate * 100)}%`;
 }
 
 /** 汇总卡空态文案：统计自本版本才开始积累，给用户一句解释。 */
-const SUMMARY_EMPTY_TEXT = '暂无数据，自本版本起开始积累';
+/** 空态统一显示横杠（简洁，不占版面）。 */
+const SUMMARY_EMPTY_TEXT = '—';
 
 /** 平均 token 速率展示：`x.x tok/s`；无数据时返回调用方传入的空态文案。 */
 function formatTokensPerSecond(v: number | null, emptyText: string): string {
@@ -660,12 +661,12 @@ export function TokenUsageStatsScreen() {
                 · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
                 {formatTokensPerSecond(
                   selectedDayBucket.avgTokensPerSecond,
-                  '暂无数据',
+                  '—',
                 )}{' '}
                 · 平均首字延迟{' '}
                 {formatFirstTokenMs(
                   selectedDayBucket.avgFirstTokenMs,
-                  '暂无数据',
+                  '—',
                 )}
               </Text>
               <StackedBars

@@ -454,7 +454,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(today).toContain('2');
   });
 
-  it('汇总页签：命中率无 cache 数据时显示「暂无数据」而非 0%', async () => {
+  it('汇总页签：命中率无 cache 数据时显示「—」而非 0%', async () => {
     mockGetSummary.mockResolvedValue({
       ...SAMPLE_SUMMARY,
       cacheReadTokens: 0,
@@ -464,7 +464,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     const hitTile = nodeText(
       findByTestId(renderer.root, 'summary-metric-hitRate')!,
     );
-    expect(hitTile).toContain('暂无数据');
+    expect(hitTile).toContain('—');
     expect(hitTile).not.toContain('0%');
   });
 
@@ -870,7 +870,7 @@ describe('T-MB 新指标卡与长按详情', () => {
     expect(nodeText(ttftTile!)).toContain('1.2 s');
   });
 
-  it('新指标空态：null 时显示「暂无数据，自本版本起开始积累」而非 0（T-MB4）', async () => {
+  it('新指标空态：null 时显示「—」而非 0（T-MB4）', async () => {
     mockGetSummary.mockResolvedValue({
       ...SAMPLE_SUMMARY,
       avgFirstTokenMs: null,
@@ -878,9 +878,9 @@ describe('T-MB 新指标卡与长按详情', () => {
     });
     const renderer = await renderScreen();
     const rateTile = findByTestId(renderer.root, 'summary-metric-avgTokensPerSecond');
-    expect(nodeText(rateTile!)).toContain('暂无数据，自本版本起开始积累');
+    expect(nodeText(rateTile!)).toContain('—');
     const ttftTile = findByTestId(renderer.root, 'summary-metric-avgFirstTokenMs');
-    expect(nodeText(ttftTile!)).toContain('暂无数据，自本版本起开始积累');
+    expect(nodeText(ttftTile!)).toContain('—');
   });
 
   it('选中天汇总行含当日均值（有值与 null 两形态）（T-MB4）', async () => {
@@ -907,7 +907,8 @@ describe('T-MB 新指标卡与长按详情', () => {
     json = JSON.stringify(renderer.toJSON());
     expect(json).toContain('平均速率');
     expect(json).toContain('平均首字延迟');
-    expect(json).toContain('暂无数据');
+    expect(json).toContain('平均速率');
+    expect(json).toContain('"—"');
   });
 
   it('长按柱子后图下方显示 bar-inspect 详情行（输入/输出/调用）（T-MB3）', async () => {

@@ -146,7 +146,10 @@ export function StackedBars({
                 <View
                   style={{ height: CHART_HEIGHT, justifyContent: 'flex-end' }}
                 >
-                  {height === 0 ? null : (
+                  {/* 无数据日期也保留等宽占位，列宽与有数据日期一致 */}
+                  {height === 0 ? (
+                    <View style={{ width: barWidth, height: 0 }} />
+                  ) : (
                     <View
                       testID={`bar-${datum.key}`}
                       style={[
