@@ -5211,6 +5211,58 @@ html[data-theme="dark"] .chat-batch-bar {
   max-width: 480px;
 }
 
+/* 提示词内联限高（约 5 行）：内容超出后 textarea 内部滚动，输入不受限。
+   行数语义为 5 行（PROMPT_INLINE_MAX_LINES，实际限高以这里为准）：
+   8 × line-height 1.45em ≈ 151px 内容 + 上下 padding 16px + 边框 2px（border-box）。 */
+.prompt-field-inline {
+  position: relative;
+}
+
+.prompt-field-inline textarea {
+  max-height: calc(8 * 1.45em + 18px);
+  overflow-y: auto;
+}
+
+/* 全屏编辑按钮：复用 .icon-btn 基础样式，悬浮字段右上角，平时半透明不抢视线。 */
+.prompt-field-inline__expand {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.prompt-field-inline__expand:hover,
+.prompt-field-inline__expand:focus-visible {
+  opacity: 1;
+}
+
+/* 提示词全屏编辑 Modal：近全屏、纵向 flex（CodeEditor 编辑区 + 底部按钮条），overlay 复用 .text-prompt-overlay。 */
+.prompt-editor-modal {
+  width: 100%;
+  max-width: min(1100px, 92vw);
+  height: min(92vh, 1000px);
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.prompt-editor-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  padding-top: 12px;
+}
+
 .project-agent-config-modal {
   max-width: min(92vw, 720px);
   max-height: min(90vh, 860px);

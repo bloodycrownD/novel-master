@@ -7,6 +7,8 @@ import {STORED_CONFIG_LABELS} from '@novel-master/core/config-forms/stored-confi
 const mockGetRawWire = jest.fn();
 const mockListAgentIds = jest.fn();
 const mockGoBack = jest.fn();
+// 超长折叠层展开入口需要 push（PromptEditor 全屏编辑页）。
+const mockPush = jest.fn();
 
 const agentId = 'agent-broken-001';
 const agentName = '失效写作助手';
@@ -69,7 +71,7 @@ jest.mock('../src/hooks/useRuntime', () => ({
 }));
 
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({goBack: mockGoBack}),
+  useNavigation: () => ({goBack: mockGoBack, push: mockPush}),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({

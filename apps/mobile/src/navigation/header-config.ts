@@ -34,6 +34,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   FileEditor: { title: '编辑文件', showBack: true, showNav: false },
   SessionDetail: { title: '会话详情', showBack: true, showNav: false },
   SkillPanel: { title: '技能', showBack: true, showNav: false },
+  PromptEditor: { title: '编辑提示词', showBack: true, showNav: false },
   SkillsSettings: { title: '技能管理', showBack: true, showNav: false },
   SkillDetail: { title: '技能详情', showBack: true, showNav: false },
   SubagentSessionView: { title: '子会话', showBack: true, showNav: false },

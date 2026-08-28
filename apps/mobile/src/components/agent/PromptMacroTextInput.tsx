@@ -9,6 +9,8 @@ import {
   View,
   type NativeSyntheticEvent,
   type TextInputSelectionChangeEventData,
+  type StyleProp,
+  type TextStyle,
 } from 'react-native';
 import type {ThemeTokens} from '../../theme/tokens';
 import {FormTextInput} from '../form/FormTextInput';
@@ -24,6 +26,14 @@ type Props = {
   value: string;
   onChangeText: (next: string) => void;
   placeholder?: string;
+  /** 透传给内部 FormTextInput 的样式（内联限高 maxHeight 等） */
+  style?: StyleProp<TextStyle>;
+  /** 外部短暂受控的选区（挂载视口置顶用）；内部程序化选区优先。 */
+  selection?: {start: number; end: number};
+  /** 外部 selectionChange：与内部共用一个回调链，两边都收到。 */
+  onSelectionChange?: (
+    event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
+  ) => void;
 };
 
 export function PromptMacroTextInput({
@@ -31,6 +41,9 @@ export function PromptMacroTextInput({
   value,
   onChangeText,
   placeholder,
+  style,
+  selection,
+  onSelectionChange,
 }: Props) {
   const selectionRef = useRef({start: value.length, end: value.length});
   const prevValueRef = useRef(value);
@@ -43,8 +56,9 @@ export function PromptMacroTextInput({
     (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
       selectionRef.current = event.nativeEvent.selection;
       setPendingSelection(null);
+      onSelectionChange?.(event);
     },
-    [],
+    [onSelectionChange],
   );
 
   const handleChangeText = useCallback(
@@ -84,11 +98,12 @@ export function PromptMacroTextInput({
         tokens={tokens}
         onChangeText={handleChangeText}
         onSelectionChange={handleSelectionChange}
-        selection={pendingSelection ?? undefined}
+        selection={pendingSelection ?? selection}
         multiline
         placeholder={placeholder}
         autoCapitalize="none"
-        autoCorrect={false}>
+        autoCorrect={false}
+        style={style}>
         {/* RN TextInput：value 与 children 互斥；由 children 着色，onChangeText 驱动纯文本 */}
         {value.length === 0 ? null : (
           <Text>

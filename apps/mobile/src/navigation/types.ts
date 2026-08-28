@@ -46,6 +46,12 @@ export type RootStackParamList = {
   };
   /** 会话技能面板：当前项目合并视图 + 启停开关（写项目负清单）。 */
   SkillPanel: { projectId: string };
+  /** 全屏提示词编辑页：草稿副本编辑，保存才回填，取消/返回键不动原值。
+   *  回调不走路由参数（不可序列化），由 prompt-editor-callback 模块级存取。 */
+  PromptEditor: {
+    title?: string;
+    initialText: string;
+  };
   /** 设置·技能管理页：全局默认 / 项目分组双 tab。 */
   SkillsSettings: undefined;
   /** 技能详情页：文件浏览 + 新建/删除辅助文件。 */

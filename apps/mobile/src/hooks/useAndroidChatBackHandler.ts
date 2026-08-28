@@ -1,7 +1,8 @@
 /**
  * Android hardware back for Chat Tab only (registered while the tab is focused).
  * Aligns system back / edge swipe with segmented sub-panels:
- * conversation workspace → chat → session list; template → sessions; then exit app.
+ * conversation workspace → chat → session list; template workspace dirs →
+ * template → sessions; then exit app.
  */
 import { useCallback } from 'react';
 import { BackHandler, Platform } from 'react-native';
@@ -135,6 +136,11 @@ export function useAndroidChatBackHandler(
       return true;
     }
     if (sessionListPanel === 'template') {
+      // 项目工作区同聊天工作区：先逐级退目录，根目录才切回会话列表
+      if (workspaceCanGoUp && workspaceGoUp) {
+        workspaceGoUp();
+        return true;
+      }
       showSessionsPanel();
       return true;
     }
