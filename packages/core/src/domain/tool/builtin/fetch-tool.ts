@@ -181,9 +181,9 @@ export const fetchTool: Tool<
 入参：
 - url：目标 URL，仅支持 http/https 协议（file://、ftp://、data: 等会被拒绝）
 
-结果格式：本工具回流一个 JSON 对象，结构为 { url, finalUrl, status, contentType, body, truncated, originalBytes }。
+结果格式：可读文本，非 JSON——第一行为 GET 请求行（发生重定向时附「→ 最终 URL」），第二行为 Status 状态行（含 content-type），空行后是正文文本；正文超过 50KB 时按字节截断，末尾附截断标注；非文本类型（如图片）返回占位说明，不回流内容。
 - status：HTTP 状态码（非 2xx 也照常返回，不会当作工具错误）。
-- body：正文文本，超过 50KB 时按字节截断并置 truncated=true；非文本类型（如图片）返回占位说明。
+- body：正文文本，超过 50KB 时按字节截断并置 truncated=true；非文本类型返回占位说明。
 - finalUrl：重定向后的最终 URL。
 
 注意：仅支持 GET，无自定义请求头 / Body / 鉴权；网络错误或超时会返回可读错误。`,
