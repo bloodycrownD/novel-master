@@ -1,5 +1,5 @@
 ---
-date: 2026-08-29 09:30
+date: 2026-08-29 10:30
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -252,3 +252,9 @@ fetch 支持 post 或者复杂的 header 吗？参考 curl？
 
 assistant:
 答：当前不支持——纯 GET、无自定义 header/body（PRD 保守设计）。业界先例（Claude Code WebFetch、Zed fetch）均为只读 GET，全能 curl 风险：POST 写操作副作用、任意 header 可携带/泄露鉴权、SSRF 放大、body 吃 token。若需求成立给分级方案：低配=method 白名单+body 限大小+header 安全子集（Authorization 不让模型自由带）；中配=用户预设 header 集（模型只引用名不见值）；必备护栏=内网地址拦截（loopback/私网默认拒）+写方法用户确认+响应截断。待用户给场景（查资料为主 vs 当 HTTP 客户端）再决定立项。
+
+user:
+不做（确认门），简单搞。另外你刚才合并到 main 了？回滚，fetch 不够用，改名 curl，再实现完整功能。
+
+assistant:
+回滚+重做完成：main 上 revert 7e85acb（-m 1 撤整个 fetch-tool merge）+ 55d967d（hint）为一个提交 61cd6fc（-1184 行，fetch-tool.ts/测试/fix-spec/迭代记忆删除，主线记忆保留；教训：revert 序列遇 docs(apm) 记忆提交冲突用 --skip 跳过、merge commit 须 -m 1，最终标准姿势=两个精准 revert 合一提交）。worktree feat/fetch-tool 上子代理升级（ad1b882，16 文件）：fetch→curl（注册/目录/双端 hint/测试全换名）；参数 method 枚举 7 种默认 GET、headers ≤16 条名称防 CRLF 值禁 \r\n 单条 8KB、body ≤1MB GET/HEAD 拒绝、timeout 秒默认 30 上限 120；P1 超时语义保留（参数驱动）；content-type 缺省 application/json；回流截断 50KB→256KB；输出请求行 curl METHOD url。用户拍板 known limitation：不做确认门/域名白名单/SSRF 拦截（curl 对齐定位）。验证：定向 18/18、工具+config 213+70、core 全量 2188、双端 typecheck。抽查通过，worktree 待用户测试后合并。
