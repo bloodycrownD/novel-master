@@ -1,5 +1,5 @@
 ---
-date: 2026-08-29 12:40
+date: 2026-08-29 13:00
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -282,3 +282,9 @@ user:
 
 assistant:
 排查：统计页查询 chat_message 的 first_token_ms/duration_ms（usage-stats.service AGG_SELECT_SQL），列升级链完备（新库 DDL chat-schema.ts L45-46、存量库 bootstrap alignSchemaColumns L207 pragma 检测 ADD）。node+better-sqlite3 复现验证：旧 schema 内存库跑 dist 的 alignSchemaColumns 后 model_name/first_token_ms/duration_ms 全部自动补上——代码侧无问题。结论：用户测试端跑的是旧构建（UI 新、core dist/bundle 旧），需重新打包/重启让 bootstrap 补列（desktop release/asar 需重打包或跑 dev；mobile 需重打 bundle+清 metro 缓存）。待用户重新构建后复测。
+
+user:
+还是不行，仍然报错 op-sqlite 错误。不行你拉取手机的数据库测试下？
+
+assistant:
+按用户建议拉真机库实测（adb run-as com.novelmaster，库在 files/default/novel_master_vfs，36MB）：1) 手机库 chat_message 确实无 first_token_ms/duration_ms——手机上跑的是旧 JS bundle（新 bootstrap 从未执行）；migration 表正常。2) 拷贝库跑新 dist 的 alignSchemaColumns：列成功补上、统计页聚合 SQL 跑通——新代码修该库无问题。结论 100% 指向构建侧：metro 缓存旧 core 模块（dev 需 --reset-cache + 杀进程重开）或 release APK 未重打（旧包 bundle 打死不会变）。建议用户清缓存重启 metro / 重打 release。真机库路径：/data/data/com.novelmaster/files/default/novel_master_vfs（run-as 可读）。
