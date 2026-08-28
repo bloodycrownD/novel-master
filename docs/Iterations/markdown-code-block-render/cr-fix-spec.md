@@ -25,6 +25,7 @@ dag_version: 2
   - **a（备选）**：双端 `FENCE_LANG_ALIAS` / `LANG_ALIAS` 表同步补入这批内置别名（`mjs`/`cjs`/`mts`/`cts`/`xhtml`/`rss`/`atom`/`xsd`/`xsl`…），双端一致高亮且 `data-lang` 正常输出——属语言清单范围变更，须回写 spec「语言清单与归一化」节并同步 PRD 口径。
 - **验收**：方案 b——spec deviation 与样例 ```` ```mjs ```` 块落盘，双端各自行为有测试钉死；方案 a——双端 ```` ```mjs ```` 均高亮、`data-lang` 一致、两表双端同步（T-CB13 通过）。
 - **来源**：CR-R1（评审实证：highlight.js@11 javascript 模块 aliases 含 mjs/cjs）
+- **闭合状态**：✅ 已闭合（CR-R1 fix wave）——按方案 b 执行并数双端统一化：mobile `resolveHighlight` 门控改为「归一化表优先、表外回退 hljs 注册表」，与 desktop rehype-highlight 落在同一 hljs 注册表同一判定逻辑；`mjs`/`cjs` 双端均高亮但不出 `data-lang`，`rust` 等注册表未命中双端均纯文本。spec「语言清单与归一化」节已回写 deviation 与双端注册机制差异说明，统一样例补 ` ```mjs ` 块，T-CB13 双端各自补 mjs/cjs 行为断言锁定。
 
 ### MF-2 [P2][D] mobile fence renderer 手拼 class 未转义（隐式依赖表 key 字符集不变式）
 

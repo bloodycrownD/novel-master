@@ -72,6 +72,11 @@ const UNIFIED_SAMPLE = [
   '**bold**',
   '```',
   '',
+  '```mjs',
+  'import { readFile } from "node:fs/promises";',
+  'export const load = async (p) => readFile(p, "utf8");',
+  '```',
+  '',
   '```',
   'no language fence',
   '```',
@@ -232,6 +237,19 @@ describe('code block render (mobile)', () => {
     expect(html).toContain('data-lang="bash"');
     // mermaid 块 class 保留、无高亮污染
     expect(html).toContain('language-mermaid');
+  });
+
+  it('T-CB13: 表外内置别名 mjs/cjs → 高亮但无 data-lang（MF-1 双端一致，与 desktop 同一判定）', () => {
+    const html = prepareTranscriptRichHtml(
+      '```mjs\nimport { readFile } from "node:fs/promises";\n```\n\n```cjs\nconst { readFile } = require("node:fs");\n```',
+    );
+    // hljs 语言模块内置别名随注册进入注册表：命中即高亮（与 desktop rehype-highlight 同源）
+    expect(html).toContain('language-mjs');
+    expect(html).toContain('language-cjs');
+    expect(html).toMatch(/<span class="hljs-keyword">/);
+    expect(html).toMatch(/<span class="hljs-string">/);
+    // 表外语言不出语言标签（data-lang 仅归一化表内语言输出）
+    expect(html).not.toContain('data-lang');
   });
 
   it('T-CB12: RN 回退路径维持纯文本——超长/rn 引擎只渲染 Text，无 pre/code/HTML', () => {

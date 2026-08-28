@@ -46,7 +46,11 @@ dependency:
 
 别名归一化映射（双端各持一份同表，以统一验收样例钉死一致）：`ts → typescript`、`tsx → typescript`（降级为 ts 高亮）、`js / jsx → javascript`、`py → python`、`sh / shell / zsh → bash`、`yml → yaml`。语言标签显示归一化后的规范名（PRD 验收：` ```ts ` 显示 `typescript`）。不在清单且无别名的语言（如 `rust`）：不出 `data-lang`、不高亮、纯文本块级。
 
+**Deviation（CR-R1 MF-1，方案 b）**：上述「清单外不高亮」对 hljs 语言模块**内置别名**有一条例外——javascript 模块 aliases 含 `mjs`/`cjs`，typescript 含 `mts`/`cts`，xml 含 `xhtml`/`rss`/`atom`/`xsd`/`xsl` 等，这批别名不在双端归一化表内，但随语言模块注册进入 hljs 注册表。双端统一口径（T-CB13 钉死）：**清单外但 hljs 注册表命中的语言：双端均高亮但不出 `data-lang`（无语言标签）；注册表未命中（如 `rust`）：双端均纯文本不高亮**。desktop 侧 rehype-highlight 在 AST 层按注册表命中内置别名（`renderCodeBlock` 归一化失败后剥 `hljs` 壳类、不出 `data-lang`）；mobile 侧 `resolveHighlight` 门控为「归一化表优先、表外回退 hljs 注册表」同一判定逻辑，`data-lang` 仍仅按归一化表输出——两端别名判定同源于 hljs 注册表，行为一致。
+
 **双端语言注册表同源**：desktop `rehypeHighlight({ languages, aliases })` 与 mobile `highlight-code.ts` 的 core 注册为**同一集合**——`typescript / javascript / json / python / bash / sql / markdown / yaml / xml / css` 共 10 个语言模块。别名注意：`html` 由 `xml` 内置别名承载（成立），但 `shell` **不在** bash 模块的内置 aliases（highlight.js@11 的 bash aliases 只有 `sh`/`zsh`）——desktop 侧 rehype-highlight 在 AST 层按 fence 原始 lang 查表（早于 renderCodeBlock 归一化），必须显式配 `aliases: { bash: ['shell'] }`（v7 选项，内部调 `lowlight.registerAlias`）；mobile 侧 fence renderer 先过 `LANG_ALIAS` 归一化（`shell → bash`）再调 `resolveHighlight`，天然覆盖。desktop `languages` 显式注册同时起到替换 lowlight 缺省 common 集（37 语言，含 rust）的作用。任一端增删语言须双端同步，否则 T-CB13 一致性断言失败。
+
+**双端注册机制差异说明**：desktop 的别名高亮随 `languages` 显式注册一并进入 lowlight 注册表（含上文内置别名，AST 层命中）；mobile 为 core 按需注册 + `resolveHighlight` 内「归一化表优先、表外回退 hljs 注册表」的门控——两端高亮判定最终都落在同一 hljs 注册表上，差异仅在桌面端多一层 AST 插件介入。
 
 ### 双端统一验收样例（一致性基准）
 
@@ -90,6 +94,11 @@ steps: [checkout, test]
 **bold**
 ```
 
+```mjs
+import { readFile } from "node:fs/promises";
+export const load = async (p) => readFile(p, "utf8");
+```
+
 ```
 no language fence
 ```
@@ -106,7 +115,7 @@ A-->B
 （另含一条 >120 字符长行的 ts 代码块，验证 mobile 折行）
 ````
 
-验收时双端分别渲染同一样例：块级形态一致（平台微调允许）、语言标签文案一致（归一化后）、mermaid 均走图表、`rust` 与无语言块均为纯文本块级且无标签残留。
+验收时双端分别渲染同一样例：块级形态一致（平台微调允许）、语言标签文案一致（归一化后）、mermaid 均走图表、`rust` 与无语言块均为纯文本块级且无标签残留；`mjs` 块（内置别名代表）双端均高亮但无语言标签（MF-1 deviation 行为钉死）。
 
 ## 最终项目结构
 

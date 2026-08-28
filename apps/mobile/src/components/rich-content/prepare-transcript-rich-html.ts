@@ -17,11 +17,12 @@ markdown.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx]!;
   const rawLang = token.info.trim().split(/\s+/)[0] || '';
   const normalized = normalizeFenceLang(rawLang);
-  if (normalized) {
-    const highlighted = resolveHighlight(token.content, normalized);
-    if (highlighted) {
-      return `<pre data-lang="${normalized}"><code class="language-${rawLang} hljs">${highlighted}</code></pre>\n`;
-    }
+  // 高亮判定在 resolveHighlight 内统一（归一化表 + hljs 注册表内置别名，与 desktop 同一逻辑）；
+  // data-lang 仅归一化表内语言输出——表外内置别名（mjs/cjs 等）高亮但不出语言标签（MF-1 双端一致）。
+  const highlighted = resolveHighlight(token.content, rawLang);
+  if (highlighted) {
+    const label = normalized ? ` data-lang="${normalized}"` : '';
+    return `<pre${label}><code class="language-${rawLang} hljs">${highlighted}</code></pre>\n`;
   }
   return defaultFence(tokens, idx, options, env, self);
 };

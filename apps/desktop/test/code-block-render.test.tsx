@@ -67,6 +67,11 @@ export const UNIFIED_CODE_BLOCK_SAMPLE = [
   "**bold**",
   "```",
   "",
+  "```mjs",
+  "import { readFile } from \"node:fs/promises\";",
+  "export const load = async (p) => readFile(p, \"utf8\");",
+  "```",
+  "",
   "```",
   "no language fence",
   "```",
@@ -253,4 +258,23 @@ test("T-CB13: 统一样例 → data-lang 集合与 token 类名并集与 mobile 
   assert.match(html, /data-lang="bash"/);
   // mermaid 走图表链路（统一样例内含一个 mermaid 块）
   assert.match(html, /mermaid-block__source/);
+});
+
+test("T-CB13: 表外内置别名 mjs/cjs → 高亮但无 data-lang（MF-1 双端一致，与 mobile 同一判定）", () => {
+  const html = renderToStaticMarkup(
+    <MermaidMarkdown
+      content={
+        '```mjs\nimport { readFile } from "node:fs/promises";\n```\n\n```cjs\nconst { readFile } = require("node:fs");\n```'
+      }
+    />,
+  );
+  // hljs 模块内置别名随 languages 注册进入 lowlight：AST 层命中即高亮，class 保留原文
+  assert.match(html, /language-mjs/);
+  assert.match(html, /language-cjs/);
+  assert.match(html, /<span class="hljs-keyword">/);
+  assert.match(html, /<span class="hljs-string">/);
+  // 归一化表外语言不出语言标签，且剥壳后 code 无 hljs 壳类残留
+  assert.doesNotMatch(html, /data-lang/);
+  const mjsCode = html.match(/<code class="language-mjs[^"]*">/)![0];
+  assert.doesNotMatch(mjsCode, /(^|\s)hljs(\s|$)/);
 });

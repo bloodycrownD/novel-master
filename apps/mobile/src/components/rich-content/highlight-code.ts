@@ -75,17 +75,30 @@ export function normalizeFenceLang(
 }
 
 /**
+ * 表外回退：按小写查 hljs 注册表（语言模块内置别名 mjs/cjs/mts/cts/xhtml 等随注册进入）。
+ * 与 desktop rehype-highlight 的 AST 层判定同一注册表、同一逻辑（MF-1 双端统一）。
+ */
+function lookupRegisteredLang(lang: string): string | null {
+  const lower = lang.toLowerCase();
+  return hljs.getLanguage(lower) ? lower : null;
+}
+
+/**
  * 源码 → 高亮 HTML（hljs 自带转义）；不支持的语言返回 ''（调用方走默认 escape）。
+ *
+ * 高亮语言判定：归一化表命中用规范名；表外回退 hljs 注册表查原始 lang
+ * （内置别名命中即高亮，与 desktop rehype-highlight 行为一致）。语言标签
+ * （data-lang）由调用方按归一化表单独决定——表外语言高亮但不出标签。
  */
 export function resolveHighlight(code: string, lang: string): string {
   registerHighlightLanguages();
-  const normalized = normalizeFenceLang(lang);
-  if (!normalized || !hljs.getLanguage(normalized)) {
+  const target = normalizeFenceLang(lang) ?? lookupRegisteredLang(lang);
+  if (!target || !hljs.getLanguage(target)) {
     return '';
   }
   try {
     return hljs.highlight(code, {
-      language: normalized,
+      language: target,
       ignoreIllegals: true,
     }).value;
   } catch {
