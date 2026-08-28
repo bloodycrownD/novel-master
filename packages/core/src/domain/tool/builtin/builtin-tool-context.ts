@@ -207,14 +207,6 @@ export type BuiltinToolContext = {
     WorkplaceService,
     "setDirRule" | "getDirRule" | "listDirRules"
   >;
-  /**
-   * 可选：仅 `fetch` 工具读取。缺省回落 `globalThis.fetch`（双端一致）。
-   *
-   * 类型就地定义为 `typeof globalThis.fetch`，与 infra/llm-protocol 的
-   * `FetchFn` 结构相同但不跨层 import（domain/tool 不依赖 infra）；
-   * 测试经此注入 mock（先例：llm-sse-transport.test.ts 的 mock FetchFn）。
-   */
-  readonly fetchFn?: typeof globalThis.fetch;
 };
 
 /** @deprecated Use {@link BuiltinToolContext}. */

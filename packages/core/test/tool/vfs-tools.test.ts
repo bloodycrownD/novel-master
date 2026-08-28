@@ -39,10 +39,10 @@ describe("Builtin file tools V2 (unit)", () => {
     );
   });
 
-  it("registers exactly 10 builtin tools via registerBuiltinTools", () => {
+  it("registers exactly 9 builtin tools via registerBuiltinTools", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
-    assert.equal(registry.list().length, 10);
+    assert.equal(registry.list().length, 9);
     assert.ok(registry.list().includes("task"));
     assert.ok(registry.list().includes("skill"));
     assert.ok(registry.list().includes("agent"));

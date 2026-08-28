@@ -117,11 +117,11 @@ function makeRunner(): ToolRunner<BuiltinToolContext> {
 }
 
 describe("agent 管理工具", () => {
-  it("registerBuiltinTools 注册 agent（共 10 个内置工具）", () => {
+  it("registerBuiltinTools 注册 agent（共 9 个内置工具）", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
     assert.ok(registry.list().includes(AGENT_TOOL_NAME));
-    assert.equal(registry.list().length, 10);
+    assert.equal(registry.list().length, 9);
   });
 
   it("description lambda 从装配期快照拼名单（未装配 agents 时降级为空名单）", () => {

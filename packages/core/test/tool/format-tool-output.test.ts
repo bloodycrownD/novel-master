@@ -6,7 +6,6 @@ import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
   formatToolResultContentForDisplay,
-  isFetchOutput,
 } from "../../src/domain/tool/logic/format-tool-output.js";
 import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 
@@ -335,30 +334,6 @@ describe("formatToolResultContentForDisplay", () => {
     assert.equal(
       formatToolResultContentForDisplay("Error: not found"),
       "Error: not found",
-    );
-  });
-});
-
-describe("fetch 输出形状回归", () => {
-  it("T-FT10: fetch 输出经专属 formatter，不误撞 read/grep/glob/fs 形状", () => {
-    const fetchOut = {
-      url: "https://example.com/page",
-      finalUrl: "https://example.com/page",
-      status: 200,
-      contentType: "text/html",
-      body: "<html></html>",
-      truncated: false,
-      originalBytes: 13,
-    };
-    assert.equal(isFetchOutput(fetchOut), true);
-
-    const out = formatToolOutputForLlm(fetchOut);
-    // 可读文本而非 JSON 串：不以 { 开头、无 JSON 键名、含 GET/Status 头。
-    assert.ok(!out.trimStart().startsWith("{"));
-    assert.ok(!out.includes('"contentType"'));
-    assert.equal(
-      out,
-      "GET https://example.com/page\nStatus: 200 · text/html\n\n<html></html>",
     );
   });
 });

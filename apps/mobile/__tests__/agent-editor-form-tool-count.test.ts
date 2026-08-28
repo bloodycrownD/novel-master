@@ -15,12 +15,12 @@ const formPath = join(
 const source = readFileSync(formPath, 'utf8');
 
 describe('AgentEditorForm builtin tools hint (T-AG5)', () => {
-  it('默认模式提示文案计 10 个且名单含 agent、fetch', () => {
-    expect(source).toMatch(/未配置时使用全部内置工具（10/);
-    expect(source).toMatch(/个）：task、read、write、edit、fs、glob、grep、skill、agent、fetch。/);
+  it('默认模式提示文案计 9 个且名单含 agent', () => {
+    expect(source).toMatch(/未配置时使用全部内置工具（9/);
+    expect(source).toMatch(/个）：task、read、write、edit、fs、glob、grep、skill、agent。/);
   });
 
-  it('不再残留 9 个的旧计数', () => {
-    expect(source).not.toMatch(/全部内置工具（9/);
+  it('不再残留 8 个的旧计数', () => {
+    expect(source).not.toMatch(/全部内置工具（8/);
   });
 });

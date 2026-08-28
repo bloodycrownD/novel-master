@@ -162,41 +162,6 @@ function formatFsLsOutput(rec: Record<string, unknown>): string {
   return out;
 }
 
-/**
- * Detects fetch tool output.
- *
- * 守卫要求 url + finalUrl + status + body + truncated 同时类型匹配；
- * 现有工具输出均无 url 字段，不会误撞 read / grep / glob / fs 形状。
- */
-export function isFetchOutput(rec: Record<string, unknown>): boolean {
-  return (
-    typeof rec.url === "string" &&
-    typeof rec.finalUrl === "string" &&
-    typeof rec.status === "number" &&
-    typeof rec.body === "string" &&
-    typeof rec.truncated === "boolean"
-  );
-}
-
-/**
- * Formats fetch output as `GET <url> → <finalUrl>` + status header + body.
- *
- * 截断标注行由工具本体附在 body 末尾（不计入字节预算），这里不重复追加。
- */
-export function formatFetchOutput(rec: Record<string, unknown>): string {
-  const url = rec.url as string;
-  const finalUrl = rec.finalUrl as string;
-  const contentType =
-    typeof rec.contentType === "string" ? (rec.contentType as string) : "";
-  const requestLine =
-    finalUrl !== url ? `GET ${url} → ${finalUrl}` : `GET ${url}`;
-  const statusLine =
-    contentType.length > 0
-      ? `Status: ${rec.status} · ${contentType}`
-      : `Status: ${rec.status}`;
-  return `${requestLine}\n${statusLine}\n\n${rec.body}`;
-}
-
 /** Compact tool success text for the model (e.g. write → `ok`). */
 export function formatToolOutputForLlm(out: unknown): string {
   if (typeof out === "string") {
@@ -220,10 +185,6 @@ export function formatToolOutputForLlm(out: unknown): string {
 
     if (isGlobOutput(rec)) {
       return formatGlobOutput(rec);
-    }
-
-    if (isFetchOutput(rec)) {
-      return formatFetchOutput(rec);
     }
 
     if (keys.length === 1 && typeof rec.version === "number") {
