@@ -162,10 +162,13 @@ const SAMPLE_SUMMARY = {
   cacheReadTokens: 800,
   cacheCreationTokens: 0,
   billedInputTokens: 1000,
+  avgFirstTokenMs: 1200,
+  avgTokensPerSecond: 45.5,
   today: { totalTokens: 500, calls: 2 },
 };
 
-// 三天样例：总用量递减（900+100 / 400+100 / 50+0），柱高随之递减。
+// 三天样例：总用量递减（900+100 / 400+100 / 50+0），柱高随之递减；
+// 首桶带速率/TTFT 均值（选中天汇总行用），后两桶为存量 null 形态。
 const SAMPLE_BUCKETS = [
   {
     bucketStartMs: dayMs(2026, 7, 21),
@@ -175,6 +178,8 @@ const SAMPLE_BUCKETS = [
     cacheReadTokens: 500,
     cacheCreationTokens: 0,
     billedInputTokens: 600,
+    avgFirstTokenMs: 900,
+    avgTokensPerSecond: 25,
   },
   {
     bucketStartMs: dayMs(2026, 7, 22),
@@ -184,6 +189,8 @@ const SAMPLE_BUCKETS = [
     cacheReadTokens: 300,
     cacheCreationTokens: 0,
     billedInputTokens: 500,
+    avgFirstTokenMs: null,
+    avgTokensPerSecond: null,
   },
   {
     bucketStartMs: dayMs(2026, 7, 23),
@@ -193,6 +200,8 @@ const SAMPLE_BUCKETS = [
     cacheReadTokens: 0,
     cacheCreationTokens: 0,
     billedInputTokens: 0,
+    avgFirstTokenMs: null,
+    avgTokensPerSecond: null,
   },
 ];
 
@@ -304,6 +313,8 @@ beforeEach(() => {
       cacheReadTokens: 0,
       cacheCreationTokens: 0,
       billedInputTokens: 0,
+      avgFirstTokenMs: null,
+      avgTokensPerSecond: null,
     })),
   );
   mockGetModelBreakdown.mockReset().mockResolvedValue(SAMPLE_MODEL_ROWS);
@@ -845,5 +856,75 @@ describe('T-S7 自定义区间上限校验', () => {
     expect(
       isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
     ).toBe(false);
+  });
+});
+
+describe('T-MB 新指标卡与长按详情', () => {
+  it('汇总页出现平均速率 / 平均首字延迟卡（T-MB4）', async () => {
+    const renderer = await renderScreen();
+    const rateTile = findByTestId(renderer.root, 'summary-metric-avgTokensPerSecond');
+    expect(rateTile).toBeTruthy();
+    expect(nodeText(rateTile!)).toContain('45.5 tok/s');
+    const ttftTile = findByTestId(renderer.root, 'summary-metric-avgFirstTokenMs');
+    expect(ttftTile).toBeTruthy();
+    expect(nodeText(ttftTile!)).toContain('1.2 s');
+  });
+
+  it('新指标空态：null 时显示「暂无数据，自本版本起开始积累」而非 0（T-MB4）', async () => {
+    mockGetSummary.mockResolvedValue({
+      ...SAMPLE_SUMMARY,
+      avgFirstTokenMs: null,
+      avgTokensPerSecond: null,
+    });
+    const renderer = await renderScreen();
+    const rateTile = findByTestId(renderer.root, 'summary-metric-avgTokensPerSecond');
+    expect(nodeText(rateTile!)).toContain('暂无数据，自本版本起开始积累');
+    const ttftTile = findByTestId(renderer.root, 'summary-metric-avgFirstTokenMs');
+    expect(nodeText(ttftTile!)).toContain('暂无数据，自本版本起开始积累');
+  });
+
+  it('选中天汇总行含当日均值（有值与 null 两形态）（T-MB4）', async () => {
+    const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
+    // 有值形态：首天 avgTokensPerSecond=25、avgFirstTokenMs=900
+    await act(async () => {
+      renderer.root
+        .findAll(node => node.props.testID === 'bar-col-2026-08-21')[0]
+        .props.onPress();
+      await flushPromises();
+    });
+    let json = JSON.stringify(renderer.toJSON());
+    expect(json).toContain('25.0 tok/s');
+    expect(json).toContain('900 ms');
+
+    // null 形态：第二天为存量 null
+    await act(async () => {
+      renderer.root
+        .findAll(node => node.props.testID === 'bar-col-2026-08-22')[0]
+        .props.onPress();
+      await flushPromises();
+    });
+    json = JSON.stringify(renderer.toJSON());
+    expect(json).toContain('平均速率');
+    expect(json).toContain('平均首字延迟');
+    expect(json).toContain('暂无数据');
+  });
+
+  it('长按柱子后图下方显示 bar-inspect 详情行（输入/输出/调用）（T-MB3）', async () => {
+    const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
+    expect(findByTestId(renderer.root, 'bar-inspect')).toBeUndefined();
+    await act(async () => {
+      renderer.root
+        .findAll(node => node.props.testID === 'bar-col-2026-08-21')[0]
+        .props.onLongPress();
+      await flushPromises();
+    });
+    const inspect = findByTestId(renderer.root, 'bar-inspect');
+    expect(inspect).toBeTruthy();
+    const text = nodeText(inspect!);
+    expect(text).toContain('输入 900');
+    expect(text).toContain('输出 100');
+    expect(text).toContain('调用 2 次');
   });
 });

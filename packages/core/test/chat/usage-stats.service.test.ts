@@ -78,6 +78,8 @@ interface MsgSeed {
     total?: number;
     cacheRead?: number;
     cacheCreation?: number;
+    firstTokenMs?: number;
+    durationMs?: number;
   };
 }
 
@@ -107,6 +109,8 @@ async function seedMsg(
           ...(u.cacheCreation != null
             ? { cacheCreationTokens: u.cacheCreation }
             : {}),
+          ...(u.firstTokenMs != null ? { firstTokenMs: u.firstTokenMs } : {}),
+          ...(u.durationMs != null ? { durationMs: u.durationMs } : {}),
         };
   const message: ChatMessage = {
     id: randomUUID(),
@@ -725,5 +729,130 @@ describe("usage stats service (T-S5)", () => {
     // 两个 01:10 实例都落在加宽的 1 点桶里。
     assert.equal(buckets[1]!.calls, 2);
     assert.equal(buckets[1]!.promptTokens, 3);
+  });
+});
+
+describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
+  it("聚合速率口径：加权 SUM/SUM，NULL 与零分母行不入；avgFirstTokenMs 含非流式行（T-US2）", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // 行 1：有效行（流式）—— completion 900，生成时长 3500-500=3000ms → 900/3 = 300 tok/s
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      usage: { prompt: 100, completion: 900, total: 1000, firstTokenMs: 500, durationMs: 3500 },
+    });
+    // 行 2：非流式行（first=duration）—— 入 TTFT 均值，不入速率分母
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 11 * MIN,
+      usage: { prompt: 50, completion: 100, total: 150, firstTokenMs: 2000, durationMs: 2000 },
+    });
+    // 行 3：旧数据（耗时全 NULL）—— 不入任何新指标
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 12 * MIN,
+      usage: { prompt: 30, completion: 60, total: 90 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const summary = await svc.getSummary({
+      range: {
+        kind: "custom",
+        fromMs: today0,
+        toMs: localAddDays(today0, 1),
+      },
+    });
+    // 速率 = 900 / (3500-500)/1000 = 300 tok/s（仅有效行）
+    assert.equal(summary.avgTokensPerSecond, 300);
+    // TTFT 均值 = AVG(500, 2000) = 1250（NULL 行忽略，非流式行计入）
+    assert.equal(summary.avgFirstTokenMs, 1250);
+    // token 各汇总值不受新指标影响（三行全计）
+    assert.equal(summary.calls, 3);
+    assert.equal(summary.promptTokens, 180);
+    assert.equal(summary.completionTokens, 1060);
+    assert.equal(summary.totalTokens, 1240);
+  });
+
+  it("全为存量 NULL 行时两新指标返回 null，token 汇总不变（T-US3）", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      usage: { prompt: 100, completion: 200, total: 300 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 11 * MIN,
+      usage: { prompt: 10, completion: 20, total: 30 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const summary = await svc.getSummary({
+      range: {
+        kind: "custom",
+        fromMs: today0,
+        toMs: localAddDays(today0, 1),
+      },
+    });
+    assert.equal(summary.avgFirstTokenMs, null);
+    assert.equal(summary.avgTokensPerSecond, null);
+    assert.equal(summary.calls, 2);
+    assert.equal(summary.totalTokens, 330);
+  });
+
+  it("daily/hourly 桶的新指标随桶正确切分，空桶为零值 + 双 null（T-US4）", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    const yesterday0 = localAddDays(today0, -1);
+    // 今天：有效行 → 600/(4000-1000)/1000*1000... 计算：completion 600，生成 3000ms → 200 tok/s
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 14 * HOUR,
+      usage: { prompt: 80, completion: 600, total: 680, firstTokenMs: 1000, durationMs: 4000 },
+    });
+    // 昨天：另一条有效行 → completion 300，生成 1500ms → 200 tok/s；TTFT 300
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: yesterday0 + 9 * HOUR,
+      usage: { prompt: 40, completion: 300, total: 340, firstTokenMs: 300, durationMs: 1800 },
+    });
+
+    const svc = createUsageStatsService(ctx.conn);
+    const daily = await svc.getDailyBuckets({
+      range: {
+        kind: "custom",
+        fromMs: yesterday0,
+        toMs: localAddDays(today0, 1),
+      },
+    });
+    assert.equal(daily.length, 2);
+    const todayBucket = daily.find(
+      (b) => b.bucketStartMs === today0,
+    );
+    const yesterdayBucket = daily.find(
+      (b) => b.bucketStartMs === yesterday0,
+    );
+    assert.ok(todayBucket);
+    assert.ok(yesterdayBucket);
+    assert.equal(todayBucket!.avgTokensPerSecond, 200);
+    assert.equal(todayBucket!.avgFirstTokenMs, 1000);
+    assert.equal(yesterdayBucket!.avgTokensPerSecond, 200);
+    assert.equal(yesterdayBucket!.avgFirstTokenMs, 300);
+
+    // hourly：今天 14 点桶有效，其余 23 个空桶 calls=0 + 双 null
+    const hourly = await svc.getHourlyBuckets(fmtLocalDay(today0), {
+      range: { kind: "last7" },
+    });
+    assert.equal(hourly.length, 24);
+    const hour14 = hourly.find(
+      (b) => b.bucketStartMs === today0 + 14 * HOUR,
+    );
+    assert.ok(hour14);
+    assert.equal(hour14!.calls, 1);
+    assert.equal(hour14!.avgTokensPerSecond, 200);
+    assert.equal(hour14!.avgFirstTokenMs, 1000);
+    for (const [i, b] of hourly.entries()) {
+      if (b.bucketStartMs === today0 + 14 * HOUR) {
+        continue;
+      }
+      assert.equal(b.calls, 0, `桶 ${i} 应为空`);
+      assert.equal(b.avgFirstTokenMs, null, `桶 ${i} TTFT 应为 null`);
+      assert.equal(b.avgTokensPerSecond, null, `桶 ${i} 速率应为 null`);
+    }
   });
 });

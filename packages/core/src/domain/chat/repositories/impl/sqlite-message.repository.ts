@@ -25,7 +25,7 @@ import type { MessageUsage } from "../../model/message-usage.js";
 import type { MessageRepository } from "../message.port.js";
 
 const MESSAGE_SELECT_COLUMNS =
-  `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name`;
+  `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
 
 /**
  * chat_message 的 INSERT 语句（`?` 占位），insert 与 batchInsert 共用。
@@ -34,8 +34,8 @@ const MESSAGE_SELECT_COLUMNS =
  */
 const MESSAGE_INSERT_SQL =
   `INSERT INTO chat_message ` +
-  `(id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name) ` +
-  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+  `(id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms) ` +
+  `VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 /**
  * 把 ChatMessage 摊平成与 {@link MESSAGE_INSERT_SQL} 列顺序对齐的参数数组。
@@ -62,6 +62,8 @@ function toMessageParams(message: ChatMessage): unknown[] {
     message.usage?.cacheReadTokens ?? null,
     message.usage?.cacheCreationTokens ?? null,
     message.modelName ?? null,
+    message.usage?.firstTokenMs ?? null,
+    message.usage?.durationMs ?? null,
   ];
 }
 
@@ -100,12 +102,16 @@ function parseUsage(row: Row): MessageUsage | undefined {
   const totalTokens = row.total_tokens;
   const cacheReadTokens = row.cache_read_tokens;
   const cacheCreationTokens = row.cache_creation_tokens;
+  const firstTokenMs = row.first_token_ms;
+  const durationMs = row.duration_ms;
   if (
     promptTokens == null &&
     completionTokens == null &&
     totalTokens == null &&
     cacheReadTokens == null &&
-    cacheCreationTokens == null
+    cacheCreationTokens == null &&
+    firstTokenMs == null &&
+    durationMs == null
   ) {
     return undefined;
   }
@@ -121,6 +127,8 @@ function parseUsage(row: Row): MessageUsage | undefined {
     ...(cacheCreationTokens != null
       ? { cacheCreationTokens: Number(cacheCreationTokens) }
       : {}),
+    ...(firstTokenMs != null ? { firstTokenMs: Number(firstTokenMs) } : {}),
+    ...(durationMs != null ? { durationMs: Number(durationMs) } : {}),
   };
 }
 

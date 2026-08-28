@@ -881,6 +881,17 @@ export type UsageStatsSummaryDto = {
   readonly cacheCreationTokens: number;
   /** 计费口径全部输入：anthropic 行为 prompt + cache_read + cache_creation，其余协议为 prompt。 */
   readonly billedInputTokens: number;
+  /**
+   * 平均首字延迟（ms）：AVG(first_token_ms)，非流式请求按完成时刻计
+   * （first=duration）会计入；存量数据全 NULL 时为 null（UI 空态依据）。
+   */
+  readonly avgFirstTokenMs: number | null;
+  /**
+   * 平均 token 速率（tokens/s）：SUM(completion_tokens) ÷
+   * SUM(duration_ms − first_token_ms) / 1000 的加权口径，仅统计两列非
+   * NULL 且 duration > first 的行；无有效行为 null。
+   */
+  readonly avgTokensPerSecond: number | null;
   readonly today: UsageStatsTodayDto;
 };
 
@@ -893,6 +904,10 @@ export type UsageStatsBucketDto = {
   readonly cacheReadTokens: number;
   readonly cacheCreationTokens: number;
   readonly billedInputTokens: number;
+  /** 桶内平均首字延迟（ms）；无有效行为 null（口径同 UsageStatsSummaryDto）。 */
+  readonly avgFirstTokenMs: number | null;
+  /** 桶内平均 token 速率（tokens/s）；无有效行为 null（口径同 UsageStatsSummaryDto）。 */
+  readonly avgTokensPerSecond: number | null;
 };
 
 /** 分模型汇总行（modelName 为 null 表示「未记录」桶）。 */

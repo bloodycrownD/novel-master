@@ -487,7 +487,12 @@ export class DefaultAgentRunner implements AgentRunner {
           toolUseLookupMessages = await this.deps.listAllSessionMessages();
         }
 
-        const onStream =
+        // 计时采集（spec 指标口径）：requestStartedAtMs 为请求发起时刻；
+        // 首个内容事件（text-delta / thinking-delta）到达时记 firstContentAtMs。
+        // 非流式（无 onStream）时 firstContentAtMs 保持 null，TTFT 取完成时刻。
+        const requestStartedAtMs = Date.now();
+        let firstContentAtMs: number | null = null;
+        const innerOnStream =
           options.stream && publishRunLifecycle
             ? wrapStreamForBus(
                 bus,
@@ -499,6 +504,20 @@ export class DefaultAgentRunner implements AgentRunner {
             : options.stream
               ? options.onStream
               : undefined;
+        // 在 bus 分发层之外再包一层 timing onStream：只记首个内容事件时刻，
+        // 不改变事件流向内层回调；wrapStreamForBus 本身不动。
+        const onStream =
+          innerOnStream != null
+            ? (ev: LlmStreamEvent) => {
+                if (
+                  firstContentAtMs == null &&
+                  (ev.type === "text-delta" || ev.type === "thinking-delta")
+                ) {
+                  firstContentAtMs = Date.now();
+                }
+                innerOnStream(ev);
+              }
+            : undefined;
 
         let result;
         try {
@@ -526,6 +545,13 @@ export class DefaultAgentRunner implements AgentRunner {
           throw e;
         }
 
+        // 总时长取 await 结束时刻而非监听 done 事件（done 不经 wrapStreamForBus 转发）。
+        const endedAtMs = Date.now();
+        const durationMs = endedAtMs - requestStartedAtMs;
+        // 非流式请求（无 onStream 或未收到内容事件）TTFT = 总时长（完成时刻口径）。
+        const firstTokenMs =
+          (firstContentAtMs ?? endedAtMs) - requestStartedAtMs;
+
         const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
 
         // abort 时仍写入 partial assistant（用户能看到模型刚吐出的内容），然后退出
@@ -549,7 +575,9 @@ export class DefaultAgentRunner implements AgentRunner {
                 ? { modelName: savedModelForAppend.vendorModelId }
                 : {}),
               raw: result.raw as Record<string, unknown>,
-              ...(result.usage != null ? { usage: result.usage } : {}),
+              // 耗时随 usage 一并落库；result.usage 缺失时仅含两个耗时字段，
+              // token 统计仍由 USAGE_NOT_NULL_SQL 把关（缺失行不计入）。
+              usage: { ...result.usage, firstTokenMs, durationMs },
             },
           );
           if (publishRunLifecycle) {

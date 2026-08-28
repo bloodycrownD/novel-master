@@ -62,6 +62,22 @@ function formatHitRate(rate: number | null): string {
   return rate == null ? "暂无数据" : `${Math.round(rate * 100)}%`;
 }
 
+/** 平均 token 速率展示：`x.x tok/s`（≥100 取整避免小数位过长）；无数据显示空态。 */
+function formatTokensPerSecond(v: number | null): string {
+  if (v == null) {
+    return "暂无数据";
+  }
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
+}
+
+/** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据显示空态。 */
+function formatFirstTokenMs(ms: number | null): string {
+  if (ms == null) {
+    return "暂无数据";
+  }
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
 /**
  * 桶 tooltip 文案（当天/该小时 输入输出与调用数）。
  * 明细图表不再展示命中率——命中率出口仅保留在汇总卡片与选中天汇总行。
@@ -72,7 +88,10 @@ function bucketTooltip(key: string, b: UsageStatsBucketDto): string {
   )} · 调用 ${b.calls} 次`;
 }
 
-/** CSS div 柱状图：输入（--primary）下 + 输出（--text-secondary）上堆叠（仅用量模式）。 */
+/**
+ * CSS div 柱状图：输入（--primary）下 + 输出（--text-secondary）上堆叠（仅用量模式）。
+ * 图例行 + max/max÷2/0 三条网格刻度线 + 受控 hover 卡片（替代原生 title）。
+ */
 function TokenStatsChart({
   buckets,
   chart,
@@ -91,51 +110,105 @@ function TokenStatsChart({
   onSelect?: (key: string) => void;
 }) {
   const maxValue = Math.max(1, ...buckets.map((b) => b.promptTokens + b.completionTokens));
+  // 受控 hover 卡片：activeKey 记当前柱，null 不渲染；容器级 onMouseLeave 统一清除。
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const activeBucketIndex =
+    activeKey == null
+      ? -1
+      : buckets.findIndex((b, index) => keyOf(b, index) === activeKey);
+  const activeText =
+    activeKey != null && activeBucketIndex >= 0
+      ? bucketTooltip(activeKey, buckets[activeBucketIndex]!)
+      : null;
   return (
     <div
       className={`token-stats-chart${chart === "hourly" ? " token-stats-chart--hourly" : ""}`}
       data-chart={chart}
+      onMouseLeave={() => setActiveKey(null)}
     >
-      {buckets.map((b, index) => {
-        const key = keyOf(b, index);
-        const usagePct = (value: number) => `${Math.min(100, (value / maxValue) * 100)}%`;
-        const tooltip = bucketTooltip(key, b);
-        const className = `token-stats-chart__col${selectedKey === key ? " is-selected" : ""}`;
-        const content = (
-          <>
-            <span className="token-stats-chart__bars">
-              <span
-                className="token-stats-chart__bar token-stats-chart__bar--output"
-                style={{ height: usagePct(b.completionTokens) }}
-              />
-              <span
-                className="token-stats-chart__bar token-stats-chart__bar--input"
-                style={{ height: usagePct(b.promptTokens) }}
-              />
-            </span>
-            <span className="token-stats-chart__label">{labelOf(key)}</span>
-          </>
-        );
-        // 仅可交互（有 onSelect，如按天柱）时才用 button；纯展示柱（如 hourly）用
-        // role="img" 的 div，避免无 onClick 的 button 被键盘聚焦、回车无响应。
-        return onSelect != null ? (
-          <button
-            key={key}
-            type="button"
-            className={className}
-            data-day={key}
-            title={tooltip}
-            aria-label={tooltip}
-            onClick={() => onSelect(key)}
-          >
-            {content}
-          </button>
-        ) : (
-          <div key={key} role="img" className={className} data-day={key} title={tooltip} aria-label={tooltip}>
-            {content}
+      {/* 图例行：输入 primary / 输出 text-secondary，与 mobile legendRow 同口径 */}
+      <div className="token-stats-chart__legend">
+        <span className="token-stats-chart__legend-item">
+          <span className="token-stats-chart__legend-dot token-stats-chart__legend-dot--input" />
+          输入
+        </span>
+        <span className="token-stats-chart__legend-item">
+          <span className="token-stats-chart__legend-dot token-stats-chart__legend-dot--output" />
+          输出
+        </span>
+      </div>
+      <div className="token-stats-chart__plot">
+        {/* 网格刻度线：max / max÷2 / 0 三条，右侧数值标注（maxValue 派生） */}
+        <div className="token-stats-chart__grid" aria-hidden="true">
+          <span className="token-stats-chart__grid-line token-stats-chart__grid-line--max" />
+          <span className="token-stats-chart__grid-line token-stats-chart__grid-line--mid" />
+          <span className="token-stats-chart__grid-line token-stats-chart__grid-line--zero" />
+          <span className="token-stats-chart__grid-label token-stats-chart__grid-label--max">
+            {formatTokenCount(maxValue)}
+          </span>
+          <span className="token-stats-chart__grid-label token-stats-chart__grid-label--mid">
+            {formatTokenCount(Math.round(maxValue / 2))}
+          </span>
+        </div>
+        {buckets.map((b, index) => {
+          const key = keyOf(b, index);
+          const usagePct = (value: number) => `${Math.min(100, (value / maxValue) * 100)}%`;
+          const tooltip = bucketTooltip(key, b);
+          const className = `token-stats-chart__col${selectedKey === key ? " is-selected" : ""}`;
+          const hoverProps = {
+            onMouseEnter: () => setActiveKey(key),
+            onMouseLeave: () => setActiveKey(null),
+          };
+          const content = (
+            <>
+              <span className="token-stats-chart__bars">
+                <span
+                  className="token-stats-chart__bar token-stats-chart__bar--output"
+                  style={{ height: usagePct(b.completionTokens) }}
+                />
+                <span
+                  className="token-stats-chart__bar token-stats-chart__bar--input"
+                  style={{ height: usagePct(b.promptTokens) }}
+                />
+              </span>
+              <span className="token-stats-chart__label">{labelOf(key)}</span>
+            </>
+          );
+          // 仅可交互（有 onSelect，如按天柱）时才用 button；纯展示柱（如 hourly）用
+          // role="img" 的 div，避免无 onClick 的 button 被键盘聚焦、回车无响应。
+          // hover 详情改受控卡片，aria-label 保留 tooltip 供读屏。
+          return onSelect != null ? (
+            <button
+              key={key}
+              type="button"
+              className={className}
+              data-day={key}
+              aria-label={tooltip}
+              onClick={() => onSelect(key)}
+              {...hoverProps}
+            >
+              {content}
+            </button>
+          ) : (
+            <div
+              key={key}
+              role="img"
+              className={className}
+              data-day={key}
+              aria-label={tooltip}
+              {...hoverProps}
+            >
+              {content}
+            </div>
+          );
+        })}
+        {/* hover 详情卡片：随绘图区相对定位，横向不出容器 */}
+        {activeText != null ? (
+          <div className="token-stats-chart__tooltip" data-tooltip={activeKey}>
+            {activeText}
           </div>
-        );
-      })}
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -454,7 +527,7 @@ export function TokenUsageStatsView() {
         <SettingsSection title="数据统计">
           {libraryEmpty ? (
             <SettingsListEmpty>
-              库里还没有任何用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录。
+              库里还没有任何用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
             </SettingsListEmpty>
           ) : (
             <>
@@ -497,6 +570,21 @@ export function TokenUsageStatsView() {
                     hitRate(summary?.cacheReadTokens ?? 0, summary?.billedInputTokens ?? 0),
                   )}
                 </span>
+              </div>
+              {/* 新指标卡：无有效行为 null → 空态文案而非 0 */}
+              <div className="token-stats-card" data-metric="avgTokensPerSecond">
+                <span className="token-stats-card__label">平均速率</span>
+                <span className="token-stats-card__value">
+                  {formatTokensPerSecond(summary?.avgTokensPerSecond ?? null)}
+                </span>
+              </div>
+              <div className="token-stats-card" data-metric="avgFirstTokenMs">
+                <span className="token-stats-card__label">平均首字延迟</span>
+                <span className="token-stats-card__value">
+                  {formatFirstTokenMs(summary?.avgFirstTokenMs ?? null)}
+                </span>
+                {/* 口径注记：非流式请求的 TTFT 取完成时刻，避免误导 */}
+                <span className="token-stats-card__hint">非流式请求按完成时刻计</span>
               </div>
             </div>
             {/* 今日卡见 todayCard（非空分支同样独立于筛选） */}
@@ -556,7 +644,9 @@ export function TokenUsageStatsView() {
                     selectedDayBucket.billedInputTokens,
                   ),
                 )}{" "}
-                · 调用 {selectedDayBucket.calls} 次
+                · 调用 {selectedDayBucket.calls} 次 · 平均速率{" "}
+                {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond)} · 平均首字延迟{" "}
+                {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs)}
               </p>
               <TokenStatsChart
                 buckets={hourlyBuckets ?? []}

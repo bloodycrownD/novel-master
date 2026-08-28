@@ -7,6 +7,7 @@ import {
   open,
   type TdbcConnection,
 } from "@novel-master/core";
+import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import {
@@ -16,6 +17,7 @@ import {
 import {
   execLegacyChatMessageWithoutHidden,
   execLegacyV107ChatDdl,
+  execLegacyV7ChatMessageDdl,
 } from "./helpers/legacy-db-fixtures.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
@@ -273,6 +275,69 @@ describe("schema 列对齐（T-B3）", () => {
 
     const columns = await tableColumnNames(conn, "chat_session");
     assert.ok(columns.has("agent_config_json"));
+
+    await conn.close();
+  });
+
+  it("A11：legacy chat_message 缺 first_token_ms/duration_ms，bootstrap 补列后可正常 INSERT/SELECT，重复 bootstrap 幂等且旧行新列全 NULL（T-US1）", async () => {
+    const conn = await openInMemoryConnection();
+    const sessionId = randomUUID();
+    const legacyMessageId = randomUUID();
+    const now = 1_700_000_000_000;
+
+    // 旧库形态：v7 风格 chat_message（有 hidden/usage 列，无耗时两列，
+    // 也无 cache/model_name 列——三者均由 ALIGN 幂等补齐）
+    await execLegacyV107ChatDdl(conn);
+    await execLegacyV7ChatMessageDdl(conn);
+    await conn.execute(
+      `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
+       VALUES ('${sessionId}', '${randomUUID()}', 'timing-align', ${now}, ${now})`,
+    );
+    await conn.execute(
+      `INSERT INTO chat_message (
+         id, session_id, seq, role, content_json, created_at_ms
+       ) VALUES (
+         '${legacyMessageId}', '${sessionId}', 1, 'assistant',
+         '{"blocks":[{"type":"text","text":"legacy"}]}', ${now}
+       )`,
+    );
+    await bootstrapNovelMaster(conn);
+    // 重复执行幂等：第二次 bootstrap 不因列已存在而报错
+    await bootstrapNovelMaster(conn);
+
+    const columns = await tableColumnNames(conn, "chat_message");
+    assert.ok(columns.has("first_token_ms"), "first_token_ms 应被 ALIGN 补列");
+    assert.ok(columns.has("duration_ms"), "duration_ms 应被 ALIGN 补列");
+
+    // 旧行新列全 NULL（不出现假值）
+    const legacyRow = await conn.query<{
+      first_token_ms: number | null;
+      duration_ms: number | null;
+    }>(
+      `SELECT first_token_ms, duration_ms FROM chat_message WHERE id = '${legacyMessageId}'`,
+    );
+    assert.equal(legacyRow[0]?.first_token_ms, null);
+    assert.equal(legacyRow[0]?.duration_ms, null);
+
+    // 补列后可正常 INSERT/SELECT 新字段
+    const repo = new SqliteMessageRepository(conn);
+    const message = {
+      id: randomUUID(),
+      sessionId,
+      seq: 2,
+      role: "assistant" as const,
+      content: textBlocks("timed"),
+      provider: "openai",
+      modelName: null,
+      raw: null,
+      createdAtMs: now + 1,
+      hidden: false,
+      usage: { firstTokenMs: 320, durationMs: 2100 },
+    };
+    await repo.insert(message);
+    const read = await repo.findById(message.id);
+    assert.ok(read);
+    assert.deepEqual(read!.usage, { firstTokenMs: 320, durationMs: 2100 });
 
     await conn.close();
   });

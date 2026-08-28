@@ -13,4 +13,12 @@ export interface MessageUsage {
   readonly cacheReadTokens?: number;
   /** 本次请求新写入 prompt cache 的输入 token 数（OpenAI/Gemini 无此概念，仅 Anthropic）。 */
   readonly cacheCreationTokens?: number;
+  /**
+   * 首字延迟（TTFT，ms）：首个内容事件（text-delta / thinking-delta）到达
+   * 时刻 − 请求发起时刻；非流式请求（无 onStream 或未收到内容事件）取请求
+   * 完成时刻，即 firstTokenMs === durationMs。
+   */
+  readonly firstTokenMs?: number;
+  /** 请求发起 → 完成的总耗时（ms），与 token 字段独立（可仅有耗时无 token）。 */
+  readonly durationMs?: number;
 }

@@ -24,6 +24,8 @@ type Props = {
   data: readonly StackedBarsDatum[];
   selectedKey?: string;
   onSelect?: (key: string) => void;
+  /** 长按柱子回调（静置 500ms 触发、滚动即取消，与横向 ScrollView 不互抢）。 */
+  onLongPress?: (key: string) => void;
   tokens: ThemeTokens;
   /** x 轴标签（缺省用 key 原文）。 */
   formatLabel?: (key: string, index: number) => string;
@@ -40,6 +42,7 @@ export function StackedBars({
   data,
   selectedKey,
   onSelect,
+  onLongPress,
   tokens,
   formatLabel,
   testID,
@@ -85,6 +88,25 @@ export function StackedBars({
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={[styles.barsRow, { minWidth: containerWidth }]}>
+          {/* 网格刻度层：绝对定位覆盖绘图区，不参与 flex 布局 */}
+          <View testID={testID ? `${testID}-grid` : undefined} pointerEvents="none" style={styles.gridLayer}>
+            {[1, 2].map(line => (
+              <View
+                key={line}
+                testID={`grid-line-${line}`}
+                style={[
+                  styles.gridLine,
+                  { top: `${(line / 3) * 100}%`, borderTopColor: tokens.borderLight },
+                ]}
+              />
+            ))}
+            <Text
+              testID="grid-max-label"
+              style={[styles.gridMaxLabel, { color: tokens.textTertiary }]}
+            >
+              {formatTokenCount(maxTotal)}
+            </Text>
+          </View>
           {data.map((datum, index) => {
             const selected = datum.key === selectedKey;
             const label = formatLabel
@@ -112,6 +134,9 @@ export function StackedBars({
                 key={datum.key}
                 testID={`bar-col-${datum.key}`}
                 onPress={onSelect ? () => onSelect(datum.key) : undefined}
+                onLongPress={
+                  onLongPress ? () => onLongPress(datum.key) : undefined
+                }
                 // 仅可点选的柱子（如按天图）标 button；无 onSelect 的柱子
                 // 标成 button 会让读屏用户以为可激活（参照 desktop/J-1 的教训）。
                 accessibilityRole={onSelect ? 'button' : undefined}
@@ -185,6 +210,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: BAR_GAP,
     alignItems: 'flex-end',
+    // 柱总宽小于容器（minWidth: containerWidth）时水平居中，修贴左根因；
+    // 超宽时内容宽大于 minWidth，justifyContent 不生效，横向滚动原样保留。
+    justifyContent: 'center',
+  },
+  gridLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: CHART_HEIGHT,
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
+  },
+  gridMaxLabel: {
+    position: 'absolute',
+    top: 2,
+    right: 0,
+    fontSize: 10,
   },
   barCol: {
     alignItems: 'center',

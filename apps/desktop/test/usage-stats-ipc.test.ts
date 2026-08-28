@@ -28,6 +28,8 @@ const SUMMARY = {
   cacheReadTokens: 400,
   cacheCreationTokens: 600,
   billedInputTokens: 2000,
+  avgFirstTokenMs: 850.5,
+  avgTokensPerSecond: 42.25,
   today: { totalTokens: 550, calls: 3 },
 };
 
@@ -40,6 +42,8 @@ const BUCKETS = [
     cacheReadTokens: 40,
     cacheCreationTokens: 60,
     billedInputTokens: 200,
+    avgFirstTokenMs: 620,
+    avgTokensPerSecond: 33.5,
   },
   {
     bucketStartMs: 1_800_086_400_000,
@@ -49,6 +53,9 @@ const BUCKETS = [
     cacheReadTokens: 4,
     cacheCreationTokens: 6,
     billedInputTokens: 20,
+    // 存量 NULL 行：两新指标 null 保真透传
+    avgFirstTokenMs: null,
+    avgTokensPerSecond: null,
   },
 ];
 
@@ -144,6 +151,8 @@ describe("usage stats IPC handler（T-S6）", () => {
       cacheReadTokens: 400,
       cacheCreationTokens: 600,
       billedInputTokens: 2000,
+      avgFirstTokenMs: 850.5,
+      avgTokensPerSecond: 42.25,
       today: { totalTokens: 550, calls: 3 },
     });
     assert.deepEqual(calls, [
@@ -240,6 +249,45 @@ describe("usage stats IPC handler（T-S6）", () => {
     }
     assert.deepEqual(res.data, ["gpt-4o", "claude-3-5-sonnet"]);
     assert.deepEqual(calls, [{ method: "listModels", args: [] }]);
+  });
+
+  it("新指标字段显式透传且 null 保真：summary 有值 / bucket 存量 null（T-IP1）", async () => {
+    const calls = installStubRuntime();
+    const summaryRes = await handleUsageStatsQuery({
+      kind: "summary",
+      filter: LAST7_FILTER,
+    });
+    assert.equal(summaryRes.ok, true);
+    if (!summaryRes.ok) {
+      return;
+    }
+    const summary = summaryRes.data;
+    assert.equal(
+      typeof summary === "object" && summary != null && "today" in summary,
+      true,
+    );
+    if (typeof summary === "object" && summary != null && "today" in summary) {
+      assert.equal(summary.avgFirstTokenMs, 850.5);
+      assert.equal(summary.avgTokensPerSecond, 42.25);
+    }
+
+    const dailyRes = await handleUsageStatsQuery({
+      kind: "daily",
+      filter: LAST7_FILTER,
+    });
+    assert.equal(dailyRes.ok, true);
+    if (!dailyRes.ok) {
+      return;
+    }
+    assert.ok(Array.isArray(dailyRes.data));
+    if (Array.isArray(dailyRes.data)) {
+      const [withValues, legacyNull] = dailyRes.data;
+      assert.equal(withValues.avgFirstTokenMs, 620);
+      assert.equal(withValues.avgTokensPerSecond, 33.5);
+      assert.equal(legacyNull.avgFirstTokenMs, null);
+      assert.equal(legacyNull.avgTokensPerSecond, null);
+    }
+    assert.equal(calls.length, 2);
   });
 
   it("service 抛 ChatError 时返回 IpcResult error 形态（code/message 透传）", async () => {

@@ -7350,6 +7350,12 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--success);
 }
 
+/* 指标卡口径注记（如首字延迟的非流式口径） */
+.token-stats-card__hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
 .token-stats-view__today {
   margin-top: 12px;
   display: flex;
@@ -7370,14 +7376,100 @@ html[data-theme="dark"] .chat-batch-bar {
 
 .token-stats-chart {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 图例行：输入 primary / 输出 text-secondary（与 mobile legendRow 同口径） */
+.token-stats-chart__legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.token-stats-chart__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.token-stats-chart__legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.token-stats-chart__legend-dot--input {
+  background: var(--primary);
+}
+
+.token-stats-chart__legend-dot--output {
+  background: var(--text-secondary);
+}
+
+/* 绘图区：relative 供网格层与 hover 卡片定位 */
+.token-stats-chart__plot {
+  position: relative;
+  display: flex;
   align-items: stretch;
   gap: 2px;
   height: 150px;
 }
 
-.token-stats-chart--hourly {
+.token-stats-chart--hourly .token-stats-chart__plot {
   height: 120px;
   margin-top: 8px;
+}
+
+/* 网格刻度层：max / max÷2 / 0 三条虚线，底部让出 label 高度 */
+.token-stats-chart__grid {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: 18px;
+  pointer-events: none;
+}
+
+.token-stats-chart__grid-line {
+  position: absolute;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--border-light);
+}
+
+.token-stats-chart__grid-line--max {
+  top: 0;
+}
+
+.token-stats-chart__grid-line--mid {
+  top: 50%;
+}
+
+.token-stats-chart__grid-line--zero {
+  bottom: 0;
+}
+
+.token-stats-chart__grid-label {
+  position: absolute;
+  right: 0;
+  padding: 0 2px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-tertiary);
+  background: var(--surface);
+  border-radius: 3px;
+}
+
+.token-stats-chart__grid-label--max {
+  top: 0;
+}
+
+.token-stats-chart__grid-label--mid {
+  top: 50%;
 }
 
 .token-stats-chart__col {
@@ -7391,6 +7483,8 @@ html[data-theme="dark"] .chat-batch-bar {
   padding: 0 0 2px;
   cursor: pointer;
   border-radius: 4px;
+  position: relative;
+  z-index: 1;
 }
 
 .token-stats-chart__col:hover,
@@ -7411,6 +7505,22 @@ html[data-theme="dark"] .chat-batch-bar {
   width: 100%;
   min-height: 0;
   border-radius: 2px 2px 0 0;
+  /* 柱高过波：数据刷新时平滑变化；首帧从 0 生长 */
+  transition: height 0.25s ease;
+  animation: token-stats-chart-bar-grow 0.25s ease;
+}
+
+@keyframes token-stats-chart-bar-grow {
+  from {
+    height: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .token-stats-chart__bar {
+    animation: none;
+    transition: none;
+  }
 }
 
 .token-stats-chart__bar--input {
@@ -7430,6 +7540,24 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--text-tertiary);
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* hover 详情卡片：随绘图区顶部居中，不随柱子溢出容器 */
+.token-stats-chart__tooltip {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translate(-50%, -100%);
+  z-index: 2;
+  padding: 5px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  pointer-events: none;
 }
 
 .token-stats-view__day-detail {
