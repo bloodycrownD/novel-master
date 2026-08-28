@@ -1,5 +1,5 @@
 ---
-date: 2026-08-27 20:30
+date: 2026-08-28 09:00
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -210,3 +210,9 @@ user:
 
 assistant:
 thinking-context-toggle 已 ff 合回 main（a42ea24→70a4cb6，45 文件 +1685/-69，含迭代全部提交：偏好三件套、容量1两次语义变更史、全量回传+openai reasoning_content、默认关、TS4104 修复、spec 三次偏离修订、apm 记忆）。main 本地领先 origin 9 提交未 push（约定不主动 push）。五迭代合并进度：thinking-openai-unify ✅、thinking-context-toggle ✅；剩 token-usage-stats-enhance（1 P2）、fetch-tool（1 P1+4 P2）、markdown-code-block-render（2 P2+MF-1 待拍板 a/b）。下一步建议从 fetch-tool（有 P1）或 token-usage-stats-enhance（最轻）开始，流程同前：main 新建 feature 分支 → --no-ff 合并迭代分支 → fix-spec 修复 → 用户测 → 合 main。
+
+user:
+刚才让你分身干活了，你看看 CHANGELOG 写全了吗？
+
+assistant:
+审查 Unreleased（对照 changelog skill 校对清单）：分身两批活（ux-fixes-2026-08、vfs-revision 唯一键冲突）的三条修复条目与改动对得上——tag 闪烁与去 padding 均被回退不写是正确的。发现两处缺口并补齐（3b9f0e7+修正提交）：1) thinking-openai-unify 整条漏了，补变更「思考档位下发统一为 reasoning_effort（GLM 无单独处理）」；2) context-toggle 原变更条目只写 openai 侧，重写为「思考内容默认不再进入上下文」覆盖 anthropic/gemini 旧版全量透传→默认不发的行为变化（含缓存失效提示、openai 首次打通括注），并按「一个功能一个分类」删掉与新增重复的条目；修正新增条目「默认关闭（与旧版行为一致）」的不准确括注——仅 openai 侧一致，anthropic/gemini 侧是行为变化。
