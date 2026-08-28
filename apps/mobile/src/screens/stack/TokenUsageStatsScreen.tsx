@@ -115,20 +115,20 @@ function formatFirstTokenMs(ms: number | null, emptyText: string): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-/** 汇总页签指标小卡；宽卡（wide）独占一行，用于命中率与今日。 */
+/** 汇总页签指标小卡；宽卡（wide）独占一行（今日卡），三列卡（third）一行放三个（命中率/速率/首字延迟）。 */
 function SummaryTile({
   label,
   value,
   tokens,
   tone = 'default',
-  wide = false,
+  layout = 'half',
   testID,
 }: {
   label: string;
   value: string;
   tokens: ThemeTokens;
   tone?: 'default' | 'success';
-  wide?: boolean;
+  layout?: 'half' | 'wide' | 'third';
   testID?: string;
 }) {
   return (
@@ -136,7 +136,8 @@ function SummaryTile({
       testID={testID}
       style={[
         styles.tile,
-        wide && styles.tileWide,
+        layout === 'wide' && styles.tileWide,
+        layout === 'third' && styles.tileThird,
         { backgroundColor: tokens.bgSecondary },
       ]}
     >
@@ -544,6 +545,8 @@ export function TokenUsageStatsScreen() {
               tokens={tokens}
             />
           </View>
+          {/* 命中率/速率/首字延迟三卡一行（31% 列） */}
+          <View style={styles.summaryGrid}>
           <SummaryTile
             testID="summary-metric-hitRate"
             label="命中率"
@@ -554,10 +557,10 @@ export function TokenUsageStatsScreen() {
               ),
             )}
             tone="success"
-            wide
+            layout="third"
             tokens={tokens}
           />
-          {/* 新指标卡：无有效行为 null → 空态文案而非 0 */}
+          {/* 新指标卡：无有效行为 null → 空态横杠而非 0 */}
           <SummaryTile
             testID="summary-metric-avgTokensPerSecond"
             label="平均速率"
@@ -565,7 +568,7 @@ export function TokenUsageStatsScreen() {
               summary?.avgTokensPerSecond ?? null,
               SUMMARY_EMPTY_TEXT,
             )}
-            wide
+            layout="third"
             tokens={tokens}
           />
           <SummaryTile
@@ -575,9 +578,10 @@ export function TokenUsageStatsScreen() {
               summary?.avgFirstTokenMs ?? null,
               SUMMARY_EMPTY_TEXT,
             )}
-            wide
+            layout="third"
             tokens={tokens}
           />
+          </View>
           <TodayCard summary={summary} tokens={tokens} />
           {/* 聚合数据归汇总页签：分模型列表跟随五指标卡与今日卡展示。 */}
           <ListSectionTitle title="分模型汇总" tokens={tokens} />
@@ -816,6 +820,9 @@ const styles = StyleSheet.create({
   tileWide: {
     flexBasis: '100%',
     marginTop: 10,
+  },
+  tileThird: {
+    flexBasis: '31%',
   },
   tileLabel: {
     fontSize: 12,
