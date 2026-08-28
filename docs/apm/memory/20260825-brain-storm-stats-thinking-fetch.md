@@ -1,5 +1,5 @@
 ---
-date: 2026-08-28 22:30
+date: 2026-08-28 23:10
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -228,3 +228,9 @@ user:
 
 assistant:
 并行派三个修复子代理（各自 worktree），抽查关键 diff 后确认闭合：fetch-tool 全 5 条闭合（P1 e7cc3af：clearTimeout 移到外层 finally 包住 fetch+text() 整体，慢滴流 30s abort；补 T-FT14 挂起 body 测试；P2×4：description 措辞/CHANGELOG/非文本不下载只回 content-length/utf8ByteLength 分块增量计数；定向 15/15+全量 2185/2185）。token-usage-stats-enhance MF-1 闭合（21163ea：四格式化函数合并为带 emptyText 二参的一对，渲染逐字一致，mobile 25/25+typecheck）。markdown-code-block-render 两条闭合（MF-1 按推荐方案 b：mobile 门控放宽为归一化表优先+hljs 注册表回退，desktop 零改动靠测试锁定，双端 mjs/cjs 样例断言；MF-2 rawLang escapeHtml 拼接+两层注入测试；双端 typecheck+定向 21/21+23/23）。新发现 OQ6（markdown 子代理）：defaultFence 首词含引号时 sanitize 出口 decode 后仍可拼接出事件属性形态——既有管道行为、与 MF-2 路径无关（不可达），记入 fix-spec 待后续迭代评估。三个迭代均在各自 worktree 分支待用户测试后合并，package-lock 残留均未提交。
+
+user:
+一个个来吧，合并一个迭代到 feature。
+
+assistant:
+fetch-tool 合并到 feature：主仓从 main（e376abe）新建 feat/2026-08-fetch-tool → --no-ff 合并 feat/fetch-tool（merge 7e85acb）。CHANGELOG 冲突（分身已把 Unreleased 发版为 1.5.5-2026-08-28，fetch 条目解入新 Unreleased 新增段）。验证：fetch-tool 定向测试全过 + core build 类型通过。待用户测试后 ff 合回 main；随后 token-usage-stats-enhance、markdown-code-block-render 依同流程。
