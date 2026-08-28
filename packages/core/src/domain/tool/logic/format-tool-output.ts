@@ -163,12 +163,13 @@ function formatFsLsOutput(rec: Record<string, unknown>): string {
 }
 
 /**
- * Detects fetch tool output.
+ * Detects curl tool output.
  *
  * 守卫要求 url + finalUrl + status + body + truncated 同时类型匹配；
  * 现有工具输出均无 url 字段，不会误撞 read / grep / glob / fs 形状。
+ * method 不入守卫（curl 升级前的历史输出无该字段，formatter 缺省 GET）。
  */
-export function isFetchOutput(rec: Record<string, unknown>): boolean {
+export function isCurlOutput(rec: Record<string, unknown>): boolean {
   return (
     typeof rec.url === "string" &&
     typeof rec.finalUrl === "string" &&
@@ -179,17 +180,24 @@ export function isFetchOutput(rec: Record<string, unknown>): boolean {
 }
 
 /**
- * Formats fetch output as `GET <url> → <finalUrl>` + status header + body.
+ * Formats curl output as `curl <METHOD> <url> → <finalUrl>` + status header + body.
  *
- * 截断标注行由工具本体附在 body 末尾（不计入字节预算），这里不重复追加。
+ * method 从输出回显（缺省 GET）；截断标注行由工具本体附在 body 末尾
+ * （不计入字节预算），这里不重复追加。
  */
-export function formatFetchOutput(rec: Record<string, unknown>): string {
+export function formatCurlOutput(rec: Record<string, unknown>): string {
   const url = rec.url as string;
   const finalUrl = rec.finalUrl as string;
+  const method =
+    typeof rec.method === "string" && rec.method.length > 0
+      ? (rec.method as string)
+      : "GET";
   const contentType =
     typeof rec.contentType === "string" ? (rec.contentType as string) : "";
   const requestLine =
-    finalUrl !== url ? `GET ${url} → ${finalUrl}` : `GET ${url}`;
+    finalUrl !== url
+      ? `curl ${method} ${url} → ${finalUrl}`
+      : `curl ${method} ${url}`;
   const statusLine =
     contentType.length > 0
       ? `Status: ${rec.status} · ${contentType}`
@@ -222,8 +230,8 @@ export function formatToolOutputForLlm(out: unknown): string {
       return formatGlobOutput(rec);
     }
 
-    if (isFetchOutput(rec)) {
-      return formatFetchOutput(rec);
+    if (isCurlOutput(rec)) {
+      return formatCurlOutput(rec);
     }
 
     if (keys.length === 1 && typeof rec.version === "number") {

@@ -19,7 +19,7 @@ import {
 } from "./format-tool-output.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ParallelToolOutcome } from "./tool-runner.js";
-import { FETCH_MAX_BODY_BYTES } from "../builtin/fetch-tool.js";
+import { CURL_MAX_BODY_BYTES } from "../builtin/curl-tool.js";
 
 export interface BuildToolResultBlockMeta {
   readonly toolName?: string;
@@ -176,10 +176,10 @@ function summarizeToolSuccess(
     }
   }
 
-  // fetch：状态 · 原始体积（如 `200 · 12.3KB`）；截断时保留量/原始量
-  // （如 `truncated · 50KB/1.2MB`）。保留量即字节预算（截断的正文部分
-  // ≤ FETCH_MAX_BODY_BYTES），非文本占位与预检占位很小，照 body 现算。
-  if (name === "fetch") {
+  // curl：状态 · 原始体积（如 `200 · 12.3KB`）；截断时保留量/原始量
+  // （如 `truncated · 256KB/1.2MB`）。保留量即字节预算（截断的正文部分
+  // ≤ CURL_MAX_BODY_BYTES），非文本占位与预检占位很小，照 body 现算。
+  if (name === "curl") {
     const status = output.status;
     const originalBytes = output.originalBytes;
     if (typeof status === "number" && typeof originalBytes === "number") {
@@ -190,9 +190,9 @@ function summarizeToolSuccess(
             : undefined;
         // 正常截断路径 body 含标注行会略超预算，展示上按预算值口径。
         const kept =
-          bodyBytes != null && bodyBytes < FETCH_MAX_BODY_BYTES
+          bodyBytes != null && bodyBytes < CURL_MAX_BODY_BYTES
             ? bodyBytes
-            : FETCH_MAX_BODY_BYTES;
+            : CURL_MAX_BODY_BYTES;
         return `truncated · ${formatByteSize(kept)}/${formatByteSize(originalBytes)}`;
       }
       return `${status} · ${formatByteSize(originalBytes)}`;
