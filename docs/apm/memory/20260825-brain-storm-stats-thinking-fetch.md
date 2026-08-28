@@ -1,5 +1,5 @@
 ---
-date: 2026-08-29 15:00
+date: 2026-08-29 15:30
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -300,3 +300,9 @@ user:
 
 assistant:
 统计页空态三改（feat/2026-08-token-usage-stats）：1) 空值文案全收敛「—」——mobile 命中率/选中天行「暂无数据」+ SUMMARY_EMPTY_TEXT 长文案（原「暂无数据，自本版本起开始积累」在汇总卡 value 位显得又大又丑），desktop 三个 formatter 同步；2) StackedBars 根因：height===0 时整个柱子不渲染，barCol 宽度塌成 label 文字宽——修为渲染等宽透明占位（width: barWidth, height: 0），列宽与有数据日期一致（desktop 图表是 CSS flex 布局天然等宽无此问题）；3) 测试断言同步（渲染树中「—」是独立 text 节点，JSON 序列化后与相邻文本不连续，断言改 toContain('"—"')）。mobile 25/25、双端 typecheck 过。
+
+user:
+命中率/平均速率/首字延迟用每个数据占一行？三个放一行也不挤吧？
+
+assistant:
+三卡改一行三列：SummaryTile 的 wide boolean 改为 layout: 'half'|'wide'|'third'，三卡传 third（flexBasis 31%）并包进 summaryGrid wrap 容器（原三卡在容器外竖排）；今日卡保持 wide 独占。mobile 25/25 + typecheck 过。
