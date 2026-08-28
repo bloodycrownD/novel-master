@@ -766,8 +766,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </SettingsField>
           ) : (
             <p className="settings-hint">
-              未配置时使用全部内置工具（9
-              个）：task、read、write、edit、fs、glob、grep、skill、agent。
+              未配置时使用全部内置工具（10
+              个）：task、read、write、edit、fs、glob、grep、skill、agent、fetch。
             </p>
           )}
         </SettingsSection>
