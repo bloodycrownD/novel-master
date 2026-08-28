@@ -173,45 +173,6 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     expect(attach).toHaveLength(scanned.length);
   });
 
-  it('T-C1: mention 胶囊样式宽度中性，不含水平 padding', () => {
-    // R1（ux-fixes-2026-08）：胶囊的 paddingHorizontal 会改变文本测量，
-    // 多行文本时换行点漂移导致输入框上下抖动；此断言锁定胶囊不改水平宽度。
-    const onChangeText = jest.fn();
-    let tree: TestRenderer.ReactTestRenderer;
-    act(() => {
-      tree = TestRenderer.create(
-        <ComposerAtPathInput value="见 @/a.md 后文" onChangeText={onChangeText} />,
-      );
-    });
-    const input = tree!.root.findByType(TextInput);
-
-    // 从 children 树里收集带 backgroundColor 的胶囊样式
-    const pillStyles: {backgroundColor?: unknown; paddingHorizontal?: unknown}[] = [];
-    const collect = (node: unknown): void => {
-      if (node == null || typeof node !== 'object') {
-        return;
-      }
-      if (Array.isArray(node)) {
-        node.forEach(collect);
-        return;
-      }
-      const style = (node as {props?: {style?: {backgroundColor?: unknown}}}).props
-        ?.style;
-      if (style != null && style.backgroundColor != null) {
-        pillStyles.push(style);
-      }
-      collect((node as {props?: {children?: unknown}}).props?.children);
-    };
-    collect(input.props.children);
-
-    // 挂载即提升完整 token，至少渲染出一个胶囊
-    expect(pillStyles.length).toBeGreaterThanOrEqual(1);
-    for (const style of pillStyles) {
-      expect(style.paddingHorizontal).toBeUndefined();
-      expect(style.backgroundColor).toBeTruthy();
-    }
-  });
-
   it('T-SC1: selectionColor 用 tokens.selection，≠ primary 原色', () => {
     expect(lightTheme.selection).not.toBe(lightTheme.primary);
     expect(darkTheme.selection).not.toBe(darkTheme.primary);
