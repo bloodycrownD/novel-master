@@ -323,20 +323,18 @@ describe("fetch 工具", () => {
     assert.equal(rec.truncated, false);
   });
 
-  it("T-FT7: 非文本 Content-Type → 占位说明 + originalBytes 回填", async () => {
+  it("T-FT7: 非文本 Content-Type → 不读 body，占位说明回填 content-length", async () => {
     const { runner } = makeRunner();
-    const binary = "\u0000\u0001\u0002\u0003";
+    const response = fakeResponse({
+      status: 200,
+      headers: { "content-type": "image/png", "content-length": "4" },
+      body: "\u0000\u0001\u0002\u0003",
+    });
     const out = await runner.call(
       "fetch",
       { url: "https://example.com/logo.png" },
       makeCtx(
-        mock.fn(async () =>
-          fakeResponse({
-            status: 200,
-            headers: { "content-type": "image/png" },
-            body: binary,
-          }),
-        ) as unknown as typeof fetch,
+        mock.fn(async () => response) as unknown as typeof fetch,
       ),
     );
     const rec = out as {
@@ -344,9 +342,28 @@ describe("fetch 工具", () => {
       truncated: boolean;
       originalBytes: number;
     };
+    // contentType 响应头阶段即已知：不应为了丢弃而先全量下载正文。
+    assert.equal(response.textCalls(), 0, "非文本路径不应读 body");
     assert.equal(rec.body, `[binary content, 4 bytes, not shown]`);
     assert.equal(rec.originalBytes, 4);
     assert.equal(rec.truncated, false);
+
+    // content-length 缺失：体积标 unknown，originalBytes 置 0。
+    const noLength = fakeResponse({
+      headers: { "content-type": "image/png" },
+      body: "\u0000\u0001",
+    });
+    const out2 = await runner.call(
+      "fetch",
+      { url: "https://example.com/no-len.png" },
+      makeCtx(
+        mock.fn(async () => noLength) as unknown as typeof fetch,
+      ),
+    );
+    const rec2 = out2 as { body: string; originalBytes: number };
+    assert.equal(noLength.textCalls(), 0);
+    assert.equal(rec2.body, `[binary content, unknown size, not shown]`);
+    assert.equal(rec2.originalBytes, 0);
   });
 
   it("T-FT8: 重定向 → finalUrl 回填且 formatter 输出 GET <url> → <finalUrl>", async () => {

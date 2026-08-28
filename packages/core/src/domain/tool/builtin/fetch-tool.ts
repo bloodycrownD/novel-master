@@ -54,15 +54,28 @@ export interface FetchToolOutput {
   /** 正文是否被截断（字节预算或 content-length 预检触发）。 */
   readonly truncated: boolean;
   /**
-   * 原始正文字节数，双来源：
-   * - 正常路径：读 body 后经 TextEncoder 全量编码计算；
-   * - content-length 预检路径：不读 body，回填 content-length 头数值。
+   * 原始正文字节数，三来源：
+   * - 文本路径：读 body 后按块增量累计 UTF-8 字节数（解码后口径，
+   *   非线上压缩传输字节数）；
+   * - content-length 预检路径：不读 body，回填 content-length 头数值；
+   * - 非文本路径：不下载正文，回填 content-length 头数值（缺失时为 0）。
    */
   readonly originalBytes: number;
 }
 
 /**
- * 判断 Content-Type 是否按文本处理：主类型 `text/`，或 subtype 含
+ * 解析 content-length 头：缺失或非法（非数字 / 负数等）时返回 null。
+ * 预检与非文本占位两处共用，避免各自直读原始头。
+ */
+function parseContentLength(response: Response): number | null {
+  const header = response.headers.get("content-length");
+  if (header == null) return null;
+  const value = Number(header);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/**
+ * 判断 Content-Type 是否按文本处理：主类型 `text/`，或 subtype含
  * json / xml / javascript / svg / yaml / urlencoded 关键字。
  * 缺省（空串）按文本处理。
  */
@@ -192,7 +205,9 @@ export const fetchTool: Tool<
     truncated: z.boolean().describe("正文是否被截断"),
     originalBytes: z
       .number()
-      .describe("原始正文字节数（正常路径全量计算 / 预检路径回填 content-length）"),
+      .describe(
+        "原始正文字节数（文本路径为解码后 UTF-8 口径，预检与非文本路径回填 content-length）",
+      ),
   }),
   async run(input, ctx) {
     const doFetch = ctx.fetchFn ?? globalThis.fetch;
@@ -226,23 +241,35 @@ export const fetchTool: Tool<
 
       // content-length 预检：声明的正文超过上限时不读 body（防巨响应内存峰值），
       // 直接返回占位 + 截断标注；originalBytes 回填 content-length 头数值。
-      const contentLengthHeader = response.headers.get("content-length");
-      if (contentLengthHeader != null) {
-        const declared = Number(contentLengthHeader);
-        if (
-          Number.isFinite(declared) &&
-          declared > FETCH_MAX_RESPONSE_BYTES
-        ) {
-          return {
-            url: normalizedUrl,
-            finalUrl,
-            status: response.status,
-            contentType,
-            body: `[response too large, not downloaded]\n\nOutput truncated (original ${declared} bytes).`,
-            truncated: true,
-            originalBytes: declared,
-          };
-        }
+      const declaredLength = parseContentLength(response);
+      if (declaredLength != null && declaredLength > FETCH_MAX_RESPONSE_BYTES) {
+        return {
+          url: normalizedUrl,
+          finalUrl,
+          status: response.status,
+          contentType,
+          body: `[response too large, not downloaded]\n\nOutput truncated (original ${declaredLength} bytes).`,
+          truncated: true,
+          originalBytes: declaredLength,
+        };
+      }
+
+      // 非文本 Content-Type：contentType 响应头阶段即已知，无需下载正文——
+      // 直接占位说明，体积回填 content-length 头（缺失时无法得知，标 unknown）。
+      if (!isTextualContentType(contentType)) {
+        const binaryBytes = declaredLength;
+        return {
+          url: normalizedUrl,
+          finalUrl,
+          status: response.status,
+          contentType,
+          body:
+            binaryBytes != null
+            ? `[binary content, ${binaryBytes} bytes, not shown]`
+            : `[binary content, unknown size, not shown]`,
+          truncated: false,
+          originalBytes: binaryBytes ?? 0,
+        };
       }
 
       try {
@@ -257,19 +284,6 @@ export const fetchTool: Tool<
       }
 
       const originalBytes = new TextEncoder().encode(text).byteLength;
-
-      // 非文本 Content-Type：不回流解码乱码，占位说明 + 回填原始大小。
-      if (!isTextualContentType(contentType)) {
-        return {
-          url: normalizedUrl,
-          finalUrl,
-          status: response.status,
-          contentType,
-          body: `[binary content, ${originalBytes} bytes, not shown]`,
-          truncated: false,
-          originalBytes,
-        };
-      }
 
       // 字节预算截断：截断点按 UTF-8 字节计，末尾标注行不计入预算。
       if (originalBytes > FETCH_MAX_BODY_BYTES) {
