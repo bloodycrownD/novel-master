@@ -545,8 +545,8 @@ export function TokenUsageStatsScreen() {
               tokens={tokens}
             />
           </View>
-          {/* 命中率/速率/首字延迟三卡一行（31% 列） */}
-          <View style={styles.summaryGrid}>
+          {/* 命中率/速率/首字延迟三卡一行（31% 列）；marginTop 补与上半卡行的垂直间距 */}
+          <View style={[styles.summaryGrid, styles.tileThirdRow]}>
           <SummaryTile
             testID="summary-metric-hitRate"
             label="命中率"
@@ -823,6 +823,9 @@ const styles = StyleSheet.create({
   },
   tileThird: {
     flexBasis: '31%',
+  },
+  tileThirdRow: {
+    marginTop: 10,
   },
   tileLabel: {
     fontSize: 12,
