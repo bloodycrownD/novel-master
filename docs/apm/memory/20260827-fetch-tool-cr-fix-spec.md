@@ -16,3 +16,16 @@
 - fetch-tool.test.ts 的 fake Response helper 已记录 `text()` 调用次数（L29 附近），MF-4 的「非文本不读 body」断言可直接复用；T-FT4（L201-228）是 mock.timers 超时用例先例。
 - CHANGELOG.md 现行无 Unreleased 段，新条目要在版本段落之前新建该段；措辞走 novel-master-changelog skill 的校对清单。
 - `tool-schema-descriptions.test.ts` 对 fetch description 无内容断言，改 description 措辞不牵动测试。
+
+## 2026-08-28 CR 修复执行（round 1 闭合）
+
+同 worktree 内按 fix-spec 逐条闭合，五条全部完成，每个逻辑块独立提交：
+
+- **MF-1（e7cc3af）**：run 重构为单层 try/finally 包住 fetch + text() 整体，clearTimeout 只在整体结束后执行；fetch/text 两阶段错误统一抽 fetchPhaseError（abort 给含 URL 的超时文案，其余透传作 cause）。text 阶段的 aborted 分支由死代码变为可达。新增 T-FT14：fakeResponse 加 pendingBodySignal 选项（text() 监听 signal、abort 时 reject AbortError），headers 立即返回 + body 永不 resolve，tick(30s) 断言超时 ToolError。
+- **MF-4（ddf67e1，采纳推荐方案）**：isTextualContentType 提前到 text() 之前，非文本不下载正文；体积回填 content-length（缺失文案 unknown size、originalBytes 置 0）；抽 parseContentLength 与预检共用。
+- **MF-5（32b1b4d，采纳备选方案）**：抽 utf8ByteLength 按 8192 字符分块增量累计替换全量 encode，截断函数不动；数值口径不变。
+- **MF-2（43b3605）**：description 结果格式段改为描述可读文本实际格式。
+- **MF-3（50c5f48）**：CHANGELOG 补 `## [Unreleased]`/`### 新增` 单条 fetch 条目，按 changelog skill 清单校对（同批引入即修的 MF-1/4/5 不进修复段）。
+- fix-spec 各条目标注闭合状态 + commit sha，元信息状态改已执行。
+
+验证：`tsc --build tsconfig.json` 零错误；`npm run test:fast -- test/tool/fetch-tool.test.ts` 15 例全绿（含新 T-FT14，T-FT7 双场景更新）。踩坑：MF-1 重构时 contentType/finalUrl 声明在 try 内而后续代码在 try 外会 TS18004，正文处理后半段须一并挪进 try 块。
