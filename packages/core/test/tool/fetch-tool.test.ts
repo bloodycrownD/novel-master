@@ -26,13 +26,16 @@ afterEach(() => {
   mock.timers.reset();
 });
 
-/** 构造 fake Response：记录 text() 调用次数（预检用例断言不读 body）。 */
+/** 构造 fake Response：记录 text() 调用次数（预检/非文本用例断言不读 body）。 */
 function fakeResponse(
   overrides: {
     readonly status?: number;
     readonly url?: string;
     readonly headers?: Readonly<Record<string, string>>;
     readonly body?: string;
+    /** 挂起 body：text() 永不 resolve，监听该 signal 在 abort 时 reject
+     * （模拟 undici 对 body 读取的中断语义，用于慢滴流超时用例）。 */
+    readonly pendingBodySignal?: AbortSignal;
   } = {},
 ): Response & { readonly textCalls: () => number } {
   let calls = 0;
@@ -42,6 +45,18 @@ function fakeResponse(
     headers: new Headers(overrides.headers ?? {}),
     text: () => {
       calls += 1;
+      if (overrides.pendingBodySignal != null) {
+        return new Promise<string>((_resolve, reject) => {
+          overrides.pendingBodySignal!.addEventListener("abort", () => {
+            reject(
+              new DOMException(
+                "This operation was aborted",
+                "AbortError",
+              ),
+            );
+          });
+        });
+      }
       return Promise.resolve(overrides.body ?? "");
     },
   };
@@ -227,6 +242,43 @@ describe("fetch 工具", () => {
     const message = formatToolErrorForLlm(err);
     assert.match(message, /timed out/);
     assert.match(message, /https:\/\/example\.com\/slow/);
+  });
+
+  it("T-FT14: body 下载阶段慢滴流挂起 → 超时中断，不无限挂起回合", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    const { runner } = makeRunner();
+    const fetchFn = mock.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        Promise.resolve(
+          // 响应头立即返回，body 永不完成：text() 监听 signal，
+          // abort 时 reject AbortError（模拟 undici 慢滴流 body 的中断）。
+          fakeResponse({
+            headers: { "content-type": "text/html" },
+            pendingBodySignal: init?.signal,
+          }),
+        ),
+    ) as unknown as typeof fetch;
+
+    const pending = runner
+      .call(
+        "fetch",
+        { url: "https://example.com/slow-body" },
+        makeCtx(fetchFn),
+      )
+      .then(
+        () => assert.fail("慢 body 应超时抛 ToolError"),
+        (err: unknown) => err,
+      );
+    // flush 微任务：让 run 拿到响应头并进入 text()，abort listener 已挂好。
+    await new Promise((resolve) => setImmediate(resolve));
+    mock.timers.tick(30_000);
+
+    const err = await pending;
+    assert.ok(err instanceof ToolError);
+    assert.equal(err.code, "FAILED");
+    const message = formatToolErrorForLlm(err);
+    assert.match(message, /timed out/);
+    assert.match(message, /https:\/\/example\.com\/slow-body/);
   });
 
   it("T-FT5: 网络错误 → ToolError FAILED 且 cause 文案可读", async () => {

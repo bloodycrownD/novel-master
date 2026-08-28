@@ -6,7 +6,9 @@
  * - 双端同一份实现：走 `globalThis.fetch` + 非流式 `response.text()`，
  *   无平台分支；网络入口经 `ctx.fetchFn` 可选注入（缺省 globalThis.fetch）。
  * - 超时用 `AbortController` + 手动 `setTimeout`（不用 `AbortSignal.timeout`，
- *   规避 RN/Hermes 兼容差异），请求结束后 `clearTimeout` 防悬挂计时器。
+ *   规避 RN/Hermes 兼容差异）。计时器覆盖 fetch + 正文读取（`text()`）
+ *   全程——慢滴流 body 若在响应头到达后失去超时兜底，会让整个回合
+ *   无限挂起；请求整体结束（无论成功或失败）后才 `clearTimeout`。
  * - HTTP 非 2xx 不算错误（4xx/5xx 也是有效响应，让模型自行解释），
  *   与 LLM provider 层的 `assertOk` 语义刻意不同。
  * - content-length 预检：响应头声明超过 {@link FETCH_MAX_RESPONSE_BYTES}
@@ -76,6 +78,22 @@ function isTextualContentType(contentType: string): boolean {
     lower.includes("yaml") ||
     lower.includes("urlencoded")
   );
+}
+
+/**
+ * fetch / text() 两个阶段的错误统一映射：超时 abort 给可读超时文案
+ * （含 URL），其余错误原样透传——formatToolErrorForLlm 会解 cause
+ * 给模型可读文案。
+ */
+function fetchPhaseError(
+  e: unknown,
+  aborted: boolean,
+  url: string,
+): unknown {
+  if (aborted) {
+    return new Error(`Request timed out after ${FETCH_TIMEOUT_MS}ms: ${url}`);
+  }
+  return e;
 }
 
 /**
@@ -180,110 +198,105 @@ export const fetchTool: Tool<
     const doFetch = ctx.fetchFn ?? globalThis.fetch;
     const normalizedUrl = new URL(input.url).href;
 
+    // 超时须包住 fetch + 正文读取整体（spec §3）：响应头到达不结束计时，
+    // `text()` 下载正文阶段同样受 abort 约束，慢滴流不会无限挂起回合。
     const controller = new AbortController();
     const timer = setTimeout(
       () => controller.abort(),
       FETCH_TIMEOUT_MS,
     );
     let response: Response;
+    let text: string;
     try {
-      response = await doFetch(normalizedUrl, {
-        method: "GET",
-        signal: controller.signal,
-        redirect: "follow",
-      });
-    } catch (e) {
-      // abort 触发（超时）给专门的可读文案；其余网络错误原样包进 cause，
-      // formatToolErrorForLlm 会解 cause 给模型可读文案。
-      if (controller.signal.aborted) {
+      try {
+        response = await doFetch(normalizedUrl, {
+          method: "GET",
+          signal: controller.signal,
+          redirect: "follow",
+        });
+      } catch (e) {
         throw toolFailed(
           "fetch",
-          new Error(
-            `Request timed out after ${FETCH_TIMEOUT_MS}ms: ${normalizedUrl}`,
-          ),
+          fetchPhaseError(e, controller.signal.aborted, normalizedUrl),
         );
       }
-      throw toolFailed("fetch", e);
-    } finally {
-      clearTimeout(timer);
-    }
 
-    const contentType = response.headers.get("content-type") ?? "";
-    const finalUrl = response.url.length > 0 ? response.url : normalizedUrl;
+      const contentType = response.headers.get("content-type") ?? "";
+      const finalUrl = response.url.length > 0 ? response.url : normalizedUrl;
 
-    // content-length 预检：声明的正文超过上限时不读 body（防巨响应内存峰值），
-    // 直接返回占位 + 截断标注；originalBytes 回填 content-length 头数值。
-    const contentLengthHeader = response.headers.get("content-length");
-    if (contentLengthHeader != null) {
-      const declared = Number(contentLengthHeader);
-      if (
-        Number.isFinite(declared) &&
-        declared > FETCH_MAX_RESPONSE_BYTES
-      ) {
+      // content-length 预检：声明的正文超过上限时不读 body（防巨响应内存峰值），
+      // 直接返回占位 + 截断标注；originalBytes 回填 content-length 头数值。
+      const contentLengthHeader = response.headers.get("content-length");
+      if (contentLengthHeader != null) {
+        const declared = Number(contentLengthHeader);
+        if (
+          Number.isFinite(declared) &&
+          declared > FETCH_MAX_RESPONSE_BYTES
+        ) {
+          return {
+            url: normalizedUrl,
+            finalUrl,
+            status: response.status,
+            contentType,
+            body: `[response too large, not downloaded]\n\nOutput truncated (original ${declared} bytes).`,
+            truncated: true,
+            originalBytes: declared,
+          };
+        }
+      }
+
+      try {
+        text = await response.text();
+      } catch (e) {
+        // 超时 abort 后 text() 会 reject（undici 对 body 读取同样响应 signal），
+        // 这里给出与 fetch 阶段一致的可读超时文案。
+        throw toolFailed(
+          "fetch",
+          fetchPhaseError(e, controller.signal.aborted, normalizedUrl),
+        );
+      }
+
+      const originalBytes = new TextEncoder().encode(text).byteLength;
+
+      // 非文本 Content-Type：不回流解码乱码，占位说明 + 回填原始大小。
+      if (!isTextualContentType(contentType)) {
         return {
           url: normalizedUrl,
           finalUrl,
           status: response.status,
           contentType,
-          body: `[response too large, not downloaded]\n\nOutput truncated (original ${declared} bytes).`,
-          truncated: true,
-          originalBytes: declared,
+          body: `[binary content, ${originalBytes} bytes, not shown]`,
+          truncated: false,
+          originalBytes,
         };
       }
-    }
 
-    let text: string;
-    try {
-      text = await response.text();
-    } catch (e) {
-      if (controller.signal.aborted) {
-        throw toolFailed(
-          "fetch",
-          new Error(
-            `Request timed out after ${FETCH_TIMEOUT_MS}ms: ${normalizedUrl}`,
-          ),
-        );
+      // 字节预算截断：截断点按 UTF-8 字节计，末尾标注行不计入预算。
+      if (originalBytes > FETCH_MAX_BODY_BYTES) {
+        const kept = truncateToByteBudget(text, FETCH_MAX_BODY_BYTES);
+        return {
+          url: normalizedUrl,
+          finalUrl,
+          status: response.status,
+          contentType,
+          body: `${kept}\n\nOutput truncated (original ${originalBytes} bytes).`,
+          truncated: true,
+          originalBytes,
+        };
       }
-      throw toolFailed("fetch", e);
-    }
 
-    const originalBytes = new TextEncoder().encode(text).byteLength;
-
-    // 非文本 Content-Type：不回流解码乱码，占位说明 + 回填原始大小。
-    if (!isTextualContentType(contentType)) {
       return {
         url: normalizedUrl,
         finalUrl,
         status: response.status,
         contentType,
-        body: `[binary content, ${originalBytes} bytes, not shown]`,
+        body: text,
         truncated: false,
         originalBytes,
       };
+    } finally {
+      // 请求整体结束（成功、失败或提前 return）后清计时器，防悬挂。
+      clearTimeout(timer);
     }
-
-    // 字节预算截断：截断点按 UTF-8 字节计，末尾标注行不计入预算。
-    if (originalBytes > FETCH_MAX_BODY_BYTES) {
-      const kept = truncateToByteBudget(text, FETCH_MAX_BODY_BYTES);
-      return {
-        url: normalizedUrl,
-        finalUrl,
-        status: response.status,
-        contentType,
-        body: `${kept}\n\nOutput truncated (original ${originalBytes} bytes).`,
-        truncated: true,
-        originalBytes,
-      };
-    }
-
-    return {
-      url: normalizedUrl,
-      finalUrl,
-      status: response.status,
-      contentType,
-      body: text,
-      truncated: false,
-      originalBytes,
-    };
   },
 };
