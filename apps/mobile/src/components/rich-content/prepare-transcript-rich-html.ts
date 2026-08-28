@@ -22,7 +22,10 @@ markdown.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const highlighted = resolveHighlight(token.content, rawLang);
   if (highlighted) {
     const label = normalized ? ` data-lang="${normalized}"` : '';
-    return `<pre${label}><code class="language-${rawLang} hljs">${highlighted}</code></pre>\n`;
+    // rawLang 来自 fence info 首词，未经归一化表约束：拼接前必须转义，
+    // 避免未来表 key 引入特殊字符时打开属性注入面（MF-2）
+    const langClass = markdown.utils.escapeHtml(rawLang);
+    return `<pre${label}><code class="language-${langClass} hljs">${highlighted}</code></pre>\n`;
   }
   return defaultFence(tokens, idx, options, env, self);
 };

@@ -4,7 +4,7 @@ base: b3429b0
 head: 1fad168
 review_round: 1
 dag_version: 2
-状态: draft
+状态: closed（MF-1 / MF-2 已闭合，C-1 已回写；OQ1 已拍板方案 b 并数双端统一化执行）
 ---
 
 # markdown 代码块渲染 — Code Review 第一轮 fix-spec
@@ -37,6 +37,7 @@ dag_version: 2
 - **改法**：`rawLang` 先过 `md.utils.escapeHtml` 再拼接（`class="language-${md.utils.escapeHtml(rawLang)} hljs"`）；补测试：lang 首词含引号（如 ```` ```ab"c ````）时走默认 escape，输出不含未转义反射的属性或标签。
 - **验收**：新增单测通过；含引号 lang 的 fence 输出经断言无注入向量。
 - **来源**：CR-R1
+- **闭合状态**：✅ 已闭合（CR-R1 fix wave）——`rawLang` 拼接前过 `markdown.utils.escapeHtml`（`< >` 进入 sanitize 前已转义；`&quot;`/`&amp;` 会被出口 `decodeAfterSanitize` 按既有设计回解，无裸标签反射）。补两组测试：表 key 含 `"`/`<`/`&` 走拼接路径无标签注入向量（mock 透传锁定转义生效）、含特殊字符 lang 走默认 fence 无注入向量（真实 sanitize 管道）。另断言过程发现既有管道组合行为新开 OQ6（见 Open questions）。
 
 ### C-1 [P2][K] spec 变更点 C-1 补记 desktop `highlight.js` 直接依赖（本轮已回写）
 
@@ -63,6 +64,7 @@ dag_version: 2
 3. **Step 10 真机验收是否补做**：四场景 × 明暗主题人工验收 + T-CB14 批注回归 + T-CB15 流式验收当前均未执行。
 4. **双端色表无契约锁**：desktop `shell.css` 的 `--hljs-*` 与 mobile `rich-content-styles.ts` 的 `.hljs-*` 色值各持一份，无测试或脚本校验一致，漂移只能靠目测发现——是否补一致性断言。
 5. **缩进 code block 防回归断言**：现有测试只覆盖 fence 形态，4 空格缩进代码块是否需要补「不被高亮改写」的防回归断言。
+6. **（新增，MF-2 验收过程发现）无空格引号拼接 + 出口 decode 的既有组合行为**：fence 首词为 `x"onmouseover="alert(1)`（引号闭合后无空格拼属性名）时，markdown-it 默认 fence 不转义引号，sanitize-html 将整串视为 class 值转义，但出口 `decodeAfterSanitize` 按既有设计回解 `&quot;`，最终 HTML 仍含 `class="language-x"onmouseover="alert(1)"` 形态（浏览器 tokenizer 可解析出事件属性）。该行为在本轮修复前即存在（defaultFence 路径，与 MF-2 拼接路径无关，且拼接路径仅对表/注册表命中 lang 生效、实际不可达），超出本轮 must-fix 范围——建议后续迭代评估：出口 decode 收窄 quot 回解范围或 fence 首词白名单化。
 
 ## 已豁免
 

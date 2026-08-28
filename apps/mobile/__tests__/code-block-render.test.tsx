@@ -25,7 +25,7 @@ import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-
 import {RichContentBody} from '../src/components/rich-content/RichContentBody';
 import {RICH_CONTENT_MAX_CHARS} from '../src/components/rich-content/rich-content-limits';
 import {buildRichContentCssRules} from '../src/web/shared/rich-content-styles';
-import {normalizeFenceLang} from '../src/components/rich-content/highlight-code';
+import {normalizeFenceLang, LANG_ALIAS} from '../src/components/rich-content/highlight-code';
 
 /** 双端统一验收样例（与 desktop test/code-block-render.test.tsx 保持同文）。 */
 const UNIFIED_SAMPLE = [
@@ -250,6 +250,27 @@ describe('code block render (mobile)', () => {
     expect(html).toMatch(/<span class="hljs-string">/);
     // 表外语言不出语言标签（data-lang 仅归一化表内语言输出）
     expect(html).not.toContain('data-lang');
+  });
+
+  it('MF-2: 表 key 含特殊字符时 rawLang 经 escapeHtml 拼接，无标签注入向量', () => {
+    // 模拟未来往归一化表引入含特殊字符的 key（当前表 key 恒为字母数字，
+    // 不变式一旦被破坏，转义是 sanitize 之前的第一道防线）
+    (LANG_ALIAS as Record<string, string>)['x"y'] = 'typescript';
+    (LANG_ALIAS as Record<string, string>)['a<b&c'] = 'typescript';
+    try {
+      const html = prepareTranscriptRichHtml(
+        '```x"y\nconst a = 1;\n```\n\n```a<b&c\nconst b = 2;\n```',
+      );
+      // 尖括号/引号经 escapeHtml 后进入 sanitize；出口 decode 只回解 quot/amp，
+      // lt/gt 存活——无裸 < > 反射、不产生新标签
+      expect(html).toContain('language-a&lt;b');
+      expect(html).not.toContain('language-a<b');
+      expect(html).not.toContain('language-a>b');
+      expect(html).not.toMatch(/<span[^>]*on\w+/i);
+    } finally {
+      delete (LANG_ALIAS as Record<string, string>)['x"y'];
+      delete (LANG_ALIAS as Record<string, string>)['a<b&c'];
+    }
   });
 
   it('T-CB12: RN 回退路径维持纯文本——超长/rn 引擎只渲染 Text，无 pre/code/HTML', () => {
