@@ -95,33 +95,21 @@ function formatHitRate(rate: number | null): string {
   return rate == null ? '暂无数据' : `${Math.round(rate * 100)}%`;
 }
 
-/** 平均 token 速率展示：`x.x tok/s`；无数据时空态文案（汇总卡口径）。 */
-function formatTokensPerSecond(v: number | null): string {
+/** 汇总卡空态文案：统计自本版本才开始积累，给用户一句解释。 */
+const SUMMARY_EMPTY_TEXT = '暂无数据，自本版本起开始积累';
+
+/** 平均 token 速率展示：`x.x tok/s`；无数据时返回调用方传入的空态文案。 */
+function formatTokensPerSecond(v: number | null, emptyText: string): string {
   if (v == null) {
-    return '暂无数据，自本版本起开始积累';
+    return emptyText;
   }
   return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
 }
 
-/** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时空态文案。 */
-function formatFirstTokenMs(ms: number | null): string {
+/** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时返回调用方传入的空态文案。 */
+function formatFirstTokenMs(ms: number | null, emptyText: string): string {
   if (ms == null) {
-    return '暂无数据，自本版本起开始积累';
-  }
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
-}
-
-/** 选中天汇总行的新指标格式化（空态用简短版，区别于汇总卡的积累说明）。 */
-function formatDayTokensPerSecond(v: number | null): string {
-  if (v == null) {
-    return '暂无数据';
-  }
-  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
-}
-
-function formatDayFirstTokenMs(ms: number | null): string {
-  if (ms == null) {
-    return '暂无数据';
+    return emptyText;
   }
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
@@ -572,14 +560,20 @@ export function TokenUsageStatsScreen() {
           <SummaryTile
             testID="summary-metric-avgTokensPerSecond"
             label="平均速率"
-            value={formatTokensPerSecond(summary?.avgTokensPerSecond ?? null)}
+            value={formatTokensPerSecond(
+              summary?.avgTokensPerSecond ?? null,
+              SUMMARY_EMPTY_TEXT,
+            )}
             wide
             tokens={tokens}
           />
           <SummaryTile
             testID="summary-metric-avgFirstTokenMs"
             label="平均首字延迟"
-            value={formatFirstTokenMs(summary?.avgFirstTokenMs ?? null)}
+            value={formatFirstTokenMs(
+              summary?.avgFirstTokenMs ?? null,
+              SUMMARY_EMPTY_TEXT,
+            )}
             wide
             tokens={tokens}
           />
@@ -664,9 +658,15 @@ export function TokenUsageStatsScreen() {
                   ),
                 )}{' '}
                 · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
-                {formatDayTokensPerSecond(selectedDayBucket.avgTokensPerSecond)}{' '}
+                {formatTokensPerSecond(
+                  selectedDayBucket.avgTokensPerSecond,
+                  '暂无数据',
+                )}{' '}
                 · 平均首字延迟{' '}
-                {formatDayFirstTokenMs(selectedDayBucket.avgFirstTokenMs)}
+                {formatFirstTokenMs(
+                  selectedDayBucket.avgFirstTokenMs,
+                  '暂无数据',
+                )}
               </Text>
               <StackedBars
                 testID="hourly-chart"
