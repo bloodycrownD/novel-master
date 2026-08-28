@@ -67,8 +67,12 @@ import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sq
  * 三列与 idx_chat_message_created_at 索引。老库（v7）靠本轮 bump 走慢路径，
  * 由 DDL 建索引 + ALIGN 补列；新列的存量回填由 usage-cache-model-backfill-v1
  * migration 承担（见 schema-migrations 目录）。
+ * v9：chat_message 新增 first_token_ms / duration_ms 两列（TTFT/速率统计）。
+ * 老库（v8）靠本轮 bump 走慢路径，由 ALIGN 补列；两列仅新消息写入，
+ * 无存量回填。token-usage-stats-enhance 迭代曾遗漏此 bump，导致存量库
+ * 走快路径永远不补列（真机实测 no such column: first_token_ms）。
  */
-export const SCHEMA_BOOT_VERSION = 8;
+export const SCHEMA_BOOT_VERSION = 9;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [

@@ -13,6 +13,7 @@ import { describe, it } from "node:test";
 import {
   bootstrapNovelMaster,
   open,
+  SCHEMA_BOOT_VERSION,
   type TdbcConnection,
 } from "@novel-master/core";
 import {
@@ -77,7 +78,7 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
         true,
         "应存在 idx_chat_message_created_at 索引",
       );
-      assert.equal(await readUserVersion(conn), 8);
+      assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
     } finally {
       await conn.close();
     }
@@ -111,8 +112,8 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
       );
       assert.equal(
         await readUserVersion(conn),
-        8,
-        "bootstrap 后 user_version 应写为 SCHEMA_BOOT_VERSION(8)",
+        SCHEMA_BOOT_VERSION,
+        "bootstrap 后 user_version 应写为当前 SCHEMA_BOOT_VERSION",
       );
 
       const rows = await conn.query<{

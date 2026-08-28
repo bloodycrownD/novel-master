@@ -11,7 +11,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open } from "@novel-master/core";
+import { bootstrapNovelMaster, open, SCHEMA_BOOT_VERSION } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -70,7 +70,7 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     const versionRows = await conn.query<{ user_version: number }>(
       "PRAGMA user_version",
     );
-    assert.equal(Number(versionRows[0]!.user_version), 8, "boot version 应升到 8");
+    assert.equal(Number(versionRows[0]!.user_version), SCHEMA_BOOT_VERSION, "boot version 应升到当前 SCHEMA_BOOT_VERSION");
 
     await conn.close();
   });
@@ -88,7 +88,7 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
     const versionRows = await conn.query<{ user_version: number }>(
       "PRAGMA user_version",
     );
-    assert.equal(Number(versionRows[0]!.user_version), 8, "boot version 应升到 8");
+    assert.equal(Number(versionRows[0]!.user_version), SCHEMA_BOOT_VERSION, "boot version 应升到当前 SCHEMA_BOOT_VERSION");
 
     // 复合主键形态：重复 (scope_key, skill_name) 插入应被拒绝
     await conn.execute(
