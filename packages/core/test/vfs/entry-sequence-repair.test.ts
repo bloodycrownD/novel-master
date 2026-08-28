@@ -8,7 +8,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSkillsService } from "@novel-master/core/skills";
+import type { TdbcConnection } from "../../src/infra/tdbc/ports/connection.port.js";
 import { createVfsEntrySequenceRepairOperation } from "../../src/domain/vfs/logic/entry-sequence-repair.js";
+import { runIntegrityRepair } from "../../src/service/integrity-repair.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -105,5 +107,41 @@ describe("vfs entry-sequence repair", () => {
     await op.repair();
     const after = await op.detect();
     assert.equal(after.needsRepair, false);
+  });
+
+  it("T-V4：查询抛错时 detect 异常上抛，registry 保守判需要修复，绝不伪装健康", async () => {
+    // mock 连接：所有查询抛错，模拟 op-sqlite 等驱动读边界查询失败
+    const brokenConn: TdbcConnection = {
+      async execute() {
+        throw new Error("mock: execute 不可用");
+      },
+      async query() {
+        throw new Error("mock: sqlite_sequence 读取失败");
+      },
+      async batch() {
+        throw new Error("mock: batch 不可用");
+      },
+      async transaction() {
+        throw new Error("mock: transaction 不可用");
+      },
+      async close() {},
+    };
+    const op = createVfsEntrySequenceRepairOperation(brokenConn);
+
+    // detect 不吞错：异常直接上抛，绝不返回「健康」
+    await assert.rejects(
+      () => op.detect(),
+      /mock: sqlite_sequence 读取失败/,
+    );
+
+    // 经 registry 编排：detect 抛错被保守地判为需要修复，repair 再试抛错挂报告
+    const report = await runIntegrityRepair(op);
+    assert.equal(
+      report.detection.needsRepair,
+      true,
+      "detect 抛错应按「需要修复」保守处理",
+    );
+    assert.equal(report.repaired, false);
+    assert.ok(report.error instanceof Error, "repair 阶段错误应挂到报告 error");
   });
 });

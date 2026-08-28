@@ -74,6 +74,14 @@ export interface VfsRevisionRepository {
    */
   findMaxVersionForEntry(entryId: number): Promise<number | null>;
 
+  /**
+   * 批量读取多个 entry 的最高 revision version（`IN` 分块 + `GROUP BY` 聚合）。
+   *
+   * @remarks 供递归删除等批量场景一次取齐 MAX，避免逐 entry 查询的 N+1；
+   * 没有 revision 行的 entry 不进 Map。
+   */
+  findMaxVersionsForEntries(entryIds: number[]): Promise<Map<number, number>>;
+
   /** Appends a new revision row; never updates existing rows. */
   append(input: VfsRevisionAppendInput): Promise<void>;
 

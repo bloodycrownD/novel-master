@@ -78,20 +78,32 @@ export interface VfsEntryRepository {
 
   insertDirectory(scopeKey: string, path: string): Promise<void>;
 
+  /**
+   * 更新文件内容并按 nextVersion 落 head。
+   *
+   * @param nextVersion - 新 head 版本号，由 service 层按
+   *   `max(head_version, MAX(vfs_revision.version)) + 1` 语义分配，
+   *   避免 head 回拨后撞上历史占号；乐观锁判定（versionCheck 分支
+   *   的 expectedVersion 比对）不受此参数影响。
+   */
   update(
     scopeKey: string,
     path: string,
     content: string,
+    nextVersion: number,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }>;
 
   /**
    * 以已有 content_hash 更新文件行（不 put；`content=NULL`）。
+   *
+   * @param nextVersion - 同 {@link update}，由 service 层按 MAX 语义分配。
    */
   updateWithContentHash(
     scopeKey: string,
     path: string,
     contentHash: string,
+    nextVersion: number,
     options: VfsWriteRepoOptions,
   ): Promise<{ version: number }>;
 

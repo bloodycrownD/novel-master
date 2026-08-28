@@ -1,4 +1,3 @@
-import { createVfsService } from "@novel-master/core/vfs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isVfsError } from "@/errors/vfs-errors.js";
@@ -137,10 +136,10 @@ describe("SqliteVfsEntryRepository", () => {
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const path = `${isolatedRoot()}/v.txt`;
     await repo.insert(GLOBAL_SCOPE, path, "one");
-    await repo.update(GLOBAL_SCOPE, path, "two", { expectedVersion: 1, versionCheck: true });
+    await repo.update(GLOBAL_SCOPE, path, "two", 2, { expectedVersion: 1, versionCheck: true });
     await assert.rejects(
       () =>
-        repo.update(GLOBAL_SCOPE, path, "three", {
+        repo.update(GLOBAL_SCOPE, path, "three", 3, {
           expectedVersion: 1,
           versionCheck: true,
         }),
@@ -157,7 +156,7 @@ describe("SqliteVfsEntryRepository", () => {
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const path = `${isolatedRoot()}/nc.txt`;
     await repo.insert(GLOBAL_SCOPE, path, "one");
-    const result = await repo.update(GLOBAL_SCOPE, path, "two", { versionCheck: false });
+    const result = await repo.update(GLOBAL_SCOPE, path, "two", 2, { versionCheck: false });
     assert.equal(result.version, 2);
   });
 
@@ -236,7 +235,7 @@ describe("SqliteVfsEntryRepository", () => {
     assert.notEqual(a!.entryId, b!.entryId);
 
     // 对 scopeA 做 update 不影响 scopeB。
-    await repo.update(scopeA, path, "content-A2", { versionCheck: false });
+    await repo.update(scopeA, path, "content-A2", 2, { versionCheck: false });
     assert.equal((await repo.findByPath(scopeA, path))!.content, "content-A2");
     assert.equal((await repo.findByPath(scopeB, path))!.content, "content-B");
 

@@ -358,10 +358,22 @@ async function writeWithRevision(
     return { version: existing.version };
   }
 
-  const updated = await entryRepo.update(scopeKey, normalized, content, {
-    expectedVersion: options?.expectedVersion,
-    versionCheck,
-  });
+  // 统一分配器：max(head, MAX(version)) + 1，避开 head 回拨后历史占号段
+  const nextVersion = await nextVersionFor(
+    revisionRepo,
+    existing.entryId,
+    existing.version,
+  );
+  const updated = await entryRepo.update(
+    scopeKey,
+    normalized,
+    content,
+    nextVersion,
+    {
+      expectedVersion: options?.expectedVersion,
+      versionCheck,
+    },
+  );
   version = updated.version;
   await revisionRepo.append({
     entryId: existing.entryId,
@@ -372,6 +384,22 @@ async function writeWithRevision(
   });
   await transferLiveRef(revisionRepo, existing.entryId, existing.version, version);
   return { version };
+}
+
+/**
+ * 统一版本分配器：`max(headVersion, MAX(vfs_revision.version)) + 1`。
+ *
+ * head 回拨（resetHead 后高版本被 checkpoint 钉住）时 `head_version < MAX(version)`
+ * 是合法状态，新号必须越过 MAX 才能避开历史占号段；防御性的 `max(headVersion, …)`
+ * 在健康库上与 head + 1 等价。
+ */
+async function nextVersionFor(
+  revisionRepo: VfsRevisionRepository,
+  entryId: number,
+  headVersion: number,
+): Promise<number> {
+  const maxStored = await revisionRepo.findMaxVersionForEntry(entryId);
+  return Math.max(headVersion, maxStored ?? 0) + 1;
 }
 
 /**
@@ -398,9 +426,11 @@ async function resolveMaxRevision(
  * 给子树里每个 live file head 追加一条 deleted revision（墓碑），并同步调整 ref_count。
  *
  * 实现走批量：先 {@link VfsEntryRepository.listFileHeadsUnderPrefix} 一次查出前缀下所有
- * live file head 的 `(entryId, headVersion)`，再用 `batchAdjustRefCount` 一次性 −1 旧 head、
- * `batchAppendWithRefCount` 一次性落 deleted 行。这样把原来「逐文件 findByPath + adjustRef +
- * append + adjustRef」的 3N 次 SQL 压成 3 条（分块 100，100 文件以内各一条）。
+ * live file head 的 `(entryId, headVersion)`，再用 `findMaxVersionsForEntries` 一次取齐
+ * 各 entry 的 MAX(version)（逐 entry 计算 `max(headVersion, MAX) + 1`，避免 N+1），然后用
+ * `batchAdjustRefCount` 一次性 −1 旧 head、`batchAppendWithRefCount` 一次性落 deleted 行。
+ * 这样把原来「逐文件 findByPath + adjustRef + append + adjustRef」的 3N 次 SQL 压成
+ * 4 条（分块 100，100 文件以内各一条）。
  *
  * 注意 deleted 行的 ref_count 直接以 `refCount=1` 落库——`batchAppendWithRefCount` 是
  * `INSERT ... ref_count = ?`，等价于「逐条 append(ref_count=0) + adjustRef(+1)」，
@@ -419,6 +449,12 @@ async function appendDeletedRevisionsForSubtree(
     return;
   }
 
+  // 批量取齐各 entry 的 MAX(version)，逐 entry 按 max(head, MAX) + 1 发墓碑号，
+  // 避开 head 回拨后被 checkpoint 钉住的占号版本。
+  const maxVersionMap = await revisionRepo.findMaxVersionsForEntries(
+    liveHeads.map((h) => h.entryId),
+  );
+
   const oldPointers = liveHeads.map((h) => ({
     entryId: h.entryId,
     version: h.headVersion,
@@ -429,7 +465,8 @@ async function appendDeletedRevisionsForSubtree(
   await revisionRepo.batchAppendWithRefCount(
     liveHeads.map((h) => ({
       entryId: h.entryId,
-      version: h.headVersion + 1,
+      version:
+        Math.max(h.headVersion, maxVersionMap.get(h.entryId) ?? 0) + 1,
       contentHash: null,
       status: "deleted",
       mtimeMs,
@@ -481,7 +518,11 @@ async function appendDeletedRevision(
   entryId: number,
   currentHeadVersion: number,
 ): Promise<void> {
-  const deletedVersion = currentHeadVersion + 1;
+  const deletedVersion = await nextVersionFor(
+    revisionRepo,
+    entryId,
+    currentHeadVersion,
+  );
   await revisionRepo.append({
     entryId,
     version: deletedVersion,

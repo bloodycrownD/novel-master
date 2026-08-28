@@ -32,27 +32,26 @@ export const VFS_ENTRY_SEQUENCE_REPAIR_NAME = "vfs-entry-sequence-repair";
 async function readSequenceBoundaries(
   conn: TdbcConnection,
 ): Promise<{ seq: number; needed: number }> {
-  // 全新库在首次自增插入前 sqlite_sequence 尚未物化——此时不可能有孤儿，
-  // 视为健康
-  try {
-    const entryMax = await conn.query<{ m: number | null }>(
-      "SELECT MAX(entry_id) AS m FROM vfs_entry",
-    );
-    const revMax = await conn.query<{ m: number | null }>(
-      "SELECT MAX(entry_id) AS m FROM vfs_revision",
-    );
-    const seqRow = await conn.query<{ seq: number | null }>(
-      "SELECT seq FROM sqlite_sequence WHERE name = 'vfs_entry'",
-    );
-    const needed = Math.max(
-      Number(entryMax[0]?.m ?? 0),
-      Number(revMax[0]?.m ?? 0),
-    );
-    const seq = Number(seqRow[0]?.seq ?? 0);
-    return { seq, needed };
-  } catch {
-    return { seq: 0, needed: 0 };
-  }
+  // 全新库在首次自增插入前 sqlite_sequence 尚未物化（没有 vfs_entry 行，
+  // 表本身随 AUTOINCREMENT 建表即存在）——查询返回空结果集而非抛错，
+  // 下方 `?? 0` 兜底视为健康。查询异常则直接上抛：detect 抛错由 registry
+  // （integrity-repair.ts）保守地按「需要修复」处理并挂到报告，这里
+  // 绝不吞错伪装健康（吞错会让存量错位库静默漏修）。
+  const entryMax = await conn.query<{ m: number | null }>(
+    "SELECT MAX(entry_id) AS m FROM vfs_entry",
+  );
+  const revMax = await conn.query<{ m: number | null }>(
+    "SELECT MAX(entry_id) AS m FROM vfs_revision",
+  );
+  const seqRow = await conn.query<{ seq: number | null }>(
+    "SELECT seq FROM sqlite_sequence WHERE name = 'vfs_entry'",
+  );
+  const needed = Math.max(
+    Number(entryMax[0]?.m ?? 0),
+    Number(revMax[0]?.m ?? 0),
+  );
+  const seq = Number(seqRow[0]?.seq ?? 0);
+  return { seq, needed };
 }
 
 /** 构造发号器修复操作（bootstrap 启动期无条件注册）。 */
