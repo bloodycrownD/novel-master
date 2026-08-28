@@ -1,5 +1,5 @@
 ---
-date: 2026-08-29 10:30
+date: 2026-08-29 11:00
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -258,3 +258,9 @@ user:
 
 assistant:
 回滚+重做完成：main 上 revert 7e85acb（-m 1 撤整个 fetch-tool merge）+ 55d967d（hint）为一个提交 61cd6fc（-1184 行，fetch-tool.ts/测试/fix-spec/迭代记忆删除，主线记忆保留；教训：revert 序列遇 docs(apm) 记忆提交冲突用 --skip 跳过、merge commit 须 -m 1，最终标准姿势=两个精准 revert 合一提交）。worktree feat/fetch-tool 上子代理升级（ad1b882，16 文件）：fetch→curl（注册/目录/双端 hint/测试全换名）；参数 method 枚举 7 种默认 GET、headers ≤16 条名称防 CRLF 值禁 \r\n 单条 8KB、body ≤1MB GET/HEAD 拒绝、timeout 秒默认 30 上限 120；P1 超时语义保留（参数驱动）；content-type 缺省 application/json；回流截断 50KB→256KB；输出请求行 curl METHOD url。用户拍板 known limitation：不做确认门/域名白名单/SSRF 拦截（curl 对齐定位）。验证：定向 18/18、工具+config 213+70、core 全量 2188、双端 typecheck。抽查通过，worktree 待用户测试后合并。
+
+user:
+对，合并到 feature 分支。
+
+assistant:
+curl 合并到 feat/2026-08-curl（main c2cadad → --no-ff 合 feat/fetch-tool，merge ed20fd9）。冲突 8 处：CHANGELOG 手工（curl 条目进新 Unreleased、1.5.5 已发版内容保留 main 侧）、测试与 core 五文件取 worktree 侧；坑：revert 撤掉的 builtin-tool-context fetchFn 字段在三方合并中静默丢失（curl-tool.ts TS2339），从 worktree checkout 该文件补回（fix 提交）。验证：curl 定向 18/18+formatter+catalog、core build EXIT 0。待用户真机测试（建议 POST httpbin.org 验 method/headers/body）后合回 main。
