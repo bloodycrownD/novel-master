@@ -1,5 +1,5 @@
 ---
-date: 2026-08-29 09:00
+date: 2026-08-29 09:30
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -246,3 +246,9 @@ fetch 工具测试没什么问题。话说 fetch 工具的 schema 和 Zed 的网
 
 assistant:
 fetch-tool 已 ff 合回 main（e376abe→ec7d059，22 文件 +1197）。schema 对比（Zed fetch 人家第一手了解）：输入几乎一样（均单参数 url；我们多 zod superRefine 协议白名单拒 file/ftp/data，Zed 无 schema 层限协议）。最大差异在输出与安全模型：我们结构化 JSON（status/contentType/body/truncated/finalUrl）+原文透传 50KB 截断；Zed 转 Markdown（html→markdown 省 token 好读）。安全：Zed per-host 授权（redirect 每跳都查）；我们无主机白名单（SSRF 面，CR 时已列待拍板）。潜在跟进项：html→markdown 转换、主机白名单——未立项，用户提了再说。
+
+user:
+fetch 支持 post 或者复杂的 header 吗？参考 curl？
+
+assistant:
+答：当前不支持——纯 GET、无自定义 header/body（PRD 保守设计）。业界先例（Claude Code WebFetch、Zed fetch）均为只读 GET，全能 curl 风险：POST 写操作副作用、任意 header 可携带/泄露鉴权、SSRF 放大、body 吃 token。若需求成立给分级方案：低配=method 白名单+body 限大小+header 安全子集（Authorization 不让模型自由带）；中配=用户预设 header 集（模型只引用名不见值）；必备护栏=内网地址拦截（loopback/私网默认拒）+写方法用户确认+响应截断。待用户给场景（查资料为主 vs 当 HTTP 客户端）再决定立项。
