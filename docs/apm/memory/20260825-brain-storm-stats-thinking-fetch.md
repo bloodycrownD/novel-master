@@ -1,5 +1,5 @@
 ---
-date: 2026-08-28 23:10
+date: 2026-08-28 23:50
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -234,3 +234,9 @@ user:
 
 assistant:
 fetch-tool 合并到 feature：主仓从 main（e376abe）新建 feat/2026-08-fetch-tool → --no-ff 合并 feat/fetch-tool（merge 7e85acb）。CHANGELOG 冲突（分身已把 Unreleased 发版为 1.5.5-2026-08-28，fetch 条目解入新 Unreleased 新增段）。验证：fetch-tool 定向测试全过 + core build 类型通过。待用户测试后 ff 合回 main；随后 token-usage-stats-enhance、markdown-code-block-render 依同流程。
+
+user:
+我说的是描述「未配置时使用全部…」这个描述，fetch 我在白名单看到了，我说的是 UI 描述。
+
+assistant:
+定位：工具策略「默认模式」下方的 hint 文案在双端三处（desktop AgentEditorView/AgentDefinitionEditorForm、mobile AgentEditorForm）硬编码「未配置时使用全部内置工具（9 个）：task…agent」，fetch-tool 迭代更新了 BUILTIN_TOOL_CATALOG（白名单选择器有 fetch）但漏了这三处 hint。修复（feat/2026-08-fetch-tool 分支）：三处改「10 个」并在清单尾部补 fetch；mobile 的 agent-editor-form-tool-count 测试同步改断言 10+fetch、旧计数反断言改 9。测试 2/2、双端 typecheck 过。教训：工具数量/清单有两份来源（catalog + hint 文案），加新工具要同步双处。
