@@ -16,6 +16,7 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   { name: "grep", label: "grep", description: "在工作区文件内容中搜索（支持正则/反选/上下文）" },
   { name: "skill", label: "skill", description: "使用与管理技能（load/read/write/edit/list）" },
   { name: "agent", label: "agent", description: "管理 agent 定义（list/get/create/update，仅主智能体可用）" },
+  { name: "fetch", label: "fetch", description: "发起 http/https GET 请求获取网页或接口内容" },
 ] as const;
 
 export function buildToolsPolicyFromSelection(
