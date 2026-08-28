@@ -6,6 +6,7 @@ import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
   formatToolResultContentForDisplay,
+  isCurlOutput,
 } from "../../src/domain/tool/logic/format-tool-output.js";
 import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 
@@ -334,6 +335,31 @@ describe("formatToolResultContentForDisplay", () => {
     assert.equal(
       formatToolResultContentForDisplay("Error: not found"),
       "Error: not found",
+    );
+  });
+});
+
+describe("curl 输出形状回归", () => {
+  it("T-CT10: curl 输出经专属 formatter，不误撞 read/grep/glob/fs 形状", () => {
+    const curlOut = {
+      url: "https://example.com/page",
+      finalUrl: "https://example.com/page",
+      method: "GET",
+      status: 200,
+      contentType: "text/html",
+      body: "<html></html>",
+      truncated: false,
+      originalBytes: 13,
+    };
+    assert.equal(isCurlOutput(curlOut), true);
+
+    const out = formatToolOutputForLlm(curlOut);
+    // 可读文本而非 JSON 串：不以 { 开头、无 JSON 键名、含 curl 请求行/Status 头。
+    assert.ok(!out.trimStart().startsWith("{"));
+    assert.ok(!out.includes('"contentType"'));
+    assert.equal(
+      out,
+      "curl GET https://example.com/page\nStatus: 200 · text/html\n\n<html></html>",
     );
   });
 });

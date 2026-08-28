@@ -201,3 +201,29 @@ Step 7 — phase-fetch-shim — blocking: no — qa: manual_user：（可选）b
 | 子代理深度可用带来的滥用面 | 孙 agent 也可联网 | PRD 默认口径；用户可 deny；若需收紧，后续在 `resolveAgentToolRegistry` 加 depth 分支（改动点单一、已隔离） | 同上 |
 
 整体回滚：本迭代全部变更为纯增量（新文件 + 可选字段 + 注册行 + 数据行），无存储格式变更、无数据迁移；删除 `register-builtin-tools.ts` 的注册行即可让三端同时摘除 fetch，旧版本读取含 fetch tool_result 的会话也只是纯文本展示，向后兼容。
+
+## 实现偏离记录（curl 升级，2026-08-29）
+
+用户拍板：工具改名 `curl` 并升级为完整 HTTP 功能，定位对齐 curl（「简单搞、参考 curl」）。本节记录与上文原设计的差异，后续维护以本节为准。
+
+### 改名与文件路径
+
+- 工具注册名 `fetch` → `curl`，`fetch` 名字不再存在；文件 `fetch-tool.ts` → `curl-tool.ts`，测试 `fetch-tool.test.ts` → `curl-tool.test.ts`（原用例语义保留，含 P1 慢滴流超时修复用例）。
+- `isFetchOutput` / `formatFetchOutput` 改名 `isCurlOutput` / `formatCurlOutput`；`buildToolResultBlock` 摘要分支与 `BUILTIN_TOOL_CATALOG` 条目同步换名。
+- 输出对象新增 `method` 字段（回显实际 HTTP 方法，缺省 GET）；method 不入 isCurlOutput 守卫，formatter 缺省 GET，请求行变为 `curl METHOD url[ → finalUrl]`。
+
+### 参数扩展（原设计仅 url）
+
+- `method`：枚举 GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS，默认 GET。
+- `headers`：可选 record，最多 16 条；名称正则 `/^[A-Za-z0-9_-]{1,64}$/`（拒空格/冒号/CR/LF，防 CRLF 注入）；值禁止包含 `\r\n`（报可读错误）；单条值上限 8KB。
+- `body`：可选字符串，上限 1MB（按 UTF-8 字节，schema 层拒绝）；GET/HEAD 不允许携带 body（对象级 superRefine 报错）。
+- `timeout`：可选整数秒，默认 30，上限 120；超时毫秒数由该参数驱动，错误文案含实际毫秒。AbortController 包住 fetch + text() 整体的 P1 修复语义不变。
+- content-type 约定：headers 显式给就用显式的；有 body 且未给时默认 `application/json`。
+
+### 截断预算调整
+
+- 回流正文截断预算从 50KB 提到 256KB（`CURL_MAX_BODY_BYTES = 256 * 1024`，API JSON 响应常见更大）；响应体下载预检上限 10MB 沿用（`CURL_MAX_RESPONSE_BYTES`）。
+
+### 明确不做的安全门（known limitation）
+
+- 不做调用确认门、不做域名白名单、不做 SSRF 私网拦截（用户拍板：curl 对齐定位，简单搞）。防线仍是：http/https 协议白名单、体积截断与预检、tools.allow/deny 可一键收回、重定向仅 http/https 间跳转。上文 §5 的私网拦截建议不采纳，若后续要收紧再立项。

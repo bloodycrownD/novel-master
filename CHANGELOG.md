@@ -4,6 +4,12 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [Unreleased]
+
+### 新增
+
+- **智能体联网请求网页与 API**（双端）：新增 `curl` 工具，智能体可对 http/https 网址发起 HTTP 请求（GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS），支持自定义请求头与请求体，获取或提交网页、接口文档与 API 内容；超时可配（默认 30 秒），超长正文自动截断，非文本内容以占位说明代替，是否启用可在智能体配置的工具白名单中控制
+
 ## [1.5.5] - 2026-08-28
 
 ### 修复
@@ -14,7 +20,7 @@
 
 ### 新增
 
-- **「思考提示词」开关**（双端）：聊天设置中可控制模型的思考内容是否进入后续请求的上下文，默认关闭。开启后历史思考全部保留：anthropic / gemini 以原生思考块回传，OpenAI 兼容协议（GLM、DeepSeek 等）以 `reasoning_content` 字段回传；关闭则不进入上下文（进行中工具调用的必要思考除外）
+- **「思考提示词」开关**（双端）：聊天设置中可控制模型的思考内容是否进入后续请求的上下文，默认关闭。开启后历史思考全部保留：anthropic / gemini 以原生思考块回传，OpenAI 兼容协议（GLM、DeepSeek 等）以 `reasoning_content` 字段回传；关闭则不进入上下文（进行中工具调用所需的必要思考除外）
 
 ### 变更
 
