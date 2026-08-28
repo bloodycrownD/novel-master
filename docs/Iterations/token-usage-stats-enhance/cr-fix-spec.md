@@ -6,7 +6,7 @@
 - prd_path: docs/Iterations/token-usage-stats-enhance/prd.md
 - spec_path: docs/Iterations/token-usage-stats-enhance/spec.md
 - review_round: 1 / dag_version: 2
-- 状态: fix-spec-ready（trivial 直接执行：单条 P2，主代理代写）
+- 状态: executed（MF-1 已闭合：mobile 测试 25/25 绿 + typecheck 绿）
 
 ## Must-fix（按 P0 → P1 → P2）
 
@@ -17,6 +17,7 @@
 - 改法：合并为带 `emptyText` 参数的一对函数 `formatTokensPerSecond(v, emptyText)` / `formatFirstTokenMs(ms, emptyText)`，调用处传各自空态文案。
 - 验收：`apps/mobile/__tests__/token-usage-stats-screen.test.tsx` 既有断言（T-MB4 三形态：有值/空态完整文案/当日简短空态）零改动通过。
 - 来源：review round 1（CR 统计增强子代理）
+- **闭合**：已按改法合并为带 `emptyText` 参数的一对函数（含 `SUMMARY_EMPTY_TEXT` 常量），`apps/mobile/__tests__/token-usage-stats-screen.test.tsx` 零改动 25/25 通过，`tsc --noEmit -p tsconfig.build.json` 通过。
 
 ## Spec deviations
 - none
