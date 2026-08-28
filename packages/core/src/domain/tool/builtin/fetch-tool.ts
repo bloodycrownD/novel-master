@@ -110,6 +110,24 @@ function fetchPhaseError(
 }
 
 /**
+ * 按块增量累计正文的 UTF-8 字节数：每块临时字节数组即奔，避免对
+ * 全量正文再 encode 一份完整数组（10MB 正文峰值额外翻倍）；与
+ * truncateToByteBudget 同样的 8192 字符分块口径。文本路径的
+ * originalBytes 用它计算，是解码后口径而非线上压缩传输字节数。
+ */
+function utf8ByteLength(text: string): number {
+  const encoder = new TextEncoder();
+  const CHUNK = 8192;
+  let total = 0;
+  for (let i = 0; i < text.length; i += CHUNK) {
+    total += encoder.encode(
+      text.slice(i, Math.min(i + CHUNK, text.length)),
+    ).byteLength;
+  }
+  return total;
+}
+
+/**
  * 按字节预算返回正文前缀：TextEncoder 增量编码并累计字节数，
  * 找到预算内能容纳的最大字符切点后在该处截断。
  *
@@ -283,7 +301,7 @@ export const fetchTool: Tool<
         );
       }
 
-      const originalBytes = new TextEncoder().encode(text).byteLength;
+      const originalBytes = utf8ByteLength(text);
 
       // 字节预算截断：截断点按 UTF-8 字节计，末尾标注行不计入预算。
       if (originalBytes > FETCH_MAX_BODY_BYTES) {
