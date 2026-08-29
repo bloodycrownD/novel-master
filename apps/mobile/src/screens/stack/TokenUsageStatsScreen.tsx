@@ -355,8 +355,8 @@ export function TokenUsageStatsScreen() {
     }, [reload]),
   );
 
-  // 流水页分页加载：页签激活且数据标脏时拉第一页；翻页按钮按页号取整页替换。
-  const PAGE_SIZE = 50;
+  // 流水页分页加载：页签激活且数据标脏时拉第一页；翻页/点页码按页号取整页替换。
+  const PAGE_SIZE = 10;
   const loadRequests = useCallback(
     async (page: number) => {
       const seq = ++reqSeqRef.current;

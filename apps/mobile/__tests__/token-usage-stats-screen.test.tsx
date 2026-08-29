@@ -972,7 +972,7 @@ describe('T-S7 请求流水页签（分页）', () => {
     expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
     expect(mockListRequestUsage.mock.calls[0]![1]).toEqual({
       offset: 0,
-      limit: 50,
+      limit: 10,
     });
     // 页码条常驻：首页上一页禁用、页码按钮 1/2 可见；行内首字延迟/总时间与时间同行
     expect(findByTestId(renderer.root, 'req-prev-page')!.props.disabled).toBe(
@@ -983,27 +983,38 @@ describe('T-S7 请求流水页签（分页）', () => {
     expect(nodeText(renderer.root)).toContain('首字延迟 900 ms');
     expect(nodeText(renderer.root)).toContain('首字延迟 —');
 
-    // 点页码 2 跳页：offset 50、末页下一页禁用
+    // 点页码 2 跳页：offset 10（60 条 / 10 页 = 6 页，第 2 页非末页）
     await act(async () => {
       findByTestId(renderer.root, 'req-page-2')!.props.onPress();
       await flushPromises();
     });
     expect(mockListRequestUsage.mock.calls[1]![1]).toEqual({
+      offset: 10,
+      limit: 10,
+    });
+    expect(findByTestId(renderer.root, 'req-next-page')!.props.disabled).toBe(
+      false,
+    );
+
+    // 点尾页 6：末页下一页禁用；前一页按钮回到第 5 页
+    await act(async () => {
+      findByTestId(renderer.root, 'req-page-6')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockListRequestUsage.mock.calls[2]![1]).toEqual({
       offset: 50,
-      limit: 50,
+      limit: 10,
     });
     expect(findByTestId(renderer.root, 'req-next-page')!.props.disabled).toBe(
       true,
     );
-
-    // 前一页按钮回到首页
     await act(async () => {
       findByTestId(renderer.root, 'req-prev-page')!.props.onPress();
       await flushPromises();
     });
-    expect(mockListRequestUsage.mock.calls[2]![1]).toEqual({
-      offset: 0,
-      limit: 50,
+    expect(mockListRequestUsage.mock.calls[3]![1]).toEqual({
+      offset: 40,
+      limit: 10,
     });
   });
 
@@ -1014,18 +1025,18 @@ describe('T-S7 请求流水页签（分页）', () => {
       findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
       await flushPromises();
     });
-    // 8 页（400/50）：当前第 1 页 → [1][2]…[8]
+    // 40 页（400/10）：当前第 1 页 → [1][2]…[40]
     expect(findByTestId(renderer.root, 'req-page-2')).toBeTruthy();
-    expect(findByTestId(renderer.root, 'req-page-8')).toBeTruthy();
-    expect(nodeText(findByTestId(renderer.root, 'req-page-8')!.parent!)).toContain('…');
+    expect(findByTestId(renderer.root, 'req-page-40')).toBeTruthy();
+    expect(nodeText(findByTestId(renderer.root, 'req-page-40')!.parent!)).toContain('…');
 
     await act(async () => {
-      findByTestId(renderer.root, 'req-page-8')!.props.onPress();
+      findByTestId(renderer.root, 'req-page-40')!.props.onPress();
       await flushPromises();
     });
     expect(mockListRequestUsage.mock.calls.at(-1)![1]).toEqual({
-      offset: 350,
-      limit: 50,
+      offset: 390,
+      limit: 10,
     });
   });
 });
