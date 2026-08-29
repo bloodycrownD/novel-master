@@ -404,3 +404,11 @@ user:
 
 assistant:
 fix/2026-08-release-1-5-6-cr ff 合回 main（HEAD becdb7d，领先 origin/main 122 提交），修复分支已删。main 当前状态：1.5.6 changelog 已备、CR 修复全落地、dev-ready。待用户指令：push 与发版（novel-master-publish skill：bump 双端版本、tag v1.5.6、GitHub Release 走 CI）。
+
+user:
+发版吧。（期间 run-tests 又挂 9 分钟两次）
+
+assistant:
+v1.5.6 发版完成（26642cc）：双端 package.json + gradle 默认 versionName bump 1.5.6，冒烟（desktop run-tests 100/100、mobile 894/894 + 双 typecheck）后提交、打 tag、push tag 触发 Release CI + push main（ffec472..26642cc）。
+
+【跟进】desktop 测试间歇性挂起（今天同代码三绿两挂）：两次挂点都在 notify-composer T-UO4 附近，但该文件单跑/三件套组合跑都瞬过、串行与并发都复现过、之后又不复现；伴随 skills-handlers 顺序型存量污染（agent-config 泄入共享技能目录，仅串行全序触发，官方跑法不触发）。下一步排查思路：挂起时保留进程 strace 看阻塞系统调用 + 查跨子进程共享的磁盘/锁资源（register-electron-mock、setupDesktopDbTestEnv 临时目录）；skills 污染查哪个用例把 agent-config 写进了非隔离路径。
