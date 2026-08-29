@@ -1,9 +1,10 @@
 /**
  * 设置页「数据统计」视图（spec 变更点 6 / Step 7）：
- * 「汇总 / 明细」双页签，筛选栏（时间范围：近 7 / 近 30 / 自定义区间 × 模型）置顶、
- * 两页签共享（切换页签保留筛选、不重查）。汇总页签：范围内五指标卡片 + 独立于筛选的
+ * 「汇总 / 明细 / 流水」三页签，筛选栏（时间范围：近 7 / 近 30 / 自定义区间 × 模型）置顶、
+ * 三页签共享（切换页签保留筛选、不重查）。汇总页签：范围内五指标卡片 + 独立于筛选的
  * 今日卡；明细页签：按天图 + 24 小时钻取 + 当天汇总行；分模型表在汇总页签
- * （不含命中率列，命中率出口在汇总卡片与选中天汇总行）。
+ * （不含命中率列，命中率出口在汇总卡片与选中天汇总行）；流水页签：请求级分页列表
+ * （时间倒序，按需加载）。
  * 数据统一经 ipcUsageStatsQuery（nm:usageStats/query 单 channel 按 kind 分发）获取；
  * 功能口径对齐 mobile 侧 TokenUsageStatsScreen，交互按桌面惯例。
  */
@@ -14,13 +15,15 @@ import type {
   UsageStatsBucketDto,
   UsageStatsFilterDto,
   UsageStatsModelRowDto,
+  UsageStatsRequestPageDto,
+  UsageStatsRequestRowDto,
   UsageStatsSummaryDto,
 } from "@shared/ipc-types";
 import { SettingsListEmpty, SettingsPanel, SettingsSection } from "./settings-ui";
 import { formatTokenCount } from "@shared/logic/format-token-count";
 
 type RangeKind = "last7" | "last30" | "custom";
-type PageTab = "summary" | "detail";
+type PageTab = "summary" | "detail" | "requests";
 
 const MS_PER_DAY = 86_400_000;
 /** 自定义区间上限（天，含首尾；与 mobile 侧同口径，避免超长区间查询变慢）。 */
@@ -76,6 +79,24 @@ function formatFirstTokenMs(ms: number | null): string {
     return "—";
   }
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+/** 请求耗时展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据显示横杠。 */
+function formatDurationMs(ms: number | null): string {
+  if (ms == null) {
+    return "—";
+  }
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+/** 请求流水时间展示：本地时区 `MM-DD HH:mm`。 */
+function formatRequestTime(ms: number): string {
+  const d = new Date(ms);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${month}-${day} ${hh}:${mm}`;
 }
 
 /**
@@ -213,6 +234,9 @@ function TokenStatsChart({
   );
 }
 
+/** 流水分页页大小（与 mobile 侧同口径；core 限制 1–200）。 */
+const REQUESTS_PAGE_SIZE = 50;
+
 export function TokenUsageStatsView() {
   const [rangeKind, setRangeKind] = useState<RangeKind>("last7");
   const [customFrom, setCustomFrom] = useState("");
@@ -225,6 +249,9 @@ export function TokenUsageStatsView() {
   const [modelRows, setModelRows] = useState<UsageStatsModelRowDto[]>([]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [hourlyBuckets, setHourlyBuckets] = useState<UsageStatsBucketDto[] | null>(null);
+  const [reqRows, setReqRows] = useState<UsageStatsRequestRowDto[]>([]);
+  const [reqTotal, setReqTotal] = useState<number>(0);
+  const [reqLoading, setReqLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // 自定义区间校验（≤366 天，含首尾）；非法时行内提示且暂停重查。
@@ -269,6 +296,10 @@ export function TokenUsageStatsView() {
   // 过期请求的报错不覆盖新一轮的 loading/数据状态）。
   const reloadSeqRef = useRef(0);
 
+  // 流水页按需加载：筛选变化置脏，页签激活且数据脏时才拉首页（与汇总/明细共享筛选不即时重查）。
+  const reqSeqRef = useRef(0);
+  const reqDirtyRef = useRef(true);
+
   const reload = useCallback(async (f: UsageStatsFilterDto) => {
     const seq = ++reloadSeqRef.current;
     const [sumRes, dailyRes, rowsRes] = await Promise.all([
@@ -308,12 +339,59 @@ export function TokenUsageStatsView() {
     setModelRows(rowsRes.data as UsageStatsModelRowDto[]);
     setSelectedDay(null);
     setHourlyBuckets(null);
+    // 筛选已变，流水页数据失效（等切回页签时重拉首页）。
+    reqDirtyRef.current = true;
   }, []);
 
   useEffect(() => {
     if (filter == null) return;
     void reload(filter);
   }, [filter, reload]);
+
+  // 流水页加载：reset=true 重拉首页，false 追加下一页；序号守卫防止旧响应覆盖新数据。
+  const loadRequests = useCallback(
+    async (f: UsageStatsFilterDto, offset: number) => {
+      const seq = ++reqSeqRef.current;
+      setReqLoading(true);
+      const res = await ipcUsageStatsQuery({
+        kind: "requests",
+        filter: f,
+        offset,
+        limit: REQUESTS_PAGE_SIZE,
+      });
+      if (seq !== reqSeqRef.current) {
+        return;
+      }
+      setReqLoading(false);
+      if (!res.ok) {
+        setLoadError(res.error.message);
+        return;
+      }
+      const page = res.data;
+      if (
+        typeof page !== "object" ||
+        page == null ||
+        !Array.isArray((page as UsageStatsRequestPageDto).rows)
+      ) {
+        setLoadError("统计数据返回格式异常");
+        return;
+      }
+      setLoadError(null);
+      const data = page as UsageStatsRequestPageDto;
+      setReqRows((prev) => (offset === 0 ? [...data.rows] : [...prev, ...data.rows]));
+      setReqTotal(data.total);
+    },
+    [],
+  );
+
+  // 页签激活且数据脏时拉首页；仅切页签不重拉（保留已加载的分页）。
+  useEffect(() => {
+    if (pageTab !== "requests" || filter == null || !reqDirtyRef.current) {
+      return;
+    }
+    reqDirtyRef.current = false;
+    void loadRequests(filter, 0);
+  }, [pageTab, filter, loadRequests]);
 
   // 模型选项：listModels 只回非 NULL 模型名，「未记录」桶由 UI 侧补上（DEV-1）。
   useEffect(() => {
@@ -518,6 +596,7 @@ export function TokenUsageStatsView() {
           options={[
             { value: "summary" as PageTab, label: "汇总" },
             { value: "detail" as PageTab, label: "明细" },
+            { value: "requests" as PageTab, label: "流水" },
           ]}
           onChange={setPageTab}
         />
@@ -622,6 +701,60 @@ export function TokenUsageStatsView() {
             </div>
           </SettingsSection>
         </>
+      ) : pageTab === "requests" ? (
+        <SettingsSection
+          title={`请求流水 · ${reqRows.length}/${reqTotal}`}
+          desc="按时间倒序列出范围内的每次 LLM 请求"
+        >
+          <div className="token-stats-requests">
+            <div className="token-stats-requests__row token-stats-requests__row--head">
+              <span>时间</span>
+              <span>模型</span>
+              <span>输入</span>
+              <span>输出</span>
+              <span>总量</span>
+              <span>缓存读</span>
+              <span>首字</span>
+              <span>耗时</span>
+            </div>
+            {reqRows.map((row, index) => (
+              <div
+                key={`${row.createdAtMs}-${index}`}
+                className="token-stats-requests__row"
+              >
+                <span>{formatRequestTime(row.createdAtMs)}</span>
+                <span className="token-stats-requests__name">
+                  {row.modelName ?? "—"}
+                </span>
+                <span>{formatTokenCount(row.promptTokens)}</span>
+                <span>{formatTokenCount(row.completionTokens)}</span>
+                <span>{formatTokenCount(row.totalTokens)}</span>
+                <span>
+                  {row.cacheReadTokens == null
+                    ? "—"
+                    : formatTokenCount(row.cacheReadTokens)}
+                </span>
+                <span>{formatFirstTokenMs(row.firstTokenMs)}</span>
+                <span>{formatDurationMs(row.durationMs)}</span>
+              </div>
+            ))}
+            {reqRows.length === 0 && !reqLoading ? (
+              <div className="token-stats-requests__row">—</div>
+            ) : null}
+          </div>
+          {reqRows.length < reqTotal ? (
+            <button
+              type="button"
+              className="token-stats-requests__more"
+              disabled={reqLoading}
+              onClick={() =>
+                filter != null ? void loadRequests(filter, reqRows.length) : undefined
+              }
+            >
+              {reqLoading ? "加载中…" : `加载更多（还剩 ${reqTotal - reqRows.length} 条）`}
+            </button>
+          ) : null}
+        </SettingsSection>
       ) : (
         <SettingsSection title="按天用量">
           <TokenStatsChart

@@ -7610,3 +7610,59 @@ html[data-theme="dark"] .chat-batch-bar {
   font-weight: 600;
   word-break: break-all;
 }
+
+/* ===== 请求流水表（token-stats-requests）：与分模型表同视觉，列更多改用 8 列网格 ===== */
+.token-stats-requests {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--settings-item-border, var(--border-light));
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.token-stats-requests__row {
+  display: grid;
+  grid-template-columns: 88px minmax(120px, 2fr) repeat(6, minmax(56px, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.token-stats-requests__row--head {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.token-stats-requests__row + .token-stats-requests__row {
+  border-top: 1px solid var(--border-light);
+}
+
+.token-stats-requests__name {
+  color: var(--text);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.token-stats-requests__more {
+  margin-top: 10px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.token-stats-requests__more:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-tertiary);
+}
+
+.token-stats-requests__more:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

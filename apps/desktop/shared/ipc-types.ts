@@ -921,18 +921,46 @@ export type UsageStatsModelRowDto = {
   readonly billedInputTokens: number;
 };
 
-/** `nm:usageStats/query` 响应体：一次调用按 kind 分发（避免五个 channel）。 */
+/** 请求流水行（一条 assistant 消息 = 一次 LLM 请求）。 */
+export type UsageStatsRequestRowDto = {
+  readonly createdAtMs: number;
+  readonly modelName: string | null;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly totalTokens: number;
+  readonly cacheReadTokens: number | null;
+  readonly cacheCreationTokens: number | null;
+  readonly firstTokenMs: number | null;
+  readonly durationMs: number | null;
+};
+
+/** 请求流水分页结果。 */
+export type UsageStatsRequestPageDto = {
+  readonly rows: UsageStatsRequestRowDto[];
+  readonly total: number;
+};
+
+/** `nm:usageStats/query` 响应体：一次调用按 kind 分发（避免多个 channel）。 */
 export type UsageStatsQueryResponse =
   | UsageStatsSummaryDto
   | UsageStatsBucketDto[]
   | UsageStatsModelRowDto[]
+  | UsageStatsRequestPageDto
   | string[];
 
-/** `nm:usageStats/query` 请求体（dayLocalDate 仅 kind='hourly' 使用，本地日期 `YYYY-MM-DD`）。 */
+/** `nm:usageStats/query` 请求体（dayLocalDate 仅 kind='hourly'，offset/limit 仅 kind='requests' 使用）。 */
 export type UsageStatsQueryRequest = {
-  readonly kind: 'summary' | 'daily' | 'hourly' | 'models' | 'modelBreakdown';
+  readonly kind:
+    | 'summary'
+    | 'daily'
+    | 'hourly'
+    | 'models'
+    | 'modelBreakdown'
+    | 'requests';
   readonly filter: UsageStatsFilterDto;
   readonly dayLocalDate?: string;
+  readonly offset?: number;
+  readonly limit?: number;
 };
 
 export type CompactionManualRequest = PromptScopeRequest;

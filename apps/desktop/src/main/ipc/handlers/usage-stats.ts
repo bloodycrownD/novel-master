@@ -6,6 +6,7 @@ import type {
   UsageStatsBucket,
   UsageStatsFilter,
   UsageStatsModelRow,
+  UsageStatsRequestRow,
   UsageStatsService,
   UsageStatsSummary,
 } from '@novel-master/core/chat';
@@ -17,6 +18,7 @@ import type {
   UsageStatsModelRowDto,
   UsageStatsQueryRequest,
   UsageStatsQueryResponse,
+  UsageStatsRequestRowDto,
   UsageStatsSummaryDto,
 } from '../../../../shared/ipc-types.js';
 import { formatIpcError } from '../format-ipc-error.js';
@@ -79,6 +81,20 @@ function toModelRowDto(row: UsageStatsModelRow): UsageStatsModelRowDto {
   };
 }
 
+function toRequestRowDto(row: UsageStatsRequestRow): UsageStatsRequestRowDto {
+  return {
+    createdAtMs: row.createdAtMs,
+    modelName: row.modelName,
+    promptTokens: row.promptTokens,
+    completionTokens: row.completionTokens,
+    totalTokens: row.totalTokens,
+    cacheReadTokens: row.cacheReadTokens,
+    cacheCreationTokens: row.cacheCreationTokens,
+    firstTokenMs: row.firstTokenMs,
+    durationMs: row.durationMs,
+  };
+}
+
 export async function handleUsageStatsQuery(
   req: UsageStatsQueryRequest,
 ): Promise<IpcResult<UsageStatsQueryResponse>> {
@@ -112,6 +128,17 @@ export async function handleUsageStatsQuery(
         };
       case 'models':
         return { ok: true, data: await svc.listModels() };
+      case 'requests': {
+        // offset/limit 仅 requests 使用；缺省 0/50 与 renderer 侧默认页大小一致。
+        const page = await svc.listRequestUsage(filter, {
+          offset: req.offset ?? 0,
+          limit: req.limit ?? 50,
+        });
+        return {
+          ok: true,
+          data: { rows: page.rows.map(toRequestRowDto), total: page.total },
+        };
+      }
       default: {
         const exhaustive: never = req.kind;
         return {

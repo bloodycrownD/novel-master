@@ -80,6 +80,35 @@ const MODEL_ROWS = [
   },
 ];
 
+const REQUEST_PAGE = {
+  rows: [
+    {
+      createdAtMs: 1_800_000_000_000,
+      modelName: "gpt-4o",
+      promptTokens: 100,
+      completionTokens: 200,
+      totalTokens: 300,
+      cacheReadTokens: 40,
+      cacheCreationTokens: 60,
+      firstTokenMs: 620,
+      durationMs: 8_000,
+    },
+    {
+      createdAtMs: 1_799_900_000_000,
+      // 存量 NULL 行：timing/cache 字段 null 保真透传
+      modelName: null,
+      promptTokens: 10,
+      completionTokens: 20,
+      totalTokens: 30,
+      cacheReadTokens: null,
+      cacheCreationTokens: null,
+      firstTokenMs: null,
+      durationMs: null,
+    },
+  ],
+  total: 12,
+};
+
 interface RecordedCall {
   method: string;
   args: unknown[];
@@ -115,6 +144,10 @@ function makeStubUsageStats(
     listModels: async () => {
       calls.push({ method: "listModels", args: [] });
       return ["gpt-4o", "claude-3-5-sonnet"];
+    },
+    listRequestUsage: async (filter: unknown, page: unknown) => {
+      calls.push({ method: "listRequestUsage", args: [filter, page] });
+      return REQUEST_PAGE;
     },
   };
   return { usageStats };
@@ -249,6 +282,45 @@ describe("usage stats IPC handler（T-S6）", () => {
     }
     assert.deepEqual(res.data, ["gpt-4o", "claude-3-5-sonnet"]);
     assert.deepEqual(calls, [{ method: "listModels", args: [] }]);
+  });
+
+  it("kind=requests 转发 listRequestUsage，offset/limit 透传且分页/NULL 字段保真", async () => {
+    const calls = installStubRuntime();
+    const res = await handleUsageStatsQuery({
+      kind: "requests",
+      filter: { range: { kind: "last7" }, model: "gpt-4o" },
+      offset: 50,
+      limit: 100,
+    });
+    assert.equal(res.ok, true);
+    if (!res.ok) {
+      return;
+    }
+    assert.deepEqual(res.data, REQUEST_PAGE);
+    assert.deepEqual(calls, [
+      {
+        method: "listRequestUsage",
+        args: [
+          { range: { kind: "last7" }, model: "gpt-4o" },
+          { offset: 50, limit: 100 },
+        ],
+      },
+    ]);
+  });
+
+  it("kind=requests 缺省 offset/limit 时回落 0/50", async () => {
+    const calls = installStubRuntime();
+    const res = await handleUsageStatsQuery({
+      kind: "requests",
+      filter: LAST7_FILTER,
+    });
+    assert.equal(res.ok, true);
+    assert.deepEqual(calls, [
+      {
+        method: "listRequestUsage",
+        args: [{ range: { kind: "last7" } }, { offset: 0, limit: 50 }],
+      },
+    ]);
   });
 
   it("新指标字段显式透传且 null 保真：summary 有值 / bucket 存量 null（T-IP1）", async () => {
