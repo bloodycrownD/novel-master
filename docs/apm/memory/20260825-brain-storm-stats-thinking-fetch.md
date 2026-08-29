@@ -336,3 +336,9 @@ mobile 你实现分页了吗？分页按钮呢？总页数呢？另外字段一�
 
 assistant:
 两个问题（efd49e2/a024c7b/fb38e2c）：1) mobile 翻页条被 reqTotal > PAGE_SIZE 条件挡住，一页以内不渲染——用户看不到任何分页控件，误以为没实现。改为有记录即常驻显示（上一页/第 X/Y 页/下一页，0 条时隐藏），desktop 同步。教训：分页 UI 别按「页数>1 才显示」藏控件，用户需要确认分页存在；2) mobile 行字段太长换行——首字延迟/总时间是计时类，挪到第一行与时间同行（space-between 右侧），模型并入第二行与输入/输出/缓存读同排。补流水翻页测试（mock listRequestUsage，total=60 → 第 1/2 页→翻页 offset 50），mobile 26/26。
+
+user:
+页数切换呢？跳页呢？只有上一页/下一页不够。
+
+assistant:
+流水页码条升级（9988e18/3c8bd52）：双端在前后翻页按钮之间加页码按钮，直接点页码跳页。窗口算法：总页数 ≤7 全展示；否则 [1] … [当前±1] … [尾页]，间隙省略号，当前页高亮（primary 边框+selection 底）。mobile 页码条 flexWrap 防窄屏溢出，active 底色用 tokens.selection 不硬编码；desktop 页码按钮 --active 样式。测试双端补齐：mobile 27/27（页码跳页 offset、8 页省略号窗口、尾页直达）、desktop 16/16（6 页全展示、点页码 5 → offset 200；注意 react-test-renderer children 有循环引用不能 JSON.stringify，要递归收文本）。
