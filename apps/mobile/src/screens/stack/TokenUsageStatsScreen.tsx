@@ -107,8 +107,11 @@ function formatRequestTime(ms: number): string {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** 耗时展示：秒级 x.x s / 毫秒级 xxx ms。 */
-function formatDurationMs(ms: number): string {
+/** 耗时/首字延迟展示：秒级 x.x s / 毫秒级 xxx ms；无数据显示横杠。 */
+function formatDurationMs(ms: number | null): string {
+  if (ms == null) {
+    return '—';
+  }
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
@@ -243,6 +246,7 @@ export function TokenUsageStatsScreen() {
   // 请求流水（分页）：dirty 标记随筛选变化置位，流水页激活时拉取第一页
   const [reqRows, setReqRows] = useState<UsageStatsRequestRow[]>([]);
   const [reqTotal, setReqTotal] = useState(0);
+  const [reqPage, setReqPage] = useState(0);
   const [reqLoading, setReqLoading] = useState(false);
   const reqDirtyRef = useRef(true);
   const reqSeqRef = useRef(0);
@@ -327,23 +331,23 @@ export function TokenUsageStatsScreen() {
     }, [reload]),
   );
 
-  // 流水页按需加载：页签激活且数据标脏时拉第一页；「加载更多」追加下一页。
+  // 流水页分页加载：页签激活且数据标脏时拉第一页；翻页按钮按页号取整页替换。
   const PAGE_SIZE = 50;
   const loadRequests = useCallback(
-    async (reset: boolean) => {
+    async (page: number) => {
       const seq = ++reqSeqRef.current;
       setReqLoading(true);
       try {
-        const offset = reset ? 0 : reqRows.length;
-        const page = await runtime.usageStats.listRequestUsage(filter, {
-          offset,
+        const result = await runtime.usageStats.listRequestUsage(filter, {
+          offset: page * PAGE_SIZE,
           limit: PAGE_SIZE,
         });
         if (seq !== reqSeqRef.current) {
           return;
         }
-        setReqRows(prev => (reset ? [...page.rows] : [...prev, ...page.rows]));
-        setReqTotal(page.total);
+        setReqRows([...result.rows]);
+        setReqTotal(result.total);
+        setReqPage(page);
         reqDirtyRef.current = false;
       } catch (err) {
         if (seq === reqSeqRef.current) {
@@ -355,12 +359,12 @@ export function TokenUsageStatsScreen() {
         }
       }
     },
-    [runtime, filter, reqRows.length, showToast],
+    [runtime, filter, showToast],
   );
 
   useEffect(() => {
     if (pageTab === 'requests' && reqDirtyRef.current && !reqLoading) {
-      loadRequests(true).catch(() => undefined);
+      loadRequests(0).catch(() => undefined);
     }
   }, [pageTab, reqLoading, loadRequests]);
 
@@ -582,7 +586,7 @@ export function TokenUsageStatsScreen() {
       ) : pageTab === 'requests' ? (
         <>
           <ListSectionTitle
-            title={`请求流水 · ${reqRows.length}/${reqTotal}`}
+            title={`请求流水 · 共 ${reqTotal} 条`}
             tokens={tokens}
           />
           {reqRows.map(row => (
@@ -608,34 +612,47 @@ export function TokenUsageStatsScreen() {
                 style={[styles.reqRowDetail, { color: tokens.textSecondary }]}
               >
                 输入 {formatTokenCount(row.promptTokens)} · 输出{' '}
-                {formatTokenCount(row.completionTokens)} · 总{' '}
-                {formatTokenCount(row.totalTokens)}
-                {row.cacheReadTokens != null
-                  ? ` · 缓存读 ${formatTokenCount(row.cacheReadTokens)}`
-                  : ''}
-                {row.firstTokenMs != null
-                  ? ` · 首字 ${formatDurationMs(row.firstTokenMs)}`
-                  : ''}
-                {row.durationMs != null
-                  ? ` · 耗时 ${formatDurationMs(row.durationMs)}`
-                  : ''}
+                {formatTokenCount(row.completionTokens)} · 缓存读{' '}
+                {row.cacheReadTokens == null
+                  ? '—'
+                  : formatTokenCount(row.cacheReadTokens)}{' '}
+                · 首字延迟 {formatDurationMs(row.firstTokenMs)} · 总时间{' '}
+                {formatDurationMs(row.durationMs)}
               </Text>
             </View>
           ))}
-          {reqRows.length < reqTotal ? (
-            <Pressable
-              testID="req-load-more"
-              style={[
-                styles.loadMore,
-                { borderColor: tokens.borderLight },
-              ]}
-              disabled={reqLoading}
-              onPress={() => loadRequests(false).catch(() => undefined)}
-            >
-              <Text style={{ color: tokens.primary }}>
-                {reqLoading ? '加载中…' : `加载更多（还剩 ${reqTotal - reqRows.length} 条）`}
+          {reqTotal > PAGE_SIZE ? (
+            <View style={styles.reqPager}>
+              <Pressable
+                testID="req-prev-page"
+                style={[
+                  styles.reqPagerBtn,
+                  { borderColor: tokens.borderLight },
+                ]}
+                disabled={reqLoading || reqPage === 0}
+                onPress={() => loadRequests(reqPage - 1).catch(() => undefined)}
+              >
+                <Text style={{ color: tokens.primary }}>上一页</Text>
+              </Pressable>
+              <Text
+                style={[styles.reqPagerLabel, { color: tokens.textSecondary }]}
+              >
+                {reqLoading ? '加载中…' : `第 ${reqPage + 1}/${Math.ceil(reqTotal / PAGE_SIZE)} 页`}
               </Text>
-            </Pressable>
+              <Pressable
+                testID="req-next-page"
+                style={[
+                  styles.reqPagerBtn,
+                  { borderColor: tokens.borderLight },
+                ]}
+                disabled={
+                  reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal
+                }
+                onPress={() => loadRequests(reqPage + 1).catch(() => undefined)}
+              >
+                <Text style={{ color: tokens.primary }}>下一页</Text>
+              </Pressable>
+            </View>
           ) : null}
           {reqRows.length === 0 && !reqLoading && !reqDirtyRef.current ? (
             <Text
@@ -981,12 +998,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
-  loadMore: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
+  reqPager: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 8,
+  },
+  reqPagerBtn: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  reqPagerLabel: {
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
   },
   tileLabel: {
     fontSize: 12,
