@@ -386,3 +386,9 @@ user:
 
 assistant:
 五迭代全部收尾：markdown-code-block-render ff 合回 main（main HEAD e5fc54e），.woktree 三个 worktree（fetch-tool/token-usage-stats-enhance/markdown-code-block-render）及五个迭代分支已清理，仅剩主 worktree。至此 thinking-openai-unify、thinking-context-toggle、curl、ux-fixes、vfs-revision-fix、token-usage-stats-enhance、markdown-code-block-render 七批改动全在 main（未 push）。遗留待办（用户未拍板）：openai-unify GLM 关档行为是否补 CHANGELOG（已有 reasoning_effort 条目覆盖）、curl SSRF/域名白名单是否立项、markdown OQ6（fence 首词事件属性注入向量，记在 fix-spec）。
+
+user:
+生成 1.5.6 的 changelog，然后进入 CR 环节，对比上一 tag。
+
+assistant:
+CHANGELOG Unreleased 落成 [1.5.6] - 2026-08-29（新增 3：代码块高亮/统计流水/curl；变更 1：统计视觉精修）。CR（code-review-loop）按 v1.5.5..main 三迭代拆三个 scope 并行 readonly 子代理审查：共 12 条 must-fix（P1×2：mobile 流水失败无限重试、复制按钮 spec 零记载需追认；P2×10：curl JSDoc 残留、offset NaN 校验、行 key 碰撞、双端函数重复、JSDoc 畸形、boot version 无回归锁、T-CB14 编号挪用、clipboard 无 catch、mermaid 块按钮双端不一致、copyCode 零测试）。spec-fix 子代理落盘 docs/Iterations/release-1.5.6/cr-fix-spec.md（MF-1~12）；review-full 复核给 fix-spec-ready: yes 附 3 条文本修订（K-1 三条互锁执行顺序 MF-11→MF-9→MF-2、G-1 MF-10 验收降级源码断言、C-1 formatTokenCount 实存三份并入 MF-6）——trivial 直接执行修订并附 Closure，状态 fix-spec-ready。重要 open question：curl SSRF 前提失效（现可带凭证对内网写操作）建议重拍板、desktop 交互测试基建立项与否。
