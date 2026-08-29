@@ -83,8 +83,9 @@ export interface UsageStatsBucket {
 }
 
 /**
- /** 分模型汇总行（`modelName` 为 null 表示「其他」桶：未记录行与不在
- * 当前已保存模型集合内的行归并成一行）。 */
+ * 分模型汇总行（`modelName` 为 null 表示「其他」桶：未记录行与不在
+ * 当前已保存模型集合内的行归并成一行）。
+ */
 export interface UsageStatsModelRow {
   readonly modelName: string | null;
   readonly calls: number;
