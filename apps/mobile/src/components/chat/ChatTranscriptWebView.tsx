@@ -775,6 +775,14 @@ export const ChatTranscriptWebView = memo(
           } catch {
             return;
           }
+          if (message.type === 'copyCode') {
+            // 代码块复制按钮：webview 收集源码文本，RN 侧原生剪贴板落盘
+            const code = String(message.payload.code ?? '');
+            if (code) {
+              Clipboard.setString(code);
+            }
+            return;
+          }
           if (message.type === 'ready') {
             setWebReady(true);
             onReady?.();

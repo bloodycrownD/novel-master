@@ -176,6 +176,14 @@ export function RichDocumentWebView({
   const handleMessage = useCallback((event: WebViewMessageEvent) => {
     try {
       const message = decodeRichDocumentToHost(event.nativeEvent.data);
+      if (message.type === 'copyCode') {
+        // 代码块复制按钮：webview 收集源码文本，RN 侧原生剪贴板落盘
+        const code = String(message.payload.code ?? '');
+        if (code) {
+          Clipboard.setString(code);
+        }
+        return;
+      }
       if (message.type === 'ready') {
         setWebReady(true);
         // WebView 被系统回收重建后，webview 侧全屏层已不存在；视为全屏已关，

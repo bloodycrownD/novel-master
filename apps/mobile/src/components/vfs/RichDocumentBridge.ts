@@ -100,7 +100,9 @@ export type RichDocumentToHostMessage =
   /** mermaid 全屏查看器开（点击图表进全屏；RN 侧登记返回键拦截态）。 */
   | BridgeEnvelope<'mermaidViewerOpened', Record<string, never>>
   /** mermaid 全屏查看器关（点空白/关闭按钮/返回键；RN 侧复位拦截态）。 */
-  | BridgeEnvelope<'mermaidViewerClosed', Record<string, never>>;
+  | BridgeEnvelope<'mermaidViewerClosed', Record<string, never>>
+  /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
+  | BridgeEnvelope<'copyCode', {code: string}>;
 
 export function encodeHostToRichDocument(
   message: HostToRichDocumentMessage,
