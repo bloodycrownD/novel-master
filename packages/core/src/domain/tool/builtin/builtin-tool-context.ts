@@ -208,7 +208,7 @@ export type BuiltinToolContext = {
     "setDirRule" | "getDirRule" | "listDirRules"
   >;
   /**
-   * 可选：仅 `fetch` 工具读取。缺省回落 `globalThis.fetch`（双端一致）。
+   * 可选：仅 `curl` 工具读取。缺省回落 `globalThis.fetch`（双端一致）。
    *
    * 类型就地定义为 `typeof globalThis.fetch`，与 infra/llm-protocol 的
    * `FetchFn` 结构相同但不跨层 import（domain/tool 不依赖 infra）；
