@@ -1,5 +1,5 @@
 ---
-date: 2026-08-29 16:00
+date: 2026-08-29 16:30
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -312,3 +312,9 @@ user:
 
 assistant:
 配色根因：指标卡底色用 bgSecondary（#E5E5EA）比页面背景 background（#F2F2F7）更深——灰底上摆深灰卡，层次反了显原始。改 SummaryTile/TodayCard 底色为 surface（白卡浮在灰底），与分模型行/picker 一致的标准 iOS 层次（灰底+白卡+蓝点缀）。测试 25/25。视觉调整经验：bgSecondary 是"嵌入型"深灰（chip 选中态等），卡片浮层用 surface。
+
+user:
+浅灰底色对指标卡片还不错，但条形图透明背景大面积露出背景色，灰色很丑。
+
+assistant:
+按天/按小时两张 StackedBars 各包 chartCard 白卡容器（surface、圆角 12、padding），图表不再裸透灰底，与指标卡同层次。测试 25/25 + typecheck 过。
