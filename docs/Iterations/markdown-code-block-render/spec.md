@@ -159,6 +159,10 @@ docs/Iterations/markdown-code-block-render/spec.md
 | C-11 | `apps/mobile/src/web/chat-transcript/webview/runtime/bridge/bridge.ts` `applyTheme` 及 rich-document 同构挂点 | `applyTheme` 末尾按 `theme.background` 推断并写 `documentElement.dataset.nmMode` |
 | C-12 | RN 回退路径（**无代码改动**） | `RichContentBody.tsx` 已是纯文本回退组件（只渲染 `Text`，无 RenderHTML 树），`FileMarkdownPreview` overLimit / 非 webview 引擎时 `html` 为 `undefined` 直走纯文本——原 classesStyles 方案无实现载体，撤销。RN 回退维持纯文本现状，仅以 T-CB12 钉死「回退行为不变」回归断言 |
 | C-13 | `apps/desktop/test/code-block-render.test.tsx`（新增）、`apps/mobile/__tests__/code-block-render.test.ts`（新增）、`apps/mobile/__tests__/sanitize-rich-html.test.ts`、`apps/desktop/test/mermaid-markdown.test.tsx` | 见测试策略 |
+| C-14 | `apps/desktop/renderer/components/code-block.tsx`、`apps/desktop/renderer/styles/shell.css` | （追认，cr-fix MF-2）复制按钮（desktop）：`renderCodeBlock` 在 pre 首位注入 `CodeCopyButton`（SVG 图标零文本节点、`aria-label="复制代码"`、copied 对勾反馈；clipboard promise `.catch` 与卸载定时器清理见 cr-fix MF-10）；`shell.css` 新增 `.code-copy-btn` 系列规则（常驻显示、`pre:hover` 提亮、`--copied` 态、用户气泡 `pre[data-lang]` 定位微调） |
+| C-15 | `apps/mobile/src/web/shared/code-copy.ts`（新增）、`bind-shell-events.ts`、`rich-document/webview/main.ts`、`ChatTranscriptBridge.ts` / `RichDocumentBridge.ts`、`ChatTranscriptWebView.tsx` / `RichDocumentWebView.tsx` | （追认，cr-fix MF-2）复制点击链路（mobile）：`attachCodeCopyDelegation` document 捕获阶段委托 + `stopPropagation`（防嵌套 `[data-action]` 双触发）+ `textContent` 收集 + `copied` 态超时，chat-transcript / rich-document 两宿主挂接；`copyCode` 桥消息（`BridgeEnvelope<'copyCode', {code}>`）由 RN 宿主 `handleMessage` 落 `Clipboard.setString`（WebView 不碰 clipboard API，iOS WKWebView 不可用） |
+| C-16 | `apps/mobile/src/components/rich-content/prepare-transcript-rich-html.ts` | （追认，cr-fix MF-2）fence renderer 在 pre 首位注入空 `span.code-copy`（label 走 CSS 伪元素、零 DOM 文本，批注文本流零偏移）——**mermaid fence 除外**（mermaid 不是普通代码块，不插按钮，与 desktop MermaidBlock 无按钮口径对齐，cr-fix MF-11）；sanitize 白名单本就放行 span+class，无新增放行项 |
+| C-17 | `apps/mobile/src/web/shared/rich-content-styles.ts` | （追认，cr-fix MF-2）复制按钮 CSS（mobile）：pre 定位容器（`position: relative`）、`.code-copy` 绝对定位、`::after` 伪元素 label（「复制」/「已复制」）、`.copied` 态；对应用例见测试表 T-CB16/T-CB17 |
 
 ## 详细实现步骤
 

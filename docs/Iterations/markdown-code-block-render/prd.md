@@ -43,7 +43,9 @@ dependency:
 - 流式期间已完成的代码块按新形态渲染
 
 ### 不包含范围
+
 - 代码块复制按钮、行号、折叠（可作后续迭代）
+  - 范围变更批注（release-1.5.6 追认）：复制按钮经用户口头追加已实施（desktop `CodeCopyButton`；mobile `code-copy.ts` + fence 注入 `span.code-copy` + `copyCode` 桥 + CSS，详见 spec 变更点 C-14~C-17），随 release-1.5.6 追认纳入范围（mermaid 块除外，与 desktop 图表渲染口径对齐）；行号、折叠仍不在范围
 - 代码编辑器（FileEditor）的编辑态高亮
 - 自定义高亮主题配置（跟随应用明暗主题即可）
 - 流式进行中未闭合代码块的实时高亮（流式轻量渲染维持现状）
