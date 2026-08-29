@@ -42,7 +42,12 @@ import type {
   UsageStatsRequestRow,
   UsageStatsSummary,
 } from '@novel-master/core/chat';
-import { formatTokenCount } from '@novel-master/core/common';
+import {
+  formatDurationMs,
+  formatRequestTime,
+  formatTokenCount,
+  pageWindowItems,
+} from '@novel-master/core/common';
 import { AppModal } from '../../components/ui/AppModal';
 import { ListSectionTitle } from '../../components/ui/ListSectionTitle';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
@@ -99,45 +104,6 @@ function formatHitRate(rate: number | null): string {
 /** 汇总卡空态文案：统计自本版本才开始积累，给用户一句解释。 */
 /** 空态统一显示横杠（简洁，不占版面）。 */
 const SUMMARY_EMPTY_TEXT = '—';
-
-/** 请求流水时间：MM-DD HH:mm（本地时区）。 */
-function formatRequestTime(ms: number): string {
-  const d = new Date(ms);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** 耗时/首字延迟展示：秒级 x.x s / 毫秒级 xxx ms；无数据显示横杠。 */
-function formatDurationMs(ms: number | null): string {
-  if (ms == null) {
-    return '—';
-  }
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
-}
-
-/** 页码条窗口：总页数 ≤7 全展示；否则首尾页 + 当前页 ±1，间隙用省略号。 */
-function pageWindowItems(
-  current: number,
-  totalPages: number,
-): (number | '…')[] {
-  if (totalPages <= 7) {
-    return Array.from({length: totalPages}, (_, i) => i + 1);
-  }
-  const items: (number | '…')[] = [1];
-  const lo = Math.max(2, current - 1);
-  const hi = Math.min(totalPages - 1, current + 1);
-  if (lo > 2) {
-    items.push('…');
-  }
-  for (let p = lo; p <= hi; p += 1) {
-    items.push(p);
-  }
-  if (hi < totalPages - 1) {
-    items.push('…');
-  }
-  items.push(totalPages);
-  return items;
-}
 
 /** 平均 token 速率展示：`x.x tok/s`；无数据时返回调用方传入的空态文案。 */
 function formatTokensPerSecond(v: number | null, emptyText: string): string {

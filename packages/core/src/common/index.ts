@@ -15,3 +15,8 @@ export {
   formatPromptTokenUsageLabel,
 } from "./format-token-count.js";
 export { normalizeYamlError } from "./normalize-yaml-error.js";
+export {
+  formatDurationMs,
+  formatRequestTime,
+  pageWindowItems,
+} from "./usage-stats-format.js";

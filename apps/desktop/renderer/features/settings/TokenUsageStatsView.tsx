@@ -21,6 +21,11 @@ import type {
 } from "@shared/ipc-types";
 import { SettingsListEmpty, SettingsPanel, SettingsSection } from "./settings-ui";
 import { formatTokenCount } from "@shared/logic/format-token-count";
+import {
+  formatDurationMs,
+  formatRequestTime,
+  pageWindowItems,
+} from "@shared/logic/usage-stats-format";
 
 type RangeKind = "last7" | "last30" | "custom";
 type PageTab = "summary" | "detail" | "requests";
@@ -71,53 +76,6 @@ function formatTokensPerSecond(v: number | null): string {
     return "—";
   }
   return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
-}
-
-/** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据显示空态。 */
-function formatFirstTokenMs(ms: number | null): string {
-  if (ms == null) {
-    return "—";
-  }
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
-}
-
-/** 请求耗时展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据显示横杠。 */
-function formatDurationMs(ms: number | null): string {
-  if (ms == null) {
-    return "—";
-  }
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
-}
-
-/** 请求流水时间展示：本地时区 `MM-DD HH:mm`。 */
-function formatRequestTime(ms: number): string {
-  const d = new Date(ms);
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${month}-${day} ${hh}:${mm}`;
-}
-
-/** 页码条窗口：总页数 ≤7 全展示；否则首尾页 + 当前页 ±1，间隙用省略号。 */
-function pageWindowItems(current: number, totalPages: number): (number | "…")[] {
-  if (totalPages <= 7) {
-    return Array.from({ length: totalPages }, (_, i) => i + 1);
-  }
-  const items: (number | "…")[] = [1];
-  const lo = Math.max(2, current - 1);
-  const hi = Math.min(totalPages - 1, current + 1);
-  if (lo > 2) {
-    items.push("…");
-  }
-  for (let p = lo; p <= hi; p += 1) {
-    items.push(p);
-  }
-  if (hi < totalPages - 1) {
-    items.push("…");
-  }
-  items.push(totalPages);
-  return items;
 }
 
 /**
@@ -255,7 +213,7 @@ function TokenStatsChart({
   );
 }
 
-/** 流水分页页大小（与 mobile 侧同口径；core 限制 1–200）。 */
+/** 流水分页页大小（core 限制 1–200，desktop 取 50）。 */
 const REQUESTS_PAGE_SIZE = 50;
 
 export function TokenUsageStatsView() {
@@ -683,7 +641,7 @@ export function TokenUsageStatsView() {
               <div className="token-stats-card" data-metric="avgFirstTokenMs">
                 <span className="token-stats-card__label">平均首字延迟</span>
                 <span className="token-stats-card__value">
-                  {formatFirstTokenMs(summary?.avgFirstTokenMs ?? null)}
+                  {formatDurationMs(summary?.avgFirstTokenMs ?? null)}
                 </span>
                 {/* 口径注记：非流式请求的 TTFT 取完成时刻，避免误导 */}
                 <span className="token-stats-card__hint">非流式请求按完成时刻计</span>
@@ -755,7 +713,7 @@ export function TokenUsageStatsView() {
                     ? "—"
                     : formatTokenCount(row.cacheReadTokens)}
                 </span>
-                <span>{formatFirstTokenMs(row.firstTokenMs)}</span>
+                <span>{formatDurationMs(row.firstTokenMs)}</span>
                 <span>{formatDurationMs(row.durationMs)}</span>
               </div>
             ))}
@@ -844,7 +802,7 @@ export function TokenUsageStatsView() {
                 )}{" "}
                 · 调用 {selectedDayBucket.calls} 次 · 平均速率{" "}
                 {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond)} · 平均首字延迟{" "}
-                {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs)}
+                {formatDurationMs(selectedDayBucket.avgFirstTokenMs)}
               </p>
               <TokenStatsChart
                 buckets={hourlyBuckets ?? []}
