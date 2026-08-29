@@ -227,8 +227,18 @@ describe('code block render (mobile)', () => {
     expect(css).toMatch(
       /\.bubble\.rich pre > \.code-copy \{[^}]*position: absolute;/s,
     );
-    expect(css).toContain(".code-copy::after { content: '复制'; }");
-    expect(css).toContain(".code-copy.copied::after { content: '已复制'; }");
+    // 伪元素规则里每个选择器都必须自带 ::after——`${list}::after` 只给最后一项挂伪元素，
+    // 其余项 content 落在元素本身不生效（chat 气泡只剩空壳小长条的回归）
+    const copyLabelSelectors =
+      css.match(/([^{}]*?)\{ content: '复制'; \}/)?.[1] ?? '';
+    expect(copyLabelSelectors).not.toBe('');
+    expect(
+      copyLabelSelectors
+        .split(',')
+        .every(sel => sel.trim().endsWith('::after')),
+    ).toBe(true);
+    expect(css).toContain('.code-copy.copied::after');
+    expect(css).toContain("content: '已复制'");
   });
 
   it('T-CB13: normalizeFenceLang 归一化表（双端同表契约）', () => {

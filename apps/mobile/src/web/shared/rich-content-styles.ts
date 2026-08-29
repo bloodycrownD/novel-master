@@ -41,12 +41,20 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
   const preLangLabel = selectors
     .map((s) => `${s} pre[data-lang]::before`)
     .join(', ');
-  // 代码块复制按钮：空 span，label 走伪元素（零 DOM 文本，批注零偏移）
+  // 代码块复制按钮：空 span，label 走伪元素（零 DOM 文本，批注零偏移）。
+  // 伪元素选择器必须逐个带 ::after 再 join——`${list}::after` 只会给最后一项挂伪元素，
+  // 其余项的 content 落在元素本身上不生效（chat 气泡因此只见到空壳小长条）。
   const preCopyBtn = selectors
     .map((s) => `${s} pre > .code-copy`)
     .join(', ');
+  const preCopyBtnAfter = selectors
+    .map((s) => `${s} pre > .code-copy::after`)
+    .join(', ');
   const preCopyBtnCopied = selectors
     .map((s) => `${s} pre > .code-copy.copied`)
+    .join(', ');
+  const preCopyBtnCopiedAfter = selectors
+    .map((s) => `${s} pre > .code-copy.copied::after`)
     .join(', ');
   // 高亮 token 两套配色：默认亮色，html[data-nm-mode="dark"]（bridge applyTheme 推断写入）覆盖暗色
   // 色值与 desktop shell.css 的 --hljs-* 变量一致（双端一致性）
@@ -116,9 +124,9 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
       background: rgba(0, 0, 0, 0.05);
       border-radius: 5px;
     }
-    ${preCopyBtn}::after { content: '复制'; }
+    ${preCopyBtnAfter} { content: '复制'; }
     ${preCopyBtnCopied} { opacity: 0.9; color: #1a7f37; }
-    ${preCopyBtnCopied}::after { content: '已复制'; }
+    ${preCopyBtnCopiedAfter} { content: '已复制'; }
     /* 语言标签：伪元素不进 textContent，批注文本流零偏移（同桌面端 pre[data-lang]::before） */
     ${preLangLabel} {
       content: attr(data-lang);
