@@ -368,3 +368,9 @@ user:
 
 assistant:
 消息的做了——双端聊天与文件预览走同一代码块管道（desktop 共用 MermaidMarkdown/renderCodeBlock，mobile 共用 prepareTranscriptRichHtml）。看不到的两个原因：1) mobile WebView 从 APK 内置 android_asset 加载 app.js/app.css，不走 metro——reload 只更新 RN 侧（span 在了但无样式隐形），须 npm run android 重装 APK（preandroid 钩子会跑 build:webview:native 拷贝资产，该目录是 gitignore 构建产物）；2) desktop 按钮原为 hover 浮现，不碰鼠标看不见——改常驻 opacity 0.55、悬停加深。教训：涉及 webview 资产的改动，让用户验证前先说明需要重装 APK，别只说 reload。
+
+user:
+我看到了，右上角有个小长条，但并没有什么复制按钮。
+
+assistant:
+小长条=按钮壳（.code-copy 有样式），「复制」文字没出来——CSS 生成 bug：`${selectors.join(', ')}::after` 只给列表最后一项（.thinking-body）挂伪元素，聊天气泡的前两项 content 落在元素本身无效，span 空壳。修为逐项 `${s} pre > .code-copy::after` 再 join（rich-content-styles.ts，copied 态同修）。测试断言补强：伪元素规则里每个逗号分段都必须 endsWith('::after')（用捕获组 1 取选择器部分，别拿整条规则拆）。教训两条：1) 多选择器列表要逐项带伪元素再 join；2) 测试 toContain('::after { content...') 抓不住这类 bug（最后一项总能匹配上），要逐段校验。重建 build:webview:native，用户须再重装 APK。
