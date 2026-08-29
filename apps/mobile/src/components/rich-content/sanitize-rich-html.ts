@@ -34,6 +34,8 @@ export function sanitizeRichHtml(html: string): string {
       '*': ['style', 'class', 'id'],
       // 预览锚管道：须保留 data-annotate-id，否则 closest 点击失效
       span: ['style', 'class', 'id', 'data-annotate-id'],
+      // 代码块语言标签：pre[data-lang] 由 CSS 伪元素呈现（data-* 非可执行属性）
+      pre: ['style', 'class', 'id', 'data-lang'],
       a: ['href', 'name', 'target', 'rel'],
       img: ['src', 'alt', 'title', 'width', 'height'],
       td: ['colspan', 'rowspan', 'style', 'class'],

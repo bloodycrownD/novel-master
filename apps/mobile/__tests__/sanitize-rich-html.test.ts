@@ -53,4 +53,37 @@ describe('sanitizeRichHtml', () => {
     expect(out).toContain('data-annotate-id="a1"');
     expect(out).toContain('nm-annotate-anchor');
   });
+
+  it('T-CB7: allowedAttributes.pre 放行 data-lang（语言标签伪元素宿主）', () => {
+    sanitizeRichHtml('<pre data-lang="typescript"><code>x</code></pre>');
+    const opts = mockSanitizeHtml.mock.calls[0]![1] as {
+      allowedAttributes: Record<string, string[]>;
+    };
+    expect(opts.allowedAttributes.pre).toEqual(
+      expect.arrayContaining(['data-lang', 'class']),
+    );
+  });
+
+  it('T-CB7: 白名单不含事件属性，危险标签仍以 escape 处置（基线不放松）', () => {
+    sanitizeRichHtml('<p onclick="x">y</p>');
+    const opts = mockSanitizeHtml.mock.calls[0]![1] as {
+      allowedAttributes: Record<string, string[]>;
+      disallowedTagsMode: string;
+    };
+    const allAllowed = Object.values(opts.allowedAttributes).flat();
+    expect(allAllowed).not.toContain('onclick');
+    expect(allAllowed.every((attr) => !attr.startsWith('on'))).toBe(true);
+    // script 在 DISALLOWED_TAGS 内，escape 模式下不可执行
+    expect(opts.disallowedTagsMode).toBe('escape');
+  });
+
+  it('T-CB7: 透传替身下 hljs span 与 pre data-lang 均保留', () => {
+    mockSanitizeHtml.mockImplementation((html: string) => html);
+    const out = sanitizeRichHtml(
+      '<pre data-lang="typescript"><code class="language-ts hljs"><span class="hljs-keyword">const</span> a = 1</code></pre>',
+    );
+    expect(out).toContain('data-lang="typescript"');
+    expect(out).toContain('class="language-ts hljs"');
+    expect(out).toContain('hljs-keyword');
+  });
 });

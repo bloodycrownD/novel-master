@@ -49,4 +49,16 @@ describe('prepareTranscriptRichHtml', () => {
     expect(html).toContain('<strong>');
     expect(html).toContain('bold');
   });
+
+  it('MF-2: fence 语言首词含引号/尖括号/与号 → 默认路径无标签注入向量', () => {
+    const html = prepareTranscriptRichHtml(
+      '```ab"c onmouseover=x\ncode body\n```\n\n```a<b>&d\ncode body\n```',
+    );
+    expect(html).toContain('code body');
+    // < > 经默认 fence renderer 转义反射，不产生新标签
+    expect(html).toContain('language-a&lt;b&gt;&d');
+    // info 首词之后的内容不进 class 输出：事件属性不可达
+    expect(html).not.toMatch(/\son\w+\s*=/i);
+    expect(hasExecutableOpenTag(html, 'b')).toBe(false);
+  });
 });
