@@ -115,6 +115,30 @@ function formatDurationMs(ms: number | null): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
+/** 页码条窗口：总页数 ≤7 全展示；否则首尾页 + 当前页 ±1，间隙用省略号。 */
+function pageWindowItems(
+  current: number,
+  totalPages: number,
+): (number | '…')[] {
+  if (totalPages <= 7) {
+    return Array.from({length: totalPages}, (_, i) => i + 1);
+  }
+  const items: (number | '…')[] = [1];
+  const lo = Math.max(2, current - 1);
+  const hi = Math.min(totalPages - 1, current + 1);
+  if (lo > 2) {
+    items.push('…');
+  }
+  for (let p = lo; p <= hi; p += 1) {
+    items.push(p);
+  }
+  if (hi < totalPages - 1) {
+    items.push('…');
+  }
+  items.push(totalPages);
+  return items;
+}
+
 /** 平均 token 速率展示：`x.x tok/s`；无数据时返回调用方传入的空态文案。 */
 function formatTokensPerSecond(v: number | null, emptyText: string): string {
   if (v == null) {
@@ -623,38 +647,75 @@ export function TokenUsageStatsScreen() {
             </View>
           ))}
           {reqTotal > 0 ? (
-            <View style={styles.reqPager}>
-            <Pressable
-              testID="req-prev-page"
-              style={[
-                styles.reqPagerBtn,
-                { borderColor: tokens.borderLight },
-              ]}
-              disabled={reqLoading || reqPage === 0}
-              onPress={() => loadRequests(reqPage - 1).catch(() => undefined)}
-            >
-              <Text style={{ color: tokens.primary }}>上一页</Text>
-            </Pressable>
-            <Text
-              style={[styles.reqPagerLabel, { color: tokens.textSecondary }]}
-            >
-              {reqLoading
-                ? '加载中…'
-                : `第 ${reqPage + 1}/${Math.max(1, Math.ceil(reqTotal / PAGE_SIZE))} 页`}
-            </Text>
-            <Pressable
-              testID="req-next-page"
-              style={[
-                styles.reqPagerBtn,
-                { borderColor: tokens.borderLight },
-              ]}
-              disabled={
-                reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal
-              }
-              onPress={() => loadRequests(reqPage + 1).catch(() => undefined)}
-            >
-              <Text style={{ color: tokens.primary }}>下一页</Text>
-            </Pressable>
+            <View style={[styles.reqPager]}>
+              <Pressable
+                testID="req-prev-page"
+                style={[
+                  styles.reqPagerBtn,
+                  { borderColor: tokens.borderLight },
+                ]}
+                disabled={reqLoading || reqPage === 0}
+                onPress={() => loadRequests(reqPage - 1).catch(() => undefined)}
+              >
+                <Text style={{ color: tokens.primary }}>上一页</Text>
+              </Pressable>
+              {pageWindowItems(
+                reqPage + 1,
+                Math.max(1, Math.ceil(reqTotal / PAGE_SIZE)),
+              ).map((item, index) =>
+                item === '…' ? (
+                  <Text
+                    key={`gap-${index}`}
+                    style={[styles.reqPageGap, { color: tokens.textTertiary }]}
+                  >
+                    …
+                  </Text>
+                ) : (
+                  <Pressable
+                    key={`page-${item}`}
+                    testID={`req-page-${item}`}
+                    style={[
+                      styles.reqPageNum,
+                      item === reqPage + 1 && { backgroundColor: tokens.selection },
+                      {
+                        borderColor:
+                          item === reqPage + 1
+                            ? tokens.primary
+                            : tokens.borderLight,
+                      },
+                    ]}
+                    disabled={reqLoading}
+                    onPress={() =>
+                      loadRequests(item - 1).catch(() => undefined)
+                    }
+                  >
+                    <Text
+                      style={{
+                        color:
+                          item === reqPage + 1
+                            ? tokens.primary
+                            : tokens.textSecondary,
+                        fontWeight: item === reqPage + 1 ? '600' : '400',
+                      }}
+                    >
+                      {String(item)}
+                    </Text>
+                  </Pressable>
+                ),
+              )}
+              <Pressable
+                testID="req-next-page"
+                style={[
+                  styles.reqPagerBtn,
+                  { borderColor: tokens.borderLight },
+                ]}
+                disabled={
+                  reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal
+                }
+                onPress={() => loadRequests(reqPage + 1).catch(() => undefined)}
+              >
+                <Text style={{ color: tokens.primary }}>下一页</Text>
+              </Pressable>
             </View>
           ) : null}
           {reqRows.length === 0 && !reqLoading && !reqDirtyRef.current ? (
@@ -1005,18 +1066,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    flexWrap: 'wrap',
+    gap: 8,
     marginTop: 8,
   },
   reqPagerBtn: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   reqPagerLabel: {
     fontSize: 12,
     fontVariant: ['tabular-nums'],
+  },
+  reqPageNum: {
+    minWidth: 30,
+    minHeight: 28,
+    borderWidth: 1,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  reqPageGap: {
+    fontSize: 12,
+    lineHeight: 18,
   },
   tileLabel: {
     fontSize: 12,
