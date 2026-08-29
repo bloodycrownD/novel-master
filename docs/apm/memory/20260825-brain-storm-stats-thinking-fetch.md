@@ -374,3 +374,9 @@ user:
 
 assistant:
 小长条=按钮壳（.code-copy 有样式），「复制」文字没出来——CSS 生成 bug：`${selectors.join(', ')}::after` 只给列表最后一项（.thinking-body）挂伪元素，聊天气泡的前两项 content 落在元素本身无效，span 空壳。修为逐项 `${s} pre > .code-copy::after` 再 join（rich-content-styles.ts，copied 态同修）。测试断言补强：伪元素规则里每个逗号分段都必须 endsWith('::after')（用捕获组 1 取选择器部分，别拿整条规则拆）。教训两条：1) 多选择器列表要逐项带伪元素再 join；2) 测试 toContain('::after { content...') 抓不住这类 bug（最后一项总能匹配上），要逐段校验。重建 build:webview:native，用户须再重装 APK。
+
+user:
+是否影响 mermaid 的渲染？我发现文件无法正常渲染了。
+
+assistant:
+确实影响了——但根因不在 mermaid：rich-document main.ts 只加了 attachCodeCopyDelegation 调用、import 漏了（当时 python 批量替换的 import 匹配串是单行格式，实际文件是多行 import，替换静默失败且没断言）。esbuild 不做类型检查照常打包，WebView 启动即 ReferenceError，rich-document 整个崩——文件预览（含 mermaid 图表）整页不可用；chat-transcript 的 bind-shell-events import 加上了所以聊天气泡正常（用户能看到复制按钮小长条）。三层教训：1) python 批量编辑每个 replace 都要 assert 命中；2) 改 webview 源码后必须跑 npm run typecheck（脚本本来就含 tsc -p src/web/tsconfig.json 覆盖 webview 目录）——直跑 tsconfig.build.json 会漏 webview；3) webview 产物验证 grep 关键字符串（bundle 里找不到 code-copy 就是没打进去）。重建 build:webview:native 后 rich-document app.js 命中 2 处。用户须再重装 APK。
