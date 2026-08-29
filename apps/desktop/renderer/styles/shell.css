@@ -7611,7 +7611,7 @@ html[data-theme="dark"] .chat-batch-bar {
   word-break: break-all;
 }
 
-/* ===== 请求流水表（token-stats-requests）：与分模型表同视觉，列更多改用 8 列网格 ===== */
+/* ===== 请求流水表（token-stats-requests）：与分模型表同视觉，列更多改用 7 列网格 ===== */
 .token-stats-requests {
   display: flex;
   flex-direction: column;
@@ -7622,7 +7622,7 @@ html[data-theme="dark"] .chat-batch-bar {
 
 .token-stats-requests__row {
   display: grid;
-  grid-template-columns: 88px minmax(120px, 2fr) repeat(6, minmax(56px, 1fr));
+  grid-template-columns: 88px minmax(120px, 2fr) repeat(5, minmax(56px, 1fr));
   gap: 8px;
   align-items: center;
   padding: 8px 12px;
@@ -7646,9 +7646,16 @@ html[data-theme="dark"] .chat-batch-bar {
   word-break: break-all;
 }
 
-.token-stats-requests__more {
+.token-stats-requests__pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   margin-top: 10px;
-  padding: 6px 14px;
+}
+
+.token-stats-requests__page-btn {
+  padding: 5px 12px;
   font-size: 12px;
   color: var(--text-secondary);
   background: var(--surface);
@@ -7657,12 +7664,18 @@ html[data-theme="dark"] .chat-batch-bar {
   cursor: pointer;
 }
 
-.token-stats-requests__more:hover:not(:disabled) {
+.token-stats-requests__page-btn:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--text-tertiary);
 }
 
-.token-stats-requests__more:disabled {
+.token-stats-requests__page-btn:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.5;
+}
+
+.token-stats-requests__pager-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }

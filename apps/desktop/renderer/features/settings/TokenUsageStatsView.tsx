@@ -251,6 +251,7 @@ export function TokenUsageStatsView() {
   const [hourlyBuckets, setHourlyBuckets] = useState<UsageStatsBucketDto[] | null>(null);
   const [reqRows, setReqRows] = useState<UsageStatsRequestRowDto[]>([]);
   const [reqTotal, setReqTotal] = useState<number>(0);
+  const [reqPage, setReqPage] = useState(0);
   const [reqLoading, setReqLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -348,15 +349,15 @@ export function TokenUsageStatsView() {
     void reload(filter);
   }, [filter, reload]);
 
-  // 流水页加载：reset=true 重拉首页，false 追加下一页；序号守卫防止旧响应覆盖新数据。
+  // 流水页分页加载：按页号取整页替换（不再追加）；序号守卫防止旧响应覆盖新数据。
   const loadRequests = useCallback(
-    async (f: UsageStatsFilterDto, offset: number) => {
+    async (f: UsageStatsFilterDto, page: number) => {
       const seq = ++reqSeqRef.current;
       setReqLoading(true);
       const res = await ipcUsageStatsQuery({
         kind: "requests",
         filter: f,
-        offset,
+        offset: page * REQUESTS_PAGE_SIZE,
         limit: REQUESTS_PAGE_SIZE,
       });
       if (seq !== reqSeqRef.current) {
@@ -367,19 +368,20 @@ export function TokenUsageStatsView() {
         setLoadError(res.error.message);
         return;
       }
-      const page = res.data;
+      const body = res.data;
       if (
-        typeof page !== "object" ||
-        page == null ||
-        !Array.isArray((page as UsageStatsRequestPageDto).rows)
+        typeof body !== "object" ||
+        body == null ||
+        !Array.isArray((body as UsageStatsRequestPageDto).rows)
       ) {
         setLoadError("统计数据返回格式异常");
         return;
       }
       setLoadError(null);
-      const data = page as UsageStatsRequestPageDto;
-      setReqRows((prev) => (offset === 0 ? [...data.rows] : [...prev, ...data.rows]));
+      const data = body as UsageStatsRequestPageDto;
+      setReqRows([...data.rows]);
       setReqTotal(data.total);
+      setReqPage(page);
     },
     [],
   );
@@ -703,7 +705,7 @@ export function TokenUsageStatsView() {
         </>
       ) : pageTab === "requests" ? (
         <SettingsSection
-          title={`请求流水 · ${reqRows.length}/${reqTotal}`}
+          title={`请求流水 · 共 ${reqTotal} 条`}
           desc="按时间倒序列出范围内的每次 LLM 请求"
         >
           <div className="token-stats-requests">
@@ -712,10 +714,9 @@ export function TokenUsageStatsView() {
               <span>模型</span>
               <span>输入</span>
               <span>输出</span>
-              <span>总量</span>
               <span>缓存读</span>
-              <span>首字</span>
-              <span>耗时</span>
+              <span>首字延迟</span>
+              <span>总时间</span>
             </div>
             {reqRows.map((row, index) => (
               <div
@@ -728,7 +729,6 @@ export function TokenUsageStatsView() {
                 </span>
                 <span>{formatTokenCount(row.promptTokens)}</span>
                 <span>{formatTokenCount(row.completionTokens)}</span>
-                <span>{formatTokenCount(row.totalTokens)}</span>
                 <span>
                   {row.cacheReadTokens == null
                     ? "—"
@@ -742,17 +742,40 @@ export function TokenUsageStatsView() {
               <div className="token-stats-requests__row">—</div>
             ) : null}
           </div>
-          {reqRows.length < reqTotal ? (
-            <button
-              type="button"
-              className="token-stats-requests__more"
-              disabled={reqLoading}
-              onClick={() =>
-                filter != null ? void loadRequests(filter, reqRows.length) : undefined
-              }
-            >
-              {reqLoading ? "加载中…" : `加载更多（还剩 ${reqTotal - reqRows.length} 条）`}
-            </button>
+          {reqTotal > REQUESTS_PAGE_SIZE ? (
+            <div className="token-stats-requests__pager">
+              <button
+                type="button"
+                className="token-stats-requests__page-btn"
+                disabled={reqLoading || reqPage === 0}
+                onClick={() =>
+                  filter != null
+                    ? void loadRequests(filter, reqPage - 1)
+                    : undefined
+                }
+              >
+                上一页
+              </button>
+              <span className="token-stats-requests__pager-label">
+                {reqLoading
+                  ? "加载中…"
+                  : `第 ${reqPage + 1}/${Math.ceil(reqTotal / REQUESTS_PAGE_SIZE)} 页`}
+              </span>
+              <button
+                type="button"
+                className="token-stats-requests__page-btn"
+                disabled={
+                  reqLoading || (reqPage + 1) * REQUESTS_PAGE_SIZE >= reqTotal
+                }
+                onClick={() =>
+                  filter != null
+                    ? void loadRequests(filter, reqPage + 1)
+                    : undefined
+                }
+              >
+                下一页
+              </button>
+            </div>
           ) : null}
         </SettingsSection>
       ) : (
