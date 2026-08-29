@@ -1,4 +1,4 @@
-import { cloneElement, type ReactElement, type ReactNode } from "react";
+import { cloneElement, useState, type ReactElement, type ReactNode } from "react";
 
 /**
  * 围栏语言归一化表（PRD 清单）：别名 → 规范名。
@@ -40,6 +40,64 @@ export function normalizeFenceLang(
   return FENCE_LANG_ALIAS[lang.toLowerCase()] ?? null;
 }
 
+/** 从高亮后的 React 子树收集纯文本（hljs span 不改文本，拼接即源码）。 */
+function collectNodeText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") {
+    return "";
+  }
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map((child) => collectNodeText(child)).join("");
+  }
+  if (typeof node === "object" && "props" in node) {
+    return collectNodeText(
+      (node as { props?: { children?: ReactNode } }).props?.children,
+    );
+  }
+  return "";
+}
+
+/**
+ * 代码块复制按钮：SVG 图标零文本节点（批注文本流零偏移，同语言标签伪元素策略）；
+ * 复制成功后图标切换对勾 1.5s。
+ */
+function CodeCopyButton({ source }: { source: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`code-copy-btn${copied ? " code-copy-btn--copied" : ""}`}
+      aria-label="复制代码"
+      onClick={() => {
+        void navigator.clipboard.writeText(source).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+    >
+      {copied ? (
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path
+            d="M3 8.5 6.5 12 13 4.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M11 3.5V3a1.5 1.5 0 0 0-1.5-1.5H3A1.5 1.5 0 0 0 1.5 3v6.5A1.5 1.5 0 0 0 3 11h.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 /** 从 code 的 className 提取 language-xxx 的原始语言名。 */
 function extractLangFromClass(className: string | undefined): string | null {
   if (!className) {
@@ -57,15 +115,32 @@ function extractLangFromClass(className: string | undefined): string | null {
  */
 export function renderCodeBlock(children: ReactNode): ReactNode {
   const child = Array.isArray(children) ? children[0] : children;
+  const source =
+    child != null && typeof child === "object" && "props" in child
+      ? collectNodeText(
+          (child as { props?: { children?: ReactNode } }).props?.children,
+        )
+      : "";
+  const copyBtn = <CodeCopyButton source={source} />;
   if (child == null || typeof child !== "object" || !("props" in child)) {
-    return <pre>{children}</pre>;
+    return (
+      <pre>
+        {copyBtn}
+        {children}
+      </pre>
+    );
   }
   const props = (child as { props?: { className?: unknown } }).props;
   const className =
     typeof props?.className === "string" ? props.className : undefined;
   const normalized = normalizeFenceLang(extractLangFromClass(className));
   if (normalized) {
-    return <pre data-lang={normalized}>{children}</pre>;
+    return (
+      <pre data-lang={normalized}>
+        {copyBtn}
+        {children}
+      </pre>
+    );
   }
   if (className && /(?:^|\s)hljs(?:\s|$)/.test(className)) {
     const stripped =
@@ -73,7 +148,17 @@ export function renderCodeBlock(children: ReactNode): ReactNode {
         .split(/\s+/)
         .filter((cls) => cls && cls !== "hljs")
         .join(" ") || undefined;
-    return <pre>{cloneElement(child as ReactElement, { className: stripped })}</pre>;
+    return (
+      <pre>
+        {copyBtn}
+        {cloneElement(child as ReactElement, { className: stripped })}
+      </pre>
+    );
   }
-  return <pre>{children}</pre>;
+  return (
+    <pre>
+      {copyBtn}
+      {children}
+    </pre>
+  );
 }

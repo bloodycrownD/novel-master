@@ -183,7 +183,8 @@ test("T-CB3: 无语言 fence 与未知语言 → 无 data-lang、无 .hljs 类�
   assert.match(html, /no language fence/);
   assert.match(html, /fn main\(\)/);
   // 裸 <pre>（不带属性）
-  assert.match(html, /<pre><code>/);
+  // 复制按钮（T-CB14）插在 pre 首位：无语言块形态为 pre > button + code
+  assert.match(html, /<pre><button[^>]*code-copy-btn[^>]*><svg[\s\S]*?<\/svg><\/button><code>/);
 });
 
 test("T-CB4: shell.css 含两套 --hljs-* 变量、.hljs-* 规则与 pre[data-lang]::before", () => {
@@ -277,4 +278,19 @@ test("T-CB13: 表外内置别名 mjs/cjs → 高亮但无 data-lang（MF-1 双�
   assert.doesNotMatch(html, /data-lang/);
   const mjsCode = html.match(/<code class="language-mjs[^"]*">/)![0];
   assert.doesNotMatch(mjsCode, /(^|\s)hljs(\s|$)/);
+});
+
+test("T-CB14: 代码块带复制按钮（SVG 零文本节点，批注偏移零污染）且 CSS 规则存在", () => {
+  const html = renderToStaticMarkup(
+    <MermaidMarkdown content={"```ts\nconst a = 1;\n```"} />,
+  );
+  assert.match(html, /class="code-copy-btn"/);
+  assert.match(html, /aria-label="复制代码"/);
+  // 按钮子树零文本节点：文案只在 aria-label 属性，SVG 图标无文字
+  const btn = html.match(/<button[^>]*code-copy-btn[^>]*>[\s\S]*?<\/button>/)![0];
+  const inner = btn.replace(/<button[^>]*>/, "").replace(/<\/button>$/, "");
+  assert.doesNotMatch(inner, /[\u4e00-\u9fff]/);
+  const css = readFileSync(shellCssPath, "utf8");
+  assert.match(css, /\.code-copy-btn \{/);
+  assert.match(css, /pre:hover > \.code-copy-btn/);
 });

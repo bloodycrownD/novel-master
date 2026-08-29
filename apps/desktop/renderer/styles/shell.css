@@ -4808,6 +4808,7 @@ html[data-theme="dark"] .chat-batch-bar {
 }
 
 .preview-markdown pre {
+  position: relative;
   margin: 0.75em 0;
   padding: 12px;
   overflow: auto;
@@ -5970,6 +5971,7 @@ html[data-theme="dark"] .chat-batch-bar {
 }
 
 .chat-message__markdown pre {
+  position: relative;
   margin: 0.5em 0;
   padding: 10px;
   overflow: auto;
@@ -5997,6 +5999,48 @@ html[data-theme="dark"] .chat-batch-bar {
   background: transparent;
   font-size: inherit;
 }
+
+/* 代码块复制按钮：绝对定位右上角；SVG 图标零文本节点（批注偏移零污染） */
+.code-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+pre:hover > .code-copy-btn,
+.code-copy-btn:focus-visible,
+.code-copy-btn--copied {
+  opacity: 1;
+}
+
+.code-copy-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.code-copy-btn--copied {
+  color: var(--success, #1a7f37);
+}
+
+/* 语言标签在左上，按钮在右上，互不遮挡 */
+.chat-message__markdown pre[data-lang] > .code-copy-btn,
+.preview-markdown pre[data-lang] > .code-copy-btn {
+  top: 2px;
+}
+
 
 .chat-message__markdown a {
   color: var(--primary);
