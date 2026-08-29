@@ -212,11 +212,16 @@ describe('code block render (mobile)', () => {
     expect(preRule).toContain('overflow-x: visible');
   });
 
-  it('T-CB14: 所有代码块（高亮/纯文本/mermaid）带复制按钮 span.code-copy（零 DOM 文本）', () => {
+  it('T-CB14: 高亮/纯文本块带复制按钮 span.code-copy，mermaid 块无（零 DOM 文本）', () => {
     const html = prepareTranscriptRichHtml(
       '```ts\nconst a = 1;\n```\n\n```\nplain fence\n```\n\n```mermaid\nflowchart TD\n```',
     );
-    expect(html.match(/<span class="code-copy"><\/span>/g)).toHaveLength(3);
+    expect(html.match(/<span class="code-copy"><\/span>/g)).toHaveLength(2);
+    // mermaid 不是普通代码块：其 pre 不含复制按钮（与 desktop MermaidBlock 口径对齐，MF-11）
+    const mermaidPre =
+      html.match(/<pre><code class="language-mermaid">[\s\S]*?<\/pre>/)?.[0] ?? '';
+    expect(mermaidPre).not.toBe('');
+    expect(mermaidPre).not.toContain('code-copy');
     // 按钮是空 span：label 走 CSS 伪元素，不进 textContent（批注文本流零偏移）
     expect(html).not.toContain('>复制<');
   });
