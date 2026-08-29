@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+## [1.5.6] - 2026-08-29
+
 ### 新增
 
 - **Markdown 代码块语法高亮**（双端）：文件预览与聊天消息里的代码块改为独立块级展示（背景/边框/圆角，与行内代码明显区分）并高亮语法，顶部标注语言名（别名自动归一，如 `ts` 显示为 `typescript`），右上角提供一键复制；支持 TypeScript、JavaScript、JSON、Python、Bash/Shell、SQL、Markdown、YAML、HTML、CSS 等语言，配色跟随明暗主题；未标注或不支持的语言（如 Rust）按纯文本块级展示，Mermaid 图表渲染不受影响，移动端长行仍自动折行不抢竖滑手势（包体积影响轻微：预览样式增量约 2KB，语法库随应用包增加约百余 KB）
