@@ -354,3 +354,11 @@ user:
 
 assistant:
 token-usage-stats 以 ff 合入 main（bac4a13→7ee0b09）。下一个迭代是 markdown-code-block-render（代码块语法高亮，worktree .woktree/markdown-code-block-render，CR 两 P2 已修）。按流程从 main 新建 feat/2026-08-markdown-code-block-render 并 --no-ff 合入（bef8d4d）：CHANGELOG 冲突按老规矩解（迭代条目进当前 Unreleased，已发版段留 main 侧）；package-lock 冲突取 main 侧后 npm install --package-lock-only 重新生成补上 highlight.js/lowlight（注意 --package-lock-only 不装 node_modules，测试会挂起超时，要先 npm install）。验证：desktop 98/98 + typecheck，mobile 50/50（代码块/统计四套）+ tsc。
+
+user:
+代码块加个复制按钮，我记得这个是原生支持的？然后全量测试跑了 9 分钟有问题。
+
+assistant:
+复制按钮双端落地（043af63..13a80d7）。不是原生支持——hljs/rehype-highlight 只管高亮，得自己挂。desktop：renderCodeBlock 收集高亮子树纯文本（hljs span 不改文本），pre 内加 CodeCopyButton（SVG 图标零文本节点，批注偏移零污染，hover 显示、点击 navigator.clipboard+对勾反馈）。mobile：fence 全量接管输出 pre>span.code-copy（空 span+CSS 伪元素 label，绕开 button 在 sanitize 黑名单的问题且零 DOM 文本），共享 @web/shared/code-copy.ts 捕获阶段 document 委托+stopPropagation（防嵌套 data-action 双触发），post copyCode 桥回 RN 原生 Clipboard，chat/rich-document 两个宿主都接了。测试：desktop 99/99、mobile 26/26。
+
+9 分钟挂起排查：run-tests.mjs 走 shell 展开通配符只匹配 test/ 顶层（99 个测试，15 秒全绿、复跑稳定）；我排查时引号包 glob 让 node 递归扫到 test/ipc/、test/update-check/ 嵌套目录（408 个测试，含存量 skills 污染失败与挂起），那条路不是正式套件。9 分钟那次未复现，官方跑法连续两轮 15 秒绿。另：python 改文件会把 CRLF 洗成 LF——ChatTranscriptWebView.tsx 是 CRLF 文件，提交前要 git show --stat 检查行数，全文件重写=行尾被洗，转回 CRLF 重做提交（git diff <old> HEAD 确认树一致）。
