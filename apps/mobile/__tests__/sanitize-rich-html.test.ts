@@ -86,4 +86,11 @@ describe('sanitizeRichHtml', () => {
     expect(out).toContain('class="language-ts hljs"');
     expect(out).toContain('hljs-keyword');
   });
+  it('代码块复制按钮 span.code-copy 经消毒保留（span+class 白名单内）', () => {
+    const out = sanitizeRichHtml(
+      '<pre data-lang="ts"><span class="code-copy"></span><code class="language-ts hljs">hi</code></pre>',
+    );
+    expect(out).toContain('<span class="code-copy"></span>');
+    expect(out).toContain('data-lang="ts"');
+  });
 });

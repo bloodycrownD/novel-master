@@ -212,6 +212,25 @@ describe('code block render (mobile)', () => {
     expect(preRule).toContain('overflow-x: visible');
   });
 
+  it('T-CB14: 所有代码块（高亮/纯文本/mermaid）带复制按钮 span.code-copy（零 DOM 文本）', () => {
+    const html = prepareTranscriptRichHtml(
+      '```ts\nconst a = 1;\n```\n\n```\nplain fence\n```\n\n```mermaid\nflowchart TD\n```',
+    );
+    expect(html.match(/<span class="code-copy"><\/span>/g)).toHaveLength(3);
+    // 按钮是空 span：label 走 CSS 伪元素，不进 textContent（批注文本流零偏移）
+    expect(html).not.toContain('>复制<');
+  });
+
+  it('T-CB14: CSS 含 .code-copy 规则（伪元素 label + copied 态 + pre 定位容器）', () => {
+    const css = buildRichContentCssRules(['.bubble.rich']);
+    expect(css).toMatch(/\.bubble\.rich pre \{[^}]*position: relative;/s);
+    expect(css).toMatch(
+      /\.bubble\.rich pre > \.code-copy \{[^}]*position: absolute;/s,
+    );
+    expect(css).toContain(".code-copy::after { content: '复制'; }");
+    expect(css).toContain(".code-copy.copied::after { content: '已复制'; }");
+  });
+
   it('T-CB13: normalizeFenceLang 归一化表（双端同表契约）', () => {
     expect(normalizeFenceLang('ts')).toBe('typescript');
     expect(normalizeFenceLang('tsx')).toBe('typescript');
