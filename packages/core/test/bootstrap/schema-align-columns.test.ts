@@ -5,6 +5,7 @@ import {
   bootstrapNovelMaster,
   NOVEL_MASTER_SCHEMA_STATEMENTS,
   open,
+  SCHEMA_BOOT_VERSION,
   type TdbcConnection,
 } from "@novel-master/core";
 import { textBlocks } from "@novel-master/core/chat";
@@ -340,5 +341,38 @@ describe("schema 列对齐（T-B3）", () => {
     assert.deepEqual(read!.usage, { firstTokenMs: 320, durationMs: 2100 });
 
     await conn.close();
+  });
+
+  it("A12：v8 存量库（版本未 bump + 缺耗时两列）bootstrap 后补列且版本升到 SCHEMA_BOOT_VERSION（MF-8）", async () => {
+    // 锁定 token-usage-stats-enhance 迭代道漏 SCHEMA_BOOT_VERSION bump 的 bug 形态：
+    // align 加了列但版本号没跟上，存量 v8 库永远走快路径、两列永不补齐
+    // （真机实测 no such column: first_token_ms）。若未来再出现「加列忘 bump」，
+    // 本用例的 v8 库会被误判为快路径而断言失败。
+    const conn = await openInMemoryConnection();
+    try {
+      // 先建完整 schema，再裁掉 v9 新增的耗时两列、把 user_version 回拨到 8，
+      // 模拟真实 v8 存量库（其余表结构与当前一致）。
+      await bootstrapNovelMaster(conn);
+      await conn.execute("ALTER TABLE chat_message DROP COLUMN first_token_ms");
+      await conn.execute("ALTER TABLE chat_message DROP COLUMN duration_ms");
+      await conn.execute("PRAGMA user_version = 8");
+
+      await bootstrapNovelMaster(conn);
+
+      const columns = await tableColumnNames(conn, "chat_message");
+      assert.ok(columns.has("first_token_ms"), "first_token_ms 应被 ALIGN 补列");
+      assert.ok(columns.has("duration_ms"), "duration_ms 应被 ALIGN 补列");
+
+      const versionRows = await conn.query<{ user_version: number }>(
+        "PRAGMA user_version",
+      );
+      assert.equal(
+        versionRows[0]?.user_version,
+        SCHEMA_BOOT_VERSION,
+        "user_version 应升到 SCHEMA_BOOT_VERSION",
+      );
+    } finally {
+      await conn.close();
+    }
   });
 });
