@@ -398,3 +398,9 @@ user:
 
 assistant:
 fix wave 完成（fix/2026-08-release-1-5-6-cr，dev-ready）：DAG 3 波——wave-0 四节点并行（mobile-stats MF-1/5、core-stats MF-4/7/8、markdown-chain MF-11→9→2 顺序互锁、desktop-copybtn MF-10）+ MF-3 trivial 主代理直改；wave-1 两节点并行（shared-sink MF-6、copy-tests MF-12）。三处执行口径适配（fix-spec 已补记）：MF-6 desktop 落 @shared/logic 镜像不引 core（eslint X1 门禁，format-token-count 双副本即此惯例）、MF-10/MF-12 降级为源码+dist 契约测试（mobile jest 是 RN 环境无 jsdom，mermaid-fullscreen.test 是样板）。顺手修 mobile tool-policy 9→10 存量漂移。verify 全绿：core 2242/2242+build、desktop 100/100、mobile 894/894（164 套件）；cr-func func-ready: yes（12 条矩阵全闭合，P3 文档补记三条已 trivial 落盘）。子代理撞号协调：MF-10 测试先占 T-CB16，MF-9 节点顺延为 T-CB18；MF-12 从 T-CB19 起。core exports 指向 dist——改 core src 后必须先 build 测试才生效（子代理踩过）。
+
+user:
+没问题。（fix wave 真机抽查通过）
+
+assistant:
+fix/2026-08-release-1-5-6-cr ff 合回 main（HEAD becdb7d，领先 origin/main 122 提交），修复分支已删。main 当前状态：1.5.6 changelog 已备、CR 修复全落地、dev-ready。待用户指令：push 与发版（novel-master-publish skill：bump 双端版本、tag v1.5.6、GitHub Release 走 CI）。
