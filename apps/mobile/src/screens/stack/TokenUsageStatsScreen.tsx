@@ -138,7 +138,7 @@ function SummaryTile({
         styles.tile,
         layout === 'wide' && styles.tileWide,
         layout === 'third' && styles.tileThird,
-        { backgroundColor: tokens.bgSecondary },
+        { backgroundColor: tokens.surface },
       ]}
     >
       <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
@@ -175,7 +175,7 @@ function TodayCard({
         styles.tile,
         styles.tileWide,
         styles.todayCard,
-        { backgroundColor: tokens.bgSecondary },
+        { backgroundColor: tokens.surface },
       ]}
     >
       <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
