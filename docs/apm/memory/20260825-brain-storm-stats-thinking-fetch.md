@@ -392,3 +392,9 @@ user:
 
 assistant:
 CHANGELOG Unreleased 落成 [1.5.6] - 2026-08-29（新增 3：代码块高亮/统计流水/curl；变更 1：统计视觉精修）。CR（code-review-loop）按 v1.5.5..main 三迭代拆三个 scope 并行 readonly 子代理审查：共 12 条 must-fix（P1×2：mobile 流水失败无限重试、复制按钮 spec 零记载需追认；P2×10：curl JSDoc 残留、offset NaN 校验、行 key 碰撞、双端函数重复、JSDoc 畸形、boot version 无回归锁、T-CB14 编号挪用、clipboard 无 catch、mermaid 块按钮双端不一致、copyCode 零测试）。spec-fix 子代理落盘 docs/Iterations/release-1.5.6/cr-fix-spec.md（MF-1~12）；review-full 复核给 fix-spec-ready: yes 附 3 条文本修订（K-1 三条互锁执行顺序 MF-11→MF-9→MF-2、G-1 MF-10 验收降级源码断言、C-1 formatTokenCount 实存三份并入 MF-6）——trivial 直接执行修订并附 Closure，状态 fix-spec-ready。重要 open question：curl SSRF 前提失效（现可带凭证对内网写操作）建议重拍板、desktop 交互测试基建立项与否。
+
+user:
+按 code-dev-loop 修复 fix-spec 吧。
+
+assistant:
+fix wave 完成（fix/2026-08-release-1-5-6-cr，dev-ready）：DAG 3 波——wave-0 四节点并行（mobile-stats MF-1/5、core-stats MF-4/7/8、markdown-chain MF-11→9→2 顺序互锁、desktop-copybtn MF-10）+ MF-3 trivial 主代理直改；wave-1 两节点并行（shared-sink MF-6、copy-tests MF-12）。三处执行口径适配（fix-spec 已补记）：MF-6 desktop 落 @shared/logic 镜像不引 core（eslint X1 门禁，format-token-count 双副本即此惯例）、MF-10/MF-12 降级为源码+dist 契约测试（mobile jest 是 RN 环境无 jsdom，mermaid-fullscreen.test 是样板）。顺手修 mobile tool-policy 9→10 存量漂移。verify 全绿：core 2242/2242+build、desktop 100/100、mobile 894/894（164 套件）；cr-func func-ready: yes（12 条矩阵全闭合，P3 文档补记三条已 trivial 落盘）。子代理撞号协调：MF-10 测试先占 T-CB16，MF-9 节点顺延为 T-CB18；MF-12 从 T-CB19 起。core exports 指向 dist——改 core src 后必须先 build 测试才生效（子代理踩过）。
