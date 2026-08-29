@@ -348,3 +348,9 @@ mobile 分页大小调整为 10。
 
 assistant:
 mobile 流水 PAGE_SIZE 50→10（desktop 维持 50）；测试断言同步（60 条→6 页：页码 2 offset 10 非末页、尾页 6 offset 50 下一页禁用、prev 回第 5 页；400 条→40 页尾页直达 offset 390）。mobile 27/27 + tsc 过。
+
+user:
+统计迭代没问题，合并吧，下一个迭代是什么？
+
+assistant:
+token-usage-stats 以 ff 合入 main（bac4a13→7ee0b09）。下一个迭代是 markdown-code-block-render（代码块语法高亮，worktree .woktree/markdown-code-block-render，CR 两 P2 已修）。按流程从 main 新建 feat/2026-08-markdown-code-block-render 并 --no-ff 合入（bef8d4d）：CHANGELOG 冲突按老规矩解（迭代条目进当前 Unreleased，已发版段留 main 侧）；package-lock 冲突取 main 侧后 npm install --package-lock-only 重新生成补上 highlight.js/lowlight（注意 --package-lock-only 不装 node_modules，测试会挂起超时，要先 npm install）。验证：desktop 98/98 + typecheck，mobile 50/50（代码块/统计四套）+ tsc。
