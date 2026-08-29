@@ -99,6 +99,27 @@ function formatRequestTime(ms: number): string {
   return `${month}-${day} ${hh}:${mm}`;
 }
 
+/** 页码条窗口：总页数 ≤7 全展示；否则首尾页 + 当前页 ±1，间隙用省略号。 */
+function pageWindowItems(current: number, totalPages: number): (number | "…")[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const items: (number | "…")[] = [1];
+  const lo = Math.max(2, current - 1);
+  const hi = Math.min(totalPages - 1, current + 1);
+  if (lo > 2) {
+    items.push("…");
+  }
+  for (let p = lo; p <= hi; p += 1) {
+    items.push(p);
+  }
+  if (hi < totalPages - 1) {
+    items.push("…");
+  }
+  items.push(totalPages);
+  return items;
+}
+
 /**
  * 桶 tooltip 文案（当天/该小时 输入输出与调用数）。
  * 明细图表不再展示命中率——命中率出口仅保留在汇总卡片与选中天汇总行。
@@ -756,11 +777,32 @@ export function TokenUsageStatsView() {
               >
                 上一页
               </button>
-              <span className="token-stats-requests__pager-label">
-                {reqLoading
-                  ? "加载中…"
-                  : `第 ${reqPage + 1}/${Math.max(1, Math.ceil(reqTotal / REQUESTS_PAGE_SIZE))} 页`}
-              </span>
+              {pageWindowItems(
+                reqPage + 1,
+                Math.max(1, Math.ceil(reqTotal / REQUESTS_PAGE_SIZE)),
+              ).map((item, index) =>
+                item === "…" ? (
+                  <span key={`gap-${index}`} className="token-stats-requests__pager-gap">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={`page-${item}`}
+                    type="button"
+                    className={`token-stats-requests__page-num${
+                      item === reqPage + 1 ? " token-stats-requests__page-num--active" : ""
+                    }`}
+                    disabled={reqLoading}
+                    onClick={() =>
+                      filter != null
+                        ? void loadRequests(filter, item - 1)
+                        : undefined
+                    }
+                  >
+                    {String(item)}
+                  </button>
+                ),
+              )}
               <button
                 type="button"
                 className="token-stats-requests__page-btn"

@@ -123,6 +123,8 @@ interface UsageQueryPayload {
   kind: string;
   filter: { range: { kind: string }; model?: string | null };
   dayLocalDate?: string;
+  offset?: number;
+  limit?: number;
 }
 
 interface MockData {
@@ -132,7 +134,37 @@ interface MockData {
   hourly?: unknown;
   modelRows?: unknown;
   models?: unknown;
+  requests?: unknown;
 }
+
+/** 流水样例：两行（有 timing / 存量 null），total=260 → 50/页 共 6 页。 */
+const REQUEST_PAGE = {
+  rows: [
+    {
+      createdAtMs: Date.UTC(2026, 7, 23, 3, 0),
+      modelName: "gpt-4o",
+      promptTokens: 900,
+      completionTokens: 100,
+      totalTokens: 1000,
+      cacheReadTokens: 500,
+      cacheCreationTokens: 0,
+      firstTokenMs: 900,
+      durationMs: 8_000,
+    },
+    {
+      createdAtMs: Date.UTC(2026, 7, 22, 7, 0),
+      modelName: null,
+      promptTokens: 400,
+      completionTokens: 100,
+      totalTokens: 500,
+      cacheReadTokens: null,
+      cacheCreationTokens: null,
+      firstTokenMs: null,
+      durationMs: null,
+    },
+  ],
+  total: 260,
+};
 
 /** 拦在 ipc client 底层出口：按 nm:usageStats/query 的 payload.kind 路由回样例数据。 */
 function makeInvoke(
@@ -159,6 +191,11 @@ function makeInvoke(
         return Promise.resolve({ ok: true, data: data.modelRows ?? MODEL_ROWS });
       case "models":
         return Promise.resolve({ ok: true, data: data.models ?? MODELS });
+      case "requests":
+        return Promise.resolve({
+          ok: true,
+          data: data.requests ?? REQUEST_PAGE,
+        });
       default:
         return Promise.reject(new Error(`测试未预期的 kind: ${req.kind}`));
     }
@@ -1016,6 +1053,71 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
         .join("");
       assert.ok(summaryText.includes("平均速率 —"));
       assert.ok(summaryText.includes("平均首字延迟 —"));
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("流水页签：页码条常驻，点页码按页号取整页（首字延迟/总时间列渲染）", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const restore = mockWindow(makeInvoke({}, requests));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      await clickSegmented(root, "流水");
+      assert.equal(requests.at(-1)?.kind, "requests");
+      assert.equal(requests.at(-1)?.offset, 0);
+      assert.equal(requests.at(-1)?.limit, 50);
+
+      // 6 页全展示（≤7 不收窄）：页码 1-6 按钮可见，当前页 1 高亮
+      const pageBtn = (label: string) =>
+        root.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className.split(" ").includes(
+              "token-stats-requests__page-num",
+            ) &&
+            (node.children as unknown[]).some((c) => c === label),
+        )[0];
+      for (const n of ["1", "2", "3", "4", "5", "6"]) {
+        assert.ok(pageBtn(n) != null, `页码按钮 ${n} 应存在`);
+      }
+      // 空值列显示横杠（存量 null 行的缓存读/首字/总时间）。
+      // react-test-renderer 节点带循环引用，不能 JSON 序列化，递归收集文本。
+      const collectText = (node: { children?: unknown }): string => {
+        let out = "";
+        for (const child of (node.children as unknown[]) ?? []) {
+          if (typeof child === "string") {
+            out += child;
+          } else if (
+            child != null &&
+            typeof child === "object" &&
+            "children" in child
+          ) {
+            out += collectText(child as { children?: unknown });
+          }
+        }
+        return out;
+      };
+      const rowsText = root
+        .findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className === "token-stats-requests__row",
+        )
+        .map((node) => collectText(node))
+        .join("|");
+      assert.ok(rowsText.includes("—"));
+
+      // 点页码 5 跳页：offset 200
+      await act(async () => {
+        pageBtn("5")!.props.onClick();
+      });
+      assert.equal(requests.at(-1)?.offset, 200);
     } finally {
       await act(async () => {
         renderer?.unmount();

@@ -7674,8 +7674,33 @@ html[data-theme="dark"] .chat-batch-bar {
   opacity: 0.5;
 }
 
-.token-stats-requests__pager-label {
+.token-stats-requests__page-num {
+  min-width: 26px;
+  padding: 5px 6px;
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  cursor: pointer;
   font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.token-stats-requests__page-num:hover:not(:disabled):not(.token-stats-requests__page-num--active) {
+  color: var(--text);
+  border-color: var(--text-tertiary);
+}
+
+.token-stats-requests__page-num--active {
+  color: var(--primary);
+  border-color: var(--primary);
+  font-weight: 600;
+  cursor: default;
+}
+
+.token-stats-requests__pager-gap {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  padding: 0 2px;
 }
