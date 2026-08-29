@@ -27,6 +27,7 @@ const mockGetDailyBuckets = jest.fn();
 const mockGetHourlyBuckets = jest.fn();
 const mockGetModelBreakdown = jest.fn();
 const mockListModels = jest.fn();
+const mockListRequestUsage = jest.fn();
 
 const mockRuntime = {
   usageStats: {
@@ -35,6 +36,7 @@ const mockRuntime = {
     getHourlyBuckets: mockGetHourlyBuckets,
     getModelBreakdown: mockGetModelBreakdown,
     listModels: mockListModels,
+    listRequestUsage: mockListRequestUsage,
   },
   state: {
     getCurrentModelId: jest.fn(async () => null),
@@ -226,6 +228,32 @@ const SAMPLE_MODEL_ROWS = [
   },
 ];
 
+// 流水样例：两行（有 timing / 存量 null），total=60 → 50/页 共 2 页。
+const SAMPLE_REQUEST_ROWS = [
+  {
+    createdAtMs: dayMs(2026, 7, 23) + 3_600_000,
+    modelName: 'gpt-4o',
+    promptTokens: 900,
+    completionTokens: 100,
+    totalTokens: 1000,
+    cacheReadTokens: 500,
+    cacheCreationTokens: 0,
+    firstTokenMs: 900,
+    durationMs: 8_000,
+  },
+  {
+    createdAtMs: dayMs(2026, 7, 22) + 7_200_000,
+    modelName: null,
+    promptTokens: 400,
+    completionTokens: 100,
+    totalTokens: 500,
+    cacheReadTokens: null,
+    cacheCreationTokens: null,
+    firstTokenMs: null,
+    durationMs: null,
+  },
+];
+
 function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
@@ -319,6 +347,10 @@ beforeEach(() => {
   );
   mockGetModelBreakdown.mockReset().mockResolvedValue(SAMPLE_MODEL_ROWS);
   mockListModels.mockReset().mockResolvedValue(['gpt-4o']);
+  mockListRequestUsage.mockReset().mockResolvedValue({
+    rows: SAMPLE_REQUEST_ROWS,
+    total: 60,
+  });
   mockShowToast.mockClear();
   mockNavigate.mockClear();
 });
@@ -927,5 +959,40 @@ describe('T-MB 新指标卡与长按详情', () => {
     expect(text).toContain('输入 900');
     expect(text).toContain('输出 100');
     expect(text).toContain('调用 2 次');
+  });
+});
+
+describe('T-S7 请求流水页签（分页）', () => {
+  it('切到流水页签拉第一页；翻页条常驻（页码 1/2），翻页按页号取整页', async () => {
+    const renderer = await renderScreen();
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
+    expect(mockListRequestUsage.mock.calls[0]![1]).toEqual({
+      offset: 0,
+      limit: 50,
+    });
+    // 翻页条常驻：首页上一页禁用、页码 1/2；行内首字延迟/总时间与时间同行
+    expect(findByTestId(renderer.root, 'req-prev-page')!.props.disabled).toBe(
+      true,
+    );
+    expect(nodeText(renderer.root)).toContain('第 1/2 页');
+    expect(nodeText(renderer.root)).toContain('首字延迟 900 ms');
+    expect(nodeText(renderer.root)).toContain('首字延迟 —');
+
+    await act(async () => {
+      findByTestId(renderer.root, 'req-next-page')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockListRequestUsage.mock.calls[1]![1]).toEqual({
+      offset: 50,
+      limit: 50,
+    });
+    expect(findByTestId(renderer.root, 'req-next-page')!.props.disabled).toBe(
+      true,
+    );
+    expect(nodeText(renderer.root)).toContain('第 2/2 页');
   });
 });
