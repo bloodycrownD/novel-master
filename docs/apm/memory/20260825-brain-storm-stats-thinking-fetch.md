@@ -342,3 +342,9 @@ user:
 
 assistant:
 流水页码条升级（9988e18/3c8bd52）：双端在前后翻页按钮之间加页码按钮，直接点页码跳页。窗口算法：总页数 ≤7 全展示；否则 [1] … [当前±1] … [尾页]，间隙省略号，当前页高亮（primary 边框+selection 底）。mobile 页码条 flexWrap 防窄屏溢出，active 底色用 tokens.selection 不硬编码；desktop 页码按钮 --active 样式。测试双端补齐：mobile 27/27（页码跳页 offset、8 页省略号窗口、尾页直达）、desktop 16/16（6 页全展示、点页码 5 → offset 200；注意 react-test-renderer children 有循环引用不能 JSON.stringify，要递归收文本）。
+
+user:
+mobile 分页大小调整为 10。
+
+assistant:
+mobile 流水 PAGE_SIZE 50→10（desktop 维持 50）；测试断言同步（60 条→6 页：页码 2 offset 10 非末页、尾页 6 offset 50 下一页禁用、prev 回第 5 页；400 条→40 页尾页直达 offset 390）。mobile 27/27 + tsc 过。
