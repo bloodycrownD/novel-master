@@ -624,15 +624,17 @@ export function TokenUsageStatsScreen() {
       ) : (
         <>
           <ListSectionTitle title="按天用量" tokens={tokens} />
-          <StackedBars
-            testID="daily-chart"
-            data={dailyData}
-            selectedKey={selectedDay ?? undefined}
-            onSelect={setSelectedDay}
-            onLongPress={setInspectedKey}
-            tokens={tokens}
-            formatLabel={key => key.slice(8)}
-          />
+          <View style={[styles.chartCard, { backgroundColor: tokens.surface }]}>
+            <StackedBars
+              testID="daily-chart"
+              data={dailyData}
+              selectedKey={selectedDay ?? undefined}
+              onSelect={setSelectedDay}
+              onLongPress={setInspectedKey}
+              tokens={tokens}
+              formatLabel={key => key.slice(8)}
+            />
+          </View>
           {dailyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
               <Text style={[styles.inspectText, { color: tokens.textSecondary }]}>
@@ -673,13 +675,15 @@ export function TokenUsageStatsScreen() {
                   '—',
                 )}
               </Text>
-              <StackedBars
-                testID="hourly-chart"
-                data={hourlyData}
-                onLongPress={setInspectedKey}
-                tokens={tokens}
-                formatLabel={key => `${Number(key)}时`}
-              />
+              <View style={[styles.chartCard, { backgroundColor: tokens.surface }]}>
+                <StackedBars
+                  testID="hourly-chart"
+                  data={hourlyData}
+                  onLongPress={setInspectedKey}
+                  tokens={tokens}
+                  formatLabel={key => `${Number(key)}时`}
+                />
+              </View>
               {hourlyInspected != null ? (
                 <View testID="bar-inspect" style={styles.inspectRow}>
                   <Text
@@ -826,6 +830,11 @@ const styles = StyleSheet.create({
   },
   tileThirdRow: {
     marginTop: 10,
+  },
+  chartCard: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
   },
   tileLabel: {
     fontSize: 12,
