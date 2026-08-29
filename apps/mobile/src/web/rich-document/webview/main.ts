@@ -62,6 +62,8 @@ registerMermaidViewerView((props) => {
   );
 });
 attachMermaidViewerDelegation(post);
+// 代码块复制按钮：document 捕获委托（一次挂接，不进 setDocument 视图刷新链路）
+attachCodeCopyDelegation(post);
 
 document.addEventListener('message', function (e: Event) {
   const ev = e as MessageEvent;

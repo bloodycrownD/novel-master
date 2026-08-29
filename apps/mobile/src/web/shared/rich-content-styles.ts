@@ -41,6 +41,13 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
   const preLangLabel = selectors
     .map((s) => `${s} pre[data-lang]::before`)
     .join(', ');
+  // 代码块复制按钮：空 span，label 走伪元素（零 DOM 文本，批注零偏移）
+  const preCopyBtn = selectors
+    .map((s) => `${s} pre > .code-copy`)
+    .join(', ');
+  const preCopyBtnCopied = selectors
+    .map((s) => `${s} pre > .code-copy.copied`)
+    .join(', ');
   // 高亮 token 两套配色：默认亮色，html[data-nm-mode="dark"]（bridge applyTheme 推断写入）覆盖暗色
   // 色值与 desktop shell.css 的 --hljs-* 变量一致（双端一致性）
   const hljsTokens: Array<[string, string, string]> = [
@@ -85,6 +92,7 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
     /* 覆盖 UA white-space:pre；折行后勿用 overflow-x:auto，避免内层滚动抢 transcript 竖滑 */
     /* 块级独立形态：背景叠层 + 边框 + padding，与行内 code（rgba 背景 + 无边框）拉开 */
     ${child('pre')} {
+      position: relative;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
       overflow-x: visible;
@@ -95,6 +103,22 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
       background: rgba(0,0,0,0.045);
     }
     ${preCode} { background: transparent; padding: 0; border-radius: 0; }
+    /* 复制按钮：常驻右上角（触屏无 hover，不藏）;文案伪元素呈现，复制成功切「已复制」 */
+    ${preCopyBtn} {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      padding: 1px 8px;
+      font-size: 11px;
+      line-height: 18px;
+      color: var(--text, #333);
+      opacity: 0.55;
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 5px;
+    }
+    ${preCopyBtn}::after { content: '复制'; }
+    ${preCopyBtnCopied} { opacity: 0.9; color: #1a7f37; }
+    ${preCopyBtnCopied}::after { content: '已复制'; }
     /* 语言标签：伪元素不进 textContent，批注文本流零偏移（同桌面端 pre[data-lang]::before） */
     ${preLangLabel} {
       content: attr(data-lang);
