@@ -926,7 +926,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     }
   });
 
-  it("汇总页新增平均速率 / 平均首字延迟两张指标卡；null 时显示「暂无数据」而非 0（T-DT3）", async () => {
+  it("汇总页新增平均速率 / 平均首字延迟两张指标卡；null 时显示横杠而非 0（T-DT3）", async () => {
     const restore = mockWindow(makeInvoke({}));
     let renderer: ReactTestRenderer | undefined;
     try {
@@ -953,7 +953,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     }
   });
 
-  it("新指标空态：summary 两字段 null → 卡片显示「暂无数据」而非 0（T-DT3）", async () => {
+  it("新指标空态：summary 两字段 null → 卡片显示横杠而非 0（T-DT3）", async () => {
     const restore = mockWindow(
       makeInvoke({
         summary: {
@@ -967,8 +967,8 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     try {
       renderer = await mountView();
       const root = renderer.root;
-      assert.equal(metricText(root, "avgTokensPerSecond"), "暂无数据");
-      assert.equal(metricText(root, "avgFirstTokenMs"), "暂无数据");
+      assert.equal(metricText(root, "avgTokensPerSecond"), "—");
+      assert.equal(metricText(root, "avgFirstTokenMs"), "—");
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -1001,7 +1001,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       assert.ok(summaryText.includes("25.0 tok/s"), "当日平均速率");
       assert.ok(summaryText.includes("900 ms"), "当日平均首字延迟");
 
-      // null 形态：DAILY[1] 无 timing → 「暂无数据」
+      // null 形态：DAILY[1] 无 timing → 横杠
       const dayNull = toDayKey(DAILY[1]!.bucketStartMs);
       await clickDayCol(root, dayNull);
       detail = root.findByProps({ "data-day-detail": dayNull });
@@ -1014,8 +1014,8 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
           (c.props.children as unknown[]).map(String).join(""),
         )
         .join("");
-      assert.ok(summaryText.includes("平均速率 暂无数据"));
-      assert.ok(summaryText.includes("平均首字延迟 暂无数据"));
+      assert.ok(summaryText.includes("平均速率 —"));
+      assert.ok(summaryText.includes("平均首字延迟 —"));
     } finally {
       await act(async () => {
         renderer?.unmount();
