@@ -380,3 +380,9 @@ user:
 
 assistant:
 确实影响了——但根因不在 mermaid：rich-document main.ts 只加了 attachCodeCopyDelegation 调用、import 漏了（当时 python 批量替换的 import 匹配串是单行格式，实际文件是多行 import，替换静默失败且没断言）。esbuild 不做类型检查照常打包，WebView 启动即 ReferenceError，rich-document 整个崩——文件预览（含 mermaid 图表）整页不可用；chat-transcript 的 bind-shell-events import 加上了所以聊天气泡正常（用户能看到复制按钮小长条）。三层教训：1) python 批量编辑每个 replace 都要 assert 命中；2) 改 webview 源码后必须跑 npm run typecheck（脚本本来就含 tsc -p src/web/tsconfig.json 覆盖 webview 目录）——直跑 tsconfig.build.json 会漏 webview；3) webview 产物验证 grep 关键字符串（bundle 里找不到 code-copy 就是没打进去）。重建 build:webview:native 后 rich-document app.js 命中 2 处。用户须再重装 APK。
+
+user:
+没问题。（markdown 迭代确认通过）
+
+assistant:
+五迭代全部收尾：markdown-code-block-render ff 合回 main（main HEAD e5fc54e），.woktree 三个 worktree（fetch-tool/token-usage-stats-enhance/markdown-code-block-render）及五个迭代分支已清理，仅剩主 worktree。至此 thinking-openai-unify、thinking-context-toggle、curl、ux-fixes、vfs-revision-fix、token-usage-stats-enhance、markdown-code-block-render 七批改动全在 main（未 push）。遗留待办（用户未拍板）：openai-unify GLM 关档行为是否补 CHANGELOG（已有 reasoning_effort 条目覆盖）、curl SSRF/域名白名单是否立项、markdown OQ6（fence 首词事件属性注入向量，记在 fix-spec）。
