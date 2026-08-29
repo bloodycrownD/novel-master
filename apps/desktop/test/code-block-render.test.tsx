@@ -190,7 +190,7 @@ test("T-CB3: 无语言 fence 与未知语言 → 无 data-lang、无 .hljs 类�
   assert.match(html, /no language fence/);
   assert.match(html, /fn main\(\)/);
   // 裸 <pre>（不带属性）
-  // 复制按钮（T-CB14）插在 pre 首位：无语言块形态为 pre > button + code
+  // 复制按钮（T-CB16）插在 pre 首位：无语言块形态为 pre > button + code
   assert.match(html, /<pre><button[^>]*code-copy-btn[^>]*><svg[\s\S]*?<\/svg><\/button><code>/);
 });
 
@@ -287,7 +287,7 @@ test("T-CB13: 表外内置别名 mjs/cjs → 高亮但无 data-lang（MF-1 双�
   assert.doesNotMatch(mjsCode, /(^|\s)hljs(\s|$)/);
 });
 
-test("T-CB14: 代码块带复制按钮（SVG 零文本节点，批注偏移零污染）且 CSS 规则存在", () => {
+test("T-CB16/T-CB17: 代码块带复制按钮（SVG 零文本节点，批注偏移零污染）且 CSS 规则存在", () => {
   const html = renderToStaticMarkup(
     <MermaidMarkdown content={"```ts\nconst a = 1;\n```"} />,
   );
@@ -303,7 +303,7 @@ test("T-CB14: 代码块带复制按钮（SVG 零文本节点，批注偏移零�
   // 常驻显示：默认 opacity 0.55（非 hover 隐藏——曾让用户以为没做复制）
 });
 
-test("T-CB16: 复制按钮 promise/定时器源码级断言（MF-10：静态渲染跑不了 effect，降级为源码级验收）", () => {
+test("T-CB18: 复制按钮 promise/定时器源码级断言（MF-10：静态渲染跑不了 effect，降级为源码级验收）", () => {
   const src = readFileSync(codeBlockPath, "utf8");
   // writeText 调用链上存在 .catch：复制失败（如权限被拒）不产生 unhandled rejection
   assert.match(src, /navigator\.clipboard\.writeText\([\s\S]*?\.then\([\s\S]*?\.catch\(/);

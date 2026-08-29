@@ -212,7 +212,7 @@ describe('code block render (mobile)', () => {
     expect(preRule).toContain('overflow-x: visible');
   });
 
-  it('T-CB14: 高亮/纯文本块带复制按钮 span.code-copy，mermaid 块无（零 DOM 文本）', () => {
+  it('T-CB16: 高亮/纯文本块带复制按钮 span.code-copy，mermaid 块无（零 DOM 文本）', () => {
     const html = prepareTranscriptRichHtml(
       '```ts\nconst a = 1;\n```\n\n```\nplain fence\n```\n\n```mermaid\nflowchart TD\n```',
     );
@@ -226,7 +226,7 @@ describe('code block render (mobile)', () => {
     expect(html).not.toContain('>复制<');
   });
 
-  it('T-CB14: CSS 含 .code-copy 规则（伪元素 label + copied 态 + pre 定位容器）', () => {
+  it('T-CB17: CSS 含 .code-copy 规则（伪元素 label + copied 态 + pre 定位容器）', () => {
     const css = buildRichContentCssRules(['.bubble.rich']);
     expect(css).toMatch(/\.bubble\.rich pre \{[^}]*position: relative;/s);
     expect(css).toMatch(
