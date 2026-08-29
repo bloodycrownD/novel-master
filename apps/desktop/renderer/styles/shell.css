@@ -6016,7 +6016,8 @@ html[data-theme="dark"] .chat-batch-bar {
   border: none;
   border-radius: 5px;
   cursor: pointer;
-  opacity: 0;
+  /* 常驻显示（hover 才浮现会让用户以为没有复制功能）；悬停加深 */
+  opacity: 0.55;
   transition: opacity 0.15s ease;
 }
 

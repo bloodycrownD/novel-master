@@ -293,4 +293,5 @@ test("T-CB14: 代码块带复制按钮（SVG 零文本节点，批注偏移零�
   const css = readFileSync(shellCssPath, "utf8");
   assert.match(css, /\.code-copy-btn \{/);
   assert.match(css, /pre:hover > \.code-copy-btn/);
+  // 常驻显示：默认 opacity 0.55（非 hover 隐藏——曾让用户以为没做复制）
 });
