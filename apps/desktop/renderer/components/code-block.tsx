@@ -1,4 +1,11 @@
-import { cloneElement, useState, type ReactElement, type ReactNode } from "react";
+import {
+  cloneElement,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 
 /**
  * 围栏语言归一化表（PRD 清单）：别名 → 规范名。
@@ -65,6 +72,15 @@ function collectNodeText(node: ReactNode): string {
  */
 function CodeCopyButton({ source }: { source: string }) {
   const [copied, setCopied] = useState(false);
+  // 复位定时器句柄：卸载时清理，避免对已卸载组件 setState（MF-10）
+  const resetTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current != null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
   return (
     <button
       type="button"
@@ -73,7 +89,13 @@ function CodeCopyButton({ source }: { source: string }) {
       onClick={() => {
         void navigator.clipboard.writeText(source).then(() => {
           setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
+          resetTimerRef.current = window.setTimeout(
+            () => setCopied(false),
+            1500,
+          );
+        }).catch((err: unknown) => {
+          // 复制失败（如剪贴板权限被拒）静默降级，仅留 debug 日志（MF-10）
+          console.debug("code-copy: clipboard write failed", err);
         });
       }}
     >
