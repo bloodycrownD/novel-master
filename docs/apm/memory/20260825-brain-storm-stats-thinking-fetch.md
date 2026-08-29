@@ -1,5 +1,5 @@
 ---
-date: 2026-08-29 16:30
+date: 2026-08-29 18:40
 title: 五需求从头脑风暴到 PRD/SPEC/CR/合并：统计、思考强度、thinking开关、fetch、代码块
 keywords: 统计UI, TTFT, token速率, 思考强度, reasoning_effort, thinking块, 思考提示词, fetch工具, PRD, SPEC, 代码块渲染, 合并流程
 abstract: 五需求全流程主线（头脑风暴→PRD→spec 四轮审查→并发 impl→CR fix-spec→逐个合并）：thinking-openai-unify 已进 main（a42ea24）；thinking-context-toggle 在 feat/2026-08-thinking-context-toggle 修复完 4 条 P2 并按用户拍板定稿文案（label「思考提示词」+固定描述），head a325f90 待用户测试后合回；剩 fetch-tool（P1 超时未修）、统计增强（1 P2）、代码块渲染（2 P2）待修复合入。探索结论与关键沉淀见正文各轮。
@@ -318,3 +318,9 @@ user:
 
 assistant:
 按天/按小时两张 StackedBars 各包 chartCard 白卡容器（surface、圆角 12、padding），图表不再裸透灰底，与指标卡同层次。测试 25/25 + typecheck 过。
+
+user:
+明细/汇总再加一个「流水」tab，展示请求流水分页表格，字段你看着提供就行。
+
+assistant:
+流水 tab 双端落地（feat/2026-08-token-usage-stats，f6bf932..f41ae20）：口径为一条 assistant 消息=一次 LLM 请求，WHERE 复用 USAGE_NOT_NULL_SQL+时间范围+模型三态筛选，时间倒序 LIMIT/OFFSET 分页。core 加 listRequestUsage（页大小 1-200 校验、COUNT total）+ 三个公共类型 re-export；mobile 请求页签脏标记按需加载（切筛选置脏、切回页签才拉首页，「加载更多」追加）；desktop 单 channel kind='requests' 分发（offset/limit 缺省 0/50），表格 8 列（时间/模型/输入/输出/总量/缓存读/首字/耗时），null 字段横杠，竞态用序号守卫。空态延续横杠口径。顺带修了两个存量测试漂移：tool-policy-picker 工具数 9→10（curl 漏改）、desktop 统计视图「暂无数据」断言改横杠。core 23/23、desktop 89/89、双端 typecheck 过。CHANGELOG Unreleased 补统计增强（速率/延迟指标+流水）与视觉精修两条。
