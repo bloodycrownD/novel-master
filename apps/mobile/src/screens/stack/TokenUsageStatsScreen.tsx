@@ -39,6 +39,7 @@ import type {
   UsageStatsBucket,
   UsageStatsFilter,
   UsageStatsModelRow,
+  UsageStatsRequestRow,
   UsageStatsSummary,
 } from '@novel-master/core/chat';
 import { formatTokenCount } from '@novel-master/core/common';
@@ -55,7 +56,7 @@ import type { ThemeTokens } from '../../theme/tokens';
 
 type RangeKind = 'last7' | 'last30' | 'custom';
 /** 页面主结构页签：汇总（指标卡 + 分模型列表）/ 明细（按天图表钻取）。 */
-type PageTab = 'summary' | 'detail';
+type PageTab = 'summary' | 'detail' | 'requests';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -98,6 +99,18 @@ function formatHitRate(rate: number | null): string {
 /** 汇总卡空态文案：统计自本版本才开始积累，给用户一句解释。 */
 /** 空态统一显示横杠（简洁，不占版面）。 */
 const SUMMARY_EMPTY_TEXT = '—';
+
+/** 请求流水时间：MM-DD HH:mm（本地时区）。 */
+function formatRequestTime(ms: number): string {
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 耗时展示：秒级 x.x s / 毫秒级 xxx ms。 */
+function formatDurationMs(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
 
 /** 平均 token 速率展示：`x.x tok/s`；无数据时返回调用方传入的空态文案。 */
 function formatTokensPerSecond(v: number | null, emptyText: string): string {
@@ -227,6 +240,12 @@ export function TokenUsageStatsScreen() {
   const [summary, setSummary] = useState<UsageStatsSummary | null>(null);
   const [dailyBuckets, setDailyBuckets] = useState<UsageStatsBucket[]>([]);
   const [modelRows, setModelRows] = useState<UsageStatsModelRow[]>([]);
+  // 请求流水（分页）：dirty 标记随筛选变化置位，流水页激活时拉取第一页
+  const [reqRows, setReqRows] = useState<UsageStatsRequestRow[]>([]);
+  const [reqTotal, setReqTotal] = useState(0);
+  const [reqLoading, setReqLoading] = useState(false);
+  const reqDirtyRef = useRef(true);
+  const reqSeqRef = useRef(0);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [hourlyBuckets, setHourlyBuckets] = useState<UsageStatsBucket[] | null>(
     null,
@@ -283,6 +302,8 @@ export function TokenUsageStatsScreen() {
       setSelectedDay(null);
       setHourlyBuckets(null);
       setLoadError(null);
+      // 流水页数据随筛选变化标脏，切回/停留在流水页时重拉第一页
+      reqDirtyRef.current = true;
     } catch (err) {
       if (seq !== reloadSeqRef.current) {
         return; // 过期请求的报错不覆盖新一轮状态。
@@ -305,6 +326,43 @@ export function TokenUsageStatsScreen() {
       reload().catch(() => undefined);
     }, [reload]),
   );
+
+  // 流水页按需加载：页签激活且数据标脏时拉第一页；「加载更多」追加下一页。
+  const PAGE_SIZE = 50;
+  const loadRequests = useCallback(
+    async (reset: boolean) => {
+      const seq = ++reqSeqRef.current;
+      setReqLoading(true);
+      try {
+        const offset = reset ? 0 : reqRows.length;
+        const page = await runtime.usageStats.listRequestUsage(filter, {
+          offset,
+          limit: PAGE_SIZE,
+        });
+        if (seq !== reqSeqRef.current) {
+          return;
+        }
+        setReqRows(prev => (reset ? [...page.rows] : [...prev, ...page.rows]));
+        setReqTotal(page.total);
+        reqDirtyRef.current = false;
+      } catch (err) {
+        if (seq === reqSeqRef.current) {
+          showToast(toastMessage('加载流水失败', err));
+        }
+      } finally {
+        if (seq === reqSeqRef.current) {
+          setReqLoading(false);
+        }
+      }
+    },
+    [runtime, filter, reqRows.length, showToast],
+  );
+
+  useEffect(() => {
+    if (pageTab === 'requests' && reqDirtyRef.current && !reqLoading) {
+      loadRequests(true).catch(() => undefined);
+    }
+  }, [pageTab, reqLoading, loadRequests]);
 
   // 模型选项：listModels 只返回非 NULL 模型名，「其他模型」选项由 UI 侧补上
   //（DEV-1，spec T-S5/AC-11；语义 = NULL + 非当前配置历史模型归并）。
@@ -485,6 +543,11 @@ export function TokenUsageStatsScreen() {
             label: '明细',
             testID: 'stats-tab-detail',
           },
+          {
+            value: 'requests' as PageTab,
+            label: '流水',
+            testID: 'stats-tab-requests',
+          },
         ]}
         value={pageTab}
         onChange={setPageTab}
@@ -516,6 +579,72 @@ export function TokenUsageStatsScreen() {
           {/* 今日卡独立于筛选：范围空态下保留渲染。 */}
           <TodayCard summary={summary} tokens={tokens} />
         </View>
+      ) : pageTab === 'requests' ? (
+        <>
+          <ListSectionTitle
+            title={`请求流水 · ${reqRows.length}/${reqTotal}`}
+            tokens={tokens}
+          />
+          {reqRows.map(row => (
+            <View
+              key={`${row.createdAtMs}-${row.modelName ?? 'other'}-${row.promptTokens}`}
+              style={[
+                styles.reqRow,
+                { backgroundColor: tokens.surface },
+              ]}
+            >
+              <View style={styles.reqRowHead}>
+                <Text style={{ color: tokens.text }}>
+                  {formatRequestTime(row.createdAtMs)}
+                </Text>
+                <Text
+                  numberOfLines={1}
+                  style={{ color: tokens.textSecondary, flexShrink: 1 }}
+                >
+                  {row.modelName ?? '其他'}
+                </Text>
+              </View>
+              <Text
+                style={[styles.reqRowDetail, { color: tokens.textSecondary }]}
+              >
+                输入 {formatTokenCount(row.promptTokens)} · 输出{' '}
+                {formatTokenCount(row.completionTokens)} · 总{' '}
+                {formatTokenCount(row.totalTokens)}
+                {row.cacheReadTokens != null
+                  ? ` · 缓存读 ${formatTokenCount(row.cacheReadTokens)}`
+                  : ''}
+                {row.firstTokenMs != null
+                  ? ` · 首字 ${formatDurationMs(row.firstTokenMs)}`
+                  : ''}
+                {row.durationMs != null
+                  ? ` · 耗时 ${formatDurationMs(row.durationMs)}`
+                  : ''}
+              </Text>
+            </View>
+          ))}
+          {reqRows.length < reqTotal ? (
+            <Pressable
+              testID="req-load-more"
+              style={[
+                styles.loadMore,
+                { borderColor: tokens.borderLight },
+              ]}
+              disabled={reqLoading}
+              onPress={() => loadRequests(false).catch(() => undefined)}
+            >
+              <Text style={{ color: tokens.primary }}>
+                {reqLoading ? '加载中…' : `加载更多（还剩 ${reqTotal - reqRows.length} 条）`}
+              </Text>
+            </Pressable>
+          ) : null}
+          {reqRows.length === 0 && !reqLoading && !reqDirtyRef.current ? (
+            <Text
+              style={[styles.reqRowDetail, { color: tokens.textSecondary }]}
+            >
+              （无请求记录）
+            </Text>
+          ) : null}
+        </>
       ) : pageTab === 'summary' ? (
         <>
           <ListSectionTitle title={`总览 · ${rangeLabel}`} tokens={tokens} />
@@ -835,6 +964,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 12,
+  },
+  reqRow: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 8,
+    gap: 4,
+  },
+  reqRowHead: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reqRowDetail: {
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  loadMore: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
   },
   tileLabel: {
     fontSize: 12,
