@@ -20,6 +20,7 @@ import {
   registerMermaidViewerView,
 } from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import { MermaidViewerOverlay } from '@web/shared/mermaid-fullscreen/MermaidViewerOverlay';
+import { attachCodeCopyDelegation } from '@web/shared/code-copy';
 import { DocumentApp } from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
