@@ -1018,6 +1018,23 @@ describe('T-S7 请求流水页签（分页）', () => {
     });
   });
 
+  it('首拉失败不无限重试：清脏标记后等待用户切页签/改筛选再触发（MF-1）', async () => {
+    mockListRequestUsage.mockRejectedValue(new Error('x'));
+    const renderer = await renderScreen();
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
+    // 再等两轮 flush：若失败后仍标脏，reqLoading 复位会再触发 effect，
+    // 这里应保持 1 次，证明无重试循环。
+    await act(async () => {
+      await flushPromises();
+      await flushPromises();
+    });
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
+  });
+
   it('多页时页码窗口收窄：首尾页 + 当前页 ±1，间隙省略号，尾页可直达', async () => {
     mockListRequestUsage.mockResolvedValue({ rows: SAMPLE_REQUEST_ROWS, total: 400 });
     const renderer = await renderScreen();

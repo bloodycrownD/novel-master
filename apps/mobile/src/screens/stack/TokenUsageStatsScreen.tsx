@@ -375,6 +375,9 @@ export function TokenUsageStatsScreen() {
         reqDirtyRef.current = false;
       } catch (err) {
         if (seq === reqSeqRef.current) {
+          // 失败也要清脏标记：否则 reqLoading 复位会再次触发 effect，
+          // 条件仍满足导致无限重试；重试交给用户切页签/改筛选触发（MF-1）。
+          reqDirtyRef.current = false;
           showToast(toastMessage('加载流水失败', err));
         }
       } finally {
@@ -613,9 +616,10 @@ export function TokenUsageStatsScreen() {
             title={`请求流水 · 共 ${reqTotal} 条`}
             tokens={tokens}
           />
-          {reqRows.map(row => (
+          {reqRows.map((row, index) => (
             <View
-              key={`${row.createdAtMs}-${row.modelName ?? 'other'}-${row.promptTokens}`}
+              // 与 desktop 口径一致：createdAtMs+index，防同毫秒同模型碰撞（MF-5）。
+              key={`${row.createdAtMs}-${index}`}
               style={[
                 styles.reqRow,
                 { backgroundColor: tokens.surface },
