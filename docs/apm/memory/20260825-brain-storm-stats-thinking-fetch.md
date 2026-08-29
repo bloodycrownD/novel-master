@@ -362,3 +362,9 @@ assistant:
 复制按钮双端落地（043af63..13a80d7）。不是原生支持——hljs/rehype-highlight 只管高亮，得自己挂。desktop：renderCodeBlock 收集高亮子树纯文本（hljs span 不改文本），pre 内加 CodeCopyButton（SVG 图标零文本节点，批注偏移零污染，hover 显示、点击 navigator.clipboard+对勾反馈）。mobile：fence 全量接管输出 pre>span.code-copy（空 span+CSS 伪元素 label，绕开 button 在 sanitize 黑名单的问题且零 DOM 文本），共享 @web/shared/code-copy.ts 捕获阶段 document 委托+stopPropagation（防嵌套 data-action 双触发），post copyCode 桥回 RN 原生 Clipboard，chat/rich-document 两个宿主都接了。测试：desktop 99/99、mobile 26/26。
 
 9 分钟挂起排查：run-tests.mjs 走 shell 展开通配符只匹配 test/ 顶层（99 个测试，15 秒全绿、复跑稳定）；我排查时引号包 glob 让 node 递归扫到 test/ipc/、test/update-check/ 嵌套目录（408 个测试，含存量 skills 污染失败与挂起），那条路不是正式套件。9 分钟那次未复现，官方跑法连续两轮 15 秒绿。另：python 改文件会把 CRLF 洗成 LF——ChatTranscriptWebView.tsx 是 CRLF 文件，提交前要 git show --stat 检查行数，全文件重写=行尾被洗，转回 CRLF 重做提交（git diff <old> HEAD 确认树一致）。
+
+user:
+哪里有复制按钮？你只做文件代码块的复制？消息的没做？
+
+assistant:
+消息的做了——双端聊天与文件预览走同一代码块管道（desktop 共用 MermaidMarkdown/renderCodeBlock，mobile 共用 prepareTranscriptRichHtml）。看不到的两个原因：1) mobile WebView 从 APK 内置 android_asset 加载 app.js/app.css，不走 metro——reload 只更新 RN 侧（span 在了但无样式隐形），须 npm run android 重装 APK（preandroid 钩子会跑 build:webview:native 拷贝资产，该目录是 gitignore 构建产物）；2) desktop 按钮原为 hover 浮现，不碰鼠标看不见——改常驻 opacity 0.55、悬停加深。教训：涉及 webview 资产的改动，让用户验证前先说明需要重装 APK，别只说 reload。
