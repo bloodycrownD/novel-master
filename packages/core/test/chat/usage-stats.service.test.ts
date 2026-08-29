@@ -926,4 +926,19 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       /limit/,
     );
   });
+
+  it("listRequestUsage 分页 offset 非有限数值（NaN/±Infinity）拒收，不触达 SQL（B-2）", async () => {
+    const { ctx } = await seedSession();
+    const svc = createUsageStatsService(ctx.conn);
+    for (const offset of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+    ]) {
+      await assert.rejects(
+        () => svc.listRequestUsage({ range: { kind: "last7" } }, { offset, limit: 10 }),
+        /offset/,
+      );
+    }
+  });
 });

@@ -275,13 +275,20 @@ export class DefaultUsageStatsService implements UsageStatsService {
     filter: UsageStatsFilter,
     page: UsageStatsRequestPageQuery,
   ): Promise<UsageStatsRequestPage> {
-    const offset = Math.max(0, Math.floor(page.offset));
     const limit = Math.floor(page.limit);
     if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
       throw chatInvalidArgument(
         `流水分页 limit 须为 1–200，收到：${page.limit}`,
       );
     }
+    // NaN/Infinity 会穿透 Math.floor/Math.max 进 SQL 绑定（better-sqlite3
+    // 直接抛错），与 limit 同构提前拒收。
+    if (!Number.isFinite(page.offset)) {
+      throw chatInvalidArgument(
+        `流水分页 offset 须为有限数值，收到：${page.offset}`,
+      );
+    }
+    const offset = Math.max(0, Math.floor(page.offset));
     const { fromMs, toMs } = this.resolveRangeMs(filter.range);
     const whereSql =
       `WHERE ${USAGE_NOT_NULL_SQL}` +
