@@ -605,53 +605,56 @@ export function TokenUsageStatsScreen() {
                   numberOfLines={1}
                   style={{ color: tokens.textSecondary, flexShrink: 1 }}
                 >
-                  {row.modelName ?? '其他'}
+                  首字延迟 {formatDurationMs(row.firstTokenMs)} · 总时间{' '}
+                  {formatDurationMs(row.durationMs)}
                 </Text>
               </View>
               <Text
+                numberOfLines={1}
                 style={[styles.reqRowDetail, { color: tokens.textSecondary }]}
               >
-                输入 {formatTokenCount(row.promptTokens)} · 输出{' '}
+                {row.modelName ?? '其他'} · 输入{' '}
+                {formatTokenCount(row.promptTokens)} · 输出{' '}
                 {formatTokenCount(row.completionTokens)} · 缓存读{' '}
                 {row.cacheReadTokens == null
                   ? '—'
-                  : formatTokenCount(row.cacheReadTokens)}{' '}
-                · 首字延迟 {formatDurationMs(row.firstTokenMs)} · 总时间{' '}
-                {formatDurationMs(row.durationMs)}
+                  : formatTokenCount(row.cacheReadTokens)}
               </Text>
             </View>
           ))}
-          {reqTotal > PAGE_SIZE ? (
+          {reqTotal > 0 ? (
             <View style={styles.reqPager}>
-              <Pressable
-                testID="req-prev-page"
-                style={[
-                  styles.reqPagerBtn,
-                  { borderColor: tokens.borderLight },
-                ]}
-                disabled={reqLoading || reqPage === 0}
-                onPress={() => loadRequests(reqPage - 1).catch(() => undefined)}
-              >
-                <Text style={{ color: tokens.primary }}>上一页</Text>
-              </Pressable>
-              <Text
-                style={[styles.reqPagerLabel, { color: tokens.textSecondary }]}
-              >
-                {reqLoading ? '加载中…' : `第 ${reqPage + 1}/${Math.ceil(reqTotal / PAGE_SIZE)} 页`}
-              </Text>
-              <Pressable
-                testID="req-next-page"
-                style={[
-                  styles.reqPagerBtn,
-                  { borderColor: tokens.borderLight },
-                ]}
-                disabled={
-                  reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal
-                }
-                onPress={() => loadRequests(reqPage + 1).catch(() => undefined)}
-              >
-                <Text style={{ color: tokens.primary }}>下一页</Text>
-              </Pressable>
+            <Pressable
+              testID="req-prev-page"
+              style={[
+                styles.reqPagerBtn,
+                { borderColor: tokens.borderLight },
+              ]}
+              disabled={reqLoading || reqPage === 0}
+              onPress={() => loadRequests(reqPage - 1).catch(() => undefined)}
+            >
+              <Text style={{ color: tokens.primary }}>上一页</Text>
+            </Pressable>
+            <Text
+              style={[styles.reqPagerLabel, { color: tokens.textSecondary }]}
+            >
+              {reqLoading
+                ? '加载中…'
+                : `第 ${reqPage + 1}/${Math.max(1, Math.ceil(reqTotal / PAGE_SIZE))} 页`}
+            </Text>
+            <Pressable
+              testID="req-next-page"
+              style={[
+                styles.reqPagerBtn,
+                { borderColor: tokens.borderLight },
+              ]}
+              disabled={
+                reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal
+              }
+              onPress={() => loadRequests(reqPage + 1).catch(() => undefined)}
+            >
+              <Text style={{ color: tokens.primary }}>下一页</Text>
+            </Pressable>
             </View>
           ) : null}
           {reqRows.length === 0 && !reqLoading && !reqDirtyRef.current ? (
