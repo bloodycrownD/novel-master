@@ -83,9 +83,8 @@ export interface UsageStatsBucket {
 }
 
 /**
- * 分模型汇总行（`modelName` 为 null 表示「其他」桶：未记录行与不在
- * 当前已保存模型集合内的行归并成一行）。
- */
+ /** 分模型汇总行（`modelName` 为 null 表示「其他」桶：未记录行与不在
+ * 当前已保存模型集合内的行归并成一行）。 */
 export interface UsageStatsModelRow {
   readonly modelName: string | null;
   readonly calls: number;
@@ -94,6 +93,34 @@ export interface UsageStatsModelRow {
   readonly totalTokens: number;
   readonly cacheReadTokens: number;
   readonly billedInputTokens: number;
+}
+
+/** 请求流水行（一条 assistant 消息 = 一次 LLM 请求）。 */
+export interface UsageStatsRequestRow {
+  /** 请求完成落库时刻（本地时区展示）。 */
+  readonly createdAtMs: number;
+  readonly modelName: string | null;
+  readonly promptTokens: number;
+  readonly completionTokens: number;
+  readonly totalTokens: number;
+  readonly cacheReadTokens: number | null;
+  readonly cacheCreationTokens: number | null;
+  readonly firstTokenMs: number | null;
+  readonly durationMs: number | null;
+}
+
+/** 请求流水分页查询入参。 */
+export interface UsageStatsRequestPageQuery {
+  readonly offset: number;
+  /** 每页条数（服务层限制 1–200）。 */
+  readonly limit: number;
+}
+
+/** 请求流水分页结果。 */
+export interface UsageStatsRequestPage {
+  readonly rows: readonly UsageStatsRequestRow[];
+  /** 符合筛选的总条数（供 UI 判断是否还有下一页）。 */
+  readonly total: number;
 }
 
 /** Token 用量统计聚合服务。 */
@@ -115,6 +142,15 @@ export interface UsageStatsService {
 
   /** 分模型汇总（非配置模型与未记录行归并为 `modelName` 为 null 的「其他」桶）。 */
   getModelBreakdown(filter: UsageStatsFilter): Promise<UsageStatsModelRow[]>;
+
+  /**
+   * 请求流水分页：按时间倒序逐条列出范围（与模型筛选同口径）内的
+   * LLM 请求记录，供「流水」页签展示。
+   */
+  listRequestUsage(
+    filter: UsageStatsFilter,
+    page: UsageStatsRequestPageQuery,
+  ): Promise<UsageStatsRequestPage>;
 
   /**
    * 可选模型列表：来自当前服务商配置的已保存模型（vendor_model_id 去重，

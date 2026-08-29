@@ -855,4 +855,75 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       assert.equal(b.avgTokensPerSecond, null, `桶 ${i} 速率应为 null`);
     }
   });
+
+  it("listRequestUsage 流水分页：时间倒序、分页与总数、模型筛选同口径", async () => {
+    const { ctx, session } = await seedSession();
+    // seed 已保存模型 model-a：「其他」桶口径 = null 或不在配置集内
+    const ts = String(Date.now());
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('reqlog-provider', 'openai', 'https://example.com', 'reqlog-p', '{}', 0, ${ts}, ${ts})`,
+    );
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('som-reqlog-1', 'reqlog-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`,
+    );
+    const svc = createUsageStatsService(ctx.conn);
+    const now = Date.now();
+    // 5 条 usage 行（时间递增 seed）+ 1 条无 usage 行（不入流水）
+    for (let i = 0; i < 5; i++) {
+      await seedMsg(ctx, session.id, i + 1, {
+        createdAtMs: now - (5 - i) * 60_000,
+        modelName: i === 0 ? null : "model-a",
+        usage: { prompt: 100 + i, completion: 10 + i, total: 110 + 2 * i, firstTokenMs: 200, durationMs: 2000 },
+      });
+    }
+    await seedMsg(ctx, session.id, 9, {
+      createdAtMs: now,
+      modelName: "model-a",
+      usage: null,
+    });
+    const page1 = await svc.listRequestUsage(
+      { range: { kind: "last7" } },
+      { offset: 0, limit: 3 },
+    );
+    assert.equal(page1.total, 5);
+    assert.equal(page1.rows.length, 3);
+    // 时间倒序：最新在前
+    assert.ok(page1.rows[0]!.createdAtMs >= page1.rows[1]!.createdAtMs);
+    assert.equal(page1.rows[0]!.completionTokens, 14);
+    const page2 = await svc.listRequestUsage(
+      { range: { kind: "last7" } },
+      { offset: 3, limit: 3 },
+    );
+    assert.equal(page2.rows.length, 2);
+    assert.ok(page2.rows[0]!.createdAtMs >= page2.rows[1]!.createdAtMs);
+    // 越界页空
+    const page3 = await svc.listRequestUsage(
+      { range: { kind: "last7" } },
+      { offset: 9, limit: 3 },
+    );
+    assert.equal(page3.rows.length, 0);
+    // 模型筛选：只 model-a（排除 null 行）→ 4 条
+    const filtered = await svc.listRequestUsage(
+      { range: { kind: "last7" }, model: "model-a" },
+      { offset: 0, limit: 50 },
+    );
+    assert.equal(filtered.total, 4);
+    for (const row of filtered.rows) {
+      assert.equal(row.modelName, "model-a");
+    }
+    // 「其他」桶（null model）→ 1 条
+    const others = await svc.listRequestUsage(
+      { range: { kind: "last7" }, model: null },
+      { offset: 0, limit: 50 },
+    );
+    assert.equal(others.total, 1);
+    assert.equal(others.rows[0]!.modelName, null);
+    // 非法 limit 拒收
+    await assert.rejects(
+      () => svc.listRequestUsage({ range: { kind: "last7" } }, { offset: 0, limit: 0 }),
+      /limit/,
+    );
+  });
 });

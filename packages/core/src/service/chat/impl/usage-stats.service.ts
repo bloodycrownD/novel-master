@@ -16,6 +16,9 @@ import type {
   UsageStatsFilter,
   UsageStatsModelRow,
   UsageStatsRange,
+  UsageStatsRequestPage,
+  UsageStatsRequestPageQuery,
+  UsageStatsRequestRow,
   UsageStatsService,
   UsageStatsSummary,
   UsageStatsToday,
@@ -266,6 +269,64 @@ export class DefaultUsageStatsService implements UsageStatsService {
         b.totalTokens - a.totalTokens ||
         (a.modelName ?? "").localeCompare(b.modelName ?? ""),
     );
+  }
+
+  async listRequestUsage(
+    filter: UsageStatsFilter,
+    page: UsageStatsRequestPageQuery,
+  ): Promise<UsageStatsRequestPage> {
+    const offset = Math.max(0, Math.floor(page.offset));
+    const limit = Math.floor(page.limit);
+    if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
+      throw chatInvalidArgument(
+        `流水分页 limit 须为 1–200，收到：${page.limit}`,
+      );
+    }
+    const { fromMs, toMs } = this.resolveRangeMs(filter.range);
+    const whereSql =
+      `WHERE ${USAGE_NOT_NULL_SQL}` +
+      ` AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}` +
+      ` ${modelFilterSql(filter.model)}`;
+    const params = { fromMs, toMs, modelName: filter.model ?? null, offset, limit };
+    const totalRows = await queryTemplate<{ n: number }>(
+      this.conn,
+      this.parser,
+      `SELECT COUNT(*) AS n FROM chat_message ${whereSql}`,
+      params,
+    );
+    const rows = await queryTemplate<Row>(
+      this.conn,
+      this.parser,
+      `SELECT created_at_ms, model_name, prompt_tokens, completion_tokens,
+              total_tokens, cache_read_tokens, cache_creation_tokens,
+              first_token_ms, duration_ms
+       FROM chat_message
+       ${whereSql}
+       ORDER BY created_at_ms DESC, id ASC
+       LIMIT #{limit} OFFSET #{offset}`,
+      params,
+    );
+    return {
+      rows: rows.map((row): UsageStatsRequestRow => ({
+        createdAtMs: Number(row.created_at_ms),
+        modelName: row.model_name == null ? null : String(row.model_name),
+        promptTokens: Number(row.prompt_tokens ?? 0),
+        completionTokens: Number(row.completion_tokens ?? 0),
+        totalTokens: Number(row.total_tokens ?? 0),
+        cacheReadTokens:
+          row.cache_read_tokens == null
+            ? null
+            : Number(row.cache_read_tokens),
+        cacheCreationTokens:
+          row.cache_creation_tokens == null
+            ? null
+            : Number(row.cache_creation_tokens),
+        firstTokenMs:
+          row.first_token_ms == null ? null : Number(row.first_token_ms),
+        durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
+      })),
+      total: Number(totalRows[0]?.n ?? 0),
+    };
   }
 
   async listModels(): Promise<string[]> {

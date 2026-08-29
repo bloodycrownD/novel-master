@@ -343,6 +343,9 @@ export type {
   UsageStatsToday,
   UsageStatsBucket,
   UsageStatsModelRow,
+  UsageStatsRequestRow,
+  UsageStatsRequestPage,
+  UsageStatsRequestPageQuery,
 } from '../service/chat/usage-stats.port.js';
 export type {
   MessageTranscriptEffectsService,
