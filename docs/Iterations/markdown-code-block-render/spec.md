@@ -207,6 +207,11 @@ docs/Iterations/markdown-code-block-render/spec.md
 | T-CB16 | 复制按钮渲染（追认，cr-fix MF-2）：desktop `renderCodeBlock` 注入 `CodeCopyButton`（`code-copy-btn`，SVG 零文本节点，批注偏移零污染）；mobile fence 注入空 `span.code-copy`（零 DOM 文本，label 走 CSS 伪元素）——**mermaid fence 除外**（mermaid 不是普通代码块，与 desktop MermaidBlock 无按钮口径对齐，cr-fix MF-11） | 追认（cr-fix MF-2/MF-11） | yes |
 | T-CB17 | 复制按钮 CSS（追认，cr-fix MF-2）：desktop `shell.css` `.code-copy-btn` 规则（`pre:hover > .code-copy-btn` 显示、copied 态）；mobile `rich-content-styles.ts` `.code-copy` 定位（pre 相对定位容器 + 按钮绝对定位）、`::after` 伪元素 label 与 `.copied::after` 已复制态 | 追认（cr-fix MF-2） | yes |
 | T-CB18 | desktop：复制按钮 promise/定时器源码级断言（cr-fix MF-10——静态渲染跑不了 effect，验收降级为源码级：`writeText` 链含 `.catch`、卸载路径 `clearTimeout` 清理） | cr-fix MF-10 | yes |
+| T-CB19 | mobile：code-copy 源码契约——document 捕获阶段 click 委托、`.code-copy` closest 命中、stopPropagation 拦冒泡（cr-fix MF-12，RN 环境无 jsdom 按「读源码 + dist」惯例） | cr-fix MF-12 | yes |
+| T-CB20 | mobile：copyCode 负载（pre>code textContent）与 copied 反馈（1500ms 复位）、attached 幂等守卫 | cr-fix MF-12 | yes |
+| T-CB21 | mobile：dist 契约——chat-transcript / rich-document 两包 app.js 均含 code-copy 委托标记 | cr-fix MF-12 | yes |
+| T-CB22 | mobile：双宿主 handleMessage copyCode → Clipboard.setString；双 Bridge copyCode 消息类型 | cr-fix MF-12 | yes |
+| T-CB23 | mobile：bind-shell-events 与 rich-document main.ts 的 attachCodeCopyDelegation 挂接契约 | cr-fix MF-12 | yes |
 
 ## 风险与回滚方案
 

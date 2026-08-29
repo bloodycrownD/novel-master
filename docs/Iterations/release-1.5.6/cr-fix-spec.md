@@ -69,6 +69,7 @@
 - **问题**：流水行 React key 用 `createdAtMs-modelName-promptTokens` 三元组拼接——同一毫秒内同模型、同 promptTokens 的两行会得到相同 key，触发渲染异常与告警。
 - **改法**：key 改为 `` `${row.createdAtMs}-${index}` ``，与 desktop 现行口径一致。
 - **验收/测试**：构造同毫秒、同模型、同 token 数的两行数据，渲染无 key 冲突告警（或按项目既有 key 测试模式补断言）。
+- **豁免备案（cr-func CR-P3-1）**：免补同毫秒专用断言——React test renderer 对重复 key 本就不告警，该断言无鉴别力；key 口径与 desktop 一致已由代码与既有渲染用例覆盖。
 - **来源**：release-1.5.6 review-scope（stats 节点）
 
 ### MF-6 release-1.5.6/stats-C-1 [P2] 纯函数双端逐字重复 + 同体函数未合并 + 注释失真
@@ -78,8 +79,9 @@
 - **维度**：C（代码复用 / 重复）
 - **文件**：`apps/desktop/renderer/…`（统计页）与 `apps/mobile/src/screens/stack/TokenUsageStatsScreen.tsx` 中的 `pageWindowItems` / `formatRequestTime` / `formatDurationMs` 等；desktop 文件内 `formatFirstTokenMs` 与 `formatDurationMs` 同体；desktop `REQUESTS_PAGE_SIZE` 注释
 - **问题**：`pageWindowItems`、`formatRequestTime`、`formatDurationMs` 等纯函数在双端逐字重复；desktop 文件内 `formatFirstTokenMs` 与 `formatDurationMs` 是同一个函数的两份拷贝；desktop `REQUESTS_PAGE_SIZE` 旁注释写「与 mobile 同口径」，但 mobile 页大小已改为 10（desktop 50），注释失真。另 `formatTokenCount` 实存三份：core/common 一份、`apps/desktop/shared/logic/format-token-count.ts` 一份（文件头自认等价复制）、mobile 已走 core 导入。
-- **改法**：纯函数下沉到 `@novel-master/core` 的 common（mobile 已有 `formatTokenCount` 下沉先例可循）；desktop 文件内同体的 `formatFirstTokenMs` / `formatDurationMs` 合并为一份；desktop `shared/logic/format-token-count.ts` 本地拷贝删除、改从 `@novel-master/core/common` 导入；`REQUESTS_PAGE_SIZE` 注释改为「core 限制 1–200，desktop 取 50」。
-- **验收/测试**：下沉后双端各删一份本地实现、引用 core 导出；双端 typecheck 通过；分页窗口与时间格式化既有测试不回归（如有快照随迁移更新）。
+- **改法**：纯函数下沉到 `@novel-master/core` 的 common（mobile 已有 `formatTokenCount` 下沉先例可循）；desktop 文件内同体的 `formatFirstTokenMs` / `formatDurationMs` 合并为一份；`REQUESTS_PAGE_SIZE` 注释改为「core 限制 1–200，desktop 取 50」。
+- **执行口径适配（fix wave 落地时裁定）**：desktop renderer 禁止 import core（eslint X1 门禁，`@shared/logic/format-token-count.ts` 的双副本即此惯例产物），故 desktop 侧落 `@shared/logic/usage-stats-format.ts` 等价镜像（文件头互指「双端行为一致契约」注释），`formatTokenCount` 维持双副本现状；原改法中「desktop 删除本地拷贝改引 core」一条按门禁约束不执行。
+- **验收/测试**：mobile 引用 core/common 导出、desktop 引用 @shared/logic 镜像（见上口径适配）；双端 typecheck 通过；分页窗口与时间格式化既有测试不回归（如有快照随迁移更新）。
 - **来源**：release-1.5.6 review-scope（stats 节点）
 
 ### MF-7 release-1.5.6/stats-C-2 [P2] UsageStatsModelRow JSDoc 嵌套畸形
@@ -145,6 +147,7 @@
 - **文件**：`apps/mobile/src/web/shared/code-copy.ts`（`attachCodeCopyDelegation`）；两个 RN 宿主的 `handleMessage`（`copyCode` → `Clipboard.setString` 分支）；desktop `CodeCopyButton` 相关测试
 - **问题**：`attachCodeCopyDelegation` 的委托命中、`stopPropagation`、`textContent` 收集、copied 超时、幂等守卫均无用例；两个 RN 宿主 `handleMessage` 的 `copyCode → Clipboard.setString` 分支也无用例；desktop `CodeCopyButton` 目前只有静态断言。
 - **改法**：补 `code-copy.ts` 单测（jsdom 环境 dispatch click + mock `post`，覆盖上述五个行为点）；补两个宿主桥测（mock message 事件触发 `handleMessage`，断言 `Clipboard.setString` 被调用且参数为收集到的文本）。
+- **执行口径适配（fix wave 落地时裁定）**：mobile jest 为 RN 环境（@react-native/jest-preset，无 jsdom），按本仓 webview 既有惯例改为「读源码 + dist」契约测试（T-CB19~T-CB23，样板 mermaid-fullscreen.test.ts）——jsdom 方案不执行；desktop 侧维持源码级断言（见 MF-10 适配）。
 - **验收/测试**：上述新增用例全部通过；desktop 侧如可行补交互级断言（click → clipboard 调用），至少不再只有静态断言。
 - **来源**：release-1.5.6 review-scope（markdown 节点）
 
