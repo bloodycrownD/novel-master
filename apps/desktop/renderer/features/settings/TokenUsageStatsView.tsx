@@ -742,7 +742,7 @@ export function TokenUsageStatsView() {
               <div className="token-stats-requests__row">—</div>
             ) : null}
           </div>
-          {reqTotal > REQUESTS_PAGE_SIZE ? (
+          {reqTotal > 0 ? (
             <div className="token-stats-requests__pager">
               <button
                 type="button"
@@ -759,7 +759,7 @@ export function TokenUsageStatsView() {
               <span className="token-stats-requests__pager-label">
                 {reqLoading
                   ? "加载中…"
-                  : `第 ${reqPage + 1}/${Math.ceil(reqTotal / REQUESTS_PAGE_SIZE)} 页`}
+                  : `第 ${reqPage + 1}/${Math.max(1, Math.ceil(reqTotal / REQUESTS_PAGE_SIZE))} 页`}
               </span>
               <button
                 type="button"
