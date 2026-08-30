@@ -2,6 +2,14 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
+import {
+  CHAT_TRANSCRIPT_BRIDGE_VERSION,
+  decodeHostToTranscript,
+} from '../src/components/chat/ChatTranscriptBridge';
+import {
+  clearMockWebViewPostMessages,
+  mockWebViewPostMessages,
+} from '../test-utils/react-native-webview-mock';
 
 // 消息体需带 content.blocks，deriveComposerSendState 会读 message.content.blocks。
 const mockTailMessage = {
@@ -22,6 +30,9 @@ const mockStreamBufferPush = jest.fn();
 let mockLatestMessageListProps: any;
 let mockStreamFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let mockTextBuffer = '';
+// transcript 引擎按用例切换：默认 legacy-rn（既有用例），webview 用例
+// （T-R3 顺序断言）切到 'webview' 挂真 ChatTranscriptWebView。
+let mockTranscriptEngine: 'legacy-rn' | 'webview' = 'legacy-rn';
 
 const mockRuntime: any = {
   projects: {
@@ -249,8 +260,8 @@ jest.mock('../src/components/ui/TextPromptModal', () => ({
 }));
 
 jest.mock('../src/storage/chat-transcript-engine', () => ({
-  defaultChatTranscriptEngine: () => 'legacy-rn',
-  readChatTranscriptEngine: jest.fn(async () => 'legacy-rn'),
+  defaultChatTranscriptEngine: () => mockTranscriptEngine,
+  readChatTranscriptEngine: jest.fn(async () => mockTranscriptEngine),
 }));
 
 jest.mock('../src/storage/chat-stream-batch-pref', () => ({
@@ -348,6 +359,11 @@ describe('ChatTabScreen integration', () => {
     mockRuntime.messages.listBySession.mockClear();
     mockRuntime.messages.listBySessionPage.mockClear();
     mockTextBuffer = '';
+    // 重进恢复相关 mock 复位（个别用例会覆盖实现）
+    mockTranscriptEngine = 'legacy-rn';
+    clearMockWebViewPostMessages();
+    mockRuntime.abortRegistry.has.mockImplementation(() => false);
+    mockRuntime.streamRegistry.get.mockImplementation(() => undefined);
     if (mockStreamFlushTimer != null) {
       clearTimeout(mockStreamFlushTimer);
       mockStreamFlushTimer = null;
@@ -425,5 +441,77 @@ describe('ChatTabScreen integration', () => {
       jest.advanceTimersByTime(41);
     });
     expect(mockLatestMessageListProps.streamingText).toBe('ABC');
+  });
+
+  it('T-R3 顺序：重进恢复注入的 streamDelta 晚于 sessionSnapshot（先 snapshot 后 inject）', async () => {
+    // 重进恢复现场：s1 仍有 in-flight run（has=true）且 streamRegistry 已有
+    // partial；webview 引擎下挂真 ChatTranscriptWebView，sessionSnapshot 与注入
+    // delta 都经 bridge 的 postToWeb（webview mock 落盘）按序记录。
+    mockTranscriptEngine = 'webview';
+    mockRuntime.abortRegistry.has.mockImplementation(() => true);
+    mockRuntime.streamRegistry.get.mockImplementation(() => ({
+      text: '重进恢复的 partial 正文',
+      thinking: '',
+    }));
+    clearMockWebViewPostMessages();
+
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatTabScreen />);
+    });
+    const root = (tree as TestRenderer.ReactTestRenderer).root;
+
+    // 进入会话：探针恢复方向合成 markRunStarted（uiRunning=true），
+    // messages 经 mockLoadTail 加载非空（先于 webview ready）
+    const sessionCard = findPressableByText(root, 'S1');
+    await act(async () => {
+      sessionCard.props.onPress();
+    });
+
+    // web 侧 ready：webReady=true 后子组件 messages effect 直发
+    // sessionSnapshot（needsOpenSnapshot 路径），注入 effect 随后把
+    // registry partial 经 pushStreamDelta（RAF 冲洗）注入。
+    const WebViewMock = require('react-native-webview').default as React.ComponentType<{
+      onMessage?: (event: {nativeEvent: {data: string}}) => void;
+    }>;
+    const webViews = root
+      .findAllByType(WebViewMock)
+      .filter(n => typeof n.props.onMessage === 'function');
+    expect(webViews).toHaveLength(1);
+    await act(async () => {
+      webViews[0]!.props.onMessage?.({
+        nativeEvent: {
+          data: JSON.stringify({
+            v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+            type: 'ready',
+            payload: {version: 'test'},
+          }),
+        },
+      });
+    });
+    // 冲洗 RAF/deferred 定时器（注入 delta 经 requestAnimationFrame 发出）
+    await act(async () => {
+      jest.advanceTimersByTime(64);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const sentMessages = mockWebViewPostMessages.map(raw =>
+      decodeHostToTranscript(raw),
+    );
+    const types = sentMessages.map(m => m.type);
+    const snapshotIdx = types.indexOf('sessionSnapshot');
+    const deltaIdx = types.indexOf('streamDelta');
+    expect(snapshotIdx).toBeGreaterThanOrEqual(0);
+    expect(deltaIdx).toBeGreaterThanOrEqual(0);
+    // 先 snapshot 后 inject：第一条 sessionSnapshot 的调用序号必须小于任何
+    // 注入产生的 stream/delta 消息（snapshot 建立基线后 delta 才有意义）
+    expect(snapshotIdx).toBeLessThan(deltaIdx);
+    // 本用例未发布任何流式事件，streamDelta 只可能来自重进注入，内容即 partial
+    const delta = sentMessages.find(m => m.type === 'streamDelta');
+    if (delta?.type === 'streamDelta') {
+      expect(delta.payload.delta).toBe('重进恢复的 partial 正文');
+    }
   });
 });
