@@ -33,6 +33,8 @@ export type EditorScreenShellProps<T extends string> = {
   /** 有未保存改动时调用方改传「未保存」，由 shell 统一 danger 着色。 */
   title: string;
   titleDanger: boolean;
+  /** 标题字号，默认 13（旧 PromptEditor 值）；文件屏传 14 还原旧默认字号。 */
+  titleFontSize?: number;
   /** 提供时标题区渲染为可点按（收起键盘）变体，如文件编辑聚焦态。 */
   titlePress?: {
     testID?: string;
@@ -64,6 +66,7 @@ export function EditorScreenShell<T extends string>({
   save,
   title,
   titleDanger,
+  titleFontSize = 13,
   titlePress,
   toggle,
   toolbarExtra,
@@ -102,7 +105,10 @@ export function EditorScreenShell<T extends string>({
             accessibilityLabel="收起键盘"
           >
             <Text
-              style={[styles.toolbarTitleText, {color: titleColor}]}
+              style={[
+                styles.toolbarTitleText,
+                {color: titleColor, fontSize: titleFontSize},
+              ]}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
@@ -114,7 +120,7 @@ export function EditorScreenShell<T extends string>({
             style={[
               styles.toolbarTitle,
               styles.toolbarTitleText,
-              {color: titleColor},
+              {color: titleColor, fontSize: titleFontSize},
             ]}
             numberOfLines={1}
             ellipsizeMode="tail"

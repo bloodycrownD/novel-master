@@ -23,6 +23,7 @@ export function AnnotatePickModal({visible, drafts, onPick, onClose}: Props) {
       onClose={onClose}
       variant="center"
       animationType="fade"
+      backdropOpacity={0.45}
       containerStyle={styles.overlay}
       panelStyle={styles.card}
     >

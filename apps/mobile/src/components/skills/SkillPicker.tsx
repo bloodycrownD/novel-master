@@ -103,11 +103,20 @@ export function SkillPicker({
       }}
       emptyText="当前项目暂无可用技能"
       onClose={onClose}
+      // 还原旧面板观感（cr-fix-spec ui-parity P2-4）：maxHeight 80%、圆角 16、取消色主文字色。
+      sheetStyle={styles.sheetOverride}
+      cancelColor={tokens.text}
     />
   );
 }
 
 const styles = StyleSheet.create({
+  // 覆盖 PickerListModal 默认 sheet（70%/圆角 12），还原旧 SkillPicker 观感。
+  sheetOverride: {
+    maxHeight: '80%',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
   rowBody: {flex: 1, gap: 4},
   titleRow: {
     flexDirection: 'row',

@@ -299,6 +299,7 @@ export function FileEditorScreen() {
       }}
       title={isDirty ? '未保存' : vfsBasename(path)}
       titleDanger={isDirty}
+      titleFontSize={14}
       titlePress={
         editorFocused && !previewMode
           ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor}
