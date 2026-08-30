@@ -7,8 +7,9 @@
  * - 全局 refcount 收口：increment 在 startRun 受理路径同步执行、decrement 由
  *   全量 FINISHED/FAILED 事件订阅驱动（不经 UI 面板的 sessionId 过滤，修掉
  *   「切走会话后 FINISHED 被丢弃 → refcount 泄漏」的缺陷）；
- * - promise 链尾 finally 早退兜底：RUN_STARTED 未达即抛错 → 清 entry +
- *   decrement（对齐 desktop agent.ts 的 C-orch-1 注释形状）。
+ * - promise 链尾 finally 兕底：只要 entry 仍归本次 startRun 所有（未被事件
+ *   路径收尾、未被新 run 替换）即清 entry + decrement——事件总线同步分发，
+ *   不存在「事件还会再来双减」的组合（对齐 desktop agent.ts 的 C-orch-1）。
  *
  * Manager 在 React 树外（runtime 装配层）实例化；UI toast / 偏好 / scope
  * 经 Provider 注入的桥访问，桥未注入期间降级：失败 toast 与完成通知不发，
@@ -240,15 +241,19 @@ export class AgentRunManager {
       })
       .finally(() => {
         const current = this.entries.get(sessionId);
-        if (current !== entry || current.runId != null) {
-          // RUN_STARTED 已达：FINISHED/FAILED 的事件路径负责收尾，不双减。
+        if (current !== entry) {
+          // 事件路径已收尾（entry 已删）或已被新一轮 startRun 替换，不双减。
           return;
         }
-        // 无 RUN_STARTED 的早退：清 entry + decrement，否则 refcount 永不回落、
-        // isMobileAgentActive() 永久 true（对齐 desktop agent.ts 的 C-orch-1）。
+        // 安全性依据（MF-2）：事件总线是同步分发的——若事件路径（FINISHED/FAILED）
+        // 已收尾过，此刻 entries.get(sessionId) 必然不等于 entry（已 delete 或被
+        // 新一轮 startRun 替换）；因此 current === entry 时不可能再有终态事件
+        // 来双减，一律收尾。这覆盖了「RUN_STARTED 已达但 core 在主 try 前抛错、
+        // 无终态事件」的窗口（否则 entry/refcount 永久泄漏）；finishRun 的
+        // entry+runId 所有权校验是另一道双保险。
         this.entries.delete(sessionId);
         decrementAgentActive();
-        void this.syncKeepAlive();
+        this.syncKeepAliveQuietly();
       });
 
     return {ok: true};
@@ -286,8 +291,9 @@ export class AgentRunManager {
   }
 
   private onRunFailed(payload: AgentRunFailedPayload): void {
-    this.uiBridge?.onError(payload.error);
-    this.finishRun(payload.sessionId, payload.runId, 'failed');
+    // toast / 兕底日志收口在 finishRun 的所有权匹配分支内（MF-1）：无 entry
+    // 或 runId 不匹配的 FAILED（subagent 子 run、旧连接残留）不弹也不刷日志。
+    this.finishRun(payload.sessionId, payload.runId, 'failed', payload.error);
   }
 
   /** FINISHED/FAILED 收尾：runId 匹配才清 entry + decrement + 触发 onSettled/通知。 */
@@ -295,6 +301,7 @@ export class AgentRunManager {
     sessionId: string,
     runId: string,
     status: AgentRunSettledStatus,
+    errorMessage?: string,
   ): void {
     const entry = this.entries.get(sessionId);
     if (entry == null || entry.runId !== runId) {
@@ -302,7 +309,20 @@ export class AgentRunManager {
     }
     this.entries.delete(sessionId);
     decrementAgentActive();
-    void this.syncKeepAlive();
+    this.syncKeepAliveQuietly();
+
+    if (status === 'failed') {
+      // 失败反馈也收口在所有权校验之后：无主 FAILED 不弹 toast（MF-1）；
+      // 桥未注入时用 console.error 兕底，不留无任何痕迹的失败（MF-6）。
+      if (this.uiBridge != null) {
+        this.uiBridge.onError(errorMessage ?? '生成失败');
+      } else {
+        console.error(
+          '[novel-master/agent-run-manager] run failed (uiBridge not ready)',
+          {sessionId, runId, error: errorMessage},
+        );
+      }
+    }
 
     try {
       entry.onSettled?.(status);
@@ -341,6 +361,13 @@ export class AgentRunManager {
     } else {
       await stopAgentKeepAliveService();
     }
+  }
+
+  /** fire-and-forget 调 syncKeepAlive：吞错但留日志，防 unhandled rejection（MF-4）。 */
+  private syncKeepAliveQuietly(): void {
+    void this.syncKeepAlive().catch(err => {
+      console.error('[novel-master/agent-run-manager] syncKeepAlive failed', err);
+    });
   }
 
   /**

@@ -244,6 +244,72 @@ describe('AgentRunManager', () => {
     expect(onError).toHaveBeenCalledWith('early boom');
   });
 
+  it('MF-1: 无 entry 的 FAILED 事件不弹 toast（subagent 子 run / 旧连接残留不误报）', () => {
+    const h = createHarness();
+    const onError = jest.fn();
+    h.manager.setUiBridge({onError});
+
+    publishFailed(h.eventBus, 'other', 'r-x'); // 无 entry 的会话
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('MF-1: runId 不匹配的 FAILED 事件不弹 toast，且不影响在途 run', () => {
+    const h = createHarness();
+    const onError = jest.fn();
+    h.manager.setUiBridge({onError});
+
+    h.manager.startRun('a', 'p', 'hi');
+    publishStarted(h.eventBus, 'a', 'r1');
+    publishFailed(h.eventBus, 'a', 'r-other'); // 旧连接残留的 runId
+    expect(onError).not.toHaveBeenCalled();
+    expect(h.manager.hasRun('a')).toBe(true); // 在途 run 不被误收尾
+
+    publishFinished(h.eventBus, 'a', 'r1'); // 真正的终态仍正常收尾
+    expect(h.manager.hasRun('a')).toBe(false);
+  });
+
+  it('MF-2: RUN_STARTED 已达但 reject 且无终态事件 → finally 仍收尾，refcount 回落', async () => {
+    const h = createHarness();
+    // core 在 RUN_STARTED publish 之后、主 try 之前抛错的窗口：无终态事件
+    h.runAgentTurn.mockRejectedValue(new Error('post-started boom'));
+
+    h.manager.startRun('a', 'p', 'hi');
+    publishStarted(h.eventBus, 'a', 'r1');
+    expect(isMobileAgentActive()).toBe(true);
+
+    await flushAsync();
+    expect(isMobileAgentActive()).toBe(false); // 不再因 runId != null 早退泄漏
+    expect(h.manager.hasRun('a')).toBe(false);
+  });
+
+  it('MF-6: uiBridge 未注入时匹配的 FAILED 走 console.error 兕底', () => {
+    const h = createHarness();
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    h.manager.startRun('a', 'p', 'hi');
+    publishStarted(h.eventBus, 'a', 'r1');
+    publishFailed(h.eventBus, 'a', 'r1');
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[novel-master/agent-run-manager] run failed (uiBridge not ready)',
+      expect.objectContaining({sessionId: 'a', runId: 'r1', error: 'model error'}),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it('MF-6 附带: 无主的 FAILED 不刷兑底日志（只在匹配分支内兑底）', () => {
+    const h = createHarness();
+    const errorSpy = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+
+    publishFailed(h.eventBus, 'other', 'r-x');
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
   it('dispose: 按记录清零模块级 refcount 并退订（之后的事件不再处理）', () => {
     const h = createHarness();
     const h2 = createHarness();
