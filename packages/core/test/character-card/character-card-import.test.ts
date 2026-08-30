@@ -24,6 +24,7 @@ import {
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import type { WorkplaceDirRule } from "../../src/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
 import { DefaultCharacterCardImportService } from "../../src/service/vfs/impl/character-card-import.service.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
@@ -379,6 +380,74 @@ describe("CharacterCardImportService", () => {
       (await vfs.read("/世界书/章节/深层/设定.md")).content,
       "深层设定",
     );
+  });
+
+  it("T-I8: 补规则行中途失败——已补目录保留、失败之后的目录仍补、导入整体成功", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-ti8-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 故障注入：仅 /角色/世界书 这一条补行抛错（目录全集按 path 排序，
+    // 它之前是 /角色，之后是 章节链），验证逐目录容错不阻断剩余补行
+    const svc = createCharacterCardImportService(ctx.conn, {
+      testHook: {
+        createWorkplaceRepo: (tx) =>
+          ({
+            listDirRules: (scopeKey: string) =>
+              new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
+            upsertDirRule: async (rule: WorkplaceDirRule) => {
+              if (rule.logicalPath === "/角色/世界书") {
+                throw new Error("boom-on-worldbook");
+              }
+              await new SqliteWorkplaceRepository(tx).upsertDirRule(rule);
+            },
+          }) as unknown as WorkplaceRepository,
+      },
+    });
+    const tree = new Map([
+      ["角色描述.md", "描述"],
+      ["世界书/章节/深层/设定.md", "深层设定"],
+    ]);
+    const originalWarn = console.warn;
+    const warnCalls: unknown[][] = [];
+    console.warn = (...args: unknown[]) => {
+      warnCalls.push(args);
+    };
+    try {
+      await assert.doesNotReject(
+        svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }),
+      );
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    // 仅失败目录触发一次 warn，导入整体成功
+    assert.equal(warnCalls.length, 1);
+    assert.match(String(warnCalls[0]![0]), /directory=\/角色\/世界书/);
+    assert.equal((await vfs.read("/角色/角色描述.md")).content, "描述");
+    assert.equal(
+      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
+      "深层设定",
+    );
+
+    // 失败之前的 /角色 与之后的章节链都有默认启用行，失败目录自身无行
+    const wt = createWorkplaceService(ctx.conn, scope);
+    for (const dir of [
+      "/角色",
+      "/角色/世界书/章节",
+      "/角色/世界书/章节/深层",
+    ]) {
+      const rule = await wt.getDirRule(dir);
+      assert.ok(rule, `${dir} 应有默认规则行`);
+      assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
+    }
+    assert.equal(await wt.getDirRule("/角色/世界书"), undefined);
   });
 
   it("T-C16: fixture PNG 经 importFromBytes 落盘子树", async () => {

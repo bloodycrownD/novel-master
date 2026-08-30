@@ -5,10 +5,12 @@
  * 由本 helper 在导入事务内、文件全部写入之后统一保证：取导入目标前缀下的
  * 全部目录，与 workplace 规则表已有行求差，对无行目录补一条默认启用规则行。
  *
- * 错误口径：整体 try/catch 吞错 + `console.warn`（对齐 clear-session-prompt-caches
- * 的 best-effort 口径——文件已落库，补行失败不应让导入报错）。差异须注意：它
- * 在事务提交后吞错，本 helper 在事务**内**吞错，依赖 SQLite 语句级失败不自动
- * ROLLBACK、后续语句可继续提交的行为（由 T-I5 故障注入用例守卫）。
+ * 错误口径：逐目录 try/catch + `console.warn`（单个目录补行失败只跳过该目录，
+ * 不阻断剩余目录补行，见 PRD 需求 4），外层再包整体 try/catch 兜底 warn
+ * （对齐 clear-session-prompt-caches 的 best-effort 口径——文件已落库，补行
+ * 失败不应让导入报错）。差异须注意：它在事务提交后吞错，本 helper 在事务**内**
+ * 吞错，依赖 SQLite 语句级失败不自动 ROLLBACK、后续语句可继续提交的行为
+ * （由 T-I5 故障注入用例守卫）。
  *
  * @module service/vfs/logic/ensure-import-dir-rules
  */
@@ -107,10 +109,20 @@ export async function ensureImportDirRules(
     await backfillMissingDirRules(
       directories,
       existing,
-      (logicalPath) =>
-        workplaceRepo.upsertDirRule(
-          buildDefaultDirRule(targetScopeKey, logicalPath)
-        )
+      async (logicalPath) => {
+        try {
+          await workplaceRepo.upsertDirRule(
+            buildDefaultDirRule(targetScopeKey, logicalPath)
+          );
+        } catch (error) {
+          // 逐目录容错（PRD 需求 4）：单个目录补行失败只 warn 并跳过，
+          // 不阻断剩余目录补行；外层整体 try/catch 仍是兜底。
+          console.warn(
+            `ensureImportDirRules: 补目录规则行失败（directory=${logicalPath}）`,
+            error
+          );
+        }
+      }
     );
   } catch (error) {
     // 吞错但不无声：目录/文件已落库（同事务），补规则失败不阻断导入主流程。
