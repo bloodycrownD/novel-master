@@ -1,34 +1,20 @@
-# code-dev-loop 编排状态（fix wave1 + 全量 8 波，终态）
-# 工作流状态存此处，不进 docs/apm/memory（APM 约定）
-spec_path: docs/Iterations/mobile-cr-dedup-abstraction/cr-fix-spec.md
-branch: cr/mobile-fix-wave1
-base_sha: 4ba1c73
-head_sha: f466efa
-status: dev-ready（fix-spec 30 P1 + 69 P2 = 99 条全部闭合）
-waves:
-  wave1: [sec/D-1, infra/B-1, b2/B-4, comp-misc/B-2]  # 20342a6 f095bcb 25daabc e5f3524
-  A 门禁格式: [fmt-1, arch/C-4, gates/G-1~G-5, web/A-1, tests/G-7, oq23]  # a091500 c5a8235
-  B 死代码: [comp-misc/C-1,C-3, services/C-1, infra/C-4, screens/C-9, web/C-1, comp-rest/C-8, tests/G-1,G-4, oq13, oq15部分]  # 2a386d1
-  C web收敛: [web/C-orch-1~6, web/A-2,A-3, web/C-2,C-3, oq7]  # ba42ffc
-  D 错误缓存: [b2/B-1~B-3,B-5,B-6, infra/B-2, comp-chat/C-6, services/C-6, screens/C-3]  # 2a9c29e
-  E services: [services/C-2~C-9 含 A-1,A-2, sec/D-2, oq17, oq18]  # f2f15d0
-  F screens: [screens/C-1,C-2,C-4~C-8,C-11,C-12, oq5]  # e9de26d
-  G components: [comp-rest/C-1~C-7, comp-chat/C-1,C-2,C-4,C-5,C-7,C-9, collapsible-rn, oq3]  # eb28bc0
-  H 收尾: [infra/C-1,C-2,C-5~C-7, arch/C-1~C-3,C-5, tests/G-2,G-3,G-5,G-6, oq12,oq14,oq21, comp-rest/C-9]  # 7141a71 3f67100
-  终轮修正: [格式回归修复, run-gradlew.mjs]  # f466efa
-verify_final:
-  tsc: 零输出
-  jest: 181 套件 / 1049 用例全绿（基线 165/906 → 净增 16 套件 143 用例）
-  format:check: 全绿（CI blocking）
-  lint: 22 存量 exhaustive-deps error（拍板分步收敛，CI continue-on-error）+ --max-warnings 321 锁
-cr_func_final:
-  抽验 15 条：14 ✅ + G-4 ⚠️（已补 run-gradlew.mjs 闭合）
-  func_ready: yes（两阻塞项经主代理机械复验消除：format 全绿 + JSON 合法 + 脚本落地）
-manual_qa_未自动化:
-  - 真机点消息内链接→系统浏览器、伪造桥消息不触发 rollback（sec/D-1）
-  - Android 五屏键盘回归（screens/C-2/C-8）
-  - 导出/导入全链含取消分支（services/C-2/C-3）
-  - allowFileAccessFromFileURLs 收紧评估（sec/D-1 后续）
-  - nightly Android 构建需推 GitHub 后实跑一次（oq23）
-单独立项记录: HostTheme tokens 收敛 / assertZipArchive 升 core / metro smoke 改造 / iOS sksp driver
-spec_deviations: []
+# spec-check-loop 编排状态（三个迭代并行审查）
+dag_version: 4
+review_round: 3
+iterations:
+  import-dir-rule-default-on:
+    prd_path: docs/Iterations/import-dir-rule-default-on/prd.md
+    spec_path: docs/Iterations/import-dir-rule-default-on/spec.md
+    review_rounds: 1
+    status: execute-ready 待用户确认（第 1 轮 Go，P1/P2 trivial 豁免直改闭合）
+  main-session-stream-resume:
+    prd_path: docs/Iterations/main-session-stream-resume/prd.md
+    spec_path: docs/Iterations/main-session-stream-resume/spec.md
+    review_rounds: 2
+    status: execute-ready 待用户确认（第 2 轮有条件 Go，P1+P2 trivial 豁免直改闭合）
+  agent-run-parallel-and-notify:
+    prd_path: docs/Iterations/agent-run-parallel-and-notify/prd.md
+    spec_path: docs/Iterations/agent-run-parallel-and-notify/spec.md
+    dependency: [Iterations/main-session-stream-resume/prd.md]
+    review_rounds: 3
+    status: execute-ready 待用户确认（第 3 轮 Go，残余 P2 trivial 豁免直改闭合）
