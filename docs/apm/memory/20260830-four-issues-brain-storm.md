@@ -82,4 +82,10 @@ user:
 导入和流式两条线直接合并到 main。
 
 assistant:
-已合并：main 在 6c8a872 后新增两个 mobile 样式提交（5a1a6ce），与两线零交集；7909552 合并导入线（干净）、e91422d 合并流式线（仅一个 memory 文件冲突，双侧轮次合并保留）。合并后 main 全量验证：core 1791 pass / mobile 1080 pass 全绿。并行线 feat/agent-run-parallel-and-notify（head 3d3bd4b）保留在 .woktree/parallel-notify 待后续 Step3 融合后合并。
+已合并：main 在 6c8a72 后新增两个 mobile 样式提交（5a1a6ce），与两线零交集；7909552 合并导入线（干净）、e91422d 合并流式线（仅一个 memory 文件冲突，双侧轮次合并保留）。合并后 main 全量验证：core 1791 pass / mobile 1080 pass 全绿。并行线 feat/agent-run-parallel-and-notify（head 3d3bd4b）保留在 .woktree/parallel-notify 待后续 Step3 融合后合并。
+
+user:
+写 changelog 并发版。
+
+assistant:
+v1.5.8 已发布（tag 1aba999）：CHANGELOG Unreleased 转 1.5.8（两项修复+两条维护，期间用户补记的 1.5.7 后续弹窗/样式/依赖修复三条同段发放），双端 package.json 与 build.gradle 默认 versionName 同步 1.5.8，三端测试全绿（core 1791/mobile 1080/desktop 100），tag 已推送触发 Release CI（APK+NSIS+DMG），main 已同步。并行+通知线未入本版，待 Step3 融合后随下版发布。
