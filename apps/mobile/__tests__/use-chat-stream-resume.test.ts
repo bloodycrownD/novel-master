@@ -8,6 +8,10 @@
 import React, {useRef} from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {AppState} from 'react-native';
+import type {
+  AgentAbortRegistry,
+  AgentStreamRegistry,
+} from '@novel-master/core/agent';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {
   EVENT_AGENT_RUN_FINISHED,
@@ -28,8 +32,10 @@ import {
   setMobileAgentActive,
 } from '@/runtime/agent-activity';
 
-const mockFlushRunUi = jest.fn(async () => undefined);
-const mockFlushAgentStepUi = jest.fn(async () => undefined);
+// 显式 rest 签名：包装层 (...args: unknown[]) => mock(...args) 的 spread
+// 要求目标函数带 rest 参数，否则裸 tsc 报 TS2556。
+const mockFlushRunUi = jest.fn(async (..._args: unknown[]) => undefined);
+const mockFlushAgentStepUi = jest.fn(async (..._args: unknown[]) => undefined);
 
 jest.mock('@/components/chat/flush-run-ui', () => ({
   flushRunUi: (...args: unknown[]) => mockFlushRunUi(...args),
@@ -43,14 +49,16 @@ let s1Has = false;
 let s1Partial: {text: string; thinking: string} | undefined;
 const eventBus = new SimpleEventBus();
 
-const mockRuntime: unknown = {
+// 具体形状对齐 core 两个 registry 端口（satisfies 校验），后续属性访问与
+// 向 useSessionAbort / useChatStreamResumeInject 的直传都无需再 as never。
+const mockRuntime = {
   eventBus,
   abortRegistry: {
     register: jest.fn(),
     abort: jest.fn(),
     unregister: jest.fn(),
     has: jest.fn((sid: string) => sid === 's1' && s1Has),
-  },
+  } satisfies AgentAbortRegistry,
   streamRegistry: {
     register: jest.fn(),
     reset: jest.fn(),
@@ -58,7 +66,7 @@ const mockRuntime: unknown = {
     get: jest.fn((sid: string) => (sid === 's1' ? s1Partial : undefined)),
     has: jest.fn((sid: string) => sid === 's1' && s1Partial != null),
     unregister: jest.fn(),
-  },
+  } satisfies AgentStreamRegistry,
 };
 
 jest.mock('@/hooks/useRuntime', () => ({
@@ -126,7 +134,7 @@ describe('主会话流式重进恢复（T-R1/R3/R4/R5/R7/R8）', () => {
       >(() => undefined);
       const abort = useSessionAbort({
         sessionId,
-        abortRegistry: mockRuntime.abortRegistry as never,
+        abortRegistry: mockRuntime.abortRegistry,
         onStreamResetRef,
       });
       const lifecycle = useAgentRunLifecycle({
@@ -145,7 +153,7 @@ describe('主会话流式重进恢复（T-R1/R3/R4/R5/R7/R8）', () => {
         transcriptWebRef: ref,
         // messages 已加载（非 0）——注入守卫允许（先 snapshot 后 inject）
         messagesLength: 3,
-        streamRegistry: mockRuntime.streamRegistry as never,
+        streamRegistry: mockRuntime.streamRegistry,
       });
       // 与 ChatTabProvider 同款 reset effect：session 切换时清状态（lifecycle
       // 内部同步查 registry 开恢复窗口）；声明在探针之前，同 commit 内
