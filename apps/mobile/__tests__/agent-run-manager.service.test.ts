@@ -213,6 +213,37 @@ describe('AgentRunManager', () => {
     expect(isMobileAgentActive()).toBe(false); // finally 未把计数减成负
   });
 
+  it('RUN_STARTED 后失败只弹一次 toast（事件路径已收尾，throw 路径不重复弹）', async () => {
+    const h = createHarness();
+    // core 失败形状：publish EVENT_AGENT_RUN_FAILED 后同一次 throw
+    h.runAgentTurn.mockRejectedValue(new Error('late boom'));
+    const onError = jest.fn();
+    h.manager.setUiBridge({onError});
+
+    h.manager.startRun('a', 'p', 'hi');
+    publishStarted(h.eventBus, 'a', 'r1');
+    publishFailed(h.eventBus, 'a', 'r1'); // 事件路径：onError + 收尾
+    await flushAsync(); // throw 路径随后到达
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith('model error');
+    expect(isMobileAgentActive()).toBe(false);
+  });
+
+  it('RUN_STARTED 未达即抛错（resolve/register 阶段）时 throw 路径兑底弹一次 toast', async () => {
+    const h = createHarness();
+    h.runAgentTurn.mockRejectedValue(new Error('early boom'));
+    const onError = jest.fn();
+    h.manager.setUiBridge({onError});
+
+    h.manager.startRun('a', 'p', 'hi');
+    await flushAsync();
+
+    // FAILED 事件永远不会来，只由 throw 路径弹
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith('early boom');
+  });
+
   it('dispose: 按记录清零模块级 refcount 并退订（之后的事件不再处理）', () => {
     const h = createHarness();
     const h2 = createHarness();

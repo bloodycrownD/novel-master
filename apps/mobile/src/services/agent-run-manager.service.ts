@@ -223,9 +223,16 @@ export class AgentRunManager {
               ? {name: err.name, message: err.message}
               : String(err),
         });
-        this.uiBridge?.onError(
-          err instanceof Error ? err.message : String(err),
-        );
+        // 仅 resolve/register 阶段错误（RUN_STARTED 未达，FAILED 事件永远不会来）
+        // 才由 throw 路径兜底 toast；RUN_STARTED 已达的失败 core 必发
+        // EVENT_AGENT_RUN_FAILED，事件路径（onRunFailed）已 onError，这里再弹
+        // 就是同一次失败的双 toast。entry 非本次（事件已收尾或已被替换）同理不弹。
+        const current = this.entries.get(sessionId);
+        if (current === entry && current.runId == null) {
+          this.uiBridge?.onError(
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       })
       .finally(() => {
         const current = this.entries.get(sessionId);
