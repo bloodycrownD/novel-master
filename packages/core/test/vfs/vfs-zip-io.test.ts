@@ -8,6 +8,8 @@ import {
   type VfsService,
 } from "@novel-master/core/vfs";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { createWorkplaceService } from "@novel-master/core/workplace";
+import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
@@ -836,6 +838,97 @@ describe("VfsZipIoService", () => {
       ),
       [],
     );
+  });
+
+  it("T-I2: ZIP 导入后前缀下全部目录（显式 directories 与隐式父链、深嵌套）默认启用并参与裁剪", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    // 显式 directories（"设定集/"）+ 文件路径隐式父链（世界书/章节/深层）
+    await zipSvc.import(
+      scope,
+      buildVfsZip(
+        new Map([
+          ["设定集/显式目录条目.md", "显式"],
+          ["世界书/章节/深层/设定.md", "深层设定"],
+        ]),
+        ["设定集/"],
+      ),
+      { confirmed: true, directoryPath: "/角色" },
+    );
+
+    const wt = createWorkplaceService(ctx.conn, scope);
+    for (const dir of [
+      "/角色",
+      "/角色/设定集",
+      "/角色/世界书",
+      "/角色/世界书/章节",
+      "/角色/世界书/章节/深层",
+    ]) {
+      const rule = await wt.getDirRule(dir);
+      assert.ok(rule, `${dir} 应有默认规则行`);
+      assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
+      assert.equal(rule.headCount, 0);
+      assert.equal(rule.tailCount, 1000);
+      assert.equal(rule.fillPolicy, "header");
+      // T-I4 同口径：补入行落在 workplace 键空间
+      assert.equal(rule.scopeKey, `session:${session.id}`);
+    }
+
+    // 经文件树视图确认导入目录参与裁剪
+    const view = await wt.materializeLiveView();
+    assert.ok(view.filetreeDisplay.includes("设定.md"));
+    assert.ok(view.filetreeDisplay.includes("显式目录条目.md"));
+    assert.equal(
+      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
+      "深层设定",
+    );
+  });
+
+  it("T-I3: ZIP 导入后已有规则行（rule_off 与自定义 headCount）不被覆盖", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 预置：目标目录自定义 headCount:7；子目录 rule_off
+    const wt = createWorkplaceService(ctx.conn, scope);
+    await wt.setDirRule({
+      logicalPath: "/角色",
+      sortField: "name",
+      sortOrder: "asc",
+      headCount: 7,
+      tailCount: 1,
+      fillPolicy: "filename",
+    });
+    await wt.setDirRule({ logicalPath: "/角色/世界书", ruleEnabled: false });
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(
+      scope,
+      buildVfsZip(new Map([["世界书/设定.md", "设定"]])),
+      { confirmed: true, directoryPath: "/角色" },
+    );
+
+    const after = await wt.getDirRule("/角色");
+    assert.ok(after);
+    assert.equal(after.headCount, 7);
+    assert.equal(after.fillPolicy, "filename");
+    const worldbook = await wt.getDirRule("/角色/世界书");
+    assert.ok(worldbook);
+    assert.equal(worldbook.ruleEnabled, false);
   });
 
 });
