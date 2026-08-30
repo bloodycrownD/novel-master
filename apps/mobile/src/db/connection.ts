@@ -60,6 +60,12 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
           cause = cause instanceof Error ? cause.cause : undefined;
           depth++;
         }
+        // 此时 conn 还没赋值，closeMobileConnection() 里的 conn?.close()
+        // 关不到这条连接；不在这里手动 close，局部变量 c 持有的已打开连接
+        // 会随 throw 一起丢弃，文件句柄和 WAL 锁随之泄漏——Android 上重试
+        // 重新 open 同一个库时，新旧连接可能互相锁死。close 本身失败不掩盖
+        // 原始的 bootstrap 错误，所以吞掉它的异常。
+        await c.close().catch(() => {});
         throw bootErr;
       }
       await probeAndCacheMobileDatabaseFilePath();

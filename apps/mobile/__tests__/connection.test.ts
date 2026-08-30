@@ -5,9 +5,15 @@ import {
   probeAndCacheMobileDatabaseFilePath,
   QUICK_SQLITE_DEFAULT_LOCATION,
 } from '../src/db/db-file-path';
+import {
+  closeMobileConnection,
+  getMobileConnection,
+} from '../src/db/connection';
 import {MOBILE_VFS_DB_NAME} from '../src/vfs/constants';
 
 const mockExists = jest.fn();
+const mockOpen = jest.fn();
+const mockBootstrap = jest.fn();
 
 jest.mock('react-native-blob-util', () => ({
   __esModule: true,
@@ -20,6 +26,23 @@ jest.mock('react-native-blob-util', () => ({
       exists: (...args: unknown[]) => mockExists(...args),
     },
   },
+}));
+
+jest.mock('@novel-master/core', () => ({
+  open: (...args: unknown[]) => mockOpen(...args),
+  bootstrapNovelMaster: (...args: unknown[]) => mockBootstrap(...args),
+}));
+
+jest.mock('@novel-master/tdbc-driver-op-sqlite/native', () => ({
+  registerOpSqliteDriver: jest.fn(),
+}));
+
+jest.mock('@novel-master/sksp-android', () => ({
+  registerSkspAndroidDriver: jest.fn(),
+}));
+
+jest.mock('@novel-master/tokenizer-driver-rn/native', () => ({
+  registerTokenizerRnDriver: jest.fn(),
 }));
 
 describe('mobile database file path', () => {
@@ -86,5 +109,46 @@ describe('mobile database file path', () => {
       `/data/files/${QUICK_SQLITE_DEFAULT_LOCATION}/${MOBILE_VFS_DB_NAME}.db`,
     );
     expect(getMobileDatabaseFilePath()).toBe(path);
+  });
+});
+
+describe('getMobileConnection bootstrap failure', () => {
+  beforeEach(() => {
+    mockExists.mockReset();
+    mockOpen.mockReset();
+    mockBootstrap.mockReset();
+    // 失败路径会打 cause 链日志，测试里不需要真输出。
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    // 重置 connection 模块的 conn / initPromise，避免状态串到其他用例。
+    await closeMobileConnection();
+  });
+
+  it('closes the opened connection when bootstrap rejects, and reopen works after reset', async () => {
+    // bootstrap 抛错时 conn 尚未赋值，closeMobileConnection() 关不到这条
+    // 连接；open 拿到的连接必须在意料外的路径上被手动 close，否则文件
+    // 句柄和 WAL 锁泄漏，Android 重试 open 同一个库时可能互锁。
+    const leakingConn = {close: jest.fn().mockResolvedValue(undefined)};
+    mockOpen.mockResolvedValueOnce(leakingConn);
+    mockBootstrap.mockRejectedValueOnce(new Error('bootstrap boom'));
+
+    await expect(getMobileConnection()).rejects.toThrow('bootstrap boom');
+    expect(mockOpen).toHaveBeenCalledTimes(1);
+    expect(leakingConn.close).toHaveBeenCalledTimes(1);
+
+    // 重试路径：bootstrap 失败后 initPromise 仍是那个 rejected 的 Promise，
+    // 直接重调不会重新 open；实际重试要先 closeMobileConnection() 重置
+    // initPromise，再重新走 open。
+    await closeMobileConnection();
+    const retryConn = {close: jest.fn().mockResolvedValue(undefined)};
+    mockOpen.mockResolvedValueOnce(retryConn);
+    mockBootstrap.mockResolvedValueOnce(undefined);
+
+    await expect(getMobileConnection()).resolves.toBe(retryConn);
+    expect(mockOpen).toHaveBeenCalledTimes(2);
+    expect(retryConn.close).not.toHaveBeenCalled();
   });
 });
