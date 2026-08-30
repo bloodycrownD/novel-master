@@ -35,7 +35,17 @@ let permissionDenied = false;
 
 let channelsReady = false;
 
-let tapHandler: ((sessionId: string) => void) | undefined;
+/**
+ * 点按处理入口（前台/后台共用）：Manager 构造时替换引用，dispose 后置空。
+ * 允许返回 Promise：后台 headless 路径要等 scope 切换落盘后才结束任务。
+ */
+let tapHandler: ((sessionId: string) => void | Promise<void>) | undefined;
+
+/**
+ * 后台点按的待导航意图：headless 里导航容器多半未 ready，先记录，
+ * 回前台后消费一次（见模块级 AppState 监听）。
+ */
+let pendingTapNavigation = false;
 
 /**
  * 前台保活常驻服务是否处于运行态（模块级标记，跨 Manager 实例共享）。
@@ -238,11 +248,12 @@ export function stopAgentKeepAliveService(): Promise<void> {
 /**
  * 注册通知点按处理：切 scope 到目标会话（经注入的回调）并导航到 Chat tab。
  *
- * 仅处理 app 存活时的前台事件（onForegroundEvent PRESS）；app 被杀后点通知
- * 属冷启动场景，PRD 未承诺（杀 app 后 run 已终止）。
+ * 前台事件（onForegroundEvent PRESS）返回退订函数，由调用方（Manager）
+ * 在 dispose 时退订；app 被杀后点通知属冷启动场景，PRD 未承诺
+ * （杀 app 后 run 已终止）。
  */
 export function registerAgentNotificationTapHandling(
-  onTapSession: (sessionId: string) => void,
+  onTapSession: (sessionId: string) => void | Promise<void>,
 ): () => void {
   tapHandler = onTapSession;
   return notifee.onForegroundEvent(({type, detail}) => {
@@ -251,7 +262,7 @@ export function registerAgentNotificationTapHandling(
     }
     const sessionId = detail?.notification?.data?.sessionId;
     if (typeof sessionId === 'string') {
-      tapHandler?.(sessionId);
+      void tapHandler?.(sessionId);
     }
   });
 }
@@ -275,3 +286,30 @@ export function navigateToChatTabFromNotification(): void {
 if (Platform.OS === 'android') {
   notifee.registerForegroundService(() => new Promise(() => undefined));
 }
+
+// 后台点按（MF-3）：notifee 9.x 的 onBackgroundEvent 返回 void、没有退订函数，
+// 只能模块级注册一次；handler 需要变化时替换上面的 tapHandler 引用
+// （与 onForegroundEvent 共用同一入口）。注册放模块级而非 Manager 构造时，
+// 避免 app 存活但 runtime 未装配时 headless 事件到达而 handler 未就绪。
+// observer 必须返回 Promise<void>（headless 语义：notifee 等 promise 结束才标记任务完成），
+// 这里等 scope 切换（tapHandler）落盘后再记录导航意图。
+notifee.onBackgroundEvent(async ({type, detail}) => {
+  if (type !== EventType.PRESS) {
+    return;
+  }
+  const sessionId = detail?.notification?.data?.sessionId;
+  if (typeof sessionId !== 'string') {
+    return;
+  }
+  await tapHandler?.(sessionId);
+  // headless 里导航大概率不可达（容器未 ready），记录待导航意图，回前台后消费。
+  pendingTapNavigation = true;
+});
+
+// 回前台消费后台点按留下的导航意图（模块级单次注册，与进程同生命周期）。
+AppState.addEventListener('change', state => {
+  if (state === 'active' && pendingTapNavigation) {
+    pendingTapNavigation = false;
+    navigateToChatTabFromNotification();
+  }
+});

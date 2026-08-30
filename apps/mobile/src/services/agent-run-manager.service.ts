@@ -123,6 +123,8 @@ export class AgentRunManager {
   private uiBridge: AgentRunUiBridge | undefined;
   private prefBridge: AgentRunPrefBridge | undefined;
   private scopeBridge: AgentRunScopeBridge | undefined;
+  /** onForegroundEvent 点按监听的退订函数（dispose 时退订，防 retry 重建累积）。 */
+  private offNotificationTap: (() => void) | undefined;
   private disposed = false;
   private permissionEnsured = false;
 
@@ -149,7 +151,9 @@ export class AgentRunManager {
     );
 
     // 通知点按：切 scope 到目标会话 + 导航 Chat tab。
-    registerAgentNotificationTapHandling(sessionId => {
+    // onBackgroundEvent 为模块级一次注册（handler 引用替换），不随实例退订；
+    // 这里只握 onForegroundEvent 的退订函数，dispose 时退订（MF-5）。
+    this.offNotificationTap = registerAgentNotificationTapHandling(sessionId => {
       void this.scopeBridge?.setCurrentSession(sessionId).catch(() => undefined);
       navigateToChatTabFromNotification();
     });
@@ -349,6 +353,8 @@ export class AgentRunManager {
    */
   dispose(): void {
     this.disposed = true;
+    this.offNotificationTap?.();
+    this.offNotificationTap = undefined;
     for (const sub of this.subscriptions) {
       sub.unsubscribe();
     }

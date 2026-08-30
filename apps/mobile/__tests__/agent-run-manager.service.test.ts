@@ -19,7 +19,7 @@ import {
 } from '@/runtime/agent-activity';
 import {AgentRunManager} from '@/services/agent-run-manager.service';
 import {Platform} from 'react-native';
-import notifee from '@notifee/react-native';
+import notifee, {onForegroundEventUnsubscribe} from '@notifee/react-native';
 
 /** 等待 fire-and-forget promise 链（catch+finally）收敛。 */
 async function flushAsync(): Promise<void> {
@@ -267,6 +267,16 @@ describe('AgentRunManager', () => {
     publishStarted(h2.eventBus, 'c', 'r9');
     publishFinished(h2.eventBus, 'c', 'r9');
     expect(isMobileAgentActive()).toBe(false);
+  });
+
+  it('MF-5: 构造→dispose→再构造→再 dispose：onForegroundEvent 注册与退订对齐，不随重建累积', () => {
+    const h1 = createHarness();
+    h1.manager.dispose();
+    const h2 = createHarness();
+    h2.manager.dispose();
+
+    expect(notifee.onForegroundEvent).toHaveBeenCalledTimes(2);
+    expect(onForegroundEventUnsubscribe).toHaveBeenCalledTimes(2);
   });
 
   describe('通知与保活（T-P4/T-P6 侧）', () => {

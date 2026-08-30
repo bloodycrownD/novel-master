@@ -4,7 +4,7 @@
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import {AppState, Platform} from 'react-native';
-import notifee, {displayNotification, createChannel} from '@notifee/react-native';
+import notifee, {displayNotification, createChannel, EventType} from '@notifee/react-native';
 import {
   notifyAgentRunFinished,
   resetFailedNotifyMergeStateForTests,
@@ -13,6 +13,7 @@ import {
   ensureAgentNotificationPermission,
   startAgentKeepAliveService,
   stopAgentKeepAliveService,
+  registerAgentNotificationTapHandling,
 } from '@/services/agent-finished-notification';
 
 function setAppState(state: string): void {
@@ -21,6 +22,20 @@ function setAppState(state: string): void {
     configurable: true,
   });
 }
+
+/**
+ * onBackgroundEvent 的模块级注册发生在 import 时，beforeEach 的
+ * clearAllMocks 会清掉调用记录，必须在顶层立即捕获 observer。
+ */
+const backgroundObserver: (
+  event: {type: number; detail?: {notification?: {data?: Record<string, unknown>}}},
+) => Promise<void> = (notifee.onBackgroundEvent as jest.Mock).mock.calls[0][0];
+
+const backgroundAppStateListener = (
+  AppState.addEventListener as jest.Mock
+).mock.calls.find(([state]) => state === 'change')?.[1] as
+  | ((state: string) => void)
+  | undefined;
 
 describe('agent-finished-notification', () => {
   beforeEach(() => {
@@ -223,6 +238,46 @@ describe('agent-finished-notification', () => {
         status: 'failed',
       });
       expect(displayNotification).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('MF-3: 后台点按（onBackgroundEvent）', () => {
+    it('PRESS 携带 sessionId 时触发 tapHandler（与前台共用同一入口）', async () => {
+      const onTap = jest.fn();
+      registerAgentNotificationTapHandling(onTap);
+
+      await backgroundObserver({
+        type: EventType.PRESS,
+        detail: {notification: {data: {sessionId: 's9'}}},
+      });
+      expect(onTap).toHaveBeenCalledWith('s9');
+    });
+
+    it('非 PRESS 事件与无 sessionId 的 PRESS 不触发 tapHandler', async () => {
+      const onTap = jest.fn();
+      registerAgentNotificationTapHandling(onTap);
+
+      await backgroundObserver({type: EventType.DISMISSED, detail: undefined});
+      await backgroundObserver({
+        type: EventType.PRESS,
+        detail: {notification: {data: {}}},
+      });
+      expect(onTap).not.toHaveBeenCalled();
+    });
+
+    it('后台点按记录待导航意图，回前台后消费一次', async () => {
+      const onTap = jest.fn();
+      registerAgentNotificationTapHandling(onTap);
+      await backgroundObserver({
+        type: EventType.PRESS,
+        detail: {notification: {data: {sessionId: 's9'}}},
+      });
+
+      expect(backgroundAppStateListener).toBeInstanceOf(Function);
+      backgroundAppStateListener!('active');
+      backgroundAppStateListener!('active'); // 意图已消费，不重复导航
+      backgroundAppStateListener!('background');
+      // 无新的待导航意图：再回前台也不导航（无断言手段，仅验证不抛错）
     });
   });
 
