@@ -18,10 +18,7 @@ import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js"
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
 import { workplaceScopeKey } from "@/domain/workplace/logic/workplace-scope.js";
-import type {
-  WorkplaceDirRule,
-  WorkplaceScope,
-} from "@/domain/workplace/model/workplace-types.js";
+import type { WorkplaceDirRule } from "@/domain/workplace/model/workplace-types.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 
 /**
@@ -97,7 +94,7 @@ export async function ensureImportDirRules(
   const { vfsRepo, workplaceRepo, scope, directoryPath } = deps;
   try {
     const prefix = normalizePath(directoryPath);
-    const targetScopeKey = workplaceScopeKey(scope as unknown as WorkplaceScope);
+    const targetScopeKey = workplaceScopeKey(scope);
     const directories = await vfsRepo.listDirectoryPathsUnderPrefix(
       scopeKey(scope),
       prefix
