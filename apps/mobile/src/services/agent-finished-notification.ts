@@ -45,6 +45,66 @@ let tapHandler: ((sessionId: string) => void) | undefined;
  */
 let keepAliveRunning = false;
 
+/** 期望运行态：链上每次 reconcile 都按最新期望值对齐实际状态。 */
+let keepAliveDesired = false;
+
+/** 起停串行化链：所有 start/stop 决策排队执行，消除在途竞态。 */
+let keepAliveChain: Promise<void> = Promise.resolve();
+
+/** 仅测试用：复位保活模块级状态。 */
+export function resetKeepAliveStateForTests(): void {
+  keepAliveRunning = false;
+  keepAliveDesired = false;
+  keepAliveChain = Promise.resolve();
+}
+
+/**
+ * 把一次起/停决策排到链尾，并立即更新期望态。
+ *
+ * 期望态在入队时写入（而非执行时），所以「stop 在途期间来了 start」
+ * 会让链上尚未执行的 stop 直接跳过、或 stop 完成后补一次 start，
+ * 两种时序最终都收敛到运行——新 run 不会裸奔。
+ */
+function enqueueKeepAliveSync(desired: boolean): Promise<void> {
+  keepAliveDesired = desired;
+  const task = keepAliveChain.then(() => reconcileKeepAlive());
+  // 链本身吞错（否则任一 reject 会卡死后续排队），调用侧自行 catch。
+  keepAliveChain = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
+}
+
+/** 按最新期望态对齐实际运行态（只在链尾执行，天然串行）。 */
+async function reconcileKeepAlive(): Promise<void> {
+  if (keepAliveDesired === keepAliveRunning) {
+    return;
+  }
+  if (keepAliveDesired) {
+    await ensureChannels();
+    await notifee.displayNotification({
+      id: KEEPALIVE_NOTIFICATION_ID,
+      title: '正在生成',
+      body: '生成进行中，完成后自动结束；期间请勿强行关闭应用。',
+      android: {
+        channelId: CHANNEL_AGENT_KEEPALIVE,
+        asForegroundService: true,
+        ongoing: true,
+        smallIcon: 'ic_launcher',
+      },
+    });
+    keepAliveRunning = true;
+    return;
+  }
+  try {
+    await notifee.stopForegroundService();
+  } finally {
+    // stop 抛错也要复位标记，否则永久卡 true、之后所有 start 都 no-op。
+    keepAliveRunning = false;
+  }
+}
+
 async function ensureChannels(): Promise<void> {
   if (channelsReady) {
     return;
@@ -104,6 +164,10 @@ export function resetFailedNotifyMergeStateForTests(): void {
 /**
  * 发送「生成结束」本地通知。
  *
+ * 平台门禁在最前（iOS 本次不承诺通知，且 createChannel / android channel
+ * 均为 Android-only）；失败合并窗口的写入在门禁之后，避免 iOS 消耗窗口
+ * 状态、期间真实失败被误抑制。
+ *
  * 前台（AppState active）不发；失败通知按会话 5 分钟窗口合并抑制。
  * 通知 data 携带 sessionId，点按路径据此直达会话。
  */
@@ -112,6 +176,9 @@ export async function notifyAgentRunFinished(input: {
   readonly sessionTitle: string | null | undefined;
   readonly status: 'finished' | 'failed';
 }): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return;
+  }
   // 前台一律不发（含停留生成中会话的界面——前台自有完成反馈）。
   if (isAppInForeground()) {
     return;
@@ -153,32 +220,19 @@ export async function notifyAgentRunFinished(input: {
  * 仅 Android；已在运行时幂等 no-op。JS 侧须已 registerForegroundService，
  * 否则原生侧找不到 runner——本模块顶层已注册常驻 runner（服务随 stop 调用结束）。
  */
-export async function startAgentKeepAliveService(): Promise<void> {
-  if (Platform.OS !== 'android' || keepAliveRunning) {
-    return;
+export function startAgentKeepAliveService(): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return Promise.resolve();
   }
-  await ensureChannels();
-  await notifee.displayNotification({
-    id: KEEPALIVE_NOTIFICATION_ID,
-    title: '正在生成',
-    body: '生成进行中，完成后自动结束；期间请勿强行关闭应用。',
-    android: {
-      channelId: CHANNEL_AGENT_KEEPALIVE,
-      asForegroundService: true,
-      ongoing: true,
-      smallIcon: 'ic_launcher',
-    },
-  });
-  keepAliveRunning = true;
+  return enqueueKeepAliveSync(true);
 }
 
 /** 停止前台保活服务（全部 run 结束 / Manager dispose 时调用）。 */
-export async function stopAgentKeepAliveService(): Promise<void> {
-  if (Platform.OS !== 'android' || !keepAliveRunning) {
-    return;
+export function stopAgentKeepAliveService(): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return Promise.resolve();
   }
-  await notifee.stopForegroundService();
-  keepAliveRunning = false;
+  return enqueueKeepAliveSync(false);
 }
 
 /**

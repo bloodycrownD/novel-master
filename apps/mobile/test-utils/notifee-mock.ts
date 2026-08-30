@@ -34,7 +34,11 @@ export const requestPermission = jest.fn(async () => ({
 }));
 export const stopForegroundService = jest.fn(async () => undefined);
 export const registerForegroundService = jest.fn();
-export const onForegroundEvent = jest.fn(() => () => undefined);
+/** onForegroundEvent 返回的退订函数（单独暴露以便断言注册/退订净值）。 */
+export const onForegroundEventUnsubscribe = jest.fn(() => undefined);
+export const onForegroundEvent = jest.fn(() => onForegroundEventUnsubscribe);
+/** onBackgroundEvent（notifee 9.x 返回 void、不可退订），模块级只应调用一次。 */
+export const onBackgroundEvent = jest.fn();
 
 const notifeeMock = {
   displayNotification,
@@ -43,6 +47,7 @@ const notifeeMock = {
   stopForegroundService,
   registerForegroundService,
   onForegroundEvent,
+  onBackgroundEvent,
 };
 
 export default notifeeMock;
