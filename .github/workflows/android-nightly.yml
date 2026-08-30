@@ -1,0 +1,77 @@
+# Nightly Android assembleDebug：原生侧编译门禁（oq23，2026-08-30 拍板）。
+#
+# 设计要点：
+# - 只走 schedule（+ 手动 workflow_dispatch），不进 PR 路径，避免拖慢日常 CI
+# - setup 写法复用 release.yml 的 android-release job（Node / Java / Android SDK / Gradle cache）
+# - 失败通知走 GitHub Actions 默认通知（scheduled workflow 失败会邮件仓库 owner）
+# - 注意：GitHub 会在仓库 60 天无活动后自动停用 scheduled workflow，push 任意提交即恢复
+
+name: Android Nightly
+
+on:
+  schedule:
+    # UTC 18:00 = 北京时间凌晨 2:00
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-nightly:
+    name: Android assembleDebug
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'packages/sksp-android/android/**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: |
+          npm run build -w @novel-master/core
+          npm run build -w @novel-master/cloud-sync-driver-s3
+          npm run build -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
+          # dist gitignore，CI 须逐包构建；漏列会让 metro 解析 exports（./native → dist/native.js）失败
+          npm run build -w @novel-master/tdbc-driver-op-sqlite
+
+      # WebView 产物 gitignore；assemble 前必须拷入 android_asset，否则聊天页 net::ERR_FILE_NOT_FOUND
+      - name: Build WebView native assets
+        run: npm run build:webview:native -w @novel-master/mobile
+
+      - name: Build debug APK
+        working-directory: apps/mobile/android
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon

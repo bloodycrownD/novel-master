@@ -60,7 +60,7 @@ Mobile 源码使用 `@/` 指向 `apps/mobile/src/`（`tsconfig.json` paths、`me
 
 跨 workspace 包请用包名导入，例如 `@novel-master/core`、`@novel-master/tdbc-driver-rn`；**不要**用 `@/` 引用 `packages/` 内代码。
 
-WebView boot（`src/web/**`）使用 `@web/*` → `src/web/*`（`tsconfig.webview-boot.json` + `scripts/build-webview.mjs`）；**不要**用 `@/` 写 WebView 源码。
+WebView boot（`src/web/**`）使用 `@web/*` → `src/web/*`（`src/web/tsconfig.json` + `scripts/build-webview.mjs`）；**不要**用 `@/` 写 WebView 源码。
 
 ## App launcher icon
 
@@ -200,7 +200,7 @@ Chat Transcript `webview/ui/**` 对 `runtime/state` 的纪律（对齐 post-1.3.
 | 路径 | `ui/stream/StreamTail.tsx`、`ui/render/RowList.tsx`、`ui/render/MessageRow.tsx`（含 StreamTail 内 `StreamBodyHost`，同文件） |
 | type-only | `import type { … } from '…/state'` **允许**（不占白名单） |
 | **新** `ui/**` 组件 | **禁止**值导入 `state`；经 props / runtime 门面拿数据 |
-| 门禁 | `npm run check:ct-ui-no-state`（根或 `-w @novel-master/mobile`）→ `scripts/check-ct-ui-no-state.mjs`；白名单外新直读 → exit 1 |
+| 门禁 | 纪律保留为代码约定（原 `check:ct-ui-no-state` 脚本已删，需要时从 git 历史找回）；新直读靠 CR 把关 |
 
 既有三文件可渐进 props 化并缩小白名单（不挡本门禁开启）。勿把新直读加进白名单外文件。
 

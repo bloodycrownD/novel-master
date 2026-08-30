@@ -1,6 +1,18 @@
 {
-  "extends": "../../tsconfig.webview-boot.json",
+  // 原 extends ../../tsconfig.webview-boot.json 已退役（web/A-1，2026-08-30 决议）：
+  // compilerOptions 内联至此，include 由本文件独占维护
   "compilerOptions": {
+    "target": "ES2018",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2018", "DOM"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
     // 本文件位于 src/web/：@web → 当前目录（勿沿用父级 baseUrl=. → apps/mobile，避免 IDE 解析错位）
     "baseUrl": ".",
     "paths": {
@@ -12,6 +24,7 @@
     "chat-transcript/webview/**/*.tsx",
     "rich-document/webview/**/*.ts",
     "rich-document/webview/**/*.tsx",
+    "code-editor/webview/**/*.ts",
     "shared/**/*.ts",
     "shared/**/*.tsx",
     "webview-host/**/*.ts"

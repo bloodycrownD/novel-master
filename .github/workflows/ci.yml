@@ -3,8 +3,8 @@
 # 设计要点：
 # - 包管理器和 release.yml 对齐，统一用 npm（npm ci），不用 pnpm
 # - build 步骤是 blocking——core 产物是下游 workspace 测试的依赖，必须先绿
-# - lint / typecheck / test 暂时 continue-on-error，因为仓库里还有既存错误；
-#   先把流水线搭起来，后续逐步修到全绿再去掉 continue-on-error
+# - test / format 是 blocking；lint / typecheck 暂时 continue-on-error，因为仓库里还有既存错误；
+#   后续逐步修到全绿再去掉 continue-on-error（分步收敛，见 cr-fix-spec gates/G-1）
 #
 # 触发策略：
 # - push 到非 main、非 tag 的分支才跑（main 由 release.yml 负责，避免重复）
@@ -50,7 +50,10 @@ jobs:
       - name: Build workspaces
         run: npm run build --workspaces --if-present
 
-      # 下面三步目前仓库里还有既存错误，先就位但允许失败，后续逐步修到全绿
+      # lint / typecheck 还有既存错误，先就位但允许失败，后续逐步修到全绿（gates/G-1 分步收敛）
+      - name: Format
+        run: npm run format:check
+
       - name: Lint
         continue-on-error: true
         run: npm run lint --workspaces --if-present
@@ -60,5 +63,4 @@ jobs:
         run: npm run typecheck --workspaces --if-present
 
       - name: Test
-        continue-on-error: true
         run: npm run test --workspaces --if-present
