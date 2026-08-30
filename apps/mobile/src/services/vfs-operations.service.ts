@@ -17,7 +17,7 @@ import {
   remapPathUnderDir,
   type UserVfsSaveVersionOptions,
 } from '@novel-master/core/vfs';
-import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import type { MobileNovelMasterRuntime } from '../runtime/types';
 import {
   executeSessionUserVfsOp,
   type ExecuteSessionUserVfsOpOptions,
@@ -29,7 +29,7 @@ export async function createVfsFile(
   path: string,
   content = '',
 ): Promise<void> {
-  await vfs.write(path, content, {versionCheck: false});
+  await vfs.write(path, content, { versionCheck: false });
 }
 
 /** 会话 scope：新建文件经 userVfsTurn。 */
@@ -73,9 +73,9 @@ export async function sessionCreateVfsDirectory(
 export async function deleteVfsEntry(
   vfs: VfsService,
   path: string,
-  options?: {recursive?: boolean},
+  options?: { recursive?: boolean },
 ): Promise<void> {
-  await vfs.delete(path, {recursive: options?.recursive ?? true});
+  await vfs.delete(path, { recursive: options?.recursive ?? true });
 }
 
 /** 会话 scope：删除经 userVfsTurn。 */
@@ -83,7 +83,7 @@ export async function sessionDeleteVfsEntry(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,
   path: string,
-  options?: {recursive?: boolean},
+  options?: { recursive?: boolean },
 ): Promise<void> {
   await executeSessionUserVfsOp(
     runtime,
@@ -119,7 +119,7 @@ export async function deleteScopedVfsEntry(
       recursive,
     });
   } else {
-    await deleteVfsEntry(vfs, path, {recursive});
+    await deleteVfsEntry(vfs, path, { recursive });
   }
   await cleanupWorktreeAfterVfsDelete(runtime, scope, path);
 }
@@ -149,30 +149,11 @@ export async function sessionRenameVfsFile(
   );
 }
 
-/** Rename a directory tree (delegates to Core move logic). */
-export async function renameVfsDirectory(
-  vfs: VfsService,
-  oldPath: string,
-  newPath: string,
-): Promise<void> {
-  await moveVfsPath(vfs, oldPath, newPath);
-}
+/** Rename a directory tree (delegates to Core move logic; same impl as file rename). */
+export const renameVfsDirectory = renameVfsFile;
 
-/** 会话 scope：重命名目录经 userVfsTurn。 */
-export async function sessionRenameVfsDirectory(
-  runtime: MobileNovelMasterRuntime,
-  sessionId: string,
-  oldPath: string,
-  newPath: string,
-  options?: ExecuteSessionUserVfsOpOptions,
-): Promise<void> {
-  await executeSessionUserVfsOp(
-    runtime,
-    sessionId,
-    buildUserVfsRenameOp(oldPath, newPath),
-    options,
-  );
-}
+/** 会话 scope：重命名目录经 userVfsTurn（与文件重命名同一实现）。 */
+export const sessionRenameVfsDirectory = sessionRenameVfsFile;
 
 /** 会话 scope：保存文件经 userVfsTurn（含锚点 diff）。 */
 export async function sessionSaveVfsFile(
@@ -190,7 +171,7 @@ export async function sessionSaveVfsFile(
     baseline != null &&
     lastKnownContent !== baseline
   ) {
-    console.info('[user-vfs-turn] external_drift_detected', {path});
+    console.info('[user-vfs-turn] external_drift_detected', { path });
   }
   const op = buildUserVfsSaveOp(
     baseline,
@@ -205,5 +186,5 @@ export async function sessionSaveVfsFile(
   await executeSessionUserVfsOp(runtime, sessionId, op);
 }
 
-export {remapPathUnderDir};
-export type {VfsListEntry};
+export { remapPathUnderDir };
+export type { VfsListEntry };

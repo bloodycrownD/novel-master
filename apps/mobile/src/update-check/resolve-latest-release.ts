@@ -2,7 +2,7 @@
  * Fetches the latest GitHub release. Future: swap to list + APK asset filter.
  */
 
-import {githubLatestReleaseApiUrl} from './app-meta';
+import {githubLatestReleaseApiUrl, GITHUB_REPO} from './app-meta';
 import {parseReleaseTag} from './parse-release-tag';
 import type {LatestRelease} from './types';
 
@@ -24,6 +24,12 @@ function mapReleaseJson(json: GitHubLatestReleaseJson): LatestRelease {
   const htmlUrl = json.html_url;
   if (!htmlUrl || typeof htmlUrl !== 'string') {
     throw new Error('GitHub API 响应缺少 html_url');
+  }
+  const expectedPrefix = `https://github.com/${GITHUB_REPO.owner}/${GITHUB_REPO.name}/`;
+  if (!htmlUrl.startsWith(expectedPrefix)) {
+    throw new Error(
+      `发行版链接域名校验失败（预期 ${expectedPrefix}，实际 ${htmlUrl}）`,
+    );
   }
   const version = parseReleaseTag(tagName);
   return {

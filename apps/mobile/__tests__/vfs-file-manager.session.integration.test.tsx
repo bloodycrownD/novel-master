@@ -1,6 +1,13 @@
 import React from 'react';
-import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
-import TestRenderer, {act} from 'react-test-renderer';
+import {
+  describe,
+  expect,
+  it,
+  jest,
+  beforeEach,
+  afterEach,
+} from '@jest/globals';
+import TestRenderer, { act } from 'react-test-renderer';
 
 const mockShowToast = jest.fn();
 
@@ -9,7 +16,7 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-jest.mock('@/theme/ThemeProvider', () => ({
+jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -26,20 +33,20 @@ jest.mock('@/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({
+jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
   useDismissOverlaysOnBlur: () => undefined,
 }));
 
-jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+jest.mock('../src/components/chrome/ToastHost', () => ({
+  useToast: () => ({ showToast: mockShowToast }),
 }));
 
-jest.mock('@/errors/toast-message', () => ({
+jest.mock('../src/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }));
 
-jest.mock('@/services/vfs-operations.service', () => ({
+jest.mock('../src/services/vfs-operations.service', () => ({
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
@@ -52,13 +59,12 @@ jest.mock('@/services/vfs-operations.service', () => ({
   sessionRenameVfsFile: jest.fn(),
 }));
 
-jest.mock('@/services/workplace-operations.service', () => {
+jest.mock('../src/services/workplace-operations.service', () => {
   const actual = jest.requireActual(
-    '@/services/workplace-operations.service',
-  ) as typeof import('@/services/workplace-operations.service');
+    '../src/services/workplace-operations.service',
+  ) as typeof import('../src/services/workplace-operations.service');
   return {
     ...actual,
-    batchSetDirRulesDisabled: jest.fn(),
     batchSetDirRulesEnabled: jest.fn(),
     cycleFileInclusion: jest.fn(),
     migrateWorkplaceDirRename: jest.fn(),
@@ -70,7 +76,7 @@ let capturedEntityMenuOnSelect: ((action: string) => void) | undefined;
 let capturedMoreMenuOnSelect: ((action: string) => void) | undefined;
 let capturedDirRuleOnSave: ((input: unknown) => Promise<void>) | undefined;
 
-jest.mock('@/components/sheet/BottomSheetMenu', () => ({
+jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: ({
     visible,
     onSelect,
@@ -78,7 +84,7 @@ jest.mock('@/components/sheet/BottomSheetMenu', () => ({
   }: {
     visible: boolean;
     onSelect: (action: string) => void;
-    items: {action: string}[];
+    items: { action: string }[];
   }) => {
     if (visible && items?.some(item => item.action === 'toggle-include')) {
       capturedEntityMenuOnSelect = onSelect;
@@ -90,7 +96,7 @@ jest.mock('@/components/sheet/BottomSheetMenu', () => ({
   },
 }));
 
-jest.mock('@/components/sheet/DirectoryRuleSheet', () => ({
+jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
   DirectoryRuleSheet: ({
     visible,
     onSave,
@@ -105,19 +111,19 @@ jest.mock('@/components/sheet/DirectoryRuleSheet', () => ({
   },
 }));
 
-jest.mock('@/components/template/TemplatePullButton', () => ({
+jest.mock('../src/components/template/TemplatePullButton', () => ({
   TemplatePullButton: () => null,
 }));
 
-jest.mock('@/services/vfs-zip.service', () => ({
+jest.mock('../src/services/vfs-zip.service', () => ({
   exportVfsZip: jest.fn(),
   importVfsZip: jest.fn(),
 }));
 
-import {cycleFileInclusion} from '@/services/workplace-operations.service';
+import { cycleFileInclusion } from '../src/services/workplace-operations.service';
 
-const {VfsFileManager} =
-  require('@/components/vfs/VfsFileManager') as typeof import('@/components/vfs/VfsFileManager');
+const { VfsFileManager } =
+  require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
 
 const fixedListRows = [
   {
@@ -137,7 +143,7 @@ const buildListRows = jest.fn(async () => fixedListRows);
 // reload 现以 vfs.list() 为权威源（worktree 仅作元数据补丁）：
 // 不在 vfs.list 结果里的路径会被当孤儿残留过滤掉，因此 list 需返回
 // /note.md 的 VFS 条目，行才会渲染出行菜单按钮。
-const list = jest.fn(async () => [{path: '/note.md', kind: 'file' as const}]);
+const list = jest.fn(async () => [{ path: '/note.md', kind: 'file' as const }]);
 const getDirRule = jest.fn(async () => null);
 const setDirRule = jest.fn(async () => undefined);
 
@@ -149,7 +155,7 @@ const mockRuntime = {
   },
 };
 
-jest.mock('@/hooks/useRuntime', () => ({
+jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
@@ -159,7 +165,7 @@ function flushPromises(): Promise<void> {
 
 async function waitFor(
   predicate: () => boolean,
-  options?: {maxAttempts?: number},
+  options?: { maxAttempts?: number },
 ): Promise<void> {
   const maxAttempts = options?.maxAttempts ?? 50;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -181,8 +187,8 @@ function renderSessionVfm(rootPath = '/') {
         projectId: 'p1',
         sessionId: 's1',
       }}
-      vfs={{list} as any}
-      workplace={{buildListRows, getDirRule, setDirRule} as any}
+      vfs={{ list } as any}
+      workplace={{ buildListRows, getDirRule, setDirRule } as any}
       onOpenFile={jest.fn()}
       rootPath={rootPath}
     />
@@ -245,7 +251,7 @@ describe('VfsFileManager session list (no BlockStore capture)', () => {
     });
     buildListRows.mockClear();
 
-    const moreBtn = tree!.root.findByProps({testID: 'vfs-more-action'});
+    const moreBtn = tree!.root.findByProps({ testID: 'vfs-more-action' });
     await act(async () => {
       moreBtn.props.onPress();
       await flushPromises();
@@ -281,7 +287,7 @@ describe('VfsFileManager session list (no BlockStore capture)', () => {
       await flushPromises();
     });
 
-    const menuBtn = tree!.root.findByProps({testID: 'vfs-row-menu-note.md'});
+    const menuBtn = tree!.root.findByProps({ testID: 'vfs-row-menu-note.md' });
     await act(async () => {
       menuBtn.props.onPress();
       await flushPromises();

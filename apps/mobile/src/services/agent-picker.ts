@@ -1,7 +1,7 @@
 /**
  * Agent picker data + selection (shared by AgentPickerModal).
  */
-import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export const AGENT_PICKER_EMPTY_MESSAGE =
   '暂无智能体。请先在「智能体配置」中创建。';
@@ -11,11 +11,9 @@ export interface AgentPickerRow {
   readonly label: string;
 }
 
-export async function loadAgentPickerRows(
+async function loadAgentRows(
   runtime: MobileNovelMasterRuntime,
-): Promise<{rows: AgentPickerRow[]; currentId: string | undefined}> {
-  const explicitId = await runtime.state.getCurrentAgentId();
-  const currentId = explicitId ?? undefined;
+): Promise<AgentPickerRow[]> {
   const ids = await runtime.agentRegistry.listAgentIds();
   const rows: AgentPickerRow[] = [];
   for (const agentId of ids) {
@@ -31,6 +29,15 @@ export async function loadAgentPickerRows(
     }
     rows.push({agentId, label});
   }
+  return rows;
+}
+
+export async function loadAgentPickerRows(
+  runtime: MobileNovelMasterRuntime,
+): Promise<{rows: AgentPickerRow[]; currentId: string | undefined}> {
+  const explicitId = await runtime.state.getCurrentAgentId();
+  const currentId = explicitId ?? undefined;
+  const rows = await loadAgentRows(runtime);
   return {rows, currentId};
 }
 
@@ -62,21 +69,7 @@ export async function loadSessionAgentPickerRows(
 ): Promise<{rows: AgentPickerRow[]; currentId: string | undefined}> {
   const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
   const currentId = sessionConfig.agentId;
-  const ids = await runtime.agentRegistry.listAgentIds();
-  const rows: AgentPickerRow[] = [];
-  for (const agentId of ids) {
-    let label = agentId;
-    try {
-      const def = await runtime.agentRegistry.get(agentId);
-      if (def.mode === 'subagent') {
-        continue;
-      }
-      label = def.name?.trim() || agentId;
-    } catch {
-      /* keep agentId */
-    }
-    rows.push({agentId, label});
-  }
+  const rows = await loadAgentRows(runtime);
   return {rows, currentId};
 }
 
@@ -95,3 +88,5 @@ export async function selectSessionAgent(
     agentId,
   });
 }
+
+

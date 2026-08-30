@@ -1,13 +1,7 @@
 /**
  * Agent 流式生成计时与正文字数统计（不含 tool 参数计数）。
  */
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type MutableRefObject,
-} from 'react';
+import {useCallback, useEffect, useRef, useState, type MutableRefObject} from 'react';
 import {
   buildStreamMetricsLine,
   formatCharCount,
@@ -105,22 +99,18 @@ export function useStreamMetricsAcc(running: boolean): {
   return {accRef, lastRun, noteTextDelta, noteThinkingDelta};
 }
 
-function snapshotFromAcc(
-  acc: MetricsAcc,
-  elapsedMs: number,
-): AgentStreamMetricsSnapshot {
-  return snapshotMetricsAcc(acc, elapsedMs);
-}
-
-function toView(
-  running: boolean,
-  snap: AgentStreamMetricsSnapshot,
-): AgentStreamMetricsView {
-  return toAgentStreamMetricsView(running, snap);
-}
-
-function emptyAcc(): MetricsAcc {
-  return emptyMetricsAcc();
+/** 运行中每 250ms 触发一次重渲染，用于刷新 live 计时。 */
+function useTicker(running: boolean): void {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!running) {
+      return undefined;
+    }
+    const id = setInterval(() => {
+      setTick(t => t + 1);
+    }, 250);
+    return () => clearInterval(id);
+  }, [running]);
 }
 
 /** 格式化秒数（60s 内一位小数，否则整数）。 */
@@ -144,53 +134,19 @@ export function useAgentStreamMetrics(running: boolean): {
   readonly noteTextDelta: (delta: string) => void;
   readonly noteThinkingDelta: (delta: string) => void;
 } {
-  const accRef = useRef<MetricsAcc>(emptyAcc());
-  const [lastRun, setLastRun] = useState<AgentStreamMetricsSnapshot | null>(
-    null,
-  );
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    if (running) {
-      accRef.current = {...emptyAcc(), startedAtMs: Date.now()};
-      setLastRun(null);
-      const id = setInterval(() => {
-        setTick(t => t + 1);
-      }, 250);
-      return () => clearInterval(id);
-    }
-    const acc = accRef.current;
-    if (acc.startedAtMs > 0) {
-      setLastRun(
-        snapshotFromAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
-      );
-      accRef.current = emptyAcc();
-    }
-    return undefined;
-  }, [running]);
-
-  const noteTextDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    accRef.current.textChars += delta.length;
-  }, []);
-
-  const noteThinkingDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    accRef.current.thinkingChars += delta.length;
-  }, []);
-
-  void tick;
+  const {accRef, lastRun, noteTextDelta, noteThinkingDelta} =
+    useStreamMetricsAcc(running);
+  useTicker(running);
 
   let metrics: AgentStreamMetricsView | null = null;
   if (running && accRef.current.startedAtMs > 0) {
     const elapsedMs = Math.max(0, Date.now() - accRef.current.startedAtMs);
-    metrics = toView(true, snapshotFromAcc(accRef.current, elapsedMs));
+    metrics = toAgentStreamMetricsView(
+      true,
+      snapshotMetricsAcc(accRef.current, elapsedMs),
+    );
   } else if (lastRun != null) {
-    metrics = toView(false, lastRun);
+    metrics = toAgentStreamMetricsView(false, lastRun);
   }
 
   return {metrics, noteTextDelta, noteThinkingDelta};

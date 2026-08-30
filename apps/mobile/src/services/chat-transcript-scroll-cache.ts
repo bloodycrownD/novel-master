@@ -2,13 +2,17 @@
  * WebView transcript scroll snapshots (schema v2, forward DOM semantics).
  * v1 inverted FlatList snapshots are discarded on read.
  */
-import {
-  CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-  type ChatTranscriptScrollSnapshot,
-} from '../components/chat/ChatTranscriptBridge';
 import {createScopeKeyCache} from './scope-key-cache';
 
-export type {ChatTranscriptScrollSnapshot};
+/** Transcript → host 滚动快照 schema（v2，前向 DOM 语义）。 */
+export const CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION = 2 as const;
+
+export type ChatTranscriptScrollSnapshot = {
+  readonly schemaVersion: typeof CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION;
+  /** Distance from visual bottom, px (forward DOM scrollTop semantics). */
+  readonly offsetY: number;
+  readonly nearBottom: boolean;
+};
 
 /** @deprecated v1 inverted list snapshot — rejected by transcript cache. */
 export type LegacyChatListScrollSnapshot = {

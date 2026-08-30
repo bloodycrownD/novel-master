@@ -6,13 +6,7 @@
  * @module services/db-backup.service
  */
 import {Platform} from 'react-native';
-import ReactNativeBlobUtil from 'react-native-blob-util';
-import {
-  keepLocalCopy,
-  saveDocuments,
-  types,
-} from '@react-native-documents/picker';
-import {isUserCancelledPick, pickSingleDocument} from './document-pick';
+import {types} from '@react-native-documents/picker';
 import {
   dumpProviderTableSnapshot,
   open,
@@ -25,28 +19,19 @@ import {
   checkpointMobileDatabase,
   closeMobileConnection,
   getMobileConnection,
-} from '@/db/connection';
-import {resolveMobileDatabaseFilePath} from '@/db/db-file-path';
-import {isMobileAgentActive} from '@/runtime/agent-activity';
-import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {MOBILE_TDBC_URL} from '@/vfs/constants';
+} from '../db/connection';
+import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
+import {isMobileAgentActive} from '../runtime/agent-activity';
+import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {MOBILE_TDBC_URL} from '../vfs/constants';
+import {exportBytesViaDocumentPicker, pickToLocalPath} from './document-io';
+import {blobFs, bytesToAsciiString} from './rn-file-io';
 
 const SQLITE_MAGIC = 'SQLite format 3';
 const BACKUP_EXT = '.nmbackup';
 const EXPORT_ATTACH_ALIAS = 'export_db';
 /** 分块落盘，避免 100MB+ Uint8Array → 单次 base64 撑爆 Hermes 堆。 */
 const WRITE_CHUNK_BYTES = 256 * 1024;
-
-function toFileUri(path: string): string {
-  return path.startsWith('file://') ? path : `file://${path}`;
-}
-
-function localUriToFsPath(localUri: string): string {
-  const withoutScheme = localUri.startsWith('file://')
-    ? localUri.slice('file://'.length)
-    : localUri;
-  return decodeURIComponent(withoutScheme);
-}
 
 function backupFileName(): string {
   return `novel-master-backup-${Date.now()}${BACKUP_EXT}`;
@@ -67,26 +52,15 @@ function assertSqliteFile(bytes: Uint8Array): void {
  * 注意：`fs.readFile(path, enc, 16)` 的第三参会被忽略，会整包读入，大备份必 OOM。
  */
 async function assertSqliteBackupAtPath(srcPath: string): Promise<void> {
-  const exists = await ReactNativeBlobUtil.fs.exists(srcPath);
+  const fs = blobFs();
+  const exists = await fs.exists(srcPath);
   if (!exists) {
     throw new Error(`数据库文件不存在: ${srcPath}`);
   }
-  const info = await ReactNativeBlobUtil.fs.stat(srcPath);
+  const info = await fs.stat(srcPath);
   if (Number(info.size) < 16) {
     throw new Error('文件过小，不是有效的数据库备份');
   }
-}
-
-/** 将字节块转为 ascii 字符串（`writeStream(..., 'ascii')` 需要 string）。 */
-function bytesToAsciiString(bytes: Uint8Array): string {
-  // 与 vfs-zip 一致：按 0x8000 切段再 fromCharCode，避免超大 spread 撑爆调用栈
-  const charChunk = 0x8000;
-  let out = '';
-  for (let i = 0; i < bytes.length; i += charChunk) {
-    const slice = bytes.subarray(i, Math.min(i + charChunk, bytes.length));
-    out += String.fromCharCode(...slice);
-  }
-  return out;
 }
 
 /** 分块 ascii 写入，避免整包 `String.fromCharCode` / `btoa`。 */
@@ -94,11 +68,7 @@ async function writeBytesToFileChunked(
   destPath: string,
   bytes: Uint8Array,
 ): Promise<void> {
-  const stream = await ReactNativeBlobUtil.fs.writeStream(
-    destPath,
-    'ascii',
-    false,
-  );
+  const stream = await blobFs().writeStream(destPath, 'ascii', false);
   try {
     for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
       const end = Math.min(offset + WRITE_CHUNK_BYTES, bytes.length);
@@ -128,7 +98,7 @@ export async function exportDatabaseBackupToPath(
 ): Promise<void> {
   await checkpointMobileDatabase(runtime.conn);
   const dbPath = await resolveMobileDatabaseFilePath();
-  await ReactNativeBlobUtil.fs.cp(dbPath, destPath);
+  await blobFs().cp(dbPath, destPath);
   await scrubProviderTablesInDatabase(
     runtime.conn,
     destPath,
@@ -151,14 +121,15 @@ export async function importDatabaseBackupFromPath(
   const liveConn = await getMobileConnection();
   const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
 
-  const dbExists = await ReactNativeBlobUtil.fs.exists(dbPath);
+  const fs = blobFs();
+  const dbExists = await fs.exists(dbPath);
   if (dbExists) {
-    await ReactNativeBlobUtil.fs.cp(dbPath, bakPath);
+    await fs.cp(dbPath, bakPath);
   }
 
   try {
     await closeMobileConnection();
-    await ReactNativeBlobUtil.fs.cp(srcPath, dbPath);
+    await fs.cp(srcPath, dbPath);
 
     const restoreConn = await openDbForProviderRestore();
     try {
@@ -167,9 +138,9 @@ export async function importDatabaseBackupFromPath(
       await restoreConn.close();
     }
   } catch (error) {
-    const bakExists = await ReactNativeBlobUtil.fs.exists(bakPath);
+    const bakExists = await fs.exists(bakPath);
     if (bakExists) {
-      await ReactNativeBlobUtil.fs.cp(bakPath, dbPath).catch(() => undefined);
+      await fs.cp(bakPath, dbPath).catch(() => undefined);
     }
     throw error;
   }
@@ -184,14 +155,13 @@ export async function importDatabaseBackupFromBytes(
 ): Promise<void> {
   assertSqliteFile(bytes);
 
-  const tmpPath = `${
-    ReactNativeBlobUtil.fs.dirs.CacheDir
-  }/import-bytes-${Date.now()}${BACKUP_EXT}`;
+  const fs = blobFs();
+  const tmpPath = `${fs.dirs.CacheDir}/import-bytes-${Date.now()}${BACKUP_EXT}`;
   try {
     await writeBytesToFileChunked(tmpPath, bytes);
     await importDatabaseBackupFromPath(tmpPath);
   } finally {
-    await ReactNativeBlobUtil.fs.unlink(tmpPath).catch(() => undefined);
+    await fs.unlink(tmpPath).catch(() => undefined);
   }
 }
 
@@ -206,30 +176,12 @@ export async function exportDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导出数据库');
   }
 
-  const fileName = backupFileName();
-  const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
-
-  await exportDatabaseBackupToPath(runtime, tmpPath);
-
-  try {
-    const [result] = await saveDocuments({
-      sourceUris: [toFileUri(tmpPath)],
-      mimeType: 'application/octet-stream',
-      fileName,
-      copy: Platform.OS === 'ios',
-    });
-    if (result?.error) {
-      throw new Error(result.error);
-    }
-    return 'saved';
-  } catch (error) {
-    if (isUserCancelledPick(error)) {
-      return 'cancelled';
-    }
-    throw error;
-  } finally {
-    await ReactNativeBlobUtil.fs.unlink(tmpPath).catch(() => undefined);
-  }
+  return exportBytesViaDocumentPicker({
+    fileName: backupFileName(),
+    mimeType: 'application/octet-stream',
+    copy: Platform.OS === 'ios',
+    write: destPath => exportDatabaseBackupToPath(runtime, destPath),
+  });
 }
 
 /**
@@ -244,21 +196,14 @@ export async function importDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导入数据库');
   }
 
-  const file = await pickSingleDocument({type: [types.allFiles]});
-  if (file == null) {
+  const picked = await pickToLocalPath({
+    mimeTypes: [types.allFiles],
+    localFileName: 'import.nmbackup',
+  });
+  if (picked == null) {
     return;
   }
 
-  const [copyResult] = await keepLocalCopy({
-    files: [{uri: file.uri, fileName: 'import.nmbackup'}],
-    destination: 'cachesDirectory',
-  });
-
-  if (copyResult.status !== 'success') {
-    throw new Error(copyResult.copyError ?? '无法读取所选文件');
-  }
-
-  const pickedPath = localUriToFsPath(copyResult.localUri);
-  await importDatabaseBackupFromPath(pickedPath);
+  await importDatabaseBackupFromPath(picked.fsPath);
   onRebootstrap();
 }

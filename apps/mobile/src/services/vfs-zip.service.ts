@@ -3,7 +3,7 @@
  * Export: temp cache file + platform "Save as" (local destination).
  * Import: document picker + keepLocalCopy + confirmed full replace.
  */
-import ReactNativeBlobUtil from 'react-native-blob-util';
+import {types} from '@react-native-documents/picker';
 import {
   createVfsZipIoService,
   type VfsScope,
@@ -11,12 +11,11 @@ import {
   VfsZipError,
 } from '@novel-master/core/vfs';
 import {
-  keepLocalCopy,
-  saveDocuments,
-  types,
-} from '@react-native-documents/picker';
-import {isUserCancelledPick, pickSingleDocument} from './document-pick';
-import type {MobileNovelMasterRuntime} from '@/runtime/types';
+  exportBytesViaDocumentPicker,
+  pickAndReadBytes,
+} from './document-io';
+import {blobFs, bytesToBase64} from './rn-file-io';
+import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
   const pathSuffix =
@@ -36,29 +35,6 @@ function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
     return `vfs-project-${scope.projectId}${pathSuffix}.zip`;
   }
   return `vfs-session-${scope.sessionId}${pathSuffix}.zip`;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const slice = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...slice);
-  }
-  return globalThis.btoa(binary);
-}
-
-function toFileUri(path: string): string {
-  return path.startsWith('file://') ? path : `file://${path}`;
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = globalThis.atob(base64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    out[i] = binary.charCodeAt(i);
-  }
-  return out;
 }
 
 const EOCD_SIGNATURE = 0x06054b50;
@@ -103,92 +79,45 @@ function assertZipArchive(bytes: Uint8Array): void {
   }
 }
 
-/** blob-util on Android mishandles `file://` + encoded paths; use absolute fs path. */
-function localUriToFsPath(localUri: string): string {
-  const withoutScheme = localUri.startsWith('file://')
-    ? localUri.slice('file://'.length)
-    : localUri;
-  return decodeURIComponent(withoutScheme);
-}
-
-async function readFileUriAsBytes(localUri: string): Promise<Uint8Array> {
-  const fsPath = localUriToFsPath(localUri);
-  const exists = await ReactNativeBlobUtil.fs.exists(fsPath);
-  if (!exists) {
-    throw new VfsZipError('INVALID_ZIP', `ZIP file not found at ${fsPath}`);
-  }
-  const base64 = await ReactNativeBlobUtil.fs.readFile(fsPath, 'base64');
-  return base64ToBytes(base64);
-}
-
-async function readPickedZipAsBytes(uri: string): Promise<Uint8Array> {
-  const [copyResult] = await keepLocalCopy({
-    files: [{uri, fileName: 'import.zip'}],
-    destination: 'cachesDirectory',
-  });
-
-  if (copyResult.status !== 'success') {
-    throw new VfsZipError(
-      'INVALID_ZIP',
-      copyResult.copyError ?? 'failed to copy picked ZIP into app cache',
-    );
-  }
-
-  const bytes = await readFileUriAsBytes(copyResult.localUri);
-  assertZipArchive(bytes);
-  return bytes;
-}
-
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options: {readonly directoryPath?: string} = {},
+  options: { readonly directoryPath?: string } = {},
 ): Promise<'saved' | 'cancelled'> {
   const directoryPath =
     options.directoryPath == null || options.directoryPath.trim() === ''
       ? '/'
       : options.directoryPath;
   const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope, {directoryPath});
+  const bytes = await zipSvc.export(scope, { directoryPath });
   assertZipArchive(bytes);
 
-  const fileName = vfsZipExportFileName(scope, directoryPath);
-  const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
-
-  await ReactNativeBlobUtil.fs.writeFile(
-    tmpPath,
-    bytesToBase64(bytes),
-    'base64',
-  );
-
-  try {
-    const [result] = await saveDocuments({
-      sourceUris: [toFileUri(tmpPath)],
-      mimeType: 'application/zip',
-      fileName,
-      copy: true,
-    });
-    if (result?.error) {
-      throw new Error(result.error);
-    }
-    return 'saved';
-  } catch (error) {
-    if (isUserCancelledPick(error)) {
-      return 'cancelled';
-    }
-    throw error;
-  } finally {
-    await ReactNativeBlobUtil.fs.unlink(tmpPath).catch(() => undefined);
-  }
+  return exportBytesViaDocumentPicker({
+    fileName: vfsZipExportFileName(scope, directoryPath),
+    mimeType: 'application/zip',
+    write: tmpPath =>
+      blobFs().writeFile(tmpPath, bytesToBase64(bytes), 'base64'),
+  });
 }
 
 /** 选 zip + 拷入缓存 + 读字节（导入链路共用）；用户取消返回 null。 */
 export async function pickZipFileBytes(): Promise<Uint8Array | null> {
-  const file = await pickSingleDocument({type: [types.zip]});
-  if (file == null) {
+  const bytes = await pickAndReadBytes({
+    mimeTypes: [types.zip],
+    localFileName: 'import.zip',
+    buildCopyError: copyError =>
+      new VfsZipError(
+        'INVALID_ZIP',
+        copyError ?? 'failed to copy picked ZIP into app cache',
+      ),
+    buildMissingError: fsPath =>
+      new VfsZipError('INVALID_ZIP', `ZIP file not found at ${fsPath}`),
+  });
+  if (bytes == null) {
     return null;
   }
-  return readPickedZipAsBytes(file.uri);
+  assertZipArchive(bytes);
+  return bytes;
 }
 
 export async function importVfsZip(

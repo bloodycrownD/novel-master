@@ -69,6 +69,7 @@ export async function batchSetDirRulesEnabled(
   workplace: WorkplaceService,
   paths: readonly string[],
   dirPaths: ReadonlySet<string>,
+  enabled: boolean,
 ): Promise<{ applied: number; skipped: number }> {
   let applied = 0;
   let skipped = 0;
@@ -78,29 +79,7 @@ export async function batchSetDirRulesEnabled(
       continue;
     }
     try {
-      await setDirRuleEnabled(workplace, path, true);
-      applied += 1;
-    } catch {
-      skipped += 1;
-    }
-  }
-  return { applied, skipped };
-}
-
-export async function batchSetDirRulesDisabled(
-  workplace: WorkplaceService,
-  paths: readonly string[],
-  dirPaths: ReadonlySet<string>,
-): Promise<{ applied: number; skipped: number }> {
-  let applied = 0;
-  let skipped = 0;
-  for (const path of paths) {
-    if (!dirPaths.has(path)) {
-      skipped += 1;
-      continue;
-    }
-    try {
-      await setDirRuleEnabled(workplace, path, false);
+      await setDirRuleEnabled(workplace, path, enabled);
       applied += 1;
     } catch {
       skipped += 1;

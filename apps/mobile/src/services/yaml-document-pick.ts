@@ -1,17 +1,8 @@
-import {isKnownType, types} from '@react-native-documents/picker';
+import {types} from '@react-native-documents/picker';
+
+import {knownTypesForExtension} from './document-io';
 
 const YAML_NAME_RE = /\.ya?ml$/i;
-
-function knownTypesForExtension(ext: string): string[] {
-  try {
-    const info = isKnownType({kind: 'extension', value: ext});
-    return [info.mimeType].filter(
-      (value): value is string => typeof value === 'string' && value.length > 0,
-    );
-  } catch {
-    return [];
-  }
-}
 
 /** MIME / UTType filters for YAML import (covers export + common Android providers). */
 export function yamlImportPickTypes(): string[] {

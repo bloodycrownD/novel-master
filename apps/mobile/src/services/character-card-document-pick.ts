@@ -1,17 +1,8 @@
-import {isKnownType, types} from '@react-native-documents/picker';
+import {types} from '@react-native-documents/picker';
+
+import {knownTypesForExtension} from './document-io';
 
 const CHARACTER_CARD_NAME_RE = /\.(png|json)$/i;
-
-function knownTypesForExtension(ext: string): string[] {
-  try {
-    const info = isKnownType({kind: 'extension', value: ext});
-    return [info.mimeType].filter(
-      (value): value is string => typeof value === 'string' && value.length > 0,
-    );
-  } catch {
-    return [];
-  }
-}
 
 /** MIME / UTType filters for character-card import (PNG + JSON). */
 export function characterCardImportPickTypes(): string[] {
