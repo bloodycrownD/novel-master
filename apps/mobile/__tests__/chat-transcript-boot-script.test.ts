@@ -252,7 +252,8 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain(
       `var NEAR_BOTTOM_THRESHOLD_PX = ${NEAR_BOTTOM_THRESHOLD_PX};`,
     );
-    expect(script).toContain('var NEAR_BOTTOM = NEAR_BOTTOM_THRESHOLD_PX;');
+    // web/C-3：NEAR_BOTTOM 短别名已删，boot 侧统一全名。
+    expect(script).not.toContain('var NEAR_BOTTOM =');
     expect(script).toContain(`var MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS};`);
     expect(script).toContain(`var ANCHORED_MENU_GAP = ${ANCHORED_MENU_GAP};`);
     expect(script).toContain(

@@ -1,8 +1,8 @@
-import {state} from '../state/state';
-import {post} from '../bridge/bridge';
-import {closeContextMenu} from '../menu/menu';
-import {renderRows} from './row-logic';
-import {requestLoadOlder} from '../scroll/scroll';
+import { state } from '../state/state';
+import {post} from '../bridge';
+import { closeContextMenu } from '../menu/menu';
+import { renderRows } from './row-logic';
+import { requestLoadOlder } from '../scroll/scroll';
 /**
  * #rows 点击：折叠开关、打开工具文件、加载更早等。
  */
@@ -21,7 +21,7 @@ export function onRowsClick(event: MouseEvent): void {
     const menuAction = actionEl.getAttribute('data-menu-action');
     closeContextMenu(true);
     if (messageId && menuAction) {
-      post('messageMenuAction', {messageId: messageId, action: menuAction});
+      post('messageMenuAction', { messageId: messageId, action: menuAction });
     }
     return;
   }
@@ -51,12 +51,12 @@ export function onRowsClick(event: MouseEvent): void {
   }
   if (action === 'open-tool-file') {
     const path = actionEl.getAttribute('data-path');
-    if (path) post('openToolFile', {path: path});
+    if (path) post('openToolFile', { path: path });
     return;
   }
   if (action === 'open-subagent-session') {
     const sessionId = actionEl.getAttribute('data-session-id');
-    if (sessionId) post('openSubagentSession', {sessionId: sessionId});
+    if (sessionId) post('openSubagentSession', { sessionId: sessionId });
     return;
   }
   if (action === 'open-skill') {
@@ -67,7 +67,7 @@ export function onRowsClick(event: MouseEvent): void {
       post('openSkillDetail', {
         domain: domain,
         name: name,
-        ...(projectId != null ? {projectId: projectId} : {}),
+        ...(projectId != null ? { projectId: projectId } : {}),
       });
     }
     return;

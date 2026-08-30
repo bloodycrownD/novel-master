@@ -65,7 +65,8 @@ function readWeb(rel) {
  * 样式常量单源：禁止在 assemble/build 内再嵌第二份规则）。
  */
 /** WebView boot 路径别名：`@web/*` → `src/web/*`（勿与 RN Metro `@/` 混用） */
-const webAlias = { '@web': webRoot };
+/** `@/` → `src/`：webview bundle 可引用 RN 侧共享纯函数（src/webview-host，真源） */
+const webAlias = {'@web': webRoot, '@': join(mobileRoot, 'src')};
 
 async function loadWebModule(entryRel) {
   const result = await esbuild.build({

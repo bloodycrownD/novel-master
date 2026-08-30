@@ -2,8 +2,11 @@
  * rich-document 桥与 setDocument 门面（runtime；无 JSX）。
  * setDocument 仅调用 main 已注册的视图刷新实现；禁止在此拼串或 preact.render。
  */
-import {BRIDGE_V, type DocumentPayload, type HostTheme} from './document-model';
-import {post} from './post';
+import {
+  BRIDGE_V,
+  type DocumentPayload,
+} from './document-model';
+import { post } from './post';
 import {
   setAnnotateEnabled,
   setAnnotations,
@@ -11,7 +14,9 @@ import {
   type AnnotateRenderMark,
 } from './annotate';
 import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
-import {inferThemeModeFromBg} from '@web/shared/theme-mode';
+import {matchHostMessage} from '@web/shared/host-message-channel';
+import {applyHostTheme} from '@web/shared/host-theme';
+import type {HostTheme} from '@web/shared/host-theme';
 
 /**
  * P0-3：setDocument 视图刷新注册门面。
@@ -37,25 +42,10 @@ export function invokeRegisteredSetDocumentView(
   return true;
 }
 
-export {post};
+export { post };
 
-export function applyTheme(theme: HostTheme | null | undefined): void {
-  if (!theme) return;
-  const root = document.documentElement;
-  if (theme.background) root.style.setProperty('--bg', theme.background);
-  if (theme.text) root.style.setProperty('--text', theme.text);
-  if (theme.textSecondary) {
-    root.style.setProperty('--text-secondary', theme.textSecondary);
-  }
-  if (theme.primary) root.style.setProperty('--primary', theme.primary);
-  if (theme.surface) root.style.setProperty('--surface', theme.surface);
-  if (theme.borderLight) root.style.setProperty('--border', theme.borderLight);
-  // 代码高亮 token 配色：按背景亮度推断 dark|light（init 与 themeUpdate 都走这里），
-  // token CSS 写两套静态规则（html[data-nm-mode="dark"] 覆盖），不扩展 HostTheme payload
-  if (theme.background) {
-    root.dataset.nmMode = inferThemeModeFromBg(theme.background);
-  }
-}
+// HostTheme 超集与条件式写入统一在 @web/shared/host-theme（web/C-orch-2）
+export type {HostTheme};
 
 /** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
 export function setDocument(payload: DocumentPayload | null | undefined): void {
@@ -63,15 +53,10 @@ export function setDocument(payload: DocumentPayload | null | undefined): void {
 }
 
 export function handleHostMessage(raw: unknown): void {
-  let msg: {v?: number; type?: string; payload?: Record<string, unknown>};
-  try {
-    msg = JSON.parse(String(raw));
-  } catch {
-    return;
-  }
-  if (!msg || msg.v !== BRIDGE_V) return;
+  const msg = matchHostMessage(raw, BRIDGE_V);
+  if (!msg) return;
   if (msg.type === 'init') {
-    applyTheme(msg.payload && (msg.payload.theme as HostTheme | undefined));
+    applyHostTheme(msg.payload && (msg.payload.theme as HostTheme | undefined));
     return;
   }
   if (msg.type === 'setDocument') {
@@ -79,7 +64,7 @@ export function handleHostMessage(raw: unknown): void {
     return;
   }
   if (msg.type === 'themeUpdate') {
-    applyTheme(msg.payload && (msg.payload.theme as HostTheme | undefined));
+    applyHostTheme(msg.payload && (msg.payload.theme as HostTheme | undefined));
     return;
   }
   if (msg.type === 'setAnnotateEnabled') {

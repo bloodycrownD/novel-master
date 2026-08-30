@@ -1,70 +1,40 @@
-import {state, BRIDGE_V, type TranscriptFlags} from '../state/state';
+import { state, BRIDGE_V, type TranscriptFlags } from './state/state';
 import {
   applySnapshot,
   applyPrependPage,
   applyAppendTailRows,
   applyStreamCommit,
-} from '../render/snapshot';
+} from './render/snapshot';
 import {
   appendStreamDelta,
   applyStreamBatch,
   setStreamToolInvokingDom,
-} from '../stream/stream';
-import {clearStreamRichUpgrade} from '../stream/stream-markdown';
-import {closeContextMenu} from '../menu/menu';
+} from './stream/stream';
+import { clearStreamRichUpgrade } from './stream/stream-markdown';
+import { closeContextMenu } from './menu/menu';
 import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
-import {inferThemeModeFromBg} from '@web/shared/theme-mode';
-import {flagsEqual, renderRows} from '../render/row-logic';
-import {scheduleStickIfNearBottom} from '../scroll/scroll';
+import {createBoundPost} from '@web/shared/post';
+import {matchHostMessage} from '@web/shared/host-message-channel';
+import {applyHostTheme} from '@web/shared/host-theme';
+import {flagsEqual, renderRows} from './render/row-logic';
+import { scheduleStickIfNearBottom } from './scroll/scroll';
 
-/** 宿主下发的主题 token（最小字段）。 */
-export type HostTheme = {
-  background?: string;
-  text?: string;
-  textSecondary?: string;
-  primary?: string;
-  danger?: string;
-  surface?: string;
-  borderLight?: string;
-};
+// HostTheme 超集与条件式写入统一在 @web/shared/host-theme（web/C-orch-2）
+export type {HostTheme} from '@web/shared/host-theme';
+export {applyHostTheme};
 
 /**
- * RN 桥：postMessage、主题应用与宿主消息分发。
+ * RN 桥：postMessage 经 shared 工厂绑定 BRIDGE_V（消息头 v:1 不变）。
  */
-export function post(type: string, payload?: Record<string, unknown>): void {
-  const msg = JSON.stringify({v: BRIDGE_V, type: type, payload: payload || {}});
-  if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-    window.ReactNativeWebView.postMessage(msg);
-  }
-}
-
-export function applyTheme(theme: HostTheme | null | undefined): void {
-  if (!theme) return;
-  const root = document.documentElement;
-  root.style.setProperty('--bg', theme.background || '#fff');
-  root.style.setProperty('--text', theme.text || '#111');
-  root.style.setProperty('--text-secondary', theme.textSecondary || '#666');
-  root.style.setProperty('--primary', theme.primary || '#007aff');
-  root.style.setProperty('--danger', theme.danger || '#d92d20');
-  root.style.setProperty('--surface', theme.surface || '#f2f2f7');
-  root.style.setProperty('--border', theme.borderLight || '#e5e5ea');
-  // 代码高亮 token 配色：按背景亮度推断 dark|light（init 与 themeUpdate 都走这里），
-  // token CSS 写两套静态规则（html[data-nm-mode="dark"] 覆盖），不扩展 HostTheme payload
-  root.dataset.nmMode = inferThemeModeFromBg(theme.background);
-}
+export const post = createBoundPost(BRIDGE_V);
 
 export function handleHostMessage(raw: unknown): void {
-  let msg: {v?: number; type?: string; payload?: Record<string, unknown>};
-  try {
-    msg = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof msg);
-  } catch {
-    return;
-  }
-  if (!msg || msg.v !== BRIDGE_V || !msg.type) return;
+  const msg = matchHostMessage(raw, BRIDGE_V);
+  if (!msg) return;
   const p = (msg.payload || {}) as Record<string, any>;
   switch (msg.type) {
     case 'init':
-      applyTheme(p.theme);
+      applyHostTheme(p.theme);
       if (p.flags) {
         state.flags = {
           richText: !!p.flags.richText,
@@ -135,7 +105,7 @@ export function handleHostMessage(raw: unknown): void {
       }
       break;
     case 'themeUpdate':
-      applyTheme(p.theme);
+      applyHostTheme(p.theme);
       break;
     case 'closeMenu':
       closeContextMenu(true);
@@ -150,10 +120,4 @@ export function handleHostMessage(raw: unknown): void {
     default:
       break;
   }
-}
-
-export function onHostMessage(event: MessageEvent | {data?: unknown}): void {
-  const data = event && event.data;
-  if (data == null) return;
-  handleHostMessage(data);
 }

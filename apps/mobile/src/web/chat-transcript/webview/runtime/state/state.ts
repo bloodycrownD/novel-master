@@ -2,17 +2,6 @@
  * chat-transcript boot 共享状态与版本常量。
  */
 
-/** RN WebView 注入的 postMessage 桥（宿主 API）。 */
-export type ReactNativeWebViewBridge = {
-  postMessage: (message: string) => void;
-};
-
-declare global {
-  interface Window {
-    ReactNativeWebView?: ReactNativeWebViewBridge;
-  }
-}
-
 export const SCHEMA_V = 2;
 export const BRIDGE_V = 1;
 export const VFS_FILE_TOOLS: Record<string, number> = {
@@ -133,7 +122,7 @@ export const state: TranscriptState = {
     thinkingHtml: '',
     toolInvoking: false,
   },
-  flags: {richText: false, menuDisabled: false},
+  flags: { richText: false, menuDisabled: false },
   menu: null,
   menuOverlayHandler: null,
   menuNativeTextBlockHandler: null,

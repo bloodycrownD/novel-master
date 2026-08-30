@@ -34,3 +34,15 @@ export function post(
     window.ReactNativeWebView.postMessage(msg);
   }
 }
+
+/** 绑定固定 BRIDGE_V 的 post（各 webview 域一行接入，消息头 `v` 恒为 bridgeV）。 */
+export type BoundPost = (
+  type: string,
+  payload?: Record<string, unknown>,
+) => void;
+
+export function createBoundPost(bridgeV: number): BoundPost {
+  return (type, payload) => {
+    post(type, payload, bridgeV);
+  };
+}

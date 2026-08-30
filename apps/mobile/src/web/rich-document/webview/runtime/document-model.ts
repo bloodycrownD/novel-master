@@ -13,14 +13,7 @@ export function concatDocBodyHtml(
   return frontMatterHtml ? `${frontMatterHtml}${body}` : body;
 }
 
-export type HostTheme = {
-  background?: string;
-  text?: string;
-  textSecondary?: string;
-  primary?: string;
-  surface?: string;
-  borderLight?: string;
-};
+export type {HostTheme} from '@web/shared/host-theme';
 
 export type DocumentPayload = {
   frontMatterHtml?: string;

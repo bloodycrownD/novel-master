@@ -4,14 +4,8 @@
 
 export const BRIDGE_V = 1;
 
-export type HostTheme = {
-  background?: string;
-  text?: string;
-  textSecondary?: string;
-  primary?: string;
-  surface?: string;
-  borderLight?: string;
-};
+// HostTheme 超集统一在 @web/shared/host-theme（web/C-orch-2）
+export type {HostTheme} from '@web/shared/host-theme';
 
 export type SetDocumentPayload = {
   text?: string;

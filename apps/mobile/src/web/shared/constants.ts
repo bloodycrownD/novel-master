@@ -6,9 +6,6 @@
 /** 距视觉底部 ≤ 此值视为贴底（流式 stick）。 */
 export const NEAR_BOTTOM_THRESHOLD_PX = 80;
 
-/** boot 历史别名（与 NEAR_BOTTOM_THRESHOLD_PX 同值）。 */
-export const NEAR_BOTTOM = NEAR_BOTTOM_THRESHOLD_PX;
-
 /** 长按菜单打开后忽略 bubble touchend 的宽限（ms）。 */
 export const MENU_OPEN_GRACE_MS = 400;
 

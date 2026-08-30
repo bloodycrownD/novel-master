@@ -1,22 +1,17 @@
+import { MENU_OPEN_GRACE_MS } from '@web/shared/constants';
 import {
-  ANCHORED_MENU_GAP,
-  ANCHORED_MENU_SCREEN_MARGIN,
-  ANCHORED_MENU_ITEM_MIN_HEIGHT,
-  ANCHORED_MENU_MAX_HEIGHT_CAP,
-  ANCHORED_MENU_MIN_WIDTH,
-  ANCHORED_MENU_MAX_WIDTH,
-  ANCHORED_MENU_H_PADDING,
-  ANCHORED_MENU_CHAR_WIDTH_EST,
-  MENU_OPEN_GRACE_MS,
-} from '@web/shared/constants';
-import {state} from '../state/state';
+  computeAnchoredMenuWidth,
+  layoutAnchoredMenuForHeight,
+  type AnchoredMenuLayout,
+} from '../../../../../webview-host/chat-transcript/anchored-menu-layout';
+import { state } from '../state/state';
 import type {
   MenuAnchor,
   MenuItem,
   MessageRow,
   TranscriptRow,
 } from '../state/state';
-import {post} from '../bridge/bridge';
+import {post} from '../bridge';
 
 /**
  * ISD 债/非债（菜单）：
@@ -32,9 +27,7 @@ export type MenuOverlayViewProps = {
 };
 
 /** null = 卸载（render(null, portal)）；非 null = 刷新完整 overlay。 */
-export type RenderContextMenuView = (
-  props: MenuOverlayViewProps | null,
-) => void;
+export type RenderContextMenuView = (props: MenuOverlayViewProps | null) => void;
 
 let _renderContextMenuView: RenderContextMenuView | null = null;
 
@@ -56,20 +49,11 @@ export function invokeRegisteredRenderContextMenu(
 
 /**
  * 消息菜单：布局、打开/关闭与 overlay 手势。
+ * 布局算法真源：`src/webview-host/chat-transcript/anchored-menu-layout.ts`；
+ * 本文件只做 DOM 取值（window.innerWidth / layout viewport 高度）后委托。
  */
 export function computeContextMenuWidth(items: MenuItem[]): number {
-  let longest = 0;
-  for (let i = 0; i < items.length; i++) {
-    if (items[i].label.length > longest) longest = items[i].label.length;
-  }
-  const byLabel =
-    longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
-  const cap = window.innerWidth - ANCHORED_MENU_SCREEN_MARGIN * 2;
-  return Math.min(
-    cap,
-    ANCHORED_MENU_MAX_WIDTH,
-    Math.max(ANCHORED_MENU_MIN_WIDTH, byLabel),
-  );
+  return computeAnchoredMenuWidth(items, window.innerWidth);
 }
 
 export function viewportHeight(): number {
@@ -78,66 +62,25 @@ export function viewportHeight(): number {
   return doc.clientHeight || window.innerHeight;
 }
 
-export type ContextMenuLayout = {
-  left: number;
-  top: number;
-  width: number;
-  maxHeight: number;
-  scrollable: boolean;
-};
+export type ContextMenuLayout = AnchoredMenuLayout;
 
 export function layoutContextMenu(
   anchor: MenuAnchor,
   contentHeight: number,
   menuWidth: number,
 ): ContextMenuLayout {
-  const screenW = window.innerWidth;
-  const screenH = viewportHeight();
-  const heightCap = Math.min(ANCHORED_MENU_MAX_HEIGHT_CAP, screenH * 0.45);
-  const flipEstimate = Math.min(contentHeight, heightCap);
-  const anchorCenterX = anchor.x + anchor.width / 2;
-  let left = anchorCenterX - menuWidth / 2;
-  left = Math.max(
-    ANCHORED_MENU_SCREEN_MARGIN,
-    Math.min(left, screenW - menuWidth - ANCHORED_MENU_SCREEN_MARGIN),
+  return layoutAnchoredMenuForHeight(
+    anchor,
+    contentHeight,
+    menuWidth,
+    window.innerWidth,
+    viewportHeight(),
   );
-  const spaceAbove = anchor.y;
-  const spaceBelow = screenH - (anchor.y + anchor.height);
-  // Prefer below; flip above when bottom space is too tight.
-  const placeAbove =
-    spaceBelow < flipEstimate + ANCHORED_MENU_GAP && spaceAbove >= spaceBelow;
-  const availableSpace =
-    (placeAbove ? spaceAbove : spaceBelow) -
-    ANCHORED_MENU_GAP -
-    ANCHORED_MENU_SCREEN_MARGIN;
-  const availableMax = Math.max(ANCHORED_MENU_ITEM_MIN_HEIGHT, availableSpace);
-  const scrollable = contentHeight > availableMax + 1;
-  let menuHeight = scrollable
-    ? Math.min(contentHeight, availableMax)
-    : contentHeight;
-  if (scrollable && menuHeight > heightCap) {
-    menuHeight = heightCap;
-  }
-  let top: number;
-  if (placeAbove) {
-    top = anchor.y - menuHeight - ANCHORED_MENU_GAP;
-  } else {
-    top = anchor.y + anchor.height + ANCHORED_MENU_GAP;
-  }
-  top = Math.max(
-    ANCHORED_MENU_SCREEN_MARGIN,
-    Math.min(top, screenH - menuHeight - ANCHORED_MENU_SCREEN_MARGIN),
-  );
-  return {
-    left: left,
-    top: top,
-    width: menuWidth,
-    maxHeight: menuHeight,
-    scrollable: scrollable,
-  };
 }
 
-export function findMessageRow(messageId: string): MessageRow | null {
+export function findMessageRow(
+  messageId: string,
+): MessageRow | null {
   for (let i = 0; i < state.rows.length; i++) {
     const row = state.rows[i];
     if (row.kind === 'message' && row.id === messageId) {
@@ -152,20 +95,16 @@ export function buildMenuItems(
   hitEl: EventTarget | null,
 ): MenuItem[] {
   const items: MenuItem[] = [];
-  if ('text' in row && row.text) items.push({label: '编辑', action: 'edit'});
-  items.push({label: '复制', action: 'copy'});
+  if ('text' in row && row.text) items.push({ label: '编辑', action: 'edit' });
+  items.push({ label: '复制', action: 'copy' });
   const hitElement = hitEl as Element | null;
   const showSetFloor =
     row.kind === 'message' &&
     row.role === 'user' &&
-    !(
-      hitElement &&
-      hitElement.closest &&
-      hitElement.closest('.tool-card, .tool-group-item')
-    );
-  if (showSetFloor) items.push({label: '置位', action: 'set-floor'});
-  items.push({label: '分叉', action: 'fork'});
-  items.push({label: '回滚', action: 'rollback', danger: true});
+    !(hitElement && hitElement.closest && hitElement.closest('.tool-card, .tool-group-item'));
+  if (showSetFloor) items.push({ label: '置位', action: 'set-floor' });
+  items.push({ label: '分叉', action: 'fork' });
+  items.push({ label: '回滚', action: 'rollback', danger: true });
   return items;
 }
 
@@ -184,16 +123,8 @@ export function attachMenuNativeTextBlock(): void {
       suppressNativeTextMenu(event);
     }
   };
-  document.addEventListener(
-    'contextmenu',
-    state.menuNativeTextBlockHandler,
-    true,
-  );
-  document.addEventListener(
-    'selectstart',
-    state.menuNativeTextBlockHandler,
-    true,
-  );
+  document.addEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
+  document.addEventListener('selectstart', state.menuNativeTextBlockHandler, true);
 }
 
 export function detachMenuNativeTextBlock(): void {
@@ -305,7 +236,7 @@ export function openContextMenuFromAnchor(
   };
   const pageX = anchor.x + anchor.width / 2;
   const pageY = anchor.y + anchor.height / 2;
-  post('openMessageMenu', {messageId: messageId, pageX: pageX, pageY: pageY});
+  post('openMessageMenu', { messageId: messageId, pageX: pageX, pageY: pageY });
   post('menuOpened', {});
   state.menu = {
     messageId: messageId,

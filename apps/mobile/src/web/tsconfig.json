@@ -16,7 +16,9 @@
     // 本文件位于 src/web/：@web → 当前目录（勿沿用父级 baseUrl=. → apps/mobile，避免 IDE 解析错位）
     "baseUrl": ".",
     "paths": {
-      "@web/*": ["./*"]
+      "@web/*": ["./*"],
+      // web 代码可引 RN 侧共享纯函数（src/webview-host，具 scroll.ts 先例）；其内用 `@/` 别名
+      "@/*": ["../*"]
     }
   },
   "include": [
@@ -26,7 +28,6 @@
     "rich-document/webview/**/*.tsx",
     "code-editor/webview/**/*.ts",
     "shared/**/*.ts",
-    "shared/**/*.tsx",
-    "webview-host/**/*.ts"
+    "shared/**/*.tsx"
   ]
 }

@@ -35,9 +35,7 @@ export function nextMermaidId(): string {
 let mermaidMod: typeof import('mermaid')['default'] | null = null;
 
 /** 懒加载 bundle 内 mermaid（IIFE 无分包，动态 import 已内联）。 */
-export async function loadMermaid(): Promise<
-  typeof import('mermaid')['default']
-> {
+export async function loadMermaid(): Promise<typeof import('mermaid')['default']> {
   if (!mermaidMod) {
     mermaidMod = (await import('mermaid')).default;
   }
@@ -51,9 +49,9 @@ export async function renderMermaidSvg(
   theme: MermaidTheme,
 ): Promise<string> {
   const mermaid = await loadMermaid();
-  mermaid.initialize({startOnLoad: false, theme, securityLevel: 'strict'});
+  mermaid.initialize({ startOnLoad: false, theme, securityLevel: 'strict' });
   try {
-    const {svg} = await mermaid.render(id, source);
+    const { svg } = await mermaid.render(id, source);
     return svg;
   } catch (err) {
     const leftover = document.getElementById(`d${id}`);
@@ -71,7 +69,7 @@ export async function renderMermaidSvg(
 export function extractMermaidErrorMessage(err: unknown): string {
   return err instanceof Error
     ? err.message
-    : String((err as {str?: unknown}).str ?? err);
+    : String((err as { str?: unknown }).str ?? err);
 }
 
 export interface MermaidSourceCache {
@@ -118,11 +116,11 @@ export function createMermaidSourceCache(): MermaidSourceCache {
         return pending;
       }
       const job = render(nextMermaidId())
-        .then(svg => {
+        .then((svg) => {
           svgCache.set(key, svg);
           return svg;
         })
-        .catch(err => {
+        .catch((err) => {
           failedCache.set(key, err);
           throw err;
         })
@@ -137,15 +135,13 @@ export function createMermaidSourceCache(): MermaidSourceCache {
 
 /** 从 documentElement 的 --bg CSS 变量读取当前主题。 */
 export function readMermaidThemeFromDocument(): MermaidTheme {
-  if (
-    typeof document === 'undefined' ||
-    typeof getComputedStyle !== 'function'
-  ) {
+  if (typeof document === 'undefined' || typeof getComputedStyle !== 'function') {
     return 'default';
   }
-  const bg = getComputedStyle(document.documentElement).getPropertyValue(
-    '--bg',
-  );
+  // 宿主未下发 --bg（条件式写入缺省）时按 #fff 亮底兜底，与 CSS var(--bg, #fff) 口径一致
+  const bg =
+    getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() ||
+    '#fff';
   return inferMermaidThemeFromBg(bg);
 }
 
@@ -185,7 +181,7 @@ export async function renderMermaidCodeBlocks(
     const source = code.textContent || '';
     handled += 1;
     try {
-      const svg = await cache.getOrCreate(theme, source, id =>
+      const svg = await cache.getOrCreate(theme, source, (id) =>
         renderMermaidSvg(id, source, theme),
       );
       const block = document.createElement('div');

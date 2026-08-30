@@ -1,7 +1,8 @@
 /**
  * 思考过程折叠区；消毒 HTML 走 TrustedHtml，明文走 text children。
  */
-import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
+import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
+import { CollapsibleHeader } from './CollapsibleSection';
 
 export type ThinkingSectionProps = {
   text: unknown;
@@ -23,21 +24,20 @@ export function ThinkingSection({
   const trimmed = String(text || '').trim();
   if (!trimmed) return null;
   const useRich = !!(richText && thinkingHtml);
-  const chevron = expanded ? '▼' : '▶';
   let bodyClass = 'thinking-body' + (useRich ? ' rich' : '');
   if (expanded && showDividerBelow) {
     bodyClass += ' thinking-body-divided';
   }
   return (
     <div className="thinking-section" data-thinking-key={thinkingKey}>
-      <div
-        className="thinking-header"
-        data-action="toggle-thinking"
-        data-thinking-key={thinkingKey}
-      >
-        <span className="thinking-title">思考过程</span>
-        <span className="thinking-chevron">{chevron}</span>
-      </div>
+      <CollapsibleHeader
+        headerClass="thinking-header"
+        title="思考过程"
+        action="toggle-thinking"
+        dataKey="thinking-key"
+        dataValue={thinkingKey}
+        expanded={expanded}
+      />
       {expanded ? (
         useRich ? (
           <TrustedHtml html={thinkingHtml!} className={bodyClass} />

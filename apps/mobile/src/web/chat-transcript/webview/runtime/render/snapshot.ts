@@ -1,15 +1,16 @@
-import {state} from '../state/state';
-import type {MessageRow, TranscriptRow} from '../state/state';
+import { state } from '../state/state';
+import type { MessageRow, TranscriptRow } from '../state/state';
 import {
   offsetFromBottom,
   isNearBottom,
   stickToBottom,
   emitScrollSnapshot,
 } from '../scroll/scroll';
-import {closeContextMenu} from '../menu/menu';
-import {renderRows} from './row-logic';
-import {setStreamToolInvokingDom} from '../stream/stream';
-import {scheduleMermaidScan} from '../mermaid';
+import { closeContextMenu } from '../menu/menu';
+import { scrollTopForOffsetFromBottom } from '../../../../../webview-host/chat-transcript/scroll';
+import { renderRows } from './row-logic';
+import { setStreamToolInvokingDom } from '../stream/stream';
+import { scheduleMermaidScan } from '../mermaid';
 
 export type RestoreScroll = {
   nearBottom?: boolean;
@@ -66,9 +67,10 @@ export function applySnapshot(payload: SnapshotPayload): void {
       if (rs.nearBottom) {
         stickToBottom(scroller);
       } else {
-        scroller.scrollTop = Math.max(
-          0,
-          scroller.scrollHeight - scroller.clientHeight - rs.offsetY,
+        scroller.scrollTop = scrollTopForOffsetFromBottom(
+          scroller.scrollHeight,
+          scroller.clientHeight,
+          rs.offsetY,
         );
       }
     } else if (intent === 'preserve') {
@@ -76,9 +78,10 @@ export function applySnapshot(payload: SnapshotPayload): void {
         stickToBottom(scroller);
       } else {
         // WHY: flex-end layout shrinks tail — restore distance-from-bottom, not raw scrollTop.
-        scroller.scrollTop = Math.max(
-          0,
-          scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom,
+        scroller.scrollTop = scrollTopForOffsetFromBottom(
+          scroller.scrollHeight,
+          scroller.clientHeight,
+          prevOffsetFromBottom,
         );
       }
     }
@@ -123,9 +126,10 @@ export function applyAppendTailRows(payload: RowsPayload): void {
     if (wasNearBottom) {
       stickToBottom(scroller);
     } else {
-      scroller.scrollTop = Math.max(
-        0,
-        scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom,
+      scroller.scrollTop = scrollTopForOffsetFromBottom(
+        scroller.scrollHeight,
+        scroller.clientHeight,
+        prevOffsetFromBottom,
       );
     }
     state.nearBottom = isNearBottom(scroller);
@@ -192,9 +196,10 @@ export function applyStreamCommit(payload: RowsPayload): void {
     if (scrollIntent === 'preserve' && wasNearBottom) {
       stickToBottom(scroller);
     } else if (scrollIntent === 'preserve') {
-      scroller.scrollTop = Math.max(
-        0,
-        scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom,
+      scroller.scrollTop = scrollTopForOffsetFromBottom(
+        scroller.scrollHeight,
+        scroller.clientHeight,
+        prevOffsetFromBottom,
       );
     }
     state.nearBottom = isNearBottom(scroller);

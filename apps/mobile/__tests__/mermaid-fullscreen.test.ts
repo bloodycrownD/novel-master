@@ -15,7 +15,7 @@ import {
   computeMermaidViewerPinch,
   rebasePanAfterBake,
   resolveMermaidViewerDoubleTap,
-} from '../src/web/webview-host/chat-transcript/mermaid-viewer-gestures';
+} from '../src/web/shared/mermaid-fullscreen/mermaid-viewer-gestures';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 const webSrc = (rel: string) =>
@@ -72,22 +72,26 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
       'id="mermaid-viewer-portal"',
     );
 
-    // 两 main.ts：注册渲染入口 + 事件委托挂接（模块初始化处，不进渲染链路）
+    // 两 main.ts：portal 一行挂接 + 事件委托（模块刈处，不进渲染链路；web/C-orch-5）
     for (const rel of [
       'rich-document/webview/main.ts',
       'chat-transcript/webview/main.ts',
     ]) {
       const main = webSrc(rel);
-      expect(main).toContain('registerMermaidViewerView');
+      expect(main).toContain('mountMermaidViewerPortal');
       expect(main).toContain('attachMermaidViewerDelegation');
-      expect(main).toContain('MermaidViewerOverlay');
     }
+
+    // 挂接块单源：mountMermaidViewerPortal 内含 Overlay 渲染与卸载
+    const mount = webSrc('shared/mermaid-fullscreen/mermaid-fullscreen.ts');
+    expect(mount).toContain('function mountMermaidViewerPortal');
+    expect(mount).toContain('MermaidViewerOverlay');
 
     // 两 bridge：closeMermaidViewer 分支（关覆盖层 + post closed）
     expect(webSrc('rich-document/webview/runtime/bridge.ts')).toContain(
       "msg.type === 'closeMermaidViewer'",
     );
-    expect(webSrc('chat-transcript/webview/runtime/bridge/bridge.ts')).toContain(
+    expect(webSrc('chat-transcript/webview/runtime/bridge.ts')).toContain(
       "case 'closeMermaidViewer':",
     );
   });
@@ -98,9 +102,9 @@ describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
     expect(main).toMatch(
       /renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/,
     );
-    // 全屏注册在 registerSetDocumentView 回调之外（模块初始化处）
+    // 全屏挂接在 registerSetDocumentView 回调之外（模块刈处一行调用）
     expect(main).toMatch(
-      /\}\);\n\nbindAnnotateUi[\s\S]*registerMermaidViewerView/,
+      /\}\);\n\nbindAnnotateUi[\s\S]*mountMermaidViewerPortal/,
     );
   });
 });

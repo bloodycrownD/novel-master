@@ -8,19 +8,20 @@
  *
  * E2 allowlist：本文件（含 StreamBodyHost）可值导入 `state`；
  * 新 ui 组件禁直读——见 apps/mobile/README.md「E2：ui 禁值导入 state」、
- * （原 check-ct-ui-no-state 脚本已删，纪律见 apps/mobile/README.md。）
+ * scripts/check-ct-ui-no-state.mjs。
  */
-import {Component} from 'preact';
-import type {ComponentChildren} from 'preact';
-import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
-import {state} from '../../runtime/state/state';
+import { Component } from 'preact';
+import type { ComponentChildren } from 'preact';
+import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
+import { state } from '../../runtime/state/state';
 import {
   assistantBubbleExtraClasses,
   getStreamTailPhase,
   shouldRenderStreamTail,
   streamThinkingHtml,
 } from '../../runtime/stream/stream';
-import {ToolInvokingBar} from '../render/ToolInvokingBar';
+import { ToolInvokingBar } from '../render/ToolInvokingBar';
+import { CollapsibleHeader } from '../render/CollapsibleSection';
 
 type StreamBodyHostProps = {
   className: string;
@@ -41,12 +42,10 @@ class StreamBodyHost extends Component<StreamBodyHostProps> {
   }
 
   render(): ComponentChildren {
-    const {className, dataTextShell, seedHtml, seedText} = this.props;
-    const shellAttr = dataTextShell ? {'data-text-shell': '1' as const} : {};
+    const { className, dataTextShell, seedHtml, seedText } = this.props;
+    const shellAttr = dataTextShell ? { 'data-text-shell': '1' as const } : {};
     if (seedHtml) {
-      return (
-        <TrustedHtml html={seedHtml} className={className} {...shellAttr} />
-      );
+      return <TrustedHtml html={seedHtml} className={className} {...shellAttr} />;
     }
     if (seedText) {
       return (
@@ -59,16 +58,12 @@ class StreamBodyHost extends Component<StreamBodyHostProps> {
   }
 }
 
-function streamTextSeed(): {
-  seedHtml: string | null;
-  seedText: string | null;
-  className: string;
-} {
+function streamTextSeed(): { seedHtml: string | null; seedText: string | null; className: string } {
   const hasText = !!(state.stream.text && String(state.stream.text).trim());
   const textHtml = state.stream.textHtml;
   const useRich = !!(state.flags.richText && textHtml);
   if (useRich) {
-    return {seedHtml: textHtml!, seedText: null, className: 'bubble-body rich'};
+    return { seedHtml: textHtml!, seedText: null, className: 'bubble-body rich' };
   }
   if (hasText) {
     return {
@@ -98,7 +93,7 @@ function streamThinkingSeed(): {
     className += ' thinking-body-divided';
   }
   if (useRich) {
-    return {seedHtml: thinkingHtml!, seedText: null, className};
+    return { seedHtml: thinkingHtml!, seedText: null, className };
   }
   return {
     seedHtml: null,
@@ -149,14 +144,14 @@ export function StreamTail() {
             className="thinking-section"
             data-thinking-key="stream:thinking"
           >
-            <div
-              className="thinking-header"
-              data-action="toggle-thinking"
-              data-thinking-key="stream:thinking"
-            >
-              <span className="thinking-title">思考过程</span>
-              <span className="thinking-chevron">▼</span>
-            </div>
+            <CollapsibleHeader
+              headerClass="thinking-header"
+              title="思考过程"
+              action="toggle-thinking"
+              dataKey="thinking-key"
+              dataValue="stream:thinking"
+              expanded={true}
+            />
             <StreamBodyHost
               key="stream-thinking-body"
               className={thinkingSeed.className}

@@ -11,9 +11,13 @@
  * - 返回键走对称消息模式：开 → post('mermaidViewerOpened')；
  *   RN 拦截 BackHandler 后下发 closeMermaidViewer（各管线 bridge 分支）→
  *   closeMermaidViewer() → post('mermaidViewerClosed')。
- * - 覆盖层视图由各管线 main.ts 经 registerMermaidViewerView 注册（照
- *   registerRenderContextMenu 先例）；post 函数由管线注入（两桥 post 实现不同）。
+ * - 覆盖层视图由 mountMermaidViewerPortal(portalId) 统一注册（各管线 main.ts
+ *   一行调用，照 registerRenderContextMenu 先例）；post 函数由管线注入（两桥 post 实现不同）。
  */
+
+import {h, render} from 'preact';
+
+import {MermaidViewerOverlay} from './MermaidViewerOverlay';
 
 export type MermaidViewerViewProps = {
   /** 原图 SVG 的深克隆（cloneNode(true)），由覆盖层 effect 挂入视口容器。 */
@@ -61,7 +65,7 @@ export function openMermaidViewer(chart: Element): void {
   _open = true;
   document.body.classList.add('mermaid-viewer-open');
   if (_renderView) {
-    _renderView({svgClone});
+    _renderView({ svgClone });
   }
   if (_post) {
     _post('mermaidViewerOpened', {});
@@ -94,7 +98,7 @@ export function attachMermaidViewerDelegation(post: MermaidViewerPost): void {
     return;
   }
   _delegationAttached = true;
-  document.addEventListener('click', event => {
+  document.addEventListener('click', (event) => {
     if (_open) {
       return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）
     }
@@ -106,5 +110,27 @@ export function attachMermaidViewerDelegation(post: MermaidViewerPost): void {
     if (chart) {
       openMermaidViewer(chart);
     }
+  });
+}
+
+/**
+ * portal 挂接一行化（web/C-orch-5）：注册覆盖层渲染到指定 portal 容器。
+ * 各管线 main.ts 模块初始化处调用一次，替代原先逐行重复的注册块。
+ */
+export function mountMermaidViewerPortal(portalId: string): void {
+  const portal = document.getElementById(portalId);
+  registerMermaidViewerView((props) => {
+    if (!portal) return;
+    if (!props) {
+      render(null, portal);
+      return;
+    }
+    render(
+      h(MermaidViewerOverlay, {
+        svgClone: props.svgClone,
+        onClose: () => closeMermaidViewer(true),
+      }),
+      portal,
+    );
   });
 }

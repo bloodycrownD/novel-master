@@ -1,21 +1,20 @@
 /**
  * code-editor 桥与文档门面（runtime；无 JSX）。
  */
-import type {HostTheme, SetDocumentPayload} from './model';
-import {blurEditor, mountEditor, setDocument} from './editor';
-import {post} from './post';
-import {applyTheme} from './theme';
+import { BRIDGE_V, type SetDocumentPayload } from './model';
+import type { HostTheme } from './model';
+import { blurEditor, mountEditor, setDocument } from './editor';
+import { post } from './post';
+import { applyTheme } from './theme';
+import { matchHostMessage } from '@web/shared/host-message-channel';
 
-export {post};
+export { post };
 
 export function handleHostMessage(raw: unknown): void {
-  let msg: {v?: number; type?: string; payload?: Record<string, unknown>};
-  try {
-    msg = JSON.parse(String(raw));
-  } catch {
-    return;
-  }
-  if (!msg || msg.v !== 1) return;
+  // 解析 + v/type 校验统一在 shared（web/C-orch-3、web/A-2）：
+  // v 不匹配或 type 缺失的消息在此丢弃；对象型 raw 直通（宽容口径）
+  const msg = matchHostMessage(raw, BRIDGE_V);
+  if (!msg) return;
 
   if (msg.type === 'init') {
     applyTheme(msg.payload && (msg.payload.theme as HostTheme | undefined));

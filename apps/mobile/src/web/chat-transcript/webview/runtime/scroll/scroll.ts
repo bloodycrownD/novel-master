@@ -1,6 +1,6 @@
-import {NEAR_BOTTOM} from '@web/shared/constants';
-import {state, SCHEMA_V} from '../state/state';
-import {post} from '../bridge/bridge';
+import { NEAR_BOTTOM_THRESHOLD_PX } from '@web/shared/constants';
+import { state, SCHEMA_V } from '../state/state';
+import {post} from '../bridge';
 /**
  * 滚动锚点、贴底与加载更早消息。
  */
@@ -11,7 +11,7 @@ export function offsetFromBottom(el: HTMLElement): number {
 }
 
 export function isNearBottom(el: HTMLElement): boolean {
-  return offsetFromBottom(el) <= NEAR_BOTTOM;
+  return offsetFromBottom(el) <= NEAR_BOTTOM_THRESHOLD_PX;
 }
 
 export function stickToBottom(el: HTMLElement): void {
@@ -39,7 +39,7 @@ export function emitScrollSnapshot(): void {
   const scroller = document.getElementById('scroller');
   if (!scroller) return;
   const off = offsetFromBottom(scroller);
-  const near = off <= NEAR_BOTTOM;
+  const near = off <= NEAR_BOTTOM_THRESHOLD_PX;
   state.nearBottom = near;
   post('scrollSnapshot', {
     schemaVersion: SCHEMA_V,
