@@ -4,13 +4,13 @@
  * 判定 / partition 单点：`@novel-master/core/chat`。
  */
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {
   formatStatusChipLabelFromAttachment,
   partitionComposerChipAttachments,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-import { useTheme } from '@/theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 export type AttachmentDraftChipsProps = {
   attachments: readonly MessageAttachment[];
@@ -33,7 +33,7 @@ export function AttachmentDraftChips({
   accessibilityLabel,
   transparentRow = false,
 }: AttachmentDraftChipsProps) {
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
   if (attachments.length === 0) {
     return null;
   }
@@ -59,7 +59,7 @@ export function AttachmentDraftChips({
             ]}
           >
             <Text
-              style={[styles.label, { color: tokens.text }]}
+              style={[styles.label, {color: tokens.text}]}
               numberOfLines={1}
             >
               {label}
@@ -79,7 +79,7 @@ export function ComposerStatusChips({
   attachments: readonly MessageAttachment[];
   disabled?: boolean;
 }) {
-  const { status } = partitionComposerChipAttachments(attachments);
+  const {status} = partitionComposerChipAttachments(attachments);
   return (
     <AttachmentDraftChips
       attachments={status}
@@ -91,12 +91,12 @@ export function ComposerStatusChips({
 }
 
 const styles = StyleSheet.create({
-  row: { maxHeight: 36, marginBottom: 6 },
+  row: {maxHeight: 36, marginBottom: 6},
   rowTransparent: {
     backgroundColor: 'transparent',
     marginBottom: 4,
   },
-  content: { gap: 6, paddingRight: 8, alignItems: 'center' },
+  content: {gap: 6, paddingRight: 8, alignItems: 'center'},
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -107,5 +107,5 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  label: { fontSize: 12, flexShrink: 1, maxWidth: 160 },
+  label: {fontSize: 12, flexShrink: 1, maxWidth: 160},
 });

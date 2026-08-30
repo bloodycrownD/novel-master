@@ -9,7 +9,10 @@
 import React, {useCallback} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import {skillDomainBadgeColor, skillDomainBadgeLabel} from '@/components/skills/skill-ui';
+import {
+  skillDomainBadgeColor,
+  skillDomainBadgeLabel,
+} from '@/components/skills/skill-ui';
 import {
   PickerListModal,
   type PickerListLoadResult,
@@ -34,13 +37,12 @@ export function SkillPicker({
   const {tokens} = useTheme();
   const runtime = useRuntime();
 
-  const load = useCallback(
-    async (): Promise<PickerListLoadResult<EffectiveSkill>> => {
-      const list = await runtime.skills().effectiveSkills(projectId);
-      return {rows: list.filter(s => s.valid)};
-    },
-    [runtime, projectId],
-  );
+  const load = useCallback(async (): Promise<
+    PickerListLoadResult<EffectiveSkill>
+  > => {
+    const list = await runtime.skills().effectiveSkills(projectId);
+    return {rows: list.filter(s => s.valid)};
+  }, [runtime, projectId]);
 
   return (
     <PickerListModal
@@ -54,7 +56,8 @@ export function SkillPicker({
           <View style={styles.titleRow}>
             <Text
               style={{color: tokens.text, fontSize: 15, fontWeight: '600'}}
-              numberOfLines={1}>
+              numberOfLines={1}
+            >
               {item.name}
             </Text>
             <Text
@@ -64,7 +67,8 @@ export function SkillPicker({
                   color: skillDomainBadgeColor(item.domain, tokens),
                   borderColor: tokens.border,
                 },
-              ]}>
+              ]}
+            >
               {skillDomainBadgeLabel(item.domain, item.overridden)}
             </Text>
             {item.disabled ? (
@@ -72,7 +76,8 @@ export function SkillPicker({
                 style={[
                   styles.badge,
                   {color: tokens.textSecondary, borderColor: tokens.border},
-                ]}>
+                ]}
+              >
                 已关闭
               </Text>
             ) : null}
@@ -80,7 +85,8 @@ export function SkillPicker({
           {item.description ? (
             <Text
               style={{color: tokens.textSecondary, fontSize: 13}}
-              numberOfLines={2}>
+              numberOfLines={2}
+            >
               {item.description}
             </Text>
           ) : null}

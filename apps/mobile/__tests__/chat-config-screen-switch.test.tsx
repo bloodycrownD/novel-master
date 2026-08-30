@@ -175,10 +175,7 @@ async function renderScreen() {
 }
 
 /** 同步点一下开关（只 flush 渲染，不等持久化 promise），便于断言乐观翻转的中间态。 */
-function toggleSwitchSync(
-  root: TestRenderer.ReactTestInstance,
-  label: string,
-) {
+function toggleSwitchSync(root: TestRenderer.ReactTestInstance, label: string) {
   act(() => {
     findSwitch(root, label).props.onPress();
   });

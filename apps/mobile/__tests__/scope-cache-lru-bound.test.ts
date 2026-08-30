@@ -2,9 +2,7 @@
  * b2/B-6：三个 scope 缓存模块统一启用 LRU 上限（500）。
  * 插入超过上限后 size 封顶，最旧条目被淘汰。
  */
-import {
-  CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
-} from '@/components/chat/ChatTranscriptBridge';
+import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '@/components/chat/ChatTranscriptBridge';
 import {
   clearAllScrollSnapshots,
   scrollCacheKey,

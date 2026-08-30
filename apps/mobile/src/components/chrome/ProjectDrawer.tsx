@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import { type ChatProject } from "@novel-master/core/chat";
+import {type ChatProject} from '@novel-master/core/chat';
 import {ModalShell} from '../ui/ModalShell';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
@@ -106,122 +106,126 @@ export function ProjectDrawer({
             paddingTop: insets.top,
             paddingBottom: Math.max(insets.bottom, 12),
           },
-        ]}>
-            <ManageHeader
-              title="项目"
-              batchMode={batch.active}
-              selectedCount={batch.selectedCount}
-              onEnterBatch={batch.enter}
-              onCancelBatch={batch.exit}
-              onDelete={confirmBatchDelete}
-              hint="选择要删除的项目（将同时移除其下所有会话）"
-              normalActions={
-                <PrimaryButton
-                  label="新建"
-                  tokens={tokens}
-                  onPress={() => setNamePrompt({mode: 'create'})}
-                />
-              }
+        ]}
+      >
+        <ManageHeader
+          title="项目"
+          batchMode={batch.active}
+          selectedCount={batch.selectedCount}
+          onEnterBatch={batch.enter}
+          onCancelBatch={batch.exit}
+          onDelete={confirmBatchDelete}
+          hint="选择要删除的项目（将同时移除其下所有会话）"
+          normalActions={
+            <PrimaryButton
+              label="新建"
+              tokens={tokens}
+              onPress={() => setNamePrompt({mode: 'create'})}
             />
-            <ScrollView
-              style={styles.list}
-              contentContainerStyle={styles.listContent}
-              keyboardShouldPersistTaps="handled">
-              {projects.length === 0 ? (
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                  暂无项目，点击「新建」开始。
-                </Text>
-              ) : (
-                projects.map((project, index) => {
-                  const isCurrent = project.id === currentProjectId;
-                  const selected = batch.isSelected(project.id);
-                  return (
-                    <Pressable
-                      key={project.id}
+          }
+        />
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {projects.length === 0 ? (
+            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+              暂无项目，点击「新建」开始。
+            </Text>
+          ) : (
+            projects.map((project, index) => {
+              const isCurrent = project.id === currentProjectId;
+              const selected = batch.isSelected(project.id);
+              return (
+                <Pressable
+                  key={project.id}
+                  style={[
+                    styles.projectCard,
+                    {
+                      backgroundColor: tokens.surfaceElevated,
+                      borderColor: selected
+                        ? tokens.primary
+                        : tokens.borderLight,
+                      borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
+                    },
+                  ]}
+                  onPress={() => {
+                    if (batch.active) {
+                      batch.toggle(project.id);
+                    } else {
+                      onSelect(project.id);
+                      onClose();
+                    }
+                  }}
+                >
+                  {batch.active ? (
+                    <BatchCheckbox
+                      checked={selected}
+                      onToggle={() => batch.toggle(project.id)}
+                    />
+                  ) : (
+                    <Text style={styles.projectIcon}>
+                      {pickEntityIcon(project.id, PROJECT_ICONS)}
+                    </Text>
+                  )}
+                  <View style={styles.projectInfo}>
+                    <Text
+                      style={[styles.projectName, {color: tokens.text}]}
+                      numberOfLines={1}
+                    >
+                      {project.name}
+                    </Text>
+                    <Text
                       style={[
-                        styles.projectCard,
-                        {
-                          backgroundColor: tokens.surfaceElevated,
-                          borderColor: selected
-                            ? tokens.primary
-                            : tokens.borderLight,
-                          borderWidth: selected
-                            ? 2
-                            : StyleSheet.hairlineWidth,
-                        },
+                        styles.projectMeta,
+                        {color: tokens.textSecondary},
                       ]}
-                      onPress={() => {
-                        if (batch.active) {
-                          batch.toggle(project.id);
-                        } else {
-                          onSelect(project.id);
-                          onClose();
-                        }
-                      }}>
-                      {batch.active ? (
-                        <BatchCheckbox
-                          checked={selected}
-                          onToggle={() => batch.toggle(project.id)}
-                        />
-                      ) : (
-                        <Text style={styles.projectIcon}>
-                          {pickEntityIcon(project.id, PROJECT_ICONS)}
-                        </Text>
-                      )}
-                      <View style={styles.projectInfo}>
-                        <Text
-                          style={[styles.projectName, {color: tokens.text}]}
-                          numberOfLines={1}>
-                          {project.name}
-                        </Text>
+                    >
+                      更新于 {formatRelativeTimeMs(project.updatedAtMs)}
+                    </Text>
+                  </View>
+                  {isCurrent && !batch.active ? (
+                    <View
+                      style={[
+                        styles.currentBadge,
+                        {backgroundColor: tokens.primary},
+                      ]}
+                    >
+                      <Text style={styles.currentBadgeText}>当前</Text>
+                    </View>
+                  ) : null}
+                  {!batch.active ? (
+                    <>
+                      <Pressable
+                        hitSlop={8}
+                        testID={`project-menu-${project.id}`}
+                        onPress={e => {
+                          e.stopPropagation?.();
+                          setMenuProjectId(project.id);
+                        }}
+                      >
                         <Text
                           style={[
-                            styles.projectMeta,
+                            styles.menuDots,
                             {color: tokens.textSecondary},
-                          ]}>
-                          更新于 {formatRelativeTimeMs(project.updatedAtMs)}
+                          ]}
+                        >
+                          ⋮
                         </Text>
-                      </View>
-                      {isCurrent && !batch.active ? (
-                        <View
-                          style={[
-                            styles.currentBadge,
-                            {backgroundColor: tokens.primary},
-                          ]}>
-                          <Text style={styles.currentBadgeText}>当前</Text>
-                        </View>
-                      ) : null}
-                      {!batch.active ? (
-                        <>
-                          <Pressable
-                            hitSlop={8}
-                            testID={`project-menu-${project.id}`}
-                            onPress={e => {
-                              e.stopPropagation?.();
-                              setMenuProjectId(project.id);
-                            }}>
-                            <Text
-                              style={[
-                                styles.menuDots,
-                                {color: tokens.textSecondary},
-                              ]}>
-                              ⋮
-                            </Text>
-                          </Pressable>
-                          <Text
-                            style={[
-                              styles.chevron,
-                              {color: tokens.textTertiary},
-                            ]}>
-                            ›
-                          </Text>
-                        </>
-                      ) : null}
-                    </Pressable>
-                  );
-                })
-              )}
-            </ScrollView>
+                      </Pressable>
+                      <Text
+                        style={[styles.chevron, {color: tokens.textTertiary}]}
+                      >
+                        ›
+                      </Text>
+                    </>
+                  ) : null}
+                </Pressable>
+              );
+            })
+          )}
+        </ScrollView>
       </ModalShell>
 
       <BottomSheetMenu
@@ -253,8 +257,7 @@ export function ProjectDrawer({
                   style: 'destructive',
                   onPress: () => {
                     void Promise.resolve(onDeleteSelected([project.id])).catch(
-                      err =>
-                        showToast(toastMessage('删除失败', err)),
+                      err => showToast(toastMessage('删除失败', err)),
                     );
                   },
                 },

@@ -26,7 +26,10 @@ export type UpdateCheckSideEffects = {
     options?: {actionLabel: string; onAction: () => void},
   ) => void;
   /** 展示版本详情（Alert + 外跳下载页），onLater 为「稍后」回调。 */
-  readonly showUpdateDetail: (data: UpdateCheckData, onLater: () => void) => void;
+  readonly showUpdateDetail: (
+    data: UpdateCheckData,
+    onLater: () => void,
+  ) => void;
   /** 首屏结果弹窗（已最新 / 检查失败）。 */
   readonly showResultModal: (kind: UpdateCheckResultKind) => void;
 };

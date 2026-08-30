@@ -104,10 +104,7 @@ export function DetailTab({
             {selectedDay} · 按小时分布
           </Text>
           <Text
-            style={[
-              styles.dayDetailSummary,
-              {color: tokens.textSecondary},
-            ]}
+            style={[styles.dayDetailSummary, {color: tokens.textSecondary}]}
           >
             输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出{' '}
             {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{' '}
@@ -118,15 +115,9 @@ export function DetailTab({
               ),
             )}{' '}
             · 调用 {selectedDayBucket.calls} 次 · 平均速率{' '}
-            {formatTokensPerSecond(
-              selectedDayBucket.avgTokensPerSecond,
-              '—',
-            )}{' '}
-            · 平均首字延迟{' '}
-            {formatFirstTokenMs(
-              selectedDayBucket.avgFirstTokenMs,
-              '—',
-            )}
+            {formatTokensPerSecond(selectedDayBucket.avgTokensPerSecond, '—')} ·
+            平均首字延迟{' '}
+            {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
           </Text>
           <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
             <StackedBars
@@ -139,9 +130,7 @@ export function DetailTab({
           </View>
           {hourlyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
-              <Text
-                style={[styles.inspectText, {color: tokens.textSecondary}]}
-              >
+              <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
                 {Number(hourlyInspected.key)}时 · 输入{' '}
                 {formatTokenCount(hourlyInspected.primary)} · 输出{' '}
                 {formatTokenCount(hourlyInspected.secondary ?? 0)} · 调用{' '}

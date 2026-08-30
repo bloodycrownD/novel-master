@@ -225,10 +225,7 @@ export function SummaryTab({
               </Text>
             </View>
             <Text
-              style={[
-                styles.modelRowDetail,
-                {color: tokens.textSecondary},
-              ]}
+              style={[styles.modelRowDetail, {color: tokens.textSecondary}]}
             >
               用量 {formatTokenCount(row.totalTokens)} · 调用 {row.calls} 次
             </Text>

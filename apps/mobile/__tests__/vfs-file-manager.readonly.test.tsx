@@ -3,15 +3,8 @@
  * 同时守住红线：默认（不传 readOnly）行为与现状完全一致。
  */
 import React from 'react';
-import {
-  describe,
-  expect,
-  it,
-  jest,
-  beforeEach,
-  afterEach,
-} from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
 
 const mockShowToast = jest.fn();
 
@@ -42,7 +35,7 @@ jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
 }));
 
 jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({ showToast: mockShowToast }),
+  useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('../src/errors/toast-message', () => ({
@@ -76,7 +69,7 @@ jest.mock('../src/services/workplace-operations.service', () => {
   };
 });
 
-const mockMenuOpenCount = { opened: 0 };
+const mockMenuOpenCount = {opened: 0};
 
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: ({
@@ -85,7 +78,7 @@ jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   }: {
     visible: boolean;
     onSelect: (action: string) => void;
-    items: { action: string }[];
+    items: {action: string}[];
   }) => {
     if (visible && items.length > 0) {
       // 记录任何被打开的菜单（readOnly 断言应为零）。
@@ -136,15 +129,15 @@ jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-const { VfsFileManager } =
+const {VfsFileManager} =
   require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
 
 // 物理树根目录形态：虚拟目录 + 全局文件（list 为唯一数据源，workplace 不传）。
 const list = jest.fn(async () => [
-  { path: '/projects', kind: 'directory' as const },
-  { path: '/template', kind: 'directory' as const },
-  { path: '/meta', kind: 'directory' as const },
-  { path: '/readme.md', kind: 'file' as const },
+  {path: '/projects', kind: 'directory' as const},
+  {path: '/template', kind: 'directory' as const},
+  {path: '/meta', kind: 'directory' as const},
+  {path: '/readme.md', kind: 'file' as const},
 ]);
 
 const onOpenFile = jest.fn();
@@ -156,8 +149,8 @@ function flushPromises(): Promise<void> {
 function renderManager(readOnly: boolean) {
   return (
     <VfsFileManager
-      scope={{ kind: 'global' }}
-      vfs={{ list } as never}
+      scope={{kind: 'global'}}
+      vfs={{list} as never}
       rootPath="/"
       readOnly={readOnly}
       onOpenFile={onOpenFile}
@@ -170,7 +163,7 @@ function findOptionalByTestId(
   testID: string,
 ): TestRenderer.ReactTestInstance | undefined {
   try {
-    return root.findByProps({ testID });
+    return root.findByProps({testID});
   } catch {
     return undefined;
   }
@@ -185,10 +178,10 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
     mockShowToast.mockClear();
     mockMenuOpenCount.opened = 0;
     list.mockResolvedValue([
-      { path: '/projects', kind: 'directory' as const },
-      { path: '/template', kind: 'directory' as const },
-      { path: '/meta', kind: 'directory' as const },
-      { path: '/readme.md', kind: 'file' as const },
+      {path: '/projects', kind: 'directory' as const},
+      {path: '/template', kind: 'directory' as const},
+      {path: '/meta', kind: 'directory' as const},
+      {path: '/readme.md', kind: 'file' as const},
     ]);
   });
 
@@ -232,16 +225,14 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
 
     await act(async () => {
       tree!.root
-        .findByProps({ testID: 'vfs-row-item-readme.md' })
+        .findByProps({testID: 'vfs-row-item-readme.md'})
         .props.onPress();
       await flushPromises();
     });
     expect(onOpenFile).toHaveBeenCalledWith('/readme.md');
 
     await act(async () => {
-      tree!.root
-        .findByProps({ testID: 'vfs-row-item-template' })
-        .props.onPress();
+      tree!.root.findByProps({testID: 'vfs-row-item-template'}).props.onPress();
       await flushPromises();
     });
     expect(list).toHaveBeenCalledWith('/template');
@@ -253,9 +244,7 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
       await flushPromises();
     });
 
-    expect(
-      findOptionalByTestId(tree!.root, 'vfs-more-action'),
-    ).toBeDefined();
+    expect(findOptionalByTestId(tree!.root, 'vfs-more-action')).toBeDefined();
     expect(
       findOptionalByTestId(tree!.root, 'vfs-row-menu-readme.md'),
     ).toBeDefined();

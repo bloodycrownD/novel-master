@@ -42,9 +42,7 @@ export function ThinkingBlockCard({
   }
 
   const useRich =
-    expanded &&
-    richTextEnabled &&
-    !isRichContentOverLimit(trimmed);
+    expanded && richTextEnabled && !isRichContentOverLimit(trimmed);
 
   return (
     <CollapsibleCard
@@ -63,7 +61,8 @@ export function ThinkingBlockCard({
         },
         {opacity: dimmed ? 0.55 : 1},
       ]}
-      showDividerBelow={showDividerBelow}>
+      showDividerBelow={showDividerBelow}
+    >
       {useRich ? (
         <RichContentBody
           content={trimmed}

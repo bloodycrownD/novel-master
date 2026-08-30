@@ -1,35 +1,30 @@
 /**
  * Chat tab: session list / template sub-tabs, conversation workspace.
  */
-import React, { useCallback, useLayoutEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, {useCallback, useLayoutEffect} from 'react';
+import {StyleSheet, View} from 'react-native';
 import {
   useNavigation,
   type CompositeNavigationProp,
 } from '@react-navigation/native';
-import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AppHeader } from '@/components/chrome/AppHeader';
-import { ProjectDrawer } from '@/components/chrome/ProjectDrawer';
-import { TextPromptModal } from '@/components/ui/TextPromptModal';
-import { useAndroidChatBackHandler } from '@/hooks/useAndroidChatBackHandler';
-import { useBatchSelection } from '@/hooks/useBatchSelection';
-import { useMobileScope } from '@/hooks/useMobileScope';
-import { useTheme } from '@/theme/ThemeProvider';
-import { resolveChatTabBarStyle } from '@/navigation/main-tab-bar-style';
-import type {
-  MainTabParamList,
-  RootStackParamList,
-} from '@/navigation/types';
-import { ChatConversationPanel } from './chat-tab/ChatConversationPanel';
-import { ChatSessionListPanel } from './chat-tab/ChatSessionListPanel';
-import { ChatTabProvider, useChatTabContext } from './chat-tab/ChatTabProvider';
-import {
-  ChatTabNavigationProvider,
-} from './chat-tab/ChatTabNavigationProvider';
+import type {BottomTabNavigationProp} from '@react-navigation/bottom-tabs';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {AppHeader} from '@/components/chrome/AppHeader';
+import {ProjectDrawer} from '@/components/chrome/ProjectDrawer';
+import {TextPromptModal} from '@/components/ui/TextPromptModal';
+import {useAndroidChatBackHandler} from '@/hooks/useAndroidChatBackHandler';
+import {useBatchSelection} from '@/hooks/useBatchSelection';
+import {useMobileScope} from '@/hooks/useMobileScope';
+import {useTheme} from '@/theme/ThemeProvider';
+import {resolveChatTabBarStyle} from '@/navigation/main-tab-bar-style';
+import type {MainTabParamList, RootStackParamList} from '@/navigation/types';
+import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
+import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
+import {ChatTabProvider, useChatTabContext} from './chat-tab/ChatTabProvider';
+import {ChatTabNavigationProvider} from './chat-tab/ChatTabNavigationProvider';
 import {useChatTabNavigation} from '@/navigation/ChatTabNavContext';
-import { useChatTabController } from './chat-tab/useChatTabController';
+import {useChatTabController} from './chat-tab/useChatTabController';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Chat'>,
@@ -66,12 +61,12 @@ function ChatTabScreenContent({
 }: {
   sessionBatch: ReturnType<typeof useBatchSelection>;
 }) {
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const nav = useChatTabNavigation();
-  const { setCurrentProject, setCurrentSession } = useMobileScope();
+  const {setCurrentProject, setCurrentSession} = useMobileScope();
   const navigation = useNavigation<Nav>();
 
   useLayoutEffect(() => {
@@ -162,7 +157,7 @@ function ChatTabScreenContent({
   );
 
   return (
-    <View style={[styles.root, { backgroundColor: tokens.background }]}>
+    <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="chat" />
       {ctx.chatSubview === 'conversation' ? (
         <ChatConversationPanel tokens={tokens} visible />
@@ -225,5 +220,5 @@ export function ChatTabScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: {flex: 1},
 });

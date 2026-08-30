@@ -158,7 +158,9 @@ describe('cloud-sync-config.store KKV 持久化往返', () => {
     // SK 明文不落 KKV，只写 SKSP
     expect(await secretStore.get(CLOUD_SYNC_SECRET_REF)).toBe('SK-plain');
     for (const key of await kkv.listKeys(CLOUD_SYNC_KKV_MODULE)) {
-      expect(await kkv.get(CLOUD_SYNC_KKV_MODULE, key)).not.toContain('SK-plain');
+      expect(await kkv.get(CLOUD_SYNC_KKV_MODULE, key)).not.toContain(
+        'SK-plain',
+      );
     }
 
     // 再次读回与首次返回一致，且 deviceId 稳定

@@ -12,7 +12,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import {
@@ -29,10 +33,7 @@ import {
 } from '../../components/provider/ProviderForm';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
-import {
-  PrimaryButton,
-  SecondaryButton,
-} from '../../components/ui/Buttons';
+import {PrimaryButton, SecondaryButton} from '../../components/ui/Buttons';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
@@ -77,7 +78,9 @@ export function ProviderDetailScreen() {
 
   const [addVisible, setAddVisible] = useState(false);
   const [fetchVisible, setFetchVisible] = useState(false);
-  const [menuSavedModelId, setMenuSavedModelId] = useState<string | undefined>();
+  const [menuSavedModelId, setMenuSavedModelId] = useState<
+    string | undefined
+  >();
   const [renameModelName, setRenameModelName] = useState('');
   const [renameVisible, setRenameVisible] = useState(false);
   const batch = useBatchSelection();
@@ -108,9 +111,7 @@ export function ProviderDetailScreen() {
       }
       return saved.map(model => {
         const sampling = savedModelSampling(model.settings);
-        const hasSampling = Boolean(
-          sampling.enabled && sampling.params,
-        );
+        const hasSampling = Boolean(sampling.enabled && sampling.params);
         const duplicate =
           (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ??
             0) > 1;
@@ -233,152 +234,163 @@ export function ProviderDetailScreen() {
         )
       ) : (
         <>
-      <ManageHeader
-        title="已保存模型"
-        batchMode={batch.active}
-        selectedCount={batch.selectedCount}
-        allSelected={rows.length > 0 && batch.selectedCount === rows.length}
-        onSelectAll={() =>
-          batch.selectRange(
-            batch.selectedCount === rows.length
-              ? []
-              : rows.map(row => row.savedModelId),
-          )
-        }
-        onEnterBatch={batch.enter}
-        onCancelBatch={batch.exit}
-        onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
-        hint="选择要删除的模型（批量模式下不会进入采样配置）"
-        normalActions={
-          <>
-            <SecondaryButton
-              label="远程"
-              tokens={tokens}
-              onPress={() => setFetchVisible(true)}
-            />
-            <PrimaryButton
-              label="添加"
-              tokens={tokens}
-              onPress={() => setAddVisible(true)}
-            />
-          </>
-        }
-      />
-      {loading && rows.length === 0 ? (
-        <ActivityIndicator style={listScreenStyles.loader} />
-      ) : error ? (
-        <View style={styles.errorWrap}>
-          <Text style={[styles.errorText, {color: tokens.danger}]}>{error}</Text>
-          <Pressable onPress={() => void reload()}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={item => item.savedModelId}
-          contentContainerStyle={listScreenStyles.listContent}
-          refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={() => void reload()} />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyWrap}>
-              <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                暂无已保存模型
+          <ManageHeader
+            title="已保存模型"
+            batchMode={batch.active}
+            selectedCount={batch.selectedCount}
+            allSelected={rows.length > 0 && batch.selectedCount === rows.length}
+            onSelectAll={() =>
+              batch.selectRange(
+                batch.selectedCount === rows.length
+                  ? []
+                  : rows.map(row => row.savedModelId),
+              )
+            }
+            onEnterBatch={batch.enter}
+            onCancelBatch={batch.exit}
+            onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
+            hint="选择要删除的模型（批量模式下不会进入采样配置）"
+            normalActions={
+              <>
+                <SecondaryButton
+                  label="远程"
+                  tokens={tokens}
+                  onPress={() => setFetchVisible(true)}
+                />
+                <PrimaryButton
+                  label="添加"
+                  tokens={tokens}
+                  onPress={() => setAddVisible(true)}
+                />
+              </>
+            }
+          />
+          {loading && rows.length === 0 ? (
+            <ActivityIndicator style={listScreenStyles.loader} />
+          ) : error ? (
+            <View style={styles.errorWrap}>
+              <Text style={[styles.errorText, {color: tokens.danger}]}>
+                {error}
               </Text>
+              <Pressable onPress={() => void reload()}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                  重试
+                </Text>
+              </Pressable>
             </View>
-          }
-          renderItem={({item}) => (
-            <ConfigListCard
-              tokens={tokens}
-              selected={batch.isSelected(item.savedModelId)}
-              onPress={() => {
-                if (batch.active) {
-                  batch.toggle(item.savedModelId);
-                } else {
-                  navigation.navigate('ModelSampling', {
-                    savedModelId: item.savedModelId,
-                  });
-                }
-              }}
-              leading={
-                batch.active ? (
-                  <BatchCheckbox
-                    checked={batch.isSelected(item.savedModelId)}
-                    onToggle={() => batch.toggle(item.savedModelId)}
-                  />
-                ) : (
-                  <Text style={styles.modelIcon}>🧠</Text>
-                )
+          ) : (
+            <FlatList
+              data={rows}
+              keyExtractor={item => item.savedModelId}
+              contentContainerStyle={listScreenStyles.listContent}
+              refreshControl={
+                <RefreshControl
+                  refreshing={loading}
+                  onRefresh={() => void reload()}
+                />
               }
-              title={item.label}
-              subtitle={item.subtitle || undefined}
-              onMenuPress={
-                batch.active
-                  ? undefined
-                  : () => setMenuSavedModelId(item.savedModelId)
+              ListEmptyComponent={
+                <View style={styles.emptyWrap}>
+                  <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                    暂无已保存模型
+                  </Text>
+                </View>
               }
+              renderItem={({item}) => (
+                <ConfigListCard
+                  tokens={tokens}
+                  selected={batch.isSelected(item.savedModelId)}
+                  onPress={() => {
+                    if (batch.active) {
+                      batch.toggle(item.savedModelId);
+                    } else {
+                      navigation.navigate('ModelSampling', {
+                        savedModelId: item.savedModelId,
+                      });
+                    }
+                  }}
+                  leading={
+                    batch.active ? (
+                      <BatchCheckbox
+                        checked={batch.isSelected(item.savedModelId)}
+                        onToggle={() => batch.toggle(item.savedModelId)}
+                      />
+                    ) : (
+                      <Text style={styles.modelIcon}>🧠</Text>
+                    )
+                  }
+                  title={item.label}
+                  subtitle={item.subtitle || undefined}
+                  onMenuPress={
+                    batch.active
+                      ? undefined
+                      : () => setMenuSavedModelId(item.savedModelId)
+                  }
+                />
+              )}
             />
           )}
-        />
-      )}
-      <TextPromptModal
-        visible={addVisible}
-        variant="bottom"
-        title="添加模型"
-        confirmLabel="添加"
-        fields={[
-          {
-            label: '厂商模型 ID',
-            placeholder: '如 gpt-4o',
-            autoCapitalize: 'none',
-          },
-          {label: '模型名称（可选）', placeholder: '模型名称', optional: true},
-        ]}
-        onClose={() => setAddVisible(false)}
-        onConfirm={values => handleAdd(values[0], values[1] || undefined)}
-      />
-      <TextPromptModal
-        visible={renameVisible}
-        variant="bottom"
-        title="重命名模型"
-        label="模型名称"
-        placeholder="模型名称"
-        initialValue={renameModelName}
-        autoCapitalize="none"
-        confirmLabel="保存"
-        onClose={() => {
-          setRenameVisible(false);
-          setMenuSavedModelId(undefined);
-        }}
-        onConfirm={values => handleRename(values[0])}
-      />
-      {providerId ? (
-        <FetchModelsSheet
-          visible={fetchVisible}
-          providerId={providerId}
-          onClose={() => setFetchVisible(false)}
-          onSaved={() => void reload()}
-        />
-      ) : null}
-      <BottomSheetMenu
-        visible={menuSavedModelId != null}
-        items={[
-          {label: '重命名', action: 'rename'},
-          {label: '删除', action: 'delete', danger: true},
-        ]}
-        onClose={() => setMenuSavedModelId(undefined)}
-        onSelect={action => {
-          const row = menuRow;
-          if (action === 'rename' && row) {
-            setRenameModelName(row.modelName);
-            setRenameVisible(true);
-          } else if (action === 'delete' && row) {
-            setMenuSavedModelId(undefined);
-            handleDelete(row).catch(() => undefined);
-          }
-        }}
-      />
+          <TextPromptModal
+            visible={addVisible}
+            variant="bottom"
+            title="添加模型"
+            confirmLabel="添加"
+            fields={[
+              {
+                label: '厂商模型 ID',
+                placeholder: '如 gpt-4o',
+                autoCapitalize: 'none',
+              },
+              {
+                label: '模型名称（可选）',
+                placeholder: '模型名称',
+                optional: true,
+              },
+            ]}
+            onClose={() => setAddVisible(false)}
+            onConfirm={values => handleAdd(values[0], values[1] || undefined)}
+          />
+          <TextPromptModal
+            visible={renameVisible}
+            variant="bottom"
+            title="重命名模型"
+            label="模型名称"
+            placeholder="模型名称"
+            initialValue={renameModelName}
+            autoCapitalize="none"
+            confirmLabel="保存"
+            onClose={() => {
+              setRenameVisible(false);
+              setMenuSavedModelId(undefined);
+            }}
+            onConfirm={values => handleRename(values[0])}
+          />
+          {providerId ? (
+            <FetchModelsSheet
+              visible={fetchVisible}
+              providerId={providerId}
+              onClose={() => setFetchVisible(false)}
+              onSaved={() => void reload()}
+            />
+          ) : null}
+          <BottomSheetMenu
+            visible={menuSavedModelId != null}
+            items={[
+              {label: '重命名', action: 'rename'},
+              {label: '删除', action: 'delete', danger: true},
+            ]}
+            onClose={() => setMenuSavedModelId(undefined)}
+            onSelect={action => {
+              const row = menuRow;
+              if (action === 'rename' && row) {
+                setRenameModelName(row.modelName);
+                setRenameVisible(true);
+              } else if (action === 'delete' && row) {
+                setMenuSavedModelId(undefined);
+                handleDelete(row).catch(() => undefined);
+              }
+            }}
+          />
         </>
       )}
     </View>
@@ -398,7 +410,9 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
   const [saving, setSaving] = useState(false);
   const [initial, setInitial] = useState<Partial<ProviderFormValues>>();
   const [isBuiltin, setIsBuiltin] = useState(false);
-  const [apiKeyStatus, setApiKeyStatus] = useState<'set' | 'not set'>('not set');
+  const [apiKeyStatus, setApiKeyStatus] = useState<'set' | 'not set'>(
+    'not set',
+  );
 
   const load = useCallback(async () => {
     setLoading(true);

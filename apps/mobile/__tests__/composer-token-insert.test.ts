@@ -7,14 +7,11 @@ import {
   buildTokenInsertion,
   statusOnlyComposerAttachments,
 } from '@/components/chat/composer-token-insert';
-import type { MessageAttachment } from '@novel-master/core/chat';
+import type {MessageAttachment} from '@novel-master/core/chat';
 
 describe('buildTokenInsertion', () => {
   test('@ 选择器多选：前段无尾空白补前导空格，末尾补尾空格，多 token 空格连接', () => {
-    const next = buildTokenInsertion('你好', 2, 2, [
-      '@docs/a.md',
-      '@docs/b/',
-    ]);
+    const next = buildTokenInsertion('你好', 2, 2, ['@docs/a.md', '@docs/b/']);
     expect(next.text).toBe('你好 @docs/a.md @docs/b/ ');
     expect(next.cursor).toBe('你好 @docs/a.md @docs/b/ '.length);
   });

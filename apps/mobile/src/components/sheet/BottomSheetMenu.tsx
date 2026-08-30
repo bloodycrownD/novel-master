@@ -43,7 +43,8 @@ export function BottomSheetMenu({
       animationType="slide"
       statusBarTranslucent
       backdropOpacity={0.55}
-      panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}>
+      panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
+    >
       {title ? (
         <Text style={[styles.title, {color: tokens.textSecondary}]}>
           {title}
@@ -57,23 +58,26 @@ export function BottomSheetMenu({
           onPress={() => {
             onClose();
             onSelect(item.action);
-          }}>
+          }}
+        >
           <Text
             style={{
               color: item.disabled
                 ? tokens.textTertiary
                 : item.danger
-                  ? tokens.danger
-                  : tokens.text,
+                ? tokens.danger
+                : tokens.text,
               fontSize: 16,
-            }}>
+            }}
+          >
             {item.label}
           </Text>
         </Pressable>
       ))}
       <Pressable
         style={[styles.item, {borderTopColor: tokens.border}]}
-        onPress={onClose}>
+        onPress={onClose}
+      >
         <Text style={{color: tokens.textSecondary, fontSize: 16}}>取消</Text>
       </Pressable>
     </ModalShell>

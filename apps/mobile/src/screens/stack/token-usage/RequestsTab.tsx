@@ -46,10 +46,7 @@ export function RequestsTab({
         <View
           // 与 desktop 口径一致：createdAtMs+index，防同毫秒同模型碰撞（MF-5）。
           key={`${row.createdAtMs}-${index}`}
-          style={[
-            styles.reqRow,
-            {backgroundColor: tokens.surface},
-          ]}
+          style={[styles.reqRow, {backgroundColor: tokens.surface}]}
         >
           <View style={styles.reqRowHead}>
             <Text style={{color: tokens.text}}>
@@ -80,10 +77,7 @@ export function RequestsTab({
         <View style={[styles.reqPager]}>
           <Pressable
             testID="req-prev-page"
-            style={[
-              styles.reqPagerBtn,
-              {borderColor: tokens.borderLight},
-            ]}
+            style={[styles.reqPagerBtn, {borderColor: tokens.borderLight}]}
             disabled={reqLoading || reqPage === 0}
             onPress={() => onLoadRequests(reqPage - 1).catch(() => undefined)}
           >
@@ -115,9 +109,7 @@ export function RequestsTab({
                   },
                 ]}
                 disabled={reqLoading}
-                onPress={() =>
-                  onLoadRequests(item - 1).catch(() => undefined)
-                }
+                onPress={() => onLoadRequests(item - 1).catch(() => undefined)}
               >
                 <Text
                   style={{
@@ -135,13 +127,8 @@ export function RequestsTab({
           )}
           <Pressable
             testID="req-next-page"
-            style={[
-              styles.reqPagerBtn,
-              {borderColor: tokens.borderLight},
-            ]}
-            disabled={
-              reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal
-            }
+            style={[styles.reqPagerBtn, {borderColor: tokens.borderLight}]}
+            disabled={reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal}
             onPress={() => onLoadRequests(reqPage + 1).catch(() => undefined)}
           >
             <Text style={{color: tokens.primary}}>下一页</Text>
@@ -149,9 +136,7 @@ export function RequestsTab({
         </View>
       ) : null}
       {reqRows.length === 0 && !reqLoading && !reqDirty ? (
-        <Text
-          style={[styles.reqRowDetail, {color: tokens.textSecondary}]}
-        >
+        <Text style={[styles.reqRowDetail, {color: tokens.textSecondary}]}>
           （无请求记录）
         </Text>
       ) : null}

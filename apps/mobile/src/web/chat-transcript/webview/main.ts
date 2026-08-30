@@ -4,24 +4,22 @@
  * ISD：MenuOverlay 渲染到 #menu-portal（Portal 等价；不上 preact/compat）。
  * 壳事件 / ready 见 runtime/boot（非「混合框架」，而是 boot 与视图注册分离）。
  */
-import { h, render } from 'preact';
-import {
-  registerRenderContextMenu,
-} from './runtime/menu/menu';
-import { registerRenderRows } from './runtime/render/row-logic';
-import { startTranscriptBoot } from './runtime/boot/boot-transcript';
-import { post } from './runtime/bridge';
+import {h, render} from 'preact';
+import {registerRenderContextMenu} from './runtime/menu/menu';
+import {registerRenderRows} from './runtime/render/row-logic';
+import {startTranscriptBoot} from './runtime/boot/boot-transcript';
+import {post} from './runtime/bridge';
 import {
   attachMermaidViewerDelegation,
   mountMermaidViewerPortal,
 } from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
-import { MenuOverlay } from './ui/menu/MenuOverlay';
-import { RowList } from './ui/render/RowList';
+import {MenuOverlay} from './ui/menu/MenuOverlay';
+import {RowList} from './ui/render/RowList';
 
 const menuPortal = document.getElementById('menu-portal');
 
 // P0-3 / ISD：注册完整菜单 overlay；关闭时 render(null) 卸载
-registerRenderContextMenu((props) => {
+registerRenderContextMenu(props => {
   if (!menuPortal) return;
   if (!props) {
     render(null, menuPortal);
@@ -44,4 +42,4 @@ attachMermaidViewerDelegation(post);
 startTranscriptBoot();
 
 // 契约测 / 外部仍可检索 bootTranscript 符号（经 boot 模块再导出）
-export { bootTranscript } from './runtime/boot/boot-transcript';
+export {bootTranscript} from './runtime/boot/boot-transcript';

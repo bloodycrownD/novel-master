@@ -86,13 +86,15 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
           backgroundColor: tokens.headerBackground,
           borderBottomColor: tokens.border,
         },
-      ]}>
+      ]}
+    >
       <View style={styles.row}>
         {resolved.showBack ? (
           <Pressable
             onPress={resolved.onBack}
             style={styles.iconBtn}
-            accessibilityLabel="返回">
+            accessibilityLabel="返回"
+          >
             <BackIcon color={tokens.primary} />
           </Pressable>
         ) : (
@@ -101,7 +103,8 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
         <Text
           style={[styles.title, {color: tokens.text}]}
           numberOfLines={1}
-          accessibilityRole="header">
+          accessibilityRole="header"
+        >
           {resolved.title}
         </Text>
         <Pressable onPress={() => toggleMode()} style={styles.iconBtn}>
@@ -115,7 +118,8 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
           <Pressable
             onPress={resolved.onMenu}
             style={styles.iconBtn}
-            accessibilityLabel={menuLabel}>
+            accessibilityLabel={menuLabel}
+          >
             {resolved.menuIcon ?? <MenuIcon color={tokens.text} />}
           </Pressable>
         ) : (

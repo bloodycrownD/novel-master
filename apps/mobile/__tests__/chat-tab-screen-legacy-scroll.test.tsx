@@ -50,7 +50,9 @@ const mockRuntime: any = {
     get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
   },
   sessions: {
-    listByProject: jest.fn(async () => [{id: 's1', title: 'S1', updatedAtMs: 1}]),
+    listByProject: jest.fn(async () => [
+      {id: 's1', title: 'S1', updatedAtMs: 1},
+    ]),
   },
   messages: {
     listBySession: jest.fn(async () => []),
@@ -162,9 +164,15 @@ jest.mock('../src/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
 
-jest.mock('../src/components/chrome/AppHeader', () => ({AppHeader: () => null}));
-jest.mock('../src/components/chat/ChatMetaBar', () => ({ChatMetaBar: () => null}));
-jest.mock('../src/components/chat/ChatComposer', () => ({ChatComposer: () => null}));
+jest.mock('../src/components/chrome/AppHeader', () => ({
+  AppHeader: () => null,
+}));
+jest.mock('../src/components/chat/ChatMetaBar', () => ({
+  ChatMetaBar: () => null,
+}));
+jest.mock('../src/components/chat/ChatComposer', () => ({
+  ChatComposer: () => null,
+}));
 jest.mock('../src/components/chat/MessageActionMenu', () => ({
   MessageActionMenu: () => null,
 }));
@@ -180,7 +188,9 @@ jest.mock('../src/components/provider/ModelPickerModal', () => ({
 jest.mock('../src/components/vfs/VfsFileManager', () => ({
   VfsFileManager: () => null,
 }));
-jest.mock('../src/components/batch/ManageHeader', () => ({ManageHeader: () => null}));
+jest.mock('../src/components/batch/ManageHeader', () => ({
+  ManageHeader: () => null,
+}));
 jest.mock('../src/components/batch/BatchCheckbox', () => ({
   BatchCheckbox: () => null,
 }));

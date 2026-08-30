@@ -65,7 +65,7 @@ export function openMermaidViewer(chart: Element): void {
   _open = true;
   document.body.classList.add('mermaid-viewer-open');
   if (_renderView) {
-    _renderView({ svgClone });
+    _renderView({svgClone});
   }
   if (_post) {
     _post('mermaidViewerOpened', {});
@@ -98,7 +98,7 @@ export function attachMermaidViewerDelegation(post: MermaidViewerPost): void {
     return;
   }
   _delegationAttached = true;
-  document.addEventListener('click', (event) => {
+  document.addEventListener('click', event => {
     if (_open) {
       return; // 覆盖层内点击由覆盖层自身处理（backdrop 关闭/双击缩放）
     }
@@ -119,7 +119,7 @@ export function attachMermaidViewerDelegation(post: MermaidViewerPost): void {
  */
 export function mountMermaidViewerPortal(portalId: string): void {
   const portal = document.getElementById(portalId);
-  registerMermaidViewerView((props) => {
+  registerMermaidViewerView(props => {
     if (!portal) return;
     if (!props) {
       render(null, portal);

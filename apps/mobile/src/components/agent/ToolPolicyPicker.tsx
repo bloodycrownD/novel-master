@@ -11,14 +11,15 @@
  * - 点行只 toggle 临时 draft，不关闭 sheet；点确定才把 draft 提交回 onChange 并关闭。
  * - draft 仅在 open 从 false 翻 true 时用 selected 初始化一次，sheet 打开期间不再随 selected 变化重置。
  */
-import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
 import {FormTextInput} from '../form/FormTextInput';
@@ -120,69 +121,63 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
           maxHeightRatio: 0.75,
           iosTranslateY: true,
         }}
-        panelStyle={styles.sheet}>
-          <Text style={[styles.sheetTitle, {color: tokens.text}]}>
-            选择工具
-          </Text>
-          <View style={styles.searchWrap}>
-            <FormTextInput
-              tokens={tokens}
-              value={query}
-              onChangeText={setQuery}
-              placeholder="搜索工具…"
-            />
-          </View>
-          <FlatList
-            data={filtered}
-            keyExtractor={item => item.name}
-            style={styles.list}
-            renderItem={({item}) => {
-              const active = draftSet.has(item.name);
-              return (
-                <Pressable
-                  style={[
-                    styles.row,
-                    {borderBottomColor: tokens.border},
-                    active && {backgroundColor: tokens.bgSecondary},
-                  ]}
-                  onPress={() => toggle(item.name)}>
-                  <View style={styles.rowText}>
-                    <Text style={{color: tokens.text}}>{item.name}</Text>
-                    <Text
-                      style={{color: tokens.textSecondary, fontSize: 13}}>
-                      {item.description}
-                    </Text>
-                  </View>
-                  {active ? (
-                    <Text style={{color: tokens.primary}}>✓</Text>
-                  ) : null}
-                </Pressable>
-              );
-            }}
+        panelStyle={styles.sheet}
+      >
+        <Text style={[styles.sheetTitle, {color: tokens.text}]}>选择工具</Text>
+        <View style={styles.searchWrap}>
+          <FormTextInput
+            tokens={tokens}
+            value={query}
+            onChangeText={setQuery}
+            placeholder="搜索工具…"
           />
-          <View
-            style={[
-              styles.actionRow,
-              {
-                borderTopColor: tokens.border,
-                paddingBottom: Math.max(insets.bottom, 16),
-              },
-            ]}>
-            <Pressable
-              onPress={close}
-              style={styles.actionBtn}>
-              <Text style={{color: tokens.textSecondary}}>取消</Text>
-            </Pressable>
-            <Pressable
-              onPress={confirm}
-              style={[
-                styles.actionBtn,
-                {backgroundColor: tokens.primary},
-              ]}>
-              <Text style={styles.confirmText}>确定</Text>
-            </Pressable>
-          </View>
-        </ModalShell>,
+        </View>
+        <FlatList
+          data={filtered}
+          keyExtractor={item => item.name}
+          style={styles.list}
+          renderItem={({item}) => {
+            const active = draftSet.has(item.name);
+            return (
+              <Pressable
+                style={[
+                  styles.row,
+                  {borderBottomColor: tokens.border},
+                  active && {backgroundColor: tokens.bgSecondary},
+                ]}
+                onPress={() => toggle(item.name)}
+              >
+                <View style={styles.rowText}>
+                  <Text style={{color: tokens.text}}>{item.name}</Text>
+                  <Text style={{color: tokens.textSecondary, fontSize: 13}}>
+                    {item.description}
+                  </Text>
+                </View>
+                {active ? <Text style={{color: tokens.primary}}>✓</Text> : null}
+              </Pressable>
+            );
+          }}
+        />
+        <View
+          style={[
+            styles.actionRow,
+            {
+              borderTopColor: tokens.border,
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
+          <Pressable onPress={close} style={styles.actionBtn}>
+            <Text style={{color: tokens.textSecondary}}>取消</Text>
+          </Pressable>
+          <Pressable
+            onPress={confirm}
+            style={[styles.actionBtn, {backgroundColor: tokens.primary}]}
+          >
+            <Text style={styles.confirmText}>确定</Text>
+          </Pressable>
+        </View>
+      </ModalShell>,
     );
 
     return () => overlay.hide(overlayKey);
@@ -210,13 +205,15 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
           borderColor: tokens.borderLight,
         },
       ]}
-      onPress={() => setOpen(true)}>
+      onPress={() => setOpen(true)}
+    >
       <Text
         style={{
           color: selected.length > 0 ? tokens.text : tokens.textSecondary,
           flex: 1,
         }}
-        numberOfLines={1}>
+        numberOfLines={1}
+      >
         {triggerLabel}
       </Text>
       <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>

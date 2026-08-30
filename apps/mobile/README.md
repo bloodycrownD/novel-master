@@ -4,13 +4,13 @@ React Native app scaffold for monorepo VFS validation on device (Android Debug).
 
 ## Versions (init 2026-05-24)
 
-| Package | Version |
-|---------|---------|
-| react-native | 0.85.3 |
-| react | 19.2.3 |
-| @react-native-community/cli | 20.1.0 |
-| @op-engineering/op-sqlite | 18.0.0 |
-| Node | 22.22.0 (see repo `.nvmrc`) |
+| Package                     | Version                     |
+| --------------------------- | --------------------------- |
+| react-native                | 0.85.3                      |
+| react                       | 19.2.3                      |
+| @react-native-community/cli | 20.1.0                      |
+| @op-engineering/op-sqlite   | 18.0.0                      |
+| Node                        | 22.22.0 (see repo `.nvmrc`) |
 
 SQLite 驱动已于 2026-08 从废弃的 `react-native-quick-sqlite`（^8.2.7）迁移至 `@op-engineering/op-sqlite`；旧依赖与 `tdbc-driver-rn` 包保留作回滚线（mobile 侧两行 import + driver 名切回即回滚）。
 
@@ -25,12 +25,12 @@ SQLite 驱动已于 2026-08 从废弃的 `react-native-quick-sqlite`（^8.2.7）
 
 Gradle needs your SDK location. **Three layers** (any one is enough for Gradle; adb needs PATH):
 
-| 方式 | 作用 |
-|------|------|
-| **`android/local.properties`** | Gradle 读 `sdk.dir`（本机已 gitignore，见 `local.properties.example`） |
-| **Windows 用户环境变量** | `ANDROID_HOME` + `platform-tools`/`emulator` 在 Path（持久，新开终端生效） |
-| **PowerShell Profile** | 每个 PS 会话自动 `$env:ANDROID_HOME` 与 Path（见 `Documents\PowerShell\Microsoft.PowerShell_profile.ps1`） |
-| **`.vscode/settings.json`** | Cursor 集成终端注入 `ANDROID_HOME`（本仓库已配置） |
+| 方式                           | 作用                                                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **`android/local.properties`** | Gradle 读 `sdk.dir`（本机已 gitignore，见 `local.properties.example`）                                     |
+| **Windows 用户环境变量**       | `ANDROID_HOME` + `platform-tools`/`emulator` 在 Path（持久，新开终端生效）                                 |
+| **PowerShell Profile**         | 每个 PS 会话自动 `$env:ANDROID_HOME` 与 Path（见 `Documents\PowerShell\Microsoft.PowerShell_profile.ps1`） |
+| **`.vscode/settings.json`**    | Cursor 集成终端注入 `ANDROID_HOME`（本仓库已配置）                                                         |
 
 **A. `local.properties`**（与 banzhu 相同，Gradle 最稳）:
 
@@ -129,7 +129,7 @@ adb logcat *:S ReactNative:V ReactNativeJS:V
 
 Device DB name: `novel_master_vfs` (app-private storage). The op-sqlite driver probes the legacy quick-sqlite layout (`files/default/novel_master_vfs`) first and opens the existing DB file in place, so upgrades keep the same file. This is **not** the CLI file `.novel-master/novel.db`. VFS runtime registers the driver via `@novel-master/tdbc-driver-op-sqlite/native`.
 
-### CLI对照 (same semantics, different DB)
+### CLI 对照 (same semantics, different DB)
 
 ```bash
 npm run build -w @novel-master/core -w @novel-master/cli
@@ -148,10 +148,10 @@ nm vfs list / -r
 
 File editor preview body uses a single `react-native-webview` (`RichDocumentWebView`) when `vfsMarkdownPreviewEngine` is `webview`. Toolbar, stats, and the **Markdown / 文本** toggle stay in RN; Front Matter + body scroll together inside the Web bundle (`src/web/rich-document/webview/`). **文本** mode bypasses WebView and shows the full file buffer as monospace RN `Text`.
 
-| Setting | Default | Notes |
-|---------|---------|-------|
-| `vfsMarkdownPreviewEngine` KKV | **`webview`** | Release and Debug |
-| Override | App UI prefs key `vfsMarkdownPreviewEngine` | Set to `rn` to roll back to `RichContentBody` |
+| Setting                        | Default                                     | Notes                                         |
+| ------------------------------ | ------------------------------------------- | --------------------------------------------- |
+| `vfsMarkdownPreviewEngine` KKV | **`webview`**                               | Release and Debug                             |
+| Override                       | App UI prefs key `vfsMarkdownPreviewEngine` | Set to `rn` to roll back to `RichContentBody` |
 
 **Rollback:** set `vfsMarkdownPreviewEngine` to `rn` to restore RenderHTML preview without reinstalling.
 
@@ -173,11 +173,11 @@ Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
 
 CT / RD 视图主写法为 **Preact + TSX**（不上 `htm` 主路径）；`code-editor` 为 CodeMirror runtime（无 Preact `ui/`）。CT / RD 每个包 `webview/` 内强制：
 
-| 目录 | 内容 |
-|------|------|
-| `ui/**/*.tsx` | 仅结构组件（菜单 / 行列表 / 流式壳 / DocumentApp 等） |
+| 目录              | 内容                                                                                      |
+| ----------------- | ----------------------------------------------------------------------------------------- |
+| `ui/**/*.tsx`     | 仅结构组件（菜单 / 行列表 / 流式壳 / DocumentApp 等）                                     |
 | `runtime/**/*.ts` | 仅非 UI（桥 / 状态 / 滚动 / 流式增量 DOM / 门面）；CT 保留 `menu` / `render` 等职责子目录 |
-| `main.ts` | 唯一根入口（本身无 JSX） |
+| `main.ts`         | 唯一根入口（本身无 JSX）                                                                  |
 
 禁止同目录混放 TSX 与业务 TS；禁止 `index.ts` barrel。职责心智仍按「改菜单找 menu、改行找 render、改流式找 stream」。终局树以 Preact 迭代 SPEC 为准（不再以 layout-cleanup 七类**顶层**为验收）。
 
@@ -193,13 +193,13 @@ CT / RD 视图主写法为 **Preact + TSX**（不上 `htm` 主路径）；`code-
 
 Chat Transcript `webview/ui/**` 对 `runtime/state` 的纪律（对齐 post-1.3.14-large-debt-remediation）：
 
-| 规则 | 定案 |
-|------|------|
-| **初始 allowlist（值导入 `state`）** | `{StreamTail, RowList, MessageRow}` |
-| 路径 | `ui/stream/StreamTail.tsx`、`ui/render/RowList.tsx`、`ui/render/MessageRow.tsx`（含 StreamTail 内 `StreamBodyHost`，同文件） |
-| type-only | `import type { … } from '…/state'` **允许**（不占白名单） |
-| **新** `ui/**` 组件 | **禁止**值导入 `state`；经 props / runtime 门面拿数据 |
-| 门禁 | 纪律保留为代码约定（原 `check:ct-ui-no-state` 脚本已删，需要时从 git 历史找回）；新直读靠 CR 把关 |
+| 规则                                 | 定案                                                                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| **初始 allowlist（值导入 `state`）** | `{StreamTail, RowList, MessageRow}`                                                                                          |
+| 路径                                 | `ui/stream/StreamTail.tsx`、`ui/render/RowList.tsx`、`ui/render/MessageRow.tsx`（含 StreamTail 内 `StreamBodyHost`，同文件） |
+| type-only                            | `import type { … } from '…/state'` **允许**（不占白名单）                                                                    |
+| **新** `ui/**` 组件                  | **禁止**值导入 `state`；经 props / runtime 门面拿数据                                                                        |
+| 门禁                                 | 纪律保留为代码约定（原 `check:ct-ui-no-state` 脚本已删，需要时从 git 历史找回）；新直读靠 CR 把关                            |
 
 既有三文件可渐进 props 化并缩小白名单（不挡本门禁开启）。勿把新直读加进白名单外文件。
 
@@ -218,11 +218,11 @@ npm run android -w @novel-master/mobile
 npm run ios -w @novel-master/mobile
 ```
 
-| 命令 | 作用 |
-|------|------|
-| `build:webview` | 写出 `webview-dist/{pkg}/index.html` + `app.js` + `app.css` |
-| `build:webview:native` | 同上，并拷贝到 Android `assets/webview/` 与 iOS `WebViewDist/` |
-| `npm start` / `prestart` | **只保证** dist 已生成；**不会**把新资产 merge 进已安装包 |
+| 命令                     | 作用                                                           |
+| ------------------------ | -------------------------------------------------------------- |
+| `build:webview`          | 写出 `webview-dist/{pkg}/index.html` + `app.js` + `app.css`    |
+| `build:webview:native`   | 同上，并拷贝到 Android `assets/webview/` 与 iOS `WebViewDist/` |
+| `npm start` / `prestart` | **只保证** dist 已生成；**不会**把新资产 merge 进已安装包      |
 
 **仅 `npm start`（Metro）不足以更新真机 WebView。** 设备上看到的是原生 assets/bundle 内副本；须 `run-android` / `run-ios`（或等价 `build:webview:native` + 重装）后新页面才生效。
 
@@ -238,10 +238,10 @@ Bundler / 产物路径 Spec: `.apm/kb/docs/Iterations/mobile-webview-boot-bundle
 
 Conversation messages render in a single `react-native-webview` (`ChatTranscriptWebView`) when `chatTranscriptEngine` is `webview`. Composer, runtime, paging, modals, and navigation stay in RN; scroll + rich bubbles live in the embedded Web bundle (`src/web/chat-transcript/webview/`).
 
-| Setting | Default | Notes |
-|---------|---------|-------|
-| `chatTranscriptEngine` KKV | **`webview`** | Release and Debug |
-| Override | App UI prefs key `chatTranscriptEngine` | Set to `legacy-rn` to roll back to RN `MessageList` |
+| Setting                    | Default                                 | Notes                                               |
+| -------------------------- | --------------------------------------- | --------------------------------------------------- |
+| `chatTranscriptEngine` KKV | **`webview`**                           | Release and Debug                                   |
+| Override                   | App UI prefs key `chatTranscriptEngine` | Set to `legacy-rn` to roll back to RN `MessageList` |
 
 **Rollback:** set `chatTranscriptEngine` to `legacy-rn` to restore the RN FlatList transcript without inverted-list experiments.
 
@@ -267,9 +267,9 @@ npm test -w @novel-master/mobile
 
 ### E2E vs Jest
 
-| Layer | Command | Scope |
-|-------|---------|-------|
-| Jest | `npm test` | RN components, scroll math, VFS mocks |
+| Layer      | Command       | Scope                                               |
+| ---------- | ------------- | --------------------------------------------------- |
+| Jest       | `npm test`    | RN components, scroll math, VFS mocks               |
 | Appium E2E | `npm run e2e` | Tabs, WebView transcript, Toast, Alert, real scroll |
 
 See [`e2e/README.md`](./e2e/README.md) for emulator setup and debug APK build.
@@ -293,12 +293,12 @@ All artifacts are attached to a single GitHub Release.
 
 Optional repository secrets for Android production signing (otherwise the debug keystore is used):
 
-| Secret | Description |
-|--------|-------------|
-| `ANDROID_KEYSTORE_BASE64` | Base64-encoded `.jks` / `.keystore` |
-| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
-| `ANDROID_KEY_ALIAS` | Key alias |
-| `ANDROID_KEY_PASSWORD` | Key password |
+| Secret                      | Description                         |
+| --------------------------- | ----------------------------------- |
+| `ANDROID_KEYSTORE_BASE64`   | Base64-encoded `.jks` / `.keystore` |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password                   |
+| `ANDROID_KEY_ALIAS`         | Key alias                           |
+| `ANDROID_KEY_PASSWORD`      | Key password                        |
 
 ## Known issues
 

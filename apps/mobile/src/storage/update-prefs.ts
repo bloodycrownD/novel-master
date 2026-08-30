@@ -75,9 +75,7 @@ export async function readSnoozeUntil(
   return appUi.get(APP_UI_KEY_UPDATES_SNOOZE_UNTIL);
 }
 
-export async function writeSnoozeUntil(
-  appUi: AppUiPreferences,
-): Promise<void> {
+export async function writeSnoozeUntil(appUi: AppUiPreferences): Promise<void> {
   const until = new Date(Date.now() + UPDATE_SNOOZE_MS).toISOString();
   await appUi.set(APP_UI_KEY_UPDATES_SNOOZE_UNTIL, until);
 }
@@ -89,7 +87,10 @@ export async function persistUpdateCheckResult(
 ): Promise<void> {
   const now = new Date().toISOString();
   await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_AT, now);
-  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION, data.remoteVersion);
+  await appUi.set(
+    APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION,
+    data.remoteVersion,
+  );
   await appUi.set(
     APP_UI_KEY_UPDATES_LAST_CHECK_STATUS,
     data.status === 'update-available' ? 'available' : 'up-to-date',

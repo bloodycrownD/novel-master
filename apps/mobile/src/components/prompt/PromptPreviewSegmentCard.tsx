@@ -58,7 +58,10 @@ export function PromptPreviewSegmentCard({segment}: Props) {
     <CollapsibleCard
       title={
         <>
-          <Text style={[styles.role, {color: tokens.primary}]} numberOfLines={1}>
+          <Text
+            style={[styles.role, {color: tokens.primary}]}
+            numberOfLines={1}
+          >
             {roleLabel}
           </Text>
           <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1}>
@@ -70,7 +73,8 @@ export function PromptPreviewSegmentCard({segment}: Props) {
         <View>
           <Text
             style={[styles.preview, {color: tokens.textSecondary}]}
-            numberOfLines={2}>
+            numberOfLines={2}
+          >
             {collapsedHint}
           </Text>
           {charCount > 0 ? (
@@ -88,10 +92,9 @@ export function PromptPreviewSegmentCard({segment}: Props) {
         },
       ]}
       headerStyle={styles.header}
-      chevronStyle={styles.chevron}>
-      <Text
-        style={[styles.body, {color: tokens.text}]}
-        selectable>
+      chevronStyle={styles.chevron}
+    >
+      <Text style={[styles.body, {color: tokens.text}]} selectable>
         {segment.body || '（空）'}
       </Text>
     </CollapsibleCard>

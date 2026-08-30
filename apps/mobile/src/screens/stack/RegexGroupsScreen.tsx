@@ -55,7 +55,8 @@ function groupTitle(group: RegexGroup): string {
 function RegexLeadingIcon({tokens}: {tokens: {primary: string}}) {
   return (
     <View
-      style={[styles.leadingIcon, {backgroundColor: `${tokens.primary}1A`}]}>
+      style={[styles.leadingIcon, {backgroundColor: `${tokens.primary}1A`}]}
+    >
       <Text style={styles.leadingEmoji}>🛡️</Text>
     </View>
   );
@@ -87,7 +88,8 @@ function GroupPanelRow({
           backgroundColor: selected ? `${tokens.primary}12` : 'transparent',
           opacity: pressed ? 0.92 : 1,
         },
-      ]}>
+      ]}
+    >
       {batchActive ? (
         <BatchCheckbox checked={selected} onToggle={onPress} />
       ) : (
@@ -96,7 +98,8 @@ function GroupPanelRow({
       <View style={styles.panelRowInfo}>
         <Text
           style={[styles.panelRowTitle, {color: tokens.text}]}
-          numberOfLines={1}>
+          numberOfLines={1}
+        >
           {groupTitle(item)}
         </Text>
         <Text style={[styles.panelRowSubtitle, {color: tokens.textSecondary}]}>
@@ -114,8 +117,11 @@ function GroupPanelRow({
           onPress={e => {
             e.stopPropagation?.();
             onMenuPress();
-          }}>
-          <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>⋮</Text>
+          }}
+        >
+          <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>
+            ⋮
+          </Text>
         </Pressable>
       ) : null}
       {!batchActive ? (
@@ -156,9 +162,7 @@ export function RegexGroupsScreen() {
       } else {
         try {
           const current = await runtime.regexConfig.getGroup(currentId);
-          setCurrentRegexLabel(
-            current.displayName?.trim() || current.groupId,
-          );
+          setCurrentRegexLabel(current.displayName?.trim() || current.groupId);
         } catch {
           setCurrentRegexLabel('不启用');
         }
@@ -204,9 +208,7 @@ export function RegexGroupsScreen() {
           (async () => {
             await runtime.regexConfig.deleteGroup(groupId);
             await reload();
-          })().catch(err =>
-            showToast(toastMessage('删除失败', err)),
-          );
+          })().catch(err => showToast(toastMessage('删除失败', err)));
         },
       },
     ]);
@@ -214,8 +216,8 @@ export function RegexGroupsScreen() {
 
   const editInitialName =
     editGroupId != null
-      ? (rows.find(g => g.groupId === editGroupId)?.displayName ??
-        groupTitle(rows.find(g => g.groupId === editGroupId)!))
+      ? rows.find(g => g.groupId === editGroupId)?.displayName ??
+        groupTitle(rows.find(g => g.groupId === editGroupId)!)
       : '';
 
   const currentSubtitle =
@@ -242,17 +244,12 @@ export function RegexGroupsScreen() {
         }
       />
       {loading && rows.length === 0 ? (
-        <ActivityIndicator
-          style={styles.panelLoader}
-          color={tokens.primary}
-        />
+        <ActivityIndicator style={styles.panelLoader} color={tokens.primary} />
       ) : error ? (
         <View style={styles.center}>
           <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
           <Pressable onPress={() => void reload()}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>
-              重试
-            </Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
           </Pressable>
         </View>
       ) : (
@@ -262,7 +259,10 @@ export function RegexGroupsScreen() {
           contentContainerStyle={styles.listContent}
           keyboardShouldPersistTaps="handled"
           refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={() => void reload()} />
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={() => void reload()}
+            />
           }
           ListHeaderComponent={
             <View>
@@ -290,7 +290,8 @@ export function RegexGroupsScreen() {
                   backgroundColor: tokens.surfaceElevated,
                   borderColor: tokens.borderLight,
                 },
-              ]}>
+              ]}
+            >
               <GroupPanelRow
                 item={item}
                 tokens={tokens}

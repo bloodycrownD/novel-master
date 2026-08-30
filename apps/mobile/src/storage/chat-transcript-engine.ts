@@ -11,7 +11,10 @@ import type {AppUiPreferences} from './app-ui-prefs';
 export type ChatTranscriptEngine = 'legacy-rn' | 'webview';
 
 const DEFAULT_ENGINE: ChatTranscriptEngine = 'webview';
-const ALLOWED_ENGINES: readonly ChatTranscriptEngine[] = ['legacy-rn', 'webview'];
+const ALLOWED_ENGINES: readonly ChatTranscriptEngine[] = [
+  'legacy-rn',
+  'webview',
+];
 
 export function defaultChatTranscriptEngine(): ChatTranscriptEngine {
   return DEFAULT_ENGINE;

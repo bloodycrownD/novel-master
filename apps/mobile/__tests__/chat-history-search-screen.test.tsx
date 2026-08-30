@@ -315,7 +315,10 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
 
     // 点击卡片展开
     await act(async () => {
-      findCardPressable(tree.root, 'chat-history-search-result-card').props.onPress();
+      findCardPressable(
+        tree.root,
+        'chat-history-search-result-card',
+      ).props.onPress();
     });
 
     // 展开态：显示完整文本 + 「收起」提示
@@ -426,7 +429,10 @@ describe('T-MO3 ChatHistorySearchScreen 编号区间', () => {
 
     // 首次查询命中后表单卡片自动收起（卸载输入框），改输入前先点卡片头展开。
     await act(async () => {
-      findCardPressable(tree.root, 'chat-history-search-form-toggle').props.onPress();
+      findCardPressable(
+        tree.root,
+        'chat-history-search-form-toggle',
+      ).props.onPress();
     });
 
     // 修改起始编号为 50 后重新查询：入参应携带新区间。
@@ -471,10 +477,8 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
   function formToggleState(tree: TestRenderer.ReactTestRenderer): {
     expanded?: boolean;
   } {
-    return findCardPressable(
-      tree.root,
-      'chat-history-search-form-toggle',
-    ).props.accessibilityState;
+    return findCardPressable(tree.root, 'chat-history-search-form-toggle').props
+      .accessibilityState;
   }
 
   it('T-CF1：进入页面表单卡片默认展开，各输入 testID 可直查', async () => {
@@ -613,7 +617,10 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
 
     // 点卡片头重新展开：输入值应从 screen 级 state 回填。
     await act(async () => {
-      findCardPressable(tree.root, 'chat-history-search-form-toggle').props.onPress();
+      findCardPressable(
+        tree.root,
+        'chat-history-search-form-toggle',
+      ).props.onPress();
     });
     expect(formToggleState(tree).expanded).toBe(true);
     expect(

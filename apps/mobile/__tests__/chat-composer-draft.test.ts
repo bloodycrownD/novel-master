@@ -113,9 +113,9 @@ describe('chat-composer-draft', () => {
       state.attachments.map(a => `${a.action ?? a.source}:${a.path}`),
     ).toEqual(['workplaceChange:/w.md', 'annotate:/note.md']);
     // 同 path 两条草稿仍只一只 chip
-    expect(
-      state.attachments.filter(a => a.action === 'annotate').length,
-    ).toBe(1);
+    expect(state.attachments.filter(a => a.action === 'annotate').length).toBe(
+      1,
+    );
     resetChatAnnotateDraftStoreForTests();
   });
 });
@@ -137,15 +137,23 @@ describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
     try {
       // 覆盖三条 void 落库路径：persistAttachTextDraft、两侧皆空 set null、clear set null。
       writeChatComposerDraft('s-persist', 'hello', sessions);
-      writeChatComposerDraftState('s-persist', {
-        text: 'state',
-        attachments: [],
-      }, sessions);
+      writeChatComposerDraftState(
+        's-persist',
+        {
+          text: 'state',
+          attachments: [],
+        },
+        sessions,
+      );
       writeChatComposerDraft('s-persist', '', sessions);
-      writeChatComposerDraftState('s-persist', {
-        text: '',
-        attachments: [],
-      }, sessions);
+      writeChatComposerDraftState(
+        's-persist',
+        {
+          text: '',
+          attachments: [],
+        },
+        sessions,
+      );
       clearChatComposerDraft('s-persist', sessions);
       await new Promise(resolve => setImmediate(resolve));
 

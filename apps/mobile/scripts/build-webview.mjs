@@ -11,16 +11,10 @@
  *   npm run build:webview:native
  */
 import * as esbuild from 'esbuild';
-import {
-  cpSync,
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import {cpSync, mkdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {dirname, join, relative} from 'node:path';
+import {fileURLToPath} from 'node:url';
 
 const require = createRequire(import.meta.url);
 
@@ -102,7 +96,7 @@ const MERMAID_FULLSCREEN_CSS_PLACEHOLDER = '/* __MERMAID_FULLSCREEN_CSS__ */';
  */
 async function bundleAppJs(pkgId, entryAbs) {
   const outDir = join(distRoot, pkgId);
-  mkdirSync(outDir, { recursive: true });
+  mkdirSync(outDir, {recursive: true});
   const outfile = join(outDir, 'app.js');
   await esbuild.build({
     entryPoints: [entryAbs],
@@ -128,9 +122,9 @@ async function bundleAppJs(pkgId, entryAbs) {
  * @param {string} dest
  */
 function replaceCopyDir(src, dest) {
-  rmSync(dest, { recursive: true, force: true });
-  mkdirSync(dirname(dest), { recursive: true });
-  cpSync(src, dest, { recursive: true });
+  rmSync(dest, {recursive: true, force: true});
+  mkdirSync(dirname(dest), {recursive: true});
+  cpSync(src, dest, {recursive: true});
 }
 
 function copyDistToNativeSinks() {
@@ -141,11 +135,7 @@ function copyDistToNativeSinks() {
       'android/app/src/main/assets/webview',
       pkg.id,
     );
-    const iosDest = join(
-      mobileRoot,
-      'ios/NovelMaster/WebViewDist',
-      pkg.id,
-    );
+    const iosDest = join(mobileRoot, 'ios/NovelMaster/WebViewDist', pkg.id);
     replaceCopyDir(src, androidDest);
     replaceCopyDir(src, iosDest);
     console.log(
@@ -170,12 +160,7 @@ async function buildPackage(pkg, richStyles, mermaidFullscreenCss) {
     if (typeof richCss !== 'string' || !richCss) {
       throw new Error(`缺少富文本 CSS：${pkg.richCssKey}`);
     }
-    css = injectCss(
-      css,
-      richCss,
-      RICH_CSS_PLACEHOLDER,
-      pkg.richCssKey,
-    );
+    css = injectCss(css, richCss, RICH_CSS_PLACEHOLDER, pkg.richCssKey);
   }
   // mermaid 全屏查看器样式（选择器不带 .bubble.rich 前缀 → 独立注入位）
   if (pkg.mermaidFullscreenCss) {
@@ -188,7 +173,7 @@ async function buildPackage(pkg, richStyles, mermaidFullscreenCss) {
   }
   const html = readWeb(pkg.htmlRel);
   const outDir = join(distRoot, pkg.id);
-  mkdirSync(outDir, { recursive: true });
+  mkdirSync(outDir, {recursive: true});
 
   const jsPath = await bundleAppJs(pkg.id, entryAbs);
   // rich-document：把 Recogito 样式打进 app.css（file:// WebView 不能靠 CDN）
@@ -206,7 +191,7 @@ async function buildPackage(pkg, richStyles, mermaidFullscreenCss) {
   writeFileSync(cssPath, css, 'utf8');
   writeFileSync(htmlPath, html, 'utf8');
 
-  const rel = (p) => relative(mobileRoot, p).replace(/\\/g, '/');
+  const rel = p => relative(mobileRoot, p).replace(/\\/g, '/');
   console.log(`已生成 ${rel(htmlPath)}`);
   console.log(`已生成 ${rel(jsPath)}`);
   console.log(`已生成 ${rel(cssPath)}`);
@@ -221,7 +206,7 @@ async function main() {
   if (typeof mermaidFullscreenCss !== 'string' || !mermaidFullscreenCss) {
     throw new Error('缺少 mermaid 全屏 CSS：MERMAID_FULLSCREEN_CSS');
   }
-  mkdirSync(distRoot, { recursive: true });
+  mkdirSync(distRoot, {recursive: true});
   for (const pkg of PACKAGES) {
     await buildPackage(pkg, richStyles, mermaidFullscreenCss);
   }
@@ -230,7 +215,7 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error(err);
   process.exit(1);
 });

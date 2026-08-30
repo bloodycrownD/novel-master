@@ -1,5 +1,5 @@
-import { NEAR_BOTTOM_THRESHOLD_PX } from '@web/shared/constants';
-import { state, SCHEMA_V } from '../state/state';
+import {NEAR_BOTTOM_THRESHOLD_PX} from '@web/shared/constants';
+import {state, SCHEMA_V} from '../state/state';
 import {post} from '../bridge';
 /**
  * 滚动锚点、贴底与加载更早消息。

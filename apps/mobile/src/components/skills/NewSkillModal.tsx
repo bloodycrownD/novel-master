@@ -68,7 +68,10 @@ function withFrontMatterValues(
   const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   const fmLine = (key: string, value: string) => `${key}: ${yamlScalar(value)}`;
   if (match == null) {
-    return `---\n${fmLine('name', name)}\n${fmLine('description', description)}\n---\n\n${source}`;
+    return `---\n${fmLine('name', name)}\n${fmLine(
+      'description',
+      description,
+    )}\n---\n\n${source}`;
   }
   let fm = match[1]!;
   const values: ReadonlyArray<[string, string]> = [
@@ -77,7 +80,9 @@ function withFrontMatterValues(
   ];
   for (const [key, value] of values) {
     const re = new RegExp(`^${key}:.*$`, 'm');
-    fm = re.test(fm) ? fm.replace(re, fmLine(key, value)) : `${fm}\n${fmLine(key, value)}`;
+    fm = re.test(fm)
+      ? fm.replace(re, fmLine(key, value))
+      : `${fm}\n${fmLine(key, value)}`;
   }
   return source.replace(match[0], `---\n${fm}\n---\n`);
 }
@@ -131,9 +136,7 @@ export function NewSkillModal({
           setProjects(list);
           // 无预选项目时默认第一个，避免「项目域但无 projectId」的空态
           setProjectId(prev =>
-            prev != null && list.some(p => p.id === prev)
-              ? prev
-              : list[0]?.id,
+            prev != null && list.some(p => p.id === prev) ? prev : list[0]?.id,
           );
         }
       } catch {
@@ -154,7 +157,9 @@ export function NewSkillModal({
 
   const nameIssue = name.length > 0 ? validateSkillName(name) : null;
   const descriptionIssue =
-    description.length === 0 ? '描述不能为空（进入索引，供模型判断是否使用）' : null;
+    description.length === 0
+      ? '描述不能为空（进入索引，供模型判断是否使用）'
+      : null;
   const projectIssue =
     domain === 'project' && projectId == null ? '请选择所属项目' : null;
   const canSubmit =
@@ -210,11 +215,13 @@ export function NewSkillModal({
         // ZIP 是第二条新建通道（不经 writeSkillFile 的 D2② 门）：落盘前
         // 先过保留名校验，拒绝时不落盘（CR D-1）。SkillError 的中文
         // message 由 catch 分支冒泡展示。
-        await runtime.skills().assertSkillNameNotReservedForCreate(
-          domain,
-          name,
-          domain === 'project' ? projectId : undefined,
-        );
+        await runtime
+          .skills()
+          .assertSkillNameNotReservedForCreate(
+            domain,
+            name,
+            domain === 'project' ? projectId : undefined,
+          );
         // 导入创建：zip 内全部文件落入新技能目录（目录新建为空，无覆盖风险），
         // 表单值与 zip 元数据不一致时重写 SKILL.md front matter（保留正文）。
         // 技能已重定位到独立 meta 域，导入 scope 取 meta 域。
@@ -233,29 +240,39 @@ export function NewSkillModal({
         ) {
           // 重写目标是刚导入落盘的 SKILL.md（已存在文件），不带版本会被
           // VFS 乐观锁拒绝（CONFLICT）：先 read 拿版本再写入（对齐 desktop）。
-          const read = await runtime.skills().readSkillFile(
-            domain,
-            name,
-            'SKILL.md',
-            domain === 'project' ? projectId : undefined,
-          );
-          await runtime.skills().writeSkillFile(
-            domain,
-            name,
-            'SKILL.md',
-            withFrontMatterValues(imported.preview.skillMd!, name, description),
-            domain === 'project' ? projectId : undefined,
-            {expectedVersion: read.version},
-          );
+          const read = await runtime
+            .skills()
+            .readSkillFile(
+              domain,
+              name,
+              'SKILL.md',
+              domain === 'project' ? projectId : undefined,
+            );
+          await runtime
+            .skills()
+            .writeSkillFile(
+              domain,
+              name,
+              'SKILL.md',
+              withFrontMatterValues(
+                imported.preview.skillMd!,
+                name,
+                description,
+              ),
+              domain === 'project' ? projectId : undefined,
+              {expectedVersion: read.version},
+            );
         }
       } else {
-        await runtime.skills().writeSkillFile(
-          domain,
-          name,
-          'SKILL.md',
-          buildNewSkillDoc(name, description),
-          domain === 'project' ? projectId : undefined,
-        );
+        await runtime
+          .skills()
+          .writeSkillFile(
+            domain,
+            name,
+            'SKILL.md',
+            buildNewSkillDoc(name, description),
+            domain === 'project' ? projectId : undefined,
+          );
       }
       onCreated({
         domain,
@@ -272,123 +289,132 @@ export function NewSkillModal({
 
   const sheetContent = (
     <>
-        <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
-        {imported != null ? (
-          <View style={styles.importRow}>
-            <Text
-              style={{color: tokens.textSecondary, flex: 1}}
-              numberOfLines={1}>
-              已导入 ZIP · {imported.preview.fileCount} 个文件（创建后全部带入）
+      <Text style={[styles.title, {color: tokens.text}]}>新建技能</Text>
+      {imported != null ? (
+        <View style={styles.importRow}>
+          <Text
+            style={{color: tokens.textSecondary, flex: 1}}
+            numberOfLines={1}
+          >
+            已导入 ZIP · {imported.preview.fileCount} 个文件（创建后全部带入）
+          </Text>
+          <Pressable
+            testID="new-skill-import-clear"
+            onPress={() => setImported(null)}
+            hitSlop={8}
+          >
+            <Text style={{color: tokens.primary}}>移除</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          testID="new-skill-import-btn"
+          style={[styles.importBtn, {borderColor: tokens.border}]}
+          disabled={importing}
+          onPress={() => handleImport().catch(() => undefined)}
+        >
+          {importing ? (
+            <ActivityIndicator size="small" color={tokens.primary} />
+          ) : (
+            <Text style={{color: tokens.primary}}>从 ZIP 导入…</Text>
+          )}
+        </Pressable>
+      )}
+      <ScrollView
+        style={styles.form}
+        contentContainerStyle={styles.formContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text
+          style={[styles.label, {color: tokens.textSecondary}]}
+          testID="new-skill-name-label"
+        >
+          技能名（即目录名，创建后不可改）
+        </Text>
+        <TextInput
+          testID="new-skill-name-input"
+          style={[
+            styles.input,
+            {
+              color: tokens.text,
+              borderColor: nameIssue ? tokens.danger : tokens.border,
+              backgroundColor: tokens.background,
+            },
+          ]}
+          value={name}
+          onChangeText={setName}
+          placeholder="如 worldbuilding-checker"
+          placeholderTextColor={tokens.textSecondary}
+          autoCorrect={false}
+        />
+        {nameIssue ? (
+          <Text style={[styles.error, {color: tokens.danger}]}>
+            {nameIssue}
+          </Text>
+        ) : null}
+        <Text style={[styles.label, {color: tokens.textSecondary}]}>描述</Text>
+        <TextInput
+          testID="new-skill-description-input"
+          style={[
+            styles.input,
+            styles.descriptionInput,
+            {
+              color: tokens.text,
+              borderColor:
+                description.length > 0 && descriptionIssue
+                  ? tokens.danger
+                  : tokens.border,
+              backgroundColor: tokens.background,
+            },
+          ]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="进入技能索引，模型据此决定是否使用"
+          placeholderTextColor={tokens.textSecondary}
+          multiline
+        />
+        {needsProjectPicker ? (
+          <>
+            <Text style={[styles.label, {color: tokens.textSecondary}]}>
+              所属项目
             </Text>
             <Pressable
-              testID="new-skill-import-clear"
-              onPress={() => setImported(null)}
-              hitSlop={8}>
-              <Text style={{color: tokens.primary}}>移除</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            testID="new-skill-import-btn"
-            style={[styles.importBtn, {borderColor: tokens.border}]}
-            disabled={importing}
-            onPress={() => handleImport().catch(() => undefined)}>
-            {importing ? (
-              <ActivityIndicator size="small" color={tokens.primary} />
-            ) : (
-              <Text style={{color: tokens.primary}}>从 ZIP 导入…</Text>
-            )}
-          </Pressable>
-        )}
-        <ScrollView
-          style={styles.form}
-          contentContainerStyle={styles.formContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <Text
-            style={[styles.label, {color: tokens.textSecondary}]}
-            testID="new-skill-name-label">
-            技能名（即目录名，创建后不可改）
-          </Text>
-          <TextInput
-            testID="new-skill-name-input"
-            style={[
-              styles.input,
-              {
-                color: tokens.text,
-                borderColor: nameIssue ? tokens.danger : tokens.border,
-                backgroundColor: tokens.background,
-              },
-            ]}
-            value={name}
-            onChangeText={setName}
-            placeholder="如 worldbuilding-checker"
-            placeholderTextColor={tokens.textSecondary}
-            autoCorrect={false}
-          />
-          {nameIssue ? (
-            <Text style={[styles.error, {color: tokens.danger}]}>{nameIssue}</Text>
-          ) : null}
-          <Text style={[styles.label, {color: tokens.textSecondary}]}>描述</Text>
-          <TextInput
-            testID="new-skill-description-input"
-            style={[
-              styles.input,
-              styles.descriptionInput,
-              {
-                color: tokens.text,
-                borderColor:
-                  description.length > 0 && descriptionIssue
-                    ? tokens.danger
-                    : tokens.border,
-                backgroundColor: tokens.background,
-              },
-            ]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="进入技能索引，模型据此决定是否使用"
-            placeholderTextColor={tokens.textSecondary}
-            multiline
-          />
-          {needsProjectPicker ? (
-            <>
-              <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                所属项目
-              </Text>
-              <Pressable
               testID="new-skill-project-picker"
               style={[styles.projectPicker, {borderColor: tokens.border}]}
-              onPress={() => setProjectMenuOpen(true)}>
+              onPress={() => setProjectMenuOpen(true)}
+            >
               <Text style={{color: tokens.text, flex: 1}} numberOfLines={1}>
                 {selectedProject ? selectedProject.name : '选择所属项目'}
               </Text>
               <Text style={{color: tokens.textSecondary}}>▾</Text>
             </Pressable>
-            </>
-          ) : null}
-          {error ? (
-            <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-          ) : null}
-        </ScrollView>
-        <View style={styles.foot}>
-          <Pressable onPress={onClose} style={styles.footBtn}>
-            <Text style={{color: tokens.textSecondary}}>取消</Text>
-          </Pressable>
-          <Pressable
-            testID="new-skill-submit"
-            style={[
-              styles.footBtn,
-              {backgroundColor: canSubmit ? tokens.primary : tokens.border},
-            ]}
-            disabled={!canSubmit}
-            onPress={() => handleCreate().catch(() => undefined)}>
-            {creating ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={{color: '#fff', fontWeight: '600'}}>创建</Text>
-            )}
-          </Pressable>
-        </View>
+          </>
+        ) : null}
+        {error ? (
+          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+        ) : null}
+      </ScrollView>
+      <View style={styles.foot}>
+        <Pressable onPress={onClose} style={styles.footBtn}>
+          <Text style={{color: tokens.textSecondary}}>取消</Text>
+        </Pressable>
+        <Pressable
+          testID="new-skill-submit"
+          style={[
+            styles.footBtn,
+            {backgroundColor: canSubmit ? tokens.primary : tokens.border},
+          ]}
+          disabled={!canSubmit}
+          onPress={() => handleCreate().catch(() => undefined)}
+        >
+          {creating ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={{color: '#fff', fontWeight: '600'}}>创建</Text>
+          )}
+        </Pressable>
+      </View>
     </>
   );
 
@@ -400,7 +426,8 @@ export function NewSkillModal({
         variant="bottom"
         animationType="slide"
         keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
-        panelStyle={styles.panel}>
+        panelStyle={styles.panel}
+      >
         {sheetContent}
       </ModalShell>
       <BottomSheetMenu

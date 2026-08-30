@@ -24,7 +24,12 @@ describe('app-ui-pref-io readEnumPref', () => {
   it('returns the stored value when it is in the allowed list', async () => {
     const get = jest.fn(async () => 'legacy-rn');
     await expect(
-      readEnumPref(appUiWithGet(get), 'chatTranscriptEngine', ALLOWED, 'webview'),
+      readEnumPref(
+        appUiWithGet(get),
+        'chatTranscriptEngine',
+        ALLOWED,
+        'webview',
+      ),
     ).resolves.toBe('legacy-rn');
     expect(get).toHaveBeenCalledWith('chatTranscriptEngine');
   });
@@ -32,7 +37,12 @@ describe('app-ui-pref-io readEnumPref', () => {
   it('falls back to default on invalid stored value', async () => {
     const get = jest.fn(async () => 'nope');
     await expect(
-      readEnumPref(appUiWithGet(get), 'chatTranscriptEngine', ALLOWED, 'webview'),
+      readEnumPref(
+        appUiWithGet(get),
+        'chatTranscriptEngine',
+        ALLOWED,
+        'webview',
+      ),
     ).resolves.toBe('webview');
   });
 
@@ -41,7 +51,12 @@ describe('app-ui-pref-io readEnumPref', () => {
       throw new Error('kkv boom');
     });
     await expect(
-      readEnumPref(appUiWithGet(get), 'chatTranscriptEngine', ALLOWED, 'webview'),
+      readEnumPref(
+        appUiWithGet(get),
+        'chatTranscriptEngine',
+        ALLOWED,
+        'webview',
+      ),
     ).resolves.toBe('webview');
   });
 

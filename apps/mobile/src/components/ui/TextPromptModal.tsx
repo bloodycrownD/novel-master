@@ -111,7 +111,8 @@ export function TextPromptModal({
       animationType={isBottom ? 'slide' : 'fade'}
       keyboardAvoid={{kind: 'translate', fraction: isBottom ? 1 : 0.5}}
       keyboardVerticalOffset={isBottom ? 0 : 24}
-      panelStyle={isBottom ? styles.panelBottom : styles.panelCenter}>
+      panelStyle={isBottom ? styles.panelBottom : styles.panelCenter}
+    >
       <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
       {effectiveFields.map((field, index) => (
         <View key={index}>
@@ -150,12 +151,14 @@ export function TextPromptModal({
           testID="text-prompt-submit"
           onPress={() => handleConfirm().catch(() => undefined)}
           style={styles.btn}
-          disabled={!canSubmit}>
+          disabled={!canSubmit}
+        >
           <Text
             style={{
               color: canSubmit ? tokens.primary : tokens.textTertiary,
               fontWeight: '600',
-            }}>
+            }}
+          >
             {saving ? '保存中…' : confirmLabel}
           </Text>
         </Pressable>

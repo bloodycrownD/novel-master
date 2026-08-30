@@ -4,7 +4,7 @@
  * 组件侧只负责 mention ref 优先与纯文本 fallback 的提交（见 ChatComposer 的
  * commitComposerText）。
  */
-import type { MessageAttachment } from '@novel-master/core/chat';
+import type {MessageAttachment} from '@novel-master/core/chat';
 
 export type ComposerTokenInsertion = {
   readonly text: string;
@@ -27,11 +27,9 @@ export function buildTokenInsertion(
 ): ComposerTokenInsertion {
   const before = text.slice(0, replaceStart);
   const after = text.slice(cursor);
-  const gapBefore =
-    before.length === 0 || /\s$/.test(before) ? '' : ' ';
+  const gapBefore = before.length === 0 || /\s$/.test(before) ? '' : ' ';
   const joined = typeof token === 'string' ? token : token.join(' ');
-  const gapAfter =
-    after.length === 0 || !/^\s/.test(after) ? ' ' : '';
+  const gapAfter = after.length === 0 || !/^\s/.test(after) ? ' ' : '';
   const inserted = `${gapBefore}${joined}${gapAfter}`;
   return {
     text: `${before}${inserted}${after}`,

@@ -39,7 +39,12 @@ function modelNameKey(providerId: string, modelName: string): string {
   return `${providerId}\0${modelName}`;
 }
 
-export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Props) {
+export function ModelPickerModal({
+  visible,
+  onClose,
+  onSelected,
+  sessionId,
+}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
@@ -114,7 +119,9 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
       // 写入成功才回调并关闭；失败留在弹窗里 toast 提示，方便重试。
       try {
         if (sessionId != null) {
-          const current = await runtime.sessions.getSessionAgentConfig(sessionId);
+          const current = await runtime.sessions.getSessionAgentConfig(
+            sessionId,
+          );
           await runtime.sessions.updateSessionAgentConfig(sessionId, {
             agentId: current.agentId,
             modelId: savedModelId,
@@ -148,9 +155,7 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
               </Text>
             ) : null}
           </View>
-          {selected ? (
-            <Text style={{color: tokens.primary}}>当前</Text>
-          ) : null}
+          {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
         </>
       )}
       onPick={item => select(item.savedModelId)}

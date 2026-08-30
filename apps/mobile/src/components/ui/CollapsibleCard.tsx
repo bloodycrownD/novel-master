@@ -93,7 +93,8 @@ export function CollapsibleCard({
           paddingBottom: 8,
         },
         contentStyle,
-      ]}>
+      ]}
+    >
       {children}
     </View>
   ) : null;
@@ -106,7 +107,8 @@ export function CollapsibleCard({
         accessibilityLabel={accessibilityLabel}
         accessibilityRole={collapsible ? 'button' : undefined}
         accessibilityState={collapsible ? {expanded: isExpanded} : undefined}
-        style={style}>
+        style={style}
+      >
         {headerNode}
         {contentNode}
       </Pressable>
@@ -121,7 +123,8 @@ export function CollapsibleCard({
         accessibilityLabel={accessibilityLabel}
         accessibilityRole={collapsible ? 'button' : undefined}
         accessibilityState={collapsible ? {expanded: isExpanded} : undefined}
-        style={[styles.header, headerStyle]}>
+        style={[styles.header, headerStyle]}
+      >
         {headerNode}
         {chevronNode}
       </Pressable>

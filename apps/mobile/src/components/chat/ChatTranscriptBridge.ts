@@ -103,7 +103,7 @@ export type TranscriptRestoreScroll = {
 
 /** Host → transcript */
 export type HostToTranscriptMessage =
-  | BridgeEnvelope<'init', { theme: TranscriptTheme; flags: TranscriptFlags }>
+  | BridgeEnvelope<'init', {theme: TranscriptTheme; flags: TranscriptFlags}>
   | BridgeEnvelope<
       'sessionSnapshot',
       {
@@ -120,9 +120,9 @@ export type HostToTranscriptMessage =
     >
   | BridgeEnvelope<
       'prependPage',
-      { rows: readonly TranscriptRow[]; prependedCount: number }
+      {rows: readonly TranscriptRow[]; prependedCount: number}
     >
-  | BridgeEnvelope<'appendTailRows', { rows: readonly TranscriptRow[] }>
+  | BridgeEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
   | BridgeEnvelope<
       'streamCommit',
       {
@@ -151,10 +151,10 @@ export type HostToTranscriptMessage =
       }
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
-  | BridgeEnvelope<'streamToolInvoking', { active: boolean }>
-  | BridgeEnvelope<'messagePatch', { messageId: string; patch: unknown }>
-  | BridgeEnvelope<'themeUpdate', { theme: TranscriptTheme }>
-  | BridgeEnvelope<'flagsUpdate', { flags: TranscriptFlags }>
+  | BridgeEnvelope<'streamToolInvoking', {active: boolean}>
+  | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
+  | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
+  | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
   | BridgeEnvelope<'closeMenu', Record<string, never>>
   /** Android 返回键：RN 拦截后下发，关闭 mermaid 全屏查看器。 */
   | BridgeEnvelope<'closeMermaidViewer', Record<string, never>>
@@ -171,7 +171,7 @@ export {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../../services/chat-transcr
 export type {ChatTranscriptScrollSnapshot} from '../../services/chat-transcript-scroll-cache';
 
 export type TranscriptToHostMessage =
-  | BridgeEnvelope<'ready', { version: string; readyState?: string }>
+  | BridgeEnvelope<'ready', {version: string; readyState?: string}>
   | BridgeEnvelope<
       'scrollSnapshot',
       ChatTranscriptScrollSnapshot & {
@@ -182,10 +182,10 @@ export type TranscriptToHostMessage =
   | BridgeEnvelope<'loadOlder', Record<string, never>>
   | BridgeEnvelope<
       'openMessageMenu',
-      { messageId: string; pageX: number; pageY: number }
+      {messageId: string; pageX: number; pageY: number}
     >
-  | BridgeEnvelope<'openToolFile', { path: string }>
-  | BridgeEnvelope<'openSubagentSession', { sessionId: string }>
+  | BridgeEnvelope<'openToolFile', {path: string}>
+  | BridgeEnvelope<'openSubagentSession', {sessionId: string}>
   | BridgeEnvelope<
       'openSkillDetail',
       {
@@ -194,7 +194,7 @@ export type TranscriptToHostMessage =
         name: string;
       }
     >
-  | BridgeEnvelope<'messageMenuAction', { messageId: string; action: string }>
+  | BridgeEnvelope<'messageMenuAction', {messageId: string; action: string}>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>
   /** mermaid 全屏查看器开（点击图表进全屏；RN 侧登记返回键拦截态）。 */
@@ -202,10 +202,10 @@ export type TranscriptToHostMessage =
   /** mermaid 全屏查看器关（点空白/关闭按钮/返回键；RN 侧复位拦截态）。 */
   | BridgeEnvelope<'mermaidViewerClosed', Record<string, never>>
   /** 代码块复制按钮：webview 收集的源码文本，RN 侧原生 Clipboard 落盘。 */
-  | BridgeEnvelope<'copyCode', { code: string }>
+  | BridgeEnvelope<'copyCode', {code: string}>
   | BridgeEnvelope<
       'log',
-      { level: string; message: string; fields?: Record<string, unknown> }
+      {level: string; message: string; fields?: Record<string, unknown>}
     >;
 
 export type HostToTranscriptType = HostToTranscriptMessage['type'];
@@ -251,11 +251,11 @@ export function parseScrollSnapshotFromHost(
   if (message.type !== 'scrollSnapshot') {
     return null;
   }
-  const { schemaVersion, offsetY, nearBottom } = message.payload;
+  const {schemaVersion, offsetY, nearBottom} = message.payload;
   if (schemaVersion !== CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
     return null;
   }
-  return { schemaVersion, offsetY, nearBottom };
+  return {schemaVersion, offsetY, nearBottom};
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

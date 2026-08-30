@@ -10,10 +10,7 @@ import {
   type VfsZipImportOptions,
   VfsZipError,
 } from '@novel-master/core/vfs';
-import {
-  exportBytesViaDocumentPicker,
-  pickAndReadBytes,
-} from './document-io';
+import {exportBytesViaDocumentPicker, pickAndReadBytes} from './document-io';
 import {blobFs, bytesToBase64} from './rn-file-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
@@ -82,14 +79,14 @@ function assertZipArchive(bytes: Uint8Array): void {
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options: { readonly directoryPath?: string } = {},
+  options: {readonly directoryPath?: string} = {},
 ): Promise<'saved' | 'cancelled'> {
   const directoryPath =
     options.directoryPath == null || options.directoryPath.trim() === ''
       ? '/'
       : options.directoryPath;
   const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope, { directoryPath });
+  const bytes = await zipSvc.export(scope, {directoryPath});
   assertZipArchive(bytes);
 
   return exportBytesViaDocumentPicker({

@@ -37,7 +37,8 @@ export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
       backdropOpacity={0.45}
       keyboardAvoid={{kind: 'translate', fraction: 0.5}}
       keyboardVerticalOffset={24}
-      panelStyle={styles.promptBox}>
+      panelStyle={styles.promptBox}
+    >
       <Text style={[styles.promptTitle, {color: tokens.text}]}>
         {state.title}
       </Text>

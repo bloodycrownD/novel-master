@@ -1,8 +1,8 @@
 /**
  * 思考过程折叠区；消毒 HTML 走 TrustedHtml，明文走 text children。
  */
-import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
-import { CollapsibleHeader } from './CollapsibleSection';
+import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
+import {CollapsibleHeader} from './CollapsibleSection';
 
 export type ThinkingSectionProps = {
   text: unknown;

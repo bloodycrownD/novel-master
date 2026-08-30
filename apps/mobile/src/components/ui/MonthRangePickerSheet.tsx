@@ -142,107 +142,108 @@ export function MonthRangePickerSheet({
       onClose={onClose}
       variant="bottom"
       animationType="slide"
-      panelStyle={styles.sheet}>
+      panelStyle={styles.sheet}
+    >
       <Text style={[styles.title, {color: tokens.text}]}>选择日期区间</Text>
-          <View style={styles.monthNav}>
-            <Pressable
-              testID="month-range-prev"
-              onPress={goToPrevMonth}
-              style={styles.monthBtn}
-            >
-              <Text style={{color: tokens.primary}}>‹</Text>
-            </Pressable>
-            <Text
-              testID="month-range-label"
-              style={[styles.monthTitle, {color: tokens.text}]}
-            >
-              {monthLabel(viewYear, viewMonth)}
-            </Text>
-            <Pressable
-              testID="month-range-next"
-              onPress={goToNextMonth}
-              style={styles.monthBtn}
-            >
-              <Text style={{color: tokens.primary}}>›</Text>
-            </Pressable>
-          </View>
-          <View style={styles.weekRow}>
-            {WEEKDAY_LABELS.map(label => (
-              <Text
-                key={label}
-                style={[styles.weekLabel, {color: tokens.textSecondary}]}
-              >
-                {label}
-              </Text>
-            ))}
-          </View>
-          <View style={styles.grid}>
-            {cells.map((day, index) => {
-              if (day == null) {
-                return <View key={`blank-${index}`} style={styles.dayCell} />;
-              }
-              const state = dayCellState(day);
-              return (
-                <Pressable
-                  key={`day-${day}`}
-                  testID={`month-range-day-${day}`}
-                  onPress={() => pickDay(day)}
-                  style={[
-                    styles.dayCell,
-                    state === 'edge' && {backgroundColor: tokens.primary},
-                    state === 'inRange' && {
-                      backgroundColor: tokens.selection,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.dayText,
-                      {
-                        color: state === 'edge' ? TEXT_ON_PRIMARY : tokens.text,
-                      },
-                    ]}
-                  >
-                    {day}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-            {start == null
-              ? '先选起始日，再选结束日'
-              : end == null
-              ? '已选起始日，请选择结束日'
-              : `${start.getMonth() + 1} 月 ${start.getDate()} 日 — ${
-                  end.getMonth() + 1
-                } 月 ${end.getDate()} 日`}
+      <View style={styles.monthNav}>
+        <Pressable
+          testID="month-range-prev"
+          onPress={goToPrevMonth}
+          style={styles.monthBtn}
+        >
+          <Text style={{color: tokens.primary}}>‹</Text>
+        </Pressable>
+        <Text
+          testID="month-range-label"
+          style={[styles.monthTitle, {color: tokens.text}]}
+        >
+          {monthLabel(viewYear, viewMonth)}
+        </Text>
+        <Pressable
+          testID="month-range-next"
+          onPress={goToNextMonth}
+          style={styles.monthBtn}
+        >
+          <Text style={{color: tokens.primary}}>›</Text>
+        </Pressable>
+      </View>
+      <View style={styles.weekRow}>
+        {WEEKDAY_LABELS.map(label => (
+          <Text
+            key={label}
+            style={[styles.weekLabel, {color: tokens.textSecondary}]}
+          >
+            {label}
           </Text>
-          <View style={styles.actionRow}>
+        ))}
+      </View>
+      <View style={styles.grid}>
+        {cells.map((day, index) => {
+          if (day == null) {
+            return <View key={`blank-${index}`} style={styles.dayCell} />;
+          }
+          const state = dayCellState(day);
+          return (
             <Pressable
-              testID="month-range-clear"
-              onPress={() => {
-                setStart(undefined);
-                setEnd(undefined);
-              }}
-              style={[styles.actionBtn, {backgroundColor: tokens.bgSecondary}]}
-            >
-              <Text style={{color: tokens.textSecondary}}>清除</Text>
-            </Pressable>
-            <Pressable
-              testID="month-range-confirm"
-              onPress={confirm}
-              disabled={start == null || end == null}
+              key={`day-${day}`}
+              testID={`month-range-day-${day}`}
+              onPress={() => pickDay(day)}
               style={[
-                styles.actionBtn,
-                styles.confirmBtn,
-                {backgroundColor: tokens.primary},
-                (start == null || end == null) && {opacity: 0.4},
+                styles.dayCell,
+                state === 'edge' && {backgroundColor: tokens.primary},
+                state === 'inRange' && {
+                  backgroundColor: tokens.selection,
+                },
               ]}
             >
-              <Text style={styles.confirmText}>确定</Text>
+              <Text
+                style={[
+                  styles.dayText,
+                  {
+                    color: state === 'edge' ? TEXT_ON_PRIMARY : tokens.text,
+                  },
+                ]}
+              >
+                {day}
+              </Text>
             </Pressable>
-          </View>
+          );
+        })}
+      </View>
+      <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+        {start == null
+          ? '先选起始日，再选结束日'
+          : end == null
+          ? '已选起始日，请选择结束日'
+          : `${start.getMonth() + 1} 月 ${start.getDate()} 日 — ${
+              end.getMonth() + 1
+            } 月 ${end.getDate()} 日`}
+      </Text>
+      <View style={styles.actionRow}>
+        <Pressable
+          testID="month-range-clear"
+          onPress={() => {
+            setStart(undefined);
+            setEnd(undefined);
+          }}
+          style={[styles.actionBtn, {backgroundColor: tokens.bgSecondary}]}
+        >
+          <Text style={{color: tokens.textSecondary}}>清除</Text>
+        </Pressable>
+        <Pressable
+          testID="month-range-confirm"
+          onPress={confirm}
+          disabled={start == null || end == null}
+          style={[
+            styles.actionBtn,
+            styles.confirmBtn,
+            {backgroundColor: tokens.primary},
+            (start == null || end == null) && {opacity: 0.4},
+          ]}
+        >
+          <Text style={styles.confirmText}>确定</Text>
+        </Pressable>
+      </View>
     </ModalShell>
   );
 }

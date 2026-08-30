@@ -9,7 +9,10 @@ jest.mock('fast-text-encoding', () => ({}));
 require('@/polyfills');
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const {collectResponseBytes, toSdkResponseBody} = require('@/shims/aws-rn-stream-collector');
+const {
+  collectResponseBytes,
+  toSdkResponseBody,
+} = require('@/shims/aws-rn-stream-collector');
 
 describe('aws-rn-stream-collector', () => {
   it('collectResponseBytes 读取 Blob 文本', async () => {

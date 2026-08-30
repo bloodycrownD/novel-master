@@ -12,7 +12,9 @@ import {
 
 describe('shared/host-message-channel 纯函数', () => {
   it('parseHostMessage：JSON 字符串解析（chat 宽容口径）', () => {
-    expect(parseHostMessage('{"v":1,"type":"init","payload":{"theme":{}}}')).toEqual({
+    expect(
+      parseHostMessage('{"v":1,"type":"init","payload":{"theme":{}}}'),
+    ).toEqual({
       v: 1,
       type: 'init',
       payload: {theme: {}},
@@ -33,7 +35,9 @@ describe('shared/host-message-channel 纯函数', () => {
   });
 
   it('matchHostMessage：v 不匹配被丢弃（字符串与对象两形态）', () => {
-    expect(matchHostMessage(JSON.stringify({v: 2, type: 'init'}), 1)).toBeNull();
+    expect(
+      matchHostMessage(JSON.stringify({v: 2, type: 'init'}), 1),
+    ).toBeNull();
     expect(matchHostMessage({v: 2, type: 'init'}, 1)).toBeNull();
     expect(matchHostMessage({v: undefined, type: 'init'}, 1)).toBeNull();
   });

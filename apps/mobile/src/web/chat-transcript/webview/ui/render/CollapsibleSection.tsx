@@ -5,7 +5,7 @@
  * tool-group-header → tool-group-title / tool-group-chevron，thinking-header 同理）。
  * 约束：DOM 结构与 class 与抽离前逐属性一致（data-action 委托 key 不变）。
  */
-import type { ComponentChildren } from 'preact';
+import type {ComponentChildren} from 'preact';
 
 export type CollapsibleHeaderProps = {
   /** header 基础 class（tool-group-header / thinking-header）。 */
@@ -31,7 +31,7 @@ export function CollapsibleHeader({
     <div
       className={headerClass}
       data-action={action}
-      {...({ ['data-' + dataKey]: dataValue } as Record<string, string>)}
+      {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
     >
       <span className={headerClass + '-title'}>{title}</span>
       <span className={headerClass + '-chevron'}>{expanded ? '▼' : '▶'}</span>
@@ -67,7 +67,7 @@ export function CollapsibleSection({
   return (
     <div
       className={sectionClass + dividedClass}
-      {...({ ['data-' + dataKey]: dataValue } as Record<string, string>)}
+      {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
     >
       <CollapsibleHeader
         headerClass="tool-group-header"
@@ -77,9 +77,7 @@ export function CollapsibleSection({
         dataValue={dataValue}
         expanded={expanded}
       />
-      {expanded ? (
-        <div className="tool-group-items">{children}</div>
-      ) : null}
+      {expanded ? <div className="tool-group-items">{children}</div> : null}
     </div>
   );
 }

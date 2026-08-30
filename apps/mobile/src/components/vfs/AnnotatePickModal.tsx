@@ -24,7 +24,8 @@ export function AnnotatePickModal({visible, drafts, onPick, onClose}: Props) {
       variant="center"
       animationType="fade"
       containerStyle={styles.overlay}
-      panelStyle={styles.card}>
+      panelStyle={styles.card}
+    >
       <Text style={[styles.title, {color: tokens.text}]}>选择批注</Text>
       <View style={styles.list}>
         {drafts.map(d => (

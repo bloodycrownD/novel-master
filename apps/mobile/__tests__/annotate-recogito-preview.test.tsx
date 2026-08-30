@@ -80,10 +80,7 @@ const tokens = {
 };
 
 function readSrc(relFromSrc: string): string {
-  return readFileSync(
-    join(__dirname, '..', 'src', relFromSrc),
-    'utf8',
-  );
+  return readFileSync(join(__dirname, '..', 'src', relFromSrc), 'utf8');
 }
 
 describe('T-RG2 无插锚预览主路径', () => {
@@ -104,7 +101,9 @@ describe('T-RG2 无插锚预览主路径', () => {
 
   it('annotate.ts 不走 applyAnnotateMarks / __NM_ANNOTATE_DOM_SEARCH_FALLBACK__', () => {
     const src = readSrc('web/rich-document/webview/runtime/annotate.ts');
-    expect(src).not.toMatch(/applyAnnotateMarks\s*\(|from\s+['"][^'"]*annotate-marks/);
+    expect(src).not.toMatch(
+      /applyAnnotateMarks\s*\(|from\s+['"][^'"]*annotate-marks/,
+    );
     expect(src).not.toMatch(/__NM_ANNOTATE_DOM_SEARCH_FALLBACK__/);
     expect(src).not.toMatch(/isAnnotateDomSearchFallbackEnabled/);
   });
@@ -274,9 +273,7 @@ describe('T-RG4 plain 无批注', () => {
 
   it('RichDocumentWebView 挂 复制/批注菜单；划词不自动建批注', () => {
     const src = readSrc('components/vfs/RichDocumentWebView.tsx');
-    const annotate = readSrc(
-      'web/rich-document/webview/runtime/annotate.ts',
-    );
+    const annotate = readSrc('web/rich-document/webview/runtime/annotate.ts');
     expect(src).toMatch(/menuItems/);
     expect(src).toMatch(/RICH_DOCUMENT_ANNOTATE_MENU_ITEMS/);
     expect(src).toMatch(/__nmCollectRecogitoSelection/);
@@ -324,7 +321,12 @@ describe('T-RG5 Recogito ↔ draft 字段映射', () => {
     ).toBeNull();
     expect(
       draftsToRecogitoAnnotations([
-        {id: 'old', originalText: 'a', renderStart: undefined, renderEnd: undefined},
+        {
+          id: 'old',
+          originalText: 'a',
+          renderStart: undefined,
+          renderEnd: undefined,
+        },
         {id: 'ok', originalText: 'hi', renderStart: 0, renderEnd: 2},
       ]),
     ).toEqual([

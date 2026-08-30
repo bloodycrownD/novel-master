@@ -1,4 +1,4 @@
-import { state, BRIDGE_V, type TranscriptFlags } from './state/state';
+import {state, BRIDGE_V, type TranscriptFlags} from './state/state';
 import {
   applySnapshot,
   applyPrependPage,
@@ -10,14 +10,14 @@ import {
   applyStreamBatch,
   setStreamToolInvokingDom,
 } from './stream/stream';
-import { clearStreamRichUpgrade } from './stream/stream-markdown';
-import { closeContextMenu } from './menu/menu';
+import {clearStreamRichUpgrade} from './stream/stream-markdown';
+import {closeContextMenu} from './menu/menu';
 import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {createBoundPost} from '@web/shared/post';
 import {matchHostMessage} from '@web/shared/host-message-channel';
 import {applyHostTheme} from '@web/shared/host-theme';
 import {flagsEqual, renderRows} from './render/row-logic';
-import { scheduleStickIfNearBottom } from './scroll/scroll';
+import {scheduleStickIfNearBottom} from './scroll/scroll';
 
 // HostTheme 超集与条件式写入统一在 @web/shared/host-theme（web/C-orch-2）
 export type {HostTheme} from '@web/shared/host-theme';

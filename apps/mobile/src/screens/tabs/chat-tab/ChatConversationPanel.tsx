@@ -1,29 +1,23 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, { useCallback, useEffect, useMemo } from 'react';
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { type VfsScope } from '@novel-master/core/vfs';
-import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
-import { ChatComposer } from '@/components/chat/ChatComposer';
-import { ChatMetaBar } from '@/components/chat/ChatMetaBar';
-import { ChatStreamMetricsBarLive } from '@/components/chat/ChatStreamMetricsBarLive';
-import { ChatTranscriptWebView } from '@/components/chat/ChatTranscriptWebView';
-import { MessageActionMenu } from '@/components/chat/MessageActionMenu';
-import { MessageEditModal } from '@/components/chat/MessageEditModal';
-import { MessageList } from '@/components/chat/MessageList';
-import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
-import { BottomSheetMenu } from '@/components/sheet/BottomSheetMenu';
-import { VfsFileManager } from '@/components/vfs/VfsFileManager';
-import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { AndroidKeyboardClipBody } from '@/components/chrome/AndroidKeyboardClipBody';
-import { useToast } from '@/components/chrome/ToastHost';
+import React, {useCallback, useEffect, useMemo} from 'react';
+import {Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {type VfsScope} from '@novel-master/core/vfs';
+import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
+import {ChatComposer} from '@/components/chat/ChatComposer';
+import {ChatMetaBar} from '@/components/chat/ChatMetaBar';
+import {ChatStreamMetricsBarLive} from '@/components/chat/ChatStreamMetricsBarLive';
+import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
+import {MessageActionMenu} from '@/components/chat/MessageActionMenu';
+import {MessageEditModal} from '@/components/chat/MessageEditModal';
+import {MessageList} from '@/components/chat/MessageList';
+import {ModelPickerModal} from '@/components/provider/ModelPickerModal';
+import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
+import {VfsFileManager} from '@/components/vfs/VfsFileManager';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
+import {AndroidKeyboardClipBody} from '@/components/chrome/AndroidKeyboardClipBody';
+import {useToast} from '@/components/chrome/ToastHost';
 import {
   AGENT_LOCK_TOAST_GUIDE,
   isAgentLocked,
@@ -31,9 +25,9 @@ import {
   MODEL_LOCK_TOAST,
 } from '@/services/chat-agent-meta';
 import type {ThemeTokens} from '@/theme/tokens';
-import { useChatTabContext } from './ChatTabProvider';
-import { useChatTabWorkspaceBackState } from './ChatTabNavigationProvider';
-import { useChatTabController } from './useChatTabController';
+import {useChatTabContext} from './ChatTabProvider';
+import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
+import {useChatTabController} from './useChatTabController';
 
 export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
@@ -54,7 +48,7 @@ export function ChatConversationPanel({
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
-  const { showToast } = useToast();
+  const {showToast} = useToast();
   const {
     conversationPanel,
     setConversationPanel,
@@ -124,7 +118,7 @@ export function ChatConversationPanel({
     if (projectId == null || sessionId == null) {
       return null;
     }
-    return { kind: 'session', projectId, sessionId };
+    return {kind: 'session', projectId, sessionId};
   }, [projectId, sessionId]);
 
   const emitWorkspaceBackState = useCallback(() => {
@@ -246,7 +240,7 @@ export function ChatConversationPanel({
                 style={styles.loadMoreBtn}
                 onPress={onLoadOlderMessages}
               >
-                <Text style={{ color: tokens.primary }}>
+                <Text style={{color: tokens.primary}}>
                   {loadingMoreMessages ? '加载中…' : '加载更早消息'}
                 </Text>
               </Pressable>
@@ -258,7 +252,7 @@ export function ChatConversationPanel({
   const chatComposer =
     projectId != null && sessionId != null ? (
       <ChatComposer
-        scope={{ projectId, sessionId }}
+        scope={{projectId, sessionId}}
         hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
         running={uiRunning}
         beginUiRun={beginUiRun}
@@ -286,8 +280,8 @@ export function ChatConversationPanel({
         value={conversationPanel}
         onChange={setConversationPanel}
         options={[
-          { value: 'chat', label: '聊天', testID: 'tab-chat' },
-          { value: 'workspace', label: '聊天工作区', testID: 'tab-workspace' },
+          {value: 'chat', label: '聊天', testID: 'tab-chat'},
+          {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
         ]}
       />
       {projectId != null && sessionId != null ? (
@@ -325,7 +319,7 @@ export function ChatConversationPanel({
                 workplace={sessionWorktree}
                 rootPath="/"
                 pullFromParent={{
-                  scope: { kind: 'session', sessionId },
+                  scope: {kind: 'session', sessionId},
                   onPulled: bumpWorktreeUiToken,
                 }}
                 onOpenFile={path => onOpenFileEditor(path, 'session')}
@@ -334,7 +328,7 @@ export function ChatConversationPanel({
             </View>
           ) : conversationPanel === 'workspace' ? (
             <View style={styles.placeholder}>
-              <Text style={{ color: tokens.textSecondary }}>
+              <Text style={{color: tokens.textSecondary}}>
                 聊天工作区不可用
               </Text>
             </View>
@@ -342,7 +336,7 @@ export function ChatConversationPanel({
         </>
       ) : (
         <View style={styles.placeholder}>
-          <Text style={{ color: tokens.textSecondary }}>请先选择会话</Text>
+          <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
         </View>
       )}
       <BottomSheetMenu
@@ -411,12 +405,12 @@ export function ChatConversationPanel({
 }
 
 const styles = StyleSheet.create({
-  subviewFill: { flex: 1, minHeight: 0 },
-  panelHidden: { display: 'none' },
-  chatPanel: { flex: 1, backgroundColor: 'transparent' },
-  transcriptHost: { flex: 1, minHeight: 0 },
-  flexFill: { flex: 1 },
-  placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  subviewFill: {flex: 1, minHeight: 0},
+  panelHidden: {display: 'none'},
+  chatPanel: {flex: 1, backgroundColor: 'transparent'},
+  transcriptHost: {flex: 1, minHeight: 0},
+  flexFill: {flex: 1},
+  placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   loadMoreBtn: {
     alignSelf: 'center',
     paddingHorizontal: 12,

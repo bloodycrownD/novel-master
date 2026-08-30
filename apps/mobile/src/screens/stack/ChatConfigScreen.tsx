@@ -160,14 +160,13 @@ export function ChatConfigScreen() {
           loading={compactionSaving}
           onPress={() => handleSaveCompaction().catch(() => undefined)}
         />
-      }>
+      }
+    >
       <ProfileSwitchItem
         icon="⚡"
         label="流式输出"
         subtitle={
-          llmStreamEnabled
-            ? '边生成边显示（推荐）'
-            : '完成后一次性显示回复'
+          llmStreamEnabled ? '边生成边显示（推荐）' : '完成后一次性显示回复'
         }
         value={llmStreamEnabled}
         tokens={tokens}
@@ -235,7 +234,8 @@ export function ChatConfigScreen() {
       <FormSectionCard
         title="压缩配置"
         tokens={tokens}
-        hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。">
+        hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。"
+      >
         <FormField label="隐藏起始深度" tokens={tokens} row>
           <FormTextInput
             tokens={tokens}

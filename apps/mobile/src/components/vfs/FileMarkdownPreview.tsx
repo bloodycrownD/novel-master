@@ -4,12 +4,7 @@
  * plain/文本 Tab：禁用批注入口与投影。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
 import type {AnnotateDraft} from '@novel-master/core/chat';
@@ -67,7 +62,9 @@ interface FileMarkdownPreviewProps {
 }
 
 function newAnnotateId(): string {
-  return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `ann-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 }
 
 /** Wrap plain/RN markdown in ScrollView when previewFill — WebView paths skip this. */
@@ -85,7 +82,8 @@ function PreviewScrollWrap({
     <ScrollView
       style={styles.rnBodyScroll}
       contentContainerStyle={styles.rnBodyContent}
-      keyboardShouldPersistTaps="handled">
+      keyboardShouldPersistTaps="handled"
+    >
       {children}
     </ScrollView>
   );
@@ -223,13 +221,7 @@ export function FileMarkdownPreview({
       refreshComposerAnnotateChips(sessionId);
       setPendingRenderRange(null);
     },
-    [
-      annotateEnabled,
-      sessionId,
-      path,
-      pendingOriginalText,
-      pendingRenderRange,
-    ],
+    [annotateEnabled, sessionId, path, pendingOriginalText, pendingRenderRange],
   );
 
   const handleAnnotateOpen = useCallback(
@@ -287,10 +279,7 @@ export function FileMarkdownPreview({
 
   const fmLines = split?.frontMatterLines ?? null;
   const showFrontMatter = isMdPath && fmLines !== null;
-  const fmFields =
-    showFrontMatter
-      ? parseFrontMatterFields(fmLines)
-      : [];
+  const fmFields = showFrontMatter ? parseFrontMatterFields(fmLines) : [];
 
   /** 干净 MD 正文（禁止源串插锚注再渲染）。 */
   const mdBody = useMemo(() => {
@@ -346,15 +335,11 @@ export function FileMarkdownPreview({
       fields: fmFields,
       empty: fmLines.length === 0,
     });
-  }, [
-    mdUseWebViewPreview,
-    showFrontMatter,
-    fmFields,
-    fmLines,
-  ]);
+  }, [mdUseWebViewPreview, showFrontMatter, fmFields, fmLines]);
 
   /** 仅 MD Tab 挂 Recogito；plain 永不 annotate。 */
-  const mdAnnotateActive = annotateEnabled === true && renderKind === 'markdown';
+  const mdAnnotateActive =
+    annotateEnabled === true && renderKind === 'markdown';
 
   const bumpClearAnnotateSelection = useCallback(() => {
     setClearAnnotateSelectionSignal(n => n + 1);
@@ -466,7 +451,8 @@ export function FileMarkdownPreview({
           styles.root,
           previewFill && nonMdUseWebViewPreview && styles.fillRoot,
           previewFill && mdAnnotateActive && styles.fillRoot,
-        ]}>
+        ]}
+      >
         {nonMdUseWebViewPreview || mdAnnotateActive ? (
           <RichDocumentWebView
             key={path}
@@ -492,7 +478,8 @@ export function FileMarkdownPreview({
         styles.root,
         previewFill && mdUseWebViewPreview && styles.fillRoot,
         previewFill && mdAnnotateActive && styles.fillRoot,
-      ]}>
+      ]}
+    >
       {mdUseWebViewPreview || mdAnnotateActive ? (
         <RichDocumentWebView
           key={path}
@@ -539,11 +526,7 @@ interface FrontMatterCardProps {
   empty: boolean;
 }
 
-function FrontMatterCard({
-  tokens,
-  fields,
-  empty,
-}: FrontMatterCardProps) {
+function FrontMatterCard({tokens, fields, empty}: FrontMatterCardProps) {
   return (
     <View
       style={[
@@ -552,7 +535,8 @@ function FrontMatterCard({
           backgroundColor: tokens.bgSecondary,
           borderColor: tokens.border,
         },
-      ]}>
+      ]}
+    >
       <Text style={[styles.fmTitle, {color: tokens.textSecondary}]}>
         Front Matter
       </Text>
@@ -567,7 +551,8 @@ function FrontMatterCard({
               {field.key ? (
                 <Text
                   style={[styles.fmKey, {color: tokens.textSecondary}]}
-                  numberOfLines={1}>
+                  numberOfLines={1}
+                >
                   {field.key}
                 </Text>
               ) : null}

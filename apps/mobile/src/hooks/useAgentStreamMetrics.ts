@@ -1,7 +1,13 @@
 /**
  * Agent 流式生成计时与正文字数统计（不含 tool 参数计数）。
  */
-import {useCallback, useEffect, useRef, useState, type MutableRefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
 import {
   buildStreamMetricsLine,
   formatCharCount,

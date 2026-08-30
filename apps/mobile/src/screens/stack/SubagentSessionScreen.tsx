@@ -18,7 +18,11 @@
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
+import {
+  useNavigation,
+  useRoute,
+  type RouteProp,
+} from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
 import type {
   AgentRunFailedPayload,
@@ -98,9 +102,9 @@ export function SubagentSessionScreen() {
 
   // 装配 stream/abort/batch（与主会话同构，但不接 composer）。
   const onStreamResetRef = useRef<() => void>(() => undefined);
-  const applySegmentsRef = useRef<(segments: readonly StreamWireChunk[]) => void>(
-    () => undefined,
-  );
+  const applySegmentsRef = useRef<
+    (segments: readonly StreamWireChunk[]) => void
+  >(() => undefined);
 
   const abort = useSessionAbort({
     sessionId,
@@ -256,7 +260,13 @@ export function SubagentSessionScreen() {
     if (partial.thinking.length > 0) {
       web.pushStreamDelta('thinking', partial.thinking);
     }
-  }, [webviewReady, abort.uiRunning, sessionId, runtime.streamRegistry, messages.length]);
+  }, [
+    webviewReady,
+    abort.uiRunning,
+    sessionId,
+    runtime.streamRegistry,
+    messages.length,
+  ]);
 
   // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
   // 而不是当前子会话的 id。
@@ -291,10 +301,7 @@ export function SubagentSessionScreen() {
     [projectId, sessionId],
   );
 
-  const flags = useMemo(
-    () => ({richText: richTextEnabled}),
-    [richTextEnabled],
-  );
+  const flags = useMemo(() => ({richText: richTextEnabled}), [richTextEnabled]);
 
   const onStop = useCallback(() => {
     if (sessionId == null) {

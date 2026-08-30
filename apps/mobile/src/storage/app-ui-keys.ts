@@ -13,7 +13,8 @@ export const APP_UI_KEY_CHAT_RICH_TEXT = 'chatRichText';
 /** `legacy-rn` | `webview` — transcript rendering engine (default `webview`). */
 export const APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE = 'chatTranscriptEngine';
 /** `rn` | `webview` — VFS markdown preview engine (default `webview`). */
-export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE = 'vfsMarkdownPreviewEngine';
+export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE =
+  'vfsMarkdownPreviewEngine';
 /** `true` | `false` — WebView stream bridge uses streamBatch (default on). */
 export const APP_UI_KEY_CHAT_STREAM_BATCH_ENABLED = 'chatStreamBatchEnabled';
 /** Last app version seen at bootstrap (package version). */

@@ -85,7 +85,8 @@ export function DynamicBlocksCard({
                     color: tokens.textSecondary,
                     borderColor: tokens.borderLight,
                   },
-                ]}>
+                ]}
+              >
                 {PROMPT_REGION_LABELS.emptyDynamicHint}
               </Text>
             ) : null}
@@ -94,7 +95,8 @@ export function DynamicBlocksCard({
                 <View style={styles.blockHeader}>
                   <Text
                     style={[styles.blockName, {color: tokens.text}]}
-                    numberOfLines={1}>
+                    numberOfLines={1}
+                  >
                     {block.name}
                   </Text>
                   <PromptBlockActions
@@ -149,10 +151,8 @@ export function DynamicBlocksCard({
                 />
                 {!isDynamicBlockPersistent(block) ? (
                   <Text
-                    style={[
-                      styles.fieldHint,
-                      {color: tokens.textSecondary},
-                    ]}>
+                    style={[styles.fieldHint, {color: tokens.textSecondary}]}
+                  >
                     {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
                   </Text>
                 ) : null}

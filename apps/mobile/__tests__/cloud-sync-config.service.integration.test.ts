@@ -76,10 +76,12 @@ describe('cloud-sync.service × cloud-sync-config.store 集成', () => {
 
   it('未配置时 pullCloudSync / pushCloudSync 抛 NOT_CONFIGURED', async () => {
     const {runtime} = makeRuntime();
-    await expect(pullCloudSync(runtime, () => undefined)).rejects.toMatchObject({
-      name: 'CloudSyncError',
-      code: 'NOT_CONFIGURED',
-    });
+    await expect(pullCloudSync(runtime, () => undefined)).rejects.toMatchObject(
+      {
+        name: 'CloudSyncError',
+        code: 'NOT_CONFIGURED',
+      },
+    );
     await expect(pushCloudSync(runtime, undefined)).rejects.toMatchObject({
       name: 'CloudSyncError',
       code: 'NOT_CONFIGURED',

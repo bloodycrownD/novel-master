@@ -90,7 +90,7 @@ export function ModalShell({
     {
       iosTranslateY:
         keyboardAvoid.kind === 'adaptive'
-          ? (keyboardAvoid.iosTranslateY ?? false)
+          ? keyboardAvoid.iosTranslateY ?? false
           : false,
     },
   );
@@ -98,8 +98,8 @@ export function ModalShell({
     keyboardAvoid.kind === 'translate'
       ? translateAvoid
       : keyboardAvoid.kind === 'adaptive'
-        ? adaptiveAvoid
-        : undefined;
+      ? adaptiveAvoid
+      : undefined;
 
   // panel 挂 responder 吞掉落在面板空白处的触摸，避免穿透到遮罩误关闭。
   const panel = (
@@ -110,7 +110,8 @@ export function ModalShell({
         avoidStyle,
         panelStyle,
       ]}
-      onStartShouldSetResponder={() => true}>
+      onStartShouldSetResponder={() => true}
+    >
       {children}
     </Animated.View>
   );
@@ -164,12 +165,14 @@ export function ModalShell({
       transparent
       animationType={animationType}
       statusBarTranslucent={statusBarTranslucent}
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       {Platform.OS === 'ios' && useKav ? (
         <KeyboardAvoidingView
           behavior="padding"
           style={rootStyle}
-          keyboardVerticalOffset={keyboardVerticalOffset}>
+          keyboardVerticalOffset={keyboardVerticalOffset}
+        >
           {content}
         </KeyboardAvoidingView>
       ) : (

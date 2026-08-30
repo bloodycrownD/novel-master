@@ -39,7 +39,9 @@ describe('copyCode 共享委托模块源码契约 (T-CB19)', () => {
     expect(src).toContain("btn.classList.add('copied')");
     expect(src).toContain("btn.classList.remove('copied')");
     expect(src).toContain('COPY_FEEDBACK_MS = 1500');
-    expect(src).toMatch(/window\.setTimeout\(\s*\(\) => btn\.classList\.remove\('copied'\)/);
+    expect(src).toMatch(
+      /window\.setTimeout\(\s*\(\) => btn\.classList\.remove\('copied'\)/,
+    );
     // 幂等：重复挂接只挂一次，不叠加 document 监听
     expect(src).toMatch(/if \(attached \|\| typeof document === 'undefined'\)/);
     expect(src).toContain('attached = true;');

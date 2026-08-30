@@ -5,7 +5,10 @@
 import React from 'react';
 import {Pressable, Text, View} from 'react-native';
 
-import {MODE_OPTIONS, type AgentMode} from '@novel-master/core/config-forms/agent';
+import {
+  MODE_OPTIONS,
+  type AgentMode,
+} from '@novel-master/core/config-forms/agent';
 
 import {FormField} from '../../form/FormField';
 import {FormSectionCard} from '../../form/FormSectionCard';
@@ -52,7 +55,11 @@ export function AgentEditorBasicSection({
         </Pressable>
       </View>
       <FormField label="名称" tokens={tokens}>
-        <FormTextInput tokens={tokens} value={name} onChangeText={onNameChange} />
+        <FormTextInput
+          tokens={tokens}
+          value={name}
+          onChangeText={onNameChange}
+        />
       </FormField>
       <FormField label="作用域" tokens={tokens}>
         <FormSelectField
@@ -66,7 +73,8 @@ export function AgentEditorBasicSection({
       <FormField
         label="描述"
         tokens={tokens}
-        hint="向 task 工具说明这个智能体擅长什么，可留空。">
+        hint="向 task 工具说明这个智能体擅长什么，可留空。"
+      >
         <FormTextInput
           tokens={tokens}
           value={description}

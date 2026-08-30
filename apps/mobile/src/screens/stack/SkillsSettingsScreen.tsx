@@ -12,7 +12,14 @@
  *   tab hint 注明该全局版仅对无副本的项目生效。
  */
 import React, {useCallback, useMemo, useState} from 'react';
-import {FlatList, Pressable, RefreshControl, StyleSheet, Text, View} from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatProject} from '@novel-master/core/chat';
@@ -20,7 +27,10 @@ import type {SkillDomain, SkillListItem} from '@novel-master/core/skills';
 import type {VfsScope} from '@novel-master/core/vfs';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {ManageHeader} from '@/components/batch/ManageHeader';
-import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomSheetMenu';
+import {
+  BottomSheetMenu,
+  type SheetMenuItem,
+} from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/Buttons';
 import {exportVfsZip} from '@/services/vfs-zip.service';
@@ -144,7 +154,9 @@ export function SkillsSettingsScreen() {
   };
 
   const rowKey = (row: SkillRow) =>
-    row.domain === 'global' ? `global:${row.name}` : `${row.projectId}:${row.name}`;
+    row.domain === 'global'
+      ? `global:${row.name}`
+      : `${row.projectId}:${row.name}`;
 
   const openDetail = (row: SkillRow) => {
     navigation.navigate('SkillDetail', {
@@ -163,10 +175,12 @@ export function SkillsSettingsScreen() {
       const scopeHint = anyGlobal
         ? '全局技能删除后影响所有项目'
         : targets.length === 1 && targets[0]!.projectName
-          ? `该技能仅在该项目（${targets[0]!.projectName}）生效`
-          : '项目技能仅所属项目生效';
+        ? `该技能仅在该项目（${targets[0]!.projectName}）生效`
+        : '项目技能仅所属项目生效';
       const names = targets.map(t => t.name).join('、');
-      return `${scopeHint}。确定删除${targets.length > 1 ? `选中的 ${targets.length} 个技能` : `「${names}」`}？删除会清理整目录与对应禁用记录。`;
+      return `${scopeHint}。确定删除${
+        targets.length > 1 ? `选中的 ${targets.length} 个技能` : `「${names}」`
+      }？删除会清理整目录与对应禁用记录。`;
     },
     deleteOne: useCallback(
       async (t: SkillRow) => {
@@ -257,7 +271,8 @@ export function SkillsSettingsScreen() {
           } else {
             openDetail(row);
           }
-        }}>
+        }}
+      >
         {batch.active ? (
           <BatchCheckbox
             checked={selected}
@@ -266,22 +281,22 @@ export function SkillsSettingsScreen() {
         ) : null}
         <View style={styles.rowBody}>
           <View style={styles.titleRow}>
-            <Text
-              style={[styles.name, {color: tokens.text}]}
-              numberOfLines={1}>
+            <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
               {row.name}
             </Text>
             {overridden ? (
               <Text
                 style={[styles.overrideTag, {color: tokens.textTertiary}]}
-                numberOfLines={1}>
+                numberOfLines={1}
+              >
                 被项目副本覆盖
               </Text>
             ) : null}
             {!row.item.valid ? (
               <Text
                 style={[styles.invalidTag, {color: tokens.danger}]}
-                numberOfLines={1}>
+                numberOfLines={1}
+              >
                 无效 · {row.item.invalidReason ?? 'front matter 不合法'}
               </Text>
             ) : null}
@@ -289,7 +304,8 @@ export function SkillsSettingsScreen() {
           {row.item.description ? (
             <Text
               style={[styles.description, {color: tokens.textSecondary}]}
-              numberOfLines={1}>
+              numberOfLines={1}
+            >
               {row.item.description}
             </Text>
           ) : null}
@@ -299,7 +315,8 @@ export function SkillsSettingsScreen() {
             testID={`skills-settings-menu-${row.name}`}
             hitSlop={8}
             onPress={() => setMenuTarget(row)}
-            accessibilityLabel={`技能 ${row.name} 更多操作`}>
+            accessibilityLabel={`技能 ${row.name} 更多操作`}
+          >
             <Text style={[styles.moreGlyph, {color: tokens.textSecondary}]}>
               ⋮
             </Text>
@@ -337,9 +354,7 @@ export function SkillsSettingsScreen() {
         onEnterBatch={batch.enter}
         onCancelBatch={batch.exit}
         onDelete={() =>
-          confirmDeleteRows(
-            rows.filter(r => batch.isSelected(rowKey(r))),
-          )
+          confirmDeleteRows(rows.filter(r => batch.isSelected(rowKey(r))))
         }
         hint="选择要删除的技能"
         normalActions={
@@ -399,7 +414,8 @@ export function SkillsSettingsScreen() {
           item.kind === 'header' ? (
             <Text
               style={[styles.groupHeader, {color: tokens.textSecondary}]}
-              testID={`skills-settings-group-${item.project.name}`}>
+              testID={`skills-settings-group-${item.project.name}`}
+            >
               {item.project.name}
             </Text>
           ) : (

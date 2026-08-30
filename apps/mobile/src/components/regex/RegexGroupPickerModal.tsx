@@ -73,7 +73,8 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
       onClose={onClose}
       variant="bottom"
       animationType="slide"
-      panelStyle={styles.sheet}>
+      panelStyle={styles.sheet}
+    >
       <Text style={[styles.title, {color: tokens.text}]}>选择当前正则组</Text>
       {loading ? (
         <ActivityIndicator style={styles.loader} />
@@ -88,7 +89,8 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
                 {borderBottomColor: tokens.border},
                 disabledSelected && {backgroundColor: tokens.background},
               ]}
-              onPress={selectNone}>
+              onPress={selectNone}
+            >
               <Text style={{color: tokens.text, flex: 1}}>不启用</Text>
               {disabledSelected ? (
                 <Text style={{color: tokens.primary}}>当前</Text>
@@ -109,7 +111,8 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
                   {borderBottomColor: tokens.border},
                   selected && {backgroundColor: tokens.background},
                 ]}
-                onPress={() => selectGroup(item.groupId)}>
+                onPress={() => selectGroup(item.groupId)}
+              >
                 <Text style={{color: tokens.text, flex: 1}}>
                   {groupTitle(item)}
                 </Text>

@@ -264,7 +264,10 @@ describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（行为断言）
     const renderer = renderPicker({selected: [], onChange: jest.fn()});
 
     // 打开 sheet：ModalShell 由 overlay.show 挂载，靠 keyboardAvoid prop 定位
-    const trigger = findPressableByChildText(renderer.root, '未选择工具（0/10）');
+    const trigger = findPressableByChildText(
+      renderer.root,
+      '未选择工具（0/10）',
+    );
     expect(trigger).toBeTruthy();
     act(() => {
       trigger.props.onPress();

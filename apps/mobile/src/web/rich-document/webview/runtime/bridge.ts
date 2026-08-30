@@ -2,11 +2,8 @@
  * rich-document 桥与 setDocument 门面（runtime；无 JSX）。
  * setDocument 仅调用 main 已注册的视图刷新实现；禁止在此拼串或 preact.render。
  */
-import {
-  BRIDGE_V,
-  type DocumentPayload,
-} from './document-model';
-import { post } from './post';
+import {BRIDGE_V, type DocumentPayload} from './document-model';
+import {post} from './post';
 import {
   setAnnotateEnabled,
   setAnnotations,
@@ -42,7 +39,7 @@ export function invokeRegisteredSetDocumentView(
   return true;
 }
 
-export { post };
+export {post};
 
 // HostTheme 超集与条件式写入统一在 @web/shared/host-theme（web/C-orch-2）
 export type {HostTheme};

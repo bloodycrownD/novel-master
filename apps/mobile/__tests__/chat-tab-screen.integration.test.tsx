@@ -32,7 +32,9 @@ const mockRuntime: any = {
     delete: jest.fn(),
   },
   sessions: {
-    listByProject: jest.fn(async () => [{id: 's1', title: 'S1', updatedAtMs: 1}]),
+    listByProject: jest.fn(async () => [
+      {id: 's1', title: 'S1', updatedAtMs: 1},
+    ]),
     create: jest.fn(),
     rename: jest.fn(),
     copy: jest.fn(),
@@ -154,7 +156,9 @@ jest.mock('../src/services/regex-apply-channel', () => ({
 }));
 
 jest.mock('../src/services/stream-apply-buffer', () => ({
-  createStreamApplyBuffer: (onFlush: (segments: {kind: string; delta: string}[]) => void) => ({
+  createStreamApplyBuffer: (
+    onFlush: (segments: {kind: string; delta: string}[]) => void,
+  ) => ({
     push: (chunk: {kind: string; delta: string}) => {
       mockStreamBufferPush(chunk.kind, chunk.delta);
       if (chunk.kind !== 'text') {
@@ -296,17 +300,22 @@ function findPressableByText(
   root: TestRenderer.ReactTestInstance,
   text: string,
 ): TestRenderer.ReactTestInstance {
-  const node = root.findAll(n => typeof n.props?.onPress === 'function').find(n => {
-    const selfText =
-      typeof n.props?.children === 'string' && n.props.children.includes(text);
-    if (selfText) {
-      return true;
-    }
-    const descendants = n.findAll(
-      d => typeof d.props?.children === 'string' && d.props.children.includes(text),
-    );
-    return descendants.length > 0;
-  });
+  const node = root
+    .findAll(n => typeof n.props?.onPress === 'function')
+    .find(n => {
+      const selfText =
+        typeof n.props?.children === 'string' &&
+        n.props.children.includes(text);
+      if (selfText) {
+        return true;
+      }
+      const descendants = n.findAll(
+        d =>
+          typeof d.props?.children === 'string' &&
+          d.props.children.includes(text),
+      );
+      return descendants.length > 0;
+    });
   if (!node) {
     throw new Error(`pressable not found: ${text}`);
   }
@@ -403,4 +412,3 @@ describe('ChatTabScreen integration', () => {
     expect(mockLatestMessageListProps.streamingText).toBe('ABC');
   });
 });
-

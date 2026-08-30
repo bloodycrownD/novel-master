@@ -1,7 +1,7 @@
 /**
  * Directory inclusion rule form → {@link WorkplaceService.setDirRule}.
  */
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,7 +10,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   DEFAULT_WORKPLACE_DIR_RULE,
   type FillPolicy,
@@ -18,9 +18,9 @@ import {
   type SortField,
   type SortOrder,
 } from '@novel-master/core/workplace';
-import { ModalShell } from '../ui/ModalShell';
+import {ModalShell} from '../ui/ModalShell';
 import {normalizeFillPolicyForMobile} from '../../services/fill-policy-mobile';
-import { useTheme } from '../../theme/ThemeProvider';
+import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
   visible: boolean;
@@ -32,21 +32,21 @@ type Props = {
   onSave: (input: SetDirRuleInput) => Promise<void>;
 };
 
-const SORT_FIELDS: { value: SortField; label: string }[] = [
-  { value: 'name', label: '文件名称' },
-  { value: 'created', label: '创建时间' },
-  { value: 'updated', label: '更新时间' },
+const SORT_FIELDS: {value: SortField; label: string}[] = [
+  {value: 'name', label: '文件名称'},
+  {value: 'created', label: '创建时间'},
+  {value: 'updated', label: '更新时间'},
 ];
 
-const SORT_ORDERS: { value: SortOrder; label: string }[] = [
-  { value: 'asc', label: '升序' },
-  { value: 'desc', label: '降序' },
+const SORT_ORDERS: {value: SortOrder; label: string}[] = [
+  {value: 'asc', label: '升序'},
+  {value: 'desc', label: '降序'},
 ];
 
-const FILL_POLICIES: { value: FillPolicy; label: string }[] = [
-  { value: 'filename', label: '文件名' },
-  { value: 'header', label: '头信息' },
-  { value: 'hidden', label: '不展示' },
+const FILL_POLICIES: {value: FillPolicy; label: string}[] = [
+  {value: 'filename', label: '文件名'},
+  {value: 'header', label: '头信息'},
+  {value: 'hidden', label: '不展示'},
 ];
 
 export function DirectoryRuleSheet({
@@ -57,7 +57,7 @@ export function DirectoryRuleSheet({
   onClose,
   onSave,
 }: Props) {
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
   // 85% 高面板 + 两个数字输入：键盘避让不能只做位移（translate fraction=1
   // 会把标题顶出屏），由 ModalShell 的 adaptive 策略「上移 + maxHeight 收缩」
@@ -120,70 +120,72 @@ export function DirectoryRuleSheet({
 
   const sheetContent = (
     <>
-        <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
-        <ScrollView
-          style={styles.form}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
+      <Text style={[styles.heading, {color: tokens.text}]}>目录规则</Text>
+      <ScrollView
+        style={styles.form}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
               ruleEnabled 沿用打开时的既有状态原样保存。 */}
-          <FieldLabel tokens={tokens} text="排序字段" />
-          <OptionRow
-            options={SORT_FIELDS}
-            value={sortField}
-            onChange={setSortField}
-            tokens={tokens}
-          />
-          <FieldLabel tokens={tokens} text="排序方向" />
-          <OptionRow
-            options={SORT_ORDERS}
-            value={sortOrder}
-            onChange={setSortOrder}
-            tokens={tokens}
-          />
-          <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
-          <TextInput
-            style={[
-              styles.input,
-              { borderColor: tokens.border, color: tokens.text },
-            ]}
-            keyboardType="number-pad"
-            value={headCount}
-            onChangeText={setHeadCount}
-            underlineColorAndroid="transparent"
-          />
-          <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
-          <TextInput
-            style={[
-              styles.input,
-              { borderColor: tokens.border, color: tokens.text },
-            ]}
-            keyboardType="number-pad"
-            value={tailCount}
-            onChangeText={setTailCount}
-            underlineColorAndroid="transparent"
-          />
-          <FieldLabel tokens={tokens} text="其余文件填充" />
-          <OptionRow
-            options={FILL_POLICIES}
-            value={fillPolicy}
-            onChange={setFillPolicy}
-            tokens={tokens}
-          />
-        </ScrollView>
-        <View style={[styles.actions, { borderTopColor: tokens.border }]}>
-          <Pressable onPress={onClose} style={styles.actionBtn}>
-            <Text style={{ color: tokens.textSecondary }}>取消</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => handleSave().catch(() => undefined)}
-            disabled={saving}
-            style={styles.actionBtn}>
-            <Text style={{ color: tokens.primary }}>
-              {saving ? '保存中…' : '保存'}
-            </Text>
-          </Pressable>
-        </View>
+        <FieldLabel tokens={tokens} text="排序字段" />
+        <OptionRow
+          options={SORT_FIELDS}
+          value={sortField}
+          onChange={setSortField}
+          tokens={tokens}
+        />
+        <FieldLabel tokens={tokens} text="排序方向" />
+        <OptionRow
+          options={SORT_ORDERS}
+          value={sortOrder}
+          onChange={setSortOrder}
+          tokens={tokens}
+        />
+        <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
+        <TextInput
+          style={[
+            styles.input,
+            {borderColor: tokens.border, color: tokens.text},
+          ]}
+          keyboardType="number-pad"
+          value={headCount}
+          onChangeText={setHeadCount}
+          underlineColorAndroid="transparent"
+        />
+        <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
+        <TextInput
+          style={[
+            styles.input,
+            {borderColor: tokens.border, color: tokens.text},
+          ]}
+          keyboardType="number-pad"
+          value={tailCount}
+          onChangeText={setTailCount}
+          underlineColorAndroid="transparent"
+        />
+        <FieldLabel tokens={tokens} text="其余文件填充" />
+        <OptionRow
+          options={FILL_POLICIES}
+          value={fillPolicy}
+          onChange={setFillPolicy}
+          tokens={tokens}
+        />
+      </ScrollView>
+      <View style={[styles.actions, {borderTopColor: tokens.border}]}>
+        <Pressable onPress={onClose} style={styles.actionBtn}>
+          <Text style={{color: tokens.textSecondary}}>取消</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => handleSave().catch(() => undefined)}
+          disabled={saving}
+          style={styles.actionBtn}
+        >
+          <Text style={{color: tokens.primary}}>
+            {saving ? '保存中…' : '保存'}
+          </Text>
+        </Pressable>
+      </View>
     </>
   );
 
@@ -193,8 +195,9 @@ export function DirectoryRuleSheet({
       onClose={onClose}
       variant="bottom"
       animationType="slide"
-      keyboardAvoid={{ kind: 'adaptive', maxHeightRatio: 0.85 }}
-      panelStyle={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.85}}
+      panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}
+    >
       {sheetContent}
     </ModalShell>
   );
@@ -213,10 +216,10 @@ function FieldLabel({
   tokens,
 }: {
   text: string;
-  tokens: { textSecondary: string };
+  tokens: {textSecondary: string};
 }) {
   return (
-    <Text style={[styles.label, { color: tokens.textSecondary }]}>{text}</Text>
+    <Text style={[styles.label, {color: tokens.textSecondary}]}>{text}</Text>
   );
 }
 
@@ -226,10 +229,10 @@ function OptionRow<T extends string>({
   onChange,
   tokens,
 }: {
-  options: { value: T; label: string }[];
+  options: {value: T; label: string}[];
   value: T;
   onChange: (v: T) => void;
-  tokens: { border: string; primary: string; text: string };
+  tokens: {border: string; primary: string; text: string};
 }) {
   return (
     <View style={styles.optionRow}>
@@ -247,7 +250,7 @@ function OptionRow<T extends string>({
               },
             ]}
           >
-            <Text style={{ color: active ? tokens.primary : tokens.text }}>
+            <Text style={{color: active ? tokens.primary : tokens.text}}>
               {opt.label}
             </Text>
           </Pressable>
@@ -266,17 +269,17 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     overflow: 'hidden',
   },
-  heading: { fontSize: 18, fontWeight: '600', marginBottom: 12 },
+  heading: {fontSize: 18, fontWeight: '600', marginBottom: 12},
   // maxHeight 收缩时内容要向内收缩，否则底部按钮行被裁（对齐 ToolPolicyPicker list）
   form: {maxHeight: 360, flexShrink: 1},
-  label: { fontSize: 12, marginTop: 12, marginBottom: 6 },
+  label: {fontSize: 12, marginTop: 12, marginBottom: 6},
   input: {
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  optionRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   chip: {
     borderWidth: 1,
     borderRadius: 16,
@@ -290,5 +293,5 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  actionBtn: { padding: 8 },
+  actionBtn: {padding: 8},
 });

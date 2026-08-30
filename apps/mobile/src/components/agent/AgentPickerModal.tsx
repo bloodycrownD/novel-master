@@ -36,7 +36,12 @@ type Props = {
   sessionId?: string;
 };
 
-export function AgentPickerModal({visible, onClose, onSelected, sessionId}: Props) {
+export function AgentPickerModal({
+  visible,
+  onClose,
+  onSelected,
+  sessionId,
+}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
@@ -82,9 +87,7 @@ export function AgentPickerModal({visible, onClose, onSelected, sessionId}: Prop
       renderRow={(item, selected) => (
         <>
           <Text style={{color: tokens.text, flex: 1}}>{item.label}</Text>
-          {selected ? (
-            <Text style={{color: tokens.primary}}>当前</Text>
-          ) : null}
+          {selected ? <Text style={{color: tokens.primary}}>当前</Text> : null}
         </>
       )}
       onPick={item => select(item.agentId)}

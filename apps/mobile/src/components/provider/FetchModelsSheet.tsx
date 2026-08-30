@@ -170,132 +170,134 @@ export function FetchModelsSheet({
 
   const body = (
     <>
-        <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
-        <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
-          从服务商获取可用模型，勾选后批量添加
-        </Text>
-        {loading ? (
-          <ActivityIndicator style={styles.loader} />
-        ) : error ? (
-          <View style={styles.center}>
-            <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-            <Pressable onPress={() => load().catch(() => undefined)}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                重试
-              </Text>
-            </Pressable>
-          </View>
-        ) : (
-          <>
-            <View style={styles.searchWrap}>
-              <FormTextInput
-                tokens={tokens}
-                value={query}
-                onChangeText={setQuery}
-                placeholder="过滤模型…"
-              />
-            </View>
-            {allSelectableCount > 0 ? (
-              <View style={styles.selectBar}>
-                {selectableRows.length > 0 ? (
-                  <Pressable onPress={toggleSelectAll} disabled={saving} hitSlop={8}>
-                    <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                      {allSelected ? '全不选' : '全选'}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                <Text
-                  style={{color: tokens.textSecondary, fontSize: 13}}>
-                  已选 {batch.selectedCount} 项
-                </Text>
-              </View>
-            ) : null}
-            {/* key 技巧：过滤词变化时重建 FlatList，滚动位置归零 */}
-            <FlatList
-              data={filteredRows}
-              key={query}
-              keyExtractor={item => item.vendorModelId}
-              style={styles.list}
-              ListEmptyComponent={
-                rows.length === 0 ? (
-                  <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                    未拉取到可用模型，请检查 API Key 与 Base URL。
-                  </Text>
-                ) : (
-                  <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                    无匹配模型
-                  </Text>
-                )
-              }
-              renderItem={({item}) => {
-                const saved = addedSet.has(item.vendorModelId);
-                const selected = batch.isSelected(item.vendorModelId);
-                const label = item.displayName?.trim() || item.vendorModelId;
-                return (
-                  <Pressable
-                    style={[
-                      styles.row,
-                      {borderBottomColor: tokens.border},
-                      selected && {backgroundColor: tokens.bgSecondary},
-                      saved && {opacity: 0.55},
-                    ]}
-                    disabled={saved || saving}
-                    onPress={() => batch.toggle(item.vendorModelId)}>
-                    {saved ? (
-                      // 与 BatchCheckbox 等宽占位，保持文本左对齐
-                      <View style={styles.checkSpacer} />
-                    ) : (
-                      <BatchCheckbox
-                        checked={selected}
-                        onToggle={() => batch.toggle(item.vendorModelId)}
-                      />
-                    )}
-                    <View style={styles.rowText}>
-                      <Text style={{color: tokens.text, fontWeight: '500'}}>
-                        {label}
-                      </Text>
-                      {item.displayName?.trim() &&
-                      item.displayName.trim() !== item.vendorModelId ? (
-                        <Text
-                          style={{color: tokens.textSecondary, fontSize: 13}}>
-                          {item.vendorModelId}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {saving && selected && !saved ? (
-                      <ActivityIndicator size="small" />
-                    ) : saved ? (
-                      <Text style={{color: tokens.textSecondary}}>已添加</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              }}
-            />
-          </>
-        )}
-        {saveError ? (
-          <Text style={[styles.saveError, {color: tokens.danger}]}>
-            {saveError}
-          </Text>
-        ) : null}
-        <View style={styles.actionRow}>
-          <Pressable onPress={onClose} disabled={saving} style={styles.doneBtn}>
-            <Text style={{color: tokens.textSecondary}}>完成</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => saveSelected().catch(() => undefined)}
-            disabled={batch.selectedCount === 0 || saving}
-            style={({pressed}) => [
-              styles.confirmBtn,
-              {backgroundColor: tokens.primary},
-              (batch.selectedCount === 0 || saving) && {opacity: 0.45},
-              pressed && {opacity: 0.85},
-            ]}>
-            <Text style={styles.confirmText}>
-              {saving ? '添加中…' : confirmLabel}
-            </Text>
+      <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
+      <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
+        从服务商获取可用模型，勾选后批量添加
+      </Text>
+      {loading ? (
+        <ActivityIndicator style={styles.loader} />
+      ) : error ? (
+        <View style={styles.center}>
+          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+          <Pressable onPress={() => load().catch(() => undefined)}>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
           </Pressable>
         </View>
+      ) : (
+        <>
+          <View style={styles.searchWrap}>
+            <FormTextInput
+              tokens={tokens}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="过滤模型…"
+            />
+          </View>
+          {allSelectableCount > 0 ? (
+            <View style={styles.selectBar}>
+              {selectableRows.length > 0 ? (
+                <Pressable
+                  onPress={toggleSelectAll}
+                  disabled={saving}
+                  hitSlop={8}
+                >
+                  <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                    {allSelected ? '全不选' : '全选'}
+                  </Text>
+                </Pressable>
+              ) : null}
+              <Text style={{color: tokens.textSecondary, fontSize: 13}}>
+                已选 {batch.selectedCount} 项
+              </Text>
+            </View>
+          ) : null}
+          {/* key 技巧：过滤词变化时重建 FlatList，滚动位置归零 */}
+          <FlatList
+            data={filteredRows}
+            key={query}
+            keyExtractor={item => item.vendorModelId}
+            style={styles.list}
+            ListEmptyComponent={
+              rows.length === 0 ? (
+                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                  未拉取到可用模型，请检查 API Key 与 Base URL。
+                </Text>
+              ) : (
+                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                  无匹配模型
+                </Text>
+              )
+            }
+            renderItem={({item}) => {
+              const saved = addedSet.has(item.vendorModelId);
+              const selected = batch.isSelected(item.vendorModelId);
+              const label = item.displayName?.trim() || item.vendorModelId;
+              return (
+                <Pressable
+                  style={[
+                    styles.row,
+                    {borderBottomColor: tokens.border},
+                    selected && {backgroundColor: tokens.bgSecondary},
+                    saved && {opacity: 0.55},
+                  ]}
+                  disabled={saved || saving}
+                  onPress={() => batch.toggle(item.vendorModelId)}
+                >
+                  {saved ? (
+                    // 与 BatchCheckbox 等宽占位，保持文本左对齐
+                    <View style={styles.checkSpacer} />
+                  ) : (
+                    <BatchCheckbox
+                      checked={selected}
+                      onToggle={() => batch.toggle(item.vendorModelId)}
+                    />
+                  )}
+                  <View style={styles.rowText}>
+                    <Text style={{color: tokens.text, fontWeight: '500'}}>
+                      {label}
+                    </Text>
+                    {item.displayName?.trim() &&
+                    item.displayName.trim() !== item.vendorModelId ? (
+                      <Text style={{color: tokens.textSecondary, fontSize: 13}}>
+                        {item.vendorModelId}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {saving && selected && !saved ? (
+                    <ActivityIndicator size="small" />
+                  ) : saved ? (
+                    <Text style={{color: tokens.textSecondary}}>已添加</Text>
+                  ) : null}
+                </Pressable>
+              );
+            }}
+          />
+        </>
+      )}
+      {saveError ? (
+        <Text style={[styles.saveError, {color: tokens.danger}]}>
+          {saveError}
+        </Text>
+      ) : null}
+      <View style={styles.actionRow}>
+        <Pressable onPress={onClose} disabled={saving} style={styles.doneBtn}>
+          <Text style={{color: tokens.textSecondary}}>完成</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => saveSelected().catch(() => undefined)}
+          disabled={batch.selectedCount === 0 || saving}
+          style={({pressed}) => [
+            styles.confirmBtn,
+            {backgroundColor: tokens.primary},
+            (batch.selectedCount === 0 || saving) && {opacity: 0.45},
+            pressed && {opacity: 0.85},
+          ]}
+        >
+          <Text style={styles.confirmText}>
+            {saving ? '添加中…' : confirmLabel}
+          </Text>
+        </Pressable>
+      </View>
     </>
   );
 
@@ -306,7 +308,8 @@ export function FetchModelsSheet({
       variant="bottom"
       animationType="slide"
       keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.75}}
-      panelStyle={styles.sheet}>
+      panelStyle={styles.sheet}
+    >
       {body}
     </ModalShell>
   );

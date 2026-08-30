@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import { type ProviderListItem } from "@novel-master/core/provider";
+import {type ProviderListItem} from '@novel-master/core/provider';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
@@ -69,8 +69,7 @@ export function ProvidersScreen() {
     fallbackValue: EMPTY_ROWS,
   });
 
-  const metaLine = (row: ProviderRow) =>
-    `${row.savedCount} 个已保存模型`;
+  const metaLine = (row: ProviderRow) => `${row.savedCount} 个已保存模型`;
 
   // 删除单个服务商：级联清掉「当前服务商/模型」的指向，避免悬空引用。
   const deleteProviderOne = useCallback(
@@ -121,9 +120,7 @@ export function ProvidersScreen() {
           onPress: () => {
             (async () => {
               await deleteProviders([providerId]);
-            })().catch(err =>
-              showToast(toastMessage('删除失败', err)),
-            );
+            })().catch(err => showToast(toastMessage('删除失败', err)));
           },
         },
       ],
@@ -167,7 +164,8 @@ export function ProvidersScreen() {
           }
           ListEmptyComponent={
             <Text
-              style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>
+              style={[listScreenStyles.empty, {color: tokens.textSecondary}]}
+            >
               暂无服务商，点击右上角「添加」创建。
             </Text>
           }

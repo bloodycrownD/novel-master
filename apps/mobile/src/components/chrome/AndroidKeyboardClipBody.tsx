@@ -14,7 +14,11 @@ import {StyleSheet, View} from 'react-native';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 
-export function AndroidKeyboardClipBody({children}: {children: React.ReactNode}) {
+export function AndroidKeyboardClipBody({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
   // hook 返回的 height 是负数（键盘高 300 时值为 -300），取反得到正的键盘高度。
   const clipStyle = useAnimatedStyle(() => {

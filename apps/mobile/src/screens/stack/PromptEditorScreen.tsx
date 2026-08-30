@@ -107,7 +107,7 @@ export function PromptEditorScreen() {
         disabled: previewMode || !isDirty,
         onPress: handleSave,
       }}
-      title={isDirty ? '未保存' : (title ?? '提示词')}
+      title={isDirty ? '未保存' : title ?? '提示词'}
       titleDanger={isDirty}
       toggle={{
         testID: 'prompt-editor-toggle',

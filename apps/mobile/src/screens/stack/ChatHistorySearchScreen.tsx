@@ -132,7 +132,10 @@ export function ChatHistorySearchScreen() {
     if (results.length === 0) {
       return undefined;
     }
-    return results.reduce((acc, m) => Math.min(acc, m.seq), Number.POSITIVE_INFINITY);
+    return results.reduce(
+      (acc, m) => Math.min(acc, m.seq),
+      Number.POSITIVE_INFINITY,
+    );
   }, [results]);
 
   const runQuery = useCallback(
@@ -175,8 +178,7 @@ export function ChatHistorySearchScreen() {
         }
         setHasSearched(true);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : String(err);
+        const message = err instanceof Error ? err.message : String(err);
         setError(message);
         setHasSearched(true);
       } finally {
@@ -222,7 +224,8 @@ export function ChatHistorySearchScreen() {
     <View style={styles.emptyWrap}>
       <Text
         style={[styles.empty, {color: tokens.textSecondary}]}
-        testID="chat-history-search-empty">
+        testID="chat-history-search-empty"
+      >
         未找到匹配的聊天记录
       </Text>
     </View>
@@ -232,11 +235,7 @@ export function ChatHistorySearchScreen() {
   const body = (
     <>
       {/* 顶部：筛选表单折叠卡片（默认展开；成功命中后自动收起，收起态显示摘要）。 */}
-      <View
-        style={[
-          styles.header,
-          {borderBottomColor: tokens.borderLight},
-        ]}>
+      <View style={[styles.header, {borderBottomColor: tokens.borderLight}]}>
         <CollapsibleCard
           expanded={formExpanded}
           onToggle={setFormExpanded}
@@ -251,7 +250,8 @@ export function ChatHistorySearchScreen() {
             formExpanded ? undefined : (
               <Text
                 style={[styles.formCardSummary, {color: tokens.textSecondary}]}
-                numberOfLines={1}>
+                numberOfLines={1}
+              >
                 {filterSummary}
               </Text>
             )
@@ -263,75 +263,83 @@ export function ChatHistorySearchScreen() {
               backgroundColor: tokens.surfaceElevated,
               borderColor: tokens.borderLight,
             },
-          ]}>
+          ]}
+        >
           <View style={styles.formCardBody}>
-              <View style={styles.sectionLabelRow}>
-                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
-                  关键词
-                </Text>
-              </View>
-              <View style={styles.searchRow}>
-                <FormTextInput
-                  testID="chat-history-search-keyword"
-                  tokens={tokens}
-                  value={keyword}
-                  onChangeText={setKeyword}
-                  placeholder="关键词"
-                  accessibilityLabel="搜索关键词输入框"
-                  style={styles.keywordInput}
-                />
-                <Pressable
-                  testID="chat-history-search-submit"
-                  onPress={onSubmitSearch}
-                  disabled={loading}
-                  style={[
-                    styles.submitBtn,
-                    {
-                      backgroundColor: tokens.primary,
-                      opacity: loading ? 0.6 : 1,
-                    },
-                  ]}
-                  accessibilityLabel="查询聊天记录">
-                  {loading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.submitText}>搜索</Text>
-                  )}
-                </Pressable>
-              </View>
+            <View style={styles.sectionLabelRow}>
+              <Text
+                style={[styles.sectionLabel, {color: tokens.textSecondary}]}
+              >
+                关键词
+              </Text>
+            </View>
+            <View style={styles.searchRow}>
+              <FormTextInput
+                testID="chat-history-search-keyword"
+                tokens={tokens}
+                value={keyword}
+                onChangeText={setKeyword}
+                placeholder="关键词"
+                accessibilityLabel="搜索关键词输入框"
+                style={styles.keywordInput}
+              />
+              <Pressable
+                testID="chat-history-search-submit"
+                onPress={onSubmitSearch}
+                disabled={loading}
+                style={[
+                  styles.submitBtn,
+                  {
+                    backgroundColor: tokens.primary,
+                    opacity: loading ? 0.6 : 1,
+                  },
+                ]}
+                accessibilityLabel="查询聊天记录"
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitText}>搜索</Text>
+                )}
+              </Pressable>
+            </View>
 
-              {/* 编号区间节：两个数字输入并排，均可留空表示该侧不设限。 */}
-              <View style={styles.sectionLabelRow}>
-                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
-                  编号区间
-                </Text>
-                <Text style={[styles.sectionHint, {color: tokens.textTertiary}]}>
-                  留空不限
-                </Text>
-              </View>
-              <View style={styles.seqRow}>
-                <FormTextInput
-                  testID="chat-history-search-from-seq"
-                  tokens={tokens}
-                  value={fromSeqText}
-                  onChangeText={(t) => setFromSeqText(t.replace(/[^0-9]/g, ''))}
-                  placeholder="从 #"
-                  keyboardType="numeric"
-                  accessibilityLabel="起始编号输入框"
-                  style={styles.seqInput}
-                />
-                <Text style={[styles.seqDash, {color: tokens.textTertiary}]}>–</Text>
-                <FormTextInput
-                  testID="chat-history-search-to-seq"
-                  tokens={tokens}
-                  value={toSeqText}
-                  onChangeText={(t) => setToSeqText(t.replace(/[^0-9]/g, ''))}
-                  placeholder="到 #"
-                  keyboardType="numeric"
-                  accessibilityLabel="截止编号输入框"
-                  style={styles.seqInput}
-                />
-              </View>
+            {/* 编号区间节：两个数字输入并排，均可留空表示该侧不设限。 */}
+            <View style={styles.sectionLabelRow}>
+              <Text
+                style={[styles.sectionLabel, {color: tokens.textSecondary}]}
+              >
+                编号区间
+              </Text>
+              <Text style={[styles.sectionHint, {color: tokens.textTertiary}]}>
+                留空不限
+              </Text>
+            </View>
+            <View style={styles.seqRow}>
+              <FormTextInput
+                testID="chat-history-search-from-seq"
+                tokens={tokens}
+                value={fromSeqText}
+                onChangeText={t => setFromSeqText(t.replace(/[^0-9]/g, ''))}
+                placeholder="从 #"
+                keyboardType="numeric"
+                accessibilityLabel="起始编号输入框"
+                style={styles.seqInput}
+              />
+              <Text style={[styles.seqDash, {color: tokens.textTertiary}]}>
+                –
+              </Text>
+              <FormTextInput
+                testID="chat-history-search-to-seq"
+                tokens={tokens}
+                value={toSeqText}
+                onChangeText={t => setToSeqText(t.replace(/[^0-9]/g, ''))}
+                placeholder="到 #"
+                keyboardType="numeric"
+                accessibilityLabel="截止编号输入框"
+                style={styles.seqInput}
+              />
+            </View>
           </View>
         </CollapsibleCard>
         {/* 错误恒显在折叠卡片外：首次查询成功后表单自动收起，若翻页 append
@@ -339,7 +347,8 @@ export function ChatHistorySearchScreen() {
         {error != null ? (
           <Text
             style={[styles.error, {color: tokens.danger}]}
-            numberOfLines={2}>
+            numberOfLines={2}
+          >
             {error}
           </Text>
         ) : null}
@@ -370,7 +379,8 @@ export function ChatHistorySearchScreen() {
   return Platform.OS === 'ios' ? (
     <KeyboardAvoidingView
       style={[styles.root, {backgroundColor: tokens.background}]}
-      behavior="padding">
+      behavior="padding"
+    >
       {body}
     </KeyboardAvoidingView>
   ) : (
@@ -420,7 +430,8 @@ function MessageResultCard({
         <>
           <Text
             style={[styles.resultBody, {color: tokens.text}]}
-            numberOfLines={4}>
+            numberOfLines={4}
+          >
             {summary}
           </Text>
           {canExpand ? (
@@ -437,7 +448,8 @@ function MessageResultCard({
           borderColor: tokens.borderLight,
           opacity: message.hidden ? 0.55 : 1,
         },
-      ]}>
+      ]}
+    >
       <Text style={[styles.resultBody, {color: tokens.text}]}>
         {fullText || '（无文本内容）'}
       </Text>
@@ -517,7 +529,12 @@ const styles = StyleSheet.create({
   hiddenTag: {fontSize: 11, fontWeight: '500'},
   seq: {fontSize: 11, marginLeft: 'auto'},
   resultBody: {fontSize: 14, lineHeight: 20},
-  emptyWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
+  emptyWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   empty: {fontSize: 14, textAlign: 'center'},
   expandHint: {fontSize: 13, fontWeight: '600', paddingTop: 4},
   hint: {fontSize: 12, textAlign: 'center', paddingVertical: 8},

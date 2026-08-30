@@ -38,7 +38,8 @@ export function AgentEditorInvalidCard({
         style={[
           styles.invalidCard,
           {borderColor: tokens.border, backgroundColor: tokens.surface},
-        ]}>
+        ]}
+      >
         <Text style={[styles.invalidTitle, {color: tokens.text}]}>{title}</Text>
         <Text style={[styles.invalidReason, {color: tokens.textSecondary}]}>
           {reason}
@@ -55,7 +56,8 @@ export function AgentEditorInvalidCard({
                 color: tokens.primary,
                 fontSize: 14,
                 fontWeight: '600',
-              }}>
+              }}
+            >
               {STORED_CONFIG_LABELS.agentBack}
             </Text>
           </Pressable>
@@ -66,7 +68,8 @@ export function AgentEditorInvalidCard({
                   color: tokens.primary,
                   fontSize: 14,
                   fontWeight: '600',
-                }}>
+                }}
+              >
                 {STORED_CONFIG_LABELS.agentOverwriteDefault}
               </Text>
             </Pressable>
@@ -77,7 +80,8 @@ export function AgentEditorInvalidCard({
                 color: tokens.danger,
                 fontSize: 14,
                 fontWeight: '600',
-              }}>
+              }}
+            >
               {STORED_CONFIG_LABELS.agentDelete}
             </Text>
           </Pressable>

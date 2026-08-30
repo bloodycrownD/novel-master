@@ -48,7 +48,8 @@ export function AgentEditorToolsSection({
       {toolsMode !== 'default' ? (
         <FormField
           label={toolsMode === 'allow' ? '白名单工具' : '黑名单工具'}
-          tokens={tokens}>
+          tokens={tokens}
+        >
           <ToolPolicyPicker
             tokens={tokens}
             selected={toolsSelected}

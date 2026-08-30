@@ -16,7 +16,9 @@ function AppContent() {
 
   return (
     <>
-      <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} />
+      <StatusBar
+        barStyle={mode === 'dark' ? 'light-content' : 'dark-content'}
+      />
       <ToastHost>
         <RootNavigator />
         <UpdateCheckHost />

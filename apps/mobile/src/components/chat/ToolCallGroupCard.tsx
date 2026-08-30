@@ -55,7 +55,8 @@ export function ToolCallGroupCard({
         {opacity: dimmed ? 0.55 : 1},
       ]}
       contentStyle={styles.items}
-      showDividerBelow={showDividerBelow}>
+      showDividerBelow={showDividerBelow}
+    >
       {tools.map(tool => (
         <ToolCallCard
           key={tool.toolUseId}

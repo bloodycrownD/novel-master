@@ -32,7 +32,10 @@ export async function importCharacterCard(
         copyError ?? '无法读取所选角色卡文件',
       ),
     buildMissingError: fsPath =>
-      new CharacterCardError('NOT_CHARACTER_CARD', `角色卡文件不存在：${fsPath}`),
+      new CharacterCardError(
+        'NOT_CHARACTER_CARD',
+        `角色卡文件不存在：${fsPath}`,
+      ),
   });
   if (bytes == null) {
     return;

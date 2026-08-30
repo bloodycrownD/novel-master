@@ -1,14 +1,14 @@
 /**
  * code-editor 桥与文档门面（runtime；无 JSX）。
  */
-import { BRIDGE_V, type SetDocumentPayload } from './model';
-import type { HostTheme } from './model';
-import { blurEditor, mountEditor, setDocument } from './editor';
-import { post } from './post';
-import { applyTheme } from './theme';
-import { matchHostMessage } from '@web/shared/host-message-channel';
+import {BRIDGE_V, type SetDocumentPayload} from './model';
+import type {HostTheme} from './model';
+import {blurEditor, mountEditor, setDocument} from './editor';
+import {post} from './post';
+import {applyTheme} from './theme';
+import {matchHostMessage} from '@web/shared/host-message-channel';
 
-export { post };
+export {post};
 
 export function handleHostMessage(raw: unknown): void {
   // 解析 + v/type 校验统一在 shared（web/C-orch-3、web/A-2）：

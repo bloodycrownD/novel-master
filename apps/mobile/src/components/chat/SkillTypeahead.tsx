@@ -54,20 +54,22 @@ export function SkillTypeahead({
           key={skill.name}
           testID={`skill-typeahead-${skill.name}`}
           style={[typeaheadItemStyle, styles.item]}
-          onPress={() => onSelect(skill.name)}>
+          onPress={() => onSelect(skill.name)}
+        >
           <Text style={{color: tokens.text, flexShrink: 1}} numberOfLines={1}>
             $ {skill.name}
           </Text>
           <Text
             style={[styles.tag, {color: tokens.textSecondary}]}
-            numberOfLines={1}>
+            numberOfLines={1}
+          >
             {skill.disabled
               ? '已关闭'
               : skill.domain === 'global'
-                ? '全局'
-                : skill.overridden
-                  ? '项目 · 覆盖全局'
-                  : '项目'}
+              ? '全局'
+              : skill.overridden
+              ? '项目 · 覆盖全局'
+              : '项目'}
           </Text>
         </Pressable>
       ))}

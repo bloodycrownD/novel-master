@@ -45,9 +45,9 @@ describe('token-usage/format', () => {
 
   describe('isCustomRangeValid', () => {
     it('同一天有效（含首尾 1 天）', () => {
-      expect(isCustomRangeValid(new Date(2026, 0, 1), new Date(2026, 0, 1))).toBe(
-        true,
-      );
+      expect(
+        isCustomRangeValid(new Date(2026, 0, 1), new Date(2026, 0, 1)),
+      ).toBe(true);
     });
 
     it('恰好 366 天有效（含首尾）', () => {
@@ -63,9 +63,9 @@ describe('token-usage/format', () => {
     });
 
     it('to 早于 from 无效（天数为负）', () => {
-      expect(isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1))).toBe(
-        false,
-      );
+      expect(
+        isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
+      ).toBe(false);
     });
 
     it('跨年区间按天数判定', () => {

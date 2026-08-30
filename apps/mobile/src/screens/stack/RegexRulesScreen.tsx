@@ -2,11 +2,21 @@
  * Rules list for one regex group with batch delete.
  */
 import React, {useCallback, useState} from 'react';
-import {ActivityIndicator, FlatList, RefreshControl, Text, View} from 'react-native';
-import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
+import {
+  ActivityIndicator,
+  FlatList,
+  RefreshControl,
+  Text,
+  View,
+} from 'react-native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import { type RegexGroup, type RegexRule } from "@novel-master/core/regex";
+import {type RegexGroup, type RegexRule} from '@novel-master/core/regex';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
@@ -128,11 +138,15 @@ export function RegexRulesScreen() {
           keyExtractor={item => item.ruleId}
           contentContainerStyle={listScreenStyles.listContent}
           refreshControl={
-            <RefreshControl refreshing={loading} onRefresh={() => void reload()} />
+            <RefreshControl
+              refreshing={loading}
+              onRefresh={() => void reload()}
+            />
           }
           ListEmptyComponent={
             <Text
-              style={[listScreenStyles.empty, {color: tokens.textSecondary}]}>
+              style={[listScreenStyles.empty, {color: tokens.textSecondary}]}
+            >
               暂无规则，点击「添加」创建。
             </Text>
           }

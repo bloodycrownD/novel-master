@@ -123,7 +123,7 @@ function layoutAnchoredMenuInternal(
     Math.min(top, screenHeight - menuHeight - ANCHORED_MENU_SCREEN_MARGIN),
   );
 
-  return { left, top, width: menuWidth, maxHeight: menuHeight, scrollable };
+  return {left, top, width: menuWidth, maxHeight: menuHeight, scrollable};
 }
 
 export interface AnchoredMenuLayout {
@@ -137,7 +137,7 @@ export interface AnchoredMenuLayout {
 
 /** Content-aware width so short labels do not stretch to full screen. */
 export function computeAnchoredMenuWidth(
-  items: readonly { label: string }[],
+  items: readonly {label: string}[],
   screenWidth: number,
 ): number {
   const longest = items.reduce(

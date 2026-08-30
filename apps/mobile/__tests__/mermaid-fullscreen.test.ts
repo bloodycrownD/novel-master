@@ -31,7 +31,7 @@ describe('mermaid 全屏查看器共享模块源码契约 (T-MF1)', () => {
     expect(runtime).toContain("closest('.mermaid-block__chart')");
     // 克隆不移动：原图 DOM 零改动
     expect(runtime).toContain('cloneNode(true)');
-    expect(runtime).toContain('querySelector(\'svg\')');
+    expect(runtime).toContain("querySelector('svg')");
     // 对称消息模式：开/关都通知 RN
     expect(runtime).toContain("'mermaidViewerOpened'");
     expect(runtime).toContain("'mermaidViewerClosed'");
@@ -65,9 +65,7 @@ describe('mermaid 全屏查看器共享模块源码契约 (T-MF1)', () => {
 describe('mermaid 全屏查看器两管线接线 (T-MF3)', () => {
   it('两 index.html 含 portal 宿主；两 main.ts 含注册与委托；两 bridge 含 closeMermaidViewer 分支', () => {
     // rich-document：#overlay-portal 与 #doc 平级；chat：#mermaid-viewer-portal 与 #menu-portal 平级
-    expect(webSrc('rich-document/index.html')).toContain(
-      'id="overlay-portal"',
-    );
+    expect(webSrc('rich-document/index.html')).toContain('id="overlay-portal"');
     expect(webSrc('chat-transcript/index.html')).toContain(
       'id="mermaid-viewer-portal"',
     );
@@ -284,15 +282,21 @@ describe('mermaid 全屏查看器烘焙纯函数 (T-MS1)', () => {
 
 describe('mermaid 全屏查看器落定烘焙契约 (T-MS2)', () => {
   it('onTouchEnd 抬指落定烘焙；双击已调度过渡烘焙时让位', () => {
-    const overlay = webSrc('shared/mermaid-fullscreen/MermaidViewerOverlay.tsx');
+    const overlay = webSrc(
+      'shared/mermaid-fullscreen/MermaidViewerOverlay.tsx',
+    );
     // pinch 抬指即烘（D8）；pendingBakeFinish 让位避免立即烘焙取消过渡动画
-    expect(overlay).toMatch(/if \(!pendingBakeFinish\.current\) \{\s*bake\(\);\s*\}/);
+    expect(overlay).toMatch(
+      /if \(!pendingBakeFinish\.current\) \{\s*bake\(\);\s*\}/,
+    );
     // pinch 起点先解除烘焙：档位计算回到「相对 fit 的绝对倍率」坐标系
     expect(overlay).toMatch(/unbake\(\);[\s\S]*pinch\.current = \{/);
   });
 
   it('烘焙前置 maxWidth/maxHeight=none 再写 px 尺寸，flexShrink 补零', () => {
-    const overlay = webSrc('shared/mermaid-fullscreen/MermaidViewerOverlay.tsx');
+    const overlay = webSrc(
+      'shared/mermaid-fullscreen/MermaidViewerOverlay.tsx',
+    );
     // bake 函数体内顺序锁定：先解除 viewport svg 的百分比钳制，再落 px
     const bakeStart = overlay.indexOf('const bake = () => {');
     const unbakeStart = overlay.indexOf('const unbake = () => {');
@@ -321,7 +325,9 @@ describe('mermaid 全屏查看器落定烘焙契约 (T-MS2)', () => {
   });
 
   it('双击过渡后烘焙时序：transitionend 监听 + 兜底定时器双保险', () => {
-    const overlay = webSrc('shared/mermaid-fullscreen/MermaidViewerOverlay.tsx');
+    const overlay = webSrc(
+      'shared/mermaid-fullscreen/MermaidViewerOverlay.tsx',
+    );
     // 过渡结束后才烘焙（D9）：双击 toggle 只调度 scheduleBakeAfterTransition，
     // 烘焙收敛在 finish 回调内（先摘监听与定时器，再 bake）
     const finishIdx = overlay.indexOf('const finish = () => {');
@@ -339,7 +345,9 @@ describe('mermaid 全屏查看器落定烘焙契约 (T-MS2)', () => {
   });
 
   it('手势中仍直写 transform（不 setState、不经重渲）', () => {
-    const overlay = webSrc('shared/mermaid-fullscreen/MermaidViewerOverlay.tsx');
+    const overlay = webSrc(
+      'shared/mermaid-fullscreen/MermaidViewerOverlay.tsx',
+    );
     // 手势中唯一写 transform 的出口（直写 style，不经重渲）
     expect(overlay).toContain('viewport.style.transform =');
     // onTouchMove 体内：调 applyTransform 直写，无状态调用
@@ -377,10 +385,12 @@ describe('mermaid 全屏查看器手势纯函数 (T-MF2)', () => {
 
   it('pan clamp：按视觉内容尺寸算可达范围，内容不超舞台时锁中心', () => {
     // 布局 400x800（fit 档 = 舞台）、scale=1 → 不可平移
-    expect(clampMermaidViewerPan({x: 120, y: -80}, 400, 800, 400, 800)).toEqual({
-      x: 0,
-      y: 0,
-    });
+    expect(clampMermaidViewerPan({x: 120, y: -80}, 400, 800, 400, 800)).toEqual(
+      {
+        x: 0,
+        y: 0,
+      },
+    );
     // 布局 400x800、scale=3 → contentRendered=1200x2400 → x ∈ [-400, 400]，y ∈ [-800, 800]
     expect(
       clampMermaidViewerPan({x: 500, y: 900}, 1200, 2400, 400, 800),

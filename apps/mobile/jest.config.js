@@ -34,7 +34,8 @@ module.exports = {
       '<rootDir>/test-utils/react-native-reanimated-mock.tsx',
     '^react-native-keyboard-controller$':
       '<rootDir>/test-utils/react-native-keyboard-controller-mock.tsx',
-    '^react-native-webview$': '<rootDir>/test-utils/react-native-webview-mock.tsx',
+    '^react-native-webview$':
+      '<rootDir>/test-utils/react-native-webview-mock.tsx',
     // 原生包在 Jest 环境顶层即抛错（blob-util 的 NativeEventEmitter / op-sqlite 的
     // turbo module），挂全局 stub 保证未被局部 mock 的套件也能加载；
     // 测试文件内的 jest.mock 仍会覆盖这里的映射。
@@ -82,7 +83,7 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/compaction.js',
     ),
-  '^@/(.*)$': '<rootDir>/src/$1',
+    '^@/(.*)$': '<rootDir>/src/$1',
     '^@novel-master/core/workplace$': path.join(
       repoRoot,
       'packages/core/dist/public/workplace.js',

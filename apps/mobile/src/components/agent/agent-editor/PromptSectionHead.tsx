@@ -29,9 +29,7 @@ export function PromptSectionHead({
       <View style={styles.sectionHeadActions}>
         {onAdd != null ? (
           <Pressable onPress={onAdd}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>
-              添加
-            </Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
           </Pressable>
         ) : null}
         {switchValue !== undefined && onSwitchChange != null ? (

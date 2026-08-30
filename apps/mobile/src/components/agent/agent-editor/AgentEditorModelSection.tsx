@@ -27,7 +27,8 @@ export function AgentEditorModelSection({
       <FormField
         label="专属模型"
         tokens={tokens}
-        hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。">
+        hint="默认(跟随) 表示使用会话操作抽屉 / 我的里设置的当前模型。"
+      >
         <FormSelectField
           tokens={tokens}
           value={value}

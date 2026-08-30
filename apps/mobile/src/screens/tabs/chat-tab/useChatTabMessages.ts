@@ -1,9 +1,9 @@
 /**
  * Chat tab message list state: tail load, cache, and older-message paging.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { DeviceEventEmitter } from 'react-native';
-import { type ChatMessage } from '@novel-master/core/chat';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {DeviceEventEmitter} from 'react-native';
+import {type ChatMessage} from '@novel-master/core/chat';
 
 import {
   deriveComposerSendState,
@@ -18,9 +18,9 @@ import {
   loadSessionMessagesPageForDisplay,
   loadSessionMessagesTailForDisplay,
 } from '@/services/regex-apply-channel';
-import { prependOlderMessages } from '@/services/message-paging';
-import type { MobileNovelMasterRuntime } from '@/runtime/types';
-import type { ChatSubview } from './useChatTabScope';
+import {prependOlderMessages} from '@/services/message-paging';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import type {ChatSubview} from './useChatTabScope';
 
 const CHAT_PAGE_SIZE = 40;
 
@@ -182,7 +182,7 @@ export function useChatTabMessages({
   const handleMessagesChanged = useCallback(
     async (
       refreshChatTokenLabel: () => Promise<void>,
-      options?: { agentRunning?: boolean; immediate?: boolean },
+      options?: {agentRunning?: boolean; immediate?: boolean},
     ): Promise<ChatMessage[]> => {
       const agentRunning = options?.agentRunning ?? false;
       const immediate = options?.immediate ?? false;
@@ -227,15 +227,18 @@ export function useChatTabMessages({
     if (sessionId == null) {
       return;
     }
-    const sub = DeviceEventEmitter.addListener('session-transcript-changed', (e?: { sessionId?: string }) => {
-      if (e?.sessionId === sessionId) {
-        reloadMessages(true)
-          .then(() => {
-            onAfterExternalReload?.();
-          })
-          .catch(() => undefined);
-      }
-    });
+    const sub = DeviceEventEmitter.addListener(
+      'session-transcript-changed',
+      (e?: {sessionId?: string}) => {
+        if (e?.sessionId === sessionId) {
+          reloadMessages(true)
+            .then(() => {
+              onAfterExternalReload?.();
+            })
+            .catch(() => undefined);
+        }
+      },
+    );
     return () => sub.remove();
   }, [sessionId, reloadMessages, onAfterExternalReload]);
 

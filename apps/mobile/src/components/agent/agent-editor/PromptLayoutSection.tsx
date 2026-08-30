@@ -25,7 +25,10 @@ import {DynamicBlocksCard} from './DynamicBlocksCard';
 import {PromptSectionHead} from './PromptSectionHead';
 import {styles} from './agent-editor-form.styles';
 import {type AgentEditorTokens} from './agent-editor-types';
-import {type AgentEditorFormState, type AgentEditorFormPatch} from './useAgentEditorFormState';
+import {
+  type AgentEditorFormState,
+  type AgentEditorFormPatch,
+} from './useAgentEditorFormState';
 
 // 自定义附加信息输入框文案（core 未导出，UI 层自管）。
 const CUSTOM_ATTACH_TEXT_LABEL = '附加信息内容';
@@ -35,10 +38,14 @@ type Props = {
   form: AgentEditorFormState;
   patch: (partial: AgentEditorFormPatch) => void;
   setPersist: (
-    apply: (prev: AgentEditorFormState['persist']) => AgentEditorFormState['persist'],
+    apply: (
+      prev: AgentEditorFormState['persist'],
+    ) => AgentEditorFormState['persist'],
   ) => void;
   setDynamic: (
-    apply: (prev: AgentEditorFormState['dynamic']) => AgentEditorFormState['dynamic'],
+    apply: (
+      prev: AgentEditorFormState['dynamic'],
+    ) => AgentEditorFormState['dynamic'],
   ) => void;
   onMovePersist: (index: number, dir: -1 | 1) => void;
   onDeletePersist: (index: number) => void;
@@ -141,10 +148,8 @@ export function PromptLayoutSection({
             <ExpandablePromptInput
               label="索引前缀语"
               openEditor={() =>
-                openPromptEditor(
-                  '索引前缀语',
-                  form.skillsPrefixText,
-                  value => patch({skillsPrefixText: value}),
+                openPromptEditor('索引前缀语', form.skillsPrefixText, value =>
+                  patch({skillsPrefixText: value}),
                 )
               }
               renderInline={ctx => (

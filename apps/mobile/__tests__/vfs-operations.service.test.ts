@@ -47,7 +47,8 @@ class FakeVfs {
   }
 
   async list(dir: string, options?: {recursive?: boolean}) {
-    const normalized = dir !== '/' && dir.endsWith('/') ? dir.slice(0, -1) : dir;
+    const normalized =
+      dir !== '/' && dir.endsWith('/') ? dir.slice(0, -1) : dir;
     const prefix = normalized === '/' ? '/' : `${normalized}/`;
     const out: FakeEntry[] = [];
     if (this.dirs.has(normalized)) {
@@ -86,7 +87,8 @@ class FakeVfs {
     if (this.failDelete.has(path)) {
       throw notFound(path);
     }
-    const normalized = path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
+    const normalized =
+      path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
     this.files.delete(normalized);
     this.dirs.delete(normalized);
     for (const key of [...this.files.keys()]) {
@@ -119,8 +121,8 @@ class FakeVfs {
       path === oldDir
         ? newDir
         : path.startsWith(`${oldDir}/`)
-          ? `${newDir}${path.slice(oldDir.length)}`
-          : path;
+        ? `${newDir}${path.slice(oldDir.length)}`
+        : path;
     for (const dir of [...this.dirs]) {
       this.dirs.delete(dir);
       this.dirs.add(remap(dir));
@@ -166,8 +168,9 @@ function seededVfs(): FakeVfs {
 describe('vfs-operations move/rename 冲突', () => {
   it('renameVfsFile 目标文件已存在 → ALREADY_EXISTS 且双端内容不变', async () => {
     const vfs = seededVfs();
-    await expect(renameVfsFile(vfs as unknown as VfsService, '/a.md', '/b.md'))
-      .rejects.toMatchObject({name: 'VfsError', code: 'ALREADY_EXISTS'});
+    await expect(
+      renameVfsFile(vfs as unknown as VfsService, '/a.md', '/b.md'),
+    ).rejects.toMatchObject({name: 'VfsError', code: 'ALREADY_EXISTS'});
     expect(vfs.files.get('/a.md')).toBe('content-a');
     expect(vfs.files.get('/b.md')).toBe('content-b');
   });
@@ -226,7 +229,11 @@ describe('vfs-operations 批量删除部分失败', () => {
     vfs.files.set('/y.md', 'y');
     vfs.failDelete.add('/y.md');
     const {runtime, deleteRulesCalls} = makeRuntime();
-    const scope = {kind: 'session', projectId: 'p1', sessionId: 's1'} as VfsScope;
+    const scope = {
+      kind: 'session',
+      projectId: 'p1',
+      sessionId: 's1',
+    } as VfsScope;
 
     const batch = ['/x.md', '/y.md', '/a.md'];
     let failure: unknown;
@@ -234,9 +241,15 @@ describe('vfs-operations 批量删除部分失败', () => {
       for (const path of batch) {
         // 模拟文件管理器批量删除循环（fail-fast，错误中断批次）
         // eslint-disable-next-line no-await-in-loop
-        await deleteScopedVfsEntry(runtime, scope, vfs as unknown as VfsService, path, {
-          useUserVfsTurn: false,
-        });
+        await deleteScopedVfsEntry(
+          runtime,
+          scope,
+          vfs as unknown as VfsService,
+          path,
+          {
+            useUserVfsTurn: false,
+          },
+        );
       }
     } catch (error) {
       failure = error;
@@ -252,36 +265,66 @@ describe('vfs-operations 批量删除部分失败', () => {
     const vfs = seededVfs();
     vfs.failDelete.add('/a.md');
     const {runtime, deleteRulesCalls} = makeRuntime();
-    const scope = {kind: 'session', projectId: 'p1', sessionId: 's1'} as VfsScope;
+    const scope = {
+      kind: 'session',
+      projectId: 'p1',
+      sessionId: 's1',
+    } as VfsScope;
 
     await expect(
-      deleteScopedVfsEntry(runtime, scope, vfs as unknown as VfsService, '/a.md', {
-        useUserVfsTurn: false,
-      }),
+      deleteScopedVfsEntry(
+        runtime,
+        scope,
+        vfs as unknown as VfsService,
+        '/a.md',
+        {
+          useUserVfsTurn: false,
+        },
+      ),
     ).rejects.toMatchObject({code: 'NOT_FOUND'});
     expect(deleteRulesCalls).toEqual([]);
 
-    await deleteScopedVfsEntry(runtime, scope, vfs as unknown as VfsService, '/b.md', {
-      useUserVfsTurn: false,
-    });
+    await deleteScopedVfsEntry(
+      runtime,
+      scope,
+      vfs as unknown as VfsService,
+      '/b.md',
+      {
+        useUserVfsTurn: false,
+      },
+    );
     expect(deleteRulesCalls).toEqual([{scope, path: '/b.md'}]);
   });
 
   it('useUserVfsTurn 时经 executeOp 发 rm 操作，成功后仍清 worktree', async () => {
     const vfs = seededVfs();
     const {runtime, executedOps, deleteRulesCalls} = makeRuntime();
-    const scope = {kind: 'session', projectId: 'p1', sessionId: 's1'} as VfsScope;
-
-    await deleteScopedVfsEntry(runtime, scope, vfs as unknown as VfsService, '/old', {
-      useUserVfsTurn: true,
+    const scope = {
+      kind: 'session',
+      projectId: 'p1',
       sessionId: 's1',
-      recursive: false,
-    });
+    } as VfsScope;
+
+    await deleteScopedVfsEntry(
+      runtime,
+      scope,
+      vfs as unknown as VfsService,
+      '/old',
+      {
+        useUserVfsTurn: true,
+        sessionId: 's1',
+        recursive: false,
+      },
+    );
 
     expect(executedOps).toHaveLength(1);
     expect(executedOps[0]!.sessionId).toBe('s1');
     expect(executedOps[0]!.op.tools).toEqual([
-      {id: expect.any(String), name: 'fs', input: {action: 'rm', path: '/old', recursive: false}},
+      {
+        id: expect.any(String),
+        name: 'fs',
+        input: {action: 'rm', path: '/old', recursive: false},
+      },
     ]);
     expect(deleteRulesCalls).toEqual([{scope, path: '/old'}]);
   });
@@ -321,10 +364,22 @@ describe('vfs-operations 会话 scope 编排（mock userVfsTurn 端口）', () =
     const vfs = seededVfs();
     const {runtime, executedOps} = makeRuntime();
 
-    await sessionSaveVfsFile(runtime, 's1', vfs as unknown as VfsService, '/a.md', 'content-a');
+    await sessionSaveVfsFile(
+      runtime,
+      's1',
+      vfs as unknown as VfsService,
+      '/a.md',
+      'content-a',
+    );
     expect(executedOps).toHaveLength(0);
 
-    await sessionSaveVfsFile(runtime, 's1', vfs as unknown as VfsService, '/a.md', 'content-a2');
+    await sessionSaveVfsFile(
+      runtime,
+      's1',
+      vfs as unknown as VfsService,
+      '/a.md',
+      'content-a2',
+    );
     expect(executedOps).toHaveLength(1);
     expect(executedOps[0]!.op.tools.length).toBeGreaterThan(0);
   });

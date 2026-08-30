@@ -82,12 +82,14 @@ export function EditorScreenShell<T extends string>({
           accessibilityLabel={save.accessibilityLabel}
           style={styles.toolbarBtn}
           onPress={save.onPress}
-          disabled={save.disabled}>
+          disabled={save.disabled}
+        >
           <Text
             style={[
               styles.toolbarText,
               {color: save.disabled ? tokens.textSecondary : tokens.primary},
-            ]}>
+            ]}
+          >
             {save.label}
           </Text>
         </Pressable>
@@ -97,19 +99,26 @@ export function EditorScreenShell<T extends string>({
             style={styles.toolbarTitle}
             onPress={titlePress.onPress}
             accessibilityRole="button"
-            accessibilityLabel="收起键盘">
+            accessibilityLabel="收起键盘"
+          >
             <Text
               style={[styles.toolbarTitleText, {color: titleColor}]}
               numberOfLines={1}
-              ellipsizeMode="tail">
+              ellipsizeMode="tail"
+            >
               {title}
             </Text>
           </Pressable>
         ) : (
           <Text
-            style={[styles.toolbarTitle, styles.toolbarTitleText, {color: titleColor}]}
+            style={[
+              styles.toolbarTitle,
+              styles.toolbarTitleText,
+              {color: titleColor},
+            ]}
             numberOfLines={1}
-            ellipsizeMode="tail">
+            ellipsizeMode="tail"
+          >
             {title}
           </Text>
         )}
@@ -118,12 +127,18 @@ export function EditorScreenShell<T extends string>({
             testID={toggle.testID}
             accessibilityLabel={toggle.accessibilityLabel}
             style={styles.toolbarBtn}
-            onPress={toggle.onPress}>
+            onPress={toggle.onPress}
+          >
             <Text
               style={[
                 styles.toolbarText,
-                {color: toggle.previewMode ? tokens.primary : tokens.textSecondary},
-              ]}>
+                {
+                  color: toggle.previewMode
+                    ? tokens.primary
+                    : tokens.textSecondary,
+                },
+              ]}
+            >
               {toggle.previewMode ? '编辑' : '预览'}
             </Text>
           </Pressable>
@@ -165,10 +180,7 @@ export function EditorScreenShell<T extends string>({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={rootStyle}
-      behavior="padding"
-      automaticOffset>
+    <KeyboardAvoidingView style={rootStyle} behavior="padding" automaticOffset>
       {body}
     </KeyboardAvoidingView>
   );

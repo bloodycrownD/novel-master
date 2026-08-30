@@ -2,7 +2,14 @@
  * Full-screen file editor: read VFS, save via scoped vfs.write (no checkpoint).
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View} from 'react-native';
+import {
+  ActivityIndicator,
+  Keyboard,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import type {VfsService} from '@novel-master/core/vfs';
@@ -12,7 +19,7 @@ import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
+import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
 import {
   FileMarkdownPreview,
   isMarkdownPreviewPath,
@@ -247,18 +254,21 @@ export function FileEditorScreen() {
   }
 
   const statsRow =
-    mtimeMs != null ?
+    mtimeMs != null ? (
       editorFocused && !previewMode ? (
         <Pressable
           testID="file-editor-dismiss-stats"
           style={[styles.statsRow, {borderBottomColor: tokens.border}]}
           onPress={dismissEditor}
           accessibilityRole="button"
-          accessibilityLabel="收起键盘">
+          accessibilityLabel="收起键盘"
+        >
           <Text
             style={[styles.statsText, {color: tokens.textSecondary}]}
-            numberOfLines={1}>
-            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+            numberOfLines={1}
+          >
+            更新于 {formatFileMtime(mtimeMs)} ·{' '}
+            {formatCharCount(content.length)} 字
             {isDirty ? ' · 编辑中未保存' : ''}
           </Text>
         </Pressable>
@@ -266,13 +276,15 @@ export function FileEditorScreen() {
         <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
           <Text
             style={[styles.statsText, {color: tokens.textSecondary}]}
-            numberOfLines={1}>
-            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+            numberOfLines={1}
+          >
+            更新于 {formatFileMtime(mtimeMs)} ·{' '}
+            {formatCharCount(content.length)} 字
             {isDirty ? ' · 编辑中未保存' : ''}
           </Text>
         </View>
       )
-    : null;
+    ) : null;
 
   // 预览无软键盘；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
   return (
@@ -292,9 +304,7 @@ export function FileEditorScreen() {
           ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor}
           : undefined
       }
-      toggle={
-        isReadOnly ? undefined : {previewMode, onPress: togglePreview}
-      }
+      toggle={isReadOnly ? undefined : {previewMode, onPress: togglePreview}}
       toolbarExtra={statsRow}
       segmented={{
         options: [

@@ -24,7 +24,8 @@ markdown.renderer.rules.fence = (tokens, idx) => {
   // data-lang 仅归一化表内语言输出——表外内置别名（mjs/cjs 等）高亮但不出语言标签（MF-1 双端一致）。
   const highlighted = resolveHighlight(token.content, rawLang);
   // mermaid 不插复制按钮：与 desktop MermaidBlock（图表渲染、无按钮）口径对齐（MF-11）
-  const copyBtn = rawLang === 'mermaid' ? '' : '<span class="code-copy"></span>';
+  const copyBtn =
+    rawLang === 'mermaid' ? '' : '<span class="code-copy"></span>';
   // rawLang 来自 fence info 首词，未经归一化表约束：拼接前必须转义，
   // 避免未来表 key 引入特殊字符时打开属性注入面（MF-2）
   const langClass = markdown.utils.escapeHtml(rawLang);
@@ -34,7 +35,9 @@ markdown.renderer.rules.fence = (tokens, idx) => {
   }
   // 等价 markdown-it 默认 fence 输出（escapeHtml 同源）+ 复制按钮
   const cls = rawLang ? ` class="language-${langClass}"` : '';
-  return `<pre>${copyBtn}<code${cls}>${markdown.utils.escapeHtml(token.content)}</code></pre>\n`;
+  return `<pre>${copyBtn}<code${cls}>${markdown.utils.escapeHtml(
+    token.content,
+  )}</code></pre>\n`;
 };
 
 /**

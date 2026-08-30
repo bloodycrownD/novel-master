@@ -83,7 +83,9 @@ describe('oq14 decode-entities 双端对齐', () => {
   it('同输入同输出：入口/出口包装函数', () => {
     for (const sample of SAMPLES) {
       expect(rnDecodeForMarkdown(sample)).toBe(webDecodeForMarkdown(sample));
-      expect(rnDecodeAfterSanitize(sample)).toBe(webDecodeAfterSanitize(sample));
+      expect(rnDecodeAfterSanitize(sample)).toBe(
+        webDecodeAfterSanitize(sample),
+      );
     }
   });
 

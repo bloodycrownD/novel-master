@@ -17,7 +17,7 @@ export type ChatComposerDraft = {
 
 const bySession = new Map<string, ChatComposerDraft>();
 
-const EMPTY: ChatComposerDraft = { text: '', attachments: [] };
+const EMPTY: ChatComposerDraft = {text: '', attachments: []};
 
 type DraftListener = (sessionId: string) => void;
 const listeners = new Set<DraftListener>();
@@ -54,10 +54,7 @@ export function readChatComposerDraftState(
 
 type ComposerDraftPersistence = {
   getComposerDraftJson(id: string): Promise<string | null>;
-  setComposerDraftJson(
-    id: string,
-    draftJson: string | null,
-  ): Promise<boolean>;
+  setComposerDraftJson(id: string, draftJson: string | null): Promise<boolean>;
 };
 
 /** 仅持久 attach+text（状态条不进列）。 */
@@ -91,11 +88,13 @@ export function writeChatComposerDraft(
   if (!text && attachments.length === 0) {
     bySession.delete(sessionId);
     if (sessions != null) {
-      void sessions.setComposerDraftJson(sessionId, null).catch(warnPersistFailure);
+      void sessions
+        .setComposerDraftJson(sessionId, null)
+        .catch(warnPersistFailure);
     }
     return;
   }
-  const next: ChatComposerDraft = { text, attachments: [...attachments] };
+  const next: ChatComposerDraft = {text, attachments: [...attachments]};
   bySession.set(sessionId, next);
   if (sessions != null) {
     void persistAttachTextDraft(sessions, sessionId, next).catch(
@@ -116,7 +115,9 @@ export function writeChatComposerDraftState(
   if (!draft.text && draft.attachments.length === 0) {
     bySession.delete(sessionId);
     if (sessions != null) {
-      void sessions.setComposerDraftJson(sessionId, null).catch(warnPersistFailure);
+      void sessions
+        .setComposerDraftJson(sessionId, null)
+        .catch(warnPersistFailure);
     }
     return;
   }
@@ -142,7 +143,9 @@ export function clearChatComposerDraft(
   }
   bySession.delete(sessionId);
   if (sessions != null) {
-    void sessions.setComposerDraftJson(sessionId, null).catch(warnPersistFailure);
+    void sessions
+      .setComposerDraftJson(sessionId, null)
+      .catch(warnPersistFailure);
   }
 }
 
@@ -184,7 +187,7 @@ export function applyComposerStatusAttachmentsReplace(payload: {
   readonly sessionId: string;
   readonly attachments: readonly MessageAttachment[];
 }): void {
-  const { sessionId, attachments: statusProjected } = payload;
+  const {sessionId, attachments: statusProjected} = payload;
   if (sessionId === '') {
     return;
   }
@@ -196,7 +199,7 @@ export function applyComposerStatusAttachmentsReplace(payload: {
     notifyDraftListeners(sessionId);
     return;
   }
-  bySession.set(sessionId, { text: prev.text, attachments: merged });
+  bySession.set(sessionId, {text: prev.text, attachments: merged});
   notifyDraftListeners(sessionId);
 }
 

@@ -51,7 +51,10 @@ export function formatHitRate(rate: number | null): string {
 }
 
 /** 平均 token 速率展示：`x.x tok/s`；无数据时返回调用方传入的空态文案。 */
-export function formatTokensPerSecond(v: number | null, emptyText: string): string {
+export function formatTokensPerSecond(
+  v: number | null,
+  emptyText: string,
+): string {
   if (v == null) {
     return emptyText;
   }
@@ -59,7 +62,10 @@ export function formatTokensPerSecond(v: number | null, emptyText: string): stri
 }
 
 /** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时返回调用方传入的空态文案。 */
-export function formatFirstTokenMs(ms: number | null, emptyText: string): string {
+export function formatFirstTokenMs(
+  ms: number | null,
+  emptyText: string,
+): string {
   if (ms == null) {
     return emptyText;
   }

@@ -1,8 +1,8 @@
 /**
  * Chat tab message actions: compact, fork, rollback, set-floor, edit, copy.
  */
-import { useCallback } from 'react';
-import { Alert } from 'react-native';
+import {useCallback} from 'react';
+import {Alert} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   type ChatMessage,
@@ -11,9 +11,9 @@ import {
   resolveRollbackConfirmMessage,
 } from '@novel-master/core/chat';
 
-import { runCompaction } from '@novel-master/core/compaction';
-import { formatError } from '@/errors/format-error';
-import { toastMessage } from '@/errors/toast-message';
+import {runCompaction} from '@novel-master/core/compaction';
+import {formatError} from '@/errors/format-error';
+import {toastMessage} from '@/errors/toast-message';
 import {
   applyTextEditToMessage,
   editableTextFromMessage,
@@ -36,11 +36,11 @@ import {
   refreshComposerStatusAfterFloorOrCompaction,
   refreshComposerStatusAfterSessionKkvCleared,
 } from '@/services/project-composer-status.service';
-import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
-import { rollbackToMessage } from '@/services/message-rollback.service';
-import type { MobileNovelMasterRuntime } from '@/runtime/types';
-import type { ChatSubview, ConversationPanel } from './useChatTabScope';
-import type { UseChatTabMessagesResult } from './useChatTabMessages';
+import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
+import {rollbackToMessage} from '@/services/message-rollback.service';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import type {ChatSubview, ConversationPanel} from './useChatTabScope';
+import type {UseChatTabMessagesResult} from './useChatTabMessages';
 
 export type UseChatTabMessageActionsParams = {
   runtime: MobileNovelMasterRuntime;
@@ -57,7 +57,7 @@ export type UseChatTabMessageActionsParams = {
   setChatSubview: (subview: ChatSubview) => void;
   setConversationPanel: (panel: ConversationPanel) => void;
   setMessageEditPrompt: (
-    prompt: { messageId: string; initialText: string } | undefined,
+    prompt: {messageId: string; initialText: string} | undefined,
   ) => void;
 };
 
@@ -77,7 +77,7 @@ export function useChatTabMessageActions({
   setConversationPanel,
   setMessageEditPrompt,
 }: UseChatTabMessageActionsParams) {
-  const { chatMessages, reloadMessages, setDraftRestoreToken } = messages;
+  const {chatMessages, reloadMessages, setDraftRestoreToken} = messages;
 
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
@@ -88,7 +88,7 @@ export function useChatTabMessageActions({
       return;
     }
     Alert.alert('压缩上下文', '将压缩上下文。是否继续？', [
-      { text: '取消', style: 'cancel' },
+      {text: '取消', style: 'cancel'},
       {
         text: '压缩',
         onPress: () => {
@@ -102,7 +102,7 @@ export function useChatTabMessageActions({
                   messages: runtime.messages,
                   messageTranscriptEffects: runtime.messageTranscriptEffects,
                 },
-                { sessionId, projectId, hideStartDepth },
+                {sessionId, projectId, hideStartDepth},
               );
               await reloadMessages(true);
               void refreshChatTokenLabel();
@@ -189,7 +189,7 @@ export function useChatTabMessageActions({
       const restoreText = editableTextFromMessage(target);
       // 删消息前 snapshot：undo_send 成功后仅解析批注（rewind / undo_send 均清空 ops store）
       const attachmentsSnapshot =
-        mode === 'undo_send' ? (target.attachments ?? []) : null;
+        mode === 'undo_send' ? target.attachments ?? [] : null;
 
       const applyComposerRestore = async () => {
         // Bug3：批注消息（restoreText 为 null）也要走反投影——拿掉 restoreText == null，
@@ -210,9 +210,8 @@ export function useChatTabMessageActions({
         }
         // 顺序：正文 → parseAnnotate → project + ∪ annotate（不映回 user_ops）
         if (attachmentsSnapshot != null) {
-          const restoredAnnotate = parseAnnotateDraftsFromAttachments(
-            attachmentsSnapshot,
-          );
+          const restoredAnnotate =
+            parseAnnotateDraftsFromAttachments(attachmentsSnapshot);
           for (const draft of restoredAnnotate) {
             addChatAnnotateDraft(sessionId, draft);
           }
@@ -235,7 +234,7 @@ export function useChatTabMessageActions({
         try {
           await rollbackToMessage(
             runtime,
-            { projectId, sessionId },
+            {projectId, sessionId},
             targetMessageId,
             options,
           );
@@ -272,7 +271,7 @@ export function useChatTabMessageActions({
                 missingPaths,
               }),
               [
-                { text: '取消', style: 'cancel' },
+                {text: '取消', style: 'cancel'},
                 {
                   text: '继续回滚',
                   style: 'destructive',
@@ -295,9 +294,12 @@ export function useChatTabMessageActions({
             const errorMessage = formatError(error);
             Alert.alert(
               '无法恢复工作区',
-              `${errorMessage}\n\n${resolveRollbackConfirmMessage(mode, 'degraded')}`,
+              `${errorMessage}\n\n${resolveRollbackConfirmMessage(
+                mode,
+                'degraded',
+              )}`,
               [
-                { text: '取消', style: 'cancel' },
+                {text: '取消', style: 'cancel'},
                 {
                   text: '仅删除后续对话',
                   style: 'destructive',
@@ -321,7 +323,7 @@ export function useChatTabMessageActions({
         '回滚到此消息',
         resolveRollbackConfirmMessage(mode, 'primary'),
         [
-          { text: '取消', style: 'cancel' },
+          {text: '取消', style: 'cancel'},
           {
             text: '回滚',
             style: 'destructive',
@@ -384,7 +386,7 @@ export function useChatTabMessageActions({
         '置位到此消息？',
         '此消息之前将不参与提示词，此消息及之后将恢复可见。',
         [
-          { text: '取消', style: 'cancel' },
+          {text: '取消', style: 'cancel'},
           {
             text: '置位',
             onPress: () => {

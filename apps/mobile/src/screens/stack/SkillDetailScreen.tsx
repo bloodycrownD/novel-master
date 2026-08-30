@@ -7,12 +7,7 @@
  * - 文件结构变化（新建/删除辅助文件）后刷新清单。
  */
 import React, {useCallback, useRef, useState} from 'react';
-import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import {
   useFocusEffect,
   useNavigation,
@@ -112,7 +107,13 @@ export function SkillDetailScreen() {
 
   if (loading && item == null) {
     return (
-      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
+      <View
+        style={[
+          styles.root,
+          styles.center,
+          {backgroundColor: tokens.background},
+        ]}
+      >
         <ActivityIndicator color={tokens.primary} />
       </View>
     );
@@ -120,7 +121,13 @@ export function SkillDetailScreen() {
 
   if (item == null) {
     return (
-      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
+      <View
+        style={[
+          styles.root,
+          styles.center,
+          {backgroundColor: tokens.background},
+        ]}
+      >
         <Text style={{color: tokens.textSecondary}}>技能不存在或已被删除</Text>
       </View>
     );

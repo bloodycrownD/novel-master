@@ -109,14 +109,13 @@ export function ManageHeader({
                 <Pressable
                   key={action.label}
                   onPress={action.onPress}
-                  disabled={disabled}>
+                  disabled={disabled}
+                >
                   <Text
                     style={[
                       styles.actionLabel,
                       {
-                        color: disabled
-                          ? tokens.textTertiary
-                          : enabledColor,
+                        color: disabled ? tokens.textTertiary : enabledColor,
                       },
                     ]}
                   >

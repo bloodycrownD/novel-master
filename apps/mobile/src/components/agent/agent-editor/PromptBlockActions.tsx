@@ -31,7 +31,8 @@ export function PromptBlockActions({
             styles.actionBtn,
             {borderColor: tokens.border, backgroundColor: tokens.surface},
           ]}
-          onPress={() => onMove(index, -1)}>
+          onPress={() => onMove(index, -1)}
+        >
           <Text style={{color: tokens.textSecondary}}>↑</Text>
         </Pressable>
       ) : null}
@@ -41,7 +42,8 @@ export function PromptBlockActions({
             styles.actionBtn,
             {borderColor: tokens.border, backgroundColor: tokens.surface},
           ]}
-          onPress={() => onMove(index, 1)}>
+          onPress={() => onMove(index, 1)}
+        >
           <Text style={{color: tokens.textSecondary}}>↓</Text>
         </Pressable>
       ) : null}
@@ -50,7 +52,8 @@ export function PromptBlockActions({
           styles.actionBtn,
           {borderColor: tokens.border, backgroundColor: tokens.surface},
         ]}
-        onPress={() => onDelete(index)}>
+        onPress={() => onDelete(index)}
+      >
         <Text style={{color: tokens.danger}}>×</Text>
       </Pressable>
     </View>

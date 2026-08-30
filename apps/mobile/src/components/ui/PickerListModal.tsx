@@ -38,7 +38,11 @@ type Props<T> = {
   load: () => Promise<PickerListLoadResult<T>>;
   keyExtractor: (item: T) => string;
   /** 选中判定，默认 keyExtractor(item) === selectedId。 */
-  isSelected?: (item: T, index: number, selectedId: string | undefined) => boolean;
+  isSelected?: (
+    item: T,
+    index: number,
+    selectedId: string | undefined,
+  ) => boolean;
   /** 行内容（不含行容器与按压反馈）。 */
   renderRow: (item: T, selected: boolean) => ReactNode;
   onPick: (item: T) => void;
@@ -102,7 +106,8 @@ export function PickerListModal<T>({
       onClose={onClose}
       variant="bottom"
       animationType="slide"
-      panelStyle={styles.sheet}>
+      panelStyle={styles.sheet}
+    >
       <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
       {subtitle != null ? (
         <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
@@ -137,11 +142,12 @@ export function PickerListModal<T>({
                   styles.row,
                   {borderBottomColor: tokens.border},
                   selected && {backgroundColor: tokens.background},
-                  {opacity: pressed ? 0.85 : (rowProps?.opacity ?? 1)},
+                  {opacity: pressed ? 0.85 : rowProps?.opacity ?? 1},
                 ]}
                 onPress={() => onPick(item)}
                 testID={rowProps?.testID}
-                accessibilityLabel={rowProps?.accessibilityLabel}>
+                accessibilityLabel={rowProps?.accessibilityLabel}
+              >
                 {renderRow(item, selected)}
               </Pressable>
             );

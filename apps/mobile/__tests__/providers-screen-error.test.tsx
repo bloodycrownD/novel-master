@@ -122,9 +122,7 @@ async function renderScreen() {
   return {renderer: renderer!};
 }
 
-const PROVIDERS = [
-  {id: 'p1', displayName: 'OpenAI', apiKeyStatus: 'ok'},
-];
+const PROVIDERS = [{id: 'p1', displayName: 'OpenAI', apiKeyStatus: 'ok'}];
 
 describe('ProvidersScreen 列表加载错误态', () => {
   beforeEach(() => {

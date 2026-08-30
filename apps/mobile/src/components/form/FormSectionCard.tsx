@@ -22,12 +22,7 @@ export function FormSectionCard({
   children,
 }: Props) {
   return (
-    <View
-      style={[
-        card,
-        cardSurface(tokens),
-      ]}
-    >
+    <View style={[card, cardSurface(tokens)]}>
       {title != null || rightAction != null ? (
         <View style={styles.header}>
           {title != null ? (

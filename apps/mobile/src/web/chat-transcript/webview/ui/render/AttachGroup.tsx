@@ -1,12 +1,12 @@
 /**
  * 消息附件组：对齐工具组折叠交互。
  */
-import type { AttachmentChip } from '../../runtime/state/state';
+import type {AttachmentChip} from '../../runtime/state/state';
 import {
   attachmentChipLabel,
   attachmentSourceLabel,
 } from '../../runtime/render/row-logic';
-import { CollapsibleSection } from './CollapsibleSection';
+import {CollapsibleSection} from './CollapsibleSection';
 
 export type AttachGroupProps = {
   attachments: AttachmentChip[];
@@ -35,15 +35,10 @@ export function AttachGroup({
       {attachments.map((a, i) => {
         const src = attachmentSourceLabel(a);
         return (
-          <div
-            key={i}
-            className="tool-group-item tool-card attach-card"
-          >
+          <div key={i} className="tool-group-item tool-card attach-card">
             <div className="tool-header">
               <span className="tool-name">{attachmentChipLabel(a)}</span>
-              {src ? (
-                <span className="tool-status success">{src}</span>
-              ) : null}
+              {src ? <span className="tool-status success">{src}</span> : null}
             </div>
           </div>
         );

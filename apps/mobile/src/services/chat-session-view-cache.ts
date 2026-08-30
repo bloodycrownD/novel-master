@@ -1,7 +1,7 @@
 /**
  * In-memory per-session message tail + paging flag (survives list ↔ conversation).
  */
-import { type ChatMessage } from "@novel-master/core/chat";
+import {type ChatMessage} from '@novel-master/core/chat';
 import {createScopeKeyCache} from './scope-key-cache';
 
 export type SessionViewCache = {
@@ -18,9 +18,7 @@ export function sessionViewCacheKey(
   return cache.key(projectId, sessionId);
 }
 
-export function getSessionViewCache(
-  key: string,
-): SessionViewCache | undefined {
+export function getSessionViewCache(key: string): SessionViewCache | undefined {
   return cache.get(key);
 }
 

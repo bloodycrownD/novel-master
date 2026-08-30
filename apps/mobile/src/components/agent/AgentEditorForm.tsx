@@ -8,7 +8,7 @@
 import React, {useCallback, useEffect} from 'react';
 import {Alert, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 
 import {
   buildAgentDefinitionFromForm,
@@ -19,7 +19,7 @@ import {
   buildDefaultAgentDefinitionPreservingName,
   storedConfigInvalidReason,
 } from '@novel-master/core/config-forms/stored-config-validity';
-import { registerBuiltinTools, ToolRegistry } from '@novel-master/core';
+import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
 
 import {FormField} from '../form/FormField';
 import {FormSectionCard} from '../form/FormSectionCard';
@@ -35,11 +35,9 @@ import {
   exportAgentYaml,
   importAgentYaml,
 } from '../../services/agent-yaml.service';
-import type { RootStackParamList } from '../../navigation/types';
+import type {RootStackParamList} from '../../navigation/types';
 
-import {
-  AgentEditorBasicSection,
-} from './agent-editor/AgentEditorBasicSection';
+import {AgentEditorBasicSection} from './agent-editor/AgentEditorBasicSection';
 import {AgentEditorInvalidCard} from './agent-editor/AgentEditorInvalidCard';
 import {AgentEditorModelSection} from './agent-editor/AgentEditorModelSection';
 import {AgentEditorToolsSection} from './agent-editor/AgentEditorToolsSection';
@@ -59,9 +57,9 @@ type Props = {
 };
 
 export function AgentEditorForm(props: Props) {
-  const { onDirtyChange, onSaved, agentId } = props;
-  const { tokens } = useTheme();
-  const { showToast } = useToast();
+  const {onDirtyChange, onSaved, agentId} = props;
+  const {tokens} = useTheme();
+  const {showToast} = useToast();
   const navigation = useNavigation<StackNav>();
   const runtime = useRuntime();
 
@@ -102,7 +100,7 @@ export function AgentEditorForm(props: Props) {
 
   const handleDeleteBrokenAgent = useCallback(() => {
     Alert.alert('删除 Agent', `删除 Agent「${displayName ?? agentId}」？`, [
-      { text: '取消', style: 'cancel' },
+      {text: '取消', style: 'cancel'},
       {
         text: '删除',
         style: 'destructive',
@@ -130,7 +128,7 @@ export function AgentEditorForm(props: Props) {
       '覆盖为默认模板',
       '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
       [
-        { text: '取消', style: 'cancel' },
+        {text: '取消', style: 'cancel'},
         {
           text: '覆盖并保存',
           onPress: () => {
@@ -160,14 +158,7 @@ export function AgentEditorForm(props: Props) {
         },
       ],
     );
-  }, [
-    agentId,
-    loadAgent,
-    onSaved,
-    runtime,
-    setRecovering,
-    showToast,
-  ]);
+  }, [agentId, loadAgent, onSaved, runtime, setRecovering, showToast]);
 
   const handleSave = async () => {
     const built = buildAgentDefinitionFromForm(form);
@@ -181,7 +172,7 @@ export function AgentEditorForm(props: Props) {
         showToast('请选择专属模型');
         return;
       }
-      def = { ...def, model: form.savedModelId };
+      def = {...def, model: form.savedModelId};
     }
     setSaving(true);
     try {
@@ -213,7 +204,7 @@ export function AgentEditorForm(props: Props) {
 
   const handleImportYaml = useCallback(() => {
     Alert.alert('导入 YAML', '将覆盖当前智能体配置，是否继续？', [
-      { text: '取消', style: 'cancel' },
+      {text: '取消', style: 'cancel'},
       {
         text: '导入',
         onPress: () => {
@@ -244,7 +235,7 @@ export function AgentEditorForm(props: Props) {
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <Text style={{ color: tokens.textSecondary }}>加载中…</Text>
+        <Text style={{color: tokens.textSecondary}}>加载中…</Text>
       </View>
     );
   }

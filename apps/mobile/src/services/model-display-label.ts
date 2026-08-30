@@ -16,4 +16,3 @@ export async function resolveModelDisplayLabel(
   const provider = await runtime.providers.get(saved.providerId);
   return formatSavedModelDisplayName(provider.displayName, saved.modelName);
 }
-

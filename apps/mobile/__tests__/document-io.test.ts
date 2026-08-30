@@ -55,7 +55,9 @@ describe('document-io', () => {
     mockWriteFile.mockReset();
     mockUnlink.mockReset().mockResolvedValue(undefined);
     mockWriteFile.mockResolvedValue(undefined);
-    mockSaveDocuments.mockResolvedValue([{uri: 'content://saved', error: null}]);
+    mockSaveDocuments.mockResolvedValue([
+      {uri: 'content://saved', error: null},
+    ]);
     mockExists.mockResolvedValue(true);
   });
 
@@ -229,9 +231,9 @@ describe('document-io', () => {
       ]);
       mockReadFile.mockResolvedValue('name: a');
 
-      await expect(
-        pickAndReadText({mimeTypes: ['text/yaml']}),
-      ).resolves.toBe('name: a');
+      await expect(pickAndReadText({mimeTypes: ['text/yaml']})).resolves.toBe(
+        'name: a',
+      );
       expect(mockReadFile).toHaveBeenCalledWith('/cache/a.yaml', 'utf8');
     });
   });

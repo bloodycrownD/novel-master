@@ -5,8 +5,15 @@
 import React from 'react';
 import {Text, View} from 'react-native';
 
-import type {PersistPromptBlock, PersistTextPromptBlock} from '@novel-master/core/prompt';
-import {PROMPT_REGION_LABELS, ROLE_OPTIONS, mapPersistTextBlocks} from '@novel-master/core/config-forms/agent';
+import type {
+  PersistPromptBlock,
+  PersistTextPromptBlock,
+} from '@novel-master/core/prompt';
+import {
+  PROMPT_REGION_LABELS,
+  ROLE_OPTIONS,
+  mapPersistTextBlocks,
+} from '@novel-master/core/config-forms/agent';
 
 import {ExpandablePromptInput} from '../ExpandablePromptInput';
 import {FormField} from '../../form/FormField';
@@ -80,7 +87,8 @@ export function PersistBlocksCard({
                     color: tokens.textSecondary,
                     borderColor: tokens.borderLight,
                   },
-                ]}>
+                ]}
+              >
                 {PROMPT_REGION_LABELS.emptyPersistHint}
               </Text>
             ) : null}
@@ -91,7 +99,8 @@ export function PersistBlocksCard({
                   <View style={styles.blockHeader}>
                     <Text
                       style={[styles.blockName, {color: tokens.text}]}
-                      numberOfLines={1}>
+                      numberOfLines={1}
+                    >
                       {block.name}
                     </Text>
                     <PromptBlockActions
@@ -136,10 +145,8 @@ export function PersistBlocksCard({
                     />
                   </FormField>
                   <Text
-                    style={[
-                      styles.fieldHint,
-                      {color: tokens.textSecondary},
-                    ]}>
+                    style={[styles.fieldHint, {color: tokens.textSecondary}]}
+                  >
                     {PROMPT_REGION_LABELS.persistRegionHint}
                   </Text>
                   {(() => {

@@ -69,7 +69,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   // 本组件在 ThemeProvider 之外渲染，直接按系统色取 token（错误屏要适配 dark）。
   const colorScheme = useColorScheme();
   const [status, setStatus] = useState<RuntimeStatus>('loading');
-  const [runtime, setRuntime] = useState<MobileNovelMasterRuntime | undefined>();
+  const [runtime, setRuntime] = useState<
+    MobileNovelMasterRuntime | undefined
+  >();
   const [appUi, setAppUi] = useState<AppUiPreferences | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [scope, setScope] = useState<MobileScopeSnapshot>({
@@ -107,15 +109,14 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       setRichRenderEpoch(epoch);
       setScope(loaded);
       setStatus('ready');
-    })()
-      .catch(err => {
-        if (!cancelled) {
-          setRuntime(undefined);
-          setAppUi(undefined);
-          setError(formatBootstrapError(err));
-          setStatus('error');
-        }
-      });
+    })().catch(err => {
+      if (!cancelled) {
+        setRuntime(undefined);
+        setAppUi(undefined);
+        setError(formatBootstrapError(err));
+        setStatus('error');
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -195,7 +196,9 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorTitle}>启动失败</Text>
-        <Text style={[styles.errorMessage, {color: errorMessageColor}]}>{error}</Text>
+        <Text style={[styles.errorMessage, {color: errorMessageColor}]}>
+          {error}
+        </Text>
         <Button title="重试" onPress={retry} />
       </View>
     );

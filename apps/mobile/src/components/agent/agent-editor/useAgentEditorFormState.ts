@@ -56,7 +56,13 @@ export type InvalidAgentConfig = {
 /** 表单全量状态：AgentEditorFormInput 的可变数组、必有字段版本（制控输入直接用）。 */
 export type AgentEditorFormState = Omit<
   AgentEditorFormInput,
-  'persist' | 'dynamic' | 'customAttachEnabled' | 'customAttachText' | 'skillsEnabled' | 'skillsPrefixText' | 'description'
+  | 'persist'
+  | 'dynamic'
+  | 'customAttachEnabled'
+  | 'customAttachText'
+  | 'skillsEnabled'
+  | 'skillsPrefixText'
+  | 'description'
 > & {
   customAttachEnabled: boolean;
   customAttachText: string;
@@ -124,7 +130,9 @@ export function useAgentEditorFormState(
   runtime: MobileRuntime,
   showToast: (message: string) => void,
 ) {
-  const [form, setForm] = useState<AgentEditorFormState>(createInitialFormState);
+  const [form, setForm] = useState<AgentEditorFormState>(
+    createInitialFormState,
+  );
   const [providers, setProviders] = useState<SavedProviderOption[]>([]);
   const [savedModels, setSavedModels] = useState<SavedModelEntry[]>([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);

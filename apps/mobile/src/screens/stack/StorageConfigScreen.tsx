@@ -102,10 +102,7 @@ export function StorageConfigScreen() {
     return result?.trim() ? result : undefined;
   };
 
-  const syncControlValue = (
-    lastAt?: string,
-    lastResult?: string,
-  ): string => {
+  const syncControlValue = (lastAt?: string, lastResult?: string): string => {
     if (agentActive) {
       return 'Agent 运行中';
     }
@@ -119,7 +116,11 @@ export function StorageConfigScreen() {
 
   const syncStatusContent = (): {
     message?: string;
-    metrics?: Array<{label: string; value: string; tone?: 'default' | 'warning' | 'success'}>;
+    metrics?: Array<{
+      label: string;
+      value: string;
+      tone?: 'default' | 'warning' | 'success';
+    }>;
   } => {
     if (statusLoading) {
       return {message: '加载中…'};
@@ -204,7 +205,8 @@ export function StorageConfigScreen() {
     <ScrollView
       style={[styles.scroll, {backgroundColor: tokens.background}]}
       contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled">
+      keyboardShouldPersistTaps="handled"
+    >
       <ListSectionTitle title="云同步" tokens={tokens} />
       <ProfileStatusCard
         title="同步状态"
@@ -212,9 +214,7 @@ export function StorageConfigScreen() {
         message={syncStatus.message}
         metrics={syncStatus.metrics}
         notice={syncStatusNotice()}
-        noticeTone={
-          agentActive || cloudSuggestPull ? 'warning' : 'muted'
-        }
+        noticeTone={agentActive || cloudSuggestPull ? 'warning' : 'muted'}
         tokens={tokens}
       />
       <ProfileMenuItem
@@ -252,9 +252,7 @@ export function StorageConfigScreen() {
           exportDatabaseBackup(runtime)
             .then(result => {
               if (result === 'saved') {
-                showToast(
-                  '数据库已导出；备份文件包含聊天记录明文，请妥善保管',
-                );
+                showToast('数据库已导出；备份文件包含聊天记录明文，请妥善保管');
               }
             })
             .catch(err => showToast(toastMessage('导出失败', err)))

@@ -98,10 +98,7 @@ export function StatsFilterBar({
         transparent
         onRequestClose={onCloseModelPicker}
       >
-        <Pressable
-          style={styles.backdrop}
-          onPress={onCloseModelPicker}
-        >
+        <Pressable style={styles.backdrop} onPress={onCloseModelPicker}>
           <Pressable
             style={[styles.pickerSheet, {backgroundColor: tokens.surface}]}
             onPress={e => e.stopPropagation()}

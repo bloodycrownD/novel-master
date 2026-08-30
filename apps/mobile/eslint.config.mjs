@@ -17,28 +17,28 @@
 // 为什么不直接复用根目录的 createTsEslintConfig：那套带 projectService + tsconfig
 // 类型感知，对 RN 项目跑起来成本太高、还要单独维护 tsconfig 路径，得不偿失；
 // RN 自带的 flat 已经把 typescript parser 配好了，咱们只在 rules 层面拉齐就够。
-import reactNativeConfig from "@react-native/eslint-config/flat";
-import { sharedTsRules } from "../../eslint.config.base.mjs";
+import reactNativeConfig from '@react-native/eslint-config/flat';
+import {sharedTsRules} from '../../eslint.config.base.mjs';
 
 // 把 ft-flow/* 规则从 RN flat 基线里摘掉，原因见上面注释第 2 点。
-const withoutFtFlowRules = reactNativeConfig.map((block) => {
+const withoutFtFlowRules = reactNativeConfig.map(block => {
   if (!block || !block.rules) return block;
   const pruned = {};
   for (const [name, value] of Object.entries(block.rules)) {
-    if (!name.startsWith("ft-flow/")) pruned[name] = value;
+    if (!name.startsWith('ft-flow/')) pruned[name] = value;
   }
-  return { ...block, rules: pruned };
+  return {...block, rules: pruned};
 });
 
 export default [
   {
     ignores: [
-      "node_modules/**",
-      "android/**",
-      "ios/**",
-      "webview-dist/**",
-      "dist/**",
-      "coverage/**",
+      'node_modules/**',
+      'android/**',
+      'ios/**',
+      'webview-dist/**',
+      'dist/**',
+      'coverage/**',
     ],
   },
 
@@ -47,7 +47,7 @@ export default [
 
   // 三端共用 TS 规则基线，覆盖默认 RN 规则里没明确表态的几条 legacy debt
   {
-    files: ["**/*.{ts,tsx}"],
+    files: ['**/*.{ts,tsx}'],
     rules: sharedTsRules,
   },
 

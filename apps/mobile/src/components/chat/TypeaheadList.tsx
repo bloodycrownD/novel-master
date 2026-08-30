@@ -24,7 +24,8 @@ export function TypeaheadList({
         {backgroundColor: tokens.surface, borderColor: tokens.border},
         style,
       ]}
-      accessibilityLabel={accessibilityLabel}>
+      accessibilityLabel={accessibilityLabel}
+    >
       {children}
     </View>
   );

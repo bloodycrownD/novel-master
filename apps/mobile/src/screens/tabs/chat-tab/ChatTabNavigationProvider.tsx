@@ -11,8 +11,8 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { useChatTabContext } from './ChatTabProvider';
-import { ChatTabNavigationCtx } from '@/navigation/ChatTabNavContext';
+import {useChatTabContext} from './ChatTabProvider';
+import {ChatTabNavigationCtx} from '@/navigation/ChatTabNavContext';
 import type {
   ChatTabNavigationActions,
   ChatTabNavigationState,
@@ -100,7 +100,7 @@ export function ChatTabNavigationProvider({
     [ctx, onExitSessionBatch, onOpenSessionDetail, workspaceBackState],
   );
 
-  const value = useMemo(() => ({ state, actions }), [state, actions]);
+  const value = useMemo(() => ({state, actions}), [state, actions]);
 
   return (
     <WorkspaceBackCtx.Provider value={setWorkspaceBackState}>

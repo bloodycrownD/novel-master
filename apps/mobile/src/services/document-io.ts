@@ -47,12 +47,13 @@ export async function exportBytesViaDocumentPicker(
   const tmpPath = `${fs.dirs.CacheDir}/${options.fileName}`;
   await options.write(tmpPath);
   try {
-    const [result] = (await saveDocuments({
-      sourceUris: [toFileUri(tmpPath)],
-      mimeType: options.mimeType,
-      fileName: options.fileName,
-      copy: options.copy ?? true,
-    })) ?? [];
+    const [result] =
+      (await saveDocuments({
+        sourceUris: [toFileUri(tmpPath)],
+        mimeType: options.mimeType,
+        fileName: options.fileName,
+        copy: options.copy ?? true,
+      })) ?? [];
     if (result?.error) {
       throw new Error(result.error);
     }

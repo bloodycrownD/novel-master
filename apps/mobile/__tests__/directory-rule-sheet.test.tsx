@@ -68,12 +68,12 @@ describe('DirectoryRuleSheet (mobile) — C-2 flexShrink 契约', () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
-      <DirectoryRuleSheet
-        visible
-        logicalPath="novel://project-x/"
-        onClose={jest.fn()}
-        onSave={jest.fn(async () => undefined)}
-      />,
+        <DirectoryRuleSheet
+          visible
+          logicalPath="novel://project-x/"
+          onClose={jest.fn()}
+          onSave={jest.fn(async () => undefined)}
+        />,
       );
     });
     const shrinkers = renderer.root.findAll(node => {

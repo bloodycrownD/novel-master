@@ -1,7 +1,11 @@
 /**
  * Single SQLite connection for mobile (VFS + SKSP share one DB).
  */
-import {bootstrapNovelMaster, open, type TdbcConnection} from '@novel-master/core';
+import {
+  bootstrapNovelMaster,
+  open,
+  type TdbcConnection,
+} from '@novel-master/core';
 import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
 import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';

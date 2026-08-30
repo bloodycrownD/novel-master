@@ -2,8 +2,8 @@
  * T-BB-06：chat-transcript 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
  * 三列矩阵见 mobile-webview-preact-htm SPEC（必须保留 / 可改为 token / 允许删除）。
  */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {
   ANCHORED_MENU_CHAR_WIDTH_EST,
   ANCHORED_MENU_GAP,
@@ -18,7 +18,7 @@ import {
   MESSAGE_ACTION_MENU_ITEM_COUNT,
   NEAR_BOTTOM_THRESHOLD_PX,
 } from '../src/web/shared/constants';
-import { readWebViewDistFile } from './helpers/read-webview-dist';
+import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
   return readWebViewDistFile('chat-transcript', 'app.js');
@@ -143,7 +143,9 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('openContextMenuFromAnchor');
     expect(script).toContain('getBoundingClientRect');
     // 锚点写入 state.menu.anchor（打包后可能拆字段，保留 width/height 赋值意图）
-    expect(script).toMatch(/anchor:\s*anchor|width:\s*rect\.width|width:\s*\w+\.width/);
+    expect(script).toMatch(
+      /anchor:\s*anchor|width:\s*rect\.width|width:\s*\w+\.width/,
+    );
   });
 
   it('T-BR-CT-03: stream waiting-first / incremental / rich+noHtml', () => {
@@ -186,7 +188,9 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toMatch(/if \(state\.flags\.richText && !html\w*\)/);
     expect(script).toContain('} else if (kind === "text")');
     // 可改为 token：DRY 后局部名 textBody；增量走 appendEscapedDelta helper（bubble 可能被 esbuild 重命名）
-    expect(script).toMatch(/const textBody = ensureStreamTextBody\(bubble\w*\)/);
+    expect(script).toMatch(
+      /const textBody = ensureStreamTextBody\(bubble\w*\)/,
+    );
     expect(script).toContain('appendEscapedDelta');
     expect(script).toContain('getStreamThinkingBody');
     // tool-invoking 单路径：壳归 Preact ToolInvokingBar；runtime 不得再拼串/createElement 插条

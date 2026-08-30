@@ -52,7 +52,7 @@ jest.mock('../src/components/chat/AttachmentDraftChips', () => {
 (global as any).__DEV__ = false;
 
 jest.mock('../src/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({ appUi: null }),
+  useNovelMaster: () => ({appUi: null}),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -67,7 +67,7 @@ const mockProjectComposerStatus = jest.fn(async () => [] as unknown[]);
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => ({
     eventBus: {
-      subscribe: () => ({ unsubscribe: () => undefined }),
+      subscribe: () => ({unsubscribe: () => undefined}),
     },
     preferences: {
       getLlmStreamEnabled: mockGetLlmStreamEnabled,
@@ -77,7 +77,7 @@ jest.mock('../src/hooks/useRuntime', () => ({
       getComposerDraftJson: (...args: unknown[]) =>
         mockGetComposerDraftJson(...args),
       setComposerDraftJson: async () => true,
-      get: async () => ({ projectId: 'p' }),
+      get: async () => ({projectId: 'p'}),
     },
     workplace: () => ({}),
   }),
@@ -99,7 +99,7 @@ const mockRunAgentTurn = jest.fn(
       signal?.addEventListener(
         'abort',
         () => reject(new DOMException('aborted', 'AbortError')),
-        { once: true },
+        {once: true},
       );
     });
   },
@@ -110,15 +110,15 @@ jest.mock('../src/services/agent-run.service', () => ({
 }));
 
 import {serializeComposerDraftJson} from '@novel-master/core/chat';
-import { ChatComposer } from '../src/components/chat/ChatComposer';
-import { useAgentRunLifecycle } from '../src/hooks/useAgentRunLifecycle';
-import { useSessionAbort } from '../src/screens/tabs/chat-tab/useSessionAbort';
+import {ChatComposer} from '../src/components/chat/ChatComposer';
+import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
+import {useSessionAbort} from '../src/screens/tabs/chat-tab/useSessionAbort';
 import {
   decrementAgentActive,
   isMobileAgentActive,
   setMobileAgentActive,
 } from '../src/runtime/agent-activity';
-import { ThemeProvider } from '../src/theme/ThemeProvider';
+import {ThemeProvider} from '../src/theme/ThemeProvider';
 import {
   clearChatComposerDraft,
   writeChatComposerDraft,
@@ -154,7 +154,7 @@ function Harness(props: {
   return (
     <ThemeProvider>
       <ChatComposer
-        scope={{ projectId: 'p', sessionId: 's' }}
+        scope={{projectId: 'p', sessionId: 's'}}
         hasModel={true}
         running={abort.uiRunning}
         beginUiRun={lifecycle.beginUiRun}

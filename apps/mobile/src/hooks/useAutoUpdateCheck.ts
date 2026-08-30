@@ -28,7 +28,9 @@ export type AutoUpdateCheckController = {
   snoozeToday: () => Promise<void>;
 };
 
-export function useAutoUpdateCheck(ui: AutoUpdateCheckUi): AutoUpdateCheckController {
+export function useAutoUpdateCheck(
+  ui: AutoUpdateCheckUi,
+): AutoUpdateCheckController {
   const {status, appUi} = useNovelMaster();
   const [resultModal, setResultModal] = useState<UpdateCheckResultKind | null>(
     null,

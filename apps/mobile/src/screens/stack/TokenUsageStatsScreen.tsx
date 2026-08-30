@@ -20,19 +20,8 @@
  * - 流水页 dirty 标记随筛选变化置位，页签激活时拉取首页；失败也清脏
  *   标记避免无限重试（MF-1）。
  */
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {
   UsageStatsBucket,
