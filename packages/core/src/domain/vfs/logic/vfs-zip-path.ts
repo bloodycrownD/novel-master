@@ -47,7 +47,7 @@ export function zipEntryNameFromLogical(logical: string): string {
  */
 export function zipEntryNameRelativeToDirectory(
   logical: string,
-  directoryPath: string,
+  directoryPath: string
 ): string {
   const dir = resolveZipDirectoryPath(directoryPath);
   const path = resolveLogicalPath(logical);
@@ -61,7 +61,7 @@ export function zipEntryNameRelativeToDirectory(
   if (!path.startsWith(prefix)) {
     throw vfsZipError(
       "INVALID_PATH",
-      `path ${path} is not under directory ${dir}`,
+      `path ${path} is not under directory ${dir}`
     );
   }
   return path.slice(prefix.length);
@@ -77,13 +77,13 @@ export function zipDirectoryEntryNameFromLogical(logical: string): string {
  */
 export function zipDirectoryEntryNameRelativeToDirectory(
   logical: string,
-  directoryPath: string,
+  directoryPath: string
 ): string {
   const relative = zipEntryNameRelativeToDirectory(logical, directoryPath);
   if (relative.length === 0) {
     throw vfsZipError(
       "INVALID_PATH",
-      "cannot export target directory itself as a ZIP directory entry",
+      "cannot export target directory itself as a ZIP directory entry"
     );
   }
   return `${relative}/`;
@@ -105,7 +105,7 @@ export function logicalFromZipEntryName(entryName: string): string {
  */
 export function logicalFromZipEntryRelativeToDirectory(
   entryName: string,
-  directoryPath: string,
+  directoryPath: string
 ): string {
   const trimmed = entryName
     .replace(/\\/g, "/")
@@ -135,7 +135,7 @@ export function logicalFromZipDirectoryEntryName(entryName: string): string {
  */
 export function logicalFromZipDirectoryEntryRelativeToDirectory(
   entryName: string,
-  directoryPath: string,
+  directoryPath: string
 ): string {
   const withoutSlash = entryName.replace(/\\/g, "/").replace(/\/+$/, "");
   if (withoutSlash.length === 0) {
@@ -150,7 +150,7 @@ export function logicalFromZipDirectoryEntryRelativeToDirectory(
  */
 export function assertZipEntriesNotDomainRootPrefixed(
   directoryPath: string,
-  entryNames: readonly string[],
+  entryNames: readonly string[]
 ): void {
   const dir = resolveZipDirectoryPath(directoryPath);
   if (dir === "/") {
@@ -168,7 +168,7 @@ export function assertZipEntriesNotDomainRootPrefixed(
   if (allMatchBase) {
     throw vfsZipError(
       "INVALID_PATH",
-      `ZIP 似以目标目录名「${base}」作根前缀，请使用相对该目录的内容，系统不会自动剥离`,
+      `ZIP 似以目标目录名「${base}」作根前缀，请使用相对该目录的内容，系统不会自动剥离`
     );
   }
 }

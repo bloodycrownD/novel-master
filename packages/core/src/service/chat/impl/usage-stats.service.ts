@@ -5,9 +5,7 @@
  */
 
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { chatInvalidArgument } from "@/errors/chat-errors.js";
@@ -60,8 +58,7 @@ const AGG_SELECT_SQL =
   `/ (SUM(duration_ms - first_token_ms) FILTER (${RATE_FILTER_SQL}) / 1000.0) AS avg_tokens_per_second`;
 
 /** usage 非空判定的公共片断（NULL usage 行不计任何求和与次数）。 */
-const USAGE_NOT_NULL_SQL =
-  `role = 'assistant' AND (prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
+const USAGE_NOT_NULL_SQL = `role = 'assistant' AND (prompt_tokens IS NOT NULL OR completion_tokens IS NOT NULL)`;
 
 /**
  * 模型筛选片断：undefined = 全部；null = 「其他」桶（未记录 + 不在
@@ -100,7 +97,7 @@ function parseDayLocalDate(dayLocalDate: string): {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayLocalDate);
   if (match == null) {
     throw chatInvalidArgument(
-      `dayLocalDate 须为 YYYY-MM-DD 格式，收到：${dayLocalDate}`,
+      `dayLocalDate 须为 YYYY-MM-DD 格式，收到：${dayLocalDate}`
     );
   }
   const year = Number(match[1]);
@@ -137,7 +134,7 @@ const ZERO_AGG_ROW: Row = {
  */
 export function daySpanBetweenLocalDays(
   fromDayStartMs: number,
-  toDayStartMs: number,
+  toDayStartMs: number
 ): number {
   return Math.round((toDayStartMs - fromDayStartMs) / 86_400_000);
 }
@@ -170,9 +167,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     };
   }
 
-  async getDailyBuckets(
-    filter: UsageStatsFilter,
-  ): Promise<UsageStatsBucket[]> {
+  async getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]> {
     const { fromMs, toMs } = this.resolveRangeMs(filter.range);
     const buckets: UsageStatsBucket[] = [];
     let cursor = startOfLocalDay(fromMs).getTime();
@@ -187,7 +182,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
         const row = await this.queryAggregateRow(
           bucketFrom,
           bucketTo,
-          filter.model,
+          filter.model
         );
         buckets.push(this.toBucket(cursor, row));
       }
@@ -198,7 +193,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
 
   async getHourlyBuckets(
     dayLocalDate: string,
-    filter: UsageStatsFilter,
+    filter: UsageStatsFilter
   ): Promise<UsageStatsBucket[]> {
     const { year, month, day } = parseDayLocalDate(dayLocalDate);
     const buckets: UsageStatsBucket[] = [];
@@ -217,7 +212,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
   }
 
   async getModelBreakdown(
-    filter: UsageStatsFilter,
+    filter: UsageStatsFilter
   ): Promise<UsageStatsModelRow[]> {
     const { fromMs, toMs } = this.resolveRangeMs(filter.range);
     const rows = await queryTemplate<Row>(
@@ -231,7 +226,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
          ${modelFilterSql(filter.model)}
        GROUP BY model_name
        ORDER BY total_tokens DESC, model_name ASC`,
-      { fromMs, toMs, modelName: filter.model ?? null },
+      { fromMs, toMs, modelName: filter.model ?? null }
     );
     const mapped = rows.map((row) => ({
       modelName: row.model_name == null ? null : String(row.model_name),
@@ -267,25 +262,25 @@ export class DefaultUsageStatsService implements UsageStatsService {
     return [...merged.values()].sort(
       (a, b) =>
         b.totalTokens - a.totalTokens ||
-        (a.modelName ?? "").localeCompare(b.modelName ?? ""),
+        (a.modelName ?? "").localeCompare(b.modelName ?? "")
     );
   }
 
   async listRequestUsage(
     filter: UsageStatsFilter,
-    page: UsageStatsRequestPageQuery,
+    page: UsageStatsRequestPageQuery
   ): Promise<UsageStatsRequestPage> {
     const limit = Math.floor(page.limit);
     if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
       throw chatInvalidArgument(
-        `流水分页 limit 须为 1–200，收到：${page.limit}`,
+        `流水分页 limit 须为 1–200，收到：${page.limit}`
       );
     }
     // NaN/Infinity 会穿透 Math.floor/Math.max 进 SQL 绑定（better-sqlite3
     // 直接抛错），与 limit 同构提前拒收。
     if (!Number.isFinite(page.offset)) {
       throw chatInvalidArgument(
-        `流水分页 offset 须为有限数值，收到：${page.offset}`,
+        `流水分页 offset 须为有限数值，收到：${page.offset}`
       );
     }
     const offset = Math.max(0, Math.floor(page.offset));
@@ -294,12 +289,18 @@ export class DefaultUsageStatsService implements UsageStatsService {
       `WHERE ${USAGE_NOT_NULL_SQL}` +
       ` AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}` +
       ` ${modelFilterSql(filter.model)}`;
-    const params = { fromMs, toMs, modelName: filter.model ?? null, offset, limit };
+    const params = {
+      fromMs,
+      toMs,
+      modelName: filter.model ?? null,
+      offset,
+      limit,
+    };
     const totalRows = await queryTemplate<{ n: number }>(
       this.conn,
       this.parser,
       `SELECT COUNT(*) AS n FROM chat_message ${whereSql}`,
-      params,
+      params
     );
     const rows = await queryTemplate<Row>(
       this.conn,
@@ -311,27 +312,29 @@ export class DefaultUsageStatsService implements UsageStatsService {
        ${whereSql}
        ORDER BY created_at_ms DESC, id ASC
        LIMIT #{limit} OFFSET #{offset}`,
-      params,
+      params
     );
     return {
-      rows: rows.map((row): UsageStatsRequestRow => ({
-        createdAtMs: Number(row.created_at_ms),
-        modelName: row.model_name == null ? null : String(row.model_name),
-        promptTokens: Number(row.prompt_tokens ?? 0),
-        completionTokens: Number(row.completion_tokens ?? 0),
-        totalTokens: Number(row.total_tokens ?? 0),
-        cacheReadTokens:
-          row.cache_read_tokens == null
-            ? null
-            : Number(row.cache_read_tokens),
-        cacheCreationTokens:
-          row.cache_creation_tokens == null
-            ? null
-            : Number(row.cache_creation_tokens),
-        firstTokenMs:
-          row.first_token_ms == null ? null : Number(row.first_token_ms),
-        durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
-      })),
+      rows: rows.map(
+        (row): UsageStatsRequestRow => ({
+          createdAtMs: Number(row.created_at_ms),
+          modelName: row.model_name == null ? null : String(row.model_name),
+          promptTokens: Number(row.prompt_tokens ?? 0),
+          completionTokens: Number(row.completion_tokens ?? 0),
+          totalTokens: Number(row.total_tokens ?? 0),
+          cacheReadTokens:
+            row.cache_read_tokens == null
+              ? null
+              : Number(row.cache_read_tokens),
+          cacheCreationTokens:
+            row.cache_creation_tokens == null
+              ? null
+              : Number(row.cache_creation_tokens),
+          firstTokenMs:
+            row.first_token_ms == null ? null : Number(row.first_token_ms),
+          durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
+        })
+      ),
       total: Number(totalRows[0]?.n ?? 0),
     };
   }
@@ -344,7 +347,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       this.parser,
       `SELECT DISTINCT vendor_model_id FROM llm_saved_model
        ORDER BY vendor_model_id ASC`,
-      {},
+      {}
     );
     return rows.map((row) => String(row.vendor_model_id));
   }
@@ -375,7 +378,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     }
     const daySpan = daySpanBetweenLocalDays(
       startOfLocalDay(fromMs).getTime(),
-      startOfLocalDay(toMs).getTime(),
+      startOfLocalDay(toMs).getTime()
     );
     if (daySpan > 366) {
       throw chatInvalidArgument("custom 区间跨度不能超过 366 天");
@@ -387,7 +390,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
   private async queryAggregateRow(
     fromMs: number,
     toMs: number,
-    model: string | null | undefined,
+    model: string | null | undefined
   ): Promise<Row> {
     const rows = await queryTemplate<Row>(
       this.conn,
@@ -398,7 +401,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
          AND created_at_ms >= #{fromMs}
          AND created_at_ms < #{toMs}
          ${modelFilterSql(model)}`,
-      { fromMs, toMs, modelName: model ?? null },
+      { fromMs, toMs, modelName: model ?? null }
     );
     return rows[0] ?? ZERO_AGG_ROW;
   }
@@ -417,7 +420,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
       {
         fromMs: today0.getTime(),
         toMs: addLocalDays(today0, 1).getTime(),
-      },
+      }
     );
     const row = rows[0] ?? ZERO_AGG_ROW;
     return { totalTokens: Number(row.total_tokens), calls: Number(row.calls) };

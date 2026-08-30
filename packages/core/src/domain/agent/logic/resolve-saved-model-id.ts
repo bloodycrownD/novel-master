@@ -25,7 +25,7 @@ export interface ResolveSavedModelIdInput {
  * @returns 无可用来源时 undefined（由宿主报错）。
  */
 export function resolveSavedModelId(
-  input: ResolveSavedModelIdInput,
+  input: ResolveSavedModelIdInput
 ): string | undefined {
   return input.agentModelId ?? input.sessionModelId ?? undefined;
 }
@@ -37,7 +37,7 @@ export interface ResolveSummarySavedModelIdInput {
 
 /** 解析压缩摘要 Agent LLM 调用的 savedModelId。 */
 export function resolveSummarySavedModelId(
-  input: ResolveSummarySavedModelIdInput,
+  input: ResolveSummarySavedModelIdInput
 ): string {
   return input.summaryModelId ?? input.workspaceModelId;
 }

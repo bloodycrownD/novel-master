@@ -17,7 +17,7 @@ export interface MessageTranscriptEffectsService {
     projectId: string,
     sessionId: string,
     fromSeq: number,
-    toSeq: number,
+    toSeq: number
   ): Promise<number>;
 
   /** showRange（不 capture worktree 块）。 */
@@ -25,7 +25,7 @@ export interface MessageTranscriptEffectsService {
     projectId: string,
     sessionId: string,
     fromSeq: number,
-    toSeq: number,
+    toSeq: number
   ): Promise<number>;
 
   /**
@@ -36,13 +36,13 @@ export interface MessageTranscriptEffectsService {
     projectId: string,
     sessionId: string,
     afterSeq: number,
-    options?: { sweepRevisions?: boolean },
+    options?: { sweepRevisions?: boolean }
   ): Promise<void>;
 
   /** hide 前缀 + show 后缀；不 truncate；不 capture worktree 块。 */
   setMessageFloorAtMessage(
     projectId: string,
     sessionId: string,
-    messageId: string,
+    messageId: string
   ): Promise<SetMessageFloorResult>;
 }

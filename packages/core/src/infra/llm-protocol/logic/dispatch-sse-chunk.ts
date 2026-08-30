@@ -44,7 +44,7 @@ export function dispatchSseChunk(
   chunk: string,
   state: SseDispatchState,
   emit: (text: string) => void,
-  onFirstChunk?: (bytes: number) => void,
+  onFirstChunk?: (bytes: number) => void
 ): void {
   if (chunk.length === 0) {
     return;

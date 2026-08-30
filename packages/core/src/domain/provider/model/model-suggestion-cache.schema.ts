@@ -28,5 +28,5 @@ export const modelSuggestionCacheSchema =
     (doc): ModelSuggestionCache => ({
       schemaVersion: 1,
       models: doc.models,
-    }),
+    })
   );

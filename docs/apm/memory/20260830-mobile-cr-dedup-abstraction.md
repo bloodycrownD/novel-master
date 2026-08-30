@@ -220,3 +220,9 @@ assistant:
 
 assistant:
 （全量完成）8 波全部执行完毕，fix-spec 30 P1 + 69 P2 = 99 条闭合，分支 cr/mobile-fix-wave1 共 19 个提交（4ba1c73..f466efa）。终验：tsc 零输出、181 套件/1049 用例全绿（基线 165/906）、format:check 全绿（CI blocking）。终轮 cr-func 抽验 15 条 14 ✅，逮到两个收口项（波次后 252 文件格式回归、G-4 缺 win32 分支）已修。手工 QA 待办：真机链接外跳+伪造桥消息、五屏键盘回归、导出导入取消分支、nightly Android 实跑。单独立项四项记在 iteration-state。经验：①并行波次后必须重跑 format:check（每波都该验，不能攒到最后）；②prettier --write . 会污染 webview-dist 构建产物，.prettierignore 必须先建；③巨屏拆分类任务（1149 行+）单独派节点，混多个大文件必爆上下文。
+
+user:
+清理下 migration 代码，可以清理距离现在 10 tag 以前的迁移代码，没有就不清理。
+
+assistant:
+有得清：packages/core/src/bootstrap/schema-migrations/ 的 runner 里 3 条早于 v1.4.27 分界（vfs-entry-id-redesign-v1、session-agent-config-v2、project-agent-config-cleanup-v1）退役，加上此前已退役留档的 6 条一并物理删除（git 历史即冷回放档案）。沿用仓库既有惯例：ID 并入 BASELINE_MIGRATION_IDS（9 条字面量）+ 三个新 legacy 探针 + 最低支持版本 v1.4.08→v1.4.27 + fail-fast 文案更新。关键坑：①3 个 blob ref_count 触发器原本靠被删的 entry-id 迁移在新库 ensure，canonical DDL 故意不含——已并入 vfs-revision-schema.ts 否则新库无触发器；②entryIdApplied/_entryIdMigrationJustApplied 安全网整块死代码删除；③H1 给 core/public/compaction 加的 DEFAULT_HIDE_START_DEPTH re-export 漏更新了 package-exports 快照（core node:test 此前从没跑过才漏网），快照补齐；④core 的 npm test 通配 !(performance) 在 sh 下语法错，须 bash -O extglob 跑。终验 core 1781/1781、mobile 1049/1049 全绿。

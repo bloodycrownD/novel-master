@@ -42,14 +42,14 @@ export const TABLE_CONSTRAINTS_V1_ID = "table-constraints-v1b";
  */
 async function isAlreadyConstrained(tx: TdbcConnection): Promise<boolean> {
   const rows = await tx.query<{ sql: string }>(
-    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vfs_revision'`,
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vfs_revision'`
   );
   if (rows.length === 0 || rows[0]?.sql == null) {
     // 查询异常/空结果的保守方向是 false（重跑）：rebuild 幂等、重复执行无害；
     // 误判 true 会让约束永远缺失（真机事故：disk I/O error 后中间态下探测异常，
     // up 早退却标记 applied，16 表 rebuild 从未执行）。
     console.warn(
-      "[table-constraints-v1] 探测 vfs_revision 形态失败（sqlite_master 无结果），按未迁移处理",
+      "[table-constraints-v1] 探测 vfs_revision 形态失败（sqlite_master 无结果），按未迁移处理"
     );
     return false;
   }
@@ -67,15 +67,15 @@ async function clean(
   tx: TdbcConnection,
   table: string,
   setSql: string,
-  whereSql: string,
+  whereSql: string
 ): Promise<number> {
   const rows = await tx.query<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM ${table} WHERE ${whereSql}`,
+    `SELECT COUNT(*) AS n FROM ${table} WHERE ${whereSql}`
   );
   const n = Number(rows[0]?.n ?? 0);
   if (n > 0) {
     console.warn(
-      `[table-constraints-v1] ${table}: 清洗 ${n} 条脏值（${whereSql} → ${setSql}）`,
+      `[table-constraints-v1] ${table}: 清洗 ${n} 条脏值（${whereSql} → ${setSql}）`
     );
     await tx.execute(`UPDATE ${table} SET ${setSql} WHERE ${whereSql}`);
   }
@@ -90,15 +90,15 @@ async function clean(
 async function discard(
   tx: TdbcConnection,
   table: string,
-  whereSql: string,
+  whereSql: string
 ): Promise<number> {
   const rows = await tx.query<{ n: number }>(
-    `SELECT COUNT(*) AS n FROM ${table} WHERE ${whereSql}`,
+    `SELECT COUNT(*) AS n FROM ${table} WHERE ${whereSql}`
   );
   const n = Number(rows[0]?.n ?? 0);
   if (n > 0) {
     console.warn(
-      `[table-constraints-v1] ${table}: 丢弃 ${n} 条无法清洗的脏行（${whereSql}）`,
+      `[table-constraints-v1] ${table}: 丢弃 ${n} 条无法清洗的脏行（${whereSql}）`
     );
     await tx.execute(`DELETE FROM ${table} WHERE ${whereSql}`);
   }
@@ -117,7 +117,7 @@ async function dedupRegexSortOrder(tx: TdbcConnection): Promise<number> {
     `SELECT group_id, sort_order
      FROM regex_rule
      GROUP BY group_id, sort_order
-     HAVING COUNT(*) > 1`,
+     HAVING COUNT(*) > 1`
   );
   if (dups.length === 0) {
     return 0;
@@ -126,28 +126,28 @@ async function dedupRegexSortOrder(tx: TdbcConnection): Promise<number> {
   for (const d of dups) {
     const maxRows = await tx.query<{ m: number }>(
       `SELECT COALESCE(MAX(sort_order), 0) AS m FROM regex_rule WHERE group_id = ?`,
-      [String(d.group_id)],
+      [String(d.group_id)]
     );
     let next = Number(maxRows[0]?.m ?? 0);
     const rows = await tx.query<{ rule_id: string }>(
       `SELECT rule_id FROM regex_rule
        WHERE group_id = ? AND sort_order = ?
        ORDER BY rule_id`,
-      [String(d.group_id), Number(d.sort_order)],
+      [String(d.group_id), Number(d.sort_order)]
     );
     // 首条保留原 sort_order，其余递增分配新值。
     for (let i = 1; i < rows.length; i++) {
       next += 1;
       await tx.execute(
         `UPDATE regex_rule SET sort_order = ? WHERE group_id = ? AND rule_id = ?`,
-        [next, String(d.group_id), String(rows[i]!.rule_id)],
+        [next, String(d.group_id), String(rows[i]!.rule_id)]
       );
       fixed++;
     }
   }
   if (fixed > 0) {
     console.warn(
-      `[table-constraints-v1] regex_rule: 去重 ${fixed} 条冲突的 (group_id, sort_order)`,
+      `[table-constraints-v1] regex_rule: 去重 ${fixed} 条冲突的 (group_id, sort_order)`
     );
   }
   return fixed;
@@ -166,13 +166,13 @@ async function rebuildTable(
   txOrig: TdbcConnection,
   table: string,
   newBodyDdl: string,
-  recreateSqls: readonly string[] = [],
+  recreateSqls: readonly string[] = []
 ): Promise<void> {
   const tx = txOrig;
   const tmp = `${table}__nm_tc_new`;
   // 读旧表列名（顺序敏感，决定 INSERT 列序）。
   const oldCols = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${table}')`,
+    `SELECT name FROM pragma_table_info('${table}')`
   );
   const oldColNames = oldCols.map((r) => String(r.name));
 
@@ -181,7 +181,7 @@ async function rebuildTable(
 
   // 读新表列名，取交集（旧表有且新表也有的列）。
   const newCols = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${tmp}')`,
+    `SELECT name FROM pragma_table_info('${tmp}')`
   );
   const newColSet = new Set(newCols.map((r) => String(r.name)));
   const common = oldColNames.filter((c) => newColSet.has(c));
@@ -201,7 +201,7 @@ async function rebuildTable(
   for (;;) {
     const batch = await tx.query<{ r: number | bigint }>(
       `SELECT rowid AS r FROM ${table} WHERE rowid > ? ORDER BY rowid LIMIT ${COPY_CHUNK}`,
-      [cursor],
+      [cursor]
     );
     if (batch.length === 0) {
       break;
@@ -210,7 +210,7 @@ async function rebuildTable(
     const hi = Number(batch[batch.length - 1]!.r);
     await tx.execute(
       `INSERT INTO ${tmp} (${colList}) SELECT ${colList} FROM ${table} WHERE rowid >= ? AND rowid <= ?`,
-      [lo, hi],
+      [lo, hi]
     );
     cursor = hi;
   }
@@ -236,12 +236,12 @@ async function renumberLowerBound(
   table: string,
   col: string,
   groupKey: string,
-  lowerBound: number,
+  lowerBound: number
 ): Promise<number> {
   const dirty = await tx.query<{ g: string | number }>(
     `SELECT ${groupKey} AS g FROM ${table}
      WHERE ${col} < ${lowerBound}
-     GROUP BY ${groupKey}`,
+     GROUP BY ${groupKey}`
   );
   if (dirty.length === 0) {
     return 0;
@@ -252,27 +252,27 @@ async function renumberLowerBound(
     const maxRows = await tx.query<{ m: number | null }>(
       `SELECT MAX(${col}) AS m FROM ${table}
        WHERE ${groupKey} = ? AND ${col} >= ${lowerBound}`,
-      [g],
+      [g]
     );
     let next = Number(maxRows[0]?.m ?? lowerBound - 1);
     const rows = await tx.query<{ rid: number }>(
       `SELECT rowid AS rid FROM ${table}
        WHERE ${groupKey} = ? AND ${col} < ${lowerBound}
        ORDER BY rowid`,
-      [g],
+      [g]
     );
     for (const r of rows) {
       next += 1;
-      await tx.execute(
-        `UPDATE ${table} SET ${col} = ? WHERE rowid = ?`,
-        [next, Number(r.rid)],
-      );
+      await tx.execute(`UPDATE ${table} SET ${col} = ? WHERE rowid = ?`, [
+        next,
+        Number(r.rid),
+      ]);
       fixed++;
     }
   }
   if (fixed > 0) {
     console.warn(
-      `[table-constraints-v1] ${table}.${col}: 挪位 ${fixed} 条下界脏行（< ${lowerBound} → 递增分配，避免 PK 冲突）`,
+      `[table-constraints-v1] ${table}.${col}: 挪位 ${fixed} 条下界脏行（< ${lowerBound} → 递增分配，避免 PK 冲突）`
     );
   }
   return fixed;
@@ -281,8 +281,16 @@ async function renumberLowerBound(
 /** Step 11：脏值预扫描 + 清洗。每个要加 CHECK/NOT NULL/UNIQUE 的列先扫后清。 */
 async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
   // —— 声明了 FK 的表先清孤儿引用行，rebuild INSERT 时 FK 才不会炸 ——
-  await discard(tx, "llm_saved_model", "provider_id NOT IN (SELECT id FROM llm_provider)");
-  await discard(tx, "regex_rule", "group_id NOT IN (SELECT group_id FROM regex_group)");
+  await discard(
+    tx,
+    "llm_saved_model",
+    "provider_id NOT IN (SELECT id FROM llm_provider)"
+  );
+  await discard(
+    tx,
+    "regex_rule",
+    "group_id NOT IN (SELECT group_id FROM regex_group)"
+  );
 
   // —— TEXT PK 列 NULL 行：NOT NULL 约束加上后无法保留，统一丢弃 ——
   await discard(tx, "chat_project", "id IS NULL");
@@ -295,55 +303,94 @@ async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
   await discard(tx, "agent_definition", "agent_id IS NULL");
   await discard(tx, "sksp_secrets", "ref IS NULL");
   await discard(tx, "vfs_content_blob", "content_hash IS NULL");
-  await discard(tx, "message_checkpoint", "session_id IS NULL OR message_id IS NULL");
+  await discard(
+    tx,
+    "message_checkpoint",
+    "session_id IS NULL OR message_id IS NULL"
+  );
   await discard(
     tx,
     "message_checkpoint_file",
-    "session_id IS NULL OR message_id IS NULL OR entry_id IS NULL",
+    "session_id IS NULL OR message_id IS NULL OR entry_id IS NULL"
   );
   await discard(
     tx,
     "workplace_dir_rule",
-    "scope_key IS NULL OR logical_path IS NULL",
+    "scope_key IS NULL OR logical_path IS NULL"
   );
   await discard(
     tx,
     "workplace_file_rule",
-    "scope_key IS NULL OR logical_path IS NULL",
+    "scope_key IS NULL OR logical_path IS NULL"
   );
 
   // —— 枚举值域 CHECK 清洗 ——
-  await clean(tx, "chat_message", "role = 'user'", "role NOT IN ('user', 'assistant', 'system', 'tool')");
+  await clean(
+    tx,
+    "chat_message",
+    "role = 'user'",
+    "role NOT IN ('user', 'assistant', 'system', 'tool')"
+  );
   await clean(tx, "chat_message", "hidden = 0", "hidden NOT IN (0, 1)");
-  await clean(tx, "vfs_entry", "entry_kind = 'file'", "entry_kind NOT IN ('file', 'directory')");
-  await clean(tx, "vfs_revision", "status = 'deleted'", "status NOT IN ('active', 'deleted')");
-  await clean(tx, "vfs_content_blob", "encoding = 'zlib'", "encoding NOT IN ('zlib', 'zlib-b64')");
+  await clean(
+    tx,
+    "vfs_entry",
+    "entry_kind = 'file'",
+    "entry_kind NOT IN ('file', 'directory')"
+  );
+  await clean(
+    tx,
+    "vfs_revision",
+    "status = 'deleted'",
+    "status NOT IN ('active', 'deleted')"
+  );
+  await clean(
+    tx,
+    "vfs_content_blob",
+    "encoding = 'zlib'",
+    "encoding NOT IN ('zlib', 'zlib-b64')"
+  );
   await clean(
     tx,
     "workplace_dir_rule",
     "sort_field = 'name'",
-    "sort_field NOT IN ('name', 'created', 'updated')",
+    "sort_field NOT IN ('name', 'created', 'updated')"
   );
-  await clean(tx, "workplace_dir_rule", "sort_order = 'asc'", "sort_order NOT IN ('asc', 'desc')");
+  await clean(
+    tx,
+    "workplace_dir_rule",
+    "sort_order = 'asc'",
+    "sort_order NOT IN ('asc', 'desc')"
+  );
   await clean(
     tx,
     "workplace_dir_rule",
     "fill_policy = 'header'",
-    "fill_policy NOT IN ('hidden', 'filename', 'header', 'full')",
+    "fill_policy NOT IN ('hidden', 'filename', 'header', 'full')"
   );
-  await clean(tx, "workplace_dir_rule", "rule_enabled = 0", "rule_enabled NOT IN (0, 1)");
+  await clean(
+    tx,
+    "workplace_dir_rule",
+    "rule_enabled = 0",
+    "rule_enabled NOT IN (0, 1)"
+  );
   await clean(
     tx,
     "workplace_file_rule",
     "inclusion_mode = 'auto'",
-    "inclusion_mode NOT IN ('auto', 'show', 'hide')",
+    "inclusion_mode NOT IN ('auto', 'show', 'hide')"
   );
 
   // —— regex_rule flags：清掉含非法字符（非 g/i/m/s/u/y）的 flags ——
   await clean(tx, "regex_rule", "flags = ''", "flags GLOB '*[^gimsuy]*'");
   await clean(tx, "regex_rule", "enabled = 0", "enabled NOT IN (0, 1)");
   await clean(tx, "regex_rule", "scope_user = 0", "scope_user NOT IN (0, 1)");
-  await clean(tx, "regex_rule", "scope_assistant = 0", "scope_assistant NOT IN (0, 1)");
+  await clean(
+    tx,
+    "regex_rule",
+    "scope_assistant = 0",
+    "scope_assistant NOT IN (0, 1)"
+  );
   await dedupRegexSortOrder(tx);
 
   // —— boolean / 枚举：provider / agent / sksp ——
@@ -353,13 +400,13 @@ async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
     tx,
     "llm_saved_model",
     "settings_json = '{}'",
-    "json_valid(settings_json) = 0",
+    "json_valid(settings_json) = 0"
   );
   await clean(
     tx,
     "agent_definition",
     "prompts_json = '{}'",
-    "json_valid(prompts_json) = 0",
+    "json_valid(prompts_json) = 0"
   );
 
   // —— sksp_secrets：先清非法 algo（统一改 dpapi-v1，因为它不要求 iv，安全兜底），
@@ -368,13 +415,13 @@ async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
     tx,
     "sksp_secrets",
     "algo = 'dpapi-v1'",
-    "algo NOT IN ('linux-secret-service-aes-gcm-v1', 'macos-keychain-aes-gcm-v1', 'android-keystore-aes-gcm-v1', 'dpapi-v1')",
+    "algo NOT IN ('linux-secret-service-aes-gcm-v1', 'macos-keychain-aes-gcm-v1', 'android-keystore-aes-gcm-v1', 'dpapi-v1')"
   );
   await clean(
     tx,
     "sksp_secrets",
     "algo = 'dpapi-v1'",
-    "algo != 'dpapi-v1' AND iv IS NULL",
+    "algo != 'dpapi-v1' AND iv IS NULL"
   );
 
   // —— vfs_revision status-content_hash 耦合：active 但 content_hash NULL 改 deleted ——
@@ -382,7 +429,7 @@ async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
     tx,
     "vfs_revision",
     "status = 'deleted'",
-    "status = 'active' AND content_hash IS NULL",
+    "status = 'active' AND content_hash IS NULL"
   );
 
   // —— 下界 CHECK 清洗（负值 / 小于下界）——
@@ -393,7 +440,12 @@ async function scanAndCleanDirtyValues(tx: TdbcConnection): Promise<void> {
   await renumberLowerBound(tx, "vfs_revision", "version", "entry_id", 1);
   await clean(tx, "vfs_revision", "ref_count = 0", "ref_count < 0");
   await clean(tx, "vfs_content_blob", "ref_count = 0", "ref_count < 0");
-  await clean(tx, "message_checkpoint_file", "revision_version = 1", "revision_version < 1");
+  await clean(
+    tx,
+    "message_checkpoint_file",
+    "revision_version = 1",
+    "revision_version < 1"
+  );
   await clean(tx, "workplace_dir_rule", "head_count = 0", "head_count < 0");
   await clean(tx, "workplace_dir_rule", "tail_count = 0", "tail_count < 0");
 }
@@ -407,7 +459,9 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
   // 时在 recreateSqls 里统一重建。
   await tx.execute(`DROP TRIGGER IF EXISTS trg_revision_insert_inc_blob_ref`);
   await tx.execute(`DROP TRIGGER IF EXISTS trg_revision_delete_dec_blob_ref`);
-  await tx.execute(`DROP TRIGGER IF EXISTS trg_revision_update_transfer_blob_ref`);
+  await tx.execute(
+    `DROP TRIGGER IF EXISTS trg_revision_update_transfer_blob_ref`
+  );
 
   // —— FK 预处理阶段：先把带 FK 的子表 rebuild 成无 FK 形态。 ——
   // 原因：foreign_keys=ON 时 DROP 父表会触发 ON DELETE CASCADE 连带删子表数据
@@ -424,7 +478,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       settings_json TEXT NOT NULL CHECK (settings_json IS NULL OR json_valid(settings_json)),
       created_at_ms INTEGER NOT NULL,
       updated_at_ms INTEGER NOT NULL
-    )`,
+    )`
   );
   await rebuildTable(
     tx,
@@ -447,7 +501,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       updated_at_ms INTEGER NOT NULL,
       PRIMARY KEY (group_id, rule_id),
       UNIQUE (group_id, sort_order)
-    )`,
+    )`
   );
 
   // —— FK 被引用表先于引用表 rebuild（rename 后表名恢复，FK 解析正常）——
@@ -466,7 +520,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       is_builtin INTEGER NOT NULL DEFAULT 0 CHECK (is_builtin IN (0, 1)),
       created_at_ms INTEGER NOT NULL,
       updated_at_ms INTEGER NOT NULL
-    )`,
+    )`
   );
 
   await rebuildTable(
@@ -482,16 +536,22 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       updated_at_ms INTEGER NOT NULL,
       FOREIGN KEY (provider_id) REFERENCES llm_provider(id) ON DELETE CASCADE
     )`,
-    [`CREATE INDEX IF NOT EXISTS idx_llm_saved_model_provider ON llm_saved_model(provider_id)`],
+    [
+      `CREATE INDEX IF NOT EXISTS idx_llm_saved_model_provider ON llm_saved_model(provider_id)`,
+    ]
   );
 
-  await rebuildTable(tx, "chat_project", `(
+  await rebuildTable(
+    tx,
+    "chat_project",
+    `(
     id TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,
     agent_config_json TEXT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
-  )`);
+  )`
+  );
 
   await rebuildTable(
     tx,
@@ -509,7 +569,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
     [
       `CREATE INDEX IF NOT EXISTS idx_chat_session_project ON chat_session(project_id)`,
       `CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)`,
-    ],
+    ]
   );
 
   await rebuildTable(
@@ -530,7 +590,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       completion_tokens INTEGER,
       total_tokens INTEGER,
       UNIQUE (session_id, seq)
-    )`,
+    )`
   );
 
   await rebuildTable(
@@ -541,7 +601,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       message_id TEXT NOT NULL,
       created_at_ms INTEGER NOT NULL,
       PRIMARY KEY (session_id, message_id)
-    ) WITHOUT ROWID`,
+    ) WITHOUT ROWID`
   );
 
   await rebuildTable(
@@ -553,7 +613,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       entry_id INTEGER NOT NULL,
       revision_version INTEGER NOT NULL CHECK (revision_version >= 1),
       PRIMARY KEY (session_id, message_id, entry_id)
-    ) WITHOUT ROWID`,
+    ) WITHOUT ROWID`
   );
 
   // vfs_content_blob 必须先于 vfs_revision rebuild：vfs_revision 的 3 个触发器引用
@@ -568,7 +628,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       bytes BLOB NOT NULL,
       byte_len INTEGER NOT NULL,
       ref_count INTEGER NOT NULL DEFAULT 0 CHECK (ref_count >= 0)
-    ) WITHOUT ROWID`,
+    ) WITHOUT ROWID`
   );
 
   await rebuildTable(
@@ -586,7 +646,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       UNIQUE(scope_key, path)
     )`,
     // 发现 24：不再重建 idx_vfs_entry_scope_path（UNIQUE(scope_key, path) 隐式索引已覆盖）。
-    [],
+    []
   );
 
   await rebuildTable(
@@ -606,15 +666,19 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       VFS_REVISION_INSERT_TRIGGER_DDL,
       VFS_REVISION_DELETE_TRIGGER_DDL,
       VFS_REVISION_UPDATE_TRIGGER_DDL,
-    ],
+    ]
   );
 
-  await rebuildTable(tx, "regex_group", `(
+  await rebuildTable(
+    tx,
+    "regex_group",
+    `(
     group_id TEXT NOT NULL PRIMARY KEY,
     display_name TEXT,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
-  )`);
+  )`
+  );
 
   await rebuildTable(
     tx,
@@ -639,7 +703,9 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       UNIQUE (group_id, sort_order),
       FOREIGN KEY (group_id) REFERENCES regex_group(group_id) ON DELETE CASCADE
     )`,
-    [`CREATE INDEX IF NOT EXISTS idx_regex_rule_group_sort ON regex_rule (group_id, sort_order)`],
+    [
+      `CREATE INDEX IF NOT EXISTS idx_regex_rule_group_sort ON regex_rule (group_id, sort_order)`,
+    ]
   );
 
   await rebuildTable(
@@ -656,7 +722,9 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       fill_policy TEXT NOT NULL DEFAULT 'header' CHECK (fill_policy IN ('hidden', 'filename', 'header', 'full')),
       PRIMARY KEY (scope_key, logical_path)
     )`,
-    [`CREATE INDEX IF NOT EXISTS idx_workplace_dir_scope ON workplace_dir_rule(scope_key)`],
+    [
+      `CREATE INDEX IF NOT EXISTS idx_workplace_dir_scope ON workplace_dir_rule(scope_key)`,
+    ]
   );
 
   await rebuildTable(
@@ -668,7 +736,9 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       inclusion_mode TEXT NOT NULL DEFAULT 'auto' CHECK (inclusion_mode IN ('auto', 'show', 'hide')),
       PRIMARY KEY (scope_key, logical_path)
     )`,
-    [`CREATE INDEX IF NOT EXISTS idx_workplace_file_scope ON workplace_file_rule(scope_key)`],
+    [
+      `CREATE INDEX IF NOT EXISTS idx_workplace_file_scope ON workplace_file_rule(scope_key)`,
+    ]
   );
 
   await rebuildTable(
@@ -679,7 +749,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       prompts_json TEXT NOT NULL CHECK (prompts_json IS NULL OR json_valid(prompts_json)),
       created_at_ms INTEGER NOT NULL,
       updated_at_ms INTEGER NOT NULL
-    )`,
+    )`
   );
 
   await rebuildTable(
@@ -698,7 +768,7 @@ async function rebuildAllTables(tx: TdbcConnection): Promise<void> {
       version INTEGER NOT NULL DEFAULT 1,
       updated_at_ms INTEGER NOT NULL,
       CHECK ((algo = 'dpapi-v1') OR (iv IS NOT NULL))
-    )`,
+    )`
   );
 }
 

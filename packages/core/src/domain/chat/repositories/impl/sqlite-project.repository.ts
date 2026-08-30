@@ -34,7 +34,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       this.conn,
       this.parser,
       `SELECT id, name, created_at_ms, updated_at_ms FROM chat_project ORDER BY created_at_ms`,
-      {},
+      {}
     );
     return rows.map(rowToProject);
   }
@@ -44,7 +44,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       this.conn,
       this.parser,
       `SELECT id, name, created_at_ms, updated_at_ms FROM chat_project WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -63,21 +63,21 @@ export class SqliteProjectRepository implements ProjectRepository {
         name: project.name,
         createdAtMs: project.createdAtMs,
         updatedAtMs: project.updatedAtMs,
-      },
+      }
     );
   }
 
   async updateName(
     id: string,
     name: string,
-    updatedAtMs: number,
+    updatedAtMs: number
   ): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,
       this.parser,
       `UPDATE chat_project SET name = #{name}, updated_at_ms = #{updatedAtMs}
        WHERE id = #{id}`,
-      { id, name, updatedAtMs },
+      { id, name, updatedAtMs }
     );
     return result.changes > 0;
   }
@@ -87,7 +87,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       this.conn,
       this.parser,
       `SELECT agent_config_json FROM chat_project WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -99,7 +99,7 @@ export class SqliteProjectRepository implements ProjectRepository {
   async updateAgentConfig(
     id: string,
     configJson: string | null,
-    updatedAtMs: number,
+    updatedAtMs: number
   ): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,
@@ -107,7 +107,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       `UPDATE chat_project
        SET agent_config_json = #{configJson}, updated_at_ms = #{updatedAtMs}
        WHERE id = #{id}`,
-      { id, configJson, updatedAtMs },
+      { id, configJson, updatedAtMs }
     );
     return result.changes > 0;
   }
@@ -117,7 +117,7 @@ export class SqliteProjectRepository implements ProjectRepository {
       this.conn,
       this.parser,
       `DELETE FROM chat_project WHERE id = #{id}`,
-      { id },
+      { id }
     );
     return result.changes > 0;
   }

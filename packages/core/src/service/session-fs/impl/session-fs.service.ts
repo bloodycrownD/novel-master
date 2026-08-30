@@ -23,13 +23,13 @@ export class DefaultSessionFsService implements SessionFsService {
     sessionId: string,
     projectId: string,
     messageId: string,
-    options?: RollbackOptions,
+    options?: RollbackOptions
   ): Promise<void> {
     await this.deps.messageRollback.rollbackToMessage(
       sessionId,
       projectId,
       messageId,
-      options,
+      options
     );
   }
 }

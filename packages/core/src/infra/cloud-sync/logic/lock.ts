@@ -24,7 +24,7 @@ export function isEffectiveLock(lock: CloudSyncLock | null): boolean {
  */
 export function canAcquireLock(
   lock: CloudSyncLock | null,
-  deviceId: string,
+  deviceId: string
 ): boolean {
   if (!isEffectiveLock(lock)) {
     return true;
@@ -37,7 +37,7 @@ export function canAcquireLock(
  */
 export function buildLease(
   deviceId: string,
-  leaseSeconds: number = DEFAULT_LEASE_SECONDS,
+  leaseSeconds: number = DEFAULT_LEASE_SECONDS
 ): CloudSyncLock {
   const now = Date.now();
   return {
@@ -52,7 +52,7 @@ export function buildLease(
  */
 export function renewLease(
   lock: CloudSyncLock,
-  leaseSeconds: number = DEFAULT_LEASE_SECONDS,
+  leaseSeconds: number = DEFAULT_LEASE_SECONDS
 ): CloudSyncLock {
   return {
     holderDeviceId: lock.holderDeviceId,

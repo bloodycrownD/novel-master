@@ -20,7 +20,9 @@ export type { TruncateTailDeps, TruncateTailParams };
 export { truncateTailInTransaction };
 
 /** 从事务连接构造 {@link TruncateTailDeps}。 */
-export function createTruncateTailDepsFromTx(tx: TdbcConnection): TruncateTailDeps {
+export function createTruncateTailDepsFromTx(
+  tx: TdbcConnection
+): TruncateTailDeps {
   return {
     messages: new SqliteMessageRepository(tx),
     checkpoints: new SqliteMessageCheckpointRepository(tx),

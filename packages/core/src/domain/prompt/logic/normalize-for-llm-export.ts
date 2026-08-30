@@ -29,7 +29,7 @@ const VFS_SEMANTIC_KINDS = new Set([
 function resolveZone(
   index: number,
   total: number,
-  zones: LlmExportZones | undefined,
+  zones: LlmExportZones | undefined
 ): LlmExportZone {
   if (zones == null) {
     return "chat";
@@ -64,7 +64,7 @@ function canMergeAdjacent(
   left: ChatMessage,
   right: ChatMessage,
   leftZone: LlmExportZone,
-  rightZone: LlmExportZone,
+  rightZone: LlmExportZone
 ): boolean {
   if (leftZone !== rightZone) {
     return false;
@@ -86,7 +86,7 @@ function canMergeAdjacent(
 
 function mergePlainTextMessages(
   left: ChatMessage,
-  right: ChatMessage,
+  right: ChatMessage
 ): ChatMessage {
   const leftText = messageBodyTextFromBlocks(left.content.blocks);
   const rightText = messageBodyTextFromBlocks(right.content.blocks);
@@ -102,7 +102,7 @@ function mergePlainTextMessages(
 
 function mergeWithinZones(
   messages: readonly ChatMessage[],
-  zones: LlmExportZones | undefined,
+  zones: LlmExportZones | undefined
 ): ChatMessage[] {
   if (messages.length === 0) {
     return [];
@@ -137,7 +137,7 @@ function isEmptyTextMessage(message: ChatMessage): boolean {
 /** OpenAI：可剔除空内容的 tool_turn_bridge synthetic。 */
 function applyProviderPostProcess(
   messages: readonly ChatMessage[],
-  provider: LlmProtocolKind,
+  provider: LlmProtocolKind
 ): ChatMessage[] {
   if (provider !== "openai") {
     return [...messages];
@@ -163,7 +163,7 @@ function applyProviderPostProcess(
 export function normalizeForLlmExport(
   messages: readonly ChatMessage[],
   provider: LlmProtocolKind,
-  zones?: LlmExportZones,
+  zones?: LlmExportZones
 ): ChatMessage[] {
   const merged = mergeWithinZones(messages, zones);
   return applyProviderPostProcess(merged, provider);

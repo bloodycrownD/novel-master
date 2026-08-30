@@ -38,7 +38,7 @@ export class AgentRunResolveError extends Error {
 
 /** Resolves current agent id from state or registry fallback. */
 export async function resolveCurrentAgentId(
-  runtime: AgentRunRuntimePort,
+  runtime: AgentRunRuntimePort
 ): Promise<string | undefined> {
   const fromState = await runtime.state.getCurrentAgentId();
   if (fromState != null && fromState !== "") {
@@ -72,12 +72,12 @@ export async function resolveWorkspaceAgentForNewSession(deps: {
 
 /** Loads agent definition for the current agent pointer. */
 export async function resolveCurrentAgentDefinition(
-  runtime: AgentRunRuntimePort,
+  runtime: AgentRunRuntimePort
 ): Promise<{ agentId: string; definition: AgentDefinition }> {
   const agentId = await resolveCurrentAgentId(runtime);
   if (agentId == null || agentId === "") {
     throw new AgentRunResolveError(
-      "未配置 Agent。请先在「agent管理」中导入或创建 Agent。",
+      "未配置 Agent。请先在「agent管理」中导入或创建 Agent。"
     );
   }
   try {
@@ -101,12 +101,14 @@ export async function resolveCurrentAgentDefinition(
 export async function resolveApplicationModelIdForRun(
   runtime: AgentRunRuntimePort,
   definition: AgentDefinition,
-  sessionId?: string,
+  sessionId?: string
 ): Promise<{ savedModelId: string; workspaceModelId: string }> {
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
   let sessionModelId: string | undefined;
   if (sessionId != null && sessionId !== "") {
-    const sessionConfig = await runtime.sessions.getSessionAgentConfig(sessionId);
+    const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+      sessionId
+    );
     // modelId 可选；空串归一化为 undefined（与 workspaceModelId 同约束）
     sessionModelId = sessionConfig.modelId || undefined;
   }
@@ -116,7 +118,7 @@ export async function resolveApplicationModelIdForRun(
   });
   if (resolved == null || resolved === "") {
     throw new AgentRunResolveError(
-      "未选择模型。请为 Agent 设置专属模型，或在会话上设置 modelId。",
+      "未选择模型。请为 Agent 设置专属模型，或在会话上设置 modelId。"
     );
   }
   return { savedModelId: resolved, workspaceModelId };

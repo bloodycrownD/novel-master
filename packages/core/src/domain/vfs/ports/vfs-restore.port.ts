@@ -13,7 +13,7 @@ export interface VfsRestorePort {
   write(
     path: string,
     content: string,
-    options?: WriteOptions,
+    options?: WriteOptions
   ): Promise<{ version: number }>;
   delete(path: string): Promise<void>;
 

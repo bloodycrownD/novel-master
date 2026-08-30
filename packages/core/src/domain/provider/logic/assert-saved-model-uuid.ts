@@ -21,21 +21,21 @@ export function isSavedModelUuidFormat(id: string): boolean {
  */
 export async function assertSavedModelUuid(
   savedModelId: string,
-  savedModels: SavedModelRepository,
+  savedModels: SavedModelRepository
 ): Promise<SavedModel> {
   const trimmed = savedModelId.trim();
   if (trimmed.includes("/")) {
     throw new ProviderError(
       "INVALID_SAVED_MODEL_ID",
       `Invalid saved model id (legacy path not accepted): ${savedModelId}`,
-      { modelId: savedModelId },
+      { modelId: savedModelId }
     );
   }
   if (!isSavedModelUuidFormat(trimmed)) {
     throw new ProviderError(
       "INVALID_SAVED_MODEL_ID",
       `Invalid saved model id (expected UUID): ${savedModelId}`,
-      { modelId: savedModelId },
+      { modelId: savedModelId }
     );
   }
   const saved = await savedModels.findById(trimmed);
@@ -43,7 +43,7 @@ export async function assertSavedModelUuid(
     throw new ProviderError(
       "INVALID_SAVED_MODEL_ID",
       `Saved model not found: ${savedModelId}`,
-      { modelId: savedModelId },
+      { modelId: savedModelId }
     );
   }
   return saved;

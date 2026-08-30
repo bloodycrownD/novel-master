@@ -62,12 +62,12 @@ export function workplaceFileTreeRootLabel(scope: WorkplaceScope): string {
 
 function sortedChildren(
   dirPath: string,
-  params: RenderWorkplaceFileTreeParams,
+  params: RenderWorkplaceFileTreeParams
 ): TreeEntry[] {
   const dirRule = params.dirRuleMap.get(dirPath) ?? null;
   const subdirs = sortDirPaths(
     directChildDirs(dirPath, params.allDirs),
-    dirRule,
+    dirRule
   ).map((path) => ({ kind: "dir" as const, path }));
 
   const files = sortFilesForDir(
@@ -75,9 +75,9 @@ function sortedChildren(
       (logicalPath): WorkplaceFileSortMeta => ({
         logicalPath,
         mtimeMs: params.mtimeByPath.get(logicalPath) ?? 0,
-      }),
+      })
     ),
-    dirRule,
+    dirRule
   ).map((file) => ({ kind: "file" as const, path: file.logicalPath }));
 
   return [...subdirs, ...files];
@@ -88,7 +88,7 @@ function appendDirLines(
   dirPath: string,
   prefix: string,
   params: RenderWorkplaceFileTreeParams,
-  displayByPath?: ReadonlyMap<string, DisplayState>,
+  displayByPath?: ReadonlyMap<string, DisplayState>
 ): void {
   const children = sortedChildren(dirPath, params);
   for (let i = 0; i < children.length; i++) {
@@ -107,7 +107,7 @@ function appendDirLines(
         child.path,
         prefix + (isLast ? "    " : "│   "),
         params,
-        displayByPath,
+        displayByPath
       );
     }
   }
@@ -117,7 +117,7 @@ function appendDirLines(
  * Renders a UTF-8 directory tree (dirs before files, same sort as workplace list).
  */
 export function renderWorkplaceFileTree(
-  params: RenderWorkplaceFileTreeParams,
+  params: RenderWorkplaceFileTreeParams
 ): string {
   const rootPath = workplaceRootLogicalPath(params.scope);
   const rootLabel = workplaceFileTreeRootLabel(params.scope);
@@ -131,7 +131,7 @@ export function renderWorkplaceFileTree(
  * 渲染带加载状态后缀的 workplace ASCII 树（`{{$filetree}}` 与工作区宏树）。
  */
 export function renderWorkplaceFileTreeForMacro(
-  params: RenderWorkplaceFileTreeForMacroParams,
+  params: RenderWorkplaceFileTreeForMacroParams
 ): string {
   const rootPath = workplaceRootLogicalPath(params.scope);
   const rootLabel = workplaceFileTreeRootLabel(params.scope);

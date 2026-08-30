@@ -34,7 +34,7 @@ export interface ProviderServiceBundle {
  */
 export function createProviderServices(
   conn: TdbcConnection,
-  secretStore: SecretStore,
+  secretStore: SecretStore
 ): ProviderServiceBundle {
   const providerRepo = new SqliteProviderRepository(conn);
   const kkv = createKkvService(conn);

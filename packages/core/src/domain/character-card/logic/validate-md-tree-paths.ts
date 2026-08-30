@@ -30,25 +30,25 @@ export function assertMdTreeRelativePathAllowed(relativePath: string): void {
   if (relativePath.startsWith("/")) {
     throw characterCardError(
       "INVALID_PATH",
-      `leading slash in md tree path: ${relativePath}`,
+      `leading slash in md tree path: ${relativePath}`
     );
   }
   if (relativePath.includes("\\")) {
     throw characterCardError(
       "INVALID_PATH",
-      `backslash in md tree path: ${relativePath}`,
+      `backslash in md tree path: ${relativePath}`
     );
   }
   if (relativePath.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
     throw characterCardError(
       "INVALID_PATH",
-      `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`,
+      `md tree path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${relativePath}`
     );
   }
   if (WINDOWS_DRIVE_PATH.test(relativePath)) {
     throw characterCardError(
       "INVALID_PATH",
-      `absolute Windows path in md tree: ${relativePath}`,
+      `absolute Windows path in md tree: ${relativePath}`
     );
   }
 
@@ -57,13 +57,13 @@ export function assertMdTreeRelativePathAllowed(relativePath: string): void {
     if (segment.length === 0) {
       throw characterCardError(
         "INVALID_PATH",
-        `empty segment in md tree path: ${relativePath}`,
+        `empty segment in md tree path: ${relativePath}`
       );
     }
     if (segment === "..") {
       throw characterCardError(
         "INVALID_PATH",
-        `parent segment in md tree path: ${relativePath}`,
+        `parent segment in md tree path: ${relativePath}`
       );
     }
   }
@@ -77,7 +77,7 @@ export function assertMdTreeRelativePathAllowed(relativePath: string): void {
 export function validateMdTreeForImport(
   scope: VfsScope,
   tree: MdTree,
-  directoryPath: string,
+  directoryPath: string
 ): ReadonlyMap<string, string> {
   const targetDir = resolveZipDirectoryPath(directoryPath);
   const files = new Map<string, string>();
@@ -86,10 +86,7 @@ export function validateMdTreeForImport(
     assertMdTreeRelativePathAllowed(relativePath);
     let logical: string;
     try {
-      logical = logicalFromZipEntryRelativeToDirectory(
-        relativePath,
-        targetDir,
-      );
+      logical = logicalFromZipEntryRelativeToDirectory(relativePath, targetDir);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "invalid relative path";
@@ -102,7 +99,7 @@ export function validateMdTreeForImport(
         error instanceof Error ? error.message : "path not allowed for scope";
       throw characterCardError(
         "INVALID_PATH",
-        `md tree "${relativePath}" → logical "${logical}": ${message}`,
+        `md tree "${relativePath}" → logical "${logical}": ${message}`
       );
     }
     files.set(logical, content);

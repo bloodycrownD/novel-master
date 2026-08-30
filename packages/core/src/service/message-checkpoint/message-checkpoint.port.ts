@@ -16,7 +16,7 @@ export interface MessageCheckpointService {
   capture(
     sessionId: string,
     projectId: string,
-    messageId: string,
+    messageId: string
   ): Promise<void>;
 
   /**
@@ -27,10 +27,7 @@ export interface MessageCheckpointService {
    *
    * @remarks 幂等：所有消息都有 checkpoint 时直接 short-circuit。
    */
-  backfillMissingBaselines(
-    sessionId: string,
-    projectId: string,
-  ): Promise<void>;
+  backfillMissingBaselines(sessionId: string, projectId: string): Promise<void>;
 
   /**
    * 删除指定消息的 checkpoint 行（capture 的补偿动作）。

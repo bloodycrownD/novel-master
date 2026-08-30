@@ -38,7 +38,7 @@ export interface SeedForkCopyParityInput {
  */
 export async function seedForkCopyParity(
   tx: TdbcConnection,
-  input: SeedForkCopyParityInput,
+  input: SeedForkCopyParityInput
 ): Promise<void> {
   const entries = new SqliteVfsEntryRepository(tx);
   const contentStore = new SqliteVfsContentStore(tx);
@@ -53,11 +53,7 @@ export async function seedForkCopyParity(
     sessionId: targetSessionId,
   });
 
-  const heads = await listSessionFileHeads(
-    entries,
-    projectId,
-    targetSessionId,
-  );
+  const heads = await listSessionFileHeads(entries, projectId, targetSessionId);
 
   // 批量取会话 scope 下所有文件 entry 的 meta（entryId → contentHash/mtime），
   // 消掉对每个 head 逐条 findByPath / findContentHash 的冗余全表探测。
@@ -71,7 +67,7 @@ export async function seedForkCopyParity(
       ...new Set(
         heads
           .map((h) => metaByEntryId.get(h.entryId)?.contentHash)
-          .filter((h): h is string => h != null),
+          .filter((h): h is string => h != null)
       ),
     ];
     if (hashes.length > 0) {
@@ -121,7 +117,7 @@ export async function seedForkCopyParity(
       projectId,
       sessionId: targetSessionId,
     }),
-    (p) => normalizePath(p),
+    (p) => normalizePath(p)
   );
 
   if (heads.length === 0 || newMessages.length === 0) {
@@ -139,6 +135,6 @@ export async function seedForkCopyParity(
     targetSessionId,
     newMessages,
     files,
-    createdAtMs,
+    createdAtMs
   );
 }

@@ -26,10 +26,7 @@ import {
   nullableText,
   resolveEntryPlainContent,
 } from "../../content-store/logic/resolve-stored-content.js";
-import type {
-  VfsEntry,
-  VfsEntryKind,
-} from "../../model/vfs-entry.js";
+import type { VfsEntry, VfsEntryKind } from "../../model/vfs-entry.js";
 import type { VfsListEntry } from "../../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
@@ -61,7 +58,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   constructor(
     private readonly conn: TdbcConnection,
-    contentStore?: VfsContentStore,
+    contentStore?: VfsContentStore
   ) {
     this.contentStore = contentStore ?? new SqliteVfsContentStore(conn);
   }
@@ -69,7 +66,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   async list(
     scopeKey: string,
     dir: string,
-    options?: VfsListOptions,
+    options?: VfsListOptions
   ): Promise<VfsListEntry[]> {
     const normalizedDir = normalizePath(dir);
     const pattern = childLikePattern(normalizedDir);
@@ -83,7 +80,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       `SELECT path, entry_kind, head_version FROM vfs_entry
        WHERE scope_key = #{scopeKey}
          AND path LIKE #{pattern} ESCAPE '\\'`,
-      { scopeKey, pattern },
+      { scopeKey, pattern }
     );
 
     const recursive = options?.recursive === true;
@@ -130,7 +127,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.parser,
       `SELECT entry_id, scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind
        FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}`,
-      { scopeKey, path: normalized },
+      { scopeKey, path: normalized }
     );
     if (rows.length === 0) {
       return null;
@@ -138,7 +135,10 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return this.rowToEntry(rows[0]!);
   }
 
-  async findContentHash(scopeKey: string, path: string): Promise<string | null> {
+  async findContentHash(
+    scopeKey: string,
+    path: string
+  ): Promise<string | null> {
     const normalized = normalizePath(path);
     const rows = await queryTemplate<{
       content_hash: string | null;
@@ -148,7 +148,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.parser,
       `SELECT content_hash, entry_kind FROM vfs_entry
        WHERE scope_key = #{scopeKey} AND path = #{path}`,
-      { scopeKey, path: normalized },
+      { scopeKey, path: normalized }
     );
     if (rows.length === 0) {
       return null;
@@ -162,7 +162,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async findContentHashesByPaths(
     scopeKey: string,
-    paths: ReadonlyArray<string>,
+    paths: ReadonlyArray<string>
   ): Promise<Map<string, string | null>> {
     const result = new Map<string, string | null>();
     if (paths.length === 0) {
@@ -189,7 +189,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         `SELECT path, content_hash, entry_kind
          FROM vfs_entry
          WHERE scope_key = #{scopeKey} AND path IN (${inClause})`,
-        bindings,
+        bindings
       );
       for (const row of rows) {
         const path = String(row.path);
@@ -211,7 +211,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   async insert(
     scopeKey: string,
     path: string,
-    content: string,
+    content: string
   ): Promise<{ version: number }> {
     return this.insertAtVersion(scopeKey, path, content, 1);
   }
@@ -219,7 +219,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   async insertWithContentHash(
     scopeKey: string,
     path: string,
-    contentHash: string,
+    contentHash: string
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
@@ -229,7 +229,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.parser,
       `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
        VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')`,
-      { scopeKey, path: normalized, contentHash, version, mtimeMs },
+      { scopeKey, path: normalized, contentHash, version, mtimeMs }
     );
     return { version };
   }
@@ -238,7 +238,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     content: string,
-    version: number,
+    version: number
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
@@ -248,7 +248,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.parser,
       `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
        VALUES (#{scopeKey}, #{path}, NULL, #{contentHash}, #{version}, #{mtimeMs}, 'file')`,
-      { scopeKey, path: normalized, contentHash, version, mtimeMs },
+      { scopeKey, path: normalized, contentHash, version, mtimeMs }
     );
     return { version };
   }
@@ -261,7 +261,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.parser,
       `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind)
        VALUES (#{scopeKey}, #{path}, NULL, NULL, 1, #{mtimeMs}, 'directory')`,
-      { scopeKey, path: normalized, mtimeMs },
+      { scopeKey, path: normalized, mtimeMs }
     );
   }
 
@@ -270,7 +270,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     path: string,
     content: string,
     nextVersion: number,
-    options: VfsWriteRepoOptions,
+    options: VfsWriteRepoOptions
   ): Promise<{ version: number }> {
     const contentHash = await this.contentStore.put(content);
     return this.applyContentHashUpdate(
@@ -278,7 +278,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       path,
       contentHash,
       nextVersion,
-      options,
+      options
     );
   }
 
@@ -287,14 +287,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     path: string,
     contentHash: string,
     nextVersion: number,
-    options: VfsWriteRepoOptions,
+    options: VfsWriteRepoOptions
   ): Promise<{ version: number }> {
     return this.applyContentHashUpdate(
       scopeKey,
       path,
       contentHash,
       nextVersion,
-      options,
+      options
     );
   }
 
@@ -303,7 +303,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     path: string,
     contentHash: string,
     nextVersion: number,
-    options: VfsWriteRepoOptions,
+    options: VfsWriteRepoOptions
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
@@ -320,7 +320,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
              mtime_ms = #{mtimeMs}
          WHERE scope_key = #{scopeKey} AND path = #{path}
            AND head_version = #{expectedVersion} AND entry_kind = 'file'`,
-        { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized, expectedVersion },
+        {
+          scopeKey,
+          contentHash,
+          nextVersion,
+          mtimeMs,
+          path: normalized,
+          expectedVersion,
+        }
       );
       if (result.changes === 0) {
         const rows = await queryTemplate<{ head_version: number }>(
@@ -328,7 +335,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
           this.parser,
           `SELECT head_version FROM vfs_entry
            WHERE scope_key = #{scopeKey} AND path = #{path}`,
-          { scopeKey, path: normalized },
+          { scopeKey, path: normalized }
         );
         if (rows.length === 0) {
           throw vfsNotFound(normalized);
@@ -336,7 +343,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         throw vfsConflict(
           normalized,
           expectedVersion,
-          Number(rows[0]!.head_version),
+          Number(rows[0]!.head_version)
         );
       }
     } else {
@@ -349,7 +356,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
              head_version = #{nextVersion},
              mtime_ms = #{mtimeMs}
          WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'`,
-        { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized },
+        { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized }
       );
       if (result.changes === 0) {
         throw vfsNotFound(normalized);
@@ -361,7 +368,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.parser,
       `SELECT head_version FROM vfs_entry
        WHERE scope_key = #{scopeKey} AND path = #{path}`,
-      { scopeKey, path: normalized },
+      { scopeKey, path: normalized }
     );
     return { version: Number(rows[0]!.head_version) };
   }
@@ -373,7 +380,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       version: number;
       contentHash: string;
       mtimeMs: number;
-    },
+    }
   ): Promise<void> {
     const normalized = normalizePath(path);
     const existing = await queryTemplate<{ entry_id: number }>(
@@ -381,7 +388,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.parser,
       `SELECT entry_id FROM vfs_entry
        WHERE scope_key = #{scopeKey} AND path = #{path}`,
-      { scopeKey, path: normalized },
+      { scopeKey, path: normalized }
     );
 
     if (existing.length > 0) {
@@ -401,7 +408,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
           contentHash: input.contentHash,
           version: input.version,
           mtimeMs: input.mtimeMs,
-        },
+        }
       );
       return;
     }
@@ -417,14 +424,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         contentHash: input.contentHash,
         version: input.version,
         mtimeMs: input.mtimeMs,
-      },
+      }
     );
   }
 
   async delete(
     scopeKey: string,
     path: string,
-    options: VfsDeleteOptions,
+    options: VfsDeleteOptions
   ): Promise<number> {
     const normalized = normalizePath(path);
     const pattern = childLikePattern(normalized);
@@ -438,7 +445,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
            AND path LIKE #{pattern} ESCAPE '\\'
            AND path <> #{path}
          LIMIT 1`,
-        { scopeKey, pattern, path: normalized },
+        { scopeKey, pattern, path: normalized }
       );
       if (childRows.length > 0) {
         throw vfsDirectoryNotEmpty(normalized);
@@ -448,7 +455,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.conn,
         this.parser,
         `DELETE FROM vfs_entry WHERE scope_key = #{scopeKey} AND path = #{path}`,
-        { scopeKey, path: normalized },
+        { scopeKey, path: normalized }
       );
       if (result.changes === 0) {
         throw vfsNotFound(normalized);
@@ -462,7 +469,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       `DELETE FROM vfs_entry
        WHERE scope_key = #{scopeKey}
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')`,
-      { scopeKey, path: normalized, pattern },
+      { scopeKey, path: normalized, pattern }
     );
     if (result.changes === 0) {
       throw vfsNotFound(normalized);
@@ -472,7 +479,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async deleteRecursiveIfAny(
     scopeKey: string,
-    prefix: string,
+    prefix: string
   ): Promise<number> {
     // 先探测：prefix 下无任何 entry 时静默返回 0，避免 recursive:true 分支的 vfsNotFound。
     const base = normalizePrefix(prefix);
@@ -496,14 +503,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       `SELECT path FROM vfs_entry
        WHERE scope_key = #{scopeKey} AND entry_kind = 'file'
        ORDER BY path`,
-      { scopeKey },
+      { scopeKey }
     );
     return rows.map((row) => String(row.path));
   }
 
   async listDirectoryPathsUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<string[]> {
     const base = normalizePrefix(pathPrefix);
     const pattern = childLikePattern(base);
@@ -515,14 +522,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
          AND entry_kind = 'directory'
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
        ORDER BY path`,
-      { scopeKey, path: base, pattern },
+      { scopeKey, path: base, pattern }
     );
     return rows.map((row) => String(row.path));
   }
 
   async listEntriesUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<VfsListEntry[]> {
     const base = normalizePrefix(pathPrefix);
     const pattern = childLikePattern(base);
@@ -533,7 +540,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
        WHERE scope_key = #{scopeKey}
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
        ORDER BY path`,
-      { scopeKey, path: base, pattern },
+      { scopeKey, path: base, pattern }
     );
     return rows.map((row) => ({
       path: String(row.path),
@@ -543,7 +550,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async listFileMetaUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>> {
     const base = normalizePrefix(pathPrefix);
     const pattern = childLikePattern(base);
@@ -555,7 +562,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
          AND entry_kind = 'file'
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
        ORDER BY path`,
-      { scopeKey, path: base, pattern },
+      { scopeKey, path: base, pattern }
     );
     return rows.map((row) => ({
       path: String(row.path),
@@ -565,7 +572,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async listFileHeadsUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<
     ReadonlyArray<{
       entryId: number;
@@ -589,7 +596,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
          AND entry_kind = 'file'
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')
        ORDER BY path`,
-      { scopeKey, path: base, pattern },
+      { scopeKey, path: base, pattern }
     );
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
@@ -601,7 +608,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async scanContents(
     scopeKey: string,
-    pathPrefix?: string,
+    pathPrefix?: string
   ): Promise<
     ReadonlyArray<{
       entryId: number;
@@ -619,7 +626,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.parser,
         `SELECT entry_id, path, content_hash FROM vfs_entry
          WHERE scope_key = #{scopeKey} AND entry_kind = 'file'`,
-        { scopeKey },
+        { scopeKey }
       );
       return this.resolveScanRows(rows);
     }
@@ -637,14 +644,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
        WHERE scope_key = #{scopeKey}
          AND entry_kind = 'file'
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')`,
-      { scopeKey, path: base, pattern },
+      { scopeKey, path: base, pattern }
     );
     return this.resolveScanRows(rows);
   }
 
   async scanFileEntriesWithMeta(
     scopeKey: string,
-    pathPrefix?: string,
+    pathPrefix?: string
   ): Promise<
     ReadonlyArray<{
       entryId: number;
@@ -666,7 +673,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.parser,
         `SELECT entry_id, path, content_hash, head_version, mtime_ms FROM vfs_entry
          WHERE scope_key = #{scopeKey} AND entry_kind = 'file'`,
-        { scopeKey },
+        { scopeKey }
       );
       return rows.map((r) => ({
         entryId: r.entry_id,
@@ -692,7 +699,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
        WHERE scope_key = #{scopeKey}
          AND entry_kind = 'file'
          AND (path = #{path} OR path LIKE #{pattern} ESCAPE '\\')`,
-      { scopeKey, path: base, pattern },
+      { scopeKey, path: base, pattern }
     );
     return rows.map((r) => ({
       entryId: r.entry_id,
@@ -705,7 +712,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async findExistingPaths(
     scopeKey: string,
-    paths: ReadonlyArray<string>,
+    paths: ReadonlyArray<string>
   ): Promise<Set<string>> {
     const result = new Set<string>();
     if (paths.length === 0) {
@@ -727,7 +734,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.parser,
         `SELECT path FROM vfs_entry
          WHERE scope_key = #{scopeKey} AND path IN (${inClause})`,
-        bindings,
+        bindings
       );
       for (const row of rows) {
         result.add(String(row.path));
@@ -742,7 +749,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       path: string;
       contentHash: string;
       mtimeMs: number;
-    }>,
+    }>
   ): Promise<void> {
     if (entries.length === 0) return;
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, ?, 1, ?, 'file')`;
@@ -757,7 +764,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async batchInsertDirectoryEntries(
     scopeKey: string,
-    paths: ReadonlyArray<string>,
+    paths: ReadonlyArray<string>
   ): Promise<void> {
     if (paths.length === 0) return;
     const sql = `INSERT INTO vfs_entry (scope_key, path, content, content_hash, head_version, mtime_ms, entry_kind) VALUES (?, ?, NULL, NULL, 1, ?, 'directory')`;
@@ -771,7 +778,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       entry_id: number;
       path: string;
       content_hash: string | null;
-    }>,
+    }>
   ): Promise<
     ReadonlyArray<{ entryId: number; path: string; content: string }>
   > {
@@ -802,7 +809,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       } else {
         // content=NULL 且 content_hash=NULL 的 active 文件行视为正文损坏。
         throw new Error(
-          "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL",
+          "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL"
         );
       }
       out.push({
@@ -818,7 +825,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     tx: TdbcConnection,
     scopeKey: string,
     oldPath: string,
-    newPath: string,
+    newPath: string
   ): Promise<void> {
     const oldNorm = normalizePath(oldPath);
     const newNorm = normalizePath(newPath);
@@ -828,7 +835,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       parser,
       `UPDATE vfs_entry SET path = #{newPath}
        WHERE scope_key = #{scopeKey} AND path = #{oldPath}`,
-      { scopeKey, oldPath: oldNorm, newPath: newNorm },
+      { scopeKey, oldPath: oldNorm, newPath: newNorm }
     );
     if (result.changes === 0) {
       throw vfsNotFound(oldNorm);
@@ -839,7 +846,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     tx: TdbcConnection,
     scopeKey: string,
     oldPrefix: string,
-    newPrefix: string,
+    newPrefix: string
   ): Promise<void> {
     const oldBase = normalizePrefix(oldPrefix);
     const newBase = normalizePrefix(newPrefix);
@@ -858,7 +865,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         oldWithSlash: `${oldBase}/`,
         newWithSlash: `${newBase}/`,
         pattern: `${escapeLike(oldBase)}/%`,
-      },
+      }
     );
     // 处理前缀根自身（oldBase → newBase）。
     await executeTemplate(
@@ -866,7 +873,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       parser,
       `UPDATE vfs_entry SET path = #{newBase}
        WHERE scope_key = #{scopeKey} AND path = #{oldBase}`,
-      { scopeKey, oldBase, newBase },
+      { scopeKey, oldBase, newBase }
     );
     if (result.changes === 0) {
       // 允许空目录（无子项），仅根自身存在时也算成功；根都不在时抛错。
@@ -875,7 +882,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         parser,
         `SELECT entry_id FROM vfs_entry
          WHERE scope_key = #{scopeKey} AND path = #{oldBase} LIMIT 1`,
-        { scopeKey, oldBase },
+        { scopeKey, oldBase }
       );
       if (rows.length === 0) {
         throw vfsNotFound(oldBase);

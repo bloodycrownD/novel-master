@@ -20,7 +20,7 @@ export type CreateVfsBatchIoServiceOptions = {
 /** 创建批量 ingest/export 服务。 */
 export function createVfsBatchIoService(
   conn: TdbcConnection,
-  options: CreateVfsBatchIoServiceOptions = {},
+  options: CreateVfsBatchIoServiceOptions = {}
 ): VfsBatchIoService {
   const repo = new SqliteVfsEntryRepository(conn);
   return new DefaultVfsBatchIoService(conn, repo, {

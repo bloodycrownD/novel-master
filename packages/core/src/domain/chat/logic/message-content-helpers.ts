@@ -53,7 +53,7 @@ export function isPlainUserText(message: ChatMessage): boolean {
     return false;
   }
   const hasText = (message.content.blocks ?? []).some(
-    (b) => b.type === "text" && b.text.trim().length > 0,
+    (b) => b.type === "text" && b.text.trim().length > 0
   );
   if (hasText) return true;
   return hasAnnotateAttachment(message);

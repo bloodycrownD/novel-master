@@ -43,7 +43,7 @@ export function formatReadOutput(rec: Record<string, unknown>): string {
   const offset = typeof rec.offset === "number" ? rec.offset : 1;
   const lines = content.split("\n");
   const numbered = lines.map(
-    (line, index) => `${formatLineNumber(offset + index)}|${line}`,
+    (line, index) => `${formatLineNumber(offset + index)}|${line}`
   );
   const parts = [numbered.join("\n")];
 
@@ -97,7 +97,9 @@ export function isGrepOutput(rec: Record<string, unknown>): boolean {
 export function formatGrepOutput(rec: Record<string, unknown>): string {
   const matches = rec.matches as readonly GrepMatchShape[];
   let out = matches
-    .map((match) => `${match.path}:${match.line}:${match.column}: ${match.excerpt}`)
+    .map(
+      (match) => `${match.path}:${match.line}:${match.column}: ${match.excerpt}`
+    )
     .join("\n");
 
   if (rec.truncated === true) {
@@ -155,8 +157,8 @@ function formatFsLsOutput(rec: Record<string, unknown>): string {
       typeof rec.omitted === "number"
         ? rec.omitted
         : typeof rec.total === "number"
-          ? rec.total - entries.length
-          : 0;
+        ? rec.total - entries.length
+        : 0;
     out += `\n\nOutput truncated (${omitted} entries omitted; total ${rec.total}).`;
   }
   return out;
@@ -258,7 +260,7 @@ export function formatToolOutputForLlm(out: unknown): string {
  */
 export function formatToolErrorForLlm(
   error: unknown,
-  options?: FormatToolErrorForLlmOptions,
+  options?: FormatToolErrorForLlmOptions
 ): string {
   let message: string;
   if (error instanceof ToolError) {
@@ -283,7 +285,6 @@ export function formatToolErrorForLlm(
   return `Error: ${message}`;
 }
 
-
 function resolveVfsErrorFromCause(cause: unknown): VfsError | undefined {
   if (cause instanceof TdbcError && cause.cause != null) {
     return resolveVfsErrorFromCause(cause.cause);
@@ -297,10 +298,7 @@ function resolveVfsErrorFromCause(cause: unknown): VfsError | undefined {
   return undefined;
 }
 
-function formatToolErrorCause(
-  cause: unknown,
-  vfsScope?: VfsScope,
-): string {
+function formatToolErrorCause(cause: unknown, vfsScope?: VfsScope): string {
   const vfsError = resolveVfsErrorFromCause(cause);
   if (vfsError != null) {
     return formatVfsErrorForLlm(vfsError, vfsScope);

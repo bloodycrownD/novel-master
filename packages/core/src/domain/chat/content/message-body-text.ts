@@ -12,10 +12,7 @@ import type { MessageContent } from "../model/content-block.js";
 /** 剥离模型泄漏的孤立闭合思考标签（GLM / 代理网关常见）。 */
 function stripOrphanThinkingCloseTags(text: string): string {
   return text
-    .replace(
-      /<\/(?:thought|thinking|think|redacted_thinking)\b[^>]*>/gi,
-      "",
-    )
+    .replace(/<\/(?:thought|thinking|think|redacted_thinking)\b[^>]*>/gi, "")
     .trim();
 }
 
@@ -48,7 +45,7 @@ function blockBodyText(block: ContentBlock): string | null {
 
 /** Extract readable plain text from content blocks (skips thinking blocks). */
 export function messageBodyTextFromBlocks(
-  blocks: readonly ContentBlock[],
+  blocks: readonly ContentBlock[]
 ): string {
   const parts: string[] = [];
   for (const block of blocks) {
@@ -73,7 +70,7 @@ export function messageBodyText(m: ChatMessage): string {
 /** Role-prefixed segments for CLI / real-prompt preview (tool_result → `tool`; tool_use → `tool_call`). */
 export function formatChatMessageForCliPreview(
   message: ChatMessage,
-  options?: { readonly includeThinking?: boolean },
+  options?: { readonly includeThinking?: boolean }
 ): ReadonlyArray<{ readonly role: string; readonly body: string }> {
   const segments: Array<{ role: string; body: string }> = [];
 
@@ -114,8 +111,7 @@ export function formatChatMessageForCliPreview(
         flushText();
         segments.push({
           role: "thinking",
-          body:
-            block.type === "thinking" ? block.text : "[redacted thinking]",
+          body: block.type === "thinking" ? block.text : "[redacted thinking]",
         });
       }
       continue;

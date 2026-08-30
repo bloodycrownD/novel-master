@@ -5,17 +5,17 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import type { ContentBlock, MessageContent } from "@/domain/chat/model/content-block.js";
+import type {
+  ContentBlock,
+  MessageContent,
+} from "@/domain/chat/model/content-block.js";
 import { matchDepth } from "@/domain/depth/logic/depth-slice.js";
 import type { CompiledRegexRule } from "./compile-regex-rule.js";
 
 /** Replacement target channel (LLM prompt vs CLI display). */
 export type RegexChannel = "llm" | "display";
 
-function roleMatchesScope(
-  role: string,
-  rule: CompiledRegexRule,
-): boolean {
+function roleMatchesScope(role: string, rule: CompiledRegexRule): boolean {
   if (role === "user") {
     return rule.scopeUser;
   }
@@ -35,10 +35,9 @@ function depthInRange(depthFromTail: number, rule: CompiledRegexRule): boolean {
 function replaceForChannel(
   text: string,
   rule: CompiledRegexRule,
-  channel: RegexChannel,
+  channel: RegexChannel
 ): string {
-  const replacement =
-    channel === "llm" ? rule.llmReplace : rule.displayReplace;
+  const replacement = channel === "llm" ? rule.llmReplace : rule.displayReplace;
   if (replacement == null) {
     return text;
   }
@@ -55,7 +54,7 @@ export function applyRegexRules(
     readonly channel: RegexChannel;
     readonly depthFromTail: number;
     readonly role: string;
-  },
+  }
 ): string {
   let out = text;
   for (const rule of rules) {
@@ -72,7 +71,7 @@ export function applyRegexRules(
 
 function mapTextBlocks(
   content: MessageContent,
-  transform: (text: string) => string,
+  transform: (text: string) => string
 ): MessageContent {
   const blocks: ContentBlock[] = content.blocks.map((block) => {
     if (block.type !== "text") {
@@ -90,7 +89,7 @@ export function applyRegexToMessageContent(
     readonly channel: RegexChannel;
     readonly depthFromTail: number;
     readonly role: string;
-  },
+  }
 ): MessageContent {
   return mapTextBlocks(content, (text) => applyRegexRules(text, rules, ctx));
 }
@@ -104,7 +103,7 @@ export function applyRegexChannelToMessages(
   messages: readonly ChatMessage[],
   rules: readonly CompiledRegexRule[],
   channel: RegexChannel,
-  depthByMessageId: ReadonlyMap<string, number>,
+  depthByMessageId: ReadonlyMap<string, number>
 ): ChatMessage[] {
   return messages.map((m) => {
     const depth = depthByMessageId.get(m.id);

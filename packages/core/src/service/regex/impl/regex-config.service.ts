@@ -40,9 +40,13 @@ export class DefaultRegexConfigService implements RegexConfigService {
     const parsed = createRegexGroupSchema.parse(input);
     const existing = await this.deps.groups.findById(parsed.groupId);
     if (existing) {
-      throw new RegexError("CONFLICT", `Regex group already exists: ${parsed.groupId}`, {
-        groupId: parsed.groupId,
-      });
+      throw new RegexError(
+        "CONFLICT",
+        `Regex group already exists: ${parsed.groupId}`,
+        {
+          groupId: parsed.groupId,
+        }
+      );
     }
     const now = Date.now();
     const group: RegexGroup = {
@@ -71,14 +75,16 @@ export class DefaultRegexConfigService implements RegexConfigService {
 
   async updateGroup(
     groupId: string,
-    patch: UpdateRegexGroupInput,
+    patch: UpdateRegexGroupInput
   ): Promise<RegexGroup> {
     const parsed = updateRegexGroupSchema.parse(patch);
     const group = await this.getGroup(groupId);
     const updated: RegexGroup = {
       ...group,
       displayName:
-        parsed.displayName !== undefined ? parsed.displayName : group.displayName,
+        parsed.displayName !== undefined
+          ? parsed.displayName
+          : group.displayName,
       updatedAtMs: Date.now(),
     };
     await this.deps.groups.update(updated);
@@ -104,7 +110,7 @@ export class DefaultRegexConfigService implements RegexConfigService {
       throw new RegexError(
         "CONFLICT",
         `Regex rule already exists: ${parsed.groupId}/${parsed.ruleId}`,
-        { groupId: parsed.groupId, ruleId: parsed.ruleId },
+        { groupId: parsed.groupId, ruleId: parsed.ruleId }
       );
     }
     const fields = {
@@ -155,7 +161,7 @@ export class DefaultRegexConfigService implements RegexConfigService {
       throw new RegexError(
         "NOT_FOUND",
         `Regex rule not found: ${groupId}/${ruleId}`,
-        { groupId, ruleId },
+        { groupId, ruleId }
       );
     }
     return rule;
@@ -164,7 +170,7 @@ export class DefaultRegexConfigService implements RegexConfigService {
   async updateRule(
     groupId: string,
     ruleId: string,
-    patch: UpdateRegexRuleInput,
+    patch: UpdateRegexRuleInput
   ): Promise<RegexRule> {
     const parsed = updateRegexRuleSchema.parse(patch);
     const existing = await this.getRule(groupId, ruleId);
@@ -172,13 +178,17 @@ export class DefaultRegexConfigService implements RegexConfigService {
       pattern: parsed.pattern ?? existing.pattern,
       flags: parsed.flags ?? existing.flags,
       llmReplace:
-        parsed.llmReplace !== undefined ? parsed.llmReplace : existing.llmReplace,
+        parsed.llmReplace !== undefined
+          ? parsed.llmReplace
+          : existing.llmReplace,
       displayReplace:
         parsed.displayReplace !== undefined
           ? parsed.displayReplace
           : existing.displayReplace,
       startDepth:
-        parsed.startDepth !== undefined ? parsed.startDepth : existing.startDepth,
+        parsed.startDepth !== undefined
+          ? parsed.startDepth
+          : existing.startDepth,
       endDepth:
         parsed.endDepth !== undefined ? parsed.endDepth : existing.endDepth,
       scopeUser: parsed.scopeUser ?? existing.scopeUser,
@@ -211,7 +221,7 @@ export class DefaultRegexConfigService implements RegexConfigService {
   async setRuleEnabled(
     groupId: string,
     ruleId: string,
-    enabled: boolean,
+    enabled: boolean
   ): Promise<RegexRule> {
     const existing = await this.getRule(groupId, ruleId);
     const updated: RegexRule = {
@@ -223,7 +233,9 @@ export class DefaultRegexConfigService implements RegexConfigService {
     return updated;
   }
 
-  async listCompiledRulesForGroup(groupId: string): Promise<CompiledRegexRule[]> {
+  async listCompiledRulesForGroup(
+    groupId: string
+  ): Promise<CompiledRegexRule[]> {
     const rules = await this.deps.rules.listByGroupOrdered(groupId);
     const out: CompiledRegexRule[] = [];
     for (const rule of rules) {

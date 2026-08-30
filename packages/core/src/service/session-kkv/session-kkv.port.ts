@@ -14,17 +14,13 @@
  * - fork / copy 会话**不**复制本表行。
  */
 export interface SessionKkvService {
-  get(
-    sessionId: string,
-    domain: string,
-    key: string,
-  ): Promise<string | null>;
+  get(sessionId: string, domain: string, key: string): Promise<string | null>;
 
   set(
     sessionId: string,
     domain: string,
     key: string,
-    value: string,
+    value: string
   ): Promise<void>;
 
   delete(sessionId: string, domain: string, key: string): Promise<void>;

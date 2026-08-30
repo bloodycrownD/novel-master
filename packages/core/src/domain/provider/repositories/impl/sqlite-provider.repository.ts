@@ -40,7 +40,7 @@ function rowToProvider(row: Row): LlmProvider {
     throw new ProviderError(
       "INVALID_ARGUMENT",
       `服务商 display_name 不得为空（id=${String(row.id)}）`,
-      { providerId: String(row.id) },
+      { providerId: String(row.id) }
     );
   }
   return {
@@ -70,7 +70,7 @@ export class SqliteProviderRepository implements ProviderRepository {
       `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
               headers_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider ORDER BY id`,
-      {},
+      {}
     );
     return rows.map(rowToProvider);
   }
@@ -82,7 +82,7 @@ export class SqliteProviderRepository implements ProviderRepository {
       `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
               headers_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -112,7 +112,7 @@ export class SqliteProviderRepository implements ProviderRepository {
         isBuiltin: provider.isBuiltin ? 1 : 0,
         createdAtMs: provider.createdAtMs,
         updatedAtMs: provider.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -136,7 +136,7 @@ export class SqliteProviderRepository implements ProviderRepository {
         secretRef: provider.secretRef,
         headersJson: JSON.stringify(provider.headers),
         updatedAtMs: provider.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -145,7 +145,7 @@ export class SqliteProviderRepository implements ProviderRepository {
       this.conn,
       this.parser,
       `DELETE FROM llm_provider WHERE id = #{id}`,
-      { id },
+      { id }
     );
     return result.changes > 0;
   }

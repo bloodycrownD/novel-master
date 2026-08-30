@@ -23,7 +23,7 @@ export class SkspError extends Error {
   constructor(
     code: SkspErrorCode,
     message: string,
-    options?: { ref?: string; cause?: unknown },
+    options?: { ref?: string; cause?: unknown }
   ) {
     super(message);
     this.name = "SkspError";

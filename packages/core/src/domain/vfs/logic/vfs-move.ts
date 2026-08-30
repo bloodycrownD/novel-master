@@ -26,7 +26,7 @@ export function normalizeDirPath(path: string): string {
 export function remapPathUnderDir(
   path: string,
   oldDir: string,
-  newDir: string,
+  newDir: string
 ): string {
   const normalizedOld = normalizeDirPath(oldDir);
   const normalizedNew = normalizeDirPath(newDir);
@@ -49,7 +49,7 @@ export function remapPathUnderDir(
  */
 export async function mkdirIgnoreExistingDirectory(
   vfs: VfsRestorePort,
-  path: string,
+  path: string
 ): Promise<void> {
   try {
     await vfs.mkdir(path);
@@ -76,7 +76,7 @@ export async function mkdirIgnoreExistingDirectory(
 /** mkdir that treats ALREADY_EXISTS as success (idempotent directory chain). */
 export async function mkdirIgnoreExists(
   vfs: VfsService,
-  path: string,
+  path: string
 ): Promise<void> {
   try {
     await vfs.mkdir(path);
@@ -96,7 +96,7 @@ export async function mkdirIgnoreExists(
 export async function assertMoveTargetAvailable(
   vfs: VfsService,
   from: string,
-  to: string,
+  to: string
 ): Promise<void> {
   const normalizedFrom = normalizeDirPath(from);
   const normalizedTo = normalizeDirPath(to);
@@ -122,7 +122,7 @@ export async function assertMoveTargetAvailable(
   try {
     const entries = await vfs.list(normalizedTo, { recursive: false });
     const hasDirRow = entries.some(
-      (e) => e.kind === "directory" && normalizeDirPath(e.path) === normalizedTo,
+      (e) => e.kind === "directory" && normalizeDirPath(e.path) === normalizedTo
     );
     if (entries.length > 0 || hasDirRow) {
       throw vfsAlreadyExists(to);
@@ -141,7 +141,7 @@ export async function assertMoveTargetAvailable(
 async function moveVfsFile(
   vfs: VfsService,
   from: string,
-  to: string,
+  to: string
 ): Promise<void> {
   // entry_id 化后走 rename 原语（单事务 UPDATE entry.path），不写 revision/checkpoint。
   await vfs.renamePath(from, to);
@@ -150,7 +150,7 @@ async function moveVfsFile(
 async function moveVfsDirectory(
   vfs: VfsService,
   from: string,
-  to: string,
+  to: string
 ): Promise<void> {
   // entry_id 化后走 renamePrefix 原语（单事务 REPLACE path 前缀），revision/checkpoint 零操作。
   await vfs.renamePrefix(from, to);
@@ -166,7 +166,7 @@ async function moveVfsDirectory(
 export async function moveVfsPath(
   vfs: VfsService,
   from: string,
-  to: string,
+  to: string
 ): Promise<void> {
   // WHY: fail before write/delete so a rename conflict cannot overwrite the target.
   await assertMoveTargetAvailable(vfs, from, to);
@@ -199,7 +199,7 @@ export async function moveVfsPath(
   const oldDir = normalizeDirPath(from);
   const entries = await vfs.list(oldDir, { recursive: true });
   const hasDirRow = entries.some(
-    (e) => e.kind === "directory" && e.path === oldDir,
+    (e) => e.kind === "directory" && e.path === oldDir
   );
   if (entries.length === 0 && !hasDirRow) {
     throw vfsNotFound(from);

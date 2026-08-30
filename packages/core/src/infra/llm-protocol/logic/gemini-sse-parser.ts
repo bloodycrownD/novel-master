@@ -5,7 +5,10 @@
  */
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
+import type {
+  DegradedToolCall,
+  LlmStreamEvent,
+} from "../ports/adapter.port.js";
 import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
 import { emitDirectTextDelta } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
@@ -38,7 +41,9 @@ export type GeminiSseParserState = SseParseDiagnostics & {
   emittedFunctionCallKeys: Set<string>;
 };
 
-function readThoughtSignature(part: Record<string, unknown>): string | undefined {
+function readThoughtSignature(
+  part: Record<string, unknown>
+): string | undefined {
   const sig = part.thought_signature ?? part.thoughtSignature;
   return typeof sig === "string" && sig !== "" ? sig : undefined;
 }
@@ -58,7 +63,7 @@ export function createGeminiSseParserState(): GeminiSseParserState {
 function tryEmitGeminiToolUseIfComplete(
   state: GeminiSseParserState,
   key: string,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   if (state.emittedFunctionCallKeys.has(key)) {
     return;
@@ -80,7 +85,7 @@ function tryEmitGeminiToolUseIfComplete(
 function mergeFunctionCallPart(
   state: GeminiSseParserState,
   part: Record<string, unknown>,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   const fc = part.functionCall;
   if (!isRecord(fc) || typeof fc.name !== "string") {
@@ -112,7 +117,7 @@ function mergeFunctionCallPart(
 function processGeminiResponseChunk(
   state: GeminiSseParserState,
   payload: Record<string, unknown>,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   state.streamRaw = payload;
   const candidates = payload.candidates;
@@ -160,7 +165,7 @@ function processGeminiResponseChunk(
 function processGeminiSseLine(
   state: GeminiSseParserState,
   line: string,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   if (!line.startsWith("data: ")) {
     return;
@@ -182,16 +187,16 @@ function processGeminiSseLine(
 export function feedGeminiSseChunk(
   state: GeminiSseParserState,
   chunk: string,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
-  feedSseLines(state, chunk, line =>
-    processGeminiSseLine(state, line, onStream),
+  feedSseLines(state, chunk, (line) =>
+    processGeminiSseLine(state, line, onStream)
   );
 }
 
 function functionCallsToToolUses(
   state: GeminiSseParserState,
-  strict = false,
+  strict = false
 ): {
   toolUses: Array<{
     id: string;
@@ -235,7 +240,9 @@ function functionCallsToToolUses(
       id: acc.id,
       name: acc.name,
       input,
-      ...(acc.thinkingSignature != null ? { thinkingSignature: acc.thinkingSignature } : {}),
+      ...(acc.thinkingSignature != null
+        ? { thinkingSignature: acc.thinkingSignature }
+        : {}),
     });
   }
   return { toolUses, degradedToolCalls };
@@ -249,7 +256,7 @@ function emitToolUsesFromAccumulators(
     thinkingSignature?: string;
   }[],
   onStream?: (event: LlmStreamEvent) => void,
-  emittedKeys?: Set<string>,
+  emittedKeys?: Set<string>
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   let signatureEmitted = false;
@@ -286,7 +293,7 @@ function emitToolUsesFromAccumulators(
 /** Finalize parser state (normal stream end). */
 export function finishGeminiSse(
   state: GeminiSseParserState,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
@@ -317,8 +324,8 @@ export function finishGeminiSse(
     ...emitToolUsesFromAccumulators(
       toolUses,
       onStream,
-      state.emittedFunctionCallKeys,
-    ),
+      state.emittedFunctionCallKeys
+    )
   );
 
   assertSseParseSucceededOrThrow(state, blocks, "gemini");
@@ -341,7 +348,7 @@ export function finishGeminiSse(
 /** Partial snapshot when the user aborted mid-stream. */
 export function finishGeminiSsePartial(
   state: GeminiSseParserState,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
@@ -358,12 +365,14 @@ export function finishGeminiSsePartial(
       thinking: state.thinkingParts.join(""),
       toolUses,
     },
-    onStream,
+    onStream
   );
 
   return {
     blocks,
-    streamRaw: state.streamRaw ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+    streamRaw:
+      state.streamRaw ??
+      ({ streamed: true, aborted: true } as Record<string, unknown>),
     degradedToolCalls: [],
   };
 }

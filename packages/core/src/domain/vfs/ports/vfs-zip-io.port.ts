@@ -26,6 +26,6 @@ export interface VfsZipIoService {
   import(
     scope: VfsScope,
     zipBytes: Uint8Array,
-    options: VfsZipImportOptions & ZipPathOptions,
+    options: VfsZipImportOptions & ZipPathOptions
   ): Promise<void>;
 }

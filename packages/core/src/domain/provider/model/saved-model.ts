@@ -24,7 +24,7 @@ export interface SavedModel {
  */
 export function savedModelDisplayName(
   model: SavedModel,
-  providerDisplayName: string,
+  providerDisplayName: string
 ): string {
   return formatSavedModelDisplayName(providerDisplayName, model.modelName);
 }
@@ -34,7 +34,7 @@ export type SavedModelView = SavedModel & { readonly displayName: string };
 
 export function toSavedModelView(
   model: SavedModel,
-  providerDisplayName: string,
+  providerDisplayName: string
 ): SavedModelView {
   return {
     ...model,

@@ -47,9 +47,13 @@ export function resolveDriver(explicit?: string): TdbcDriver {
   if (explicit !== undefined) {
     const driver = getDriver(explicit);
     if (!driver) {
-      throw new TdbcError("UNKNOWN_DRIVER", `Driver not registered: ${explicit}`, {
-        driver: explicit,
-      });
+      throw new TdbcError(
+        "UNKNOWN_DRIVER",
+        `Driver not registered: ${explicit}`,
+        {
+          driver: explicit,
+        }
+      );
     }
     return driver;
   }
@@ -63,6 +67,6 @@ export function resolveDriver(explicit?: string): TdbcDriver {
     "UNKNOWN_DRIVER",
     names.length === 0
       ? "No TDBC driver registered"
-      : "Multiple drivers registered; specify options.driver",
+      : "Multiple drivers registered; specify options.driver"
   );
 }

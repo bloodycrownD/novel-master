@@ -41,7 +41,7 @@ const GLOBAL_TEMPLATE_RE = /^\/template(\/.*)?$/;
  * @throws {Error} 当路径不符合任何已知 scope 前缀时，抛出带 `INVALID_PATH` 前缀的错误
  */
 export function inferScopeFromPhysicalPath(
-  physicalPath: string,
+  physicalPath: string
 ): InferredScope {
   const sessionMatch = physicalPath.match(SESSION_RE);
   if (sessionMatch != null) {
@@ -70,7 +70,5 @@ export function inferScopeFromPhysicalPath(
     };
   }
 
-  throw new Error(
-    `INVALID_PATH: 无法从物理路径反解 scope: ${physicalPath}`,
-  );
+  throw new Error(`INVALID_PATH: 无法从物理路径反解 scope: ${physicalPath}`);
 }

@@ -41,7 +41,7 @@ export function redactUrl(url: string): string {
 }
 
 function redactHeaders(
-  headers: RequestInit["headers"],
+  headers: RequestInit["headers"]
 ): Record<string, string> {
   if (headers == null) {
     return {};
@@ -99,7 +99,7 @@ function summarizeBody(body: RequestInit["body"]): string | undefined {
             index,
             role: content.role,
             partKinds: content.parts.map((part) =>
-              isRecord(part) ? Object.keys(part)[0] ?? "?" : "?",
+              isRecord(part) ? Object.keys(part)[0] ?? "?" : "?"
             ),
             functionResponseName:
               isRecord(fr) && typeof fr.name === "string" ? fr.name : undefined,
@@ -127,8 +127,8 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
       typeof input === "string"
         ? input
         : input instanceof URL
-          ? input.toString()
-          : input.url;
+        ? input.toString()
+        : input.url;
     const method = init?.method ?? "GET";
 
     console.log(LOG_TAG, "→", method, redactUrl(url));
@@ -144,26 +144,24 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
     const contentType = response.headers.get("content-type");
     const hasBody = response.body != null;
 
-    console.log(
-      LOG_TAG,
-      "←",
-      response.status,
-      response.statusText,
-      `${ms}ms`,
-      { contentType, hasBody },
-    );
+    console.log(LOG_TAG, "←", response.status, response.statusText, `${ms}ms`, {
+      contentType,
+      hasBody,
+    });
 
     if (!response.ok) {
       try {
         const text = await response.clone().text();
-        const snippet =
-          text.length > 600 ? `${text.slice(0, 600)}…` : text;
+        const snippet = text.length > 600 ? `${text.slice(0, 600)}…` : text;
         console.log(LOG_TAG, "  error body", snippet);
       } catch {
         /* ignore */
       }
     } else if (hasBody === false) {
-      console.warn(LOG_TAG, "  response.body is null (streaming may fail on RN)");
+      console.warn(
+        LOG_TAG,
+        "  response.body is null (streaming may fail on RN)"
+      );
     }
 
     return response;

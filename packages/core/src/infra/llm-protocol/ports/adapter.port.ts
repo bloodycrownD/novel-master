@@ -102,7 +102,7 @@ export interface LlmProtocolAdapter {
       | "tools"
       | "stream"
       | "onStream"
-    >,
+    >
   ): Promise<LlmListModelsResult>;
   chat(req: LlmChatRequest): Promise<LlmChatResult>;
 }

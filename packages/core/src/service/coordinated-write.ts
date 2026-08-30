@@ -45,17 +45,16 @@ export class CoordinatedWriteRollbackError extends Error {
 
   constructor(
     cause: unknown,
-    rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>,
+    rollbackErrors: ReadonlyArray<{ step: string; error: unknown }>
   ) {
-    const causeMessage =
-      cause instanceof Error ? cause.message : String(cause);
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
     const rolledBackNames = rollbackErrors
       .map((entry) => entry.step)
       .join(", ");
     super(
       `CoordinatedWrite 在回滚阶段再次失败（原始原因：${causeMessage}；回滚失败步骤：${
         rolledBackNames || "<无>"
-      }）`,
+      }）`
     );
     this.name = "CoordinatedWriteRollbackError";
     this.cause = cause;
@@ -97,12 +96,12 @@ export class CoordinatedWrite {
   register(step: WriteStep): this {
     if (!step || typeof step.execute !== "function") {
       throw new TypeError(
-        `CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`,
+        `CoordinatedWrite.register: 步骤 ${step?.name ?? "<匿名>"} 缺少 execute`
       );
     }
     if (typeof step.rollback !== "function") {
       throw new TypeError(
-        `CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`,
+        `CoordinatedWrite.register: 步骤 ${step.name} 缺少 rollback`
       );
     }
     this.steps.push(step);
@@ -153,9 +152,7 @@ export class CoordinatedWrite {
  * 适合一次性、不需要外部继续注册的场景。需要分批注册或链式拼装时，
  * 直接用 `new CoordinatedWrite()` 即可。
  */
-export async function runCoordinatedWrite(
-  steps: WriteStep[],
-): Promise<void> {
+export async function runCoordinatedWrite(steps: WriteStep[]): Promise<void> {
   const write = new CoordinatedWrite();
   for (const step of steps) write.register(step);
   await write.run();

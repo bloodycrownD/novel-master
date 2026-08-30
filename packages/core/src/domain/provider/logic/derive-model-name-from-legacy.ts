@@ -8,7 +8,7 @@
 export function deriveModelNameFromLegacy(
   providerId: string,
   vendorModelId: string,
-  displayName: string | null | undefined,
+  displayName: string | null | undefined
 ): string {
   const trimmed = displayName?.trim() ?? "";
   if (!trimmed) {

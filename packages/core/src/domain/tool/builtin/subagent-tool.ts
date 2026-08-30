@@ -73,14 +73,14 @@ const SUBAGENT_MAX_DEPTH = 2;
  * `mode === "primary"` 的主 agent、排除当前 agent 自身，至少含内置 `general`。
  */
 function formatCallableList(
-  callable: readonly { readonly name: string; readonly description?: string }[],
+  callable: readonly { readonly name: string; readonly description?: string }[]
 ): string {
   if (callable.length === 0) return "（暂无）";
   return callable
     .map((a) =>
       a.description != null && a.description.trim().length > 0
         ? `${a.name}：${a.description.trim()}`
-        : a.name,
+        : a.name
     )
     .join("\n");
 }
@@ -91,13 +91,13 @@ function formatCallableList(
  * @returns 末条 assistant 文本；不存在或无 text block 时返回 undefined。
  */
 function extractLastAssistantText(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessage[]
 ): string | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]!;
     if (msg.role !== "assistant") continue;
     const textBlocks = msg.content.blocks.filter(
-      (b): b is TextBlock => b.type === "text",
+      (b): b is TextBlock => b.type === "text"
     );
     if (textBlocks.length === 0) continue;
     const joined = textBlocks.map((b) => b.text).join("");
@@ -140,10 +140,7 @@ ${formatCallableList(callable)}
 注意：子代理只能访问当前会话工作区文件（与父会话同一 VFS 视图）；它不会看到主对话的历史，仅看到你在 prompt 中提供的上下文。`;
   },
   inputSchema: z.object({
-    description: z
-      .string()
-      .min(1)
-      .describe("3-5 词任务描述（用作子会话标题）"),
+    description: z.string().min(1).describe("3-5 词任务描述（用作子会话标题）"),
     prompt: z.string().min(1).describe("任务正文，写清要子代理完成什么"),
     subagentName: z
       .string()
@@ -151,10 +148,18 @@ ${formatCallableList(callable)}
       .describe("目标子代理 name（非 id），需为 mode 非 primary 的 agent"),
   }),
   outputSchema: z.object({
-    text: z.string().describe("子代理末条回复正文；被中断且未输出文本时为占位文案"),
+    text: z
+      .string()
+      .describe("子代理末条回复正文；被中断且未输出文本时为占位文案"),
     subagentSessionId: z.string().describe("子会话 id（UI 跳转用）"),
-    stopped: z.boolean().optional().describe("true 表示子代理被用户中断，text 可能是半成品"),
-    failureReason: z.string().optional().describe("中断原因（如「用户停止」），仅在 stopped=true 时出现"),
+    stopped: z
+      .boolean()
+      .optional()
+      .describe("true 表示子代理被用户中断，text 可能是半成品"),
+    failureReason: z
+      .string()
+      .optional()
+      .describe("中断原因（如「用户停止」），仅在 stopped=true 时出现"),
   }),
   async run(input, ctx) {
     const subagent = ctx.subagent;
@@ -162,7 +167,7 @@ ${formatCallableList(callable)}
       throw new ToolError(
         "FAILED",
         "task 工具未装配 subagent 上下文（当前 agent 不允许派生子代理）",
-        { toolName: "task" },
+        { toolName: "task" }
       );
     }
     // 双保险：depth >= 2 时拒绝（孙 agent 的 registry 本应已 deny task，见 resolveAgentToolRegistry）。
@@ -170,14 +175,14 @@ ${formatCallableList(callable)}
       throw new ToolError(
         "FAILED",
         `已达子代理递归上限（depth=${subagent.depth}），不允许再派生`,
-        { toolName: "task" },
+        { toolName: "task" }
       );
     }
 
     const defs = await subagent.agentRegistry.list();
     // mode !== "primary" 过滤：主 agent（mode=primary）不能被当子 agent 调，防自递归。
     const def = defs.find(
-      (d) => d.name === input.subagentName && d.mode !== "primary",
+      (d) => d.name === input.subagentName && d.mode !== "primary"
     );
     if (def == null) {
       const callableNames = defs
@@ -185,15 +190,18 @@ ${formatCallableList(callable)}
         .map((d) => d.name);
       throw new ToolError(
         "FAILED",
-        `未找到名为 "${input.subagentName}" 的子代理；可选：${callableNames.join(", ") || "（暂无）"}`,
-        { toolName: "task" },
+        `未找到名为 "${input.subagentName}" 的子代理；可选：${
+          callableNames.join(", ") || "（暂无）"
+        }`,
+        { toolName: "task" }
       );
     }
 
     // 子 session title（P2-12）：description 非空优先，否则 prompt.slice(0, 40)。
     // 统一 trim，与 mobile 侧 pendingSubagentSessions 的 title 匹配逻辑保持一致。
     const trimmedDesc = input.description.trim();
-    const title = trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
+    const title =
+      trimmedDesc.length > 0 ? trimmedDesc : input.prompt.trim().slice(0, 40);
     const childSessionId = await subagent.createChildSession(title);
 
     const { savedModelId, workspaceModelId } =

@@ -16,7 +16,7 @@ export class DefaultSessionKkvService implements SessionKkvService {
   async get(
     sessionId: string,
     domain: string,
-    key: string,
+    key: string
   ): Promise<string | null> {
     const entry = await this.repo.get(sessionId, domain, key);
     return entry?.value ?? null;
@@ -26,16 +26,12 @@ export class DefaultSessionKkvService implements SessionKkvService {
     sessionId: string,
     domain: string,
     key: string,
-    value: string,
+    value: string
   ): Promise<void> {
     return this.repo.set(sessionId, domain, key, value);
   }
 
-  async delete(
-    sessionId: string,
-    domain: string,
-    key: string,
-  ): Promise<void> {
+  async delete(sessionId: string, domain: string, key: string): Promise<void> {
     await this.repo.delete(sessionId, domain, key);
   }
 

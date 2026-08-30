@@ -10,10 +10,7 @@
 
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
-import {
-  scopeKey,
-  type VfsScope,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 
@@ -33,13 +30,13 @@ export async function resolveReconcilePathSets(
   revisionRepo: VfsRevisionRepository,
   scope: Extract<VfsScope, { kind: "session" }>,
   targetTree: ReadonlyMap<string, number>,
-  hasDirectTargetTree: boolean,
+  hasDirectTargetTree: boolean
 ): Promise<ReconcilePathSets> {
   const { projectId, sessionId } = scope;
   const scopeKeyStr = scopeKey(scope);
   const liveHeads = await listSessionFileHeads(entryRepo, projectId, sessionId);
   const liveHeadByPath = new Map(
-    liveHeads.map((head) => [head.logicalPath, head.headVersion]),
+    liveHeads.map((head) => [head.logicalPath, head.headVersion])
   );
   const entryIdByPath = new Map<string, number>();
   for (const head of liveHeads) {
@@ -67,12 +64,11 @@ export async function resolveReconcilePathSets(
 
   const queryable = reconcilePairs.filter((pair) => pair.entryId >= 0);
   const revisionMetaByKey = await revisionRepo.findMetasByEntryVersions(
-    queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })),
+    queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version }))
   );
-  const liveHashByPath = await entryRepo.findContentHashesByPaths(
-    scopeKeyStr,
-    [...new Set(reconcilePairs.map((pair) => pair.logicalPath))],
-  );
+  const liveHashByPath = await entryRepo.findContentHashesByPaths(scopeKeyStr, [
+    ...new Set(reconcilePairs.map((pair) => pair.logicalPath)),
+  ]);
 
   const pathsNeedWrite = new Set<string>();
   for (const pair of reconcilePairs) {
@@ -85,7 +81,7 @@ export async function resolveReconcilePathSets(
       continue;
     }
     const meta = revisionMetaByKey.get(
-      revisionPairKey(pair.entryId, pair.version),
+      revisionPairKey(pair.entryId, pair.version)
     );
     if (meta == null) {
       pathsNeedWrite.add(pair.logicalPath);

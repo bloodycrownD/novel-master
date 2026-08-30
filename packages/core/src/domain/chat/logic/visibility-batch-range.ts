@@ -14,7 +14,7 @@ export type VisibilityBatchMessage = {
 /** 当前 batch 模式下该行是否可勾选；不可勾选时返回 `none`。 */
 export function transcriptSelectableRole(
   messageRole: string,
-  batchMode: MessageVisibilityBatchMode | null,
+  batchMode: MessageVisibilityBatchMode | null
 ): TranscriptSelectableRole {
   if (batchMode == null) {
     return "none";
@@ -27,7 +27,7 @@ export function transcriptSelectableRole(
 
 /** 该行在当前 batch 模式下是否可勾选。 */
 export function isTranscriptRowSelectable(
-  role: TranscriptSelectableRole,
+  role: TranscriptSelectableRole
 ): boolean {
   return role !== "none";
 }
@@ -35,10 +35,10 @@ export function isTranscriptRowSelectable(
 /** 隐藏：hideRange(1, max(selectedAssistant.seq)) */
 export function computeHideRangeFromSelection(
   messages: readonly VisibilityBatchMessage[],
-  selectedIds: ReadonlySet<string>,
+  selectedIds: ReadonlySet<string>
 ): { fromSeq: 1; toSeq: number } | null {
   const selected = messages.filter(
-    (m) => selectedIds.has(m.id) && m.role === "assistant",
+    (m) => selectedIds.has(m.id) && m.role === "assistant"
   );
   if (selected.length === 0) {
     return null;
@@ -55,12 +55,12 @@ export function computeHideRangeFromSelection(
 export function computeShowRangeFromSelection(
   messages: readonly VisibilityBatchMessage[],
   selectedIds: ReadonlySet<string>,
-  sessionMaxSeq: number,
+  sessionMaxSeq: number
 ): { fromSeq: number; toSeq: number } | null {
   return computeVisibilityRestoreRangeFromSelection(
     messages,
     selectedIds,
-    sessionMaxSeq,
+    sessionMaxSeq
   );
 }
 
@@ -68,10 +68,10 @@ export function computeShowRangeFromSelection(
 function computeVisibilityRestoreRangeFromSelection(
   messages: readonly VisibilityBatchMessage[],
   selectedIds: ReadonlySet<string>,
-  sessionMaxSeq: number,
+  sessionMaxSeq: number
 ): { fromSeq: number; toSeq: number } | null {
   const selected = messages.filter(
-    (m) => selectedIds.has(m.id) && m.role === "user",
+    (m) => selectedIds.has(m.id) && m.role === "user"
   );
   if (selected.length === 0) {
     return null;
@@ -90,7 +90,7 @@ export function computeVisibilityBatchAffectedIds(
   messages: readonly VisibilityBatchMessage[],
   mode: MessageVisibilityBatchMode | null,
   selectedIds: ReadonlySet<string>,
-  sessionMaxSeq: number,
+  sessionMaxSeq: number
 ): ReadonlySet<string> {
   if (mode == null) {
     return new Set();
@@ -101,19 +101,19 @@ export function computeVisibilityBatchAffectedIds(
       return new Set();
     }
     return new Set(
-      messages.filter((m) => m.seq <= range.toSeq).map((m) => m.id),
+      messages.filter((m) => m.seq <= range.toSeq).map((m) => m.id)
     );
   }
   const range = computeVisibilityRestoreRangeFromSelection(
     messages,
     selectedIds,
-    sessionMaxSeq,
+    sessionMaxSeq
   );
   if (range == null) {
     return new Set();
   }
   return new Set(
-    messages.filter((m) => m.seq >= range.fromSeq).map((m) => m.id),
+    messages.filter((m) => m.seq >= range.fromSeq).map((m) => m.id)
   );
 }
 
@@ -126,7 +126,7 @@ export function computeVisibilityBatchAffectedIds(
 export function selectVisibilityBatchEligibleIdsFromAnchor(
   messages: readonly VisibilityBatchMessage[],
   mode: MessageVisibilityBatchMode,
-  anchorId: string,
+  anchorId: string
 ): ReadonlySet<string> {
   const anchor = messages.find((m) => m.id === anchorId);
   if (anchor == null) {
@@ -139,7 +139,7 @@ export function selectVisibilityBatchEligibleIdsFromAnchor(
     return new Set(
       messages
         .filter((m) => m.role === "assistant" && m.seq <= anchor.seq)
-        .map((m) => m.id),
+        .map((m) => m.id)
     );
   }
   if (anchor.role !== "user") {
@@ -148,6 +148,6 @@ export function selectVisibilityBatchEligibleIdsFromAnchor(
   return new Set(
     messages
       .filter((m) => m.role === "user" && m.seq >= anchor.seq)
-      .map((m) => m.id),
+      .map((m) => m.id)
   );
 }

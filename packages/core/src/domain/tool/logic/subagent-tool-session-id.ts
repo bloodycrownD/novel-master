@@ -7,7 +7,10 @@
  * @module domain/tool/logic/subagent-tool-session-id
  */
 
-import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
+import type {
+  ToolResultBlock,
+  ToolUseBlock,
+} from "@/domain/chat/model/content-block.js";
 
 /**
  * 从 tool_result 块解析子代理会话 id（供工具卡片「跳转子会话」门控使用）。
@@ -16,7 +19,7 @@ import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-
  * 不抛错。`toolName` 可选地用于额外门控（默认只看 meta 字段是否存在）。
  */
 export function resolveSubagentSessionId(
-  block: { readonly meta?: { readonly subagentSessionId?: string } } | undefined,
+  block: { readonly meta?: { readonly subagentSessionId?: string } } | undefined
 ): string | undefined {
   if (block == null) return undefined;
   const sid = block.meta?.subagentSessionId;

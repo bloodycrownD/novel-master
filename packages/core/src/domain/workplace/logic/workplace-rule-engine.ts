@@ -36,7 +36,7 @@ import type {
  */
 export function evaluateWorkplaceRuleView(
   scope: WorkplaceScope,
-  ctx: WorkplaceRuleContext,
+  ctx: WorkplaceRuleContext
 ): WorkplaceRuleView {
   const displayByPath = buildDisplayByPath(scope, ctx);
   const rows: WorkplaceRuleRow[] = [];
@@ -47,7 +47,7 @@ export function evaluateWorkplaceRuleView(
 /** 各文件 path → 展示档位（宏树后缀与列表 file 行共用）。 */
 function buildDisplayByPath(
   scope: WorkplaceScope,
-  ctx: WorkplaceRuleContext,
+  ctx: WorkplaceRuleContext
 ): Map<string, DisplayState> {
   const displayByPath = new Map<string, DisplayState>();
   for (const filePath of ctx.fileSet) {
@@ -55,10 +55,7 @@ function buildDisplayByPath(
     if (parent == null) {
       continue;
     }
-    displayByPath.set(
-      filePath,
-      computeDisplay(scope, ctx, filePath, parent),
-    );
+    displayByPath.set(filePath, computeDisplay(scope, ctx, filePath, parent));
   }
   return displayByPath;
 }
@@ -66,7 +63,7 @@ function buildDisplayByPath(
 function resolveRuleState(
   scope: WorkplaceScope,
   dirPath: string,
-  ctx: WorkplaceRuleContext,
+  ctx: WorkplaceRuleContext
 ): RuleState {
   if (isWorkplaceRootPath(scope, dirPath)) {
     return "rule_on";
@@ -80,7 +77,7 @@ function resolveRuleState(
 
 function resolveInclusion(
   filePath: string,
-  ctx: WorkplaceRuleContext,
+  ctx: WorkplaceRuleContext
 ): InclusionMode {
   return ctx.fileRuleMap.get(filePath)?.inclusionMode ?? "auto";
 }
@@ -89,11 +86,10 @@ function computeDisplay(
   scope: WorkplaceScope,
   ctx: WorkplaceRuleContext,
   filePath: string,
-  parentDir: string,
+  parentDir: string
 ): DisplayState {
   const inclusion = resolveInclusion(filePath, ctx);
-  const parentRuleOn =
-    resolveRuleState(scope, parentDir, ctx) === "rule_on";
+  const parentRuleOn = resolveRuleState(scope, parentDir, ctx) === "rule_on";
   const dirRule = ctx.dirRuleMap.get(parentDir) ?? null;
   const siblings = directChildFiles(parentDir, ctx.fileSet);
   const autoSiblings: WorkplaceFileSortMeta[] = siblings
@@ -119,7 +115,7 @@ function walkDir(
   ctx: WorkplaceRuleContext,
   dirPath: string,
   rows: WorkplaceRuleRow[],
-  displayByPath: ReadonlyMap<string, DisplayState>,
+  displayByPath: ReadonlyMap<string, DisplayState>
 ): void {
   rows.push({
     kind: "dir",
@@ -140,7 +136,7 @@ function walkDir(
       logicalPath: p,
       mtimeMs: ctx.mtimeByPath.get(p) ?? 0,
     })),
-    dirRule,
+    dirRule
   ).map((f) => f.logicalPath);
 
   for (const filePath of sortedFiles) {

@@ -7,7 +7,11 @@
  * @module infra/llm-protocol/logic/registry
  */
 
-import type { FetchFn, LlmProtocolAdapter, LlmProtocolKind } from "../ports/adapter.port.js";
+import type {
+  FetchFn,
+  LlmProtocolAdapter,
+  LlmProtocolKind,
+} from "../ports/adapter.port.js";
 import { AnthropicProtocolAdapter } from "../impl/anthropic.adapter.js";
 import { GeminiProtocolAdapter } from "../impl/gemini.adapter.js";
 import { OpenAiProtocolAdapter } from "../impl/openai.adapter.js";
@@ -38,7 +42,7 @@ export function configureLlmFetch(fetchFn: FetchFn = globalThis.fetch): void {
 /** Returns the adapter for a protocol kind. */
 export function getProtocolAdapter(
   kind: LlmProtocolKind,
-  fetchFn?: FetchFn,
+  fetchFn?: FetchFn
 ): LlmProtocolAdapter {
   ensureDefaults(fetchFn);
   const adapter = adapters.get(kind);

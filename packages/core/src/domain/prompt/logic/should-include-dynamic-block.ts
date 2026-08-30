@@ -9,7 +9,7 @@ import type { DynamicPromptBlock } from "../model/agent-prompt-layout.js";
 /** 给定 agent 步索引时是否纳入该 dynamic 块。 */
 export function shouldIncludeDynamicBlock(
   block: DynamicPromptBlock,
-  agentStepIndex: number,
+  agentStepIndex: number
 ): boolean {
   const lifecycle = block.lifecycle ?? "always";
   if (lifecycle === "always") {

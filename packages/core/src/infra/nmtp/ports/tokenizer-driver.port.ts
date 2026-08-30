@@ -13,6 +13,6 @@ import type {
 export interface TokenizerDriver {
   readonly name: string;
   countPromptLlmInput(
-    params: CountPromptLlmInputParams,
+    params: CountPromptLlmInputParams
   ): Promise<PromptTokenCountResult>;
 }

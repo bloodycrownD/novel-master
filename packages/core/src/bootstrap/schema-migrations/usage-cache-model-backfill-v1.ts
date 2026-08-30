@@ -45,7 +45,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function finiteNum(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 /** cache 计数：非负有限数即保留（显式 0 回填 0 而非跳过，与 usage-parser 口径一致；仅字段缺失视为缺席）。 */
@@ -59,10 +61,10 @@ function str(value: unknown): string | undefined {
 }
 
 async function chatMessageColumnNames(
-  tx: TdbcConnection,
+  tx: TdbcConnection
 ): Promise<Set<string>> {
   const rows = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('chat_message')`,
+    `SELECT name FROM pragma_table_info('chat_message')`
   );
   return new Set(rows.map((row) => row.name));
 }
@@ -79,7 +81,10 @@ async function ensureBackfillColumns(tx: TdbcConnection): Promise<void> {
     return;
   }
   const additions: readonly (readonly [string, string])[] = [
-    ["cache_read_tokens", "ALTER TABLE chat_message ADD COLUMN cache_read_tokens INTEGER NULL"],
+    [
+      "cache_read_tokens",
+      "ALTER TABLE chat_message ADD COLUMN cache_read_tokens INTEGER NULL",
+    ],
     [
       "cache_creation_tokens",
       "ALTER TABLE chat_message ADD COLUMN cache_creation_tokens INTEGER NULL",
@@ -139,7 +144,7 @@ type Extracted = {
  */
 function extractByProtocol(
   raw: Record<string, unknown>,
-  protocol: LlmProtocol,
+  protocol: LlmProtocol
 ): Extracted {
   if (protocol === "gemini") {
     const meta = isRecord(raw.usageMetadata) ? raw.usageMetadata : undefined;
@@ -166,8 +171,8 @@ function extractByProtocol(
   const usage = isRecord(raw.usage)
     ? raw.usage
     : isRecord(message?.usage)
-      ? message.usage
-      : undefined;
+    ? message.usage
+    : undefined;
   const cacheCreation = isRecord(usage?.cache_creation)
     ? nonNegativeNum(usage.cache_creation.input_tokens)
     : nonNegativeNum(usage?.cache_creation_input_tokens);
@@ -181,7 +186,7 @@ function extractByProtocol(
 /** 单行回填：能写多少写多少，全部条件不满足则不发 UPDATE。 */
 async function backfillRow(
   tx: TdbcConnection,
-  row: BackfillRow,
+  row: BackfillRow
 ): Promise<void> {
   let parsed: unknown;
   try {
@@ -225,7 +230,7 @@ async function backfillRow(
   params.push(row.id);
   await tx.execute(
     `UPDATE chat_message SET ${sets.join(", ")} WHERE id = ?`,
-    params,
+    params
   );
 }
 
@@ -247,7 +252,7 @@ async function up(tx: TdbcConnection): Promise<void> {
          AND id > ?
        ORDER BY id
        LIMIT ?`,
-      [lastId, BACKFILL_BATCH_SIZE],
+      [lastId, BACKFILL_BATCH_SIZE]
     );
     if (rows.length === 0) {
       break;

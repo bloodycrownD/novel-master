@@ -25,7 +25,7 @@ export interface DynamicMacroContext {
  */
 export async function expandDynamicMacros(
   content: string,
-  ctx: DynamicMacroContext,
+  ctx: DynamicMacroContext
 ): Promise<string> {
   const now = ctx.now ?? new Date();
   let filetree = "";

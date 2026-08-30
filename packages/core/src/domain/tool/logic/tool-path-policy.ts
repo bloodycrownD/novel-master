@@ -44,9 +44,10 @@ export function pathStartsWithPrefix(path: string, prefix: string): boolean {
   if (prefix === "" || prefix === "/" || prefix === "\\") {
     return true;
   }
-  const normalizedPrefix = prefix.endsWith("/") || prefix.endsWith("\\")
-    ? prefix.slice(0, -1)
-    : prefix;
+  const normalizedPrefix =
+    prefix.endsWith("/") || prefix.endsWith("\\")
+      ? prefix.slice(0, -1)
+      : prefix;
   if (path === normalizedPrefix) {
     return true;
   }
@@ -63,7 +64,7 @@ export function pathStartsWithPrefix(path: string, prefix: string): boolean {
  */
 export function isPathAllowed(
   path: string,
-  allowedPaths?: readonly string[],
+  allowedPaths?: readonly string[]
 ): boolean {
   if (allowedPaths === undefined) {
     return true;
@@ -79,7 +80,7 @@ export function isPathAllowed(
  */
 export function findDisallowedPath(
   paths: readonly string[],
-  allowedPaths?: readonly string[],
+  allowedPaths?: readonly string[]
 ): string | null {
   if (allowedPaths === undefined) {
     return null;
@@ -100,9 +101,7 @@ export function findDisallowedPath(
  * policy 与具体上下文类型解耦：只要 ctx 长得像 `{ allowedPaths?: string[] }`
  * 就能套上策略。
  */
-export function readAllowedPaths(
-  ctx: unknown,
-): readonly string[] | undefined {
+export function readAllowedPaths(ctx: unknown): readonly string[] | undefined {
   if (typeof ctx !== "object" || ctx === null) {
     return undefined;
   }
@@ -127,7 +126,7 @@ export function readAllowedPaths(
  */
 export function checkToolPathPolicy(
   input: unknown,
-  ctx: unknown,
+  ctx: unknown
 ): string | null {
   const allowedPaths = readAllowedPaths(ctx);
   const paths = extractInputPaths(input);

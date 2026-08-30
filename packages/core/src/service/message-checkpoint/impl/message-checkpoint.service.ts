@@ -22,7 +22,9 @@ export interface MessageCheckpointServiceDeps {
 /**
  * Scans session files and writes a checkpoint tree (files only, no empty dirs).
  */
-export class DefaultMessageCheckpointService implements MessageCheckpointService {
+export class DefaultMessageCheckpointService
+  implements MessageCheckpointService
+{
   constructor(private readonly deps: MessageCheckpointServiceDeps) {}
 
   /**
@@ -31,17 +33,13 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
   async capture(
     sessionId: string,
     projectId: string,
-    messageId: string,
+    messageId: string
   ): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
       // listSessionFileHeads 在事务内调：用绑定 tx 的 entry repo 持锁扫描，
       // 避免并发 capture 读到未提交的 head（V8）。
       const txEntries = new SqliteVfsEntryRepository(tx);
-      const files = await listSessionFileHeads(
-        txEntries,
-        projectId,
-        sessionId,
-      );
+      const files = await listSessionFileHeads(txEntries, projectId, sessionId);
       if (files.length === 0) {
         return;
       }
@@ -65,7 +63,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
    */
   async backfillMissingBaselines(
     sessionId: string,
-    projectId: string,
+    projectId: string
   ): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
       const txEntries = new SqliteVfsEntryRepository(tx);
@@ -76,7 +74,7 @@ export class DefaultMessageCheckpointService implements MessageCheckpointService
         txMessages,
         txCheckpoints,
         projectId,
-        sessionId,
+        sessionId
       );
     });
   }

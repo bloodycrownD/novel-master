@@ -25,7 +25,7 @@ export interface VfsEntryRepository {
   list(
     scopeKey: string,
     dir: string,
-    options?: VfsListOptions,
+    options?: VfsListOptions
   ): Promise<VfsListEntry[]>;
 
   findByPath(scopeKey: string, path: string): Promise<VfsEntry | null>;
@@ -44,13 +44,13 @@ export interface VfsEntryRepository {
    */
   findContentHashesByPaths(
     scopeKey: string,
-    paths: ReadonlyArray<string>,
+    paths: ReadonlyArray<string>
   ): Promise<Map<string, string | null>>;
 
   insert(
     scopeKey: string,
     path: string,
-    content: string,
+    content: string
   ): Promise<{ version: number }>;
 
   /**
@@ -61,7 +61,7 @@ export interface VfsEntryRepository {
   insertWithContentHash(
     scopeKey: string,
     path: string,
-    contentHash: string,
+    contentHash: string
   ): Promise<{ version: number }>;
 
   /**
@@ -73,7 +73,7 @@ export interface VfsEntryRepository {
     scopeKey: string,
     path: string,
     content: string,
-    version: number,
+    version: number
   ): Promise<{ version: number }>;
 
   insertDirectory(scopeKey: string, path: string): Promise<void>;
@@ -91,7 +91,7 @@ export interface VfsEntryRepository {
     path: string,
     content: string,
     nextVersion: number,
-    options: VfsWriteRepoOptions,
+    options: VfsWriteRepoOptions
   ): Promise<{ version: number }>;
 
   /**
@@ -104,7 +104,7 @@ export interface VfsEntryRepository {
     path: string,
     contentHash: string,
     nextVersion: number,
-    options: VfsWriteRepoOptions,
+    options: VfsWriteRepoOptions
   ): Promise<{ version: number }>;
 
   /**
@@ -122,7 +122,7 @@ export interface VfsEntryRepository {
       version: number;
       contentHash: string;
       mtimeMs: number;
-    },
+    }
   ): Promise<void>;
 
   /**
@@ -130,7 +130,11 @@ export interface VfsEntryRepository {
    *
    * @returns 实际删除的行数（changes）；命中 0 行时抛 `vfsNotFound`。
    */
-  delete(scopeKey: string, path: string, options: VfsDeleteOptions): Promise<number>;
+  delete(
+    scopeKey: string,
+    path: string,
+    options: VfsDeleteOptions
+  ): Promise<number>;
 
   /**
    * 递归删除 scope+prefix 下所有 entry；prefix 下无任何 entry 时静默返回 0。
@@ -146,28 +150,25 @@ export interface VfsEntryRepository {
    *
    * @returns 实际删除的行数（探测为空时返回 0）
    */
-  deleteRecursiveIfAny(
-    scopeKey: string,
-    prefix: string,
-  ): Promise<number>;
+  deleteRecursiveIfAny(scopeKey: string, prefix: string): Promise<number>;
 
   /** scope 下所有文件路径（glob 用）。 */
   listAllPaths(scopeKey: string): Promise<string[]>;
 
   listDirectoryPathsUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<string[]>;
 
   listEntriesUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<VfsListEntry[]>;
 
   /** Lists file paths and mtimes under a prefix without reading `content`. */
   listFileMetaUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
 
   /**
@@ -176,7 +177,7 @@ export interface VfsEntryRepository {
    */
   listFileHeadsUnderPrefix(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<
     ReadonlyArray<{
       entryId: number;
@@ -188,7 +189,7 @@ export interface VfsEntryRepository {
 
   scanContents(
     scopeKey: string,
-    pathPrefix?: string,
+    pathPrefix?: string
   ): Promise<
     ReadonlyArray<{
       entryId: number;
@@ -206,7 +207,7 @@ export interface VfsEntryRepository {
     tx: TdbcConnection,
     scopeKey: string,
     oldPath: string,
-    newPath: string,
+    newPath: string
   ): Promise<void>;
 
   /**
@@ -218,7 +219,7 @@ export interface VfsEntryRepository {
     tx: TdbcConnection,
     scopeKey: string,
     oldPrefix: string,
-    newPrefix: string,
+    newPrefix: string
   ): Promise<void>;
 
   /**
@@ -228,7 +229,7 @@ export interface VfsEntryRepository {
    */
   scanFileEntriesWithMeta(
     scopeKey: string,
-    pathPrefix?: string,
+    pathPrefix?: string
   ): Promise<
     ReadonlyArray<{
       entryId: number;
@@ -242,7 +243,7 @@ export interface VfsEntryRepository {
   /** 批量检查哪些路径在指定 scope 下已存在（文件或目录行）。 */
   findExistingPaths(
     scopeKey: string,
-    paths: ReadonlyArray<string>,
+    paths: ReadonlyArray<string>
   ): Promise<Set<string>>;
 
   /**
@@ -257,13 +258,13 @@ export interface VfsEntryRepository {
       path: string;
       contentHash: string;
       mtimeMs: number;
-    }>,
+    }>
   ): Promise<void>;
 
   /** 批量插入目录 entry（head_version=1, content_hash=NULL）。 */
   batchInsertDirectoryEntries(
     scopeKey: string,
-    paths: ReadonlyArray<string>,
+    paths: ReadonlyArray<string>
   ): Promise<void>;
 }
 

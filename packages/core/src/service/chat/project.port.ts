@@ -33,6 +33,6 @@ export interface ProjectService {
   updateAgentConfig(
     id: string,
     patch: ProjectAgentConfigPatch,
-    options?: ValidateAgentDefinitionOptions,
+    options?: ValidateAgentDefinitionOptions
   ): Promise<ProjectAgentConfig>;
 }

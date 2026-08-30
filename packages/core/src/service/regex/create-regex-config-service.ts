@@ -19,7 +19,7 @@ import type { RegexConfigService } from "./regex-config.port.js";
  */
 export function createRegexConfigService(
   conn: TdbcConnection,
-  state?: PersistentState,
+  state?: PersistentState
 ): RegexConfigService {
   return new DefaultRegexConfigService({
     groups: new SqliteRegexGroupRepository(conn),

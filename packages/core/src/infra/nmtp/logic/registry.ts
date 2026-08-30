@@ -37,7 +37,7 @@ export function resolveTokenizerDriver(explicit?: string): TokenizerDriver {
     if (!driver) {
       throw new TokenizerError(
         "NOT_REGISTERED",
-        `Tokenizer driver not registered: ${explicit}. ${REGISTER_HINT}`,
+        `Tokenizer driver not registered: ${explicit}. ${REGISTER_HINT}`
       );
     }
     return driver;
@@ -51,12 +51,14 @@ export function resolveTokenizerDriver(explicit?: string): TokenizerDriver {
   if (names.length === 0) {
     throw new TokenizerError(
       "NOT_REGISTERED",
-      `No tokenizer driver registered. ${REGISTER_HINT}`,
+      `No tokenizer driver registered. ${REGISTER_HINT}`
     );
   }
 
   throw new TokenizerError(
     "MULTIPLE_DRIVERS",
-    `Multiple tokenizer drivers registered (${names.join(", ")}); specify driver name. ${REGISTER_HINT}`,
+    `Multiple tokenizer drivers registered (${names.join(
+      ", "
+    )}); specify driver name. ${REGISTER_HINT}`
   );
 }

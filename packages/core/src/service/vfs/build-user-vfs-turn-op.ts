@@ -29,7 +29,7 @@ function allocToolIds(count: number, prefix: string): string[] {
   const stamp = Date.now();
   return Array.from(
     { length: count },
-    (_, index) => `tu_${prefix}_${stamp}_${toolIdSeq++}_${index}`,
+    (_, index) => `tu_${prefix}_${stamp}_${toolIdSeq++}_${index}`
   );
 }
 
@@ -40,7 +40,7 @@ function toOp(actionXml: string, tools: UserVfsTurnToolSpec[]): UserVfsTurnOp {
 /** 构建删除操作 op。 */
 export function buildUserVfsDeleteOp(
   path: string,
-  recursive = true,
+  recursive = true
 ): UserVfsTurnOp {
   const actionXml = buildUserVfsSimpleActionXml("delete", {
     path,
@@ -77,7 +77,7 @@ export function buildUserVfsRenameOp(from: string, to: string): UserVfsTurnOp {
 /** 构建新建文件（write）操作 op。 */
 export function buildUserVfsCreateFileOp(
   path: string,
-  content = "",
+  content = ""
 ): UserVfsTurnOp {
   const actionXml = buildUserVfsSaveWriteActionXml(path, "new-file", content);
   const [id] = allocToolIds(1, "create");
@@ -93,14 +93,14 @@ export function buildUserVfsSaveOp(
   path: string,
   fileContentAtSave: string,
   versionOptions?: UserVfsSaveVersionOptions,
-  mappingOptions?: UserVfsSaveMappingOptions,
+  mappingOptions?: UserVfsSaveMappingOptions
 ): UserVfsTurnOp | null {
   const mapped = mapUserSaveToToolUses(
     baseline,
     saved,
     path,
     fileContentAtSave,
-    mappingOptions,
+    mappingOptions
   );
 
   if (mapped.kind === "noop") {
@@ -111,7 +111,7 @@ export function buildUserVfsSaveOp(
     const actionXml = buildUserVfsSaveWriteActionXml(
       mapped.path,
       mapped.reason ?? "anchor-not-unique",
-      mapped.content,
+      mapped.content
     );
     const [id] = allocToolIds(1, "write");
     const writeInput: Record<string, unknown> = {
@@ -132,7 +132,10 @@ export function buildUserVfsSaveOp(
     return toOp(actionXml, [{ id, name: "write", input: writeInput }]);
   }
 
-  const actionXml = buildUserVfsSaveEditActionXml(mapped.path, mapped.editHunks);
+  const actionXml = buildUserVfsSaveEditActionXml(
+    mapped.path,
+    mapped.editHunks
+  );
   const ids = allocToolIds(mapped.toolUses.length, "edit");
   const tools = mapped.toolUses.map((toolUse, index) => ({
     id: ids[index]!,

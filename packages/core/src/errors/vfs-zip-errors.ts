@@ -28,6 +28,9 @@ export class VfsZipError extends Error {
   }
 }
 
-export function vfsZipError(code: VfsZipErrorCode, message: string): VfsZipError {
+export function vfsZipError(
+  code: VfsZipErrorCode,
+  message: string
+): VfsZipError {
   return new VfsZipError(code, message);
 }

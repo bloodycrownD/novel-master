@@ -3,7 +3,7 @@
 /** 稳定 slug；名称无可用字符时回退为 time-based id。 */
 export function deriveRegexGroupId(
   displayName: string,
-  takenIds: ReadonlySet<string>,
+  takenIds: ReadonlySet<string>
 ): string {
   const base = displayName
     .trim()

@@ -60,11 +60,9 @@ export const EMPTY_CLOUD_SYNC_STATUS: CloudSyncStatus = {
 export function parseCloudSyncStatus(raw: unknown): CloudSyncStatus {
   const result = cloudSyncStatusSchema.safeParse(raw);
   if (!result.success) {
-    throw new CloudSyncError(
-      "INVALID_STATUS",
-      "云端状态文件格式无效",
-      { cause: result.error },
-    );
+    throw new CloudSyncError("INVALID_STATUS", "云端状态文件格式无效", {
+      cause: result.error,
+    });
   }
   return result.data;
 }

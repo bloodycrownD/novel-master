@@ -43,7 +43,7 @@ function compileRegex(pattern: string, caseInsensitive: boolean): RegExp {
 
 function createLineMatcher(
   pattern: string,
-  options?: VfsGrepOptions,
+  options?: VfsGrepOptions
 ): LineMatcher {
   const mode = options?.matchMode ?? "auto";
   const caseInsensitive = options?.caseInsensitive === true;
@@ -112,7 +112,7 @@ function createLineMatcher(
 function buildExcerpt(
   lines: readonly string[],
   lineIndex: number,
-  contextLines: number,
+  contextLines: number
 ): string {
   if (contextLines <= 0) {
     return lines[lineIndex] ?? "";
@@ -128,7 +128,7 @@ function buildExcerpt(
 export function grepContents(
   rows: readonly VfsGrepContentRow[],
   pattern: string,
-  options?: VfsGrepOptions,
+  options?: VfsGrepOptions
 ): VfsGrepMatch[] {
   const matcher = createLineMatcher(pattern, options);
   const invert = options?.invert === true;

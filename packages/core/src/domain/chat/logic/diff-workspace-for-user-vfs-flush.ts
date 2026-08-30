@@ -27,7 +27,10 @@ export type WorkspaceFlushDiff = {
   readonly changedFiles: readonly WorkspaceFlushChangedFile[];
   readonly addedDirs: readonly string[];
   readonly deletedDirs: readonly string[];
-  readonly renames: ReadonlyArray<{ readonly from: string; readonly to: string }>;
+  readonly renames: ReadonlyArray<{
+    readonly from: string;
+    readonly to: string;
+  }>;
 };
 
 /** diff 纯函数入参；正文由 service 层预先读取。 */
@@ -40,7 +43,7 @@ export type WorkspaceFlushDiffInput = {
 
 function hasFilesUnderDir(
   dir: string,
-  fileTree: ReadonlyMap<string, number>,
+  fileTree: ReadonlyMap<string, number>
 ): boolean {
   if (dir === "/") {
     return fileTree.size > 0;
@@ -61,7 +64,7 @@ function pairRenamesByEqualContent(
   deletedPaths: readonly string[],
   addedPaths: readonly string[],
   baselineContentByPath: ReadonlyMap<string, string>,
-  currentContentByPath: ReadonlyMap<string, string>,
+  currentContentByPath: ReadonlyMap<string, string>
 ): {
   readonly renames: Array<{ from: string; to: string }>;
   readonly remainingDeleted: string[];
@@ -117,7 +120,7 @@ export function isWorkspaceFlushDiffEmpty(diff: WorkspaceFlushDiff): boolean {
  * @remarks rename 计入 `from` 与 `to`；供 Composer `user_ops` chip 投影与 preview API 复用。
  */
 export function collectUserOpsChangedPaths(
-  diff: WorkspaceFlushDiff,
+  diff: WorkspaceFlushDiff
 ): readonly string[] {
   const paths = new Set<string>();
   for (const path of diff.deletedFiles) {
@@ -148,7 +151,7 @@ export function collectUserOpsChangedPaths(
  * @remarks 双方共有 path 且正文相等则跳过（含 edit 后改回）；rename 优先于 delete+write。
  */
 export function diffWorkspaceForUserVfsFlush(
-  input: WorkspaceFlushDiffInput,
+  input: WorkspaceFlushDiffInput
 ): WorkspaceFlushDiff {
   const { baseline, current, baselineContentByPath, currentContentByPath } =
     input;
@@ -184,12 +187,13 @@ export function diffWorkspaceForUserVfsFlush(
     }
   }
 
-  const { renames, remainingDeleted, remainingAdded } = pairRenamesByEqualContent(
-    rawDeleted,
-    rawAdded,
-    baselineContentByPath,
-    currentContentByPath,
-  );
+  const { renames, remainingDeleted, remainingAdded } =
+    pairRenamesByEqualContent(
+      rawDeleted,
+      rawAdded,
+      baselineContentByPath,
+      currentContentByPath
+    );
 
   const addedFiles: WorkspaceFlushAddedFile[] = remainingAdded.map((path) => ({
     path,

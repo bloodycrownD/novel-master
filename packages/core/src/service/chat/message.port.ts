@@ -18,11 +18,11 @@ export interface MessageService {
   listBySession(sessionId: string): Promise<ChatMessage[]>;
   listBySessionTail(
     sessionId: string,
-    options: { limit: number },
+    options: { limit: number }
   ): Promise<ChatMessage[]>;
   listBySessionPage(
     sessionId: string,
-    options: { limit: number; beforeSeq?: number },
+    options: { limit: number; beforeSeq?: number }
   ): Promise<ChatMessage[]>;
 
   get(id: string): Promise<ChatMessage>;
@@ -40,13 +40,16 @@ export interface MessageService {
       attachments?: readonly MessageAttachment[];
       /** LLM token usage（assistant message 持久化）。 */
       usage?: MessageUsage;
-    },
+    }
   ): Promise<ChatMessage>;
 
   delete(id: string): Promise<void>;
 
   /** Replaces message content (e.g. user edit in mobile). */
-  updateContent(messageId: string, content: MessageContent): Promise<ChatMessage>;
+  updateContent(
+    messageId: string,
+    content: MessageContent
+  ): Promise<ChatMessage>;
 
   /**
    * Creates a new session with source session VFS and messages up to `upToMessageId`.
@@ -73,7 +76,7 @@ export interface MessageService {
    */
   truncateAfter(
     sessionId: string,
-    afterMessageId: string | null,
+    afterMessageId: string | null
   ): Promise<void>;
 
   /**
@@ -81,6 +84,6 @@ export interface MessageService {
    */
   searchMessages(
     sessionId: string,
-    query: MessageSearchQuery,
+    query: MessageSearchQuery
   ): Promise<ChatMessage[]>;
 }

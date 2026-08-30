@@ -47,7 +47,7 @@ export class SessionFsError extends Error {
       missingLogicalPaths?: readonly string[];
       expectedMessageCount?: number;
       actualMessageCount?: number;
-    },
+    }
   ) {
     super(message);
     this.name = "SessionFsError";
@@ -76,7 +76,7 @@ function unwrapCause(error: unknown): unknown {
 /** Type guard for {@link SessionFsError}. */
 export function isSessionFsError(
   error: unknown,
-  code?: SessionFsErrorCode,
+  code?: SessionFsErrorCode
 ): error is SessionFsError {
   const candidate = unwrapCause(error);
   if (typeof candidate !== "object" || candidate === null) {
@@ -89,33 +89,35 @@ export function isSessionFsError(
   return code === undefined || err.code === code;
 }
 
-export function sessionFsRollbackMessageNotFound(messageId: string): SessionFsError {
+export function sessionFsRollbackMessageNotFound(
+  messageId: string
+): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_MESSAGE_NOT_FOUND",
     `消息不存在：${messageId}`,
-    { messageId },
+    { messageId }
   );
 }
 
 export function sessionFsRollbackMessageSessionMismatch(
   messageId: string,
-  sessionId: string,
+  sessionId: string
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_MESSAGE_SESSION_MISMATCH",
     `消息不属于当前会话：${messageId}`,
-    { messageId, sessionId },
+    { messageId, sessionId }
   );
 }
 
 export function sessionFsRestoreRevisionMissing(
   logicalPath: string,
-  revisionVersion: number,
+  revisionVersion: number
 ): SessionFsError {
   return new SessionFsError(
     "RESTORE_REVISION_MISSING",
     `恢复所需 revision 缺失：${logicalPath} v${revisionVersion}`,
-    { logicalPath, revisionVersion },
+    { logicalPath, revisionVersion }
   );
 }
 
@@ -127,13 +129,12 @@ export function sessionFsRestoreRevisionMissing(
  */
 export function sessionFsRollbackNoCheckpoint(
   messageId: string,
-  sessionId: string,
+  sessionId: string
 ): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_NO_CHECKPOINT",
-    "该消息无回滚点",
-    { messageId, sessionId },
-  );
+  return new SessionFsError("ROLLBACK_NO_CHECKPOINT", "该消息无回滚点", {
+    messageId,
+    sessionId,
+  });
 }
 
 /**
@@ -143,12 +144,12 @@ export function sessionFsRollbackNoCheckpoint(
  */
 export function sessionFsRollbackUndoSendEmptyTarget(
   sessionId: string,
-  messageId: string,
+  messageId: string
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_UNDO_SEND_EMPTY_TARGET",
     "undo_send 缺少可用的 baseline 快照，拒绝清空会话工作区",
-    { sessionId, messageId },
+    { sessionId, messageId }
   );
 }
 
@@ -159,7 +160,7 @@ export function sessionFsRollbackVfsRestoreFailed(
     sessionId?: string;
     messageId?: string;
     logicalPath?: string;
-  },
+  }
 ): SessionFsError {
   return new SessionFsError("ROLLBACK_VFS_RESTORE_FAILED", message, options);
 }
@@ -172,26 +173,26 @@ export function sessionFsRollbackRevisionBackfillRequired(
   options?: {
     sessionId?: string;
     messageId?: string;
-  },
+  }
 ): SessionFsError {
   const paths = missingLogicalPaths.join(", ");
   return new SessionFsError(
     "ROLLBACK_REVISION_BACKFILL_REQUIRED",
     `回滚所需 revision 缺失，需确认使用最新内容修复：${paths}`,
-    { ...options, missingLogicalPaths },
+    { ...options, missingLogicalPaths }
   );
 }
 
 /** 判断是否为 revision 缺失需回补错误（含 cause 链）。 */
 export function isRollbackRevisionBackfillRequiredError(
-  error: unknown,
+  error: unknown
 ): error is SessionFsError {
   return isSessionFsError(error, "ROLLBACK_REVISION_BACKFILL_REQUIRED");
 }
 
 /** 从回补错误中读取缺失快照的逻辑路径列表。 */
 export function readRollbackRevisionBackfillMissingPaths(
-  error: unknown,
+  error: unknown
 ): readonly string[] {
   if (!isRollbackRevisionBackfillRequiredError(error)) {
     return [];
@@ -206,10 +207,10 @@ export function readRollbackRevisionBackfillMissingPaths(
  */
 export function formatRollbackRevisionBackfillAlertMessage(
   missingLogicalPaths: readonly string[],
-  mode?: import("@/domain/chat/logic/rollback-confirm-copy.js").RollbackMode,
+  mode?: import("@/domain/chat/logic/rollback-confirm-copy.js").RollbackMode
 ): string {
   const displayNames = missingLogicalPaths.map((logicalPath) =>
-    logicalPath.startsWith("/") ? logicalPath.slice(1) : logicalPath,
+    logicalPath.startsWith("/") ? logicalPath.slice(1) : logicalPath
   );
   const fileLines =
     displayNames.length > 0
@@ -232,18 +233,18 @@ export function sessionFsRollbackConflict(
   sessionId: string,
   messageId: string,
   expectedMessageCount: number,
-  actualMessageCount: number,
+  actualMessageCount: number
 ): SessionFsError {
   return new SessionFsError(
     "ROLLBACK_CONFLICT",
     `回滚期间会话消息发生了变化（预期 ${expectedMessageCount} 条，实际 ${actualMessageCount} 条），请重试`,
-    { sessionId, messageId, expectedMessageCount, actualMessageCount },
+    { sessionId, messageId, expectedMessageCount, actualMessageCount }
   );
 }
 
 /** 判断错误是否为乐观锁冲突（含 cause 链）。 */
 export function isRollbackConflictError(
-  error: unknown,
+  error: unknown
 ): error is SessionFsError {
   return isSessionFsError(error, "ROLLBACK_CONFLICT");
 }

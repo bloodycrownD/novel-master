@@ -18,7 +18,7 @@ const listeners = new Set<AnnotateListener>();
 
 /** 订阅批注草稿变更；返回取消订阅。 */
 export function subscribeChatAnnotateDraft(
-  listener: AnnotateListener,
+  listener: AnnotateListener
 ): () => void {
   listeners.add(listener);
   return () => {
@@ -38,7 +38,7 @@ function cloneDrafts(list: readonly AnnotateDraft[]): AnnotateDraft[] {
 
 /** 读本会话未发送批注草稿（快照）。 */
 export function listChatAnnotateDrafts(
-  sessionId: string | undefined,
+  sessionId: string | undefined
 ): readonly AnnotateDraft[] {
   if (sessionId == null || sessionId === "") {
     return [];
@@ -47,9 +47,7 @@ export function listChatAnnotateDrafts(
 }
 
 /** 本会话是否有未发送批注。 */
-export function hasChatAnnotateDrafts(
-  sessionId: string | undefined,
-): boolean {
+export function hasChatAnnotateDrafts(sessionId: string | undefined): boolean {
   if (sessionId == null || sessionId === "") {
     return false;
   }
@@ -61,7 +59,7 @@ export function hasChatAnnotateDrafts(
  * **忽略**历史消息批注伪 path（`path.includes('__message__:')`）——防御误写入。
  */
 export function chipsFromAnnotateStore(
-  sessionId: string | undefined,
+  sessionId: string | undefined
 ): MessageAttachment[] {
   const drafts = listChatAnnotateDrafts(sessionId);
   const seen = new Set<string>();
@@ -93,7 +91,7 @@ export function chipsFromAnnotateStore(
  */
 export function unionComposerStatusWithAnnotate(
   projected: readonly MessageAttachment[],
-  sessionId: string | undefined,
+  sessionId: string | undefined
 ): MessageAttachment[] {
   const withoutAnnotate = projected.filter((a) => a.action !== "annotate");
   return [...withoutAnnotate, ...chipsFromAnnotateStore(sessionId)];
@@ -102,7 +100,7 @@ export function unionComposerStatusWithAnnotate(
 /** 新增一条批注草稿。 */
 export function addChatAnnotateDraft(
   sessionId: string,
-  draft: AnnotateDraft,
+  draft: AnnotateDraft
 ): void {
   if (sessionId === "") {
     return;
@@ -117,7 +115,7 @@ export function updateChatAnnotateDraft(
   sessionId: string,
   id: string,
   patch: Pick<AnnotateDraft, "userAnnotation"> &
-    Partial<Pick<AnnotateDraft, "originalText">>,
+    Partial<Pick<AnnotateDraft, "originalText">>
 ): void {
   if (sessionId === "") {
     return;
@@ -146,10 +144,7 @@ export function updateChatAnnotateDraft(
 }
 
 /** 删除一条批注草稿。 */
-export function removeChatAnnotateDraft(
-  sessionId: string,
-  id: string,
-): void {
+export function removeChatAnnotateDraft(sessionId: string, id: string): void {
   if (sessionId === "") {
     return;
   }
@@ -172,7 +167,7 @@ export function removeChatAnnotateDraft(
 /** 删光某 path 下全部批注。 */
 export function removeChatAnnotateDraftsByPath(
   sessionId: string,
-  path: string,
+  path: string
 ): void {
   if (sessionId === "") {
     return;

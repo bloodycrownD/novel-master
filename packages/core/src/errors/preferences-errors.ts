@@ -17,7 +17,7 @@ export class PreferencesError extends Error {
   constructor(
     code: PreferencesErrorCode,
     message: string,
-    options?: { key?: string },
+    options?: { key?: string }
   ) {
     super(message);
     this.name = "PreferencesError";
@@ -32,11 +32,11 @@ export class PreferencesError extends Error {
 export function preferencesInvalidValue(
   key: string,
   expectedType: string,
-  actualValue: string,
+  actualValue: string
 ): PreferencesError {
   return new PreferencesError(
     "INVALID_VALUE",
     `Preference key "${key}" expected ${expectedType}, got: ${actualValue}`,
-    { key },
+    { key }
   );
 }

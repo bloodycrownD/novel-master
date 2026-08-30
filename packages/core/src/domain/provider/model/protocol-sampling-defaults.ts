@@ -36,7 +36,7 @@ export const GEMINI_SAMPLING_DEFAULTS = {
 /** Merges saved params over protocol defaults (for forms and max-token display). */
 export function mergeSamplingWithDefaults(
   protocol: LlmProtocolKind,
-  params: ModelSamplingParams | undefined,
+  params: ModelSamplingParams | undefined
 ): ModelSamplingParams {
   switch (protocol) {
     case "openai":
@@ -68,7 +68,7 @@ export function mergeSamplingWithDefaults(
 
 /** Output token cap from effective sampling params (for prompt usage %). */
 export function maxOutputTokensFromSampling(
-  params: ModelSamplingParams,
+  params: ModelSamplingParams
 ): number | undefined {
   switch (params.protocol) {
     case "openai":

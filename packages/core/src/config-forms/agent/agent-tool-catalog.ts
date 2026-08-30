@@ -1,4 +1,7 @@
-import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
+import type {
+  AgentDefinition,
+  AgentToolPolicy,
+} from "@/domain/agent/model/agent-definition.js";
 import type { ToolsMode } from "./agent-editor-state.js";
 
 /** Catalog of V2 builtin tools for Agent policy UI（与 registerBuiltinTools 同步）。 */
@@ -7,21 +10,46 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   readonly label: string;
   readonly description: string;
 }> = [
-  { name: "task", label: "task", description: "委派子智能体执行子任务（仅主智能体可用）" },
+  {
+    name: "task",
+    label: "task",
+    description: "委派子智能体执行子任务（仅主智能体可用）",
+  },
   { name: "read", label: "read", description: "读取工作区文件（支持分页）" },
   { name: "write", label: "write", description: "写入或整文件覆盖" },
   { name: "edit", label: "edit", description: "精确查找替换（含尾追）" },
-  { name: "fs", label: "fs", description: "文件系统命令（ls/rm/mv/cp/mkdir/rmdir）" },
+  {
+    name: "fs",
+    label: "fs",
+    description: "文件系统命令（ls/rm/mv/cp/mkdir/rmdir）",
+  },
   { name: "glob", label: "glob", description: "按 glob 模式查找路径" },
-  { name: "grep", label: "grep", description: "在工作区文件内容中搜索（支持正则/反选/上下文）" },
-  { name: "skill", label: "skill", description: "使用与管理技能（load/read/write/edit/list）" },
-  { name: "agent", label: "agent", description: "管理 agent 定义（list/get/create/update，仅主智能体可用）" },
-  { name: "curl", label: "curl", description: "发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体" },
+  {
+    name: "grep",
+    label: "grep",
+    description: "在工作区文件内容中搜索（支持正则/反选/上下文）",
+  },
+  {
+    name: "skill",
+    label: "skill",
+    description: "使用与管理技能（load/read/write/edit/list）",
+  },
+  {
+    name: "agent",
+    label: "agent",
+    description: "管理 agent 定义（list/get/create/update，仅主智能体可用）",
+  },
+  {
+    name: "curl",
+    label: "curl",
+    description:
+      "发起 http/https 请求获取或提交网页/API 内容，支持自定义方法、请求头与请求体",
+  },
 ] as const;
 
 export function buildToolsPolicyFromSelection(
   mode: ToolsMode,
-  selected: readonly string[],
+  selected: readonly string[]
 ): AgentToolPolicy | undefined {
   if (mode === "default") {
     return undefined;

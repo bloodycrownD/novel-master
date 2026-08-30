@@ -22,11 +22,11 @@ export interface TokenCounterRegistry {
    */
   forSavedModel(
     savedModelId: string,
-    options?: ForVendorModelOptions,
+    options?: ForVendorModelOptions
   ): Promise<TokenCounter>;
   /** Primary path: vendor model id substring → tokenizer family (heuristic in core). */
   forVendorModel(
     vendorModelId: string,
-    options?: ForVendorModelOptions,
+    options?: ForVendorModelOptions
   ): TokenCounter;
 }

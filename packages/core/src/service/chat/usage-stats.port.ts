@@ -138,7 +138,7 @@ export interface UsageStatsService {
    */
   getHourlyBuckets(
     dayLocalDate: string,
-    filter: UsageStatsFilter,
+    filter: UsageStatsFilter
   ): Promise<UsageStatsBucket[]>;
 
   /** 分模型汇总（非配置模型与未记录行归并为 `modelName` 为 null 的「其他」桶）。 */
@@ -150,7 +150,7 @@ export interface UsageStatsService {
    */
   listRequestUsage(
     filter: UsageStatsFilter,
-    page: UsageStatsRequestPageQuery,
+    page: UsageStatsRequestPageQuery
   ): Promise<UsageStatsRequestPage>;
 
   /**

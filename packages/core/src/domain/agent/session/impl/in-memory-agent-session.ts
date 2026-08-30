@@ -22,7 +22,7 @@ export class InMemoryAgentSession implements AgentSession {
   constructor(
     readonly sessionId = "in-memory",
     readonly workplaceScopeSessionId = sessionId,
-    readonly kkvScopeSessionId = sessionId,
+    readonly kkvScopeSessionId = sessionId
   ) {}
 
   async list(): Promise<readonly ChatMessage[]> {
@@ -37,7 +37,7 @@ export class InMemoryAgentSession implements AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
-    },
+    }
   ): Promise<ChatMessage> {
     this.seq += 1;
     const message: ChatMessage = {

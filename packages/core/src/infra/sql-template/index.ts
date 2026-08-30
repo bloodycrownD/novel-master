@@ -51,10 +51,7 @@ export class SqlTemplateParser {
    * (for example fixed column names from an allow-list). Untrusted input in `${...}`
    * can cause SQL injection. Prefer `#{name}` for user-supplied values.
    */
-  parse(
-    template: string,
-    params: Record<string, unknown>,
-  ): SqlParseResult {
+  parse(template: string, params: Record<string, unknown>): SqlParseResult {
     const ast = this.parser.parse(template);
     const evaluator = new TemplateEvaluator(this.placeholder);
     return evaluator.evaluate(ast, params);

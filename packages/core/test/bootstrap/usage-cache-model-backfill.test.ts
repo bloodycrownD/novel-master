@@ -61,7 +61,7 @@ async function seedMessage(
   conn: TdbcConnection,
   id: string,
   rawJson: string | null,
-  opts: SeedOptions = {},
+  opts: SeedOptions = {}
 ): Promise<void> {
   await conn.execute(
     `INSERT INTO chat_message (
@@ -77,7 +77,7 @@ async function seedMessage(
       opts.promptTokens ?? null,
       opts.cacheReadTokens ?? null,
       opts.cacheCreationTokens ?? null,
-    ],
+    ]
   );
 }
 
@@ -92,24 +92,22 @@ type MessageRow = {
 
 async function readMessage(
   conn: TdbcConnection,
-  id: string,
+  id: string
 ): Promise<MessageRow | undefined> {
   const rows = await conn.query<MessageRow>(
     `SELECT id, provider, cache_read_tokens, cache_creation_tokens,
             model_name, prompt_tokens
      FROM chat_message WHERE id = ?`,
-    [id],
+    [id]
   );
   return rows[0];
 }
 
-async function readAllMessages(
-  conn: TdbcConnection,
-): Promise<MessageRow[]> {
+async function readAllMessages(conn: TdbcConnection): Promise<MessageRow[]> {
   return await conn.query<MessageRow>(
     `SELECT id, provider, cache_read_tokens, cache_creation_tokens,
             model_name, prompt_tokens
-     FROM chat_message ORDER BY id`,
+     FROM chat_message ORDER BY id`
   );
 }
 
@@ -148,7 +146,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
   it("登记表：migration 位于 SCHEMA_MIGRATIONS 尾部", () => {
     assert.equal(
       SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1]?.id,
-      USAGE_CACHE_MODEL_BACKFILL_V1_ID,
+      USAGE_CACHE_MODEL_BACKFILL_V1_ID
     );
   });
 
@@ -217,7 +215,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
             model: "claude-opus-4",
             usage: { input_tokens: 9, cache_read_input_tokens: 4 },
           },
-        }),
+        })
       );
 
       await usageCacheModelBackfillV1Up(conn);
@@ -241,7 +239,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
           type: "message_delta",
           delta: { stop_reason: "end_turn" },
           usage: { output_tokens: 7 },
-        }),
+        })
       );
 
       await usageCacheModelBackfillV1Up(conn);
@@ -262,7 +260,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
       await seedMessage(
         conn,
         "msg-placeholder",
-        JSON.stringify({ streamed: true, aborted: true }),
+        JSON.stringify({ streamed: true, aborted: true })
       );
       await seedMessage(conn, "msg-unknown", JSON.stringify({ foo: "bar" }));
       await seedMessage(conn, "msg-broken", "{not json");
@@ -276,7 +274,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
         assert.equal(
           row?.cache_read_tokens,
           null,
-          `${id} cache_read_tokens 应保持 NULL`,
+          `${id} cache_read_tokens 应保持 NULL`
         );
       }
     } finally {
@@ -298,7 +296,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
             total_tokens: 120,
             prompt_tokens_details: { cached_tokens: 0 },
           },
-        }),
+        })
       );
       await seedMessage(
         conn,
@@ -312,7 +310,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
             cache_read_input_tokens: 0,
             cache_creation_input_tokens: 0,
           },
-        }),
+        })
       );
 
       await usageCacheModelBackfillV1Up(conn);
@@ -338,7 +336,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
       await seedMessage(
         conn,
         "msg-placeholder",
-        JSON.stringify({ streamed: true, aborted: true }),
+        JSON.stringify({ streamed: true, aborted: true })
       );
 
       await usageCacheModelBackfillV1Up(conn);
@@ -347,17 +345,17 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
       const violated = await conn.query<{ n: number }>(
         `SELECT COUNT(*) AS n FROM chat_message
          WHERE (cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL)
-           AND provider IS NULL`,
+           AND provider IS NULL`
       );
       assert.equal(
         violated[0]?.n,
         0,
-        "cache 列非 NULL 的行 provider 不能是 NULL",
+        "cache 列非 NULL 的行 provider 不能是 NULL"
       );
       // 对照：确有 cache 非 NULL 的行存在（防断言空转）。
       const cached = await conn.query<{ n: number }>(
         `SELECT COUNT(*) AS n FROM chat_message
-         WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL`,
+         WHERE cache_read_tokens IS NOT NULL OR cache_creation_tokens IS NOT NULL`
       );
       assert.equal((cached[0]?.n ?? 0) > 0, true);
     } finally {
@@ -404,12 +402,12 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
         JSON.stringify({
           type: "message_delta",
           usage: { output_tokens: 7 },
-        }),
+        })
       );
       await seedMessage(
         conn,
         "msg-placeholder",
-        JSON.stringify({ streamed: true, aborted: true }),
+        JSON.stringify({ streamed: true, aborted: true })
       );
 
       await usageCacheModelBackfillV1Up(conn);
@@ -422,7 +420,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
       assert.equal(
         counter.countBySubstring("UPDATE chat_message"),
         0,
-        "二次执行不应发出任何 UPDATE chat_message",
+        "二次执行不应发出任何 UPDATE chat_message"
       );
 
       const afterSecond = await readAllMessages(conn);
@@ -457,9 +455,7 @@ describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
         model_name: string | null;
         provider: string | null;
         cache_read_tokens: number | null;
-      }>(
-        `SELECT model_name, provider, cache_read_tokens FROM chat_message`,
-      );
+      }>(`SELECT model_name, provider, cache_read_tokens FROM chat_message`);
       assert.equal(rows.length, total);
       for (const row of rows) {
         assert.equal(row.provider, "openai");

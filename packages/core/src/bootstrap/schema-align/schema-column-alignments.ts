@@ -37,7 +37,7 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
     afterAdd: async (tx) => {
       // 老库升版补列后建索引（新库由 bootstrap 末尾的幂等步骤建）。
       await tx.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)",
+        "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)"
       );
     },
   },
@@ -56,8 +56,7 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
   {
     table: "chat_message",
     column: "prompt_tokens",
-    addColumnSql:
-      "ALTER TABLE chat_message ADD COLUMN prompt_tokens INTEGER",
+    addColumnSql: "ALTER TABLE chat_message ADD COLUMN prompt_tokens INTEGER",
   },
   {
     table: "chat_message",
@@ -68,8 +67,7 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
   {
     table: "chat_message",
     column: "total_tokens",
-    addColumnSql:
-      "ALTER TABLE chat_message ADD COLUMN total_tokens INTEGER",
+    addColumnSql: "ALTER TABLE chat_message ADD COLUMN total_tokens INTEGER",
   },
   {
     table: "chat_message",

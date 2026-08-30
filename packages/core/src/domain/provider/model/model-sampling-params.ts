@@ -32,12 +32,15 @@ export interface GeminiSamplingParams {
 /** Discriminated union keyed by provider protocol. */
 export type ModelSamplingParams =
   | { readonly protocol: "openai"; readonly openai: OpenAiSamplingParams }
-  | { readonly protocol: "anthropic"; readonly anthropic: AnthropicSamplingParams }
+  | {
+      readonly protocol: "anthropic";
+      readonly anthropic: AnthropicSamplingParams;
+    }
   | { readonly protocol: "gemini"; readonly gemini: GeminiSamplingParams };
 
 /** Returns the protocol tag for sampling params, if any. */
 export function samplingProtocol(
-  params: ModelSamplingParams | undefined,
+  params: ModelSamplingParams | undefined
 ): LlmProtocolKind | undefined {
   return params?.protocol;
 }

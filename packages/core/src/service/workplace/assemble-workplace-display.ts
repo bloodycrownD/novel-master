@@ -34,7 +34,7 @@ export interface AssembleWorkplaceDisplayDeps {
   readonly sessionKkv: SessionKkvService;
   readonly workplace: WorkplaceService;
   readonly vfs: VfsService;
-/** Agent layout；`workplace` 未开则短路返回空且不写 kkv。 */
+  /** Agent layout；`workplace` 未开则短路返回空且不写 kkv。 */
   readonly layout: Pick<AgentPromptLayout, "workplace">;
 }
 
@@ -83,7 +83,7 @@ export interface AssembleWorkplaceDisplayOptions {
 export async function assembleWorkplaceDisplay(
   scope: Extract<VfsScope, { kind: "session" }>,
   deps: AssembleWorkplaceDisplayDeps,
-  options?: AssembleWorkplaceDisplayOptions,
+  options?: AssembleWorkplaceDisplayOptions
 ): Promise<AssembleWorkplaceDisplayResult> {
   if (!layoutHasWorkplace(deps.layout)) {
     return { workplaceDisplay: "", prefixPaths: [] };
@@ -112,7 +112,7 @@ export async function assembleWorkplaceDisplay(
         mtimeMs: cached.mtimeMs,
         display: entry.status,
         content: cached.body,
-      }),
+      })
     );
   }
   return {
@@ -123,12 +123,12 @@ export async function assembleWorkplaceDisplay(
 
 async function loadOrCreateRuleSnapshot(
   sessionId: string,
-  deps: AssembleWorkplaceDisplayDeps,
+  deps: AssembleWorkplaceDisplayDeps
 ): Promise<RuleSnapshotEntry[]> {
   const raw = await deps.sessionKkv.get(
     sessionId,
     SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-    RULE_SNAPSHOT_CANON_KEY,
+    RULE_SNAPSHOT_CANON_KEY
   );
   if (raw != null && raw !== "") {
     const parsed = parseRuleSnapshotJson(raw);
@@ -144,7 +144,7 @@ async function loadOrCreateRuleSnapshot(
     sessionId,
     SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
     RULE_SNAPSHOT_CANON_KEY,
-    serializeRuleSnapshot(entries),
+    serializeRuleSnapshot(entries)
   );
   return entries;
 }

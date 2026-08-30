@@ -58,7 +58,7 @@ export interface WorkplaceService {
    */
   renameRulesUnderLogicalPrefix(
     oldPrefix: string,
-    newPrefix: string,
+    newPrefix: string
   ): Promise<void>;
 
   /**

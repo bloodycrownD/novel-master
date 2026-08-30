@@ -67,7 +67,7 @@ function tryDecodeUtf8(bytes: Uint8Array): string | null {
 async function ensureEmptyDirectoryRow(
   repo: VfsEntryRepository,
   scope: VfsScope,
-  logical: string,
+  logical: string
 ): Promise<void> {
   const sk = scopeKey(scope);
   await ensureParentDirectories(repo, sk, `${logical}/__vfs_batch_placeholder`);
@@ -85,7 +85,7 @@ async function writeOrUpdateFile(
   repo: VfsEntryRepository,
   scope: VfsScope,
   logical: string,
-  content: string,
+  content: string
 ): Promise<void> {
   const sk = scopeKey(scope);
   await ensureParentDirectories(repo, sk, logical);
@@ -105,7 +105,7 @@ async function writeOrUpdateFile(
 
 function emptyReport(
   skipped: string[] = [],
-  failed: BatchApplyReport["failed"] = [],
+  failed: BatchApplyReport["failed"] = []
 ): BatchApplyReport {
   return { written: [], skipped, failed: [...failed] };
 }
@@ -122,7 +122,7 @@ function relativePathPrefixes(rel: string): string[] {
 function detectIngestTypeConflict(
   rel: string,
   kind: "file" | "directory",
-  pathKind: Map<string, "file" | "directory">,
+  pathKind: Map<string, "file" | "directory">
 ): string | null {
   const existing = pathKind.get(rel);
   if (existing != null && existing !== kind) {
@@ -166,7 +166,7 @@ function basenameOf(logical: string): string {
 function exportRelativePath(
   childLogical: string,
   anchorLogical: string,
-  selectionCount: number,
+  selectionCount: number
 ): string {
   const under = relativePathUnderAnchor(childLogical, anchorLogical);
   if (selectionCount <= 1) {
@@ -190,7 +190,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
   constructor(
     private readonly conn: TdbcConnection,
     private readonly repo: VfsEntryRepository,
-    options: DefaultVfsBatchIoServiceOptions = {},
+    options: DefaultVfsBatchIoServiceOptions = {}
   ) {
     this.testHook = options.testHook;
   }
@@ -198,7 +198,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
   async planBatchIngest(
     scope: VfsScope,
     targetDir: string,
-    entries: readonly BatchIngestRawEntry[],
+    entries: readonly BatchIngestRawEntry[]
   ): Promise<BatchIngestPlan> {
     const target = resolveLogicalPath(targetDir);
     assertLogicalPathAllowed(scope, target);
@@ -265,14 +265,17 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     scope: VfsScope,
     _targetDir: string,
     plan: BatchIngestPlan,
-    options: BatchApplyOptions,
+    options: BatchApplyOptions
   ): Promise<BatchApplyReport> {
     const skippedBase = [...plan.skippedBinary];
 
     if (plan.typeConflicts.length > 0) {
       return emptyReport(
         skippedBase,
-        plan.typeConflicts.map((c) => ({ path: c.logicalPath, message: c.message })),
+        plan.typeConflicts.map((c) => ({
+          path: c.logicalPath,
+          message: c.message,
+        }))
       );
     }
 
@@ -305,7 +308,9 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "batch ingest transaction failed";
+        error instanceof Error
+          ? error.message
+          : "batch ingest transaction failed";
       const failedPath =
         this.testHook?.throwOnWriteLogical ??
         (plan.writes[0]
@@ -326,7 +331,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
     targetDir: string,
     plan: BatchIngestPlan,
     options: BatchApplyOptions,
-    writer: BatchIngestWriter,
+    writer: BatchIngestWriter
   ): Promise<BatchApplyReport> {
     const skipped: string[] = [...plan.skippedBinary];
 
@@ -358,8 +363,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       try {
         await writer.mkdir(dirLogical);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "mkdir failed";
+        const message = error instanceof Error ? error.message : "mkdir failed";
         failed.push({ path: dirLogical, message });
       }
     }
@@ -370,8 +374,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
         await writer.writeFile(logical, write.content);
         written.push(logical);
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "write failed";
+        const message = error instanceof Error ? error.message : "write failed";
         failed.push({ path: logical, message });
       }
     }
@@ -381,7 +384,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
 
   async planBatchExport(
     scope: VfsScope,
-    logicalPaths: readonly string[],
+    logicalPaths: readonly string[]
   ): Promise<BatchExportPlan> {
     const files: Array<{ relativePath: string; content: string }> = [];
     const mkdirPaths: string[] = [];
@@ -435,7 +438,7 @@ export class DefaultVfsBatchIoService implements VfsBatchIoService {
       .filter((dir) => {
         const prefix = `${dir}/`;
         return !Array.from(seenFileRels).some(
-          (f) => f === dir || f.startsWith(prefix),
+          (f) => f === dir || f.startsWith(prefix)
         );
       })
       .sort();

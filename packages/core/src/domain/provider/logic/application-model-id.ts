@@ -16,7 +16,7 @@ export function parseApplicationModelId(modelId: string): {
     throw new ProviderError(
       "INVALID_ARGUMENT",
       `Invalid application model id: ${modelId}`,
-      { modelId },
+      { modelId }
     );
   }
   return {
@@ -28,7 +28,7 @@ export function parseApplicationModelId(modelId: string): {
 /** Formats provider id and vendor model id into application model id. */
 export function formatApplicationModelId(
   providerId: string,
-  vendorModelId: string,
+  vendorModelId: string
 ): string {
   return `${providerId}/${normalizeVendorModelId(providerId, vendorModelId)}`;
 }
@@ -39,7 +39,7 @@ export function formatApplicationModelId(
  */
 export function normalizeVendorModelId(
   providerId: string,
-  raw: string,
+  raw: string
 ): string {
   let value = raw.trim();
   if (!value) {

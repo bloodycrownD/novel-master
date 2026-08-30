@@ -87,7 +87,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         headCount: rule.headCount,
         tailCount: rule.tailCount,
         fillPolicy: rule.fillPolicy,
-      },
+      }
     );
   }
 
@@ -104,7 +104,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
         scopeKey: rule.scopeKey,
         logicalPath,
         inclusionMode: rule.inclusionMode,
-      },
+      }
     );
   }
 
@@ -141,7 +141,9 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     await this.conn.batch(sql, paramsList);
   }
 
-  async batchUpsertFileRules(rules: readonly WorkplaceFileRule[]): Promise<void> {
+  async batchUpsertFileRules(
+    rules: readonly WorkplaceFileRule[]
+  ): Promise<void> {
     if (rules.length === 0) {
       return;
     }
@@ -163,13 +165,13 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       this.conn,
       this.parser,
       `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey },
+      { scopeKey }
     );
     await executeTemplate(
       this.conn,
       this.parser,
       `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey },
+      { scopeKey }
     );
   }
 
@@ -180,7 +182,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey },
+      { scopeKey }
     );
     return rows.map(rowToDirRule);
   }
@@ -191,14 +193,14 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       this.parser,
       `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey },
+      { scopeKey }
     );
     return rows.map(rowToFileRule);
   }
 
   async findDirRule(
     scopeKey: string,
-    logicalPath: string,
+    logicalPath: string
   ): Promise<WorkplaceDirRule | null> {
     const rows = await queryTemplate(
       this.conn,
@@ -207,7 +209,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
               head_count, tail_count, fill_policy
        FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`,
-      { scopeKey, logicalPath: normalizePath(logicalPath) },
+      { scopeKey, logicalPath: normalizePath(logicalPath) }
     );
     if (rows.length === 0) {
       return null;
@@ -217,7 +219,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
 
   async findFileRule(
     scopeKey: string,
-    logicalPath: string,
+    logicalPath: string
   ): Promise<WorkplaceFileRule | null> {
     const rows = await queryTemplate(
       this.conn,
@@ -225,7 +227,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       `SELECT scope_key, logical_path, inclusion_mode
        FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`,
-      { scopeKey, logicalPath: normalizePath(logicalPath) },
+      { scopeKey, logicalPath: normalizePath(logicalPath) }
     );
     if (rows.length === 0) {
       return null;
@@ -236,7 +238,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
   async copyScope(
     fromScopeKey: string,
     toScopeKey: string,
-    mapLogicalPath: (logical: string) => string,
+    mapLogicalPath: (logical: string) => string
   ): Promise<void> {
     // 先清空目标 scope（覆盖目标 scope 原有、但不在源 scope 的规则），语义保持不变。
     await this.deleteScope(toScopeKey);
@@ -259,7 +261,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
 
   async deleteRulesUnderLogicalPrefix(
     scopeKey: string,
-    logicalPrefix: string,
+    logicalPrefix: string
   ): Promise<void> {
     const base = normalizePath(logicalPrefix);
     const escaped = escapeLike(base);
@@ -270,7 +272,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
-      { scopeKey, path: base, childPattern },
+      { scopeKey, path: base, childPattern }
     );
     await executeTemplate(
       this.conn,
@@ -278,14 +280,14 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
-      { scopeKey, path: base, childPattern },
+      { scopeKey, path: base, childPattern }
     );
   }
 
   async renameRulesUnderLogicalPrefix(
     scopeKey: string,
     oldPrefix: string,
-    newPrefix: string,
+    newPrefix: string
   ): Promise<void> {
     const oldBase = normalizePath(oldPrefix);
     const newBase = normalizePath(newPrefix);
@@ -314,18 +316,18 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     // 注意：TDBC 事务不可嵌套——目前唯一调用方（createWorkplaceService 的默认连接）
     // 在此处是非事务连接，安全；若未来有调用方把本方法放进外层事务，需改成“复用外层 tx”。
     await this.conn.transaction(async (tx) => {
-      await executeTemplate(
-        tx,
-        this.parser,
-        renameDir,
-        { scopeKey, oldBase, newBase, childPattern },
-      );
-      await executeTemplate(
-        tx,
-        this.parser,
-        renameFile,
-        { scopeKey, oldBase, newBase, childPattern },
-      );
+      await executeTemplate(tx, this.parser, renameDir, {
+        scopeKey,
+        oldBase,
+        newBase,
+        childPattern,
+      });
+      await executeTemplate(tx, this.parser, renameFile, {
+        scopeKey,
+        oldBase,
+        newBase,
+        childPattern,
+      });
     });
   }
 }

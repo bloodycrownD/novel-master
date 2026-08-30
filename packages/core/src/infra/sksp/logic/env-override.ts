@@ -19,7 +19,7 @@
  */
 export function resolveSkspEnvOverride(
   name: string,
-  env: Record<string, string | undefined>,
+  env: Record<string, string | undefined>
 ): string | null {
   const v = env[name];
   // undefined / 空串 / 仅空白 一律视为不覆盖 DB

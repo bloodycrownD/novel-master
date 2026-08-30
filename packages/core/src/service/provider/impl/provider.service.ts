@@ -32,16 +32,13 @@ export interface DefaultProviderServiceDeps {
   readonly secretStore: SecretStore;
 }
 
-function requireNonEmptyDisplayName(
-  raw: string,
-  providerId?: string,
-): string {
+function requireNonEmptyDisplayName(raw: string, providerId?: string): string {
   const trimmed = raw.trim();
   if (trimmed === "") {
     throw new ProviderError(
       "INVALID_ARGUMENT",
       "displayName 不能为空",
-      providerId != null ? { providerId } : undefined,
+      providerId != null ? { providerId } : undefined
     );
   }
   return trimmed;
@@ -57,7 +54,7 @@ export class DefaultProviderService implements ProviderService {
       rows.map(async (p) => ({
         ...p,
         apiKeyStatus: await this.apiKeyStatus(p),
-      })),
+      }))
     );
   }
 
@@ -125,7 +122,7 @@ export class DefaultProviderService implements ProviderService {
       throw new ProviderError(
         "BUILTIN_PROVIDER",
         `Cannot change protocol of built-in provider: ${id}`,
-        { providerId: id },
+        { providerId: id }
       );
     }
 
@@ -133,7 +130,7 @@ export class DefaultProviderService implements ProviderService {
     // 只能在应用层用「读到旧值 → 失败时写回」来补偿）。
     const originalSecretRef = resolveProviderApiKeySecretRef(provider);
     const originalSecretValue = await this.deps.secretStore.get(
-      originalSecretRef,
+      originalSecretRef
     );
 
     let secretRef = provider.secretRef;
@@ -185,7 +182,7 @@ export class DefaultProviderService implements ProviderService {
           if (originalSecretValue != null) {
             await this.deps.secretStore.set(
               originalSecretRef,
-              originalSecretValue,
+              originalSecretValue
             );
           } else if (secretOp === "set") {
             // 原本没有 secret：删掉新写的，避免留孤儿凭据。
@@ -215,7 +212,7 @@ export class DefaultProviderService implements ProviderService {
       throw new ProviderError(
         "BUILTIN_PROVIDER",
         `Cannot delete built-in provider: ${id}`,
-        { providerId: id },
+        { providerId: id }
       );
     }
 
@@ -275,7 +272,7 @@ export class DefaultProviderService implements ProviderService {
   }
 
   private async apiKeyStatus(
-    provider: LlmProvider,
+    provider: LlmProvider
   ): Promise<"set" | "not set"> {
     return (await providerApiKeyIsConfigured(provider, this.deps.secretStore))
       ? "set"

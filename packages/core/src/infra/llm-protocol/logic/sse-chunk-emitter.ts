@@ -28,7 +28,7 @@ export interface SseChunkEmitter {
 
 export function createSseChunkEmitter(
   onChunk: (chunk: string) => void,
-  options?: { tickMs?: number },
+  options?: { tickMs?: number }
 ): SseChunkEmitter {
   const tickMs = options?.tickMs ?? DEFAULT_TICK_MS;
   let buffer = "";

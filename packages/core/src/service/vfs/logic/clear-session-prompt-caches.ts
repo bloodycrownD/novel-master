@@ -22,7 +22,7 @@ import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.j
  */
 export async function clearSessionPromptCaches(
   sessionId: string,
-  sessionKkv: SessionKkvService,
+  sessionKkv: SessionKkvService
 ): Promise<void> {
   try {
     await sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_RULE_SNAPSHOT);
@@ -31,7 +31,7 @@ export async function clearSessionPromptCaches(
   } catch (error) {
     console.warn(
       `clearSessionPromptCaches: best-effort 清空提示词缓存失败（session=${sessionId}）`,
-      error,
+      error
     );
   }
 }

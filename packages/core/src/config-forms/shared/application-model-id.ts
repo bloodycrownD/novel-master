@@ -20,7 +20,7 @@ export function parseApplicationModelId(modelId: string): {
 /** Formats provider id and vendor model id into application model id. */
 export function formatApplicationModelId(
   providerId: string,
-  vendorModelId: string,
+  vendorModelId: string
 ): string {
   return `${providerId}/${normalizeVendorModelId(providerId, vendorModelId)}`;
 }

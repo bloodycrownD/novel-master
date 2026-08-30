@@ -27,6 +27,6 @@ export interface ModelRequestService {
   request(
     savedModelId: string,
     userContent: string,
-    options?: ModelRequestOptions,
+    options?: ModelRequestOptions
   ): Promise<LlmChatResult>;
 }

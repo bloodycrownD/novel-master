@@ -42,7 +42,7 @@ export interface ThinkingContextOptions {
  * 更早的 assistant 消息。找不到时返回 -1。
  */
 function findProtocolMinimumRetainIndex(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessage[]
 ): number {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!;
@@ -50,7 +50,7 @@ function findProtocolMinimumRetainIndex(
       continue;
     }
     const hasToolUse = (message.content.blocks ?? []).some(
-      (block) => block.type === "tool_use",
+      (block) => block.type === "tool_use"
     );
     return hasToolUse ? i : -1;
   }
@@ -60,8 +60,7 @@ function findProtocolMinimumRetainIndex(
 /** 消息是否含 thinking / redacted_thinking 块。 */
 function hasThinkingBlocks(message: ChatMessage): boolean {
   return (message.content.blocks ?? []).some(
-    (block) =>
-      block.type === "thinking" || block.type === "redacted_thinking",
+    (block) => block.type === "thinking" || block.type === "redacted_thinking"
   );
 }
 
@@ -71,8 +70,7 @@ function stripThinkingBlocks(message: ChatMessage): ChatMessage {
     return message;
   }
   const blocks = (message.content.blocks ?? []).filter(
-    (block) =>
-      block.type !== "thinking" && block.type !== "redacted_thinking",
+    (block) => block.type !== "thinking" && block.type !== "redacted_thinking"
   );
   return { ...message, content: { blocks } };
 }
@@ -83,7 +81,7 @@ function stripThinkingBlocks(message: ChatMessage): ChatMessage {
  */
 export function applyThinkingContextForLlm(
   messages: readonly ChatMessage[],
-  options: ThinkingContextOptions,
+  options: ThinkingContextOptions
 ): ChatMessage[] {
   const { enabled, protocol, retainProtocolMinimum, requestThinkingEnabled } =
     options;
@@ -103,21 +101,20 @@ export function applyThinkingContextForLlm(
 
   // 关态：全剥，仅协议最低保留（anthropic / gemini）跳过。
   const retainIndex =
-    retainProtocolMinimum &&
-    (protocol === "anthropic" || protocol === "gemini")
+    retainProtocolMinimum && (protocol === "anthropic" || protocol === "gemini")
       ? findProtocolMinimumRetainIndex(messages)
       : -1;
   return messages.map((message, index) =>
     message.role === "assistant" && index !== retainIndex
       ? stripThinkingBlocks(message)
-      : message,
+      : message
   );
 }
 
 function stripAllAssistantThinking(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessage[]
 ): ChatMessage[] {
   return messages.map((message) =>
-    message.role === "assistant" ? stripThinkingBlocks(message) : message,
+    message.role === "assistant" ? stripThinkingBlocks(message) : message
   );
 }

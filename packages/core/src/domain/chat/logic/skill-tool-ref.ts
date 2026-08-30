@@ -17,7 +17,12 @@ import type { SkillToolRef } from "@/domain/chat/model/content-block.js";
 const SKILL_TOOL_NAME = "skill";
 
 /** 输入里可解析出跳转三元组的 action（list 无目标技能，不产生跳转）。 */
-const REF_ACTIONS: ReadonlySet<string> = new Set(["load", "read", "write", "edit"]);
+const REF_ACTIONS: ReadonlySet<string> = new Set([
+  "load",
+  "read",
+  "write",
+  "edit",
+]);
 
 function parseDomain(raw: unknown): "global" | "project" | undefined {
   return raw === "global" || raw === "project" ? raw : undefined;
@@ -38,7 +43,7 @@ function parseName(raw: unknown): string | undefined {
 export function resolveSkillToolRefFromInput(
   toolName: string,
   input: Record<string, unknown> | null | undefined,
-  projectId?: string,
+  projectId?: string
 ): SkillToolRef | undefined {
   if (toolName !== SKILL_TOOL_NAME) return undefined;
   const action = input?.action;
@@ -68,7 +73,7 @@ export function resolveSkillToolRefFromInput(
 export function resolveSkillToolRefFromOutput(
   toolName: string,
   output: unknown,
-  projectId?: string,
+  projectId?: string
 ): SkillToolRef | undefined {
   if (toolName !== SKILL_TOOL_NAME) return undefined;
   if (output == null || typeof output !== "object" || Array.isArray(output)) {

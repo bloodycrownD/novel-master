@@ -55,7 +55,7 @@ export function countTokens(
   encode: ChatTokenEncoder,
   messages: readonly ChatTokenMessage[],
   kind: ChatTokenCountKind,
-  options?: CountTokensOptions,
+  options?: CountTokensOptions
 ): number {
   if (kind === "heuristic") {
     return countHeuristic(encode, messages);
@@ -69,7 +69,7 @@ export function countTokens(
  */
 function countHeuristic(
   encode: ChatTokenEncoder,
-  messages: readonly ChatTokenMessage[],
+  messages: readonly ChatTokenMessage[]
 ): number {
   let numTokens = 0;
   for (const msg of messages) {
@@ -88,7 +88,7 @@ function countHeuristic(
 function countPrecise(
   encode: ChatTokenEncoder,
   messages: readonly ChatTokenMessage[],
-  tiktokenModel?: string,
+  tiktokenModel?: string
 ): number {
   const is0301 =
     tiktokenModel != null ? isGpt0301TiktokenModel(tiktokenModel) : false;

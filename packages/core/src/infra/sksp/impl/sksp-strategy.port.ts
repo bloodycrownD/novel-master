@@ -24,7 +24,7 @@ export interface SkspCryptoStrategy {
    */
   encrypt(
     ref: string,
-    plain: string,
+    plain: string
   ): Promise<{ ciphertext: unknown; iv: unknown }>;
   /**
    * 解密 `sksp_secrets` 单行。row 的 ciphertext/iv 列类型解码、

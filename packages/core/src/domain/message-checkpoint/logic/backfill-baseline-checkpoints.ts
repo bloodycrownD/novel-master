@@ -26,7 +26,7 @@ export async function backfillBaselineCheckpoints(
   messageRepo: MessageRepository,
   checkpointRepo: MessageCheckpointRepository,
   projectId: string,
-  sessionId: string,
+  sessionId: string
 ): Promise<void> {
   const files = await listSessionFileHeads(entryRepo, projectId, sessionId);
   if (files.length === 0) {
@@ -103,7 +103,7 @@ export function createBaselineCheckpointBackfillOperation(args: {
       for (let i = messages.length - 1; i >= 0; i--) {
         const has = await checkpointRepo.hasCheckpoint(
           sessionId,
-          messages[i]!.id,
+          messages[i]!.id
         );
         if (has) {
           firstGapIndex = i + 1;
@@ -115,7 +115,11 @@ export function createBaselineCheckpointBackfillOperation(args: {
       }
       return {
         needsRepair: true,
-        details: `session=${sessionId} 在第 ${firstGapIndex + 1} 条消息处开始有空窗，共 ${messages.length - firstGapIndex} 条缺 baseline checkpoint`,
+        details: `session=${sessionId} 在第 ${
+          firstGapIndex + 1
+        } 条消息处开始有空窗，共 ${
+          messages.length - firstGapIndex
+        } 条缺 baseline checkpoint`,
       };
     },
     async repair() {
@@ -124,7 +128,7 @@ export function createBaselineCheckpointBackfillOperation(args: {
         messageRepo,
         checkpointRepo,
         projectId,
-        sessionId,
+        sessionId
       );
     },
   };

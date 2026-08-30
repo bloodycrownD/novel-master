@@ -23,7 +23,7 @@ export type PlatformSkspName = "windows" | "macos" | "linux";
  * @throws {Error} 传入的 platform 没有对应的 SKSP driver
  */
 export function resolveSkspNameFromPlatform(
-  platform: string,
+  platform: string
 ): PlatformSkspName {
   switch (platform) {
     case "darwin":
@@ -34,7 +34,7 @@ export function resolveSkspNameFromPlatform(
       return "linux";
     default:
       throw new Error(
-        `Unsupported SKSP platform: ${platform}（暂无对应的 driver）`,
+        `Unsupported SKSP platform: ${platform}（暂无对应的 driver）`
       );
   }
 }

@@ -30,10 +30,8 @@ CREATE INDEX IF NOT EXISTS idx_vfs_entry_scope_path
 
 /** All bootstrap statements in execution order.
  *
- * 注意：`scope_key` / `entry_id` 上的具名索引不在此数组内——它们引用的列在旧库
- * 形态上尚不存在，`CREATE INDEX` 会在 canonical DDL 阶段撞 `no such column`。
- * 这些索引改由 `vfs-entry-id-redesign-v1` migration 在两条路径（新库 ensure +
- * 旧库 rebuild）上创建，靠 `IF NOT EXISTS` 幂等。 */
-export const VFS_SCHEMA_STATEMENTS: readonly string[] = [
-  VFS_ENTRY_TABLE_DDL,
-];
+ * 注意：`scope_key` / `entry_id` 上的具名索引不在此数组内——`UNIQUE(scope_key, path)`
+ * 的隐式索引已覆盖前缀扫描需求，其余具名索引曾被视为纯写放大而不再建出
+ * （历史上由 vfs-entry-id-redesign-v1 的 rebuildIndexes 统一管理，该函数为刻意空实现，
+ * migration 已随第二轮退役删除）。 */
+export const VFS_SCHEMA_STATEMENTS: readonly string[] = [VFS_ENTRY_TABLE_DDL];

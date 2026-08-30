@@ -48,7 +48,7 @@ export interface ResolvedPreviewThinkingContext {
 
 /** 解析预览用的思考上下文快照（双端 prompt-preview 各调一次）。 */
 export async function resolvePreviewThinkingContext(
-  input: ResolvePreviewThinkingContextInput,
+  input: ResolvePreviewThinkingContextInput
 ): Promise<ResolvedPreviewThinkingContext> {
   const { preferences, savedModels, providers, agentModelId, sessionModelId } =
     input;
@@ -64,7 +64,11 @@ export async function resolvePreviewThinkingContext(
   }
   const protocol =
     savedModelId != null && savedModelId !== ""
-      ? await inferLlmProtocolFromSavedModelId(savedModelId, savedModels, providers)
+      ? await inferLlmProtocolFromSavedModelId(
+          savedModelId,
+          savedModels,
+          providers
+        )
       : "anthropic";
   return { enabled, requestThinkingEnabled, protocol };
 }

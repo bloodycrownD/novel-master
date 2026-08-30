@@ -17,7 +17,10 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { seedForkCopyParity } from "@/domain/chat/logic/seed-fork-copy-parity.js";
-import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {
+  copyVfsTree,
+  deleteVfsPrefix,
+} from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
@@ -26,7 +29,10 @@ import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
+import {
+  deleteSessionFsData,
+  runDeferredBlobGc,
+} from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
@@ -47,7 +53,7 @@ function parseStoredSessionAgentConfig(json: string): SessionAgentConfig {
 
 /** 永远写非 null wire JSON（agentId 必填，schema 校验已保证非空）。 */
 function serializeSessionAgentConfigForStorage(
-  config: SessionAgentConfig,
+  config: SessionAgentConfig
 ): string {
   return JSON.stringify(sessionAgentConfigSchema.toWire(config));
 }
@@ -89,10 +95,7 @@ export class DefaultSessionService implements SessionService {
     return session;
   }
 
-  async create(
-    projectId: string,
-    title?: string | null,
-  ): Promise<ChatSession> {
+  async create(projectId: string, title?: string | null): Promise<ChatSession> {
     await this.requireProject(projectId);
     // 复制 workspace 当前 agentId + modelId 落到新会话；agentId 缺失回落 registry 首项。
     // 读取放在事务外：state / agentRegistry 走的是另一套表，不需要在 chat_session 事务内同步。
@@ -102,7 +105,7 @@ export class DefaultSessionService implements SessionService {
     });
     if (agentId == null || agentId === "") {
       throw chatInvalidArgument(
-        "新建会话失败：workspace 未配置 Agent，且 registry 为空",
+        "新建会话失败：workspace 未配置 Agent，且 registry 为空"
       );
     }
     const workspaceModelId = await this.deps.state.getCurrentModelId();
@@ -134,7 +137,7 @@ export class DefaultSessionService implements SessionService {
   async createSubSession(
     parentSessionId: string,
     projectId: string,
-    title?: string | null,
+    title?: string | null
   ): Promise<ChatSession> {
     // 子会话不初始化任何工作区：文件只有一个工作区（父 session VFS），子 agent
     // 的工具操作由 runChildAgent 装配期直接指向父 session scope。这里只 insert
@@ -147,7 +150,7 @@ export class DefaultSessionService implements SessionService {
     }
     if (parent.projectId !== projectId) {
       throw chatInvalidArgument(
-        `createSubSession: parent projectId ${parent.projectId} !== ${projectId}`,
+        `createSubSession: parent projectId ${parent.projectId} !== ${projectId}`
       );
     }
     const now = Date.now();
@@ -173,7 +176,7 @@ export class DefaultSessionService implements SessionService {
     const updated = await this.deps.sessions.updateTitle(
       id,
       trimmed,
-      updatedAtMs,
+      updatedAtMs
     );
     if (!updated) {
       throw chatNotFound("session", id);
@@ -198,7 +201,7 @@ export class DefaultSessionService implements SessionService {
    */
   private async deleteSessionTree(
     tx: TdbcConnection,
-    session: ChatSession,
+    session: ChatSession
   ): Promise<void> {
     const r = reposFor(tx);
     // 先递归删全部子 session（深度优先，避免删自己后子变孤儿）。
@@ -212,7 +215,7 @@ export class DefaultSessionService implements SessionService {
     await deleteVfsPrefix(
       r.vfs,
       `session:${session.projectId}:${session.id}`,
-      "/",
+      "/"
     );
     const deleted = await r.sessions.delete(session.id);
     if (!deleted) {
@@ -223,7 +226,7 @@ export class DefaultSessionService implements SessionService {
   async pullTemplate(sessionId: string): Promise<void> {
     await this.get(sessionId);
     await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePull(
-      sessionId,
+      sessionId
     );
   }
 
@@ -234,7 +237,7 @@ export class DefaultSessionService implements SessionService {
 
   async setComposerDraftJson(
     id: string,
-    draftJson: string | null,
+    draftJson: string | null
   ): Promise<boolean> {
     await this.get(id);
     return this.deps.sessions.setComposerDraftJson(id, draftJson);
@@ -246,7 +249,7 @@ export class DefaultSessionService implements SessionService {
     if (json == null) {
       // migration 后不应有 NULL；这里视为异常，提示运行 session-agent-config-v2。
       throw chatInvalidArgument(
-        "session agent config missing, run migration session-agent-config-v2",
+        "session agent config missing, run migration session-agent-config-v2"
       );
     }
     return parseStoredSessionAgentConfig(json);
@@ -254,7 +257,7 @@ export class DefaultSessionService implements SessionService {
 
   async updateSessionAgentConfig(
     id: string,
-    patch: SessionAgentConfigPatch,
+    patch: SessionAgentConfigPatch
   ): Promise<SessionAgentConfig> {
     await this.get(id);
     // partial overlay merge：拿当前配置当基线，patch 里只覆盖出现的字段。
@@ -278,14 +281,14 @@ export class DefaultSessionService implements SessionService {
     // merge 完走 schema 校验（agentId 必填）+ 规范化（含 strict）。
     const validated = decode(
       sessionAgentConfigSchema.toWire(merged),
-      sessionAgentConfigSchema,
+      sessionAgentConfigSchema
     );
     const updatedAtMs = Date.now();
     const configJson = serializeSessionAgentConfigForStorage(validated);
     const updated = await this.deps.sessions.setSessionAgentConfig(
       id,
       configJson,
-      updatedAtMs,
+      updatedAtMs
     );
     if (!updated) {
       throw chatNotFound("session", id);
@@ -318,10 +321,15 @@ export class DefaultSessionService implements SessionService {
       // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
       // 刻意不复制 composer_draft_json（维持现状）
       // agent_config_json：继承源会话配置（v2 后 agentId 必填，源不会是 NULL）
-      const sourceAgentConfigJson =
-        await r.sessions.getSessionAgentConfig(source.id);
+      const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(
+        source.id
+      );
       if (sourceAgentConfigJson != null) {
-        await r.sessions.setSessionAgentConfig(copy.id, sourceAgentConfigJson, now);
+        await r.sessions.setSessionAgentConfig(
+          copy.id,
+          sourceAgentConfigJson,
+          now
+        );
       }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
@@ -331,7 +339,7 @@ export class DefaultSessionService implements SessionService {
         "/",
         { scopeKey: `session:${source.projectId}:${copy.id}` },
         "/",
-        { contentStore: new SqliteVfsContentStore(tx) },
+        { contentStore: new SqliteVfsContentStore(tx) }
       );
       const messages = await r.messages.listBySession(source.id);
       const newMessages: { id: string }[] = [];

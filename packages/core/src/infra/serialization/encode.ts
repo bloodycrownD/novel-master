@@ -21,7 +21,7 @@ export function encode<T>(value: T, schema: EncodableSchema<T>): unknown {
   if (encoder == null) {
     throw new ConfigDecodeError(
       "ENCODE_NOT_SUPPORTED",
-      "schema does not define toWire",
+      "schema does not define toWire"
     );
   }
   return encoder(value);

@@ -49,14 +49,20 @@ const MULTI_VALUES_MAX_VARS = 900;
 async function insertMultiValues(
   conn: TdbcConnection,
   insertPrefix: string,
-  rows: ReadonlyArray<readonly unknown[]>,
+  rows: ReadonlyArray<readonly unknown[]>
 ): Promise<void> {
   if (rows.length === 0) {
     return;
   }
   const paramsPerRow = rows[0]!.length;
-  const chunkSize = Math.max(1, Math.floor(MULTI_VALUES_MAX_VARS / paramsPerRow));
-  const rowPlaceholder = `(${Array.from({ length: paramsPerRow }, () => "?").join(",")})`;
+  const chunkSize = Math.max(
+    1,
+    Math.floor(MULTI_VALUES_MAX_VARS / paramsPerRow)
+  );
+  const rowPlaceholder = `(${Array.from(
+    { length: paramsPerRow },
+    () => "?"
+  ).join(",")})`;
   for (let offset = 0; offset < rows.length; offset += chunkSize) {
     const chunk = rows.slice(offset, offset + chunkSize);
     const placeholders = chunk.map(() => rowPlaceholder).join(",");
@@ -85,7 +91,7 @@ export class SqliteMessageCheckpointRepository
       `SELECT 1 AS one FROM message_checkpoint
        WHERE session_id = #{sessionId} AND message_id = #{messageId}
        LIMIT 1`,
-      { sessionId, messageId },
+      { sessionId, messageId }
     );
     return rows.length > 0;
   }
@@ -97,7 +103,7 @@ export class SqliteMessageCheckpointRepository
       `SELECT 1 AS one FROM message_checkpoint
        WHERE session_id = #{sessionId}
        LIMIT 1`,
-      { sessionId },
+      { sessionId }
     );
     return rows.length > 0;
   }
@@ -111,12 +117,12 @@ export class SqliteMessageCheckpointRepository
       `SELECT session_id, message_id, entry_id, revision_version
        FROM message_checkpoint_file
        WHERE session_id = #{sessionId} AND message_id = #{messageId}`,
-      { sessionId: input.sessionId, messageId: input.messageId },
+      { sessionId: input.sessionId, messageId: input.messageId }
     );
     if (oldRows.length > 0) {
       await decrementRefsForCheckpointFiles(
         revisionRepo,
-        oldRows.map((row) => rowToFilePointer(row)),
+        oldRows.map((row) => rowToFilePointer(row))
       );
     }
 
@@ -125,14 +131,14 @@ export class SqliteMessageCheckpointRepository
       this.parser,
       `DELETE FROM message_checkpoint_file
        WHERE session_id = #{sessionId} AND message_id = #{messageId}`,
-      { sessionId: input.sessionId, messageId: input.messageId },
+      { sessionId: input.sessionId, messageId: input.messageId }
     );
     await executeTemplate(
       this.conn,
       this.parser,
       `DELETE FROM message_checkpoint
        WHERE session_id = #{sessionId} AND message_id = #{messageId}`,
-      { sessionId: input.sessionId, messageId: input.messageId },
+      { sessionId: input.sessionId, messageId: input.messageId }
     );
     await executeTemplate(
       this.conn,
@@ -143,7 +149,7 @@ export class SqliteMessageCheckpointRepository
         sessionId: input.sessionId,
         messageId: input.messageId,
         createdAtMs: input.createdAtMs,
-      },
+      }
     );
     // 批量 INSERT message_checkpoint_file——原来逐条 executeTemplate 在文件多时
     // 会变成 N 次 SQL 往返，seed-fork 500 消息 × 200 文件就是 10 万次，相当卡。
@@ -165,7 +171,7 @@ export class SqliteMessageCheckpointRepository
         input.files.map((file) => ({
           entryId: file.entryId,
           revisionVersion: file.revisionVersion,
-        })),
+        }))
       );
     }
   }
@@ -177,7 +183,7 @@ export class SqliteMessageCheckpointRepository
       readonly entryId: number;
       readonly revisionVersion: number;
     }>,
-    createdAtMs: number,
+    createdAtMs: number
   ): Promise<void> {
     if (messages.length === 0 || files.length === 0) {
       return;
@@ -193,7 +199,7 @@ export class SqliteMessageCheckpointRepository
     await insertMultiValues(
       this.conn,
       `INSERT INTO message_checkpoint (session_id, message_id, created_at_ms)`,
-      messages.map((m) => [sessionId, m.id, createdAtMs]),
+      messages.map((m) => [sessionId, m.id, createdAtMs])
     );
     const fileRows: unknown[][] = [];
     for (const msg of messages) {
@@ -204,21 +210,24 @@ export class SqliteMessageCheckpointRepository
     await insertMultiValues(
       this.conn,
       `INSERT INTO message_checkpoint_file (session_id, message_id, entry_id, revision_version)`,
-      fileRows,
+      fileRows
     );
 
     // 批量递增 ref_count：每个文件指针的 revision ref_count 加 msgCount。
     // 直接用 IN 子句 + 固定 delta，比 expand 成 N 份再调 batchAdjustRefCount 更高效——
     // 不需要构造 100,000 元素的数组，也不需要逐条存在性查询（seed 场景 revision 刚 append 完）。
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
-    const pointers = files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion }));
+    const pointers = files.map((f) => ({
+      entryId: f.entryId,
+      version: f.revisionVersion,
+    }));
     // 复用 batchAdjustRefCount 的存在性校验（守护 NOT_FOUND 不变量）
     await revisionRepo.batchAdjustRefCountWithDelta(pointers, msgCount);
   }
 
   async loadFileTree(
     sessionId: string,
-    messageId: string,
+    messageId: string
   ): Promise<Map<string, number> | null> {
     const has = await this.hasCheckpoint(sessionId, messageId);
     if (!has) {
@@ -234,7 +243,7 @@ export class SqliteMessageCheckpointRepository
        FROM message_checkpoint_file mcf
        JOIN vfs_entry e ON e.entry_id = mcf.entry_id
        WHERE mcf.session_id = #{sessionId} AND mcf.message_id = #{messageId}`,
-      { sessionId, messageId },
+      { sessionId, messageId }
     );
     const tree = new Map<string, number>();
     for (const row of rows) {
@@ -245,7 +254,7 @@ export class SqliteMessageCheckpointRepository
 
   async findCheckpointMessageIdAtOrBefore(
     sessionId: string,
-    maxSeq: number,
+    maxSeq: number
   ): Promise<string | null> {
     const rows = await queryTemplate<{ message_id: string }>(
       this.conn,
@@ -257,13 +266,13 @@ export class SqliteMessageCheckpointRepository
        WHERE mc.session_id = #{sessionId} AND cm.seq <= #{maxSeq}
        ORDER BY cm.seq DESC
        LIMIT 1`,
-      { sessionId, maxSeq },
+      { sessionId, maxSeq }
     );
     return rows.length === 0 ? null : String(rows[0]!.message_id);
   }
 
   async listFilePointersForSession(
-    sessionId: string,
+    sessionId: string
   ): Promise<ReadonlyArray<MessageCheckpointFile>> {
     const rows = await queryTemplate(
       this.conn,
@@ -271,13 +280,13 @@ export class SqliteMessageCheckpointRepository
       `SELECT session_id, message_id, entry_id, revision_version
        FROM message_checkpoint_file
        WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
     return rows.map((row) => rowToFilePointer(row));
   }
 
   async listDistinctCheckpointPointersForSession(
-    sessionId: string,
+    sessionId: string
   ): Promise<ReadonlyArray<MessageCheckpointDistinctPointer>> {
     const rows = await queryTemplate<{
       entry_id: number;
@@ -288,7 +297,7 @@ export class SqliteMessageCheckpointRepository
       `SELECT DISTINCT entry_id, revision_version
        FROM message_checkpoint_file
        WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
     return rows.map((row) => ({
       entryId: Number(row.entry_id),
@@ -298,13 +307,13 @@ export class SqliteMessageCheckpointRepository
 
   async listFilePointersForMessages(
     sessionId: string,
-    messageIds: ReadonlyArray<string>,
+    messageIds: ReadonlyArray<string>
   ): Promise<ReadonlyArray<MessageCheckpointFile>> {
     if (messageIds.length === 0) {
       return [];
     }
     const idBindings = Object.fromEntries(
-      messageIds.map((id, i) => [`id${i}`, id]),
+      messageIds.map((id, i) => [`id${i}`, id])
     );
     const rows = await queryTemplate(
       this.conn,
@@ -312,22 +321,24 @@ export class SqliteMessageCheckpointRepository
       `SELECT session_id, message_id, entry_id, revision_version
        FROM message_checkpoint_file
        WHERE session_id = #{sessionId}
-         AND message_id IN (${messageIds.map((_, i) => `#{id${i}}`).join(", ")})`,
-      { sessionId, ...idBindings },
+         AND message_id IN (${messageIds
+           .map((_, i) => `#{id${i}}`)
+           .join(", ")})`,
+      { sessionId, ...idBindings }
     );
     return rows.map((row) => rowToFilePointer(row));
   }
 
   async deleteCheckpointsForMessages(
     sessionId: string,
-    messageIds: ReadonlyArray<string>,
+    messageIds: ReadonlyArray<string>
   ): Promise<void> {
     if (messageIds.length === 0) {
       return;
     }
     const revisionRepo = new SqliteVfsRevisionRepository(this.conn);
     const bindings = Object.fromEntries(
-      messageIds.map((id, i) => [`id${i}`, id]),
+      messageIds.map((id, i) => [`id${i}`, id])
     );
     const inClause = messageIds.map((_, i) => `#{id${i}}`).join(", ");
 
@@ -337,12 +348,12 @@ export class SqliteMessageCheckpointRepository
       `SELECT session_id, message_id, entry_id, revision_version
        FROM message_checkpoint_file
        WHERE session_id = #{sessionId} AND message_id IN (${inClause})`,
-      { sessionId, ...bindings },
+      { sessionId, ...bindings }
     );
     if (fileRows.length > 0) {
       await decrementRefsForCheckpointFiles(
         revisionRepo,
-        fileRows.map((row) => rowToFilePointer(row)),
+        fileRows.map((row) => rowToFilePointer(row))
       );
     }
 
@@ -351,14 +362,14 @@ export class SqliteMessageCheckpointRepository
       this.parser,
       `DELETE FROM message_checkpoint_file
        WHERE session_id = #{sessionId} AND message_id IN (${inClause})`,
-      { sessionId, ...bindings },
+      { sessionId, ...bindings }
     );
     await executeTemplate(
       this.conn,
       this.parser,
       `DELETE FROM message_checkpoint
        WHERE session_id = #{sessionId} AND message_id IN (${inClause})`,
-      { sessionId, ...bindings },
+      { sessionId, ...bindings }
     );
   }
 
@@ -370,12 +381,12 @@ export class SqliteMessageCheckpointRepository
       `SELECT session_id, message_id, entry_id, revision_version
        FROM message_checkpoint_file
        WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
     if (fileRows.length > 0) {
       await decrementRefsForCheckpointFiles(
         revisionRepo,
-        fileRows.map((row) => rowToFilePointer(row)),
+        fileRows.map((row) => rowToFilePointer(row))
       );
     }
 
@@ -383,13 +394,13 @@ export class SqliteMessageCheckpointRepository
       this.conn,
       this.parser,
       `DELETE FROM message_checkpoint_file WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
     await executeTemplate(
       this.conn,
       this.parser,
       `DELETE FROM message_checkpoint WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
   }
 }

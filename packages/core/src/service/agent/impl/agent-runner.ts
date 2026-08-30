@@ -23,9 +23,16 @@ import {
 } from "@/domain/agent/logic/doom-loop.js";
 import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
 import { anyToolUseMutatesWorkspace } from "@/domain/tool/logic/tool-use-mutates-workspace.js";
-import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
+import type {
+  AgentRunResult,
+  ModelRoundSummary,
+} from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import { ToolRunner, type ParallelToolOutcome, type ToolCall } from "@/domain/tool/logic/tool-runner.js";
+import {
+  ToolRunner,
+  type ParallelToolOutcome,
+  type ToolCall,
+} from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import { PreferencesError } from "@/errors/preferences-errors.js";
@@ -33,7 +40,11 @@ import type { MessageCheckpointService } from "@/service/message-checkpoint/mess
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import { pickLastPromptUsage } from "@/infra/tokenizer/logic/pick-last-prompt-usage.js";
 import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
-import type { ModelRequestService } from "../../provider/model-request.port.js";import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "../../prompt/render-prompt.js";
+import type { ModelRequestService } from "../../provider/model-request.port.js";
+import {
+  buildPromptLlmInputFromLayout,
+  computeLlmExportZonesFromLayout,
+} from "../../prompt/render-prompt.js";
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
@@ -147,7 +158,7 @@ function truncateRaw(raw: string, maxLen: number): string {
 
 /** 避免落库空正文 assistant（真实提示词 #seq 断层、UI 也不展示）。 */
 function hasMeaningfulAssistantBlocks(
-  blocks: readonly ContentBlock[],
+  blocks: readonly ContentBlock[]
 ): boolean {
   for (const block of blocks) {
     switch (block.type) {
@@ -181,9 +192,12 @@ function hasMeaningfulAssistantBlocks(
  * subagentSessionId 是否为 string，天然覆盖）。
  */
 export function extractSubagentSessionIdFromOutcome(
-  outcome: { readonly ok: boolean; readonly output?: unknown } | {
-    readonly ok: boolean; readonly error?: unknown;
-  },
+  outcome:
+    | { readonly ok: boolean; readonly output?: unknown }
+    | {
+        readonly ok: boolean;
+        readonly error?: unknown;
+      }
 ): string | undefined {
   if (!outcome.ok) return undefined;
   const output = (outcome as { output?: unknown }).output;
@@ -214,10 +228,9 @@ export class DefaultAgentRunner implements AgentRunner {
     const persistMessages = options.persistMessages !== false;
     const publishRunLifecycle = options.publishRunLifecycle !== false;
     const bus = this.deps.eventBus;
-    const session =
-      persistMessages
-        ? this.deps.session
-        : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
+    const session = persistMessages
+      ? this.deps.session
+      : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
 
     const runId = generateAgentRunId();
 
@@ -241,7 +254,8 @@ export class DefaultAgentRunner implements AgentRunner {
     const doomLoopThreshold =
       options.definition.runtime?.doomLoopThreshold ?? DOOM_LOOP_THRESHOLD;
     const doomLoopCrossRoundWindow =
-      options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
+      options.definition.runtime?.doomLoopCrossRoundWindow ??
+      CROSS_ROUND_WINDOW;
 
     const tools = toolsFromRegistry(this.deps.registry, this.deps.toolCtx);
     // 技能索引预算：消费装配期 toolCtx.skills 的生效清单快照（每 run 一次，
@@ -265,7 +279,7 @@ export class DefaultAgentRunner implements AgentRunner {
     // assistant 落库的 model_name 来源（vendorModelId）；每 run 查一次即可。
     // saved model 可能已被删除（悬空引用）：查不到时降级不传该字段。
     const savedModelForAppend = await this.deps.savedModels.findById(
-      options.savedModelId,
+      options.savedModelId
     );
 
     // 思考上下文偏好（每 run 一次快照，对齐 savedModelForAppend 的读法）：
@@ -314,7 +328,7 @@ export class DefaultAgentRunner implements AgentRunner {
       const wt = this.deps.workplace(wtScope);
       const turnFiletree = await resolveTurnFiletreeSnapshot(
         options.definition.prompts,
-        wt,
+        wt
       );
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
@@ -331,7 +345,7 @@ export class DefaultAgentRunner implements AgentRunner {
         visible = await applyLlmRegexChannelToVisible(
           this.deps,
           options,
-          visible,
+          visible
         );
         if (signal?.aborted) {
           await handleAbort("after_regex_channel");
@@ -341,16 +355,17 @@ export class DefaultAgentRunner implements AgentRunner {
         // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
         // 规则评估按 wtScope（子 agent 时=父工作区）；rule_snapshot / file_cache
         // 的 KKV 存取按 session.kkvScopeSessionId（永远=自身，子会话快照隔离）。
-        const { workplaceDisplay, prefixPaths } = await assembleWorkplaceDisplay(
-          wtScope,
-          {
-            sessionKkv: this.deps.sessionKkv,
-            workplace: wt,
-            vfs: this.deps.toolCtx.vfs,
-            layout: options.definition.prompts,
-          },
-          { kkvSessionId: session.kkvScopeSessionId },
-        );
+        const { workplaceDisplay, prefixPaths } =
+          await assembleWorkplaceDisplay(
+            wtScope,
+            {
+              sessionKkv: this.deps.sessionKkv,
+              workplace: wt,
+              vfs: this.deps.toolCtx.vfs,
+              layout: options.definition.prompts,
+            },
+            { kkvSessionId: session.kkvScopeSessionId }
+          );
         if (signal?.aborted) {
           await handleAbort("after_assemble_workplace");
           break;
@@ -408,7 +423,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
           promptRenderCtx,
-          { agentStepIndex: step },
+          { agentStepIndex: step }
         );
 
         if (persistMessages && this.deps.compactionConditions != null) {
@@ -424,7 +439,7 @@ export class DefaultAgentRunner implements AgentRunner {
                 promptInput,
                 layout: options.definition.prompts,
                 ctx: promptRenderCtx,
-              },
+              }
             );
           if (signal?.aborted) {
             await handleAbort("after_compaction_eval");
@@ -438,7 +453,7 @@ export class DefaultAgentRunner implements AgentRunner {
             const messageTranscriptEffects = this.deps.messageTranscriptEffects;
             if (messages == null || messageTranscriptEffects == null) {
               throw new Error(
-                "messages and messageTranscriptEffects are required when compactionConditions are configured",
+                "messages and messageTranscriptEffects are required when compactionConditions are configured"
               );
             }
             const hideStartDepth =
@@ -449,27 +464,30 @@ export class DefaultAgentRunner implements AgentRunner {
                 messages,
                 messageTranscriptEffects,
               },
-              { sessionId, projectId, hideStartDepth },
+              { sessionId, projectId, hideStartDepth }
             );
             stepCompactionEmitted = true;
           }
         }
 
         const llmInput = promptInput;
-        const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
-          agentStepIndex: step,
-          workplaceDisplay,
-          skillsIndex,
-        });
+        const zones = computeLlmExportZonesFromLayout(
+          options.definition.prompts,
+          {
+            agentStepIndex: step,
+            workplaceDisplay,
+            skillsIndex,
+          }
+        );
         const protocol = await inferLlmProtocolFromSavedModelId(
           options.savedModelId,
           this.deps.savedModels,
-          this.deps.providers,
+          this.deps.providers
         );
         const exportMessages = normalizeForLlmExport(
           llmInput.messages,
           protocol,
-          zones,
+          zones
         );
         // 思考上下文剥离：normalizeForLlmExport 之后、orphan 归一化之前。
         // 容量 1 判定只看 assistant 消息，与 orphan 归一化顺序无耦合，
@@ -499,11 +517,11 @@ export class DefaultAgentRunner implements AgentRunner {
                 sessionId,
                 runId,
                 { streamRegistry: this.deps.streamRegistry },
-                options.onStream,
+                options.onStream
               )
             : options.stream
-              ? options.onStream
-              : undefined;
+            ? options.onStream
+            : undefined;
         // 在 bus 分发层之外再包一层 timing onStream：只记首个内容事件时刻，
         // 不改变事件流向内层回调；wrapStreamForBus 本身不动。
         const onStream =
@@ -532,7 +550,7 @@ export class DefaultAgentRunner implements AgentRunner {
               stream: options.stream,
               onStream,
               signal,
-            },
+            }
           );
         } catch (e: unknown) {
           if (
@@ -578,7 +596,7 @@ export class DefaultAgentRunner implements AgentRunner {
               // 耗时随 usage 一并落库；result.usage 缺失时仅含两个耗时字段，
               // token 统计仍由 USAGE_NOT_NULL_SQL 把关（缺失行不计入）。
               usage: { ...result.usage, firstTokenMs, durationMs },
-            },
+            }
           );
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
@@ -601,7 +619,7 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const toolUses = result.blocks.filter(
-          (b): b is ToolUseBlock => b.type === "tool_use",
+          (b): b is ToolUseBlock => b.type === "tool_use"
         );
 
         if (toolUses.length === 0) {
@@ -623,7 +641,9 @@ export class DefaultAgentRunner implements AgentRunner {
           usage: result.usage,
         });
 
-        assertNoDoomLoopInBlocks(result.blocks, { threshold: doomLoopThreshold });
+        assertNoDoomLoopInBlocks(result.blocks, {
+          threshold: doomLoopThreshold,
+        });
         for (const toolUse of toolUses) {
           toolUseWindow.push(toolUse);
           if (toolUseWindow.length > doomLoopCrossRoundWindow * 4) {
@@ -640,7 +660,7 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const degradedById = new Map(
-          (result.degradedToolCalls ?? []).map((d) => [d.id, d] as const),
+          (result.degradedToolCalls ?? []).map((d) => [d.id, d] as const)
         );
         const outcomes: Array<ParallelToolOutcome | null> = [];
         const runnableCalls: ToolCall[] = [];
@@ -652,7 +672,10 @@ export class DefaultAgentRunner implements AgentRunner {
               ok: false,
               error: new ProviderError(
                 "INVALID_TOOL_ARGUMENTS",
-                `${protocol}: invalid tool arguments JSON (${truncateRaw(degraded.rawArguments, 80)})`,
+                `${protocol}: invalid tool arguments JSON (${truncateRaw(
+                  degraded.rawArguments,
+                  80
+                )})`
               ),
             });
             continue;
@@ -663,7 +686,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const parallelResults = await this.toolRunner.runParallel(
           runnableCalls,
-          this.deps.toolCtx,
+          this.deps.toolCtx
         );
         let parallelIdx = 0;
         for (let i = 0; i < outcomes.length; i++) {
@@ -686,11 +709,13 @@ export class DefaultAgentRunner implements AgentRunner {
             },
             // task 工具输出对象含 subagentSessionId：透传到 ToolResultBlock.meta（P0-1）。
             // buildToolResultBlock 内部还会从 outcome.output.subagentSessionId 自动检测。
-            subagentSessionId: extractSubagentSessionIdFromOutcome(outcomes[i]!),
+            subagentSessionId: extractSubagentSessionIdFromOutcome(
+              outcomes[i]!
+            ),
             // skill：read 缺省域命中生效副本的解析结果由输出携带，
             // projectId 上下文从这里补进 meta.skillRef（T-SK8）。
             skillProjectId: projectId,
-          }),
+          })
         );
 
         if (
@@ -703,7 +728,7 @@ export class DefaultAgentRunner implements AgentRunner {
             await this.deps.messageCheckpoint.capture(
               sessionId,
               projectId,
-              assistantMessage.id,
+              assistantMessage.id
             );
           } catch (error) {
             console.error("[agent-runner] checkpoint_capture_failed", {
@@ -790,7 +815,7 @@ export class DefaultAgentRunner implements AgentRunner {
 async function applyLlmRegexChannelToVisible(
   deps: DefaultAgentRunnerDeps,
   options: AgentRunOptions,
-  visible: readonly ChatMessage[],
+  visible: readonly ChatMessage[]
 ): Promise<ChatMessage[]> {
   if (!options.activeRegexGroupId || deps.regexConfig == null) {
     return [...visible];
@@ -801,12 +826,12 @@ async function applyLlmRegexChannelToVisible(
       deps.regexConfig,
       options.activeRegexGroupId,
       all,
-      visible,
+      visible
     );
   }
   const rules = await resolveActiveCompiledRules(
     deps.regexConfig,
-    options.activeRegexGroupId,
+    options.activeRegexGroupId
   );
   if (rules.length === 0) {
     return [...visible];
@@ -832,7 +857,7 @@ export function wrapStreamForBus(
   sessionId: string,
   runId: string,
   deps: { readonly streamRegistry?: AgentStreamRegistry } = {},
-  userOnStream?: (event: LlmStreamEvent) => void,
+  userOnStream?: (event: LlmStreamEvent) => void
 ): ((event: LlmStreamEvent) => void) | undefined {
   // 待发布的 bus event 列表；同一同步批次内累积，由唯一一个 microtask 一次性 flush。
   const pendingQueue: Array<() => void> = [];
@@ -866,7 +891,7 @@ export function wrapStreamForBus(
           sessionId,
           runId,
           text: ev.text,
-        }),
+        })
       );
     } else if (ev.type === "thinking-delta") {
       deps.streamRegistry?.append(sessionId, { thinking: ev.text });
@@ -875,7 +900,7 @@ export function wrapStreamForBus(
           sessionId,
           runId,
           text: ev.text,
-        }),
+        })
       );
     } else if (ev.type === "tool-use") {
       enqueuePublish(() =>
@@ -885,7 +910,7 @@ export function wrapStreamForBus(
           id: ev.id,
           name: ev.name,
           input: ev.input,
-        }),
+        })
       );
     }
   };
@@ -923,7 +948,7 @@ function collectMacroExpandableText(layout: AgentPromptLayout): string {
  */
 async function resolveTurnFiletreeSnapshot(
   layout: AgentPromptLayout,
-  workplace: WorkplaceService,
+  workplace: WorkplaceService
 ): Promise<string | undefined> {
   if (!collectMacroExpandableText(layout).includes("$filetree")) {
     return undefined;

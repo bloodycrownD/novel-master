@@ -43,7 +43,7 @@ export class SqliteSessionRepository implements SessionRepository {
        FROM chat_session
        WHERE project_id = #{projectId} AND parent_session_id IS NULL
        ORDER BY created_at_ms`,
-      { projectId },
+      { projectId }
     );
     return rows.map(rowToSession);
   }
@@ -56,7 +56,7 @@ export class SqliteSessionRepository implements SessionRepository {
        FROM chat_session
        WHERE parent_session_id = #{parentSessionId}
        ORDER BY created_at_ms`,
-      { parentSessionId },
+      { parentSessionId }
     );
     return rows.map(rowToSession);
   }
@@ -67,7 +67,7 @@ export class SqliteSessionRepository implements SessionRepository {
       this.parser,
       `SELECT ${SESSION_COLUMNS}
        FROM chat_session WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -92,21 +92,21 @@ export class SqliteSessionRepository implements SessionRepository {
         parentSessionId: session.parentSessionId,
         createdAtMs: session.createdAtMs,
         updatedAtMs: session.updatedAtMs,
-      },
+      }
     );
   }
 
   async updateTitle(
     id: string,
     title: string,
-    updatedAtMs: number,
+    updatedAtMs: number
   ): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,
       this.parser,
       `UPDATE chat_session SET title = #{title}, updated_at_ms = #{updatedAtMs}
        WHERE id = #{id}`,
-      { id, title, updatedAtMs },
+      { id, title, updatedAtMs }
     );
     return result.changes > 0;
   }
@@ -116,7 +116,7 @@ export class SqliteSessionRepository implements SessionRepository {
       this.conn,
       this.parser,
       `DELETE FROM chat_session WHERE id = #{id}`,
-      { id },
+      { id }
     );
     return result.changes > 0;
   }
@@ -126,7 +126,7 @@ export class SqliteSessionRepository implements SessionRepository {
       this.conn,
       this.parser,
       `DELETE FROM chat_session WHERE project_id = #{projectId}`,
-      { projectId },
+      { projectId }
     );
   }
 
@@ -135,7 +135,7 @@ export class SqliteSessionRepository implements SessionRepository {
       this.conn,
       this.parser,
       `SELECT composer_draft_json FROM chat_session WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -146,14 +146,14 @@ export class SqliteSessionRepository implements SessionRepository {
 
   async setComposerDraftJson(
     id: string,
-    draftJson: string | null,
+    draftJson: string | null
   ): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,
       this.parser,
       `UPDATE chat_session SET composer_draft_json = #{draftJson}
        WHERE id = #{id}`,
-      { id, draftJson },
+      { id, draftJson }
     );
     return result.changes > 0;
   }
@@ -163,7 +163,7 @@ export class SqliteSessionRepository implements SessionRepository {
       this.conn,
       this.parser,
       `SELECT agent_config_json FROM chat_session WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -175,7 +175,7 @@ export class SqliteSessionRepository implements SessionRepository {
   async setSessionAgentConfig(
     id: string,
     agentConfigJson: string | null,
-    updatedAtMs: number,
+    updatedAtMs: number
   ): Promise<boolean> {
     // 绑定切换是会话活动（区别于高频草稿写），同步更新 updated_at_ms。
     const result = await executeTemplate(
@@ -184,7 +184,7 @@ export class SqliteSessionRepository implements SessionRepository {
       `UPDATE chat_session
          SET agent_config_json = #{agentConfigJson}, updated_at_ms = #{updatedAtMs}
        WHERE id = #{id}`,
-      { id, agentConfigJson, updatedAtMs },
+      { id, agentConfigJson, updatedAtMs }
     );
     return result.changes > 0;
   }

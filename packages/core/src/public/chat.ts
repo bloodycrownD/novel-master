@@ -1,29 +1,27 @@
-export { ChatError } from '../errors/chat-errors.js';
-export type { ChatErrorCode } from '../errors/chat-errors.js';
-export type { ChatProject } from '../domain/chat/model/project.js';
+export { ChatError } from "../errors/chat-errors.js";
+export type { ChatErrorCode } from "../errors/chat-errors.js";
+export type { ChatProject } from "../domain/chat/model/project.js";
 export type {
   ProjectAgentConfig,
   ProjectAgentConfigPatch,
   ProjectAgentMode,
-} from '../domain/chat/model/project-agent-config.js';
-export {DEFAULT_PROJECT_AGENT_CONFIG} from '../domain/chat/model/project-agent-config.js';
+} from "../domain/chat/model/project-agent-config.js";
+export { DEFAULT_PROJECT_AGENT_CONFIG } from "../domain/chat/model/project-agent-config.js";
 export {
   projectAgentConfigSchema,
   projectAgentModeSchema,
-} from '../domain/chat/model/project-agent-config.schema.js';
-export type { ChatSession } from '../domain/chat/model/session.js';
+} from "../domain/chat/model/project-agent-config.schema.js";
+export type { ChatSession } from "../domain/chat/model/session.js";
 export type {
   SessionAgentConfig,
   SessionAgentConfigPatch,
-} from '../domain/chat/model/session-agent-config.js';
-export {
-  sessionAgentConfigSchema,
-} from '../domain/chat/model/session-agent-config.schema.js';
+} from "../domain/chat/model/session-agent-config.js";
+export { sessionAgentConfigSchema } from "../domain/chat/model/session-agent-config.schema.js";
 export type {
   ChatMessage,
   MessageAttachment,
   MessageContent,
-} from '../domain/chat/model/message.js';
+} from "../domain/chat/model/message.js";
 export {
   NO_PATH_ATTACHMENT_NAME,
   attachmentStorageName,
@@ -32,19 +30,19 @@ export {
   messageAttachmentsSchema,
   parseAttachmentsJson,
   serializeAttachmentsJson,
-} from '../domain/chat/model/message-attachment.schema.js';
-export type { MessageAttachmentAction } from '../domain/chat/model/message-attachment.schema.js';
+} from "../domain/chat/model/message-attachment.schema.js";
+export type { MessageAttachmentAction } from "../domain/chat/model/message-attachment.schema.js";
 export {
   annotateDraftSchema,
   annotateDraftsSchema,
   isMessageAnnotatePath,
   MESSAGE_ANNOTATE_PATH_MARKER,
-} from '../domain/chat/model/annotate-draft.schema.js';
+} from "../domain/chat/model/annotate-draft.schema.js";
 export type {
   AnnotateDraft,
   AnnotateDrafts,
   SendAnnotateDraft,
-} from '../domain/chat/model/annotate-draft.schema.js';
+} from "../domain/chat/model/annotate-draft.schema.js";
 export {
   EMPTY_COMPOSER_DRAFT,
   composerDraftAttachmentSchema,
@@ -52,16 +50,14 @@ export {
   isComposerDraftAttachment,
   parseComposerDraftJson,
   serializeComposerDraftJson,
-} from '../domain/chat/model/composer-draft.schema.js';
+} from "../domain/chat/model/composer-draft.schema.js";
 export type {
   ComposerDraft,
   ComposerDraftAttachment,
-} from '../domain/chat/model/composer-draft.schema.js';
-export { wrapUserMessageForLlm } from '../domain/chat/logic/wrap-user-message-for-llm.js';
-export {
-  prepareUserMessagesForPrompt,
-} from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
-export type { PrepareUserMessagesForPromptRuntime } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
+} from "../domain/chat/model/composer-draft.schema.js";
+export { wrapUserMessageForLlm } from "../domain/chat/logic/wrap-user-message-for-llm.js";
+export { prepareUserMessagesForPrompt } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";
+export type { PrepareUserMessagesForPromptRuntime } from "../domain/chat/logic/prepare-user-messages-for-prompt.js";
 export {
   STATUS_CHIP_ZH,
   formatStatusChipLabel,
@@ -69,7 +65,7 @@ export {
   logicalParentDir,
   renameChipZh,
   resolveRenameOrMoveAction,
-} from '../domain/chat/logic/status-chip-label.js';
+} from "../domain/chat/logic/status-chip-label.js";
 export {
   buildAlreadyReferencedActionXml,
   buildAnnotateAttachmentFromDraft,
@@ -78,7 +74,7 @@ export {
   buildFileAnnotateAttachmentFromDraft,
   buildFileRefActionXml,
   parseAnnotateDraftsFromAttachments,
-} from '../domain/chat/logic/build-attachment-action-xml.js';
+} from "../domain/chat/logic/build-attachment-action-xml.js";
 export {
   PROMPT_FILE_SEEN_SHORT_TIP,
   createPromptPathSeenSet,
@@ -86,22 +82,22 @@ export {
   normalizePromptSeenPath,
   normalizePromptStorePath,
   tryNormalizePromptSeenPath,
-} from '../domain/chat/logic/prompt-path-seen.js';
+} from "../domain/chat/logic/prompt-path-seen.js";
 export {
   ATTACH_DIR_TREE_MAX_UTF8_BYTES,
   renderDirAttachTree,
-} from '../domain/chat/logic/render-dir-attach-tree.js';
-export type { RenderDirAttachTreeDeps } from '../domain/chat/logic/render-dir-attach-tree.js';
+} from "../domain/chat/logic/render-dir-attach-tree.js";
+export type { RenderDirAttachTreeDeps } from "../domain/chat/logic/render-dir-attach-tree.js";
 export {
   mergeAttachmentsByPath,
   mergeAttachmentsWithScannedAtPaths,
   scanAtPathAttachments,
-} from '../domain/chat/logic/scan-at-path-attachments.js';
+} from "../domain/chat/logic/scan-at-path-attachments.js";
 export {
   mergeAttachmentsWithScannedSkills,
   scanSkillAttachments,
   skillSeenKey,
-} from '../domain/chat/logic/scan-skill-attachments.js';
+} from "../domain/chat/logic/scan-skill-attachments.js";
 export type {
   ContentBlock,
   TextBlock,
@@ -111,53 +107,53 @@ export type {
   ToolResultBlock,
   ThinkingBlock,
   RedactedThinkingBlock,
-} from '../domain/chat/model/content-block.js';
-export { textBlocks } from '../domain/chat/content/text-blocks.js';
+} from "../domain/chat/model/content-block.js";
+export { textBlocks } from "../domain/chat/content/text-blocks.js";
 export {
   parseMessageContent,
   assertMessageContent,
-} from '../domain/chat/content/parse-message-content.js';
-export { formatMessageForCli } from '../domain/chat/content/format-message-cli.js';
-export { escapeLikePattern } from '../domain/chat/content/message-content-match.js';
-export type { MessageSearchQuery } from '../domain/chat/content/message-content-match.js';
+} from "../domain/chat/content/parse-message-content.js";
+export { formatMessageForCli } from "../domain/chat/content/format-message-cli.js";
+export { escapeLikePattern } from "../domain/chat/content/message-content-match.js";
+export type { MessageSearchQuery } from "../domain/chat/content/message-content-match.js";
 export type {
   MessageMetadata,
   MessageMetadataKind,
-} from '../domain/chat/model/message-metadata.js';
-export { readMessageMetadata } from '../domain/chat/model/message-metadata.js';
+} from "../domain/chat/model/message-metadata.js";
+export { readMessageMetadata } from "../domain/chat/model/message-metadata.js";
 export {
   userVfsPendingEntrySchema,
   userVfsPendingQueueSchema,
   userVfsPendingToolSchema,
-} from '../domain/chat/model/user-vfs-pending.schema.js';
+} from "../domain/chat/model/user-vfs-pending.schema.js";
 export type {
   UserVfsPendingEntry,
   UserVfsPendingQueue,
   UserVfsPendingTool,
-} from '../domain/chat/model/user-vfs-pending.schema.js';
+} from "../domain/chat/model/user-vfs-pending.schema.js";
 export {
   computeStreamTailGenerating,
   DEFAULT_STREAM_TAIL_IDLE_MS,
-} from '../domain/chat/logic/compute-stream-tail-generating.js';
-export { mergePendingVfsTurns } from '../domain/chat/logic/merge-pending-vfs-turns.js';
-export type { MergedPendingVfsTurn } from '../domain/chat/logic/merge-pending-vfs-turns.js';
-export type { WorkspaceFlushSnapshot } from '../domain/chat/logic/workspace-flush-snapshot.js';
+} from "../domain/chat/logic/compute-stream-tail-generating.js";
+export { mergePendingVfsTurns } from "../domain/chat/logic/merge-pending-vfs-turns.js";
+export type { MergedPendingVfsTurn } from "../domain/chat/logic/merge-pending-vfs-turns.js";
+export type { WorkspaceFlushSnapshot } from "../domain/chat/logic/workspace-flush-snapshot.js";
 export {
   deriveDirPathsFromFileTree,
   emptyWorkspaceFlushSnapshot,
-} from '../domain/chat/logic/workspace-flush-snapshot.js';
-export { hasComposerSendableInput } from '../domain/chat/logic/composer-sendable-input.js';
-export { resolveComposerSendIntent } from '../domain/chat/logic/composer-send-intent.js';
+} from "../domain/chat/logic/workspace-flush-snapshot.js";
+export { hasComposerSendableInput } from "../domain/chat/logic/composer-sendable-input.js";
+export { resolveComposerSendIntent } from "../domain/chat/logic/composer-send-intent.js";
 export type {
   ComposerSendIntent,
   ComposerSendIntentAttachment,
   ComposerSendIntentInput,
-} from '../domain/chat/logic/composer-send-intent.js';
+} from "../domain/chat/logic/composer-send-intent.js";
 export {
   isComposerStatusAttachment,
   partitionComposerChipAttachments,
-} from '../domain/chat/logic/composer-chip-attachment.js';
-export type { ComposerChipAttachment } from '../domain/chat/logic/composer-chip-attachment.js';
+} from "../domain/chat/logic/composer-chip-attachment.js";
+export type { ComposerChipAttachment } from "../domain/chat/logic/composer-chip-attachment.js";
 export {
   atPathTokensFromPickerSelection,
   countScannedAtPathAttachments,
@@ -165,8 +161,11 @@ export {
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
-} from '../domain/chat/logic/composer-at-path.js';
-export type { AtPathRef, ComposerTrigger } from '../domain/chat/logic/composer-at-path.js';
+} from "../domain/chat/logic/composer-at-path.js";
+export type {
+  AtPathRef,
+  ComposerTrigger,
+} from "../domain/chat/logic/composer-at-path.js";
 export {
   addChatAnnotateDraft,
   chipsFromAnnotateStore,
@@ -179,7 +178,7 @@ export {
   subscribeChatAnnotateDraft,
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,
-} from '../domain/chat/logic/chat-annotate-draft-store.js';
+} from "../domain/chat/logic/chat-annotate-draft-store.js";
 export {
   buildFlatTextIndex,
   findAllOccurrences,
@@ -194,14 +193,14 @@ export {
   countAnnotateOccurrencesInSource,
   selectAnnotateOccurrenceStarts,
   sortAnnotateTextsLongestFirst,
-} from '../domain/chat/logic/annotate-highlight.js';
+} from "../domain/chat/logic/annotate-highlight.js";
 export type {
   AnnotateSourceMatch,
   AnnotateSourceMatchStrategy,
   FlatSegmentLocalRange,
   FlatTextIndex,
   FlatTextSegmentSpan,
-} from '../domain/chat/logic/annotate-highlight.js';
+} from "../domain/chat/logic/annotate-highlight.js";
 export {
   ANNOTATE_SOFT_RANGE_CHAR_PADDING,
   ANNOTATE_SOFT_RANGE_LINE_PADDING,
@@ -217,13 +216,13 @@ export {
   offsetToSourceLineCol,
   sliceSourceBySoftRange,
   splitSourceLines,
-} from '../domain/chat/logic/annotate-source-range.js';
+} from "../domain/chat/logic/annotate-source-range.js";
 export type {
   AnnotateQuoteContext,
   AnnotateSoftOffsetRange,
   AnnotateSoftRangeFields,
   AnnotateSoftSourceRange,
-} from '../domain/chat/logic/annotate-source-range.js';
+} from "../domain/chat/logic/annotate-source-range.js";
 /**
  * 注锚派生导出（非预览投影合同，SPEC R5）：
  * 可暂留 `buildAnnotatedSource` 等符号；宿主 MD/plain 预览主路径禁止调用。
@@ -237,16 +236,16 @@ export {
   findMarkdownCodeRanges,
   hasValidAnnotateOffsetRange,
   splitMarkdownUnderlineRuns,
-} from '../domain/chat/logic/annotate-source-anchor.js';
+} from "../domain/chat/logic/annotate-source-anchor.js";
 export type {
   BuildAnnotatedSourceInput,
   BuildAnnotatedSourceMode,
   BuildAnnotatedSourceResult,
-} from '../domain/chat/logic/annotate-source-anchor.js';
+} from "../domain/chat/logic/annotate-source-anchor.js";
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
-} from '../domain/chat/logic/user-vfs-turn-constants.js';
+} from "../domain/chat/logic/user-vfs-turn-constants.js";
 export {
   buildUserVfsTurnView,
   deriveToolUsesFromVfsActions,
@@ -254,33 +253,31 @@ export {
   matchUserVfsTurnAt,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_SPAN,
-} from '../domain/chat/logic/user-vfs-turn-view.js';
+} from "../domain/chat/logic/user-vfs-turn-view.js";
 export type {
   ParsedUserVfsAction,
   ParsedUserVfsEditHunk,
   UserVfsTurnView,
-} from '../domain/chat/logic/user-vfs-turn-view.js';
+} from "../domain/chat/logic/user-vfs-turn-view.js";
 export {
   hasAnnotateAttachment,
   hasToolResult,
   isPlainUserText,
-} from '../domain/chat/logic/message-content-helpers.js';
+} from "../domain/chat/logic/message-content-helpers.js";
 export {
   extractEditableTextFromMessage,
   isPlainUserUndoSendEligible,
-} from '../domain/chat/logic/editable-text-from-message.js';
-export {
-  resolveRollbackConfirmMessage,
-} from '../domain/chat/logic/rollback-confirm-copy.js';
+} from "../domain/chat/logic/editable-text-from-message.js";
+export { resolveRollbackConfirmMessage } from "../domain/chat/logic/rollback-confirm-copy.js";
 export type {
   RollbackConfirmKind,
   RollbackMode,
-} from '../domain/chat/logic/rollback-confirm-copy.js';
+} from "../domain/chat/logic/rollback-confirm-copy.js";
 export type {
   MessageVisibilityBatchMode,
   TranscriptSelectableRole,
   VisibilityBatchMessage,
-} from '../domain/chat/logic/visibility-batch-range.js';
+} from "../domain/chat/logic/visibility-batch-range.js";
 export {
   transcriptSelectableRole,
   isTranscriptRowSelectable,
@@ -288,53 +285,54 @@ export {
   computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
   selectVisibilityBatchEligibleIdsFromAnchor,
-} from '../domain/chat/logic/visibility-batch-range.js';
+} from "../domain/chat/logic/visibility-batch-range.js";
 export {
   computeSetFloorRanges,
   isSetFloorAnchorRole,
-} from '../domain/chat/logic/message-set-floor-range.js';
+} from "../domain/chat/logic/message-set-floor-range.js";
 export type {
   TailBatchMode,
   TailBatchRow,
-} from '../domain/chat/logic/tail-batch-range.js';
+} from "../domain/chat/logic/tail-batch-range.js";
 export {
   isTailBatchRowSelectable,
   selectTailBatchEligibleIdsFromAnchor,
   computeTailBatchAffectedIds,
   computeTailBatchRangeFromSelection,
   tailBatchDeleteAfterSeq,
-} from '../domain/chat/logic/tail-batch-range.js';
+} from "../domain/chat/logic/tail-batch-range.js";
 export {
   listVisibleSorted,
   visibleFloorByMessageId,
-} from '../domain/chat/logic/message-visible-floor.js';
+} from "../domain/chat/logic/message-visible-floor.js";
 export {
   createChatServices,
   createProjectService,
   createSessionService,
   createMessageService,
   createUsageStatsService,
-} from '../service/chat/create-chat-services.js';
-export type { ChatServiceBundle, ChatServicesSessionDeps } from '../service/chat/create-chat-services.js';
+} from "../service/chat/create-chat-services.js";
+export type {
+  ChatServiceBundle,
+  ChatServicesSessionDeps,
+} from "../service/chat/create-chat-services.js";
 export {
   createUserVfsTurnService,
   createUserVfsTurnServiceBundle,
-} from '../service/chat/create-user-vfs-turn-service.js';
-export type { UserVfsTurnServiceBundle } from '../service/chat/create-user-vfs-turn-service.js';
-export { resolveVfsToolFilePath } from '../domain/tool/logic/vfs-tool-file-path.js';
-export {
-  resolveSkillToolRefFromInput,
-} from '../domain/chat/logic/skill-tool-ref.js';
-export type { SkillToolRef } from '../domain/chat/model/content-block.js';
+} from "../service/chat/create-user-vfs-turn-service.js";
+export type { UserVfsTurnServiceBundle } from "../service/chat/create-user-vfs-turn-service.js";
+export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
+export { resolveSkillToolRefFromInput } from "../domain/chat/logic/skill-tool-ref.js";
+export type { SkillToolRef } from "../domain/chat/model/content-block.js";
 export type {
   UserVfsTurnService,
   UserVfsTurnOp,
   UserVfsTurnToolSpec,
   UserVfsTurnExecuteResult,
-} from '../service/chat/user-vfs-turn.port.js';
-export type { ProjectService } from '../service/chat/project.port.js';
-export type { SessionService } from '../service/chat/session.port.js';
-export type { MessageService } from '../service/chat/message.port.js';
+} from "../service/chat/user-vfs-turn.port.js";
+export type { ProjectService } from "../service/chat/project.port.js";
+export type { SessionService } from "../service/chat/session.port.js";
+export type { MessageService } from "../service/chat/message.port.js";
 export type {
   UsageStatsService,
   UsageStatsRange,
@@ -346,9 +344,9 @@ export type {
   UsageStatsRequestRow,
   UsageStatsRequestPage,
   UsageStatsRequestPageQuery,
-} from '../service/chat/usage-stats.port.js';
+} from "../service/chat/usage-stats.port.js";
 export type {
   MessageTranscriptEffectsService,
   SetMessageFloorResult,
-} from '../service/chat/message-transcript-effects.port.js';
-export { createMessageTranscriptEffectsService } from '../service/chat/create-message-transcript-effects.js';
+} from "../service/chat/message-transcript-effects.port.js";
+export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";

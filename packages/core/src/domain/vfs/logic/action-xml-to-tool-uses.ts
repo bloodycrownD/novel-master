@@ -9,8 +9,7 @@ export interface DerivedToolUseInput {
   readonly input: Record<string, unknown>;
 }
 
-const ACTION_TAG_RE =
-  /<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/g;
+const ACTION_TAG_RE = /<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/g;
 
 const ATTR_RE = /(\w+)="([^"]*)"/g;
 
@@ -51,7 +50,7 @@ function unescapeXml(text: string): string {
   result = result
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"");
+    .replace(/&quot;/g, '"');
   // &amp; 必须放在最后，否则前面替换出来的 & 又会被错认成实体前缀。
   return result.replace(/&amp;/g, "&");
 }
@@ -63,7 +62,11 @@ function parseJsonBody(inner: string): Record<string, unknown> {
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (parsed != null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    if (
+      parsed != null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
       return parsed as Record<string, unknown>;
     }
   } catch {
@@ -78,7 +81,7 @@ function asString(value: unknown, fallback = ""): string {
 
 function deriveFromNamedAction(
   name: string,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): DerivedToolUseInput[] {
   switch (name) {
     case "write":
@@ -111,7 +114,8 @@ function deriveFromNamedAction(
       ];
     case "delete": {
       const path = asString(params.path);
-      const recursive = params.recursive === true || params.recursive === "true";
+      const recursive =
+        params.recursive === true || params.recursive === "true";
       return [
         {
           name: "fs",

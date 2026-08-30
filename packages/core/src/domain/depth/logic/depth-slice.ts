@@ -52,7 +52,7 @@ export function validateDepthSlice(slice: DepthSlice): void {
 /** Message ids whose tail depth matches the slice. */
 export function messageIdsInSlice(
   visibleMessages: readonly { readonly id: string }[],
-  slice: DepthSlice,
+  slice: DepthSlice
 ): string[] {
   validateDepthSlice(slice);
   const n = visibleMessages.length;
@@ -68,8 +68,7 @@ export function messageIdsInSlice(
 
 /** Parses kebab or camel depth fields from a wire object. */
 export function depthSliceFromWire(raw: Record<string, unknown>): DepthSlice {
-  const start =
-    raw.startDepth ?? raw["start-depth"];
+  const start = raw.startDepth ?? raw["start-depth"];
   const end = raw.endDepth ?? raw["end-depth"];
   return {
     startDepth: typeof start === "number" ? start : undefined,

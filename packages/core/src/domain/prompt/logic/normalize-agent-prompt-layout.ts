@@ -22,7 +22,7 @@ export type LegacyPersistWorktreeWireBlock = {
 
 /** 是否为旧 persist worktree 块（读入 strip，不升迁 workplace）。 */
 export function isLegacyWorktreeWireBlock(
-  block: unknown,
+  block: unknown
 ): block is LegacyPersistWorktreeWireBlock {
   return (
     block != null &&
@@ -36,7 +36,7 @@ export function isLegacyWorktreeWireBlock(
  * 从 wire persist map 丢弃 `type:worktree` 条目（**不**据此设 workplace）。
  */
 export function stripLegacyWorktreeBlocksFromPersistMap(
-  persist: Record<string, unknown>,
+  persist: Record<string, unknown>
 ): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
   for (const [name, item] of Object.entries(persist)) {
@@ -52,11 +52,11 @@ export function stripLegacyWorktreeBlocksFromPersistMap(
  * 域 layout 归一化：persist 仅 text；保留非空 `workplace` string（勿压成 boolean）；丢弃旧 worktree 块。
  */
 export function normalizeAgentPromptLayoutDomain(
-  layout: AgentPromptLayout,
+  layout: AgentPromptLayout
 ): AgentPromptLayout {
   const persist = layout.persist.filter(
     (block): block is PersistTextPromptBlock =>
-      (block as { type?: string }).type === "text",
+      (block as { type?: string }).type === "text"
   );
   return {
     ...(layout.system != null && layout.system.trim() !== ""

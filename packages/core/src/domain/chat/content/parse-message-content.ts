@@ -46,7 +46,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * 解析 `meta.skillRef`（skill 跳转三元组）：字段不合法时抛错，
  * 缺省/未携带时返回 undefined（与其他具名 meta 字段同一口径）。
  */
-function parseSkillRefMeta(value: unknown, label: string): SkillToolRef | undefined {
+function parseSkillRefMeta(
+  value: unknown,
+  label: string
+): SkillToolRef | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value)) {
     throw chatInvalidArgument(`${label}: meta.skillRef must be an object`);
@@ -54,7 +57,7 @@ function parseSkillRefMeta(value: unknown, label: string): SkillToolRef | undefi
   const domain = value.domain;
   if (domain !== "global" && domain !== "project") {
     throw chatInvalidArgument(
-      `${label}: meta.skillRef.domain must be "global" or "project"`,
+      `${label}: meta.skillRef.domain must be "global" or "project"`
     );
   }
   const name = requireString(value, "name", `${label} meta.skillRef`);
@@ -66,7 +69,11 @@ function parseSkillRefMeta(value: unknown, label: string): SkillToolRef | undefi
   };
 }
 
-function requireString(obj: Record<string, unknown>, key: string, label: string): string {
+function requireString(
+  obj: Record<string, unknown>,
+  key: string,
+  label: string
+): string {
   const v = obj[key];
   if (typeof v !== "string" || v === "") {
     throw chatInvalidArgument(`${label}: ${key} must be a non-empty string`);
@@ -88,7 +95,9 @@ function parseImageSource(value: unknown): ImageSource {
     const data = requireString(value, "data", "image base64 source");
     return { kind: "base64", mediaType, data };
   }
-  throw chatInvalidArgument('image block: source.kind must be "url" or "base64"');
+  throw chatInvalidArgument(
+    'image block: source.kind must be "url" or "base64"'
+  );
 }
 
 /**
@@ -117,7 +126,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
   const type = value.type;
   if (typeof type !== "string" || !BLOCK_TYPES.has(type)) {
     throw chatInvalidArgument(
-      `blocks[${index}]: unknown or missing type (expected text|image|tool_use|tool_result|thinking|redacted_thinking)`,
+      `blocks[${index}]: unknown or missing type (expected text|image|tool_use|tool_result|thinking|redacted_thinking)`
     );
   }
 
@@ -135,7 +144,9 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       const name = requireString(value, "name", `blocks[${index}] tool_use`);
       const input = value.input;
       if (!isRecord(input)) {
-        throw chatInvalidArgument(`blocks[${index}] tool_use: input must be an object`);
+        throw chatInvalidArgument(
+          `blocks[${index}] tool_use: input must be an object`
+        );
       }
       const thinkingSignature = optionalString(value.thinkingSignature);
       return {
@@ -149,8 +160,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
     case "tool_result": {
       const label = `blocks[${index}] tool_result`;
       const toolUseId = requireString(value, "toolUseId", label);
-      const content =
-        typeof value.content === "string" ? value.content : "";
+      const content = typeof value.content === "string" ? value.content : "";
       if ("ok" in value && typeof value.ok !== "boolean") {
         throw chatInvalidArgument(`${label}: ok must be a boolean`);
       }
@@ -175,7 +185,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
           typeof metaValue.subagentSessionId !== "string"
         ) {
           throw chatInvalidArgument(
-            `${label}: meta.subagentSessionId must be a string`,
+            `${label}: meta.subagentSessionId must be a string`
           );
         }
         const skillRef = parseSkillRefMeta(metaValue.skillRef, label);
@@ -204,7 +214,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       const thinkingSignature = optionalString(value.thinkingSignature);
       if (text === "" && thinkingSignature == null) {
         throw chatInvalidArgument(
-          `blocks[${index}] thinking: text or thinkingSignature required`,
+          `blocks[${index}] thinking: text or thinkingSignature required`
         );
       }
       return {
@@ -214,7 +224,11 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       } satisfies ThinkingBlock;
     }
     case "redacted_thinking": {
-      const data = requireString(value, "data", `blocks[${index}] redacted_thinking`);
+      const data = requireString(
+        value,
+        "data",
+        `blocks[${index}] redacted_thinking`
+      );
       const thinkingSignature = optionalString(value.thinkingSignature);
       return {
         type: "redacted_thinking",
@@ -228,7 +242,9 @@ function parseBlock(value: unknown, index: number): ContentBlock {
 }
 
 /** Runtime validation for in-memory {@link MessageContent} before append. */
-export function assertMessageContent(value: unknown): asserts value is MessageContent {
+export function assertMessageContent(
+  value: unknown
+): asserts value is MessageContent {
   if (!isRecord(value)) {
     throw chatInvalidArgument("MessageContent must be an object");
   }
@@ -238,7 +254,7 @@ export function assertMessageContent(value: unknown): asserts value is MessageCo
   const extraKeys = Object.keys(value).filter((k) => k !== "blocks");
   if (extraKeys.length > 0) {
     throw chatInvalidArgument(
-      `MessageContent has unexpected keys: ${extraKeys.join(", ")}`,
+      `MessageContent has unexpected keys: ${extraKeys.join(", ")}`
     );
   }
   if (!("blocks" in value)) {

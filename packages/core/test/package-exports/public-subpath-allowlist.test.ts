@@ -47,24 +47,24 @@ describe("public 子入口 export allowlist 快照", () => {
       assert.equal(
         snapshot.includes(name),
         false,
-        `public/workplace 不应导出 ${name}`,
+        `public/workplace 不应导出 ${name}`
       );
     }
     assert.ok(snapshot.includes("assembleWorkplaceDisplay"));
     assert.equal(
       snapshot.includes("createSessionWorktreeBlockStore"),
       false,
-      "public/workplace 不应再导出 createSessionWorktreeBlockStore",
+      "public/workplace 不应再导出 createSessionWorktreeBlockStore"
     );
     assert.equal(
       snapshot.includes("captureSessionWorktreeBlock"),
       false,
-      "public/workplace 不应再导出 captureSessionWorktreeBlock",
+      "public/workplace 不应再导出 captureSessionWorktreeBlock"
     );
     assert.equal(
       snapshot.includes("getCapturedBlockOrCapture"),
       false,
-      "public/workplace 不应再导出 getCapturedBlockOrCapture",
+      "public/workplace 不应再导出 getCapturedBlockOrCapture"
     );
   });
 });

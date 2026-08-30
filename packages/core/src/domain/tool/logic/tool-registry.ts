@@ -51,4 +51,3 @@ export class ToolRegistry<Ctx = unknown> {
     this.tools.clear();
   }
 }
-

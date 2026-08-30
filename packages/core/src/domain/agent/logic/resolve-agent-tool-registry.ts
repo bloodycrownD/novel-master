@@ -10,7 +10,7 @@ import type { AgentDefinition } from "../model/agent-definition.js";
 
 function allowedToolNames(
   definition: AgentDefinition,
-  allNames: readonly string[],
+  allNames: readonly string[]
 ): readonly string[] {
   const policy = definition.tools;
   if (policy == null) {
@@ -57,7 +57,7 @@ export interface ResolveAgentToolRegistryOptions {
 export function resolveAgentToolRegistry<Ctx>(
   baseRegistry: ToolRegistry<Ctx>,
   definition: AgentDefinition,
-  options?: ResolveAgentToolRegistryOptions,
+  options?: ResolveAgentToolRegistryOptions
 ): ToolRegistry<Ctx> {
   const allNames = baseRegistry.list();
   const allowed = new Set(allowedToolNames(definition, allNames));

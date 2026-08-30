@@ -56,7 +56,7 @@ function firstNonEmptyKey(keys: readonly string[]): string | undefined {
 
 function resolveEntryBaseName(
   entry: Record<string, unknown>,
-  oneBasedIndex: number,
+  oneBasedIndex: number
 ): string {
   const commentRaw = entry["comment"];
   if (typeof commentRaw === "string") {
@@ -76,10 +76,7 @@ function resolveEntryBaseName(
   return `条目${oneBasedIndex}`;
 }
 
-function allocateUniqueName(
-  baseName: string,
-  used: Set<string>,
-): string {
+function allocateUniqueName(baseName: string, used: Set<string>): string {
   let candidate = `${baseName}.md`;
   if (!used.has(candidate)) {
     used.add(candidate);
@@ -96,7 +93,7 @@ function allocateUniqueName(
 
 function buildWorldbookMarkdown(
   keywords: readonly string[],
-  content: string,
+  content: string
 ): string {
   const fmBody = stringifyText({ keywords: [...keywords] }, "yaml").trimEnd();
   return `---\n${fmBody}\n---\n${content}`;
@@ -113,7 +110,7 @@ export function characterCardJsonToMdTree(card: unknown): MdTree {
  * 将已规范化字段映射为相对路径 md 树。
  */
 export function normalizedCardToMdTree(
-  card: NormalizedCharacterCardData,
+  card: NormalizedCharacterCardData
 ): MdTree {
   const tree = new Map<string, string>();
   tree.set("角色描述.md", card.description);

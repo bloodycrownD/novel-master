@@ -19,7 +19,7 @@ export type ComposerTrigger = "@" | "$";
 /** 插入正文的 `@path`（目录带尾 `/`，落库扫描后带前导 `/`）。 */
 export function formatComposerAtPathToken(
   path: string,
-  isDir: boolean,
+  isDir: boolean
 ): string {
   if (isDir) {
     // 选择器 path 通常无尾 `/`；先补尾再规范化，保证正文 token 与 scan 目录判定一致
@@ -36,7 +36,7 @@ export function formatComposerAtPathToken(
 /** 选择器多选 → 正文 token 列表（先 dir 后 file）。 */
 export function atPathTokensFromPickerSelection(
   selectedDirs: Iterable<string>,
-  selectedFiles: Iterable<string>,
+  selectedFiles: Iterable<string>
 ): string[] {
   return [
     ...[...selectedDirs].map((p) => formatComposerAtPathToken(p, true)),
@@ -52,7 +52,7 @@ export function atPathTokensFromPickerSelection(
 export function findActiveAtQuery(
   text: string,
   cursor: number,
-  trigger: ComposerTrigger = "@",
+  trigger: ComposerTrigger = "@"
 ): { readonly start: number; readonly query: string } | null {
   const safeCursor = Math.max(0, Math.min(cursor, text.length));
   const before = text.slice(0, safeCursor);
@@ -78,7 +78,7 @@ export function replaceActiveAtWithToken(
   text: string,
   cursor: number,
   start: number,
-  token: string,
+  token: string
 ): { readonly text: string; readonly cursor: number } {
   const before = text.slice(0, start);
   const after = text.slice(cursor);
@@ -92,7 +92,7 @@ export function replaceActiveAtWithToken(
 export function filterAtPathTypeaheadCandidates(
   refs: readonly AtPathRef[],
   query: string,
-  limit = 5,
+  limit = 5
 ): AtPathRef[] {
   const q = query.trim().toLowerCase();
   const out: AtPathRef[] = [];

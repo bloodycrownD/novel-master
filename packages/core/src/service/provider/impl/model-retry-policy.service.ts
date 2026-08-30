@@ -33,7 +33,11 @@ function assertValidPolicy(input: ModelRetryPolicy): void {
   if (input.maxDelayMs < input.baseDelayMs) {
     bad("maxDelayMs must be >= baseDelayMs");
   }
-  if (!Number.isFinite(input.jitterRatio) || input.jitterRatio < 0 || input.jitterRatio > 1) {
+  if (
+    !Number.isFinite(input.jitterRatio) ||
+    input.jitterRatio < 0 ||
+    input.jitterRatio > 1
+  ) {
     bad("jitterRatio must be in [0, 1]");
   }
 }
@@ -89,4 +93,3 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
     }
   }
 }
-

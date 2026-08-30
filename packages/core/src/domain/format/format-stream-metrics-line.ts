@@ -18,7 +18,9 @@ function formatStreamElapsed(seconds: number): string {
 }
 
 /** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
-export function buildStreamMetricsLine(metrics: StreamMetricsLineInput): string {
+export function buildStreamMetricsLine(
+  metrics: StreamMetricsLineInput
+): string {
   const elapsedSec = metrics.elapsedMs / 1000;
   const elapsedLabel = formatStreamElapsed(elapsedSec);
   const rate =

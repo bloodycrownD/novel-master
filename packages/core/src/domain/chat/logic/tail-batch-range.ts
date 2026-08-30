@@ -22,7 +22,7 @@ export type TailBatchRow = {
  */
 export function isTailBatchRowSelectable(
   row: TailBatchRow,
-  mode: TailBatchMode,
+  mode: TailBatchMode
 ): boolean {
   if (!row.selectable) {
     return false;
@@ -41,7 +41,7 @@ export function isTailBatchRowSelectable(
 export function selectTailBatchEligibleIdsFromAnchor(
   rows: readonly TailBatchRow[],
   anchorId: string,
-  mode: TailBatchMode,
+  mode: TailBatchMode
 ): ReadonlySet<string> {
   const anchor = rows.find((r) => r.id === anchorId);
   if (anchor == null || !isTailBatchRowSelectable(anchor, mode)) {
@@ -49,10 +49,8 @@ export function selectTailBatchEligibleIdsFromAnchor(
   }
   return new Set(
     rows
-      .filter(
-        (r) => isTailBatchRowSelectable(r, mode) && r.seq >= anchor.seq,
-      )
-      .map((r) => r.id),
+      .filter((r) => isTailBatchRowSelectable(r, mode) && r.seq >= anchor.seq)
+      .map((r) => r.id)
   );
 }
 
@@ -64,18 +62,14 @@ export function selectTailBatchEligibleIdsFromAnchor(
 export function computeTailBatchAffectedIds(
   rows: readonly TailBatchRow[],
   selectedIds: ReadonlySet<string>,
-  _sessionMaxSeq: number,
+  _sessionMaxSeq: number
 ): ReadonlySet<string> {
-  const selected = rows.filter(
-    (r) => selectedIds.has(r.id) && r.selectable,
-  );
+  const selected = rows.filter((r) => selectedIds.has(r.id) && r.selectable);
   if (selected.length === 0) {
     return new Set();
   }
   const fromSeq = Math.min(...selected.map((r) => r.seq));
-  return new Set(
-    rows.filter((r) => r.seq >= fromSeq).map((r) => r.id),
-  );
+  return new Set(rows.filter((r) => r.seq >= fromSeq).map((r) => r.id));
 }
 
 /**
@@ -87,10 +81,10 @@ export function computeTailBatchRangeFromSelection(
   rows: readonly TailBatchRow[],
   selectedIds: ReadonlySet<string>,
   sessionMaxSeq: number,
-  mode: TailBatchMode,
+  mode: TailBatchMode
 ): { fromSeq: number; toSeq: number } | null {
   const selected = rows.filter(
-    (r) => selectedIds.has(r.id) && isTailBatchRowSelectable(r, mode),
+    (r) => selectedIds.has(r.id) && isTailBatchRowSelectable(r, mode)
   );
   if (selected.length === 0) {
     return null;

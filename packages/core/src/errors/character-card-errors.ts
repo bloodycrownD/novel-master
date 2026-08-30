@@ -28,7 +28,7 @@ export class CharacterCardError extends Error {
 /** 构造 {@link CharacterCardError}。 */
 export function characterCardError(
   code: CharacterCardErrorCode,
-  message: string,
+  message: string
 ): CharacterCardError {
   return new CharacterCardError(code, message);
 }

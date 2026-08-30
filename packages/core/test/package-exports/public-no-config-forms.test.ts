@@ -10,7 +10,9 @@ const PUBLIC_DIR = join(import.meta.dirname, "../../src/public");
 
 describe("public/* 架构守卫", () => {
   it("除 KNOWN_LEAKS 外不得 import config-forms", () => {
-    for (const file of readdirSync(PUBLIC_DIR).filter((f) => f.endsWith(".ts"))) {
+    for (const file of readdirSync(PUBLIC_DIR).filter((f) =>
+      f.endsWith(".ts")
+    )) {
       const src = readFileSync(join(PUBLIC_DIR, file), "utf8");
       const importsConfigForms = /from\s+["'].*config-forms/.test(src);
       if (importsConfigForms && !KNOWN_LEAKS.has(file)) {

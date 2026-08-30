@@ -26,7 +26,7 @@ export interface InternalVfsService {
   list(
     scopeKey: string,
     dir: string,
-    options?: { recursive?: boolean; maxDepth?: number },
+    options?: { recursive?: boolean; maxDepth?: number }
   ): Promise<VfsListEntry[]>;
 
   mkdir(scopeKey: string, path: string): Promise<void>;
@@ -37,7 +37,7 @@ export interface InternalVfsService {
     scopeKey: string,
     path: string,
     content: string,
-    options?: WriteOptions,
+    options?: WriteOptions
   ): Promise<{ version: number }>;
 
   replace(
@@ -45,33 +45,37 @@ export interface InternalVfsService {
     path: string,
     oldString: string,
     newString: string,
-    options?: { replaceAll?: boolean },
+    options?: { replaceAll?: boolean }
   ): Promise<{ version: number; replacements: number }>;
 
   glob(
     scopeKey: string,
     pattern: string,
-    options?: { cwd?: string },
+    options?: { cwd?: string }
   ): Promise<string[]>;
 
   grep(
     scopeKey: string,
     pattern: string,
-    options?: VfsGrepOptions,
+    options?: VfsGrepOptions
   ): Promise<VfsGrepMatch[]>;
 
-  delete(scopeKey: string, path: string, options?: { recursive?: boolean }): Promise<void>;
+  delete(
+    scopeKey: string,
+    path: string,
+    options?: { recursive?: boolean }
+  ): Promise<void>;
 
   resetHeadToVersion(
     scopeKey: string,
     path: string,
-    version: number,
+    version: number
   ): Promise<void>;
 
   hardDelete(
     scopeKey: string,
     path: string,
-    options?: { recursive?: boolean },
+    options?: { recursive?: boolean }
   ): Promise<void>;
 
   /** 单文件 rename（Step 7 接通具体实现）。 */
@@ -79,14 +83,14 @@ export interface InternalVfsService {
     scopeKey: string,
     fromLogical: string,
     toLogical: string,
-    options?: { overwrite?: boolean },
+    options?: { overwrite?: boolean }
   ): Promise<void>;
 
   /** 目录前缀批量 rename（Step 7 接通具体实现）。 */
   renamePrefix(
     scopeKey: string,
     oldDirLogical: string,
-    newDirLogical: string,
+    newDirLogical: string
   ): Promise<void>;
 }
 

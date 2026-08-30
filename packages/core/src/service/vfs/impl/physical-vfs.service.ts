@@ -45,7 +45,7 @@ interface ResolvedPhysical {
  */
 function resolvePhysicalPath(normalized: string): ResolvedPhysical | null {
   const session = normalized.match(
-    /^\/projects\/([^/]+)\/sessions\/([^/]+)(\/.*)?$/,
+    /^\/projects\/([^/]+)\/sessions\/([^/]+)(\/.*)?$/
   );
   if (session != null) {
     return {
@@ -104,7 +104,9 @@ function compareEntries(a: VfsListEntry, b: VfsListEntry): number {
 
 /** 挂载点根的合成目录行（`/template`、`/meta`、`/projects` 域根无表行）。 */
 function syntheticDir(path: string, label?: string): VfsListEntry {
-  return label == null ? { path, kind: "directory" } : { path, kind: "directory", label };
+  return label == null
+    ? { path, kind: "directory" }
+    : { path, kind: "directory", label };
 }
 
 /** Default read-only physical VFS service. */
@@ -170,7 +172,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
         syntheticDir("/projects"),
         syntheticDir("/template"),
       ];
-      rows.push(...(await this.scopeTreeRows({ kind: "global-meta" }, "/meta")));
+      rows.push(
+        ...(await this.scopeTreeRows({ kind: "global-meta" }, "/meta"))
+      );
       rows.push(...(await this.scopeTreeRows({ kind: "global" }, "/template")));
       rows.push(...(await this.projectsTreeRows()));
       return rows.sort(compareEntries);
@@ -188,7 +192,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
         throw vfsNotFound(`/projects/${projectId}`);
       }
       return (await this.projectTreeRows(projectId, projectsMatch[2])).sort(
-        compareEntries,
+        compareEntries
       );
     }
 
@@ -202,7 +206,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     const templateMatch = normalized.match(/^\/template(\/.*)?$/);
     if (templateMatch != null) {
       return (await this.scopeTreeRows({ kind: "global" }, normalized)).sort(
-        compareEntries,
+        compareEntries
       );
     }
 
@@ -217,10 +221,9 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     let result: VfsReadResult;
     try {
-      result = await createScopedVfsService(
-        this.conn,
-        resolved.scope,
-      ).read(resolved.logicalPath);
+      result = await createScopedVfsService(this.conn, resolved.scope).read(
+        resolved.logicalPath
+      );
     } catch (error) {
       // 挂载点根等目录行按「无此文件」归一（本视图 read 只面向文件）
       if (isVfsError(error, "IS_DIRECTORY")) {
@@ -231,14 +234,17 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     const prefix = scopePhysicalPrefix(resolved.scope);
     return {
       ...result,
-      path: resolved.logicalPath === "/" ? prefix : `${prefix}${resolved.logicalPath}`,
+      path:
+        resolved.logicalPath === "/"
+          ? prefix
+          : `${prefix}${resolved.logicalPath}`,
     };
   }
 
   /** `/projects/{pid}` 下的列目录分流（项目存在性在此校验）。 */
   private async listUnderProject(
     projectId: string,
-    rest: string | undefined,
+    rest: string | undefined
   ): Promise<VfsListEntry[]> {
     const project = await this.projects.findById(projectId);
     if (project == null) {
@@ -254,24 +260,21 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     const sessionsMatch = rest.match(/^\/sessions(\/.*)?$/);
     if (sessionsMatch != null) {
-      return this.listSessionsUnderProject(
-        projectId,
-        sessionsMatch[1] ?? "/",
-      );
+      return this.listSessionsUnderProject(projectId, sessionsMatch[1] ?? "/");
     }
     const metaMatch = rest.match(/^\/meta(\/.*)?$/);
     if (metaMatch != null) {
       // project-meta：传物理形态目录（逻辑路径自带 /meta 段，挂载前缀仅项目段）
       return this.listScopeFirstLevel(
         { kind: "project-meta", projectId },
-        `/projects/${projectId}${rest}`,
+        `/projects/${projectId}${rest}`
       );
     }
     const templateMatch = rest.match(/^\/template(\/.*)?$/);
     if (templateMatch != null) {
       return this.listScopeFirstLevel(
         { kind: "project", projectId },
-        `/projects/${projectId}${rest}`,
+        `/projects/${projectId}${rest}`
       );
     }
     throw vfsNotFound(`/projects/${projectId}${rest}`);
@@ -280,11 +283,11 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   /** 会话域内是否有任意 VFS 条目（用于过滤无工作区文件的子 agent 会话）。 */
   private async hasSessionEntries(
     projectId: string,
-    sessionId: string,
+    sessionId: string
   ): Promise<boolean> {
     const entries = await this.entryRepo.listEntriesUnderPrefix(
       scopeKey({ kind: "session", projectId, sessionId }),
-      "/",
+      "/"
     );
     return entries.length > 0;
   }
@@ -292,7 +295,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   /** `/projects/{pid}/sessions[/...]`：会话目录行枚举 + 会话域内列目录。 */
   private async listSessionsUnderProject(
     projectId: string,
-    rest: string,
+    rest: string
   ): Promise<VfsListEntry[]> {
     if (rest === "/") {
       // 主会话 + 子 agent 会话 BFS 展开；空项目返回空列表。
@@ -313,15 +316,15 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
           visible:
             s.parentSessionId == null ||
             (await this.hasSessionEntries(projectId, s.id)),
-        })),
+        }))
       );
       return withVisibility
-        .filter(({visible}) => visible)
-        .map(({s}) =>
+        .filter(({ visible }) => visible)
+        .map(({ s }) =>
           syntheticDir(
             `/projects/${projectId}/sessions/${s.id}`,
-            s.title ?? undefined,
-          ),
+            s.title ?? undefined
+          )
         )
         .sort(compareEntries);
     }
@@ -336,7 +339,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     return this.listScopeFirstLevel(
       { kind: "session", projectId, sessionId },
-      `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`,
+      `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`
     );
   }
 
@@ -352,14 +355,14 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
    */
   private async listScopeFirstLevel(
     scope: VfsScope,
-    physicalDir: string,
+    physicalDir: string
   ): Promise<VfsListEntry[]> {
     const prefix = scopePhysicalPrefix(scope);
     const restDir = physicalDir.slice(prefix.length);
     const queryDir = restDir === "" ? "/" : restDir;
     const entries = await this.entryRepo.listEntriesUnderPrefix(
       scopeKey(scope),
-      queryDir,
+      queryDir
     );
     const base = queryDir === "/" ? "" : queryDir;
     const firstLevel = new Map<string, "file" | "directory">();
@@ -394,14 +397,14 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
    */
   private async scopeTreeRows(
     scope: VfsScope,
-    physicalDir: string,
+    physicalDir: string
   ): Promise<VfsListEntry[]> {
     const prefix = scopePhysicalPrefix(scope);
     const restDir = physicalDir.slice(prefix.length);
     const queryDir = restDir === "" ? "/" : restDir;
     const entries = await this.entryRepo.listEntriesUnderPrefix(
       scopeKey(scope),
-      queryDir,
+      queryDir
     );
     const base = queryDir === "/" ? "" : queryDir;
     // path → kind；同名合并规则与 listScopeFirstLevel 一致（已有文件行不被目录行覆盖）
@@ -447,7 +450,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   /** `/projects/{pid}` 子树（rest 语义同 listUnderProject；不含项目目录行自身）。 */
   private async projectTreeRows(
     projectId: string,
-    rest: string | undefined,
+    rest: string | undefined
   ): Promise<VfsListEntry[]> {
     if (rest == null || rest === "/") {
       // 项目根：三个子域挂载点目录行 + 各子树
@@ -459,14 +462,14 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
       rows.push(
         ...(await this.scopeTreeRows(
           { kind: "project", projectId },
-          `/projects/${projectId}/template`,
-        )),
+          `/projects/${projectId}/template`
+        ))
       );
       rows.push(
         ...(await this.scopeTreeRows(
           { kind: "project-meta", projectId },
-          `/projects/${projectId}/meta`,
-        )),
+          `/projects/${projectId}/meta`
+        ))
       );
       rows.push(...(await this.sessionsTreeRows(projectId, "/")));
       return rows;
@@ -479,14 +482,14 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     if (metaMatch != null) {
       return this.scopeTreeRows(
         { kind: "project-meta", projectId },
-        `/projects/${projectId}${rest}`,
+        `/projects/${projectId}${rest}`
       );
     }
     const templateMatch = rest.match(/^\/template(\/.*)?$/);
     if (templateMatch != null) {
       return this.scopeTreeRows(
         { kind: "project", projectId },
-        `/projects/${projectId}${rest}`,
+        `/projects/${projectId}${rest}`
       );
     }
     throw vfsNotFound(`/projects/${projectId}${rest}`);
@@ -495,7 +498,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
   /** `/projects/{pid}/sessions[/...]` 子树（主会话 + 子 agent 会话 BFS 展开）。 */
   private async sessionsTreeRows(
     projectId: string,
-    rest: string,
+    rest: string
   ): Promise<VfsListEntry[]> {
     if (rest === "/") {
       // 空项目返回空列表；子会话目录行与其子树均 BFS 展平。
@@ -515,14 +518,14 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
         rows.push(
           syntheticDir(
             `/projects/${projectId}/sessions/${s.id}`,
-            s.title ?? undefined,
-          ),
+            s.title ?? undefined
+          )
         );
         rows.push(
           ...(await this.scopeTreeRows(
             { kind: "session", projectId, sessionId: s.id },
-            `/projects/${projectId}/sessions/${s.id}`,
-          )),
+            `/projects/${projectId}/sessions/${s.id}`
+          ))
         );
       }
       return rows;
@@ -538,7 +541,7 @@ export class DefaultPhysicalVfsService implements PhysicalVfsService {
     }
     return this.scopeTreeRows(
       { kind: "session", projectId, sessionId },
-      `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`,
+      `/projects/${projectId}/sessions/${sessionId}${sidMatch[2] ?? ""}`
     );
   }
 }

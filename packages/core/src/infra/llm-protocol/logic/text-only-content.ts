@@ -18,7 +18,7 @@ export function blocksToTextOnly(blocks: readonly ContentBlock[]): string {
     }
     throw new ProviderError(
       "UNSUPPORTED_CONTENT",
-      `Provider does not support ${block.type} content blocks; use Anthropic or send text only`,
+      `Provider does not support ${block.type} content blocks; use Anthropic or send text only`
     );
   }
   return parts.join("\n\n");
@@ -37,7 +37,9 @@ export function isTextOnlyHistory(messages: readonly ChatMessage[]): boolean {
 }
 
 /** Flatten chat history to a single user string (text blocks only). */
-export function chatMessagesToTextOnly(messages: readonly ChatMessage[]): string {
+export function chatMessagesToTextOnly(
+  messages: readonly ChatMessage[]
+): string {
   const parts: string[] = [];
   for (const msg of messages) {
     const body = blocksToTextOnly(msg.content.blocks);

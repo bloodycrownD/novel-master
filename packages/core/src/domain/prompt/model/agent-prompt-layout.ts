@@ -59,7 +59,7 @@ export const DEFAULT_SKILLS_INDEX_PREFIX =
  * 布局是否启用常驻工作区（开 = 非空 string）。
  */
 export function layoutHasWorkplace(
-  layout: Pick<AgentPromptLayout, "workplace">,
+  layout: Pick<AgentPromptLayout, "workplace">
 ): boolean {
   return typeof layout.workplace === "string" && layout.workplace.length > 0;
 }
@@ -68,9 +68,12 @@ export function layoutHasWorkplace(
  * 布局是否带自定义附加信息（开 = trim 后非空 string；缺省 = 关）。
  */
 export function layoutHasCustomAttach(
-  layout: Pick<AgentPromptLayout, "customAttach">,
+  layout: Pick<AgentPromptLayout, "customAttach">
 ): boolean {
-  return typeof layout.customAttach === "string" && layout.customAttach.trim().length > 0;
+  return (
+    typeof layout.customAttach === "string" &&
+    layout.customAttach.trim().length > 0
+  );
 }
 
 /**

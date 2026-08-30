@@ -32,7 +32,7 @@ export function createAbortError(message = "Request aborted"): Error {
 /** True when `signal` was aborted or `error` is an abort-shaped failure. */
 export function isRequestAborted(
   error: unknown,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): boolean {
   if (signal?.aborted === true) {
     return true;

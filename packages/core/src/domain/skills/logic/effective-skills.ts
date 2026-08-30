@@ -40,7 +40,7 @@ export interface EffectiveSkill {
 }
 
 function normalizeDisabled(
-  disabled: ReadonlySet<string> | readonly string[] | undefined,
+  disabled: ReadonlySet<string> | readonly string[] | undefined
 ): Set<string> {
   if (disabled == null) {
     return new Set();
@@ -56,7 +56,7 @@ function normalizeDisabled(
  * 无效技能保留但 `effective=false`。结果按名称排序，输出稳定。
  */
 export function computeEffectiveSkills(
-  input: EffectiveSkillsInput,
+  input: EffectiveSkillsInput
 ): EffectiveSkill[] {
   const disabled = normalizeDisabled(input.disabledNames);
 

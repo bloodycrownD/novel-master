@@ -94,14 +94,20 @@ export class IntegrityRepairRegistry {
 
   /** 登记一个操作；同名重复登记直接抛错，防止悄悄覆盖。 */
   register(op: IntegrityRepairOperation): this {
-    if (!op || typeof op.detect !== "function" || typeof op.repair !== "function") {
+    if (
+      !op ||
+      typeof op.detect !== "function" ||
+      typeof op.repair !== "function"
+    ) {
       throw new TypeError(
-        `IntegrityRepairRegistry.register: 操作 ${op?.name ?? "<匿名>"} 缺少 detect/repair`,
+        `IntegrityRepairRegistry.register: 操作 ${
+          op?.name ?? "<匿名>"
+        } 缺少 detect/repair`
       );
     }
     if (this.operations.has(op.name)) {
       throw new Error(
-        `IntegrityRepairRegistry.register: 操作 ${op.name} 已登记，不允许覆盖`,
+        `IntegrityRepairRegistry.register: 操作 ${op.name} 已登记，不允许覆盖`
       );
     }
     this.operations.set(op.name, op);
@@ -145,7 +151,7 @@ export class IntegrityRepairRegistry {
   }
 
   private async runByFilter(
-    predicate: (op: IntegrityRepairOperation) => boolean,
+    predicate: (op: IntegrityRepairOperation) => boolean
   ): Promise<IntegrityRepairReport[]> {
     const reports: IntegrityRepairReport[] = [];
     for (const op of this.operations.values()) {
@@ -163,7 +169,7 @@ export class IntegrityRepairRegistry {
  * repair 抛错时挂到报告的 `error` 字段，不向上传播。
  */
 export async function runIntegrityRepair(
-  op: IntegrityRepairOperation,
+  op: IntegrityRepairOperation
 ): Promise<IntegrityRepairReport> {
   let detection: IntegrityRepairDetection;
   try {
@@ -172,7 +178,9 @@ export async function runIntegrityRepair(
     // detect 本身炸了，保守地尝试 repair，并在报告里挂上 detect 阶段的错误。
     detection = {
       needsRepair: true,
-      details: `detect 阶段抛错：${err instanceof Error ? err.message : String(err)}`,
+      details: `detect 阶段抛错：${
+        err instanceof Error ? err.message : String(err)
+      }`,
     };
   }
 
@@ -184,6 +192,12 @@ export async function runIntegrityRepair(
     await op.repair();
     return { name: op.name, kind: op.kind, detection, repaired: true };
   } catch (err) {
-    return { name: op.name, kind: op.kind, detection, repaired: false, error: err };
+    return {
+      name: op.name,
+      kind: op.kind,
+      detection,
+      repaired: false,
+      error: err,
+    };
   }
 }

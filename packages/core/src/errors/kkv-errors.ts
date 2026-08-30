@@ -18,7 +18,7 @@ export class KkvError extends Error {
   constructor(
     code: KkvErrorCode,
     message: string,
-    options?: { module?: string; key?: string },
+    options?: { module?: string; key?: string }
   ) {
     super(message);
     this.name = "KkvError";
@@ -31,7 +31,7 @@ export class KkvError extends Error {
 /** Type guard that works across duplicate module instances (e.g. src vs dist in tests). */
 export function isKkvError(
   error: unknown,
-  code?: KkvErrorCode,
+  code?: KkvErrorCode
 ): error is KkvError {
   if (typeof error !== "object" || error === null) {
     return false;

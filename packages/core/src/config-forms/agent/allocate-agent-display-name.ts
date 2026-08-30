@@ -14,7 +14,7 @@ export type AgentDisplayNameSlot = {
  * 返回 `agent1`、`agent2`… 中首个未被占用的显示名（trim 后精确匹配）。
  */
 export function allocateAgentDisplayName(
-  slots: readonly AgentDisplayNameSlot[],
+  slots: readonly AgentDisplayNameSlot[]
 ): string {
   const used = new Set<string>();
   for (const slot of slots) {

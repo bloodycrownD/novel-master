@@ -69,11 +69,15 @@ END`.trim();
 
 /** All vfs_revision bootstrap statements in execution order.
  *
- * 触发器 DDL **不在此数组**——SQLite 在 schema 变更（DROP TABLE / ALTER TABLE）时会
- * 重编译触发器，而旧库在跑更早的 zlib migration 时 `vfs_revision` 尚无 `content_hash`
- * 列、`vfs_content_blob` 尚无 `ref_count` 列，重编译会撞 `no such column`。触发器统一
- * 由 `vfs-entry-id-redesign-v1` migration 在两条路径（新库 ensure + 旧库 rebuild）上
- * 创建，靠 `IF NOT EXISTS` 幂等。触发器 DDL 常量仍定义在本文件供 migration import。 */
+ * 触发器 DDL 历史上不在此数组——旧库在跑更早的 zlib migration 时 `vfs_revision` 尚无
+ * `content_hash` 列、`vfs_content_blob` 尚无 `ref_count` 列，schema 变更重编译触发器会撞
+ * `no such column`，故曾由 `vfs-entry-id-redesign-v1` migration 统一创建。该 migration 已
+ * 随第二轮退役（最低支持 v1.4.27）删除，更早的 zlib migration 也不存在了：受支持的库
+ * 从建库起就具备两列，触发器直接并入 canonical DDL（SQLite 对触发体内的表/列引用
+ * 延迟解析，CREATE 阶段不校验，实测前向引用与缺列形态均安全）。 */
 export const VFS_REVISION_SCHEMA_STATEMENTS: readonly string[] = [
   VFS_REVISION_TABLE_DDL,
+  VFS_REVISION_INSERT_TRIGGER_DDL,
+  VFS_REVISION_DELETE_TRIGGER_DDL,
+  VFS_REVISION_UPDATE_TRIGGER_DDL,
 ];

@@ -159,14 +159,20 @@ export class CloudSyncCoordinator {
       const tempPath = this.importTempPath!;
       await this.storage.getToPath!(snapKey, tempPath);
       const localHash = await this.hashSnapshotFile!(tempPath);
-      if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
+      if (
+        remote.snapshotSha256 != null &&
+        localHash !== remote.snapshotSha256
+      ) {
         throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
       }
       await this.dbSync.importSnapshotFromPath!(tempPath);
     } else {
       const { body } = await this.storage.get(snapKey);
       const localHash = this.computeSha256Hex(body);
-      if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
+      if (
+        remote.snapshotSha256 != null &&
+        localHash !== remote.snapshotSha256
+      ) {
         throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
       }
       await this.dbSync.importSnapshot(body);
@@ -199,7 +205,7 @@ export class CloudSyncCoordinator {
         throw new CloudSyncError(
           "PUSH_MUTEX_TIMEOUT",
           "推送繁忙，等待互斥锁超时，请稍后再试",
-          { cause: error },
+          { cause: error }
         );
       }
       throw error;
@@ -222,7 +228,10 @@ export class CloudSyncCoordinator {
 
     const newLock = buildLease(this.deviceId, this.leaseSeconds);
     if (!canAcquireLock(remote.lock, this.deviceId)) {
-      throw new CloudSyncError("LOCK_HELD_BY_OTHER", "另一台设备正在同步，请稍后再推送");
+      throw new CloudSyncError(
+        "LOCK_HELD_BY_OTHER",
+        "另一台设备正在同步，请稍后再推送"
+      );
     }
 
     const lockedStatus: CloudSyncStatus = { ...remote, lock: newLock };
@@ -261,8 +270,14 @@ export class CloudSyncCoordinator {
 
       if (uploadElapsed > this.leaseSeconds * 500) {
         const renewedLock = renewLease(newLock, this.leaseSeconds);
-        const renewedStatus: CloudSyncStatus = { ...lockedStatus, lock: renewedLock };
-        const renewedEtag = await this.conditionalPutStatus(renewedStatus, statusEtag);
+        const renewedStatus: CloudSyncStatus = {
+          ...lockedStatus,
+          lock: renewedLock,
+        };
+        const renewedEtag = await this.conditionalPutStatus(
+          renewedStatus,
+          statusEtag
+        );
         if (renewedEtag != null) {
           statusEtag = renewedEtag;
         }
@@ -335,20 +350,17 @@ export class CloudSyncCoordinator {
    */
   private async conditionalPutStatus(
     status: CloudSyncStatus,
-    ifMatch?: string,
+    ifMatch?: string
   ): Promise<string | null> {
     try {
       const { etag } = await this.storage.put(
         statusKey(this.pathPrefix),
         this.encodeStatus(status),
-        ifMatch != null ? { ifMatch } : undefined,
+        ifMatch != null ? { ifMatch } : undefined
       );
       return etag;
     } catch (error) {
-      if (
-        error instanceof CloudSyncError &&
-        error.code === "LOCK_CONTENTION"
-      ) {
+      if (error instanceof CloudSyncError && error.code === "LOCK_CONTENTION") {
         return null;
       }
       throw error;

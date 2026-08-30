@@ -20,6 +20,8 @@ import {
   execLegacyV107ChatDdl,
   execLegacyV7ChatMessageDdl,
 } from "./helpers/legacy-db-fixtures.js";
+import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
+import { BASELINE_MIGRATION_IDS } from "../../src/bootstrap/novel-master-bootstrap.js";
 
 async function openInMemoryConnection(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
@@ -27,6 +29,19 @@ async function openInMemoryConnection(): Promise<TdbcConnection> {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
+}
+
+/**
+ * 登记一条 baseline id 哨兵：模拟「已走过 v1.4.27 基线迁移、但缺 align 管理的新列」
+ * 的老库。纯 legacy 形态（如 v1.0.7 无 agent_config_json）现在会被
+ * assertMinimumBaseline fail-fast 拦下，align 行为测试需先过基线检查。
+ */
+async function seedBaselineSentinel(conn: TdbcConnection): Promise<void> {
+  await ensureSchemaMigrationsTable(conn);
+  await conn.execute(
+    `INSERT INTO schema_migrations (id, applied_at_ms) VALUES (?, ?)`,
+    [BASELINE_MIGRATION_IDS[0]!, Date.now()]
+  );
 }
 
 /** 执行完整 bootstrap DDL（legacy 表已存在时 CREATE IF NOT EXISTS 不会改列）。 */
@@ -38,10 +53,10 @@ async function execBootstrapSchemaDdl(conn: TdbcConnection): Promise<void> {
 
 async function tableColumnNames(
   conn: TdbcConnection,
-  table: string,
+  table: string
 ): Promise<Set<string>> {
   const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${table}')`,
+    `SELECT name FROM pragma_table_info('${table}')`
   );
   return new Set(rows.map((row) => row.name));
 }
@@ -51,6 +66,7 @@ describe("schema 列对齐（T-B3）", () => {
     const conn = await openInMemoryConnection();
     await execLegacyV107ChatDdl(conn);
     await execBootstrapSchemaDdl(conn);
+    await seedBaselineSentinel(conn);
     await bootstrapNovelMaster(conn);
 
     const columns = await tableColumnNames(conn, "chat_session");
@@ -72,9 +88,10 @@ describe("schema 列对齐（T-B3）", () => {
 
     await execLegacyV107ChatDdl(conn);
     await execBootstrapSchemaDdl(conn);
+    await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${projectId}', 'legacy-session', ${now}, ${now})`,
+       VALUES ('${sessionId}', '${projectId}', 'legacy-session', ${now}, ${now})`
     );
     await bootstrapNovelMaster(conn);
 
@@ -96,16 +113,17 @@ describe("schema 列对齐（T-B3）", () => {
     await execLegacyV107ChatDdl(conn);
     await execLegacyChatMessageWithoutHidden(conn);
     await execBootstrapSchemaDdl(conn);
+    await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${randomUUID()}', 'msg-session', ${now}, ${now})`,
+       VALUES ('${sessionId}', '${randomUUID()}', 'msg-session', ${now}, ${now})`
     );
     await conn.execute(
       `INSERT INTO chat_message (
          id, session_id, seq, role, content_json, created_at_ms
        ) VALUES (
          '${messageId}', '${sessionId}', 1, 'user', '{"blocks":[{"type":"text","text":"hi"}]}', ${now}
-       )`,
+       )`
     );
     await bootstrapNovelMaster(conn);
 
@@ -161,20 +179,24 @@ describe("schema 列对齐（T-B3）", () => {
       "vfs_entry",
     ] as const) {
       const rows = await conn.query<{ name: string }>(
-        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${tableName}'`,
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${tableName}'`
       );
       assert.equal(rows.length, 1, `表 ${tableName} 应存在`);
     }
 
     assert.equal(
-      (await tableColumnNames(conn, "chat_session")).has("user_vfs_pending_json"),
-      false,
+      (await tableColumnNames(conn, "chat_session")).has(
+        "user_vfs_pending_json"
+      ),
+      false
     );
     assert.ok(
-      (await tableColumnNames(conn, "chat_session")).has("composer_draft_json"),
+      (await tableColumnNames(conn, "chat_session")).has("composer_draft_json")
     );
     assert.ok((await tableColumnNames(conn, "chat_message")).has("hidden"));
-    assert.ok((await tableColumnNames(conn, "chat_project")).has("agent_config_json"));
+    assert.ok(
+      (await tableColumnNames(conn, "chat_project")).has("agent_config_json")
+    );
     const vfsCols = await tableColumnNames(conn, "vfs_entry");
     assert.ok(vfsCols.has("entry_kind"));
     assert.ok(vfsCols.has("head_version"));
@@ -214,7 +236,7 @@ describe("schema 列对齐（T-B3）", () => {
     await execBootstrapSchemaDdl(conn);
     await conn.execute(
       `INSERT INTO chat_project (id, name, created_at_ms, updated_at_ms)
-       VALUES ('${projectId}', 'legacy-project', ${now}, ${now})`,
+       VALUES ('${projectId}', 'legacy-project', ${now}, ${now})`
     );
     await bootstrapNovelMaster(conn);
 
@@ -228,7 +250,10 @@ describe("schema 列对齐（T-B3）", () => {
     assert.equal(await repo.getAgentConfig(projectId), null);
 
     const configJson = JSON.stringify({ mode: "follow" });
-    assert.equal(await repo.updateAgentConfig(projectId, configJson, now + 1), true);
+    assert.equal(
+      await repo.updateAgentConfig(projectId, configJson, now + 1),
+      true
+    );
     assert.equal(await repo.getAgentConfig(projectId), configJson);
 
     await conn.close();
@@ -242,14 +267,18 @@ describe("schema 列对齐（T-B3）", () => {
 
     // 旧库形态：v1.0.7 风格 chat_session（无 composer_draft_json 也无 agent_config_json）
     await execLegacyV107ChatDdl(conn);
+    await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${projectId}', 'legacy-agent-col', ${now}, ${now})`,
+       VALUES ('${sessionId}', '${projectId}', 'legacy-agent-col', ${now}, ${now})`
     );
     await bootstrapNovelMaster(conn);
 
     const columns = await tableColumnNames(conn, "chat_session");
-    assert.ok(columns.has("agent_config_json"), "agent_config_json 应被 ALIGN 补列");
+    assert.ok(
+      columns.has("agent_config_json"),
+      "agent_config_json 应被 ALIGN 补列"
+    );
 
     const repo = new SqliteSessionRepository(conn);
     assert.equal(await repo.getSessionAgentConfig(sessionId), null);
@@ -257,13 +286,13 @@ describe("schema 列对齐（T-B3）", () => {
       await repo.setSessionAgentConfig(
         sessionId,
         JSON.stringify({ mode: "bind", agentId: "a1" }),
-        now + 1,
+        now + 1
       ),
-      true,
+      true
     );
     assert.equal(
       await repo.getSessionAgentConfig(sessionId),
-      JSON.stringify({ mode: "bind", agentId: "a1" }),
+      JSON.stringify({ mode: "bind", agentId: "a1" })
     );
 
     await conn.close();
@@ -290,9 +319,10 @@ describe("schema 列对齐（T-B3）", () => {
     // 也无 cache/model_name 列——三者均由 ALIGN 幂等补齐）
     await execLegacyV107ChatDdl(conn);
     await execLegacyV7ChatMessageDdl(conn);
+    await seedBaselineSentinel(conn);
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${randomUUID()}', 'timing-align', ${now}, ${now})`,
+       VALUES ('${sessionId}', '${randomUUID()}', 'timing-align', ${now}, ${now})`
     );
     await conn.execute(
       `INSERT INTO chat_message (
@@ -300,7 +330,7 @@ describe("schema 列对齐（T-B3）", () => {
        ) VALUES (
          '${legacyMessageId}', '${sessionId}', 1, 'assistant',
          '{"blocks":[{"type":"text","text":"legacy"}]}', ${now}
-       )`,
+       )`
     );
     await bootstrapNovelMaster(conn);
     // 重复执行幂等：第二次 bootstrap 不因列已存在而报错
@@ -315,7 +345,7 @@ describe("schema 列对齐（T-B3）", () => {
       first_token_ms: number | null;
       duration_ms: number | null;
     }>(
-      `SELECT first_token_ms, duration_ms FROM chat_message WHERE id = '${legacyMessageId}'`,
+      `SELECT first_token_ms, duration_ms FROM chat_message WHERE id = '${legacyMessageId}'`
     );
     assert.equal(legacyRow[0]?.first_token_ms, null);
     assert.equal(legacyRow[0]?.duration_ms, null);
@@ -360,16 +390,19 @@ describe("schema 列对齐（T-B3）", () => {
       await bootstrapNovelMaster(conn);
 
       const columns = await tableColumnNames(conn, "chat_message");
-      assert.ok(columns.has("first_token_ms"), "first_token_ms 应被 ALIGN 补列");
+      assert.ok(
+        columns.has("first_token_ms"),
+        "first_token_ms 应被 ALIGN 补列"
+      );
       assert.ok(columns.has("duration_ms"), "duration_ms 应被 ALIGN 补列");
 
       const versionRows = await conn.query<{ user_version: number }>(
-        "PRAGMA user_version",
+        "PRAGMA user_version"
       );
       assert.equal(
         versionRows[0]?.user_version,
         SCHEMA_BOOT_VERSION,
-        "user_version 应升到 SCHEMA_BOOT_VERSION",
+        "user_version 应升到 SCHEMA_BOOT_VERSION"
       );
     } finally {
       await conn.close();

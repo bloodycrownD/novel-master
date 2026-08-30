@@ -39,14 +39,11 @@ export interface VfsRevisionRepository {
    */
   findByEntryAndVersion(
     entryId: number,
-    version: number,
+    version: number
   ): Promise<VfsRevision | null>;
 
   /** 判断指定 entryId+version 的 revision 行是否存在（不解正文）。 */
-  existsByEntryAndVersion(
-    entryId: number,
-    version: number,
-  ): Promise<boolean>;
+  existsByEntryAndVersion(entryId: number, version: number): Promise<boolean>;
 
   /**
    * 读取指定 entryId+version 的 status / content_hash（不解正文）。
@@ -55,7 +52,7 @@ export interface VfsRevisionRepository {
    */
   findMetaByEntryAndVersion(
     entryId: number,
-    version: number,
+    version: number
   ): Promise<VfsRevisionPointerMeta | null>;
 
   /**
@@ -64,7 +61,7 @@ export interface VfsRevisionRepository {
    * @returns 键为 `entryId:version`；不存在的 pair 不在 map 中
    */
   findMetasByEntryVersions(
-    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
   ): Promise<Map<string, VfsRevisionPointerMeta>>;
 
   /**
@@ -92,7 +89,7 @@ export interface VfsRevisionRepository {
    */
   listKeysUnderScope(
     scopeKey: string,
-    pathPrefix: string,
+    pathPrefix: string
   ): Promise<ReadonlyArray<{ entryId: number; version: number }>>;
 
   /**
@@ -103,11 +100,15 @@ export interface VfsRevisionRepository {
   deleteExceptReachable(
     scopeKey: string,
     pathPrefix: string,
-    reachable: ReadonlySet<string>,
+    reachable: ReadonlySet<string>
   ): Promise<number>;
 
   /** 对 (entryId, version) 的 ref_count 增减；行不存在且 delta<0 时为 no-op。 */
-  adjustRefCount(entryId: number, version: number, delta: number): Promise<void>;
+  adjustRefCount(
+    entryId: number,
+    version: number,
+    delta: number
+  ): Promise<void>;
 
   /**
    * 批量增减 ref_count。
@@ -122,8 +123,11 @@ export interface VfsRevisionRepository {
    * 逐条 adjustRefCount 的循环，把 N 次 SQL 往返压成 ceil(N/chunk) 次。
    */
   batchAdjustRefCount(
-    pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
-    delta: 1 | -1,
+    pointers: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+    }>,
+    delta: 1 | -1
   ): Promise<void>;
 
   /**
@@ -134,8 +138,11 @@ export interface VfsRevisionRepository {
    * delta < 0 时缺失行 no-op。
    */
   batchAdjustRefCountWithDelta(
-    pointers: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
-    delta: number,
+    pointers: ReadonlyArray<{
+      readonly entryId: number;
+      readonly version: number;
+    }>,
+    delta: number
   ): Promise<void>;
 
   /**
@@ -144,7 +151,7 @@ export interface VfsRevisionRepository {
    * @returns 已存在的 pair 集合，key 格式为 `${entryId}:${version}`
    */
   findExistingEntryVersionKeys(
-    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>,
+    pairs: ReadonlyArray<{ readonly entryId: number; readonly version: number }>
   ): Promise<Set<string>>;
 
   /**
@@ -162,14 +169,14 @@ export interface VfsRevisionRepository {
       readonly status: string;
       readonly mtimeMs: number;
       readonly refCount: number;
-    }>,
+    }>
   ): Promise<void>;
 
   /** 将 ref_count 上调至 expected（只增不减，保守纠偏）。 */
   repairRefCountFloor(
     entryId: number,
     version: number,
-    expected: number,
+    expected: number
   ): Promise<boolean>;
 
   /**
@@ -189,7 +196,7 @@ export interface VfsRevisionRepository {
       readonly entryId: number;
       readonly version: number;
       readonly expected: number;
-    }>,
+    }>
   ): Promise<number>;
 
   /**
@@ -202,7 +209,7 @@ export interface VfsRevisionRepository {
   deleteUnreferencedUnderScope(
     scopeKey: string,
     pathPrefix: string,
-    excludePrefixes?: readonly string[],
+    excludePrefixes?: readonly string[]
   ): Promise<number>;
 
   /**

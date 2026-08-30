@@ -38,7 +38,7 @@ function resolveDisplayPath(vfsError: VfsError, _scope?: VfsScope): string {
 
 function formatVfsErrorCodeMessage(
   vfsError: VfsError,
-  scope?: VfsScope,
+  scope?: VfsScope
 ): string {
   switch (vfsError.code) {
     case "REPLACE_NOT_FOUND":
@@ -58,11 +58,9 @@ function formatVfsErrorCodeMessage(
 }
 
 function ipcPayloadToVfsError(payload: IpcLikeError): VfsError {
-  return new VfsError(
-    payload.code as VfsError["code"],
-    payload.message,
-    { path: undefined },
-  );
+  return new VfsError(payload.code as VfsError["code"], payload.message, {
+    path: undefined,
+  });
 }
 
 /**
@@ -70,7 +68,7 @@ function ipcPayloadToVfsError(payload: IpcLikeError): VfsError {
  */
 export function formatVfsErrorForUser(
   error: unknown,
-  scope?: VfsScope,
+  scope?: VfsScope
 ): string {
   if (error instanceof ToolError && error.cause != null) {
     return formatVfsErrorForUser(error.cause, scope);

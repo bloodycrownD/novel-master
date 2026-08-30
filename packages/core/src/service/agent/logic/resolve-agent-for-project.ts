@@ -45,7 +45,7 @@ export interface ResolveAgentForProjectRuntimePort extends AgentRunRuntimePort {
 export async function resolveAgentForProject(
   runtime: ResolveAgentForProjectRuntimePort,
   projectId: string,
-  sessionId: string,
+  sessionId: string
 ): Promise<ResolvedAgentForProject> {
   void projectId;
   void runtime.projects;
@@ -60,7 +60,7 @@ export async function resolveAgentForProject(
     // 保留原始错误消息便于诊断。
     const detail = error instanceof Error ? error.message : String(error);
     throw new AgentRunResolveError(
-      `会话引用的 Agent 不存在：${agentId}（${detail}）`,
+      `会话引用的 Agent 不存在：${agentId}（${detail}）`
     );
   }
 }

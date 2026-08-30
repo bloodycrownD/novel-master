@@ -25,12 +25,15 @@ const ANTHROPIC_BODY_DEFAULT_MAX_TOKENS = 4096;
  */
 export function resolveEffectiveMaxTokens(
   sampling: SavedModelSamplingSettings,
-  protocol: LlmProtocolKind,
+  protocol: LlmProtocolKind
 ): number {
   if (sampling.enabled && sampling.params != null) {
     switch (protocol) {
       case "openai":
-        if (sampling.params.protocol === "openai" && sampling.params.openai.max_tokens != null) {
+        if (
+          sampling.params.protocol === "openai" &&
+          sampling.params.openai.max_tokens != null
+        ) {
           return sampling.params.openai.max_tokens;
         }
         return OPENAI_SAMPLING_DEFAULTS.max_tokens;
@@ -74,7 +77,12 @@ export function resolveThinkingParamsForLevel(
   level: ThinkingLevel,
   protocol: LlmProtocolKind,
   sampling: SavedModelSamplingSettings,
-  vendorModelId: string,
+  vendorModelId: string
 ): ModelThinkingParams | undefined {
-  return thinkingLevelToModelThinkingParams(level, protocol, vendorModelId, sampling);
+  return thinkingLevelToModelThinkingParams(
+    level,
+    protocol,
+    vendorModelId,
+    sampling
+  );
 }

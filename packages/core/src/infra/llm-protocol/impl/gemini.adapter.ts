@@ -37,9 +37,11 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
   async listModels(
-    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">,
+    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">
   ): Promise<LlmListModelsResult> {
-    const url = `${joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(req.apiKey)}`;
+    const url = `${joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(
+      req.apiKey
+    )}`;
     const data = (await fetchJson(this.fetchFn, url, {
       method: "GET",
       headers: { ...req.extraHeaders },
@@ -98,9 +100,14 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     return body;
   }
 
-  private modelUrl(req: LlmChatRequest, action: "generateContent" | "streamGenerateContent"): string {
+  private modelUrl(
+    req: LlmChatRequest,
+    action: "generateContent" | "streamGenerateContent"
+  ): string {
     const path = `/models/${encodeURIComponent(req.vendorModelId)}:${action}`;
-    const base = `${joinUrl(req.baseUrl, path)}?key=${encodeURIComponent(req.apiKey)}`;
+    const base = `${joinUrl(req.baseUrl, path)}?key=${encodeURIComponent(
+      req.apiKey
+    )}`;
     return action === "streamGenerateContent" ? `${base}&alt=sse` : base;
   }
 
@@ -145,7 +152,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
         },
         (chunk) => feedGeminiSseChunk(state, chunk, req.onStream),
         undefined,
-        { fetchFn: this.fetchFn, signal: req.signal },
+        { fetchFn: this.fetchFn, signal: req.signal }
       );
     } catch (error) {
       if (!isRequestAborted(error, req.signal)) {

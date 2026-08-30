@@ -12,7 +12,9 @@ import { BUILTIN_PROVIDER_ROWS } from "@/domain/provider/logic/builtin-providers
 /**
  * 按 builtin_key 幂等插入内置服务商（已存在则跳过，不覆盖用户编辑）。
  */
-export async function seedBuiltinProviders(conn: TdbcConnection): Promise<void> {
+export async function seedBuiltinProviders(
+  conn: TdbcConnection
+): Promise<void> {
   const parser = new SqlTemplateParser();
   const now = Date.now();
   for (const row of BUILTIN_PROVIDER_ROWS) {
@@ -32,7 +34,7 @@ export async function seedBuiltinProviders(conn: TdbcConnection): Promise<void> 
         baseUrl: row.baseUrl,
         displayName: row.displayName,
         now,
-      },
+      }
     );
   }
 }

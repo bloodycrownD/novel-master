@@ -5,17 +5,13 @@
  */
 
 import { decode } from "@/infra/serialization/decode.js";
-import {
-  compactionConditionsSchema,
-} from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
+import { compactionConditionsSchema } from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
 import {
   DEFAULT_HIDE_START_DEPTH,
   type CompactionConditions,
 } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
-import {
-  compactionConditionsInvalidSchema,
-} from "@/errors/compaction-conditions-errors.js";
+import { compactionConditionsInvalidSchema } from "@/errors/compaction-conditions-errors.js";
 import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionConditionsStore } from "../compaction-conditions-store.port.js";
@@ -44,13 +40,12 @@ function migrateV2ToV3(raw: Record<string, unknown>): Record<string, unknown> {
     typeof raw.visibleFloor === "number"
       ? raw.visibleFloor
       : typeof raw["visible-floor"] === "number"
-        ? (raw["visible-floor"] as number)
-        : undefined;
+      ? (raw["visible-floor"] as number)
+      : undefined;
   return {
     schemaVersion: 3,
     enabled: Boolean(raw.enabled),
-    tokenRatio:
-      typeof raw.tokenRatio === "number" ? raw.tokenRatio : 0.8,
+    tokenRatio: typeof raw.tokenRatio === "number" ? raw.tokenRatio : 0.8,
     ...(visibleFloor != null ? { visibleFloor } : {}),
   };
 }
@@ -65,8 +60,8 @@ function migrateV3ToV4(raw: Record<string, unknown>): Record<string, unknown> {
     typeof raw.visibleFloor === "number"
       ? raw.visibleFloor
       : typeof raw["visible-floor"] === "number"
-        ? (raw["visible-floor"] as number)
-        : undefined;
+      ? (raw["visible-floor"] as number)
+      : undefined;
   const tokenRatio =
     typeof raw.tokenRatio === "number" ? raw.tokenRatio : undefined;
   return {
@@ -85,7 +80,9 @@ function rethrowDecodeError(error: unknown): never {
   throw error;
 }
 
-export class DefaultCompactionConditionsStore implements CompactionConditionsStore {
+export class DefaultCompactionConditionsStore
+  implements CompactionConditionsStore
+{
   constructor(private readonly kkv: KkvService) {}
 
   async getConditions(): Promise<CompactionConditions | null> {
@@ -123,7 +120,9 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
       parsed = JSON.parse(raw) as unknown;
     } catch (error) {
       throw compactionConditionsInvalidSchema(
-        `invalid JSON in nm-compaction-conditions/policy: ${error instanceof Error ? error.message : String(error)}`,
+        `invalid JSON in nm-compaction-conditions/policy: ${
+          error instanceof Error ? error.message : String(error)
+        }`
       );
     }
     if (isV2Document(parsed)) {

@@ -31,8 +31,8 @@ export const composerDraftSchema = z
       .array(messageAttachmentSchema)
       .transform((items) =>
         items.filter(
-          (item): item is ComposerDraftAttachment => item.source === "attach",
-        ),
+          (item): item is ComposerDraftAttachment => item.source === "attach"
+        )
       ),
   })
   .strict();
@@ -50,7 +50,7 @@ export const EMPTY_COMPOSER_DRAFT: ComposerDraft = {
  * 含非 attach 的附件会被剥掉。
  */
 export function parseComposerDraftJson(
-  raw: string | null | undefined,
+  raw: string | null | undefined
 ): ComposerDraft {
   if (raw == null || raw === "") {
     return { ...EMPTY_COMPOSER_DRAFT, attachments: [] };
@@ -76,13 +76,13 @@ export function serializeComposerDraftJson(
   draft:
     | { text: string; attachments: readonly MessageAttachment[] }
     | null
-    | undefined,
+    | undefined
 ): string | null {
   if (draft == null) {
     return null;
   }
   const attachments = draft.attachments.filter(
-    (item): item is ComposerDraftAttachment => item.source === "attach",
+    (item): item is ComposerDraftAttachment => item.source === "attach"
   );
   if (draft.text === "" && attachments.length === 0) {
     return null;
@@ -96,7 +96,7 @@ export function serializeComposerDraftJson(
 
 /** 类型守卫：附件是否为 attach 源。 */
 export function isComposerDraftAttachment(
-  item: MessageAttachment,
+  item: MessageAttachment
 ): item is ComposerDraftAttachment {
   return item.source === "attach";
 }

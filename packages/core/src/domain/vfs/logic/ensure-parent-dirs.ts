@@ -16,7 +16,7 @@ import { isStorageRootParent, parentDir } from "./parent-dir.js";
 export async function ensureParentDirectories(
   repo: VfsEntryRepository,
   scopeKey: string,
-  filePath: string,
+  filePath: string
 ): Promise<void> {
   const chain: string[] = [];
   let current = parentDir(filePath);

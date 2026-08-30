@@ -16,13 +16,14 @@ export type ComposerChipAttachment = {
  * 是否为状态条附件（annotate 投影；workplace 为历史只读兼容；不含 attach/userAttach）。
  * D3：user_ops 分支须 `action === "annotate"`，不能按 source 一刀切（手改附件不再是状态 chip）。
  */
-export function isComposerStatusAttachment(
-  a: ComposerChipAttachment,
-): boolean {
+export function isComposerStatusAttachment(a: ComposerChipAttachment): boolean {
   if (a.action === "userAttach" || a.source === "attach") {
     return false;
   }
-  return a.source === "workplace" || (a.source === "user_ops" && a.action === "annotate");
+  return (
+    a.source === "workplace" ||
+    (a.source === "user_ops" && a.action === "annotate")
+  );
 }
 
 /**
@@ -30,9 +31,9 @@ export function isComposerStatusAttachment(
  * 泛型保留调用方附件类型（DTO / domain）。
  */
 export function partitionComposerChipAttachments<
-  T extends ComposerChipAttachment,
+  T extends ComposerChipAttachment
 >(
-  attachments: readonly T[],
+  attachments: readonly T[]
 ): {
   readonly status: T[];
   readonly attach: T[];

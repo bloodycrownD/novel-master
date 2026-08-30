@@ -24,7 +24,7 @@ export type AttachmentDisplayKind = "full" | "filename" | "header";
  */
 export function buildAttachmentActionXml(
   action: MessageAttachmentAction,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): string {
   return buildUserVfsActionXml(action, params);
 }
@@ -52,10 +52,7 @@ export function buildAlreadyReferencedActionXml(path: string): string {
 }
 
 /** 目录树：`kind: "dirTree"`，content = ASCII 树（无外层 `<dir>`）。 */
-export function buildDirTreeActionXml(
-  path: string,
-  treeBody: string,
-): string {
+export function buildDirTreeActionXml(path: string, treeBody: string): string {
   return buildAttachmentActionXml("userAttach", {
     path,
     content: treeBody,
@@ -97,7 +94,9 @@ function asParamNonNegInt(value: unknown): number | undefined {
 
 /** 新 mint 批注草稿 id（Undo 解析恢复用；与发送原 id 解耦）。 */
 function mintAnnotateDraftId(): string {
-  return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `ann-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 }
 
 /**
@@ -107,7 +106,7 @@ function mintAnnotateDraftId(): string {
  */
 export function formatAnnotateLocationLabel(
   startLine: number | undefined | null,
-  endLine: number | undefined | null,
+  endLine: number | undefined | null
 ): string | undefined {
   if (
     typeof startLine !== "number" ||
@@ -131,7 +130,7 @@ export function formatAnnotateLocationLabel(
  * 有 `startLine` 时额外写 `locationLabel`（「第 N 行」/「第 A-B 行」），让模型直接读自然语言。
  */
 export function buildFileAnnotateAttachmentFromDraft(
-  draft: AnnotateDraft,
+  draft: AnnotateDraft
 ): MessageAttachment {
   const path = draft.path;
   const params: Record<string, unknown> = {
@@ -166,7 +165,7 @@ export function buildFileAnnotateAttachmentFromDraft(
   // 行号已就位时附自然语言位置标签，方便模型一眼定位（仅渲染态，不回灌草稿）
   const locationLabel = formatAnnotateLocationLabel(
     draft.startLine,
-    draft.endLine,
+    draft.endLine
   );
   if (locationLabel != null) {
     params.locationLabel = locationLabel;
@@ -187,7 +186,7 @@ export function buildFileAnnotateAttachmentFromDraft(
  * 仅文件形 `AnnotateDraft`（消息批注发送管线已移除）。
  */
 export function buildAnnotateAttachmentFromDraft(
-  draft: AnnotateDraft,
+  draft: AnnotateDraft
 ): MessageAttachment {
   return buildFileAnnotateAttachmentFromDraft(draft);
 }
@@ -198,7 +197,7 @@ export function buildAnnotateAttachmentFromDraft(
  * 每条 **新 mint id**（不复用落库伪 id）。
  */
 export function parseAnnotateDraftsFromAttachments(
-  attachments: readonly MessageAttachment[] | null | undefined,
+  attachments: readonly MessageAttachment[] | null | undefined
 ): AnnotateDraft[] {
   if (attachments == null || attachments.length === 0) {
     return [];
@@ -250,13 +249,9 @@ export function parseAnnotateDraftsFromAttachments(
     }
     // 渲染坐标 / offset 成对且半开合法才写回；残缺/非法旧数据丢对应对，保留其余
     const renderOk =
-      renderStart != null &&
-      renderEnd != null &&
-      renderStart < renderEnd;
+      renderStart != null && renderEnd != null && renderStart < renderEnd;
     const offsetsOk =
-      startOffset != null &&
-      endOffset != null &&
-      startOffset < endOffset;
+      startOffset != null && endOffset != null && startOffset < endOffset;
     out.push({
       id: mintAnnotateDraftId(),
       path,

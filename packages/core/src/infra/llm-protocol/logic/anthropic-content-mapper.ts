@@ -17,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** NM blocks ??Anthropic message `content` array. */
 export function blocksToAnthropicContent(
   blocks: readonly ContentBlock[],
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): AnthropicContentItem[] {
   return blocks.map((block) => {
     switch (block.type) {
@@ -72,7 +72,7 @@ export function blocksToAnthropicContent(
 /** Anthropic API `content[]` ??NM blocks (unknown types are skipped). */
 export function anthropicContentToBlocks(
   content: readonly unknown[],
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const item of content) {
@@ -141,8 +141,8 @@ export function anthropicContentToBlocks(
           typeof item.thinking === "string"
             ? item.thinking
             : typeof item.text === "string"
-              ? item.text
-              : "";
+            ? item.text
+            : "";
         const signature =
           typeof item.signature === "string" && item.signature !== ""
             ? item.signature
@@ -180,7 +180,7 @@ export function anthropicContentToBlocks(
 
 /** 相邻 user 消息合并：content 按序拼接，tool_result 块前置（D2 规则，出站单向操作，不回写内部消息列表）。 */
 function mergeAdjacentUserTurns(
-  messages: Array<{ role: string; content: AnthropicContentItem[] }>,
+  messages: Array<{ role: string; content: AnthropicContentItem[] }>
 ): Array<{ role: string; content: AnthropicContentItem[] }> {
   const out: Array<{ role: string; content: AnthropicContentItem[] }> = [];
   for (const msg of messages) {
@@ -205,12 +205,14 @@ function mergeAdjacentUserTurns(
 /** Session history ??Anthropic `messages[]` (tool_result ??user role). */
 export function chatMessagesToAnthropic(
   messages: readonly ChatMessage[],
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): Array<{ role: string; content: AnthropicContentItem[] }> {
   const out: Array<{ role: string; content: AnthropicContentItem[] }> = [];
 
   for (const msg of messages) {
-    const toolResults = msg.content.blocks.filter((b) => b.type === "tool_result");
+    const toolResults = msg.content.blocks.filter(
+      (b) => b.type === "tool_result"
+    );
     const other = msg.content.blocks.filter((b) => b.type !== "tool_result");
 
     if (toolResults.length > 0) {

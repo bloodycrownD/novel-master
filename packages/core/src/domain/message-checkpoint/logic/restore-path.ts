@@ -9,10 +9,7 @@
 
 import { mkdirIgnoreExistingDirectory } from "@/domain/vfs/logic/vfs-move.js";
 import { parentDir } from "@/domain/vfs/logic/parent-dir.js";
-import {
-  scopeKey,
-  type VfsScope,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -43,7 +40,7 @@ async function resolveEntryId(
   entryRepo: VfsEntryRepository,
   scopeKeyStr: string,
   logicalPath: string,
-  prefetch?: RestorePathPrefetch,
+  prefetch?: RestorePathPrefetch
 ): Promise<number | null> {
   if (prefetch?.entryIdByPath != null) {
     return prefetch.entryIdByPath.get(logicalPath) ?? null;
@@ -56,7 +53,7 @@ async function resolveRevisionMeta(
   revisionRepo: VfsRevisionRepository,
   entryId: number,
   version: number,
-  prefetch?: RestorePathPrefetch,
+  prefetch?: RestorePathPrefetch
 ): Promise<VfsRevisionPointerMeta | null> {
   const key = revisionPairKey(entryId, version);
   if (prefetch?.revisionMetaByKey != null) {
@@ -69,7 +66,7 @@ async function resolveLiveHash(
   entryRepo: VfsEntryRepository,
   scopeKeyStr: string,
   logicalPath: string,
-  prefetch?: RestorePathPrefetch,
+  prefetch?: RestorePathPrefetch
 ): Promise<string | null> {
   if (prefetch?.liveHashByPath != null) {
     return prefetch.liveHashByPath.get(logicalPath) ?? null;
@@ -82,7 +79,7 @@ async function resolveLiveHash(
  */
 export async function ensureDirectoryChain(
   vfs: VfsRestorePort,
-  logicalPath: string,
+  logicalPath: string
 ): Promise<void> {
   const normalized = normalizePath(logicalPath);
   const dirs: string[] = [];
@@ -112,7 +109,7 @@ export async function restorePathToRevision(
   version: number,
   liveHeadByPath?: ReadonlyMap<string, number>,
   entryRepo?: VfsEntryRepository,
-  prefetch?: RestorePathPrefetch,
+  prefetch?: RestorePathPrefetch
 ): Promise<RestorePathOutcome> {
   // live head 已与 checkpoint 目标 version 对齐时，正文无需再 restore。
   if (liveHeadByPath?.get(logicalPath) === version) {
@@ -124,7 +121,12 @@ export async function restorePathToRevision(
   // entry_id 解析：prefetch 优先，退化为 entryRepo 探测。
   let entryId: number | null = null;
   if (entryRepo != null) {
-    entryId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
+    entryId = await resolveEntryId(
+      entryRepo,
+      scopeKeyStr,
+      logicalPath,
+      prefetch
+    );
   }
 
   // 轻量 meta：先判 deleted / 再比 content_hash，避免无谓解压。
@@ -133,7 +135,7 @@ export async function restorePathToRevision(
       revisionRepo,
       entryId,
       version,
-      prefetch,
+      prefetch
     );
     if (meta == null) {
       throw sessionFsRestoreRevisionMissing(logicalPath, version);
@@ -153,7 +155,7 @@ export async function restorePathToRevision(
         entryRepo,
         scopeKeyStr,
         logicalPath,
-        prefetch,
+        prefetch
       );
       if (liveHash != null && liveHash === meta.contentHash) {
         return "skipped_same_content_hash";
@@ -205,20 +207,25 @@ export async function restorePathToRevisionWithBackfill(
   logicalPath: string,
   version: number,
   liveHeadByPath?: ReadonlyMap<string, number>,
-  prefetch?: RestorePathPrefetch,
+  prefetch?: RestorePathPrefetch
 ): Promise<{ backfilled: boolean; outcome: RestorePathOutcome }> {
   if (liveHeadByPath?.get(logicalPath) === version) {
     return { backfilled: false, outcome: "skipped_same_version" };
   }
 
   const scopeKeyStr = scopeKey(scope);
-  const entryId = await resolveEntryId(entryRepo, scopeKeyStr, logicalPath, prefetch);
+  const entryId = await resolveEntryId(
+    entryRepo,
+    scopeKeyStr,
+    logicalPath,
+    prefetch
+  );
   const backfilled = await backfillMissingRevisionIfNeeded(
     { revisionRepo, entryRepo, contentStore: new SqliteVfsContentStore(tx) },
     scopeKeyStr,
     logicalPath,
     entryId,
-    version,
+    version
   );
   const outcome = await restorePathToRevision(
     vfs,
@@ -228,7 +235,7 @@ export async function restorePathToRevisionWithBackfill(
     version,
     liveHeadByPath,
     entryRepo,
-    prefetch,
+    prefetch
   );
   return { backfilled, outcome };
 }

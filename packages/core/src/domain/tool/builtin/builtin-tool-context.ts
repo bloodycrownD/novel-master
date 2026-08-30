@@ -51,11 +51,11 @@ export interface BuiltinToolSubagentContext {
   readonly runChildAgent: (
     def: AgentDefinition,
     childSessionId: string,
-    opts: RunChildAgentOptions,
+    opts: RunChildAgentOptions
   ) => Promise<AgentRunResult>;
   /** 解析子 agent 模型：子 pin → 父 savedModelId → 报错（不走 workspace fallback）。 */
   readonly resolveChildModelId: (
-    def: AgentDefinition,
+    def: AgentDefinition
   ) => ResolveChildModelIdResult;
   /** 当前 agent 的递归深度：主 agent depth=0，子 depth=1，孙 depth=2。 */
   readonly depth: number;
@@ -124,9 +124,7 @@ export interface BuiltinToolAgentsContext {
   /** probe 注册表名单（透传给 upsert 的工具策略校验）。 */
   readonly registeredToolNames: readonly string[];
   /** 可选：校验 model pin 指向已保存模型（照 ValidateAgentDefinitionOptions）。 */
-  readonly assertSavedModel?: (
-    savedModelId: string,
-  ) => void | Promise<void>;
+  readonly assertSavedModel?: (savedModelId: string) => void | Promise<void>;
 }
 
 /**

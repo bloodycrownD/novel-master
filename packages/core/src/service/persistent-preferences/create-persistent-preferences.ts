@@ -15,7 +15,7 @@ import type { PersistentPreferences } from "./persistent-preferences.port.js";
  * @param conn - Open connection after {@link bootstrapNovelMaster}
  */
 export function createPersistentPreferences(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): PersistentPreferences {
   const kkv = createKkvService(conn);
   return new DefaultPersistentPreferences(kkv);

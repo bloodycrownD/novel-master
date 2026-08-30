@@ -46,7 +46,7 @@ export type AnnotateSoftRangeFields = {
  * 仅有列或非法行 → false（走全文匹配）。
  */
 export function hasValidAnnotateSoftRange(
-  range: AnnotateSoftRangeFields | null | undefined,
+  range: AnnotateSoftRangeFields | null | undefined
 ): range is AnnotateSoftSourceRange {
   if (range == null) {
     return false;
@@ -77,7 +77,7 @@ export function splitSourceLines(sourceText: string): string[] {
  */
 export function offsetToSourceLineCol(
   sourceText: string,
-  offset: number,
+  offset: number
 ): { readonly line: number; readonly col: number } {
   const clamped = Math.max(0, Math.min(offset, sourceText.length));
   let line = 1;
@@ -102,7 +102,7 @@ export function offsetToSourceLineCol(
 
 function lineStartOffsets(
   sourceText: string,
-  lines: readonly string[],
+  lines: readonly string[]
 ): number[] {
   const offsets: number[] = [];
   let off = 0;
@@ -130,7 +130,7 @@ function lineStartOffsets(
 export function applySoftRangeLinePadding(
   exact: AnnotateSoftSourceRange,
   totalLines: number,
-  linePadding: number = ANNOTATE_SOFT_RANGE_LINE_PADDING,
+  linePadding: number = ANNOTATE_SOFT_RANGE_LINE_PADDING
 ): AnnotateSoftSourceRange {
   const pad = Math.max(0, Math.floor(linePadding));
   const maxLine = Math.max(1, totalLines);
@@ -158,7 +158,7 @@ export function applySoftRangeLinePadding(
 export function deriveSoftRangeFieldsFromOffsets(
   sourceText: string,
   startOffset: number,
-  endOffset: number,
+  endOffset: number
 ): AnnotateSoftSourceRange {
   const lo = Math.min(startOffset, endOffset);
   const hi = Math.max(startOffset, endOffset);
@@ -166,9 +166,7 @@ export function deriveSoftRangeFieldsFromOffsets(
   const endOff = Math.max(startOff, Math.min(hi, sourceText.length));
   const start = offsetToSourceLineCol(sourceText, startOff);
   const endInclusive =
-    endOff > startOff
-      ? offsetToSourceLineCol(sourceText, endOff - 1)
-      : start;
+    endOff > startOff ? offsetToSourceLineCol(sourceText, endOff - 1) : start;
   return {
     startLine: start.line,
     endLine: endInclusive.line,
@@ -184,18 +182,18 @@ export function estimateSoftRangeFromPlainOffsets(
   sourceText: string,
   selectionStart: number,
   selectionEnd: number,
-  options?: { readonly linePadding?: number },
+  options?: { readonly linePadding?: number }
 ): AnnotateSoftSourceRange {
   const exact = deriveSoftRangeFieldsFromOffsets(
     sourceText,
     selectionStart,
-    selectionEnd,
+    selectionEnd
   );
   const lines = splitSourceLines(sourceText);
   return applySoftRangeLinePadding(
     exact,
     lines.length,
-    options?.linePadding ?? ANNOTATE_SOFT_RANGE_LINE_PADDING,
+    options?.linePadding ?? ANNOTATE_SOFT_RANGE_LINE_PADDING
   );
 }
 
@@ -212,11 +210,11 @@ export function estimateSoftOffsetRangeFromPlainOffsets(
   options?: {
     readonly charPadding?: number;
     readonly linePadding?: number;
-  },
+  }
 ): AnnotateSoftOffsetRange {
   const charPad = Math.max(
     0,
-    Math.floor(options?.charPadding ?? ANNOTATE_SOFT_RANGE_CHAR_PADDING),
+    Math.floor(options?.charPadding ?? ANNOTATE_SOFT_RANGE_CHAR_PADDING)
   );
   const lo = Math.min(selectionStart, selectionEnd);
   const hi = Math.max(selectionStart, selectionEnd);
@@ -228,7 +226,7 @@ export function estimateSoftOffsetRangeFromPlainOffsets(
     sourceText,
     startOff,
     endOff,
-    { linePadding: options?.linePadding },
+    { linePadding: options?.linePadding }
   );
   const sliced = sliceSourceBySoftRange(sourceText, softRange);
   return {
@@ -244,7 +242,7 @@ export function estimateSoftOffsetRangeFromPlainOffsets(
 export function estimateSoftRangeFromOriginalText(
   sourceText: string,
   originalText: string,
-  options?: { readonly linePadding?: number },
+  options?: { readonly linePadding?: number }
 ): AnnotateSoftSourceRange | null {
   const needle = originalText.replace(/\u00a0/g, " ");
   if (needle.length === 0) {
@@ -267,7 +265,7 @@ export function estimateSoftRangeFromOriginalText(
     haystack,
     at,
     at + matchLen,
-    options,
+    options
   );
 }
 
@@ -282,7 +280,10 @@ export type AnnotateQuoteContext = {
 };
 
 function normalizeAnnotateQuoteText(text: string): string {
-  return text.replace(/\u00a0/g, " ").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  return text
+    .replace(/\u00a0/g, " ")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
 }
 
 function findAllNeedleStarts(haystack: string, needle: string): number[] {
@@ -307,17 +308,20 @@ function scoreQuoteContextMatch(
   start: number,
   end: number,
   contextBefore: string,
-  contextAfter: string,
+  contextAfter: string
 ): number {
   let score = 0;
   if (contextBefore.length > 0) {
     const actual = haystack.slice(
       Math.max(0, start - contextBefore.length),
-      start,
+      start
     );
     if (actual === contextBefore) {
       score += contextBefore.length * 2;
-    } else if (contextBefore.endsWith(actual) || actual.endsWith(contextBefore)) {
+    } else if (
+      contextBefore.endsWith(actual) ||
+      actual.endsWith(contextBefore)
+    ) {
       score += Math.min(actual.length, contextBefore.length);
     } else {
       // 后缀重叠长度
@@ -333,11 +337,14 @@ function scoreQuoteContextMatch(
   if (contextAfter.length > 0) {
     const actual = haystack.slice(
       end,
-      Math.min(haystack.length, end + contextAfter.length),
+      Math.min(haystack.length, end + contextAfter.length)
     );
     if (actual === contextAfter) {
       score += contextAfter.length * 2;
-    } else if (contextAfter.startsWith(actual) || actual.startsWith(contextAfter)) {
+    } else if (
+      contextAfter.startsWith(actual) ||
+      actual.startsWith(contextAfter)
+    ) {
       score += Math.min(actual.length, contextAfter.length);
     } else {
       const max = Math.min(actual.length, contextAfter.length);
@@ -358,7 +365,7 @@ function scoreQuoteContextMatch(
  */
 export function locateAnnotateOffsetRangeByQuoteContext(
   sourceText: string,
-  quote: AnnotateQuoteContext,
+  quote: AnnotateQuoteContext
 ): AnnotateSoftOffsetRange | null {
   const needle = normalizeAnnotateQuoteText(quote.originalText ?? "");
   if (needle.length === 0) {
@@ -388,7 +395,7 @@ export function locateAnnotateOffsetRangeByQuoteContext(
         at,
         at + matchLen,
         contextBefore,
-        contextAfter,
+        contextAfter
       );
       if (score > bestScore) {
         bestScore = score;
@@ -421,7 +428,7 @@ export function estimateSoftOffsetRangeFromQuoteContext(
   options?: {
     readonly charPadding?: number;
     readonly linePadding?: number;
-  },
+  }
 ): AnnotateSoftOffsetRange | null {
   const exact = locateAnnotateOffsetRangeByQuoteContext(sourceText, quote);
   if (exact == null) {
@@ -431,7 +438,7 @@ export function estimateSoftOffsetRangeFromQuoteContext(
     sourceText,
     exact.startOffset,
     exact.endOffset,
-    options,
+    options
   );
 }
 
@@ -442,13 +449,13 @@ export function estimateSoftOffsetRangeFromQuoteContext(
 export function expandSoftRangeOnce(
   range: AnnotateSoftSourceRange,
   sourceText: string,
-  options?: { readonly linePadding?: number },
+  options?: { readonly linePadding?: number }
 ): AnnotateSoftSourceRange {
   const lines = splitSourceLines(sourceText);
   return applySoftRangeLinePadding(
     { startLine: range.startLine, endLine: range.endLine },
     lines.length,
-    options?.linePadding ?? ANNOTATE_SOFT_RANGE_LINE_PADDING,
+    options?.linePadding ?? ANNOTATE_SOFT_RANGE_LINE_PADDING
   );
 }
 
@@ -458,7 +465,7 @@ export function expandSoftRangeOnce(
  */
 export function sliceSourceBySoftRange(
   sourceText: string,
-  range: AnnotateSoftSourceRange,
+  range: AnnotateSoftSourceRange
 ): { readonly text: string; readonly startOffset: number } {
   const lines = splitSourceLines(sourceText);
   if (lines.length === 0) {
@@ -466,10 +473,7 @@ export function sliceSourceBySoftRange(
   }
   const starts = lineStartOffsets(sourceText, lines);
   const startLine = Math.max(1, Math.min(range.startLine, lines.length));
-  const endLine = Math.max(
-    startLine,
-    Math.min(range.endLine, lines.length),
-  );
+  const endLine = Math.max(startLine, Math.min(range.endLine, lines.length));
   const startLineText = lines[startLine - 1]!;
   const endLineText = lines[endLine - 1]!;
   let from = starts[startLine - 1]!;

@@ -38,7 +38,10 @@ export function resolveSkspDriver(explicit?: string): SkspDriver {
   if (explicit !== undefined) {
     const driver = getSkspDriver(explicit);
     if (!driver) {
-      throw new SkspError("NOT_REGISTERED", `SKSP driver not registered: ${explicit}`);
+      throw new SkspError(
+        "NOT_REGISTERED",
+        `SKSP driver not registered: ${explicit}`
+      );
     }
     return driver;
   }
@@ -52,6 +55,6 @@ export function resolveSkspDriver(explicit?: string): SkspDriver {
     "NOT_REGISTERED",
     names.length === 0
       ? "No SKSP driver registered"
-      : "Multiple SKSP drivers registered; specify driver name",
+      : "Multiple SKSP drivers registered; specify driver name"
   );
 }

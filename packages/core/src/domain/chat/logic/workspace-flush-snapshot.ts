@@ -26,7 +26,7 @@ export function emptyWorkspaceFlushSnapshot(): WorkspaceFlushSnapshot {
  * @remarks checkpoint 不存空目录；baseline 目录集仅由此推导。
  */
 export function deriveDirPathsFromFileTree(
-  fileTree: ReadonlyMap<string, number>,
+  fileTree: ReadonlyMap<string, number>
 ): Set<string> {
   const dirs = new Set<string>();
   for (const filePath of fileTree.keys()) {

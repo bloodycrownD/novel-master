@@ -34,9 +34,16 @@ const geminiSamplingSchema = z
 
 /** Discriminated union for model sampling params in profile documents. */
 export const modelSamplingParamsSchema = z.discriminatedUnion("protocol", [
-  z.object({ protocol: z.literal("openai"), openai: openAiSamplingSchema }).strict(),
   z
-    .object({ protocol: z.literal("anthropic"), anthropic: anthropicSamplingSchema })
+    .object({ protocol: z.literal("openai"), openai: openAiSamplingSchema })
     .strict(),
-  z.object({ protocol: z.literal("gemini"), gemini: geminiSamplingSchema }).strict(),
+  z
+    .object({
+      protocol: z.literal("anthropic"),
+      anthropic: anthropicSamplingSchema,
+    })
+    .strict(),
+  z
+    .object({ protocol: z.literal("gemini"), gemini: geminiSamplingSchema })
+    .strict(),
 ]);

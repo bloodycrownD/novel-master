@@ -35,11 +35,12 @@ function readUInt16LE(bytes: Uint8Array, offset: number): number {
 
 function readUInt32LE(bytes: Uint8Array, offset: number): number {
   return (
-    bytes[offset]! |
-    (bytes[offset + 1]! << 8) |
-    (bytes[offset + 2]! << 16) |
-    (bytes[offset + 3]! << 24)
-  ) >>> 0;
+    (bytes[offset]! |
+      (bytes[offset + 1]! << 8) |
+      (bytes[offset + 2]! << 16) |
+      (bytes[offset + 3]! << 24)) >>>
+    0
+  );
 }
 
 function findEndOfCentralDirectory(bytes: Uint8Array): number {
@@ -54,18 +55,24 @@ function findEndOfCentralDirectory(bytes: Uint8Array): number {
   throw vfsZipError("INVALID_ZIP", "ZIP end of central directory not found");
 }
 
-function assertSupportedCompressionMethod(method: number, entryLabel: string): void {
+function assertSupportedCompressionMethod(
+  method: number,
+  entryLabel: string
+): void {
   if (method !== ZIP_METHOD_STORE && method !== ZIP_METHOD_DEFLATE) {
     throw vfsZipError(
       "INVALID_ZIP",
-      `unsupported compression method ${method} for ${entryLabel}`,
+      `unsupported compression method ${method} for ${entryLabel}`
     );
   }
 }
 
 function assertNotEncrypted(gpbf: number, entryLabel: string): void {
   if ((gpbf & ZIP_GPBF_ENCRYPTED) !== 0) {
-    throw vfsZipError("INVALID_ZIP", `encrypted ZIP entry not supported: ${entryLabel}`);
+    throw vfsZipError(
+      "INVALID_ZIP",
+      `encrypted ZIP entry not supported: ${entryLabel}`
+    );
   }
 }
 
@@ -79,13 +86,13 @@ function decompressEntryData(
   compressed: Uint8Array,
   method: number,
   uncompressedSize: number,
-  entryLabel: string,
+  entryLabel: string
 ): Uint8Array {
   if (method === ZIP_METHOD_STORE) {
     if (compressed.length !== uncompressedSize) {
       throw vfsZipError(
         "INVALID_ZIP",
-        `STORE size mismatch for ${entryLabel}: expected ${uncompressedSize}, got ${compressed.length}`,
+        `STORE size mismatch for ${entryLabel}: expected ${uncompressedSize}, got ${compressed.length}`
       );
     }
     return compressed;
@@ -95,7 +102,7 @@ function decompressEntryData(
     if (inflated.length !== uncompressedSize) {
       throw vfsZipError(
         "INVALID_ZIP",
-        `DEFLATE size mismatch for ${entryLabel}: expected ${uncompressedSize}, got ${inflated.length}`,
+        `DEFLATE size mismatch for ${entryLabel}: expected ${uncompressedSize}, got ${inflated.length}`
       );
     }
     return inflated;
@@ -115,20 +122,20 @@ function readLocalEntryData(
     uncompressedSize: number;
     method: number;
     entryName: string;
-  },
+  }
 ): Uint8Array {
   const { localHeaderOffset } = entry;
   if (readUInt32LE(bytes, localHeaderOffset) !== LOCAL_FILE_HEADER_SIG) {
     throw vfsZipError(
       "INVALID_ZIP",
-      `invalid local file header at offset ${localHeaderOffset}`,
+      `invalid local file header at offset ${localHeaderOffset}`
     );
   }
   const localMethod = readUInt16LE(bytes, localHeaderOffset + 8);
   if (localMethod !== entry.method) {
     throw vfsZipError(
       "INVALID_ZIP",
-      `compression method mismatch for ${entry.entryName}`,
+      `compression method mismatch for ${entry.entryName}`
     );
   }
   const fileNameLen = readUInt16LE(bytes, localHeaderOffset + 26);
@@ -138,7 +145,7 @@ function readLocalEntryData(
   if (dataEnd > bytes.length) {
     throw vfsZipError(
       "INVALID_ZIP",
-      `truncated entry data for ${entry.entryName}`,
+      `truncated entry data for ${entry.entryName}`
     );
   }
   const compressed = bytes.subarray(dataStart, dataEnd);
@@ -146,7 +153,7 @@ function readLocalEntryData(
     compressed,
     entry.method,
     entry.uncompressedSize,
-    entry.entryName,
+    entry.entryName
   );
 }
 
@@ -156,7 +163,7 @@ function readLocalEntryData(
  * @throws {VfsZipError} `INVALID_ZIP` 当归档结构不受支持或无法读取
  */
 export function parseZipCentralDirectory(
-  zipBytes: Uint8Array,
+  zipBytes: Uint8Array
 ): ZipCentralDirEntry[] {
   if (zipBytes.length < 22) {
     throw vfsZipError("INVALID_ZIP", "ZIP archive too small");
@@ -203,7 +210,10 @@ export function parseZipCentralDirectory(
     const nameEnd = nameStart + fileNameLen;
     const entryEnd = nameEnd + extraLen + commentLen;
     if (entryEnd > centralDirEnd) {
-      throw vfsZipError("INVALID_ZIP", "truncated central directory entry name");
+      throw vfsZipError(
+        "INVALID_ZIP",
+        "truncated central directory entry name"
+      );
     }
 
     const rawNameBytes = zipBytes.subarray(nameStart, nameEnd);

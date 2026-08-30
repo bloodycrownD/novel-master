@@ -18,7 +18,7 @@ import type { MessageRollbackService } from "./message-rollback.port.js";
  * Creates a {@link MessageCheckpointService} for the given connection.
  */
 export function createMessageCheckpointService(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): MessageCheckpointService {
   return new DefaultMessageCheckpointService({
     conn,
@@ -28,7 +28,7 @@ export function createMessageCheckpointService(
 
 /** Creates a {@link MessageRollbackService} for the given connection. */
 export function createMessageRollbackService(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): MessageRollbackService {
   return new DefaultMessageRollbackService({
     conn,

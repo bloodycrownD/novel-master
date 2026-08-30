@@ -27,9 +27,7 @@ export function resetUserVfsUnifiedToolTurnSnapshotForTests(): void {
  * 读取是否启用统一 tool turn。
  * 优先级：显式 configured → env=0 → preferenceSnapshot → 默认值。
  */
-export function isUserVfsUnifiedToolTurnEnabled(
-  configured?: boolean,
-): boolean {
+export function isUserVfsUnifiedToolTurnEnabled(configured?: boolean): boolean {
   if (configured !== undefined) return configured;
   if (process.env.NM_USER_VFS_UNIFIED_TOOL_TURN === "0") return false;
   if (preferenceSnapshot !== undefined) return preferenceSnapshot;

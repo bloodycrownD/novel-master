@@ -27,16 +27,15 @@ export {
   clearSkspDrivers,
 } from "./logic/registry.js";
 export type { SkspDriver } from "./logic/registry.js";
-export {
-  createCompositeSecretStore,
-} from "./impl/composite-secret-store.js";
+export { createCompositeSecretStore } from "./impl/composite-secret-store.js";
 export type { EnvSecretStoreLike } from "./impl/composite-secret-store.js";
 export { refToEnvVar } from "./logic/ref-to-env.js";
 export { resolveSkspEnvOverride } from "./logic/env-override.js";
-export { EnvSecretStore, createEnvSecretStore } from "./impl/env-secret-store.js";
+export {
+  EnvSecretStore,
+  createEnvSecretStore,
+} from "./impl/env-secret-store.js";
 export { BaseSqliteSecretStore } from "./impl/base-sqlite-secret-store.js";
 export type { SkspCryptoStrategy } from "./impl/sksp-strategy.port.js";
-export {
-  resolveSkspNameFromPlatform,
-} from "./logic/platform.js";
+export { resolveSkspNameFromPlatform } from "./logic/platform.js";
 export type { PlatformSkspName } from "./logic/platform.js";

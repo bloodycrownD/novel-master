@@ -27,7 +27,7 @@ export class SqliteSkillDisabledRuleRepository
       this.parser,
       `SELECT skill_name FROM ${SKILL_DISABLED_RULE_TABLE}
        WHERE scope_key = #{scopeKey} ORDER BY skill_name`,
-      { scopeKey },
+      { scopeKey }
     );
     return rows.map((row) => String(row.skill_name));
   }
@@ -38,7 +38,7 @@ export class SqliteSkillDisabledRuleRepository
       this.parser,
       `INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name)
        VALUES (#{scopeKey}, #{skillName})`,
-      { scopeKey, skillName },
+      { scopeKey, skillName }
     );
   }
 
@@ -48,7 +48,7 @@ export class SqliteSkillDisabledRuleRepository
       this.parser,
       `DELETE FROM ${SKILL_DISABLED_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND skill_name = #{skillName}`,
-      { scopeKey, skillName },
+      { scopeKey, skillName }
     );
   }
 
@@ -57,7 +57,7 @@ export class SqliteSkillDisabledRuleRepository
       this.conn,
       this.parser,
       `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
-      { scopeKey },
+      { scopeKey }
     );
   }
 
@@ -66,13 +66,13 @@ export class SqliteSkillDisabledRuleRepository
       this.conn,
       this.parser,
       `DELETE FROM ${SKILL_DISABLED_RULE_TABLE} WHERE skill_name = #{skillName}`,
-      { skillName },
+      { skillName }
     );
   }
 
   async copyScopeRules(
     fromScopeKey: string,
-    toScopeKey: string,
+    toScopeKey: string
   ): Promise<void> {
     await executeTemplate(
       this.conn,
@@ -80,7 +80,7 @@ export class SqliteSkillDisabledRuleRepository
       `INSERT OR IGNORE INTO ${SKILL_DISABLED_RULE_TABLE} (scope_key, skill_name)
        SELECT #{toScopeKey}, skill_name FROM ${SKILL_DISABLED_RULE_TABLE}
        WHERE scope_key = #{fromScopeKey}`,
-      { fromScopeKey, toScopeKey },
+      { fromScopeKey, toScopeKey }
     );
   }
 }

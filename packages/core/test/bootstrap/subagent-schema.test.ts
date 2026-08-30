@@ -34,20 +34,20 @@ async function openInMemoryConnection(): Promise<TdbcConnection> {
 
 async function tableColumnNames(
   conn: TdbcConnection,
-  table: string,
+  table: string
 ): Promise<Set<string>> {
   const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${table}')`,
+    `SELECT name FROM pragma_table_info('${table}')`
   );
   return new Set(rows.map((row) => row.name));
 }
 
 async function indexNames(
   conn: TdbcConnection,
-  table: string,
+  table: string
 ): Promise<Set<string>> {
   const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = '${table}'`,
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = '${table}'`
   );
   return new Set(rows.map((row) => row.name));
 }
@@ -61,13 +61,13 @@ describe("agent-subagent M1 schema（T-S1）", () => {
       const columns = await tableColumnNames(conn, "chat_session");
       assert.ok(
         columns.has("parent_session_id"),
-        "新库 bootstrap 后 chat_session 应有 parent_session_id 列",
+        "新库 bootstrap 后 chat_session 应有 parent_session_id 列"
       );
 
       const indexes = await indexNames(conn, "chat_session");
       assert.ok(
         indexes.has("idx_chat_session_parent"),
-        "应有复合索引 idx_chat_session_parent",
+        "应有复合索引 idx_chat_session_parent"
       );
     } finally {
       await conn.close();
@@ -102,7 +102,7 @@ describe("agent-subagent M1 schema（T-S1）", () => {
       // 升级前确认列不存在。
       assert.equal(
         (await tableColumnNames(conn, "chat_session")).has("parent_session_id"),
-        false,
+        false
       );
 
       // 触发升级：bootstrap 检测到 user_version=3 < SCHEMA_BOOT_VERSION，跑 ALIGN。
@@ -111,12 +111,12 @@ describe("agent-subagent M1 schema（T-S1）", () => {
       const columns = await tableColumnNames(conn, "chat_session");
       assert.ok(
         columns.has("parent_session_id"),
-        "老库升级后应通过 ALIGN 补上 parent_session_id",
+        "老库升级后应通过 ALIGN 补上 parent_session_id"
       );
 
       // user_version 应已升到当前 SCHEMA_BOOT_VERSION（快路径再次 bootstrap 不应报错也不重建）。
       const versionRows = await conn.query<{ user_version: number }>(
-        "PRAGMA user_version",
+        "PRAGMA user_version"
       );
       assert.equal(versionRows[0]!.user_version, SCHEMA_BOOT_VERSION);
 

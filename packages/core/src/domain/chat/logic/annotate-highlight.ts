@@ -15,10 +15,7 @@ import {
 } from "./annotate-source-range.js";
 
 /** 非重叠查找 needle 在 haystack 中的全部起始下标。 */
-export function findAllOccurrences(
-  haystack: string,
-  needle: string,
-): number[] {
+export function findAllOccurrences(haystack: string, needle: string): number[] {
   if (needle.length === 0) {
     return [];
   }
@@ -42,7 +39,7 @@ export function findAllOccurrences(
  */
 export function selectAnnotateOccurrenceStarts(
   starts: readonly number[],
-  preferredOrdinal: number | null | undefined,
+  preferredOrdinal: number | null | undefined
 ): number[] {
   if (starts.length === 0) {
     return [];
@@ -70,7 +67,7 @@ export function selectAnnotateOccurrenceStarts(
 export function annotateOccurrenceOrdinal(
   haystack: string,
   originalText: string,
-  hitIndex: number,
+  hitIndex: number
 ): number {
   const needle = normalizeAnnotateNeedle(originalText);
   if (!needle) {
@@ -98,7 +95,7 @@ export function annotateOccurrenceOrdinal(
 /** 归一化全文中 needle 出现次数（用于 MD 仅在唯一命中时写软窗口）。 */
 export function countAnnotateOccurrencesInSource(
   haystack: string,
-  originalText: string,
+  originalText: string
 ): number {
   const needle = normalizeAnnotateNeedle(originalText);
   if (!needle) {
@@ -123,7 +120,7 @@ export function countAnnotateOccurrencesInSource(
  * 空 text 或空 id 跳过（采 Mobile 更严规则）。
  */
 export function groupAnnotateIdsByOriginalText(
-  drafts: readonly { readonly id: string; readonly originalText: string }[],
+  drafts: readonly { readonly id: string; readonly originalText: string }[]
 ): Map<string, string[]> {
   const byText = new Map<string, string[]>();
   for (const d of drafts) {
@@ -156,7 +153,7 @@ export function parseAnnotateIdsAttr(raw: string | null | undefined): string[] {
  * 应用顺序：originalText 长度降序（长优先），重叠/嵌套时避免短针抢占。
  */
 export function sortAnnotateTextsLongestFirst(
-  texts: readonly string[],
+  texts: readonly string[]
 ): string[] {
   return [...texts].sort((a, b) => b.length - a.length);
 }
@@ -232,7 +229,7 @@ function normalizeHaystackWithIndexMap(haystack: string): {
 
 function findFirstNormalizedInHaystack(
   haystack: string,
-  needleRaw: string,
+  needleRaw: string
 ): { readonly index: number; readonly length: number } | null {
   const needle = normalizeAnnotateNeedle(needleRaw);
   if (!needle) {
@@ -261,7 +258,7 @@ export function findAnnotateOccurrenceInSource(
   sourceText: string,
   originalText: string,
   softRange?: AnnotateSoftRangeFields | null,
-  options?: { readonly linePadding?: number },
+  options?: { readonly linePadding?: number }
 ): AnnotateSourceMatch | null {
   if (!originalText || !normalizeAnnotateNeedle(originalText)) {
     return null;
@@ -269,7 +266,7 @@ export function findAnnotateOccurrenceInSource(
 
   const trySlice = (
     range: AnnotateSoftSourceRange,
-    strategy: AnnotateSourceMatchStrategy,
+    strategy: AnnotateSourceMatchStrategy
   ): AnnotateSourceMatch | null => {
     const { text, startOffset } = sliceSourceBySoftRange(sourceText, range);
     const hit = findFirstNormalizedInHaystack(text, originalText);
@@ -344,9 +341,7 @@ export type FlatSegmentLocalRange = {
  * 表内相邻格允许直拼；跨 `<p>` / 跨表不得并入同一 `segments` 列表，否则会误命中。
  * 空串 segment 不贡献 haystack 字符，但仍保留 span（flatStart===flatEnd）以便下标对齐。
  */
-export function buildFlatTextIndex(
-  segments: readonly string[],
-): FlatTextIndex {
+export function buildFlatTextIndex(segments: readonly string[]): FlatTextIndex {
   const parts: string[] = [];
   const spans: FlatTextSegmentSpan[] = [];
   let flatCursor = 0;
@@ -370,7 +365,7 @@ export function buildFlatTextIndex(
 export function mapFlatRangeToSegments(
   flatStart: number,
   flatEnd: number,
-  index: FlatTextIndex,
+  index: FlatTextIndex
 ): FlatSegmentLocalRange[] {
   if (flatEnd <= flatStart) {
     return [];

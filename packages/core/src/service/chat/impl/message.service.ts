@@ -48,7 +48,7 @@ function reposFor(conn: TdbcConnection) {
 }
 
 function normalizeAppendAttachments(
-  attachments: readonly MessageAttachment[] | undefined,
+  attachments: readonly MessageAttachment[] | undefined
 ): MessageAttachment[] | undefined {
   if (attachments == null || attachments.length === 0) {
     return undefined;
@@ -78,19 +78,19 @@ export class DefaultMessageService implements MessageService {
 
   listBySessionTail(
     sessionId: string,
-    options: { limit: number },
+    options: { limit: number }
   ): Promise<ChatMessage[]> {
     return this.deps.messages.listBySessionTail(sessionId, options.limit);
   }
 
   listBySessionPage(
     sessionId: string,
-    options: { limit: number; beforeSeq?: number },
+    options: { limit: number; beforeSeq?: number }
   ): Promise<ChatMessage[]> {
     return this.deps.messages.listBySessionPage(
       sessionId,
       options.limit,
-      options.beforeSeq,
+      options.beforeSeq
     );
   }
 
@@ -112,7 +112,7 @@ export class DefaultMessageService implements MessageService {
       raw?: Record<string, unknown> | null;
       attachments?: readonly MessageAttachment[];
       usage?: MessageUsage;
-    },
+    }
   ): Promise<ChatMessage> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
@@ -169,7 +169,7 @@ export class DefaultMessageService implements MessageService {
         checkpoints,
         session.projectId,
         message.sessionId,
-        tx,
+        tx
       );
     });
     await runDeferredBlobGc(this.deps.conn);
@@ -178,12 +178,12 @@ export class DefaultMessageService implements MessageService {
 
   async updateContent(
     messageId: string,
-    content: MessageContent,
+    content: MessageContent
   ): Promise<ChatMessage> {
     assertMessageContent(content);
     const updated = await this.deps.messages.updateContent(
       messageId,
-      JSON.stringify(content),
+      JSON.stringify(content)
     );
     if (!updated) {
       throw chatNotFound("message", messageId);
@@ -204,11 +204,11 @@ export class DefaultMessageService implements MessageService {
     }
     const all = await this.deps.messages.listBySession(sessionId);
     const projectSessions = await this.deps.sessions.listByProject(
-      source.projectId,
+      source.projectId
     );
     const forkTitle = nextForkSessionTitle(
       source.title,
-      projectSessions.map((s) => s.title),
+      projectSessions.map((s) => s.title)
     );
     return this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
@@ -231,10 +231,15 @@ export class DefaultMessageService implements MessageService {
       // 刻意不复制 composer_draft_json（维持现状）
       // agent_config_json：继承源会话配置（与 copy 一致）。必须走 repo 层——
       // NULL 静默跳过；service 层 getSessionAgentConfig 对 NULL 会抛且不在本事务上。
-      const sourceAgentConfigJson =
-        await r.sessions.getSessionAgentConfig(source.id);
+      const sourceAgentConfigJson = await r.sessions.getSessionAgentConfig(
+        source.id
+      );
       if (sourceAgentConfigJson != null) {
-        await r.sessions.setSessionAgentConfig(forked.id, sourceAgentConfigJson, now);
+        await r.sessions.setSessionAgentConfig(
+          forked.id,
+          sourceAgentConfigJson,
+          now
+        );
       }
       // 顺序钉死：VFS → MSG(ids) → helper(REV + RULE + CK)
       // entry_id 化后会话独立 scope：session:{pid}:{sid}，逻辑前缀为 "/"
@@ -244,7 +249,7 @@ export class DefaultMessageService implements MessageService {
         "/",
         { scopeKey: `session:${source.projectId}:${forked.id}` },
         "/",
-        { contentStore: new SqliteVfsContentStore(tx) },
+        { contentStore: new SqliteVfsContentStore(tx) }
       );
 
       const newMessages: { id: string }[] = [];
@@ -293,7 +298,11 @@ export class DefaultMessageService implements MessageService {
     sessionApiPromptTokenCache.invalidate(existing.sessionId);
   }
 
-  async hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
+  async hideRange(
+    sessionId: string,
+    fromSeq: number,
+    toSeq: number
+  ): Promise<number> {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
@@ -303,7 +312,7 @@ export class DefaultMessageService implements MessageService {
       sessionId,
       fromSeq,
       toSeq,
-      true,
+      true
     );
     if (count > 0) {
       sessionApiPromptTokenCache.invalidate(sessionId);
@@ -311,7 +320,11 @@ export class DefaultMessageService implements MessageService {
     return count;
   }
 
-  async showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
+  async showRange(
+    sessionId: string,
+    fromSeq: number,
+    toSeq: number
+  ): Promise<number> {
     // Verify session exists
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
@@ -321,7 +334,7 @@ export class DefaultMessageService implements MessageService {
       sessionId,
       fromSeq,
       toSeq,
-      false,
+      false
     );
     if (count > 0) {
       sessionApiPromptTokenCache.invalidate(sessionId);
@@ -331,7 +344,7 @@ export class DefaultMessageService implements MessageService {
 
   async truncateAfter(
     sessionId: string,
-    afterMessageId: string | null,
+    afterMessageId: string | null
   ): Promise<void> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
@@ -361,7 +374,7 @@ export class DefaultMessageService implements MessageService {
 
     const tailIds = await this.deps.messages.listIdsAfterSeq(
       sessionId,
-      anchor.seq,
+      anchor.seq
     );
     if (tailIds.length === 0) {
       // 没有 tail 需要截断，也顺手 invalidate 一下 prompt 缓存保险
@@ -380,11 +393,11 @@ export class DefaultMessageService implements MessageService {
 
   async searchMessages(
     sessionId: string,
-    query: MessageSearchQuery,
+    query: MessageSearchQuery
   ): Promise<ChatMessage[]> {
     const candidates = await this.deps.messages.searchMessages(
       sessionId,
-      query,
+      query
     );
     const keyword = query.keyword?.trim() ?? "";
     if (keyword.length === 0) {

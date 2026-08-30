@@ -10,7 +10,9 @@ import { resolveLogicalPath } from "./vfs-path-mapper.js";
  * 规范化 ingest 相对路径：去掉 leading `/`、反斜杠转正斜杠、拒绝 `..`。
  * @returns 规范化相对路径，或 `null`（非法）
  */
-export function normalizeBatchRelativePath(relativePath: string): string | null {
+export function normalizeBatchRelativePath(
+  relativePath: string
+): string | null {
   const trimmed = relativePath.trim().replace(/\\/g, "/");
   if (trimmed.length === 0 || trimmed === ".") {
     return null;
@@ -41,7 +43,7 @@ export function normalizeBatchRelativePath(relativePath: string): string | null 
  */
 export function joinTargetLogicalPath(
   targetDir: string,
-  relativePath: string,
+  relativePath: string
 ): string {
   const dir = resolveLogicalPath(targetDir);
   const rel = normalizeBatchRelativePath(relativePath);
@@ -60,7 +62,7 @@ export function joinTargetLogicalPath(
  */
 export function relativePathUnderAnchor(
   logical: string,
-  anchor: string,
+  anchor: string
 ): string {
   const path = resolveLogicalPath(logical);
   const root = resolveLogicalPath(anchor);

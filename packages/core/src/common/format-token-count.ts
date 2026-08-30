@@ -39,7 +39,7 @@ export function formatTokenCount(n: number): string {
 export function formatPromptTokenUsageLabel(
   count: number,
   contextWindowTokens?: number,
-  options?: { readonly estimated?: boolean },
+  options?: { readonly estimated?: boolean }
 ): string {
   const prefix = options?.estimated ? "~" : "";
   const current = formatTokenCount(count);
@@ -49,5 +49,7 @@ export function formatPromptTokenUsageLabel(
       : `${current} tokens`;
   }
   const pct = Math.min(999, Math.round((count / contextWindowTokens) * 100));
-  return `${prefix}${pct}% • ${current}/${formatTokenCount(contextWindowTokens)}`;
+  return `${prefix}${pct}% • ${current}/${formatTokenCount(
+    contextWindowTokens
+  )}`;
 }

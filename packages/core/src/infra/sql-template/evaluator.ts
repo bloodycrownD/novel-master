@@ -3,7 +3,11 @@
  * Produces final SQL text and ordered parameters for prepared statements.
  */
 
-import { pushScope, resolveCollectionName, type ContextStack } from "./context.js";
+import {
+  pushScope,
+  resolveCollectionName,
+  type ContextStack,
+} from "./context.js";
 import { evaluateTest } from "./expression.js";
 import { renderBind } from "./placeholder.js";
 import { normalizeCollection } from "./tags/foreach.js";
@@ -36,7 +40,7 @@ export class TemplateEvaluator {
   private evaluateNodes(
     nodes: AstNode[],
     stack: ContextStack,
-    state: EvaluateState,
+    state: EvaluateState
   ): void {
     for (const node of nodes) {
       this.evaluateNode(node, stack, state);
@@ -46,7 +50,7 @@ export class TemplateEvaluator {
   private evaluateNode(
     node: AstNode,
     stack: ContextStack,
-    state: EvaluateState,
+    state: EvaluateState
   ): void {
     switch (node.type) {
       case "text":
@@ -57,16 +61,14 @@ export class TemplateEvaluator {
           node.kind,
           node.path,
           stack,
-          this.placeholder,
+          this.placeholder
         );
         state.parts.push(fragment);
         state.parameters.push(...parameters);
         break;
       }
       case "if":
-        if (
-          evaluateTest(node.test, stack, { offset: node.testOffset })
-        ) {
+        if (evaluateTest(node.test, stack, { offset: node.testOffset })) {
           this.evaluateNodes(node.children, stack, state);
         }
         break;
@@ -79,10 +81,7 @@ export class TemplateEvaluator {
         break;
       }
       case "foreach": {
-        const collection = resolveCollectionName(
-          stack,
-          node.attrs.collection,
-        );
+        const collection = resolveCollectionName(stack, node.attrs.collection);
         const items = normalizeCollection(collection);
         if (items.length === 0) break;
 
@@ -113,15 +112,13 @@ export class TemplateEvaluator {
         this.evaluateNodes(node.children, stack, innerState);
         state.parameters.push(...innerState.parameters);
         state.parts.push(
-          applyTrimOverrides(innerState.parts.join(""), node.attrs),
+          applyTrimOverrides(innerState.parts.join(""), node.attrs)
         );
         break;
       }
       case "choose": {
         for (const when of node.whens) {
-          if (
-            evaluateTest(when.test, stack, { offset: when.testOffset })
-          ) {
+          if (evaluateTest(when.test, stack, { offset: when.testOffset })) {
             this.evaluateNodes(when.children, stack, state);
             return;
           }
@@ -137,5 +134,4 @@ export class TemplateEvaluator {
       }
     }
   }
-
 }

@@ -19,10 +19,10 @@ import { SCHEMA_COLUMN_ALIGNMENTS } from "./schema-column-alignments.js";
  */
 async function tableColumnNames(
   tx: TdbcConnection,
-  table: string,
+  table: string
 ): Promise<Set<string>> {
   const rows = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${table}')`,
+    `SELECT name FROM pragma_table_info('${table}')`
   );
   return new Set(rows.map((row) => row.name));
 }

@@ -35,7 +35,7 @@ const DEFAULT_PARALLEL_CONCURRENCY = 8;
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   concurrency: number,
-  fn: (item: T, index: number) => Promise<R>,
+  fn: (item: T, index: number) => Promise<R>
 ): Promise<R[]> {
   if (items.length === 0) {
     return [];
@@ -82,7 +82,7 @@ export class ToolRunner<Ctx = unknown> {
   async call<Output = unknown>(
     name: string,
     input: unknown,
-    ctx: Ctx,
+    ctx: Ctx
   ): Promise<Output> {
     const tool = this.registry.get(name);
     if (!tool) {
@@ -134,7 +134,7 @@ export class ToolRunner<Ctx = unknown> {
   async runParallel(
     calls: readonly ToolCall[],
     ctx: Ctx,
-    options?: { concurrency?: number },
+    options?: { concurrency?: number }
   ): Promise<ParallelToolOutcome[]> {
     const concurrency = options?.concurrency ?? DEFAULT_PARALLEL_CONCURRENCY;
     const pathTail = new Map<string, Promise<void>>();
@@ -145,7 +145,7 @@ export class ToolRunner<Ctx = unknown> {
 
       if (paths != null && paths.length > 0) {
         const prevTails = paths.map(
-          (path) => pathTail.get(path) ?? Promise.resolve(),
+          (path) => pathTail.get(path) ?? Promise.resolve()
         );
         const gate = new Promise<void>((resolve) => {
           release = resolve;

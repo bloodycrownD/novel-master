@@ -1,5 +1,5 @@
 /**
- * Tool registry â†?LLM tool definitions.
+ * Tool registry ï¿½?LLM tool definitions.
  *
  * @module infra/llm-protocol/logic/tool-definitions
  */
@@ -16,7 +16,7 @@ import { zodToJsonSchema } from "@/infra/serialization/zod-to-json-schema.js";
  */
 export function toolsFromRegistry<Ctx>(
   registry: ToolRegistry<Ctx>,
-  ctx: Ctx,
+  ctx: Ctx
 ): LlmToolDefinition[] {
   return registry.list().map((name) => {
     const tool = registry.get(name)!;

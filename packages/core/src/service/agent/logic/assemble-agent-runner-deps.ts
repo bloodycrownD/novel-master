@@ -47,12 +47,10 @@ export interface AssembleAgentRunnerDepsInput {
 
 /** 装配 createAgentRunner 依赖；listAllSessionMessages 由 toolCtx.sessionId + runtime.messages 推导。 */
 export function assembleAgentRunnerDeps(
-  input: AssembleAgentRunnerDepsInput,
+  input: AssembleAgentRunnerDepsInput
 ): CreateAgentRunnerDeps {
-  const savedModels =
-    input.runtime.savedModelRepo ?? input.runtime.savedModels;
-  const providers =
-    input.runtime.providerRepo ?? input.runtime.providers;
+  const savedModels = input.runtime.savedModelRepo ?? input.runtime.savedModels;
+  const providers = input.runtime.providerRepo ?? input.runtime.providers;
 
   const base: CreateAgentRunnerDeps = {
     session: input.session,

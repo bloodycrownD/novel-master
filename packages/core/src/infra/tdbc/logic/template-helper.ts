@@ -15,7 +15,7 @@ export async function executeTemplate(
   connection: TdbcConnection,
   parser: SqlTemplateParser,
   template: string,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): Promise<ExecuteResult> {
   const { sql, parameters } = parser.parse(template, params);
   return connection.execute(sql, parameters);
@@ -28,7 +28,7 @@ export async function queryTemplate<T extends Row = Row>(
   connection: TdbcConnection,
   parser: SqlTemplateParser,
   template: string,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): Promise<T[]> {
   const { sql, parameters } = parser.parse(template, params);
   return connection.query<T>(sql, parameters);

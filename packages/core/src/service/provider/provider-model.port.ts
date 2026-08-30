@@ -9,7 +9,7 @@ export interface ProviderModelService {
   save(
     providerId: string,
     vendorModelId: string,
-    modelName?: string,
+    modelName?: string
   ): Promise<SavedModel>;
   create(providerId: string, vendorModelId: string): Promise<SavedModel>;
   savedList(providerId: string): Promise<SavedModel[]>;
@@ -19,7 +19,7 @@ export interface ProviderModelService {
 
   updateSettings(
     savedModelId: string,
-    patch: SavedModelSettingsPatch,
+    patch: SavedModelSettingsPatch
   ): Promise<SavedModel>;
 
   resetContextWindowToDefault(savedModelId: string): Promise<SavedModel>;

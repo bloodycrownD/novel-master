@@ -22,7 +22,7 @@ export interface MessageRepository {
   listBySessionPage(
     sessionId: string,
     limit: number,
-    beforeSeq?: number,
+    beforeSeq?: number
   ): Promise<ChatMessage[]>;
 
   findById(id: string): Promise<ChatMessage | null>;
@@ -59,7 +59,7 @@ export interface MessageRepository {
     sessionId: string,
     fromSeq: number,
     toSeq: number,
-    hidden: boolean,
+    hidden: boolean
   ): Promise<number>;
 
   /**
@@ -68,6 +68,6 @@ export interface MessageRepository {
    */
   searchMessages(
     sessionId: string,
-    query: MessageSearchQuery,
+    query: MessageSearchQuery
   ): Promise<ChatMessage[]>;
 }

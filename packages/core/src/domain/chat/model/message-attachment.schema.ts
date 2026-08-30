@@ -13,9 +13,7 @@ export const NO_PATH_ATTACHMENT_NAME = "__no_path__";
  * 落库 `name`：有非空 path 时与 path 逐字相同；否则 `__no_path__`。
  * UI 永不把 `name` 当 chip 文案真源。
  */
-export function attachmentStorageName(
-  path: string | null | undefined,
-): string {
+export function attachmentStorageName(path: string | null | undefined): string {
   if (path == null || path === "") {
     return NO_PATH_ATTACHMENT_NAME;
   }
@@ -65,8 +63,8 @@ export const messageAttachmentObjectSchema = z
   .strict();
 
 /** 单条消息附件（含新写入 name 禁展示 tag / 须等于 storage name 校验）。 */
-export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine(
-  (val, ctx) => {
+export const messageAttachmentSchema =
+  messageAttachmentObjectSchema.superRefine((val, ctx) => {
     // skillAttach：无 path，跳过 path/name 规则；skillName 必填校验在本分支内做
     if (val.action === "skillAttach") {
       if (typeof val.skillName !== "string" || val.skillName === "") {
@@ -97,8 +95,7 @@ export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine
         });
       }
     }
-  },
-);
+  });
 
 /** 消息附件数组（`attachments_json`）。 */
 export const messageAttachmentsSchema = z.array(messageAttachmentSchema);
@@ -110,7 +107,7 @@ export type MessageAttachments = z.infer<typeof messageAttachmentsSchema>;
  * 解析 `attachments_json`；NULL/空/非法 → `undefined`。
  */
 export function parseAttachmentsJson(
-  raw: string | null | undefined,
+  raw: string | null | undefined
 ): MessageAttachment[] | undefined {
   if (raw == null || raw === "") {
     return undefined;
@@ -132,7 +129,7 @@ export function parseAttachmentsJson(
  * 序列化附件数组；空/undefined → `null`（写入 SQL NULL）。
  */
 export function serializeAttachmentsJson(
-  attachments: readonly MessageAttachment[] | undefined | null,
+  attachments: readonly MessageAttachment[] | undefined | null
 ): string | null {
   if (attachments == null || attachments.length === 0) {
     return null;

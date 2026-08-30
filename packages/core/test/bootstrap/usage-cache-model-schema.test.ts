@@ -32,27 +32,27 @@ async function openInMemoryConnection(): Promise<TdbcConnection> {
 
 async function tableColumnNames(
   conn: TdbcConnection,
-  table: string,
+  table: string
 ): Promise<Set<string>> {
   const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('${table}')`,
+    `SELECT name FROM pragma_table_info('${table}')`
   );
   return new Set(rows.map((row) => row.name));
 }
 
 async function indexExists(
   conn: TdbcConnection,
-  indexName: string,
+  indexName: string
 ): Promise<boolean> {
   const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'index' AND name = '${indexName}'`,
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND name = '${indexName}'`
   );
   return rows.length > 0;
 }
 
 async function readUserVersion(conn: TdbcConnection): Promise<number> {
   const rows = await conn.query<{ user_version: number }>(
-    "PRAGMA user_version",
+    "PRAGMA user_version"
   );
   return Number(rows[0]?.user_version ?? 0);
 }
@@ -61,7 +61,7 @@ function assertNewColumns(columns: Set<string>): void {
   assert.ok(columns.has("cache_read_tokens"), "应有 cache_read_tokens 列");
   assert.ok(
     columns.has("cache_creation_tokens"),
-    "应有 cache_creation_tokens 列",
+    "应有 cache_creation_tokens 列"
   );
   assert.ok(columns.has("model_name"), "应有 model_name 列");
 }
@@ -76,7 +76,7 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
       assert.equal(
         await indexExists(conn, "idx_chat_message_created_at"),
         true,
-        "应存在 idx_chat_message_created_at 索引",
+        "应存在 idx_chat_message_created_at 索引"
       );
       assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
     } finally {
@@ -98,7 +98,7 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
            'msg-v7', 'sess-v7', 1, 'assistant',
            '{"blocks":[{"type":"text","text":"hi"}]}', 'openai', '{"usage":{}}',
            ${now}, 0, 12, 34, 46
-         )`,
+         )`
       );
       await conn.execute("PRAGMA user_version = 7");
 
@@ -108,12 +108,12 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
       assert.equal(
         await indexExists(conn, "idx_chat_message_created_at"),
         true,
-        "老库升级后应建出 idx_chat_message_created_at 索引",
+        "老库升级后应建出 idx_chat_message_created_at 索引"
       );
       assert.equal(
         await readUserVersion(conn),
         SCHEMA_BOOT_VERSION,
-        "bootstrap 后 user_version 应写为当前 SCHEMA_BOOT_VERSION",
+        "bootstrap 后 user_version 应写为当前 SCHEMA_BOOT_VERSION"
       );
 
       const rows = await conn.query<{
@@ -121,7 +121,7 @@ describe("chat_message cache/模型列 schema（T-S1）", () => {
         cache_read_tokens: number | null;
         model_name: string | null;
       }>(
-        "SELECT prompt_tokens, cache_read_tokens, model_name FROM chat_message WHERE id = 'msg-v7'",
+        "SELECT prompt_tokens, cache_read_tokens, model_name FROM chat_message WHERE id = 'msg-v7'"
       );
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.prompt_tokens, 12, "存量行数据应保留");

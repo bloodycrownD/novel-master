@@ -7,9 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import {
-  queryTemplate,
-} from "@/infra/tdbc/logic/template-helper.js";
+import { queryTemplate } from "@/infra/tdbc/logic/template-helper.js";
 import {
   KEY_CURRENT_MODEL_ID,
   WORKSPACE_STATE_MODULE,
@@ -33,7 +31,7 @@ interface ChatProjectRow extends Row {
  */
 export async function findSavedModelReferences(
   conn: TdbcConnection,
-  savedModelId: string,
+  savedModelId: string
 ): Promise<string[]> {
   const refs: string[] = [];
 
@@ -42,7 +40,7 @@ export async function findSavedModelReferences(
     parser,
     `SELECT value FROM kkv_entry
      WHERE module = #{module} AND key = #{key}`,
-    { module: WORKSPACE_STATE_MODULE, key: KEY_CURRENT_MODEL_ID },
+    { module: WORKSPACE_STATE_MODULE, key: KEY_CURRENT_MODEL_ID }
   );
   if (kkvRows.length > 0 && String(kkvRows[0]!.value).trim() === savedModelId) {
     refs.push("currentModelId");
@@ -52,10 +50,13 @@ export async function findSavedModelReferences(
     conn,
     parser,
     `SELECT agent_id, prompts_json FROM agent_definition`,
-    {},
+    {}
   );
   for (const row of agentRows) {
-    const wire = JSON.parse(String(row.prompts_json)) as Record<string, unknown>;
+    const wire = JSON.parse(String(row.prompts_json)) as Record<
+      string,
+      unknown
+    >;
     const model = wire.model;
     if (typeof model === "string" && model.trim() === savedModelId) {
       refs.push(`agent_definition:${String(row.agent_id)}`);
@@ -66,7 +67,7 @@ export async function findSavedModelReferences(
     conn,
     parser,
     `SELECT id, agent_config_json FROM chat_project`,
-    {},
+    {}
   );
   for (const row of projectRows) {
     const raw = row.agent_config_json;
@@ -75,7 +76,11 @@ export async function findSavedModelReferences(
     }
     const config = JSON.parse(String(raw)) as Record<string, unknown>;
     const definition = config.definition;
-    if (definition == null || typeof definition !== "object" || Array.isArray(definition)) {
+    if (
+      definition == null ||
+      typeof definition !== "object" ||
+      Array.isArray(definition)
+    ) {
       continue;
     }
     const model = (definition as Record<string, unknown>).model;

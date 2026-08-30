@@ -35,7 +35,7 @@ export type ComposerSendIntent = {
 };
 
 export function resolveComposerSendIntent(
-  input: ComposerSendIntentInput,
+  input: ComposerSendIntentInput
 ): ComposerSendIntent {
   const content = input.text.trim();
   const scannedCount =
@@ -46,13 +46,11 @@ export function resolveComposerSendIntent(
     attachmentCount: scannedCount,
     hasAnnotateDrafts: input.hasAnnotateDrafts === true,
   });
-  const allowResumeWithoutInput =
-    !hasSendable && input.canResumeWithoutInput;
+  const allowResumeWithoutInput = !hasSendable && input.canResumeWithoutInput;
   const hasModel = input.hasModel !== false;
   const running = input.running === true;
   const sendDisabled =
-    !hasModel ||
-    (!running && !hasSendable && !input.canResumeWithoutInput);
+    !hasModel || (!running && !hasSendable && !input.canResumeWithoutInput);
   return {
     hasSendable,
     allowResumeWithoutInput,

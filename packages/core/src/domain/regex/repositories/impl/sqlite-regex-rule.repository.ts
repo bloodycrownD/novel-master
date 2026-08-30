@@ -50,7 +50,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
               scope_user, scope_assistant, created_at_ms, updated_at_ms
        FROM regex_rule WHERE group_id = #{groupId}
        ORDER BY sort_order ASC, rule_id ASC`,
-      { groupId },
+      { groupId }
     );
     return rows.map(rowToRule);
   }
@@ -64,7 +64,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
               scope_user, scope_assistant, created_at_ms, updated_at_ms
        FROM regex_rule
        WHERE group_id = #{groupId} AND rule_id = #{ruleId}`,
-      { groupId, ruleId },
+      { groupId, ruleId }
     );
     if (rows.length === 0) {
       return null;
@@ -101,7 +101,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
         scopeAssistant: rule.scopeAssistant ? 1 : 0,
         createdAtMs: rule.createdAtMs,
         updatedAtMs: rule.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -138,7 +138,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
         scopeUser: rule.scopeUser ? 1 : 0,
         scopeAssistant: rule.scopeAssistant ? 1 : 0,
         updatedAtMs: rule.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -147,7 +147,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
       this.conn,
       this.parser,
       `DELETE FROM regex_rule WHERE group_id = #{groupId} AND rule_id = #{ruleId}`,
-      { groupId, ruleId },
+      { groupId, ruleId }
     );
   }
 
@@ -157,7 +157,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
       this.parser,
       `SELECT COALESCE(MAX(sort_order), 0) AS max_sort
        FROM regex_rule WHERE group_id = #{groupId}`,
-      { groupId },
+      { groupId }
     );
     const max = Number(rows[0]?.max_sort ?? 0);
     return max + 1;

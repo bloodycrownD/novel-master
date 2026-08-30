@@ -10,7 +10,10 @@ import {
   parseTokenCounterModePref,
 } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import { modelSamplingParamsSchema } from "./model-sampling-params.schema.js";
-import type { SavedModelSettings, ThinkingLevel } from "./saved-model-settings.js";
+import type {
+  SavedModelSettings,
+  ThinkingLevel,
+} from "./saved-model-settings.js";
 
 const savedModelSamplingSettingsSchema = z
   .object({
@@ -35,7 +38,11 @@ function normalizeGenerationForRead(raw: unknown): unknown {
     return raw;
   }
   const thinking = generation.thinking;
-  if (typeof thinking !== "object" || thinking == null || !("enabled" in thinking)) {
+  if (
+    typeof thinking !== "object" ||
+    thinking == null ||
+    !("enabled" in thinking)
+  ) {
     return raw;
   }
   const enabled = (thinking as { enabled: boolean }).enabled;
@@ -51,7 +58,7 @@ const savedModelGenerationSettingsSchema = z.preprocess(
       sampling: savedModelSamplingSettingsSchema,
       thinkingLevel: thinkingLevelSchema.default("off"),
     })
-    .strict(),
+    .strict()
 );
 
 const tokenCounterModeSchema = z
@@ -100,16 +107,17 @@ const savedModelSettingsV1DocumentSchema = z
         sampling: doc.sampling,
         thinkingLevel: "off",
       },
-    }),
+    })
   );
 
-const savedModelSettingsV2ToMemorySchema = savedModelSettingsV2DocumentSchema.transform(
-  (doc): SavedModelSettings => ({
-    schemaVersion: 2,
-    internal: doc.internal,
-    generation: doc.generation,
-  }),
-);
+const savedModelSettingsV2ToMemorySchema =
+  savedModelSettingsV2DocumentSchema.transform(
+    (doc): SavedModelSettings => ({
+      schemaVersion: 2,
+      internal: doc.internal,
+      generation: doc.generation,
+    })
+  );
 
 /** 读盘：接受 v1 或 v2 文档，输出 v2 内存形态。 */
 export const savedModelSettingsSchema = z.union([

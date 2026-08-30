@@ -18,7 +18,7 @@ import type { AgentRegistryService } from "./agent-registry.port.js";
  */
 export function createAgentRegistryService(
   conn: TdbcConnection,
-  state?: PersistentState,
+  state?: PersistentState
 ): AgentRegistryService {
   const repository = new SqliteAgentDefinitionRepository(conn);
   return new DefaultAgentRegistryService({ repository, state });

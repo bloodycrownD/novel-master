@@ -9,10 +9,7 @@ import { vfsZipError } from "@/errors/vfs-zip-errors.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
 import { buildVfsZip } from "@/domain/vfs/logic/vfs-zip-build.js";
 import { parseVfsZip } from "@/domain/vfs/logic/vfs-zip-parse.js";
-import {
-  type VfsScope,
-  scopeKey,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { type VfsScope, scopeKey } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {
   resolveZipDirectoryPath,
   zipDirectoryEntryNameRelativeToDirectory,
@@ -20,9 +17,7 @@ import {
 } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { validateVfsZipEntries } from "@/domain/vfs/logic/vfs-zip-validate.js";
 import { vfsNotADirectory } from "@/errors/vfs-errors.js";
-import {
-  insertFileSeedingRevision,
-} from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -46,7 +41,11 @@ export type VfsZipImportTestHook = {
 
 function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
   const base =
-    prefix === "/" ? prefix : prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+    prefix === "/"
+      ? prefix
+      : prefix.endsWith("/")
+      ? prefix.slice(0, -1)
+      : prefix;
   if (fullPath === base) {
     return "";
   }
@@ -64,7 +63,7 @@ function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
 async function ensureEmptyDirectoryRow(
   repo: VfsEntryRepository,
   scope: VfsScope,
-  logical: string,
+  logical: string
 ): Promise<void> {
   const sk = scopeKey(scope);
   if (logical === "/") {
@@ -84,13 +83,13 @@ async function ensureEmptyDirectoryRow(
 async function assertDirectoryPathNotFile(
   repo: VfsEntryRepository,
   scope: VfsScope,
-  directoryPath: string,
+  directoryPath: string
 ): Promise<void> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
     throw vfsZipError(
       "INVALID_PATH",
-      `ZIP target path is a file, not a directory: ${directoryPath}`,
+      `ZIP target path is a file, not a directory: ${directoryPath}`
     );
   }
 }
@@ -118,7 +117,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
   constructor(
     private readonly conn: TdbcConnection,
     private readonly repo: VfsEntryRepository,
-    options: DefaultVfsZipIoServiceOptions = {},
+    options: DefaultVfsZipIoServiceOptions = {}
   ) {
     this.testHook = options.testHook;
     this.backfillBaseline = options.backfillBaseline ?? true;
@@ -134,7 +133,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
 
     for (const row of rows) {
       // entry_id 化后 storageKind 已下线，所有文件均为 inline blob
-      const entryName = zipEntryNameRelativeToDirectory(row.path, directoryPath);
+      const entryName = zipEntryNameRelativeToDirectory(
+        row.path,
+        directoryPath
+      );
       if (entryName.length === 0) {
         continue;
       }
@@ -142,8 +144,10 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     }
 
     const directoryZipNames: string[] = [];
-    const entriesUnderScope =
-      await this.repo.listEntriesUnderPrefix(sk, directoryPath);
+    const entriesUnderScope = await this.repo.listEntriesUnderPrefix(
+      sk,
+      directoryPath
+    );
     for (const entry of entriesUnderScope) {
       if (entry.kind !== "directory") {
         continue;
@@ -152,7 +156,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         continue;
       }
       directoryZipNames.push(
-        zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath),
+        zipDirectoryEntryNameRelativeToDirectory(entry.path, directoryPath)
       );
     }
 
@@ -162,12 +166,12 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
   async import(
     scope: VfsScope,
     zipBytes: Uint8Array,
-    options: VfsZipImportOptions & ZipPathOptions,
+    options: VfsZipImportOptions & ZipPathOptions
   ): Promise<void> {
     if (options.confirmed !== true) {
       throw vfsZipError(
         "NOT_CONFIRMED",
-        "import requires explicit confirmation (CLI --yes or mobile confirm dialog)",
+        "import requires explicit confirmation (CLI --yes or mobile confirm dialog)"
       );
     }
 
@@ -179,7 +183,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     const { files, directories } = validateVfsZipEntries(
       scope,
       rawEntries,
-      directoryPath,
+      directoryPath
     );
     const sk = scopeKey(scope);
 
@@ -204,7 +208,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
             revisionTx,
             sk,
             logical,
-            content,
+            content
           );
         }
         // session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照。
@@ -216,7 +220,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
             messageRepo,
             checkpointRepo,
             scope.projectId,
-            scope.sessionId,
+            scope.sessionId
           );
         }
       });

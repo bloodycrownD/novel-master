@@ -4,7 +4,10 @@
  * @module domain/agent/logic/validate-agent-tool-policy
  */
 
-import { FILE_TOOL_NAMES, normalizeAgentToolPolicyName } from "@/domain/tool/builtin/vfs-tools.js";
+import {
+  FILE_TOOL_NAMES,
+  normalizeAgentToolPolicyName,
+} from "@/domain/tool/builtin/vfs-tools.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import type { AgentToolPolicy } from "../model/agent-definition.js";
 
@@ -25,7 +28,7 @@ function migrationHint(raw: string): string | undefined {
 function assertKnownNames(
   names: readonly string[],
   registryNames: ReadonlySet<string>,
-  listLabel: string,
+  listLabel: string
 ): void {
   for (const raw of names) {
     const name = normalizeAgentToolPolicyName(raw);
@@ -38,7 +41,7 @@ function assertKnownNames(
           : ` Known V2 tools: ${v2List}.`;
       throw new AgentConfigError(
         "INVALID_TOOL_POLICY",
-        `${listLabel} references unknown tool: ${raw}.${suffix}`,
+        `${listLabel} references unknown tool: ${raw}.${suffix}`
       );
     }
   }
@@ -51,7 +54,7 @@ function assertKnownNames(
  */
 export function validateAgentToolPolicy(
   tools: AgentToolPolicy | undefined,
-  registryNames: ReadonlySet<string>,
+  registryNames: ReadonlySet<string>
 ): void {
   if (tools == null) {
     return;
@@ -62,7 +65,7 @@ export function validateAgentToolPolicy(
   if (hasAllow && hasDeny) {
     throw new AgentConfigError(
       "INVALID_TOOL_POLICY",
-      "tools.allow and tools.deny cannot both be set",
+      "tools.allow and tools.deny cannot both be set"
     );
   }
 

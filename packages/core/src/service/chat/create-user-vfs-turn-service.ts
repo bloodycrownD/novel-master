@@ -31,7 +31,7 @@ export interface UserVfsTurnServiceBundle {
  * 鍒涘缓鐢ㄦ埛 VFS turn 鏈嶅姟涓庢ˉ鎺?append 闂寘锛堝叡浜繛鎺ヤ笌 repo锛夈€?
  */
 export function createUserVfsTurnServiceBundle(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): UserVfsTurnServiceBundle {
   const sessionRepo = new SqliteSessionRepository(conn);
   const messageRepo = new SqliteMessageRepository(conn);
@@ -55,7 +55,7 @@ export function createUserVfsTurnServiceBundle(
 
   const resolveToolCtx = (
     sessionId: string,
-    projectId: string,
+    projectId: string
   ): BuiltinToolContext => ({
     vfs: createScopedVfsService(conn, {
       kind: "session",
@@ -100,7 +100,7 @@ export function createUserVfsTurnServiceBundle(
 
 /** 鍒涘缓 {@link UserVfsTurnService} 瀹炰緥銆?*/
 export function createUserVfsTurnService(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): UserVfsTurnService {
   return createUserVfsTurnServiceBundle(conn).userVfsTurn;
 }

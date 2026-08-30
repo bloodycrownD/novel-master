@@ -17,7 +17,7 @@ const MODULE = "nm-model-suggestions";
 
 function entryToSuggestion(
   providerId: string,
-  entry: ModelSuggestionCache["models"][number],
+  entry: ModelSuggestionCache["models"][number]
 ): ModelSuggestion {
   return {
     providerId,
@@ -45,7 +45,7 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
     const cache = await this.readCache(suggestion.providerId);
     const models = [...cache.models];
     const index = models.findIndex(
-      (m) => m.vendorModelId === suggestion.vendorModelId,
+      (m) => m.vendorModelId === suggestion.vendorModelId
     );
     const entry = {
       vendorModelId: suggestion.vendorModelId,
@@ -66,7 +66,7 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
 
   async markStaleExcept(
     providerId: string,
-    seen: ReadonlySet<string>,
+    seen: ReadonlySet<string>
   ): Promise<void> {
     const cache = await this.readCache(providerId);
     const now = Date.now();
@@ -116,7 +116,7 @@ export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
 
   private async writeCache(
     providerId: string,
-    cache: ModelSuggestionCache,
+    cache: ModelSuggestionCache
   ): Promise<void> {
     await this.kkv.set(MODULE, providerId, JSON.stringify(cache));
   }

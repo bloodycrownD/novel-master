@@ -80,7 +80,9 @@ function memoizeSingle<A, R>(fn: (arg: A) => R): (arg: A) => R {
  * 挂到当前层，下次同样的参数序列再来就能原路命中。因为同一函数的参数个数
  * 一般固定，缓存树的深度也是固定的，不会出现长短不一的调用互相覆盖。
  */
-function memoizeMulti<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
+function memoizeMulti<A extends unknown[], R>(
+  fn: (...args: A) => R
+): (...args: A) => R {
   const root = createCacheLevel();
   return (...args: A): R => {
     let level: CacheLevel | Leaf = root;
@@ -114,7 +116,7 @@ function memoizeMulti<A extends unknown[], R>(fn: (...args: A) => R): (...args: 
  */
 export function memoize<A, R>(fn: (arg: A) => R): (arg: A) => R;
 export function memoize<A extends unknown[], R>(
-  fn: (...args: A) => R,
+  fn: (...args: A) => R
 ): (...args: A) => R;
 export function memoize(fn: (...args: unknown[]) => unknown): unknown {
   return fn.length <= 1 ? memoizeSingle(fn) : memoizeMulti(fn);

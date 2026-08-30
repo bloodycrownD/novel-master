@@ -68,11 +68,7 @@ export const annotateDraftSchema = z
         message: "renderStart 与 renderEnd 须成对出现",
         path: hasRenderStart ? ["renderEnd"] : ["renderStart"],
       });
-    } else if (
-      hasRenderStart &&
-      hasRenderEnd &&
-      renderStart! >= renderEnd!
-    ) {
+    } else if (hasRenderStart && hasRenderEnd && renderStart! >= renderEnd!) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "须满足 renderStart < renderEnd（半开区间 [start, end)）",
@@ -117,7 +113,9 @@ export const MESSAGE_ANNOTATE_PATH_MARKER = "__message__:";
 
 /** `path.includes('__message__:')` → 历史消息批注伪 path（Undo 恢复须跳过）。 */
 export function isMessageAnnotatePath(
-  path: string | null | undefined,
+  path: string | null | undefined
 ): boolean {
-  return typeof path === "string" && path.includes(MESSAGE_ANNOTATE_PATH_MARKER);
+  return (
+    typeof path === "string" && path.includes(MESSAGE_ANNOTATE_PATH_MARKER)
+  );
 }

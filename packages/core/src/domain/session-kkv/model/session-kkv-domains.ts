@@ -45,7 +45,7 @@ export type WorkplaceDisplayStatus = "full" | "header" | "filename";
  */
 export function fileCacheKey(
   status: WorkplaceDisplayStatus,
-  path: string,
+  path: string
 ): string {
   return `${status}:${path}`;
 }

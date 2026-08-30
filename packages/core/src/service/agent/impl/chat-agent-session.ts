@@ -24,7 +24,7 @@ export class ChatAgentSession implements AgentSession {
     private readonly messages: MessageService,
     readonly sessionId: string,
     readonly workplaceScopeSessionId: string = sessionId,
-    readonly kkvScopeSessionId: string = sessionId,
+    readonly kkvScopeSessionId: string = sessionId
   ) {}
 
   async list(): Promise<readonly ChatMessage[]> {
@@ -40,7 +40,7 @@ export class ChatAgentSession implements AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
-    },
+    }
   ): Promise<ChatMessage> {
     return this.messages.append(this.sessionId, role, content, options);
   }

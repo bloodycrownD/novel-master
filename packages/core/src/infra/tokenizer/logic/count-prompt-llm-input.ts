@@ -8,7 +8,10 @@ import type { SavedModelRepository } from "@/domain/provider/repositories/saved-
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
-import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
+import type {
+  TokenCounterKind,
+  TokenizerFamily,
+} from "../ports/token-counter.port.js";
 import type { TokenCounterRegistry } from "../ports/token-counter-registry.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
@@ -37,14 +40,14 @@ export interface PromptTokenCountResult {
  * Counts tokens for a full prompt via registered NMTP driver (assembly serialize).
  */
 export async function countPromptLlmInput(
-  params: CountPromptLlmInputParams,
+  params: CountPromptLlmInputParams
 ): Promise<PromptTokenCountResult> {
   return resolveTokenizerDriver().countPromptLlmInput(params);
 }
 
 async function resolveVendorModelIdFromSaved(
   savedModelId: string,
-  savedModels?: Pick<SavedModelRepository, "findById">,
+  savedModels?: Pick<SavedModelRepository, "findById">
 ): Promise<string> {
   if (savedModels == null) {
     return savedModelId;
@@ -55,12 +58,12 @@ async function resolveVendorModelIdFromSaved(
 
 /** Minimal fallback without a registered driver (tests / documentation). */
 export async function countPromptLlmInputHeuristicOnly(
-  params: CountPromptLlmInputParams,
+  params: CountPromptLlmInputParams
 ): Promise<PromptTokenCountResult> {
   const { savedModelId, registry, layout, ctx } = params;
   const vendorModelId = await resolveVendorModelIdFromSaved(
     savedModelId,
-    params.savedModels,
+    params.savedModels
   );
   const family = resolveTokenizerFamily(vendorModelId, "auto");
   const serialized = await serializePromptLlmInput(layout, ctx);
@@ -79,7 +82,7 @@ export async function countPromptLlmInputHeuristicOnly(
 export function formatPromptTokenUsageLabel(
   count: number,
   contextWindowTokens?: number,
-  options?: { readonly estimated?: boolean },
+  options?: { readonly estimated?: boolean }
 ): string {
   const prefix = options?.estimated ? "~" : "";
   const current = formatCompact(count);

@@ -34,7 +34,7 @@ export function normalizePromptSeenPath(path: string): string {
  */
 export function normalizePromptStorePath(
   path: string,
-  options?: { readonly keepDirTrailingSlash?: boolean },
+  options?: { readonly keepDirTrailingSlash?: boolean }
 ): string {
   const keepSlash = options?.keepDirTrailingSlash === true;
   const isDir = isPromptDirTokenPath(path);
@@ -59,7 +59,7 @@ export function tryNormalizePromptSeenPath(path: string): string | null {
 
 /** 由初始前缀 path 列表构造可变 seen 集合（写入前均规范化）。 */
 export function createPromptPathSeenSet(
-  initialPaths?: readonly string[],
+  initialPaths?: readonly string[]
 ): Set<string> {
   const set = new Set<string>();
   if (initialPaths == null) {
@@ -73,4 +73,3 @@ export function createPromptPathSeenSet(
   }
   return set;
 }
-

@@ -24,8 +24,7 @@ import type { ChatMessage } from "../../model/message.js";
 import type { MessageUsage } from "../../model/message-usage.js";
 import type { MessageRepository } from "../message.port.js";
 
-const MESSAGE_SELECT_COLUMNS =
-  `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
+const MESSAGE_SELECT_COLUMNS = `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json, prompt_tokens, completion_tokens, total_tokens, cache_read_tokens, cache_creation_tokens, model_name, first_token_ms, duration_ms`;
 
 /**
  * chat_message 的 INSERT 语句（`?` 占位），insert 与 batchInsert 共用。
@@ -73,7 +72,7 @@ function parseContent(json: string) {
 
 function rowToMessage(row: Row): ChatMessage {
   const attachments = parseAttachmentsJson(
-    row.attachments_json == null ? null : String(row.attachments_json),
+    row.attachments_json == null ? null : String(row.attachments_json)
   );
   const usage = parseUsage(row);
   return {
@@ -144,7 +143,7 @@ export class SqliteMessageRepository implements MessageRepository {
       this.parser,
       `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
-      { sessionId },
+      { sessionId }
     );
     return rows.map(rowToMessage);
   }
@@ -154,13 +153,16 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `SELECT COUNT(*) AS n FROM chat_message WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
     // COUNT(*) 恒返回一行；SQLite 下 COUNT 结果是 INTEGER，Number() 安全。
     return Number(rows[0]!.n);
   }
 
-  async listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]> {
+  async listBySessionTail(
+    sessionId: string,
+    limit: number
+  ): Promise<ChatMessage[]> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const rows = await queryTemplate(
       this.conn,
@@ -174,7 +176,7 @@ export class SqliteMessageRepository implements MessageRepository {
          LIMIT #{limit}
        )
        ORDER BY seq ASC`,
-      { sessionId, limit: clampedLimit },
+      { sessionId, limit: clampedLimit }
     );
     return rows.map(rowToMessage);
   }
@@ -182,7 +184,7 @@ export class SqliteMessageRepository implements MessageRepository {
   async listBySessionPage(
     sessionId: string,
     limit: number,
-    beforeSeq?: number,
+    beforeSeq?: number
   ): Promise<ChatMessage[]> {
     const clampedLimit = Math.max(1, Math.floor(limit));
     const rows = await queryTemplate(
@@ -198,7 +200,7 @@ export class SqliteMessageRepository implements MessageRepository {
          LIMIT #{limit}
        )
        ORDER BY seq ASC`,
-      { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit },
+      { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit }
     );
     return rows.map(rowToMessage);
   }
@@ -209,7 +211,7 @@ export class SqliteMessageRepository implements MessageRepository {
       this.parser,
       `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM chat_message WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -222,7 +224,7 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `SELECT MAX(seq) AS max_seq FROM chat_message WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
     const maxSeq = rows[0]?.max_seq;
     return maxSeq == null ? 1 : Number(maxSeq) + 1;
@@ -233,7 +235,7 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `UPDATE chat_message SET content_json = #{contentJson} WHERE id = #{id}`,
-      { id, contentJson },
+      { id, contentJson }
     );
     return result.changes > 0;
   }
@@ -250,7 +252,7 @@ export class SqliteMessageRepository implements MessageRepository {
     }
     await this.conn.batch(
       MESSAGE_INSERT_SQL,
-      messages.map((m) => toMessageParams(m)),
+      messages.map((m) => toMessageParams(m))
     );
   }
 
@@ -259,7 +261,7 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `DELETE FROM chat_message WHERE id = #{id}`,
-      { id },
+      { id }
     );
     return result.changes > 0;
   }
@@ -269,7 +271,7 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `DELETE FROM chat_message WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
   }
 
@@ -278,17 +280,20 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `DELETE FROM chat_message WHERE session_id = #{sessionId} AND seq > #{afterSeq}`,
-      { sessionId, afterSeq },
+      { sessionId, afterSeq }
     );
   }
 
-  async listIdsAfterSeq(sessionId: string, afterSeq: number): Promise<string[]> {
+  async listIdsAfterSeq(
+    sessionId: string,
+    afterSeq: number
+  ): Promise<string[]> {
     const rows = await queryTemplate<{ id: string }>(
       this.conn,
       this.parser,
       `SELECT id FROM chat_message
        WHERE session_id = #{sessionId} AND seq > #{afterSeq}`,
-      { sessionId, afterSeq },
+      { sessionId, afterSeq }
     );
     return rows.map((row) => String(row.id));
   }
@@ -298,7 +303,7 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `UPDATE chat_message SET hidden = #{hidden} WHERE id = #{id}`,
-      { id: messageId, hidden: hidden ? 1 : 0 },
+      { id: messageId, hidden: hidden ? 1 : 0 }
     );
     return result.changes > 0;
   }
@@ -307,7 +312,7 @@ export class SqliteMessageRepository implements MessageRepository {
     sessionId: string,
     fromSeq: number,
     toSeq: number,
-    hidden: boolean,
+    hidden: boolean
   ): Promise<number> {
     const hiddenFilter = hidden ? "AND hidden = 0" : "AND hidden = 1";
     const result = await executeTemplate(
@@ -319,29 +324,25 @@ export class SqliteMessageRepository implements MessageRepository {
          AND seq >= #{fromSeq} 
          AND seq <= #{toSeq}
          ${hiddenFilter}`,
-      { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 },
+      { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 }
     );
     return result.changes;
   }
 
   async searchMessages(
     sessionId: string,
-    query: MessageSearchQuery,
+    query: MessageSearchQuery
   ): Promise<ChatMessage[]> {
     const keyword = query.keyword?.trim() ?? "";
     const hasKeyword = keyword.length > 0;
     // keyword 非空时加 role 粗筛 + LIKE 粗筛（LIKE 扫整个 content_json 是超集，内存层再精筛 TextBlock）；
     // keyword 为空时不加 role / LIKE 过滤，返回所有类型消息。
-    const roleFilter = hasKeyword
-      ? "AND role IN ('user', 'assistant')"
-      : "";
+    const roleFilter = hasKeyword ? "AND role IN ('user', 'assistant')" : "";
     // JS 源码双反斜杠 → 落到 SQL 是单反斜杠 ESCAPE '\'。
     const likeFilter = hasKeyword
       ? "AND content_json LIKE #{likePattern} ESCAPE '\\'"
       : "";
-    const likePattern = hasKeyword
-      ? `%${escapeLikePattern(keyword)}%`
-      : null;
+    const likePattern = hasKeyword ? `%${escapeLikePattern(keyword)}%` : null;
     const clampedLimit = Math.max(1, Math.floor(query.limit));
     const rows = await queryTemplate(
       this.conn,
@@ -363,7 +364,7 @@ export class SqliteMessageRepository implements MessageRepository {
         fromSeq: query.fromSeq ?? null,
         toSeq: query.toSeq ?? null,
         limit: clampedLimit,
-      },
+      }
     );
     return rows.map(rowToMessage);
   }

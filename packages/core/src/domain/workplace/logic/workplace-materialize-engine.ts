@@ -18,7 +18,7 @@ export async function materializeBlockFromView(
   view: WorkplaceRuleView,
   vfs: VfsEntryRepository,
   scope: WorkplaceScope,
-  mtimeByPath: ReadonlyMap<string, number>,
+  mtimeByPath: ReadonlyMap<string, number>
 ): Promise<string> {
   const scopeKeyStr = scopeKey(scope);
   const blocks: string[] = [];
@@ -42,7 +42,7 @@ export async function materializeBlockFromView(
         mtimeMs: mtimeByPath.get(row.path) ?? 0,
         display,
         content,
-      }),
+      })
     );
   }
   return joinFileBlocks(blocks);

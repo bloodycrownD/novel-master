@@ -37,7 +37,7 @@ export type TokenizerOverride = TokenizerFamily | "auto" | "heuristic";
  */
 export function resolveTokenizerFamily(
   vendorModelId: string,
-  override: TokenizerOverride = "auto",
+  override: TokenizerOverride = "auto"
 ): TokenizerFamily {
   if (override === "heuristic") {
     return "heuristic";

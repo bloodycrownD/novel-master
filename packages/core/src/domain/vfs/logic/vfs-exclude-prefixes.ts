@@ -24,7 +24,7 @@ export function normalizeExcludePrefix(raw: string): string {
  */
 export function isVfsPathExcluded(
   path: string,
-  excludePrefixes: readonly string[],
+  excludePrefixes: readonly string[]
 ): boolean {
   for (const raw of excludePrefixes) {
     const base = normalizeExcludePrefix(raw);
@@ -46,7 +46,7 @@ export function isVfsPathExcluded(
  */
 export function isVfsPathAncestorOfExcluded(
   path: string,
-  excludePrefixes: readonly string[],
+  excludePrefixes: readonly string[]
 ): boolean {
   for (const raw of excludePrefixes) {
     const base = normalizeExcludePrefix(raw);

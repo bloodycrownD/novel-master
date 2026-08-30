@@ -7,7 +7,10 @@
  */
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
+import type {
+  DegradedToolCall,
+  LlmStreamEvent,
+} from "../ports/adapter.port.js";
 import {
   openAiStreamAccumulatorsToBlocks,
   openAiStreamDeltaToEvents,
@@ -61,9 +64,9 @@ export function createOpenAiSseParserState(): OpenAiSseParserState {
 export function feedOpenAiSseChunk(
   state: OpenAiSseParserState,
   chunk: string,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
-  feedSseLines(state, chunk, line => {
+  feedSseLines(state, chunk, (line) => {
     if (!line.startsWith("data: ")) {
       return;
     }
@@ -97,7 +100,7 @@ export function feedOpenAiSseChunk(
 /** Finalize parser state into content blocks and the last raw SSE event. */
 export function finishOpenAiSse(
   state: OpenAiSseParserState,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
@@ -106,7 +109,10 @@ export function finishOpenAiSse(
   if (state.buffer !== "") {
     feedOpenAiSseChunk(state, "\n", onStream);
   }
-  const { blocks, degradedToolCalls } = openAiStreamAccumulatorsToBlocks(state, onStream);
+  const { blocks, degradedToolCalls } = openAiStreamAccumulatorsToBlocks(
+    state,
+    onStream
+  );
   assertSseParseSucceededOrThrow(state, blocks, "openai");
   return {
     blocks,
@@ -118,7 +124,7 @@ export function finishOpenAiSse(
 /** Read a fetch `ReadableStream` body and parse OpenAI SSE incrementally. */
 export async function parseOpenAiSseStream(
   body: ReadableStream<Uint8Array>,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -129,7 +135,11 @@ export async function parseOpenAiSseStream(
     if (done) {
       break;
     }
-    feedOpenAiSseChunk(state, decoder.decode(value, { stream: true }), onStream);
+    feedOpenAiSseChunk(
+      state,
+      decoder.decode(value, { stream: true }),
+      onStream
+    );
   }
 
   return finishOpenAiSse(state, onStream);

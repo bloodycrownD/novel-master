@@ -40,4 +40,3 @@ export interface Tool<Input, Output, Ctx = unknown> {
   /** Executes the tool. Implementations should be side-effect safe by default. */
   run(input: Input, ctx: Ctx): Promise<Output>;
 }
-

@@ -19,7 +19,10 @@ export interface RegexConfigService {
   createGroup(input: CreateRegexGroupInput): Promise<RegexGroup>;
   listGroups(): Promise<RegexGroup[]>;
   getGroup(groupId: string): Promise<RegexGroup>;
-  updateGroup(groupId: string, patch: UpdateRegexGroupInput): Promise<RegexGroup>;
+  updateGroup(
+    groupId: string,
+    patch: UpdateRegexGroupInput
+  ): Promise<RegexGroup>;
   deleteGroup(groupId: string): Promise<void>;
 
   createRule(input: CreateRegexRuleInput): Promise<RegexRule>;
@@ -28,13 +31,13 @@ export interface RegexConfigService {
   updateRule(
     groupId: string,
     ruleId: string,
-    patch: UpdateRegexRuleInput,
+    patch: UpdateRegexRuleInput
   ): Promise<RegexRule>;
   deleteRule(groupId: string, ruleId: string): Promise<void>;
   setRuleEnabled(
     groupId: string,
     ruleId: string,
-    enabled: boolean,
+    enabled: boolean
   ): Promise<RegexRule>;
 
   /** Enabled rules for group, compiled in `sort_order` (empty if group missing). */

@@ -14,7 +14,7 @@
  */
 export function parseKkvJsonDocument<T>(
   raw: string,
-  decodeFn: (parsed: unknown) => T,
+  decodeFn: (parsed: unknown) => T
 ): T {
   const parsed = JSON.parse(raw) as unknown;
   return decodeFn(parsed);

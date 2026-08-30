@@ -19,7 +19,7 @@ import type { SavedModelRepository } from "../repositories/saved-model.port.js";
 export async function inferLlmProtocolFromSavedModelId(
   savedModelId: string,
   savedModels: Pick<SavedModelRepository, "findById">,
-  providers?: Pick<ProviderRepository, "findById">,
+  providers?: Pick<ProviderRepository, "findById">
 ): Promise<LlmProtocolKind> {
   try {
     const saved = await savedModels.findById(savedModelId.trim());
@@ -41,7 +41,9 @@ export async function inferLlmProtocolFromSavedModelId(
       return "anthropic";
     }
     if (provider.builtinKey != null) {
-      return BUILTIN_PROVIDER_PROTOCOLS[provider.builtinKey] ?? provider.protocol;
+      return (
+        BUILTIN_PROVIDER_PROTOCOLS[provider.builtinKey] ?? provider.protocol
+      );
     }
     return provider.protocol;
   } catch {
@@ -53,7 +55,7 @@ export async function inferLlmProtocolFromSavedModelId(
 export async function inferLlmProtocolFromApplicationModelId(
   savedModelId: string,
   savedModels: Pick<SavedModelRepository, "findById">,
-  providers?: Pick<ProviderRepository, "findById">,
+  providers?: Pick<ProviderRepository, "findById">
 ): Promise<LlmProtocolKind> {
   return inferLlmProtocolFromSavedModelId(savedModelId, savedModels, providers);
 }

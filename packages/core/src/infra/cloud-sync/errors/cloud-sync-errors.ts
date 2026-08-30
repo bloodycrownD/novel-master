@@ -29,7 +29,7 @@ export class CloudSyncError extends Error {
   constructor(
     code: CloudSyncErrorCode,
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown }
   ) {
     super(message, { cause: options?.cause });
     this.name = "CloudSyncError";

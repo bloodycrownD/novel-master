@@ -21,7 +21,11 @@ export function parentDirOf(logicalPath: string): string | null {
   return n.slice(0, idx);
 }
 
-function addParentChain(dirs: Set<string>, logicalPath: string, root: string): void {
+function addParentChain(
+  dirs: Set<string>,
+  logicalPath: string,
+  root: string
+): void {
   let current = parentDirOf(logicalPath);
   while (current != null && current !== root) {
     dirs.add(current);
@@ -61,7 +65,7 @@ export function buildWorkplaceDirSet(params: {
 /** Direct child directories of `dir` within `allDirs`. */
 export function directChildDirs(
   dir: string,
-  allDirs: ReadonlySet<string>,
+  allDirs: ReadonlySet<string>
 ): string[] {
   const normalized = normalizePath(dir);
   const children: string[] = [];
@@ -79,7 +83,7 @@ export function directChildDirs(
 /** Direct child files of `dir` from the file path list. */
 export function directChildFiles(
   dir: string,
-  filePaths: ReadonlySet<string>,
+  filePaths: ReadonlySet<string>
 ): string[] {
   const normalized = normalizePath(dir);
   const prefix = normalized === "/" ? "/" : `${normalized}/`;
@@ -88,10 +92,7 @@ export function directChildFiles(
     if (!f.startsWith(prefix) && !(normalized === "/" && f.startsWith("/"))) {
       continue;
     }
-    const rel =
-      normalized === "/"
-        ? f.slice(1)
-        : f.slice(prefix.length);
+    const rel = normalized === "/" ? f.slice(1) : f.slice(prefix.length);
     if (rel.length === 0 || rel.includes("/")) {
       continue;
     }

@@ -4,7 +4,10 @@
 
 function parseOverrides(overrides: string | undefined): string[] {
   if (!overrides?.trim()) return [];
-  return overrides.split("|").map((t) => t.trim()).filter(Boolean);
+  return overrides
+    .split("|")
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 function escapeRegExp(s: string): string {
@@ -21,7 +24,7 @@ export function applyTrimOverrides(
     suffix?: string;
     prefixOverrides?: string;
     suffixOverrides?: string;
-  },
+  }
 ): string {
   let s = content;
 

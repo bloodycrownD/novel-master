@@ -15,7 +15,7 @@ import {
 export async function serializePromptLlmInput(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  options?: PromptAssemblyOptions,
+  options?: PromptAssemblyOptions
 ): Promise<string> {
   return formatPromptLlmInputForCliFromLayout(layout, ctx, options);
 }

@@ -25,7 +25,11 @@ export interface ImageBlock {
 
 export type ImageSource =
   | { readonly kind: "url"; readonly url: string }
-  | { readonly kind: "base64"; readonly mediaType: string; readonly data: string };
+  | {
+      readonly kind: "base64";
+      readonly mediaType: string;
+      readonly data: string;
+    };
 
 export interface ToolUseBlock {
   readonly type: "tool_use";

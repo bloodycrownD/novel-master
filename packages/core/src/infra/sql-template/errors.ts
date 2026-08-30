@@ -21,7 +21,7 @@ export class SqlTemplateError extends Error {
   constructor(
     code: SqlTemplateErrorCode,
     message: string,
-    options?: { offset?: number; tagName?: string; cause?: unknown },
+    options?: { offset?: number; tagName?: string; cause?: unknown }
   ) {
     super(message, { cause: options?.cause });
     this.name = "SqlTemplateError";

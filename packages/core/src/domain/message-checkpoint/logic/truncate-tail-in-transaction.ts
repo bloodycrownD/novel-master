@@ -43,7 +43,7 @@ export type TruncateTailDeps = {
  */
 export async function truncateTailInTransaction(
   deps: TruncateTailDeps,
-  params: TruncateTailParams,
+  params: TruncateTailParams
 ): Promise<void> {
   const { projectId, sessionId, afterSeq, sweepRevisions } = params;
 
@@ -61,7 +61,7 @@ export async function truncateTailInTransaction(
       deps.checkpoints,
       projectId,
       sessionId,
-      deps.conn,
+      deps.conn
     );
   }
 

@@ -20,7 +20,11 @@ export interface UserVfsTurnOp {
 /** `executeOp` 执行结果。 */
 export type UserVfsTurnExecuteResult =
   | { readonly ok: true }
-  | { readonly ok: false; readonly error: unknown; readonly partialFailure?: true };
+  | {
+      readonly ok: false;
+      readonly error: unknown;
+      readonly partialFailure?: true;
+    };
 
 /**
  * 用户 VFS 操作编排：即时 ToolRunner 执行（写盘 + 失败回滚 restore）。
@@ -31,6 +35,6 @@ export interface UserVfsTurnService {
    */
   executeOp(
     sessionId: string,
-    op: UserVfsTurnOp,
+    op: UserVfsTurnOp
   ): Promise<UserVfsTurnExecuteResult>;
 }

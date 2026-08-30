@@ -9,9 +9,7 @@ import type { AgentDefinition } from "../model/agent-definition.js";
 
 export interface ValidateAgentDefinitionOptions {
   /** Ensures model pin refers to a saved model (CLI injects). */
-  readonly assertSavedModel?: (
-    savedModelId: string,
-  ) => void | Promise<void>;
+  readonly assertSavedModel?: (savedModelId: string) => void | Promise<void>;
   /** Registered tool names for tools policy validation (host injects after registerVfsTools). */
   readonly registeredToolNames?: readonly string[];
 }
@@ -21,13 +19,10 @@ export interface ValidateAgentDefinitionOptions {
  */
 export async function validateAgentDefinition(
   def: AgentDefinition,
-  options: ValidateAgentDefinitionOptions = {},
+  options: ValidateAgentDefinitionOptions = {}
 ): Promise<void> {
   if (options.registeredToolNames != null) {
-    validateAgentToolPolicy(
-      def.tools,
-      new Set(options.registeredToolNames),
-    );
+    validateAgentToolPolicy(def.tools, new Set(options.registeredToolNames));
   }
 
   const pin = def.model;

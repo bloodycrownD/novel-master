@@ -46,23 +46,29 @@ function assertZipEntryNameAllowed(entryName: string): void {
   if (entryName.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
     throw vfsZipError(
       "PAYLOAD_TOO_LARGE",
-      `ZIP entry path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${entryName}`,
+      `ZIP entry path exceeds ${VFS_ZIP_MAX_ENTRY_PATH_LEN} characters: ${entryName}`
     );
   }
   if (entryName.includes("\\")) {
     throw vfsZipError("INVALID_PATH", `backslash in ZIP entry: ${entryName}`);
   }
   if (entryName.includes("..")) {
-    throw vfsZipError("INVALID_PATH", `parent segment in ZIP entry: ${entryName}`);
+    throw vfsZipError(
+      "INVALID_PATH",
+      `parent segment in ZIP entry: ${entryName}`
+    );
   }
   if (WINDOWS_DRIVE_PATH.test(entryName)) {
-    throw vfsZipError("INVALID_PATH", `absolute Windows path in ZIP: ${entryName}`);
+    throw vfsZipError(
+      "INVALID_PATH",
+      `absolute Windows path in ZIP: ${entryName}`
+    );
   }
   const lower = entryName.toLowerCase();
   if (lower.startsWith("projects/") || lower.startsWith("/projects/")) {
     throw vfsZipError(
       "INVALID_PATH",
-      `cross-domain path prefix in ZIP entry: ${entryName}`,
+      `cross-domain path prefix in ZIP entry: ${entryName}`
     );
   }
 }
@@ -102,7 +108,7 @@ export function decodeUtf8Entry(bytes: Uint8Array, entryName: string): string {
   if (!bytesEqual(payload, roundTrip)) {
     throw vfsZipError(
       "INVALID_UTF8",
-      `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)`,
+      `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)`
     );
   }
   return decoded;
@@ -111,7 +117,7 @@ export function decodeUtf8Entry(bytes: Uint8Array, entryName: string): string {
 function assertLogicalAllowed(
   scope: VfsScope,
   logical: string,
-  entryName: string,
+  entryName: string
 ): void {
   try {
     assertLogicalPathAllowed(scope, logical);
@@ -120,7 +126,7 @@ function assertLogicalAllowed(
       error instanceof Error ? error.message : "path not allowed for scope";
     throw vfsZipError(
       "INVALID_PATH",
-      `ZIP entry "${entryName}" → logical "${logical}": ${message}`,
+      `ZIP entry "${entryName}" → logical "${logical}": ${message}`
     );
   }
 }
@@ -134,7 +140,7 @@ function assertLogicalAllowed(
 export function validateVfsZipEntries(
   scope: VfsScope,
   entries: ReadonlyMap<string, Uint8Array>,
-  directoryPath?: string,
+  directoryPath?: string
 ): VfsZipValidatedPayload {
   const targetDir = resolveZipDirectoryPath(directoryPath);
   const fileEntries: Array<{ entryName: string; bytes: Uint8Array }> = [];
@@ -153,7 +159,7 @@ export function validateVfsZipEntries(
       if (bytes.byteLength > 0) {
         throw vfsZipError(
           "INVALID_ZIP",
-          `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)`,
+          `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)`
         );
       }
       if (dirKey.length > 0) {
@@ -178,7 +184,7 @@ export function validateVfsZipEntries(
   for (const entryName of directoryEntries) {
     const logical = logicalFromZipDirectoryEntryRelativeToDirectory(
       entryName,
-      targetDir,
+      targetDir
     );
     assertLogicalAllowed(scope, logical, entryName);
     if (!directoryLogicals.includes(logical)) {
@@ -190,19 +196,22 @@ export function validateVfsZipEntries(
   if (entryCount > VFS_ZIP_MAX_ENTRY_COUNT) {
     throw vfsZipError(
       "PAYLOAD_TOO_LARGE",
-      `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} entries`,
+      `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} entries`
     );
   }
   if (totalBytes > VFS_ZIP_MAX_UNCOMPRESSED_BYTES) {
     throw vfsZipError(
       "PAYLOAD_TOO_LARGE",
-      `ZIP uncompressed payload exceeds ${VFS_ZIP_MAX_UNCOMPRESSED_BYTES} bytes`,
+      `ZIP uncompressed payload exceeds ${VFS_ZIP_MAX_UNCOMPRESSED_BYTES} bytes`
     );
   }
 
   const files = new Map<string, string>();
   for (const { entryName, bytes } of fileEntries) {
-    const logical = logicalFromZipEntryRelativeToDirectory(entryName, targetDir);
+    const logical = logicalFromZipEntryRelativeToDirectory(
+      entryName,
+      targetDir
+    );
     if (files.has(logical) || directoryLogicals.includes(logical)) {
       throw vfsZipError("DUPLICATE_PATH", `duplicate logical path: ${logical}`);
     }

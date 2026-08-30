@@ -53,7 +53,7 @@ export interface RunCompactionResult {
  */
 export async function runCompaction(
   deps: RunCompactionDeps,
-  params: RunCompactionParams,
+  params: RunCompactionParams
 ): Promise<RunCompactionResult> {
   const startDepth = params.hideStartDepth ?? DEFAULT_HIDE_START_DEPTH;
   const slice: DepthSlice = { startDepth };
@@ -70,11 +70,11 @@ export async function runCompaction(
   // hide-message 成功后才清缓存：与旧编排器 `result.ok` 门控同口径。
   await deps.sessionKkv.clearDomain(
     params.sessionId,
-    SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+    SESSION_KKV_DOMAIN_RULE_SNAPSHOT
   );
   await deps.sessionKkv.clearDomain(
     params.sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
+    SESSION_KKV_DOMAIN_FILE_CACHE
   );
   sessionApiPromptTokenCache.invalidate(params.sessionId);
 

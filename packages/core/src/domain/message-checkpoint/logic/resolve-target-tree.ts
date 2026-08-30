@@ -16,7 +16,7 @@ export async function resolveRollbackTargetTree(
   checkpoints: MessageCheckpointRepository,
   sessionId: string,
   anchorMessageId: string,
-  anchorSeq: number,
+  anchorSeq: number
 ): Promise<Map<string, number>> {
   const direct = await checkpoints.loadFileTree(sessionId, anchorMessageId);
   if (direct != null) {
@@ -25,7 +25,7 @@ export async function resolveRollbackTargetTree(
 
   const priorMessageId = await checkpoints.findCheckpointMessageIdAtOrBefore(
     sessionId,
-    anchorSeq,
+    anchorSeq
   );
   if (priorMessageId == null) {
     return new Map();
@@ -43,11 +43,11 @@ export async function resolveRollbackTargetTree(
 export async function resolvePriorRollbackTargetTree(
   checkpoints: MessageCheckpointRepository,
   sessionId: string,
-  maxSeq: number,
+  maxSeq: number
 ): Promise<Map<string, number>> {
   const priorMessageId = await checkpoints.findCheckpointMessageIdAtOrBefore(
     sessionId,
-    maxSeq,
+    maxSeq
   );
   if (priorMessageId == null) {
     return new Map();

@@ -20,12 +20,12 @@ import type { VfsService } from "./vfs.port.js";
  */
 export function createScopedVfsService(
   conn: TdbcConnection,
-  scope: VfsScope,
+  scope: VfsScope
 ): VfsService {
   const entryRepo = new SqliteVfsEntryRepository(conn);
   const inner = new RevisionAwareVfsService(
     conn,
-    new DefaultVfsService(entryRepo),
+    new DefaultVfsService(entryRepo)
   );
   return new ScopedVfsService(inner, scope);
 }

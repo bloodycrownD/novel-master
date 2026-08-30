@@ -29,7 +29,7 @@ const LOADED_STATUSES: readonly WorkplaceDisplayStatus[] = [
  */
 export function isWorkplacePathLoadedInCache(
   path: string,
-  cacheKeys: ReadonlySet<string>,
+  cacheKeys: ReadonlySet<string>
 ): boolean {
   for (const status of LOADED_STATUSES) {
     if (cacheKeys.has(fileCacheKey(status, path))) {
@@ -44,10 +44,9 @@ export function isWorkplacePathLoadedInCache(
  */
 export function diffWorkplacePaths(
   live: readonly WorkplaceLivePath[],
-  cacheKeys: ReadonlySet<string> | readonly string[],
+  cacheKeys: ReadonlySet<string> | readonly string[]
 ): string[] {
-  const keySet =
-    cacheKeys instanceof Set ? cacheKeys : new Set(cacheKeys);
+  const keySet = cacheKeys instanceof Set ? cacheKeys : new Set(cacheKeys);
   const needed: string[] = [];
   const seen = new Set<string>();
   for (const entry of live) {

@@ -22,8 +22,10 @@ import { createRegexConfigService } from "@novel-master/core/regex";
 import { createSessionFsService } from "@novel-master/core/session-fs";
 import { createScopedVfsService } from "@novel-master/core/vfs";
 import { createWorkplaceService } from "@novel-master/core/workplace";
-import { getNovelMasterTestContext, novelMasterTestFixture } from "./helpers/novel-master-fixture.js";
-
+import {
+  getNovelMasterTestContext,
+  novelMasterTestFixture,
+} from "./helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
 
@@ -33,18 +35,21 @@ describe("T0 package exports (@novel-master/core entry)", () => {
   it("does not export createKkvService from main entry", () => {
     assert.equal(
       (coreMain as Record<string, unknown>).createKkvService,
-      undefined,
+      undefined
     );
   });
 
   it("does not export SimpleEventBus from main entry", () => {
-    assert.equal((coreMain as Record<string, unknown>).SimpleEventBus, undefined);
+    assert.equal(
+      (coreMain as Record<string, unknown>).SimpleEventBus,
+      undefined
+    );
   });
 
   it("does not export readTokenCounterModeFromPreferences from main entry", () => {
     assert.equal(
       (coreMain as Record<string, unknown>).readTokenCounterModeFromPreferences,
-      undefined,
+      undefined
     );
   });
 

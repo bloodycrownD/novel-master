@@ -30,7 +30,7 @@ export function savedModelSettingsFromJson(raw: unknown): SavedModelSettings {
  * 将 {@link SavedModelSettings} 序列化为 v2 JSON 文档。
  */
 export function savedModelSettingsToJson(
-  settings: SavedModelSettings,
+  settings: SavedModelSettings
 ): SavedModelSettingsDocument {
   return {
     schemaVersion: 2,
@@ -50,6 +50,8 @@ export function savedModelSettingsToJson(
  *
  * @param settings 合并后的设置。
  */
-export function assertSavedModelSettingsPersistable(settings: SavedModelSettings): void {
+export function assertSavedModelSettingsPersistable(
+  settings: SavedModelSettings
+): void {
   savedModelSettingsFromJson(savedModelSettingsToJson(settings));
 }

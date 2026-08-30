@@ -21,8 +21,7 @@ export const DEFAULT_SUBAGENT_DEFINITION: AgentDefinition = {
   description: "通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
   mode: "subagent",
   prompts: {
-    system:
-      "你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
+    system: "你是一个通用助手，可以读写文件、搜索内容，完成主代理委派的任务。",
     persist: [],
     dynamic: [],
     // 常驻工作区开启：子 agent 每轮注入 <workplace> 前缀（按父工作区规则评估、

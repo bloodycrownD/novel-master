@@ -30,7 +30,7 @@ import type {
 export const VFS_ENTRY_SEQUENCE_REPAIR_NAME = "vfs-entry-sequence-repair";
 
 async function readSequenceBoundaries(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): Promise<{ seq: number; needed: number }> {
   // 全新库在首次自增插入前 sqlite_sequence 尚未物化（没有 vfs_entry 行，
   // 表本身随 AUTOINCREMENT 建表即存在）——查询返回空结果集而非抛错，
@@ -38,17 +38,17 @@ async function readSequenceBoundaries(
   // （integrity-repair.ts）保守地按「需要修复」处理并挂到报告，这里
   // 绝不吞错伪装健康（吞错会让存量错位库静默漏修）。
   const entryMax = await conn.query<{ m: number | null }>(
-    "SELECT MAX(entry_id) AS m FROM vfs_entry",
+    "SELECT MAX(entry_id) AS m FROM vfs_entry"
   );
   const revMax = await conn.query<{ m: number | null }>(
-    "SELECT MAX(entry_id) AS m FROM vfs_revision",
+    "SELECT MAX(entry_id) AS m FROM vfs_revision"
   );
   const seqRow = await conn.query<{ seq: number | null }>(
-    "SELECT seq FROM sqlite_sequence WHERE name = 'vfs_entry'",
+    "SELECT seq FROM sqlite_sequence WHERE name = 'vfs_entry'"
   );
   const needed = Math.max(
     Number(entryMax[0]?.m ?? 0),
-    Number(revMax[0]?.m ?? 0),
+    Number(revMax[0]?.m ?? 0)
   );
   const seq = Number(seqRow[0]?.seq ?? 0);
   return { seq, needed };
@@ -56,7 +56,7 @@ async function readSequenceBoundaries(
 
 /** 构造发号器修复操作（bootstrap 启动期无条件注册）。 */
 export function createVfsEntrySequenceRepairOperation(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): IntegrityRepairOperation {
   return {
     name: VFS_ENTRY_SEQUENCE_REPAIR_NAME,
@@ -76,12 +76,12 @@ export function createVfsEntrySequenceRepairOperation(
       // sqlite_sequence 可直接写入；无行（表从未自发递增过）时补一行
       const updated = await conn.execute(
         "UPDATE sqlite_sequence SET seq = ? WHERE name = 'vfs_entry'",
-        [needed],
+        [needed]
       );
       if (updated.changes === 0) {
         await conn.execute(
           "INSERT INTO sqlite_sequence (name, seq) VALUES ('vfs_entry', ?)",
-          [needed],
+          [needed]
         );
       }
     },

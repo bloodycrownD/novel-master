@@ -42,7 +42,7 @@ export function thinkingLevelToModelThinkingParams(
   level: ThinkingLevel,
   protocol: LlmProtocolKind,
   vendorModelId: string,
-  sampling: SavedModelSamplingSettings,
+  sampling: SavedModelSamplingSettings
 ): ModelThinkingParams | undefined {
   if (level === "off") {
     return undefined;
@@ -58,7 +58,7 @@ export function thinkingLevelToModelThinkingParams(
       const effectiveMax = resolveEffectiveMaxTokens(sampling, "anthropic");
       const budget = Math.min(
         ANTHROPIC_PRESET_BUDGET[level],
-        Math.max(1, effectiveMax - 1),
+        Math.max(1, effectiveMax - 1)
       );
       return {
         protocol: "anthropic",
@@ -74,7 +74,9 @@ export function thinkingLevelToModelThinkingParams(
       }
       return {
         protocol: "gemini",
-        gemini: { thinkingConfig: { thinkingBudget: GEMINI_25_PRESET_BUDGET[level] } },
+        gemini: {
+          thinkingConfig: { thinkingBudget: GEMINI_25_PRESET_BUDGET[level] },
+        },
       };
   }
 }

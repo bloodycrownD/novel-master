@@ -39,7 +39,7 @@ function matchSegments(
   pattern: string[],
   path: string[],
   pi: number,
-  si: number,
+  si: number
 ): boolean {
   if (pi === pattern.length) {
     return si === path.length;

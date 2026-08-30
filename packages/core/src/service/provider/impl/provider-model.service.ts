@@ -43,7 +43,7 @@ export interface DefaultProviderModelServiceDeps {
 
 function resolvePersistedModelName(
   vendorModelId: string,
-  modelName?: string,
+  modelName?: string
 ): string {
   if (modelName === undefined) {
     return vendorModelId;
@@ -52,7 +52,7 @@ function resolvePersistedModelName(
   if (trimmed.length === 0) {
     throw new ProviderError(
       "INVALID_MODEL_NAME",
-      "modelName must not be empty",
+      "modelName must not be empty"
     );
   }
   return trimmed;
@@ -95,16 +95,16 @@ export class DefaultProviderModelService implements ProviderModelService {
   async save(
     providerId: string,
     vendorModelId: string,
-    modelName?: string,
+    modelName?: string
   ): Promise<SavedModel> {
     await this.deps.providers.get(providerId);
     const normalizedVendorModelId = normalizeVendorModelId(
       providerId,
-      vendorModelId,
+      vendorModelId
     );
     const persistedModelName = resolvePersistedModelName(
       normalizedVendorModelId,
-      modelName,
+      modelName
     );
     const now = Date.now();
     const model: SavedModel = {
@@ -129,17 +129,20 @@ export class DefaultProviderModelService implements ProviderModelService {
     return this.deps.savedModels.listByProvider(providerId);
   }
 
-  async editSaved(savedModelId: string, modelName?: string): Promise<SavedModel> {
+  async editSaved(
+    savedModelId: string,
+    modelName?: string
+  ): Promise<SavedModel> {
     const existing = await assertSavedModelUuid(
       savedModelId,
-      this.deps.savedModels,
+      this.deps.savedModels
     );
     let nextModelName = existing.modelName;
     if (modelName === null) {
       throw new ProviderError(
         "INVALID_MODEL_NAME",
         "modelName must not be empty",
-        { modelId: savedModelId },
+        { modelId: savedModelId }
       );
     }
     if (modelName !== undefined) {
@@ -148,7 +151,7 @@ export class DefaultProviderModelService implements ProviderModelService {
         throw new ProviderError(
           "INVALID_MODEL_NAME",
           "modelName must not be empty",
-          { modelId: savedModelId },
+          { modelId: savedModelId }
         );
       }
       nextModelName = trimmed;
@@ -165,14 +168,14 @@ export class DefaultProviderModelService implements ProviderModelService {
   async deleteSaved(savedModelId: string): Promise<void> {
     const existing = await assertSavedModelUuid(
       savedModelId,
-      this.deps.savedModels,
+      this.deps.savedModels
     );
     const refs = await findSavedModelReferences(this.deps.conn, savedModelId);
     if (refs.length > 0) {
       throw new ProviderError(
         "SAVED_MODEL_IN_USE",
         `Saved model is in use: ${refs.join(", ")}`,
-        { modelId: savedModelId, providerId: existing.providerId },
+        { modelId: savedModelId, providerId: existing.providerId }
       );
     }
     const ok = await this.deps.savedModels.deleteById(savedModelId);
@@ -180,18 +183,18 @@ export class DefaultProviderModelService implements ProviderModelService {
       throw new ProviderError(
         "NOT_FOUND",
         `Saved model not found: ${savedModelId}`,
-        { modelId: savedModelId },
+        { modelId: savedModelId }
       );
     }
   }
 
   async updateSettings(
     savedModelId: string,
-    patch: SavedModelSettingsPatch,
+    patch: SavedModelSettingsPatch
   ): Promise<SavedModel> {
     const existing = await assertSavedModelUuid(
       savedModelId,
-      this.deps.savedModels,
+      this.deps.savedModels
     );
 
     if (
@@ -202,7 +205,7 @@ export class DefaultProviderModelService implements ProviderModelService {
       throw new ProviderError(
         "INVALID_ARGUMENT",
         "contextWindowTokens must be a positive integer",
-        { modelId: savedModelId, providerId: existing.providerId },
+        { modelId: savedModelId, providerId: existing.providerId }
       );
     }
 
@@ -213,11 +216,14 @@ export class DefaultProviderModelService implements ProviderModelService {
       throw new ProviderError(
         "INVALID_ARGUMENT",
         `Invalid tokenCounterMode: ${patch.tokenCounterMode}`,
-        { modelId: savedModelId, providerId: existing.providerId },
+        { modelId: savedModelId, providerId: existing.providerId }
       );
     }
 
-    const mergedSettings = applySavedModelSettingsPatch(existing.settings, patch);
+    const mergedSettings = applySavedModelSettingsPatch(
+      existing.settings,
+      patch
+    );
     assertSavedModelSettingsPersistable(mergedSettings);
 
     const updated: SavedModel = {
@@ -233,7 +239,7 @@ export class DefaultProviderModelService implements ProviderModelService {
   async resetContextWindowToDefault(savedModelId: string): Promise<SavedModel> {
     const existing = await assertSavedModelUuid(
       savedModelId,
-      this.deps.savedModels,
+      this.deps.savedModels
     );
     const defaults = defaultSavedModelSettings(existing.vendorModelId);
     return this.updateSettings(savedModelId, {

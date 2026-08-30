@@ -14,7 +14,7 @@ import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking
  */
 export function applyAnthropicThinkingToBody(
   body: Record<string, unknown>,
-  thinking: ModelThinkingParams | undefined,
+  thinking: ModelThinkingParams | undefined
 ): void {
   if (thinking?.protocol !== "anthropic") {
     return;
@@ -33,7 +33,7 @@ export function applyAnthropicThinkingToBody(
  */
 export function applyOpenAiThinkingToBody(
   body: Record<string, unknown>,
-  thinking: ModelThinkingParams | undefined,
+  thinking: ModelThinkingParams | undefined
 ): void {
   if (thinking?.protocol !== "openai") {
     return;
@@ -49,7 +49,7 @@ export function applyOpenAiThinkingToBody(
  */
 export function applyGeminiThinkingToBody(
   body: Record<string, unknown>,
-  thinking: ModelThinkingParams | undefined,
+  thinking: ModelThinkingParams | undefined
 ): void {
   if (thinking?.protocol !== "gemini") {
     return;

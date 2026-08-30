@@ -29,6 +29,6 @@ export interface CompactionEvaluationContext {
 export interface CompactionConditionTrigger {
   shouldTrigger(
     session: AgentSession,
-    evaluation: CompactionEvaluationContext,
+    evaluation: CompactionEvaluationContext
   ): Promise<boolean>;
 }

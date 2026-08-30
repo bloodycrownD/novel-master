@@ -78,13 +78,10 @@ function countOccurrences(haystack: string, needle: string): number {
  */
 function computeLineChangeRegions(
   baselineLines: readonly string[],
-  savedLines: readonly string[],
+  savedLines: readonly string[]
 ): LineChangeRegion[] {
   const regions: LineChangeRegion[] = [];
-  const parts = diffArrays(
-    [...baselineLines],
-    [...savedLines],
-  );
+  const parts = diffArrays([...baselineLines], [...savedLines]);
 
   let oldIdx = 0; // 已消费的 baseline 行号（开区间端点）
   let newIdx = 0; // 已消费的 saved 行号（开区间端点）
@@ -140,7 +137,7 @@ function expandAnchorHunk(
   baseline: string,
   baselineLines: readonly string[],
   savedLines: readonly string[],
-  region: LineChangeRegion,
+  region: LineChangeRegion
 ): { oldString: string; newString: string } | null {
   const maxRadius = Math.max(baselineLines.length, savedLines.length);
   for (let radius = 0; radius <= maxRadius; radius++) {
@@ -165,7 +162,7 @@ function buildEditToolUse(
   path: string,
   oldString: string,
   newString: string,
-  options?: UserVfsSaveMappingOptions,
+  options?: UserVfsSaveMappingOptions
 ): ToolUseBlock {
   return {
     type: "tool_use",
@@ -193,7 +190,7 @@ export function mapUserSaveToToolUses(
   _saved: string,
   path: string,
   fileContentAtSave: string,
-  options?: UserVfsSaveMappingOptions,
+  options?: UserVfsSaveMappingOptions
 ): UserVfsSaveMappingResult {
   const content = fileContentAtSave;
   if (baseline != null && baseline === content) {
@@ -214,7 +211,12 @@ export function mapUserSaveToToolUses(
   const toolUses: ToolUseBlock[] = [];
 
   for (const region of regions) {
-    const anchor = expandAnchorHunk(baseline, baselineLines, savedLines, region);
+    const anchor = expandAnchorHunk(
+      baseline,
+      baselineLines,
+      savedLines,
+      region
+    );
     if (anchor == null || anchor.oldString === baseline) {
       return {
         kind: "write",
@@ -229,7 +231,7 @@ export function mapUserSaveToToolUses(
       newString: anchor.newString,
     });
     toolUses.push(
-      buildEditToolUse(path, anchor.oldString, anchor.newString, options),
+      buildEditToolUse(path, anchor.oldString, anchor.newString, options)
     );
   }
 
@@ -258,7 +260,7 @@ function escapeXmlAttr(value: string): string {
  */
 export function buildUserVfsActionXml(
   name: string,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): string {
   const body = escapeXmlText(JSON.stringify(params, null, 2));
   return `<action name="${escapeXmlAttr(name)}">\n${body}\n</action>`;
@@ -268,7 +270,7 @@ export function buildUserVfsActionXml(
 export function buildUserVfsSaveWriteActionXml(
   path: string,
   _reason: "new-file" | "anchor-not-unique" = "anchor-not-unique",
-  content = "",
+  content = ""
 ): string {
   return buildUserVfsActionXml("write", { path, content });
 }
@@ -276,7 +278,7 @@ export function buildUserVfsSaveWriteActionXml(
 /** 生成 edit：每个 hunk 一条 `<action name="edit">`（oldString/newString）。 */
 export function buildUserVfsSaveEditActionXml(
   path: string,
-  editHunks: readonly UserVfsEditHunk[],
+  editHunks: readonly UserVfsEditHunk[]
 ): string {
   return editHunks
     .map((hunk) =>
@@ -284,7 +286,7 @@ export function buildUserVfsSaveEditActionXml(
         path,
         oldString: hunk.oldString,
         newString: hunk.newString,
-      }),
+      })
     )
     .join("\n");
 }
@@ -292,7 +294,7 @@ export function buildUserVfsSaveEditActionXml(
 /** 生成 delete / mkdir / rename / move 的 `<action name="…">`。 */
 export function buildUserVfsSimpleActionXml(
   kind: "delete" | "mkdir" | "rename" | "move",
-  attrs: Record<string, string>,
+  attrs: Record<string, string>
 ): string {
   if (kind === "delete") {
     const params: Record<string, unknown> = { path: attrs.path ?? "" };
@@ -310,4 +312,3 @@ export function buildUserVfsSimpleActionXml(
     to: attrs.to ?? "",
   });
 }
-

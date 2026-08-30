@@ -25,10 +25,11 @@ import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-def
 import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
-import {
-  registerBuiltinTools,
-} from "@/domain/tool/builtin/register-builtin-tools.js";
-import type { BuiltinToolContext, RunChildAgentOptions } from "@/domain/tool/builtin/builtin-tool-context.js";
+import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
+import type {
+  BuiltinToolContext,
+  RunChildAgentOptions,
+} from "@/domain/tool/builtin/builtin-tool-context.js";
 import type {
   BuiltinToolAgentsContext,
   BuiltinToolSkillsContext,
@@ -39,9 +40,7 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
-import {
-  EVENT_SUBAGENT_CHILD_SESSION_CREATED,
-} from "@/domain/events/model/event-types.js";
+import { EVENT_SUBAGENT_CHILD_SESSION_CREATED } from "@/domain/events/model/event-types.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { SendAnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
@@ -171,7 +170,7 @@ export class AgentTurnError extends Error {
 export async function assembleSkillsToolContext(
   runtime: Pick<AgentTurnRuntimePort, "skills">,
   projectId: string,
-  registry: ToolRegistry<BuiltinToolContext>,
+  registry: ToolRegistry<BuiltinToolContext>
 ): Promise<BuiltinToolSkillsContext | undefined> {
   const service = runtime.skills?.();
   if (service == null) return undefined;
@@ -198,7 +197,7 @@ export function assembleAgentsToolContext(
   agentRegistry: AgentRegistryService,
   allDefs: readonly AgentDefinition[],
   probeNames: readonly string[],
-  registry: ToolRegistry<BuiltinToolContext>,
+  registry: ToolRegistry<BuiltinToolContext>
 ): BuiltinToolAgentsContext | undefined {
   if (!registry.list().includes(AGENT_TOOL_NAME)) return undefined;
   return {
@@ -247,7 +246,7 @@ export interface RunAgentTurnOptions {
   readonly annotateDrafts?: readonly SendAnnotateDraft[];
   readonly onUserMessageAppended?: () => void | Promise<void>;
   readonly onAfterResolveModel?: (
-    ctx: RunAgentTurnAfterResolveContext,
+    ctx: RunAgentTurnAfterResolveContext
   ) => void | Promise<void>;
   readonly onRunFailed?: (ctx: {
     readonly stage: string;
@@ -276,7 +275,7 @@ export async function runAgentTurn(
   runtime: AgentTurnRuntimePort,
   scope: AgentTurnScope,
   userContent: string,
-  options?: RunAgentTurnOptions,
+  options?: RunAgentTurnOptions
 ): Promise<AgentRunResult> {
   let stage = "start";
   const stream = options?.stream !== false;
@@ -289,7 +288,7 @@ export async function runAgentTurn(
 
   // 入参清洗：误传的 user_ops 预览一律丢弃，只保留 attach（workplace 为历史只读兼容，新数据不再产生）
   const composerAttachOnly = (options?.attachments ?? []).filter(
-    (a) => a.source === "attach",
+    (a) => a.source === "attach"
   );
 
   // S-13 扩展：每轮发送开头都尝试 backfill 一下历史空窗消息。Step 9 之后新消息
@@ -298,13 +297,13 @@ export async function runAgentTurn(
   stage = "backfill-baseline-checkpoints";
   await runtime.messageCheckpoint.backfillMissingBaselines(
     scope.sessionId,
-    scope.projectId,
+    scope.projectId
   );
 
   stage = "resolve-agent";
   const definition = (
     await mapResolveError(() =>
-      resolveAgentForProject(runtime, scope.projectId, scope.sessionId),
+      resolveAgentForProject(runtime, scope.projectId, scope.sessionId)
     )
   ).definition;
 
@@ -326,7 +325,7 @@ export async function runAgentTurn(
 
   stage = "resolve-agent";
   const { savedModelId, workspaceModelId } = await mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition, scope.sessionId),
+    resolveApplicationModelIdForRun(runtime, definition, scope.sessionId)
   );
 
   await options?.onAfterResolveModel?.({
@@ -340,7 +339,7 @@ export async function runAgentTurn(
   // Scan typed @path / $skill into attach; dedupe with chips; keep tokens in body text.
   const scannedComposer = mergeAttachmentsWithScannedSkills(
     trimmed,
-    mergeAttachmentsWithScannedAtPaths(trimmed, composerAttachOnly),
+    mergeAttachmentsWithScannedAtPaths(trimmed, composerAttachOnly)
   );
 
   let checkpointAnchorMessageId: string | undefined;
@@ -367,7 +366,7 @@ export async function runAgentTurn(
       const softRange = estimateSoftRangeFromOriginalText(
         sourceText,
         draft.originalText,
-        { linePadding: 0 },
+        { linePadding: 0 }
       );
       if (softRange == null) {
         return buildAnnotateAttachmentFromDraft(draft);
@@ -381,16 +380,14 @@ export async function runAgentTurn(
         ...(softRange.endCol != null ? { endCol: softRange.endCol } : {}),
       };
       return buildAnnotateAttachmentFromDraft(enriched);
-    }),
+    })
   );
 
   // 新 append：scannedComposer ∪ annotate 直 concat（禁 path 去重）
   const mergedAttachments = [...scannedComposer, ...annotateAttachments];
 
   const shouldAppendNewUser =
-    trimmed !== "" ||
-    scannedComposer.length > 0 ||
-    hasAnnotateDrafts;
+    trimmed !== "" || scannedComposer.length > 0 || hasAnnotateDrafts;
 
   // S-1：append + capture 这条跨资源写链走 CoordinatedWrite，任一步失败按逆序补偿。
   // append 的补偿是删掉刚写入的消息；capture 的补偿是 release 刚写的 checkpoint。
@@ -406,7 +403,7 @@ export async function runAgentTurn(
           textBlocks(trimmed),
           mergedAttachments.length > 0
             ? { attachments: mergedAttachments }
-            : undefined,
+            : undefined
         );
         // S-13 治本：每条新 user 消息都写 baseline checkpoint，确保后续步骤失败时
         // undo_send 仍有可回滚点。原先仅在 user_ops 附件非空时才 capture，
@@ -434,7 +431,7 @@ export async function runAgentTurn(
       await runtime.messageCheckpoint.capture(
         scope.sessionId,
         scope.projectId,
-        anchorId,
+        anchorId
       );
     },
     rollback: async () => {
@@ -466,13 +463,15 @@ export async function runAgentTurn(
 
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   // depth=0（主 agent）：task 可用（如有 subagentCallable=true 的子代理）。
-  const registry = resolveAgentToolRegistry(toolProbe, definition, { depth: 0 });
+  const registry = resolveAgentToolRegistry(toolProbe, definition, {
+    depth: 0,
+  });
   // skill 工具读取：装配期预算生效技能清单（description lambda 用）。
   // deny 后 registry 不含 skill → 不注入闭包且不产生预算 IO（D4 注册表侧联动）。
   const skillsCtx = await assembleSkillsToolContext(
     runtime,
     scope.projectId,
-    registry,
+    registry
   );
   // agent 管理工具读取：快照复用上方 allDefs（零新增 IO）；probe 名单透传给
   // 工具内 upsert 的策略校验。registry 不含 agent（子/孙摘除或 deny）时不注入。
@@ -480,7 +479,7 @@ export async function runAgentTurn(
     runtime.agentRegistry,
     allDefs,
     toolProbe.list(),
-    registry,
+    registry
   );
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
@@ -497,7 +496,7 @@ export async function runAgentTurn(
       callerSignal.addEventListener(
         "abort",
         () => internalController.abort(callerSignal.reason),
-        { once: true },
+        { once: true }
       );
     }
   }
@@ -526,10 +525,10 @@ export async function runAgentTurn(
       messages: runtime.messages,
       sessions: runtime.sessions,
       createChildSession: async (title: string): Promise<string> => {
- const child = await runtime.sessions.createSubSession(
+        const child = await runtime.sessions.createSubSession(
           scope.sessionId,
           scope.projectId,
-          title,
+          title
         );
         runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
           parentSessionId: scope.sessionId,
@@ -540,7 +539,7 @@ export async function runAgentTurn(
         return child.id;
       },
       resolveChildModelId: (
-        def: AgentDefinition,
+        def: AgentDefinition
       ): { savedModelId: string; workspaceModelId: string } => {
         // 子 agent pin → 父 savedModelId → 报错（不走 workspace fallback）。
         const resolved = resolveSavedModelId({
@@ -549,7 +548,7 @@ export async function runAgentTurn(
         });
         if (resolved == null || resolved === "") {
           throw new AgentRunResolveError(
-            "子代理未指定模型，且父 agent 也无可用 savedModelId。",
+            "子代理未指定模型，且父 agent 也无可用 savedModelId。"
           );
         }
         return { savedModelId: resolved, workspaceModelId };
@@ -557,7 +556,7 @@ export async function runAgentTurn(
       runChildAgent: async (
         def: AgentDefinition,
         childSessionId: string,
-        opts: RunChildAgentOptions,
+        opts: RunChildAgentOptions
       ): Promise<AgentRunResult> => {
         return runChildAgent({
           runtime,
@@ -587,7 +586,7 @@ export async function runAgentTurn(
       registry,
       toolCtx,
       includeCompactionOrchestrator: true,
-    }),
+    })
   );
 
   runtime.abortRegistry?.register(scope.sessionId, internalController);
@@ -596,8 +595,7 @@ export async function runAgentTurn(
   const streamHandle = runtime.streamRegistry?.register(scope.sessionId);
   try {
     stage = "runner.run";
-    const maxSteps =
-      definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
+    const maxSteps = definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
     const result = await runner.run({
       definition,
       sessionId: scope.sessionId,
@@ -682,7 +680,7 @@ async function runChildAgent(args: {
   const skillsCtx = await assembleSkillsToolContext(
     runtime,
     parentProjectId,
-    registry,
+    registry
   );
   // agent 管理工具：快照复用上方 childAllDefs；probe 名单用 baseRegistry。
   // 子 agent（mode==="subagent"）与孙 agent（depth>=2）被 resolve 摘除，不注入。
@@ -690,7 +688,7 @@ async function runChildAgent(args: {
     runtime.agentRegistry,
     childAllDefs,
     baseRegistry.list(),
-    registry,
+    registry
   );
 
   // VFS（工作区共享）：子 agent 用父 session 的 VFS 视图——写入直接落在父工作区。
@@ -707,7 +705,7 @@ async function runChildAgent(args: {
       () => {
         childController.abort();
       },
-      { once: true },
+      { once: true }
     );
   }
 
@@ -723,113 +721,114 @@ async function runChildAgent(args: {
     // 同主 run：register 拿句柄，finally 反注册时回传做所有权比对。
     streamHandle = runtime.streamRegistry?.register(childSessionId);
 
-  // ChatAgentSession 的消息落子 session（独立历史）；工作区归属指向父 session
-  // （子 agent 在父 session 工作区工作，规则评估按父工作区）；KKV 归属走默认值
-  // =自身（rule_snapshot / file_cache 存子 session 自己的 KKV，仅快照隔离）。
-  const session = new ChatAgentSession(
-    runtime.messages,
-    childSessionId,
-    parentSessionId,
-  );
+    // ChatAgentSession 的消息落子 session（独立历史）；工作区归属指向父 session
+    // （子 agent 在父 session 工作区工作，规则评估按父工作区）；KKV 归属走默认值
+    // =自身（rule_snapshot / file_cache 存子 session 自己的 KKV，仅快照隔离）。
+    const session = new ChatAgentSession(
+      runtime.messages,
+      childSessionId,
+      parentSessionId
+    );
 
-  // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
-  // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。
-  if (opts.prompt && opts.prompt.trim().length > 0) {
-    await session.append("user", textBlocks(opts.prompt));
-  }
-  const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
-  const toolCtx: BuiltinToolContext = {
-    vfs,
-    projectId: parentProjectId,
-    sessionId: childSessionId,
-    listSessionMessages: (): Promise<readonly ChatMessage[]> =>
-      runtime.messages.listBySession(childSessionId),
-    sessionKkv: runtime.sessionKkv,
-    // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
-    // 补规则也写父工作区的 workplace_dir_rule。
-    workplace: runtime.workplace({
-      kind: "session",
+    // task 工具的 prompt 作为子 session 的第一条 user 消息落库，
+    // 使子 agent 对话历史完整：LLM 能看到任务描述，UI 浏览页也能展示。
+    if (opts.prompt && opts.prompt.trim().length > 0) {
+      await session.append("user", textBlocks(opts.prompt));
+    }
+    const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
+    const toolCtx: BuiltinToolContext = {
+      vfs,
       projectId: parentProjectId,
-      sessionId: parentSessionId,
-    }),
-    // skill（D2）：子代理同样注入，清单按父会话 projectId 解析。
-    ...(skillsCtx != null ? { skills: skillsCtx } : {}),
-    // agent 管理工具：mode==="all" 的子 agent 且 depth<2 时才可能注入（D6 摘除后不注入）。
-    ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
-    // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
-    subagent: {
-      agentRegistry: runtime.agentRegistry,
-      messages: runtime.messages,
-      sessions: runtime.sessions,
-      createChildSession: async (title: string): Promise<string> => {
-        const grandchild = await runtime.sessions.createSubSession(
-          childSessionId,
-          parentProjectId,
-          title,
-        );
-        runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
-          parentSessionId: childSessionId,
-          projectId: parentProjectId,
-          childSessionId: grandchild.id,
-          title,
-        });
-        return grandchild.id;
-      },
-      resolveChildModelId: (
-        grandchildDef: AgentDefinition,
-      ): { savedModelId: string; workspaceModelId: string } => {
-        // 子 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）。
-        const resolved = resolveSavedModelId({
-          agentModelId: grandchildDef.model,
-          sessionModelId: opts.savedModelId,
-        });
-        if (resolved == null || resolved === "") {
-          throw new AgentRunResolveError(
-            "孙代理未指定模型，且子 agent 也无可用 savedModelId。",
+      sessionId: childSessionId,
+      listSessionMessages: (): Promise<readonly ChatMessage[]> =>
+        runtime.messages.listBySession(childSessionId),
+      sessionKkv: runtime.sessionKkv,
+      // 目录规则默认启用：子 agent 与父共享同一工作区（上面 vfs 同归属根父会话），
+      // 补规则也写父工作区的 workplace_dir_rule。
+      workplace: runtime.workplace({
+        kind: "session",
+        projectId: parentProjectId,
+        sessionId: parentSessionId,
+      }),
+      // skill（D2）：子代理同样注入，清单按父会话 projectId 解析。
+      ...(skillsCtx != null ? { skills: skillsCtx } : {}),
+      // agent 管理工具：mode==="all" 的子 agent 且 depth<2 时才可能注入（D6 摘除后不注入）。
+      ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
+      // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
+      subagent: {
+        agentRegistry: runtime.agentRegistry,
+        messages: runtime.messages,
+        sessions: runtime.sessions,
+        createChildSession: async (title: string): Promise<string> => {
+          const grandchild = await runtime.sessions.createSubSession(
+            childSessionId,
+            parentProjectId,
+            title
           );
-        }
-        return {
-          savedModelId: resolved,
-          workspaceModelId: opts.workspaceModelId,
-        };
+          runtime.eventBus.publish(EVENT_SUBAGENT_CHILD_SESSION_CREATED, {
+            parentSessionId: childSessionId,
+            projectId: parentProjectId,
+            childSessionId: grandchild.id,
+            title,
+          });
+          return grandchild.id;
+        },
+        resolveChildModelId: (
+          grandchildDef: AgentDefinition
+        ): { savedModelId: string; workspaceModelId: string } => {
+          // 子 agent pin → 父子 agent 的 savedModelId → 报错（不走 workspace fallback）。
+          const resolved = resolveSavedModelId({
+            agentModelId: grandchildDef.model,
+            sessionModelId: opts.savedModelId,
+          });
+          if (resolved == null || resolved === "") {
+            throw new AgentRunResolveError(
+              "孙代理未指定模型，且子 agent 也无可用 savedModelId。"
+            );
+          }
+          return {
+            savedModelId: resolved,
+            workspaceModelId: opts.workspaceModelId,
+          };
+        },
+        runChildAgent: async (
+          grandchildDef: AgentDefinition,
+          grandchildSessionId: string,
+          grandchildOpts: RunChildAgentOptions
+        ): Promise<AgentRunResult> => {
+          return runChildAgent({
+            runtime,
+            parentProjectId,
+            // 透传根父会话 id：孙 agent 的工作区同样指向根父，不指向中间子会话。
+            parentSessionId,
+            parentDepth: childDepth,
+            def: grandchildDef,
+            childSessionId: grandchildSessionId,
+            opts: grandchildOpts,
+          });
+        },
+        depth: childDepth,
+        parentSignal: childController.signal,
+        callableAgents: callable,
       },
-      runChildAgent: async (
-        grandchildDef: AgentDefinition,
-        grandchildSessionId: string,
-        grandchildOpts: RunChildAgentOptions,
-      ): Promise<AgentRunResult> => {
-        return runChildAgent({
-          runtime,
-          parentProjectId,
-          // 透传根父会话 id：孙 agent 的工作区同样指向根父，不指向中间子会话。
-          parentSessionId,
-          parentDepth: childDepth,
-          def: grandchildDef,
-          childSessionId: grandchildSessionId,
-          opts: grandchildOpts,
-        });
-      },
-      depth: childDepth,
-      parentSignal: childController.signal,
-      callableAgents: callable,
-    },
-    // A-14：子 agent 同样不限制路径。
-    allowedPaths: undefined,
-    resourceQuota: undefined,
-  };
+      // A-14：子 agent 同样不限制路径。
+      allowedPaths: undefined,
+      resourceQuota: undefined,
+    };
 
-  const runner = createAgentRunner(
-    assembleAgentRunnerDeps({
-      session,
-      runtime,
-      registry,
-      toolCtx,
-      // 装配期 false：子 agent run 不走压缩编排（P0-2）。
-      includeCompactionOrchestrator: false,
-    }),
-  );
+    const runner = createAgentRunner(
+      assembleAgentRunnerDeps({
+        session,
+        runtime,
+        registry,
+        toolCtx,
+        // 装配期 false：子 agent run 不走压缩编排（P0-2）。
+        includeCompactionOrchestrator: false,
+      })
+    );
 
-  const maxSteps = opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
+    const maxSteps =
+      opts.maxSteps ?? def.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
     return await runner.run({
       definition: def,
       sessionId: childSessionId,

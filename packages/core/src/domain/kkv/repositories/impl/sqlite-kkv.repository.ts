@@ -35,7 +35,7 @@ export class SqliteKkvRepository implements KkvRepository {
       this.conn,
       this.parser,
       `SELECT key FROM kkv_entry WHERE module = #{module} ORDER BY key`,
-      { module },
+      { module }
     );
     return rows.map((row) => String(row.key));
   }
@@ -46,7 +46,7 @@ export class SqliteKkvRepository implements KkvRepository {
       this.parser,
       `SELECT module, key, value FROM kkv_entry
        WHERE module = #{module} AND key = #{key}`,
-      { module, key },
+      { module, key }
     );
     if (rows.length === 0) {
       return null;
@@ -60,7 +60,7 @@ export class SqliteKkvRepository implements KkvRepository {
       this.parser,
       `INSERT INTO kkv_entry (module, key, value) VALUES (#{module}, #{key}, #{value})
        ON CONFLICT(module, key) DO UPDATE SET value = excluded.value`,
-      { module, key, value },
+      { module, key, value }
     );
   }
 
@@ -69,7 +69,7 @@ export class SqliteKkvRepository implements KkvRepository {
       this.conn,
       this.parser,
       `DELETE FROM kkv_entry WHERE module = #{module} AND key = #{key}`,
-      { module, key },
+      { module, key }
     );
     return result.changes > 0;
   }

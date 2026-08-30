@@ -21,17 +21,14 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   constructor(private readonly kkv: KkvService) {}
 
   async getSessionFsVersionCheck(): Promise<boolean> {
-    return this.getBooleanPref(
-      PREF_KEY_SESSION_FS_VERSION_CHECK,
-      true,
-    );
+    return this.getBooleanPref(PREF_KEY_SESSION_FS_VERSION_CHECK, true);
   }
 
   async setSessionFsVersionCheck(enabled: boolean): Promise<void> {
     await this.kkv.set(
       PREFERENCES_MODULE,
       PREF_KEY_SESSION_FS_VERSION_CHECK,
-      formatBoolean(enabled),
+      formatBoolean(enabled)
     );
   }
 
@@ -47,7 +44,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     await this.kkv.set(
       PREFERENCES_MODULE,
       PREF_KEY_CHAT_LLM_STREAM,
-      formatBoolean(enabled),
+      formatBoolean(enabled)
     );
   }
 
@@ -63,7 +60,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     await this.kkv.set(
       PREFERENCES_MODULE,
       PREF_KEY_CHAT_THINKING_CONTEXT,
-      formatBoolean(enabled),
+      formatBoolean(enabled)
     );
   }
 
@@ -72,17 +69,14 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
   }
 
   async getUserVfsUnifiedToolTurn(): Promise<boolean> {
-    return this.getBooleanPref(
-      PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
-      true,
-    );
+    return this.getBooleanPref(PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN, true);
   }
 
   async setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void> {
     await this.kkv.set(
       PREFERENCES_MODULE,
       PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
-      formatBoolean(enabled),
+      formatBoolean(enabled)
     );
   }
 
@@ -115,7 +109,7 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
 
   private async getBooleanPref(
     key: string,
-    defaultValue: boolean,
+    defaultValue: boolean
   ): Promise<boolean> {
     const raw = await this.getRaw(key);
     if (raw === undefined) {

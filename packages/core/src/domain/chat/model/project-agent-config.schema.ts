@@ -38,7 +38,7 @@ function configToWire(config: ProjectAgentConfig): Record<string, unknown> {
 /** 列内 JSON → {@link ProjectAgentConfig}；含 `toWire` 用于持久化。 */
 export const projectAgentConfigSchema = Object.assign(
   projectAgentConfigDocumentSchema,
-  { toWire: configToWire },
+  { toWire: configToWire }
 );
 
 export { projectAgentModeSchema };

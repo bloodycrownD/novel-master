@@ -30,13 +30,16 @@ export interface GeminiThinkingParams {
 
 /** 按 provider protocol 区分的思考参数联合类型。 */
 export type ModelThinkingParams =
-  | { readonly protocol: "anthropic"; readonly anthropic: AnthropicThinkingParams }
+  | {
+      readonly protocol: "anthropic";
+      readonly anthropic: AnthropicThinkingParams;
+    }
   | { readonly protocol: "openai"; readonly openai: OpenAiThinkingParams }
   | { readonly protocol: "gemini"; readonly gemini: GeminiThinkingParams };
 
 /** 返回思考参数的协议标签（若有）。 */
 export function thinkingProtocol(
-  params: ModelThinkingParams | undefined,
+  params: ModelThinkingParams | undefined
 ): LlmProtocolKind | undefined {
   return params?.protocol;
 }

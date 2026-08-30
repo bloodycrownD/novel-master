@@ -73,7 +73,10 @@ export function resolveLogicalPath(input: string): string {
  *
  * @throws {import("@/errors/vfs-errors.js").VfsError} `INVALID_PATH`
  */
-export function assertLogicalPathAllowed(_scope: VfsScope, logical: string): void {
+export function assertLogicalPathAllowed(
+  _scope: VfsScope,
+  logical: string
+): void {
   const normalized = resolveLogicalPath(logical);
   assertNormalizedPathAllowed(normalized);
 }

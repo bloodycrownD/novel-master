@@ -31,7 +31,7 @@ const SCRUB_TABLE_ORDER: readonly ProviderBackupTableName[] = [
  * 从当前连接主库读取三张服务商表的全量行。
  */
 export async function dumpProviderTableSnapshot(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): Promise<ProviderTableSnapshot> {
   const snapshot: Record<ProviderBackupTableName, Row[]> = {
     sksp_secrets: [],
@@ -61,7 +61,7 @@ export async function scrubProviderTables(conn: TdbcConnection): Promise<void> {
 export async function scrubProviderTablesInDatabase(
   conn: TdbcConnection,
   attachPath: string,
-  alias: string,
+  alias: string
 ): Promise<void> {
   await conn.execute(`ATTACH DATABASE ? AS ${alias}`, [attachPath]);
   try {
@@ -81,7 +81,7 @@ export async function scrubProviderTablesInDatabase(
  */
 export async function restoreProviderTableSnapshot(
   conn: TdbcConnection,
-  snapshot: ProviderTableSnapshot,
+  snapshot: ProviderTableSnapshot
 ): Promise<void> {
   validateProviderTableSnapshot(snapshot);
   await conn.transaction(async (tx) => {
@@ -97,7 +97,7 @@ export async function restoreProviderTableSnapshot(
  */
 async function scrubProviderTablesWithPrefix(
   conn: TdbcConnection,
-  alias?: string,
+  alias?: string
 ): Promise<void> {
   const prefix = alias ? `${alias}.` : "";
   for (const table of SCRUB_TABLE_ORDER) {
@@ -111,7 +111,7 @@ async function scrubProviderTablesWithPrefix(
 async function insertTableRows(
   conn: TdbcConnection,
   table: ProviderBackupTableName,
-  rows: readonly Row[],
+  rows: readonly Row[]
 ): Promise<void> {
   if (rows.length === 0) {
     return;
@@ -121,7 +121,7 @@ async function insertTableRows(
   const placeholders = columns.map(() => "?").join(", ");
   const sql = `INSERT INTO ${table} (${columnList}) VALUES (${placeholders})`;
   const parametersList = rows.map((row) =>
-    columns.map((column) => row[column] ?? null),
+    columns.map((column) => row[column] ?? null)
   );
   await conn.batch(sql, parametersList);
 }

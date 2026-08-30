@@ -37,7 +37,7 @@ export function computeReplaceResult(
   currentContent: string,
   oldString: string,
   newString: string,
-  options?: ComputeReplaceResultOptions,
+  options?: ComputeReplaceResultOptions
 ): ComputeReplaceResult {
   // 归一化只用于 indexOf 定位；切片和拼接全部走原文 currentContent，
   // 保证未替换段的引号形态原样保留（落盘不被归一化改写）。

@@ -24,7 +24,9 @@ export interface CreateDefaultTokenCounterRegistryDeps {
 class DefaultTokenCounterRegistry implements TokenCounterRegistry {
   readonly heuristic: TokenCounter = new HeuristicTokenCounter();
   readonly getTokenizerOverride: (() => Promise<TokenizerOverride>) | undefined;
-  private readonly savedModels: Pick<SavedModelRepository, "findById"> | undefined;
+  private readonly savedModels:
+    | Pick<SavedModelRepository, "findById">
+    | undefined;
 
   constructor(deps: CreateDefaultTokenCounterRegistryDeps) {
     this.getTokenizerOverride = deps.getTokenizerOverride;
@@ -33,7 +35,7 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
 
   async forSavedModel(
     savedModelId: string,
-    _options?: ForVendorModelOptions,
+    _options?: ForVendorModelOptions
   ): Promise<TokenCounter> {
     if (this.savedModels != null) {
       const saved = await this.savedModels.findById(savedModelId.trim());
@@ -46,7 +48,7 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
 
   forVendorModel(
     _vendorModelId: string,
-    _options?: ForVendorModelOptions,
+    _options?: ForVendorModelOptions
   ): TokenCounter {
     return this.heuristic;
   }
@@ -54,7 +56,7 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
 
 /** Creates a heuristic-only registry. */
 export function createDefaultTokenCounterRegistry(
-  deps: CreateDefaultTokenCounterRegistryDeps = {},
+  deps: CreateDefaultTokenCounterRegistryDeps = {}
 ): TokenCounterRegistry {
   return new DefaultTokenCounterRegistry(deps);
 }

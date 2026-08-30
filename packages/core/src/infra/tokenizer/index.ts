@@ -14,7 +14,10 @@ export type {
   ForVendorModelOptions,
 } from "./ports/token-counter-registry.port.js";
 export type { TokenizerOverride } from "./logic/resolve-tokenizer-family.js";
-export { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "./impl/heuristic-token-counter.js";
+export {
+  HeuristicTokenCounter,
+  CHARACTERS_PER_TOKEN_RATIO,
+} from "./impl/heuristic-token-counter.js";
 export {
   createDefaultTokenCounterRegistry,
   type CreateDefaultTokenCounterRegistryDeps,

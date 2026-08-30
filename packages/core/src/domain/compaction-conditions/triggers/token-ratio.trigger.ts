@@ -16,11 +16,11 @@ import type {
 export interface TokenRatioTriggerOptions {
   readonly tokenRatio: number;
   readonly resolveContextWindow: (
-    evaluation: CompactionEvaluationContext,
+    evaluation: CompactionEvaluationContext
   ) => Promise<number | null>;
   /** Per-model tokenizer override (same source as Chat / CLI token counts). */
   readonly resolveTokenizerOverride: (
-    evaluation: CompactionEvaluationContext,
+    evaluation: CompactionEvaluationContext
   ) => Promise<TokenizerOverride>;
   /**
    * 当计数走 heuristic 时，effective 阈值再乘这个系数（< 1）。
@@ -40,20 +40,21 @@ export const DEFAULT_HEURISTIC_SAFETY_FACTOR = 0.85;
 export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
   constructor(
     private readonly options: TokenRatioTriggerOptions,
-    private readonly tokenCounters: TokenCounterRegistry,
+    private readonly tokenCounters: TokenCounterRegistry
   ) {}
 
   async shouldTrigger(
     _session: AgentSession,
-    evaluation: CompactionEvaluationContext,
+    evaluation: CompactionEvaluationContext
   ): Promise<boolean> {
     const contextWindow = await this.options.resolveContextWindow(evaluation);
     if (contextWindow == null) {
       return false;
     }
 
-    const tokenizerOverride =
-      await this.options.resolveTokenizerOverride(evaluation);
+    const tokenizerOverride = await this.options.resolveTokenizerOverride(
+      evaluation
+    );
     const { tokenCount, counterKind } = await resolveCurrentPromptTokens(
       evaluation.sessionId,
       {
@@ -62,17 +63,17 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
         savedModelId: evaluation.modelContext.savedModelId,
         registry: this.tokenCounters,
         tokenizerOverride,
-      },
+      }
     );
 
     // heuristic 计数不精确（可能低估），触发保守阈值：
     // 把比例阈值再乘一个 < 1 的安全系数，让压缩比精确计数更早发生。
     const safetyFactor =
       counterKind === "heuristic"
-        ? (this.options.heuristicSafetyFactor ?? DEFAULT_HEURISTIC_SAFETY_FACTOR)
+        ? this.options.heuristicSafetyFactor ?? DEFAULT_HEURISTIC_SAFETY_FACTOR
         : 1;
     const effective = Math.floor(
-      contextWindow * this.options.tokenRatio * safetyFactor,
+      contextWindow * this.options.tokenRatio * safetyFactor
     );
     return tokenCount > effective;
   }

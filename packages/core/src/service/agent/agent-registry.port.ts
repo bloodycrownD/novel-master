@@ -24,7 +24,7 @@ export interface AgentRegistryService {
   upsert(
     agentId: string,
     def: AgentDefinition,
-    options?: ValidateAgentDefinitionOptions,
+    options?: ValidateAgentDefinitionOptions
   ): Promise<void>;
   /**
    * 删除指定 Agent。

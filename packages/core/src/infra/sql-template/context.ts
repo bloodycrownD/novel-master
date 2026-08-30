@@ -10,7 +10,7 @@ export type ContextStack = Record<string, unknown>[];
  */
 export function pushScope(
   stack: ContextStack,
-  frame: Record<string, unknown>,
+  frame: Record<string, unknown>
 ): ContextStack {
   return [...stack, frame];
 }
@@ -50,7 +50,7 @@ export function resolvePath(stack: ContextStack, path: string): unknown {
  */
 export function resolveCollectionName(
   stack: ContextStack,
-  collectionAttr: string,
+  collectionAttr: string
 ): unknown {
   return resolvePath(stack, collectionAttr);
 }

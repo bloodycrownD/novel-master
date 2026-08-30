@@ -44,7 +44,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** Read Gemini wire thought_signature (snake or camelCase). */
-function readThoughtSignature(part: Record<string, unknown>): string | undefined {
+function readThoughtSignature(
+  part: Record<string, unknown>
+): string | undefined {
   const sig = part.thought_signature ?? part.thoughtSignature;
   return typeof sig === "string" && sig !== "" ? sig : undefined;
 }
@@ -71,7 +73,7 @@ function buildToolUseLookup(messages: readonly ChatMessage[]): ToolUseLookup {
 /** Resolves tool_use id → declared function name; null when assistant tool_use is unavailable (e.g. compaction). */
 function resolveFunctionNameOrNull(
   toolUseId: unknown,
-  ctx: ResolveContext,
+  ctx: ResolveContext
 ): string | null {
   if (typeof toolUseId !== "string" || toolUseId.trim() === "") {
     return null;
@@ -89,14 +91,14 @@ function resolveFunctionNameOrNull(
 
 function isResolvableToolResult(
   block: ToolResultBlock,
-  ctx: ResolveContext,
+  ctx: ResolveContext
 ): boolean {
   return resolveFunctionNameOrNull(block.toolUseId, ctx) != null;
 }
 
 function toolResultToGeminiPart(
   block: ToolResultBlock,
-  ctx: ResolveContext,
+  ctx: ResolveContext
 ): GeminiPart {
   const functionName = resolveFunctionNameOrNull(block.toolUseId, ctx);
   if (functionName != null) {
@@ -116,7 +118,7 @@ function toolResultToGeminiPart(
 function modelTurnCoversToolResults(
   turn: GeminiContent,
   toolResults: readonly ToolResultBlock[],
-  ctx: ResolveContext,
+  ctx: ResolveContext
 ): boolean {
   if (turn.role !== "model") {
     return false;
@@ -138,9 +140,7 @@ function modelTurnCoversToolResults(
     const matched = calls.some(
       (fc) =>
         fc.name === expectedName &&
-        (fc.id === "" ||
-          fc.id === block.toolUseId ||
-          fc.id === expectedName),
+        (fc.id === "" || fc.id === block.toolUseId || fc.id === expectedName)
     );
     if (!matched) {
       return false;
@@ -151,7 +151,7 @@ function modelTurnCoversToolResults(
 
 function buildSyntheticModelTurn(
   toolResults: readonly ToolResultBlock[],
-  ctx: ResolveContext,
+  ctx: ResolveContext
 ): GeminiContent | null {
   const parts: GeminiPart[] = [];
   for (const block of toolResults) {
@@ -177,7 +177,7 @@ function buildSyntheticModelTurn(
 /** NM blocks → Gemini `parts` for one content turn. */
 export function blocksToGeminiParts(
   blocks: readonly ContentBlock[],
-  ctx: ResolveContext = { lookup: buildToolUseLookup([]) },
+  ctx: ResolveContext = { lookup: buildToolUseLookup([]) }
 ): GeminiPart[] {
   const parts: GeminiPart[] = [];
   let toolUseSignatureEmitted = false;
@@ -220,7 +220,7 @@ export function blocksToGeminiParts(
       case "image":
         throw new ProviderError(
           "UNSUPPORTED_CONTENT",
-          "Gemini outbound messages do not support image blocks in this iteration",
+          "Gemini outbound messages do not support image blocks in this iteration"
         );
       default:
         break;
@@ -232,7 +232,7 @@ export function blocksToGeminiParts(
 /** Gemini `parts` → NM blocks. */
 export function geminiPartsToBlocks(
   parts: readonly unknown[],
-  options: GeminiPartsToBlocksOptions = {},
+  options: GeminiPartsToBlocksOptions = {}
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const part of parts) {
@@ -246,7 +246,9 @@ export function geminiPartsToBlocks(
         blocks.push({
           type: "thinking",
           text: part.text,
-          ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
+          ...(thoughtSignature != null
+            ? { thinkingSignature: thoughtSignature }
+            : {}),
         });
       } else {
         // 非 thought 正文直通为 text，不做内嵌标签清洗
@@ -266,24 +268,29 @@ export function geminiPartsToBlocks(
         id,
         name: functionCall.name,
         input: args,
-        ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
+        ...(thoughtSignature != null
+          ? { thinkingSignature: thoughtSignature }
+          : {}),
       });
       continue;
     }
     const functionResponse = part.functionResponse;
-    if (isRecord(functionResponse) && typeof functionResponse.name === "string") {
+    if (
+      isRecord(functionResponse) &&
+      typeof functionResponse.name === "string"
+    ) {
       const response = functionResponse.response;
       const content =
         isRecord(response) && typeof response.output === "string"
           ? response.output
           : typeof response === "string"
-            ? response
-            : JSON.stringify(response ?? "");
+          ? response
+          : JSON.stringify(response ?? "");
       const functionName = functionResponse.name;
       const toolUseId =
         typeof functionResponse.id === "string" && functionResponse.id !== ""
           ? functionResponse.id
-          : (options.toolUseIdByFunctionName?.get(functionName) ?? functionName);
+          : options.toolUseIdByFunctionName?.get(functionName) ?? functionName;
       blocks.push({
         type: "tool_result",
         toolUseId,
@@ -296,7 +303,7 @@ export function geminiPartsToBlocks(
 
 /** 相邻 user content 合并：parts 按序拼接，functionResponse part 前置（D2 规则，出站单向操作，不回写内部消息列表）。 */
 function mergeAdjacentUserContents(
-  contents: readonly GeminiContent[],
+  contents: readonly GeminiContent[]
 ): GeminiContent[] {
   const out: GeminiContent[] = [];
   for (const content of contents) {
@@ -321,7 +328,7 @@ function mergeAdjacentUserContents(
 /** Session history → Gemini `contents[]`. */
 export function chatMessagesToGeminiContents(
   messages: readonly ChatMessage[],
-  options: ChatMessagesToGeminiContentsOptions = {},
+  options: ChatMessagesToGeminiContentsOptions = {}
 ): GeminiContent[] {
   const out: GeminiContent[] = [];
   const lookupSource =
@@ -335,11 +342,13 @@ export function chatMessagesToGeminiContents(
 
   for (const msg of messages) {
     const toolResults = msg.content.blocks.filter(
-      (b): b is ToolResultBlock => b.type === "tool_result",
+      (b): b is ToolResultBlock => b.type === "tool_result"
     );
     const other = msg.content.blocks.filter((b) => b.type !== "tool_result");
 
-    const resolvable = toolResults.filter((b) => isResolvableToolResult(b, ctx));
+    const resolvable = toolResults.filter((b) =>
+      isResolvableToolResult(b, ctx)
+    );
     const orphaned = toolResults.filter((b) => !isResolvableToolResult(b, ctx));
 
     if (resolvable.length > 0) {
@@ -378,7 +387,7 @@ export function chatMessagesToGeminiContents(
 
 /** NM tool definitions → Gemini `tools` array entry. */
 export function toolsToGeminiFunctionDeclarations(
-  tools: readonly LlmToolDefinition[],
+  tools: readonly LlmToolDefinition[]
 ): unknown[] {
   return [
     {

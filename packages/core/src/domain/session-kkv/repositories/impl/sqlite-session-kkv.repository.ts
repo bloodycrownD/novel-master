@@ -34,14 +34,14 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
   async get(
     sessionId: string,
     domain: string,
-    key: string,
+    key: string
   ): Promise<SessionKkvEntry | null> {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
       `SELECT session_id, domain, key, value FROM session_kkv_entry
        WHERE session_id = #{sessionId} AND domain = #{domain} AND key = #{key}`,
-      { sessionId, domain, key },
+      { sessionId, domain, key }
     );
     if (rows.length === 0) {
       return null;
@@ -53,7 +53,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
     sessionId: string,
     domain: string,
     key: string,
-    value: string,
+    value: string
   ): Promise<void> {
     await executeTemplate(
       this.conn,
@@ -61,21 +61,21 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       `INSERT INTO session_kkv_entry (session_id, domain, key, value)
        VALUES (#{sessionId}, #{domain}, #{key}, #{value})
        ON CONFLICT(session_id, domain, key) DO UPDATE SET value = excluded.value`,
-      { sessionId, domain, key, value },
+      { sessionId, domain, key, value }
     );
   }
 
   async delete(
     sessionId: string,
     domain: string,
-    key: string,
+    key: string
   ): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,
       this.parser,
       `DELETE FROM session_kkv_entry
        WHERE session_id = #{sessionId} AND domain = #{domain} AND key = #{key}`,
-      { sessionId, domain, key },
+      { sessionId, domain, key }
     );
     return result.changes > 0;
   }
@@ -86,7 +86,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       this.parser,
       `DELETE FROM session_kkv_entry
        WHERE session_id = #{sessionId} AND domain = #{domain}`,
-      { sessionId, domain },
+      { sessionId, domain }
     );
   }
 
@@ -95,7 +95,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       this.conn,
       this.parser,
       `DELETE FROM session_kkv_entry WHERE session_id = #{sessionId}`,
-      { sessionId },
+      { sessionId }
     );
   }
 
@@ -106,7 +106,7 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
       `SELECT key FROM session_kkv_entry
        WHERE session_id = #{sessionId} AND domain = #{domain}
        ORDER BY key`,
-      { sessionId, domain },
+      { sessionId, domain }
     );
     return rows.map((row) => String(row.key));
   }

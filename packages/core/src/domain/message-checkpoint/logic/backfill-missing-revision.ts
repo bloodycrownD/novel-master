@@ -31,7 +31,7 @@ export async function backfillMissingRevisionIfNeeded(
   scopeKey: string,
   logicalPath: string,
   entryId: number | null,
-  targetVersion: number,
+  targetVersion: number
 ): Promise<boolean> {
   if (entryId == null) {
     // entry 已不存在（hardDelete）：无 entry_id 可挂 revision，无法回补。
@@ -40,7 +40,7 @@ export async function backfillMissingRevisionIfNeeded(
 
   const exists = await deps.revisionRepo.existsByEntryAndVersion(
     entryId,
-    targetVersion,
+    targetVersion
   );
   if (exists) {
     return false;
@@ -50,7 +50,10 @@ export async function backfillMissingRevisionIfNeeded(
   const mtimeMs = Date.now();
 
   if (entry != null && entry.entryKind === "file") {
-    const contentHash = await deps.entryRepo.findContentHash(scopeKey, logicalPath);
+    const contentHash = await deps.entryRepo.findContentHash(
+      scopeKey,
+      logicalPath
+    );
     if (contentHash != null && deps.contentStore != null) {
       await deps.contentStore.ensureBlob(contentHash, null);
     }

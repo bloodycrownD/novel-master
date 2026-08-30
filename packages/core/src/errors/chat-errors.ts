@@ -5,10 +5,7 @@
  */
 
 /** Discriminant codes for {@link ChatError}. */
-export type ChatErrorCode =
-  | "NOT_FOUND"
-  | "CONFLICT"
-  | "INVALID_ARGUMENT";
+export type ChatErrorCode = "NOT_FOUND" | "CONFLICT" | "INVALID_ARGUMENT";
 
 /**
  * Unified error for chat service and repository operations.
@@ -26,7 +23,7 @@ export class ChatError extends Error {
       projectId?: string;
       sessionId?: string;
       messageId?: string;
-    },
+    }
   ) {
     super(message);
     this.name = "ChatError";
@@ -41,7 +38,7 @@ export class ChatError extends Error {
 export function chatNotFound(
   kind: string,
   id: string,
-  options?: { projectId?: string; sessionId?: string },
+  options?: { projectId?: string; sessionId?: string }
 ): ChatError {
   return new ChatError("NOT_FOUND", `${kind} not found: ${id}`, {
     projectId: options?.projectId,

@@ -31,7 +31,7 @@ export type DynamicPromptBlockWire = {
  * 将 persist 文本块序列化为 wire map 条目。
  */
 export function persistBlockToWire(
-  block: PersistTextPromptBlock,
+  block: PersistTextPromptBlock
 ): PersistPromptBlockWire {
   return { type: "text", role: block.role, content: block.content };
 }
@@ -42,7 +42,7 @@ export function persistBlockToWire(
  * @remarks 仅 `lifecycle: "once"` 写入 wire；缺省 always 省略字段。
  */
 export function dynamicBlockToWire(
-  block: DynamicPromptBlock,
+  block: DynamicPromptBlock
 ): DynamicPromptBlockWire {
   return {
     type: "text",

@@ -44,7 +44,7 @@ function attachDirTreeRootLabel(rootDir: string): string {
 /** 取 path 末段名；目录带尾 `/`。 */
 function entryDisplayName(
   entryPath: string,
-  kind: "file" | "directory",
+  kind: "file" | "directory"
 ): string {
   const parts = entryPath.replace(/\/+$/, "").split("/").filter(Boolean);
   const base = parts[parts.length - 1] ?? entryPath;
@@ -64,7 +64,7 @@ function entryDisplayName(
  */
 export async function renderDirAttachTree(
   rootDir: string,
-  deps: RenderDirAttachTreeDeps,
+  deps: RenderDirAttachTreeDeps
 ): Promise<string> {
   const maxBytes = deps.maxUtf8Bytes ?? ATTACH_DIR_TREE_MAX_UTF8_BYTES;
   const normalizedRoot = rootDir.replace(/\/+$/, "") || "/";

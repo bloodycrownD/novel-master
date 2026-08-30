@@ -25,7 +25,7 @@ export function toAnthropicWireToolName(canonical: string): string {
 
 /** Builds bidirectional mapping for a request's declared/historical tools. */
 export function createAnthropicToolNameWire(
-  canonicalNames: readonly string[],
+  canonicalNames: readonly string[]
 ): AnthropicToolNameWire {
   const wireToCanonical = new Map<string, string>();
   for (const canonical of canonicalNames) {
@@ -39,9 +39,9 @@ export function createAnthropicToolNameWire(
 
 /** True when any tool name would be rejected by strict wire validators. */
 export function anthropicToolsNeedWireEncoding(
-  canonicalNames: readonly string[],
+  canonicalNames: readonly string[]
 ): boolean {
   return canonicalNames.some(
-    (name) => !ANTHROPIC_WIRE_TOOL_NAME_PATTERN.test(name),
+    (name) => !ANTHROPIC_WIRE_TOOL_NAME_PATTERN.test(name)
   );
 }

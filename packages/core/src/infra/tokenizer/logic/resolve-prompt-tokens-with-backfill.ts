@@ -24,7 +24,7 @@ import {
 export async function resolvePromptTokensWithBackfill(
   sessionId: string,
   _rawMessages: readonly ChatMessage[],
-  params: CountPromptLlmInputParams,
+  params: CountPromptLlmInputParams
 ): Promise<ResolvedPromptTokens> {
   return resolveCurrentPromptTokens(sessionId, params);
 }

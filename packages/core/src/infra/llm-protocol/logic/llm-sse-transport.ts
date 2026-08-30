@@ -68,7 +68,9 @@ export function resetShouldUseXhrForSseCacheForTests(): void {
 }
 
 /** @internal Force XHR/fetch branch in tests. */
-export function setShouldUseXhrForSseOverrideForTests(value: boolean | undefined): void {
+export function setShouldUseXhrForSseOverrideForTests(
+  value: boolean | undefined
+): void {
   shouldUseXhrOverrideForTests = value;
   cachedShouldUseXhr = undefined;
 }
@@ -96,13 +98,16 @@ function isSseDebugEnabled(): boolean {
   if (process.env.NM_DEBUG_LLM_FETCH === "1") {
     return true;
   }
-  const g = globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean; __DEV__?: boolean };
+  const g = globalThis as {
+    __NM_DEBUG_LLM_FETCH__?: boolean;
+    __DEV__?: boolean;
+  };
   return g.__NM_DEBUG_LLM_FETCH__ === true || g.__DEV__ === true;
 }
 
 function applyXhrHeaders(
   xhr: SseXmlHttpRequest,
-  headers: RequestInit["headers"] | undefined,
+  headers: RequestInit["headers"] | undefined
 ): void {
   if (headers == null) {
     return;
@@ -127,7 +132,7 @@ function applyXhrHeaders(
 function logSse(
   logTag: string,
   message: string,
-  detail?: Record<string, unknown>,
+  detail?: Record<string, unknown>
 ): void {
   if (!isSseDebugEnabled()) {
     return;
@@ -145,7 +150,7 @@ function postSseViaXhr(
   onChunk: SseByteHandler,
   providerId: string | undefined,
   signal: AbortSignal | undefined,
-  logTag: string,
+  logTag: string
 ): Promise<{ status: number; contentType: string | null }> {
   const XhrCtor = getXmlHttpRequestCtor();
   if (XhrCtor == null) {
@@ -153,8 +158,8 @@ function postSseViaXhr(
       new ProviderError(
         "HTTP_ERROR",
         "XMLHttpRequest is not available in this environment",
-        { providerId },
-      ),
+        { providerId }
+      )
     );
   }
 
@@ -164,7 +169,10 @@ function postSseViaXhr(
     const dispatchState = createSseDispatchState();
     let settled = false;
 
-    const resolveOnce = (value: { status: number; contentType: string | null }) => {
+    const resolveOnce = (value: {
+      status: number;
+      contentType: string | null;
+    }) => {
       if (settled) return;
       settled = true;
       resolve(value);
@@ -189,7 +197,7 @@ function postSseViaXhr(
         chunk,
         dispatchState,
         (text) => emitter.append(text),
-        (bytes) => logSse(logTag, "xhr first chunk", { bytes }),
+        (bytes) => logSse(logTag, "xhr first chunk", { bytes })
       );
     };
 
@@ -198,7 +206,9 @@ function postSseViaXhr(
     if (signal != null) {
       if (signal.aborted) {
         emitter.dispose();
-        rejectOnce(new ProviderError("HTTP_ERROR", "Request aborted", { providerId }));
+        rejectOnce(
+          new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
+        );
         return;
       }
       signal.addEventListener(
@@ -206,7 +216,7 @@ function postSseViaXhr(
         () => {
           xhr.abort();
         },
-        { once: true },
+        { once: true }
       );
     }
 
@@ -230,11 +240,9 @@ function postSseViaXhr(
         const body = xhr.responseText;
         const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
         rejectOnce(
-          new ProviderError(
-            "HTTP_ERROR",
-            `HTTP ${status}: ${snippet}`,
-            { providerId },
-          ),
+          new ProviderError("HTTP_ERROR", `HTTP ${status}: ${snippet}`, {
+            providerId,
+          })
         );
         return;
       }
@@ -244,12 +252,16 @@ function postSseViaXhr(
 
     xhr.onerror = () => {
       emitter.dispose();
-      rejectOnce(new ProviderError("HTTP_ERROR", "XHR network error", { providerId }));
+      rejectOnce(
+        new ProviderError("HTTP_ERROR", "XHR network error", { providerId })
+      );
     };
 
     xhr.onabort = () => {
       emitter.dispose();
-      rejectOnce(new ProviderError("HTTP_ERROR", "Request aborted", { providerId }));
+      rejectOnce(
+        new ProviderError("HTTP_ERROR", "Request aborted", { providerId })
+      );
     };
 
     applyXhrHeaders(xhr, init.headers);
@@ -263,7 +275,7 @@ async function postSseViaFetch(
   onChunk: SseByteHandler,
   providerId: string | undefined,
   options: PostSseOptions | undefined,
-  logTag: string,
+  logTag: string
 ): Promise<{ status: number; contentType: string | null }> {
   const fetchFn = options?.fetchFn ?? globalThis.fetch;
   const signal = options?.signal ?? init.signal;
@@ -276,7 +288,7 @@ async function postSseViaFetch(
     throw new ProviderError(
       "HTTP_ERROR",
       `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). This environment does not support fetch stream bodies.`,
-      { providerId },
+      { providerId }
     );
   }
 
@@ -297,11 +309,8 @@ async function postSseViaFetch(
     // fetch 在此完成 UTF-8 解码，再经公共 dispatchSseChunk 直投 onChunk（即时转发，
     // 无节流）；首包日志与 XHR 路径共用同一套分发语义。
     const chunk = decoder.decode(value, { stream: true });
-    dispatchSseChunk(
-      chunk,
-      dispatchState,
-      onChunk,
-      (bytes) => logSse(logTag, "fetch first chunk", { bytes }),
+    dispatchSseChunk(chunk, dispatchState, onChunk, (bytes) =>
+      logSse(logTag, "fetch first chunk", { bytes })
     );
   }
 
@@ -320,11 +329,15 @@ export async function postSse(
   init: RequestInit,
   onChunk: SseByteHandler,
   providerId?: string,
-  options?: PostSseOptions,
+  options?: PostSseOptions
 ): Promise<{ status: number; contentType: string | null }> {
   const logTag = options?.logTag ?? DEFAULT_LOG_TAG;
   const method = init.method ?? "POST";
-  logSse(logTag, "→", { method, url, transport: shouldUseXhrForSse() ? "xhr" : "fetch" });
+  logSse(logTag, "→", {
+    method,
+    url,
+    transport: shouldUseXhrForSse() ? "xhr" : "fetch",
+  });
 
   if (shouldUseXhrForSse()) {
     return postSseViaXhr(
@@ -333,7 +346,7 @@ export async function postSse(
       onChunk,
       providerId,
       options?.signal ?? init.signal ?? undefined,
-      logTag,
+      logTag
     );
   }
 

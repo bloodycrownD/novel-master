@@ -12,7 +12,7 @@ import type { ChatMessage } from "../model/message.js";
  * @param messages - Full session list from `listBySession` (seq order)
  */
 export function listVisibleSorted(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessage[]
 ): ChatMessage[] {
   return messages.filter((m) => !m.hidden);
 }
@@ -23,7 +23,7 @@ export function listVisibleSorted(
  * @param messages - Full session list from `listBySession` (seq order)
  */
 export function visibleFloorByMessageId(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessage[]
 ): Map<string, number> {
   const map = new Map<string, number>();
   let floor = 0;

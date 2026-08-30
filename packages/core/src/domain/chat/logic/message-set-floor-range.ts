@@ -1,12 +1,12 @@
 /** 消息置位：按锚点 seq 计算 hide/show 区间。 */
 
-export function isSetFloorAnchorRole(role: string): role is 'user' {
-  return role === 'user';
+export function isSetFloorAnchorRole(role: string): role is "user" {
+  return role === "user";
 }
 
 export function computeSetFloorRanges(
   floorSeq: number,
-  sessionMaxSeq: number,
+  sessionMaxSeq: number
 ): {
   readonly hidePrefix: { readonly fromSeq: 1; readonly toSeq: number } | null;
   readonly showSuffix: {

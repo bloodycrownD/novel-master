@@ -36,7 +36,7 @@ export interface SessionService {
   createSubSession(
     parentSessionId: string,
     projectId: string,
-    title?: string | null,
+    title?: string | null
   ): Promise<ChatSession>;
 
   rename(id: string, title: string): Promise<ChatSession>;
@@ -59,10 +59,7 @@ export interface SessionService {
    * 写入 `composer_draft_json`；`draftJson` 为 null 时清空列。
    * 不更新 `updated_at_ms`。
    */
-  setComposerDraftJson(
-    id: string,
-    draftJson: string | null,
-  ): Promise<boolean>;
+  setComposerDraftJson(id: string, draftJson: string | null): Promise<boolean>;
 
   /**
    * 读取会话智能体配置；列 NULL 视为异常（migration 后不应存在 NULL），
@@ -80,6 +77,6 @@ export interface SessionService {
    */
   updateSessionAgentConfig(
     id: string,
-    patch: SessionAgentConfigPatch,
+    patch: SessionAgentConfigPatch
   ): Promise<SessionAgentConfig>;
 }

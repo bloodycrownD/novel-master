@@ -17,7 +17,7 @@ export function renderBind(
   kind: "hash" | "dollar",
   path: string,
   stack: ContextStack,
-  placeholder: string,
+  placeholder: string
 ): BindResult {
   const value = resolvePath(stack, path);
   if (kind === "hash") {

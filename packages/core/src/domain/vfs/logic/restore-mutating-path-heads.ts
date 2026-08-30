@@ -57,7 +57,7 @@ export class MutatingPathRestoreCompositeError extends Error {
  */
 function captureDirectorySnapshot(
   path: string,
-  entries: readonly VfsListEntry[],
+  entries: readonly VfsListEntry[]
 ): MutatingPathHeadDirectory {
   const files: MutatingPathHeadDirectory["files"][number][] = [];
   for (const entry of entries) {
@@ -80,7 +80,7 @@ function captureDirectorySnapshot(
  */
 export async function captureMutatingPathHeadSnapshots(
   vfs: VfsService,
-  paths: readonly string[],
+  paths: readonly string[]
 ): Promise<Map<string, MutatingPathHeadSnapshot>> {
   const snapshots = new Map<string, MutatingPathHeadSnapshot>();
   for (const path of paths) {
@@ -126,7 +126,7 @@ export async function captureMutatingPathHeadSnapshots(
  */
 async function restoreDirectorySnapshot(
   vfs: VfsService,
-  snapshot: MutatingPathHeadDirectory,
+  snapshot: MutatingPathHeadDirectory
 ): Promise<void> {
   // 空目录：硬清 D 下残留文件/子树后，确保目录存在
   if (snapshot.files.length === 0) {
@@ -188,7 +188,7 @@ async function restoreDirectorySnapshot(
 export async function restoreMutatingPathHeads(
   vfs: VfsService,
   snapshots: ReadonlyMap<string, MutatingPathHeadSnapshot>,
-  paths: readonly string[],
+  paths: readonly string[]
 ): Promise<void> {
   const errors: unknown[] = [];
   for (const path of paths) {

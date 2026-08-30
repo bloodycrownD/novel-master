@@ -271,10 +271,7 @@ export function withDynamicBlockPersistence(
 export function withWorkplaceToggle(
   enabled: boolean,
   workplaceAssistantText: string
-): Pick<
-  AgentEditorFormInput,
-  "workplaceEnabled" | "workplaceAssistantText"
-> {
+): Pick<AgentEditorFormInput, "workplaceEnabled" | "workplaceAssistantText"> {
   if (!enabled) {
     return {
       workplaceEnabled: false,
@@ -369,10 +366,7 @@ export function countEffectiveFormPromptSources(
   if (input.dynamicEnabled && input.dynamic.length > 0) {
     count += 1;
   }
-  if (
-    input.workplaceEnabled &&
-    input.workplaceAssistantText.trim() !== ""
-  ) {
+  if (input.workplaceEnabled && input.workplaceAssistantText.trim() !== "") {
     count += 1;
   }
   return count;
@@ -420,10 +414,7 @@ export function countFormPromptSources(
   count += textBlocks.filter(
     (_, index) => index !== options?.excludePersistTextIndex
   ).length;
-  if (
-    input.workplaceEnabled &&
-    input.workplaceAssistantText.trim() !== ""
-  ) {
+  if (input.workplaceEnabled && input.workplaceAssistantText.trim() !== "") {
     count += 1;
   }
   count += input.dynamic.filter(
@@ -478,7 +469,9 @@ export function definitionToForm(
   const workplaceText =
     typeof def.prompts.workplace === "string" ? def.prompts.workplace : "";
   const customAttachText =
-    typeof def.prompts.customAttach === "string" ? def.prompts.customAttach : "";
+    typeof def.prompts.customAttach === "string"
+      ? def.prompts.customAttach
+      : "";
   return {
     mode: def.mode ?? "all",
     systemEnabled: system.length > 0,
@@ -535,7 +528,8 @@ export function layoutFromFormInput(
     ...(input.skillsEnabled === false ? { skillsEnabled: false } : {}),
     // 前缀语等于默认值 / 空时 omit（落库省噪音；关闭时前缀无意义一并 omit）
     ...((input.skillsPrefixText ?? "").trim() !== "" &&
-    (input.skillsPrefixText ?? "").trim() !== DEFAULT_SKILLS_INDEX_PREFIX.trim() &&
+    (input.skillsPrefixText ?? "").trim() !==
+      DEFAULT_SKILLS_INDEX_PREFIX.trim() &&
     input.skillsEnabled !== false
       ? { skillsPrefix: (input.skillsPrefixText ?? "").trim() }
       : {}),
@@ -581,10 +575,7 @@ export function buildAgentDefinitionFromForm(
     return { ok: false, message: "请填写 Agent 名称" };
   }
   // W9：开态空文案显式阻断（hasAnyPromptRegionEnabled 不含 workplace）
-  if (
-    input.workplaceEnabled &&
-    input.workplaceAssistantText.trim() === ""
-  ) {
+  if (input.workplaceEnabled && input.workplaceAssistantText.trim() === "") {
     return {
       ok: false,
       message: WORKPLACE_ASSISTANT_TEXT_REQUIRED_MESSAGE,

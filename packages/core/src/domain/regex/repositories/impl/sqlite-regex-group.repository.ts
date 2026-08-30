@@ -35,7 +35,7 @@ export class SqliteRegexGroupRepository implements RegexGroupRepository {
       this.parser,
       `SELECT group_id, display_name, created_at_ms, updated_at_ms
        FROM regex_group ORDER BY group_id`,
-      {},
+      {}
     );
     return rows.map(rowToGroup);
   }
@@ -46,7 +46,7 @@ export class SqliteRegexGroupRepository implements RegexGroupRepository {
       this.parser,
       `SELECT group_id, display_name, created_at_ms, updated_at_ms
        FROM regex_group WHERE group_id = #{groupId}`,
-      { groupId },
+      { groupId }
     );
     if (rows.length === 0) {
       return null;
@@ -68,7 +68,7 @@ export class SqliteRegexGroupRepository implements RegexGroupRepository {
         displayName: group.displayName,
         createdAtMs: group.createdAtMs,
         updatedAtMs: group.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -84,7 +84,7 @@ export class SqliteRegexGroupRepository implements RegexGroupRepository {
         groupId: group.groupId,
         displayName: group.displayName,
         updatedAtMs: group.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -93,7 +93,7 @@ export class SqliteRegexGroupRepository implements RegexGroupRepository {
       this.conn,
       this.parser,
       `DELETE FROM regex_group WHERE group_id = #{groupId}`,
-      { groupId },
+      { groupId }
     );
   }
 }

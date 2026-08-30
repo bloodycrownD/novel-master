@@ -58,7 +58,7 @@ export interface MessageCheckpointRepository {
       readonly entryId: number;
       readonly revisionVersion: number;
     }>,
-    createdAtMs: number,
+    createdAtMs: number
   ): Promise<void>;
 
   /**
@@ -68,7 +68,7 @@ export interface MessageCheckpointRepository {
    */
   loadFileTree(
     sessionId: string,
-    messageId: string,
+    messageId: string
   ): Promise<Map<string, number> | null>;
 
   /**
@@ -78,12 +78,12 @@ export interface MessageCheckpointRepository {
    */
   findCheckpointMessageIdAtOrBefore(
     sessionId: string,
-    maxSeq: number,
+    maxSeq: number
   ): Promise<string | null>;
 
   /** Lists all file pointers for a session (used by revision GC). */
   listFilePointersForSession(
-    sessionId: string,
+    sessionId: string
   ): Promise<ReadonlyArray<MessageCheckpointFile>>;
 
   /**
@@ -92,19 +92,19 @@ export interface MessageCheckpointRepository {
    * @remarks 不含 message_id；同一路径版本在多 checkpoint 中重复时只计一次。
    */
   listDistinctCheckpointPointersForSession(
-    sessionId: string,
+    sessionId: string
   ): Promise<ReadonlyArray<MessageCheckpointDistinctPointer>>;
 
   /** Lists file pointers for specific messages (used during rollback diff). */
   listFilePointersForMessages(
     sessionId: string,
-    messageIds: ReadonlyArray<string>,
+    messageIds: ReadonlyArray<string>
   ): Promise<ReadonlyArray<MessageCheckpointFile>>;
 
   /** Deletes checkpoint rows for the given messages. */
   deleteCheckpointsForMessages(
     sessionId: string,
-    messageIds: ReadonlyArray<string>,
+    messageIds: ReadonlyArray<string>
   ): Promise<void>;
 
   /** Deletes all checkpoint rows for a session (used on session delete). */

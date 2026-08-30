@@ -18,7 +18,7 @@ import type { ChatMessage } from "@/domain/chat/model/message.js";
 
 function isToolResultPairedInVisible(
   toolUseId: string,
-  visibleMessages: readonly ChatMessage[],
+  visibleMessages: readonly ChatMessage[]
 ): boolean {
   for (const msg of visibleMessages) {
     for (const block of msg.content.blocks) {
@@ -32,7 +32,7 @@ function isToolResultPairedInVisible(
 
 /** 收集 visible 消息里所有 tool_result 引用的 toolUseId */
 function collectToolResultIds(
-  visibleMessages: readonly ChatMessage[],
+  visibleMessages: readonly ChatMessage[]
 ): Set<string> {
   const ids = new Set<string>();
   for (const msg of visibleMessages) {
@@ -50,7 +50,7 @@ function collectToolResultIds(
  * Does not mutate DB rows — same pattern as regex channel transforms.
  */
 export function normalizeOrphanToolResultsForLlm(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessage[]
 ): ChatMessage[] {
   // 第一遍：处理孤立的 tool_result（没有对应 tool_use 的）
   const orphanResultFixed = messages.map((msg) => {
@@ -87,10 +87,7 @@ export function normalizeOrphanToolResultsForLlm(
     const blocks: ContentBlock[] = [];
 
     for (const block of msg.content.blocks) {
-      if (
-        block.type === "tool_use" &&
-        !pairedResultIds.has(block.id)
-      ) {
+      if (block.type === "tool_use" && !pairedResultIds.has(block.id)) {
         changed = true;
         // 跳过这个 block（悬挂的 tool_use）
         continue;

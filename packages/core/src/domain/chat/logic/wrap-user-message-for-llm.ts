@@ -52,7 +52,7 @@ function renderExtraInfoBlock(extraInfo: string): string {
 export function wrapUserMessageForLlm(
   plainText: string,
   attachments: readonly MessageAttachment[] | undefined | null,
-  extraInfo?: string,
+  extraInfo?: string
 ): string {
   const hasAttachments = attachments != null && attachments.length > 0;
   let body = "";
@@ -62,7 +62,7 @@ export function wrapUserMessageForLlm(
     const workplace = attachments!.filter((a) => a.source === "workplace");
     // D2：user_ops 仅保留批注附件；历史手改附件（write/edit 等）不再进 prompt
     const annotate = attachments!.filter(
-      (a) => a.source === "user_ops" && a.action === "annotate",
+      (a) => a.source === "user_ops" && a.action === "annotate"
     );
     body = sectionBody([...attach, ...workplace, ...annotate]);
   }

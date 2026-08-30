@@ -13,9 +13,8 @@ import type { ModelRetryPolicyService } from "./model-retry-policy.port.js";
  * Creates model retry policy storage on KKV module `nm-model-retry`.
  */
 export function createModelRetryPolicyService(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): ModelRetryPolicyService {
   const kkv = createKkvService(conn);
   return new DefaultModelRetryPolicyService(kkv);
 }
-

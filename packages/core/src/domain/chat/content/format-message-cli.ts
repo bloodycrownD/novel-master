@@ -23,7 +23,10 @@ function formatBlock(block: ContentBlock): string {
     case "tool_use":
       return `[tool_use] ${block.name} (${block.id})`;
     case "tool_result":
-      return `[tool_result] ${block.toolUseId}: ${truncate(block.content, 120)}`;
+      return `[tool_result] ${block.toolUseId}: ${truncate(
+        block.content,
+        120
+      )}`;
     case "thinking":
       return `[thinking] ${truncate(block.text, 80)}`;
     case "redacted_thinking":

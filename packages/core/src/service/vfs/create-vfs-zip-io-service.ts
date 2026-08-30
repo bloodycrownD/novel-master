@@ -23,7 +23,7 @@ export type CreateVfsZipIoServiceOptions = {
  */
 export function createVfsZipIoService(
   conn: TdbcConnection,
-  options: CreateVfsZipIoServiceOptions = {},
+  options: CreateVfsZipIoServiceOptions = {}
 ): VfsZipIoService {
   const repo = new SqliteVfsEntryRepository(conn);
   return new DefaultVfsZipIoService(conn, repo, {

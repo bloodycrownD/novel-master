@@ -41,7 +41,10 @@ export interface BatchApplyReport {
   /** 预检或策略性未写：非法 UTF-8、用户跳过冲突等；非异常 */
   readonly skipped: string[];
   /** 执行期异常未写成功的项 */
-  readonly failed: ReadonlyArray<{ readonly path: string; readonly message: string }>;
+  readonly failed: ReadonlyArray<{
+    readonly path: string;
+    readonly message: string;
+  }>;
 }
 
 /** plan 阶段检测到的 file/directory 类型冲突。 */
@@ -97,7 +100,7 @@ export interface VfsBatchIoService {
   planBatchIngest(
     scope: VfsScope,
     targetDir: string,
-    entries: readonly BatchIngestRawEntry[],
+    entries: readonly BatchIngestRawEntry[]
   ): Promise<BatchIngestPlan>;
 
   /**
@@ -107,7 +110,7 @@ export interface VfsBatchIoService {
     scope: VfsScope,
     targetDir: string,
     plan: BatchIngestPlan,
-    options: BatchApplyOptions,
+    options: BatchApplyOptions
   ): Promise<BatchApplyReport>;
 
   /**
@@ -117,11 +120,11 @@ export interface VfsBatchIoService {
     targetDir: string,
     plan: BatchIngestPlan,
     options: BatchApplyOptions,
-    writer: BatchIngestWriter,
+    writer: BatchIngestWriter
   ): Promise<BatchApplyReport>;
 
   planBatchExport(
     scope: VfsScope,
-    logicalPaths: readonly string[],
+    logicalPaths: readonly string[]
   ): Promise<BatchExportPlan>;
 }

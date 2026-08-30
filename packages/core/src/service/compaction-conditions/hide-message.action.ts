@@ -24,7 +24,7 @@ export async function runHideMessageAction(
   projectId: string,
   sessionId: string,
   slice: DepthSlice,
-  deps: HideMessageHandlerDeps,
+  deps: HideMessageHandlerDeps
 ): Promise<void> {
   const all = await deps.messages.listBySession(sessionId);
   const visible = listVisibleForDepth(all);
@@ -41,6 +41,6 @@ export async function runHideMessageAction(
     projectId,
     sessionId,
     range.fromSeq,
-    range.toSeq,
+    range.toSeq
   );
 }

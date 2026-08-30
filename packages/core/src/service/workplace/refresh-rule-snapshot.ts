@@ -28,7 +28,7 @@ export type RefreshRuleSnapshotDeps = {
  */
 export async function refreshRuleSnapshot(
   sessionId: string,
-  deps: RefreshRuleSnapshotDeps,
+  deps: RefreshRuleSnapshotDeps
 ): Promise<void> {
   const view = await deps.workplace.evaluateRuleView();
   const entries = ruleViewToSnapshotEntries(view);
@@ -36,10 +36,7 @@ export async function refreshRuleSnapshot(
     sessionId,
     SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
     RULE_SNAPSHOT_CANON_KEY,
-    serializeRuleSnapshot(entries),
+    serializeRuleSnapshot(entries)
   );
-  await deps.sessionKkv.clearDomain(
-    sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-  );
+  await deps.sessionKkv.clearDomain(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE);
 }

@@ -14,17 +14,14 @@ export interface TdbcConnection {
   /**
    * Runs a statement that does not return rows (INSERT, UPDATE, DELETE, DDL).
    */
-  execute(
-    sql: string,
-    parameters?: readonly unknown[],
-  ): Promise<ExecuteResult>;
+  execute(sql: string, parameters?: readonly unknown[]): Promise<ExecuteResult>;
 
   /**
    * Runs a SELECT (or similar) and returns all rows.
    */
   query<T extends Row = Row>(
     sql: string,
-    parameters?: readonly unknown[],
+    parameters?: readonly unknown[]
   ): Promise<T[]>;
 
   /**
@@ -33,7 +30,7 @@ export interface TdbcConnection {
    */
   batch(
     sql: string,
-    parametersList: readonly (readonly unknown[])[],
+    parametersList: readonly (readonly unknown[])[]
   ): Promise<BatchResult>;
 
   /**

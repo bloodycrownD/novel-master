@@ -12,9 +12,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
 import { DEFAULT_WORKPLACE_DIR_RULE } from "@/domain/workplace/logic/default-dir-rule.js";
-import {
-  buildWorkplaceDirSet,
-} from "@/domain/workplace/logic/workplace-tree.js";
+import { buildWorkplaceDirSet } from "@/domain/workplace/logic/workplace-tree.js";
 import { materializeBlockFromView } from "@/domain/workplace/logic/workplace-materialize-engine.js";
 import { renderWorkplaceFileTreeForMacro } from "@/domain/workplace/logic/workplace-file-tree.js";
 import { evaluateWorkplaceRuleView } from "@/domain/workplace/logic/workplace-rule-engine.js";
@@ -71,7 +69,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     }
     const existing = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),
-      logicalPath,
+      logicalPath
     );
     // Any save without explicit --rule off enables rules (do not preserve prior rule_off).
     const rule: WorkplaceDirRule = {
@@ -79,15 +77,25 @@ export class DefaultWorkplaceService implements WorkplaceService {
       logicalPath,
       ruleEnabled: input.ruleEnabled === false ? false : true,
       sortField:
-        input.sortField ?? existing?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField,
+        input.sortField ??
+        existing?.sortField ??
+        DEFAULT_WORKPLACE_DIR_RULE.sortField,
       sortOrder:
-        input.sortOrder ?? existing?.sortOrder ?? DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
+        input.sortOrder ??
+        existing?.sortOrder ??
+        DEFAULT_WORKPLACE_DIR_RULE.sortOrder,
       headCount:
-        input.headCount ?? existing?.headCount ?? DEFAULT_WORKPLACE_DIR_RULE.headCount,
+        input.headCount ??
+        existing?.headCount ??
+        DEFAULT_WORKPLACE_DIR_RULE.headCount,
       tailCount:
-        input.tailCount ?? existing?.tailCount ?? DEFAULT_WORKPLACE_DIR_RULE.tailCount,
+        input.tailCount ??
+        existing?.tailCount ??
+        DEFAULT_WORKPLACE_DIR_RULE.tailCount,
       fillPolicy:
-        input.fillPolicy ?? existing?.fillPolicy ?? DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
+        input.fillPolicy ??
+        existing?.fillPolicy ??
+        DEFAULT_WORKPLACE_DIR_RULE.fillPolicy,
     };
     await this.deps.workplace.upsertDirRule(rule);
   }
@@ -97,7 +105,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     assertLogicalPathAllowed(this.scope, normalized);
     const rule = await this.deps.workplace.findDirRule(
       workplaceScopeKey(this.scope),
-      normalized,
+      normalized
     );
     return rule ?? undefined;
   }
@@ -121,13 +129,13 @@ export class DefaultWorkplaceService implements WorkplaceService {
     assertLogicalPathAllowed(this.scope, normalized);
     await this.deps.workplace.deleteRulesUnderLogicalPrefix(
       workplaceScopeKey(this.scope),
-      normalized,
+      normalized
     );
   }
 
   async renameRulesUnderLogicalPrefix(
     oldPrefix: string,
-    newPrefix: string,
+    newPrefix: string
   ): Promise<void> {
     const oldNormalized = normalizePath(oldPrefix);
     const newNormalized = normalizePath(newPrefix);
@@ -136,7 +144,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     await this.deps.workplace.renameRulesUnderLogicalPrefix(
       workplaceScopeKey(this.scope),
       oldNormalized,
-      newNormalized,
+      newNormalized
     );
   }
 
@@ -175,7 +183,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
       view,
       this.deps.vfs,
       this.scope,
-      ctx.mtimeByPath,
+      ctx.mtimeByPath
     );
     return { workplaceDisplay };
   }
@@ -238,7 +246,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
     });
     const dirPaths = await this.deps.vfs.listDirectoryPathsUnderPrefix(
       vfsKey,
-      "/",
+      "/"
     );
     for (const logical of dirPaths) {
       allDirs.add(logical);
@@ -252,5 +260,3 @@ export class DefaultWorkplaceService implements WorkplaceService {
     };
   }
 }
-
-

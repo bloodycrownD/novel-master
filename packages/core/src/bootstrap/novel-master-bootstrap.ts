@@ -7,7 +7,7 @@
  * 稳态冷启动：若 `PRAGMA user_version` ≥ {@link SCHEMA_BOOT_VERSION}，跳过 DDL 与
  * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
  *
- * 最低支持版本：v1.4.08。低于此版本的极旧库需先升级到 v1.4.08，再升级到本版本——
+ * 最低支持版本：v1.4.27。低于此版本的极旧库需先升级到 v1.4.27，再升级到本版本——
  * {@link assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
  * 防止跨大版本升级走样。
  *
@@ -37,20 +37,8 @@ import {
   listAppliedSchemaMigrationIds,
   runPendingSchemaMigrations,
 } from "./schema-migrations/index.js";
-import { SAVED_MODEL_IDENTITY_V1_ID } from "./schema-migrations/saved-model-identity-v1.js";
-import { PROVIDER_IDENTITY_V1_ID } from "./schema-migrations/provider-identity-v1.js";
-import { DROP_CHAT_SESSION_USER_VFS_PENDING_V1_ID } from "./schema-migrations/drop-chat-session-user-vfs-pending-v1.js";
-import { RENAME_WORKTREE_TABLES_TO_WORKPLACE_V1_ID } from "./schema-migrations/rename-worktree-tables-to-workplace-v1.js";
-import { VFS_CONTENT_BLOB_ZLIB_V1_ID } from "./schema-migrations/vfs-content-blob-zlib-v1.js";
-import { VFS_REVISION_REF_COUNT_V1_ID } from "./schema-migrations/vfs-revision-ref-count-v1.js";
-import { createRevisionRefCountRepairOperation } from "@/domain/vfs/logic/revision-ref-count.js";
 import { createVfsEntrySequenceRepairOperation } from "@/domain/vfs/logic/entry-sequence-repair.js";
-import { createProviderIdentityRepairOperation } from "@/domain/provider/logic/provider-identity-repair.js";
 import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
 
 /**
  * 稳态 DDL + 列对齐合同版本。
@@ -99,43 +87,49 @@ async function readSchemaBootVersion(tx: TdbcConnection): Promise<number> {
 
 async function writeSchemaBootVersion(
   tx: TdbcConnection,
-  version: number,
+  version: number
 ): Promise<void> {
   // user_version 为整数 pragma，不能参数绑定。
   await tx.execute(`PRAGMA user_version = ${version}`);
 }
 
 /**
- * v1.4.08 之前上线的 schema migration id 清单。
+ * v1.4.27 之前上线的 schema migration id 清单。
  *
- * 本版本最低支持 v1.4.08，这些 migration 的逻辑已融入 canonical DDL 与 align，
- * 不再在 {@link runPendingSchemaMigrations} 阵列里执行。但运行时仍需确认老库走过它们——
- * 若表里一条都没登记、又探测到 legacy 形态，说明用户跳过了 v1.4.08 直接到本版本，
- * 须 fail-fast 提示先升级。
+ * 本版本最低支持 v1.4.27，这些 migration 的逻辑已融入 canonical DDL 与 align（或
+ * 已不再需要），源文件已删除，不再在 {@link runPendingSchemaMigrations} 阵列里执行。
+ * 但运行时仍需确认老库走过它们——若表里一条都没登记、又探测到 legacy 形态，
+ * 说明用户跳过了 v1.4.27 直接到本版本，须 fail-fast 提示先升级。
+ *
+ * 前三条（vfs-entry-id-redesign-v1、session-agent-config-v2、
+ * project-agent-config-cleanup-v1）为第二轮退役：所有 ≥v1.4.27 的库都已应用过。
  */
 export const BASELINE_MIGRATION_IDS: readonly string[] = [
-  SAVED_MODEL_IDENTITY_V1_ID,
-  PROVIDER_IDENTITY_V1_ID,
-  DROP_CHAT_SESSION_USER_VFS_PENDING_V1_ID,
-  RENAME_WORKTREE_TABLES_TO_WORKPLACE_V1_ID,
-  VFS_CONTENT_BLOB_ZLIB_V1_ID,
-  VFS_REVISION_REF_COUNT_V1_ID,
+  "saved-model-identity-v1",
+  "provider-identity-v1",
+  "drop-chat-session-user-vfs-pending-v1",
+  "rename-worktree-tables-to-workplace-v1",
+  "vfs-content-blob-zlib-v1",
+  "vfs-revision-ref-count-v1",
+  "vfs-entry-id-redesign-v1",
+  "session-agent-config-v2",
+  "project-agent-config-cleanup-v1",
 ];
 
-/** 老库升级失败提示，指引用户先升到 v1.4.08。 */
+/** 老库升级失败提示，指引用户先升到 v1.4.27。 */
 export const BASELINE_TOO_OLD_MESSAGE =
-  "检测到当前数据库低于本版本最低支持版本（v1.4.08）。请先升级到 v1.4.08，再升级到本版本。";
+  "检测到当前数据库低于本版本最低支持版本（v1.4.27）。请先升级到 v1.4.27，再升级到本版本。";
 
 /** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
 async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {
   const tables = await tx.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'llm_saved_model'`,
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'llm_saved_model'`
   );
   if (tables.length === 0) {
     return false;
   }
   const cols = await tx.query<{ name: string }>(
-    `SELECT name FROM pragma_table_info('llm_saved_model')`,
+    `SELECT name FROM pragma_table_info('llm_saved_model')`
   );
   const names = new Set(cols.map((c) => c.name));
   return !names.has("id");
@@ -145,17 +139,84 @@ async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {
 async function hasLegacyWorktreeTables(tx: TdbcConnection): Promise<boolean> {
   const rows = await tx.query<{ name: string }>(
     `SELECT name FROM sqlite_master
-     WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')`,
+     WHERE type = 'table' AND (name = 'worktree_dir_rule' OR name = 'worktree_file_rule')`
   );
   return rows.length > 0;
 }
 
-/** 任一 legacy 形态命中即视为未升级到 v1.4.08。 */
+/**
+ * `vfs_entry` 存在但 `entry_id` 不是主键（旧形态 pk 是 `path`）
+ * → 未走 vfs-entry-id-redesign-v1。判据与原迁移自身的探测一致。
+ */
+async function hasLegacyVfsEntryShape(tx: TdbcConnection): Promise<boolean> {
+  const tables = await tx.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`
+  );
+  if (tables.length === 0) {
+    return false;
+  }
+  const cols = await tx.query<{ name: string; pk: number }>(
+    `SELECT name, pk FROM pragma_table_info('vfs_entry')`
+  );
+  const entryId = cols.find((c) => c.name === "entry_id");
+  return !(entryId != null && entryId.pk > 0);
+}
+
+/**
+ * `chat_session` 存在但缺 `agent_config_json` 列
+ * → 未走 session-agent-config-v2（该迁移/DDL 在 v1.4.21 前后引入此列）。
+ */
+async function hasLegacyChatSessionShape(tx: TdbcConnection): Promise<boolean> {
+  const tables = await tx.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_session'`
+  );
+  if (tables.length === 0) {
+    return false;
+  }
+  const cols = await tx.query<{ name: string }>(
+    `SELECT name FROM pragma_table_info('chat_session')`
+  );
+  return !cols.some((c) => c.name === "agent_config_json");
+}
+
+/**
+ * `chat_project` 存在且 `agent_config_json` 有非 NULL 残留
+ * → 未走 project-agent-config-cleanup-v1（该功能已下线，新库不会再写入非 NULL）。
+ */
+async function hasLegacyChatProjectShape(tx: TdbcConnection): Promise<boolean> {
+  const tables = await tx.query<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'chat_project'`
+  );
+  if (tables.length === 0) {
+    return false;
+  }
+  const cols = await tx.query<{ name: string }>(
+    `SELECT name FROM pragma_table_info('chat_project')`
+  );
+  if (!cols.some((c) => c.name === "agent_config_json")) {
+    return false;
+  }
+  const rows = await tx.query<{ cnt: number }>(
+    `SELECT COUNT(*) AS cnt FROM chat_project WHERE agent_config_json IS NOT NULL`
+  );
+  return Number(rows[0]?.cnt ?? 0) > 0;
+}
+
+/** 任一 legacy 形态命中即视为未升级到 v1.4.27。 */
 async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
   if (await hasLegacySavedModelShape(tx)) {
     return true;
   }
-  return hasLegacyWorktreeTables(tx);
+  if (await hasLegacyWorktreeTables(tx)) {
+    return true;
+  }
+  if (await hasLegacyVfsEntryShape(tx)) {
+    return true;
+  }
+  if (await hasLegacyChatSessionShape(tx)) {
+    return true;
+  }
+  return hasLegacyChatProjectShape(tx);
 }
 
 /**
@@ -165,9 +226,7 @@ async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
  * 一条都没登记、且探测到 legacy 形态时，判定为跨大版本升级，报错拦下。
  * 全新空库（无 legacy 表征）不触发——首次安装是新装路径。
  */
-export async function assertMinimumBaseline(
-  tx: TdbcConnection,
-): Promise<void> {
+export async function assertMinimumBaseline(tx: TdbcConnection): Promise<void> {
   await ensureSchemaMigrationsTable(tx);
   const applied = await listAppliedSchemaMigrationIds(tx);
 
@@ -182,24 +241,20 @@ export async function assertMinimumBaseline(
 }
 
 /**
- * entry-id migration 刚跑完时置为 true，供 repairRefCounts 空闲调度判断。
- */
-export let _entryIdMigrationJustApplied = false;
-
-/**
  * 确保所有实体表存在并写入内置 provider。可安全重复调用。
  *
  * @param conn - 已打开的 TDBC 连接
  */
-export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> {
+export async function bootstrapNovelMaster(
+  conn: TdbcConnection
+): Promise<void> {
   await conn.transaction(async (tx) => {
     const bootVersion = await readSchemaBootVersion(tx);
     if (bootVersion >= SCHEMA_BOOT_VERSION) {
       // 快路径：表结构已与当前 DDL/列对齐合同一致，跳过数十次 CREATE/PRAGMA。
       await assertMinimumBaseline(tx);
-      const entryIdApplied = await runPendingSchemaMigrations(tx);
+      await runPendingSchemaMigrations(tx);
       await seedBuiltinProviders(tx);
-      _entryIdMigrationJustApplied = entryIdApplied;
       return;
     }
 
@@ -207,15 +262,14 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
       await tx.execute(sql);
     }
     await assertMinimumBaseline(tx);
-    const entryIdApplied = await runPendingSchemaMigrations(tx);
+    await runPendingSchemaMigrations(tx);
     await alignSchemaColumns(tx);
     // parent_session_id 索引不能放在 DDL 里——老库升级路径下 DDL 阶段该列还没被
     // ALIGN 加上，CREATE INDEX 会炸。这里在 ALIGN 之后幂等建一次，保证新老库都有。
     await tx.execute(
-      "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)",
+      "CREATE INDEX IF NOT EXISTS idx_chat_session_parent ON chat_session(parent_session_id)"
     );
     await seedBuiltinProviders(tx);
-    _entryIdMigrationJustApplied = entryIdApplied;
     await writeSchemaBootVersion(tx, SCHEMA_BOOT_VERSION);
   });
 
@@ -227,20 +281,15 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
   } catch (error) {
     console.warn(
       "[bootstrap] 内置技能种入失败（不阻断启动，下次启动重试）:",
-      error,
+      error
     );
   }
 
-  // W3：entry-id migration 刚跑完时，异步走统一完整性修复注册表作为安全网。
-  //
-  // 这里登记两类操作：
-  //   1. vfs revision ref_count 修复（只动 vfs_revision.ref_count，不碰 blob 侧触发器计数）；
-  //   2. provider 双身份键形态校验（migration 后 assertMigratedShape 的运行时镜像）。
-  //
-  // 两条路径各自独立，互不干扰。不阻塞启动，但失败要有日志可查。
-  // 发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
+  // W3：发号器安全网（无条件，await 保证先于任何业务写入）：孤儿 revision 占号
   // + sqlite_sequence 回退时，新建文件会撞 vfs_revision(entry_id, version)
   // 唯一键（导入旧备份库实测）。两条聚合查询成本可忽。
+  // 历史：这里曾另有 entry-id migration 刚跑完时的 ref_count / provider 身份键
+  // 兜底修复分支，随 vfs-entry-id-redesign-v1 退役（最低支持 v1.4.27）一并移除。
   try {
     const reports = await new IntegrityRepairRegistry()
       .register(createVfsEntrySequenceRepairOperation(conn))
@@ -249,7 +298,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
       if (report.error != null) {
         console.warn(
           `[bootstrap] 发号器完整性修复失败（${report.name}，不阻断启动，下次启动重试）:`,
-          report.error,
+          report.error
         );
       }
     }
@@ -258,33 +307,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     // 同样只记日志不阻断启动（可重试）。
     console.warn(
       "[bootstrap] 发号器完整性修复运行异常（不阻断启动，下次启动重试）:",
-      error,
+      error
     );
-  }
-
-  if (_entryIdMigrationJustApplied) {
-    const revisionRepo = new SqliteVfsRevisionRepository(conn);
-    const entryRepo = new SqliteVfsEntryRepository(conn);
-    const checkpoints = new SqliteMessageCheckpointRepository(conn);
-    const providerRepo = new SqliteProviderRepository(conn);
-    const registry = new IntegrityRepairRegistry()
-      .register(
-        createRevisionRefCountRepairOperation({
-          revisionRepo,
-          entryRepo,
-          checkpoints,
-          scopeKey: "global",
-          pathPrefix: "/",
-          sessionId: "",
-        }),
-      )
-      .register(createProviderIdentityRepairOperation({ providerRepo }));
-    // global scope 兜底修复；不阻塞启动，失败记日志（丢 rejection 也不崩）
-    registry.runAll().catch((error) => {
-      console.warn(
-        "[bootstrap] global scope 兜底完整性修复失败（不阻断启动）:",
-        error,
-      );
-    });
   }
 }

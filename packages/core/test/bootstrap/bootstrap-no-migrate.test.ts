@@ -5,10 +5,7 @@ import { describe, it } from "node:test";
 import { SCHEMA_MIGRATIONS } from "../../src/bootstrap/schema-migrations/index.js";
 
 const CORE_SRC = join(import.meta.dirname, "../../src");
-const SCHEMA_MIGRATIONS_DIR = join(
-  CORE_SRC,
-  "bootstrap/schema-migrations",
-);
+const SCHEMA_MIGRATIONS_DIR = join(CORE_SRC, "bootstrap/schema-migrations");
 
 /** 递归收集 core 源码目录下全部 .ts 文件。 */
 async function collectTsFiles(dir: string): Promise<string[]> {
@@ -33,13 +30,9 @@ const SCHEMA_MIGRATION_INFRA = new Set([
 ]);
 
 /** Step 21 后保留的冷回放备份模块：逻辑已融入 canonical DDL，不再注册。 */
-const BASELINE_BACKUP_MODULES = new Set([
-  "saved-model-identity-v1.ts",
-  "provider-identity-v1.ts",
-  "drop-chat-session-user-vfs-pending-v1.ts",
-  "rename-worktree-tables-to-workplace-v1.ts",
-  "vfs-content-blob-zlib-v1.ts",
-  "vfs-revision-ref-count-v1.ts",
+const BASELINE_BACKUP_MODULES = new Set<string>([
+  // 第二轮退役（最低支持 v1.4.27）后，9 个退役迁移源文件均已物理删除，
+  // 目录里只剩已注册模块与基建文件，本清单为空。
 ]);
 
 describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
@@ -55,7 +48,7 @@ describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
     assert.deepEqual(
       migrateFiles,
       [],
-      `不应存在未登记目录下的 migrate 模块：${migrateFiles.join(", ")}`,
+      `不应存在未登记目录下的 migrate 模块：${migrateFiles.join(", ")}`
     );
   });
 
@@ -74,7 +67,7 @@ describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
     assert.deepEqual(
       offenders,
       [],
-      `以下文件仍 import 未登记的 migrate 模块：${offenders.join(", ")}`,
+      `以下文件仍 import 未登记的 migrate 模块：${offenders.join(", ")}`
     );
   });
 
@@ -93,7 +86,7 @@ describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
           e.isFile() &&
           e.name.endsWith(".ts") &&
           !SCHEMA_MIGRATION_INFRA.has(e.name) &&
-          !BASELINE_BACKUP_MODULES.has(e.name),
+          !BASELINE_BACKUP_MODULES.has(e.name)
       )
       .map((e) => e.name);
 
@@ -103,7 +96,7 @@ describe("bootstrap 无历史 migrate（T-B2 / T-SM10）", () => {
       const stem = fileName.replace(/\.ts$/, "");
       assert.ok(
         registeredIds.has(stem),
-        `schema-migrations/${fileName} 须在 SCHEMA_MIGRATIONS 注册（id=${stem}）`,
+        `schema-migrations/${fileName} 须在 SCHEMA_MIGRATIONS 注册（id=${stem}）`
       );
     }
   });

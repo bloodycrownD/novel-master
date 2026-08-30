@@ -16,8 +16,7 @@ const KNOWN_TAGS = new Set([
   "otherwise",
 ]);
 
-const OPEN_TAG_RE =
-  /^(if|where|foreach|trim|choose|when|otherwise)\b/i;
+const OPEN_TAG_RE = /^(if|where|foreach|trim|choose|when|otherwise)\b/i;
 
 const BIND_HASH_RE = /^#\{([^}]+)\}/;
 const BIND_DOLLAR_RE = /^\$\{([^}]+)\}/;
@@ -58,7 +57,7 @@ export class TemplateParser {
 function parseChildren(
   template: string,
   pos: { value: number },
-  closeTag: string | null,
+  closeTag: string | null
 ): AstNode[] {
   const nodes: AstNode[] = [];
 
@@ -68,11 +67,10 @@ function parseChildren(
   }
 
   if (closeTag !== null) {
-    throw new SqlTemplateError(
-      "UNCLOSED_TAG",
-      `Unclosed tag <${closeTag}>`,
-      { offset: pos.value, tagName: closeTag },
-    );
+    throw new SqlTemplateError("UNCLOSED_TAG", `Unclosed tag <${closeTag}>`, {
+      offset: pos.value,
+      tagName: closeTag,
+    });
   }
 
   return nodes;
@@ -91,7 +89,7 @@ function parseNodesUntilClose(
   template: string,
   pos: { value: number },
   closeTag: string | null,
-  nodes: AstNode[],
+  nodes: AstNode[]
 ): boolean {
   const i = pos.value;
   const hash = template.indexOf("#{", i);
@@ -155,14 +153,14 @@ function parseNodesUntilClose(
       throw new SqlTemplateError(
         "MALFORMED_TAG",
         `Unexpected closing tag </${close.name}>`,
-        { offset: start, tagName: close.name },
+        { offset: start, tagName: close.name }
       );
     }
     if (close.name.toLowerCase() !== closeTag.toLowerCase()) {
       throw new SqlTemplateError(
         "MALFORMED_TAG",
         `Mismatched closing tag: expected </${closeTag}>, got </${close.name}>`,
-        { offset: start, tagName: close.name },
+        { offset: start, tagName: close.name }
       );
     }
     return true;
@@ -173,11 +171,10 @@ function parseNodesUntilClose(
   if (!openMatch) {
     const unknown = /^(\w+)(\s+[\w-]+=|\s*>)/.exec(tagProbe);
     if (unknown && !KNOWN_TAGS.has(unknown[1].toLowerCase())) {
-      throw new SqlTemplateError(
-        "UNKNOWN_TAG",
-        `Unknown tag <${unknown[1]}>`,
-        { offset: start, tagName: unknown[1] },
-      );
+      throw new SqlTemplateError("UNKNOWN_TAG", `Unknown tag <${unknown[1]}>`, {
+        offset: start,
+        tagName: unknown[1],
+      });
     }
     nodes.push({ type: "text", value: "<" });
     pos.value = start + 1;
@@ -190,8 +187,7 @@ function parseNodesUntilClose(
     throw new SqlTemplateError(
       "MALFORMED_TAG",
       `<${tagName}> must appear inside <choose>`,
-      { offset: start,
-      tagName },
+      { offset: start, tagName }
     );
   }
 
@@ -202,7 +198,7 @@ function parseNodesUntilClose(
 
 function readCloseTag(
   template: string,
-  offset: number,
+  offset: number
 ): { name: string; end: number } {
   const m = /^<\/(\w+)\s*>/.exec(template.slice(offset));
   if (!m) {
@@ -221,7 +217,7 @@ interface ParsedAttribute {
 function readOpenTagHeader(
   template: string,
   offset: number,
-  tagName: string,
+  tagName: string
 ): { attrs: Map<string, ParsedAttribute>; bodyStart: number } {
   const headerStart = offset + 1 + tagName.length;
   const gt = template.indexOf(">", headerStart);
@@ -240,7 +236,7 @@ function parseAttributes(
   header: string,
   headerStart: number,
   offset: number,
-  tagName: string,
+  tagName: string
 ): Map<string, ParsedAttribute> {
   const attrs = new Map<string, ParsedAttribute>();
   const attrRe = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
@@ -257,7 +253,7 @@ function parseAttributes(
     throw new SqlTemplateError(
       "MALFORMED_TAG",
       `Malformed attributes on <${tagName}>`,
-      { offset, tagName },
+      { offset, tagName }
     );
   }
   return attrs;
@@ -267,14 +263,14 @@ function requireAttr(
   attrs: Map<string, ParsedAttribute>,
   name: string,
   tagName: string,
-  offset: number,
+  offset: number
 ): ParsedAttribute {
   const val = attrs.get(name);
   if (val === undefined) {
     throw new SqlTemplateError(
       "MALFORMED_TAG",
       `Missing required attribute "${name}" on <${tagName}>`,
-      { offset, tagName },
+      { offset, tagName }
     );
   }
   return val;
@@ -284,7 +280,7 @@ function parseOpenTag(
   template: string,
   pos: { value: number },
   offset: number,
-  tagName: string,
+  tagName: string
 ): AstNode {
   const { attrs, bodyStart } = readOpenTagHeader(template, offset, tagName);
   pos.value = bodyStart;
@@ -305,7 +301,12 @@ function parseOpenTag(
       return { type: "where", children };
     }
     case "foreach": {
-      const collection = requireAttr(attrs, "collection", tagName, offset).value;
+      const collection = requireAttr(
+        attrs,
+        "collection",
+        tagName,
+        offset
+      ).value;
       const item = requireAttr(attrs, "item", tagName, offset).value;
       const foreachAttrs: ForeachAttrs = {
         collection,
@@ -341,9 +342,10 @@ function parseOpenTag(
 function parseChooseBody(
   template: string,
   pos: { value: number },
-  offset: number,
+  offset: number
 ): AstNode {
-  const whens: { test: string; testOffset?: number; children: AstNode[] }[] = [];
+  const whens: { test: string; testOffset?: number; children: AstNode[] }[] =
+    [];
   let otherwise: AstNode[] | undefined;
 
   while (pos.value < template.length) {
@@ -357,7 +359,7 @@ function parseChooseBody(
       throw new SqlTemplateError(
         "MALFORMED_TAG",
         "Only <when> and <otherwise> allowed inside <choose>",
-        { offset: tagStart },
+        { offset: tagStart }
       );
     }
 
@@ -369,7 +371,7 @@ function parseChooseBody(
       const { attrs, bodyStart } = readOpenTagHeader(
         template,
         tagStart,
-        "when",
+        "when"
       );
       const testAttr = requireAttr(attrs, "test", "when", tagStart);
       pos.value = bodyStart;
@@ -387,14 +389,10 @@ function parseChooseBody(
         throw new SqlTemplateError(
           "MALFORMED_TAG",
           "Duplicate <otherwise> in <choose>",
-          { offset: tagStart },
+          { offset: tagStart }
         );
       }
-      const { bodyStart } = readOpenTagHeader(
-        template,
-        tagStart,
-        "otherwise",
-      );
+      const { bodyStart } = readOpenTagHeader(template, tagStart, "otherwise");
       pos.value = bodyStart;
       otherwise = parseChildren(template, pos, "otherwise");
       continue;
@@ -413,7 +411,7 @@ function parseChooseBody(
       throw new SqlTemplateError(
         "MALFORMED_TAG",
         `Invalid child <${openMatch[1]}> inside <choose>`,
-        { offset: tagStart, tagName: openMatch[1] },
+        { offset: tagStart, tagName: openMatch[1] }
       );
     }
 

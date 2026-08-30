@@ -11,7 +11,7 @@ import type { ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js
  * 禁止用 totalTokens / completion 冒充。
  */
 export function pickLastPromptUsage(
-  rounds: readonly ModelRoundSummary[],
+  rounds: readonly ModelRoundSummary[]
 ): number | undefined {
   for (let i = rounds.length - 1; i >= 0; i--) {
     const p = rounds[i]?.usage?.promptTokens;

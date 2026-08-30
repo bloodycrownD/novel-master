@@ -29,9 +29,7 @@ import {
 import { BUILTIN_SKILL_NAMES } from "@/bootstrap/skills/seed-builtin-skills.js";
 import { parseSkillFrontMatter } from "@/domain/skills/logic/parse-skill-front-matter.js";
 import { computeEffectiveSkills } from "@/domain/skills/logic/effective-skills.js";
-import type {
-  EffectiveSkill,
-} from "@/domain/skills/logic/effective-skills.js";
+import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type { SkillDomain } from "@/domain/skills/model/skill.schema.js";
 import { validateSkillName } from "@/domain/skills/model/skill-name.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
@@ -147,7 +145,10 @@ export class SkillsService implements SkillService {
     return this.deps.projectMetaVfs(projectId);
   }
 
-  private vfsForScope(scope: SkillListScope): { vfs: VfsService; domain: SkillDomain } {
+  private vfsForScope(scope: SkillListScope): {
+    vfs: VfsService;
+    domain: SkillDomain;
+  } {
     if (scope === "global") {
       return { vfs: this.deps.globalMetaVfs(), domain: "global" };
     }
@@ -204,7 +205,7 @@ export class SkillsService implements SkillService {
     vfs: VfsService,
     domain: SkillDomain,
     name: string,
-    files: string[],
+    files: string[]
   ): Promise<SkillListItem> {
     let source: string | null = null;
     if (files.includes(SKILL_ENTRY_FILE)) {
@@ -247,7 +248,7 @@ export class SkillsService implements SkillService {
     domain: SkillDomain | undefined,
     name: string,
     path?: string,
-    projectId?: string,
+    projectId?: string
   ): Promise<SkillFileContent> {
     assertNoPathSeparatorInName(name);
     const rel = resolveSkillRelPath(name, path);
@@ -255,8 +256,8 @@ export class SkillsService implements SkillService {
       domain != null
         ? [domain]
         : projectId != null && projectId.length > 0
-          ? ["project", "global"]
-          : ["global"];
+        ? ["project", "global"]
+        : ["global"];
     for (const candidate of candidates) {
       const vfs = this.vfsForDomain(candidate, projectId);
       try {
@@ -284,7 +285,7 @@ export class SkillsService implements SkillService {
     path: string | undefined,
     content: string,
     projectId?: string,
-    options?: SkillWriteOptions,
+    options?: SkillWriteOptions
   ): Promise<{ version: number }> {
     if (domain == null) {
       throw skillMissingDomain(name);
@@ -313,7 +314,7 @@ export class SkillsService implements SkillService {
     name: string,
     path: string | undefined,
     match: SkillEditMatch,
-    projectId?: string,
+    projectId?: string
   ): Promise<{ version: number; replacements: number }> {
     if (domain == null) {
       throw skillMissingDomain(name);
@@ -327,14 +328,14 @@ export class SkillsService implements SkillService {
       `${SKILLS_ROOT}/${name}/${rel}`,
       match.oldString,
       match.newString,
-      { replaceAll: match.replaceAll },
+      { replaceAll: match.replaceAll }
     );
   }
 
   async setDisabled(
     projectId: string,
     name: string,
-    disabled: boolean,
+    disabled: boolean
   ): Promise<void> {
     assertValidSkillName(name);
     const scopeKey = disabledScopeKeyOfProject(projectId);
@@ -362,13 +363,18 @@ export class SkillsService implements SkillService {
     await this.assertSkillDirExists(
       new SqliteVfsEntryRepository(this.deps.conn),
       vfsScopeKey,
-      prefix,
+      prefix
     );
 
     await this.deps.conn.transaction(async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
-      await sweepRevisionsUnderScope(entryRepo, revisionRepo, vfsScopeKey, prefix);
+      await sweepRevisionsUnderScope(
+        entryRepo,
+        revisionRepo,
+        vfsScopeKey,
+        prefix
+      );
 
       // 连带清理负清单行：project 域只清本项目行；global 域清所有项目行，
       // 否则会留下指向不存在技能的孤儿禁用行。
@@ -379,7 +385,7 @@ export class SkillsService implements SkillService {
         }
         await ruleRepo.remove(
           disabledScopeKeyOfProject(location.projectId),
-          location.name,
+          location.name
         );
       } else {
         await ruleRepo.removeAllScopesByName(location.name);
@@ -399,7 +405,7 @@ export class SkillsService implements SkillService {
   async assertSkillNameNotReservedForCreate(
     domain: SkillDomain,
     name: string,
-    projectId?: string,
+    projectId?: string
   ): Promise<void> {
     if (!BUILTIN_SKILL_NAMES.has(name)) {
       return;
@@ -412,7 +418,7 @@ export class SkillsService implements SkillService {
     const dirExists = await this.skillDirExists(
       new SqliteVfsEntryRepository(this.deps.conn),
       scopeKey,
-      `${SKILLS_ROOT}/${name}`,
+      `${SKILLS_ROOT}/${name}`
     );
     if (!dirExists) {
       throw skillBuiltinNameReserved(name);
@@ -423,12 +429,11 @@ export class SkillsService implements SkillService {
   private async skillDirExists(
     entryRepo: SqliteVfsEntryRepository,
     scopeKey: string,
-    prefix: string,
+    prefix: string
   ): Promise<boolean> {
     const entries = await entryRepo.listEntriesUnderPrefix(scopeKey, prefix);
     return entries.some(
-      (entry) =>
-        entry.path === prefix || entry.path.startsWith(`${prefix}/`),
+      (entry) => entry.path === prefix || entry.path.startsWith(`${prefix}/`)
     );
   }
 
@@ -436,7 +441,7 @@ export class SkillsService implements SkillService {
   private async assertSkillDirExists(
     entryRepo: SqliteVfsEntryRepository,
     scopeKey: string,
-    prefix: string,
+    prefix: string
   ): Promise<void> {
     if (!(await this.skillDirExists(entryRepo, scopeKey, prefix))) {
       throw skillNotFound(prefix.slice(SKILLS_ROOT.length + 1));

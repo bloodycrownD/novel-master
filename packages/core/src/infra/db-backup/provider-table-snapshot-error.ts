@@ -27,7 +27,7 @@ export class ProviderTableSnapshotError extends Error {
   constructor(
     code: ProviderTableSnapshotErrorCode,
     message: string,
-    location: { table: ProviderBackupTableName; rowIndex: number },
+    location: { table: ProviderBackupTableName; rowIndex: number }
   ) {
     super(message);
     this.name = "ProviderTableSnapshotError";

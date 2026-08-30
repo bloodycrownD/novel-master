@@ -39,7 +39,8 @@ export function parseSkillFrontMatter(source: string): ParsedSkillFrontMatter {
   if (split.frontMatterLines === null) {
     return {
       valid: false,
-      invalidReason: "缺少 front matter（需以 --- 包裹并含 name 与 description）",
+      invalidReason:
+        "缺少 front matter（需以 --- 包裹并含 name 与 description）",
       name: null,
       description: null,
     };

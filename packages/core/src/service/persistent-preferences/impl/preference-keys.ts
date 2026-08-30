@@ -17,4 +17,5 @@ export const PREF_KEY_CHAT_LLM_STREAM = "chat.llmStream";
 export const PREF_KEY_CHAT_THINKING_CONTEXT = "chat.thinkingContext";
 
 /** User VFS 统一 tool turn（默认 true）。关闭时回滚直写 VFS + 跳过 flush。 */
-export const PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN = "vfs.userVfsUnifiedToolTurn";
+export const PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN =
+  "vfs.userVfsUnifiedToolTurn";

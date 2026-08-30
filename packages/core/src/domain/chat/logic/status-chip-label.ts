@@ -10,22 +10,21 @@ import type {
 } from "../model/message-attachment.schema.js";
 
 /** 已知 action → 中文二字。 */
-export const STATUS_CHIP_ZH: Readonly<
-  Record<MessageAttachmentAction, string>
-> = {
-  delete: "删除",
-  write: "创建",
-  edit: "编辑",
-  mkdir: "创建",
-  /** 同目录换名。 */
-  rename: "改名",
-  /** 跨目录移动。 */
-  move: "移动",
-  workplaceChange: "规则",
-  userAttach: "", // 不进状态 chip；映射表仍保留
-  annotate: "批注",
-  skillAttach: "", // 不进状态 chip；chip 文案以附件 skillName 为准
-};
+export const STATUS_CHIP_ZH: Readonly<Record<MessageAttachmentAction, string>> =
+  {
+    delete: "删除",
+    write: "创建",
+    edit: "编辑",
+    mkdir: "创建",
+    /** 同目录换名。 */
+    rename: "改名",
+    /** 跨目录移动。 */
+    move: "移动",
+    workplaceChange: "规则",
+    userAttach: "", // 不进状态 chip；映射表仍保留
+    annotate: "批注",
+    skillAttach: "", // 不进状态 chip；chip 文案以附件 skillName 为准
+  };
 
 const LEGACY_ACTION_PREFIX_RE = /^(\w+):(.*)$/;
 
@@ -64,7 +63,7 @@ export function logicalParentDir(path: string): string {
  */
 export function resolveRenameOrMoveAction(
   from: string,
-  to: string,
+  to: string
 ): "rename" | "move" {
   return logicalParentDir(from) === logicalParentDir(to) ? "rename" : "move";
 }
@@ -83,7 +82,7 @@ export function renameChipZh(from: string, to: string): string {
  */
 export function formatStatusChipLabel(
   action: MessageAttachmentAction,
-  path: string,
+  path: string
 ): string {
   const zh = STATUS_CHIP_ZH[action];
   if (zh === "") {
@@ -98,7 +97,7 @@ export function formatStatusChipLabel(
  * 无 `action` 时按降级规则（不做英文 /「规则 ·」/ emoji 兼容承诺）。
  */
 export function formatStatusChipLabelFromAttachment(
-  a: Pick<MessageAttachment, "action" | "path" | "name" | "source" | "content">,
+  a: Pick<MessageAttachment, "action" | "path" | "name" | "source" | "content">
 ): string {
   if (a.action != null) {
     if (a.action === "userAttach") {
@@ -140,7 +139,7 @@ export function formatStatusChipLabelFromAttachment(
 const ANNOTATE_CHIP_MAX_CHARS = 20;
 
 function resolveChipPath(
-  a: Pick<MessageAttachment, "action" | "path" | "name" | "content">,
+  a: Pick<MessageAttachment, "action" | "path" | "name" | "content">
 ): string {
   // 批注：chip 显示「用户批注内容」而非划词原文——优先 userAnnotation，
   // 回落 originalText（向后兼容老附件）；都拿不到回落 path。
@@ -161,7 +160,7 @@ function resolveChipPath(
       return fromContent;
     }
     const fromName = renameSuffixToChipPath(
-      stripLegacyPrefix(a.name ?? "") ?? a.name ?? "",
+      stripLegacyPrefix(a.name ?? "") ?? a.name ?? ""
     );
     return fromName;
   }
@@ -169,7 +168,7 @@ function resolveChipPath(
 }
 
 function resolvePathOrName(
-  a: Pick<MessageAttachment, "path" | "name">,
+  a: Pick<MessageAttachment, "path" | "name">
 ): string {
   if (a.path != null && a.path !== "") {
     return a.path;
@@ -206,7 +205,7 @@ function tryParseRenameTo(content: string | null | undefined): string | null {
 /** 从 rename/move content JSON 抽 {from, to}（兼容 from/to 与 oldPath/newPath 两套键）。
  * 缺键或值为空返回 null。 */
 function tryParseRenamePairFromContent(
-  content: string | null | undefined,
+  content: string | null | undefined
 ): { from: string; to: string } | null {
   return parseContentJson(content, (raw) => {
     const parsed = raw as {
@@ -219,14 +218,14 @@ function tryParseRenamePairFromContent(
       typeof parsed.from === "string"
         ? parsed.from
         : typeof parsed.oldPath === "string"
-          ? parsed.oldPath
-          : "";
+        ? parsed.oldPath
+        : "";
     const to =
       typeof parsed.to === "string"
         ? parsed.to
         : typeof parsed.newPath === "string"
-          ? parsed.newPath
-          : "";
+        ? parsed.newPath
+        : "";
     if (from !== "" && to !== "") {
       return { from, to };
     }
@@ -238,7 +237,7 @@ function tryParseRenamePairFromContent(
  * content 为空 / 没匹配到 JSON / JSON.parse 抛错 / validate 返回 null，统一兜底为 null。 */
 function parseContentJson<T>(
   content: string | null | undefined,
-  validate: (raw: unknown) => T | null,
+  validate: (raw: unknown) => T | null
 ): T | null {
   if (content == null || content === "") {
     return null;
@@ -259,7 +258,7 @@ function parseContentJson<T>(
 /** 从 annotate action content JSON 解析用户批注内容（userAnnotation）。
  * 取不到时回落 originalText（向后兼容旧数据）。都拿不到返回 null。 */
 function tryParseAnnotateChipText(
-  content: string | null | undefined,
+  content: string | null | undefined
 ): string | null {
   return parseContentJson(content, (raw) => {
     const parsed = raw as { userAnnotation?: unknown; originalText?: unknown };
@@ -284,10 +283,9 @@ function truncateChipText(text: string, maxChars: number): string {
   return flat.slice(0, maxChars) + "…";
 }
 
-
 /** `from→to` 或 `rename:from→to` 后缀。 */
 function parseRenameArrowPair(
-  suffix: string,
+  suffix: string
 ): { from: string; to: string } | null {
   const sep = "→";
   const idx = suffix.indexOf(sep);

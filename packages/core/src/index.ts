@@ -186,10 +186,12 @@ export type {
 /**
  * 基础序列化能力：供跨端配置读写共用。
  */
-export { parseText, type TextFormat } from "./infra/serialization/parse-text.js";
+export {
+  parseText,
+  type TextFormat,
+} from "./infra/serialization/parse-text.js";
 export { stringifyText } from "./infra/serialization/stringify-text.js";
 export { decode } from "./infra/serialization/decode.js";
 export { encode, type EncodableSchema } from "./infra/serialization/encode.js";
 export { ConfigDecodeError } from "./errors/config-decode-errors.js";
 export type { ConfigDecodeErrorCode } from "./errors/config-decode-errors.js";
-

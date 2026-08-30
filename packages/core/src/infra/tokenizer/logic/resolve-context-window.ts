@@ -12,7 +12,7 @@ import { CONTEXT_WINDOW_RULES } from "./context-window-map.js";
  * @param vendorModelId Provider model name.
  */
 export function resolveContextWindowTokens(
-  vendorModelId: string,
+  vendorModelId: string
 ): number | undefined {
   const id = vendorModelId.toLowerCase();
   for (const rule of CONTEXT_WINDOW_RULES) {

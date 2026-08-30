@@ -14,7 +14,7 @@ import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
  */
 export async function readUserVfsSaveBaseline(
   vfs: VfsService,
-  path: string,
+  path: string
 ): Promise<string | null> {
   try {
     const result = await vfs.read(path);

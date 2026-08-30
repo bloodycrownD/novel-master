@@ -24,7 +24,9 @@ export type ComposerSendableInput = {
  * `trim(text)` 非空 **或** `attachments.length > 0` **或** 有批注草稿
  * → 等价于有输入（可不要求文字）。
  */
-export function hasComposerSendableInput(input: ComposerSendableInput): boolean {
+export function hasComposerSendableInput(
+  input: ComposerSendableInput
+): boolean {
   return (
     input.text.trim() !== "" ||
     input.attachmentCount > 0 ||

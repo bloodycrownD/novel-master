@@ -22,7 +22,9 @@ export interface MarkdownFrontMatterSplit {
 /**
  * Splits YAML front matter between `---` lines from the Markdown body.
  */
-export function splitMarkdownFrontMatter(content: string): MarkdownFrontMatterSplit {
+export function splitMarkdownFrontMatter(
+  content: string
+): MarkdownFrontMatterSplit {
   const lines = content.split(/\r?\n/);
   if (lines.length === 0 || !FRONT_MATTER_START.test(lines[0] ?? "")) {
     return { frontMatterLines: null, body: content, closed: true };

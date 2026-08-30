@@ -1,4 +1,1 @@
-[
-  "createMessageCheckpointService",
-  "createMessageRollbackService"
-]
+["createMessageCheckpointService", "createMessageRollbackService"]

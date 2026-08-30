@@ -10,14 +10,20 @@ export {
 } from "./errors/cloud-sync-errors.js";
 export type { CloudSyncErrorCode } from "./errors/cloud-sync-errors.js";
 
-export type { ObjectStorageHeadResult, ObjectStoragePort } from "./ports/object-storage.port.js";
+export type {
+  ObjectStorageHeadResult,
+  ObjectStoragePort,
+} from "./ports/object-storage.port.js";
 export type { DbSyncPort } from "./ports/db-sync.port.js";
 
 export {
   parseCloudSyncStatus,
   EMPTY_CLOUD_SYNC_STATUS,
 } from "./model/cloud-sync-status.js";
-export type { CloudSyncLock, CloudSyncStatus } from "./model/cloud-sync-status.js";
+export type {
+  CloudSyncLock,
+  CloudSyncStatus,
+} from "./model/cloud-sync-status.js";
 
 export {
   isEffectiveLock,
@@ -29,9 +35,7 @@ export {
 
 export { normalizePrefix, statusKey, snapshotKey } from "./logic/paths.js";
 
-export {
-  CloudSyncCoordinator,
-} from "./impl/cloud-sync-coordinator.js";
+export { CloudSyncCoordinator } from "./impl/cloud-sync-coordinator.js";
 export type {
   CloudSyncCoordinatorDeps,
   PullOptions,

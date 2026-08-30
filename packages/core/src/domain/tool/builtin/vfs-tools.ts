@@ -109,7 +109,11 @@ export type GlobToolOutput = {
  * Visibility and access rules come from the injected `VfsService` instance
  * (global / project / session scope). Mutations append revisions via the revision-aware wrapper.
  */
-export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] {
+export function createVfsTools(): readonly Tool<
+  any,
+  any,
+  BuiltinToolContext
+>[] {
   const read: Tool<
     { path: string; offset?: number; limit?: number },
     ReadToolOutput,
@@ -125,10 +129,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
 
 与 write 区别：write 整文件覆盖；与 edit 区别：edit 做局部替换。需要先看清文件再改时，优先 read。`,
     inputSchema: z.object({
-      path: z
-        .string()
-        .min(1)
-        .describe("工作区内文件的绝对或相对路径"),
+      path: z.string().min(1).describe("工作区内文件的绝对或相对路径"),
       offset: z
         .number()
         .int()
@@ -165,21 +166,21 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
         throw new ToolError(
           "INVALID_ARGUMENT",
           `offset ${offset} exceeds file length (0 lines)`,
-          { toolName: "read" },
+          { toolName: "read" }
         );
       }
       if (totalLines > 0 && offset > totalLines) {
         throw new ToolError(
           "INVALID_ARGUMENT",
           `offset ${offset} exceeds file length (${totalLines} lines)`,
-          { toolName: "read" },
+          { toolName: "read" }
         );
       }
 
       const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
         lines,
         offset,
-        limit,
+        limit
       );
       const truncatedLines = slice.map((line) => truncateLine(line).line);
       const byteCapped = capUtf8Bytes(truncatedLines);
@@ -227,10 +228,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
 
 与 edit 区别：write 替换整个文件；小改动、局部替换请用 edit。与 read 配合：先 read 确认现状再 write。`,
     inputSchema: z.object({
-      path: z
-        .string()
-        .min(1)
-        .describe("目标文件路径；不存在则创建"),
+      path: z.string().min(1).describe("目标文件路径；不存在则创建"),
       content: z.string().describe("写入后的完整文件内容（UTF-8 文本）"),
       options: z
         .object({
@@ -260,7 +258,10 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
       // 仅新建：为各层祖先目录补默认目录规则（文件本身不是目录，只补父链）
       if (isNewFile) {
-        await ensureDirRulesForNewPath(ctx, parentDirOfLogicalPath(logicalPath));
+        await ensureDirRulesForNewPath(
+          ctx,
+          parentDirOfLogicalPath(logicalPath)
+        );
       }
       return result;
     },
@@ -277,7 +278,8 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "edit",
-    description: () => `在工作区文件内做精确文本替换（单次或 replaceAll）。适合小范围修改，避免整文件 write。
+    description:
+      () => `在工作区文件内做精确文本替换（单次或 replaceAll）。适合小范围修改，避免整文件 write。
 
 用法：
 - 常规替换：oldString 为文件中待替换片段，newString 为替换结果；oldString 须在文件中唯一匹配
@@ -290,7 +292,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       oldString: z
         .string()
         .describe(
-          "要被替换的原文；须在文件中唯一定位（replaceAll 时除外）。尾追时取文件末尾唯一锚点",
+          "要被替换的原文；须在文件中唯一定位（replaceAll 时除外）。尾追时取文件末尾唯一锚点"
         ),
       newString: z
         .string()
@@ -314,7 +316,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
         input.path,
         input.oldString,
         input.newString,
-        input.options,
+        input.options
       );
     },
   };
@@ -331,7 +333,8 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "fs",
-    description: () => `执行单条文件系统命令（非 shell）。每次调用仅一条命令，通过结构化参数指定动作与路径。
+    description:
+      () => `执行单条文件系统命令（非 shell）。每次调用仅一条命令，通过结构化参数指定动作与路径。
 
 支持的 action：
 - ls：列目录；path 省略时列根目录；recursive=true 递归列出
@@ -358,10 +361,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
         .describe("ls / rm / rmdir / mkdir 的目标路径；ls 省略时列根目录"),
       from: z.string().optional().describe("mv / cp 的源路径"),
       to: z.string().optional().describe("mv / cp 的目标路径"),
-      recursive: z
-        .boolean()
-        .optional()
-        .describe("ls / rm / cp 的递归标记"),
+      recursive: z.boolean().optional().describe("ls / rm / cp 的递归标记"),
     }),
     outputSchema: z.union([
       z.object({ ok: z.literal(true) }),
@@ -370,7 +370,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
           z.object({
             path: z.string(),
             kind: z.enum(["file", "directory"]),
-          }),
+          })
         ),
         total: z.number().int(),
         truncated: z.boolean(),
@@ -394,7 +394,8 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "glob",
-    description: () => `按 glob 模式在工作区中查找路径列表。只返回路径，不读文件内容。
+    description:
+      () => `按 glob 模式在工作区中查找路径列表。只返回路径，不读文件内容。
 
 用法：
 - pattern：glob 模式，如 \`**/*.ts\`、\`src/**\`
@@ -449,7 +450,8 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     BuiltinToolContext
   > = {
     name: "grep",
-    description: () => `在工作区文件**内容**中搜索，返回 path、行号、列号与 excerpt。
+    description:
+      () => `在工作区文件**内容**中搜索，返回 path、行号、列号与 excerpt。
 
 用法：
 - pattern：搜索模式；默认 matchMode=auto（先尝试正则，失败则按字面量子串）
@@ -479,10 +481,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
             .enum(["auto", "literal", "regex"])
             .optional()
             .describe("auto：先正则后字面量；literal：子串；regex：纯正则"),
-          caseInsensitive: z
-            .boolean()
-            .optional()
-            .describe("忽略大小写"),
+          caseInsensitive: z.boolean().optional().describe("忽略大小写"),
           invert: z
             .boolean()
             .optional()
@@ -508,7 +507,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
           line: z.number().int(),
           column: z.number().int(),
           excerpt: z.string(),
-        }),
+        })
       ),
       total: z.number().int(),
       truncated: z.boolean(),
@@ -522,7 +521,7 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
       const capped = capMatchList(
         withTruncatedExcerpts,
         TOOL_OUTPUT_MAX_MATCHES,
-        (m) => JSON.stringify(m),
+        (m) => JSON.stringify(m)
       );
       return {
         matches: capped.items,
@@ -543,7 +542,7 @@ async function upsertFileCacheAfterWrite(
   ctx: BuiltinToolContext,
   // 入参已是规范化的逻辑路径（write 入口 resolveLogicalPath 处理过），无需再次规范化。
   logicalPath: string,
-  content: string,
+  content: string
 ): Promise<void> {
   if (ctx.sessionKkv == null) {
     return;
@@ -553,7 +552,7 @@ async function upsertFileCacheAfterWrite(
     ctx.sessionId,
     SESSION_KKV_DOMAIN_FILE_CACHE,
     key,
-    serializeFileCachePayload({ body: content, mtimeMs: Date.now() }),
+    serializeFileCachePayload({ body: content, mtimeMs: Date.now() })
   );
 }
 
@@ -573,7 +572,7 @@ function parentDirOfLogicalPath(logicalPath: string): string {
  */
 async function probeFileAbsentForWrite(
   ctx: BuiltinToolContext,
-  logicalPath: string,
+  logicalPath: string
 ): Promise<boolean> {
   try {
     await ctx.vfs.read(logicalPath);
@@ -584,7 +583,7 @@ async function probeFileAbsentForWrite(
     }
     console.debug(
       `[vfs-tools] write 前探测 ${logicalPath} 失败，保守跳过补规则:`,
-      error,
+      error
     );
     return false;
   }
@@ -605,7 +604,7 @@ async function probeFileAbsentForWrite(
  */
 async function ensureDirRulesForNewPath(
   ctx: BuiltinToolContext,
-  dirLogicalPath: string,
+  dirLogicalPath: string
 ): Promise<void> {
   if (ctx.workplace == null || dirLogicalPath === "/") {
     return;
@@ -614,7 +613,7 @@ async function ensureDirRulesForNewPath(
     // 入参已是规范化逻辑路径（write 侧经 resolveLogicalPath，mkdir 侧同样）。
     const parts = dirLogicalPath.split("/").filter((p) => p !== "");
     const existing = new Set(
-      (await ctx.workplace.listDirRules()).map((rule) => rule.logicalPath),
+      (await ctx.workplace.listDirRules()).map((rule) => rule.logicalPath)
     );
     let current = "";
     for (const part of parts) {
@@ -625,10 +624,7 @@ async function ensureDirRulesForNewPath(
     }
   } catch (error) {
     // 吞错但不无声：文件/目录已落盘，补规则失败不阻断主流程。
-    console.debug(
-      `[vfs-tools] 补目录规则失败（${dirLogicalPath}）:`,
-      error,
-    );
+    console.debug(`[vfs-tools] 补目录规则失败（${dirLogicalPath}）:`, error);
   }
 }
 

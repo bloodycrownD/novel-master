@@ -30,7 +30,7 @@ function basename(logicalPath: string): string {
 function contentLines(
   display: DisplayState,
   logicalPath: string,
-  content: string,
+  content: string
 ): string[] {
   switch (display) {
     case "full": {
@@ -58,11 +58,9 @@ export function renderFileBlockBody(params: {
   readonly display: DisplayState;
   readonly content: string;
 }): string {
-  return contentLines(
-    params.display,
-    params.logicalPath,
-    params.content,
-  ).join("\n");
+  return contentLines(params.display, params.logicalPath, params.content).join(
+    "\n"
+  );
 }
 
 /** Renders a single visible file block. */

@@ -14,7 +14,7 @@ import type { PhysicalVfsService } from "./physical-vfs.port.js";
  * @param conn - Open connection after `bootstrapNovelMaster`
  */
 export function createPhysicalVfsService(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): PhysicalVfsService {
   return new DefaultPhysicalVfsService(conn);
 }

@@ -9,7 +9,10 @@
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import type { LlmStreamEvent, DegradedToolCall } from "../ports/adapter.port.js";
+import type {
+  LlmStreamEvent,
+  DegradedToolCall,
+} from "../ports/adapter.port.js";
 import { emitDirectTextDelta } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
@@ -27,7 +30,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * thinkingRaw → thinking 块，textRaw → text 块，互不改写（不做内嵌标签清洗）。
  * 与 {@link buildStreamPartialBlocks} 对齐：thinking 独立；省略空 text（content_json 拒绝 `text: ""`）。
  */
-function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBlock[] {
+function blocksFromReplyStrings(
+  textRaw: string,
+  thinkingRaw: string
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   if (thinkingRaw.trim() !== "") {
     blocks.push({ type: "thinking", text: thinkingRaw });
@@ -44,7 +50,7 @@ function appendOpenAiStreamTextDelta(
     thinkingParts: string[];
   },
   content: unknown,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   if (typeof content === "string" && content !== "") {
     emitDirectTextDelta(state, content, onStream);
@@ -57,13 +63,19 @@ function appendOpenAiStreamTextDelta(
     if (!isRecord(part)) {
       continue;
     }
-    if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
+    if (
+      part.type === "text" &&
+      typeof part.text === "string" &&
+      part.text !== ""
+    ) {
       emitDirectTextDelta(state, part.text, onStream);
     }
   }
 }
 
-function imageUrlFromBlock(block: Extract<ContentBlock, { type: "image" }>): string {
+function imageUrlFromBlock(
+  block: Extract<ContentBlock, { type: "image" }>
+): string {
   if (block.source.kind === "url") {
     return block.source.url;
   }
@@ -75,10 +87,10 @@ function imageUrlFromBlock(block: Extract<ContentBlock, { type: "image" }>): str
  * `tool_use` / `tool_result` are handled at the message level by {@link chatMessagesToOpenAi}.
  */
 export function blocksToOpenAiMessageContent(
-  blocks: readonly ContentBlock[],
+  blocks: readonly ContentBlock[]
 ): string | OpenAiContentPart[] {
   const contentBlocks = blocks.filter(
-    (b) => b.type !== "tool_use" && b.type !== "tool_result",
+    (b) => b.type !== "tool_use" && b.type !== "tool_result"
   );
   if (contentBlocks.length === 0) {
     return "";
@@ -101,7 +113,7 @@ export function blocksToOpenAiMessageContent(
       case "thinking":
         throw new ProviderError(
           "UNSUPPORTED_CONTENT",
-          "OpenAI outbound messages must not include thinking blocks; strip them before mapping",
+          "OpenAI outbound messages must not include thinking blocks; strip them before mapping"
         );
       default:
         break;
@@ -118,7 +130,7 @@ export function blocksToOpenAiMessageContent(
 }
 
 function toolCallsFromBlocks(
-  toolUses: readonly Extract<ContentBlock, { type: "tool_use" }>[],
+  toolUses: readonly Extract<ContentBlock, { type: "tool_use" }>[]
 ): unknown[] {
   return toolUses.map((block) => ({
     id: block.id,
@@ -139,12 +151,14 @@ function toolCallsFromBlocks(
  * redacted_thinking 是 anthropic 加密负载，openai 无对应字段，丢弃。
  */
 export function chatMessagesToOpenAi(
-  messages: readonly ChatMessage[],
+  messages: readonly ChatMessage[]
 ): OpenAiChatMessage[] {
   const out: OpenAiChatMessage[] = [];
 
   for (const msg of messages) {
-    const toolResults = msg.content.blocks.filter((b) => b.type === "tool_result");
+    const toolResults = msg.content.blocks.filter(
+      (b) => b.type === "tool_result"
+    );
     const toolUses = msg.content.blocks.filter((b) => b.type === "tool_use");
     const thinkingTexts = msg.content.blocks
       .filter((b) => b.type === "thinking")
@@ -154,7 +168,7 @@ export function chatMessagesToOpenAi(
         b.type !== "tool_result" &&
         b.type !== "tool_use" &&
         b.type !== "thinking" &&
-        b.type !== "redacted_thinking",
+        b.type !== "redacted_thinking"
     );
 
     for (const tr of toolResults) {
@@ -235,7 +249,11 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
       if (!isRecord(part)) {
         continue;
       }
-      if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
+      if (
+        part.type === "text" &&
+        typeof part.text === "string" &&
+        part.text !== ""
+      ) {
         textParts.push(part.text);
       } else if (part.type === "image_url" && isRecord(part.image_url)) {
         const url = part.image_url.url;
@@ -264,7 +282,7 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
   }
 
   blocks.unshift(
-    ...blocksFromReplyStrings(textParts.join(""), thinkingParts.join("")),
+    ...blocksFromReplyStrings(textParts.join(""), thinkingParts.join(""))
   );
 
   const toolCalls = message.tool_calls;
@@ -304,7 +322,7 @@ function tryEmitOpenAiToolUseIfComplete(
     emittedToolIndices: Set<number>;
   },
   index: number,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   if (state.emittedToolIndices.has(index)) {
     return;
@@ -341,7 +359,7 @@ export function openAiStreamDeltaToEvents(
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
   },
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   if (!isRecord(delta)) {
     return;
@@ -394,11 +412,11 @@ export function openAiStreamAccumulatorsToBlocks(
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
   },
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): { blocks: ContentBlock[]; degradedToolCalls: DegradedToolCall[] } {
   const blocks = blocksFromReplyStrings(
     state.textParts.join(""),
-    state.thinkingParts.join(""),
+    state.thinkingParts.join("")
   );
   const degradedToolCalls: DegradedToolCall[] = [];
 
@@ -446,14 +464,14 @@ export function openAiStreamAccumulatorsToPartialBlocks(
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
   },
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): ContentBlock[] {
   const blocks = buildStreamPartialBlocks(
     {
       text: state.textParts.join(""),
       thinking: state.thinkingParts.join(""),
     },
-    onStream,
+    onStream
   );
 
   const indices = [...state.toolCalls.keys()].sort((a, b) => a - b);

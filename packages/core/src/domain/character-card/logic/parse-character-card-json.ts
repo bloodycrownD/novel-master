@@ -67,7 +67,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 function readStringField(
   primary: Record<string, unknown> | undefined,
   fallback: Record<string, unknown>,
-  key: string,
+  key: string
 ): string {
   const fromPrimary = primary?.[key];
   if (typeof fromPrimary === "string") {
@@ -82,7 +82,7 @@ function readStringField(
 
 function readAlternateGreetings(
   primary: Record<string, unknown> | undefined,
-  fallback: Record<string, unknown>,
+  fallback: Record<string, unknown>
 ): readonly string[] {
   const raw =
     primary?.["alternate_greetings"] ?? fallback["alternate_greetings"];
@@ -94,7 +94,7 @@ function readAlternateGreetings(
 
 function readCharacterBookEntries(
   primary: Record<string, unknown> | undefined,
-  fallback: Record<string, unknown>,
+  fallback: Record<string, unknown>
 ): readonly unknown[] {
   const bookRaw = primary?.["character_book"] ?? fallback["character_book"];
   const book = asRecord(bookRaw);
@@ -128,10 +128,7 @@ function assertRecognizableCard(root: Record<string, unknown>): void {
     return;
   }
   if (typeof spec === "string" && spec.length > 0) {
-    throw characterCardError(
-      "UNSUPPORTED_SPEC",
-      `不支持的角色卡规格: ${spec}`,
-    );
+    throw characterCardError("UNSUPPORTED_SPEC", `不支持的角色卡规格: ${spec}`);
   }
   throw characterCardError("NOT_CHARACTER_CARD", "无法识别为角色卡");
 }
@@ -142,7 +139,7 @@ function assertRecognizableCard(root: Record<string, unknown>): void {
  * @throws {import("@/errors/character-card-errors.js").CharacterCardError}
  */
 export function normalizeCharacterCardJson(
-  raw: unknown,
+  raw: unknown
 ): NormalizedCharacterCardData {
   const root = asRecord(raw);
   if (root == null) {

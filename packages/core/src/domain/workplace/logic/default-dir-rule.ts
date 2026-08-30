@@ -6,7 +6,11 @@
  * @module domain/workplace/logic/default-dir-rule
  */
 
-import type { FillPolicy, SortField, SortOrder } from "../model/workplace-types.js";
+import type {
+  FillPolicy,
+  SortField,
+  SortOrder,
+} from "../model/workplace-types.js";
 
 /** 目录启用规则但无 {@link WorkplaceDirRule} 行时应用的默认值。 */
 export const DEFAULT_WORKPLACE_DIR_RULE = {

@@ -10,9 +10,7 @@
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import type {
-  IntegrityRepairOperation,
-} from "@/service/integrity-repair.js";
+import type { IntegrityRepairOperation } from "@/service/integrity-repair.js";
 import { isVfsPathExcluded } from "./vfs-exclude-prefixes.js";
 
 /** checkpoint 文件指针（entry_id 形态）。 */
@@ -32,7 +30,7 @@ export async function adjustRef(
   revisionRepo: VfsRevisionRepository,
   entryId: number,
   version: number,
-  delta: 1 | -1,
+  delta: 1 | -1
 ): Promise<void> {
   await revisionRepo.adjustRefCount(entryId, version, delta);
 }
@@ -42,7 +40,7 @@ export async function transferLiveRef(
   revisionRepo: VfsRevisionRepository,
   entryId: number,
   fromVersion: number,
-  toVersion: number,
+  toVersion: number
 ): Promise<void> {
   if (fromVersion === toVersion) {
     return;
@@ -54,24 +52,24 @@ export async function transferLiveRef(
 /** checkpoint_file 行列表 → 每条 (entryId, version) +1。 */
 export async function incrementRefsForCheckpointFiles(
   revisionRepo: VfsRevisionRepository,
-  files: ReadonlyArray<CheckpointFilePointer>,
+  files: ReadonlyArray<CheckpointFilePointer>
 ): Promise<void> {
   // 走批量 +1，缺失行会报 NOT_FOUND（守护 T-RB-REF-MISSING），跟原来的逐条语义一致
   await revisionRepo.batchAdjustRefCount(
     files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion })),
-    +1,
+    +1
   );
 }
 
 /** checkpoint_file 行列表 → 每条 (entryId, version) −1。 */
 export async function decrementRefsForCheckpointFiles(
   revisionRepo: VfsRevisionRepository,
-  files: ReadonlyArray<CheckpointFilePointer>,
+  files: ReadonlyArray<CheckpointFilePointer>
 ): Promise<void> {
   // 减引用时缺失行 no-op（UPDATE 命不中即跳过），所以不需要前置校验
   await revisionRepo.batchAdjustRefCount(
     files.map((f) => ({ entryId: f.entryId, version: f.revisionVersion })),
-    -1,
+    -1
   );
 }
 
@@ -82,12 +80,12 @@ export async function deleteUnreferencedUnderScope(
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   pathPrefix: string,
-  excludePrefixes?: readonly string[],
+  excludePrefixes?: readonly string[]
 ): Promise<number> {
   return revisionRepo.deleteUnreferencedUnderScope(
     scopeKey,
     pathPrefix,
-    excludePrefixes,
+    excludePrefixes
   );
 }
 
@@ -103,7 +101,7 @@ export async function repairRefCounts(
   checkpoints: MessageCheckpointRepository,
   scopeKey: string,
   pathPrefix: string,
-  sessionId: string,
+  sessionId: string
 ): Promise<RepairReport> {
   const expected = new Map<string, number>();
 
@@ -117,7 +115,10 @@ export async function repairRefCounts(
     bump(pointer.entryId, pointer.revisionVersion);
   }
 
-  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
+  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(
+    scopeKey,
+    pathPrefix
+  );
   for (const head of liveHeads) {
     bump(head.entryId, head.headVersion);
   }
@@ -156,8 +157,14 @@ export function createRevisionRefCountRepairOperation(args: {
   readonly pathPrefix: string;
   readonly sessionId: string;
 }): IntegrityRepairOperation {
-  const { revisionRepo, entryRepo, checkpoints, scopeKey, pathPrefix, sessionId } =
-    args;
+  const {
+    revisionRepo,
+    entryRepo,
+    checkpoints,
+    scopeKey,
+    pathPrefix,
+    sessionId,
+  } = args;
   const name = `vfs-revision-ref-count:${scopeKey}:${pathPrefix || "/"}`;
   return {
     name,
@@ -169,7 +176,9 @@ export function createRevisionRefCountRepairOperation(args: {
       }
       return {
         needsRepair: true,
-        details: `scope=${scopeKey} prefix=${pathPrefix || "/"} 下有 ${keys.length} 条 revision 行，交给幂等 repair 兜底`,
+        details: `scope=${scopeKey} prefix=${pathPrefix || "/"} 下有 ${
+          keys.length
+        } 条 revision 行，交给幂等 repair 兜底`,
       };
     },
     async repair() {
@@ -179,7 +188,7 @@ export function createRevisionRefCountRepairOperation(args: {
         checkpoints,
         scopeKey,
         pathPrefix,
-        sessionId,
+        sessionId
       );
     },
   };
@@ -193,15 +202,18 @@ export async function decrementLiveRefsUnderScope(
   entryRepo: VfsEntryRepository,
   scopeKey: string,
   pathPrefix: string,
-  excludePrefixes?: readonly string[],
+  excludePrefixes?: readonly string[]
 ): Promise<void> {
   const excludes = excludePrefixes ?? [];
-  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix);
+  const liveHeads = await entryRepo.listFileHeadsUnderPrefix(
+    scopeKey,
+    pathPrefix
+  );
   // 批量减引用，避免对每个 live head 发一条 SQL（会话删除场景下文件多会卡）
   await revisionRepo.batchAdjustRefCount(
     liveHeads
       .filter((h) => !isVfsPathExcluded(h.path, excludes))
       .map((h) => ({ entryId: h.entryId, version: h.headVersion })),
-    -1,
+    -1
   );
 }

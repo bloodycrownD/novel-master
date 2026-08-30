@@ -15,7 +15,7 @@ import type { ActiveRegexRulesSource } from "../ports/active-regex-rules.port.js
  */
 export async function resolveActiveCompiledRules(
   config: ActiveRegexRulesSource,
-  activeGroupId: string | undefined,
+  activeGroupId: string | undefined
 ): Promise<CompiledRegexRule[]> {
   if (activeGroupId == null || activeGroupId === "") {
     return [];

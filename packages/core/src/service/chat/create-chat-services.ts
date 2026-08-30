@@ -51,7 +51,7 @@ export interface ChatServicesSessionDeps {
  */
 export function createChatServices(
   conn: TdbcConnection,
-  sessionDeps: ChatServicesSessionDeps,
+  sessionDeps: ChatServicesSessionDeps
 ): ChatServiceBundle {
   const projectRepo = new SqliteProjectRepository(conn);
   const sessionRepo = new SqliteSessionRepository(conn);
@@ -100,7 +100,7 @@ export function createProjectService(conn: TdbcConnection): ProjectService {
 /** Creates a {@link SessionService} instance. */
 export function createSessionService(
   conn: TdbcConnection,
-  sessionDeps: ChatServicesSessionDeps,
+  sessionDeps: ChatServicesSessionDeps
 ): SessionService {
   return createChatServices(conn, sessionDeps).sessions;
 }
@@ -112,7 +112,7 @@ export function createMessageService(conn: TdbcConnection): MessageService {
 
 /** Creates a {@link UsageStatsService} instance. */
 export function createUsageStatsService(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): UsageStatsService {
   return createChatServices(conn, _stubSessionDeps()).usageStats;
 }

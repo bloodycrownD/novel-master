@@ -29,7 +29,7 @@ export interface HideMessageSeqRange {
 function anchorToSeqBeforeUserTurn(
   visible: readonly ChatMessage[],
   minSeq: number,
-  maxSeq: number,
+  maxSeq: number
 ): number | null {
   for (let i = visible.length - 1; i >= 0; i--) {
     const m = visible[i];
@@ -53,7 +53,7 @@ function anchorToSeqBeforeUserTurn(
 export function resolveHideMessageRange(
   visible: readonly ChatMessage[],
   _slice: DepthSlice,
-  messageIds: readonly string[],
+  messageIds: readonly string[]
 ): HideMessageSeqRange | null {
   if (messageIds.length === 0) {
     return null;

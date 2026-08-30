@@ -12,7 +12,7 @@ import { strToU8, zipSync } from "fflate";
  */
 export function buildVfsZip(
   files: ReadonlyMap<string, string>,
-  directoryEntryNames: readonly string[] = [],
+  directoryEntryNames: readonly string[] = []
 ): Uint8Array {
   const payload: Record<string, Uint8Array> = {};
   for (const dirName of directoryEntryNames) {

@@ -22,7 +22,7 @@ import { stripKnownPhysicalPrefixes } from "./strip-known-physical-prefixes.js";
  */
 function resolveLogicalPathForError(
   vfsError: VfsError,
-  _scope?: VfsScope,
+  _scope?: VfsScope
 ): string | undefined {
   if (vfsError.path == null) {
     return undefined;
@@ -37,7 +37,7 @@ function extractInvalidPathReason(message: string): string {
 
 function formatReplaceNotFound(
   vfsError: VfsError,
-  logicalPath: string,
+  logicalPath: string
 ): string {
   const details = vfsError.details as VfsReplaceNotFoundDetails | undefined;
   const pathLabel = logicalPath || vfsError.path || "unknown path";
@@ -77,7 +77,7 @@ function formatReplaceNotFound(
 function formatByCode(
   code: VfsErrorCode,
   vfsError: VfsError,
-  logicalPath: string,
+  logicalPath: string
 ): string {
   switch (code) {
     case "NOT_FOUND":
@@ -93,7 +93,9 @@ function formatByCode(
     case "IS_DIRECTORY":
       return `[IS_DIRECTORY] Path is a directory: ${logicalPath}`;
     case "INVALID_PATH":
-      return `[INVALID_PATH] Invalid path ${logicalPath}: ${extractInvalidPathReason(vfsError.message)}`;
+      return `[INVALID_PATH] Invalid path ${logicalPath}: ${extractInvalidPathReason(
+        vfsError.message
+      )}`;
     case "NOT_A_DIRECTORY":
       return `[NOT_A_DIRECTORY] Not a directory: ${logicalPath}`;
     case "PARENT_NOT_FOUND":
@@ -112,7 +114,7 @@ function formatByCode(
 /** 将 VfsError 格式化为 LLM tool_result 正文（不含 `Error:` 前缀）。 */
 export function formatVfsErrorForLlm(
   vfsError: VfsError,
-  scope?: VfsScope,
+  scope?: VfsScope
 ): string {
   const logicalPath =
     resolveLogicalPathForError(vfsError, scope) ??

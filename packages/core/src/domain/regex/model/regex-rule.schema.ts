@@ -5,7 +5,10 @@
  */
 
 import { z } from "zod";
-import { depthSliceFromWire, validateDepthSlice } from "@/domain/depth/logic/depth-slice.js";
+import {
+  depthSliceFromWire,
+  validateDepthSlice,
+} from "@/domain/depth/logic/depth-slice.js";
 
 const replaceFields = z.object({
   llmReplace: z.string().nullable().optional(),
@@ -42,7 +45,10 @@ export function normalizeDepthFields(raw: Record<string, unknown>): {
   };
 }
 
-function hasDepthWireKey(raw: Record<string, unknown>, bound: "start" | "end"): boolean {
+function hasDepthWireKey(
+  raw: Record<string, unknown>,
+  bound: "start" | "end"
+): boolean {
   if (bound === "start") {
     return "startDepth" in raw || "start-depth" in raw;
   }

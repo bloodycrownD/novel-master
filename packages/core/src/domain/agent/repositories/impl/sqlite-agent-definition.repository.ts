@@ -23,7 +23,9 @@ function rowToDefinition(row: Row): AgentDefinition {
 }
 
 /** TDBC-backed agent definition repository. */
-export class SqliteAgentDefinitionRepository implements AgentDefinitionRepository {
+export class SqliteAgentDefinitionRepository
+  implements AgentDefinitionRepository
+{
   private readonly parser = new SqlTemplateParser();
 
   constructor(private readonly conn: TdbcConnection) {}
@@ -33,7 +35,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       this.conn,
       this.parser,
       `SELECT agent_id FROM agent_definition ORDER BY agent_id ASC`,
-      {},
+      {}
     );
     return rows.map((row) => String(row.agent_id));
   }
@@ -44,7 +46,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       this.parser,
       `SELECT agent_id, prompts_json
        FROM agent_definition WHERE agent_id = #{agentId}`,
-      { agentId },
+      { agentId }
     );
     if (rows.length === 0) {
       return null;
@@ -57,7 +59,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       this.conn,
       this.parser,
       `SELECT prompts_json FROM agent_definition WHERE agent_id = #{agentId}`,
-      { agentId },
+      { agentId }
     );
     if (rows.length === 0) {
       return null;
@@ -70,7 +72,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       this.conn,
       this.parser,
       `SELECT 1 FROM agent_definition WHERE agent_id = #{agentId} LIMIT 1`,
-      { agentId },
+      { agentId }
     );
     return rows.length > 0;
   }
@@ -91,7 +93,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       ON CONFLICT(agent_id) DO UPDATE SET
         prompts_json = excluded.prompts_json,
         updated_at_ms = excluded.updated_at_ms`,
-      { agentId, promptsJson, now },
+      { agentId, promptsJson, now }
     );
   }
 
@@ -100,7 +102,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       this.conn,
       this.parser,
       `DELETE FROM agent_definition WHERE agent_id = #{agentId}`,
-      { agentId },
+      { agentId }
     );
   }
 
@@ -109,7 +111,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
       this.conn,
       this.parser,
       `SELECT agent_id, prompts_json FROM agent_definition ORDER BY agent_id ASC`,
-      {},
+      {}
     );
     return rows.map((row) => rowToDefinition(row));
   }

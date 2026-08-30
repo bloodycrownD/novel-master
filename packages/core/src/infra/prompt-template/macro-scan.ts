@@ -16,15 +16,14 @@ export interface MacroAction {
   readonly path: readonly string[];
 }
 
-const UNSUPPORTED_PATTERN =
-  /\b(if|range|with|template|define)\b|:=|\|/;
+const UNSUPPORTED_PATTERN = /\b(if|range|with|template|define)\b|:=|\|/;
 
 function assertSupportedSyntax(action: string, offset: number): void {
   if (UNSUPPORTED_PATTERN.test(action)) {
     throw new PromptError(
       "UNSUPPORTED_SYNTAX",
       `unsupported template syntax near offset ${offset}`,
-      { offset },
+      { offset }
     );
   }
 }
@@ -81,7 +80,7 @@ function parseAction(action: string, openOffset: number): MacroAction {
   throw new PromptError(
     "UNSUPPORTED_SYNTAX",
     `unsupported macro action: ${trimmed}`,
-    { offset: openOffset },
+    { offset: openOffset }
   );
 }
 

@@ -26,7 +26,7 @@ function rejectWhen(label: string, record: Record<string, unknown>): void {
   if ("when" in record) {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: when is no longer supported; remove the when field`,
+      `${label}: when is no longer supported; remove the when field`
     );
   }
 }
@@ -34,7 +34,7 @@ function rejectWhen(label: string, record: Record<string, unknown>): void {
 function parseTextBlockLifecycle(
   label: string,
   role: PromptBlockRole,
-  record: Record<string, unknown>,
+  record: Record<string, unknown>
 ): PromptBlockLifecycle | undefined {
   if (!("lifecycle" in record)) {
     return undefined;
@@ -42,17 +42,20 @@ function parseTextBlockLifecycle(
   if (role === "system") {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: system text block must not include lifecycle`,
+      `${label}: system text block must not include lifecycle`
     );
   }
   const lifecycle = record.lifecycle;
   if (lifecycle === undefined) {
     return undefined;
   }
-  if (typeof lifecycle !== "string" || !LIFECYCLES.has(lifecycle as PromptBlockLifecycle)) {
+  if (
+    typeof lifecycle !== "string" ||
+    !LIFECYCLES.has(lifecycle as PromptBlockLifecycle)
+  ) {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: lifecycle must be always or once`,
+      `${label}: lifecycle must be always or once`
     );
   }
   if (lifecycle === "always") {
@@ -61,24 +64,18 @@ function parseTextBlockLifecycle(
   return "once";
 }
 
-function validateBlockEntry(
-  name: string,
-  item: unknown,
-): PromptBlock {
+function validateBlockEntry(name: string, item: unknown): PromptBlock {
   if (item == null || typeof item !== "object" || Array.isArray(item)) {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${blockLabel(name)} must be an object`,
+      `${blockLabel(name)} must be an object`
     );
   }
   const record = item as Record<string, unknown>;
   const type = record.type;
 
   if (!isNonEmptyString(type)) {
-    throw new PromptError(
-      "INVALID_BLOCK",
-      `${blockLabel(name)} requires type`,
-    );
+    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)} requires type`);
   }
 
   const label = blockLabel(name);
@@ -89,13 +86,13 @@ function validateBlockEntry(
     if (typeof role !== "string" || !ROLES.has(role as PromptBlockRole)) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: text block requires role system|user|assistant`,
+        `${label}: text block requires role system|user|assistant`
       );
     }
     if (typeof record.content !== "string") {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: text block requires string content`,
+        `${label}: text block requires string content`
       );
     }
     const parsedRole = role as PromptBlockRole;
@@ -113,19 +110,19 @@ function validateBlockEntry(
     if ("lifecycle" in record) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: chat block must not include lifecycle`,
+        `${label}: chat block must not include lifecycle`
       );
     }
     if ("role" in record) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: chat block must not include role`,
+        `${label}: chat block must not include role`
       );
     }
     if ("content" in record) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: chat block must not include content`,
+        `${label}: chat block must not include content`
       );
     }
     return { name, type: "chat" };
@@ -134,7 +131,7 @@ function validateBlockEntry(
   if (type === "abstract") {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: type "abstract" is removed; delete the block and any {{.abstract}} macros`,
+      `${label}: type "abstract" is removed; delete the block and any {{.abstract}} macros`
     );
   }
 
@@ -144,11 +141,13 @@ function validateBlockEntry(
 /**
  * Validates `prompts.blocks` as an ordered map (key = block name) into {@link PromptBlock}[].
  */
-export function validatePromptBlocksFromMap(raw: unknown): readonly PromptBlock[] {
+export function validatePromptBlocksFromMap(
+  raw: unknown
+): readonly PromptBlock[] {
   if (Array.isArray(raw)) {
     throw new PromptError(
       "INVALID_YAML",
-      "blocks must be a mapping (object), not an array",
+      "blocks must be a mapping (object), not an array"
     );
   }
   if (raw == null || typeof raw !== "object") {
@@ -158,7 +157,10 @@ export function validatePromptBlocksFromMap(raw: unknown): readonly PromptBlock[
   const blocks: PromptBlock[] = [];
   for (const [name, item] of Object.entries(raw as Record<string, unknown>)) {
     if (!isNonEmptyString(name)) {
-      throw new PromptError("INVALID_BLOCK", "block map keys must be non-empty strings");
+      throw new PromptError(
+        "INVALID_BLOCK",
+        "block map keys must be non-empty strings"
+      );
     }
     blocks.push(validateBlockEntry(name, item));
   }
@@ -166,7 +168,7 @@ export function validatePromptBlocksFromMap(raw: unknown): readonly PromptBlock[
   if (chatBlocks.length > 1) {
     throw new PromptError(
       "INVALID_YAML",
-      "prompt must contain at most one chat block",
+      "prompt must contain at most one chat block"
     );
   }
   return blocks;
@@ -174,4 +176,3 @@ export function validatePromptBlocksFromMap(raw: unknown): readonly PromptBlock[
 
 /** @alias validatePromptBlocksFromMap */
 export const validatePromptBlocks = validatePromptBlocksFromMap;
-

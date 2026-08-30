@@ -8,7 +8,9 @@ import { AGENT_LIST_LABELS as BASE_AGENT_LIST_LABELS } from "../shared/ui-labels
 import type { StoredConfigInvalidCode } from "./types.js";
 
 /** 失效原因 → 用户可读说明。 */
-export function storedConfigInvalidReason(code: StoredConfigInvalidCode): string {
+export function storedConfigInvalidReason(
+  code: StoredConfigInvalidCode
+): string {
   switch (code) {
     case "outdated_version":
       return STORED_CONFIG_LABELS.reasonOutdatedVersion;

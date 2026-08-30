@@ -12,11 +12,13 @@ import type {
 
 /** Any child satisfied → trigger fires. */
 export class CompositeConditionTrigger implements CompactionConditionTrigger {
-  constructor(private readonly triggers: readonly CompactionConditionTrigger[]) {}
+  constructor(
+    private readonly triggers: readonly CompactionConditionTrigger[]
+  ) {}
 
   async shouldTrigger(
     session: AgentSession,
-    evaluation: CompactionEvaluationContext,
+    evaluation: CompactionEvaluationContext
   ): Promise<boolean> {
     for (const trigger of this.triggers) {
       if (await trigger.shouldTrigger(session, evaluation)) {

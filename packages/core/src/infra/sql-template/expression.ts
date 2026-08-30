@@ -31,16 +31,13 @@ const IDENTIFIER_RE = /\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\b/g;
  * 每次都重新 `new Function` 是纯浪费。这里按规范化后的表达式体做 key 缓存
  * 编译结果，命中后直接拿现成函数去跑就行。
  */
-const compiledTestFunctionCache = new Map<
-  string,
-  (ctx: unknown) => unknown
->();
+const compiledTestFunctionCache = new Map<string, (ctx: unknown) => unknown>();
 
 function compileTestFunction(normalized: string): (ctx: unknown) => unknown {
   const cached = compiledTestFunctionCache.get(normalized);
   if (cached !== undefined) return cached;
   const fn = new Function("__ctx__", `return (${normalized});`) as (
-    ctx: unknown,
+    ctx: unknown
   ) => unknown;
   compiledTestFunctionCache.set(normalized, fn);
   return fn;
@@ -51,7 +48,7 @@ function compileTestFunction(normalized: string): (ctx: unknown) => unknown {
  */
 function mapOutsideStringLiterals(
   expr: string,
-  transform: (segment: string) => string,
+  transform: (segment: string) => string
 ): string {
   let result = "";
   let i = 0;
@@ -95,7 +92,7 @@ export function normalizeExpression(expr: string): string {
     segment
       .replace(/\band\b/gi, "&&")
       .replace(/\bor\b/gi, "||")
-      .replace(/\bnot\b/gi, "!"),
+      .replace(/\bnot\b/gi, "!")
   );
 }
 
@@ -114,7 +111,7 @@ export function bindExpressionToContext(expr: string): string {
         bound += `?.${parts[i]}`;
       }
       return bound;
-    }),
+    })
   );
 }
 
@@ -130,24 +127,23 @@ export interface EvaluateTestOptions {
 export function evaluateTest(
   expr: string,
   stack: ContextStack,
-  options?: EvaluateTestOptions,
+  options?: EvaluateTestOptions
 ): boolean {
   const normalized = bindExpressionToContext(normalizeExpression(expr));
-  const errorOptions = options?.offset !== undefined
-    ? { offset: options.offset }
-    : undefined;
+  const errorOptions =
+    options?.offset !== undefined ? { offset: options.offset } : undefined;
   if (!normalized) {
     throw new SqlTemplateError(
       "EXPRESSION_ERROR",
       "Empty test expression",
-      errorOptions,
+      errorOptions
     );
   }
   if (FORBIDDEN_PATTERN.test(normalized)) {
     throw new SqlTemplateError(
       "EXPRESSION_ERROR",
       `Disallowed syntax in test expression: ${expr}`,
-      errorOptions,
+      errorOptions
     );
   }
 
@@ -159,7 +155,7 @@ export function evaluateTest(
     throw new SqlTemplateError(
       "EXPRESSION_ERROR",
       `Failed to evaluate test expression: ${expr}`,
-      { ...errorOptions, cause: err },
+      { ...errorOptions, cause: err }
     );
   }
 }

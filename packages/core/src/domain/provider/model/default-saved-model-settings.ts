@@ -14,7 +14,9 @@ import type { SavedModelSettings } from "./saved-model-settings.js";
  *
  * @param vendorModelId Provider 模型名。
  */
-export function defaultSavedModelSettings(vendorModelId: string): SavedModelSettings {
+export function defaultSavedModelSettings(
+  vendorModelId: string
+): SavedModelSettings {
   return {
     schemaVersion: 2,
     internal: {

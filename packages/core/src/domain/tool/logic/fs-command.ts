@@ -9,14 +9,14 @@
 
 import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
 import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
-import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
+import type {
+  VfsListEntry,
+  VfsService,
+} from "@/domain/vfs/ports/vfs-service.port.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import { classifyFsCommand } from "./fs-command-classify.js";
-import {
-  capUtf8Bytes,
-  TOOL_OUTPUT_MAX_BYTES,
-} from "./tool-output-limits.js";
+import { capUtf8Bytes, TOOL_OUTPUT_MAX_BYTES } from "./tool-output-limits.js";
 
 export type FsCommand =
   | { readonly kind: "rm"; readonly path: string; readonly recursive: boolean }
@@ -101,14 +101,15 @@ export function parseFsCommand(input: FsToolInput): FsCommand {
     case "mkdir":
       return { kind: "mkdir", path: requireField(input.path, "path") };
     case "ls": {
-      const dir = typeof input.path === "string" && input.path !== "" ? input.path : "/";
+      const dir =
+        typeof input.path === "string" && input.path !== "" ? input.path : "/";
       return { kind: "ls", dir, recursive: input.recursive === true };
     }
     default:
       invalidCommand(
         typeof action === "string" && action !== ""
           ? `unknown action: ${action}`
-          : "missing action",
+          : "missing action"
       );
   }
 }
@@ -139,7 +140,9 @@ function formatLsOutput(entries: readonly VfsListEntry[]): FsLsOutput {
     };
   });
   const truncated = capped.truncated;
-  const omitted = truncated ? entries.length - formattedEntries.length : undefined;
+  const omitted = truncated
+    ? entries.length - formattedEntries.length
+    : undefined;
   return {
     entries: formattedEntries,
     total: entries.length,
@@ -152,7 +155,7 @@ function formatLsOutput(entries: readonly VfsListEntry[]): FsLsOutput {
 async function rmRecursiveWhenTargetIsDirectory(
   vfs: VfsService,
   path: string,
-  recursive: boolean,
+  recursive: boolean
 ): Promise<boolean> {
   if (recursive) {
     return true;
@@ -182,14 +185,14 @@ async function rmRecursiveWhenTargetIsDirectory(
 /** Executes a parsed fs command against the injected VFS instance. */
 export async function executeFsCommand(
   vfs: VfsService,
-  parsed: FsCommand,
+  parsed: FsCommand
 ): Promise<FsCommandResult> {
   switch (parsed.kind) {
     case "rm": {
       const recursive = await rmRecursiveWhenTargetIsDirectory(
         vfs,
         parsed.path,
-        parsed.recursive,
+        parsed.recursive
       );
       await vfs.delete(parsed.path, { recursive });
       return { ok: true as const };
@@ -210,7 +213,9 @@ export async function executeFsCommand(
       await vfs.mkdir(parsed.path);
       return { ok: true as const };
     case "ls": {
-      const entries = await vfs.list(parsed.dir, { recursive: parsed.recursive });
+      const entries = await vfs.list(parsed.dir, {
+        recursive: parsed.recursive,
+      });
       return formatLsOutput(entries);
     }
   }

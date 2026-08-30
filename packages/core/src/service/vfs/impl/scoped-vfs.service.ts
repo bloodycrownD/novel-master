@@ -33,7 +33,7 @@ import type {
 export class ScopedVfsService implements VfsService {
   constructor(
     private readonly inner: InternalVfsService,
-    private readonly scope: VfsScope,
+    private readonly scope: VfsScope
   ) {}
 
   private get scopeKeyStr(): string {
@@ -42,7 +42,7 @@ export class ScopedVfsService implements VfsService {
 
   async list(
     dir: string,
-    options?: { recursive?: boolean; maxDepth?: number },
+    options?: { recursive?: boolean; maxDepth?: number }
   ): Promise<VfsListEntry[]> {
     const logicalDir = resolveLogicalPath(dir);
     assertLogicalPathAllowed(this.scope, logicalDir);
@@ -64,7 +64,7 @@ export class ScopedVfsService implements VfsService {
   async write(
     path: string,
     content: string,
-    options?: WriteOptions,
+    options?: WriteOptions
   ): Promise<{ version: number }> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
@@ -75,17 +75,20 @@ export class ScopedVfsService implements VfsService {
     path: string,
     oldString: string,
     newString: string,
-    options?: { replaceAll?: boolean },
+    options?: { replaceAll?: boolean }
   ): Promise<{ version: number; replacements: number }> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    return this.inner.replace(this.scopeKeyStr, logical, oldString, newString, options);
+    return this.inner.replace(
+      this.scopeKeyStr,
+      logical,
+      oldString,
+      newString,
+      options
+    );
   }
 
-  async glob(
-    pattern: string,
-    options?: { cwd?: string },
-  ): Promise<string[]> {
+  async glob(pattern: string, options?: { cwd?: string }): Promise<string[]> {
     const cwd = options?.cwd;
     let logicalCwd: string | undefined;
     if (cwd != null) {
@@ -97,7 +100,7 @@ export class ScopedVfsService implements VfsService {
 
   async grep(
     pattern: string,
-    options?: VfsGrepOptions,
+    options?: VfsGrepOptions
   ): Promise<VfsGrepMatch[]> {
     const prefix = options?.pathPrefix;
     let logicalPrefix: string | undefined;
@@ -111,14 +114,11 @@ export class ScopedVfsService implements VfsService {
       pathPrefix: logicalPrefix,
     });
     return matches.filter((m) =>
-      pathGlob != null ? matchGlob(pathGlob, m.path) : true,
+      pathGlob != null ? matchGlob(pathGlob, m.path) : true
     );
   }
 
-  async delete(
-    path: string,
-    options?: { recursive?: boolean },
-  ): Promise<void> {
+  async delete(path: string, options?: { recursive?: boolean }): Promise<void> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
     return this.inner.delete(this.scopeKeyStr, logical, options);
@@ -132,7 +132,7 @@ export class ScopedVfsService implements VfsService {
 
   async hardDelete(
     path: string,
-    options?: { recursive?: boolean },
+    options?: { recursive?: boolean }
   ): Promise<void> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
@@ -142,13 +142,18 @@ export class ScopedVfsService implements VfsService {
   async renamePath(
     from: string,
     to: string,
-    options?: { overwrite?: boolean },
+    options?: { overwrite?: boolean }
   ): Promise<void> {
     const logicalFrom = resolveLogicalPath(from);
     const logicalTo = resolveLogicalPath(to);
     assertLogicalPathAllowed(this.scope, logicalFrom);
     assertLogicalPathAllowed(this.scope, logicalTo);
-    return this.inner.renamePath(this.scopeKeyStr, logicalFrom, logicalTo, options);
+    return this.inner.renamePath(
+      this.scopeKeyStr,
+      logicalFrom,
+      logicalTo,
+      options
+    );
   }
 
   async renamePrefix(oldDir: string, newDir: string): Promise<void> {

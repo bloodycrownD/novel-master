@@ -27,21 +27,22 @@ export async function seedLiveHeadRevisionsUnderPrefix(
   scopeKey: string,
   pathPrefix: string,
   contentStore?: VfsContentStore,
-  excludePrefixes?: readonly string[],
+  excludePrefixes?: readonly string[]
 ): Promise<number> {
   const excludes = excludePrefixes ?? [];
-  const heads = (await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix))
-    .filter((h) => !isVfsPathExcluded(h.path, excludes));
+  const heads = (
+    await entryRepo.listFileHeadsUnderPrefix(scopeKey, pathPrefix)
+  ).filter((h) => !isVfsPathExcluded(h.path, excludes));
   if (heads.length === 0) {
     return 0;
   }
 
   // 批量检查哪些 (entryId, version) 的 revision 已存在
   const existingKeys = await revisionRepo.findExistingEntryVersionKeys(
-    heads.map((h) => ({ entryId: h.entryId, version: h.headVersion })),
+    heads.map((h) => ({ entryId: h.entryId, version: h.headVersion }))
   );
   const needsSeed = heads.filter(
-    (h) => !existingKeys.has(`${h.entryId}:${h.headVersion}`),
+    (h) => !existingKeys.has(`${h.entryId}:${h.headVersion}`)
   );
   if (needsSeed.length === 0) {
     return 0;
@@ -50,7 +51,7 @@ export async function seedLiveHeadRevisionsUnderPrefix(
   // 批量取每个待种文件的 content_hash（不解明文）
   const hashMap = await entryRepo.findContentHashesByPaths(
     scopeKey,
-    needsSeed.map((h) => h.path),
+    needsSeed.map((h) => h.path)
   );
 
   // 批量确保 blob 存在（同库时全部已存在）
@@ -58,12 +59,11 @@ export async function seedLiveHeadRevisionsUnderPrefix(
     ...new Set(
       needsSeed
         .map((h) => hashMap.get(h.path) ?? null)
-        .filter((h): h is string => h != null),
+        .filter((h): h is string => h != null)
     ),
   ];
   if (allHashes.length > 0 && contentStore != null) {
-    const existingBlobs =
-      await contentStore.findExistingBlobHashes(allHashes);
+    const existingBlobs = await contentStore.findExistingBlobHashes(allHashes);
     const missingHashes = allHashes.filter((h) => !existingBlobs.has(h));
     // blob 缺失时逐个 ensureBlob（回退路径；同库复制不会走到）
     for (const hash of missingHashes) {
@@ -99,7 +99,7 @@ export async function insertFileSeedingRevision(
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   logicalPath: string,
-  content: string,
+  content: string
 ): Promise<{ version: number }> {
   const entry = await entryRepo.findByPath(scopeKey, logicalPath);
   const entryId = entry?.entryId;
@@ -107,7 +107,12 @@ export async function insertFileSeedingRevision(
   if (entryId != null) {
     const maxRevision = await revisionRepo.findMaxVersionForEntry(entryId);
     if (maxRevision != null) {
-      await entryRepo.insertAtVersion(scopeKey, logicalPath, content, maxRevision + 1);
+      await entryRepo.insertAtVersion(
+        scopeKey,
+        logicalPath,
+        content,
+        maxRevision + 1
+      );
       version = maxRevision + 1;
     } else {
       const inserted = await entryRepo.insert(scopeKey, logicalPath, content);

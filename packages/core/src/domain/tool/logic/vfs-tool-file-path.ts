@@ -20,7 +20,7 @@ const FILE_OPEN_TOOL_NAMES = new Set(["read", "write", "edit"]);
  */
 export function resolveVfsToolFilePath(
   toolName: string,
-  input: Record<string, unknown> | null | undefined,
+  input: Record<string, unknown> | null | undefined
 ): string | undefined {
   const name = toolName.startsWith("vfs.") ? toolName.slice(4) : toolName;
   if (!FILE_OPEN_TOOL_NAMES.has(name)) return undefined;

@@ -50,7 +50,10 @@ export interface VfsContentStore {
    * @param fallbackPlain 不存在时用于 put 的明文；为 null 时仅探测不写入
    * @throws 当 blob 不存在且 fallbackPlain 为 null 时抛 `NOT_FOUND`
    */
-  ensureBlob(contentHash: string, fallbackPlain: string | null): Promise<string>;
+  ensureBlob(
+    contentHash: string,
+    fallbackPlain: string | null
+  ): Promise<string>;
 
   /**
    * 批量检查哪些 content_hash 的 blob 行已存在。

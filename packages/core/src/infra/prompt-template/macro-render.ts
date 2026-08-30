@@ -18,12 +18,9 @@ function lookupDot(
   dot: Readonly<Record<string, unknown>>,
   path: readonly string[],
   offset: number,
-  optionalTopLevel?: ReadonlySet<string>,
+  optionalTopLevel?: ReadonlySet<string>
 ): string {
-  if (
-    path.length === 1 &&
-    optionalTopLevel?.has(path[0]!) === true
-  ) {
+  if (path.length === 1 && optionalTopLevel?.has(path[0]!) === true) {
     const value = dot[path[0]!];
     if (value == null) {
       return "";
@@ -35,11 +32,15 @@ function lookupDot(
   }
   let current: unknown = dot;
   for (const segment of path) {
-    if (current == null || typeof current !== "object" || Array.isArray(current)) {
+    if (
+      current == null ||
+      typeof current !== "object" ||
+      Array.isArray(current)
+    ) {
       throw new PromptError(
         "UNKNOWN_FIELD",
         `unknown field: .${path.join(".")}`,
-        { offset },
+        { offset }
       );
     }
     current = (current as Record<string, unknown>)[segment];
@@ -48,14 +49,14 @@ function lookupDot(
     throw new PromptError(
       "UNKNOWN_FIELD",
       `unknown field: .${path.join(".")}`,
-      { offset },
+      { offset }
     );
   }
   if (typeof current !== "string") {
     throw new PromptError(
       "UNKNOWN_FIELD",
       `field .${path.join(".")} is not a string`,
-      { offset },
+      { offset }
     );
   }
   return current;
@@ -64,11 +65,13 @@ function lookupDot(
 function lookupRoot(
   root: Readonly<Record<string, string>>,
   key: string,
-  offset: number,
+  offset: number
 ): string {
   const value = root[key];
   if (value == null) {
-    throw new PromptError("UNKNOWN_FIELD", `unknown field: $.${key}`, { offset });
+    throw new PromptError("UNKNOWN_FIELD", `unknown field: $.${key}`, {
+      offset,
+    });
   }
   return value;
 }
@@ -76,19 +79,14 @@ function lookupRoot(
 /**
  * Replaces `{{ ... }}` macros in `template` using dot and root contexts.
  */
-export function renderMacro(
-  template: string,
-  ctx: MacroRenderContext,
-): string {
+export function renderMacro(template: string, ctx: MacroRenderContext): string {
   const actions = scanMacroActions(template);
   if (actions.length === 0) {
     return template;
   }
 
   const optionalTopLevel =
-    ctx.optionalDotFields != null
-      ? new Set(ctx.optionalDotFields)
-      : undefined;
+    ctx.optionalDotFields != null ? new Set(ctx.optionalDotFields) : undefined;
 
   let out = "";
   let cursor = 0;

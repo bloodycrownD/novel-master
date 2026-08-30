@@ -38,7 +38,7 @@ export function countOccurrences(haystack: string, needle: string): number {
  */
 export function longestCommonSubstring(
   a: string,
-  b: string,
+  b: string
 ): LongestCommonSubstringResult {
   if (a.length === 0 || b.length === 0) {
     return { substring: "", length: 0 };
@@ -50,7 +50,7 @@ export function longestCommonSubstring(
   const endsInB: number[] = [];
 
   const dp: number[][] = Array.from({ length: rows }, () =>
-    Array<number>(cols).fill(0),
+    Array<number>(cols).fill(0)
   );
 
   for (let i = 1; i < rows; i++) {

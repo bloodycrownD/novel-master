@@ -28,15 +28,35 @@ export function tokenizerAssetPaths(family: TokenizerFamily): {
     case "jamba":
       return { primary: "jamba.model", kind: "model" };
     case "qwen2":
-      return { primary: "web/qwen2.json", fallback: "llama3.json", kind: "json" };
+      return {
+        primary: "web/qwen2.json",
+        fallback: "llama3.json",
+        kind: "json",
+      };
     case "command-r":
-      return { primary: "web/command-r.json", fallback: "llama3.json", kind: "json" };
+      return {
+        primary: "web/command-r.json",
+        fallback: "llama3.json",
+        kind: "json",
+      };
     case "command-a":
-      return { primary: "web/command-a.json", fallback: "llama3.json", kind: "json" };
+      return {
+        primary: "web/command-a.json",
+        fallback: "llama3.json",
+        kind: "json",
+      };
     case "nemo":
-      return { primary: "web/nemo.json", fallback: "llama3.json", kind: "json" };
+      return {
+        primary: "web/nemo.json",
+        fallback: "llama3.json",
+        kind: "json",
+      };
     case "deepseek":
-      return { primary: "web/deepseek.json", fallback: "llama3.json", kind: "json" };
+      return {
+        primary: "web/deepseek.json",
+        fallback: "llama3.json",
+        kind: "json",
+      };
     case "glm":
       return { primary: "web/glm.json", fallback: "llama3.json", kind: "json" };
     default:

@@ -21,7 +21,7 @@ export interface CharacterCardImportService {
   import(
     scope: VfsScope,
     tree: MdTree,
-    options: CharacterCardImportOptions,
+    options: CharacterCardImportOptions
   ): Promise<void>;
 
   /**
@@ -31,6 +31,6 @@ export interface CharacterCardImportService {
   importFromBytes(
     scope: VfsScope,
     bytes: Uint8Array,
-    options: CharacterCardImportOptions,
+    options: CharacterCardImportOptions
   ): Promise<void>;
 }

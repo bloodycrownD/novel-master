@@ -15,7 +15,7 @@ function escapeRegExp(value: string): string {
  */
 export function nextForkSessionTitle(
   sourceTitle: string | null | undefined,
-  existingTitles: ReadonlyArray<string | null | undefined>,
+  existingTitles: ReadonlyArray<string | null | undefined>
 ): string {
   const base = sourceTitle?.trim() || "会话";
   const re = new RegExp(`^${escapeRegExp(base)}_ckpt_(\\d+)$`);

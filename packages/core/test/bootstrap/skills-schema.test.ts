@@ -11,7 +11,11 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open, SCHEMA_BOOT_VERSION } from "@novel-master/core";
+import {
+  bootstrapNovelMaster,
+  open,
+  SCHEMA_BOOT_VERSION,
+} from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -27,20 +31,20 @@ async function openMemory() {
 
 async function tableExists(
   conn: Awaited<ReturnType<typeof openMemory>>,
-  name: string,
+  name: string
 ): Promise<boolean> {
   const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${name}'`,
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${name}'`
   );
   return rows.length === 1;
 }
 
 async function indexExists(
   conn: Awaited<ReturnType<typeof openMemory>>,
-  name: string,
+  name: string
 ): Promise<boolean> {
   const rows = await conn.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'index' AND name = '${name}'`,
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND name = '${name}'`
   );
   return rows.length === 1;
 }
@@ -65,12 +69,20 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
 
     await bootstrapNovelMaster(conn);
 
-    assert.equal(await tableExists(conn, "skill_disabled_rule"), true, "v6 撞车库应补建技能表");
+    assert.equal(
+      await tableExists(conn, "skill_disabled_rule"),
+      true,
+      "v6 撞车库应补建技能表"
+    );
     assert.equal(await indexExists(conn, "idx_skill_disabled_scope"), true);
     const versionRows = await conn.query<{ user_version: number }>(
-      "PRAGMA user_version",
+      "PRAGMA user_version"
     );
-    assert.equal(Number(versionRows[0]!.user_version), SCHEMA_BOOT_VERSION, "boot version 应升到当前 SCHEMA_BOOT_VERSION");
+    assert.equal(
+      Number(versionRows[0]!.user_version),
+      SCHEMA_BOOT_VERSION,
+      "boot version 应升到当前 SCHEMA_BOOT_VERSION"
+    );
 
     await conn.close();
   });
@@ -83,27 +95,35 @@ describe("skill_disabled_rule 建表（T-SK3）", () => {
 
     await bootstrapNovelMaster(conn);
 
-    assert.equal(await tableExists(conn, "skill_disabled_rule"), true, "升级路径应补建表");
+    assert.equal(
+      await tableExists(conn, "skill_disabled_rule"),
+      true,
+      "升级路径应补建表"
+    );
     assert.equal(await indexExists(conn, "idx_skill_disabled_scope"), true);
     const versionRows = await conn.query<{ user_version: number }>(
-      "PRAGMA user_version",
+      "PRAGMA user_version"
     );
-    assert.equal(Number(versionRows[0]!.user_version), SCHEMA_BOOT_VERSION, "boot version 应升到当前 SCHEMA_BOOT_VERSION");
+    assert.equal(
+      Number(versionRows[0]!.user_version),
+      SCHEMA_BOOT_VERSION,
+      "boot version 应升到当前 SCHEMA_BOOT_VERSION"
+    );
 
     // 复合主键形态：重复 (scope_key, skill_name) 插入应被拒绝
     await conn.execute(
-      `INSERT INTO skill_disabled_rule (scope_key, skill_name) VALUES ('project:p1', 'foo')`,
+      `INSERT INTO skill_disabled_rule (scope_key, skill_name) VALUES ('project:p1', 'foo')`
     );
     await assert.rejects(
       () =>
         conn.execute(
-          `INSERT INTO skill_disabled_rule (scope_key, skill_name) VALUES ('project:p1', 'foo')`,
+          `INSERT INTO skill_disabled_rule (scope_key, skill_name) VALUES ('project:p1', 'foo')`
         ),
-      /UNIQUE constraint failed/,
+      /UNIQUE constraint failed/
     );
     // 同名不同域互不冲突
     await conn.execute(
-      `INSERT INTO skill_disabled_rule (scope_key, skill_name) VALUES ('project:p2', 'foo')`,
+      `INSERT INTO skill_disabled_rule (scope_key, skill_name) VALUES ('project:p2', 'foo')`
     );
 
     // 再跑一遍 bootstrap（幂等）：表不重复、不报错

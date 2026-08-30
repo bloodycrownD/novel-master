@@ -13,14 +13,14 @@ export interface SessionKkvRepository {
   get(
     sessionId: string,
     domain: string,
-    key: string,
+    key: string
   ): Promise<SessionKkvEntry | null>;
 
   set(
     sessionId: string,
     domain: string,
     key: string,
-    value: string,
+    value: string
   ): Promise<void>;
 
   delete(sessionId: string, domain: string, key: string): Promise<boolean>;

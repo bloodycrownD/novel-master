@@ -6,10 +6,7 @@
 
 import type { MdTree } from "../model/character-card.js";
 import { characterCardJsonToMdTree } from "./character-card-to-md-tree.js";
-import {
-  extractPngCharaJsonText,
-  isPngMagic,
-} from "./extract-png-chara.js";
+import { extractPngCharaJsonText, isPngMagic } from "./extract-png-chara.js";
 import {
   parseCharacterCardJsonBytes,
   parseCharacterCardJsonText,
@@ -20,9 +17,7 @@ import {
  *
  * @throws {import("@/errors/character-card-errors.js").CharacterCardError}
  */
-export function parseCharacterCardToMdTree(
-  input: Uint8Array | string,
-): MdTree {
+export function parseCharacterCardToMdTree(input: Uint8Array | string): MdTree {
   if (typeof input === "string") {
     return characterCardJsonToMdTree(parseCharacterCardJsonText(input));
   }

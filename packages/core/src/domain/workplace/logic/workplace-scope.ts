@@ -36,7 +36,7 @@ export function workplaceRootLogicalPath(_scope: WorkplaceScope): string {
  */
 export function isWorkplaceRootPath(
   scope: WorkplaceScope,
-  logicalPath: string,
+  logicalPath: string
 ): boolean {
   return logicalPath === workplaceRootLogicalPath(scope);
 }

@@ -16,7 +16,7 @@ import type { LlmStreamEvent } from "../ports/adapter.port.js";
 export function emitDirectTextDelta(
   state: { textParts: string[] },
   text: string,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): void {
   if (text === "") {
     return;

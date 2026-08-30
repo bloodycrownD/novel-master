@@ -23,6 +23,6 @@ export interface MessageRollbackService {
     sessionId: string,
     projectId: string,
     anchorMessageId: string,
-    options?: RollbackOptions,
+    options?: RollbackOptions
   ): Promise<void>;
 }

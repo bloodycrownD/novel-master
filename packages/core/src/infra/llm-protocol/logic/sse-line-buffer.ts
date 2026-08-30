@@ -13,7 +13,7 @@ export type SseLineBufferState = { readonly buffer: string };
 export function feedSseLines(
   state: SseLineBufferState,
   chunk: string,
-  onLine: (line: string) => void,
+  onLine: (line: string) => void
 ): void {
   const combined = state.buffer + chunk;
   const lines = combined.split("\n");

@@ -131,29 +131,27 @@ export type SkillToolOutput =
 function requireString(
   action: SkillToolInput["action"],
   field: string,
-  value: string | undefined,
+  value: string | undefined
 ): string {
   if (typeof value !== "string" || value.length === 0) {
     throw new ToolError(
       "INVALID_ARGUMENT",
       `skill 的 ${action} 动作必须提供非空 ${field}`,
-      { toolName: SKILL_TOOL_NAME },
+      { toolName: SKILL_TOOL_NAME }
     );
   }
   return value;
 }
 
 /** 从装配期预算好的生效清单拼给 LLM 看的「可用技能」文案（照 formatCallableList）。 */
-function formatEffectiveSkills(
-  effective: readonly EffectiveSkill[],
-): string {
+function formatEffectiveSkills(effective: readonly EffectiveSkill[]): string {
   const usable = effective.filter((s) => s.effective);
   if (usable.length === 0) return "（暂无可用技能）";
   return usable
     .map((s) =>
       s.description != null && s.description.trim().length > 0
         ? `- ${s.name}：${s.description.trim()}`
-        : `- ${s.name}`,
+        : `- ${s.name}`
     )
     .join("\n");
 }
@@ -169,12 +167,15 @@ const SKILL_LOAD_SEEN_TIP =
  * 解析，输出携带实际命中域）；write / edit 缺省写 project 域（服务层要求
  * 显式域，工具层补默认值）；list 缺省列当前项目合并视图。
  */
-export const skillTool: Tool<SkillToolInput, SkillToolOutput, BuiltinToolContext> =
-  {
-    name: SKILL_TOOL_NAME,
-    description: (ctx) => {
-      const effective = ctx.skills?.effective ?? [];
-      return `读取与管理技能（Skills）。技能是可复用的提示词包（SKILL.md + 附属文件），通过本工具查看或修改其内容。
+export const skillTool: Tool<
+  SkillToolInput,
+  SkillToolOutput,
+  BuiltinToolContext
+> = {
+  name: SKILL_TOOL_NAME,
+  description: (ctx) => {
+    const effective = ctx.skills?.effective ?? [];
+    return `读取与管理技能（Skills）。技能是可复用的提示词包（SKILL.md + 附属文件），通过本工具查看或修改其内容。
 
 当前可用技能（装配期快照，回合内变更不即时反映）：
 ${formatEffectiveSkills(effective)}
@@ -192,281 +193,283 @@ action 说明：
 - path：相对技能目录的路径，不得包含 ..
 
 注意：技能文件跨域读写不进会话工作区；修改只影响技能本身，不改当前会话文件。`;
-    },
-    inputSchema: z.object({
-      action: z
-        .enum(["load", "read", "write", "edit", "list"])
-        .describe("动作类型：load 装载技能 / read 读取 / write 覆盖写 / edit 局部替换 / list 列清单"),
-      name: z
-        .string()
-        .min(1)
-        .optional()
-        .describe("技能名（read/write/edit 必填；list 不需要）"),
-      domain: z
-        .enum(["global", "project"])
-        .optional()
-        .describe("技能域；read 缺省生效副本，write/edit 缺省 project，list 缺省合并视图"),
-      path: z
-        .string()
-        .refine((p) => !p.split("/").includes(".."), {
-          message: "技能文件路径不得包含 ..",
-        })
-        .optional()
-        .describe("相对技能目录的路径，缺省 SKILL.md，不得包含 .."),
-      content: z.string().optional().describe("write 动作的整文件内容"),
-      oldString: z.string().optional().describe("edit 动作的匹配串"),
-      newString: z.string().optional().describe("edit 动作的替换串"),
-      replaceAll: z.boolean().optional().describe("edit 动作是否替换全部匹配"),
-      offset: z
-        .number()
-        .int()
-        .min(1)
-        .optional()
-        .describe("read 分页起始行（1-based）"),
-      limit: z.number().int().min(1).optional().describe("read 分页行数上限"),
+  },
+  inputSchema: z.object({
+    action: z
+      .enum(["load", "read", "write", "edit", "list"])
+      .describe(
+        "动作类型：load 装载技能 / read 读取 / write 覆盖写 / edit 局部替换 / list 列清单"
+      ),
+    name: z
+      .string()
+      .min(1)
+      .optional()
+      .describe("技能名（read/write/edit 必填；list 不需要）"),
+    domain: z
+      .enum(["global", "project"])
+      .optional()
+      .describe(
+        "技能域；read 缺省生效副本，write/edit 缺省 project，list 缺省合并视图"
+      ),
+    path: z
+      .string()
+      .refine((p) => !p.split("/").includes(".."), {
+        message: "技能文件路径不得包含 ..",
+      })
+      .optional()
+      .describe("相对技能目录的路径，缺省 SKILL.md，不得包含 .."),
+    content: z.string().optional().describe("write 动作的整文件内容"),
+    oldString: z.string().optional().describe("edit 动作的匹配串"),
+    newString: z.string().optional().describe("edit 动作的替换串"),
+    replaceAll: z.boolean().optional().describe("edit 动作是否替换全部匹配"),
+    offset: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("read 分页起始行（1-based）"),
+    limit: z.number().int().min(1).optional().describe("read 分页行数上限"),
+  }),
+  outputSchema: z.discriminatedUnion("action", [
+    z.object({
+      action: z.literal("load"),
+      domain: z.enum(["global", "project"]),
+      name: z.string(),
+      path: z.string(),
+      content: z.string(),
+      version: z.number(),
+      files: z.array(z.string()),
+      truncated: z.boolean(),
+      alreadyReferenced: z.boolean().optional(),
     }),
-    outputSchema: z.discriminatedUnion("action", [
-      z.object({
-        action: z.literal("load"),
-        domain: z.enum(["global", "project"]),
-        name: z.string(),
-        path: z.string(),
-        content: z.string(),
-        version: z.number(),
-        files: z.array(z.string()),
-        truncated: z.boolean(),
-        alreadyReferenced: z.boolean().optional(),
-      }),
-      z.object({
-        action: z.literal("read"),
-        domain: z.enum(["global", "project"]),
-        name: z.string(),
-        path: z.string(),
-        content: z.string(),
-        version: z.number(),
-        offset: z.number().int(),
-        limit: z.number().int(),
-        totalLines: z.number().int(),
-        returnedLines: z.number().int(),
-        truncated: z.boolean(),
-        nextOffset: z.number().int().optional(),
-      }),
-      z.object({
-        action: z.literal("write"),
-        domain: z.enum(["global", "project"]),
-        name: z.string(),
-        path: z.string(),
-        version: z.number(),
-      }),
-      z.object({
-        action: z.literal("edit"),
-        domain: z.enum(["global", "project"]),
-        name: z.string(),
-        path: z.string(),
-        version: z.number(),
-        replacements: z.number().int(),
-      }),
-      z.object({
-        action: z.literal("list"),
-        entries: z.array(
-          z.object({
-            name: z.string(),
-            description: z.string().optional(),
-            domain: z.enum(["global", "project"]),
-            valid: z.boolean(),
-            disabled: z.boolean().optional(),
-            overridden: z.boolean().optional(),
-          }),
-        ),
-        total: z.number().int(),
-      }),
-    ]),
-    async run(input, ctx): Promise<SkillToolOutput> {
-      const skills = ctx.skills;
-      if (skills == null) {
-        throw new ToolError(
-          "FAILED",
-          "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）",
-          { toolName: SKILL_TOOL_NAME },
-        );
-      }
-      const service: SkillService = skills.service;
+    z.object({
+      action: z.literal("read"),
+      domain: z.enum(["global", "project"]),
+      name: z.string(),
+      path: z.string(),
+      content: z.string(),
+      version: z.number(),
+      offset: z.number().int(),
+      limit: z.number().int(),
+      totalLines: z.number().int(),
+      returnedLines: z.number().int(),
+      truncated: z.boolean(),
+      nextOffset: z.number().int().optional(),
+    }),
+    z.object({
+      action: z.literal("write"),
+      domain: z.enum(["global", "project"]),
+      name: z.string(),
+      path: z.string(),
+      version: z.number(),
+    }),
+    z.object({
+      action: z.literal("edit"),
+      domain: z.enum(["global", "project"]),
+      name: z.string(),
+      path: z.string(),
+      version: z.number(),
+      replacements: z.number().int(),
+    }),
+    z.object({
+      action: z.literal("list"),
+      entries: z.array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          domain: z.enum(["global", "project"]),
+          valid: z.boolean(),
+          disabled: z.boolean().optional(),
+          overridden: z.boolean().optional(),
+        })
+      ),
+      total: z.number().int(),
+    }),
+  ]),
+  async run(input, ctx): Promise<SkillToolOutput> {
+    const skills = ctx.skills;
+    if (skills == null) {
+      throw new ToolError(
+        "FAILED",
+        "skill 工具未装配 skills 上下文（当前运行时未注入技能服务）",
+        { toolName: SKILL_TOOL_NAME }
+      );
+    }
+    const service: SkillService = skills.service;
 
-      switch (input.action) {
-        case "load": {
-          const name = requireString("load", "name", input.name);
-          const result = await service.readSkillFile(
-            undefined,
-            name,
-            undefined,
-            skills.projectId,
-          );
-          // seen 共享（方向 A）：本请求提示词已注入该技能全文（$ 引用）→ 短提示
-          if (skills.referencedNames?.has(name)) {
-            return {
-              action: "load",
-              domain: result.domain,
-              name,
-              path: result.path,
-              content: SKILL_LOAD_SEEN_TIP,
-              version: result.version,
-              files: [],
-              truncated: false,
-              alreadyReferenced: true,
-            };
-          }
-          // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
-          const lines = result.content.split("\n");
-          const { slice } = sliceLinesFromOffset(lines, 1, TOOL_OUTPUT_MAX_LINES);
-          const truncatedLines = slice.map((line) => truncateLine(line).line);
-          const byteCapped = capUtf8Bytes(truncatedLines);
-          const truncated =
-            byteCapped.truncated || byteCapped.lines.length < lines.length;
-          // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
-          const list = await service.listSkills(
-            result.domain === "global"
-              ? "global"
-              : { projectId: skills.projectId },
-          );
-          const files =
-            list
-              .find((entry) => entry.name === name)
-              ?.files.filter((f) => f !== "SKILL.md") ?? [];
+    switch (input.action) {
+      case "load": {
+        const name = requireString("load", "name", input.name);
+        const result = await service.readSkillFile(
+          undefined,
+          name,
+          undefined,
+          skills.projectId
+        );
+        // seen 共享（方向 A）：本请求提示词已注入该技能全文（$ 引用）→ 短提示
+        if (skills.referencedNames?.has(name)) {
           return {
             action: "load",
             domain: result.domain,
             name,
             path: result.path,
-            content: byteCapped.lines.join("\n"),
+            content: SKILL_LOAD_SEEN_TIP,
             version: result.version,
-            files,
-            truncated,
+            files: [],
+            truncated: false,
+            alreadyReferenced: true,
           };
         }
-        case "read": {
-          const name = requireString("read", "name", input.name);
-          const result = await service.readSkillFile(
-            input.domain,
-            name,
-            input.path,
-            skills.projectId,
+        // 全文按输出上限截断（load 无分页参数；长文续读走 read 的 offset/limit）
+        const lines = result.content.split("\n");
+        const { slice } = sliceLinesFromOffset(lines, 1, TOOL_OUTPUT_MAX_LINES);
+        const truncatedLines = slice.map((line) => truncateLine(line).line);
+        const byteCapped = capUtf8Bytes(truncatedLines);
+        const truncated =
+          byteCapped.truncated || byteCapped.lines.length < lines.length;
+        // 附属文件清单（不含 SKILL.md）：按实际命中域列目录文件
+        const list = await service.listSkills(
+          result.domain === "global"
+            ? "global"
+            : { projectId: skills.projectId }
+        );
+        const files =
+          list
+            .find((entry) => entry.name === name)
+            ?.files.filter((f) => f !== "SKILL.md") ?? [];
+        return {
+          action: "load",
+          domain: result.domain,
+          name,
+          path: result.path,
+          content: byteCapped.lines.join("\n"),
+          version: result.version,
+          files,
+          truncated,
+        };
+      }
+      case "read": {
+        const name = requireString("read", "name", input.name);
+        const result = await service.readSkillFile(
+          input.domain,
+          name,
+          input.path,
+          skills.projectId
+        );
+        const offset = input.offset ?? 1;
+        const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
+        const lines = result.content.split("\n");
+        const totalLines = lines.length;
+        if (totalLines > 0 && offset > totalLines) {
+          throw new ToolError(
+            "INVALID_ARGUMENT",
+            `offset ${offset} exceeds file length (${totalLines} lines)`,
+            { toolName: SKILL_TOOL_NAME }
           );
-          const offset = input.offset ?? 1;
-          const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
-          const lines = result.content.split("\n");
-          const totalLines = lines.length;
-          if (totalLines > 0 && offset > totalLines) {
-            throw new ToolError(
-              "INVALID_ARGUMENT",
-              `offset ${offset} exceeds file length (${totalLines} lines)`,
-              { toolName: SKILL_TOOL_NAME },
-            );
-          }
-          const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
-            lines,
-            offset,
-            limit,
-          );
-          const truncatedLines = slice.map((line) => truncateLine(line).line);
-          const byteCapped = capUtf8Bytes(truncatedLines);
-          const content = byteCapped.lines.join("\n");
-          const returnedLines = byteCapped.lines.length;
-          const truncated =
-            byteCapped.truncated ||
-            returnedLines < slice.length ||
-            (lineNextOffset != null && returnedLines >= limit);
-          let nextOffset: number | undefined;
-          if (truncated) {
-            if (byteCapped.truncated && returnedLines > 0) {
-              nextOffset = offset + returnedLines;
-            } else if (lineNextOffset != null) {
-              nextOffset = lineNextOffset;
-            }
-          }
-          return {
-            action: "read",
-            domain: result.domain,
-            name,
-            path: result.path,
-            content,
-            version: result.version,
-            offset,
-            limit,
-            totalLines,
-            returnedLines,
-            truncated,
-            ...(nextOffset != null ? { nextOffset } : {}),
-          };
         }
-        case "write": {
-          const name = requireString("write", "name", input.name);
-          const content = requireString("write", "content", input.content);
-          const domain = input.domain ?? "project";
-          const path = input.path ?? SKILL_DEFAULT_ENTRY;
-          const { version } = await service.writeSkillFile(
-            domain,
-            name,
-            input.path,
-            content,
-            skills.projectId,
-          );
-          return { action: "write", domain, name, path, version };
-        }
-        case "edit": {
-          const name = requireString("edit", "name", input.name);
-          const oldString = requireString("edit", "oldString", input.oldString);
-          const newString = requireString("edit", "newString", input.newString);
-          const domain = input.domain ?? "project";
-          const path = input.path ?? SKILL_DEFAULT_ENTRY;
-          const result = await service.editSkillFile(
-            domain,
-            name,
-            input.path,
-            { oldString, newString, replaceAll: input.replaceAll },
-            skills.projectId,
-          );
-          return {
-            action: "edit",
-            domain,
-            name,
-            path,
-            version: result.version,
-            replacements: result.replacements,
-          };
-        }
-        case "list": {
-          if (input.domain == null) {
-            // 缺省列合并视图（当前项目视角的生效清单，含禁用/覆盖标记）
-            const effective = await service.effectiveSkills(skills.projectId);
-            return {
-              action: "list",
-              entries: effective.map((s) => ({
-                name: s.name,
-                ...(s.description != null ? { description: s.description } : {}),
-                domain: s.domain,
-                valid: s.valid,
-                ...(s.disabled ? { disabled: true } : {}),
-                ...(s.overridden ? { overridden: true } : {}),
-              })),
-              total: effective.length,
-            };
+        const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
+          lines,
+          offset,
+          limit
+        );
+        const truncatedLines = slice.map((line) => truncateLine(line).line);
+        const byteCapped = capUtf8Bytes(truncatedLines);
+        const content = byteCapped.lines.join("\n");
+        const returnedLines = byteCapped.lines.length;
+        const truncated =
+          byteCapped.truncated ||
+          returnedLines < slice.length ||
+          (lineNextOffset != null && returnedLines >= limit);
+        let nextOffset: number | undefined;
+        if (truncated) {
+          if (byteCapped.truncated && returnedLines > 0) {
+            nextOffset = offset + returnedLines;
+          } else if (lineNextOffset != null) {
+            nextOffset = lineNextOffset;
           }
-          const items = await service.listSkills(
-            input.domain === "global"
-              ? "global"
-              : { projectId: skills.projectId },
-          );
+        }
+        return {
+          action: "read",
+          domain: result.domain,
+          name,
+          path: result.path,
+          content,
+          version: result.version,
+          offset,
+          limit,
+          totalLines,
+          returnedLines,
+          truncated,
+          ...(nextOffset != null ? { nextOffset } : {}),
+        };
+      }
+      case "write": {
+        const name = requireString("write", "name", input.name);
+        const content = requireString("write", "content", input.content);
+        const domain = input.domain ?? "project";
+        const path = input.path ?? SKILL_DEFAULT_ENTRY;
+        const { version } = await service.writeSkillFile(
+          domain,
+          name,
+          input.path,
+          content,
+          skills.projectId
+        );
+        return { action: "write", domain, name, path, version };
+      }
+      case "edit": {
+        const name = requireString("edit", "name", input.name);
+        const oldString = requireString("edit", "oldString", input.oldString);
+        const newString = requireString("edit", "newString", input.newString);
+        const domain = input.domain ?? "project";
+        const path = input.path ?? SKILL_DEFAULT_ENTRY;
+        const result = await service.editSkillFile(
+          domain,
+          name,
+          input.path,
+          { oldString, newString, replaceAll: input.replaceAll },
+          skills.projectId
+        );
+        return {
+          action: "edit",
+          domain,
+          name,
+          path,
+          version: result.version,
+          replacements: result.replacements,
+        };
+      }
+      case "list": {
+        if (input.domain == null) {
+          // 缺省列合并视图（当前项目视角的生效清单，含禁用/覆盖标记）
+          const effective = await service.effectiveSkills(skills.projectId);
           return {
             action: "list",
-            entries: items.map((s) => ({
+            entries: effective.map((s) => ({
               name: s.name,
               ...(s.description != null ? { description: s.description } : {}),
               domain: s.domain,
               valid: s.valid,
+              ...(s.disabled ? { disabled: true } : {}),
+              ...(s.overridden ? { overridden: true } : {}),
             })),
-            total: items.length,
+            total: effective.length,
           };
         }
+        const items = await service.listSkills(
+          input.domain === "global" ? "global" : { projectId: skills.projectId }
+        );
+        return {
+          action: "list",
+          entries: items.map((s) => ({
+            name: s.name,
+            ...(s.description != null ? { description: s.description } : {}),
+            domain: s.domain,
+            valid: s.valid,
+          })),
+          total: items.length,
+        };
       }
-    },
-  };
+    }
+  },
+};

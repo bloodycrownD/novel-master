@@ -15,5 +15,7 @@ import { resolveContextWindowTokens } from "./resolve-context-window.js";
  * @param vendorModelId Provider model name.
  */
 export function seedContextWindowTokens(vendorModelId: string): number {
-  return resolveContextWindowTokens(vendorModelId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
+  return (
+    resolveContextWindowTokens(vendorModelId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS
+  );
 }

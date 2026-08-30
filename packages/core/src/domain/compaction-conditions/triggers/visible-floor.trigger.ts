@@ -16,7 +16,7 @@ export class VisibleFloorTrigger implements CompactionConditionTrigger {
 
   async shouldTrigger(
     session: AgentSession,
-    _evaluation: CompactionEvaluationContext,
+    _evaluation: CompactionEvaluationContext
   ): Promise<boolean> {
     const visible = await session.list();
     return visible.length > this.visibleFloor;

@@ -25,5 +25,5 @@ function configToWire(config: SessionAgentConfig): Record<string, unknown> {
 /** 列内 JSON → {@link SessionAgentConfig}；含 `toWire` 用于持久化。 */
 export const sessionAgentConfigSchema = Object.assign(
   sessionAgentConfigDocumentSchema,
-  { toWire: configToWire },
+  { toWire: configToWire }
 );

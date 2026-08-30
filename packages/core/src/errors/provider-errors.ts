@@ -33,7 +33,7 @@ export class ProviderError extends Error {
   constructor(
     code: ProviderErrorCode,
     message: string,
-    options?: { providerId?: string; modelId?: string },
+    options?: { providerId?: string; modelId?: string }
   ) {
     super(message);
     this.name = "ProviderError";
@@ -49,6 +49,8 @@ export function providerApiKeyNotSetMessage(providerId: string): string {
 }
 
 /** Platform-neutral copy for unsaved application model id. */
-export function providerModelNotSavedMessage(applicationModelId: string): string {
+export function providerModelNotSavedMessage(
+  applicationModelId: string
+): string {
   return `Model not saved: ${applicationModelId}. Fetch and save the model first.`;
 }

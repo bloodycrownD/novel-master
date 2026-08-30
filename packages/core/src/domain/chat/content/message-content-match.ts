@@ -39,7 +39,7 @@ export interface MessageSearchQuery {
  */
 export function messageMatchesKeyword(
   message: ChatMessage,
-  keyword: string,
+  keyword: string
 ): boolean {
   if (message.role !== "user" && message.role !== "assistant") {
     return false;

@@ -4,7 +4,10 @@
  * @module service/provider/impl/model-request.service
  */
 
-import { ProviderError, providerModelNotSavedMessage } from "@/errors/provider-errors.js";
+import {
+  ProviderError,
+  providerModelNotSavedMessage,
+} from "@/errors/provider-errors.js";
 import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
 import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
@@ -52,7 +55,9 @@ const DEFAULT_RETRY_POLICY = {
   jitterRatio: 0.2,
 } as const;
 
-function parseHttpStatusFromProviderError(error: ProviderError): number | undefined {
+function parseHttpStatusFromProviderError(
+  error: ProviderError
+): number | undefined {
   const m = /HTTP\s+(\d{3})/.exec(error.message);
   if (m == null) {
     return undefined;
@@ -80,15 +85,21 @@ function isRetryableError(error: unknown): boolean {
 
 function computeBackoffMs(
   attempt: number,
-  policy: ModelRetryPolicy | undefined,
+  policy: ModelRetryPolicy | undefined
 ): number {
   const p = policy ?? DEFAULT_RETRY_POLICY;
-  const base = Math.min(p.baseDelayMs * 2 ** Math.max(0, attempt - 1), p.maxDelayMs);
+  const base = Math.min(
+    p.baseDelayMs * 2 ** Math.max(0, attempt - 1),
+    p.maxDelayMs
+  );
   const jitterRange = base * p.jitterRatio;
   return Math.max(0, Math.round(base + (Math.random() * 2 - 1) * jitterRange));
 }
 
-async function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+async function delayWithSignal(
+  ms: number,
+  signal?: AbortSignal
+): Promise<void> {
   if (ms <= 0) {
     return;
   }
@@ -119,17 +130,20 @@ export class DefaultModelRequestService implements ModelRequestService {
   async request(
     savedModelId: string,
     userContent: string,
-    options?: ModelRequestOptions,
+    options?: ModelRequestOptions
   ): Promise<LlmChatResult> {
     let saved;
     try {
       saved = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
     } catch (error) {
-      if (error instanceof ProviderError && error.code === "INVALID_SAVED_MODEL_ID") {
+      if (
+        error instanceof ProviderError &&
+        error.code === "INVALID_SAVED_MODEL_ID"
+      ) {
         throw new ProviderError(
           "MODEL_NOT_SAVED",
           providerModelNotSavedMessage(savedModelId),
-          { modelId: savedModelId, providerId: error.providerId },
+          { modelId: savedModelId, providerId: error.providerId }
         );
       }
       throw error;
@@ -137,9 +151,13 @@ export class DefaultModelRequestService implements ModelRequestService {
     const { providerId, vendorModelId } = saved;
     const provider = await this.deps.providers.findById(providerId);
     if (!provider) {
-      throw new ProviderError("NOT_FOUND", `Provider not found: ${providerId}`, {
-        providerId,
-      });
+      throw new ProviderError(
+        "NOT_FOUND",
+        `Provider not found: ${providerId}`,
+        {
+          providerId,
+        }
+      );
     }
     const apiKey = await resolveProviderApiKey(provider, this.deps.secretStore);
     let sampling = options?.sampling;
@@ -158,7 +176,7 @@ export class DefaultModelRequestService implements ModelRequestService {
           thinkingLevel,
           provider.protocol,
           saved.settings.generation.sampling,
-          vendorModelId,
+          vendorModelId
         );
       }
     }
@@ -196,7 +214,10 @@ export class DefaultModelRequestService implements ModelRequestService {
         if (!canRetry || isAbortLikeError(error)) {
           throw error;
         }
-        await delayWithSignal(computeBackoffMs(attempt, policy), options?.signal);
+        await delayWithSignal(
+          computeBackoffMs(attempt, policy),
+          options?.signal
+        );
       }
     }
   }

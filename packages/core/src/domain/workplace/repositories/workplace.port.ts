@@ -40,12 +40,12 @@ export interface WorkplaceRepository {
 
   findDirRule(
     scopeKey: string,
-    logicalPath: string,
+    logicalPath: string
   ): Promise<WorkplaceDirRule | null>;
 
   findFileRule(
     scopeKey: string,
-    logicalPath: string,
+    logicalPath: string
   ): Promise<WorkplaceFileRule | null>;
 
   /**
@@ -54,13 +54,13 @@ export interface WorkplaceRepository {
   copyScope(
     fromScopeKey: string,
     toScopeKey: string,
-    mapLogicalPath: (logical: string) => string,
+    mapLogicalPath: (logical: string) => string
   ): Promise<void>;
 
   /** 删除某逻辑路径及其子路径下的目录/文件纳入规则。 */
   deleteRulesUnderLogicalPrefix(
     scopeKey: string,
-    logicalPrefix: string,
+    logicalPrefix: string
   ): Promise<void>;
 
   /**
@@ -72,7 +72,7 @@ export interface WorkplaceRepository {
   renameRulesUnderLogicalPrefix(
     scopeKey: string,
     oldPrefix: string,
-    newPrefix: string,
+    newPrefix: string
   ): Promise<void>;
 }
 

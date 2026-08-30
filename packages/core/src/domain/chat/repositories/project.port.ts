@@ -23,7 +23,7 @@ export interface ProjectRepository {
   updateAgentConfig(
     id: string,
     configJson: string | null,
-    updatedAtMs: number,
+    updatedAtMs: number
   ): Promise<boolean>;
 
   delete(id: string): Promise<boolean>;

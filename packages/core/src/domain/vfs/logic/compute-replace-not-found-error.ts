@@ -26,9 +26,7 @@ const MAX_CODEPOINT_DUMP_CHARS = 100;
 function dumpCodepoints(input: string): string {
   // Array.from 会按码点拆分，代理对会合并成单个元素，避免把一个 emoji 切成两半。
   const chars = Array.from(input).slice(0, MAX_CODEPOINT_DUMP_CHARS);
-  return chars
-    .map((ch) => ch.codePointAt(0)!.toString(16))
-    .join(" ");
+  return chars.map((ch) => ch.codePointAt(0)!.toString(16)).join(" ");
 }
 
 /**
@@ -52,7 +50,7 @@ function pickFileHintRegion(fileContent: string, lcsSubstring: string): string {
 export function buildReplaceNotFoundError(
   path: string,
   fileContent: string,
-  oldString: string,
+  oldString: string
 ) {
   const lcs = longestCommonSubstring(oldString, fileContent);
   const occurrences =

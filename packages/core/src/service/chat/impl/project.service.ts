@@ -20,7 +20,10 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
-import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import {
+  copyVfsTree,
+  deleteVfsPrefix,
+} from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { seedLiveHeadRevisionsUnderPrefix } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { decode } from "@/infra/serialization/decode.js";
@@ -29,7 +32,10 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { deleteSessionFsData, runDeferredBlobGc } from "@/service/session-fs/create-session-fs-service.js";
+import {
+  deleteSessionFsData,
+  runDeferredBlobGc,
+} from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { SqliteSkillDisabledRuleRepository } from "@/domain/skills/repositories/impl/sqlite-skill-disabled-rule.repository.js";
 import type { ProjectService } from "../project.port.js";
@@ -50,21 +56,21 @@ function parseStoredAgentConfig(json: string): ProjectAgentConfig {
 
 function mergeAgentConfigPatch(
   current: ProjectAgentConfig,
-  patch: ProjectAgentConfigPatch,
+  patch: ProjectAgentConfigPatch
 ): ProjectAgentConfig {
   return {
     mode: patch.mode ?? current.mode,
     ...(patch.definition !== undefined
       ? { definition: patch.definition }
       : current.definition !== undefined
-        ? { definition: current.definition }
-        : {}),
+      ? { definition: current.definition }
+      : {}),
   };
 }
 
 /** 纯 follow 且无草稿时存 NULL；否则存 wire JSON。 */
 function serializeAgentConfigForStorage(
-  config: ProjectAgentConfig,
+  config: ProjectAgentConfig
 ): string | null {
   if (config.mode === "follow" && config.definition == null) {
     return null;
@@ -127,7 +133,11 @@ export class DefaultProjectService implements ProjectService {
     }
     const existing = await this.get(id);
     const updatedAtMs = Date.now();
-    const updated = await this.deps.projects.updateName(id, trimmed, updatedAtMs);
+    const updated = await this.deps.projects.updateName(
+      id,
+      trimmed,
+      updatedAtMs
+    );
     if (!updated) {
       throw chatNotFound("project", id);
     }
@@ -158,16 +168,14 @@ export class DefaultProjectService implements ProjectService {
         await deleteSessionFsData(tx, session.id, id);
         await sessionKkv.clearSession(session.id);
         // entry_id 化后会话独立 scope：session:{pid}:{sid}，前缀为"/"
-        await deleteVfsPrefix(
-          r.vfs,
-          `session:${id}:${session.id}`,
-          "/",
-        );
+        await deleteVfsPrefix(r.vfs, `session:${id}:${session.id}`, "/");
       }
       await r.sessions.deleteByProject(id);
       // 项目 scope 只剩 template（会话都有自己的 scope）；技能负清单行一并清理，
       // 避免留下指向已删项目的孤儿禁用行。
-      await new SqliteSkillDisabledRuleRepository(tx).removeScope(`project:${id}`);
+      await new SqliteSkillDisabledRuleRepository(tx).removeScope(
+        `project:${id}`
+      );
       await deleteVfsPrefix(r.vfs, `project:${id}`, "/");
       // 技能已重定位到独立 meta 域：deleteVfsPrefix 按 scope_key 精确匹配，
       // 不补这条会留下 project:{pid}:meta 的孤儿 entry 行
@@ -198,14 +206,14 @@ export class DefaultProjectService implements ProjectService {
   async updateAgentConfig(
     id: string,
     patch: ProjectAgentConfigPatch,
-    options: ValidateAgentDefinitionOptions = {},
+    options: ValidateAgentDefinitionOptions = {}
   ): Promise<ProjectAgentConfig> {
     await this.get(id);
     const current = await this.getAgentConfig(id);
     const merged = mergeAgentConfigPatch(current, patch);
     const validated = decode(
       projectAgentConfigSchema.toWire(merged),
-      projectAgentConfigSchema,
+      projectAgentConfigSchema
     );
     if (validated.mode === "custom") {
       await validateAgentDefinition(validated.definition!, options);
@@ -215,7 +223,7 @@ export class DefaultProjectService implements ProjectService {
     const updated = await this.deps.projects.updateAgentConfig(
       id,
       configJson,
-      updatedAtMs,
+      updatedAtMs
     );
     if (!updated) {
       throw chatNotFound("project", id);
@@ -250,7 +258,7 @@ export class DefaultProjectService implements ProjectService {
         "/",
         { scopeKey: `project:${copy.id}` },
         "/",
-        { contentStore },
+        { contentStore }
       );
       await copyVfsTree(
         r.vfs,
@@ -258,25 +266,25 @@ export class DefaultProjectService implements ProjectService {
         "/",
         { scopeKey: `project:${copy.id}:meta` },
         "/",
-        { contentStore },
+        { contentStore }
       );
       await new SqliteSkillDisabledRuleRepository(tx).copyScopeRules(
         `project:${id}`,
-        `project:${copy.id}`,
+        `project:${copy.id}`
       );
       await seedLiveHeadRevisionsUnderPrefix(
         r.vfs,
         r.revisions,
         `project:${copy.id}`,
         "/",
-        contentStore,
+        contentStore
       );
       await seedLiveHeadRevisionsUnderPrefix(
         r.vfs,
         r.revisions,
         `project:${copy.id}:meta`,
         "/",
-        contentStore,
+        contentStore
       );
       return copy;
     });

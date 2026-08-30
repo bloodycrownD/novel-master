@@ -56,7 +56,7 @@ export function classifyFsCommand(input: unknown): FsCommandClassification {
  */
 export function classifyMutatingToolCall(
   name: string,
-  input: unknown,
+  input: unknown
 ): FsCommandClassification {
   if (name === "write" || name === "edit") {
     const path =

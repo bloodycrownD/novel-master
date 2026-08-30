@@ -37,7 +37,9 @@ export function isValidTokenCounterModePref(raw: string): boolean {
 }
 
 /** Parses stored preference value into registry override. */
-export function parseTokenCounterModePref(raw: string | undefined): TokenizerOverride {
+export function parseTokenCounterModePref(
+  raw: string | undefined
+): TokenizerOverride {
   if (raw == null || raw === "" || raw === "auto") {
     return "auto";
   }

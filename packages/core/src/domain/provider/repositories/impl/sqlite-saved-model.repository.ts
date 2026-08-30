@@ -42,7 +42,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       `SELECT id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms
        FROM llm_saved_model WHERE provider_id = #{providerId}
        ORDER BY vendor_model_id, model_name`,
-      { providerId },
+      { providerId }
     );
     return rows.map(rowToSaved);
   }
@@ -53,7 +53,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       this.parser,
       `SELECT id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms
        FROM llm_saved_model WHERE id = #{id}`,
-      { id },
+      { id }
     );
     if (rows.length === 0) {
       return null;
@@ -78,7 +78,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
         settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
         createdAtMs: model.createdAtMs,
         updatedAtMs: model.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -96,7 +96,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
         modelName: model.modelName,
         settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
         updatedAtMs: model.updatedAtMs,
-      },
+      }
     );
   }
 
@@ -105,7 +105,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       this.conn,
       this.parser,
       `DELETE FROM llm_saved_model WHERE id = #{id}`,
-      { id },
+      { id }
     );
     return result.changes > 0;
   }
@@ -115,7 +115,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       this.conn,
       this.parser,
       `DELETE FROM llm_saved_model WHERE provider_id = #{providerId}`,
-      { providerId },
+      { providerId }
     );
   }
 }

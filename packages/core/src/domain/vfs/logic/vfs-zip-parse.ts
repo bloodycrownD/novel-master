@@ -9,7 +9,7 @@ import { vfsZipError, VfsZipError } from "@/errors/vfs-zip-errors.js";
 import { parseZipCentralDirectory } from "./vfs-zip-central-dir.js";
 
 function parseVfsZipViaCentralDirectory(
-  zipBytes: Uint8Array,
+  zipBytes: Uint8Array
 ): Map<string, Uint8Array> {
   const parsed = parseZipCentralDirectory(zipBytes);
   const entries = new Map<string, Uint8Array>();
@@ -20,7 +20,9 @@ function parseVfsZipViaCentralDirectory(
 }
 
 /** 中央目录解析失败时回退 fflate，兼容原生 zip 等边缘格式。 */
-function parseVfsZipViaUnzipSync(zipBytes: Uint8Array): Map<string, Uint8Array> {
+function parseVfsZipViaUnzipSync(
+  zipBytes: Uint8Array
+): Map<string, Uint8Array> {
   try {
     const raw = unzipSync(zipBytes);
     const entries = new Map<string, Uint8Array>();

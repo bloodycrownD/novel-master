@@ -19,7 +19,7 @@ const DISPLAY_STATUSES = new Set<string>(["full", "header", "filename"]);
  * 将规则视图转为快照条目（DFS 文件行顺序；过滤 hidden）。
  */
 export function ruleViewToSnapshotEntries(
-  view: WorkplaceRuleView,
+  view: WorkplaceRuleView
 ): RuleSnapshotEntry[] {
   const entries: RuleSnapshotEntry[] = [];
   for (const row of view.rows) {
@@ -39,7 +39,7 @@ export function ruleViewToSnapshotEntries(
  * 序列化规则快照为 JSON 字符串。
  */
 export function serializeRuleSnapshot(
-  entries: readonly RuleSnapshotEntry[],
+  entries: readonly RuleSnapshotEntry[]
 ): string {
   return JSON.stringify(entries);
 }
@@ -47,9 +47,7 @@ export function serializeRuleSnapshot(
 /**
  * 解析规则快照 JSON；非法结构返回 `null`。
  */
-export function parseRuleSnapshotJson(
-  raw: string,
-): RuleSnapshotEntry[] | null {
+export function parseRuleSnapshotJson(raw: string): RuleSnapshotEntry[] | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -96,9 +94,7 @@ export function serializeFileCachePayload(payload: FileCachePayload): string {
 /**
  * 解析文件缓存 JSON；非法结构返回 `null`。
  */
-export function parseFileCachePayload(
-  raw: string,
-): FileCachePayload | null {
+export function parseFileCachePayload(raw: string): FileCachePayload | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);

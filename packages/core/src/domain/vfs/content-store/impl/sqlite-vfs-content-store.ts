@@ -65,7 +65,9 @@ function asUint8Array(value: unknown, label: string): Uint8Array {
     return new Uint8Array(value);
   }
   throw new Error(
-    `${label} 期望 Uint8Array/ArrayBuffer，实际 ${Object.prototype.toString.call(value)}`,
+    `${label} 期望 Uint8Array/ArrayBuffer，实际 ${Object.prototype.toString.call(
+      value
+    )}`
   );
 }
 
@@ -77,12 +79,13 @@ function asBase64Text(value: unknown, label: string): string {
     return value;
   }
   if (value instanceof Uint8Array || value instanceof ArrayBuffer) {
-    const bytes =
-      value instanceof Uint8Array ? value : new Uint8Array(value);
+    const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
     return new TextDecoder().decode(bytes);
   }
   throw new Error(
-    `${label} 期望 base64 字符串或 UTF-8 字节，实际 ${Object.prototype.toString.call(value)}`,
+    `${label} 期望 base64 字符串或 UTF-8 字节，实际 ${Object.prototype.toString.call(
+      value
+    )}`
   );
 }
 
@@ -93,10 +96,7 @@ function asBase64Text(value: unknown, label: string): string {
  * - `zlib` + string：存量 RN 误存 base64，按 base64 解（对齐 sksp）
  * - `zlib-b64`：取 base64 文本再解码
  */
-function decodeCompressedBytes(
-  encoding: string,
-  bytes: unknown,
-): Uint8Array {
+function decodeCompressedBytes(encoding: string, bytes: unknown): Uint8Array {
   if (encoding === VFS_CONTENT_ENCODING_ZLIB) {
     if (typeof bytes === "string") {
       // 存量：Mobile 曾写 encoding=zlib，但 quick-sqlite 读回为 base64 字符串。
@@ -122,10 +122,9 @@ export class SqliteVfsContentStore implements VfsContentStore {
 
   constructor(
     private readonly conn: TdbcConnection,
-    options?: SqliteVfsContentStoreOptions,
+    options?: SqliteVfsContentStoreOptions
   ) {
-    this.preferZlibB64 =
-      options?.preferZlibB64 ?? isReactNativeRuntime();
+    this.preferZlibB64 = options?.preferZlibB64 ?? isReactNativeRuntime();
   }
 
   async put(plain: string): Promise<string> {
@@ -134,7 +133,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
       this.conn,
       this.parser,
       `SELECT content_hash FROM vfs_content_blob WHERE content_hash = #{contentHash}`,
-      { contentHash },
+      { contentHash }
     );
     if (existing.length > 0) {
       // 同 hash 复用已有行，不改 encoding / bytes。
@@ -157,7 +156,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
           encoding: VFS_CONTENT_ENCODING_ZLIB_B64,
           bytes: b64,
           byteLen: b64.length,
-        },
+        }
       );
       return contentHash;
     }
@@ -173,7 +172,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
         encoding: VFS_CONTENT_ENCODING_ZLIB,
         bytes,
         byteLen: bytes.byteLength,
-      },
+      }
     );
     return contentHash;
   }
@@ -186,7 +185,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
       this.conn,
       this.parser,
       `SELECT encoding, bytes FROM vfs_content_blob WHERE content_hash = #{contentHash}`,
-      { contentHash },
+      { contentHash }
     );
     if (rows.length === 0) {
       throw new Error(`vfs_content_blob 缺失: ${contentHash}`);
@@ -198,14 +197,16 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return new TextDecoder().decode(plainUtf8);
   }
 
-  async getMany(
-    hashes: readonly string[],
-  ): Promise<Map<string, string>> {
+  async getMany(hashes: readonly string[]): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     if (hashes.length === 0) {
       return result;
     }
-    for (let offset = 0; offset < hashes.length; offset += CONTENT_GETMANY_CHUNK_SIZE) {
+    for (
+      let offset = 0;
+      offset < hashes.length;
+      offset += CONTENT_GETMANY_CHUNK_SIZE
+    ) {
       const chunk = hashes.slice(offset, offset + CONTENT_GETMANY_CHUNK_SIZE);
       const placeholders = chunk.map(() => `?`).join(`,`);
       const rows = await this.conn.query<{
@@ -214,20 +215,23 @@ export class SqliteVfsContentStore implements VfsContentStore {
         bytes: SqlValue;
       }>(
         `SELECT content_hash, encoding, bytes FROM vfs_content_blob WHERE content_hash IN (${placeholders})`,
-        chunk,
+        chunk
       );
       for (const row of rows) {
         const encoding = String(row.encoding);
         const compressed = decodeCompressedBytes(encoding, row.bytes);
         const plainUtf8 = decompressZlib(compressed);
-        result.set(String(row.content_hash), new TextDecoder().decode(plainUtf8));
+        result.set(
+          String(row.content_hash),
+          new TextDecoder().decode(plainUtf8)
+        );
       }
     }
     return result;
   }
 
   async findExistingBlobHashes(
-    hashes: ReadonlyArray<string>,
+    hashes: ReadonlyArray<string>
   ): Promise<Set<string>> {
     const result = new Set<string>();
     if (hashes.length === 0) {
@@ -239,7 +243,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
       const placeholders = chunk.map(() => `?`).join(`,`);
       const rows = await this.conn.query<{ content_hash: string }>(
         `SELECT content_hash FROM vfs_content_blob WHERE content_hash IN (${placeholders})`,
-        chunk,
+        chunk
       );
       for (const row of rows) {
         result.add(String(row.content_hash));
@@ -248,20 +252,21 @@ export class SqliteVfsContentStore implements VfsContentStore {
     return result;
   }
 
-  async ensureBlob(contentHash: string, fallbackPlain: string | null): Promise<string> {
+  async ensureBlob(
+    contentHash: string,
+    fallbackPlain: string | null
+  ): Promise<string> {
     const existing = await queryTemplate<{ content_hash: string }>(
       this.conn,
       this.parser,
       `SELECT content_hash FROM vfs_content_blob WHERE content_hash = #{contentHash}`,
-      { contentHash },
+      { contentHash }
     );
     if (existing.length > 0) {
       return contentHash;
     }
     if (fallbackPlain == null) {
-      throw new Error(
-        `vfs_content_blob 缺失且无可回退明文: ${contentHash}`,
-      );
+      throw new Error(`vfs_content_blob 缺失且无可回退明文: ${contentHash}`);
     }
     // 走 put 路径落新行（insert 或复用同 hash 其他行）
     return this.put(fallbackPlain);
@@ -278,7 +283,7 @@ export class SqliteVfsContentStore implements VfsContentStore {
         UNION
         SELECT content_hash FROM vfs_revision WHERE content_hash IS NOT NULL
       )`,
-      {},
+      {}
     );
     return result.changes;
   }

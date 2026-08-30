@@ -26,13 +26,13 @@ export type LoadOrFillFileCacheDeps = {
 
 /** filename 不读盘；缺失用 `(missing)` 占位并仍写入 cache。 */
 export async function loadOrFillFileCache(
-  deps: LoadOrFillFileCacheDeps,
+  deps: LoadOrFillFileCacheDeps
 ): Promise<FileCachePayload> {
   const key = fileCacheKey(deps.status, deps.path);
   const raw = await deps.sessionKkv.get(
     deps.sessionId,
     SESSION_KKV_DOMAIN_FILE_CACHE,
-    key,
+    key
   );
   if (raw != null) {
     const parsed = parseFileCachePayload(raw);
@@ -46,7 +46,7 @@ export async function loadOrFillFileCache(
     deps.sessionId,
     SESSION_KKV_DOMAIN_FILE_CACHE,
     key,
-    serializeFileCachePayload(filled),
+    serializeFileCachePayload(filled)
   );
   return filled;
 }
@@ -54,7 +54,7 @@ export async function loadOrFillFileCache(
 async function readWorkplaceFileBody(
   path: string,
   status: WorkplaceDisplayStatus,
-  vfs: VfsService,
+  vfs: VfsService
 ): Promise<FileCachePayload> {
   if (status === "filename") {
     return { body: "", mtimeMs: 0 };

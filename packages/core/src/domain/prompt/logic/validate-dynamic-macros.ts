@@ -21,7 +21,10 @@ const LEGACY_DOT_MACROS = new Set(["worktree", "filetree"]);
 /**
  * 校验 dynamic 文本内容中的宏；拒绝 dot 宏与非法 `$` 根键。
  */
-export function validateDynamicMacros(content: string, blockLabel: string): void {
+export function validateDynamicMacros(
+  content: string,
+  blockLabel: string
+): void {
   const actions = scanMacroActions(content);
   for (const action of actions) {
     if (action.kind === "comment") {
@@ -36,19 +39,19 @@ export function validateDynamicMacros(content: string, blockLabel: string): void
             : "请使用 {{$filetree}} 替代 {{.filetree}}";
         throw new PromptError(
           "UNSUPPORTED_SYNTAX",
-          `${blockLabel}：动态区不允许 {{.${top}}}；${hint}`,
+          `${blockLabel}：动态区不允许 {{.${top}}}；${hint}`
         );
       }
       throw new PromptError(
         "UNSUPPORTED_SYNTAX",
-        `${blockLabel}：动态区不支持点号宏（{{.${action.path.join(".")}}}）`,
+        `${blockLabel}：动态区不支持点号宏（{{.${action.path.join(".")}}}）`
       );
     }
     const key = action.path[0] ?? "";
     if (!ALLOWED_ROOT_MACROS.has(key)) {
       throw new PromptError(
         "UNKNOWN_FIELD",
-        `${blockLabel}：未知的动态宏 {{$${key}}}；允许：$time、$week_cn、$filetree`,
+        `${blockLabel}：未知的动态宏 {{$${key}}}；允许：$time、$week_cn、$filetree`
       );
     }
   }
@@ -61,7 +64,7 @@ export function rejectPersistMacros(content: string, blockLabel: string): void {
   if (content.includes("{{")) {
     throw new PromptError(
       "UNSUPPORTED_SYNTAX",
-      `${blockLabel}：持久区文本块不得包含宏（{{...}}）`,
+      `${blockLabel}：持久区文本块不得包含宏（{{...}}）`
     );
   }
 }

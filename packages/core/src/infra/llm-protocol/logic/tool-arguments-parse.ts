@@ -20,7 +20,7 @@ export type TryParseToolArgumentsResult =
 
 /** finish 路径：非法 JSON 返回 `{ ok: false, raw }`，不抛错。 */
 export function tryParseToolArgumentsJson(
-  raw: string,
+  raw: string
 ): TryParseToolArgumentsResult {
   if (raw === "") {
     return { ok: true, value: {} };
@@ -35,7 +35,7 @@ export function tryParseToolArgumentsJson(
 /** 解析 tool arguments；空串为 {}，非空非法 JSON 抛错。 */
 export function parseToolArgumentsJson(
   raw: string,
-  protocol: LlmProtocolKind,
+  protocol: LlmProtocolKind
 ): Record<string, unknown> {
   const parsed = tryParseToolArgumentsJson(raw);
   if (parsed.ok) {
@@ -43,6 +43,6 @@ export function parseToolArgumentsJson(
   }
   throw new ProviderError(
     "INVALID_TOOL_ARGUMENTS",
-    `${protocol}: invalid tool arguments JSON (${truncate(parsed.raw, 80)})`,
+    `${protocol}: invalid tool arguments JSON (${truncate(parsed.raw, 80)})`
   );
 }

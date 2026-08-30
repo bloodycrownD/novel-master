@@ -15,7 +15,7 @@ import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
  * 名称经 trim；若为空由调用方 fallback 为 agentId。
  */
 export function buildDefaultAgentDefinitionPreservingName(
-  name: string,
+  name: string
 ): AgentDefinition {
   return {
     name: name.trim(),

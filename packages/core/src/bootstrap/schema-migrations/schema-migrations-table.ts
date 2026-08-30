@@ -16,39 +16,39 @@ const parser = new SqlTemplateParser();
 
 /** 确保 migration 登记表存在（不在 NOVEL_MASTER_SCHEMA_STATEMENTS 内）。 */
 export async function ensureSchemaMigrationsTable(
-  tx: TdbcConnection,
+  tx: TdbcConnection
 ): Promise<void> {
   await tx.execute(
     `CREATE TABLE IF NOT EXISTS ${TABLE} (
   id TEXT PRIMARY KEY,
   applied_at_ms INTEGER NOT NULL
-)`,
+)`
   );
 }
 
 /** 是否已 apply 指定 migration id。 */
 export async function isSchemaMigrationApplied(
   tx: TdbcConnection,
-  id: string,
+  id: string
 ): Promise<boolean> {
   const rows = await queryTemplate<{ id: string }>(
     tx,
     parser,
     `SELECT id FROM ${TABLE} WHERE id = #{id}`,
-    { id },
+    { id }
   );
   return rows.length > 0;
 }
 
 /** 一次读出全部已 apply 的 migration id（供 runner 避免 N+1）。 */
 export async function listAppliedSchemaMigrationIds(
-  tx: TdbcConnection,
+  tx: TdbcConnection
 ): Promise<Set<string>> {
   const rows = await queryTemplate<{ id: string }>(
     tx,
     parser,
     `SELECT id FROM ${TABLE}`,
-    {},
+    {}
   );
   return new Set(rows.map((row) => String(row.id)));
 }
@@ -57,12 +57,12 @@ export async function listAppliedSchemaMigrationIds(
 export async function markSchemaMigrationApplied(
   tx: TdbcConnection,
   id: string,
-  appliedAtMs: number,
+  appliedAtMs: number
 ): Promise<void> {
   await executeTemplate(
     tx,
     parser,
     `INSERT INTO ${TABLE} (id, applied_at_ms) VALUES (#{id}, #{appliedAtMs})`,
-    { id, appliedAtMs },
+    { id, appliedAtMs }
   );
 }

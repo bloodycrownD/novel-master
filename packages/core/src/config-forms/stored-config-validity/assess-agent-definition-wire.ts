@@ -27,7 +27,9 @@ function isRemovedFeatureError(error: unknown): boolean {
   return REMOVED_FEATURE_KEYWORDS.some((keyword) => message.includes(keyword));
 }
 
-function isAgentDefinitionDomainShape(value: unknown): value is AgentDefinition {
+function isAgentDefinitionDomainShape(
+  value: unknown
+): value is AgentDefinition {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     return false;
   }
@@ -39,20 +41,21 @@ function isAgentDefinitionDomainShape(value: unknown): value is AgentDefinition 
     return false;
   }
   const prompts = record.prompts;
-  if (prompts == null || typeof prompts !== "object" || Array.isArray(prompts)) {
+  if (
+    prompts == null ||
+    typeof prompts !== "object" ||
+    Array.isArray(prompts)
+  ) {
     return false;
   }
-  return (
-    Array.isArray(prompts.persist) &&
-    Array.isArray(prompts.dynamic)
-  );
+  return Array.isArray(prompts.persist) && Array.isArray(prompts.dynamic);
 }
 
 /**
  * 将智能体配置 wire 判定为 valid / invalid。
  */
 export function assessAgentDefinitionWire(
-  raw: unknown,
+  raw: unknown
 ): StoredConfigHealth<AgentDefinition> {
   try {
     const value = decode(raw, agentDefinitionSchema);
@@ -73,7 +76,7 @@ export function assessAgentDefinitionWire(
  *（`prompts.persist` 为数组），不可直接走 wire 判定。
  */
 export function resolveAgentDefinitionFromStorage(
-  stored: unknown,
+  stored: unknown
 ): StoredConfigHealth<AgentDefinition> {
   if (isAgentDefinitionDomainShape(stored)) {
     return {

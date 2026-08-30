@@ -22,7 +22,7 @@ export class RegexError extends Error {
   constructor(
     code: RegexErrorCode,
     message: string,
-    options?: { groupId?: string; ruleId?: string },
+    options?: { groupId?: string; ruleId?: string }
   ) {
     super(message);
     this.name = "RegexError";

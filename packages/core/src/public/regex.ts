@@ -10,7 +10,10 @@ export {
   applyRegexChannelToMessages,
 } from "../domain/regex/logic/apply-regex-rules.js";
 export type { RegexChannel } from "../domain/regex/logic/apply-regex-rules.js";
-export { validateRegexRule, validateRegexRuleEntity } from "../domain/regex/logic/validate-regex-rule.js";
+export {
+  validateRegexRule,
+  validateRegexRuleEntity,
+} from "../domain/regex/logic/validate-regex-rule.js";
 export {
   createRegexRuleSchema,
   updateRegexRuleSchema,

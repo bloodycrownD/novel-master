@@ -12,7 +12,7 @@ import type { TemplatePullService } from "./template-pull.port.js";
  * Creates a {@link TemplatePullService} for the given connection.
  */
 export function createTemplatePullService(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): TemplatePullService {
   return new DefaultTemplatePullService(conn);
 }

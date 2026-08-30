@@ -68,10 +68,9 @@ async function nextUpdateVersion(
   revisions: VfsRevisionRepository | undefined,
   scopeKey: string,
   path: string,
-  known: { entryId: number; version: number } | null,
+  known: { entryId: number; version: number } | null
 ): Promise<number> {
-  const existing =
-    known ?? (await repo.findByPath(scopeKey, path));
+  const existing = known ?? (await repo.findByPath(scopeKey, path));
   if (existing == null || revisions == null) {
     return (existing?.version ?? 0) + 1;
   }
@@ -87,7 +86,7 @@ async function nextUpdateVersion(
 async function resolvePlainContentMap(
   repo: VfsEntryRepository,
   scopeKey: string,
-  pathPrefix: string,
+  pathPrefix: string
 ): Promise<Map<string, string>> {
   const rows = await repo.scanContents(scopeKey, pathPrefix);
   const map = new Map<string, string>();
@@ -127,7 +126,7 @@ export type ReplaceVfsSubtreeOptions = CopyVfsTreeOptions & {
 
 /** 供三侧（拷贝/删除/seed）统一取排除前缀，缺省为空数组。 */
 function resolveExcludePrefixes(
-  excludePrefixes: readonly string[] | undefined,
+  excludePrefixes: readonly string[] | undefined
 ): readonly string[] {
   return excludePrefixes ?? [];
 }
@@ -143,13 +142,13 @@ export async function copyVfsTree(
   fromPathPrefix: string,
   toScope: VfsCopyScope,
   toPathPrefix: string,
-  options?: CopyVfsTreeOptions,
+  options?: CopyVfsTreeOptions
 ): Promise<void> {
   const excludePrefixes = resolveExcludePrefixes(options?.excludePrefixes);
   // --- 目录：批量检查存在 + 批量 INSERT ---
   const dirPaths = await repo.listDirectoryPathsUnderPrefix(
     fromScope.scopeKey,
-    fromPathPrefix,
+    fromPathPrefix
   );
   const targetDirPaths: string[] = [];
   for (const dirPath of dirPaths) {
@@ -174,7 +173,7 @@ export async function copyVfsTree(
   if (targetDirPaths.length > 0) {
     const existingDirs = await repo.findExistingPaths(
       toScope.scopeKey,
-      targetDirPaths,
+      targetDirPaths
     );
     const newDirs = targetDirPaths.filter((p) => !existingDirs.has(p));
     if (newDirs.length > 0) {
@@ -185,7 +184,7 @@ export async function copyVfsTree(
   // --- 文件：scanFileEntriesWithMeta 一次 SELECT 拿全部元数据（不解明文）---
   const fileEntries = await repo.scanFileEntriesWithMeta(
     fromScope.scopeKey,
-    fromPathPrefix,
+    fromPathPrefix
   );
   const mappedFiles: Array<{
     sourcePath: string;
@@ -218,8 +217,9 @@ export async function copyVfsTree(
     const hashes = [...new Set(blobFiles.map((f) => f.contentHash!))];
     let allBlobsExist = true;
     if (options != null) {
-      const existingBlobs =
-        await options.contentStore.findExistingBlobHashes(hashes);
+      const existingBlobs = await options.contentStore.findExistingBlobHashes(
+        hashes
+      );
       allBlobsExist = hashes.every((h) => existingBlobs.has(h));
     }
 
@@ -228,7 +228,7 @@ export async function copyVfsTree(
       const targetPaths = blobFiles.map((f) => f.targetPath);
       const existingTargets = await repo.findExistingPaths(
         toScope.scopeKey,
-        targetPaths,
+        targetPaths
       );
       const newEntries = blobFiles
         .filter((f) => !existingTargets.has(f.targetPath))
@@ -241,20 +241,22 @@ export async function copyVfsTree(
         await repo.batchInsertFileEntriesWithHash(toScope.scopeKey, newEntries);
       }
       // 已存在的目标用逐条 update（tree-copy 到清空 scope 时不会走到）
-      for (const f of blobFiles.filter((f) => existingTargets.has(f.targetPath))) {
+      for (const f of blobFiles.filter((f) =>
+        existingTargets.has(f.targetPath)
+      )) {
         const nextVersion = await nextUpdateVersion(
           repo,
           options?.revisions,
           toScope.scopeKey,
           f.targetPath,
-          null,
+          null
         );
         await repo.updateWithContentHash(
           toScope.scopeKey,
           f.targetPath,
           f.contentHash!,
           nextVersion,
-          { versionCheck: false },
+          { versionCheck: false }
         );
       }
     } else {
@@ -262,13 +264,13 @@ export async function copyVfsTree(
       const plainMap = await resolvePlainContentMap(
         repo,
         fromScope.scopeKey,
-        fromPathPrefix,
+        fromPathPrefix
       );
       for (const f of blobFiles) {
         if (options != null) {
           await options.contentStore.ensureBlob(
             f.contentHash!,
-            plainMap.get(f.sourcePath) ?? null,
+            plainMap.get(f.sourcePath) ?? null
           );
         }
         const existing = await repo.findByPath(toScope.scopeKey, f.targetPath);
@@ -276,7 +278,7 @@ export async function copyVfsTree(
           await repo.insertWithContentHash(
             toScope.scopeKey,
             f.targetPath,
-            f.contentHash!,
+            f.contentHash!
           );
         } else {
           const nextVersion = await nextUpdateVersion(
@@ -284,14 +286,14 @@ export async function copyVfsTree(
             options?.revisions,
             toScope.scopeKey,
             f.targetPath,
-            { entryId: existing.entryId, version: existing.version },
+            { entryId: existing.entryId, version: existing.version }
           );
           await repo.updateWithContentHash(
             toScope.scopeKey,
             f.targetPath,
             f.contentHash!,
             nextVersion,
-            { versionCheck: false },
+            { versionCheck: false }
           );
         }
       }
@@ -303,7 +305,7 @@ export async function copyVfsTree(
     const plainMap = await resolvePlainContentMap(
       repo,
       fromScope.scopeKey,
-      fromPathPrefix,
+      fromPathPrefix
     );
     for (const f of plainFiles) {
       const content = plainMap.get(f.sourcePath);
@@ -319,11 +321,17 @@ export async function copyVfsTree(
           options?.revisions,
           toScope.scopeKey,
           f.targetPath,
-          { entryId: existing.entryId, version: existing.version },
+          { entryId: existing.entryId, version: existing.version }
         );
-        await repo.update(toScope.scopeKey, f.targetPath, content, nextVersion, {
-          versionCheck: false,
-        });
+        await repo.update(
+          toScope.scopeKey,
+          f.targetPath,
+          content,
+          nextVersion,
+          {
+            versionCheck: false,
+          }
+        );
       }
     }
   }
@@ -338,7 +346,7 @@ export async function replaceVfsSubtree(
   fromPathPrefix: string,
   toScope: VfsCopyScope,
   toPathPrefix: string,
-  options?: ReplaceVfsSubtreeOptions,
+  options?: ReplaceVfsSubtreeOptions
 ): Promise<void> {
   const excludePrefixes = resolveExcludePrefixes(options?.excludePrefixes);
   if (options?.revisions != null) {
@@ -347,12 +355,24 @@ export async function replaceVfsSubtree(
       options.revisions,
       toScope.scopeKey,
       toPathPrefix,
-      excludePrefixes,
+      excludePrefixes
     );
   } else {
-    await deleteVfsPrefix(repo, toScope.scopeKey, toPathPrefix, excludePrefixes);
+    await deleteVfsPrefix(
+      repo,
+      toScope.scopeKey,
+      toPathPrefix,
+      excludePrefixes
+    );
   }
-  await copyVfsTree(repo, fromScope, fromPathPrefix, toScope, toPathPrefix, options);
+  await copyVfsTree(
+    repo,
+    fromScope,
+    fromPathPrefix,
+    toScope,
+    toPathPrefix,
+    options
+  );
   if (options?.revisions != null) {
     await seedLiveHeadRevisionsUnderPrefix(
       repo,
@@ -360,7 +380,7 @@ export async function replaceVfsSubtree(
       toScope.scopeKey,
       toPathPrefix,
       undefined,
-      excludePrefixes,
+      excludePrefixes
     );
   }
 }
@@ -377,21 +397,21 @@ export async function sweepRevisionsUnderScope(
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   pathPrefix: string,
-  excludePrefixes?: readonly string[],
+  excludePrefixes?: readonly string[]
 ): Promise<void> {
   await decrementLiveRefsUnderScope(
     revisionRepo,
     repo,
     scopeKey,
     pathPrefix,
-    excludePrefixes,
+    excludePrefixes
   );
   await deleteVfsPrefix(repo, scopeKey, pathPrefix, excludePrefixes);
   await deleteUnreferencedUnderScope(
     revisionRepo,
     scopeKey,
     pathPrefix,
-    excludePrefixes,
+    excludePrefixes
   );
 }
 
@@ -404,7 +424,7 @@ export async function releaseAndDeleteVfsPrefix(
   repo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
-  pathPrefix: string,
+  pathPrefix: string
 ): Promise<void> {
   await sweepRevisionsUnderScope(repo, revisionRepo, scopeKey, pathPrefix);
 }
@@ -420,7 +440,7 @@ export async function deleteVfsPrefix(
   repo: VfsEntryRepository,
   scopeKey: string,
   prefix: string,
-  excludePrefixes?: readonly string[],
+  excludePrefixes?: readonly string[]
 ): Promise<void> {
   const excludes = excludePrefixes ?? [];
   const base = normalizePrefix(prefix);
@@ -437,7 +457,10 @@ export async function deleteVfsPrefix(
     }
     // 祖先目录也保留：排除子树里的 entry 不删，承载它的目录层级不能删，
     // 否则会因「目录非空」失败。
-    if (excludes.length > 0 && isVfsPathAncestorOfExcluded(entry.path, excludes)) {
+    if (
+      excludes.length > 0 &&
+      isVfsPathAncestorOfExcluded(entry.path, excludes)
+    ) {
       continue;
     }
     await repo.delete(scopeKey, entry.path, { recursive: false });

@@ -28,7 +28,7 @@ export type StreamPartialInput = {
  */
 export function buildStreamPartialBlocks(
   input: StreamPartialInput,
-  onStream?: (event: LlmStreamEvent) => void,
+  onStream?: (event: LlmStreamEvent) => void
 ): ContentBlock[] {
   const text = input.text;
   const thinking = input.thinking;

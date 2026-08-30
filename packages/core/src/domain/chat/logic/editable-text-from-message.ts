@@ -17,7 +17,7 @@ import {
  * @remarks 多段 text 以 `\n\n` 拼接；trim 后为空则返回 null。
  */
 export function extractEditableTextFromMessage(
-  message: ChatMessage,
+  message: ChatMessage
 ): string | null {
   const blocks = message.content.blocks ?? [];
   const parts = blocks

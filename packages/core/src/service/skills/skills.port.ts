@@ -4,10 +4,11 @@
  * @module service/skills/skills.port
  */
 
+import type { EffectiveSkill } from "@/domain/skills/logic/effective-skills.js";
 import type {
-  EffectiveSkill,
-} from "@/domain/skills/logic/effective-skills.js";
-import type { SkillDomain, SkillSummary } from "@/domain/skills/model/skill.schema.js";
+  SkillDomain,
+  SkillSummary,
+} from "@/domain/skills/model/skill.schema.js";
 
 /** 技能清单查询域：global 全局域，或某个项目域。 */
 export type SkillListScope = "global" | { readonly projectId: string };
@@ -84,7 +85,7 @@ export interface SkillService {
     domain: SkillDomain | undefined,
     name: string,
     path?: string,
-    projectId?: string,
+    projectId?: string
   ): Promise<SkillFileContent>;
 
   /**
@@ -102,7 +103,7 @@ export interface SkillService {
     path: string | undefined,
     content: string,
     projectId?: string,
-    options?: SkillWriteOptions,
+    options?: SkillWriteOptions
   ): Promise<{ version: number }>;
 
   /**
@@ -114,7 +115,7 @@ export interface SkillService {
   assertSkillNameNotReservedForCreate(
     domain: SkillDomain,
     name: string,
-    projectId?: string,
+    projectId?: string
   ): Promise<void>;
 
   /**
@@ -126,14 +127,14 @@ export interface SkillService {
     name: string,
     path: string | undefined,
     match: SkillEditMatch,
-    projectId?: string,
+    projectId?: string
   ): Promise<{ version: number; replacements: number }>;
 
   /** 负清单读写：disabled=true 落行、false 删行（只影响当前项目）。 */
   setDisabled(
     projectId: string,
     name: string,
-    disabled: boolean,
+    disabled: boolean
   ): Promise<void>;
 
   /**

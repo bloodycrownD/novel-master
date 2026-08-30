@@ -30,7 +30,7 @@ export interface ResolvedPromptTokens {
  */
 export async function resolveCurrentPromptTokens(
   sessionId: string,
-  params: CountPromptLlmInputParams,
+  params: CountPromptLlmInputParams
 ): Promise<ResolvedPromptTokens> {
   const cached = sessionApiPromptTokenCache.get(sessionId);
   if (cached != null) {

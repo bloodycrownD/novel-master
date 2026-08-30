@@ -35,8 +35,7 @@ export type ParsedUserVfsAction = {
   readonly hunks: readonly ParsedUserVfsEditHunk[];
 };
 
-const ACTION_TAG_RE =
-  /<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/g;
+const ACTION_TAG_RE = /<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/g;
 
 function parseAttrs(attrs: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -61,7 +60,11 @@ function parseJsonParams(inner: string): Record<string, unknown> {
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (parsed != null && typeof parsed === "object" && !Array.isArray(parsed)) {
+    if (
+      parsed != null &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
       return parsed as Record<string, unknown>;
     }
   } catch {
@@ -76,7 +79,7 @@ function asString(value: unknown, fallback = ""): string {
 
 function actionFromNamedTag(
   name: string,
-  params: Record<string, unknown>,
+  params: Record<string, unknown>
 ): ParsedUserVfsAction {
   // 旧跨目录 rename XML → 规范为 move（只读兼容）。
   let resolvedName = name;
@@ -106,14 +109,17 @@ function actionFromNamedTag(
     path,
     params,
     kind: resolvedName,
-    method: resolvedName === "write" || resolvedName === "edit" ? resolvedName : undefined,
+    method:
+      resolvedName === "write" || resolvedName === "edit"
+        ? resolvedName
+        : undefined,
     hunks,
   };
 }
 
 /** 解析文本中全部 `<action name="…">`。 */
 export function parseAllUserVfsActionsFromText(
-  text: string,
+  text: string
 ): readonly ParsedUserVfsAction[] {
   if (!text.includes("<action")) {
     return [];
@@ -140,7 +146,7 @@ function formatUserVfsActionXml(action: ParsedUserVfsAction): string {
           path: action.path,
           oldString: hunk.old,
           newString: hunk.new,
-        }),
+        })
       )
       .join("\n");
   }
@@ -148,11 +154,11 @@ function formatUserVfsActionXml(action: ParsedUserVfsAction): string {
     Object.keys(action.params).length > 0
       ? action.params
       : action.name === "rename" || action.name === "move"
-        ? (() => {
-            const [from = "", to = ""] = action.path.split("→");
-            return { from, to };
-          })()
-        : { path: action.path };
+      ? (() => {
+          const [from = "", to = ""] = action.path.split("→");
+          return { from, to };
+        })()
+      : { path: action.path };
   return buildUserVfsActionXml(action.name || action.kind, params);
 }
 
@@ -160,7 +166,7 @@ function formatUserVfsActionXml(action: ParsedUserVfsAction): string {
  * 从已解析的 action 还原 flush 前的完整 tool input（用于 UI 展示）。
  */
 export function deriveToolUsesFromVfsActions(
-  actions: readonly ParsedUserVfsAction[],
+  actions: readonly ParsedUserVfsAction[]
 ): readonly DerivedToolUseInput[] {
   if (actions.length === 0) {
     return [];
@@ -170,7 +176,7 @@ export function deriveToolUsesFromVfsActions(
 }
 
 function derivedToToolUseBlocks(
-  derived: readonly DerivedToolUseInput[],
+  derived: readonly DerivedToolUseInput[]
 ): ToolUseBlock[] {
   return derived.map((tu, index) => ({
     type: "tool_use" as const,
@@ -180,7 +186,9 @@ function derivedToToolUseBlocks(
   }));
 }
 
-function syntheticToolResults(toolUses: readonly ToolUseBlock[]): ToolResultBlock[] {
+function syntheticToolResults(
+  toolUses: readonly ToolUseBlock[]
+): ToolResultBlock[] {
   return toolUses.map((tu) => ({
     type: "tool_result" as const,
     toolUseId: tu.id,
@@ -206,7 +214,7 @@ export const USER_VFS_TURN_SPAN = 2 as const;
  */
 function matchUserVfsTurnStructureAt(
   messages: readonly ChatMessage[],
-  startIndex: number,
+  startIndex: number
 ): readonly [ChatMessage, ChatMessage] | null {
   const m0 = messages[startIndex];
   const m1 = messages[startIndex + 1];
@@ -241,7 +249,7 @@ function matchUserVfsTurnStructureAt(
  */
 export function matchUserVfsTurnAt(
   messages: readonly ChatMessage[],
-  startIndex: number,
+  startIndex: number
 ): readonly [ChatMessage, ChatMessage] | null {
   const turn = matchUserVfsTurnStructureAt(messages, startIndex);
   if (turn == null) {
@@ -265,12 +273,14 @@ export type UserVfsTurnView = {
 
 /** 从已匹配的 UA 两段构建 UI 视图。 */
 export function buildUserVfsTurnView(
-  turn: readonly [ChatMessage, ChatMessage],
+  turn: readonly [ChatMessage, ChatMessage]
 ): UserVfsTurnView {
   const [actionMsg, ackMsg] = turn;
   const actionText = messageBodyTextFromContent(actionMsg.content);
   const actions = parseAllUserVfsActionsFromText(actionText);
-  const toolUses = derivedToToolUseBlocks(deriveToolUsesFromVfsActions(actions));
+  const toolUses = derivedToToolUseBlocks(
+    deriveToolUsesFromVfsActions(actions)
+  );
   return {
     id: actionMsg.id,
     hidden: actionMsg.hidden || ackMsg.hidden,

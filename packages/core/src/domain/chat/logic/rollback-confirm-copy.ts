@@ -22,12 +22,12 @@ export type RollbackConfirmKind = "primary" | "degraded" | "backfill";
 export function resolveRollbackConfirmMessage(
   mode: RollbackMode,
   kind: RollbackConfirmKind,
-  ctx?: { missingPaths?: readonly string[] },
+  ctx?: { missingPaths?: readonly string[] }
 ): string {
   if (kind === "backfill") {
     return formatRollbackRevisionBackfillAlertMessage(
       ctx?.missingPaths ?? [],
-      mode,
+      mode
     );
   }
 

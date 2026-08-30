@@ -7,10 +7,7 @@
  * @module domain/message-checkpoint/logic/detect-missing-revisions
  */
 
-import {
-  scopeKey,
-  type VfsScope,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { revisionPairKey } from "@/domain/vfs/logic/revision-pair-key.js";
@@ -25,7 +22,7 @@ export async function findMissingRevisionPointers(
   entryRepo: VfsEntryRepository,
   scope: VfsScope,
   targetTree: ReadonlyMap<string, number>,
-  pathsToReconcile: Iterable<string>,
+  pathsToReconcile: Iterable<string>
 ): Promise<string[]> {
   const scopeKeyStr = scopeKey(scope);
   const pairs: Array<{
@@ -56,7 +53,7 @@ export async function findMissingRevisionPointers(
   const missing: string[] = [];
   const queryable = pairs.filter((pair) => pair.entryId >= 0);
   const metas = await revisionRepo.findMetasByEntryVersions(
-    queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version })),
+    queryable.map((pair) => ({ entryId: pair.entryId, version: pair.version }))
   );
 
   for (const pair of queryable) {

@@ -7,25 +7,25 @@
 import {
   computeSetFloorRanges,
   isSetFloorAnchorRole,
-} from '@/domain/chat/logic/message-set-floor-range.js';
-import { chatInvalidArgument, chatNotFound } from '@/errors/chat-errors.js';
-import { sessionApiPromptTokenCache } from '@/infra/tokenizer/logic/session-api-prompt-token-cache.js';
-import type { TdbcConnection } from '@/infra/tdbc/ports/connection.port.js';
-import { CoordinatedWrite } from '@/service/coordinated-write.js';
+} from "@/domain/chat/logic/message-set-floor-range.js";
+import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
+import { sessionApiPromptTokenCache } from "@/infra/tokenizer/logic/session-api-prompt-token-cache.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { CoordinatedWrite } from "@/service/coordinated-write.js";
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
-} from '@/service/message-checkpoint/truncate-tail-wiring.js';
+} from "@/service/message-checkpoint/truncate-tail-wiring.js";
 import {
   SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-} from '@/domain/session-kkv/model/session-kkv-domains.js';
-import type { SessionKkvService } from '@/service/session-kkv/session-kkv.port.js';
-import type { MessageService } from '../message.port.js';
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
+import type { MessageService } from "../message.port.js";
 import type {
   MessageTranscriptEffectsService,
   SetMessageFloorResult,
-} from '../message-transcript-effects.port.js';
+} from "../message-transcript-effects.port.js";
 
 /** {@link DefaultMessageTranscriptEffectsService} 依赖。 */
 export interface MessageTranscriptEffectsServiceDeps {
@@ -46,7 +46,7 @@ export class DefaultMessageTranscriptEffectsService
     _projectId: string,
     sessionId: string,
     fromSeq: number,
-    toSeq: number,
+    toSeq: number
   ): Promise<number> {
     return this.deps.messages.hideRange(sessionId, fromSeq, toSeq);
   }
@@ -55,7 +55,7 @@ export class DefaultMessageTranscriptEffectsService
     _projectId: string,
     sessionId: string,
     fromSeq: number,
-    toSeq: number,
+    toSeq: number
   ): Promise<number> {
     return this.deps.messages.showRange(sessionId, fromSeq, toSeq);
   }
@@ -64,9 +64,9 @@ export class DefaultMessageTranscriptEffectsService
     projectId: string,
     sessionId: string,
     afterSeq: number,
-    options?: { sweepRevisions?: boolean },
+    options?: { sweepRevisions?: boolean }
   ): Promise<void> {
-    await this.deps.conn.transaction(async tx => {
+    await this.deps.conn.transaction(async (tx) => {
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId,
         sessionId,
@@ -79,24 +79,24 @@ export class DefaultMessageTranscriptEffectsService
   async setMessageFloorAtMessage(
     _projectId: string,
     sessionId: string,
-    messageId: string,
+    messageId: string
   ): Promise<SetMessageFloorResult> {
     const messages = await this.deps.messages.listBySession(sessionId);
-    const anchor = messages.find(m => m.id === messageId);
+    const anchor = messages.find((m) => m.id === messageId);
     if (anchor == null) {
-      throw chatNotFound('message', messageId, { sessionId });
+      throw chatNotFound("message", messageId, { sessionId });
     }
     if (!isSetFloorAnchorRole(anchor.role)) {
       throw chatInvalidArgument(
-        `set-floor anchor role must be user, got: ${anchor.role}`,
+        `set-floor anchor role must be user, got: ${anchor.role}`
       );
     }
 
     const sessionMaxSeq =
-      messages.length > 0 ? Math.max(...messages.map(m => m.seq)) : 0;
+      messages.length > 0 ? Math.max(...messages.map((m) => m.seq)) : 0;
     const { hidePrefix, showSuffix } = computeSetFloorRanges(
       anchor.seq,
-      sessionMaxSeq,
+      sessionMaxSeq
     );
 
     let hiddenCount = 0;
@@ -108,48 +108,48 @@ export class DefaultMessageTranscriptEffectsService
     const write = new CoordinatedWrite();
     if (hidePrefix != null) {
       write.register({
-        name: 'hide-prefix',
+        name: "hide-prefix",
         execute: async () => {
           hiddenCount = await this.deps.messages.hideRange(
             sessionId,
             hidePrefix.fromSeq,
-            hidePrefix.toSeq,
+            hidePrefix.toSeq
           );
         },
         rollback: async () => {
           await this.deps.messages.showRange(
             sessionId,
             hidePrefix.fromSeq,
-            hidePrefix.toSeq,
+            hidePrefix.toSeq
           );
         },
       });
     }
     if (showSuffix != null) {
       write.register({
-        name: 'show-suffix',
+        name: "show-suffix",
         execute: async () => {
           shownCount = await this.deps.messages.showRange(
             sessionId,
             showSuffix.fromSeq,
-            showSuffix.toSeq,
+            showSuffix.toSeq
           );
         },
         rollback: async () => {
           await this.deps.messages.hideRange(
             sessionId,
             showSuffix.fromSeq,
-            showSuffix.toSeq,
+            showSuffix.toSeq
           );
         },
       });
     }
     write.register({
-      name: 'clear-rule-snapshot',
+      name: "clear-rule-snapshot",
       execute: async () => {
         await this.deps.sessionKkv.clearDomain(
           sessionId,
-          SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+          SESSION_KKV_DOMAIN_RULE_SNAPSHOT
         );
       },
       rollback: async () => {
@@ -157,11 +157,11 @@ export class DefaultMessageTranscriptEffectsService
       },
     });
     write.register({
-      name: 'clear-file-cache',
+      name: "clear-file-cache",
       execute: async () => {
         await this.deps.sessionKkv.clearDomain(
           sessionId,
-          SESSION_KKV_DOMAIN_FILE_CACHE,
+          SESSION_KKV_DOMAIN_FILE_CACHE
         );
       },
       rollback: async () => {

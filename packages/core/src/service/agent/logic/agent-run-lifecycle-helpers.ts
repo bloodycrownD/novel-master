@@ -5,9 +5,9 @@
 /** 是否接受带 runId 的 stream/bus 事件。 */
 export function shouldAcceptRunEvent(
   activeRunId: string | null,
-  runId: string | undefined,
+  runId: string | undefined
 ): boolean {
-  if (runId == null || runId === '') {
+  if (runId == null || runId === "") {
     return false;
   }
   if (activeRunId == null) {
@@ -19,7 +19,7 @@ export function shouldAcceptRunEvent(
 /** abort 后迟到 RUN_STARTED 是否应被忽略。 */
 export function shouldIgnoreStaleRunStarted(
   uiRunning: boolean,
-  _activeRunId: string | null,
+  _activeRunId: string | null
 ): boolean {
   return !uiRunning;
 }
@@ -38,12 +38,9 @@ export type ShouldApplyTranscriptReloadOptions = {
 export function shouldApplyTranscriptReload(
   uiRunning: boolean,
   freezeCount: number | null,
-  opts?: ShouldApplyTranscriptReloadOptions,
+  opts?: ShouldApplyTranscriptReloadOptions
 ): boolean {
-  if (
-    opts?.abortRetainPending === true &&
-    opts.phase === "assistant"
-  ) {
+  if (opts?.abortRetainPending === true && opts.phase === "assistant") {
     return true;
   }
   if (!shouldReloadTranscriptOnRunEvent(uiRunning)) {

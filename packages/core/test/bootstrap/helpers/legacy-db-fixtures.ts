@@ -59,6 +59,7 @@ export async function seedLegacySavedModelRows(conn: TdbcConnection): Promise<vo
   );
 }
 
+
 /** v1.0.7 风格 chat_session（无 user_vfs_pending_json）。 */
 export async function execLegacyV107ChatDdl(conn: TdbcConnection): Promise<void> {
   await conn.execute(`
@@ -163,6 +164,35 @@ export async function execLegacySavedModelTable(conn: TdbcConnection): Promise<v
       FOREIGN KEY (provider_id) REFERENCES llm_provider(id) ON DELETE CASCADE
     )
   `);
+}
+
+/**
+ * `chat_project` 带 legacy 项目智能体配置残留：未走 project-agent-config-cleanup-v1
+ * （v1.4.27 前形态，列非 NULL）。
+ */
+export async function execLegacyChatProjectWithAgentConfig(
+  conn: TdbcConnection,
+): Promise<void> {
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS chat_project (
+      id TEXT PRIMARY KEY,
+      display_name TEXT,
+      created_at_ms INTEGER NOT NULL,
+      updated_at_ms INTEGER NOT NULL,
+      agent_config_json TEXT NULL
+    )
+  `);
+  await conn.execute(
+    `INSERT INTO chat_project (id, display_name, created_at_ms, updated_at_ms, agent_config_json)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      "legacy-project",
+      "旧项目",
+      LEGACY_DB_NOW_MS,
+      LEGACY_DB_NOW_MS,
+      JSON.stringify({ agentId: "builtin-writer" }),
+    ],
+  );
 }
 
 /** pre-C3 worktree_* 规则表（物理旧名）。 */

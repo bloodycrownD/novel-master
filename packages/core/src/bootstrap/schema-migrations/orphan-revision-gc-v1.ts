@@ -51,7 +51,7 @@ async function up(tx: TdbcConnection): Promise<void> {
   const deleted = Number(result.changes);
   if (deleted > 0) {
     console.log(
-      `[nm-boot] orphan-revision-gc-v1: 清扫 ${deleted} 条 JOIN 孤儿 revision（entry 已删、ref_count<=0）`,
+      `[nm-boot] orphan-revision-gc-v1: 清扫 ${deleted} 条 JOIN 孤儿 revision（entry 已删、ref_count<=0）`
     );
   }
 }

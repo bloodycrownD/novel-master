@@ -7,7 +7,10 @@
  */
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
+import type {
+  DegradedToolCall,
+  LlmStreamEvent,
+} from "../ports/adapter.port.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
@@ -62,7 +65,7 @@ export function createAnthropicSseParserState(): AnthropicSseParserState {
 function flushActiveBlock(
   state: AnthropicSseParserState,
   onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): void {
   const active = state.active;
   if (active == null) {
@@ -93,7 +96,9 @@ function flushActiveBlock(
       state.blocks.push({
         type: "redacted_thinking",
         data: active.data,
-        ...(active.signature != null ? { thinkingSignature: active.signature } : {}),
+        ...(active.signature != null
+          ? { thinkingSignature: active.signature }
+          : {}),
       });
       break;
     }
@@ -134,18 +139,23 @@ function flushActiveBlock(
   state.active = null;
 }
 
-function ensureActiveText(state: AnthropicSseParserState): Extract<ActiveBlock, { type: "text" }> {
+function ensureActiveText(
+  state: AnthropicSseParserState
+): Extract<ActiveBlock, { type: "text" }> {
   if (state.active?.type === "text") {
     return state.active;
   }
   flushActiveBlock(state);
-  const active: Extract<ActiveBlock, { type: "text" }> = { type: "text", parts: [] };
+  const active: Extract<ActiveBlock, { type: "text" }> = {
+    type: "text",
+    parts: [],
+  };
   state.active = active;
   return active;
 }
 
 function ensureActiveThinking(
-  state: AnthropicSseParserState,
+  state: AnthropicSseParserState
 ): Extract<ActiveBlock, { type: "thinking" }> {
   if (state.active?.type === "thinking") {
     return state.active;
@@ -164,7 +174,7 @@ function processAnthropicSseLine(
   state: AnthropicSseParserState,
   line: string,
   onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): void {
   if (!line.startsWith("data: ")) {
     return;
@@ -251,10 +261,10 @@ export function feedAnthropicSseChunk(
   state: AnthropicSseParserState,
   chunk: string,
   onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): void {
-  feedSseLines(state, chunk, line =>
-    processAnthropicSseLine(state, line, onStream, toolNames),
+  feedSseLines(state, chunk, (line) =>
+    processAnthropicSseLine(state, line, onStream, toolNames)
   );
 }
 
@@ -285,8 +295,8 @@ function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
   const startUsage = isRecord(startMessage?.usage)
     ? startMessage!.usage
     : isRecord(start.usage)
-      ? start.usage
-      : undefined;
+    ? start.usage
+    : undefined;
   const usage: Record<string, unknown> = {};
   if (startUsage != null) {
     const inputSideKeys = [
@@ -314,7 +324,7 @@ function mergeAnthropicStreamRaw(state: AnthropicSseParserState): unknown {
 export function finishAnthropicSse(
   state: AnthropicSseParserState,
   onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
@@ -338,7 +348,7 @@ export function finishAnthropicSse(
 export function finishAnthropicSsePartial(
   state: AnthropicSseParserState,
   onStream?: (event: LlmStreamEvent) => void,
-  toolNames?: AnthropicToolNameWire,
+  toolNames?: AnthropicToolNameWire
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
@@ -351,23 +361,31 @@ export function finishAnthropicSsePartial(
   flushActiveBlock(state, onStream, toolNames);
 
   const text = state.blocks
-    .filter((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")
+    .filter(
+      (b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text"
+    )
     .map((b) => b.text)
     .join("");
   const thinking = state.blocks
-    .filter((b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking")
+    .filter(
+      (b): b is Extract<ContentBlock, { type: "thinking" }> =>
+        b.type === "thinking"
+    )
     .map((b) => b.text)
     .join("");
   const toolUses = state.blocks
-    .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
+    .filter(
+      (b): b is Extract<ContentBlock, { type: "tool_use" }> =>
+        b.type === "tool_use"
+    )
     .map((b) => ({ id: b.id, name: b.name, input: b.input }));
   const otherBlocks = state.blocks.filter(
-    (b) => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use",
+    (b) => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use"
   );
 
   const blocks = buildStreamPartialBlocks(
     { text, thinking, toolUses },
-    onStream,
+    onStream
   );
   blocks.push(...otherBlocks);
 

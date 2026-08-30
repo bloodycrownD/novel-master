@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  open,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { open, type TdbcConnection } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -16,7 +13,10 @@ import {
 } from "../../src/bootstrap/novel-master-bootstrap.js";
 import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
 import {
+  execLegacyChatProjectWithAgentConfig,
   execLegacySavedModelTable,
+  execLegacyV107ChatDdl,
+  execLegacyVfsEntryTable,
   execLegacyWorktreeRuleTables,
 } from "./helpers/legacy-db-fixtures.js";
 
@@ -41,7 +41,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
       assertMinimumBaseline(conn),
       (err: unknown) =>
         err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
-      "legacy 形态 + 缺 baseline 登记，应抛出 v1.4.08 升级提示",
+      "legacy 形态 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
     );
   });
 
@@ -55,7 +55,49 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
       assertMinimumBaseline(conn),
       (err: unknown) =>
         err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
-      "worktree_* 残留 + 缺 baseline 登记，应抛出 v1.4.08 升级提示",
+      "worktree_* 残留 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
+    );
+  });
+
+  it("T-BL1（vfs_entry 旧主键形态）：path 作 pk + 缺 baseline 登记 → fail-fast", async () => {
+    const conn = await openMemoryConn();
+    // vfs-entry-id-redesign-v1 之前的形态：主键是 path，无 entry_id 主键。
+    await execLegacyVfsEntryTable(conn);
+
+    await ensureSchemaMigrationsTable(conn);
+    await assert.rejects(
+      assertMinimumBaseline(conn),
+      (err: unknown) =>
+        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      "vfs_entry 旧主键形态 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
+    );
+  });
+
+  it("T-BL1（chat_session 缺 agent_config_json）：缺 baseline 登记 → fail-fast", async () => {
+    const conn = await openMemoryConn();
+    // session-agent-config-v2 之前的形态：chat_session 无 agent_config_json 列。
+    await execLegacyV107ChatDdl(conn);
+
+    await ensureSchemaMigrationsTable(conn);
+    await assert.rejects(
+      assertMinimumBaseline(conn),
+      (err: unknown) =>
+        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      "chat_session 缺 agent_config_json + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
+    );
+  });
+
+  it("T-BL1（chat_project 配置残留）：agent_config_json 非 NULL + 缺 baseline 登记 → fail-fast", async () => {
+    const conn = await openMemoryConn();
+    // project-agent-config-cleanup-v1 之前的形态：列里残留非 NULL 配置。
+    await execLegacyChatProjectWithAgentConfig(conn);
+
+    await ensureSchemaMigrationsTable(conn);
+    await assert.rejects(
+      assertMinimumBaseline(conn),
+      (err: unknown) =>
+        err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
+      "chat_project 配置残留 + 缺 baseline 登记，应抛出 v1.4.27 升级提示"
     );
   });
 
@@ -68,7 +110,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
     const sentinelId = BASELINE_MIGRATION_IDS[0]!;
     await conn.execute(
       `INSERT INTO schema_migrations (id, applied_at_ms) VALUES (?, ?)`,
-      [sentinelId, Date.now()],
+      [sentinelId, Date.now()]
     );
 
     // 不应抛错。
@@ -92,7 +134,7 @@ describe("bootstrap 版本基线检查（T-BL1 / T-BL2）", () => {
       bootstrapNovelMaster(conn),
       (err: unknown) =>
         err instanceof Error && err.message === BASELINE_TOO_OLD_MESSAGE,
-      "bootstrapNovelMaster 应在 migration runner 之前 fail-fast",
+      "bootstrapNovelMaster 应在 migration runner 之前 fail-fast"
     );
   });
 });

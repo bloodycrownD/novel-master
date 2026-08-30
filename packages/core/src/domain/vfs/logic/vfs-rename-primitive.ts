@@ -22,7 +22,7 @@ export async function renameVfsEntry(
   entryRepo: VfsEntryRepository,
   scopeKey: string,
   oldPath: string,
-  newPath: string,
+  newPath: string
 ): Promise<void> {
   await entryRepo.renamePathInScope(tx, scopeKey, oldPath, newPath);
 }
@@ -40,7 +40,7 @@ export async function renameVfsDirectory(
   entryRepo: VfsEntryRepository,
   scopeKey: string,
   oldDir: string,
-  newDir: string,
+  newDir: string
 ): Promise<void> {
   await entryRepo.renamePrefixInScope(tx, scopeKey, oldDir, newDir);
 }

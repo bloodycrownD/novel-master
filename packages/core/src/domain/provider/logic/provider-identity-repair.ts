@@ -53,7 +53,10 @@ export function createProviderIdentityRepairOperation(args: {
         if (p.displayName.trim() === "") {
           offenders.push(`${p.id}: 空 display_name`);
         }
-        if (p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === "")) {
+        if (
+          p.isBuiltin &&
+          (p.builtinKey == null || p.builtinKey.trim() === "")
+        ) {
           offenders.push(`${p.id}: 内置行缺 builtin_key`);
         }
       }
@@ -62,7 +65,9 @@ export function createProviderIdentityRepairOperation(args: {
       }
       return {
         needsRepair: true,
-        details: `${offenders.length} 条 provider 违反双身份键不变量：${offenders.join("; ")}`,
+        details: `${
+          offenders.length
+        } 条 provider 违反双身份键不变量：${offenders.join("; ")}`,
       };
     },
     async repair() {
@@ -70,7 +75,8 @@ export function createProviderIdentityRepairOperation(args: {
       const providers = await providerRepo.list();
       const emptyNames = providers.filter((p) => p.displayName.trim() === "");
       const builtinMissingKey = providers.filter(
-        (p) => p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === ""),
+        (p) =>
+          p.isBuiltin && (p.builtinKey == null || p.builtinKey.trim() === "")
       );
       if (emptyNames.length === 0 && builtinMissingKey.length === 0) {
         return;
@@ -79,7 +85,9 @@ export function createProviderIdentityRepairOperation(args: {
         "MIGRATION_ORPHAN_POINTER",
         `provider 双身份键不变量被破坏，无法自动修复：` +
           `空 display_name=[${emptyNames.map((p) => p.id).join(", ")}]，` +
-          `内置行缺 builtin_key=[${builtinMissingKey.map((p) => p.id).join(", ")}]`,
+          `内置行缺 builtin_key=[${builtinMissingKey
+            .map((p) => p.id)
+            .join(", ")}]`
       );
     },
   };

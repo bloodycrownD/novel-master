@@ -65,7 +65,7 @@ export function scanSkillAttachments(text: string): MessageAttachment[] {
  */
 export function mergeAttachmentsWithScannedSkills(
   text: string,
-  existing: readonly MessageAttachment[],
+  existing: readonly MessageAttachment[]
 ): MessageAttachment[] {
   return mergeAttachmentsByPath(existing, scanSkillAttachments(text));
 }

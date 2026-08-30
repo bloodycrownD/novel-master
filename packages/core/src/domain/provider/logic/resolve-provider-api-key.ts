@@ -4,7 +4,10 @@
  * @module domain/provider/logic/resolve-provider-api-key
  */
 
-import { ProviderError, providerApiKeyNotSetMessage } from "@/errors/provider-errors.js";
+import {
+  ProviderError,
+  providerApiKeyNotSetMessage,
+} from "@/errors/provider-errors.js";
 import {
   resolveProviderApiKeySecretRef,
   type LlmProvider,
@@ -17,7 +20,7 @@ import { builtinDefaultApiKey } from "./builtin-providers.js";
  */
 export async function resolveProviderApiKey(
   provider: Pick<LlmProvider, "id" | "secretRef" | "builtinKey">,
-  secretStore: SecretStore,
+  secretStore: SecretStore
 ): Promise<string> {
   const ref = resolveProviderApiKeySecretRef(provider);
   const stored = await secretStore.get(ref);
@@ -31,21 +34,26 @@ export async function resolveProviderApiKey(
   if (fallback != null && fallback !== "") {
     return fallback;
   }
-  throw new ProviderError("API_KEY_NOT_SET", providerApiKeyNotSetMessage(provider.id), {
-    providerId: provider.id,
-  });
+  throw new ProviderError(
+    "API_KEY_NOT_SET",
+    providerApiKeyNotSetMessage(provider.id),
+    {
+      providerId: provider.id,
+    }
+  );
 }
 
 /** list/UI 是否应把该服务商视为已配置可用 API key。 */
 export async function providerApiKeyIsConfigured(
   provider: Pick<LlmProvider, "id" | "secretRef" | "builtinKey">,
-  secretStore: SecretStore,
+  secretStore: SecretStore
 ): Promise<boolean> {
   const ref = resolveProviderApiKeySecretRef(provider);
   if (await secretStore.has(ref)) {
     return true;
   }
   return (
-    provider.builtinKey != null && builtinDefaultApiKey(provider.builtinKey) != null
+    provider.builtinKey != null &&
+    builtinDefaultApiKey(provider.builtinKey) != null
   );
 }

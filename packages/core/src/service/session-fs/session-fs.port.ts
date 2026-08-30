@@ -22,6 +22,6 @@ export interface SessionFsService {
     sessionId: string,
     projectId: string,
     messageId: string,
-    options?: RollbackOptions,
+    options?: RollbackOptions
   ): Promise<void>;
 }

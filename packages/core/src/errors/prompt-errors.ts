@@ -21,7 +21,7 @@ export class PromptError extends Error {
   constructor(
     code: PromptErrorCode,
     message: string,
-    options?: { offset?: number },
+    options?: { offset?: number }
   ) {
     super(message);
     this.name = "PromptError";

@@ -4,9 +4,7 @@
  * @module service/vfs/impl/character-card-import.service
  */
 
-import {
-  insertFileSeedingRevision,
-} from "@/domain/vfs/logic/seed-live-head-revisions.js";
+import { insertFileSeedingRevision } from "@/domain/vfs/logic/seed-live-head-revisions.js";
 import { releaseAndDeleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -24,10 +22,7 @@ import {
 } from "@/errors/character-card-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
-import {
-  scopeKey,
-  type VfsScope,
-} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { scopeKey, type VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { resolveZipDirectoryPath } from "@/domain/vfs/logic/vfs-zip-path.js";
 import { backfillBaselineCheckpoints } from "@/domain/message-checkpoint/logic/backfill-baseline-checkpoints.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -44,7 +39,7 @@ export type CharacterCardImportTestHook = {
 async function ensureEmptyDirectoryRow(
   repo: VfsEntryRepository,
   scope: VfsScope,
-  logical: string,
+  logical: string
 ): Promise<void> {
   const sk = scopeKey(scope);
   if (logical === "/") {
@@ -59,7 +54,7 @@ async function ensureEmptyDirectoryRow(
   if (existing.entryKind !== "directory") {
     throw characterCardError(
       "INVALID_PATH",
-      `character card target path is a file, not a directory: ${logical}`,
+      `character card target path is a file, not a directory: ${logical}`
     );
   }
 }
@@ -67,13 +62,13 @@ async function ensureEmptyDirectoryRow(
 async function assertDirectoryPathNotFile(
   repo: VfsEntryRepository,
   scope: VfsScope,
-  directoryPath: string,
+  directoryPath: string
 ): Promise<void> {
   const existing = await repo.findByPath(scopeKey(scope), directoryPath);
   if (existing != null && existing.entryKind === "file") {
     throw characterCardError(
       "INVALID_PATH",
-      `character card target path is a file, not a directory: ${directoryPath}`,
+      `character card target path is a file, not a directory: ${directoryPath}`
     );
   }
 }
@@ -103,7 +98,7 @@ export class DefaultCharacterCardImportService
   constructor(
     private readonly conn: TdbcConnection,
     private readonly repo: VfsEntryRepository,
-    options: DefaultCharacterCardImportServiceOptions = {},
+    options: DefaultCharacterCardImportServiceOptions = {}
   ) {
     this.testHook = options.testHook;
     this.backfillBaseline = options.backfillBaseline ?? true;
@@ -113,12 +108,12 @@ export class DefaultCharacterCardImportService
   async import(
     scope: VfsScope,
     tree: MdTree,
-    options: CharacterCardImportOptions,
+    options: CharacterCardImportOptions
   ): Promise<void> {
     if (options.confirmed !== true) {
       throw characterCardError(
         "NOT_CONFIRMED",
-        "import requires explicit confirmation (CLI --yes or confirm dialog)",
+        "import requires explicit confirmation (CLI --yes or confirm dialog)"
       );
     }
 
@@ -141,7 +136,13 @@ export class DefaultCharacterCardImportService
             throw new Error("test import failure");
           }
           await ensureParentDirectories(repoTx, sk, logical);
-          await insertFileSeedingRevision(repoTx, revisionTx, sk, logical, content);
+          await insertFileSeedingRevision(
+            repoTx,
+            revisionTx,
+            sk,
+            logical,
+            content
+          );
         }
         // session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照，
         // 让回滚有正确的基线可对齐，不会因空基线误删导入的文件。
@@ -153,7 +154,7 @@ export class DefaultCharacterCardImportService
             messageRepo,
             checkpointRepo,
             scope.projectId,
-            scope.sessionId,
+            scope.sessionId
           );
         }
       });
@@ -178,13 +179,13 @@ export class DefaultCharacterCardImportService
   async importFromBytes(
     scope: VfsScope,
     bytes: Uint8Array,
-    options: CharacterCardImportOptions,
+    options: CharacterCardImportOptions
   ): Promise<void> {
     // 解析在 confirmed 门闸之后、delete 之前；解析失败零写库
     if (options.confirmed !== true) {
       throw characterCardError(
         "NOT_CONFIRMED",
-        "import requires explicit confirmation (CLI --yes or confirm dialog)",
+        "import requires explicit confirmation (CLI --yes or confirm dialog)"
       );
     }
     const tree = parseCharacterCardToMdTree(bytes);

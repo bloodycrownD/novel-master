@@ -22,7 +22,7 @@ export function joinUrl(baseUrl: string, path: string): string {
 /** Throws ProviderError HTTP_ERROR on non-2xx responses. */
 export async function assertOk(
   response: Response,
-  providerId?: string,
+  providerId?: string
 ): Promise<void> {
   if (response.ok) {
     return;
@@ -34,11 +34,9 @@ export async function assertOk(
     body = "";
   }
   const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
-  throw new ProviderError(
-    "HTTP_ERROR",
-    `HTTP ${response.status}: ${snippet}`,
-    { providerId },
-  );
+  throw new ProviderError("HTTP_ERROR", `HTTP ${response.status}: ${snippet}`, {
+    providerId,
+  });
 }
 
 /** JSON fetch with error handling. */
@@ -46,7 +44,7 @@ export async function fetchJson(
   fetchFn: FetchFn,
   url: string,
   init: RequestInit,
-  providerId?: string,
+  providerId?: string
 ): Promise<unknown> {
   const response = await fetchFn(url, init);
   await assertOk(response, providerId);

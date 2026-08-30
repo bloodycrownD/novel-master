@@ -14,7 +14,8 @@ export const DB_BACKUP_PROVIDER_TABLES = [
 ] as const;
 
 /** {@link DB_BACKUP_PROVIDER_TABLES} 中的表名。 */
-export type ProviderBackupTableName = (typeof DB_BACKUP_PROVIDER_TABLES)[number];
+export type ProviderBackupTableName =
+  (typeof DB_BACKUP_PROVIDER_TABLES)[number];
 
 /**
  * 三张服务商表的行级快照，用于导入前 dump 与导入后 restore。

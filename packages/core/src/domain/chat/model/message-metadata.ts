@@ -27,7 +27,7 @@ export interface MessageMetadata {
 
 /** 从 `raw` 对象读取 metadata（无则 undefined）。 */
 export function readMessageMetadata(
-  raw: Record<string, unknown> | null | undefined,
+  raw: Record<string, unknown> | null | undefined
 ): MessageMetadata | undefined {
   if (raw == null) {
     return undefined;

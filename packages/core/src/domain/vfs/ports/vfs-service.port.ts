@@ -36,10 +36,7 @@ export interface VfsGrepMatch {
   readonly excerpt: string;
 }
 
-export type {
-  VfsGrepMatchMode,
-  VfsGrepOptions,
-} from "../logic/vfs-grep.js";
+export type { VfsGrepMatchMode, VfsGrepOptions } from "../logic/vfs-grep.js";
 
 /**
  * Virtual file system capability (read/write/list/glob/grep/delete/mkdir).
@@ -51,7 +48,7 @@ export type {
 export interface VfsService {
   list(
     dir: string,
-    options?: { recursive?: boolean; maxDepth?: number },
+    options?: { recursive?: boolean; maxDepth?: number }
   ): Promise<VfsListEntry[]>;
 
   mkdir(path: string): Promise<void>;
@@ -61,22 +58,19 @@ export interface VfsService {
   write(
     path: string,
     content: string,
-    options?: WriteOptions,
+    options?: WriteOptions
   ): Promise<{ version: number }>;
 
   replace(
     path: string,
     oldString: string,
     newString: string,
-    options?: { replaceAll?: boolean },
+    options?: { replaceAll?: boolean }
   ): Promise<{ version: number; replacements: number }>;
 
   glob(pattern: string, options?: { cwd?: string }): Promise<string[]>;
 
-  grep(
-    pattern: string,
-    options?: VfsGrepOptions,
-  ): Promise<VfsGrepMatch[]>;
+  grep(pattern: string, options?: VfsGrepOptions): Promise<VfsGrepMatch[]>;
 
   delete(path: string, options?: { recursive?: boolean }): Promise<void>;
 
@@ -105,7 +99,11 @@ export interface VfsService {
    * @throws 目标路径已存在时抛 ALREADY_EXISTS（需调用方先校验或传 options.overwrite）
    * @throws `DefaultVfsService` 下抛 unsupported
    */
-  renamePath(from: string, to: string, options?: { overwrite?: boolean }): Promise<void>;
+  renamePath(
+    from: string,
+    to: string,
+    options?: { overwrite?: boolean }
+  ): Promise<void>;
 
   /**
    * 目录前缀批量重命名（单事务 UPDATE 全部子路径，不写 revision/checkpoint）。

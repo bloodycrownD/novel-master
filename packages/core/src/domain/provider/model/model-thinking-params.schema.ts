@@ -35,8 +35,15 @@ const geminiThinkingSchema = z
 /** 已保存模型思考参数文档的 discriminated union。 */
 export const modelThinkingParamsSchema = z.discriminatedUnion("protocol", [
   z
-    .object({ protocol: z.literal("anthropic"), anthropic: anthropicThinkingSchema })
+    .object({
+      protocol: z.literal("anthropic"),
+      anthropic: anthropicThinkingSchema,
+    })
     .strict(),
-  z.object({ protocol: z.literal("openai"), openai: openAiThinkingSchema }).strict(),
-  z.object({ protocol: z.literal("gemini"), gemini: geminiThinkingSchema }).strict(),
+  z
+    .object({ protocol: z.literal("openai"), openai: openAiThinkingSchema })
+    .strict(),
+  z
+    .object({ protocol: z.literal("gemini"), gemini: geminiThinkingSchema })
+    .strict(),
 ]);

@@ -33,7 +33,7 @@ function isNonEmptyString(value: unknown): value is string {
  * @throws PromptError 空串 / 仅空白
  */
 export function resolveWorkplaceFromWire(
-  workplace: boolean | string | undefined,
+  workplace: boolean | string | undefined
 ): string | undefined {
   if (workplace === undefined || workplace === false) {
     return undefined;
@@ -45,14 +45,14 @@ export function resolveWorkplaceFromWire(
     if (workplace.trim().length < 1) {
       throw new PromptError(
         "INVALID_YAML",
-        "prompts.workplace 如开启则须为非空字符串",
+        "prompts.workplace 如开启则须为非空字符串"
       );
     }
     return workplace;
   }
   throw new PromptError(
     "INVALID_YAML",
-    "prompts.workplace 须为 boolean 或非空字符串",
+    "prompts.workplace 须为 boolean 或非空字符串"
   );
 }
 
@@ -71,7 +71,7 @@ function rejectWhen(label: string, record: Record<string, unknown>): void {
 
 function parsePersistTextBlock(
   name: string,
-  item: unknown,
+  item: unknown
 ): PersistTextPromptBlock {
   if (item == null || typeof item !== "object" || Array.isArray(item)) {
     throw new PromptError("INVALID_BLOCK", `${blockLabel(name)}须为对象`);

@@ -18,7 +18,7 @@ export const SKILL_NAME_PATTERN_SOURCE = "[^\\s/.][^\\s/]*";
 
 /** 锚定的完整技能名校验正则。 */
 export const SKILL_NAME_PATTERN = new RegExp(
-  `^(?:${SKILL_NAME_PATTERN_SOURCE})$`,
+  `^(?:${SKILL_NAME_PATTERN_SOURCE})$`
 );
 
 /** 保留名（大小写不敏感）：技能目录入口文件名，不能当技能名。 */

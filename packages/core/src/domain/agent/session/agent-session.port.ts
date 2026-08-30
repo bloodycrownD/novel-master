@@ -45,7 +45,7 @@ export interface AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
-    },
+    }
   ): Promise<ChatMessage>;
 
   /** Hides messages in a seq range (compaction). Returns affected count. */

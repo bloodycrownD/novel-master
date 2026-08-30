@@ -6,7 +6,10 @@
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { applyRegexChannelToMessages } from "@/domain/regex/logic/apply-regex-rules.js";
-import { depthByMessageId, listVisibleForDepth } from "@/domain/depth/logic/depth-from-tail.js";
+import {
+  depthByMessageId,
+  listVisibleForDepth,
+} from "@/domain/depth/logic/depth-from-tail.js";
 import { resolveActiveCompiledRules } from "@/domain/regex/logic/resolve-active-regex-rules.js";
 import type { RegexConfigService } from "../regex/regex-config.port.js";
 
@@ -17,7 +20,7 @@ export async function applyRegexChannelForLlm(
   config: RegexConfigService,
   activeGroupId: string | undefined,
   allSessionMessages: readonly ChatMessage[],
-  visibleMessages: readonly ChatMessage[],
+  visibleMessages: readonly ChatMessage[]
 ): Promise<ChatMessage[]> {
   const rules = await resolveActiveCompiledRules(config, activeGroupId);
   if (rules.length === 0) {
@@ -25,10 +28,5 @@ export async function applyRegexChannelForLlm(
   }
   const visibleSorted = listVisibleForDepth(allSessionMessages);
   const depthMap = depthByMessageId(visibleSorted);
-  return applyRegexChannelToMessages(
-    visibleMessages,
-    rules,
-    "llm",
-    depthMap,
-  );
+  return applyRegexChannelToMessages(visibleMessages, rules, "llm", depthMap);
 }

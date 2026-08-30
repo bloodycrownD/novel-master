@@ -39,9 +39,13 @@ export function compileRegexRule(rule: RegexRule): CompiledRegexRule {
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    throw new RegexError("INVALID_PATTERN", `Invalid regular expression: ${msg}`, {
-      groupId: rule.groupId,
-      ruleId: rule.ruleId,
-    });
+    throw new RegexError(
+      "INVALID_PATTERN",
+      `Invalid regular expression: ${msg}`,
+      {
+        groupId: rule.groupId,
+        ruleId: rule.ruleId,
+      }
+    );
   }
 }

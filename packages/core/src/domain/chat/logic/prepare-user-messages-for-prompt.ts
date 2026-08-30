@@ -85,12 +85,12 @@ export interface PrepareUserMessagesForPromptRuntime {
 
 async function resolveWorkplaceStatus(
   path: string,
-  runtime: PrepareUserMessagesForPromptRuntime,
+  runtime: PrepareUserMessagesForPromptRuntime
 ): Promise<WorkplaceDisplayStatus> {
   const raw = await runtime.sessionKkv.get(
     runtime.sessionId,
     SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-    RULE_SNAPSHOT_CANON_KEY,
+    RULE_SNAPSHOT_CANON_KEY
   );
   if (raw == null || raw === "") {
     return "full";
@@ -105,7 +105,7 @@ async function resolveWorkplaceStatus(
 
 function resolveAttachFileStatus(
   path: string,
-  type: MessageAttachment["type"],
+  type: MessageAttachment["type"]
 ): WorkplaceDisplayStatus {
   if (type === "image" || isBinaryAttachPath(path) || isImageAttachPath(path)) {
     return "filename";
@@ -125,7 +125,7 @@ function fileRefAction(
   source: "attach" | "workplace",
   logicalPath: string,
   display: WorkplaceDisplayStatus,
-  rawContent: string,
+  rawContent: string
 ): string {
   const lineBody = renderFileBlockBody({
     logicalPath,
@@ -144,10 +144,12 @@ function fileRefAction(
 async function hydrateFileFull(
   attachment: MessageAttachment,
   logicalPath: string,
-  runtime: PrepareUserMessagesForPromptRuntime,
+  runtime: PrepareUserMessagesForPromptRuntime
 ): Promise<MessageAttachment> {
   const action =
-    attachment.source === "workplace" ? "workplaceChange" as const : "userAttach" as const;
+    attachment.source === "workplace"
+      ? ("workplaceChange" as const)
+      : ("userAttach" as const);
 
   if (attachment.content != null) {
     // 已是 action XML → 原样带过
@@ -179,7 +181,7 @@ async function hydrateFileFull(
           attachment.source === "workplace" ? "workplace" : "attach",
           logicalPath,
           status,
-          fileBody,
+          fileBody
         );
     return {
       ...attachment,
@@ -209,7 +211,7 @@ async function hydrateFileFull(
       attachment.source === "workplace" ? "workplace" : "attach",
       logicalPath,
       status,
-      cached.body,
+      cached.body
     ),
   };
 }
@@ -217,7 +219,7 @@ async function hydrateFileFull(
 async function hydrateDirAttach(
   attachment: MessageAttachment,
   logicalPath: string,
-  runtime: PrepareUserMessagesForPromptRuntime,
+  runtime: PrepareUserMessagesForPromptRuntime
 ): Promise<MessageAttachment> {
   if (attachment.content != null) {
     if (attachment.content.includes("<action ")) {
@@ -307,7 +309,7 @@ async function hydrateSkillAttachWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
-  resolveSkillNames: () => Promise<Set<string>>,
+  resolveSkillNames: () => Promise<Set<string>>
 ): Promise<MessageAttachment> {
   const name = attachment.skillName;
   if (typeof name !== "string" || name === "") {
@@ -330,7 +332,11 @@ async function hydrateSkillAttachWithSeen(
   // 存在性按合并视图（global ∪ 当前项目，含无效技能；禁用不影响）
   const names = await resolveSkillNames();
   if (!names.has(name)) {
-    return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
+    return {
+      ...attachment,
+      action: "skillAttach",
+      content: buildSkillAttachMissingXml(name),
+    };
   }
   try {
     // 跨域读不经 session file_cache：直接读生效副本 SKILL.md 全文（含无效技能原文）
@@ -338,7 +344,7 @@ async function hydrateSkillAttachWithSeen(
       undefined,
       name,
       undefined,
-      runtime.projectId,
+      runtime.projectId
     );
     seen.add(key);
     return {
@@ -351,7 +357,11 @@ async function hydrateSkillAttachWithSeen(
     };
   } catch {
     // 存在性判定与读盘之间被删除等竞态：按不存在处理（不写 seen）
-    return { ...attachment, action: "skillAttach", content: buildSkillAttachMissingXml(name) };
+    return {
+      ...attachment,
+      action: "skillAttach",
+      content: buildSkillAttachMissingXml(name),
+    };
   }
 }
 
@@ -363,11 +373,16 @@ async function hydrateAttachWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
-  resolveSkillNames: () => Promise<Set<string>>,
+  resolveSkillNames: () => Promise<Set<string>>
 ): Promise<MessageAttachment> {
   // skillAttach：无 path，不走路径规范化/文件 hydrate
   if (attachment.action === "skillAttach") {
-    return hydrateSkillAttachWithSeen(attachment, runtime, seen, resolveSkillNames);
+    return hydrateSkillAttachWithSeen(
+      attachment,
+      runtime,
+      seen,
+      resolveSkillNames
+    );
   }
   const rawPath = attachment.path;
   if (rawPath == null || rawPath === "") {
@@ -392,7 +407,7 @@ async function hydrateAttachWithSeen(
     return hydrateFileFull(
       { ...attachment, path: logicalPath },
       logicalPath,
-      runtime,
+      runtime
     );
   }
 
@@ -408,7 +423,7 @@ async function hydrateAttachWithSeen(
   return hydrateFileFull(
     { ...attachment, path: logicalPath },
     logicalPath,
-    runtime,
+    runtime
   );
 }
 
@@ -418,7 +433,7 @@ async function hydrateAttachWithSeen(
 async function hydrateWorkplaceWithSeen(
   attachment: MessageAttachment,
   runtime: PrepareUserMessagesForPromptRuntime,
-  seen: Set<string>,
+  seen: Set<string>
 ): Promise<MessageAttachment> {
   const rawPath = attachment.path;
   if (rawPath == null || rawPath === "") {
@@ -441,7 +456,7 @@ async function hydrateWorkplaceWithSeen(
   return hydrateFileFull(
     { ...attachment, path: logicalPath },
     logicalPath,
-    runtime,
+    runtime
   );
 }
 
@@ -450,7 +465,7 @@ async function prepareOneUserMessage(
   runtime: PrepareUserMessagesForPromptRuntime,
   seen: Set<string>,
   isLatestUser: boolean,
-  resolveSkillNames: () => Promise<Set<string>>,
+  resolveSkillNames: () => Promise<Set<string>>
 ): Promise<ChatMessage> {
   if (message.hidden) {
     // hidden：不 hydrate/wrap；库内 attachments 保留在原消息上
@@ -479,13 +494,13 @@ async function prepareOneUserMessage(
   for (const att of attachList) {
     hydratedBySource.set(
       att,
-      await hydrateAttachWithSeen(att, runtime, seen, resolveSkillNames),
+      await hydrateAttachWithSeen(att, runtime, seen, resolveSkillNames)
     );
   }
   for (const att of workplaceList) {
     hydratedBySource.set(
       att,
-      await hydrateWorkplaceWithSeen(att, runtime, seen),
+      await hydrateWorkplaceWithSeen(att, runtime, seen)
     );
   }
   for (const att of userOpsList) {
@@ -495,11 +510,15 @@ async function prepareOneUserMessage(
 
   // 保持原 attachments 数组序（仅内容已按 source 优先级处理）
   const hydrated: MessageAttachment[] = attachments.map(
-    (a) => hydratedBySource.get(a) ?? a,
+    (a) => hydratedBySource.get(a) ?? a
   );
 
   const plainText = messageBodyTextFromContent(message.content);
-  const wrapped = wrapUserMessageForLlm(plainText, hydrated, effectiveExtraInfo);
+  const wrapped = wrapUserMessageForLlm(
+    plainText,
+    hydrated,
+    effectiveExtraInfo
+  );
 
   return {
     ...message,
@@ -519,7 +538,7 @@ async function prepareOneUserMessage(
  */
 export async function prepareUserMessagesForPrompt(
   messages: readonly ChatMessage[],
-  runtime: PrepareUserMessagesForPromptRuntime,
+  runtime: PrepareUserMessagesForPromptRuntime
 ): Promise<ChatMessage[]> {
   const seen = createPromptPathSeenSet(runtime.seenPaths);
   // seen 共享（方向 B）：可见历史里 assistant 已通过 skill 工具 load 过的
@@ -539,8 +558,7 @@ export async function prepareUserMessagesForPrompt(
   }
   // 每轮 prepare 展开一次 customAttach 宏（与 dynamic 区每步展开对齐），同一轮内所有 user 消息复用同一份文本。
   const extraInfoResolved =
-    typeof runtime.extraInfo === "string" &&
-    runtime.extraInfo.trim().length > 0
+    typeof runtime.extraInfo === "string" && runtime.extraInfo.trim().length > 0
       ? await expandDynamicMacros(runtime.extraInfo, {
           now: runtime.now,
           workplace: runtime.workplace,
@@ -557,11 +575,7 @@ export async function prepareUserMessagesForPrompt(
   let latestUserInputIndex = -1;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]!;
-    if (
-      m.role === "user" &&
-      !m.hidden &&
-      isUserInputMessage(m)
-    ) {
+    if (m.role === "user" && !m.hidden && isUserInputMessage(m)) {
       latestUserInputIndex = i;
       break;
     }
@@ -602,8 +616,8 @@ export async function prepareUserMessagesForPrompt(
         resolvedRuntime,
         seen,
         i === latestUserInputIndex,
-        resolveSkillNames,
-      ),
+        resolveSkillNames
+      )
     );
   }
   return out;

@@ -30,7 +30,7 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
 
   constructor(
     protected readonly conn: TdbcConnection,
-    protected readonly strategy: SkspCryptoStrategy,
+    protected readonly strategy: SkspCryptoStrategy
   ) {}
 
   async get(ref: string): Promise<string | null> {
@@ -39,7 +39,7 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
       this.conn,
       this.parser,
       `SELECT ciphertext, iv, algo, version FROM sksp_secrets WHERE ref = #{ref}`,
-      { ref },
+      { ref }
     );
     if (rows.length === 0) {
       return null;
@@ -49,7 +49,7 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
       throw new SkspError(
         "DECRYPT_FAILED",
         `Unsupported algo for ${ref}. Re-run: nm provider edit --apiKey`,
-        { ref },
+        { ref }
       );
     }
     return this.strategy.decrypt(ref, row);
@@ -61,7 +61,7 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
       this.conn,
       this.parser,
       `SELECT 1 AS n FROM sksp_secrets WHERE ref = #{ref} LIMIT 1`,
-      { ref },
+      { ref }
     );
     return rows.length > 0;
   }
@@ -88,7 +88,7 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
         iv,
         algo: this.strategy.algo,
         updatedAtMs: now,
-      },
+      }
     );
   }
 
@@ -98,7 +98,7 @@ export abstract class BaseSqliteSecretStore implements SecretStore {
       this.conn,
       this.parser,
       `DELETE FROM sksp_secrets WHERE ref = #{ref}`,
-      { ref },
+      { ref }
     );
     return result.changes > 0;
   }

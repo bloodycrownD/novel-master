@@ -25,7 +25,7 @@ export class SkillError extends Error {
   constructor(
     code: SkillErrorCode,
     message: string,
-    options?: { skillName?: string; path?: string },
+    options?: { skillName?: string; path?: string }
   ) {
     super(message);
     this.name = "SkillError";
@@ -38,14 +38,14 @@ export class SkillError extends Error {
 /** Type guard that works across duplicate module instances (e.g. src vs dist in tests). */
 export function isSkillError(
   error: unknown,
-  code?: SkillErrorCode,
+  code?: SkillErrorCode
 ): error is SkillError {
   return matchesSkillError(error, code);
 }
 
 function matchesSkillError(
   error: unknown,
-  code?: SkillErrorCode,
+  code?: SkillErrorCode
 ): error is SkillError {
   if (typeof error !== "object" || error === null) {
     return false;
@@ -58,13 +58,14 @@ function matchesSkillError(
 }
 
 /** 技能名未过 SKILL_NAME_PATTERN 校验。 */
-export function skillInvalidName(
-  name: string,
-  reason: string,
-): SkillError {
-  return new SkillError("INVALID_NAME", `Invalid skill name ${name}: ${reason}`, {
-    skillName: name,
-  });
+export function skillInvalidName(name: string, reason: string): SkillError {
+  return new SkillError(
+    "INVALID_NAME",
+    `Invalid skill name ${name}: ${reason}`,
+    {
+      skillName: name,
+    }
+  );
 }
 
 /** 写操作（write/edit）缺显式域。 */
@@ -72,7 +73,7 @@ export function skillMissingDomain(name: string): SkillError {
   return new SkillError(
     "MISSING_DOMAIN",
     `写入技能 ${name} 须显式指定 domain（global / project）`,
-    { skillName: name },
+    { skillName: name }
   );
 }
 
@@ -81,28 +82,29 @@ export function skillMissingProjectId(name: string): SkillError {
   return new SkillError(
     "MISSING_PROJECT_ID",
     `project 域操作须提供 projectId（技能 ${name}）`,
-    { skillName: name },
+    { skillName: name }
   );
 }
 
 /** 技能内相对路径非法（含 .. / 逃逸技能目录 / 空路径）。 */
 export function skillInvalidPath(path: string, reason: string): SkillError {
-  return new SkillError("INVALID_PATH", `Invalid skill file path ${path}: ${reason}`, {
-    path,
-  });
+  return new SkillError(
+    "INVALID_PATH",
+    `Invalid skill file path ${path}: ${reason}`,
+    {
+      path,
+    }
+  );
 }
 
 /** 技能或技能文件不存在。 */
-export function skillNotFound(
-  name: string,
-  path?: string,
-): SkillError {
+export function skillNotFound(name: string, path?: string): SkillError {
   return new SkillError(
     "NOT_FOUND",
     path == null
       ? `Skill not found: ${name}`
       : `Skill file not found: ${name}/${path}`,
-    { skillName: name, path },
+    { skillName: name, path }
   );
 }
 
@@ -118,6 +120,6 @@ export function skillBuiltinNameReserved(name: string): SkillError {
   return new SkillError(
     "BUILTIN_SKILL_NAME_RESERVED",
     `「${name}」为内置技能保留名，不能用于新建；内置技能本身可在管理页编辑`,
-    { skillName: name },
+    { skillName: name }
   );
 }

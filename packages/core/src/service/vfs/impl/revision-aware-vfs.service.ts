@@ -52,13 +52,13 @@ import type { InternalVfsService } from "../internal-vfs.port.js";
 export class RevisionAwareVfsService implements InternalVfsService {
   constructor(
     private readonly conn: TdbcConnection,
-    private readonly inner: InternalVfsService,
+    private readonly inner: InternalVfsService
   ) {}
 
   list(
     scopeKey: string,
     dir: string,
-    options?: { recursive?: boolean; maxDepth?: number },
+    options?: { recursive?: boolean; maxDepth?: number }
   ): Promise<VfsListEntry[]> {
     return this.inner.list(scopeKey, dir, options);
   }
@@ -75,7 +75,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     scopeKey: string,
     path: string,
     content: string,
-    options?: WriteOptions,
+    options?: WriteOptions
   ): Promise<{ version: number }> {
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
@@ -86,7 +86,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         scopeKey,
         path,
         content,
-        options,
+        options
       );
     });
   }
@@ -96,7 +96,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
     path: string,
     oldString: string,
     newString: string,
-    options?: { replaceAll?: boolean },
+    options?: { replaceAll?: boolean }
   ): Promise<{ version: number; replacements: number }> {
     const current = await this.read(scopeKey, path);
     const { nextContent, replacements } = computeReplaceResult(
@@ -104,7 +104,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
       current.content,
       oldString,
       newString,
-      options,
+      options
     );
 
     const result = await this.write(scopeKey, path, nextContent, {
@@ -117,7 +117,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   glob(
     scopeKey: string,
     pattern: string,
-    options?: { cwd?: string },
+    options?: { cwd?: string }
   ): Promise<string[]> {
     return this.inner.glob(scopeKey, pattern, options);
   }
@@ -125,7 +125,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   grep(
     scopeKey: string,
     pattern: string,
-    options?: VfsGrepOptions,
+    options?: VfsGrepOptions
   ): Promise<VfsGrepMatch[]> {
     return this.inner.grep(scopeKey, pattern, options);
   }
@@ -133,7 +133,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   async delete(
     scopeKey: string,
     path: string,
-    options?: { recursive?: boolean },
+    options?: { recursive?: boolean }
   ): Promise<void> {
     const normalized = normalizePath(path);
     if (normalized === "/") {
@@ -148,7 +148,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         revisionRepo,
         scopeKey,
         normalized,
-        options?.recursive === true,
+        options?.recursive === true
       );
     });
   }
@@ -156,7 +156,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   async resetHeadToVersion(
     scopeKey: string,
     path: string,
-    version: number,
+    version: number
   ): Promise<void> {
     const normalized = normalizePath(path);
     await runInTransactionOrConn(this.conn, async (tx) => {
@@ -170,7 +170,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         throw new VfsError(
           "NOT_FOUND",
           `cannot resetHeadToVersion: entry missing for ${normalized}`,
-          { path: normalized },
+          { path: normalized }
         );
       }
       const entryId = existing.entryId;
@@ -180,21 +180,22 @@ export class RevisionAwareVfsService implements InternalVfsService {
         throw new VfsError(
           "NOT_FOUND",
           `cannot resetHeadToVersion: revision missing or deleted for ${normalized}@${version}`,
-          { path: normalized },
+          { path: normalized }
         );
       }
       if (rev.content == null) {
         throw new VfsError(
           "NOT_FOUND",
           `cannot resetHeadToVersion: active revision has no content for ${normalized}@${version}`,
-          { path: normalized },
+          { path: normalized }
         );
       }
 
       // put 幂等：复用既有 blob，拿到与 revision 行一致的 content_hash
       const contentHash = await contentStore.put(rev.content);
       await ensureParentDirectories(entryRepo, scopeKey, normalized);
-      const oldVersion = existing?.entryKind === "file" ? existing.version : null;
+      const oldVersion =
+        existing?.entryKind === "file" ? existing.version : null;
       await entryRepo.setHeadContentHash(scopeKey, normalized, {
         version: rev.version,
         contentHash,
@@ -211,7 +212,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
   async hardDelete(
     scopeKey: string,
     path: string,
-    options?: { recursive?: boolean },
+    options?: { recursive?: boolean }
   ): Promise<void> {
     const normalized = normalizePath(path);
     if (normalized === "/") {
@@ -223,7 +224,10 @@ export class RevisionAwareVfsService implements InternalVfsService {
       const revisionRepo = new SqliteVfsRevisionRepository(tx);
       if (options?.recursive === true) {
         // B-1 修复保留：recursive hardDelete 仍要先 adjustRef 释放 live head。
-        const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, normalized);
+        const heads = await entryRepo.listFileHeadsUnderPrefix(
+          scopeKey,
+          normalized
+        );
         for (const head of heads) {
           await adjustRef(revisionRepo, head.entryId, head.headVersion, -1);
         }
@@ -234,7 +238,11 @@ export class RevisionAwareVfsService implements InternalVfsService {
         if (entry != null && entry.entryKind === "file") {
           await adjustRef(revisionRepo, entry.entryId, entry.version, -1);
           // 删 entry 前先 sweep ref_count<=0 的 revision（此时 entry 仍在可 JOIN）
-          await deleteUnreferencedUnderScope(revisionRepo, scopeKey, normalized);
+          await deleteUnreferencedUnderScope(
+            revisionRepo,
+            scopeKey,
+            normalized
+          );
         }
       }
       // 物理删 entry，故意不走 deleteWithRevision（禁止注水墓碑）
@@ -248,26 +256,38 @@ export class RevisionAwareVfsService implements InternalVfsService {
     scopeKey: string,
     fromLogical: string,
     toLogical: string,
-    _options?: { overwrite?: boolean },
+    _options?: { overwrite?: boolean }
   ): Promise<void> {
     const normalizedFrom = normalizePath(fromLogical);
     const normalizedTo = normalizePath(toLogical);
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
-      await renameVfsEntry(tx, entryRepo, scopeKey, normalizedFrom, normalizedTo);
+      await renameVfsEntry(
+        tx,
+        entryRepo,
+        scopeKey,
+        normalizedFrom,
+        normalizedTo
+      );
     });
   }
 
   async renamePrefix(
     scopeKey: string,
     oldDirLogical: string,
-    newDirLogical: string,
+    newDirLogical: string
   ): Promise<void> {
     const normalizedOld = normalizePath(oldDirLogical);
     const normalizedNew = normalizePath(newDirLogical);
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
-      await renameVfsDirectory(tx, entryRepo, scopeKey, normalizedOld, normalizedNew);
+      await renameVfsDirectory(
+        tx,
+        entryRepo,
+        scopeKey,
+        normalizedOld,
+        normalizedNew
+      );
     });
   }
 }
@@ -277,7 +297,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
  */
 async function runInTransactionOrConn<T>(
   conn: TdbcConnection,
-  fn: (tx: TdbcConnection) => Promise<T>,
+  fn: (tx: TdbcConnection) => Promise<T>
 ): Promise<T> {
   try {
     return await conn.transaction(fn);
@@ -296,7 +316,7 @@ async function writeWithRevision(
   scopeKey: string,
   path: string,
   content: string,
-  options?: WriteOptions,
+  options?: WriteOptions
 ): Promise<{ version: number }> {
   const normalized = normalizePath(path);
   const existing = await entryRepo.findByPath(scopeKey, normalized);
@@ -309,7 +329,12 @@ async function writeWithRevision(
 
   if (existing == null) {
     await ensureParentDirectories(entryRepo, scopeKey, normalized);
-    const maxRevision = await resolveMaxRevision(entryRepo, revisionRepo, scopeKey, normalized);
+    const maxRevision = await resolveMaxRevision(
+      entryRepo,
+      revisionRepo,
+      scopeKey,
+      normalized
+    );
     if (maxRevision != null) {
       // Boundary: vfs_entry removed but revision history retained (e.g. batch rollback restore).
       version = maxRevision + 1;
@@ -336,7 +361,7 @@ async function writeWithRevision(
     throw new VfsError(
       "CONFLICT",
       `expectedVersion required when updating ${normalized}`,
-      { path: normalized },
+      { path: normalized }
     );
   }
 
@@ -346,11 +371,7 @@ async function writeWithRevision(
     options?.expectedVersion != null &&
     options.expectedVersion !== existing.version
   ) {
-    throw vfsConflict(
-      normalized,
-      options.expectedVersion,
-      existing.version,
-    );
+    throw vfsConflict(normalized, options.expectedVersion, existing.version);
   }
 
   // 同文短路：相对 live 明文全等 → 不 bump、不 append
@@ -362,7 +383,7 @@ async function writeWithRevision(
   const nextVersion = await nextVersionFor(
     revisionRepo,
     existing.entryId,
-    existing.version,
+    existing.version
   );
   const updated = await entryRepo.update(
     scopeKey,
@@ -372,7 +393,7 @@ async function writeWithRevision(
     {
       expectedVersion: options?.expectedVersion,
       versionCheck,
-    },
+    }
   );
   version = updated.version;
   await revisionRepo.append({
@@ -382,7 +403,12 @@ async function writeWithRevision(
     status: "active",
     mtimeMs,
   });
-  await transferLiveRef(revisionRepo, existing.entryId, existing.version, version);
+  await transferLiveRef(
+    revisionRepo,
+    existing.entryId,
+    existing.version,
+    version
+  );
   return { version };
 }
 
@@ -396,7 +422,7 @@ async function writeWithRevision(
 async function nextVersionFor(
   revisionRepo: VfsRevisionRepository,
   entryId: number,
-  headVersion: number,
+  headVersion: number
 ): Promise<number> {
   const maxStored = await revisionRepo.findMaxVersionForEntry(entryId);
   return Math.max(headVersion, maxStored ?? 0) + 1;
@@ -413,7 +439,7 @@ async function resolveMaxRevision(
   entryRepo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
-  path: string,
+  path: string
 ): Promise<number | null> {
   const entry = await entryRepo.findByPath(scopeKey, path);
   if (entry == null) {
@@ -440,7 +466,7 @@ async function appendDeletedRevisionsForSubtree(
   entryRepo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
-  path: string,
+  path: string
 ): Promise<void> {
   // listFileHeadsUnderPrefix 只返回 file head（目录自身不在内），保险起见仍过滤掉 path 命中。
   const heads = await entryRepo.listFileHeadsUnderPrefix(scopeKey, path);
@@ -452,7 +478,7 @@ async function appendDeletedRevisionsForSubtree(
   // 批量取齐各 entry 的 MAX(version)，逐 entry 按 max(head, MAX) + 1 发墓碑号，
   // 避开 head 回拨后被 checkpoint 钉住的占号版本。
   const maxVersionMap = await revisionRepo.findMaxVersionsForEntries(
-    liveHeads.map((h) => h.entryId),
+    liveHeads.map((h) => h.entryId)
   );
 
   const oldPointers = liveHeads.map((h) => ({
@@ -465,13 +491,12 @@ async function appendDeletedRevisionsForSubtree(
   await revisionRepo.batchAppendWithRefCount(
     liveHeads.map((h) => ({
       entryId: h.entryId,
-      version:
-        Math.max(h.headVersion, maxVersionMap.get(h.entryId) ?? 0) + 1,
+      version: Math.max(h.headVersion, maxVersionMap.get(h.entryId) ?? 0) + 1,
       contentHash: null,
       status: "deleted",
       mtimeMs,
       refCount: 1,
-    })),
+    }))
   );
 }
 
@@ -480,7 +505,7 @@ async function deleteWithRevision(
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   path: string,
-  recursive: boolean,
+  recursive: boolean
 ): Promise<void> {
   const entry = await entryRepo.findByPath(scopeKey, path);
   if (entry == null) {
@@ -492,7 +517,12 @@ async function deleteWithRevision(
     if (under.length === 0) {
       return;
     }
-    await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, path);
+    await appendDeletedRevisionsForSubtree(
+      entryRepo,
+      revisionRepo,
+      scopeKey,
+      path
+    );
     await entryRepo.delete(scopeKey, path, { recursive: true });
     return;
   }
@@ -505,7 +535,12 @@ async function deleteWithRevision(
   }
 
   if (recursive) {
-    await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, scopeKey, path);
+    await appendDeletedRevisionsForSubtree(
+      entryRepo,
+      revisionRepo,
+      scopeKey,
+      path
+    );
     await entryRepo.delete(scopeKey, path, { recursive: true });
     return;
   }
@@ -516,12 +551,12 @@ async function deleteWithRevision(
 async function appendDeletedRevision(
   revisionRepo: VfsRevisionRepository,
   entryId: number,
-  currentHeadVersion: number,
+  currentHeadVersion: number
 ): Promise<void> {
   const deletedVersion = await nextVersionFor(
     revisionRepo,
     entryId,
-    currentHeadVersion,
+    currentHeadVersion
   );
   await revisionRepo.append({
     entryId,

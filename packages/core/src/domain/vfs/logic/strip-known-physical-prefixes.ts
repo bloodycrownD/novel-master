@@ -4,12 +4,9 @@
  * @module domain/vfs/logic/strip-known-physical-prefixes
  */
 
-const SESSION_PHYSICAL_PREFIX =
-  /\/projects\/[^/]+\/sessions\/[^/]+(?=\/|$)/g;
-const PROJECT_TEMPLATE_PREFIX =
-  /\/projects\/[^/]+\/template(?=\/|$)/g;
-const PROJECT_META_PREFIX =
-  /\/projects\/[^/]+\/meta(?=\/|$)/g;
+const SESSION_PHYSICAL_PREFIX = /\/projects\/[^/]+\/sessions\/[^/]+(?=\/|$)/g;
+const PROJECT_TEMPLATE_PREFIX = /\/projects\/[^/]+\/template(?=\/|$)/g;
+const PROJECT_META_PREFIX = /\/projects\/[^/]+\/meta(?=\/|$)/g;
 const GLOBAL_TEMPLATE_PREFIX = /\/template(?=\/|$)/g;
 const GLOBAL_META_PREFIX = /\/meta(?=\/|$)/g;
 

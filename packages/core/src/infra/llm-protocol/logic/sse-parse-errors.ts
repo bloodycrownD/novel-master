@@ -29,12 +29,11 @@ export function isSseParseDebugEnabled(): boolean {
 /** 记录一条无法 JSON 解析的 SSE data 行。 */
 export function recordMalformedSseLine(
   diag: SseParseDiagnostics,
-  payload: string,
+  payload: string
 ): void {
   diag.malformedLineCount += 1;
   if (isSseParseDebugEnabled()) {
-    const prefix =
-      payload.length > 120 ? payload.slice(0, 120) + "…" : payload;
+    const prefix = payload.length > 120 ? payload.slice(0, 120) + "…" : payload;
     console.warn("[llm-sse] malformed JSON line:", prefix);
   }
 }
@@ -43,12 +42,12 @@ export function recordMalformedSseLine(
 export function assertSseParseSucceededOrThrow(
   diag: SseParseDiagnostics,
   blocks: readonly unknown[],
-  protocol: LlmProtocolKind,
+  protocol: LlmProtocolKind
 ): void {
   if (blocks.length === 0 && diag.malformedLineCount > 0) {
     throw new ProviderError(
       "MALFORMED_SSE",
-      `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)`,
+      `${protocol}: stream ended with no content after ${diag.malformedLineCount} malformed SSE line(s)`
     );
   }
 }

@@ -45,7 +45,10 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   async get(agentId: string): Promise<AgentDefinition> {
     const def = await this.deps.repository.get(agentId);
     if (def == null) {
-      throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
+      throw new AgentConfigError(
+        "AGENT_NOT_FOUND",
+        `agent not found: ${agentId}`
+      );
     }
     return def;
   }
@@ -53,21 +56,21 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   async upsert(
     agentId: string,
     def: AgentDefinition,
-    options: ValidateAgentDefinitionOptions = {},
+    options: ValidateAgentDefinitionOptions = {}
   ): Promise<void> {
     await validateAgentDefinition(def, options);
     const trimmedName = def.name.trim();
     if (trimmedName.length === 0) {
       throw new AgentConfigError(
         "INVALID_SCHEMA",
-        "agent name must not be empty",
+        "agent name must not be empty"
       );
     }
     // 内置 general 是虚拟 agent，禁止用户创建同名
     if (trimmedName === DEFAULT_SUBAGENT_DEFINITION.name) {
       throw new AgentConfigError(
         "INVALID_SCHEMA",
-        `"${DEFAULT_SUBAGENT_DEFINITION.name}" 是内置智能体名称，不可使用`,
+        `"${DEFAULT_SUBAGENT_DEFINITION.name}" 是内置智能体名称，不可使用`
       );
     }
     await this.assertUniqueDisplayName(agentId, trimmedName);
@@ -78,7 +81,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
 
   private async assertUniqueDisplayName(
     agentId: string,
-    name: string,
+    name: string
   ): Promise<void> {
     const ids = await this.deps.repository.listIds();
     for (const otherId of ids) {
@@ -100,7 +103,10 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
 
   async delete(agentId: string): Promise<void> {
     if (!(await this.deps.repository.exists(agentId))) {
-      throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
+      throw new AgentConfigError(
+        "AGENT_NOT_FOUND",
+        `agent not found: ${agentId}`
+      );
     }
     // built-in general 不可删除（运行时虚拟注入的递归基线）。
     // 用 getRawWire 取 name 而非 get（解码）：坏数据（decode 失败的行）也必须能删，
@@ -113,7 +119,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     if (wireName === DEFAULT_SUBAGENT_DEFINITION.name) {
       throw new AgentConfigError(
         "INVALID_SCHEMA",
-        `内置 agent "${DEFAULT_SUBAGENT_DEFINITION.name}" 不可删除`,
+        `内置 agent "${DEFAULT_SUBAGENT_DEFINITION.name}" 不可删除`
       );
     }
     await this.deps.repository.delete(agentId);

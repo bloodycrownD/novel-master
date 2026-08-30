@@ -8,8 +8,7 @@ export const TOOL_OUTPUT_MAX_LINES = 2000;
 export const TOOL_OUTPUT_MAX_LINE_LENGTH = 2000;
 export const TOOL_OUTPUT_MAX_BYTES = 50 * 1024;
 export const TOOL_OUTPUT_MAX_MATCHES = 100;
-export const TOOL_OUTPUT_LINE_TRUNCATED_SUFFIX =
-  `... (line truncated to ${TOOL_OUTPUT_MAX_LINE_LENGTH} chars)`;
+export const TOOL_OUTPUT_LINE_TRUNCATED_SUFFIX = `... (line truncated to ${TOOL_OUTPUT_MAX_LINE_LENGTH} chars)`;
 
 /** UTF-8 byte length without Node `Buffer` (RN/Hermes has no global Buffer). */
 function utf8ByteLength(text: string): number {
@@ -19,7 +18,7 @@ function utf8ByteLength(text: string): number {
 /** Truncates a single line when it exceeds {@link TOOL_OUTPUT_MAX_LINE_LENGTH}. */
 export function truncateLine(
   text: string,
-  maxLen: number = TOOL_OUTPUT_MAX_LINE_LENGTH,
+  maxLen: number = TOOL_OUTPUT_MAX_LINE_LENGTH
 ): { readonly line: string; readonly truncated: boolean } {
   if (text.length <= maxLen) {
     return { line: text, truncated: false };
@@ -38,7 +37,7 @@ export function truncateLine(
 export function sliceLinesFromOffset(
   lines: readonly string[],
   offset1Based: number,
-  limit: number = TOOL_OUTPUT_MAX_LINES,
+  limit: number = TOOL_OUTPUT_MAX_LINES
 ): {
   readonly slice: readonly string[];
   readonly totalLines: number;
@@ -55,7 +54,7 @@ export function sliceLinesFromOffset(
 /** Stops accumulating lines once UTF-8 byte budget would be exceeded. */
 export function capUtf8Bytes(
   lines: readonly string[],
-  maxBytes: number = TOOL_OUTPUT_MAX_BYTES,
+  maxBytes: number = TOOL_OUTPUT_MAX_BYTES
 ): {
   readonly lines: readonly string[];
   readonly truncated: boolean;
@@ -88,7 +87,7 @@ export function capUtf8Bytes(
 export function capMatchList<T>(
   items: readonly T[],
   maxItems: number = TOOL_OUTPUT_MAX_MATCHES,
-  formatItem: (item: T) => string,
+  formatItem: (item: T) => string
 ): {
   readonly items: readonly T[];
   readonly total: number;

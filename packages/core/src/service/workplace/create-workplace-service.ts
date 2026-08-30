@@ -19,7 +19,7 @@ import type { WorkplaceService } from "./workplace.port.js";
  */
 export function createWorkplaceService(
   conn: TdbcConnection,
-  scope: WorkplaceScope,
+  scope: WorkplaceScope
 ): WorkplaceService {
   return new DefaultWorkplaceService({
     scope,

@@ -44,22 +44,30 @@ export interface SavedModelSettingsPatch {
 }
 
 /** 读取上下文窗口 token 上限。 */
-export function savedModelContextWindowTokens(settings: SavedModelSettings): number {
+export function savedModelContextWindowTokens(
+  settings: SavedModelSettings
+): number {
   return settings.internal.contextWindowTokens;
 }
 
 /** 读取 token 计数器模式。 */
-export function savedModelTokenCounterMode(settings: SavedModelSettings): TokenizerOverride {
+export function savedModelTokenCounterMode(
+  settings: SavedModelSettings
+): TokenizerOverride {
   return settings.internal.tokenCounterMode;
 }
 
 /** 读取生成采样小节。 */
-export function savedModelSampling(settings: SavedModelSettings): SavedModelSamplingSettings {
+export function savedModelSampling(
+  settings: SavedModelSettings
+): SavedModelSamplingSettings {
   return settings.generation.sampling;
 }
 
 /** 读取思考强度档位。 */
-export function savedModelThinkingLevel(settings: SavedModelSettings): ThinkingLevel {
+export function savedModelThinkingLevel(
+  settings: SavedModelSettings
+): ThinkingLevel {
   return settings.generation.thinkingLevel;
 }
 
@@ -71,14 +79,15 @@ export function savedModelThinkingLevel(settings: SavedModelSettings): ThinkingL
  */
 export function applySavedModelSettingsPatch(
   settings: SavedModelSettings,
-  patch: SavedModelSettingsPatch,
+  patch: SavedModelSettingsPatch
 ): SavedModelSettings {
   return {
     schemaVersion: 2,
     internal: {
       contextWindowTokens:
         patch.contextWindowTokens ?? settings.internal.contextWindowTokens,
-      tokenCounterMode: patch.tokenCounterMode ?? settings.internal.tokenCounterMode,
+      tokenCounterMode:
+        patch.tokenCounterMode ?? settings.internal.tokenCounterMode,
     },
     generation: {
       sampling: patch.sampling ?? settings.generation.sampling,

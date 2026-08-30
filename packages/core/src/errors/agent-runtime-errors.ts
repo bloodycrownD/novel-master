@@ -30,7 +30,7 @@ export class AgentError extends Error {
 export function agentDoomLoop(toolName: string): AgentError {
   return new AgentError(
     "DOOM_LOOP",
-    `Doom loop: tool "${toolName}" invoked 3 times with identical input`,
+    `Doom loop: tool "${toolName}" invoked 3 times with identical input`
   );
 }
 
@@ -38,6 +38,6 @@ export function agentDoomLoop(toolName: string): AgentError {
 export function agentUnsupportedProvider(protocol: string): AgentError {
   return new AgentError(
     "UNSUPPORTED_PROVIDER",
-    `Provider protocol "${protocol}" does not support tools`,
+    `Provider protocol "${protocol}" does not support tools`
   );
 }

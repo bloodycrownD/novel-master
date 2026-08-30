@@ -18,6 +18,8 @@ import {
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import { execLegacyV107ChatDdl } from "../bootstrap/helpers/legacy-db-fixtures.js";
+import { ensureSchemaMigrationsTable } from "../../src/bootstrap/schema-migrations/schema-migrations-table.js";
+import { BASELINE_MIGRATION_IDS } from "../../src/bootstrap/novel-master-bootstrap.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -170,6 +172,13 @@ describe("SqliteSessionRepository legacy 库 bootstrap", () => {
     const now = Date.now();
 
     await execLegacyV107ChatDdl(conn);
+    // v1.0.7 形态已是 baseline 之前的老库，登记哨兵模拟「已过 v1.4.27 基线」
+    // 后再验证 align 补列与仓储读写。
+    await ensureSchemaMigrationsTable(conn);
+    await conn.execute(
+      `INSERT INTO schema_migrations (id, applied_at_ms) VALUES (?, ?)`,
+      [BASELINE_MIGRATION_IDS[0]!, Date.now()],
+    );
     await conn.execute(
       `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
        VALUES ('${sessionId}', '${projectId}', 'legacy-bootstrap', ${now}, ${now})`,

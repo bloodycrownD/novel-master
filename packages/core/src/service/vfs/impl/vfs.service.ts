@@ -45,7 +45,7 @@ export class DefaultVfsService implements InternalVfsService {
   async list(
     scopeKey: string,
     dir: string,
-    options?: { recursive?: boolean; maxDepth?: number },
+    options?: { recursive?: boolean; maxDepth?: number }
   ): Promise<VfsListEntry[]> {
     const normalized = normalizePath(dir);
     const entries = await this.repo.list(scopeKey, normalized, options);
@@ -104,7 +104,7 @@ export class DefaultVfsService implements InternalVfsService {
     scopeKey: string,
     path: string,
     content: string,
-    options?: WriteOptions,
+    options?: WriteOptions
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const existing = await this.repo.findByPath(scopeKey, normalized);
@@ -121,13 +121,19 @@ export class DefaultVfsService implements InternalVfsService {
       throw new VfsError(
         "CONFLICT",
         `expectedVersion required when updating ${normalized}`,
-        { path: normalized },
+        { path: normalized }
       );
     }
-    return this.repo.update(scopeKey, normalized, content, existing.version + 1, {
-      expectedVersion: options?.expectedVersion,
-      versionCheck,
-    });
+    return this.repo.update(
+      scopeKey,
+      normalized,
+      content,
+      existing.version + 1,
+      {
+        expectedVersion: options?.expectedVersion,
+        versionCheck,
+      }
+    );
   }
 
   async replace(
@@ -135,7 +141,7 @@ export class DefaultVfsService implements InternalVfsService {
     path: string,
     oldString: string,
     newString: string,
-    options?: { replaceAll?: boolean },
+    options?: { replaceAll?: boolean }
   ): Promise<{ version: number; replacements: number }> {
     const current = await this.read(scopeKey, path);
     const { nextContent, replacements } = computeReplaceResult(
@@ -143,7 +149,7 @@ export class DefaultVfsService implements InternalVfsService {
       current.content,
       oldString,
       newString,
-      options,
+      options
     );
 
     const result = await this.repo.update(
@@ -154,7 +160,7 @@ export class DefaultVfsService implements InternalVfsService {
       {
         expectedVersion: current.version,
         versionCheck: true,
-      },
+      }
     );
     return { version: result.version, replacements };
   }
@@ -162,7 +168,7 @@ export class DefaultVfsService implements InternalVfsService {
   async glob(
     scopeKey: string,
     pattern: string,
-    options?: { cwd?: string },
+    options?: { cwd?: string }
   ): Promise<string[]> {
     const paths = await this.repo.listAllPaths(scopeKey);
     const cwd = options?.cwd;
@@ -181,7 +187,7 @@ export class DefaultVfsService implements InternalVfsService {
   async grep(
     scopeKey: string,
     pattern: string,
-    options?: VfsGrepOptions,
+    options?: VfsGrepOptions
   ): Promise<VfsGrepMatch[]> {
     const rows = await this.repo.scanContents(scopeKey, options?.pathPrefix);
     const filtered =
@@ -194,7 +200,7 @@ export class DefaultVfsService implements InternalVfsService {
   async delete(
     scopeKey: string,
     path: string,
-    options?: { recursive?: boolean },
+    options?: { recursive?: boolean }
   ): Promise<void> {
     const normalized = normalizePath(path);
     if (normalized === "/") {
@@ -208,18 +214,18 @@ export class DefaultVfsService implements InternalVfsService {
   async resetHeadToVersion(
     scopeKey: string,
     path: string,
-    _version: number,
+    _version: number
   ): Promise<void> {
     // 无 revision 层：补偿合同依赖 revision，禁止静默 no-op
     throw new Error(
-      `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}`,
+      `resetHeadToVersion is unsupported without revision history: ${scopeKey}:${path}`
     );
   }
 
   hardDelete(
     scopeKey: string,
     path: string,
-    options?: { recursive?: boolean },
+    options?: { recursive?: boolean }
   ): Promise<void> {
     // 无墓碑可 append 时与物理 delete 一致
     return this.delete(scopeKey, path, options);
@@ -229,22 +235,22 @@ export class DefaultVfsService implements InternalVfsService {
     _scopeKey: string,
     fromLogical: string,
     _toLogical: string,
-    _options?: { overwrite?: boolean },
+    _options?: { overwrite?: boolean }
   ): Promise<void> {
     // rename 原语依赖事务 + repo + scopeKey，本服务只拿 repo 不在事务里跑；
     // 生产 wiring 走 RevisionAwareVfsService，不会命中此分支。
     throw new Error(
-      `renamePath is unsupported without revision history: ${fromLogical}`,
+      `renamePath is unsupported without revision history: ${fromLogical}`
     );
   }
 
   renamePrefix(
     _scopeKey: string,
     oldDirLogical: string,
-    _newDirLogical: string,
+    _newDirLogical: string
   ): Promise<void> {
     throw new Error(
-      `renamePrefix is unsupported without revision history: ${oldDirLogical}`,
+      `renamePrefix is unsupported without revision history: ${oldDirLogical}`
     );
   }
 }

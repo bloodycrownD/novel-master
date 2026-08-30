@@ -50,7 +50,7 @@ export class VfsError extends Error {
       expectedVersion?: number;
       actualVersion?: number;
       details?: unknown;
-    },
+    }
   ) {
     super(message);
     this.name = "VfsError";
@@ -65,7 +65,7 @@ export class VfsError extends Error {
 /** Type guard that works across duplicate module instances (e.g. src vs dist in tests). */
 export function isVfsError(
   error: unknown,
-  code?: VfsErrorCode,
+  code?: VfsErrorCode
 ): error is VfsError {
   if (matchesVfsError(error, code)) {
     return true;
@@ -76,7 +76,10 @@ export function isVfsError(
   return false;
 }
 
-function matchesVfsError(error: unknown, code?: VfsErrorCode): error is VfsError {
+function matchesVfsError(
+  error: unknown,
+  code?: VfsErrorCode
+): error is VfsError {
   if (typeof error !== "object" || error === null) {
     return false;
   }
@@ -96,34 +99,32 @@ export function vfsNotFound(path: string): VfsError {
 export function vfsConflict(
   path: string,
   expectedVersion: number,
-  actualVersion: number,
+  actualVersion: number
 ): VfsError {
   return new VfsError(
     "CONFLICT",
     `Version conflict for ${path}: expected ${expectedVersion}, actual ${actualVersion}`,
-    { path, expectedVersion, actualVersion },
+    { path, expectedVersion, actualVersion }
   );
 }
 
 /** Replace oldString not found in content. */
 export function vfsReplaceNotFound(
   path: string,
-  details?: VfsReplaceNotFoundDetails,
+  details?: VfsReplaceNotFoundDetails
 ): VfsError {
   return new VfsError(
     "REPLACE_NOT_FOUND",
     `Replace string not found in ${path}`,
-    { path, ...(details != null ? { details } : {}) },
+    { path, ...(details != null ? { details } : {}) }
   );
 }
 
 /** Non-recursive delete blocked by child paths. */
 export function vfsDirectoryNotEmpty(path: string): VfsError {
-  return new VfsError(
-    "DIRECTORY_NOT_EMPTY",
-    `Directory not empty: ${path}`,
-    { path },
-  );
+  return new VfsError("DIRECTORY_NOT_EMPTY", `Directory not empty: ${path}`, {
+    path,
+  });
 }
 
 /** Invalid or non-normalizable path. */
@@ -140,7 +141,9 @@ export function vfsIsDirectory(path: string): VfsError {
 
 /** mkdir target already exists. */
 export function vfsAlreadyExists(path: string): VfsError {
-  return new VfsError("ALREADY_EXISTS", `Path already exists: ${path}`, { path });
+  return new VfsError("ALREADY_EXISTS", `Path already exists: ${path}`, {
+    path,
+  });
 }
 
 /** Parent path exists as a file row. */
@@ -150,5 +153,7 @@ export function vfsNotADirectory(path: string): VfsError {
 
 /** mkdir parent path does not exist. */
 export function vfsParentNotFound(path: string): VfsError {
-  return new VfsError("PARENT_NOT_FOUND", `Parent not found: ${path}`, { path });
+  return new VfsError("PARENT_NOT_FOUND", `Parent not found: ${path}`, {
+    path,
+  });
 }

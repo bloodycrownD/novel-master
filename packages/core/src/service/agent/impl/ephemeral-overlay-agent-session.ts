@@ -22,7 +22,7 @@ export class EphemeralOverlayAgentSession implements AgentSession {
 
   constructor(
     private readonly base: AgentSession,
-    readonly sessionId: string,
+    readonly sessionId: string
   ) {}
 
   /** 工作区归属透传 base——overlay 不改变工作区 session 归属。 */
@@ -48,7 +48,7 @@ export class EphemeralOverlayAgentSession implements AgentSession {
       modelName?: string | null;
       raw?: Record<string, unknown> | null;
       usage?: MessageUsage;
-    },
+    }
   ): Promise<ChatMessage> {
     const seq = this.nextSeq++;
     const message: ChatMessage = {

@@ -21,7 +21,7 @@ describe("bootstrap DDL smoke (T-B1)", () => {
       "vfs_entry",
     ] as const) {
       const rows = await conn.query<{ name: string }>(
-        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${tableName}'`,
+        `SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${tableName}'`
       );
       assert.equal(rows.length, 1, `表 ${tableName} 应存在`);
     }

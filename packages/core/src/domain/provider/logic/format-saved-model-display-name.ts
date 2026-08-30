@@ -7,7 +7,7 @@
 /** 主文案前缀为服务商 displayName（非技术 id）。 */
 export function formatSavedModelDisplayName(
   providerDisplayName: string,
-  modelName: string,
+  modelName: string
 ): string {
   return `${providerDisplayName}/${modelName}`;
 }

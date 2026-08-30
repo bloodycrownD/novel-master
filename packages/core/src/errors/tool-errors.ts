@@ -43,10 +43,13 @@ export class ToolError extends Error {
       toolName?: string;
       details?: ToolErrorDetails;
       cause?: unknown;
-    },
+    }
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    super(message, options?.cause !== undefined ? { cause: options.cause } : {});
+    super(
+      message,
+      options?.cause !== undefined ? { cause: options.cause } : {}
+    );
     this.name = "ToolError";
     this.code = code;
     this.toolName = options?.toolName;
@@ -71,7 +74,7 @@ export function toolConflict(name: string): ToolError {
 /** Tool input schema validation failed. */
 export function toolInvalidArgument(
   name: string,
-  issues: readonly ZodIssue[],
+  issues: readonly ZodIssue[]
 ): ToolError {
   return new ToolError("INVALID_ARGUMENT", `Invalid input for tool: ${name}`, {
     toolName: name,
@@ -101,7 +104,6 @@ export function toolPathForbidden(name: string, path: string): ToolError {
     {
       toolName: name,
       details: { path },
-    },
+    }
   );
 }
-

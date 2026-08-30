@@ -54,7 +54,7 @@ export function scanAtPathAttachments(text: string): MessageAttachment[] {
  */
 export function mergeAttachmentsWithScannedAtPaths(
   text: string,
-  existing: readonly MessageAttachment[],
+  existing: readonly MessageAttachment[]
 ): MessageAttachment[] {
   return mergeAttachmentsByPath(existing, scanAtPathAttachments(text));
 }
@@ -62,13 +62,13 @@ export function mergeAttachmentsWithScannedAtPaths(
 /** 按 path（或 user_ops name）去重合并；已有优先。 */
 export function mergeAttachmentsByPath(
   existing: readonly MessageAttachment[],
-  incoming: readonly MessageAttachment[],
+  incoming: readonly MessageAttachment[]
 ): MessageAttachment[] {
   const out = [...existing];
   const seen = new Set(
     existing
       .map((a) => attachmentDedupeKey(a))
-      .filter((k): k is string => k != null),
+      .filter((k): k is string => k != null)
   );
   for (const item of incoming) {
     const key = attachmentDedupeKey(item);

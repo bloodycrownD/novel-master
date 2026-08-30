@@ -34,7 +34,7 @@ export class PushAgentMutexAcquireError extends Error {
   constructor(
     code: PushAgentMutexAcquireErrorCode,
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown }
   ) {
     super(message, { cause: options?.cause });
     this.name = "PushAgentMutexAcquireError";
@@ -75,7 +75,7 @@ export class PushAgentMutex {
    * 在 `timeoutMs` 内被唤醒则拿到锁，超时则从队列移除并抛 TIMEOUT。
    */
   async acquire(
-    options: PushAgentMutexAcquireOptions,
+    options: PushAgentMutexAcquireOptions
   ): Promise<PushAgentLockHandle> {
     if (this.heldBy == null) {
       const handle = this.createHandle();
@@ -96,8 +96,8 @@ export class PushAgentMutex {
           reject(
             new PushAgentMutexAcquireError(
               "TIMEOUT",
-              "等待 push/agent 互斥锁超时",
-            ),
+              "等待 push/agent 互斥锁超时"
+            )
           );
         }
       }, options.timeoutMs);

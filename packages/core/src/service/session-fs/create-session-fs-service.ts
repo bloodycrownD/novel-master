@@ -32,7 +32,7 @@ export function createSessionFsService(conn: TdbcConnection): SessionFsService {
 export async function deleteSessionFsData(
   conn: TdbcConnection,
   sessionId: string,
-  projectId: string,
+  projectId: string
 ): Promise<void> {
   const checkpoints = new SqliteMessageCheckpointRepository(conn);
   const revisions = new SqliteVfsRevisionRepository(conn);
@@ -52,7 +52,7 @@ export async function deleteSessionFsData(
     checkpoints,
     projectId,
     sessionId,
-    conn,
+    conn
   );
 }
 

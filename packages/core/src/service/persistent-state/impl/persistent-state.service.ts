@@ -71,14 +71,14 @@ export class DefaultPersistentState implements PersistentState {
       throw new ProviderError(
         "INVALID_SAVED_MODEL_ID",
         `Invalid saved model id (legacy path not accepted): ${id}`,
-        { modelId: id },
+        { modelId: id }
       );
     }
     if (!isSavedModelUuidFormat(trimmed)) {
       throw new ProviderError(
         "INVALID_SAVED_MODEL_ID",
         `Invalid saved model id (expected UUID): ${id}`,
-        { modelId: id },
+        { modelId: id }
       );
     }
     return this.setAndInvalidatePromptTokenCache(KEY_CURRENT_MODEL_ID, trimmed);
@@ -130,7 +130,7 @@ export class DefaultPersistentState implements PersistentState {
   /** 切换模型 / Agent 成功后，丢弃当前会话陈旧 API 占用缓存。 */
   private async setAndInvalidatePromptTokenCache(
     key: string,
-    value: string,
+    value: string
   ): Promise<void> {
     await this.set(key, value);
     const sessionId = await this.getCurrentSessionId();

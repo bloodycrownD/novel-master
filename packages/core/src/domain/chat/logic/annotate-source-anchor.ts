@@ -45,7 +45,7 @@ type AnchorPiece = {
 /** 草稿是否具备可用半开 offset（相对给定全文长度）。 */
 export function hasValidAnnotateOffsetRange(
   draft: Pick<AnnotateDraft, "startOffset" | "endOffset">,
-  sourceLength: number,
+  sourceLength: number
 ): draft is {
   readonly startOffset: number;
   readonly endOffset: number;
@@ -79,7 +79,9 @@ function escapeAnnotateAttr(value: string): string {
 }
 
 function wrapAnchor(id: string, innerEscaped: string): string {
-  return `<span class="${ANNOTATE_ANCHOR_CLASS}" data-annotate-id="${escapeAnnotateAttr(id)}">${innerEscaped}</span>`;
+  return `<span class="${ANNOTATE_ANCHOR_CLASS}" data-annotate-id="${escapeAnnotateAttr(
+    id
+  )}">${innerEscaped}</span>`;
 }
 
 /**
@@ -90,7 +92,7 @@ export function annotateRangeMatchesOriginalText(
   sourceText: string,
   startOffset: number,
   endOffset: number,
-  originalText: string,
+  originalText: string
 ): boolean {
   const needle = normalizeAnnotateNeedle(originalText);
   if (!needle) {
@@ -142,11 +144,7 @@ export function findMarkdownCodeRanges(source: string): HalfOpen[] {
           ) {
             k++;
           }
-          if (
-            k >= source.length ||
-            source[k] === "\n" ||
-            source[k] === "\r"
-          ) {
+          if (k >= source.length || source[k] === "\n" || source[k] === "\r") {
             const end = advancePastEol(source, k);
             out.push({ start: i, end });
             i = end;
@@ -213,7 +211,7 @@ function advancePastEol(source: string, at: number): number {
 function findClosingBackticks(
   source: string,
   from: number,
-  tickCount: number,
+  tickCount: number
 ): number {
   const needle = "`".repeat(tickCount);
   let at = from;
@@ -249,7 +247,11 @@ function emphasisDelimiterLength(source: string, index: number): number {
   return 0;
 }
 
-function skipLinkDestination(source: string, from: number, limit: number): number {
+function skipLinkDestination(
+  source: string,
+  from: number,
+  limit: number
+): number {
   // 从 `](` 起跳到匹配 `)`
   let i = from;
   if (i + 1 >= limit || source[i] !== "]" || source[i + 1] !== "(") {
@@ -281,7 +283,7 @@ export function splitMarkdownUnderlineRuns(
   source: string,
   rangeStart: number,
   rangeEnd: number,
-  codeRanges: readonly HalfOpen[],
+  codeRanges: readonly HalfOpen[]
 ): HalfOpen[] {
   const runs: HalfOpen[] = [];
   let runStart = -1;
@@ -340,7 +342,7 @@ function collectPiecesForDraft(
   sourceText: string,
   draft: AnnotateDraft & { startOffset: number; endOffset: number },
   mode: BuildAnnotatedSourceMode,
-  codeRanges: readonly HalfOpen[],
+  codeRanges: readonly HalfOpen[]
 ): AnchorPiece[] | null {
   const { startOffset, endOffset, id } = draft;
   if (mode === "text") {
@@ -349,7 +351,7 @@ function collectPiecesForDraft(
 
   // 选区完全落在代码内 → 整段跳过（T-SA5）
   const fullyInCode = codeRanges.some(
-    (r) => startOffset >= r.start && endOffset <= r.end,
+    (r) => startOffset >= r.start && endOffset <= r.end
   );
   if (fullyInCode) {
     return null;
@@ -359,7 +361,7 @@ function collectPiecesForDraft(
     sourceText,
     startOffset,
     endOffset,
-    codeRanges,
+    codeRanges
   );
   if (runs.length === 0) {
     return null;
@@ -375,7 +377,7 @@ function collectPiecesForDraft(
  * 预览投影权威为 Recogito 渲染坐标（`renderStart`/`renderEnd`），非本函数输出。
  */
 export function buildAnnotatedSource(
-  input: BuildAnnotatedSourceInput,
+  input: BuildAnnotatedSourceInput
 ): BuildAnnotatedSourceResult {
   const { sourceText, drafts, mode } = input;
   const skippedDraftIds: string[] = [];
@@ -408,7 +410,7 @@ export function buildAnnotatedSource(
         sourceText,
         range.start,
         range.end,
-        draft.originalText,
+        draft.originalText
       )
     ) {
       skippedDraftIds.push(draft.id);
@@ -422,7 +424,7 @@ export function buildAnnotatedSource(
       sourceText,
       draft,
       mode,
-      codeRanges,
+      codeRanges
     );
     if (draftPieces == null || draftPieces.length === 0) {
       skippedDraftIds.push(draft.id);
@@ -446,7 +448,7 @@ export function buildAnnotatedSource(
     }
     out += wrapAnchor(
       piece.id,
-      escapeAnnotateSourceText(sourceText.slice(piece.start, piece.end)),
+      escapeAnnotateSourceText(sourceText.slice(piece.start, piece.end))
     );
     cursor = piece.end;
   }

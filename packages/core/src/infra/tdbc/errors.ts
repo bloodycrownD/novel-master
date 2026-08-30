@@ -25,7 +25,7 @@ export class TdbcError extends Error {
   constructor(
     code: TdbcErrorCode,
     message: string,
-    options?: { driver?: string; sqliteCode?: number; cause?: unknown },
+    options?: { driver?: string; sqliteCode?: number; cause?: unknown }
   ) {
     super(message, { cause: options?.cause });
     this.name = "TdbcError";

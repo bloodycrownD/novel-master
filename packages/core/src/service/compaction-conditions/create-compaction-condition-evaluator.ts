@@ -29,7 +29,7 @@ export interface CompactionConditionEvaluator {
   /** True when enabled conditions match (token ratio and/or visible floor). */
   shouldRequestCompaction(
     session: AgentSession,
-    evaluation: CompactionEvaluationContext,
+    evaluation: CompactionEvaluationContext
   ): Promise<boolean>;
   /**
    * 当前持久化配置的 hide-message 起始深度；
@@ -46,7 +46,7 @@ export interface CreateCompactionConditionEvaluatorDeps {
 
 function triggersFromConditions(
   conditions: CompactionConditions,
-  deps: CreateCompactionConditionEvaluatorDeps,
+  deps: CreateCompactionConditionEvaluatorDeps
 ): CompactionConditionTrigger | null {
   const parts: CompactionConditionTrigger[] = [];
   if (conditions.tokenRatio != null) {
@@ -56,15 +56,15 @@ function triggersFromConditions(
           tokenRatio: conditions.tokenRatio,
           resolveContextWindow: async (evaluation) =>
             deps.providerModels.getContextWindow(
-              evaluation.modelContext.savedModelId,
+              evaluation.modelContext.savedModelId
             ),
           resolveTokenizerOverride: async (evaluation) =>
             deps.providerModels.getTokenCounterMode(
-              evaluation.modelContext.savedModelId,
+              evaluation.modelContext.savedModelId
             ),
         },
-        deps.tokenCounters,
-      ),
+        deps.tokenCounters
+      )
     );
   }
   if (conditions.visibleFloor != null) {
@@ -77,7 +77,7 @@ function triggersFromConditions(
 }
 
 export function createCompactionConditionEvaluator(
-  deps: CreateCompactionConditionEvaluatorDeps,
+  deps: CreateCompactionConditionEvaluatorDeps
 ): CompactionConditionEvaluator {
   return {
     async shouldRequestCompaction(session, evaluation) {

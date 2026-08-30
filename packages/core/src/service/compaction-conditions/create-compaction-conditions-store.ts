@@ -10,7 +10,7 @@ import { DefaultCompactionConditionsStore } from "./impl/compaction-conditions-s
 import type { CompactionConditionsStore } from "./compaction-conditions-store.port.js";
 
 export function createCompactionConditionsStore(
-  conn: TdbcConnection,
+  conn: TdbcConnection
 ): CompactionConditionsStore {
   return new DefaultCompactionConditionsStore(createKkvService(conn));
 }

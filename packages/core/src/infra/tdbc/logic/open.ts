@@ -57,7 +57,7 @@ export function parseUrl(url: string): ParsedTdbcUrl {
  */
 export async function open(
   url: string,
-  options?: OpenOptions,
+  options?: OpenOptions
 ): Promise<TdbcConnection> {
   const parsed = parseUrl(url);
   const driver = resolveDriver(options?.driver);

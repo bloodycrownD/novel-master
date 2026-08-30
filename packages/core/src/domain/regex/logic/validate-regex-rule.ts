@@ -26,25 +26,24 @@ export interface RegexRuleValidationFields {
  */
 export function validateRegexRule(
   fields: RegexRuleValidationFields,
-  options?: { groupId?: string; ruleId?: string },
+  options?: { groupId?: string; ruleId?: string }
 ): void {
   const opts = { groupId: options?.groupId, ruleId: options?.ruleId };
-  const hasLlm =
-    fields.llmReplace != null && fields.llmReplace !== "";
+  const hasLlm = fields.llmReplace != null && fields.llmReplace !== "";
   const hasDisplay =
     fields.displayReplace != null && fields.displayReplace !== "";
   if (!hasLlm && !hasDisplay) {
     throw new RegexError(
       "INVALID_ARGUMENT",
       "At least one of llmReplace or displayReplace must be set",
-      opts,
+      opts
     );
   }
   if (!fields.scopeUser && !fields.scopeAssistant) {
     throw new RegexError(
       "INVALID_ARGUMENT",
       "At least one of scopeUser or scopeAssistant must be true",
-      opts,
+      opts
     );
   }
   try {
@@ -61,7 +60,11 @@ export function validateRegexRule(
     new RegExp(fields.pattern, fields.flags);
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
-    throw new RegexError("INVALID_PATTERN", `Invalid regular expression: ${msg}`, opts);
+    throw new RegexError(
+      "INVALID_PATTERN",
+      `Invalid regular expression: ${msg}`,
+      opts
+    );
   }
 }
 

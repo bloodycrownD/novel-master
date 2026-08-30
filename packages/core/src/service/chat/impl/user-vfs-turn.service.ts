@@ -4,7 +4,6 @@
  * @module service/chat/impl/user-vfs-turn.service
  */
 
-
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -55,7 +54,7 @@ export interface UserVfsTurnServiceDeps {
   readonly toolRunner: ToolRunner<BuiltinToolContext>;
   readonly resolveToolCtx: (
     sessionId: string,
-    projectId: string,
+    projectId: string
   ) => BuiltinToolContext;
   /**
    * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
@@ -71,7 +70,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
 
   async executeOp(
     sessionId: string,
-    op: UserVfsTurnOp,
+    op: UserVfsTurnOp
   ): Promise<UserVfsTurnExecuteResult> {
     if (op.tools.length === 0) {
       throw chatInvalidArgument("userVfsTurn.op.tools must not be empty");
@@ -93,7 +92,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     const mutatingPaths = collectMutatingPathsFromCalls(calls);
     const headSnapshots = await captureMutatingPathHeadSnapshots(
       toolCtx.vfs,
-      mutatingPaths,
+      mutatingPaths
     );
 
     const outcomes = await this.deps.toolRunner.runParallel(calls, toolCtx);
@@ -131,7 +130,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
         this.deps.checkpoints,
         session.projectId,
         sessionId,
-        this.deps.conn,
+        this.deps.conn
       );
       await runDeferredBlobGc(this.deps.conn);
       if (restoreErrors.length > 0) {
@@ -147,5 +146,4 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     // 写盘已成功：不再记操作日志（user ops 拆除，E-core）。
     return { ok: true };
   }
-
 }

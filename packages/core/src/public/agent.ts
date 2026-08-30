@@ -32,7 +32,10 @@ export {
 } from "../domain/agent/logic/doom-loop.js";
 export { InMemoryAgentSession } from "../domain/agent/session/impl/in-memory-agent-session.js";
 export { ChatAgentSession } from "../service/agent/impl/chat-agent-session.js";
-export type { AgentRunner, AgentRunOptions } from "../service/agent/agent.port.js";
+export type {
+  AgentRunner,
+  AgentRunOptions,
+} from "../service/agent/agent.port.js";
 export { createAgentRunner } from "../service/agent/create-agent-runner.js";
 export type { CreateAgentRunnerDeps } from "../service/agent/create-agent-runner.js";
 export type { AgentRegistryService } from "../service/agent/agent-registry.port.js";
@@ -53,9 +56,7 @@ export {
   AgentRunResolveError,
 } from "../service/agent/logic/agent-run-shared.js";
 export type { AgentRunRuntimePort } from "../service/agent/logic/agent-run-shared.js";
-export {
-  resolveAgentForProject,
-} from "../service/agent/logic/resolve-agent-for-project.js";
+export { resolveAgentForProject } from "../service/agent/logic/resolve-agent-for-project.js";
 export type {
   ResolvedAgentForProject,
   ResolveAgentForProjectRuntimePort,

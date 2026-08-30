@@ -25,7 +25,7 @@ import { curlTool } from "./curl-tool.js";
  * `ctx.fetchFn` 可选注入（缺省 globalThis.fetch）。
  */
 export function registerBuiltinTools(
-  registry: ToolRegistry<BuiltinToolContext>,
+  registry: ToolRegistry<BuiltinToolContext>
 ): void {
   for (const tool of createVfsTools()) {
     registry.register(tool);
@@ -40,7 +40,7 @@ export function registerBuiltinTools(
  * @deprecated Use {@link registerBuiltinTools}.
  */
 export function registerVfsTools(
-  registry: ToolRegistry<BuiltinToolContext>,
+  registry: ToolRegistry<BuiltinToolContext>
 ): void {
   registerBuiltinTools(registry);
 }

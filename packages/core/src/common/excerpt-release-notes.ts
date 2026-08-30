@@ -14,8 +14,7 @@ const NOTES_EXCERPT_MAX = 280;
 const CHANGELOG_HEADING = "## 更新说明";
 
 const FALLBACK: Record<ReleaseNotesFocus, string> = {
-  desktop:
-    "新版本安装包已在 GitHub Releases 发布（Windows / macOS）。",
+  desktop: "新版本安装包已在 GitHub Releases 发布（Windows / macOS）。",
   mobile: "新版本 APK 已在 GitHub Releases 发布。",
 };
 
@@ -95,9 +94,11 @@ function truncateExcerpt(text: string): string {
  */
 export function excerptReleaseNotes(
   body: string,
-  focus: ReleaseNotesFocus = "desktop",
+  focus: ReleaseNotesFocus = "desktop"
 ): string {
-  const changelog = excerptPlainSection(extractSection(body, CHANGELOG_HEADING));
+  const changelog = excerptPlainSection(
+    extractSection(body, CHANGELOG_HEADING)
+  );
   if (changelog) {
     return truncateExcerpt(changelog);
   }

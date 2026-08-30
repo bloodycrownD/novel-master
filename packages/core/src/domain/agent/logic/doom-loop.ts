@@ -4,7 +4,10 @@
  * @module domain/agent/doom-loop
  */
 
-import type { ContentBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
+import type {
+  ContentBlock,
+  ToolUseBlock,
+} from "@/domain/chat/model/content-block.js";
 import { agentDoomLoop, AgentError } from "@/errors/agent-runtime-errors.js";
 
 /** Consecutive identical tool_use invocations before abort. */
@@ -21,7 +24,10 @@ function toolUseBlocks(blocks: readonly ContentBlock[]): ToolUseBlock[] {
   return blocks.filter((b): b is ToolUseBlock => b.type === "tool_use");
 }
 
-function sameInput(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+function sameInput(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>
+): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
@@ -31,7 +37,7 @@ function sameInput(a: Record<string, unknown>, b: Record<string, unknown>): bool
  */
 export function assertNoDoomLoop(
   toolUses: readonly ToolUseBlock[],
-  config?: DoomLoopChecksConfig,
+  config?: DoomLoopChecksConfig
 ): void {
   const threshold = config?.threshold ?? DOOM_LOOP_THRESHOLD;
   if (toolUses.length < threshold) {
@@ -40,7 +46,7 @@ export function assertNoDoomLoop(
   const tail = toolUses.slice(-threshold);
   const first = tail[0]!;
   const allSame = tail.every(
-    (t) => t.name === first.name && sameInput(t.input, first.input),
+    (t) => t.name === first.name && sameInput(t.input, first.input)
   );
   if (allSame) {
     throw agentDoomLoop(first.name);
@@ -52,7 +58,7 @@ export function assertNoDoomLoop(
  */
 export function assertNoDoomLoopInBlocks(
   blocks: readonly ContentBlock[],
-  config?: DoomLoopChecksConfig,
+  config?: DoomLoopChecksConfig
 ): void {
   assertNoDoomLoop(toolUseBlocks(blocks), config);
 }
@@ -66,10 +72,14 @@ function sameToolUse(a: ToolUseBlock, b: ToolUseBlock): boolean {
  */
 export function assertNoCrossRoundDoomLoop(
   toolUses: readonly ToolUseBlock[],
-  config?: DoomLoopChecksConfig,
+  config?: DoomLoopChecksConfig
 ): void {
   const crossRoundWindow = config?.crossRoundWindow ?? CROSS_ROUND_WINDOW;
-  if (crossRoundWindow < 4 || crossRoundWindow % 2 !== 0 || toolUses.length < crossRoundWindow) {
+  if (
+    crossRoundWindow < 4 ||
+    crossRoundWindow % 2 !== 0 ||
+    toolUses.length < crossRoundWindow
+  ) {
     return;
   }
   const tail = toolUses.slice(-crossRoundWindow);

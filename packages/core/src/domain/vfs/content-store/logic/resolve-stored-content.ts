@@ -21,7 +21,7 @@ export type StoredContentFields = {
  */
 export async function resolveEntryPlainContent(
   contentStore: VfsContentStore,
-  fields: StoredContentFields & { readonly entryKind: "file" | "directory" },
+  fields: StoredContentFields & { readonly entryKind: "file" | "directory" }
 ): Promise<string> {
   if (fields.entryKind === "directory") {
     return "";
@@ -36,7 +36,7 @@ export async function resolveRevisionPlainContent(
   contentStore: VfsContentStore,
   fields: StoredContentFields & {
     readonly status: "active" | "deleted";
-  },
+  }
 ): Promise<string | null> {
   if (fields.status === "deleted") {
     return null;
@@ -46,7 +46,7 @@ export async function resolveRevisionPlainContent(
 
 async function resolveActiveFilePlainContent(
   contentStore: VfsContentStore,
-  fields: StoredContentFields,
+  fields: StoredContentFields
 ): Promise<string> {
   if (fields.contentHash != null && fields.contentHash.length > 0) {
     return contentStore.get(fields.contentHash);
@@ -56,7 +56,7 @@ async function resolveActiveFilePlainContent(
     return fields.content;
   }
   throw new Error(
-    "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL",
+    "vfs 正文损坏：active 文件 content 与 content_hash 均为 NULL"
   );
 }
 

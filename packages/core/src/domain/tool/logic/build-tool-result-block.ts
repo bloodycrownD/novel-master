@@ -66,7 +66,7 @@ function formatByteSize(bytes: number): string {
 
 function summarizeToolSuccess(
   toolName: string | undefined,
-  output: unknown,
+  output: unknown
 ): string | undefined {
   if (!isRecord(output)) {
     return undefined;
@@ -112,7 +112,10 @@ function summarizeToolSuccess(
   if (name === "skill" && typeof output.action === "string") {
     if (output.action === "load") {
       const parts: string[] = [];
-      if (typeof output.domain === "string" && typeof output.name === "string") {
+      if (
+        typeof output.domain === "string" &&
+        typeof output.name === "string"
+      ) {
         parts.push(`${output.domain}:${output.name}`);
       }
       if (output.alreadyReferenced === true) {
@@ -193,7 +196,9 @@ function summarizeToolSuccess(
           bodyBytes != null && bodyBytes < CURL_MAX_BODY_BYTES
             ? bodyBytes
             : CURL_MAX_BODY_BYTES;
-        return `truncated · ${formatByteSize(kept)}/${formatByteSize(originalBytes)}`;
+        return `truncated · ${formatByteSize(kept)}/${formatByteSize(
+          originalBytes
+        )}`;
       }
       return `${status} · ${formatByteSize(originalBytes)}`;
     }
@@ -227,7 +232,7 @@ function summarizeToolError(content: string): string | undefined {
 export function buildToolResultBlock(
   toolUseId: string,
   outcome: ParallelToolOutcome,
-  meta?: BuildToolResultBlockMeta,
+  meta?: BuildToolResultBlockMeta
 ): ToolResultBlock {
   if (outcome.ok) {
     const content = formatToolOutputForLlm(outcome.output);
@@ -235,14 +240,14 @@ export function buildToolResultBlock(
     // task 工具输出对象形如 { text, subagentSessionId }：透传 subagentSessionId 到 meta。
     const subagentSessionId = resolveSubagentSessionIdFromOutcome(
       outcome.output,
-      meta?.subagentSessionId,
+      meta?.subagentSessionId
     );
     // skill 成功输出携带实际 domain/name（read 缺省域命中生效副本的解析结果
     // 也在这里）：照 subagentSessionId 自动检测透传到 meta.skillRef。
     const skillRef = resolveSkillToolRefFromOutcome(
       meta?.toolName,
       outcome.output,
-      meta?.skillProjectId,
+      meta?.skillProjectId
     );
 
     // 中断回流（phase-1-abort-reflow）：outcome.ok=true 但 output.stopped=true 表示
@@ -264,8 +269,8 @@ export function buildToolResultBlock(
               },
             }
           : failureReason != null
-            ? { meta: { failureReason } }
-            : {}),
+          ? { meta: { failureReason } }
+          : {}),
       };
     }
 
@@ -317,11 +322,7 @@ function isStoppedTaskOutput(output: unknown): boolean {
 
 /** 从 task 工具输出读取 failureReason（仅 string 时生效，否则返回 undefined）。 */
 function readFailureReason(output: unknown): string | undefined {
-  if (
-    output == null ||
-    typeof output !== "object" ||
-    Array.isArray(output)
-  ) {
+  if (output == null || typeof output !== "object" || Array.isArray(output)) {
     return undefined;
   }
   const reason = (output as { failureReason?: unknown }).failureReason;
@@ -336,7 +337,7 @@ function readFailureReason(output: unknown): string | undefined {
  */
 function resolveSubagentSessionIdFromOutcome(
   output: unknown,
-  fallback?: string,
+  fallback?: string
 ): string | undefined {
   if (
     output != null &&
@@ -361,7 +362,7 @@ function resolveSubagentSessionIdFromOutcome(
 function resolveSkillToolRefFromOutcome(
   toolName: string | undefined,
   output: unknown,
-  skillProjectId?: string,
+  skillProjectId?: string
 ): SkillToolRef | undefined {
   if (toolName == null) return undefined;
   return resolveSkillToolRefFromOutput(toolName, output, skillProjectId);

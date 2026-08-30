@@ -20,7 +20,7 @@ function messageHasToolUse(message: ChatMessage): boolean {
 /** First user message after assistant whose tool_result ids cover all assistant tool_use ids. */
 function resolveToolResultsMessageId(
   messages: readonly ChatMessage[],
-  assistantMessage: ChatMessage,
+  assistantMessage: ChatMessage
 ): string | undefined {
   const required = new Set(toolUseIdsFromMessage(assistantMessage));
   if (required.size === 0) {
@@ -49,7 +49,7 @@ function resolveToolResultsMessageId(
  */
 export function resolveRollbackAnchorMessage(
   messages: readonly ChatMessage[],
-  anchorMessageId: string,
+  anchorMessageId: string
 ): ChatMessage | undefined {
   const anchor = messages.find((m) => m.id === anchorMessageId);
   if (anchor == null) {

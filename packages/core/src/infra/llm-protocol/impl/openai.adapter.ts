@@ -71,7 +71,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
   async listModels(
-    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">,
+    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">
   ): Promise<LlmListModelsResult> {
     const url = joinUrl(req.baseUrl, "/models");
     const data = (await fetchJson(this.fetchFn, url, {
@@ -101,7 +101,12 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     const messages =
       req.history != null && req.history.length > 0
         ? chatMessagesToOpenAi(req.history)
-        : [{ role: "user", content: blocksToTextOnly(textBlocks(req.userContent).blocks) }];
+        : [
+            {
+              role: "user",
+              content: blocksToTextOnly(textBlocks(req.userContent).blocks),
+            },
+          ];
 
     if (req.system != null && req.system !== "") {
       return [{ role: "system", content: req.system }, ...messages];
@@ -110,10 +115,15 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   }
 
   private toolChoiceWhenToolsPresent(): "auto" | "required" {
-    return process.env.OPENAI_TOOL_CHOICE_REQUIRED === "1" ? "required" : "auto";
+    return process.env.OPENAI_TOOL_CHOICE_REQUIRED === "1"
+      ? "required"
+      : "auto";
   }
 
-  private buildBody(req: LlmChatRequest, stream: boolean): Record<string, unknown> {
+  private buildBody(
+    req: LlmChatRequest,
+    stream: boolean
+  ): Record<string, unknown> {
     const body: Record<string, unknown> = {
       model: req.vendorModelId,
       messages: this.buildMessages(req),
@@ -214,7 +224,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         },
         (chunk) => feedOpenAiSseChunk(state, chunk, req.onStream),
         undefined,
-        { fetchFn: this.fetchFn, signal: req.signal },
+        { fetchFn: this.fetchFn, signal: req.signal }
       );
     } catch (error) {
       if (!isRequestAborted(error, req.signal)) {

@@ -41,19 +41,19 @@ function rejectLegacyPromptKeys(raw: unknown): unknown {
   if ("blocks" in record) {
     throw new AgentConfigError(
       "INVALID_SCHEMA",
-      "prompts.blocks is removed; use prompts.system / persist / dynamic",
+      "prompts.blocks is removed; use prompts.system / persist / dynamic"
     );
   }
   if ("regions" in record) {
     throw new AgentConfigError(
       "INVALID_SCHEMA",
-      "prompts.regions is not supported; use prompts.system / persist / dynamic",
+      "prompts.regions is not supported; use prompts.system / persist / dynamic"
     );
   }
   if ("chat" in record) {
     throw new AgentConfigError(
       "INVALID_SCHEMA",
-      "prompts.chat is not supported; chat is a runtime slot only",
+      "prompts.chat is not supported; chat is a runtime slot only"
     );
   }
   return raw;
@@ -70,13 +70,17 @@ function stripLegacyWorktreeFromPromptsWire(raw: unknown): unknown {
   }
   const record = rejected as Record<string, unknown>;
   const persist = record.persist;
-  if (persist == null || typeof persist !== "object" || Array.isArray(persist)) {
+  if (
+    persist == null ||
+    typeof persist !== "object" ||
+    Array.isArray(persist)
+  ) {
     return rejected;
   }
   return {
     ...record,
     persist: stripLegacyWorktreeBlocksFromPersistMap(
-      persist as Record<string, unknown>,
+      persist as Record<string, unknown>
     ),
   };
 }
@@ -87,18 +91,18 @@ const promptsDocumentSchema = z.preprocess(
     .object({
       system: z.string().optional(),
       persist: z.record(z.string().min(1), persistBlockValueSchema).default({}),
-      dynamic: z.record(z.string().min(1), dynamicTextBlockValueSchema).default({}),
+      dynamic: z
+        .record(z.string().min(1), dynamicTextBlockValueSchema)
+        .default({}),
       persistEnabled: z.boolean().default(false),
       dynamicEnabled: z.boolean().default(false),
       /** wire：关 omit；开为非空 string；兼容旧 `true`（空串 / 仅空白非法）。 */
       workplace: z
         .union([
           z.boolean(),
-          z
-            .string()
-            .refine((s) => s.trim().length > 0, {
-              message: "prompts.workplace 如开启则须为非空字符串",
-            }),
+          z.string().refine((s) => s.trim().length > 0, {
+            message: "prompts.workplace 如开启则须为非空字符串",
+          }),
         ])
         .optional(),
       /** wire：关 omit；开为 trim 后非空 string（新字段，无历史值，无需 boolean 兼容）。 */
@@ -118,7 +122,7 @@ const promptsDocumentSchema = z.preprocess(
         })
         .optional(),
     })
-    .strict(),
+    .strict()
 );
 
 const agentToolPolicyDocumentSchema = z
@@ -150,7 +154,9 @@ export const agentDefinitionDocumentSchema = z
   })
   .strict();
 
-export type AgentDefinitionDocument = z.infer<typeof agentDefinitionDocumentSchema>;
+export type AgentDefinitionDocument = z.infer<
+  typeof agentDefinitionDocumentSchema
+>;
 
 function assertNoLegacyAgentFields(raw: unknown): void {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -160,20 +166,20 @@ function assertNoLegacyAgentFields(raw: unknown): void {
   if ("preferredModelId" in record) {
     throw new AgentConfigError(
       "INVALID_SCHEMA",
-      "preferredModelId is removed; use optional model: <savedModelId UUID>",
+      "preferredModelId is removed; use optional model: <savedModelId UUID>"
     );
   }
   const model = record.model;
   if (model != null && typeof model === "object" && !Array.isArray(model)) {
     throw new AgentConfigError(
       "INVALID_SCHEMA",
-      "legacy nested model block is not supported",
+      "legacy nested model block is not supported"
     );
   }
 }
 
 function wireToolsToDomain(
-  tools: AgentDefinitionDocument["tools"],
+  tools: AgentDefinitionDocument["tools"]
 ): AgentToolPolicy | undefined {
   if (tools == null) {
     return undefined;
@@ -196,7 +202,7 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
       customAttach: doc.prompts.customAttach,
       skillsEnabled: doc.prompts.skillsEnabled,
       skillsPrefix: doc.prompts.skillsPrefix,
-    },
+    }
   );
   const tools = wireToolsToDomain(doc.tools);
   return {
@@ -240,9 +246,7 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
       def.prompts.customAttach.trim().length > 0
         ? { customAttach: def.prompts.customAttach }
         : {}),
-      ...(def.prompts.skillsEnabled === false
-        ? { skillsEnabled: false }
-        : {}),
+      ...(def.prompts.skillsEnabled === false ? { skillsEnabled: false } : {}),
       ...(typeof def.prompts.skillsPrefix === "string" &&
       def.prompts.skillsPrefix.trim().length > 0
         ? { skillsPrefix: def.prompts.skillsPrefix }
@@ -255,9 +259,7 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
     ...(def.tools != null
       ? {
           tools: {
-            ...(def.tools.allow != null
-              ? { allow: [...def.tools.allow] }
-              : {}),
+            ...(def.tools.allow != null ? { allow: [...def.tools.allow] } : {}),
             ...(def.tools.deny != null ? { deny: [...def.tools.deny] } : {}),
           },
         }
@@ -274,7 +276,7 @@ const agentDefinitionWireSchema = z.preprocess((raw) => {
 /** Domain parser: wire document → {@link AgentDefinition}. */
 export const agentDefinitionSchema = Object.assign(
   agentDefinitionWireSchema.transform(documentToDefinition),
-  { toWire: definitionToDocument },
+  { toWire: definitionToDocument }
 );
 
 export {

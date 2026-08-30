@@ -49,8 +49,7 @@ export function createAgentStreamRegistry(): AgentStreamRegistry {
         return;
       }
       map.set(sessionId, {
-        text:
-          delta.text != null ? current.text + delta.text : current.text,
+        text: delta.text != null ? current.text + delta.text : current.text,
         thinking:
           delta.thinking != null
             ? current.thinking + delta.thinking

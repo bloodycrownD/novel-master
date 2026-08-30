@@ -23,7 +23,7 @@ export type CreateCharacterCardImportServiceOptions = {
  */
 export function createCharacterCardImportService(
   conn: TdbcConnection,
-  options: CreateCharacterCardImportServiceOptions = {},
+  options: CreateCharacterCardImportServiceOptions = {}
 ): CharacterCardImportService {
   const repo = new SqliteVfsEntryRepository(conn);
   return new DefaultCharacterCardImportService(conn, repo, {
