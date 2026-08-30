@@ -163,7 +163,6 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       },
     });
     manager.setScopeBridge({
-      getCurrentSessionId: () => scopeRef.current.sessionId,
       setCurrentSession: async sessionId => {
         const rt = runtimeRef.current;
         const projectId = scopeRef.current.projectId;

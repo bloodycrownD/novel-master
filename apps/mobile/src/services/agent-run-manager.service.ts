@@ -91,9 +91,8 @@ export interface AgentRunPrefBridge {
   isEnabled(): Promise<boolean>;
 }
 
-/** scope 同步桥：React 外读当前会话 / 通知点按后切换会话。 */
+/** scope 同步桥：通知点按后切换会话（React 外）。 */
 export interface AgentRunScopeBridge {
-  getCurrentSessionId(): string | undefined;
   setCurrentSession(sessionId: string): Promise<void>;
 }
 
