@@ -28,7 +28,7 @@ import {
   writeChatComposerDraft,
   writeChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
-import { useChatTabMessageActions } from '../src/screens/tabs/chat-tab/useChatTabMessages';
+import { useChatTabMessageActions } from '../src/screens/tabs/chat-tab/useChatTabMessageActions';
 
 const mockRollbackToMessage = jest.fn();
 const mockReloadMessages = jest.fn();

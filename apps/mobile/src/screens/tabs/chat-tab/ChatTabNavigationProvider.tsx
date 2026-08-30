@@ -9,7 +9,7 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import {useChatTabContext} from './ChatTabProvider';
+import { useChatTabContext } from './ChatTabProvider';
 
 export type ChatTabNavigationState = {
   readonly chatSubview: 'list' | 'conversation';
@@ -92,8 +92,7 @@ export function ChatTabNavigationProvider({
   const state = useMemo(
     (): ChatTabNavigationState => ({
       chatSubview: ctx.chatSubview === 'conversation' ? 'conversation' : 'list',
-      sessionListPanel:
-        ctx.scope.sessionListPanel === 'template' ? 'projects' : 'sessions',
+      sessionListPanel: ctx.scope.sessionListPanel,
       projectName: ctx.scope.currentProject?.name,
       sessionTitle:
         ctx.scope.currentSession?.title ?? ctx.scope.currentSession?.id,
@@ -145,7 +144,7 @@ export function ChatTabNavigationProvider({
     [ctx, onExitSessionBatch, onOpenSessionDetail, workspaceBackState],
   );
 
-  const value = useMemo(() => ({state, actions}), [state, actions]);
+  const value = useMemo(() => ({ state, actions }), [state, actions]);
 
   return (
     <WorkspaceBackCtx.Provider value={setWorkspaceBackState}>

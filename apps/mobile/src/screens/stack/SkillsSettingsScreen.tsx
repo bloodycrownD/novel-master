@@ -12,33 +12,25 @@
  *   tab hint 注明该全局版仅对无副本的项目生效。
  */
 import React, {useCallback, useMemo, useState} from 'react';
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import {FlatList, Pressable, RefreshControl, StyleSheet, Text, View} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatProject} from '@novel-master/core/chat';
 import type {SkillDomain, SkillListItem} from '@novel-master/core/skills';
 import type {VfsScope} from '@novel-master/core/vfs';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {ManageHeader} from '@/components/batch/ManageHeader';
-import {
-  BottomSheetMenu,
-  type SheetMenuItem,
-} from '@/components/sheet/BottomSheetMenu';
+import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/PrototypeButtons';
 import {exportVfsZip} from '@/services/vfs-zip.service';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
+import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
+import {useFocusListReload} from '@/hooks/useFocusListReload';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
+import {listScreenStyles} from '@/screens/shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
@@ -56,6 +48,19 @@ type SkillRow = {
 
 type MenuTarget = SkillRow | undefined;
 
+/** useFocusListReload 的行集：一个屏要同时维护三份列表，打包成一个 payload。 */
+interface SkillsPayload {
+  projects: ChatProject[];
+  globalSkills: SkillListItem[];
+  projectSkills: SkillRow[];
+}
+
+const EMPTY_PAYLOAD: SkillsPayload = {
+  projects: [],
+  globalSkills: [],
+  projectSkills: [],
+};
+
 const GLOBAL_TAB_HINT =
   '全局技能对所有项目生效。若任意项目存在同名副本，该项目优先使用副本——该全局版仅对无副本的项目生效。';
 const PROJECT_TAB_HINT =
@@ -68,18 +73,19 @@ export function SkillsSettingsScreen() {
   const navigation = useNavigation<Nav>();
 
   const [tab, setTab] = useState<'global' | 'project'>('global');
-  const [loading, setLoading] = useState(true);
-  const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [globalSkills, setGlobalSkills] = useState<SkillListItem[]>([]);
-  const [projectSkills, setProjectSkills] = useState<SkillRow[]>([]);
   const batch = useBatchSelection();
   const [menuTarget, setMenuTarget] = useState<MenuTarget>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [zipBusy, setZipBusy] = useState(false);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    try {
+  // loading/reload + 聚焦重载走共用 hook；本屏要同时维护三份列表，
+  // fetcher 返回打包后的 payload；加载失败 toast（保持原语义，rows 不动）。
+  const {
+    rows: payload,
+    loading,
+    reload,
+  } = useFocusListReload<SkillsPayload>({
+    fetcher: useCallback(async () => {
       const [projectList, globalList] = await Promise.all([
         runtime.projects.list(),
         runtime.skills().listSkills('global'),
@@ -98,21 +104,21 @@ export function SkillsSettingsScreen() {
           );
         }),
       );
-      setProjects(projectList);
-      setGlobalSkills(globalList);
-      setProjectSkills(perProject.flat());
-    } catch (error) {
-      showToast(toastMessage('加载技能失败', error));
-    } finally {
-      setLoading(false);
-    }
-  }, [runtime, showToast]);
-
-  useFocusEffect(
-    useCallback(() => {
-      reload().catch(() => undefined);
-    }, [reload]),
-  );
+      return {
+        projects: projectList,
+        globalSkills: globalList,
+        projectSkills: perProject.flat(),
+      };
+    }, [runtime]),
+    fallbackValue: EMPTY_PAYLOAD,
+    onError: useCallback(
+      (cause: unknown) => {
+        showToast(toastMessage('加载技能失败', cause));
+      },
+      [showToast],
+    ),
+  });
+  const {projects, globalSkills, projectSkills} = payload;
 
   /** 任意项目存在同名副本（D5：不按「当前项目」判定）。 */
   const overriddenGlobalNames = useMemo(() => {
@@ -138,9 +144,7 @@ export function SkillsSettingsScreen() {
   };
 
   const rowKey = (row: SkillRow) =>
-    row.domain === 'global'
-      ? `global:${row.name}`
-      : `${row.projectId}:${row.name}`;
+    row.domain === 'global' ? `global:${row.name}` : `${row.projectId}:${row.name}`;
 
   const openDetail = (row: SkillRow) => {
     navigation.navigate('SkillDetail', {
@@ -152,51 +156,36 @@ export function SkillsSettingsScreen() {
     });
   };
 
-  const confirmDeleteRows = (targets: SkillRow[]) => {
-    if (targets.length === 0) {
-      return;
-    }
-    const anyGlobal = targets.some(t => t.domain === 'global');
-    const scopeHint = anyGlobal
-      ? '全局技能删除后影响所有项目'
-      : targets.length === 1 && targets[0]!.projectName
-      ? `该技能仅在该项目（${targets[0]!.projectName}）生效`
-      : '项目技能仅所属项目生效';
-    const names = targets.map(t => t.name).join('、');
-    Alert.alert(
-      '删除技能',
-      `${scopeHint}。确定删除${
-        targets.length > 1 ? `选中的 ${targets.length} 个技能` : `「${names}」`
-      }？删除会清理整目录与对应禁用记录。`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              try {
-                for (const t of targets) {
-                  await runtime.skills().deleteSkill({
-                    domain: t.domain,
-                    name: t.name,
-                    ...(t.domain === 'project' && t.projectId != null
-                      ? {projectId: t.projectId}
-                      : {}),
-                  });
-                }
-                batch.exit();
-                showToast('已删除');
-                await reload();
-              } catch (error) {
-                showToast(toastMessage('删除失败', error));
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
+  const confirmDeleteRows = useBatchDeleteConfirm<SkillRow>({
+    title: '删除技能',
+    message: targets => {
+      const anyGlobal = targets.some(t => t.domain === 'global');
+      const scopeHint = anyGlobal
+        ? '全局技能删除后影响所有项目'
+        : targets.length === 1 && targets[0]!.projectName
+          ? `该技能仅在该项目（${targets[0]!.projectName}）生效`
+          : '项目技能仅所属项目生效';
+      const names = targets.map(t => t.name).join('、');
+      return `${scopeHint}。确定删除${targets.length > 1 ? `选中的 ${targets.length} 个技能` : `「${names}」`}？删除会清理整目录与对应禁用记录。`;
+    },
+    deleteOne: useCallback(
+      async (t: SkillRow) => {
+        await runtime.skills().deleteSkill({
+          domain: t.domain,
+          name: t.name,
+          ...(t.domain === 'project' && t.projectId != null
+            ? {projectId: t.projectId}
+            : {}),
+        });
+      },
+      [runtime],
+    ),
+    onDone: async () => {
+      batch.exit();
+      showToast('已删除');
+      await reload();
+    },
+  });
 
   const zipScopeFor = (skill: SkillRow): VfsScope =>
     skill.domain === 'global'
@@ -268,8 +257,7 @@ export function SkillsSettingsScreen() {
           } else {
             openDetail(row);
           }
-        }}
-      >
+        }}>
         {batch.active ? (
           <BatchCheckbox
             checked={selected}
@@ -278,22 +266,22 @@ export function SkillsSettingsScreen() {
         ) : null}
         <View style={styles.rowBody}>
           <View style={styles.titleRow}>
-            <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
+            <Text
+              style={[styles.name, {color: tokens.text}]}
+              numberOfLines={1}>
               {row.name}
             </Text>
             {overridden ? (
               <Text
                 style={[styles.overrideTag, {color: tokens.textTertiary}]}
-                numberOfLines={1}
-              >
+                numberOfLines={1}>
                 被项目副本覆盖
               </Text>
             ) : null}
             {!row.item.valid ? (
               <Text
                 style={[styles.invalidTag, {color: tokens.danger}]}
-                numberOfLines={1}
-              >
+                numberOfLines={1}>
                 无效 · {row.item.invalidReason ?? 'front matter 不合法'}
               </Text>
             ) : null}
@@ -301,8 +289,7 @@ export function SkillsSettingsScreen() {
           {row.item.description ? (
             <Text
               style={[styles.description, {color: tokens.textSecondary}]}
-              numberOfLines={1}
-            >
+              numberOfLines={1}>
               {row.item.description}
             </Text>
           ) : null}
@@ -312,8 +299,7 @@ export function SkillsSettingsScreen() {
             testID={`skills-settings-menu-${row.name}`}
             hitSlop={8}
             onPress={() => setMenuTarget(row)}
-            accessibilityLabel={`技能 ${row.name} 更多操作`}
-          >
+            accessibilityLabel={`技能 ${row.name} 更多操作`}>
             <Text style={[styles.moreGlyph, {color: tokens.textSecondary}]}>
               ⋮
             </Text>
@@ -343,7 +329,7 @@ export function SkillsSettingsScreen() {
   }, [tab, rows, projects]);
 
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
+    <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
       <ManageHeader
         title="技能管理"
         batchMode={batch.active}
@@ -351,7 +337,9 @@ export function SkillsSettingsScreen() {
         onEnterBatch={batch.enter}
         onCancelBatch={batch.exit}
         onDelete={() =>
-          confirmDeleteRows(rows.filter(r => batch.isSelected(rowKey(r))))
+          confirmDeleteRows(
+            rows.filter(r => batch.isSelected(rowKey(r))),
+          )
         }
         hint="选择要删除的技能"
         normalActions={
@@ -411,8 +399,7 @@ export function SkillsSettingsScreen() {
           item.kind === 'header' ? (
             <Text
               style={[styles.groupHeader, {color: tokens.textSecondary}]}
-              testID={`skills-settings-group-${item.project.name}`}
-            >
+              testID={`skills-settings-group-${item.project.name}`}>
               {item.project.name}
             </Text>
           ) : (
@@ -445,7 +432,6 @@ export function SkillsSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
   tabHint: {
     paddingHorizontal: 12,
     paddingVertical: 6,

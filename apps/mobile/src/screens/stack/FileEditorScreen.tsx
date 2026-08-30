@@ -2,64 +2,28 @@
  * Full-screen file editor: read VFS, save via scoped vfs.write (no checkpoint).
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {
-  ActivityIndicator,
-  Keyboard,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {
-  KeyboardAvoidingView,
-  useReanimatedKeyboardAnimation,
-} from 'react-native-keyboard-controller';
-import Animated, {useAnimatedStyle} from 'react-native-reanimated';
+import {ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useRoute, type RouteProp} from '@react-navigation/native';
-import type {RootStackParamList} from '@/navigation/types';
+import type {RootStackParamList} from '../../navigation/types';
 import type {VfsService} from '@novel-master/core/vfs';
-import {useRuntime} from '@/hooks/useRuntime';
-import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
-import {toastMessage} from '@/errors/toast-message';
-import {useTheme} from '@/theme/ThemeProvider';
-import {useToast} from '@/components/chrome/ToastHost';
-import {sessionSaveVfsFile} from '@/services/vfs-operations.service';
-import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
+import {useRuntime} from '../../hooks/useRuntime';
+import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
+import {toastMessage} from '../../errors/toast-message';
+import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
+import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 import {
   FileMarkdownPreview,
   isMarkdownPreviewPath,
-} from '@/components/vfs/FileMarkdownPreview';
-import {shouldEnableFileAnnotate} from '@/components/vfs/file-annotate-gate';
+} from '../../components/vfs/FileMarkdownPreview';
+import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
 import {
   CodeEditorWebView,
   type CodeEditorWebViewHandle,
-} from '@/components/vfs/CodeEditorWebView';
-import {SegmentedControl} from '@/components/ui/SegmentedControl';
+} from '../../components/vfs/CodeEditorWebView';
+import {EditorScreenShell} from '../../components/chrome/EditorScreenShell';
 import {formatCharCount} from '@novel-master/core/format';
-
-/**
- * Android：与聊天页同款——裁切窗口用 marginBottom 收缩键盘高度，
- * 内容区（flex:1）跟着缩到键盘以上。不能只 translateY：body 高度不变的话
- * 顶部会被 overflow:hidden 裁掉，未行够不着、也滚动不了。
- */
-function AndroidKeyboardFileEditorBody({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
-  // hook 返回的 height 是负数，取反得到正的键盘高度。
-  const clipStyle = useAnimatedStyle(() => {
-    return {marginBottom: -keyboardHeightSV.value};
-  }, [keyboardHeightSV]);
-
-  return (
-    <Animated.View style={[styles.keyboardClip, clipStyle]}>
-      <View style={styles.keyboardLiftBody}>{children}</View>
-    </Animated.View>
-  );
-}
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 
@@ -282,133 +246,83 @@ export function FileEditorScreen() {
     );
   }
 
-  const editorBody = (
-    <>
-      <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
+  const statsRow =
+    mtimeMs != null ?
+      editorFocused && !previewMode ? (
         <Pressable
-          testID="file-editor-save"
-          style={styles.toolbarBtn}
-          onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving || !isDirty || previewMode || isReadOnly}
-        >
+          testID="file-editor-dismiss-stats"
+          style={[styles.statsRow, {borderBottomColor: tokens.border}]}
+          onPress={dismissEditor}
+          accessibilityRole="button"
+          accessibilityLabel="收起键盘">
           <Text
-            style={{
-              color:
-                isDirty && !saving && !previewMode && !isReadOnly
-                  ? tokens.primary
-                  : tokens.textSecondary,
-            }}
-          >
-            {saving ? '保存中…' : '保存'}
+            style={[styles.statsText, {color: tokens.textSecondary}]}
+            numberOfLines={1}>
+            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+            {isDirty ? ' · 编辑中未保存' : ''}
           </Text>
         </Pressable>
-        {/* Show basename only; tail ellipsis when the filename is long. */}
-        {editorFocused && !previewMode ? (
-          <Pressable
-            testID="file-editor-dismiss-toolbar"
-            style={styles.toolbarPath}
-            onPress={dismissEditor}
-            accessibilityRole="button"
-            accessibilityLabel="收起键盘"
-          >
-            <Text
-              style={[
-                styles.toolbarPathText,
-                {color: isDirty ? tokens.danger : tokens.textSecondary},
-              ]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {isDirty ? '未保存' : vfsBasename(path)}
-            </Text>
-          </Pressable>
-        ) : (
+      ) : (
+        <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
           <Text
-            style={[
-              styles.toolbarPath,
-              styles.toolbarPathText,
-              {color: isDirty ? tokens.danger : tokens.textSecondary},
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {isDirty ? '未保存' : vfsBasename(path)}
+            style={[styles.statsText, {color: tokens.textSecondary}]}
+            numberOfLines={1}>
+            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+            {isDirty ? ' · 编辑中未保存' : ''}
           </Text>
-        )}
-        {!isReadOnly ? (
-          <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
-            <Text
-              style={{
-                color: previewMode ? tokens.primary : tokens.textSecondary,
-              }}
-            >
-              {previewMode ? '编辑' : '预览'}
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
-      {mtimeMs != null ? (
-        editorFocused && !previewMode ? (
-          <Pressable
-            testID="file-editor-dismiss-stats"
-            style={[styles.statsRow, {borderBottomColor: tokens.border}]}
-            onPress={dismissEditor}
-            accessibilityRole="button"
-            accessibilityLabel="收起键盘"
-          >
-            <Text
-              style={[styles.statsText, {color: tokens.textSecondary}]}
-              numberOfLines={1}
-            >
-              更新于 {formatFileMtime(mtimeMs)} ·{' '}
-              {formatCharCount(content.length)} 字
-              {isDirty ? ' · 编辑中未保存' : ''}
-            </Text>
-          </Pressable>
+        </View>
+      )
+    : null;
+
+  // 预览无软键盘；编辑态键盘抬升/裁切分支由 EditorScreenShell 统一处理。
+  return (
+    <EditorScreenShell
+      tokens={tokens}
+      toolbarBorderColor={tokens.border}
+      save={{
+        testID: 'file-editor-save',
+        label: saving ? '保存中…' : '保存',
+        disabled: saving || !isDirty || previewMode || isReadOnly,
+        onPress: () => handleSave().catch(() => undefined),
+      }}
+      title={isDirty ? '未保存' : vfsBasename(path)}
+      titleDanger={isDirty}
+      titlePress={
+        editorFocused && !previewMode
+          ? {testID: 'file-editor-dismiss-toolbar', onPress: dismissEditor}
+          : undefined
+      }
+      toggle={
+        isReadOnly ? undefined : {previewMode, onPress: togglePreview}
+      }
+      toolbarExtra={statsRow}
+      segmented={{
+        options: [
+          {value: 'markdown', label: 'Markdown'},
+          {value: 'txt', label: '文本'},
+        ],
+        value: previewRenderKind,
+        onChange: setPreviewRenderKind,
+      }}
+      previewMode={previewMode}
+      preview={
+        heavyPreviewReady ? (
+          <FileMarkdownPreview
+            path={path}
+            content={content}
+            tokens={tokens}
+            previewFill
+            renderKind={previewRenderKind}
+            annotateEnabled={annotateEnabled}
+            sessionId={annotateEnabled ? sessionId : undefined}
+          />
         ) : (
-          <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
-            <Text
-              style={[styles.statsText, {color: tokens.textSecondary}]}
-              numberOfLines={1}
-            >
-              更新于 {formatFileMtime(mtimeMs)} ·{' '}
-              {formatCharCount(content.length)} 字
-              {isDirty ? ' · 编辑中未保存' : ''}
-            </Text>
+          <View style={styles.previewLoading}>
+            <ActivityIndicator size="large" color={tokens.primary} />
           </View>
         )
-      ) : null}
-      {previewMode ? (
-        <SegmentedControl
-          options={[
-            {value: 'markdown', label: 'Markdown'},
-            {value: 'txt', label: '文本'},
-          ]}
-          value={previewRenderKind}
-          onChange={setPreviewRenderKind}
-          tokens={tokens}
-        />
-      ) : null}
-      {previewMode ? (
-        /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
-        <View style={[styles.preview, {backgroundColor: tokens.surface}]}>
-          {heavyPreviewReady ? (
-            <FileMarkdownPreview
-              path={path}
-              content={content}
-              tokens={tokens}
-              previewFill
-              renderKind={previewRenderKind}
-              annotateEnabled={annotateEnabled}
-              sessionId={annotateEnabled ? sessionId : undefined}
-            />
-          ) : (
-            <View style={styles.previewLoading}>
-              <ActivityIndicator size="large" color={tokens.primary} />
-            </View>
-          )}
-        </View>
-      ) : (
+      }
+      editor={
         <CodeEditorWebView
           ref={codeEditorRef}
           testID="file-editor-input"
@@ -418,66 +332,19 @@ export function FileEditorScreen() {
           onFocusChange={setEditorFocused}
           style={styles.editor}
         />
-      )}
-    </>
-  );
-
-  const rootStyle = [styles.root, {backgroundColor: tokens.background}];
-
-  // 预览无软键盘；编辑态 Android 抬升（同聊天页），iOS 仍用 KAV padding。
-  if (previewMode) {
-    return <View style={rootStyle}>{editorBody}</View>;
-  }
-
-  if (Platform.OS === 'android') {
-    return (
-      <View style={rootStyle}>
-        <AndroidKeyboardFileEditorBody>
-          {editorBody}
-        </AndroidKeyboardFileEditorBody>
-      </View>
-    );
-  }
-
-  return (
-    <KeyboardAvoidingView style={rootStyle} behavior="padding" automaticOffset>
-      {editorBody}
-    </KeyboardAvoidingView>
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
   center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
-  keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
-  keyboardLiftBody: {flex: 1, minHeight: 0},
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  toolbarBtn: {
-    flexShrink: 0,
-  },
-  toolbarPath: {
-    flex: 1,
-    flexShrink: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-  },
-  toolbarPathText: {
-    textAlign: 'center',
-  },
   statsRow: {
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   statsText: {fontSize: 12},
-  preview: {flex: 1, minHeight: 0, padding: 12},
   previewLoading: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   editor: {flex: 1, minHeight: 0},
 });

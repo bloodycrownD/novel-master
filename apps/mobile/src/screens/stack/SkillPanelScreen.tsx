@@ -16,11 +16,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import {
-  useFocusEffect,
-  useNavigation,
-  useRoute,
-} from '@react-navigation/native';
+import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
@@ -31,14 +27,18 @@ import {
   skillDomainBadgeLabel,
 } from '@/components/skills/skill-ui';
 import {SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {useFocusListReload} from '@/hooks/useFocusListReload';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';
+import {listScreenStyles} from '@/screens/shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type PanelRoute = RouteProp<RootStackParamList, 'SkillPanel'>;
+
+const EMPTY_SKILLS: EffectiveSkill[] = [];
 
 export function SkillPanelScreen() {
   const {tokens} = useTheme();
@@ -48,40 +48,37 @@ export function SkillPanelScreen() {
   const route = useRoute<PanelRoute>();
   const {projectId} = route.params;
 
-  const [skills, setSkills] = useState<EffectiveSkill[]>([]);
-  const [loading, setLoading] = useState(true);
+  // rows/loading/reload + 聚焦重载走共用 hook；聚焦返回静默刷新（不拉下拉指示器）。
+  // NOT_FOUND（技能根目录尚不存在）= 空列表，不算错误；其他错误 toast（保持原语义）。
+  const {
+    rows: skills,
+    loading,
+    reload,
+    setRows: setSkills,
+  } = useFocusListReload<EffectiveSkill[]>({
+    fetcher: useCallback(async () => {
+      try {
+        return await runtime.skills().effectiveSkills(projectId);
+      } catch (error) {
+        // 与服务层向 NOT_FOUND 语义对齐：技能根目录不存在 = 空列表
+        if (isVfsError(error, 'NOT_FOUND')) {
+          return [];
+        }
+        throw error;
+      }
+    }, [runtime, projectId]),
+    fallbackValue: EMPTY_SKILLS,
+    focusSilent: true,
+    onError: useCallback(
+      (cause: unknown) => {
+        showToast(toastMessage('加载技能失败', cause));
+      },
+      [showToast],
+    ),
+  });
   // 防连点用 ref：不驱动渲染，避免开关 disabled 灰态与 value 更量叠加造成抖动
   const togglingRef = useRef(false);
   const [createOpen, setCreateOpen] = useState(false);
-
-  const reload = useCallback(
-    async (opts?: {silent?: boolean}) => {
-      // 静默刷新（聚焦返回）不拉下拉指示器、不重建列表视觉
-      if (!opts?.silent) {
-        setLoading(true);
-      }
-      try {
-        setSkills(await runtime.skills().effectiveSkills(projectId));
-      } catch (error) {
-        // 技能根目录尚不存在 = 空列表（与服务层向 NOT_FOUND 语义对齐），不弹错
-        if (isVfsError(error, 'NOT_FOUND')) {
-          setSkills([]);
-        } else {
-          showToast(toastMessage('加载技能失败', error));
-        }
-      } finally {
-        // 结尾无条件清 loading：静默刷新若给 loading 置过 true 也要复位
-        setLoading(false);
-      }
-    },
-    [runtime, projectId, showToast],
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      reload({silent: true}).catch(() => undefined);
-    }, [reload]),
-  );
 
   const toggleDisabled = useCallback(
     async (skill: EffectiveSkill, nextEnabled: boolean) => {
@@ -98,7 +95,9 @@ export function SkillPanelScreen() {
         );
       flip(nextEnabled);
       try {
-        await runtime.skills().setDisabled(projectId, skill.name, !nextEnabled);
+        await runtime
+          .skills()
+          .setDisabled(projectId, skill.name, !nextEnabled);
       } catch (error) {
         flip(!nextEnabled);
         showToast(toastMessage(nextEnabled ? '启用失败' : '关闭失败', error));
@@ -119,9 +118,12 @@ export function SkillPanelScreen() {
   };
 
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
+    <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
       {loading && skills.length === 0 ? (
-        <ActivityIndicator style={styles.loader} color={tokens.primary} />
+        <ActivityIndicator
+          style={listScreenStyles.loader}
+          color={tokens.primary}
+        />
       ) : (
         <FlatList
           data={skills}
@@ -148,21 +150,16 @@ export function SkillPanelScreen() {
               testID={`skill-panel-row-${item.name}`}
               style={[
                 styles.row,
-                {
-                  backgroundColor: tokens.surface,
-                  borderColor: tokens.borderLight,
-                },
+                {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
                 (item.disabled || !item.valid) && styles.rowDimmed,
               ]}
               onPress={() => openDetail(item)}
-              accessibilityLabel={`技能 ${item.name}`}
-            >
+              accessibilityLabel={`技能 ${item.name}`}>
               <View style={styles.rowBody}>
                 <View style={styles.titleRow}>
                   <Text
                     style={[styles.name, {color: tokens.text}]}
-                    numberOfLines={1}
-                  >
+                    numberOfLines={1}>
                     {item.name}
                   </Text>
                   <Text
@@ -172,15 +169,13 @@ export function SkillPanelScreen() {
                         color: skillDomainBadgeColor(item.domain, tokens),
                         borderColor: tokens.border,
                       },
-                    ]}
-                  >
+                    ]}>
                     {skillDomainBadgeLabel(item.domain, item.overridden)}
                   </Text>
                   {!item.valid ? (
                     <Text
                       style={[styles.invalidTag, {color: tokens.danger}]}
-                      numberOfLines={1}
-                    >
+                      numberOfLines={1}>
                       无效 · {item.invalidReason ?? 'front matter 不合法'}
                     </Text>
                   ) : null}
@@ -188,8 +183,7 @@ export function SkillPanelScreen() {
                 {item.description ? (
                   <Text
                     style={[styles.description, {color: tokens.textSecondary}]}
-                    numberOfLines={2}
-                  >
+                    numberOfLines={2}>
                     {item.description}
                   </Text>
                 ) : null}
@@ -197,9 +191,7 @@ export function SkillPanelScreen() {
               <Switch
                 value={!item.disabled}
                 disabled={!item.valid}
-                onValueChange={next =>
-                  toggleDisabled(item, next).catch(() => undefined)
-                }
+                onValueChange={next => toggleDisabled(item, next).catch(() => undefined)}
                 trackColor={{false: tokens.border, true: tokens.primary}}
               />
             </Pressable>
@@ -225,8 +217,6 @@ export function SkillPanelScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  loader: {marginTop: 32},
   listContent: {padding: 12, gap: 8, paddingBottom: 24},
   row: {
     flexDirection: 'row',

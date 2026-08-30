@@ -176,7 +176,7 @@ describe('useAndroidChatBackHandler', () => {
   it('T-B5: project template panel returns to session list before exiting app', () => {
     const showSessionsPanel = jest.fn();
     const handler = mountAndGetHandler(
-      defaultState({sessionListPanel: 'template'}),
+      defaultState({sessionListPanel: 'projects'}),
       defaultActions({showSessionsPanel}),
     );
 
@@ -189,7 +189,7 @@ describe('useAndroidChatBackHandler', () => {
     const showSessionsPanel = jest.fn();
     const handler = mountAndGetHandler(
       defaultState({
-        sessionListPanel: 'template',
+        sessionListPanel: 'projects',
         workspaceCanGoUp: true,
         workspaceGoUp,
       }),

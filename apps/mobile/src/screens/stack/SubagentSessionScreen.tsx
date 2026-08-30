@@ -18,11 +18,7 @@
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {
-  useNavigation,
-  useRoute,
-  type RouteProp,
-} from '@react-navigation/native';
+import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native';
 import type {ChatMessage} from '@novel-master/core/chat';
 import type {
   AgentRunFailedPayload,
@@ -30,15 +26,15 @@ import type {
   AgentRunStartedPayload,
   AgentStepCommittedPayload,
 } from '@novel-master/core/events';
-import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
-import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
-import {useRuntime} from '@/hooks/useRuntime';
-import {useNovelMaster} from '@/runtime/novel-master-context';
-import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
-import {useTheme} from '@/theme/ThemeProvider';
-import type {RootStackParamList} from '@/navigation/types';
+import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptWebViewHandle} from '../../components/chat/ChatTranscriptWebView';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
+import {useRuntime} from '../../hooks/useRuntime';
+import {useNovelMaster} from '../../runtime/novel-master-context';
+import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
+import {useTheme} from '../../theme/ThemeProvider';
+import type {RootStackParamList} from '../../navigation/types';
 import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
 import {useSessionBatch} from '@/screens/tabs/chat-tab/useSessionBatch';
 import {useSessionStream} from '@/screens/tabs/chat-tab/useSessionStream';
@@ -85,30 +81,10 @@ export function SubagentSessionScreen() {
     }
   }, [runtime, sessionId, showToast]);
 
-  // 初次加载
+  // 初次加载：复用 reload（含错误 toast），仅制表 initialLoading 的收尾
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const list = await runtime.messages.listBySession(sessionId);
-        if (!cancelled) {
-          setMessages(list);
-          messagesCountRef.current = list.length;
-        }
-      } catch (error) {
-        if (!cancelled) {
-          showToast(toastMessage('加载子会话失败', error));
-        }
-      } finally {
-        if (!cancelled) {
-          setInitialLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [runtime, sessionId, showToast]);
+    reload().finally(() => setInitialLoading(false));
+  }, [reload]);
 
   // 继承主会话的富文本偏好
   useEffect(() => {
@@ -122,9 +98,9 @@ export function SubagentSessionScreen() {
 
   // 装配 stream/abort/batch（与主会话同构，但不接 composer）。
   const onStreamResetRef = useRef<() => void>(() => undefined);
-  const applySegmentsRef = useRef<
-    (segments: readonly StreamWireChunk[]) => void
-  >(() => undefined);
+  const applySegmentsRef = useRef<(segments: readonly StreamWireChunk[]) => void>(
+    () => undefined,
+  );
 
   const abort = useSessionAbort({
     sessionId,
@@ -280,13 +256,7 @@ export function SubagentSessionScreen() {
     if (partial.thinking.length > 0) {
       web.pushStreamDelta('thinking', partial.thinking);
     }
-  }, [
-    webviewReady,
-    abort.uiRunning,
-    sessionId,
-    runtime.streamRegistry,
-    messages.length,
-  ]);
+  }, [webviewReady, abort.uiRunning, sessionId, runtime.streamRegistry, messages.length]);
 
   // 嵌套子会话（孙会话）也共享同一个根父工作区，因此透传同一个 parentSessionId，
   // 而不是当前子会话的 id。
@@ -321,7 +291,10 @@ export function SubagentSessionScreen() {
     [projectId, sessionId],
   );
 
-  const flags = useMemo(() => ({richText: richTextEnabled}), [richTextEnabled]);
+  const flags = useMemo(
+    () => ({richText: richTextEnabled}),
+    [richTextEnabled],
+  );
 
   const onStop = useCallback(() => {
     if (sessionId == null) {

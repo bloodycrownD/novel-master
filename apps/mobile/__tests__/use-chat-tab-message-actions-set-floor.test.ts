@@ -7,7 +7,7 @@ import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {type ChatMessage} from '@novel-master/core/chat';
 
-import {useChatTabMessageActions} from '@/screens/tabs/chat-tab/useChatTabMessages';
+import {useChatTabMessageActions} from '@/screens/tabs/chat-tab/useChatTabMessageActions';
 
 const mockSetMessageFloorAtMessage = jest.fn();
 const mockReloadMessages = jest.fn();

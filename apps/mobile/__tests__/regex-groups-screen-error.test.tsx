@@ -44,6 +44,9 @@ jest.mock('@novel-master/core/format', () => ({
 jest.mock('@/components/batch/BatchCheckbox', () => ({
   BatchCheckbox: () => null,
 }));
+jest.mock('@/components/batch/ManageHeader', () => ({
+  ManageHeader: () => null,
+}));
 jest.mock('@/components/regex/RegexGroupPickerModal', () => ({
   RegexGroupPickerModal: () => null,
 }));

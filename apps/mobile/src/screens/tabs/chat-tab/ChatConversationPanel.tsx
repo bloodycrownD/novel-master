@@ -1,41 +1,42 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, {useCallback, useEffect, useMemo} from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import {
   Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
-  type StyleProp,
-  type ViewStyle,
 } from 'react-native';
-import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
-import Animated, {useAnimatedStyle} from 'react-native-reanimated';
-import {type VfsScope} from '@novel-master/core/vfs';
-import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
-import {ChatComposer} from '@/components/chat/ChatComposer';
-import {ChatMetaBar} from '@/components/chat/ChatMetaBar';
-import {ChatStreamMetricsBarLive} from '@/components/chat/ChatStreamMetricsBarLive';
-import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
-import {MessageActionMenu} from '@/components/chat/MessageActionMenu';
-import {MessageEditModal} from '@/components/chat/MessageEditModal';
-import {MessageList} from '@/components/chat/MessageList';
-import {ModelPickerModal} from '@/components/provider/ModelPickerModal';
-import {SessionActionsDrawer} from '@/components/chrome/SessionActionsDrawer';
-import {VfsFileManager} from '@/components/vfs/VfsFileManager';
-import {SegmentedControl} from '@/components/ui/SegmentedControl';
-import {useToast} from '@/components/chrome/ToastHost';
-import {isAgentLocked, isModelLocked} from '@/services/chat-agent-meta';
+import { type VfsScope } from '@novel-master/core/vfs';
+import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
+import { ChatComposer } from '@/components/chat/ChatComposer';
+import { ChatMetaBar } from '@/components/chat/ChatMetaBar';
+import { ChatStreamMetricsBarLive } from '@/components/chat/ChatStreamMetricsBarLive';
+import { ChatTranscriptWebView } from '@/components/chat/ChatTranscriptWebView';
+import { MessageActionMenu } from '@/components/chat/MessageActionMenu';
+import { MessageEditModal } from '@/components/chat/MessageEditModal';
+import { MessageList } from '@/components/chat/MessageList';
+import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
+import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
+import { VfsFileManager } from '@/components/vfs/VfsFileManager';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import { AndroidKeyboardClipBody } from '@/components/chrome/AndroidKeyboardClipBody';
+import { useToast } from '@/components/chrome/ToastHost';
+import {
+  isAgentLocked,
+  isModelLocked,
+} from '@/services/chat-agent-meta';
 import type {ThemeTokens} from '@/theme/tokens';
 
 // 锁定提示文案与 SessionDetailScreen 对齐（会话未绑定有效智能体）。
-const AGENT_LOCK_TOAST = '当前会话未绑定有效智能体，请到会话详情确认智能体配置';
+const AGENT_LOCK_TOAST =
+  '当前会话未绑定有效智能体，请到会话详情确认智能体配置';
 const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
-import {useChatTabContext} from './ChatTabProvider';
-import {useChatTabWorkspaceBackState} from './ChatTabNavigationProvider';
-import {useChatTabController} from './useChatTabController';
+import { useChatTabContext } from './ChatTabProvider';
+import { useChatTabWorkspaceBackState } from './ChatTabNavigationProvider';
+import { useChatTabController } from './useChatTabController';
 
 export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
@@ -43,45 +44,11 @@ export type ChatConversationPanelProps = {
 };
 
 /**
- * Android：消息区 + 输入框共用同一套 Reanimated 动画（与 KeyboardStickyView 同源 height）。
- * 关键不能只靠 translateY——body 是 flex:1 不会自动缩，平移后顶部会被外层
- * overflow:hidden 裁掉，滚不回去也编辑不了。这里改为「直接收缩裁切窗口高度」，
- * body 跟着收紧到键盘以上，内容区照常滚动、输入框依然贴在键盘上方。
+ * Android：消息区 + 输入框共用同一套 Reanimated 动画（与 KeyboardStickyView 同源 height），
+ * 裁切抬升由 AndroidKeyboardClipBody 统一持有（screens/C-2），这里只负责
+ * 把 header 放在裁切窗口外、transcript/composer 放进去；iOS 分支结构一致、
+ * 不套裁切容器。
  */
-function AndroidKeyboardChatBody({
-  style,
-  pointerEvents,
-  header,
-  transcript,
-  composer,
-}: {
-  style?: StyleProp<ViewStyle>;
-  pointerEvents?: 'auto' | 'none';
-  header: React.ReactNode;
-  transcript: React.ReactNode;
-  composer: React.ReactNode;
-}) {
-  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
-  // useReanimatedKeyboardAnimation 返回的 height 是负数（键盘高 300 时值为 -300）。
-  // 取反拿到正的键盘高度，作为 marginBottom 让裁切窗口底部收紧——
-  // body（flex:1）跟着缩到键盘以上，内容区可正常滚动，输入框自然贴在键盘上方。
-  const clipStyle = useAnimatedStyle(() => {
-    const kb = -keyboardHeightSV.value;
-    return {marginBottom: kb};
-  }, [keyboardHeightSV]);
-
-  return (
-    <View style={style} pointerEvents={pointerEvents}>
-      {header}
-      <Animated.View style={[styles.keyboardClip, clipStyle]}>
-        <View style={styles.keyboardLiftBody}>
-          <View style={styles.transcriptHost}>{transcript}</View>
-          {composer}
-        </View>
-      </Animated.View>
-    </View>
-  );
-}
 
 export function ChatConversationPanel({
   tokens,
@@ -90,7 +57,7 @@ export function ChatConversationPanel({
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();
-  const {showToast} = useToast();
+  const { showToast } = useToast();
   const {
     conversationPanel,
     setConversationPanel,
@@ -160,7 +127,7 @@ export function ChatConversationPanel({
     if (projectId == null || sessionId == null) {
       return null;
     }
-    return {kind: 'session', projectId, sessionId};
+    return { kind: 'session', projectId, sessionId };
   }, [projectId, sessionId]);
 
   const emitWorkspaceBackState = useCallback(() => {
@@ -282,7 +249,7 @@ export function ChatConversationPanel({
                 style={styles.loadMoreBtn}
                 onPress={onLoadOlderMessages}
               >
-                <Text style={{color: tokens.primary}}>
+                <Text style={{ color: tokens.primary }}>
                   {loadingMoreMessages ? '加载中…' : '加载更早消息'}
                 </Text>
               </Pressable>
@@ -294,7 +261,7 @@ export function ChatConversationPanel({
   const chatComposer =
     projectId != null && sessionId != null ? (
       <ChatComposer
-        scope={{projectId, sessionId}}
+        scope={{ projectId, sessionId }}
         hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
         running={uiRunning}
         beginUiRun={beginUiRun}
@@ -322,20 +289,20 @@ export function ChatConversationPanel({
         value={conversationPanel}
         onChange={setConversationPanel}
         options={[
-          {value: 'chat', label: '聊天', testID: 'tab-chat'},
-          {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
+          { value: 'chat', label: '聊天', testID: 'tab-chat' },
+          { value: 'workspace', label: '聊天工作区', testID: 'tab-workspace' },
         ]}
       />
       {projectId != null && sessionId != null ? (
         <>
           {Platform.OS === 'android' ? (
-            <AndroidKeyboardChatBody
-              style={chatPanelStyle}
-              pointerEvents={chatPointerEvents}
-              header={chatHeader}
-              transcript={chatTranscript}
-              composer={chatComposer}
-            />
+            <View style={chatPanelStyle} pointerEvents={chatPointerEvents}>
+              {chatHeader}
+              <AndroidKeyboardClipBody>
+                <View style={styles.transcriptHost}>{chatTranscript}</View>
+                {chatComposer}
+              </AndroidKeyboardClipBody>
+            </View>
           ) : (
             <View style={chatPanelStyle} pointerEvents={chatPointerEvents}>
               {chatHeader}
@@ -361,7 +328,7 @@ export function ChatConversationPanel({
                 workplace={sessionWorktree}
                 rootPath="/"
                 pullFromParent={{
-                  scope: {kind: 'session', sessionId},
+                  scope: { kind: 'session', sessionId },
                   onPulled: bumpWorktreeUiToken,
                 }}
                 onOpenFile={path => onOpenFileEditor(path, 'session')}
@@ -370,7 +337,7 @@ export function ChatConversationPanel({
             </View>
           ) : conversationPanel === 'workspace' ? (
             <View style={styles.placeholder}>
-              <Text style={{color: tokens.textSecondary}}>
+              <Text style={{ color: tokens.textSecondary }}>
                 聊天工作区不可用
               </Text>
             </View>
@@ -378,7 +345,7 @@ export function ChatConversationPanel({
         </>
       ) : (
         <View style={styles.placeholder}>
-          <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
+          <Text style={{ color: tokens.textSecondary }}>请先选择会话</Text>
         </View>
       )}
       <SessionActionsDrawer
@@ -432,14 +399,12 @@ export function ChatConversationPanel({
 }
 
 const styles = StyleSheet.create({
-  subviewFill: {flex: 1, minHeight: 0},
-  panelHidden: {display: 'none'},
-  chatPanel: {flex: 1, backgroundColor: 'transparent'},
-  keyboardClip: {flex: 1, minHeight: 0, overflow: 'hidden'},
-  keyboardLiftBody: {flex: 1, minHeight: 0},
-  transcriptHost: {flex: 1, minHeight: 0},
-  flexFill: {flex: 1},
-  placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  subviewFill: { flex: 1, minHeight: 0 },
+  panelHidden: { display: 'none' },
+  chatPanel: { flex: 1, backgroundColor: 'transparent' },
+  transcriptHost: { flex: 1, minHeight: 0 },
+  flexFill: { flex: 1 },
+  placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadMoreBtn: {
     alignSelf: 'center',
     paddingHorizontal: 12,

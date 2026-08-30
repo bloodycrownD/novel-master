@@ -94,7 +94,7 @@ function ChatSessionListPanelInner({
     if (setWorkspaceBackState == null) {
       return;
     }
-    if (!visible || sessionListPanel !== 'template') {
+    if (!visible || sessionListPanel !== 'projects') {
       setWorkspaceBackState(null);
       return;
     }
@@ -124,10 +124,10 @@ function ChatSessionListPanelInner({
         onChange={onSessionListPanelChange}
         options={[
           {value: 'sessions', label: '会话'},
-          {value: 'template', label: '项目工作区'},
+          {value: 'projects', label: '项目工作区'},
         ]}
       />
-      {sessionListPanel === 'template' ? (
+      {sessionListPanel === 'projects' ? (
         projectVfs && projectWorktree && projectId != null ? (
           <View style={styles.flexFill}>
             <VfsFileManager

@@ -22,11 +22,21 @@ import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
 import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 
-export type SessionListPanel = 'sessions' | 'template';
+export type SessionListPanel = 'sessions' | 'projects';
 export type ChatSubview = 'sessions' | 'conversation';
 export type ConversationPanel = 'chat' | 'workspace';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
+
+const EMPTY_AGENT_META: ChatAgentMeta = {
+  source: 'none',
+  agentId: undefined,
+  agentName: '—',
+  modelLabel: '—',
+  tokenLabel: '',
+  hasDedicatedModel: false,
+  modelSource: 'session',
+};
 
 export type UseChatTabScopeParams = {
   runtime: MobileNovelMasterRuntime;
@@ -64,15 +74,7 @@ export function useChatTabScope({
   const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
     {sessionId: string; initialTitle: string} | undefined
   >();
-  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>({
-    source: 'none',
-    agentId: undefined,
-    agentName: '—',
-    modelLabel: '—',
-    tokenLabel: '',
-    hasDedicatedModel: false,
-    modelSource: 'session',
-  });
+  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>(EMPTY_AGENT_META);
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
 
   const refreshChatTokenLabel = useCallback(async () => {
@@ -95,29 +97,9 @@ export function useChatTabScope({
   const refreshChatMeta = useCallback(async () => {
     const modelId = await runtime.state.getCurrentModelId();
     setHasWorkspaceModel(modelId != null && modelId !== '');
-    if (projectId == null) {
-      setAgentMeta({
-        source: 'none',
-        agentId: undefined,
-        agentName: '—',
-        modelLabel: '—',
-        tokenLabel: '',
-        hasDedicatedModel: false,
-        modelSource: 'session',
-      });
-      return;
-    }
-    if (sessionId == null) {
-      // 无活动会话时无法解析 session 绑定，回退到无 meta 状态。
-      setAgentMeta({
-        source: 'none',
-        agentId: undefined,
-        agentName: '—',
-        modelLabel: '—',
-        tokenLabel: '',
-        hasDedicatedModel: false,
-        modelSource: 'session',
-      });
+    if (projectId == null || sessionId == null) {
+      // 无项目或无活动会话时无法解析 session 绑定，回退到无 meta 状态。
+      setAgentMeta(EMPTY_AGENT_META);
       return;
     }
     try {
@@ -129,15 +111,7 @@ export function useChatTabScope({
       }));
       void refreshChatTokenLabel();
     } catch {
-      setAgentMeta({
-        source: 'none',
-        agentId: undefined,
-        agentName: '—',
-        modelLabel: '—',
-        tokenLabel: '',
-        hasDedicatedModel: false,
-        modelSource: 'session',
-      });
+      setAgentMeta(EMPTY_AGENT_META);
     }
   }, [runtime, projectId, sessionId, refreshChatTokenLabel]);
 

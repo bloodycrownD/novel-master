@@ -4,14 +4,14 @@
  * conversation workspace → chat → session list; template workspace dirs →
  * template → sessions; then exit app.
  */
-import {useCallback} from 'react';
-import {BackHandler, Platform} from 'react-native';
-import {useFocusEffect} from '@react-navigation/native';
+import { useCallback } from 'react';
+import { BackHandler, Platform } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 
 export type AndroidChatBackState = {
   chatSubview: 'sessions' | 'conversation';
   conversationPanel: 'chat' | 'workspace';
-  sessionListPanel: 'sessions' | 'template';
+  sessionListPanel: 'sessions' | 'projects';
   sessionDrawerOpen: boolean;
   /** mermaid 全屏查看器开着（WebView 上浮）；返回键先关全屏。可选：未接线时无拦截。 */
   mermaidViewerOpen?: boolean;
@@ -135,7 +135,7 @@ export function useAndroidChatBackHandler(
       exitSessionBatch();
       return true;
     }
-    if (sessionListPanel === 'template') {
+    if (sessionListPanel === 'projects') {
       // 项目工作区同聊天工作区：先逐级退目录，根目录才切回会话列表
       if (workspaceCanGoUp && workspaceGoUp) {
         workspaceGoUp();

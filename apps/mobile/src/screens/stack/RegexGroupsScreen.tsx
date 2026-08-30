@@ -1,35 +1,41 @@
 /**
  * 正则配置：当前选用状态卡 + 全部正则组列表卡。
+ *
+ * C-12：批量工具栏换用 ManageHeader（与其余列表屏同轨），
+ * 「当前正则组」卡片放 FlatList 的 ListHeaderComponent。
  */
 import React, {useCallback, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
+import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import { type RegexGroup } from "@novel-master/core/regex";
+import {type RegexGroup} from '@novel-master/core/regex';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
+import {ManageHeader} from '../../components/batch/ManageHeader';
 import {RegexGroupPickerModal} from '../../components/regex/RegexGroupPickerModal';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
+import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
+import {useFocusListReload} from '../../hooks/useFocusListReload';
 import {useRuntime} from '../../hooks/useRuntime';
-import {formatError} from '../../errors/format-error';
 import type {RootStackParamList} from '../../navigation/types';
 import {deriveRegexGroupId} from '@novel-master/core/format';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {ThemeTokens} from '../../theme/tokens';
+import {listScreenStyles} from '../shared/list-screen-styles';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 
@@ -40,13 +46,16 @@ interface GroupRow extends RegexGroup {
   isCurrent: boolean;
 }
 
+const EMPTY_ROWS: GroupRow[] = [];
+
 function groupTitle(group: RegexGroup): string {
   return group.displayName?.trim() || group.groupId;
 }
 
 function RegexLeadingIcon({tokens}: {tokens: {primary: string}}) {
   return (
-    <View style={[styles.leadingIcon, {backgroundColor: `${tokens.primary}1A`}]}>
+    <View
+      style={[styles.leadingIcon, {backgroundColor: `${tokens.primary}1A`}]}>
       <Text style={styles.leadingEmoji}>🛡️</Text>
     </View>
   );
@@ -57,7 +66,6 @@ type GroupPanelRowProps = {
   tokens: ThemeTokens;
   batchActive: boolean;
   selected: boolean;
-  isLast: boolean;
   onPress: () => void;
   onMenuPress?: () => void;
 };
@@ -67,7 +75,6 @@ function GroupPanelRow({
   tokens,
   batchActive,
   selected,
-  isLast,
   onPress,
   onMenuPress,
 }: GroupPanelRowProps) {
@@ -78,21 +85,18 @@ function GroupPanelRow({
         styles.panelRow,
         {
           backgroundColor: selected ? `${tokens.primary}12` : 'transparent',
-          borderBottomColor: tokens.borderLight,
-          borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
           opacity: pressed ? 0.92 : 1,
         },
       ]}>
       {batchActive ? (
-        <BatchCheckbox
-          checked={selected}
-          onToggle={onPress}
-        />
+        <BatchCheckbox checked={selected} onToggle={onPress} />
       ) : (
         <RegexLeadingIcon tokens={tokens} />
       )}
       <View style={styles.panelRowInfo}>
-        <Text style={[styles.panelRowTitle, {color: tokens.text}]} numberOfLines={1}>
+        <Text
+          style={[styles.panelRowTitle, {color: tokens.text}]}
+          numberOfLines={1}>
           {groupTitle(item)}
         </Text>
         <Text style={[styles.panelRowSubtitle, {color: tokens.textSecondary}]}>
@@ -126,10 +130,6 @@ export function RegexGroupsScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
-  const [rows, setRows] = useState<GroupRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  // 加载失败渲染错误文案 + 重试，而不是吞错伪装成空列表（对齐 FetchModelsSheet）。
-  const [error, setError] = useState<string | undefined>();
   const [menuGroupId, setMenuGroupId] = useState<string | undefined>();
   const [createVisible, setCreateVisible] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | undefined>();
@@ -146,10 +146,9 @@ export function RegexGroupsScreen() {
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
-    try {
+  // rows/loading/reload + 聚焦重载走共用 hook；fetcher 抛错进 error 态（配重试）。
+  const {rows, loading, error, reload} = useFocusListReload<GroupRow[]>({
+    fetcher: useCallback(async () => {
       const groups = await runtime.regexConfig.listGroups();
       const currentId = await runtime.state.getCurrentRegexGroupId();
       if (!currentId) {
@@ -173,45 +172,25 @@ export function RegexGroupsScreen() {
           isCurrent: currentId === group.groupId,
         });
       }
-      setRows(enriched);
-    } catch (cause) {
-      setRows([]);
-      setError(formatError(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, [runtime]);
+      return enriched;
+    }, [runtime]),
+    fallbackValue: EMPTY_ROWS,
+  });
 
-  useFocusEffect(
-    useCallback(() => {
-      reload().catch(() => undefined);
-    }, [reload]),
-  );
-
-  const confirmBatchDelete = () => {
-    const ids = Array.from(batch.selectedIds);
-    if (ids.length === 0) {
-      return;
-    }
-    Alert.alert('删除正则组', `确定删除选中的 ${ids.length} 个正则组？`, [
-      {text: '取消', style: 'cancel'},
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: () => {
-          (async () => {
-            for (const groupId of ids) {
-              await runtime.regexConfig.deleteGroup(groupId);
-            }
-            batch.exit();
-            await reload();
-          })().catch(err =>
-            showToast(toastMessage('删除失败', err)),
-          );
-        },
+  const confirmBatchDelete = useBatchDeleteConfirm<string>({
+    title: '删除正则组',
+    message: ids => `确定删除选中的 ${ids.length} 个正则组？`,
+    deleteOne: useCallback(
+      async (groupId: string) => {
+        await runtime.regexConfig.deleteGroup(groupId);
       },
-    ]);
-  };
+      [runtime],
+    ),
+    onDone: async () => {
+      batch.exit();
+      await reload();
+    },
+  });
 
   const deleteGroup = async (groupId: string) => {
     const row = rows.find(g => g.groupId === groupId);
@@ -244,123 +223,79 @@ export function RegexGroupsScreen() {
       ? '未选择规则组，消息不做正则过滤'
       : `已选用「${currentRegexLabel}」`;
 
-  const renderListPanelToolbar = () => {
-    if (batch.active) {
-      return (
-        <View
-          style={[
-            styles.panelToolbar,
-            {borderBottomColor: tokens.borderLight},
-          ]}>
-          <Pressable onPress={batch.exit}>
-            <Text style={[styles.batchAction, {color: tokens.text}]}>取消</Text>
-          </Pressable>
-          <Text style={{color: tokens.textSecondary, fontSize: 14}}>
-            已选 {batch.selectedCount} 项
-          </Text>
-          <Pressable
-            onPress={confirmBatchDelete}
-            disabled={batch.selectedCount === 0}>
-            <Text
-              style={{
-                color:
-                  batch.selectedCount > 0
-                    ? tokens.danger
-                    : tokens.textTertiary,
-                fontSize: 15,
-                fontWeight: '600',
-              }}>
-              删除
-            </Text>
-          </Pressable>
-        </View>
-      );
-    }
-
-    return (
-      <View
-        style={[
-          styles.panelToolbar,
-          {borderBottomColor: tokens.borderLight},
-        ]}>
-        <Text style={[styles.sectionLabel, {color: tokens.text}]}>
-          全部正则组
-        </Text>
-        <View style={styles.sectionActions}>
-          <Pressable onPress={batch.enter} hitSlop={8}>
-            <Text style={[styles.linkAction, {color: tokens.textSecondary}]}>
-              管理
-            </Text>
-          </Pressable>
+  return (
+    <View style={[listScreenStyles.root, {backgroundColor: tokens.background}]}>
+      <ManageHeader
+        title="全部正则组"
+        batchMode={batch.active}
+        selectedCount={batch.selectedCount}
+        onEnterBatch={batch.enter}
+        onCancelBatch={batch.exit}
+        onDelete={() => confirmBatchDelete(Array.from(batch.selectedIds))}
+        hint="选择要删除的正则组"
+        normalActions={
           <PrimaryButton
             label="添加"
             tokens={tokens}
             onPress={() => setCreateVisible(true)}
           />
-        </View>
-      </View>
-    );
-  };
-
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={reload} />
-        }>
-        <ListSectionTitle title="当前" tokens={tokens} />
-        <ConfigListCard
-          tokens={tokens}
-          onPress={() => setRegexGroupPickerVisible(true)}
-          leading={<RegexLeadingIcon tokens={tokens} />}
-          title="当前正则组"
-          subtitle={currentSubtitle}
-          showChevron
+        }
+      />
+      {loading && rows.length === 0 ? (
+        <ActivityIndicator
+          style={styles.panelLoader}
+          color={tokens.primary}
         />
-
-        <View
-          style={[
-            styles.listPanel,
-            {
-              backgroundColor: tokens.surfaceElevated,
-              borderColor: tokens.borderLight,
-            },
-          ]}>
-          {renderListPanelToolbar()}
-          {batch.active ? (
-            <Text style={[styles.batchHint, {color: tokens.textSecondary}]}>
-              选择要删除的正则组
+      ) : error ? (
+        <View style={styles.center}>
+          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+          <Pressable onPress={() => void reload()}>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>
+              重试
             </Text>
-          ) : null}
-          {loading && rows.length === 0 ? (
-            <ActivityIndicator
-              style={styles.panelLoader}
-              color={tokens.primary}
-            />
-          ) : error ? (
-            <View style={styles.center}>
-              <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-              <Pressable onPress={() => reload().catch(() => undefined)}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  重试
-                </Text>
-              </Pressable>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={item => item.groupId}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={() => void reload()} />
+          }
+          ListHeaderComponent={
+            <View>
+              <ListSectionTitle title="当前" tokens={tokens} />
+              <ConfigListCard
+                tokens={tokens}
+                onPress={() => setRegexGroupPickerVisible(true)}
+                leading={<RegexLeadingIcon tokens={tokens} />}
+                title="当前正则组"
+                subtitle={currentSubtitle}
+                showChevron
+              />
             </View>
-          ) : rows.length === 0 ? (
+          }
+          ListEmptyComponent={
             <Text style={[styles.panelEmpty, {color: tokens.textSecondary}]}>
               暂无正则组，点击「添加」创建。
             </Text>
-          ) : (
-            rows.map((item, index) => (
+          }
+          renderItem={({item}) => (
+            <View
+              style={[
+                styles.rowCard,
+                {
+                  backgroundColor: tokens.surfaceElevated,
+                  borderColor: tokens.borderLight,
+                },
+              ]}>
               <GroupPanelRow
-                key={item.groupId}
                 item={item}
                 tokens={tokens}
                 batchActive={batch.active}
                 selected={batch.isSelected(item.groupId)}
-                isLast={index === rows.length - 1}
                 onPress={() => {
                   if (batch.active) {
                     batch.toggle(item.groupId);
@@ -369,15 +304,13 @@ export function RegexGroupsScreen() {
                   }
                 }}
                 onMenuPress={
-                  batch.active
-                    ? undefined
-                    : () => setMenuGroupId(item.groupId)
+                  batch.active ? undefined : () => setMenuGroupId(item.groupId)
                 }
               />
-            ))
+            </View>
           )}
-        </View>
-      </ScrollView>
+        />
+      )}
       <BottomSheetMenu
         visible={menuGroupId != null}
         items={[
@@ -438,15 +371,14 @@ export function RegexGroupsScreen() {
       <RegexGroupPickerModal
         visible={regexGroupPickerVisible}
         onClose={() => setRegexGroupPickerVisible(false)}
-        onSelected={() => reload().catch(() => undefined)}
+        onSelected={() => void reload()}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  scrollContent: {paddingTop: 4, paddingBottom: 24},
+  listContent: {paddingTop: 4, paddingBottom: 24},
   leadingIcon: {
     width: 36,
     height: 36,
@@ -455,9 +387,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   leadingEmoji: {fontSize: 18},
-  listPanel: {
-    marginHorizontal: 5,
-    marginTop: 16,
+  rowCard: {
+    marginTop: 8,
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
@@ -466,26 +397,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 3,
     elevation: 2,
-  },
-  panelToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
-  sectionLabel: {fontSize: 12, fontWeight: '700'},
-  sectionActions: {flexDirection: 'row', alignItems: 'center', gap: 10},
-  linkAction: {fontSize: 14, fontWeight: '600'},
-  batchAction: {fontSize: 15, fontWeight: '600'},
-  batchHint: {
-    fontSize: 12,
-    lineHeight: 16,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
   },
   panelLoader: {paddingVertical: 28},
   center: {alignItems: 'center', gap: 12, padding: 24},

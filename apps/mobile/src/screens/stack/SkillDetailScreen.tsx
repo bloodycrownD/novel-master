@@ -6,10 +6,9 @@
  *   /meta/skills/{name}/{rel}）。
  * - 文件结构变化（新建/删除辅助文件）后刷新清单。
  */
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {
   ActivityIndicator,
-  BackHandler,
   StyleSheet,
   Text,
   View,
@@ -28,7 +27,7 @@ import {
   type VfsFileManagerHandle,
 } from '@/components/vfs/VfsFileManager';
 import {useRuntime} from '@/hooks/useRuntime';
-import {useHeaderContext} from '@/navigation/HeaderContext';
+import {useVfsBackNavigation} from '@/hooks/useVfsBackNavigation';
 import type {RootStackParamList} from '@/navigation/types';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';
@@ -71,35 +70,11 @@ export function SkillDetailScreen() {
     }
   }, [runtime, domain, projectId, name, showToast, navigation]);
 
-  // 标题 = 技能名；系统返回/侧滑与 header 返回在子目录时逐级上翻而非退出页面
-  const {setStackOverride} = useHeaderContext();
+  // 标题 = 技能名；返回上翻三件套（header 覆盖/硬件返回/侧滑手势）见 hook 内注释。
   const fileRef = useRef<VfsFileManagerHandle>(null);
-  const goUpOrExit = useCallback(() => {
-    if (fileRef.current?.canGoUp()) {
-      fileRef.current.goUp();
-    } else {
-      navigation.goBack();
-    }
-  }, [navigation]);
-  useEffect(() => {
-    setStackOverride({title: name, onBack: goUpOrExit});
-    return () => setStackOverride(undefined);
-  }, [name, setStackOverride, goUpOrExit]);
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      // 仅在本屏聚焦时拦截：BackHandler 是全局的，FileEditor 等上层屏幕
-      // 在栈顶时若不判聚焦，详情页的返回/侧滑会被本屏吞成目录上翻。
-      if (!navigation.isFocused()) {
-        return false;
-      }
-      if (fileRef.current?.canGoUp()) {
-        fileRef.current.goUp();
-        return true;
-      }
-      return false;
-    });
-    return () => sub.remove();
-  }, [navigation]);
+  const {syncGestureEnabled} = useVfsBackNavigation(fileRef, navigation, {
+    title: name,
+  });
 
   useFocusEffect(
     useCallback(() => {
@@ -137,13 +112,7 @@ export function SkillDetailScreen() {
 
   if (loading && item == null) {
     return (
-      <View
-        style={[
-          styles.root,
-          styles.center,
-          {backgroundColor: tokens.background},
-        ]}
-      >
+      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
         <ActivityIndicator color={tokens.primary} />
       </View>
     );
@@ -151,13 +120,7 @@ export function SkillDetailScreen() {
 
   if (item == null) {
     return (
-      <View
-        style={[
-          styles.root,
-          styles.center,
-          {backgroundColor: tokens.background},
-        ]}
-      >
+      <View style={[styles.root, styles.center, {backgroundColor: tokens.background}]}>
         <Text style={{color: tokens.textSecondary}}>技能不存在或已被删除</Text>
       </View>
     );
@@ -167,6 +130,8 @@ export function SkillDetailScreen() {
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <VfsFileManager
         ref={fileRef}
+        // 目录变化时同步侧滑手势开关：根目录开（侧滑退出），子目录关（防误退）。
+        onDirectoryChange={syncGestureEnabled}
         scope={fileScope}
         vfs={fileVfs}
         rootPath={skillRoot}

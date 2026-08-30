@@ -11,54 +11,54 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
-import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {type ChatMessage} from '@novel-master/core/chat';
-import type {VfsService} from '@novel-master/core/vfs';
-import type {WorkplaceService} from '@novel-master/core/workplace';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { type ChatMessage } from '@novel-master/core/chat';
+import type { VfsService } from '@novel-master/core/vfs';
+import type { WorkplaceService } from '@novel-master/core/workplace';
 import {
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
   type SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
-import type {StreamWireChunk} from '@/services/stream-wire-queue';
-import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
-import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
-import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
-import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
-import type {ChatAgentMeta} from '@/services/chat-agent-meta';
+import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
+import type { StreamWireChunk } from '@/services/stream-wire-queue';
+import type { MessageMenuAnchor } from '@/components/chat/MessageActionMenu';
+import type { VfsFileManagerHandle } from '@/components/vfs/VfsFileManager';
+import type { ChatListScrollSnapshot } from '@/services/chat-list-scroll-cache';
+import type { ChatTranscriptScrollSnapshot } from '@/components/chat/ChatTranscriptBridge';
+import type { ChatAgentMeta } from '@/services/chat-agent-meta';
 import type {
   AgentStreamMetricsSnapshot,
   StreamMetricsAccRef,
 } from '@/hooks/useAgentStreamMetrics';
-import {useToast} from '@/components/chrome/ToastHost';
-import {useRuntime} from '@/hooks/useRuntime';
-import {useMobileScope} from '@/hooks/useMobileScope';
-import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
-import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
-import {useNovelMaster} from '@/runtime/novel-master-context';
+import { useToast } from '@/components/chrome/ToastHost';
+import { useRuntime } from '@/hooks/useRuntime';
+import { useMobileScope } from '@/hooks/useMobileScope';
+import { useAgentRunLifecycle } from '@/hooks/useAgentRunLifecycle';
+import { useDismissOverlaysOnBlur } from '@/hooks/useDismissOverlaysOnBlur';
+import { useNovelMaster } from '@/runtime/novel-master-context';
 import {
   isMobileAgentActive,
   subscribeMobileAgentActivity,
 } from '@/runtime/agent-activity';
-import type {RootStackParamList} from '@/navigation/types';
+import type { RootStackParamList } from '@/navigation/types';
 import {
   defaultChatTranscriptEngine,
   readChatTranscriptEngine,
   type ChatTranscriptEngine,
 } from '@/storage/chat-transcript-engine';
-import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
-import {readChatStreamBatchEnabled} from '@/storage/chat-stream-batch-pref';
-import {useChatTabMessages} from './useChatTabMessages';
+import { readChatRichTextEnabled } from '@/storage/chat-rich-text-pref';
+import { readChatStreamBatchEnabled } from '@/storage/chat-stream-batch-pref';
+import { useChatTabMessages } from './useChatTabMessages';
 import {
   useChatTabScope,
   type ChatSubview,
   type ConversationPanel,
 } from './useChatTabScope';
-import {useChatTabScrollCache} from './useChatTabStream';
-import {useSessionAbort} from './useSessionAbort';
-import {useSessionBatch} from './useSessionBatch';
-import {useSessionStream} from './useSessionStream';
+import { useChatTabScrollCache } from './useChatTabStream';
+import { useSessionAbort } from './useSessionAbort';
+import { useSessionBatch } from './useSessionBatch';
+import { useSessionStream } from './useSessionStream';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -115,10 +115,10 @@ export type ChatTabContextValue = {
     anchor: MessageMenuAnchor | undefined,
   ) => void;
   readonly messageEditPrompt:
-    | {messageId: string; initialText: string}
+    | { messageId: string; initialText: string }
     | undefined;
   readonly setMessageEditPrompt: (
-    prompt: {messageId: string; initialText: string} | undefined,
+    prompt: { messageId: string; initialText: string } | undefined,
   ) => void;
   readonly useWebviewTranscript: boolean;
   readonly chatRichTextEnabled: boolean;
@@ -171,8 +171,8 @@ export function useChatTabContext(): ChatTabContextValue {
   return ctx;
 }
 
-export function ChatTabProvider({children}: {children: ReactNode}) {
-  const {showToast} = useToast();
+export function ChatTabProvider({ children }: { children: ReactNode }) {
+  const { showToast } = useToast();
   const runtime = useRuntime();
   const {
     projectId,
@@ -182,7 +182,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     refreshScope,
   } = useMobileScope();
   const navigation = useNavigation<Nav>();
-  const {appUi, richRenderEpoch} = useNovelMaster();
+  const { appUi, richRenderEpoch } = useNovelMaster();
 
   const scope = useChatTabScope({
     runtime,
@@ -203,12 +203,12 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     onAfterExternalReload: scope.refreshChatTokenLabel,
   });
 
-  const {refreshChatMeta} = scope;
+  const { refreshChatMeta } = scope;
   useEffect(() => {
     if (scope.chatSubview === 'conversation' && sessionId != null) {
       refreshChatMeta().catch(() => undefined);
     }
-  }, [scope.chatSubview, sessionId, projectId, refreshChatMeta]);
+  }, [scope.chatSubview, sessionId, refreshChatMeta]);
 
   // 订阅子会话创建事件：task 工具执行中（createChildSession）即发出，
   // 用 title → childSessionId 维护映射，让 pending 卡片也能点击进入子会话浏览。
@@ -256,7 +256,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   const [mermaidViewerOpen, setMermaidViewerOpen] = useState(false);
   const [mermaidViewerCloseSignal, setMermaidViewerCloseSignal] = useState(0);
   const [messageEditPrompt, setMessageEditPrompt] = useState<
-    {messageId: string; initialText: string} | undefined
+    { messageId: string; initialText: string } | undefined
   >();
   const [chatTranscriptEngine, setChatTranscriptEngine] =
     useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
@@ -270,9 +270,9 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   });
 
   const onStreamResetRef = useRef<() => void>(() => undefined);
-  const applySegmentsRef = useRef<
-    (segments: readonly StreamWireChunk[]) => void
-  >(() => undefined);
+  const applySegmentsRef = useRef<(segments: readonly StreamWireChunk[]) => void>(
+    () => undefined,
+  );
   const agentRunningRef = useRef(false);
   const chatMessageCountRef = useRef(0);
 
@@ -307,7 +307,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   }, [sessionId]);
 
   const handleMessagesChanged = useCallback(
-    (options?: {immediate?: boolean}) =>
+    (options?: { immediate?: boolean }) =>
       messages
         .handleMessagesChanged(scope.refreshChatTokenLabel, {
           agentRunning: agentRunningRef.current,
@@ -444,7 +444,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       chatMessages: messages.chatMessages,
       hasMoreMessages: messages.hasMoreMessages,
       loadingMoreMessages: messages.loadingMoreMessages,
-      onMessagesChanged: () => handleMessagesChanged().catch(() => undefined),
+      onMessagesChanged: () =>
+        handleMessagesChanged().catch(() => undefined),
       canResumeWithoutInput: messages.canResumeWithoutInput,
       lastMessageIsPlainUserText: messages.lastMessageIsPlainUserText,
       draftRestoreToken: messages.draftRestoreToken,

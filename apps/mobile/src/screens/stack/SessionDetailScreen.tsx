@@ -30,30 +30,29 @@ import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {runCompaction} from '@novel-master/core/compaction';
-import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
-import {ModelPickerModal} from '@/components/provider/ModelPickerModal';
-import {useRuntime} from '@/hooks/useRuntime';
+import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
+import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
+import {useRuntime} from '../../hooks/useRuntime';
 import {
+  AGENT_LOCK_TOAST_STATEMENT,
   isAgentLocked,
   isModelLocked,
   loadChatAgentMeta,
+  MODEL_LOCK_TOAST,
   type ChatAgentMeta,
-} from '@/services/chat-agent-meta';
-import {useTheme} from '@/theme/ThemeProvider';
-import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
-import {isMobileAgentActive} from '@/runtime/agent-activity';
-import {refreshComposerStatusAfterFloorOrCompaction} from '@/services/project-composer-status.service';
-import type {RootStackParamList} from '@/navigation/types';
+} from '../../services/chat-agent-meta';
+import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
+import {isMobileAgentActive} from '../../runtime/agent-activity';
+import {refreshComposerStatusAfterFloorOrCompaction} from '../../services/project-composer-status.service';
+import type {RootStackParamList} from '../../navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SessionDetail'>;
 type ScreenNavigation = NativeStackNavigationProp<
   RootStackParamList,
   'SessionDetail'
 >;
-
-const AGENT_LOCK_TOAST = '当前会话未绑定有效智能体，无法在会话内切换。';
-const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 
 export function SessionDetailScreen() {
   const {tokens} = useTheme();
@@ -124,7 +123,7 @@ export function SessionDetailScreen() {
 
   const openAgentPicker = useCallback(() => {
     if (agentLocked) {
-      showToast(AGENT_LOCK_TOAST);
+      showToast(AGENT_LOCK_TOAST_STATEMENT);
       return;
     }
     setAgentPickerOpen(true);
@@ -174,9 +173,7 @@ export function SessionDetailScreen() {
                 });
                 showToast('已压缩');
                 // 通知聊天页刷新消息列表（压缩后旧消息 hidden 已置 true，聊天页需 reload 才能渲染降透明度）
-                DeviceEventEmitter.emit('session-transcript-changed', {
-                  sessionId,
-                });
+                DeviceEventEmitter.emit('session-transcript-changed', {sessionId});
               }
               await load();
             } catch (error) {
@@ -223,8 +220,7 @@ export function SessionDetailScreen() {
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled"
-    >
+      keyboardShouldPersistTaps="handled">
       {/* 聊天名：大字标题 + 弱化铅笔暗示可编辑，点击切到 TextInput inline 编辑。 */}
       <View style={styles.titleBlock}>
         {editingTitle ? (
@@ -248,12 +244,10 @@ export function SessionDetailScreen() {
             testID="session-title"
             onPress={startEditTitle}
             accessibilityLabel="编辑会话名称"
-            style={styles.titleRow}
-          >
+            style={styles.titleRow}>
             <Text
               style={[styles.titleValue, {color: tokens.text}]}
-              numberOfLines={2}
-            >
+              numberOfLines={2}>
               {sessionTitle || '（未命名）'}
             </Text>
             <Text style={[styles.titleEditGlyph, {color: tokens.textTertiary}]}>
@@ -276,11 +270,12 @@ export function SessionDetailScreen() {
             borderColor: tokens.borderLight,
             opacity: agentLocked ? 0.6 : 1,
           },
-        ]}
-      >
+        ]}>
         <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
           <Text style={styles.iconGlyph}>🤖</Text>
         </View>
         <View style={styles.cardBody}>
@@ -289,13 +284,12 @@ export function SessionDetailScreen() {
           </Text>
           <Text
             style={[styles.cardValue, {color: tokens.text}]}
-            numberOfLines={1}
-          >
+            numberOfLines={1}>
             {meta.agentName}
           </Text>
           {agentLocked ? (
             <Text style={[styles.lockHint, {color: tokens.textTertiary}]}>
-              {AGENT_LOCK_TOAST}
+              {AGENT_LOCK_TOAST_STATEMENT}
             </Text>
           ) : null}
         </View>
@@ -317,11 +311,12 @@ export function SessionDetailScreen() {
             borderColor: tokens.borderLight,
             opacity: modelLocked ? 0.6 : 1,
           },
-        ]}
-      >
+        ]}>
         <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
           <Text style={styles.iconGlyph}>⚡</Text>
         </View>
         <View style={styles.cardBody}>
@@ -330,8 +325,7 @@ export function SessionDetailScreen() {
           </Text>
           <Text
             style={[styles.cardValue, {color: tokens.text}]}
-            numberOfLines={1}
-          >
+            numberOfLines={1}>
             {meta.modelLabel}
           </Text>
           {modelLocked ? (
@@ -359,11 +353,12 @@ export function SessionDetailScreen() {
             backgroundColor: tokens.surface,
             borderColor: tokens.borderLight,
           },
-        ]}
-      >
+        ]}>
         <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
           <Text style={styles.iconGlyph}>🔍</Text>
         </View>
         <View style={styles.cardBody}>
@@ -389,11 +384,12 @@ export function SessionDetailScreen() {
             backgroundColor: tokens.surface,
             borderColor: tokens.borderLight,
           },
-        ]}
-      >
+        ]}>
         <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
           <Text style={styles.iconGlyph}>📄</Text>
         </View>
         <View style={styles.cardBody}>
@@ -419,11 +415,12 @@ export function SessionDetailScreen() {
             backgroundColor: tokens.surface,
             borderColor: tokens.borderLight,
           },
-        ]}
-      >
+        ]}>
         <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
           <Text style={styles.iconGlyph}>🗜️</Text>
         </View>
         <View style={styles.cardBody}>
@@ -449,11 +446,12 @@ export function SessionDetailScreen() {
             backgroundColor: tokens.surface,
             borderColor: tokens.borderLight,
           },
-        ]}
-      >
+        ]}>
         <View
-          style={[styles.iconBox, {backgroundColor: tokens.primary + '1A'}]}
-        >
+          style={[
+            styles.iconBox,
+            {backgroundColor: tokens.primary + '1A'},
+          ]}>
           <Text style={styles.iconGlyph}>🧩</Text>
         </View>
         <View style={styles.cardBody}>
@@ -501,12 +499,7 @@ const styles = StyleSheet.create({
   root: {flex: 1},
   scroll: {flex: 1},
   scrollContent: {paddingHorizontal: 16, paddingTop: 32, paddingBottom: 40},
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
+  center: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
   titleBlock: {marginBottom: 24, paddingHorizontal: 4},
   titleRow: {
     flexDirection: 'row',

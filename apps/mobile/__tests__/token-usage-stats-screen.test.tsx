@@ -143,10 +143,8 @@ jest.mock('@/services/agent-display-label', () => ({
   resolveCurrentAgentDisplayLabel: jest.fn(async () => 'Agent'),
 }));
 
-import {
-  TokenUsageStatsScreen,
-  isCustomRangeValid,
-} from '@/screens/stack/TokenUsageStatsScreen';
+import {TokenUsageStatsScreen} from '@/screens/stack/TokenUsageStatsScreen';
+import {isCustomRangeValid} from '@/screens/stack/token-usage/format';
 import {MonthRangePickerSheet} from '@/components/ui/MonthRangePickerSheet';
 import {ProfileTabScreen} from '@/screens/tabs/ProfileTabScreen';
 

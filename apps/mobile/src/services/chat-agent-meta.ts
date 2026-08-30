@@ -13,8 +13,8 @@ import {
   resolveSavedModelId,
 } from '@novel-master/core/agent';
 import {ChatError} from '@novel-master/core/chat';
-import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {resolveModelDisplayLabel} from '@/provider/model-display-label';
+import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {resolveModelDisplayLabel} from '../provider/model-display-label';
 
 /**
  * modelSource 与 desktop `PromptAgentMetaResponse.modelSource` 同语义
@@ -106,6 +106,22 @@ export async function loadChatAgentMeta(
     throw error;
   }
 }
+
+/**
+ * 锁定提示文案统一收口（screens/C-11）。
+ *
+ * AGENT_LOCK_TOAST 两处文案是有意分化，不是漂移：
+ * - 会话面板（chat tab）用引导语，把用户引去会话详情配置；
+ * - 会话详情页用陈述语，说明当前页内不可切换。
+ */
+/** 会话面板锁定提示：引导去会话详情确认配置。 */
+export const AGENT_LOCK_TOAST_GUIDE =
+  '当前会话未绑定有效智能体，请到会话详情确认智能体配置';
+/** 会话详情页锁定提示：陈述本页不可切换。 */
+export const AGENT_LOCK_TOAST_STATEMENT =
+  '当前会话未绑定有效智能体，无法在会话内切换。';
+/** 模型锁定提示：会话面板与会话详情页共用同一文案。 */
+export const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 
 /**
  * Agent 是否被锁定（不可在会话内切换）。
