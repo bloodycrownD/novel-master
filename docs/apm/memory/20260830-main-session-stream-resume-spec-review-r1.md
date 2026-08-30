@@ -76,3 +76,73 @@ dependency: []
 - P2×3：① L24 故障机理二表述与 queueStreamDelta 实际行为不符（实为静默丢弃 + 本 mount 永不重注入，修复方向不受影响但误导实现者）；② sessionKey 构成未定义、transcriptWebRef.current 变 null 非 React 可观测信号（应注明由 chatSubview/sessionKey 伴随）；③ 注入 effect 若内联 Provider，T-R3/R4/R5/R8 只能测复刻品，建议明确抽 hook。
 
 建议：修掉 P1 一处文档矛盾后即 execute-ready。
+
+# 主会话流式重进恢复 verify-resume（独立复跑验证，readonly）
+
+## 请求
+
+节点 verify-resume：在 worktree `.woktree/stream-resume`（分支 feat/main-session-stream-resume，HEAD 66de06f）以非实现者身份复跑验证——jest 全量、tsc、git log/diff 核对改动范围、抽查 spec 四项关键设计与实现一致性。不改任何代码/文档。
+
+## 结果
+
+- **jest 全量**：184 套件 / 1069 测试全过（含 use-chat-stream-resume、use-agent-run-lifecycle、subagent-run-probe、use-chat-stream-runtime、chat-tab-screen 相关）。
+- **tsc**：正式口径 `tsc --noEmit -p tsconfig.build.json` 通过（exit 0）；裸 `npx tsc --noEmit` 在本分支报 373 错、在 main 同样报 367 错——`tsconfig.json` include `__tests__` 又 exclude `src/web/**`，测试文件 import web 文件必然 TS6307，属现存配置问题非本分支引入；分支相对 main 净增 6 错全在新增的 `use-chat-stream-resume.test.ts`（TS2556×2 + TS18046×4，正式口径 exclude 测试故不可见）。
+- **提交/范围**：main..HEAD 共 4 commit（daf446a/2db9f20/bb3c048/66de06f），改动 10 文件 +1081/-33，全部在 apps/mobile，core/desktop 零改动，与预期清单一致（另含两个 chat-tab-screen 测试各 +15，属测试文件范围）。
+- **spec 四项抽查全过**：①恢复窗口无超时（resumeWindowRef 无定时器，关窗仅反填/resetUiForSessionChange 两处）；②accept 带副作用同步反填（acceptRunEvent L130-139 同步关窗+syncActiveRunId，先于 onRunFinished 内部守卫）；③复位三信号挂 state 依赖（useChatStreamResumeInject L87-99，effect 依赖 [chatSubview, sessionKey]，transcriptWebRef.current===null 为防御性断言）；④注入 hook 独立文件（useChatStreamResumeInject.ts 新增 152 行）。
+- 备注：spec「useSessionStream 目前没传 onStepCommitted」指 Provider 装配层没传（main 上 ChatTabProvider 0 处），hook 本身 L73 已支持——本分支在 Provider 接 handleStepCommitted → inject.resetInjection()，符合意图。测试用例放新文件 use-chat-stream-resume.test.ts（626 行）而非 spec 提的 use-chat-stream-runtime.test.ts 补充，属文件组织差异。
+
+结论：PASS，无阻塞问题。
+
+## 第 2 轮：diff 评审（review-resume，2026-08-30）
+
+readonly 评审 feat 分支 diff（6c8a872..66de06f，4 commits），模式 diff 单轮深审，维度 B–K 全维含 C-orch。核实：4 个测试套件 30 例全绿 + subagent-run-probe 7 例不回归；正式 typecheck（tsconfig.build.json）通过；裸 tsc（tsconfig.json）6 处瑕疵属实（TS2556×2 L35/36 + TS18046×4 L129-161，均在新测试文件 use-chat-stream-resume.test.ts，正式口径不含 tests 目录故不受影响）。结论：通过（无 P0/P1 must-fix；4 条 P2：裸 tsc 6 处类型瑕疵、顺序约束未显式锁定、T-R3 顺序断言为代理、主会话收尾探针发起窗口误判——后三条建议随下轮顺手修或记 open question）。cr-func 两条已知偏离维持 open。
+
+# 主会话流式重进恢复 spec-fix-resume（fix-spec 撰写，2026-08-30）
+
+## 请求
+
+节点 spec-fix-resume：只改文档不改实现。在 worktree `.woktree/stream-resume`（base_sha 6c8a872，head_sha 66de06f）创建 `docs/Iterations/main-session-stream-resume/cr-fix-spec.md`，写入 review-resume round 1 的 4 条 must-fix（均 P2）、open_questions 附录、spec deviations 节、K 节建议。
+
+## 结果
+
+- 新建 `cr-fix-spec.md`（元信息 review_round=1 / dag_version=2 / 状态=draft）：
+  - MF-1 测试文件裸 tsc 6 处类型瑕疵（TS2556×2 mockFlushRunUi/mockFlushAgentStepUi spread 无 rest 目标；TS18046×4 mockRuntime: unknown 属性访问 + 2 处 as never）；改法=mock 写显式 rest 签名 + mockRuntime 给具体形状（或 satisfies）；验收=裸 tsc 相对 main 净增清零 + 正式口径零报错（裸 tsc 全仓 main 上即有 367 处配置类既有错误，已写明口径避免不可达验收）。
+  - MF-2 两处 effect 顺序约束仅靠排列维持：useChatStreamResumeInject 复位 effect→注入 effect；ChatTabProvider reset effect→useRunResumeProbe。改法=声明处显式中文注释（「不得移到 XX 之后」+理由），守护测试可选（行为级挂 T-R5/T-R1）；验收=注释存在。
+  - MF-3 T-R3 补 mountFull 路径「先 snapshot 后 inject」顺序断言（mock postToWeb 序列，断言 sessionSnapshot 序号先于注入 delta）；验收=新用例绿。
+  - MF-4 beginUiRun→core register 窗口内探针误收尾致真 RUN_STARTED 被 stale 拒收；建议方案 a 发起保护窗（beginUiRun 时间戳，N 建议 2~3s 内不收尾），备选方案 b 同 session RUN_STARTED 重激活；验收=「保护窗内探针不收尾」用例。
+- open_questions 4 条：MF-4 修或接受（建议修）、主/子会话收尾 reload 语义等价性、裸 tsc 是否纳入 CI、Step 5 真机验收待执行。
+- deviations：注入 hook 在 screens/tabs/chat-tab/ 而非 spec 的 hooks/（按现状收窄，建议后续同步 spec 措辞）；顺序约束未显式说明=MF-2（修复后 fixed）。
+- K 节：MF-1→MF-4 顺序修复；复跑 apps/mobile jest 全量 + npm run typecheck + 裸 tsc 净增核对；真机验收维持 Step 5 口径。
+- 未触碰 prd.md / spec.md / 任何实现代码。
+
+# 主会话流式重进恢复 review-full-resume（fix-spec 第 2 轮校验，2026-08-30）
+
+## 请求
+
+readonly 校验 cr-fix-spec.md（节点 review-full-resume，模式 full 第 2 轮）：逐条核对 4 条 must-fix 覆盖度与可执行性、抽查 MF-4/MF-1 改法可落地性、spec_deviations 表述、有无新问题，给出 fix-spec-ready 结论。
+
+## 结果
+
+- 实测裸 tsc：分支 373 = main 基线 367 + 净增 6（TS2556×2 L35/36、TS18046×4 L129/137/148/161，全在新测试文件），fix-spec 数字与口径完全自洽；测试文件为本次新增且 tsconfig 未动，「相对 main 净增清零」可简化为「该文件 0 报错」，可测。
+- MF-4 竞态链全链核实：beginUiRun→onRunUiActivate→abort.markRunStarted（Provider L302 接线）；探针 onRunEnded→abort.markRunEnded 翻 uiRunning=false；core 侧 shouldIgnoreStaleRunStarted 即 !uiRunning，真 RUN_STARTED 必被拒。方案 a 可落地：时间戳记 lifecycle.beginUiRun（或 abort.markRunStarted），守卫放 Provider onRunEnded 闭包（前台探针+30s 轮询同汇此点），use-run-resume-probe.ts 无需改；T-R6 为隔离 hook 测试不受影响。注意点：时间戳若记在 abort.markRunStarted，探针合成恢复也会刷窗、兜底收尾最多延迟 N 秒（仅 backstop，事件路径不受影响）——建议记在 beginUiRun。
+- MF-3 发现落地口径需钉死：sessionSnapshot 由真 ChatTranscriptWebView 经 ChatTranscriptBridge postToWeb 发出（handle 上只有 pushStreamDelta），现有 mountInject harness（mock handle）观测不到 snapshot——补顺序断言需 mock bridge postToWeb + 更宽挂载（集成级），否则易写成同义反复。
+- MF-2 核实两处约束排列属实；小瑕疵：问题陈述说「无注释」，但 Provider L330-334 已有描述性顺序注释（改法自己也承认），措辞内部略不一致。
+- spec_deviations 两条与 spec 原文（L55/L40-42）核对属实：仅注入 hook 落 screens/，use-run-resume-probe.ts 本身落在 hooks/。
+- 结论 fix-spec-ready: yes（附 3 条非阻断建议：MF-3 钉测试层级、MF-2 措辞对齐、MF-4 时间戳位置首选 beginUiRun）。
+
+# cr-func-cr-resume 闭合小检（2026-08-30）
+
+## 请求
+
+readonly 功能小检节点 cr-func-cr-resume：波次 git diff 49e44c1..64172b4（5 提交，MF-1~MF-4 + memory）。检查 A（4 条 P2 实质闭合，抽查 MF-3 层级与 MF-4 两向）、G（verify 证据链）、spec_deviations（两处已登记偏离核实 + 新偏离排查）。
+
+## 结果
+
+- MF-1 闭合属实：mock 目标函数补 rest 签名消 2 处 TS2556；mockRuntime 以 satisfies 对齐 AgentAbortRegistry/AgentStreamRegistry、移除 as never，4 处 TS18046 消除。实测裸 tsc 该文件 0 报错。
+- MF-2 闭合属实：两处「不得移到 XX 之后」注释各带理由与行为守护指向（T-R5/R5b、T-R1），符合 fix-spec 验收格式。
+- MF-3 闭合属实且层级合规：集成级挂真 ChatTranscriptWebView，mock 落在 react-native-webview 组件的 postMessage 边界（test-utils/react-native-webview-mock），snapshot（组件 L472）与注入 streamDelta 走同一真 bridge 通道，非自造通道；断言首条 sessionSnapshot 序号 < streamDelta 且 delta 内容即 registry partial；提交信息记录了反转变红自检。
+- MF-4 闭合属实：RUN_LAUNCH_PROTECT_WINDOW_MS=3s + beginUiRunAtRef 均在 useAgentRunLifecycle（时间戳记 beginUiRun 而非 markRunStarted，符合 fix-spec 提示）；守卫单点在 Provider onRunEnded 闭包，覆盖前台探针与 30s 轮询；测试两向齐（窗内 800ms 复询不收尾 + 过期后收尾 uiRunning 归 false）。注意：该用例在 mountFull 组装级复刻守卫，非 Provider 级直测（fix-spec 未钉死层级，可接受）。
+- 证据链抽查：两测试文件 jest 13 例实跑全绿；根目录 npm run typecheck 实跑通过；裸 tsc 全仓 368 处，use-chat-stream-resume.test.ts 0 报错（MF-1 验收达标）。
+- 发现 verify 摘要不精确（非阻断）：「裸 tsc 净增 0」仅在 MF-1 目标文件口径成立；本波在 chat-tab-screen.integration.test.tsx 实际净增 2 处裸 tsc 报错——TS6307×1（新 import test-utils/react-native-webview-mock，目录不在 tsconfig include，与 Open Question 3 同类既有配置问题）+ TS2454×1（新用例 L462 `let tree` used before assigned，既有用例同款 pattern）。正式口径不受影响。
+- 两处已登记偏离核实均无害：常量挪 useAgentRunLifecycle（避免测试 import Provider 拖重链，且与时间戳同源）；MF-4 先于 MF-3 提交（两提交独立，最终树一致）。新见未登记项：MF-3 顺带把 integration 的 transcript 引擎 mock 改为按用例可控变量（默认 legacy-rn 不变，属测试基建细节，不算 spec 偏离）。
+- 结论 func-ready: yes（附 1 条建议：下轮文档修订时把 verify 口径收窄为「目标文件净增 0」，或顺手清 integration 文件那 2 处裸 tsc 新增）。

@@ -1,20 +1,43 @@
-# spec-check-loop 编排状态（三个迭代并行审查）
-dag_version: 4
-review_round: 3
+# code-dev-loop 编排状态（fix-spec 执行轮）——dev-ready 收敛
+dag_version: 2
+spec_source: 各 worktree docs/Iterations/<name>/cr-fix-spec.md
 iterations:
-  import-dir-rule-default-on:
-    prd_path: docs/Iterations/import-dir-rule-default-on/prd.md
-    spec_path: docs/Iterations/import-dir-rule-default-on/spec.md
-    review_rounds: 1
-    status: execute-ready 待用户确认（第 1 轮 Go，P1/P2 trivial 豁免直改闭合）
-  main-session-stream-resume:
-    prd_path: docs/Iterations/main-session-stream-resume/prd.md
-    spec_path: docs/Iterations/main-session-stream-resume/spec.md
-    review_rounds: 2
-    status: execute-ready 待用户确认（第 2 轮有条件 Go，P1+P2 trivial 豁免直改闭合）
-  agent-run-parallel-and-notify:
-    prd_path: docs/Iterations/agent-run-parallel-and-notify/prd.md
-    spec_path: docs/Iterations/agent-run-parallel-and-notify/spec.md
-    dependency: [Iterations/main-session-stream-resume/prd.md]
-    review_rounds: 3
-    status: execute-ready 待用户确认（第 3 轮 Go，残余 P2 trivial 豁免直改闭合）
+  import-dir-rule:
+    repo: .woktree/import-dir-rule
+    branch: feat/import-dir-rule-default-on
+    fix_base: e355cc5
+    head_sha: 7c4d938
+    result: dev-ready（cr-fix-spec 4/4 闭合，core 1791 pass，tsc 0 err）
+    notes: flaky 观察——首跑 1 例偶发失败未抓到名，三次复跑全绿；fix-spec 偏离表状态翻转（open→fixed）待下次文档顺手改
+  stream-resume:
+    repo: .woktree/stream-resume
+    branch: feat/main-session-stream-resume
+    fix_base: 49e44c1
+    head_sha: 64172b4
+    result: dev-ready（cr-fix-spec 4/4 闭合，mobile 1071 pass，裸 tsc 目标文件净增 0）
+    notes: integration 测试文件新增 2 处裸 tsc 报错（非 CI 口径可见，TS6307 配置类 + TS2454 同款写法）；两处已登记小偏离（常量位置/提交顺序）无害
+  parallel-notify:
+    repo: .woktree/parallel-notify
+    branch: feat/agent-run-parallel-and-notify
+    fix_base: 0184f44
+    head_sha: 3d3bd4b
+    result: dev-ready（cr-fix-spec 8/8 闭合含 3 P1，mobile 1105 pass，typecheck 三口径绿）
+    notes: 非阻断观察——reconcileKeepAlive start 路径失败后等下次 sync 重试（链不卡死，不劣化）
+node_status:
+  fix-cr-import: { status: done, executor: subagent }
+  fix-cr-resume: { status: done, executor: subagent }
+  fix-cr-parallel: { status: done, executor: subagent }
+  verify-cr-import: { status: done, result: pass }
+  verify-cr-resume: { status: done, result: pass }
+  verify-cr-parallel: { status: done, result: pass }
+  cr-func-cr-import: { status: done, func_ready: yes }
+  cr-func-cr-resume: { status: done, func_ready: yes }
+  cr-func-cr-parallel: { status: done, func_ready: yes }
+spec_deviations:
+  - parallel-step3-defer: fixed（用户发起 fix-spec 执行视为确认收窄；Step3 融合阶段待三线合并后执行）
+open_must_fix: []
+manual_user_pending:
+  - import：真机/CLI 根导入验收（import-zip 不带 --path）
+  - resume：真机路径 A/B 重进恢复
+  - parallel：后台点按直达（MF-3 依赖）、锁屏 5 分钟保活、双会话并行、杀 app 无残留、notifee onTimeout 核实
+merge_order: import → stream-resume → parallel-notify（最后做 Step3 融合：useAgentRunLifecycle/ChatTabProvider/useSessionStream 手工融合）

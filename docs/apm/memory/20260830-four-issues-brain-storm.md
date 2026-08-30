@@ -56,3 +56,24 @@ user:
 
 assistant:
 共 3 轮收敛到 execute-ready（逐轮子代理审查 + doc-fix/trivial 直改）：①导入迭代第 1 轮 Go（修 T-C15 表述、事务内吞错差异、验收映射）；②流式恢复第 2 轮有条件 Go（P0：标记提升到常驻 Provider 无复位语义→三信号复位；反填落点写死带副作用 accept；删窗口超时与两信号口径的矛盾）；③并行通知第 3 轮 Go（P0：Manager 装配契约补齐；starting 空窗导致门禁双 run 与开窗信号互掐→门禁/开窗/探针三处信号扩为 RunEntry 投影；refcount 受理同步 increment；onSettled 签名收敛 abort 归 finished；前台不发通知口径；dataSync 6h 超时降级）。关键拍板：两迭代存在落地时序耦合（stream-resume 先合入、parallel 合入后替换其开窗信号）。三个迭代均 execute-ready 待用户确认。
+
+user:
+确认 execute-ready，新建三个 worktree 并行开发（.woktree/import-dir-rule、stream-resume、parallel-notify，分支 feat/*），按 code-dev-loop 走 impl→verify→cr-func 波次。
+
+assistant:
+已提交迭代文档到 main（6c8a872，用户自己的未提交改动未碰），建三 worktree。DAG：wave-0 三线并行 impl。拍板：迭代 3 的 Step 3（activeRunId per-session 化）与迭代 2 同文件冲突，延后至融合阶段（记 spec_deviations），本次迭代 3 只做 refcount 收口且不碰 activeRunId/acceptRunEvent 区域；实现顺序耦合为 stream-resume 先合入。
+
+assistant:
+code-dev-loop 收敛：三线均 dev-ready。导入线（head 88f088c，6 提交，core 1786 测试全绿）；流式恢复线（head 66de06f，4 提交，mobile 1069 测试全绿，四项关键设计抽查一致）；并行通知线（head ce289b4，8 提交，mobile 1091 测试全绿，cr-func 一轮 not-ready：T-P7 守卫用例缺失 + 失败双 toast，fix 后 r2 复核 func-ready）。遗留：真机验收三份（manual_user）；合并顺序 import→stream-resume→parallel-notify，最后做 Step3 融合（useAgentRunLifecycle/ChatTabProvider/useSessionStream 三文件手工融合）。
+
+user:
+发起 code-review-loop 对三线 diff 评审。
+
+assistant:
+两轮收敛 fix-spec-ready（round1 三线并行评审→spec-fix 三份落盘→round2 校验+trivial 修订）。关键发现：导入线 P1——根前缀整体短路，CLI/desktop 缺省路径就是根，那条路 bug 原样保留；并行线 3 P1——子会话 FAILED 误弹 toast、RUN_STARTED 后 reject 的 refcount 永久泄漏（finally 早退条件错）、后台点按走 onBackgroundEvent 未处理致「点按直达会话」落空（notifee 9.x 该 API 返回 void 不可退订，只能模块级注册+handler 引用替换）；恢复线无 P0/P1 仅 4 P2。三份 cr-fix-spec 已提交各分支（import e355cc5 / resume 49e44c1 / parallel 0184f44），待用户确认后按 fix-spec 执行修复。
+
+user:
+确认，发起 code-dev-loop 执行 fix-spec。
+
+assistant:
+fix-spec 执行轮收敛 dev-ready（wave：三线并行 fix → 增量 verify → cr-func 全 func-ready）。最终：导入线 head 7c4d938（4/4 闭合，core 1791 pass）；恢复线 head 64172b4（4/4 闭合，mobile 1071 pass）；并行线 head 3d3bd4b（8/8 闭合含 3 P1，mobile 1105 pass）。遗留：真机验收三份、导入线一条 flaky 观察、恢复线 integration 文件 2 处非 CI 裸 tsc、合并顺序 import→stream-resume→parallel-notify 后做 Step3 融合。

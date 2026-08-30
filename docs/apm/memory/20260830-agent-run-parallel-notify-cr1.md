@@ -1,6 +1,7 @@
 # agent-run-parallel-and-notify 第 1 轮 CR 修复（spec-parallel + prd-parallel）
 
 <!-- 第 2 轮追加见文末 -->
+<!-- 第 3 轮（impl）追加见文末 -->
 
 日期：2026-08-30
 
@@ -48,3 +49,26 @@
 
 - `docs/Iterations/agent-run-parallel-and-notify/spec.md`（第 0/1/2 块、装配契约、融合小节、变更点清单、Step 1/3、T-P2/T-P11、风险段）
 - `docs/Iterations/agent-run-parallel-and-notify/prd.md`（验收标准）
+
+## 第 3 轮：impl 实现（2026-08-30，impl-parallel 节点）
+
+### 请求
+
+在 worktree `.woktree/parallel-notify`（分支 `feat/agent-run-parallel-and-notify`）按最终 spec 实现 Step 1/2/4/5(代码)/6：Manager + 装配、ChatComposer 迁移、通知模块、前台保活代码、偏好开关与单测；Step 3 主体（activeRunId per-session 化与 ChatTabProvider/useSessionStream context 改造）延后与 main-session-stream-resume 融合；Step 5/7 真机验证不做。
+
+### 实现要点（含与 spec 的小差异记录）
+
+- **依赖**：`@notifee/react-native` 锁 `9.1.8`（npm 精确版本）。注意项目真 lockfile 是 `package-lock.json`（npm workspaces）；worktree 里 `pnpm install` 只装根目录依赖且会生成 untracked 的 `pnpm-lock.yaml`（已删），mobile 依赖需 npm install。
+- **AgentRunManager**（`services/agent-run-manager.service.ts`）：门禁（RunEntry starting/running 或 abortRegistry.has）、受理同步 increment、事件驱动 decrement（RUN_STARTED 只迁移 entry）、finally 早退兑底（`current !== entry || current.runId != null` 提前 return 防双减）、dispose 清零；桥三件套（uiBridge→showAppToast / prefBridge / scopeBridge）。
+- **小差异（按 spec 意图）**：工厂返回 `MobileRuntimeCore = Omit<runtime,'agentRunManager'>`，Provider bootstrap 内 `Object.assign(rt, {agentRunManager: new AgentRunManager(...)})` 装配——保持「Provider 内实例化」的 spec 钉死，同时工厂纯度不破坏；useAgentRunLifecycle 中 onRunFinished/onRunFailed 的 decrement 也一并移除（spec 只点名 beginUiRun/endUiRunOnError，但保留会与 Manager 双减）。
+- **通知模块**（`services/agent-finished-notification.ts`）：AppState 前台不发、同会话失败 5 分钟合并、Android 13+ 权限拒绝后不再申请、dataSync 前台服务（模块级 keepAliveRunning 标记跨 Manager 实例共享）、点按→scopeBridge.setCurrentSession + navigateToChatTabFromNotification。
+- **测试坑**：mock runAgentTurn 立即 resolve 会触发 finally 早退把 entry 清掉——事件驱动型用例必须让 mock 挂起或同步 publish 事件；`Platform.OS = 'android'` / `Object.defineProperty(AppState,'currentState')` 是前台后台/权限断言的 mock 手段；notifee 全局 Jest stub 在 `test-utils/notifee-mock.ts` + jest.config moduleNameMapper。
+- **环境坑**：worktree 里 workspace 包 dist 缺失会让 5 个无关 suite 挂（cloud-sync / connection / db-backup 等）——先 build cloud-sync-driver-s3 / tdbc-driver-op-sqlite / tokenizer-driver-rn 等再跑全量。
+
+### 提交
+
+5 个 commit：deps（notifee）、notify（封装+Manifest+ref）、manager（Manager+装配+lifecycle 收口）、composer（迁移）、pref（开关）。
+
+### 验证
+
+`npx jest` 186 suites / 1083 tests 全绿；`npm run build` + `npm run typecheck` 通过；eslint error 数与基线持平（22=22，存量）。
