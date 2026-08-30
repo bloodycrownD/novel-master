@@ -931,4 +931,52 @@ describe("VfsZipIoService", () => {
     assert.equal(worldbook.ruleEnabled, false);
   });
 
+  it("T-Z8: 导入到根——前缀下子目录补默认启用行、根自身 / 无规则行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-tz8-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // directoryPath 缺省即根（CLI import-zip 不带 --path 的主场景）
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(
+      scope,
+      buildVfsZip(
+        new Map([
+          ["设定集/显式目录条目.md", "显式"],
+          ["世界书/章节/深层/设定.md", "深层设定"],
+        ]),
+        ["设定集/"],
+      ),
+      { confirmed: true, directoryPath: "/" },
+    );
+
+    const wt = createWorkplaceService(ctx.conn, scope);
+    for (const dir of [
+      "/设定集",
+      "/世界书",
+      "/世界书/章节",
+      "/世界书/章节/深层",
+    ]) {
+      const rule = await wt.getDirRule(dir);
+      assert.ok(rule, `${dir} 应有默认规则行`);
+      assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
+      assert.equal(rule.headCount, 0);
+      assert.equal(rule.tailCount, 1000);
+      assert.equal(rule.fillPolicy, "header");
+      assert.equal(rule.scopeKey, `session:${session.id}`);
+    }
+    // 根自身 / 不补规则行
+    assert.equal(await wt.getDirRule("/"), undefined);
+    assert.equal(
+      (await vfs.read("/世界书/章节/深层/设定.md")).content,
+      "深层设定",
+    );
+  });
+
 });

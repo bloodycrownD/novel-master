@@ -88,7 +88,8 @@ export interface EnsureImportDirRulesDeps {
  * scope 键空间必须分开算：查 VFS 表用 vfs 的 `scopeKey`，读写 workplace 表用
  * `workplaceScopeKey`——两者是不同键空间（session 分别为
  * `session:${projectId}:${sessionId}` 与 `session:${sessionId}`），严禁混用。
- * 目录全集含 prefix 自身，按「无行才补」统一处理（有行不动，含 rule_off）。
+ * 目录全集含 prefix 自身；根自身 `/` 由内核跳过不补，根前缀（`/`）下其余
+ * 子目录照常求差补行（CLI / desktop 缺省导入到根的场景由此覆盖）。
  */
 export async function ensureImportDirRules(
   deps: EnsureImportDirRulesDeps
@@ -96,9 +97,6 @@ export async function ensureImportDirRules(
   const { vfsRepo, workplaceRepo, scope, directoryPath } = deps;
   try {
     const prefix = normalizePath(directoryPath);
-    if (prefix === "/") {
-      return;
-    }
     const targetScopeKey = workplaceScopeKey(scope as unknown as WorkplaceScope);
     const directories = await vfsRepo.listDirectoryPathsUnderPrefix(
       scopeKey(scope),

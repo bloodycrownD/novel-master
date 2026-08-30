@@ -1,6 +1,6 @@
 /**
- * ensureImportDirRules 单测：scope 键空间正确性、根路径跳过、空差集零写入、
- * 吞错路径，以及补入行与 setDirRule 产物的逐字段等价性。
+ * ensureImportDirRules 单测：scope 键空间正确性、导入到根（子目录补行、根自身
+ * 不补）、空差集零写入、吞错路径，以及补入行与 setDirRule 产物的逐字段等价性。
  *
  * 键空间 / 差集 / 吞错用内存 stub（不依赖真实 DB）；等价性用例走
  * novelMasterTestFixture 对照真实 WorkplaceService.setDirRule 产物。
@@ -68,9 +68,9 @@ const SESSION_SCOPE = {
 };
 
 describe("ensureImportDirRules（stub 单测）", () => {
-  it("T-I6: 根路径 / 跳过——零查询零写入", async () => {
+  it("T-I6: 导入到根——子目录补行、根自身无规则行", async () => {
     const { vfsRepo, workplaceRepo, calls } = makeStubs({
-      directories: ["/a"],
+      directories: ["/", "/a", "/a/b"],
     });
     await ensureImportDirRules({
       vfsRepo,
@@ -78,9 +78,16 @@ describe("ensureImportDirRules（stub 单测）", () => {
       scope: SESSION_SCOPE,
       directoryPath: "/",
     });
-    assert.equal(calls.vfsPrefix.length, 0);
-    assert.equal(calls.listDirRulesScopeKeys.length, 0);
-    assert.equal(calls.upserted.length, 0);
+    // 根前缀不再整体短路：照常查目录全集并求差
+    assert.deepEqual(calls.vfsPrefix, [
+      { scopeKey: "session:p1:s1", prefix: "/" },
+    ]);
+    assert.deepEqual(calls.listDirRulesScopeKeys, ["session:s1"]);
+    // 根自身 / 不补规则行，前缀下子目录全部补默认启用行
+    assert.deepEqual(
+      calls.upserted.map((rule) => rule.logicalPath),
+      ["/a", "/a/b"]
+    );
   });
 
   it("T-I6: 空差集零写入——已有行（含 rule_off）全部跳过", async () => {
