@@ -117,7 +117,11 @@ export function ModalShell({
   );
 
   const containerStyleList = [
-    variant === 'center' ? styles.center : styles.bottom,
+    variant === 'center'
+      ? styles.center
+      : variant === 'left'
+      ? styles.left
+      : styles.bottom,
     containerStyle,
   ];
 
@@ -197,6 +201,12 @@ const styles = StyleSheet.create({
   bottom: {
     flex: 1,
     justifyContent: 'flex-end',
+  },
+  // left 抽屉专用：横向布局，面板在左、遮罩占右侧剩余空间（见上方 leftBackdrop 注释）。
+  // 不能复用 bottom（纵向 flex-end 会把面板堆到屏幕底部且高度塌陷）。
+  left: {
+    flex: 1,
+    flexDirection: 'row',
   },
   panel: {},
   leftBackdrop: {
