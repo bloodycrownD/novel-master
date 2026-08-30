@@ -146,3 +146,14 @@ readonly 功能小检节点 cr-func-cr-resume：波次 git diff 49e44c1..64172b4
 - 发现 verify 摘要不精确（非阻断）：「裸 tsc 净增 0」仅在 MF-1 目标文件口径成立；本波在 chat-tab-screen.integration.test.tsx 实际净增 2 处裸 tsc 报错——TS6307×1（新 import test-utils/react-native-webview-mock，目录不在 tsconfig include，与 Open Question 3 同类既有配置问题）+ TS2454×1（新用例 L462 `let tree` used before assigned，既有用例同款 pattern）。正式口径不受影响。
 - 两处已登记偏离核实均无害：常量挪 useAgentRunLifecycle（避免测试 import Provider 拖重链，且与时间戳同源）；MF-4 先于 MF-3 提交（两提交独立，最终树一致）。新见未登记项：MF-3 顺带把 integration 的 transcript 引擎 mock 改为按用例可控变量（默认 legacy-rn 不变，属测试基建细节，不算 spec 偏离）。
 - 结论 func-ready: yes（附 1 条建议：下轮文档修订时把 verify 口径收窄为「目标文件净增 0」，或顺手清 integration 文件那 2 处裸 tsc 新增）。
+
+## 追加（2026-08-30）：CR fix-spec 闭合（fix-cr-resume 节点）
+
+- 请求：在 worktree `.woktree/stream-resume`（分支 feat/main-session-stream-resume）按 `cr-fix-spec.md` 闭合全部 4 条 P2 must-fix（MF-1 类型瑕疵 / MF-2 顺序注释 / MF-3 snapshot-inject 顺序断言 / MF-4 发起保护窗），按逻辑块中文 commit，验证 = jest 全量 + typecheck + 裸 tsc 净增清零。
+- 结果：4 条 P2 全部闭合，提交序列（rebase 后）：
+  - 6b018c5 MF-1 测试裸 tsc 6 处类型瑕疵清零（mock rest 签名 + satisfies 对齐端口形状 + 移除 as never）
+  - 880af0e MF-2 两处 effect 声明顺序约束显式注释（复位→注入 / reset→探针）
+  - afae784 MF-4 发起保护窗（时间戳记 lifecycle.beginUiRun + getBeginUiRunAt，常量 RUN_LAUNCH_PROTECT_WINDOW_MS=3s 与时间戳同放 lifecycle hook，守卫落 Provider onRunEnded 闭包；已自检去守卫用例红）
+  - 663e996 MF-3 T-R3 顺序断言（集成级挂真 ChatTranscriptWebView + webview mock postMessage 按序记录，断言 sessionSnapshot 先于注入 streamDelta；已自检 needsOpenSnapshot 改 deferred 路径用例红）
+- 验证：jest 全量 184 套 1071 例全绿；npm run typecheck 零报错；裸 tsc 本文件净增 0。
+- 偏离记录：窗口常量最初放 ChatTabProvider，因测试 import 其会拖入 @novel-master/core/skills 等重链（jest 解析失败）改为与时间戳同放 useAgentRunLifecycle；提交顺序 MF-4 先于 MF-3（MF-3 集成用例依赖更少风险后置，无正确性影响）。

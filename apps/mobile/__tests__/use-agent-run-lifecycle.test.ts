@@ -152,6 +152,89 @@ describe('useAgentRunLifecycle (slimmed)', () => {
     expect(lifecycle.acceptRunEvent('r1')).toBe(false);
   });
 
+  // ===== 恢复窗口（T-R2 / 主会话流式重进恢复） =====
+
+  it('恢复窗口开启时：activeRunId==null 下接纳任意非空 runId 并同步反填', () => {
+    const lifecycle = mountLifecycle({getResumeWindowEligible: () => true});
+    act(() => {
+      // session 切换：reset 内部按 eligible 开窗（模拟切回仍有 in-flight run 的会话）
+      lifecycle.resetUiForSessionChange();
+    });
+    expect(lifecycle.activeRunId).toBe(null);
+    // 窗口内第一条带 runId 的事件被接纳（带副作用反填）
+    let accepted = false;
+    act(() => {
+      accepted = lifecycle.acceptRunEvent('run-live-1');
+    });
+    expect(accepted).toBe(true);
+    expect(lifecycle.activeRunId).toBe('run-live-1');
+  });
+
+  it('反填后关窗：不匹配的新 runId 事件被拒（防旧 run 迟到事件干扰）', () => {
+    const lifecycle = mountLifecycle({getResumeWindowEligible: () => true});
+    act(() => {
+      lifecycle.resetUiForSessionChange();
+      lifecycle.acceptRunEvent('run-live-1');
+    });
+    expect(lifecycle.acceptRunEvent('run-stale-2')).toBe(false);
+    expect(lifecycle.activeRunId).toBe('run-live-1');
+    // 空 runId 同样拒绝
+    expect(lifecycle.acceptRunEvent(undefined)).toBe(false);
+    expect(lifecycle.acceptRunEvent('')).toBe(false);
+  });
+
+  it('eligible=false 时不开窗：activeRunId==null 下仍拒绝（现状口径不变）', () => {
+    const lifecycle = mountLifecycle({getResumeWindowEligible: () => false});
+    act(() => {
+      lifecycle.resetUiForSessionChange();
+    });
+    expect(lifecycle.acceptRunEvent('run-1')).toBe(false);
+  });
+
+  it('FINISHED 是窗口内第一条事件：accept 反填先于内部守卫，收尾正常且 refcount 平衡', () => {
+    const onRunUiDeactivate = jest.fn();
+    const lifecycle = mountLifecycle({
+      onRunUiDeactivate,
+      // 模拟状态重建已合成 markRunStarted（uiRunning=true）
+      getUiRunning: () => true,
+      getResumeWindowEligible: () => true,
+    });
+    act(() => {
+      // 切走前发起过 run（increment refcount），切回时 reset 开窗
+      lifecycle.beginUiRun();
+      lifecycle.resetUiForSessionChange();
+    });
+    expect(isMobileAgentActive()).toBe(true);
+    act(() => {
+      // 窗口内第一条事件是 FINISHED：useSessionStream 先 accept（反填）再 onRunFinished
+      expect(lifecycle.acceptRunEvent('run-live-1')).toBe(true);
+      lifecycle.onRunFinished({
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: 'run-live-1',
+        stopReason: 'end_turn',
+      });
+    });
+    // 反填先于内部守卫求值：收尾未被拒，refcount 正确递减
+    expect(lifecycle.activeRunId).toBe(null);
+    expect(onRunUiDeactivate).toHaveBeenCalledTimes(1);
+    expect(isMobileAgentActive()).toBe(false);
+  });
+
+  it('窗口内真 RUN_STARTED 到达也承担关窗并反填真实 runId', () => {
+    const lifecycle = mountLifecycle({
+      getUiRunning: () => true,
+      getResumeWindowEligible: () => true,
+    });
+    act(() => {
+      lifecycle.resetUiForSessionChange();
+      lifecycle.onRunStarted({sessionId: 's1', projectId: 'p1', runId: 'run-live-1'});
+    });
+    expect(lifecycle.activeRunId).toBe('run-live-1');
+    // 窗已关：新 runId 被拒
+    expect(lifecycle.acceptRunEvent('run-other')).toBe(false);
+  });
+
   it('getUiRunning 注入时 stale RUN_STARTED 被忽略（uiRunning=false）', () => {
     const onRunUiActivate = jest.fn();
     const lifecycle = mountLifecycle({
