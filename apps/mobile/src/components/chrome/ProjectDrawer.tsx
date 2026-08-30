@@ -16,7 +16,7 @@ import {ModalShell} from '../ui/ModalShell';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
-import {PrimaryButton} from '../ui/PrototypeButtons';
+import {PrimaryButton} from '../ui/Buttons';
 import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {formatRelativeTimeMs} from '../../utils/format-relative-time';

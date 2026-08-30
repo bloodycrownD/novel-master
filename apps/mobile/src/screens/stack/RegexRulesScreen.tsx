@@ -10,7 +10,7 @@ import { type RegexGroup, type RegexRule } from "@novel-master/core/regex";
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
-import {PrimaryButton} from '../../components/ui/PrototypeButtons';
+import {PrimaryButton} from '../../components/ui/Buttons';
 import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useFocusListReload} from '../../hooks/useFocusListReload';

@@ -96,7 +96,7 @@ jest.mock('@/components/batch/BatchCheckbox', () => ({
   BatchCheckbox: () => null,
 }));
 
-jest.mock('@/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/Buttons', () => ({
   PrimaryButton: () => null,
 }));
 

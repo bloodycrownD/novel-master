@@ -10,7 +10,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import {SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {SecondaryButton} from '@/components/ui/Buttons';
 import {useTheme} from '@/theme/ThemeProvider';
 
 /** 批量模式次操作（如 VFS 的「移动」）：主操作（删除）右侧依次渲染。 */

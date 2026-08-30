@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
-import {PrimaryButton} from '@/components/ui/PrototypeButtons';
+import {PrimaryButton} from '@/components/ui/Buttons';
 import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {

@@ -56,7 +56,7 @@ jest.mock('@/components/sheet/BottomSheetMenu', () => ({
 jest.mock('@/components/ui/ListSectionTitle', () => ({
   ListSectionTitle: () => null,
 }));
-jest.mock('@/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/Buttons', () => ({
   PrimaryButton: () => null,
 }));
 jest.mock('@/components/ui/TextPromptModal', () => ({

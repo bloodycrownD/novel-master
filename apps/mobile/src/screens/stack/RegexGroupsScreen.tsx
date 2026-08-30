@@ -24,7 +24,7 @@ import {RegexGroupPickerModal} from '../../components/regex/RegexGroupPickerModa
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
-import {PrimaryButton} from '../../components/ui/PrototypeButtons';
+import {PrimaryButton} from '../../components/ui/Buttons';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '../../hooks/useBatchSelection';

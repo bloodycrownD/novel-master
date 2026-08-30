@@ -22,7 +22,7 @@ import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BottomSheetMenu, type SheetMenuItem} from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
-import {PrimaryButton, SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {PrimaryButton, SecondaryButton} from '@/components/ui/Buttons';
 import {exportVfsZip} from '@/services/vfs-zip.service';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';

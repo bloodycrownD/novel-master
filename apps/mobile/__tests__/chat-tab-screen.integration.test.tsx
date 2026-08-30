@@ -222,7 +222,7 @@ jest.mock('../src/components/batch/BatchCheckbox', () => ({
 jest.mock('../src/components/ui/SegmentedControl', () => ({
   SegmentedControl: () => null,
 }));
-jest.mock('../src/components/ui/PrototypeButtons', () => ({
+jest.mock('../src/components/ui/Buttons', () => ({
   PrimaryButton: () => null,
 }));
 jest.mock('../src/components/ui/TextPromptModal', () => ({

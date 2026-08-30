@@ -48,7 +48,7 @@ jest.mock('@/components/sheet/BottomSheetMenu', () => ({
 jest.mock('@/components/provider/ApiKeyStatusTag', () => ({
   ApiKeyStatusTag: () => null,
 }));
-jest.mock('@/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/Buttons', () => ({
   PrimaryButton: () => null,
 }));
 jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({

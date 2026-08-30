@@ -20,7 +20,7 @@ import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {ApiKeyStatusTag} from '../../components/provider/ApiKeyStatusTag';
-import {PrimaryButton} from '../../components/ui/PrototypeButtons';
+import {PrimaryButton} from '../../components/ui/Buttons';
 import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';

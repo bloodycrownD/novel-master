@@ -26,7 +26,7 @@ import {
   skillDomainBadgeColor,
   skillDomainBadgeLabel,
 } from '@/components/skills/skill-ui';
-import {SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {SecondaryButton} from '@/components/ui/Buttons';
 import {useFocusListReload} from '@/hooks/useFocusListReload';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {RootStackParamList} from '@/navigation/types';

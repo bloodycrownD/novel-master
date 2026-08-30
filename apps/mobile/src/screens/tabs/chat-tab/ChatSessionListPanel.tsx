@@ -12,7 +12,7 @@ import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
-import {PrimaryButton} from '@/components/ui/PrototypeButtons';
+import {PrimaryButton} from '@/components/ui/Buttons';
 import {
   VfsFileManager,
   type VfsFileManagerHandle,

@@ -23,7 +23,7 @@ jest.mock('@/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('@/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/Buttons', () => ({
   SecondaryButton: () => null,
   PrimaryButton: () => null,
 }));

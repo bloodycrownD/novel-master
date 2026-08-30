@@ -32,7 +32,7 @@ import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {
   PrimaryButton,
   SecondaryButton,
-} from '../../components/ui/PrototypeButtons';
+} from '../../components/ui/Buttons';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';

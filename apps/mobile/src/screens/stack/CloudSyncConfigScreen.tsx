@@ -16,7 +16,7 @@ import {FormSwitchRow} from '@/components/form/FormSwitchRow';
 import {FormTextInput} from '@/components/form/FormTextInput';
 import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
 import {StickyFormFooter} from '@/components/form/StickyFormFooter';
-import {SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {SecondaryButton} from '@/components/ui/Buttons';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 import {useToast} from '@/components/chrome/ToastHost';

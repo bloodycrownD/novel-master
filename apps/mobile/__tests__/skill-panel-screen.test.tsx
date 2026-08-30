@@ -73,7 +73,7 @@ jest.mock('@/components/skills/NewSkillModal', () => ({
   NewSkillModal: () => null,
 }));
 
-jest.mock('@/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/Buttons', () => ({
   SecondaryButton: () => null,
   PrimaryButton: () => null,
 }));

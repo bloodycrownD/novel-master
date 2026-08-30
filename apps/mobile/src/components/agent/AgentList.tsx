@@ -24,7 +24,7 @@ import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {ElevatedCard} from '../ui/ElevatedCard';
-import {PrimaryButton} from '../ui/PrototypeButtons';
+import {PrimaryButton} from '../ui/Buttons';
 import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
