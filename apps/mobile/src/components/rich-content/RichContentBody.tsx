@@ -4,18 +4,14 @@
  */
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '@/theme/tokens';
+import type {ThemeTokens} from '../../theme/tokens';
 import {isRichContentOverLimit} from './rich-content-limits';
 
 export interface RichContentBodyProps {
   content: string;
   tokens: ThemeTokens;
-  /** @deprecated Ignored — rollback path is plain text only. */
-  variant?: 'chat-assistant' | 'chat-user' | 'file-preview';
   /** Plain-text color (default tokens.text). */
   fallbackTextColor?: string;
-  /** @deprecated Ignored — kept for call-site compatibility. */
-  renderKey?: string;
 }
 
 function RichContentBodyInner({

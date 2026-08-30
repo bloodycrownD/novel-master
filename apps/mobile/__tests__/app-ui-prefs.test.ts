@@ -4,8 +4,8 @@ import {
   APP_UI_DEFAULTS,
   APP_UI_KKV_MODULE,
   APP_UI_KEY_THEME,
-} from '@/storage/app-ui-keys';
-import {createAppUiPreferences, appUiKeys} from '@/storage/app-ui-prefs';
+} from '../src/storage/app-ui-keys';
+import {createAppUiPreferences} from '../src/storage/app-ui-prefs';
 
 function createMemoryKkv(): KkvService {
   const data = new Map<string, string>();
@@ -41,7 +41,7 @@ function createMemoryKkv(): KkvService {
 describe('createAppUiPreferences', () => {
   it('returns default theme when key is missing', async () => {
     const prefs = createAppUiPreferences(createMemoryKkv());
-    await expect(prefs.get(appUiKeys.theme)).resolves.toBe(
+    await expect(prefs.get(APP_UI_KEY_THEME)).resolves.toBe(
       APP_UI_DEFAULTS[APP_UI_KEY_THEME],
     );
   });
@@ -49,8 +49,8 @@ describe('createAppUiPreferences', () => {
   it('round-trips set and get', async () => {
     const kkv = createMemoryKkv();
     const prefs = createAppUiPreferences(kkv);
-    await prefs.set(appUiKeys.theme, 'dark');
-    await expect(prefs.get(appUiKeys.theme)).resolves.toBe('dark');
+    await prefs.set(APP_UI_KEY_THEME, 'dark');
+    await expect(prefs.get(APP_UI_KEY_THEME)).resolves.toBe('dark');
     await expect(kkv.get(APP_UI_KKV_MODULE, APP_UI_KEY_THEME)).resolves.toBe(
       'dark',
     );
@@ -58,7 +58,7 @@ describe('createAppUiPreferences', () => {
 
   it('delete is idempotent for missing keys', async () => {
     const prefs = createAppUiPreferences(createMemoryKkv());
-    await expect(prefs.delete(appUiKeys.theme)).resolves.toBeUndefined();
+    await expect(prefs.delete(APP_UI_KEY_THEME)).resolves.toBeUndefined();
   });
 
   it('returns undefined for unknown keys', async () => {

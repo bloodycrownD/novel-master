@@ -3,7 +3,7 @@ import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {Alert} from 'react-native';
 
-jest.mock('@/errors/format-error', () => ({
+jest.mock('../src/errors/format-error', () => ({
   formatError: (err: unknown) => String(err),
 }));
 
@@ -30,18 +30,18 @@ jest.mock('@novel-master/core/chat', () => {
   };
 });
 
-jest.mock('@/components/chat/FileReferencePicker', () => ({
+jest.mock('../src/components/chat/FileReferencePicker', () => ({
   FileReferencePicker: () => null,
 }));
 
-jest.mock('@/components/skills/SkillPicker', () => ({
+jest.mock('../src/components/skills/SkillPicker', () => ({
   SkillPicker: () => null,
 }));
 
-jest.mock('@/components/chat/AttachmentDraftChips', () => {
+jest.mock('../src/components/chat/AttachmentDraftChips', () => {
   const actual = jest.requireActual(
-    '@/components/chat/AttachmentDraftChips',
-  ) as typeof import('@/components/chat/AttachmentDraftChips');
+    '../src/components/chat/AttachmentDraftChips',
+  ) as typeof import('../src/components/chat/AttachmentDraftChips');
   return {
     ...actual,
     AttachmentDraftChips: () => null,
@@ -51,8 +51,8 @@ jest.mock('@/components/chat/AttachmentDraftChips', () => {
 
 (global as any).__DEV__ = false;
 
-jest.mock('@/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({appUi: null}),
+jest.mock('../src/runtime/novel-master-context', () => ({
+  useNovelMaster: () => ({ appUi: null }),
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -64,10 +64,10 @@ const mockGetComposerDraftJson = jest.fn(
   async (): Promise<string | null> => null,
 );
 const mockProjectComposerStatus = jest.fn(async () => [] as unknown[]);
-jest.mock('@/hooks/useRuntime', () => ({
+jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => ({
     eventBus: {
-      subscribe: () => ({unsubscribe: () => undefined}),
+      subscribe: () => ({ unsubscribe: () => undefined }),
     },
     preferences: {
       getLlmStreamEnabled: mockGetLlmStreamEnabled,
@@ -77,13 +77,13 @@ jest.mock('@/hooks/useRuntime', () => ({
       getComposerDraftJson: (...args: unknown[]) =>
         mockGetComposerDraftJson(...args),
       setComposerDraftJson: async () => true,
-      get: async () => ({projectId: 'p'}),
+      get: async () => ({ projectId: 'p' }),
     },
     workplace: () => ({}),
   }),
 }));
 
-jest.mock('@/services/project-composer-status.service', () => ({
+jest.mock('../src/services/project-composer-status.service', () => ({
   projectComposerStatusForSession: (...args: unknown[]) =>
     mockProjectComposerStatus(...args),
 }));
@@ -99,34 +99,34 @@ const mockRunAgentTurn = jest.fn(
       signal?.addEventListener(
         'abort',
         () => reject(new DOMException('aborted', 'AbortError')),
-        {once: true},
+        { once: true },
       );
     });
   },
 );
 
-jest.mock('@/services/agent-run.service', () => ({
+jest.mock('../src/services/agent-run.service', () => ({
   runAgentTurn: (...args: any[]) => mockRunAgentTurn(...args),
 }));
 
 import {serializeComposerDraftJson} from '@novel-master/core/chat';
-import {ChatComposer} from '@/components/chat/ChatComposer';
-import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
-import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
+import { ChatComposer } from '../src/components/chat/ChatComposer';
+import { useAgentRunLifecycle } from '../src/hooks/useAgentRunLifecycle';
+import { useSessionAbort } from '../src/screens/tabs/chat-tab/useSessionAbort';
 import {
   decrementAgentActive,
   isMobileAgentActive,
   setMobileAgentActive,
-} from '@/runtime/agent-activity';
-import {ThemeProvider} from '@/theme/ThemeProvider';
+} from '../src/runtime/agent-activity';
+import { ThemeProvider } from '../src/theme/ThemeProvider';
 import {
   clearChatComposerDraft,
   writeChatComposerDraft,
-} from '@/storage/chat-composer-draft';
+} from '../src/storage/chat-composer-draft';
 import {
   addChatAnnotateDraft,
   resetChatAnnotateDraftStoreForTests,
-} from '@/storage/chat-annotate-draft';
+} from '@novel-master/core/chat';
 
 function Harness(props: {
   canResumeWithoutInput: boolean;
@@ -154,7 +154,7 @@ function Harness(props: {
   return (
     <ThemeProvider>
       <ChatComposer
-        scope={{projectId: 'p', sessionId: 's'}}
+        scope={{ projectId: 'p', sessionId: 's' }}
         hasModel={true}
         running={abort.uiRunning}
         beginUiRun={lifecycle.beginUiRun}

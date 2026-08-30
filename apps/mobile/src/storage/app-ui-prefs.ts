@@ -6,12 +6,7 @@
 
 import {KkvError} from '@novel-master/core';
 import type {KkvService} from '@novel-master/core/kkv';
-import {
-  APP_UI_DEFAULTS,
-  APP_UI_KKV_MODULE,
-  APP_UI_KEY_CHAT_RICH_TEXT,
-  APP_UI_KEY_THEME,
-} from './app-ui-keys';
+import {APP_UI_DEFAULTS, APP_UI_KKV_MODULE} from './app-ui-keys';
 
 /** String key-value UI preferences (prototype-aligned). */
 export interface AppUiPreferences {
@@ -56,9 +51,3 @@ export function createAppUiPreferences(kkv: KkvService): AppUiPreferences {
     },
   };
 }
-
-/** Typed helpers for Client UI keys. */
-export const appUiKeys = {
-  theme: APP_UI_KEY_THEME,
-  chatRichText: APP_UI_KEY_CHAT_RICH_TEXT,
-} as const;

@@ -3,7 +3,7 @@
  */
 import {beforeEach, describe, expect, it, jest} from '@jest/globals';
 import {addChatAnnotateDraft} from '@novel-master/core/chat';
-import {resetChatAnnotateDraftStoreForTests} from '@/storage/chat-annotate-draft';
+import {resetChatAnnotateDraftStoreForTests} from '@novel-master/core/chat';
 
 const mockReplace = jest.fn();
 

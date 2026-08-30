@@ -1,12 +1,9 @@
-import {
-  readRichRenderEpoch,
-  syncAppVersionForRichRender,
-} from '@/storage/app-version-guard';
-import type {AppUiPreferences} from '@/storage/app-ui-prefs';
+import {syncAppVersionForRichRender} from '../src/storage/app-version-guard';
+import type {AppUiPreferences} from '../src/storage/app-ui-prefs';
 import {
   APP_UI_KEY_LAST_RUN_VERSION,
   APP_UI_KEY_RICH_RENDER_EPOCH,
-} from '@/storage/app-ui-keys';
+} from '../src/storage/app-ui-keys';
 
 function mockAppUi(initial: Record<string, string> = {}): AppUiPreferences {
   const store = {...initial};
@@ -34,7 +31,7 @@ describe('app-version-guard', () => {
     });
     const epoch = await syncAppVersionForRichRender(appUi, '1.0.0');
     expect(epoch).toBe(3);
-    expect(await readRichRenderEpoch(appUi)).toBe(3);
+    expect(await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH)).toBe('3');
   });
 
   it('increments epoch when version changes', async () => {

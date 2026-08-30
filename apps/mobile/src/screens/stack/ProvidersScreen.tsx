@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -14,20 +13,20 @@ import {
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {type ProviderListItem} from '@novel-master/core/provider';
-import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
-import {ManageHeader} from '@/components/batch/ManageHeader';
-import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {ConfigListCard} from '@/components/ui/ConfigListCard';
-import {ApiKeyStatusTag} from '@/components/provider/ApiKeyStatusTag';
-import {PrimaryButton} from '@/components/ui/PrototypeButtons';
-import {useBatchSelection} from '@/hooks/useBatchSelection';
-import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
-import {useRuntime} from '@/hooks/useRuntime';
-import type {RootStackParamList} from '@/navigation/types';
-import {useTheme} from '@/theme/ThemeProvider';
-import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
+import { type ProviderListItem } from "@novel-master/core/provider";
+import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
+import {ManageHeader} from '../../components/batch/ManageHeader';
+import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
+import {ConfigListCard} from '../../components/ui/ConfigListCard';
+import {ApiKeyStatusTag} from '../../components/provider/ApiKeyStatusTag';
+import {PrimaryButton} from '../../components/ui/PrototypeButtons';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
+import {useRuntime} from '../../hooks/useRuntime';
+import type {RootStackParamList} from '../../navigation/types';
+import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -75,7 +74,8 @@ export function ProvidersScreen() {
     }, [reload]),
   );
 
-  const metaLine = (row: ProviderRow) => `${row.savedCount} 个已保存模型`;
+  const metaLine = (row: ProviderRow) =>
+    `${row.savedCount} 个已保存模型`;
 
   const deleteProviders = async (providerIds: string[]) => {
     for (const providerId of providerIds) {
@@ -113,7 +113,9 @@ export function ProvidersScreen() {
               .then(() => {
                 batch.exit();
               })
-              .catch(err => showToast(toastMessage('删除失败', err)));
+              .catch(err =>
+                showToast(toastMessage('删除失败', err)),
+              );
           },
         },
       ],
@@ -132,7 +134,9 @@ export function ProvidersScreen() {
           onPress: () => {
             (async () => {
               await deleteProviders([providerId]);
-            })().catch(err => showToast(toastMessage('删除失败', err)));
+            })().catch(err =>
+              showToast(toastMessage('删除失败', err)),
+            );
           },
         },
       ],

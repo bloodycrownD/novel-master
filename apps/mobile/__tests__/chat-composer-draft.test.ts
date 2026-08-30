@@ -1,27 +1,26 @@
 import {describe, expect, it} from '@jest/globals';
 import {
   applyComposerStatusAttachmentsReplace,
-  readChatComposerDraft,
   readChatComposerDraftState,
   writeChatComposerDraft,
   writeChatComposerDraftState,
-} from '@/storage/chat-composer-draft';
+} from '../src/storage/chat-composer-draft';
 import {
   addChatAnnotateDraft,
   resetChatAnnotateDraftStoreForTests,
-} from '@/storage/chat-annotate-draft';
+} from '@novel-master/core/chat';
 
 describe('chat-composer-draft', () => {
   it('reads and writes per session', () => {
     writeChatComposerDraft('s1', 'hello');
-    expect(readChatComposerDraft('s1')).toBe('hello');
-    expect(readChatComposerDraft('s2')).toBe('');
+    expect(readChatComposerDraftState('s1').text).toBe('hello');
+    expect(readChatComposerDraftState('s2').text).toBe('');
   });
 
   it('clears draft when text and attachments are empty', () => {
     writeChatComposerDraft('s3', 'draft');
     writeChatComposerDraft('s3', '');
-    expect(readChatComposerDraft('s3')).toBe('');
+    expect(readChatComposerDraftState('s3').text).toBe('');
   });
 
   it('整表替换状态条；不保留 attach', () => {
@@ -113,9 +112,9 @@ describe('chat-composer-draft', () => {
       state.attachments.map(a => `${a.action ?? a.source}:${a.path}`),
     ).toEqual(['workplaceChange:/w.md', 'annotate:/note.md']);
     // 同 path 两条草稿仍只一只 chip
-    expect(state.attachments.filter(a => a.action === 'annotate').length).toBe(
-      1,
-    );
+    expect(
+      state.attachments.filter(a => a.action === 'annotate').length,
+    ).toBe(1);
     resetChatAnnotateDraftStoreForTests();
   });
 });

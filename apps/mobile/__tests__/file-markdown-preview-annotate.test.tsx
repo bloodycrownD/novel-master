@@ -8,7 +8,7 @@ import {
   addChatAnnotateDraft,
   chipsFromAnnotateStore,
   resetChatAnnotateDraftStoreForTests,
-} from '@/storage/chat-annotate-draft';
+} from '@novel-master/core/chat';
 import {
   readChatComposerDraftState,
   refreshComposerAnnotateChips,

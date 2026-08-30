@@ -1,7 +1,7 @@
 /**
  * Workplace rule toggles for VFS file manager row actions.
  */
-import {type VfsScope} from '@novel-master/core/vfs';
+import { type VfsScope } from '@novel-master/core/vfs';
 
 import {
   type InclusionMode,
@@ -9,8 +9,8 @@ import {
   type WorkplaceDirRule,
   type WorkplaceService,
 } from '@novel-master/core/workplace';
-import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
-import {normalizeFillPolicyForMobile} from '@/storage/fill-policy-mobile';
+import { DEFAULT_WORKPLACE_DIR_RULE } from '@novel-master/core/workplace';
+import {normalizeFillPolicyForMobile} from './fill-policy-mobile';
 
 function workplaceRootLogicalPath(_scope: VfsScope): string {
   return '/';
@@ -32,7 +32,7 @@ export async function cycleFileInclusion(
     INCLUSION_CYCLE[
       (INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length
     ];
-  await workplace.setFileRule({logicalPath, inclusionMode: next});
+  await workplace.setFileRule({ logicalPath, inclusionMode: next });
   return next;
 }
 
@@ -69,7 +69,7 @@ export async function batchSetDirRulesEnabled(
   workplace: WorkplaceService,
   paths: readonly string[],
   dirPaths: ReadonlySet<string>,
-): Promise<{applied: number; skipped: number}> {
+): Promise<{ applied: number; skipped: number }> {
   let applied = 0;
   let skipped = 0;
   for (const path of paths) {
@@ -84,14 +84,14 @@ export async function batchSetDirRulesEnabled(
       skipped += 1;
     }
   }
-  return {applied, skipped};
+  return { applied, skipped };
 }
 
 export async function batchSetDirRulesDisabled(
   workplace: WorkplaceService,
   paths: readonly string[],
   dirPaths: ReadonlySet<string>,
-): Promise<{applied: number; skipped: number}> {
+): Promise<{ applied: number; skipped: number }> {
   let applied = 0;
   let skipped = 0;
   for (const path of paths) {
@@ -106,7 +106,7 @@ export async function batchSetDirRulesDisabled(
       skipped += 1;
     }
   }
-  return {applied, skipped};
+  return { applied, skipped };
 }
 
 /** Map persisted directory rule to sheet form input. */

@@ -11,8 +11,8 @@ import React, {
   type ReactNode,
 } from 'react';
 import {useColorScheme} from 'react-native';
-import {useNovelMaster} from '@/runtime/novel-master-context';
-import {appUiKeys} from '@/storage/app-ui-prefs';
+import {useNovelMaster} from '../runtime/novel-master-context';
+import {APP_UI_KEY_THEME} from '../storage/app-ui-keys';
 import {tokensForMode, type ThemeMode, type ThemeTokens} from './tokens';
 
 export interface ThemeContextValue {
@@ -38,7 +38,7 @@ export function ThemeProvider({children}: {children: ReactNode}) {
     }
     let cancelled = false;
     appUi
-      .get(appUiKeys.theme)
+      .get(APP_UI_KEY_THEME)
       .then(raw => {
         if (cancelled) {
           return;
@@ -67,7 +67,7 @@ export function ThemeProvider({children}: {children: ReactNode}) {
     async (next: ThemeMode) => {
       setModeState(next);
       if (appUi) {
-        await appUi.set(appUiKeys.theme, next);
+        await appUi.set(APP_UI_KEY_THEME, next);
       }
     },
     [appUi],

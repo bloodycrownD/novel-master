@@ -1,5 +1,5 @@
 /**
- * Mobile annotate store 薄接线烟测（主测在 core；T-X2-3）。
+ * Mobile annotate store 直连 core 烟测（主测在 core；T-X2-3）。
  */
 import {describe, expect, it, afterEach} from '@jest/globals';
 import {hasComposerSendableInput} from '@novel-master/core/chat';
@@ -8,14 +8,14 @@ import {
   chipsFromAnnotateStore,
   hasChatAnnotateDrafts,
   resetChatAnnotateDraftStoreForTests,
-} from '@/storage/chat-annotate-draft';
+} from '@novel-master/core/chat';
 
 afterEach(() => {
   resetChatAnnotateDraftStoreForTests();
 });
 
 describe('chat-annotate-draft wiring', () => {
-  it('接线: re-export CRUD/chip 可用', () => {
+  it('CRUD/chip 直连 core 可用', () => {
     const sessionId = 's-mobile-wire';
     addChatAnnotateDraft(sessionId, {
       id: 'a1',

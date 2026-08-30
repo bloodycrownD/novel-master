@@ -16,14 +16,6 @@ type GitHubLatestReleaseJson = {
 
 export type FetchFn = typeof fetch;
 
-/** Reserved for future per-platform release selection from a releases list. */
-export function resolveLatestReleaseFromList(
-  releases: readonly LatestRelease[],
-  _platform?: string,
-): LatestRelease | undefined {
-  return releases[0];
-}
-
 function mapReleaseJson(json: GitHubLatestReleaseJson): LatestRelease {
   const tagName = json.tag_name;
   if (!tagName || typeof tagName !== 'string') {

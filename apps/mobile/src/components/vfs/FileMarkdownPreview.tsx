@@ -4,29 +4,34 @@
  * plain/文本 Tab：禁用批注入口与投影。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/workplace';
 import type {AnnotateDraft} from '@novel-master/core/chat';
-import type {ThemeTokens} from '@/theme/tokens';
-import {useNovelMaster} from '@/runtime/novel-master-context';
+import type {ThemeTokens} from '../../theme/tokens';
+import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
   defaultVfsMarkdownPreviewEngine,
   readVfsMarkdownPreviewEngine,
   type VfsMarkdownPreviewEngine,
-} from '@/storage/vfs-markdown-preview-engine';
+} from '../../storage/vfs-markdown-preview-engine';
 import {
   addChatAnnotateDraft,
   listChatAnnotateDrafts,
   removeChatAnnotateDraft,
   subscribeChatAnnotateDraft,
   updateChatAnnotateDraft,
-} from '@/storage/chat-annotate-draft';
-import {refreshComposerAnnotateChips} from '@/storage/chat-composer-draft';
-import {RichContentBody} from '@/components/rich-content/RichContentBody';
-import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
-import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
-import {MessageEditModal} from '@/components/chat/MessageEditModal';
+} from '@novel-master/core/chat';
+import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
+import {RichContentBody} from '../rich-content/RichContentBody';
+import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
+import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
+import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
 import type {
@@ -57,14 +62,12 @@ interface FileMarkdownPreviewProps {
    * project/global/编辑态必须为 false。plain Tab 即使为 true 也不挂 Recogito。
    */
   annotateEnabled?: boolean;
-  /** annotateEnabled 时必填：写入 chat-annotate-draft 会话 Map。 */
+  /** annotateEnabled 时必填：写入 core 批注草稿 store 会话 Map。 */
   sessionId?: string;
 }
 
 function newAnnotateId(): string {
-  return `ann-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
+  return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** Wrap plain/RN markdown in ScrollView when previewFill — WebView paths skip this. */
@@ -82,8 +85,7 @@ function PreviewScrollWrap({
     <ScrollView
       style={styles.rnBodyScroll}
       contentContainerStyle={styles.rnBodyContent}
-      keyboardShouldPersistTaps="handled"
-    >
+      keyboardShouldPersistTaps="handled">
       {children}
     </ScrollView>
   );
@@ -221,7 +223,13 @@ export function FileMarkdownPreview({
       refreshComposerAnnotateChips(sessionId);
       setPendingRenderRange(null);
     },
-    [annotateEnabled, sessionId, path, pendingOriginalText, pendingRenderRange],
+    [
+      annotateEnabled,
+      sessionId,
+      path,
+      pendingOriginalText,
+      pendingRenderRange,
+    ],
   );
 
   const handleAnnotateOpen = useCallback(
@@ -279,7 +287,10 @@ export function FileMarkdownPreview({
 
   const fmLines = split?.frontMatterLines ?? null;
   const showFrontMatter = isMdPath && fmLines !== null;
-  const fmFields = showFrontMatter ? parseFrontMatterFields(fmLines) : [];
+  const fmFields =
+    showFrontMatter
+      ? parseFrontMatterFields(fmLines)
+      : [];
 
   /** 干净 MD 正文（禁止源串插锚注再渲染）。 */
   const mdBody = useMemo(() => {
@@ -335,11 +346,15 @@ export function FileMarkdownPreview({
       fields: fmFields,
       empty: fmLines.length === 0,
     });
-  }, [mdUseWebViewPreview, showFrontMatter, fmFields, fmLines]);
+  }, [
+    mdUseWebViewPreview,
+    showFrontMatter,
+    fmFields,
+    fmLines,
+  ]);
 
   /** 仅 MD Tab 挂 Recogito；plain 永不 annotate。 */
-  const mdAnnotateActive =
-    annotateEnabled === true && renderKind === 'markdown';
+  const mdAnnotateActive = annotateEnabled === true && renderKind === 'markdown';
 
   const bumpClearAnnotateSelection = useCallback(() => {
     setClearAnnotateSelectionSignal(n => n + 1);
@@ -451,8 +466,7 @@ export function FileMarkdownPreview({
           styles.root,
           previewFill && nonMdUseWebViewPreview && styles.fillRoot,
           previewFill && mdAnnotateActive && styles.fillRoot,
-        ]}
-      >
+        ]}>
         {nonMdUseWebViewPreview || mdAnnotateActive ? (
           <RichDocumentWebView
             key={path}
@@ -464,11 +478,7 @@ export function FileMarkdownPreview({
           />
         ) : content.trim() ? (
           <PreviewScrollWrap previewFill={previewFill}>
-            <RichContentBody
-              content={content.trim()}
-              tokens={tokens}
-              variant="file-preview"
-            />
+            <RichContentBody content={content.trim()} tokens={tokens} />
           </PreviewScrollWrap>
         ) : null}
         {mdAnnotateActive ? annotateModals : null}
@@ -482,8 +492,7 @@ export function FileMarkdownPreview({
         styles.root,
         previewFill && mdUseWebViewPreview && styles.fillRoot,
         previewFill && mdAnnotateActive && styles.fillRoot,
-      ]}
-    >
+      ]}>
       {mdUseWebViewPreview || mdAnnotateActive ? (
         <RichDocumentWebView
           key={path}
@@ -504,11 +513,7 @@ export function FileMarkdownPreview({
             />
           ) : null}
           <PreviewScrollWrap previewFill={previewFill}>
-            <RichContentBody
-              content={mdBody}
-              tokens={tokens}
-              variant="file-preview"
-            />
+            <RichContentBody content={mdBody} tokens={tokens} />
           </PreviewScrollWrap>
         </>
       ) : showFrontMatter ? (
@@ -534,7 +539,11 @@ interface FrontMatterCardProps {
   empty: boolean;
 }
 
-function FrontMatterCard({tokens, fields, empty}: FrontMatterCardProps) {
+function FrontMatterCard({
+  tokens,
+  fields,
+  empty,
+}: FrontMatterCardProps) {
   return (
     <View
       style={[
@@ -543,8 +552,7 @@ function FrontMatterCard({tokens, fields, empty}: FrontMatterCardProps) {
           backgroundColor: tokens.bgSecondary,
           borderColor: tokens.border,
         },
-      ]}
-    >
+      ]}>
       <Text style={[styles.fmTitle, {color: tokens.textSecondary}]}>
         Front Matter
       </Text>
@@ -559,8 +567,7 @@ function FrontMatterCard({tokens, fields, empty}: FrontMatterCardProps) {
               {field.key ? (
                 <Text
                   style={[styles.fmKey, {color: tokens.textSecondary}]}
-                  numberOfLines={1}
-                >
+                  numberOfLines={1}>
                   {field.key}
                 </Text>
               ) : null}

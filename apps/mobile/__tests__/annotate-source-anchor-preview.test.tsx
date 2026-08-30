@@ -10,7 +10,7 @@ import {sanitizeRichHtml} from '@/components/rich-content/sanitize-rich-html';
 import {
   addChatAnnotateDraft,
   resetChatAnnotateDraftStoreForTests,
-} from '@/storage/chat-annotate-draft';
+} from '@novel-master/core/chat';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 

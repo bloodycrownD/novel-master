@@ -9,11 +9,7 @@ jest.mock('fast-text-encoding', () => ({}));
 require('@/polyfills');
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const {
-  collectResponseBytes,
-  toSdkPayloadBytes,
-  toSdkResponseBody,
-} = require('@/shims/aws-rn-stream-collector');
+const {collectResponseBytes, toSdkResponseBody} = require('@/shims/aws-rn-stream-collector');
 
 describe('aws-rn-stream-collector', () => {
   it('collectResponseBytes 读取 Blob 文本', async () => {
@@ -29,13 +25,6 @@ describe('aws-rn-stream-collector', () => {
     const mixed = sdkStreamMixin(new Blob(['ok']));
     const bytes = await collectResponseBytes(mixed);
     expect(new TextDecoder().decode(bytes)).toBe('ok');
-  });
-
-  it('toSdkPayloadBytes 包装 Uint8Array 供 Smithy collectBody 使用', () => {
-    const payload = toSdkPayloadBytes(new Uint8Array([1, 2, 3]));
-    expect(payload).toBeInstanceOf(Uint8Array);
-    expect(payload.byteLength).toBe(3);
-    expect(typeof payload.transformToString).toBe('function');
   });
 
   it('toSdkResponseBody 空字节用空 Blob（Hermes 不支持 Blob([Uint8Array])）', async () => {

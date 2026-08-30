@@ -33,10 +33,3 @@ export async function syncAppVersionForRichRender(
 
   return epoch;
 }
-
-/** Reads the persisted rich-text remount epoch (no version sync). */
-export async function readRichRenderEpoch(
-  appUi: AppUiPreferences,
-): Promise<number> {
-  return parseEpoch(await appUi.get(APP_UI_KEY_RICH_RENDER_EPOCH));
-}

@@ -4,18 +4,16 @@
 import {
   type ChatMessage,
   type ContentBlock,
+  type MessageAttachment,
   type ToolResultBlock,
   type ToolUseBlock,
 } from '@novel-master/core/chat';
-import {resolveToolResultOk} from '@novel-master/core';
+import { resolveToolResultOk } from '@novel-master/core';
 
-import {
-  resolveSkillToolRefFromInput,
-  resolveVfsToolFilePath,
-} from '@novel-master/core/chat';
-import type {SkillToolRef} from '@novel-master/core/chat';
-import type {TranscriptRow} from './ChatTranscriptBridge';
-import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
+import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from '@novel-master/core/chat';
+import type { SkillToolRef } from '@novel-master/core/chat';
+import type { TranscriptRow } from './ChatTranscriptBridge';
+import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
 
 export type ToolCallStatus = 'success' | 'error' | 'pending' | 'interrupted';
 
@@ -60,6 +58,14 @@ export interface BuildChatListItemsOptions {
 
 function blocksForMessage(message: ChatMessage): readonly ContentBlock[] {
   return message.content.blocks ?? [];
+}
+
+/**
+ * user_ops 已拆除：遗留操作日志附件（非 annotate）不再兼容展示，直接丢弃；
+ * 批注（annotate）与其它来源附件照常保留。列表与 transcript 共用此口径。
+ */
+export function isDisplayableAttachment(a: MessageAttachment): boolean {
+  return !(a.source === 'user_ops' && a.action !== 'annotate');
 }
 
 /** tool_use ids from an assistant message (block order preserved). */
@@ -203,7 +209,7 @@ export function toolCallViewFromUse(
       if (title) {
         const childSessionId = options.pendingSubagentSessions.get(title);
         if (childSessionId) {
-          return {...view, subagentSessionId: childSessionId};
+          return { ...view, subagentSessionId: childSessionId };
         }
       }
     }
@@ -217,11 +223,11 @@ export function toolCallViewFromUse(
     input: use.input,
     status: toolStatusFromResult(result),
     resultContent: result.content,
-    ...(result.summary != null ? {summary: result.summary} : {}),
+    ...(result.summary != null ? { summary: result.summary } : {}),
     ...(typeof subagentSessionId === 'string' && subagentSessionId.length > 0
-      ? {subagentSessionId}
+      ? { subagentSessionId }
       : {}),
-    ...(skillRef != null ? {skillRef} : {}),
+    ...(skillRef != null ? { skillRef } : {}),
   };
 }
 
@@ -345,7 +351,7 @@ export function buildChatListItems(
     // user ops 已拆除：遗留的 user_ops 操作日志附件（非 annotate）不再兼容展示，
     // 直接丢弃——仅保留批注（annotate）与其它来源附件。
     const displayAttachments = (message.attachments ?? []).filter(
-      a => !(a.source === 'user_ops' && a.action !== 'annotate'),
+      isDisplayableAttachment,
     );
     const hasAttachments = displayAttachments.length > 0;
     const unpairedStatus = hasToolUse
@@ -354,7 +360,7 @@ export function buildChatListItems(
     const tools = toolUses.map(use => {
       const view = toolCallViewFromUse(use, results, options);
       if (view.status === 'pending' && unpairedStatus != null) {
-        return {...view, status: unpairedStatus};
+        return { ...view, status: unpairedStatus };
       }
       return view;
     });
@@ -419,16 +425,14 @@ export function buildTranscriptRows(
       item.message.role === 'user' &&
       (item.message.attachments?.length ?? 0) > 0
         ? item.message
-            .attachments!.filter(
-              a => !(a.source === 'user_ops' && a.action !== 'annotate'),
-            )!
+            .attachments!.filter(isDisplayableAttachment)!
             .map(a => ({
               source: a.source,
               type: a.type,
               name: a.name,
               path: a.path ?? a.name,
-              ...(a.action != null ? {action: a.action} : {}),
-              ...(a.content !== undefined ? {content: a.content} : {}),
+              ...(a.action != null ? { action: a.action } : {}),
+              ...(a.content !== undefined ? { content: a.content } : {}),
             }))
         : undefined;
     rows.push({
@@ -438,7 +442,7 @@ export function buildTranscriptRows(
       hidden: item.message.hidden,
       text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
       thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
-      ...(userAttachments != null ? {attachments: userAttachments} : {}),
+      ...(userAttachments != null ? { attachments: userAttachments } : {}),
       ...(item.tools.length > 0
         ? {
             tools: item.tools.map(t => ({
@@ -447,11 +451,11 @@ export function buildTranscriptRows(
               input: t.input,
               status: t.status,
               resultContent: t.resultContent,
-              ...(t.summary != null ? {summary: t.summary} : {}),
+              ...(t.summary != null ? { summary: t.summary } : {}),
               ...(t.subagentSessionId != null
-                ? {subagentSessionId: t.subagentSessionId}
+                ? { subagentSessionId: t.subagentSessionId }
                 : {}),
-              ...(t.skillRef != null ? {skillRef: t.skillRef} : {}),
+              ...(t.skillRef != null ? { skillRef: t.skillRef } : {}),
             })),
           }
         : {}),
