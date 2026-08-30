@@ -76,3 +76,14 @@ dependency: []
 - P2×3：① L24 故障机理二表述与 queueStreamDelta 实际行为不符（实为静默丢弃 + 本 mount 永不重注入，修复方向不受影响但误导实现者）；② sessionKey 构成未定义、transcriptWebRef.current 变 null 非 React 可观测信号（应注明由 chatSubview/sessionKey 伴随）；③ 注入 effect 若内联 Provider，T-R3/R4/R5/R8 只能测复刻品，建议明确抽 hook。
 
 建议：修掉 P1 一处文档矛盾后即 execute-ready。
+
+## 追加（2026-08-30）：CR fix-spec 闭合（fix-cr-resume 节点）
+
+- 请求：在 worktree `.woktree/stream-resume`（分支 feat/main-session-stream-resume）按 `cr-fix-spec.md` 闭合全部 4 条 P2 must-fix（MF-1 类型瑕疵 / MF-2 顺序注释 / MF-3 snapshot-inject 顺序断言 / MF-4 发起保护窗），按逻辑块中文 commit，验证 = jest 全量 + typecheck + 裸 tsc 净增清零。
+- 结果：4 条 P2 全部闭合，提交序列（rebase 后）：
+  - 6b018c5 MF-1 测试裸 tsc 6 处类型瑕疵清零（mock rest 签名 + satisfies 对齐端口形状 + 移除 as never）
+  - 880af0e MF-2 两处 effect 声明顺序约束显式注释（复位→注入 / reset→探针）
+  - afae784 MF-4 发起保护窗（时间戳记 lifecycle.beginUiRun + getBeginUiRunAt，常量 RUN_LAUNCH_PROTECT_WINDOW_MS=3s 与时间戳同放 lifecycle hook，守卫落 Provider onRunEnded 闭包；已自检去守卫用例红）
+  - 663e996 MF-3 T-R3 顺序断言（集成级挂真 ChatTranscriptWebView + webview mock postMessage 按序记录，断言 sessionSnapshot 先于注入 streamDelta；已自检 needsOpenSnapshot 改 deferred 路径用例红）
+- 验证：jest 全量 184 套 1071 例全绿；npm run typecheck 零报错；裸 tsc 本文件净增 0。
+- 偏离记录：窗口常量最初放 ChatTabProvider，因测试 import 其会拖入 @novel-master/core/skills 等重链（jest 解析失败）改为与时间戳同放 useAgentRunLifecycle；提交顺序 MF-4 先于 MF-3（MF-3 集成用例依赖更少风险后置，无正确性影响）。
