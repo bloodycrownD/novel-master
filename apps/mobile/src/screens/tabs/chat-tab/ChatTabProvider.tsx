@@ -327,6 +327,12 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   useEffect(() => {
     abort.resetForSessionChange();
     lifecycle.resetUiForSessionChange();
+    // 声明顺序约束：本 reset effect 不得移到下方 useRunResumeProbe 接线
+    // 之后——session 切换的同一 commit 里必须 reset 先求值（清 uiRunning /
+    // activeRunId），探针的恢复方向再按 registry.has 合成 markRunStarted；
+    // 若探针在前，其合成的 uiRunning=true 会被随后的 reset 清掉，路径 B
+    // 切回状态重建失效（行为守护：T-R1，顺序颠倒时应红）。
+    //
     // 状态重建（路径 B）在 useRunResumeProbe 的恢复方向承担（声明于本 effect
     // 之后，同 commit 内 reset 先清、再按 registry.has 合成 markRunStarted）；
     // lifecycle 的恢复窗口已在上面 reset 内按需开启，迟到的真 RUN_STARTED

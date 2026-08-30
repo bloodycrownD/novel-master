@@ -83,6 +83,14 @@ export function useChatStreamResumeInject({
   // 注入资格与 WebView mount 绑定的复位 effect：effect 依赖挂 chatSubview 与
   // sessionKey 两个可观测 state；transcriptWebRef.current === null 伴随卸载发生、
   // 不独立触发 effect，作为同 effect 内的防御性断言。
+  //
+  // 声明顺序约束：本复位 effect 不得移到下方注入 effect 之后——sessionKey
+  // 变化的同一 commit 里必须复位先求值、清掉 webviewReadyRef /
+  // streamInjectedRef，注入 effect 随后求值时看到的才是本 mount 的干净
+  // 状态；若注入在前，会带着上一 mount 残留的 webviewReady=true 在新
+  // WebView 就绪前抢先注入（delta 被 queueStreamDelta 的 webReady 守卫静默
+  // 丢弃），或被残留的 streamInjectedRef=true 直接 return（路径 A 二次
+  // 重进不再注入）。行为守护：T-R5 / T-R5b（顺序颠倒时两例应红）。
   const prevSessionKeyRef = useRef(sessionKey);
   useEffect(() => {
     const sessionKeyChanged = prevSessionKeyRef.current !== sessionKey;
