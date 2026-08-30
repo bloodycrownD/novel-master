@@ -31,6 +31,7 @@
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.1.2",
     "@noble/hashes": "^2.2.0",
+    "@notifee/react-native": "9.1.8",
     "@novel-master/cloud-sync-driver-s3": "*",
     "@novel-master/core": "*",
     "@novel-master/sksp-android": "*",
