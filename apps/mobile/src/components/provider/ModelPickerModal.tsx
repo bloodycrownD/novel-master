@@ -16,9 +16,9 @@ import {
   View,
 } from 'react-native';
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
-import {AppModal} from '../ui/AppModal';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useTheme} from '../../theme/ThemeProvider';
+import {AppModal} from '@/components/ui/AppModal';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useTheme} from '@/theme/ThemeProvider';
 
 export interface SavedModelRow {
   readonly savedModelId: string;
@@ -41,7 +41,12 @@ function modelNameKey(providerId: string, modelName: string): string {
   return `${providerId}\0${modelName}`;
 }
 
-export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Props) {
+export function ModelPickerModal({
+  visible,
+  onClose,
+  onSelected,
+  sessionId,
+}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const [rows, setRows] = useState<SavedModelRow[]>([]);
@@ -145,12 +150,16 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
-          <Text style={[styles.title, {color: tokens.text}]}>选择工作区模型</Text>
+          onPress={e => e.stopPropagation()}
+        >
+          <Text style={[styles.title, {color: tokens.text}]}>
+            选择工作区模型
+          </Text>
           {loading ? (
             <ActivityIndicator style={styles.loader} />
           ) : (
@@ -171,7 +180,8 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
                       {borderBottomColor: tokens.border},
                       selected && {backgroundColor: tokens.background},
                     ]}
-                    onPress={() => select(item.savedModelId)}>
+                    onPress={() => select(item.savedModelId)}
+                  >
                     <View style={styles.rowText}>
                       <Text style={{color: tokens.text}}>{item.label}</Text>
                       {item.subtitle ? (
@@ -179,7 +189,8 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
                           style={[
                             styles.subtitle,
                             {color: tokens.textSecondary},
-                          ]}>
+                          ]}
+                        >
                           {item.subtitle}
                         </Text>
                       ) : null}

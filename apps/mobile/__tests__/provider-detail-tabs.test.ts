@@ -30,9 +30,7 @@ describe('ProviderDetailScreen (mobile) — T-T1', () => {
   });
 
   it('服务商配置 tab 内嵌 ProviderForm mode="edit"', () => {
-    expect(detailSource).toMatch(
-      /<ProviderForm\s+mode="edit"/,
-    );
+    expect(detailSource).toMatch(/<ProviderForm\s+mode="edit"/);
   });
 
   it('模型管理 tab 保留 ManageHeader + 模型列表（含添加/远程）', () => {

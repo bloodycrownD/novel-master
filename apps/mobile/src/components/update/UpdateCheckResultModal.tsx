@@ -7,7 +7,7 @@
  */
 import React from 'react';
 import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 export type UpdateCheckResultKind = 'up-to-date' | 'error';
 
@@ -41,11 +41,13 @@ export function UpdateCheckResultModal({
       visible={visible}
       animationType="fade"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[styles.panel, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+          onPress={e => e.stopPropagation()}
+        >
           <Text style={[styles.title, {color: tokens.text}]}>
             {UPDATE_CHECK_RESULT_TITLE}
           </Text>
@@ -56,7 +58,8 @@ export function UpdateCheckResultModal({
             <Pressable
               testID="update-check-result-close"
               onPress={onClose}
-              style={styles.btn}>
+              style={styles.btn}
+            >
               <Text style={{color: tokens.textSecondary}}>关闭</Text>
             </Pressable>
             <Pressable
@@ -64,7 +67,8 @@ export function UpdateCheckResultModal({
               onPress={() => {
                 void Promise.resolve(onSnoozeToday());
               }}
-              style={styles.btn}>
+              style={styles.btn}
+            >
               <Text style={{color: tokens.primary, fontWeight: '600'}}>
                 今日不再提醒
               </Text>

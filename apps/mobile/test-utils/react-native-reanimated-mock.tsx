@@ -1,5 +1,5 @@
 import React from 'react';
-import { View } from 'react-native';
+import {View} from 'react-native';
 
 const Animated = {
   View,
@@ -13,7 +13,7 @@ export function useAnimatedStyle(factory: () => object) {
 }
 
 export function useSharedValue<T>(value: T) {
-  return { value };
+  return {value};
 }
 
 export function useAnimatedProps(factory: () => object) {

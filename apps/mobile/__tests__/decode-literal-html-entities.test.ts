@@ -2,12 +2,14 @@ import {
   decodeAfterSanitize,
   decodeForMarkdownInput,
   decodeLiteralHtmlEntities,
-} from '../src/components/rich-content/decode-literal-html-entities';
-import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
+} from '@/components/rich-content/decode-literal-html-entities';
+import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
 describe('decodeLiteralHtmlEntities', () => {
   it('decodes &quot; and double-encoded &amp;quot;', () => {
-    expect(decodeLiteralHtmlEntities('&quot;重新做人&quot;')).toBe('"重新做人"');
+    expect(decodeLiteralHtmlEntities('&quot;重新做人&quot;')).toBe(
+      '"重新做人"',
+    );
     expect(decodeLiteralHtmlEntities('&amp;quot;重新做人&amp;quot;')).toBe(
       '"重新做人"',
     );

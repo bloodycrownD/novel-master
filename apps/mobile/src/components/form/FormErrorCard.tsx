@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Action = {
   label: string;
@@ -31,7 +31,8 @@ export function FormErrorCard({
       style={[
         styles.card,
         {borderColor: tokens.border, backgroundColor: tokens.surface},
-      ]}>
+      ]}
+    >
       <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
       <Text style={[styles.message, {color: tokens.textSecondary}]}>
         {message}
@@ -39,7 +40,9 @@ export function FormErrorCard({
       <View style={styles.actions}>
         {secondaryAction ? (
           <Pressable onPress={secondaryAction.onPress}>
-            <Text style={{color: tokens.primary, fontSize: 14, fontWeight: '600'}}>
+            <Text
+              style={{color: tokens.primary, fontSize: 14, fontWeight: '600'}}
+            >
               {secondaryAction.label}
             </Text>
           </Pressable>
@@ -51,7 +54,8 @@ export function FormErrorCard({
                 color: primaryAction.danger ? tokens.danger : tokens.primary,
                 fontSize: 14,
                 fontWeight: '600',
-              }}>
+              }}
+            >
               {primaryAction.label}
             </Text>
           </Pressable>

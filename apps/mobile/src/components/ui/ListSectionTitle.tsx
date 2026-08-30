@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {StyleSheet, Text} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   title: string;

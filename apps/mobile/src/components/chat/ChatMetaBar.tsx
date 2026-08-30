@@ -36,7 +36,8 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
         accessibilityRole="button"
         accessibilityLabel={`切换智能体，当前 ${meta.agentName}`}
         accessibilityState={{disabled: agentLocked}}
-        style={({pressed}) => [styles.agentCol, pressed && styles.pressed]}>
+        style={({pressed}) => [styles.agentCol, pressed && styles.pressed]}
+      >
         <Text style={[styles.fieldLabel, {color: tokens.textSecondary}]}>
           Agent
         </Text>
@@ -46,7 +47,8 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
             {color: tokens.text},
             agentLocked && styles.agentLocked,
           ]}
-          numberOfLines={1}>
+          numberOfLines={1}
+        >
           {meta.agentName}
         </Text>
       </Pressable>
@@ -56,20 +58,23 @@ export function ChatMetaBar({meta, onPressAgent, onPressModel}: Props) {
         accessibilityRole="button"
         accessibilityLabel={`切换模型，当前 ${meta.modelLabel}`}
         accessibilityState={{disabled: modelLocked}}
-        style={({pressed}) => [styles.metaRight, pressed && styles.pressed]}>
+        style={({pressed}) => [styles.metaRight, pressed && styles.pressed]}
+      >
         <Text
           style={[
             styles.model,
             {color: tokens.textSecondary},
             modelLocked && styles.agentLocked,
           ]}
-          numberOfLines={1}>
+          numberOfLines={1}
+        >
           {meta.modelLabel}
         </Text>
         {showTokens ? (
           <Text
             style={[styles.tokens, {color: tokens.textTertiary}]}
-            numberOfLines={1}>
+            numberOfLines={1}
+          >
             {meta.tokenLabel}
           </Text>
         ) : null}

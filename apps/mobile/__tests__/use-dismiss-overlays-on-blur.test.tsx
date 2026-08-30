@@ -1,7 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {useDismissOverlaysOnBlur} from '../src/hooks/useDismissOverlaysOnBlur';
+import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 
 let focusCleanup: (() => void) | undefined;
 

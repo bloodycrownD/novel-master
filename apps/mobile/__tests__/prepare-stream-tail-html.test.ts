@@ -1,5 +1,5 @@
-import {prepareStreamTailHtml} from '../src/components/chat/prepare-stream-tail-html';
-import {RICH_CONTENT_MAX_CHARS} from '../src/components/rich-content/rich-content-limits';
+import {prepareStreamTailHtml} from '@/components/chat/prepare-stream-tail-html';
+import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
 
 describe('prepareStreamTailHtml', () => {
   it('returns undefined when richText is off', () => {
@@ -23,10 +23,7 @@ describe('prepareStreamTailHtml', () => {
   });
 
   it('T-S5: 定稿 HTML 对空伪标签不挖空', () => {
-    const html = prepareStreamTailHtml(
-      '表现为 <xxx></xxx> 之间没有文本',
-      true,
-    );
+    const html = prepareStreamTailHtml('表现为 <xxx></xxx> 之间没有文本', true);
     expect(html).toBeDefined();
     expect(html).toContain('&lt;xxx&gt;');
     expect(html).toContain('&lt;/xxx&gt;');

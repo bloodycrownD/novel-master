@@ -20,14 +20,15 @@ export function clearMockWebViewPostMessages(): void {
   mockWebViewPostMessages.length = 0;
 }
 
-const WebView = React.forwardRef<{postMessage: (data: string) => void}, WebViewProps>(
-  function WebViewMock(props, ref) {
-    const postMessage = React.useCallback((data: string) => {
-      mockWebViewPostMessages.push(data);
-    }, []);
-    React.useImperativeHandle(ref, () => ({postMessage}), [postMessage]);
-    return <View ref={ref as React.Ref<View>} {...props} />;
-  },
-);
+const WebView = React.forwardRef<
+  {postMessage: (data: string) => void},
+  WebViewProps
+>(function WebViewMock(props, ref) {
+  const postMessage = React.useCallback((data: string) => {
+    mockWebViewPostMessages.push(data);
+  }, []);
+  React.useImperativeHandle(ref, () => ({postMessage}), [postMessage]);
+  return <View ref={ref as React.Ref<View>} {...props} />;
+});
 
 export default WebView;

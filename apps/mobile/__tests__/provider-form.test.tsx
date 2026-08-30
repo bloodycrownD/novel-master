@@ -1,6 +1,6 @@
 import {describe, expect, it} from '@jest/globals';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -11,7 +11,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: jest.fn()}),
 }));
 
@@ -20,7 +20,7 @@ import {
   providerFormToCreateInput,
   providerFormToEditPatch,
   type ProviderFormValues,
-} from '../src/components/provider/ProviderForm';
+} from '@/components/provider/ProviderForm';
 
 const baseValues: ProviderFormValues = {
   ...EMPTY_PROVIDER_FORM,

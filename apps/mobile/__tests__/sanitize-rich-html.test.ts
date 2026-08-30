@@ -18,12 +18,14 @@ import sanitizeHtml from 'sanitize-html';
 import {
   filterInlineStyle,
   sanitizeRichHtml,
-} from '../src/components/rich-content/sanitize-rich-html';
+} from '@/components/rich-content/sanitize-rich-html';
 
 const mockSanitizeHtml = sanitizeHtml as unknown as jest.Mock;
 // jest.mock 只接管配置断言用的替身；行为用例绕过 mock 直连真实库
 // （transformIgnorePatterns 已把 sanitize-html 及其 ESM 依赖家簇纳入 babel transform）
-const realSanitizeHtml = jest.requireActual('sanitize-html') as typeof sanitizeHtml;
+const realSanitizeHtml = jest.requireActual(
+  'sanitize-html',
+) as typeof sanitizeHtml;
 
 describe('sanitizeRichHtml', () => {
   beforeEach(() => {
@@ -78,7 +80,7 @@ describe('sanitizeRichHtml', () => {
     };
     const allAllowed = Object.values(opts.allowedAttributes).flat();
     expect(allAllowed).not.toContain('onclick');
-    expect(allAllowed.every((attr) => !attr.startsWith('on'))).toBe(true);
+    expect(allAllowed.every(attr => !attr.startsWith('on'))).toBe(true);
     // script 在 DISALLOWED_TAGS 内，escape 模式下不可执行
     expect(opts.disallowedTagsMode).toBe('escape');
   });
@@ -106,10 +108,12 @@ describe('sanitizeRichHtml（真实库行为）', () => {
     // 借道替身捕获真实传给 sanitize-html 的配置，再用真实库回放，
     // 保证行为断言不随替身 mock 漂移。
     let captured: Parameters<typeof realSanitizeHtml>[1] | undefined;
-    mockSanitizeHtml.mockImplementationOnce((input: string, options: unknown) => {
-      captured = options as Parameters<typeof realSanitizeHtml>[1];
-      return input;
-    });
+    mockSanitizeHtml.mockImplementationOnce(
+      (input: string, options: unknown) => {
+        captured = options as Parameters<typeof realSanitizeHtml>[1];
+        return input;
+      },
+    );
     sanitizeRichHtml(html);
     expect(captured).toBeDefined();
     return realSanitizeHtml(html, captured!);
@@ -139,7 +143,9 @@ describe('sanitizeRichHtml（真实库行为）', () => {
   });
 
   it('B-2: 非白名单样式全剥时 style 属性整体移除', () => {
-    const out = sanitizeWithRealConfig('<div style="position:fixed;top:0">x</div>');
+    const out = sanitizeWithRealConfig(
+      '<div style="position:fixed;top:0">x</div>',
+    );
     expect(out).toBe('<div>x</div>');
   });
 });
@@ -149,22 +155,31 @@ describe('filterInlineStyle（CSS 属性白名单）', () => {
     expect(filterInlineStyle('COLOR:red;  text-align : center')).toBe(
       'color: red; text-align: center',
     );
-    expect(filterInlineStyle('position:fixed;inset:0;transform:translate(0,0);z-index:999'))
-      .toBeUndefined();
+    expect(
+      filterInlineStyle(
+        'position:fixed;inset:0;transform:translate(0,0);z-index:999',
+      ),
+    ).toBeUndefined();
     expect(filterInlineStyle('width:100vw;height:100vh')).toBeUndefined();
   });
 
   it('含 CSS 注释的声明整条丢弃（防 pos/**/ition 拼凑属性名）', () => {
-    expect(filterInlineStyle('pos/**/ition:fixed;color:red')).toBe('color: red');
+    expect(filterInlineStyle('pos/**/ition:fixed;color:red')).toBe(
+      'color: red',
+    );
   });
 
   it('值内含 url() 的声明丢弃（background:url 可外联加载）', () => {
-    expect(filterInlineStyle('background:url(https://evil.example/x.png)')).toBeUndefined();
+    expect(
+      filterInlineStyle('background:url(https://evil.example/x.png)'),
+    ).toBeUndefined();
     expect(filterInlineStyle('background:#fff')).toBe('background: #fff');
   });
 
   it('url() 值内的分号/逗号/引号不会破坏声明切分', () => {
     // url("a;b") 内的分号被引号保护，不切分；整条因含 url( 被丢，但 color 完整保留
-    expect(filterInlineStyle('background:url("a;b,c");color:blue')).toBe('color: blue');
+    expect(filterInlineStyle('background:url("a;b,c");color:blue')).toBe(
+      'color: blue',
+    );
   });
 });

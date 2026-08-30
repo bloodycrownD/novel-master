@@ -3,17 +3,17 @@
  *
  * @module services/user-vfs-turn-execute.service
  */
-import { type UserVfsTurnOp } from '@novel-master/core/chat';
+import {type UserVfsTurnOp} from '@novel-master/core/chat';
 
-import { type VfsScope } from '@novel-master/core/vfs';
-import { applyComposerStatusAttachmentsReplace } from '../storage/chat-composer-draft';
-import type { MobileNovelMasterRuntime } from '../runtime/types';
-import { projectComposerStatusForSession } from './project-composer-status.service';
+import {type VfsScope} from '@novel-master/core/vfs';
+import {applyComposerStatusAttachmentsReplace} from '@/storage/chat-composer-draft';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import {projectComposerStatusForSession} from './project-composer-status.service';
 
 /** 是否为会话工作区 scope（需走 userVfsTurn）。 */
 export function isSessionVfsScope(
   scope: VfsScope,
-): scope is Extract<VfsScope, { kind: 'session' }> {
+): scope is Extract<VfsScope, {kind: 'session'}> {
   return scope.kind === 'session';
 }
 

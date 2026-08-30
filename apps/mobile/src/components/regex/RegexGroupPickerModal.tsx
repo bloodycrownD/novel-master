@@ -11,9 +11,9 @@ import {
   View,
 } from 'react-native';
 import type {RegexGroup} from '@novel-master/core/regex';
-import {useRuntime} from '../../hooks/useRuntime';
-import {AppModal} from '../ui/AppModal';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useRuntime} from '@/hooks/useRuntime';
+import {AppModal} from '@/components/ui/AppModal';
+import {useTheme} from '@/theme/ThemeProvider';
 
 function groupTitle(group: RegexGroup): string {
   return group.displayName?.trim() || group.groupId;
@@ -72,11 +72,13 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+          onPress={e => e.stopPropagation()}
+        >
           <Text style={[styles.title, {color: tokens.text}]}>
             选择当前正则组
           </Text>
@@ -93,7 +95,8 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
                     {borderBottomColor: tokens.border},
                     disabledSelected && {backgroundColor: tokens.background},
                   ]}
-                  onPress={selectNone}>
+                  onPress={selectNone}
+                >
                   <Text style={{color: tokens.text, flex: 1}}>不启用</Text>
                   {disabledSelected ? (
                     <Text style={{color: tokens.primary}}>当前</Text>
@@ -114,7 +117,8 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
                       {borderBottomColor: tokens.border},
                       selected && {backgroundColor: tokens.background},
                     ]}
-                    onPress={() => selectGroup(item.groupId)}>
+                    onPress={() => selectGroup(item.groupId)}
+                  >
                     <Text style={{color: tokens.text, flex: 1}}>
                       {groupTitle(item)}
                     </Text>

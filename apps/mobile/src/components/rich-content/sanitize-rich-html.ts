@@ -74,7 +74,7 @@ function splitStyleDeclarations(style: string): string[] {
 
 /**
  * 内联 style 白名单过滤：保留名单内且安全的声明，重组为规范化串。
- * 含 CSS 注释（用注释拆分属性名可拼凑出 pos⋯ition 这类写法）或 url() 
+ * 含 CSS 注释（用注释拆分属性名可拼凑出 pos⋯ition 这类写法）或 url()
  * （background:url 可外联加载）的声明整条丢弃；全部被剥时返回 undefined，
  * 调用方删除 style 属性。
  */
@@ -118,9 +118,20 @@ export function sanitizeRichHtml(html: string): string {
     parseStyleAttributes: false,
     nonTextTags: ['script', 'textarea', 'option'],
     allowedTags: sanitizeHtml.defaults.allowedTags
-      .concat(['img', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td'])
-      .filter((tag: string) =>
-        !DISALLOWED_TAGS.includes(tag as (typeof DISALLOWED_TAGS)[number]),
+      .concat([
+        'img',
+        'div',
+        'span',
+        'table',
+        'thead',
+        'tbody',
+        'tr',
+        'th',
+        'td',
+      ])
+      .filter(
+        (tag: string) =>
+          !DISALLOWED_TAGS.includes(tag as (typeof DISALLOWED_TAGS)[number]),
       ),
     allowedAttributes: {
       ...sanitizeHtml.defaults.allowedAttributes,

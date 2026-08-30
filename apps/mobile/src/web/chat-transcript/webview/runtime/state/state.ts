@@ -133,7 +133,7 @@ export const state: TranscriptState = {
     thinkingHtml: '',
     toolInvoking: false,
   },
-  flags: { richText: false, menuDisabled: false },
+  flags: {richText: false, menuDisabled: false},
   menu: null,
   menuOverlayHandler: null,
   menuNativeTextBlockHandler: null,

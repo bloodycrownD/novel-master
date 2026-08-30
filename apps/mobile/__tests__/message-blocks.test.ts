@@ -14,7 +14,7 @@ import {
   toolUseIdsFromMessage,
   turnToolResultsComplete,
   vfsToolFilePath,
-} from '../src/components/chat/message-blocks';
+} from '@/components/chat/message-blocks';
 
 function msg(
   id: string,
@@ -29,7 +29,7 @@ function msg(
     sessionId: 's1',
     seq,
     role,
-    content: { blocks },
+    content: {blocks},
     provider: null,
     raw,
     createdAtMs: seq,
@@ -50,7 +50,7 @@ describe('message-blocks', () => {
             type: 'tool_use',
             id: 'tu1',
             name: 'read',
-            input: { path: '/poem.txt' },
+            input: {path: '/poem.txt'},
           },
         ],
         1,
@@ -63,7 +63,7 @@ describe('message-blocks', () => {
             type: 'tool_result',
             toolUseId: 'tu1',
             content: JSON.stringify(
-              { path: '/poem.txt', content: ravenSnippet, truncated: false },
+              {path: '/poem.txt', content: ravenSnippet, truncated: false},
               null,
               2,
             ),
@@ -90,7 +90,7 @@ describe('message-blocks', () => {
             type: 'tool_use',
             id: 'tu1',
             name: 'read',
-            input: { path: '/poem.txt' },
+            input: {path: '/poem.txt'},
           },
         ],
         1,
@@ -104,7 +104,7 @@ describe('message-blocks', () => {
             toolUseId: 'tu1',
             ok: true,
             content: JSON.stringify(
-              { path: '/poem.txt', content: ravenSnippet, truncated: false },
+              {path: '/poem.txt', content: ravenSnippet, truncated: false},
               null,
               2,
             ),
@@ -129,7 +129,7 @@ describe('message-blocks', () => {
             type: 'tool_use',
             id: 'tu1',
             name: 'read',
-            input: { path: '/ok.txt' },
+            input: {path: '/ok.txt'},
           },
         ],
         1,
@@ -137,7 +137,7 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'file body' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'file body'}],
         2,
       ),
     ];
@@ -155,7 +155,7 @@ describe('message-blocks', () => {
             type: 'tool_use',
             id: 'tu2',
             name: 'read',
-            input: { path: '/missing' },
+            input: {path: '/missing'},
           },
         ],
         3,
@@ -189,7 +189,7 @@ describe('message-blocks', () => {
             type: 'tool_use',
             id: 'tu1',
             name: 'read',
-            input: { path: '/missing' },
+            input: {path: '/missing'},
           },
         ],
         1,
@@ -218,19 +218,19 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } }],
+        [{type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}}],
         1,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
       ),
     ];
     const map = buildToolResultByUseId(messages);
     const view = toolCallViewFromUse(
-      { type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } },
+      {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
       map,
     );
     expect(view.status).toBe('success');
@@ -242,11 +242,11 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
         1,
       ),
     ];
-    const items = buildChatListItems(messages, { agentRunning: false });
+    const items = buildChatListItems(messages, {agentRunning: false});
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
@@ -264,20 +264,20 @@ describe('message-blocks', () => {
             type: 'tool_use',
             id: 'tu1',
             name: 'read',
-            input: { path: '/a' },
+            input: {path: '/a'},
           },
-          { type: 'tool_use', id: 'tu2', name: 'list', input: {} },
+          {type: 'tool_use', id: 'tu2', name: 'list', input: {}},
         ],
         1,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
       ),
     ];
-    const items = buildChatListItems(messages, { runUiStopped: true });
+    const items = buildChatListItems(messages, {runUiStopped: true});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(2);
       expect(items[0].tools[0]?.status).toBe('success');
@@ -290,7 +290,7 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
         1,
       ),
     ];
@@ -308,11 +308,11 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
         1,
       ),
     ];
-    const items = buildChatListItems(messages, { agentRunning: true });
+    const items = buildChatListItems(messages, {agentRunning: true});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
       expect(items[0].tools[0]?.status).toBe('pending');
@@ -324,17 +324,17 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
         1,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
       ),
     ];
-    const items = buildChatListItems(messages, { agentRunning: true });
+    const items = buildChatListItems(messages, {agentRunning: true});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
       expect(items[0].tools[0]?.status).toBe('success');
@@ -346,17 +346,17 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
         1,
       ),
       msg(
         'a2',
         'assistant',
-        [{ type: 'tool_use', id: 'tu2', name: 'list', input: {} }],
+        [{type: 'tool_use', id: 'tu2', name: 'list', input: {}}],
         2,
       ),
     ];
-    const items = buildChatListItems(messages, { agentRunning: true });
+    const items = buildChatListItems(messages, {agentRunning: true});
     const byId = new Map(
       items.filter(i => i.kind === 'message').map(i => [i.message.id, i]),
     );
@@ -369,11 +369,11 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
         1,
       ),
     ];
-    const items = buildChatListItems(messages, { agentRunning: false });
+    const items = buildChatListItems(messages, {agentRunning: false});
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('error');
       expect(items[0].tools[0]?.status).not.toBe('pending');
@@ -384,7 +384,7 @@ describe('message-blocks', () => {
     const assistant = msg(
       'a1',
       'assistant',
-      [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+      [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
       1,
     );
     const incomplete = [assistant];
@@ -393,7 +393,7 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
       ),
     ];
@@ -405,7 +405,7 @@ describe('message-blocks', () => {
     const assistant = msg(
       'a1',
       'assistant',
-      [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+      [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
       1,
     );
     expect(isTurnToolExecuting(assistant, [assistant], false)).toBe(false);
@@ -422,14 +422,14 @@ describe('message-blocks', () => {
             type: 'tool_use',
             id: 'tu1',
             name: 'vfs.read',
-            input: { path: '/a' },
+            input: {path: '/a'},
           },
-          { type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {} },
+          {type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {}},
           {
             type: 'tool_use',
             id: 'tu3',
             name: 'vfs.write',
-            input: { path: '/b' },
+            input: {path: '/b'},
           },
         ],
         1,
@@ -438,9 +438,9 @@ describe('message-blocks', () => {
         'u1',
         'user',
         [
-          { type: 'tool_result', toolUseId: 'tu1', content: 'a' },
-          { type: 'tool_result', toolUseId: 'tu2', content: 'b' },
-          { type: 'tool_result', toolUseId: 'tu3', content: 'c' },
+          {type: 'tool_result', toolUseId: 'tu1', content: 'a'},
+          {type: 'tool_result', toolUseId: 'tu2', content: 'b'},
+          {type: 'tool_result', toolUseId: 'tu3', content: 'c'},
         ],
         2,
       ),
@@ -454,20 +454,20 @@ describe('message-blocks', () => {
 
   it('emits text bubbles with embedded tools (no standalone tool rows)', () => {
     const messages = [
-      msg('u1', 'user', [{ type: 'text', text: 'hi' }], 1),
+      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
       msg(
         'a1',
         'assistant',
         [
-          { type: 'text', text: 'hello' },
-          { type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/x' } },
+          {type: 'text', text: 'hello'},
+          {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
         ],
         2,
       ),
       msg(
         'u2',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         3,
       ),
     ];
@@ -480,8 +480,8 @@ describe('message-blocks', () => {
 
   it('keeps hidden text messages in chat list items', () => {
     const messages = [
-      msg('u1', 'user', [{ type: 'text', text: 'visible' }], 1),
-      msg('u2', 'user', [{ type: 'text', text: 'hidden row' }], 2, true),
+      msg('u1', 'user', [{type: 'text', text: 'visible'}], 1),
+      msg('u2', 'user', [{type: 'text', text: 'hidden row'}], 2, true),
     ];
     const items = buildChatListItems(messages);
     expect(items).toHaveLength(2);
@@ -496,13 +496,13 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } }],
+        [{type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}}],
         1,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
         true,
       ),
@@ -520,7 +520,7 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'vfs.list', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'vfs.list', input: {}}],
         1,
         true,
       ),
@@ -536,7 +536,7 @@ describe('message-blocks', () => {
 
   it('T-SR3: 空正文 + attachments 仍进 buildChatListItems；仅遗留 user_ops 操作日志则丢弃', () => {
     const emptyBodyWithAttach: ChatMessage = {
-      ...msg('u-att', 'user', [{ type: 'text', text: '' }], 1),
+      ...msg('u-att', 'user', [{type: 'text', text: ''}], 1),
       attachments: [
         {
           name: '/w.md',
@@ -564,7 +564,7 @@ describe('message-blocks', () => {
 
     // 空正文且仅遗留 user_ops 操作日志（非 annotate）：不再生成空行。
     const opsOnly: ChatMessage = {
-      ...msg('u-ops2', 'user', [{ type: 'text', text: '' }], 2),
+      ...msg('u-ops2', 'user', [{type: 'text', text: ''}], 2),
       attachments: [
         {
           name: 'mkdir:/notes',
@@ -582,13 +582,13 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {}}],
         1,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
       ),
     ];
@@ -603,8 +603,8 @@ describe('message-blocks', () => {
         'a1',
         'assistant',
         [
-          { type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {} },
-          { type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {} },
+          {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {}},
+          {type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {}},
         ],
         1,
       ),
@@ -612,8 +612,8 @@ describe('message-blocks', () => {
         'u1',
         'user',
         [
-          { type: 'tool_result', toolUseId: 'tu1', content: 'a' },
-          { type: 'tool_result', toolUseId: 'tu2', content: 'b' },
+          {type: 'tool_result', toolUseId: 'tu1', content: 'a'},
+          {type: 'tool_result', toolUseId: 'tu2', content: 'b'},
         ],
         2,
       ),
@@ -629,14 +629,14 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {}}],
         1,
       ),
-      msg('u1', 'user', [{ type: 'text', text: 'hi' }], 2),
+      msg('u1', 'user', [{type: 'text', text: 'hi'}], 2),
       msg(
         'u2',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         3,
       ),
     ];
@@ -649,16 +649,16 @@ describe('message-blocks', () => {
         'a1',
         'assistant',
         [
-          { type: 'thinking', text: 'hmm' },
-          { type: 'text', text: 'reply' },
-          { type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } },
+          {type: 'thinking', text: 'hmm'},
+          {type: 'text', text: 'reply'},
+          {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
         ],
         1,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
       ),
     ];
@@ -676,7 +676,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't1',
         name: 'edit',
-        input: { path: '/续写/a.md' },
+        input: {path: '/续写/a.md'},
         status: 'success',
       }),
     ).toBe('/续写/a.md');
@@ -684,7 +684,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't2',
         name: 'fs',
-        input: { action: 'ls', path: '/' },
+        input: {action: 'ls', path: '/'},
         status: 'success',
       }),
     ).toBeUndefined();
@@ -695,7 +695,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't3',
         name: 'write',
-        input: { path: 'chapter.md' },
+        input: {path: 'chapter.md'},
         status: 'success',
       }),
     ).toBe('/chapter.md');
@@ -703,7 +703,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't4',
         name: 'read',
-        input: { path: 'notes/a.md' },
+        input: {path: 'notes/a.md'},
         status: 'success',
       }),
     ).toBe('/notes/a.md');
@@ -715,7 +715,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't5',
         name: 'write',
-        input: { file_path: 'chapter.md' },
+        input: {file_path: 'chapter.md'},
         status: 'success',
       }),
     ).toBe('/chapter.md');
@@ -723,7 +723,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't6',
         name: 'edit',
-        input: { file_path: '/续写/a.md' },
+        input: {file_path: '/续写/a.md'},
         status: 'success',
       }),
     ).toBe('/续写/a.md');
@@ -732,7 +732,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't7',
         name: 'write',
-        input: { path: 'a.md', file_path: 'b.md' },
+        input: {path: 'a.md', file_path: 'b.md'},
         status: 'success',
       }),
     ).toBe('/a.md');
@@ -740,14 +740,19 @@ describe('message-blocks', () => {
 
   it('T-SK8: skill tool_result meta.skillRef 透传进 ToolCallView，skillToolRef 优先取 meta', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {
-          type: 'tool_use',
-          id: 'tu-skill',
-          name: 'skill',
-          input: { action: 'read', name: 'demo' },
-        } as never,
-      ], 1),
+      msg(
+        'a1',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu-skill',
+            name: 'skill',
+            input: {action: 'read', name: 'demo'},
+          } as never,
+        ],
+        1,
+      ),
       msg(
         'u1',
         'user',
@@ -757,7 +762,7 @@ describe('message-blocks', () => {
             toolUseId: 'tu-skill',
             content: 'ok',
             ok: true,
-            meta: { skillRef: { domain: 'global', name: 'demo' } },
+            meta: {skillRef: {domain: 'global', name: 'demo'}},
           } as never,
         ],
         2,
@@ -772,9 +777,9 @@ describe('message-blocks', () => {
       input: Record<string, unknown>;
     };
     const view = toolCallViewFromUse(use, results);
-    expect(view.skillRef).toEqual({ domain: 'global', name: 'demo' });
+    expect(view.skillRef).toEqual({domain: 'global', name: 'demo'});
     // meta 透传优先；输入侧（read 缺省域）解析不出也不影响
-    expect(skillToolRef(view)).toEqual({ domain: 'global', name: 'demo' });
+    expect(skillToolRef(view)).toEqual({domain: 'global', name: 'demo'});
   });
 
   it('T-SK8: skillToolRef 输入侧解析 write 缺省 project 域并携带 projectId', () => {
@@ -783,18 +788,18 @@ describe('message-blocks', () => {
         {
           toolUseId: 't-w',
           name: 'skill',
-          input: { action: 'write', name: 'demo', content: 'x' },
+          input: {action: 'write', name: 'demo', content: 'x'},
           status: 'pending',
         },
         'proj-1',
       ),
-    ).toEqual({ domain: 'project', projectId: 'proj-1', name: 'demo' });
+    ).toEqual({domain: 'project', projectId: 'proj-1', name: 'demo'});
     // read 缺省域 pending：解析不出（等 tool_result meta）
     expect(
       skillToolRef({
         toolUseId: 't-r',
         name: 'skill',
-        input: { action: 'read', name: 'demo' },
+        input: {action: 'read', name: 'demo'},
         status: 'pending',
       }),
     ).toBeUndefined();
@@ -806,7 +811,7 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
+        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
         1,
         false,
         {
@@ -820,10 +825,10 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
+        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
         2,
         false,
-        { metadata: { kind: 'user_vfs_ack', synthetic: true } },
+        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
       ),
     ];
     const items = buildChatListItems(messages);
@@ -839,7 +844,7 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
+        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
         1,
         true,
         {
@@ -853,10 +858,10 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
+        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
         2,
         true,
-        { metadata: { kind: 'user_vfs_ack', synthetic: true } },
+        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
       ),
     ];
     const items = buildChatListItems(messages);
@@ -889,7 +894,7 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'fs', input: { action: 'ls' } }],
+        [{type: 'tool_use', id: 'tu1', name: 'fs', input: {action: 'ls'}}],
         2,
         false,
         {
@@ -903,13 +908,13 @@ describe('message-blocks', () => {
       msg(
         'u2',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok', ok: true }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok', ok: true}],
         3,
         false,
-        { metadata: { source: 'user', synthetic: true } },
+        {metadata: {source: 'user', synthetic: true}},
       ),
-      msg('a2', 'assistant', [{ type: 'text', text: '【done】' }], 4, false, {
-        metadata: { kind: 'tool_turn_bridge', synthetic: true },
+      msg('a2', 'assistant', [{type: 'text', text: '【done】'}], 4, false, {
+        metadata: {kind: 'tool_turn_bridge', synthetic: true},
       }),
     ];
     const items = buildChatListItems(messages);

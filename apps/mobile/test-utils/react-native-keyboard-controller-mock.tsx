@@ -1,15 +1,11 @@
 import React from 'react';
-import { View } from 'react-native';
+import {View} from 'react-native';
 
-export function KeyboardProvider({ children }: { children: React.ReactNode }) {
+export function KeyboardProvider({children}: {children: React.ReactNode}) {
   return <>{children}</>;
 }
 
-export function KeyboardStickyView({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export function KeyboardStickyView({children}: {children: React.ReactNode}) {
   return <>{children}</>;
 }
 
@@ -53,10 +49,10 @@ export function useKeyboardAnimation() {
   };
 }
 
-export function useKeyboardState<T = { height: number }>(
-  selector?: (state: { height: number; isVisible: boolean }) => T,
+export function useKeyboardState<T = {height: number}>(
+  selector?: (state: {height: number; isVisible: boolean}) => T,
 ): T {
-  const state = { height: 0, isVisible: false };
+  const state = {height: 0, isVisible: false};
   return (selector ? selector(state) : state) as T;
 }
 

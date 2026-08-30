@@ -6,8 +6,8 @@
  * html / plain 两个分支都通过 concatDocBodyHtml 把 FM HTML 拼进 .doc-body 内部
  * （置于正文之前），over-limit 回退时 FM 卡片不会凭空消失。
  */
-import type { ComponentChildren } from 'preact';
-import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
+import type {ComponentChildren} from 'preact';
+import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
 import {
   OVER_LIMIT_HINT,
   concatDocBodyHtml,
@@ -23,7 +23,7 @@ function docBodyClass(layout: 'plain' | 'rich' | undefined): string {
   return layout === 'plain' ? 'doc-body' : 'doc-body rich';
 }
 
-export function DocumentApp({ payload }: DocumentAppProps) {
+export function DocumentApp({payload}: DocumentAppProps) {
   const fm = payload.frontMatterHtml || '';
   const mode = payload.mode;
   const overLimit = !!payload.overLimit;
@@ -39,7 +39,9 @@ export function DocumentApp({ payload }: DocumentAppProps) {
     );
   } else if (payload.plain) {
     // 无锚纯文本回退（over-limit / 非 annotate 预览）；FM 同样并入 .doc-body 内、置于纯文本之前
-    body = <div className="doc-body">{concatDocBodyHtml(fm, payload.plain)}</div>;
+    body = (
+      <div className="doc-body">{concatDocBodyHtml(fm, payload.plain)}</div>
+    );
   }
 
   const children: ComponentChildren[] = [];

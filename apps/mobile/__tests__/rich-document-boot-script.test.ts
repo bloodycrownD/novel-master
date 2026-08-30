@@ -39,7 +39,8 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
   it('T-BR-RD-01: setDocument / themeUpdate / annotate; no chat menu handlers', () => {
     const script = bootScript();
     expect(script).toContain('setDocument');
-    expect(script).toContain('msg.type === "setDocument"');
+    // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号），只锁 msg.type + setDocument 语义
+    expect(script).toMatch(/msg\.type === ['"]setDocument['"]/);
     expect(script).toContain('handleHostMessage');
     expect(script).toContain('themeUpdate');
     expect(script).toContain('setAnnotateEnabled');
@@ -69,7 +70,7 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(script).toContain('TrustedHtml');
     expect(script).toContain('registerSetDocumentView');
     // 允许删除：手拼 doc-body 整段（已迁 DocumentApp + TrustedHtml）
-    expect(script).not.toContain("'<div class=\"doc-body rich\">'+");
+    expect(script).not.toContain('\'<div class="doc-body rich">\'+');
   });
 
   it('T-BR-CSS-02: rich list padding；旧 annotate CSS 标为非主路径遗留', () => {

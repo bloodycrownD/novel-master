@@ -14,12 +14,7 @@ type Props = {
   readonly onClose: () => void;
 };
 
-export function AnnotatePickModal({
-  visible,
-  drafts,
-  onPick,
-  onClose,
-}: Props) {
+export function AnnotatePickModal({visible, drafts, onPick, onClose}: Props) {
   const {tokens} = useTheme();
 
   return (
@@ -27,27 +22,28 @@ export function AnnotatePickModal({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <Pressable
         style={styles.overlay}
         onPress={onClose}
         accessibilityRole="button"
-        accessibilityLabel="关闭选择批注">
+        accessibilityLabel="关闭选择批注"
+      >
         <Pressable
           style={[styles.card, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+          onPress={e => e.stopPropagation()}
+        >
           <Text style={[styles.title, {color: tokens.text}]}>选择批注</Text>
           <View style={styles.list}>
             {drafts.map(d => (
               <Pressable
                 key={d.id}
-                style={[
-                  styles.item,
-                  {borderBottomColor: tokens.borderLight},
-                ]}
+                style={[styles.item, {borderBottomColor: tokens.borderLight}]}
                 onPress={() => onPick(d)}
                 accessibilityRole="button"
-                accessibilityLabel={d.userAnnotation || '空说明'}>
+                accessibilityLabel={d.userAnnotation || '空说明'}
+              >
                 <Text style={[styles.itemText, {color: tokens.text}]}>
                   {d.userAnnotation || '（空说明）'}
                 </Text>
@@ -58,7 +54,8 @@ export function AnnotatePickModal({
             style={styles.cancel}
             onPress={onClose}
             accessibilityRole="button"
-            accessibilityLabel="取消">
+            accessibilityLabel="取消"
+          >
             <Text style={{color: tokens.textSecondary}}>取消</Text>
           </Pressable>
         </Pressable>

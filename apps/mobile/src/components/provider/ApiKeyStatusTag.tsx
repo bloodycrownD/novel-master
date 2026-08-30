@@ -4,7 +4,7 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {API_KEY_STATUS_LABELS} from '@novel-master/core/config-forms/shared';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   status: 'set' | 'not set';
@@ -22,12 +22,14 @@ export function ApiKeyStatusTag({status, tokens}: Props) {
             ? `${tokens.success}1A`
             : `${tokens.textSecondary}1A`,
         },
-      ]}>
+      ]}
+    >
       <Text
         style={[
           styles.tagText,
           {color: connected ? tokens.success : tokens.textSecondary},
-        ]}>
+        ]}
+      >
         {connected ? API_KEY_STATUS_LABELS.set : API_KEY_STATUS_LABELS.notSet}
       </Text>
     </View>

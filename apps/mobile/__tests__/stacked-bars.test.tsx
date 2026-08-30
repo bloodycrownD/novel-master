@@ -8,10 +8,10 @@
  *   输入/输出；calls 缺省时不拼「调用」段。
  */
 import React from 'react';
-import { describe, expect, it, jest } from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
-import { StackedBars } from '../src/components/charts/StackedBars';
-import type { ThemeTokens } from '../src/theme/tokens';
+import {describe, expect, it, jest} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
+import {StackedBars} from '@/components/charts/StackedBars';
+import type {ThemeTokens} from '@/theme/tokens';
 
 const tokens = {
   primary: '#007aff',
@@ -52,9 +52,7 @@ describe('StackedBars 无障碍属性', () => {
     act(() => {
       tree = TestRenderer.create(
         <StackedBars
-          data={[
-            { key: '2026-08-24', primary: 1200, secondary: 300, calls: 6 },
-          ]}
+          data={[{key: '2026-08-24', primary: 1200, secondary: 300, calls: 6}]}
           onSelect={jest.fn()}
           tokens={tokens}
           formatLabel={key => key.slice(8)}
@@ -73,7 +71,7 @@ describe('StackedBars 无障碍属性', () => {
     act(() => {
       tree = TestRenderer.create(
         <StackedBars
-          data={[{ key: '13', primary: 40 }]}
+          data={[{key: '13', primary: 40}]}
           tokens={tokens}
           formatLabel={key => `${Number(key)}时`}
         />,
@@ -93,7 +91,7 @@ function layoutContainer(
   act(() => {
     tree.root
       .findAll(node => typeof node.props.onLayout === 'function')[0]
-      .props.onLayout({ nativeEvent: { layout: { width } } });
+      .props.onLayout({nativeEvent: {layout: {width}}});
   });
 }
 
@@ -111,9 +109,9 @@ describe('StackedBars 居中与网格（T-MB1/2/3）', () => {
       tree = TestRenderer.create(
         <StackedBars
           data={[
-            { key: 'a', primary: 10 },
-            { key: 'b', primary: 20 },
-            { key: 'c', primary: 30 },
+            {key: 'a', primary: 10},
+            {key: 'b', primary: 20},
+            {key: 'c', primary: 30},
           ]}
           tokens={tokens}
         />,
@@ -127,15 +125,13 @@ describe('StackedBars 居中与网格（T-MB1/2/3）', () => {
   });
 
   it('柱数多到触发 MIN_BAR_WIDTH 时外层仍为横向 ScrollView（超宽滚动保留，T-MB2）', () => {
-    const data = Array.from({ length: 30 }, (_, i) => ({
+    const data = Array.from({length: 30}, (_, i) => ({
       key: `d${i}`,
       primary: 10 + i,
     }));
     let tree!: ReactTestRenderer.ReactTestRenderer;
     act(() => {
-      tree = TestRenderer.create(
-        <StackedBars data={data} tokens={tokens} />,
-      );
+      tree = TestRenderer.create(<StackedBars data={data} tokens={tokens} />);
     });
     layoutContainer(tree, 300);
     // 30 柱 × min 18 + 29 间隔 × 6 = 714 > 300：内容超宽
@@ -145,7 +141,8 @@ describe('StackedBars 居中与网格（T-MB1/2/3）', () => {
     expect(scrollViews.length).toBeGreaterThan(0);
     // 柱宽被 MIN_BAR_WIDTH=18 撑住（超宽证据）
     const bar = tree.root.findAll(
-      node => typeof node.props.testID === 'string' && node.props.testID === 'bar-d0',
+      node =>
+        typeof node.props.testID === 'string' && node.props.testID === 'bar-d0',
     )[0];
     expect(styleValue(bar.props.style, 'width')).toBe(18);
   });
@@ -156,8 +153,8 @@ describe('StackedBars 居中与网格（T-MB1/2/3）', () => {
       tree = TestRenderer.create(
         <StackedBars
           data={[
-            { key: 'a', primary: 1200, secondary: 300 },
-            { key: 'b', primary: 0 },
+            {key: 'a', primary: 1200, secondary: 300},
+            {key: 'b', primary: 0},
           ]}
           tokens={tokens}
         />,
@@ -189,9 +186,7 @@ describe('StackedBars 居中与网格（T-MB1/2/3）', () => {
     act(() => {
       tree = TestRenderer.create(
         <StackedBars
-          data={[
-            { key: '2026-08-24', primary: 1200, secondary: 300, calls: 6 },
-          ]}
+          data={[{key: '2026-08-24', primary: 1200, secondary: 300, calls: 6}]}
           onLongPress={onLongPress}
           tokens={tokens}
         />,

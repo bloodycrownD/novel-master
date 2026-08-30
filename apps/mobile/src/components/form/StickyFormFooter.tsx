@@ -3,8 +3,8 @@
  */
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
-import {PrimaryButton} from '../ui/PrototypeButtons';
-import type {ThemeTokens} from '../../theme/tokens';
+import {PrimaryButton} from '@/components/ui/PrototypeButtons';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   tokens: ThemeTokens;
@@ -29,7 +29,8 @@ export function StickyFormFooter({
           backgroundColor: tokens.surface,
           borderTopColor: tokens.borderLight,
         },
-      ]}>
+      ]}
+    >
       <PrimaryButton
         label={loading ? '保存中…' : label}
         tokens={tokens}

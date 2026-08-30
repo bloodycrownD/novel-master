@@ -11,7 +11,7 @@ import React from 'react';
 import * as RN from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
 import {__setKeyboardHeightForTests} from '../test-utils/react-native-keyboard-controller-mock';
-import {useAdaptiveKeyboardSheetStyle} from '../src/hooks/useAdaptiveKeyboardSheetStyle';
+import {useAdaptiveKeyboardSheetStyle} from '@/hooks/useAdaptiveKeyboardSheetStyle';
 
 type Style = ReturnType<typeof useAdaptiveKeyboardSheetStyle>;
 

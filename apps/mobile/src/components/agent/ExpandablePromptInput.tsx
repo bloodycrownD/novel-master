@@ -24,7 +24,7 @@ import {
   type TextInputSelectionChangeEventData,
   type TextStyle,
 } from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 import {PROMPT_INLINE_MAX_HEIGHT} from './prompt-collapse';
 
 type PromptSelection = {start: number; end: number};
@@ -80,7 +80,8 @@ export function ExpandablePromptInput({
       <View style={styles.labelRow}>
         <Text
           style={[styles.labelText, {color: tokens.textSecondary}]}
-          numberOfLines={1}>
+          numberOfLines={1}
+        >
           {label}
         </Text>
         <Pressable
@@ -88,7 +89,8 @@ export function ExpandablePromptInput({
           onPress={handleOpenPress}
           accessibilityLabel="全屏编辑"
           style={styles.openBtn}
-          hitSlop={8}>
+          hitSlop={8}
+        >
           <Text style={[styles.openGlyph, {color: tokens.textSecondary}]}>
             ⛶
           </Text>

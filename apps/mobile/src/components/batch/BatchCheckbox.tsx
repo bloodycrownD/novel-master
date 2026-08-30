@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   checked: boolean;
@@ -27,7 +27,8 @@ export function BatchCheckbox({checked, onToggle, accentColor}: Props) {
           borderColor: checked ? accent : tokens.border,
           backgroundColor: checked ? accent : 'transparent',
         },
-      ]}>
+      ]}
+    >
       {checked ? <Text style={styles.mark}>✓</Text> : null}
     </Pressable>
   );

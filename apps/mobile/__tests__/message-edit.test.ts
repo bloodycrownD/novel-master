@@ -1,8 +1,8 @@
-import { type ChatMessage } from "@novel-master/core/chat";
+import {type ChatMessage} from '@novel-master/core/chat';
 import {
   applyTextEditToMessage,
   editableTextFromMessage,
-} from '../src/components/chat/message-edit';
+} from '@/components/chat/message-edit';
 
 function msg(
   role: string,

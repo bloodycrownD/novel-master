@@ -1,9 +1,9 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {VfsBatchHeader} from '../src/components/batch/VfsBatchHeader';
+import {VfsBatchHeader} from '@/components/batch/VfsBatchHeader';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       text: '#111',

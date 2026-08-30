@@ -6,21 +6,21 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {buildAnnotatedSource} from '@novel-master/core/chat';
-import {sanitizeRichHtml} from '../src/components/rich-content/sanitize-rich-html';
+import {sanitizeRichHtml} from '@/components/rich-content/sanitize-rich-html';
 import {
   addChatAnnotateDraft,
   resetChatAnnotateDraftStoreForTests,
-} from '../src/storage/chat-annotate-draft';
+} from '@/storage/chat-annotate-draft';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
 const mockReadEngine = jest.fn(async () => 'webview' as const);
 
-jest.mock('../src/runtime/novel-master-context', () => ({
+jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: {get: jest.fn()}}),
 }));
 
-jest.mock('../src/storage/vfs-markdown-preview-engine', () => ({
+jest.mock('@/storage/vfs-markdown-preview-engine', () => ({
   defaultVfsMarkdownPreviewEngine: () => 'webview',
   readVfsMarkdownPreviewEngine: (...args: unknown[]) => mockReadEngine(...args),
 }));
@@ -30,7 +30,7 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
+jest.mock('@/components/vfs/RichDocumentWebView', () => ({
   RichDocumentWebView: jest.fn((props: Record<string, unknown>) => {
     const React = require('react');
     const {View} = require('react-native');
@@ -41,15 +41,15 @@ jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
   }),
 }));
 
-jest.mock('../src/components/chat/MessageEditModal', () => ({
+jest.mock('@/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
 }));
 
-jest.mock('../src/components/vfs/AnnotatePickModal', () => ({
+jest.mock('@/components/vfs/AnnotatePickModal', () => ({
   AnnotatePickModal: () => null,
 }));
 
-jest.mock('../src/components/rich-content/sanitize-rich-html', () => ({
+jest.mock('@/components/rich-content/sanitize-rich-html', () => ({
   sanitizeRichHtml: (html: string) => {
     return html
       .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -57,15 +57,17 @@ jest.mock('../src/components/rich-content/sanitize-rich-html', () => ({
   },
 }));
 
-jest.mock('../src/components/rich-content/prepare-transcript-rich-html', () => ({
+jest.mock('@/components/rich-content/prepare-transcript-rich-html', () => ({
   prepareTranscriptRichHtml: (md: string) => {
-    const {sanitizeRichHtml} = require('../src/components/rich-content/sanitize-rich-html');
+    const {
+      sanitizeRichHtml,
+    } = require('@/components/rich-content/sanitize-rich-html');
     return sanitizeRichHtml(md);
   },
 }));
 
-import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
-import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
+import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
+import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
 
 const mockRichDocumentWebView = RichDocumentWebView as jest.MockedFunction<
   typeof RichDocumentWebView
@@ -197,10 +199,7 @@ hello world
 describe('T-SA9 预览主路径无 DOM 搜字 / 无插锚', () => {
   it('RichDocumentWebView 无 fallback 开关；annotate 时投递 setAnnotations', () => {
     const src = readFileSync(
-      join(
-        __dirname,
-        '../src/components/vfs/RichDocumentWebView.tsx',
-      ),
+      join(__dirname, '../src/components/vfs/RichDocumentWebView.tsx'),
       'utf8',
     );
     expect(src).not.toContain('NM_ANNOTATE_DOM_SEARCH_FALLBACK');
@@ -211,14 +210,13 @@ describe('T-SA9 预览主路径无 DOM 搜字 / 无插锚', () => {
 
   it('annotate.ts 使用 createTextAnnotator，不调用 applyAnnotateMarks', () => {
     const src = readFileSync(
-      join(
-        __dirname,
-        '../src/web/rich-document/webview/runtime/annotate.ts',
-      ),
+      join(__dirname, '../src/web/rich-document/webview/runtime/annotate.ts'),
       'utf8',
     );
     expect(src).toContain('createTextAnnotator');
-    expect(src).not.toMatch(/applyAnnotateMarks\s*\(|from\s+['"][^'"]*annotate-marks/);
+    expect(src).not.toMatch(
+      /applyAnnotateMarks\s*\(|from\s+['"][^'"]*annotate-marks/,
+    );
     expect(src).not.toContain('isAnnotateDomSearchFallbackEnabled');
   });
 

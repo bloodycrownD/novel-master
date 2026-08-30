@@ -13,19 +13,13 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  ActivityIndicator,
-  Button,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import {closeMobileConnection} from '../db/connection';
+import {ActivityIndicator, Button, StyleSheet, Text, View} from 'react-native';
+import {closeMobileConnection} from '@/db/connection';
 import {
   createAppUiPreferences,
   type AppUiPreferences,
-} from '../storage/app-ui-prefs';
-import {syncAppVersionForRichRender} from '../storage/app-version-guard';
+} from '@/storage/app-ui-prefs';
+import {syncAppVersionForRichRender} from '@/storage/app-version-guard';
 import {createMobileNovelMasterRuntime} from './create-mobile-runtime';
 import mobilePackage from '../../package.json';
 import {
@@ -65,7 +59,9 @@ function formatBootstrapError(err: unknown): string {
 
 export function NovelMasterProvider({children}: {children: ReactNode}) {
   const [status, setStatus] = useState<RuntimeStatus>('loading');
-  const [runtime, setRuntime] = useState<MobileNovelMasterRuntime | undefined>();
+  const [runtime, setRuntime] = useState<
+    MobileNovelMasterRuntime | undefined
+  >();
   const [appUi, setAppUi] = useState<AppUiPreferences | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [scope, setScope] = useState<MobileScopeSnapshot>({
@@ -103,15 +99,14 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       setRichRenderEpoch(epoch);
       setScope(loaded);
       setStatus('ready');
-    })()
-      .catch(err => {
-        if (!cancelled) {
-          setRuntime(undefined);
-          setAppUi(undefined);
-          setError(formatBootstrapError(err));
-          setStatus('error');
-        }
-      });
+    })().catch(err => {
+      if (!cancelled) {
+        setRuntime(undefined);
+        setAppUi(undefined);
+        setError(formatBootstrapError(err));
+        setStatus('error');
+      }
+    });
 
     return () => {
       cancelled = true;

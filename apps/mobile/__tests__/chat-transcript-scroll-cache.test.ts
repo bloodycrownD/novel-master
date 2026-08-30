@@ -1,13 +1,13 @@
 import {
   CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
   type ChatTranscriptScrollSnapshot,
-} from '../src/components/chat/ChatTranscriptBridge';
+} from '@/components/chat/ChatTranscriptBridge';
 import {
   clearAllTranscriptScrollSnapshots,
   getTranscriptScrollSnapshot,
   normalizeScrollSnapshot,
   setTranscriptScrollSnapshot,
-} from '../src/services/chat-transcript-scroll-cache';
+} from '@/services/chat-transcript-scroll-cache';
 
 describe('chat-transcript-scroll-cache', () => {
   beforeEach(() => {

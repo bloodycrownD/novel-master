@@ -5,9 +5,9 @@
  */
 import {KkvError, normalizePrefix} from '@novel-master/core';
 import type {KkvService} from '@novel-master/core/kkv';
-import { type SecretStore } from "@novel-master/core/provider";
+import {type SecretStore} from '@novel-master/core/provider';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /** KKV 模块名 */
 export const CLOUD_SYNC_KKV_MODULE = 'nm-cloud-sync';
@@ -131,7 +131,10 @@ export function generateCloudSyncDeviceId(): string {
   bytes[6] = (bytes[6]! & 0x0f) | 0x40;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(
+    12,
+    16,
+  )}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function validateConfigInput(input: CloudSyncConfigInput): void {
@@ -195,14 +198,19 @@ export async function getCloudSyncLocalStatus(
 ): Promise<CloudSyncLocalStatus> {
   const config = await getCloudSyncConfig(runtime);
   const {kkv} = runtime;
-  const [lastSyncedRev, lastPullAt, lastPushAt, lastPullResult, lastPushResult] =
-    await Promise.all([
-      kkvGet(kkv, KEY_LAST_SYNCED_REV),
-      kkvGet(kkv, KEY_LAST_PULL_AT),
-      kkvGet(kkv, KEY_LAST_PUSH_AT),
-      kkvGet(kkv, KEY_LAST_PULL_RESULT),
-      kkvGet(kkv, KEY_LAST_PUSH_RESULT),
-    ]);
+  const [
+    lastSyncedRev,
+    lastPullAt,
+    lastPushAt,
+    lastPullResult,
+    lastPushResult,
+  ] = await Promise.all([
+    kkvGet(kkv, KEY_LAST_SYNCED_REV),
+    kkvGet(kkv, KEY_LAST_PULL_AT),
+    kkvGet(kkv, KEY_LAST_PUSH_AT),
+    kkvGet(kkv, KEY_LAST_PULL_RESULT),
+    kkvGet(kkv, KEY_LAST_PUSH_RESULT),
+  ]);
 
   const configured =
     config.endpoint.trim().length > 0 &&
@@ -272,9 +280,7 @@ export async function patchCloudSyncLocalStatus(
   const {kkv} = runtime;
   const tasks: Promise<void>[] = [];
   if (patch.lastSyncedRev != null) {
-    tasks.push(
-      kkvSet(kkv, KEY_LAST_SYNCED_REV, String(patch.lastSyncedRev)),
-    );
+    tasks.push(kkvSet(kkv, KEY_LAST_SYNCED_REV, String(patch.lastSyncedRev)));
   }
   if (patch.lastPullAt != null) {
     tasks.push(kkvSet(kkv, KEY_LAST_PULL_AT, patch.lastPullAt));
@@ -320,10 +326,8 @@ export async function buildS3StorageConfig(
     endpoint: overrides?.endpoint?.trim() || config.endpoint.trim(),
     bucket: overrides?.bucket?.trim() || config.bucket.trim(),
     region: overrides?.region?.trim() ?? config.region.trim(),
-    accessKeyId:
-      overrides?.accessKeyId?.trim() || config.accessKeyId.trim(),
+    accessKeyId: overrides?.accessKeyId?.trim() || config.accessKeyId.trim(),
     secretAccessKey: secretKey,
-    forcePathStyle:
-      overrides?.forcePathStyle ?? config.forcePathStyle,
+    forcePathStyle: overrides?.forcePathStyle ?? config.forcePathStyle,
   };
 }

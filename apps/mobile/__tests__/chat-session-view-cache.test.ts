@@ -1,11 +1,11 @@
 import {describe, expect, it, beforeEach} from '@jest/globals';
-import { type ChatMessage } from "@novel-master/core/chat";
+import {type ChatMessage} from '@novel-master/core/chat';
 import {
   clearAllSessionViewCaches,
   getSessionViewCache,
   sessionViewCacheKey,
   setSessionViewCache,
-} from '../src/services/chat-session-view-cache';
+} from '@/services/chat-session-view-cache';
 
 function sampleMessage(id: string): ChatMessage {
   return {

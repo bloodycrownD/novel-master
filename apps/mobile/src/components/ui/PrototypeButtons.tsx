@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type BtnProps = {
   label: string;
@@ -32,10 +32,12 @@ export function PrimaryButton({
           backgroundColor: tokens.primary,
           opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
         },
-      ]}>
+      ]}
+    >
       <Text
         pointerEvents="none"
-        style={[styles.primaryText, fullWidth ? styles.fullWidthLabel : null]}>
+        style={[styles.primaryText, fullWidth ? styles.fullWidthLabel : null]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -61,14 +63,16 @@ export function SecondaryButton({
           backgroundColor: tokens.bgSecondary,
           opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
         },
-      ]}>
+      ]}
+    >
       <Text
         pointerEvents="none"
         style={[
           styles.secondaryText,
           {color: tokens.text},
           fullWidth ? styles.fullWidthLabel : null,
-        ]}>
+        ]}
+      >
         {label}
       </Text>
     </Pressable>

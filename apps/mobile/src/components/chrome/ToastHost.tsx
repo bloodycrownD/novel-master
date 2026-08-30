@@ -13,8 +13,8 @@ import React, {
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {APP_HEADER_CONTENT_HEIGHT} from './AppHeader';
-import {useTheme} from '../../theme/ThemeProvider';
-import {registerAppToastSink} from '../../services/app-toast';
+import {useTheme} from '@/theme/ThemeProvider';
+import {registerAppToastSink} from '@/services/app-toast';
 
 export type ToastOptions = {
   actionLabel?: string;
@@ -96,8 +96,11 @@ export function ToastHost({children}: {children: ReactNode}) {
               backgroundColor: tokens.surfaceElevated,
               borderColor: tokens.border,
             },
-          ]}>
-          <Text style={[styles.text, {color: tokens.text}]}>{toast.message}</Text>
+          ]}
+        >
+          <Text style={[styles.text, {color: tokens.text}]}>
+            {toast.message}
+          </Text>
           {hasAction ? (
             <Pressable
               accessibilityRole="button"
@@ -115,7 +118,8 @@ export function ToastHost({children}: {children: ReactNode}) {
                     ? tokens.bgSecondary
                     : tokens.borderLight,
                 },
-              ]}>
+              ]}
+            >
               <Text style={[styles.actionText, {color: tokens.primary}]}>
                 {toast.actionLabel}
               </Text>

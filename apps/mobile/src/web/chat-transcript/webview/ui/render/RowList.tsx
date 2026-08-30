@@ -2,12 +2,12 @@
  * 行列表根：加载更早 / 消息行 / 流式尾 / 空态。
  *
  * E2 allowlist：可值导入 `state`；新 ui 组件禁直读——
- * 见 apps/mobile/README.md「E2：ui 禁值导入 state」、scripts/check-ct-ui-no-state.mjs。
+ * 见 apps/mobile/README.md「E2：ui 禁值导入 state」；原门禁脚本已删，纪律见 README。）
  */
-import type { ComponentChildren } from 'preact';
-import { state } from '../../runtime/state/state';
-import { MessageRow } from './MessageRow';
-import { StreamTail } from '../stream/StreamTail';
+import type {ComponentChildren} from 'preact';
+import {state} from '../../runtime/state/state';
+import {MessageRow} from './MessageRow';
+import {StreamTail} from '../stream/StreamTail';
 
 export function RowList() {
   const hasStream = !!(

@@ -5,11 +5,11 @@ import {
   readChatComposerDraftState,
   writeChatComposerDraft,
   writeChatComposerDraftState,
-} from '../src/storage/chat-composer-draft';
+} from '@/storage/chat-composer-draft';
 import {
   addChatAnnotateDraft,
   resetChatAnnotateDraftStoreForTests,
-} from '../src/storage/chat-annotate-draft';
+} from '@/storage/chat-annotate-draft';
 
 describe('chat-composer-draft', () => {
   it('reads and writes per session', () => {
@@ -113,9 +113,9 @@ describe('chat-composer-draft', () => {
       state.attachments.map(a => `${a.action ?? a.source}:${a.path}`),
     ).toEqual(['workplaceChange:/w.md', 'annotate:/note.md']);
     // 同 path 两条草稿仍只一只 chip
-    expect(
-      state.attachments.filter(a => a.action === 'annotate').length,
-    ).toBe(1);
+    expect(state.attachments.filter(a => a.action === 'annotate').length).toBe(
+      1,
+    );
     resetChatAnnotateDraftStoreForTests();
   });
 });

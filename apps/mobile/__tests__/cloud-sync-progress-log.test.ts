@@ -2,14 +2,16 @@ import {
   createCloudSyncProgress,
   shortStorageKey,
   withCloudSyncStorageProgress,
-} from '../src/services/cloud-sync-progress-log';
+} from '@/services/cloud-sync-progress-log';
 import {
   initialCloudSyncProgressUi,
   mapCloudSyncProgressEvent,
-} from '../src/services/cloud-sync-progress-ui';
+} from '@/services/cloud-sync-progress-ui';
 
 describe('cloud-sync-progress-log', () => {
-  const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  const warnSpy = jest
+    .spyOn(console, 'warn')
+    .mockImplementation(() => undefined);
 
   afterEach(() => {
     warnSpy.mockClear();

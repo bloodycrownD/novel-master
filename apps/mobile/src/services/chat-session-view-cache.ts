@@ -1,7 +1,7 @@
 /**
  * In-memory per-session message tail + paging flag (survives list ↔ conversation).
  */
-import { type ChatMessage } from "@novel-master/core/chat";
+import {type ChatMessage} from '@novel-master/core/chat';
 
 export type SessionViewCache = {
   readonly messages: readonly ChatMessage[];
@@ -17,9 +17,7 @@ export function sessionViewCacheKey(
   return `${projectId}:${sessionId}`;
 }
 
-export function getSessionViewCache(
-  key: string,
-): SessionViewCache | undefined {
+export function getSessionViewCache(key: string): SessionViewCache | undefined {
   return cache.get(key);
 }
 

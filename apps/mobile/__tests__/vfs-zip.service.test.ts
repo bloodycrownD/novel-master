@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
-import {exportVfsZip, importVfsZip} from '../src/services/vfs-zip.service';
-import { VfsZipError } from "@novel-master/core/vfs";
+import {exportVfsZip, importVfsZip} from '@/services/vfs-zip.service';
+import {VfsZipError} from '@novel-master/core/vfs';
 
 const mockExport = jest.fn();
 const mockImport = jest.fn();
@@ -17,7 +17,8 @@ const mockParseVfsZip = jest.fn();
 
 jest.mock('@novel-master/core/vfs', () => ({
   ...jest.requireActual('@novel-master/core/vfs'),
-  createVfsZipIoService: (...args: unknown[]) => mockCreateVfsZipIoService(...args),
+  createVfsZipIoService: (...args: unknown[]) =>
+    mockCreateVfsZipIoService(...args),
   parseVfsZip: (...args: unknown[]) => mockParseVfsZip(...args),
 }));
 
@@ -54,11 +55,11 @@ jest.mock('react-native-blob-util', () => ({
 
 /** 含 EOCD 的最小有效 ZIP（fflate zipSync 单文件 a.md）。 */
 const VALID_ZIP_BYTES = new Uint8Array([
-  80, 75, 3, 4, 20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0,
-  0, 0, 1, 0, 0, 0, 4, 0, 0, 0, 97, 46, 109, 100, 75, 4, 0, 80, 75, 1, 2, 20,
-  0, 20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0, 0, 1, 0,
-  0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 46, 109, 100,
-  80, 75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 50, 0, 0, 0, 37, 0, 0, 0, 0, 0,
+  80, 75, 3, 4, 20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0,
+  0, 1, 0, 0, 0, 4, 0, 0, 0, 97, 46, 109, 100, 75, 4, 0, 80, 75, 1, 2, 20, 0,
+  20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0, 0, 1, 0, 0, 0,
+  4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 46, 109, 100, 80,
+  75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 50, 0, 0, 0, 37, 0, 0, 0, 0, 0,
 ]);
 const VALID_ZIP_BASE64 =
   'UEsDBBQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAYS5tZEsEAFBLAQIUABQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAAAAAAAAAAAAAAAAAAABhLm1kUEsFBgAAAAABAAEAMgAAACUAAAAAAA==';
@@ -95,9 +96,7 @@ describe('vfs-zip.service', () => {
     mockWriteFile.mockResolvedValue(undefined);
     mockStat.mockResolvedValue({size: 5});
     mockUnlink.mockResolvedValue(undefined);
-    mockParseVfsZip.mockReturnValue(
-      new Map([['a.md', new Uint8Array([97])]]),
-    );
+    mockParseVfsZip.mockReturnValue(new Map([['a.md', new Uint8Array([97])]]));
     mockKeepLocalCopy.mockResolvedValue([
       {
         status: 'success',
@@ -190,11 +189,10 @@ describe('vfs-zip.service', () => {
       }),
     );
     expect(mockReadFile).toHaveBeenCalledWith('/cache/import.zip', 'base64');
-    expect(mockImport).toHaveBeenCalledWith(
-      scope,
-      expect.any(Uint8Array),
-      {confirmed: true, directoryPath: '/'},
-    );
+    expect(mockImport).toHaveBeenCalledWith(scope, expect.any(Uint8Array), {
+      confirmed: true,
+      directoryPath: '/',
+    });
   });
 
   it('passes directoryPath to Core export/import', async () => {
@@ -208,11 +206,10 @@ describe('vfs-zip.service', () => {
       confirmed: true,
       directoryPath: '/a',
     });
-    expect(mockImport).toHaveBeenCalledWith(
-      scope,
-      expect.any(Uint8Array),
-      {confirmed: true, directoryPath: '/a'},
-    );
+    expect(mockImport).toHaveBeenCalledWith(scope, expect.any(Uint8Array), {
+      confirmed: true,
+      directoryPath: '/a',
+    });
   });
 
   it('export fileName includes directoryPath suffix aligned with Desktop', async () => {

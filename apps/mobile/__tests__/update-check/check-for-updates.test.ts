@@ -1,4 +1,4 @@
-import {checkForUpdates} from '../../src/update-check/check-for-updates';
+import {checkForUpdates} from '@/update-check/check-for-updates';
 
 describe('checkForUpdates', () => {
   it('reports update-available when local is older', async () => {
@@ -7,7 +7,8 @@ describe('checkForUpdates', () => {
       status: 200,
       json: async () => ({
         tag_name: 'v9.9.9',
-        html_url: 'https://github.com/bloodycrownD/novel-master/releases/tag/v9.9.9',
+        html_url:
+          'https://github.com/bloodycrownD/novel-master/releases/tag/v9.9.9',
         body: 'Notes',
       }),
     });

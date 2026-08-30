@@ -18,7 +18,7 @@ import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // import type 会被擦除，不影响运行时打包。
 import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
 import Clipboard from '@react-native-clipboard/clipboard';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 import {
   encodeHostToRichDocument,
   decodeRichDocumentToHost,
@@ -31,7 +31,7 @@ import {
   getRichDocumentPackageDirUri,
   getRichDocumentUri,
 } from '@/webview-host/rich-document/uri';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
 
@@ -197,8 +197,7 @@ export function RichDocumentWebView({
       }
       if (message.type === 'recogitoCreate') {
         const p = message.payload;
-        const quote = String(p.quote ?? '')
-          .replace(/\u00a0/g, ' ');
+        const quote = String(p.quote ?? '').replace(/\u00a0/g, ' ');
         const renderStart = Number(p.renderStart);
         const renderEnd = Number(p.renderEnd);
         if (
@@ -271,15 +270,7 @@ export function RichDocumentWebView({
     postToWeb(
       buildSetDocumentPayload(html, plain, overLimit, frontMatterHtml, layout),
     );
-  }, [
-    webReady,
-    html,
-    plain,
-    overLimit,
-    frontMatterHtml,
-    layout,
-    postToWeb,
-  ]);
+  }, [webReady, html, plain, overLimit, frontMatterHtml, layout, postToWeb]);
 
   useEffect(() => {
     if (!webReady) {
@@ -322,12 +313,7 @@ export function RichDocumentWebView({
       type: 'clearAnnotateSelection',
       payload: {},
     });
-  }, [
-    webReady,
-    annotateEnabled,
-    clearAnnotateSelectionSignal,
-    postToWeb,
-  ]);
+  }, [webReady, annotateEnabled, clearAnnotateSelectionSignal, postToWeb]);
 
   /**
    * Android 返回键：全屏查看器开着时先关它（完全内聚，不影响使用方）。
@@ -355,29 +341,29 @@ export function RichDocumentWebView({
    * http/https 外跳系统浏览器并拒绝页内导航，其余 scheme 一律拒绝。
    * 外部页面无法在 WebView 内落地后，其 postMessage 伪造桥消息即无从成立。
    */
-  const shouldStartLoadWithRequest = useCallback((req: {url: string}): boolean => {
-    if (req.url.startsWith(getRichDocumentPackageDirUri())) {
-      return true;
-    }
-    if (/^https?:\/\//i.test(req.url)) {
-      // 外跳失败（无浏览器可处理等）静默兜底：绝不回退到 WebView 页内导航。
-      // 防御性保留：库自身在 originWhitelist 拦截失败时也会外跳，此处兜住回调直达的场景。
-      void Linking.openURL(req.url).catch(() => undefined);
-    }
-    return false;
-  }, []);
+  const shouldStartLoadWithRequest = useCallback(
+    (req: {url: string}): boolean => {
+      if (req.url.startsWith(getRichDocumentPackageDirUri())) {
+        return true;
+      }
+      if (/^https?:\/\//i.test(req.url)) {
+        // 外跳失败（无浏览器可处理等）静默兜底：绝不回退到 WebView 页内导航。
+        // 防御性保留：库自身在 originWhitelist 拦截失败时也会外跳，此处兜住回调直达的场景。
+        void Linking.openURL(req.url).catch(() => undefined);
+      }
+      return false;
+    },
+    [],
+  );
 
   /**
    * iOS window.open / target="_blank" 新开窗口兜底：拒绝 WebView 内打开，外跳系统浏览器。
    */
-  const handleOpenWindow = useCallback(
-    (event: WebViewOpenWindowEvent) => {
-      event.preventDefault();
-      // WebViewOpenWindow 的字段是 targetUrl（新窗口目标地址），无 url 字段。
-      void Linking.openURL(event.nativeEvent.targetUrl).catch(() => undefined);
-    },
-    [],
-  );
+  const handleOpenWindow = useCallback((event: WebViewOpenWindowEvent) => {
+    event.preventDefault();
+    // WebViewOpenWindow 的字段是 targetUrl（新窗口目标地址），无 url 字段。
+    void Linking.openURL(event.nativeEvent.targetUrl).catch(() => undefined);
+  }, []);
 
   return (
     <View style={[styles.fill, style]}>

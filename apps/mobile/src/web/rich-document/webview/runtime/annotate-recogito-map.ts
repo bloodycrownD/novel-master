@@ -46,16 +46,19 @@ export function draftToRecogitoAnnotation(
  * selector 缺失或非法时返回 null（不写脏 offset）。
  */
 export function recogitoAnnotationToDraftFields(
-  annotation: {
-    readonly id?: string;
-    readonly target?: {
-      readonly selector?: readonly {
-        readonly quote?: string;
-        readonly start?: number;
-        readonly end?: number;
-      }[];
-    };
-  } | null | undefined,
+  annotation:
+    | {
+        readonly id?: string;
+        readonly target?: {
+          readonly selector?: readonly {
+            readonly quote?: string;
+            readonly start?: number;
+            readonly end?: number;
+          }[];
+        };
+      }
+    | null
+    | undefined,
 ): {
   readonly id: string;
   readonly originalText: string;

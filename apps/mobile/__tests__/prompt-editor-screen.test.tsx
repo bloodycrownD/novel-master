@@ -50,7 +50,10 @@ jest.mock('@react-navigation/native', () => ({
     dispatch: mockDispatch,
     addListener: (
       event: string,
-      handler: (e: {preventDefault: () => void; data: {action: unknown}}) => void,
+      handler: (e: {
+        preventDefault: () => void;
+        data: {action: unknown};
+      }) => void,
     ) => {
       if (event === 'beforeRemove') {
         mockBeforeRemoveHandlers[0] = handler;
@@ -61,7 +64,7 @@ jest.mock('@react-navigation/native', () => ({
   useRoute: () => mockRoute,
 }));
 
-jest.mock('../src/components/vfs/CodeEditorWebView', () => {
+jest.mock('@/components/vfs/CodeEditorWebView', () => {
   // forwardRef 包装：真组件接 codeEditorRef，stub 不接会报 function component ref 警告。
   const mockReact = require('react');
   return {
@@ -79,7 +82,7 @@ jest.mock('../src/components/vfs/CodeEditorWebView', () => {
   };
 });
 
-jest.mock('../src/components/vfs/FileMarkdownPreview', () => ({
+jest.mock('@/components/vfs/FileMarkdownPreview', () => ({
   FileMarkdownPreview: (props: {
     path: string;
     content: string;
@@ -91,22 +94,22 @@ jest.mock('../src/components/vfs/FileMarkdownPreview', () => ({
   },
 }));
 
-jest.mock('../src/components/ui/SegmentedControl', () => ({
+jest.mock('@/components/ui/SegmentedControl', () => ({
   SegmentedControl: (props: {value: string; onChange: (v: string) => void}) => {
     mockSegmentedProps[0] = props;
     return null;
   },
 }));
 
-jest.mock('../src/navigation/HeaderContext', () => ({
+jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({setStackOverride: jest.fn()}),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       text: '#111',
@@ -120,11 +123,11 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-import {PromptEditorScreen} from '../src/screens/stack/PromptEditorScreen';
+import {PromptEditorScreen} from '@/screens/stack/PromptEditorScreen';
 import {
   setPromptEditorOnSaved,
   takePromptEditorOnSaved,
-} from '../src/components/agent/prompt-editor-callback';
+} from '@/components/agent/prompt-editor-callback';
 
 function renderScreen() {
   let tree: TestRenderer.ReactTestRenderer;

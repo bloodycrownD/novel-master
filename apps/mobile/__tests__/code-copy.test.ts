@@ -78,16 +78,16 @@ describe('copyCode 两管线挂接契约 (T-CB23)', () => {
     const bind = webSrc(
       'chat-transcript/webview/runtime/boot/bind-shell-events.ts',
     );
-    // chat：壳级绑定处挂接，传 bridge 的 post
-    expect(bind).toContain(
-      "import { attachCodeCopyDelegation } from '@web/shared/code-copy'",
+    // chat：壳级绑定处挂接，传 bridge 的 post（空白容忍，锁语义 token）
+    expect(bind).toMatch(
+      /import\s*\{\s*attachCodeCopyDelegation\s*\}\s*from\s*'@web\/shared\/code-copy'/,
     );
     expect(bind).toContain('attachCodeCopyDelegation(post)');
 
     // rich：模块初始化处挂接，不进 setDocument 视图刷新链路
     const main = webSrc('rich-document/webview/main.ts');
-    expect(main).toContain(
-      "import { attachCodeCopyDelegation } from '@web/shared/code-copy'",
+    expect(main).toMatch(
+      /import\s*\{\s*attachCodeCopyDelegation\s*\}\s*from\s*'@web\/shared\/code-copy'/,
     );
     expect(main).toContain('attachCodeCopyDelegation(post)');
   });

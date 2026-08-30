@@ -7,7 +7,7 @@ import {
   buildChatListItems,
   buildTranscriptRows,
   selectTailTranscriptRows,
-} from '../src/components/chat/message-blocks';
+} from '@/components/chat/message-blocks';
 
 function msg(
   id: string,
@@ -22,7 +22,7 @@ function msg(
     sessionId: 's1',
     seq,
     role,
-    content: { blocks },
+    content: {blocks},
     provider: null,
     raw,
     createdAtMs: seq,
@@ -33,8 +33,8 @@ function msg(
 describe('buildTranscriptRows', () => {
   it('matches buildChatListItems message order (seq ascending)', () => {
     const messages = [
-      msg('u1', 'user', [{ type: 'text', text: 'hi' }], 1),
-      msg('a1', 'assistant', [{ type: 'text', text: 'hello' }], 2),
+      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
+      msg('a1', 'assistant', [{type: 'text', text: 'hello'}], 2),
     ];
     const listKinds = buildChatListItems(messages).map(i => i.kind);
     const rowKinds = buildTranscriptRows(messages).map(r => r.kind);
@@ -43,7 +43,7 @@ describe('buildTranscriptRows', () => {
 
   it('user 带 attachments → row.attachments 摘要', () => {
     const withAttach: ChatMessage = {
-      ...msg('u1', 'user', [{ type: 'text', text: '看这个' }], 1),
+      ...msg('u1', 'user', [{type: 'text', text: '看这个'}], 1),
       attachments: [
         {
           name: '/a.md',
@@ -81,9 +81,9 @@ describe('buildTranscriptRows', () => {
       ],
     });
     const plain = buildTranscriptRows([
-      msg('u2', 'user', [{ type: 'text', text: '无附件' }], 1),
+      msg('u2', 'user', [{type: 'text', text: '无附件'}], 1),
     ])[0];
-    expect(plain).toMatchObject({ kind: 'message', role: 'user' });
+    expect(plain).toMatchObject({kind: 'message', role: 'user'});
     expect(
       plain && plain.kind === 'message' ? plain.attachments : undefined,
     ).toBeUndefined();
@@ -91,7 +91,7 @@ describe('buildTranscriptRows', () => {
 
   it('T-SR3: 仅遗留 user_ops 操作日志（非 annotate）的空正文消息不进 transcript（直接丢弃）', () => {
     const opsOnly: ChatMessage = {
-      ...msg('u-ops', 'user', [{ type: 'text', text: '' }], 3),
+      ...msg('u-ops', 'user', [{type: 'text', text: ''}], 3),
       attachments: [
         {
           name: 'mkdir:/notes',
@@ -107,7 +107,7 @@ describe('buildTranscriptRows', () => {
 
   it('T-SR3b: 空正文 + 仅 annotate 附件仍进 transcript（批注保留）', () => {
     const annotateOnly: ChatMessage = {
-      ...msg('u-ann', 'user', [{ type: 'text', text: '' }], 3),
+      ...msg('u-ann', 'user', [{type: 'text', text: ''}], 3),
       attachments: [
         {
           name: '/c.md',
@@ -177,7 +177,7 @@ describe('buildTranscriptRows', () => {
       msg(
         'u1',
         'user',
-        [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
+        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
         1,
         false,
         {
@@ -191,10 +191,10 @@ describe('buildTranscriptRows', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
+        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
         2,
         false,
-        { metadata: { kind: 'user_vfs_ack', synthetic: true } },
+        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
       ),
     ];
     const items = buildChatListItems(messages);
@@ -207,7 +207,7 @@ describe('buildTranscriptRows', () => {
 
   it('T-SR3: 空正文 + workplace/attach 摘要进 ChatTranscriptBridge 行', () => {
     const emptyWithMixed: ChatMessage = {
-      ...msg('u-mix', 'user', [{ type: 'text', text: '   ' }], 1),
+      ...msg('u-mix', 'user', [{type: 'text', text: '   '}], 1),
       attachments: [
         {
           name: '/w.md',
@@ -232,14 +232,14 @@ describe('buildTranscriptRows', () => {
       role: 'user',
       text: '',
       attachments: [
-        { source: 'workplace', name: '/w.md', path: '/w.md' },
-        { source: 'attach', name: '/a.md', path: '/a.md' },
+        {source: 'workplace', name: '/w.md', path: '/w.md'},
+        {source: 'attach', name: '/a.md', path: '/a.md'},
       ],
     });
   });
 
   it('appends stream tail row when streaming (text/thinking only)', () => {
-    const messages = [msg('u1', 'user', [{ type: 'text', text: 'q' }], 1)];
+    const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
     const rows = buildTranscriptRows(messages, {
       text: 'partial',
       thinking: '',
@@ -252,7 +252,7 @@ describe('buildTranscriptRows', () => {
   });
 
   it('stream tail never includes tools', () => {
-    const messages = [msg('u1', 'user', [{ type: 'text', text: 'q' }], 1)];
+    const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
     const rows = buildTranscriptRows(messages, {
       text: 'partial',
       thinking: 'hmm',
@@ -271,7 +271,7 @@ describe('buildTranscriptRows', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
         1,
       ),
     ];
@@ -281,7 +281,7 @@ describe('buildTranscriptRows', () => {
     expect(row).toMatchObject({
       kind: 'message',
       id: 'a1',
-      tools: [expect.objectContaining({ toolUseId: 'tu1', status: 'pending' })],
+      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
     });
   });
 
@@ -291,8 +291,8 @@ describe('buildTranscriptRows', () => {
         'a1',
         'assistant',
         [
-          { type: 'text', text: 'reply' },
-          { type: 'thinking', text: 'hmm' },
+          {type: 'text', text: 'reply'},
+          {type: 'thinking', text: 'hmm'},
         ],
         1,
       ),
@@ -309,20 +309,20 @@ describe('buildTranscriptRows', () => {
 
   it('embeds tools on message rows (no kind:tool)', () => {
     const messages = [
-      msg('u1', 'user', [{ type: 'text', text: 'hi' }], 1),
+      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
       msg(
         'a1',
         'assistant',
         [
-          { type: 'text', text: 'hello' },
-          { type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/x' } },
+          {type: 'text', text: 'hello'},
+          {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
         ],
         2,
       ),
       msg(
         'u2',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         3,
       ),
     ];
@@ -337,7 +337,7 @@ describe('buildTranscriptRows', () => {
           toolUseId: 'tu1',
           name: 'read',
           status: 'success',
-          input: { path: '/x' },
+          input: {path: '/x'},
           resultContent: 'ok',
         }),
       ],
@@ -349,14 +349,14 @@ describe('buildTranscriptRows', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
         1,
         true,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
       ),
     ];
@@ -365,16 +365,16 @@ describe('buildTranscriptRows', () => {
     expect(rows[0]).toMatchObject({
       kind: 'message',
       hidden: true,
-      tools: [expect.objectContaining({ toolUseId: 'tu1' })],
+      tools: [expect.objectContaining({toolUseId: 'tu1'})],
     });
   });
 
   it('maps hidden flag on message rows', () => {
     const messages = [
-      msg('u1', 'user', [{ type: 'text', text: 'hidden' }], 1, true),
+      msg('u1', 'user', [{type: 'text', text: 'hidden'}], 1, true),
     ];
     const row = buildTranscriptRows(messages)[0];
-    expect(row).toMatchObject({ kind: 'message', hidden: true });
+    expect(row).toMatchObject({kind: 'message', hidden: true});
   });
 
   it('selectTailTranscriptRows 需全量上下文：hidden tool_result 已配对时显示 success 工具卡', () => {
@@ -382,13 +382,13 @@ describe('buildTranscriptRows', () => {
       msg(
         'a1',
         'assistant',
-        [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+        [{type: 'tool_use', id: 'tu1', name: 'read', input: {}}],
         1,
       ),
       msg(
         'u1',
         'user',
-        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
         2,
         true,
       ),
@@ -400,10 +400,10 @@ describe('buildTranscriptRows', () => {
       agentRunning: true,
     })[0];
     expect(tailOnly).toMatchObject({
-      tools: [expect.objectContaining({ toolUseId: 'tu1', status: 'pending' })],
+      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
     });
     expect(fromFull).toMatchObject({
-      tools: [expect.objectContaining({ toolUseId: 'tu1', status: 'success' })],
+      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'success'})],
     });
   });
 });

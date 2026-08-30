@@ -5,14 +5,14 @@ import {
   clearAllScrollSnapshots,
   scrollCacheKey,
   setScrollSnapshot,
-} from '../src/services/chat-list-scroll-cache';
-import {emitChatTranscriptTelemetry} from '../src/services/chat-transcript-telemetry';
+} from '@/services/chat-list-scroll-cache';
+import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 
 const mockEmitTelemetry = emitChatTranscriptTelemetry as jest.MockedFunction<
   typeof emitChatTranscriptTelemetry
 >;
 
-jest.mock('../src/services/chat-transcript-telemetry', () => ({
+jest.mock('@/services/chat-transcript-telemetry', () => ({
   CHAT_TRANSCRIPT_TELEMETRY_ENABLED: true,
   emitChatTranscriptTelemetry: jest.fn(),
 }));
@@ -50,7 +50,9 @@ const mockRuntime: any = {
     get: jest.fn(async () => ({id: 'p1', name: 'P1'})),
   },
   sessions: {
-    listByProject: jest.fn(async () => [{id: 's1', title: 'S1', updatedAtMs: 1}]),
+    listByProject: jest.fn(async () => [
+      {id: 's1', title: 'S1', updatedAtMs: 1},
+    ]),
   },
   messages: {
     listBySession: jest.fn(async () => []),
@@ -66,11 +68,11 @@ const mockRuntime: any = {
   projectVfs: jest.fn(() => ({})),
 };
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('../src/hooks/useMobileScope', () => ({
+jest.mock('@/hooks/useMobileScope', () => ({
   useMobileScope: () => ({
     projectId: 'p1',
     sessionId: 's1',
@@ -80,22 +82,22 @@ jest.mock('../src/hooks/useMobileScope', () => ({
   }),
 }));
 
-jest.mock('../src/navigation/HeaderContext', () => ({
+jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({setChat: jest.fn()}),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: jest.fn()}),
 }));
 
-jest.mock('../src/runtime/novel-master-context', () => ({
+jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     appUi: {get: jest.fn(async () => 'false')},
     richRenderEpoch: 0,
   }),
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -109,7 +111,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
     // 与新类型契约保持一致：枚举统一为 'session'
     source: 'session',
@@ -122,20 +124,20 @@ jest.mock('../src/services/chat-agent-meta', () => ({
   })),
 }));
 
-jest.mock('../src/services/chat-prompt-tokens.service', () => ({
+jest.mock('@/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
 }));
 
-jest.mock('../src/storage/chat-rich-text-pref', () => ({
+jest.mock('@/storage/chat-rich-text-pref', () => ({
   readChatRichTextEnabled: jest.fn(async () => false),
 }));
 
-jest.mock('../src/services/regex-apply-channel', () => ({
+jest.mock('@/services/regex-apply-channel', () => ({
   loadSessionMessagesTailForDisplay: jest.fn(async () => []),
   loadSessionMessagesPageForDisplay: jest.fn(async () => []),
 }));
 
-jest.mock('../src/services/stream-apply-buffer', () => ({
+jest.mock('@/services/stream-apply-buffer', () => ({
   createStreamApplyBuffer: () => ({
     push: jest.fn(),
     pushAll: jest.fn(),
@@ -145,72 +147,74 @@ jest.mock('../src/services/stream-apply-buffer', () => ({
   }),
 }));
 
-jest.mock('../src/storage/chat-stream-batch-pref', () => ({
+jest.mock('@/storage/chat-stream-batch-pref', () => ({
   readChatStreamBatchEnabled: jest.fn(async () => true),
 }));
 
-jest.mock('../src/storage/chat-transcript-engine', () => ({
+jest.mock('@/storage/chat-transcript-engine', () => ({
   defaultChatTranscriptEngine: () => 'webview',
   readChatTranscriptEngine: jest.fn(async () => 'webview'),
 }));
 
-jest.mock('../src/components/chat/ChatTranscriptWebView', () => ({
+jest.mock('@/components/chat/ChatTranscriptWebView', () => ({
   ChatTranscriptWebView: () => null,
 }));
 
-jest.mock('../src/components/chat/MessageList', () => ({
+jest.mock('@/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
 
-jest.mock('../src/components/chrome/AppHeader', () => ({AppHeader: () => null}));
-jest.mock('../src/components/chat/ChatMetaBar', () => ({ChatMetaBar: () => null}));
-jest.mock('../src/components/chat/ChatComposer', () => ({ChatComposer: () => null}));
-jest.mock('../src/components/chat/MessageActionMenu', () => ({
+jest.mock('@/components/chrome/AppHeader', () => ({AppHeader: () => null}));
+jest.mock('@/components/chat/ChatMetaBar', () => ({ChatMetaBar: () => null}));
+jest.mock('@/components/chat/ChatComposer', () => ({ChatComposer: () => null}));
+jest.mock('@/components/chat/MessageActionMenu', () => ({
   MessageActionMenu: () => null,
 }));
-jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
+jest.mock('@/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
 }));
-jest.mock('../src/components/chrome/ProjectDrawer', () => ({
+jest.mock('@/components/chrome/ProjectDrawer', () => ({
   ProjectDrawer: () => null,
 }));
-jest.mock('../src/components/chrome/SessionActionsDrawer', () => ({
+jest.mock('@/components/chrome/SessionActionsDrawer', () => ({
   SessionActionsDrawer: () => null,
 }));
-jest.mock('../src/components/provider/ModelPickerModal', () => ({
+jest.mock('@/components/provider/ModelPickerModal', () => ({
   ModelPickerModal: () => null,
 }));
-jest.mock('../src/components/vfs/VfsFileManager', () => ({
+jest.mock('@/components/vfs/VfsFileManager', () => ({
   VfsFileManager: () => null,
 }));
-jest.mock('../src/components/batch/ManageHeader', () => ({ManageHeader: () => null}));
-jest.mock('../src/components/batch/BatchCheckbox', () => ({
+jest.mock('@/components/batch/ManageHeader', () => ({
+  ManageHeader: () => null,
+}));
+jest.mock('@/components/batch/BatchCheckbox', () => ({
   BatchCheckbox: () => null,
 }));
-jest.mock('../src/components/ui/SegmentedControl', () => ({
+jest.mock('@/components/ui/SegmentedControl', () => ({
   SegmentedControl: () => null,
 }));
-jest.mock('../src/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/PrototypeButtons', () => ({
   PrimaryButton: () => null,
 }));
-jest.mock('../src/components/ui/TextPromptModal', () => ({
+jest.mock('@/components/ui/TextPromptModal', () => ({
   TextPromptModal: () => null,
 }));
-jest.mock('../src/components/agent/AgentPickerModal', () => ({
+jest.mock('@/components/agent/AgentPickerModal', () => ({
   AgentPickerModal: () => null,
 }));
-jest.mock('../src/components/chat/MessageEditModal', () => ({
+jest.mock('@/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
 }));
 
-jest.mock('../src/hooks/useAndroidChatBackHandler', () => ({
+jest.mock('@/hooks/useAndroidChatBackHandler', () => ({
   useAndroidChatBackHandler: jest.fn(),
 }));
-jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
+jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({
   useDismissOverlaysOnBlur: jest.fn(),
 }));
 
-import {ChatTabScreen} from '../src/screens/tabs/ChatTabScreen';
+import {ChatTabScreen} from '@/screens/tabs/ChatTabScreen';
 
 describe('ChatTabScreen legacy scroll cache', () => {
   beforeEach(() => {

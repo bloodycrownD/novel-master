@@ -41,9 +41,7 @@ export function ThinkingBlockCard({
   }
 
   const useRich =
-    expanded &&
-    richTextEnabled &&
-    !isRichContentOverLimit(trimmed);
+    expanded && richTextEnabled && !isRichContentOverLimit(trimmed);
 
   return (
     <View
@@ -54,12 +52,14 @@ export function ThinkingBlockCard({
           borderColor: tokens.borderLight,
         },
         {opacity: dimmed ? 0.55 : 1},
-      ]}>
+      ]}
+    >
       <Pressable
         style={styles.header}
         onPress={() => setExpanded(v => !v)}
         accessibilityRole="button"
-        accessibilityState={{expanded}}>
+        accessibilityState={{expanded}}
+      >
         <Text style={[styles.title, {color: tokens.textSecondary}]}>
           思考过程
         </Text>
@@ -79,7 +79,8 @@ export function ThinkingBlockCard({
                     paddingBottom: 8,
                   }
                 : undefined
-            }>
+            }
+          >
             <RichContentBody
               content={trimmed}
               tokens={tokens}
@@ -99,7 +100,8 @@ export function ThinkingBlockCard({
                 marginBottom: 8,
                 paddingBottom: 8,
               },
-            ]}>
+            ]}
+          >
             {trimmed}
           </Text>
         )

@@ -63,7 +63,10 @@ export function materializeInlineColors(
         `style=${quote}${restStyle}${quote}`,
       );
     } else {
-      nextAttrs = nextAttrs.replace(styleMatch[0], '').replace(/\s+/g, ' ').trim();
+      nextAttrs = nextAttrs
+        .replace(styleMatch[0], '')
+        .replace(/\s+/g, ' ')
+        .trim();
       nextAttrs = nextAttrs.length > 0 ? ` ${nextAttrs}` : '';
     }
 

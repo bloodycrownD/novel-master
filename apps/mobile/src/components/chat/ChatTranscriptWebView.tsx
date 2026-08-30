@@ -10,12 +10,12 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
-import WebView, { type WebViewMessageEvent } from 'react-native-webview';
+import {Linking, StyleSheet, View} from 'react-native';
+import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
 // import type 会被擦除，不影响运行时打包。
-import type { WebViewOpenWindowEvent } from 'react-native-webview/lib/WebViewTypes';
-import { type ChatMessage } from '@novel-master/core/chat';
+import type {WebViewOpenWindowEvent} from 'react-native-webview/lib/WebViewTypes';
+import {type ChatMessage} from '@novel-master/core/chat';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {
   encodeHostToTranscript,
@@ -30,7 +30,7 @@ import {
   type TranscriptSkillRef,
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
-import { enrichTranscriptRows } from './enrich-transcript-rows';
+import {enrichTranscriptRows} from './enrich-transcript-rows';
 import {
   buildTranscriptRows,
   messageHasToolUse,
@@ -41,19 +41,19 @@ import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
 } from '@/webview-host/chat-transcript/uri';
-import { emitChatTranscriptTelemetry } from '@/services/chat-transcript-telemetry';
-import { useTheme } from '@/theme/ThemeProvider';
-import { prepareStreamTailHtml } from './prepare-stream-tail-html';
-import type { StreamWireChunk } from '@/services/stream-wire-queue';
-import { appendWireChunk } from '@/services/stream-wire-queue';
-import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
-import { CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS } from './chat-transcript-selection-menu';
+import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
+import {useTheme} from '@/theme/ThemeProvider';
+import {prepareStreamTailHtml} from './prepare-stream-tail-html';
+import type {StreamWireChunk} from '@/services/stream-wire-queue';
+import {appendWireChunk} from '@/services/stream-wire-queue';
+import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
+import {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
 
-export { CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS } from './chat-transcript-selection-menu';
+export {CHAT_TRANSCRIPT_SELECTION_MENU_ITEMS} from './chat-transcript-selection-menu';
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
-  pushStreamBatch: (payload: { segments: readonly StreamWireChunk[] }) => void;
+  pushStreamBatch: (payload: {segments: readonly StreamWireChunk[]}) => void;
   resetStream: () => void;
   /** 流式结束：单次 DOM 提交落库行并清 stream tail（纯文本 assistant）。成功返回 true。 */
   tryCommitStreamTail: (
@@ -164,15 +164,15 @@ function themeFromTokens(tokens: {
 function resolveOpenScrollIntent(
   initialScroll: ChatTranscriptScrollSnapshot | null,
   defaultScrollToBottom: boolean,
-): { intent: TranscriptScrollIntent; restoreScroll?: TranscriptRestoreScroll } {
+): {intent: TranscriptScrollIntent; restoreScroll?: TranscriptRestoreScroll} {
   if (defaultScrollToBottom) {
-    return { intent: 'stick' };
+    return {intent: 'stick'};
   }
   if (initialScroll == null) {
-    return { intent: 'stick' };
+    return {intent: 'stick'};
   }
   if (initialScroll.nearBottom) {
-    return { intent: 'stick' };
+    return {intent: 'stick'};
   }
   return {
     intent: 'restore',
@@ -256,7 +256,7 @@ export const ChatTranscriptWebView = memo(
         runUiStopped: !uiRunning,
         pendingSubagentSessions,
       };
-      const { tokens } = useTheme();
+      const {tokens} = useTheme();
       const webRef = useRef<WebView>(null);
       const [webReady, setWebReady] = useState(false);
       const prevStreamTextRef = useRef('');
@@ -267,7 +267,7 @@ export const ChatTranscriptWebView = memo(
       const prevRichTextRef = useRef(flags?.richText ?? false);
       const prevMessagesRef = useRef(messages);
       const prevSentFlagsRef = useRef<TranscriptFlags | null>(null);
-      const lastScrollRef = useRef({ nearBottom: true, offsetY: 0 });
+      const lastScrollRef = useRef({nearBottom: true, offsetY: 0});
       const initialScrollRef = useRef(initialScroll);
       const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
       const needsOpenSnapshotRef = useRef(true);
@@ -325,7 +325,7 @@ export const ChatTranscriptWebView = memo(
         postToWeb({
           v: 1,
           type: 'streamToolInvoking',
-          payload: { active: streamGenerating },
+          payload: {active: streamGenerating},
         });
       }, [webReady, streamGenerating, postToWeb]);
 
@@ -430,7 +430,7 @@ export const ChatTranscriptWebView = memo(
       );
 
       const queueStreamBatch = useCallback(
-        (payload: { segments: readonly StreamWireChunk[] }) => {
+        (payload: {segments: readonly StreamWireChunk[]}) => {
           if (!webReady || payload.segments.length === 0) {
             return;
           }
@@ -454,7 +454,7 @@ export const ChatTranscriptWebView = memo(
         postToWeb({
           v: 1,
           type: 'init',
-          payload: { theme: themeFromTokens(tokens), flags: resolvedFlags },
+          payload: {theme: themeFromTokens(tokens), flags: resolvedFlags},
         });
       }, [flags?.richText, postToWeb, tokens, uiRunning]);
 
@@ -477,9 +477,9 @@ export const ChatTranscriptWebView = memo(
               rows,
               hasMore,
               scrollIntent,
-              ...(uiRunning ? { generating: true } : {}),
+              ...(uiRunning ? {generating: true} : {}),
               ...(scrollIntent === 'restore' && restoreScroll != null
-                ? { restoreScroll }
+                ? {restoreScroll}
                 : {}),
             },
           });
@@ -537,7 +537,7 @@ export const ChatTranscriptWebView = memo(
             sendSessionSnapshotNow(intent, restoreScroll);
             return;
           }
-          pendingSnapshotRef.current = { intent, restoreScroll };
+          pendingSnapshotRef.current = {intent, restoreScroll};
           if (streamActiveRef.current) {
             return;
           }
@@ -588,7 +588,7 @@ export const ChatTranscriptWebView = memo(
           postToWeb({
             v: 1,
             type: 'appendTailRows',
-            payload: { rows },
+            payload: {rows},
           });
         },
         [
@@ -621,7 +621,7 @@ export const ChatTranscriptWebView = memo(
           postToWeb({
             v: 1,
             type: 'streamCommit',
-            payload: { rows, scrollIntent },
+            payload: {rows, scrollIntent},
           });
           syncStreamToolInvoking();
         },
@@ -710,7 +710,7 @@ export const ChatTranscriptWebView = memo(
         const wasActive = streamActiveRef.current;
         streamActiveRef.current = false;
         if (webReady && wasActive) {
-          postToWeb({ v: 1, type: 'streamReset', payload: {} });
+          postToWeb({v: 1, type: 'streamReset', payload: {}});
           flushPendingSnapshot();
           syncStreamToolInvoking();
         }
@@ -831,7 +831,7 @@ export const ChatTranscriptWebView = memo(
             if (uiRunning) {
               return;
             }
-            emitChatTranscriptTelemetry({ name: 'menu_open' });
+            emitChatTranscriptTelemetry({name: 'menu_open'});
             onOpenMessageMenu?.(
               message.payload.messageId,
               message.payload.pageX,
@@ -922,7 +922,7 @@ export const ChatTranscriptWebView = memo(
         postToWeb({
           v: 1,
           type: 'flagsUpdate',
-          payload: { flags: resolvedFlags },
+          payload: {flags: resolvedFlags},
         });
       }, [webReady, flags?.richText, uiRunning, postToWeb]);
 
@@ -933,7 +933,7 @@ export const ChatTranscriptWebView = memo(
         postToWeb({
           v: 1,
           type: 'themeUpdate',
-          payload: { theme: themeFromTokens(tokens) },
+          payload: {theme: themeFromTokens(tokens)},
         });
       }, [webReady, tokens, postToWeb]);
 
@@ -941,21 +941,21 @@ export const ChatTranscriptWebView = memo(
         if (!webReady || menuCloseSignal === 0) {
           return;
         }
-        postToWeb({ v: 1, type: 'closeMenu', payload: {} });
+        postToWeb({v: 1, type: 'closeMenu', payload: {}});
       }, [webReady, menuCloseSignal, postToWeb]);
 
       useEffect(() => {
         if (!webReady || mermaidViewerCloseSignal === 0) {
           return;
         }
-        postToWeb({ v: 1, type: 'closeMermaidViewer', payload: {} });
+        postToWeb({v: 1, type: 'closeMermaidViewer', payload: {}});
       }, [webReady, mermaidViewerCloseSignal, postToWeb]);
 
       useEffect(() => {
         if (!webReady || keyboardLiftNonce === 0) {
           return;
         }
-        postToWeb({ v: 1, type: 'stickIfNearBottom', payload: {} });
+        postToWeb({v: 1, type: 'stickIfNearBottom', payload: {}});
       }, [webReady, keyboardLiftNonce, postToWeb]);
 
       useEffect(() => {
@@ -1003,7 +1003,7 @@ export const ChatTranscriptWebView = memo(
             return;
           }
           needsOpenSnapshotRef.current = false;
-          const { intent, restoreScroll } = resolveOpenScrollIntent(
+          const {intent, restoreScroll} = resolveOpenScrollIntent(
             initialScrollRef.current,
             defaultScrollToBottomRef.current,
           );
@@ -1043,7 +1043,12 @@ export const ChatTranscriptWebView = memo(
         // 前面的分支（grew/streamCommit/uiRunning）都不命中，会走到 else sendSessionSnapshot，
         // 但 L976 的 streamCommit 分支可能在 lastStreamCommitIdsRef 非空时提前拦截。
         // 这里在分流前检测 hidden 变化，确保走 sendSessionSnapshot 而不是被拦截。
-        if (!grew && prevFirstId === firstId && prevCount === messages.length && prevCount > 0) {
+        if (
+          !grew &&
+          prevFirstId === firstId &&
+          prevCount === messages.length &&
+          prevCount > 0
+        ) {
           const prevMsgs = prevMessagesRef.current;
           if (prevMsgs != null && prevMsgs.length === messages.length) {
             let hiddenChanged = false;
@@ -1190,16 +1195,13 @@ export const ChatTranscriptWebView = memo(
       /**
        * iOS window.open / target="_blank" 新开窗口兜底：拒绝 WebView 内打开，外跳系统浏览器。
        */
-      const handleOpenWindow = useCallback(
-        (event: WebViewOpenWindowEvent) => {
-          event.preventDefault();
-          // WebViewOpenWindow 的字段是 targetUrl（新窗口目标地址），无 url 字段。
-          void Linking.openURL(event.nativeEvent.targetUrl).catch(
-            () => undefined,
-          );
-        },
-        [],
-      );
+      const handleOpenWindow = useCallback((event: WebViewOpenWindowEvent) => {
+        event.preventDefault();
+        // WebViewOpenWindow 的字段是 targetUrl（新窗口目标地址），无 url 字段。
+        void Linking.openURL(event.nativeEvent.targetUrl).catch(
+          () => undefined,
+        );
+      }, []);
 
       return (
         <View style={styles.fill}>
@@ -1209,7 +1211,7 @@ export const ChatTranscriptWebView = memo(
             /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
                均命中此前缀，已验证收紧不影响首载。白名单外的导航由库自行外跳系统浏览器。 */
             originWhitelist={['file://']}
-            source={{ uri: getChatTranscriptUri() }}
+            source={{uri: getChatTranscriptUri()}}
             allowFileAccess
             allowFileAccessFromFileURLs
             allowingReadAccessToURL={getChatTranscriptPackageDirUri()}
@@ -1233,5 +1235,5 @@ export const ChatTranscriptWebView = memo(
 );
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, minHeight: 0, overflow: 'hidden' },
+  fill: {flex: 1, minHeight: 0, overflow: 'hidden'},
 });

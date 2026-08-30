@@ -13,7 +13,7 @@ import {isKnownType} from '@react-native-documents/picker';
 import {
   assertCharacterCardFileName,
   characterCardImportPickTypes,
-} from '../src/services/character-card-document-pick';
+} from '@/services/character-card-document-pick';
 
 describe('character-card-document-pick', () => {
   it('includes PNG/JSON MIME types and isKnownType results', () => {

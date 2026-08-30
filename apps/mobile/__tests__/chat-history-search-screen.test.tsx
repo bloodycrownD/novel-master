@@ -26,11 +26,11 @@ let mockRouteParams: {projectId: string; sessionId: string} = {
   sessionId: 's1',
 };
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -52,7 +52,7 @@ jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({params: mockRouteParams}),
 }));
 
-jest.mock('../src/components/form/FormTextInput', () => {
+jest.mock('@/components/form/FormTextInput', () => {
   const React = require('react');
   const FormTextInput = (props: {
     testID?: string;
@@ -77,10 +77,14 @@ jest.mock('react-native', () => {
       testID?: string;
       onScroll?: (e: unknown) => void;
     }) =>
-      RnReact.createElement('ScrollView', {
-        testID: props.testID,
-        onScroll: props.onScroll,
-      }, props.children),
+      RnReact.createElement(
+        'ScrollView',
+        {
+          testID: props.testID,
+          onScroll: props.onScroll,
+        },
+        props.children,
+      ),
     FlatList: (props: {
       data?: readonly unknown[];
       renderItem?: (info: {item: unknown}) => React.ReactNode;
@@ -95,7 +99,11 @@ jest.mock('react-native', () => {
         props.renderItem
           ? RnReact.createElement(
               'View',
-              {key: props.keyExtractor ? props.keyExtractor(item) : String(index)},
+              {
+                key: props.keyExtractor
+                  ? props.keyExtractor(item)
+                  : String(index),
+              },
               props.renderItem({item}),
             )
           : null,
@@ -167,7 +175,7 @@ jest.mock('react-native', () => {
   };
 });
 
-import {ChatHistorySearchScreen} from '../src/screens/stack/ChatHistorySearchScreen';
+import {ChatHistorySearchScreen} from '@/screens/stack/ChatHistorySearchScreen';
 
 function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
@@ -208,15 +216,20 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
       tree = TestRenderer.create(<ChatHistorySearchScreen />);
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
 
     expect(mockSearchMessages).toHaveBeenCalledTimes(1);
     // 透传给 core 的入参形状（仅关键词 + limit + 翻页游标）
-    expect(mockSearchMessages).toHaveBeenCalledWith('s1', expect.objectContaining({
-      limit: 50,
-    }));
+    expect(mockSearchMessages).toHaveBeenCalledWith(
+      's1',
+      expect.objectContaining({
+        limit: 50,
+      }),
+    );
     const json = JSON.stringify(tree.toJSON());
     expect(json).toContain('魔法设定');
     expect(json).toContain('你好世界');
@@ -230,7 +243,9 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
       tree = TestRenderer.create(<ChatHistorySearchScreen />);
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
 
@@ -251,7 +266,9 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
       tree = TestRenderer.create(<ChatHistorySearchScreen />);
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
 
@@ -271,7 +288,9 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
       tree = TestRenderer.create(<ChatHistorySearchScreen />);
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
 
@@ -281,7 +300,9 @@ describe('T-MO2 ChatHistorySearchScreen 查询与结果渲染', () => {
 
     // 点击卡片展开
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-result-card'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-result-card'})
+        .props.onPress();
     });
 
     // 展开态：显示完整文本 + 「收起」提示
@@ -314,7 +335,9 @@ describe('T-MO3 ChatHistorySearchScreen 编号区间', () => {
         .props.onChangeText('50');
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
 
@@ -341,7 +364,9 @@ describe('T-MO3 ChatHistorySearchScreen 编号区间', () => {
         .props.onChangeText('40');
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
 
@@ -376,7 +401,9 @@ describe('T-MO3 ChatHistorySearchScreen 编号区间', () => {
         .props.onChangeText('100');
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
     expect(mockSearchMessages).toHaveBeenLastCalledWith(
@@ -398,7 +425,9 @@ describe('T-MO3 ChatHistorySearchScreen 编号区间', () => {
         .props.onChangeText('50');
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
     expect(mockSearchMessages).toHaveBeenLastCalledWith(
@@ -428,11 +457,10 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
   });
 
   /** 查卡片头当前的 expanded 无障碍状态。 */
-  function formToggleState(
-    tree: TestRenderer.ReactTestRenderer,
-  ): {expanded?: boolean} {
-    return tree.root
-      .findByProps({testID: 'chat-history-search-form-toggle'})
+  function formToggleState(tree: TestRenderer.ReactTestRenderer): {
+    expanded?: boolean;
+  } {
+    return tree.root.findByProps({testID: 'chat-history-search-form-toggle'})
       .props.accessibilityState;
   }
 
@@ -479,7 +507,9 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
         .props.onChangeText('50');
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
 
@@ -504,7 +534,9 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
       tree = TestRenderer.create(<ChatHistorySearchScreen />);
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
     expect(formToggleState(tree).expanded).toBe(true);
@@ -527,7 +559,9 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
         .props.onChangeText('40');
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
     expect(mockSearchMessages).not.toHaveBeenCalled();
@@ -557,7 +591,9 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
         .props.onChangeText('7');
     });
     await act(async () => {
-      tree.root.findByProps({testID: 'chat-history-search-submit'}).props.onPress();
+      tree.root
+        .findByProps({testID: 'chat-history-search-submit'})
+        .props.onPress();
       await flushPromises();
     });
     expect(formToggleState(tree).expanded).toBe(false);
@@ -570,7 +606,8 @@ describe('T-CF ChatHistorySearchScreen 筛选表单折叠卡片', () => {
     });
     expect(formToggleState(tree).expanded).toBe(true);
     expect(
-      tree.root.findByProps({testID: 'chat-history-search-keyword'}).props.value,
+      tree.root.findByProps({testID: 'chat-history-search-keyword'}).props
+        .value,
     ).toBe('保留关键词');
     expect(
       tree.root.findByProps({testID: 'chat-history-search-from-seq'}).props

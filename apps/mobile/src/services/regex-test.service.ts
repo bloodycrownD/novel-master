@@ -38,7 +38,9 @@ interface CompiledRule {
   readonly scopeAssistant: boolean;
 }
 
-type ValidationResult = {readonly ok: true} | {readonly ok: false; readonly message: string};
+type ValidationResult =
+  | {readonly ok: true}
+  | {readonly ok: false; readonly message: string};
 
 function roleMatchesScope(role: string, rule: CompiledRule): boolean {
   if (role === 'user') {
@@ -62,8 +64,7 @@ function replaceForChannel(
   rule: CompiledRule,
   channel: RegexChannel,
 ): string {
-  const replacement =
-    channel === 'llm' ? rule.llmReplace : rule.displayReplace;
+  const replacement = channel === 'llm' ? rule.llmReplace : rule.displayReplace;
   if (replacement == null) {
     return text;
   }
@@ -126,7 +127,9 @@ type CompileResult =
   | {readonly ok: false; readonly message: string};
 
 /** Compiles draft fields into a runtime rule for preview. */
-export function compileRegexRuleDraft(fields: RegexRuleDraftFields): CompileResult {
+export function compileRegexRuleDraft(
+  fields: RegexRuleDraftFields,
+): CompileResult {
   const validation = validateRegexRuleDraft(fields);
   if (!validation.ok) {
     return validation;

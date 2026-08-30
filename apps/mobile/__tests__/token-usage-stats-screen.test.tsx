@@ -19,8 +19,8 @@
  * （新对象字面量会导致 effect 无限重跑）；AppModal 只在 visible 时渲染 children。
  */
 import React from 'react';
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
+import {describe, expect, it, jest, beforeEach} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
 
 const mockGetSummary = jest.fn();
 const mockGetDailyBuckets = jest.fn();
@@ -44,13 +44,13 @@ const mockRuntime = {
   },
 };
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   // 固定引用：runtime 每次渲染都是新对象的话 reload 的 useCallback 会重建，
   // effect 就会无限重跑（session-detail-screen 范式）。
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -73,15 +73,15 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({ showToast: mockShowToast }),
+jest.mock('@/components/chrome/ToastHost', () => ({
+  useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) => String(err),
 }));
 
-jest.mock('../src/components/ui/AppModal', () => {
+jest.mock('@/components/ui/AppModal', () => {
   const mockReact = require('react');
   return {
     AppModal: ({
@@ -92,7 +92,7 @@ jest.mock('../src/components/ui/AppModal', () => {
       visible?: boolean;
     }) =>
       visible
-        ? mockReact.createElement('View', { testID: 'app-modal' }, children)
+        ? mockReact.createElement('View', {testID: 'app-modal'}, children)
         : null,
   };
 });
@@ -104,7 +104,7 @@ jest.mock('@react-navigation/native', () => {
     useNavigation: () => ({
       navigate: mockNavigate,
       goBack: jest.fn(),
-      getParent: () => ({ navigate: mockNavigate }),
+      getParent: () => ({navigate: mockNavigate}),
     }),
     // 近似真实 focus 行为（mobile/B-2）：挂载时执行一次；回调标识变化
     // （reload 引用随筛选刷新）时重跑。页面已收敛为 useFocusEffect 单通道，
@@ -116,39 +116,39 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-jest.mock('../src/components/chrome/AppHeader', () => {
+jest.mock('@/components/chrome/AppHeader', () => {
   const mockReact = require('react');
   return {
-    AppHeader: () => mockReact.createElement('View', { testID: 'app-header' }),
+    AppHeader: () => mockReact.createElement('View', {testID: 'app-header'}),
   };
 });
 
-jest.mock('../src/components/agent/AgentPickerModal', () => {
+jest.mock('@/components/agent/AgentPickerModal', () => {
   const mockReact = require('react');
   return {
     AgentPickerModal: () =>
-      mockReact.createElement('View', { testID: 'agent-picker' }),
+      mockReact.createElement('View', {testID: 'agent-picker'}),
   };
 });
 
-jest.mock('../src/components/provider/ModelPickerModal', () => {
+jest.mock('@/components/provider/ModelPickerModal', () => {
   const mockReact = require('react');
   return {
     ModelPickerModal: () =>
-      mockReact.createElement('View', { testID: 'model-picker' }),
+      mockReact.createElement('View', {testID: 'model-picker'}),
   };
 });
 
-jest.mock('../src/services/agent-display-label', () => ({
+jest.mock('@/services/agent-display-label', () => ({
   resolveCurrentAgentDisplayLabel: jest.fn(async () => 'Agent'),
 }));
 
 import {
   TokenUsageStatsScreen,
   isCustomRangeValid,
-} from '../src/screens/stack/TokenUsageStatsScreen';
-import { MonthRangePickerSheet } from '../src/components/ui/MonthRangePickerSheet';
-import { ProfileTabScreen } from '../src/screens/tabs/ProfileTabScreen';
+} from '@/screens/stack/TokenUsageStatsScreen';
+import {MonthRangePickerSheet} from '@/components/ui/MonthRangePickerSheet';
+import {ProfileTabScreen} from '@/screens/tabs/ProfileTabScreen';
 
 const MS_PER_DAY = 86_400_000;
 
@@ -166,7 +166,7 @@ const SAMPLE_SUMMARY = {
   billedInputTokens: 1000,
   avgFirstTokenMs: 1200,
   avgTokensPerSecond: 45.5,
-  today: { totalTokens: 500, calls: 2 },
+  today: {totalTokens: 500, calls: 2},
 };
 
 // 三天样例：总用量递减（900+100 / 400+100 / 50+0），柱高随之递减；
@@ -264,7 +264,7 @@ function deferred<T>() {
   const promise = new Promise<T>(res => {
     resolve = res;
   });
-  return { promise, resolve };
+  return {promise, resolve};
 }
 
 function findByTestId(
@@ -333,7 +333,7 @@ beforeEach(() => {
   mockGetSummary.mockReset().mockResolvedValue(SAMPLE_SUMMARY);
   mockGetDailyBuckets.mockReset().mockResolvedValue(SAMPLE_BUCKETS);
   mockGetHourlyBuckets.mockReset().mockResolvedValue(
-    Array.from({ length: 24 }, (_, hour) => ({
+    Array.from({length: 24}, (_, hour) => ({
       bucketStartMs: dayMs(2026, 7, 22) + hour * 3_600_000,
       calls: 0,
       promptTokens: 0,
@@ -376,7 +376,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
   it('初始加载以 last7 查询，切近 30 天后以 last30 重查', async () => {
     const renderer = await renderScreen();
     expect(mockGetDailyBuckets).toHaveBeenCalledWith({
-      range: { kind: 'last7' },
+      range: {kind: 'last7'},
       model: undefined,
     });
     await act(async () => {
@@ -384,7 +384,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
-      range: { kind: 'last30' },
+      range: {kind: 'last30'},
       model: undefined,
     });
   });
@@ -404,7 +404,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
-      range: { kind: 'last7' },
+      range: {kind: 'last7'},
       model: 'gpt-4o',
     });
     // 语义断言：选中「其他模型」时 filter.model 传 null，归并筛选由 core 侧解释。
@@ -416,7 +416,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
-      range: { kind: 'last7' },
+      range: {kind: 'last7'},
       model: null,
     });
   });
@@ -453,7 +453,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
-      range: { kind: 'last30' },
+      range: {kind: 'last30'},
       model: undefined,
     });
     await act(async () => {
@@ -473,9 +473,9 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       nodeText(findByTestId(renderer.root, 'summary-metric-output')!),
     ).toContain('200');
-    expect(nodeText(findByTestId(renderer.root, 'summary-metric-calls')!)).toContain(
-      '6',
-    );
+    expect(
+      nodeText(findByTestId(renderer.root, 'summary-metric-calls')!),
+    ).toContain('6');
     // 命中率 = 800/1000 = 80%。
     expect(
       nodeText(findByTestId(renderer.root, 'summary-metric-hitRate')!),
@@ -508,7 +508,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetHourlyBuckets).toHaveBeenCalledWith('2026-08-21', {
-      range: { kind: 'last7' },
+      range: {kind: 'last7'},
       model: undefined,
     });
     expect(findByTestId(renderer.root, 'hourly-chart')).toBeTruthy();
@@ -573,7 +573,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
 
   it('主查询竞态：旧响应后到不覆盖新数据（cross/B-1）', async () => {
     // 每轮三连查询各自挂到可控 promise 上，按调用序号取轮次。
-    const rounds = Array.from({ length: 2 }, () => ({
+    const rounds = Array.from({length: 2}, () => ({
       summary: deferred<unknown>(),
       buckets: deferred<unknown>(),
       rows: deferred<unknown>(),
@@ -613,9 +613,9 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       rounds[1].rows.resolve([]);
       await flushPromises();
     });
-    expect(nodeText(findByTestId(renderer!.root, 'summary-metric-total')!)).toContain(
-      '888',
-    );
+    expect(
+      nodeText(findByTestId(renderer!.root, 'summary-metric-total')!),
+    ).toContain('888');
     expect(
       nodeText(findByTestId(renderer!.root, 'summary-metric-calls')!),
     ).toContain('42');
@@ -648,7 +648,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       cacheReadTokens: 0,
       cacheCreationTokens: 0,
       billedInputTokens: 0,
-      today: { totalTokens: 0, calls: 0 },
+      today: {totalTokens: 0, calls: 0},
     });
     mockGetDailyBuckets.mockResolvedValue([]);
     mockGetModelBreakdown.mockResolvedValue([]);
@@ -671,7 +671,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       cacheReadTokens: 0,
       cacheCreationTokens: 0,
       billedInputTokens: 0,
-      today: { totalTokens: 500, calls: 2 },
+      today: {totalTokens: 500, calls: 2},
     });
     mockGetDailyBuckets.mockResolvedValue([]);
     mockGetModelBreakdown.mockResolvedValue([]);
@@ -757,8 +757,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       });
       // 从当前月翻回 2026 年 3 月。
       const now = new Date();
-      const monthsBack =
-        (now.getFullYear() - 2026) * 12 + (now.getMonth() - 2);
+      const monthsBack = (now.getFullYear() - 2026) * 12 + (now.getMonth() - 2);
       for (let i = 0; i < Math.abs(monthsBack); i++) {
         await act(async () => {
           findByTestId(
@@ -824,11 +823,11 @@ describe('T-S7 MonthRangePickerSheet 组件级', () => {
         />,
       );
     });
-    return { renderer: renderer!, onClose, onConfirm };
+    return {renderer: renderer!, onClose, onConfirm};
   }
 
   it('两次点选确定区间，确认回调给起止日本地 0 点（倒序点选自动排序）', async () => {
-    const { renderer, onConfirm } = await renderSheet();
+    const {renderer, onConfirm} = await renderSheet();
     const now = new Date();
     // 两次点选分开 act：state 更新需要落定后下一次点选才能读到。
     await act(async () => {
@@ -848,7 +847,7 @@ describe('T-S7 MonthRangePickerSheet 组件级', () => {
   });
 
   it('未选完整区间时确定不触发回调', async () => {
-    const { renderer, onConfirm } = await renderSheet();
+    const {renderer, onConfirm} = await renderSheet();
     await act(async () => {
       findByTestId(renderer.root, 'month-range-day-3')!.props.onPress();
       findByTestId(renderer.root, 'month-range-confirm')!.props.onPress();
@@ -857,7 +856,7 @@ describe('T-S7 MonthRangePickerSheet 组件级', () => {
   });
 
   it('月份翻页可跨月，1 月翻到上一年 12 月', async () => {
-    const { renderer, onConfirm } = await renderSheet();
+    const {renderer, onConfirm} = await renderSheet();
     const now = new Date();
     // 翻到上月（当前月为 1 月时跨到上一年 12 月）。
     const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -894,10 +893,16 @@ describe('T-S7 自定义区间上限校验', () => {
 describe('T-MB 新指标卡与长按详情', () => {
   it('汇总页出现平均速率 / 平均首字延迟卡（T-MB4）', async () => {
     const renderer = await renderScreen();
-    const rateTile = findByTestId(renderer.root, 'summary-metric-avgTokensPerSecond');
+    const rateTile = findByTestId(
+      renderer.root,
+      'summary-metric-avgTokensPerSecond',
+    );
     expect(rateTile).toBeTruthy();
     expect(nodeText(rateTile!)).toContain('45.5 tok/s');
-    const ttftTile = findByTestId(renderer.root, 'summary-metric-avgFirstTokenMs');
+    const ttftTile = findByTestId(
+      renderer.root,
+      'summary-metric-avgFirstTokenMs',
+    );
     expect(ttftTile).toBeTruthy();
     expect(nodeText(ttftTile!)).toContain('1.2 s');
   });
@@ -909,9 +914,15 @@ describe('T-MB 新指标卡与长按详情', () => {
       avgTokensPerSecond: null,
     });
     const renderer = await renderScreen();
-    const rateTile = findByTestId(renderer.root, 'summary-metric-avgTokensPerSecond');
+    const rateTile = findByTestId(
+      renderer.root,
+      'summary-metric-avgTokensPerSecond',
+    );
     expect(nodeText(rateTile!)).toContain('—');
-    const ttftTile = findByTestId(renderer.root, 'summary-metric-avgFirstTokenMs');
+    const ttftTile = findByTestId(
+      renderer.root,
+      'summary-metric-avgFirstTokenMs',
+    );
     expect(nodeText(ttftTile!)).toContain('—');
   });
 
@@ -1036,7 +1047,10 @@ describe('T-S7 请求流水页签（分页）', () => {
   });
 
   it('多页时页码窗口收窄：首尾页 + 当前页 ±1，间隙省略号，尾页可直达', async () => {
-    mockListRequestUsage.mockResolvedValue({ rows: SAMPLE_REQUEST_ROWS, total: 400 });
+    mockListRequestUsage.mockResolvedValue({
+      rows: SAMPLE_REQUEST_ROWS,
+      total: 400,
+    });
     const renderer = await renderScreen();
     await act(async () => {
       findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
@@ -1045,7 +1059,9 @@ describe('T-S7 请求流水页签（分页）', () => {
     // 40 页（400/10）：当前第 1 页 → [1][2]…[40]
     expect(findByTestId(renderer.root, 'req-page-2')).toBeTruthy();
     expect(findByTestId(renderer.root, 'req-page-40')).toBeTruthy();
-    expect(nodeText(findByTestId(renderer.root, 'req-page-40')!.parent!)).toContain('…');
+    expect(
+      nodeText(findByTestId(renderer.root, 'req-page-40')!.parent!),
+    ).toContain('…');
 
     await act(async () => {
       findByTestId(renderer.root, 'req-page-40')!.props.onPress();

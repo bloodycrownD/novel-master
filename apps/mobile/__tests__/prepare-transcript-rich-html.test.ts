@@ -1,4 +1,4 @@
-import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
+import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
 /** 可执行形态：未转义的危险开标签。 */
 function hasExecutableOpenTag(html: string, tag: string): boolean {

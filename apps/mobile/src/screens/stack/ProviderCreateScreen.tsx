@@ -8,12 +8,12 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   ProviderForm,
   providerFormToCreateInput,
-} from '../../components/provider/ProviderForm';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {useRuntime} from '../../hooks/useRuntime';
-import type {RootStackParamList} from '../../navigation/types';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/components/provider/ProviderForm';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
+import {useRuntime} from '@/hooks/useRuntime';
+import type {RootStackParamList} from '@/navigation/types';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 

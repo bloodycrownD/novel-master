@@ -8,10 +8,7 @@
  * 把业务知识塞进这层。
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
-import {
-  keepLocalCopy,
-  saveDocuments,
-} from '@react-native-documents/picker';
+import {keepLocalCopy, saveDocuments} from '@react-native-documents/picker';
 
 export {normalizeYamlError} from '@novel-master/core/common';
 

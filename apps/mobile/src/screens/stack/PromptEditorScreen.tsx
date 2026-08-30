@@ -26,24 +26,24 @@ import {
 } from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useRoute, type RouteProp} from '@react-navigation/native';
-import type {RootStackParamList} from '../../navigation/types';
-import {useHeaderContext} from '../../navigation/HeaderContext';
-import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
-import {useToast} from '../../components/chrome/ToastHost';
+import type {RootStackParamList} from '@/navigation/types';
+import {useHeaderContext} from '@/navigation/HeaderContext';
+import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
+import {useToast} from '@/components/chrome/ToastHost';
 import {
   CodeEditorWebView,
   type CodeEditorWebViewHandle,
-} from '../../components/vfs/CodeEditorWebView';
+} from '@/components/vfs/CodeEditorWebView';
 import {
   FileMarkdownPreview,
   type PreviewRenderKind,
-} from '../../components/vfs/FileMarkdownPreview';
-import {SegmentedControl} from '../../components/ui/SegmentedControl';
+} from '@/components/vfs/FileMarkdownPreview';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {
   takePromptEditorOnSaved,
   type PromptEditorOnSaved,
-} from '../../components/agent/prompt-editor-callback';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/components/agent/prompt-editor-callback';
+import {useTheme} from '@/theme/ThemeProvider';
 
 /** 伪路径以 .md 结尾：编辑器按 markdown 高亮，预览走 markdown 渲染管线。 */
 const PROMPT_EDITOR_PATH = 'prompt.md';
@@ -137,7 +137,8 @@ export function PromptEditorScreen() {
           onPress={handleSave}
           disabled={previewMode || !isDirty}
           style={styles.toolbarBtn}
-          accessibilityLabel="保存">
+          accessibilityLabel="保存"
+        >
           <Text
             style={[
               styles.toolbarText,
@@ -147,7 +148,8 @@ export function PromptEditorScreen() {
                     ? tokens.primary
                     : tokens.textSecondary,
               },
-            ]}>
+            ]}
+          >
             保存
           </Text>
         </Pressable>
@@ -158,20 +160,23 @@ export function PromptEditorScreen() {
             {color: isDirty ? tokens.danger : tokens.textSecondary},
           ]}
           numberOfLines={1}
-          ellipsizeMode="tail">
-          {isDirty ? '未保存' : (title ?? '提示词')}
+          ellipsizeMode="tail"
+        >
+          {isDirty ? '未保存' : title ?? '提示词'}
         </Text>
         {/* 编辑/预览切换：位置和交互照工作区（预览态显示「编辑」，反之「预览」）。 */}
         <Pressable
           testID="prompt-editor-toggle"
           onPress={togglePreview}
           style={styles.toolbarBtn}
-          accessibilityLabel={previewMode ? '编辑' : '预览'}>
+          accessibilityLabel={previewMode ? '编辑' : '预览'}
+        >
           <Text
             style={[
               styles.toolbarText,
               {color: previewMode ? tokens.primary : tokens.textSecondary},
-            ]}>
+            ]}
+          >
             {previewMode ? '编辑' : '预览'}
           </Text>
         </Pressable>
@@ -228,10 +233,7 @@ export function PromptEditorScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={rootStyle}
-      behavior="padding"
-      automaticOffset>
+    <KeyboardAvoidingView style={rootStyle} behavior="padding" automaticOffset>
       {editorBody}
     </KeyboardAvoidingView>
   );

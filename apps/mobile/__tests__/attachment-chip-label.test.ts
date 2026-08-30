@@ -2,7 +2,7 @@
  * attachmentChipLabel：消息附件中文 action:path。
  */
 import {describe, expect, it} from '@jest/globals';
-import {attachmentChipLabel} from '../src/web/chat-transcript/webview/runtime/render/row-logic';
+import {attachmentChipLabel} from '@/web/chat-transcript/webview/runtime/render/row-logic';
 
 describe('attachmentChipLabel', () => {
   it('user_ops + action → 中文二字:path', () => {

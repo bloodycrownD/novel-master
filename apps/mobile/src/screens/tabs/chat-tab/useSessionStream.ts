@@ -13,8 +13,8 @@
  * 注意：refcount 归属 lifecycle 单元——本单元的 FINISHED/FAILED 不再直接
  * decrementAgentActive，改为通知 lifecycle（onRunFinished/onRunFailed）。
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { RefObject } from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import type {RefObject} from 'react';
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -31,17 +31,17 @@ import {
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
 } from '@novel-master/core/events';
-import { shouldApplyTranscriptReload } from '@novel-master/core/agent';
-import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
+import {shouldApplyTranscriptReload} from '@novel-master/core/agent';
+import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
 import {
   flushAgentStepUi,
   flushRunUi,
   type FlushMessagesChanged,
   type FlushStreamEndContext,
 } from '@/components/chat/flush-run-ui';
-import { useStreamMetricsAcc } from '@/hooks/useAgentStreamMetrics';
-import { useRuntime } from '@/hooks/useRuntime';
-import type { StreamWireChunk } from '@/services/stream-wire-queue';
+import {useStreamMetricsAcc} from '@/hooks/useAgentStreamMetrics';
+import {useRuntime} from '@/hooks/useRuntime';
+import type {StreamWireChunk} from '@/services/stream-wire-queue';
 
 export type UseSessionStreamParams = {
   sessionId: string | undefined;
@@ -142,8 +142,8 @@ export function useSessionStream({
     onRunFailed,
   };
 
-  const callbacksRef = useRef({ onMessagesChanged, onStepCommitted });
-  callbacksRef.current = { onMessagesChanged, onStepCommitted };
+  const callbacksRef = useRef({onMessagesChanged, onStepCommitted});
+  callbacksRef.current = {onMessagesChanged, onStepCommitted};
 
   const abortGuardsRef = useRef({
     getUiRunning,
@@ -158,8 +158,8 @@ export function useSessionStream({
     clearAbortRetainPending,
   };
 
-  const metricsRef = useRef({ noteMetricsTextDelta, noteMetricsThinkingDelta });
-  metricsRef.current = { noteMetricsTextDelta, noteMetricsThinkingDelta };
+  const metricsRef = useRef({noteMetricsTextDelta, noteMetricsThinkingDelta});
+  metricsRef.current = {noteMetricsTextDelta, noteMetricsThinkingDelta};
 
   const batchIngestRef = useRef(batchIngest);
   batchIngestRef.current = batchIngest;
@@ -168,7 +168,9 @@ export function useSessionStream({
   const batchFlushRef = useRef(batchFlush);
   batchFlushRef.current = batchFlush;
   // abort fallback commit：内部定义后赋值（见下），这里占位。
-  const commitAbortOverlayRef = useRef<() => Promise<void>>(async () => undefined);
+  const commitAbortOverlayRef = useRef<() => Promise<void>>(
+    async () => undefined,
+  );
 
   const getMessageCountRef = useRef(getMessageCount);
   getMessageCountRef.current = getMessageCount;
@@ -187,7 +189,7 @@ export function useSessionStream({
         return;
       }
       if (batchEnabledRef.current) {
-        web.pushStreamBatch({ segments });
+        web.pushStreamBatch({segments});
       } else {
         for (const seg of segments) {
           web.pushStreamDelta(seg.kind, seg.delta);
@@ -204,30 +206,24 @@ export function useSessionStream({
     }
   }, []);
 
-  const handleIngressText = useCallback(
-    (delta: string) => {
-      if (delta.length === 0) {
-        return;
-      }
-      metricsRef.current.noteMetricsTextDelta(delta);
-      batchIngestRef.current({ kind: 'text', delta });
-    },
-    [],
-  );
+  const handleIngressText = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    metricsRef.current.noteMetricsTextDelta(delta);
+    batchIngestRef.current({kind: 'text', delta});
+  }, []);
 
-  const handleIngressThinking = useCallback(
-    (delta: string) => {
-      if (delta.length === 0) {
-        return;
-      }
-      metricsRef.current.noteMetricsThinkingDelta(delta);
-      batchIngestRef.current({ kind: 'thinking', delta });
-    },
-    [],
-  );
+  const handleIngressThinking = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    metricsRef.current.noteMetricsThinkingDelta(delta);
+    batchIngestRef.current({kind: 'thinking', delta});
+  }, []);
 
   const handleStreamEndAfterReload = useCallback(
-    ({ messages, prevCount }: FlushStreamEndContext) => {
+    ({messages, prevCount}: FlushStreamEndContext) => {
       batchClearRef.current();
       const added = messages.slice(prevCount);
       if (added.length === 0) {
@@ -251,7 +247,8 @@ export function useSessionStream({
       }
       if (useWebviewRef.current) {
         const web = transcriptWebRefRef.current.current;
-        const committed = web?.tryCommitStreamTail(messages, prevCount) ?? false;
+        const committed =
+          web?.tryCommitStreamTail(messages, prevCount) ?? false;
         if (committed) {
           for (const id of addedIds) {
             committedTailIdsRef.current.add(id);
@@ -374,9 +371,9 @@ export function useSessionStream({
           if (!shouldApplyTranscriptReload(uiRunning, freezeCount)) {
             return;
           }
-          void Promise.resolve(
-            cb.onMessagesChanged({ immediate: true }),
-          ).catch(() => undefined);
+          void Promise.resolve(cb.onMessagesChanged({immediate: true})).catch(
+            () => undefined,
+          );
           return;
         }
         const allowAssistantReload = shouldApplyTranscriptReload(
@@ -390,7 +387,8 @@ export function useSessionStream({
         if (!allowAssistantReload) {
           return;
         }
-        const abortRetainReload = abortGuardsRef.current.getAbortRetainPending();
+        const abortRetainReload =
+          abortGuardsRef.current.getAbortRetainPending();
         void flushAgentStepUi(
           payload.phase,
           cb.onMessagesChanged,
@@ -424,8 +422,7 @@ export function useSessionStream({
         const uiRunning = abortGuardsRef.current.getUiRunning();
         const freezeCount = abortGuardsRef.current.getTranscriptFreezeCount();
         const cb = callbacksRef.current;
-        const finishRun = () =>
-          lifecycleRef.current.onRunFinished?.(payload);
+        const finishRun = () => lifecycleRef.current.onRunFinished?.(payload);
         if (abortGuardsRef.current.getAbortRetainPending()) {
           void commitAbortOverlayRef
             .current()

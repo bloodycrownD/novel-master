@@ -1,13 +1,9 @@
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import {defaultKeymap, history, historyKeymap} from '@codemirror/commands';
 import {EditorView, drawSelection, keymap} from '@codemirror/view';
-import {
-  Compartment,
-  EditorState,
-  type Extension,
-} from '@codemirror/state';
-import { languageExtensionForPath } from './language-for-path';
-import { editorSyntaxHighlighting, editorTheme } from './theme';
-import { post } from './post';
+import {Compartment, EditorState, type Extension} from '@codemirror/state';
+import {languageExtensionForPath} from './language-for-path';
+import {editorSyntaxHighlighting, editorTheme} from './theme';
+import {post} from './post';
 
 let view: EditorView | null = null;
 let currentPath = '';
@@ -28,7 +24,7 @@ function buildExtensions(path: string, readOnly: boolean): Extension[] {
     keymap.of([...defaultKeymap, ...historyKeymap]),
     EditorView.updateListener.of(update => {
       if (suppressChange || !update.docChanged) return;
-      post('change', { text: update.state.doc.toString() });
+      post('change', {text: update.state.doc.toString()});
     }),
     EditorView.domEventHandlers({
       focus: () => {
@@ -133,7 +129,7 @@ export function setDocument(text: string, path: string): void {
   suppressChange = true;
   try {
     view.dispatch({
-      changes: { from: 0, to: current.length, insert: text },
+      changes: {from: 0, to: current.length, insert: text},
       effects: pathChanged
         ? languageCompartment.reconfigure(languageExtensionForPath(path))
         : undefined,

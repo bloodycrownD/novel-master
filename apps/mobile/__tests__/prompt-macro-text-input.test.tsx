@@ -1,8 +1,8 @@
 import React from 'react';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer from 'react-test-renderer';
-import {PromptMacroTextInput} from '../src/components/agent/PromptMacroTextInput';
-import {lightTheme} from '../src/theme/tokens';
+import {PromptMacroTextInput} from '@/components/agent/PromptMacroTextInput';
+import {lightTheme} from '@/theme/tokens';
 
 describe('PromptMacroTextInput', () => {
   it('renders with macro value without value+children invariant error', () => {

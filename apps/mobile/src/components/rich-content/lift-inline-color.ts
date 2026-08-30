@@ -15,9 +15,7 @@ export function liftInlineColorToInnerSpan(html: string): string {
         .replace(/color\s*:\s*[^;]+;?/i, '')
         .replace(/^\s*;+\s*|\s*;+\s*$/g, '')
         .trim();
-      const outerStyle = restStyle
-        ? ` style=${quote}${restStyle}${quote}`
-        : '';
+      const outerStyle = restStyle ? ` style=${quote}${restStyle}${quote}` : '';
       return `<${tag}${pre}${outerStyle}${post}><span style=${quote}${colorDecl}${quote}>${inner}</span></${tag}>`;
     },
   );

@@ -4,7 +4,7 @@ import {
   pushCloudSync,
   sha256Hex,
   testCloudSyncConnection,
-} from '../src/services/cloud-sync.service';
+} from '@/services/cloud-sync.service';
 
 const mockGetConfig = jest.fn();
 const mockGetLocalStatus = jest.fn();
@@ -22,13 +22,14 @@ const mockUnlink = jest.fn();
 const mockReadFile = jest.fn();
 const mockStat = jest.fn();
 
-jest.mock('../src/services/cloud-sync-config.store', () => ({
+jest.mock('@/services/cloud-sync-config.store', () => ({
   CLOUD_SYNC_KKV_MODULE: 'nm-cloud-sync',
   CLOUD_SYNC_SECRET_REF: 'cloud-sync/s3-secret-key',
   DEFAULT_CLOUD_SYNC_PATH_PREFIX: 'novel-master/sync/',
   getCloudSyncConfig: (...args: unknown[]) => mockGetConfig(...args),
   getCloudSyncLocalStatus: (...args: unknown[]) => mockGetLocalStatus(...args),
-  patchCloudSyncLocalStatus: (...args: unknown[]) => mockPatchLocalStatus(...args),
+  patchCloudSyncLocalStatus: (...args: unknown[]) =>
+    mockPatchLocalStatus(...args),
   buildS3StorageConfig: (...args: unknown[]) => mockBuildS3Config(...args),
   setCloudSyncConfig: jest.fn(),
   generateCloudSyncDeviceId: jest.fn(() => 'device-1'),
@@ -65,13 +66,13 @@ jest.mock('@aws-sdk/client-s3', () => ({
   ListObjectsV2Command: class ListObjectsV2Command {},
 }));
 
-jest.mock('../src/services/db-backup.service', () => ({
+jest.mock('@/services/db-backup.service', () => ({
   exportDatabaseBackupToPath: (...args: unknown[]) => mockExportToPath(...args),
   importDatabaseBackupFromBytes: (...args: unknown[]) =>
     mockImportFromBytes(...args),
 }));
 
-jest.mock('../src/runtime/agent-activity', () => ({
+jest.mock('@/runtime/agent-activity', () => ({
   isMobileAgentActive: () => mockAgentActive(),
 }));
 

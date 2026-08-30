@@ -4,7 +4,7 @@ import {
   encodeHostToCodeEditor,
   encodeCodeEditorToHost,
   CODE_EDITOR_BRIDGE_VERSION,
-} from '../src/components/vfs/CodeEditorBridge';
+} from '@/components/vfs/CodeEditorBridge';
 
 describe('code-editor-bridge', () => {
   it('round-trips RN→Web init envelope', () => {
@@ -44,7 +44,9 @@ describe('code-editor-bridge', () => {
       type: 'ready' as const,
       payload: {version: 1},
     };
-    expect(decodeCodeEditorToHost(encodeCodeEditorToHost(ready))).toEqual(ready);
+    expect(decodeCodeEditorToHost(encodeCodeEditorToHost(ready))).toEqual(
+      ready,
+    );
 
     const change = {
       v: CODE_EDITOR_BRIDGE_VERSION,

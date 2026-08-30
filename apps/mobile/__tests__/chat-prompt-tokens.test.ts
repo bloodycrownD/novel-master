@@ -3,8 +3,8 @@ import {formatCounterKindLabel} from '@novel-master/core/provider';
 import {
   loadChatPromptTokenLabel,
   loadChatPromptTokenLabelResilient,
-} from '../src/services/chat-prompt-tokens.service';
-import type {MobileNovelMasterRuntime} from '../src/runtime/types';
+} from '@/services/chat-prompt-tokens.service';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 const mockResolvePromptTokensWithBackfill = jest.fn();
 const mockResolveTokenCounterModeForModel = jest.fn();
@@ -24,15 +24,14 @@ jest.mock('@novel-master/core/provider', () => ({
 }));
 
 jest.mock('@novel-master/core/agent', () => ({
-  resolveSavedModelId: (...args: unknown[]) =>
-    mockResolveSavedModelId(...args),
+  resolveSavedModelId: (...args: unknown[]) => mockResolveSavedModelId(...args),
 }));
 
 jest.mock('@novel-master/core/prompt', () => ({
   messageBodyText: () => 'hello',
 }));
 
-jest.mock('../src/services/session-prompt-input.service', () => ({
+jest.mock('@/services/session-prompt-input.service', () => ({
   buildSessionPromptInput: (...args: unknown[]) =>
     mockBuildSessionPromptInput(...args),
 }));
@@ -77,9 +76,9 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('formatPromptTokenUsageLabel marks estimated fallback', () => {
-    expect(formatPromptTokenUsageLabel(1000, undefined, {estimated: true})).toBe(
-      '~1K tokens (est.)',
-    );
+    expect(
+      formatPromptTokenUsageLabel(1000, undefined, {estimated: true}),
+    ).toBe('~1K tokens (est.)');
   });
 
   it('loadChatPromptTokenLabel appends counterKind suffix', async () => {
@@ -188,7 +187,9 @@ describe('chat-prompt-tokens.service', () => {
   });
 
   it('T7: loadChatPromptTokenLabelResilient falls back to heuristic suffix on build error', async () => {
-    mockBuildSessionPromptInput.mockRejectedValue(new Error('prompt build failed'));
+    mockBuildSessionPromptInput.mockRejectedValue(
+      new Error('prompt build failed'),
+    );
     const runtime = stubRuntime({contextWindow: null});
     (runtime.state.getCurrentModelId as jest.Mock).mockResolvedValue('');
     (runtime.messages.listBySession as jest.Mock).mockResolvedValue([

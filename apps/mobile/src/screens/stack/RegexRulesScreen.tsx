@@ -12,21 +12,25 @@ import {
   Text,
   View,
 } from 'react-native';
-import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import { type RegexGroup, type RegexRule } from "@novel-master/core/regex";
-import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
-import {ManageHeader} from '../../components/batch/ManageHeader';
-import {ConfigListCard} from '../../components/ui/ConfigListCard';
-import {PrimaryButton} from '../../components/ui/PrototypeButtons';
-import {useBatchSelection} from '../../hooks/useBatchSelection';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useHeaderContext} from '../../navigation/HeaderContext';
-import type {RootStackParamList} from '../../navigation/types';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {type RegexGroup, type RegexRule} from '@novel-master/core/regex';
+import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
+import {ManageHeader} from '@/components/batch/ManageHeader';
+import {ConfigListCard} from '@/components/ui/ConfigListCard';
+import {PrimaryButton} from '@/components/ui/PrototypeButtons';
+import {useBatchSelection} from '@/hooks/useBatchSelection';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useHeaderContext} from '@/navigation/HeaderContext';
+import type {RootStackParamList} from '@/navigation/types';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RulesRoute = RouteProp<RootStackParamList, 'RegexRules'>;
@@ -71,9 +75,7 @@ export function RegexRulesScreen() {
         title: g.displayName?.trim() || g.groupId,
       });
       const list = await runtime.regexConfig.listRules(groupId);
-      setRules(
-        [...list].sort((a, b) => a.sortOrder - b.sortOrder),
-      );
+      setRules([...list].sort((a, b) => a.sortOrder - b.sortOrder));
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
@@ -115,9 +117,7 @@ export function RegexRulesScreen() {
             }
             batch.exit();
             await reload();
-          })().catch(err =>
-            showToast(toastMessage('删除失败', err)),
-          );
+          })().catch(err => showToast(toastMessage('删除失败', err)));
         },
       },
     ]);

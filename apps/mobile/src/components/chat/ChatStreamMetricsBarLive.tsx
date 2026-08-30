@@ -50,4 +50,4 @@ export function ChatStreamMetricsBarLive({
   }
 
   return <ChatStreamMetricsBar metrics={metrics} />;
-};
+}

@@ -1,31 +1,24 @@
 import React from 'react';
-import {
-  describe,
-  expect,
-  it,
-  jest,
-  beforeEach,
-  afterEach,
-} from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
-import { Platform } from 'react-native';
-import { type ChatMessage } from '@novel-master/core/chat';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
+import {Platform} from 'react-native';
+import {type ChatMessage} from '@novel-master/core/chat';
 import {
   CHAT_TRANSCRIPT_BRIDGE_VERSION,
   decodeHostToTranscript,
-} from '../src/components/chat/ChatTranscriptBridge';
-import { ChatTranscriptWebView } from '../src/components/chat/ChatTranscriptWebView';
+} from '@/components/chat/ChatTranscriptBridge';
+import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
-import { emitChatTranscriptTelemetry } from '../src/services/chat-transcript-telemetry';
+import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 
 const mockEmitTelemetry = emitChatTranscriptTelemetry as jest.MockedFunction<
   typeof emitChatTranscriptTelemetry
 >;
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -56,7 +49,7 @@ jest.mock('sanitize-html', () => {
   return fn;
 });
 
-jest.mock('../src/services/chat-transcript-telemetry', () => ({
+jest.mock('@/services/chat-transcript-telemetry', () => ({
   emitChatTranscriptTelemetry: jest.fn(),
 }));
 
@@ -64,7 +57,7 @@ jest.mock('react-native-blob-util', () => ({
   __esModule: true,
   default: {
     fs: {
-      dirs: { MainBundleDir: '/App/NovelMaster.app' },
+      dirs: {MainBundleDir: '/App/NovelMaster.app'},
     },
   },
 }));
@@ -81,7 +74,7 @@ function sampleMessage(id: string, seq: number): ChatMessage {
     sessionId: 's1',
     seq,
     role: 'user',
-    content: { blocks: [{ type: 'text', text: `msg-${id}` }] },
+    content: {blocks: [{type: 'text', text: `msg-${id}`}]},
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -96,7 +89,7 @@ function assistantWithToolUse(id: string, seq: number): ChatMessage {
     seq,
     role: 'assistant',
     content: {
-      blocks: [{ type: 'tool_use', id: `tu-${id}`, name: 'read', input: {} }],
+      blocks: [{type: 'tool_use', id: `tu-${id}`, name: 'read', input: {}}],
     },
     provider: null,
     raw: null,
@@ -115,7 +108,7 @@ function assistantTextMessage(
     sessionId: 's1',
     seq,
     role: 'assistant',
-    content: { blocks: [{ type: 'text', text }] },
+    content: {blocks: [{type: 'text', text}]},
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -134,7 +127,7 @@ function toolResultsUserMessage(
     seq,
     role: 'user',
     content: {
-      blocks: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'ok' }],
+      blocks: [{type: 'tool_result', tool_use_id: toolUseId, content: 'ok'}],
     },
     provider: null,
     raw: null,
@@ -184,7 +177,7 @@ function simulateWebMessage(
 ): void {
   const webView = root.findByType(
     require('react-native-webview').default as React.ComponentType<{
-      onMessage?: (event: { nativeEvent: { data: string } }) => void;
+      onMessage?: (event: {nativeEvent: {data: string}}) => void;
     }>,
   );
   act(() => {
@@ -201,7 +194,7 @@ function simulateWebMessage(
 }
 
 function simulateWebReady(root: TestRenderer.ReactTestInstance): void {
-  simulateWebMessage(root, 'ready', { version: 'test' });
+  simulateWebMessage(root, 'ready', {version: 'test'});
 }
 
 async function flushAnimationFrame(): Promise<void> {
@@ -302,7 +295,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{ richText: true }}
+          flags={{richText: true}}
         />,
       );
     });
@@ -321,7 +314,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText="**bold**"
           streamingThinking=""
-          flags={{ richText: true }}
+          flags={{richText: true}}
         />,
       );
     });
@@ -355,7 +348,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{ richText: true }}
+          flags={{richText: true}}
         />,
       );
     });
@@ -374,7 +367,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking="*reason*"
-          flags={{ richText: true }}
+          flags={{richText: true}}
         />,
       );
     });
@@ -439,7 +432,7 @@ describe('ChatTranscriptWebView', () => {
     const typesAfterMenu = messageTypesSince(baseline);
     expect(typesAfterMenu).not.toContain('sessionSnapshot');
     expect(typesAfterMenu).not.toContain('flagsUpdate');
-    expect(mockEmitTelemetry).toHaveBeenCalledWith({ name: 'menu_open' });
+    expect(mockEmitTelemetry).toHaveBeenCalledWith({name: 'menu_open'});
   });
 
   it('T7: new flags object ref with same values does not post flagsUpdate', async () => {
@@ -471,7 +464,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{ ...baseFlags }}
+          flags={{...baseFlags}}
         />,
       );
     });
@@ -526,7 +519,7 @@ describe('ChatTranscriptWebView', () => {
     const messages = [sampleMessage('m1', 1)];
     const edited = {
       ...messages[0]!,
-      content: { blocks: [{ type: 'text' as const, text: 'edited' }] },
+      content: {blocks: [{type: 'text' as const, text: 'edited'}]},
     };
     let tree: TestRenderer.ReactTestRenderer;
 
@@ -576,7 +569,7 @@ describe('ChatTranscriptWebView', () => {
     let tree: TestRenderer.ReactTestRenderer;
     const ref =
       React.createRef<
-        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
       >();
 
     await act(async () => {
@@ -628,7 +621,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{ richText: false }}
+          flags={{richText: false}}
         />,
       );
     });
@@ -643,7 +636,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{ richText: true }}
+          flags={{richText: true}}
         />,
       );
     });
@@ -658,7 +651,7 @@ describe('ChatTranscriptWebView', () => {
     let tree: TestRenderer.ReactTestRenderer;
     const ref =
       React.createRef<
-        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
       >();
 
     await act(async () => {
@@ -697,12 +690,12 @@ describe('ChatTranscriptWebView', () => {
         if (msg.type !== 'streamDelta') {
           return null;
         }
-        return { kind: msg.payload.kind, delta: msg.payload.delta };
+        return {kind: msg.payload.kind, delta: msg.payload.delta};
       }),
     ).toEqual([
-      { kind: 'thinking', delta: 'A' },
-      { kind: 'text', delta: 'B' },
-      { kind: 'thinking', delta: 'C' },
+      {kind: 'thinking', delta: 'A'},
+      {kind: 'text', delta: 'B'},
+      {kind: 'thinking', delta: 'C'},
     ]);
   });
 
@@ -711,7 +704,7 @@ describe('ChatTranscriptWebView', () => {
     let tree: TestRenderer.ReactTestRenderer;
     const ref =
       React.createRef<
-        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
       >();
 
     await act(async () => {
@@ -720,7 +713,7 @@ describe('ChatTranscriptWebView', () => {
           ref={ref}
           sessionKey="p1:s1"
           messages={messages}
-          flags={{ richText: true }}
+          flags={{richText: true}}
         />,
       );
     });
@@ -735,8 +728,8 @@ describe('ChatTranscriptWebView', () => {
     await act(async () => {
       ref.current?.pushStreamBatch({
         segments: [
-          { kind: 'thinking', delta: '*r*' },
-          { kind: 'text', delta: '**b**' },
+          {kind: 'thinking', delta: '*r*'},
+          {kind: 'text', delta: '**b**'},
         ],
       });
     });
@@ -749,8 +742,8 @@ describe('ChatTranscriptWebView', () => {
     expect(batchMsg?.type).toBe('streamBatch');
     if (batchMsg?.type === 'streamBatch') {
       expect(batchMsg.payload.segments).toEqual([
-        { kind: 'thinking', delta: '*r*' },
-        { kind: 'text', delta: '**b**' },
+        {kind: 'thinking', delta: '*r*'},
+        {kind: 'text', delta: '**b**'},
       ]);
       expect(typeof batchMsg.payload.textHtml).toBe('string');
       expect(batchMsg.payload.textHtml!.length).toBeGreaterThan(0);
@@ -799,7 +792,7 @@ describe('ChatTranscriptWebView', () => {
     let tree: TestRenderer.ReactTestRenderer;
     const ref =
       React.createRef<
-        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
       >();
 
     await act(async () => {
@@ -957,7 +950,7 @@ describe('ChatTranscriptWebView', () => {
     let tree: TestRenderer.ReactTestRenderer;
     const ref =
       React.createRef<
-        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
       >();
 
     await act(async () => {
@@ -1016,7 +1009,7 @@ describe('ChatTranscriptWebView', () => {
     let tree: TestRenderer.ReactTestRenderer;
     const ref =
       React.createRef<
-        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+        import('@/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
       >();
 
     await act(async () => {
@@ -1083,10 +1076,10 @@ describe('ChatTranscriptWebView', () => {
   });
 
   it('同长度但 firstId 变化（满页回滚）时 sessionSnapshot 使用 stick', async () => {
-    const initialMessages = Array.from({ length: 40 }, (_, i) =>
+    const initialMessages = Array.from({length: 40}, (_, i) =>
       sampleMessage(`old-${i + 1}`, i + 1),
     );
-    const afterRollback = Array.from({ length: 40 }, (_, i) =>
+    const afterRollback = Array.from({length: 40}, (_, i) =>
       sampleMessage(`new-${i + 1}`, i + 1),
     );
     let tree: TestRenderer.ReactTestRenderer;
@@ -1130,7 +1123,7 @@ describe('ChatTranscriptWebView', () => {
     const baseline = mockWebViewPostMessages.length;
 
     const updatedSameLength = [
-      { ...initialMessages[0]!, hidden: true },
+      {...initialMessages[0]!, hidden: true},
       initialMessages[1]!,
     ];
 

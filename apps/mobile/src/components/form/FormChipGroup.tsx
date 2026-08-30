@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 export type ChipOption<T extends string> = {
   value: T;
@@ -40,7 +40,8 @@ export function FormChipGroup<T extends string>({
                 opacity: option.disabled && !active ? 0.45 : 1,
               },
             ]}
-            onPress={() => onChange(option.value)}>
+            onPress={() => onChange(option.value)}
+          >
             <Text style={{color: active ? '#FFFFFF' : tokens.text}}>
               {option.label}
             </Text>

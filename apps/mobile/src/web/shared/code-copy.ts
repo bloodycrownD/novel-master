@@ -23,7 +23,7 @@ export function attachCodeCopyDelegation(post: PostToHost): void {
   attached = true;
   document.addEventListener(
     'click',
-    (event) => {
+    event => {
       const target = event.target as Element | null;
       if (!target || typeof target.closest !== 'function') {
         return;
@@ -40,10 +40,7 @@ export function attachCodeCopyDelegation(post: PostToHost): void {
       }
       post('copyCode', {code: text});
       btn.classList.add('copied');
-      window.setTimeout(
-        () => btn.classList.remove('copied'),
-        COPY_FEEDBACK_MS,
-      );
+      window.setTimeout(() => btn.classList.remove('copied'), COPY_FEEDBACK_MS);
     },
     true,
   );

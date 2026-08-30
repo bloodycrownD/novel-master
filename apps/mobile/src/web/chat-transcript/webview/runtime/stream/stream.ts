@@ -1,13 +1,10 @@
-import { applyTrustedHtml } from '@web/shared/ui/TrustedHtml';
-import { escapeHtml } from '../util/html-escape';
-import { state } from '../state/state';
-import type { ToolCallRow } from '../state/state';
-import { scheduleStickIfNearBottom } from '../scroll/scroll';
-import { renderRows } from '../render/row-logic';
-import {
-  scheduleStreamRichUpgrade,
-  streamRichUpgrade,
-} from './stream-markdown';
+import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
+import {escapeHtml} from '../util/html-escape';
+import {state} from '../state/state';
+import type {ToolCallRow} from '../state/state';
+import {scheduleStickIfNearBottom} from '../scroll/scroll';
+import {renderRows} from '../render/row-logic';
+import {scheduleStreamRichUpgrade, streamRichUpgrade} from './stream-markdown';
 
 export type StreamKind = 'text' | 'thinking';
 export type StreamTailPhase = 'active' | 'waiting-first' | 'idle-after-content';
@@ -360,7 +357,7 @@ export function appendStreamDelta(
 }
 
 export type StreamBatchPayload = {
-  segments?: Array<{ kind: StreamKind; delta: string }>;
+  segments?: Array<{kind: StreamKind; delta: string}>;
   textHtml?: string;
   thinkingHtml?: string;
 };

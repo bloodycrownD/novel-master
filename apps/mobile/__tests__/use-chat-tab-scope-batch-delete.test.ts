@@ -8,15 +8,15 @@
 import {beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
-import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
+import {useChatTabScope} from '@/screens/tabs/chat-tab/useChatTabScope';
 import {
   clearAllSessionViewCaches,
   getSessionViewCache,
   sessionViewCacheKey,
   setSessionViewCache,
-} from '../src/services/chat-session-view-cache';
+} from '@/services/chat-session-view-cache';
 
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -28,7 +28,7 @@ jest.mock('../src/services/chat-agent-meta', () => ({
   })),
 }));
 
-jest.mock('../src/services/chat-prompt-tokens.service', () => ({
+jest.mock('@/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
 }));
 

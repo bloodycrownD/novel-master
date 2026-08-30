@@ -6,14 +6,14 @@ jest.mock('react-native-url-polyfill/auto', () => ({}));
 jest.mock('fast-text-encoding', () => ({}));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-require('../src/polyfills');
+require('@/polyfills');
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {
   collectResponseBytes,
   toSdkPayloadBytes,
   toSdkResponseBody,
-} = require('../src/shims/aws-rn-stream-collector');
+} = require('@/shims/aws-rn-stream-collector');
 
 describe('aws-rn-stream-collector', () => {
   it('collectResponseBytes 读取 Blob 文本', async () => {

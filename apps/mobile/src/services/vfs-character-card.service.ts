@@ -11,7 +11,7 @@ import {
 } from '@novel-master/core/vfs';
 import {keepLocalCopy} from '@react-native-documents/picker';
 import {pickSingleDocument} from './document-pick';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {
   assertCharacterCardFileName,
   characterCardImportPickTypes,

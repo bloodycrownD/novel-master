@@ -2,15 +2,9 @@
  * Compact select row that opens a bottom sheet list (for long option sets).
  */
 import React, {useEffect, useId, useMemo, useState} from 'react';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 import {useFormOverlay} from './FormOverlayHost';
 
 export type SelectOption = {
@@ -50,9 +44,7 @@ export function FormSelectField({
     [options, value],
   );
   const isEmpty = options.length === 0;
-  const display = isEmpty
-    ? emptyLabel
-    : selected?.label ?? placeholder;
+  const display = isEmpty ? emptyLabel : selected?.label ?? placeholder;
 
   const close = () => setOpen(false);
 
@@ -72,7 +64,8 @@ export function FormSelectField({
       <Pressable style={styles.backdrop} onPress={close}>
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+          onPress={e => e.stopPropagation()}
+        >
           {sheetTitle ? (
             <Text style={[styles.sheetTitle, {color: tokens.text}]}>
               {sheetTitle}
@@ -93,7 +86,8 @@ export function FormSelectField({
                     active && {backgroundColor: tokens.bgSecondary},
                     item.disabled && !active ? {opacity: 0.45} : null,
                   ]}
-                  onPress={() => select(item.value)}>
+                  onPress={() => select(item.value)}
+                >
                   <View style={styles.rowText}>
                     <Text style={{color: tokens.text}}>{item.label}</Text>
                     {item.subtitle ? (
@@ -116,7 +110,8 @@ export function FormSelectField({
                 borderTopColor: tokens.border,
                 paddingBottom: Math.max(insets.bottom, 16),
               },
-            ]}>
+            ]}
+          >
             <Pressable onPress={close} style={styles.cancelBtn}>
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
@@ -148,13 +143,15 @@ export function FormSelectField({
           opacity: disabled || isEmpty ? 0.55 : 1,
         },
       ]}
-      onPress={() => setOpen(true)}>
+      onPress={() => setOpen(true)}
+    >
       <Text
         style={{
           color: selected ? tokens.text : tokens.textSecondary,
           flex: 1,
         }}
-        numberOfLines={1}>
+        numberOfLines={1}
+      >
         {display}
       </Text>
       {!isEmpty ? (

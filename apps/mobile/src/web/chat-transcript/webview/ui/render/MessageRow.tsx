@@ -2,21 +2,21 @@
  * 普通消息行（user / assistant）。
  *
  * E2 allowlist：可值导入 `state`；新 ui 组件禁直读——
- * 见 apps/mobile/README.md「E2：ui 禁值导入 state」、scripts/check-ct-ui-no-state.mjs。
+ * 见 apps/mobile/README.md「E2：ui 禁值导入 state」；原门禁脚本已删，纪律见 README。）
  */
-import type { MessageRow as MessageRowModel } from '../../runtime/state/state';
-import { state } from '../../runtime/state/state';
-import { openContextMenuFromAnchor } from '../../runtime/menu/menu';
-import { assistantBubbleExtraClasses } from '../../runtime/stream/stream';
-import { AttachGroup } from './AttachGroup';
-import { AssistantBubbleInner } from './AssistantBubble';
-import { RefTokenText } from './RefTokenText';
+import type {MessageRow as MessageRowModel} from '../../runtime/state/state';
+import {state} from '../../runtime/state/state';
+import {openContextMenuFromAnchor} from '../../runtime/menu/menu';
+import {assistantBubbleExtraClasses} from '../../runtime/stream/stream';
+import {AttachGroup} from './AttachGroup';
+import {AssistantBubbleInner} from './AssistantBubble';
+import {RefTokenText} from './RefTokenText';
 
 export type MessageRowProps = {
   row: MessageRowModel;
 };
 
-export function MessageRow({ row }: MessageRowProps) {
+export function MessageRow({row}: MessageRowProps) {
   const role = row.role === 'user' ? 'user' : 'assistant';
   const hidden = row.hidden ? ' hidden' : '';
   const thinkingKey = 'msg:' + row.id;
@@ -116,10 +116,7 @@ export function MessageRow({ row }: MessageRowProps) {
   }
 
   return (
-    <div
-      className={'row message ' + role + hidden}
-      data-id={row.id}
-    >
+    <div className={'row message ' + role + hidden} data-id={row.id}>
       {bubble}
     </div>
   );

@@ -1,8 +1,8 @@
 /**
  * 64ms FIFO apply 缓冲：按 wire 到达序 flush，溢出时强制 flush 且不丢弃 thinking。
  */
-import type {StreamWireChunk} from '@/services/stream-wire-queue';
-import {wireQueueCharCount} from '@/services/stream-wire-queue';
+import type {StreamWireChunk} from './stream-wire-queue';
+import {wireQueueCharCount} from './stream-wire-queue';
 
 export type StreamApplyBufferOptions = {
   readonly flushIntervalMs?: number;

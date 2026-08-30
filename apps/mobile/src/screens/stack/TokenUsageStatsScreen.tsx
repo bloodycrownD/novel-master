@@ -19,13 +19,7 @@
  *   错误条且不渲染 0 兜底卡片（mobile/C-orch-2）；空态区分库全空
  *   （冷启动引导）与范围内无数据（提示 + 保留今日卡，mobile/A-1）。
  */
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -34,7 +28,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import {useFocusEffect} from '@react-navigation/native';
 import type {
   UsageStatsBucket,
   UsageStatsFilter,
@@ -48,16 +42,16 @@ import {
   formatTokenCount,
   pageWindowItems,
 } from '@novel-master/core/common';
-import { AppModal } from '../../components/ui/AppModal';
-import { ListSectionTitle } from '../../components/ui/ListSectionTitle';
-import { SegmentedControl } from '../../components/ui/SegmentedControl';
-import { MonthRangePickerSheet } from '../../components/ui/MonthRangePickerSheet';
-import { StackedBars } from '../../components/charts/StackedBars';
-import { useToast } from '../../components/chrome/ToastHost';
-import { toastMessage } from '../../errors/toast-message';
-import { useRuntime } from '../../hooks/useRuntime';
-import { useTheme } from '../../theme/ThemeProvider';
-import type { ThemeTokens } from '../../theme/tokens';
+import {AppModal} from '@/components/ui/AppModal';
+import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
+import {MonthRangePickerSheet} from '@/components/ui/MonthRangePickerSheet';
+import {StackedBars} from '@/components/charts/StackedBars';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type RangeKind = 'last7' | 'last30' | 'custom';
 /** 页面主结构页签：汇总（指标卡 + 分模型列表）/ 明细（按天图表钻取）。 */
@@ -144,16 +138,16 @@ function SummaryTile({
         styles.tile,
         layout === 'wide' && styles.tileWide,
         layout === 'third' && styles.tileThird,
-        { backgroundColor: tokens.surface },
+        {backgroundColor: tokens.surface},
       ]}
     >
-      <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+      <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
         {label}
       </Text>
       <Text
         style={[
           styles.tileValue,
-          { color: tone === 'success' ? tokens.success : tokens.text },
+          {color: tone === 'success' ? tokens.success : tokens.text},
         ]}
         numberOfLines={1}
       >
@@ -181,30 +175,30 @@ function TodayCard({
         styles.tile,
         styles.tileWide,
         styles.todayCard,
-        { backgroundColor: tokens.surface },
+        {backgroundColor: tokens.surface},
       ]}
     >
-      <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+      <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
         今日 · 不受时间范围与模型筛选影响
       </Text>
       <View style={styles.todayRow}>
         <View style={styles.todayMetric}>
-          <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+          <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
             总 token
           </Text>
           <Text
-            style={[styles.tileValue, { color: tokens.text }]}
+            style={[styles.tileValue, {color: tokens.text}]}
             numberOfLines={1}
           >
             {formatTokenCount(summary?.today.totalTokens ?? 0)}
           </Text>
         </View>
         <View style={styles.todayMetric}>
-          <Text style={[styles.tileLabel, { color: tokens.textSecondary }]}>
+          <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
             调用次数
           </Text>
           <Text
-            style={[styles.tileValue, { color: tokens.text }]}
+            style={[styles.tileValue, {color: tokens.text}]}
             numberOfLines={1}
           >
             {String(summary?.today.calls ?? 0)}
@@ -216,8 +210,8 @@ function TodayCard({
 }
 
 export function TokenUsageStatsScreen() {
-  const { tokens } = useTheme();
-  const { showToast } = useToast();
+  const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
 
   const [rangeKind, setRangeKind] = useState<RangeKind>('last7');
@@ -273,7 +267,7 @@ export function TokenUsageStatsScreen() {
         model: modelFilter,
       };
     }
-    return { range: { kind: rangeKind }, model: modelFilter };
+    return {range: {kind: rangeKind}, model: modelFilter};
   }, [rangeKind, customFrom, customTo, modelFilter]);
 
   // 页签切换只切换展示，不参与 filter/reload 依赖——筛选跨页签保留、不重查。
@@ -487,7 +481,7 @@ export function TokenUsageStatsScreen() {
 
   return (
     <ScrollView
-      style={[styles.scroll, { backgroundColor: tokens.background }]}
+      style={[styles.scroll, {backgroundColor: tokens.background}]}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
     >
@@ -525,8 +519,8 @@ export function TokenUsageStatsScreen() {
           },
         ]}
       >
-        <Text style={{ color: tokens.text }}>{modelFilterLabel}</Text>
-        <Text style={{ color: tokens.textSecondary }}>切换 ›</Text>
+        <Text style={{color: tokens.text}}>{modelFilterLabel}</Text>
+        <Text style={{color: tokens.textSecondary}}>切换 ›</Text>
       </Pressable>
       <SegmentedControl
         options={[
@@ -556,21 +550,21 @@ export function TokenUsageStatsScreen() {
       {loadError != null ? (
         <View
           testID="load-error"
-          style={[styles.errorBar, { borderColor: tokens.danger }]}
+          style={[styles.errorBar, {borderColor: tokens.danger}]}
         >
-          <Text style={{ color: tokens.danger }}>{loadError}</Text>
+          <Text style={{color: tokens.danger}}>{loadError}</Text>
         </View>
       ) : null}
       {loadError != null && summary == null ? null : libraryEmpty ? (
         <View style={styles.empty} testID="empty-cold-start">
-          <Text style={[styles.emptyText, { color: tokens.textSecondary }]}>
+          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
             Token
             用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
           </Text>
         </View>
       ) : rangeEmpty ? (
         <View style={styles.empty} testID="empty-range">
-          <Text style={[styles.emptyText, { color: tokens.textSecondary }]}>
+          <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
             该区间无数据
           </Text>
           {/* 今日卡独立于筛选：范围空态下保留渲染。 */}
@@ -586,18 +580,15 @@ export function TokenUsageStatsScreen() {
             <View
               // 与 desktop 口径一致：createdAtMs+index，防同毫秒同模型碰撞（MF-5）。
               key={`${row.createdAtMs}-${index}`}
-              style={[
-                styles.reqRow,
-                { backgroundColor: tokens.surface },
-              ]}
+              style={[styles.reqRow, {backgroundColor: tokens.surface}]}
             >
               <View style={styles.reqRowHead}>
-                <Text style={{ color: tokens.text }}>
+                <Text style={{color: tokens.text}}>
                   {formatRequestTime(row.createdAtMs)}
                 </Text>
                 <Text
                   numberOfLines={1}
-                  style={{ color: tokens.textSecondary, flexShrink: 1 }}
+                  style={{color: tokens.textSecondary, flexShrink: 1}}
                 >
                   首字延迟 {formatDurationMs(row.firstTokenMs)} · 总时间{' '}
                   {formatDurationMs(row.durationMs)}
@@ -605,7 +596,7 @@ export function TokenUsageStatsScreen() {
               </View>
               <Text
                 numberOfLines={1}
-                style={[styles.reqRowDetail, { color: tokens.textSecondary }]}
+                style={[styles.reqRowDetail, {color: tokens.textSecondary}]}
               >
                 {row.modelName ?? '其他'} · 输入{' '}
                 {formatTokenCount(row.promptTokens)} · 输出{' '}
@@ -620,14 +611,11 @@ export function TokenUsageStatsScreen() {
             <View style={[styles.reqPager]}>
               <Pressable
                 testID="req-prev-page"
-                style={[
-                  styles.reqPagerBtn,
-                  { borderColor: tokens.borderLight },
-                ]}
+                style={[styles.reqPagerBtn, {borderColor: tokens.borderLight}]}
                 disabled={reqLoading || reqPage === 0}
                 onPress={() => loadRequests(reqPage - 1).catch(() => undefined)}
               >
-                <Text style={{ color: tokens.primary }}>上一页</Text>
+                <Text style={{color: tokens.primary}}>上一页</Text>
               </Pressable>
               {pageWindowItems(
                 reqPage + 1,
@@ -636,7 +624,7 @@ export function TokenUsageStatsScreen() {
                 item === '…' ? (
                   <Text
                     key={`gap-${index}`}
-                    style={[styles.reqPageGap, { color: tokens.textTertiary }]}
+                    style={[styles.reqPageGap, {color: tokens.textTertiary}]}
                   >
                     …
                   </Text>
@@ -646,7 +634,9 @@ export function TokenUsageStatsScreen() {
                     testID={`req-page-${item}`}
                     style={[
                       styles.reqPageNum,
-                      item === reqPage + 1 && { backgroundColor: tokens.selection },
+                      item === reqPage + 1 && {
+                        backgroundColor: tokens.selection,
+                      },
                       {
                         borderColor:
                           item === reqPage + 1
@@ -675,23 +665,16 @@ export function TokenUsageStatsScreen() {
               )}
               <Pressable
                 testID="req-next-page"
-                style={[
-                  styles.reqPagerBtn,
-                  { borderColor: tokens.borderLight },
-                ]}
-                disabled={
-                  reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal
-                }
+                style={[styles.reqPagerBtn, {borderColor: tokens.borderLight}]}
+                disabled={reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal}
                 onPress={() => loadRequests(reqPage + 1).catch(() => undefined)}
               >
-                <Text style={{ color: tokens.primary }}>下一页</Text>
+                <Text style={{color: tokens.primary}}>下一页</Text>
               </Pressable>
             </View>
           ) : null}
           {reqRows.length === 0 && !reqLoading && !reqDirtyRef.current ? (
-            <Text
-              style={[styles.reqRowDetail, { color: tokens.textSecondary }]}
-            >
+            <Text style={[styles.reqRowDetail, {color: tokens.textSecondary}]}>
               （无请求记录）
             </Text>
           ) : null}
@@ -727,40 +710,40 @@ export function TokenUsageStatsScreen() {
           </View>
           {/* 命中率/速率/首字延迟三卡一行（31% 列）；marginTop 补与上半卡行的垂直间距 */}
           <View style={[styles.summaryGrid, styles.tileThirdRow]}>
-          <SummaryTile
-            testID="summary-metric-hitRate"
-            label="命中率"
-            value={formatHitRate(
-              hitRate(
-                summary?.cacheReadTokens ?? 0,
-                summary?.billedInputTokens ?? 0,
-              ),
-            )}
-            tone="success"
-            layout="third"
-            tokens={tokens}
-          />
-          {/* 新指标卡：无有效行为 null → 空态横杠而非 0 */}
-          <SummaryTile
-            testID="summary-metric-avgTokensPerSecond"
-            label="平均速率"
-            value={formatTokensPerSecond(
-              summary?.avgTokensPerSecond ?? null,
-              SUMMARY_EMPTY_TEXT,
-            )}
-            layout="third"
-            tokens={tokens}
-          />
-          <SummaryTile
-            testID="summary-metric-avgFirstTokenMs"
-            label="平均首字延迟"
-            value={formatFirstTokenMs(
-              summary?.avgFirstTokenMs ?? null,
-              SUMMARY_EMPTY_TEXT,
-            )}
-            layout="third"
-            tokens={tokens}
-          />
+            <SummaryTile
+              testID="summary-metric-hitRate"
+              label="命中率"
+              value={formatHitRate(
+                hitRate(
+                  summary?.cacheReadTokens ?? 0,
+                  summary?.billedInputTokens ?? 0,
+                ),
+              )}
+              tone="success"
+              layout="third"
+              tokens={tokens}
+            />
+            {/* 新指标卡：无有效行为 null → 空态横杠而非 0 */}
+            <SummaryTile
+              testID="summary-metric-avgTokensPerSecond"
+              label="平均速率"
+              value={formatTokensPerSecond(
+                summary?.avgTokensPerSecond ?? null,
+                SUMMARY_EMPTY_TEXT,
+              )}
+              layout="third"
+              tokens={tokens}
+            />
+            <SummaryTile
+              testID="summary-metric-avgFirstTokenMs"
+              label="平均首字延迟"
+              value={formatFirstTokenMs(
+                summary?.avgFirstTokenMs ?? null,
+                SUMMARY_EMPTY_TEXT,
+              )}
+              layout="third"
+              tokens={tokens}
+            />
           </View>
           <TodayCard summary={summary} tokens={tokens} />
           {/* 聚合数据归汇总页签：分模型列表跟随五指标卡与今日卡展示。 */}
@@ -782,18 +765,15 @@ export function TokenUsageStatsScreen() {
                 ]}
               >
                 <View style={styles.modelRowHead}>
-                  <Text style={{ color: tokens.text }} numberOfLines={1}>
+                  <Text style={{color: tokens.text}} numberOfLines={1}>
                     {row.modelName ?? '其他'}
                   </Text>
-                  <Text style={{ color: tokens.textSecondary }}>
+                  <Text style={{color: tokens.textSecondary}}>
                     占比 {share == null ? '—' : `${Math.round(share * 100)}%`}
                   </Text>
                 </View>
                 <Text
-                  style={[
-                    styles.modelRowDetail,
-                    { color: tokens.textSecondary },
-                  ]}
+                  style={[styles.modelRowDetail, {color: tokens.textSecondary}]}
                 >
                   用量 {formatTokenCount(row.totalTokens)} · 调用 {row.calls} 次
                 </Text>
@@ -804,7 +784,7 @@ export function TokenUsageStatsScreen() {
       ) : (
         <>
           <ListSectionTitle title="按天用量" tokens={tokens} />
-          <View style={[styles.chartCard, { backgroundColor: tokens.surface }]}>
+          <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
             <StackedBars
               testID="daily-chart"
               data={dailyData}
@@ -817,7 +797,7 @@ export function TokenUsageStatsScreen() {
           </View>
           {dailyInspected != null ? (
             <View testID="bar-inspect" style={styles.inspectRow}>
-              <Text style={[styles.inspectText, { color: tokens.textSecondary }]}>
+              <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
                 {dailyInspected.key.slice(8)} 日 · 输入{' '}
                 {formatTokenCount(dailyInspected.primary)} · 输出{' '}
                 {formatTokenCount(dailyInspected.secondary ?? 0)} · 调用{' '}
@@ -827,14 +807,11 @@ export function TokenUsageStatsScreen() {
           ) : null}
           {selectedDay != null && selectedDayBucket != null ? (
             <View style={styles.dayDetail}>
-              <Text style={[styles.dayDetailTitle, { color: tokens.text }]}>
+              <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>
                 {selectedDay} · 按小时分布
               </Text>
               <Text
-                style={[
-                  styles.dayDetailSummary,
-                  { color: tokens.textSecondary },
-                ]}
+                style={[styles.dayDetailSummary, {color: tokens.textSecondary}]}
               >
                 输入 {formatTokenCount(selectedDayBucket.promptTokens)} · 输出{' '}
                 {formatTokenCount(selectedDayBucket.completionTokens)} · 命中率{' '}
@@ -850,12 +827,11 @@ export function TokenUsageStatsScreen() {
                   '—',
                 )}{' '}
                 · 平均首字延迟{' '}
-                {formatFirstTokenMs(
-                  selectedDayBucket.avgFirstTokenMs,
-                  '—',
-                )}
+                {formatFirstTokenMs(selectedDayBucket.avgFirstTokenMs, '—')}
               </Text>
-              <View style={[styles.chartCard, { backgroundColor: tokens.surface }]}>
+              <View
+                style={[styles.chartCard, {backgroundColor: tokens.surface}]}
+              >
                 <StackedBars
                   testID="hourly-chart"
                   data={hourlyData}
@@ -867,7 +843,7 @@ export function TokenUsageStatsScreen() {
               {hourlyInspected != null ? (
                 <View testID="bar-inspect" style={styles.inspectRow}>
                   <Text
-                    style={[styles.inspectText, { color: tokens.textSecondary }]}
+                    style={[styles.inspectText, {color: tokens.textSecondary}]}
                   >
                     {Number(hourlyInspected.key)}时 · 输入{' '}
                     {formatTokenCount(hourlyInspected.primary)} · 输出{' '}
@@ -897,16 +873,16 @@ export function TokenUsageStatsScreen() {
           onPress={() => setModelPickerVisible(false)}
         >
           <Pressable
-            style={[styles.pickerSheet, { backgroundColor: tokens.surface }]}
+            style={[styles.pickerSheet, {backgroundColor: tokens.surface}]}
             onPress={e => e.stopPropagation()}
           >
-            <Text style={[styles.pickerTitle, { color: tokens.text }]}>
+            <Text style={[styles.pickerTitle, {color: tokens.text}]}>
               选择模型
             </Text>
             {[
-              { id: MODEL_OPTION_ALL, label: '全部模型' },
-              ...models.map(m => ({ id: m, label: m })),
-              { id: MODEL_OPTION_UNLOGGED, label: '其他模型' },
+              {id: MODEL_OPTION_ALL, label: '全部模型'},
+              ...models.map(m => ({id: m, label: m})),
+              {id: MODEL_OPTION_UNLOGGED, label: '其他模型'},
             ].map(option => {
               const selected =
                 option.id === MODEL_OPTION_ALL
@@ -930,15 +906,15 @@ export function TokenUsageStatsScreen() {
                   }}
                   style={[
                     styles.pickerRow,
-                    { borderBottomColor: tokens.border },
-                    selected && { backgroundColor: tokens.bgSecondary },
+                    {borderBottomColor: tokens.border},
+                    selected && {backgroundColor: tokens.bgSecondary},
                   ]}
                 >
-                  <Text style={{ color: tokens.text }} numberOfLines={1}>
+                  <Text style={{color: tokens.text}} numberOfLines={1}>
                     {option.label}
                   </Text>
                   {selected ? (
-                    <Text style={{ color: tokens.primary }}>当前</Text>
+                    <Text style={{color: tokens.primary}}>当前</Text>
                   ) : null}
                 </Pressable>
               );

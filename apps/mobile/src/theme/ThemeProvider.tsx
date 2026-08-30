@@ -11,8 +11,8 @@ import React, {
   type ReactNode,
 } from 'react';
 import {useColorScheme} from 'react-native';
-import {useNovelMaster} from '../runtime/novel-master-context';
-import {appUiKeys} from '../storage/app-ui-prefs';
+import {useNovelMaster} from '@/runtime/novel-master-context';
+import {appUiKeys} from '@/storage/app-ui-prefs';
 import {tokensForMode, type ThemeMode, type ThemeTokens} from './tokens';
 
 export interface ThemeContextValue {

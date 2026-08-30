@@ -62,7 +62,8 @@ if (
         }
         reject(new Error('Blob.arrayBuffer polyfill: 无法读取 ArrayBuffer'));
       };
-      reader.onerror = () => reject(reader.error ?? new Error('FileReader 失败'));
+      reader.onerror = () =>
+        reject(reader.error ?? new Error('FileReader 失败'));
       reader.readAsArrayBuffer(this);
     });
   };
@@ -78,4 +79,3 @@ if (
     );
   };
 }
-

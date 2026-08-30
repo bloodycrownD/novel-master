@@ -5,6 +5,8 @@ export type StreamTailGenerating = {
   readonly streamTailGenerating: boolean;
 };
 
-export function useStreamTailGenerating(uiRunning: boolean): StreamTailGenerating {
-  return { streamTailGenerating: uiRunning };
+export function useStreamTailGenerating(
+  uiRunning: boolean,
+): StreamTailGenerating {
+  return {streamTailGenerating: uiRunning};
 }

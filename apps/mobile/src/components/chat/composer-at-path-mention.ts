@@ -127,7 +127,10 @@ export function mergeProgrammaticPlainIntoMentionValue(
     return prevMentionValue;
   }
 
-  const baseValue = generateValueFromMentionStateAndChangedText(prev, nextPlain);
+  const baseValue = generateValueFromMentionStateAndChangedText(
+    prev,
+    nextPlain,
+  );
   const added = findSingleAddedRange(prev.plainText, nextPlain);
   if (added == null) {
     return baseValue;
@@ -251,8 +254,7 @@ function promotePlainAtPathsInRange(
     })),
     ...promotions
       .filter(
-        p =>
-          !mentionSpans.some(s => p.absStart < s.end && p.absEnd > s.start),
+        p => !mentionSpans.some(s => p.absStart < s.end && p.absEnd > s.start),
       )
       .map(p => ({
         kind: 'promote' as const,

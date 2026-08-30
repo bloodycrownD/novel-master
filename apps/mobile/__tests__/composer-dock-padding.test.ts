@@ -1,5 +1,5 @@
 import {describe, expect, it} from '@jest/globals';
-import {composerDockBottomPadding} from '../src/components/chat/composer-dock-padding';
+import {composerDockBottomPadding} from '@/components/chat/composer-dock-padding';
 
 describe('composerDockBottomPadding', () => {
   it('T-N4: safe-area bottom 大于 base 时取 insets', () => {

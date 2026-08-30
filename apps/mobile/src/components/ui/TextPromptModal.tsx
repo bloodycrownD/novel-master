@@ -2,11 +2,18 @@
  * Single-line text prompt (create/rename dialogs).
  */
 import React, {useEffect, useState} from 'react';
-import {Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useAndroidModalKeyboardAvoid} from '../../hooks/useAndroidModalKeyboardAvoid';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
 import {AppModal} from './AppModal';
 
 type Props = {
@@ -71,7 +78,8 @@ export function TextPromptModal({
           {backgroundColor: tokens.surface},
           Platform.OS === 'android' ? panelAvoidStyle : undefined,
         ]}
-        onStartShouldSetResponder={() => true}>
+        onStartShouldSetResponder={() => true}
+      >
         <Pressable onPress={e => e.stopPropagation()}>
           <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
           {label ? (
@@ -106,12 +114,14 @@ export function TextPromptModal({
               testID="text-prompt-submit"
               onPress={() => handleConfirm().catch(() => undefined)}
               style={styles.btn}
-              disabled={!canSubmit}>
+              disabled={!canSubmit}
+            >
               <Text
                 style={{
                   color: canSubmit ? tokens.primary : tokens.textTertiary,
                   fontWeight: '600',
-                }}>
+                }}
+              >
                 {saving ? '保存中…' : confirmLabel}
               </Text>
             </Pressable>
@@ -126,12 +136,14 @@ export function TextPromptModal({
       visible={visible}
       animationType="fade"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       {Platform.OS === 'ios' ? (
         <KeyboardAvoidingView
           behavior="padding"
           style={styles.avoidingRoot}
-          keyboardVerticalOffset={24}>
+          keyboardVerticalOffset={24}
+        >
           {backdrop}
         </KeyboardAvoidingView>
       ) : (

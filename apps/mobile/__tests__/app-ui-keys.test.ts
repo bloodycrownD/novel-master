@@ -3,7 +3,7 @@ import {
   APP_UI_KKV_MODULE,
   APP_UI_KEY_CHAT_RICH_TEXT,
   APP_UI_KEY_THEME,
-} from '../src/storage/app-ui-keys';
+} from '@/storage/app-ui-keys';
 
 describe('app-ui-keys', () => {
   it('uses nm-mobile-ui module', () => {

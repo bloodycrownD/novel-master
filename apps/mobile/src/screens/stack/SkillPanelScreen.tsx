@@ -16,7 +16,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
+import {
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
@@ -94,9 +98,7 @@ export function SkillPanelScreen() {
         );
       flip(nextEnabled);
       try {
-        await runtime
-          .skills()
-          .setDisabled(projectId, skill.name, !nextEnabled);
+        await runtime.skills().setDisabled(projectId, skill.name, !nextEnabled);
       } catch (error) {
         flip(!nextEnabled);
         showToast(toastMessage(nextEnabled ? '启用失败' : '关闭失败', error));
@@ -146,16 +148,21 @@ export function SkillPanelScreen() {
               testID={`skill-panel-row-${item.name}`}
               style={[
                 styles.row,
-                {backgroundColor: tokens.surface, borderColor: tokens.borderLight},
+                {
+                  backgroundColor: tokens.surface,
+                  borderColor: tokens.borderLight,
+                },
                 (item.disabled || !item.valid) && styles.rowDimmed,
               ]}
               onPress={() => openDetail(item)}
-              accessibilityLabel={`技能 ${item.name}`}>
+              accessibilityLabel={`技能 ${item.name}`}
+            >
               <View style={styles.rowBody}>
                 <View style={styles.titleRow}>
                   <Text
                     style={[styles.name, {color: tokens.text}]}
-                    numberOfLines={1}>
+                    numberOfLines={1}
+                  >
                     {item.name}
                   </Text>
                   <Text
@@ -165,13 +172,15 @@ export function SkillPanelScreen() {
                         color: skillDomainBadgeColor(item.domain, tokens),
                         borderColor: tokens.border,
                       },
-                    ]}>
+                    ]}
+                  >
                     {skillDomainBadgeLabel(item.domain, item.overridden)}
                   </Text>
                   {!item.valid ? (
                     <Text
                       style={[styles.invalidTag, {color: tokens.danger}]}
-                      numberOfLines={1}>
+                      numberOfLines={1}
+                    >
                       无效 · {item.invalidReason ?? 'front matter 不合法'}
                     </Text>
                   ) : null}
@@ -179,7 +188,8 @@ export function SkillPanelScreen() {
                 {item.description ? (
                   <Text
                     style={[styles.description, {color: tokens.textSecondary}]}
-                    numberOfLines={2}>
+                    numberOfLines={2}
+                  >
                     {item.description}
                   </Text>
                 ) : null}
@@ -187,7 +197,9 @@ export function SkillPanelScreen() {
               <Switch
                 value={!item.disabled}
                 disabled={!item.valid}
-                onValueChange={next => toggleDisabled(item, next).catch(() => undefined)}
+                onValueChange={next =>
+                  toggleDisabled(item, next).catch(() => undefined)
+                }
                 trackColor={{false: tokens.border, true: tokens.primary}}
               />
             </Pressable>

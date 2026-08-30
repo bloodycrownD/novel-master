@@ -42,7 +42,7 @@ jest.mock('@novel-master/core', () => ({
   },
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       text: '#111',
@@ -58,15 +58,15 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) => String(err),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
@@ -78,11 +78,11 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
 
-jest.mock('../src/components/form/FormOverlayHost', () => ({
+jest.mock('@/components/form/FormOverlayHost', () => ({
   useFormOverlay: () => ({openOverlay: jest.fn()}),
 }));
 
-jest.mock('../src/components/form/FormField', () => {
+jest.mock('@/components/form/FormField', () => {
   const mockReact = require('react');
   return {
     FormField: ({children}: {children?: React.ReactNode}) =>
@@ -90,11 +90,11 @@ jest.mock('../src/components/form/FormField', () => {
   };
 });
 
-jest.mock('../src/components/form/FormSwitchRow', () => ({
+jest.mock('@/components/form/FormSwitchRow', () => ({
   FormSwitchRow: () => null,
 }));
 
-jest.mock('../src/components/form/FormSectionCard', () => {
+jest.mock('@/components/form/FormSectionCard', () => {
   const mockReact = require('react');
   return {
     FormSectionCard: ({children}: {children?: React.ReactNode}) =>
@@ -102,15 +102,15 @@ jest.mock('../src/components/form/FormSectionCard', () => {
   };
 });
 
-jest.mock('../src/components/form/FormSelectField', () => ({
+jest.mock('@/components/form/FormSelectField', () => ({
   FormSelectField: () => null,
 }));
 
-jest.mock('../src/components/form/FormTextInput', () => ({
+jest.mock('@/components/form/FormTextInput', () => ({
   FormTextInput: () => null,
 }));
 
-jest.mock('../src/components/form/ScreenFormLayout', () => {
+jest.mock('@/components/form/ScreenFormLayout', () => {
   const mockReact = require('react');
   return {
     ScreenFormLayout: ({children}: {children?: React.ReactNode}) =>
@@ -118,19 +118,19 @@ jest.mock('../src/components/form/ScreenFormLayout', () => {
   };
 });
 
-jest.mock('../src/components/form/StickyFormFooter', () => ({
+jest.mock('@/components/form/StickyFormFooter', () => ({
   StickyFormFooter: () => null,
 }));
 
-jest.mock('../src/components/agent/ToolPolicyPicker', () => ({
+jest.mock('@/components/agent/ToolPolicyPicker', () => ({
   ToolPolicyPicker: () => null,
 }));
 
-jest.mock('../src/components/agent/PromptMacroTextInput', () => ({
+jest.mock('@/components/agent/PromptMacroTextInput', () => ({
   PromptMacroTextInput: () => null,
 }));
 
-jest.mock('../src/services/agent-yaml.service', () => ({
+jest.mock('@/services/agent-yaml.service', () => ({
   exportAgentYaml: jest.fn(),
   importAgentYaml: jest.fn(),
 }));
@@ -162,7 +162,7 @@ jest.mock('react-native', () => {
   };
 });
 
-import {AgentEditorForm} from '../src/components/agent/AgentEditorForm';
+import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
 
 async function renderInvalidEditor(wire: unknown) {
   mockGetRawWire.mockResolvedValue(wire);
@@ -182,7 +182,9 @@ function pressDeleteButton(root: TestRenderer.ReactTestInstance) {
   const deletePressable = root
     .findAll(node => node.type === 'Pressable')
     .find(node =>
-      node.findAllByType('Text' as never).some(t => t.children?.includes(deleteLabel)),
+      node
+        .findAllByType('Text' as never)
+        .some(t => t.children?.includes(deleteLabel)),
     );
   expect(deletePressable).toBeDefined();
   act(() => {

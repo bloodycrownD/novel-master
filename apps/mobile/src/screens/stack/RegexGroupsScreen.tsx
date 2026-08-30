@@ -14,23 +14,23 @@ import {
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import { type RegexGroup } from "@novel-master/core/regex";
-import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
-import {RegexGroupPickerModal} from '../../components/regex/RegexGroupPickerModal';
-import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
-import {ConfigListCard} from '../../components/ui/ConfigListCard';
-import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
-import {PrimaryButton} from '../../components/ui/PrototypeButtons';
-import {TextPromptModal} from '../../components/ui/TextPromptModal';
-import {useBatchSelection} from '../../hooks/useBatchSelection';
-import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
-import {useRuntime} from '../../hooks/useRuntime';
-import type {RootStackParamList} from '../../navigation/types';
+import {type RegexGroup} from '@novel-master/core/regex';
+import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
+import {RegexGroupPickerModal} from '@/components/regex/RegexGroupPickerModal';
+import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
+import {ConfigListCard} from '@/components/ui/ConfigListCard';
+import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
+import {PrimaryButton} from '@/components/ui/PrototypeButtons';
+import {TextPromptModal} from '@/components/ui/TextPromptModal';
+import {useBatchSelection} from '@/hooks/useBatchSelection';
+import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
+import {useRuntime} from '@/hooks/useRuntime';
+import type {RootStackParamList} from '@/navigation/types';
 import {deriveRegexGroupId} from '@novel-master/core/format';
-import {useTheme} from '../../theme/ThemeProvider';
-import type {ThemeTokens} from '../../theme/tokens';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -45,7 +45,9 @@ function groupTitle(group: RegexGroup): string {
 
 function RegexLeadingIcon({tokens}: {tokens: {primary: string}}) {
   return (
-    <View style={[styles.leadingIcon, {backgroundColor: `${tokens.primary}1A`}]}>
+    <View
+      style={[styles.leadingIcon, {backgroundColor: `${tokens.primary}1A`}]}
+    >
       <Text style={styles.leadingEmoji}>🛡️</Text>
     </View>
   );
@@ -81,17 +83,18 @@ function GroupPanelRow({
           borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
           opacity: pressed ? 0.92 : 1,
         },
-      ]}>
+      ]}
+    >
       {batchActive ? (
-        <BatchCheckbox
-          checked={selected}
-          onToggle={onPress}
-        />
+        <BatchCheckbox checked={selected} onToggle={onPress} />
       ) : (
         <RegexLeadingIcon tokens={tokens} />
       )}
       <View style={styles.panelRowInfo}>
-        <Text style={[styles.panelRowTitle, {color: tokens.text}]} numberOfLines={1}>
+        <Text
+          style={[styles.panelRowTitle, {color: tokens.text}]}
+          numberOfLines={1}
+        >
           {groupTitle(item)}
         </Text>
         <Text style={[styles.panelRowSubtitle, {color: tokens.textSecondary}]}>
@@ -109,8 +112,11 @@ function GroupPanelRow({
           onPress={e => {
             e.stopPropagation?.();
             onMenuPress();
-          }}>
-          <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>⋮</Text>
+          }}
+        >
+          <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>
+            ⋮
+          </Text>
         </Pressable>
       ) : null}
       {!batchActive ? (
@@ -153,9 +159,7 @@ export function RegexGroupsScreen() {
       } else {
         try {
           const current = await runtime.regexConfig.getGroup(currentId);
-          setCurrentRegexLabel(
-            current.displayName?.trim() || current.groupId,
-          );
+          setCurrentRegexLabel(current.displayName?.trim() || current.groupId);
         } catch {
           setCurrentRegexLabel('不启用');
         }
@@ -198,9 +202,7 @@ export function RegexGroupsScreen() {
             }
             batch.exit();
             await reload();
-          })().catch(err =>
-            showToast(toastMessage('删除失败', err)),
-          );
+          })().catch(err => showToast(toastMessage('删除失败', err)));
         },
       },
     ]);
@@ -218,9 +220,7 @@ export function RegexGroupsScreen() {
           (async () => {
             await runtime.regexConfig.deleteGroup(groupId);
             await reload();
-          })().catch(err =>
-            showToast(toastMessage('删除失败', err)),
-          );
+          })().catch(err => showToast(toastMessage('删除失败', err)));
         },
       },
     ]);
@@ -228,8 +228,8 @@ export function RegexGroupsScreen() {
 
   const editInitialName =
     editGroupId != null
-      ? (rows.find(g => g.groupId === editGroupId)?.displayName ??
-        groupTitle(rows.find(g => g.groupId === editGroupId)!))
+      ? rows.find(g => g.groupId === editGroupId)?.displayName ??
+        groupTitle(rows.find(g => g.groupId === editGroupId)!)
       : '';
 
   const currentSubtitle =
@@ -241,10 +241,8 @@ export function RegexGroupsScreen() {
     if (batch.active) {
       return (
         <View
-          style={[
-            styles.panelToolbar,
-            {borderBottomColor: tokens.borderLight},
-          ]}>
+          style={[styles.panelToolbar, {borderBottomColor: tokens.borderLight}]}
+        >
           <Pressable onPress={batch.exit}>
             <Text style={[styles.batchAction, {color: tokens.text}]}>取消</Text>
           </Pressable>
@@ -253,16 +251,16 @@ export function RegexGroupsScreen() {
           </Text>
           <Pressable
             onPress={confirmBatchDelete}
-            disabled={batch.selectedCount === 0}>
+            disabled={batch.selectedCount === 0}
+          >
             <Text
               style={{
                 color:
-                  batch.selectedCount > 0
-                    ? tokens.danger
-                    : tokens.textTertiary,
+                  batch.selectedCount > 0 ? tokens.danger : tokens.textTertiary,
                 fontSize: 15,
                 fontWeight: '600',
-              }}>
+              }}
+            >
               删除
             </Text>
           </Pressable>
@@ -272,10 +270,8 @@ export function RegexGroupsScreen() {
 
     return (
       <View
-        style={[
-          styles.panelToolbar,
-          {borderBottomColor: tokens.borderLight},
-        ]}>
+        style={[styles.panelToolbar, {borderBottomColor: tokens.borderLight}]}
+      >
         <Text style={[styles.sectionLabel, {color: tokens.text}]}>
           全部正则组
         </Text>
@@ -302,7 +298,8 @@ export function RegexGroupsScreen() {
         keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl refreshing={loading} onRefresh={reload} />
-        }>
+        }
+      >
         <ListSectionTitle title="当前" tokens={tokens} />
         <ConfigListCard
           tokens={tokens}
@@ -320,7 +317,8 @@ export function RegexGroupsScreen() {
               backgroundColor: tokens.surfaceElevated,
               borderColor: tokens.borderLight,
             },
-          ]}>
+          ]}
+        >
           {renderListPanelToolbar()}
           {batch.active ? (
             <Text style={[styles.batchHint, {color: tokens.textSecondary}]}>
@@ -353,9 +351,7 @@ export function RegexGroupsScreen() {
                   }
                 }}
                 onMenuPress={
-                  batch.active
-                    ? undefined
-                    : () => setMenuGroupId(item.groupId)
+                  batch.active ? undefined : () => setMenuGroupId(item.groupId)
                 }
               />
             ))

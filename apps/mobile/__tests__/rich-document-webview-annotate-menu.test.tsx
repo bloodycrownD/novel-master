@@ -37,7 +37,7 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => {},
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -53,7 +53,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 import {
   RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
   RichDocumentWebView,
-} from '../src/components/vfs/RichDocumentWebView';
+} from '@/components/vfs/RichDocumentWebView';
 
 describe('RichDocumentWebView annotate（原生菜单 + Recogito 投影）', () => {
   beforeEach(() => {
@@ -99,10 +99,7 @@ describe('RichDocumentWebView annotate（原生菜单 + Recogito 投影）', () 
       'utf8',
     );
     const annotate = readFileSync(
-      join(
-        __dirname,
-        '../src/web/rich-document/webview/runtime/annotate.ts',
-      ),
+      join(__dirname, '../src/web/rich-document/webview/runtime/annotate.ts'),
       'utf8',
     );
     expect(web).toMatch(/menuItems/);

@@ -1,11 +1,13 @@
 import {
   extractStyleBlocksFromHtml,
   parseSimpleCssToClasses,
-} from '../src/components/rich-content/extract-style-classes';
+} from '@/components/rich-content/extract-style-classes';
 
 describe('extract-style-classes', () => {
   it('parses simple class rules', () => {
-    const classes = parseSimpleCssToClasses('.note { color: red; font-weight: bold; }');
+    const classes = parseSimpleCssToClasses(
+      '.note { color: red; font-weight: bold; }',
+    );
     expect(classes.note).toMatchObject({color: 'red', fontWeight: 'bold'});
   });
 

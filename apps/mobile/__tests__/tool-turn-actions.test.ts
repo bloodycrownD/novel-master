@@ -1,8 +1,8 @@
-import { type ChatMessage } from '@novel-master/core/chat';
+import {type ChatMessage} from '@novel-master/core/chat';
 import {
   deleteToolTurn,
   hideToolTurn,
-} from '../src/components/chat/tool-turn-actions';
+} from '@/components/chat/tool-turn-actions';
 
 function msg(
   id: string,
@@ -15,7 +15,7 @@ function msg(
     sessionId: 's1',
     seq,
     role,
-    content: { blocks },
+    content: {blocks},
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -50,20 +50,20 @@ describe('tool-turn-actions', () => {
     msg(
       'a1',
       'assistant',
-      [{ type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {} }],
+      [{type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {}}],
       1,
     ),
     msg(
       'u1',
       'user',
-      [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+      [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
       2,
     ),
-    msg('u2', 'user', [{ type: 'text', text: 'plain' }], 3),
+    msg('u2', 'user', [{type: 'text', text: 'plain'}], 3),
   ];
 
   it('hideToolTurn hides assistant and paired tool_results', async () => {
-    const { runtime, hidden } = createRuntime();
+    const {runtime, hidden} = createRuntime();
     await hideToolTurn(runtime, messages, 'a1', true);
     expect(runtime.messages.hide).toHaveBeenCalledWith('a1');
     expect(runtime.messages.hide).toHaveBeenCalledWith('u1');
@@ -71,14 +71,14 @@ describe('tool-turn-actions', () => {
   });
 
   it('hideToolTurn shows assistant and paired tool_results', async () => {
-    const { runtime } = createRuntime();
+    const {runtime} = createRuntime();
     await hideToolTurn(runtime, messages, 'a1', false);
     expect(runtime.messages.show).toHaveBeenCalledWith('a1');
     expect(runtime.messages.show).toHaveBeenCalledWith('u1');
   });
 
   it('hideToolTurn only hides single message without tool_use', async () => {
-    const { runtime, hidden } = createRuntime();
+    const {runtime, hidden} = createRuntime();
     await hideToolTurn(runtime, messages, 'u2', true);
     expect(runtime.messages.hide).toHaveBeenCalledTimes(1);
     expect(runtime.messages.hide).toHaveBeenCalledWith('u2');
@@ -86,7 +86,7 @@ describe('tool-turn-actions', () => {
   });
 
   it('deleteToolTurn deletes assistant and paired tool_results', async () => {
-    const { runtime, deleted } = createRuntime();
+    const {runtime, deleted} = createRuntime();
     await deleteToolTurn(runtime, messages, 'a1');
     expect(runtime.messages.delete).toHaveBeenCalledWith('u1');
     expect(runtime.messages.delete).toHaveBeenCalledWith('a1');
@@ -94,7 +94,7 @@ describe('tool-turn-actions', () => {
   });
 
   it('deleteToolTurn only deletes plain messages', async () => {
-    const { runtime, deleted } = createRuntime();
+    const {runtime, deleted} = createRuntime();
     await deleteToolTurn(runtime, messages, 'u2');
     expect(runtime.messages.delete).toHaveBeenCalledTimes(1);
     expect(runtime.messages.delete).toHaveBeenCalledWith('u2');

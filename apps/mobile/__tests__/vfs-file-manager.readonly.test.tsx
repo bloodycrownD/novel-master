@@ -3,15 +3,8 @@
  * 同时守住红线：默认（不传 readOnly）行为与现状完全一致。
  */
 import React from 'react';
-import {
-  describe,
-  expect,
-  it,
-  jest,
-  beforeEach,
-  afterEach,
-} from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
 
 const mockShowToast = jest.fn();
 
@@ -20,7 +13,7 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -37,20 +30,20 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
+jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({
   useDismissOverlaysOnBlur: () => undefined,
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({ showToast: mockShowToast }),
+jest.mock('@/components/chrome/ToastHost', () => ({
+  useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }));
 
-jest.mock('../src/services/vfs-operations.service', () => ({
+jest.mock('@/services/vfs-operations.service', () => ({
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
@@ -63,10 +56,10 @@ jest.mock('../src/services/vfs-operations.service', () => ({
   sessionRenameVfsFile: jest.fn(),
 }));
 
-jest.mock('../src/services/workplace-operations.service', () => {
+jest.mock('@/services/workplace-operations.service', () => {
   const actual = jest.requireActual(
-    '../src/services/workplace-operations.service',
-  ) as typeof import('../src/services/workplace-operations.service');
+    '@/services/workplace-operations.service',
+  ) as typeof import('@/services/workplace-operations.service');
   return {
     ...actual,
     batchSetDirRulesDisabled: jest.fn(),
@@ -77,16 +70,16 @@ jest.mock('../src/services/workplace-operations.service', () => {
   };
 });
 
-const mockMenuOpenCount = { opened: 0 };
+const mockMenuOpenCount = {opened: 0};
 
-jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
+jest.mock('@/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: ({
     visible,
     items,
   }: {
     visible: boolean;
     onSelect: (action: string) => void;
-    items: { action: string }[];
+    items: {action: string}[];
   }) => {
     if (visible && items.length > 0) {
       // 记录任何被打开的菜单（readOnly 断言应为零）。
@@ -96,32 +89,32 @@ jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   },
 }));
 
-jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
+jest.mock('@/components/sheet/DirectoryRuleSheet', () => ({
   DirectoryRuleSheet: () => null,
 }));
 
-jest.mock('../src/components/template/TemplatePullButton', () => ({
+jest.mock('@/components/template/TemplatePullButton', () => ({
   TemplatePullButton: () => null,
 }));
 
-jest.mock('../src/services/vfs-zip.service', () => ({
+jest.mock('@/services/vfs-zip.service', () => ({
   exportVfsZip: jest.fn(),
   importVfsZip: jest.fn(),
 }));
 
-jest.mock('../src/services/vfs-character-card.service', () => ({
+jest.mock('@/services/vfs-character-card.service', () => ({
   importCharacterCard: jest.fn(),
 }));
 
-jest.mock('../src/services/user-vfs-turn-execute.service', () => ({
+jest.mock('@/services/user-vfs-turn-execute.service', () => ({
   refreshComposerStatusAfterUserVfsOps: jest.fn(),
 }));
 
-jest.mock('../src/services/workplace-rule-delta-draft.service', () => ({
+jest.mock('@/services/workplace-rule-delta-draft.service', () => ({
   refreshRuleSnapshotAfterRuleChange: jest.fn(),
 }));
 
-jest.mock('../src/hooks/useAndroidModalKeyboardAvoid', () => ({
+jest.mock('@/hooks/useAndroidModalKeyboardAvoid', () => ({
   useAndroidModalKeyboardAvoid: () => ({}),
 }));
 
@@ -133,19 +126,19 @@ const mockRuntime = {
   },
 };
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-const { VfsFileManager } =
-  require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
+const {VfsFileManager} =
+  require('@/components/vfs/VfsFileManager') as typeof import('@/components/vfs/VfsFileManager');
 
 // 物理树根目录形态：虚拟目录 + 全局文件（list 为唯一数据源，workplace 不传）。
 const list = jest.fn(async () => [
-  { path: '/projects', kind: 'directory' as const },
-  { path: '/template', kind: 'directory' as const },
-  { path: '/meta', kind: 'directory' as const },
-  { path: '/readme.md', kind: 'file' as const },
+  {path: '/projects', kind: 'directory' as const},
+  {path: '/template', kind: 'directory' as const},
+  {path: '/meta', kind: 'directory' as const},
+  {path: '/readme.md', kind: 'file' as const},
 ]);
 
 const onOpenFile = jest.fn();
@@ -157,8 +150,8 @@ function flushPromises(): Promise<void> {
 function renderManager(readOnly: boolean) {
   return (
     <VfsFileManager
-      scope={{ kind: 'global' }}
-      vfs={{ list } as never}
+      scope={{kind: 'global'}}
+      vfs={{list} as never}
       rootPath="/"
       readOnly={readOnly}
       onOpenFile={onOpenFile}
@@ -171,7 +164,7 @@ function findOptionalByTestId(
   testID: string,
 ): TestRenderer.ReactTestInstance | undefined {
   try {
-    return root.findByProps({ testID });
+    return root.findByProps({testID});
   } catch {
     return undefined;
   }
@@ -186,10 +179,10 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
     mockShowToast.mockClear();
     mockMenuOpenCount.opened = 0;
     list.mockResolvedValue([
-      { path: '/projects', kind: 'directory' as const },
-      { path: '/template', kind: 'directory' as const },
-      { path: '/meta', kind: 'directory' as const },
-      { path: '/readme.md', kind: 'file' as const },
+      {path: '/projects', kind: 'directory' as const},
+      {path: '/template', kind: 'directory' as const},
+      {path: '/meta', kind: 'directory' as const},
+      {path: '/readme.md', kind: 'file' as const},
     ]);
   });
 
@@ -233,16 +226,14 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
 
     await act(async () => {
       tree!.root
-        .findByProps({ testID: 'vfs-row-item-readme.md' })
+        .findByProps({testID: 'vfs-row-item-readme.md'})
         .props.onPress();
       await flushPromises();
     });
     expect(onOpenFile).toHaveBeenCalledWith('/readme.md');
 
     await act(async () => {
-      tree!.root
-        .findByProps({ testID: 'vfs-row-item-template' })
-        .props.onPress();
+      tree!.root.findByProps({testID: 'vfs-row-item-template'}).props.onPress();
       await flushPromises();
     });
     expect(list).toHaveBeenCalledWith('/template');
@@ -254,9 +245,7 @@ describe('T-PB3: VfsFileManager readOnly 模式（全局文件浏览器）', () 
       await flushPromises();
     });
 
-    expect(
-      findOptionalByTestId(tree!.root, 'vfs-more-action'),
-    ).toBeDefined();
+    expect(findOptionalByTestId(tree!.root, 'vfs-more-action')).toBeDefined();
     expect(
       findOptionalByTestId(tree!.root, 'vfs-row-menu-readme.md'),
     ).toBeDefined();

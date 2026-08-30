@@ -19,12 +19,12 @@ export const MERMAID_DOUBLE_TAP_INTERVAL_MS = 300;
 /** 单指位移超过此值视为拖拽（抑制 tap 关闭 / 双击误判）。 */
 export const MERMAID_VIEWER_TAP_SLOP_PX = 8;
 
-export type MermaidViewerPan = { x: number; y: number };
+export type MermaidViewerPan = {x: number; y: number};
 
-export type MermaidViewerTransform = { scale: number; pan: MermaidViewerPan };
+export type MermaidViewerTransform = {scale: number; pan: MermaidViewerPan};
 
 /** 尺寸（px）。 */
-export type MermaidViewerSize = { width: number; height: number };
+export type MermaidViewerSize = {width: number; height: number};
 
 /** pinch 缩放 clamp：不小于原始档、不大于最大档；NaN 回退原始档。 */
 export function clampMermaidViewerScale(scale: number): number {
@@ -93,12 +93,12 @@ export function computeMermaidViewerPinch(
     stageWidth,
     stageHeight,
   );
-  return { scale, pan };
+  return {scale, pan};
 }
 
 export type MermaidViewerDoubleTap =
-  | { kind: 'ignore' }
-  | { kind: 'toggle'; scale: number };
+  | {kind: 'ignore'}
+  | {kind: 'toggle'; scale: number};
 
 /**
  * 烘焙尺寸换算：SVG width/height 落定的 px = fit 基准渲染尺寸 × scale。
@@ -130,7 +130,7 @@ export function rebasePanAfterBake(
   pan: MermaidViewerPan,
   _scale: number,
 ): MermaidViewerPan {
-  return { x: pan.x + 0, y: pan.y + 0 };
+  return {x: pan.x + 0, y: pan.y + 0};
 }
 
 /**
@@ -146,11 +146,11 @@ export function resolveMermaidViewerDoubleTap(
     lastTapAtMs <= 0 ||
     nowMs - lastTapAtMs > MERMAID_DOUBLE_TAP_INTERVAL_MS
   ) {
-    return { kind: 'ignore' };
+    return {kind: 'ignore'};
   }
   const next =
     currentScale > MERMAID_VIEWER_MIN_SCALE
       ? MERMAID_VIEWER_MIN_SCALE
       : MERMAID_VIEWER_DOUBLE_TAP_SCALE;
-  return { kind: 'toggle', scale: clampMermaidViewerScale(next) };
+  return {kind: 'toggle', scale: clampMermaidViewerScale(next)};
 }

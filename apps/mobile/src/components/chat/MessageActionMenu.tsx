@@ -72,13 +72,15 @@ export function MessageActionMenu({
       onPress={() => {
         onClose();
         onSelect(item.action);
-      }}>
+      }}
+    >
       <Text
         style={{
           color: item.danger ? tokens.danger : tokens.text,
           fontSize: 15,
           textAlign: 'center',
-        }}>
+        }}
+      >
         {item.label}
       </Text>
     </Pressable>
@@ -89,7 +91,8 @@ export function MessageActionMenu({
       visible={visible && layout != null}
       transparent
       animationType="fade"
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         {layout != null ? (
@@ -104,12 +107,14 @@ export function MessageActionMenu({
                 backgroundColor: tokens.surfaceElevated,
                 borderColor: tokens.border,
               },
-            ]}>
+            ]}
+          >
             {layout.scrollable ? (
               <ScrollView
                 bounces={false}
                 keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator>
+                showsVerticalScrollIndicator
+              >
                 {menuItems}
               </ScrollView>
             ) : (

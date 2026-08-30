@@ -2,7 +2,7 @@ import {
   previewRegexReplacementOnly,
   previewRegexRule,
   type RegexRuleDraftFields,
-} from '../src/services/regex-test.service';
+} from '@/services/regex-test.service';
 
 describe('previewRegexReplacementOnly', () => {
   const baseFields: RegexRuleDraftFields = {
@@ -19,7 +19,11 @@ describe('previewRegexReplacementOnly', () => {
   };
 
   it('忽略 depth/role，仍执行所选通道替换', () => {
-    const result = previewRegexReplacementOnly('my secret text', baseFields, 'llm');
+    const result = previewRegexReplacementOnly(
+      'my secret text',
+      baseFields,
+      'llm',
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.text).toBe('my [redacted] text');
@@ -27,7 +31,11 @@ describe('previewRegexReplacementOnly', () => {
   });
 
   it('display 通道使用 displayReplace', () => {
-    const result = previewRegexReplacementOnly('my secret text', baseFields, 'display');
+    const result = previewRegexReplacementOnly(
+      'my secret text',
+      baseFields,
+      'display',
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.text).toBe('my *** text');

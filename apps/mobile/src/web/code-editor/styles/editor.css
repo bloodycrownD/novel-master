@@ -1,9 +1,14 @@
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body {
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+html,
+body {
   height: 100%;
   background: var(--editor-bg, var(--bg, #fff));
   color: var(--text, #111);
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
   overflow: hidden;
 }
 #root {
@@ -43,7 +48,8 @@ html, body {
 .cm-activeLine {
   background-color: var(--editor-active-line, rgba(0, 0, 0, 0.04));
 }
-.cm-cursor, .cm-dropCursor {
+.cm-cursor,
+.cm-dropCursor {
   border-left-width: 2px;
   border-left-color: var(--primary, #007aff);
 }

@@ -60,11 +60,11 @@ let mockRouteParams: {projectId: string; sessionId: string} = {
   sessionId: 's1',
 };
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -79,33 +79,37 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) => String(err),
 }));
 
 const mockLoadChatAgentMeta = jest.fn();
 // isAgentLocked / isModelLocked 的 mock 跟真实逻辑保持一致，
 // 这样锁定场景的测试（source !== 'session'）能拿到 true。
-jest.mock('../src/services/chat-agent-meta', () => ({
+jest.mock('@/services/chat-agent-meta', () => ({
   loadChatAgentMeta: (...args: unknown[]) => mockLoadChatAgentMeta(...args),
   isAgentLocked: (meta: {source?: string} | undefined) =>
     !meta || meta.source !== 'session',
-  isModelLocked: (meta: {
-    source?: string;
-    modelSource?: string;
-    hasDedicatedModel?: boolean;
-  } | undefined) =>
+  isModelLocked: (
+    meta:
+      | {
+          source?: string;
+          modelSource?: string;
+          hasDedicatedModel?: boolean;
+        }
+      | undefined,
+  ) =>
     !meta ||
     meta.source !== 'session' ||
     meta.modelSource === 'agent-pin' ||
     Boolean(meta.hasDedicatedModel),
 }));
 
-jest.mock('../src/components/agent/AgentPickerModal', () => {
+jest.mock('@/components/agent/AgentPickerModal', () => {
   const React = require('react');
   return {
     AgentPickerModal: (props: {
@@ -120,7 +124,7 @@ jest.mock('../src/components/agent/AgentPickerModal', () => {
       }),
   };
 });
-jest.mock('../src/components/provider/ModelPickerModal', () => {
+jest.mock('@/components/provider/ModelPickerModal', () => {
   const React = require('react');
   return {
     ModelPickerModal: (props: {
@@ -197,12 +201,12 @@ jest.mock('react-native', () => {
   };
 });
 
-import {SessionDetailScreen} from '../src/screens/stack/SessionDetailScreen';
+import {SessionDetailScreen} from '@/screens/stack/SessionDetailScreen';
 import {
   selectSessionAgent,
   selectWorkspaceAgent,
-} from '../src/services/agent-picker';
-import type {ChatAgentMeta} from '../src/services/chat-agent-meta';
+} from '@/services/agent-picker';
+import type {ChatAgentMeta} from '@/services/chat-agent-meta';
 
 function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
@@ -308,15 +312,15 @@ describe('T-M2 SessionDetailScreen', () => {
     await act(async () => {
       tree.root.findByProps({testID: 'agent-row'}).props.onPress();
     });
-    expect(tree.root.findByProps({testID: 'agent-picker-modal'}).props.visible).toBe(
-      'false',
-    );
+    expect(
+      tree.root.findByProps({testID: 'agent-picker-modal'}).props.visible,
+    ).toBe('false');
     await act(async () => {
       tree.root.findByProps({testID: 'model-row'}).props.onPress();
     });
-    expect(tree.root.findByProps({testID: 'model-picker-modal'}).props.visible).toBe(
-      'false',
-    );
+    expect(
+      tree.root.findByProps({testID: 'model-picker-modal'}).props.visible,
+    ).toBe('false');
     // 两张卡片都应触发锁定提示
     expect(mockShowToast).toHaveBeenCalledTimes(2);
   });
@@ -433,13 +437,12 @@ describe('T-SD1 SessionDetailScreen 改名广播', () => {
 describe('T-SD2 useChatTabScope session-renamed 订阅契约', () => {
   it('源码含 session-renamed 订阅、reloadLists 调用与 sub.remove() 清理', () => {
     const source = fs.readFileSync(
-      path.join(
-        __dirname,
-        '../src/screens/tabs/chat-tab/useChatTabScope.ts',
-      ),
+      path.join(__dirname, '../src/screens/tabs/chat-tab/useChatTabScope.ts'),
       'utf8',
     );
-    expect(source).toMatch(/DeviceEventEmitter\.addListener\(\s*'session-renamed'/);
+    expect(source).toMatch(
+      /DeviceEventEmitter\.addListener\(\s*'session-renamed'/,
+    );
     expect(source).toMatch(/reloadLists\(\)\.catch/);
     expect(source).toMatch(/return \(\) => sub\.remove\(\)/);
   });

@@ -1,4 +1,4 @@
-import {importCharacterCard} from '../src/services/vfs-character-card.service';
+import {importCharacterCard} from '@/services/vfs-character-card.service';
 import {CharacterCardError} from '@novel-master/core/vfs';
 
 const mockImportFromBytes = jest.fn();
@@ -92,9 +92,7 @@ describe('vfs-character-card.service', () => {
     await importCharacterCard(runtime, scope, {confirmed: true});
     expect(mockKeepLocalCopy).toHaveBeenCalledWith(
       expect.objectContaining({
-        files: [
-          {uri: 'content://downloads/card.json', fileName: 'card.json'},
-        ],
+        files: [{uri: 'content://downloads/card.json', fileName: 'card.json'}],
         destination: 'cachesDirectory',
       }),
     );

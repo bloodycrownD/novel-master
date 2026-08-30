@@ -1,11 +1,15 @@
 /**
  * Single SQLite connection for mobile (VFS + SKSP share one DB).
  */
-import {bootstrapNovelMaster, open, type TdbcConnection} from '@novel-master/core';
+import {
+  bootstrapNovelMaster,
+  open,
+  type TdbcConnection,
+} from '@novel-master/core';
 import {registerOpSqliteDriver} from '@novel-master/tdbc-driver-op-sqlite/native';
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
 import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';
-import {MOBILE_TDBC_URL} from '../vfs/constants';
+import {MOBILE_TDBC_URL} from '@/vfs/constants';
 import {
   clearMobileDatabaseFilePathCache,
   probeAndCacheMobileDatabaseFilePath,
@@ -41,8 +45,7 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
         let openDepth = 0;
         while (openCause && openDepth < 5) {
           console.error(`[nm-boot] open cause[${openDepth}]:`, openCause);
-          openCause =
-            openCause instanceof Error ? openCause.cause : undefined;
+          openCause = openCause instanceof Error ? openCause.cause : undefined;
           openDepth++;
         }
         throw openErr;
@@ -53,7 +56,8 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
         // 打出 cause 链：migration 失败时原始错误可能被驱动层的包装错误盖住
         // （真机事故教训：ROLLBACK 失败曾掩盖 disk I/O error）。
         console.error('[nm-boot] bootstrap 失败:', bootErr);
-        let cause: unknown = bootErr instanceof Error ? bootErr.cause : undefined;
+        let cause: unknown =
+          bootErr instanceof Error ? bootErr.cause : undefined;
         let depth = 0;
         while (cause && depth < 5) {
           console.error(`[nm-boot] cause[${depth}]:`, cause);

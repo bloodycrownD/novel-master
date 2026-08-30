@@ -16,7 +16,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -33,11 +33,19 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/ui/AppModal', () => {
+jest.mock('@/components/ui/AppModal', () => {
   const mockReact = require('react');
   return {
-    AppModal: ({children, visible}: {children?: React.ReactNode; visible?: boolean}) =>
-      visible ? mockReact.createElement('View', {testID: 'app-modal'}, children) : null,
+    AppModal: ({
+      children,
+      visible,
+    }: {
+      children?: React.ReactNode;
+      visible?: boolean;
+    }) =>
+      visible
+        ? mockReact.createElement('View', {testID: 'app-modal'}, children)
+        : null,
   };
 });
 
@@ -49,17 +57,21 @@ const mockProviderModels = {
 
 const mockRuntime = {providerModels: mockProviderModels};
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   // 返回固定引用：runtime 每次渲染都是新对象的话，load 的 useCallback 会重建，
   // visible effect 就会无限重跑（Maximum update depth）。
   useRuntime: () => mockRuntime,
 }));
 
-import {FetchModelsSheet} from '../src/components/provider/FetchModelsSheet';
+import {FetchModelsSheet} from '@/components/provider/FetchModelsSheet';
 
 const SUGGESTIONS = [
   {vendorModelId: 'gpt-4o', displayName: 'GPT-4o 对话', stale: false},
-  {vendorModelId: 'claude-3-sonnet', displayName: 'Claude 3 Sonnet', stale: false},
+  {
+    vendorModelId: 'claude-3-sonnet',
+    displayName: 'Claude 3 Sonnet',
+    stale: false,
+  },
   {vendorModelId: 'ernie-speed', displayName: null, stale: false},
 ];
 
@@ -86,9 +98,7 @@ async function renderSheet(
 
 /** 找过滤输入框（树里唯一挂 onChangeText 的 TextInput）。 */
 function findFilterInput(root: TestRenderer.ReactTestInstance) {
-  const inputs = root.findAll(
-    n => typeof n.props.onChangeText === 'function',
-  );
+  const inputs = root.findAll(n => typeof n.props.onChangeText === 'function');
   expect(inputs.length).toBeGreaterThanOrEqual(1);
   return inputs[0];
 }
@@ -148,7 +158,9 @@ function findButtonByText(
 }
 
 /** 递归收集渲染树里全部展示文本（避开 toJSON 的循环引用，VirtualizedList 内部节点会挂 fiber）。 */
-function treeText(node: TestRenderer.ReactTestInstance | string | number): string {
+function treeText(
+  node: TestRenderer.ReactTestInstance | string | number,
+): string {
   if (node == null) {
     return '';
   }

@@ -67,12 +67,40 @@ export function SunIcon({color, size = 22}: IconProps) {
       <Circle cx={12} cy={12} r={5} stroke={color} strokeWidth={2} />
       <Line x1={12} y1={1} x2={12} y2={3} stroke={color} strokeWidth={2} />
       <Line x1={12} y1={21} x2={12} y2={23} stroke={color} strokeWidth={2} />
-      <Line x1={4.22} y1={4.22} x2={5.64} y2={5.64} stroke={color} strokeWidth={2} />
-      <Line x1={18.36} y1={18.36} x2={19.78} y2={19.78} stroke={color} strokeWidth={2} />
+      <Line
+        x1={4.22}
+        y1={4.22}
+        x2={5.64}
+        y2={5.64}
+        stroke={color}
+        strokeWidth={2}
+      />
+      <Line
+        x1={18.36}
+        y1={18.36}
+        x2={19.78}
+        y2={19.78}
+        stroke={color}
+        strokeWidth={2}
+      />
       <Line x1={1} y1={12} x2={3} y2={12} stroke={color} strokeWidth={2} />
       <Line x1={21} y1={12} x2={23} y2={12} stroke={color} strokeWidth={2} />
-      <Line x1={4.22} y1={19.78} x2={5.64} y2={18.36} stroke={color} strokeWidth={2} />
-      <Line x1={18.36} y1={5.64} x2={19.78} y2={4.22} stroke={color} strokeWidth={2} />
+      <Line
+        x1={4.22}
+        y1={19.78}
+        x2={5.64}
+        y2={18.36}
+        stroke={color}
+        strokeWidth={2}
+      />
+      <Line
+        x1={18.36}
+        y1={5.64}
+        x2={19.78}
+        y2={4.22}
+        stroke={color}
+        strokeWidth={2}
+      />
     </Svg>
   );
 }
@@ -107,9 +135,33 @@ export function MenuIcon({color, size = 22}: IconProps) {
 export function ManageListIcon({color, size = 22}: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Line x1={4} y1={6} x2={12} y2={6} stroke={color} strokeWidth={2} strokeLinecap="round" />
-      <Line x1={4} y1={12} x2={12} y2={12} stroke={color} strokeWidth={2} strokeLinecap="round" />
-      <Line x1={4} y1={18} x2={12} y2={18} stroke={color} strokeWidth={2} strokeLinecap="round" />
+      <Line
+        x1={4}
+        y1={6}
+        x2={12}
+        y2={6}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Line
+        x1={4}
+        y1={12}
+        x2={12}
+        y2={12}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Line
+        x1={4}
+        y1={18}
+        x2={12}
+        y2={18}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
       <Line
         x1={16.5}
         y1={4.5}
@@ -119,7 +171,14 @@ export function ManageListIcon({color, size = 22}: IconProps) {
         strokeWidth={2}
         strokeLinecap="round"
       />
-      <Circle cx={14} cy={9} r={2.6} fill="none" stroke={color} strokeWidth={2} />
+      <Circle
+        cx={14}
+        cy={9}
+        r={2.6}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+      />
     </Svg>
   );
 }

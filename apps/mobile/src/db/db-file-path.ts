@@ -4,7 +4,7 @@
  * @module db/db-file-path
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
-import {MOBILE_VFS_DB_NAME} from '../vfs/constants';
+import {MOBILE_VFS_DB_NAME} from '@/vfs/constants';
 
 /** Subfolder under app files dir used by quick-sqlite when `location: 'default'`. */
 export const QUICK_SQLITE_DEFAULT_LOCATION = 'default';
@@ -38,9 +38,13 @@ function blobFs(): typeof ReactNativeBlobUtil.fs {
 function defaultQuickSqliteBaseDir(
   dirs: typeof ReactNativeBlobUtil.fs.dirs,
 ): string {
-  const dirsWithSupport = dirs as typeof dirs & {ApplicationSupportDir?: string};
+  const dirsWithSupport = dirs as typeof dirs & {
+    ApplicationSupportDir?: string;
+  };
   const base =
-    dirs.DocumentDir ?? dirs.LibraryDir ?? dirsWithSupport.ApplicationSupportDir;
+    dirs.DocumentDir ??
+    dirs.LibraryDir ??
+    dirsWithSupport.ApplicationSupportDir;
   if (typeof base !== 'string' || base.length === 0) {
     throw new Error('无法定位应用数据库目录');
   }

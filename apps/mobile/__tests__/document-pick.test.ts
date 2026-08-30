@@ -13,8 +13,8 @@ jest.mock('@react-native-documents/picker', () => ({
 }));
 
 import {pick} from '@react-native-documents/picker';
-import {pickSingleDocument} from '../src/services/document-pick';
-import {registerAppToastSink} from '../src/services/app-toast';
+import {pickSingleDocument} from '@/services/document-pick';
+import {registerAppToastSink} from '@/services/app-toast';
 
 const pickMock = pick as unknown as jest.Mock;
 
@@ -50,9 +50,9 @@ describe('pickSingleDocument 用户取消归一', () => {
   test('正常选择 → 原样返回文件，不弹 toast', async () => {
     const file = {uri: 'file:///tmp/a.zip', name: 'a.zip'};
     pickMock.mockResolvedValue([file]);
-    await expect(pickSingleDocument({type: ['public.zip']})).resolves.toStrictEqual(
-      file,
-    );
+    await expect(
+      pickSingleDocument({type: ['public.zip']}),
+    ).resolves.toStrictEqual(file);
     expect(shown).toEqual([]);
   });
 

@@ -1,4 +1,4 @@
-import {parseReleaseTag} from '../../src/update-check/parse-release-tag';
+import {parseReleaseTag} from '@/update-check/parse-release-tag';
 
 describe('parseReleaseTag', () => {
   it('parses v1.2.3', () => {

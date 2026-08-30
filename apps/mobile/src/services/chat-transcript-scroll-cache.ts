@@ -5,7 +5,7 @@
 import {
   CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
   type ChatTranscriptScrollSnapshot,
-} from '../components/chat/ChatTranscriptBridge';
+} from '@/components/chat/ChatTranscriptBridge';
 
 export type {ChatTranscriptScrollSnapshot};
 

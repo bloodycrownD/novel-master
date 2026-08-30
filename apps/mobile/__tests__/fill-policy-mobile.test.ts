@@ -1,9 +1,9 @@
-import { normalizeFillPolicyForMobile } from '../src/storage/fill-policy-mobile';
+import {normalizeFillPolicyForMobile} from '@/storage/fill-policy-mobile';
 import {
   defaultDirRuleForm,
   dirRuleToForm,
   emptyDirRuleForm,
-} from '../src/services/workplace-operations.service';
+} from '@/services/workplace-operations.service';
 
 describe('normalizeFillPolicyForMobile', () => {
   it('maps full to hidden', () => {

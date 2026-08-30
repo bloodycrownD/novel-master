@@ -2,8 +2,8 @@
  * Tool invocation card with status from paired tool_result.
  */
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useTheme } from '@/theme/ThemeProvider';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {useTheme} from '@/theme/ThemeProvider';
 import {
   skillToolRef,
   toolCallSummary,
@@ -42,7 +42,7 @@ function statusLabel(status: ToolCallView['status']): string {
 
 function statusColor(
   status: ToolCallView['status'],
-  tokens: { primary: string; danger: string; textSecondary: string },
+  tokens: {primary: string; danger: string; textSecondary: string},
 ): string {
   if (status === 'error') {
     return tokens.danger;
@@ -61,7 +61,7 @@ export function ToolCallCard({
   onOpenSubagentSession,
   onOpenSkillDetail,
 }: Props) {
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
   const filePath = vfsToolFilePath(tool);
   const subagentSessionId = tool.subagentSessionId;
   // skill 跳转三元组：meta 透传优先，否则从 input 解析（write/edit）。
@@ -78,28 +78,28 @@ export function ToolCallCard({
     subagentSessionId != null
       ? '点击查看 · 子会话'
       : skillRef != null
-        ? '点击查看 · 技能'
-        : '点击查看 · 聊天工作区';
+      ? '点击查看 · 技能'
+      : '点击查看 · 聊天工作区';
 
   const card = (
     <>
       <View style={styles.header}>
-        <Text style={[styles.name, { color: tokens.text }]} numberOfLines={1}>
+        <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
           {tool.name}
         </Text>
         <Text
-          style={[styles.status, { color: statusColor(tool.status, tokens) }]}
+          style={[styles.status, {color: statusColor(tool.status, tokens)}]}
         >
           {statusLabel(tool.status)}
         </Text>
       </View>
       {detail ? (
-        <Text style={[styles.summary, { color: tokens.textSecondary }]}>
+        <Text style={[styles.summary, {color: tokens.textSecondary}]}>
           {detail}
         </Text>
       ) : null}
       {canOpen ? (
-        <Text style={[styles.openHint, { color: tokens.primary }]}>
+        <Text style={[styles.openHint, {color: tokens.primary}]}>
           {openHint}
         </Text>
       ) : null}
@@ -114,8 +114,8 @@ export function ToolCallCard({
           subagentSessionId != null
             ? `打开子会话 ${subagentSessionId}`
             : skillRef != null
-              ? `打开技能 ${skillRef.name}`
-              : `打开文件 ${filePath}`
+            ? `打开技能 ${skillRef.name}`
+            : `打开文件 ${filePath}`
         }
         onPress={() => {
           if (subagentSessionId != null && onOpenSubagentSession != null) {
@@ -126,7 +126,7 @@ export function ToolCallCard({
             onOpenFile(filePath);
           }
         }}
-        style={({ pressed }) => [
+        style={({pressed}) => [
           groupItem ? styles.groupItem : styles.card,
           {
             backgroundColor: tokens.surface,
@@ -144,7 +144,7 @@ export function ToolCallCard({
     <View
       style={[
         groupItem ? styles.groupItem : styles.card,
-        { backgroundColor: tokens.surface, borderColor: tokens.border },
+        {backgroundColor: tokens.surface, borderColor: tokens.border},
       ]}
     >
       {card}
@@ -173,8 +173,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  name: { flex: 1, fontWeight: '600', fontSize: 14 },
-  status: { fontSize: 12, fontWeight: '500' },
-  summary: { marginTop: 6, fontSize: 13 },
-  openHint: { marginTop: 8, fontSize: 12, fontWeight: '500' },
+  name: {flex: 1, fontWeight: '600', fontSize: 14},
+  status: {fontSize: 12, fontWeight: '500'},
+  summary: {marginTop: 6, fontSize: 13},
+  openHint: {marginTop: 8, fontSize: 12, fontWeight: '500'},
 });

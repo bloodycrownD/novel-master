@@ -26,11 +26,10 @@ jest.mock('@novel-master/core/agent', () => ({
   agentDefinitionSchema: {toWire: (x: any) => x},
 }));
 
-import {encodeAgentYamlText} from '../src/services/agent-yaml.service';
+import {encodeAgentYamlText} from '@/services/agent-yaml.service';
 
 describe('yaml encode helpers', () => {
   it('encodes agent definition to YAML text', () => {
     expect(encodeAgentYamlText({name: 'a'})).toBe('yaml-out');
   });
 });
-

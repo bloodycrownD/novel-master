@@ -3,7 +3,7 @@ import {
   isBlockedMoveTarget,
   isSelfOrAncestorPath,
   resolveMoveDestination,
-} from '../src/components/vfs/vfs-move-path';
+} from '@/components/vfs/vfs-move-path';
 
 describe('vfs-move-path', () => {
   it('resolveMoveDestination 保留 basename', () => {

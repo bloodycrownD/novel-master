@@ -2,12 +2,8 @@
  * rich-document 桥与 setDocument 门面（runtime；无 JSX）。
  * setDocument 仅调用 main 已注册的视图刷新实现；禁止在此拼串或 preact.render。
  */
-import {
-  BRIDGE_V,
-  type DocumentPayload,
-  type HostTheme,
-} from './document-model';
-import { post } from './post';
+import {BRIDGE_V, type DocumentPayload, type HostTheme} from './document-model';
+import {post} from './post';
 import {
   setAnnotateEnabled,
   setAnnotations,
@@ -41,7 +37,7 @@ export function invokeRegisteredSetDocumentView(
   return true;
 }
 
-export { post };
+export {post};
 
 export function applyTheme(theme: HostTheme | null | undefined): void {
   if (!theme) return;
@@ -67,7 +63,7 @@ export function setDocument(payload: DocumentPayload | null | undefined): void {
 }
 
 export function handleHostMessage(raw: unknown): void {
-  let msg: { v?: number; type?: string; payload?: Record<string, unknown> };
+  let msg: {v?: number; type?: string; payload?: Record<string, unknown>};
   try {
     msg = JSON.parse(String(raw));
   } catch {

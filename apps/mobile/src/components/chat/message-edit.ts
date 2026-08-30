@@ -9,9 +9,7 @@ import {
 } from '@novel-master/core/chat';
 
 /** Re-export Core 规则。 */
-export function editableTextFromMessage(
-  message: ChatMessage,
-): string | null {
+export function editableTextFromMessage(message: ChatMessage): string | null {
   return extractEditableTextFromMessage(message);
 }
 
@@ -35,7 +33,7 @@ export function applyTextEditToMessage(
   for (const block of blocks) {
     if (block.type === 'text') {
       if (!textReplaced) {
-        result.push({ type: 'text', text: newText });
+        result.push({type: 'text', text: newText});
         textReplaced = true;
       }
     } else {
@@ -43,7 +41,7 @@ export function applyTextEditToMessage(
     }
   }
 
-  return { blocks: result };
+  return {blocks: result};
 }
 
 /** 仅 user 消息行可置位（展示形态由调用方过滤）。 */
@@ -57,13 +55,13 @@ export function buildMessageActionItems(
 ): MessageActionMenuItem[] {
   const items: MessageActionMenuItem[] = [];
   if (editableTextFromMessage(message) != null) {
-    items.push({ label: '编辑', action: 'edit' });
+    items.push({label: '编辑', action: 'edit'});
   }
-  items.push({ label: '复制', action: 'copy' });
+  items.push({label: '复制', action: 'copy'});
   if (isSetFloorEligibleMessage(message)) {
-    items.push({ label: '置位', action: 'set-floor' });
+    items.push({label: '置位', action: 'set-floor'});
   }
-  items.push({ label: '分叉', action: 'fork' });
-  items.push({ label: '回滚', action: 'rollback', danger: true });
+  items.push({label: '分叉', action: 'fork'});
+  items.push({label: '回滚', action: 'rollback', danger: true});
   return items;
 }

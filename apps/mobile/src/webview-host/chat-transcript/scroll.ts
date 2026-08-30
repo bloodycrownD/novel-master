@@ -4,8 +4,8 @@
  *
  * 数值常量真源：`web/shared/constants.ts`。
  */
-export { NEAR_BOTTOM_THRESHOLD_PX } from '../../web/shared/constants';
-import { NEAR_BOTTOM_THRESHOLD_PX } from '../../web/shared/constants';
+export {NEAR_BOTTOM_THRESHOLD_PX} from '@/web/shared/constants';
+import {NEAR_BOTTOM_THRESHOLD_PX} from '@/web/shared/constants';
 
 /** True when scrollTop is within threshold of the visual bottom. */
 export function nearBottom(
@@ -27,7 +27,10 @@ export function offsetFromBottom(
 }
 
 /** Pin scroll to visual bottom (open session / stream follow). */
-export function scrollTopForBottom(scrollHeight: number, clientHeight: number): number {
+export function scrollTopForBottom(
+  scrollHeight: number,
+  clientHeight: number,
+): number {
   return Math.max(0, scrollHeight - clientHeight);
 }
 

@@ -33,11 +33,11 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import type {ChatMessage} from '@novel-master/core/chat';
-import {FormTextInput} from '../../components/form/FormTextInput';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useTheme} from '../../theme/ThemeProvider';
-import type {ThemeTokens} from '../../theme/tokens';
-import type {RootStackParamList} from '../../navigation/types';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
+import type {RootStackParamList} from '@/navigation/types';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'ChatHistorySearch'>;
 
@@ -142,7 +142,10 @@ export function ChatHistorySearchScreen() {
     if (results.length === 0) {
       return undefined;
     }
-    return results.reduce((acc, m) => Math.min(acc, m.seq), Number.POSITIVE_INFINITY);
+    return results.reduce(
+      (acc, m) => Math.min(acc, m.seq),
+      Number.POSITIVE_INFINITY,
+    );
   }, [results]);
 
   const runQuery = useCallback(
@@ -185,8 +188,7 @@ export function ChatHistorySearchScreen() {
         }
         setHasSearched(true);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : String(err);
+        const message = err instanceof Error ? err.message : String(err);
         setError(message);
         setHasSearched(true);
       } finally {
@@ -232,7 +234,8 @@ export function ChatHistorySearchScreen() {
     <View style={styles.emptyWrap}>
       <Text
         style={[styles.empty, {color: tokens.textSecondary}]}
-        testID="chat-history-search-empty">
+        testID="chat-history-search-empty"
+      >
         未找到匹配的聊天记录
       </Text>
     </View>
@@ -242,11 +245,7 @@ export function ChatHistorySearchScreen() {
   const body = (
     <>
       {/* 顶部：筛选表单折叠卡片（默认展开；成功命中后自动收起，收起态显示摘要）。 */}
-      <View
-        style={[
-          styles.header,
-          {borderBottomColor: tokens.borderLight},
-        ]}>
+      <View style={[styles.header, {borderBottomColor: tokens.borderLight}]}>
         <View
           style={[
             styles.formCard,
@@ -254,34 +253,44 @@ export function ChatHistorySearchScreen() {
               backgroundColor: tokens.surfaceElevated,
               borderColor: tokens.borderLight,
             },
-          ]}>
+          ]}
+        >
           <Pressable
             testID="chat-history-search-form-toggle"
             style={styles.formCardHeader}
             onPress={() => setFormExpanded(v => !v)}
             accessibilityRole="button"
             accessibilityState={{expanded: formExpanded}}
-            accessibilityLabel="筛选条件">
+            accessibilityLabel="筛选条件"
+          >
             <View style={styles.formCardHeaderText}>
               <Text style={[styles.formCardTitle, {color: tokens.text}]}>
                 筛选条件
               </Text>
               {!formExpanded ? (
                 <Text
-                  style={[styles.formCardSummary, {color: tokens.textSecondary}]}
-                  numberOfLines={1}>
+                  style={[
+                    styles.formCardSummary,
+                    {color: tokens.textSecondary},
+                  ]}
+                  numberOfLines={1}
+                >
                   {filterSummary}
                 </Text>
               ) : null}
             </View>
-            <Text style={[styles.formCardChevron, {color: tokens.textTertiary}]}>
+            <Text
+              style={[styles.formCardChevron, {color: tokens.textTertiary}]}
+            >
               {formExpanded ? '▼' : '▶'}
             </Text>
           </Pressable>
           {formExpanded ? (
             <View style={styles.formCardBody}>
               <View style={styles.sectionLabelRow}>
-                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
+                <Text
+                  style={[styles.sectionLabel, {color: tokens.textSecondary}]}
+                >
                   关键词
                 </Text>
               </View>
@@ -306,7 +315,8 @@ export function ChatHistorySearchScreen() {
                       opacity: loading ? 0.6 : 1,
                     },
                   ]}
-                  accessibilityLabel="查询聊天记录">
+                  accessibilityLabel="查询聊天记录"
+                >
                   {loading ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
@@ -317,10 +327,14 @@ export function ChatHistorySearchScreen() {
 
               {/* 编号区间节：两个数字输入并排，均可留空表示该侧不设限。 */}
               <View style={styles.sectionLabelRow}>
-                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
+                <Text
+                  style={[styles.sectionLabel, {color: tokens.textSecondary}]}
+                >
                   编号区间
                 </Text>
-                <Text style={[styles.sectionHint, {color: tokens.textTertiary}]}>
+                <Text
+                  style={[styles.sectionHint, {color: tokens.textTertiary}]}
+                >
                   留空不限
                 </Text>
               </View>
@@ -329,18 +343,20 @@ export function ChatHistorySearchScreen() {
                   testID="chat-history-search-from-seq"
                   tokens={tokens}
                   value={fromSeqText}
-                  onChangeText={(t) => setFromSeqText(t.replace(/[^0-9]/g, ''))}
+                  onChangeText={t => setFromSeqText(t.replace(/[^0-9]/g, ''))}
                   placeholder="从 #"
                   keyboardType="numeric"
                   accessibilityLabel="起始编号输入框"
                   style={styles.seqInput}
                 />
-                <Text style={[styles.seqDash, {color: tokens.textTertiary}]}>–</Text>
+                <Text style={[styles.seqDash, {color: tokens.textTertiary}]}>
+                  –
+                </Text>
                 <FormTextInput
                   testID="chat-history-search-to-seq"
                   tokens={tokens}
                   value={toSeqText}
-                  onChangeText={(t) => setToSeqText(t.replace(/[^0-9]/g, ''))}
+                  onChangeText={t => setToSeqText(t.replace(/[^0-9]/g, ''))}
                   placeholder="到 #"
                   keyboardType="numeric"
                   accessibilityLabel="截止编号输入框"
@@ -355,7 +371,8 @@ export function ChatHistorySearchScreen() {
         {error != null ? (
           <Text
             style={[styles.error, {color: tokens.danger}]}
-            numberOfLines={2}>
+            numberOfLines={2}
+          >
             {error}
           </Text>
         ) : null}
@@ -386,12 +403,14 @@ export function ChatHistorySearchScreen() {
   return Platform.OS === 'ios' ? (
     <KeyboardAvoidingView
       style={[styles.root, {backgroundColor: tokens.background}]}
-      behavior="padding">
+      behavior="padding"
+    >
       {body}
     </KeyboardAvoidingView>
   ) : (
     <Animated.View
-      style={[styles.root, {backgroundColor: tokens.background}, clipStyle]}>
+      style={[styles.root, {backgroundColor: tokens.background}, clipStyle]}
+    >
       {body}
     </Animated.View>
   );
@@ -422,7 +441,8 @@ function MessageResultCard({
           borderColor: tokens.borderLight,
           opacity: message.hidden ? 0.55 : 1,
         },
-      ]}>
+      ]}
+    >
       <View style={styles.resultHead}>
         <Text style={[styles.roleTag, {color: tokens.primary}]}>
           {roleLabel(message.role)}
@@ -438,7 +458,8 @@ function MessageResultCard({
       </View>
       <Text
         style={[styles.resultBody, {color: tokens.text}]}
-        numberOfLines={expanded ? undefined : 4}>
+        numberOfLines={expanded ? undefined : 4}
+      >
         {expanded ? fullText || '（无文本内容）' : summary}
       </Text>
       {canExpand ? (
@@ -524,7 +545,12 @@ const styles = StyleSheet.create({
   hiddenTag: {fontSize: 11, fontWeight: '500'},
   seq: {fontSize: 11, marginLeft: 'auto'},
   resultBody: {fontSize: 14, lineHeight: 20},
-  emptyWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
+  emptyWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
   empty: {fontSize: 14, textAlign: 'center'},
   expandHint: {fontSize: 13, fontWeight: '600', paddingTop: 4},
   hint: {fontSize: 12, textAlign: 'center', paddingVertical: 8},

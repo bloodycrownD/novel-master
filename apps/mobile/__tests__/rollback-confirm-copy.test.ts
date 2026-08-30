@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals';
-import { resolveRollbackConfirmMessage } from '@novel-master/core/chat';
+import {describe, expect, it} from '@jest/globals';
+import {resolveRollbackConfirmMessage} from '@novel-master/core/chat';
 
 describe('rollback-confirm-copy (mobile)', () => {
   it('T-M1: undo_send primary 含「及之后」', () => {

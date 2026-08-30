@@ -8,8 +8,8 @@
  * html / plain 两个分支在 build 后都经由它拼接（而非常量硬编码），
  * 确保 over-limit 回退时 FM 卡片不会凭空消失。
  */
-import { concatDocBodyHtml } from '../src/web/rich-document/webview/runtime/document-model';
-import { readWebViewDistFile } from './helpers/read-webview-dist';
+import {concatDocBodyHtml} from '@/web/rich-document/webview/runtime/document-model';
+import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 describe('concatDocBodyHtml (T-FA4 fm+body 并入 .doc-body)', () => {
   it('有 FM 时把 FM 置于正文之前、拼成同一条 HTML', () => {
@@ -29,7 +29,9 @@ describe('concatDocBodyHtml (T-FA4 fm+body 并入 .doc-body)', () => {
     const merged = concatDocBodyHtml(fm, body);
     expect(merged).toContain('fm-card');
     expect(merged).toContain('<p>正文</p>');
-    expect(merged.indexOf('fm-card')).toBeLessThan(merged.indexOf('<p>正文</p>'));
+    expect(merged.indexOf('fm-card')).toBeLessThan(
+      merged.indexOf('<p>正文</p>'),
+    );
   });
 
   it('DocumentApp 的 html / plain 两分支在 WebView 产物中都调用 concatDocBodyHtml', () => {

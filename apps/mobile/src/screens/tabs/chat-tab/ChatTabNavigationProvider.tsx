@@ -9,7 +9,7 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import { useChatTabContext } from './ChatTabProvider';
+import {useChatTabContext} from './ChatTabProvider';
 
 export type ChatTabNavigationState = {
   readonly chatSubview: 'list' | 'conversation';
@@ -145,7 +145,7 @@ export function ChatTabNavigationProvider({
     [ctx, onExitSessionBatch, onOpenSessionDetail, workspaceBackState],
   );
 
-  const value = useMemo(() => ({ state, actions }), [state, actions]);
+  const value = useMemo(() => ({state, actions}), [state, actions]);
 
   return (
     <WorkspaceBackCtx.Provider value={setWorkspaceBackState}>

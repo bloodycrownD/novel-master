@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 export type SegmentOption<T extends string> = {
   value: T;
@@ -32,7 +32,8 @@ export function SegmentedControl<T extends string>({
           backgroundColor: tokens.surfaceElevated,
           borderBottomColor: tokens.borderLight,
         },
-      ]}>
+      ]}
+    >
       {options.map(option => {
         const active = option.value === value;
         return (
@@ -50,12 +51,14 @@ export function SegmentedControl<T extends string>({
                 shadowRadius: 3,
                 elevation: 2,
               },
-            ]}>
+            ]}
+          >
             <Text
               style={[
                 styles.label,
                 {color: active ? '#FFFFFF' : tokens.textSecondary},
-              ]}>
+              ]}
+            >
               {option.label}
             </Text>
           </Pressable>

@@ -9,7 +9,7 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -26,20 +26,20 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
+jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({
   useDismissOverlaysOnBlur: () => undefined,
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }));
 
-jest.mock('../src/services/vfs-operations.service', () => ({
+jest.mock('@/services/vfs-operations.service', () => ({
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
   deleteScopedVfsEntry: jest.fn(),
@@ -52,7 +52,7 @@ jest.mock('../src/services/vfs-operations.service', () => ({
   sessionRenameVfsFile: jest.fn(),
 }));
 
-jest.mock('../src/services/workplace-operations.service', () => ({
+jest.mock('@/services/workplace-operations.service', () => ({
   cycleFileInclusion: jest.fn(),
   defaultDirRuleForm: jest.fn(() => ({})),
   dirRuleToForm: jest.fn(() => ({})),
@@ -62,23 +62,23 @@ jest.mock('../src/services/workplace-operations.service', () => ({
   vfsScopeRootPath: jest.fn(() => '/'),
 }));
 
-jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
+jest.mock('@/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
 }));
 
-jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
+jest.mock('@/components/sheet/DirectoryRuleSheet', () => ({
   DirectoryRuleSheet: () => null,
 }));
 
-jest.mock('../src/components/template/TemplatePullButton', () => ({
+jest.mock('@/components/template/TemplatePullButton', () => ({
   TemplatePullButton: () => null,
 }));
 
-jest.mock('../src/components/chat/FileReferencePicker', () => ({
+jest.mock('@/components/chat/FileReferencePicker', () => ({
   FileReferencePicker: () => null,
 }));
 
-jest.mock('../src/services/vfs-zip.service', () => ({
+jest.mock('@/services/vfs-zip.service', () => ({
   exportVfsZip: jest.fn(),
   importVfsZip: jest.fn(),
 }));
@@ -91,17 +91,20 @@ const mockRuntime = {
   },
 };
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
 const {VfsFileManager} =
-  require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
+  require('@/components/vfs/VfsFileManager') as typeof import('@/components/vfs/VfsFileManager');
 
 // 物理树 list 的 mock：每层目录返回一个子目录行，带 label 的行模拟
 // 项目/会话名（物理树 list 对 /projects/{pid}、/projects/{pid}/sessions/{sid}
 // 的合成行携带 label；/projects、sessions 等中间目录行不带 label）。
-const listByPath: Record<string, {path: string; kind: 'directory'; label?: string}[]> = {
+const listByPath: Record<
+  string,
+  {path: string; kind: 'directory'; label?: string}[]
+> = {
   '/': [{path: '/projects', kind: 'directory'}],
   '/projects': [{path: '/projects/p1', kind: 'directory', label: '我的小说'}],
   '/projects/p1': [{path: '/projects/p1/sessions', kind: 'directory'}],

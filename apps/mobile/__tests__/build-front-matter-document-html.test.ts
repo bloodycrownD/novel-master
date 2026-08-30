@@ -1,4 +1,4 @@
-import {buildFrontMatterDocumentHtml} from '../src/components/vfs/build-front-matter-document-html';
+import {buildFrontMatterDocumentHtml} from '@/components/vfs/build-front-matter-document-html';
 
 describe('buildFrontMatterDocumentHtml', () => {
   it('renders key/value rows and escapes HTML', () => {

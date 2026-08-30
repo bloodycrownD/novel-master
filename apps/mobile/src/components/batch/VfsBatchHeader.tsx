@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   selectedCount: number;
@@ -40,7 +40,8 @@ export function VfsBatchHeader({
                 {
                   color: actionsEnabled ? tokens.danger : tokens.textTertiary,
                 },
-              ]}>
+              ]}
+            >
               删除
             </Text>
           </Pressable>
@@ -51,7 +52,8 @@ export function VfsBatchHeader({
                 {
                   color: actionsEnabled ? tokens.primary : tokens.textTertiary,
                 },
-              ]}>
+              ]}
+            >
               移动
             </Text>
           </Pressable>

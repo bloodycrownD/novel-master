@@ -3,7 +3,7 @@ import {
   buildChatStreamMetricsLine,
   formatCharCount,
   formatStreamElapsed,
-} from '../src/hooks/useAgentStreamMetrics';
+} from '@/hooks/useAgentStreamMetrics';
 
 describe('useAgentStreamMetrics formatters', () => {
   it('formatStreamElapsed uses one decimal under 60s', () => {

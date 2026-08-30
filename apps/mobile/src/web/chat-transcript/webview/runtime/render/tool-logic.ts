@@ -1,4 +1,4 @@
-import type { ToolCallRow } from '../state/state';
+import type {ToolCallRow} from '../state/state';
 
 /**
  * 工具调用摘要与状态标签（非 JSX）。
@@ -13,8 +13,10 @@ export function summarizeToolInput(
 
   // task 工具：展示 @agent · description，比裸 JSON 可读。
   if (name === 'task') {
-    const desc = typeof input.description === 'string' ? input.description.trim() : '';
-    const agent = typeof input.subagentName === 'string' ? input.subagentName : '';
+    const desc =
+      typeof input.description === 'string' ? input.description.trim() : '';
+    const agent =
+      typeof input.subagentName === 'string' ? input.subagentName : '';
     const parts: string[] = [];
     if (agent) parts.push(`@${agent}`);
     if (desc) parts.push(desc);

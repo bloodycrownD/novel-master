@@ -1,4 +1,4 @@
-import { state, BRIDGE_V, type TranscriptFlags } from '../state/state';
+import {state, BRIDGE_V, type TranscriptFlags} from '../state/state';
 import {
   applySnapshot,
   applyPrependPage,
@@ -10,12 +10,12 @@ import {
   applyStreamBatch,
   setStreamToolInvokingDom,
 } from '../stream/stream';
-import { clearStreamRichUpgrade } from '../stream/stream-markdown';
-import { closeContextMenu } from '../menu/menu';
+import {clearStreamRichUpgrade} from '../stream/stream-markdown';
+import {closeContextMenu} from '../menu/menu';
 import {closeMermaidViewer} from '@web/shared/mermaid-fullscreen/mermaid-fullscreen';
 import {inferThemeModeFromBg} from '@web/shared/theme-mode';
 import {flagsEqual, renderRows} from '../render/row-logic';
-import { scheduleStickIfNearBottom } from '../scroll/scroll';
+import {scheduleStickIfNearBottom} from '../scroll/scroll';
 
 /** 宿主下发的主题 token（最小字段）。 */
 export type HostTheme = {
@@ -32,7 +32,7 @@ export type HostTheme = {
  * RN 桥：postMessage、主题应用与宿主消息分发。
  */
 export function post(type: string, payload?: Record<string, unknown>): void {
-  const msg = JSON.stringify({ v: BRIDGE_V, type: type, payload: payload || {} });
+  const msg = JSON.stringify({v: BRIDGE_V, type: type, payload: payload || {}});
   if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
     window.ReactNativeWebView.postMessage(msg);
   }
@@ -54,7 +54,7 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
 }
 
 export function handleHostMessage(raw: unknown): void {
-  let msg: { v?: number; type?: string; payload?: Record<string, unknown> };
+  let msg: {v?: number; type?: string; payload?: Record<string, unknown>};
   try {
     msg = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof msg);
   } catch {
@@ -152,7 +152,7 @@ export function handleHostMessage(raw: unknown): void {
   }
 }
 
-export function onHostMessage(event: MessageEvent | { data?: unknown }): void {
+export function onHostMessage(event: MessageEvent | {data?: unknown}): void {
   const data = event && event.data;
   if (data == null) return;
   handleHostMessage(data);

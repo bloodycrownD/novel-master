@@ -2,12 +2,18 @@
  * Confirm + run sessions.pullTemplate（§14 M6；project 域 pull 已拆除，仅支持 session 域）。
  */
 import React, {useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, StyleSheet, Text} from 'react-native';
-import {SyncPullIcon} from '../icons/TabIcons';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+} from 'react-native';
+import {SyncPullIcon} from '@/components/icons/TabIcons';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
 
 type Props = {
   scope: {kind: 'session'; sessionId: string};
@@ -64,11 +70,12 @@ export function TemplatePullButton({
         iconOnly
           ? styles.iconBtn
           : compact
-            ? styles.btnCompact
-            : [styles.btn, {borderColor: tokens.border}]
+          ? styles.btnCompact
+          : [styles.btn, {borderColor: tokens.border}]
       }
       disabled={pulling}
-      onPress={confirmPull}>
+      onPress={confirmPull}
+    >
       {pulling ? (
         <ActivityIndicator size="small" color={tokens.primary} />
       ) : iconOnly ? (
@@ -79,7 +86,8 @@ export function TemplatePullButton({
             compact
               ? {color: tokens.primary, fontSize: 13, fontWeight: '600'}
               : {color: tokens.primary, fontWeight: '600'}
-          }>
+          }
+        >
           从上级同步
         </Text>
       )}

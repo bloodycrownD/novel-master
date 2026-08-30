@@ -8,7 +8,7 @@ import {
   serializeComposerDraftJson,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-import { unionComposerStatusWithAnnotate } from './chat-annotate-draft';
+import {unionComposerStatusWithAnnotate} from './chat-annotate-draft';
 
 export type ChatComposerDraft = {
   readonly text: string;
@@ -17,7 +17,7 @@ export type ChatComposerDraft = {
 
 const bySession = new Map<string, ChatComposerDraft>();
 
-const EMPTY: ChatComposerDraft = { text: '', attachments: [] };
+const EMPTY: ChatComposerDraft = {text: '', attachments: []};
 
 type DraftListener = (sessionId: string) => void;
 const listeners = new Set<DraftListener>();
@@ -54,10 +54,7 @@ export function readChatComposerDraft(sessionId: string | undefined): string {
 
 type ComposerDraftPersistence = {
   getComposerDraftJson(id: string): Promise<string | null>;
-  setComposerDraftJson(
-    id: string,
-    draftJson: string | null,
-  ): Promise<boolean>;
+  setComposerDraftJson(id: string, draftJson: string | null): Promise<boolean>;
 };
 
 /** 仅持久 attach+text（状态条不进列）。 */
@@ -95,7 +92,7 @@ export function writeChatComposerDraft(
     }
     return;
   }
-  const next: ChatComposerDraft = { text, attachments: [...attachments] };
+  const next: ChatComposerDraft = {text, attachments: [...attachments]};
   bySession.set(sessionId, next);
   if (sessions != null) {
     void persistAttachTextDraft(sessions, sessionId, next);
@@ -180,7 +177,7 @@ export function applyComposerStatusAttachmentsReplace(payload: {
   readonly sessionId: string;
   readonly attachments: readonly MessageAttachment[];
 }): void {
-  const { sessionId, attachments: statusProjected } = payload;
+  const {sessionId, attachments: statusProjected} = payload;
   if (sessionId === '') {
     return;
   }
@@ -192,7 +189,7 @@ export function applyComposerStatusAttachmentsReplace(payload: {
     notifyDraftListeners(sessionId);
     return;
   }
-  bySession.set(sessionId, { text: prev.text, attachments: merged });
+  bySession.set(sessionId, {text: prev.text, attachments: merged});
   notifyDraftListeners(sessionId);
 }
 

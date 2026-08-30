@@ -1,8 +1,8 @@
 /**
  * T-MN1 / T-MN2：消息菜单项集合 + 右上角 ⋯ 入口接线（源码契约）。
  */
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 
 const root = join(__dirname, '..');
 

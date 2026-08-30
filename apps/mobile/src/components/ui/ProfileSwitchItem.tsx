@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {StyleSheet, Switch, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   icon: string;
@@ -30,7 +30,8 @@ export function ProfileSwitchItem({
           backgroundColor: tokens.surfaceElevated,
           borderColor: tokens.borderLight,
         },
-      ]}>
+      ]}
+    >
       <View style={[styles.iconWrap, {backgroundColor: tokens.bgSecondary}]}>
         <Text style={styles.icon}>{icon}</Text>
       </View>

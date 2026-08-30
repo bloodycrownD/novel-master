@@ -3,12 +3,12 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, Linking, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useToast} from '../../components/chrome/ToastHost';
-import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
-import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
-import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
-import {toastMessage} from '../../errors/toast-message';
-import {useNovelMaster} from '../../runtime/novel-master-context';
+import {useToast} from '@/components/chrome/ToastHost';
+import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
+import {ProfileMenuItem} from '@/components/ui/ProfileMenuItem';
+import {ProfileSwitchItem} from '@/components/ui/ProfileSwitchItem';
+import {toastMessage} from '@/errors/toast-message';
+import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
   persistFailedUpdateCheck,
   persistUpdateCheckResult,
@@ -17,11 +17,11 @@ import {
   readUpdatesAutoCheck,
   writeDismissedVersion,
   writeUpdatesAutoCheck,
-} from '../../storage/update-prefs';
-import {APP_LINKS, APP_VERSION} from '../../update-check/app-meta';
-import {checkForUpdates} from '../../update-check/check-for-updates';
-import type {UpdateCheckData} from '../../update-check/types';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/storage/update-prefs';
+import {APP_LINKS, APP_VERSION} from '@/update-check/app-meta';
+import {checkForUpdates} from '@/update-check/check-for-updates';
+import type {UpdateCheckData} from '@/update-check/types';
+import {useTheme} from '@/theme/ThemeProvider';
 
 function formatStatusLabel(
   status: string | undefined,
@@ -33,10 +33,7 @@ function formatStatusLabel(
   return '—';
 }
 
-function showUpdateAlert(
-  data: UpdateCheckData,
-  onLater: () => void,
-): void {
+function showUpdateAlert(data: UpdateCheckData, onLater: () => void): void {
   const message = data.releaseNotesExcerpt
     ? `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n将在浏览器中打开 GitHub 发行页下载。`
     : `v${data.remoteVersion}\n\n将在浏览器中打开 GitHub 发行页下载。`;
@@ -116,13 +113,18 @@ export function AboutScreen() {
   return (
     <ScrollView
       style={[styles.scroll, {backgroundColor: tokens.background}]}
-      contentContainerStyle={styles.scrollContent}>
+      contentContainerStyle={styles.scrollContent}
+    >
       <View style={styles.header}>
         <View
           style={[
             styles.logoBox,
-            {backgroundColor: tokens.surfaceElevated, borderColor: tokens.borderLight},
-          ]}>
+            {
+              backgroundColor: tokens.surfaceElevated,
+              borderColor: tokens.borderLight,
+            },
+          ]}
+        >
           <Text style={styles.logoEmoji} accessibilityLabel="Novel Master">
             📖
           </Text>

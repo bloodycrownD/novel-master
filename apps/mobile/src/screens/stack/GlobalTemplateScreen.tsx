@@ -6,13 +6,13 @@ import React, {useCallback, useEffect, useRef} from 'react';
 import {BackHandler, StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {VfsFileManager} from '../../components/vfs/VfsFileManager';
-import type {VfsFileManagerHandle} from '../../components/vfs/VfsFileManager';
-import {useHeaderContext} from '../../navigation/HeaderContext';
-import {useRuntime} from '../../hooks/useRuntime';
-import type {RootStackParamList} from '../../navigation/types';
-import {useTheme} from '../../theme/ThemeProvider';
+import {FormSectionCard} from '@/components/form/FormSectionCard';
+import {VfsFileManager} from '@/components/vfs/VfsFileManager';
+import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
+import {useHeaderContext} from '@/navigation/HeaderContext';
+import {useRuntime} from '@/hooks/useRuntime';
+import type {RootStackParamList} from '@/navigation/types';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 

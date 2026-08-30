@@ -1,6 +1,6 @@
-import { TdbcError } from "@novel-master/core";
-import { VfsError } from "@novel-master/core/vfs";
-import {formatVfsError} from '../src/vfs/errors';
+import {TdbcError} from '@novel-master/core';
+import {VfsError} from '@novel-master/core/vfs';
+import {formatVfsError} from '@/vfs/errors';
 
 describe('formatVfsError', () => {
   it('formats VfsError message', () => {

@@ -12,8 +12,8 @@ import {
   StyleSheet,
   Text,
 } from 'react-native';
-import {useRuntime} from '../../hooks/useRuntime';
-import {AppModal} from '../ui/AppModal';
+import {useRuntime} from '@/hooks/useRuntime';
+import {AppModal} from '@/components/ui/AppModal';
 import {
   AGENT_PICKER_EMPTY_MESSAGE,
   isAgentPickerRowSelected,
@@ -22,8 +22,8 @@ import {
   selectWorkspaceAgent,
   selectSessionAgent,
   type AgentPickerRow,
-} from '../../services/agent-picker';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/services/agent-picker';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   visible: boolean;
@@ -36,7 +36,12 @@ type Props = {
   sessionId?: string;
 };
 
-export function AgentPickerModal({visible, onClose, onSelected, sessionId}: Props) {
+export function AgentPickerModal({
+  visible,
+  onClose,
+  onSelected,
+  sessionId,
+}: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const [rows, setRows] = useState<AgentPickerRow[]>([]);
@@ -83,11 +88,13 @@ export function AgentPickerModal({visible, onClose, onSelected, sessionId}: Prop
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+          onPress={e => e.stopPropagation()}
+        >
           <Text style={[styles.title, {color: tokens.text}]}>选择 Agent</Text>
           {loading ? (
             <ActivityIndicator style={styles.loader} />
@@ -113,7 +120,8 @@ export function AgentPickerModal({visible, onClose, onSelected, sessionId}: Prop
                       {borderBottomColor: tokens.border},
                       selected && {backgroundColor: tokens.background},
                     ]}
-                    onPress={() => select(item.agentId)}>
+                    onPress={() => select(item.agentId)}
+                  >
                     <Text style={{color: tokens.text, flex: 1}}>
                       {item.label}
                     </Text>

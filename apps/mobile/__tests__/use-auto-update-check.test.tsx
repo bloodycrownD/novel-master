@@ -1,12 +1,11 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {useAutoUpdateCheck} from '../src/hooks/useAutoUpdateCheck';
+import {useAutoUpdateCheck} from '@/hooks/useAutoUpdateCheck';
 
-const {isSnoozed: isSnoozedActual} =
-  jest.requireActual<typeof import('../src/storage/update-prefs')>(
-    '../src/storage/update-prefs',
-  );
+const {isSnoozed: isSnoozedActual} = jest.requireActual<
+  typeof import('@/storage/update-prefs')
+>('../src/storage/update-prefs');
 
 const mockCheckForUpdates = jest.fn();
 const mockReadUpdatesAutoCheck = jest.fn();
@@ -25,19 +24,19 @@ let modalProps: {
   onSnoozeToday?: () => void | Promise<void>;
 } | null = null;
 
-jest.mock('../src/runtime/novel-master-context', () => ({
+jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     status: 'ready',
     appUi: {get: jest.fn(), set: jest.fn()},
   }),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/storage/update-prefs', () => ({
-  isSnoozed: jest.requireActual('../src/storage/update-prefs').isSnoozed,
+jest.mock('@/storage/update-prefs', () => ({
+  isSnoozed: jest.requireActual('@/storage/update-prefs').isSnoozed,
   readUpdatesAutoCheck: (...args: unknown[]) =>
     mockReadUpdatesAutoCheck(...args),
   readSnoozeUntil: (...args: unknown[]) => mockReadSnoozeUntil(...args),
@@ -52,11 +51,11 @@ jest.mock('../src/storage/update-prefs', () => ({
     mockWriteDismissedVersion(...args),
 }));
 
-jest.mock('../src/update-check/check-for-updates', () => ({
+jest.mock('@/update-check/check-for-updates', () => ({
   checkForUpdates: (...args: unknown[]) => mockCheckForUpdates(...args),
 }));
 
-jest.mock('../src/components/update/UpdateCheckResultModal', () => ({
+jest.mock('@/components/update/UpdateCheckResultModal', () => ({
   UpdateCheckResultModal: (props: typeof modalProps & object) => {
     modalProps = props;
     return null;

@@ -45,7 +45,7 @@ jest.mock('@novel-master/core', () => ({
   },
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       text: '#111',
@@ -63,15 +63,15 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) => String(err),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
@@ -95,11 +95,11 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
 
-jest.mock('../src/components/form/FormOverlayHost', () => ({
+jest.mock('@/components/form/FormOverlayHost', () => ({
   useFormOverlay: () => ({openOverlay: jest.fn()}),
 }));
 
-jest.mock('../src/components/form/FormField', () => {
+jest.mock('@/components/form/FormField', () => {
   const mockReact = require('react');
   return {
     FormField: ({children}: {children?: React.ReactNode}) =>
@@ -107,11 +107,11 @@ jest.mock('../src/components/form/FormField', () => {
   };
 });
 
-jest.mock('../src/components/form/FormSwitchRow', () => ({
+jest.mock('@/components/form/FormSwitchRow', () => ({
   FormSwitchRow: () => null,
 }));
 
-jest.mock('../src/components/form/FormSectionCard', () => {
+jest.mock('@/components/form/FormSectionCard', () => {
   const mockReact = require('react');
   return {
     FormSectionCard: ({children}: {children?: React.ReactNode}) =>
@@ -119,11 +119,11 @@ jest.mock('../src/components/form/FormSectionCard', () => {
   };
 });
 
-jest.mock('../src/components/form/FormSelectField', () => ({
+jest.mock('@/components/form/FormSelectField', () => ({
   FormSelectField: () => null,
 }));
 
-jest.mock('../src/components/form/ScreenFormLayout', () => {
+jest.mock('@/components/form/ScreenFormLayout', () => {
   const mockReact = require('react');
   return {
     ScreenFormLayout: ({
@@ -136,7 +136,7 @@ jest.mock('../src/components/form/ScreenFormLayout', () => {
   };
 });
 
-jest.mock('../src/components/form/StickyFormFooter', () => {
+jest.mock('@/components/form/StickyFormFooter', () => {
   const mockReact = require('react');
   return {
     StickyFormFooter: ({onPress}: {onPress: () => void}) =>
@@ -144,11 +144,11 @@ jest.mock('../src/components/form/StickyFormFooter', () => {
   };
 });
 
-jest.mock('../src/components/agent/ToolPolicyPicker', () => ({
+jest.mock('@/components/agent/ToolPolicyPicker', () => ({
   ToolPolicyPicker: () => null,
 }));
 
-jest.mock('../src/services/agent-yaml.service', () => ({
+jest.mock('@/services/agent-yaml.service', () => ({
   exportAgentYaml: jest.fn(),
   importAgentYaml: jest.fn(),
 }));
@@ -159,7 +159,7 @@ const mockEditorProps: {
   onChange: (text: string) => void;
 }[] = [];
 
-jest.mock('../src/components/vfs/CodeEditorWebView', () => {
+jest.mock('@/components/vfs/CodeEditorWebView', () => {
   const mockReact = require('react');
   return {
     CodeEditorWebView: mockReact.forwardRef(function CodeEditorWebViewStub(
@@ -173,22 +173,22 @@ jest.mock('../src/components/vfs/CodeEditorWebView', () => {
 });
 
 // R5：PromptEditorScreen 预览态依赖（内部 RichDocumentWebView/core 依赖重，stub 掉）。
-jest.mock('../src/components/vfs/FileMarkdownPreview', () => ({
+jest.mock('@/components/vfs/FileMarkdownPreview', () => ({
   FileMarkdownPreview: () => null,
 }));
 
-jest.mock('../src/components/ui/SegmentedControl', () => ({
+jest.mock('@/components/ui/SegmentedControl', () => ({
   SegmentedControl: () => null,
 }));
 
-jest.mock('../src/navigation/HeaderContext', () => ({
+jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({setStackOverride: jest.fn()}),
 }));
 
-import {AgentEditorScreen} from '../src/screens/stack/AgentEditorScreen';
-import {AgentEditorForm} from '../src/components/agent/AgentEditorForm';
-import {PromptEditorScreen} from '../src/screens/stack/PromptEditorScreen';
-import {takePromptEditorOnSaved} from '../src/components/agent/prompt-editor-callback';
+import {AgentEditorScreen} from '@/screens/stack/AgentEditorScreen';
+import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
+import {PromptEditorScreen} from '@/screens/stack/PromptEditorScreen';
+import {takePromptEditorOnSaved} from '@/components/agent/prompt-editor-callback';
 
 function findBanner(root: TestRenderer.ReactTestInstance) {
   return root

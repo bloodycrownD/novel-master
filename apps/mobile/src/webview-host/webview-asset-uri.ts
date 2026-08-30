@@ -2,7 +2,7 @@
  * WebView 本地资产 URI（Android android_asset / iOS MainBundle WebViewDist）。
  * 同步返回；不做磁盘 exists 探测。禁止引入 react-native-fs。
  */
-import { Platform } from 'react-native';
+import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 
 export type WebViewAssetPackageId =
@@ -13,7 +13,7 @@ export type WebViewAssetPackageId =
 function blobFsDirs(): typeof ReactNativeBlobUtil.fs.dirs {
   const anyMod = ReactNativeBlobUtil as unknown as {
     fs?: typeof ReactNativeBlobUtil.fs;
-    default?: { fs?: typeof ReactNativeBlobUtil.fs };
+    default?: {fs?: typeof ReactNativeBlobUtil.fs};
   };
   const fs = anyMod.fs ?? anyMod.default?.fs;
   if (fs?.dirs == null) {

@@ -3,9 +3,9 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {AppModal} from '../ui/AppModal';
+import {AppModal} from '@/components/ui/AppModal';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 export interface SheetMenuItem {
   readonly label: string;
@@ -37,7 +37,8 @@ export function BottomSheetMenu({
       transparent
       animationType="slide"
       statusBarTranslucent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <View style={styles.backdrop}>
         <Pressable style={styles.backdropTap} onPress={onClose} />
         <View
@@ -47,7 +48,8 @@ export function BottomSheetMenu({
               backgroundColor: tokens.surface,
               paddingBottom: Math.max(insets.bottom, 16),
             },
-          ]}>
+          ]}
+        >
           {title ? (
             <Text style={[styles.title, {color: tokens.textSecondary}]}>
               {title}
@@ -60,19 +62,22 @@ export function BottomSheetMenu({
               onPress={() => {
                 onClose();
                 onSelect(item.action);
-              }}>
+              }}
+            >
               <Text
                 style={{
                   color: item.danger ? tokens.danger : tokens.text,
                   fontSize: 16,
-                }}>
+                }}
+              >
                 {item.label}
               </Text>
             </Pressable>
           ))}
           <Pressable
             style={[styles.item, {borderTopColor: tokens.border}]}
-            onPress={onClose}>
+            onPress={onClose}
+          >
             <Text style={{color: tokens.textSecondary, fontSize: 16}}>
               取消
             </Text>

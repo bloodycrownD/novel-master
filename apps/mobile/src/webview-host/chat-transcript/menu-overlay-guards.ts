@@ -4,11 +4,11 @@
 export {
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
-} from '../../web/shared/constants';
+} from '@/web/shared/constants';
 import {
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
-} from '../../web/shared/constants';
+} from '@/web/shared/constants';
 
 export function shouldCancelLongPressForMove(
   deltaX: number,

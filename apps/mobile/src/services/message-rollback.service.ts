@@ -2,7 +2,7 @@
  * Thin wrapper for session message rollback (Core parity with CLI).
  */
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export async function rollbackToMessage(
   runtime: MobileNovelMasterRuntime,

@@ -89,8 +89,7 @@ export function MessageEditModal({
     }
   };
 
-  const displayValue =
-    readOnly && !trimmed ? '（空说明）' : value;
+  const displayValue = readOnly && !trimmed ? '（空说明）' : value;
 
   const actions = readOnly ? (
     <View style={styles.actionsRow}>
@@ -107,9 +106,7 @@ export function MessageEditModal({
         </Pressable>
         {onEdit ? (
           <Pressable onPress={onEdit} style={styles.btn}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>
-              编辑
-            </Text>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>编辑</Text>
           </Pressable>
         ) : null}
       </View>
@@ -122,12 +119,14 @@ export function MessageEditModal({
       <Pressable
         onPress={() => handleConfirm().catch(() => undefined)}
         style={styles.btn}
-        disabled={!canSubmit}>
+        disabled={!canSubmit}
+      >
         <Text
           style={{
             color: canSubmit ? tokens.primary : tokens.textTertiary,
             fontWeight: '600',
-          }}>
+          }}
+        >
           {saving ? '保存中…' : confirmLabel}
         </Text>
       </Pressable>
@@ -135,45 +134,50 @@ export function MessageEditModal({
   );
 
   const modalBody = (
-    <Pressable
-      style={styles.backdrop}
-      onPress={onClose}>
+    <Pressable style={styles.backdrop} onPress={onClose}>
       <Animated.View
-        style={[styles.panel, {backgroundColor: tokens.surface}, !readOnly ? panelAvoidStyle : undefined]}
-        onStartShouldSetResponder={() => true}>
+        style={[
+          styles.panel,
+          {backgroundColor: tokens.surface},
+          !readOnly ? panelAvoidStyle : undefined,
+        ]}
+        onStartShouldSetResponder={() => true}
+      >
         <Pressable onPress={e => e.stopPropagation()}>
-        <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
-        {label ? (
-          <Text style={[styles.label, {color: tokens.textSecondary}]}>
-            {label}
-          </Text>
-        ) : null}
-        <TextInput
-          testID={readOnly ? 'message-edit-readonly-input' : 'message-edit-input'}
-          style={[
-            styles.input,
-            {
-              color: tokens.text,
-              borderColor: tokens.border,
-              backgroundColor: tokens.background,
-              minHeight: INPUT_MIN_HEIGHT,
-              maxHeight: inputMaxHeight,
-            },
-          ]}
-          value={displayValue}
-          onChangeText={readOnly ? undefined : setValue}
-          placeholder={placeholder}
-          placeholderTextColor={tokens.textSecondary}
-          autoFocus={!readOnly}
-          editable={!readOnly}
-          showSoftInputOnFocus={!readOnly}
-          scrollEnabled
-          autoCorrect={false}
-          multiline
-          submitBehavior="newline"
-          textAlignVertical="top"
-        />
-        {actions}
+          <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
+          {label ? (
+            <Text style={[styles.label, {color: tokens.textSecondary}]}>
+              {label}
+            </Text>
+          ) : null}
+          <TextInput
+            testID={
+              readOnly ? 'message-edit-readonly-input' : 'message-edit-input'
+            }
+            style={[
+              styles.input,
+              {
+                color: tokens.text,
+                borderColor: tokens.border,
+                backgroundColor: tokens.background,
+                minHeight: INPUT_MIN_HEIGHT,
+                maxHeight: inputMaxHeight,
+              },
+            ]}
+            value={displayValue}
+            onChangeText={readOnly ? undefined : setValue}
+            placeholder={placeholder}
+            placeholderTextColor={tokens.textSecondary}
+            autoFocus={!readOnly}
+            editable={!readOnly}
+            showSoftInputOnFocus={!readOnly}
+            scrollEnabled
+            autoCorrect={false}
+            multiline
+            submitBehavior="newline"
+            textAlignVertical="top"
+          />
+          {actions}
         </Pressable>
       </Animated.View>
     </Pressable>
@@ -184,7 +188,8 @@ export function MessageEditModal({
       visible={visible}
       animationType="fade"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       {modalBody}
     </AppModal>
   );

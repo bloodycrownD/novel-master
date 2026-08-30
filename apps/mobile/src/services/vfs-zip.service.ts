@@ -4,14 +4,19 @@
  * Import: document picker + keepLocalCopy + confirmed full replace.
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
-import { createVfsZipIoService, type VfsScope, type VfsZipImportOptions, VfsZipError } from "@novel-master/core/vfs";
+import {
+  createVfsZipIoService,
+  type VfsScope,
+  type VfsZipImportOptions,
+  VfsZipError,
+} from '@novel-master/core/vfs';
 import {
   keepLocalCopy,
   saveDocuments,
   types,
 } from '@react-native-documents/picker';
 import {isUserCancelledPick, pickSingleDocument} from './document-pick';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
   const pathSuffix =
@@ -137,20 +142,24 @@ async function readPickedZipAsBytes(uri: string): Promise<Uint8Array> {
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options: { readonly directoryPath?: string } = {},
+  options: {readonly directoryPath?: string} = {},
 ): Promise<'saved' | 'cancelled'> {
   const directoryPath =
     options.directoryPath == null || options.directoryPath.trim() === ''
       ? '/'
       : options.directoryPath;
   const zipSvc = createVfsZipIoService(runtime.conn);
-  const bytes = await zipSvc.export(scope, { directoryPath });
+  const bytes = await zipSvc.export(scope, {directoryPath});
   assertZipArchive(bytes);
 
   const fileName = vfsZipExportFileName(scope, directoryPath);
   const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
 
-  await ReactNativeBlobUtil.fs.writeFile(tmpPath, bytesToBase64(bytes), 'base64');
+  await ReactNativeBlobUtil.fs.writeFile(
+    tmpPath,
+    bytesToBase64(bytes),
+    'base64',
+  );
 
   try {
     const [result] = await saveDocuments({

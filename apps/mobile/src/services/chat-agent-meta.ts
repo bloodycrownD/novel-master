@@ -13,8 +13,8 @@ import {
   resolveSavedModelId,
 } from '@novel-master/core/agent';
 import {ChatError} from '@novel-master/core/chat';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {resolveModelDisplayLabel} from '../provider/model-display-label';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import {resolveModelDisplayLabel} from '@/provider/model-display-label';
 
 /**
  * modelSource 与 desktop `PromptAgentMetaResponse.modelSource` 同语义

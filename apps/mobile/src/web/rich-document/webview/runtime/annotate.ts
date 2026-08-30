@@ -10,12 +10,12 @@ import {
   type TextAnnotator,
   type TextAnnotationLike,
 } from '@recogito/text-annotator';
-import { post } from './post';
+import {post} from './post';
 import {
   draftsToRecogitoAnnotations,
   type RecogitoTextAnnotation,
 } from './annotate-recogito-map';
-import { bindAnnotateCollectBridge } from './annotate-collect';
+import {bindAnnotateCollectBridge} from './annotate-collect';
 
 export type AnnotateRenderMark = {
   readonly id: string;
@@ -27,7 +27,8 @@ export type AnnotateRenderMark = {
 let annotateEnabled = false;
 let annotations: AnnotateRenderMark[] = [];
 // createTextAnnotator 工厂返回 TextAnnotationLike 形态（未 revive 的注解），变量类型与之对齐
-let annotator: TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null = null;
+let annotator: TextAnnotator<TextAnnotationLike, TextAnnotationLike> | null =
+  null;
 /** 已由宿主确认并 setAnnotations 的 draft id；用于 selectionChanged 打开详情。 */
 const knownDraftIds = new Set<string>();
 
@@ -128,9 +129,13 @@ function applyAnnotationsToAnnotator(): void {
   if (!annotator) {
     return;
   }
-  const list = draftsToRecogitoAnnotations(annotations) as RecogitoTextAnnotation[];
+  const list = draftsToRecogitoAnnotations(
+    annotations,
+  ) as RecogitoTextAnnotation[];
   // Recogito setAnnotations 接受 TextAnnotation[]；映射形状与库一致
-  annotator.setAnnotations(list as Parameters<TextAnnotator['setAnnotations']>[0]);
+  annotator.setAnnotations(
+    list as Parameters<TextAnnotator['setAnnotations']>[0],
+  );
 }
 
 function onSelectionChanged(selected: unknown): void {

@@ -173,8 +173,8 @@ describe('mermaid 全屏查看器 dist 产物契约 (T-MF5)', () => {
       expect(appJs).toContain('mermaidViewerOpened');
       expect(appJs).toContain('mermaidViewerClosed');
       expect(appJs).toContain('closeMermaidViewer');
-      // esbuild 打印层会把单引号规范化为双引号，dist 断言用双引号形态
-      expect(appJs).toContain('closest(".mermaid-block__chart")');
+      // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号），只锁选择器语义
+      expect(appJs).toMatch(/closest\(['"]\.mermaid-block__chart['"]\)/);
       expect(appJs).toContain('cloneNode(true)');
 
       const appCss = readWebViewDistFile(pkg, 'app.css');
@@ -312,7 +312,8 @@ describe('mermaid 全屏查看器落定烘焙契约 (T-MS2)', () => {
     // 烘焙换算走纯函数，gesture 归一 scale=1、transform 复位纯 translate
     expect(bakeBody).toContain('computeBakedSvgSize(base, total)');
     expect(bakeBody).toContain('rebasePanAfterBake(');
-    expect(bakeBody).toContain('gesture.current = { scale: 1, pan }');
+    // 花括号内空格容忍（bracketSpacing:false），锁 scale=1 归一语义
+    expect(bakeBody).toMatch(/gesture\.current = \{\s*scale: 1,\s*pan\s*\}/);
   });
 
   it('双击过渡后烘焙时序：transitionend 监听 + 兜底定时器双保险', () => {

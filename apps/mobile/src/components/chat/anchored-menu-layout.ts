@@ -14,7 +14,7 @@ export {
   ANCHORED_MENU_H_PADDING,
   ANCHORED_MENU_CHAR_WIDTH_EST,
   MESSAGE_ACTION_MENU_ITEM_COUNT,
-} from '../../web/shared/constants';
+} from '@/web/shared/constants';
 import {
   ANCHORED_MENU_GAP,
   ANCHORED_MENU_SCREEN_MARGIN,
@@ -25,7 +25,7 @@ import {
   ANCHORED_MENU_MIN_WIDTH,
   ANCHORED_MENU_H_PADDING,
   ANCHORED_MENU_CHAR_WIDTH_EST,
-} from '../../web/shared/constants';
+} from '@/web/shared/constants';
 
 export interface MenuAnchor {
   readonly x: number;
@@ -121,7 +121,7 @@ function layoutAnchoredMenuInternal(
     Math.min(top, screenHeight - menuHeight - ANCHORED_MENU_SCREEN_MARGIN),
   );
 
-  return { left, top, width: menuWidth, maxHeight: menuHeight, scrollable };
+  return {left, top, width: menuWidth, maxHeight: menuHeight, scrollable};
 }
 
 export interface AnchoredMenuLayout {
@@ -135,7 +135,7 @@ export interface AnchoredMenuLayout {
 
 /** Content-aware width so short labels do not stretch to full screen. */
 export function computeAnchoredMenuWidth(
-  items: readonly { label: string }[],
+  items: readonly {label: string}[],
   screenWidth: number,
 ): number {
   const longest = items.reduce(

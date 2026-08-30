@@ -1,8 +1,8 @@
 /**
  * Workspace project/session scope synced with {@link PersistentState}.
  */
-import {useNovelMaster} from '../runtime/novel-master-context';
-import type {MobileScopeSnapshot} from '../runtime/mobile-scope';
+import {useNovelMaster} from '@/runtime/novel-master-context';
+import type {MobileScopeSnapshot} from '@/runtime/mobile-scope';
 
 export function useMobileScope(): MobileScopeSnapshot & {
   setCurrentProject: (projectId: string) => Promise<void>;

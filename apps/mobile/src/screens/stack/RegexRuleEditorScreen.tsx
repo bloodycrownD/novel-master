@@ -5,26 +5,26 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
-import {FormField} from '../../components/form/FormField';
-import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {FormSwitchRow} from '../../components/form/FormSwitchRow';
-import {FormTextInput} from '../../components/form/FormTextInput';
-import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
-import {StickyFormFooter} from '../../components/form/StickyFormFooter';
-import {SegmentedControl} from '../../components/ui/SegmentedControl';
+import {FormField} from '@/components/form/FormField';
+import {FormSectionCard} from '@/components/form/FormSectionCard';
+import {FormSwitchRow} from '@/components/form/FormSwitchRow';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
+import {StickyFormFooter} from '@/components/form/StickyFormFooter';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {
   parseOptionalDepthInput,
   previewRegexReplacementOnly,
   validateRegexRuleDraft,
   type RegexChannel,
   type RegexRuleDraftFields,
-} from '../../services/regex-test.service';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
-import type {RootStackParamList} from '../../navigation/types';
+} from '@/services/regex-test.service';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
+import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
+import type {RootStackParamList} from '@/navigation/types';
 import {REGEX_UI_LABELS} from '@novel-master/core/config-forms/shared';
 
 type EditorRoute = RouteProp<RootStackParamList, 'RegexRuleEditor'>;
@@ -121,7 +121,8 @@ export function RegexRuleEditorScreen() {
         scopeAssistant: rule.scopeAssistant,
       };
       const llmOn = rule.llmReplace != null && rule.llmReplace !== '';
-      const displayOn = rule.displayReplace != null && rule.displayReplace !== '';
+      const displayOn =
+        rule.displayReplace != null && rule.displayReplace !== '';
       setDraft(loaded);
       setLlmEnabled(llmOn);
       setDisplayEnabled(displayOn);
@@ -263,7 +264,8 @@ export function RegexRuleEditorScreen() {
             onPress={() => handleSave().catch(() => undefined)}
           />
         </View>
-      }>
+      }
+    >
       <FormSectionCard title="规则" tokens={tokens}>
         <FormField label="名称" tokens={tokens}>
           <FormTextInput
@@ -286,7 +288,8 @@ export function RegexRuleEditorScreen() {
         <FormField
           label="Flags"
           tokens={tokens}
-          hint="常用 gim：全局、忽略大小写、多行。">
+          hint="常用 gim：全局、忽略大小写、多行。"
+        >
           <FormTextInput
             tokens={tokens}
             value={draft.flags}
@@ -306,15 +309,14 @@ export function RegexRuleEditorScreen() {
       <FormSectionCard
         title="深度范围（自最新消息起）"
         tokens={tokens}
-        hint="0 = 最新一条；留空表示该侧无界。至少填一侧。">
+        hint="0 = 最新一条；留空表示该侧无界。至少填一侧。"
+      >
         <View style={styles.row2}>
           <View style={styles.cell}>
             <FormField label={REGEX_UI_LABELS.startDepth} tokens={tokens}>
               <FormTextInput
                 tokens={tokens}
-                value={
-                  draft.startDepth != null ? String(draft.startDepth) : ''
-                }
+                value={draft.startDepth != null ? String(draft.startDepth) : ''}
                 onChangeText={v =>
                   patchDraft({startDepth: parseOptionalDepthInput(v)})
                 }
@@ -397,7 +399,8 @@ export function RegexRuleEditorScreen() {
       <FormSectionCard
         title="测试预览"
         tokens={tokens}
-        hint="对样例文本应用所选通道的替换规则；保存前可本地试跑。">
+        hint="对样例文本应用所选通道的替换规则；保存前可本地试跑。"
+      >
         <FormField label="样例文本" tokens={tokens}>
           <FormTextInput
             tokens={tokens}
@@ -422,12 +425,14 @@ export function RegexRuleEditorScreen() {
                 backgroundColor: tokens.bgSecondary,
                 borderColor: tokens.borderLight,
               },
-            ]}>
+            ]}
+          >
             <Text
               style={[
                 styles.previewText,
                 {color: previewError ? tokens.danger : tokens.text},
-              ]}>
+              ]}
+            >
               {previewOutput}
             </Text>
           </View>

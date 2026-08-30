@@ -52,20 +52,17 @@ describe('useAgentRunLifecycle (slimmed)', () => {
 
     // 返回 getter 包装：state 字段（activeRunId）每次读最新 render 的 api.current，
     // 方法引用稳定（useCallback），调用后需在 act 里读才能看到新 state。
-    return new Proxy(
-      {} as AgentRunLifecycle,
-      {
-        get(_t, prop) {
-          const current = api.current;
-          if (current == null) {
-            return undefined;
-          }
-          // @ts-expect-error 动态透传属性
-          const value = current[prop];
-          return typeof value === 'function' ? value.bind(current) : value;
-        },
+    return new Proxy({} as AgentRunLifecycle, {
+      get(_t, prop) {
+        const current = api.current;
+        if (current == null) {
+          return undefined;
+        }
+        // @ts-expect-error 动态透传属性
+        const value = current[prop];
+        return typeof value === 'function' ? value.bind(current) : value;
       },
-    );
+    });
   }
 
   beforeEach(() => {
@@ -89,7 +86,10 @@ describe('useAgentRunLifecycle (slimmed)', () => {
   it('onRunStarted 设 activeRunId 并通知 abort 单元', () => {
     const onRunUiActivate = jest.fn();
     // getUiRunning 返回 true 模拟 abort 单元已 markRunStarted（beginUiRun 路径）。
-    const lifecycle = mountLifecycle({onRunUiActivate, getUiRunning: () => true});
+    const lifecycle = mountLifecycle({
+      onRunUiActivate,
+      getUiRunning: () => true,
+    });
     act(() => {
       lifecycle.onRunStarted({sessionId: 's1', projectId: 'p1', runId: 'r1'});
     });
@@ -100,7 +100,10 @@ describe('useAgentRunLifecycle (slimmed)', () => {
 
   it('onRunFinished 清 activeRunId、递减 agentActive、通知 abort', () => {
     const onRunUiDeactivate = jest.fn();
-    const lifecycle = mountLifecycle({onRunUiDeactivate, getUiRunning: () => true});
+    const lifecycle = mountLifecycle({
+      onRunUiDeactivate,
+      getUiRunning: () => true,
+    });
     act(() => {
       lifecycle.beginUiRun();
       lifecycle.onRunStarted({sessionId: 's1', projectId: 'p1', runId: 'r1'});

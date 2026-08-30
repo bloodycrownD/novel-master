@@ -1,7 +1,7 @@
 import {
   defaultChatTranscriptEngine,
   readChatTranscriptEngine,
-} from '../src/storage/chat-transcript-engine';
+} from '@/storage/chat-transcript-engine';
 
 describe('chat-transcript-engine', () => {
   it('defaults to webview in all builds', () => {

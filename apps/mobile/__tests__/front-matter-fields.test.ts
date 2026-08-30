@@ -1,10 +1,8 @@
-import {parseFrontMatterFields} from '../src/components/vfs/front-matter-fields';
+import {parseFrontMatterFields} from '@/components/vfs/front-matter-fields';
 
 describe('parseFrontMatterFields', () => {
   it('parses key value pairs', () => {
-    expect(
-      parseFrontMatterFields(['title: Hello', 'tags: a, b']),
-    ).toEqual([
+    expect(parseFrontMatterFields(['title: Hello', 'tags: a, b'])).toEqual([
       {key: 'title', value: 'Hello'},
       {key: 'tags', value: 'a, b'},
     ]);

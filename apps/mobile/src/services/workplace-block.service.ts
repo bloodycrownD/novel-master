@@ -3,9 +3,9 @@
  *
  * @module services/workplace-block.service
  */
-import { assembleWorkplaceDisplay } from '@novel-master/core/workplace';
-import type { MobileNovelMasterRuntime } from '../runtime/types';
-import { refreshComposerStatusAfterSessionKkvCleared } from './project-composer-status.service';
+import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import {refreshComposerStatusAfterSessionKkvCleared} from './project-composer-status.service';
 
 export interface SessionWorkplaceBlockScope {
   readonly projectId: string;
@@ -22,13 +22,13 @@ export async function assembleWorkplaceForMobile(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   };
-  const { workplaceDisplay } = await assembleWorkplaceDisplay(wtScope, {
+  const {workplaceDisplay} = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: runtime.sessionKkv,
     workplace: runtime.workplace(wtScope),
     vfs: runtime.sessionVfs(scope.projectId, scope.sessionId),
-    layout: { workplace: "on" },
+    layout: {workplace: 'on'},
   });
-  return { workplaceDisplay, capturedAtMs: Date.now() };
+  return {workplaceDisplay, capturedAtMs: Date.now()};
 }
 
 /**
@@ -41,5 +41,5 @@ export async function clearSessionWorkplaceKkv(
 ) {
   await runtime.sessionKkv.clearSession(scope.sessionId);
   await refreshComposerStatusAfterSessionKkvCleared(runtime, scope);
-  return { workplaceDisplay: '', capturedAtMs: Date.now() };
+  return {workplaceDisplay: '', capturedAtMs: Date.now()};
 }

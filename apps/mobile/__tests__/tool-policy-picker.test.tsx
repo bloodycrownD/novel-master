@@ -17,8 +17,8 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
 
-import {ToolPolicyPicker} from '../src/components/agent/ToolPolicyPicker';
-import {FormOverlayProvider} from '../src/components/form/FormOverlayHost';
+import {ToolPolicyPicker} from '@/components/agent/ToolPolicyPicker';
+import {FormOverlayProvider} from '@/components/form/FormOverlayHost';
 
 const tokens = {
   text: '#111',
@@ -138,9 +138,10 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
 
     // 勾选 write 行：write 同时出现在 sheet 列表，找列表行（排除 trigger）。
     // skill 的描述文案含「write」字样，须排除，否则误中 skill 行。
-    const writeRows = findAllPressablesByChildText(renderer.root, 'write').filter(
-      (row: any) => !collectOwnText(row).includes('skill'),
-    );
+    const writeRows = findAllPressablesByChildText(
+      renderer.root,
+      'write',
+    ).filter((row: any) => !collectOwnText(row).includes('skill'));
     expect(writeRows.length).toBeGreaterThanOrEqual(1);
     act(() => {
       writeRows[writeRows.length - 1].props.onPress();
@@ -207,7 +208,11 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
     act(() => {
       r1 = TestRenderer.create(
         <FormOverlayProvider>
-          <ToolPolicyPicker tokens={tokens} selected={[]} onChange={jest.fn()} />
+          <ToolPolicyPicker
+            tokens={tokens}
+            selected={[]}
+            onChange={jest.fn()}
+          />
         </FormOverlayProvider>,
       );
     });
@@ -244,12 +249,17 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
 describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（源码契约）', () => {
   it('hook 调用传 iosTranslateY: true（FormOverlayHost 无 KAV 外壳，iOS 由 hook 位移）', () => {
     const src = readFileSync(
-      join(__dirname, '..', 'src', 'components', 'agent', 'ToolPolicyPicker.tsx'),
+      join(
+        __dirname,
+        '..',
+        'src',
+        'components',
+        'agent',
+        'ToolPolicyPicker.tsx',
+      ),
       'utf8',
     );
-    expect(src).toContain(
-      'useAdaptiveKeyboardSheetStyle(0.75, {',
-    );
+    expect(src).toContain('useAdaptiveKeyboardSheetStyle(0.75, {');
     expect(src).toContain('iosTranslateY: true');
   });
 });

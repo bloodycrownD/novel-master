@@ -6,7 +6,7 @@
  * `skillToolRef` 优先取它。漏了这份镜像，transcript 内的 skill 卡片
  * 将不可点（对称 `vfs-tool-path.ts` 的镜像先例）。
  */
-import type { SkillRefMeta, ToolCallRow } from '../state/state';
+import type {SkillRefMeta, ToolCallRow} from '../state/state';
 
 const SKILL_TOOL_NAME = 'skill';
 
@@ -34,13 +34,13 @@ export function resolveSkillToolRefFromInput(
     rawDomain === 'global' || rawDomain === 'project'
       ? rawDomain
       : action === 'read'
-        ? null
-        : 'project';
+      ? null
+      : 'project';
   if (domain == null) return null;
   return {
     domain,
     name: skillName,
-    ...(domain === 'project' && projectId != null ? { projectId } : {}),
+    ...(domain === 'project' && projectId != null ? {projectId} : {}),
   };
 }
 
@@ -53,5 +53,9 @@ export function skillToolRef(
   projectId?: string,
 ): SkillRefMeta | null {
   if (tool.skillRef != null) return tool.skillRef;
-  return resolveSkillToolRefFromInput(tool.name || '', tool.input || {}, projectId);
+  return resolveSkillToolRefFromInput(
+    tool.name || '',
+    tool.input || {},
+    projectId,
+  );
 }

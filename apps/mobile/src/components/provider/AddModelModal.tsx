@@ -2,12 +2,19 @@
  * Register a saved model under a provider (vendorModelId + optional model name).
  */
 import React, {useEffect, useState} from 'react';
-import {Platform, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {AppModal} from '../ui/AppModal';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useAndroidModalKeyboardAvoid} from '../../hooks/useAndroidModalKeyboardAvoid';
+import {AppModal} from '@/components/ui/AppModal';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
 
 type Props = {
   visible: boolean;
@@ -53,7 +60,8 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
           {backgroundColor: tokens.surface},
           Platform.OS === 'android' ? panelAvoidStyle : undefined,
         ]}
-        onStartShouldSetResponder={() => true}>
+        onStartShouldSetResponder={() => true}
+      >
         <Pressable onPress={e => e.stopPropagation()}>
           <Text style={[styles.title, {color: tokens.text}]}>添加模型</Text>
           <Text style={[styles.label, {color: tokens.textSecondary}]}>
@@ -91,7 +99,8 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
             <Pressable
               onPress={() => handleConfirm().catch(() => undefined)}
               style={styles.btn}
-              disabled={saving || !vendorModelId.trim()}>
+              disabled={saving || !vendorModelId.trim()}
+            >
               <Text style={{color: tokens.primary, fontWeight: '600'}}>
                 {saving ? '保存中…' : '添加'}
               </Text>
@@ -107,7 +116,8 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       {Platform.OS === 'ios' ? (
         <KeyboardAvoidingView behavior="padding" style={styles.avoidingRoot}>
           {body}
@@ -138,7 +148,12 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 8,
   },
-  title: {fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 8},
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
   label: {fontSize: 13, marginTop: 4},
   input: {
     borderWidth: StyleSheet.hairlineWidth,

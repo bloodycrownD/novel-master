@@ -3,24 +3,24 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import {DEFAULT_CLOUD_SYNC_PATH_PREFIX} from '../../services/cloud-sync-config.store';
+import {DEFAULT_CLOUD_SYNC_PATH_PREFIX} from '@/services/cloud-sync-config.store';
 import {
   getCloudSyncConfig,
   setCloudSyncConfig,
   testCloudSyncConnection,
   type CloudSyncConfigInput,
-} from '../../services/cloud-sync.service';
-import {FormField} from '../../components/form/FormField';
-import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {FormSwitchRow} from '../../components/form/FormSwitchRow';
-import {FormTextInput} from '../../components/form/FormTextInput';
-import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
-import {StickyFormFooter} from '../../components/form/StickyFormFooter';
-import {SecondaryButton} from '../../components/ui/PrototypeButtons';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+} from '@/services/cloud-sync.service';
+import {FormField} from '@/components/form/FormField';
+import {FormSectionCard} from '@/components/form/FormSectionCard';
+import {FormSwitchRow} from '@/components/form/FormSwitchRow';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
+import {StickyFormFooter} from '@/components/form/StickyFormFooter';
+import {SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
 
 type FormState = {
   endpoint: string;
@@ -159,7 +159,8 @@ export function CloudSyncConfigScreen() {
           loading={saving}
           disabled={testing}
         />
-      }>
+      }
+    >
       <FormSectionCard tokens={tokens} title="S3 兼容存储">
         <FormField label="Endpoint" tokens={tokens} hint="含 https://">
           <FormTextInput
@@ -189,11 +190,17 @@ export function CloudSyncConfigScreen() {
             autoCorrect={false}
           />
         </FormField>
-        <FormField label="路径前缀" tokens={tokens} hint="须以 / 结尾，保存时自动规范化">
+        <FormField
+          label="路径前缀"
+          tokens={tokens}
+          hint="须以 / 结尾，保存时自动规范化"
+        >
           <FormTextInput
             tokens={tokens}
             value={form.pathPrefix}
-            onChangeText={pathPrefix => setForm(prev => ({...prev, pathPrefix}))}
+            onChangeText={pathPrefix =>
+              setForm(prev => ({...prev, pathPrefix}))
+            }
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -224,7 +231,8 @@ export function CloudSyncConfigScreen() {
         <FormField
           label="Secret Access Key"
           tokens={tokens}
-          hint={secretKeySet ? '已保存；留空则保留原密钥' : '保存时写入 SKSP'}>
+          hint={secretKeySet ? '已保存；留空则保留原密钥' : '保存时写入 SKSP'}
+        >
           <FormTextInput
             tokens={tokens}
             value={form.secretAccessKey}

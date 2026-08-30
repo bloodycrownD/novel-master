@@ -47,10 +47,7 @@ export function createCloudSyncProgress(
   let lastAt = startedAt;
   const onUiProgress = options?.onUiProgress;
 
-  const emitUi = (
-    event: string,
-    detail?: Record<string, unknown>,
-  ): void => {
+  const emitUi = (event: string, detail?: Record<string, unknown>): void => {
     if (onUiProgress == null || (op !== 'push' && op !== 'pull')) {
       return;
     }

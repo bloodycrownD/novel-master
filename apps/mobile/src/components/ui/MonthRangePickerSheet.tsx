@@ -6,10 +6,10 @@
  * 无输入框，不需要键盘避让。容器风格参照 ModelPickerModal（AppModal +
  * 底部 sheet）。
  */
-import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { AppModal } from '../ui/AppModal';
-import type { ThemeTokens } from '../../theme/tokens';
+import React, {useEffect, useState} from 'react';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {AppModal} from './AppModal';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -132,8 +132,8 @@ export function MonthRangePickerSheet({
   };
 
   const cells: Array<null | number> = [
-    ...Array.from({ length: leadingBlanks }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+    ...Array.from({length: leadingBlanks}, () => null),
+    ...Array.from({length: daysInMonth}, (_, i) => i + 1),
   ];
 
   return (
@@ -145,23 +145,21 @@ export function MonthRangePickerSheet({
     >
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
-          style={[styles.sheet, { backgroundColor: tokens.surface }]}
+          style={[styles.sheet, {backgroundColor: tokens.surface}]}
           onPress={e => e.stopPropagation()}
         >
-          <Text style={[styles.title, { color: tokens.text }]}>
-            选择日期区间
-          </Text>
+          <Text style={[styles.title, {color: tokens.text}]}>选择日期区间</Text>
           <View style={styles.monthNav}>
             <Pressable
               testID="month-range-prev"
               onPress={goToPrevMonth}
               style={styles.monthBtn}
             >
-              <Text style={{ color: tokens.primary }}>‹</Text>
+              <Text style={{color: tokens.primary}}>‹</Text>
             </Pressable>
             <Text
               testID="month-range-label"
-              style={[styles.monthTitle, { color: tokens.text }]}
+              style={[styles.monthTitle, {color: tokens.text}]}
             >
               {monthLabel(viewYear, viewMonth)}
             </Text>
@@ -170,14 +168,14 @@ export function MonthRangePickerSheet({
               onPress={goToNextMonth}
               style={styles.monthBtn}
             >
-              <Text style={{ color: tokens.primary }}>›</Text>
+              <Text style={{color: tokens.primary}}>›</Text>
             </Pressable>
           </View>
           <View style={styles.weekRow}>
             {WEEKDAY_LABELS.map(label => (
               <Text
                 key={label}
-                style={[styles.weekLabel, { color: tokens.textSecondary }]}
+                style={[styles.weekLabel, {color: tokens.textSecondary}]}
               >
                 {label}
               </Text>
@@ -196,7 +194,7 @@ export function MonthRangePickerSheet({
                   onPress={() => pickDay(day)}
                   style={[
                     styles.dayCell,
-                    state === 'edge' && { backgroundColor: tokens.primary },
+                    state === 'edge' && {backgroundColor: tokens.primary},
                     state === 'inRange' && {
                       backgroundColor: tokens.selection,
                     },
@@ -216,7 +214,7 @@ export function MonthRangePickerSheet({
               );
             })}
           </View>
-          <Text style={[styles.hint, { color: tokens.textSecondary }]}>
+          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
             {start == null
               ? '先选起始日，再选结束日'
               : end == null
@@ -232,12 +230,9 @@ export function MonthRangePickerSheet({
                 setStart(undefined);
                 setEnd(undefined);
               }}
-              style={[
-                styles.actionBtn,
-                { backgroundColor: tokens.bgSecondary },
-              ]}
+              style={[styles.actionBtn, {backgroundColor: tokens.bgSecondary}]}
             >
-              <Text style={{ color: tokens.textSecondary }}>清除</Text>
+              <Text style={{color: tokens.textSecondary}}>清除</Text>
             </Pressable>
             <Pressable
               testID="month-range-confirm"
@@ -246,8 +241,8 @@ export function MonthRangePickerSheet({
               style={[
                 styles.actionBtn,
                 styles.confirmBtn,
-                { backgroundColor: tokens.primary },
-                (start == null || end == null) && { opacity: 0.4 },
+                {backgroundColor: tokens.primary},
+                (start == null || end == null) && {opacity: 0.4},
               ]}
             >
               <Text style={styles.confirmText}>确定</Text>

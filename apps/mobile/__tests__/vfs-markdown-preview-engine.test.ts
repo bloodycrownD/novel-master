@@ -1,7 +1,7 @@
 import {
   defaultVfsMarkdownPreviewEngine,
   readVfsMarkdownPreviewEngine,
-} from '../src/storage/vfs-markdown-preview-engine';
+} from '@/storage/vfs-markdown-preview-engine';
 
 describe('vfs-markdown-preview-engine', () => {
   it('defaults to webview in all builds', () => {

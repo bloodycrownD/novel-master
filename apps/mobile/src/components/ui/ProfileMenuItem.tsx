@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   icon: string;
@@ -24,7 +24,8 @@ export function ProfileMenuItem({icon, label, value, onPress, tokens}: Props) {
           borderColor: tokens.borderLight,
           opacity: pressed ? 0.92 : 1,
         },
-      ]}>
+      ]}
+    >
       <View style={[styles.iconWrap, {backgroundColor: tokens.bgSecondary}]}>
         <Text style={styles.icon}>{icon}</Text>
       </View>
@@ -34,7 +35,8 @@ export function ProfileMenuItem({icon, label, value, onPress, tokens}: Props) {
       {value != null && value !== '' ? (
         <Text
           style={[styles.value, {color: tokens.textSecondary}]}
-          numberOfLines={1}>
+          numberOfLines={1}
+        >
           {value}
         </Text>
       ) : null}

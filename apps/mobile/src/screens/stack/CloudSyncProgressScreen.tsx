@@ -10,21 +10,21 @@ import {
   useRoute,
 } from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {CloudSyncProgressPanel} from '../../components/chrome/CloudSyncProgressPanel';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {useHeaderContext} from '../../navigation/HeaderContext';
-import type {RootStackParamList} from '../../navigation/types';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useNovelMaster} from '../../runtime/novel-master-context';
+import {CloudSyncProgressPanel} from '@/components/chrome/CloudSyncProgressPanel';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
+import {useHeaderContext} from '@/navigation/HeaderContext';
+import type {RootStackParamList} from '@/navigation/types';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
   initialCloudSyncProgressUi,
   pullCloudSync,
   pushCloudSync,
   type CloudSyncProgressUiState,
-} from '../../services/cloud-sync.service';
+} from '@/services/cloud-sync.service';
 import {isCloudSyncError} from '@novel-master/core';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Route = RouteProp<RootStackParamList, 'CloudSyncProgress'>;
 type Nav = NativeStackNavigationProp<RootStackParamList, 'CloudSyncProgress'>;
@@ -148,9 +148,7 @@ export function CloudSyncProgressScreen() {
           handleNeedPullFirst();
           return;
         }
-        showToast(
-          toastMessage(op === 'pull' ? '拉取失败' : '推送失败', error),
-        );
+        showToast(toastMessage(op === 'pull' ? '拉取失败' : '推送失败', error));
         runningRef.current = false;
         navigation.goBack();
       }

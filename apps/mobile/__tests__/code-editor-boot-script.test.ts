@@ -1,7 +1,7 @@
 /**
  * code-editor 契约测 — 读 webview-dist 产物（pretest 已 build:webview）。
  */
-import { readWebViewDistFile } from './helpers/read-webview-dist';
+import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 function bootScript(): string {
   return readWebViewDistFile('code-editor', 'app.js');
@@ -36,13 +36,14 @@ describe('code-editor WebView boot (dist)', () => {
   it('T-CE-BR-01: init / setDocument / themeUpdate / blur; emits ready/change', () => {
     const script = bootScript();
     expect(script).toContain('handleHostMessage');
-    expect(script).toContain('msg.type === "init"');
+    // 引号风格容忍（prettier singleQuote 后 dist 产物为单引号），只锁 msg.type + init 语义
+    expect(script).toMatch(/msg\.type === ['"]init['"]/);
     expect(script).toContain('setDocument');
     expect(script).toContain('themeUpdate');
     expect(script).toContain('blurEditor');
     // esbuild 打包时同名 post 会被去重重命名为 post2 等形态，断言需兼容 postN。
-    expect(script).toMatch(/post\d*\("ready"/);
-    expect(script).toMatch(/post\d*\("change"/);
+    expect(script).toMatch(/post\d*\(['"]ready['"]/);
+    expect(script).toMatch(/post\d*\(['"]change['"]/);
   });
 
   it('T-CE-CSS-01: editor shell CSS for full height + touch scroll', () => {

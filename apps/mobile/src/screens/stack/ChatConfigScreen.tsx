@@ -5,22 +5,22 @@ import React, {useCallback, useState} from 'react';
 import type {CompactionConditions} from '@novel-master/core/compaction';
 import {useFocusEffect} from '@react-navigation/native';
 import {StyleSheet, Switch} from 'react-native';
-import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
-import {FormField} from '../../components/form/FormField';
-import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {FormTextInput} from '../../components/form/FormTextInput';
-import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
-import {StickyFormFooter} from '../../components/form/StickyFormFooter';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useNovelMaster} from '../../runtime/novel-master-context';
+import {ProfileSwitchItem} from '@/components/ui/ProfileSwitchItem';
+import {FormField} from '@/components/form/FormField';
+import {FormSectionCard} from '@/components/form/FormSectionCard';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
+import {StickyFormFooter} from '@/components/form/StickyFormFooter';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
-} from '../../storage/chat-rich-text-pref';
+} from '@/storage/chat-rich-text-pref';
 import {SESSION_FS_LABELS} from '@novel-master/core/config-forms/shared';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
 
 // 对齐 core 的 DEFAULT_HIDE_START_DEPTH
 const DEFAULT_CONDITIONS: CompactionConditions = {
@@ -139,14 +139,13 @@ export function ChatConfigScreen() {
           loading={compactionSaving}
           onPress={() => handleSaveCompaction().catch(() => undefined)}
         />
-      }>
+      }
+    >
       <ProfileSwitchItem
         icon="⚡"
         label="流式输出"
         subtitle={
-          llmStreamEnabled
-            ? '边生成边显示（推荐）'
-            : '完成后一次性显示回复'
+          llmStreamEnabled ? '边生成边显示（推荐）' : '完成后一次性显示回复'
         }
         value={llmStreamEnabled}
         tokens={tokens}
@@ -208,7 +207,8 @@ export function ChatConfigScreen() {
       <FormSectionCard
         title="压缩配置"
         tokens={tokens}
-        hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。">
+        hint="满足 token 比例阈值时自动压缩；隐藏起始深度对自动和手动压缩均生效。"
+      >
         <FormField label="隐藏起始深度" tokens={tokens} row>
           <FormTextInput
             tokens={tokens}

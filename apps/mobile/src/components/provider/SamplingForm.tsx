@@ -3,10 +3,14 @@
  */
 import React, {useMemo} from 'react';
 import {StyleSheet, View} from 'react-native';
-import { mergeSamplingWithDefaults, type LlmProtocolKind, type ModelSamplingParams } from "@novel-master/core/provider";
-import {FormField} from '../form/FormField';
-import {FormTextInput} from '../form/FormTextInput';
-import type {ThemeTokens} from '../../theme/tokens';
+import {
+  mergeSamplingWithDefaults,
+  type LlmProtocolKind,
+  type ModelSamplingParams,
+} from '@novel-master/core/provider';
+import {FormField} from '@/components/form/FormField';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   tokens: ThemeTokens;
@@ -90,7 +94,8 @@ export function SamplingForm({tokens, protocol, params, onChange}: Props) {
     [protocol, params],
   );
   const openai = effective.protocol === 'openai' ? effective.openai : {};
-  const anthropic = effective.protocol === 'anthropic' ? effective.anthropic : {};
+  const anthropic =
+    effective.protocol === 'anthropic' ? effective.anthropic : {};
   const gemini = effective.protocol === 'gemini' ? effective.gemini : {};
 
   return (
@@ -130,9 +135,7 @@ export function SamplingForm({tokens, protocol, params, onChange}: Props) {
             label="温度"
             value={numStr(anthropic.temperature)}
             onChangeText={v =>
-              onChange(
-                patchAnthropic(params, {temperature: parseNumber(v)}),
-              )
+              onChange(patchAnthropic(params, {temperature: parseNumber(v)}))
             }
           />
           <NumberField
@@ -156,9 +159,7 @@ export function SamplingForm({tokens, protocol, params, onChange}: Props) {
             label="输出最大长度"
             value={numStr(anthropic.max_tokens)}
             onChangeText={v =>
-              onChange(
-                patchAnthropic(params, {max_tokens: parseNumber(v)}),
-              )
+              onChange(patchAnthropic(params, {max_tokens: parseNumber(v)}))
             }
           />
         </>

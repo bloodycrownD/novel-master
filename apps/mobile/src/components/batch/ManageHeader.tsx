@@ -3,8 +3,8 @@
  */
 import React, {type ReactNode} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {SecondaryButton} from '../ui/PrototypeButtons';
-import {useTheme} from '../../theme/ThemeProvider';
+import {SecondaryButton} from '@/components/ui/PrototypeButtons';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   title: string;
@@ -67,10 +67,9 @@ export function ManageHeader({
             <Text
               style={{
                 color:
-                  selectedCount > 0
-                    ? primaryEnabledColor
-                    : tokens.textTertiary,
-              }}>
+                  selectedCount > 0 ? primaryEnabledColor : tokens.textTertiary,
+              }}
+            >
               {primaryActionLabel}
             </Text>
           </Pressable>

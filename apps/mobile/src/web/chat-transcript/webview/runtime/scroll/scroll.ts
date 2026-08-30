@@ -1,6 +1,6 @@
-import { NEAR_BOTTOM } from '@web/shared/constants';
-import { state, SCHEMA_V } from '../state/state';
-import { post } from '../bridge/bridge';
+import {NEAR_BOTTOM} from '@web/shared/constants';
+import {state, SCHEMA_V} from '../state/state';
+import {post} from '../bridge/bridge';
 /**
  * 滚动锚点、贴底与加载更早消息。
  */

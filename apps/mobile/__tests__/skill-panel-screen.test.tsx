@@ -8,7 +8,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {VfsError} from '@novel-master/core/vfs';
-import {SkillPanelScreen} from '../src/screens/stack/SkillPanelScreen';
+import {SkillPanelScreen} from '@/screens/stack/SkillPanelScreen';
 
 const mockEffectiveSkills = jest.fn();
 
@@ -19,11 +19,11 @@ const mockRuntime = {
   }),
 };
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -40,11 +40,11 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 }));
 
 const mockShowToast = jest.fn();
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (title: string, _err: unknown) => `${title}`,
 }));
 
@@ -59,31 +59,41 @@ jest.mock('@react-navigation/native', () => ({
     }, []),
 }));
 
-jest.mock('../src/navigation/HeaderContext', () => ({
+jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({
     setStackOverride: jest.fn(),
   }),
 }));
 
-jest.mock('../src/components/icons/TabIcons', () => ({
+jest.mock('@/components/icons/TabIcons', () => ({
   ManageListIcon: () => null,
 }));
 
-jest.mock('../src/components/skills/NewSkillModal', () => ({
+jest.mock('@/components/skills/NewSkillModal', () => ({
   NewSkillModal: () => null,
 }));
 
-jest.mock('../src/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/PrototypeButtons', () => ({
   SecondaryButton: () => null,
   PrimaryButton: () => null,
 }));
 
 jest.mock('react-native', () => {
   const RnReact = require('react');
-  const View = ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
-    RnReact.createElement('View', {testID}, children);
-  const Text = ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
-    RnReact.createElement('Text', {testID}, children);
+  const View = ({
+    children,
+    testID,
+  }: {
+    children?: React.ReactNode;
+    testID?: string;
+  }) => RnReact.createElement('View', {testID}, children);
+  const Text = ({
+    children,
+    testID,
+  }: {
+    children?: React.ReactNode;
+    testID?: string;
+  }) => RnReact.createElement('Text', {testID}, children);
   return {
     View,
     Text,
@@ -102,8 +112,11 @@ jest.mock('react-native', () => {
     ActivityIndicator: () => null,
     RefreshControl: () => null,
     Switch: () => null,
-    Pressable: (props: {children?: React.ReactNode; onPress?: () => void; testID?: string}) =>
-      RnReact.createElement('View', {testID: props.testID}, props.children),
+    Pressable: (props: {
+      children?: React.ReactNode;
+      onPress?: () => void;
+      testID?: string;
+    }) => RnReact.createElement('View', {testID: props.testID}, props.children),
     StyleSheet: {
       create: (s: Record<string, unknown>) => s,
       hairlineWidth: 1,

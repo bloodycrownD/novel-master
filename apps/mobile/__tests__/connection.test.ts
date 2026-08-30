@@ -4,12 +4,9 @@ import {
   getMobileDatabaseFilePath,
   probeAndCacheMobileDatabaseFilePath,
   QUICK_SQLITE_DEFAULT_LOCATION,
-} from '../src/db/db-file-path';
-import {
-  closeMobileConnection,
-  getMobileConnection,
-} from '../src/db/connection';
-import {MOBILE_VFS_DB_NAME} from '../src/vfs/constants';
+} from '@/db/db-file-path';
+import {closeMobileConnection, getMobileConnection} from '@/db/connection';
+import {MOBILE_VFS_DB_NAME} from '@/vfs/constants';
 
 const mockExists = jest.fn();
 const mockOpen = jest.fn();

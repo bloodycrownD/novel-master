@@ -2,7 +2,7 @@
  * MainTabs 底栏样式：供 RootNavigator screenOptions 与对话态恢复共用。
  */
 import {Platform, StyleSheet, type ViewStyle} from 'react-native';
-import type {ThemeTokens} from '../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 export type TabBarInsets = {
   bottom: number;
@@ -10,10 +10,7 @@ export type TabBarInsets = {
 
 /** 与 RootNavigator 初始 tabBarStyle 等价的完整底栏样式。 */
 export function buildMainTabBarStyle(
-  tokens: Pick<
-    ThemeTokens,
-    'tabBarBackground' | 'borderLight'
-  >,
+  tokens: Pick<ThemeTokens, 'tabBarBackground' | 'borderLight'>,
   insets: TabBarInsets,
 ): ViewStyle {
   return {

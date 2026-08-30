@@ -4,7 +4,7 @@
 import React, {type ReactNode} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {ElevatedCard} from './ElevatedCard';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   tokens: ThemeTokens;
@@ -42,7 +42,8 @@ export function ConfigListCard({
         {subtitle != null ? (
           <Text
             style={[styles.subtitle, {color: tokens.textSecondary}]}
-            numberOfLines={2}>
+            numberOfLines={2}
+          >
             {subtitle}
           </Text>
         ) : null}
@@ -61,8 +62,11 @@ export function ConfigListCard({
           onPress={e => {
             e.stopPropagation?.();
             onMenuPress();
-          }}>
-          <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>⋮</Text>
+          }}
+        >
+          <Text style={[styles.menuDots, {color: tokens.textSecondary}]}>
+            ⋮
+          </Text>
         </Pressable>
       ) : null}
       {showChevron ? (

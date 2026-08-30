@@ -1,7 +1,10 @@
 /**
  * Order direct children of a VFS directory to match worktree DFS list semantics.
  */
-import type {WorkplaceDirRule, WorkplaceListRow} from '@novel-master/core/workplace';
+import type {
+  WorkplaceDirRule,
+  WorkplaceListRow,
+} from '@novel-master/core/workplace';
 import {sortDirPaths, sortFilesForDir} from '@novel-master/core/workplace';
 import {isDirectChild} from './vfs-row-mapper';
 
@@ -55,10 +58,7 @@ export function orderedDirectChildPaths(
   const orphanDirs: string[] = [];
   const orphanFiles: string[] = [];
   for (const path of orphans) {
-    const kind =
-      rowKindAtPath(rows, path) ??
-      kindByPath?.get(path) ??
-      'file';
+    const kind = rowKindAtPath(rows, path) ?? kindByPath?.get(path) ?? 'file';
     if (kind === 'dir') {
       orphanDirs.push(path);
     } else {

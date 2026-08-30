@@ -9,7 +9,7 @@ import React from 'react';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -26,7 +26,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-import {ManageHeader} from '../src/components/batch/ManageHeader';
+import {ManageHeader} from '@/components/batch/ManageHeader';
 
 /** 递归收集渲染树里全部展示文本。 */
 function treeText(
@@ -45,7 +45,9 @@ function treeText(
   return out;
 }
 
-function renderHeader(props: Partial<React.ComponentProps<typeof ManageHeader>>) {
+function renderHeader(
+  props: Partial<React.ComponentProps<typeof ManageHeader>>,
+) {
   const onCancelBatch = jest.fn();
   let renderer: TestRenderer.ReactTestRenderer;
   act(() => {

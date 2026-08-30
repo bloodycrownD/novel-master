@@ -4,7 +4,10 @@
  * @module runtime/setup-llm-fetch
  */
 
-import { configureLlmFetch, createLoggingFetch } from "@novel-master/core/provider";
+import {
+  configureLlmFetch,
+  createLoggingFetch,
+} from '@novel-master/core/provider';
 
 let configured = false;
 

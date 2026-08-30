@@ -4,7 +4,7 @@
  */
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 import {isRichContentOverLimit} from './rich-content-limits';
 
 export interface RichContentBodyProps {

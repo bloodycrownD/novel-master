@@ -26,9 +26,7 @@ export function useAndroidModalKeyboardAvoid(fraction: 0.5 | 1 = 0.5) {
   // 收起时为 0。Math.min(0, ...) 兜底防止正值（理论上不会出现）把面板往下推。
   const panelAvoidStyle = useAnimatedStyle(() => {
     return {
-      transform: [
-        {translateY: Math.min(0, keyboardHeightSV.value) * fraction},
-      ],
+      transform: [{translateY: Math.min(0, keyboardHeightSV.value) * fraction}],
     };
   }, [keyboardHeightSV, fraction]);
   return panelAvoidStyle;

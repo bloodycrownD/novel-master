@@ -17,19 +17,19 @@ import {
   type ThinkingLevel,
   type TokenizerOverride,
 } from '@novel-master/core/provider';
-import {FormField} from '../../components/form/FormField';
-import {FormSelectField} from '../../components/form/FormSelectField';
-import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {FormTextInput} from '../../components/form/FormTextInput';
-import {SegmentedControl} from '../../components/ui/SegmentedControl';
-import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
-import {StickyFormFooter} from '../../components/form/StickyFormFooter';
-import {SamplingForm} from '../../components/provider/SamplingForm';
-import {useRuntime} from '../../hooks/useRuntime';
-import type {RootStackParamList} from '../../navigation/types';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {FormField} from '@/components/form/FormField';
+import {FormSelectField} from '@/components/form/FormSelectField';
+import {FormSectionCard} from '@/components/form/FormSectionCard';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
+import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
+import {StickyFormFooter} from '@/components/form/StickyFormFooter';
+import {SamplingForm} from '@/components/provider/SamplingForm';
+import {useRuntime} from '@/hooks/useRuntime';
+import type {RootStackParamList} from '@/navigation/types';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
 
 type SamplingRoute = RouteProp<RootStackParamList, 'ModelSampling'>;
 
@@ -101,7 +101,9 @@ export function ModelSamplingScreen() {
       setModelName(saved.modelName);
       setInitialModelName(saved.modelName);
       setVendorModelId(saved.vendorModelId);
-      setModelSubtitle(buildModelSubtitle(saved.modelName, saved.vendorModelId));
+      setModelSubtitle(
+        buildModelSubtitle(saved.modelName, saved.vendorModelId),
+      );
       setContextWindowTokens(
         String(savedModelContextWindowTokens(saved.settings)),
       );
@@ -219,7 +221,8 @@ export function ModelSamplingScreen() {
           loading={saving}
           onPress={() => handleSave().catch(() => undefined)}
         />
-      }>
+      }
+    >
       <FormSectionCard title="模型" tokens={tokens}>
         <FormField label="模型名称" tokens={tokens}>
           <FormTextInput
@@ -239,7 +242,8 @@ export function ModelSamplingScreen() {
       <FormSectionCard
         title="内部预算"
         tokens={tokens}
-        hint="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。">
+        hint="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。"
+      >
         <FormField label="上下文上限 (tokens)" tokens={tokens}>
           <FormTextInput
             tokens={tokens}
@@ -251,7 +255,8 @@ export function ModelSamplingScreen() {
         <FormField
           label="计数方式"
           tokens={tokens}
-          hint="自动按模型名匹配分词器族；保存后以本页为准。">
+          hint="自动按模型名匹配分词器族；保存后以本页为准。"
+        >
           <FormSelectField
             tokens={tokens}
             value={tokenCounterMode}
@@ -271,14 +276,14 @@ export function ModelSamplingScreen() {
           <Pressable
             disabled={resetting}
             style={[styles.resetLink, resetting ? styles.resetDisabled : null]}
-            onPress={() =>
-              handleResetSamplingDefaults().catch(() => undefined)
-            }>
+            onPress={() => handleResetSamplingDefaults().catch(() => undefined)}
+          >
             <Text style={[styles.resetLinkText, {color: tokens.primary}]}>
               {resetting ? '恢复中…' : '恢复默认'}
             </Text>
           </Pressable>
-        }>
+        }
+      >
         <SamplingForm
           tokens={tokens}
           protocol={protocol}

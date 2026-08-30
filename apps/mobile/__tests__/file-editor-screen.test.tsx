@@ -1,7 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {FileEditorScreen} from '../src/screens/stack/FileEditorScreen';
+import {FileEditorScreen} from '@/screens/stack/FileEditorScreen';
 
 const mockDismiss = jest.fn();
 const mockShowToast = jest.fn();
@@ -16,10 +16,10 @@ const mockRead = jest.fn(async () => ({
 const mockWrite = jest.fn(async () => undefined);
 
 const mockRuntime = {
-  globalVfs: () => ({ read: mockRead, write: mockWrite }),
-  projectVfs: () => ({ read: mockRead, write: mockWrite }),
-  sessionVfs: () => ({ read: mockRead, write: mockWrite }),
-  physicalVfs: () => ({ read: mockRead }),
+  globalVfs: () => ({read: mockRead, write: mockWrite}),
+  projectVfs: () => ({read: mockRead, write: mockWrite}),
+  sessionVfs: () => ({read: mockRead, write: mockWrite}),
+  physicalVfs: () => ({read: mockRead}),
 };
 
 // 路由参数可变：默认 global，physical 用例自行覆盖。
@@ -40,15 +40,15 @@ jest.mock('@react-navigation/native', () => ({
   }),
 }));
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('../src/hooks/useUnsavedGuard', () => ({
+jest.mock('@/hooks/useUnsavedGuard', () => ({
   useUnsavedGuard: jest.fn(),
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -63,20 +63,20 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }));
 
-jest.mock('../src/services/vfs-operations.service', () => ({
+jest.mock('@/services/vfs-operations.service', () => ({
   sessionSaveVfsFile: jest.fn(),
 }));
 
-jest.mock('../src/components/vfs/FileMarkdownPreview', () => {
+jest.mock('@/components/vfs/FileMarkdownPreview', () => {
   const mockReact = require('react');
   return {
     FileMarkdownPreview: (props: Record<string, unknown>) =>
@@ -88,7 +88,7 @@ jest.mock('../src/components/vfs/FileMarkdownPreview', () => {
   };
 });
 
-jest.mock('../src/components/ui/SegmentedControl', () => {
+jest.mock('@/components/ui/SegmentedControl', () => {
   const mockReact = require('react');
   return {
     SegmentedControl: () =>
@@ -96,7 +96,7 @@ jest.mock('../src/components/ui/SegmentedControl', () => {
   };
 });
 
-jest.mock('../src/components/vfs/CodeEditorWebView', () => {
+jest.mock('@/components/vfs/CodeEditorWebView', () => {
   const mockReact = require('react');
   return {
     CodeEditorWebView: mockReact.forwardRef(
@@ -145,12 +145,8 @@ jest.mock('react-native', () => {
       hairlineWidth: 1,
       create: (s: object) => s,
     },
-    Text: ({
-      children,
-      ...props
-    }: {
-      children?: React.ReactNode;
-    }) => mockReact.createElement('Text', props, children),
+    Text: ({children, ...props}: {children?: React.ReactNode}) =>
+      mockReact.createElement('Text', props, children),
     View: ({
       children,
       testID,
@@ -268,7 +264,9 @@ describe('FileEditorScreen', () => {
 
     const editor = tree.root.findByProps({testID: 'file-editor-input'});
     expect(editor).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'file-editor-browse-scroll')).toBeUndefined();
+    expect(
+      findOptionalByTestId(tree.root, 'file-editor-browse-scroll'),
+    ).toBeUndefined();
   });
 
   it('T-F2: 编辑态 value 传入 CodeEditorWebView', async () => {
@@ -287,7 +285,9 @@ describe('FileEditorScreen', () => {
     mockDismiss.mockClear();
     mockCodeEditorBlur.mockClear();
 
-    const dismissStats = tree.root.findByProps({testID: 'file-editor-dismiss-stats'});
+    const dismissStats = tree.root.findByProps({
+      testID: 'file-editor-dismiss-stats',
+    });
     await act(async () => {
       dismissStats.props.onPress();
     });
@@ -327,8 +327,12 @@ describe('FileEditorScreen', () => {
       previewBtn.props.onPress();
     });
 
-    expect(findOptionalByTestId(tree.root, 'file-markdown-preview')).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
+    expect(
+      findOptionalByTestId(tree.root, 'file-markdown-preview'),
+    ).toBeTruthy();
+    expect(
+      findOptionalByTestId(tree.root, 'file-editor-input'),
+    ).toBeUndefined();
     expect(mockDismiss).toHaveBeenCalled();
   });
 
@@ -337,7 +341,9 @@ describe('FileEditorScreen', () => {
     await switchToEditMode(tree);
     await focusEditor(tree);
 
-    const dismissStats = tree.root.findByProps({testID: 'file-editor-dismiss-stats'});
+    const dismissStats = tree.root.findByProps({
+      testID: 'file-editor-dismiss-stats',
+    });
     await act(async () => {
       dismissStats.props.onPress();
     });
@@ -348,10 +354,18 @@ describe('FileEditorScreen', () => {
   it('T-F4: 预览分支仍可渲染', async () => {
     const tree = await renderLoadedScreen();
 
-    expect(findOptionalByTestId(tree.root, 'file-markdown-preview')).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'preview-segmented-control')).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'file-editor-browse-scroll')).toBeUndefined();
-    expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
+    expect(
+      findOptionalByTestId(tree.root, 'file-markdown-preview'),
+    ).toBeTruthy();
+    expect(
+      findOptionalByTestId(tree.root, 'preview-segmented-control'),
+    ).toBeTruthy();
+    expect(
+      findOptionalByTestId(tree.root, 'file-editor-browse-scroll'),
+    ).toBeUndefined();
+    expect(
+      findOptionalByTestId(tree.root, 'file-editor-input'),
+    ).toBeUndefined();
   });
 
   it('T-F6: CodeEditorWebView 挂载；滚动由 Web 侧 CM 处理', async () => {
@@ -392,7 +406,7 @@ describe('FileEditorScreen', () => {
     expect(mockWrite).not.toHaveBeenCalled();
 
     // 保存按钮禁用（既有只读样式：置灰 + disabled）。
-    const saveBtn = tree.root.findByProps({ testID: 'file-editor-save' });
+    const saveBtn = tree.root.findByProps({testID: 'file-editor-save'});
     expect(saveBtn.props.disabled).toBe(true);
 
     // 不提供编辑切换（纯只读预览）。
@@ -415,6 +429,8 @@ describe('FileEditorScreen', () => {
       }
     }
     expect(previewNode).toBeTruthy();
-    expect(findOptionalByTestId(tree.root, 'file-editor-input')).toBeUndefined();
+    expect(
+      findOptionalByTestId(tree.root, 'file-editor-input'),
+    ).toBeUndefined();
   });
 });

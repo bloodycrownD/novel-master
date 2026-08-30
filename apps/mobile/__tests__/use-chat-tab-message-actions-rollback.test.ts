@@ -1,35 +1,28 @@
 /**
  * T-M2/T-M3 / T-UD1–T-UD3：Mobile 回滚确认文案、undo_send Composer draft 与工作区批注恢复。
  */
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  jest,
-} from '@jest/globals';
+import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import TestRenderer, {act} from 'react-test-renderer';
 import {
   buildAnnotateAttachmentFromDraft,
   type ChatMessage,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-import { Alert } from 'react-native';
+import {Alert} from 'react-native';
 import {
   addChatAnnotateDraft,
   chipsFromAnnotateStore,
   listChatAnnotateDrafts,
   resetChatAnnotateDraftStoreForTests,
-} from '../src/storage/chat-annotate-draft';
+} from '@/storage/chat-annotate-draft';
 import {
   readChatComposerDraft,
   readChatComposerDraftState,
   writeChatComposerDraft,
   writeChatComposerDraftState,
-} from '../src/storage/chat-composer-draft';
-import { useChatTabMessageActions } from '../src/screens/tabs/chat-tab/useChatTabMessages';
+} from '@/storage/chat-composer-draft';
+import {useChatTabMessageActions} from '@/screens/tabs/chat-tab/useChatTabMessages';
 
 const mockRollbackToMessage = jest.fn();
 const mockReloadMessages = jest.fn();
@@ -39,15 +32,15 @@ const mockRefreshChatTokenLabel = jest.fn();
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
-  default: { setString: jest.fn() },
+  default: {setString: jest.fn()},
 }));
 
-jest.mock('../src/services/regex-apply-channel', () => ({
+jest.mock('@/services/regex-apply-channel', () => ({
   loadSessionMessagesPageForDisplay: jest.fn(),
   loadSessionMessagesTailForDisplay: jest.fn(),
 }));
 
-jest.mock('../src/services/message-rollback.service', () => ({
+jest.mock('@/services/message-rollback.service', () => ({
   rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
 }));
 
@@ -57,7 +50,7 @@ jest.mock('react-native', () => ({
       (
         _title: string,
         _message: string,
-        buttons: { text: string; onPress?: () => void }[],
+        buttons: {text: string; onPress?: () => void}[],
       ) => {
         buttons.find(b => b.text === '回滚')?.onPress?.();
       },
@@ -76,14 +69,12 @@ function plainUserMessage(
     sessionId: 's1',
     seq: 2,
     role: 'user',
-    content: { blocks: [{ type: 'text', text }] },
+    content: {blocks: [{type: 'text', text}]},
     provider: null,
     raw: null,
     createdAtMs: 1,
     hidden: false,
-    ...(attachments != null && attachments.length > 0
-      ? { attachments }
-      : {}),
+    ...(attachments != null && attachments.length > 0 ? {attachments} : {}),
   };
 }
 
@@ -93,7 +84,7 @@ function assistantMessage(): ChatMessage {
     sessionId: 's1',
     seq: 3,
     role: 'assistant',
-    content: { blocks: [{ type: 'text', text: 'reply' }] },
+    content: {blocks: [{type: 'text', text: 'reply'}]},
     provider: null,
     raw: null,
     createdAtMs: 2,
@@ -168,7 +159,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-M2/T-TX2: undo_send 成功后写 draft 原文（含 @路径）；无 attach chip', async () => {
-    writeChatComposerDraftState('s1', { text: 'old draft', attachments: [] });
+    writeChatComposerDraftState('s1', {text: 'old draft', attachments: []});
     const anchorText = '请看 @/a.md';
     const attachments = [
       {
@@ -349,9 +340,9 @@ describe('useChatTabMessageActions rollback', () => {
     expect(readChatComposerDraft('s1')).toBe('请看批注');
     const drafts = listChatAnnotateDrafts('s1');
     expect(drafts).toHaveLength(2);
-    expect(drafts.some(d => d.id === 'unsent-keep' && d.path === '/keep.md')).toBe(
-      true,
-    );
+    expect(
+      drafts.some(d => d.id === 'unsent-keep' && d.path === '/keep.md'),
+    ).toBe(true);
     const restored = drafts.find(d => d.path === '/chapter/a.md');
     expect(restored).toMatchObject({
       path: '/chapter/a.md',
@@ -360,12 +351,12 @@ describe('useChatTabMessageActions rollback', () => {
     });
     expect(restored?.id).not.toBe('sent-ann');
     const chips = chipsFromAnnotateStore('s1');
-    expect(chips.some(c => c.path === '/chapter/a.md' && c.action === 'annotate')).toBe(
-      true,
-    );
-    expect(chips.some(c => c.path === '/keep.md' && c.action === 'annotate')).toBe(
-      true,
-    );
+    expect(
+      chips.some(c => c.path === '/chapter/a.md' && c.action === 'annotate'),
+    ).toBe(true);
+    expect(
+      chips.some(c => c.path === '/keep.md' && c.action === 'annotate'),
+    ).toBe(true);
     const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
     expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
     expect(
@@ -376,7 +367,7 @@ describe('useChatTabMessageActions rollback', () => {
   });
 
   it('T-UD2: undo_send 无 annotate → store 不新增；正文恢复；attachments 仍 []', async () => {
-    writeChatComposerDraftState('s1', { text: 'old', attachments: [] });
+    writeChatComposerDraftState('s1', {text: 'old', attachments: []});
     const anchor = plainUserMessage('仅正文 @/a.md', [
       {
         name: '/a.md',

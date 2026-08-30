@@ -1,15 +1,15 @@
 /**
  * code-editor 桥与文档门面（runtime；无 JSX）。
  */
-import type { HostTheme, SetDocumentPayload } from './model';
-import { blurEditor, mountEditor, setDocument } from './editor';
-import { post } from './post';
-import { applyTheme } from './theme';
+import type {HostTheme, SetDocumentPayload} from './model';
+import {blurEditor, mountEditor, setDocument} from './editor';
+import {post} from './post';
+import {applyTheme} from './theme';
 
-export { post };
+export {post};
 
 export function handleHostMessage(raw: unknown): void {
-  let msg: { v?: number; type?: string; payload?: Record<string, unknown> };
+  let msg: {v?: number; type?: string; payload?: Record<string, unknown>};
   try {
     msg = JSON.parse(String(raw));
   } catch {

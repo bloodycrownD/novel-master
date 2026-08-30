@@ -9,14 +9,14 @@ import {
   ANCHORED_MENU_CHAR_WIDTH_EST,
   MENU_OPEN_GRACE_MS,
 } from '@web/shared/constants';
-import { state } from '../state/state';
+import {state} from '../state/state';
 import type {
   MenuAnchor,
   MenuItem,
   MessageRow,
   TranscriptRow,
 } from '../state/state';
-import { post } from '../bridge/bridge';
+import {post} from '../bridge/bridge';
 
 /**
  * ISD 债/非债（菜单）：
@@ -32,7 +32,9 @@ export type MenuOverlayViewProps = {
 };
 
 /** null = 卸载（render(null, portal)）；非 null = 刷新完整 overlay。 */
-export type RenderContextMenuView = (props: MenuOverlayViewProps | null) => void;
+export type RenderContextMenuView = (
+  props: MenuOverlayViewProps | null,
+) => void;
 
 let _renderContextMenuView: RenderContextMenuView | null = null;
 
@@ -60,7 +62,8 @@ export function computeContextMenuWidth(items: MenuItem[]): number {
   for (let i = 0; i < items.length; i++) {
     if (items[i].label.length > longest) longest = items[i].label.length;
   }
-  const byLabel = longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
+  const byLabel =
+    longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
   const cap = window.innerWidth - ANCHORED_MENU_SCREEN_MARGIN * 2;
   return Math.min(
     cap,
@@ -134,9 +137,7 @@ export function layoutContextMenu(
   };
 }
 
-export function findMessageRow(
-  messageId: string,
-): MessageRow | null {
+export function findMessageRow(messageId: string): MessageRow | null {
   for (let i = 0; i < state.rows.length; i++) {
     const row = state.rows[i];
     if (row.kind === 'message' && row.id === messageId) {
@@ -151,16 +152,20 @@ export function buildMenuItems(
   hitEl: EventTarget | null,
 ): MenuItem[] {
   const items: MenuItem[] = [];
-  if ('text' in row && row.text) items.push({ label: '编辑', action: 'edit' });
-  items.push({ label: '复制', action: 'copy' });
+  if ('text' in row && row.text) items.push({label: '编辑', action: 'edit'});
+  items.push({label: '复制', action: 'copy'});
   const hitElement = hitEl as Element | null;
   const showSetFloor =
     row.kind === 'message' &&
     row.role === 'user' &&
-    !(hitElement && hitElement.closest && hitElement.closest('.tool-card, .tool-group-item'));
-  if (showSetFloor) items.push({ label: '置位', action: 'set-floor' });
-  items.push({ label: '分叉', action: 'fork' });
-  items.push({ label: '回滚', action: 'rollback', danger: true });
+    !(
+      hitElement &&
+      hitElement.closest &&
+      hitElement.closest('.tool-card, .tool-group-item')
+    );
+  if (showSetFloor) items.push({label: '置位', action: 'set-floor'});
+  items.push({label: '分叉', action: 'fork'});
+  items.push({label: '回滚', action: 'rollback', danger: true});
   return items;
 }
 
@@ -179,8 +184,16 @@ export function attachMenuNativeTextBlock(): void {
       suppressNativeTextMenu(event);
     }
   };
-  document.addEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
-  document.addEventListener('selectstart', state.menuNativeTextBlockHandler, true);
+  document.addEventListener(
+    'contextmenu',
+    state.menuNativeTextBlockHandler,
+    true,
+  );
+  document.addEventListener(
+    'selectstart',
+    state.menuNativeTextBlockHandler,
+    true,
+  );
 }
 
 export function detachMenuNativeTextBlock(): void {
@@ -292,7 +305,7 @@ export function openContextMenuFromAnchor(
   };
   const pageX = anchor.x + anchor.width / 2;
   const pageY = anchor.y + anchor.height / 2;
-  post('openMessageMenu', { messageId: messageId, pageX: pageX, pageY: pageY });
+  post('openMessageMenu', {messageId: messageId, pageX: pageX, pageY: pageY});
   post('menuOpened', {});
   state.menu = {
     messageId: messageId,

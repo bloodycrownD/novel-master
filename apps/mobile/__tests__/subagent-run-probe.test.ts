@@ -14,7 +14,7 @@ import {
   useSubagentRunProbe,
   useSubagentRunPolling,
   SUBAGENT_RUN_PROBE_RECONFIRM_DELAY_MS,
-} from '../src/screens/stack/useSubagentRunProbe';
+} from '@/screens/stack/useSubagentRunProbe';
 
 /** AppState mock：取棕 listener 供测试主动触发。 */
 let appStateListener: (state: string) => void = () => undefined;
@@ -32,12 +32,10 @@ describe('useSubagentRunProbe — T-G2-mobile', () => {
     jest.useFakeTimers();
     appStateListener = () => undefined;
     spy = jest.spyOn(AppState, 'addEventListener');
-    spy.mockImplementation(
-      (_event: unknown, cb: (state: string) => void) => {
-        appStateListener = cb;
-        return {remove: () => undefined} as unknown as {remove: () => void};
-      },
-    );
+    spy.mockImplementation((_event: unknown, cb: (state: string) => void) => {
+      appStateListener = cb;
+      return {remove: () => undefined} as unknown as {remove: () => void};
+    });
   });
   afterEach(() => {
     jest.useRealTimers();
@@ -72,7 +70,9 @@ describe('useSubagentRunProbe — T-G2-mobile', () => {
 
     expect(isRunRegistered).toHaveBeenCalled();
     expect(onRunEnded).toHaveBeenCalledTimes(1);
-    act(() => { r.unmount(); });
+    act(() => {
+      r.unmount();
+    });
   });
 
   it('isRunActive=false 时 AppState→active 不触发收尾（主路径已处理）', async () => {
@@ -95,7 +95,9 @@ describe('useSubagentRunProbe — T-G2-mobile', () => {
       await flushTimers(SUBAGENT_RUN_PROBE_RECONFIRM_DELAY_MS + 50);
     });
     expect(onRunEnded).not.toHaveBeenCalled();
-    act(() => { r.unmount(); });
+    act(() => {
+      r.unmount();
+    });
   });
 
   it('第一次 false、复询时变 true 则不收尾（防抖避免误判）', async () => {
@@ -124,7 +126,9 @@ describe('useSubagentRunProbe — T-G2-mobile', () => {
       await flushTimers(SUBAGENT_RUN_PROBE_RECONFIRM_DELAY_MS + 50);
     });
     expect(onRunEnded).not.toHaveBeenCalled();
-    act(() => { r.unmount(); });
+    act(() => {
+      r.unmount();
+    });
   });
 });
 
@@ -159,13 +163,20 @@ describe('useSubagentRunPolling — T-G2-mobile 轮询路径', () => {
     });
 
     expect(onRunEnded).toHaveBeenCalledTimes(1);
-    act(() => { r.unmount(); });
+    act(() => {
+      r.unmount();
+    });
   });
 
   it('uiRunning=false 时不启动轮询', async () => {
     const onRunEnded = jest.fn();
     function Harness() {
-      useSubagentRunPolling(false, () => true, () => false, onRunEnded);
+      useSubagentRunPolling(
+        false,
+        () => true,
+        () => false,
+        onRunEnded,
+      );
       return null;
     }
     let r: any;
@@ -176,6 +187,8 @@ describe('useSubagentRunPolling — T-G2-mobile 轮询路径', () => {
       await flushTimers(60_000);
     });
     expect(onRunEnded).not.toHaveBeenCalled();
-    act(() => { r.unmount(); });
+    act(() => {
+      r.unmount();
+    });
   });
 });

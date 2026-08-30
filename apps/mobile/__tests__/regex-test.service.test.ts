@@ -3,7 +3,7 @@ import {
   regexPreviewRoleFromScope,
   validateRegexRuleDraft,
   type RegexRuleDraftFields,
-} from '../src/services/regex-test.service';
+} from '@/services/regex-test.service';
 
 describe('regex-test.service', () => {
   const baseFields: RegexRuleDraftFields = {
@@ -42,12 +42,16 @@ describe('regex-test.service', () => {
   });
 
   it('returns source when rule disabled', () => {
-    const result = previewRegexRule('secret', {...baseFields, enabled: false}, {
-      text: 'secret',
-      channel: 'llm',
-      depthFromTail: 0,
-      role: 'user',
-    });
+    const result = previewRegexRule(
+      'secret',
+      {...baseFields, enabled: false},
+      {
+        text: 'secret',
+        channel: 'llm',
+        depthFromTail: 0,
+        role: 'user',
+      },
+    );
     expect(result).toEqual({ok: true, text: 'secret'});
   });
 });

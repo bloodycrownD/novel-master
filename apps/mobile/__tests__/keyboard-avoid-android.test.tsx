@@ -21,14 +21,14 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {afterEach, beforeEach, describe, expect, it, jest} from '@jest/globals';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 
-import {TextPromptModal} from '../src/components/ui/TextPromptModal';
-import {DirectoryRuleSheet} from '../src/components/sheet/DirectoryRuleSheet';
-import {AddModelModal} from '../src/components/provider/AddModelModal';
-import {EditModelNameModal} from '../src/components/provider/EditModelNameModal';
-import {useAndroidModalKeyboardAvoid} from '../src/hooks/useAndroidModalKeyboardAvoid';
+import {TextPromptModal} from '@/components/ui/TextPromptModal';
+import {DirectoryRuleSheet} from '@/components/sheet/DirectoryRuleSheet';
+import {AddModelModal} from '@/components/provider/AddModelModal';
+import {EditModelNameModal} from '@/components/provider/EditModelNameModal';
+import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
 
 // ── 公共 mock：theme / AppModal ────────────────────────────────────────────
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -46,11 +46,19 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/ui/AppModal', () => {
+jest.mock('@/components/ui/AppModal', () => {
   const mockReact = require('react');
   return {
-    AppModal: ({children, visible}: {children?: React.ReactNode; visible?: boolean}) =>
-      visible ? mockReact.createElement('View', {testID: 'app-modal'}, children) : null,
+    AppModal: ({
+      children,
+      visible,
+    }: {
+      children?: React.ReactNode;
+      visible?: boolean;
+    }) =>
+      visible
+        ? mockReact.createElement('View', {testID: 'app-modal'}, children)
+        : null,
   };
 });
 

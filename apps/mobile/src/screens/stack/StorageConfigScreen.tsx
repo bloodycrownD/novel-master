@@ -5,24 +5,24 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, ScrollView, StyleSheet} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
-import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
-import {ProfileStatusCard} from '../../components/ui/ProfileStatusCard';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useNovelMaster} from '../../runtime/novel-master-context';
+import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
+import {ProfileMenuItem} from '@/components/ui/ProfileMenuItem';
+import {ProfileStatusCard} from '@/components/ui/ProfileStatusCard';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
   exportDatabaseBackup,
   importDatabaseBackup,
-} from '../../services/db-backup.service';
-import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
+} from '@/services/db-backup.service';
+import {getCloudSyncStatusView} from '@/services/cloud-sync.service';
 import {
   isMobileAgentActive,
   subscribeMobileAgentActivity,
-} from '../../runtime/agent-activity';
-import type {RootStackParamList} from '../../navigation/types';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/runtime/agent-activity';
+import type {RootStackParamList} from '@/navigation/types';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -102,10 +102,7 @@ export function StorageConfigScreen() {
     return result?.trim() ? result : undefined;
   };
 
-  const syncControlValue = (
-    lastAt?: string,
-    lastResult?: string,
-  ): string => {
+  const syncControlValue = (lastAt?: string, lastResult?: string): string => {
     if (agentActive) {
       return 'Agent 运行中';
     }
@@ -119,7 +116,11 @@ export function StorageConfigScreen() {
 
   const syncStatusContent = (): {
     message?: string;
-    metrics?: Array<{label: string; value: string; tone?: 'default' | 'warning' | 'success'}>;
+    metrics?: Array<{
+      label: string;
+      value: string;
+      tone?: 'default' | 'warning' | 'success';
+    }>;
   } => {
     if (statusLoading) {
       return {message: '加载中…'};
@@ -204,7 +205,8 @@ export function StorageConfigScreen() {
     <ScrollView
       style={[styles.scroll, {backgroundColor: tokens.background}]}
       contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="handled">
+      keyboardShouldPersistTaps="handled"
+    >
       <ListSectionTitle title="云同步" tokens={tokens} />
       <ProfileStatusCard
         title="同步状态"
@@ -212,9 +214,7 @@ export function StorageConfigScreen() {
         message={syncStatus.message}
         metrics={syncStatus.metrics}
         notice={syncStatusNotice()}
-        noticeTone={
-          agentActive || cloudSuggestPull ? 'warning' : 'muted'
-        }
+        noticeTone={agentActive || cloudSuggestPull ? 'warning' : 'muted'}
         tokens={tokens}
       />
       <ProfileMenuItem

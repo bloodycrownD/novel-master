@@ -7,7 +7,9 @@
 export type ThemeMode = 'dark' | 'light';
 
 /** 解析 #rgb/#rrggbb/#rrggbbaa/rgb() 颜色为 [r,g,b]；无法解析返回 null。 */
-export function parseColorToRgb(color: string): [number, number, number] | null {
+export function parseColorToRgb(
+  color: string,
+): [number, number, number] | null {
   const trimmed = color.trim();
   let m = /^#([0-9a-f]{3,8})$/i.exec(trimmed);
   if (m) {
@@ -36,9 +38,7 @@ export function parseColorToRgb(color: string): [number, number, number] | null 
 }
 
 /** 按背景亮度推断模式：暗底 dark，亮底 light；无法解析按 light。 */
-export function inferThemeModeFromBg(
-  bg: string | null | undefined,
-): ThemeMode {
+export function inferThemeModeFromBg(bg: string | null | undefined): ThemeMode {
   if (!bg) {
     return 'light';
   }

@@ -1,16 +1,16 @@
 /**
  * workplace-block.service：手动重置 → clearSession + 清 Composer 上条。
  */
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 
 const mockRefresh = jest.fn(async () => undefined);
 
-jest.mock('../src/services/project-composer-status.service', () => ({
+jest.mock('@/services/project-composer-status.service', () => ({
   refreshComposerStatusAfterSessionKkvCleared: (...args: unknown[]) =>
     mockRefresh(...args),
 }));
 
-import { clearSessionWorkplaceKkv } from '../src/services/workplace-block.service';
+import {clearSessionWorkplaceKkv} from '@/services/workplace-block.service';
 
 describe('workplace-block.service', () => {
   beforeEach(() => {
@@ -19,7 +19,7 @@ describe('workplace-block.service', () => {
 
   it('clearSessionWorkplaceKkv 清空 session kkv 并刷新状态条', async () => {
     const clearSession = jest.fn(async () => undefined);
-    const runtime = { sessionKkv: { clearSession } } as any;
+    const runtime = {sessionKkv: {clearSession}} as any;
 
     const block = await clearSessionWorkplaceKkv(runtime, {
       projectId: 'p',

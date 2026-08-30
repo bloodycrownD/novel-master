@@ -1,8 +1,8 @@
-import { decodeLiteralHtmlEntities } from '@web/shared/decode-entities';
-import { applyTrustedHtml } from '@web/shared/ui/TrustedHtml';
-import { escapeHtmlRaw } from '../util/html-escape';
-import { state } from '../state/state';
-import { scheduleStickIfNearBottom } from '../scroll/scroll';
+import {decodeLiteralHtmlEntities} from '@web/shared/decode-entities';
+import {applyTrustedHtml} from '@web/shared/ui/TrustedHtml';
+import {escapeHtmlRaw} from '../util/html-escape';
+import {state} from '../state/state';
+import {scheduleStickIfNearBottom} from '../scroll/scroll';
 import {
   assistantBubbleExtraClasses,
   ensureStreamTextBody,
@@ -15,14 +15,14 @@ export const STREAM_RICH_UPGRADE_MS = 350;
 
 export type StreamRichUpgradeState = {
   timer: ReturnType<typeof setTimeout> | null;
-  kinds: { text: boolean; thinking: boolean };
-  plainMode: { text: boolean; thinking: boolean };
+  kinds: {text: boolean; thinking: boolean};
+  plainMode: {text: boolean; thinking: boolean};
 };
 
 export const streamRichUpgrade: StreamRichUpgradeState = {
   timer: null,
-  kinds: { text: false, thinking: false },
-  plainMode: { text: true, thinking: true },
+  kinds: {text: false, thinking: false},
+  plainMode: {text: true, thinking: true},
 };
 
 export function renderStreamingInline(s: string): string {

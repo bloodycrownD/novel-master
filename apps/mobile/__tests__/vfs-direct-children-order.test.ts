@@ -1,9 +1,9 @@
-import { orderedDirectChildPaths } from '../src/components/vfs/vfs-direct-children-order';
+import {orderedDirectChildPaths} from '@/components/vfs/vfs-direct-children-order';
 import {
   type WorkplaceDirRule,
   type WorkplaceListRow,
 } from '@novel-master/core/workplace';
-import { DEFAULT_WORKPLACE_DIR_RULE } from '@novel-master/core/workplace';
+import {DEFAULT_WORKPLACE_DIR_RULE} from '@novel-master/core/workplace';
 
 describe('orderedDirectChildPaths', () => {
   const parent = '/p';

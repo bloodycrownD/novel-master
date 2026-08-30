@@ -2,8 +2,13 @@
  * Elevated list row card (aligned with session cards / examples/mobile .agent-item).
  */
 import React, {type ReactNode} from 'react';
-import {Pressable, StyleSheet, type StyleProp, type ViewStyle} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import {
+  Pressable,
+  StyleSheet,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   children: ReactNode;
@@ -32,7 +37,8 @@ export function ElevatedCard({
           opacity: pressed ? 0.92 : 1,
         },
         style,
-      ]}>
+      ]}
+    >
       {children}
     </Pressable>
   );

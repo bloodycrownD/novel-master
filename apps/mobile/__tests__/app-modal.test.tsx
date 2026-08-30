@@ -1,7 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {AppModal} from '../src/components/ui/AppModal';
+import {AppModal} from '@/components/ui/AppModal';
 
 let mockIsFocused = true;
 

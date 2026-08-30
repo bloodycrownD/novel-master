@@ -5,13 +5,13 @@ import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {AgentList} from '../../components/agent/AgentList';
-import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {useRuntime} from '../../hooks/useRuntime';
-import type {RootStackParamList} from '../../navigation/types';
-import {createBlankAgent} from '../../services/agent-create';
-import {useTheme} from '../../theme/ThemeProvider';
+import {AgentList} from '@/components/agent/AgentList';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
+import {useRuntime} from '@/hooks/useRuntime';
+import type {RootStackParamList} from '@/navigation/types';
+import {createBlankAgent} from '@/services/agent-create';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 

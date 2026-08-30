@@ -1,9 +1,9 @@
 import {describe, expect, it} from '@jest/globals';
-import {lightTheme} from '../src/theme/tokens';
+import {lightTheme} from '@/theme/tokens';
 import {
   buildMainTabBarStyle,
   resolveChatTabBarStyle,
-} from '../src/navigation/main-tab-bar-style';
+} from '@/navigation/main-tab-bar-style';
 
 describe('resolveChatTabBarStyle / buildMainTabBarStyle', () => {
   const insets = {bottom: 34};

@@ -1,7 +1,7 @@
 /**
  * Resolves display label for the workspace current agent pointer.
  */
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {resolveCurrentAgentId} from './agent-run.service';
 
 /** Display name for current agent; falls back to id or em dash when unset. */

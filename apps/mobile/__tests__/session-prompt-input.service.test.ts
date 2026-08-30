@@ -14,16 +14,20 @@ import {describe, expect, it, jest} from '@jest/globals';
 import {textBlocks} from '@novel-master/core/chat';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
 
-import {buildSessionPromptInput} from '../src/services/session-prompt-input.service';
-import type {MobileNovelMasterRuntime} from '../src/runtime/types';
+import {buildSessionPromptInput} from '@/services/session-prompt-input.service';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 // regex-apply-channel 依赖的 @novel-master/core/regex 在 mobile jest 配置里没有映射，
 // 且本用例只关心 customAttach 在 prepare 路径的 parity，不需要真实 regex 逻辑，
 // 直接 mock 成原样透传可见消息即可。
-jest.mock('../src/services/regex-apply-channel', () => ({
+jest.mock('@/services/regex-apply-channel', () => ({
   applyActiveRegexChannel: jest.fn(
-    async (_config: unknown, _groupId: unknown, _all: unknown, visible: readonly never[]) =>
-      [...visible],
+    async (
+      _config: unknown,
+      _groupId: unknown,
+      _all: unknown,
+      visible: readonly never[],
+    ) => [...visible],
   ),
 }));
 
@@ -83,9 +87,8 @@ function makeStubRuntime(): MobileNovelMasterRuntime {
 describe('buildSessionPromptInput (T-CA5 mobile)', () => {
   it('definition.prompts.customAttach 非空时预览路径 messages 含 <extra-info> 块', async () => {
     const runtime = makeStubRuntime();
-    const definition = buildDefaultAgentDefinitionPreservingName(
-      'extra-info-agent',
-    );
+    const definition =
+      buildDefaultAgentDefinitionPreservingName('extra-info-agent');
     // 与 domain prompts.customAttach 对齐；wrap 阶段在 </user-ops> 后注入 <extra-info>。
     definition.prompts = {
       ...definition.prompts,

@@ -2,9 +2,7 @@
  * 用户气泡引用胶囊切分（splitRefTokenSpans）单测：
  * 口径与 core 扫描同构（@ 路径 / $ 技能 / 边界与非法形态）。
  */
-import {
-  splitRefTokenSpans,
-} from '../src/web/chat-transcript/webview/ui/render/RefTokenText';
+import {splitRefTokenSpans} from '@/web/chat-transcript/webview/ui/render/RefTokenText';
 
 describe('splitRefTokenSpans', () => {
   it('普通文本单段原样', () => {
@@ -14,13 +12,15 @@ describe('splitRefTokenSpans', () => {
   });
 
   it('@路径 与 $技能 切为胶囊片段', () => {
-    expect(splitRefTokenSpans('看 @/chapters/01.md 与 $写作技能 再回')).toEqual([
-      {kind: 'text', text: '看 '},
-      {kind: 'path', text: '@/chapters/01.md'},
-      {kind: 'text', text: ' 与 '},
-      {kind: 'skill', text: '$写作技能'},
-      {kind: 'text', text: ' 再回'},
-    ]);
+    expect(splitRefTokenSpans('看 @/chapters/01.md 与 $写作技能 再回')).toEqual(
+      [
+        {kind: 'text', text: '看 '},
+        {kind: 'path', text: '@/chapters/01.md'},
+        {kind: 'text', text: ' 与 '},
+        {kind: 'skill', text: '$写作技能'},
+        {kind: 'text', text: ' 再回'},
+      ],
+    );
   });
 
   it('$ 无空白边界不成 token（a$b）', () => {

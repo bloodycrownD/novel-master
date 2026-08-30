@@ -1,8 +1,10 @@
-import {nextStreamTailHtmlField} from '../src/webview-host/chat-transcript/stream-tail-html-state';
+import {nextStreamTailHtmlField} from '@/webview-host/chat-transcript/stream-tail-html-state';
 
 describe('stream-tail-html-state', () => {
   it('keeps incoming html when present', () => {
-    expect(nextStreamTailHtmlField(true, '<strong>x</strong>')).toBe('<strong>x</strong>');
+    expect(nextStreamTailHtmlField(true, '<strong>x</strong>')).toBe(
+      '<strong>x</strong>',
+    );
   });
 
   it('clears html when rich on but RN omitted html (limit exceeded)', () => {

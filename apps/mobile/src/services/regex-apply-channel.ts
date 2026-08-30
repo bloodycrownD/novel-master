@@ -1,10 +1,18 @@
 /**
  * Applies active regex group to visible messages for a channel (CLI parity).
  */
-import { visibleFloorByMessageId, type ChatMessage } from "@novel-master/core/chat";
+import {
+  visibleFloorByMessageId,
+  type ChatMessage,
+} from '@novel-master/core/chat';
 
-import { applyRegexChannelToMessages, resolveActiveCompiledRules, type RegexChannel, type RegexConfigService } from "@novel-master/core/regex";
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {
+  applyRegexChannelToMessages,
+  resolveActiveCompiledRules,
+  type RegexChannel,
+  type RegexConfigService,
+} from '@novel-master/core/regex';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 export async function applyActiveRegexChannel(
   config: RegexConfigService,
@@ -18,12 +26,7 @@ export async function applyActiveRegexChannel(
     return [...visibleMessages];
   }
   const floorMap = visibleFloorByMessageId(allSessionMessages);
-  return applyRegexChannelToMessages(
-    visibleMessages,
-    rules,
-    channel,
-    floorMap,
-  );
+  return applyRegexChannelToMessages(visibleMessages, rules, channel, floorMap);
 }
 
 /**

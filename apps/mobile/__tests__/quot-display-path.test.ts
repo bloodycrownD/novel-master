@@ -1,5 +1,5 @@
-import {decodeLiteralHtmlEntities} from '../src/components/rich-content/decode-literal-html-entities';
-import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
+import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
+import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
 function bootEscapeHtml(text: string): string {
   const decoded = decodeLiteralHtmlEntities(text);
@@ -20,9 +20,7 @@ describe('quot display paths', () => {
   });
 
   it('plain escapeHtml path produces single-encoded entities', () => {
-    const escaped = bootEscapeHtml(
-      '- 得到了一个&quot;重新做人&quot;的机会',
-    );
+    const escaped = bootEscapeHtml('- 得到了一个&quot;重新做人&quot;的机会');
     expect(escaped).toContain('&quot;重新做人&quot;');
     expect(escaped).not.toContain('&amp;quot;');
   });

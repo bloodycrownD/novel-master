@@ -1,5 +1,5 @@
-import {enrichTranscriptRows} from '../src/components/chat/enrich-transcript-rows';
-import type {TranscriptRow} from '../src/components/chat/ChatTranscriptBridge';
+import {enrichTranscriptRows} from '@/components/chat/enrich-transcript-rows';
+import type {TranscriptRow} from '@/components/chat/ChatTranscriptBridge';
 
 describe('enrichTranscriptRows', () => {
   const baseRow: TranscriptRow = {

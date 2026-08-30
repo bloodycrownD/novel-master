@@ -44,9 +44,7 @@ export function encodeCodeEditorToHost(
   return JSON.stringify(message);
 }
 
-export function decodeCodeEditorToHost(
-  raw: string,
-): CodeEditorToHostMessage {
+export function decodeCodeEditorToHost(raw: string): CodeEditorToHostMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('Invalid code-editor bridge envelope shape');
@@ -61,9 +59,7 @@ export function decodeCodeEditorToHost(
   return parsed as CodeEditorToHostMessage;
 }
 
-export function decodeHostToCodeEditor(
-  raw: string,
-): HostToCodeEditorMessage {
+export function decodeHostToCodeEditor(raw: string): HostToCodeEditorMessage {
   const parsed: unknown = JSON.parse(raw);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('Invalid code-editor bridge envelope shape');

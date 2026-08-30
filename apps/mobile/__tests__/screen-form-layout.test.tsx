@@ -11,8 +11,8 @@ import TestRenderer, {act} from 'react-test-renderer';
 import {afterEach, beforeEach, describe, expect, it} from '@jest/globals';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 
-import {ScreenFormLayout} from '../src/components/form/ScreenFormLayout';
-import type {ThemeTokens} from '../src/theme/tokens';
+import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
+import type {ThemeTokens} from '@/theme/tokens';
 
 const tokens: ThemeTokens = {
   background: '#fff',

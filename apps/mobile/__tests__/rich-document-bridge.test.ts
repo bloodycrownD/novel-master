@@ -4,7 +4,7 @@ import {
   encodeHostToRichDocument,
   encodeRichDocumentToHost,
   RICH_DOCUMENT_BRIDGE_VERSION,
-} from '../src/components/vfs/RichDocumentBridge';
+} from '@/components/vfs/RichDocumentBridge';
 
 describe('rich-document-bridge', () => {
   it('round-trips RN→Web setDocument envelope', () => {
@@ -107,7 +107,9 @@ describe('rich-document-bridge', () => {
       type: 'selectionAnnotate' as const,
       payload: {text: '选中原文'},
     };
-    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(sel))).toEqual(sel);
+    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(sel))).toEqual(
+      sel,
+    );
   });
 
   it('rejects invalid bridge version', () => {

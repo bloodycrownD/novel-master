@@ -23,11 +23,19 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
     ...actual,
     isNativeTokenizerAvailable: () => nativeBridgeState.available,
     countPromptViaNative: jest.fn(
-      async (req: {serialized: string; family: string; vendorModelId: string}) => {
+      async (req: {
+        serialized: string;
+        family: string;
+        vendorModelId: string;
+      }) => {
         if (!nativeBridgeState.available) {
           return null;
         }
-        const result = await mockCountPrompt(req.serialized, req.family, req.vendorModelId);
+        const result = await mockCountPrompt(
+          req.serialized,
+          req.family,
+          req.vendorModelId,
+        );
         return result;
       },
     ),
@@ -36,7 +44,9 @@ jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
 
 jest.mock('@novel-master/core', () => ({
   CHARACTERS_PER_TOKEN_RATIO: 3.35,
-  parseApplicationModelId: (id: string) => ({vendorModelId: id.split('/').pop() ?? id}),
+  parseApplicationModelId: (id: string) => ({
+    vendorModelId: id.split('/').pop() ?? id,
+  }),
   resolveTokenizerFamily: () => mockResolveFamily,
   mapVendorModelIdToTiktokenModel: () => 'gpt-4o',
   serializePromptLlmInput: () => '',

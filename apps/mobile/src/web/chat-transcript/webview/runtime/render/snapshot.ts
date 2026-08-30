@@ -1,15 +1,15 @@
-import { state } from '../state/state';
-import type { MessageRow, TranscriptRow } from '../state/state';
+import {state} from '../state/state';
+import type {MessageRow, TranscriptRow} from '../state/state';
 import {
   offsetFromBottom,
   isNearBottom,
   stickToBottom,
   emitScrollSnapshot,
 } from '../scroll/scroll';
-import { closeContextMenu } from '../menu/menu';
-import { renderRows } from './row-logic';
-import { setStreamToolInvokingDom } from '../stream/stream';
-import { scheduleMermaidScan } from '../mermaid';
+import {closeContextMenu} from '../menu/menu';
+import {renderRows} from './row-logic';
+import {setStreamToolInvokingDom} from '../stream/stream';
+import {scheduleMermaidScan} from '../mermaid';
 
 export type RestoreScroll = {
   nearBottom?: boolean;

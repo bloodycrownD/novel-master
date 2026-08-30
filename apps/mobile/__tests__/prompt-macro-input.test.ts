@@ -3,7 +3,7 @@ import {
   insertTextAtSelection,
   splitPromptMacroSegments,
   tryAtomicMacroDelete,
-} from '../src/components/agent/prompt-macro-input';
+} from '@/components/agent/prompt-macro-input';
 
 describe('splitPromptMacroSegments', () => {
   it('芯片形态：白名单宏分段为 macro', () => {

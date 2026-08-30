@@ -1,6 +1,6 @@
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { tags as t } from '@lezer/highlight';
-import { EditorView } from '@codemirror/view';
+import {HighlightStyle, syntaxHighlighting} from '@codemirror/language';
+import {tags as t} from '@lezer/highlight';
+import {EditorView} from '@codemirror/view';
 
 /** Theme via CSS variables set from RN tokens. */
 export const editorTheme = EditorView.theme(
@@ -13,8 +13,7 @@ export const editorTheme = EditorView.theme(
     },
     '.cm-scroller': {
       overflow: 'auto',
-      fontFamily:
-        'ui-monospace, "Cascadia Code", Consolas, monospace',
+      fontFamily: 'ui-monospace, "Cascadia Code", Consolas, monospace',
       lineHeight: '1.6',
     },
     '.cm-content': {
@@ -32,7 +31,8 @@ export const editorTheme = EditorView.theme(
       backgroundColor: 'var(--editor-gutter-bg, var(--surface, #f2f2f7))',
       color: 'var(--text-secondary, #666)',
       border: 'none',
-      borderRight: '1px solid var(--editor-gutter-border, var(--border, #e5e5ea))',
+      borderRight:
+        '1px solid var(--editor-gutter-border, var(--border, #e5e5ea))',
     },
     '.cm-gutter.cm-lineNumbers .cm-gutterElement': {
       padding: '0 12px 0 8px',
@@ -47,32 +47,35 @@ export const editorTheme = EditorView.theme(
       backgroundColor: 'var(--editor-active-line, rgba(0, 0, 0, 0.04))',
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-      backgroundColor: 'var(--editor-selection, rgba(0, 122, 255, 0.25)) !important',
+      backgroundColor:
+        'var(--editor-selection, rgba(0, 122, 255, 0.25)) !important',
     },
   },
-  { dark: false },
+  {dark: false},
 );
 
 const highlightStyle = HighlightStyle.define([
-  { tag: t.heading, color: 'var(--primary, #007aff)', fontWeight: '600' },
-  { tag: t.strong, fontWeight: '700' },
-  { tag: t.emphasis, fontStyle: 'italic' },
-  { tag: t.link, color: 'var(--primary, #007aff)', textDecoration: 'underline' },
+  {tag: t.heading, color: 'var(--primary, #007aff)', fontWeight: '600'},
+  {tag: t.strong, fontWeight: '700'},
+  {tag: t.emphasis, fontStyle: 'italic'},
+  {tag: t.link, color: 'var(--primary, #007aff)', textDecoration: 'underline'},
   {
     tag: t.monospace,
     fontFamily: 'ui-monospace, "Cascadia Code", Consolas, monospace',
   },
-  { tag: t.string, color: 'var(--primary, #007aff)' },
-  { tag: t.number, color: 'var(--text-secondary, #666)' },
-  { tag: t.keyword, color: 'var(--primary, #007aff)' },
-  { tag: t.comment, color: 'var(--text-secondary, #666)', fontStyle: 'italic' },
+  {tag: t.string, color: 'var(--primary, #007aff)'},
+  {tag: t.number, color: 'var(--text-secondary, #666)'},
+  {tag: t.keyword, color: 'var(--primary, #007aff)'},
+  {tag: t.comment, color: 'var(--text-secondary, #666)', fontStyle: 'italic'},
 ]);
 
 export const editorSyntaxHighlighting = syntaxHighlighting(highlightStyle, {
   fallback: true,
 });
 
-export function applyTheme(theme: import('./model').HostTheme | null | undefined): void {
+export function applyTheme(
+  theme: import('./model').HostTheme | null | undefined,
+): void {
   if (!theme) return;
   const root = document.documentElement;
   if (theme.background) {

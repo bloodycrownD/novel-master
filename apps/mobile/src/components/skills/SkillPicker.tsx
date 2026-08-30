@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
 import {AppModal} from '@/components/ui/AppModal';
-import {skillDomainBadgeColor, skillDomainBadgeLabel} from '@/components/skills/skill-ui';
+import {skillDomainBadgeColor, skillDomainBadgeLabel} from './skill-ui';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -69,7 +69,8 @@ export function SkillPicker({
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
@@ -97,12 +98,18 @@ export function SkillPicker({
                     {opacity: pressed ? 0.85 : item.disabled ? 0.55 : 1},
                   ]}
                   onPress={() => pick(item)}
-                  accessibilityLabel={`引用技能 ${item.name}`}>
+                  accessibilityLabel={`引用技能 ${item.name}`}
+                >
                   <View style={styles.rowBody}>
                     <View style={styles.titleRow}>
                       <Text
-                        style={{color: tokens.text, fontSize: 15, fontWeight: '600'}}
-                        numberOfLines={1}>
+                        style={{
+                          color: tokens.text,
+                          fontSize: 15,
+                          fontWeight: '600',
+                        }}
+                        numberOfLines={1}
+                      >
                         {item.name}
                       </Text>
                       <Text
@@ -112,11 +119,20 @@ export function SkillPicker({
                             color: skillDomainBadgeColor(item.domain, tokens),
                             borderColor: tokens.border,
                           },
-                        ]}>
+                        ]}
+                      >
                         {skillDomainBadgeLabel(item.domain, item.overridden)}
                       </Text>
                       {item.disabled ? (
-                        <Text style={[styles.badge, {color: tokens.textSecondary, borderColor: tokens.border}]}>
+                        <Text
+                          style={[
+                            styles.badge,
+                            {
+                              color: tokens.textSecondary,
+                              borderColor: tokens.border,
+                            },
+                          ]}
+                        >
                           已关闭
                         </Text>
                       ) : null}
@@ -124,7 +140,8 @@ export function SkillPicker({
                     {item.description ? (
                       <Text
                         style={{color: tokens.textSecondary, fontSize: 13}}
-                        numberOfLines={2}>
+                        numberOfLines={2}
+                      >
                         {item.description}
                       </Text>
                     ) : null}

@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {StyleSheet, TextInput, type TextInputProps} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = TextInputProps & {
   tokens: ThemeTokens;

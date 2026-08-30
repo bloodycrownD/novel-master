@@ -23,8 +23,8 @@ describe('NewSkillModal ZIP 导入源码契约（CR D-1 / MF-8）', () => {
     expect(importIdx).toBeGreaterThanOrEqual(0);
     // 校验必须发生在 zip 落盘之前（同名 await 调用，抛错即中止后续落盘）
     expect(assertIdx).toBeLessThan(importIdx);
-    // 调用形态：域 + 名 + project 域 projectId
-    expect(src).toContain('assertSkillNameNotReservedForCreate(\n          domain,');
+    // 调用形态：域 + 名 + project 域 projectId（排版容忍，锁首参为 domain）
+    expect(src).toMatch(/assertSkillNameNotReservedForCreate\(\s*domain,/);
   });
 
   it('MF-8：重写分支先 readSkillFile 拿版本，writeSkillFile 传 expectedVersion', () => {

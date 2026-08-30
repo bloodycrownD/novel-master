@@ -23,12 +23,12 @@ import {
   ListObjectsV2Command,
   type S3Client,
 } from '@aws-sdk/client-s3';
-import {createRnS3Client} from '../shims/aws-rn-s3-client';
+import {createRnS3Client} from '@/shims/aws-rn-s3-client';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {Buffer} from 'buffer';
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {isMobileAgentActive} from '../runtime/agent-activity';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import {isMobileAgentActive} from '@/runtime/agent-activity';
 import {
   exportDatabaseBackupToPath,
   importDatabaseBackupFromBytes,
@@ -65,7 +65,10 @@ export type CloudSyncPullOptions = {
   onProgress?: CloudSyncProgressListener;
 };
 
-export type {CloudSyncProgressListener, CloudSyncProgressUiState} from './cloud-sync-progress-ui';
+export type {
+  CloudSyncProgressListener,
+  CloudSyncProgressUiState,
+} from './cloud-sync-progress-ui';
 export {initialCloudSyncProgressUi} from './cloud-sync-progress-ui';
 
 /** @deprecated 请使用 snapshot-file-hash 模块导出 */
@@ -255,8 +258,7 @@ export async function testCloudSyncConnection(
     : await buildS3StorageConfig(runtime);
   const client = buildS3Client(s3Config);
   const pathPrefix = normalizePrefix(
-    input?.pathPrefix?.trim() ||
-      (await getCloudSyncConfig(runtime)).pathPrefix,
+    input?.pathPrefix?.trim() || (await getCloudSyncConfig(runtime)).pathPrefix,
   );
 
   const progress = createCloudSyncProgress('test');
@@ -322,10 +324,7 @@ export async function pullCloudSync(
     progress.done({rev: result.rev});
     return {rev: result.rev, alreadyUpToDate: false};
   } catch (error) {
-    if (
-      isCloudSyncError(error) &&
-      error.code === 'ALREADY_UP_TO_DATE'
-    ) {
+    if (isCloudSyncError(error) && error.code === 'ALREADY_UP_TO_DATE') {
       await patchCloudSyncLocalStatus(runtime, {
         lastPullAt: now,
         lastPullResult: 'already_up_to_date',

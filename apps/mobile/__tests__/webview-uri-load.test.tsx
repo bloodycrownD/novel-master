@@ -2,33 +2,26 @@
  * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言；三包 CT/RD/code-editor）。
  */
 import React from 'react';
-import { Platform } from 'react-native';
-import {
-  describe,
-  expect,
-  it,
-  jest,
-  beforeEach,
-  afterEach,
-} from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
-import { ChatTranscriptWebView } from '../src/components/chat/ChatTranscriptWebView';
-import { RichDocumentWebView } from '../src/components/vfs/RichDocumentWebView';
-import { CodeEditorWebView } from '../src/components/vfs/CodeEditorWebView';
+import {Platform} from 'react-native';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
+import {ChatTranscriptWebView} from '@/components/chat/ChatTranscriptWebView';
+import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
+import {CodeEditorWebView} from '@/components/vfs/CodeEditorWebView';
 import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
-} from '../src/webview-host/chat-transcript/uri';
+} from '@/webview-host/chat-transcript/uri';
 import {
   getRichDocumentPackageDirUri,
   getRichDocumentUri,
-} from '../src/webview-host/rich-document/uri';
+} from '@/webview-host/rich-document/uri';
 import {
   getCodeEditorPackageDirUri,
   getCodeEditorUri,
-} from '../src/webview-host/code-editor/uri';
+} from '@/webview-host/code-editor/uri';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -43,7 +36,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
-  default: { setString: jest.fn(), getString: jest.fn(async () => '') },
+  default: {setString: jest.fn(), getString: jest.fn(async () => '')},
 }));
 
 // mermaid 全屏返回键自注册用（RichDocumentWebView 组件不在 NavigationContainer 内渲染）
@@ -56,7 +49,7 @@ jest.mock('react-native-blob-util', () => ({
   __esModule: true,
   default: {
     fs: {
-      dirs: { MainBundleDir: '/App/NovelMaster.app' },
+      dirs: {MainBundleDir: '/App/NovelMaster.app'},
     },
   },
 }));

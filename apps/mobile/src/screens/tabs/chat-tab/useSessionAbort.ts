@@ -14,9 +14,9 @@
  * freeze 计数会被高频 bus 回调读取，state 读取会触发额外的 React 订阅/重渲染开销，
  * 换成 getter 后调用方拿到的总是最新值，bus 回调里读它零成本。
  */
-import { useCallback, useRef, useState } from 'react';
-import type { MutableRefObject } from 'react';
-import type { AgentAbortRegistry } from '@novel-master/core/agent';
+import {useCallback, useRef, useState} from 'react';
+import type {MutableRefObject} from 'react';
+import type {AgentAbortRegistry} from '@novel-master/core/agent';
 
 export type UseSessionAbortParams = {
   sessionId: string | undefined;

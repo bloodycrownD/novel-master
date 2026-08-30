@@ -11,19 +11,19 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import { type ChatProject } from "@novel-master/core/chat";
-import {AppModal} from '../ui/AppModal';
-import {BatchCheckbox} from '../batch/BatchCheckbox';
-import {ManageHeader} from '../batch/ManageHeader';
-import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
-import {PrimaryButton} from '../ui/PrototypeButtons';
-import {TextPromptModal} from '../ui/TextPromptModal';
-import {useBatchSelection} from '../../hooks/useBatchSelection';
-import {formatRelativeTimeMs} from '../../utils/format-relative-time';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {pickEntityIcon} from '../../utils/entity-icon';
+import {type ChatProject} from '@novel-master/core/chat';
+import {AppModal} from '@/components/ui/AppModal';
+import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
+import {ManageHeader} from '@/components/batch/ManageHeader';
+import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
+import {PrimaryButton} from '@/components/ui/PrototypeButtons';
+import {TextPromptModal} from '@/components/ui/TextPromptModal';
+import {useBatchSelection} from '@/hooks/useBatchSelection';
+import {formatRelativeTimeMs} from '@/utils/format-relative-time';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from './ToastHost';
+import {toastMessage} from '@/errors/toast-message';
+import {pickEntityIcon} from '@/utils/entity-icon';
 
 const PROJECT_ICONS = ['📁', '📚', '✨', '🚀', '📝', '🎯'];
 
@@ -99,7 +99,8 @@ export function ProjectDrawer({
         visible={visible}
         animationType="fade"
         transparent
-        onRequestClose={onClose}>
+        onRequestClose={onClose}
+      >
         <View style={styles.root}>
           <View
             style={[
@@ -109,7 +110,8 @@ export function ProjectDrawer({
                 paddingTop: insets.top,
                 paddingBottom: Math.max(insets.bottom, 12),
               },
-            ]}>
+            ]}
+          >
             <ManageHeader
               title="项目"
               batchMode={batch.active}
@@ -129,7 +131,8 @@ export function ProjectDrawer({
             <ScrollView
               style={styles.list}
               contentContainerStyle={styles.listContent}
-              keyboardShouldPersistTaps="handled">
+              keyboardShouldPersistTaps="handled"
+            >
               {projects.length === 0 ? (
                 <Text style={[styles.empty, {color: tokens.textSecondary}]}>
                   暂无项目，点击「新建」开始。
@@ -148,9 +151,7 @@ export function ProjectDrawer({
                           borderColor: selected
                             ? tokens.primary
                             : tokens.borderLight,
-                          borderWidth: selected
-                            ? 2
-                            : StyleSheet.hairlineWidth,
+                          borderWidth: selected ? 2 : StyleSheet.hairlineWidth,
                         },
                       ]}
                       onPress={() => {
@@ -160,7 +161,8 @@ export function ProjectDrawer({
                           onSelect(project.id);
                           onClose();
                         }
-                      }}>
+                      }}
+                    >
                       {batch.active ? (
                         <BatchCheckbox
                           checked={selected}
@@ -174,14 +176,16 @@ export function ProjectDrawer({
                       <View style={styles.projectInfo}>
                         <Text
                           style={[styles.projectName, {color: tokens.text}]}
-                          numberOfLines={1}>
+                          numberOfLines={1}
+                        >
                           {project.name}
                         </Text>
                         <Text
                           style={[
                             styles.projectMeta,
                             {color: tokens.textSecondary},
-                          ]}>
+                          ]}
+                        >
                           更新于 {formatRelativeTimeMs(project.updatedAtMs)}
                         </Text>
                       </View>
@@ -190,7 +194,8 @@ export function ProjectDrawer({
                           style={[
                             styles.currentBadge,
                             {backgroundColor: tokens.primary},
-                          ]}>
+                          ]}
+                        >
                           <Text style={styles.currentBadgeText}>当前</Text>
                         </View>
                       ) : null}
@@ -202,12 +207,14 @@ export function ProjectDrawer({
                             onPress={e => {
                               e.stopPropagation?.();
                               setMenuProjectId(project.id);
-                            }}>
+                            }}
+                          >
                             <Text
                               style={[
                                 styles.menuDots,
                                 {color: tokens.textSecondary},
-                              ]}>
+                              ]}
+                            >
                               ⋮
                             </Text>
                           </Pressable>
@@ -215,7 +222,8 @@ export function ProjectDrawer({
                             style={[
                               styles.chevron,
                               {color: tokens.textTertiary},
-                            ]}>
+                            ]}
+                          >
                             ›
                           </Text>
                         </>
@@ -263,8 +271,7 @@ export function ProjectDrawer({
                   style: 'destructive',
                   onPress: () => {
                     void Promise.resolve(onDeleteSelected([project.id])).catch(
-                      err =>
-                        showToast(toastMessage('删除失败', err)),
+                      err => showToast(toastMessage('删除失败', err)),
                     );
                   },
                 },

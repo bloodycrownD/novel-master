@@ -6,11 +6,9 @@ import {
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
 } from '@novel-master/core/config-forms/agent';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
-async function listAgentDisplayNameSlots(
-  runtime: MobileNovelMasterRuntime,
-) {
+async function listAgentDisplayNameSlots(runtime: MobileNovelMasterRuntime) {
   const ids = await runtime.agentRegistry.listAgentIds();
   const slots = [];
   for (const id of ids) {
@@ -29,7 +27,9 @@ export async function createBlankAgent(
   runtime: MobileNovelMasterRuntime,
   id = `agent-${Date.now()}`,
 ): Promise<string> {
-  const name = allocateAgentDisplayName(await listAgentDisplayNameSlots(runtime));
+  const name = allocateAgentDisplayName(
+    await listAgentDisplayNameSlots(runtime),
+  );
   await runtime.agentRegistry.upsert(id, {
     name,
     runtime: {maxSteps: 20},

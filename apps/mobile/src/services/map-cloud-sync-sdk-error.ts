@@ -45,7 +45,10 @@ function readHttpStatusCode(error: unknown): number | undefined {
   return typeof statusCode === 'number' ? statusCode : undefined;
 }
 
-function isPathStyleForbiddenError(name: string, lowerMessage: string): boolean {
+function isPathStyleForbiddenError(
+  name: string,
+  lowerMessage: string,
+): boolean {
   return (
     PATH_STYLE_FORBIDDEN_NAMES.has(name) ||
     lowerMessage.includes('virtual hosted style') ||
@@ -53,7 +56,11 @@ function isPathStyleForbiddenError(name: string, lowerMessage: string): boolean 
   );
 }
 
-function isAuthError(name: string, lowerMessage: string, httpStatusCode?: number): boolean {
+function isAuthError(
+  name: string,
+  lowerMessage: string,
+  httpStatusCode?: number,
+): boolean {
   if (isPathStyleForbiddenError(name, lowerMessage)) {
     return false;
   }
@@ -67,7 +74,11 @@ function isAuthError(name: string, lowerMessage: string, httpStatusCode?: number
   );
 }
 
-function isBucketError(name: string, lowerMessage: string, httpStatusCode?: number): boolean {
+function isBucketError(
+  name: string,
+  lowerMessage: string,
+  httpStatusCode?: number,
+): boolean {
   return (
     BUCKET_ERROR_NAMES.has(name) ||
     lowerMessage.includes('nosuchbucket') ||

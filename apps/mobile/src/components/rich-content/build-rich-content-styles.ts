@@ -1,6 +1,6 @@
 import {StyleSheet} from 'react-native';
 import type {MixedStyleDeclaration} from 'react-native-render-html';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 export type RichContentVariant =
   | 'chat-assistant'

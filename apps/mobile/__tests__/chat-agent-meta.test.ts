@@ -1,15 +1,19 @@
 import {describe, expect, it, jest} from '@jest/globals';
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
-import {loadChatAgentMeta} from '../src/services/chat-agent-meta';
+import {loadChatAgentMeta} from '@/services/chat-agent-meta';
 
 const globalDefinition = buildDefaultAgentDefinitionPreservingName('全局助手');
-const sessionAgentDefinition = buildDefaultAgentDefinitionPreservingName('会话引用助手');
+const sessionAgentDefinition =
+  buildDefaultAgentDefinitionPreservingName('会话引用助手');
 
 // core 移除 workspace 回退层后，SessionAgentConfig = { agentId, modelId? }。
 const DEFAULT_SESSION_CONFIG = {agentId: 'default'};
 
 function mockRuntime(overrides: {
-  agentConfig?: {mode: 'follow' | 'custom'; definition?: typeof projectDefinition};
+  agentConfig?: {
+    mode: 'follow' | 'custom';
+    definition?: typeof projectDefinition;
+  };
   currentAgentId?: string;
   currentModelId?: string;
   sessionAgentConfig?: {agentId: string; modelId?: string};
@@ -50,7 +54,7 @@ function mockRuntime(overrides: {
   };
 }
 
-jest.mock('../src/provider/model-display-label', () => ({
+jest.mock('@/provider/model-display-label', () => ({
   resolveModelDisplayLabel: jest.fn(async () => 'GPT-4'),
 }));
 

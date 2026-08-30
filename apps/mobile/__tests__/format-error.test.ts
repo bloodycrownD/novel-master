@@ -1,9 +1,13 @@
-import { TdbcError, ToolError } from "@novel-master/core";
-import { AgentError } from "@novel-master/core/agent";
-import { ChatError } from "@novel-master/core/chat";
-import { ProviderError } from "@novel-master/core/provider";
-import { CharacterCardError, VfsError, VfsZipError } from "@novel-master/core/vfs";
-import {formatError} from '../src/errors/format-error';
+import {TdbcError, ToolError} from '@novel-master/core';
+import {AgentError} from '@novel-master/core/agent';
+import {ChatError} from '@novel-master/core/chat';
+import {ProviderError} from '@novel-master/core/provider';
+import {
+  CharacterCardError,
+  VfsError,
+  VfsZipError,
+} from '@novel-master/core/vfs';
+import {formatError} from '@/errors/format-error';
 
 describe('formatError (T4)', () => {
   it('formats VfsError message', () => {
@@ -22,14 +26,18 @@ describe('formatError (T4)', () => {
   });
 
   it('T-M-TOAST-01: REPLACE_NOT_FOUND uses Chinese refresh hint', () => {
-    const err = new VfsError('REPLACE_NOT_FOUND', 'Replace string not found in /x', {
-      path: '/x',
-    });
+    const err = new VfsError(
+      'REPLACE_NOT_FOUND',
+      'Replace string not found in /x',
+      {
+        path: '/x',
+      },
+    );
     expect(formatError(err)).toContain('刷新');
   });
 
   it('T-M-TOAST-02: CONFLICT uses Chinese version conflict', () => {
-    const err = new VfsError('CONFLICT', 'Version conflict', { path: '/x' });
+    const err = new VfsError('CONFLICT', 'Version conflict', {path: '/x'});
     expect(formatError(err)).toContain('版本冲突');
   });
 
@@ -64,9 +72,7 @@ describe('formatError (T4)', () => {
     const err = new TdbcError('SQLITE_ERROR', 'Failed to open database', {
       cause: new Error('JSI not available'),
     });
-    expect(formatError(err)).toBe(
-      'Failed to open database\nJSI not available',
-    );
+    expect(formatError(err)).toBe('Failed to open database\nJSI not available');
   });
 
   it('formats generic Error', () => {

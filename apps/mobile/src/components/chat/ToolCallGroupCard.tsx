@@ -54,12 +54,14 @@ export function ToolCallGroupCard({
             marginBottom: 8,
             paddingBottom: 8,
           },
-      ]}>
+      ]}
+    >
       <Pressable
         style={styles.header}
         onPress={() => setExpanded(v => !v)}
         accessibilityRole="button"
-        accessibilityState={{expanded}}>
+        accessibilityState={{expanded}}
+      >
         <Text style={[styles.title, {color: tokens.textSecondary}]}>
           工具调用 ({tools.length})
         </Text>

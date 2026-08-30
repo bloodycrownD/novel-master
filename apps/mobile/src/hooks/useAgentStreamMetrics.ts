@@ -1,7 +1,13 @@
 /**
  * Agent 流式生成计时与正文字数统计（不含 tool 参数计数）。
  */
-import {useCallback, useEffect, useRef, useState, type MutableRefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from 'react';
 import {
   buildStreamMetricsLine,
   formatCharCount,
@@ -182,10 +188,7 @@ export function useAgentStreamMetrics(running: boolean): {
   let metrics: AgentStreamMetricsView | null = null;
   if (running && accRef.current.startedAtMs > 0) {
     const elapsedMs = Math.max(0, Date.now() - accRef.current.startedAtMs);
-    metrics = toView(
-      true,
-      snapshotFromAcc(accRef.current, elapsedMs),
-    );
+    metrics = toView(true, snapshotFromAcc(accRef.current, elapsedMs));
   } else if (lastRun != null) {
     metrics = toView(false, lastRun);
   }

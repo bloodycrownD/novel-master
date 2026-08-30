@@ -4,18 +4,18 @@
  * 最终 style/className → 可见（禁止 effect 内长期命令式双写 DOM；禁止先可见再跳位）。
  * 挂载由 main `render` 到 `#menu-portal`（Portal 等价）。
  */
-import { useLayoutEffect, useRef, useState } from 'preact/hooks';
+import {useLayoutEffect, useRef, useState} from 'preact/hooks';
 import {
   ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
   MESSAGE_ACTION_MENU_ITEM_COUNT,
 } from '@web/shared/constants';
-import type { MenuAnchor, MenuItem } from '../../runtime/state/state';
+import type {MenuAnchor, MenuItem} from '../../runtime/state/state';
 import {
   computeContextMenuWidth,
   layoutContextMenu,
   type ContextMenuLayout,
 } from '../../runtime/menu/menu';
-import { ContextMenu } from './ContextMenu';
+import {ContextMenu} from './ContextMenu';
 
 export type MenuOverlayProps = {
   messageId: string;
@@ -23,7 +23,7 @@ export type MenuOverlayProps = {
   anchor: MenuAnchor;
 };
 
-export function MenuOverlay({ messageId, items, anchor }: MenuOverlayProps) {
+export function MenuOverlay({messageId, items, anchor}: MenuOverlayProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const menuWidth = computeContextMenuWidth(items);
   /** null = 仍隐藏待测；非 null = 已定位，由 state 驱动最终 style/className */
@@ -87,12 +87,7 @@ export function MenuOverlay({ messageId, items, anchor }: MenuOverlayProps) {
         className="menu-backdrop"
         data-action="close-menu"
       />
-      <div
-        ref={menuRef}
-        id="context-menu"
-        className={className}
-        style={style}
-      >
+      <div ref={menuRef} id="context-menu" className={className} style={style}>
         <ContextMenu messageId={messageId} items={items} />
       </div>
     </>

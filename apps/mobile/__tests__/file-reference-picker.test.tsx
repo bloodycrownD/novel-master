@@ -6,11 +6,11 @@ import {
   atPathTokensFromPickerSelection,
   FileReferencePicker,
   listPickerChildRows,
-} from '../src/components/chat/FileReferencePicker';
+} from '@/components/chat/FileReferencePicker';
 
 const mockBuildListRows = jest.fn(async (): Promise<WorkplaceListRow[]> => []);
 
-jest.mock('../src/errors/format-error', () => ({
+jest.mock('@/errors/format-error', () => ({
   formatError: (err: unknown) => String(err),
 }));
 
@@ -18,7 +18,7 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -32,7 +32,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/ui/AppModal', () => {
+jest.mock('@/components/ui/AppModal', () => {
   const mockReact = require('react');
   return {
     AppModal: ({
@@ -42,13 +42,11 @@ jest.mock('../src/components/ui/AppModal', () => {
       children?: React.ReactNode;
       visible?: boolean;
     }) =>
-      visible
-        ? mockReact.createElement('AppModal', null, children)
-        : null,
+      visible ? mockReact.createElement('AppModal', null, children) : null,
   };
 });
 
-jest.mock('../src/hooks/useRuntime', () => {
+jest.mock('@/hooks/useRuntime', () => {
   const runtime = {
     workplace: () => ({
       buildListRows: (...args: unknown[]) => mockBuildListRows(...args),
@@ -95,11 +93,7 @@ function findByTestId(root: TestRenderer.ReactTestInstance, testID: string) {
 describe('listPickerChildRows / atPathTokensFromPickerSelection', () => {
   it('只列出 cwd 直子（含隐藏文件，不含 cwd 自身）', () => {
     const atRoot = listPickerChildRows(fixtureRows, '/');
-    expect(atRoot.map(r => r.path)).toEqual([
-      '/notes',
-      '/a.md',
-      '/hidden.md',
-    ]);
+    expect(atRoot.map(r => r.path)).toEqual(['/notes', '/a.md', '/hidden.md']);
 
     const inNotes = listPickerChildRows(fixtureRows, '/notes');
     expect(inNotes.map(r => r.path)).toEqual(['/notes/b.md', '/notes/c.md']);
@@ -107,7 +101,10 @@ describe('listPickerChildRows / atPathTokensFromPickerSelection', () => {
 
   it('目录多选 + 文件多选同确认产出 @path token', () => {
     expect(
-      atPathTokensFromPickerSelection(['/notes', '/'], ['/a.md', '/notes/b.md']),
+      atPathTokensFromPickerSelection(
+        ['/notes', '/'],
+        ['/a.md', '/notes/b.md'],
+      ),
     ).toEqual(['@/notes/', '@/', '@/a.md', '@/notes/b.md']);
   });
 });
@@ -256,7 +253,7 @@ describe('FileReferencePicker', () => {
         <FileReferencePicker
           visible
           mode="pick-directory"
-          scope={{ kind: 'session', projectId: 'p1', sessionId: 's1' }}
+          scope={{kind: 'session', projectId: 'p1', sessionId: 's1'}}
           blockedSourcePaths={['/notes']}
           onClose={onClose}
           onConfirmDir={onConfirmDir}
@@ -265,9 +262,7 @@ describe('FileReferencePicker', () => {
     });
 
     // 不展示文件勾选
-    expect(() =>
-      findByTestId(tree!.root, 'file-ref-file-/a.md'),
-    ).toThrow();
+    expect(() => findByTestId(tree!.root, 'file-ref-file-/a.md')).toThrow();
     expect(findByTestId(tree!.root, 'file-ref-dir-/notes')).toBeTruthy();
 
     await act(async () => {
@@ -282,9 +277,9 @@ describe('FileReferencePicker', () => {
       findByTestId(tree!.root, 'file-ref-dir-enter-/notes').props.onPress();
     });
     expect(findByTestId(tree!.root, 'file-ref-cwd-blocked')).toBeTruthy();
-    expect(
-      findByTestId(tree!.root, 'file-ref-confirm').props.disabled,
-    ).toBe(true);
+    expect(findByTestId(tree!.root, 'file-ref-confirm').props.disabled).toBe(
+      true,
+    );
   });
 
   it('pick-directory：选择当前文件夹直接确认', async () => {
@@ -295,7 +290,7 @@ describe('FileReferencePicker', () => {
         <FileReferencePicker
           visible
           mode="pick-directory"
-          scope={{ kind: 'project', projectId: 'p1' }}
+          scope={{kind: 'project', projectId: 'p1'}}
           onClose={jest.fn()}
           onConfirmDir={onConfirmDir}
         />,

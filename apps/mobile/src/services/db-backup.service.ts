@@ -25,11 +25,11 @@ import {
   checkpointMobileDatabase,
   closeMobileConnection,
   getMobileConnection,
-} from '../db/connection';
-import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
-import {isMobileAgentActive} from '../runtime/agent-activity';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {MOBILE_TDBC_URL} from '../vfs/constants';
+} from '@/db/connection';
+import {resolveMobileDatabaseFilePath} from '@/db/db-file-path';
+import {isMobileAgentActive} from '@/runtime/agent-activity';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import {MOBILE_TDBC_URL} from '@/vfs/constants';
 
 const SQLITE_MAGIC = 'SQLite format 3';
 const BACKUP_EXT = '.nmbackup';
@@ -184,7 +184,9 @@ export async function importDatabaseBackupFromBytes(
 ): Promise<void> {
   assertSqliteFile(bytes);
 
-  const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/import-bytes-${Date.now()}${BACKUP_EXT}`;
+  const tmpPath = `${
+    ReactNativeBlobUtil.fs.dirs.CacheDir
+  }/import-bytes-${Date.now()}${BACKUP_EXT}`;
   try {
     await writeBytesToFileChunked(tmpPath, bytes);
     await importDatabaseBackupFromPath(tmpPath);

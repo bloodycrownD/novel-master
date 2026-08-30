@@ -2,7 +2,7 @@
  * Saved model label helpers for workspace currentModelId (UUID).
  */
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /** Primary row label: derived displayName (`服务商名称/modelName`). */
 export async function resolveModelDisplayLabel(

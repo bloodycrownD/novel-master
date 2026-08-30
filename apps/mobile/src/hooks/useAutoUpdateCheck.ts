@@ -4,12 +4,12 @@
 
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, Linking} from 'react-native';
-import {useToast} from '../components/chrome/ToastHost';
+import {useToast} from '@/components/chrome/ToastHost';
 import {
   UpdateCheckResultModal,
   type UpdateCheckResultKind,
-} from '../components/update/UpdateCheckResultModal';
-import {useNovelMaster} from '../runtime/novel-master-context';
+} from '@/components/update/UpdateCheckResultModal';
+import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
   isSnoozed,
   persistFailedUpdateCheck,
@@ -19,9 +19,9 @@ import {
   readUpdatesAutoCheck,
   writeDismissedVersion,
   writeSnoozeUntil,
-} from '../storage/update-prefs';
-import {checkForUpdates} from '../update-check/check-for-updates';
-import type {UpdateCheckData} from '../update-check/types';
+} from '@/storage/update-prefs';
+import {checkForUpdates} from '@/update-check/check-for-updates';
+import type {UpdateCheckData} from '@/update-check/types';
 
 const AUTO_CHECK_DELAY_MS = 2000;
 

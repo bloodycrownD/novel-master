@@ -1,5 +1,5 @@
 import {CloudSyncError} from '@novel-master/core';
-import {mapCloudSyncSdkError} from '../src/services/map-cloud-sync-sdk-error';
+import {mapCloudSyncSdkError} from '@/services/map-cloud-sync-sdk-error';
 
 type MappingCase = {
   name: string;
@@ -14,7 +14,8 @@ const cases: MappingCase[] = [
     name: 'InvalidAccessKeyId → AUTH',
     error: {
       name: 'InvalidAccessKeyId',
-      message: 'The AWS Access Key Id you provided does not exist in our records.',
+      message:
+        'The AWS Access Key Id you provided does not exist in our records.',
     },
     code: 'AUTH',
     message: '云存储凭据无效或权限不足',
@@ -55,20 +56,24 @@ const cases: MappingCase[] = [
       $metadata: {httpStatusCode: 403},
     },
     code: 'NETWORK',
-    message: '阿里云 OSS 请关闭 Path style；Endpoint 建议使用 https://oss-cn-xxx.aliyuncs.com',
+    message:
+      '阿里云 OSS 请关闭 Path style；Endpoint 建议使用 https://oss-cn-xxx.aliyuncs.com',
     messageNotContains: '凭据',
   },
 ];
 
-describe.each(cases)('mapCloudSyncSdkError', ({name, error, code, message, messageNotContains}) => {
-  it(name, () => {
-    const result = mapCloudSyncSdkError(error);
+describe.each(cases)(
+  'mapCloudSyncSdkError',
+  ({name, error, code, message, messageNotContains}) => {
+    it(name, () => {
+      const result = mapCloudSyncSdkError(error);
 
-    expect(result).toBeInstanceOf(CloudSyncError);
-    expect(result.code).toBe(code);
-    expect(result.message).toBe(message);
-    if (messageNotContains) {
-      expect(result.message).not.toContain(messageNotContains);
-    }
-  });
-});
+      expect(result).toBeInstanceOf(CloudSyncError);
+      expect(result.code).toBe(code);
+      expect(result.message).toBe(message);
+      if (messageNotContains) {
+        expect(result.message).not.toContain(messageNotContains);
+      }
+    });
+  },
+);

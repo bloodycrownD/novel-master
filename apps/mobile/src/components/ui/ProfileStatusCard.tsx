@@ -3,8 +3,8 @@
  */
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {FormSectionCard} from '../form/FormSectionCard';
-import type {ThemeTokens} from '../../theme/tokens';
+import {FormSectionCard} from '@/components/form/FormSectionCard';
+import type {ThemeTokens} from '@/theme/tokens';
 
 export type ProfileStatusMetric = {
   label: string;
@@ -51,7 +51,8 @@ export function ProfileStatusCard({
           {metrics.map(metric => (
             <View
               key={metric.label}
-              style={[styles.metric, {backgroundColor: tokens.bgSecondary}]}>
+              style={[styles.metric, {backgroundColor: tokens.bgSecondary}]}
+            >
               <Text style={[styles.metricLabel, {color: tokens.textSecondary}]}>
                 {metric.label}
               </Text>
@@ -60,7 +61,8 @@ export function ProfileStatusCard({
                   styles.metricValue,
                   {color: metricColor(metric.tone, tokens)},
                 ]}
-                numberOfLines={1}>
+                numberOfLines={1}
+              >
                 {metric.value}
               </Text>
             </View>
@@ -81,9 +83,12 @@ export function ProfileStatusCard({
                   ? tokens.warning
                   : tokens.textSecondary,
               backgroundColor:
-                noticeTone === 'warning' ? tokens.warningMuted : tokens.bgSecondary,
+                noticeTone === 'warning'
+                  ? tokens.warningMuted
+                  : tokens.bgSecondary,
             },
-          ]}>
+          ]}
+        >
           {notice}
         </Text>
       ) : null}

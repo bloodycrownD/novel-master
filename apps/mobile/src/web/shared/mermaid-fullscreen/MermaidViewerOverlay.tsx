@@ -13,8 +13,8 @@
  * 无 viewBox 的回退分支不烘焙，维持纯 transform 行为。
  * 关闭：点空白（stage 非视口区）/ 右上角关闭按钮 / 宿主返回键（bridge 下发）。
  */
-import { useEffect, useRef } from 'preact/hooks';
-import type { JSX } from 'preact';
+import {useEffect, useRef} from 'preact/hooks';
+import type {JSX} from 'preact';
 import {
   MERMAID_VIEWER_MIN_SCALE,
   MERMAID_VIEWER_TAP_SLOP_PX,
@@ -56,9 +56,9 @@ export function MermaidViewerOverlay({
 }: MermaidViewerOverlayProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const gesture = useRef<{ scale: number; pan: MermaidViewerPan }>({
+  const gesture = useRef<{scale: number; pan: MermaidViewerPan}>({
     scale: 1,
-    pan: { x: 0, y: 0 },
+    pan: {x: 0, y: 0},
   });
   const drag = useRef<DragSession | null>(null);
   const pinch = useRef<PinchSession | null>(null);
@@ -78,7 +78,7 @@ export function MermaidViewerOverlay({
     if (!viewport) {
       return;
     }
-    const { scale, pan } = gesture.current;
+    const {scale, pan} = gesture.current;
     viewport.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
   };
 
@@ -95,13 +95,13 @@ export function MermaidViewerOverlay({
   /** clamp/烘焙共用的布局基准：fit 基准渲染尺寸 × 已烘焙倍率（未烘焙=1）。 */
   const layoutSize = (): MermaidViewerSize => {
     const base = baseRenderedRef.current;
-    const { w, h } = stageMetrics();
+    const {w, h} = stageMetrics();
     if (!base) {
       // viewBox 解析失败的防御退化：以舞台为内容尺寸（等价旧 viewport 公式）
-      return { width: w, height: h };
+      return {width: w, height: h};
     }
     const total = bakedTotalRef.current;
-    return { width: base.width * total, height: base.height * total };
+    return {width: base.width * total, height: base.height * total};
   };
 
   /** 取消挂起的「过渡后烘焙」；flush=true 时立即以当前 gesture 态落定。 */
@@ -153,7 +153,7 @@ export function MermaidViewerOverlay({
     svg.setAttribute('height', String(size.height));
     bakedTotalRef.current = total;
     const pan = rebasePanAfterBake(gesture.current.pan, gesture.current.scale);
-    gesture.current = { scale: 1, pan };
+    gesture.current = {scale: 1, pan};
     viewport.style.transform = `translate(${pan.x}px, ${pan.y}px)`;
   };
 
@@ -239,7 +239,10 @@ export function MermaidViewerOverlay({
     // 无 viewBox 时盒即内容尺寸（该分支不烘焙，仅作 clamp 布局基准）。
     const rect = svg.getBoundingClientRect();
     const parts = viewBox
-      ? viewBox.trim().split(/[\s,]+/).map(Number)
+      ? viewBox
+          .trim()
+          .split(/[\s,]+/)
+          .map(Number)
       : null;
     const viewBoxValid =
       !!parts &&
@@ -258,7 +261,7 @@ export function MermaidViewerOverlay({
       };
       hasViewBoxRef.current = true;
     } else if (rect.width > 0 && rect.height > 0) {
-      baseRenderedRef.current = { width: rect.width, height: rect.height };
+      baseRenderedRef.current = {width: rect.width, height: rect.height};
       hasViewBoxRef.current = false;
     }
     return () => {
@@ -281,7 +284,8 @@ export function MermaidViewerOverlay({
       const a = event.touches[0];
       const b = event.touches[1];
       pinch.current = {
-        startDist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1,
+        startDist:
+          Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1,
         baseScale: gesture.current.scale,
         basePan: gesture.current.pan,
       };
@@ -304,10 +308,10 @@ export function MermaidViewerOverlay({
       const a = event.touches[0];
       const b = event.touches[1];
       const session = pinch.current;
-      const { cx, cy, w, h } = stageMetrics();
+      const {cx, cy, w, h} = stageMetrics();
       const layout = layoutSize();
       gesture.current = computeMermaidViewerPinch(
-        { scale: session.baseScale, pan: session.basePan },
+        {scale: session.baseScale, pan: session.basePan},
         session.startDist,
         Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
         (a.clientX + b.clientX) / 2 - cx,
@@ -329,10 +333,10 @@ export function MermaidViewerOverlay({
       if (Math.hypot(dx, dy) > MERMAID_VIEWER_TAP_SLOP_PX) {
         moved.current = true;
       }
-      const { w, h } = stageMetrics();
+      const {w, h} = stageMetrics();
       const layout = layoutSize();
       gesture.current.pan = clampMermaidViewerPan(
-        { x: session.basePan.x + dx, y: session.basePan.y + dy },
+        {x: session.basePan.x + dx, y: session.basePan.y + dy},
         layout.width * gesture.current.scale,
         layout.height * gesture.current.scale,
         w,
@@ -384,12 +388,12 @@ export function MermaidViewerOverlay({
       return;
     }
     unbake();
-    const { w, h } = stageMetrics();
+    const {w, h} = stageMetrics();
     const layout = layoutSize();
     gesture.current = {
       scale: decision.scale,
       pan: clampMermaidViewerPan(
-        { x: 0, y: 0 },
+        {x: 0, y: 0},
         layout.width * decision.scale,
         layout.height * decision.scale,
         w,
@@ -405,7 +409,7 @@ export function MermaidViewerOverlay({
   };
 
   /** 点空白关闭：目标不在视口（图本体）内才算空白；拖拽后的合成 click 忽略。 */
-  const onStageClick: JSX.MouseEventHandler<HTMLDivElement> = (event) => {
+  const onStageClick: JSX.MouseEventHandler<HTMLDivElement> = event => {
     if (moved.current) {
       return;
     }

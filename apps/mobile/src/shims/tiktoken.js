@@ -24,7 +24,9 @@ function loadRank(encodingName) {
 }
 
 function getOrCreateEncoding(encodingName, extendSpecialTokens) {
-  const cacheKey = `${encodingName}:${JSON.stringify(extendSpecialTokens ?? null)}`;
+  const cacheKey = `${encodingName}:${JSON.stringify(
+    extendSpecialTokens ?? null,
+  )}`;
   let enc = encodingCache.get(cacheKey);
   if (enc == null) {
     enc = new Tiktoken(loadRank(encodingName), extendSpecialTokens);
@@ -36,7 +38,9 @@ function getOrCreateEncoding(encodingName, extendSpecialTokens) {
 function wrapEncoder(enc) {
   return {
     encode(text, allowedSpecial, disallowedSpecial) {
-      return Uint32Array.from(enc.encode(text, allowedSpecial, disallowedSpecial));
+      return Uint32Array.from(
+        enc.encode(text, allowedSpecial, disallowedSpecial),
+      );
     },
     encode_ordinary(text) {
       return Uint32Array.from(enc.encode(text));
@@ -63,7 +67,9 @@ export class TiktokenExport {
   free() {}
 
   encode() {
-    throw new Error('Use encoding_for_model() instead of constructing Tiktoken directly');
+    throw new Error(
+      'Use encoding_for_model() instead of constructing Tiktoken directly',
+    );
   }
 }
 

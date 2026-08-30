@@ -25,7 +25,7 @@ const mockRuntime = {
   state: {getCurrentModelId: jest.fn().mockResolvedValue(null)},
 };
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       surfaceElevated: '#f5f5f5',
@@ -43,27 +43,27 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 const mockShowToast = jest.fn();
 
-jest.mock('../src/errors/toast-message', () => ({
+jest.mock('@/errors/toast-message', () => ({
   toastMessage: (_title: string, err: unknown) => String(err),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('../src/provider/model-display-label', () => ({
+jest.mock('@/provider/model-display-label', () => ({
   resolveModelDisplayLabel: jest.fn().mockResolvedValue('gpt-4'),
 }));
 
-jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
+jest.mock('@/hooks/useDismissOverlaysOnBlur', () => ({
   useDismissOverlaysOnBlur: () => undefined,
 }));
 
-jest.mock('../src/hooks/useBatchSelection', () => ({
+jest.mock('@/hooks/useBatchSelection', () => ({
   useBatchSelection: () => ({
     active: false,
     selectedCount: 0,
@@ -85,26 +85,26 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-jest.mock('../src/components/batch/ManageHeader', () => {
+jest.mock('@/components/batch/ManageHeader', () => {
   const mockReact = require('react');
   return {
     ManageHeader: () => mockReact.createElement('View', null, 'ManageHeader'),
   };
 });
 
-jest.mock('../src/components/batch/BatchCheckbox', () => ({
+jest.mock('@/components/batch/BatchCheckbox', () => ({
   BatchCheckbox: () => null,
 }));
 
-jest.mock('../src/components/ui/PrototypeButtons', () => ({
+jest.mock('@/components/ui/PrototypeButtons', () => ({
   PrimaryButton: () => null,
 }));
 
-jest.mock('../src/components/ui/TextPromptModal', () => ({
+jest.mock('@/components/ui/TextPromptModal', () => ({
   TextPromptModal: () => null,
 }));
 
-jest.mock('../src/components/sheet/BottomSheetMenu', () => {
+jest.mock('@/components/sheet/BottomSheetMenu', () => {
   const mockReact = require('react');
   return {
     BottomSheetMenu: ({
@@ -133,7 +133,10 @@ jest.mock('react-native', () => {
       keyExtractor,
     }: {
       data: Array<{id: string}>;
-      renderItem: (info: {item: {id: string}; index: number}) => React.ReactNode;
+      renderItem: (info: {
+        item: {id: string};
+        index: number;
+      }) => React.ReactNode;
       keyExtractor: (item: {id: string}) => string;
     }) =>
       mockReact.createElement(
@@ -155,32 +158,17 @@ jest.mock('react-native', () => {
       children?: React.ReactNode;
       onPress?: (e?: {stopPropagation?: () => void}) => void;
       testID?: string;
-    }) =>
-      mockReact.createElement(
-        'Pressable',
-        {testID, onPress},
-        children,
-      ),
+    }) => mockReact.createElement('Pressable', {testID, onPress}, children),
     RefreshControl: () => null,
     StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
-    Text: ({
-      children,
-      testID,
-    }: {
-      children?: React.ReactNode;
-      testID?: string;
-    }) => mockReact.createElement('Text', {testID}, children),
-    View: ({
-      children,
-      testID,
-    }: {
-      children?: React.ReactNode;
-      testID?: string;
-    }) => mockReact.createElement('View', {testID}, children),
+    Text: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
+      mockReact.createElement('Text', {testID}, children),
+    View: ({children, testID}: {children?: React.ReactNode; testID?: string}) =>
+      mockReact.createElement('View', {testID}, children),
   };
 });
 
-import {AgentList} from '../src/components/agent/AgentList';
+import {AgentList} from '@/components/agent/AgentList';
 
 function findMenuDotsPressable(root: TestRenderer.ReactTestInstance) {
   const dotText = root
@@ -210,7 +198,9 @@ async function renderAndOpenDeleteMenu(wire: unknown) {
     await Promise.resolve();
   });
 
-  expect(tree!.root.findByProps({testID: `agent-row-${agentId}`})).toBeDefined();
+  expect(
+    tree!.root.findByProps({testID: `agent-row-${agentId}`}),
+  ).toBeDefined();
 
   const menuDots = findMenuDotsPressable(tree!.root);
   expect(menuDots).toBeDefined();

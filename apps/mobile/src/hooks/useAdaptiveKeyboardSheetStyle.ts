@@ -48,27 +48,24 @@ export function useAdaptiveKeyboardSheetStyle(
   const iosTranslateY = opts?.iosTranslateY ?? false;
   const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
   const {height: screenH} = useWindowDimensions();
-  return useAnimatedStyle(
-    () => {
-      // hook 返回的 height 键盘弹起时为负值，Math.min(0, ...) 兜底防正值下推。
-      const kb = Math.min(0, keyboardHeightSV.value);
-      const available = screenH + kb - topMargin;
-      const useTranslateY = Platform.OS === 'android' || iosTranslateY;
-      return {
-        ...(useTranslateY ? {transform: [{translateY: kb}]} : {}),
-        maxHeight: Math.max(
-          minPanelHeight,
-          Math.min(screenH * maxHeightRatio, available),
-        ),
-      };
-    },
-    [
-      keyboardHeightSV,
-      screenH,
-      maxHeightRatio,
-      topMargin,
-      minPanelHeight,
-      iosTranslateY,
-    ],
-  );
+  return useAnimatedStyle(() => {
+    // hook 返回的 height 键盘弹起时为负值，Math.min(0, ...) 兜底防正值下推。
+    const kb = Math.min(0, keyboardHeightSV.value);
+    const available = screenH + kb - topMargin;
+    const useTranslateY = Platform.OS === 'android' || iosTranslateY;
+    return {
+      ...(useTranslateY ? {transform: [{translateY: kb}]} : {}),
+      maxHeight: Math.max(
+        minPanelHeight,
+        Math.min(screenH * maxHeightRatio, available),
+      ),
+    };
+  }, [
+    keyboardHeightSV,
+    screenH,
+    maxHeightRatio,
+    topMargin,
+    minPanelHeight,
+    iosTranslateY,
+  ]);
 }

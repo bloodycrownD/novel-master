@@ -1,21 +1,14 @@
-import React, { useRef } from 'react';
-import {
-  describe,
-  expect,
-  it,
-  jest,
-  beforeEach,
-  afterEach,
-} from '@jest/globals';
-import TestRenderer, { act } from 'react-test-renderer';
+import React, {useRef} from 'react';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
 
 const mockReload = jest.fn(async () => undefined);
 
-jest.mock('../src/components/vfs/VfsFileManager', () => {
+jest.mock('@/components/vfs/VfsFileManager', () => {
   const React = require('react');
   return {
     VfsFileManager: React.forwardRef(
-      (_props: unknown, ref: React.Ref<{ reload: () => Promise<void> }>) => {
+      (_props: unknown, ref: React.Ref<{reload: () => Promise<void>}>) => {
         React.useImperativeHandle(ref, () => ({
           canGoUp: () => false,
           goUp: () => undefined,
@@ -27,42 +20,42 @@ jest.mock('../src/components/vfs/VfsFileManager', () => {
   };
 });
 
-jest.mock('../src/components/chat/ChatComposer', () => ({
+jest.mock('@/components/chat/ChatComposer', () => ({
   ChatComposer: () => null,
 }));
-jest.mock('../src/components/chat/ChatMetaBar', () => ({
+jest.mock('@/components/chat/ChatMetaBar', () => ({
   ChatMetaBar: () => null,
 }));
-jest.mock('../src/components/chat/ChatStreamMetricsBarLive', () => ({
+jest.mock('@/components/chat/ChatStreamMetricsBarLive', () => ({
   ChatStreamMetricsBarLive: () => null,
 }));
-jest.mock('../src/components/chat/ChatTranscriptWebView', () => ({
+jest.mock('@/components/chat/ChatTranscriptWebView', () => ({
   ChatTranscriptWebView: () => null,
 }));
-jest.mock('../src/components/chat/MessageList', () => ({
+jest.mock('@/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
-jest.mock('../src/components/chat/MessageActionMenu', () => ({
+jest.mock('@/components/chat/MessageActionMenu', () => ({
   MessageActionMenu: () => null,
 }));
-jest.mock('../src/components/chat/MessageEditModal', () => ({
+jest.mock('@/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
 }));
-jest.mock('../src/components/provider/ModelPickerModal', () => ({
+jest.mock('@/components/provider/ModelPickerModal', () => ({
   ModelPickerModal: () => null,
 }));
-jest.mock('../src/components/agent/AgentPickerModal', () => ({
+jest.mock('@/components/agent/AgentPickerModal', () => ({
   AgentPickerModal: () => null,
 }));
-jest.mock('../src/components/chrome/SessionActionsDrawer', () => ({
+jest.mock('@/components/chrome/SessionActionsDrawer', () => ({
   SessionActionsDrawer: () => null,
 }));
-jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({ showToast: jest.fn() }),
+jest.mock('@/components/chrome/ToastHost', () => ({
+  useToast: () => ({showToast: jest.fn()}),
 }));
 
-import { ChatConversationPanel } from '../src/screens/tabs/chat-tab/ChatConversationPanel';
-import type { VfsFileManagerHandle } from '../src/components/vfs/VfsFileManager';
+import {ChatConversationPanel} from '@/screens/tabs/chat-tab/ChatConversationPanel';
+import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 
 const tokens = {
   background: '#000',
@@ -100,7 +93,15 @@ function makeMockContext(
     setConversationPanel: mockSetConversationPanel,
     chatSubview: 'conversation' as const,
     setChatSubview: jest.fn(),
-    agentMeta: { source: 'session', agentId: 'a1', agentName: 'A', hasDedicatedModel: false, modelLabel: 'Model', tokenLabel: '', modelSource: 'session' },
+    agentMeta: {
+      source: 'session',
+      agentId: 'a1',
+      agentName: 'A',
+      hasDedicatedModel: false,
+      modelLabel: 'Model',
+      tokenLabel: '',
+      modelSource: 'session',
+    },
     uiRunning: false,
     agentActive: false,
     activeRunId: null,
@@ -108,7 +109,7 @@ function makeMockContext(
     streamingText: '',
     streamingThinking: '',
     streamMetricsLastRun: null,
-    streamMetricsAccRef: { current: null },
+    streamMetricsAccRef: {current: null},
     onStreamReset: jest.fn(),
     chatMessages: [],
     hasMoreMessages: false,
@@ -150,7 +151,7 @@ function makeMockContext(
     onOpenFileEditor: jest.fn(),
     onNeedModel: jest.fn(),
     onRefreshChatMeta: jest.fn(),
-    transcriptWebRef: { current: null },
+    transcriptWebRef: {current: null},
     workspaceVfsRef,
     scope: {
       sessionRenamePrompt: undefined,
@@ -158,7 +159,7 @@ function makeMockContext(
       refreshChatTokenLabel: jest.fn(),
       reloadLists: jest.fn(async () => undefined),
     },
-    messages: { hydrateFromSessionCache: jest.fn() },
+    messages: {hydrateFromSessionCache: jest.fn()},
     resetStreamingDisplay: jest.fn(),
     navigation: {} as any,
     showToast: jest.fn(),
@@ -168,11 +169,11 @@ function makeMockContext(
   };
 }
 
-jest.mock('../src/screens/tabs/chat-tab/ChatTabProvider', () => ({
+jest.mock('@/screens/tabs/chat-tab/ChatTabProvider', () => ({
   useChatTabContext: jest.fn(),
 }));
 
-jest.mock('../src/screens/tabs/chat-tab/useChatTabController', () => ({
+jest.mock('@/screens/tabs/chat-tab/useChatTabController', () => ({
   useChatTabController: () => ({
     handleMessageLongPress: jest.fn(),
     handleMessageMenuSelect: jest.fn(),
@@ -185,11 +186,11 @@ jest.mock('../src/screens/tabs/chat-tab/useChatTabController', () => ({
   }),
 }));
 
-jest.mock('../src/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
+jest.mock('@/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
   useChatTabWorkspaceBackState: () => jest.fn(),
 }));
 
-import { useChatTabContext } from '../src/screens/tabs/chat-tab/ChatTabProvider';
+import {useChatTabContext} from '@/screens/tabs/chat-tab/ChatTabProvider';
 
 const mockUseChatTabContext = useChatTabContext as jest.MockedFunction<
   typeof useChatTabContext

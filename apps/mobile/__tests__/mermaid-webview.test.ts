@@ -8,14 +8,14 @@ import {join} from 'node:path';
 import {
   CHAT_TRANSCRIPT_RICH_CSS,
   RICH_DOCUMENT_RICH_CSS,
-} from '../src/web/shared/rich-content-styles';
+} from '@/web/shared/rich-content-styles';
 import {
   createMermaidSourceCache,
   extractMermaidErrorMessage,
   inferMermaidThemeFromBg,
   parseColorToRgb,
-} from '../src/web/shared/mermaid-core';
-import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
+} from '@/web/shared/mermaid-core';
+import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 import {readWebViewDistFile} from './helpers/read-webview-dist';
 
 const webSrc = (rel: string) =>
@@ -93,7 +93,9 @@ describe('mermaid rich-document 预览管线 (T-MV1 / T-MV2)', () => {
     expect(main).toContain("from './runtime/mermaid'");
     expect(main).toContain('renderMermaidBlocks');
     // mermaid 渲染完成后再重建 Recogito（批注按最终 DOM 文本流计算）
-    expect(main).toMatch(/renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/);
+    expect(main).toMatch(
+      /renderMermaidBlocks\(docRoot\)[\s\S]*refreshAnnotateAfterDocument/,
+    );
   });
 
   it('T-MV1: rich-content-styles 单源含图表/占位/失败样式（两管线同源）', () => {
@@ -157,10 +159,12 @@ describe('mermaid 消毒管线 (T-MV3)', () => {
 });
 
 describe('mermaid chat-transcript 聊天管线 (T-MT1 / T-MT2)', () => {
-  const snapshot = () => webSrc('chat-transcript/webview/runtime/render/snapshot.ts');
+  const snapshot = () =>
+    webSrc('chat-transcript/webview/runtime/render/snapshot.ts');
   const bridge = () =>
     webSrc('chat-transcript/webview/runtime/bridge/bridge.ts');
-  const stream = () => webSrc('chat-transcript/webview/runtime/stream/stream.ts');
+  const stream = () =>
+    webSrc('chat-transcript/webview/runtime/stream/stream.ts');
 
   it('T-MT1: sessionSnapshot/prependPage/appendTailRows/streamCommit 渲染后触发', () => {
     const src = snapshot();

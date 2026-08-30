@@ -8,9 +8,9 @@
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} throws.
  */
-import { resolveSavedModelId } from "@novel-master/core/agent";
+import {resolveSavedModelId} from '@novel-master/core/agent';
 
-import { messageBodyText } from "@novel-master/core/prompt";
+import {messageBodyText} from '@novel-master/core/prompt';
 
 import {
   formatCounterKindLabel,
@@ -18,9 +18,12 @@ import {
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from '@novel-master/core/provider';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {formatPromptTokenUsageLabel} from '@novel-master/core/common';
-import {buildSessionPromptInput, type SessionPromptScope} from './session-prompt-input.service';
+import {
+  buildSessionPromptInput,
+  type SessionPromptScope,
+} from './session-prompt-input.service';
 
 function formatChatTokenLabel(
   result: {tokenCount: number; estimated: boolean; counterKind: string},
@@ -67,17 +70,22 @@ export async function loadChatPromptTokenLabel(
 
   // 直接 resolve（历史上的 cache miss 回填步骤已废弃：置位/压缩后旧值不准，
   // 统一走本地 tokenizer 重算）。
-  const result = await resolvePromptTokensWithBackfill(scope.sessionId, rawMessages, {
-    layout,
-    ctx,
-    savedModelId,
-    registry: runtime.tokenCounters,
-    tokenizerOverride,
-    savedModels: { findById: (id) => runtime.providerModels.getSavedById(id) },
-  });
+  const result = await resolvePromptTokensWithBackfill(
+    scope.sessionId,
+    rawMessages,
+    {
+      layout,
+      ctx,
+      savedModelId,
+      registry: runtime.tokenCounters,
+      tokenizerOverride,
+      savedModels: {findById: id => runtime.providerModels.getSavedById(id)},
+    },
+  );
 
-  const contextWindow =
-    await runtime.providerModels.getContextWindow(savedModelId);
+  const contextWindow = await runtime.providerModels.getContextWindow(
+    savedModelId,
+  );
 
   return formatChatTokenLabel(result, contextWindow ?? undefined);
 }
@@ -113,8 +121,7 @@ async function loadChatPromptTokenLabelFallback(
   let contextWindow: number | undefined;
   if (savedModelId) {
     try {
-      const cw =
-        await runtime.providerModels.getContextWindow(savedModelId);
+      const cw = await runtime.providerModels.getContextWindow(savedModelId);
       contextWindow = cw ?? undefined;
     } catch {
       contextWindow = undefined;
@@ -138,7 +145,10 @@ export async function loadChatPromptTokenLabelResilient(
     return await loadChatPromptTokenLabel(runtime, scope);
   } catch (error) {
     if (__DEV__) {
-      console.warn('[chat] prompt token count failed, using message fallback', error);
+      console.warn(
+        '[chat] prompt token count failed, using message fallback',
+        error,
+      );
     }
     return loadChatPromptTokenLabelFallback(runtime, scope);
   }

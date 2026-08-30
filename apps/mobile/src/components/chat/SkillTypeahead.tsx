@@ -52,26 +52,29 @@ export function SkillTypeahead({
         styles.list,
         {backgroundColor: tokens.surface, borderColor: tokens.border},
       ]}
-      accessibilityLabel="技能建议">
+      accessibilityLabel="技能建议"
+    >
       {candidates.map(skill => (
         <Pressable
           key={skill.name}
           testID={`skill-typeahead-${skill.name}`}
           style={styles.item}
-          onPress={() => onSelect(skill.name)}>
+          onPress={() => onSelect(skill.name)}
+        >
           <Text style={{color: tokens.text, flexShrink: 1}} numberOfLines={1}>
             $ {skill.name}
           </Text>
           <Text
             style={[styles.tag, {color: tokens.textSecondary}]}
-            numberOfLines={1}>
+            numberOfLines={1}
+          >
             {skill.disabled
               ? '已关闭'
               : skill.domain === 'global'
-                ? '全局'
-                : skill.overridden
-                  ? '项目 · 覆盖全局'
-                  : '项目'}
+              ? '全局'
+              : skill.overridden
+              ? '项目 · 覆盖全局'
+              : '项目'}
           </Text>
         </Pressable>
       ))}

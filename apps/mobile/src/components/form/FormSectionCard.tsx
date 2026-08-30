@@ -3,7 +3,7 @@
  */
 import React, {type ReactNode} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   title?: string;
@@ -28,7 +28,8 @@ export function FormSectionCard({
           backgroundColor: tokens.surfaceElevated,
           borderColor: tokens.borderLight,
         },
-      ]}>
+      ]}
+    >
       {title != null || rightAction != null ? (
         <View style={styles.header}>
           {title != null ? (

@@ -1,12 +1,12 @@
 import {
   readRichRenderEpoch,
   syncAppVersionForRichRender,
-} from '../src/storage/app-version-guard';
-import type {AppUiPreferences} from '../src/storage/app-ui-prefs';
+} from '@/storage/app-version-guard';
+import type {AppUiPreferences} from '@/storage/app-ui-prefs';
 import {
   APP_UI_KEY_LAST_RUN_VERSION,
   APP_UI_KEY_RICH_RENDER_EPOCH,
-} from '../src/storage/app-ui-keys';
+} from '@/storage/app-ui-keys';
 
 function mockAppUi(initial: Record<string, string> = {}): AppUiPreferences {
   const store = {...initial};

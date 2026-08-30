@@ -16,7 +16,7 @@ describe('polyfills-aws-xml', () => {
     delete (globalThis as {DOMParser?: unknown; Node?: unknown}).Node;
     // 须在 delete 之后加载，静态 import 会被提升
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require('../src/polyfills');
+    require('@/polyfills');
   });
 
   it('注入 DOMParser 与 Node 常量', () => {

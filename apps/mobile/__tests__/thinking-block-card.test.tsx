@@ -1,9 +1,9 @@
 import React from 'react';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {ThinkingBlockCard} from '../src/components/chat/ThinkingBlockCard';
+import {ThinkingBlockCard} from '@/components/chat/ThinkingBlockCard';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       text: '#111',
@@ -16,7 +16,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/rich-content/RichContentBody', () => {
+jest.mock('@/components/rich-content/RichContentBody', () => {
   const mockReact = require('react');
   return {
     RichContentBody: () => mockReact.createElement('RichContentBody'),
@@ -33,8 +33,7 @@ jest.mock('react-native', () => {
     }: {
       children?: React.ReactNode;
       onPress?: () => void;
-    }) =>
-      mockReact.createElement('Pressable', {...rest, onPress}, children),
+    }) => mockReact.createElement('Pressable', {...rest, onPress}, children),
     StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
     Text: ({children}: {children?: React.ReactNode}) =>
       mockReact.createElement('Text', null, children),

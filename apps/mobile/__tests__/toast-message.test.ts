@@ -1,4 +1,4 @@
-import {toastMessage} from '../src/errors/toast-message';
+import {toastMessage} from '@/errors/toast-message';
 
 describe('toastMessage', () => {
   it('returns title only when detail is empty', () => {

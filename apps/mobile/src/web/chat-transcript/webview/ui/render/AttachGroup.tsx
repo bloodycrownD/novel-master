@@ -1,7 +1,7 @@
 /**
  * 消息附件组：对齐工具组折叠交互。
  */
-import type { AttachmentChip } from '../../runtime/state/state';
+import type {AttachmentChip} from '../../runtime/state/state';
 import {
   attachmentChipLabel,
   attachmentSourceLabel,
@@ -25,9 +25,7 @@ export function AttachGroup({
   const divided = showDividerAbove ? ' attach-group-divided-above' : '';
   return (
     <div
-      className={
-        'tool-group-section attach-group-section' + divided
-      }
+      className={'tool-group-section attach-group-section' + divided}
       data-attach-group-key={groupKey}
     >
       <div
@@ -45,10 +43,7 @@ export function AttachGroup({
           {attachments.map((a, i) => {
             const src = attachmentSourceLabel(a);
             return (
-              <div
-                key={i}
-                className="tool-group-item tool-card attach-card"
-              >
+              <div key={i} className="tool-group-item tool-card attach-card">
                 <div className="tool-header">
                   <span className="tool-name">{attachmentChipLabel(a)}</span>
                   {src ? (

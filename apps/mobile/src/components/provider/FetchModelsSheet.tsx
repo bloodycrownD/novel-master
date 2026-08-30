@@ -14,14 +14,14 @@ import {
 } from 'react-native';
 import Animated from 'react-native-reanimated';
 import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {useRuntime} from '../../hooks/useRuntime';
-import {formatError} from '../../errors/format-error';
-import {AppModal} from '../ui/AppModal';
-import {FormTextInput} from '../form/FormTextInput';
-import {BatchCheckbox} from '../batch/BatchCheckbox';
-import {useAdaptiveKeyboardSheetStyle} from '../../hooks/useAdaptiveKeyboardSheetStyle';
-import {useBatchSelection} from '../../hooks/useBatchSelection';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useRuntime} from '@/hooks/useRuntime';
+import {formatError} from '@/errors/format-error';
+import {AppModal} from '@/components/ui/AppModal';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
+import {useAdaptiveKeyboardSheetStyle} from '@/hooks/useAdaptiveKeyboardSheetStyle';
+import {useBatchSelection} from '@/hooks/useBatchSelection';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type SuggestionRow = {
   vendorModelId: string;
@@ -181,7 +181,8 @@ export function FetchModelsSheet({
           {backgroundColor: tokens.surface},
           panelAvoidStyle,
         ]}
-        onStartShouldSetResponder={() => true}>
+        onStartShouldSetResponder={() => true}
+      >
         <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
         <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
           从服务商获取可用模型，勾选后批量添加
@@ -210,14 +211,17 @@ export function FetchModelsSheet({
             {allSelectableCount > 0 ? (
               <View style={styles.selectBar}>
                 {selectableRows.length > 0 ? (
-                  <Pressable onPress={toggleSelectAll} disabled={saving} hitSlop={8}>
+                  <Pressable
+                    onPress={toggleSelectAll}
+                    disabled={saving}
+                    hitSlop={8}
+                  >
                     <Text style={{color: tokens.primary, fontWeight: '600'}}>
                       {allSelected ? '全不选' : '全选'}
                     </Text>
                   </Pressable>
                 ) : null}
-                <Text
-                  style={{color: tokens.textSecondary, fontSize: 13}}>
+                <Text style={{color: tokens.textSecondary, fontSize: 13}}>
                   已选 {batch.selectedCount} 项
                 </Text>
               </View>
@@ -252,7 +256,8 @@ export function FetchModelsSheet({
                       saved && {opacity: 0.55},
                     ]}
                     disabled={saved || saving}
-                    onPress={() => batch.toggle(item.vendorModelId)}>
+                    onPress={() => batch.toggle(item.vendorModelId)}
+                  >
                     {saved ? (
                       // 与 BatchCheckbox 等宽占位，保持文本左对齐
                       <View style={styles.checkSpacer} />
@@ -269,7 +274,8 @@ export function FetchModelsSheet({
                       {item.displayName?.trim() &&
                       item.displayName.trim() !== item.vendorModelId ? (
                         <Text
-                          style={{color: tokens.textSecondary, fontSize: 13}}>
+                          style={{color: tokens.textSecondary, fontSize: 13}}
+                        >
                           {item.vendorModelId}
                         </Text>
                       ) : null}
@@ -302,7 +308,8 @@ export function FetchModelsSheet({
               {backgroundColor: tokens.primary},
               (batch.selectedCount === 0 || saving) && {opacity: 0.45},
               pressed && {opacity: 0.85},
-            ]}>
+            ]}
+          >
             <Text style={styles.confirmText}>
               {saving ? '添加中…' : confirmLabel}
             </Text>
@@ -317,7 +324,8 @@ export function FetchModelsSheet({
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       {Platform.OS === 'ios' ? (
         <KeyboardAvoidingView behavior="padding" style={styles.avoidingRoot}>
           {body}

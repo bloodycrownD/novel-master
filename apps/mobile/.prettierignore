@@ -1,0 +1,14 @@
+# 构建产物与本地运行态，不进 prettier 范围
+webview-dist/
+android/app/src/main/assets/webview/
+ios/NovelMaster/WebViewDist/
+.android/
+.appium/
+node_modules/
+android/build/
+android/app/build/
+android/.gradle/
+ios/Pods/
+ios/build/
+*.tsbuildinfo
+package-lock.json

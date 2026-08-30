@@ -8,7 +8,7 @@ import {
   chipsFromAnnotateStore,
   hasChatAnnotateDrafts,
   resetChatAnnotateDraftStoreForTests,
-} from '../src/storage/chat-annotate-draft';
+} from '@/storage/chat-annotate-draft';
 
 afterEach(() => {
   resetChatAnnotateDraftStoreForTests();

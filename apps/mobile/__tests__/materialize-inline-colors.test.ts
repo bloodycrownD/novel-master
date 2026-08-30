@@ -1,5 +1,5 @@
-import {materializeInlineColors} from '../src/components/rich-content/materialize-inline-colors';
-import {prepareRichHtml} from '../src/components/rich-content/prepare-rich-html';
+import {materializeInlineColors} from '@/components/rich-content/materialize-inline-colors';
+import {prepareRichHtml} from '@/components/rich-content/prepare-rich-html';
 
 describe('materializeInlineColors', () => {
   it('maps span color to classesStyles', () => {
@@ -16,7 +16,7 @@ describe('materializeInlineColors', () => {
   it('reuses class for identical colors', () => {
     const classesStyles = {};
     const html = materializeInlineColors(
-      "<span style='color:red'>a</span><span style=\"color:red\">b</span>",
+      '<span style=\'color:red\'>a</span><span style="color:red">b</span>',
       classesStyles,
     );
     expect(html.match(/nm-inline-c-0/g)?.length).toBe(2);

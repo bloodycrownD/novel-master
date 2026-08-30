@@ -8,7 +8,7 @@ import {
   useReanimatedKeyboardAnimation,
 } from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 import {FormOverlayProvider} from './FormOverlayHost';
 
 type Props = {
@@ -48,7 +48,8 @@ function AndroidKeyboardFormBody({
         <ScrollView
           scrollEnabled={scrollEnabled}
           contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled">
+          keyboardShouldPersistTaps="handled"
+        >
           {children}
         </ScrollView>
         {footer}
@@ -71,7 +72,8 @@ export function ScreenFormLayout({
         <View style={rootStyle}>
           <AndroidKeyboardFormBody
             scrollEnabled={scrollEnabled}
-            footer={footer}>
+            footer={footer}
+          >
             {children}
           </AndroidKeyboardFormBody>
         </View>
@@ -81,11 +83,16 @@ export function ScreenFormLayout({
 
   return (
     <FormOverlayProvider>
-      <KeyboardAvoidingView style={rootStyle} behavior="padding" automaticOffset>
+      <KeyboardAvoidingView
+        style={rootStyle}
+        behavior="padding"
+        automaticOffset
+      >
         <ScrollView
           scrollEnabled={scrollEnabled}
           contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled">
+          keyboardShouldPersistTaps="handled"
+        >
           {children}
         </ScrollView>
         {footer}

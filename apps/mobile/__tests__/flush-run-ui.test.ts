@@ -1,4 +1,4 @@
-import {flushAgentStepUi, flushRunUi} from '../src/components/chat/flush-run-ui';
+import {flushAgentStepUi, flushRunUi} from '@/components/chat/flush-run-ui';
 
 describe('flush-run-ui', () => {
   // abort 后增列表 reload 守卫在 useChatStreamRuntime / ConversationPanel 层；
@@ -6,9 +6,9 @@ describe('flush-run-ui', () => {
   it('flushAgentStepUi reloads then clears stream only after assistant phase', async () => {
     const order: string[] = [];
     const onAssistantStreamEnd = () => order.push('reset');
-    const reload = async (options?: { immediate?: boolean }) => {
+    const reload = async (options?: {immediate?: boolean}) => {
       order.push(`reload:${options?.immediate ? 'immediate' : 'normal'}`);
-      return [{ id: 'm1' }];
+      return [{id: 'm1'}];
     };
 
     await flushAgentStepUi('tool_results', reload, onAssistantStreamEnd, 0);
@@ -24,7 +24,7 @@ describe('flush-run-ui', () => {
     await flushRunUi(
       async options => {
         order.push(`reload:${options?.immediate ? 'immediate' : 'normal'}`);
-        return [{ id: 'm1' }];
+        return [{id: 'm1'}];
       },
       () => order.push('reset'),
       0,
@@ -35,7 +35,7 @@ describe('flush-run-ui', () => {
   it('passes prevCount to stream end handler', async () => {
     let capturedPrev = -1;
     await flushRunUi(
-      async () => [{ id: 'm1' }],
+      async () => [{id: 'm1'}],
       ctx => {
         capturedPrev = ctx.prevCount;
       },

@@ -8,7 +8,8 @@ import type {AppUiPreferences} from './app-ui-prefs';
 
 export type VfsMarkdownPreviewEngine = 'rn' | 'webview';
 
-export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE = 'vfsMarkdownPreviewEngine';
+export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE =
+  'vfsMarkdownPreviewEngine';
 
 const DEFAULT_ENGINE: VfsMarkdownPreviewEngine = 'webview';
 

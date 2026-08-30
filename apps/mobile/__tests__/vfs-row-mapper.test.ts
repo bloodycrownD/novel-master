@@ -8,8 +8,8 @@ import {
   pathWithLabels,
   remapDirectChildRows,
   type MappedVfsRow,
-} from '../src/components/vfs/vfs-row-mapper';
-import { type WorkplaceListRow } from '@novel-master/core/workplace';
+} from '@/components/vfs/vfs-row-mapper';
+import {type WorkplaceListRow} from '@novel-master/core/workplace';
 
 describe('vfs-row-mapper', () => {
   describe('pathWithLabels（面包屑逐段替换）', () => {
@@ -18,9 +18,9 @@ describe('vfs-row-mapper', () => {
         ['/projects/p1', '我的小说'],
         ['/projects/p1/sessions/s9', '第三章草稿'],
       ]);
-      expect(
-        pathWithLabels('/projects/p1/sessions/s9/chapter.md', cache),
-      ).toBe('/projects/我的小说/sessions/第三章草稿/chapter.md');
+      expect(pathWithLabels('/projects/p1/sessions/s9/chapter.md', cache)).toBe(
+        '/projects/我的小说/sessions/第三章草稿/chapter.md',
+      );
     });
 
     it('无缓存时原样返回；根路径返回 /', () => {
@@ -60,7 +60,7 @@ describe('vfs-row-mapper', () => {
   it('maps directory badge and file count subtitle', () => {
     const mapped = mapWorktreeRow(dirRow, 3);
     expect(mapped.subtitle).toBe('3个文件');
-    expect(mapped.badge).toEqual({ label: '开启', tone: 'in' });
+    expect(mapped.badge).toEqual({label: '开启', tone: 'in'});
     expect(mapped.ruleEnabled).toBe(true);
   });
 
@@ -83,11 +83,11 @@ describe('vfs-row-mapper', () => {
       mapWorktreeRow(fileRowAuto),
     ];
     const updatedMeta: WorkplaceListRow[] = [
-      { ...fileInShared, inclusionMode: 'show', displayState: 'full' },
-      { ...siblingAuto, displayState: 'full' },
+      {...fileInShared, inclusionMode: 'show', displayState: 'full'},
+      {...siblingAuto, displayState: 'full'},
     ];
     const remapped = remapDirectChildRows(visible, '/shared', updatedMeta);
-    expect(remapped[0].badge).toEqual({ label: '展示', tone: 'in' });
+    expect(remapped[0].badge).toEqual({label: '展示', tone: 'in'});
     expect(remapped[0].subtitle).toBe('展示·全内容');
     expect(remapped[1].subtitle).toBe('跟随·全内容');
     expect(remapped[2]).toBe(visible[2]);
@@ -97,32 +97,32 @@ describe('vfs-row-mapper', () => {
     const mapped = mapWorktreeRow(dirRow, 2);
     const patched = patchDirRuleRow(mapped, false);
     expect(patched.subtitle).toBe('2个文件');
-    expect(patched.badge).toEqual({ label: '关闭', tone: 'muted' });
+    expect(patched.badge).toEqual({label: '关闭', tone: 'muted'});
     expect(patched.ruleEnabled).toBe(false);
   });
 
   it('maps directory rule off badge without count subtitle when zero files', () => {
-    const off: WorkplaceListRow = { ...dirRow, ruleState: 'rule_off' };
+    const off: WorkplaceListRow = {...dirRow, ruleState: 'rule_off'};
     const mapped = mapWorktreeRow(off, 0);
     expect(mapped.subtitle).toBe('');
-    expect(mapped.badge).toEqual({ label: '关闭', tone: 'muted' });
+    expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
     expect(mapped.ruleEnabled).toBe(false);
   });
 
   it('maps inherit file badge as follow tone without expanding display', () => {
     const mapped = mapWorktreeRow(fileRowAuto);
     expect(mapped.subtitle).toBe('跟随·全内容');
-    expect(mapped.badge).toEqual({ label: '跟随', tone: 'follow' });
+    expect(mapped.badge).toEqual({label: '跟随', tone: 'follow'});
   });
 
   it('maps show file badge as in tone', () => {
     const mapped = mapWorktreeRow(fileRowShow);
-    expect(mapped.badge).toEqual({ label: '展示', tone: 'in' });
+    expect(mapped.badge).toEqual({label: '展示', tone: 'in'});
   });
 
   it('maps hide file badge as muted tone', () => {
     const mapped = mapWorktreeRow(fileRowHide);
-    expect(mapped.badge).toEqual({ label: '隐藏', tone: 'muted' });
+    expect(mapped.badge).toEqual({label: '隐藏', tone: 'muted'});
   });
 
   it('counts direct child files only', () => {
@@ -152,11 +152,11 @@ describe('vfs-row-mapper', () => {
   });
 
   it('maps vfs list directory entry', () => {
-    const mapped = mapVfsListEntry({ path: '/drafts', kind: 'directory' });
+    const mapped = mapVfsListEntry({path: '/drafts', kind: 'directory'});
     expect(mapped.kind).toBe('dir');
     expect(mapped.name).toBe('drafts');
     expect(mapped.subtitle).toBe('');
-    expect(mapped.badge).toEqual({ label: '关闭', tone: 'muted' });
+    expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
     expect(mapped.badge?.label).not.toBe('跟随');
   });
 });

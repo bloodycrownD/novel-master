@@ -2,9 +2,9 @@
  * Session actions drawer: prompt preview, compaction, model/agent.
  */
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { AppModal } from '../ui/AppModal';
-import { useTheme } from '../../theme/ThemeProvider';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {AppModal} from '@/components/ui/AppModal';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   visible: boolean;
@@ -23,13 +23,13 @@ export function SessionActionsDrawer({
   onSwitchModel,
   onSwitchAgent,
 }: Props) {
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
 
   const items = [
-    { label: '查看提示词', action: onRealPrompt },
-    { label: '压缩上下文', action: onCompact },
-    { label: '切换大模型', action: onSwitchModel },
-    { label: '切换智能体', action: onSwitchAgent },
+    {label: '查看提示词', action: onRealPrompt},
+    {label: '压缩上下文', action: onCompact},
+    {label: '切换大模型', action: onSwitchModel},
+    {label: '切换智能体', action: onSwitchAgent},
   ];
 
   return (
@@ -45,7 +45,7 @@ export function SessionActionsDrawer({
           onPress={onClose}
           accessibilityLabel="关闭"
         />
-        <View style={[styles.panel, { backgroundColor: tokens.surface }]}>
+        <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
           {items.map(item => (
             <Pressable
               key={item.label}
@@ -83,5 +83,5 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   },
-  row: { paddingVertical: 14 },
+  row: {paddingVertical: 14},
 });

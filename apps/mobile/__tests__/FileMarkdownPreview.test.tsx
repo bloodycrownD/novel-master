@@ -4,11 +4,11 @@ import TestRenderer, {act} from 'react-test-renderer';
 
 const mockReadEngine = jest.fn(async () => 'webview' as const);
 
-jest.mock('../src/runtime/novel-master-context', () => ({
+jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: {get: jest.fn()}}),
 }));
 
-jest.mock('../src/storage/vfs-markdown-preview-engine', () => ({
+jest.mock('@/storage/vfs-markdown-preview-engine', () => ({
   defaultVfsMarkdownPreviewEngine: () => 'webview',
   readVfsMarkdownPreviewEngine: (...args: unknown[]) => mockReadEngine(...args),
 }));
@@ -17,27 +17,30 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => cb(),
 }));
 
-jest.mock('../src/components/rich-content/sanitize-rich-html', () => ({
+jest.mock('@/components/rich-content/sanitize-rich-html', () => ({
   sanitizeRichHtml: (html: string) => html,
 }));
 
-jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
+jest.mock('@/components/vfs/RichDocumentWebView', () => ({
   RichDocumentWebView: jest.fn((props: Record<string, unknown>) => {
     const React = require('react');
     const {View} = require('react-native');
-    return React.createElement(View, {testID: 'rich-document-webview', ...props});
+    return React.createElement(View, {
+      testID: 'rich-document-webview',
+      ...props,
+    });
   }),
 }));
 
-import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
-import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
-import {RICH_CONTENT_MAX_CHARS} from '../src/components/rich-content/rich-content-limits';
+import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
+import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
+import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
 
 const mockRichDocumentWebView = RichDocumentWebView as jest.MockedFunction<
   typeof RichDocumentWebView
 >;
 
-jest.mock('../src/components/rich-content/RichContentBody', () => ({
+jest.mock('@/components/rich-content/RichContentBody', () => ({
   RichContentBody: () => {
     const React = require('react');
     const {View} = require('react-native');
@@ -85,7 +88,9 @@ title: Test
     await act(async () => {
       await Promise.resolve();
     });
-    expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toBeTruthy();
     const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
     expect(lastCall?.frontMatterHtml).toContain('fm-card');
     expect(lastCall?.frontMatterHtml).toContain('title');
@@ -164,7 +169,9 @@ title: Test
     await act(async () => {
       await Promise.resolve();
     });
-    expect(() => tree!.root.findByProps({testID: 'rich-document-webview'})).toThrow();
+    expect(() =>
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toThrow();
     const textNodes = tree!.root.findAllByType(
       require('react-native').Text as React.ComponentType,
     );
@@ -219,7 +226,9 @@ title: Test
     await act(async () => {
       await Promise.resolve();
     });
-    expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toBeTruthy();
   });
 
   it('renders unclosed front matter as body without FM card (T-FM4)', async () => {
@@ -241,7 +250,9 @@ no closing fence
       await Promise.resolve();
     });
     // Unclosed FM is treated as no FM — body renders normally.
-    expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toBeTruthy();
     const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
     expect(lastCall?.frontMatterHtml).toBeUndefined();
     // plain is the full content as body (unclosed `---` becomes normal markdown).
@@ -294,8 +305,9 @@ title: x
       await Promise.resolve();
     });
     expect(
-      tree!.root.findAllByType(require('react-native').ScrollView as React.ComponentType)
-        .length,
+      tree!.root.findAllByType(
+        require('react-native').ScrollView as React.ComponentType,
+      ).length,
     ).toBeGreaterThan(0);
   });
 
@@ -315,7 +327,9 @@ title: x
     await act(async () => {
       await Promise.resolve();
     });
-    expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+    expect(
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toBeTruthy();
   });
 
   it('non-md markdown tab mounts RichContentBody when rn engine (T2)', async () => {
@@ -354,6 +368,8 @@ title: x
     await act(async () => {
       await Promise.resolve();
     });
-    expect(() => tree!.root.findByProps({testID: 'rich-document-webview'})).toThrow();
+    expect(() =>
+      tree!.root.findByProps({testID: 'rich-document-webview'}),
+    ).toThrow();
   });
 });

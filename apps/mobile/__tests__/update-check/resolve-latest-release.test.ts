@@ -1,4 +1,4 @@
-import {resolveLatestRelease} from '../../src/update-check/resolve-latest-release';
+import {resolveLatestRelease} from '@/update-check/resolve-latest-release';
 
 describe('resolveLatestRelease', () => {
   it('maps latest JSON fixture', async () => {

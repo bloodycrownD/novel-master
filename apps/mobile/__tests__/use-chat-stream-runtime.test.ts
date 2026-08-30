@@ -113,7 +113,9 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
       const ref = useRef<ChatTranscriptWebViewHandle>(webHandle);
       const onStreamResetRef = useRef<() => void>(() => undefined);
       const applySegmentsRef = useRef<
-        (segments: readonly {kind: 'text' | 'thinking'; delta: string}[]) => void
+        (
+          segments: readonly {kind: 'text' | 'thinking'; delta: string}[],
+        ) => void
       >(() => undefined);
 
       const abort = useSessionAbort({
@@ -306,7 +308,10 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
   });
 
   it('chatStreamBatchEnabled=false 时走 pushStreamDelta 保序', () => {
-    const {webHandle, startRun} = mountRuntime({batchEnabled: false, beginUiRun: true});
+    const {webHandle, startRun} = mountRuntime({
+      batchEnabled: false,
+      beginUiRun: true,
+    });
     startRun();
     act(() => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
@@ -351,7 +356,9 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
   });
 
   it('T-ARP-M4 / T-AC2-4：abort 后 cancelled RUN_FINISHED 清 lifecycle 但不 flushRunUi', async () => {
-    const {api, startRun, setMessageCount, webHandle} = mountRuntime({beginUiRun: true});
+    const {api, startRun, setMessageCount, webHandle} = mountRuntime({
+      beginUiRun: true,
+    });
     startRun();
     setMessageCount(2);
     act(() => {
@@ -379,7 +386,9 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
   });
 
   it('T-ARP-M1 / T-AC2-3：abort 后 STEP_COMMITTED(assistant) 允许一次 flushAgentStepUi + resetStream', async () => {
-    const {api, startRun, setMessageCount, webHandle} = mountRuntime({beginUiRun: true});
+    const {api, startRun, setMessageCount, webHandle} = mountRuntime({
+      beginUiRun: true,
+    });
     startRun();
     setMessageCount(1);
     act(() => {
@@ -559,7 +568,7 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
     const tryCommit = jest.fn(() => true);
     const {startRun, setMessageCount} = mountRuntime({
       beginUiRun: true,
-      web: { tryCommitStreamTail: tryCommit },
+      web: {tryCommitStreamTail: tryCommit},
     });
     startRun();
     setMessageCount(1);
@@ -588,28 +597,29 @@ describe('useSessionStream + useSessionAbort + useSessionBatch (主会话 T-M1 �
       await Promise.resolve();
     });
     expect(mockFlushAgentStepUi).not.toHaveBeenCalled();
-    expect(onMessagesChanged).toHaveBeenCalledWith({ immediate: true });
+    expect(onMessagesChanged).toHaveBeenCalledWith({immediate: true});
   });
 
   it('RUN_FINISHED 在 tryCommit 已成功时不再 resetStream', async () => {
-    const assistantMsg = { id: 'assistant-1', role: 'assistant' as const };
+    const assistantMsg = {id: 'assistant-1', role: 'assistant' as const};
     const tryCommit = jest.fn(() => true);
-    const {startRun, webHandle, setMessageCount, onMessagesChanged} = mountRuntime({
-      beginUiRun: true,
-      web: { tryCommitStreamTail: tryCommit },
-    });
+    const {startRun, webHandle, setMessageCount, onMessagesChanged} =
+      mountRuntime({
+        beginUiRun: true,
+        web: {tryCommitStreamTail: tryCommit},
+      });
     onMessagesChanged.mockResolvedValue([assistantMsg]);
     startRun();
     setMessageCount(0);
     mockFlushRunUi.mockImplementation(async (reload, onEnd, prevCount) => {
-      const messages = (await reload({ immediate: true })) ?? [];
-      onEnd({ messages, prevCount });
+      const messages = (await reload({immediate: true})) ?? [];
+      onEnd({messages, prevCount});
     });
     mockFlushAgentStepUi.mockImplementation(
       async (phase, reload, onEnd, prevCount) => {
-        const messages = (await reload({ immediate: true })) ?? [];
+        const messages = (await reload({immediate: true})) ?? [];
         if (phase === 'assistant') {
-          onEnd({ messages, prevCount });
+          onEnd({messages, prevCount});
         }
       },
     );

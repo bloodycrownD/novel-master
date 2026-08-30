@@ -4,7 +4,7 @@ import {
   importDatabaseBackup,
   importDatabaseBackupFromBytes,
   importDatabaseBackupFromPath,
-} from '../src/services/db-backup.service';
+} from '@/services/db-backup.service';
 
 const mockCheckpoint = jest.fn();
 const mockClose = jest.fn();
@@ -45,17 +45,17 @@ jest.mock('@novel-master/tdbc-driver-op-sqlite/native', () => ({
   registerOpSqliteDriver: jest.fn(),
 }));
 
-jest.mock('../src/db/connection', () => ({
+jest.mock('@/db/connection', () => ({
   checkpointMobileDatabase: (...args: unknown[]) => mockCheckpoint(...args),
   closeMobileConnection: (...args: unknown[]) => mockClose(...args),
   getMobileConnection: (...args: unknown[]) => mockGetConnection(...args),
 }));
 
-jest.mock('../src/db/db-file-path', () => ({
+jest.mock('@/db/db-file-path', () => ({
   resolveMobileDatabaseFilePath: (...args: unknown[]) => mockGetPath(...args),
 }));
 
-jest.mock('../src/runtime/agent-activity', () => ({
+jest.mock('@/runtime/agent-activity', () => ({
   isMobileAgentActive: () => mockAgentActive(),
 }));
 

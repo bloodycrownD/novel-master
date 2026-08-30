@@ -21,7 +21,8 @@ export function ChatStreamMetricsBar({metrics}: Props) {
     <View style={[styles.bar, {backgroundColor: tokens.bgSecondary}]}>
       <Text
         style={[styles.line, {color: tokens.textSecondary}]}
-        numberOfLines={2}>
+        numberOfLines={2}
+      >
         {line}
       </Text>
     </View>

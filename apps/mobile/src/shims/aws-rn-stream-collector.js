@@ -1,8 +1,14 @@
 /**
  * RN 兼容响应体收集：统一将 Blob / Readable / mixin stream 转为 Uint8Array。
  */
-const {streamCollector: fetchStreamCollector} = require('@smithy/fetch-http-handler');
-const {fromBase64, sdkStreamMixin, Uint8ArrayBlobAdapter} = require('@smithy/core/serde');
+const {
+  streamCollector: fetchStreamCollector,
+} = require('@smithy/fetch-http-handler');
+const {
+  fromBase64,
+  sdkStreamMixin,
+  Uint8ArrayBlobAdapter,
+} = require('@smithy/core/serde');
 
 function isNodeReadable(stream) {
   return (
@@ -66,11 +72,13 @@ function readBlobAsBase64(blob) {
       }
       const result = reader.result ?? '';
       const commaIndex = String(result).indexOf(',');
-      const dataOffset = commaIndex > -1 ? commaIndex + 1 : String(result).length;
+      const dataOffset =
+        commaIndex > -1 ? commaIndex + 1 : String(result).length;
       resolve(String(result).substring(dataOffset));
     };
     reader.onabort = () => reject(new Error('Read aborted'));
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error('FileReader failed'));
     reader.readAsDataURL(blob);
   });
 }
@@ -83,7 +91,9 @@ async function collectBlobBytes(blob) {
   if (typeof blob.arrayBuffer === 'function') {
     return new Uint8Array(await blob.arrayBuffer());
   }
-  throw new TypeError('[cloud-sync] 无法读取 Blob 响应体（缺少 FileReader / arrayBuffer）');
+  throw new TypeError(
+    '[cloud-sync] 无法读取 Blob 响应体（缺少 FileReader / arrayBuffer）',
+  );
 }
 
 /** 将 fetch / Smithy 响应体规范为 Uint8Array。 */

@@ -12,8 +12,8 @@ import {
   type StyleProp,
   type TextStyle,
 } from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
-import {FormTextInput} from '../form/FormTextInput';
+import type {ThemeTokens} from '@/theme/tokens';
+import {FormTextInput} from '@/components/form/FormTextInput';
 import {
   PROMPT_INSERTABLE_MACROS,
   insertTextAtSelection,
@@ -103,7 +103,8 @@ export function PromptMacroTextInput({
         placeholder={placeholder}
         autoCapitalize="none"
         autoCorrect={false}
-        style={style}>
+        style={style}
+      >
         {/* RN TextInput：value 与 children 互斥；由 children 着色，onChangeText 驱动纯文本 */}
         {value.length === 0 ? null : (
           <Text>
@@ -116,7 +117,8 @@ export function PromptMacroTextInput({
                     backgroundColor: `${tokens.primary}22`,
                     borderRadius: 6,
                     paddingHorizontal: 3,
-                  }}>
+                  }}
+                >
                   {segment.value}
                 </Text>
               ) : (
@@ -142,7 +144,8 @@ export function PromptMacroTextInput({
                 borderColor: `${tokens.primary}33`,
               },
             ]}
-            onPress={() => insertMacro(macro.token)}>
+            onPress={() => insertMacro(macro.token)}
+          >
             <Text style={[styles.chipText, {color: tokens.primary}]}>
               {macro.label}
             </Text>

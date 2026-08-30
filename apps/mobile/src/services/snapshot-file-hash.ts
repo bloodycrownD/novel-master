@@ -28,7 +28,9 @@ export async function hashSnapshotFile(path: string): Promise<string> {
     stream.open();
     stream.onData((chunk: string | number[]) => {
       const base64 =
-        typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('base64');
+        typeof chunk === 'string'
+          ? chunk
+          : Buffer.from(chunk).toString('base64');
       hasher.update(Buffer.from(base64, 'base64'));
     });
     stream.onError((error: unknown) => {

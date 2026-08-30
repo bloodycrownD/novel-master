@@ -2,11 +2,11 @@
  * T-AT1 / T-AT2 / T-AT3 / T-SC1 + 既有 T-ATD*：
  * Mobile `@路径` 插入、mention 口径、原子删、无 attach chip、选中色。
  */
-import { describe, expect, it, jest } from '@jest/globals';
+import {describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
-import { TextInput } from 'react-native';
-import TestRenderer, { act } from 'react-test-renderer';
-import { parseValue } from 'react-native-controlled-mentions';
+import {TextInput} from 'react-native';
+import TestRenderer, {act} from 'react-test-renderer';
+import {parseValue} from 'react-native-controlled-mentions';
 import {
   partitionComposerChipAttachments,
   scanAtPathAttachments,
@@ -18,7 +18,7 @@ import {
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
-} from '../src/components/chat/composer-at-path';
+} from '@/components/chat/composer-at-path';
 import {
   formatAtPathMentionMarkup,
   mentionValueToPlain,
@@ -27,15 +27,16 @@ import {
   suggestionFromAtPathToken,
   tryAtomicMentionDelete,
   type ComposerAtPathTriggersConfig,
-} from '../src/components/chat/composer-at-path-mention';
+} from '@/components/chat/composer-at-path-mention';
 import {
   ComposerAtPathInput,
   type ComposerAtPathInputHandle,
-} from '../src/components/chat/ComposerAtPathInput';
-import { darkTheme, lightTheme } from '../src/theme/tokens';
+} from '@/components/chat/ComposerAtPathInput';
+import {darkTheme, lightTheme} from '@/theme/tokens';
 
-jest.mock('../src/theme/ThemeProvider', () => {
-  const { lightTheme: theme } = require('../src/theme/tokens') as typeof import('../src/theme/tokens');
+jest.mock('@/theme/ThemeProvider', () => {
+  const {lightTheme: theme} =
+    require('@/theme/tokens') as typeof import('@/theme/tokens');
   return {
     useTheme: () => ({
       mode: 'light' as const,
@@ -70,12 +71,12 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
 
   it('T-ATD3: 手输 @ 搜索 ≤5，点选插入完整 @path', () => {
     const refs = [
-      { path: '/a.md', kind: 'file' as const },
-      { path: '/ab.md', kind: 'file' as const },
-      { path: '/abc.md', kind: 'file' as const },
-      { path: '/abcd.md', kind: 'file' as const },
-      { path: '/abcde.md', kind: 'file' as const },
-      { path: '/abcdef.md', kind: 'file' as const },
+      {path: '/a.md', kind: 'file' as const},
+      {path: '/ab.md', kind: 'file' as const},
+      {path: '/abc.md', kind: 'file' as const},
+      {path: '/abcd.md', kind: 'file' as const},
+      {path: '/abcde.md', kind: 'file' as const},
+      {path: '/abcdef.md', kind: 'file' as const},
     ];
     expect(filterAtPathTypeaheadCandidates(refs, 'a', 5)).toHaveLength(5);
 
@@ -100,7 +101,9 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
   });
 
   it('T-AT1: mergeProgrammaticPlain 后 mention part 存在；plain 无 {@}', () => {
-    const markup = `见 ${formatAtPathMentionMarkup('/a.md')} 与 ${formatAtPathMentionMarkup('/notes/')} 补充`;
+    const markup = `见 ${formatAtPathMentionMarkup(
+      '/a.md',
+    )} 与 ${formatAtPathMentionMarkup('/notes/')} 补充`;
     const plain = mentionValueToPlain(markup);
     expect(plain).toBe('见 @/a.md 与 @/notes/ 补充');
     expect(plain.includes('{@}')).toBe(false);
@@ -147,7 +150,10 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
 
     // 退一格碰到 mention → 整段删
     const tokenEnd = '见 @/x @/a.md'.length;
-    const oneCharDeleted = `${state.plainText.slice(0, tokenEnd - 1)}${state.plainText.slice(tokenEnd)}`;
+    const oneCharDeleted = `${state.plainText.slice(
+      0,
+      tokenEnd - 1,
+    )}${state.plainText.slice(tokenEnd)}`;
     const afterAtomic = tryAtomicMentionDelete(
       withPicker,
       oneCharDeleted,
@@ -161,14 +167,16 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     const hand = '见 @/x';
     const handEnd = hand.length;
     const handDeleted = `${hand.slice(0, handEnd - 1)}${hand.slice(handEnd)}`;
-    expect(tryAtomicMentionDelete(hand, handDeleted, triggersConfig)).toBeNull();
+    expect(
+      tryAtomicMentionDelete(hand, handDeleted, triggersConfig),
+    ).toBeNull();
   });
 
   it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
     const scanned = scanAtPathAttachments('请看 @/a.md');
     expect(scanned.length).toBeGreaterThan(0);
     expect(scanned.every(a => a.source === 'attach')).toBe(true);
-    const { status, attach } = partitionComposerChipAttachments(scanned);
+    const {status, attach} = partitionComposerChipAttachments(scanned);
     expect(status).toHaveLength(0);
     expect(attach).toHaveLength(scanned.length);
   });
@@ -226,13 +234,13 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     expect(text.includes('{@}')).toBe(false);
 
     const input = tree!.root.findByType(TextInput);
-    expect(input.props.selection).toEqual({ start: 9, end: 9 });
+    expect(input.props.selection).toEqual({start: 9, end: 9});
   });
 });
 
 describe('promotePlainMentions（草稿水化恢复 tag）', () => {
   it('完整 @path / $skill 全部提为 mention，plain 不变', () => {
-    const config: import('../src/components/chat/composer-at-path-mention').ComposerTriggersConfig =
+    const config: import('@/components/chat/composer-at-path-mention').ComposerTriggersConfig =
       {
         atPath: triggersConfig.atPath,
         skill: {

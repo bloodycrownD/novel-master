@@ -2,18 +2,12 @@
  * Chat tab sessions subview: session list, template workspace.
  */
 import React, {useCallback, useEffect, useMemo, useRef} from 'react';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { type ChatSession } from "@novel-master/core/chat";
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import {type ChatSession} from '@novel-master/core/chat';
 
-import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
+import {type VfsScope, type VfsService} from '@novel-master/core/vfs';
 
-import { type WorkplaceService } from "@novel-master/core/workplace";
+import {type WorkplaceService} from '@novel-master/core/workplace';
 import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
 import {ManageHeader} from '@/components/batch/ManageHeader';
 import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
@@ -122,7 +116,8 @@ function ChatSessionListPanelInner({
   return (
     <View
       style={[styles.subviewFill, !visible && styles.panelHidden]}
-      pointerEvents={visible ? 'auto' : 'none'}>
+      pointerEvents={visible ? 'auto' : 'none'}
+    >
       <SegmentedControl
         tokens={tokens}
         value={sessionListPanel}
@@ -204,7 +199,8 @@ function ChatSessionListPanelInner({
                   onLongPress={() => {
                     onEnterSessionBatch();
                     onToggleSessionSelect(item.id);
-                  }}>
+                  }}
+                >
                   {sessionBatchActive ? (
                     <BatchCheckbox
                       checked={isSessionSelected(item.id)}
@@ -214,14 +210,16 @@ function ChatSessionListPanelInner({
                   <View style={styles.sessionInfo}>
                     <Text
                       style={[styles.sessionTitle, {color: tokens.text}]}
-                      numberOfLines={1}>
+                      numberOfLines={1}
+                    >
                       {item.title ?? item.id}
                     </Text>
                     <Text
                       style={[
                         styles.sessionMeta,
                         {color: tokens.textSecondary},
-                      ]}>
+                      ]}
+                    >
                       {formatRelativeTimeMs(item.updatedAtMs)}
                       {isCurrent ? ' · 活跃中' : ''}
                     </Text>
@@ -231,7 +229,8 @@ function ChatSessionListPanelInner({
                       style={[
                         styles.currentBadge,
                         {backgroundColor: tokens.primary},
-                      ]}>
+                      ]}
+                    >
                       <Text style={styles.currentBadgeText}>当前</Text>
                     </View>
                   ) : null}
@@ -242,16 +241,20 @@ function ChatSessionListPanelInner({
                         onPress={e => {
                           e.stopPropagation?.();
                           onMenuSessionIdChange(item.id);
-                        }}>
+                        }}
+                      >
                         <Text
                           style={[
                             styles.menuDots,
                             {color: tokens.textSecondary},
-                          ]}>
+                          ]}
+                        >
                           ⋮
                         </Text>
                       </Pressable>
-                      <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+                      <Text
+                        style={[styles.chevron, {color: tokens.textTertiary}]}
+                      >
                         ›
                       </Text>
                     </>

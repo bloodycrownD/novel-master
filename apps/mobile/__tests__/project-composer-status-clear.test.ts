@@ -1,13 +1,13 @@
 /**
  * T-CR5：置位/压缩 refresh 推仅 annotate 投影；Undo 路径仍可先空。
  */
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { addChatAnnotateDraft } from '@novel-master/core/chat';
-import { resetChatAnnotateDraftStoreForTests } from '../src/storage/chat-annotate-draft';
+import {beforeEach, describe, expect, it, jest} from '@jest/globals';
+import {addChatAnnotateDraft} from '@novel-master/core/chat';
+import {resetChatAnnotateDraftStoreForTests} from '@/storage/chat-annotate-draft';
 
 const mockReplace = jest.fn();
 
-jest.mock('../src/storage/chat-composer-draft', () => ({
+jest.mock('@/storage/chat-composer-draft', () => ({
   applyComposerStatusAttachmentsReplace: (...args: unknown[]) =>
     mockReplace(...args),
 }));
@@ -15,7 +15,7 @@ jest.mock('../src/storage/chat-composer-draft', () => ({
 import {
   refreshComposerStatusAfterFloorOrCompaction,
   refreshComposerStatusAfterSessionKkvCleared,
-} from '../src/services/project-composer-status.service';
+} from '@/services/project-composer-status.service';
 
 describe('composer status after kkv clear (T-CR5)', () => {
   beforeEach(() => {

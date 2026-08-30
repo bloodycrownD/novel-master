@@ -74,7 +74,9 @@ export function findWhitelistMacroRanges(
 }
 
 /** 将纯文本拆分为字面量段与白名单完整宏 token。 */
-export function splitPromptMacroSegments(text: string): readonly PromptMacroSegment[] {
+export function splitPromptMacroSegments(
+  text: string,
+): readonly PromptMacroSegment[] {
   if (text === '') {
     return [];
   }
@@ -148,7 +150,10 @@ export function insertTextAtSelection(
   value: string,
   selection: {readonly start: number; readonly end: number},
   insert: string,
-): {readonly next: string; readonly selection: {readonly start: number; readonly end: number}} {
+): {
+  readonly next: string;
+  readonly selection: {readonly start: number; readonly end: number};
+} {
   const start = Math.max(0, Math.min(selection.start, value.length));
   const end = Math.max(start, Math.min(selection.end, value.length));
   const next = value.slice(0, start) + insert + value.slice(end);

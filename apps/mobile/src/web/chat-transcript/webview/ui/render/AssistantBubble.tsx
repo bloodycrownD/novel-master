@@ -3,12 +3,12 @@
  * 宿主消毒 HTML（textHtml / thinkingHtml）一律经 TrustedHtml。
  * 角色行 + ⋯ 由 MessageRow 顶行提供，不在此重复。
  */
-import type { ComponentChildren } from 'preact';
-import type { ToolCallRow } from '../../runtime/state/state';
-import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
-import { ThinkingSection } from './ThinkingSection';
-import { ToolInvokingBar } from './ToolInvokingBar';
-import { ToolGroup } from './ToolGroup';
+import type {ComponentChildren} from 'preact';
+import type {ToolCallRow} from '../../runtime/state/state';
+import {TrustedHtml} from '@web/shared/ui/TrustedHtml';
+import {ThinkingSection} from './ThinkingSection';
+import {ToolInvokingBar} from './ToolInvokingBar';
+import {ToolGroup} from './ToolGroup';
 
 export type AssistantBubbleInnerProps = {
   text: unknown;

@@ -1,4 +1,4 @@
-import { type ChatMessage } from "@novel-master/core/chat";
+import {type ChatMessage} from '@novel-master/core/chat';
 
 /**
  * Merge "older" messages before the currently displayed list.
@@ -17,4 +17,3 @@ export function prependOlderMessages(
   }
   return [...older, ...current];
 }
-

@@ -4,10 +4,12 @@ import {
   isAgentPickerRowSelected,
   loadAgentPickerRows,
   selectWorkspaceAgent,
-} from '../src/services/agent-picker';
+} from '@/services/agent-picker';
 
 const mockSetCurrentAgentId = jest.fn(async () => undefined);
-const mockGetCurrentAgentId = jest.fn(async () => undefined as string | undefined);
+const mockGetCurrentAgentId = jest.fn(
+  async () => undefined as string | undefined,
+);
 const mockListAgentIds = jest.fn(async () => [] as string[]);
 const mockGet = jest.fn(async () => ({name: 'writer', mode: 'all'} as const));
 

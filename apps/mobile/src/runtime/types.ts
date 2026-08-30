@@ -26,7 +26,7 @@ import type {
   CompactionConditionEvaluator,
   CompactionConditionsStore,
 } from '@novel-master/core/compaction';
-import type { SimpleEventBus } from '@novel-master/core/events';
+import type {SimpleEventBus} from '@novel-master/core/events';
 import type {
   SecretStore,
   ModelRequestService,
@@ -35,18 +35,18 @@ import type {
   ProviderServiceBundle,
   TokenCounterRegistry,
 } from '@novel-master/core/provider';
-import type { RegexConfigService } from '@novel-master/core/regex';
-import type { MessageCheckpointService } from '@novel-master/core/message-checkpoint';
-import type { SessionFsService } from '@novel-master/core/session-fs';
+import type {RegexConfigService} from '@novel-master/core/regex';
+import type {MessageCheckpointService} from '@novel-master/core/message-checkpoint';
+import type {SessionFsService} from '@novel-master/core/session-fs';
 import type {
   PhysicalVfsService,
   VfsScope,
   VfsService,
 } from '@novel-master/core/vfs';
-import type { WorkplaceService } from '@novel-master/core/workplace';
-import type { KkvService } from '@novel-master/core/kkv';
-import type { SessionKkvService } from '@novel-master/core/session-kkv';
-import type { SkillService } from '@novel-master/core/skills';
+import type {WorkplaceService} from '@novel-master/core/workplace';
+import type {KkvService} from '@novel-master/core/kkv';
+import type {SessionKkvService} from '@novel-master/core/session-kkv';
+import type {SkillService} from '@novel-master/core/skills';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
 export interface MobileNovelMasterRuntime {

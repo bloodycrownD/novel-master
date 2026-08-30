@@ -1,4 +1,4 @@
-import {nextDefaultSessionTitle} from '../src/utils/session-default-title';
+import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 
 describe('nextDefaultSessionTitle', () => {
   it('returns 新会话1 when no numbered titles exist', () => {

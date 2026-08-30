@@ -2,12 +2,12 @@
  * T-SF1：Mobile runSetFloor 编排链（setMessageFloorAtMessage → reload → bump；
  * rule_snapshot+file_cache 由 Core clearDomain，UI 不再调 capture）。
  */
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
-import { type ChatMessage } from '@novel-master/core/chat';
+import TestRenderer, {act} from 'react-test-renderer';
+import {type ChatMessage} from '@novel-master/core/chat';
 
-import { useChatTabMessageActions } from '../src/screens/tabs/chat-tab/useChatTabMessages';
+import {useChatTabMessageActions} from '@/screens/tabs/chat-tab/useChatTabMessages';
 
 const mockSetMessageFloorAtMessage = jest.fn();
 const mockReloadMessages = jest.fn();
@@ -17,20 +17,20 @@ const mockShowToast = jest.fn();
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
-  default: { setString: jest.fn() },
+  default: {setString: jest.fn()},
 }));
 
-jest.mock('../src/services/regex-apply-channel', () => ({
+jest.mock('@/services/regex-apply-channel', () => ({
   loadSessionMessagesPageForDisplay: jest.fn(),
   loadSessionMessagesTailForDisplay: jest.fn(),
 }));
 
-jest.mock('../src/services/project-composer-status.service', () => ({
+jest.mock('@/services/project-composer-status.service', () => ({
   refreshComposerStatusAfterFloorOrCompaction: jest.fn(async () => undefined),
   refreshComposerStatusAfterSessionKkvCleared: jest.fn(async () => undefined),
 }));
 
-jest.mock('../src/services/message-rollback.service', () => ({
+jest.mock('@/services/message-rollback.service', () => ({
   rollbackToMessage: jest.fn(),
 }));
 
@@ -40,7 +40,7 @@ jest.mock('react-native', () => ({
       (
         _title: string,
         _message: string,
-        buttons: { text: string; onPress?: () => void }[],
+        buttons: {text: string; onPress?: () => void}[],
       ) => {
         buttons.find(b => b.text === '置位')?.onPress?.();
       },
@@ -89,7 +89,7 @@ const sampleMessage = (): ChatMessage => ({
   sessionId: 's1',
   seq: 2,
   role: 'user',
-  content: { blocks: [{ type: 'text', text: 'hi' }] },
+  content: {blocks: [{type: 'text', text: 'hi'}]},
   provider: null,
   raw: null,
   createdAtMs: 1,

@@ -1,8 +1,8 @@
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
-import {AboutScreen} from '../src/screens/stack/AboutScreen';
+import {AboutScreen} from '@/screens/stack/AboutScreen';
 
-jest.mock('../src/runtime/novel-master-context', () => ({
+jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     appUi: {
       get: jest.fn().mockResolvedValue(undefined),
@@ -11,7 +11,7 @@ jest.mock('../src/runtime/novel-master-context', () => ({
   }),
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -23,7 +23,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: jest.fn()}),
 }));
 

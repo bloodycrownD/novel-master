@@ -1,13 +1,13 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import { type ChatMessage } from "@novel-master/core/chat";
-import {MessageList} from '../src/components/chat/MessageList';
+import {type ChatMessage} from '@novel-master/core/chat';
+import {MessageList} from '@/components/chat/MessageList';
 
 const mockScrollToEnd = jest.fn();
 const mockScrollToOffset = jest.fn();
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       primary: '#06c',
@@ -21,19 +21,19 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/chat/ThinkingBlockCard', () => {
+jest.mock('@/components/chat/ThinkingBlockCard', () => {
   const mockReact = require('react');
   return {
     ThinkingBlockCard: () => mockReact.createElement('ThinkingBlockCard'),
   };
 });
 
-jest.mock('../src/components/chat/ToolCallCard', () => {
+jest.mock('@/components/chat/ToolCallCard', () => {
   const mockReact = require('react');
   return {ToolCallCard: () => mockReact.createElement('ToolCallCard')};
 });
 
-jest.mock('../src/components/rich-content/RichContentBody', () => {
+jest.mock('@/components/rich-content/RichContentBody', () => {
   const mockReact = require('react');
   return {RichContentBody: () => mockReact.createElement('RichContentBody')};
 });
@@ -51,12 +51,8 @@ jest.mock('react-native', () => {
   );
   return {
     FlatList,
-    Pressable: ({
-      children,
-      ...rest
-    }: {
-      children?: React.ReactNode;
-    }) => mockReact.createElement('Pressable', rest, children),
+    Pressable: ({children, ...rest}: {children?: React.ReactNode}) =>
+      mockReact.createElement('Pressable', rest, children),
     StyleSheet: {create: (s: object) => s, hairlineWidth: 1},
     Text: ({children}: {children?: React.ReactNode}) =>
       mockReact.createElement('Text', null, children),

@@ -1,12 +1,12 @@
 /**
  * Chat tab 低频回调：消息菜单、工作区导航等。
  */
-import { useCallback } from 'react';
-import { Alert } from 'react-native';
-import { buildMessageActionItems } from '@/components/chat/message-edit';
-import { clearSessionWorkplaceKkv } from '@/services/workplace-block.service';
-import { useChatTabContext } from './ChatTabProvider';
-import { useChatTabMessageActions } from './useChatTabMessages';
+import {useCallback} from 'react';
+import {Alert} from 'react-native';
+import {buildMessageActionItems} from '@/components/chat/message-edit';
+import {clearSessionWorkplaceKkv} from '@/services/workplace-block.service';
+import {useChatTabContext} from './ChatTabProvider';
+import {useChatTabMessageActions} from './useChatTabMessages';
 
 export function useChatTabController() {
   const ctx = useChatTabContext();
@@ -108,8 +108,8 @@ export function useChatTabController() {
         return;
       }
       Alert.alert('确认删除', `确定删除选中的 ${count} 个会话？`, [
-        { text: '取消', style: 'cancel' },
-        { text: '删除', style: 'destructive', onPress: onConfirm },
+        {text: '取消', style: 'cancel'},
+        {text: '删除', style: 'destructive', onPress: onConfirm},
       ]);
     },
     [],

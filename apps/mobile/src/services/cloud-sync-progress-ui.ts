@@ -95,14 +95,11 @@ function resolveEventKey(
     return event;
   }
 
-  const bytes =
-    typeof detail?.bytes === 'number' ? detail.bytes : undefined;
-  const isLargeSnapshot =
-    bytes != null && bytes >= SNAPSHOT_BYTE_THRESHOLD;
+  const bytes = typeof detail?.bytes === 'number' ? detail.bytes : undefined;
+  const isLargeSnapshot = bytes != null && bytes >= SNAPSHOT_BYTE_THRESHOLD;
   const isSnapshotKey =
     typeof detail?.key === 'string' &&
-    (detail.key.includes('snapshots/') ||
-      detail.key.includes('.nmbackup'));
+    (detail.key.includes('snapshots/') || detail.key.includes('.nmbackup'));
 
   if (op === 'push') {
     if (
@@ -124,16 +121,10 @@ function resolveEventKey(
   }
 
   if (op === 'pull') {
-    if (
-      event === 'storage_get_start' &&
-      (isLargeSnapshot || isSnapshotKey)
-    ) {
+    if (event === 'storage_get_start' && (isLargeSnapshot || isSnapshotKey)) {
       return 'storage_get_start_large';
     }
-    if (
-      event === 'storage_get_done' &&
-      (isLargeSnapshot || isSnapshotKey)
-    ) {
+    if (event === 'storage_get_done' && (isLargeSnapshot || isSnapshotKey)) {
       return 'storage_get_done_large';
     }
   }

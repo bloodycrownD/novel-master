@@ -1,9 +1,9 @@
-import type { ChatMessage } from '@novel-master/core/chat';
+import type {ChatMessage} from '@novel-master/core/chat';
 
 /** 流式收尾 reload；`immediate` 绕过 run 内 200ms 合并并 await DB 拉取。 */
-export type FlushMessagesChanged = (
-  options?: { immediate?: boolean },
-) => void | Promise<readonly ChatMessage[] | void>;
+export type FlushMessagesChanged = (options?: {
+  immediate?: boolean;
+}) => void | Promise<readonly ChatMessage[] | void>;
 
 export type FlushStreamEndContext = {
   readonly messages: readonly ChatMessage[];
@@ -19,8 +19,8 @@ export async function flushRunUi(
   onStreamEnd: (ctx: FlushStreamEndContext) => void,
   prevCount: number,
 ): Promise<void> {
-  const messages = (await onMessagesChanged({ immediate: true })) ?? [];
-  onStreamEnd({ messages, prevCount });
+  const messages = (await onMessagesChanged({immediate: true})) ?? [];
+  onStreamEnd({messages, prevCount});
 }
 
 /**
@@ -33,8 +33,8 @@ export async function flushAgentStepUi(
   onAssistantStreamEnd: (ctx: FlushStreamEndContext) => void,
   prevCount: number,
 ): Promise<void> {
-  const messages = (await onMessagesChanged({ immediate: true })) ?? [];
+  const messages = (await onMessagesChanged({immediate: true})) ?? [];
   if (phase === 'assistant') {
-    onAssistantStreamEnd({ messages, prevCount });
+    onAssistantStreamEnd({messages, prevCount});
   }
 }

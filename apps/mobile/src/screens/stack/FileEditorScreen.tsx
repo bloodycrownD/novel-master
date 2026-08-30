@@ -17,25 +17,25 @@ import {
 } from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import {useRoute, type RouteProp} from '@react-navigation/native';
-import type {RootStackParamList} from '../../navigation/types';
+import type {RootStackParamList} from '@/navigation/types';
 import type {VfsService} from '@novel-master/core/vfs';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
-import {toastMessage} from '../../errors/toast-message';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../../components/chrome/ToastHost';
-import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
+import {useRuntime} from '@/hooks/useRuntime';
+import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
+import {toastMessage} from '@/errors/toast-message';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {sessionSaveVfsFile} from '@/services/vfs-operations.service';
+import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
 import {
   FileMarkdownPreview,
   isMarkdownPreviewPath,
-} from '../../components/vfs/FileMarkdownPreview';
-import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
+} from '@/components/vfs/FileMarkdownPreview';
+import {shouldEnableFileAnnotate} from '@/components/vfs/file-annotate-gate';
 import {
   CodeEditorWebView,
   type CodeEditorWebViewHandle,
-} from '../../components/vfs/CodeEditorWebView';
-import {SegmentedControl} from '../../components/ui/SegmentedControl';
+} from '@/components/vfs/CodeEditorWebView';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import {formatCharCount} from '@novel-master/core/format';
 
 /**
@@ -51,7 +51,7 @@ function AndroidKeyboardFileEditorBody({
   const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
   // hook 返回的 height 是负数，取反得到正的键盘高度。
   const clipStyle = useAnimatedStyle(() => {
-    return { marginBottom: -keyboardHeightSV.value };
+    return {marginBottom: -keyboardHeightSV.value};
   }, [keyboardHeightSV]);
 
   return (
@@ -289,14 +289,16 @@ export function FileEditorScreen() {
           testID="file-editor-save"
           style={styles.toolbarBtn}
           onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving || !isDirty || previewMode || isReadOnly}>
+          disabled={saving || !isDirty || previewMode || isReadOnly}
+        >
           <Text
             style={{
               color:
                 isDirty && !saving && !previewMode && !isReadOnly
                   ? tokens.primary
                   : tokens.textSecondary,
-            }}>
+            }}
+          >
             {saving ? '保存中…' : '保存'}
           </Text>
         </Pressable>
@@ -307,14 +309,16 @@ export function FileEditorScreen() {
             style={styles.toolbarPath}
             onPress={dismissEditor}
             accessibilityRole="button"
-            accessibilityLabel="收起键盘">
+            accessibilityLabel="收起键盘"
+          >
             <Text
               style={[
                 styles.toolbarPathText,
                 {color: isDirty ? tokens.danger : tokens.textSecondary},
               ]}
               numberOfLines={1}
-              ellipsizeMode="tail">
+              ellipsizeMode="tail"
+            >
               {isDirty ? '未保存' : vfsBasename(path)}
             </Text>
           </Pressable>
@@ -326,7 +330,8 @@ export function FileEditorScreen() {
               {color: isDirty ? tokens.danger : tokens.textSecondary},
             ]}
             numberOfLines={1}
-            ellipsizeMode="tail">
+            ellipsizeMode="tail"
+          >
             {isDirty ? '未保存' : vfsBasename(path)}
           </Text>
         )}
@@ -335,7 +340,8 @@ export function FileEditorScreen() {
             <Text
               style={{
                 color: previewMode ? tokens.primary : tokens.textSecondary,
-              }}>
+              }}
+            >
               {previewMode ? '编辑' : '预览'}
             </Text>
           </Pressable>
@@ -348,11 +354,14 @@ export function FileEditorScreen() {
             style={[styles.statsRow, {borderBottomColor: tokens.border}]}
             onPress={dismissEditor}
             accessibilityRole="button"
-            accessibilityLabel="收起键盘">
+            accessibilityLabel="收起键盘"
+          >
             <Text
               style={[styles.statsText, {color: tokens.textSecondary}]}
-              numberOfLines={1}>
-              更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+              numberOfLines={1}
+            >
+              更新于 {formatFileMtime(mtimeMs)} ·{' '}
+              {formatCharCount(content.length)} 字
               {isDirty ? ' · 编辑中未保存' : ''}
             </Text>
           </Pressable>
@@ -360,8 +369,10 @@ export function FileEditorScreen() {
           <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
             <Text
               style={[styles.statsText, {color: tokens.textSecondary}]}
-              numberOfLines={1}>
-              更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+              numberOfLines={1}
+            >
+              更新于 {formatFileMtime(mtimeMs)} ·{' '}
+              {formatCharCount(content.length)} 字
               {isDirty ? ' · 编辑中未保存' : ''}
             </Text>
           </View>
@@ -421,16 +432,15 @@ export function FileEditorScreen() {
   if (Platform.OS === 'android') {
     return (
       <View style={rootStyle}>
-        <AndroidKeyboardFileEditorBody>{editorBody}</AndroidKeyboardFileEditorBody>
+        <AndroidKeyboardFileEditorBody>
+          {editorBody}
+        </AndroidKeyboardFileEditorBody>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={rootStyle}
-      behavior="padding"
-      automaticOffset>
+    <KeyboardAvoidingView style={rootStyle} behavior="padding" automaticOffset>
       {editorBody}
     </KeyboardAvoidingView>
   );

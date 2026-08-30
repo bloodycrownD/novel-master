@@ -4,7 +4,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   selectedCount: number;
@@ -25,7 +25,8 @@ export function ListBatchBar({selectedCount, onCancel, onDelete}: Props) {
           backgroundColor: tokens.surfaceElevated,
           borderTopColor: tokens.border,
         },
-      ]}>
+      ]}
+    >
       <Pressable onPress={onCancel}>
         <Text style={{color: tokens.text}}>取消</Text>
       </Pressable>
@@ -34,7 +35,8 @@ export function ListBatchBar({selectedCount, onCancel, onDelete}: Props) {
         <Text
           style={{
             color: selectedCount > 0 ? tokens.danger : tokens.textTertiary,
-          }}>
+          }}
+        >
           删除
         </Text>
       </Pressable>

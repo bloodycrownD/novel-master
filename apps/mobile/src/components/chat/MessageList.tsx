@@ -8,7 +8,7 @@
  * 附件卡契约；生产主路径以 WebView / `buildTranscriptRows` 为准。勿再启用本组件作主 UI
  * 除非补齐 attachments 展示。
  */
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {
   FlatList,
   Pressable,
@@ -18,17 +18,17 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import type { MessageMenuAnchor } from './MessageActionMenu';
-import { type ChatMessage, type SkillToolRef } from '@novel-master/core/chat';
-import { RichContentBody } from '@/components/rich-content/RichContentBody';
-import { isRichContentOverLimit } from '@/components/rich-content/rich-content-limits';
-import type { ChatListScrollSnapshot } from '@/services/chat-list-scroll-cache';
-import { useTheme } from '@/theme/ThemeProvider';
-import type { ThemeTokens } from '@/theme/tokens';
-import { buildChatListItems, type ChatListItem } from './message-blocks';
-import { ThinkingBlockCard } from './ThinkingBlockCard';
-import { ToolCallGroupCard } from './ToolCallGroupCard';
-import { ToolTurnPhaseBar } from './ToolTurnPhaseBar';
+import type {MessageMenuAnchor} from './MessageActionMenu';
+import {type ChatMessage, type SkillToolRef} from '@novel-master/core/chat';
+import {RichContentBody} from '@/components/rich-content/RichContentBody';
+import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
+import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
+import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
+import {buildChatListItems, type ChatListItem} from './message-blocks';
+import {ThinkingBlockCard} from './ThinkingBlockCard';
+import {ToolCallGroupCard} from './ToolCallGroupCard';
+import {ToolTurnPhaseBar} from './ToolTurnPhaseBar';
 
 type Props = {
   messages: readonly ChatMessage[];
@@ -87,7 +87,7 @@ interface ChatMessageBodyProps {
 function chatBubbleColors(
   tokens: ThemeTokens,
   isUser: boolean,
-): { backgroundColor: string; bodyColor: string } {
+): {backgroundColor: string; bodyColor: string} {
   return {
     backgroundColor: isUser ? tokens.primary : tokens.surface,
     bodyColor: isUser ? '#fff' : tokens.text,
@@ -106,7 +106,7 @@ const ChatMessageBody = React.memo(function ChatMessageBody({
 }: ChatMessageBodyProps) {
   const plainColor = bodyColor;
   if (!richTextEnabled || isRichContentOverLimit(body)) {
-    return <Text style={{ color: plainColor }}>{body}</Text>;
+    return <Text style={{color: plainColor}}>{body}</Text>;
   }
   return (
     <RichContentBody
@@ -138,8 +138,8 @@ export function MessageList({
   defaultScrollToBottom = false,
   keyboardLiftNonce = 0,
 }: Props) {
-  const { tokens } = useTheme();
-  const listRef = useRef<FlatList<ChatListItem | { kind: 'stream' }>>(null);
+  const {tokens} = useTheme();
+  const listRef = useRef<FlatList<ChatListItem | {kind: 'stream'}>>(null);
   const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
   const prevMessageCountRef = useRef(0);
   // WHY: default true breaks restore — onContentSizeChange runs before useEffect and scrolls to end.
@@ -158,16 +158,15 @@ export function MessageList({
   const snapshotThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
-  const mountContentOffsetRef = useRef<{ x: number; y: number } | undefined>(
+  const mountContentOffsetRef = useRef<{x: number; y: number} | undefined>(
     initialScroll != null &&
       !initialScroll.nearBottom &&
       initialScroll.offsetY > 0
-      ? { x: 0, y: initialScroll.offsetY }
+      ? {x: 0, y: initialScroll.offsetY}
       : undefined,
   );
   const items = useMemo(
-    () =>
-      buildChatListItems(messages, { agentRunning, pendingSubagentSessions }),
+    () => buildChatListItems(messages, {agentRunning, pendingSubagentSessions}),
     [messages, agentRunning, pendingSubagentSessions],
   );
 
@@ -209,7 +208,7 @@ export function MessageList({
         return;
       }
       if (initialScroll?.nearBottom) {
-        listRef.current?.scrollToEnd({ animated: false });
+        listRef.current?.scrollToEnd({animated: false});
         pendingScrollRestoreRef.current = false;
         return;
       }
@@ -244,7 +243,7 @@ export function MessageList({
       lastScrollToEndMsRef.current = Date.now();
       requestAnimationFrame(() => {
         if (nearBottomRef.current) {
-          listRef.current?.scrollToEnd({ animated: false });
+          listRef.current?.scrollToEnd({animated: false});
         }
       });
     }, delay);
@@ -252,8 +251,7 @@ export function MessageList({
 
   const syncNearBottomFromScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } =
-        event.nativeEvent;
+      const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
       scrollOffsetRef.current = contentOffset.y;
       contentHeightRef.current = contentSize.height;
       viewportHeightRef.current = layoutMeasurement.height;
@@ -292,7 +290,7 @@ export function MessageList({
     }
     requestAnimationFrame(() => {
       if (nearBottomRef.current) {
-        listRef.current?.scrollToEnd({ animated: false });
+        listRef.current?.scrollToEnd({animated: false});
       }
     });
   }, [keyboardLiftNonce]);
@@ -347,14 +345,14 @@ export function MessageList({
     [streamingText, streamingThinking],
   );
 
-  const data: (ChatListItem | { kind: 'stream' })[] = useMemo(() => {
-    const list: (ChatListItem | { kind: 'stream' })[] = [...items];
+  const data: (ChatListItem | {kind: 'stream'})[] = useMemo(() => {
+    const list: (ChatListItem | {kind: 'stream'})[] = [...items];
     if (
       (streamingText && streamingText.length > 0) ||
       (streamingThinking && streamingThinking.length > 0) ||
       toolInvoking
     ) {
-      list.push({ kind: 'stream' });
+      list.push({kind: 'stream'});
     }
     return list;
   }, [items, streamingText, streamingThinking, toolInvoking]);
@@ -413,7 +411,7 @@ export function MessageList({
         ) : null}
         {trimmedBody ? (
           options?.forcePlainText ? (
-            <Text style={{ color: colors.bodyColor }}>{trimmedBody}</Text>
+            <Text style={{color: colors.bodyColor}}>{trimmedBody}</Text>
           ) : (
             <ChatMessageBody
               body={trimmedBody}
@@ -476,7 +474,7 @@ export function MessageList({
       style={styles.list}
       data={data}
       contentOffset={mountContentOffsetRef.current}
-      extraData={{ chatRichTextEnabled, richRenderEpoch }}
+      extraData={{chatRichTextEnabled, richRenderEpoch}}
       ListHeaderComponent={listHeaderComponent ?? undefined}
       maintainVisibleContentPosition={{
         minIndexForVisible: 0,
@@ -496,7 +494,7 @@ export function MessageList({
           const maxOffset = Math.max(0, height - viewportHeightRef.current);
           const clamped = Math.min(scrollOffsetRef.current, maxOffset);
           scrollOffsetRef.current = clamped;
-          listRef.current?.scrollToOffset({ offset: clamped, animated: false });
+          listRef.current?.scrollToOffset({offset: clamped, animated: false});
           return;
         }
         scheduleScrollToEnd();
@@ -514,12 +512,12 @@ export function MessageList({
       }}
       ListEmptyComponent={
         !streamingText && !streamingThinking && !toolInvoking ? (
-          <Text style={[styles.empty, { color: tokens.textSecondary }]}>
+          <Text style={[styles.empty, {color: tokens.textSecondary}]}>
             暂无消息，发送一条开始对话
           </Text>
         ) : null
       }
-      renderItem={({ item }) => {
+      renderItem={({item}) => {
         if ('kind' in item && item.kind === 'stream') {
           if (toolInvoking && !hasStreamContent) {
             return (
@@ -551,15 +549,9 @@ export function MessageList({
         const hidden = row.message.hidden;
         const body = row.textParts.join('\n\n');
         const thinking = row.thinkingParts.join('\n\n');
-        const hasAttachments =
-          (row.message.attachments?.length ?? 0) > 0;
+        const hasAttachments = (row.message.attachments?.length ?? 0) > 0;
         // 与 message-blocks / WebView 对齐：空正文但有 attachments 仍须展示
-        if (
-          !body &&
-          !thinking &&
-          row.tools.length === 0 &&
-          !hasAttachments
-        ) {
+        if (!body && !thinking && row.tools.length === 0 && !hasAttachments) {
           return null;
         }
         const content = isUser
@@ -592,11 +584,7 @@ type MessageMenuRowProps = {
 };
 
 /** 气泡右上角 ⋯：测量按钮窗口坐标后打开锚定菜单（替代长按主路径）。 */
-function MessageMenuRow({
-  isUser,
-  onOpenMenu,
-  children,
-}: MessageMenuRowProps) {
+function MessageMenuRow({isUser, onOpenMenu, children}: MessageMenuRowProps) {
   const btnRef = useRef<View>(null);
   const menuBtn = (
     <Pressable
@@ -606,14 +594,14 @@ function MessageMenuRow({
       style={styles.messageMenuBtn}
       onPress={() => {
         btnRef.current?.measureInWindow((x, y, width, height) => {
-          onOpenMenu({ x, y, width, height });
+          onOpenMenu({x, y, width, height});
         });
       }}
     >
       <Text
         style={[
           styles.messageMenuBtnText,
-          { color: isUser ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)' },
+          {color: isUser ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)'},
         ]}
       >
         ⋯
@@ -636,8 +624,8 @@ function MessageMenuRow({
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1 },
-  empty: { textAlign: 'center', marginTop: 32, paddingHorizontal: 24 },
+  list: {flex: 1},
+  empty: {textAlign: 'center', marginTop: 32, paddingHorizontal: 24},
   rowAlign: {
     width: '100%',
     paddingHorizontal: 12,

@@ -1,7 +1,7 @@
 /**
  * Maps {@link WorkplaceListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
-import { type VfsListEntry } from '@novel-master/core/vfs';
+import {type VfsListEntry} from '@novel-master/core/vfs';
 import {
   displayStateLabel,
   inclusionModeLabel,
@@ -91,8 +91,8 @@ export function countFilesInDir(
 /** Directory rule on/off badge for list rows. */
 export function dirRuleBadge(ruleEnabled: boolean): VfsRowBadge {
   return ruleEnabled
-    ? { label: '开启', tone: 'in' }
-    : { label: '关闭', tone: 'muted' };
+    ? {label: '开启', tone: 'in'}
+    : {label: '关闭', tone: 'muted'};
 }
 
 /** Patch one directory row after rule enabled toggles (no list reload). */
@@ -103,7 +103,7 @@ export function patchDirRuleRow(
   if (row.kind !== 'dir') {
     return row;
   }
-  return { ...row, ruleEnabled, badge: dirRuleBadge(ruleEnabled) };
+  return {...row, ruleEnabled, badge: dirRuleBadge(ruleEnabled)};
 }
 
 /** Worktree list row enum after directory rule enabled toggles. */
@@ -114,11 +114,11 @@ export function dirRuleStateFromEnabled(ruleEnabled: boolean): RuleState {
 function fileBadge(mode: InclusionMode): VfsRowBadge {
   switch (mode) {
     case 'hide':
-      return { label: '隐藏', tone: 'muted' };
+      return {label: '隐藏', tone: 'muted'};
     case 'show':
-      return { label: '展示', tone: 'in' };
+      return {label: '展示', tone: 'in'};
     default:
-      return { label: '跟随', tone: 'follow' };
+      return {label: '跟随', tone: 'follow'};
   }
 }
 
@@ -177,7 +177,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
     name,
     kind: 'file',
     subtitle: '跟随·全内容',
-    badge: { label: '跟随', tone: 'follow' },
+    badge: {label: '跟随', tone: 'follow'},
     ruleEnabled: false,
   };
 }
@@ -209,5 +209,5 @@ export function remapDirectChildRows(
 
 /** @deprecated Use {@link mapVfsListEntry}. */
 export function mapVfsFilePath(path: string): MappedVfsRow {
-  return mapVfsListEntry({ path, kind: 'file' });
+  return mapVfsListEntry({path, kind: 'file'});
 }

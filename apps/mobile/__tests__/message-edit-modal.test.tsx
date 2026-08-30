@@ -1,9 +1,9 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {MessageEditModal} from '../src/components/chat/MessageEditModal';
+import {MessageEditModal} from '@/components/chat/MessageEditModal';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       surface: '#fff',
@@ -22,7 +22,7 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
 
-jest.mock('../src/components/ui/AppModal', () => {
+jest.mock('@/components/ui/AppModal', () => {
   const mockReact = require('react');
   return {
     AppModal: ({
@@ -31,8 +31,7 @@ jest.mock('../src/components/ui/AppModal', () => {
     }: {
       children?: React.ReactNode;
       visible?: boolean;
-    }) =>
-      visible ? mockReact.createElement('Modal', null, children) : null,
+    }) => (visible ? mockReact.createElement('Modal', null, children) : null),
   };
 });
 
@@ -87,8 +86,7 @@ function findSaveLabelText(root: TestRenderer.ReactTestInstance) {
   return root.find(
     node =>
       node.type === 'Text' &&
-      (node.props.children === '保存' ||
-        node.props.children === '保存中…'),
+      (node.props.children === '保存' || node.props.children === '保存中…'),
   );
 }
 
@@ -105,9 +103,7 @@ function findSavePressable(root: TestRenderer.ReactTestInstance) {
 }
 
 /** 检查 TextInput 祖先链中是否存在 ScrollView */
-function hasScrollViewAncestor(
-  node: TestRenderer.ReactTestInstance,
-): boolean {
+function hasScrollViewAncestor(node: TestRenderer.ReactTestInstance): boolean {
   let current: TestRenderer.ReactTestInstance | null = node.parent;
   while (current) {
     if (current.type === 'ScrollView') {
@@ -226,9 +222,11 @@ describe('MessageEditModal', () => {
         />,
       );
     });
-    let backdrop: TestRenderer.ReactTestInstance | null = tree.root.findByProps({
-      testID: 'message-edit-input',
-    });
+    let backdrop: TestRenderer.ReactTestInstance | null = tree.root.findByProps(
+      {
+        testID: 'message-edit-input',
+      },
+    );
     // 从输入框往上找第一个带 style 的 Pressable，即 backdrop（内层 stopPropagation 的 Pressable 无 style）。
     while (
       backdrop &&

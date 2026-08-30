@@ -9,16 +9,16 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import React from 'react';
 import {StyleSheet, Text, TextInput} from 'react-native';
 import TestRenderer, {act} from 'react-test-renderer';
-import {ExpandablePromptInput} from '../src/components/agent/ExpandablePromptInput';
+import {ExpandablePromptInput} from '@/components/agent/ExpandablePromptInput';
 import {
   PROMPT_INLINE_MAX_HEIGHT,
   PROMPT_INLINE_MAX_LINES,
-} from '../src/components/agent/prompt-collapse';
-import {lightTheme} from '../src/theme/tokens';
+} from '@/components/agent/prompt-collapse';
+import {lightTheme} from '@/theme/tokens';
 
-jest.mock('../src/theme/ThemeProvider', () => {
+jest.mock('@/theme/ThemeProvider', () => {
   const {lightTheme: theme} =
-    require('../src/theme/tokens') as typeof import('../src/theme/tokens');
+    require('@/theme/tokens') as typeof import('@/theme/tokens');
   return {
     useTheme: () => ({
       mode: 'light' as const,
@@ -62,8 +62,8 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（R5 + R6）', () => {
       );
     });
     // label 文本在场（由本组件统一渲染）
-    const texts = tree!
-      .root.findAll(node => typeof node.children?.[0] === 'string')
+    const texts = tree!.root
+      .findAll(node => typeof node.children?.[0] === 'string')
       .map(node => String(node.children[0]));
     expect(texts).toContain('系统提示词');
     // inline 在场
@@ -85,8 +85,8 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（R5 + R6）', () => {
     ).toBe(true);
     // 旧的折叠预览不存在（label 单行截断不算折叠预览）
     expect(
-      tree!
-        .root.findAllByType(Text)
+      tree!.root
+        .findAllByType(Text)
         .filter(t => (t.props.numberOfLines ?? 1) > 1),
     ).toHaveLength(0);
   });
@@ -104,8 +104,8 @@ describe('ExpandablePromptInput 内联 + 全屏按钮（R5 + R6）', () => {
         />,
       );
     });
-    const button = tree!
-      .root.findAllByProps({testID: 'prompt-input-fullscreen'})
+    const button = tree!.root
+      .findAllByProps({testID: 'prompt-input-fullscreen'})
       .find(n => typeof n.props.onPress === 'function')!;
     const buttonStyle = flattenStyle(button.props.style);
     // 触达区至少 28×28（另有 hitSlop 8 外扩）。

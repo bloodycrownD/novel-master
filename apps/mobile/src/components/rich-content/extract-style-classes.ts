@@ -9,7 +9,9 @@ function cssPropToRn(prop: string): string {
  * Parses a minimal subset of CSS (`.class { prop: value; }`) into RenderHTML classesStyles.
  * Complex selectors and @rules are skipped on purpose.
  */
-export function parseSimpleCssToClasses(css: string): Record<string, MixedStyleRecord> {
+export function parseSimpleCssToClasses(
+  css: string,
+): Record<string, MixedStyleRecord> {
   const classes: Record<string, MixedStyleRecord> = {};
   const ruleRe = /\.([a-zA-Z0-9_-]+)\s*\{([^}]*)\}/g;
   let match: RegExpExecArray | null;

@@ -4,8 +4,8 @@ import {
   APP_UI_DEFAULTS,
   APP_UI_KKV_MODULE,
   APP_UI_KEY_THEME,
-} from '../src/storage/app-ui-keys';
-import {createAppUiPreferences, appUiKeys} from '../src/storage/app-ui-prefs';
+} from '@/storage/app-ui-keys';
+import {createAppUiPreferences, appUiKeys} from '@/storage/app-ui-prefs';
 
 function createMemoryKkv(): KkvService {
   const data = new Map<string, string>();

@@ -9,8 +9,8 @@
  *
  * stream 单元通过 {@link ingestWireChunk} 把 wire chunk 投进来即可。
  */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { createStreamApplyBuffer } from '@/services/stream-apply-buffer';
+import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {createStreamApplyBuffer} from '@/services/stream-apply-buffer';
 import {
   appendWireChunk,
   coalesceWireQueue,
@@ -59,7 +59,7 @@ export function useSessionBatch({
   }, []);
 
   const applyBuffer = useMemo(
-    () => createStreamApplyBuffer(applyLeaf, { flushIntervalMs: 64 }),
+    () => createStreamApplyBuffer(applyLeaf, {flushIntervalMs: 64}),
     [applyLeaf],
   );
 
@@ -123,5 +123,5 @@ export function useSessionBatch({
     };
   }, [applyBuffer]);
 
-  return { ingestWireChunk, clearBuffers, flushBuffers };
+  return {ingestWireChunk, clearBuffers, flushBuffers};
 }

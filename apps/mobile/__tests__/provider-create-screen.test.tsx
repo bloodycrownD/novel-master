@@ -1,7 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {ProviderCreateScreen} from '../src/screens/stack/ProviderCreateScreen';
+import {ProviderCreateScreen} from '@/screens/stack/ProviderCreateScreen';
 
 const mockReplace = jest.fn();
 const mockShowToast = jest.fn();
@@ -29,13 +29,13 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => mockNavigation,
 }));
 
-jest.mock('../src/hooks/useRuntime', () => ({
+jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => ({
     providers: {create: mockCreate},
   }),
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -44,11 +44,11 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('../src/components/chrome/ToastHost', () => ({
+jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('../src/components/provider/ProviderForm', () => {
+jest.mock('@/components/provider/ProviderForm', () => {
   const mockReact = require('react');
   return {
     providerFormToCreateInput: jest.fn((values: typeof sampleValues) => ({

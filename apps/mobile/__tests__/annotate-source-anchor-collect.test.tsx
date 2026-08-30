@@ -16,13 +16,13 @@ import {
   addChatAnnotateDraft,
   listChatAnnotateDrafts,
   resetChatAnnotateDraftStoreForTests,
-} from '../src/storage/chat-annotate-draft';
+} from '@/storage/chat-annotate-draft';
 import {
   getSelectionOffsetsInElement,
   collectAnnotateSelection,
   reportRecogitoCreateFromSelection,
   bindAnnotateCollectBridge,
-} from '../src/web/rich-document/webview/runtime/annotate-collect';
+} from '@/web/rich-document/webview/runtime/annotate-collect';
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -56,7 +56,7 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#fff',
@@ -69,7 +69,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
+import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
 
 /** 最小 DOM：textContent 对齐无锚源；锚 span 不计入 Range.toString。 */
 function installMiniDom(sourceText: string, selStart: number, selEnd: number) {

@@ -3,7 +3,7 @@
  * 生产新建批注只走 {@link reportRecogitoCreateFromSelection}（`__nmCollectRecogitoSelection`）。
  * {@link collectAnnotateSelection} 仅测用 / 工具层残留，不挂 window。
  */
-import { post } from './post';
+import {post} from './post';
 
 export type AnnotateCollectMode = 'plain' | 'markdown';
 
@@ -23,10 +23,15 @@ const CONTEXT_CHARS = 64;
  */
 export function getSelectionOffsetsInElement(
   element: Element,
-  selection: Selection | null | undefined =
-    typeof window !== 'undefined' ? window.getSelection() : null,
-): { readonly start: number; readonly end: number } | null {
-  if (selection == null || selection.rangeCount === 0 || selection.isCollapsed) {
+  selection: Selection | null | undefined = typeof window !== 'undefined'
+    ? window.getSelection()
+    : null,
+): {readonly start: number; readonly end: number} | null {
+  if (
+    selection == null ||
+    selection.rangeCount === 0 ||
+    selection.isCollapsed
+  ) {
     return null;
   }
   const selRange = selection.getRangeAt(0);
@@ -45,7 +50,7 @@ export function getSelectionOffsetsInElement(
   preRange.setEnd(selRange.startContainer, selRange.startOffset);
   const start = preRange.toString().length;
   const selectedLen = selRange.toString().length;
-  return { start, end: start + selectedLen };
+  return {start, end: start + selectedLen};
 }
 
 /**
@@ -55,8 +60,7 @@ export function getSelectionOffsetsInElement(
 export function collectAnnotateSelection(
   mode: AnnotateCollectMode,
 ): AnnotateSelectionCollectPayload | null {
-  const sel =
-    typeof window !== 'undefined' ? window.getSelection() : null;
+  const sel = typeof window !== 'undefined' ? window.getSelection() : null;
   const raw = (sel?.toString() ?? '').replace(/\u00a0/g, ' ');
   const originalText = raw.trim();
   if (!originalText) {
@@ -65,13 +69,13 @@ export function collectAnnotateSelection(
 
   const body = document.querySelector('.doc-body');
   if (!body) {
-    return { originalText, mode };
+    return {originalText, mode};
   }
 
   const offsets = getSelectionOffsetsInElement(body, sel);
   if (mode === 'plain') {
     if (offsets == null) {
-      return { originalText, mode };
+      return {originalText, mode};
     }
     return {
       originalText,
@@ -84,7 +88,7 @@ export function collectAnnotateSelection(
   // markdown：邻域取自可见正文（非 VFS 源字面量）；Core 再用邻域在无锚全文定位
   const full = body.textContent ?? '';
   if (offsets == null) {
-    return { originalText, mode };
+    return {originalText, mode};
   }
   const contextBefore = full.slice(
     Math.max(0, offsets.start - CONTEXT_CHARS),
@@ -110,8 +114,7 @@ export function collectAnnotateSelection(
  * 使容器正文 `slice(renderStart, renderEnd) === quote`（R4）。宿主勿二次 trim。
  */
 export function reportRecogitoCreateFromSelection(): void {
-  const sel =
-    typeof window !== 'undefined' ? window.getSelection() : null;
+  const sel = typeof window !== 'undefined' ? window.getSelection() : null;
   const rawSelected = sel?.toString() ?? '';
   const normalized = rawSelected.replace(/\u00a0/g, ' ');
   const quote = normalized.trim();

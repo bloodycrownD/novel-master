@@ -15,7 +15,7 @@ import {
   type PromptRenderContext,
   type PromptSkillIndexEntry,
 } from '@novel-master/core/prompt';
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {buildSessionPromptInput} from './session-prompt-input.service';
 
 export interface PromptPreviewScope {

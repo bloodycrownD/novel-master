@@ -1,11 +1,11 @@
 /**
  * AttachmentDraftChips：状态 chip 文案壳（判定/partition 见 core T-X2-1）。
  */
-import { describe, expect, it, jest } from '@jest/globals';
-import { formatAttachmentChipLabel } from '../src/components/chat/AttachmentDraftChips';
-import type { MessageAttachment } from '@novel-master/core/chat';
+import {describe, expect, it, jest} from '@jest/globals';
+import {formatAttachmentChipLabel} from '@/components/chat/AttachmentDraftChips';
+import type {MessageAttachment} from '@novel-master/core/chat';
 
-jest.mock('../src/theme/ThemeProvider', () => ({
+jest.mock('@/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       surface: '#111',

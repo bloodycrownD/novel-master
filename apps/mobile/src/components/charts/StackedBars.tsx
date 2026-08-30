@@ -5,10 +5,10 @@
  * 不依赖 react-native-svg：柱宽按容器宽度自适应（柱数少时变宽），30 天数据
  * 超宽时由横向 ScrollView 自然滚动。
  */
-import React, { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { formatTokenCount } from '@novel-master/core/common';
-import type { ThemeTokens } from '../../theme/tokens';
+import React, {useCallback, useState} from 'react';
+import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {formatTokenCount} from '@novel-master/core/common';
+import type {ThemeTokens} from '@/theme/tokens';
 
 export interface StackedBarsDatum {
   key: string;
@@ -50,7 +50,7 @@ export function StackedBars({
   const [containerWidth, setContainerWidth] = useState(0);
 
   const onLayout = useCallback(
-    (e: { nativeEvent: { layout: { width: number } } }) => {
+    (e: {nativeEvent: {layout: {width: number}}}) => {
       setContainerWidth(e.nativeEvent.layout.width);
     },
     [],
@@ -75,34 +75,41 @@ export function StackedBars({
     <View testID={testID} onLayout={onLayout}>
       <View style={styles.legendRow}>
         {[
-          { label: '输入', color: tokens.primary },
-          { label: '输出', color: tokens.textSecondary },
+          {label: '输入', color: tokens.primary},
+          {label: '输出', color: tokens.textSecondary},
         ].map(item => (
           <View key={item.label} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={[styles.legendLabel, { color: tokens.textSecondary }]}>
+            <View style={[styles.legendDot, {backgroundColor: item.color}]} />
+            <Text style={[styles.legendLabel, {color: tokens.textSecondary}]}>
               {item.label}
             </Text>
           </View>
         ))}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-        <View style={[styles.barsRow, { minWidth: containerWidth }]}>
+        <View style={[styles.barsRow, {minWidth: containerWidth}]}>
           {/* 网格刻度层：绝对定位覆盖绘图区，不参与 flex 布局 */}
-          <View testID={testID ? `${testID}-grid` : undefined} pointerEvents="none" style={styles.gridLayer}>
+          <View
+            testID={testID ? `${testID}-grid` : undefined}
+            pointerEvents="none"
+            style={styles.gridLayer}
+          >
             {[1, 2].map(line => (
               <View
                 key={line}
                 testID={`grid-line-${line}`}
                 style={[
                   styles.gridLine,
-                  { top: `${(line / 3) * 100}%`, borderTopColor: tokens.borderLight },
+                  {
+                    top: `${(line / 3) * 100}%`,
+                    borderTopColor: tokens.borderLight,
+                  },
                 ]}
               />
             ))}
             <Text
               testID="grid-max-label"
-              style={[styles.gridMaxLabel, { color: tokens.textTertiary }]}
+              style={[styles.gridMaxLabel, {color: tokens.textTertiary}]}
             >
               {formatTokenCount(maxTotal)}
             </Text>
@@ -144,21 +151,21 @@ export function StackedBars({
                 style={styles.barCol}
               >
                 <View
-                  style={{ height: CHART_HEIGHT, justifyContent: 'flex-end' }}
+                  style={{height: CHART_HEIGHT, justifyContent: 'flex-end'}}
                 >
                   {/* 无数据日期也保留等宽占位，列宽与有数据日期一致 */}
                   {height === 0 ? (
-                    <View style={{ width: barWidth, height: 0 }} />
+                    <View style={{width: barWidth, height: 0}} />
                   ) : (
                     <View
                       testID={`bar-${datum.key}`}
                       style={[
                         styles.bar,
-                        { height, width: barWidth, overflow: 'hidden' },
+                        {height, width: barWidth, overflow: 'hidden'},
                       ]}
                     >
                       <View
-                        style={{ flex: 1, backgroundColor: tokens.primary }}
+                        style={{flex: 1, backgroundColor: tokens.primary}}
                       />
                       {secondaryHeight > 0 ? (
                         <View
@@ -175,7 +182,7 @@ export function StackedBars({
                   testID={`bar-label-${datum.key}`}
                   style={[
                     styles.barLabel,
-                    { color: selected ? tokens.primary : tokens.textSecondary },
+                    {color: selected ? tokens.primary : tokens.textSecondary},
                   ]}
                   numberOfLines={1}
                 >

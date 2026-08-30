@@ -11,21 +11,22 @@
  * - 点行只 toggle 临时 draft，不关闭 sheet；点确定才把 draft 提交回 onChange 并关闭。
  * - draft 仅在 open 从 false 翻 true 时用 selected 初始化一次，sheet 打开期间不再随 selected 变化重置。
  */
-import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import Animated from 'react-native-reanimated';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
-import {FormTextInput} from '../form/FormTextInput';
-import {useFormOverlay} from '../form/FormOverlayHost';
-import {useAdaptiveKeyboardSheetStyle} from '../../hooks/useAdaptiveKeyboardSheetStyle';
-import type {ThemeTokens} from '../../theme/tokens';
+import {FormTextInput} from '@/components/form/FormTextInput';
+import {useFormOverlay} from '@/components/form/FormOverlayHost';
+import {useAdaptiveKeyboardSheetStyle} from '@/hooks/useAdaptiveKeyboardSheetStyle';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   tokens: ThemeTokens;
@@ -116,8 +117,13 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
       overlayKey,
       <Pressable style={styles.backdrop} onPress={close}>
         <Animated.View
-          style={[styles.sheet, {backgroundColor: tokens.surface}, panelAvoidStyle]}
-          onStartShouldSetResponder={() => true}>
+          style={[
+            styles.sheet,
+            {backgroundColor: tokens.surface},
+            panelAvoidStyle,
+          ]}
+          onStartShouldSetResponder={() => true}
+        >
           <Text style={[styles.sheetTitle, {color: tokens.text}]}>
             选择工具
           </Text>
@@ -142,11 +148,11 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
                     {borderBottomColor: tokens.border},
                     active && {backgroundColor: tokens.bgSecondary},
                   ]}
-                  onPress={() => toggle(item.name)}>
+                  onPress={() => toggle(item.name)}
+                >
                   <View style={styles.rowText}>
                     <Text style={{color: tokens.text}}>{item.name}</Text>
-                    <Text
-                      style={{color: tokens.textSecondary, fontSize: 13}}>
+                    <Text style={{color: tokens.textSecondary, fontSize: 13}}>
                       {item.description}
                     </Text>
                   </View>
@@ -164,18 +170,15 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
                 borderTopColor: tokens.border,
                 paddingBottom: Math.max(insets.bottom, 16),
               },
-            ]}>
-            <Pressable
-              onPress={close}
-              style={styles.actionBtn}>
+            ]}
+          >
+            <Pressable onPress={close} style={styles.actionBtn}>
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
             <Pressable
               onPress={confirm}
-              style={[
-                styles.actionBtn,
-                {backgroundColor: tokens.primary},
-              ]}>
+              style={[styles.actionBtn, {backgroundColor: tokens.primary}]}
+            >
               <Text style={styles.confirmText}>确定</Text>
             </Pressable>
           </View>
@@ -208,13 +211,15 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
           borderColor: tokens.borderLight,
         },
       ]}
-      onPress={() => setOpen(true)}>
+      onPress={() => setOpen(true)}
+    >
       <Text
         style={{
           color: selected.length > 0 ? tokens.text : tokens.textSecondary,
           flex: 1,
         }}
-        numberOfLines={1}>
+        numberOfLines={1}
+      >
         {triggerLabel}
       </Text>
       <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>

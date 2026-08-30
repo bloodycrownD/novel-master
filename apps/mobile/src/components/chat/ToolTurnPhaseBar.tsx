@@ -11,10 +11,7 @@ type Props = {
   label?: string;
 };
 
-export function ToolTurnPhaseBar({
-  embedded = true,
-  label = '生成中',
-}: Props) {
+export function ToolTurnPhaseBar({embedded = true, label = '生成中'}: Props) {
   const {tokens} = useTheme();
   return (
     <View
@@ -23,7 +20,8 @@ export function ToolTurnPhaseBar({
         {
           borderTopColor: tokens.borderLight,
         },
-      ]}>
+      ]}
+    >
       <ActivityIndicator size="small" color={tokens.primary} />
       <Text style={[styles.label, {color: tokens.primary}]}>{label}</Text>
     </View>

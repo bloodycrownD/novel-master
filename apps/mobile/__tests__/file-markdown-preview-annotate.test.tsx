@@ -8,19 +8,19 @@ import {
   addChatAnnotateDraft,
   chipsFromAnnotateStore,
   resetChatAnnotateDraftStoreForTests,
-} from '../src/storage/chat-annotate-draft';
+} from '@/storage/chat-annotate-draft';
 import {
   readChatComposerDraftState,
   refreshComposerAnnotateChips,
-} from '../src/storage/chat-composer-draft';
+} from '@/storage/chat-composer-draft';
 
 const mockReadEngine = jest.fn(async () => 'webview' as const);
 
-jest.mock('../src/runtime/novel-master-context', () => ({
+jest.mock('@/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({appUi: {get: jest.fn()}}),
 }));
 
-jest.mock('../src/storage/vfs-markdown-preview-engine', () => ({
+jest.mock('@/storage/vfs-markdown-preview-engine', () => ({
   defaultVfsMarkdownPreviewEngine: () => 'webview',
   readVfsMarkdownPreviewEngine: (...args: unknown[]) => mockReadEngine(...args),
 }));
@@ -30,7 +30,7 @@ jest.mock('@react-navigation/native', () => ({
   useIsFocused: () => true,
 }));
 
-jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
+jest.mock('@/components/vfs/RichDocumentWebView', () => ({
   RichDocumentWebView: jest.fn((props: Record<string, unknown>) => {
     const React = require('react');
     const {View} = require('react-native');
@@ -42,24 +42,24 @@ jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
   }),
 }));
 
-jest.mock('../src/components/chat/MessageEditModal', () => ({
+jest.mock('@/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
 }));
 
-jest.mock('../src/components/vfs/AnnotatePickModal', () => ({
+jest.mock('@/components/vfs/AnnotatePickModal', () => ({
   AnnotatePickModal: () => null,
 }));
 
-jest.mock('../src/components/rich-content/sanitize-rich-html', () => ({
+jest.mock('@/components/rich-content/sanitize-rich-html', () => ({
   sanitizeRichHtml: (html: string) => html,
 }));
 
-jest.mock('../src/components/rich-content/prepare-transcript-rich-html', () => ({
+jest.mock('@/components/rich-content/prepare-transcript-rich-html', () => ({
   prepareTranscriptRichHtml: (md: string) => `<div>${md}</div>`,
 }));
 
-import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
-import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
+import {FileMarkdownPreview} from '@/components/vfs/FileMarkdownPreview';
+import {RichDocumentWebView} from '@/components/vfs/RichDocumentWebView';
 
 const mockRichDocumentWebView = RichDocumentWebView as jest.MockedFunction<
   typeof RichDocumentWebView

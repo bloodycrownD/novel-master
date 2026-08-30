@@ -10,12 +10,12 @@ import {
   View,
 } from 'react-native';
 import type {PromptPreviewSegment} from '@novel-master/core/prompt';
-import {PromptPreviewSegmentCard} from '../../components/prompt/PromptPreviewSegmentCard';
-import {useMobileScope} from '../../hooks/useMobileScope';
-import {useRuntime} from '../../hooks/useRuntime';
-import {buildRealPromptPreviewSegments} from '../../services/prompt-preview.service';
-import {AgentRunError} from '../../services/agent-run.service';
-import {useTheme} from '../../theme/ThemeProvider';
+import {PromptPreviewSegmentCard} from '@/components/prompt/PromptPreviewSegmentCard';
+import {useMobileScope} from '@/hooks/useMobileScope';
+import {useRuntime} from '@/hooks/useRuntime';
+import {buildRealPromptPreviewSegments} from '@/services/prompt-preview.service';
+import {AgentRunError} from '@/services/agent-run.service';
+import {useTheme} from '@/theme/ThemeProvider';
 
 export function RealPromptScreen() {
   const {tokens} = useTheme();
@@ -45,8 +45,8 @@ export function RealPromptScreen() {
         err instanceof AgentRunError
           ? err.message
           : err instanceof Error
-            ? err.message
-            : String(err);
+          ? err.message
+          : String(err);
       setError(message);
       setSegments([]);
     } finally {

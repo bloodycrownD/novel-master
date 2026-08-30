@@ -4,7 +4,7 @@ import {
   isMobileAgentActive,
   setMobileAgentActive,
   subscribeMobileAgentActivity,
-} from '../src/runtime/agent-activity';
+} from '@/runtime/agent-activity';
 
 describe('agent-activity', () => {
   afterEach(() => {

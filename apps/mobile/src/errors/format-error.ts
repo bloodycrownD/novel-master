@@ -1,15 +1,15 @@
 /**
  * User-visible error messages for Core domain errors (VFS, chat, provider, tools, agent).
  */
-import { CloudSyncError, TdbcError, ToolError } from "@novel-master/core";
+import {CloudSyncError, TdbcError, ToolError} from '@novel-master/core';
 
-import { AgentError } from "@novel-master/core/agent";
+import {AgentError} from '@novel-master/core/agent';
 
-import { ChatError } from "@novel-master/core/chat";
+import {ChatError} from '@novel-master/core/chat';
 
-import { ProviderError } from "@novel-master/core/provider";
+import {ProviderError} from '@novel-master/core/provider';
 
-import { SessionFsError } from "@novel-master/core/session-fs";
+import {SessionFsError} from '@novel-master/core/session-fs';
 
 import {
   CharacterCardError,
@@ -17,7 +17,7 @@ import {
   VfsZipError,
   formatVfsErrorForUser,
   isVfsError,
-} from "@novel-master/core/vfs";
+} from '@novel-master/core/vfs';
 
 function formatCause(cause: unknown): string | undefined {
   if (cause instanceof Error && cause.message) {
@@ -30,15 +30,15 @@ function formatCause(cause: unknown): string | undefined {
 }
 
 function readCause(error: Error): unknown {
-  return (error as Error & { cause?: unknown }).cause;
+  return (error as Error & {cause?: unknown}).cause;
 }
 
 function formatProviderError(error: ProviderError): string {
   switch (error.code) {
-    case "API_KEY_NOT_SET":
-      return "请先在服务商设置中配置 API Key";
-    case "MODEL_NOT_SAVED":
-      return "请先从远程拉取并保存模型";
+    case 'API_KEY_NOT_SET':
+      return '请先在服务商设置中配置 API Key';
+    case 'MODEL_NOT_SAVED':
+      return '请先从远程拉取并保存模型';
     default:
       return error.message;
   }

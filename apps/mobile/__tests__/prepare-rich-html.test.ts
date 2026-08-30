@@ -1,4 +1,4 @@
-import {prepareRichHtml} from '../src/components/rich-content/prepare-rich-html';
+import {prepareRichHtml} from '@/components/rich-content/prepare-rich-html';
 
 describe('prepareRichHtml', () => {
   it('renders markdown headings', () => {
@@ -18,7 +18,9 @@ describe('prepareRichHtml', () => {
   });
 
   it('preserves sanitized inline style on div', () => {
-    const {html, classesStyles} = prepareRichHtml('<div style="color:red">x</div>');
+    const {html, classesStyles} = prepareRichHtml(
+      '<div style="color:red">x</div>',
+    );
     expect(html).toContain('nm-inline-c-0');
     expect(Object.values(classesStyles)).toContainEqual({color: 'red'});
     expect(html).toContain('x');

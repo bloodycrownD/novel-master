@@ -26,14 +26,16 @@ jest.mock('@novel-master/core', () => ({
       return [];
     }
   },
-  validateAgentDefinition: (...args: any[]) => mockValidateAgentDefinition(...args),
+  validateAgentDefinition: (...args: any[]) =>
+    mockValidateAgentDefinition(...args),
 }));
 
 // 实现从 @novel-master/core/agent 子路径导入 schema/校验（jest moduleNameMapper 指向真实 dist），
 // 须单独 mock，根入口 mock 拦不住子路径导入。
 jest.mock('@novel-master/core/agent', () => ({
   agentDefinitionSchema: {toWire: (x: any) => x},
-  validateAgentDefinition: (...args: any[]) => mockValidateAgentDefinition(...args),
+  validateAgentDefinition: (...args: any[]) =>
+    mockValidateAgentDefinition(...args),
 }));
 
 jest.mock('react-native-blob-util', () => ({
@@ -59,7 +61,7 @@ import {
   decodeAgentYamlText,
   exportAgentYaml,
   importAgentYaml,
-} from '../src/services/agent-yaml.service';
+} from '@/services/agent-yaml.service';
 
 describe('agent-yaml.service', () => {
   it('exports yaml via temp file + picker save flow', async () => {
@@ -72,20 +74,28 @@ describe('agent-yaml.service', () => {
       },
     } as any;
     await expect(exportAgentYaml(runtime, 'a1')).resolves.toBe('saved');
-    expect(mockWriteFile).toHaveBeenCalledWith('/tmp/a1.agent.yaml', 'yaml', 'utf8');
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/tmp/a1.agent.yaml',
+      'yaml',
+      'utf8',
+    );
     expect(mockSaveDocuments).toHaveBeenCalled();
     expect(mockUnlink).toHaveBeenCalledWith('/tmp/a1.agent.yaml');
   });
 
   it('rejects non-yaml file names from picker', async () => {
-    mockPick.mockResolvedValueOnce([{uri: 'file:///sdcard/readme.txt', name: 'readme.txt'}]);
+    mockPick.mockResolvedValueOnce([
+      {uri: 'file:///sdcard/readme.txt', name: 'readme.txt'},
+    ]);
     const runtime = {agentRegistry: {upsert: jest.fn()}} as any;
     await expect(importAgentYaml(runtime, 'a1')).rejects.toThrow(/\.yaml/);
     expect(mockKeepLocalCopy).not.toHaveBeenCalled();
   });
 
   it('imports yaml via picker/copy/read and persists agent', async () => {
-    mockPick.mockResolvedValueOnce([{uri: 'file:///sdcard/a1.agent.yaml', name: 'a1.agent.yaml'}]);
+    mockPick.mockResolvedValueOnce([
+      {uri: 'file:///sdcard/a1.agent.yaml', name: 'a1.agent.yaml'},
+    ]);
     mockKeepLocalCopy.mockResolvedValueOnce([
       {status: 'success', localUri: 'file:///tmp/local-a1.agent.yaml'},
     ]);
@@ -102,7 +112,10 @@ describe('agent-yaml.service', () => {
     await importAgentYaml(runtime, 'a1');
     expect(mockPick).toHaveBeenCalled();
     expect(mockKeepLocalCopy).toHaveBeenCalled();
-    expect(mockReadFile).toHaveBeenCalledWith('/tmp/local-a1.agent.yaml', 'utf8');
+    expect(mockReadFile).toHaveBeenCalledWith(
+      '/tmp/local-a1.agent.yaml',
+      'utf8',
+    );
     expect(mockValidateAgentDefinition).toHaveBeenCalled();
     expect(runtime.agentRegistry.upsert).toHaveBeenCalled();
   });

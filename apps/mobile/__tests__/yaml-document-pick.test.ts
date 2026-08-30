@@ -1,7 +1,10 @@
 import {describe, expect, it, jest} from '@jest/globals';
 
 jest.mock('@react-native-documents/picker', () => ({
-  isKnownType: jest.fn(() => ({mimeType: 'application/yaml', uti: 'public.yaml'})),
+  isKnownType: jest.fn(() => ({
+    mimeType: 'application/yaml',
+    uti: 'public.yaml',
+  })),
   types: {plainText: 'text/plain'},
 }));
 
@@ -9,7 +12,7 @@ import {isKnownType} from '@react-native-documents/picker';
 import {
   assertYamlFileName,
   yamlImportPickTypes,
-} from '../src/services/yaml-document-pick';
+} from '@/services/yaml-document-pick';
 
 describe('yaml-document-pick', () => {
   it('includes common YAML MIME types and isKnownType results', () => {

@@ -3,17 +3,17 @@
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import { type LlmProtocolKind } from "@novel-master/core/provider";
-import {FormChipGroup} from '../form/FormChipGroup';
-import {FormField} from '../form/FormField';
-import {FormSectionCard} from '../form/FormSectionCard';
-import {FormTextInput} from '../form/FormTextInput';
+import {type LlmProtocolKind} from '@novel-master/core/provider';
+import {FormChipGroup} from '@/components/form/FormChipGroup';
+import {FormField} from '@/components/form/FormField';
+import {FormSectionCard} from '@/components/form/FormSectionCard';
+import {FormTextInput} from '@/components/form/FormTextInput';
 import {ApiKeyStatusTag} from './ApiKeyStatusTag';
-import {ScreenFormLayout} from '../form/ScreenFormLayout';
-import {StickyFormFooter} from '../form/StickyFormFooter';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
+import {ScreenFormLayout} from '@/components/form/ScreenFormLayout';
+import {StickyFormFooter} from '@/components/form/StickyFormFooter';
+import {useTheme} from '@/theme/ThemeProvider';
+import {useToast} from '@/components/chrome/ToastHost';
+import {toastMessage} from '@/errors/toast-message';
 
 const PROTOCOLS: LlmProtocolKind[] = ['openai', 'anthropic', 'gemini'];
 
@@ -52,7 +52,9 @@ function parseHeadersJson(raw: string): Record<string, string> | undefined {
     throw new Error('Headers 必须是 JSON 对象');
   }
   const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+  for (const [key, value] of Object.entries(
+    parsed as Record<string, unknown>,
+  )) {
     if (typeof value !== 'string') {
       throw new Error(`Header ${key} 必须是字符串`);
     }
@@ -129,12 +131,9 @@ export function ProviderForm({
     setValues({...EMPTY_PROVIDER_FORM, ...initial});
   }, [initial]);
 
-  const patch = useCallback(
-    (next: Partial<ProviderFormValues>) => {
-      setValues(prev => ({...prev, ...next}));
-    },
-    [],
-  );
+  const patch = useCallback((next: Partial<ProviderFormValues>) => {
+    setValues(prev => ({...prev, ...next}));
+  }, []);
 
   const canSave = useMemo(() => {
     if (mode === 'create') {
@@ -177,7 +176,8 @@ export function ProviderForm({
             onPress={() => handleSave().catch(() => undefined)}
           />
         )
-      }>
+      }
+    >
       <FormSectionCard title="连接" tokens={tokens}>
         <FormField label="服务商名称" tokens={tokens}>
           <FormTextInput
@@ -221,11 +221,8 @@ export function ProviderForm({
         <FormField
           label="API Key"
           tokens={tokens}
-          hint={
-            mode === 'edit'
-              ? '留空则不修改'
-              : '必填，写入 SKSP 安全存储'
-          }>
+          hint={mode === 'edit' ? '留空则不修改' : '必填，写入 SKSP 安全存储'}
+        >
           <FormTextInput
             tokens={tokens}
             value={values.apiKey}

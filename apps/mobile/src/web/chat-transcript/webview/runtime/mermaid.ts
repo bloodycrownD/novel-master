@@ -39,7 +39,7 @@ export async function runMermaidScan(): Promise<void> {
     return;
   }
   await renderMermaidCodeBlocks(rows, mermaidCache, {
-    skip: (code) => !!code.closest('#stream-tail'),
+    skip: code => !!code.closest('#stream-tail'),
   });
 }
 

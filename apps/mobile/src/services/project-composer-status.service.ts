@@ -1,9 +1,12 @@
 /**
  * Composer 状态条投影：仅 annotate（user ops 拆除后收窄保留，D7）。
  */
-import { chipsFromAnnotateStore, type MessageAttachment } from '@novel-master/core/chat';
-import { applyComposerStatusAttachmentsReplace } from '../storage/chat-composer-draft';
-import type { MobileNovelMasterRuntime } from '../runtime/types';
+import {
+  chipsFromAnnotateStore,
+  type MessageAttachment,
+} from '@novel-master/core/chat';
+import {applyComposerStatusAttachmentsReplace} from '@/storage/chat-composer-draft';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 /**
  * session 真源 → 状态条 attachments（仅 annotate chip）。
@@ -23,7 +26,7 @@ export async function projectComposerStatusForSession(
  */
 export async function refreshComposerStatusAfterSessionKkvCleared(
   _runtime: MobileNovelMasterRuntime,
-  scope: { readonly projectId: string; readonly sessionId: string },
+  scope: {readonly projectId: string; readonly sessionId: string},
 ): Promise<void> {
   applyComposerStatusAttachmentsReplace({
     sessionId: scope.sessionId,
@@ -37,7 +40,7 @@ export async function refreshComposerStatusAfterSessionKkvCleared(
  */
 export async function refreshComposerStatusAfterFloorOrCompaction(
   runtime: MobileNovelMasterRuntime,
-  scope: { readonly projectId: string; readonly sessionId: string },
+  scope: {readonly projectId: string; readonly sessionId: string},
 ): Promise<void> {
   const attachments = await projectComposerStatusForSession(
     runtime,

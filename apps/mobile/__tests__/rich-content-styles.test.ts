@@ -2,7 +2,7 @@ import {
   buildRichContentCssRules,
   CHAT_TRANSCRIPT_RICH_CSS,
   RICH_DOCUMENT_RICH_CSS,
-} from '../src/web/shared/rich-content-styles';
+} from '@/web/shared/rich-content-styles';
 
 describe('rich-content-styles', () => {
   it('includes list padding for shared rich rules', () => {
@@ -19,7 +19,9 @@ describe('rich-content-styles', () => {
     expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('.bubble.rich ul ul');
     expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('font-weight: 600');
     expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('border-top: 1px solid');
-    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain(':first-child { margin-top: 0; }');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain(
+      ':first-child { margin-top: 0; }',
+    );
   });
 
   it('builds compound selectors for multiple roots', () => {

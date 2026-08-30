@@ -10,8 +10,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
-import type {CloudSyncProgressUiState} from '../../services/cloud-sync-progress-ui';
+import type {ThemeTokens} from '@/theme/tokens';
+import type {CloudSyncProgressUiState} from '@/services/cloud-sync-progress-ui';
 
 type Props = {
   title: string;
@@ -60,7 +60,8 @@ export function CloudSyncProgressPanel({title, state, tokens}: Props) {
             backgroundColor: tokens.surface,
             borderColor: tokens.borderLight,
           },
-        ]}>
+        ]}
+      >
         <ActivityIndicator color={tokens.primary} size="large" />
         <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
         <Text style={[styles.phase, {color: tokens.textSecondary}]}>
@@ -73,7 +74,8 @@ export function CloudSyncProgressPanel({title, state, tokens}: Props) {
             min: 0,
             max: 100,
             now: percent,
-          }}>
+          }}
+        >
           {state?.indeterminate === true ? (
             <Animated.View
               style={[

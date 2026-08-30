@@ -2,31 +2,25 @@
  * Chat input: 大框 + 框内「更多 / @ / 发送」；attachments draft。
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, {Path, Rect} from 'react-native-svg';
 
 import {
   resolveComposerSendIntent,
   type MessageAttachment,
 } from '@novel-master/core/chat';
-import type { WorkplaceListRow } from '@novel-master/core/workplace';
+import type {WorkplaceListRow} from '@novel-master/core/workplace';
 
-import { useTheme } from '@/theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
-import { formatError } from '@/errors/format-error';
+import {formatError} from '@/errors/format-error';
 
-import { runAgentTurn, type AgentRunScope } from '@/services/agent-run.service';
+import {runAgentTurn, type AgentRunScope} from '@/services/agent-run.service';
 
-import { useRuntime } from '@/hooks/useRuntime';
+import {useRuntime} from '@/hooks/useRuntime';
 
 import {isMobileAgentActive} from '@/runtime/agent-activity';
 
@@ -46,14 +40,14 @@ import {
   subscribeChatAnnotateDraft,
 } from '@/storage/chat-annotate-draft';
 
-import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
+import {projectComposerStatusForSession} from '@/services/project-composer-status.service';
 
-import { ComposerStatusChips } from './AttachmentDraftChips';
+import {ComposerStatusChips} from './AttachmentDraftChips';
 import {
   ComposerAtPathInput,
   type ComposerAtPathInputHandle,
 } from './ComposerAtPathInput';
-import { AtPathTypeahead } from './AtPathTypeahead';
+import {AtPathTypeahead} from './AtPathTypeahead';
 import {
   type AtPathRef,
   filterAtPathTypeaheadCandidates,
@@ -63,14 +57,11 @@ import {
 import {composerDockBottomPadding} from './composer-dock-padding';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
-import { FileReferencePicker } from './FileReferencePicker';
-import { SkillPicker } from '@/components/skills/SkillPicker';
-import {
-  SkillTypeahead,
-  filterSkillTypeaheadCandidates,
-} from './SkillTypeahead';
+import {FileReferencePicker} from './FileReferencePicker';
+import {SkillPicker} from '@/components/skills/SkillPicker';
+import {SkillTypeahead, filterSkillTypeaheadCandidates} from './SkillTypeahead';
 import type {EffectiveSkill} from '@novel-master/core/skills';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 type Props = {
   scope: AgentRunScope;
@@ -122,19 +113,19 @@ export function ChatComposer({
   lastMessageIsPlainUserText,
   draftRestoreToken,
 }: Props) {
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
   const runtime = useRuntime();
   // 键盘弹起时不再需要 safeAreaBottom padding——键盘已覆盖底部，
   // 多出来的 padding 会形成一道白条。
-  const { height: keyboardHeightSV } = useReanimatedKeyboardAnimation();
+  const {height: keyboardHeightSV} = useReanimatedKeyboardAnimation();
   const dockPadRest = composerDockBottomPadding(insets.bottom);
   const dockPaddingBottom = useAnimatedStyle(() => {
     const kb = -keyboardHeightSV.value;
     // 键盘弹起（kb > 0）时 padding 归零；否则走 safeAreaBottom
-    return { paddingBottom: kb > 0 ? 0 : dockPadRest };
+    return {paddingBottom: kb > 0 ? 0 : dockPadRest};
   }, [keyboardHeightSV, dockPadRest]);
-  const { sessionId } = scope;
+  const {sessionId} = scope;
   const initial = readChatComposerDraftState(sessionId);
   const [text, setText] = useState(initial.text);
   const [attachments, setAttachments] = useState<MessageAttachment[]>([
@@ -322,8 +313,7 @@ export function ChatComposer({
 
       // 有正文 / 批注草稿 → 成功后清输入
       // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
-      const shouldClearComposer =
-        content.trim() !== '' || hasAnnotateDrafts;
+      const shouldClearComposer = content.trim() !== '' || hasAnnotateDrafts;
       let composerCleared = false;
       const clearComposerNow = () => {
         if (composerCleared) {
@@ -390,11 +380,9 @@ export function ChatComposer({
                   name: err.name,
                   message: err.message,
                   stack: err.stack,
-                  cause: String(
-                    (err as Error & { cause?: unknown }).cause ?? '',
-                  ),
+                  cause: String((err as Error & {cause?: unknown}).cause ?? ''),
                 }
-              : { name: typeof err, message: String(err) };
+              : {name: typeof err, message: String(err)};
           console.error('[novel-master/chat] run failed', detail);
         }
         setError(formatError(err));
@@ -420,12 +408,10 @@ export function ChatComposer({
       const replaceStart = activeAt != null ? activeAt.start : cursor;
       const before = text.slice(0, replaceStart);
       const after = text.slice(cursor);
-      const gapBefore =
-        before.length === 0 || /\s$/.test(before) ? '' : ' ';
+      const gapBefore = before.length === 0 || /\s$/.test(before) ? '' : ' ';
       const joined = pathTokens.join(' ');
       // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
-      const gapAfter =
-        after.length === 0 || !/^\s/.test(after) ? ' ' : '';
+      const gapAfter = after.length === 0 || !/^\s/.test(after) ? ' ' : '';
       const inserted = `${gapBefore}${joined}${gapAfter}`;
       const next = `${before}${inserted}${after}`;
       const nextCursor = before.length + inserted.length;
@@ -511,10 +497,8 @@ export function ChatComposer({
       const replaceStart = activeSkill != null ? activeSkill.start : cursor;
       const before = text.slice(0, replaceStart);
       const after = text.slice(cursor);
-      const gapBefore =
-        before.length === 0 || /\s$/.test(before) ? '' : ' ';
-      const gapAfter =
-        after.length === 0 || !/^\s/.test(after) ? ' ' : '';
+      const gapBefore = before.length === 0 || /\s$/.test(before) ? '' : ' ';
+      const gapAfter = after.length === 0 || !/^\s/.test(after) ? ' ' : '';
       const inserted = `${gapBefore}${token}${gapAfter}`;
       const next = `${before}${inserted}${after}`;
       const nextCursor = before.length + inserted.length;
@@ -552,7 +536,7 @@ export function ChatComposer({
       hasModel,
       running,
     });
-    const { hasSendable, allowResumeWithoutInput } = intent;
+    const {hasSendable, allowResumeWithoutInput} = intent;
 
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
@@ -600,18 +584,18 @@ export function ChatComposer({
     >
       {!hasModel ? (
         <Pressable onPress={onNeedModel} style={styles.hintRow}>
-          <Text style={{ color: tokens.primary }}>请先选择工作区模型</Text>
+          <Text style={{color: tokens.primary}}>请先选择工作区模型</Text>
         </Pressable>
       ) : null}
 
       {error ? (
-        <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>
+        <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
       ) : null}
 
       <View
         style={[
           styles.box,
-          { backgroundColor: tokens.surface, borderColor: tokens.border },
+          {backgroundColor: tokens.surface, borderColor: tokens.border},
         ]}
       >
         {/* 状态 chip 在输入框内顶部：不可叉；无文件引用 attach chip */}
@@ -669,22 +653,18 @@ export function ChatComposer({
           <Pressable
             onPress={() => setPickerOpen(true)}
             disabled={inputDisabled}
-            style={[styles.toolBtn, { borderColor: tokens.border }]}
+            style={[styles.toolBtn, {borderColor: tokens.border}]}
             accessibilityLabel="引用文件"
           >
-            <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>
-              @
-            </Text>
+            <Text style={{color: tokens.textSecondary, fontSize: 16}}>@</Text>
           </Pressable>
           <Pressable
             onPress={() => setSkillPickerOpen(true)}
             disabled={inputDisabled}
-            style={[styles.toolBtn, { borderColor: tokens.border }]}
+            style={[styles.toolBtn, {borderColor: tokens.border}]}
             accessibilityLabel="引用技能"
           >
-            <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>
-              $
-            </Text>
+            <Text style={{color: tokens.textSecondary, fontSize: 16}}>$</Text>
           </Pressable>
           <Pressable
             onPress={send}
@@ -695,8 +675,8 @@ export function ChatComposer({
                 backgroundColor: sendDisabled
                   ? tokens.border
                   : running
-                    ? tokens.danger
-                    : tokens.primary,
+                  ? tokens.danger
+                  : tokens.primary,
               },
             ]}
             accessibilityLabel={running ? '终止' : '发送'}

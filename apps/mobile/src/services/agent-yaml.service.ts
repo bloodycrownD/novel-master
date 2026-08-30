@@ -1,8 +1,12 @@
 import {decode, encode, parseText, stringifyText} from '@novel-master/core';
 import {registerBuiltinTools, ToolRegistry} from '@novel-master/core';
-import {agentDefinitionSchema, validateAgentDefinition, type AgentDefinition} from '@novel-master/core/agent';
+import {
+  agentDefinitionSchema,
+  validateAgentDefinition,
+  type AgentDefinition,
+} from '@novel-master/core/agent';
 
-import type {MobileNovelMasterRuntime} from '../runtime/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {
   exportYamlFile,
   importYamlFile,

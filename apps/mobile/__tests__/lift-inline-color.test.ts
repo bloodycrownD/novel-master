@@ -1,11 +1,9 @@
-import {liftInlineColorToInnerSpan} from '../src/components/rich-content/lift-inline-color';
-import {prepareRichHtml} from '../src/components/rich-content/prepare-rich-html';
+import {liftInlineColorToInnerSpan} from '@/components/rich-content/lift-inline-color';
+import {prepareRichHtml} from '@/components/rich-content/prepare-rich-html';
 
 describe('liftInlineColorToInnerSpan', () => {
   it('wraps colored p content in span', () => {
-    const out = liftInlineColorToInnerSpan(
-      "<p style='color:red'>hi</p>",
-    );
+    const out = liftInlineColorToInnerSpan("<p style='color:red'>hi</p>");
     expect(out).toMatch(/<span style=['"]color:\s*red['"]>hi<\/span>/i);
   });
 });

@@ -4,7 +4,7 @@
 import React, {type ReactNode} from 'react';
 import {StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
-import {AppHeader} from '../components/chrome/AppHeader';
+import {AppHeader} from '@/components/chrome/AppHeader';
 import type {HeaderPageKey} from './header-config';
 
 type Props = {

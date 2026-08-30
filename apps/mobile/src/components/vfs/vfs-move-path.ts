@@ -25,9 +25,7 @@ export function resolveMoveDestination(
   targetDir: string,
 ): string {
   const name =
-    sourcePath === '/'
-      ? ''
-      : sourcePath.slice(sourcePath.lastIndexOf('/') + 1);
+    sourcePath === '/' ? '' : sourcePath.slice(sourcePath.lastIndexOf('/') + 1);
   if (!name) {
     return targetDir;
   }

@@ -1,4 +1,4 @@
-import { type ChatMessage } from "@novel-master/core/chat";
+import {type ChatMessage} from '@novel-master/core/chat';
 
 jest.mock('@novel-master/core', () => {
   const actual = jest.requireActual('@novel-master/core');
@@ -8,8 +8,8 @@ jest.mock('@novel-master/core', () => {
   };
 });
 
-import {loadSessionMessagesForDisplay} from '../src/services/regex-apply-channel';
-import type {MobileNovelMasterRuntime} from '../src/runtime/types';
+import {loadSessionMessagesForDisplay} from '@/services/regex-apply-channel';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
 function msg(id: string, hidden: boolean): ChatMessage {
   return {

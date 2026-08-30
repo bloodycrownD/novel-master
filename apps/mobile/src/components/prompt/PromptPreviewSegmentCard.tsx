@@ -3,7 +3,7 @@
  */
 import React, {useMemo, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 const ROLE_LABEL: Record<string, string> = {
   system: '系统',
@@ -62,14 +62,19 @@ export function PromptPreviewSegmentCard({segment}: Props) {
           backgroundColor: tokens.surface,
           borderColor: tokens.borderLight,
         },
-      ]}>
+      ]}
+    >
       <Pressable
         style={styles.header}
         onPress={() => setExpanded(v => !v)}
         accessibilityRole="button"
-        accessibilityState={{expanded}}>
+        accessibilityState={{expanded}}
+      >
         <View style={styles.headerText}>
-          <Text style={[styles.role, {color: tokens.primary}]} numberOfLines={1}>
+          <Text
+            style={[styles.role, {color: tokens.primary}]}
+            numberOfLines={1}
+          >
             {roleLabel}
           </Text>
           <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1}>
@@ -79,7 +84,8 @@ export function PromptPreviewSegmentCard({segment}: Props) {
             <View>
               <Text
                 style={[styles.preview, {color: tokens.textSecondary}]}
-                numberOfLines={2}>
+                numberOfLines={2}
+              >
                 {collapsedHint}
               </Text>
               {charCount > 0 ? (
@@ -95,9 +101,7 @@ export function PromptPreviewSegmentCard({segment}: Props) {
         </Text>
       </Pressable>
       {expanded ? (
-        <Text
-          style={[styles.body, {color: tokens.text}]}
-          selectable>
+        <Text style={[styles.body, {color: tokens.text}]} selectable>
           {segment.body || '（空）'}
         </Text>
       ) : null}

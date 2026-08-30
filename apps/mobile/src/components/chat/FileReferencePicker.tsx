@@ -3,7 +3,7 @@
  * - at-ref（默认）：层级浏览 + 多选文件与目录，产出 @path token（ChatComposer）
  * - pick-directory：注入 VfsScope，单选目标目录（批量移动）
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,18 +12,18 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { WorkplaceListRow } from '@novel-master/core/workplace';
-import type { VfsScope } from '@novel-master/core/vfs';
-import { AppModal } from '@/components/ui/AppModal';
-import { useTheme } from '@/theme/ThemeProvider';
-import { formatError } from '@/errors/format-error';
-import { useRuntime } from '@/hooks/useRuntime';
+import type {WorkplaceListRow} from '@novel-master/core/workplace';
+import type {VfsScope} from '@novel-master/core/vfs';
+import {AppModal} from '@/components/ui/AppModal';
+import {useTheme} from '@/theme/ThemeProvider';
+import {formatError} from '@/errors/format-error';
+import {useRuntime} from '@/hooks/useRuntime';
 import {
   isDirectChild,
   parentLogicalPath,
 } from '@/components/vfs/vfs-row-mapper';
-import { isBlockedMoveTarget } from '@/components/vfs/vfs-move-path';
-import { atPathTokensFromPickerSelection } from './composer-at-path';
+import {isBlockedMoveTarget} from '@/components/vfs/vfs-move-path';
+import {atPathTokensFromPickerSelection} from './composer-at-path';
 
 type AtRefPickerProps = {
   visible: boolean;
@@ -72,7 +72,7 @@ export function listPickerDirectoryChildRows(
   return listPickerChildRows(rows, currentPath).filter(r => r.kind === 'dir');
 }
 
-export { atPathTokensFromPickerSelection };
+export {atPathTokensFromPickerSelection};
 
 function toggleInSet(prev: Set<string>, path: string): Set<string> {
   const next = new Set(prev);
@@ -84,9 +84,7 @@ function toggleInSet(prev: Set<string>, path: string): Set<string> {
   return next;
 }
 
-function resolveWorkplaceScope(
-  props: FileReferencePickerProps,
-): VfsScope {
+function resolveWorkplaceScope(props: FileReferencePickerProps): VfsScope {
   if (props.mode === 'pick-directory') {
     return props.scope;
   }
@@ -98,12 +96,12 @@ function resolveWorkplaceScope(
 }
 
 export function FileReferencePicker(props: FileReferencePickerProps) {
-  const { visible, onClose } = props;
+  const {visible, onClose} = props;
   const isPickDirectory = props.mode === 'pick-directory';
   const blockedSourcePaths = isPickDirectory
-    ? (props.blockedSourcePaths ?? [])
+    ? props.blockedSourcePaths ?? []
     : [];
-  const { tokens } = useTheme();
+  const {tokens} = useTheme();
   const runtime = useRuntime();
   const [rows, setRows] = useState<WorkplaceListRow[]>([]);
   const [currentPath, setCurrentPath] = useState('/');
@@ -113,7 +111,10 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
   const [loading, setLoading] = useState(false);
 
   const workplaceScope = resolveWorkplaceScope(props);
-  const scopeKey = useMemo(() => JSON.stringify(workplaceScope), [workplaceScope]);
+  const scopeKey = useMemo(
+    () => JSON.stringify(workplaceScope),
+    [workplaceScope],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -207,18 +208,18 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
     >
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={[styles.panel, { backgroundColor: tokens.surface }]}>
-          <Text style={[styles.title, { color: tokens.text }]}>
+        <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
+          <Text style={[styles.title, {color: tokens.text}]}>
             {isPickDirectory ? '选择目标目录' : '引用文件'}
           </Text>
-          <Text style={{ color: tokens.textSecondary, marginBottom: 8 }}>
+          <Text style={{color: tokens.textSecondary, marginBottom: 8}}>
             {isPickDirectory
               ? '浏览到目标文件夹后确认；不可选中源自身或其子树'
               : '可多选文件与目录'}
           </Text>
           <View style={styles.navBar}>
             <Text
-              style={[styles.cwd, { color: tokens.text }]}
+              style={[styles.cwd, {color: tokens.text}]}
               numberOfLines={1}
               testID="file-ref-cwd"
             >
@@ -259,21 +260,21 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                 {isPickDirectory
                   ? '选择当前文件夹'
                   : currentDirSelected
-                    ? '取消选用'
-                    : '选择当前文件夹'}
+                  ? '取消选用'
+                  : '选择当前文件夹'}
               </Text>
             </Pressable>
           </View>
           {cwdBlocked ? (
             <Text
-              style={{ color: tokens.danger, marginBottom: 8 }}
+              style={{color: tokens.danger, marginBottom: 8}}
               testID="file-ref-cwd-blocked"
             >
               当前目录是源自身或子树，不能作为目标
             </Text>
           ) : null}
           {error ? (
-            <Text style={{ color: tokens.danger, marginBottom: 8 }}>{error}</Text>
+            <Text style={{color: tokens.danger, marginBottom: 8}}>{error}</Text>
           ) : null}
           {loading ? (
             <ActivityIndicator color={tokens.primary} />
@@ -282,7 +283,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
               data={visibleRows}
               keyExtractor={item => `${item.kind}:${item.path}`}
               style={styles.list}
-              renderItem={({ item }) => {
+              renderItem={({item}) => {
                 const label = basename(item.path) || item.path;
                 if (item.kind === 'dir') {
                   const dirBlocked =
@@ -301,7 +302,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                           testID={`file-ref-dir-check-${item.path}`}
                           accessibilityLabel={`选用目录 ${label}`}
                         >
-                          <Text style={{ color: tokens.text }}>
+                          <Text style={{color: tokens.text}}>
                             {checked ? '☑' : '☐'}
                           </Text>
                         </Pressable>
@@ -320,10 +321,9 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                             flex: 1,
                           }}
                         >
-                          📁 {label}/
-                          {dirBlocked ? '（不可作目标）' : ''}
+                          📁 {label}/{dirBlocked ? '（不可作目标）' : ''}
                         </Text>
-                        <Text style={{ color: tokens.textSecondary }}>›</Text>
+                        <Text style={{color: tokens.textSecondary}}>›</Text>
                       </Pressable>
                     </View>
                   );
@@ -340,7 +340,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                       testID={`file-ref-file-${item.path}`}
                       accessibilityLabel={`选用文件 ${label}`}
                     >
-                      <Text style={{ color: tokens.text }}>
+                      <Text style={{color: tokens.text}}>
                         {checked ? '☑' : '☐'}
                       </Text>
                     </Pressable>
@@ -350,7 +350,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                       testID={`file-ref-file-label-${item.path}`}
                       accessibilityLabel={`选用文件 ${label}`}
                     >
-                      <Text style={{ color: tokens.text, flex: 1 }}>
+                      <Text style={{color: tokens.text, flex: 1}}>
                         📄 {label}
                       </Text>
                     </Pressable>
@@ -358,7 +358,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
                 );
               }}
               ListEmptyComponent={
-                <Text style={{ color: tokens.textSecondary }}>
+                <Text style={{color: tokens.textSecondary}}>
                   {isPickDirectory ? '暂无子目录' : '暂无文件'}
                 </Text>
               }
@@ -366,7 +366,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
           )}
           <View style={styles.foot}>
             <Pressable onPress={onClose} style={styles.footBtn}>
-              <Text style={{ color: tokens.text }}>取消</Text>
+              <Text style={{color: tokens.text}}>取消</Text>
             </Pressable>
             <Pressable
               disabled={!canConfirm}
@@ -379,7 +379,7 @@ export function FileReferencePicker(props: FileReferencePickerProps) {
               testID="file-ref-confirm"
               onPress={handleConfirm}
             >
-              <Text style={{ color: '#fff' }}>确认</Text>
+              <Text style={{color: '#fff'}}>确认</Text>
             </Pressable>
           </View>
         </View>
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   },
-  title: { fontSize: 18, fontWeight: '600', marginBottom: 4 },
+  title: {fontSize: 18, fontWeight: '600', marginBottom: 4},
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -408,9 +408,9 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  cwd: { flexGrow: 1, flexShrink: 1, fontSize: 13 },
-  navBtn: { paddingVertical: 4, paddingHorizontal: 4 },
-  list: { maxHeight: 360 },
+  cwd: {flexGrow: 1, flexShrink: 1, fontSize: 13},
+  navBtn: {paddingVertical: 4, paddingHorizontal: 4},
+  list: {maxHeight: 360},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     borderRadius: 8,
   },
-  checkHit: { paddingVertical: 8, paddingHorizontal: 8 },
+  checkHit: {paddingVertical: 8, paddingHorizontal: 8},
   rowBody: {
     flex: 1,
     flexDirection: 'row',

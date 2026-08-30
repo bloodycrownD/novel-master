@@ -4,7 +4,7 @@
  */
 import React, {type ReactNode} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import type {ThemeTokens} from '../../theme/tokens';
+import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
   label: string;

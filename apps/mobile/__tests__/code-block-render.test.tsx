@@ -21,11 +21,14 @@ jest.mock('sanitize-html', () => {
 import React from 'react';
 import {create, act} from 'react-test-renderer';
 import {Text} from 'react-native';
-import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
-import {RichContentBody} from '../src/components/rich-content/RichContentBody';
-import {RICH_CONTENT_MAX_CHARS} from '../src/components/rich-content/rich-content-limits';
-import {buildRichContentCssRules} from '../src/web/shared/rich-content-styles';
-import {normalizeFenceLang, LANG_ALIAS} from '../src/components/rich-content/highlight-code';
+import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
+import {RichContentBody} from '@/components/rich-content/RichContentBody';
+import {RICH_CONTENT_MAX_CHARS} from '@/components/rich-content/rich-content-limits';
+import {buildRichContentCssRules} from '@/web/shared/rich-content-styles';
+import {
+  normalizeFenceLang,
+  LANG_ALIAS,
+} from '@/components/rich-content/highlight-code';
 
 /** 双端统一验收样例（与 desktop test/code-block-render.test.tsx 保持同文）。 */
 const UNIFIED_SAMPLE = [
@@ -129,9 +132,9 @@ const UNIFIED_TOKEN_CLASSES = [
 ];
 
 function collectDataLangs(html: string): string[] {
-  return [...new Set(
-    [...html.matchAll(/data-lang="([^"]*)"/g)].map((m) => m[1]!),
-  )].sort();
+  return [
+    ...new Set([...html.matchAll(/data-lang="([^"]*)"/g)].map(m => m[1]!)),
+  ].sort();
 }
 
 function collectTokenClasses(html: string): string[] {
@@ -219,7 +222,8 @@ describe('code block render (mobile)', () => {
     expect(html.match(/<span class="code-copy"><\/span>/g)).toHaveLength(2);
     // mermaid 不是普通代码块：其 pre 不含复制按钮（与 desktop MermaidBlock 口径对齐，MF-11）
     const mermaidPre =
-      html.match(/<pre><code class="language-mermaid">[\s\S]*?<\/pre>/)?.[0] ?? '';
+      html.match(/<pre><code class="language-mermaid">[\s\S]*?<\/pre>/)?.[0] ??
+      '';
     expect(mermaidPre).not.toBe('');
     expect(mermaidPre).not.toContain('code-copy');
     // 按钮是空 span：label 走 CSS 伪元素，不进 textContent（批注文本流零偏移）
@@ -340,13 +344,16 @@ describe('code block render (mobile)', () => {
     expect([...nodeTypes].sort()).toEqual(['Text', 'View']);
     // 源码原样展示 + 超长提示
     expect(texts[0]).toBe(long);
-    expect(texts.some((t) => t.includes('内容过长'))).toBe(true);
+    expect(texts.some(t => t.includes('内容过长'))).toBe(true);
 
     // 普通长度：仅源码 Text，无提示
     let plain: React.ReactTestRenderer;
     act(() => {
       plain = create(
-        <RichContentBody content={'```ts\nconst a = 1;\n```'} tokens={tokens as never} />,
+        <RichContentBody
+          content={'```ts\nconst a = 1;\n```'}
+          tokens={tokens as never}
+        />,
       );
     });
     const plainJson = plain!.toJSON()!;

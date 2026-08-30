@@ -1,5 +1,5 @@
 import {describe, expect, it} from '@jest/globals';
-import {shouldEnableFileAnnotate} from '../src/components/vfs/file-annotate-gate';
+import {shouldEnableFileAnnotate} from '@/components/vfs/file-annotate-gate';
 
 describe('shouldEnableFileAnnotate (P1-D2 / T-MAN1 gate)', () => {
   it('仅 previewMode + scopeKind=session + sessionId 为真', () => {

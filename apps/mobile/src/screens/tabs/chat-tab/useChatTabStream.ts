@@ -88,4 +88,6 @@ export function useChatTabScrollCache({
   };
 }
 
-export type UseChatTabScrollCacheResult = ReturnType<typeof useChatTabScrollCache>;
+export type UseChatTabScrollCacheResult = ReturnType<
+  typeof useChatTabScrollCache
+>;

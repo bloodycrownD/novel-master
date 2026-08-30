@@ -5,10 +5,10 @@ import React, {useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
-import {AgentEditorForm} from '../../components/agent/AgentEditorForm';
-import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
-import type {RootStackParamList} from '../../navigation/types';
-import {useTheme} from '../../theme/ThemeProvider';
+import {AgentEditorForm} from '@/components/agent/AgentEditorForm';
+import {useUnsavedGuard} from '@/hooks/useUnsavedGuard';
+import type {RootStackParamList} from '@/navigation/types';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type EditorRoute = RouteProp<RootStackParamList, 'AgentEditor'>;
 

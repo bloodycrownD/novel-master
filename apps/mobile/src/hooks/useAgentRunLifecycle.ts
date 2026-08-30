@@ -18,15 +18,18 @@ import {
   shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,
 } from '@novel-master/core/agent';
-import { useCallback, useRef, useState } from 'react';
+import {useCallback, useRef, useState} from 'react';
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
 } from '@novel-master/core/events';
-import { decrementAgentActive, incrementAgentActive } from '@/runtime/agent-activity';
+import {
+  decrementAgentActive,
+  incrementAgentActive,
+} from '@/runtime/agent-activity';
 
-export { shouldApplyTranscriptReload };
+export {shouldApplyTranscriptReload};
 
 export type AgentRunLifecycle = {
   readonly activeRunId: string | null;

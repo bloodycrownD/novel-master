@@ -1,10 +1,12 @@
 import {
   CHAT_TRANSCRIPT_TELEMETRY_ENABLED,
   emitChatTranscriptTelemetry,
-} from '../src/services/chat-transcript-telemetry';
+} from '@/services/chat-transcript-telemetry';
 
 describe('chat-transcript-telemetry', () => {
-  const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => undefined);
+  const infoSpy = jest
+    .spyOn(console, 'info')
+    .mockImplementation(() => undefined);
 
   afterEach(() => {
     infoSpy.mockClear();
