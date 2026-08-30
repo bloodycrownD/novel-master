@@ -67,7 +67,9 @@ export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
 }
 
 const styles = StyleSheet.create({
-  promptBox: {borderRadius: 12, padding: 16},
+  // ModalShell center 容器带 alignItems:'center'（子元素收缩包裹），
+  // 未声明宽度的面板会坍成内容宽——必须显式撑满（旧行为：接近全宽卡片）。
+  promptBox: {width: '100%', borderRadius: 12, padding: 16},
   promptTitle: {fontSize: 16, fontWeight: '600', marginBottom: 12},
   promptInput: {
     borderWidth: 1,
