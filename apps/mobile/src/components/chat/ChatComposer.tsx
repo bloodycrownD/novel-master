@@ -18,11 +18,9 @@ import {useTheme} from '@/theme/ThemeProvider';
 
 import {formatError} from '@/errors/format-error';
 
-import {runAgentTurn, type AgentRunScope} from '@/services/agent-run.service';
+import type {AgentRunScope} from '@/services/agent-run.service';
 
 import {useRuntime} from '@/hooks/useRuntime';
-
-import {isMobileAgentActive} from '@/runtime/agent-activity';
 
 import {
   applyComposerStatusAttachmentsReplace,
@@ -75,7 +73,10 @@ type Props = {
 
   beginUiRun: () => void;
 
-  /** UI run 异常收尾（替代旧 finally 兜底递减，refcount 单一归属 lifecycle）。 */
+  /**
+   * UI run 异常收尾（本地异常 / startRun 被拒时收回 UI 态；
+   * refcount 已归 AgentRunManager，此处只收 UI 侧状态）。
+   */
   endUiRunOnError: () => void;
 
   abortUiRun: () => void;
@@ -325,10 +326,6 @@ export function ChatComposer({
 
   const executeRun = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
-      if (isMobileAgentActive()) {
-        return;
-      }
-
       setError(undefined);
       onStreamReset();
       beginUiRun();
@@ -350,9 +347,13 @@ export function ChatComposer({
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
         const annotateDrafts = listChatAnnotateDrafts(sessionId);
-        // 文件引用由 Core 扫描正文 `@`；规则变更不走差集 materialize
-        // caller 不传 signal——core runAgentTurn 自建 internalController 注册到 registry。
-        await runAgentTurn(runtime, scope, content, {
+        // 迁移 AgentRunManager：门禁由 Manager per-session 拒绝（返回明确错误），
+        // run 本体 fire-and-forget；refcount 与收尾归 Manager。
+        const manager = runtime.agentRunManager;
+        if (manager == null) {
+          throw new Error('运行时尚未就绪，请稍后重试');
+        }
+        const started = manager.startRun(sessionId, scope.projectId, content, {
           stream,
           allowResumeWithoutInput,
           annotateDrafts:
@@ -365,35 +366,35 @@ export function ChatComposer({
               streamHandlersRef.current.onMessagesChanged(),
             ).catch(() => undefined);
           },
+          onSettled: () => {
+            // 空续跑等路径可能不走 append 回调——结束后兑底清草稿
+            if (shouldClearComposer) {
+              clearComposerNow();
+            }
+            // 以投影为准刷新 chip（仅 annotate）
+            void projectComposerStatusForSession(runtime, sessionId)
+              .then(status => {
+                applyComposerStatusAttachmentsReplace({
+                  sessionId,
+                  attachments: status,
+                });
+              })
+              .catch(() => undefined);
+            // 再刷一次列表：切走 / 无面板场景的补刷；停留当前面板时与
+            // useSessionStream 的 FINISHED 路径双刷幂等（代价是多一次 DB 读，可接受）。
+            void Promise.resolve(
+              streamHandlersRef.current.onMessagesChanged(),
+            ).catch(() => undefined);
+          },
         });
-        // 空续跑等路径可能不走 append 回调
-        if (shouldClearComposer) {
-          clearComposerNow();
-        }
-        // 以投影为准刷新 chip（仅 annotate）
-        try {
-          const status = await projectComposerStatusForSession(
-            runtime,
-            sessionId,
-          );
-          applyComposerStatusAttachmentsReplace({
-            sessionId,
-            attachments: status,
-          });
-        } catch {
-          // 投影失败不影响发送结果
-        }
-        // 再刷一次列表，覆盖 re-append / 流式末态漏刷新
-        await Promise.resolve(
-          streamHandlersRef.current.onMessagesChanged(),
-        ).catch(() => undefined);
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          // abort 走正常 RUN_FINISHED/FAILED 路径，lifecycle 自己递减 refcount，
-          // 这里不再调用 endUiRunOnError。
+        if (!started.ok) {
+          // Manager 拒绝（同会话已有 run）：收回本次 UI 态并明确反馈
+          endUiRunOnError();
+          setError(started.error);
           return;
         }
-        // 非 abort 异常：收敛到 lifecycle 单一归属收尾。
+      } catch (err) {
+        // 本地异常（偏好读取失败 / runtime 未就绪等）：收敛收尾
         endUiRunOnError();
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const detail =
