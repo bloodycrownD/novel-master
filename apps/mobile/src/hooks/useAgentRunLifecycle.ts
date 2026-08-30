@@ -31,10 +31,27 @@ import {
 
 export {shouldApplyTranscriptReload};
 
+/**
+ * 发起保护窗时长（MF-4）：beginUiRun 到 core 侧 abortRegistry.register 之间
+ * 的正常延迟窗口。窗口内探针把 registry.has=false 视为「尚未 register」而非
+ * 「run 已结束」、不收尾；须覆盖 agent-runner 启动到 register 的正常耗时
+ * （数百毫秒量级），3s 留有余量。窗口过期后仍 !has 才允许收尾校准。
+ * 守卫本身在 ChatTabProvider 的 onRunEnded 闭包（一处覆盖前台探针与轮询）。
+ */
+export const RUN_LAUNCH_PROTECT_WINDOW_MS = 3_000;
+
 export type AgentRunLifecycle = {
   readonly activeRunId: string | null;
   /** 发 run 前：递增 agentActive；同时通过回调通知 abort 单元 markRunStarted。 */
   beginUiRun(): void;
+  /**
+   * 最近一次 beginUiRun 的时刻（Date.now()，从未发起为 0）。
+   *
+   * 发起保护窗判据：beginUiRun 置 uiRunning=true 后、core 侧
+   * abortRegistry.register 尚未发生的窗口内，收尾探针不得把
+   * registry.has=false 误判为「run 已结束」（详见 ChatTabProvider 的守卫）。
+   */
+  getBeginUiRunAt(): number;
   /** runId 不匹配则丢弃。 */
   acceptRunEvent(runId: string | undefined): boolean;
   /** 设 activeRunId=runId（幂等，stale 守卫过滤迟到的 RUN_STARTED）；通知 abort 单元 uiRunning=true。 */
@@ -89,6 +106,9 @@ export function useAgentRunLifecycle({
   const activeRunIdRef = useRef<string | null>(null);
   // 跟踪 beginUiRun / onRunStarted 是否已激活 UI run 态，给 endUiRunOnError 做幂等守卫。
   const uiActiveRef = useRef(false);
+  // 最近一次发起（beginUiRun）时刻：发起保护窗判据。不记在 abort.markRunStarted
+  // ——探针的合成恢复也调它，记那边会把合法的兑底收尾一并推迟保护窗时长。
+  const beginUiRunAtRef = useRef(0);
 
   const onRunUiActivateRef = useRef(onRunUiActivate);
   onRunUiActivateRef.current = onRunUiActivate;
@@ -112,9 +132,12 @@ export function useAgentRunLifecycle({
   const beginUiRun = useCallback(() => {
     // abort 状态机的 freeze/retain 清理由 abort.markRunStarted 完成。
     uiActiveRef.current = true;
+    beginUiRunAtRef.current = Date.now();
     onRunUiActivateRef.current?.();
     incrementAgentActive();
   }, []);
+
+  const getBeginUiRunAt = useCallback(() => beginUiRunAtRef.current, []);
 
   const acceptRunEvent = useCallback(
     (runId: string | undefined): boolean => {
@@ -209,6 +232,7 @@ export function useAgentRunLifecycle({
   return {
     activeRunId,
     beginUiRun,
+    getBeginUiRunAt,
     acceptRunEvent,
     onRunStarted,
     onRunFinished,

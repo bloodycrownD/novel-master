@@ -34,7 +34,7 @@ import type {
 import {useToast} from '@/components/chrome/ToastHost';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useMobileScope} from '@/hooks/useMobileScope';
-import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
+import {useAgentRunLifecycle, RUN_LAUNCH_PROTECT_WINDOW_MS} from '@/hooks/useAgentRunLifecycle';
 import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
@@ -367,6 +367,15 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       abort.markRunStarted();
     },
     onRunEnded: () => {
+      // 发起保护窗（MF-4）：beginUiRun 先把 uiRunning 置 true，core 侧
+      // abortRegistry.register 要到 agent-runner 跑起来才发生；若恰逢回
+      // 前台/轮询触发探针且复询时仍未 register，把 has=false 误判为
+      // 「run 已结束」收尾，uiRunning 翻 false 后迟到的真 RUN_STARTED 会被
+      // stale 守卫拒收，本轮流式 UI 全丢。窗口内不收尾；过期后仍 !has
+      // 才兑底。守卫落本闭包一处，同时覆盖前台探针与 30s 轮询两条触发路径。
+      if (Date.now() - lifecycle.getBeginUiRunAt() < RUN_LAUNCH_PROTECT_WINDOW_MS) {
+        return;
+      }
       abort.markRunEnded();
       void handleMessagesChanged().catch(() => undefined);
     },

@@ -20,7 +20,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
 } from '@novel-master/core/events';
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
-import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
+import {useAgentRunLifecycle, RUN_LAUNCH_PROTECT_WINDOW_MS} from '@/hooks/useAgentRunLifecycle';
 import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
 import {useChatStreamResumeInject} from '@/screens/tabs/chat-tab/useChatStreamResumeInject';
 import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
@@ -171,6 +171,15 @@ describe('主会话流式重进恢复（T-R1/R3/R4/R5/R7/R8）', () => {
           abort.markRunStarted();
         },
         onRunEnded: () => {
+          // 发起保护窗（MF-4，与 ChatTabProvider 同款）：beginUiRun 到 core
+          // register 的窗口内 has=false 视为「尚未 register」，不收尾；守卫落
+          // 本闭包一处，同时覆盖前台探针与 30s 轮询两条触发路径。
+          if (
+            Date.now() - lifecycle.getBeginUiRunAt() <
+            RUN_LAUNCH_PROTECT_WINDOW_MS
+          ) {
+            return;
+          }
           abort.markRunEnded();
         },
         uiRunning: abort.uiRunning,
@@ -359,6 +368,55 @@ describe('主会话流式重进恢复（T-R1/R3/R4/R5/R7/R8）', () => {
     });
     expect(h.api.compat.uiRunning).toBe(false);
     expect(isMobileAgentActive()).toBe(false);
+  });
+
+  it('MF-4 发起保护窗：beginUiRun 后窗口内探针不收尾，窗口过期后仍未注册才收尾', async () => {
+    let appStateListener: (state: string) => void = () => undefined;
+    // 与 T-R6 同款宽松 spy 类型（ReturnType<typeof jest.spyOn>），
+    // 否则 mockImplementation 的箭头函数须精确匹配 RN 原生签名。
+    let spy: ReturnType<typeof jest.spyOn>;
+    spy = jest.spyOn(AppState, 'addEventListener');
+    spy.mockImplementation((_e: unknown, cb: (state: string) => void) => {
+      appStateListener = cb;
+      return {remove: () => undefined} as unknown as {remove: () => void};
+    });
+    const flushTimers = (ms: number) =>
+      new Promise<void>(resolve => {
+        setTimeout(resolve, ms);
+        jest.advanceTimersByTime(ms);
+      });
+    try {
+      const h = mountFull('s1');
+      // 发起：beginUiRun 置 uiRunning=true，时间戳记在 lifecycle.beginUiRun
+      // （core 侧 abortRegistry.register 尚未发生，s1Has=false）
+      act(() => {
+        h.api.compat.beginUiRun();
+      });
+      expect(h.api.abort.uiRunning).toBe(true);
+      // 保护窗内：回前台触发探针 + 800ms 复询仍 !has → 视为「尚未
+      // register」而非「run 已结束」，不收尾（否则迟到的真 RUN_STARTED
+      // 会被 stale 守卫拒收，本轮流式 UI 全丢）
+      act(() => {
+        appStateListener('active');
+      });
+      await act(async () => {
+        await flushTimers(800);
+      });
+      expect(h.api.abort.uiRunning).toBe(true);
+      // 窗口过期后仍 !has：探针触发 → 收尾校准正常（uiRunning 归 false）
+      act(() => {
+        jest.advanceTimersByTime(RUN_LAUNCH_PROTECT_WINDOW_MS + 100);
+      });
+      act(() => {
+        appStateListener('active');
+      });
+      await act(async () => {
+        await flushTimers(800);
+      });
+      expect(h.api.abort.uiRunning).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   /** 注入 hook 单元组装：props 可控 rerender，直接断言 imperative 注入。 */
