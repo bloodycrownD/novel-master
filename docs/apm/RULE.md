@@ -70,3 +70,8 @@ merge 到 main、push、发版等改变共享状态的操作，必须等用户�
 - **主仓提交前防「编辑器旧缓冲」回写**：用户在 Zed 等编辑器打开的旧文件缓冲，会在子代理改文件后保存覆盖，把已删代码带回提交（pms-integration 迭代三度发生：工具计数 9→8、done 桥 ipc-types 两段、handler-registry 三段）。主仓有用户编辑器驻留时，每次提交前对涉改文件 `git diff --stat` 复核；派 impl/fix 子代理须在 prompt 里要求提交前复核 diff；发现回写立即从提交中剔除并提醒用户 reload 编辑器缓冲。
 - **schema migration 清理有约定节奏**：v1.4.22（`ee030b2`）已把 6 条史前（≤v1.4.08）migration 清出注册表（源文件留作冷回放备份），并加 `assertMinimumBaseline` 基线 fail-fast（最低支持 v1.4.08）。用户拍板：**10 个版本后再清下一轮**。届时三件套：逻辑固化进 canonical DDL → 从 `SCHEMA_MIGRATIONS` 数组摘除（保留文件）→ 抬 `BASELINE_MIGRATION_IDS` 与基线探测；同步改 `bootstrap-no-migrate.test.ts` 硬编码的备份模块名清单。注意数据迁移（如 `session-agent-config-v2`）无法固化进 DDL，只能靠中间版本保底。→ 注册表：`packages/core/src/bootstrap/schema-migrations/index.ts`、基线：`novel-master-bootstrap.ts`（`assertMinimumBaseline`）、先例：`docs/Iterations/event-config-merge-and-migration-cleanup/`
 - **给 SCHEMA_COLUMN_ALIGNMENTS 加列必须 bump SCHEMA_BOOT_VERSION**：bootstrap 快路径（`user_version >= SCHEMA_BOOT_VERSION`）会跳过 DDL 与 alignSchemaColumns——只加 align 条目不 bump 版本，存量库永远走快路径、新列永远补不上（token-stats 迭代真机实锤：统计页与 token 计数 no such column）。新列上线路径 = DDL 建列（新库）+ align 条目（存量库）+ bump 版本（让存量库重走慢路径），三件缺一不可；先例注释见版本常量上方。测试断言引用 SCHEMA_BOOT_VERSION 常量而非字面量。
+
+## 子代理与记忆
+
+- **子代理不得写 `docs/apm/memory/`**：对话记忆由主代理统一维护。曾发生子代理用写文件工具整写覆盖共享记忆文件、丢失既有轮次的事故；记忆的追加/整理/修复只由主代理执行。
+- 派发子代理的默认纪律：禁止全仓 grep（内置 search 工具有返回过多内容致上下文爆炸的 bug），定位用 `grep -rln`（只列文件名）+ `sed -n` 定点读；大文件分段读；终端输出截断。
