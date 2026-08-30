@@ -236,6 +236,33 @@ const metroBlockList = [
   /[\\/]node_modules[\\/]@agnai[\\/]web-tokenizers[\\/]/,
 ];
 
+/**
+ * metro 关闭 hierarchical lookup 后只查 nodeModulesPaths，嵌套 node_modules
+ * 里的依赖（hoisting 版本冲突下沉的包）会解析不到：如 sanitize-html 需要
+ * htmlparser2@12，但根位置被 cheerio/linkedom 的 ^10 占位，npm 把 12 下沉到
+ * sanitize-html/node_modules，CI 的 npm ci 干净安装后 metro 解析失败。
+ * 常规解析失败时用 Node 的 require.resolve 从引用方目录逐级向上兑底。
+ */
+function resolveNestedFromOrigin(context, moduleName) {
+  const origin = context.originModulePath;
+  if (
+    typeof origin !== 'string' ||
+    !origin.includes(`${path.sep}node_modules${path.sep}`)
+  ) {
+    return null;
+  }
+  try {
+    return {
+      type: 'sourceFile',
+      filePath: require.resolve(moduleName, {
+        paths: [path.dirname(origin)],
+      }),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** @type {import('@react-native/metro-config').MetroConfig} */
 const config = {
   watchFolders: [monorepoRoot],
@@ -314,10 +341,18 @@ const config = {
         return {type: 'sourceFile', filePath: coreAliasPath};
       }
 
-      if (defaultResolveRequest != null) {
-        return defaultResolveRequest(context, moduleName, platform);
+      try {
+        if (defaultResolveRequest != null) {
+          return defaultResolveRequest(context, moduleName, platform);
+        }
+        return context.resolveRequest(context, moduleName, platform);
+      } catch (err) {
+        const nested = resolveNestedFromOrigin(context, moduleName);
+        if (nested != null) {
+          return nested;
+        }
+        throw err;
       }
-      return context.resolveRequest(context, moduleName, platform);
     },
   },
 };
