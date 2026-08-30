@@ -1,12 +1,14 @@
 /**
- * Agent 回合 run 生命周期：activeRunId 状态 + agentActivity refcount。
+ * Agent 回合 run 生命周期：activeRunId 状态 + UI 侧 run 态守卫。
  *
  * Phase 2 拆分后：abort 状态机（uiRunning / freezeCount / abortRetainPending /
  * abortUiRun）已挪到 {@link useSessionAbort}；本 hook 只保留 run 生命周期——
- * activeRunId 跟踪、stale RUN_STARTED 守卫、agentActive 引用计数。
+ * activeRunId 跟踪、stale RUN_STARTED 守卫。
  *
- * refcount 单一归属：beginUiRun 加、onRunFinished/onRunFailed 减。stream 单元的
- * FINISHED/FAILED 不再直接 decrementAgentActive，改为通知本 hook。
+ * refcount 单一归属已移交 AgentRunManager（多会话并行迭代）：
+ * increment 在 Manager.startRun 受理路径同步执行、decrement 由 Manager 的
+ * 全量 FINISHED/FAILED 事件订阅驱动——本 hook 不再直接改 agent-activity 计数
+ * （切走会话后 UI 面板过滤会丢弃 FINISHED，旧行为会泄漏 refcount）。
  *
  * uiRunning 的同步通过 `onRunUiActivate` / `onRunUiDeactivate` 回调注入——
  * Provider 实例化顺序是「先 abort 单元、再 lifecycle」，把 abort.markRunStarted /
@@ -24,32 +26,28 @@ import type {
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
 } from '@novel-master/core/events';
-import {
-  decrementAgentActive,
-  incrementAgentActive,
-} from '@/runtime/agent-activity';
 
 export {shouldApplyTranscriptReload};
 
 export type AgentRunLifecycle = {
   readonly activeRunId: string | null;
-  /** 发 run 前：递增 agentActive；同时通过回调通知 abort 单元 markRunStarted。 */
+  /** 发 run 前：通知 abort 单元 markRunStarted（refcount 归 Manager，不再加计数）。 */
   beginUiRun(): void;
   /** runId 不匹配则丢弃。 */
   acceptRunEvent(runId: string | undefined): boolean;
   /** 设 activeRunId=runId（幂等，stale 守卫过滤迟到的 RUN_STARTED）；通知 abort 单元 uiRunning=true。 */
   onRunStarted(payload: AgentRunStartedPayload): void;
-  /** accept 后：activeRunId=null、递减 agentActive；通知 abort 单元 uiRunning=false。 */
+  /** accept 后：activeRunId=null；通知 abort 单元 uiRunning=false（decrement 归 Manager）。 */
   onRunFinished(payload: AgentRunFinishedPayload): void;
   onRunFailed(payload: AgentRunFailedPayload): void;
   /**
-   * UI 侧 run 异常收尾（如 runAgentTurn 同步 throw）。
+   * UI 侧 run 异常收尾（如 startRun 被拒 / 本地异常）。
    *
    * 幂等：用 uiActiveRef 跟踪 beginUiRun / onRunStarted 是否已激活 UI run 态，
-   * 未激活时直接 no-op；激活过则清 activeRunId、通知 abort 单元 uiRunning=false、
-   * 递减 agentActive，并把 uiActiveRef 翻回未激活。
+   * 未激活时直接 no-op；激活过则清 activeRunId、通知 abort 单元 uiRunning=false，
+   * 并把 uiActiveRef 翻回未激活。
    *
-   * 这样 composer 不再需要 finally 兜底递减——refcount 单一归属 lifecycle。
+   * refcount 已归 AgentRunManager，这里只收 UI 侧状态。
    */
   endUiRunOnError(): void;
   /** session 切换：清 activeRunId（abort 状态与 stream 清理由 abort 单元负责）。 */
@@ -92,9 +90,9 @@ export function useAgentRunLifecycle({
 
   const beginUiRun = useCallback(() => {
     // abort 状态机的 freeze/retain 清理由 abort.markRunStarted 完成。
+    // agent-activity 计数归 AgentRunManager（受理路径同步 increment）。
     uiActiveRef.current = true;
     onRunUiActivateRef.current?.();
-    incrementAgentActive();
   }, []);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
@@ -126,7 +124,6 @@ export function useAgentRunLifecycle({
       syncActiveRunId(null);
       uiActiveRef.current = false;
       onRunUiDeactivateRef.current?.();
-      decrementAgentActive();
     },
     [syncActiveRunId],
   );
@@ -140,20 +137,19 @@ export function useAgentRunLifecycle({
       syncActiveRunId(null);
       uiActiveRef.current = false;
       onRunUiDeactivateRef.current?.();
-      decrementAgentActive();
     },
     [syncActiveRunId],
   );
 
   const endUiRunOnError = useCallback(() => {
     // 幂等：未激活过 UI run 态时直接 return（比如还没 beginUiRun 就报错）。
+    // refcount 归 AgentRunManager，这里只收 UI 侧状态。
     if (!uiActiveRef.current) {
       return;
     }
     syncActiveRunId(null);
     uiActiveRef.current = false;
     onRunUiDeactivateRef.current?.();
-    decrementAgentActive();
   }, [syncActiveRunId]);
 
   const resetUiForSessionChange = useCallback(() => {

@@ -47,12 +47,15 @@ import {
 import {getMobileConnection} from '../db/connection';
 import {mobileSkspDriverName} from './mobile-sksp';
 import {ensureLlmFetchConfigured} from './setup-llm-fetch';
-import type {MobileNovelMasterRuntime} from './types';
+import type {MobileRuntimeCore} from './types';
 
 /**
  * Opens the app DB once and returns service handles aligned with CLI runtime.
+ *
+ * 返回 MobileRuntimeCore（不含 agentRunManager）——该字段由
+ * NovelMasterProvider bootstrap 装配（见 runtime/types.ts 字段注释）。
  */
-export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMasterRuntime> {
+export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCore> {
   const conn = await getMobileConnection();
 
   const state = createPersistentState(conn);

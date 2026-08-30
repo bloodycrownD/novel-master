@@ -10,6 +10,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -36,6 +37,9 @@ import {
   type MobileScopeSnapshot,
 } from './mobile-scope';
 import type {MobileNovelMasterRuntime} from './types';
+import {AgentRunManager} from '@/services/agent-run-manager.service';
+import {showAppToast} from '@/services/app-toast';
+import {readAgentFinishedNotificationEnabled} from '@/storage/agent-finished-notification-pref';
 import {tokensForMode} from '../theme/tokens';
 
 export type RuntimeStatus = 'loading' | 'ready' | 'error';
@@ -80,6 +84,13 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   });
   const [richRenderEpoch, setRichRenderEpoch] = useState(0);
   const [bootToken, setBootToken] = useState(0);
+  // 当前 runtime / appUi / scope 的同步镜像——桥闭包（React 外）读最新值用。
+  const runtimeRef = useRef<MobileNovelMasterRuntime | undefined>(undefined);
+  const appUiRef = useRef<AppUiPreferences | undefined>(undefined);
+  const scopeRef = useRef<MobileScopeSnapshot>(scope);
+  runtimeRef.current = runtime;
+  appUiRef.current = appUi;
+  scopeRef.current = scope;
 
   const retry = useCallback(() => {
     setBootToken(t => t + 1);
@@ -92,11 +103,21 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
 
     (async () => {
       if (bootToken > 0) {
+        // 对齐 desktop main 的先 detach 模式：重建前先销毁旧 Manager
+        // （退订事件总线 + 按记录清零模块级 refcount + 停前台服务），
+        // 再销毁旧连接。模块级 agent-activity 不随 runtime 重建归零，
+        // 必须 dispose 显式清零。
+        runtimeRef.current?.agentRunManager.dispose();
         await closeMobileConnection();
       }
       const rt = await createMobileNovelMasterRuntime();
-      const loaded = await loadMobileScope(rt);
-      const ui = createAppUiPreferences(rt.kkv);
+      // 装配契约：runtime 创建完成后实例化 Manager 并挂到 runtime 上
+      // （Manager 生命周期跟随 runtime；桥在下方 ready 后的 effect 注入）。
+      const runtime: MobileNovelMasterRuntime = Object.assign(rt, {
+        agentRunManager: new AgentRunManager({runtime: rt}),
+      });
+      const loaded = await loadMobileScope(runtime);
+      const ui = createAppUiPreferences(runtime.kkv);
       const epoch = await syncAppVersionForRichRender(
         ui,
         mobilePackage.version,
@@ -104,7 +125,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       if (cancelled) {
         return;
       }
-      setRuntime(rt);
+      setRuntime(runtime);
       setAppUi(ui);
       setRichRenderEpoch(epoch);
       setScope(loaded);
@@ -122,6 +143,40 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       cancelled = true;
     };
   }, [bootToken]);
+
+  // 桥注入（ready 后执行；retry 换新 runtime 时对新 Manager 重新注入）。
+  // 桥未注入期间（bootstrap 早期与 retry 窗口）的降级：失败 toast 与完成通知
+  // 不发，refcount 与 RunEntry 维护不依赖桥，始终生效。
+  useEffect(() => {
+    const manager = runtime?.agentRunManager;
+    if (!manager) {
+      return;
+    }
+    manager.setUiBridge({onError: message => showAppToast(message)});
+    manager.setPrefBridge({
+      isEnabled: () => {
+        const appUiNow = appUiRef.current;
+        if (appUiNow == null) {
+          return Promise.resolve(true);
+        }
+        return readAgentFinishedNotificationEnabled(appUiNow);
+      },
+    });
+    manager.setScopeBridge({
+      getCurrentSessionId: () => scopeRef.current.sessionId,
+      setCurrentSession: async sessionId => {
+        const rt = runtimeRef.current;
+        const projectId = scopeRef.current.projectId;
+        if (!rt || projectId == null) {
+          return;
+        }
+        // 通知点按路径的 scope 同步：持久化 + 直接 setScope 更新 React state
+        // （不在 React 外裸调模块级 setMobileSession——它只写持久层不更新 React scope）。
+        const next = await setMobileSession(rt, projectId, sessionId);
+        setScope(next);
+      },
+    });
+  }, [runtime]);
 
   const refreshScope = useCallback(async () => {
     if (!runtime) {

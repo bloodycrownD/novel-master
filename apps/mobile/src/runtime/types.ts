@@ -47,6 +47,7 @@ import type {WorkplaceService} from '@novel-master/core/workplace';
 import type {KkvService} from '@novel-master/core/kkv';
 import type {SessionKkvService} from '@novel-master/core/session-kkv';
 import type {SkillService} from '@novel-master/core/skills';
+import type {AgentRunManager} from '@/services/agent-run-manager.service';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
 export interface MobileNovelMasterRuntime {
@@ -94,4 +95,18 @@ export interface MobileNovelMasterRuntime {
   readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;
   readonly userVfsTurn: UserVfsTurnService;
+  /**
+   * app 级 run 编排器（门禁、事件驱动 refcount、通知、前台保活）。
+   *
+   * 工厂阶段不实例化（避免纯工厂带副作用）；由 NovelMasterProvider 的
+   * bootstrap effect 在 runtime 创建完成后装配，生命周期跟随 runtime，
+   * retry 重建时由 Provider 先 dispose 再 closeMobileConnection。
+   */
+  agentRunManager: AgentRunManager;
 }
+
+/** 工厂产出的 runtime 核心（缺 agentRunManager，由 Provider 装配后补齐）。 */
+export type MobileRuntimeCore = Omit<
+  MobileNovelMasterRuntime,
+  'agentRunManager'
+>;

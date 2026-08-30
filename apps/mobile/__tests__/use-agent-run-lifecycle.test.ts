@@ -31,7 +31,8 @@ describe('shouldApplyTranscriptReload', () => {
 });
 
 /**
- * 瘦身后的 useAgentRunLifecycle 只保留 activeRunId + refcount。
+ * 瘦身后的 useAgentRunLifecycle 只保留 activeRunId + UI 态守卫；
+ * refcount 已归 AgentRunManager（本 hook 不再改 agent-activity 计数）。
  * abort 状态机的测试在 use-session-abort.test.ts。
  */
 describe('useAgentRunLifecycle (slimmed)', () => {
@@ -73,13 +74,13 @@ describe('useAgentRunLifecycle (slimmed)', () => {
     setMobileAgentActive(false);
   });
 
-  it('beginUiRun 递增 agentActive 并通知 abort 单元 markRunStarted', () => {
+  it('beginUiRun 通知 abort 单元 markRunStarted；refcount 归 Manager 不再加计数', () => {
     const onRunUiActivate = jest.fn();
     const lifecycle = mountLifecycle({onRunUiActivate});
     act(() => {
       lifecycle.beginUiRun();
     });
-    expect(isMobileAgentActive()).toBe(true);
+    expect(isMobileAgentActive()).toBe(false);
     expect(onRunUiActivate).toHaveBeenCalledTimes(1);
   });
 
@@ -98,7 +99,7 @@ describe('useAgentRunLifecycle (slimmed)', () => {
     expect(lifecycle.acceptRunEvent('r1')).toBe(true);
   });
 
-  it('onRunFinished 清 activeRunId、递减 agentActive、通知 abort', () => {
+  it('onRunFinished 清 activeRunId、通知 abort（decrement 归 Manager）', () => {
     const onRunUiDeactivate = jest.fn();
     const lifecycle = mountLifecycle({
       onRunUiDeactivate,
@@ -121,7 +122,7 @@ describe('useAgentRunLifecycle (slimmed)', () => {
     expect(onRunUiDeactivate).toHaveBeenCalledTimes(1);
   });
 
-  it('onRunFailed 清 activeRunId、递减 agentActive', () => {
+  it('onRunFailed 清 activeRunId（decrement 归 Manager）', () => {
     const lifecycle = mountLifecycle({getUiRunning: () => true});
     act(() => {
       lifecycle.beginUiRun();
@@ -184,23 +185,23 @@ describe('useAgentRunLifecycle (slimmed)', () => {
 
   // T-CF4: composer finally 兑底收敛到 lifecycle.endUiRunOnError 后的幂等与守卫。
   describe('endUiRunOnError (T-CF4)', () => {
-    it('beginUiRun 后 runAgentTurn 同步 throw → endUiRunOnError 收尾，refcount 归 0、uiActiveRef 翻 false', () => {
+    it('beginUiRun 后本地异常 → endUiRunOnError 收 UI 态（refcount 归 Manager，本 hook 不碰计数）', () => {
       const onRunUiDeactivate = jest.fn();
       const lifecycle = mountLifecycle({onRunUiDeactivate});
       act(() => {
         lifecycle.beginUiRun();
       });
-      expect(isMobileAgentActive()).toBe(true);
+      expect(isMobileAgentActive()).toBe(false); // 不加计数
 
-      // 模拟 runAgentTurn 同步 throw 后 composer 调用 endUiRunOnError。
+      // 模拟 startRun 被拒 / 本地异常后 composer 调用 endUiRunOnError。
       act(() => {
         lifecycle.endUiRunOnError();
       });
-      expect(isMobileAgentActive()).toBe(false);
+      expect(isMobileAgentActive()).toBe(false); // 也不减计数
       expect(lifecycle.activeRunId).toBe(null);
       expect(onRunUiDeactivate).toHaveBeenCalledTimes(1);
 
-      // 幂等：再调一次不应再递减（这里以不报错 + 状态仍归 0 来间接验证）。
+      // 幂等：再调一次不应再通知。
       act(() => {
         lifecycle.endUiRunOnError();
       });
@@ -247,9 +248,9 @@ describe('useAgentRunLifecycle (slimmed)', () => {
         lifecycle.beginUiRun();
         lifecycle.onRunStarted({sessionId: 's1', projectId: 'p1', runId: 'r1'});
       });
-      expect(isMobileAgentActive()).toBe(true);
+      expect(isMobileAgentActive()).toBe(false); // 计数归 Manager
 
-      // runAgentTurn 同步 throw：endUiRunOnError 已递减并清空 activeRunId。
+      // runAgentTurn 同步 throw：endUiRunOnError 已清空 activeRunId。
       act(() => {
         lifecycle.endUiRunOnError();
       });
