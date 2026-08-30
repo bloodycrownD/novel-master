@@ -3,7 +3,8 @@
 spec_path: docs/Iterations/mobile-cr-dedup-abstraction/cr-fix-spec.md
 branch: cr/mobile-fix-wave1
 base_sha: 4ba1c73
-dag_version: 4
+dag_version: 5
+status: dev-ready（wave1 四条目闭环）
 scope: 第一批四条 P1（sec/D-1、infra/B-1、b2/B-4、comp-misc/B-2）
 wave_plan: [[impl-sec-d1, impl-infra-b1, impl-b2-b4, impl-misc-b2], [fix-sec-d1-types, fix-b2-b4-test], [verify-wave1], [cr-func-wave1]]
 node_status:
@@ -16,7 +17,7 @@ node_status:
   verify-wave1: { status: done, executor: subagent }
   verify-wave1-rerun: { status: done, executor: main, note: 全量 jest 165 套件 / 906 用例全绿 + tsc 零输出 }
   fix-verify-assert: { status: done, executor: main, note: trivial——prepare-transcript-rich-html 断言改 /color:\s*red/（序列化带空格） }
-  cr-func-wave1: { status: pending }
+  cr-func-wave1: { status: done, func_ready: yes, note: 四条目验收矩阵全✅或手工项；无 must-fix；两处无害偏离（白名单更严、错误内聚 hook）均合拍板方向 }
 commits:
   - 4ba1c73 docs(cr): fix-spec
   - 20342a6 fix(mobile): sec/D-1 WebView 导航守卫

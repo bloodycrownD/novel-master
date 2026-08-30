@@ -53,6 +53,9 @@ user:
 assistant:
 进入 code-dev-loop：分支 cr/mobile-fix-wave1（基线 4ba1c73，含 fix-spec 文档提交）；第一批范围四条 P1：sec/D-1（WebView 导航守卫）、infra/B-1（bootstrap 连接泄漏）、b2/B-4（批删失败卡死）、comp-misc/B-2（sanitize CSS 白名单）。DAG v1：wave-0 四 impl 并行（文件不重叠）→ wave-1 verify → wave-2 cr-func。因同仓库并行，impl 子代理只改不提交，主代理按条目统一提交。用户自己的未提交改动（.vscode 删除、AGENTS.md 修改等）保留不动。
 
+assistant:
+（wave1 结果）dev-ready。实际 DAG：wave-0 四 impl 并行 → wave-1 两 fix 并行（onOpenWindow 类型修正——真实字段 targetUrl 且须深导入 react-native-webview/lib/WebViewTypes；补批删失败测试）→ wave-2 verify（拒了 1 条：filterInlineStyle 重序列化带空格致旧断言 color:red 失配，trivial 主代理修）→ re-verify 全量 165 套件/906 用例全绿 → wave-3 cr-func func-ready yes。提交链：20342a6/f095bcb/25daabc/e5f3524 四修复 + 54002dd/2fa8630 文档与断言。经验：①同仓库并行 impl 必须子代理只改不 commit，主代理按条目统一提交；②子代理「无测试文件」结论要抽查（impl-b2-b4 误报，实际 __tests__ 有大量样板）；③白名单默认全拒比黑名单更严且好维护；④验证日志属工作流状态，写 docs/.iteration-state.yaml 不进 apm memory；⑤子代理写记忆文件有误覆盖风险，主代理要抽查记忆完整性。合并后 QA 手工项：真机点链接外跳+伪造桥消息不触发 rollback、allowFileAccessFromFileURLs 收紧评估。
+
 user:
 节点：impl-infra-b1，类型：impl。修复 bootstrap 失败路径泄漏 SQLite 连接：open() 成功后 bootstrapNovelMaster 抛错时局部变量 c 持有的已打开连接随 throw 丢弃（conn 尚未赋值，closeMobileConnection 的 conn?.close() 关不到）——泄漏文件句柄与 WAL 锁，Android 重试多连接同库可能互锁。改法：bootstrap 的 catch 在 throw 前补 await c.close().catch(() => {})，open 的 catch 不需要；补测试断言 close 被调用且重试可重新 open。不执行 git commit/add，只改 connection.ts 与其测试。
 
