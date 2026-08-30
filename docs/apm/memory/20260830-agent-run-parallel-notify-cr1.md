@@ -48,3 +48,25 @@
 
 - `docs/Iterations/agent-run-parallel-and-notify/spec.md`（第 0/1/2 块、装配契约、融合小节、变更点清单、Step 1/3、T-P2/T-P11、风险段）
 - `docs/Iterations/agent-run-parallel-and-notify/prd.md`（验收标准）
+
+## cr-func 代码审查修复（2026-08-30，fix-parallel 节点，worktree .woktree/parallel-notify）
+
+### 请求
+
+在 worktree `parallel-notify`（分支 feat/agent-run-parallel-and-notify）闭合 cr-func 两条 must-fix：T-P7 守卫用例缺失、RUN_STARTED 后失败双 toast。只改最小范围，不动 useSessionStream/ChatTabProvider 与 docs/Iterations/。
+
+### 修复要点
+
+- **must-fix 1（T-P7）**：`apps/mobile/__tests__/agent-activity.test.ts` 新增「T-P7 守卫：refcount 单一归属」describe——受理即活跃、STARTED 不碰计数、FINISHED/FAILED 事件收尾归零、finally 早退归零、跨会话并行归零在最后一个 run 收尾；另有静态断言锁定 lifecycle 路径（useAgentRunLifecycle.ts / useSessionStream.ts）不含计数 API 的调用或导入（正则带括号/匹配 import 语句，注释提及 API 名不算）。`db-backup.service.test.ts` 补 import 侧守卫用例（活跃期间选择器启动前即拒）。
+- **must-fix 2（双 toast）**：根因是 core `agent-runner.ts:774` 失败时既 publish EVENT_AGENT_RUN_FAILED 又 throw，Manager 的 onRunFailed 与 .catch 都调 uiBridge.onError。修复：`.catch` 仅当 `entries.get(sessionId) === entry && entry.runId == null`（resolve/register 阶段错误，事件永不来）时才 onError；事件已收尾或 RUN_STARTED 已达由事件路径负责。补两条测试：RUN_STARTED 后失败只弹一次、早退 throw 兜底弹一次。
+
+### 提交与验证
+
+- 35ed6fd fix(manager): 失败双 toast——throw 路径仅在事件路径未收尾时兜底 onError
+- 54bb4b0 test(t-p7): 补 refcount 单一归属守卫用例
+- `cd apps/mobile && npx jest` 全量 186 套件 / 1091 用例全过；`npm run typecheck` 干净。
+
+### 经验
+
+- 静态源码断言（readFileSync + 正则）要区分「调用/导入」与「注释提及」，否则误伤既有注释。
+- Manager 双路径收尾的去重判断统一用「entry 是否仍是本次 + runId 是否已回填」两个信号，覆盖受理空窗、事件先到、throw 先到三种时序。
