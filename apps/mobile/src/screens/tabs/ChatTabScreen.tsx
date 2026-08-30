@@ -134,6 +134,8 @@ function ChatTabScreenContent({
 
   const confirmBatchDelete = useCallback(() => {
     controller.confirmBatchDeleteSessions(sessionBatch.selectedCount, () =>
+      // 删除错误已在 deleteSelectedSessions 内部处理并 toast，
+      // 这里只兜底避免意外的 Promise 拒绝变成未处理告警。
       ctx.scope
         .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
         .catch(() => undefined),

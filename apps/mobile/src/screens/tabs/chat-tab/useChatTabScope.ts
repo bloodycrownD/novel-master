@@ -302,32 +302,45 @@ export function useChatTabScope({
   const deleteSelectedSessions = useCallback(
     async (selectedIds: ReadonlySet<string>, exitSessionBatch: () => void) => {
       const ids = [...selectedIds];
-      for (const id of ids) {
-        await runtime.sessions.delete(id);
-        if (projectId != null) {
-          clearSessionViewCache(sessionViewCacheKey(projectId, id));
+      // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
+      try {
+        for (const id of ids) {
+          await runtime.sessions.delete(id);
+          if (projectId != null) {
+            clearSessionViewCache(sessionViewCacheKey(projectId, id));
+          }
         }
+      } catch (error) {
+        showToast(toastMessage('删除失败', error));
+      } finally {
+        // 无论删除是否中途失败，都退出批选态，让用户可以重试剩余未删项。
+        const deletedCurrent = sessionId != null && ids.includes(sessionId);
+        exitSessionBatch();
+        if (deletedCurrent) {
+          setChatSubview('sessions');
+        }
+        await refreshScope();
+        await reloadLists();
       }
-      const deletedCurrent = sessionId != null && ids.includes(sessionId);
-      exitSessionBatch();
-      if (deletedCurrent) {
-        setChatSubview('sessions');
-      }
-      await refreshScope();
-      await reloadLists();
     },
-    [runtime, sessionId, projectId, refreshScope, reloadLists],
+    [runtime, sessionId, projectId, refreshScope, reloadLists, showToast],
   );
 
   const handleDeleteProjects = useCallback(
     async (ids: string[]) => {
-      for (const id of ids) {
-        await runtime.projects.delete(id);
+      // 部分成功语义：逐个删除，先删成功的保持已删、不回滚；中途失败即停止并提示剩余未删。
+      try {
+        for (const id of ids) {
+          await runtime.projects.delete(id);
+        }
+      } catch (error) {
+        showToast(toastMessage('删除失败', error));
+      } finally {
+        await refreshScope();
+        await reloadLists();
       }
-      await refreshScope();
-      await reloadLists();
     },
-    [runtime, refreshScope, reloadLists],
+    [runtime, refreshScope, reloadLists, showToast],
   );
 
   const bumpWorktreeUiToken = useCallback(() => {
