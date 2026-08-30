@@ -1048,4 +1048,58 @@ describe("VfsZipIoService", () => {
     assert.equal(await wt.getDirRule("/角色/世界书"), undefined);
   });
 
+  it("T-Z10: 补规则行语句真失败时不毒化导入事务，ZIP 导入仍成功且文件完整", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(
+      `P-tz10-${testIsolationSuffix()}`,
+    );
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 故障注入（同构角色卡侧 T-I5）：upsertDirRule 执行一条必失败的 SQL
+    // （表不存在），验证语句级失败不自动 ROLLBACK，导入事务照常提交
+    const zipSvc = createVfsZipIoService(ctx.conn, {
+      testHook: {
+        createWorkplaceRepo: (tx) =>
+          ({
+            listDirRules: (scopeKey: string) =>
+              new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
+            upsertDirRule: async () => {
+              await tx.execute("INSERT INTO no_such_table_boom (id) VALUES (1)");
+            },
+          }) as unknown as WorkplaceRepository,
+      },
+    });
+    await assert.doesNotReject(
+      zipSvc.import(
+        scope,
+        buildVfsZip(
+          new Map([
+            ["a.md", "甲"],
+            ["世界书/章节/深层/设定.md", "深层设定"],
+          ]),
+        ),
+        { confirmed: true, directoryPath: "/角色" },
+      ),
+    );
+
+    // 已写文件完整保留
+    assert.equal((await vfs.read("/角色/a.md")).content, "甲");
+    assert.equal(
+      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
+      "深层设定",
+    );
+    // 补行失败后 workplace 表无残留行（best-effort，不阻断也不留脏数据）
+    const repo = new SqliteWorkplaceRepository(ctx.conn);
+    assert.deepEqual(
+      await repo.listDirRules(`session:${session.id}`),
+      [],
+    );
+  });
+
 });
