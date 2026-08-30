@@ -43,10 +43,7 @@ import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
 import {useSessionBatch} from '@/screens/tabs/chat-tab/useSessionBatch';
 import {useSessionStream} from '@/screens/tabs/chat-tab/useSessionStream';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
-import {
-  useSubagentRunProbe,
-  useSubagentRunPolling,
-} from './useSubagentRunProbe';
+import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'SubagentSessionView'>;
 
@@ -182,41 +179,29 @@ export function SubagentSessionScreen() {
   onStreamResetRef.current = stream.handleStreamReset;
 
   // stale 守卫日志已移除（诊断阶段结束）。
-  useEffect(() => {
-    if (sessionId == null) {
-      return;
-    }
-    if (runtime.abortRegistry.has(sessionId)) {
-      abort.markRunStarted();
-      void reload().catch(() => undefined);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 mount 时检查
-  }, [sessionId]);
-
   // ===== 生成中状态兜底（避免事件丢失导致 uiRunning 永久残留） =====
   //
-  // 逻辑抽到 useSubagentRunProbe / useSubagentRunPolling，这里只注入依赖。
-  // mobile 没有跨进程 IPC，查本进程内存里的 abortRegistry 注册状态；
-  // registry 反映 core 层注册：run 被 main 主动结束、unregister 事件还没派发到
-  // renderer 时 has 可能短暂仍返回 true，所以 hook 内部查到 false 后会复询一次防抖。
-  useSubagentRunProbe({
-    isRunActive: abort.getUiRunning,
+  // 双方向探针（从本 Screen 抽出的 useRunResumeProbe）：
+  // 恢复方向——sessionId 生效时查 abortRegistry.has → 合成 markRunStarted + reload；
+  // 收尾方向——uiRunning=true 但 has=false 时校准收尾 + reload（前台触发 + 低频轮询，
+  // 内部含复询防抖；mobile 查的是本进程内存里的 core registry 注册状态，
+  // unregister 事件还没派发到 renderer 时 has 可能短暂仍返回 true）。
+  // 该探针/轮询节点也是 registry.has 的唯一复评点，不新增订阅机制。
+  useRunResumeProbe({
+    sessionId,
     isRunRegistered: () =>
       sessionId != null && runtime.abortRegistry.has(sessionId),
+    onRunActive: () => {
+      abort.markRunStarted();
+      void reload().catch(() => undefined);
+    },
     onRunEnded: () => {
       abort.markRunEnded();
       void reload().catch(() => undefined);
     },
+    uiRunning: abort.uiRunning,
+    isRunActive: abort.getUiRunning,
   });
-  useSubagentRunPolling(
-    abort.uiRunning,
-    abort.getUiRunning,
-    () => sessionId != null && runtime.abortRegistry.has(sessionId),
-    () => {
-      abort.markRunEnded();
-      void reload().catch(() => undefined);
-    },
-  );
 
   // 从 core streamRegistry 查询 in-flight 流式 partial 并注入 WebView。
   // registry 在 run-agent-turn register/append/unregister，不管用户何时进入，
