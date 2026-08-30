@@ -75,6 +75,35 @@ describe('useSubagentRunProbe — T-G2-mobile', () => {
     });
   });
 
+  it('卸载后复询不触发 onRunEnded（定时器随 unmount 清理）', async () => {
+    const onRunEnded = jest.fn();
+    const isRunActive = jest.fn(() => true);
+    const isRunRegistered = jest.fn(() => false);
+
+    function Harness() {
+      useSubagentRunProbe({isRunActive, isRunRegistered, onRunEnded});
+      return null;
+    }
+    let r: any;
+    act(() => {
+      r = TestRenderer.create(React.createElement(Harness));
+    });
+
+    // 触发探针后排入 800ms 复询，但在复询到期前卸载。
+    act(() => {
+      appStateListener('active');
+    });
+    act(() => {
+      r.unmount();
+    });
+
+    await act(async () => {
+      await flushTimers(SUBAGENT_RUN_PROBE_RECONFIRM_DELAY_MS + 50);
+    });
+
+    expect(onRunEnded).not.toHaveBeenCalled();
+  });
+
   it('isRunActive=false 时 AppState→active 不触发收尾（主路径已处理）', async () => {
     const onRunEnded = jest.fn();
     const isRunActive = jest.fn(() => false);
@@ -166,6 +195,35 @@ describe('useSubagentRunPolling — T-G2-mobile 轮询路径', () => {
     act(() => {
       r.unmount();
     });
+  });
+
+  it('卸载后复询不触发 onRunEnded（定时器随 unmount 清理）', async () => {
+    const onRunEnded = jest.fn();
+    const isRunActive = jest.fn(() => true);
+    const isRunRegistered = jest.fn(() => false);
+
+    function Harness() {
+      useSubagentRunPolling(true, isRunActive, isRunRegistered, onRunEnded);
+      return null;
+    }
+    let r: any;
+    act(() => {
+      r = TestRenderer.create(React.createElement(Harness));
+    });
+
+    // 轮询周期触发探针、排入复询后，在复询到期前卸载。
+    await act(async () => {
+      await flushTimers(30_000);
+    });
+    act(() => {
+      r.unmount();
+    });
+
+    await act(async () => {
+      await flushTimers(SUBAGENT_RUN_PROBE_RECONFIRM_DELAY_MS + 50);
+    });
+
+    expect(onRunEnded).not.toHaveBeenCalled();
   });
 
   it('uiRunning=false 时不启动轮询', async () => {

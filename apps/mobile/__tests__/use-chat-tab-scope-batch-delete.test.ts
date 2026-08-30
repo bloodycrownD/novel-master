@@ -8,15 +8,28 @@
 import {beforeEach, describe, expect, it, jest} from '@jest/globals';
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
-import {useChatTabScope} from '@/screens/tabs/chat-tab/useChatTabScope';
+import {useChatTabScope} from '../src/screens/tabs/chat-tab/useChatTabScope';
 import {
   clearAllSessionViewCaches,
   getSessionViewCache,
   sessionViewCacheKey,
   setSessionViewCache,
-} from '@/services/chat-session-view-cache';
+} from '../src/services/chat-session-view-cache';
+import {
+  clearAllScrollSnapshots,
+  getScrollSnapshot,
+  scrollCacheKey,
+  setScrollSnapshot,
+} from '../src/services/chat-list-scroll-cache';
+import {
+  clearAllTranscriptScrollSnapshots,
+  getTranscriptScrollSnapshot,
+  scrollCacheKey as transcriptScrollCacheKey,
+  setTranscriptScrollSnapshot,
+} from '../src/services/chat-transcript-scroll-cache';
+import {CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION} from '../src/components/chat/ChatTranscriptBridge';
 
-jest.mock('@/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
     source: 'session',
     agentId: 'a1',
@@ -28,7 +41,7 @@ jest.mock('@/services/chat-agent-meta', () => ({
   })),
 }));
 
-jest.mock('@/services/chat-prompt-tokens.service', () => ({
+jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
 }));
 
@@ -92,6 +105,8 @@ describe('useChatTabScope 批量删除中途失败', () => {
     deletedSessionIds.length = 0;
     deletedProjectIds.length = 0;
     clearAllSessionViewCaches();
+    clearAllScrollSnapshots();
+    clearAllTranscriptScrollSnapshots();
     mockRuntime.sessions.delete.mockImplementation(async (id: string) => {
       deletedSessionIds.push(id);
     });
@@ -183,6 +198,57 @@ describe('useChatTabScope 批量删除中途失败', () => {
       expect(mockRuntime.projects.list.mock.calls.length).toBeGreaterThan(
         listCallsBefore,
       );
+    });
+  });
+
+  describe('handleDeleteProjects 缓存清理（b2/B-6）', () => {
+    it('删除成功后按项目前缀清掉会话级缓存，未删项目不受影响', async () => {
+      const p1ViewKey = sessionViewCacheKey('p1', 's1');
+      const p1ScrollKey = scrollCacheKey('p1', 's1');
+      const p1TranscriptKey = transcriptScrollCacheKey('p1', 's1');
+      const otherScrollKey = scrollCacheKey('p2', 's9');
+      setSessionViewCache(p1ViewKey, {messages: [], hasMoreMessages: false});
+      setScrollSnapshot(p1ScrollKey, {offsetY: 10, nearBottom: false});
+      setTranscriptScrollSnapshot(p1TranscriptKey, {
+        schemaVersion: CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
+        offsetY: 10,
+        nearBottom: false,
+      });
+      setScrollSnapshot(otherScrollKey, {offsetY: 1, nearBottom: false});
+      const api = mountScope();
+
+      await act(async () => {
+        await api.handleDeleteProjects(['p1']);
+      });
+
+      expect(getSessionViewCache(p1ViewKey)).toBeUndefined();
+      expect(getScrollSnapshot(p1ScrollKey)).toBeUndefined();
+      expect(getTranscriptScrollSnapshot(p1TranscriptKey)).toBeUndefined();
+      expect(getScrollSnapshot(otherScrollKey)).toEqual({
+        offsetY: 1,
+        nearBottom: false,
+      });
+    });
+
+    it('中途 reject：已删项目缓存已清、未删项目缓存保留', async () => {
+      mockRuntime.projects.delete.mockImplementation(async (id: string) => {
+        if (id === 'p2') {
+          throw new Error('fs busy');
+        }
+        deletedProjectIds.push(id);
+      });
+      const p1Key = sessionViewCacheKey('p1', 's1');
+      const p2Key = sessionViewCacheKey('p2', 's2');
+      setSessionViewCache(p1Key, {messages: [], hasMoreMessages: false});
+      setSessionViewCache(p2Key, {messages: [], hasMoreMessages: false});
+      const api = mountScope();
+
+      await act(async () => {
+        await api.handleDeleteProjects(['p1', 'p2']);
+      });
+
+      expect(getSessionViewCache(p1Key)).toBeUndefined();
+      expect(getSessionViewCache(p2Key)).toBeDefined();
     });
   });
 });

@@ -4,12 +4,13 @@
 
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, Linking} from 'react-native';
-import {useToast} from '@/components/chrome/ToastHost';
+import {useToast} from '../components/chrome/ToastHost';
 import {
   UpdateCheckResultModal,
   type UpdateCheckResultKind,
-} from '@/components/update/UpdateCheckResultModal';
-import {useNovelMaster} from '@/runtime/novel-master-context';
+} from '../components/update/UpdateCheckResultModal';
+import {useNovelMaster} from '../runtime/novel-master-context';
+import {toastMessage} from '../errors/toast-message';
 import {
   isSnoozed,
   persistFailedUpdateCheck,
@@ -19,15 +20,16 @@ import {
   readUpdatesAutoCheck,
   writeDismissedVersion,
   writeSnoozeUntil,
-} from '@/storage/update-prefs';
-import {checkForUpdates} from '@/update-check/check-for-updates';
-import type {UpdateCheckData} from '@/update-check/types';
+} from '../storage/update-prefs';
+import {checkForUpdates} from '../update-check/check-for-updates';
+import type {UpdateCheckData} from '../update-check/types';
 
 const AUTO_CHECK_DELAY_MS = 2000;
 
 function showUpdateDetailAlert(
   data: UpdateCheckData,
   onLater: () => void,
+  showToast: (message: string) => void,
 ): void {
   const message = data.releaseNotesExcerpt
     ? `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n将在浏览器中打开 GitHub 发行页下载。`
@@ -39,7 +41,10 @@ function showUpdateDetailAlert(
     {
       text: '前往下载',
       onPress: () => {
-        void Linking.openURL(data.releaseUrl);
+        // 对齐 AboutScreen openLink：外跳失败（无浏览器可处理等）toast 而非裸 rejection。
+        void Linking.openURL(data.releaseUrl).catch(err =>
+          showToast(toastMessage('无法打开链接', err)),
+        );
       },
     },
   ]);
@@ -59,9 +64,14 @@ export function useAutoUpdateCheck(): React.ReactNode {
 
   const handleSnoozeToday = useCallback(async () => {
     if (!appUi) return;
-    await writeSnoozeUntil(appUi);
-    setResultModal(null);
-  }, [appUi]);
+    // 写入失败不关弹窗，toast 提示后用户可重试。
+    try {
+      await writeSnoozeUntil(appUi);
+      setResultModal(null);
+    } catch (cause) {
+      showToast(toastMessage('设置失败', cause));
+    }
+  }, [appUi, showToast]);
 
   useEffect(() => {
     if (status !== 'ready' || !appUi || ranRef.current) return;
@@ -69,13 +79,15 @@ export function useAutoUpdateCheck(): React.ReactNode {
 
     const timer = setTimeout(() => {
       void (async () => {
-        const autoCheck = await readUpdatesAutoCheck(appUi);
-        if (!autoCheck) return;
-
-        const snoozeUntil = await readSnoozeUntil(appUi);
-        const snoozed = isSnoozed(snoozeUntil);
-
+        // snoozed 提到 try 外：读偏好失败时未知静音状态，按未静音处理，
+        // 保证用户能看到失败反馈而不是静默吞错。
+        let snoozed = false;
         try {
+          const autoCheck = await readUpdatesAutoCheck(appUi);
+          if (!autoCheck) return;
+
+          snoozed = isSnoozed(await readSnoozeUntil(appUi));
+
           const data = await checkForUpdates();
           await persistUpdateCheckResult(appUi, data);
 
@@ -96,11 +108,12 @@ export function useAutoUpdateCheck(): React.ReactNode {
             onAction: () => {
               showUpdateDetailAlert(data, () => {
                 void writeDismissedVersion(appUi, data.remoteVersion);
-              });
+              }, showToast);
             },
           });
         } catch {
-          await persistFailedUpdateCheck(appUi);
+          // 持久化失败标记自身可能因同一存储故障 reject，显式吃掉，不再冒泡。
+          await persistFailedUpdateCheck(appUi).catch(() => undefined);
           if (!snoozed) {
             setResultModal('error');
           }

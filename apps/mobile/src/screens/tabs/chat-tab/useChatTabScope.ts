@@ -4,11 +4,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert, DeviceEventEmitter} from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {
-  type ChatProject,
-  type ChatSession,
-  type SkillToolRef,
-} from '@novel-master/core/chat';
+import { type ChatProject, type ChatSession, type SkillToolRef } from "@novel-master/core/chat";
 import {toastMessage} from '@/errors/toast-message';
 import {
   loadChatAgentMeta,
@@ -19,8 +15,11 @@ import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {
   clearSessionViewCache,
+  clearSessionViewCachesByProject,
   sessionViewCacheKey,
 } from '@/services/chat-session-view-cache';
+import {clearScrollSnapshotsByProject} from '@/services/chat-list-scroll-cache';
+import {clearTranscriptScrollSnapshotsByProject} from '@/services/chat-transcript-scroll-cache';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 
 export type SessionListPanel = 'sessions' | 'template';
@@ -52,9 +51,7 @@ export function useChatTabScope({
 }: UseChatTabScopeParams) {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentProject, setCurrentProjectMeta] = useState<
-    ChatProject | undefined
-  >();
+  const [currentProject, setCurrentProjectMeta] = useState<ChatProject | undefined>();
   const [sessionListPanel, setSessionListPanel] =
     useState<SessionListPanel>('sessions');
   const [chatSubview, setChatSubview] = useState<ChatSubview>('sessions');
@@ -169,9 +166,12 @@ export function useChatTabScope({
   // 详情页改名成功后会广播 session-renamed；无条件 reloadLists（幂等，
   // 跨项目改名时当前项目列表本就无需变化），聊天页标题/列表随 sessions 刷新。
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('session-renamed', () => {
-      reloadLists().catch(() => undefined);
-    });
+    const sub = DeviceEventEmitter.addListener(
+      'session-renamed',
+      () => {
+        reloadLists().catch(() => undefined);
+      },
+    );
     return () => sub.remove();
   }, [reloadLists]);
 
@@ -297,8 +297,7 @@ export function useChatTabScope({
           {
             text: '删除',
             style: 'destructive',
-            onPress: () =>
-              handleDeleteSession(targetSessionId).catch(() => undefined),
+            onPress: () => handleDeleteSession(targetSessionId).catch(() => undefined),
           },
         ],
       );
@@ -339,6 +338,10 @@ export function useChatTabScope({
       try {
         for (const id of ids) {
           await runtime.projects.delete(id);
+          // 项目删除后按前缀清掉其会话级缓存，避免消息 tail / 滚动快照残留。
+          clearSessionViewCachesByProject(id);
+          clearScrollSnapshotsByProject(id);
+          clearTranscriptScrollSnapshotsByProject(id);
         }
       } catch (error) {
         showToast(toastMessage('删除失败', error));
@@ -355,7 +358,10 @@ export function useChatTabScope({
   }, []);
 
   const openFileEditor = useCallback(
-    (path: string, scopeKind: 'project' | 'session') => {
+    (
+      path: string,
+      scopeKind: 'project' | 'session',
+    ) => {
       if (projectId == null) {
         return;
       }
@@ -411,7 +417,7 @@ export function useChatTabScope({
   const openSkillDetail = useCallback(
     (ref: SkillToolRef) => {
       const targetProjectId =
-        ref.domain === 'project' ? ref.projectId ?? projectId : undefined;
+        ref.domain === 'project' ? (ref.projectId ?? projectId) : undefined;
       if (ref.domain === 'project' && targetProjectId == null) {
         return;
       }

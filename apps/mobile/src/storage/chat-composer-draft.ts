@@ -22,6 +22,11 @@ const EMPTY: ChatComposerDraft = { text: '', attachments: [] };
 type DraftListener = (sessionId: string) => void;
 const listeners = new Set<DraftListener>();
 
+/** fire-and-forget 落库失败仅告警，不产生 unhandled rejection。 */
+function warnPersistFailure(error: unknown): void {
+  console.warn('[chat-composer-draft] persist draft failed:', error);
+}
+
 /** 订阅草稿变更（attachments 合并等）；返回取消订阅。 */
 export function subscribeChatComposerDraft(
   listener: DraftListener,
@@ -86,14 +91,16 @@ export function writeChatComposerDraft(
   if (!text && attachments.length === 0) {
     bySession.delete(sessionId);
     if (sessions != null) {
-      void sessions.setComposerDraftJson(sessionId, null);
+      void sessions.setComposerDraftJson(sessionId, null).catch(warnPersistFailure);
     }
     return;
   }
   const next: ChatComposerDraft = { text, attachments: [...attachments] };
   bySession.set(sessionId, next);
   if (sessions != null) {
-    void persistAttachTextDraft(sessions, sessionId, next);
+    void persistAttachTextDraft(sessions, sessionId, next).catch(
+      warnPersistFailure,
+    );
   }
 }
 
@@ -109,7 +116,7 @@ export function writeChatComposerDraftState(
   if (!draft.text && draft.attachments.length === 0) {
     bySession.delete(sessionId);
     if (sessions != null) {
-      void sessions.setComposerDraftJson(sessionId, null);
+      void sessions.setComposerDraftJson(sessionId, null).catch(warnPersistFailure);
     }
     return;
   }
@@ -119,7 +126,9 @@ export function writeChatComposerDraftState(
   };
   bySession.set(sessionId, next);
   if (sessions != null) {
-    void persistAttachTextDraft(sessions, sessionId, next);
+    void persistAttachTextDraft(sessions, sessionId, next).catch(
+      warnPersistFailure,
+    );
   }
 }
 
@@ -133,7 +142,7 @@ export function clearChatComposerDraft(
   }
   bySession.delete(sessionId);
   if (sessions != null) {
-    void sessions.setComposerDraftJson(sessionId, null);
+    void sessions.setComposerDraftJson(sessionId, null).catch(warnPersistFailure);
   }
 }
 

@@ -16,9 +16,12 @@ import {
   View,
 } from 'react-native';
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
-import {AppModal} from '@/components/ui/AppModal';
-import {useRuntime} from '@/hooks/useRuntime';
-import {useTheme} from '@/theme/ThemeProvider';
+import {AppModal} from '../ui/AppModal';
+import {useRuntime} from '../../hooks/useRuntime';
+import {formatError} from '../../errors/format-error';
+import {toastMessage} from '../../errors/toast-message';
+import {useToast} from '../chrome/ToastHost';
+import {useTheme} from '../../theme/ThemeProvider';
 
 export interface SavedModelRow {
   readonly savedModelId: string;
@@ -41,20 +44,19 @@ function modelNameKey(providerId: string, modelName: string): string {
   return `${providerId}\0${modelName}`;
 }
 
-export function ModelPickerModal({
-  visible,
-  onClose,
-  onSelected,
-  sessionId,
-}: Props) {
+export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Props) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const [rows, setRows] = useState<SavedModelRow[]>([]);
   const [loading, setLoading] = useState(false);
+  // 加载失败渲染错误文案 + 重试，而不是吞错伪装成空列表（对齐 FetchModelsSheet）。
+  const [error, setError] = useState<string | undefined>();
   const [currentId, setCurrentId] = useState<string | undefined>();
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setError(undefined);
     try {
       let effectiveId: string | undefined;
       if (sessionId != null) {
@@ -116,6 +118,9 @@ export function ModelPickerModal({
       });
       collected.sort((a, b) => a.label.localeCompare(b.label));
       setRows(collected);
+    } catch (cause) {
+      setRows([]);
+      setError(formatError(cause));
     } finally {
       setLoading(false);
     }
@@ -123,26 +128,32 @@ export function ModelPickerModal({
 
   useEffect(() => {
     if (visible) {
-      reload().catch(() => setRows([]));
+      reload().catch(() => undefined);
     }
   }, [visible, reload]);
 
   const select = useCallback(
     async (savedModelId: string) => {
       // 分流：session 写全量配置（保留 agentId 只换 modelId），workspace 写全局。
-      if (sessionId != null) {
-        const current = await runtime.sessions.getSessionAgentConfig(sessionId);
-        await runtime.sessions.updateSessionAgentConfig(sessionId, {
-          agentId: current.agentId,
-          modelId: savedModelId,
-        });
-      } else {
-        await runtime.state.setCurrentModelId(savedModelId);
+      // 写入成功才回调并关闭；失败留在弹窗里 toast 提示，方便重试。
+      try {
+        if (sessionId != null) {
+          const current = await runtime.sessions.getSessionAgentConfig(sessionId);
+          await runtime.sessions.updateSessionAgentConfig(sessionId, {
+            agentId: current.agentId,
+            modelId: savedModelId,
+          });
+        } else {
+          await runtime.state.setCurrentModelId(savedModelId);
+        }
+      } catch (cause) {
+        showToast(toastMessage('设置失败', cause));
+        return;
       }
       onSelected?.(savedModelId);
       onClose();
     },
-    [runtime, sessionId, onSelected, onClose],
+    [runtime, sessionId, onSelected, onClose, showToast],
   );
 
   return (
@@ -150,18 +161,23 @@ export function ModelPickerModal({
       visible={visible}
       animationType="slide"
       transparent
-      onRequestClose={onClose}
-    >
+      onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}
-        >
-          <Text style={[styles.title, {color: tokens.text}]}>
-            选择工作区模型
-          </Text>
+          onPress={e => e.stopPropagation()}>
+          <Text style={[styles.title, {color: tokens.text}]}>选择工作区模型</Text>
           {loading ? (
             <ActivityIndicator style={styles.loader} />
+          ) : error ? (
+            <View style={styles.center}>
+              <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+              <Pressable onPress={() => reload().catch(() => undefined)}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                  重试
+                </Text>
+              </Pressable>
+            </View>
           ) : (
             <FlatList
               data={rows}
@@ -180,8 +196,7 @@ export function ModelPickerModal({
                       {borderBottomColor: tokens.border},
                       selected && {backgroundColor: tokens.background},
                     ]}
-                    onPress={() => select(item.savedModelId)}
-                  >
+                    onPress={() => select(item.savedModelId)}>
                     <View style={styles.rowText}>
                       <Text style={{color: tokens.text}}>{item.label}</Text>
                       {item.subtitle ? (
@@ -189,8 +204,7 @@ export function ModelPickerModal({
                           style={[
                             styles.subtitle,
                             {color: tokens.textSecondary},
-                          ]}
-                        >
+                          ]}>
                           {item.subtitle}
                         </Text>
                       ) : null}
@@ -232,6 +246,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   loader: {marginVertical: 24},
+  center: {alignItems: 'center', gap: 12, padding: 24},
+  error: {textAlign: 'center', lineHeight: 20},
   empty: {textAlign: 'center', padding: 24},
   row: {
     flexDirection: 'row',

@@ -5,7 +5,8 @@
 import {
   CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION,
   type ChatTranscriptScrollSnapshot,
-} from '@/components/chat/ChatTranscriptBridge';
+} from '../components/chat/ChatTranscriptBridge';
+import {createScopeKeyCache} from './scope-key-cache';
 
 export type {ChatTranscriptScrollSnapshot};
 
@@ -15,10 +16,12 @@ export type LegacyChatListScrollSnapshot = {
   readonly nearBottom: boolean;
 };
 
-const cache = new Map<string, ChatTranscriptScrollSnapshot>();
+const cache = createScopeKeyCache<ChatTranscriptScrollSnapshot>({
+  maxEntries: 500,
+});
 
 export function scrollCacheKey(projectId: string, sessionId: string): string {
-  return `${projectId}:${sessionId}`;
+  return cache.key(projectId, sessionId);
 }
 
 export function getTranscriptScrollSnapshot(
@@ -38,7 +41,14 @@ export function setTranscriptScrollSnapshot(
 }
 
 export function clearTranscriptScrollSnapshot(key: string): void {
-  cache.delete(key);
+  cache.clear(key);
+}
+
+/** 项目删除后按前缀清理其全部会话快照。 */
+export function clearTranscriptScrollSnapshotsByProject(
+  projectId: string,
+): void {
+  cache.clearByProjectPrefix(projectId);
 }
 
 /** Accept v2 only; legacy v1 (no schemaVersion) returns undefined and emits discard signal. */
@@ -59,5 +69,10 @@ export function normalizeScrollSnapshot(
 
 /** Test-only: reset process-wide cache between cases. */
 export function clearAllTranscriptScrollSnapshots(): void {
-  cache.clear();
+  cache.clearAll();
+}
+
+/** Test-only: entry count for LRU-bound assertions. */
+export function transcriptScrollSnapshotCacheSize(): number {
+  return cache.size;
 }

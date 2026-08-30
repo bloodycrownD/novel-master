@@ -67,7 +67,12 @@ export function ThemeProvider({children}: {children: ReactNode}) {
     async (next: ThemeMode) => {
       setModeState(next);
       if (appUi) {
-        await appUi.set(APP_UI_KEY_THEME, next);
+        try {
+          await appUi.set(APP_UI_KEY_THEME, next);
+        } catch (error) {
+          // fire-and-forget 场景（如 void toggleMode()）下不冒泡成 unhandled rejection。
+          console.warn('[ThemeProvider] persist theme mode failed:', error);
+        }
       }
     },
     [appUi],

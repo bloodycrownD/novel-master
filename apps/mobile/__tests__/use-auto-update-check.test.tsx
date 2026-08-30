@@ -227,6 +227,100 @@ describe('useAutoUpdateCheck', () => {
       expect.objectContaining({actionLabel: '查看'}),
     );
   });
+
+  it('B-5: readUpdatesAutoCheck reject 被兑住，走失败持久化与错误弹窗', async () => {
+    mockReadUpdatesAutoCheck.mockRejectedValue(new Error('pref boom'));
+
+    act(() => {
+      TestRenderer.create(<TestHost />);
+    });
+    await flushAutoCheck();
+
+    expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
+    expect(modalProps?.visible).toBe(true);
+    expect(modalProps?.kind).toBe('error');
+  });
+
+  it('B-5: readSnoozeUntil reject 同样被兑住', async () => {
+    mockReadSnoozeUntil.mockRejectedValue(new Error('snooze boom'));
+
+    act(() => {
+      TestRenderer.create(<TestHost />);
+    });
+    await flushAutoCheck();
+
+    expect(mockPersistFailedUpdateCheck).toHaveBeenCalledTimes(1);
+    expect(modalProps?.visible).toBe(true);
+    expect(modalProps?.kind).toBe('error');
+  });
+
+  it('B-5: persistFailedUpdateCheck 自身 reject 不冒泡（显式 catch）', async () => {
+    mockCheckForUpdates.mockRejectedValue(new Error('network'));
+    mockPersistFailedUpdateCheck.mockRejectedValue(new Error('disk'));
+
+    act(() => {
+      TestRenderer.create(<TestHost />);
+    });
+    await flushAutoCheck();
+    // 存储同源故障时错误弹窗仍要出现，且不产生 unhandled rejection
+    expect(modalProps?.visible).toBe(true);
+    expect(modalProps?.kind).toBe('error');
+  });
+
+  it('B-5: snooze 写入失败 toast 且弹窗保持打开', async () => {
+    act(() => {
+      TestRenderer.create(<TestHost />);
+    });
+    await flushAutoCheck();
+    expect(modalProps?.visible).toBe(true);
+
+    mockWriteSnoozeUntil.mockRejectedValueOnce(new Error('write fail'));
+    await act(async () => {
+      await modalProps?.onSnoozeToday?.();
+    });
+
+    expect(mockShowToast).toHaveBeenCalledWith('设置失败：write fail');
+    expect(modalProps?.visible).toBe(true);
+  });
+
+  it('B-5: 前往下载外跳失败 toast（对齐 AboutScreen openLink）', async () => {
+    mockCheckForUpdates.mockResolvedValue({
+      status: 'update-available',
+      remoteVersion: '9.9.9',
+      releaseUrl: 'https://example.com',
+      releaseNotesExcerpt: '',
+    });
+
+    act(() => {
+      TestRenderer.create(<TestHost />);
+    });
+    await flushAutoCheck();
+
+    // toast 的「查看」打开 Alert，再点「前往下载」触发 Linking.openURL
+    const {Alert, Linking} = require('react-native');
+    Alert.alert.mockClear();
+    const toastOptions = mockShowToast.mock.calls[0]?.[1];
+    expect(toastOptions?.onAction).toBeInstanceOf(Function);
+    act(() => {
+      toastOptions.onAction();
+    });
+
+    const buttons = Alert.alert.mock.calls[0]?.[2] as Array<{
+      text: string;
+      onPress?: () => void;
+    }>;
+    const download = buttons?.find(b => b.text === '前往下载');
+    expect(download?.onPress).toBeInstanceOf(Function);
+
+    Linking.openURL.mockRejectedValueOnce(new Error('no browser'));
+    await act(async () => {
+      download.onPress?.();
+      await Promise.resolve();
+    });
+
+    expect(Linking.openURL).toHaveBeenCalledWith('https://example.com');
+    expect(mockShowToast).toHaveBeenCalledWith('无法打开链接：no browser');
+  });
 });
 
 describe('isSnoozed', () => {

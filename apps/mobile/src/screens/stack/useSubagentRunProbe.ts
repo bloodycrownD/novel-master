@@ -13,7 +13,7 @@
  * 复询防抖的原因：mobile 查的是本进程内存里的 core registry 注册状态，
  * run 被 main 主动结束、unregister 事件还没派发到 renderer 时，has 可能短暂仍返回 true。
  */
-import {useCallback, useEffect} from 'react';
+import {useEffect, useMemo} from 'react';
 import {AppState} from 'react-native';
 
 /** 兜底轮询周期（毫秒）。visibility 为主，轮询为辅，30s 足够。 */
@@ -30,16 +30,25 @@ export type UseSubagentRunProbeParams = {
   onRunEnded(): void;
 };
 
+/** 探针函数：可直接调用触发一次校准；cancel() 清掉未决的复询定时器。 */
+export type RunEndedProbe = {
+  (): void;
+  cancel(): void;
+};
+
 /**
- * @param uiRunning 用于决定轮询 interval 是否启动（false 时不轮询）。
- *                  AppState 监听始终挂载，但 probe 内部会读 isRunActive() 自行判断。
+ * 共享探针工厂：两个 hook（前台触发 / 轮询触发）复用同一段校准逻辑。
+ *
+ * 复询 setTimeout 的句柄存在工厂闭包的 reconfirmTimer 里（ref 语义），
+ * 调用方须在 effect cleanup 里调 probe.cancel()，保证卸载后 800ms 内不会触发 onRunEnded。
  */
-export function useSubagentRunProbe({
+export function createRunEndedProbe({
   isRunActive,
   isRunRegistered,
   onRunEnded,
-}: UseSubagentRunProbeParams): void {
-  const probe = useCallback(() => {
+}: UseSubagentRunProbeParams): RunEndedProbe {
+  let reconfirmTimer: ReturnType<typeof setTimeout> | null = null;
+  const probe = () => {
     if (!isRunActive()) {
       return;
     }
@@ -47,7 +56,8 @@ export function useSubagentRunProbe({
       return;
     }
     // 第一次查到未注册：短延迟复询一次仍未注册才认定 run 真的结束。
-    setTimeout(() => {
+    reconfirmTimer = setTimeout(() => {
+      reconfirmTimer = null;
       if (!isRunActive()) {
         return;
       }
@@ -56,7 +66,25 @@ export function useSubagentRunProbe({
       }
       onRunEnded();
     }, SUBAGENT_RUN_PROBE_RECONFIRM_DELAY_MS);
-  }, [isRunActive, isRunRegistered, onRunEnded]);
+  };
+  probe.cancel = () => {
+    if (reconfirmTimer !== null) {
+      clearTimeout(reconfirmTimer);
+      reconfirmTimer = null;
+    }
+  };
+  return probe;
+}
+
+export function useSubagentRunProbe({
+  isRunActive,
+  isRunRegistered,
+  onRunEnded,
+}: UseSubagentRunProbeParams): void {
+  const probe = useMemo(
+    () => createRunEndedProbe({isRunActive, isRunRegistered, onRunEnded}),
+    [isRunActive, isRunRegistered, onRunEnded],
+  );
 
   // app 回前台为主触发点。
   useEffect(() => {
@@ -65,7 +93,10 @@ export function useSubagentRunProbe({
         probe();
       }
     });
-    return () => sub.remove();
+    return () => {
+      sub.remove();
+      probe.cancel();
+    };
   }, [probe]);
 }
 
@@ -73,6 +104,11 @@ export function useSubagentRunProbe({
  * 低频轮询 effect（独立导出，由调用方按 uiRunning 决定是否启用）。
  *
  * 轮询只在 uiRunning 期间启动；uiRunning 翻 false 时清 interval。
+ *
+ * @param uiRunning 用于决定轮询 interval 是否启动（false 时不轮询）。
+ * @param isRunActive 同步读 uiRunning（probe 内部自行判断，禁止读 React state）。
+ * @param isRunRegistered 查 core abortRegistry 是否仍注册了该 sessionId 的 run。
+ * @param onRunEnded 走与 RUN_FINISHED 相同的收尾路径（markRunEnded + reload）。
  */
 export function useSubagentRunPolling(
   uiRunning: boolean,
@@ -80,29 +116,19 @@ export function useSubagentRunPolling(
   isRunRegistered: () => boolean,
   onRunEnded: () => void,
 ): void {
-  const probe = useCallback(() => {
-    if (!isRunActive()) {
-      return;
-    }
-    if (isRunRegistered()) {
-      return;
-    }
-    setTimeout(() => {
-      if (!isRunActive()) {
-        return;
-      }
-      if (isRunRegistered()) {
-        return;
-      }
-      onRunEnded();
-    }, SUBAGENT_RUN_PROBE_RECONFIRM_DELAY_MS);
-  }, [isRunActive, isRunRegistered, onRunEnded]);
+  const probe = useMemo(
+    () => createRunEndedProbe({isRunActive, isRunRegistered, onRunEnded}),
+    [isRunActive, isRunRegistered, onRunEnded],
+  );
 
   useEffect(() => {
     if (!uiRunning) {
       return;
     }
     const timer = setInterval(probe, SUBAGENT_RUN_PROBE_INTERVAL_MS);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      probe.cancel();
+    };
   }, [uiRunning, probe]);
 }

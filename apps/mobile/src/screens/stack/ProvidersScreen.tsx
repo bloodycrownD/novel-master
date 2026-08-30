@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
@@ -23,6 +24,7 @@ import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
+import {formatError} from '../../errors/format-error';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -41,6 +43,8 @@ export function ProvidersScreen() {
   const navigation = useNavigation<Nav>();
   const [rows, setRows] = useState<ProviderRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // 加载失败渲染错误文案 + 重试，而不是吞错伪装成空列表（对齐 FetchModelsSheet）。
+  const [error, setError] = useState<string | undefined>();
   const [menuProviderId, setMenuProviderId] = useState<string | undefined>();
   const batch = useBatchSelection();
 
@@ -52,6 +56,7 @@ export function ProvidersScreen() {
 
   const reload = useCallback(async () => {
     setLoading(true);
+    setError(undefined);
     try {
       const providers = await runtime.providers.list();
       const enriched: ProviderRow[] = [];
@@ -63,6 +68,9 @@ export function ProvidersScreen() {
         });
       }
       setRows(enriched);
+    } catch (cause) {
+      setRows([]);
+      setError(formatError(cause));
     } finally {
       setLoading(false);
     }
@@ -70,7 +78,7 @@ export function ProvidersScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      reload().catch(() => setRows([]));
+      reload().catch(() => undefined);
     }, [reload]),
   );
 
@@ -163,6 +171,13 @@ export function ProvidersScreen() {
       />
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={styles.loader} />
+      ) : error ? (
+        <View style={styles.center}>
+          <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
+          <Pressable onPress={() => reload().catch(() => undefined)}>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>重试</Text>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={rows}
@@ -232,6 +247,8 @@ const styles = StyleSheet.create({
   root: {flex: 1},
   listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
+  center: {alignItems: 'center', gap: 12, padding: 24},
+  error: {textAlign: 'center', lineHeight: 20},
   empty: {textAlign: 'center', padding: 32},
   icon: {fontSize: 22},
 });

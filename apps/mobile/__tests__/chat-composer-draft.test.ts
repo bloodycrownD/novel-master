@@ -1,6 +1,7 @@
-import {describe, expect, it} from '@jest/globals';
+import {describe, expect, it, jest} from '@jest/globals';
 import {
   applyComposerStatusAttachmentsReplace,
+  clearChatComposerDraft,
   readChatComposerDraftState,
   writeChatComposerDraft,
   writeChatComposerDraftState,
@@ -116,5 +117,48 @@ describe('chat-composer-draft', () => {
       state.attachments.filter(a => a.action === 'annotate').length,
     ).toBe(1);
     resetChatAnnotateDraftStoreForTests();
+  });
+});
+
+describe('chat-composer-draft 持久化失败（infra/B-2）', () => {
+  it('setComposerDraftJson reject：warn 有日志、无 unhandled rejection、内存缓存不受影响', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
+    process.on('unhandledRejection', onUnhandled);
+    const sessions = {
+      getComposerDraftJson: jest.fn(async () => null),
+      setComposerDraftJson: jest.fn(async () => {
+        throw new Error('db locked');
+      }),
+    };
+    try {
+      // 覆盖三条 void 落库路径：persistAttachTextDraft、两侧皆空 set null、clear set null。
+      writeChatComposerDraft('s-persist', 'hello', sessions);
+      writeChatComposerDraftState('s-persist', {
+        text: 'state',
+        attachments: [],
+      }, sessions);
+      writeChatComposerDraft('s-persist', '', sessions);
+      writeChatComposerDraftState('s-persist', {
+        text: '',
+        attachments: [],
+      }, sessions);
+      clearChatComposerDraft('s-persist', sessions);
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[chat-composer-draft] persist draft failed:',
+        expect.objectContaining({message: 'db locked'}),
+      );
+      expect(unhandled).toEqual([]);
+      // 落库失败不影响内存缓存语义。
+      expect(readChatComposerDraftState('s-persist').text).toBe('');
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+      warnSpy.mockRestore();
+    }
   });
 });
