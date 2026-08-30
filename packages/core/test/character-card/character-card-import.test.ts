@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   CharacterCardError,
@@ -26,6 +23,8 @@ import {
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { sessionApiPromptTokenCache } from "../../src/infra/tokenizer/logic/session-api-prompt-token-cache.js";
 import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteWorkplaceRepository } from "../../src/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
+import type { WorkplaceRepository } from "../../src/domain/workplace/repositories/workplace.port.js";
 import { DefaultCharacterCardImportService } from "../../src/service/vfs/impl/character-card-import.service.js";
 import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 
@@ -169,7 +168,7 @@ describe("CharacterCardImportService", () => {
     assert.equal((await vfs.read("/角色/stay.md")).content, "stay-bytes");
   });
 
-  it("T-C15: 导入成功后 workplace 规则表未被清理/重写", async () => {
+  it("T-C15: 导入成功后已有规则行（自定义 headCount 与 rule_off）不被覆盖", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-tc15-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -191,6 +190,8 @@ describe("CharacterCardImportService", () => {
       tailCount: 1,
       fillPolicy: "filename",
     });
+    // 预置一条 rule_off 行：导入重建同名目录后也不得被覆盖为默认开启
+    await wt.setDirRule({ logicalPath: "/角色/世界书", ruleEnabled: false });
     const before = await wt.getDirRule("/角色");
     assert.ok(before);
     assert.equal(before.headCount, 7);
@@ -202,26 +203,141 @@ describe("CharacterCardImportService", () => {
       { confirmed: true, directoryPath: "/角色" },
     );
 
+    // 行为契约（替代原源码正则断言）：已有行原样保留
     const after = await wt.getDirRule("/角色");
     assert.ok(after);
     assert.equal(after.headCount, 7);
     assert.equal(after.sortField, "name");
     assert.equal(after.fillPolicy, "filename");
+    const worldbook = await wt.getDirRule("/角色/世界书");
+    assert.ok(worldbook);
+    assert.equal(worldbook.ruleEnabled, false);
+    assert.equal(worldbook.headCount, 0);
+    assert.equal(worldbook.tailCount, 1000);
+  });
 
-    // 源码契约：角色卡导入路径禁止调用 WorkplaceService
-    const here = dirname(fileURLToPath(import.meta.url));
-    const implSrc = readFileSync(
-      join(
-        here,
-        "../../src/service/vfs/impl/character-card-import.service.ts",
-      ),
-      "utf8",
+  it("T-I1: 导入含多层嵌套目录的角色卡后，前缀下全部目录默认启用并参与文件树裁剪", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-ti1-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    const tree = new Map([
+      ["角色描述.md", "描述"],
+      ["开场/开场001.md", "开场"],
+      ["世界书/章节/深层/设定.md", "深层设定"],
+    ]);
+    await svc.import(scope, tree, {
+      confirmed: true,
+      directoryPath: "/角色",
+    });
+
+    // 前缀下全部目录（含目标自身与任意深度嵌套）都有默认启用规则行
+    const wt = createWorkplaceService(ctx.conn, scope);
+    for (const dir of [
+      "/角色",
+      "/角色/开场",
+      "/角色/世界书",
+      "/角色/世界书/章节",
+      "/角色/世界书/章节/深层",
+    ]) {
+      const rule = await wt.getDirRule(dir);
+      assert.ok(rule, `${dir} 应有默认规则行`);
+      assert.equal(rule.ruleEnabled, true, `${dir} 应默认启用`);
+      assert.equal(rule.sortField, "name");
+      assert.equal(rule.sortOrder, "asc");
+      assert.equal(rule.headCount, 0);
+      assert.equal(rule.tailCount, 1000);
+      assert.equal(rule.fillPolicy, "header");
+    }
+
+    // 经 WorkplaceService 文件树视图确认导入目录参与裁剪（PRD 验收第 5 条）
+    const view = await wt.materializeLiveView();
+    assert.ok(view.filetreeDisplay.includes("设定.md"));
+    assert.ok(view.filetreeDisplay.includes("开场001.md"));
+  });
+
+  it("T-I4: 补入行的 scope_key 落在 workplace 键空间（session:${sessionId}）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-ti4-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    await svc.import(
+      scope,
+      new Map([["开场/开场001.md", "开场"]]),
+      { confirmed: true, directoryPath: "/角色" },
     );
+
+    const repo = new SqliteWorkplaceRepository(ctx.conn);
+    // workplace 键空间有补入行，且行内 scopeKey 字段一致
+    const rules = await repo.listDirRules(`session:${session.id}`);
+    assert.ok(rules.length >= 2);
+    for (const rule of rules) {
+      assert.equal(rule.scopeKey, `session:${session.id}`);
+    }
+    // vfs 键空间（session:${projectId}:${sessionId}）下没有规则行，防止误用 vfs sk
+    assert.deepEqual(
+      await repo.listDirRules(`session:${project.id}:${session.id}`),
+      [],
+    );
+  });
+
+  it("T-I5: 补规则行语句真失败时不毒化导入事务，导入仍成功且文件完整", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-ti5-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+
+    // 故障注入：upsertDirRule 执行一条必失败的 SQL（表不存在），
+    // 验证语句级失败不自动 ROLLBACK，导入事务照常提交
+    const svc = createCharacterCardImportService(ctx.conn, {
+      testHook: {
+        createWorkplaceRepo: (tx) =>
+          ({
+            listDirRules: (scopeKey: string) =>
+              new SqliteWorkplaceRepository(tx).listDirRules(scopeKey),
+            upsertDirRule: async () => {
+              await tx.execute("INSERT INTO no_such_table_boom (id) VALUES (1)");
+            },
+          }) as unknown as WorkplaceRepository,
+      },
+    });
+    const tree = new Map([
+      ["角色描述.md", "描述"],
+      ["世界书/章节/深层/设定.md", "深层设定"],
+    ]);
+    await assert.doesNotReject(
+      svc.import(scope, tree, { confirmed: true, directoryPath: "/角色" }),
+    );
+
+    // 已写文件完整保留
+    assert.equal((await vfs.read("/角色/角色描述.md")).content, "描述");
     assert.equal(
-      /WorkplaceService|createWorkplaceService|workplace\.service/i.test(
-        implSrc,
-      ),
-      false,
+      (await vfs.read("/角色/世界书/章节/深层/设定.md")).content,
+      "深层设定",
+    );
+    // 补行失败后 workplace 表无残留行（best-effort，不阻断也不留脏数据）
+    const repo = new SqliteWorkplaceRepository(ctx.conn);
+    assert.deepEqual(
+      await repo.listDirRules(`session:${session.id}`),
+      [],
     );
   });
 
