@@ -17,6 +17,10 @@ import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
+  readAgentFinishedNotificationEnabled,
+  writeAgentFinishedNotificationEnabled,
+} from '../../storage/agent-finished-notification-pref';
+import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
 } from '../../storage/chat-rich-text-pref';
@@ -41,6 +45,10 @@ export function ChatConfigScreen() {
   const [thinkingContextEnabled, setThinkingContextEnabled] = useState(true);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
+  const [
+    agentFinishedNotificationEnabled,
+    setAgentFinishedNotificationEnabled,
+  ] = useState(true);
 
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState('0.8');
@@ -72,6 +80,15 @@ export function ChatConfigScreen() {
     setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
+  const refreshAgentFinishedNotificationPref = useCallback(async () => {
+    if (appUi == null) {
+      return;
+    }
+    setAgentFinishedNotificationEnabled(
+      await readAgentFinishedNotificationEnabled(appUi),
+    );
+  }, [appUi]);
+
   const refreshCompaction = useCallback(async () => {
     const stored = await runtime.compactionConditions.getConditions();
     const c = stored ?? DEFAULT_CONDITIONS;
@@ -90,12 +107,14 @@ export function ChatConfigScreen() {
       refreshThinkingContextPref().catch(() => undefined);
       refreshSessionFsVersionCheckPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
+      refreshAgentFinishedNotificationPref().catch(() => undefined);
       refreshCompaction().catch(() => undefined);
     }, [
       refreshStreamPref,
       refreshThinkingContextPref,
       refreshSessionFsVersionCheckPref,
       refreshChatRichTextPref,
+      refreshAgentFinishedNotificationPref,
       refreshCompaction,
     ]),
   );
@@ -226,6 +245,27 @@ export function ChatConfigScreen() {
             void persistSwitchWithRollback(
               () => writeChatRichTextEnabled(appUi, enabled),
               () => setChatRichTextEnabled(!enabled),
+            );
+          }
+        }}
+      />
+
+      <ProfileSwitchItem
+        icon="🔔"
+        label="生成结束通知"
+        subtitle={
+          agentFinishedNotificationEnabled
+            ? '仅应用在后台时通知生成结束，点按直达会话'
+            : '生成结束后不再通知（生成与后台保持不受影响）'
+        }
+        value={agentFinishedNotificationEnabled}
+        tokens={tokens}
+        onValueChange={enabled => {
+          setAgentFinishedNotificationEnabled(enabled);
+          if (appUi) {
+            void persistSwitchWithRollback(
+              () => writeAgentFinishedNotificationEnabled(appUi, enabled),
+              () => setAgentFinishedNotificationEnabled(!enabled),
             );
           }
         }}
