@@ -226,3 +226,9 @@ user:
 
 assistant:
 有得清：packages/core/src/bootstrap/schema-migrations/ 的 runner 里 3 条早于 v1.4.27 分界（vfs-entry-id-redesign-v1、session-agent-config-v2、project-agent-config-cleanup-v1）退役，加上此前已退役留档的 6 条一并物理删除（git 历史即冷回放档案）。沿用仓库既有惯例：ID 并入 BASELINE_MIGRATION_IDS（9 条字面量）+ 三个新 legacy 探针 + 最低支持版本 v1.4.08→v1.4.27 + fail-fast 文案更新。关键坑：①3 个 blob ref_count 触发器原本靠被删的 entry-id 迁移在新库 ensure，canonical DDL 故意不含——已并入 vfs-revision-schema.ts 否则新库无触发器；②entryIdApplied/_entryIdMigrationJustApplied 安全网整块死代码删除；③H1 给 core/public/compaction 加的 DEFAULT_HIDE_START_DEPTH re-export 漏更新了 package-exports 快照（core node:test 此前从没跑过才漏网），快照补齐；④core 的 npm test 通配 !(performance) 在 sh 下语法错，须 bash -O extglob 跑。终验 core 1781/1781、mobile 1049/1049 全绿。
+
+user:
+修 test 脚本；另外 message 的「工具调用」title 样式变了，之前是淡灰色，现在黑色正体。
+
+assistant:
+两件都完成：①core 的 npm test 通配用 bash -O extglob 包裹，sh 下可跑（a093dff）。②样式回归根因：web/C-2 抽 CollapsibleHeader 时 class 派生写错——headerClass+'-title' 拼出 tool-group-header-title，CSS 选择器是 .tool-group-title（-header 后缀要替换不是追加），「思考过程」同款中招。修为 replace(/-header$/,'') 派生（ec4d62a），新增 collapsible-section-classes 测试直调组件断言 class 与 CSS 对应。经验：①「DOM 逐属性一致」的子代理自述不可信，样式类重构必须用渲染断言锁定（源码字符串测试盯不住运行时拼接）；②.prettierignore 要补 android/app/.cxx/（本地原生构建产物会打爆 format:check）；③用户报 UI 样式回归时，先问清「现在的具体表现」（黑色正体→定位到规则整体失配而非颜色值变化）能省一半排查。
