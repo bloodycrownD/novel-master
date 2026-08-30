@@ -53,6 +53,21 @@ const mockRuntime: any = {
     getCurrentRegexGroupId: jest.fn(async () => undefined),
   },
   eventBus: new SimpleEventBus(),
+  // 重进恢复相关 registry mock：默认无 in-flight run（has=false、get=undefined）。
+  abortRegistry: {
+    register: jest.fn(),
+    abort: jest.fn(),
+    unregister: jest.fn(),
+    has: jest.fn(() => false),
+  },
+  streamRegistry: {
+    register: jest.fn(),
+    reset: jest.fn(),
+    append: jest.fn(),
+    get: jest.fn(() => undefined),
+    has: jest.fn(() => false),
+    unregister: jest.fn(),
+  },
   workplace: jest.fn(() => ({})),
   sessionVfs: jest.fn(() => ({})),
   projectVfs: jest.fn(() => ({})),

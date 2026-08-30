@@ -208,6 +208,7 @@ export function ChatConversationPanel({
           defaultScrollToBottom={defaultChatScrollToBottom}
           onScrollSnapshot={onChatScrollSnapshot}
           onLoadOlder={onLoadOlderMessages}
+          onReady={ctx.onTranscriptWebviewReady}
           onOpenToolFile={scope.openSessionFilePreview}
           onOpenSubagentSession={scope.openSubagentSession}
           onOpenSkillDetail={scope.openSkillDetail}

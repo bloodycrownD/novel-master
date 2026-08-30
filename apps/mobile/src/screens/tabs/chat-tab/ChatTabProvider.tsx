@@ -35,6 +35,7 @@ import {useToast} from '@/components/chrome/ToastHost';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
+import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
@@ -59,6 +60,7 @@ import {useChatTabScrollCache} from './useChatTabStream';
 import {useSessionAbort} from './useSessionAbort';
 import {useSessionBatch} from './useSessionBatch';
 import {useSessionStream} from './useSessionStream';
+import {useChatStreamResumeInject} from './useChatStreamResumeInject';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -139,6 +141,8 @@ export type ChatTabContextValue = {
   readonly beginUiRun: () => void;
   /** UI run 异常收尾（composer catch 路径用）。 */
   readonly endUiRunOnError: () => void;
+  /** WebView onReady 接线：提升 webviewReady 给注入 hook（重进 partial 恢复）。 */
+  readonly onTranscriptWebviewReady: () => void;
   readonly abortUiRun: () => void;
   readonly onLoadOlderMessages: () => void;
   readonly onOpenFileEditor: (
@@ -298,11 +302,35 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     onRunUiActivate: abort.markRunStarted,
     onRunUiDeactivate: abort.markRunEnded,
     getUiRunning: abort.getUiRunning,
+    // 恢复窗口资格：session 切换时 core abortRegistry 仍注册 in-flight run
+    // 则开窗，activeRunId==null 期间放宽事件接纳（详见 hook 注释）。
+    getResumeWindowEligible: () =>
+      sessionId != null && runtime.abortRegistry.has(sessionId),
+  });
+
+  // 主会话流式 partial 重进恢复：webviewReady / 注入标记提升到常驻 Provider，
+  // 与 WebView mount 绑定复位（chatSubview 离开 conversation / sessionKey 变化）。
+  const sessionKey =
+    projectId != null && sessionId != null
+      ? `${projectId}:${sessionId}`
+      : '';
+  const inject = useChatStreamResumeInject({
+    chatSubview: scope.chatSubview,
+    sessionKey,
+    sessionId,
+    uiRunning: abort.uiRunning,
+    transcriptWebRef,
+    messagesLength: messages.chatMessages.length,
+    streamRegistry: runtime.streamRegistry,
   });
 
   useEffect(() => {
     abort.resetForSessionChange();
     lifecycle.resetUiForSessionChange();
+    // 状态重建（路径 B）在 useRunResumeProbe 的恢复方向承担（声明于本 effect
+    // 之后，同 commit 内 reset 先清、再按 registry.has 合成 markRunStarted）；
+    // lifecycle 的恢复窗口已在上面 reset 内按需开启，迟到的真 RUN_STARTED
+    // 不会被 stale 守卫拒收（uiRunning 已被合成置 true），会反填真实 runId。
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 session 切换时重置 UI
   }, [sessionId]);
 
@@ -319,6 +347,33 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
         }),
     [messages, scope.refreshChatTokenLabel],
   );
+
+  // 双方向探针：恢复方向（sessionId 生效 + registry.has → 合成 markRunStarted，
+  // 路径 B 状态重建，早于注入与 snapshot）；收尾方向（uiRunning=true 但 registry
+  // 已无 → markRunEnded + reload，防「生成中」永久残留）。探针/轮询节点也是
+  // registry.has 的唯一复评点；主会话不接 agent-activity refcount（refcount 归属
+  // 发起方，合成恢复不加）。
+  useRunResumeProbe({
+    sessionId,
+    isRunRegistered: () =>
+      sessionId != null && runtime.abortRegistry.has(sessionId),
+    onRunActive: () => {
+      abort.markRunStarted();
+    },
+    onRunEnded: () => {
+      abort.markRunEnded();
+      void handleMessagesChanged().catch(() => undefined);
+    },
+    uiRunning: abort.uiRunning,
+    isRunActive: abort.getUiRunning,
+  });
+
+  // step 提交后 partial 已落库（core 侧 streamRegistry.reset 保证 get() 只含
+  // 下一 step 的新累积），重置注入标记允许再注入；落库 reload 由 useSessionStream
+  // 的 STEP_COMMITTED 订阅（flushAgentStepUi）承担，这里不重复触发。
+  const handleStepCommitted = useCallback(() => {
+    inject.resetInjection();
+  }, [inject]);
 
   const batch = useSessionBatch({
     applySegments: segments => applySegmentsRef.current(segments),
@@ -343,6 +398,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     batchFlush: batch.flushBuffers,
     onMessagesChanged: handleMessagesChanged,
     getMessageCount: () => chatMessageCountRef.current,
+    onStepCommitted: handleStepCommitted,
   });
   // 拆环：stream mount 后把 apply 叶子 / stream reset 写入两个占位 ref。
   applySegmentsRef.current = stream.applySegments;
@@ -482,6 +538,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       mermaidViewerCloseSignal,
       beginUiRun: lifecycle.beginUiRun,
       endUiRunOnError: lifecycle.endUiRunOnError,
+      onTranscriptWebviewReady: inject.markWebviewReady,
       abortUiRun: abortUiRunWithFreeze,
       onLoadOlderMessages: () =>
         messages.loadOlderMessages().catch(() => undefined),
@@ -511,6 +568,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       messages,
       handleMessagesChanged,
       scroll,
+      inject,
       modelPickerOpen,
       agentPickerOpen,
       messageMenuTarget,
