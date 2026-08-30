@@ -17,6 +17,21 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
 
+// ToolPolicyPicker 的 sheet 骨架（ModalShell）内部用 useTheme 取面板背景色。
+jest.mock('@/theme/ThemeProvider', () => ({
+  useTheme: () => ({
+    tokens: {
+      text: '#111',
+      textSecondary: '#666',
+      surface: '#fff',
+      bgSecondary: '#f4f4f5',
+      border: '#ddd',
+      borderLight: '#eee',
+      primary: '#007aff',
+    },
+  }),
+}));
+
 import {ToolPolicyPicker} from '@/components/agent/ToolPolicyPicker';
 import {FormOverlayProvider} from '@/components/form/FormOverlayHost';
 
@@ -247,7 +262,7 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
 });
 
 describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（源码契约）', () => {
-  it('hook 调用传 iosTranslateY: true（FormOverlayHost 无 KAV 外壳，iOS 由 hook 位移）', () => {
+  it('ModalShell 接 adaptive 策略并传 iosTranslateY: true（FormOverlayHost 无 KAV 外壳，iOS 由面板自身位移）', () => {
     const src = readFileSync(
       join(
         __dirname,
@@ -259,7 +274,7 @@ describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（源码契约）
       ),
       'utf8',
     );
-    expect(src).toContain('useAdaptiveKeyboardSheetStyle(0.75, {');
+    expect(src).toContain('maxHeightRatio: 0.75');
     expect(src).toContain('iosTranslateY: true');
   });
 });

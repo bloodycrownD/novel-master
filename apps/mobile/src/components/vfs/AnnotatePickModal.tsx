@@ -5,7 +5,7 @@ import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {AnnotateDraft} from '@novel-master/core/chat';
 import {useTheme} from '@/theme/ThemeProvider';
-import {AppModal} from '@/components/ui/AppModal';
+import {ModalShell} from '@/components/ui/ModalShell';
 
 type Props = {
   readonly visible: boolean;
@@ -18,60 +18,47 @@ export function AnnotatePickModal({visible, drafts, onPick, onClose}: Props) {
   const {tokens} = useTheme();
 
   return (
-    <AppModal
+    <ModalShell
       visible={visible}
-      transparent
+      onClose={onClose}
+      variant="center"
       animationType="fade"
-      onRequestClose={onClose}
-    >
+      containerStyle={styles.overlay}
+      panelStyle={styles.card}>
+      <Text style={[styles.title, {color: tokens.text}]}>选择批注</Text>
+      <View style={styles.list}>
+        {drafts.map(d => (
+          <Pressable
+            key={d.id}
+            style={[styles.item, {borderBottomColor: tokens.borderLight}]}
+            onPress={() => onPick(d)}
+            accessibilityRole="button"
+            accessibilityLabel={d.userAnnotation || '空说明'}
+          >
+            <Text style={[styles.itemText, {color: tokens.text}]}>
+              {d.userAnnotation || '（空说明）'}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
       <Pressable
-        style={styles.overlay}
+        style={styles.cancel}
         onPress={onClose}
         accessibilityRole="button"
-        accessibilityLabel="关闭选择批注"
+        accessibilityLabel="取消"
       >
-        <Pressable
-          style={[styles.card, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}
-        >
-          <Text style={[styles.title, {color: tokens.text}]}>选择批注</Text>
-          <View style={styles.list}>
-            {drafts.map(d => (
-              <Pressable
-                key={d.id}
-                style={[styles.item, {borderBottomColor: tokens.borderLight}]}
-                onPress={() => onPick(d)}
-                accessibilityRole="button"
-                accessibilityLabel={d.userAnnotation || '空说明'}
-              >
-                <Text style={[styles.itemText, {color: tokens.text}]}>
-                  {d.userAnnotation || '（空说明）'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Pressable
-            style={styles.cancel}
-            onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="取消"
-          >
-            <Text style={{color: tokens.textSecondary}}>取消</Text>
-          </Pressable>
-        </Pressable>
+        <Text style={{color: tokens.textSecondary}}>取消</Text>
       </Pressable>
-    </AppModal>
+    </ModalShell>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
     paddingHorizontal: 28,
   },
   card: {
+    width: '100%',
     borderRadius: 12,
     paddingTop: 16,
     paddingBottom: 8,

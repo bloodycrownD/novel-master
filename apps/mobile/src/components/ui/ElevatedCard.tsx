@@ -1,5 +1,6 @@
 /**
  * Elevated list row card (aligned with session cards / examples/mobile .agent-item).
+ * 基础样式来自 card-styles 单源（cr-fix-spec comp-rest/C-7）。
  */
 import React, {type ReactNode} from 'react';
 import {
@@ -9,6 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
+import {cardRow} from './card-styles';
 
 type Props = {
   children: ReactNode;
@@ -29,7 +31,7 @@ export function ElevatedCard({
     <Pressable
       onPress={onPress}
       style={({pressed}) => [
-        styles.card,
+        cardRow,
         {
           backgroundColor: tokens.surfaceElevated,
           borderColor: selected ? tokens.primary : tokens.borderLight,
@@ -43,20 +45,3 @@ export function ElevatedCard({
     </Pressable>
   );
 }
-
-const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 5,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-});

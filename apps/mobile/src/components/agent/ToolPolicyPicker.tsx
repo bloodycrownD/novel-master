@@ -11,22 +11,20 @@
  * - 点行只 toggle 临时 draft，不关闭 sheet；点确定才把 draft 提交回 onChange 并关闭。
  * - draft 仅在 open 从 false 翻 true 时用 selected 初始化一次，sheet 打开期间不再随 selected 变化重置。
  */
-import React, {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
-import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
-import Animated from 'react-native-reanimated';
+import React, {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
-import {FormTextInput} from '@/components/form/FormTextInput';
-import {useFormOverlay} from '@/components/form/FormOverlayHost';
-import {useAdaptiveKeyboardSheetStyle} from '@/hooks/useAdaptiveKeyboardSheetStyle';
-import type {ThemeTokens} from '@/theme/tokens';
+import {FormTextInput} from '../form/FormTextInput';
+import {useFormOverlay} from '../form/FormOverlayHost';
+import {ModalShell} from '../ui/ModalShell';
+import type {ThemeTokens} from '../../theme/tokens';
 
 type Props = {
   tokens: ThemeTokens;
@@ -100,12 +98,9 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
 
   const triggerLabel = buildTriggerLabel(selected);
 
-  // 键盘避让（上移 + maxHeight 收缩）由公共 hook 统一处理：
-  // FormOverlayHost 是普通 View 渲染层无任何避让，iOS 也要并 iosTranslateY
-  // 让 hook 自己 translateY，否则面板底部被键盘盖住 kb 高度、顶部留 kb 空隙。
-  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.75, {
-    iosTranslateY: true,
-  });
+  // 键盘避让（上移 + maxHeight 收缩）由 ModalShell standalone + adaptive 策略统一处理：
+  // FormOverlayHost 是普通 View 渲染层无任何避让，iOS 也要 iosTranslateY
+  // 让面板自己 translateY，否则面板底部被键盘盖住 kb 高度、顶部留 kb 空隙。
 
   useEffect(() => {
     if (!open || !overlay) {
@@ -115,15 +110,17 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
 
     overlay.show(
       overlayKey,
-      <Pressable style={styles.backdrop} onPress={close}>
-        <Animated.View
-          style={[
-            styles.sheet,
-            {backgroundColor: tokens.surface},
-            panelAvoidStyle,
-          ]}
-          onStartShouldSetResponder={() => true}
-        >
+      <ModalShell
+        standalone
+        visible
+        onClose={close}
+        variant="bottom"
+        keyboardAvoid={{
+          kind: 'adaptive',
+          maxHeightRatio: 0.75,
+          iosTranslateY: true,
+        }}
+        panelStyle={styles.sheet}>
           <Text style={[styles.sheetTitle, {color: tokens.text}]}>
             选择工具
           </Text>
@@ -148,11 +145,11 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
                     {borderBottomColor: tokens.border},
                     active && {backgroundColor: tokens.bgSecondary},
                   ]}
-                  onPress={() => toggle(item.name)}
-                >
+                  onPress={() => toggle(item.name)}>
                   <View style={styles.rowText}>
                     <Text style={{color: tokens.text}}>{item.name}</Text>
-                    <Text style={{color: tokens.textSecondary, fontSize: 13}}>
+                    <Text
+                      style={{color: tokens.textSecondary, fontSize: 13}}>
                       {item.description}
                     </Text>
                   </View>
@@ -170,20 +167,22 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
                 borderTopColor: tokens.border,
                 paddingBottom: Math.max(insets.bottom, 16),
               },
-            ]}
-          >
-            <Pressable onPress={close} style={styles.actionBtn}>
+            ]}>
+            <Pressable
+              onPress={close}
+              style={styles.actionBtn}>
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
             <Pressable
               onPress={confirm}
-              style={[styles.actionBtn, {backgroundColor: tokens.primary}]}
-            >
+              style={[
+                styles.actionBtn,
+                {backgroundColor: tokens.primary},
+              ]}>
               <Text style={styles.confirmText}>确定</Text>
             </Pressable>
           </View>
-        </Animated.View>
-      </Pressable>,
+        </ModalShell>,
     );
 
     return () => overlay.hide(overlayKey);
@@ -211,15 +210,13 @@ export function ToolPolicyPicker({tokens, selected, onChange}: Props) {
           borderColor: tokens.borderLight,
         },
       ]}
-      onPress={() => setOpen(true)}
-    >
+      onPress={() => setOpen(true)}>
       <Text
         style={{
           color: selected.length > 0 ? tokens.text : tokens.textSecondary,
           flex: 1,
         }}
-        numberOfLines={1}
-      >
+        numberOfLines={1}>
         {triggerLabel}
       </Text>
       <Text style={{color: tokens.textSecondary, fontSize: 12}}>▼</Text>
@@ -238,13 +235,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: 48,
   },
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   sheet: {
-    // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
+    // maxHeight（含键盘收缩）由 ModalShell 的 adaptive 策略管
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     paddingTop: 8,

@@ -23,8 +23,6 @@ import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 
 import {TextPromptModal} from '@/components/ui/TextPromptModal';
 import {DirectoryRuleSheet} from '@/components/sheet/DirectoryRuleSheet';
-import {AddModelModal} from '@/components/provider/AddModelModal';
-import {EditModelNameModal} from '@/components/provider/EditModelNameModal';
 import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
 
 // ── 公共 mock：theme / AppModal ────────────────────────────────────────────
@@ -150,8 +148,9 @@ describe('T-KB2 TextPromptModal Android 键盘避让', () => {
   });
 });
 
-// ════════════════════════════════════════════════════════════════════════════
-// T-KB3：底部对齐 sheet（DirectoryRuleSheet / AddModelModal / EditModelNameModal）
+// ════════════════════════════════════════════════════════════════════════
+// T-KB3：底部对齐 sheet（DirectoryRuleSheet + TextPromptModal variant="bottom"，
+// 已吸收原 AddModelModal / EditModelNameModal）
 // ════════════════════════════════════════════════════════════════════════════
 describe('T-KB3 底部对齐 sheet Android 键盘避让', () => {
   beforeEach(() => {
@@ -178,12 +177,18 @@ describe('T-KB3 底部对齐 sheet Android 键盘避让', () => {
     expect(countKeyboardAvoidingView(tree.root)).toBe(0);
   });
 
-  it('AddModelModal：panel 挂 translateY，不走 KeyboardAvoidingView', () => {
+  it('TextPromptModal(bottom，双输入)：panel 挂 translateY，不走 KeyboardAvoidingView', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
-        <AddModelModal
+        <TextPromptModal
           visible
+          variant="bottom"
+          title="添加模型"
+          fields={[
+            {label: '厂商模型 ID', placeholder: '如 gpt-4o'},
+            {label: '模型名称（可选）', optional: true},
+          ]}
           onClose={jest.fn() as never}
           onConfirm={jest.fn() as never}
         />,
@@ -194,13 +199,16 @@ describe('T-KB3 底部对齐 sheet Android 键盘避让', () => {
     expect(countKeyboardAvoidingView(tree.root)).toBe(0);
   });
 
-  it('EditModelNameModal：panel 挂 translateY，不走 KeyboardAvoidingView', () => {
+  it('TextPromptModal(bottom，重命名)：panel 挂 translateY，不走 KeyboardAvoidingView', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
-        <EditModelNameModal
+        <TextPromptModal
           visible
-          initialModelName="gpt-4"
+          variant="bottom"
+          title="重命名模型"
+          label="模型名称"
+          initialValue="gpt-4"
           onClose={jest.fn() as never}
           onConfirm={jest.fn() as never}
         />,

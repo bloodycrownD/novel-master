@@ -4,6 +4,7 @@
 import React, {type ReactNode} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
+import {card, cardSurface} from '@/components/ui/card-styles';
 
 type Props = {
   title?: string;
@@ -23,11 +24,8 @@ export function FormSectionCard({
   return (
     <View
       style={[
-        styles.card,
-        {
-          backgroundColor: tokens.surfaceElevated,
-          borderColor: tokens.borderLight,
-        },
+        card,
+        cardSurface(tokens),
       ]}
     >
       {title != null || rightAction != null ? (
@@ -49,18 +47,6 @@ export function FormSectionCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
-    marginHorizontal: 5,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,9 +1,11 @@
 /**
  * Profile tab row with a trailing switch (no navigation chevron).
+ * 卡片基础样式来自 card-styles 单源（cr-fix-spec comp-rest/C-7）。
  */
 import React from 'react';
 import {StyleSheet, Switch, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
+import {cardRow, cardSurface, iconWrap} from './card-styles';
 
 type Props = {
   icon: string;
@@ -23,16 +25,8 @@ export function ProfileSwitchItem({
   tokens,
 }: Props) {
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          backgroundColor: tokens.surfaceElevated,
-          borderColor: tokens.borderLight,
-        },
-      ]}
-    >
-      <View style={[styles.iconWrap, {backgroundColor: tokens.bgSecondary}]}>
+    <View style={[cardRow, cardSurface(tokens)]}>
+      <View style={[iconWrap, {backgroundColor: tokens.bgSecondary}]}>
         <Text style={styles.icon}>{icon}</Text>
       </View>
       <View style={styles.textCol}>
@@ -53,28 +47,6 @@ export function ProfileSwitchItem({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 5,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   icon: {fontSize: 24},
   textCol: {flex: 1, gap: 4},
   label: {fontSize: 16, fontWeight: '600'},

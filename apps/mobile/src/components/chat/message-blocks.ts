@@ -12,8 +12,8 @@ import { resolveToolResultOk } from '@novel-master/core';
 
 import { resolveSkillToolRefFromInput, resolveVfsToolFilePath } from '@novel-master/core/chat';
 import type { SkillToolRef } from '@novel-master/core/chat';
-import type { TranscriptRow } from './ChatTranscriptBridge';
-import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
+import type {TranscriptRow, TranscriptStreamState} from './ChatTranscriptBridge';
+import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 
 export type ToolCallStatus = 'success' | 'error' | 'pending' | 'interrupted';
 
@@ -386,10 +386,9 @@ export function buildChatListItems(
   return items;
 }
 
-export type TranscriptStreamState = {
-  readonly text: string;
-  readonly thinking: string;
-};
+// TranscriptStreamState 声明收敛到 ChatTranscriptBridge（comp-chat/C-5），这里 re-export
+// 维持既有导入路径兼容。
+export type {TranscriptStreamState};
 
 /**
  * 基于完整会话构建 transcript 行，再按 tail 消息 id 筛选待 append 行。

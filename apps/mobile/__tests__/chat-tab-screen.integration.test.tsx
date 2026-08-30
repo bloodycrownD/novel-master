@@ -32,9 +32,7 @@ const mockRuntime: any = {
     delete: jest.fn(),
   },
   sessions: {
-    listByProject: jest.fn(async () => [
-      {id: 's1', title: 'S1', updatedAtMs: 1},
-    ]),
+    listByProject: jest.fn(async () => [{id: 's1', title: 'S1', updatedAtMs: 1}]),
     create: jest.fn(),
     rename: jest.fn(),
     copy: jest.fn(),
@@ -86,11 +84,11 @@ jest.mock('@novel-master/core', () => ({
   textBlocks: (text: string) => ({blocks: [{type: 'text', text}]}),
 }));
 
-jest.mock('@/hooks/useRuntime', () => ({
+jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('@/hooks/useMobileScope', () => ({
+jest.mock('../src/hooks/useMobileScope', () => ({
   useMobileScope: () => ({
     projectId: 'p1',
     sessionId: 's1',
@@ -100,22 +98,22 @@ jest.mock('@/hooks/useMobileScope', () => ({
   }),
 }));
 
-jest.mock('@/navigation/HeaderContext', () => ({
+jest.mock('../src/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({setChat: jest.fn()}),
 }));
 
-jest.mock('@/components/chrome/ToastHost', () => ({
+jest.mock('../src/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: jest.fn()}),
 }));
 
-jest.mock('@/runtime/novel-master-context', () => ({
+jest.mock('../src/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({
     appUi: {get: jest.fn(async () => 'false')},
     richRenderEpoch: 0,
   }),
 }));
 
-jest.mock('@/theme/ThemeProvider', () => ({
+jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
       background: '#000',
@@ -129,7 +127,7 @@ jest.mock('@/theme/ThemeProvider', () => ({
   }),
 }));
 
-jest.mock('@/services/chat-agent-meta', () => ({
+jest.mock('../src/services/chat-agent-meta', () => ({
   loadChatAgentMeta: jest.fn(async () => ({
     // 与新类型契约保持一致：枚举统一为 'session'
     source: 'session',
@@ -142,23 +140,21 @@ jest.mock('@/services/chat-agent-meta', () => ({
   })),
 }));
 
-jest.mock('@/services/chat-prompt-tokens.service', () => ({
+jest.mock('../src/services/chat-prompt-tokens.service', () => ({
   loadChatPromptTokenLabelResilient: jest.fn(async () => ''),
 }));
 
-jest.mock('@/storage/chat-rich-text-pref', () => ({
+jest.mock('../src/storage/chat-rich-text-pref', () => ({
   readChatRichTextEnabled: jest.fn(async () => false),
 }));
 
-jest.mock('@/services/regex-apply-channel', () => ({
+jest.mock('../src/services/regex-apply-channel', () => ({
   loadSessionMessagesTailForDisplay: (...args: any[]) => mockLoadTail(...args),
   loadSessionMessagesPageForDisplay: (...args: any[]) => mockLoadPage(...args),
 }));
 
-jest.mock('@/services/stream-apply-buffer', () => ({
-  createStreamApplyBuffer: (
-    onFlush: (segments: {kind: string; delta: string}[]) => void,
-  ) => ({
+jest.mock('../src/services/stream-apply-buffer', () => ({
+  createStreamApplyBuffer: (onFlush: (segments: {kind: string; delta: string}[]) => void) => ({
     push: (chunk: {kind: string; delta: string}) => {
       mockStreamBufferPush(chunk.kind, chunk.delta);
       if (chunk.kind !== 'text') {
@@ -196,56 +192,53 @@ jest.mock('@/services/stream-apply-buffer', () => ({
   }),
 }));
 
-jest.mock('@/components/chrome/AppHeader', () => ({
+jest.mock('../src/components/chrome/AppHeader', () => ({
   AppHeader: () => null,
 }));
-jest.mock('@/components/chat/ChatMetaBar', () => ({
+jest.mock('../src/components/chat/ChatMetaBar', () => ({
   ChatMetaBar: () => null,
 }));
-jest.mock('@/components/chat/MessageActionMenu', () => ({
+jest.mock('../src/components/chat/MessageActionMenu', () => ({
   MessageActionMenu: () => null,
 }));
-jest.mock('@/components/sheet/BottomSheetMenu', () => ({
+jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
 }));
-jest.mock('@/components/chrome/ProjectDrawer', () => ({
+jest.mock('../src/components/chrome/ProjectDrawer', () => ({
   ProjectDrawer: () => null,
 }));
-jest.mock('@/components/chrome/SessionActionsDrawer', () => ({
-  SessionActionsDrawer: () => null,
-}));
-jest.mock('@/components/provider/ModelPickerModal', () => ({
+jest.mock('../src/components/provider/ModelPickerModal', () => ({
   ModelPickerModal: () => null,
 }));
-jest.mock('@/components/vfs/VfsFileManager', () => ({
+jest.mock('../src/components/vfs/VfsFileManager', () => ({
   VfsFileManager: () => null,
 }));
-jest.mock('@/components/batch/ManageHeader', () => ({
+jest.mock('../src/components/batch/ManageHeader', () => ({
   ManageHeader: () => null,
 }));
-jest.mock('@/components/batch/BatchCheckbox', () => ({
+jest.mock('../src/components/batch/BatchCheckbox', () => ({
   BatchCheckbox: () => null,
 }));
-jest.mock('@/components/ui/SegmentedControl', () => ({
+jest.mock('../src/components/ui/SegmentedControl', () => ({
   SegmentedControl: () => null,
 }));
-jest.mock('@/components/ui/PrototypeButtons', () => ({
+jest.mock('../src/components/ui/PrototypeButtons', () => ({
   PrimaryButton: () => null,
 }));
-jest.mock('@/components/ui/TextPromptModal', () => ({
+jest.mock('../src/components/ui/TextPromptModal', () => ({
   TextPromptModal: () => null,
 }));
 
-jest.mock('@/storage/chat-transcript-engine', () => ({
+jest.mock('../src/storage/chat-transcript-engine', () => ({
   defaultChatTranscriptEngine: () => 'legacy-rn',
   readChatTranscriptEngine: jest.fn(async () => 'legacy-rn'),
 }));
 
-jest.mock('@/storage/chat-stream-batch-pref', () => ({
+jest.mock('../src/storage/chat-stream-batch-pref', () => ({
   readChatStreamBatchEnabled: jest.fn(async () => true),
 }));
 
-jest.mock('@/components/chat/MessageList', () => {
+jest.mock('../src/components/chat/MessageList', () => {
   const ReactNative = require('react-native');
   return {
     MessageList: (props: any) => {
@@ -255,7 +248,7 @@ jest.mock('@/components/chat/MessageList', () => {
   };
 });
 
-jest.mock('@/components/chat/ChatComposer', () => {
+jest.mock('../src/components/chat/ChatComposer', () => {
   const ReactNative = require('react-native');
   const {
     EVENT_AGENT_RUN_STARTED,
@@ -297,28 +290,23 @@ jest.mock('@/components/chat/ChatComposer', () => {
   };
 });
 
-import {ChatTabScreen} from '@/screens/tabs/ChatTabScreen';
+import {ChatTabScreen} from '../src/screens/tabs/ChatTabScreen';
 
 function findPressableByText(
   root: TestRenderer.ReactTestInstance,
   text: string,
 ): TestRenderer.ReactTestInstance {
-  const node = root
-    .findAll(n => typeof n.props?.onPress === 'function')
-    .find(n => {
-      const selfText =
-        typeof n.props?.children === 'string' &&
-        n.props.children.includes(text);
-      if (selfText) {
-        return true;
-      }
-      const descendants = n.findAll(
-        d =>
-          typeof d.props?.children === 'string' &&
-          d.props.children.includes(text),
-      );
-      return descendants.length > 0;
-    });
+  const node = root.findAll(n => typeof n.props?.onPress === 'function').find(n => {
+    const selfText =
+      typeof n.props?.children === 'string' && n.props.children.includes(text);
+    if (selfText) {
+      return true;
+    }
+    const descendants = n.findAll(
+      d => typeof d.props?.children === 'string' && d.props.children.includes(text),
+    );
+    return descendants.length > 0;
+  });
   if (!node) {
     throw new Error(`pressable not found: ${text}`);
   }
@@ -415,3 +403,4 @@ describe('ChatTabScreen integration', () => {
     expect(mockLatestMessageListProps.streamingText).toBe('ABC');
   });
 });
+

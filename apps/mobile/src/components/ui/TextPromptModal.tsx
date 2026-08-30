@@ -1,58 +1,88 @@
 /**
- * Single-line text prompt (create/rename dialogs).
+ * 单/双输入文本弹窗（新建/重命名/添加模型等，cr-fix-spec comp-rest/C-2）：
+ * variant center 居中卡片，bottom 贴底 sheet（吸收原 EditModelNameModal 与
+ * AddModelModal）。1–2 个输入，必填项 trim 非空才能提交，提交期间禁用按钮，
+ * onConfirm 正常返回（不 throw）后自动关闭。
  */
 import React, {useEffect, useState} from 'react';
 import {
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
+  type TextInputProps,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {useTheme} from '@/theme/ThemeProvider';
-import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
-import {AppModal} from './AppModal';
+import {useTheme} from '../../theme/ThemeProvider';
+import {ModalShell} from './ModalShell';
+
+export type PromptField = {
+  label?: string;
+  placeholder?: string;
+  initialValue?: string;
+  /** 选填：留空不阻塞提交（回抛空串，由调用方转 undefined）。 */
+  optional?: boolean;
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+};
 
 type Props = {
   visible: boolean;
   title: string;
+  /** center 居中卡片（默认）；bottom 贴底 sheet。 */
+  variant?: 'center' | 'bottom';
+  /** 单字段语法糖：等价于 fields 的单元素简写。 */
   label?: string;
   placeholder?: string;
   initialValue?: string;
+  autoCapitalize?: TextInputProps['autoCapitalize'];
+  /** 1–2 个输入；不传时按上面的单字段语法糖构造。 */
+  fields?: [PromptField] | [PromptField, PromptField];
   confirmLabel?: string;
   onClose: () => void;
-  onConfirm: (value: string) => void | Promise<void>;
+  /** 按字段顺序回抛 trim 后的值。 */
+  onConfirm: (values: string[]) => void | Promise<void>;
 };
 
 export function TextPromptModal({
   visible,
   title,
+  variant = 'center',
   label,
   placeholder,
   initialValue = '',
+  autoCapitalize,
+  fields,
   confirmLabel = '确定',
   onClose,
   onConfirm,
 }: Props) {
   const {tokens} = useTheme();
-  const [value, setValue] = useState(initialValue);
+  const effectiveFields: PromptField[] = fields ?? [
+    {label, placeholder, initialValue, autoCapitalize},
+  ];
+  const [values, setValues] = useState<string[]>(() =>
+    effectiveFields.map(field => field.initialValue ?? ''),
+  );
   const [saving, setSaving] = useState(false);
-  // Android Modal 是独立 window，useReanimatedKeyboardAnimation 走 native event emitter
-  // 在 Modal 内也能正常收事件。只给面板加 translateY，遮罩不动，不触发 flex layout。
-  // 居中弹窗上移键盘高度的一半，露出输入框又不顶到屏幕顶部。
-  const panelAvoidStyle = useAndroidModalKeyboardAvoid(0.5);
 
+  // 重置只随可见性与初始值变化；effectiveFields 是每次渲染的新数组，
+  // 不能直接进依赖（否则每次渲染都把输入冲掉）。
+  const initialKey = effectiveFields
+    .map(field => field.initialValue ?? '')
+    .join('\0');
   useEffect(() => {
     if (visible) {
-      setValue(initialValue);
+      setValues(effectiveFields.map(field => field.initialValue ?? ''));
     }
-  }, [visible, initialValue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialKey 是 effectiveFields 初始值的稳定摘要
+  }, [visible, initialKey]);
 
-  const trimmed = value.trim();
-  const canSubmit = trimmed.length > 0 && !saving;
+  const trimmed = values.map(value => value.trim());
+  const canSubmit =
+    !saving &&
+    effectiveFields.every(
+      (field, index) => field.optional || trimmed[index].length > 0,
+    );
 
   const handleConfirm = async () => {
     if (!canSubmit) {
@@ -67,28 +97,31 @@ export function TextPromptModal({
     }
   };
 
-  // backdrop + panel：iOS 走 KeyboardAvoidingView 包裹，Android 在 panel 上挂 translateY。
-  // Android 上 react-native-keyboard-controller 的 KeyboardAvoidingView behavior={undefined}
-  // 等于啥也不干，所以改用 Animated.View + useAndroidModalKeyboardAvoid 自己避让。
-  const backdrop = (
-    <Pressable style={styles.backdrop} onPress={onClose}>
-      <Animated.View
-        style={[
-          styles.panel,
-          {backgroundColor: tokens.surface},
-          Platform.OS === 'android' ? panelAvoidStyle : undefined,
-        ]}
-        onStartShouldSetResponder={() => true}
-      >
-        <Pressable onPress={e => e.stopPropagation()}>
-          <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
-          {label ? (
+  const setValueAt = (index: number, text: string) => {
+    setValues(prev => prev.map((v, i) => (i === index ? text : v)));
+  };
+
+  const isBottom = variant === 'bottom';
+
+  return (
+    <ModalShell
+      visible={visible}
+      onClose={onClose}
+      variant={variant}
+      animationType={isBottom ? 'slide' : 'fade'}
+      keyboardAvoid={{kind: 'translate', fraction: isBottom ? 1 : 0.5}}
+      keyboardVerticalOffset={isBottom ? 0 : 24}
+      panelStyle={isBottom ? styles.panelBottom : styles.panelCenter}>
+      <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
+      {effectiveFields.map((field, index) => (
+        <View key={index}>
+          {field.label ? (
             <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              {label}
+              {field.label}
             </Text>
           ) : null}
           <TextInput
-            testID="text-prompt-input"
+            testID={index === 0 ? 'text-prompt-input' : undefined}
             style={[
               styles.input,
               {
@@ -97,84 +130,57 @@ export function TextPromptModal({
                 backgroundColor: tokens.background,
               },
             ]}
-            value={value}
-            onChangeText={setValue}
-            placeholder={placeholder}
+            value={values[index] ?? ''}
+            onChangeText={text => setValueAt(index, text)}
+            placeholder={field.placeholder}
             placeholderTextColor={tokens.textSecondary}
-            autoFocus
+            autoFocus={index === 0}
             autoCorrect={false}
+            autoCapitalize={field.autoCapitalize}
             returnKeyType="done"
             onSubmitEditing={() => handleConfirm().catch(() => undefined)}
           />
-          <View style={styles.actions}>
-            <Pressable onPress={onClose} style={styles.btn}>
-              <Text style={{color: tokens.textSecondary}}>取消</Text>
-            </Pressable>
-            <Pressable
-              testID="text-prompt-submit"
-              onPress={() => handleConfirm().catch(() => undefined)}
-              style={styles.btn}
-              disabled={!canSubmit}
-            >
-              <Text
-                style={{
-                  color: canSubmit ? tokens.primary : tokens.textTertiary,
-                  fontWeight: '600',
-                }}
-              >
-                {saving ? '保存中…' : confirmLabel}
-              </Text>
-            </Pressable>
-          </View>
+        </View>
+      ))}
+      <View style={styles.actions}>
+        <Pressable onPress={onClose} style={styles.btn}>
+          <Text style={{color: tokens.textSecondary}}>取消</Text>
         </Pressable>
-      </Animated.View>
-    </Pressable>
-  );
-
-  return (
-    <AppModal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onClose}
-    >
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={styles.avoidingRoot}
-          keyboardVerticalOffset={24}
-        >
-          {backdrop}
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.avoidingRoot}>{backdrop}</View>
-      )}
-    </AppModal>
+        <Pressable
+          testID="text-prompt-submit"
+          onPress={() => handleConfirm().catch(() => undefined)}
+          style={styles.btn}
+          disabled={!canSubmit}>
+          <Text
+            style={{
+              color: canSubmit ? tokens.primary : tokens.textTertiary,
+              fontWeight: '600',
+            }}>
+            {saving ? '保存中…' : confirmLabel}
+          </Text>
+        </Pressable>
+      </View>
+    </ModalShell>
   );
 }
 
 const styles = StyleSheet.create({
-  // 背景色放在 avoidingRoot：键盘弹起后底部不会透出白条，backdrop 不再单独设背景色。
-  avoidingRoot: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  backdrop: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  panel: {
+  panelCenter: {
     width: '100%',
     maxWidth: 360,
     borderRadius: 16,
     padding: 20,
   },
+  panelBottom: {
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    padding: 20,
+    paddingBottom: 32,
+    gap: 8,
+  },
   title: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 12,
     textAlign: 'center',
   },
   label: {
@@ -187,12 +193,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
+    marginBottom: 8,
   },
   actions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 16,
-    marginTop: 16,
+    marginTop: 8,
   },
   btn: {
     paddingVertical: 8,

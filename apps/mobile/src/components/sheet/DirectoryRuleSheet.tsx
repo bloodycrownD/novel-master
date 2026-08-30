@@ -3,7 +3,6 @@
  */
 import React, { useEffect, useState } from 'react';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -12,8 +11,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated from 'react-native-reanimated';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import {
   DEFAULT_WORKPLACE_DIR_RULE,
   type FillPolicy,
@@ -21,10 +18,9 @@ import {
   type SortField,
   type SortOrder,
 } from '@novel-master/core/workplace';
-import { AppModal } from '../ui/AppModal';
+import { ModalShell } from '../ui/ModalShell';
 import {normalizeFillPolicyForMobile} from '../../services/fill-policy-mobile';
 import { useTheme } from '../../theme/ThemeProvider';
-import { useAdaptiveKeyboardSheetStyle } from '../../hooks/useAdaptiveKeyboardSheetStyle';
 
 type Props = {
   visible: boolean;
@@ -63,9 +59,9 @@ export function DirectoryRuleSheet({
 }: Props) {
   const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
-  // 85% 高面板 + 两个数字输入：键盘避让不能只做位移（useAndroidModalKeyboardAvoid(1)
-  // 会把标题顶出屏），改用「上移 + maxHeight 收缩」公共 hook，面板不超过屏幕剩余空间。
-  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.85);
+  // 85% 高面板 + 两个数字输入：键盘避让不能只做位移（translate fraction=1
+  // 会把标题顶出屏），由 ModalShell 的 adaptive 策略「上移 + maxHeight 收缩」
+  // 处理，面板不超过屏幕剩余空间。
   const [sortField, setSortField] = useState<SortField>(
     DEFAULT_WORKPLACE_DIR_RULE.sortField,
   );
@@ -123,16 +119,7 @@ export function DirectoryRuleSheet({
   };
 
   const sheetContent = (
-    <View style={styles.backdrop}>
-      <Animated.View
-        style={[
-          styles.sheet,
-          {
-            backgroundColor: tokens.surface,
-            paddingBottom: Math.max(insets.bottom, 16),
-          },
-          panelAvoidStyle,
-        ]}>
+    <>
         <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
         <ScrollView
           style={styles.form}
@@ -197,27 +184,19 @@ export function DirectoryRuleSheet({
             </Text>
           </Pressable>
         </View>
-      </Animated.View>
-    </View>
+    </>
   );
 
   return (
-    <AppModal
+    <ModalShell
       visible={visible}
-      transparent
+      onClose={onClose}
+      variant="bottom"
       animationType="slide"
-      onRequestClose={onClose}
-    >
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={styles.avoidingRoot}>
-          {sheetContent}
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.avoidingRoot}>{sheetContent}</View>
-      )}
-    </AppModal>
+      keyboardAvoid={{ kind: 'adaptive', maxHeightRatio: 0.85 }}
+      panelStyle={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      {sheetContent}
+    </ModalShell>
   );
 }
 
@@ -279,15 +258,6 @@ function OptionRow<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  // 背景色放在 avoidingRoot：键盘弹起后底部不会透出白条，backdrop 不再单独设背景色。
-  avoidingRoot: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
   sheet: {
     // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
     borderTopLeftRadius: 12,

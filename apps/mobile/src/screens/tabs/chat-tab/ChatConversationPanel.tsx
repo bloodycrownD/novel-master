@@ -19,21 +19,18 @@ import { MessageActionMenu } from '@/components/chat/MessageActionMenu';
 import { MessageEditModal } from '@/components/chat/MessageEditModal';
 import { MessageList } from '@/components/chat/MessageList';
 import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
-import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
+import { BottomSheetMenu } from '@/components/sheet/BottomSheetMenu';
 import { VfsFileManager } from '@/components/vfs/VfsFileManager';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { AndroidKeyboardClipBody } from '@/components/chrome/AndroidKeyboardClipBody';
 import { useToast } from '@/components/chrome/ToastHost';
 import {
+  AGENT_LOCK_TOAST_GUIDE,
   isAgentLocked,
   isModelLocked,
+  MODEL_LOCK_TOAST,
 } from '@/services/chat-agent-meta';
 import type {ThemeTokens} from '@/theme/tokens';
-
-// 锁定提示文案与 SessionDetailScreen 对齐（会话未绑定有效智能体）。
-const AGENT_LOCK_TOAST =
-  '当前会话未绑定有效智能体，请到会话详情确认智能体配置';
-const MODEL_LOCK_TOAST = '当前智能体已锁定模型，会话内无法覆盖';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabWorkspaceBackState } from './ChatTabNavigationProvider';
 import { useChatTabController } from './useChatTabController';
@@ -163,7 +160,7 @@ export function ChatConversationPanel({
   // 不再各处手写 source/modelSource/hasDedicatedModel 的组合。
   const openAgentPicker = useCallback(() => {
     if (isAgentLocked(agentMeta)) {
-      showToast(AGENT_LOCK_TOAST);
+      showToast(AGENT_LOCK_TOAST_GUIDE);
       return;
     }
     setAgentPickerOpen(true);
@@ -348,16 +345,31 @@ export function ChatConversationPanel({
           <Text style={{ color: tokens.textSecondary }}>请先选择会话</Text>
         </View>
       )}
-      <SessionActionsDrawer
+      <BottomSheetMenu
         visible={sessionDrawerOpen}
+        title="会话操作"
+        items={[
+          {
+            label: '查看提示词',
+            action: 'real-prompt',
+            disabled: controller.onNavigateRealPrompt == null,
+          },
+          {label: '压缩上下文', action: 'compact'},
+          {label: '切换大模型', action: 'switch-model'},
+          {label: '切换智能体', action: 'switch-agent'},
+        ]}
         onClose={() => setSessionDrawerOpen(false)}
-        onCompact={() => {
-          setSessionDrawerOpen(false);
-          controller.handleCompactSession();
+        onSelect={action => {
+          if (action === 'real-prompt') {
+            controller.onNavigateRealPrompt?.();
+          } else if (action === 'compact') {
+            controller.handleCompactSession();
+          } else if (action === 'switch-model') {
+            setModelPickerOpen(true);
+          } else if (action === 'switch-agent') {
+            setAgentPickerOpen(true);
+          }
         }}
-        onRealPrompt={controller.onNavigateRealPrompt}
-        onSwitchModel={() => setModelPickerOpen(true)}
-        onSwitchAgent={() => setAgentPickerOpen(true)}
       />
       <MessageActionMenu
         visible={!useWebviewTranscript && messageMenuTarget != null}

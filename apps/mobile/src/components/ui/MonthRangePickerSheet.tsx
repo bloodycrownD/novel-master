@@ -8,7 +8,7 @@
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {AppModal} from './AppModal';
+import {ModalShell} from './ModalShell';
 import type {ThemeTokens} from '@/theme/tokens';
 
 type Props = {
@@ -137,18 +137,13 @@ export function MonthRangePickerSheet({
   ];
 
   return (
-    <AppModal
+    <ModalShell
       visible={visible}
+      onClose={onClose}
+      variant="bottom"
       animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}
-        >
-          <Text style={[styles.title, {color: tokens.text}]}>选择日期区间</Text>
+      panelStyle={styles.sheet}>
+      <Text style={[styles.title, {color: tokens.text}]}>选择日期区间</Text>
           <View style={styles.monthNav}>
             <Pressable
               testID="month-range-prev"
@@ -248,18 +243,11 @@ export function MonthRangePickerSheet({
               <Text style={styles.confirmText}>确定</Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
-    </AppModal>
+    </ModalShell>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   sheet: {
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,

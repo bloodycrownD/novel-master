@@ -1,9 +1,10 @@
 /**
  * Collapsible card for one real-prompt preview segment (default collapsed for perf).
  */
-import React, {useMemo, useState} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '@/theme/ThemeProvider';
+import React, {useMemo} from 'react';
+import {StyleSheet, Text, View} from 'react-native';
+import {CollapsibleCard} from '@/components/ui/CollapsibleCard';
+import {useTheme} from '../../theme/ThemeProvider';
 
 const ROLE_LABEL: Record<string, string> = {
   system: '系统',
@@ -43,7 +44,6 @@ function previewLine(body: string): string {
 
 export function PromptPreviewSegmentCard({segment}: Props) {
   const {tokens} = useTheme();
-  const [expanded, setExpanded] = useState(false);
   const roleLabel = ROLE_LABEL[segment.role] ?? segment.role;
   const charCount = segment.body.length;
   const collapsedHint = useMemo(() => {
@@ -55,7 +55,31 @@ export function PromptPreviewSegmentCard({segment}: Props) {
   }, [charCount, segment.body]);
 
   return (
-    <View
+    <CollapsibleCard
+      title={
+        <>
+          <Text style={[styles.role, {color: tokens.primary}]} numberOfLines={1}>
+            {roleLabel}
+          </Text>
+          <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1}>
+            {segmentTitleLabel(segment.title)}
+          </Text>
+        </>
+      }
+      summary={
+        <View>
+          <Text
+            style={[styles.preview, {color: tokens.textSecondary}]}
+            numberOfLines={2}>
+            {collapsedHint}
+          </Text>
+          {charCount > 0 ? (
+            <Text style={[styles.charCount, {color: tokens.textSecondary}]}>
+              {charCount} 字
+            </Text>
+          ) : null}
+        </View>
+      }
       style={[
         styles.card,
         {
@@ -63,49 +87,14 @@ export function PromptPreviewSegmentCard({segment}: Props) {
           borderColor: tokens.borderLight,
         },
       ]}
-    >
-      <Pressable
-        style={styles.header}
-        onPress={() => setExpanded(v => !v)}
-        accessibilityRole="button"
-        accessibilityState={{expanded}}
-      >
-        <View style={styles.headerText}>
-          <Text
-            style={[styles.role, {color: tokens.primary}]}
-            numberOfLines={1}
-          >
-            {roleLabel}
-          </Text>
-          <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1}>
-            {segmentTitleLabel(segment.title)}
-          </Text>
-          {!expanded ? (
-            <View>
-              <Text
-                style={[styles.preview, {color: tokens.textSecondary}]}
-                numberOfLines={2}
-              >
-                {collapsedHint}
-              </Text>
-              {charCount > 0 ? (
-                <Text style={[styles.charCount, {color: tokens.textSecondary}]}>
-                  {charCount} 字
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
-        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-          {expanded ? '▼' : '▶'}
-        </Text>
-      </Pressable>
-      {expanded ? (
-        <Text style={[styles.body, {color: tokens.text}]} selectable>
-          {segment.body || '（空）'}
-        </Text>
-      ) : null}
-    </View>
+      headerStyle={styles.header}
+      chevronStyle={styles.chevron}>
+      <Text
+        style={[styles.body, {color: tokens.text}]}
+        selectable>
+        {segment.body || '（空）'}
+      </Text>
+    </CollapsibleCard>
   );
 }
 
@@ -118,11 +107,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
   },
-  headerText: {flex: 1, minWidth: 0},
   role: {fontSize: 12, fontWeight: '700', marginBottom: 2},
   title: {fontSize: 13, fontWeight: '600', marginBottom: 4},
   preview: {fontSize: 12, lineHeight: 17},

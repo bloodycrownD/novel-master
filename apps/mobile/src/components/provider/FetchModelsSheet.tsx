@@ -6,22 +6,18 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {useRuntime} from '@/hooks/useRuntime';
-import {formatError} from '@/errors/format-error';
-import {AppModal} from '@/components/ui/AppModal';
-import {FormTextInput} from '@/components/form/FormTextInput';
-import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
-import {useAdaptiveKeyboardSheetStyle} from '@/hooks/useAdaptiveKeyboardSheetStyle';
-import {useBatchSelection} from '@/hooks/useBatchSelection';
-import {useTheme} from '@/theme/ThemeProvider';
+import {useRuntime} from '../../hooks/useRuntime';
+import {formatError} from '../../errors/format-error';
+import {ModalShell} from '../ui/ModalShell';
+import {FormTextInput} from '../form/FormTextInput';
+import {BatchCheckbox} from '../batch/BatchCheckbox';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {useTheme} from '../../theme/ThemeProvider';
 
 type SuggestionRow = {
   vendorModelId: string;
@@ -91,8 +87,7 @@ export function FetchModelsSheet({
     );
   }, [batch, allSelected, selectableRows]);
 
-  // 键盘避让（上移 + maxHeight 收缩）由公共 hook 统一处理，见 hook 头注释。
-  const panelAvoidStyle = useAdaptiveKeyboardSheetStyle(0.75);
+  // 键盘避让（上移 + maxHeight 收缩）由 ModalShell 的 adaptive 策略统一处理。
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -174,15 +169,7 @@ export function FetchModelsSheet({
     batch.selectedCount > 0 ? `添加 (${batch.selectedCount})` : '添加';
 
   const body = (
-    <Pressable style={styles.backdrop} onPress={onClose}>
-      <Animated.View
-        style={[
-          styles.sheet,
-          {backgroundColor: tokens.surface},
-          panelAvoidStyle,
-        ]}
-        onStartShouldSetResponder={() => true}
-      >
+    <>
         <Text style={[styles.title, {color: tokens.text}]}>拉取模型</Text>
         <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
           从服务商获取可用模型，勾选后批量添加
@@ -211,17 +198,14 @@ export function FetchModelsSheet({
             {allSelectableCount > 0 ? (
               <View style={styles.selectBar}>
                 {selectableRows.length > 0 ? (
-                  <Pressable
-                    onPress={toggleSelectAll}
-                    disabled={saving}
-                    hitSlop={8}
-                  >
+                  <Pressable onPress={toggleSelectAll} disabled={saving} hitSlop={8}>
                     <Text style={{color: tokens.primary, fontWeight: '600'}}>
                       {allSelected ? '全不选' : '全选'}
                     </Text>
                   </Pressable>
                 ) : null}
-                <Text style={{color: tokens.textSecondary, fontSize: 13}}>
+                <Text
+                  style={{color: tokens.textSecondary, fontSize: 13}}>
                   已选 {batch.selectedCount} 项
                 </Text>
               </View>
@@ -256,8 +240,7 @@ export function FetchModelsSheet({
                       saved && {opacity: 0.55},
                     ]}
                     disabled={saved || saving}
-                    onPress={() => batch.toggle(item.vendorModelId)}
-                  >
+                    onPress={() => batch.toggle(item.vendorModelId)}>
                     {saved ? (
                       // 与 BatchCheckbox 等宽占位，保持文本左对齐
                       <View style={styles.checkSpacer} />
@@ -274,8 +257,7 @@ export function FetchModelsSheet({
                       {item.displayName?.trim() &&
                       item.displayName.trim() !== item.vendorModelId ? (
                         <Text
-                          style={{color: tokens.textSecondary, fontSize: 13}}
-                        >
+                          style={{color: tokens.textSecondary, fontSize: 13}}>
                           {item.vendorModelId}
                         </Text>
                       ) : null}
@@ -308,47 +290,29 @@ export function FetchModelsSheet({
               {backgroundColor: tokens.primary},
               (batch.selectedCount === 0 || saving) && {opacity: 0.45},
               pressed && {opacity: 0.85},
-            ]}
-          >
+            ]}>
             <Text style={styles.confirmText}>
               {saving ? '添加中…' : confirmLabel}
             </Text>
           </Pressable>
         </View>
-      </Animated.View>
-    </Pressable>
+    </>
   );
 
   return (
-    <AppModal
+    <ModalShell
       visible={visible}
+      onClose={onClose}
+      variant="bottom"
       animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView behavior="padding" style={styles.avoidingRoot}>
-          {body}
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.avoidingRoot}>{body}</View>
-      )}
-    </AppModal>
+      keyboardAvoid={{kind: 'adaptive', maxHeightRatio: 0.75}}
+      panelStyle={styles.sheet}>
+      {body}
+    </ModalShell>
   );
 }
 
 const styles = StyleSheet.create({
-  // 背景色放在 avoidingRoot：KeyboardAvoidingView 加的 paddingBottom 区域
-  // 也属于 avoidingRoot 的 padding box，会被 backgroundColor 覆盖，
-  // 这样键盘弹起后底部不会透出白条。backdrop 不再单独设背景色。
-  avoidingRoot: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
   sheet: {
     // maxHeight（含键盘收缩）由 useAdaptiveKeyboardSheetStyle 管
     borderTopLeftRadius: 12,

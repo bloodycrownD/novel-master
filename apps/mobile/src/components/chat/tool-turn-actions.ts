@@ -1,7 +1,7 @@
 /**
  * Paired hide/delete for assistant tool_use turns and their tool_results user message.
  */
-import {type ChatMessage} from '@novel-master/core/chat';
+import { type ChatMessage } from "@novel-master/core/chat";
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {messageHasToolUse, resolveToolResultsMessageId} from './message-blocks';
 
@@ -13,28 +13,21 @@ export async function hideToolTurn(
   assistantMessageId: string,
   hidden: boolean,
 ): Promise<void> {
-  const assistant = messages.find(m => m.id === assistantMessageId);
-  if (assistant == null || !messageHasToolUse(assistant)) {
-    if (hidden) {
-      await runtime.messages.hide(assistantMessageId);
-    } else {
-      await runtime.messages.show(assistantMessageId);
-    }
-    return;
-  }
+  // hide / show 镜像分支收敛单路径（comp-chat/C-9）：同一操作闭包，
+  // tool_use 轮次的成对 tool_result 一并同步。
+  const setVisibility = hidden
+    ? async (id: string) => runtime.messages.hide(id)
+    : async (id: string) => runtime.messages.show(id);
 
-  if (hidden) {
-    await runtime.messages.hide(assistantMessageId);
-    const resultsId = resolveToolResultsMessageId(messages, assistant);
-    if (resultsId != null) {
-      await runtime.messages.hide(resultsId);
-    }
-  } else {
-    await runtime.messages.show(assistantMessageId);
-    const resultsId = resolveToolResultsMessageId(messages, assistant);
-    if (resultsId != null) {
-      await runtime.messages.show(resultsId);
-    }
+  const assistant = messages.find(m => m.id === assistantMessageId);
+  const resultsId =
+    assistant != null && messageHasToolUse(assistant)
+      ? resolveToolResultsMessageId(messages, assistant)
+      : null;
+
+  await setVisibility(assistantMessageId);
+  if (resultsId != null) {
+    await setVisibility(resultsId);
   }
 }
 

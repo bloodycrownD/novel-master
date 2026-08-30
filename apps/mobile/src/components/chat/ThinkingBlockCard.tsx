@@ -2,7 +2,8 @@
  * Collapsible model reasoning (thinking block), embedded in assistant bubbles by default.
  */
 import React, {useState} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {StyleSheet, Text} from 'react-native';
+import {CollapsibleCard} from '@/components/ui/CollapsibleCard';
 import {RichContentBody} from '@/components/rich-content/RichContentBody';
 import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
 import {useTheme} from '@/theme/ThemeProvider';
@@ -46,7 +47,14 @@ export function ThinkingBlockCard({
     !isRichContentOverLimit(trimmed);
 
   return (
-    <View
+    <CollapsibleCard
+      expanded={expanded}
+      onToggle={setExpanded}
+      title={
+        <Text style={[styles.title, {color: tokens.textSecondary}]}>
+          思考过程
+        </Text>
+      }
       style={[
         embedded ? styles.embedded : styles.card,
         !embedded && {
@@ -54,55 +62,20 @@ export function ThinkingBlockCard({
           borderColor: tokens.borderLight,
         },
         {opacity: dimmed ? 0.55 : 1},
-      ]}>
-      <Pressable
-        style={styles.header}
-        onPress={() => setExpanded(v => !v)}
-        accessibilityRole="button"
-        accessibilityState={{expanded}}>
-        <Text style={[styles.title, {color: tokens.textSecondary}]}>
-          思考过程
+      ]}
+      showDividerBelow={showDividerBelow}>
+      {useRich ? (
+        <RichContentBody
+          content={trimmed}
+          tokens={tokens}
+          fallbackTextColor={tokens.textSecondary}
+        />
+      ) : (
+        <Text style={[styles.body, {color: tokens.textSecondary}]}>
+          {trimmed}
         </Text>
-        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-          {expanded ? '▼' : '▶'}
-        </Text>
-      </Pressable>
-      {expanded ? (
-        useRich ? (
-          <View
-            style={
-              showDividerBelow
-                ? {
-                    borderBottomColor: tokens.borderLight,
-                    borderBottomWidth: StyleSheet.hairlineWidth,
-                    marginBottom: 8,
-                    paddingBottom: 8,
-                  }
-                : undefined
-            }>
-            <RichContentBody
-              content={trimmed}
-              tokens={tokens}
-              fallbackTextColor={tokens.textSecondary}
-            />
-          </View>
-        ) : (
-          <Text
-            style={[
-              styles.body,
-              {color: tokens.textSecondary},
-              showDividerBelow && {
-                borderBottomColor: tokens.borderLight,
-                borderBottomWidth: StyleSheet.hairlineWidth,
-                marginBottom: 8,
-                paddingBottom: 8,
-              },
-            ]}>
-            {trimmed}
-          </Text>
-        )
-      ) : null}
-    </View>
+      )}
+    </CollapsibleCard>
   );
 }
 
@@ -118,13 +91,6 @@ const styles = StyleSheet.create({
   embedded: {
     alignSelf: 'stretch',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
   title: {fontSize: 12, fontWeight: '600'},
-  chevron: {fontSize: 10},
   body: {fontSize: 13, lineHeight: 19, marginTop: 6},
 });

@@ -1,9 +1,11 @@
 /**
  * Simple action sheet (Modal) aligned with prototype bottom sheet menus.
+ * 吸收了原 SessionActionsDrawer（cr-fix-spec comp-rest/C-6）：未提供回调的项
+ * 传 disabled 置灰不可点，不再需要平行的 drawer 实现。
  */
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {AppModal} from '@/components/ui/AppModal';
+import {Pressable, StyleSheet, Text} from 'react-native';
+import {ModalShell} from '@/components/ui/ModalShell';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '@/theme/ThemeProvider';
 
@@ -11,6 +13,8 @@ export interface SheetMenuItem {
   readonly label: string;
   readonly action: string;
   readonly danger?: boolean;
+  /** 置灰不可点（对应原 SessionActionsDrawer 的「未传 action 回调」项）。 */
+  readonly disabled?: boolean;
 }
 
 type Props = {
@@ -32,71 +36,51 @@ export function BottomSheetMenu({
   const insets = useSafeAreaInsets();
 
   return (
-    <AppModal
+    <ModalShell
       visible={visible}
-      transparent
+      onClose={onClose}
+      variant="bottom"
       animationType="slide"
       statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <View style={styles.backdrop}>
-        <Pressable style={styles.backdropTap} onPress={onClose} />
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: tokens.surface,
-              paddingBottom: Math.max(insets.bottom, 16),
-            },
-          ]}
-        >
-          {title ? (
-            <Text style={[styles.title, {color: tokens.textSecondary}]}>
-              {title}
-            </Text>
-          ) : null}
-          {items.map(item => (
-            <Pressable
-              key={item.action}
-              style={[styles.item, {borderTopColor: tokens.border}]}
-              onPress={() => {
-                onClose();
-                onSelect(item.action);
-              }}
-            >
-              <Text
-                style={{
-                  color: item.danger ? tokens.danger : tokens.text,
-                  fontSize: 16,
-                }}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          ))}
-          <Pressable
-            style={[styles.item, {borderTopColor: tokens.border}]}
-            onPress={onClose}
-          >
-            <Text style={{color: tokens.textSecondary, fontSize: 16}}>
-              取消
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-    </AppModal>
+      backdropOpacity={0.55}
+      panelStyle={[styles.sheet, {paddingBottom: Math.max(insets.bottom, 16)}]}>
+      {title ? (
+        <Text style={[styles.title, {color: tokens.textSecondary}]}>
+          {title}
+        </Text>
+      ) : null}
+      {items.map(item => (
+        <Pressable
+          key={item.action}
+          style={[styles.item, {borderTopColor: tokens.border}]}
+          disabled={item.disabled}
+          onPress={() => {
+            onClose();
+            onSelect(item.action);
+          }}>
+          <Text
+            style={{
+              color: item.disabled
+                ? tokens.textTertiary
+                : item.danger
+                  ? tokens.danger
+                  : tokens.text,
+              fontSize: 16,
+            }}>
+            {item.label}
+          </Text>
+        </Pressable>
+      ))}
+      <Pressable
+        style={[styles.item, {borderTopColor: tokens.border}]}
+        onPress={onClose}>
+        <Text style={{color: tokens.textSecondary, fontSize: 16}}>取消</Text>
+      </Pressable>
+    </ModalShell>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  backdropTap: {
-    ...StyleSheet.absoluteFill,
-  },
   sheet: {
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,

@@ -21,8 +21,6 @@ import {
 } from '@novel-master/core/provider';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
-import {AddModelModal} from '../../components/provider/AddModelModal';
-import {EditModelNameModal} from '../../components/provider/EditModelNameModal';
 import {FetchModelsSheet} from '../../components/provider/FetchModelsSheet';
 import {
   ProviderForm,
@@ -36,6 +34,7 @@ import {
   SecondaryButton,
 } from '../../components/ui/PrototypeButtons';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
+import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useBatchDeleteConfirm} from '../../hooks/useBatchDeleteConfirm';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
@@ -323,19 +322,36 @@ export function ProviderDetailScreen() {
           )}
         />
       )}
-      <AddModelModal
+      <TextPromptModal
         visible={addVisible}
+        variant="bottom"
+        title="添加模型"
+        confirmLabel="添加"
+        fields={[
+          {
+            label: '厂商模型 ID',
+            placeholder: '如 gpt-4o',
+            autoCapitalize: 'none',
+          },
+          {label: '模型名称（可选）', placeholder: '模型名称', optional: true},
+        ]}
         onClose={() => setAddVisible(false)}
-        onConfirm={handleAdd}
+        onConfirm={values => handleAdd(values[0], values[1] || undefined)}
       />
-      <EditModelNameModal
+      <TextPromptModal
         visible={renameVisible}
-        initialModelName={renameModelName}
+        variant="bottom"
+        title="重命名模型"
+        label="模型名称"
+        placeholder="模型名称"
+        initialValue={renameModelName}
+        autoCapitalize="none"
+        confirmLabel="保存"
         onClose={() => {
           setRenameVisible(false);
           setMenuSavedModelId(undefined);
         }}
-        onConfirm={handleRename}
+        onConfirm={values => handleRename(values[0])}
       />
       {providerId ? (
         <FetchModelsSheet

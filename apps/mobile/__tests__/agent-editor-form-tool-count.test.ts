@@ -8,7 +8,10 @@ import {join} from 'path';
  * 锁住「10 个」与工具名单含 agent、curl，防止后续加内置工具时漏改。
  * 照 provider-detail-tabs.test.ts 的源码正则测试样式。
  */
-const formPath = join(__dirname, '../src/components/agent/AgentEditorForm.tsx');
+const formPath = join(
+  __dirname,
+  '../src/components/agent/agent-editor/AgentEditorToolsSection.tsx',
+);
 const source = readFileSync(formPath, 'utf8');
 
 describe('AgentEditorForm builtin tools hint (T-AG5)', () => {

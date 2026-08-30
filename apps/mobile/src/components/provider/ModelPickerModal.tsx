@@ -1,27 +1,22 @@
 /**
  * 模型选择器：同时服务「我的」tab（workspace 全局）与会话详情页（session 覆盖）。
  *
- * 传入 `sessionId` 时走会话级路径——`currentId` 取 session 绑定 modelId。
+ * 传入 `sessionId` 时走会话级路径——`selectedId` 取 session 绑定 modelId。
  * session 模式不回退 workspace：`modelId` 为空时 picker 不高亮任何项，
  * 避免误导用户以为这个会话已经绑了模型。选中后写 `{ modelId }` patch（保持现有 mode/agentId）。
- * 不传时维持原 workspace 行为。`locked` 用于 agent pin 场景整体禁用选择。
+ * 不传时维持原 workspace 行为。骨架（加载/错误重试/空态/列表）由 PickerListModal 承担。
  */
-import React, {useCallback, useEffect, useState} from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, {useCallback} from 'react';
+import {StyleSheet, Text, View} from 'react-native';
 import {formatSavedModelDisplayName} from '@novel-master/core/provider';
-import {AppModal} from '../ui/AppModal';
 import {useRuntime} from '../../hooks/useRuntime';
-import {formatError} from '../../errors/format-error';
 import {toastMessage} from '../../errors/toast-message';
 import {useToast} from '../chrome/ToastHost';
 import {useTheme} from '../../theme/ThemeProvider';
+import {
+  PickerListModal,
+  type PickerListLoadResult,
+} from '../ui/PickerListModal';
 
 export interface SavedModelRow {
   readonly savedModelId: string;
@@ -48,89 +43,70 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
-  const [rows, setRows] = useState<SavedModelRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  // 加载失败渲染错误文案 + 重试，而不是吞错伪装成空列表（对齐 FetchModelsSheet）。
-  const [error, setError] = useState<string | undefined>();
-  const [currentId, setCurrentId] = useState<string | undefined>();
 
-  const reload = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
-    try {
-      let effectiveId: string | undefined;
-      if (sessionId != null) {
-        // 会话级：只用 session 自己绑定的 modelId 高亮。即便为空，
-        // 也不再回退 workspace 当前模型——否则用户会以为会话已经绑定了模型。
-        const sessionConfig = await runtime.sessions.getSessionAgentConfig(
-          sessionId,
-        );
-        effectiveId =
-          sessionConfig.modelId && sessionConfig.modelId.length > 0
-            ? sessionConfig.modelId
-            : undefined;
-      } else {
-        // workspace 全局：用 workspace 当前模型高亮。
-        const workspaceId = await runtime.state.getCurrentModelId();
-        effectiveId = workspaceId ?? undefined;
-      }
-      setCurrentId(effectiveId);
-      const providers = await runtime.providers.list();
-      const nameById = new Map(
-        providers.map(provider => [provider.id, provider.displayName]),
+  const load = useCallback(async (): Promise<
+    PickerListLoadResult<SavedModelRow>
+  > => {
+    let selectedId: string | undefined;
+    if (sessionId != null) {
+      // 会话级：只用 session 自己绑定的 modelId 高亮。即便为空，
+      // 也不再回退 workspace 当前模型——否则用户会以为会话已经绑定了模型。
+      const sessionConfig = await runtime.sessions.getSessionAgentConfig(
+        sessionId,
       );
-      const allModels: Array<{
-        id: string;
-        providerId: string;
-        modelName: string;
-        vendorModelId: string;
-      }> = [];
-      for (const provider of providers) {
-        const saved = await runtime.providerModels.savedList(provider.id);
-        for (const model of saved) {
-          allModels.push({
-            id: model.id,
-            providerId: model.providerId,
-            modelName: model.modelName,
-            vendorModelId: model.vendorModelId,
-          });
-        }
-      }
-      const nameCounts = new Map<string, number>();
-      for (const model of allModels) {
-        const key = modelNameKey(model.providerId, model.modelName);
-        nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
-      }
-      const collected: SavedModelRow[] = allModels.map(model => {
-        const duplicate =
-          (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ??
-            0) > 1;
-        const providerDisplayName =
-          nameById.get(model.providerId) ?? '未知服务商';
-        return {
-          savedModelId: model.id,
-          label: formatSavedModelDisplayName(
-            providerDisplayName,
-            model.modelName,
-          ),
-          subtitle: duplicate ? model.vendorModelId : undefined,
-        };
-      });
-      collected.sort((a, b) => a.label.localeCompare(b.label));
-      setRows(collected);
-    } catch (cause) {
-      setRows([]);
-      setError(formatError(cause));
-    } finally {
-      setLoading(false);
+      selectedId =
+        sessionConfig.modelId && sessionConfig.modelId.length > 0
+          ? sessionConfig.modelId
+          : undefined;
+    } else {
+      // workspace 全局：用 workspace 当前模型高亮。
+      const workspaceId = await runtime.state.getCurrentModelId();
+      selectedId = workspaceId ?? undefined;
     }
+    const providers = await runtime.providers.list();
+    const nameById = new Map(
+      providers.map(provider => [provider.id, provider.displayName]),
+    );
+    const allModels: Array<{
+      id: string;
+      providerId: string;
+      modelName: string;
+      vendorModelId: string;
+    }> = [];
+    for (const provider of providers) {
+      const saved = await runtime.providerModels.savedList(provider.id);
+      for (const model of saved) {
+        allModels.push({
+          id: model.id,
+          providerId: model.providerId,
+          modelName: model.modelName,
+          vendorModelId: model.vendorModelId,
+        });
+      }
+    }
+    const nameCounts = new Map<string, number>();
+    for (const model of allModels) {
+      const key = modelNameKey(model.providerId, model.modelName);
+      nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+    }
+    const collected: SavedModelRow[] = allModels.map(model => {
+      const duplicate =
+        (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ?? 0) >
+        1;
+      const providerDisplayName =
+        nameById.get(model.providerId) ?? '未知服务商';
+      return {
+        savedModelId: model.id,
+        label: formatSavedModelDisplayName(
+          providerDisplayName,
+          model.modelName,
+        ),
+        subtitle: duplicate ? model.vendorModelId : undefined,
+      };
+    });
+    collected.sort((a, b) => a.label.localeCompare(b.label));
+    return {rows: collected, selectedId};
   }, [runtime, sessionId]);
-
-  useEffect(() => {
-    if (visible) {
-      reload().catch(() => undefined);
-    }
-  }, [visible, reload]);
 
   const select = useCallback(
     async (savedModelId: string) => {
@@ -157,107 +133,34 @@ export function ModelPickerModal({visible, onClose, onSelected, sessionId}: Prop
   );
 
   return (
-    <AppModal
+    <PickerListModal
       visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
-          <Text style={[styles.title, {color: tokens.text}]}>选择工作区模型</Text>
-          {loading ? (
-            <ActivityIndicator style={styles.loader} />
-          ) : error ? (
-            <View style={styles.center}>
-              <Text style={[styles.error, {color: tokens.danger}]}>{error}</Text>
-              <Pressable onPress={() => reload().catch(() => undefined)}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  重试
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <FlatList
-              data={rows}
-              keyExtractor={item => item.savedModelId}
-              ListEmptyComponent={
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                  暂无已保存模型。请先在「服务商」页添加模型。
-                </Text>
-              }
-              renderItem={({item}) => {
-                const selected = item.savedModelId === currentId;
-                return (
-                  <Pressable
-                    style={[
-                      styles.row,
-                      {borderBottomColor: tokens.border},
-                      selected && {backgroundColor: tokens.background},
-                    ]}
-                    onPress={() => select(item.savedModelId)}>
-                    <View style={styles.rowText}>
-                      <Text style={{color: tokens.text}}>{item.label}</Text>
-                      {item.subtitle ? (
-                        <Text
-                          style={[
-                            styles.subtitle,
-                            {color: tokens.textSecondary},
-                          ]}>
-                          {item.subtitle}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {selected ? (
-                      <Text style={{color: tokens.primary}}>当前</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              }}
-            />
-          )}
-          <Pressable onPress={onClose} style={styles.cancelBtn}>
-            <Text style={{color: tokens.textSecondary}}>取消</Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </AppModal>
+      title="选择工作区模型"
+      load={load}
+      keyExtractor={item => item.savedModelId}
+      renderRow={(item, selected) => (
+        <>
+          <View style={styles.rowText}>
+            <Text style={{color: tokens.text}}>{item.label}</Text>
+            {item.subtitle ? (
+              <Text style={[styles.subtitle, {color: tokens.textSecondary}]}>
+                {item.subtitle}
+              </Text>
+            ) : null}
+          </View>
+          {selected ? (
+            <Text style={{color: tokens.primary}}>当前</Text>
+          ) : null}
+        </>
+      )}
+      onPick={item => select(item.savedModelId)}
+      emptyText="暂无已保存模型。请先在「服务商」页添加模型。"
+      onClose={onClose}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  sheet: {
-    maxHeight: '70%',
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  loader: {marginVertical: 24},
-  center: {alignItems: 'center', gap: 12, padding: 24},
-  error: {textAlign: 'center', lineHeight: 20},
-  empty: {textAlign: 'center', padding: 24},
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
   rowText: {flex: 1, gap: 2},
   subtitle: {fontSize: 12},
-  cancelBtn: {alignItems: 'center', paddingTop: 12},
 });

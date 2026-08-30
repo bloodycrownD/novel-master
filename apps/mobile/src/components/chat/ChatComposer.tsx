@@ -2,7 +2,13 @@
  * Chat input: 大框 + 框内「更多 / @ / 发送」；attachments draft。
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   Pressable,
@@ -58,9 +64,12 @@ import {
   type AtPathRef,
   filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
-  replaceActiveAtWithToken,
 } from './composer-at-path';
 import {composerDockBottomPadding} from './composer-dock-padding';
+import {
+  buildTokenInsertion,
+  statusOnlyComposerAttachments,
+} from './composer-token-insert';
 import {useReanimatedKeyboardAnimation} from 'react-native-keyboard-controller';
 import Animated, {useAnimatedStyle} from 'react-native-reanimated';
 import { FileReferencePicker } from './FileReferencePicker';
@@ -257,6 +266,25 @@ export function ChatComposer({
     [sessionId],
   );
 
+  /** 提交正文变更：mention 输入在位时整段写入（新 token 提成 mention），
+   * 纯文本 fallback 时同步 draft（只留状态 chip）与光标。
+   * mention:false 供 onChangeText 等回写路径使用——replaceCommittedText 会
+   * 回调 onChangeText，再走 mention 分支会无限递归。 */
+  const commitComposerText = useCallback(
+    (next: string, nextCursor?: number, opts?: {mention?: boolean}) => {
+      if (opts?.mention !== false && atPathInputRef.current) {
+        atPathInputRef.current.replaceCommittedText(next, nextCursor);
+        return;
+      }
+      setText(next);
+      persistDraft(next, statusOnlyComposerAttachments(attachments));
+      if (nextCursor != null) {
+        setCursor(nextCursor);
+      }
+    },
+    [attachments, persistDraft],
+  );
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -418,30 +446,10 @@ export function ChatComposer({
       }
       // 有未完成 @… 时从 @ 起替换到光标，避免残留半截查询
       const replaceStart = activeAt != null ? activeAt.start : cursor;
-      const before = text.slice(0, replaceStart);
-      const after = text.slice(cursor);
-      const gapBefore =
-        before.length === 0 || /\s$/.test(before) ? '' : ' ';
-      const joined = pathTokens.join(' ');
-      // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
-      const gapAfter =
-        after.length === 0 || !/^\s/.test(after) ? ' ' : '';
-      const inserted = `${gapBefore}${joined}${gapAfter}`;
-      const next = `${before}${inserted}${after}`;
-      const nextCursor = before.length + inserted.length;
-      // 程序化 API：新增 @path 提成 mention（成 tag + 可原子删）
-      if (atPathInputRef.current) {
-        atPathInputRef.current.replaceCommittedText(next, nextCursor);
-        return;
-      }
-      const statusOnly = attachments.filter(
-        a => a.source === 'workplace' || a.source === 'user_ops',
-      );
-      setText(next);
-      persistDraft(next, statusOnly);
-      setCursor(nextCursor);
+      const next = buildTokenInsertion(text, cursor, replaceStart, pathTokens);
+      commitComposerText(next.text, next.cursor);
     },
-    [activeAt, attachments, cursor, persistDraft, text],
+    [activeAt, cursor, text, commitComposerText],
   );
 
   const applyTypeaheadToken = useCallback(
@@ -453,24 +461,10 @@ export function ChatComposer({
       if (activeAt == null) {
         return;
       }
-      const next = replaceActiveAtWithToken(
-        text,
-        cursor,
-        activeAt.start,
-        token,
-      );
-      if (atPathInputRef.current) {
-        atPathInputRef.current.replaceCommittedText(next.text, next.cursor);
-        return;
-      }
-      const statusOnly = attachments.filter(
-        a => a.source === 'workplace' || a.source === 'user_ops',
-      );
-      setText(next.text);
-      persistDraft(next.text, statusOnly);
-      setCursor(next.cursor);
+      const next = buildTokenInsertion(text, cursor, activeAt.start, token);
+      commitComposerText(next.text, next.cursor);
     },
-    [activeAt, attachments, cursor, persistDraft, text],
+    [activeAt, cursor, text, commitComposerText],
   );
 
   /** `$` typeahead 点选：插 `$技能名` token（mention tag + 尾空格）。 */
@@ -483,24 +477,10 @@ export function ChatComposer({
       if (activeSkill == null) {
         return;
       }
-      const next = replaceActiveAtWithToken(
-        text,
-        cursor,
-        activeSkill.start,
-        token,
-      );
-      if (atPathInputRef.current) {
-        atPathInputRef.current.replaceCommittedText(next.text, next.cursor);
-        return;
-      }
-      const statusOnly = attachments.filter(
-        a => a.source === 'workplace' || a.source === 'user_ops',
-      );
-      setText(next.text);
-      persistDraft(next.text, statusOnly);
-      setCursor(next.cursor);
+      const next = buildTokenInsertion(text, cursor, activeSkill.start, token);
+      commitComposerText(next.text, next.cursor);
     },
-    [activeSkill, attachments, cursor, persistDraft, text],
+    [activeSkill, cursor, text, commitComposerText],
   );
 
   /** SkillPicker 单选：从光标（或活跃 `$` 查询）处插入 `$技能名` token。 */
@@ -509,27 +489,30 @@ export function ChatComposer({
       const token = `$${skillName}`;
       // 有未完成 $… 时从 $ 起替换到光标，避免残留半截查询
       const replaceStart = activeSkill != null ? activeSkill.start : cursor;
-      const before = text.slice(0, replaceStart);
-      const after = text.slice(cursor);
-      const gapBefore =
-        before.length === 0 || /\s$/.test(before) ? '' : ' ';
-      const gapAfter =
-        after.length === 0 || !/^\s/.test(after) ? ' ' : '';
-      const inserted = `${gapBefore}${token}${gapAfter}`;
-      const next = `${before}${inserted}${after}`;
-      const nextCursor = before.length + inserted.length;
-      if (atPathInputRef.current) {
-        atPathInputRef.current.replaceCommittedText(next, nextCursor);
-        return;
-      }
-      const statusOnly = attachments.filter(
-        a => a.source === 'workplace' || a.source === 'user_ops',
-      );
-      setText(next);
-      persistDraft(next, statusOnly);
-      setCursor(nextCursor);
+      const next = buildTokenInsertion(text, cursor, replaceStart, token);
+      commitComposerText(next.text, next.cursor);
     },
-    [activeSkill, attachments, cursor, persistDraft, text],
+    [activeSkill, cursor, text, commitComposerText],
+  );
+
+  const sendIntent = useMemo(
+    () =>
+      resolveComposerSendIntent({
+        text,
+        attachments,
+        canResumeWithoutInput,
+        hasAnnotateDrafts,
+        hasModel,
+        running,
+      }),
+    [
+      text,
+      attachments,
+      canResumeWithoutInput,
+      hasAnnotateDrafts,
+      hasModel,
+      running,
+    ],
   );
 
   const send = useCallback(async () => {
@@ -544,15 +527,7 @@ export function ChatComposer({
     }
 
     const content = text.trim();
-    const intent = resolveComposerSendIntent({
-      text,
-      attachments,
-      canResumeWithoutInput,
-      hasAnnotateDrafts,
-      hasModel,
-      running,
-    });
-    const { hasSendable, allowResumeWithoutInput } = intent;
+    const { hasSendable, allowResumeWithoutInput } = sendIntent;
 
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
@@ -573,18 +548,11 @@ export function ChatComposer({
     abortUiRun,
     onNeedModel,
     executeRun,
-    hasAnnotateDrafts,
+    sendIntent,
   ]);
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
-  const sendDisabled = resolveComposerSendIntent({
-    text,
-    attachments,
-    canResumeWithoutInput,
-    hasAnnotateDrafts,
-    hasModel,
-    running,
-  }).sendDisabled;
+  const sendDisabled = sendIntent.sendDisabled;
 
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
@@ -639,11 +607,7 @@ export function ChatComposer({
           value={text}
           cursor={cursor}
           onChangeText={next => {
-            setText(next);
-            const statusOnly = attachments.filter(
-              a => a.source === 'workplace' || a.source === 'user_ops',
-            );
-            persistDraft(next, statusOnly);
+            commitComposerText(next, undefined, {mention: false});
           }}
           onSelectionChange={e => {
             setCursor(e.nativeEvent.selection.start);

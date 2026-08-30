@@ -2,15 +2,33 @@
  * Inline manage header: normal actions vs batch cancel / count / delete.
  */
 import React, {type ReactNode} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import {SecondaryButton} from '@/components/ui/PrototypeButtons';
 import {useTheme} from '@/theme/ThemeProvider';
 
+/** 批量模式次操作（如 VFS 的「移动」）：主操作（删除）右侧依次渲染。 */
+export type ManageHeaderBatchAction = {
+  label: string;
+  onPress: () => void;
+  tone?: 'danger' | 'primary';
+  /** 不传则跟随 selectedCount === 0 的统一禁用规则。 */
+  disabled?: boolean;
+};
+
 type Props = {
-  title: string;
+  /** 批量专用场景（batchMode 恒真）可不传。 */
+  title?: string;
   batchMode: boolean;
   selectedCount: number;
-  onEnterBatch: () => void;
+  /** 批量专用场景（batchMode 恒真）可不传。 */
+  onEnterBatch?: () => void;
   onCancelBatch: () => void;
   onDelete?: () => void;
   /** 批量模式全选/全不选回调；不传则不渲染全选按钮（其它调用方零影响）。 */
@@ -20,8 +38,12 @@ type Props = {
   primaryActionLabel?: string;
   onPrimaryAction?: () => void;
   primaryActionTone?: 'danger' | 'primary';
+  /** 批量模式次操作数组；每项在主操作右侧渲染。 */
+  actions?: ManageHeaderBatchAction[];
   normalActions?: ReactNode;
   hint?: string;
+  /** 吸收各调用方的布局差异（如 VFS 批量栏 padding 12 vs 默认 5）。 */
+  style?: StyleProp<ViewStyle>;
 };
 
 export function ManageHeader({
@@ -36,16 +58,19 @@ export function ManageHeader({
   primaryActionLabel = '删除',
   onPrimaryAction,
   primaryActionTone = 'danger',
+  actions,
   normalActions,
   hint,
+  style,
 }: Props) {
   const {tokens} = useTheme();
   const runPrimary = onPrimaryAction ?? onDelete;
   const primaryEnabledColor =
     primaryActionTone === 'danger' ? tokens.danger : tokens.primary;
+  const batchActionsDisabled = selectedCount === 0;
 
   return (
-    <View style={[styles.wrap, {borderBottomColor: tokens.border}]}>
+    <View style={[styles.wrap, {borderBottomColor: tokens.border}, style]}>
       {batchMode ? (
         <View style={styles.batchRow}>
           <Pressable onPress={onCancelBatch}>
@@ -63,26 +88,56 @@ export function ManageHeader({
               已选 {selectedCount} 项
             </Text>
           </View>
-          <Pressable onPress={runPrimary} disabled={selectedCount === 0}>
-            <Text
-              style={{
-                color:
-                  selectedCount > 0 ? primaryEnabledColor : tokens.textTertiary,
-              }}
-            >
-              {primaryActionLabel}
-            </Text>
-          </Pressable>
+          <View style={styles.batchActions}>
+            <Pressable onPress={runPrimary} disabled={batchActionsDisabled}>
+              <Text
+                style={{
+                  color:
+                    selectedCount > 0
+                      ? primaryEnabledColor
+                      : tokens.textTertiary,
+                }}
+              >
+                {primaryActionLabel}
+              </Text>
+            </Pressable>
+            {(actions ?? []).map(action => {
+              const disabled = action.disabled ?? batchActionsDisabled;
+              const enabledColor =
+                action.tone === 'danger' ? tokens.danger : tokens.primary;
+              return (
+                <Pressable
+                  key={action.label}
+                  onPress={action.onPress}
+                  disabled={disabled}>
+                  <Text
+                    style={[
+                      styles.actionLabel,
+                      {
+                        color: disabled
+                          ? tokens.textTertiary
+                          : enabledColor,
+                      },
+                    ]}
+                  >
+                    {action.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       ) : (
         <View style={styles.normalRow}>
           <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
           <View style={styles.actions}>
-            <SecondaryButton
-              label="管理"
-              tokens={tokens}
-              onPress={onEnterBatch}
-            />
+            {onEnterBatch ? (
+              <SecondaryButton
+                label="管理"
+                tokens={tokens}
+                onPress={onEnterBatch}
+              />
+            ) : null}
             {normalActions}
           </View>
         </View>
@@ -114,5 +169,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   batchCenter: {flexDirection: 'row', alignItems: 'center', gap: 12},
+  batchActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+  },
+  actionLabel: {fontSize: 13, fontWeight: '500'},
   hint: {fontSize: 12, lineHeight: 16},
 });

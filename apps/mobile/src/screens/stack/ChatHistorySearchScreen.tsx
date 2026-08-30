@@ -31,6 +31,7 @@ import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
 import type {ChatMessage} from '@novel-master/core/chat';
 import {AndroidKeyboardClipBody} from '../../components/chrome/AndroidKeyboardClipBody';
 import {FormTextInput} from '../../components/form/FormTextInput';
+import {CollapsibleCard} from '../../components/ui/CollapsibleCard';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {ThemeTokens} from '../../theme/tokens';
@@ -236,7 +237,26 @@ export function ChatHistorySearchScreen() {
           styles.header,
           {borderBottomColor: tokens.borderLight},
         ]}>
-        <View
+        <CollapsibleCard
+          expanded={formExpanded}
+          onToggle={setFormExpanded}
+          testID="chat-history-search-form-toggle"
+          accessibilityLabel="筛选条件"
+          title={
+            <Text style={[styles.formCardTitle, {color: tokens.text}]}>
+              筛选条件
+            </Text>
+          }
+          summary={
+            formExpanded ? undefined : (
+              <Text
+                style={[styles.formCardSummary, {color: tokens.textSecondary}]}
+                numberOfLines={1}>
+                {filterSummary}
+              </Text>
+            )
+          }
+          chevronStyle={styles.formCardChevron}
           style={[
             styles.formCard,
             {
@@ -244,31 +264,7 @@ export function ChatHistorySearchScreen() {
               borderColor: tokens.borderLight,
             },
           ]}>
-          <Pressable
-            testID="chat-history-search-form-toggle"
-            style={styles.formCardHeader}
-            onPress={() => setFormExpanded(v => !v)}
-            accessibilityRole="button"
-            accessibilityState={{expanded: formExpanded}}
-            accessibilityLabel="筛选条件">
-            <View style={styles.formCardHeaderText}>
-              <Text style={[styles.formCardTitle, {color: tokens.text}]}>
-                筛选条件
-              </Text>
-              {!formExpanded ? (
-                <Text
-                  style={[styles.formCardSummary, {color: tokens.textSecondary}]}
-                  numberOfLines={1}>
-                  {filterSummary}
-                </Text>
-              ) : null}
-            </View>
-            <Text style={[styles.formCardChevron, {color: tokens.textTertiary}]}>
-              {formExpanded ? '▼' : '▶'}
-            </Text>
-          </Pressable>
-          {formExpanded ? (
-            <View style={styles.formCardBody}>
+          <View style={styles.formCardBody}>
               <View style={styles.sectionLabelRow}>
                 <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
                   关键词
@@ -336,9 +332,8 @@ export function ChatHistorySearchScreen() {
                   style={styles.seqInput}
                 />
               </View>
-            </View>
-          ) : null}
-        </View>
+          </View>
+        </CollapsibleCard>
         {/* 错误恒显在折叠卡片外：首次查询成功后表单自动收起，若翻页 append
             失败，收起态下错误仍可见，不会藏在卡片里丢失反馈。 */}
         {error != null ? (
@@ -388,7 +383,7 @@ export function ChatHistorySearchScreen() {
 }
 
 /** 单条搜索结果卡片：角色标签 + seq + 摘要；hidden 时整体降透明度。
- *  点击卡片切换展开/收起——展开后显示完整文本（不限行数）。 */
+ *  整卡可按切换展开/收起（短内容不可折叠）——展开后显示完整文本（不限行数）。 */
 function MessageResultCard({
   message,
   tokens,
@@ -396,15 +391,45 @@ function MessageResultCard({
   message: ChatMessage;
   tokens: ThemeTokens;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const summary = extractMessageSummary(message);
   const fullText = extractFullText(message);
   const canExpand = fullText.length > 200 || fullText.includes('\n');
 
   return (
-    <Pressable
+    <CollapsibleCard
       testID="chat-history-search-result-card"
-      onPress={() => canExpand && setExpanded(prev => !prev)}
+      pressArea="card"
+      collapsible={canExpand}
+      showChevron={false}
+      title={
+        <View style={styles.resultHead}>
+          <Text style={[styles.roleTag, {color: tokens.primary}]}>
+            {roleLabel(message.role)}
+          </Text>
+          {message.hidden ? (
+            <Text style={[styles.hiddenTag, {color: tokens.textTertiary}]}>
+              已隐藏
+            </Text>
+          ) : null}
+          <Text style={[styles.seq, {color: tokens.textTertiary}]}>
+            #{message.seq}
+          </Text>
+        </View>
+      }
+      summary={
+        <>
+          <Text
+            style={[styles.resultBody, {color: tokens.text}]}
+            numberOfLines={4}>
+            {summary}
+          </Text>
+          {canExpand ? (
+            <Text style={[styles.expandHint, {color: tokens.primary}]}>
+              展开全文
+            </Text>
+          ) : null}
+        </>
+      }
       style={[
         styles.resultCard,
         {
@@ -413,30 +438,13 @@ function MessageResultCard({
           opacity: message.hidden ? 0.55 : 1,
         },
       ]}>
-      <View style={styles.resultHead}>
-        <Text style={[styles.roleTag, {color: tokens.primary}]}>
-          {roleLabel(message.role)}
-        </Text>
-        {message.hidden ? (
-          <Text style={[styles.hiddenTag, {color: tokens.textTertiary}]}>
-            已隐藏
-          </Text>
-        ) : null}
-        <Text style={[styles.seq, {color: tokens.textTertiary}]}>
-          #{message.seq}
-        </Text>
-      </View>
-      <Text
-        style={[styles.resultBody, {color: tokens.text}]}
-        numberOfLines={expanded ? undefined : 4}>
-        {expanded ? fullText || '（无文本内容）' : summary}
+      <Text style={[styles.resultBody, {color: tokens.text}]}>
+        {fullText || '（无文本内容）'}
       </Text>
       {canExpand ? (
-        <Text style={[styles.expandHint, {color: tokens.primary}]}>
-          {expanded ? '收起' : '展开全文'}
-        </Text>
+        <Text style={[styles.expandHint, {color: tokens.primary}]}>收起</Text>
       ) : null}
-    </Pressable>
+    </CollapsibleCard>
   );
 }
 
@@ -479,13 +487,8 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  // 卡片头：结构对齐 PromptPreviewSegmentCard（Pressable + 摘要 + ▶/▼ 文字 chevron）。
-  formCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  formCardHeaderText: {flex: 1, minWidth: 0},
+  // 卡片头：结构对齐 PromptPreviewSegmentCard（Pressable + 摘要 + ▶/▼ 文字 chevron，
+  // 由 ui/CollapsibleCard 统一持有）。
   formCardTitle: {fontSize: 15, fontWeight: '600'},
   formCardSummary: {fontSize: 12, lineHeight: 17, marginTop: 2},
   formCardChevron: {fontSize: 10, paddingTop: 4},

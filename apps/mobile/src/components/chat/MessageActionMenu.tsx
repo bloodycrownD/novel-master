@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import {AppModal} from '@/components/ui/AppModal';
 import {useTheme} from '@/theme/ThemeProvider';
+import type {MessageActionMenuItem} from './message-edit';
 import {
   ANCHORED_MENU_ITEM_MIN_HEIGHT,
   ANCHORED_MENU_SCREEN_MARGIN,
@@ -22,11 +23,7 @@ import {
 
 export type MessageMenuAnchor = MenuAnchor;
 
-export interface MessageActionMenuItem {
-  readonly label: string;
-  readonly action: string;
-  readonly danger?: boolean;
-}
+export type {MessageActionMenuItem};
 
 type Props = {
   visible: boolean;

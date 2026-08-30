@@ -1,8 +1,9 @@
 /**
  * Collapsible read-only tool group embedded in assistant bubbles (no menu).
  */
-import React, {useState} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import React from 'react';
+import {StyleSheet, Text} from 'react-native';
+import {CollapsibleCard} from '@/components/ui/CollapsibleCard';
 import {useTheme} from '@/theme/ThemeProvider';
 import type {SkillToolRef} from '@novel-master/core/chat';
 import type {ToolCallView} from './message-blocks';
@@ -32,14 +33,19 @@ export function ToolCallGroupCard({
   showDividerBelow = false,
 }: Props) {
   const {tokens} = useTheme();
-  const [expanded, setExpanded] = useState(defaultExpanded);
 
   if (tools.length === 0) {
     return null;
   }
 
   return (
-    <View
+    <CollapsibleCard
+      defaultExpanded={defaultExpanded}
+      title={
+        <Text style={[styles.title, {color: tokens.textSecondary}]}>
+          工具调用 ({tools.length})
+        </Text>
+      }
       style={[
         embedded ? styles.embedded : styles.card,
         !embedded && {
@@ -47,43 +53,20 @@ export function ToolCallGroupCard({
           borderColor: tokens.borderLight,
         },
         {opacity: dimmed ? 0.55 : 1},
-        showDividerBelow &&
-          expanded && {
-            borderBottomColor: tokens.borderLight,
-            borderBottomWidth: StyleSheet.hairlineWidth,
-            marginBottom: 8,
-            paddingBottom: 8,
-          },
       ]}
-    >
-      <Pressable
-        style={styles.header}
-        onPress={() => setExpanded(v => !v)}
-        accessibilityRole="button"
-        accessibilityState={{expanded}}
-      >
-        <Text style={[styles.title, {color: tokens.textSecondary}]}>
-          工具调用 ({tools.length})
-        </Text>
-        <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-          {expanded ? '▼' : '▶'}
-        </Text>
-      </Pressable>
-      {expanded ? (
-        <View style={styles.items}>
-          {tools.map(tool => (
-            <ToolCallCard
-              key={tool.toolUseId}
-              tool={tool}
-              groupItem
-              onOpenFile={onOpenFile}
-              onOpenSubagentSession={onOpenSubagentSession}
-              onOpenSkillDetail={onOpenSkillDetail}
-            />
-          ))}
-        </View>
-      ) : null}
-    </View>
+      contentStyle={styles.items}
+      showDividerBelow={showDividerBelow}>
+      {tools.map(tool => (
+        <ToolCallCard
+          key={tool.toolUseId}
+          tool={tool}
+          groupItem
+          onOpenFile={onOpenFile}
+          onOpenSubagentSession={onOpenSubagentSession}
+          onOpenSkillDetail={onOpenSkillDetail}
+        />
+      ))}
+    </CollapsibleCard>
   );
 }
 
@@ -99,13 +82,6 @@ const styles = StyleSheet.create({
   embedded: {
     alignSelf: 'stretch',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
   title: {fontSize: 12, fontWeight: '600'},
-  chevron: {fontSize: 10},
   items: {marginTop: 6, gap: 6},
 });

@@ -338,7 +338,8 @@ export function RegexGroupsScreen() {
         placeholder="如 对话清洗"
         confirmLabel="创建"
         onClose={() => setCreateVisible(false)}
-        onConfirm={async name => {
+        onConfirm={async values => {
+          const name = values[0];
           const taken = new Set(rows.map(r => r.groupId));
           const groupId = deriveRegexGroupId(name, taken);
           await runtime.regexConfig.createGroup({
@@ -357,12 +358,12 @@ export function RegexGroupsScreen() {
         initialValue={editInitialName}
         confirmLabel="保存"
         onClose={() => setEditGroupId(undefined)}
-        onConfirm={async name => {
+        onConfirm={async values => {
           if (editGroupId == null) {
             return;
           }
           await runtime.regexConfig.updateGroup(editGroupId, {
-            displayName: name,
+            displayName: values[0],
           });
           await reload();
           showToast('已更新名称');

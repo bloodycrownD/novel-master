@@ -10,21 +10,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {
-  Alert,
-  FlatList,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import {AppModal} from '@/components/ui/AppModal';
-import Animated from 'react-native-reanimated';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
-import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
+import {Alert, FlatList, Pressable, Text, View} from 'react-native';
+import { useDismissOverlaysOnBlur } from '../../hooks/useDismissOverlaysOnBlur';
 import {
   type PhysicalVfsService,
   type VfsListEntry,
@@ -37,14 +24,11 @@ import {
   type WorkplaceListRow,
   type WorkplaceService,
 } from '@novel-master/core/workplace';
-import {ParentDirIcon} from '@/components/icons/TabIcons';
-import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
-import {VfsBatchHeader} from '@/components/batch/VfsBatchHeader';
-import {
-  BottomSheetMenu,
-  type SheetMenuItem,
-} from '@/components/sheet/BottomSheetMenu';
-import {DirectoryRuleSheet} from '@/components/sheet/DirectoryRuleSheet';
+import { ParentDirIcon } from '../icons/TabIcons';
+import { BatchCheckbox } from '../batch/BatchCheckbox';
+import { ManageHeader } from '../batch/ManageHeader';
+import { BottomSheetMenu, type SheetMenuItem } from '../sheet/BottomSheetMenu';
+import { DirectoryRuleSheet } from '../sheet/DirectoryRuleSheet';
 import {
   countFilesInDir,
   isDirectChild,
@@ -57,11 +41,11 @@ import {
   remapDirectChildRows,
   type MappedVfsRow,
 } from './vfs-row-mapper';
-import {orderedDirectChildPaths} from './vfs-direct-children-order';
-import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core/feature-flags';
+import { orderedDirectChildPaths } from './vfs-direct-children-order';
+import { isUserVfsUnifiedToolTurnEnabled } from '@novel-master/core/feature-flags';
 
-import {isVfsError} from '@novel-master/core/vfs';
-import {refreshComposerStatusAfterUserVfsOps} from '@/services/user-vfs-turn-execute.service';
+import { isVfsError } from '@novel-master/core/vfs';
+import { refreshComposerStatusAfterUserVfsOps } from '../../services/user-vfs-turn-execute.service';
 import {
   createVfsDirectory,
   createVfsFile,
@@ -73,7 +57,7 @@ import {
   sessionCreateVfsFile,
   sessionRenameVfsDirectory,
   sessionRenameVfsFile,
-} from '@/services/vfs-operations.service';
+} from '../../services/vfs-operations.service';
 import {
   cycleFileInclusion,
   defaultDirRuleForm,
@@ -82,20 +66,31 @@ import {
   migrateWorkplaceDirRename,
   toggleDirRuleEnabled,
   vfsScopeRootPath,
-} from '@/services/workplace-operations.service';
-import {refreshRuleSnapshotAfterRuleChange} from '@/services/workplace-rule-delta-draft.service';
-import {toastMessage} from '@/errors/toast-message';
-import {useRuntime} from '@/hooks/useRuntime';
-import {importCharacterCard} from '@/services/vfs-character-card.service';
-import {exportVfsZip, importVfsZip} from '@/services/vfs-zip.service';
-import {useTheme} from '@/theme/ThemeProvider';
-import {TemplatePullButton} from '@/components/template/TemplatePullButton';
-import {useToast} from '@/components/chrome/ToastHost';
-import {FileReferencePicker} from '@/components/chat/FileReferencePicker';
-import {isSelfOrAncestorPath, resolveMoveDestination} from './vfs-move-path';
+} from '../../services/workplace-operations.service';
+import { refreshRuleSnapshotAfterRuleChange } from '../../services/workplace-rule-delta-draft.service';
+import { toastMessage } from '../../errors/toast-message';
+import { useRuntime } from '../../hooks/useRuntime';
+import { importCharacterCard } from '../../services/vfs-character-card.service';
+import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
+import { useTheme } from '../../theme/ThemeProvider';
+import { TemplatePullButton } from '../template/TemplatePullButton';
+import { useToast } from '../chrome/ToastHost';
+import {
+  VfsPromptModal,
+  type VfsPromptState,
+} from './vfs-file-manager/VfsPromptModal';
+import { VfsMoveDirPicker } from './vfs-file-manager/VfsMoveDirPicker';
+import {
+  vfsBatchHeaderWrapStyle,
+  vfsFileManagerStyles,
+} from './vfs-file-manager/styles';
+import {
+  isSelfOrAncestorPath,
+  resolveMoveDestination,
+} from './vfs-move-path';
 
 /** 仅支持 session 域 pull（project 域 pull 已拆除）。 */
-export type VfsFileManagerPullScope = {kind: 'session'; sessionId: string};
+export type VfsFileManagerPullScope = { kind: 'session'; sessionId: string };
 
 /** 供父组件控制系统返回时逐级退出目录，并在切入工作区时刷新列表。 */
 export type VfsFileManagerHandle = {
@@ -142,12 +137,7 @@ export type VfsFileManagerProps = {
   pathLabel?: (path: string) => string;
 };
 
-type PromptState = {
-  title: string;
-  placeholder: string;
-  defaultValue: string;
-  onSubmit: (value: string) => Promise<void>;
-};
+type PromptState = VfsPromptState;
 
 export const VfsFileManager = forwardRef<
   VfsFileManagerHandle,
@@ -167,8 +157,8 @@ export const VfsFileManager = forwardRef<
   },
   ref,
 ) {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
+  const { tokens } = useTheme();
+  const { showToast } = useToast();
   const runtime = useRuntime();
   // readOnly 模式下全部写入口已隐藏，此引用仅供写路径调用
   // （物理树类型层面无写方法，运行时不可能被写入）。
@@ -186,7 +176,6 @@ export const VfsFileManager = forwardRef<
     Partial<SetDirRuleInput> | undefined
   >();
   const [prompt, setPrompt] = useState<PromptState | null>(null);
-  const [promptValue, setPromptValue] = useState('');
   const [vfsBatchActive, setVfsBatchActive] = useState(false);
   const [vfsBatchSelected, setVfsBatchSelected] = useState<Set<string>>(
     () => new Set(),
@@ -194,9 +183,6 @@ export const VfsFileManager = forwardRef<
   const [exportingZip, setExportingZip] = useState(false);
   /** 批量移动：目标目录选择器是否打开 */
   const [movePickerOpen, setMovePickerOpen] = useState(false);
-  // 内联 prompt 是居中弹层（promptBackdrop justifyContent center），
-  // 上移键盘高度的一半就能露出输入框。
-  const promptAvoidStyle = useAndroidModalKeyboardAvoid(0.5);
 
   const vfsBatchExit = useCallback(() => {
     setVfsBatchActive(prev => (prev ? false : prev));
@@ -286,18 +272,19 @@ export const VfsFileManager = forwardRef<
   const scopeRef = useRef(scope);
   const reloadInFlightRef = useRef(false);
   // 面包屑名字缓存：导航中每次 list 的合成目录行携带 label（项目名/会话名），
-  // 逐段累积，供顶栏路径展示替换 UUID；只影响展示，不参与导航。
+// 逐段累积，供顶栏路径展示替换 UUID；只影响展示，不参与导航。
   const labelByPathRef = useRef(new Map<string, string>());
   vfsRef.current = vfs;
   workplaceRef.current = workplace;
   scopeRef.current = scope;
 
-  const fetchWorktreeRows = useCallback(async (): Promise<
-    WorkplaceListRow[]
-  > => {
-    const worktreeSvc = workplaceRef.current;
-    return (await worktreeSvc?.buildListRows()) ?? [];
-  }, []);
+  const fetchWorktreeRows = useCallback(
+    async (): Promise<WorkplaceListRow[]> => {
+      const worktreeSvc = workplaceRef.current;
+      return (await worktreeSvc?.buildListRows()) ?? [];
+    },
+    [],
+  );
 
   const applyWorktreeRowsToVisibleList = useCallback(
     (allRows: WorkplaceListRow[]) => {
@@ -377,13 +364,13 @@ export const VfsFileManager = forwardRef<
         if (vfsEntry) {
           return mapVfsListEntry(vfsEntry);
         }
-        return mapVfsListEntry({path, kind: 'file'});
+        return mapVfsListEntry({ path, kind: 'file' });
       });
       // 无 workplace（非工作区域，如技能目录）：剥掉纳入状态/目录规则 tag 与
       // subtitle（跟随·全内容等是工作区语义，在此无意义）。
       setRows(
         workplace == null
-          ? mapped.map(row => ({...row, subtitle: '', badge: null}))
+          ? mapped.map(row => ({ ...row, subtitle: '', badge: null }))
           : mapped,
       );
     } catch (error) {
@@ -402,7 +389,11 @@ export const VfsFileManager = forwardRef<
     await reload();
     if (sessionId != null && workplace != null) {
       try {
-        await refreshRuleSnapshotAfterRuleChange(runtime, workplace, sessionId);
+        await refreshRuleSnapshotAfterRuleChange(
+          runtime,
+          workplace,
+          sessionId,
+        );
       } catch {
         // 差集推送失败不阻断列表刷新
       }
@@ -445,7 +436,7 @@ export const VfsFileManager = forwardRef<
       return;
     }
     Alert.alert('确认删除', `确定删除选中的 ${paths.length} 项？`, [
-      {text: '取消', style: 'cancel'},
+      { text: '取消', style: 'cancel' },
       {
         text: '删除',
         style: 'destructive',
@@ -513,7 +504,7 @@ export const VfsFileManager = forwardRef<
           // WHY: 批量时跳过每次 op 后的 composer 投影；批次结束统一刷一次。
           // 投影收窄为仅 annotate；本开关仅合并批次末 notify。
           const renameOpts = useUserVfsTurn
-            ? {skipComposerStatusRefresh: true as const}
+            ? { skipComposerStatusRefresh: true as const }
             : undefined;
           if (isDir) {
             if (useUserVfsTurn) {
@@ -609,41 +600,55 @@ export const VfsFileManager = forwardRef<
       ? [
           ...(workplace != null
             ? [
-                {label: '导出 ZIP', action: 'export-zip'},
-                {label: '导入 ZIP', action: 'import-zip'},
-                {label: '导入角色卡', action: 'import-character-card'},
-                {label: '状态变更', action: 'toggle-include'},
+                { label: '导出 ZIP', action: 'export-zip' },
+                { label: '导入 ZIP', action: 'import-zip' },
+                { label: '导入角色卡', action: 'import-character-card' },
+                { label: '状态变更', action: 'toggle-include' },
               ]
             : []),
-          {label: '重命名', action: 'rename'},
-          {label: '删除', action: 'delete', danger: true},
+          { label: '重命名', action: 'rename' },
+          { label: '删除', action: 'delete', danger: true },
         ]
       : [
           ...(workplace != null
-            ? [{label: '状态变更', action: 'toggle-include'}]
+            ? [
+                { label: '状态变更', action: 'toggle-include' },
+              ]
             : []),
-          {label: '重命名', action: 'rename'},
-          {label: '删除', action: 'delete', danger: true},
+          { label: '重命名', action: 'rename' },
+          { label: '删除', action: 'delete', danger: true },
         ];
 
   const moreMenuItems: SheetMenuItem[] = readOnly
     ? []
     : [
-        {label: '新建目录', action: 'create-directory'},
-        {label: '新建文件', action: 'create-file'},
+        { label: '新建目录', action: 'create-directory' },
+        { label: '新建文件', action: 'create-file' },
         ...(workplace != null
           ? [
-              {label: '导入 ZIP', action: 'import-zip'},
-              {label: '导出 ZIP', action: 'export-zip'},
-              {label: '导入角色卡', action: 'import-character-card'},
-              {label: '目录规则', action: 'directory-rule'},
+              { label: '导入 ZIP', action: 'import-zip' },
+              { label: '导出 ZIP', action: 'export-zip' },
+              { label: '导入角色卡', action: 'import-character-card' },
+              { label: '目录规则', action: 'directory-rule' },
             ]
           : []),
       ];
 
   const openPrompt = (state: PromptState) => {
-    setPromptValue(state.defaultValue);
     setPrompt(state);
+  };
+
+  // 提交内联 prompt：先关弹窗，再执行操作并统一刷新/报错。
+  const submitPrompt = (value: string) => {
+    const current = prompt;
+    if (!current) {
+      return;
+    }
+    setPrompt(null);
+    current
+      .onSubmit(value)
+      .then(() => reloadVfsListOnly())
+      .catch(err => showToast(toastMessage('失败', err)));
   };
 
   const handleEntityAction = async (action: string) => {
@@ -651,12 +656,11 @@ export const VfsFileManager = forwardRef<
       return;
     }
     const meta = worktreeRows.find(r => r.path === menuPath);
-    const protectReason =
-      action === 'rename' || action === 'delete'
-        ? isProtectedPath
-          ? isProtectedPath(menuPath)
-          : null
-        : null;
+    const protectReason = action === 'rename' || action === 'delete'
+      ? isProtectedPath
+        ? isProtectedPath(menuPath)
+        : null
+      : null;
     if (protectReason != null) {
       showToast(protectReason);
       return;
@@ -693,7 +697,7 @@ export const VfsFileManager = forwardRef<
           setWorktreeRows(prev =>
             prev.map(row =>
               row.path === menuPath && row.kind === 'dir'
-                ? {...row, ruleState: dirRuleStateFromEnabled(nextEnabled)}
+                ? { ...row, ruleState: dirRuleStateFromEnabled(nextEnabled) }
                 : row,
             ),
           );
@@ -766,11 +770,7 @@ export const VfsFileManager = forwardRef<
                   currentPath === menuPath ||
                   currentPath.startsWith(`${menuPath}/`)
                 ) {
-                  const remapped = remapPathUnderDir(
-                    currentPath,
-                    menuPath,
-                    newPath,
-                  );
+                  const remapped = remapPathUnderDir(currentPath, menuPath, newPath);
                   setCurrentPath(remapped);
                 }
               }
@@ -789,23 +789,17 @@ export const VfsFileManager = forwardRef<
       }
       if (action === 'delete') {
         Alert.alert('确认删除', `确定删除 ${menuRow.name}？`, [
-          {text: '取消', style: 'cancel'},
+          { text: '取消', style: 'cancel' },
           {
             text: '删除',
             style: 'destructive',
             onPress: () => {
               const runDelete = async () => {
-                await deleteScopedVfsEntry(
-                  runtime,
-                  scope,
-                  writableVfs,
-                  menuPath,
-                  {
-                    recursive: true,
-                    useUserVfsTurn,
-                    sessionId,
-                  },
-                );
+                await deleteScopedVfsEntry(runtime, scope, writableVfs, menuPath, {
+                  recursive: true,
+                  useUserVfsTurn,
+                  sessionId,
+                });
                 await reloadVfsListOnly();
               };
               runDelete().catch(err =>
@@ -846,11 +840,14 @@ export const VfsFileManager = forwardRef<
   // 不会往 workplace_dir_rule 表插入规则，导入出来的目录默认就是 rule_off。
   // 这里在导入后比对前后目录集合，给新增子目录调 setDirRule(defaultDirRuleForm)，
   // 让导入产生的目录与「新建目录」行为一致（默认开规则）。
-  const runImport = (kind: 'zip' | 'character-card', targetPath: string) => {
+  const runImport = (
+    kind: 'zip' | 'character-card',
+    targetPath: string,
+  ) => {
     const title = kind === 'zip' ? '导入 ZIP' : '导入角色卡';
     const successToast = kind === 'zip' ? 'ZIP 导入完成' : '已导入角色卡';
     Alert.alert(title, zipImportConfirmCopy(targetPath), [
-      {text: '取消', style: 'cancel'},
+      { text: '取消', style: 'cancel' },
       {
         text: '导入',
         style: 'destructive',
@@ -911,7 +908,7 @@ export const VfsFileManager = forwardRef<
       return;
     }
     setExportingZip(true);
-    exportVfsZip(runtime, scope, {directoryPath: targetPath})
+    exportVfsZip(runtime, scope, { directoryPath: targetPath })
       .then(result => {
         if (result === 'saved') {
           showToast('ZIP 已保存到所选位置');
@@ -1015,69 +1012,19 @@ export const VfsFileManager = forwardRef<
   const badgeColors = (tone: 'in' | 'follow' | 'muted') => {
     switch (tone) {
       case 'in':
-        return {backgroundColor: '#dbeafe', color: tokens.primary};
+        return { backgroundColor: '#dbeafe', color: tokens.primary };
       case 'muted':
-        return {backgroundColor: tokens.border, color: tokens.textSecondary};
+        return { backgroundColor: tokens.border, color: tokens.textSecondary };
       default:
-        return {backgroundColor: '#fef3c7', color: '#92400e'};
+        return { backgroundColor: '#fef3c7', color: '#92400e' };
     }
   };
 
-  // 内联 prompt 主体：iOS 走 KeyboardAvoidingView 包裹，Android 在 promptBox 上挂 translateY。
-  // promptBox 改用 Animated.View，Android 分支才挂 promptAvoidStyle（translateY）。
-  const promptBody = (
-    <View style={styles.promptBackdrop}>
-      <Animated.View
-        style={[
-          styles.promptBox,
-          {backgroundColor: tokens.surface},
-          Platform.OS === 'android' ? promptAvoidStyle : undefined,
-        ]}
-        onStartShouldSetResponder={() => true}
-      >
-        <Text style={[styles.promptTitle, {color: tokens.text}]}>
-          {prompt?.title}
-        </Text>
-        <TextInput
-          testID="vfs-prompt-input"
-          style={[
-            styles.promptInput,
-            {borderColor: tokens.border, color: tokens.text},
-          ]}
-          placeholder={prompt?.placeholder}
-          placeholderTextColor={tokens.textSecondary}
-          value={promptValue}
-          onChangeText={setPromptValue}
-          autoFocus
-        />
-        <View style={styles.promptActions}>
-          <Pressable onPress={() => setPrompt(null)}>
-            <Text style={{color: tokens.textSecondary}}>取消</Text>
-          </Pressable>
-          <Pressable
-            testID="vfs-prompt-submit"
-            onPress={() => {
-              const current = prompt;
-              if (!current) {
-                return;
-              }
-              setPrompt(null);
-              current
-                .onSubmit(promptValue)
-                .then(() => reloadVfsListOnly())
-                .catch(err => showToast(toastMessage('失败', err)));
-            }}
-          >
-            <Text style={{color: tokens.primary}}>确定</Text>
-          </Pressable>
-        </View>
-      </Animated.View>
-    </View>
-  );
+  // 内联 prompt（重命名/新建）拆到 vfs-file-manager/VfsPromptModal。
 
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <View style={[styles.header, {borderBottomColor: tokens.border}]}>
+    <View style={[styles.root, { backgroundColor: tokens.background }]}>
+      <View style={[styles.header, { borderBottomColor: tokens.border }]}>
         <View style={styles.navGroup}>
           <Pressable
             disabled={!canGoUp}
@@ -1091,7 +1038,7 @@ export const VfsFileManager = forwardRef<
           </Pressable>
           <Text
             testID="vfs-current-path"
-            style={[styles.path, {color: tokens.text}]}
+            style={[styles.path, { color: tokens.text }]}
             numberOfLines={1}
             ellipsizeMode="middle"
           >
@@ -1115,7 +1062,7 @@ export const VfsFileManager = forwardRef<
               onPress={() => setMoreOpen(true)}
               style={styles.iconBtn}
             >
-              <Text style={{color: tokens.text, fontSize: 20, lineHeight: 22}}>
+              <Text style={{ color: tokens.text, fontSize: 20, lineHeight: 22 }}>
                 ⋯
               </Text>
             </Pressable>
@@ -1124,16 +1071,24 @@ export const VfsFileManager = forwardRef<
       </View>
 
       {vfsBatch.active ? (
-        <VfsBatchHeader
+        <ManageHeader
+          batchMode
           selectedCount={vfsBatch.selectedCount}
-          onCancel={() => vfsBatch.exit()}
+          onCancelBatch={() => vfsBatch.exit()}
           onDelete={confirmBatchDelete}
-          onMove={() => setMovePickerOpen(true)}
+          hint="选择要操作的条目"
+          actions={[
+            {
+              label: '移动',
+              onPress: () => setMovePickerOpen(true),
+            },
+          ]}
+          style={vfsBatchHeaderWrapStyle}
         />
       ) : null}
 
       {loading ? (
-        <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+        <Text style={[styles.empty, { color: tokens.textSecondary }]}>
           加载中…
         </Text>
       ) : (
@@ -1141,16 +1096,16 @@ export const VfsFileManager = forwardRef<
           data={rows}
           keyExtractor={item => item.path}
           ListEmptyComponent={
-            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+            <Text style={[styles.empty, { color: tokens.textSecondary }]}>
               空目录
             </Text>
           }
-          renderItem={({item}) => {
+          renderItem={({ item }) => {
             const selected = vfsBatch.isSelected(item.path);
             return (
               <View
                 testID={`vfs-row-${item.name}`}
-                style={[styles.row, {borderBottomColor: tokens.border}]}
+                style={[styles.row, { borderBottomColor: tokens.border }]}
               >
                 {vfsBatch.active ? (
                   <View style={styles.batchCheckCol}>
@@ -1186,11 +1141,11 @@ export const VfsFileManager = forwardRef<
                     {item.kind === 'dir' ? '📁' : '📄'}
                   </Text>
                   <View style={styles.textBlock}>
-                    <Text style={{color: tokens.text}} numberOfLines={1}>
+                    <Text style={{ color: tokens.text }} numberOfLines={1}>
                       {item.name}
                     </Text>
                     <Text
-                      style={{color: tokens.textSecondary, fontSize: 12}}
+                      style={{ color: tokens.textSecondary, fontSize: 12 }}
                       numberOfLines={1}
                     >
                       {item.subtitle}
@@ -1224,7 +1179,7 @@ export const VfsFileManager = forwardRef<
                     style={styles.menuBtn}
                     hitSlop={8}
                   >
-                    <Text style={{color: tokens.textSecondary, fontSize: 18}}>
+                    <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>
                       ⋮
                     </Text>
                   </Pressable>
@@ -1260,27 +1215,16 @@ export const VfsFileManager = forwardRef<
         }}
       />
 
-      <AppModal
-        visible={prompt != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPrompt(null)}
-      >
-        {Platform.OS === 'ios' ? (
-          <KeyboardAvoidingView
-            behavior="padding"
-            style={styles.promptAvoidingRoot}
-          >
-            {promptBody}
-          </KeyboardAvoidingView>
-        ) : (
-          <View style={styles.promptAvoidingRoot}>{promptBody}</View>
-        )}
-      </AppModal>
+      {prompt ? (
+        <VfsPromptModal
+          state={prompt}
+          onCancel={() => setPrompt(null)}
+          onSubmit={submitPrompt}
+        />
+      ) : null}
 
-      <FileReferencePicker
+      <VfsMoveDirPicker
         visible={movePickerOpen}
-        mode="pick-directory"
         scope={scope}
         blockedSourcePaths={[...vfsBatch.selectedIds]}
         onClose={() => setMovePickerOpen(false)}
@@ -1292,68 +1236,4 @@ export const VfsFileManager = forwardRef<
   );
 });
 
-const styles = StyleSheet.create({
-  root: {flex: 1},
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  navGroup: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8},
-  iconBtn: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-  },
-  iconBtnDisabled: {opacity: 0.4},
-  path: {flex: 1, fontFamily: 'monospace', fontSize: 13},
-  toolbarActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  batchCheckCol: {
-    width: 28,
-    paddingLeft: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  item: {flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12},
-  kind: {fontSize: 18, marginRight: 8},
-  textBlock: {flex: 1, minWidth: 0},
-  badge: {borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2},
-  menuBtn: {paddingHorizontal: 12, paddingVertical: 8},
-  empty: {textAlign: 'center', marginTop: 32},
-  promptAvoidingRoot: {
-    flex: 1,
-  },
-  promptBackdrop: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
-  promptBox: {borderRadius: 12, padding: 16},
-  promptTitle: {fontSize: 16, fontWeight: '600', marginBottom: 12},
-  promptInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  promptActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 16,
-    marginTop: 16,
-  },
-});
+const styles = vfsFileManagerStyles;

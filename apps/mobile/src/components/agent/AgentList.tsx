@@ -14,27 +14,27 @@ import {
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {type AgentDefinition} from '@novel-master/core/agent';
+import { type AgentDefinition } from "@novel-master/core/agent";
 import {
   AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
   storedConfigInvalidReason,
 } from '@novel-master/core/config-forms/stored-config-validity';
-import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
-import {ManageHeader} from '@/components/batch/ManageHeader';
-import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
-import {ElevatedCard} from '@/components/ui/ElevatedCard';
-import {PrimaryButton} from '@/components/ui/PrototypeButtons';
-import {TextPromptModal} from '@/components/ui/TextPromptModal';
-import {useBatchSelection} from '@/hooks/useBatchSelection';
-import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
-import {useRuntime} from '@/hooks/useRuntime';
-import {resolveModelDisplayLabel} from '@/provider/model-display-label';
-import type {RootStackParamList} from '@/navigation/types';
-import {useTheme} from '@/theme/ThemeProvider';
-import {useToast} from '@/components/chrome/ToastHost';
-import {toastMessage} from '@/errors/toast-message';
-import {pickEntityIcon} from '@/utils/entity-icon';
+import {BatchCheckbox} from '../batch/BatchCheckbox';
+import {ManageHeader} from '../batch/ManageHeader';
+import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
+import {ElevatedCard} from '../ui/ElevatedCard';
+import {PrimaryButton} from '../ui/PrototypeButtons';
+import {TextPromptModal} from '../ui/TextPromptModal';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
+import {useRuntime} from '../../hooks/useRuntime';
+import {resolveModelDisplayLabel} from '../../provider/model-display-label';
+import type {RootStackParamList} from '../../navigation/types';
+import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
+import {pickEntityIcon} from '../../utils/entity-icon';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -63,11 +63,7 @@ function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
 
 const AGENT_ICONS = ['🤖', '⚡', '📝', '🎯', '✨', '🚀'];
 
-function agentMeta(
-  def: AgentDefinition,
-  modelLabel: string,
-  workspace: boolean,
-): string {
+function agentMeta(def: AgentDefinition, modelLabel: string, workspace: boolean): string {
   const steps = def.runtime?.maxSteps ?? 20;
   const modelPart = workspace ? `${modelLabel} · 工作区` : modelLabel;
   return `${modelPart} · ${AGENT_LIST_LABELS.maxSteps(steps)}`;
@@ -154,7 +150,9 @@ export function AgentList({onCreate}: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      reload().catch(err => showToast(toastMessage('加载智能体列表失败', err)));
+      reload().catch(err =>
+        showToast(toastMessage('加载智能体列表失败', err)),
+      );
     }, [reload, showToast]),
   );
 
@@ -190,7 +188,9 @@ export function AgentList({onCreate}: Props) {
           (async () => {
             await runtime.agentRegistry.delete(agentId);
             await reload();
-          })().catch(err => showToast(toastMessage('删除失败', err)));
+          })().catch(err =>
+            showToast(toastMessage('删除失败', err)),
+          );
         },
       },
     ]);
@@ -213,7 +213,9 @@ export function AgentList({onCreate}: Props) {
             }
             batch.exit();
             await reload();
-          })().catch(err => showToast(toastMessage('删除失败', err)));
+          })().catch(err =>
+            showToast(toastMessage('删除失败', err)),
+          );
         },
       },
     ]);
@@ -273,8 +275,7 @@ export function AgentList({onCreate}: Props) {
                 } else {
                   navigation.navigate('AgentEditor', {agentId: item.id});
                 }
-              }}
-            >
+              }}>
               {batch.active ? (
                 <BatchCheckbox
                   checked={batch.isSelected(item.id)}
@@ -282,8 +283,10 @@ export function AgentList({onCreate}: Props) {
                 />
               ) : (
                 <View
-                  style={[styles.avatar, {backgroundColor: tokens.bgSecondary}]}
-                >
+                  style={[
+                    styles.avatar,
+                    {backgroundColor: tokens.bgSecondary},
+                  ]}>
                   <Text style={styles.avatarIcon}>
                     {pickEntityIcon(item.id, AGENT_ICONS)}
                   </Text>
@@ -292,8 +295,7 @@ export function AgentList({onCreate}: Props) {
               <View style={styles.info}>
                 <Text
                   style={[styles.name, {color: tokens.text}]}
-                  numberOfLines={1}
-                >
+                  numberOfLines={1}>
                   {item.name}
                 </Text>
                 {item.configInvalid ? (
@@ -302,32 +304,22 @@ export function AgentList({onCreate}: Props) {
                       style={[
                         styles.invalidBadge,
                         {backgroundColor: tokens.warningMuted},
-                      ]}
-                    >
+                      ]}>
                       <Text
-                        style={[
-                          styles.invalidBadgeText,
-                          {color: tokens.warning},
-                        ]}
-                      >
+                        style={[styles.invalidBadgeText, {color: tokens.warning}]}>
                         {AGENT_LIST_LABELS.configInvalid}
                       </Text>
                     </View>
                     <Text
-                      style={[
-                        styles.meta,
-                        {color: tokens.textSecondary, flex: 1},
-                      ]}
-                      numberOfLines={1}
-                    >
+                      style={[styles.meta, {color: tokens.textSecondary, flex: 1}]}
+                      numberOfLines={1}>
                       {item.meta}
                     </Text>
                   </View>
                 ) : (
                   <Text
                     style={[styles.meta, {color: tokens.textSecondary}]}
-                    numberOfLines={2}
-                  >
+                    numberOfLines={2}>
                     {item.meta}
                   </Text>
                 )}
@@ -339,11 +331,9 @@ export function AgentList({onCreate}: Props) {
                     onPress={e => {
                       e.stopPropagation?.();
                       setMenuAgentId(item.id);
-                    }}
-                  >
+                    }}>
                     <Text
-                      style={[styles.menuDots, {color: tokens.textSecondary}]}
-                    >
+                      style={[styles.menuDots, {color: tokens.textSecondary}]}>
                       ⋮
                     </Text>
                   </Pressable>
@@ -386,11 +376,11 @@ export function AgentList({onCreate}: Props) {
         initialValue={renamePrompt?.initialName ?? ''}
         confirmLabel="保存"
         onClose={() => setRenamePrompt(undefined)}
-        onConfirm={async value => {
+        onConfirm={async values => {
           const prompt = renamePrompt;
           setRenamePrompt(undefined);
           if (prompt) {
-            await handleRename(prompt.agentId, value);
+            await handleRename(prompt.agentId, values[0]);
           }
         }}
       />

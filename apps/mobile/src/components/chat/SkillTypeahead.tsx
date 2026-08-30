@@ -3,9 +3,10 @@
  * 点选插入完整 `$技能名` token（形态对齐 AtPathTypeahead）。
  */
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Text} from 'react-native';
 import type {EffectiveSkill} from '@novel-master/core/skills';
 import {useTheme} from '@/theme/ThemeProvider';
+import {TypeaheadList, typeaheadItemStyle} from './TypeaheadList';
 
 /** 候选过滤：仅有效技能；名称 / 描述模糊匹配，最多 `limit` 条（默认 5）。 */
 export function filterSkillTypeaheadCandidates(
@@ -47,54 +48,38 @@ export function SkillTypeahead({
     return null;
   }
   return (
-    <View
-      style={[
-        styles.list,
-        {backgroundColor: tokens.surface, borderColor: tokens.border},
-      ]}
-      accessibilityLabel="技能建议"
-    >
+    <TypeaheadList accessibilityLabel="技能建议">
       {candidates.map(skill => (
         <Pressable
           key={skill.name}
           testID={`skill-typeahead-${skill.name}`}
-          style={styles.item}
-          onPress={() => onSelect(skill.name)}
-        >
+          style={[typeaheadItemStyle, styles.item]}
+          onPress={() => onSelect(skill.name)}>
           <Text style={{color: tokens.text, flexShrink: 1}} numberOfLines={1}>
             $ {skill.name}
           </Text>
           <Text
             style={[styles.tag, {color: tokens.textSecondary}]}
-            numberOfLines={1}
-          >
+            numberOfLines={1}>
             {skill.disabled
               ? '已关闭'
               : skill.domain === 'global'
-              ? '全局'
-              : skill.overridden
-              ? '项目 · 覆盖全局'
-              : '项目'}
+                ? '全局'
+                : skill.overridden
+                  ? '项目 · 覆盖全局'
+                  : '项目'}
           </Text>
         </Pressable>
       ))}
-    </View>
+    </TypeaheadList>
   );
 }
 
 const styles = StyleSheet.create({
-  list: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 10,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
   item: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
   },
   tag: {fontSize: 11, flexShrink: 0},
 });
