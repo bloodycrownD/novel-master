@@ -8,6 +8,7 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {NovelMasterProvider} from './runtime/novel-master-context';
 import {ThemeProvider, useTheme} from './theme/ThemeProvider';
 import {ToastHost} from './components/chrome/ToastHost';
+import {UpdateCheckHost} from './components/update/UpdateCheckHost';
 import {RootNavigator} from './navigation/RootNavigator';
 
 function AppContent() {
@@ -15,11 +16,10 @@ function AppContent() {
 
   return (
     <>
-      <StatusBar
-        barStyle={mode === 'dark' ? 'light-content' : 'dark-content'}
-      />
+      <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} />
       <ToastHost>
         <RootNavigator />
+        <UpdateCheckHost />
       </ToastHost>
     </>
   );

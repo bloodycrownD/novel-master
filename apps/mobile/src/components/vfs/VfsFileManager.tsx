@@ -73,7 +73,7 @@ import { useRuntime } from '../../hooks/useRuntime';
 import { importCharacterCard } from '../../services/vfs-character-card.service';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
 import { useTheme } from '../../theme/ThemeProvider';
-import { TemplatePullButton } from '../template/TemplatePullButton';
+import { TemplatePullButton } from '../prompt/TemplatePullButton';
 import { useToast } from '../chrome/ToastHost';
 import {
   VfsPromptModal,

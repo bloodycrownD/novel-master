@@ -5,7 +5,7 @@
 import React from 'react';
 import {StyleSheet, Switch, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
-import {cardRow, cardSurface, iconWrap} from './card-styles';
+import {cardRow, cardSurface, iconWrap} from '../ui/card-styles';
 
 type Props = {
   icon: string;

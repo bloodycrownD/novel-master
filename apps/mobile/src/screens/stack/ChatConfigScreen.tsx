@@ -2,10 +2,13 @@
  * 聊天相关偏好：流式输出、思考提示词、版本校验、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
-import type {CompactionConditions} from '@novel-master/core/compaction';
+import {
+  DEFAULT_HIDE_START_DEPTH,
+  type CompactionConditions,
+} from '@novel-master/core/compaction';
 import {useFocusEffect} from '@react-navigation/native';
 import {StyleSheet, Switch} from 'react-native';
-import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
+import {ProfileSwitchItem} from '../../components/profile/ProfileSwitchItem';
 import {FormField} from '../../components/form/FormField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {FormTextInput} from '../../components/form/FormTextInput';
@@ -22,12 +25,11 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 
-// 对齐 core 的 DEFAULT_HIDE_START_DEPTH
 const DEFAULT_CONDITIONS: CompactionConditions = {
   schemaVersion: 4,
   enabled: false,
   tokenRatio: 0.8,
-  hideStartDepth: 6,
+  hideStartDepth: DEFAULT_HIDE_START_DEPTH,
 };
 
 export function ChatConfigScreen() {
@@ -42,7 +44,9 @@ export function ChatConfigScreen() {
 
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState('0.8');
-  const [compactionHideStartDepth, setCompactionHideStartDepth] = useState('6');
+  const [compactionHideStartDepth, setCompactionHideStartDepth] = useState(
+    String(DEFAULT_HIDE_START_DEPTH),
+  );
   const [compactionSaving, setCompactionSaving] = useState(false);
 
   const refreshStreamPref = useCallback(async () => {
@@ -74,7 +78,9 @@ export function ChatConfigScreen() {
     setCompactionEnabled(c.enabled);
     setCompactionTokenRatio(c.tokenRatio != null ? String(c.tokenRatio) : '');
     setCompactionHideStartDepth(
-      c.hideStartDepth != null ? String(c.hideStartDepth) : '6',
+      c.hideStartDepth != null
+        ? String(c.hideStartDepth)
+        : String(DEFAULT_HIDE_START_DEPTH),
     );
   }, [runtime]);
 

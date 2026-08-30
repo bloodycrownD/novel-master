@@ -50,4 +50,28 @@ export default [
     files: ["**/*.{ts,tsx}"],
     rules: sharedTsRules,
   },
+
+  // oq21/typed-eslint：只对 services/runtime/storage 三个逻辑目录开类型感知
+  // lint。RN flat 基线已经注册了 @typescript-eslint 插件和 parser，这里补
+  // projectService 让规则拿到类型信息即可。fire-and-forget 的 promise 在 RN
+  // 侧非常多（infra/B-2、b2/B-5 就是这个缺口），所以先 warn 锁存量、不阻塞，
+  // package.json lint 的 --max-warnings 基线随新增 warn 同步抬高；
+  // components/screens 的存量更重，暂缓不开。
+  {
+    files: [
+      'src/services/**/*.{ts,tsx}',
+      'src/runtime/**/*.{ts,tsx}',
+      'src/storage/**/*.{ts,tsx}',
+    ],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'warn',
+      '@typescript-eslint/no-misused-promises': 'warn',
+    },
+  },
 ];

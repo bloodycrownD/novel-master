@@ -20,6 +20,14 @@ module.exports = {
   // __tests__/helpers 下是测试辅助函数（如 read-webview-dist），不是测试套件，
   // 别让 Jest 当测试跑而报 "must contain at least one test"。
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/__tests__/helpers/'],
+  // coverage 可见性（tests/G-6）：仅报告逻辑层目录，不设阈值门槛，
+  // `jest --coverage` 出报告即可、不阻塞流水线。
+  collectCoverageFrom: [
+    'src/services/**',
+    'src/storage/**',
+    'src/hooks/**',
+    'src/runtime/**',
+  ],
 
   moduleNameMapper: {
     '^react-native-reanimated$':

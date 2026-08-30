@@ -1,7 +1,7 @@
 /**
  * 「工具策略」区（comp-rest/C-3 自 AgentEditorForm 拆出）：
  * 模式下拉 + 白/黑名单选择；默认模式下的内置工具计数文案是
- * 硬编码源码锁（__tests__/agent-editor-form-tool-count.test.ts），
+ * 硬编码源码锁（__tests__/agent-editor-form-tool-count.test.tsx 行为断言锁展示文案），
  * 改内置工具时需同步这里的计数。
  */
 import React from 'react';

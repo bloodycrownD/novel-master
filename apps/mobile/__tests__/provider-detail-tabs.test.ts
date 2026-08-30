@@ -5,6 +5,11 @@
  * - T-T4：ProvidersScreen 的 BottomSheetMenu 无「编辑」项
  *
  * 整屏组件依赖太重（runtime/navigation/modals），用源码断言更稳，与 desktop 对称。
+ *
+ * 源码契约测豁免（tests/G-3）：ProviderDetailScreen / ProvidersScreen 依赖
+ * navigation 栈、runtime Context 与多个二级弹层，TestRenderer 行为化需要逐层
+ * mock 整条导航链，代价远超收益；tab 集合与默认值属于静态配置，源码断言
+ * 的脆性风险可接受，待集成/e2e 层补行为覆盖。
  */
 import {describe, expect, it} from '@jest/globals';
 import {readFileSync} from 'fs';

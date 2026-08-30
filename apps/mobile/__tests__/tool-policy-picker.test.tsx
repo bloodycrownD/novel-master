@@ -8,8 +8,6 @@
  * sheet 通过 FormOverlayHost 顶起，所以测试要在 FormOverlayProvider 内渲染。
  */
 import React from 'react';
-import {readFileSync} from 'node:fs';
-import {join} from 'node:path';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
@@ -261,20 +259,28 @@ describe('ToolPolicyPicker (mobile) — T-P1/T-P2/T-P3', () => {
   });
 });
 
-describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（源码契约）', () => {
+describe('ToolPolicyPicker (mobile) — C-1 键盘避让接线（行为断言）', () => {
   it('ModalShell 接 adaptive 策略并传 iosTranslateY: true（FormOverlayHost 无 KAV 外壳，iOS 由面板自身位移）', () => {
-    const src = readFileSync(
-      join(
-        __dirname,
-        '..',
-        'src',
-        'components',
-        'agent',
-        'ToolPolicyPicker.tsx',
-      ),
-      'utf8',
+    const renderer = renderPicker({selected: [], onChange: jest.fn()});
+
+    // 打开 sheet：ModalShell 由 overlay.show 挂载，靠 keyboardAvoid prop 定位
+    const trigger = findPressableByChildText(renderer.root, '未选择工具（0/10）');
+    expect(trigger).toBeTruthy();
+    act(() => {
+      trigger.props.onPress();
+    });
+
+    const shells = renderer.root.findAll(
+      (n: {props?: {keyboardAvoid?: unknown}}) =>
+        n.props != null && n.props.keyboardAvoid != null,
     );
-    expect(src).toContain('maxHeightRatio: 0.75');
-    expect(src).toContain('iosTranslateY: true');
+    expect(shells.length).toBeGreaterThanOrEqual(1);
+    expect(shells[0].props.keyboardAvoid).toEqual({
+      kind: 'adaptive',
+      maxHeightRatio: 0.75,
+      iosTranslateY: true,
+    });
+    // FormOverlayHost 场景下必须 standalone（不包 AppModal/KAV 外壳）
+    expect(shells[0].props.standalone).toBe(true);
   });
 });

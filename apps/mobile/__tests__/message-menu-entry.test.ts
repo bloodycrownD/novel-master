@@ -1,5 +1,10 @@
 /**
- * T-MN1 / T-MN2：消息菜单项集合 + 右上角 ⋯ 入口接线（源码契约）。
+ * T-MN1 / T-MN2：消息菜单项集合 + 右上角 ⋯ 入口接线。
+ *
+ * 分级（tests/G-3）：前两段断的是 webview 侧脚本文本（menu.ts / MessageRow /
+ * bind-shell-events），与 boot-script/annotate-* 同类，保留源码契约；
+ * 第三段 legacy MessageList（RN 组件）因依赖消息列表全链渲染，行为化代价高，
+ * 源码契约测豁免，保留源码断言。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';

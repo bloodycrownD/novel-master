@@ -10,8 +10,8 @@ import {useBatchDeleteConfirm} from '@/hooks/useBatchDeleteConfirm';
 
 const mockShowToast = jest.fn();
 
-jest.mock('@/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+jest.mock('@/services/app-toast', () => ({
+  showAppToast: (...args: unknown[]) => mockShowToast(...args),
 }));
 
 jest.mock('@/errors/toast-message', () => ({

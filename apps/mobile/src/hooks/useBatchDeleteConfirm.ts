@@ -7,7 +7,7 @@
  */
 import {useCallback} from 'react';
 import {Alert} from 'react-native';
-import {useToast} from '../components/chrome/ToastHost';
+import {showAppToast} from '../services/app-toast';
 import {toastMessage} from '../errors/toast-message';
 
 export interface BatchDeleteConfirmOptions<T> {
@@ -26,8 +26,6 @@ export function useBatchDeleteConfirm<T>({
   deleteOne,
   onDone,
 }: BatchDeleteConfirmOptions<T>) {
-  const {showToast} = useToast();
-
   return useCallback(
     (items: readonly T[]) => {
       if (items.length === 0) {
@@ -44,11 +42,11 @@ export function useBatchDeleteConfirm<T>({
                 await deleteOne(item);
               }
               await onDone();
-            })().catch(err => showToast(toastMessage('删除失败', err)));
+            })().catch(err => showAppToast(toastMessage('删除失败', err)));
           },
         },
       ]);
     },
-    [title, message, deleteOne, onDone, showToast],
+    [title, message, deleteOne, onDone],
   );
 }

@@ -5,6 +5,10 @@
  *   传 {expectedVersion}（对齐 desktop edadb49，否则必撞 VFS CONFLICT）。
  *
  * 整屏组件依赖太重（runtime/keyboard/modal），按本仓惯例钉源码契约。
+ *
+ * 源码契约测豁免（tests/G-3）：NewSkillModal 依赖 runtime Context、键盘避让与
+ * 弹层体系，TestRenderer 行为化需 mock 整条链；本文件锁的是 zip 落盘前的
+ * 保留名校验顺序与乐观锁版本透传，属于调用时序契约，源码断言保留。
  */
 import {describe, expect, it} from '@jest/globals';
 import {readFileSync} from 'node:fs';

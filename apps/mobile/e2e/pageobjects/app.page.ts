@@ -159,7 +159,9 @@ export class AppPage {
     const title = await $('android=new UiSelector().text("选择工作区模型")');
     await title.waitForDisplayed({timeout: 10000});
 
-    const empty = await $('android=new UiSelector().textContains("暂无已保存模型")');
+    const empty = await $(
+      'android=new UiSelector().textContains("暂无已保存模型")',
+    );
     if (await empty.isExisting()) {
       throw new Error(
         '[e2e] No saved workspace models. Run e2e/scripts/inject-tool-turn-fixture ' +
@@ -190,7 +192,9 @@ export class AppPage {
       }
     }
 
-    throw new Error('[e2e] Model picker opened but no selectable model row found.');
+    throw new Error(
+      '[e2e] Model picker opened but no selectable model row found.',
+    );
   }
 
   /** Full UI seed: project → session → conversation chat panel. */

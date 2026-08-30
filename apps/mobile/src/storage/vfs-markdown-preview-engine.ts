@@ -4,14 +4,14 @@
  * Default: `webview`. Override via KKV `vfsMarkdownPreviewEngine` (`rn` | `webview`)
  * for rollback without reinstalling.
  */
+import {APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE} from './app-ui-keys';
+import {readEnumPref} from './app-ui-pref-io';
 import type {AppUiPreferences} from './app-ui-prefs';
 
 export type VfsMarkdownPreviewEngine = 'rn' | 'webview';
 
-export const APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE =
-  'vfsMarkdownPreviewEngine';
-
 const DEFAULT_ENGINE: VfsMarkdownPreviewEngine = 'webview';
+const ALLOWED_ENGINES: readonly VfsMarkdownPreviewEngine[] = ['rn', 'webview'];
 
 export function defaultVfsMarkdownPreviewEngine(): VfsMarkdownPreviewEngine {
   return DEFAULT_ENGINE;
@@ -20,16 +20,10 @@ export function defaultVfsMarkdownPreviewEngine(): VfsMarkdownPreviewEngine {
 export async function readVfsMarkdownPreviewEngine(
   appUi: AppUiPreferences | null | undefined,
 ): Promise<VfsMarkdownPreviewEngine> {
-  if (appUi == null) {
-    return DEFAULT_ENGINE;
-  }
-  try {
-    const raw = await appUi.get(APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE);
-    if (raw === 'rn' || raw === 'webview') {
-      return raw;
-    }
-  } catch {
-    // fall through
-  }
-  return DEFAULT_ENGINE;
+  return readEnumPref(
+    appUi,
+    APP_UI_KEY_VFS_MARKDOWN_PREVIEW_ENGINE,
+    ALLOWED_ENGINES,
+    DEFAULT_ENGINE,
+  );
 }

@@ -434,6 +434,9 @@ describe('T-SD1 SessionDetailScreen 改名广播', () => {
 });
 
 // ── T-SD2 useChatTabScope session-renamed 订阅契约（源码正则断言） ────────
+// 源码契约测豁免（tests/G-3）：useChatTabScope 订阅/清理是 effect 接线契约，
+// 行为化需要拉起整个 chat tab（runtime+navigation+DeviceEventEmitter 全链），
+// 代价过高；本文件其余部分已是 TestRenderer 行为断言，仅此 describe 保留源码断言。
 describe('T-SD2 useChatTabScope session-renamed 订阅契约', () => {
   it('源码含 session-renamed 订阅、reloadLists 调用与 sub.remove() 清理', () => {
     const source = fs.readFileSync(

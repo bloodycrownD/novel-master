@@ -55,7 +55,7 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
-jest.mock('@/provider/model-display-label', () => ({
+jest.mock('@/services/model-display-label', () => ({
   resolveModelDisplayLabel: jest.fn().mockResolvedValue('gpt-4'),
 }));
 

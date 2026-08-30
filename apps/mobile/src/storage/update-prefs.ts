@@ -2,7 +2,6 @@
  * Read/write helpers for update-check Client UI preferences.
  */
 import {
-  APP_UI_DEFAULTS,
   APP_UI_KEY_UPDATES_AUTO_CHECK,
   APP_UI_KEY_UPDATES_DISMISSED_VERSION,
   APP_UI_KEY_UPDATES_LAST_CHECK_AT,
@@ -10,23 +9,22 @@ import {
   APP_UI_KEY_UPDATES_LAST_CHECK_STATUS,
   APP_UI_KEY_UPDATES_SNOOZE_UNTIL,
 } from './app-ui-keys';
+import {readBoolPref, writeBoolPref} from './app-ui-pref-io';
 import type {AppUiPreferences} from './app-ui-prefs';
-import type {UpdateCheckData} from '@/update-check/types';
+import type {UpdateCheckData} from '../update-check/types';
 
 /** Reads auto-check toggle (default on). */
 export async function readUpdatesAutoCheck(
   appUi: AppUiPreferences,
 ): Promise<boolean> {
-  const raw = await appUi.get(APP_UI_KEY_UPDATES_AUTO_CHECK);
-  const value = raw ?? APP_UI_DEFAULTS[APP_UI_KEY_UPDATES_AUTO_CHECK];
-  return value === 'true';
+  return readBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, true);
 }
 
 export async function writeUpdatesAutoCheck(
   appUi: AppUiPreferences,
   enabled: boolean,
 ): Promise<void> {
-  await appUi.set(APP_UI_KEY_UPDATES_AUTO_CHECK, enabled ? 'true' : 'false');
+  await writeBoolPref(appUi, APP_UI_KEY_UPDATES_AUTO_CHECK, enabled);
 }
 
 export async function readDismissedVersion(
@@ -77,7 +75,9 @@ export async function readSnoozeUntil(
   return appUi.get(APP_UI_KEY_UPDATES_SNOOZE_UNTIL);
 }
 
-export async function writeSnoozeUntil(appUi: AppUiPreferences): Promise<void> {
+export async function writeSnoozeUntil(
+  appUi: AppUiPreferences,
+): Promise<void> {
   const until = new Date(Date.now() + UPDATE_SNOOZE_MS).toISOString();
   await appUi.set(APP_UI_KEY_UPDATES_SNOOZE_UNTIL, until);
 }
@@ -89,10 +89,7 @@ export async function persistUpdateCheckResult(
 ): Promise<void> {
   const now = new Date().toISOString();
   await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_AT, now);
-  await appUi.set(
-    APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION,
-    data.remoteVersion,
-  );
+  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION, data.remoteVersion);
   await appUi.set(
     APP_UI_KEY_UPDATES_LAST_CHECK_STATUS,
     data.status === 'update-available' ? 'available' : 'up-to-date',

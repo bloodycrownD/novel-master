@@ -1,22 +1,10 @@
 /**
  * VfsFileManager 内联单输入弹窗（重命名/新建文件/新建目录）。
- *
- * 骨架沿用 AppModal（ModalShell 统一骨架就位前不切换）；
- * iOS 走 KeyboardAvoidingView，Android 在弹层上挂 translateY 避让。
+ * 骨架复用 ModalShell（居中卡片 + translate 0.5 键盘避让）。
  */
 import React, {useEffect, useState} from 'react';
-import {
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import Animated from 'react-native-reanimated';
-import {KeyboardAvoidingView} from 'react-native-keyboard-controller';
-import {AppModal} from '@/components/ui/AppModal';
-import {useAndroidModalKeyboardAvoid} from '@/hooks/useAndroidModalKeyboardAvoid';
+import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {ModalShell} from '@/components/ui/ModalShell';
 import {useTheme} from '@/theme/ThemeProvider';
 
 export type VfsPromptState = {
@@ -39,75 +27,45 @@ export function VfsPromptModal({state, onCancel, onSubmit}: Props) {
   useEffect(() => {
     setValue(state.defaultValue);
   }, [state]);
-  // 内联 prompt 是居中弹层（promptBackdrop justifyContent center），
-  // 上移键盘高度的一半就能露出输入框。
-  const promptAvoidStyle = useAndroidModalKeyboardAvoid(0.5);
-
-  const promptBody = (
-    <View style={styles.promptBackdrop}>
-      <Animated.View
-        style={[
-          styles.promptBox,
-          {backgroundColor: tokens.surface},
-          Platform.OS === 'android' ? promptAvoidStyle : undefined,
-        ]}
-        onStartShouldSetResponder={() => true}>
-        <Text style={[styles.promptTitle, {color: tokens.text}]}>
-          {state.title}
-        </Text>
-        <TextInput
-          testID="vfs-prompt-input"
-          style={[
-            styles.promptInput,
-            {borderColor: tokens.border, color: tokens.text},
-          ]}
-          placeholder={state.placeholder}
-          placeholderTextColor={tokens.textSecondary}
-          value={value}
-          onChangeText={setValue}
-          autoFocus
-        />
-        <View style={styles.promptActions}>
-          <Pressable onPress={onCancel}>
-            <Text style={{color: tokens.textSecondary}}>取消</Text>
-          </Pressable>
-          <Pressable testID="vfs-prompt-submit" onPress={() => onSubmit(value)}>
-            <Text style={{color: tokens.primary}}>确定</Text>
-          </Pressable>
-        </View>
-      </Animated.View>
-    </View>
-  );
 
   return (
-    <AppModal
+    <ModalShell
       visible
-      transparent
+      onClose={onCancel}
+      variant="center"
       animationType="fade"
-      onRequestClose={onCancel}>
-      {Platform.OS === 'ios' ? (
-        <KeyboardAvoidingView
-          behavior="padding"
-          style={styles.promptAvoidingRoot}>
-          {promptBody}
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={styles.promptAvoidingRoot}>{promptBody}</View>
-      )}
-    </AppModal>
+      backdropOpacity={0.45}
+      keyboardAvoid={{kind: 'translate', fraction: 0.5}}
+      keyboardVerticalOffset={24}
+      panelStyle={styles.promptBox}>
+      <Text style={[styles.promptTitle, {color: tokens.text}]}>
+        {state.title}
+      </Text>
+      <TextInput
+        testID="vfs-prompt-input"
+        style={[
+          styles.promptInput,
+          {borderColor: tokens.border, color: tokens.text},
+        ]}
+        placeholder={state.placeholder}
+        placeholderTextColor={tokens.textSecondary}
+        value={value}
+        onChangeText={setValue}
+        autoFocus
+      />
+      <View style={styles.promptActions}>
+        <Pressable onPress={onCancel}>
+          <Text style={{color: tokens.textSecondary}}>取消</Text>
+        </Pressable>
+        <Pressable testID="vfs-prompt-submit" onPress={() => onSubmit(value)}>
+          <Text style={{color: tokens.primary}}>确定</Text>
+        </Pressable>
+      </View>
+    </ModalShell>
   );
 }
 
 const styles = StyleSheet.create({
-  promptAvoidingRoot: {
-    flex: 1,
-  },
-  promptBackdrop: {
-    flex: 1,
-    justifyContent: 'center',
-    padding: 24,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
   promptBox: {borderRadius: 12, padding: 16},
   promptTitle: {fontSize: 16, fontWeight: '600', marginBottom: 12},
   promptInput: {

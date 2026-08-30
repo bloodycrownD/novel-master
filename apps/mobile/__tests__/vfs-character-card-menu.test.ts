@@ -1,5 +1,10 @@
 /**
  * Step 6 / T-C12 入口：更多菜单「导入角色卡」源码契约（对齐 ZIP 测法）。
+ *
+ * 源码契约测豁免（tests/G-3）：VfsFileManager 是整屏文件管理器，渲染需要
+ * runtime/VFS 列表/长按菜单/Alert 一整套链路，TestRenderer 行为化代价过高；
+ * 本文件锁的是菜单项集合与 Alert 文案接线，周事维度由 vfs-file-manager.*
+ * 系列 TestRenderer 测试覆盖，此处保留源码契约。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';

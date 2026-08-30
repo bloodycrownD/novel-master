@@ -1,15 +1,16 @@
 /**
  * 自动更新检查结果首屏弹窗（已最新 / 检查失败）。
  *
- * 使用 react-native 原生 Modal，而非 AppModal：本组件由 RootNavigator 在
- * NavigationContainer 之外渲染，AppModal 依赖 useIsFocused() 会触发
+ * 使用 react-native 原生 Modal，而非 AppModal：本组件由 App 根的
+ * UpdateCheckHost 在 NavigationContainer 之外渲染，AppModal 依赖 useIsFocused() 会触发
  * "Couldn't find a navigation object" 崩溃。应用级首屏弹窗无需 focus gate。
  */
 import React from 'react';
 import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '@/theme/ThemeProvider';
+import type {UpdateCheckResultKind} from '@/services/update-check-flow';
 
-export type UpdateCheckResultKind = 'up-to-date' | 'error';
+export type {UpdateCheckResultKind};
 
 export const UPDATE_CHECK_RESULT_TITLE = '版本检查';
 export const UPDATE_CHECK_UP_TO_DATE_MESSAGE = '当前已是最新版本';

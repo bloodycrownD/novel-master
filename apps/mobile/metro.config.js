@@ -143,7 +143,9 @@ function resolveCorePathAlias(moduleName) {
 }
 
 function resolveNodeBuiltin(moduleName) {
-  const bare = moduleName.startsWith('node:') ? moduleName.slice(5) : moduleName;
+  const bare = moduleName.startsWith('node:')
+    ? moduleName.slice(5)
+    : moduleName;
   const mapped = nodeBuiltinAliases[bare];
   if (mapped != null && fs.existsSync(mapped)) {
     return mapped;
@@ -289,7 +291,10 @@ const config = {
         return {type: 'sourceFile', filePath: markdownEntitiesJson};
       }
 
-      if (moduleName === 'entities/lib/decode' && fs.existsSync(entitiesDecode)) {
+      if (
+        moduleName === 'entities/lib/decode' &&
+        fs.existsSync(entitiesDecode)
+      ) {
         return {type: 'sourceFile', filePath: entitiesDecode};
       }
       if (

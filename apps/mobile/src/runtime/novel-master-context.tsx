@@ -13,13 +13,20 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
-import {ActivityIndicator, Button, StyleSheet, Text, View} from 'react-native';
-import {closeMobileConnection} from '@/db/connection';
+import {
+  ActivityIndicator,
+  Button,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from 'react-native';
+import {closeMobileConnection} from '../db/connection';
 import {
   createAppUiPreferences,
   type AppUiPreferences,
-} from '@/storage/app-ui-prefs';
-import {syncAppVersionForRichRender} from '@/storage/app-version-guard';
+} from '../storage/app-ui-prefs';
+import {syncAppVersionForRichRender} from '../storage/app-version-guard';
 import {createMobileNovelMasterRuntime} from './create-mobile-runtime';
 import mobilePackage from '../../package.json';
 import {
@@ -29,6 +36,7 @@ import {
   type MobileScopeSnapshot,
 } from './mobile-scope';
 import type {MobileNovelMasterRuntime} from './types';
+import {tokensForMode} from '../theme/tokens';
 
 export type RuntimeStatus = 'loading' | 'ready' | 'error';
 
@@ -58,10 +66,10 @@ function formatBootstrapError(err: unknown): string {
 }
 
 export function NovelMasterProvider({children}: {children: ReactNode}) {
+  // 本组件在 ThemeProvider 之外渲染，直接按系统色取 token（错误屏要适配 dark）。
+  const colorScheme = useColorScheme();
   const [status, setStatus] = useState<RuntimeStatus>('loading');
-  const [runtime, setRuntime] = useState<
-    MobileNovelMasterRuntime | undefined
-  >();
+  const [runtime, setRuntime] = useState<MobileNovelMasterRuntime | undefined>();
   const [appUi, setAppUi] = useState<AppUiPreferences | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [scope, setScope] = useState<MobileScopeSnapshot>({
@@ -99,14 +107,15 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       setRichRenderEpoch(epoch);
       setScope(loaded);
       setStatus('ready');
-    })().catch(err => {
-      if (!cancelled) {
-        setRuntime(undefined);
-        setAppUi(undefined);
-        setError(formatBootstrapError(err));
-        setStatus('error');
-      }
-    });
+    })()
+      .catch(err => {
+        if (!cancelled) {
+          setRuntime(undefined);
+          setAppUi(undefined);
+          setError(formatBootstrapError(err));
+          setStatus('error');
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -180,10 +189,13 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
   }
 
   if (status === 'error') {
+    const errorMessageColor = tokensForMode(
+      colorScheme === 'dark' ? 'dark' : 'light',
+    ).textSecondary;
     return (
       <View style={styles.centered}>
         <Text style={styles.errorTitle}>启动失败</Text>
-        <Text style={styles.errorMessage}>{error}</Text>
+        <Text style={[styles.errorMessage, {color: errorMessageColor}]}>{error}</Text>
         <Button title="重试" onPress={retry} />
       </View>
     );
@@ -214,5 +226,5 @@ const styles = StyleSheet.create({
   },
   loadingText: {marginTop: 8, fontSize: 16},
   errorTitle: {fontSize: 18, fontWeight: '600'},
-  errorMessage: {fontSize: 14, textAlign: 'center', color: '#666'},
+  errorMessage: {fontSize: 14, textAlign: 'center'},
 });

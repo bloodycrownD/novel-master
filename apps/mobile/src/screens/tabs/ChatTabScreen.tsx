@@ -27,8 +27,8 @@ import { ChatSessionListPanel } from './chat-tab/ChatSessionListPanel';
 import { ChatTabProvider, useChatTabContext } from './chat-tab/ChatTabProvider';
 import {
   ChatTabNavigationProvider,
-  useChatTabNavigation,
 } from './chat-tab/ChatTabNavigationProvider';
+import {useChatTabNavigation} from '@/navigation/ChatTabNavContext';
 import { useChatTabController } from './chat-tab/useChatTabController';
 
 type Nav = CompositeNavigationProp<

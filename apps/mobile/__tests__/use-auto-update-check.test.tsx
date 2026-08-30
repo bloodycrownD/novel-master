@@ -1,7 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {useAutoUpdateCheck} from '@/hooks/useAutoUpdateCheck';
+import {UpdateCheckHost} from '@/components/update/UpdateCheckHost';
 
 const {isSnoozed: isSnoozedActual} = jest.requireActual<
   typeof import('@/storage/update-prefs')
@@ -68,8 +68,7 @@ jest.mock('react-native', () => ({
 }));
 
 function TestHost() {
-  const ui = useAutoUpdateCheck();
-  return <>{ui}</>;
+  return <UpdateCheckHost />;
 }
 
 async function flushAutoCheck(): Promise<void> {

@@ -17,27 +17,24 @@ export async function sampleScrollAnchor(
   const row = await $(`.row.message[data-id="${messageId}"]`);
   await row.waitForExist({timeout: 15000});
 
-  return browser.execute(
-    (id: string) => {
-      const scroller = document.getElementById('scroller');
-      const el = document.querySelector(
-        '.row.message[data-id="' + id + '"]',
-      ) as HTMLElement | null;
-      if (scroller == null || el == null) {
-        return {scrollTop: 0, anchorTop: 0, anchorVisible: false};
-      }
-      const rect = el.getBoundingClientRect();
-      const viewTop = scroller.getBoundingClientRect().top;
-      const viewBottom = viewTop + scroller.clientHeight;
-      const visible = rect.bottom > viewTop && rect.top < viewBottom;
-      return {
-        scrollTop: scroller.scrollTop,
-        anchorTop: rect.top - viewTop,
-        anchorVisible: visible,
-      };
-    },
-    messageId,
-  );
+  return browser.execute((id: string) => {
+    const scroller = document.getElementById('scroller');
+    const el = document.querySelector(
+      '.row.message[data-id="' + id + '"]',
+    ) as HTMLElement | null;
+    if (scroller == null || el == null) {
+      return {scrollTop: 0, anchorTop: 0, anchorVisible: false};
+    }
+    const rect = el.getBoundingClientRect();
+    const viewTop = scroller.getBoundingClientRect().top;
+    const viewBottom = viewTop + scroller.clientHeight;
+    const visible = rect.bottom > viewTop && rect.top < viewBottom;
+    return {
+      scrollTop: scroller.scrollTop,
+      anchorTop: rect.top - viewTop,
+      anchorVisible: visible,
+    };
+  }, messageId);
 }
 
 /** 与 WebView transcript NEAR_BOTTOM_THRESHOLD_PX 对齐。 */

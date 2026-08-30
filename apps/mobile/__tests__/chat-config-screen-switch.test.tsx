@@ -34,7 +34,7 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
-jest.mock('@/components/ui/ProfileSwitchItem', () => {
+jest.mock('@/components/profile/ProfileSwitchItem', () => {
   const mockReact = require('react');
   const {Pressable, Text} = require('react-native');
   return {

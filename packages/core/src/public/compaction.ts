@@ -8,6 +8,7 @@ export { depthByMessageId, listVisibleForDepth } from "../domain/depth/logic/dep
 export { resolveHideMessageRange } from "../domain/depth/logic/resolve-hide-message-range.js";
 export type { HideMessageSeqRange } from "../domain/depth/logic/resolve-hide-message-range.js";
 export type { CompactionConditions } from "../domain/compaction-conditions/model/compaction-conditions.js";
+export { DEFAULT_HIDE_START_DEPTH } from "../domain/compaction-conditions/model/compaction-conditions.js";
 export { compactionConditionsSchema } from "../domain/compaction-conditions/model/compaction-conditions.schema.js";
 export {
   CompactionConditionsError,

@@ -2,7 +2,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {AppHeader} from '@/components/chrome/AppHeader';
-import type {ChatTabNavigationContextValue} from '@/screens/tabs/chat-tab/ChatTabNavigationProvider';
+import type {ChatTabNavigationContextValue} from '@/navigation/ChatTabNavContext';
 
 const mockNavState = {
   chatSubview: 'list' as 'list' | 'conversation',
@@ -55,7 +55,7 @@ jest.mock('@/navigation/HeaderContext', () => ({
   useHeaderContext: () => ({chat: undefined, stackOverride: undefined}),
 }));
 
-jest.mock('@/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
+jest.mock('@/navigation/ChatTabNavContext', () => ({
   useChatTabNavigationOptional: () => mockChatNav,
 }));
 

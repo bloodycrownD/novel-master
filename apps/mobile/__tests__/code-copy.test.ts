@@ -2,6 +2,11 @@
  * T-CB19~T-CB23：copyCode 链路契约测试（cr-fix MF-12）。
  * Jest 为 RN 环境（无 jsdom），照 mermaid-fullscreen 样板走
  * 「读源码 + dist」契约测试，不改实现代码。
+ *
+ * 分级（tests/G-3）：web 源（shared/code-copy.ts、bind、main）属 webview 脚本
+ * 文本类，保留；T-CB22 RN 双宿主断的是 WebView onMessage → Clipboard 的跨边界
+ * 接线，行为化需要真 WebView 发消息，TestRenderer 无法触达，按脚本接线契约
+ * 保留源码断言。
  */
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';

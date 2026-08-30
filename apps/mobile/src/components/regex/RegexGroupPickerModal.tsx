@@ -1,5 +1,6 @@
 /**
  * Workspace regex group picker: lists groups and sets PersistentState current regex group.
+ * 骨架复用 ModalShell（贴底 sheet，无输入不避让键盘）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
@@ -8,11 +9,10 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  View,
 } from 'react-native';
 import type {RegexGroup} from '@novel-master/core/regex';
 import {useRuntime} from '@/hooks/useRuntime';
-import {AppModal} from '@/components/ui/AppModal';
+import {ModalShell} from '@/components/ui/ModalShell';
 import {useTheme} from '@/theme/ThemeProvider';
 
 function groupTitle(group: RegexGroup): string {
@@ -68,83 +68,67 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
   const disabledSelected = currentId == null || currentId === '';
 
   return (
-    <AppModal
+    <ModalShell
       visible={visible}
+      onClose={onClose}
+      variant="bottom"
       animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}
-        >
-          <Text style={[styles.title, {color: tokens.text}]}>
-            选择当前正则组
-          </Text>
-          {loading ? (
-            <ActivityIndicator style={styles.loader} />
-          ) : (
-            <FlatList
-              data={rows}
-              keyExtractor={item => item.groupId}
-              ListHeaderComponent={
-                <Pressable
-                  style={[
-                    styles.row,
-                    {borderBottomColor: tokens.border},
-                    disabledSelected && {backgroundColor: tokens.background},
-                  ]}
-                  onPress={selectNone}
-                >
-                  <Text style={{color: tokens.text, flex: 1}}>不启用</Text>
-                  {disabledSelected ? (
-                    <Text style={{color: tokens.primary}}>当前</Text>
-                  ) : null}
-                </Pressable>
-              }
-              ListEmptyComponent={
-                <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                  暂无正则组。请先在「正则配置」页创建。
+      panelStyle={styles.sheet}>
+      <Text style={[styles.title, {color: tokens.text}]}>选择当前正则组</Text>
+      {loading ? (
+        <ActivityIndicator style={styles.loader} />
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={item => item.groupId}
+          ListHeaderComponent={
+            <Pressable
+              style={[
+                styles.row,
+                {borderBottomColor: tokens.border},
+                disabledSelected && {backgroundColor: tokens.background},
+              ]}
+              onPress={selectNone}>
+              <Text style={{color: tokens.text, flex: 1}}>不启用</Text>
+              {disabledSelected ? (
+                <Text style={{color: tokens.primary}}>当前</Text>
+              ) : null}
+            </Pressable>
+          }
+          ListEmptyComponent={
+            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+              暂无正则组。请先在「正则配置」页创建。
+            </Text>
+          }
+          renderItem={({item}) => {
+            const selected = item.groupId === currentId;
+            return (
+              <Pressable
+                style={[
+                  styles.row,
+                  {borderBottomColor: tokens.border},
+                  selected && {backgroundColor: tokens.background},
+                ]}
+                onPress={() => selectGroup(item.groupId)}>
+                <Text style={{color: tokens.text, flex: 1}}>
+                  {groupTitle(item)}
                 </Text>
-              }
-              renderItem={({item}) => {
-                const selected = item.groupId === currentId;
-                return (
-                  <Pressable
-                    style={[
-                      styles.row,
-                      {borderBottomColor: tokens.border},
-                      selected && {backgroundColor: tokens.background},
-                    ]}
-                    onPress={() => selectGroup(item.groupId)}
-                  >
-                    <Text style={{color: tokens.text, flex: 1}}>
-                      {groupTitle(item)}
-                    </Text>
-                    {selected ? (
-                      <Text style={{color: tokens.primary}}>当前</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              }}
-            />
-          )}
-          <Pressable onPress={onClose} style={styles.cancelBtn}>
-            <Text style={{color: tokens.textSecondary}}>取消</Text>
-          </Pressable>
-        </Pressable>
+                {selected ? (
+                  <Text style={{color: tokens.primary}}>当前</Text>
+                ) : null}
+              </Pressable>
+            );
+          }}
+        />
+      )}
+      <Pressable onPress={onClose} style={styles.cancelBtn}>
+        <Text style={{color: tokens.textSecondary}}>取消</Text>
       </Pressable>
-    </AppModal>
+    </ModalShell>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
   sheet: {
     maxHeight: '70%',
     borderTopLeftRadius: 12,

@@ -1,5 +1,7 @@
 /**
  * Chat tab 顶栏导航态：供 AppHeader / Android 返回消费。
+ * context、hook 与类型定义在 navigation/ChatTabNavContext（cr-fix-spec
+ * arch/C-1），本组件只负责聚合并写入，避免 components 反向依赖 screens。
  */
 import React, {
   createContext,
@@ -10,43 +12,11 @@ import React, {
   type ReactNode,
 } from 'react';
 import { useChatTabContext } from './ChatTabProvider';
-
-export type ChatTabNavigationState = {
-  readonly chatSubview: 'list' | 'conversation';
-  readonly sessionListPanel: 'sessions' | 'projects';
-  readonly projectName: string | undefined;
-  readonly sessionTitle: string | undefined;
-  readonly sessionDrawerOpen: boolean;
-  readonly projectDrawerOpen: boolean;
-  readonly sessionBatchActive: boolean;
-  readonly workspaceCanGoUp: boolean;
-};
-
-export type ChatTabNavigationActions = {
-  readonly backFromConversation: () => void;
-  readonly showChatPanel: () => void;
-  readonly closeSessionDrawer: () => void;
-  /** 返回键关闭 mermaid 全屏查看器（下发 closeMermaidViewer）。 */
-  readonly closeMermaidViewer: () => void;
-  readonly closeProjectDrawer: () => void;
-  readonly showSessionsPanel: () => void;
-  readonly openDrawer: () => void;
-  readonly closeMessageMenu: () => void;
-  readonly closeMessageEdit: () => void;
-  readonly closeModelPicker: () => void;
-  readonly closeAgentPicker: () => void;
-  readonly closeSessionRename: () => void;
-  readonly exitSessionBatch: () => void;
-  readonly workspaceGoUp: (() => void) | undefined;
-};
-
-export type ChatTabNavigationContextValue = {
-  readonly state: ChatTabNavigationState;
-  readonly actions: ChatTabNavigationActions;
-};
-
-const ChatTabNavigationCtx =
-  createContext<ChatTabNavigationContextValue | null>(null);
+import { ChatTabNavigationCtx } from '@/navigation/ChatTabNavContext';
+import type {
+  ChatTabNavigationActions,
+  ChatTabNavigationState,
+} from '@/navigation/ChatTabNavContext';
 
 const WorkspaceBackCtx = createContext<React.Dispatch<
   React.SetStateAction<{
@@ -54,20 +24,6 @@ const WorkspaceBackCtx = createContext<React.Dispatch<
     goUp: () => void;
   } | null>
 > | null>(null);
-
-export function useChatTabNavigation(): ChatTabNavigationContextValue {
-  const ctx = useContext(ChatTabNavigationCtx);
-  if (ctx == null) {
-    throw new Error(
-      'useChatTabNavigation 须在 ChatTabNavigationProvider 内使用',
-    );
-  }
-  return ctx;
-}
-
-export function useChatTabNavigationOptional(): ChatTabNavigationContextValue | null {
-  return useContext(ChatTabNavigationCtx);
-}
 
 export type ChatTabNavigationProviderProps = {
   children: ReactNode;

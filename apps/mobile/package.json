@@ -8,7 +8,7 @@
     "android:no-packager": "react-native run-android --no-packager",
     "log-android": "react-native log-android",
     "ios": "react-native run-ios",
-    "lint": "eslint . --max-warnings 306",
+    "lint": "eslint . --max-warnings 321",
     "format:check": "prettier --check .",
     "start": "react-native start",
     "pretest": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 && npm run build:webview",

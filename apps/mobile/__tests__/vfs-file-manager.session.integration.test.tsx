@@ -111,7 +111,7 @@ jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
   },
 }));
 
-jest.mock('../src/components/template/TemplatePullButton', () => ({
+jest.mock('../src/components/prompt/TemplatePullButton', () => ({
   TemplatePullButton: () => null,
 }));
 

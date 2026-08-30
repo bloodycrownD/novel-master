@@ -19,14 +19,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG = 'com.novelmaster';
 const DB_REL = 'files/default/novel_master_vfs';
 const DB_DEVICE = `/data/data/${PKG}/${DB_REL}`;
-const SQL_PATH = path.join(__dirname, '..', 'fixtures', 'tool-turn-session.sql');
+const SQL_PATH = path.join(
+  __dirname,
+  '..',
+  'fixtures',
+  'tool-turn-session.sql',
+);
 
 function adb(...args) {
-  return execFileSync('adb', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  return execFileSync('adb', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 function adbShell(cmd) {
-  return execSync(`adb shell ${cmd}`, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+  return execSync(`adb shell ${cmd}`, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 function main() {
@@ -55,7 +66,9 @@ function main() {
       );
     }
     if (!pulled?.length) {
-      throw new Error('Pulled database is empty — open the app once before injecting.');
+      throw new Error(
+        'Pulled database is empty — open the app once before injecting.',
+      );
     }
     fs.writeFileSync(localDb, pulled);
 

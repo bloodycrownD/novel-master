@@ -1,0 +1,118 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`oq14 decode-entities 双端对齐 双端输出一致性快照（人为改任一侧实现即变红） 1`] = `
+[
+  {
+    "full": "",
+    "input": "",
+    "preserveAngle": "",
+    "webFull": "",
+    "webPreserveAngle": "",
+  },
+  {
+    "full": "「有意思」",
+    "input": "「有意思」",
+    "preserveAngle": "「有意思」",
+    "webFull": "「有意思」",
+    "webPreserveAngle": "「有意思」",
+  },
+  {
+    "full": ""重新做人"",
+    "input": "&quot;重新做人&quot;",
+    "preserveAngle": ""重新做人"",
+    "webFull": ""重新做人"",
+    "webPreserveAngle": ""重新做人"",
+  },
+  {
+    "full": ""重新做人"",
+    "input": "&amp;quot;重新做人&amp;quot;",
+    "preserveAngle": ""重新做人"",
+    "webFull": ""重新做人"",
+    "webPreserveAngle": ""重新做人"",
+  },
+  {
+    "full": "&still&",
+    "input": "&amp;amp;still&amp;amp;",
+    "preserveAngle": "&still&",
+    "webFull": "&still&",
+    "webPreserveAngle": "&still&",
+  },
+  {
+    "full": "'quote'",
+    "input": "&apos;quote&apos;",
+    "preserveAngle": "'quote'",
+    "webFull": "'quote'",
+    "webPreserveAngle": "'quote'",
+  },
+  {
+    "full": ""num"",
+    "input": "&#34;num&#34;",
+    "preserveAngle": ""num"",
+    "webFull": ""num"",
+    "webPreserveAngle": ""num"",
+  },
+  {
+    "full": ""hex"",
+    "input": "&#x22;hex&#x22;",
+    "preserveAngle": ""hex"",
+    "webFull": ""hex"",
+    "webPreserveAngle": ""hex"",
+  },
+  {
+    "full": "'num-apos'",
+    "input": "&#39;num-apos&#39;",
+    "preserveAngle": "'num-apos'",
+    "webFull": "'num-apos'",
+    "webPreserveAngle": "'num-apos'",
+  },
+  {
+    "full": "'hex-apos'",
+    "input": "&#x27;hex-apos&#x27;",
+    "preserveAngle": "'hex-apos'",
+    "webFull": "'hex-apos'",
+    "webPreserveAngle": "'hex-apos'",
+  },
+  {
+    "full": "<file>a</file>",
+    "input": "&lt;file&gt;a&lt;/file&gt;",
+    "preserveAngle": "&lt;file&gt;a&lt;/file&gt;",
+    "webFull": "<file>a</file>",
+    "webPreserveAngle": "&lt;file&gt;a&lt;/file&gt;",
+  },
+  {
+    "full": "<double>",
+    "input": "&amp;lt;double&amp;gt;",
+    "preserveAngle": "&lt;double&gt;",
+    "webFull": "<double>",
+    "webPreserveAngle": "&lt;double&gt;",
+  },
+  {
+    "full": "<num-lt>",
+    "input": "&#60;num-lt&#62;",
+    "preserveAngle": "&#60;num-lt&#62;",
+    "webFull": "<num-lt>",
+    "webPreserveAngle": "&#60;num-lt&#62;",
+  },
+  {
+    "full": "<hex-lt>",
+    "input": "&#x3c;hex-lt&#x3e;",
+    "preserveAngle": "&#x3c;hex-lt&#x3e;",
+    "webFull": "<hex-lt>",
+    "webPreserveAngle": "&#x3c;hex-lt&#x3e;",
+  },
+  {
+    "full": "得到了一个"机会'<是真的>",
+    "input": "得到了一个&amp;quot;机会&apos;&lt;是真的&gt;",
+    "preserveAngle": "得到了一个"机会'&lt;是真的&gt;",
+    "webFull": "得到了一个"机会'<是真的>",
+    "webPreserveAngle": "得到了一个"机会'&lt;是真的&gt;",
+  },
+  {
+    "full": ""大写实体"",
+    "input": "&QUOT;大写实体&AMP;quot;",
+    "preserveAngle": ""大写实体"",
+    "webFull": ""大写实体"",
+    "webPreserveAngle": ""大写实体"",
+  },
+]
+`;

@@ -6,8 +6,8 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {ThemeTokens} from '@/theme/tokens';
-import {chevron, iconWrap} from './card-styles';
-import {ElevatedCard} from './ElevatedCard';
+import {chevron, iconWrap} from '../ui/card-styles';
+import {ElevatedCard} from '../ui/ElevatedCard';
 
 type Props = {
   icon: string;

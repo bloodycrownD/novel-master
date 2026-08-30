@@ -20,7 +20,12 @@ const env = {...process.env, APPIUM_HOME: appiumHome};
 
 function driverInstalled() {
   return fs.existsSync(
-    path.join(appiumHome, 'node_modules', 'appium-uiautomator2-driver', 'package.json'),
+    path.join(
+      appiumHome,
+      'node_modules',
+      'appium-uiautomator2-driver',
+      'package.json',
+    ),
   );
 }
 
@@ -41,7 +46,9 @@ execSync(`npx appium driver install uiautomator2@${UIAutomator2_VERSION}`, {
 });
 
 if (!driverInstalled()) {
-  throw new Error('UiAutomator2 driver install failed — run: npm run mobile:e2e:prepare');
+  throw new Error(
+    'UiAutomator2 driver install failed — run: npm run mobile:e2e:prepare',
+  );
 }
 
 console.log('[e2e] UiAutomator2 driver installed.');

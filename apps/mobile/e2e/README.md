@@ -81,12 +81,12 @@ npm run e2e:tsc
 
 Most specs **UI-seed** project/session state. Tool-turn specs need the adb/sqlite bootstrap:
 
-| Spec | Needs fixture |
-|------|----------------|
-| `smoke.launch.e2e.ts` | No |
-| `vfs.rename-conflict.e2e.ts` | No (UI seed) |
-| `chat.rollback.e2e.ts` | Turn case only — see `e2e/scripts/` |
-| `chat.tool-phase-and-order.e2e.ts` | Yes |
+| Spec                               | Needs fixture                       |
+| ---------------------------------- | ----------------------------------- |
+| `smoke.launch.e2e.ts`              | No                                  |
+| `vfs.rename-conflict.e2e.ts`       | No (UI seed)                        |
+| `chat.rollback.e2e.ts`             | Turn case only — see `e2e/scripts/` |
+| `chat.tool-phase-and-order.e2e.ts` | Yes                                 |
 
 Set `E2E_FIXTURE_SESSION_TITLE` to match an injected session title. Default: `E2E Tool Turn Fixture`.
 
@@ -103,10 +103,10 @@ Logs include active Appium context (NATIVE vs WEBVIEW).
 
 ## vs Jest
 
-| Layer | Tool |
-|-------|------|
-| Core algorithms | `packages/core` node:test |
-| RN components | Jest in `apps/mobile/__tests__` |
-| Full device UX | This E2E suite |
+| Layer           | Tool                            |
+| --------------- | ------------------------------- |
+| Core algorithms | `packages/core` node:test       |
+| RN components   | Jest in `apps/mobile/__tests__` |
+| Full device UX  | This E2E suite                  |
 
-Spec: `.apm/kb/docs/Iterations/mobile-android-e2e-appium/spec.md`
+Spec: `docs/Iterations/mobile-android-e2e-appium/spec.md`

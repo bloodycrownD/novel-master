@@ -4,13 +4,14 @@
  * Default: `webview` (Release and Debug). Override via KKV `chatTranscriptEngine`
  * (`legacy-rn` | `webview`) for rollback without reinstalling.
  */
+import {APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE} from './app-ui-keys';
+import {readEnumPref} from './app-ui-pref-io';
 import type {AppUiPreferences} from './app-ui-prefs';
 
 export type ChatTranscriptEngine = 'legacy-rn' | 'webview';
 
-export const APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE = 'chatTranscriptEngine';
-
 const DEFAULT_ENGINE: ChatTranscriptEngine = 'webview';
+const ALLOWED_ENGINES: readonly ChatTranscriptEngine[] = ['legacy-rn', 'webview'];
 
 export function defaultChatTranscriptEngine(): ChatTranscriptEngine {
   return DEFAULT_ENGINE;
@@ -19,16 +20,10 @@ export function defaultChatTranscriptEngine(): ChatTranscriptEngine {
 export async function readChatTranscriptEngine(
   appUi: AppUiPreferences | null | undefined,
 ): Promise<ChatTranscriptEngine> {
-  if (appUi == null) {
-    return DEFAULT_ENGINE;
-  }
-  try {
-    const raw = await appUi.get(APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE);
-    if (raw === 'legacy-rn' || raw === 'webview') {
-      return raw;
-    }
-  } catch {
-    // fall through
-  }
-  return DEFAULT_ENGINE;
+  return readEnumPref(
+    appUi,
+    APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE,
+    ALLOWED_ENGINES,
+    DEFAULT_ENGINE,
+  );
 }

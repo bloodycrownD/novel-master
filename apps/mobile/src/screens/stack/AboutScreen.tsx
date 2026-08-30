@@ -5,8 +5,8 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, Linking, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useToast} from '@/components/chrome/ToastHost';
 import {ListSectionTitle} from '@/components/ui/ListSectionTitle';
-import {ProfileMenuItem} from '@/components/ui/ProfileMenuItem';
-import {ProfileSwitchItem} from '@/components/ui/ProfileSwitchItem';
+import {ProfileMenuItem} from '@/components/profile/ProfileMenuItem';
+import {ProfileSwitchItem} from '@/components/profile/ProfileSwitchItem';
 import {toastMessage} from '@/errors/toast-message';
 import {useNovelMaster} from '@/runtime/novel-master-context';
 import {

@@ -54,7 +54,7 @@ function mockRuntime(overrides: {
   };
 }
 
-jest.mock('@/provider/model-display-label', () => ({
+jest.mock('@/services/model-display-label', () => ({
   resolveModelDisplayLabel: jest.fn(async () => 'GPT-4'),
 }));
 

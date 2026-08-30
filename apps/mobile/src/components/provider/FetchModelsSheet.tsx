@@ -1,6 +1,6 @@
 /**
  * Pull remote model list for a provider and save selected models.
- * 勾选 + 批量添加（对齐 desktop FetchModelsModal），支持过滤后全选。
+ * 勾选 + 批量添加，支持过滤后全选。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {

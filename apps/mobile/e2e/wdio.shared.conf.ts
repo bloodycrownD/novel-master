@@ -35,7 +35,9 @@ function androidCapabilities(): Record<string, unknown> {
 }
 
 /** Forward slashes — WDIO glob on Windows needs this for default specs discovery. */
-const specGlob = path.join(e2eRoot, 'specs', '**', '*.e2e.ts').replace(/\\/g, '/');
+const specGlob = path
+  .join(e2eRoot, 'specs', '**', '*.e2e.ts')
+  .replace(/\\/g, '/');
 
 export const sharedConfig = {
   runner: 'local' as const,

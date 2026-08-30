@@ -86,31 +86,29 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   let compactionConditionEvaluator:
     | ReturnType<typeof createCompactionConditionEvaluator>
     | undefined;
+  const getOrCreateEvaluator = (): ReturnType<
+    typeof createCompactionConditionEvaluator
+  > => {
+    if (compactionConditionEvaluator == null) {
+      compactionConditionEvaluator = createCompactionConditionEvaluator({
+        conditionsStore: compactionConditions,
+        tokenCounters,
+        providerModels: providerBundle.providerModels,
+      });
+    }
+    return compactionConditionEvaluator;
+  };
   const lazyCompactionConditionEvaluator: ReturnType<
     typeof createCompactionConditionEvaluator
   > = {
     shouldRequestCompaction(session, evaluation) {
-      if (compactionConditionEvaluator == null) {
-        compactionConditionEvaluator = createCompactionConditionEvaluator({
-          conditionsStore: compactionConditions,
-          tokenCounters,
-          providerModels: providerBundle.providerModels,
-        });
-      }
-      return compactionConditionEvaluator.shouldRequestCompaction(
+      return getOrCreateEvaluator().shouldRequestCompaction(
         session,
         evaluation,
       );
     },
     getHideStartDepth() {
-      if (compactionConditionEvaluator == null) {
-        compactionConditionEvaluator = createCompactionConditionEvaluator({
-          conditionsStore: compactionConditions,
-          tokenCounters,
-          providerModels: providerBundle.providerModels,
-        });
-      }
-      return compactionConditionEvaluator.getHideStartDepth();
+      return getOrCreateEvaluator().getHideStartDepth();
     },
   };
 
