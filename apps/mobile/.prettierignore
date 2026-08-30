@@ -7,6 +7,7 @@ ios/NovelMaster/WebViewDist/
 node_modules/
 android/build/
 android/app/build/
+android/app/.cxx/
 android/.gradle/
 ios/Pods/
 ios/build/

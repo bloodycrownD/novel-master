@@ -27,14 +27,18 @@ export function CollapsibleHeader({
   dataValue,
   expanded,
 }: CollapsibleHeaderProps) {
+  // 标题/箭头 class 由 header 基名派生：把 `-header` 后缀换成 `-title`/`-chevron`
+  // （tool-group-header → tool-group-title，thinking-header → thinking-title）。
+  // 注意不是加后缀——CSS 选择器是 .tool-group-title / .thinking-title。
+  const base = headerClass.replace(/-header$/, '');
   return (
     <div
       className={headerClass}
       data-action={action}
       {...({['data-' + dataKey]: dataValue} as Record<string, string>)}
     >
-      <span className={headerClass + '-title'}>{title}</span>
-      <span className={headerClass + '-chevron'}>{expanded ? '▼' : '▶'}</span>
+      <span className={base + '-title'}>{title}</span>
+      <span className={base + '-chevron'}>{expanded ? '▼' : '▶'}</span>
     </div>
   );
 }
