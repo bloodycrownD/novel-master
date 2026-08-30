@@ -66,12 +66,24 @@ export type UseAgentRunLifecycleParams = {
    * （abort 后 uiRunning=false，迟到的 RUN_STARTED 不应再激活）。
    */
   readonly getUiRunning?: () => boolean;
+  /**
+   * session 切换时查询是否开启恢复窗口（core abortRegistry 仍注册该 session 的
+   * in-flight run 时为 true）。返回 true 时 `resetUiForSessionChange` 会开窗，
+   * 让 `activeRunId == null` 期间的事件接纳放宽为任何非空 runId（子会话口径）。
+   *
+   * 关窗只由两个信号承担：窗口内任何带 runId 的事件被接纳（反填即关窗）、
+   * session 切换（旧窗随 reset 关闭、新窗按本回调按需开启）。core registry
+   * 只有同步 has() 查询、没有变更订阅，「has 变 false」不承担关窗，其复评
+   * 挂到既有探针/轮询节点，仅作收尾校准。
+   */
+  readonly getResumeWindowEligible?: () => boolean;
 };
 
 export function useAgentRunLifecycle({
   onRunUiActivate,
   onRunUiDeactivate,
   getUiRunning,
+  getResumeWindowEligible,
 }: UseAgentRunLifecycleParams = {}): AgentRunLifecycle {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
@@ -84,6 +96,13 @@ export function useAgentRunLifecycle({
   onRunUiDeactivateRef.current = onRunUiDeactivate;
   const getUiRunningRef = useRef(getUiRunning);
   getUiRunningRef.current = getUiRunning;
+  const getResumeWindowEligibleRef = useRef(getResumeWindowEligible);
+  getResumeWindowEligibleRef.current = getResumeWindowEligible;
+
+  // 恢复窗口：开启期间 activeRunId==null 时事件接纳放宽为任何非空 runId。
+  // 无「窗口超时关闭」机制——activeRunId 反填后放宽条件自然失效，收尾残留
+  // 由探针兜底（见 use-run-resume-probe），不为超时另发明信号。
+  const resumeWindowRef = useRef(false);
 
   const syncActiveRunId = useCallback((runId: string | null) => {
     activeRunIdRef.current = runId;
@@ -97,9 +116,31 @@ export function useAgentRunLifecycle({
     incrementAgentActive();
   }, []);
 
-  const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
-    return shouldAcceptRunEvent(activeRunIdRef.current, runId);
-  }, []);
+  const acceptRunEvent = useCallback(
+    (runId: string | undefined): boolean => {
+      if (shouldAcceptRunEvent(activeRunIdRef.current, runId)) {
+        return true;
+      }
+      // 恢复窗口内的放宽接纳是带副作用的（显式设计决策）：accept 通过的同一
+      // 同步路径里反填 activeRunId 并关窗恢复严格匹配。反填必须先于
+      // onRunFinished / onRunFailed 内部的 shouldAcceptRunEvent 守卫求值——
+      // 若 FINISHED/FAILED 是窗口内第一条事件而反填不同步，内部守卫求值时
+      // activeRunId 仍为 null 必拒，uiRunning 永久残留、refcount 不减。
+      // core registry 只有 has() 拿不到 runId，反填是拿到真实 runId 的唯一途径。
+      if (
+        activeRunIdRef.current == null &&
+        resumeWindowRef.current &&
+        runId != null &&
+        runId !== ''
+      ) {
+        resumeWindowRef.current = false;
+        syncActiveRunId(runId);
+        return true;
+      }
+      return false;
+    },
+    [syncActiveRunId],
+  );
 
   const onRunStarted = useCallback(
     (payload: AgentRunStartedPayload) => {
@@ -110,6 +151,9 @@ export function useAgentRunLifecycle({
         return;
       }
       syncActiveRunId(payload.runId);
+      // 迟到的真 RUN_STARTED 也承担关窗（uiRunning 已被合成恢复置 true，
+      // 不会被 stale 守卫拒收）——反填真实 runId 后立即恢复严格匹配。
+      resumeWindowRef.current = false;
       uiActiveRef.current = true;
       onRunUiActivateRef.current?.();
     },
@@ -158,6 +202,8 @@ export function useAgentRunLifecycle({
 
   const resetUiForSessionChange = useCallback(() => {
     syncActiveRunId(null);
+    // session 切换：旧窗口随 reset 关闭；registry 仍注册 in-flight run 时开新窗。
+    resumeWindowRef.current = getResumeWindowEligibleRef.current?.() ?? false;
   }, [syncActiveRunId]);
 
   return {
