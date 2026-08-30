@@ -835,12 +835,10 @@ export const VfsFileManager = forwardRef<
     return `将覆盖目录「${path}」下的全部文件，同级其他内容不受影响。是否继续？`;
   };
 
-  // 导入 ZIP / 角色卡的共用流程：Alert 确认 → 调对应 service → 刷新列表 →
-  // 为新增子目录补默认目录规则。
-  // WHY: Core 的 importVfsZip / importCharacterCard 只写 VFS 目录行，
-  // 不会往 workplace_dir_rule 表插入规则，导入出来的目录默认就是 rule_off。
-  // 这里在导入后比对前后目录集合，给新增子目录调 setDirRule(defaultDirRuleForm)，
-  // 让导入产生的目录与「新建目录」行为一致（默认开规则）。
+  // 导入 ZIP / 角色卡的共用流程：Alert 确认 → 调对应 service → 刷新列表 → toast。
+  // 目录规则默认开启由 Core 导入链路在事务内统一保证（ensureImportDirRules，
+  // 含任意深度嵌套、已有 rule_off 行不覆盖），UI 层不再补行——旧方案补行发生在
+  // 列表刷新之后且只覆盖一层子目录，会出现「先显示关闭、进出文件夹才变开启」。
   const runImport = (kind: 'zip' | 'character-card', targetPath: string) => {
     const title = kind === 'zip' ? '导入 ZIP' : '导入角色卡';
     const successToast = kind === 'zip' ? 'ZIP 导入完成' : '已导入角色卡';
@@ -851,12 +849,6 @@ export const VfsFileManager = forwardRef<
         style: 'destructive',
         onPress: () => {
           void (async () => {
-            // 导入前快照 targetPath 下的目录集合，导入后比对找出新增子目录。
-            const beforeDirPaths = new Set(
-              (await vfs.list(targetPath))
-                .filter(e => e.kind === 'directory')
-                .map(e => e.path),
-            );
             try {
               if (kind === 'zip') {
                 await importVfsZip(runtime, scope, {
@@ -870,26 +862,6 @@ export const VfsFileManager = forwardRef<
                 });
               }
               await reloadVfsListOnly();
-              // 为新增子目录补默认目录规则；targetPath 自身已存在则跳过。
-              const afterEntries = await vfs.list(targetPath);
-              for (const entry of afterEntries) {
-                if (entry.kind !== 'directory') {
-                  continue;
-                }
-                if (entry.path === targetPath) {
-                  continue;
-                }
-                if (beforeDirPaths.has(entry.path)) {
-                  continue;
-                }
-                try {
-                  if (workplace != null) {
-                    await workplace.setDirRule(defaultDirRuleForm(entry.path));
-                  }
-                } catch {
-                  // 单个目录规则写入失败不阻断整体导入流程。
-                }
-              }
               showToast(successToast);
             } catch (err) {
               showToast(toastMessage('导入失败', err));
