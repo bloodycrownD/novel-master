@@ -15,7 +15,8 @@ describe('prepareTranscriptRichHtml', () => {
 
   it('preserves sanitized inline style on div', () => {
     const html = prepareTranscriptRichHtml('<div style="color:red">x</div>');
-    expect(html).toContain('color:red');
+    // 白名单过滤后重新序列化为「property: value」格式，冒号后带空格（CSS 等价）
+    expect(html).toMatch(/color:\s*red/);
     expect(html).toContain('x');
   });
 

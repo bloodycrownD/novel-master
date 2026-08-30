@@ -1,41 +1,28 @@
-# code-dev-loop 编排状态（novel-master，2026-08-26 起）
-# 五迭代并行开发，各自 worktree：.woktree/<name>，分支 feat/<name>，base b3429b0
-# DAG：wave-0 impl（内含定向+全量验证证据，verify 等效闭合）→ wave-2 cr-func
-
-dev_dag_version: 3
-base_sha: b3429b0
-status: dev-ready（全部 cr-func func-ready: yes；manual_user 验收项待用户执行）
-
-iterations:
-  token-usage-stats-enhance:
-    worktree: .woktree/token-usage-stats-enhance
-    spec_path: docs/Iterations/token-usage-stats-enhance/spec.md
-    wave_plan: [[impl+verify], [cr-func]]
-    node_status: { impl: done(head db9e5a0, 6 commits), verify: done(core 533+55/desktop 23/mobile 31/typecheck 全过), cr-func: done(func-ready yes) }
-
-  thinking-openai-unify:
-    worktree: .woktree/thinking-openai-unify
-    spec_path: docs/Iterations/thinking-openai-unify/spec.md
-    wave_plan: [[impl+verify], [cr-func]]
-    node_status: { impl: done(head 5574069, 5 commits), verify: done(core 全量 2157/typecheck 过), cr-func: done(func-ready yes) }
-
-  thinking-context-toggle:
-    worktree: .woktree/thinking-context-toggle
-    spec_path: docs/Iterations/thinking-context-toggle/spec.md
-    wave_plan: [[impl+verify], [cr-func]]
-    node_status: { impl: done(head 6e7e595, 12 commits), verify: done(core 2174/desktop 84/CLI smoke 过；mobile 3 失败为存量基线), cr-func: done(func-ready yes) }
-
-  fetch-tool:
-    worktree: .woktree/fetch-tool
-    spec_path: docs/Iterations/fetch-tool/spec.md
-    wave_plan: [[impl+verify], [cr-func]]
-    node_status: { impl: done(head 8a2810d, 8 commits), verify: done(core 全量 2169/typecheck/eslint 过), cr-func: done(func-ready yes) }
-
-  markdown-code-block-render:
-    worktree: .woktree/markdown-code-block-render
-    spec_path: docs/Iterations/markdown-code-block-render/spec.md
-    wave_plan: [[impl+verify], [cr-func]]
-    node_status: { impl: done(head 1fad168, 11 commits), verify: done(desktop 91/mobile 838(3 存量)/build:webview 增量 1.9K+1.8K 达标), cr-func: done(func-ready yes；LOW 补丁 changelog 体积说明已补 1fad168) }
-
-# 存量基线失败（非本轮引入，合并不阻塞）：mobile use-chat-tab-message-actions-unhide 3 例；CLI e2e 若干；
-# core lint 2 error（sanitize-entry-filename no-control-regex / annotate-source-range prefer-const）
+# code-dev-loop 编排状态（fix wave1）
+# 工作流状态存此处，不进 docs/apm/memory（APM 约定）
+spec_path: docs/Iterations/mobile-cr-dedup-abstraction/cr-fix-spec.md
+branch: cr/mobile-fix-wave1
+base_sha: 4ba1c73
+dag_version: 4
+scope: 第一批四条 P1（sec/D-1、infra/B-1、b2/B-4、comp-misc/B-2）
+wave_plan: [[impl-sec-d1, impl-infra-b1, impl-b2-b4, impl-misc-b2], [fix-sec-d1-types, fix-b2-b4-test], [verify-wave1], [cr-func-wave1]]
+node_status:
+  impl-sec-d1: { status: done, executor: subagent }
+  impl-infra-b1: { status: done, executor: subagent }
+  impl-b2-b4: { status: done, executor: subagent }
+  impl-misc-b2: { status: done, executor: subagent }
+  fix-sec-d1-types: { status: done, executor: subagent }
+  fix-b2-b4-test: { status: done, executor: subagent }
+  verify-wave1: { status: done, executor: subagent }
+  verify-wave1-rerun: { status: done, executor: main, note: 全量 jest 165 套件 / 906 用例全绿 + tsc 零输出 }
+  fix-verify-assert: { status: done, executor: main, note: trivial——prepare-transcript-rich-html 断言改 /color:\s*red/（序列化带空格） }
+  cr-func-wave1: { status: pending }
+commits:
+  - 4ba1c73 docs(cr): fix-spec
+  - 20342a6 fix(mobile): sec/D-1 WebView 导航守卫
+  - f095bcb fix(mobile): infra/B-1 bootstrap 连接泄漏
+  - 25daabc fix(mobile): b2/B-4 批删失败卡死
+  - e5f3524 fix(mobile): comp-misc/B-2 sanitize CSS 白名单
+  - 54002dd docs(apm): wave1 过程记忆
+open_must_fix: []
+spec_deviations: []
