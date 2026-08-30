@@ -232,3 +232,9 @@ user:
 
 assistant:
 两件都完成：①core 的 npm test 通配用 bash -O extglob 包裹，sh 下可跑（a093dff）。②样式回归根因：web/C-2 抽 CollapsibleHeader 时 class 派生写错——headerClass+'-title' 拼出 tool-group-header-title，CSS 选择器是 .tool-group-title（-header 后缀要替换不是追加），「思考过程」同款中招。修为 replace(/-header$/,'') 派生（ec4d62a），新增 collapsible-section-classes 测试直调组件断言 class 与 CSS 对应。经验：①「DOM 逐属性一致」的子代理自述不可信，样式类重构必须用渲染断言锁定（源码字符串测试盯不住运行时拼接）；②.prettierignore 要补 android/app/.cxx/（本地原生构建产物会打爆 format:check）；③用户报 UI 样式回归时，先问清「现在的具体表现」（黑色正体→定位到规则整体失配而非颜色值变化）能省一半排查。
+
+user:
+UI 坏的有点多，项目管理的 UI 也坏了（打开看不见）。CR 一下本次优化到底动了哪些 CSS。
+
+assistant:
+CSS 审计结论：本分支对 CSS/HTML 的全部改动均为 prettier 纯格式差异（transcript.css/document.css 去空白归一化零差异；editor.css 与三个 index.html 仅引号/换行）——CSS 规则零语义变化。真正回归在 RN 侧样式结构迁移：只读审计定位「项目管理打开看不见」根因＝ModalShell 的 left variant 错误复用 bottom 纵向容器（flex-end），左抽屉面板高度塌陷+被推到屏幕底；修复为独立 styles.left={flex:1,flexDirection:'row'} 三分派并补源码契约测试。其余 14 处 ModalShell 迁移、CollapsibleCard、card-styles、EditorScreenShell、AndroidKeyboardClipBody、PickerListModal 审计均无样式丢失；触发链（AppHeader→ChatTabNavContext→Drawer）完好。经验：①「样式迁移审计」要对每个迁移点做旧骨架样式 vs 新组件 props 的逐项比对，子代理自述的「样式未丢」必须独立验证；②ModalShell 这类多 variant 骨架组件，新 variant 必须有专属容器样式+测试锁定；③TestRenderer 渲染含懒加载的 RN 组件链不稳定时，源码契约测试是可接受的退路（注明理由）。
