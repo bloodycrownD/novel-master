@@ -77,3 +77,9 @@ user:
 
 assistant:
 fix-spec 执行轮收敛 dev-ready（wave：三线并行 fix → 增量 verify → cr-func 全 func-ready）。最终：导入线 head 7c4d938（4/4 闭合，core 1791 pass）；恢复线 head 64172b4（4/4 闭合，mobile 1071 pass）；并行线 head 3d3bd4b（8/8 闭合含 3 P1，mobile 1105 pass）。遗留：真机验收三份、导入线一条 flaky 观察、恢复线 integration 文件 2 处非 CI 裸 tsc、合并顺序 import→stream-resume→parallel-notify 后做 Step3 融合。
+
+user:
+导入和流式两条线直接合并到 main。
+
+assistant:
+已合并：main 在 6c8a872 后新增两个 mobile 样式提交（5a1a6ce），与两线零交集；7909552 合并导入线（干净）、e91422d 合并流式线（仅一个 memory 文件冲突，双侧轮次合并保留）。合并后 main 全量验证：core 1791 pass / mobile 1080 pass 全绿。并行线 feat/agent-run-parallel-and-notify（head 3d3bd4b）保留在 .woktree/parallel-notify 待后续 Step3 融合后合并。
