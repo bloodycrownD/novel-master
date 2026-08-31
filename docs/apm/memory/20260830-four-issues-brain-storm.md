@@ -2,7 +2,7 @@
 date: 2026-08-30 12:00
 title: 四个优化点探索：角色卡导入刷新、max_steps 生成中残留、主会话 thinking 恢复、多会话并行与通知
 keywords: 角色卡导入, dir rule, max_steps, uiRunning, streamRegistry, thinking, 并发, 通知, AgentRunManager
-abstract: 四个优化点经全链路交付：导入刷新（reload 早于补行时序+根短路）与主会话 thinking 重进丢失（缺三件套）已修复合入 main 并发版 v1.5.8；max_steps 残留暂姆；并行+通知线已实现至 dev-ready 待 Step3 融合合入（含跨项目通知点按坑、会话列表生成中角标等待拍板增补）。
+abstract: 四个优化点经全链路交付：导入刷新（reload 早于补行时序+根短路）与主会话 thinking 重进丢失（缺三件套）已修复合入 main 并发版 v1.5.8；max_steps 残留暂缓；并行+通知线已实现至 dev-ready 待 Step3 融合合入（含跨项目通知点按坑、会话列表生成中角标等待拍板增补）。
 ---
 
 user:
