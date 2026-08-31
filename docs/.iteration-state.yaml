@@ -41,3 +41,7 @@ manual_user_pending:
   - resume：真机路径 A/B 重进恢复
   - parallel：后台点按直达（MF-3 依赖）、锁屏 5 分钟保活、双会话并行、杀 app 无残留、notifee onTimeout 核实
 merge_order: import → stream-resume → parallel-notify（最后做 Step3 融合：useAgentRunLifecycle/ChatTabProvider/useSessionStream 手工融合）
+fusion_todo_extra:
+  - id: cross-project-notify-tap
+    desc: 通知 data 只带 sessionId 不带 projectId，setCurrentSession 用当前 scope.projectId 定位——跨项目场景点按通知会落错项目且无存在性校验静默失败；修复：通知 data 加 projectId（或按 sessionId 反查所属项目）并让桥接受 projectId
+    found: 2026-08-30 用户问跨项目切换行为时核实（切项目不重建 runtime/不关连接，run 存活与恢复已确认支持）
