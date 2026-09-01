@@ -206,7 +206,9 @@ export type TranscriptToHostMessage =
   | BridgeEnvelope<
       'log',
       {level: string; message: string; fields?: Record<string, unknown>}
-    >;
+    >
+  /** 可见性上报：WebView document visibilitychange；RN 侧据此判定是否需要强制重绘。 */
+  | BridgeEnvelope<'visibility', {hidden: boolean}>;
 
 export type HostToTranscriptType = HostToTranscriptMessage['type'];
 export type TranscriptToHostType = TranscriptToHostMessage['type'];

@@ -28,6 +28,14 @@ export {applyHostTheme};
  */
 export const post = createBoundPost(BRIDGE_V);
 
+// 可见性上报：RN 侧据此在「隐藏期间有改画推送」时强制重挂 WebView，
+// 规避 Android WebView 恢复显示后仍渲染摘除前的旧帧（生成中残留的根因）。
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    post('visibility', {hidden: document.hidden});
+  });
+}
+
 export function handleHostMessage(raw: unknown): void {
   const msg = matchHostMessage(raw, BRIDGE_V);
   if (!msg) return;
