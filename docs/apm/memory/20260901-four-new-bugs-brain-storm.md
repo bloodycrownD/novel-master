@@ -93,3 +93,9 @@ DAG：wave-0 三路并行 worker（CR-1 desktop DTO 聚合、CR-2 mobile 筛选 
 
 assistant(收口):
 cr-func（readonly reviewer）四条矩阵全闭合、func-ready: yes，spec_deviations 四项均为合理扩展/收窄（CR-1 null 桶归并、CR-2 三形态互斥联合比 spec 更严、CR-4 构造手段偏差但同一对账分支、CR-3 不写死 80ms）。verify 收尾：desktop tsc 0 错（main 侧）、触及文件 prettier 归一（desktop 两文件原不合规式）后 desktop 11/11、mobile 60/60 复跑绿。dev-ready 达成：四实现提交+格式提交，无 open must-fix、无 open spec_deviations。遗留（K 节，发版前）：CHANGELOG Unreleased 段补记（两分支合计）；open questions 仍待拍板：desktop 复合维度、reloadModels 错误态、方案 A 残留边界（模型仅被另一服务商配置时无入口）。
+
+user:
+生成 changelog。
+
+assistant:
+按 novel-master-changelog skill 撰写 Unreleased 段（此前无该段，1.5.8 为最近版本）：新增 1 条（服务商×模型统计，移动端——desktop DTO 聚合保持模型粒度故不标双端）；修复 5 条（输入法丢字、生成中残留+内部加固并句、markdown 首进空白、下拉滚动、t/s 单位）；dev-loop 同批引入又修复的（desktop 重复行、筛选 parity）与 schema bump、注释、测试均按原则不写。提交于 fix/2026-09-stats-composer-markdown，两分支合并后同进下个版本。
