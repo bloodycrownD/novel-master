@@ -11,8 +11,9 @@
  *
  * - 「汇总 / 明细 / 流水」三页签（SegmentedControl）；筛选栏置顶，页签
  *   共享——切换页签不触发重查，筛选状态跨页签保留；
- * - 模型筛选（listModels 只返回非 NULL 模型名，「其他模型」选项由 UI 侧补上，
- *   对应 NULL + 非当前配置历史模型的归并口径）；
+ * - 模型筛选（CR-2 方案 A）：配置组合选项之外，「{服务商} · 其他模型」与
+ *   「未记录服务商（历史）」（provider_id IS NULL，模型在不在配置集均归此）
+ *   两类归并选项由 UI 侧补上，保证存量历史行都有选项可筛；
  * - 刷新单通道（useFocusEffect 依赖 reload，mobile/B-2）：主查询带请求
  *   序号守卫（cross/B-1），旧响应后到整体丢弃；失败落 loadError 常驻
  *   错误条且不渲染 0 兜底卡片（mobile/C-orch-2）；空态区分库全空
@@ -65,6 +66,11 @@ export function TokenUsageStatsScreen() {
   const [providerLabels, setProviderLabels] = useState<Record<string, string>>(
     {},
   );
+  // 全量服务商（含未配置模型者，按展示名排序）：StatsFilterBar 据此生成
+  // 每服务商的「{服务商} · 其他模型」归并选项。
+  const [providers, setProviders] = useState<
+    ReadonlyArray<{id: string; label: string}>
+  >([]);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [summary, setSummary] = useState<UsageStatsSummary | null>(null);
   const [dailyBuckets, setDailyBuckets] = useState<UsageStatsBucket[]>([]);
@@ -92,10 +98,12 @@ export function TokenUsageStatsScreen() {
   const reloadSeqRef = useRef(0);
 
   // 服务商×模型筛选（provider 维度：provider_id 写入时快照，服务商改名/删除
-  // 不回写历史行，解析不到展示名时归「未知服务商」）。
-  const comboModel = comboFilter == null ? comboFilter : comboFilter.model;
+  // 不回写历史行，解析不到展示名时归「未知服务商」）。对象三形态（配置组合 /
+  // 服务商其他模型 / 未记录服务商）见 ProviderModelFilterValue，这里拆成
+  // core UsageStatsFilter 的 model/providerId 两字段。
+  const comboModel = comboFilter === undefined ? undefined : comboFilter.model;
   const comboProviderId =
-    comboFilter == null ? comboFilter : comboFilter.providerId;
+    comboFilter === undefined ? undefined : comboFilter.providerId;
   const filter = useMemo<UsageStatsFilter>(() => {
     // 自定义区间：from 为所选日 0 点，to 取结束日次日 0 点（含结束日全天，
     // 与 last7/last30 的「覆盖到本地明日 0 点」口径一致）。
@@ -208,15 +216,17 @@ export function TokenUsageStatsScreen() {
   }, [pageTab, reqLoading, loadRequests]);
 
   // 服务商×模型选项：配置侧生成（providers.list + 逐服务商 savedModelRepo
-  // .listByProvider）；「其他」选项由 UI 侧补上（语义 = provider_id/model_name
-  // 均缺失的历史行）。
+  // .listByProvider）；「{服务商} · 其他模型」与「未记录服务商（历史）」两类
+  // 归并选项由 UI 侧补上（语义见 ProviderModelFilterValue，覆盖存量行）。
   const reloadModels = useCallback(async () => {
     try {
       const providerList = await runtime.providers.list();
       const labels: Record<string, string> = {};
+      const providerEntries: Array<{id: string; label: string}> = [];
       const options: ProviderModelOption[] = [];
       for (const p of providerList) {
         labels[p.id] = p.displayName;
+        providerEntries.push({id: p.id, label: p.displayName});
         const saved = await runtime.savedModelRepo.listByProvider(p.id);
         for (const m of saved) {
           options.push({
@@ -227,6 +237,9 @@ export function TokenUsageStatsScreen() {
         }
       }
       setProviderLabels(labels);
+      setProviders(
+        providerEntries.sort((a, b) => a.label.localeCompare(b.label)),
+      );
       setCombos(
         options.sort(
           (a, b) =>
@@ -237,6 +250,7 @@ export function TokenUsageStatsScreen() {
     } catch {
       setCombos([]);
       setProviderLabels({});
+      setProviders([]);
     }
   }, [runtime]);
 
@@ -290,18 +304,15 @@ export function TokenUsageStatsScreen() {
     setRangeSheetVisible(false);
   };
 
+  const providerLabelOf = (id: string) => providerLabels[id] ?? '未知服务商';
   const modelFilterLabel =
     comboFilter === undefined
       ? '全部模型'
-      : comboFilter === null
-      ? '其他模型'
-      : `${
-          combos.find(
-            c =>
-              c.providerId === comboFilter.providerId &&
-              c.model === comboFilter.model,
-          )?.providerLabel ?? '未知服务商'
-        } · ${comboFilter.model}`;
+      : comboFilter.providerId === null
+      ? '未记录服务商（历史）'
+      : comboFilter.model === null
+      ? `${providerLabelOf(comboFilter.providerId)} · 其他模型`
+      : `${providerLabelOf(comboFilter.providerId)} · ${comboFilter.model}`;
 
   const rangeLabel =
     rangeKind === 'custom' && customFrom && customTo
@@ -332,6 +343,7 @@ export function TokenUsageStatsScreen() {
         modelFilterLabel={modelFilterLabel}
         comboFilter={comboFilter}
         combos={combos}
+        providers={providers}
         onSelectComboFilter={setComboFilter}
         rangeSheetVisible={rangeSheetVisible}
         onCloseRangeSheet={() => setRangeSheetVisible(false)}

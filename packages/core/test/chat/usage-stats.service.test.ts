@@ -749,6 +749,114 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(nullFiltered[0]!.totalTokens, 10);
   });
 
+  it("CR-2: providerId:null（model 不筛）可筛出「未记录服务商 × 已配置模型」存量行", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // 两行：已记录服务商 × 已配置模型，以及未记录服务商（provider_id NULL）
+    // × 已配置模型——后者是旧「其他模型」口径（model:null）筛不中的存量行，
+    // mobile 方案 A 的 provider 维度语义必须能筛出。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      providerId: "stats-cr2-p1",
+      modelName: "model-a",
+      usage: { prompt: 40, total: 40 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      providerId: null,
+      modelName: "model-a",
+      usage: { prompt: 10, total: 10 },
+    });
+    const ts = String(Date.now());
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('stats-cr2-p1', 'openai', 'https://example.com', 'CR2 P1', '{}', 0, ${ts}, ${ts})`
+    );
+    // model-a 进入已保存模型集合（全局 distinct，不分服务商）。
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('som-cr2-1', 'stats-cr2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    const range = {
+      kind: "custom" as const,
+      fromMs: today0,
+      toMs: localAddDays(today0, 1),
+    };
+    // 旧口径佐证：model-a 在配置集内，model:null 的 NOT IN 子句筛不中未记录行。
+    const legacyStyle = await svc.getModelBreakdown({
+      range,
+      model: null,
+      providerId: null,
+    });
+    assert.equal(legacyStyle.length, 0);
+    // 方案 A：model: undefined（不加模型子句）+ providerId: null
+    // （provider_id IS NULL）→ 未记录 × 已配置模型的行可被筛出。
+    const breakdown = await svc.getModelBreakdown({
+      range,
+      model: undefined,
+      providerId: null,
+    });
+    assert.equal(breakdown.length, 1);
+    assert.equal(breakdown[0]!.providerId, null);
+    assert.equal(breakdown[0]!.modelName, "model-a");
+    assert.equal(breakdown[0]!.totalTokens, 10);
+  });
+
+  it("CR-2: model:null + providerId:P 可筛出「P × 未配置模型」存量行", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // 三行：P 的未配置模型（目标行）、P 的已配置模型（被 NOT IN 子句排除）、
+    // 未记录服务商的同名未配置模型（被 provider 子句排除）。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      providerId: "stats-cr2-p2",
+      modelName: "model-legacy",
+      usage: { prompt: 40, total: 40 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      providerId: "stats-cr2-p2",
+      modelName: "model-cfg",
+      usage: { prompt: 25, total: 25 },
+    });
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 30 * MIN,
+      providerId: null,
+      modelName: "model-legacy",
+      usage: { prompt: 10, total: 10 },
+    });
+    const ts = String(Date.now());
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('stats-cr2-p2', 'openai', 'https://example.com', 'CR2 P2', '{}', 0, ${ts}, ${ts})`
+    );
+    // 配置集内只放 model-cfg：model-legacy 成为「未配置模型」。
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('som-cr2-2', 'stats-cr2-p2', 'model-cfg', 'model-cfg', '{}', ${ts}, ${ts})`
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    const breakdown = await svc.getModelBreakdown({
+      range: {
+        kind: "custom",
+        fromMs: today0,
+        toMs: localAddDays(today0, 1),
+      },
+      model: null,
+      providerId: "stats-cr2-p2",
+    });
+    // 只剩「P × 未配置模型」一行：provider 子句挡掉未记录行，
+    // NOT IN 子句挡掉 P 的已配置模型行；model-legacy 不在配置集，
+    // 输出侧按展示口径归并为 modelName: null（用量仍在）。
+    assert.equal(breakdown.length, 1);
+    assert.equal(breakdown[0]!.providerId, "stats-cr2-p2");
+    assert.equal(breakdown[0]!.modelName, null);
+    assert.equal(breakdown[0]!.totalTokens, 40);
+  });
+
   it("G-2: daySpanBetweenLocalDays 对 DST 23/25 小时天做 Math.round 补偿", () => {
     const DAY = 86_400_000;
     const H = 3_600_000;

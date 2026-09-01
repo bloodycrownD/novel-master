@@ -7,12 +7,21 @@ import type {ThemeTokens} from '../../../theme/tokens';
 import {
   MODEL_OPTION_ALL,
   MODEL_OPTION_UNLOGGED,
+  MODEL_OTHER_KEY,
   type ProviderModelFilterValue,
   type ProviderModelOption,
   type RangeKind,
+  providerModelFilterOptionKey,
   providerModelKey,
 } from './format';
 import {styles} from './styles';
+
+/** 弹层选项：id 为稳定键（testID/选中比对），value 为选中后回传的筛选值。 */
+type ModelPickerOption = {
+  readonly id: string;
+  readonly label: string;
+  readonly value: ProviderModelFilterValue;
+};
 
 /**
  * 筛选栏（screens/C-4 拆分自主文件）：时间范围 SegmentedControl +
@@ -26,6 +35,7 @@ export function StatsFilterBar({
   modelFilterLabel,
   comboFilter,
   combos,
+  providers,
   onSelectComboFilter,
   rangeSheetVisible,
   onCloseRangeSheet,
@@ -38,9 +48,11 @@ export function StatsFilterBar({
   rangeKind: RangeKind;
   onRangeKindChange: (value: RangeKind) => void;
   modelFilterLabel: string;
-  /** 当前筛选值：undefined = 全部、null = 其他（未记录历史行）、对象 = 具体 provider×model。 */
+  /** 当前筛选值：undefined = 全部、对象 = 配置组合 / 服务商其他模型 / 未记录服务商（三形态口径见 ProviderModelFilterValue）。 */
   comboFilter: ProviderModelFilterValue;
   combos: ProviderModelOption[];
+  /** 全量服务商（含未配置模型者，按展示名排序）：生成每服务商「{服务商} · 其他模型」归并选项。 */
+  providers: ReadonlyArray<{id: string; label: string}>;
   /** 选中筛选后回调（三态口径见 ProviderModelFilterValue）。 */
   onSelectComboFilter: (value: ProviderModelFilterValue) => void;
   rangeSheetVisible: boolean;
@@ -51,6 +63,28 @@ export function StatsFilterBar({
   onCloseModelPicker: () => void;
   tokens: ThemeTokens;
 }) {
+  // 选项集（CR-2 方案 A）：全部 / 配置组合「{服务商} · {模型}」/ 每服务商
+  // 「{服务商} · 其他模型」（该服务商下不在配置集的模型行，含零配置服务商）/
+  // 「未记录服务商（历史）」（provider_id IS NULL，模型在不在配置集均归此）
+  // ——保证无筛选返回的每类 (providerId, modelName) 组合行都有选项可筛。
+  const pickerOptions: readonly ModelPickerOption[] = [
+    {id: MODEL_OPTION_ALL, label: '全部模型', value: undefined},
+    ...combos.map(c => ({
+      id: providerModelKey(c.providerId, c.model),
+      label: `${c.providerLabel} · ${c.model}`,
+      value: {providerId: c.providerId, model: c.model},
+    })),
+    ...providers.map(p => ({
+      id: providerModelKey(p.id, MODEL_OTHER_KEY),
+      label: `${p.label} · 其他模型`,
+      value: {providerId: p.id, model: null},
+    })),
+    {
+      id: MODEL_OPTION_UNLOGGED,
+      label: '未记录服务商（历史）',
+      value: {providerId: null, model: undefined},
+    },
+  ];
   return (
     <>
       <SegmentedControl
@@ -116,47 +150,16 @@ export function StatsFilterBar({
               contentContainerStyle={styles.pickerListContent}
               keyboardShouldPersistTaps="handled"
             >
-              {[
-                {id: MODEL_OPTION_ALL, label: '全部模型'},
-                ...combos.map(c => ({
-                  id: providerModelKey(c.providerId, c.model),
-                  label: `${c.providerLabel} · ${c.model}`,
-                })),
-                {id: MODEL_OPTION_UNLOGGED, label: '其他模型'},
-              ].map(option => {
+              {pickerOptions.map(option => {
                 const selected =
-                  option.id === MODEL_OPTION_ALL
-                    ? comboFilter === undefined
-                    : option.id === MODEL_OPTION_UNLOGGED
-                    ? comboFilter === null
-                    : comboFilter != null &&
-                      option.id ===
-                        providerModelKey(
-                          comboFilter.providerId,
-                          comboFilter.model,
-                        );
+                  comboFilter !== undefined &&
+                  option.id === providerModelFilterOptionKey(comboFilter);
                 return (
                   <Pressable
                     key={option.id}
                     testID={`model-option-${option.id}`}
                     onPress={() => {
-                      if (option.id === MODEL_OPTION_ALL) {
-                        onSelectComboFilter(undefined);
-                      } else if (option.id === MODEL_OPTION_UNLOGGED) {
-                        onSelectComboFilter(null);
-                      } else {
-                        const combo = combos.find(
-                          c =>
-                            providerModelKey(c.providerId, c.model) ===
-                            option.id,
-                        );
-                        if (combo != null) {
-                          onSelectComboFilter({
-                            providerId: combo.providerId,
-                            model: combo.model,
-                          });
-                        }
-                      }
+                      onSelectComboFilter(option.value);
                       onCloseModelPicker();
                     }}
                     style={[

@@ -4,8 +4,10 @@
  * - 命中率 = cacheReadTokens / billedInputTokens，展示层计算；
  *   分母为 0（无 cache 数据）返回 null，展示「—」而非 0%；
  * - 自定义区间上限 366 天（含首尾），避免超长区间查询变慢；
- * - 模型筛选选项哨兵沿用 unlogged 命名，语义为「其他模型」——
- *   NULL 与非当前配置历史模型统一归并到该项（filter.model = null 由 core 侧负责）。
+ * - 模型筛选选项哨兵沿用 unlogged 命名，语义为「未记录服务商（历史）」——
+ *   provider_id IS NULL 的存量行（模型在不在配置集均归此，筛选只传
+ *   providerId: null、不筛 model）；每个服务商另有「{服务商} · 其他模型」
+ *   归并项，筛该服务商下不在配置集的模型行（filter.model = null 由 core 侧解释）。
  */
 
 /** 时间范围筛选种类；custom 需经 MonthRangePickerSheet 选定区间。 */
@@ -18,6 +20,9 @@ export const MS_PER_DAY = 86_400_000;
 
 export const MODEL_OPTION_ALL = '__all__';
 export const MODEL_OPTION_UNLOGGED = '__unlogged__';
+
+/** 服务商「其他模型」选项的组合键后缀（与 providerModelKey 拼成选项 id）。 */
+export const MODEL_OTHER_KEY = '__other__';
 
 /** 自定义区间上限（天，含首尾；避免超长区间查询变慢）。 */
 export const CUSTOM_RANGE_MAX_DAYS = 366;
@@ -80,15 +85,35 @@ export interface ProviderModelOption {
 }
 
 /**
- * 服务商×模型筛选值：`undefined` = 全部；`null` = 其他（未记录的历史行，
- * provider_id/model_name 均缺失）；对象 = 具体 provider×model 组合。
+ * 服务商×模型筛选值：`undefined` = 全部；对象 = 具体筛选目标（三形态）：
+ * - `{providerId: P, model: M}`：具体 provider×model 组合；
+ * - `{providerId: null, model: undefined}`：未记录服务商（历史）——
+ *   `provider_id IS NULL` 的存量行，模型在不在配置集均归此
+ *   （model 不筛，SQL 只留 provider_id IS NULL）；
+ * - `{providerId: P, model: null}`：{P} · 其他模型——该服务商下
+ *   `model_name IS NULL` 或不在已保存模型集合内的历史行。
  */
 export type ProviderModelFilterValue =
   | {providerId: string; model: string}
-  | null
+  | {providerId: string; model: null}
+  | {providerId: null; model: undefined}
   | undefined;
 
 /** 组合的稳定展示键（testID/行 key 共用）。 */
 export function providerModelKey(providerId: string, model: string): string {
   return `${providerId}::${model}`;
+}
+
+/**
+ * 筛选值（非 undefined 形态）对应的选项 id，与 StatsFilterBar 的选项
+ * 生成规则一致：未记录服务商 → unlogged 哨兵；服务商其他模型 →
+ * `{providerId}::__other__`；具体组合 → providerModelKey。
+ */
+export function providerModelFilterOptionKey(
+  value: Exclude<ProviderModelFilterValue, undefined>,
+): string {
+  if (value.providerId === null) {
+    return MODEL_OPTION_UNLOGGED;
+  }
+  return providerModelKey(value.providerId, value.model ?? MODEL_OTHER_KEY);
 }
