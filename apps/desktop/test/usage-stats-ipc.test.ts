@@ -2,6 +2,8 @@
  * Usage stats IPC handler（spec T-S6 的 handler 部分）：
  * - 五种 kind 各自转发到 rt.usageStats 对应方法（filter / dayLocalDate 参数透传）；
  * - core 返回体 → shared DTO 显式映射（含 today 子对象透传、modelName null 透传）；
+ * - modelBreakdown 按 modelName 聚合回每模型单行（core 已是 provider×model 复合维度，
+ *   同名模型多服务商多行在 DTO 侧逐列相加归并）；
  * - service 抛错时经 formatIpcError 包成 IpcResult error 形态。
  *
  * runtime mock 走 module hook：先把 desktop-runtime-singleton 重定向到
@@ -114,10 +116,11 @@ interface RecordedCall {
   args: unknown[];
 }
 
-/** 记录调用并返回样例数据的 stub service；getSummary 抛错可注入。 */
+/** 记录调用并返回样例数据的 stub service；getSummary 抛错可注入，modelBreakdown 返回体可注入。 */
 function makeStubUsageStats(
   calls: RecordedCall[],
   summaryError?: Error,
+  modelRows?: unknown[],
 ): {
   usageStats: unknown;
 } {
@@ -139,7 +142,7 @@ function makeStubUsageStats(
     },
     getModelBreakdown: async (filter: unknown) => {
       calls.push({ method: "getModelBreakdown", args: [filter] });
-      return MODEL_ROWS;
+      return modelRows ?? MODEL_ROWS;
     },
     listModels: async () => {
       calls.push({ method: "listModels", args: [] });
@@ -154,12 +157,15 @@ function makeStubUsageStats(
 }
 
 /** 挂 stub runtime 到 globalThis（hook 替身从这里取），返回记录数组。 */
-function installStubRuntime(summaryError?: Error): RecordedCall[] {
+function installStubRuntime(
+  summaryError?: Error,
+  modelRows?: unknown[],
+): RecordedCall[] {
   const calls: RecordedCall[] = [];
   const g = globalThis as unknown as {
     __usageStatsTestRuntime?: unknown;
   };
-  g.__usageStatsTestRuntime = makeStubUsageStats(calls, summaryError);
+  g.__usageStatsTestRuntime = makeStubUsageStats(calls, summaryError, modelRows);
   return calls;
 }
 
@@ -267,6 +273,56 @@ describe("usage stats IPC handler（T-S6）", () => {
           },
         ],
       },
+    ]);
+  });
+
+  it("kind=modelBreakdown 同名模型多服务商聚合为单行（CR-1：复合维度 → 模型粒度）", async () => {
+    // core 已按 (providerId, modelName) 复合分组，同名模型多服务商各返回一行；
+    // DTO 侧须聚合成每模型单行且各用量列为两行之和，
+    // 否则 renderer 用 modelName 作 React key 会重复、列表出现同名多行。
+    const calls = installStubRuntime(undefined, [
+      {
+        providerId: "p1",
+        modelName: "gpt-4o",
+        calls: 3,
+        promptTokens: 100,
+        completionTokens: 200,
+        totalTokens: 300,
+        cacheReadTokens: 40,
+        billedInputTokens: 120,
+      },
+      {
+        providerId: "p2",
+        modelName: "gpt-4o",
+        calls: 4,
+        promptTokens: 500,
+        completionTokens: 900,
+        totalTokens: 1400,
+        cacheReadTokens: 60,
+        billedInputTokens: 480,
+      },
+    ]);
+    const res = await handleUsageStatsQuery({
+      kind: "modelBreakdown",
+      filter: LAST7_FILTER,
+    });
+    assert.equal(res.ok, true);
+    if (!res.ok) {
+      return;
+    }
+    assert.deepEqual(res.data, [
+      {
+        modelName: "gpt-4o",
+        calls: 7,
+        promptTokens: 600,
+        completionTokens: 1100,
+        totalTokens: 1700,
+        cacheReadTokens: 100,
+        billedInputTokens: 600,
+      },
+    ]);
+    assert.deepEqual(calls, [
+      { method: "getModelBreakdown", args: [{ range: { kind: "last7" } }] },
     ]);
   });
 

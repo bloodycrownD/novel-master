@@ -1,6 +1,7 @@
 /**
  * Usage stats IPC handler — 单 channel 按 kind 分发转发 core 统计服务，
- * core 返回体在此显式映射为 shared DTO（renderer 侧不 import core）。
+ * core 返回体在此显式映射为 shared DTO（renderer 侧不 import core）；
+ * modelBreakdown 在此按 modelName 聚合回每模型单行（core 已是 provider×model 复合维度）。
  */
 import type {
   UsageStatsBucket,
@@ -69,16 +70,42 @@ function toBucketDto(bucket: UsageStatsBucket): UsageStatsBucketDto {
   };
 }
 
-function toModelRowDto(row: UsageStatsModelRow): UsageStatsModelRowDto {
-  return {
-    modelName: row.modelName,
-    calls: row.calls,
-    promptTokens: row.promptTokens,
-    completionTokens: row.completionTokens,
-    totalTokens: row.totalTokens,
-    cacheReadTokens: row.cacheReadTokens,
-    billedInputTokens: row.billedInputTokens,
-  };
+/**
+ * core 分模型汇总已是 (providerId, modelName) 复合维度，同名模型多服务商会返回多行；
+ * DTO 侧在此按 modelName 聚合回「每模型单行」旧粒度（providerId 不透出 renderer），
+ * 六列用量逐列相加，modelName 为 null 的存量行归并进同一个「未记录」桶。
+ * 保持 core 返回的首现顺序（renderer 侧自行按 totalTokens 重排）。
+ */
+function toModelRowDtos(rows: UsageStatsModelRow[]): UsageStatsModelRowDto[] {
+  // Map key 用哨兵串区分 null 模型名，避免与真实模型名冲突
+  const NULL_KEY = '\u0000__null_model__';
+  const merged = new Map<string, UsageStatsModelRowDto>();
+  for (const row of rows) {
+    const key = row.modelName ?? NULL_KEY;
+    const prev = merged.get(key);
+    if (prev == null) {
+      merged.set(key, {
+        modelName: row.modelName,
+        calls: row.calls,
+        promptTokens: row.promptTokens,
+        completionTokens: row.completionTokens,
+        totalTokens: row.totalTokens,
+        cacheReadTokens: row.cacheReadTokens,
+        billedInputTokens: row.billedInputTokens,
+      });
+    } else {
+      merged.set(key, {
+        modelName: prev.modelName,
+        calls: prev.calls + row.calls,
+        promptTokens: prev.promptTokens + row.promptTokens,
+        completionTokens: prev.completionTokens + row.completionTokens,
+        totalTokens: prev.totalTokens + row.totalTokens,
+        cacheReadTokens: prev.cacheReadTokens + row.cacheReadTokens,
+        billedInputTokens: prev.billedInputTokens + row.billedInputTokens,
+      });
+    }
+  }
+  return [...merged.values()];
 }
 
 function toRequestRowDto(row: UsageStatsRequestRow): UsageStatsRequestRowDto {
@@ -124,7 +151,7 @@ export async function handleUsageStatsQuery(
       case 'modelBreakdown':
         return {
           ok: true,
-          data: (await svc.getModelBreakdown(filter)).map(toModelRowDto),
+          data: toModelRowDtos(await svc.getModelBreakdown(filter)),
         };
       case 'models':
         return { ok: true, data: await svc.listModels() };
