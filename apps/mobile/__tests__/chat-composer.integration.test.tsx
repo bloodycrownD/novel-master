@@ -35,9 +35,9 @@ const mockFilePickerProps: {
   onConfirm?: (pathTokens: readonly string[]) => void;
 } = {};
 jest.mock('../src/components/chat/FileReferencePicker', () => ({
-  FileReferencePicker: (
-    props: {onConfirm: (pathTokens: readonly string[]) => void},
-  ) => {
+  FileReferencePicker: (props: {
+    onConfirm: (pathTokens: readonly string[]) => void;
+  }) => {
     mockFilePickerProps.onConfirm = props.onConfirm;
     return null;
   },

@@ -453,7 +453,10 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
     await act(async () => {
-      findByTestId(renderer.root, 'model-option-p1::__other__')!.props.onPress();
+      findByTestId(
+        renderer.root,
+        'model-option-p1::__other__',
+      )!.props.onPress();
       await flushPromises();
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
@@ -479,11 +482,56 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     // 模型) / (未记录, NULL) / (未记录, 已配置模型)——后四类含 CR-2 修复的
     // 存量行形态。
     const parityRows = [
-      {providerId: 'p1', modelName: 'gpt-4o', calls: 4, promptTokens: 850, completionTokens: 100, totalTokens: 950, cacheReadTokens: 800, billedInputTokens: 600},
-      {providerId: 'p1', modelName: 'legacy-relay-model', calls: 1, promptTokens: 50, completionTokens: 0, totalTokens: 50, cacheReadTokens: 0, billedInputTokens: 50},
-      {providerId: 'p2', modelName: 'p2-only-model', calls: 1, promptTokens: 30, completionTokens: 0, totalTokens: 30, cacheReadTokens: 0, billedInputTokens: 30},
-      {providerId: null, modelName: null, calls: 2, promptTokens: 500, completionTokens: 100, totalTokens: 600, cacheReadTokens: 0, billedInputTokens: 500},
-      {providerId: null, modelName: 'gpt-4o', calls: 1, promptTokens: 40, completionTokens: 0, totalTokens: 40, cacheReadTokens: 0, billedInputTokens: 40},
+      {
+        providerId: 'p1',
+        modelName: 'gpt-4o',
+        calls: 4,
+        promptTokens: 850,
+        completionTokens: 100,
+        totalTokens: 950,
+        cacheReadTokens: 800,
+        billedInputTokens: 600,
+      },
+      {
+        providerId: 'p1',
+        modelName: 'legacy-relay-model',
+        calls: 1,
+        promptTokens: 50,
+        completionTokens: 0,
+        totalTokens: 50,
+        cacheReadTokens: 0,
+        billedInputTokens: 50,
+      },
+      {
+        providerId: 'p2',
+        modelName: 'p2-only-model',
+        calls: 1,
+        promptTokens: 30,
+        completionTokens: 0,
+        totalTokens: 30,
+        cacheReadTokens: 0,
+        billedInputTokens: 30,
+      },
+      {
+        providerId: null,
+        modelName: null,
+        calls: 2,
+        promptTokens: 500,
+        completionTokens: 100,
+        totalTokens: 600,
+        cacheReadTokens: 0,
+        billedInputTokens: 500,
+      },
+      {
+        providerId: null,
+        modelName: 'gpt-4o',
+        calls: 1,
+        promptTokens: 40,
+        completionTokens: 0,
+        totalTokens: 40,
+        cacheReadTokens: 0,
+        billedInputTokens: 40,
+      },
     ];
     mockGetModelBreakdown.mockImplementation(async () => parityRows);
     const renderer = await renderScreen();

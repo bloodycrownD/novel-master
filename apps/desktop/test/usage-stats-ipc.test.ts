@@ -120,7 +120,7 @@ interface RecordedCall {
 function makeStubUsageStats(
   calls: RecordedCall[],
   summaryError?: Error,
-  modelRows?: unknown[],
+  modelRows?: unknown[]
 ): {
   usageStats: unknown;
 } {
@@ -159,13 +159,17 @@ function makeStubUsageStats(
 /** 挂 stub runtime 到 globalThis（hook 替身从这里取），返回记录数组。 */
 function installStubRuntime(
   summaryError?: Error,
-  modelRows?: unknown[],
+  modelRows?: unknown[]
 ): RecordedCall[] {
   const calls: RecordedCall[] = [];
   const g = globalThis as unknown as {
     __usageStatsTestRuntime?: unknown;
   };
-  g.__usageStatsTestRuntime = makeStubUsageStats(calls, summaryError, modelRows);
+  g.__usageStatsTestRuntime = makeStubUsageStats(
+    calls,
+    summaryError,
+    modelRows
+  );
   return calls;
 }
 
@@ -392,7 +396,7 @@ describe("usage stats IPC handler（T-S6）", () => {
     const summary = summaryRes.data;
     assert.equal(
       typeof summary === "object" && summary != null && "today" in summary,
-      true,
+      true
     );
     if (typeof summary === "object" && summary != null && "today" in summary) {
       assert.equal(summary.avgFirstTokenMs, 850.5);
@@ -421,10 +425,10 @@ describe("usage stats IPC handler（T-S6）", () => {
   it("service 抛 ChatError 时返回 IpcResult error 形态（code/message 透传）", async () => {
     // 构造带 domain code 的 ChatError 形状（core 主入口未导出该类，
     // formatIpcError 按 name ∈ TYPED_ERROR_NAMES + code 字段识别）
-    const chatError = Object.assign(
-      new Error("自定义区间缺少 fromMs/toMs"),
-      { name: "ChatError", code: "INVALID_ARGUMENT" },
-    );
+    const chatError = Object.assign(new Error("自定义区间缺少 fromMs/toMs"), {
+      name: "ChatError",
+      code: "INVALID_ARGUMENT",
+    });
     const calls = installStubRuntime(chatError);
     const res = await handleUsageStatsQuery({
       kind: "summary",
