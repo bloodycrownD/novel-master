@@ -12,8 +12,13 @@
  *
  * 复询防抖的原因：mobile 查的是本进程内存里的 core registry 注册状态，
  * run 被 main 主动结束、unregister 事件还没派发到 renderer 时，has 可能短暂仍返回 true。
+ *
+ * 实现约束：回调经 ref 转发、probe 引用恒定。调用方（ChatTabProvider 等）传的
+ * 常是每次渲染新建的内联箭头函数，若 probe 随之重建，轮询 interval 会随任何无关
+ * 重渲染（如流式计时条的 250ms ticker）反复拆建，30s 兜底永远走不完——这正是
+ * 本兜底最该工作的 uiRunning 卡死场景。
  */
-import {useEffect, useMemo} from 'react';
+import {useEffect, useMemo, useRef} from 'react';
 import {AppState} from 'react-native';
 
 /** 兜底轮询周期（毫秒）。visibility 为主，轮询为辅，30s 足够。 */
@@ -76,14 +81,23 @@ export function createRunEndedProbe({
   return probe;
 }
 
+/** 回调经 ref 转发：probe 引用恒定，不受调用方内联函数影响。 */
 export function useSubagentRunProbe({
   isRunActive,
   isRunRegistered,
   onRunEnded,
 }: UseSubagentRunProbeParams): void {
+  // 回调存 ref：调用方传内联函数也不导致 AppState 订阅反复拆建。
+  const callbacksRef = useRef({isRunActive, isRunRegistered, onRunEnded});
+  callbacksRef.current = {isRunActive, isRunRegistered, onRunEnded};
   const probe = useMemo(
-    () => createRunEndedProbe({isRunActive, isRunRegistered, onRunEnded}),
-    [isRunActive, isRunRegistered, onRunEnded],
+    () =>
+      createRunEndedProbe({
+        isRunActive: () => callbacksRef.current.isRunActive(),
+        isRunRegistered: () => callbacksRef.current.isRunRegistered(),
+        onRunEnded: () => callbacksRef.current.onRunEnded(),
+      }),
+    [],
   );
 
   // app 回前台为主触发点。
@@ -104,6 +118,8 @@ export function useSubagentRunProbe({
  * 低频轮询 effect（独立导出，由调用方按 uiRunning 决定是否启用）。
  *
  * 轮询只在 uiRunning 期间启动；uiRunning 翻 false 时清 interval。
+ * 依赖收敛为 [uiRunning, probe]（probe 恒定）：无关重渲染不得拆建 interval，
+ * 否则 30s 兜底在 uiRunning 卡死场景永远无法落地。
  *
  * @param uiRunning 用于决定轮询 interval 是否启动（false 时不轮询）。
  * @param isRunActive 同步读 uiRunning（probe 内部自行判断，禁止读 React state）。
@@ -116,9 +132,16 @@ export function useSubagentRunPolling(
   isRunRegistered: () => boolean,
   onRunEnded: () => void,
 ): void {
+  const callbacksRef = useRef({isRunActive, isRunRegistered, onRunEnded});
+  callbacksRef.current = {isRunActive, isRunRegistered, onRunEnded};
   const probe = useMemo(
-    () => createRunEndedProbe({isRunActive, isRunRegistered, onRunEnded}),
-    [isRunActive, isRunRegistered, onRunEnded],
+    () =>
+      createRunEndedProbe({
+        isRunActive: () => callbacksRef.current.isRunActive(),
+        isRunRegistered: () => callbacksRef.current.isRunRegistered(),
+        onRunEnded: () => callbacksRef.current.onRunEnded(),
+      }),
+    [],
   );
 
   useEffect(() => {
