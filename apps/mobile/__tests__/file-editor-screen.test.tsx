@@ -194,6 +194,11 @@ async function renderLoadedScreen(): Promise<TestRenderer.ReactTestRenderer> {
   await act(async () => {
     await Promise.resolve();
   });
+  // heavyPreviewReady 有 80ms 延迟挂载（避开推屏转场窗口），真计时器
+  // flush 过去，预览分支的用例才能断言到 FileMarkdownPreview。
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 120));
+  });
   return tree;
 }
 
