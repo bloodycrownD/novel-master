@@ -72,3 +72,15 @@ user:
 
 assistant:
 结案：拔除全部输入探针（composer-input-debug.ts 删除、组件内五处埋点与 self-heal 日志移除），自愈对账修复保留并提交（fix 分支）。组件 grep 探针零残留，tsc 非 __tests__ 持平基线 8、eslint 0、composer 相关 28 测试全绿。案件归档：输入变删除=IME 组合期 mention 库差分重建吃字符+children 全量重推落实，修复=原生上报对账自愈。
+
+user:
+对 fix/2026-09-stats-composer-markdown 发起 code-review-loop（diff 模式）。
+
+assistant:
+按 skill 流程：base=631ac73(main) head=b8840b0，24 文件 +614/-154；fix-spec 路径定 docs/Iterations/stats-composer-fixes-2026-09/cr-fix-spec.md；派 readonly 评审子代理（B–K 维 + A 对照记忆文件所载需求）。
+
+user:
+对 fix/2026-09-stats-composer-markdown 发起 code-review-loop。
+
+assistant:
+diff 模式单轮：reviewer（readonly）评审 631ac73..b8840b0，结论"需产出 fix-spec"（P0=0/P1=2/P2=2，无 open spec_deviations）：CR-1[P1] desktop DTO 丢 providerId→同名模型多行、React key 重复（改法=DTO 按 modelName 聚合复原桌面旧行为+ipc 测试）；CR-2[P1] mobile 筛选项与汇总行 parity 破坏——(provider_id NULL×已配置模型) 与 (P×未配置模型) 两类存量行无选项可命中（改法=方案A：「其他模型」改 provider 维度传 {model:undefined, providerId:null}、每服务商加「·其他模型」项、对象形态 model 可 undefined、format.ts 注释校正+core/mobile 测试+parity 断言）；CR-3[P2] FileEditor 矛盾注释合并；CR-4[P2] 自愈对账加两条集成用例（chat-composer.integration 未 mock 库，可真实驱动）。spec-fix 子代理落盘 docs/Iterations/stats-composer-fixes-2026-09/cr-fix-spec.md（99 行，结构合规，行号/路径经核实修正：矛盾注释实际 L83-87）。open questions 待拍板：①desktop 是否上复合维度（CR-1 只最小复原）；②reloadModels 失败静默空态；③串行 listByProvider 偏慢。待用户确认后开工执行 fix-spec。
