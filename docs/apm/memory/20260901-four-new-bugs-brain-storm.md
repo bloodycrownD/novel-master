@@ -84,3 +84,9 @@ user:
 
 assistant:
 diff 模式单轮：reviewer（readonly）评审 631ac73..b8840b0，结论"需产出 fix-spec"（P0=0/P1=2/P2=2，无 open spec_deviations）：CR-1[P1] desktop DTO 丢 providerId→同名模型多行、React key 重复（改法=DTO 按 modelName 聚合复原桌面旧行为+ipc 测试）；CR-2[P1] mobile 筛选项与汇总行 parity 破坏——(provider_id NULL×已配置模型) 与 (P×未配置模型) 两类存量行无选项可命中（改法=方案A：「其他模型」改 provider 维度传 {model:undefined, providerId:null}、每服务商加「·其他模型」项、对象形态 model 可 undefined、format.ts 注释校正+core/mobile 测试+parity 断言）；CR-3[P2] FileEditor 矛盾注释合并；CR-4[P2] 自愈对账加两条集成用例（chat-composer.integration 未 mock 库，可真实驱动）。spec-fix 子代理落盘 docs/Iterations/stats-composer-fixes-2026-09/cr-fix-spec.md（99 行，结构合规，行号/路径经核实修正：矛盾注释实际 L83-87）。open questions 待拍板：①desktop 是否上复合维度（CR-1 只最小复原）；②reloadModels 失败静默空态；③串行 listByProvider 偏慢。待用户确认后开工执行 fix-spec。
+
+user:
+发起 code-dev-loop 执行 cr-fix-spec（四条 must-fix）。
+
+assistant:
+DAG：wave-0 三路并行 worker（CR-1 desktop DTO 聚合、CR-2 mobile 筛选 parity 方案A、CR-4 自愈集成测试）+ CR-3 trivial 主代理直执（矛盾注释合并）；wave-1 verify 主代理直执；wave-2 cr-func readonly。子代理只改码不提交（避免同工作区 index 抢锁），主代理统一提交四逻辑块（09138cd/9dbc3d8/6810269/df6bc75）。CR-2 类型收敛为三形态联合（顶层 null 移除）、选项携带 value、providerModelFilterOptionKey 比对；残留边界：模型仅被另一服务商配置时仍无入口（NOT IN 是全局 distinct），方案 A 口径内可接受，另开迭代再议。CR-4 变异验证：破坏对账条件双用例挂、只破坏清空仅②挂；关键坑：testID find 命中的是 ComposerAtPathInput 组件自身 props（外层 onChangeText=直接调 commitComposerText 绕过 mention 层），必须 findAllByType(TextInput) 拿内部原生输入驱动。CR-1 desktop 测试非 jest，是 node scripts/run-tests.mjs（tsx+node:test），11/11。
