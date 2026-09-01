@@ -59,8 +59,12 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 老库（v8）靠本轮 bump 走慢路径，由 ALIGN 补列；两列仅新消息写入，
  * 无存量回填。token-usage-stats-enhance 迭代曾遗漏此 bump，导致存量库
  * 走快路径永远不补列（真机实测 no such column: first_token_ms）。
+ * v10：chat_message 新增 provider_id 列（provider×model 维度统计，写入时
+ * 快照 savedModel.providerId）。老库（v9）靠本轮 bump 走慢路径由 ALIGN
+ * 补列；无存量回填（历史行 NULL 归「其他」桶）。曾再犯 v9 同款遗漏，
+ * 真机实测 no such column: provider_id。
  */
-export const SCHEMA_BOOT_VERSION = 9;
+export const SCHEMA_BOOT_VERSION = 10;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
