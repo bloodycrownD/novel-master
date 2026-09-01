@@ -35,7 +35,12 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
-import type {PageTab, RangeKind} from './token-usage/format';
+import type {
+  PageTab,
+  ProviderModelFilterValue,
+  ProviderModelOption,
+  RangeKind,
+} from './token-usage/format';
 import {isCustomRangeValid} from './token-usage/format';
 import {styles} from './token-usage/styles';
 import {StatsFilterBar} from './token-usage/StatsFilterBar';
@@ -53,10 +58,13 @@ export function TokenUsageStatsScreen() {
   const [customTo, setCustomTo] = useState<Date | null>(null);
   const [rangeSheetVisible, setRangeSheetVisible] = useState(false);
   const [pageTab, setPageTab] = useState<PageTab>('summary');
-  const [modelFilter, setModelFilter] = useState<string | null | undefined>(
-    undefined,
+  const [comboFilter, setComboFilter] =
+    useState<ProviderModelFilterValue>(undefined);
+  const [combos, setCombos] = useState<ProviderModelOption[]>([]);
+  // providerId → 展示名（服务商已删除时缺失，展示层兑底「未知服务商」）。
+  const [providerLabels, setProviderLabels] = useState<Record<string, string>>(
+    {},
   );
-  const [models, setModels] = useState<string[]>([]);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [summary, setSummary] = useState<UsageStatsSummary | null>(null);
   const [dailyBuckets, setDailyBuckets] = useState<UsageStatsBucket[]>([]);
@@ -83,6 +91,11 @@ export function TokenUsageStatsScreen() {
   // 序号，过期响应（含报错与 loading 复位）整体丢弃，不覆盖新一轮数据。
   const reloadSeqRef = useRef(0);
 
+  // 服务商×模型筛选（provider 维度：provider_id 写入时快照，服务商改名/删除
+  // 不回写历史行，解析不到展示名时归「未知服务商」）。
+  const comboModel = comboFilter == null ? comboFilter : comboFilter.model;
+  const comboProviderId =
+    comboFilter == null ? comboFilter : comboFilter.providerId;
   const filter = useMemo<UsageStatsFilter>(() => {
     // 自定义区间：from 为所选日 0 点，to 取结束日次日 0 点（含结束日全天，
     // 与 last7/last30 的「覆盖到本地明日 0 点」口径一致）。
@@ -98,11 +111,16 @@ export function TokenUsageStatsScreen() {
             customTo.getDate() + 1,
           ).getTime(),
         },
-        model: modelFilter,
+        model: comboModel,
+        providerId: comboProviderId,
       };
     }
-    return {range: {kind: rangeKind}, model: modelFilter};
-  }, [rangeKind, customFrom, customTo, modelFilter]);
+    return {
+      range: {kind: rangeKind},
+      model: comboModel,
+      providerId: comboProviderId,
+    };
+  }, [rangeKind, customFrom, customTo, comboModel, comboProviderId]);
 
   // 页签切换只切换展示，不参与 filter/reload 依赖——筛选跨页签保留、不重查。
   const reload = useCallback(async () => {
@@ -189,13 +207,36 @@ export function TokenUsageStatsScreen() {
     }
   }, [pageTab, reqLoading, loadRequests]);
 
-  // 模型选项：listModels 只返回非 NULL 模型名，「其他模型」选项由 UI 侧补上
-  //（DEV-1，spec T-S5/AC-11；语义 = NULL + 非当前配置历史模型归并）。
+  // 服务商×模型选项：配置侧生成（providers.list + 逐服务商 savedModelRepo
+  // .listByProvider）；「其他」选项由 UI 侧补上（语义 = provider_id/model_name
+  // 均缺失的历史行）。
   const reloadModels = useCallback(async () => {
     try {
-      setModels(await runtime.usageStats.listModels());
+      const providerList = await runtime.providers.list();
+      const labels: Record<string, string> = {};
+      const options: ProviderModelOption[] = [];
+      for (const p of providerList) {
+        labels[p.id] = p.displayName;
+        const saved = await runtime.savedModelRepo.listByProvider(p.id);
+        for (const m of saved) {
+          options.push({
+            providerId: p.id,
+            providerLabel: p.displayName,
+            model: m.vendorModelId,
+          });
+        }
+      }
+      setProviderLabels(labels);
+      setCombos(
+        options.sort(
+          (a, b) =>
+            a.providerLabel.localeCompare(b.providerLabel) ||
+            a.model.localeCompare(b.model),
+        ),
+      );
     } catch {
-      setModels([]);
+      setCombos([]);
+      setProviderLabels({});
     }
   }, [runtime]);
 
@@ -250,11 +291,17 @@ export function TokenUsageStatsScreen() {
   };
 
   const modelFilterLabel =
-    modelFilter === undefined
+    comboFilter === undefined
       ? '全部模型'
-      : modelFilter === null
+      : comboFilter === null
       ? '其他模型'
-      : modelFilter;
+      : `${
+          combos.find(
+            c =>
+              c.providerId === comboFilter.providerId &&
+              c.model === comboFilter.model,
+          )?.providerLabel ?? '未知服务商'
+        } · ${comboFilter.model}`;
 
   const rangeLabel =
     rangeKind === 'custom' && customFrom && customTo
@@ -268,7 +315,7 @@ export function TokenUsageStatsScreen() {
   // 空态区分（mobile/A-1）：库全空（listModels 为空且已落地一轮查询）显示
   // 冷启动引导；范围内无数据提示「该区间无数据」并保留今日卡。summary 非空
   // 条件避免首查在途时闪现空态。
-  const libraryEmpty = models.length === 0 && summary != null;
+  const libraryEmpty = combos.length === 0 && summary != null;
   const rangeEmpty =
     summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
@@ -283,9 +330,9 @@ export function TokenUsageStatsScreen() {
         rangeKind={rangeKind}
         onRangeKindChange={onRangeKindChange}
         modelFilterLabel={modelFilterLabel}
-        modelFilter={modelFilter}
-        models={models}
-        onSelectModelFilter={setModelFilter}
+        comboFilter={comboFilter}
+        combos={combos}
+        onSelectComboFilter={setComboFilter}
         rangeSheetVisible={rangeSheetVisible}
         onCloseRangeSheet={() => setRangeSheetVisible(false)}
         onConfirmRange={onRangeConfirm}
@@ -356,6 +403,7 @@ export function TokenUsageStatsScreen() {
         <SummaryTab
           summary={summary}
           modelRows={modelRows}
+          providerLabels={providerLabels}
           rangeLabel={rangeLabel}
           tokens={tokens}
         />

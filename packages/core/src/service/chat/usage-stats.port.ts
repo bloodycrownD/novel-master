@@ -30,6 +30,15 @@ export interface UsageStatsRange {
 export interface UsageStatsFilter {
   readonly range: UsageStatsRange;
   readonly model?: string | null;
+  /**
+   * 服务商筛选（与 model 复合）：
+   * - `undefined`：全部服务商；
+   * - `null`：只统计「其他」桶——`provider_id IS NULL` 的历史行
+   *   （provider_id 写入时快照，新版本起每条 assistant 行均携带）；
+   * - 具体字符串：只统计 `provider_id` 相等的行（服务商已删除仍按
+   *   原 id 匹配，展示名由 UI 层解析兑底）。
+   */
+  readonly providerId?: string | null;
 }
 
 /** 今日卡片子对象（本地时区当日 0 点起算，独立于 filter）。 */
@@ -83,10 +92,12 @@ export interface UsageStatsBucket {
 }
 
 /**
- * 分模型汇总行（`modelName` 为 null 表示「其他」桶：未记录行与不在
- * 当前已保存模型集合内的行归并成一行）。
+ * 分服务商×模型汇总行（`providerId` 为写入时快照的服务商配置 id，
+ * null 表示未记录的历史行；`modelName` 为 null 表示该服务商下的
+ * 「其他模型」桶：未记录行与不在当前已保存模型集合内的行归并成一行）。
  */
 export interface UsageStatsModelRow {
+  readonly providerId: string | null;
   readonly modelName: string | null;
   readonly calls: number;
   readonly promptTokens: number;

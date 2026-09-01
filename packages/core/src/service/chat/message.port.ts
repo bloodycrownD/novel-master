@@ -35,6 +35,8 @@ export interface MessageService {
       provider?: string | null;
       /** 厂商模型 id（写入 `model_name` 列，统计页接续/筛选用）。 */
       modelName?: string | null;
+      /** 服务商配置 id（写入 `provider_id` 列，写入时快照，供 provider×model 维度统计）。 */
+      providerId?: string | null;
       raw?: Record<string, unknown> | null;
       /** 结构化附件；写入 `attachments_json`，不写入 `content_json`。 */
       attachments?: readonly MessageAttachment[];

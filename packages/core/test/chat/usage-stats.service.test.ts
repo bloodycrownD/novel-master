@@ -70,6 +70,7 @@ interface MsgSeed {
   createdAtMs: number;
   role?: string;
   provider?: string | null;
+  providerId?: string | null;
   modelName?: string | null;
   hidden?: boolean;
   usage?: {
@@ -95,7 +96,7 @@ async function seedMsg(
   ctx: ReturnType<typeof getNovelMasterTestContext>,
   sessionId: string,
   seq: number,
-  seed: MsgSeed,
+  seed: MsgSeed
 ): Promise<void> {
   const u = seed.usage;
   const usage =
@@ -119,6 +120,7 @@ async function seedMsg(
     role: seed.role ?? "assistant",
     content: textBlocks("usage-stats-seed"),
     provider: seed.provider ?? null,
+    providerId: seed.providerId ?? null,
     modelName: seed.modelName ?? null,
     raw: null,
     createdAtMs: seed.createdAtMs,
@@ -193,11 +195,11 @@ describe("usage stats service (T-S5)", () => {
     // 子会话：造一个 parent_session_id 非空的 session。
     const childSession = await ctx.sessions.create(
       project.id,
-      "usage-stats-child",
+      "usage-stats-child"
     );
     await ctx.conn.execute(
       `UPDATE chat_session SET parent_session_id = ? WHERE id = ?`,
-      [session.id, childSession.id],
+      [session.id, childSession.id]
     );
 
     await seedMsg(ctx, session.id, 1, {
@@ -296,11 +298,11 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-other-provider', 'openai', 'https://example.com', 'Stats Other Provider', '{}', 0, ${ts}, ${ts})`,
+       VALUES ('stats-other-provider', 'openai', 'https://example.com', 'Stats Other Provider', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-1', 'stats-other-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`,
+       VALUES ('som-1', 'stats-other-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
 
     const svc = createUsageStatsService(ctx.conn);
@@ -467,10 +469,9 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(now);
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-provider', 'openai', 'https://example.com', 'Stats Provider', '{}', 0, ${ts}, ${ts})`,
+       VALUES ('stats-provider', 'openai', 'https://example.com', 'Stats Provider', '{}', 0, ${ts}, ${ts})`
     );
-    const insertModel =
-      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+    const insertModel = `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
        VALUES (?, 'stats-provider', ?, ?, '{}', ${ts}, ${ts})`;
     await ctx.conn.execute(insertModel, ["sm-1", "model-b", "model-b"]);
     await ctx.conn.execute(insertModel, ["sm-2", "model-a", "model-a"]);
@@ -509,13 +510,13 @@ describe("usage stats service (T-S5)", () => {
     const today0 = localDayStart(Date.now());
     await assert.rejects(
       svc.getSummary({ range: { kind: "custom" } }),
-      ChatError,
+      ChatError
     );
     await assert.rejects(
       svc.getSummary({
         range: { kind: "custom", fromMs: today0 + HOUR, toMs: today0 },
       }),
-      ChatError,
+      ChatError
     );
     await assert.rejects(
       svc.getSummary({
@@ -525,7 +526,7 @@ describe("usage stats service (T-S5)", () => {
           toMs: today0,
         },
       }),
-      ChatError,
+      ChatError
     );
   });
 
@@ -534,11 +535,11 @@ describe("usage stats service (T-S5)", () => {
     const svc = createUsageStatsService(ctx.conn);
     await assert.rejects(
       svc.getHourlyBuckets("2026-02-30", { range: { kind: "last7" } }),
-      ChatError,
+      ChatError
     );
     await assert.rejects(
       svc.getHourlyBuckets("not-a-date", { range: { kind: "last7" } }),
-      ChatError,
+      ChatError
     );
   });
 
@@ -643,11 +644,11 @@ describe("usage stats service (T-S5)", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('stats-null-model-provider', 'openai', 'https://example.com', 'Stats Null Model Provider', '{}', 0, ${ts}, ${ts})`,
+       VALUES ('stats-null-model-provider', 'openai', 'https://example.com', 'Stats Null Model Provider', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-null-1', 'stats-null-model-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`,
+       VALUES ('som-null-1', 'stats-null-model-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
 
     const svc = createUsageStatsService(ctx.conn);
@@ -666,6 +667,86 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(row.calls, 2);
     assert.equal(row.promptTokens, 50);
     assert.equal(row.totalTokens, 50);
+  });
+
+  it("G-1b: provider×model 维度——同名模型跨服务商分列，providerId 筛选与 null 其他桶", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // 同名 model-a 分属两个服务商；另一条为未记录服务商（provider_id NULL）
+    // 的历史行，模型名也不在配置集合 → 归「未记录×其他」。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      providerId: "stats-px",
+      modelName: "model-a",
+      usage: { prompt: 40, total: 40 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      providerId: "stats-py",
+      modelName: "model-a",
+      usage: { prompt: 25, total: 25 },
+    });
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 30 * MIN,
+      providerId: null,
+      modelName: "model-legacy",
+      usage: { prompt: 10, total: 10 },
+    });
+    const ts = String(Date.now());
+    for (const pid of ["stats-px", "stats-py"]) {
+      await ctx.conn.execute(
+        `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+         VALUES ('${pid}', 'openai', 'https://example.com', '${pid}', '{}', 0, ${ts}, ${ts})`
+      );
+    }
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('som-pm-1', 'stats-px', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    const range = {
+      kind: "custom" as const,
+      fromMs: today0,
+      toMs: localAddDays(today0, 1),
+    };
+    // 无筛选：三行分列（同名模型按服务商拆开；未记录行独立）。
+    const breakdown = await svc.getModelBreakdown({ range });
+    assert.equal(breakdown.length, 3);
+    const px = breakdown.find(
+      (r) => r.providerId === "stats-px" && r.modelName === "model-a"
+    );
+    const py = breakdown.find(
+      (r) => r.providerId === "stats-py" && r.modelName === "model-a"
+    );
+    const unlogged = breakdown.find(
+      (r) => r.providerId === null && r.modelName === null
+    );
+    assert.ok(
+      px && py && unlogged,
+      `breakdown 应三行分列，实际 ${JSON.stringify(breakdown)}`
+    );
+    assert.equal(px!.totalTokens, 40);
+    assert.equal(py!.totalTokens, 25);
+    assert.equal(unlogged!.totalTokens, 10);
+
+    // providerId 筛选：只看 stats-py。
+    const filtered = await svc.getModelBreakdown({
+      range,
+      providerId: "stats-py",
+    });
+    assert.equal(filtered.length, 1);
+    assert.equal(filtered[0]!.providerId, "stats-py");
+    assert.equal(filtered[0]!.totalTokens, 25);
+
+    // providerId:null → 只剩未记录的历史行。
+    const nullFiltered = await svc.getModelBreakdown({
+      range,
+      providerId: null,
+    });
+    assert.equal(nullFiltered.length, 1);
+    assert.equal(nullFiltered[0]!.providerId, null);
+    assert.equal(nullFiltered[0]!.totalTokens, 10);
   });
 
   it("G-2: daySpanBetweenLocalDays 对 DST 23/25 小时天做 Math.round 补偿", () => {
@@ -724,7 +805,10 @@ describe("usage stats service (T-S5)", () => {
     });
     assert.equal(buckets.length, 24);
     // 重复钟点（本地 1 点）桶加宽：1 点桶（01:00 EDT 起）到 2 点桶（02:00 EST 起）跨 2 小时。
-    assert.equal(buckets[2]!.bucketStartMs - buckets[1]!.bucketStartMs, 2 * HOUR);
+    assert.equal(
+      buckets[2]!.bucketStartMs - buckets[1]!.bucketStartMs,
+      2 * HOUR
+    );
     assert.equal(buckets[1]!.bucketStartMs - buckets[0]!.bucketStartMs, HOUR);
     // 两个 01:10 实例都落在加宽的 1 点桶里。
     assert.equal(buckets[1]!.calls, 2);
@@ -739,12 +823,24 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     // 行 1：有效行（流式）—— completion 900，生成时长 3500-500=3000ms → 900/3 = 300 tok/s
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: today0 + 10 * MIN,
-      usage: { prompt: 100, completion: 900, total: 1000, firstTokenMs: 500, durationMs: 3500 },
+      usage: {
+        prompt: 100,
+        completion: 900,
+        total: 1000,
+        firstTokenMs: 500,
+        durationMs: 3500,
+      },
     });
     // 行 2：非流式行（first=duration）—— 入 TTFT 均值，不入速率分母
     await seedMsg(ctx, session.id, 2, {
       createdAtMs: today0 + 11 * MIN,
-      usage: { prompt: 50, completion: 100, total: 150, firstTokenMs: 2000, durationMs: 2000 },
+      usage: {
+        prompt: 50,
+        completion: 100,
+        total: 150,
+        firstTokenMs: 2000,
+        durationMs: 2000,
+      },
     });
     // 行 3：旧数据（耗时全 NULL）—— 不入任何新指标
     await seedMsg(ctx, session.id, 3, {
@@ -804,12 +900,24 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     // 今天：有效行 → 600/(4000-1000)/1000*1000... 计算：completion 600，生成 3000ms → 200 tok/s
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: today0 + 14 * HOUR,
-      usage: { prompt: 80, completion: 600, total: 680, firstTokenMs: 1000, durationMs: 4000 },
+      usage: {
+        prompt: 80,
+        completion: 600,
+        total: 680,
+        firstTokenMs: 1000,
+        durationMs: 4000,
+      },
     });
     // 昨天：另一条有效行 → completion 300，生成 1500ms → 200 tok/s；TTFT 300
     await seedMsg(ctx, session.id, 2, {
       createdAtMs: yesterday0 + 9 * HOUR,
-      usage: { prompt: 40, completion: 300, total: 340, firstTokenMs: 300, durationMs: 1800 },
+      usage: {
+        prompt: 40,
+        completion: 300,
+        total: 340,
+        firstTokenMs: 300,
+        durationMs: 1800,
+      },
     });
 
     const svc = createUsageStatsService(ctx.conn);
@@ -821,12 +929,8 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       },
     });
     assert.equal(daily.length, 2);
-    const todayBucket = daily.find(
-      (b) => b.bucketStartMs === today0,
-    );
-    const yesterdayBucket = daily.find(
-      (b) => b.bucketStartMs === yesterday0,
-    );
+    const todayBucket = daily.find((b) => b.bucketStartMs === today0);
+    const yesterdayBucket = daily.find((b) => b.bucketStartMs === yesterday0);
     assert.ok(todayBucket);
     assert.ok(yesterdayBucket);
     assert.equal(todayBucket!.avgTokensPerSecond, 200);
@@ -839,9 +943,7 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       range: { kind: "last7" },
     });
     assert.equal(hourly.length, 24);
-    const hour14 = hourly.find(
-      (b) => b.bucketStartMs === today0 + 14 * HOUR,
-    );
+    const hour14 = hourly.find((b) => b.bucketStartMs === today0 + 14 * HOUR);
     assert.ok(hour14);
     assert.equal(hour14!.calls, 1);
     assert.equal(hour14!.avgTokensPerSecond, 200);
@@ -862,11 +964,11 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     const ts = String(Date.now());
     await ctx.conn.execute(
       `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
-       VALUES ('reqlog-provider', 'openai', 'https://example.com', 'reqlog-p', '{}', 0, ${ts}, ${ts})`,
+       VALUES ('reqlog-provider', 'openai', 'https://example.com', 'reqlog-p', '{}', 0, ${ts}, ${ts})`
     );
     await ctx.conn.execute(
       `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
-       VALUES ('som-reqlog-1', 'reqlog-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`,
+       VALUES ('som-reqlog-1', 'reqlog-provider', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
     );
     const svc = createUsageStatsService(ctx.conn);
     const now = Date.now();
@@ -875,7 +977,13 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       await seedMsg(ctx, session.id, i + 1, {
         createdAtMs: now - (5 - i) * 60_000,
         modelName: i === 0 ? null : "model-a",
-        usage: { prompt: 100 + i, completion: 10 + i, total: 110 + 2 * i, firstTokenMs: 200, durationMs: 2000 },
+        usage: {
+          prompt: 100 + i,
+          completion: 10 + i,
+          total: 110 + 2 * i,
+          firstTokenMs: 200,
+          durationMs: 2000,
+        },
       });
     }
     await seedMsg(ctx, session.id, 9, {
@@ -885,7 +993,7 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     });
     const page1 = await svc.listRequestUsage(
       { range: { kind: "last7" } },
-      { offset: 0, limit: 3 },
+      { offset: 0, limit: 3 }
     );
     assert.equal(page1.total, 5);
     assert.equal(page1.rows.length, 3);
@@ -894,20 +1002,20 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     assert.equal(page1.rows[0]!.completionTokens, 14);
     const page2 = await svc.listRequestUsage(
       { range: { kind: "last7" } },
-      { offset: 3, limit: 3 },
+      { offset: 3, limit: 3 }
     );
     assert.equal(page2.rows.length, 2);
     assert.ok(page2.rows[0]!.createdAtMs >= page2.rows[1]!.createdAtMs);
     // 越界页空
     const page3 = await svc.listRequestUsage(
       { range: { kind: "last7" } },
-      { offset: 9, limit: 3 },
+      { offset: 9, limit: 3 }
     );
     assert.equal(page3.rows.length, 0);
     // 模型筛选：只 model-a（排除 null 行）→ 4 条
     const filtered = await svc.listRequestUsage(
       { range: { kind: "last7" }, model: "model-a" },
-      { offset: 0, limit: 50 },
+      { offset: 0, limit: 50 }
     );
     assert.equal(filtered.total, 4);
     for (const row of filtered.rows) {
@@ -916,14 +1024,18 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     // 「其他」桶（null model）→ 1 条
     const others = await svc.listRequestUsage(
       { range: { kind: "last7" }, model: null },
-      { offset: 0, limit: 50 },
+      { offset: 0, limit: 50 }
     );
     assert.equal(others.total, 1);
     assert.equal(others.rows[0]!.modelName, null);
     // 非法 limit 拒收
     await assert.rejects(
-      () => svc.listRequestUsage({ range: { kind: "last7" } }, { offset: 0, limit: 0 }),
-      /limit/,
+      () =>
+        svc.listRequestUsage(
+          { range: { kind: "last7" } },
+          { offset: 0, limit: 0 }
+        ),
+      /limit/
     );
   });
 
@@ -936,8 +1048,12 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       Number.NEGATIVE_INFINITY,
     ]) {
       await assert.rejects(
-        () => svc.listRequestUsage({ range: { kind: "last7" } }, { offset, limit: 10 }),
-        /offset/,
+        () =>
+          svc.listRequestUsage(
+            { range: { kind: "last7" } },
+            { offset, limit: 10 }
+          ),
+        /offset/
       );
     }
   });

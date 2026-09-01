@@ -32,6 +32,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
     content_json TEXT NOT NULL,
     provider TEXT,
+    provider_id TEXT NULL,
     raw_json TEXT,
     created_at_ms INTEGER NOT NULL,
     hidden INTEGER NOT NULL DEFAULT 0 CHECK (hidden IN (0, 1)),
