@@ -50,7 +50,7 @@ export function formatHitRate(rate: number | null): string {
   return rate == null ? '—' : `${Math.round(rate * 100)}%`;
 }
 
-/** 平均 token 速率展示：`x.x tok/s`；无数据时返回调用方传入的空态文案。 */
+/** 平均 token 速率展示：`x.x t/s`；无数据时返回调用方传入的空态文案。 */
 export function formatTokensPerSecond(
   v: number | null,
   emptyText: string,
@@ -58,7 +58,7 @@ export function formatTokensPerSecond(
   if (v == null) {
     return emptyText;
   }
-  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} tok/s`;
+  return `${v >= 100 ? Math.round(v) : v.toFixed(1)} t/s`;
 }
 
 /** 平均首字延迟展示：秒级 `x.x s` / 毫秒级 `xxx ms`；无数据时返回调用方传入的空态文案。 */
@@ -70,4 +70,25 @@ export function formatFirstTokenMs(
     return emptyText;
   }
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+}
+
+/** 服务商×模型筛选项（数据统计维度，配置侧生成）。 */
+export interface ProviderModelOption {
+  readonly providerId: string;
+  readonly providerLabel: string;
+  readonly model: string;
+}
+
+/**
+ * 服务商×模型筛选值：`undefined` = 全部；`null` = 其他（未记录的历史行，
+ * provider_id/model_name 均缺失）；对象 = 具体 provider×model 组合。
+ */
+export type ProviderModelFilterValue =
+  | {providerId: string; model: string}
+  | null
+  | undefined;
+
+/** 组合的稳定展示键（testID/行 key 共用）。 */
+export function providerModelKey(providerId: string, model: string): string {
+  return `${providerId}::${model}`;
 }
