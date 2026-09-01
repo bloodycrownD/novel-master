@@ -30,3 +30,45 @@ provider 维度拍板：统计落库记 providerId + modelId（vendor_model_id�
 
 assistant:
 口径确定：chat_message 增 provider_id 列（写入时快照，agent-runner 落 savedModel.providerId）；聚合 GROUP BY provider_id + model_name；显示名查询时经配置解析（listProviders），解析不到归"其他/已删除"桶；筛选值改 (providerId, modelName) 复合。注：现有 provider 列存协议名不动（BILLED_INPUT_SUM_SQL 依赖 anthropic 判断）。
+
+user:
+（修复完成后确认提交）要求放到 feature 分支。
+
+assistant:
+四问题全部修复并分六个提交落在 fix/2026-09-stats-composer-markdown（自 main 拉出）：①8ff21dc 下拉包 ScrollView（根因=裸 .map 无滚动容器被 maxHeight 420 裁剪）；②47c0399 速率单位 tok/s→t/s（format.ts 单点+断言）；③964c098 FileEditor 全 scope 统一 80ms 延迟挂重预览（编辑器页恒以预览模式打开、session 入口首进 markdown 空白=转场窗口 WebView 初始化失效；切 tab 重挂即好与"txt 分支 return Text 卸载 WebView"机制吻合；测试 renderLoadedScreen flush 120ms）；④fcb00ac 输入变删除缓解：tryAtomicMentionDelete 先做 {@}/{$} includes 短路再 parseValue——纯文本按键不再全文解析（根治需透明输入+高亮层 overlay 重写，spec #25 已证 children 复用/库 patch 两条路真机 tag 消失不可行，另立迭代）；⑤b9562dd provider×model 维度：chat_message 增 provider_id 列（DDL+幂等对齐）、agent-runner 快照落库、GROUP BY provider_id+model_name、filter.providerId 三态全链路（summary/daily/hourly/requests）、mobile 下拉复合选项+分服务商×模型列表+未知服务商兜底、G-1b 用例；⑥f55e16d 记忆。验证：core 1792 全绿、mobile 触及套件 77 全绿、tsc 双端持平基线、prettier/eslint 干净（1 warning 存量）。注意：format.ts 曾因 git checkout 误丢工作区副本，自丢弃提交对象恢复。
+
+user:
+真机数据统计报 no such column: provider_id——补列没生效；问取的是什么 id、是否改表。
+
+assistant:
+取的是 llm_saved_model.provider_id → llm_provider.id（服务商配置主键 UUID，非协议名）；表加了 chat_message.provider_id（幂等 ADD COLUMN）。报错根因：改 SCHEMA_COLUMN_ALIGNMENTS 时未 bump SCHEMA_BOOT_VERSION（novel-master-bootstrap.ts 合同版本），存量库走快路径跳过 ALIGN——v9 注释记载 first_token_ms 曾同款翻车。已 bump 9→10（附 v10 注释）、重建 dist、core 1792 全绿、提交 8d94xxx 同分支。规矩已写入长期记忆。
+
+user:
+确认旧结构：之前 chat_message 没有 provider 配置 id 列吗？model_name 就是纯 vendorId？
+
+assistant:
+是。旧 chat_message 只有两列相关：provider 列存的是协议名（anthropic/openai/gemini，agent-runner 注释明言"与 saved model 的服务商解耦"，BILLED_INPUT_SUM_SQL 还靠 provider='anthropic' 判计费口径）；model_name 存纯 vendorModelId（savedModelForAppend.vendorModelId）。同名模型挂在多个服务商时旧结构完全无法区分——这正是统计改 provider×model 维度的动机，新 provider_id 列补的就是这块。
+
+user:
+输入框那个没根治的，加个日志吧，有日志可以定位。
+
+assistant:
+新增临时探针（未提交，随工作树生效）：apps/mobile/src/debug/composer-input-debug.ts（__DEV__ 门控、djb2 指纹比对不落内容、文件头带判读表）+ ComposerAtPathInput 五处埋点：native-change（原生上报 len/delta/hash）、children-push（重推指纹与最近原生上报比对，stale:true=陈旧重推实锤）、atomic-delete、programmatic-write、hydrate-apply。判读：delta<0 非删除时出现=原生侧在缩（IME）；stale push 后跟 delta<0=陈旧 children 覆盖（主嫌实锤）；native-change 成簇=JS 滞后。验证 prettier/eslint/tsc/12 测试全过。
+
+user:
+贴来第一轮输入探针日志：hydrate 663 → 首键 native 664 → push 661（stale）→ native 662（delta-2）→ push 659（stale）。
+
+assistant:
+实锤：删除发生在 JS 管线内部——每轮 native 上报 N、mention 库重建值恒为 N-3，重推把短值落实回原生，每键净 -2（与 delta:-2 吻合）。不是旧帧竞态。3 字符差额身份未定（怀疑 \r\n 口径或标记边界），已加差异窥探探针（stale 时打出首差异位置±6字符窗口、\r\n 转义可见），下一轮日志可定字符级根因。#2 stale 为挂载初始态，良性。
+
+user:
+第二轮窥探日志：at=656，aWin「任务让它真改工」vs bWin「任务让它真改一好个工」——原生多出的 3 字是「一好个」。
+
+assistant:
+字符级铁证：多出的 3 字在光标处、内容是 IME 组合期临时候选文本——mention 库差分→重建在组合未上屏时就把组合区搅碎（原生 660 → 重建 657），重推回原生杀死正在输入的组合文本=输入变删除。属 Android 受控输入×中文输入法经典冲突，长文本重建重、窗口大故更明显。修复（已写未提交，随工作树生效）：emitMentionValue 自愈对账——handleChangeText 在原子删之后、入库处理之前把原生上报存 nativeTruthRef（markup 形态，消费一次即清）；库重建结果与原生不等时以原生文本为准（直接作新 mentionValue，tag 由 useMentions 重解析），原子删/程序化写入路径不经对账。新增 self-heal 探针事件验证：修复生效后 children-push 应全部 stale:false。29 个 composer 测试全绿。验证通过后：提交修复+拔探针。
+
+user:
+修好了（真机验证通过）。
+
+assistant:
+结案：拔除全部输入探针（composer-input-debug.ts 删除、组件内五处埋点与 self-heal 日志移除），自愈对账修复保留并提交（fix 分支）。组件 grep 探针零残留，tsc 非 __tests__ 持平基线 8、eslint 0、composer 相关 28 测试全绿。案件归档：输入变删除=IME 组合期 mention 库差分重建吃字符+children 全量重推落实，修复=原生上报对账自愈。
