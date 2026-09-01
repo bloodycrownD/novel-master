@@ -31,6 +31,19 @@ import {
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
+
+/** 会改变 WebView 画面的宿主消息类型；用于「隐藏期间脏推送」计数。 */
+const STATE_PAINTING_HOST_MESSAGES: ReadonlySet<string> = new Set([
+  'sessionSnapshot',
+  'prependPage',
+  'appendTailRows',
+  'streamDelta',
+  'streamBatch',
+  'streamCommit',
+  'streamReset',
+  'streamToolInvoking',
+  'flagsUpdate',
+]);
 import {
   buildTranscriptRows,
   messageHasToolUse,
@@ -259,6 +272,12 @@ export const ChatTranscriptWebView = memo(
       const {tokens} = useTheme();
       const webRef = useRef<WebView>(null);
       const [webReady, setWebReady] = useState(false);
+      // Android WebView 恢复显示后可能仍渲染摘除前的旧帧（子会话压栈期间主会话
+      // 跑完、退出后【生成中】残留的根因：屏幕上的是旧帧而非当前 DOM）。
+      // 恢复可见时若隐藏期间发生过改画推送，强制重挂 WebView；ready 后
+      // webReady effect 会自动重发快照，流式部分由 resume 注入链补齐。
+      const [repaintEpoch, setRepaintEpoch] = useState(0);
+      const statePushSinceResumeRef = useRef(0);
       const prevStreamTextRef = useRef('');
       const prevStreamThinkingRef = useRef('');
       const sessionKeyRef = useRef(sessionKey);
@@ -315,6 +334,9 @@ export const ChatTranscriptWebView = memo(
       }, [defaultScrollToBottom]);
 
       const postToWeb = useCallback((message: HostToTranscriptMessage) => {
+        if (STATE_PAINTING_HOST_MESSAGES.has(message.type)) {
+          statePushSinceResumeRef.current += 1;
+        }
         webRef.current?.postMessage(encodeHostToTranscript(message));
       }, []);
 
@@ -862,6 +884,20 @@ export const ChatTranscriptWebView = memo(
             onWebMermaidViewerOpenChange?.(false);
             return;
           }
+          // WebView 恢复可见：若隐藏期间有改画推送（旧帧风险），强制重挂重绘。
+          if (message.type === 'visibility') {
+            if (!message.payload.hidden) {
+              const dirty = statePushSinceResumeRef.current > 0;
+              statePushSinceResumeRef.current = 0;
+              if (dirty) {
+                prevStreamTextRef.current = '';
+                prevStreamThinkingRef.current = '';
+                setWebReady(false);
+                setRepaintEpoch(epoch => epoch + 1);
+              }
+            }
+            return;
+          }
         },
         [
           onReady,
@@ -1206,6 +1242,7 @@ export const ChatTranscriptWebView = memo(
       return (
         <View style={styles.fill}>
           <WebView
+            key={`transcript-repaint-${repaintEpoch}`}
             ref={webRef}
             style={styles.fill}
             /* sec/D-1：收紧为包内 file://（库会自动附带 about:blank）；初始加载与同包相对资源
