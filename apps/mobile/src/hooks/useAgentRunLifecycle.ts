@@ -106,6 +106,8 @@ export function useAgentRunLifecycle({
   const activeRunIdRef = useRef<string | null>(null);
   // 跟踪 beginUiRun / onRunStarted 是否已激活 UI run 态，给 endUiRunOnError 做幂等守卫。
   const uiActiveRef = useRef(false);
+  // refcount 归属标记：仅本单元 beginUiRun 加过 agentActive 计数且尚未抵扣时为 true。
+  const refCountedRef = useRef(false);
   // 最近一次发起（beginUiRun）时刻：发起保护窗判据。不记在 abort.markRunStarted
   // ——探针的合成恢复也调它，记那边会把合法的兑底收尾一并推迟保护窗时长。
   const beginUiRunAtRef = useRef(0);
@@ -132,6 +134,7 @@ export function useAgentRunLifecycle({
   const beginUiRun = useCallback(() => {
     // abort 状态机的 freeze/retain 清理由 abort.markRunStarted 完成。
     uiActiveRef.current = true;
+    refCountedRef.current = true;
     beginUiRunAtRef.current = Date.now();
     onRunUiActivateRef.current?.();
     incrementAgentActive();
@@ -193,7 +196,14 @@ export function useAgentRunLifecycle({
       syncActiveRunId(null);
       uiActiveRef.current = false;
       onRunUiDeactivateRef.current?.();
-      decrementAgentActive();
+      // refcount 单一归属：仅本单元 beginUiRun 加过计数才递减。子会话屏经
+      // 恢复窗口反填接受的 FINISHED 属于父会话发起的 run（计数由父加），
+      // 若在此也递减，会把父会话的计数提前扣空——窗口内全局忙门禁假开，
+      // 父会话收尾的真实递减又被 ≤0 针位吞掉。
+      if (refCountedRef.current) {
+        refCountedRef.current = false;
+        decrementAgentActive();
+      }
     },
     [syncActiveRunId],
   );
@@ -207,7 +217,10 @@ export function useAgentRunLifecycle({
       syncActiveRunId(null);
       uiActiveRef.current = false;
       onRunUiDeactivateRef.current?.();
-      decrementAgentActive();
+      if (refCountedRef.current) {
+        refCountedRef.current = false;
+        decrementAgentActive();
+      }
     },
     [syncActiveRunId],
   );
@@ -220,7 +233,10 @@ export function useAgentRunLifecycle({
     syncActiveRunId(null);
     uiActiveRef.current = false;
     onRunUiDeactivateRef.current?.();
-    decrementAgentActive();
+    if (refCountedRef.current) {
+      refCountedRef.current = false;
+      decrementAgentActive();
+    }
   }, [syncActiveRunId]);
 
   const resetUiForSessionChange = useCallback(() => {
