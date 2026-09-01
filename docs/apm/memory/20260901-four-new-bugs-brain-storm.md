@@ -90,3 +90,6 @@ user:
 
 assistant:
 DAG：wave-0 三路并行 worker（CR-1 desktop DTO 聚合、CR-2 mobile 筛选 parity 方案A、CR-4 自愈集成测试）+ CR-3 trivial 主代理直执（矛盾注释合并）；wave-1 verify 主代理直执；wave-2 cr-func readonly。子代理只改码不提交（避免同工作区 index 抢锁），主代理统一提交四逻辑块（09138cd/9dbc3d8/6810269/df6bc75）。CR-2 类型收敛为三形态联合（顶层 null 移除）、选项携带 value、providerModelFilterOptionKey 比对；残留边界：模型仅被另一服务商配置时仍无入口（NOT IN 是全局 distinct），方案 A 口径内可接受，另开迭代再议。CR-4 变异验证：破坏对账条件双用例挂、只破坏清空仅②挂；关键坑：testID find 命中的是 ComposerAtPathInput 组件自身 props（外层 onChangeText=直接调 commitComposerText 绕过 mention 层），必须 findAllByType(TextInput) 拿内部原生输入驱动。CR-1 desktop 测试非 jest，是 node scripts/run-tests.mjs（tsx+node:test），11/11。
+
+assistant(收口):
+cr-func（readonly reviewer）四条矩阵全闭合、func-ready: yes，spec_deviations 四项均为合理扩展/收窄（CR-1 null 桶归并、CR-2 三形态互斥联合比 spec 更严、CR-4 构造手段偏差但同一对账分支、CR-3 不写死 80ms）。verify 收尾：desktop tsc 0 错（main 侧）、触及文件 prettier 归一（desktop 两文件原不合规式）后 desktop 11/11、mobile 60/60 复跑绿。dev-ready 达成：四实现提交+格式提交，无 open must-fix、无 open spec_deviations。遗留（K 节，发版前）：CHANGELOG Unreleased 段补记（两分支合计）；open questions 仍待拍板：desktop 复合维度、reloadModels 错误态、方案 A 残留边界（模型仅被另一服务商配置时无入口）。
