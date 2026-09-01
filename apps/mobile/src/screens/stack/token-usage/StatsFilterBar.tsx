@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text, View} from 'react-native';
 import {AppModal} from '../../../components/ui/AppModal';
 import {SegmentedControl} from '../../../components/ui/SegmentedControl';
 import {MonthRangePickerSheet} from '../../../components/ui/MonthRangePickerSheet';
@@ -7,7 +7,10 @@ import type {ThemeTokens} from '../../../theme/tokens';
 import {
   MODEL_OPTION_ALL,
   MODEL_OPTION_UNLOGGED,
+  type ProviderModelFilterValue,
+  type ProviderModelOption,
   type RangeKind,
+  providerModelKey,
 } from './format';
 import {styles} from './styles';
 
@@ -21,9 +24,9 @@ export function StatsFilterBar({
   rangeKind,
   onRangeKindChange,
   modelFilterLabel,
-  modelFilter,
-  models,
-  onSelectModelFilter,
+  comboFilter,
+  combos,
+  onSelectComboFilter,
   rangeSheetVisible,
   onCloseRangeSheet,
   onConfirmRange,
@@ -35,11 +38,11 @@ export function StatsFilterBar({
   rangeKind: RangeKind;
   onRangeKindChange: (value: RangeKind) => void;
   modelFilterLabel: string;
-  /** 当前模型筛选值：undefined = 全部、null = 其他模型、string = 指定模型。 */
-  modelFilter: string | null | undefined;
-  models: string[];
-  /** 选中模型筛选后回调（已换算 filter.model 三态口径）。 */
-  onSelectModelFilter: (value: string | null | undefined) => void;
+  /** 当前筛选值：undefined = 全部、null = 其他（未记录历史行）、对象 = 具体 provider×model。 */
+  comboFilter: ProviderModelFilterValue;
+  combos: ProviderModelOption[];
+  /** 选中筛选后回调（三态口径见 ProviderModelFilterValue）。 */
+  onSelectComboFilter: (value: ProviderModelFilterValue) => void;
   rangeSheetVisible: boolean;
   onCloseRangeSheet: () => void;
   onConfirmRange: (from: Date, to: Date) => void;
@@ -106,46 +109,72 @@ export function StatsFilterBar({
             <Text style={[styles.pickerTitle, {color: tokens.text}]}>
               选择模型
             </Text>
-            {[
-              {id: MODEL_OPTION_ALL, label: '全部模型'},
-              ...models.map(m => ({id: m, label: m})),
-              {id: MODEL_OPTION_UNLOGGED, label: '其他模型'},
-            ].map(option => {
-              const selected =
-                option.id === MODEL_OPTION_ALL
-                  ? modelFilter === undefined
-                  : option.id === MODEL_OPTION_UNLOGGED
-                  ? modelFilter === null
-                  : modelFilter === option.id;
-              return (
-                <Pressable
-                  key={option.id}
-                  testID={`model-option-${option.id}`}
-                  onPress={() => {
-                    onSelectModelFilter(
-                      option.id === MODEL_OPTION_ALL
-                        ? undefined
-                        : option.id === MODEL_OPTION_UNLOGGED
-                        ? null
-                        : option.id,
-                    );
-                    onCloseModelPicker();
-                  }}
-                  style={[
-                    styles.pickerRow,
-                    {borderBottomColor: tokens.border},
-                    selected && {backgroundColor: tokens.bgSecondary},
-                  ]}
-                >
-                  <Text style={{color: tokens.text}} numberOfLines={1}>
-                    {option.label}
-                  </Text>
-                  {selected ? (
-                    <Text style={{color: tokens.primary}}>当前</Text>
-                  ) : null}
-                </Pressable>
-              );
-            })}
+            {/* 模型列表可很长：必须包滚动容器，否则被 pickerSheet 的 maxHeight 裁剪、
+                后面的模型滚不到也点不到。 */}
+            <ScrollView
+              style={styles.pickerList}
+              contentContainerStyle={styles.pickerListContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {[
+                {id: MODEL_OPTION_ALL, label: '全部模型'},
+                ...combos.map(c => ({
+                  id: providerModelKey(c.providerId, c.model),
+                  label: `${c.providerLabel} · ${c.model}`,
+                })),
+                {id: MODEL_OPTION_UNLOGGED, label: '其他模型'},
+              ].map(option => {
+                const selected =
+                  option.id === MODEL_OPTION_ALL
+                    ? comboFilter === undefined
+                    : option.id === MODEL_OPTION_UNLOGGED
+                    ? comboFilter === null
+                    : comboFilter != null &&
+                      option.id ===
+                        providerModelKey(
+                          comboFilter.providerId,
+                          comboFilter.model,
+                        );
+                return (
+                  <Pressable
+                    key={option.id}
+                    testID={`model-option-${option.id}`}
+                    onPress={() => {
+                      if (option.id === MODEL_OPTION_ALL) {
+                        onSelectComboFilter(undefined);
+                      } else if (option.id === MODEL_OPTION_UNLOGGED) {
+                        onSelectComboFilter(null);
+                      } else {
+                        const combo = combos.find(
+                          c =>
+                            providerModelKey(c.providerId, c.model) ===
+                            option.id,
+                        );
+                        if (combo != null) {
+                          onSelectComboFilter({
+                            providerId: combo.providerId,
+                            model: combo.model,
+                          });
+                        }
+                      }
+                      onCloseModelPicker();
+                    }}
+                    style={[
+                      styles.pickerRow,
+                      {borderBottomColor: tokens.border},
+                      selected && {backgroundColor: tokens.bgSecondary},
+                    ]}
+                  >
+                    <Text style={{color: tokens.text}} numberOfLines={1}>
+                      {option.label}
+                    </Text>
+                    {selected ? (
+                      <Text style={{color: tokens.primary}}>当前</Text>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </Pressable>
         </Pressable>
       </AppModal>
