@@ -99,3 +99,9 @@ user:
 
 assistant:
 按 novel-master-changelog skill 撰写 Unreleased 段（此前无该段，1.5.8 为最近版本）：新增 1 条（服务商×模型统计，移动端——desktop DTO 聚合保持模型粒度故不标双端）；修复 5 条（输入法丢字、生成中残留+内部加固并句、markdown 首进空白、下拉滚动、t/s 单位）；dev-loop 同批引入又修复的（desktop 重复行、筛选 parity）与 schema bump、注释、测试均按原则不写。提交于 fix/2026-09-stats-composer-markdown，两分支合并后同进下个版本。
+
+user:
+git prune 然后执行发布流程。
+
+assistant:
+prune 清理（gc.log 删除、garbage 归零）后按 novel-master-publish skill 发版 v1.5.9：两 feature 分支 no-ff 合入 main（零冲突）→ CHANGELOG Unreleased 定版 1.5.9 - 2026-09-02 → 双端 package.json + android build.gradle 默认 versionName bump（build.gradle 有历史乱码注释非 UTF-8，需二进制方式改）→ 门禁测试：core 1794/1794、desktop 触及套件 27/27（全量 run-tests.mjs 不带参数会挂慢路径，跑超过 10 分钟被用户叫停，教训：desktop 全量测试须限定文件或查明脚本行为）、mobile 触及五套件 82/82 → 提交 4b11e60、打 tag v1.5.9、push tag 触发 Release、push main。CI 三平台产物（Android APK/Windows NSIS/macOS DMG）由 release.yml 构建发布。
