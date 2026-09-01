@@ -59,6 +59,11 @@ export function formatSkillMentionMarkup(name: string): string {
   return `{$}[${name}](${name})`;
 }
 
+/** value 内是否含 mention 标记（{@}/{$}）——纯文本时不可能有原子删。 */
+function hasMentionMarkup(mentionValue: string): boolean {
+  return mentionValue.includes('{@}') || mentionValue.includes('{$}');
+}
+
 /**
  * 单次连续删除若碰到 mention 区间，整段删掉（库无官方原子删）。
  * @returns 新的 mention value；无需原子删时返回 null
@@ -68,6 +73,12 @@ export function tryAtomicMentionDelete(
   changedPlain: string,
   triggersConfig: ComposerTriggersConfig,
 ): string | null {
+  // 纯文本快速路径：无任何 mention 标记时不可能命中原子删，跳过全文
+  // parseValue——长文本下每个按键一跑全文解析是输入卡顿/回退的放大器
+  // （打字路径文本只增不减，原本也会在解析后被长度守卫拦下）。
+  if (!hasMentionMarkup(mentionValue)) {
+    return null;
+  }
   const configs = activeTriggerConfigs(triggersConfig);
   const state = parseValue(mentionValue, configs);
   const {parts, plainText} = state;
