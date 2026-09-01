@@ -21,6 +21,12 @@ export interface ChatMessage {
   readonly content: MessageContent;
   readonly provider: string | null;
   /**
+   * 产生本条 assistant 消息的服务商配置 id（`llm_saved_model.provider_id`，
+   * 映射 `chat_message.provider_id` 列），写入时快照：服务商后续改名/删除
+   * 不回写历史行。老消息缺列/NULL → `null`（统计归「其他」桶）。
+   */
+  readonly providerId?: string | null;
+  /**
    * 产生本条 assistant 消息的厂商模型 id（`llm_saved_model.vendor_model_id`，
    * 映射 `chat_message.model_name` 列）。老消息缺列/NULL → `null`。
    */

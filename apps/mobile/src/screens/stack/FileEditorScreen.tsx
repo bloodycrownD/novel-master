@@ -79,15 +79,15 @@ export function FileEditorScreen() {
   // physical = 全局文件浏览器只读分支：保存入口禁用，也不提供编辑切换。
   const isReadOnly = scopeKind === 'physical';
 
-  // 冷启动优化：物理树文件普遍较大（整章正文等），推屏转场期间同步挂
-  // WebView 会卡住转场动画。只读分支延迟到交互空闲后再挂重预览；
-  // 其余分支（会话工作区等既有路径）行为不变。
-  const [heavyPreviewReady, setHeavyPreviewReady] = useState(!isReadOnly);
+  // 所有 scope 统一延迟挂重预览：推屏转场窗口内同步挂 WebView，Android 上
+  // 初始化/首帧合成可能被转场动画延迟或丢弃——physical 大文件冷启动卡转场
+  // 与会话入口 markdown 预览首进空白（切文本 tab 再切回=重挂才能恢复）同因。
+  const [heavyPreviewReady, setHeavyPreviewReady] = useState(false);
   useEffect(() => {
     if (heavyPreviewReady) {
       return;
     }
-    // 短延时让推屏转场先启动，之后才挂 WebView（冷启动大文件不再卡转场）。
+    // 短延时让推屏转场先启动，之后才挂 WebView（避开转场窗口）。
     const timer = setTimeout(() => setHeavyPreviewReady(true), 80);
     return () => clearTimeout(timer);
   }, [heavyPreviewReady]);

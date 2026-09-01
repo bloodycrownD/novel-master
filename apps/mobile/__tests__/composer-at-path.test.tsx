@@ -172,6 +172,17 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     ).toBeNull();
   });
 
+  it('T-AT2b: 纯文本快速路径——无 mention 标记时打字/删除均直接短路', () => {
+    // 长纯文本：无论打字（文本变长）还是删除，都不得进入全文解析路径
+    const long = '很长的纯文本'.repeat(200);
+    expect(
+      tryAtomicMentionDelete(long, long + '字', triggersConfig),
+    ).toBeNull();
+    expect(
+      tryAtomicMentionDelete(long, long.slice(0, long.length - 3)),
+    ).toBeNull();
+  });
+
   it('T-AT3: 仅 @path 扫描为 source:attach，不进状态 chip', () => {
     const scanned = scanAtPathAttachments('请看 @/a.md');
     expect(scanned.length).toBeGreaterThan(0);

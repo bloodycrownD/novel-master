@@ -118,11 +118,14 @@ export function TodayCard({
 export function SummaryTab({
   summary,
   modelRows,
+  providerLabels,
   rangeLabel,
   tokens,
 }: {
   summary: UsageStatsSummary | null;
   modelRows: UsageStatsModelRow[];
+  /** providerId → 展示名；服务商已删除时缺失，展示「未知服务商」。 */
+  providerLabels: Record<string, string>;
   rangeLabel: string;
   tokens: ThemeTokens;
 }) {
@@ -199,15 +202,21 @@ export function SummaryTab({
         />
       </View>
       <TodayCard summary={summary} tokens={tokens} />
-      <ListSectionTitle title="分模型汇总" tokens={tokens} />
+      <ListSectionTitle title="分服务商×模型汇总" tokens={tokens} />
       {sortedModelRows.map(row => {
         const share =
           summary != null && summary.totalTokens > 0
             ? row.totalTokens / summary.totalTokens
             : null;
+        const providerLabel =
+          row.providerId != null
+            ? providerLabels[row.providerId] ?? '未知服务商'
+            : '未记录服务商';
         return (
           <View
-            key={row.modelName ?? '__unlogged__'}
+            key={`${row.providerId ?? '__np__'}::${
+              row.modelName ?? '__unlogged__'
+            }`}
             style={[
               styles.modelRow,
               {
@@ -218,7 +227,7 @@ export function SummaryTab({
           >
             <View style={styles.modelRowHead}>
               <Text style={{color: tokens.text}} numberOfLines={1}>
-                {row.modelName ?? '其他'}
+                {providerLabel} · {row.modelName ?? '其他'}
               </Text>
               <Text style={{color: tokens.textSecondary}}>
                 占比 {share == null ? '—' : `${Math.round(share * 100)}%`}

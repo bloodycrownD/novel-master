@@ -95,11 +95,11 @@ describe('token-usage/format', () => {
     });
 
     it('小于 100 保留一位小数', () => {
-      expect(formatTokensPerSecond(12.34, '—')).toBe('12.3 tok/s');
+      expect(formatTokensPerSecond(12.34, '—')).toBe('12.3 t/s');
     });
 
     it('大于等于 100 取整', () => {
-      expect(formatTokensPerSecond(123.6, '—')).toBe('124 tok/s');
+      expect(formatTokensPerSecond(123.6, '—')).toBe('124 t/s');
     });
   });
 

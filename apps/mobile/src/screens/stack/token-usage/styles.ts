@@ -183,7 +183,15 @@ export const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 16,
-    paddingBottom: 32,
+    paddingBottom: 8,
+  },
+  // 选项列表区：在 maxHeight 内占据剩余空间并可滚动；paddingBottom 移到
+  // 列表内容上，避免列表滚到底时被面板底部 padding 挡住最后一项。
+  pickerList: {
+    flexGrow: 1,
+  },
+  pickerListContent: {
+    paddingBottom: 24,
   },
   pickerTitle: {
     fontSize: 16,

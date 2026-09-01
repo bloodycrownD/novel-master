@@ -55,6 +55,12 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
   },
   {
     table: "chat_message",
+    column: "provider_id",
+    addColumnSql:
+      "ALTER TABLE chat_message ADD COLUMN provider_id TEXT NULL",
+  },
+  {
+    table: "chat_message",
     column: "prompt_tokens",
     addColumnSql: "ALTER TABLE chat_message ADD COLUMN prompt_tokens INTEGER",
   },
