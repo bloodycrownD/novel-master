@@ -114,3 +114,9 @@ assistant:
 1. tag 消失：自愈对账拿「库重建值（markup 形态）」与「原生上报（展示 plain，markup 从不进原生 buffer，children 拼接即 getPlainString 投影）」直接比较，带 tag 恒不等 → resolved=truth 把 markup 换成 plain → 一打字 tag 必死。修复：对账改在 plain 空间比较（mentionValueToPlain(库值)===truth 则库无损直接采用；不等才以 truth 经 promotePlainMentions 重建 markup）。关键认知：node 验证 children part.text 是 plain 形态、markup 只存在 data.original；T-CR4① 旧断言「单一 plain 段」正是 bug 表现，已改断言 tag 幸存。
 2. 流式消息丢失：可见性重挂修复的 dirty 路径重挂后，ready 链走 sendSessionSnapshot('preserve') 的 defer 路径（uiRunning+streamActive pending 到流结束）——空基线 WebView 只剩恢复注入的当前 partial。修复：dirty 重挂置 forceSnapshotOnReadyRef，ready 后首个快照带 force 直发（复用 D4 通道）。T-REPAINT 用例经变异验证。
 教训：两处都被"复现用例+变异验证"抓住，回归用例必须随修复落库。遗留：desktop 全量 run-tests.mjs 挂死调查中断（分块定位到第 2 块时被叫停），待续。
+
+user:
+确认两个回归修复均无问题（吃字/【生成中】原始场景不复现），合并发布，记得写 changelog。
+
+assistant:
+按 changelog skill 撰写 1.5.10 段（两条修复，均为 1.5.9 正式版用户实际遇到的回归：tag 打字变普通文本、流式期间从他页返回消息列表只剩当前回复）→ 按 publish skill 定版：双端 package.json + android build.gradle 默认 versionName bump 1.5.10，触及套件 47 测试全绿作门禁 → 提交 262aa3f、tag v1.5.10 推送触发 Release，main 同步推送。发布前已书面推演并经用户真机三场景验证：长文本拼音连打不丢字、带 tag 打字胶囊不掉、流式中进子会话再退出列表完整。
