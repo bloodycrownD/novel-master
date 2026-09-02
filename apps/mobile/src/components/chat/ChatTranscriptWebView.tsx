@@ -277,6 +277,10 @@ export const ChatTranscriptWebView = memo(
       // 恢复可见时若隐藏期间发生过改画推送，强制重挂 WebView；ready 后
       // webReady effect 会自动重发快照，流式部分由 resume 注入链补齐。
       const [repaintEpoch, setRepaintEpoch] = useState(0);
+      // 可见性重挂后 WebView 是空基线：ready 后的首个快照必须直发（force 绕过
+      // uiRunning+streamActive 的 defer）。否则快照 pending 到流式结束，恢复注入
+      // 只补当前 partial，页面只剩当前 assistant 消息在流（v1.5.9 回归）。
+      const forceSnapshotOnReadyRef = useRef(false);
       const statePushSinceResumeRef = useRef(0);
       const prevStreamTextRef = useRef('');
       const prevStreamThinkingRef = useRef('');
@@ -892,6 +896,7 @@ export const ChatTranscriptWebView = memo(
               if (dirty) {
                 prevStreamTextRef.current = '';
                 prevStreamThinkingRef.current = '';
+                forceSnapshotOnReadyRef.current = true;
                 setWebReady(false);
                 setRepaintEpoch(epoch => epoch + 1);
               }
@@ -1018,7 +1023,14 @@ export const ChatTranscriptWebView = memo(
         if (!webReady) {
           return;
         }
-        sendSessionSnapshotRef.current('preserve');
+        // 重挂路径的 ready：空基线快照直发，绕过 defer（见 forceSnapshotOnReadyRef）。
+        const forceAfterRepaint = forceSnapshotOnReadyRef.current;
+        forceSnapshotOnReadyRef.current = false;
+        sendSessionSnapshotRef.current(
+          'preserve',
+          undefined,
+          forceAfterRepaint,
+        );
       }, [webReady, pendingSubagentSessions]);
 
       useEffect(() => {
