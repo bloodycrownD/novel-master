@@ -148,13 +148,15 @@ export const ComposerAtPathInput = forwardRef<
     (nextMention: string) => {
       // 自愈对账（2026-09 输入变删除案）：mention 库的差分→重建在 IME
       // 组合期会吃字符（实测：原生 660 → 重建值 657，光标处组合文本整段丢失）。
-      // 重建结果与原生上报不等时以原生文本为准（原生文本本就是 markup
-      // 形态，直接作为新 mentionValue，tag 状态由 useMentions 重解析）。
+      // 注意原生 buffer 存的是展示 plain（children 拼接即 getPlainString 形态，
+      // markup 从不进原生），因此对账必须在 plain 空间比较：库重建的 plain
+      // 与原生上报一致 → 库无损，直接采用（保留 tag markup）；不一致 →
+      // 库吃了字，以原生上报为准重建 markup（token 重新提升为 tag）。
       // truth 每次消费后即清空：原子删/程序化写入路径不受影响。
       let resolved = nextMention;
       const truth = nativeTruthRef.current;
-      if (truth != null && resolved !== truth) {
-        resolved = truth;
+      if (truth != null && mentionValueToPlain(resolved) !== truth) {
+        resolved = promotePlainMentions(truth, triggersConfig);
       }
       nativeTruthRef.current = null;
       const plain = mentionValueToPlain(resolved);
@@ -163,7 +165,7 @@ export const ComposerAtPathInput = forwardRef<
       setMentionValue(resolved);
       onChangeText(plain);
     },
-    [onChangeText],
+    [onChangeText, triggersConfig],
   );
 
   const applyPendingSelection = useCallback(

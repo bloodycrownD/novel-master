@@ -212,6 +212,43 @@ describe('composer-at-path (T-ATD* / T-AT* / T-SC1)', () => {
     expect(input.props.selection).toBeUndefined();
   });
 
+  it('带 tag 打字不丢 tag——自愈对账按 plain 空间比较（v1.5.9 回归）', () => {
+    // 场景：草稿水化出 @path tag → 原生上报 plain 形态 + 新字（markup 从不进
+    // 原生 buffer）。旧对账拿 markup 与 plain 比较恒不等 → resolved=truth
+    // 把 markup 整个替换成 plain → tag 一打字必死。修复后 plain 空间比较。
+    const plain0 = '看 @/chapters/01.md 这段';
+    let text = '';
+    const onChangeText = jest.fn((next: string) => {
+      text = next;
+    });
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <ComposerAtPathInput value="" onChangeText={onChangeText} />,
+      );
+    });
+    act(() => {
+      tree!.update(
+        <ComposerAtPathInput value={plain0} onChangeText={onChangeText} />,
+      );
+    });
+    const input = () => tree!.root.findByType(TextInput);
+    // 水化后：children 为 plain 形态，且存在着色 mention span
+    expect(collectText(input().props.children)).toBe(plain0);
+    expect(hasMentionSpan(input().props.children)).toBe(true);
+
+    // 模拟原生上报：plain + 一个中文字
+    act(() => {
+      input().props.onChangeText(`${plain0}字`);
+    });
+    expect(collectText(input().props.children)).toBe(`${plain0}字`);
+    expect(hasMentionSpan(input().props.children)).toBe(true);
+    expect(text).toBe(`${plain0}字`);
+    act(() => {
+      tree!.unmount();
+    });
+  });
+
   it('程序化 replaceCommittedText 后对外 plain 无 {@}，且短暂设 selection', () => {
     const handleRef = React.createRef<ComposerAtPathInputHandle>();
     let text = '';
@@ -273,3 +310,25 @@ describe('promotePlainMentions（草稿水化恢复 tag）', () => {
     expect(promotePlainMentions('普通文本', triggersConfig)).toBe('普通文本');
   });
 });
+
+function collectText(node: unknown): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(collectText).join('');
+  const el = node as {props?: {children?: unknown}};
+  return el?.props && 'children' in el.props
+    ? collectText(el.props.children)
+    : '';
+}
+
+function hasMentionSpan(node: unknown): boolean {
+  if (Array.isArray(node)) return node.some(hasMentionSpan);
+  const el = node as {
+    props?: {style?: Record<string, unknown>; children?: unknown};
+  };
+  const style = el?.props?.style;
+  if (style && style.borderRadius === 6) return true;
+  return el?.props && 'children' in el.props
+    ? hasMentionSpan(el.props.children)
+    : false;
+}

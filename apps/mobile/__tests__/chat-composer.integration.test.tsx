@@ -567,9 +567,10 @@ describe('ChatComposer integration', () => {
     expect(root.findByType(ComposerAtPathInput).props.value).toBe(
       mentionValueToPlain(nativeReport),
     );
-    // 回推值（children）为原生上报本身：单一 plain 段、无 mention 段残留，
-    // 证明对账 resolved=truth 而非库重建的 markup。
-    expect(composerChildrenPartTexts(input)).toEqual([nativeReport]);
+    // 对账在 plain 空间比较：库重建（markup）的 plain 投影与原生上报一致，
+    // 不触发自愈、直接采用库值——@/a.md tag 幸存（v1.5.9 回归：旧对账拿
+    // markup 与 plain 比较恒不等 → resolved=truth → tag 必死）。
+    expect(composerChildrenPartTexts(input)).toEqual(['@/a.md', ' 查一下']);
     await act(async () => {
       tree.unmount();
     });
@@ -607,9 +608,11 @@ describe('ChatComposer integration', () => {
     expect(root.findByType(ComposerAtPathInput).props.value).toBe(
       mentionValueToPlain(expectedMerged),
     );
-    // 写入生效且 /b.md 被提升为独立 mention 段（未被陈旧 truth 冲掉）
+    // 写入生效且 /a.md、/b.md 均为独立 mention 段（未被陈旧 truth 冲掉）。
+    // v1.5.9 修复后首轮对账 tag 幸存，空格成为独立 plain 段。
     expect(composerChildrenPartTexts(input)).toEqual([
-      '@/a.md ',
+      '@/a.md',
+      ' ',
       '@/b.md',
       ' 查一下',
     ]);
