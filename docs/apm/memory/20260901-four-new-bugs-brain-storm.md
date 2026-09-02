@@ -105,3 +105,12 @@ git prune 然后执行发布流程。
 
 assistant:
 prune 清理（gc.log 删除、garbage 归零）后按 novel-master-publish skill 发版 v1.5.9：两 feature 分支 no-ff 合入 main（零冲突）→ CHANGELOG Unreleased 定版 1.5.9 - 2026-09-02 → 双端 package.json + android build.gradle 默认 versionName bump（build.gradle 有历史乱码注释非 UTF-8，需二进制方式改）→ 门禁测试：core 1794/1794、desktop 触及套件 27/27（全量 run-tests.mjs 不带参数会挂慢路径，跑超过 10 分钟被用户叫停，教训：desktop 全量测试须限定文件或查明脚本行为）、mobile 触及五套件 82/82 → 提交 4b11e60、打 tag v1.5.9、push tag 触发 Release、push main。CI 三平台产物（Android APK/Windows NSIS/macOS DMG）由 release.yml 构建发布。
+
+user:
+有点尴尬，又修出新bug了。1. 输入框tag效果一打字就消失变普通文本；2. 流式请求时其他消息全部丢失，只剩当前assistant消息不断流thinking，退出重进或流结束后恢复。怀疑是前面修复导致的。
+
+assistant:
+两个都是 v1.5.9 修复引入的回归，均已定位并修复（提交 c74ce03、363e399，本地 main 待真机验证）：
+1. tag 消失：自愈对账拿「库重建值（markup 形态）」与「原生上报（展示 plain，markup 从不进原生 buffer，children 拼接即 getPlainString 投影）」直接比较，带 tag 恒不等 → resolved=truth 把 markup 换成 plain → 一打字 tag 必死。修复：对账改在 plain 空间比较（mentionValueToPlain(库值)===truth 则库无损直接采用；不等才以 truth 经 promotePlainMentions 重建 markup）。关键认知：node 验证 children part.text 是 plain 形态、markup 只存在 data.original；T-CR4① 旧断言「单一 plain 段」正是 bug 表现，已改断言 tag 幸存。
+2. 流式消息丢失：可见性重挂修复的 dirty 路径重挂后，ready 链走 sendSessionSnapshot('preserve') 的 defer 路径（uiRunning+streamActive pending 到流结束）——空基线 WebView 只剩恢复注入的当前 partial。修复：dirty 重挂置 forceSnapshotOnReadyRef，ready 后首个快照带 force 直发（复用 D4 通道）。T-REPAINT 用例经变异验证。
+教训：两处都被"复现用例+变异验证"抓住，回归用例必须随修复落库。遗留：desktop 全量 run-tests.mjs 挂死调查中断（分块定位到第 2 块时被叫停），待续。
