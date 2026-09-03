@@ -30,3 +30,9 @@ user:
 
 assistant:
 都不剔除过期行，没有任何一家有"缓存过期行"概念。① deepseek-harness（packages/client/ui-conversation/src/client/chat/StatsLine.tsx）：有真命中率展示，cacheHitPercent = cacheRead / (uncachedInput + cacheRead + cacheWrite)，对整个 durable log 累计加权，分母语义与 novel-master 完全同构（cache write 计入分母）；边界处理讲究——分母 0 返回 null、零未命中显示精确 100、整数四舍五入用二分避免浮点（wire 层 prompt_tokens 含命中，translate.ts 拆成 disjoint 计数）。② claude-code：/usage 是套餐用量面板、/stats 是总 token/最爱模型/活跃热图（components/Stats.tsx），完全没有命中率指标，cache token 只进内部成本计算。③ opencode：DB 层 session 表累计列 tokens_cache_read/cache_write（迁移 20260510033149 用 plain SUM 回填 assistant 消息），无过滤无剔除，TUI/web 也没算率展示。结论：novel-master 的加权口径与业界参考一致且比 claude-code/opencode 展示得更细；"剔除过期行"若做将是独有的对照口径，无先例可抄。
+
+user:
+那就不改了，现在是合理的。
+
+assistant:
+结案：统计页命中率口径维持现状，不做流水行命中率列、也不做"剔除缓存过期行"对照口径——加权口径与 deepseek-harness 同构、无 bug，82.5% 这类数值在业界口径下本就是正确答案，后续会话勿再重提这两项改进。
