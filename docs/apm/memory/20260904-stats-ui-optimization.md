@@ -28,3 +28,9 @@ user:
 
 assistant:
 查实旧设计两处毛病：①366 上限是 resolveRangeMs 给 custom 的跨度校验，代偿 getDailyBuckets 的 N+1（每天一条聚合 SQL）——护栏挂在区间类型而非查询成本，位置错了；②last7 实为 8 个桶（今日 0 点回退 7 天→明日 0 点，含今日全天）。定稿设计：core 的 UsageStatsRange 改纯日期区间 {fromDay,toDay}（闭区间，内部 [fromDay 0点, toDay+1 0点)），删命名 kind 与 366 校验；getDailyBuckets 重写单条 GROUP BY（strftime localtime 分日 + JS 补零稠密化），clamp 逻辑消亡；listRequestUsage 的 range 改可选=不过滤时间（流水解绑的正解）；summary.today/queryToday 双端今日卡删除后若无消费方一并摘除；近7/近30 修正为 7/30 个桶（今天+前6/29天）由应用层算。UI：双端同步，RangeKind 扩 today，五项改造照旧共识，切时间不置流水脏、切模型照旧；桌面 DTO 透回 providerId；饼图前 8 块+<2% 归并其他，点选走图下固定详情行，双端自绘不引库。执行：core+测试→桌面→移动端；schema 不动。
+
+user:
+【按 token 占比取前 8 块、小于 2% 的扇区归并成"其他"】？这是什么规则，正常展示不行吗？
+
+assistant:
+解释了薄扇区可读性顾虑（服务商×模型组合随模型更替累积，一年后可能二十几个，薄扇区点不中）后用户拍板：全部组合正常展示、不折叠，折叠兜底届时真有问题再加。澄清完毕，PRD 落盘 docs/Iterations/token-usage-stats-ui-refresh/prd.md（dependency 挂 token-usage-stats-enhance），待用户最终确认。
