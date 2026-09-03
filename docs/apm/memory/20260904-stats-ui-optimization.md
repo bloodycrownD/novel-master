@@ -22,3 +22,9 @@ user:
 
 assistant:
 用户纠正成立：加 all 不是干净方向，而是往 core 塞更多时间策略；真干净是 core 移除命名窗口（last7/last30），只收显式 {fromMs,toMs} + 资源护栏，时间语义（今天/近7/近30/全部）全归应用层，此后加 tab 永不触 core。连带看清 366 天上限的本质：它是 getDailyBuckets（按天一查的 N+1）的成本护栏，应挂在具体查询而非区间类型——流水分页 SQL 全历史无碍。结论：本轮五项按应用层方案推进（core 零改动）；core 瘦身（去命名窗口、护栏挪到查询层）留作将来独立重构，勿与本次 UI 优化混做。
+
+user:
+双端同步，模型筛选继续过滤流水列表，本次把 core 清理干净。365/366 是怎么回事？不该就是 MySQL DATE 那种"第一天 0 点到第二天 0 点"吗？怀疑之前设计有问题，本次要好好设计。
+
+assistant:
+查实旧设计两处毛病：①366 上限是 resolveRangeMs 给 custom 的跨度校验，代偿 getDailyBuckets 的 N+1（每天一条聚合 SQL）——护栏挂在区间类型而非查询成本，位置错了；②last7 实为 8 个桶（今日 0 点回退 7 天→明日 0 点，含今日全天）。定稿设计：core 的 UsageStatsRange 改纯日期区间 {fromDay,toDay}（闭区间，内部 [fromDay 0点, toDay+1 0点)），删命名 kind 与 366 校验；getDailyBuckets 重写单条 GROUP BY（strftime localtime 分日 + JS 补零稠密化），clamp 逻辑消亡；listRequestUsage 的 range 改可选=不过滤时间（流水解绑的正解）；summary.today/queryToday 双端今日卡删除后若无消费方一并摘除；近7/近30 修正为 7/30 个桶（今天+前6/29天）由应用层算。UI：双端同步，RangeKind 扩 today，五项改造照旧共识，切时间不置流水脏、切模型照旧；桌面 DTO 透回 providerId；饼图前 8 块+<2% 归并其他，点选走图下固定详情行，双端自绘不引库。执行：core+测试→桌面→移动端；schema 不动。
