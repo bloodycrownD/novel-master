@@ -34,3 +34,9 @@ user:
 
 assistant:
 解释了薄扇区可读性顾虑（服务商×模型组合随模型更替累积，一年后可能二十几个，薄扇区点不中）后用户拍板：全部组合正常展示、不折叠，折叠兜底届时真有问题再加。澄清完毕，PRD 落盘 docs/Iterations/token-usage-stats-ui-refresh/prd.md（dependency 挂 token-usage-stats-enhance），待用户最终确认。
+
+user:
+【服务商×模型这个维度会跟着模型更替一直涨】？我们在说什么？不是一直有规则只记录当前服务商配置的模型吗？不匹配的全部当做其他。
+
+assistant:
+用户纠错成立：getModelBreakdown 对不在 llm_saved_model 配置集内的历史 model_name 归并"其他"桶（与模型筛选同源同口径），模型换代不会产生新扇区；饼图扇区天然有界=窗口内有用量的已配置模型+每服务商"其他"桶+历史行"未记录服务商"。唯一理论增长源是 provider_id 写入时快照（删建服务商会各占一行、展示名走 best-effort 兜底），量级小不用管。"正常展示不折叠"由结构保证而非权宜，PRD 无需改动，仍待用户确认。
