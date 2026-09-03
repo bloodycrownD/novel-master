@@ -10,3 +10,9 @@ user:
 
 assistant:
 派两个只读子代理分别探索移动端与桌面端+共享服务，要点结论：①时间筛选当前确实过滤流水（listRequestUsage 的 where 编入 range），解绑必须改 core——`UsageStatsRange` 只有 last7/last30/custom 且 custom 校验 ≤366 天，UI 造不出全量区间，最干净是加 `kind:"all"`；②「今天」tab 可纯 UI 实现（RangeKind 扩枚举、映射为 custom 今日 0 点→明日 0 点），今日卡在移动端有两处渲染点（SummaryTab L143 + rangeEmpty 空态 L404）要一起删，core 的 `summary.today` 保留（桌面端还在用）；③改名零风险，移动端测试用 testID 不认 label；④`getHourlyBuckets` 本就忽略 filter.range（时间由天界定），今天 tab 直接选当天拉小时桶即可，注意 reload 成功会重置 selectedDay、需在重置后补选今天；⑤provider×model 数据 `getModelBreakdown` 本就是复合维度、移动端渲染层拿得到 providerId（列表是纯展示非筛选入口，删了不影响筛选），但桌面端 IPC `toModelRowDtos` 把 providerId 聚合抹掉、renderer 拿不到服务商维度，要扩 DTO；饼图无现成组件，mobile 有 react-native-svg 可用、桌面建议 SVG/conic-gradient 自绘，点击详情走「图下固定详情行」惯例（mobile bar-inspect 同款）。未决：平台范围（仅移动端还是双端同步）、模型筛选是否继续过滤流水、小扇区折叠与 provider 展示名兜底（#11 口径 best-effort）。
+
+user:
+加 "all" 时间范围？没这么麻烦吧，不是有自定义日期吗？我都会选择从今天开始到今天结束，这不是应用层封装下就行吗？
+
+assistant:
+澄清后收敛方案：用户把今天 tab 与流水解绑的窗口混在一起了——②今天 tab 确实就是应用层 custom 映射（今日 0 点→明日 0 点，core 零改动）；①流水解绑的应用层封装窗口应是最大宽区间 custom {今天-365 天 → 明天}（罩住全部历史），而非今天→今天，否则"时间筛选不影响流水"不成立。放弃 core 加 "all" kind：当前库 2026-08-10 起步罩得住；代价是库龄超一年后流水尾部静默截断与总数偏小，流水倒序分页看 recent 的场景可接受，届时在意再补。定稿：①应用层宽区间 filter、汇总/图表继续吃共享 filter，core 不动。
