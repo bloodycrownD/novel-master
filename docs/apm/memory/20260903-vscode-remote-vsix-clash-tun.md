@@ -28,3 +28,9 @@ user:
 
 assistant:
 盘点了工作区：docs/apm/memory 下 2 个记忆文件追加轮次（8/20 目录规则、8/30 mobile CR）+ 4 个未跟踪新记忆（8/21 magic-context 调研、8/31 pi 安装、9/1 pi 模型查询、9/3 本文件），另有此前特意留而未提交的 AGENTS.md 人设改版（可爱→撒娇）、.vscode 清理（删 launch.json/tasks.json，settings.json 去掉 Windows Android SDK env 改为 pendant 配置）与 docs/dev/perf-conventions.md 删除（确认是纯删除未挪走，.woktree 里只是旧工作树副本）。顺手把 8/21 旧自由格式记忆重写成 front matter + user/assistant 规范格式、给 9/1 的 date 补上时刻，敏感词扫描干净。分两笔提交：docs(apm) 收记忆，chore 收人设改版与 .vscode/docs 清理。
+
+user:
+清理 worktree，应该都没用了。
+
+assistant:
+盘点 .woktree 三个工作树：stream-resume、import-dir-rule 分支均已合入 main（注意 `git branch --merged | grep -v main` 会把含 "main" 字样的分支名误滤掉，stream-resume 差点误判）；parallel-notify 分支有 13 笔未合入提交（notifee 通知 + AgentRunManager 一整套），git cherry 全 +，main 无 AgentRunManager/notifee 任何痕迹——删工作树不删分支，提交仍留在 feat/agent-run-parallel-and-notify 上。import-dir-rule 树里一份未提交的记忆追加（记录已合入的 CR fix 闭合，MF-1~4）先打补丁收编进主工作区再删树。三个树全 remove，.woktree 目录一并消失，分支全部保留未动。
