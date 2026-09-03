@@ -16,3 +16,6 @@ user:
 
 assistant:
 两个：一是 write 的目录链要取文件父目录（文件本身不是目录，setDirRule 落在文件路径上会留脏行），helper 因此接收"目录路径"语义——write 侧传 parentDirOfLogicalPath(logicalPath)，mkdir 侧传自身；二是真实 VFS 的 mkdir 不递归，集成测试里得先建 /m 再建 /m/n，第一版直接 mkdir 嵌套路径挂在 NOT_FOUND 上了。验证：tool/workplace/vfs/service-agent 相关 587 测试全过 + core typecheck 干净。
+
+user:
+2026-08-30 新迭代 import-dir-rule-default-on（docs/Iterations/import-dir-rule-default-on/prd.md）：角色卡 + ZIP 导入产生的所有新增目录（含嵌套）默认开启目录规则，由导入链路（Core）统一保证，mobile UI（VfsFileManager.tsx runImport 先 reload 后补行且只补一层）移除自行补行，desktop 零改动自然获得同口径。本次为 readonly 探索，产出技术现状与影响分析供 SPEC 撰写。
