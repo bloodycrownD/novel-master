@@ -106,3 +106,9 @@ user:
 
 assistant:
 解释后用户拍板收口：历史行（provider_id NULL，1.5.9 快照机制前的统计行）在饼图按模型拆成多个同前缀切片没法分辨——core getModelBreakdown 归并段改为 null-provider 行全并单行（modelName null、用量相加，其余 provider 的其他模型桶不动，49cb0d4）；双端 label 固定「未记录服务商」不拼模型后缀、全仓去「（历史）」残留（d02a7a4/d0dd9a8，含移动端下拉与回显）。三端全绿（core 1794/desktop 106/mobile 1092），cr-func 零偏差。1.5.9 已发布 changelog 的旧文案不改。
+
+user:
+调整 mobile 饼图 UI：像条形图那样白色底色，做成卡片效果。
+
+assistant:
+纯样式微调：PieChart 根容器 pieWrap 与条形图 chartCard 同构（borderRadius 12 + 同款内边距），背景由 tokens.surface 注入（与 DetailTab 拼法一致），扇区/详情行/图例都收进卡片。1092 测试+tsc+lint 全绿，commit 8f2619e 附近样式提交；metro reload 即可看效果。
