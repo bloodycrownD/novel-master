@@ -1,7 +1,7 @@
 /**
  * Usage stats IPC handler — 单 channel 按 kind 分发转发 core 统计服务，
  * core 返回体在此显式映射为 shared DTO（renderer 侧不 import core）；
- * modelBreakdown 在此按 modelName 聚合回每模型单行（core 已是 provider×model 复合维度）。
+ * modelBreakdown 的 provider×model 复合行原样透传（不按 modelName 归并——饼图以复合维度展示）。
  */
 import type {
   UsageStatsBucket,
@@ -19,21 +19,52 @@ import type {
   UsageStatsModelRowDto,
   UsageStatsQueryRequest,
   UsageStatsQueryResponse,
+  UsageStatsRangeDto,
   UsageStatsRequestRowDto,
   UsageStatsSummaryDto,
 } from "../../../../shared/ipc-types.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 
-/** DTO 与 core 类型结构等效，此处显式转换以守住类型边界（model 三态原样保留）。 */
+/**
+ * 校验自然日区间 DTO：YYYY-MM-DD 格式、合法日历日（拒绝 02-30 等溢出）与
+ * fromDay ≤ toDay（字典序比较，定宽日期串等价日期序）。IPC 边界先行拒绝，
+ * 不依赖 core 侧抛错路径。
+ */
+function validateRangeDto(range: UsageStatsRangeDto): string | null {
+  const re = /^(\d{4})-(\d{2})-(\d{2})$/;
+  for (const [name, day] of [
+    ["fromDay", range.fromDay],
+    ["toDay", range.toDay],
+  ] as const) {
+    const m = re.exec(day);
+    if (m == null) {
+      return `${name} 须为 YYYY-MM-DD 格式：${day}`;
+    }
+    const y = Number(m[1]);
+    const mo = Number(m[2]);
+    const d = Number(m[3]);
+    const parsed = new Date(y, mo - 1, d);
+    if (
+      parsed.getFullYear() !== y ||
+      parsed.getMonth() !== mo - 1 ||
+      parsed.getDate() !== d
+    ) {
+      return `${name} 不是合法日期：${day}`;
+    }
+  }
+  if (range.fromDay > range.toDay) {
+    return `fromDay 不能晚于 toDay：${range.fromDay} > ${range.toDay}`;
+  }
+  return null;
+}
+
+/** DTO 与 core 类型结构等效，此处显式转换以守住类型边界（model 三态原样保留；range 可选透传）。 */
 function toCoreFilter(filter: UsageStatsFilterDto): UsageStatsFilter {
   return {
-    range: {
-      kind: filter.range.kind,
-      ...(filter.range.kind === "custom"
-        ? { fromMs: filter.range.fromMs, toMs: filter.range.toMs }
-        : {}),
-    },
+    ...(filter.range != null
+      ? { range: { fromDay: filter.range.fromDay, toDay: filter.range.toDay } }
+      : {}),
     ...(filter.model !== undefined ? { model: filter.model } : {}),
   };
 }
@@ -49,10 +80,6 @@ function toSummaryDto(summary: UsageStatsSummary): UsageStatsSummaryDto {
     billedInputTokens: summary.billedInputTokens,
     avgFirstTokenMs: summary.avgFirstTokenMs,
     avgTokensPerSecond: summary.avgTokensPerSecond,
-    today: {
-      totalTokens: summary.today.totalTokens,
-      calls: summary.today.calls,
-    },
   };
 }
 
@@ -71,41 +98,21 @@ function toBucketDto(bucket: UsageStatsBucket): UsageStatsBucketDto {
 }
 
 /**
- * core 分模型汇总已是 (providerId, modelName) 复合维度，同名模型多服务商会返回多行；
- * DTO 侧在此按 modelName 聚合回「每模型单行」旧粒度（providerId 不透出 renderer），
- * 六列用量逐列相加，modelName 为 null 的存量行归并进同一个「未记录」桶。
+ * provider×model 复合行原样透传（行结构与 DTO 同构，显式逐字段映射守住类型边界）。
+ * 不按 modelName 归并：饼图需要 provider×model 复合维度，同名模型多服务商保持多行，
  * 保持 core 返回的首现顺序（renderer 侧自行按 totalTokens 重排）。
  */
 function toModelRowDtos(rows: UsageStatsModelRow[]): UsageStatsModelRowDto[] {
-  // Map key 用哨兵串区分 null 模型名，避免与真实模型名冲突
-  const NULL_KEY = "\u0000__null_model__";
-  const merged = new Map<string, UsageStatsModelRowDto>();
-  for (const row of rows) {
-    const key = row.modelName ?? NULL_KEY;
-    const prev = merged.get(key);
-    if (prev == null) {
-      merged.set(key, {
-        modelName: row.modelName,
-        calls: row.calls,
-        promptTokens: row.promptTokens,
-        completionTokens: row.completionTokens,
-        totalTokens: row.totalTokens,
-        cacheReadTokens: row.cacheReadTokens,
-        billedInputTokens: row.billedInputTokens,
-      });
-    } else {
-      merged.set(key, {
-        modelName: prev.modelName,
-        calls: prev.calls + row.calls,
-        promptTokens: prev.promptTokens + row.promptTokens,
-        completionTokens: prev.completionTokens + row.completionTokens,
-        totalTokens: prev.totalTokens + row.totalTokens,
-        cacheReadTokens: prev.cacheReadTokens + row.cacheReadTokens,
-        billedInputTokens: prev.billedInputTokens + row.billedInputTokens,
-      });
-    }
-  }
-  return [...merged.values()];
+  return rows.map((row) => ({
+    providerId: row.providerId,
+    modelName: row.modelName,
+    calls: row.calls,
+    promptTokens: row.promptTokens,
+    completionTokens: row.completionTokens,
+    totalTokens: row.totalTokens,
+    cacheReadTokens: row.cacheReadTokens,
+    billedInputTokens: row.billedInputTokens,
+  }));
 }
 
 function toRequestRowDto(row: UsageStatsRequestRow): UsageStatsRequestRowDto {
@@ -126,6 +133,15 @@ export async function handleUsageStatsQuery(
   req: UsageStatsQueryRequest
 ): Promise<IpcResult<UsageStatsQueryResponse>> {
   try {
+    if (req.filter.range != null) {
+      const rangeError = validateRangeDto(req.filter.range);
+      if (rangeError != null) {
+        return {
+          ok: false,
+          error: { code: "ERROR", message: rangeError },
+        };
+      }
+    }
     const rt = await getDesktopRuntime();
     const svc: UsageStatsService = rt.usageStats;
     const filter = toCoreFilter(req.filter);

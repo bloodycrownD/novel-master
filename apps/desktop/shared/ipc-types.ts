@@ -852,23 +852,20 @@ export type PromptChatTokenStatsResponse = {
   readonly counterKind: string;
 };
 
-/** Token 用量统计：时间范围（结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
+/** Token 用量统计：时间范围（本地自然日闭区间 `YYYY-MM-DD`，双端含；结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
 export type UsageStatsRangeDto = {
-  readonly kind: 'last7' | 'last30' | 'custom';
-  readonly fromMs?: number;
-  readonly toMs?: number;
+  readonly fromDay: string;
+  readonly toDay: string;
 };
 
-/** Token 用量统计：筛选条件（model 三态——undefined 全部 / null「未记录」桶 / 字符串指定模型）。 */
+/**
+ * Token 用量统计：筛选条件（model 三态——undefined 全部 / null「其他」桶 / 字符串指定模型）。
+ * range 可选：缺省语义按 kind 分级——summary/models/modelBreakdown/requests 不限时间
+ * （全历史），daily 必填（handler 层校验格式与 fromDay ≤ toDay，日桶序列需要界）。
+ */
 export type UsageStatsFilterDto = {
-  readonly range: UsageStatsRangeDto;
+  readonly range?: UsageStatsRangeDto;
   readonly model?: string | null;
-};
-
-/** 今日卡片子对象（本地时区当日 0 点起算，独立于 filter）。 */
-export type UsageStatsTodayDto = {
-  readonly totalTokens: number;
-  readonly calls: number;
 };
 
 /** 范围内汇总（命中率由展示层用 cacheReadTokens / billedInputTokens 计算）。 */
@@ -892,7 +889,6 @@ export type UsageStatsSummaryDto = {
    * NULL 且 duration > first 的行；无有效行为 null。
    */
   readonly avgTokensPerSecond: number | null;
-  readonly today: UsageStatsTodayDto;
 };
 
 /** 天 / 小时桶（bucketStartMs 为桶起点，本地时区边界）。 */
@@ -910,8 +906,13 @@ export type UsageStatsBucketDto = {
   readonly avgTokensPerSecond: number | null;
 };
 
-/** 分模型汇总行（modelName 为 null 表示「未记录」桶）。 */
+/**
+ * 分服务商×模型汇总行（core 的 provider×model 复合维度原样透出，不按 modelName 归并——
+ * 饼图以 provider×model 为展示维度；providerId 为写入时快照，null 表示未记录的历史行；
+ * modelName 为 null 表示该服务商下的「其他模型」桶）。
+ */
 export type UsageStatsModelRowDto = {
+  readonly providerId: string | null;
   readonly modelName: string | null;
   readonly calls: number;
   readonly promptTokens: number;
