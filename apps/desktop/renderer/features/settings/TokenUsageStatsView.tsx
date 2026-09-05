@@ -6,8 +6,9 @@
  * 自定义直传日期串（无跨度上限，仅校验 from ≤ to）。汇总页签：范围内指标卡片 +
  * 服务商×模型饼图（行原样不折叠，点选扇区/图例出固定详情行）；图表页签：按天图 +
  * 24 小时钻取 + 当天汇总行，「今天」模式跳过按天图直出当天汇总行 + 按小时图；
- * 流水页签：请求级分页列表（按时间倒序、按需加载，仅受模型筛选影响、与时间筛选解绑；
- * 窗口空时仍照常渲染——空态只拦汇总/图表两页签，库全空探底才整屏空态）。
+ * 流水页签：请求级分页列表（按时间倒序、按需加载，跟随时间窗口与模型筛选——
+ * 需求①勘误后时间/模型变化均置脏重拉；窗口空时与其他页签统一区间空态，
+ * 库全空探底命中时整屏冷启动空态）。
  * 数据统一经 ipcUsageStatsQuery（nm:usageStats/query 单 channel 按 kind 分发）获取；
  * 服务商展示名经 ipcProvidersList（AgentEditorView 同源通道）解析；
  * 功能口径对齐 mobile 侧 TokenUsageStatsScreen，交互按桌面惯例。
@@ -410,7 +411,8 @@ export function TokenUsageStatsView() {
   // 过期请求的报错不覆盖新一轮的 loading/数据状态）。
   const reloadSeqRef = useRef(0);
 
-  // 流水页按需加载：筛选变化置脏，页签激活且数据脏时才拉首页（与汇总/图表共享筛选不即时重查）。
+  // 流水页按需加载：筛选变化（时间/模型）置脏，页签激活且数据脏时才拉首页；
+  // 不在流水页时改筛选仅置脏不重查，切回流水页补拉。
   const reqSeqRef = useRef(0);
   const reqDirtyRef = useRef(true);
 
@@ -455,8 +457,8 @@ export function TokenUsageStatsView() {
     // 此处对 selectedDay 的重置抹掉（后到的回调覆盖先行的 effect）。
     setSelectedDay(autoSelectToday ? toLocalDayKey(Date.now()) : null);
     setHourlyBuckets(null);
-    // 数据已换，饼图选中行失效；流水脏标记不在此置——P1-2 流水与时间筛选解绑，
-    // 置脏改由监听 requestsFilter 的独立 effect 负责。
+    // 数据已换，饼图选中行失效；流水脏标记由监听完整 filter 的独立 effect
+    // 置位（需求①勘误后时间/模型变化均覆盖，见 requestsFilter 定义处）。
     setSelectedSliceKey(null);
   }, []);
 
@@ -465,19 +467,21 @@ export function TokenUsageStatsView() {
     void reload(filter, rangeKind === "today");
   }, [filter, rangeKind, reload]);
 
-  // 流水筛选（P1-2 与时间解绑）：只含模型维度、无 range——翻全部历史流水不受
-  // 当前时间窗口截断；模型筛选变化经下方独立 effect 置脏重拉。
-  const requestsFilter = useMemo<UsageStatsFilterDto>(
-    () => ({ model: modelFilter }),
-    [modelFilter],
-  );
+  // 流水筛选（需求①勘误后）：与汇总/图表共享完整 filter（range + model）——
+  // 时间或模型筛选变化都会改变 requestsFilter，经下方独立 effect 置脏；
+  // custom 区间非法（filter 为 null）时不发查询、保留旧列表。
+  const requestsFilter = filter;
 
   useEffect(() => {
     reqDirtyRef.current = true;
   }, [requestsFilter]);
 
   // 流水页分页加载：按页号取整页替换（不再追加）；序号守卫防止旧响应覆盖新数据。
-  const loadRequests = useCallback(async (f: UsageStatsFilterDto, page: number) => {
+  // f 为 null（custom 区间非法）时静默跳过，不发查询。
+  const loadRequests = useCallback(async (f: UsageStatsFilterDto | null, page: number) => {
+    if (f == null) {
+      return;
+    }
     const seq = ++reqSeqRef.current;
     setReqLoading(true);
     const res = await ipcUsageStatsQuery({
@@ -511,8 +515,10 @@ export function TokenUsageStatsView() {
   }, []);
 
   // 页签激活且数据脏时拉首页；仅切页签不重拉（保留已加载的分页）。
+  // requestsFilter 含 range（需求①勘误后）：时间或模型变化置脏，停在流水页时
+  // 依赖变化即时触发本 effect 重拉首页。
   useEffect(() => {
-    if (pageTab !== "requests" || !reqDirtyRef.current) {
+    if (pageTab !== "requests" || requestsFilter == null || !reqDirtyRef.current) {
       return;
     }
     reqDirtyRef.current = false;
@@ -767,10 +773,10 @@ export function TokenUsageStatsView() {
         />
       </div>
 
-      {/* 空态只拦「汇总/图表」两页签：窗口空但库非空时，流水页签照常渲染全历史 */}
-      {/* 流水（流水与时间筛选解绑，不受窗口截断——PRD 验收第一条）；库全空 */}
-      {/* 探底为 true 时流水本身也无数据，三个页签统一整屏冷启动空态。 */}
-      {empty && (libraryEmpty || pageTab !== "requests") ? (
+      {/* 空态三页签统一（需求①勘误后）：窗口空（库非空）时流水页签同样显示区间 */}
+      {/* 空态——流水跟随时间窗口，窗口外无数据可展示；库全空探底命中时为 */}
+      {/* 冷启动引导文案。 */}
+      {empty ? (
         <SettingsSection title="数据统计">
           {libraryEmpty ? (
             <SettingsListEmpty>
@@ -861,7 +867,7 @@ export function TokenUsageStatsView() {
       ) : pageTab === "requests" ? (
         <SettingsSection
           title={`请求流水 · 共 ${reqTotal} 条`}
-          desc="按时间倒序列出全部历史请求（仅受模型筛选影响）"
+          desc="按时间倒序列出当前筛选范围内的请求"
         >
           <div className="token-stats-requests">
             <div className="token-stats-requests__row token-stats-requests__row--head">

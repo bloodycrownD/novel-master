@@ -6,9 +6,9 @@
  *   「今天」模式直出按小时图（无按天图节点）；
  * - 时间模型：自然日闭区间 {fromDay, toDay}（today/last7/last30/custom 映射 + 自定义
  *   from > to 校验、无 366 上限——超长区间照常查询）；
- * - 流水与时间筛选解绑（T-D3）：切时间不重拉流水；模型变化重拉且 filter 无 range；
+ * - 流水跟随时间（T-D3·勘误后）：时间或模型筛选变化都置脏重拉，filter 含 range 且 model 叠加；
  * - 空态区分（库全空冷启动 vs 范围内无数据，探底走 {fromDay,toDay} 表达 365 天）；
- *   窗口空（库非空）时空态只拦汇总/图表两页签，流水页签照常渲染全历史流水；
+ *   窗口空（库非空）时三页签统一区间空态（流水页签同样拦截，不再放行全历史流水）；
  *   库全空探底命中时三个页签统一整屏空态；
  * - 今日卡全删（T-D5：非空与空态两分支均无 today 卡节点）；
  * - 主查询竞态守卫（旧响应后到不覆盖新数据）；错误路径（{ok:false} 保留旧数据 / 格式异常）。
@@ -605,7 +605,7 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
     }
   });
 
-  it("窗口空（库非空）：汇总/图表页签显示区间空态且无指标卡；流水页签照常渲染全历史流水（filter 无 range）", async () => {
+  it("窗口空（库非空）：三页签统一区间空态；流水页签不渲染流水行（查询仍按当前窗口发出）", async () => {
     const requests: UsageQueryPayload[] = [];
     const probeFromDay = toDayKey(localMidnight(-365));
     const restore = mockWindow(
@@ -649,39 +649,43 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
       assert.deepEqual(chartCols(root, "daily"), []);
       assert.equal(sliceKeys(root).length, 0);
 
-      // 流水页签：照常渲染全历史流水——不再被整屏空态拦截（PRD 验收第一条）
+      // 流水页签（需求①勘误后）：同样被区间空态拦截，不再放行全历史流水；
+      // 流水查询仍照常按当前窗口发出（filter 含 range，数据被空态盖住不渲染）
       requests.length = 0;
       await clickSegmented(root, "流水");
-      assert.equal(
-        root.findAll((node) => node.props.className === "settings-list__empty").length,
-        0,
-        "窗口空不应拦截流水页签",
+      assert.ok(
+        collectText(root.findByProps({ className: "settings-list__empty" })).includes(
+          "当前筛选范围内暂无用量数据",
+        ),
+        "窗口空时流水页签应显示区间空态",
       );
       const reqQueries = requests.filter((r) => r.kind === "requests");
       assert.equal(reqQueries.length, 1, "切流水页签应拉首页");
-      assert.equal(reqQueries[0]!.filter.range, undefined, "流水查询不应携带 range");
+      assert.equal(
+        reqQueries[0]!.filter.range?.fromDay,
+        toDayKey(localMidnight(-6)),
+        "流水查询应携带当前窗口 range（last7 默认）",
+      );
+      assert.equal(reqQueries[0]!.filter.range?.toDay, toDayKey(localMidnight(0)));
       assert.equal(reqQueries[0]!.offset, 0);
       assert.equal(reqQueries[0]!.limit, 50);
-      // 流水行渲染（REQUEST_PAGE 样例：gpt-4o 行可见）
-      const rowsText = root
-        .findAll(
+      assert.equal(
+        root.findAll(
           (node) => node.props.className === "token-stats-requests__row",
-        )
-        .map((node) => collectText(node))
-        .join("|");
-      assert.ok(rowsText.includes("gpt-4o"), `流水行应渲染：${rowsText}`);
-      // 分页器常驻（total=260 → 6 页）
-      assert.ok(
-        root
-          .findAll(
-            (node) =>
-              typeof node.props.className === "string" &&
-              node.props.className.split(" ").includes(
-                "token-stats-requests__page-num",
-              ),
-          )
-          .some((node) => (node.children as unknown[]).some((c) => c === "6")),
-        "流水分页器应渲染",
+        ).length,
+        0,
+        "窗口空时流水页签不应渲染流水行",
+      );
+      assert.equal(
+        root.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className.split(" ").includes(
+              "token-stats-requests__page-num",
+            ),
+        ).length,
+        0,
+        "窗口空时不应渲染流水分页器",
       );
     } finally {
       await act(async () => {
@@ -1306,7 +1310,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     }
   });
 
-  it("流水页签：页码条常驻，点页码按页号取整页（首字延迟/总时间列渲染；filter 无 range）", async () => {
+  it("流水页签：页码条常驻，点页码按页号取整页（首字延迟/总时间列渲染；filter 含当前窗口 range）", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -1317,8 +1321,13 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       assert.equal(requests.at(-1)?.kind, "requests");
       assert.equal(requests.at(-1)?.offset, 0);
       assert.equal(requests.at(-1)?.limit, 50);
-      // 流水与时间解绑：requests 查询不携带 range
-      assert.equal(requests.at(-1)?.filter.range, undefined, "流水查询不应携带 range");
+      // 流水跟随时间（需求①勘误后）：requests 查询携带当前窗口 range（默认 last7）
+      assert.equal(
+        requests.at(-1)?.filter.range?.fromDay,
+        toDayKey(localMidnight(-6)),
+        "流水查询应携带当前窗口 range",
+      );
+      assert.equal(requests.at(-1)?.filter.range?.toDay, toDayKey(localMidnight(0)));
 
       // 6 页全展示（≤7 不收窄）：页码 1-6 按钮可见，当前页 1 高亮
       const pageBtn = (label: string) =>
@@ -1525,46 +1534,64 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
     }
   });
 
-  it("T-D3：流水解绑——时间筛选变化不触发 requests 重查；模型筛选变化触发且 filter 无 range", async () => {
+  it("T-D3：流水跟随时间（勘误后）——时间筛选变化触发 requests 重查且 filter 含 range；模型筛选变化触发且叠加 model", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
     try {
       renderer = await mountView();
       const root = renderer.root;
+      const todayKey = toDayKey(localMidnight(0));
 
-      // 先激活流水页签拉首页（filter 无 range）
+      // 先激活流水页签拉首页（filter 含 last7 窗口 range）
       await clickSegmented(root, "流水");
       assert.equal(requests.filter((r) => r.kind === "requests").length, 1);
 
-      // 时间筛选变化（近 7 天 → 近 30 天 → 今天）：主链路三连查询发出，
-      // 但不触发 requests 重查（P1-2：脏标记只挂模型筛选）
-      for (const label of ["近 30 天", "今天", "近 7 天"]) {
-        requests.length = 0;
-        await clickSegmented(root, label);
-        assert.ok(
-          requests.some((r) => r.kind === "summary"),
-          `${label} 切换应触发主链路查询`,
-        );
-        assert.equal(
-          requests.filter((r) => r.kind === "requests").length,
-          0,
-          `${label} 切换不应重拉流水`,
-        );
-      }
+      // 时间筛选变化（停在流水页）：立即重查且 filter.range 跟随新窗口映射
+      requests.length = 0;
+      await clickSegmented(root, "近 30 天");
+      let reqs = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqs.length, 1, "切近 30 天应立即重拉流水首页");
+      assert.equal(reqs[0]!.filter.range?.fromDay, toDayKey(localMidnight(-29)));
+      assert.equal(reqs[0]!.filter.range?.toDay, todayKey);
+      assert.equal(reqs[0]!.offset, 0);
 
-      // 模型筛选变化：触发流水重查，且 filter 只含 model、无 range
+      requests.length = 0;
+      await clickSegmented(root, "今天");
+      reqs = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqs.length, 1, "切今天应立即重拉流水首页");
+      assert.deepEqual(reqs[0]!.filter.range, { fromDay: todayKey, toDay: todayKey });
+
+      // 模型筛选变化（停在流水页）：重查且 model 叠加在当前窗口 range 上
       requests.length = 0;
       await selectModel(root, "gpt-4o");
-      const reqs = requests.filter((r) => r.kind === "requests");
+      reqs = requests.filter((r) => r.kind === "requests");
       assert.equal(reqs.length, 1, "模型变化应重拉流水首页");
-      assert.equal(reqs[0]!.filter.range, undefined, "流水 filter 不应携带 range");
+      assert.deepEqual(reqs[0]!.filter.range, { fromDay: todayKey, toDay: todayKey });
       assert.equal(reqs[0]!.filter.model, "gpt-4o");
 
-      // 切回「全部模型」同样重拉
+      // 切回「全部模型」同样重拉（model 回到 undefined，range 仍在）
       requests.length = 0;
       await selectModel(root, "__all__");
-      assert.equal(requests.filter((r) => r.kind === "requests").length, 1);
+      reqs = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqs.length, 1);
+      assert.equal(reqs[0]!.filter.model, undefined);
+      assert.deepEqual(reqs[0]!.filter.range, { fromDay: todayKey, toDay: todayKey });
+
+      // 不在流水页时改时间：仅置脏不重查；切回流水页补拉一次（脏标记生效）
+      requests.length = 0;
+      await clickSegmented(root, "汇总");
+      await clickSegmented(root, "近 7 天");
+      assert.equal(
+        requests.filter((r) => r.kind === "requests").length,
+        0,
+        "不在流水页时改筛选不应重拉流水",
+      );
+      await clickSegmented(root, "流水");
+      const reqsAfter = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqsAfter.length, 1, "切回流水页应补拉首页");
+      assert.equal(reqsAfter[0]!.filter.range?.fromDay, toDayKey(localMidnight(-6)));
+      assert.equal(reqsAfter[0]!.filter.range?.toDay, todayKey);
     } finally {
       await act(async () => {
         renderer?.unmount();
