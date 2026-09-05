@@ -12,7 +12,9 @@
  * - 空态文案；
  * - 刷新单通道（mobile/B-2）：挂载与筛选切换各只触发一轮三连查询；
  * - 主查询竞态（cross/B-1）：旧响应后到不覆盖新数据；
- * - 空态区分（mobile/A-1）：库全空冷启动引导 vs 范围内无数据保留今日卡；
+ * - 空态区分（mobile/A-1）：库全空冷启动引导（拦全部页签）vs 范围内
+ *   无数据（只拦汇总/图表，流水页签窗口空时仍渲染全历史，PRD 验收①）；
+ *   饼图占比分母用窗口 summary.totalTokens 且人为错开行总和（P1-3 锁口径）；
  * - 加载失败（mobile/C-orch-2）：常驻错误条 + 不渲染 0 兜底卡片；
  * - MonthRangePickerSheet 组件级选值回调 + 自定义区间正常路径（无上限）。
  * - T-M1..T-M7：今天映射/近 7·30 天恰 7·30 桶/今日卡全删/饼图渲染与点选/
@@ -737,6 +739,13 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
   });
 
   it('汇总页签饼图：扇区数=行数不折叠，点选出详情行，占比分母=窗口 totalTokens（T-M4）', async () => {
+    // 分母鉴别（P1-3 锁口径）：窗口 summary.totalTokens 人为错开饼图行总和
+    // （2500 vs 600+950=1550）——占比必须按窗口总分母算（950/2500=38%、
+    // 600/2500=24%）；若实现回退为行总和作分母（61%/39%），断言即失败。
+    mockGetSummary.mockResolvedValue({
+      ...SAMPLE_SUMMARY,
+      totalTokens: 2500,
+    });
     const renderer = await renderScreen(); // 默认汇总页签
     // SAMPLE_MODEL_ROWS 两行（未记录 600 / gpt-4o 950）→ 恰两扇区，
     // 按用量降序 gpt-4o 在前，不折叠不归并。
@@ -753,7 +762,8 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     ).toContain('未记录服务商（历史）');
     // 未选时无详情行。
     expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
-    // 点选扇区：详情行 = 服务商·模型 / 用量 / 次数 / 占比（950/1550≈61%。
+    // 点选扇区：详情行 = 服务商·模型 / 用量 / 次数 / 占比（950/2500=38%，
+    // 分母为窗口 summary.totalTokens 而非行总和）。
     await act(async () => {
       findByTestId(renderer.root, 'pie-sector-p1::gpt-4o')!.props.onPress();
       await flushPromises();
@@ -762,8 +772,8 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(detail).toContain('智谱 · gpt-4o');
     expect(detail).toContain('950');
     expect(detail).toContain('调用 4 次');
-    expect(detail).toContain('61%');
-    // 点图例切换选中：600/1550≈39%。
+    expect(detail).toContain('38%');
+    // 点图例切换选中：600/2500=24%。
     await act(async () => {
       findByTestId(
         renderer.root,
@@ -774,7 +784,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     const detail2 = nodeText(findByTestId(renderer.root, 'pie-detail')!);
     expect(detail2).toContain('未记录服务商（历史）');
     expect(detail2).toContain('600');
-    expect(detail2).toContain('39%');
+    expect(detail2).toContain('24%');
   });
 
   it('图表页签不含饼图，未选天时无命中率出口', async () => {
@@ -890,6 +900,13 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(json).not.toContain('该区间无数据');
     // 今日卡全删：库全空空态也不渲染（T-M3）。
     expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
+    // 库全空优先级不变（回归锁）：冷启动引导拦全部页签，切流水页签
+    // 也不放行——流水同样无数据可翻。
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'empty-cold-start')).toBeTruthy();
   });
 
   it('空态区分：范围内无数据提示该区间，不再保留今日卡（mobile/A-1 / T-M3）', async () => {
@@ -906,11 +923,52 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     mockGetDailyBuckets.mockResolvedValue([]);
     mockGetModelBreakdown.mockResolvedValue([]);
     const renderer = await renderScreen();
+    // 汇总页签（默认）：空态文案在场、无指标卡（不渲染 0 兑底卡片）。
     expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'summary-metric-total')).toBeUndefined();
     const json = JSON.stringify(renderer.toJSON());
     expect(json).toContain('该区间无数据');
     expect(json).not.toContain('自记录功能上线起开始积累');
     expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
+    // 图表页签同样被范围空态拦：空态文案在场、无柱状图。
+    await switchToDetailTab(renderer);
+    expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'daily-chart')).toBeUndefined();
+  });
+
+  it('窗口空 + 流水页签：流水仍渲染全历史且 filter 无 range，不被空态拦（PRD 验收①）', async () => {
+    // 窗口空（今天还没用量）但库有历史：流水与时间解绑，流水页签
+    // 不受「该区间无数据」拦截，照常拉取并渲染全历史（PRD 验收①：
+    // 任意时间筛选下流水页展示全部历史请求，不受窗口截断）。
+    mockGetSummary.mockResolvedValue({
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      billedInputTokens: 0,
+    });
+    mockGetDailyBuckets.mockResolvedValue([]);
+    mockGetModelBreakdown.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    // 默认汇总页签被范围空态拦住作为前置。
+    expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
+      await flushPromises();
+    });
+    // 流水页签正常拉取：filter 无 range（全历史，仅模型/服务商两维）。
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
+    expect(mockListRequestUsage.mock.calls[0]![0]).toEqual({
+      model: undefined,
+      providerId: undefined,
+    });
+    // 空态不再拦截：流水内容与页码条在场渲染。
+    expect(findByTestId(renderer.root, 'empty-range')).toBeUndefined();
+    expect(findByTestId(renderer.root, 'empty-cold-start')).toBeUndefined();
+    expect(findByTestId(renderer.root, 'req-page-1')).toBeTruthy();
+    expect(nodeText(renderer.root)).toContain('首字延迟 900 ms');
   });
 
   it('首查失败渲染常驻错误条而非 0 值卡片，成功后清除（mobile/C-orch-2）', async () => {
@@ -1174,7 +1232,9 @@ describe('T-M7 PieChart 组件级', () => {
     let renderer: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
-        <PieChart data={PIE_ROWS} totalTokens={1000} tokens={CHART_TOKENS} />,
+        // 分母错开行总和（2500 vs 700+250+50=1000）：占比按传入的窗口
+        // 总分母算，锁死调用方分母口径（与 T-M4 同理，P1-3）。
+        <PieChart data={PIE_ROWS} totalTokens={2500} tokens={CHART_TOKENS} />,
       );
       await flushPromises();
     });
@@ -1190,7 +1250,7 @@ describe('T-M7 PieChart 组件级', () => {
     expect(findByTestId(renderer.root, 'pie-legend-c')).toBeTruthy();
     // 未选中：无详情行。
     expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
-    // 点扇区 a：700/1000 = 70%。
+    // 点扇区 a：700/2500 = 28%（分母为传入的 totalTokens，非行总和 1000）。
     await act(async () => {
       findByTestId(renderer.root, 'pie-sector-a')!.props.onPress();
       await flushPromises();
@@ -1199,15 +1259,15 @@ describe('T-M7 PieChart 组件级', () => {
     expect(detail).toContain('A · m1');
     expect(detail).toContain('700');
     expect(detail).toContain('调用 7 次');
-    expect(detail).toContain('70%');
-    // 点图例 c 切换选中：50/1000 = 5%。
+    expect(detail).toContain('28%');
+    // 点图例 c 切换选中：50/2500 = 2%。
     await act(async () => {
       findByTestId(renderer.root, 'pie-legend-c')!.props.onPress();
       await flushPromises();
     });
     detail = nodeText(findByTestId(renderer.root, 'pie-detail')!);
     expect(detail).toContain('未记录服务商（历史）');
-    expect(detail).toContain('5%');
+    expect(detail).toContain('2%');
     // 再点同一图例：取消选中，详情行消失。
     await act(async () => {
       findByTestId(renderer.root, 'pie-legend-c')!.props.onPress();
