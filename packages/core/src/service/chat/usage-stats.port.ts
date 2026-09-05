@@ -146,7 +146,7 @@ export interface UsageStatsService {
   getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]>;
 
   /**
-   * 指定本地日期（`YYYY-MM-DD`）的 24 个小时桶（只应用 `filter.model`，
+   * 指定本地日期（`YYYY-MM-DD`）的 24 个小时桶（只应用 `filter.model` 与 `filter.providerId`，
    * 时间范围由 `dayLocalDate` 本身界定；DST 日按实际构造出的桶边界为准）。
    */
   getHourlyBuckets(

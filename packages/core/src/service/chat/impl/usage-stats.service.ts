@@ -136,10 +136,10 @@ function parseDayLocalDate(
   return { year, month, day };
 }
 
-/** 本地日期格式化为 `YYYY-MM-DD`（与 strftime 的 day_key 同构）。 */
+/** 本地日期格式化为 `YYYY-MM-DD`（与 strftime 的 day_key 同构，年份补零 4 位防 <1000 年错位死循环）。 */
 function fmtLocalDay(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${String(d.getFullYear()).padStart(4, "0")}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** 空桶的零值聚合行（DST 空钟点桶直接复用，省一次查询）。 */
