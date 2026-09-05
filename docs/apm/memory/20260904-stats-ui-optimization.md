@@ -118,3 +118,9 @@ user:
 
 assistant:
 上一轮卡片化只套住了扇区 Svg 层，点选详情行和图例还是卡片外的灰底。重排 PieChart JSX：pieWrap 卡片内嵌扇区+详情行+图例，图例 alignSelf stretch 铺满卡片宽。中途自己改出少一个闭合标签的 JSX 解析错，eslint/tsc 即时抓到补上。1092+tsc+lint 全绿，样式提交收尾。
+
+user:
+（code-review-loop）对迭代分支做质量评审。
+
+assistant:
+CR 循环 3 轮收敛 fix-spec-ready：wave-0 三 scope 并行评审（desktop 首发被中止 exit 143，单发重试成功），全部 scope-ready、零 P0/P1、零 spec_deviations，17 条 P2（core 3/mobile 7/desktop 7：测试覆盖缺口、死代码死样式、注释漂移、DRY、跨端 toggle parity、单扇区整圆零覆盖等）由 spec-fix 子代理落盘 cr-fix-spec.md（行号实测校准）；review-full 抓到 X-1 交叉遗漏（mobile 同根因跨午夜竞态）由主代理 trivial 豁免并入 B-2 双端条目；round 3 轻量复核建议 yes。Closure 已附，待用户确认后按 fix-spec 开工执行。
