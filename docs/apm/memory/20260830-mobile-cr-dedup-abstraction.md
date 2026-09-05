@@ -1,8 +1,8 @@
 ---
-date: 2026-08-30 20:00
+date: 2026-08-31 00:36
 title: apps/mobile 全量 CR 与 99 条 fix-spec 实施（含 UI 回归修复）
 keywords: mobile, CR, code-review-loop, code-dev-loop, fix-spec, 重构, ModalShell, 迁移清理, 子代理纪律
-abstract: 对 apps/mobile 全量 CR 两轮评审产出 88→99 条 fix-spec，后按 8 波全部实施闭合（测试 165/906→181/1055）；追加迁移代码清理（最低支持 v1.4.27）与三个 UI 回归修复（折叠头 class 派生、ModalShell left 容器、契约测试锁定）。沉淀子代理派遣纪律（上下文/禁写记忆）与样式迁移审计方法。
+abstract: 对 apps/mobile 全量 CR 两轮评审产出 88→99 条 fix-spec，后按 8 波全部实施闭合（测试 165/906→183/1055）；追加迁移代码清理（最低支持 v1.4.27）与三个 UI 回归修复（折叠头 class 派生、ModalShell left 容器、契约测试锁定）。沉淀子代理派遣纪律（上下文/禁写记忆）与样式迁移审计方法。
 ---
 
 user:
@@ -109,3 +109,39 @@ user:
 
 assistant:
 发现记忆文件被 waveB3 子代理整写覆盖（write_file 全量写覆盖了原有对话轮次），损坏发生在 df4153f 之后；从 git 历史恢复基线并补回全部增量轮次。教训固化为 RULE.md 新规则：子代理不得写 docs/apm/memory，记忆由主代理统一维护（子代理只能 append 也曾出过误覆盖，干脆禁掉）。
+
+user:
+恢复记忆，给 AGENTS.md 加一条「search 工具有 bug 容易返回过多内容导致上下文爆炸」的规则，然后按 publish skill 发布 1.5.7。
+
+assistant:
+规则加在 AGENTS.md 新增的「代码检索」章节（与 RULE.md 中已有纪律同文）。发版流程：core build+test（1781 全绿）、mobile tsc+jest（183 套件/1055 用例）、desktop test（100）三端验证后，CHANGELOG 的 Unreleased 挪为 [1.5.7] - 2026-08-30 并把维护段用例数修成实测值（181/1049→183/1055），bump desktop/mobile package.json 与 android build.gradle 默认 versionName。cr/mobile-fix-wave1 以 fast-forward 合入 main（0b42543→c8e16c9），提交 228410f 后打 tag v1.5.7 并推送，Release workflow 已触发，main 同步推送。用户的 AGENTS.md 人设修改与 .vscode/docs/dev 删除保留在工作区未提交。
+
+user:
+v1.5.7 的 Release Android 构建挂了：metro 报 Unable to resolve module htmlparser2 from node_modules/sanitize-html/index.js。修一下重发。
+
+assistant:
+根因有两层：一是 CR 删除废弃富文本渲染模块时从 package.json 移除了 react-native-render-html，但 lockfile 没刷新——它链上的 htmlparser2@7.2.0 占着根 node_modules 位置；npm install 刷新 lockfile 清掉孤儿后，sanitize-html 需要的 htmlparser2@12 因 cheerio/linkedom 锁 ^10 无法提升，只能嵌套在 sanitize-html/node_modules 下。二是 metro.config.js 配了 disableHierarchicalLookup，只查 nodeModulesPaths 两个目录，嵌套依赖解析不到——本地之前靠孤儿残留的根 htmlparser2@7 掩盖了问题，CI 的 npm ci 干净安装才暴露。修复：metro resolveRequest 把常规解析包进 try/catch，失败时用 require.resolve 从引用方目录做 Node 层级解析兜底（resolveNestedFromOrigin）；加 lockfile 刷新共提交 2fbc77c，本地复现错误→修复→bundle 通过+jest 183/1055+desktop 100 全绿后 force tag v1.5.7 重发。教训：删依赖必须同步刷新 package-lock（否则本地增量 node_modules 会掩盖 CI 干净安装的问题）；desktop 测试被系统负载（Zed/tsserver/gradle daemon）拖慢时先查 ps 再怀疑依赖。
+
+user:
+本次修复又导致一个 UI 问题：聊天工作区新建文件夹/文件弹窗的宽度和输入框 placeholder 一样宽，不是固定宽度。
+
+assistant:
+根因是 ModalShell 收敛时 center 容器加了 alignItems:'center'（子元素收缩包裹），VfsPromptModal（vfs-file-manager 下，新建/重命名弹窗）的 promptBox 迁移时没写宽度，就塌成了内容宽；旧实现容器无 alignItems 走默认 stretch 所以接近全宽。全局排查 center 直连调用方共两处：AnnotatePickModal 迁移时已补 width:'100%'，只有 VfsPromptModal 漏网。修复：promptBox 加 width:'100%'（还原旧的接近全宽卡片视觉），新增 vfs-prompt-modal-width 契约测试锁定（源码契约手法，与 modal-shell-variant 同款）。全量 1056 用例+tsc+prettier 全绿，提交 19fc6eb 推 main。方法论沉淀：ModalShell center variant 的调用方必须在 panelStyle 显式声明宽度，迁移旧弹窗时逐项比对容器 alignItems 语义差异。
+
+user:
+弹窗宽度修复后用户质问为何 CR 没拦住这些 UI 回归，要求再 CR 一次；随后用户自己跑了一轮评审，结论与子代理不一致（含一条子代理漏判的 P0）。
+
+assistant:
+承认 CR 盲区：验证手段无视觉层（jest/tsc/契约测试看不见样式）、已沉淀的「样式迁移逐项比对」纪律执行是点状的、三个回归全是「隐式依赖被显式语义改变」。补跑专项 CR（三个 readonly 子代理并行：ModalShell 调用方/class 派生契约/迁移组件比对），结论与用户独立评审交叉核对后发现子代理漏报：scope1 把 TextPromptModal title marginBottom 12→0 误判为「综合视觉密度不变」（实际 center 变体标题贴死，P0），原因是双变体合并（旧居中版+AddModelModal）只对照了一个参照物、且间距没有逐段比。亲自核实用户五条全部属实。合并落盘 docs/Iterations/mobile-cr-dedup-abstraction/cr-fix-spec-ui-parity.md：1 条 P0（title 间距，必修）+ 6 条 P2（bottom actions 16→24、AnnotatePickModal 遮罩、VfsPromptModal KAV offset、SkillPicker 面板视觉、EditorScreenShell 字号、ElevatedCard hairline 边框），后四条待拍板。方法论教训：子代理样式等价审计必须逐段间距比对且逐一列全旧参照物；用户对 UI 的敏感度高于任何自动化门禁。
+
+user:
+直接修吧——按 fix-spec ui-parity 全量执行。
+
+assistant:
+七条全部闭合（提交 5a1a6ce 推 main）：P0-1 TextPromptModal title 拆 titleCenter（marginBottom 12）/bottom 沿用无 mb；P2-1 actions 拆 actionsCenter（mt8）/actionsBottom（mt0，gap8+input mb8=16 还原）；P2-2 AnnotatePickModal 补 backdropOpacity 0.45；P2-3 VfsPromptModal 删 keyboardVerticalOffset 24；P2-4 PickerListModal 加 sheetStyle/cancelColor 可选 prop，SkillPicker 传 sheetOverride（80%/圆角16）+tokens.text；P2-5 EditorScreenShell 加 titleFontSize（默认13），FileEditorScreen 传 14；P2-6 ElevatedCard hairline 边框拍板接受统一不改。新增 ui-parity-regressions 契约测试 8 断言锁定。验证：prettier/tsc/jest 1064 全绿。fix-spec 状态更新为已执行。
+
+user:
+CHANGELOG.md 补一下 log。
+
+assistant:
+在 Unreleased 补了三条（提交 9987afe）：修复段两条（新建文件/文件夹弹窗宽度恢复、弹窗与面板样式细节修复——均为 1.5.7 用户实际会遇到的问题）+ 维护段一条（依赖清单清理与打包解析修复——Release 构建失败即修复，用户未体验过故归维护）。别的迭代已写的两条（目录规则、生成进度恢复）保留未动；中途 edit 误删过「主会话生成进度重进不丢」一条，随即补回并全文复核确认完整。

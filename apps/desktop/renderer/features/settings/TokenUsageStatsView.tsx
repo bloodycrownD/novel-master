@@ -34,7 +34,12 @@ const MS_PER_DAY = 86_400_000;
 /** 自定义区间上限（天，含首尾；与 mobile 侧同口径，避免超长区间查询变慢）。 */
 const CUSTOM_RANGE_MAX_DAYS = 366;
 
-/** 模型下拉的三态哨兵：全部 / 其他模型（对应 filter.model 的 undefined / null）。「其他模型」= NULL 记录 + 非当前配置的历史模型归并。 */
+/**
+ * 模型下拉的三态哨兵：全部 / 其他模型（对应 filter.model 的 undefined / null）。
+ * 「其他模型」= NULL 记录 + 非当前配置的历史模型归并。
+ * 口径注记：core 统计已是 provider×model 复合维度，DTO 侧按 modelName 聚合回模型粒度，
+ * 故同名模型多服务商在分模型汇总中恒为单行，下拉按模型名单值筛选不受影响。
+ */
 const MODEL_OPTION_ALL = "__all__";
 const MODEL_OPTION_UNLOGGED = "__unlogged__";
 
@@ -563,7 +568,7 @@ export function TokenUsageStatsView() {
                 {m}
               </option>
             ))}
-            {/* 常量与 value 名保留 __unlogged__（历史命名），语义已升级为「其他模型」：NULL + 非当前配置历史模型 */}
+            {/* 常量与 value 名保留 __unlogged__（历史命名），语义已升级为「其他模型」：NULL + 非当前配置历史模型。core 已是 provider×model 复合维度，DTO 侧聚合回模型粒度，本选项仍按模型名单值筛选 */}
             <option value={MODEL_OPTION_UNLOGGED}>其他模型</option>
           </select>
         </label>
@@ -659,6 +664,7 @@ export function TokenUsageStatsView() {
                 <span>占比</span>
                 <span>调用次数</span>
               </div>
+              {/* DTO 已按 modelName 聚合（core 的 provider×model 复合维度在 IPC 层归并），modelName 在此唯一，作 React key 无重复风险 */}
               {sortedModelRows.map((row) => {
                 const share =
                   summary != null && summary.totalTokens > 0

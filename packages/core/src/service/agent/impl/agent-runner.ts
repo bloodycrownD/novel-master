@@ -590,7 +590,13 @@ export class DefaultAgentRunner implements AgentRunner {
               // 与 saved model 的服务商解耦。
               provider: protocol,
               ...(savedModelForAppend != null
-                ? { modelName: savedModelForAppend.vendorModelId }
+                ? {
+                    modelName: savedModelForAppend.vendorModelId,
+                    // provider×model 维度统计：服务商配置 id 写入时快照，
+                    // 服务商后续改名/删除不回写历史行（删除后统计解析不到
+                    // 归「其他」，用户已确认可接受）。
+                    providerId: savedModelForAppend.providerId,
+                  }
                 : {}),
               raw: result.raw as Record<string, unknown>,
               // 耗时随 usage 一并落库；result.usage 缺失时仅含两个耗时字段，

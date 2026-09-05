@@ -113,7 +113,14 @@ export function TextPromptModal({
       keyboardVerticalOffset={isBottom ? 0 : 24}
       panelStyle={isBottom ? styles.panelBottom : styles.panelCenter}
     >
-      <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
+      <Text
+        style={[
+          isBottom ? styles.title : styles.titleCenter,
+          {color: tokens.text},
+        ]}
+      >
+        {title}
+      </Text>
       {effectiveFields.map((field, index) => (
         <View key={index}>
           {field.label ? (
@@ -143,7 +150,10 @@ export function TextPromptModal({
           />
         </View>
       ))}
-      <View style={styles.actions}>
+      {/* center：input marginBottom 8 + actions marginTop 8 = 16；
+          bottom：panel gap 8 兜底段间距，input marginBottom 8 + gap 8 + marginTop 0 = 16
+          （还原旧 AddModelModal 的 16，勿再叠加 marginTop）。 */}
+      <View style={isBottom ? styles.actionsBottom : styles.actionsCenter}>
         <Pressable onPress={onClose} style={styles.btn}>
           <Text style={{color: tokens.textSecondary}}>取消</Text>
         </Pressable>
@@ -181,10 +191,18 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: 8,
   },
+  // center 面板无 gap，标题下间距由 titleCenter 自带 marginBottom 12（旧居中版值）；
+  // bottom 靠 panel gap 8 还原旧 marginBottom 8，title 不能再加。
   title: {
     fontSize: 18,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  titleCenter: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 12,
   },
   label: {
     fontSize: 13,
@@ -198,11 +216,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 8,
   },
-  actions: {
+  actionsCenter: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     gap: 16,
     marginTop: 8,
+  },
+  actionsBottom: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 16,
+    marginTop: 0,
   },
   btn: {
     paddingVertical: 8,

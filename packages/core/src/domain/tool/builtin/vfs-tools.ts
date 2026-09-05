@@ -34,6 +34,7 @@ import {
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { serializeFileCachePayload } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { backfillMissingDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
 
 /** Registered builtin file tool names (insertion order). */
 export const FILE_TOOL_NAMES = [
@@ -612,16 +613,21 @@ async function ensureDirRulesForNewPath(
   try {
     // 入参已是规范化逻辑路径（write 侧经 resolveLogicalPath，mkdir 侧同样）。
     const parts = dirLogicalPath.split("/").filter((p) => p !== "");
-    const existing = new Set(
-      (await ctx.workplace.listDirRules()).map((rule) => rule.logicalPath)
-    );
+    const chain: string[] = [];
     let current = "";
     for (const part of parts) {
       current += `/${part}`;
-      if (!existing.has(current)) {
-        await ctx.workplace.setDirRule({ logicalPath: current });
-      }
+      chain.push(current);
     }
+    const existing = new Set(
+      (await ctx.workplace.listDirRules()).map((rule) => rule.logicalPath)
+    );
+    // 求差 / 跳根 / 路径规范化内核与导入链路共享；写入载体仍是 service
+    // 层的 setDirRule（缺省字段即默认启用），BuiltinToolContext 依赖形状不变。
+    const workplace = ctx.workplace;
+    await backfillMissingDirRules(chain, existing, (logicalPath) =>
+      workplace.setDirRule({ logicalPath })
+    );
   } catch (error) {
     // 吞错但不无声：文件/目录已落盘，补规则失败不阻断主流程。
     console.debug(`[vfs-tools] 补目录规则失败（${dirLogicalPath}）:`, error);

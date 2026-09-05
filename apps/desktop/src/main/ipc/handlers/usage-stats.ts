@@ -1,6 +1,7 @@
 /**
  * Usage stats IPC handler — 单 channel 按 kind 分发转发 core 统计服务，
- * core 返回体在此显式映射为 shared DTO（renderer 侧不 import core）。
+ * core 返回体在此显式映射为 shared DTO（renderer 侧不 import core）；
+ * modelBreakdown 在此按 modelName 聚合回每模型单行（core 已是 provider×model 复合维度）。
  */
 import type {
   UsageStatsBucket,
@@ -9,7 +10,7 @@ import type {
   UsageStatsRequestRow,
   UsageStatsService,
   UsageStatsSummary,
-} from '@novel-master/core/chat';
+} from "@novel-master/core/chat";
 
 import type {
   IpcResult,
@@ -20,16 +21,16 @@ import type {
   UsageStatsQueryResponse,
   UsageStatsRequestRowDto,
   UsageStatsSummaryDto,
-} from '../../../../shared/ipc-types.js';
-import { formatIpcError } from '../format-ipc-error.js';
-import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
+} from "../../../../shared/ipc-types.js";
+import { formatIpcError } from "../format-ipc-error.js";
+import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 
 /** DTO 与 core 类型结构等效，此处显式转换以守住类型边界（model 三态原样保留）。 */
 function toCoreFilter(filter: UsageStatsFilterDto): UsageStatsFilter {
   return {
     range: {
       kind: filter.range.kind,
-      ...(filter.range.kind === 'custom'
+      ...(filter.range.kind === "custom"
         ? { fromMs: filter.range.fromMs, toMs: filter.range.toMs }
         : {}),
     },
@@ -69,16 +70,42 @@ function toBucketDto(bucket: UsageStatsBucket): UsageStatsBucketDto {
   };
 }
 
-function toModelRowDto(row: UsageStatsModelRow): UsageStatsModelRowDto {
-  return {
-    modelName: row.modelName,
-    calls: row.calls,
-    promptTokens: row.promptTokens,
-    completionTokens: row.completionTokens,
-    totalTokens: row.totalTokens,
-    cacheReadTokens: row.cacheReadTokens,
-    billedInputTokens: row.billedInputTokens,
-  };
+/**
+ * core 分模型汇总已是 (providerId, modelName) 复合维度，同名模型多服务商会返回多行；
+ * DTO 侧在此按 modelName 聚合回「每模型单行」旧粒度（providerId 不透出 renderer），
+ * 六列用量逐列相加，modelName 为 null 的存量行归并进同一个「未记录」桶。
+ * 保持 core 返回的首现顺序（renderer 侧自行按 totalTokens 重排）。
+ */
+function toModelRowDtos(rows: UsageStatsModelRow[]): UsageStatsModelRowDto[] {
+  // Map key 用哨兵串区分 null 模型名，避免与真实模型名冲突
+  const NULL_KEY = "\u0000__null_model__";
+  const merged = new Map<string, UsageStatsModelRowDto>();
+  for (const row of rows) {
+    const key = row.modelName ?? NULL_KEY;
+    const prev = merged.get(key);
+    if (prev == null) {
+      merged.set(key, {
+        modelName: row.modelName,
+        calls: row.calls,
+        promptTokens: row.promptTokens,
+        completionTokens: row.completionTokens,
+        totalTokens: row.totalTokens,
+        cacheReadTokens: row.cacheReadTokens,
+        billedInputTokens: row.billedInputTokens,
+      });
+    } else {
+      merged.set(key, {
+        modelName: prev.modelName,
+        calls: prev.calls + row.calls,
+        promptTokens: prev.promptTokens + row.promptTokens,
+        completionTokens: prev.completionTokens + row.completionTokens,
+        totalTokens: prev.totalTokens + row.totalTokens,
+        cacheReadTokens: prev.cacheReadTokens + row.cacheReadTokens,
+        billedInputTokens: prev.billedInputTokens + row.billedInputTokens,
+      });
+    }
+  }
+  return [...merged.values()];
 }
 
 function toRequestRowDto(row: UsageStatsRequestRow): UsageStatsRequestRowDto {
@@ -96,39 +123,39 @@ function toRequestRowDto(row: UsageStatsRequestRow): UsageStatsRequestRowDto {
 }
 
 export async function handleUsageStatsQuery(
-  req: UsageStatsQueryRequest,
+  req: UsageStatsQueryRequest
 ): Promise<IpcResult<UsageStatsQueryResponse>> {
   try {
     const rt = await getDesktopRuntime();
     const svc: UsageStatsService = rt.usageStats;
     const filter = toCoreFilter(req.filter);
     switch (req.kind) {
-      case 'summary':
+      case "summary":
         return {
           ok: true,
           data: toSummaryDto(await svc.getSummary(filter)),
         };
-      case 'daily':
+      case "daily":
         return {
           ok: true,
           data: (await svc.getDailyBuckets(filter)).map(toBucketDto),
         };
-      case 'hourly':
+      case "hourly":
         // dayLocalDate 缺失时传空串，由服务层日期校验拒绝并落入 IpcResult error
         return {
           ok: true,
           data: (
-            await svc.getHourlyBuckets(req.dayLocalDate ?? '', filter)
+            await svc.getHourlyBuckets(req.dayLocalDate ?? "", filter)
           ).map(toBucketDto),
         };
-      case 'modelBreakdown':
+      case "modelBreakdown":
         return {
           ok: true,
-          data: (await svc.getModelBreakdown(filter)).map(toModelRowDto),
+          data: toModelRowDtos(await svc.getModelBreakdown(filter)),
         };
-      case 'models':
+      case "models":
         return { ok: true, data: await svc.listModels() };
-      case 'requests': {
+      case "requests": {
         // offset/limit 仅 requests 使用；缺省 0/50 与 renderer 侧默认页大小一致。
         const page = await svc.listRequestUsage(filter, {
           offset: req.offset ?? 0,
@@ -144,7 +171,7 @@ export async function handleUsageStatsQuery(
         return {
           ok: false,
           error: {
-            code: 'ERROR',
+            code: "ERROR",
             message: `未知的 usageStats 查询 kind: ${String(exhaustive)}`,
           },
         };

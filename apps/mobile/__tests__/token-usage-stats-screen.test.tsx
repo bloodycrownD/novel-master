@@ -6,7 +6,8 @@
  *   保留）；汇总页签五指标卡 + 今日卡（命中率无数据显示「暂无数据」）
  *   + 分模型列表（聚合数据归汇总）；明细页签只留柱状图 / 小时钻取；
  * - 筛选切换重查：时间范围 / 模型筛选切换后 stub 的 usageStats 方法收到新
- *   filter 参数；
+ *   filter 参数；CR-2 方案 A：两类归并选项传参与选项覆盖 parity（每个
+ *   (providerId, modelName) 组合至少被一个筛选项命中）；
  * - 柱状图数据映射：样例桶数据 → 柱高顺序 / 标签文本；
  * - 空态文案；
  * - 刷新单通道（mobile/B-2）：挂载与筛选切换各只触发一轮三连查询；
@@ -27,6 +28,8 @@ const mockGetDailyBuckets = jest.fn();
 const mockGetHourlyBuckets = jest.fn();
 const mockGetModelBreakdown = jest.fn();
 const mockListModels = jest.fn();
+const mockProvidersList = jest.fn();
+const mockListByProvider = jest.fn();
 const mockListRequestUsage = jest.fn();
 
 const mockRuntime = {
@@ -37,6 +40,12 @@ const mockRuntime = {
     getModelBreakdown: mockGetModelBreakdown,
     listModels: mockListModels,
     listRequestUsage: mockListRequestUsage,
+  },
+  providers: {
+    list: mockProvidersList,
+  },
+  savedModelRepo: {
+    listByProvider: mockListByProvider,
   },
   state: {
     getCurrentModelId: jest.fn(async () => null),
@@ -207,6 +216,7 @@ const SAMPLE_BUCKETS = [
 
 const SAMPLE_MODEL_ROWS = [
   {
+    providerId: null,
     modelName: null,
     calls: 2,
     promptTokens: 500,
@@ -216,6 +226,7 @@ const SAMPLE_MODEL_ROWS = [
     billedInputTokens: 500,
   },
   {
+    providerId: 'p1',
     modelName: 'gpt-4o',
     calls: 4,
     promptTokens: 850,
@@ -345,6 +356,12 @@ beforeEach(() => {
   );
   mockGetModelBreakdown.mockReset().mockResolvedValue(SAMPLE_MODEL_ROWS);
   mockListModels.mockReset().mockResolvedValue(['gpt-4o']);
+  mockProvidersList
+    .mockReset()
+    .mockResolvedValue([{id: 'p1', displayName: '智谱'}]);
+  mockListByProvider
+    .mockReset()
+    .mockResolvedValue([{providerId: 'p1', vendorModelId: 'gpt-4o'}]);
   mockListRequestUsage.mockReset().mockResolvedValue({
     rows: SAMPLE_REQUEST_ROWS,
     total: 60,
@@ -376,6 +393,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(mockGetDailyBuckets).toHaveBeenCalledWith({
       range: {kind: 'last7'},
       model: undefined,
+      providerId: undefined,
     });
     await act(async () => {
       findByTestId(renderer.root, 'range-last30')!.props.onPress();
@@ -384,28 +402,37 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
       range: {kind: 'last30'},
       model: undefined,
+      providerId: undefined,
     });
   });
 
-  it('模型筛选：「其他模型」选项由 UI 补上，选中具体模型后 filter.model 生效', async () => {
+  it('模型筛选：三类选项生成与选中后 filter 传参（CR-2 方案 A）', async () => {
     const renderer = await renderScreen();
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
-    // DEV-1：listModels 只返回非 NULL 模型名，「其他模型」（NULL + 非当前配置历史模型归并）必须由 UI 侧补上。
-    expect(findByTestId(renderer.root, 'model-option-gpt-4o')).toBeTruthy();
+    // 选项生成：配置组合「智谱 · gpt-4o」+ 服务商归并「智谱 · 其他模型」+
+    // 全局归并「未记录服务商（历史）」（provider_id IS NULL，模型在不在
+    // 配置集均归此）。
+    expect(findByTestId(renderer.root, 'model-option-p1::gpt-4o')).toBeTruthy();
+    expect(
+      findByTestId(renderer.root, 'model-option-p1::__other__'),
+    ).toBeTruthy();
     expect(
       findByTestId(renderer.root, 'model-option-__unlogged__'),
     ).toBeTruthy();
+    // 配置组合：model/providerId 传具体值。
     await act(async () => {
-      findByTestId(renderer.root, 'model-option-gpt-4o')!.props.onPress();
+      findByTestId(renderer.root, 'model-option-p1::gpt-4o')!.props.onPress();
       await flushPromises();
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
       range: {kind: 'last7'},
       model: 'gpt-4o',
+      providerId: 'p1',
     });
-    // 语义断言：选中「其他模型」时 filter.model 传 null，归并筛选由 core 侧解释。
+    // 未记录服务商（历史）：model: undefined（不筛模型）+ providerId: null
+    // （provider_id IS NULL）——覆盖「未记录 × 已配置模型」存量行。
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
@@ -415,8 +442,158 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
       range: {kind: 'last7'},
-      model: null,
+      model: undefined,
+      providerId: null,
     });
+    expect(
+      nodeText(findByTestId(renderer.root, 'model-filter-entry')!),
+    ).toContain('未记录服务商（历史）');
+    // {服务商} · 其他模型：model: null + providerId: P——覆盖「P × 未配置模型」存量行。
+    await act(async () => {
+      findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
+    });
+    await act(async () => {
+      findByTestId(
+        renderer.root,
+        'model-option-p1::__other__',
+      )!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockGetSummary).toHaveBeenLastCalledWith({
+      range: {kind: 'last7'},
+      model: null,
+      providerId: 'p1',
+    });
+    expect(
+      nodeText(findByTestId(renderer.root, 'model-filter-entry')!),
+    ).toContain('智谱 · 其他模型');
+  });
+
+  it('筛选 parity：无筛选返回的每个 (providerId, modelName) 组合至少被一个筛选项命中', async () => {
+    // p2 为无任何已配置模型的服务商：其「其他模型」选项仍须生成。
+    mockProvidersList.mockImplementation(async () => [
+      {id: 'p1', displayName: '智谱'},
+      {id: 'p2', displayName: 'OpenAI'},
+    ]);
+    mockListByProvider.mockImplementation(async (providerId: unknown) =>
+      providerId === 'p1' ? [{providerId: 'p1', vendorModelId: 'gpt-4o'}] : [],
+    );
+    // 样例行覆盖五类组合：配置组合 / (P, 未配置模型) / (零配置服务商, 未配置
+    // 模型) / (未记录, NULL) / (未记录, 已配置模型)——后四类含 CR-2 修复的
+    // 存量行形态。
+    const parityRows = [
+      {
+        providerId: 'p1',
+        modelName: 'gpt-4o',
+        calls: 4,
+        promptTokens: 850,
+        completionTokens: 100,
+        totalTokens: 950,
+        cacheReadTokens: 800,
+        billedInputTokens: 600,
+      },
+      {
+        providerId: 'p1',
+        modelName: 'legacy-relay-model',
+        calls: 1,
+        promptTokens: 50,
+        completionTokens: 0,
+        totalTokens: 50,
+        cacheReadTokens: 0,
+        billedInputTokens: 50,
+      },
+      {
+        providerId: 'p2',
+        modelName: 'p2-only-model',
+        calls: 1,
+        promptTokens: 30,
+        completionTokens: 0,
+        totalTokens: 30,
+        cacheReadTokens: 0,
+        billedInputTokens: 30,
+      },
+      {
+        providerId: null,
+        modelName: null,
+        calls: 2,
+        promptTokens: 500,
+        completionTokens: 100,
+        totalTokens: 600,
+        cacheReadTokens: 0,
+        billedInputTokens: 500,
+      },
+      {
+        providerId: null,
+        modelName: 'gpt-4o',
+        calls: 1,
+        promptTokens: 40,
+        completionTokens: 0,
+        totalTokens: 40,
+        cacheReadTokens: 0,
+        billedInputTokens: 40,
+      },
+    ];
+    mockGetModelBreakdown.mockImplementation(async () => parityRows);
+    const renderer = await renderScreen();
+    await act(async () => {
+      findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
+    });
+    // 渲染出的选项 id 集合锁死生成规则：全部 / 配置组合 / 每服务商其他模型
+    // （含 p2 这种零配置服务商）/ 未记录服务商。
+    const optionIds = [
+      ...new Set(
+        renderer.root
+          .findAll(
+            node =>
+              typeof node.props.testID === 'string' &&
+              node.props.testID.startsWith('model-option-'),
+          )
+          .map(node =>
+            (node.props.testID as string).slice('model-option-'.length),
+          ),
+      ),
+    ].sort();
+    expect(optionIds).toEqual(
+      [
+        '__all__',
+        '__unlogged__',
+        'p1::gpt-4o',
+        'p1::__other__',
+        'p2::__other__',
+      ].sort(),
+    );
+    // 由渲染出的选项 id 还原筛选语义（与 StatsFilterBar 传参、core SQL
+    // 口径一致），逐行断言覆盖：providerId 匹配 + model 三态（undefined 不筛 /
+    // null 篚 NULL 或不在配置集 / 字串精确匹配）。
+    const configuredModels = new Set(['gpt-4o']);
+    const semantics = optionIds
+      .filter(id => id !== '__all__')
+      .map(id => {
+        if (id === '__unlogged__') {
+          return {providerId: null, model: undefined};
+        }
+        const sep = id.indexOf('::');
+        const model = id.slice(sep + 2);
+        return {
+          providerId: id.slice(0, sep),
+          model: model === '__other__' ? null : model,
+        };
+      });
+    const uncovered = parityRows.filter(
+      row =>
+        !semantics.some(
+          s =>
+            (s.providerId === null
+              ? row.providerId === null
+              : row.providerId === s.providerId) &&
+            (s.model === undefined
+              ? true
+              : s.model === null
+              ? row.modelName == null || !configuredModels.has(row.modelName)
+              : row.modelName === s.model),
+        ),
+    );
+    expect(uncovered).toEqual([]);
   });
 
   it('柱状图数据映射：柱高随桶用量递减，标签为日期文本', async () => {
@@ -453,6 +630,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
       range: {kind: 'last30'},
       model: undefined,
+      providerId: undefined,
     });
     await act(async () => {
       findByTestId(renderer.root, 'stats-tab-summary')!.props.onPress();
@@ -636,8 +814,9 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
   });
 
   it('空态区分：库全空显示冷启动引导文案（mobile/A-1）', async () => {
-    // listModels 为空 → 库全空信号：冷启动引导而非「该区间无数据」。
-    mockListModels.mockResolvedValue([]);
+    // 配置侧无任何服务商×模型 → 库全空信号：冷启动引导而非「该区间无数据」。
+    mockProvidersList.mockResolvedValue([]);
+    mockListByProvider.mockResolvedValue([]);
     mockGetSummary.mockResolvedValue({
       calls: 0,
       promptTokens: 0,
@@ -660,7 +839,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
   });
 
   it('空态区分：范围内无数据提示该区间，今日卡仍渲染（mobile/A-1）', async () => {
-    // 库非空（listModels 返回模型）但当前范围空：区间提示 + 保留今日卡。
+    // 库非空（配置侧有服务商×模型）但当前范围空：区间提示 + 保留今日卡。
     mockGetSummary.mockResolvedValue({
       calls: 0,
       promptTokens: 0,
@@ -896,7 +1075,7 @@ describe('T-MB 新指标卡与长按详情', () => {
       'summary-metric-avgTokensPerSecond',
     );
     expect(rateTile).toBeTruthy();
-    expect(nodeText(rateTile!)).toContain('45.5 tok/s');
+    expect(nodeText(rateTile!)).toContain('45.5 t/s');
     const ttftTile = findByTestId(
       renderer.root,
       'summary-metric-avgFirstTokenMs',
@@ -935,7 +1114,7 @@ describe('T-MB 新指标卡与长按详情', () => {
       await flushPromises();
     });
     let json = JSON.stringify(renderer.toJSON());
-    expect(json).toContain('25.0 tok/s');
+    expect(json).toContain('25.0 t/s');
     expect(json).toContain('900 ms');
 
     // null 形态：第二天为存量 null

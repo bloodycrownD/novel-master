@@ -29,11 +29,19 @@ import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { clearSessionPromptCaches } from "@/service/vfs/logic/clear-session-prompt-caches.js";
+import { ensureImportDirRules } from "@/service/vfs/logic/ensure-import-dir-rules.js";
+import type { WorkplaceRepository } from "@/domain/workplace/repositories/workplace.port.js";
+import { SqliteWorkplaceRepository } from "@/domain/workplace/repositories/impl/sqlite-workplace.repository.js";
 /** @internal 导入事务回滚单测钩子 */
 export type CharacterCardImportTestHook = {
   readonly throwOnInsertLogical?: string;
   /** @internal 在 Phase B deleteVfsPrefix 之前调用 */
   readonly onBeforeDeletePrefix?: () => void;
+  /**
+   * @internal 替换事务内 workplace repo（T-I5 故障注入：让补规则行语句真失败，
+   * 验证语句级失败不毒化导入事务）。缺省时用 SqliteWorkplaceRepository(tx)。
+   */
+  readonly createWorkplaceRepo?: (conn: TdbcConnection) => WorkplaceRepository;
 };
 
 async function ensureEmptyDirectoryRow(
@@ -144,6 +152,16 @@ export class DefaultCharacterCardImportService
             content
           );
         }
+        // 导入事务内补目录规则默认行：前缀下无行目录（含嵌套与目标自身）补
+        // 默认启用，已有行（含 rule_off）不覆盖；helper 自吞错，不阻断导入。
+        await ensureImportDirRules({
+          vfsRepo: repoTx,
+          workplaceRepo: this.testHook?.createWorkplaceRepo
+            ? this.testHook.createWorkplaceRepo(tx)
+            : new SqliteWorkplaceRepository(tx),
+          scope,
+          directoryPath,
+        });
         // session scope 导入完成后，给没有 checkpoint 的 message 补 baseline 快照，
         // 让回滚有正确的基线可对齐，不会因空基线误删导入的文件。
         if (this.backfillBaseline && scope.kind === "session") {

@@ -284,6 +284,61 @@ describe('ChatTranscriptWebView', () => {
     ).toBeGreaterThanOrEqual(1);
   });
 
+  it('T-REPAINT: 可见性重挂后 ready 的首个快照直发——uiRunning+流式活跃时不 defer（v1.5.9 回归）', async () => {
+    // 场景：流式运行中被封面屏盖住（推送攒 dirty）→ 恢复可见触发强制重挂
+    // → 新 WebView ready。旧实现走 sendSessionSnapshot('preserve') 的 defer
+    // 路径（uiRunning+streamActive 时 pending 到流式结束），空基线页面只剩
+    // 恢复注入的当前 partial——其他消息全部消失。修复后 force 直发。
+    const messages = [sampleMessage('m1', 1), sampleMessage('m2', 2)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText=""
+          streamingThinking=""
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(messageTypesSince(0)).toContain('sessionSnapshot');
+
+    // 流式推送：置 streamActive 并攒 dirty（每次 host→web 推送计数）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText="思"
+          streamingThinking=""
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    // 恢复可见 + dirty → 强制重挂（repaintEpoch key 变化）
+    simulateWebMessage(tree!.root, 'visibility', {hidden: false});
+    // 新 WebView 实例 ready：首个快照必须已直发（不依赖 setTimeout flush）
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(messageTypesSince(baseline)).toContain('sessionSnapshot');
+  });
+
   it('richText 开启时 text streamDelta 应包含 RN html（与 spec 契约一致）', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;

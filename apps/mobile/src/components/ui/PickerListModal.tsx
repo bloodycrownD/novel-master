@@ -13,6 +13,8 @@ import {
   StyleSheet,
   Text,
   View,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
 import {formatError} from '../../errors/format-error';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -50,6 +52,10 @@ type Props<T> = {
   onClose: () => void;
   /** 行级 testID / accessibilityLabel / 透明度。 */
   getRowProps?: (item: T) => PickerRowProps;
+  /** 叠加在默认 sheet 样式后的覆盖（如 maxHeight / 圆角还原旧观感）。 */
+  sheetStyle?: StyleProp<ViewStyle>;
+  /** 取消按钮文字色，默认 textSecondary。 */
+  cancelColor?: string;
 };
 
 export function PickerListModal<T>({
@@ -64,6 +70,8 @@ export function PickerListModal<T>({
   emptyText,
   onClose,
   getRowProps,
+  sheetStyle,
+  cancelColor,
 }: Props<T>) {
   const {tokens} = useTheme();
   const [rows, setRows] = useState<T[]>([]);
@@ -106,7 +114,7 @@ export function PickerListModal<T>({
       onClose={onClose}
       variant="bottom"
       animationType="slide"
-      panelStyle={styles.sheet}
+      panelStyle={[styles.sheet, sheetStyle]}
     >
       <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
       {subtitle != null ? (
@@ -155,7 +163,7 @@ export function PickerListModal<T>({
         />
       )}
       <Pressable onPress={onClose} style={styles.cancelBtn}>
-        <Text style={{color: tokens.textSecondary}}>取消</Text>
+        <Text style={{color: cancelColor ?? tokens.textSecondary}}>取消</Text>
       </Pressable>
     </ModalShell>
   );

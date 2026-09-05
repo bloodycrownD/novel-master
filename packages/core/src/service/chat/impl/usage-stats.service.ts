@@ -77,6 +77,21 @@ function modelFilterSql(model: string | null | undefined): string {
   return "AND model_name = #{modelName}";
 }
 
+/**
+ * 服务商筛选片断（与 modelFilterSql 同构）：undefined = 全部；null =
+ * 「其他」桶（provider_id IS NULL 的历史行）；字符串 = 指定服务商配置 id
+ * （写入时快照，服务商已删除也照常按 id 匹配——解析不到展示名是 UI 层的事）。
+ */
+function providerFilterSql(providerId: string | null | undefined): string {
+  if (providerId === undefined) {
+    return "";
+  }
+  if (providerId === null) {
+    return "AND provider_id IS NULL";
+  }
+  return "AND provider_id = #{providerId}";
+}
+
 /** 取 ms 所属本地日的 0 点（DST/月界由 Date 构造器保证正确）。 */
 function startOfLocalDay(ms: number): Date {
   const d = new Date(ms);
@@ -147,7 +162,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
 
   async getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary> {
     const { fromMs, toMs } = this.resolveRangeMs(filter.range);
-    const row = await this.queryAggregateRow(fromMs, toMs, filter.model);
+    const row = await this.queryAggregateRow(
+      fromMs,
+      toMs,
+      filter.model,
+      filter.providerId
+    );
     const today = await this.queryToday();
     return {
       calls: Number(row.calls),
@@ -182,7 +202,8 @@ export class DefaultUsageStatsService implements UsageStatsService {
         const row = await this.queryAggregateRow(
           bucketFrom,
           bucketTo,
-          filter.model
+          filter.model,
+          filter.providerId
         );
         buckets.push(this.toBucket(cursor, row));
       }
@@ -204,7 +225,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
       const endMs = new Date(year, month, day, hour + 1).getTime();
       const row =
         startMs < endMs
-          ? await this.queryAggregateRow(startMs, endMs, filter.model)
+          ? await this.queryAggregateRow(
+              startMs,
+              endMs,
+              filter.model,
+              filter.providerId
+            )
           : ZERO_AGG_ROW;
       buckets.push(this.toBucket(startMs, row));
     }
@@ -218,17 +244,24 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const rows = await queryTemplate<Row>(
       this.conn,
       this.parser,
-      `SELECT model_name, ${AGG_SELECT_SQL}
+      `SELECT provider_id, model_name, ${AGG_SELECT_SQL}
        FROM chat_message
        WHERE ${USAGE_NOT_NULL_SQL}
          AND created_at_ms >= #{fromMs}
          AND created_at_ms < #{toMs}
          ${modelFilterSql(filter.model)}
-       GROUP BY model_name
+         ${providerFilterSql(filter.providerId)}
+       GROUP BY provider_id, model_name
        ORDER BY total_tokens DESC, model_name ASC`,
-      { fromMs, toMs, modelName: filter.model ?? null }
+      {
+        fromMs,
+        toMs,
+        modelName: filter.model ?? null,
+        providerId: filter.providerId ?? null,
+      }
     );
     const mapped = rows.map((row) => ({
+      providerId: row.provider_id == null ? null : String(row.provider_id),
       modelName: row.model_name == null ? null : String(row.model_name),
       calls: Number(row.calls),
       promptTokens: Number(row.prompt_tokens),
@@ -237,19 +270,26 @@ export class DefaultUsageStatsService implements UsageStatsService {
       cacheReadTokens: Number(row.cache_read_tokens),
       billedInputTokens: Number(row.billed_input_tokens),
     }));
-    // 「其他」桶归并：modelName 不在当前配置集合（listModels 同源查询）的行
-    // 与 null 行合并成一行（各用量字段相加），配置模型各成一行；
-    // 归并后重排保持按用量降序。
+    // provider×model 归并：modelName 不在当前配置集合（listModels 同源查询）
+    // 的行与 null 行在该 provider 下归并成一行（各用量字段相加）；
+    // providerId 为写入时快照，不做存在性回查（服务商已删除仍按原 id 归组，
+    // 展示名解析不到由 UI 层兑底）。归并后重排保持按用量降序。
     const configured = new Set(await this.listModels());
-    const merged = new Map<string | null, UsageStatsModelRow>();
+    const compositeKey = (
+      providerId: string | null,
+      modelName: string | null
+    ) => `${providerId ?? ""}\u0000${modelName ?? ""}`;
+    const merged = new Map<string, UsageStatsModelRow>();
     for (const row of mapped) {
-      const key =
+      const modelKey =
         row.modelName != null && configured.has(row.modelName)
           ? row.modelName
           : null;
+      const key = compositeKey(row.providerId, modelKey);
       const prev = merged.get(key);
       merged.set(key, {
-        modelName: key,
+        providerId: row.providerId,
+        modelName: modelKey,
         calls: (prev?.calls ?? 0) + row.calls,
         promptTokens: (prev?.promptTokens ?? 0) + row.promptTokens,
         completionTokens: (prev?.completionTokens ?? 0) + row.completionTokens,
@@ -262,7 +302,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
     return [...merged.values()].sort(
       (a, b) =>
         b.totalTokens - a.totalTokens ||
-        (a.modelName ?? "").localeCompare(b.modelName ?? "")
+        `${a.providerId ?? ""}/${a.modelName ?? ""}`.localeCompare(
+          `${b.providerId ?? ""}/${b.modelName ?? ""}`
+        )
     );
   }
 
@@ -288,11 +330,13 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const whereSql =
       `WHERE ${USAGE_NOT_NULL_SQL}` +
       ` AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}` +
-      ` ${modelFilterSql(filter.model)}`;
+      ` ${modelFilterSql(filter.model)}` +
+      ` ${providerFilterSql(filter.providerId)}`;
     const params = {
       fromMs,
       toMs,
       modelName: filter.model ?? null,
+      providerId: filter.providerId ?? null,
       offset,
       limit,
     };
@@ -390,7 +434,8 @@ export class DefaultUsageStatsService implements UsageStatsService {
   private async queryAggregateRow(
     fromMs: number,
     toMs: number,
-    model: string | null | undefined
+    model: string | null | undefined,
+    providerId: string | null | undefined
   ): Promise<Row> {
     const rows = await queryTemplate<Row>(
       this.conn,
@@ -400,8 +445,9 @@ export class DefaultUsageStatsService implements UsageStatsService {
        WHERE ${USAGE_NOT_NULL_SQL}
          AND created_at_ms >= #{fromMs}
          AND created_at_ms < #{toMs}
-         ${modelFilterSql(model)}`,
-      { fromMs, toMs, modelName: model ?? null }
+         ${modelFilterSql(model)}
+         ${providerFilterSql(providerId)}`,
+      { fromMs, toMs, modelName: model ?? null, providerId: providerId ?? null }
     );
     return rows[0] ?? ZERO_AGG_ROW;
   }

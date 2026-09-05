@@ -1,6 +1,4 @@
 {
-  "terminal.integrated.env.windows": {
-    "ANDROID_HOME": "C:\\Users\\BloodyCrown\\AppData\\Local\\Android\\Sdk",
-    "ANDROID_SDK_ROOT": "C:\\Users\\BloodyCrown\\AppData\\Local\\Android\\Sdk"
-  }
+    "pendant.showThinking": true,
+    "pendant.thinkingDisplayMode": "collapsed"
 }

@@ -109,6 +109,7 @@ export class DefaultMessageService implements MessageService {
     options?: {
       provider?: string | null;
       modelName?: string | null;
+      providerId?: string | null;
       raw?: Record<string, unknown> | null;
       attachments?: readonly MessageAttachment[];
       usage?: MessageUsage;
@@ -130,6 +131,7 @@ export class DefaultMessageService implements MessageService {
       content,
       provider: options?.provider ?? null,
       modelName: options?.modelName ?? null,
+      providerId: options?.providerId ?? null,
       raw: options?.raw ?? null,
       createdAtMs: Date.now(),
       hidden: false,
