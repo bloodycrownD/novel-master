@@ -86,11 +86,12 @@ export function SummaryTab({
           key: `${row.providerId ?? '__np__'}::${
             row.modelName ?? '__unlogged__'
           }`,
-          // label 三态：未记录服务商（历史）兜历史行；名称解析不到兑底
-          // 「未知服务商」；modelName 为 null 归「{服务商} · 其他模型」。
+          // label 三态：未记录服务商兜 provider_id IS NULL 的合并行（core
+          // 已归并为单行，不拼模型后缀）；名称解析不到兑底「未知服务
+          // 商」；modelName 为 null 归「{服务商} · 其他模型」。
           label:
             row.providerId == null
-              ? '未记录服务商（历史）'
+              ? '未记录服务商'
               : row.modelName == null
               ? `${providerLabels[row.providerId] ?? '未知服务商'} · 其他模型`
               : `${providerLabels[row.providerId] ?? '未知服务商'} · ${

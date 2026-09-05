@@ -5,8 +5,8 @@
  *   分母为 0（无 cache 数据）返回 null，展示「—」而非 0%；
  * - 时间范围为自然日闭区间 {fromDay, toDay}（本地日期字符串），「今天 /
  *   近 7 天 / 近 30 天」由应用层算出具体日期后传 core，跨度不设上限；
- * - 模型筛选选项哨兵沿用 unlogged 命名，语义为「未记录服务商（历史）」——
- *   provider_id IS NULL 的存量行（模型在不在配置集均归此，筛选只传
+ * - 模型筛选选项哨兵沿用 unlogged 命名，语义为「未记录服务商」——
+ *   provider_id IS NULL 的合并行（模型在不在配置集均归此，筛选只传
  *   providerId: null、不筛 model）；每个服务商另有「{服务商} · 其他模型」
  *   归并项，筛该服务商下不在配置集的模型行（filter.model = null 由 core 侧解释）。
  */
@@ -127,8 +127,8 @@ export interface ProviderModelOption {
 /**
  * 服务商×模型筛选值：`undefined` = 全部；对象 = 具体筛选目标（三形态）：
  * - `{providerId: P, model: M}`：具体 provider×model 组合；
- * - `{providerId: null, model: undefined}`：未记录服务商（历史）——
- *   `provider_id IS NULL` 的存量行，模型在不在配置集均归此
+ * - `{providerId: null, model: undefined}`：未记录服务商——
+ *   `provider_id IS NULL` 的合并行，模型在不在配置集均归此
  *   （model 不筛，SQL 只留 provider_id IS NULL）；
  * - `{providerId: P, model: null}`：{P} · 其他模型——该服务商下
  *   `model_name IS NULL` 或不在已保存模型集合内的历史行。

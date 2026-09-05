@@ -14,7 +14,7 @@
  * - 「汇总 / 图表 / 流水」三页签（SegmentedControl）；筛选栏置顶，页签
  *   共享——切换页签不触发重查，筛选状态跨页签保留；
  * - 模型筛选（CR-2 方案 A）：配置组合选项之外，「{服务商} · 其他模型」与
- *   「未记录服务商（历史）」（provider_id IS NULL，模型在不在配置集均归此）
+ *   「未记录服务商」（provider_id IS NULL 的合并行，模型在不在配置集均归此）
  *   两类归并选项由 UI 侧补上，保证存量历史行都有选项可筛；
  * - 刷新单通道（useFocusEffect 依赖 reload，mobile/B-2）：主查询带请求
  *   序号守卫（cross/B-1），旧响应后到整体丢弃；失败落 loadError 常驻
@@ -224,7 +224,7 @@ export function TokenUsageStatsScreen() {
   }, [pageTab, reqLoading, loadRequests]);
 
   // 服务商×模型选项：配置侧生成（providers.list + 逐服务商 savedModelRepo
-  // .listByProvider）；「{服务商} · 其他模型」与「未记录服务商（历史）」两类
+  // .listByProvider）；「{服务商} · 其他模型」与「未记录服务商」两类
   // 归并选项由 UI 侧补上（语义见 ProviderModelFilterValue，覆盖存量行）。
   const reloadModels = useCallback(async () => {
     try {
@@ -319,7 +319,7 @@ export function TokenUsageStatsScreen() {
     comboFilter === undefined
       ? '全部模型'
       : comboFilter.providerId === null
-      ? '未记录服务商（历史）'
+      ? '未记录服务商'
       : comboFilter.model === null
       ? `${providerLabelOf(comboFilter.providerId)} · 其他模型`
       : `${providerLabelOf(comboFilter.providerId)} · ${comboFilter.model}`;

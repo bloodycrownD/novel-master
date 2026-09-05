@@ -445,7 +445,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
     // 选项生成：配置组合「智谱 · gpt-4o」+ 服务商归并「智谱 · 其他模型」+
-    // 全局归并「未记录服务商（历史）」（provider_id IS NULL，模型在不在
+    // 全局归并「未记录服务商」（provider_id IS NULL，模型在不在
     // 配置集均归此）。
     expect(findByTestId(renderer.root, 'model-option-p1::gpt-4o')).toBeTruthy();
     expect(
@@ -464,7 +464,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       model: 'gpt-4o',
       providerId: 'p1',
     });
-    // 未记录服务商（历史）：model: undefined（不筛模型）+ providerId: null
+    // 未记录服务商：model: undefined（不筛模型）+ providerId: null
     // （provider_id IS NULL）——覆盖「未记录 × 已配置模型」存量行。
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
@@ -480,7 +480,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     });
     expect(
       nodeText(findByTestId(renderer.root, 'model-filter-entry')!),
-    ).toContain('未记录服务商（历史）');
+    ).toContain('未记录服务商');
     // {服务商} · 其他模型：model: null + providerId: P——覆盖「P × 未配置模型」存量行。
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
@@ -548,22 +548,12 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       {
         providerId: null,
         modelName: null,
-        calls: 2,
-        promptTokens: 500,
+        calls: 3,
+        promptTokens: 540,
         completionTokens: 100,
-        totalTokens: 600,
+        totalTokens: 640,
         cacheReadTokens: 0,
-        billedInputTokens: 500,
-      },
-      {
-        providerId: null,
-        modelName: 'gpt-4o',
-        calls: 1,
-        promptTokens: 40,
-        completionTokens: 0,
-        totalTokens: 40,
-        cacheReadTokens: 0,
-        billedInputTokens: 40,
+        billedInputTokens: 540,
       },
     ];
     mockGetModelBreakdown.mockImplementation(async () => parityRows);
@@ -760,7 +750,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(legendText).toContain('智谱 · gpt-4o');
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
-    ).toContain('未记录服务商（历史）');
+    ).toContain('未记录服务商');
     // 未选时无详情行。
     expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
     // 点选扇区：详情行 = 服务商·模型 / 用量 / 次数 / 占比（950/2500=38%，
@@ -783,7 +773,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     const detail2 = nodeText(findByTestId(renderer.root, 'pie-detail')!);
-    expect(detail2).toContain('未记录服务商（历史）');
+    expect(detail2).toContain('未记录服务商');
     expect(detail2).toContain('600');
     expect(detail2).toContain('24%');
   });
@@ -1220,7 +1210,7 @@ describe('T-M7 PieChart 组件级', () => {
   const PIE_ROWS = [
     {key: 'a', label: 'A · m1', totalTokens: 700, calls: 7},
     {key: 'b', label: 'B · m2', totalTokens: 250, calls: 2},
-    {key: 'c', label: '未记录服务商（历史）', totalTokens: 50, calls: 1},
+    {key: 'c', label: '未记录服务商', totalTokens: 50, calls: 1},
   ];
 
   async function renderPie() {
@@ -1261,7 +1251,7 @@ describe('T-M7 PieChart 组件级', () => {
       await flushPromises();
     });
     detail = nodeText(findByTestId(renderer.root, 'pie-detail')!);
-    expect(detail).toContain('未记录服务商（历史）');
+    expect(detail).toContain('未记录服务商');
     expect(detail).toContain('2%');
     // 再点同一图例：取消选中，详情行消失。
     await act(async () => {

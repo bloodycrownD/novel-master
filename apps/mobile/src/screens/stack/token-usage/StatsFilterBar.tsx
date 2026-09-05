@@ -65,7 +65,7 @@ export function StatsFilterBar({
 }) {
   // 选项集（CR-2 方案 A）：全部 / 配置组合「{服务商} · {模型}」/ 每服务商
   // 「{服务商} · 其他模型」（该服务商下不在配置集的模型行，含零配置服务商）/
-  // 「未记录服务商（历史）」（provider_id IS NULL，模型在不在配置集均归此）
+  // 「未记录服务商」（provider_id IS NULL 的合并行，模型在不在配置集均归此）
   // ——保证无筛选返回的每类 (providerId, modelName) 组合行都有选项可筛。
   const pickerOptions: readonly ModelPickerOption[] = [
     {id: MODEL_OPTION_ALL, label: '全部模型', value: undefined},
@@ -81,7 +81,7 @@ export function StatsFilterBar({
     })),
     {
       id: MODEL_OPTION_UNLOGGED,
-      label: '未记录服务商（历史）',
+      label: '未记录服务商',
       value: {providerId: null, model: undefined},
     },
   ];
