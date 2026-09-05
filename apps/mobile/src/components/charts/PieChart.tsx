@@ -162,47 +162,49 @@ export function PieChart({
             );
           })}
         </Svg>
-      </View>
-      {/* 点选详情行：图正下方固定展示（非浮层，规避手势冲突）。 */}
-      {selected != null ? (
-        <View testID="pie-detail" style={styles.pieDetailRow}>
-          <Text style={[styles.pieDetailText, {color: tokens.textSecondary}]}>
-            {selected.label} · 用量 {formatTokenCount(selected.totalTokens)} ·
-            调用 {selected.calls} 次 · 占比{' '}
-            {selectedShare == null
-              ? '—'
-              : `${Math.round(selectedShare * 100)}%`}
-          </Text>
-        </View>
-      ) : null}
-      <View style={styles.pieLegend}>
-        {data.map((datum, index) => {
-          const color = palette[index % palette.length];
-          const selectedLegend = datum.key === selectedKey;
-          return (
-            <Pressable
-              key={datum.key}
-              testID={`pie-legend-${datum.key}`}
-              onPress={() => setSelectedKey(selectedLegend ? null : datum.key)}
-              accessibilityRole="button"
-              accessibilityLabel={datum.label}
-              style={styles.pieLegendItem}
-            >
-              <View style={[styles.pieLegendDot, {backgroundColor: color}]} />
-              <Text
-                style={[
-                  styles.pieLegendLabel,
-                  {
-                    color: selectedLegend ? tokens.primary : tokens.text,
-                  },
-                ]}
-                numberOfLines={1}
+        {/* 点选详情行：图正下方固定展示（非浮层，规避手势冲突）。 */}
+        {selected != null ? (
+          <View testID="pie-detail" style={styles.pieDetailRow}>
+            <Text style={[styles.pieDetailText, {color: tokens.textSecondary}]}>
+              {selected.label} · 用量 {formatTokenCount(selected.totalTokens)} ·
+              调用 {selected.calls} 次 · 占比{' '}
+              {selectedShare == null
+                ? '—'
+                : `${Math.round(selectedShare * 100)}%`}
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.pieLegend}>
+          {data.map((datum, index) => {
+            const color = palette[index % palette.length];
+            const selectedLegend = datum.key === selectedKey;
+            return (
+              <Pressable
+                key={datum.key}
+                testID={`pie-legend-${datum.key}`}
+                onPress={() =>
+                  setSelectedKey(selectedLegend ? null : datum.key)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={datum.label}
+                style={styles.pieLegendItem}
               >
-                {datum.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <View style={[styles.pieLegendDot, {backgroundColor: color}]} />
+                <Text
+                  style={[
+                    styles.pieLegendLabel,
+                    {
+                      color: selectedLegend ? tokens.primary : tokens.text,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {datum.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
     </View>
   );

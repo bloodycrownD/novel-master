@@ -145,6 +145,7 @@ export const styles = StyleSheet.create({
   pieLegend: {
     marginTop: 8,
     gap: 4,
+    alignSelf: 'stretch',
   },
   pieLegendItem: {
     flexDirection: 'row',
