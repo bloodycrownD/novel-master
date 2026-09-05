@@ -296,8 +296,11 @@ export class DefaultUsageStatsService implements UsageStatsService {
     }));
     // provider×model 归并：modelName 不在当前配置集合（listModels 同源查询）
     // 的行与 null 行在该 provider 下归并成一行（各用量字段相加）；
-    // providerId 为写入时快照，不做存在性回查（服务商已删除仍按原 id 归组，
-    // 展示名解析不到由 UI 层兑底）。归并后重排保持按用量降序。
+    // providerId 为 null 的历史行不按模型分桶——「未记录服务商 · 各模型」
+    // 切片无从辨认也无意义，全部归并为单行（modelName 同置 null，
+    // 即使模型名在配置集合内也不独立成行）；providerId 为写入时快照，
+    // 不做存在性回查（服务商已删除仍按原 id 归组，展示名解析不到
+    // 由 UI 层兑底）。归并后重排保持按用量降序。
     const configured = new Set(await this.listModels());
     const compositeKey = (
       providerId: string | null,
@@ -306,9 +309,11 @@ export class DefaultUsageStatsService implements UsageStatsService {
     const merged = new Map<string, UsageStatsModelRow>();
     for (const row of mapped) {
       const modelKey =
-        row.modelName != null && configured.has(row.modelName)
-          ? row.modelName
-          : null;
+        row.providerId == null
+          ? null // 未记录服务商历史行：不参与模型分桶，全部并入单一合并行
+          : row.modelName != null && configured.has(row.modelName)
+            ? row.modelName
+            : null;
       const key = compositeKey(row.providerId, modelKey);
       const prev = merged.get(key);
       merged.set(key, {

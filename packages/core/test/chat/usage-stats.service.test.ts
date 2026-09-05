@@ -285,19 +285,24 @@ describe("usage stats service (T-S5)", () => {
   it("「其他」桶：NULL 与非配置模型归并，配置模型独立", async () => {
     const { ctx, session } = await seedSession();
     const today0 = localDayStart(Date.now());
-    // 历史行：未记录（null）、非配置模型（中转站标注名/已下线）、配置模型各一条。
+    // 同一已记录服务商下三种模型名：未记录（null）、非配置模型
+    // （中转站标注名/已下线）、配置模型各一条。（providerId 为 null 的
+    // 历史行不在此测——它们不走模型分桶，见 G-2 合并用例。）
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: today0 + 10 * MIN,
+      providerId: "stats-other-provider",
       modelName: null,
       usage: { prompt: 10, total: 10 },
     });
     await seedMsg(ctx, session.id, 2, {
       createdAtMs: today0 + 20 * MIN,
+      providerId: "stats-other-provider",
       modelName: "[3]gemini-legacy",
       usage: { prompt: 20, total: 20 },
     });
     await seedMsg(ctx, session.id, 3, {
       createdAtMs: today0 + 30 * MIN,
+      providerId: "stats-other-provider",
       modelName: "model-a",
       usage: { prompt: 30, total: 5 },
     });
@@ -640,7 +645,7 @@ describe("usage stats service (T-S5)", () => {
     const { ctx, session } = await seedSession();
     const today0 = localDayStart(Date.now());
     // 同名 model-a 分属两个服务商；另一条为未记录服务商（provider_id NULL）
-    // 的历史行，模型名也不在配置集合 → 归「未记录×其他」。
+    // 的历史行——无论模型名是否在配置集合，都归入未记录单行（见 G-2）。
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: today0 + 10 * MIN,
       providerId: "stats-px",
@@ -712,12 +717,86 @@ describe("usage stats service (T-S5)", () => {
     assert.equal(nullFiltered[0]!.totalTokens, 10);
   });
 
-  it("CR-2: providerId:null（model 不筛）可筛出「未记录服务商 × 已配置模型」存量行", async () => {
+  it("G-2: 未记录服务商历史行不按模型分桶——不同模型合并为单行", async () => {
+    const { ctx, session } = await seedSession();
+    const today0 = localDayStart(Date.now());
+    // 三行：两条未记录历史行模型名各不相同（model-a 在配置集合内、
+    // model-legacy 不在——分桶与否都该合并），另有一条已记录服务商的
+    // model-a 对照行，验证其余 provider 的归并逻辑不变。
+    await seedMsg(ctx, session.id, 1, {
+      createdAtMs: today0 + 10 * MIN,
+      providerId: null,
+      modelName: "model-a",
+      usage: { prompt: 30, total: 30 },
+    });
+    await seedMsg(ctx, session.id, 2, {
+      createdAtMs: today0 + 20 * MIN,
+      providerId: null,
+      modelName: "model-legacy",
+      usage: { prompt: 20, total: 20 },
+    });
+    await seedMsg(ctx, session.id, 3, {
+      createdAtMs: today0 + 30 * MIN,
+      providerId: "stats-g2-p1",
+      modelName: "model-a",
+      usage: { prompt: 10, total: 10 },
+    });
+    const ts = String(Date.now());
+    await ctx.conn.execute(
+      `INSERT INTO llm_provider (id, protocol, base_url, display_name, headers_json, is_builtin, created_at_ms, updated_at_ms)
+       VALUES ('stats-g2-p1', 'openai', 'https://example.com', 'G2 P1', '{}', 0, ${ts}, ${ts})`
+    );
+    await ctx.conn.execute(
+      `INSERT INTO llm_saved_model (id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms)
+       VALUES ('som-g2-1', 'stats-g2-p1', 'model-a', 'model-a', '{}', ${ts}, ${ts})`
+    );
+
+    const svc = createUsageStatsService(ctx.conn);
+    const range = dayRange(today0, today0);
+    // 无筛选：两条未记录历史行（含配置模型 model-a）合并为单行
+    // （modelName null、用量相加），已记录服务商的 model-a 照旧独立成行。
+    const breakdown = await svc.getModelBreakdown({ range });
+    assert.equal(breakdown.length, 2);
+    const merged = breakdown.find(
+      (r) => r.providerId === null && r.modelName === null
+    );
+    const logged = breakdown.find(
+      (r) => r.providerId === "stats-g2-p1" && r.modelName === "model-a"
+    );
+    assert.ok(
+      merged && logged,
+      `breakdown 应为未记录单行 + 配置模型独立行，实际 ${JSON.stringify(breakdown)}`
+    );
+    assert.equal(merged!.calls, 2);
+    assert.equal(merged!.promptTokens, 50);
+    assert.equal(merged!.totalTokens, 50);
+    assert.equal(logged!.totalTokens, 10);
+
+    // filter.model 指定时 SQL 先按 model_name 过滤再归并：未记录的
+    // model-a 行仍并入合并行（至多一行），不因模型名在配置集内而分列。
+    const byModel = await svc.getModelBreakdown({ range, model: "model-a" });
+    assert.equal(byModel.length, 2);
+    const mergedByModel = byModel.find(
+      (r) => r.providerId === null && r.modelName === null
+    );
+    assert.ok(mergedByModel);
+    assert.equal(mergedByModel!.calls, 1);
+    assert.equal(mergedByModel!.totalTokens, 30);
+
+    // providerId:null 筛选：未记录行合并后至多一行。
+    const nullOnly = await svc.getModelBreakdown({ range, providerId: null });
+    assert.equal(nullOnly.length, 1);
+    assert.equal(nullOnly[0]!.modelName, null);
+    assert.equal(nullOnly[0]!.totalTokens, 50);
+  });
+
+  it("CR-2: providerId:null（model 不筛）筛出未记录存量行，归并后为单行", async () => {
     const { ctx, session } = await seedSession();
     const today0 = localDayStart(Date.now());
     // 两行：已记录服务商 × 已配置模型，以及未记录服务商（provider_id NULL）
     // × 已配置模型——后者是旧「其他模型」口径（model:null）筛不中的存量行，
-    // mobile 方案 A 的 provider 维度语义必须能筛出。
+    // mobile 方案 A 的 provider 维度语义必须能筛出；筛出后不按模型分桶，
+    // 归并输出单行（modelName: null，与 G-2 同口径）。
     await seedMsg(ctx, session.id, 1, {
       createdAtMs: today0 + 10 * MIN,
       providerId: "stats-cr2-p1",
@@ -751,7 +830,8 @@ describe("usage stats service (T-S5)", () => {
     });
     assert.equal(legacyStyle.length, 0);
     // 方案 A：model: undefined（不加模型子句）+ providerId: null
-    // （provider_id IS NULL）→ 未记录 × 已配置模型的行可被筛出。
+    // （provider_id IS NULL）→ 未记录 × 已配置模型的行可被筛出，
+    // 输出侧合并为单行（modelName: null）。
     const breakdown = await svc.getModelBreakdown({
       range,
       model: undefined,
@@ -759,7 +839,7 @@ describe("usage stats service (T-S5)", () => {
     });
     assert.equal(breakdown.length, 1);
     assert.equal(breakdown[0]!.providerId, null);
-    assert.equal(breakdown[0]!.modelName, "model-a");
+    assert.equal(breakdown[0]!.modelName, null);
     assert.equal(breakdown[0]!.totalTokens, 10);
   });
 
