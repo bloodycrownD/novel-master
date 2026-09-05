@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { decode } from "@novel-master/core";
 
 import { AgentConfigError, createAgentRegistryService, agentDefinitionSchema } from "@novel-master/core/agent";
+import type { AgentDefinition } from "@novel-master/core/agent";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
@@ -22,6 +23,29 @@ describe("AgentRegistryService", () => {
     await registry.upsert("writer", def);
     const loaded = await registry.get("writer");
     assert.equal(loaded.name, "写作助手");
+  });
+
+  it("写入门禁：upsert 拒绝缺 name 的 definition 且不落盘（毒行防护）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const bad = {
+      description: "文笔顶尖的执笔者",
+      mode: "subagent",
+      runtime: { maxSteps: 20 },
+      prompts: { persist: [], dynamic: [] },
+    } as unknown as AgentDefinition;
+    await assert.rejects(
+      () => registry.upsert(`agent-poison-${testIsolationSuffix()}`, bad),
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.code === "INVALID_SCHEMA" &&
+        /definition\.name 必填/.test(e.message),
+    );
+    // 拒绝后未落盘：注册表仍可完整 list/get（不会被毒行拖垮）。
+    const defs = await registry.list();
+    assert.ok(
+      defs.every((d) => typeof d.name === "string" && d.name.length > 0),
+    );
   });
 
   it("AG4: delete removes existing agent", async () => {
