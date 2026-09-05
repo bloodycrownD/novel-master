@@ -131,33 +131,17 @@ describe("SqliteVfsEntryRepository", () => {
     ]);
   });
 
-  it("detects version conflicts", async () => {
+  it("update 无版本比对：连续覆盖均成功且版本递增", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
     const path = `${isolatedRoot()}/v.txt`;
     await repo.insert(GLOBAL_SCOPE, path, "one");
-    await repo.update(GLOBAL_SCOPE, path, "two", 2, { expectedVersion: 1, versionCheck: true });
-    await assert.rejects(
-      () =>
-        repo.update(GLOBAL_SCOPE, path, "three", 3, {
-          expectedVersion: 1,
-          versionCheck: true,
-        }),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "CONFLICT"));
-        assert.equal((e as { actualVersion?: number }).actualVersion, 2);
-        return true;
-      },
-    );
-  });
-
-  it("updates without version check", async () => {
-    const ctx = getNovelMasterTestContext();
-    const repo = new SqliteVfsEntryRepository(ctx.conn);
-    const path = `${isolatedRoot()}/nc.txt`;
-    await repo.insert(GLOBAL_SCOPE, path, "one");
-    const result = await repo.update(GLOBAL_SCOPE, path, "two", 2, { versionCheck: false });
-    assert.equal(result.version, 2);
+    const second = await repo.update(GLOBAL_SCOPE, path, "two", 2);
+    assert.equal(second.version, 2);
+    const third = await repo.update(GLOBAL_SCOPE, path, "three", 3);
+    assert.equal(third.version, 3);
+    const read = await repo.findByPath(GLOBAL_SCOPE, path);
+    assert.equal(read?.version, 3);
   });
 
   it("blocks non-recursive delete when children exist", async () => {

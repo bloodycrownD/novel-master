@@ -22,12 +22,6 @@ export interface VfsReadResult {
   readonly mtimeMs: number;
 }
 
-/** Options for write operations. */
-export interface WriteOptions {
-  readonly expectedVersion?: number;
-  readonly versionCheck?: boolean;
-}
-
 /** A single grep match with line/column position. */
 export interface VfsGrepMatch {
   readonly path: string;
@@ -55,11 +49,7 @@ export interface VfsService {
 
   read(path: string): Promise<VfsReadResult>;
 
-  write(
-    path: string,
-    content: string,
-    options?: WriteOptions
-  ): Promise<{ version: number }>;
+  write(path: string, content: string): Promise<{ version: number }>;
 
   replace(
     path: string,

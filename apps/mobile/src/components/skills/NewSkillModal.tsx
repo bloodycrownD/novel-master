@@ -238,16 +238,6 @@ export function NewSkillModal({
           imported.preview.name !== name ||
           imported.preview.description !== description
         ) {
-          // 重写目标是刚导入落盘的 SKILL.md（已存在文件），不带版本会被
-          // VFS 乐观锁拒绝（CONFLICT）：先 read 拿版本再写入（对齐 desktop）。
-          const read = await runtime
-            .skills()
-            .readSkillFile(
-              domain,
-              name,
-              'SKILL.md',
-              domain === 'project' ? projectId : undefined,
-            );
           await runtime
             .skills()
             .writeSkillFile(
@@ -260,7 +250,6 @@ export function NewSkillModal({
                 description,
               ),
               domain === 'project' ? projectId : undefined,
-              {expectedVersion: read.version},
             );
         }
       } else {

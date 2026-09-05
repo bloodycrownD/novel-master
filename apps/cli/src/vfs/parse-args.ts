@@ -24,10 +24,6 @@ export function parseCliArgs(args: readonly string[]): ParsedCliArgs {
       flags.set("meta", true);
       continue;
     }
-    if (token === "--no-version-check") {
-      flags.set("no-version-check", true);
-      continue;
-    }
     if (token.startsWith("--")) {
       const key = token.slice(2);
       const next = args[i + 1];

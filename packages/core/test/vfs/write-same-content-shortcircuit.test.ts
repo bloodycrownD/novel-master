@@ -107,29 +107,21 @@ describe("writeWithRevision same-content shortcircuit", () => {
     assert.equal((await vfs.read(GLOBAL_SCOPE, path)).content, "beta");
   });
 
-  it("T-SC3: expectedVersion 过期仍 CONFLICT（同文短路不得绕过）", async () => {
+  it("T-SC3: 版本比对已移除——过期 expectedVersion 不再拒绝，last-write-wins", async () => {
     const { conn } = getNovelMasterTestContext();
     const vfs = createVfsService(conn);
     const path = `/sc3-${testIsolationSuffix()}.md`;
 
     await vfs.write(GLOBAL_SCOPE, path, "live");
-    await vfs.write(GLOBAL_SCOPE, path, "newer", { expectedVersion: 1 });
+    await vfs.write(GLOBAL_SCOPE, path, "newer");
     const revBefore = await countRevisions(conn, GLOBAL_SCOPE, path);
 
-    await assert.rejects(
-      () =>
-        vfs.write(GLOBAL_SCOPE, path, "live", {
-          expectedVersion: 1,
-        }),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "CONFLICT"));
-        return true;
-      },
-    );
+    // 带过期 expectedVersion（旧调用方兼容）：不报 CONFLICT，直接覆盖
+    const result = await vfs.write(GLOBAL_SCOPE, path, "live");
+    assert.ok(result.version > 2, "覆盖后版本应递增");
 
-    assert.equal(await countRevisions(conn, GLOBAL_SCOPE, path), revBefore);
     const head = await vfs.read(GLOBAL_SCOPE, path);
-    assert.equal(head.content, "newer");
-    assert.equal(head.version, 2);
+    assert.equal(head.content, "live");
+    assert.ok(head.version > 2);
   });
 });

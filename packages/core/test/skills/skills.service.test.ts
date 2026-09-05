@@ -49,7 +49,7 @@ describe("SkillService（T-SK5）", () => {
     assert.deepEqual(item.files, ["SKILL.md"]);
   });
 
-  it("write 对已存在文件：缺省 last-write-wins，带 expectedVersion 才校验乐观锁", async () => {
+  it("write 对已存在文件：缺省 last-write-wins，版本比对已从底层移除", async () => {
     const ctx = getNovelMasterTestContext();
     const skills = createSkillsService(ctx.conn);
     const name = `ovw-${testIsolationSuffix()}`;
@@ -66,35 +66,17 @@ describe("SkillService（T-SK5）", () => {
     );
     assert.ok(blind.version > read.version, "盲写覆盖后版本应递增");
 
-    // 带过期 expectedVersion（UI 技能编辑器的透明锁）：仍拒绝
-    await assert.rejects(
-      () =>
-        skills.writeSkillFile(
-          "global",
-          name,
-          undefined,
-          "# 过期",
-          undefined,
-          { expectedVersion: read.version },
-        ),
-      (err: unknown) =>
-        String((err as Error).message).includes("Version conflict") ||
-        String((err as Error).message).includes("CONFLICT"),
-    );
-
-    // 带 read 返回的版本：整文件覆盖成功且版本递增
-    const fresh = await skills.readSkillFile("global", name);
-    const rewritten = await skills.writeSkillFile(
+    // 多轮覆盖：每轮版本递增，无 CONFLICT
+    const again = await skills.writeSkillFile(
       "global",
       name,
       undefined,
-      "# 重写",
-      undefined,
-      { expectedVersion: fresh.version },
+      "# 再写",
     );
-    assert.ok(rewritten.version > fresh.version, "覆盖后版本应递增");
-    const after = await skills.readSkillFile("global", name);
-    assert.equal(after.content, "# 重写");
+    assert.ok(again.version > blind.version, "二次覆盖版本应递增");
+
+    const fresh = await skills.readSkillFile("global", name);
+    assert.equal(fresh.content, "# 再写");
   });
 
   it("listSkills：front matter 坏 / 缺 SKILL.md 的技能标无效", async () => {

@@ -10,7 +10,6 @@ import type { Tool } from "../model/tool.js";
 import type {
   VfsGrepMatch,
   VfsReadResult,
-  WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import {
@@ -217,7 +216,7 @@ export function createVfsTools(): readonly Tool<
   };
 
   const write: Tool<
-    { path: string; content: string; options?: WriteOptions },
+    { path: string; content: string },
     { version: number },
     BuiltinToolContext
   > = {
@@ -244,9 +243,7 @@ export function createVfsTools(): readonly Tool<
       const isNewFile =
         ctx.workplace != null &&
         (await probeFileAbsentForWrite(ctx, logicalPath));
-      const result = await ctx.vfs.write(logicalPath, input.content, {
-        versionCheck: false,
-      });
+      const result = await ctx.vfs.write(logicalPath, input.content);
       // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
       await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
       // 仅新建：为各层祖先目录补默认目录规则（文件本身不是目录，只补父链）

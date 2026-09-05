@@ -21,7 +21,7 @@ import { runSessionTemplate } from "./template.js";
 import { runSessionWorkplace } from "./workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-/** Session VFS subcommands except `write`（write 显式带 --version / --no-version-check）。
+/** Session VFS subcommands except `write`（write 无版本参数）。
  */
 const SESSION_VFS_COMMANDS = {
   list: runList,
@@ -184,9 +184,8 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
   const subArgs = args.slice(idx + 1);
 
   if (group === "write") {
-    // 版本校验改为显式 opt-in：--version 乐观锁 / --no-version-check 依旧可用，
-    // 缺省 last-write-wins（原先由 session-fs.versionCheck 偏好决定，已移除）。
-    await runWrite(vfs, subArgs, { defaultNoVersionCheck: true });
+    // 版本比对已从 VFS 底层移除：last-write-wins。
+    await runWrite(vfs, subArgs);
     return;
   }
 

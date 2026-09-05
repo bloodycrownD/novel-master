@@ -55,7 +55,6 @@ export {
 export type {
   VfsService,
   VfsReadResult,
-  WriteOptions,
   VfsGrepMatch,
 } from "../domain/vfs/ports/vfs-service.port.js";
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";

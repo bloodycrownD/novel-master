@@ -14,7 +14,6 @@ import type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
-  WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
 
 /**
@@ -36,8 +35,7 @@ export interface InternalVfsService {
   write(
     scopeKey: string,
     path: string,
-    content: string,
-    options?: WriteOptions
+    content: string
   ): Promise<{ version: number }>;
 
   replace(
@@ -100,5 +98,4 @@ export type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
-  WriteOptions,
 };

@@ -16,7 +16,6 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import {
-  vfsConflict,
   vfsDirectoryNotEmpty,
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
@@ -31,7 +30,6 @@ import type { VfsListEntry } from "../../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
   VfsListOptions,
-  VfsWriteRepoOptions,
 } from "../../model/vfs-options.js";
 import type { VfsEntryRepository } from "../vfs-entry.port.js";
 import { normalizePath } from "./normalize-path.js";
@@ -269,16 +267,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     content: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }> {
     const contentHash = await this.contentStore.put(content);
     return this.applyContentHashUpdate(
       scopeKey,
       path,
       contentHash,
-      nextVersion,
-      options
+      nextVersion
     );
   }
 
@@ -286,15 +282,13 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     contentHash: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }> {
     return this.applyContentHashUpdate(
       scopeKey,
       path,
       contentHash,
-      nextVersion,
-      options
+      nextVersion
     );
   }
 
@@ -302,65 +296,24 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     contentHash: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
 
-    if (options.versionCheck) {
-      const expectedVersion = options.expectedVersion!;
-      const result = await executeTemplate(
-        this.conn,
-        this.parser,
-        `UPDATE vfs_entry
-         SET content = NULL,
-             content_hash = #{contentHash},
-             head_version = #{nextVersion},
-             mtime_ms = #{mtimeMs}
-         WHERE scope_key = #{scopeKey} AND path = #{path}
-           AND head_version = #{expectedVersion} AND entry_kind = 'file'`,
-        {
-          scopeKey,
-          contentHash,
-          nextVersion,
-          mtimeMs,
-          path: normalized,
-          expectedVersion,
-        }
-      );
-      if (result.changes === 0) {
-        const rows = await queryTemplate<{ head_version: number }>(
-          this.conn,
-          this.parser,
-          `SELECT head_version FROM vfs_entry
-           WHERE scope_key = #{scopeKey} AND path = #{path}`,
-          { scopeKey, path: normalized }
-        );
-        if (rows.length === 0) {
-          throw vfsNotFound(normalized);
-        }
-        throw vfsConflict(
-          normalized,
-          expectedVersion,
-          Number(rows[0]!.head_version)
-        );
-      }
-    } else {
-      const result = await executeTemplate(
-        this.conn,
-        this.parser,
-        `UPDATE vfs_entry
-         SET content = NULL,
-             content_hash = #{contentHash},
-             head_version = #{nextVersion},
-             mtime_ms = #{mtimeMs}
-         WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'`,
-        { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized }
-      );
-      if (result.changes === 0) {
-        throw vfsNotFound(normalized);
-      }
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE vfs_entry
+       SET content = NULL,
+           content_hash = #{contentHash},
+           head_version = #{nextVersion},
+           mtime_ms = #{mtimeMs}
+       WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'`,
+      { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized }
+    );
+    if (result.changes === 0) {
+      throw vfsNotFound(normalized);
     }
 
     const rows = await queryTemplate<{ head_version: number }>(

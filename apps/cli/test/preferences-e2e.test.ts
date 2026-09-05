@@ -137,7 +137,7 @@ describe("preferences CLI e2e", () => {
       );
       assert.equal(first.status, 0, first.stderr);
 
-      // 不再依赖任何偏好或 --version：覆盖已存在文件直接成功
+      // 不再依赖任何偏好：覆盖已存在文件直接成功
       const second = runNm(
         ["session", "vfs", "write", "/notes/a.md", "--db", dbPath],
         { input: "v2" },

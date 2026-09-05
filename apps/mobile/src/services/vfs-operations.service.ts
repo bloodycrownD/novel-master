@@ -28,7 +28,7 @@ export async function createVfsFile(
   path: string,
   content = '',
 ): Promise<void> {
-  await vfs.write(path, content, {versionCheck: false});
+  await vfs.write(path, content);
 }
 
 /** 会话 scope：新建文件经 userVfsTurn。 */

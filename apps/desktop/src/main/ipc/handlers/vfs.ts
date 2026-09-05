@@ -163,16 +163,7 @@ export async function handleVfsWrite(
       return { ok: true, data: undefined };
     }
 
-    if (req.expectedVersion != null) {
-      await vfs.write(req.path, req.content, {
-        expectedVersion: req.expectedVersion,
-        versionCheck: req.versionCheck !== false,
-      });
-    } else {
-      await vfs.write(req.path, req.content, {
-        versionCheck: req.versionCheck ?? false,
-      });
-    }
+    await vfs.write(req.path, req.content);
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
