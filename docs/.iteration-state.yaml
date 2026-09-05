@@ -1,10 +1,10 @@
 # code-dev-loop 编排状态——token-usage-stats-ui-refresh
-dag_version: 4
+dag_version: 5
 spec_path: docs/Iterations/token-usage-stats-ui-refresh/spec.md
 prd_path: docs/Iterations/token-usage-stats-ui-refresh/prd.md
 branch: feat/token-usage-stats-ui-refresh
 base_sha: c95bf97
-head_sha: 36d2c1c
+head_sha: d0dd9a8
 wave_plan: []
 node_status:
   impl-core: { status: done, head_sha: 512cae4, executor: subagent }
@@ -20,10 +20,15 @@ node_status:
   cr-func-fix-round: { status: done, func_ready: yes, executor: subagent, note: 结论基于解绑方向，已作废 }
   impl-docs: { status: done, executor: main }
   doc-reverse: { status: done, head_sha: 085123d, executor: main, note: 需求①勘误 PRD/spec/CHANGELOG }
-  fix-desktop-reverse: { status: done, head_sha: 36d2c1c, executor: subagent }
+  fix-desktop-reverse: { status: done, head_sha: d0dd9a8, executor: subagent }
   fix-mobile-reverse: { status: done, head_sha: 60cb63f, executor: subagent }
   verify-reverse: { status: done, executor: main, result: desktop 106/106 + mobile 1092/1092 + 整仓 typecheck 0 }
   cr-func-reverse: { status: done, func_ready: yes, executor: subagent }
+  fix-core-merge-null-provider: { status: done, head_sha: 49cb0d4, executor: subagent }
+  fix-desktop-null-provider-label: { status: done, head_sha: d02a7a4, executor: subagent }
+  fix-mobile-null-provider-label: { status: done, head_sha: d0dd9a8, executor: subagent }
+  verify-null-provider-merge: { status: done, executor: main, result: core 1794 + desktop 106 + mobile 1092 }
+  cr-func-null-provider-merge: { status: done, func_ready: yes, executor: subagent }
 open_must_fix: []
 spec_deviations: []
 known_optional:
