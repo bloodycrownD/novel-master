@@ -120,7 +120,7 @@ const HOURLY: ReturnType<typeof bucket>[] = Array.from({ length: 24 }, (_, h) =>
 
 /**
  * 故意乱序 + 含 provider 三态（未记录 null / 已知 p1 / ——）——视图应按用量降序重排。
- * 默认两行覆盖「服务商·模型」与「未记录服务商（历史）·其他模型」；未知服务商形态由
+ * 默认两行覆盖「服务商·模型」与「未记录服务商」（null-provider 合并行）；未知服务商形态由
  * T-D2 用例覆写注入。
  */
 const MODEL_ROWS = [
@@ -433,7 +433,7 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
       assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
       assert.equal(
         legendText(root, "__no_provider__::__other_model__"),
-        "未记录服务商（历史） · 其他模型",
+        "未记录服务商",
       );
 
       // 点图例 → 图下固定详情行（服务商·模型 / 用量 / 次数 / 占比；分母 = summary.totalTokens）
@@ -1426,7 +1426,7 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
 
   it("T-D2：饼图切片数 = 行数、label 三态 + 未知服务商兜底、点扇区/图例出详情行、占比分母 = summary.totalTokens", async () => {
     const requests: UsageQueryPayload[] = [];
-    // 四行覆盖四种形态：已知服务商·模型 / 未记录（历史）·其他模型 / 未知服务商·模型 / 已知服务商·其他模型
+    // 四行覆盖四种形态：已知服务商·模型 / 未记录服务商（null 合并行，label 不拼模型） / 未知服务商·模型 / 已知服务商·其他模型
     const rows = [
       {
         providerId: "p1",
@@ -1496,11 +1496,11 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
         "p-gone::glm-4.6",
         "p2::__other_model__",
       ]);
-      // label 三态 + 未知服务商兜底
+      // label 三态 + 未知服务商兜底；null-provider 合并行 label 固定「未记录服务商」，不拼模型后缀
       assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
       assert.equal(
         legendText(root, "__no_provider__::__other_model__"),
-        "未记录服务商（历史） · 其他模型",
+        "未记录服务商",
       );
       assert.equal(legendText(root, "p-gone::glm-4.6"), "未知服务商 · glm-4.6");
       assert.equal(legendText(root, "p2::__other_model__"), "智谱中转 · 其他模型");

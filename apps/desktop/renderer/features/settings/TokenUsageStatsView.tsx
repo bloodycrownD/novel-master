@@ -610,19 +610,20 @@ export function TokenUsageStatsView() {
 
   // 饼图扇区：modelRows 原样不折叠（provider×model 复合维度），按用量降序分配
   // 循环色板；label 组合「服务商 · 模型」——服务商三态（解析名 / 未知服务商 /
-  // 未记录服务商（历史））× 模型两态（名 / 其他模型）；占比分母 = 窗口
-  // summary.totalTokens（P1-3，与原列表口径一致）。
+  // 未记录服务商）× 模型两态（名 / 其他模型）；占比分母 = 窗口
+  // summary.totalTokens（P1-3，与原列表口径一致）。null-provider 行在 core 已
+  // 合并为单行（不再按模型拆分），label 固定「未记录服务商」，不拼模型后缀。
   const pieSlices = useMemo<PieSlice[]>(
     () =>
       sortedModelRows.map((row, index) => {
-        const providerPart =
-          row.providerId == null
-            ? "未记录服务商（历史）"
-            : (providerNames.get(row.providerId) ?? "未知服务商");
         const modelPart = row.modelName ?? "其他模型";
+        const label =
+          row.providerId == null
+            ? "未记录服务商"
+            : `${providerNames.get(row.providerId) ?? "未知服务商"} · ${modelPart}`;
         return {
           key: `${row.providerId ?? "__no_provider__"}::${row.modelName ?? "__other_model__"}`,
-          label: `${providerPart} · ${modelPart}`,
+          label,
           value: row.totalTokens,
           calls: row.calls,
           color: PIE_PALETTE[index % PIE_PALETTE.length]!,
