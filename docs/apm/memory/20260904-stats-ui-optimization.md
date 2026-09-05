@@ -40,3 +40,9 @@ user:
 
 assistant:
 用户纠错成立：getModelBreakdown 对不在 llm_saved_model 配置集内的历史 model_name 归并"其他"桶（与模型筛选同源同口径），模型换代不会产生新扇区；饼图扇区天然有界=窗口内有用量的已配置模型+每服务商"其他"桶+历史行"未记录服务商"。唯一理论增长源是 provider_id 写入时快照（删建服务商会各占一行、展示名走 best-effort 兜底），量级小不用管。"正常展示不折叠"由结构保证而非权宜，PRD 无需改动，仍待用户确认。
+
+user:
+生成spec吧。（注：本轮子代理派遣全部失败——pi-web 0.8.11 内置 pi 0.84.3 与外层 pi 0.84.4 参数不兼容，`-p` 端口位吞掉 `--no-session`，重试同败；按 skill 失败协议改由主代理手工只读探索，覆盖 core/port/service/测试、桌面视图+IPC+DTO+测试、移动端全量+测试清单。）
+
+assistant:
+手工探索后落盘 spec：docs/Iterations/token-usage-stats-ui-refresh/spec.md。时间模型定稿：{fromDay,toDay} 闭区间、range 可选（summary/model/requests 缺省全量，daily 必须 range）、getDailyBuckets 改单条 strftime localtime GROUP BY+JS 稠密补零、删 last7/last30/366/queryToday/daySpan 差值函数；近7天修正为 7 桶。桌面 DTO 透传 providerId、内嵌 SVG 饼图；移动端新 PieChart 组件（react-native-svg）。5 个 Step（core→ipc→desktop→mobile→docs）、T-C1..7/T-D1..6/T-M1..7 用例矩阵。待用户确认 spec。
