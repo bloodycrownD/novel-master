@@ -8,6 +8,8 @@
  *   from > to 校验、无 366 上限——超长区间照常查询）；
  * - 流水与时间筛选解绑（T-D3）：切时间不重拉流水；模型变化重拉且 filter 无 range；
  * - 空态区分（库全空冷启动 vs 范围内无数据，探底走 {fromDay,toDay} 表达 365 天）；
+ *   窗口空（库非空）时空态只拦汇总/图表两页签，流水页签照常渲染全历史流水；
+ *   库全空探底命中时三个页签统一整屏空态；
  * - 今日卡全删（T-D5：非空与空态两分支均无 today 卡节点）；
  * - 主查询竞态守卫（旧响应后到不覆盖新数据）；错误路径（{ok:false} 保留旧数据 / 格式异常）。
  *
@@ -529,6 +531,21 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
       await clickSegmented(root, "图表");
       assert.deepEqual(chartCols(root, "daily"), []);
       assert.equal(sliceKeys(root).length, 0);
+      // 库全空行为不变：流水页签同样整屏空态（流水本身也无数据），不渲染流水行
+      await clickSegmented(root, "流水");
+      assert.ok(
+        collectText(root.findByProps({ className: "settings-list__empty" })).includes(
+          "上线起开始积累",
+        ),
+        "库全空时流水页签仍应整屏冷启动空态",
+      );
+      assert.equal(
+        root.findAll(
+          (node) => node.props.className === "token-stats-requests__row",
+        ).length,
+        0,
+        "库全空时不应渲染流水行",
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -580,6 +597,92 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
       );
       assert.ok(probe != null, "空态应懒发一次 365 天宽区间探底查询");
       assert.equal(probe.filter.range?.toDay, toDayKey(localMidnight(0)));
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("窗口空（库非空）：汇总/图表页签显示区间空态且无指标卡；流水页签照常渲染全历史流水（filter 无 range）", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const probeFromDay = toDayKey(localMidnight(-365));
+    const restore = mockWindow(
+      makeInvoke(
+        {
+          // 用户查询（last7）窗口空；探底（365 天宽区间）非空 → 库有数据
+          summary: (req) =>
+            req.filter.range?.fromDay === probeFromDay
+              ? SUMMARY
+              : { ...SUMMARY, calls: 0, totalTokens: 0 },
+          daily: [],
+          modelRows: [],
+        },
+        requests,
+      ),
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 默认汇总页签：区间空态文案，不渲染任何指标卡
+      assert.ok(
+        collectText(root.findByProps({ className: "settings-list__empty" })).includes(
+          "当前筛选范围内暂无用量数据",
+        ),
+      );
+      assert.equal(
+        root.findAll((node) => node.props["data-metric"] != null).length,
+        0,
+        "窗口空时汇总页签不应渲染指标卡",
+      );
+
+      // 图表页签：同样区间空态，不渲染按天图与饼图
+      await clickSegmented(root, "图表");
+      assert.ok(
+        collectText(root.findByProps({ className: "settings-list__empty" })).includes(
+          "当前筛选范围内暂无用量数据",
+        ),
+      );
+      assert.deepEqual(chartCols(root, "daily"), []);
+      assert.equal(sliceKeys(root).length, 0);
+
+      // 流水页签：照常渲染全历史流水——不再被整屏空态拦截（PRD 验收第一条）
+      requests.length = 0;
+      await clickSegmented(root, "流水");
+      assert.equal(
+        root.findAll((node) => node.props.className === "settings-list__empty").length,
+        0,
+        "窗口空不应拦截流水页签",
+      );
+      const reqQueries = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqQueries.length, 1, "切流水页签应拉首页");
+      assert.equal(reqQueries[0]!.filter.range, undefined, "流水查询不应携带 range");
+      assert.equal(reqQueries[0]!.offset, 0);
+      assert.equal(reqQueries[0]!.limit, 50);
+      // 流水行渲染（REQUEST_PAGE 样例：gpt-4o 行可见）
+      const rowsText = root
+        .findAll(
+          (node) => node.props.className === "token-stats-requests__row",
+        )
+        .map((node) => collectText(node))
+        .join("|");
+      assert.ok(rowsText.includes("gpt-4o"), `流水行应渲染：${rowsText}`);
+      // 分页器常驻（total=260 → 6 页）
+      assert.ok(
+        root
+          .findAll(
+            (node) =>
+              typeof node.props.className === "string" &&
+              node.props.className.split(" ").includes(
+                "token-stats-requests__page-num",
+              ),
+          )
+          .some((node) => (node.children as unknown[]).some((c) => c === "6")),
+        "流水分页器应渲染",
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();

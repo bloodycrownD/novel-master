@@ -6,7 +6,8 @@
  * 自定义直传日期串（无跨度上限，仅校验 from ≤ to）。汇总页签：范围内指标卡片 +
  * 服务商×模型饼图（行原样不折叠，点选扇区/图例出固定详情行）；图表页签：按天图 +
  * 24 小时钻取 + 当天汇总行，「今天」模式跳过按天图直出当天汇总行 + 按小时图；
- * 流水页签：请求级分页列表（按时间倒序、按需加载，仅受模型筛选影响、与时间筛选解绑）。
+ * 流水页签：请求级分页列表（按时间倒序、按需加载，仅受模型筛选影响、与时间筛选解绑；
+ * 窗口空时仍照常渲染——空态只拦汇总/图表两页签，库全空探底才整屏空态）。
  * 数据统一经 ipcUsageStatsQuery（nm:usageStats/query 单 channel 按 kind 分发）获取；
  * 服务商展示名经 ipcProvidersList（AgentEditorView 同源通道）解析；
  * 功能口径对齐 mobile 侧 TokenUsageStatsScreen，交互按桌面惯例。
@@ -552,7 +553,9 @@ export function TokenUsageStatsView() {
     };
   }, []);
 
-  // 选中天后加载 24 小时桶（时间由天本身界定，filter 只取模型维度）。
+  // 选中天后加载 24 小时桶：透传完整 filter（其中仅模型维度参与此链路，
+  // range 不生效），时间边界由 dayLocalDate 单独界定（core 侧按该天构造
+  // 24 个本地钟点桶）。
   useEffect(() => {
     if (selectedDay == null || filter == null) {
       setHourlyBuckets(null);
@@ -764,7 +767,10 @@ export function TokenUsageStatsView() {
         />
       </div>
 
-      {empty ? (
+      {/* 空态只拦「汇总/图表」两页签：窗口空但库非空时，流水页签照常渲染全历史 */}
+      {/* 流水（流水与时间筛选解绑，不受窗口截断——PRD 验收第一条）；库全空 */}
+      {/* 探底为 true 时流水本身也无数据，三个页签统一整屏冷启动空态。 */}
+      {empty && (libraryEmpty || pageTab !== "requests") ? (
         <SettingsSection title="数据统计">
           {libraryEmpty ? (
             <SettingsListEmpty>
