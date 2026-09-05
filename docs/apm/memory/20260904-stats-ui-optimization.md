@@ -1,8 +1,8 @@
 ---
-date: 2026-09-04 00:55
-title: 数据统计 UI 优化头脑风暴：五项需求的双端现状核查与可行性
-keywords: 数据统计, UI 优化, 时间筛选, 流水, 今天 tab, 明细改图表, 按小时, 饼图, provider×model
-abstract: 用户提五项统计 UI 优化（时间筛选不影响流水、加今天 tab 删今日卡、明细改名图表、今天直出按小时图、provider×model 换饼图）。双端探索确认：③④近乎白送，②可纯 UI 映射 custom 实现，①必须 core 加 "all" range kind（custom 有 366 天上限堵死全量），⑤移动端数据现成、桌面端 IPC DTO 抹掉 providerId 需扩形状；饼图两端都要自绘（零图表库，mobile 有 react-native-svg）。
+date: 2026-09-06 00:05
+title: 数据统计 UI 优化：从头脑风暴到 spec 定稿与 core 时间模型落地
+keywords: 数据统计, UI 优化, 时间筛选, 流水, 今天 tab, 明细改图表, 按小时, 饼图, provider×model, fromDay toDay, 自然日闭区间, 稠密补零
+abstract: 五项统计 UI 优化经头脑风暴收敛为 spec（时间模型统一 {fromDay,toDay} 闭区间、range 可选、流水解绑、今日卡删除、饼图不折叠）。Step 1 core 重构落地（512cae4：自然日区间+稠密补零+删 queryToday/366 上限，1793 全绿）；Step 4 移动端镜像落地（7670b56：resolveRangeDays 映射、流水解绑+脏标记 P1-2 挂 comboFilter、today 补选 P1-1 写 reload 成功回调、PieChart 组件 react-native-svg 扇区可点+详情行+双端同序色板 P2-5，mobile jest 186 套件 1091 用例全绿）。
 ---
 
 user:
@@ -58,3 +58,27 @@ user:
 
 assistant:
 execute-ready 已确认，进入开发循环。子代理环境已恢复（另一会话修复扩展补丁 + pi-web 重启生效，探针验证通过），DAG 走标准子代理流程：wave-0 impl-core → verify → cr-func → wave-3 impl-desktop ∥ impl-mobile（无文件冲突并行）→ 双端 verify → 双端 cr-func → docs。分支 feat/token-usage-stats-ui-refresh 自 main。
+
+user:
+（impl-core 子代理任务）实现 spec Step 1：core 统计服务时间模型重构，只动 port/service/public-chat/测试四文件，不碰 apps 与 schema。验证全绿后重建 dist，中文 commit。
+
+assistant:
+Step 1 落地（commit 512cae4，4 文件 +327/-353）：①port——UsageStatsRange 改 {fromDay,toDay} 本地自然日闭区间，Filter.range 可选（聚合/流水缺省全历史，daily 必填），删 UsageStatsToday/summary.today；②service——resolveRangeMs 重写为 resolveDayRangeMs（parseDayLocalDate 校验两字段、报错 label 指认 fromDay/toDay，from>to 抛错，换算 [fromDay 0点, toDay+1 0点)），新增 timeRangeSql 片断（null=不限时间）供 queryAggregateRow/getModelBreakdown/listRequestUsage 条件拼接，getDailyBuckets 重写单条 strftime('%Y-%m-%d', created_at_ms/1000,'unixepoch','localtime') GROUP BY + JS 侧从 fromDay 日历推进稠密补零（无数据日复用 ZERO_AGG_ROW），删 queryToday/daySpanBetweenLocalDays/startOfLocalDay；③public/chat.ts 删 UsageStatsToday re-export；④测试对齐 T-C1..T-C7（26 用例）：校验（格式/02-30/from>to）、闭区间双端含（含 toDay 深夜 23:30 与次日 00:30 不入）、7 天恰 7 桶、稠密补零、range 缺省分级、删除项运行时回归（summary 无 today 键 + 401 天区间不再拒）、DST 挂钟归桶（2026-03-08/11-01 NYC）、流水无 range 全量（total 不含时间谓词）。验证：npm test -w core 1793 全绿；npm run build -w @novel-master/core 重建 dist（fromDay 已进产物 d.ts）。注意点：模板解析只绑定 SQL 中出现的 #{} 占位符，params 携带未引用的 null 值无害；strftime 整数除法截秒不影响日归属（日界在整秒 0 点）。
+
+user:
+（impl-mobile 子代理任务）实现 spec Step 4：移动端五件套镜像改造，只动 apps/mobile，修好 core 形状变更后的编译/测试破坏。
+
+assistant:
+Step 4 落地（commit 7670b56，9 文件 +734/-274）：①format.ts——RangeKind 扩 'today'、删 CUSTOM_RANGE_MAX_DAYS 与跨度校验（保 from≤to）、新增 resolveRangeDays（today={D,D}/last7={D-6,D}/last30={D-29,D}/custom 产日期字符串，日偏移全走 localDayKeyOffset 日历加法，custom 缺日期兜底回退 last7）；②主屏——filter memo 产新形状；loadRequests 改用无 range 的 requestsFilter；脏标记 P1-2 从 reload 成功路径移到独立 effect 只监听 comboFilter；today 补选 P1-1 写进 reload 成功回调（today→todayKey 否则 null，防独立 effect 被后到回调抹掉）；rangeEmpty 空态删 TodayCard；页签「明细」→「图表」（testID 不变）；③SummaryTab 删 TodayCard，列表整块换 PieChart（apps/mobile/src/components/charts/PieChart.tsx：react-native-svg Path/Circle 扇区，数据行原样不折叠按用量降序，扇区+图例 Pressable/onPress 可点，点选图下固定详情行 testID=pie-detail，占比分母=窗口 summary.totalTokens P1-3；满圆单行用 Circle 防 360° 退化，零值行不渲染扇区但图例可点；色板 pieChartColors 固定八色循环 P2-5 与桌面 shell.css 同序：蓝(tokens.primary)→青→绿(success)→黄→橙(warning)→红(danger)→紫→灰蓝）；④DetailTab 加 todayMode prop 隐藏按天图区块，当天汇总行复用 selectedDay 查找（today 模式唯一日桶 dayKey 恒匹配）；⑤测试——screen 33 用例（last7/last30/custom 断言换 {fromDay,toDay} 运行时算期望、今日卡 5 处删、饼图 T-M4、流水解绑 T-M5、today 直出 T-M1、366→无上限 T-M6、PieChart 组件级 T-M7；jest.mock('react-native-svg') 成透传 View）+ format 单测补 resolveRangeDays 四用例。验证：NODE_ENV=test npx jest 186 套件 1091 全绿；tsc build/web/e2e 三份 typecheck 全绿；eslint/prettier 过（RequestsTab 2 warning 为存量）。环境坑：本机 shell NODE_ENV=production 会污染 jest——react-test-renderer 生产构建 act 是 undefined 占位，全部用例报 act is not a function，须显式 NODE_ENV=test（已记 #22）。
+
+user:
+（fix-desktop 子代理任务）cr-func-desktop 留了一条对 PRD 验收的实伤：窗口空（rangeEmpty，如「今天」没用量）时整屏空态优先于页签切换，切到流水页签也只看到空态文案。修复：空态只拦汇总/图表两页签，流水页签始终渲染全历史流水；库全空探底行为不变；顺带改 hourly effect 过时注释；补测试。
+
+assistant:
+修复落地（commit 6665370，2 文件 +112/-3）：①TokenUsageStatsView 渲染分支空态条件由 {empty ?} 收窄为 empty && (libraryEmpty || pageTab !== "requests")——窗口空但库非空时汇总/图表两页签显示「当前筛选范围内暂无用量数据」（复用原文案），流水页签落入正常分支照常渲染全历史流水表与分页（流水加载本就与时间解绑：requestsFilter 无 range、seq 守卫/脏标记/分页零改动）；库全空探底命中仍三页签统一整屏冷启动空态；②hourly 副链路注释改准确（透传完整 filter 仅模型维度生效、时间边界由 dayLocalDate 界定，core getHourlyBuckets 按该天构造 24 本地钟点桶）；③测试新增窗口空三页签行为矩阵用例（mock summary 按探底 fromDay=365 天前路由区分用户查询/探底），库全空用例补流水页签仍整屏空态回归断言。验证：NODE_ENV=development npm test -w @novel-master/desktop 全量 106 用例全绿；typecheck exit 0。注意：探底 libraryEmpty 为 null（未回/失败）时按库非空展示，流水页签正常渲染，流水自身空数据有「—」占位行兜底。
+
+user:
+（开发循环执行完毕）
+
+assistant:
+dev-ready 达成，分支 feat/token-usage-stats-ui-refresh（c95bf97..1e40205 共 7 笔）：core 时间模型重构 512cae4/1918ee3（1793 测试）、桌面 2de4467/dd0ba43/6665370（106 测试+typecheck 0）、移动 7670b56/1e40205（1092 测试，负向验证锁死饼图分母）、CHANGELOG Unreleased。三轮 cr-func 全 func-ready；循环中审出并修掉「窗口空态拦截流水页签」双端实伤（PRD 验收第一条）。真机/桌面目验待用户手动。环境坑备案：desktop 测试要 NODE_ENV=development、mobile 要 NODE_ENV=test（shell 默认 production 会假崩）。
