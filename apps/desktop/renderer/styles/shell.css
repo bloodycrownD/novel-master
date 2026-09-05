@@ -7421,14 +7421,9 @@ pre:hover > .code-copy-btn,
   gap: 8px;
 }
 
-/* 汇总页签独占布局：五指标卡一行放宽，不再挤在通用 auto-fit 里。 */
+/* 汇总页签独占布局：指标卡一行放宽，不再挤在通用 auto-fit 里。 */
 .token-stats-cards--metrics {
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.token-stats-cards--today {
-  grid-template-columns: repeat(2, minmax(0, 200px));
   gap: 12px;
 }
 
@@ -7460,24 +7455,6 @@ pre:hover > .code-copy-btn,
 /* 指标卡口径注记（如首字延迟的非流式口径） */
 .token-stats-card__hint {
   font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.token-stats-view__today {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.token-stats-view__today-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.token-stats-view__today-hint {
-  font-size: 12px;
   color: var(--text-tertiary);
 }
 
@@ -7684,41 +7661,142 @@ pre:hover > .code-copy-btn,
   color: var(--text-secondary);
 }
 
-.token-stats-models {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--settings-item-border, var(--border-light));
-  border-radius: 10px;
-  overflow: hidden;
+/* ===== 服务商×模型饼图（token-stats-pie）=====
+   固定循环色板（P2-5）：蓝→青→绿→黄→橙→红→紫→灰蓝，按用量降序分配；
+   亮暗主题各自适配（视图侧 PIE_PALETTE 按序引用同名变量）。 */
+:root {
+  --token-stats-pie-c1: #0066e8;
+  --token-stats-pie-c2: #009fb8;
+  --token-stats-pie-c3: #22a06b;
+  --token-stats-pie-c4: #c9970a;
+  --token-stats-pie-c5: #d96b16;
+  --token-stats-pie-c6: #cc4a3d;
+  --token-stats-pie-c7: #7c56c9;
+  --token-stats-pie-c8: #64748b;
 }
 
-.token-stats-models__row {
-  display: grid;
-  grid-template-columns: minmax(140px, 2fr) 1fr 1fr 1fr;
-  gap: 8px;
+html[data-theme="dark"] {
+  --token-stats-pie-c1: #3d8bfd;
+  --token-stats-pie-c2: #22c2d8;
+  --token-stats-pie-c3: #3ecf8e;
+  --token-stats-pie-c4: #e0b33c;
+  --token-stats-pie-c5: #f08c3a;
+  --token-stats-pie-c6: #e5675a;
+  --token-stats-pie-c7: #a887e8;
+  --token-stats-pie-c8: #94a3b8;
+}
+
+.token-stats-pie-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.token-stats-pie-view {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 24px;
+}
+
+/* 饼图容器：扇区 button 绝对定位叠满（见视图侧 P2-6 注释），固定正方形基准 */
+.token-stats-pie {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  flex: none;
+}
+
+.token-stats-pie__slice {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  /* 扇区精确命中：button 整体不吃指针、扇形 path 接收并冒泡（P2-6 键盘可达） */
+  pointer-events: none;
+}
+
+.token-stats-pie__slice:focus-visible {
+  outline: 2px solid var(--primary-ring);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+.token-stats-pie__slice svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.token-stats-pie__slice path {
+  pointer-events: auto;
+  stroke: var(--surface);
+  stroke-width: 0.02;
+  transition: opacity 0.15s ease;
+}
+
+.token-stats-pie__slice:hover path {
+  opacity: 0.85;
+}
+
+.token-stats-pie__slice.is-selected path {
+  stroke: var(--text);
+  stroke-width: 0.04;
+}
+
+.token-stats-pie-view__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 220px;
+}
+
+.token-stats-pie-view__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.token-stats-pie-view__legend-item:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.token-stats-pie-view__legend-item.is-selected {
+  border-color: var(--primary);
+  color: var(--text);
+  background: var(--primary-muted);
+}
+
+.token-stats-pie-view__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* 图下固定详情行（点选扇区/图例后出现，bar-inspect 惯例） */
+.token-stats-pie-block__detail {
+  margin: 0;
   padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--settings-item-border, var(--border-light));
+  background: var(--settings-item-bg, var(--surface));
   font-size: 13px;
   color: var(--text-secondary);
 }
 
-.token-stats-models__row--head {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  background: color-mix(in srgb, var(--text) 4%, transparent);
-}
-
-.token-stats-models__row + .token-stats-models__row {
-  border-top: 1px solid var(--border-light);
-}
-
-.token-stats-models__name {
-  color: var(--text);
-  font-weight: 600;
-  word-break: break-all;
-}
-
-/* ===== 请求流水表（token-stats-requests）：与分模型表同视觉，列更多改用 7 列网格 ===== */
+/* ===== 请求流水表（token-stats-requests）：与卡片同视觉，列更多改用 7 列网格 ===== */
 .token-stats-requests {
   display: flex;
   flex-direction: column;

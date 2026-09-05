@@ -1,17 +1,22 @@
 /**
- * 设置页「数据统计」视图（spec 变更点 6 / Step 7）：
- * 「汇总 / 明细 / 流水」三页签，筛选栏（时间范围：近 7 / 近 30 / 自定义区间 × 模型）置顶、
- * 三页签共享（切换页签保留筛选、不重查）。汇总页签：范围内五指标卡片 + 独立于筛选的
- * 今日卡；明细页签：按天图 + 24 小时钻取 + 当天汇总行；分模型表在汇总页签
- * （不含命中率列，命中率出口在汇总卡片与选中天汇总行）；流水页签：请求级分页列表
- * （时间倒序，按需加载）。
+ * 设置页「数据统计」视图（token-usage-stats-ui-refresh / Step 3）：
+ * 「汇总 / 图表 / 流水」三页签，筛选栏（时间范围：今天 / 近 7 / 近 30 / 自定义区间 × 模型）
+ * 置顶、汇总与图表两页签共享（切换页签保留筛选、不重查）。时间口径统一为本地自然日
+ * 闭区间 {fromDay, toDay}：今天 = {D, D}、近 7 天 = {D-6, D}、近 30 天 = {D-29, D}、
+ * 自定义直传日期串（无跨度上限，仅校验 from ≤ to）。汇总页签：范围内指标卡片 +
+ * 服务商×模型饼图（行原样不折叠，点选扇区/图例出固定详情行）；图表页签：按天图 +
+ * 24 小时钻取 + 当天汇总行，「今天」模式跳过按天图直出当天汇总行 + 按小时图；
+ * 流水页签：请求级分页列表（按时间倒序、按需加载，仅受模型筛选影响、与时间筛选解绑）。
  * 数据统一经 ipcUsageStatsQuery（nm:usageStats/query 单 channel 按 kind 分发）获取；
+ * 服务商展示名经 ipcProvidersList（AgentEditorView 同源通道）解析；
  * 功能口径对齐 mobile 侧 TokenUsageStatsScreen，交互按桌面惯例。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ipcUsageStatsQuery } from "@/ipc/client";
+import { ipcProvidersList, ipcUsageStatsQuery } from "@/ipc/client";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import type {
+  IpcResult,
+  ProviderListItemDto,
   UsageStatsBucketDto,
   UsageStatsFilterDto,
   UsageStatsModelRowDto,
@@ -27,18 +32,14 @@ import {
   pageWindowItems,
 } from "@shared/logic/usage-stats-format";
 
-type RangeKind = "last7" | "last30" | "custom";
+type RangeKind = "today" | "last7" | "last30" | "custom";
 type PageTab = "summary" | "detail" | "requests";
-
-const MS_PER_DAY = 86_400_000;
-/** 自定义区间上限（天，含首尾；与 mobile 侧同口径，避免超长区间查询变慢）。 */
-const CUSTOM_RANGE_MAX_DAYS = 366;
 
 /**
  * 模型下拉的三态哨兵：全部 / 其他模型（对应 filter.model 的 undefined / null）。
  * 「其他模型」= NULL 记录 + 非当前配置的历史模型归并。
- * 口径注记：core 统计已是 provider×model 复合维度，DTO 侧按 modelName 聚合回模型粒度，
- * 故同名模型多服务商在分模型汇总中恒为单行，下拉按模型名单值筛选不受影响。
+ * 口径注记：modelBreakdown 行为 provider×model 复合维度原样透传（IPC 层不归并），
+ * 饼图按复合维度展示；下拉按模型名单值筛选不受影响。
  */
 const MODEL_OPTION_ALL = "__all__";
 const MODEL_OPTION_UNLOGGED = "__unlogged__";
@@ -49,6 +50,14 @@ function toLocalDayKey(ms: number): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${month}-${day}`;
+}
+
+/** 今天偏移 N 天的本地日期键（命名窗口由应用层换算：「近 7 天」= {D-6, D} 共 7 桶）。 */
+function dayKeyOffset(offsetDays: number): string {
+  const now = new Date();
+  return toLocalDayKey(
+    new Date(now.getFullYear(), now.getMonth(), now.getDate() + offsetDays).getTime(),
+  );
 }
 
 /** `YYYY-MM-DD` → 本地 0 点 Date（非法输入返回 null）。 */
@@ -85,13 +94,26 @@ function formatTokensPerSecond(v: number | null): string {
 
 /**
  * 桶 tooltip 文案（当天/该小时 输入输出与调用数）。
- * 明细图表不再展示命中率——命中率出口仅保留在汇总卡片与选中天汇总行。
+ * 图表不展示命中率——命中率出口仅保留在汇总卡片与当天汇总行。
  */
 function bucketTooltip(key: string, b: UsageStatsBucketDto): string {
   return `${key} · 输入 ${formatTokenCount(b.promptTokens)} · 输出 ${formatTokenCount(
     b.completionTokens,
   )} · 调用 ${b.calls} 次`;
 }
+
+/** 零值桶（「今天」无数据时当天汇总行的兜底形态）。 */
+const ZERO_BUCKET: UsageStatsBucketDto = {
+  bucketStartMs: 0,
+  calls: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  cacheReadTokens: 0,
+  cacheCreationTokens: 0,
+  billedInputTokens: 0,
+  avgFirstTokenMs: null,
+  avgTokensPerSecond: null,
+};
 
 /**
  * CSS div 柱状图：输入（--primary）下 + 输出（--text-secondary）上堆叠（仅用量模式）。
@@ -218,6 +240,120 @@ function TokenStatsChart({
   );
 }
 
+/**
+ * 饼图色板（P2-5）：固定循环色板常量，色相序列双端一致
+ * （蓝→青→绿→黄→橙→红→紫→灰蓝，按用量降序分配）；色值经 CSS 变量适配亮暗主题
+ * （shell.css 中 light/dark 各定义同名变量）。
+ */
+const PIE_PALETTE = [
+  "var(--token-stats-pie-c1)",
+  "var(--token-stats-pie-c2)",
+  "var(--token-stats-pie-c3)",
+  "var(--token-stats-pie-c4)",
+  "var(--token-stats-pie-c5)",
+  "var(--token-stats-pie-c6)",
+  "var(--token-stats-pie-c7)",
+  "var(--token-stats-pie-c8)",
+] as const;
+
+/**
+ * 饼图扇区 path（单位圆，中心 0,0）：12 点方向起顺时针扫 [startAngle, endAngle]。
+ * SVG y 轴向下，故 x = sinθ、y = -cosθ；扇区角 ≥ 2π（单扇区独占整圆）时单条 A 弧
+ * 退化（起点终点重合画不出），拆成两个半圆弧绘制。
+ */
+function pieSlicePath(startAngle: number, endAngle: number): string {
+  const r = 1;
+  const px = (angle: number) => (r * Math.sin(angle)).toFixed(4);
+  const py = (angle: number) => (-r * Math.cos(angle)).toFixed(4);
+  if (endAngle - startAngle >= 2 * Math.PI - 1e-9) {
+    const half = startAngle + Math.PI;
+    return `M 0 0 L ${px(startAngle)} ${py(startAngle)} A ${r} ${r} 0 0 1 ${px(half)} ${py(half)} A ${r} ${r} 0 0 1 ${px(startAngle)} ${py(startAngle)} Z`;
+  }
+  const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+  return `M 0 0 L ${px(startAngle)} ${py(startAngle)} A ${r} ${r} 0 ${largeArc} 1 ${px(endAngle)} ${py(endAngle)} Z`;
+}
+
+/** 饼图扇区数据（label 为「服务商 · 模型」组合，share 分母 = 窗口 summary.totalTokens，P1-3）。 */
+interface PieSlice {
+  readonly key: string;
+  readonly label: string;
+  readonly value: number;
+  readonly calls: number;
+  readonly color: string;
+  readonly share: number | null;
+  readonly row: UsageStatsModelRowDto;
+}
+
+/**
+ * 服务商×模型饼图：SVG path 扇区 + 可点图例（与 TokenStatsChart 同文件内嵌惯例）。
+ * 键盘可达（P2-6）：每个扇区一个 HTML button——多个 button 经绝对定位叠满饼图容器，
+ * button 自身 pointer-events:none、扇区 path pointer-events:auto（点击命中落在扇形
+ * 区域内、事件冒泡经 button 触发 onClick），兼得精确命中与 Tab/回车可达。
+ * 点击扇区或图例 → onSelect（选中/再点取消由调用方控制）；图下详情行由调用方渲染
+ * （沿用 bar-inspect 惯例，规避浮层手势冲突）。
+ */
+function PieChart({
+  slices,
+  selectedKey,
+  onSelect,
+}: {
+  slices: PieSlice[];
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
+}) {
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+  let acc = 0;
+  const arcs = slices.map((s) => {
+    const startAngle = total > 0 ? (acc / total) * 2 * Math.PI : 0;
+    acc += s.value;
+    const endAngle = total > 0 ? (acc / total) * 2 * Math.PI : 0;
+    return { ...s, startAngle, endAngle };
+  });
+  return (
+    <div className="token-stats-pie-view">
+      <div className="token-stats-pie">
+        {arcs.map((a) => {
+          const shareText = a.share == null ? "—" : `${Math.round(a.share * 100)}%`;
+          return (
+            <button
+              key={a.key}
+              type="button"
+              className={`token-stats-pie__slice${selectedKey === a.key ? " is-selected" : ""}`}
+              data-slice={a.key}
+              aria-label={`${a.label} · 用量 ${formatTokenCount(a.value)} · ${a.calls} 次 · 占比 ${shareText}`}
+              onClick={() => onSelect(a.key)}
+            >
+              <svg viewBox="-1.08 -1.08 2.16 2.16" aria-hidden="true">
+                {a.value > 0 ? (
+                  <path d={pieSlicePath(a.startAngle, a.endAngle)} style={{ fill: a.color }} />
+                ) : null}
+              </svg>
+            </button>
+          );
+        })}
+      </div>
+      <div className="token-stats-pie-view__legend">
+        {slices.map((s) => (
+          <button
+            key={s.key}
+            type="button"
+            className={`token-stats-pie-view__legend-item${selectedKey === s.key ? " is-selected" : ""}`}
+            data-slice-key={s.key}
+            aria-pressed={selectedKey === s.key}
+            onClick={() => onSelect(s.key)}
+          >
+            <span
+              className="token-stats-pie-view__legend-dot"
+              style={{ background: s.color }}
+            />
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** 流水分页页大小（core 限制 1–200，desktop 取 50）。 */
 const REQUESTS_PAGE_SIZE = 50;
 
@@ -238,8 +374,10 @@ export function TokenUsageStatsView() {
   const [reqPage, setReqPage] = useState(0);
   const [reqLoading, setReqLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedSliceKey, setSelectedSliceKey] = useState<string | null>(null);
+  const [providerNames, setProviderNames] = useState<Map<string, string>>(new Map());
 
-  // 自定义区间校验（≤366 天，含首尾）；非法时行内提示且暂停重查。
+  // 自定义区间校验（from ≤ to，无跨度上限）；非法时行内提示且暂停重查。
   const customRangeError = useMemo(() => {
     if (rangeKind !== "custom") return null;
     if (customFrom.length === 0 || customTo.length === 0) return "请选择起止日期";
@@ -247,33 +385,23 @@ export function TokenUsageStatsView() {
     const to = parseLocalDate(customTo);
     if (from == null || to == null) return "请选择起止日期";
     if (from.getTime() > to.getTime()) return "开始日期不能晚于结束日期";
-    const dayCount = Math.round((to.getTime() - from.getTime()) / MS_PER_DAY) + 1;
-    if (dayCount > CUSTOM_RANGE_MAX_DAYS) {
-      return `自定义区间最长 ${CUSTOM_RANGE_MAX_DAYS} 天`;
-    }
     return null;
   }, [rangeKind, customFrom, customTo]);
 
   // 有效筛选（null = 自定义区间非法，暂停查询、保留旧数据，与 mobile「阻止确认」语义一致）。
+  // 命名窗口在此换算为自然日闭区间：今天 = {D, D}，近 7 天 = {D-6, D}（含今天共 7 桶），
+  // 近 30 天 = {D-29, D}；自定义直传日期串（from ≤ to 已由 customRangeError 把关）。
   const filter = useMemo<UsageStatsFilterDto | null>(() => {
     if (rangeKind === "custom") {
       if (customRangeError != null) return null;
-      const from = parseLocalDate(customFrom);
-      const to = parseLocalDate(customTo);
-      if (from == null || to == null) return null;
-      // to 取结束日次日 0 点（含结束日全天，与 last7/last30 覆盖到本地明日 0 点一致）。
-      // 用 Date 日历推进而非固定毫秒加法：DST 切换日实际只有 23/25 小时，
-      // 固定 +MS_PER_DAY 会让边界偏移 1 小时（与预填逻辑同款构造）。
-      return {
-        range: {
-          kind: "custom",
-          fromMs: from.getTime(),
-          toMs: new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1).getTime(),
-        },
-        model: modelFilter,
-      };
+      return { range: { fromDay: customFrom, toDay: customTo }, model: modelFilter };
     }
-    return { range: { kind: rangeKind }, model: modelFilter };
+    const todayKey = dayKeyOffset(0);
+    if (rangeKind === "today") {
+      return { range: { fromDay: todayKey, toDay: todayKey }, model: modelFilter };
+    }
+    const spanDays = rangeKind === "last7" ? 6 : 29;
+    return { range: { fromDay: dayKeyOffset(-spanDays), toDay: todayKey }, model: modelFilter };
   }, [rangeKind, customFrom, customTo, customRangeError, modelFilter]);
 
   // 主链路竞态守卫：请求序号自增，旧一轮响应落地前发现序号已过期即整体丢弃
@@ -281,11 +409,11 @@ export function TokenUsageStatsView() {
   // 过期请求的报错不覆盖新一轮的 loading/数据状态）。
   const reloadSeqRef = useRef(0);
 
-  // 流水页按需加载：筛选变化置脏，页签激活且数据脏时才拉首页（与汇总/明细共享筛选不即时重查）。
+  // 流水页按需加载：筛选变化置脏，页签激活且数据脏时才拉首页（与汇总/图表共享筛选不即时重查）。
   const reqSeqRef = useRef(0);
   const reqDirtyRef = useRef(true);
 
-  const reload = useCallback(async (f: UsageStatsFilterDto) => {
+  const reload = useCallback(async (f: UsageStatsFilterDto, autoSelectToday: boolean) => {
     const seq = ++reloadSeqRef.current;
     const [sumRes, dailyRes, rowsRes] = await Promise.all([
       ipcUsageStatsQuery({ kind: "summary", filter: f }),
@@ -311,7 +439,7 @@ export function TokenUsageStatsView() {
     if (
       typeof sum !== "object" ||
       sum == null ||
-      !("today" in sum) ||
+      !("totalTokens" in sum) ||
       !Array.isArray(dailyRes.data) ||
       !Array.isArray(rowsRes.data)
     ) {
@@ -322,73 +450,103 @@ export function TokenUsageStatsView() {
     setSummary(sum);
     setDailyBuckets(dailyRes.data as UsageStatsBucketDto[]);
     setModelRows(rowsRes.data as UsageStatsModelRowDto[]);
-    setSelectedDay(null);
+    // P1-1：「今天」的自动补选必须写在这个成功分支里——独立 effect 的补选会被
+    // 此处对 selectedDay 的重置抹掉（后到的回调覆盖先行的 effect）。
+    setSelectedDay(autoSelectToday ? toLocalDayKey(Date.now()) : null);
     setHourlyBuckets(null);
-    // 筛选已变，流水页数据失效（等切回页签时重拉首页）。
-    reqDirtyRef.current = true;
+    // 数据已换，饼图选中行失效；流水脏标记不在此置——P1-2 流水与时间筛选解绑，
+    // 置脏改由监听 requestsFilter 的独立 effect 负责。
+    setSelectedSliceKey(null);
   }, []);
 
   useEffect(() => {
     if (filter == null) return;
-    void reload(filter);
-  }, [filter, reload]);
+    void reload(filter, rangeKind === "today");
+  }, [filter, rangeKind, reload]);
+
+  // 流水筛选（P1-2 与时间解绑）：只含模型维度、无 range——翻全部历史流水不受
+  // 当前时间窗口截断；模型筛选变化经下方独立 effect 置脏重拉。
+  const requestsFilter = useMemo<UsageStatsFilterDto>(
+    () => ({ model: modelFilter }),
+    [modelFilter],
+  );
+
+  useEffect(() => {
+    reqDirtyRef.current = true;
+  }, [requestsFilter]);
 
   // 流水页分页加载：按页号取整页替换（不再追加）；序号守卫防止旧响应覆盖新数据。
-  const loadRequests = useCallback(
-    async (f: UsageStatsFilterDto, page: number) => {
-      const seq = ++reqSeqRef.current;
-      setReqLoading(true);
-      const res = await ipcUsageStatsQuery({
-        kind: "requests",
-        filter: f,
-        offset: page * REQUESTS_PAGE_SIZE,
-        limit: REQUESTS_PAGE_SIZE,
-      });
-      if (seq !== reqSeqRef.current) {
-        return;
-      }
-      setReqLoading(false);
-      if (!res.ok) {
-        setLoadError(res.error.message);
-        return;
-      }
-      const body = res.data;
-      if (
-        typeof body !== "object" ||
-        body == null ||
-        !Array.isArray((body as UsageStatsRequestPageDto).rows)
-      ) {
-        setLoadError("统计数据返回格式异常");
-        return;
-      }
-      setLoadError(null);
-      const data = body as UsageStatsRequestPageDto;
-      setReqRows([...data.rows]);
-      setReqTotal(data.total);
-      setReqPage(page);
-    },
-    [],
-  );
+  const loadRequests = useCallback(async (f: UsageStatsFilterDto, page: number) => {
+    const seq = ++reqSeqRef.current;
+    setReqLoading(true);
+    const res = await ipcUsageStatsQuery({
+      kind: "requests",
+      filter: f,
+      offset: page * REQUESTS_PAGE_SIZE,
+      limit: REQUESTS_PAGE_SIZE,
+    });
+    if (seq !== reqSeqRef.current) {
+      return;
+    }
+    setReqLoading(false);
+    if (!res.ok) {
+      setLoadError(res.error.message);
+      return;
+    }
+    const body = res.data;
+    if (
+      typeof body !== "object" ||
+      body == null ||
+      !Array.isArray((body as UsageStatsRequestPageDto).rows)
+    ) {
+      setLoadError("统计数据返回格式异常");
+      return;
+    }
+    setLoadError(null);
+    const data = body as UsageStatsRequestPageDto;
+    setReqRows([...data.rows]);
+    setReqTotal(data.total);
+    setReqPage(page);
+  }, []);
 
   // 页签激活且数据脏时拉首页；仅切页签不重拉（保留已加载的分页）。
   useEffect(() => {
-    if (pageTab !== "requests" || filter == null || !reqDirtyRef.current) {
+    if (pageTab !== "requests" || !reqDirtyRef.current) {
       return;
     }
     reqDirtyRef.current = false;
-    void loadRequests(filter, 0);
-  }, [pageTab, filter, loadRequests]);
+    void loadRequests(requestsFilter, 0);
+  }, [pageTab, requestsFilter, loadRequests]);
 
-  // 模型选项：listModels 只回非 NULL 模型名，「未记录」桶由 UI 侧补上（DEV-1）。
+  // 模型选项：listModels 只回非 NULL 模型名，「其他模型」桶由 UI 侧补上（DEV-1）。
+  // P2-4：models 查询不再传 dummy range（filter 留空，listModels 本就不按时间过滤）。
   useEffect(() => {
     let cancelled = false;
-    void ipcUsageStatsQuery({ kind: "models", filter: { range: { kind: "last7" } } }).then(
-      (res) => {
-        if (!cancelled && res.ok && Array.isArray(res.data)) {
-          setModels(res.data as string[]);
+    void ipcUsageStatsQuery({ kind: "models", filter: {} }).then((res) => {
+      if (!cancelled && res.ok && Array.isArray(res.data)) {
+        setModels(res.data as string[]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 服务商展示名解析：AgentEditorView 同源通道拉 provider 列表；失败静默降级
+  // （providerId 解析不到时饼图 label 显示「未知服务商」），不阻塞统计页。
+  useEffect(() => {
+    let cancelled = false;
+    ipcProvidersList()
+      .then((res) => {
+        if (cancelled) return;
+        const result = res as IpcResult<ProviderListItemDto[]>;
+        if (result.ok && Array.isArray(result.data)) {
+          setProviderNames(new Map(result.data.map((p) => [p.id, p.displayName])));
         }
-      },
-    );
+      })
+      .catch(() => {
+        /* 拉取失败：名称解析走「未知服务商」兜底 */
+      });
     return () => {
       cancelled = true;
     };
@@ -427,6 +585,10 @@ export function TokenUsageStatsView() {
     [customFrom, customTo],
   );
 
+  const handleSliceSelect = useCallback((key: string) => {
+    setSelectedSliceKey((prev) => (prev === key ? null : key));
+  }, []);
+
   const selectedDayBucket =
     selectedDay != null
       ? dailyBuckets.find((b) => toLocalDayKey(b.bucketStartMs) === selectedDay)
@@ -436,6 +598,39 @@ export function TokenUsageStatsView() {
     () => [...modelRows].sort((a, b) => b.totalTokens - a.totalTokens),
     [modelRows],
   );
+
+  // 饼图扇区：modelRows 原样不折叠（provider×model 复合维度），按用量降序分配
+  // 循环色板；label 组合「服务商 · 模型」——服务商三态（解析名 / 未知服务商 /
+  // 未记录服务商（历史））× 模型两态（名 / 其他模型）；占比分母 = 窗口
+  // summary.totalTokens（P1-3，与原列表口径一致）。
+  const pieSlices = useMemo<PieSlice[]>(
+    () =>
+      sortedModelRows.map((row, index) => {
+        const providerPart =
+          row.providerId == null
+            ? "未记录服务商（历史）"
+            : (providerNames.get(row.providerId) ?? "未知服务商");
+        const modelPart = row.modelName ?? "其他模型";
+        return {
+          key: `${row.providerId ?? "__no_provider__"}::${row.modelName ?? "__other_model__"}`,
+          label: `${providerPart} · ${modelPart}`,
+          value: row.totalTokens,
+          calls: row.calls,
+          color: PIE_PALETTE[index % PIE_PALETTE.length]!,
+          share:
+            summary != null && summary.totalTokens > 0
+              ? row.totalTokens / summary.totalTokens
+              : null,
+          row,
+        };
+      }),
+    [sortedModelRows, providerNames, summary],
+  );
+
+  const selectedSlice =
+    selectedSliceKey != null
+      ? (pieSlices.find((s) => s.key === selectedSliceKey) ?? null)
+      : null;
 
   const modelSelectValue =
     modelFilter === undefined
@@ -447,16 +642,18 @@ export function TokenUsageStatsView() {
   const rangeLabel =
     rangeKind === "custom" && customFrom.length > 0 && customTo.length > 0
       ? `${customFrom} — ${customTo}`
-      : rangeKind === "last30"
-        ? "近 30 天"
-        : "近 7 天";
+      : rangeKind === "today"
+        ? "今天"
+        : rangeKind === "last30"
+          ? "近 30 天"
+          : "近 7 天";
 
   const empty = summary != null && summary.calls === 0 && summary.totalTokens === 0;
 
   // 空态区分（库全空 vs 范围内无数据）：仅在出现空态时懒发一次探底查询——
-  // 近一年宽度的 custom 范围 summary（core custom 上限 366 天，故取 365 天）。功能上线
+  // 近一年宽度的 {fromDay, toDay} 自然日区间 summary（365 天跨度）。功能上线
   // 不足一年，一年内无任何记录 ⇔ 库全空；非空场景零额外查询。探底失败保持 null，
-  // 按范围内无数据展示（保留今日卡，不阻塞用户）。
+  // 按范围内无数据展示（不阻塞用户）。
   const [libraryEmpty, setLibraryEmpty] = useState<boolean | null>(null);
   const libraryProbedRef = useRef(false);
   useEffect(() => {
@@ -465,49 +662,27 @@ export function TokenUsageStatsView() {
     }
     libraryProbedRef.current = true;
     let cancelled = false;
-    const now = new Date();
-    const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 365);
-    const to = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     void ipcUsageStatsQuery({
       kind: "summary",
-      filter: { range: { kind: "custom", fromMs: from.getTime(), toMs: to.getTime() } },
+      filter: { range: { fromDay: dayKeyOffset(-365), toDay: dayKeyOffset(0) } },
     }).then((res) => {
       const sum = res.ok ? res.data : null;
       if (
         !cancelled &&
         typeof sum === "object" &&
         sum != null &&
-        "today" in sum
+        "totalTokens" in sum
       ) {
-        setLibraryEmpty((sum as UsageStatsSummaryDto).calls === 0 && (sum as UsageStatsSummaryDto).totalTokens === 0);
+        setLibraryEmpty(
+          (sum as UsageStatsSummaryDto).calls === 0 &&
+            (sum as UsageStatsSummaryDto).totalTokens === 0,
+        );
       }
     });
     return () => {
       cancelled = true;
     };
   }, [empty]);
-
-  // 今日卡独立于筛选，非空与「范围内无数据」空态两个分支共用。
-  const todayCard = (
-    <div className="token-stats-view__today">
-      <span className="token-stats-view__today-title">今日</span>
-      <span className="token-stats-view__today-hint">不受时间范围与模型筛选影响</span>
-      <div className="token-stats-cards token-stats-cards--today">
-        <div className="token-stats-card" data-metric="todayTotalTokens">
-          <span className="token-stats-card__label">总 token</span>
-          <span className="token-stats-card__value">
-            {formatTokenCount(summary?.today.totalTokens ?? 0)}
-          </span>
-        </div>
-        <div className="token-stats-card" data-metric="todayCalls">
-          <span className="token-stats-card__label">调用次数</span>
-          <span className="token-stats-card__value">
-            {String(summary?.today.calls ?? 0)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
 
   return (
     <SettingsPanel>
@@ -517,6 +692,7 @@ export function TokenUsageStatsView() {
             aria-label="时间范围"
             value={rangeKind}
             options={[
+              { value: "today" as RangeKind, label: "今天" },
               { value: "last7" as RangeKind, label: "近 7 天" },
               { value: "last30" as RangeKind, label: "近 30 天" },
               { value: "custom" as RangeKind, label: "自定义" },
@@ -568,7 +744,7 @@ export function TokenUsageStatsView() {
                 {m}
               </option>
             ))}
-            {/* 常量与 value 名保留 __unlogged__（历史命名），语义已升级为「其他模型」：NULL + 非当前配置历史模型。core 已是 provider×model 复合维度，DTO 侧聚合回模型粒度，本选项仍按模型名单值筛选 */}
+            {/* 常量与 value 名保留 __unlogged__（历史命名），语义已升级为「其他模型」：NULL + 非当前配置历史模型。modelBreakdown 行为 provider×model 复合维度原样透传，本选项仍按模型名单值筛选 */}
             <option value={MODEL_OPTION_UNLOGGED}>其他模型</option>
           </select>
         </label>
@@ -581,7 +757,7 @@ export function TokenUsageStatsView() {
           value={pageTab}
           options={[
             { value: "summary" as PageTab, label: "汇总" },
-            { value: "detail" as PageTab, label: "明细" },
+            { value: "detail" as PageTab, label: "图表" },
             { value: "requests" as PageTab, label: "流水" },
           ]}
           onChange={setPageTab}
@@ -595,11 +771,9 @@ export function TokenUsageStatsView() {
               库里还没有任何用量数据。Token 用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
             </SettingsListEmpty>
           ) : (
-            <>
-              <SettingsListEmpty>当前筛选范围内暂无用量数据，可调整时间范围或模型筛选后再试。</SettingsListEmpty>
-              {/* 今日卡独立于筛选，不随范围空态消失（mobile/A-1 并档双端） */}
-              {todayCard}
-            </>
+            <SettingsListEmpty>
+              当前筛选范围内暂无用量数据，可调整时间范围或模型筛选后再试。
+            </SettingsListEmpty>
           )}
         </SettingsSection>
       ) : pageTab === "summary" ? (
@@ -652,46 +826,36 @@ export function TokenUsageStatsView() {
                 <span className="token-stats-card__hint">非流式请求按完成时刻计</span>
               </div>
             </div>
-            {/* 今日卡见 todayCard（非空分支同样独立于筛选） */}
-            {todayCard}
           </SettingsSection>
 
-          <SettingsSection title="分模型汇总" desc="不含命中率列——命中率出口在汇总卡片与选中天汇总行">
-            <div className="token-stats-models">
-              <div className="token-stats-models__row token-stats-models__row--head">
-                <span>模型</span>
-                <span>用量</span>
-                <span>占比</span>
-                <span>调用次数</span>
-              </div>
-              {/* DTO 已按 modelName 聚合（core 的 provider×model 复合维度在 IPC 层归并），modelName 在此唯一，作 React key 无重复风险 */}
-              {sortedModelRows.map((row) => {
-                const share =
-                  summary != null && summary.totalTokens > 0
-                    ? row.totalTokens / summary.totalTokens
-                    : null;
-                return (
-                  <div
-                    key={row.modelName ?? MODEL_OPTION_UNLOGGED}
-                    className="token-stats-models__row"
-                    data-model={row.modelName ?? MODEL_OPTION_UNLOGGED}
-                  >
-                    <span className="token-stats-models__name">
-                      {row.modelName ?? "其他"}
-                    </span>
-                    <span>{formatTokenCount(row.totalTokens)}</span>
-                    <span>{share == null ? "—" : `${Math.round(share * 100)}%`}</span>
-                    <span>{String(row.calls)}</span>
-                  </div>
-                );
-              })}
+          <SettingsSection
+            title="服务商 × 模型"
+            desc="点选扇区或图例查看用量、调用次数与占比"
+          >
+            <div className="token-stats-pie-block">
+              <PieChart
+                slices={pieSlices}
+                selectedKey={selectedSliceKey}
+                onSelect={handleSliceSelect}
+              />
+              {selectedSlice != null ? (
+                <p
+                  className="token-stats-pie-block__detail"
+                  data-slice-detail={selectedSlice.key}
+                >
+                  {selectedSlice.label} · 用量{" "}
+                  {formatTokenCount(selectedSlice.row.totalTokens)} · 调用{" "}
+                  {selectedSlice.row.calls} 次 · 占比{" "}
+                  {selectedSlice.share == null ? "—" : `${Math.round(selectedSlice.share * 100)}%`}
+                </p>
+              ) : null}
             </div>
           </SettingsSection>
         </>
       ) : pageTab === "requests" ? (
         <SettingsSection
           title={`请求流水 · 共 ${reqTotal} 条`}
-          desc="按时间倒序列出范围内的每次 LLM 请求"
+          desc="按时间倒序列出全部历史请求（仅受模型筛选影响）"
         >
           <div className="token-stats-requests">
             <div className="token-stats-requests__row token-stats-requests__row--head">
@@ -733,11 +897,7 @@ export function TokenUsageStatsView() {
                 type="button"
                 className="token-stats-requests__page-btn"
                 disabled={reqLoading || reqPage === 0}
-                onClick={() =>
-                  filter != null
-                    ? void loadRequests(filter, reqPage - 1)
-                    : undefined
-                }
+                onClick={() => void loadRequests(requestsFilter, reqPage - 1)}
               >
                 上一页
               </button>
@@ -757,11 +917,7 @@ export function TokenUsageStatsView() {
                       item === reqPage + 1 ? " token-stats-requests__page-num--active" : ""
                     }`}
                     disabled={reqLoading}
-                    onClick={() =>
-                      filter != null
-                        ? void loadRequests(filter, item - 1)
-                        : undefined
-                    }
+                    onClick={() => void loadRequests(requestsFilter, item - 1)}
                   >
                     {String(item)}
                   </button>
@@ -773,16 +929,42 @@ export function TokenUsageStatsView() {
                 disabled={
                   reqLoading || (reqPage + 1) * REQUESTS_PAGE_SIZE >= reqTotal
                 }
-                onClick={() =>
-                  filter != null
-                    ? void loadRequests(filter, reqPage + 1)
-                    : undefined
-                }
+                onClick={() => void loadRequests(requestsFilter, reqPage + 1)}
               >
                 下一页
               </button>
             </div>
           ) : null}
+        </SettingsSection>
+      ) : rangeKind === "today" ? (
+        // 「今天」模式（T-D4）：跳过按天图（单日柱无信息量），直出当天汇总行 +
+        // 按小时图；当天汇总行取 dailyBuckets 的选中天桶（即唯一桶），无数据日
+        // 显示零值文案。hourly 数据由 selectedDay 自动补选（P1-1）触发拉取。
+        <SettingsSection title="今天 · 按小时分布" desc="当天 0-24 点的输入输出与调用量">
+          <div
+            className="token-stats-view__day-detail"
+            data-day-detail={selectedDay ?? undefined}
+          >
+            <p className="token-stats-view__day-detail-summary">
+              输入 {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).promptTokens)} · 输出{" "}
+              {formatTokenCount((selectedDayBucket ?? ZERO_BUCKET).completionTokens)} · 命中率{" "}
+              {formatHitRate(
+                hitRate(
+                  (selectedDayBucket ?? ZERO_BUCKET).cacheReadTokens,
+                  (selectedDayBucket ?? ZERO_BUCKET).billedInputTokens,
+                ),
+              )}{" "}
+              · 调用 {(selectedDayBucket ?? ZERO_BUCKET).calls} 次 · 平均速率{" "}
+              {formatTokensPerSecond((selectedDayBucket ?? ZERO_BUCKET).avgTokensPerSecond)} · 平均首字延迟{" "}
+              {formatDurationMs((selectedDayBucket ?? ZERO_BUCKET).avgFirstTokenMs)}
+            </p>
+            <TokenStatsChart
+              buckets={hourlyBuckets ?? []}
+              chart="hourly"
+              keyOf={(_b, index) => String(index)}
+              labelOf={(key) => `${Number(key)}时`}
+            />
+          </div>
         </SettingsSection>
       ) : (
         <SettingsSection title="按天用量">
