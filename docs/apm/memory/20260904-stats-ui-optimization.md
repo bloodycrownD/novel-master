@@ -112,3 +112,9 @@ user:
 
 assistant:
 纯样式微调：PieChart 根容器 pieWrap 与条形图 chartCard 同构（borderRadius 12 + 同款内边距），背景由 tokens.surface 注入（与 DetailTab 拼法一致），扇区/详情行/图例都收进卡片。1092 测试+tsc+lint 全绿，commit 8f2619e 附近样式提交；metro reload 即可看效果。
+
+user:
+我是说饼图下面那个 服务商 · 模型（图例）也要白底。
+
+assistant:
+上一轮卡片化只套住了扇区 Svg 层，点选详情行和图例还是卡片外的灰底。重排 PieChart JSX：pieWrap 卡片内嵌扇区+详情行+图例，图例 alignSelf stretch 铺满卡片宽。中途自己改出少一个闭合标签的 JSX 解析错，eslint/tsc 即时抓到补上。1092+tsc+lint 全绿，样式提交收尾。
