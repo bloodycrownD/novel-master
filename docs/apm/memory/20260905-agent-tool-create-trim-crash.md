@@ -1,5 +1,5 @@
 ---
-date: 2026-09-05 23:12
+date: 2026-09-05 23:40
 title: agent 工具 create 裸 TypeError（Cannot read property 'trim' of undefined）根因与修复
 keywords: agent 工具, create, validateAgentDefinition, name 必填, 毒行, 写入门禁
 abstract: LLM 调 agent 工具 create 时 definition 缺顶层 name，registry.upsert 的 def.name.trim() 裸崩；validateAgentDefinition 只查 tools/model 两项，D5「宽松收包交服务层校验」的设计缺口。修复补 name/prompts 守卫 + wire 往返校验；遗留设计点：除 name 外唯一无默认值的是 prompts（persist/dynamic），其余字段均有明确缺省（mode→all、runtime→maxSteps 20、tools→全部）。
@@ -26,3 +26,9 @@ user:
 
 assistant:
 逐字段审计结论：修复后不再有任何裸崩点——类型给错的值都会被守卫或 wire 往返以中文错误拒绝。默认值方面，除 name（身份字段，合理必填）外，唯一没有默认值的是 prompts 一族：域格式要求 prompts 必填且 persist/dynamic 必须是数组（wire 格式倒是 default {}，域侧没跟上；T-AG3 当初 {name, mode} 测试载荷说明本意就是最小 create）。其余全部有明确缺省：mode 省略→"all"（消费侧 d.mode ?? "all"）；runtime 省略→ maxSteps 20（DEFAULT_AGENT_MAX_STEPS）；model 省略→跟随父/聊天模型；tools 省略→全部注册工具（内置 general 即 undefined）；persistEnabled/dynamicEnabled→false；workplace/customAttach→omit 即关；skillsEnabled→omit 即开；skillsPrefix→omit 用默认前缀；description→omit 即无。建议：在 registry 写入门把 prompts 默认成空布局（persist:[]、dynamic:[]），让 {name} 成为最小合法 create、name 成为唯一必填——与「除 name 外都应有默认值」的直觉对齐。另：此轮进行中并行会话把主工作区切到了 feat/token-usage-stats-ui-refresh 跑统计 UI DAG，修复分支的后续操作需走临时 worktree。
+
+user:
+在 worktree 干，而且我一开始不就让你在 worktree 开发吗？
+
+assistant:
+补上啦——在 .worktree/agent-tool-create-validation（仓库惯例位置，RULE.md 有记载：worktree 的 node_modules 是独立目录，新建后须重跑 npm install，tdbc/core dist 也要各自重建）。实现：AgentRegistryService.upsert 写入门先经 withDefaultPromptLayouts 归一化（prompts 缺省补 {persist:[],dynamic:[]}，单个数组缺省各自补 []），再走 validateAgentDefinition；validate 层 prompts 必填守卫保留，只拦绕过 registry 的直接调用方。工具描述与 agent-config 技能文档同步改「prompts 可省略（默认空布局）」。注意：技能文档 seed 幂等不覆盖，已初始化的存量库看到的还是旧文案。测试 +2（最小 {name} create 落盘可读回 / prompts 在但数组缺省补齐且 system 保留），core 全量 1805 通过。提交 c3d2125。
