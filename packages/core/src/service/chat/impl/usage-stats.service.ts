@@ -19,7 +19,6 @@ import type {
   UsageStatsRequestRow,
   UsageStatsService,
   UsageStatsSummary,
-  UsageStatsToday,
 } from "../usage-stats.port.js";
 
 /**
@@ -92,10 +91,15 @@ function providerFilterSql(providerId: string | null | undefined): string {
   return "AND provider_id = #{providerId}";
 }
 
-/** 取 ms 所属本地日的 0 点（DST/月界由 Date 构造器保证正确）。 */
-function startOfLocalDay(ms: number): Date {
-  const d = new Date(ms);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+/**
+ * 时间谓词片断：fromMs/toMs 任一为 null 时不限时间（全历史），
+ * 非空时拼 [fromMs, toMs) 半开区间条件（与 range 可选语义配套）。
+ */
+function timeRangeSql(fromMs: number | null, toMs: number | null): string {
+  if (fromMs == null || toMs == null) {
+    return "";
+  }
+  return "AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}";
 }
 
 /** 以本地日为基点加天数（`days` 可为负）。 */
@@ -103,8 +107,11 @@ function addLocalDays(base: Date, days: number): Date {
   return new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
 }
 
-/** 解析 `YYYY-MM-DD` 为本地日期分量（拒绝溢出日期如 02-30）。 */
-function parseDayLocalDate(dayLocalDate: string): {
+/** 解析 `YYYY-MM-DD` 为本地日期分量（拒绝溢出日期如 02-30；`label` 用于报错指认字段）。 */
+function parseDayLocalDate(
+  dayLocalDate: string,
+  label = "dayLocalDate"
+): {
   year: number;
   month: number;
   day: number;
@@ -112,7 +119,7 @@ function parseDayLocalDate(dayLocalDate: string): {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dayLocalDate);
   if (match == null) {
     throw chatInvalidArgument(
-      `dayLocalDate 须为 YYYY-MM-DD 格式，收到：${dayLocalDate}`
+      `${label} 须为 YYYY-MM-DD 格式，收到：${dayLocalDate}`
     );
   }
   const year = Number(match[1]);
@@ -124,9 +131,15 @@ function parseDayLocalDate(dayLocalDate: string): {
     probe.getMonth() !== month ||
     probe.getDate() !== day
   ) {
-    throw chatInvalidArgument(`dayLocalDate 不是有效日期：${dayLocalDate}`);
+    throw chatInvalidArgument(`${label} 不是有效日期：${dayLocalDate}`);
   }
   return { year, month, day };
+}
+
+/** 本地日期格式化为 `YYYY-MM-DD`（与 strftime 的 day_key 同构）。 */
+function fmtLocalDay(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** 空桶的零值聚合行（DST 空钟点桶直接复用，省一次查询）。 */
@@ -142,18 +155,6 @@ const ZERO_AGG_ROW: Row = {
   avg_tokens_per_second: null,
 };
 
-/**
- * custom 区间跨度（天）：本地日 0 点差 ÷ 24h。
- * Math.round 补偿 DST 的 23/25 小时天（春季拨快日差 23h、秋季拨慢日差 25h），
- * 避免 366 天上限在 DST 日被误判为 366.04 之类而拒收合法区间。
- */
-export function daySpanBetweenLocalDays(
-  fromDayStartMs: number,
-  toDayStartMs: number
-): number {
-  return Math.round((toDayStartMs - fromDayStartMs) / 86_400_000);
-}
-
 /** TDBC-backed 默认统计服务。 */
 export class DefaultUsageStatsService implements UsageStatsService {
   private readonly parser = new SqlTemplateParser();
@@ -161,14 +162,13 @@ export class DefaultUsageStatsService implements UsageStatsService {
   constructor(private readonly conn: TdbcConnection) {}
 
   async getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary> {
-    const { fromMs, toMs } = this.resolveRangeMs(filter.range);
+    const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
     const row = await this.queryAggregateRow(
       fromMs,
       toMs,
       filter.model,
       filter.providerId
     );
-    const today = await this.queryToday();
     return {
       calls: Number(row.calls),
       promptTokens: Number(row.prompt_tokens),
@@ -183,33 +183,58 @@ export class DefaultUsageStatsService implements UsageStatsService {
         row.avg_tokens_per_second == null
           ? null
           : Number(row.avg_tokens_per_second),
-      today,
     };
   }
 
   async getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]> {
-    const { fromMs, toMs } = this.resolveRangeMs(filter.range);
-    const buckets: UsageStatsBucket[] = [];
-    let cursor = startOfLocalDay(fromMs).getTime();
-    while (cursor < toMs) {
-      const dayStart = new Date(cursor);
-      const nextDayMs = addLocalDays(dayStart, 1).getTime();
-      // custom 首尾为部分天时取交集，保证桶数据不越出筛选区间；
-      // bucketStartMs 统一用本地日 0 点，图表按天对齐。
-      const bucketFrom = Math.max(cursor, fromMs);
-      const bucketTo = Math.min(nextDayMs, toMs);
-      if (bucketFrom < bucketTo) {
-        const row = await this.queryAggregateRow(
-          bucketFrom,
-          bucketTo,
-          filter.model,
-          filter.providerId
-        );
-        buckets.push(this.toBucket(cursor, row));
-      }
-      cursor = nextDayMs;
+    // 日桶序列需要界（桶数随天数线性膨胀），护栏挂在这条查询上而非区间类型。
+    if (filter.range == null) {
+      throw chatInvalidArgument("getDailyBuckets 必须提供 range（日桶序列需要界）");
     }
-    return buckets;
+    const { fromMs, toMs } = this.resolveDayRangeMs(filter.range);
+    // 单条 GROUP BY 查询替代旧实现的逐日 N+1：strftime 的 localtime 与
+    // JS Date 同用进程本地时区，DST 日按挂钟日归桶；整数除法截到秒不影响
+    // 日归属（日界切换发生在整秒的 0 点，毫秒截断不可能跨日）。
+    const rows = await queryTemplate<Row>(
+      this.conn,
+      this.parser,
+      `SELECT strftime('%Y-%m-%d', created_at_ms / 1000, 'unixepoch', 'localtime') AS day_key,
+              ${AGG_SELECT_SQL}
+       FROM chat_message
+       WHERE ${USAGE_NOT_NULL_SQL}
+         AND created_at_ms >= #{fromMs}
+         AND created_at_ms < #{toMs}
+         ${modelFilterSql(filter.model)}
+         ${providerFilterSql(filter.providerId)}
+       GROUP BY day_key`,
+      {
+        fromMs,
+        toMs,
+        modelName: filter.model ?? null,
+        providerId: filter.providerId ?? null,
+      }
+    );
+    const rowByDay = new Map<string, Row>();
+    for (const row of rows) {
+      rowByDay.set(String(row.day_key), row);
+    }
+    // JS 侧从 fromDay 起按日历逐日推进（Date 构造器对 DST 安全），
+    // 无数据日复用零值行，保证桶序列稠密且首尾闭区间含两端。
+    const buckets: UsageStatsBucket[] = [];
+    const from = parseDayLocalDate(filter.range.fromDay, "range.fromDay");
+    for (
+      let cursor = new Date(from.year, from.month, from.day);
+      ;
+      cursor = addLocalDays(cursor, 1)
+    ) {
+      const dayKey = fmtLocalDay(cursor);
+      buckets.push(
+        this.toBucket(cursor.getTime(), rowByDay.get(dayKey) ?? ZERO_AGG_ROW)
+      );
+      if (dayKey === filter.range.toDay) {
+        return buckets;
+      }
+    }
   }
 
   async getHourlyBuckets(
@@ -240,15 +265,14 @@ export class DefaultUsageStatsService implements UsageStatsService {
   async getModelBreakdown(
     filter: UsageStatsFilter
   ): Promise<UsageStatsModelRow[]> {
-    const { fromMs, toMs } = this.resolveRangeMs(filter.range);
+    const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
     const rows = await queryTemplate<Row>(
       this.conn,
       this.parser,
       `SELECT provider_id, model_name, ${AGG_SELECT_SQL}
        FROM chat_message
        WHERE ${USAGE_NOT_NULL_SQL}
-         AND created_at_ms >= #{fromMs}
-         AND created_at_ms < #{toMs}
+         ${timeRangeSql(fromMs, toMs)}
          ${modelFilterSql(filter.model)}
          ${providerFilterSql(filter.providerId)}
        GROUP BY provider_id, model_name
@@ -326,10 +350,11 @@ export class DefaultUsageStatsService implements UsageStatsService {
       );
     }
     const offset = Math.max(0, Math.floor(page.offset));
-    const { fromMs, toMs } = this.resolveRangeMs(filter.range);
+    const { fromMs, toMs } = this.resolveOptionalRange(filter.range);
+    // total 与行集同用 whereSql：range 缺省时两者都不含时间谓词（全历史）。
     const whereSql =
       `WHERE ${USAGE_NOT_NULL_SQL}` +
-      ` AND created_at_ms >= #{fromMs} AND created_at_ms < #{toMs}` +
+      ` ${timeRangeSql(fromMs, toMs)}` +
       ` ${modelFilterSql(filter.model)}` +
       ` ${providerFilterSql(filter.providerId)}`;
     const params = {
@@ -397,43 +422,48 @@ export class DefaultUsageStatsService implements UsageStatsService {
   }
 
   /**
-   * 把 range 归一为毫秒区间：last7/last30 = 本地今日 0 点往回 N 天到本地明日 0 点
-   * （含今日全天）；custom 校验必填、from <= to、跨度 <= 366 天。
+   * 把 `{fromDay, toDay}` 闭区间换算为毫秒半开区间：
+   * `[fromDay 本地 0 点, toDay+1 本地 0 点)`。日期格式与合法性由
+   * parseDayLocalDate 校验（拒绝 02-30 等溢出日期），fromDay 晚于
+   * toDay 抛错；闭区间的双端含由 toMs 取 toDay 次日 0 点保证。
    */
-  private resolveRangeMs(range: UsageStatsRange): {
+  private resolveDayRangeMs(range: UsageStatsRange): {
     fromMs: number;
     toMs: number;
   } {
-    if (range.kind === "last7" || range.kind === "last30") {
-      const today0 = startOfLocalDay(Date.now());
-      const back = range.kind === "last7" ? 7 : 30;
-      return {
-        fromMs: addLocalDays(today0, -back).getTime(),
-        toMs: addLocalDays(today0, 1).getTime(),
-      };
+    const from = parseDayLocalDate(range.fromDay, "range.fromDay");
+    const to = parseDayLocalDate(range.toDay, "range.toDay");
+    const fromStart = new Date(from.year, from.month, from.day);
+    const toStart = new Date(to.year, to.month, to.day);
+    if (fromStart.getTime() > toStart.getTime()) {
+      throw chatInvalidArgument(
+        `fromDay 不能晚于 toDay：${range.fromDay} > ${range.toDay}`
+      );
     }
-    const fromMs = Number(range.fromMs);
-    const toMs = Number(range.toMs);
-    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
-      throw chatInvalidArgument("custom 区间必须提供 fromMs 与 toMs");
-    }
-    if (fromMs > toMs) {
-      throw chatInvalidArgument("custom 区间 fromMs 不能晚于 toMs");
-    }
-    const daySpan = daySpanBetweenLocalDays(
-      startOfLocalDay(fromMs).getTime(),
-      startOfLocalDay(toMs).getTime()
-    );
-    if (daySpan > 366) {
-      throw chatInvalidArgument("custom 区间跨度不能超过 366 天");
-    }
-    return { fromMs, toMs };
+    return {
+      fromMs: fromStart.getTime(),
+      toMs: addLocalDays(toStart, 1).getTime(),
+    };
   }
 
-  /** 单区间聚合查询（无 GROUP BY，聚合恒返回一行）。 */
+  /** range 缺省 → (null, null)，聚合/流水查询不限时间（全历史）。 */
+  private resolveOptionalRange(range: UsageStatsRange | undefined): {
+    fromMs: number | null;
+    toMs: number | null;
+  } {
+    if (range == null) {
+      return { fromMs: null, toMs: null };
+    }
+    return this.resolveDayRangeMs(range);
+  }
+
+  /**
+   * 单区间聚合查询（无 GROUP BY，聚合恒返回一行；fromMs/toMs 为
+   * null 时不加时间谓词 = 全历史）。
+   */
   private async queryAggregateRow(
-    fromMs: number,
-    toMs: number,
+    fromMs: number | null,
+    toMs: number | null,
     model: string | null | undefined,
     providerId: string | null | undefined
   ): Promise<Row> {
@@ -443,33 +473,12 @@ export class DefaultUsageStatsService implements UsageStatsService {
       `SELECT ${AGG_SELECT_SQL}
        FROM chat_message
        WHERE ${USAGE_NOT_NULL_SQL}
-         AND created_at_ms >= #{fromMs}
-         AND created_at_ms < #{toMs}
+         ${timeRangeSql(fromMs, toMs)}
          ${modelFilterSql(model)}
          ${providerFilterSql(providerId)}`,
       { fromMs, toMs, modelName: model ?? null, providerId: providerId ?? null }
     );
     return rows[0] ?? ZERO_AGG_ROW;
-  }
-
-  /** 今日卡片（本地今日 0 点起算，不受 filter 的 range/model 影响）。 */
-  private async queryToday(): Promise<UsageStatsToday> {
-    const today0 = startOfLocalDay(Date.now());
-    const rows = await queryTemplate<Row>(
-      this.conn,
-      this.parser,
-      `SELECT COUNT(*) AS calls, COALESCE(SUM(total_tokens), 0) AS total_tokens
-       FROM chat_message
-       WHERE ${USAGE_NOT_NULL_SQL}
-         AND created_at_ms >= #{fromMs}
-         AND created_at_ms < #{toMs}`,
-      {
-        fromMs: today0.getTime(),
-        toMs: addLocalDays(today0, 1).getTime(),
-      }
-    );
-    const row = rows[0] ?? ZERO_AGG_ROW;
-    return { totalTokens: Number(row.total_tokens), calls: Number(row.calls) };
   }
 
   private toBucket(bucketStartMs: number, row: Row): UsageStatsBucket {

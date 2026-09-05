@@ -338,7 +338,6 @@ export type {
   UsageStatsRange,
   UsageStatsFilter,
   UsageStatsSummary,
-  UsageStatsToday,
   UsageStatsBucket,
   UsageStatsModelRow,
   UsageStatsRequestRow,

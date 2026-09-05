@@ -5,16 +5,17 @@
  */
 
 /**
- * 统计时间范围。
+ * 统计时间范围：本地自然日闭区间。
  *
- * - `last7` / `last30`：本地时区今日 0 点往回 7/30 天，覆盖到本地明日 0 点（含今日全天）；
- * - `custom`：调用方给定的毫秒区间，`fromMs`/`toMs` 必填，服务层校验
- *   `from <= to` 且跨度不超过 366 天。
+ * `fromDay` / `toDay` 均为本地时区日期 `YYYY-MM-DD`，双端含（闭区间）。
+ * 服务层内部换算为 `[fromDay 本地 0 点, toDay+1 本地 0 点)` 毫秒半开区间
+ * 参与查询，毫秒值不出现在对外契约。校验仅两项：日期格式/合法性
+ * （拒绝 02-30 等溢出日期）与 `fromDay ≤ toDay`；「近 7/30 天」「今天」
+ * 等命名窗口由应用层算出具体日期后传入。
  */
 export interface UsageStatsRange {
-  readonly kind: "last7" | "last30" | "custom";
-  readonly fromMs?: number;
-  readonly toMs?: number;
+  readonly fromDay: string;
+  readonly toDay: string;
 }
 
 /**
@@ -28,7 +29,12 @@ export interface UsageStatsRange {
  * - 具体字符串：只统计 `model_name` 相等的行。
  */
 export interface UsageStatsFilter {
-  readonly range: UsageStatsRange;
+  /**
+   * 时间范围：缺省语义按查询分级——`getSummary` / `getModelBreakdown` /
+   * `listRequestUsage` 不限时间（全历史）；`getDailyBuckets` 必填，
+   * 否则抛 `chatInvalidArgument`（日桶序列需要界）。
+   */
+  readonly range?: UsageStatsRange;
   readonly model?: string | null;
   /**
    * 服务商筛选（与 model 复合）：
@@ -39,12 +45,6 @@ export interface UsageStatsFilter {
    *   原 id 匹配，展示名由 UI 层解析兑底）。
    */
   readonly providerId?: string | null;
-}
-
-/** 今日卡片子对象（本地时区当日 0 点起算，独立于 filter）。 */
-export interface UsageStatsToday {
-  readonly totalTokens: number;
-  readonly calls: number;
 }
 
 /** 范围内汇总（命中率由展示层用 cacheReadTokens / billedInputTokens 计算）。 */
@@ -73,7 +73,6 @@ export interface UsageStatsSummary {
    * 速率；非流式行 first=duration 不入分母）。无有效行为 null。
    */
   readonly avgTokensPerSecond: number | null;
-  readonly today: UsageStatsToday;
 }
 
 /** 天或小时桶（`bucketStartMs` 为桶起点，本地时区边界）。 */
@@ -137,10 +136,13 @@ export interface UsageStatsRequestPage {
 
 /** Token 用量统计聚合服务。 */
 export interface UsageStatsService {
-  /** 范围内汇总 + 独立于 filter 的今日子对象。 */
+  /** 范围内汇总（`filter.range` 缺省时为全历史）。 */
   getSummary(filter: UsageStatsFilter): Promise<UsageStatsSummary>;
 
-  /** 按本地时区天边界切桶（custom 首尾为部分天时取与区间的交集）。 */
+  /**
+   * 按本地时区天边界切桶，`fromDay` 到 `toDay` 逐日稠密产出（无数据日
+   * 为零值桶）；`filter.range` 必填，否则抛 `chatInvalidArgument`。
+   */
   getDailyBuckets(filter: UsageStatsFilter): Promise<UsageStatsBucket[]>;
 
   /**
@@ -152,12 +154,15 @@ export interface UsageStatsService {
     filter: UsageStatsFilter
   ): Promise<UsageStatsBucket[]>;
 
-  /** 分模型汇总（非配置模型与未记录行归并为 `modelName` 为 null 的「其他」桶）。 */
+  /**
+   * 分模型汇总（非配置模型与未记录行归并为 `modelName` 为 null 的「其他」桶；
+   * `filter.range` 缺省时为全历史）。
+   */
   getModelBreakdown(filter: UsageStatsFilter): Promise<UsageStatsModelRow[]>;
 
   /**
    * 请求流水分页：按时间倒序逐条列出范围（与模型筛选同口径）内的
-   * LLM 请求记录，供「流水」页签展示。
+   * LLM 请求记录，供「流水」页签展示；`filter.range` 缺省时为全历史。
    */
   listRequestUsage(
     filter: UsageStatsFilter,
