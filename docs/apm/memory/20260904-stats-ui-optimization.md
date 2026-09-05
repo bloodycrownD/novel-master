@@ -52,3 +52,9 @@ user:
 
 assistant:
 子代理两连败（pi 版本不兼容依旧），转主代理手工审查（标注）：第 1 轮 No-Go——无 P0，3 条 P1（today 补选竞态机制、脏标记接线落点、饼图占比分母）+3 条 P2 未闭合。6 条均为补实现注级别，满足 trivial 豁免，主代理直接修入 spec（P1-1/2/3 实现注、P2-4/5/6），待第 2 轮复检。
+
+user:
+（code-dev-loop）开工实现。
+
+assistant:
+execute-ready 已确认，进入开发循环。子代理环境已恢复（另一会话修复扩展补丁 + pi-web 重启生效，探针验证通过），DAG 走标准子代理流程：wave-0 impl-core → verify → cr-func → wave-3 impl-desktop ∥ impl-mobile（无文件冲突并行）→ 双端 verify → 双端 cr-func → docs。分支 feat/token-usage-stats-ui-refresh 自 main。
