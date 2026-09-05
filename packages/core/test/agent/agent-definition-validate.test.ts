@@ -109,6 +109,8 @@ describe("validateAgentDefinition 写入门禁（毒行拦截）", () => {
   });
 
   it("prompts 缺失：报 INVALID_SCHEMA 且文案说明必填", async () => {
+    // 分层：registry.upsert 会先补默认空布局再调本函数，此守卫仅拦截
+    // 绕过 registry 的直接调用方（public API / project.service 均自带完整 def）。
     await assert.rejects(
       () =>
         validateAgentDefinition(

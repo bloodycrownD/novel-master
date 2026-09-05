@@ -48,6 +48,30 @@ describe("AgentRegistryService", () => {
     );
   });
 
+  it("prompts 缺省补空布局：仅 name 的最小 create 落盘成功且可读回", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const id = `agent-min-${testIsolationSuffix()}`;
+    await registry.upsert(id, { name: "minimal" } as unknown as AgentDefinition);
+    const loaded = await registry.get(id);
+    assert.deepEqual(loaded.prompts.persist, []);
+    assert.deepEqual(loaded.prompts.dynamic, []);
+  });
+
+  it("prompts 在但 persist / dynamic 数组缺省：各自补空数组，其余字段保留", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const id = `agent-partial-${testIsolationSuffix()}`;
+    await registry.upsert(id, {
+      name: "partial",
+      prompts: { system: "你是翻译" },
+    } as unknown as AgentDefinition);
+    const loaded = await registry.get(id);
+    assert.equal(loaded.prompts.system, "你是翻译");
+    assert.deepEqual(loaded.prompts.persist, []);
+    assert.deepEqual(loaded.prompts.dynamic, []);
+  });
+
   it("AG4: delete removes existing agent", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);

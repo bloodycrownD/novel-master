@@ -279,7 +279,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
       .passthrough()
       .optional()
       .describe(
-        "create/update 必填：完整定义体对象，顶层必含 name，prompts.persist / prompts.dynamic 为块数组（结构对齐 get 的输出）；字段详情先 skill load agent-config"
+        "create/update 必填：完整定义体对象，顶层必含 name（唯一必填字段）；prompts 可省略（默认空布局），prompts.persist / prompts.dynamic 为块数组，也可省略（默认空数组，结构对齐 get 的输出）；字段详情先 skill load agent-config"
       ),
   }),
   outputSchema: z.discriminatedUnion("action", [
