@@ -5,6 +5,7 @@ import type {
   UsageStatsSummary,
 } from '@novel-master/core/chat';
 import {formatTokenCount} from '@novel-master/core/common';
+import {PieChart} from '../../../components/charts/PieChart';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
 import {
@@ -16,7 +17,7 @@ import {
 } from './format';
 import {styles} from './styles';
 
-/** 汇总页签指标小卡；宽卡（wide）独占一行（今日卡），三列卡（third）一行放三个（命中率/速率/首字延迟）。 */
+/** 汇总页签指标小卡；宽卡（wide）独占一行，三列卡（third）一行放三个（命中率/速率/首字延迟）。 */
 function SummaryTile({
   label,
   value,
@@ -59,61 +60,8 @@ function SummaryTile({
 }
 
 /**
- * 今日卡：独立于筛选（服务层 today 子对象口径），范围空态下也保留渲染
- *（mobile/A-1）。供汇总页签与主屏空态共用。
- */
-export function TodayCard({
-  summary,
-  tokens,
-}: {
-  summary: UsageStatsSummary | null;
-  tokens: ThemeTokens;
-}) {
-  return (
-    <View
-      testID="today-card"
-      style={[
-        styles.tile,
-        styles.tileWide,
-        styles.todayCard,
-        {backgroundColor: tokens.surface},
-      ]}
-    >
-      <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
-        今日 · 不受时间范围与模型筛选影响
-      </Text>
-      <View style={styles.todayRow}>
-        <View style={styles.todayMetric}>
-          <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
-            总 token
-          </Text>
-          <Text
-            style={[styles.tileValue, {color: tokens.text}]}
-            numberOfLines={1}
-          >
-            {formatTokenCount(summary?.today.totalTokens ?? 0)}
-          </Text>
-        </View>
-        <View style={styles.todayMetric}>
-          <Text style={[styles.tileLabel, {color: tokens.textSecondary}]}>
-            调用次数
-          </Text>
-          <Text
-            style={[styles.tileValue, {color: tokens.text}]}
-            numberOfLines={1}
-          >
-            {String(summary?.today.calls ?? 0)}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/**
  * 汇总页签（screens/C-4 拆分自主文件）：范围内五指标卡（2 列网格 +
- * 三列一行）+ 今日宽卡 + 分模型列表（模型名 / 用量 / 占比 / 调用次数，
- * 按用量降序，不含命中率列）。
+ * 三列一行）+ 服务商×模型饼图（数据行原样不折叠，点选出固定详情行）。
  */
 export function SummaryTab({
   summary,
@@ -129,10 +77,29 @@ export function SummaryTab({
   rangeLabel: string;
   tokens: ThemeTokens;
 }) {
-  // 聚合数据归汇总页签：分模型列表跟随五指标卡与今日卡展示。
-  const sortedModelRows = useMemo(
-    () => [...modelRows].sort((a, b) => b.totalTokens - a.totalTokens),
-    [modelRows],
+  // 聚合数据归汇总页签：饼图跟随五指标卡展示，数据行原样不折叠、按用量降序。
+  const pieData = useMemo(
+    () =>
+      [...modelRows]
+        .sort((a, b) => b.totalTokens - a.totalTokens)
+        .map(row => ({
+          key: `${row.providerId ?? '__np__'}::${
+            row.modelName ?? '__unlogged__'
+          }`,
+          // label 三态：未记录服务商（历史）兜历史行；名称解析不到兑底
+          // 「未知服务商」；modelName 为 null 归「{服务商} · 其他模型」。
+          label:
+            row.providerId == null
+              ? '未记录服务商（历史）'
+              : row.modelName == null
+              ? `${providerLabels[row.providerId] ?? '未知服务商'} · 其他模型`
+              : `${providerLabels[row.providerId] ?? '未知服务商'} · ${
+                  row.modelName
+                }`,
+          totalTokens: row.totalTokens,
+          calls: row.calls,
+        })),
+    [modelRows, providerLabels],
   );
 
   return (
@@ -201,46 +168,13 @@ export function SummaryTab({
           tokens={tokens}
         />
       </View>
-      <TodayCard summary={summary} tokens={tokens} />
       <ListSectionTitle title="分服务商×模型汇总" tokens={tokens} />
-      {sortedModelRows.map(row => {
-        const share =
-          summary != null && summary.totalTokens > 0
-            ? row.totalTokens / summary.totalTokens
-            : null;
-        const providerLabel =
-          row.providerId != null
-            ? providerLabels[row.providerId] ?? '未知服务商'
-            : '未记录服务商';
-        return (
-          <View
-            key={`${row.providerId ?? '__np__'}::${
-              row.modelName ?? '__unlogged__'
-            }`}
-            style={[
-              styles.modelRow,
-              {
-                backgroundColor: tokens.surface,
-                borderColor: tokens.borderLight,
-              },
-            ]}
-          >
-            <View style={styles.modelRowHead}>
-              <Text style={{color: tokens.text}} numberOfLines={1}>
-                {providerLabel} · {row.modelName ?? '其他'}
-              </Text>
-              <Text style={{color: tokens.textSecondary}}>
-                占比 {share == null ? '—' : `${Math.round(share * 100)}%`}
-              </Text>
-            </View>
-            <Text
-              style={[styles.modelRowDetail, {color: tokens.textSecondary}]}
-            >
-              用量 {formatTokenCount(row.totalTokens)} · 调用 {row.calls} 次
-            </Text>
-          </View>
-        );
-      })}
+      <PieChart
+        testID="provider-model-pie"
+        data={pieData}
+        totalTokens={summary?.totalTokens ?? 0}
+        tokens={tokens}
+      />
     </>
   );
 }

@@ -127,16 +127,36 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  todayCard: {
-    gap: 8,
+  /* 饼图（components/charts/PieChart）：扇区居中，详情行/图例在其下方 */
+  pieWrap: {
+    alignItems: 'center',
+    marginVertical: 8,
   },
-  todayRow: {
-    flexDirection: 'row',
-    gap: 10,
+  pieDetailRow: {
+    marginTop: 4,
   },
-  todayMetric: {
-    flex: 1,
+  pieDetailText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  pieLegend: {
+    marginTop: 8,
     gap: 4,
+  },
+  pieLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  pieLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+  },
+  pieLegendLabel: {
+    flexShrink: 1,
+    fontSize: 13,
   },
   dayDetail: {
     marginTop: 16,
@@ -156,22 +176,6 @@ export const styles = StyleSheet.create({
   inspectText: {
     fontSize: 12,
     lineHeight: 18,
-  },
-  modelRow: {
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 6,
-    marginBottom: 8,
-  },
-  modelRowHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  modelRowDetail: {
-    fontSize: 13,
   },
   backdrop: {
     flex: 1,

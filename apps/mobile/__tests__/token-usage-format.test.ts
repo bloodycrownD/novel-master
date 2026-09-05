@@ -1,17 +1,19 @@
 /**
  * token-usage/format 纯函数单测（screens/C-4 拆分补充）。
  * 覆盖：hitRate 分母边界、formatHitRate 空态、isCustomRangeValid
- * 上/下边界与跨年、toLocalDayKey 本地日键、速率与首字延迟的空态与数值分支。
+ * 顺序校验（无跨度上限）、resolveRangeDays 各 RangeKind 映射、
+ * toLocalDayKey 本地日键、速率与首字延迟的空态与数值分支。
  */
 import {describe, expect, it} from '@jest/globals';
 import {
-  CUSTOM_RANGE_MAX_DAYS,
   SUMMARY_EMPTY_TEXT,
   formatFirstTokenMs,
   formatHitRate,
   formatTokensPerSecond,
   hitRate,
   isCustomRangeValid,
+  localDayKeyOffset,
+  resolveRangeDays,
   toLocalDayKey,
 } from '@/screens/stack/token-usage/format';
 
@@ -44,39 +46,58 @@ describe('token-usage/format', () => {
   });
 
   describe('isCustomRangeValid', () => {
-    it('同一天有效（含首尾 1 天）', () => {
+    it('同一天有效', () => {
       expect(
         isCustomRangeValid(new Date(2026, 0, 1), new Date(2026, 0, 1)),
       ).toBe(true);
     });
 
-    it('恰好 366 天有效（含首尾）', () => {
+    it('十年区间也有效（跨度不设上限，T-M6）', () => {
       expect(
-        isCustomRangeValid(new Date(2025, 0, 1), new Date(2025, 11, 31)),
+        isCustomRangeValid(new Date(2016, 0, 1), new Date(2026, 0, 1)),
       ).toBe(true);
     });
 
-    it('367 天无效（超上限）', () => {
-      expect(
-        isCustomRangeValid(new Date(2025, 0, 1), new Date(2026, 0, 2)),
-      ).toBe(false);
-    });
-
-    it('to 早于 from 无效（天数为负）', () => {
+    it('to 早于 from 无效', () => {
       expect(
         isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
       ).toBe(false);
     });
+  });
 
-    it('跨年区间按天数判定', () => {
-      // 2025-12-01 → 2026-01-31 共 62 天，有效。
-      expect(
-        isCustomRangeValid(new Date(2025, 11, 1), new Date(2026, 0, 31)),
-      ).toBe(true);
+  describe('resolveRangeDays（RangeKind → 自然日闭区间）', () => {
+    it('today = {D, D}', () => {
+      const now = new Date();
+      expect(resolveRangeDays('today', null, null)).toEqual({
+        fromDay: toLocalDayKey(now.getTime()),
+        toDay: toLocalDayKey(now.getTime()),
+      });
     });
 
-    it('上限常量为 366', () => {
-      expect(CUSTOM_RANGE_MAX_DAYS).toBe(366);
+    it('last7 = {D-6, D}、last30 = {D-29, D}（日历偏移，T-M2）', () => {
+      const now = new Date();
+      expect(resolveRangeDays('last7', null, null)).toEqual({
+        fromDay: localDayKeyOffset(now, -6),
+        toDay: toLocalDayKey(now.getTime()),
+      });
+      expect(resolveRangeDays('last30', null, null)).toEqual({
+        fromDay: localDayKeyOffset(now, -29),
+        toDay: toLocalDayKey(now.getTime()),
+      });
+    });
+
+    it('custom 由选择器结果产日期字符串', () => {
+      expect(
+        resolveRangeDays('custom', new Date(2026, 2, 7), new Date(2026, 2, 8)),
+      ).toEqual({fromDay: '2026-03-07', toDay: '2026-03-08'});
+    });
+
+    it('custom 未选定日期时兑底回退近 7 天（类型完备分支）', () => {
+      const now = new Date();
+      expect(resolveRangeDays('custom', null, null)).toEqual({
+        fromDay: localDayKeyOffset(now, -6),
+        toDay: toLocalDayKey(now.getTime()),
+      });
     });
   });
 

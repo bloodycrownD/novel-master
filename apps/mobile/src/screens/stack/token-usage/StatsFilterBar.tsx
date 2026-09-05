@@ -1,5 +1,5 @@
 import React from 'react';
-import {Pressable, ScrollView, Text, View} from 'react-native';
+import {Pressable, ScrollView, Text} from 'react-native';
 import {AppModal} from '../../../components/ui/AppModal';
 import {SegmentedControl} from '../../../components/ui/SegmentedControl';
 import {MonthRangePickerSheet} from '../../../components/ui/MonthRangePickerSheet';
@@ -89,6 +89,11 @@ export function StatsFilterBar({
     <>
       <SegmentedControl
         options={[
+          {
+            value: 'today' as RangeKind,
+            label: '今天',
+            testID: 'range-today',
+          },
           {
             value: 'last7' as RangeKind,
             label: '近 7 天',
