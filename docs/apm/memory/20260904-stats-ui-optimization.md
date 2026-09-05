@@ -52,3 +52,9 @@ user:
 
 assistant:
 子代理两连败（pi 版本不兼容依旧），转主代理手工审查（标注）：第 1 轮 No-Go——无 P0，3 条 P1（today 补选竞态机制、脏标记接线落点、饼图占比分母）+3 条 P2 未闭合。6 条均为补实现注级别，满足 trivial 豁免，主代理直接修入 spec（P1-1/2/3 实现注、P2-4/5/6），待第 2 轮复检。
+
+user:
+（继续 spec-check-loop）第 2 轮复检结果？
+
+assistant:
+手工复检（子代理仍不可用）：六条修正全部实证闭合（spec L61-63/L90），无新增 P0，等效 Go——execute-ready 达成。iteration-state 重写为当前迭代状态（旧 .woktree 编排段作废），状态=execute-ready 待用户确认。审查共 2 轮，均手工（trivial 豁免由主代理直接修入实现注）。
