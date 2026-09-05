@@ -20,12 +20,12 @@ describe("PersistentState / PersistentPreferences multi-consumer", () => {
     assert.equal(await b.getCurrentProjectId(), "shared-project");
   });
 
-  it("two preferences instances on same connection see versionCheck", async () => {
+  it("two preferences instances on same connection see llmStream", async () => {
     const ctx = getNovelMasterTestContext();
     const a = createPersistentPreferences(ctx.conn);
     const b = createPersistentPreferences(ctx.conn);
-    await a.setSessionFsVersionCheck(false);
-    assert.equal(await b.getSessionFsVersionCheck(), false);
+    await a.setLlmStreamEnabled(false);
+    assert.equal(await b.getLlmStreamEnabled(), false);
   });
 
   it("does not read legacy global-config module", async () => {

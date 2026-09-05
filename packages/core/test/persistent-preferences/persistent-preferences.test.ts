@@ -9,41 +9,24 @@ import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix 
 novelMasterTestFixture();
 
 describe("PersistentPreferences", () => {
-  it("versionCheck defaults to true when unset", async () => {
-    const ctx = getNovelMasterTestContext();
-    assert.equal(await ctx.preferences.getSessionFsVersionCheck(), true);
-  });
-
-  it("set false / true round-trips", async () => {
-    const ctx = getNovelMasterTestContext();
-    await ctx.preferences.setSessionFsVersionCheck(false);
-    assert.equal(await ctx.preferences.getSessionFsVersionCheck(), false);
-    await ctx.preferences.setSessionFsVersionCheck(true);
-    assert.equal(await ctx.preferences.getSessionFsVersionCheck(), true);
-  });
-
-  it("reset restores default true", async () => {
-    const ctx = getNovelMasterTestContext();
-    await ctx.preferences.setSessionFsVersionCheck(false);
-    await ctx.preferences.resetSessionFsVersionCheck();
-    assert.equal(await ctx.preferences.getSessionFsVersionCheck(), true);
-  });
-
   it("throws PreferencesError on invalid stored boolean", async () => {
     const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
-    await kkv.set("nm-preferences", "session-fs.versionCheck", "not-a-bool");
+    await kkv.set("nm-preferences", "chat.llmStream", "not-a-bool");
     await assert.rejects(
-      () => ctx.preferences.getSessionFsVersionCheck(),
+      () => ctx.preferences.getLlmStreamEnabled(),
       (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
     );
+    // 清理：同库后续用例（v2 defaults）会读到该键，不能留脏值
+    await ctx.preferences.resetLlmStreamEnabled();
   });
 
   it("lists preference entries sorted by key", async () => {
     const ctx = getNovelMasterTestContext();
-    await ctx.preferences.setSessionFsVersionCheck(false);
+    await ctx.preferences.setLlmStreamEnabled(false);
     const list = await ctx.preferences.list();
-    assert.deepEqual(list, [{ key: "session-fs.versionCheck", value: "false" }]);
+    assert.deepEqual(list, [{ key: "chat.llmStream", value: "false" }]);
+    await ctx.preferences.resetLlmStreamEnabled();
   });
 
   describe("v2 defaults (C1)", () => {

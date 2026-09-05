@@ -54,10 +54,8 @@ import {
 } from './handlers/shell.js';
 import {
   handlePreferencesGetLlmStream,
-  handlePreferencesGetSessionFsVersionCheck,
   handlePreferencesGetThinkingContext,
   handlePreferencesSetLlmStream,
-  handlePreferencesSetSessionFsVersionCheck,
   handlePreferencesSetThinkingContext,
 } from './handlers/preferences.js';
 import {
@@ -311,14 +309,6 @@ export function registerHandlersFromRegistry(): void {
 
   bindReq(IPC_CHANNELS.COMPACTION_MANUAL, handleCompactionManual);
 
-  bindNoArg(
-    IPC_CHANNELS.PREFERENCES_GET_SESSION_FS_VERSION_CHECK,
-    handlePreferencesGetSessionFsVersionCheck,
-  );
-  bindBool(
-    IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
-    handlePreferencesSetSessionFsVersionCheck,
-  );
   bindNoArg(
     IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,
     handlePreferencesGetLlmStream,

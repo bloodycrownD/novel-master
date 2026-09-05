@@ -1211,7 +1211,7 @@ describe("AgentRunner", () => {
     assert.ok(!resultBlock.content.includes("/sessions/"));
   });
 
-  it("T-AR-02: write version conflict tool_result includes [CONFLICT]", async () => {
+  it("T-AR-02: write 工具不再有版本冲突：stale options 被 schema 剥离，last-write-wins 成功", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -1272,9 +1272,10 @@ describe("AgentRunner", () => {
     });
 
     const resultBlock = await firstToolResultBlock(session.id);
-    assert.equal(resultBlock.ok, false);
-    assert.ok(resultBlock.content.includes("[CONFLICT]"));
-    assert.ok(resultBlock.content.includes("expected 1, actual 2"));
+    // 版本参数已从 write 工具移除：stale options 被忽略，覆盖成功无 [CONFLICT]
+    assert.equal(resultBlock.ok, true);
+    assert.ok(!resultBlock.content.includes("[CONFLICT]"));
+    assert.equal((await vfs.read("/conflict.txt")).content, "stale");
     assert.ok(!resultBlock.content.includes("/projects/"));
     assert.ok(!resultBlock.content.includes("/sessions/"));
   });

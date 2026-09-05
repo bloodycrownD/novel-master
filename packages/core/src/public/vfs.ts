@@ -26,7 +26,6 @@ export {
   buildUserVfsRenameOp,
   buildUserVfsSaveOp,
 } from "../service/vfs/build-user-vfs-turn-op.js";
-export type { UserVfsSaveVersionOptions } from "../service/vfs/build-user-vfs-turn-op.js";
 export { buildVfsZip } from "../domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "../domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipError } from "../errors/vfs-zip-errors.js";

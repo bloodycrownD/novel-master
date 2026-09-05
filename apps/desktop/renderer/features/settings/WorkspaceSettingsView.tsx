@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { SESSION_FS_LABELS } from "@shared/logic/config-forms-shared";
 import {
   ipcAgentListPicker,
   ipcAgentResolveCurrent,
@@ -11,10 +10,8 @@ import {
   ipcModelListPicker,
   ipcModelSetCurrent,
   ipcPreferencesGetLlmStream,
-  ipcPreferencesGetSessionFsVersionCheck,
   ipcPreferencesGetThinkingContext,
   ipcPreferencesSetLlmStream,
-  ipcPreferencesSetSessionFsVersionCheck,
   ipcPreferencesSetThinkingContext,
   ipcRegexListPicker,
   ipcRegexSetCurrent,
@@ -44,7 +41,6 @@ export function WorkspaceSettingsView() {
   const [llmStream, setLlmStream] = useState(true);
   const [thinkingContext, setThinkingContext] = useState(true);
   const [chatRichText, setChatRichText] = useState(true);
-  const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(false);
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
   // hideStartDepth 默认值 6，对齐 core 的 DEFAULT_HIDE_START_DEPTH
@@ -58,14 +54,13 @@ export function WorkspaceSettingsView() {
   const [currentRegexId, setCurrentRegexId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
-    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes, compactionRes, thinkingRes] =
+    const [agentRes, modelRes, regexRes, streamRes, richRes, compactionRes, thinkingRes] =
       await Promise.all([
         ipcAgentResolveCurrent(),
         ipcModelListPicker(),
         ipcRegexListPicker(),
         ipcPreferencesGetLlmStream(),
         ipcAppUiGet(KEY_CHAT_RICH_TEXT),
-        ipcPreferencesGetSessionFsVersionCheck(),
         ipcCompactionConditionsGet(),
         ipcPreferencesGetThinkingContext(),
       ]);
@@ -110,9 +105,6 @@ export function WorkspaceSettingsView() {
       setChatRichText(
         richRes.data != null ? richRes.data !== "false" : true,
       );
-    }
-    if (vfsRes.ok) {
-      setSessionFsVersionCheck(vfsRes.data);
     }
     if (compactionRes.ok && compactionRes.data) {
       setCompactionEnabled(compactionRes.data.enabled);
@@ -252,14 +244,6 @@ export function WorkspaceSettingsView() {
             onChange={async (next) => {
               setChatRichText(next);
               await ipcAppUiSet(KEY_CHAT_RICH_TEXT, next ? "true" : "false");
-            }}
-          />
-          <SettingsSwitchRow
-            label={SESSION_FS_LABELS.title}
-            checked={sessionFsVersionCheck}
-            onChange={async (next) => {
-              setSessionFsVersionCheck(next);
-              await ipcPreferencesSetSessionFsVersionCheck(next);
             }}
           />
         </SettingsRows>

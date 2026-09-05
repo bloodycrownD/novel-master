@@ -9,13 +9,6 @@
  */
 export interface PersistentPreferences {
   /**
-   * Session FS optimistic version check (default `true` when unset).
-   */
-  getSessionFsVersionCheck(): Promise<boolean>;
-  setSessionFsVersionCheck(enabled: boolean): Promise<void>;
-  resetSessionFsVersionCheck(): Promise<void>;
-
-  /**
    * LLM chat SSE streaming (default `true` when unset).
    */
   getLlmStreamEnabled(): Promise<boolean>;

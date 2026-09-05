@@ -155,10 +155,6 @@ export async function handleVfsWrite(
         req.content,
         req.path,
         req.content,
-        {
-          expectedVersion: req.expectedVersion,
-          versionCheck: req.versionCheck,
-        },
       );
       if (op != null) {
         await executeSessionUserVfsOp(rt, scope.sessionId, op);

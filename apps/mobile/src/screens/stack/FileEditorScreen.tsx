@@ -184,10 +184,6 @@ export function FileEditorScreen() {
           vfs,
           path,
           content,
-          {
-            expectedVersion: version,
-            versionCheck: version != null,
-          },
           savedContent,
         );
         setSavedContent(content);

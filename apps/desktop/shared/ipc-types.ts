@@ -111,10 +111,6 @@ export const IPC_CHANNELS = {
 
   COMPACTION_MANUAL: 'nm:compaction/manual',
 
-  PREFERENCES_GET_SESSION_FS_VERSION_CHECK:
-    'nm:preferences/getSessionFsVersionCheck',
-  PREFERENCES_SET_SESSION_FS_VERSION_CHECK:
-    'nm:preferences/setSessionFsVersionCheck',
   PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
   PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
   PREFERENCES_GET_THINKING_CONTEXT: 'nm:preferences/getThinkingContext',
