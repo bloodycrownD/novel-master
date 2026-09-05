@@ -58,9 +58,9 @@ JS 侧从 `fromDay` 起按日历推进（`new Date(y, m, d+1)`，DST 安全）�
 - `RangeKind` 扩为 `'today' | 'last7' | 'last30' | 'custom'`，映射：today = `{D, D}`、last7 = `{D-6, D}`、last30 = `{D-29, D}`、custom = 选择器日期。删 custom 366 天校验（保留 from ≤ to）
 - 今日卡：移动端删 `SummaryTab` 底部与 rangeEmpty 空态两处渲染；桌面删 `todayCard` JSX 及两处使用，空态仅保留文案
 - 「明细」label →「图表」，testID（`stats-tab-detail`）与桌面结构选择器保持不变，压低测试破坏面
-- 「今天」直出小时图：reload 重置 `selectedDay` 后，`rangeKind === 'today'` 时自动补选今天（`toLocalDayKey(Date.now())`）；图表页在 today 模式下隐藏按天图区块，直接渲染「当天汇总行 + 24 小时图」（当天汇总行数据取自 dailyBuckets 的唯一桶）
-- 饼图：替换汇总页签的服务商×模型列表。数据 = `getModelBreakdown` 行原样（不折叠）；label 组合：`{服务商} · {模型}`、`{服务商} · 其他模型`（modelName null）、`未记录服务商（历史）`（providerId null）、`未知服务商`（名称解析不到）。点选扇区或图例 → 图下方**固定详情行**展示用量 / 调用次数 / 占比（沿用 bar-inspect 惯例，规避浮层手势冲突）。色板：主题 tokens 主色系循环取色
-- 流水解绑：流水查询使用**无 range** 的 filter（保留 model/providerId）；脏标记仅由模型/组合筛选变化置位，时间筛选变化不置位、不重拉
+- 「今天」直出小时图：reload 重置 `selectedDay` 后，`rangeKind === 'today'` 时自动补选今天（`toLocalDayKey(Date.now())`）；图表页在 today 模式下隐藏按天图区块，直接渲染「当天汇总行 + 24 小时图」（当天汇总行数据取自 dailyBuckets 的唯一桶）。**实现注（P1-1）**：补选必须写进 reload 成功分支（`rangeKind === 'today'` 时重置为 todayKey 而非 null），不得挂独立 effect——reload 成功回调会无条件清 selectedDay，独立 effect 的补选会被后到的回调抹掉（双端同构）
+- 饼图：替换汇总页签的服务商×模型列表。数据 = `getModelBreakdown` 行原样（不折叠）；label 组合：`{服务商} · {模型}`、`{服务商} · 其他模型`（modelName null）、`未记录服务商（历史）`（providerId null）、`未知服务商`（名称解析不到）。点选扇区或图例 → 图下方**固定详情行**展示用量 / 调用次数 / 占比（沿用 bar-inspect 惯例，规避浮层手势冲突）。**实现注（P1-3）**：占比分母沿用现有列表口径 = 窗口 `summary.totalTokens`；**（P2-5）**色板为双端各自的固定循环色板常量（主题 tokens 主色系派生，同序），不各自发明；**（P2-6）**桌面 SVG 扇区沿用 TokenStatsChart 的 button 包装惯例保障键盘可达
+- 流水解绑：流水查询使用**无 range** 的 filter（保留 model/providerId）；**实现注（P1-2）**：移出 reload 成功路径的无条件 `reqDirtyRef.current = true`，改为独立 effect 监听模型/组合筛选（mobile comboFilter / desktop modelFilter）变化置脏——否则切时间仍会重拉流水，需求①回归
 
 ## 最终项目结构
 
@@ -87,7 +87,7 @@ apps/mobile/__tests__/token-usage-stats-screen.test.tsx    改（T-M*）
 | core | usage-stats.port.ts | Range → {fromDay,toDay}；Filter.range 可选；删 UsageStatsToday/Summary.today |
 | core | usage-stats.service.ts | resolveRangeMs 重写（日期校验+日界换算）；getDailyBuckets 单条 GROUP BY+稠密补零；summary/model/requests 支持无 range；daily 缺 range 抛错；删 queryToday、daySpanBetweenLocalDays |
 | desktop | ipc-types.ts / usage-stats.ts | RangeDto/FilterDto/SummaryDto/ModelRowDto(providerId) 四处；toCoreFilter 适配 |
-| desktop | TokenUsageStatsView.tsx | RangeKind+today；删今日卡与空态挂载；label 图表；today 直出 hourly；内嵌 PieChart（SVG path）+详情行；流水 filter 无 range、脏标记只挂模型筛选；libraryEmpty 探底改 {fromDay,toDay}；customRangeError 删 366 |
+| desktop | TokenUsageStatsView.tsx | RangeKind+today；删今日卡与空态挂载；label 图表；today 直出 hourly（含 P1-1 竞态实现注）；内嵌 PieChart（SVG path）+详情行；流水 filter 无 range、脏标记只挂模型筛选（P1-2）；models 查询去 dummy range（P2-4）；libraryEmpty 探底改 {fromDay,toDay}；customRangeError 删 366 |
 | desktop | shell.css | 饼图类族 |
 | mobile | TokenUsageStatsScreen.tsx + token-usage/* | 同桌面镜像；StatsFilterBar 加「今天」段；DetailTab today 模式；SummaryTab 删 TodayCard、列表换 PieChart；format.ts 删 CUSTOM_RANGE_MAX_DAYS/isCustomRangeValid 的 366 逻辑 |
 | mobile | components/charts/PieChart.tsx | 新组件：react-native-svg 扇区 + 可点图例 + 选中态 |

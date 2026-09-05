@@ -46,3 +46,9 @@ user:
 
 assistant:
 手工探索后落盘 spec：docs/Iterations/token-usage-stats-ui-refresh/spec.md。时间模型定稿：{fromDay,toDay} 闭区间、range 可选（summary/model/requests 缺省全量，daily 必须 range）、getDailyBuckets 改单条 strftime localtime GROUP BY+JS 稠密补零、删 last7/last30/366/queryToday/daySpan 差值函数；近7天修正为 7 桶。桌面 DTO 透传 providerId、内嵌 SVG 饼图；移动端新 PieChart 组件（react-native-svg）。5 个 Step（core→ipc→desktop→mobile→docs）、T-C1..7/T-D1..6/T-M1..7 用例矩阵。待用户确认 spec。
+
+user:
+（spec-check-loop 流程）审查 spec 是否 execute-ready。
+
+assistant:
+子代理两连败（pi 版本不兼容依旧），转主代理手工审查（标注）：第 1 轮 No-Go——无 P0，3 条 P1（today 补选竞态机制、脏标记接线落点、饼图占比分母）+3 条 P2 未闭合。6 条均为补实现注级别，满足 trivial 豁免，主代理直接修入 spec（P1-1/2/3 实现注、P2-4/5/6），待第 2 轮复检。
