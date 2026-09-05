@@ -120,7 +120,7 @@ export function PieChart({
 
   return (
     <View testID={testID}>
-      <View style={styles.pieWrap}>
+      <View style={[styles.pieWrap, {backgroundColor: tokens.surface}]}>
         <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
           {sectors.map(({datum, start, end, sweep}, index) => {
             const color = palette[index % palette.length];

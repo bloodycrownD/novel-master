@@ -131,6 +131,9 @@ export const styles = StyleSheet.create({
   pieWrap: {
     alignItems: 'center',
     marginVertical: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
   },
   pieDetailRow: {
     marginTop: 4,
