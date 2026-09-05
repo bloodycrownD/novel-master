@@ -61,7 +61,7 @@ JS 侧从 `fromDay` 起按日历推进（`new Date(y, m, d+1)`，DST 安全）�
 - 今日卡：移动端删 `SummaryTab` 底部与 rangeEmpty 空态两处渲染；桌面删 `todayCard` JSX 及两处使用，空态仅保留文案
 - 「明细」label →「图表」，testID（`stats-tab-detail`）与桌面结构选择器保持不变，压低测试破坏面
 - 「今天」直出小时图：reload 重置 `selectedDay` 后，`rangeKind === 'today'` 时自动补选今天（`toLocalDayKey(Date.now())`）；图表页在 today 模式下隐藏按天图区块，直接渲染「当天汇总行 + 24 小时图」（当天汇总行数据取自 dailyBuckets 的唯一桶）。**实现注（P1-1）**：补选必须写进 reload 成功分支（`rangeKind === 'today'` 时重置为 todayKey 而非 null），不得挂独立 effect——reload 成功回调会无条件清 selectedDay，独立 effect 的补选会被后到的回调抹掉（双端同构）
-- 饼图：替换汇总页签的服务商×模型列表。数据 = `getModelBreakdown` 行原样（不折叠）；label 组合：`{服务商} · {模型}`、`{服务商} · 其他模型`（modelName null）、`未记录服务商（历史）`（providerId null）、`未知服务商`（名称解析不到）。点选扇区或图例 → 图下方**固定详情行**展示用量 / 调用次数 / 占比（沿用 bar-inspect 惯例，规避浮层手势冲突）。**实现注（P1-3）**：占比分母沿用现有列表口径 = 窗口 `summary.totalTokens`；**（P2-5）**色板为双端各自的固定循环色板常量（主题 tokens 主色系派生，同序），不各自发明；**（P2-6）**桌面 SVG 扇区沿用 TokenStatsChart 的 button 包装惯例保障键盘可达
+- 饼图：替换汇总页签的服务商×模型列表。数据 = `getModelBreakdown` 行原样（不折叠；**providerId 为 null 的历史行在 core 已合并为单行**）；label 组合：`{服务商} · {模型}`、`{服务商} · 其他模型`（modelName null）、`未记录服务商`（providerId null——单一合并切片，不按模型拆分、不带「（历史）」后缀）、`未知服务商`（名称解析不到）。点选扇区或图例 → 图下方**固定详情行**展示用量 / 调用次数 / 占比（沿用 bar-inspect 惯例，规避浮层手势冲突）。**实现注（P1-3）**：占比分母沿用现有列表口径 = 窗口 `summary.totalTokens`；**（P2-5）**色板为双端各自的固定循环色板常量（主题 tokens 主色系派生，同序），不各自发明；**（P2-6）**桌面 SVG 扇区沿用 TokenStatsChart 的 button 包装惯例保障键盘可达
 - 流水跟随时间（需求①勘误）：流水查询使用**含 range** 的完整 filter（模型/服务商叠加）；**实现注（P1-2·勘误后）**：时间或模型/组合筛选变化均需置流水脏标记并重拉——恢复 reload 成功路径置脏（或等价的全 filter 依赖 effect）即可，不再豁免时间维度；窗口空（库非空）时流水页签与其他页签统一显示区间空态，「空态只拦汇总/图表」的旧修复随勘误回退，libraryEmpty 冷启动不变
 
 ## 最终项目结构

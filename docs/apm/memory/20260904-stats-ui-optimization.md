@@ -100,3 +100,9 @@ user:
 
 assistant:
 需求①从 brain-storm 起方向就记反了（PRD 问题背景、spec、双轮审查全顺着「解绑」走完）。用户拍板勘误后整链路反转：docs 085123d（PRD 验收第一条/spec 设计与测试矩阵/CHANGELOG 删解绑条目——该行为从未发布不进 changelog）；双端并行反转 36d2c1c/60cb63f——流水查询恢复含 range、置脏 effect 挂完整 filter（时间/模型变化都重拉）、窗口空时三页签统一空态（6665370/1e40205 的「流水绕过空态」随之回退，因流水已随窗口、空窗口流水本就该空）。desktop 106/106、mobile 1092/1092、整仓 typecheck 0，cr-func-reverse func-ready。dev-ready（勘误后），流水随窗口过滤列入真机验收项。行为定稿：时间筛选约束全部三页签，模型/服务商筛选叠加；「翻全部历史」用自定义区间（366 上限已删）。
+
+user:
+未记录服务商（历史）是什么？还有多个。→ 都放一个切片，谁能分清楚，拆开没用；「历史」后缀也移除。
+
+assistant:
+解释后用户拍板收口：历史行（provider_id NULL，1.5.9 快照机制前的统计行）在饼图按模型拆成多个同前缀切片没法分辨——core getModelBreakdown 归并段改为 null-provider 行全并单行（modelName null、用量相加，其余 provider 的其他模型桶不动，49cb0d4）；双端 label 固定「未记录服务商」不拼模型后缀、全仓去「（历史）」残留（d02a7a4/d0dd9a8，含移动端下拉与回显）。三端全绿（core 1794/desktop 106/mobile 1092），cr-func 零偏差。1.5.9 已发布 changelog 的旧文案不改。
