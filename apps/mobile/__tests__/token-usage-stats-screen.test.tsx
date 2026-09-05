@@ -4,7 +4,8 @@
  * - 入口：ProfileTabScreen CONFIG_MENU「数据统计」项 navigate TokenUsageStats；
  * - 「汇总 / 图表 / 流水」三页签：筛选栏置顶共享（切页签不重查、筛选状态
  *   跨页签保留）；汇总页签五指标卡 + 服务商×模型饼图（今日卡已删）；
- *   图表页签柱状图 / 小时钻取（今天模式直出小时图）；流水与时间解绑；
+ *   图表页签柱状图 / 小时钻取（今天模式直出小时图）；流水随时间窗口
+ *   （需求①勘误后，模型/服务商叠加）；
  * - 筛选切换重查：时间范围 / 模型筛选切换后 stub 的 usageStats 方法收到新
  *   filter 参数；CR-2 方案 A：两类归并选项传参与选项覆盖 parity（每个
  *   (providerId, modelName) 组合至少被一个筛选项命中）；
@@ -13,12 +14,12 @@
  * - 刷新单通道（mobile/B-2）：挂载与筛选切换各只触发一轮三连查询；
  * - 主查询竞态（cross/B-1）：旧响应后到不覆盖新数据；
  * - 空态区分（mobile/A-1）：库全空冷启动引导（拦全部页签）vs 范围内
- *   无数据（只拦汇总/图表，流水页签窗口空时仍渲染全历史，PRD 验收①）；
+ *   无数据（拦全部页签，流水随时间窗口，需求①勘误后）；
  *   饼图占比分母用窗口 summary.totalTokens 且人为错开行总和（P1-3 锁口径）；
  * - 加载失败（mobile/C-orch-2）：常驻错误条 + 不渲染 0 兜底卡片；
  * - MonthRangePickerSheet 组件级选值回调 + 自定义区间正常路径（无上限）。
  * - T-M1..T-M7：今天映射/近 7·30 天恰 7·30 桶/今日卡全删/饼图渲染与点选/
- *   流水解绑/自定义无上限/PieChart 组件级交互。
+ *   流水跟随时间/自定义无上限/PieChart 组件级交互。
  *
  * 照 session-detail-screen.test.tsx 范式：mock useRuntime 返回固定引用 runtime
  * （新对象字面量会导致 effect 无限重跑）；AppModal 只在 visible 时渲染 children。
@@ -936,10 +937,10 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(findByTestId(renderer.root, 'daily-chart')).toBeUndefined();
   });
 
-  it('窗口空 + 流水页签：流水仍渲染全历史且 filter 无 range，不被空态拦（PRD 验收①）', async () => {
-    // 窗口空（今天还没用量）但库有历史：流水与时间解绑，流水页签
-    // 不受「该区间无数据」拦截，照常拉取并渲染全历史（PRD 验收①：
-    // 任意时间筛选下流水页展示全部历史请求，不受窗口截断）。
+  it('窗口空 + 流水页签：与其他页签统一显示区间空态，不渲染流水行（需求①勘误）', async () => {
+    // 窗口空（今天还没用量）但库有历史：流水随时间窗口（勘误后不再解绑），
+    // 切到流水页签与其他页签统一被「该区间无数据」拦住——不渲染流水行
+    // 与页码条（拉取照发但 filter 含 range，数据层与展示层口径一致）。
     mockGetSummary.mockResolvedValue({
       calls: 0,
       promptTokens: 0,
@@ -958,17 +959,11 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
       await flushPromises();
     });
-    // 流水页签正常拉取：filter 无 range（全历史，仅模型/服务商两维）。
-    expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
-    expect(mockListRequestUsage.mock.calls[0]![0]).toEqual({
-      model: undefined,
-      providerId: undefined,
-    });
-    // 空态不再拦截：流水内容与页码条在场渲染。
-    expect(findByTestId(renderer.root, 'empty-range')).toBeUndefined();
+    // 空态仍在场拦住流水：无流水行、无页码条。
+    expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
     expect(findByTestId(renderer.root, 'empty-cold-start')).toBeUndefined();
-    expect(findByTestId(renderer.root, 'req-page-1')).toBeTruthy();
-    expect(nodeText(renderer.root)).toContain('首字延迟 900 ms');
+    expect(findByTestId(renderer.root, 'req-page-1')).toBeUndefined();
+    expect(nodeText(renderer.root)).not.toContain('首字延迟 900 ms');
   });
 
   it('首查失败渲染常驻错误条而非 0 值卡片，成功后清除（mobile/C-orch-2）', async () => {
@@ -1448,26 +1443,33 @@ describe('T-S7 请求流水页签（分页）', () => {
     });
   });
 
-  it('流水解绑：时间变化不重拉流水，组合筛选变化重拉且 filter 无 range（T-M5）', async () => {
+  it('流水跟随时间：改时间重拉且 filter 含 range；改组合筛选重拉且叠加 model/providerId（T-M5）', async () => {
     const renderer = await renderScreen();
     await act(async () => {
       findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
       await flushPromises();
     });
     expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
-    // 首拉 filter 不含 range：全历史，仅模型/服务商两维。
+    // 首拉 filter 含 range（last7 窗口，与汇总/图表同窗口）。
     expect(mockListRequestUsage.mock.calls[0]![0]).toEqual({
+      range: {fromDay: dayKeyOffset(-6), toDay: todayKey()},
       model: undefined,
       providerId: undefined,
     });
-    // 切时间（last30）：主三连重查，流水不重拉（P1-2：脏标记不再挂 reload）。
+    // 切时间（last30）：脏标记不豁免时间维度（P1-2 勘误后），停在流水页
+    // 立即重拉，filter 换成 last30 窗口。
     await act(async () => {
       findByTestId(renderer.root, 'range-last30')!.props.onPress();
       await flushPromises();
     });
     expect(mockGetDailyBuckets).toHaveBeenCalledTimes(2);
-    expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
-    // 切组合筛选（未记录服务商 CR-2 三态之一）：脏标记置位重拉，filter 无 range。
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(2);
+    expect(mockListRequestUsage.mock.calls[1]![0]).toEqual({
+      range: {fromDay: dayKeyOffset(-29), toDay: todayKey()},
+      model: undefined,
+      providerId: undefined,
+    });
+    // 切组合筛选（未记录服务商，CR-2 三态之一）：重拉且叠加 model/providerId。
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
@@ -1475,8 +1477,9 @@ describe('T-S7 请求流水页签（分页）', () => {
       findByTestId(renderer.root, 'model-option-__unlogged__')!.props.onPress();
       await flushPromises();
     });
-    expect(mockListRequestUsage).toHaveBeenCalledTimes(2);
-    expect(mockListRequestUsage.mock.calls[1]![0]).toEqual({
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(3);
+    expect(mockListRequestUsage.mock.calls[2]![0]).toEqual({
+      range: {fromDay: dayKeyOffset(-29), toDay: todayKey()},
       model: undefined,
       providerId: null,
     });

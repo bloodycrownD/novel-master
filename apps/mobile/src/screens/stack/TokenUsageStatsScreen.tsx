@@ -7,7 +7,8 @@
  *   筛选（含两个弹层）；
  * - `SummaryTab`（含 SummaryTile）：五指标卡 + 服务商×模型饼图；
  * - `DetailTab`：按天 StackedBars + 24 小时钻取（今天模式直出小时图）；
- * - `RequestsTab`：请求流水分页列表（与时间筛选解绑，仅随模型筛选）；
+ * - `RequestsTab`：请求流水分页列表（与汇总/图表同窗口，模型/服务商
+ *   筛选叠加，需求①勘误后）；
  * - `format.ts`：纯函数（hitRate/formatHitRate/resolveRangeDays 等）。
  *
  * - 「汇总 / 图表 / 流水」三页签（SegmentedControl）；筛选栏置顶，页签
@@ -17,14 +18,13 @@
  *   两类归并选项由 UI 侧补上，保证存量历史行都有选项可筛；
  * - 刷新单通道（useFocusEffect 依赖 reload，mobile/B-2）：主查询带请求
  *   序号守卫（cross/B-1），旧响应后到整体丢弃；失败落 loadError 常驻
- *   错误条且不渲染 0 兜底卡片（mobile/C-orch-2）；空态区分库全空
- *   （冷启动引导）与范围内无数据（提示，mobile/A-1——范围空态只拦
- *   汇总/图表两页签，流水与时间解绑，窗口空时流水页签仍渲染全历史，
- *   PRD 验收①）；
- * - 流水与时间筛选解绑（需求①）：流水查询用无 range 的 filter（仅保留
- *   模型/服务商），脏标记只随组合筛选变化置位（P1-2）——时间切换只重查
- *   汇总三连，不重拉流水；页签激活时拉取首页；失败也清脏标记避免无限
- *   重试（MF-1）。
+ *   错误条且不渲染 0 兑底卡片（mobile/C-orch-2）；空态区分库全空
+ *   （冷启动引导，拦全部页签）与范围内无数据（提示，mobile/A-1——范围
+ *   空态拦全部页签：流水随时间窗口，需求①勘误后）；
+ * - 流水跟随时间（需求①勘误后）：流水查询用含 range 的完整 filter
+ *   （模型/服务商筛选叠加），时间或组合筛选变化均置流水脏标记并重拉
+ *   （P1-2 勘误后不再豁免时间维度）；页签激活时拉取首页；失败也清脏
+ *   标记避免无限重试（MF-1）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, ScrollView, Text, View} from 'react-native';
@@ -84,7 +84,8 @@ export function TokenUsageStatsScreen() {
   const [summary, setSummary] = useState<UsageStatsSummary | null>(null);
   const [dailyBuckets, setDailyBuckets] = useState<UsageStatsBucket[]>([]);
   const [modelRows, setModelRows] = useState<UsageStatsModelRow[]>([]);
-  // 请求流水（分页）：dirty 标记随筛选变化置位，流水页激活时拉取第一页
+  // 请求流水（分页）：dirty 标记随完整筛选（时间+组合）变化置位，流水页
+  // 激活时拉取第一页
   const [reqRows, setReqRows] = useState<UsageStatsRequestRow[]>([]);
   const [reqTotal, setReqTotal] = useState(0);
   const [reqPage, setReqPage] = useState(0);
@@ -124,11 +125,6 @@ export function TokenUsageStatsScreen() {
       providerId: comboProviderId,
     };
   }, [rangeKind, customFrom, customTo, comboModel, comboProviderId]);
-  // 流水 filter（需求①）：不带 range——流水与时间筛选解绑，可翻阅全部
-  // 历史；仅保留模型/服务商筛选。
-  const requestsFilter = useMemo<UsageStatsFilter>(() => {
-    return {model: comboModel, providerId: comboProviderId};
-  }, [comboModel, comboProviderId]);
 
   // 页签切换只切换展示，不参与 filter/reload 依赖——筛选跨页签保留、不重查。
   const reload = useCallback(async () => {
@@ -153,8 +149,6 @@ export function TokenUsageStatsScreen() {
       setSelectedDay(rangeKind === 'today' ? toLocalDayKey(Date.now()) : null);
       setHourlyBuckets(null);
       setLoadError(null);
-      // 注意：不再无条件置流水脏标记（P1-2）——时间切换不重拉流水，
-      // 脏标记只由组合筛选变化的独立 effect 置位（需求①）。
     } catch (err) {
       if (seq !== reloadSeqRef.current) {
         return; // 过期请求的报错不覆盖新一轮状态。
@@ -185,15 +179,12 @@ export function TokenUsageStatsScreen() {
       const seq = ++reqSeqRef.current;
       setReqLoading(true);
       try {
-        // 流水与时间解绑（需求①）：查询用无 range 的 requestsFilter，
-        // 不受时间窗口截断，可翻阅全部历史。
-        const result = await runtime.usageStats.listRequestUsage(
-          requestsFilter,
-          {
-            offset: page * PAGE_SIZE,
-            limit: PAGE_SIZE,
-          },
-        );
+        // 流水跟随时间（需求①勘误后）：查询用含 range 的完整 filter——
+        // 与汇总/图表同窗口，模型/服务商筛选叠加。
+        const result = await runtime.usageStats.listRequestUsage(filter, {
+          offset: page * PAGE_SIZE,
+          limit: PAGE_SIZE,
+        });
         if (seq !== reqSeqRef.current) {
           return;
         }
@@ -214,17 +205,17 @@ export function TokenUsageStatsScreen() {
         }
       }
     },
-    [runtime, requestsFilter, showToast],
+    [runtime, filter, showToast],
   );
 
-  // 流水脏标记（P1-2）：只随模型/服务商组合筛选变化置位（首挂载一次与
-  // useRef(true) 初始值同效）；时间范围变化不置脏——否则切时间仍会重拉
-  // 流水，需求①回归。置位后若正停在流水页，由下方流水 effect 响应
-  // loadRequests（依赖 requestsFilter）引用变化重拉首页；在其他页签则
-  // 等切回流水页时拉取。
+  // 流水脏标记（P1-2·勘误后）：随完整 filter 变化置位——时间或模型/服务
+  // 商组合筛选任一变化都置脏（首挂载一次与 useRef(true) 初始值同效），
+  // 不再豁免时间维度。置位后若正停在流水页，由下方流水 effect 响应
+  // loadRequests（依赖含 range 的 filter）引用变化重拉首页；在其他页签
+  // 则等切回流水页时拉取。
   useEffect(() => {
     reqDirtyRef.current = true;
-  }, [comboFilter]);
+  }, [filter]);
 
   useEffect(() => {
     if (pageTab === 'requests' && reqDirtyRef.current && !reqLoading) {
@@ -346,9 +337,9 @@ export function TokenUsageStatsScreen() {
 
   // 空态区分（mobile/A-1）：库全空（listModels 为空且已落地一轮查询）显示
   // 冷启动引导，拦全部页签（流水同样无数据可翻）；范围内无数据提示
-  // 「该区间无数据」，只拦汇总/图表两页签——流水与时间解绑，窗口空时
-  // 流水页签仍渲染全历史（PRD 验收①）。summary 非空条件避免首查在途时
-  // 闪现空态。
+  // 「该区间无数据」，同样拦全部页签——流水随时间窗口（需求①勘误后），
+  // 窗口空（库非空）时与其他页签统一显示区间空态。summary 非空条件避免
+  // 首查在途时闪现空态。
   const libraryEmpty = combos.length === 0 && summary != null;
   const rangeEmpty =
     summary != null && summary.calls === 0 && summary.totalTokens === 0;
@@ -416,20 +407,9 @@ export function TokenUsageStatsScreen() {
             用量自记录功能上线起开始积累，发起对话后这里会展示统计；缓存命中率数据自本版本起开始记录；速率与首字延迟数据自本版本起开始积累。
           </Text>
         </View>
-      ) : pageTab === 'requests' ? (
-        // 流水分支先于 rangeEmpty 空态：流水与时间解绑，窗口空时仍渲染
-        // 全历史流水，不被「该区间无数据」拦住（PRD 验收①）。
-        <RequestsTab
-          reqRows={reqRows}
-          reqTotal={reqTotal}
-          reqPage={reqPage}
-          reqLoading={reqLoading}
-          reqDirty={reqDirtyRef.current}
-          onLoadRequests={loadRequests}
-          tokens={tokens}
-        />
       ) : rangeEmpty ? (
-        // 范围空态只覆盖汇总/图表：这两页签的数据随时间窗口，窗口空即无内容。
+        // 范围空态覆盖全部页签（需求①勘误后）：流水同样随时间窗口，
+        // 窗口空（库非空）时与其他页签统一显示区间空态。
         <View style={styles.empty} testID="empty-range">
           <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
             该区间无数据
@@ -441,6 +421,16 @@ export function TokenUsageStatsScreen() {
           modelRows={modelRows}
           providerLabels={providerLabels}
           rangeLabel={rangeLabel}
+          tokens={tokens}
+        />
+      ) : pageTab === 'requests' ? (
+        <RequestsTab
+          reqRows={reqRows}
+          reqTotal={reqTotal}
+          reqPage={reqPage}
+          reqLoading={reqLoading}
+          reqDirty={reqDirtyRef.current}
+          onLoadRequests={loadRequests}
           tokens={tokens}
         />
       ) : (
