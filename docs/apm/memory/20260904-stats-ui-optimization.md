@@ -1,8 +1,8 @@
 ---
-date: 2026-09-06 00:05
+date: 2026-09-07 12:40
 title: 数据统计 UI 优化：从头脑风暴到 spec 定稿与 core 时间模型落地
-keywords: 数据统计, UI 优化, 时间筛选, 流水, 今天 tab, 明细改图表, 按小时, 饼图, provider×model, fromDay toDay, 自然日闭区间, 稠密补零
-abstract: 五项统计 UI 优化经头脑风暴收敛为 spec（时间模型统一 {fromDay,toDay} 闭区间、range 可选、流水解绑、今日卡删除、饼图不折叠）。Step 1 core 重构落地（512cae4：自然日区间+稠密补零+删 queryToday/366 上限，1793 全绿）；Step 4 移动端镜像落地（7670b56：resolveRangeDays 映射、流水解绑+脏标记 P1-2 挂 comboFilter、today 补选 P1-1 写 reload 成功回调、PieChart 组件 react-native-svg 扇区可点+详情行+双端同序色板 P2-5，mobile jest 186 套件 1091 用例全绿）。
+keywords: 数据统计, UI 优化, 时间筛选, 流水, 今天 tab, 明细改图表, 按小时, 饼图, provider×model, fromDay toDay, 自然日闭区间, 稠密补零, 需求①勘误, 流水跟随时间
+abstract: 五项统计 UI 优化经头脑风暴收敛为 spec（时间模型统一 {fromDay,toDay} 闭区间、range 可选、今日卡删除、饼图不折叠）。Step 1 core 重构落地（512cae4）；Step 4 移动端镜像落地（7670b56）；后续需求①方向勘误（用户拍板）：流水与时间解绑是记反的，正确方向是时间筛选继续约束流水——双端三处反转落地（mobile 60cb63f：loadRequests 用含 range 完整 filter、置脏 effect 依赖 comboFilter→filter、撤掉流水分支前置绕过空态，1092 用例全绿；desktop 36d2c1c：requestsFilter 别名完整 filter、全 filter 依赖 effect 置脏、empty 恢复整屏拦截，106 用例+typecheck 全绿）。
 ---
 
 user:
@@ -82,3 +82,21 @@ user:
 
 assistant:
 dev-ready 达成，分支 feat/token-usage-stats-ui-refresh（c95bf97..1e40205 共 7 笔）：core 时间模型重构 512cae4/1918ee3（1793 测试）、桌面 2de4467/dd0ba43/6665370（106 测试+typecheck 0）、移动 7670b56/1e40205（1092 测试，负向验证锁死饼图分母）、CHANGELOG Unreleased。三轮 cr-func 全 func-ready；循环中审出并修掉「窗口空态拦截流水页签」双端实伤（PRD 验收第一条）。真机/桌面目验待用户手动。环境坑备案：desktop 测试要 NODE_ENV=development、mobile 要 NODE_ENV=test（shell 默认 production 会假崩）。
+
+user:
+fix-mobile-reverse 节点（需求①勘误，只动 apps/mobile）：流水查询改回含 range、时间或组合筛选变化都置脏并重拉、窗口空时流水页签与汇总/图表统一显示「该区间无数据」、T-M5 与窗口空+流水页签用例反转，验证 NODE_ENV=test npx jest 全量 + tsc --noEmit。
+
+assistant:
+三处反转落地（60cb63f，2 文件 +66/-73）：①删掉无 range 的 requestsFilter，loadRequests 直接用与主查询同源的含 range filter（模型/服务商叠加）；②置脏 effect 依赖从 comboFilter 扩为 filter（时间或组合任一变化都置脏），选「全 filter 依赖 effect」干净接线而非 reload 成功路径置脏——后者有时序坑（置脏后拉取 effect 不重跑，流水不刷新）；③渲染链撤掉 1e40205 的流水分支前置放行，rangeEmpty 重新拦全部页签，libraryEmpty 不变。测试：T-M5 反转为「改时间重拉且 filter 含 range、改组合筛选重拉且叠加」；「窗口空 + 流水页签」用例反转为断言空态在场、无流水行与页码条（注意：拉取 effect 不受空态拦截，listRequestUsage 照发、只锁展示层）；T-M4/T-M7 分母锁不动。验证：NODE_ENV=test npx jest 186 套件 1092 用例全绿；tsc --noEmit exit 0。工作区有并行节点的 desktop 同勘误改动（TokenUsageStatsView.tsx），本节点未碰，提交只 add 显式两文件。
+
+user:
+fix-desktop-reverse 节点（需求①勘误，只动 apps/desktop）：TokenUsageStatsView 流水查询改回含 range、时间或模型变化都置脏并重拉、窗口空（库非空）时流水页签统一区间空态（撤 6665370 放行）、T-D3 与窗口空用例反转，验证 NODE_ENV=development npm test 全量 + typecheck。
+
+assistant:
+三处反转落地（36d2c1c，2 文件 +104/-71，与 mobile 60cb63f 同构）：①requestsFilter 删掉独立 useMemo，直接别名主链路 filter（range+model），流水查询携带当前窗口；loadRequests 参数放宽为可 null，custom 区间非法时静默跳过。②置脏接线同样选「全 filter 依赖 effect」——requestsFilter 引用变化（时间或模型）即置脏，停在流水页时激活 effect 依赖变化立即重拉首页，不在流水页仅置脏、切回补拉。③空态条件 empty && (libraryEmpty || pageTab !== "requests") 回退为 empty，窗口空时流水页签同样整屏区间空态（requests 查询照发、只锁展示层），libraryEmpty 冷启动不变。测试：T-D3 反转为「时间变化重查且 filter 含 range（last30/today 映射逐档断言）、模型变化叠加 model」，补「不在流水页仅置脏、切回补拉」脏标记语义断言；窗口空（库非空）用例反转为空态在场+无流水行与分页器+查询仍含 last7 range；分页用例改断言含 range；库全空用例保留。验证：desktop 全量 106 用例全绿、tsc exit 0（skill-zip-import 曾偶发存量失败，与本次无关）。踩坑：新写用例漏了 renderer = await mountView() 赋值导致 root undefined；TSX 大段中文 oldText 疑有不可见字符差异致 edit 工具匹配失败，改用 python 行级替换兜底。
+
+user:
+为什么时间筛选器还是对流水无效？——那是tm写反了，之前「时间筛选不影响流水列表」要改成「时间筛选影响流水列表」。
+
+assistant:
+需求①从 brain-storm 起方向就记反了（PRD 问题背景、spec、双轮审查全顺着「解绑」走完）。用户拍板勘误后整链路反转：docs 085123d（PRD 验收第一条/spec 设计与测试矩阵/CHANGELOG 删解绑条目——该行为从未发布不进 changelog）；双端并行反转 36d2c1c/60cb63f——流水查询恢复含 range、置脏 effect 挂完整 filter（时间/模型变化都重拉）、窗口空时三页签统一空态（6665370/1e40205 的「流水绕过空态」随之回退，因流水已随窗口、空窗口流水本就该空）。desktop 106/106、mobile 1092/1092、整仓 typecheck 0，cr-func-reverse func-ready。dev-ready（勘误后），流水随窗口过滤列入真机验收项。行为定稿：时间筛选约束全部三页签，模型/服务商筛选叠加；「翻全部历史」用自定义区间（366 上限已删）。

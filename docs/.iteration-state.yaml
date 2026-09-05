@@ -1,29 +1,35 @@
 # code-dev-loop 编排状态——token-usage-stats-ui-refresh
-dag_version: 3
+dag_version: 4
 spec_path: docs/Iterations/token-usage-stats-ui-refresh/spec.md
 prd_path: docs/Iterations/token-usage-stats-ui-refresh/prd.md
 branch: feat/token-usage-stats-ui-refresh
 base_sha: c95bf97
-head_sha: 1e40205
+head_sha: 36d2c1c
 wave_plan: []
 node_status:
   impl-core: { status: done, head_sha: 512cae4, executor: subagent }
   verify-core: { status: done, executor: main }
   cr-func-core: { status: done, func_ready: yes, executor: subagent }
-  fix-core-w1: { status: done, head_sha: 1918ee3, executor: main, note: fmtLocalDay 年份补零+注释 }
-  impl-desktop: { status: done, head_sha: dd0ba43, executor: subagent, extra: 2de4467 DTO+handler }
+  fix-core-w1: { status: done, head_sha: 1918ee3, executor: main }
+  impl-desktop: { status: done, head_sha: dd0ba43, executor: subagent, extra: 2de4467 }
   impl-mobile: { status: done, head_sha: 7670b56, executor: subagent }
-  verify-desktop: { status: done, executor: main, result: 106/106 + typecheck 0 }
-  verify-mobile: { status: done, executor: main, result: 1092/1092 + tsc 0 }
   cr-func-desktop: { status: done, func_ready: yes, executor: subagent }
   cr-func-mobile: { status: done, func_ready: yes, executor: subagent }
-  fix-desktop: { status: done, head_sha: 6665370, executor: subagent, note: 空态只拦汇总/图表 }
-  fix-mobile: { status: done, head_sha: 1e40205, executor: subagent, note: 流水分支前置+分母锁 }
-  cr-func-fix-round: { status: done, func_ready: yes, executor: subagent }
-  impl-docs: { status: done, executor: main, note: CHANGELOG Unreleased }
+  fix-desktop: { status: done, head_sha: 6665370, executor: subagent, note: 后被勘误反转覆盖 }
+  fix-mobile: { status: done, head_sha: 1e40205, executor: subagent, note: 后被勘误反转覆盖 }
+  cr-func-fix-round: { status: done, func_ready: yes, executor: subagent, note: 结论基于解绑方向，已作废 }
+  impl-docs: { status: done, executor: main }
+  doc-reverse: { status: done, head_sha: 085123d, executor: main, note: 需求①勘误 PRD/spec/CHANGELOG }
+  fix-desktop-reverse: { status: done, head_sha: 36d2c1c, executor: subagent }
+  fix-mobile-reverse: { status: done, head_sha: 60cb63f, executor: subagent }
+  verify-reverse: { status: done, executor: main, result: desktop 106/106 + mobile 1092/1092 + 整仓 typecheck 0 }
+  cr-func-reverse: { status: done, func_ready: yes, executor: subagent }
 open_must_fix: []
 spec_deviations: []
+known_optional:
+  - mobile「窗口空+流水页签」用例可补查询照发断言与 desktop 对齐（consider 级，未做）
+  - desktop requestsFilter 别名可直接用 filter（consider 级，未做）
 manual_user_pending:
-  - 桌面端 dev 运行目验：今天 tab 直出小时图、饼图点选详情行、流水翻全历史、亮暗色板
-  - Android 真机验收：同上四项（RN 侧改动，metro reload 生效即可，无需整包重装）
-status: dev-ready
+  - 桌面端 dev 运行目验：今天 tab 直出小时图、饼图点选详情行、流水随窗口过滤、亮暗色板
+  - Android 真机验收：同四项（RN 侧改动，metro reload 生效即可，无需整包重装）
+status: dev-ready（需求①勘误后）
