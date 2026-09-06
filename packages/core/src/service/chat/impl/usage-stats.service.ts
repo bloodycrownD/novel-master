@@ -276,7 +276,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
          ${modelFilterSql(filter.model)}
          ${providerFilterSql(filter.providerId)}
        GROUP BY provider_id, model_name
-       ORDER BY total_tokens DESC, model_name ASC`,
+       -- 不排序：输出顺序由 JS 归并后的 sort 保证（SQL 序会被归并架空）`,
       {
         fromMs,
         toMs,

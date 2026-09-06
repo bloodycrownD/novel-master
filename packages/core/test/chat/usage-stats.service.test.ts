@@ -422,6 +422,16 @@ describe("usage stats service (T-S5)", () => {
     const range = dayRange(localAddDays(today0, -400), today0);
     const summary = await svc.getSummary({ range });
     assert.ok(!("today" in summary), "summary 不应再有 today 字段");
+    // 类型层负向钉子（A-1）：直接访问已删字段必报编译错，由 @ts-expect-error
+    // 吸收；反之若有人把 today 加回 summary 类型、或把 kind 形态加回
+    // UsageStatsRange，指令变为 unused 同样炸编译——双向钉死。不写
+    // `as { today?: number }` 断言：可选属性目标总能被 as 合法转换，
+    // 那样表达式本身无错、钉子会被 unused 吹掉。（dayRange 返回类型显式
+    // 标注为 UsageStatsRange，钉子绑定类型定义而非推断字面量。）
+    // @ts-expect-error 已删除字段：summary 不再有 today
+    void summary.today;
+    // @ts-expect-error UsageStatsRange 为 {fromDay, toDay}，无 kind 形态
+    void range.kind;
     assert.equal(summary.calls, 1);
     // 401 个日历日（D-400 … D）每天一桶：366 天上限已删，不再抛错。
     const buckets = await svc.getDailyBuckets({ range });
@@ -1137,6 +1147,10 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
       await seedMsg(ctx, session.id, i + 1, {
         createdAtMs: now - (5 - i) * 60_000,
         modelName: i === 0 ? null : "model-a",
+        // providerId 三态 seed：i=0 与 i=4 记为 'P'（P 档内同时覆盖
+        // modelName null 与 model-a 两态），其余行与下方无 usage 行、
+        // 2020 老消息保持 null（未记录历史行档）。
+        providerId: i === 0 || i === 4 ? "P" : null,
         usage: {
           prompt: 100 + i,
           completion: 10 + i,
@@ -1185,6 +1199,37 @@ describe("usage stats service 速率/TTFT 聚合（T-US2/3/4）", () => {
     );
     assert.equal(others.total, 1);
     assert.equal(others.rows[0]!.modelName, null);
+    // providerId 筛选三态（G-1）：'P' 档与 null 档互补，缺省档已由上述
+    // 无 filter 断言覆盖（total=6）。流水行契约（UsageStatsRequestRow）
+    // 不回传 providerId，行集身份用行指纹断言：P 档恰为 i=0 / i=4 两行
+    // （completionTokens 10/14，modelName 分别为 null / model-a）；
+    // null 档只含 provider_id IS NULL 的历史行（i=1..3 与 2020 老消息），
+    // 不得混入 P 行。seed 错标（如 P 行漏标）时 total 互补性即红。
+    const pFiltered = await svc.listRequestUsage(
+      { providerId: "P" },
+      { offset: 0, limit: 50 }
+    );
+    assert.equal(pFiltered.total, 2);
+    const pCompletions = pFiltered.rows
+      .map((row) => row.completionTokens)
+      .sort((a, b) => a - b);
+    assert.deepEqual(pCompletions, [10, 14]);
+    // 配对指纹：modelName null ↔ completion 10，model-a ↔ completion 14。
+    for (const row of pFiltered.rows) {
+      assert.equal(
+        row.completionTokens,
+        row.modelName === null ? 10 : 14
+      );
+    }
+    const nullFiltered = await svc.listRequestUsage(
+      { providerId: null },
+      { offset: 0, limit: 50 }
+    );
+    assert.equal(nullFiltered.total, 4);
+    const nullCompletions = nullFiltered.rows
+      .map((row) => row.completionTokens)
+      .sort((a, b) => a - b);
+    assert.deepEqual(nullCompletions, [1, 11, 12, 13]);
     // 非法 limit 拒收
     await assert.rejects(
       () => svc.listRequestUsage({}, { offset: 0, limit: 0 }),
