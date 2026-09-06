@@ -31,7 +31,7 @@ must_fix:
   - core/G-1
 fix_spec_path: docs/Iterations/dev-tool-fixes-20260906/cr-fix-spec.md
 spec_fix_plan: []
-status: 待用户确认
+status: fix-spec-ready 已确认
 ```
 
 ## Must-fix（按 P0 → P1 → P2）
@@ -76,8 +76,8 @@ status: 待用户确认
 ### MF-6 · apps/A-1 [P2] [A] CHANGELOG 措辞窄于实际行为
 - 文件：CHANGELOG.md Unreleased 变更段
 - 问题：「命令行会话写文件的旗标移除」措辞窄于实际——`nm vfs write` 的旗标同被移除。
-- 改法：措辞扩为「命令行写文件（含会话内写文件）」。
-- 验收/测试：条目与 CLI 实际行为一致（人工核对）。
+- 改法：(a) 措辞扩为「命令行写文件（含会话内写文件）」；(b) 「文件写入版本校验整体移除」从修复段挪至变更段，与「移除设置项与命令行旗标」条目合并为一条完整叙述；(c) 合并条目补一句空管道防护说明（CLI 空输入现报错而非清空文件）。
+- 验收/测试：Unreleased 段与三端实际行为逐条一致（人工核对）。
 - 来源：review-scope-apps/R1
 
 ### MF-7 · core/C-2 [P2] [C] 三处过时注释仍描述已下线的版本校验
@@ -104,20 +104,22 @@ status: 待用户确认
 
 ## Spec deviations
 
-- **open** · apps/cli/src/vfs/commands/write.ts `readStdin` 新增空输入防护（空管道报 `No content provided` 而非写空文件）——超出「移除版本校验」意图的善意新增，堵住了空管道静默清空已有文件的数据丢失路径。待用户拍板「按现状收窄」或回退；若按现状收窄，CHANGELOG 酌情补一句。
+- **fixed** · apps/cli/src/vfs/commands/write.ts `readStdin` 空输入防护——2026-09-06 用户确认按现状收窄（CLI-only 行为，堵空管道静默清空文件的数据丢失路径；移动端无 stdin 不受影响）。CHANGELOG 补句并入 MF-6。
 
 ## Open questions / 待拍板
 
 （均不阻塞 must-fix 执行）
 
-1. 退役旗标 `--version` / `--no-version-check` 目前被静默忽略，是否改为显式报「旗标已退役」——待拍板。
-2. CHANGELOG「文件写入版本校验整体移除」条目现归「修复」段，是否应挪「变更」段——待拍板。
-3. 存量 KKV 死键 `session-fs.versionCheck` 是否做一次性清理——待拍板。
+（2026-09-06 全部落定，无遗留待拍板项）
+1. ~~退役旗标显式报错~~ → 不做（豁免，见下节）：旧脚本传旗标的目标仍是写入内容，静默忽略即零成本优雅降级，显式报错只会中断无害调用。
+2. ~~CHANGELOG 分段归属~~ → 并入 MF-6：条目挪「变更」段并与设置项条目合并为一条完整叙述。
+3. ~~KKV 死键清理~~ → 已转正为 MF-9。
 4. desktop 编辑器 last-write-wins 之后，是否需要 UI 层外部变更脏检查补偿——产品决策。
 
 ## 已豁免（用户确认不修）
 
-（无）
+1. 退役旗标 `--version` / `--no-version-check` 显式报「已退役」——用户授权主代理决定（原话「如果是cli那随便，你决定就好」），决定不做：静默忽略即优雅降级。
+2. desktop 编辑器外部变更脏检查补偿——用户「按你建议来」，维持不加：last-write-wins 下保存即覆盖为编辑器所见内容（编辑器是唯一编辑入口的产品语义），外部漂移的 console 探测日志保留。
 
 ## 合并后 QA（manual_user）
 
@@ -139,7 +141,7 @@ status: 待用户确认
 | dag_version / review_round | 3 / 2 |
 | P0 / P1 / P2（已写入 fix-spec） | 2 / 2 / 5 |
 | 未写入的开放 must-fix | 0 |
-| spec_deviations | open: readStdin 空输入防护（待用户拍板收窄/回退） |
+| spec_deviations | none（readStdin 已用户确认收窄为 fixed） |
 | C-orch | ✅（双端 parity 分叉 1 处已入 MF-4；dist 残留归 K-2 重建） |
 | C 类合并后 QA | 4 项（见「合并后 QA」章节） |
 
