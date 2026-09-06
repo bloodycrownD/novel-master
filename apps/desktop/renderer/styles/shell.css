@@ -2481,6 +2481,34 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   color: var(--text);
 }
 
+/* 智能排序规则列表（SettingsViews SmartSortRulesView，spec D9 拖拽） */
+.smart-sort-rule__drag-handle {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  font-size: 15px;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+}
+
+.smart-sort-rule__switch {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0 12px;
+  border-left: 1px solid var(--settings-item-border);
+}
+
+.settings-list-item-row.is-dragging {
+  opacity: 0.45;
+}
+
+.settings-list-item-row.is-drag-over {
+  border-color: var(--primary-ring);
+  box-shadow: 0 0 0 1px var(--primary-ring);
+}
+
 .settings-row--static {
   cursor: default;
 }

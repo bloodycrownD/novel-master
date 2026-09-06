@@ -19,6 +19,8 @@ import {
   RegexGroupsView,
   RegexRuleEditorView,
   RegexRulesView,
+  SmartSortRuleEditorView,
+  SmartSortRulesView,
 } from "../features/settings/SettingsViews";
 import { AboutView } from "../features/settings/AboutView";
 import { TokenUsageStatsView } from "../features/settings/TokenUsageStatsView";
@@ -48,6 +50,9 @@ function getSettingsMainTitle(
   if (viewId === "modelSampling") return "采样配置";
   if (viewId === "regexRules") return "正则规则";
   if (viewId === "regexRuleEditor") return navState.editingRegexRuleId ? "编辑规则" : "新规则";
+  if (viewId === "smartSortRuleEditor") {
+    return navState.editingSmartSortRuleId ? "编辑规则" : "新规则";
+  }
   if (viewId === "skillDetail") {
     return navState.viewingSkillRef != null
       ? `技能 · ${navState.viewingSkillRef.name}`
@@ -155,6 +160,10 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <RegexRulesView nav={nav} />;
       case "regexRuleEditor":
         return <RegexRuleEditorView nav={nav} />;
+      case "smartSortRules":
+        return <SmartSortRulesView nav={nav} />;
+      case "smartSortRuleEditor":
+        return <SmartSortRuleEditorView nav={nav} />;
       case "skillsManage":
         return <SkillsManageView nav={nav} />;
       case "skillDetail":

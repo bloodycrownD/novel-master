@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 export { AgentEditorView } from "./AgentEditorView";
 
 
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { ContextMenu } from "@/components/ui/ContextMenu";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Switch } from "@/components/ui/Switch";
+import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 import { ManageHeader } from "@/components/batch/ManageHeader";
 import { TextPromptModal } from "@/components/ui/TextPromptModal";
 import { showToast } from "@/components/ui/show-toast";
@@ -53,6 +55,19 @@ import {
   ipcRegexListRules,
   ipcRegexUpdateGroup,
   ipcRegexUpdateRule,
+  ipcSmartSortRuleCreate,
+  ipcSmartSortRuleDelete,
+  ipcSmartSortRuleDeleteBatch,
+  ipcSmartSortRuleList,
+  ipcSmartSortRuleMove,
+  ipcSmartSortRulePreview,
+  ipcSmartSortRuleReorder,
+  ipcSmartSortRuleResetDefaults,
+  ipcSmartSortRuleSetEnabled,
+  ipcSmartSortRuleSetEnabledBatch,
+  ipcSmartSortRuleUpdate,
+  ipcSmartSortRuleYamlExport,
+  ipcSmartSortRuleYamlImport,
 } from "@/ipc/client";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
@@ -82,7 +97,13 @@ import {
   AGENT_LIST_LABELS,
   storedConfigInvalidReason,
 } from "@shared/logic/config-forms-stored-config-validity";
-import type { AgentRegistryListItemDto } from "@shared/ipc-types";
+import type {
+  AgentRegistryListItemDto,
+  SmartSortRuleDto,
+  SmartSortRuleMoveRequest,
+  SmartSortRulePreviewDraftDto,
+  SmartSortRulePreviewResultDto,
+} from "@shared/ipc-types";
 
 type Nav = SettingsNavHandle;
 
@@ -1877,6 +1898,793 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
             className={`settings-preview-box${previewError ? " settings-preview-box--error" : ""}`}
           >
             {preview}
+          </pre>
+        </SettingsSection>
+      </SettingsFormSection>
+    </SettingsPanel>
+  );
+}
+
+// ===== 智能排序规则（spec Step 11）=====
+
+/** 内置规则固定前缀（与 core `BUILTIN_SMART_SORT_RULE_ID_PREFIX` 对齐；renderer 不依赖 core）。 */
+const SMART_SORT_BUILTIN_PREFIX = "builtin-";
+
+function isBuiltinSmartSortRule(ruleId: string): boolean {
+  return ruleId.startsWith(SMART_SORT_BUILTIN_PREFIX);
+}
+
+export function SmartSortRulesView({ nav }: { nav: Nav }) {
+  const batch = useBatchSelection();
+  const [rules, setRules] = useState<SmartSortRuleDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [ruleMenu, setRuleMenu] = useState<{
+    ruleId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    | { kind: "single"; ruleId: string; label: string }
+    | { kind: "batch"; count: number }
+    | null
+  >(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [importConfirm, setImportConfirm] = useState(false);
+  const [dragRuleId, setDragRuleId] = useState<string | null>(null);
+  const [dragOverRuleId, setDragOverRuleId] = useState<string | null>(null);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await ipcSmartSortRuleList();
+      if (res.ok) setRules([...res.data]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    reload().catch(() => undefined);
+  }, [reload]);
+
+  const openEditor = (ruleId?: string) => {
+    nav.navState.editingSmartSortRuleId = ruleId;
+    nav.push("smartSortRuleEditor");
+  };
+
+  const toggleEnabled = async (rule: SmartSortRuleDto, next: boolean) => {
+    const res = await ipcSmartSortRuleSetEnabled({
+      ruleId: rule.ruleId,
+      enabled: next,
+    });
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    const updated = res.data;
+    setRules((prev) =>
+      prev.map((r) => (r.ruleId === updated.ruleId ? updated : r)),
+    );
+  };
+
+  const moveRule = async (
+    ruleId: string,
+    to: SmartSortRuleMoveRequest["to"],
+  ) => {
+    const res = await ipcSmartSortRuleMove({ ruleId, to });
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    setRules([...res.data]);
+  };
+
+  const runDeleteRules = async (ruleIds: readonly string[]) => {
+    const res =
+      ruleIds.length === 1
+        ? await ipcSmartSortRuleDelete({ ruleId: ruleIds[0]! })
+        : await ipcSmartSortRuleDeleteBatch({ ruleIds });
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    batch.exit();
+    toastSettingsSuccess(
+      ruleIds.length > 1 ? `已删除 ${ruleIds.length} 条规则` : "已删除规则",
+    );
+    await reload();
+  };
+
+  const runBatchSetEnabled = async (enabled: boolean) => {
+    if (batch.selectedCount === 0) {
+      return;
+    }
+    const res = await ipcSmartSortRuleSetEnabledBatch({
+      ruleIds: [...batch.selectedIds],
+      enabled,
+    });
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    toastSettingsSuccess(enabled ? "已启用所选规则" : "已禁用所选规则");
+    await reload();
+  };
+
+  const runExportYaml = async () => {
+    setBusy(true);
+    try {
+      const res = await ipcSmartSortRuleYamlExport();
+      if (res.ok) {
+        toastSettingsSuccess(res.data === "saved" ? "已导出规则 YAML" : "已取消");
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runImportYaml = async () => {
+    setImportConfirm(false);
+    setBusy(true);
+    try {
+      const res = await ipcSmartSortRuleYamlImport();
+      if (res.ok) {
+        if (res.data === "imported") {
+          batch.exit();
+          toastSettingsSuccess("已导入并替换全部规则");
+          await reload();
+        } else {
+          toastSettingsSuccess("已取消");
+        }
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runResetDefaults = async () => {
+    setResetConfirm(false);
+    setBusy(true);
+    try {
+      const res = await ipcSmartSortRuleResetDefaults();
+      if (res.ok) {
+        toastSettingsSuccess("已恢复默认规则");
+        await reload();
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleMenuSelect = (action: string) => {
+    const menu = ruleMenu;
+    setRuleMenu(null);
+    if (!menu) {
+      return;
+    }
+    const rule = rules.find((r) => r.ruleId === menu.ruleId);
+    if (!rule) {
+      return;
+    }
+    if (action === "edit") {
+      openEditor(rule.ruleId);
+      return;
+    }
+    if (action === "move-top") {
+      void moveRule(rule.ruleId, "top");
+      return;
+    }
+    if (action === "move-up") {
+      void moveRule(rule.ruleId, "up");
+      return;
+    }
+    if (action === "move-down") {
+      void moveRule(rule.ruleId, "down");
+      return;
+    }
+    if (action === "move-bottom") {
+      void moveRule(rule.ruleId, "bottom");
+      return;
+    }
+    if (action === "delete") {
+      setDeleteConfirm({
+        kind: "single",
+        ruleId: rule.ruleId,
+        label: rule.name,
+      });
+    }
+  };
+
+  /** HTML5 拖拽（spec D9）：源行插入到目标行之前，整表 reorder。 */
+  const handleDrop = async (targetRuleId: string) => {
+    const sourceId = dragRuleId;
+    setDragRuleId(null);
+    setDragOverRuleId(null);
+    if (!sourceId || sourceId === targetRuleId) {
+      return;
+    }
+    const ids = rules.map((r) => r.ruleId);
+    const from = ids.indexOf(sourceId);
+    const to = ids.indexOf(targetRuleId);
+    if (from < 0 || to < 0) {
+      return;
+    }
+    ids.splice(to, 0, ...ids.splice(from, 1));
+    const res = await ipcSmartSortRuleReorder({ orderedIds: ids });
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    setRules([...res.data]);
+  };
+
+  const menuRule = ruleMenu
+    ? rules.find((r) => r.ruleId === ruleMenu.ruleId)
+    : null;
+  const menuItems =
+    menuRule != null && isBuiltinSmartSortRule(menuRule.ruleId)
+      ? [] // 内置规则仅可禁用不可删除（spec D3），隐藏删除项
+      : [{ label: "删除", action: "delete", danger: true }];
+  const allSelected =
+    rules.length > 0 && rules.every((r) => batch.selectedIds.has(r.ruleId));
+
+  return (
+    <SettingsPanel>
+      <SettingsListSection
+        header={
+          <ManageHeader
+            title="智能排序"
+            batchMode={batch.active}
+            selectedCount={batch.selectedCount}
+            onEnterBatch={batch.enter}
+            onCancelBatch={batch.exit}
+            allSelected={allSelected}
+            onSelectAll={() =>
+              batch.selectRange(
+                allSelected ? [] : rules.map((r) => r.ruleId),
+              )
+            }
+            onDelete={() => {
+              if (batch.selectedCount === 0) {
+                return;
+              }
+              if ([...batch.selectedIds].some(isBuiltinSmartSortRule)) {
+                toastSettingsError("内置规则不可删除，仅可禁用");
+                return;
+              }
+              setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
+            }}
+            actions={
+              batch.active
+                ? [
+                    {
+                      label: "启用",
+                      onClick: () => void runBatchSetEnabled(true),
+                    },
+                    {
+                      label: "禁用",
+                      onClick: () => void runBatchSetEnabled(false),
+                    },
+                  ]
+                : undefined
+            }
+            hint="内置规则仅可禁用不可删除"
+            normalActions={
+              <>
+                <button
+                  type="button"
+                  className="list-manage-header__btn"
+                  disabled={busy}
+                  onClick={() => setImportConfirm(true)}
+                >
+                  导入 YAML
+                </button>
+                <button
+                  type="button"
+                  className="list-manage-header__btn"
+                  disabled={busy}
+                  onClick={() => void runExportYaml()}
+                >
+                  导出 YAML
+                </button>
+                <button
+                  type="button"
+                  className="list-manage-header__btn"
+                  disabled={busy}
+                  onClick={() => setResetConfirm(true)}
+                >
+                  恢复默认
+                </button>
+                <button
+                  type="button"
+                  className="list-manage-header__btn list-manage-header__btn--primary"
+                  onClick={() => openEditor()}
+                >
+                  新建规则
+                </button>
+              </>
+            }
+          />
+        }
+      >
+        <p className="settings-hint">
+          目录选「智能排序」时按本列表从上到下逐条尝试，首条命中规则的捕获组提取序号；可拖拽或用行菜单调整优先级。
+        </p>
+        {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
+        {!loading && rules.length === 0 ? (
+          <SettingsListEmpty>暂无规则，点击上方按钮创建。</SettingsListEmpty>
+        ) : null}
+        {rules.map((rule) => (
+          <div
+            key={rule.ruleId}
+            className={`settings-list-item-row${
+              dragRuleId === rule.ruleId ? " is-dragging" : ""
+            }${
+              dragOverRuleId === rule.ruleId && dragRuleId !== rule.ruleId
+                ? " is-drag-over"
+                : ""
+            }`}
+            draggable={!batch.active}
+            onDragStart={(e) => {
+              setDragRuleId(rule.ruleId);
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", rule.ruleId);
+            }}
+            onDragOver={(e) => {
+              if (dragRuleId == null || dragRuleId === rule.ruleId) {
+                return;
+              }
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              setDragOverRuleId(rule.ruleId);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              void handleDrop(rule.ruleId);
+            }}
+            onDragEnd={() => {
+              setDragRuleId(null);
+              setDragOverRuleId(null);
+            }}
+          >
+            <button
+              type="button"
+              className="settings-list-item"
+              onClick={() => {
+                if (batch.active) {
+                  batch.toggle(rule.ruleId);
+                  return;
+                }
+                openEditor(rule.ruleId);
+              }}
+            >
+              {batch.active ? (
+                <BatchCheckbox
+                  checked={batch.isSelected(rule.ruleId)}
+                  onToggle={() => batch.toggle(rule.ruleId)}
+                />
+              ) : (
+                <span
+                  className="smart-sort-rule__drag-handle"
+                  aria-hidden="true"
+                >
+                  ⠿
+                </span>
+              )}
+              <span className="settings-list-item__label">
+                <span className="settings-list-item__meta-row">
+                  {rule.name}
+                  {isBuiltinSmartSortRule(rule.ruleId) ? (
+                    <span className="settings-tag settings-tag--muted">
+                      内置
+                    </span>
+                  ) : null}
+                  {!rule.enabled ? (
+                    <span className="settings-tag settings-tag--muted">
+                      已禁用
+                    </span>
+                  ) : null}
+                </span>
+                {rule.example ? (
+                  <span className="settings-row__desc">{rule.example}</span>
+                ) : null}
+              </span>
+            </button>
+            {!batch.active ? (
+              <div className="smart-sort-rule__switch">
+                <Switch
+                  checked={rule.enabled}
+                  onChange={(next) => void toggleEnabled(rule, next)}
+                  aria-label={`启用 ${rule.name}`}
+                />
+              </div>
+            ) : null}
+            {!batch.active ? (
+              <button
+                type="button"
+                className="settings-list-item__menu-btn"
+                aria-label="更多"
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  setRuleMenu({
+                    ruleId: rule.ruleId,
+                    x: Math.max(8, rect.left),
+                    y: Math.max(8, rect.bottom + 4),
+                  });
+                }}
+              >
+                ⋮
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </SettingsListSection>
+      <ContextMenu
+        open={ruleMenu != null}
+        x={ruleMenu?.x ?? 0}
+        y={ruleMenu?.y ?? 0}
+        items={[
+          { label: "编辑", action: "edit" },
+          { label: "置顶", action: "move-top" },
+          { label: "上移", action: "move-up" },
+          { label: "下移", action: "move-down" },
+          { label: "置底", action: "move-bottom" },
+          ...menuItems,
+        ]}
+        onSelect={(action) => handleMenuSelect(action)}
+        onClose={() => setRuleMenu(null)}
+      />
+      <ConfirmModal
+        open={deleteConfirm != null}
+        title="删除规则"
+        message={
+          deleteConfirm?.kind === "batch"
+            ? `确定删除选中的 ${deleteConfirm.count} 条规则？`
+            : `删除规则「${deleteConfirm?.kind === "single" ? deleteConfirm.label : ""}」？`
+        }
+        danger
+        onConfirm={() => {
+          const target = deleteConfirm;
+          setDeleteConfirm(null);
+          if (!target) {
+            return;
+          }
+          if (target.kind === "batch") {
+            void runDeleteRules([...batch.selectedIds]);
+            return;
+          }
+          void runDeleteRules([target.ruleId]);
+        }}
+        onCancel={() => setDeleteConfirm(null)}
+      />
+      <ConfirmModal
+        open={importConfirm}
+        title="导入 YAML"
+        message="导入将清空并替换当前全部规则（含内置规则），确定继续？"
+        danger
+        onConfirm={() => void runImportYaml()}
+        onCancel={() => setImportConfirm(false)}
+      />
+      <ConfirmModal
+        open={resetConfirm}
+        title="恢复默认规则"
+        message="将删除并重灌全部内置规则（自定义规则不受影响），确定继续？"
+        onConfirm={() => void runResetDefaults()}
+        onCancel={() => setResetConfirm(false)}
+      />
+    </SettingsPanel>
+  );
+}
+
+const SMART_SORT_FLAG_PRESETS: Array<{ label: string; value: string }> = [
+  { label: "无", value: "" },
+  { label: "i", value: "i" },
+  { label: "g", value: "g" },
+  { label: "gi", value: "gi" },
+];
+
+const SMART_SORT_PREVIEW_SAMPLE =
+  "第一章 开端\n第2章\n第十一章\n001、序章\nChapter 3";
+
+type SmartSortRuleDraft = {
+  name: string;
+  pattern: string;
+  flags: string;
+  example: string;
+  enabled: boolean;
+};
+
+const DEFAULT_SMART_SORT_DRAFT: SmartSortRuleDraft = {
+  name: "",
+  pattern: "",
+  flags: "",
+  example: "",
+  enabled: true,
+};
+
+/** 本地即时正则校验（renderer 不依赖 core；捕获组等严格校验仍走 service）。 */
+function localSmartSortRegexError(
+  draft: SmartSortRuleDraft,
+): string | null {
+  if (!draft.pattern) {
+    return null;
+  }
+  try {
+    new RegExp(draft.pattern, draft.flags);
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+/**
+ * 预览规则集：库内启用规则 + 本草稿（编辑就位替换、新建置顶参与）。
+ * draftRules 传入时 service 只用该集合（不叠库内规则），故须整表组装。
+ */
+function composePreviewDraftRules(
+  allRules: readonly SmartSortRuleDto[],
+  ruleId: string | undefined,
+  draft: SmartSortRuleDraft,
+): SmartSortRulePreviewDraftDto[] {
+  const draftRule: SmartSortRulePreviewDraftDto = {
+    ruleId: ruleId ?? "draft",
+    name: draft.name.trim() || "（未命名草稿）",
+    pattern: draft.pattern,
+    flags: draft.flags,
+  };
+  const base: SmartSortRulePreviewDraftDto[] = [];
+  for (const rule of allRules) {
+    if (ruleId != null && rule.ruleId === ruleId) {
+      base.push(draftRule);
+    } else if (rule.enabled) {
+      base.push({
+        ruleId: rule.ruleId,
+        name: rule.name,
+        pattern: rule.pattern,
+        flags: rule.flags,
+      });
+    }
+  }
+  if (ruleId == null) {
+    return [draftRule, ...base];
+  }
+  return base;
+}
+
+export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
+  const ruleId = nav.navState.editingSmartSortRuleId;
+  const [draft, setDraft] = useState<SmartSortRuleDraft>(
+    DEFAULT_SMART_SORT_DRAFT,
+  );
+  const [allRules, setAllRules] = useState<SmartSortRuleDto[]>([]);
+  const [testNames, setTestNames] = useState(SMART_SORT_PREVIEW_SAMPLE);
+  const [preview, setPreview] = useState<SmartSortRulePreviewResultDto | null>(
+    null,
+  );
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    ipcSmartSortRuleList().then((res) => {
+      if (!res.ok) {
+        return;
+      }
+      setAllRules([...res.data]);
+      if (ruleId) {
+        const rule = res.data.find((r) => r.ruleId === ruleId);
+        if (rule) {
+          setDraft({
+            name: rule.name,
+            pattern: rule.pattern,
+            flags: rule.flags,
+            example: rule.example ?? "",
+            enabled: rule.enabled,
+          });
+        }
+      }
+    });
+  }, [ruleId]);
+
+  const regexError = localSmartSortRegexError(draft);
+
+  const runPreview = useCallback(async () => {
+    const names = testNames
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (names.length === 0) {
+      setPreview(null);
+      setPreviewError("请输入至少一行文件名");
+      return;
+    }
+    const localError = localSmartSortRegexError(draft);
+    if (localError != null) {
+      setPreview(null);
+      setPreviewError(`正则无效：${localError}`);
+      return;
+    }
+    const res = await ipcSmartSortRulePreview({
+      names,
+      draftRules: composePreviewDraftRules(allRules, ruleId, draft),
+    });
+    if (res.ok) {
+      setPreview(res.data);
+      setPreviewError(null);
+    } else {
+      setPreview(null);
+      setPreviewError(res.error.message);
+    }
+  }, [testNames, draft, allRules, ruleId]);
+
+  /** 规则列表加载完成后自动试跑一次，与正则编辑器即时预览体验对齐。 */
+  const autoRanRef = useRef(false);
+  useEffect(() => {
+    if (autoRanRef.current || allRules.length === 0) {
+      return;
+    }
+    autoRanRef.current = true;
+    void runPreview();
+  }, [allRules, runPreview]);
+
+  const save = async () => {
+    const example = draft.example.trim() || null;
+    if (ruleId) {
+      const res = await ipcSmartSortRuleUpdate({
+        ruleId,
+        patch: {
+          name: draft.name,
+          pattern: draft.pattern,
+          flags: draft.flags,
+          example,
+          enabled: draft.enabled,
+        },
+      });
+      if (res.ok) {
+        toastSettingsSuccess("已保存");
+        nav.pop();
+      } else {
+        toastSettingsError(res.error.message);
+      }
+      return;
+    }
+    const res = await ipcSmartSortRuleCreate({
+      name: draft.name,
+      pattern: draft.pattern,
+      flags: draft.flags,
+      example,
+      enabled: draft.enabled,
+    });
+    if (res.ok) {
+      toastSettingsSuccess("已创建");
+      nav.pop();
+    } else {
+      toastSettingsError(res.error.message);
+    }
+  };
+
+  const previewNameById = new Map(
+    composePreviewDraftRules(allRules, ruleId, draft).map((r) => [
+      r.ruleId,
+      r.name,
+    ]),
+  );
+  const previewText =
+    preview == null
+      ? ""
+      : [
+          ...preview.lines.map((line) => {
+            const ruleName =
+              line.matchedRuleId != null
+                ? previewNameById.get(line.matchedRuleId) ??
+                  line.matchedRuleId
+                : null;
+            const nums =
+              line.nums == null ? "—" : `[${line.nums.join(", ")}]`;
+            return `${line.name}\t${ruleName ?? "—"}\t${nums}`;
+          }),
+          "",
+          "排序后（升序）：",
+          ...preview.sortedNames.map((name, i) => `${i + 1}. ${name}`),
+        ].join("\n");
+
+  const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
+
+  return (
+    <SettingsPanel>
+      <SettingsFormSection
+        title="排序规则"
+        desc={ruleDesc}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => void runPreview()}>
+              测试预览
+            </Button>
+            <Button variant="primary" onClick={() => void save()}>
+              保存
+            </Button>
+          </>
+        }
+      >
+        <SettingsSection title="基本信息">
+          <SettingsField label="名称">
+            <input
+              value={draft.name}
+              placeholder="如 中文卷章复合"
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+          </SettingsField>
+          <SettingsField label="正则表达式">
+            <input
+              value={draft.pattern}
+              placeholder="如 第([0-9一二三四五六七八九十百千]+)章"
+              onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
+            />
+          </SettingsField>
+          {regexError != null ? (
+            <SettingsStatus error={`正则无效：${regexError}`} inline />
+          ) : null}
+          <SettingsField label="标志（flags）">
+            <input
+              value={draft.flags}
+              placeholder="留空；常用 i（忽略大小写）"
+              onChange={(e) => setDraft({ ...draft, flags: e.target.value })}
+            />
+          </SettingsField>
+          <div className="config-dep-chips">
+            {SMART_SORT_FLAG_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className={`config-dep-chip${
+                  draft.flags === preset.value ? " is-active" : ""
+                }`}
+                onClick={() => setDraft({ ...draft, flags: preset.value })}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <p className="settings-hint">
+            flags 须为 gimsuy 子集且不重复；正则须含至少一个捕获组，命中时全部捕获组须可解析为数值（中文数字自动转换），否则尝试下一条规则。
+          </p>
+          <SettingsField label="示例">
+            <input
+              value={draft.example}
+              placeholder="如 第十二章 风起"
+              onChange={(e) => setDraft({ ...draft, example: e.target.value })}
+            />
+          </SettingsField>
+          <SettingsSwitchRow
+            label="启用规则"
+            checked={draft.enabled}
+            onChange={(v) => setDraft({ ...draft, enabled: v })}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="测试预览">
+          <p className="settings-hint">
+            每行一个文件名；按当前优先级列表试跑（本草稿规则参与匹配），输出逐行命中规则与序号、以及排序后顺序。
+          </p>
+          <SettingsField label="示例文件名">
+            <textarea
+              rows={5}
+              value={testNames}
+              onChange={(e) => setTestNames(e.target.value)}
+            />
+          </SettingsField>
+          <pre
+            className={`settings-preview-box${
+              previewError != null ? " settings-preview-box--error" : ""
+            }`}
+          >
+            {previewError ??
+              (previewText || "输入文件名后点击「测试预览」。")}
           </pre>
         </SettingsSection>
       </SettingsFormSection>
