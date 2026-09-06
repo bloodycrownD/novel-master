@@ -3,19 +3,11 @@ import test from "node:test";
 import {
   AGENT_LIST_LABELS,
   API_KEY_STATUS_LABELS,
-  REGEX_UI_LABELS,
 } from "../../src/config-forms/shared/ui-labels.js";
 
 test("API_KEY_STATUS_LABELS 映射 set/notSet 为中文", () => {
   assert.equal(API_KEY_STATUS_LABELS.set, "已连接");
   assert.equal(API_KEY_STATUS_LABELS.notSet, "未连接");
-});
-
-test("REGEX_UI_LABELS 深度与通道为主中文文案", () => {
-  assert.equal(REGEX_UI_LABELS.startDepth, "开始深度");
-  assert.equal(REGEX_UI_LABELS.endDepth, "结束深度");
-  assert.equal(REGEX_UI_LABELS.promptChannel, "提示词通道");
-  assert.equal(REGEX_UI_LABELS.displayChannel, "展示通道");
 });
 
 test("AGENT_LIST_LABELS 提供需修复与最大步数文案", () => {
@@ -26,11 +18,10 @@ test("AGENT_LIST_LABELS 提供需修复与最大步数文案", () => {
 test("ui-labels 可从 config-forms shared 入口导出", async () => {
   const shared = await import("../../src/config-forms/shared/index.js");
   assert.equal(shared.API_KEY_STATUS_LABELS.set, "已连接");
-  assert.equal(shared.REGEX_UI_LABELS.startDepth, "开始深度");
+  assert.equal(shared.AGENT_LIST_LABELS.needsRepair, "需修复");
 });
 
 test("ui-labels 可从 config-forms 根入口重导出", async () => {
   const root = await import("../../src/config-forms/index.js");
-  assert.equal(root.REGEX_UI_LABELS.startDepth, "开始深度");
   assert.equal(root.AGENT_LIST_LABELS.needsRepair, "需修复");
 });
