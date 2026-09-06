@@ -178,7 +178,7 @@ export async function resolveEngine(
     if (baseUrl == null) return null;
     return { engine: "searxng", baseUrl };
   }
-  // has 之后被并发清除的竞态兜底：get 不到明文视同未配置。
+  // has 之后被并发清除的竞态兜底：get 不到明文同样终止解析链（不静默改写为其他引擎）。
   const apiKey = await deps.secretStore.get(searchApiKeyRef(pick));
   if (apiKey == null || apiKey.length === 0) return null;
   return { engine: pick, apiKey };

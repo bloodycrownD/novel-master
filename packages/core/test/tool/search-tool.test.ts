@@ -64,10 +64,11 @@ function makeCtx(
   extra: {
     readonly search?: BuiltinToolContext["search"];
     readonly fetchFn?: typeof globalThis.fetch;
+    readonly vfs?: BuiltinToolContext["vfs"];
   } = {},
 ): BuiltinToolContext {
   return {
-    vfs: {} as never,
+    vfs: extra.vfs ?? ({} as never),
     projectId: "proj-1",
     sessionId: "sess-1",
     listSessionMessages: async () => [],
@@ -266,6 +267,83 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     );
     assert.equal((out as { engine: string }).engine, "searxng");
     assert.equal(urls[0], "http://192.168.1.5:8080/search?q=q&format=json");
+  });
+
+  it("T-O3: 结果序列化超 50KB 走 overflow-sink 落盘（savedPath/message，全文可读回）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    await secretStore.set("search/bocha/apiKey", "sk-bocha");
+    // 20 条 × 3KB snippet ≈ 61KB 序列化 > 50KB 预算。
+    const longSnippet = "s".repeat(3000);
+    const fetchFn = (async () =>
+      new Response(
+        JSON.stringify({
+          code: 200,
+          data: {
+            webPages: {
+              value: Array.from({ length: 20 }, (_, i) => ({
+                url: `https://x.example.com/${i}`,
+                title: `t${i}`,
+                summary: longSnippet,
+              })),
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )) as typeof globalThis.fetch;
+
+    const files = new Map<string, string>();
+    const vfs = {
+      write: async (p: string, content: string) => {
+        files.set(p, content);
+        return { version: 1 };
+      },
+      read: async (p: string) => {
+        const content = files.get(p);
+        if (content == null) throw new Error(`NOT_FOUND: ${p}`);
+        return { path: p, content, version: 1, mtimeMs: 0 };
+      },
+    } as never;
+
+    const runner = makeRunner();
+    // maxResults=20 让 20 条 3KB snippet 全量回流（缺省 5 条仅 15KB 不触发预算）。
+    const out = await runner.call(
+      SEARCH_TOOL_NAME,
+      { query: "q", maxResults: 20 },
+      makeCtx({
+        search: assembleSearchToolContext(
+          createSearchConfigStore({ kkv, secretStore })
+        ),
+        fetchFn,
+        vfs,
+      })
+    );
+    const rec = out as {
+      engine: string;
+      savedPath?: string;
+      message?: string;
+    };
+    // 落盘形态：SearchOversizeOutput（engine + savedPath + message，无 results）。
+    assert.equal(rec.engine, "bocha");
+    assert.ok(
+      rec.savedPath != null &&
+        /^\/tmp\/search-\d{8}-[0-9a-f]{4}\.json$/.test(rec.savedPath),
+      `savedPath 形状不对: ${rec.savedPath}`
+    );
+    assert.ok(rec.message != null && rec.message.length > 0);
+    // 落盘内容 = 截断前的序列化全文，后续 read 可读回。
+    const saved = files.get(rec.savedPath!);
+    assert.ok(saved != null);
+    const parsed = JSON.parse(saved!) as { engine: string; results: unknown[] };
+    assert.equal(parsed.engine, "bocha");
+    assert.equal(parsed.results.length, 20);
+    const readBack = (await (vfs as never as {
+      read: (p: string) => Promise<{ content: string }>;
+    }).read(rec.savedPath!)) as { content: string };
+    assert.equal(readBack.content, saved);
+    // formatter 落盘形态：显示「已落盘 路径」。
+    assert.ok(
+      formatToolOutputForLlm(rec).startsWith(`已落盘 ${rec.savedPath}`)
+    );
   });
 
   it("适配器错误经 toolFailed 包装（FAILED），错误文案不含 key 明文（T-C2 工具层）", async () => {
