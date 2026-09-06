@@ -13,6 +13,7 @@ import {
 } from "./schema-migrations-table.js";
 import { usageCacheModelBackfillV1Migration } from "./usage-cache-model-backfill-v1.js";
 import { retirePrefSessionFsVersionCheckV1Migration } from "./retire-pref-session-fs-version-check-v1.js";
+import { workplaceDirRuleSmartFieldV1Migration } from "./workplace-dir-rule-smart-field-v1.js";
 
 /**
  * 本版本最低支持 v1.4.28。以下 11 条 migration 的逻辑已并入 canonical DDL、
@@ -29,6 +30,7 @@ import { retirePrefSessionFsVersionCheckV1Migration } from "./retire-pref-sessio
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   usageCacheModelBackfillV1Migration,
   retirePrefSessionFsVersionCheckV1Migration,
+  workplaceDirRuleSmartFieldV1Migration,
 ];
 
 /**
