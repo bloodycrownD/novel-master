@@ -7,9 +7,9 @@
 - head_sha：ca1bba60
 - prd_path：docs/Iterations/smart-filename-sort/prd.md
 - spec_path：docs/Iterations/smart-filename-sort/spec.md
-- review_round：1
-- dag_version：2
-- 状态：draft
+- review_round：2
+- dag_version：3
+- 状态：fix-spec-ready
 
 ---
 
