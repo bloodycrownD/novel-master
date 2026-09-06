@@ -5,6 +5,5 @@
 
 export {
   buildStreamMetricsLine,
-  deriveRegexGroupId,
   formatCharCount,
 } from "@novel-master/core/format";

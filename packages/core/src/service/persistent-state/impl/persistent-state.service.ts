@@ -15,7 +15,6 @@ import {
   KEY_CURRENT_MODEL_ID,
   KEY_CURRENT_PROJECT_ID,
   KEY_CURRENT_PROVIDER_ID,
-  KEY_CURRENT_REGEX_GROUP_ID,
   KEY_CURRENT_SESSION_ID,
   WORKSPACE_STATE_MODULE,
 } from "./workspace-state-keys.js";
@@ -86,18 +85,6 @@ export class DefaultPersistentState implements PersistentState {
 
   resetCurrentModelId(): Promise<void> {
     return this.reset(KEY_CURRENT_MODEL_ID);
-  }
-
-  getCurrentRegexGroupId(): Promise<string | undefined> {
-    return this.get(KEY_CURRENT_REGEX_GROUP_ID);
-  }
-
-  setCurrentRegexGroupId(id: string): Promise<void> {
-    return this.set(KEY_CURRENT_REGEX_GROUP_ID, id);
-  }
-
-  resetCurrentRegexGroupId(): Promise<void> {
-    return this.reset(KEY_CURRENT_REGEX_GROUP_ID);
   }
 
   getCurrentAgentId(): Promise<string | undefined> {

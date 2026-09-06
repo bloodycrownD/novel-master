@@ -4,14 +4,6 @@ export const API_KEY_STATUS_LABELS = {
   notSet: "未连接",
 } as const;
 
-/** 正则规则编辑器深度与通道文案。 */
-export const REGEX_UI_LABELS = {
-  startDepth: "开始深度",
-  endDepth: "结束深度",
-  promptChannel: "提示词通道",
-  displayChannel: "展示通道",
-} as const;
-
 /** Agent 列表与元信息文案。 */
 export const AGENT_LIST_LABELS = {
   needsRepair: "需修复",
