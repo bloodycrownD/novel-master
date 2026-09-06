@@ -20,6 +20,7 @@ import {
 } from '@novel-master/core/vfs';
 
 import {
+  DEFAULT_WORKPLACE_DIR_RULE,
   type SetDirRuleInput,
   type WorkplaceListRow,
   type WorkplaceService,
@@ -309,6 +310,11 @@ export const VfsFileManager = forwardRef<
         fetchWorktreeRows(),
         worktreeSvc?.getDirRule(currentPath) ?? Promise.resolve(null),
       ]);
+      // 智能排序目录才拉预编译规则（懒加载；其它排序方式零额外查表）。
+      const smartRules =
+        (dirRule?.sortField ?? DEFAULT_WORKPLACE_DIR_RULE.sortField) === 'smart'
+          ? await runtime.smartSortRule.listCompiledRules()
+          : undefined;
       // 面包屑名字缓存：记录带 label 的合成目录行（项目/会话名）。
       for (const entry of listEntries) {
         if (entry.label != null) {
@@ -347,6 +353,7 @@ export const VfsFileManager = forwardRef<
         extraPaths: [...childPaths],
         dirRule: dirRule ?? null,
         kindByPath,
+        smartRules,
       }).filter(path => vfsPathSet.has(path));
 
       const mapped = orderedPaths.map(path => {
@@ -375,7 +382,7 @@ export const VfsFileManager = forwardRef<
       reloadInFlightRef.current = false;
       setLoading(false);
     }
-  }, [currentPath, fetchWorktreeRows, showToast, workplace]);
+  }, [currentPath, fetchWorktreeRows, showToast, workplace, runtime]);
 
   const reloadVfsListOnly = useCallback(async () => {
     await reload();

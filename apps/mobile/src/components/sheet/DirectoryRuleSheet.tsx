@@ -36,6 +36,7 @@ const SORT_FIELDS: {value: SortField; label: string}[] = [
   {value: 'name', label: '文件名称'},
   {value: 'created', label: '创建时间'},
   {value: 'updated', label: '更新时间'},
+  {value: 'smart', label: '智能排序'},
 ];
 
 const SORT_ORDERS: {value: SortOrder; label: string}[] = [
@@ -128,7 +129,7 @@ export function DirectoryRuleSheet({
       >
         {/* 规则启用/关闭由文件管理的快捷开关负责，表单内不再提供开关，仅编辑规则内容；
               ruleEnabled 沿用打开时的既有状态原样保存。 */}
-        <FieldLabel tokens={tokens} text="排序字段" />
+        <FieldLabel tokens={tokens} text="排序方式" />
         <OptionRow
           options={SORT_FIELDS}
           value={sortField}
