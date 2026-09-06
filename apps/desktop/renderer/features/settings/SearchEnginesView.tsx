@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ENGINE_IDS,
+  KEY_ENGINE_IDS,
+  type EngineId,
+  type KeyEngineId,
+} from "@shared/logic/search-engines";
 import type { SearchConfigDto } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -20,35 +26,28 @@ import {
 } from "./settings-ui";
 
 /**
- * 引擎展示元数据（与 core ENGINE_IDS 对应；engineId 值即 core 侧
- * EngineId 字符串，configured 状态经 IPC DTO 回填）。
+ * 引擎展示元数据：以 core `ENGINE_IDS` 为单一真源，卡片顺序由
+ * ENGINE_IDS 派生（engineId 值即 core 侧 EngineId 字符串，configured
+ * 状态经 IPC DTO 回填）。
  */
-const ENGINE_CARDS = [
-  {
-    id: "bocha",
+const ENGINE_CARDS: Record<EngineId, { label: string; desc: string }> = {
+  bocha: {
     label: "Bocha",
     desc: "博查 AI 搜索（api.bochaai.com），需 API Key。",
   },
-  {
-    id: "tavily",
+  tavily: {
     label: "Tavily",
     desc: "Tavily 搜索（tavily.com），需 API Key。",
   },
-  {
-    id: "brave",
+  brave: {
     label: "Brave",
     desc: "Brave 搜索（search.brave.com），需 API Key。",
   },
-  {
-    id: "searxng",
+  searxng: {
     label: "SearXNG",
     desc: "自托管元搜索实例，无需 API Key，填实例地址即可。",
   },
-] as const;
-
-type KeyEngineId = "bocha" | "tavily" | "brave";
-
-const KEY_ENGINES: readonly KeyEngineId[] = ["bocha", "tavily", "brave"];
+};
 
 /** 空白 key 输入态（保存后也回落到此态：留空不改语义）。 */
 const EMPTY_KEYS: Record<KeyEngineId, string> = {
@@ -57,11 +56,15 @@ const EMPTY_KEYS: Record<KeyEngineId, string> = {
   brave: "",
 };
 
-/** searxng baseUrl 的 URL 形状校验（无连通性测试，PRD 口径）。 */
+/** searxng baseUrl 的 URL 形状校验（无连通性测试，PRD 口径；禁 userinfo，与 mobile 侧同规则）。 */
 function isValidHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password
+    );
   } catch {
     return false;
   }
@@ -73,6 +76,8 @@ export function SearchEnginesView() {
   const [searxngUrl, setSearxngUrl] = useState("");
   const [defaultEngine, setDefaultEngine] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** 正在清除 key 的引擎（与保存互斥；null = 空闲，与 mobile 侧口径一致）。 */
+  const [clearing, setClearing] = useState<KeyEngineId | null>(null);
   const [error, setError] = useState<string | undefined>();
 
   const reload = useCallback(async (): Promise<void> => {
@@ -92,23 +97,39 @@ export function SearchEnginesView() {
   }, [reload]);
 
   const clearKey = async (engineId: KeyEngineId) => {
-    if (saving) return; // 与保存互斥，避免交错 IPC（与 mobile 侧口径一致）
+    if (saving || clearing != null) return; // 与保存互斥，避免交错 IPC（与 mobile 侧口径一致）
+    setClearing(engineId);
     setError(undefined);
-    const res = await ipcSearchClearEngineKey({ engineId });
-    if (res.ok) {
-      await reload();
-      toastSettingsSuccess("已清除");
-    } else {
-      setError(res.error.message);
+    try {
+      const res = await ipcSearchClearEngineKey({ engineId });
+      if (res.ok) {
+        await reload();
+        toastSettingsSuccess("已清除");
+      } else {
+        setError(res.error.message);
+      }
+    } finally {
+      setClearing(null); // 异常也不残留互斥态
     }
   };
 
   const save = async () => {
+    if (clearing != null) return; // 与清除互斥，避免交错 IPC（与 mobile 侧口径一致）
     setSaving(true);
     setError(undefined);
     try {
+      // 0) 先做本地校验：非法即早退，此时尚无任何 IPC 副作用（与 mobile 侧口径一致）
+      const nextUrl = searxngUrl.trim();
+      if (
+        nextUrl !== (config?.searxngBaseUrl ?? "") &&
+        nextUrl.length > 0 &&
+        !isValidHttpUrl(nextUrl)
+      ) {
+        setError("SearXNG 实例地址须为 http/https URL，且不允许携带用户名密码");
+        return;
+      }
       // 1) key 引擎：输入非空才保存（留空 = 不修改）
-      for (const engineId of KEY_ENGINES) {
+      for (const engineId of KEY_ENGINE_IDS) {
         const apiKey = keys[engineId].trim();
         if (apiKey.length === 0) continue;
         const res = await ipcSearchSaveEngineKey({ engineId, apiKey });
@@ -118,13 +139,8 @@ export function SearchEnginesView() {
           return;
         }
       }
-      // 2) searxng baseUrl：与已存值不同才提交（空串 = 清除）
-      const nextUrl = searxngUrl.trim();
+      // 2) searxng baseUrl：与已存值不同才提交（空串 = 清除；形状已在第 0 步校验）
       if (nextUrl !== (config?.searxngBaseUrl ?? "")) {
-        if (nextUrl.length > 0 && !isValidHttpUrl(nextUrl)) {
-          setError("SearXNG 实例地址须为 http/https URL");
-          return;
-        }
         const res = await ipcSearchSetSearxngBaseUrl({ baseUrl: nextUrl });
         if (!res.ok) {
           setError(res.error.message);
@@ -153,12 +169,12 @@ export function SearchEnginesView() {
   };
 
   const defaultOptions = useMemo(() => {
-    const options: { value: string; label: string }[] = [
+    const options: { value: string; label: string; disabled?: boolean }[] = [
       { value: "", label: "自动" },
     ];
-    for (const card of ENGINE_CARDS) {
-      if (config?.engines[card.id]?.configured) {
-        options.push({ value: card.id, label: card.label });
+    for (const engineId of ENGINE_IDS) {
+      if (config?.engines[engineId]?.configured) {
+        options.push({ value: engineId, label: ENGINE_CARDS[engineId].label });
       }
     }
     // 当前默认引擎已不在候选（如 key 被清除）时补挂为禁用项，保持可见可切换但不可重选（与 mobile 侧口径一致）
@@ -166,8 +182,8 @@ export function SearchEnginesView() {
       defaultEngine != null &&
       !options.some((o) => o.value === defaultEngine)
     ) {
-      const meta = ENGINE_CARDS.find((c) => c.id === defaultEngine);
-      if (meta) options.push({ value: meta.id, label: meta.label, disabled: true });
+      const meta = ENGINE_CARDS[defaultEngine as EngineId];
+      if (meta) options.push({ value: defaultEngine, label: meta.label, disabled: true });
     }
     return options;
   }, [config, defaultEngine]);
@@ -181,22 +197,27 @@ export function SearchEnginesView() {
         title="AI 搜索"
         desc="为 search 工具配置搜索引擎：API Key 经 SKSP 安全存储，仅保存时写入；至少配置一个引擎后 search 工具可用。"
         footer={
-          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+          <Button
+            variant="primary"
+            disabled={saving || clearing != null}
+            onClick={() => void save()}
+          >
             {saving ? "保存中…" : "保存"}
           </Button>
         }
       >
-        {ENGINE_CARDS.map((card) => {
-          const configured = config?.engines[card.id]?.configured ?? false;
+        {ENGINE_IDS.map((engineId) => {
+          const card = ENGINE_CARDS[engineId];
+          const configured = config?.engines[engineId]?.configured ?? false;
           return (
-            <SettingsSection key={card.id} title={card.label}>
+            <SettingsSection key={engineId} title={card.label}>
               <p className="settings-hint settings-hint--compact">
                 {card.desc}
               </p>
               <SettingsField label="配置状态">
                 <ApiKeyStatusTag status={configured ? "set" : "not set"} />
               </SettingsField>
-              {card.id === "searxng" ? (
+              {engineId === "searxng" ? (
                 <SettingsField label="实例 Base URL（留空 = 清除）">
                   <input
                     type="text"
@@ -212,18 +233,19 @@ export function SearchEnginesView() {
                   >
                     <input
                       type="password"
-                      value={keys[card.id]}
+                      value={keys[engineId]}
                       onChange={(e) =>
-                        setKeys({ ...keys, [card.id]: e.target.value })
+                        setKeys({ ...keys, [engineId]: e.target.value })
                       }
                     />
                   </SettingsField>
                   {configured ? (
                     <Button
                       variant="secondary"
-                      onClick={() => void clearKey(card.id)}
+                      disabled={saving || clearing != null}
+                      onClick={() => void clearKey(engineId)}
                     >
-                      清除密钥
+                      {clearing === engineId ? "清除中…" : "清除密钥"}
                     </Button>
                   ) : null}
                 </>
