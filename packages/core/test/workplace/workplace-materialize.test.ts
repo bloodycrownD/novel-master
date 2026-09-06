@@ -35,6 +35,8 @@ function createSpyingWorkplaceService(
     listAllPaths: (...args) => baseRepo.listAllPaths(...args),
     listDirectoryPathsUnderPrefix: (...args) =>
       baseRepo.listDirectoryPathsUnderPrefix(...args),
+    listDirectoryMetaUnderPrefix: (...args) =>
+      baseRepo.listDirectoryMetaUnderPrefix(...args),
     listEntriesUnderPrefix: (...args) =>
       baseRepo.listEntriesUnderPrefix(...args),
     listFileMetaUnderPrefix: async (...args) => {

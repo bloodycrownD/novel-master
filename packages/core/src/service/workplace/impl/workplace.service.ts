@@ -37,12 +37,15 @@ import type {
   WorkplacePersistBlock,
   WorkplaceService,
 } from "../workplace.port.js";
+import type { SmartRulesProvider } from "../workplace.port.js";
 
 /** Dependencies for {@link DefaultWorkplaceService}. */
 export interface WorkplaceServiceDeps {
   readonly scope: WorkplaceScope;
   readonly vfs: VfsEntryRepository;
   readonly workplace: WorkplaceRepository;
+  /** 懒加载智能规则 provider；缺省时 smart 排序退化为自然排序（D4）。 */
+  readonly smartRules?: SmartRulesProvider;
 }
 
 /**
@@ -215,6 +218,8 @@ export class DefaultWorkplaceService implements WorkplaceService {
       fileSet: ctx.fileSet,
       dirRuleMap: ctx.dirRuleMap,
       mtimeByPath: ctx.mtimeByPath,
+      smartRules: ctx.smartRules,
+      dirMtimeByPath: ctx.dirMtimeByPath,
       displayByPath: view.displayByPath,
     });
     return { listRows: view.rows, filetreeDisplay };
@@ -251,12 +256,27 @@ export class DefaultWorkplaceService implements WorkplaceService {
     for (const logical of dirPaths) {
       allDirs.add(logical);
     }
+    const dirMtimeByPath = new Map<string, number>();
+    for (const row of await this.deps.vfs.listDirectoryMetaUnderPrefix(
+      vfsKey,
+      "/"
+    )) {
+      dirMtimeByPath.set(row.path, row.mtimeMs);
+    }
+    // 懒加载（Step 6）：仅当存在启用且 sortField='smart' 的目录规则时才查表编译
+    const smartRules =
+      this.deps.smartRules != null &&
+      [...dirRuleMap.values()].some((r) => r.ruleEnabled && r.sortField === "smart")
+        ? await this.deps.smartRules()
+        : undefined;
     return {
       dirRuleMap,
       fileRuleMap,
       fileSet,
       mtimeByPath,
       allDirs,
+      smartRules,
+      dirMtimeByPath,
     };
   }
 }
