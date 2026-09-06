@@ -1,5 +1,5 @@
 /**
- * Messages IPC handlers — list (display regex), append, edit, hide, delete, rollback.
+ * Messages IPC handlers — list, append, edit, hide, delete, rollback.
  */
 import {
   clearChatAnnotateDrafts,
@@ -34,7 +34,7 @@ import type {
 import { formatIpcError } from '../format-ipc-error.js';
 import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
 import { notifyComposerStatusAfterFloorOrCompaction, notifyComposerStatusAfterSessionKkvCleared } from '../../services/notify-composer-status-after-kkv-clear.js';
-import { loadSessionMessagesForDisplay } from '../../services/regex-apply-channel.service.js';
+
 
 function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
   switch (block.type) {
@@ -89,7 +89,7 @@ export async function handleMessagesList(
 ): Promise<IpcResult<ChatMessageDto[]>> {
   try {
     const rt = await getDesktopRuntime();
-    const messages = await loadSessionMessagesForDisplay(rt, req.sessionId);
+    const messages = await rt.messages.listBySession(req.sessionId);
     return { ok: true, data: messages.map(toDto) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -97,8 +97,8 @@ export async function handleMessagesList(
 }
 
 /**
- * 聊天记录查询：直接透传 core 的 searchMessages，不套 regex-apply
- * （loadSessionMessagesForDisplay），保证返回的 bodyText 是原始文本。
+ * 聊天记录查询：直接透传 core 的 searchMessages，
+ * 保证返回的 bodyText 是原始文本。
  */
 export async function handleMessagesSearch(
   req: MessagesSearchRequest,

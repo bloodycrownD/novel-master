@@ -77,20 +77,6 @@ import {
   handleProvidersList,
 } from './handlers/providers.js';
 import {
-  handleRegexCreateGroup,
-  handleRegexCreateRule,
-  handleRegexDeleteGroup,
-  handleRegexDeleteRule,
-  handleRegexGetGroup,
-  handleRegexGetRule,
-  handleRegexListGroups,
-  handleRegexListPicker,
-  handleRegexListRules,
-  handleRegexSetCurrent,
-  handleRegexUpdateGroup,
-  handleRegexUpdateRule,
-} from './handlers/regex.js';
-import {
   handleSkillsAssertCreateName,
   handleSkillsDelete,
   handleSkillsEdit,
@@ -370,20 +356,6 @@ export function registerHandlersFromRegistry(): void {
   );
   bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, handleAgentYamlExport);
   bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
-
-
-  bindNoArg(IPC_CHANNELS.REGEX_LIST_GROUPS, handleRegexListGroups);
-  bindReq(IPC_CHANNELS.REGEX_GET_GROUP, handleRegexGetGroup);
-  bindReq(IPC_CHANNELS.REGEX_CREATE_GROUP, handleRegexCreateGroup);
-  bindReq(IPC_CHANNELS.REGEX_UPDATE_GROUP, handleRegexUpdateGroup);
-  bindReq(IPC_CHANNELS.REGEX_DELETE_GROUP, handleRegexDeleteGroup);
-  bindReq(IPC_CHANNELS.REGEX_LIST_RULES, handleRegexListRules);
-  bindReq(IPC_CHANNELS.REGEX_GET_RULE, handleRegexGetRule);
-  bindReq(IPC_CHANNELS.REGEX_CREATE_RULE, handleRegexCreateRule);
-  bindReq(IPC_CHANNELS.REGEX_UPDATE_RULE, handleRegexUpdateRule);
-  bindReq(IPC_CHANNELS.REGEX_DELETE_RULE, handleRegexDeleteRule);
-  bindNoArg(IPC_CHANNELS.REGEX_LIST_PICKER, handleRegexListPicker);
-  bindReq(IPC_CHANNELS.REGEX_SET_CURRENT, handleRegexSetCurrent);
 
   bindReq(IPC_CHANNELS.SKILLS_LIST, handleSkillsList);
   bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);

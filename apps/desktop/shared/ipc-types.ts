@@ -141,20 +141,6 @@ export const IPC_CHANNELS = {
   AGENT_YAML_EXPORT: 'nm:agentYaml/export',
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
 
-
-  REGEX_LIST_GROUPS: 'nm:regex/listGroups',
-  REGEX_GET_GROUP: 'nm:regex/getGroup',
-  REGEX_CREATE_GROUP: 'nm:regex/createGroup',
-  REGEX_UPDATE_GROUP: 'nm:regex/updateGroup',
-  REGEX_DELETE_GROUP: 'nm:regex/deleteGroup',
-  REGEX_LIST_RULES: 'nm:regex/listRules',
-  REGEX_GET_RULE: 'nm:regex/getRule',
-  REGEX_CREATE_RULE: 'nm:regex/createRule',
-  REGEX_UPDATE_RULE: 'nm:regex/updateRule',
-  REGEX_DELETE_RULE: 'nm:regex/deleteRule',
-  REGEX_LIST_PICKER: 'nm:regex/listPicker',
-  REGEX_SET_CURRENT: 'nm:regex/setCurrent',
-
   SKILLS_LIST: 'nm:skills/list',
   SKILLS_EFFECTIVE: 'nm:skills/effective',
   SKILLS_READ: 'nm:skills/read',
@@ -1215,66 +1201,6 @@ export type AgentYamlExportRequest = {
 
 export type AgentYamlImportRequest = {
   readonly agentId: string;
-};
-
-export type RegexGroupDto = {
-  readonly groupId: string;
-  readonly displayName: string | null;
-  readonly ruleCount: number;
-};
-
-export type RegexGroupIdRequest = {
-  readonly groupId: string;
-};
-
-export type RegexCreateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string;
-};
-
-export type RegexUpdateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string | null;
-};
-
-export type RegexRuleDto = {
-  readonly ruleId: string;
-  readonly name: string;
-  readonly pattern: string;
-  readonly flags: string;
-  readonly enabled: boolean;
-  readonly llmReplace: string | null;
-  readonly displayReplace: string | null;
-  readonly startDepth: number | null;
-  readonly endDepth: number | null;
-  readonly scopeUser: boolean;
-  readonly scopeAssistant: boolean;
-};
-
-export type RegexRuleIdRequest = RegexGroupIdRequest & {
-  readonly ruleId: string;
-};
-
-export type RegexCreateRuleRequest = RegexGroupIdRequest & {
-  readonly rule: Omit<RegexRuleDto, 'ruleId'> & { readonly ruleId?: string };
-};
-
-export type RegexUpdateRuleRequest = RegexRuleIdRequest & {
-  readonly patch: Partial<Omit<RegexRuleDto, 'ruleId'>>;
-};
-
-export type RegexPickerRowDto = {
-  readonly groupId: string;
-  readonly label: string;
-};
-
-export type RegexListPickerResponse = {
-  readonly rows: readonly RegexPickerRowDto[];
-  readonly currentId: string | undefined;
-};
-
-export type RegexSetCurrentRequest = {
-  readonly groupId: string | null;
 };
 
 /** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */
