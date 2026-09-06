@@ -11,5 +11,4 @@ export const KEY_CURRENT_PROJECT_ID = "currentProjectId";
 export const KEY_CURRENT_SESSION_ID = "currentSessionId";
 export const KEY_CURRENT_PROVIDER_ID = "currentProviderId";
 export const KEY_CURRENT_MODEL_ID = "currentModelId";
-export const KEY_CURRENT_REGEX_GROUP_ID = "currentRegexGroupId";
 export const KEY_CURRENT_AGENT_ID = "currentAgentId";

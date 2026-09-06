@@ -42,10 +42,6 @@
       "types": "./dist/public/provider.d.ts",
       "import": "./dist/public/provider.js"
     },
-    "./regex": {
-      "types": "./dist/public/regex.d.ts",
-      "import": "./dist/public/regex.js"
-    },
     "./message-checkpoint": {
       "types": "./dist/public/message-checkpoint.d.ts",
       "import": "./dist/public/message-checkpoint.js"

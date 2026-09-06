@@ -8,7 +8,6 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { CreateAgentRunnerDeps } from "../create-agent-runner.js";
 import type { ChatAgentSession } from "../impl/chat-agent-session.js";
@@ -31,7 +30,6 @@ export interface AssembleAgentRunnerDepsInput {
     | "preferences"
   > & {
     readonly workplace: AgentTurnRuntimePort["workplace"];
-    readonly regexConfig?: RegexConfigService;
     readonly savedModelRepo?: SavedModelRepository;
     /** 事件轨 savedModels 别名。 */
     readonly savedModels?: SavedModelRepository;
@@ -62,7 +60,6 @@ export function assembleAgentRunnerDeps(
     // skillAttach hydrate 用的技能服务工厂（透传 runtime.skills）。
     skills: input.runtime.skills,
     messageCheckpoint: input.runtime.messageCheckpoint,
-    regexConfig: input.runtime.regexConfig,
     eventBus: input.runtime.eventBus,
     sessionKkv: input.runtime.sessionKkv,
     streamRegistry: input.runtime.streamRegistry,
