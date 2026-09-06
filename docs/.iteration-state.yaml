@@ -1,5 +1,5 @@
 # code-dev-loop 编排状态——dev-tool-fixes-20260906（fix-spec 执行）
-dag_version: 1
+dag_version: 3
 spec_path: docs/Iterations/dev-tool-fixes-20260906/cr-fix-spec.md
 branch: dev
 base_sha: c7ae693
@@ -12,5 +12,10 @@ node_status:
   verify-core: { status: done, executor: main, result: "1813 pass / 0 fail" }
   verify-apps: { status: done, executor: main, result: "mobile 1092 pass；desktop typecheck 0 错；chat-smoke/session-rollback/preferences-e2e 绿" }
   fix-verify-strays: { status: done, executor: main, note: "MF-5 漏网两处（core format-vfs-error-for-user.test + mobile format-error.test）改 NOT_FOUND/REPLACE_NOT_FOUND；CLI 三 e2e 补 agent 种子与末行解析" }
+  cr-func-full: { status: done, func_ready: yes, executor: subagent }
+  crfunc-polish: { status: done, executor: main, note: "G-1 种子挪 try；C-1 错别字；K-1 JSDoc" }
 open_must_fix: []
+spec_deviations: []
+dev_ready: yes
+head_sha: HEAD
 spec_deviations: []
