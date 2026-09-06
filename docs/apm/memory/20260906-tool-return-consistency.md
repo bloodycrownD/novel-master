@@ -73,3 +73,9 @@ user:
 
 assistant:
 dev-ready 达成。编排：wave-0 三 impl 子代理并行（core-agent MF-3/8、core-vfs MF-5/7/9、apps MF-1/2/4）+ MF-6 主代理 trivial；verify 主代理执行（trivial）——core 1813 绿、mobile 1092 绿、desktop typecheck 0 错；verify 抓到 MF-5 两处漏网（core format-vfs-error-for-user.test 与 mobile format-error.test 的 CONFLICT 用例，spec 文件清单漏列）主代理修正；CLI chat-smoke/session-rollback/preferences-C5 三个 e2e 修通两个既有根因：fresh DB registry 空导致 session create 失败（测试补 agent import 种子 bundle，resolveWorkspaceAgentForNewSession 的 listAgentIds()[0] 回落即通）+ migration 日志污染 stdout（id 取末行）——其余 28 个 CLI 失败属同类既有债（失败签名与基线一致，非本批引入）。cr-func readonly 子代理判定 func-ready yes（九条 MF 闭合、无新 must-fix、verify 附加修复不构成 spec deviation），三条 suggestion（种子挪 try 防临时目录泄漏/错别字/JSDoc）主代理 trivial 闭合。教训：CLI e2e 全绿的前置是 fresh DB 种 agent + stdout 末行解析，两个坑修了三个文件还剩同类债在其余套件。
+
+user:
+（novel-master-changelog skill 加载，校对 Unreleased 段）
+
+assistant:
+按 skill 校对清单过 Unreleased，五处修正：(1) 「老版本数据库迁移代码清理」从变更段挪维护段——先例 f104af1 落维护段，且 skill 格式参考明确「旧 migration 注册表清理」是维护正面例子；(2) 修复段「AI 修改已有技能不再报版本冲突」收窄为纯 bug 面（删「同时精简 AI 写文件工具的参数」半句——同功能只在一处讲完）；(3) 该半句并入变更段「文件写入版本校验整体移除」的移除清单（设置项+AI 工具参数+CLI 旗标一处列全）；(4) 「提交 null 可清除字段」软化为人话「也可明确指定清除某项恢复默认」；(5) 顺手修条目间多余空行。维护段新增「内置技能文档自动更新」一条（seed 版本化机制的独立内部改动）。终态：修复 2 / 变更 3 / 维护 2。
