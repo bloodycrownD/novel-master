@@ -44,15 +44,6 @@ import {
   ipcProvidersEdit,
   ipcProvidersGet,
   ipcProvidersList,
-  ipcRegexCreateGroup,
-  ipcRegexCreateRule,
-  ipcRegexDeleteGroup,
-  ipcRegexDeleteRule,
-  ipcRegexGetRule,
-  ipcRegexListGroups,
-  ipcRegexListRules,
-  ipcRegexUpdateGroup,
-  ipcRegexUpdateRule,
 } from "@/ipc/client";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
@@ -66,7 +57,6 @@ import {
   SettingsListSection,
   ApiKeyStatusTag,
   SettingsPanel,
-  SettingsSection,
 } from "./settings-ui";
 import {
   AGENT_LIST_LABELS,

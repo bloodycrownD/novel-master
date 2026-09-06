@@ -13,8 +13,6 @@ import {
   ipcPreferencesGetThinkingContext,
   ipcPreferencesSetLlmStream,
   ipcPreferencesSetThinkingContext,
-  ipcRegexListPicker,
-  ipcRegexSetCurrent,
 } from "@/ipc/client";
 
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
