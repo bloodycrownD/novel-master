@@ -58,6 +58,7 @@ import {
   type SessionListByProjectRequest,
   type SessionProjectComposerStatusRequest,
   type SessionPullTemplateRequest,
+  type SessionPushTemplateRequest,
   type SessionRenameRequest,
   type SessionAgentConfigDto,
   type SessionSetAgentBindingRequest,
@@ -304,6 +305,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       SessionPullTemplateRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SESSIONS_PULL_TEMPLATE),
+    ipcSessionsPushTemplate: withReq<
+      SessionPushTemplateRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE),
     ipcMessagesList: withReq<MessagesListRequest, IpcResult<ChatMessageDto[]>>(
       invoke,
       IPC_CHANNELS.MESSAGES_LIST,

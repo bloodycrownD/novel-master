@@ -80,6 +80,7 @@ export const IPC_CHANNELS = {
   WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
+  SESSIONS_PUSH_TEMPLATE: 'nm:sessions/pushTemplate',
 
   MESSAGES_LIST: 'nm:messages/list',
   MESSAGES_APPEND: 'nm:messages/append',
@@ -606,6 +607,11 @@ export type SessionFsRollbackRequest = {
 };
 
 export type SessionPullTemplateRequest = {
+  readonly sessionId: string;
+};
+
+/** 推送：用当前聊天工作区整树覆盖项目工作区（模板母本）。 */
+export type SessionPushTemplateRequest = {
   readonly sessionId: string;
 };
 
