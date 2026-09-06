@@ -752,9 +752,9 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       ...SAMPLE_SUMMARY,
       totalTokens: 2500,
     });
-    // 兑底 label 覆盖（mobile/G-1）：在全局两行之外局部补两行——p1·
+    // 兜底 label 覆盖（mobile/G-1）：在全局两行之外局部补两行——p1·
     // modelName=null 走「其他模型」归并行；ghost 不在 providers mock 中，
-    // 名称解析不到走「未知服务商」兑底。局部覆盖不动全局 SAMPLE_MODEL_ROWS，
+    // 名称解析不到走「未知服务商」兜底。局部覆盖不动全局 SAMPLE_MODEL_ROWS，
     // 避免影响依赖「两行恰两扇区」的其他用例；新增行用量小值不影响既有
     // 排序/占比断言（分母仍为窗口 2500）。
     mockGetModelBreakdown.mockResolvedValue([
@@ -794,8 +794,8 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
     ).toContain('未记录服务商');
-    // 新增两行的扇区与兑底 label：p1·modelName=null →「{服务商} · 其他模型」；
-    // ghost 不在 providers mock 中 →「未知服务商 · x」。若 UI 去掉兑底
+    // 新增两行的扇区与兜底 label：p1·modelName=null →「{服务商} · 其他模型」；
+    // ghost 不在 providers mock 中 →「未知服务商 · x」。若 UI 去掉兜底
     // 分支（直接取 providerLabels[id] 得 undefined），此处断言即红。
     expect(
       findByTestId(renderer.root, 'pie-sector-p1::__unlogged__'),
@@ -970,7 +970,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     mockGetDailyBuckets.mockResolvedValue([]);
     mockGetModelBreakdown.mockResolvedValue([]);
     const renderer = await renderScreen();
-    // 汇总页签（默认）：空态文案在场、无指标卡（不渲染 0 兑底卡片）。
+    // 汇总页签（默认）：空态文案在场、无指标卡（不渲染 0 兜底卡片）。
     expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
     expect(findByTestId(renderer.root, 'summary-metric-total')).toBeUndefined();
     const json = JSON.stringify(renderer.toJSON());
@@ -1020,7 +1020,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(errorBar).toBeTruthy();
     expect(nodeText(errorBar!)).toContain('db locked');
     expect(mockShowToast).toHaveBeenCalledTimes(1);
-    // 无旧数据时不渲染 0 兑底卡片（误导性的「一排 0」）。
+    // 无旧数据时不渲染 0 兜底卡片（误导性的「一排 0」）。
     expect(findByTestId(renderer.root, 'summary-metric-total')).toBeUndefined();
     expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
     // 切范围重查成功（mock 回落 resolvedValue）→ 错误条清除、数据恢复。

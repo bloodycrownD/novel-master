@@ -300,7 +300,7 @@ export class DefaultUsageStatsService implements UsageStatsService {
     // 切片无从辨认也无意义，全部归并为单行（modelName 同置 null，
     // 即使模型名在配置集合内也不独立成行）；providerId 为写入时快照，
     // 不做存在性回查（服务商已删除仍按原 id 归组，展示名解析不到
-    // 由 UI 层兑底）。归并后重排保持按用量降序。
+    // 由 UI 层兜底）。归并后重排保持按用量降序。
     const configured = new Set(await this.listModels());
     const compositeKey = (
       providerId: string | null,
