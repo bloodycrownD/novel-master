@@ -55,3 +55,9 @@ user:
 
 assistant:
 CR 两轮收敛完成，fix-spec-ready。编排：R1 并行双 scope（reviewer×2，readonly）——core 侧 4 条（core/A-1 P1：withDefaultPromptLayouts 静默洗白非对象 prompts、core/C-1 P2：vfsConflict 半残留、core/C-2 P2：三处过时注释、core/G-1 P2：测试缺口）、apps 侧 4 条（apps/G-1 P0：mobile 契约测试锁已删的 expectedVersion 必红、apps/G-2 P0：两个 CLI e2e 仍 set 退役偏好必红、apps/C-1 P1：mobile version state 只写不读 parity 分叉、apps/A-1 P2：CHANGELOG 措辞窄）。主代理 grep 抽查两个 P0 属实后派 worker spec-fix 落盘 8 条；R2 review-full 逐条代码现场复核 8/8 实证、无新 P0/P1，建议 ready，附 4 处 spec 小修（两条路径勘误、MF-7 补幽灵实参、MF-1 编号撞名注明）——trivial 豁免主代理直接落。Closure：P0 2 / P1 2 / P2 4 全入 spec，open spec_deviation 1 条（readStdin 空输入防护待拍板）、open questions 4 条待用户。产出 docs/Iterations/dev-tool-fixes-20260906/cr-fix-spec.md。子代理代记：reviewer/worker 均 readonly 或单文件约束未记 apm，由主代理本轮代记。
+
+user:
+记录到 cr spec 中，不用立刻修理。另外我发现 cr check 流程你没派遣 agent？是自己 check 的？
+
+assistant:
+澄清：CR 评审四节点全部子代理派遣（R1 双 reviewer 并行、spec-fix worker、R2 review-full reviewer，转录日志均在 ~/.pi/agent/subagent-logs/ 20260906-1031*~1039*）；主代理只做了三件合规事——P0 交付抽查（AGENTS.md 抽查义务）、末轮 spec 小修（trivial 豁免）、MF-9 改法前置调研（bootstrap 迁移机制，属 spec 撰写非评审）。KKV 死键清理按用户拍板转正 MF-9：新增 schema migration retire-pref-session-fs-version-check-v1（DELETE kkv_entry 死键，module 用 PREFERENCES_MODULE 常量），走 SCHEMA_MIGRATIONS 注册（快/慢路径都跑 + applied 去重 + 免 bump SCHEMA_BOOT_VERSION），不立刻执行。
