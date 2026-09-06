@@ -124,3 +124,9 @@ user:
 
 assistant:
 CR 循环 3 轮收敛 fix-spec-ready：wave-0 三 scope 并行评审（desktop 首发被中止 exit 143，单发重试成功），全部 scope-ready、零 P0/P1、零 spec_deviations，17 条 P2（core 3/mobile 7/desktop 7：测试覆盖缺口、死代码死样式、注释漂移、DRY、跨端 toggle parity、单扇区整圆零覆盖等）由 spec-fix 子代理落盘 cr-fix-spec.md（行号实测校准）；review-full 抓到 X-1 交叉遗漏（mobile 同根因跨午夜竞态）由主代理 trivial 豁免并入 B-2 双端条目；round 3 轻量复核建议 yes。Closure 已附，待用户确认后按 fix-spec 开工执行。
+
+user:
+（code-dev-loop）按 fix-spec 开工执行。
+
+assistant:
+cr-fix-spec 17 条 P2 三路并行闭合（core 023c376：providerId 三态断言+类型钉子+死排序；mobile ed86c8f/ccdd9b9：死代码清理+toggle+跨零点补选+分页常量收敛+兜底 label 断言；desktop 327b7c9/a14d835：日历溢出行内拦截+补选取 toDay+0 值扇区跳过+三个测试缺口补齐），cr-func func-ready: yes，两条实现偏差（G-1 行指纹、A-1 直接访问钉子）复核判语义等价。错字清理 fd82bc9。三端 1794/109/1093 全绿+整仓 typecheck 0。fix-spec 7 条 open questions 仍待用户拍板（分页 50/10、探底 365 过期等）。dev-ready 收口。

@@ -276,3 +276,4 @@
 | C-orch | ✅（跨端色板/空态/toggle/分页已查；分页 50/10 为 base 现状进 open questions） |
 | C 类合并后 QA | 无 |
 | 备忘 | round 3 轻量复核确认无冲突/无重复/无计数漂移 |
+| 执行记录 | 2026-09-07 code-dev-loop 三路并行闭合 17/17：core 023c376、mobile ed86c8f+ccdd9b9、desktop 327b7c9+a14d835（错字清理 fd82bc9）；cr-func func-ready: yes；两条实现偏差（G-1 行指纹断言、A-1 直接属性访问钉子）经复核判语义等价/必要修正；三端全量 core 1794 / desktop 109 / mobile 1093 + 整仓 typecheck 0 |

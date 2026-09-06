@@ -1,40 +1,21 @@
-# code-dev-loop 编排状态——token-usage-stats-ui-refresh
-dag_version: 5
-spec_path: docs/Iterations/token-usage-stats-ui-refresh/spec.md
+# code-dev-loop 编排状态——token-usage-stats-ui-refresh（cr-fix-spec 执行轮）
+dag_version: 2
+spec_path: docs/Iterations/token-usage-stats-ui-refresh/cr-fix-spec.md
 prd_path: docs/Iterations/token-usage-stats-ui-refresh/prd.md
 branch: feat/token-usage-stats-ui-refresh
-base_sha: c95bf97
-head_sha: d0dd9a8
+fix_base: 12cce9d
+head_sha: fd82bc9
 wave_plan: []
 node_status:
-  impl-core: { status: done, head_sha: 512cae4, executor: subagent }
-  verify-core: { status: done, executor: main }
-  cr-func-core: { status: done, func_ready: yes, executor: subagent }
-  fix-core-w1: { status: done, head_sha: 1918ee3, executor: main }
-  impl-desktop: { status: done, head_sha: dd0ba43, executor: subagent, extra: 2de4467 }
-  impl-mobile: { status: done, head_sha: 7670b56, executor: subagent }
-  cr-func-desktop: { status: done, func_ready: yes, executor: subagent }
-  cr-func-mobile: { status: done, func_ready: yes, executor: subagent }
-  fix-desktop: { status: done, head_sha: 6665370, executor: subagent, note: 后被勘误反转覆盖 }
-  fix-mobile: { status: done, head_sha: 1e40205, executor: subagent, note: 后被勘误反转覆盖 }
-  cr-func-fix-round: { status: done, func_ready: yes, executor: subagent, note: 结论基于解绑方向，已作废 }
-  impl-docs: { status: done, executor: main }
-  doc-reverse: { status: done, head_sha: 085123d, executor: main, note: 需求①勘误 PRD/spec/CHANGELOG }
-  fix-desktop-reverse: { status: done, head_sha: d0dd9a8, executor: subagent }
-  fix-mobile-reverse: { status: done, head_sha: 60cb63f, executor: subagent }
-  verify-reverse: { status: done, executor: main, result: desktop 106/106 + mobile 1092/1092 + 整仓 typecheck 0 }
-  cr-func-reverse: { status: done, func_ready: yes, executor: subagent }
-  fix-core-merge-null-provider: { status: done, head_sha: 49cb0d4, executor: subagent }
-  fix-desktop-null-provider-label: { status: done, head_sha: d02a7a4, executor: subagent }
-  fix-mobile-null-provider-label: { status: done, head_sha: d0dd9a8, executor: subagent }
-  verify-null-provider-merge: { status: done, executor: main, result: core 1794 + desktop 106 + mobile 1092 }
-  cr-func-null-provider-merge: { status: done, func_ready: yes, executor: subagent }
+  fix-cr-core: { status: done, head_sha: 023c376, executor: subagent, entries: "core/G-1, A-1, C-1" }
+  fix-cr-mobile: { status: done, head_sha: ccdd9b9, executor: subagent, entries: "mobile/C-1..C-5, G-1, C-orch-1 + B-2 移动半边", extra: ed86c8f }
+  fix-cr-desktop: { status: done, head_sha: a14d835, executor: subagent, entries: "desktop/G-1..G-3, B-1, B-2 桌面半边, C-1, S-1", extra: 327b7c9 }
+  verify-cr: { status: done, executor: main, result: "core 1794 / desktop 109 / mobile 1093 / typecheck 0" }
+  cr-func-cr: { status: done, func_ready: yes, executor: subagent }
 open_must_fix: []
 spec_deviations: []
-known_optional:
-  - mobile「窗口空+流水页签」用例可补查询照发断言与 desktop 对齐（consider 级，未做）
-  - desktop requestsFilter 别名可直接用 filter（consider 级，未做）
-manual_user_pending:
-  - 桌面端 dev 运行目验：今天 tab 直出小时图、饼图点选详情行、流水随窗口过滤、亮暗色板
-  - Android 真机验收：同四项（RN 侧改动，metro reload 生效即可，无需整包重装）
-status: dev-ready（需求①勘误后）
+notes: >-
+  上游业务迭代已 dev-ready（见 git 历史与记忆）；本循环执行 CR 产出的
+  17 条 P2 fix-spec。open questions 7 条不阻塞，留用户拍板。
+
+status: dev-ready（cr-fix-spec 执行轮收口）
