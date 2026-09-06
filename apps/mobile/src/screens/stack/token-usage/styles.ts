@@ -154,6 +154,12 @@ export const styles = StyleSheet.create({
     flexShrink: 1,
     fontSize: 13,
   },
+  /* 图例常驻百分比列：固定最小宽右对齐，长 label 截断也顶不掉它 */
+  pieLegendPercent: {
+    minWidth: 40,
+    textAlign: 'right',
+    fontSize: 13,
+  },
   dayDetail: {
     marginTop: 16,
     gap: 8,

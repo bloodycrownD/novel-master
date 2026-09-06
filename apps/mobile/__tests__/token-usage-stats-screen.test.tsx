@@ -791,9 +791,15 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       findByTestId(renderer.root, 'pie-legend-p1::gpt-4o')!,
     );
     expect(legendText).toContain('智谱 · gpt-4o');
+    // 图例行常驻百分比（T-MC4）：与详情行同分母（窗口 2500），
+    // gpt-4o 950/2500=38%，未记录 600/2500=24%。
+    expect(legendText).toContain('38%');
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
     ).toContain('未记录服务商');
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
+    ).toContain('24%');
     // 新增两行的扇区与兜底 label：p1·modelName=null →「{服务商} · 其他模型」；
     // ghost 不在 providers mock 中 →「未知服务商 · x」。若 UI 去掉兜底
     // 分支（直接取 providerLabels[id] 得 undefined），此处断言即红。
@@ -1315,6 +1321,37 @@ describe('T-M7 PieChart 组件级', () => {
       await flushPromises();
     });
     expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
+  });
+
+  it('图例行常驻百分比：正常分母三行按窗口 totalTokens 计算（T-MC4）', async () => {
+    const renderer = await renderPie();
+    // 700/2500=28%、250/2500=10%、50/2500=2%：分母为传入的窗口
+    // totalTokens（2500），非行总和（1000）。图例行文本直接含百分比，
+    // 无需点选交互。
+    expect(nodeText(findByTestId(renderer.root, 'pie-legend-a')!)).toContain(
+      '28%',
+    );
+    expect(nodeText(findByTestId(renderer.root, 'pie-legend-b')!)).toContain(
+      '10%',
+    );
+    expect(nodeText(findByTestId(renderer.root, 'pie-legend-c')!)).toContain(
+      '2%',
+    );
+  });
+
+  it('图例百分比 0 分母：显示 0% 不崩（T-MC4 除零安全）', async () => {
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <PieChart data={PIE_ROWS} totalTokens={0} tokens={CHART_TOKENS} />,
+      );
+      await flushPromises();
+    });
+    for (const key of ['a', 'b', 'c']) {
+      expect(
+        nodeText(findByTestId(renderer!.root, `pie-legend-${key}`)!),
+      ).toContain('0%');
+    }
   });
 
   it('唯一非零行满圆扇区与零值行：不渲染退化扇区，图例仍在（T-M7 兜底形态）', async () => {
