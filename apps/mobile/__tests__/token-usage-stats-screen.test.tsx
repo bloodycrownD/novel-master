@@ -32,7 +32,6 @@ const mockGetSummary = jest.fn();
 const mockGetDailyBuckets = jest.fn();
 const mockGetHourlyBuckets = jest.fn();
 const mockGetModelBreakdown = jest.fn();
-const mockListModels = jest.fn();
 const mockProvidersList = jest.fn();
 const mockListByProvider = jest.fn();
 const mockListRequestUsage = jest.fn();
@@ -43,7 +42,6 @@ const mockRuntime = {
     getDailyBuckets: mockGetDailyBuckets,
     getHourlyBuckets: mockGetHourlyBuckets,
     getModelBreakdown: mockGetModelBreakdown,
-    listModels: mockListModels,
     listRequestUsage: mockListRequestUsage,
   },
   providers: {
@@ -386,7 +384,6 @@ beforeEach(() => {
     })),
   );
   mockGetModelBreakdown.mockReset().mockResolvedValue(SAMPLE_MODEL_ROWS);
-  mockListModels.mockReset().mockResolvedValue(['gpt-4o']);
   mockProvidersList
     .mockReset()
     .mockResolvedValue([{id: 'p1', displayName: '智谱'}]);
@@ -729,6 +726,24 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(json).toContain('83%');
   });
 
+  it('重复点选同一天 toggle 取消选中，小时图随之消失（与桌面端一致，mobile/C-orch-1）', async () => {
+    const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
+    await act(async () => {
+      findByTestId(renderer.root, 'bar-col-2026-08-21')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'hourly-chart')).toBeTruthy();
+    // 再点同一天：取消选中（此前只能靠切页签/换筛选重置，与桌面分叉）。
+    await act(async () => {
+      findByTestId(renderer.root, 'bar-col-2026-08-21')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'hourly-chart')).toBeUndefined();
+    // 取消选中不发新查询（小时桶加载仅首次点选那一次）。
+    expect(mockGetHourlyBuckets).toHaveBeenCalledTimes(1);
+  });
+
   it('汇总页签饼图：扇区数=行数不折叠，点选出详情行，占比分母=窗口 totalTokens（T-M4）', async () => {
     // 分母鉴别（P1-3 锁口径）：窗口 summary.totalTokens 人为错开饼图行总和
     // （2500 vs 600+950=1550）——占比必须按窗口总分母算（950/2500=38%、
@@ -737,9 +752,37 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       ...SAMPLE_SUMMARY,
       totalTokens: 2500,
     });
+    // 兑底 label 覆盖（mobile/G-1）：在全局两行之外局部补两行——p1·
+    // modelName=null 走「其他模型」归并行；ghost 不在 providers mock 中，
+    // 名称解析不到走「未知服务商」兑底。局部覆盖不动全局 SAMPLE_MODEL_ROWS，
+    // 避免影响依赖「两行恰两扇区」的其他用例；新增行用量小值不影响既有
+    // 排序/占比断言（分母仍为窗口 2500）。
+    mockGetModelBreakdown.mockResolvedValue([
+      ...SAMPLE_MODEL_ROWS,
+      {
+        providerId: 'p1',
+        modelName: null,
+        calls: 1,
+        promptTokens: 50,
+        completionTokens: 10,
+        totalTokens: 60,
+        cacheReadTokens: 0,
+        billedInputTokens: 50,
+      },
+      {
+        providerId: 'ghost',
+        modelName: 'x',
+        calls: 1,
+        promptTokens: 30,
+        completionTokens: 10,
+        totalTokens: 40,
+        cacheReadTokens: 0,
+        billedInputTokens: 30,
+      },
+    ]);
     const renderer = await renderScreen(); // 默认汇总页签
-    // SAMPLE_MODEL_ROWS 两行（未记录 600 / gpt-4o 950）→ 恰两扇区，
-    // 按用量降序 gpt-4o 在前，不折叠不归并。
+    // 四行（未记录 600 / gpt-4o 950 / 其他模型 60 / 未知服务商 40）→ 恰四
+    // 扇区，按用量降序 gpt-4o 在前，不折叠不归并。
     expect(findByTestId(renderer.root, 'pie-sector-p1::gpt-4o')).toBeTruthy();
     expect(
       findByTestId(renderer.root, 'pie-sector-__np__::__unlogged__'),
@@ -751,6 +794,19 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
     ).toContain('未记录服务商');
+    // 新增两行的扇区与兑底 label：p1·modelName=null →「{服务商} · 其他模型」；
+    // ghost 不在 providers mock 中 →「未知服务商 · x」。若 UI 去掉兑底
+    // 分支（直接取 providerLabels[id] 得 undefined），此处断言即红。
+    expect(
+      findByTestId(renderer.root, 'pie-sector-p1::__unlogged__'),
+    ).toBeTruthy();
+    expect(findByTestId(renderer.root, 'pie-sector-ghost::x')).toBeTruthy();
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-legend-p1::__unlogged__')!),
+    ).toContain('智谱 · 其他模型');
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-legend-ghost::x')!),
+    ).toContain('未知服务商 · x');
     // 未选时无详情行。
     expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
     // 点选扇区：详情行 = 服务商·模型 / 用量 / 次数 / 占比（950/2500=38%，

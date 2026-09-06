@@ -51,7 +51,6 @@ import {
   REQUESTS_PAGE_SIZE,
   isCustomRangeValid,
   resolveRangeDays,
-  toLocalDayKey,
 } from './token-usage/format';
 import {styles} from './token-usage/styles';
 import {StatsFilterBar} from './token-usage/StatsFilterBar';
@@ -146,8 +145,13 @@ export function TokenUsageStatsScreen() {
       setModelRows(nextRows);
       // today 模式补选今天（P1-1）：补选必须写进本成功分支而非独立
       // effect——这里是重置 selectedDay 的唯一时机，独立 effect 的补选
-      // 会被后到的成功回调抹掉（双端同构）；其余范围重置 null。
-      setSelectedDay(rangeKind === 'today' ? toLocalDayKey(Date.now()) : null);
+      // 会被后到的成功回调抹掉（双端同构）；其余范围重置 null。补选 key
+      // 取本轮 filter 窗口终点而非回包时重新取日期（desktop/B-2·X-1：
+      // 查询发起于昨日深夜、回包落在今日零点后时，重新取时会选中不在
+      // 本轮 daily 数据里的天，与查询窗口错位；today 路径 range 恒存在）。
+      setSelectedDay(
+        rangeKind === 'today' ? filter.range?.toDay ?? null : null,
+      );
       setHourlyBuckets(null);
       setLoadError(null);
     } catch (err) {
@@ -441,7 +445,10 @@ export function TokenUsageStatsScreen() {
           hourlyBuckets={hourlyBuckets}
           selectedDay={selectedDay}
           inspectedKey={inspectedKey}
-          onSelectDay={setSelectedDay}
+          // 重复点选同一天 toggle 取消选中（与桌面端一致，mobile/C-orch-1）。
+          onSelectDay={key =>
+            setSelectedDay(prev => (prev === key ? null : key))
+          }
           onSetInspectedKey={setInspectedKey}
           tokens={tokens}
           todayMode={rangeKind === 'today'}
