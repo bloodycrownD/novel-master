@@ -86,8 +86,8 @@ describe("session rollback CLI e2e", () => {
   it("T-CLI1: plain user rollback removes anchor message from DB", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-srb-"));
     const dbPath = join(dir, "novel.db");
-    seedAgent(dir, dbPath);
     try {
+      seedAgent(dir, dbPath);
       seedProjectSession(dbPath);
 
       const userAnchorId = appendMessageId(dbPath, "user", "hello anchor");
@@ -117,8 +117,8 @@ describe("session rollback CLI e2e", () => {
   it("T-CLI2: assistant rollback keeps anchor message in DB", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-srb-"));
     const dbPath = join(dir, "novel.db");
-    seedAgent(dir, dbPath);
     try {
+      seedAgent(dir, dbPath);
       seedProjectSession(dbPath);
 
       appendMessageId(dbPath, "user", "setup user");

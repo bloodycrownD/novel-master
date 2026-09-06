@@ -21,8 +21,7 @@ import { runSessionTemplate } from "./template.js";
 import { runSessionWorkplace } from "./workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-/** Session VFS subcommands except `write`（write 无版本参数）。
- */
+/** Session VFS subcommands except `write`（write 无版本参数）。 */
 const SESSION_VFS_COMMANDS = {
   list: runList,
   mkdir: runMkdir,

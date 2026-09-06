@@ -26,7 +26,7 @@ export interface DefaultAgentRegistryServiceDeps {
  * prompts 缺省补空布局：除 name 外所有字段均有默认值，prompts 一族
  *（含 persist / dynamic 数组）缺省时补 `[]`，让 `{name}` 成为最小合法
  * create（与内置 general 的空 persist/dynamic 同构）。非对象形状
- *（字符串 / 数字 / 数组、显式 null）不兑底——原样返回 def，直接交
+ *（字符串 / 数字 / 数组、显式 null）不兜底——原样返回 def，直接交
  * validateAgentDefinition 报 INVALID_SCHEMA，禁止静默洗白后落盘空布局。
  */
 function withDefaultPromptLayouts(def: AgentDefinition): AgentDefinition {
