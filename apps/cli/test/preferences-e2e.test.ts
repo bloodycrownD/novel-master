@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -108,6 +109,19 @@ describe("preferences CLI e2e", () => {
     const lastLine = (out: string): string =>
       out.trim().split("\n").filter(Boolean).pop() ?? "";
     try {
+      // fresh DB registry 为空会让 session create 失败——先种一个最小 agent
+      const bundlePath = join(dir, "agents.json");
+      writeFileSync(
+        bundlePath,
+        JSON.stringify({
+          schemaVersion: 1,
+          agents: {
+            "agent-pref": { prompts: {}, description: "pref seed", mode: "all" },
+          },
+        }),
+      );
+      const seeded = runNm(["agent", "import", bundlePath, "--db", dbPath]);
+      assert.equal(seeded.status, 0, seeded.stderr);
       const project = runNm([
         "project",
         "create",

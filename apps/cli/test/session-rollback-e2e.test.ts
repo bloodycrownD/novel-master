@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,7 +49,24 @@ function appendMessageId(
     dbPath,
   ]);
   assert.equal(append.status, 0, append.stderr);
-  return append.stdout.trim();
+  // [nm-boot] migration 日志会混入 stdout：id 取末行防污染
+  return lastLine(append.stdout);
+}
+
+/** fresh DB registry 为空会让 session create 失败——先种一个最小 agent。 */
+function seedAgent(dir: string, dbPath: string): void {
+  const bundlePath = join(dir, "agents.json");
+  writeFileSync(
+    bundlePath,
+    JSON.stringify({
+      schemaVersion: 1,
+      agents: {
+        "agent-rollback": { prompts: {}, description: "rollback seed", mode: "all" },
+      },
+    }),
+  );
+  const seeded = runNm(["agent", "import", bundlePath, "--db", dbPath]);
+  assert.equal(seeded.status, 0, seeded.stderr);
 }
 
 function seedProjectSession(dbPath: string): void {
@@ -58,10 +76,17 @@ function seedProjectSession(dbPath: string): void {
   assert.equal(session.status, 0, session.stderr);
 }
 
+/** stdout 末行（fresh DB 首条命令会打 [nm-boot] migration 日志） */
+function lastLine(stdout: string): string {
+  const lines = stdout.trim().split("\n");
+  return lines[lines.length - 1] ?? "";
+}
+
 describe("session rollback CLI e2e", () => {
   it("T-CLI1: plain user rollback removes anchor message from DB", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-srb-"));
     const dbPath = join(dir, "novel.db");
+    seedAgent(dir, dbPath);
     try {
       seedProjectSession(dbPath);
 
@@ -92,6 +117,7 @@ describe("session rollback CLI e2e", () => {
   it("T-CLI2: assistant rollback keeps anchor message in DB", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-srb-"));
     const dbPath = join(dir, "novel.db");
+    seedAgent(dir, dbPath);
     try {
       seedProjectSession(dbPath);
 
