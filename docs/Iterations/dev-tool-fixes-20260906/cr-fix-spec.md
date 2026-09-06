@@ -94,6 +94,14 @@ status: 待用户确认
 - 验收/测试：新增用例全绿。
 - 来源：review-scope-core/R1
 
+
+### MF-9 · core/H-1 [P2] [H] 存量 KKV 死键 session-fs.versionCheck 一次性清理
+- 文件：packages/core/src/bootstrap/schema-migrations/（新增 migration 文件）+ schema-migrations/index.ts（注册）
+- 问题：偏好读写三件套删除后，存量用户库 kkv_entry 表里 module='nm-preferences'、key='session-fs.versionCheck' 的行成为无读者、无写者的死数据（preferences.list() 会把它列出来，混淆排查）。
+- 改法：新增 schema migration `retire-pref-session-fs-version-check-v1`——up(tx) 执行 `DELETE FROM kkv_entry WHERE module = 'nm-preferences' AND key = 'session-fs.versionCheck'`（module 值 import preference-keys.ts 的 PREFERENCES_MODULE 常量防漂移）；注册进 SCHEMA_MIGRATIONS 队尾（无顺序依赖）。走 migration runner 而非 NOVEL_MASTER_SCHEMA_STATEMENTS：runner 在 bootstrap 快/慢两条路径都会执行、经 schema_migrations 表 applied 去重天然只跑一次，且无需 bump SCHEMA_BOOT_VERSION（纯数据清理不涉 DDL/列对齐合同）。
+- 验收/测试：测试库手工 kkv 写入该键 → bootstrapNovelMaster → 键消失且 schema_migrations 表出现该 id；二次 bootstrap 不重复执行（applied 去重）；core bootstrap/migration 相关测试全绿。
+- 来源：用户拍板（OQ3 转正，2026-09-06）
+
 ## Spec deviations
 
 - **open** · apps/cli/src/vfs/commands/write.ts `readStdin` 新增空输入防护（空管道报 `No content provided` 而非写空文件）——超出「移除版本校验」意图的善意新增，堵住了空管道静默清空已有文件的数据丢失路径。待用户拍板「按现状收窄」或回退；若按现状收窄，CHANGELOG 酌情补一句。
@@ -129,7 +137,7 @@ status: 待用户确认
 | fix-spec-ready | yes（待用户确认开工；spec_deviations 1 条 open 待拍板） |
 | fix_spec_path | docs/Iterations/dev-tool-fixes-20260906/cr-fix-spec.md |
 | dag_version / review_round | 3 / 2 |
-| P0 / P1 / P2（已写入 fix-spec） | 2 / 2 / 4 |
+| P0 / P1 / P2（已写入 fix-spec） | 2 / 2 / 5 |
 | 未写入的开放 must-fix | 0 |
 | spec_deviations | open: readStdin 空输入防护（待用户拍板收窄/回退） |
 | C-orch | ✅（双端 parity 分叉 1 处已入 MF-4；dist 残留归 K-2 重建） |
