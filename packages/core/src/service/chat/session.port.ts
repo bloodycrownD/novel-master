@@ -52,6 +52,12 @@ export interface SessionService {
    */
   pullTemplate(sessionId: string): Promise<void>;
 
+  /**
+   * 用当前 session 工作区（文件 + workplace 规则）整树覆盖 project 模板，
+   * 后续新建会话与其它会话「从上级同步」都会拿到覆盖后的母本。
+   */
+  pushTemplate(sessionId: string): Promise<void>;
+
   /** 读取 `composer_draft_json` 原始 JSON；未设置时为 null。 */
   getComposerDraftJson(id: string): Promise<string | null>;
 
