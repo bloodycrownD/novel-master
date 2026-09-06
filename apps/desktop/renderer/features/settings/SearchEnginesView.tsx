@@ -92,6 +92,7 @@ export function SearchEnginesView() {
   }, [reload]);
 
   const clearKey = async (engineId: KeyEngineId) => {
+    if (saving) return; // 与保存互斥，避免交错 IPC（与 mobile 侧口径一致）
     setError(undefined);
     const res = await ipcSearchClearEngineKey({ engineId });
     if (res.ok) {
@@ -113,6 +114,7 @@ export function SearchEnginesView() {
         const res = await ipcSearchSaveEngineKey({ engineId, apiKey });
         if (!res.ok) {
           setError(res.error.message);
+          await reload(); // 部分成功的已生效，回读刷新状态
           return;
         }
       }
@@ -126,6 +128,7 @@ export function SearchEnginesView() {
         const res = await ipcSearchSetSearxngBaseUrl({ baseUrl: nextUrl });
         if (!res.ok) {
           setError(res.error.message);
+          await reload();
           return;
         }
       }
@@ -136,6 +139,7 @@ export function SearchEnginesView() {
         });
         if (!res.ok) {
           setError(res.error.message);
+          await reload();
           return;
         }
       }
@@ -157,13 +161,13 @@ export function SearchEnginesView() {
         options.push({ value: card.id, label: card.label });
       }
     }
-    // 当前默认引擎已不在候选（如 key 被清除）时补挂，保持可切换、不出现幽灵态
+    // 当前默认引擎已不在候选（如 key 被清除）时补挂为禁用项，保持可见可切换但不可重选（与 mobile 侧口径一致）
     if (
       defaultEngine != null &&
       !options.some((o) => o.value === defaultEngine)
     ) {
       const meta = ENGINE_CARDS.find((c) => c.id === defaultEngine);
-      if (meta) options.push({ value: meta.id, label: meta.label });
+      if (meta) options.push({ value: meta.id, label: meta.label, disabled: true });
     }
     return options;
   }, [config, defaultEngine]);
