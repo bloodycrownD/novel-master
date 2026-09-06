@@ -130,3 +130,9 @@ user:
 
 assistant:
 cr-fix-spec 17 条 P2 三路并行闭合（core 023c376：providerId 三态断言+类型钉子+死排序；mobile ed86c8f/ccdd9b9：死代码清理+toggle+跨零点补选+分页常量收敛+兜底 label 断言；desktop 327b7c9/a14d835：日历溢出行内拦截+补选取 toDay+0 值扇区跳过+三个测试缺口补齐），cr-func func-ready: yes，两条实现偏差（G-1 行指纹、A-1 直接访问钉子）复核判语义等价。错字清理 fd82bc9。三端 1794/109/1093 全绿+整仓 typecheck 0。fix-spec 7 条 open questions 仍待用户拍板（分页 50/10、探底 365 过期等）。dev-ready 收口。
+
+user:
+没什么问题，补一个 changelog 吧。
+
+assistant:
+Unreleased 收尾：饼图条目并入「未记录服务商」合并单块语义（未发布特性的内部演化不单列）；修复段补移动端按天图 toggle（1.5.10 已发布行为，用户真实可感）；维护段补代码清理一笔。开发中引入即修复的（跨零点、0 值扇区、02-30 拦截）按规矩不进 changelog；流水跟随时间为无净变化不列。
