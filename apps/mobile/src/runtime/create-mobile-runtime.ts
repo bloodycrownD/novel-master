@@ -22,6 +22,7 @@ import {
 import {
   createPersistentPreferences,
   createPersistentState,
+  createSearchConfigStore,
 } from '@novel-master/core';
 import {refreshUserVfsUnifiedToolTurnSnapshot} from '@novel-master/core/feature-flags';
 import {
@@ -72,6 +73,8 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   });
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({});
+  // search 配置依赖 kkv + secretStore，在两者之后装配。
+  const searchConfig = createSearchConfigStore({kkv, secretStore});
 
   const eventBus = new SimpleEventBus();
   const compactionConditions = createCompactionConditionsStore(conn);
@@ -127,6 +130,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     agentRegistry,
     abortRegistry,
     streamRegistry,
+    searchConfig,
     tokenCounters,
     projects,
     sessions,
