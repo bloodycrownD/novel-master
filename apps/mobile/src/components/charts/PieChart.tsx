@@ -6,7 +6,9 @@
  * - 扇区与图例均可点选（svg 元素用原生 onPress、图例行用 Pressable），
  *   小扇区即使难以点中也可从图例命中；点选后图正下方固定详情行展示
  *   用量 / 调用次数 / 占比（沿用 bar-inspect 惯例，规避浮层手势冲突）；
- * - 占比分母由调用方传入窗口 summary.totalTokens（P1-3，与旧列表口径一致）；
+ * - 占比分母由调用方传入窗口 summary.totalTokens（P1-3，与旧列表口径一致），
+ *   图例行常驻百分比列与点选详情行同轨（图例行右端固定宽右对齐，
+ *   分母 0 时显 0%）；
  * - 色板为固定循环色板（P2-5）：色相序列与桌面端一致（蓝→青→绿→黄→
  *   橙→红→紫→灰蓝，按传入顺序即用量降序分配）；蓝/绿/橙/红四位取主题
  *   tokens 语义色（亮暗自适应），青/黄/紫/灰蓝四位为与桌面同族的
@@ -178,6 +180,12 @@ export function PieChart({
           {data.map((datum, index) => {
             const color = palette[index % palette.length];
             const selectedLegend = datum.key === selectedKey;
+            // 图例常驻百分比（分母与点选详情行同轨：传入的窗口 totalTokens），
+            // 分母为 0 时显示 0%（除零安全）。RN Text，不新增 svg 元素。
+            const percent =
+              totalTokens > 0
+                ? Math.round((datum.totalTokens / totalTokens) * 100)
+                : 0;
             return (
               <Pressable
                 key={datum.key}
@@ -200,6 +208,14 @@ export function PieChart({
                   numberOfLines={1}
                 >
                   {datum.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.pieLegendPercent,
+                    {color: tokens.textTertiary},
+                  ]}
+                >
+                  {percent}%
                 </Text>
               </Pressable>
             );
