@@ -4,7 +4,7 @@
 - repo: novel-master；base_sha: ecadd487；head_sha: c310ccc2（feat/mobile-charts-redo）
 - prd/spec: docs/Iterations/feature-optimizations-2026-09/features/mobile-charts-redo/{prd,spec}.md
 - review_round: 1 / dag_version: 1（diff 模式单轮）
-- 状态：fix-spec-ready
+- 状态：已执行（2026-09-06，见提交 2e2820d7）
 
 ## Must-fix
 
@@ -28,11 +28,11 @@
 - none
 
 ## Open questions / 待拍板
-- 百分比逐行 `Math.round` 合计可能 99%/101%（三等分切片 33+33+33）：公式与详情行同轨无技术问题，是否加「合计可能非 100%」脚注属产品决策
-- 三档刻度值可加 `accessibilityLabel`（如「最大 1.5K」）增强读屏语境（可选）
+- 无
 
 ## 已豁免（用户确认不修）
-- 无
+- 百分比逐行四舍五入的显示合计可能 99%/101%：用户拍板不加脚注、不特殊处理（每片就是一个除法，行业通行做法）
+- 刻度值 accessibilityLabel 增强：不做
 
 ## 合并后 QA（manual_user）
 - Step 5 真机视觉验收：三档刻度与图例百分比、max 标签上浮 13px 观感、30 天滚动时刻度恒可见、长 label 截断不顶掉百分比、0 档与 x 轴标签错列
