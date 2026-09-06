@@ -25,6 +25,7 @@ import { TokenUsageStatsView } from "../features/settings/TokenUsageStatsView";
 import { WorkspaceSettingsView } from "../features/settings/WorkspaceSettingsView";
 import { SkillsManageView } from "../features/settings/SkillsManageView";
 import { SkillDetailView } from "../features/settings/SkillDetailView";
+import { SearchEnginesView } from "../features/settings/SearchEnginesView";
 import {
   OPEN_SETTINGS_VIEW_EVENT,
   type OpenSettingsViewDetail,
@@ -140,6 +141,8 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <AgentsSettingsView nav={nav} />;
       case "agentEditor":
         return <AgentEditorView nav={nav} />;
+      case "searchEngines":
+        return <SearchEnginesView />;
 
       case "providers":
         return <ProvidersView nav={nav} />;
