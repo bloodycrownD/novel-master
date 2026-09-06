@@ -39,6 +39,7 @@ packages/core/src/errors/regex-errors.ts
 packages/core/src/public/regex.ts
 packages/core/src/domain/format/derive-regex-group-id.ts
 packages/core/test/regex/                 整目录（3 文件）
+packages/core/test/domain/regex/regex-rule-update-depth.test.ts（连带：import 已删模块，不删必编译红）
 apps/desktop/src/main/ipc/handlers/regex.ts
 apps/desktop/src/main/services/regex-apply-channel.service.ts
 apps/desktop/renderer/services/regex-test.service.ts

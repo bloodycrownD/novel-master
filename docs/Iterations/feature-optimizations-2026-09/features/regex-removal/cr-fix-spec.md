@@ -17,7 +17,7 @@
 - 来源：review-diff-regex-removal / round 1
 
 ## Spec deviations
-- fixed（说明性）：spec 测试清单建议补记 `packages/core/test/domain/regex/regex-rule-update-depth.test.ts` 为必要连带删除（import 已删模块，不删必编译红）；下次修订 spec 顺手补一句，不阻塞
+- fixed（已闭合）：spec 测试清单已补记 `packages/core/test/domain/regex/regex-rule-update-depth.test.ts` 为必要连带删除
 
 ## Open questions / 待拍板
 - 无
@@ -29,4 +29,4 @@
 - T-RX8：真机从 v1.5.12 存量库升级后启动正常、聊天原文直出、双端设置无正则入口
 
 ## K 节建议（下游执行时闭合）
-- desktop 两测试 it 标题仍含「regex-apply」字样，可顺手改名（语义仍成立，可不改）
+- [已闭合 2026-09-06] desktop 两测试 it 标题已去「regex-apply」字样（session-detail-drawer:136、messages-search-handler:162）
