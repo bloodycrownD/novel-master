@@ -14,6 +14,7 @@ import {
 import { orphanRevisionGcV1Migration } from "./orphan-revision-gc-v1.js";
 import { tableConstraintsV1Migration } from "./table-constraints-v1b.js";
 import { usageCacheModelBackfillV1Migration } from "./usage-cache-model-backfill-v1.js";
+import { retirePrefSessionFsVersionCheckV1Migration } from "./retire-pref-session-fs-version-check-v1.js";
 
 /**
  * 本版本最低支持 v1.4.27。以下 9 条 migration 的逻辑已并入 canonical DDL、
@@ -30,6 +31,7 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   orphanRevisionGcV1Migration,
   tableConstraintsV1Migration,
   usageCacheModelBackfillV1Migration,
+  retirePrefSessionFsVersionCheckV1Migration,
 ];
 
 /**

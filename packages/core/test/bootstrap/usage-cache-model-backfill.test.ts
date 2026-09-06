@@ -143,10 +143,11 @@ const ANTHROPIC_RAW = JSON.stringify({
 });
 
 describe("usage-cache-model-backfill-v1 migration（T-S4）", () => {
-  it("登记表：migration 位于 SCHEMA_MIGRATIONS 尾部", () => {
-    assert.equal(
-      SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1]?.id,
-      USAGE_CACHE_MODEL_BACKFILL_V1_ID
+  it("登记表：migration 已注册于 SCHEMA_MIGRATIONS（队尾由 retire-pref 接任）", () => {
+    assert.ok(
+      SCHEMA_MIGRATIONS.some(
+        (migration) => migration.id === USAGE_CACHE_MODEL_BACKFILL_V1_ID
+      )
     );
   });
 
