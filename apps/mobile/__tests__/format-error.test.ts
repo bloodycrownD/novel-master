@@ -36,9 +36,9 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toContain('刷新');
   });
 
-  it('T-M-TOAST-02: CONFLICT uses Chinese version conflict', () => {
-    const err = new VfsError('CONFLICT', 'Version conflict', {path: '/x'});
-    expect(formatError(err)).toContain('版本冲突');
+  it('T-M-TOAST-02: NOT_FOUND 返回中文不存在提示（CONFLICT 已随版本校验下线）', () => {
+    const err = new VfsError('NOT_FOUND', 'Path not found: /x', {path: '/x'});
+    expect(formatError(err)).toContain('不存在');
   });
 
   it('formats ProviderError API_KEY_NOT_SET for mobile', () => {
