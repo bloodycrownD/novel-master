@@ -46,6 +46,10 @@
       "types": "./dist/public/regex.d.ts",
       "import": "./dist/public/regex.js"
     },
+    "./smart-sort-rule": {
+      "types": "./dist/public/smart-sort-rule.d.ts",
+      "import": "./dist/public/smart-sort-rule.js"
+    },
     "./message-checkpoint": {
       "types": "./dist/public/message-checkpoint.d.ts",
       "import": "./dist/public/message-checkpoint.js"

@@ -13,6 +13,7 @@ const SUBPATHS = [
   "provider",
   "regex",
   "session-fs",
+  "smart-sort-rule",
   "vfs",
   "workplace",
 ] as const;
