@@ -19,7 +19,7 @@ export const WORKPLACE_SCHEMA_STATEMENTS: readonly string[] = [
     scope_key TEXT NOT NULL,
     logical_path TEXT NOT NULL,
     rule_enabled INTEGER NOT NULL DEFAULT 1 CHECK (rule_enabled IN (0, 1)),
-    sort_field TEXT NOT NULL DEFAULT 'name' CHECK (sort_field IN ('name', 'created', 'updated')),
+    sort_field TEXT NOT NULL DEFAULT 'name' CHECK (sort_field IN ('name', 'created', 'updated', 'smart')),
     sort_order TEXT NOT NULL DEFAULT 'asc' CHECK (sort_order IN ('asc', 'desc')),
     head_count INTEGER NOT NULL DEFAULT 0 CHECK (head_count >= 0),
     tail_count INTEGER NOT NULL DEFAULT 1000 CHECK (tail_count >= 0),
