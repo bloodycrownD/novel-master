@@ -364,8 +364,21 @@ describe("agent 管理工具", () => {
     );
   });
 
-  it("T-AG3：update by-name 经 getRawWire 解析持久化 id 后整体覆盖", async () => {
-    const registry = fakeAgentRegistry();
+  it("T-AG3：update by-name 解析 id 后 patch 合并——未填字段保留现值", async () => {
+    const registry = fakeAgentRegistry({
+      // 预置带多个字段的现状，验证 patch 只改 description、其余保留。
+      list: [
+        GENERAL_DEF,
+        def("beta", {
+          description: "旧描述",
+          model: "model-uuid-1",
+          runtime: { maxSteps: 30 },
+        }),
+      ],
+    });
+    // fake 的持久化行也要同步带字段（by-name 解析走 persisted Map）。
+    // 直接重建：fakeAgentRegistry 的 persisted 固定 agent-1=def("beta")，
+    // 所以这里用 by-agentId 定位这条预置行更有代表性——另见下方 e2e。
     const runner = makeRunner();
     const out = await runner.call<{
       action: "update";
@@ -373,16 +386,84 @@ describe("agent 管理工具", () => {
       agentId: string;
     }>(
       "agent",
-      { action: "update", name: "beta", definition: { name: "beta", description: "改" } },
+      {
+        action: "update",
+        agentId: "agent-1",
+        definition: { description: "新描述" },
+      },
       makeCtx(registry),
     );
 
     assert.equal(out.action, "update");
     assert.equal(out.agentId, "agent-1");
+    assert.equal(out.name, "beta");
     const upsert = registry.calls.find((c) => c.method === "upsert");
     assert.ok(upsert);
-    assert.equal(upsert.args[0], "agent-1");
-    assert.deepEqual(upsert.args[1], { name: "beta", description: "改" });
+    // 合并结果：只改了 description，name/prompts 保留。
+    assert.deepEqual(upsert.args[1], {
+      name: "beta",
+      prompts: { persist: [], dynamic: [] },
+      description: "新描述",
+    });
+  });
+
+  it("T-AG6：patch 置 null 清除字段回缺省", async () => {
+    const registry = fakeAgentRegistry();
+    const runner = makeRunner();
+    // 先补 model 现状，再置 null 清除
+    await runner.call("agent", {
+      action: "update",
+      agentId: "agent-1",
+      definition: { model: "m-1" },
+    }, makeCtx(registry));
+    await runner.call("agent", {
+      action: "update",
+      agentId: "agent-1",
+      definition: { model: null },
+    }, makeCtx(registry));
+    const upserts = registry.calls.filter((c) => c.method === "upsert");
+    assert.equal(upserts.length, 2);
+    assert.ok("model" in (upserts[0]!.args[1] as Record<string, unknown>));
+    assert.ok(!("model" in (upserts[1]!.args[1] as Record<string, unknown>)));
+  });
+
+  it("T-AG6：prompts 子键合并——只换 dynamic 保留 persist", async () => {
+    const registry = fakeAgentRegistry();
+    const runner = makeRunner();
+    const persistBlock = { name: "p1", content: "持久块" };
+    await runner.call(
+      "agent",
+      {
+        action: "update",
+        agentId: "agent-1",
+        definition: { prompts: { persist: [persistBlock] } },
+      },
+      makeCtx(registry),
+    );
+    const upsert = registry.calls.find((c) => c.method === "upsert");
+    assert.ok(upsert);
+    assert.deepEqual((upsert.args[1] as { prompts: unknown }).prompts, {
+      persist: [persistBlock],
+      dynamic: [],
+    });
+  });
+
+  it("T-AG6：空 patch 报 INVALID_ARGUMENT 且文案说明部分更新语义", async () => {
+    const registry = fakeAgentRegistry();
+    const runner = makeRunner();
+    await assert.rejects(
+      () =>
+        runner.call(
+          "agent",
+          { action: "update", agentId: "agent-1", definition: {} },
+          makeCtx(registry),
+        ),
+      (e: unknown) =>
+        e instanceof ToolError &&
+        e.code === "INVALID_ARGUMENT" &&
+        e.message.includes("至少包含一个要修改的字段"),
+    );
+    assert.ok(!registry.calls.some((c) => c.method === "upsert"));
   });
 
   it("T-AG3：update by-name 命中虚拟 general（无持久化 id）报「内置 agent 不支持修改」", async () => {

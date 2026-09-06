@@ -120,8 +120,8 @@ prompts 承载 agent 的全部提示词配置：
 
 ## 操作注意事项
 
-- definition 是整体覆盖，不是增量合并：update 时未带的字段会被清掉。所以 update 前先 get 拿最新定义，在返回值基础上改，再整体提交。
-- 保存成功后定义在下一个会话/回合生效，当前运行中的会话不受影响。
+- update 是部分更新（patch）：只填要改的字段，未提供的字段保留现值；置 null 清除字段回缺省（如取消 pin 的 model）；prompts 按子键合并——只填 persist 就只换 persist。要确认现状先 get，改完全量字段也可整体提交（全量 patch = 全量覆盖，两者兼容）。
+- agent 名称全局唯一（含内置 general）：撞名保存会被拒绝并提示改名。
 - agent 工具不提供删除动作——删除 agent 请走用户界面的 agent 管理。
 `;
 

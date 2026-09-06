@@ -76,3 +76,72 @@ describe("agent 工具 create 端到端（真实 registry）", () => {
     assert.deepEqual([...idsAfter].sort(), [...idsBefore].sort());
   });
 });
+
+describe("agent 工具 update patch 端到端（真实 registry）", () => {
+  it("patch 只改 description：其余字段与 prompts 布局保留，get 可读回", async () => {
+    const testCtx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(testCtx.conn);
+    // 种一个带完整字段的现状
+    const agentId = "agent-patch-e2e-1";
+    await registry.upsert(agentId, {
+      name: "patch-e2e-alpha",
+      description: "旧描述",
+      model: undefined,
+      prompts: {
+        persist: [{ name: "p1", role: "user", content: "持久块" }],
+        dynamic: [],
+      },
+    } as never);
+
+    const out = await makeRunner().call(
+      "agent",
+      {
+        action: "update",
+        agentId,
+        // patch：只改 description，未填 name/prompts
+        definition: { description: "新描述" },
+      },
+      makeRealCtx(),
+    );
+    assert.equal(out.action, "update");
+
+    // 读回：description 已改，prompts 布局原样保留
+    const saved = await registry.get(agentId);
+    assert.equal(saved.description, "新描述");
+    assert.equal(saved.name, "patch-e2e-alpha");
+    // wire 往返会给块补 type: "text"（归一），断言对齐落盘后的形状。
+    assert.deepEqual(saved.prompts, {
+      persist: [
+        { name: "p1", type: "text", role: "user", content: "持久块" },
+      ],
+      dynamic: [],
+    });
+
+    await registry.delete(agentId);
+  });
+
+  it("patch 改名撞名：服务层 DUPLICATE_NAME 转译为 INVALID_ARGUMENT", async () => {
+    const testCtx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(testCtx.conn);
+    const a = "agent-patch-e2e-a";
+    const b = "agent-patch-e2e-b";
+    await registry.upsert(a, { name: "dup-target" } as never);
+    await registry.upsert(b, { name: "dup-source" } as never);
+
+    await assert.rejects(
+      () =>
+        makeRunner().call(
+          "agent",
+          { action: "update", agentId: b, definition: { name: "dup-target" } },
+          makeRealCtx(),
+        ),
+      (e: unknown) =>
+        e instanceof ToolError &&
+        e.code === "INVALID_ARGUMENT" &&
+        e.message.includes("已存在"),
+    );
+
+    await registry.delete(a);
+    await registry.delete(b);
+  });
+});

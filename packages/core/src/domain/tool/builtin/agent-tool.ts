@@ -23,8 +23,12 @@
  *
  * 无 delete 动作（D7）：删除仅走用户界面的 agent 管理，工具描述明示这一
  * 限制。输出限流复用 `tool-output-limits.ts`：list 走 capMatchList（条数 +
- * 字节预算）；get 的定义体不截断——它是 update 回写的数据源，截断会破坏
- * 往返一致性。
+ * 字节预算）；get 的定义体不截断——便于完整查看与按需 patch。
+ *
+ * update 是部分更新（patch）语义：definition 只填要改的字段，未提供的
+ * 字段保留现值、置 null 清除回缺省、prompts 按子键合并（详见
+ * `mergeAgentDefinitionPatch`）。工具层读当前定义合并后仍走 upsert 全量
+ * 校验门禁，安全性与 create 同一标准。
  *
  * @module domain/tool/builtin/agent-tool
  */
@@ -33,6 +37,7 @@ import { z } from "zod";
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
+import { mergeAgentDefinitionPatch } from "@/domain/agent/logic/merge-agent-definition-patch.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import { ToolError } from "@/errors/tool-errors.js";
@@ -56,7 +61,7 @@ export interface AgentToolInput {
   readonly name?: string;
   /** get / update 的定位字段（按持久化 id 精确查；create 时由工具生成）。 */
   readonly agentId?: string;
-  /** create / update 必填：完整 agent 定义体（schema 宽松，语义校验交服务层）。 */
+  /** create 必填完整定义体；update 为 patch（只填要改的字段，见 schema 描述）。 */
   readonly definition?: Record<string, unknown>;
 }
 
@@ -117,9 +122,11 @@ function requireDefinition(
   value: Record<string, unknown> | undefined
 ): Record<string, unknown> {
   if (value == null || typeof value !== "object") {
+    const shape =
+      action === "create" ? "完整定义体对象，顶层必含 name" : "要修改的字段对象（只填要改的，未填保留现值）";
     throw new ToolError(
       "INVALID_ARGUMENT",
-      `agent 的 ${action} 动作必须提供 definition（完整 agent 定义体对象）`,
+      `agent 的 ${action} 动作必须提供 definition（${shape}）`,
       { toolName: AGENT_TOOL_NAME }
     );
   }
@@ -204,7 +211,7 @@ function buildValidateOptions(
 async function upsertWithTranslatedError(
   agentsCtx: BuiltinToolAgentsContext,
   agentId: string,
-  definition: Record<string, unknown>
+  definition: AgentDefinition | Record<string, unknown>
 ): Promise<void> {
   try {
     await agentsCtx.registry.upsert(
@@ -275,7 +282,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
       .passthrough()
       .optional()
       .describe(
-        "create/update 必填：完整定义体对象，顶层必含 name（唯一必填字段）；prompts 可省略（默认空布局），prompts.persist / prompts.dynamic 为块数组，也可省略（默认空数组，结构对齐 get 的输出）；字段详情先 skill load agent-config"
+        "create 必填完整定义体（顶层必含 name，名称全局唯一，撞名会报错）；update 为部分更新——只填要改的字段，未填的保留现值，置 null 清除回缺省，prompts 按子键合并（如只填 dynamic 只换 dynamic）；prompts.persist / prompts.dynamic 为块数组，结构对齐 get 输出；字段详情先 skill load agent-config"
       ),
   }),
   outputSchema: z.discriminatedUnion("action", [
@@ -436,10 +443,21 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
             );
           }
         }
-        await upsertWithTranslatedError(agentsCtx, agentId, definition);
+        // patch 语义：读当前定义 → 浅合并 patch → 走同一套 upsert 校验门禁。
+        // 空 patch 没有意义（合并结果 = 现状），直接拦在入参层。
+        if (Object.keys(definition).length === 0) {
+          throw new ToolError(
+            "INVALID_ARGUMENT",
+            "agent 的 update 动作 definition 不能为空对象——至少包含一个要修改的字段（只填要改的字段，未填的保留现值）",
+            { toolName: AGENT_TOOL_NAME },
+          );
+        }
+        const current = await agentsCtx.registry.get(agentId);
+        const merged = mergeAgentDefinitionPatch(current, definition);
+        await upsertWithTranslatedError(agentsCtx, agentId, merged);
         return {
           action: "update",
-          name: readDefinitionName(definition),
+          name: readDefinitionName(merged as unknown as Record<string, unknown>),
           agentId,
         };
       }
