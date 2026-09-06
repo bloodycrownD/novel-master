@@ -61,3 +61,9 @@ user:
 
 assistant:
 澄清：CR 评审四节点全部子代理派遣（R1 双 reviewer 并行、spec-fix worker、R2 review-full reviewer，转录日志均在 ~/.pi/agent/subagent-logs/ 20260906-1031*~1039*）；主代理只做了三件合规事——P0 交付抽查（AGENTS.md 抽查义务）、末轮 spec 小修（trivial 豁免）、MF-9 改法前置调研（bootstrap 迁移机制，属 spec 撰写非评审）。KKV 死键清理按用户拍板转正 MF-9：新增 schema migration retire-pref-session-fs-version-check-v1（DELETE kkv_entry 死键，module 用 PREFERENCES_MODULE 常量），走 SCHEMA_MIGRATIONS 注册（快/慢路径都跑 + applied 去重 + 免 bump SCHEMA_BOOT_VERSION），不立刻执行。
+
+user:
+1 空管道是指什么？我们支持命令行吗？你是说 cli 吗？不是安卓？如果是 cli 那随便，你决定就好 2 同上你决定 3 小事随便 4 清理 5 按你建议拉
+
+assistant:
+用户按 §771 五条编号作答：#1/#2 授权主代理定夺——readStdin 空管道防护保留（CLI `nm vfs write` stdin 管道空输入原会静默清空已存在文件，防护堵数据丢失；移动端无 stdin 不涉及）、退役旗标不加显式报错（旧脚本目标仍是写入，静默忽略为零成本优雅降级）；#3 CHANGELOG 分段授权——挪变更段并与设置项条目合并+补空管道句，并入 MF-6；#4 清理=KKV 死键（已转 MF-9）；#5 desktop 脏检查补偿按建议不做（豁免）。全部决定写入 fix-spec：deviation 转 fixed、豁免两条入「已豁免」、Open questions 清零，状态 fix-spec-ready 已确认。等用户开工指令（skill 规定用户确认前不改代码，本轮只动 spec）。
