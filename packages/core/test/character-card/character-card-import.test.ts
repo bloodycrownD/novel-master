@@ -731,4 +731,73 @@ describe("CharacterCardImportService", () => {
     assert.equal((await vfs.read("/角色/角色描述.md")).content, "导入描述");
     assert.ok(warnCalls.length >= 1);
   });
+
+  it("体积闸门：importFromBytes 输入超上限抛 TOO_LARGE 且零写库", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-toolarge-in-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/角色/stay.md", "stay");
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    // 48MB + 1 字节的任意内容：闸门在解析之前拦截，无需合法 PNG/JSON
+    const oversized = new Uint8Array(48 * 1024 * 1024 + 1);
+    await assert.rejects(
+      () =>
+        svc.importFromBytes(scope, oversized, {
+          confirmed: true,
+          directoryPath: "/角色",
+        }),
+      (e: unknown) => {
+        assert.ok(e instanceof CharacterCardError);
+        assert.equal(e.code, "TOO_LARGE");
+        assert.ok(e.message.includes("48"));
+        return true;
+      },
+    );
+    // 零写库：子树原样保留
+    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+    const entries = await vfs.list("/角色", { recursive: true });
+    assert.equal(entries.filter((entry) => entry.kind === "file").length, 1);
+  });
+
+  it("体积闸门：md 树单文件超上限抛 TOO_LARGE 且零写库", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-toolarge-file-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/角色/stay.md", "stay");
+
+    const svc = createCharacterCardImportService(ctx.conn);
+    // 直接走 import（桌面/CLI 的公开入口）验证树闸门：单文件 8MiB + 1 字节
+    const tree = new Map([[
+      "巨型设定.md",
+      "x".repeat(8 * 1024 * 1024 + 1),
+    ]]);
+    await assert.rejects(
+      () =>
+        svc.import(scope, tree, {
+          confirmed: true,
+          directoryPath: "/角色",
+        }),
+      (e: unknown) => {
+        assert.ok(e instanceof CharacterCardError);
+        assert.equal(e.code, "TOO_LARGE");
+        assert.ok(e.message.includes("单文件上限"));
+        return true;
+      },
+    );
+    // 零写库：子树原样保留
+    assert.equal((await vfs.read("/角色/stay.md")).content, "stay");
+  });
 });
