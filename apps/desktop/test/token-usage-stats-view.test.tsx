@@ -12,6 +12,9 @@
  *   库全空探底命中时三个页签统一整屏空态；
  * - 今日卡全删（T-D5：非空与空态两分支均无 today 卡节点）；
  * - 主查询竞态守卫（旧响应后到不覆盖新数据）；错误路径（{ok:false} 保留旧数据 / 格式异常）。
+ * - CR 修复轮补口（cr-fix-spec r1）：单行整圆拆双半圆弧（G-1）；日历溢出（02-30）
+ *   行内报错（B-1）；providers 延迟 resolve 的 label 翻转与选中保持（G-2）；
+ *   custom 非法期间旧流水保留（G-3）；0 值行跳过扇区 button 仅留图例入口（S-1）。
  *
  * 范式与 fetch-models-modal.test.tsx 一致：注册 react-alias-hook.mjs 统一 react 副本，
  * react-test-renderer 真渲组件，mock 拦在 window.novelMasterDesktop.invoke 按 channel + kind 路由
@@ -796,7 +799,7 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
     }
   });
 
-  it("自定义区间：预填最近 7 天直传日期串；超长区间不再报错；from > to 行内提示且不再查询（T-D1）", async () => {
+  it("自定义区间：预填最近 7 天直传日期串；超长区间不再报错；02-30 溢出与 from > to 行内提示且不再查询、旧流水保留（T-D1 + B-1/G-3）", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -827,13 +830,54 @@ describe("TokenUsageStatsView（Step 3 适配）", () => {
         "超长区间应照常发起查询",
       );
 
-      // from > to：行内提示且不再发查询
+      // G-3 前置：先切到流水页签加载出旧流水行——「非法区间保留旧数据」要有旧数据可保
+      await clickSegmented(root, "流水");
+      const reqRowsOf = (): string[] =>
+        root
+          .findAll(
+            (node) =>
+              typeof node.props.className === "string" &&
+              node.props.className === "token-stats-requests__row",
+          )
+          .map((node) => collectText(node));
+      assert.equal(requests.filter((r) => r.kind === "requests").length, 1, "切流水页签应拉首页");
+      assert.ok(reqRowsOf().length >= 2, `流水行应已加载：${reqRowsOf().length}`);
+      assert.ok(
+        reqRowsOf().some((t) => t.includes("gpt-4o")),
+        "流水行内容应已渲染",
+      );
+
+      // 02-30 日历溢出（B-1）：parseLocalDate 回读校验拦截 → 行内 range-error
+      // 报错（不再绕到全局 loadError）；期间旧流水行保留、不发查询
+      requests.length = 0;
+      await setDate(root, "结束日期", "2025-02-30");
+      const overflowErr = root.findByProps({ className: "token-stats-view__range-error" });
+      const overflowText = (overflowErr.children as unknown[])
+        .map((c) => String(c))
+        .join("");
+      assert.equal(overflowText, "请选择起止日期");
+      assert.equal(
+        root.findAll((node) => node.props.className === "token-stats-view__error").length,
+        0,
+        "日历溢出应走行内错误而非全局 loadError",
+      );
+      assert.equal(requests.length, 0, "非法日期不应发起查询");
+      assert.ok(
+        reqRowsOf().length >= 2,
+        "非法日期期间旧流水行应保留（G-3）",
+      );
+
+      // from > to：行内提示且不再发查询；旧流水行仍在（G-3）
       requests.length = 0;
       await setDate(root, "结束日期", "2019-12-31");
       const err = root.findByProps({ className: "token-stats-view__range-error" });
       const errText = (err.children as unknown[]).map((c) => String(c)).join("");
       assert.equal(errText, "开始日期不能晚于结束日期");
       assert.equal(requests.length, 0, "区间非法时不应发起查询");
+      assert.ok(
+        reqRowsOf().length >= 2,
+        "from > to 非法期间旧流水行应保留（G-3）",
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -1526,6 +1570,175 @@ describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
       // 再点同一图例 → 取消选中
       await clickLegend(root, "p-gone::glm-4.6");
       assert.equal(sliceDetailText(root), null);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("G-1：单行 modelRows（占比 100%）——整圆拆双半圆弧，path d 含两个 A 弧段", async () => {
+    // 仅一行 modelRows 时该行独占整圆（几何分母 = 扇区值合计），pieSlicePath 走
+    // ≥2π 特殊分支：单条 A 弧起点终点重合画不出整圆，拆成两个半圆弧绘制。
+    const row = {
+      providerId: "p1",
+      modelName: "gpt-4o",
+      calls: 10,
+      promptTokens: 600,
+      completionTokens: 600,
+      totalTokens: 1200,
+      cacheReadTokens: 300,
+      billedInputTokens: 600,
+    };
+    const restore = mockWindow(
+      makeInvoke({
+        summary: {
+          ...SUMMARY,
+          calls: 10,
+          promptTokens: 600,
+          completionTokens: 600,
+          totalTokens: 1200,
+          cacheReadTokens: 300,
+          cacheCreationTokens: 0,
+          billedInputTokens: 600,
+        },
+        modelRows: [row],
+      }),
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 扇区 button 渲染（data-slice 存在），内层 path 为整圆双半圆弧形态
+      const slice = root.findByProps({ "data-slice": "p1::gpt-4o" });
+      const paths = slice.findAll((node) => node.type === "path");
+      assert.equal(paths.length, 1, "扇区内应有一个 path");
+      const d = String(paths[0]!.props.d);
+      assert.equal((d.match(/A /g) ?? []).length, 2, `整圆应拆两个半圆弧：${d}`);
+
+      // 占比 100%（分母 = summary.totalTokens = 该行用量，单行即整圆份额）
+      assert.ok(
+        String(slice.props["aria-label"]).includes("占比 100%"),
+        `aria-label 应含占比 100%：${String(slice.props["aria-label"])}`,
+      );
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("S-1：0 值行跳过扇区 button（键盘不可聚焦），图例入口仍渲染且可点选出详情行", async () => {
+    // 扇区精确命中依赖 path（button 不吃指针）：0 值行若保留 button 会键盘可聚焦、
+    // 鼠标却永远点不中；跳过后图例成为 0 值行的唯一入口（键盘/鼠标一致）。
+    const rows = [
+      {
+        providerId: "p1",
+        modelName: "gpt-4o",
+        calls: 10,
+        promptTokens: 600,
+        completionTokens: 600,
+        totalTokens: 1200,
+        cacheReadTokens: 300,
+        billedInputTokens: 600,
+      },
+      {
+        providerId: "p2",
+        modelName: "glm-4.6",
+        calls: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        cacheReadTokens: 0,
+        billedInputTokens: 0,
+      },
+    ];
+    const restore = mockWindow(
+      makeInvoke({
+        summary: {
+          ...SUMMARY,
+          calls: 10,
+          promptTokens: 600,
+          completionTokens: 600,
+          totalTokens: 1200,
+        },
+        modelRows: rows,
+      }),
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 0 值行无扇区 button（无 data-slice 节点，Tab 不可聚焦、回车不可选中）
+      assert.deepEqual(sliceKeys(root), ["p1::gpt-4o"], "0 值行不应渲染扇区 button");
+      // 图例全量渲染：0 值行入口保留
+      assert.deepEqual(legendKeys(root), ["p1::gpt-4o", "p2::glm-4.6"]);
+
+      // 图例点选 0 值行仍出详情行（唯一入口可用；p2 不在 providers mock → 未知服务商）
+      await clickLegend(root, "p2::glm-4.6");
+      const detail = sliceDetailText(root);
+      assert.ok(
+        detail != null && detail.includes("未知服务商 · glm-4.6"),
+        `0 值行图例点选应出详情行：${detail}`,
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("G-2：providers 延迟 resolve——label「未知服务商」→配置名翻转，选中态不丢", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const base = makeInvoke({}, requests);
+    let resolveProviders: ((value: { ok: true; data: unknown }) => void) | undefined;
+    const restore = mockWindow((channel, payload) => {
+      if (channel === "nm:providers/list") {
+        // 挂起 providers/list：模拟慢返回（首帧解析不到 provider 名）
+        return new Promise((resolve) => {
+          resolveProviders = resolve;
+        });
+      }
+      return base(channel, payload);
+    });
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 首帧 providers 未到：p1 解析不到 → label 兕底「未知服务商」
+      assert.equal(legendText(root, "p1::gpt-4o"), "未知服务商 · gpt-4o");
+
+      // 挂起期间点选该扇区：详情行以兕底名出现
+      await clickSlice(root, "p1::gpt-4o");
+      let detail = sliceDetailText(root);
+      assert.ok(detail != null && detail.includes("未知服务商 · gpt-4o"));
+
+      // providers 列表到达：label 翻转为配置显示名
+      await act(async () => {
+        resolveProviders?.({ ok: true, data: PROVIDERS });
+      });
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+
+      // 翻转后选中态不丢：详情行仍在且同步翻转为新 label；扇区/图例保持 is-selected
+      detail = sliceDetailText(root);
+      assert.ok(detail != null && detail.includes("OpenAI 官方 · gpt-4o"));
+      const sliceBtn = root.findByProps({ "data-slice": "p1::gpt-4o" });
+      assert.ok(
+        String(sliceBtn.props.className).includes("is-selected"),
+        "扇区选中态不应丢失",
+      );
+      const legendBtn = root.findByProps({ "data-slice-key": "p1::gpt-4o" });
+      assert.ok(
+        String(legendBtn.props.className).includes("is-selected"),
+        "图例选中态不应丢失",
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();
