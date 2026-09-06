@@ -271,6 +271,16 @@ describe('StackedBars 纵坐标三档刻度（T-MC1/2/3）', () => {
     ).toBe('0');
   });
 
+  it('奇数 maxTotal 的 mid 取整：1501 → 751（T-MC1 补强，MC/G-2）', () => {
+    const tree = renderBars([{key: 'a', primary: 1501}]);
+    // Math.round(1501/2)=751：奇数总量的中档刻度取整值锁定。
+    expect(
+      nodeTextOf(
+        tree.root.findAll(n => n.props.testID === 'grid-label-mid')[0],
+      ),
+    ).toBe('751');
+  });
+
   it('刻度值列在横向 ScrollView 外、网格线在内容层内（T-MC2：值不随内容滚动）', () => {
     const tree = renderBars([{key: 'a', primary: 100}]);
     // 刻度值列的祖先链不应出现横向 ScrollView：30 天超宽滚动时刻度值
