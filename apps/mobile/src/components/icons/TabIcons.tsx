@@ -228,6 +228,21 @@ export function SyncPullIcon({color, size = 22}: IconProps) {
   );
 }
 
+/** Push current worktree up to parent scope（拉取图标的向上镜像）. */
+export function SyncPushIcon({color, size = 22}: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 21V9M8 13l4-4 4 4M5 21h14"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 /** Export current worktree as ZIP. */
 export function ZipExportIcon({color, size = 22}: IconProps) {
   return (
