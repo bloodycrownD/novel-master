@@ -10,7 +10,7 @@
  *   长按回调（T-MB3）。
  * - 纵坐标三档刻度（T-MC1/2/3，对齐 desktop 语义）：max/mid/zero 三线
  *   在滚动内容层铺满内容宽；三档刻度值在外层固定列，不随内容滚动；
- *   全零数据三档全显 0 不塔。
+ *   全零数据三档全显 0 不崩。
  */
 import React from 'react';
 import {describe, expect, it, jest} from '@jest/globals';
@@ -138,6 +138,13 @@ describe('StackedBars 居中与滚动（T-MB1/2/3）', () => {
     });
     // 测量点上移到 ScrollView（不含右侧刻度列）：传入 320 即滚动区宽。
     layoutContainer(tree, 320);
+    // MC/G-1：onLayout 必须挂在横向 ScrollView 上（测量宽不含 36px 刻度列），
+    // 若退回挂根 View，柱宽会默默多吃刻度列宽度且全部用例仍绿。
+    const onLayoutNode = tree.root.findAll(
+      node => typeof node.props.onLayout === 'function',
+    )[0];
+    expect(onLayoutNode).toBeTruthy();
+    expect(onLayoutNode.props.horizontal).toBe(true);
     const barsRow = findBarsRow(tree);
     expect(barsRow).toBeTruthy();
     expect(styleValue(barsRow.props.style, 'justifyContent')).toBe('center');
@@ -283,7 +290,7 @@ describe('StackedBars 纵坐标三档刻度（T-MC1/2/3）', () => {
     expect(lineInScroll).toBeTruthy();
   });
 
-  it('全零数据三档全显 0 不塔（T-MC3 除零安全）', () => {
+  it('全零数据三档全显 0 不崩（T-MC3 除零安全）', () => {
     const tree = renderBars([
       {key: 'a', primary: 0},
       {key: 'b', primary: 0, secondary: 0},

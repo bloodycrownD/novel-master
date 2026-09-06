@@ -1339,7 +1339,7 @@ describe('T-M7 PieChart 组件级', () => {
     );
   });
 
-  it('图例百分比 0 分母：显示 0% 不塔（T-MC4 除零安全）', async () => {
+  it('图例百分比 0 分母：显示 0% 不崩（T-MC4 除零安全）', async () => {
     let renderer: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
