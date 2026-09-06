@@ -136,3 +136,9 @@ user:
 
 assistant:
 Unreleased 收尾：饼图条目并入「未记录服务商」合并单块语义（未发布特性的内部演化不单列）；修复段补移动端按天图 toggle（1.5.10 已发布行为，用户真实可感）；维护段补代码清理一笔。开发中引入即修复的（跨零点、0 值扇区、02-30 拦截）按规矩不进 changelog；流水跟随时间为无净变化不列。
+
+user:
+（publish skill）发版。
+
+assistant:
+v1.5.11 发版流程本地全毕：desktop/mobile 双端测试绿（109/1093）→ main 快进合并迭代分支 → CHANGELOG Unreleased 转正 [1.5.11] - 2026-09-06 → 双 package.json + android build.gradle 默认 versionName 同步 1.5.11 → 提交 6a6990b → tag v1.5.11。push 阻塞：本机无 GitHub 凭据（无 gh/credential helper/SSH 授权，HTTPS remote 非交互读不到用户名；代理 39859 链路本身通），tag 与 main 停在本地待用户侧推送。
