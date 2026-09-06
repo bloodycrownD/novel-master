@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it, mock } from "node:test";
 
 import {
   BOCHA_SEARCH_URL,
+  BOCHA_TIMEOUT_MS,
   searchWithBocha,
 } from "../../src/domain/tool/builtin/search/engines/bocha.js";
 import {
@@ -60,6 +61,36 @@ const BOCHA_KEY = "sk-bocha-plain-key";
 function bochaResolved(): ResolvedEngineConfig {
   return { engine: "bocha", apiKey: BOCHA_KEY };
 }
+
+afterEach(() => {
+  mock.timers.reset();
+});
+
+describe("search 引擎适配器：超时（四引擎共用 engineTimeoutError，单点覆盖 bocha）", () => {
+  it("T-G1: 请求挂起到超时 → aborted 分支产出可读「timed out after」文案", async () => {
+    mock.timers.enable({ apis: ["setTimeout"] });
+    // fetchFn 永不 resolve：监听适配器传入的 signal，abort 时 reject
+    // AbortError（模拟 undici 对真实 fetch 的中断语义）。
+    const fetchFn = ((_input: unknown, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("This operation was aborted", "AbortError"));
+        });
+      })) as unknown as typeof globalThis.fetch;
+
+    const pending = searchWithBocha(bochaResolved(), "q", {}, fetchFn).then(
+      () => assert.fail("超时应抛错"),
+      (err: unknown) => err
+    );
+    // flush 微任务：让适配器进入 fetch、abort listener 已挂好。
+    await new Promise((resolve) => setImmediate(resolve));
+    mock.timers.tick(BOCHA_TIMEOUT_MS);
+
+    const err = await pending;
+    const message = err instanceof Error ? err.message : String(err);
+    assert.match(message, /Bocha search timed out after 60000ms/);
+  });
+});
 
 describe("search 引擎适配器：bocha（T-A1）", () => {
   it("端点 / POST / Bearer / 请求字段映射（freshness oneDay、summary:true）", async () => {

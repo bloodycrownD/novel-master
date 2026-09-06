@@ -9,6 +9,7 @@ import {
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { createWorkplaceService } from "../../src/service/workplace/create-workplace-service.js";
+import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { vfsNotFound } from "../../src/errors/vfs-errors.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { isVfsError } from "@novel-master/core/vfs";
@@ -760,6 +761,95 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal(glob.total, 120);
     assert.equal(glob.truncated, true);
     assert.equal(glob.paths.length, TOOL_OUTPUT_MAX_MATCHES);
+  });
+
+  it("T-G3: 超 50KB 响应经 curl 落盘真实 VFS：/tmp 首建目录 + file_cache + 目录规则 + read 分页读回全文", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const workplace = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    const sessionKkv = createSessionKkvService(ctx.conn);
+
+    // 行长 1023B：页 1 的 50 行 + 分隔符恰好耗尽 50KB 预算
+    //（50×1023+50=51200，末行 remaining=0 整行丢弃而非部分截断），
+    // 续读 nextOffset 指回被丢弃行、预算重置整行读出——分页拼回全文
+    // 无丢失，不碰「被截行尾部不可续读」路径。
+    const line = "x".repeat(1023);
+    const body = Array.from({ length: 62 }, () => line).join("\n");
+    // 62×1023+61 = 63487B > 50KB，触发 curl 落盘保险丝。
+    const fetchFn = (async () =>
+      new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      })) as typeof globalThis.fetch;
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx: BuiltinToolContext = {
+      ...toolCtx(vfs, project.id, session.id),
+      workplace,
+      sessionKkv,
+      fetchFn,
+    };
+
+    const out = await runner.call(
+      "curl",
+      { url: "https://example.com/big" },
+      baseCtx,
+    );
+    const rec = out as {
+      body: string;
+      truncated: boolean;
+      originalBytes: number;
+      savedPath?: string;
+    };
+    // 落盘形态：body 置空占位、savedPath 指向 /tmp 下真实 VFS 文件。
+    assert.equal(rec.truncated, true);
+    assert.equal(rec.body, "");
+    assert.equal(rec.originalBytes, 63487);
+    assert.ok(
+      rec.savedPath != null &&
+        /^\/tmp\/curl-\d{8}-[0-9a-f]{4}\.html$/.test(rec.savedPath),
+      `savedPath 形状不对: ${rec.savedPath}`
+    );
+
+    // /tmp 首次建目录：文件在真实 VFS 存在且全文一致。
+    const saved = await vfs.read(rec.savedPath!);
+    assert.equal(saved.content, body);
+
+    // 配套动作一：file_cache upsert（同会话后续 read 免重读盘）。
+    assert.ok(
+      (await sessionKkv.listKeys(session.id, "file_cache")).includes(
+        `full:${rec.savedPath}`
+      )
+    );
+    // 配套动作二：/tmp 目录链补默认规则（rule_on）。
+    assert.equal((await workplace.getDirRule("/tmp"))?.ruleEnabled, true);
+
+    // read 工具分页读回：页 1（行 1-50）+ 页 2（行 51-62）拼回全文。
+    const page1 = await runner.call<{
+      content: string;
+      truncated: boolean;
+      lastLineTruncated?: boolean;
+      nextOffset?: number;
+    }>("read", { path: rec.savedPath! }, baseCtx);
+    assert.equal(page1.truncated, true);
+    // 预算恰耗尽 → 末行整行丢弃，不是部分截断。
+    assert.equal(page1.lastLineTruncated, undefined);
+    assert.equal(page1.nextOffset, 51);
+    const page2 = await runner.call<{ content: string; truncated: boolean }>(
+      "read",
+      { path: rec.savedPath!, offset: 51 },
+      baseCtx,
+    );
+    assert.equal(page2.truncated, false);
+    assert.equal(`${page1.content}\n${page2.content}`, body);
   });
 
   it("wraps VfsError as FAILED and preserves cause", async () => {

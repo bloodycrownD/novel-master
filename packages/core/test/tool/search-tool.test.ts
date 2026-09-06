@@ -346,6 +346,61 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     );
   });
 
+  it("T-G2（T-O3 对偶）：落盘失败（vfs.write 抛错）→ 降级回落完整 SearchResponse", async () => {
+    const { kkv, secretStore } = fakeStores();
+    await secretStore.set("search/bocha/apiKey", "sk-bocha");
+    // 与 T-O3 同构：20 条 × 3KB snippet ≈ 61KB 序列化超 50KB 预算。
+    const longSnippet = "s".repeat(3000);
+    const fetchFn = (async () =>
+      new Response(
+        JSON.stringify({
+          code: 200,
+          data: {
+            webPages: {
+              value: Array.from({ length: 20 }, (_, i) => ({
+                url: `https://x.example.com/${i}`,
+                title: `t${i}`,
+                summary: longSnippet,
+              })),
+            },
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )) as typeof globalThis.fetch;
+
+    // vfs.write 抛错：落盘保险丝失灵，search 不因落盘故障丢搜索所得。
+    const vfs = {
+      write: async () => {
+        throw new Error("vfs unavailable");
+      },
+    } as never;
+
+    const runner = makeRunner();
+    const out = await runner.call(
+      SEARCH_TOOL_NAME,
+      { query: "q", maxResults: 20 },
+      makeCtx({
+        search: assembleSearchToolContext(
+          createSearchConfigStore({ kkv, secretStore })
+        ),
+        fetchFn,
+        vfs,
+      })
+    );
+    // 降级：完整 SearchResponse 原样回流（engine + 20 条 results），
+    // 无 savedPath / message 字段。
+    const rec = out as {
+      engine: string;
+      results: unknown[];
+      savedPath?: string;
+      message?: string;
+    };
+    assert.equal(rec.engine, "bocha");
+    assert.equal(rec.results.length, 20);
+    assert.equal("savedPath" in rec, false);
+    assert.equal("message" in rec, false);
+  });
+
   it("适配器错误经 toolFailed 包装（FAILED），错误文案不含 key 明文（T-C2 工具层）", async () => {
     const { kkv, secretStore } = fakeStores();
     await secretStore.set("search/bocha/apiKey", "sk-bocha-secret");
