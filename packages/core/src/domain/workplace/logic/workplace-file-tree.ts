@@ -15,6 +15,7 @@ import {
   sortFilesForDir,
   type WorkplaceFileSortMeta,
 } from "./workplace-eval.js";
+import type { CompiledSmartSortRule } from "./smart-sort.js";
 import { filetreeMacroLoadStateLabel } from "./workplace-labels.js";
 import { workplaceRootLogicalPath } from "./workplace-scope.js";
 import { directChildDirs, directChildFiles } from "./workplace-tree.js";
@@ -25,6 +26,10 @@ export interface RenderWorkplaceFileTreeParams {
   readonly fileSet: ReadonlySet<string>;
   readonly dirRuleMap: ReadonlyMap<string, WorkplaceDirRule>;
   readonly mtimeByPath: ReadonlyMap<string, number>;
+  /** 预编译智能排序规则（spec D4）；缺省时 smart 退化为自然排序。 */
+  readonly smartRules?: readonly CompiledSmartSortRule[];
+  /** 目录 path → mtime（spec D7）；缺省时目录 created/updated 退化为 name 字典序。 */
+  readonly dirMtimeByPath?: ReadonlyMap<string, number>;
 }
 
 /** 宏树渲染参数：在基础树参数上附带各文件 display 状态。 */
@@ -67,7 +72,8 @@ function sortedChildren(
   const dirRule = params.dirRuleMap.get(dirPath) ?? null;
   const subdirs = sortDirPaths(
     directChildDirs(dirPath, params.allDirs),
-    dirRule
+    dirRule,
+    { smartRules: params.smartRules, dirMtimeByPath: params.dirMtimeByPath }
   ).map((path) => ({ kind: "dir" as const, path }));
 
   const files = sortFilesForDir(
@@ -77,7 +83,8 @@ function sortedChildren(
         mtimeMs: params.mtimeByPath.get(logicalPath) ?? 0,
       })
     ),
-    dirRule
+    dirRule,
+    { smartRules: params.smartRules }
   ).map((file) => ({ kind: "file" as const, path: file.logicalPath }));
 
   return [...subdirs, ...files];

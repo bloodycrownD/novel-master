@@ -98,7 +98,9 @@ function computeDisplay(
       logicalPath: p,
       mtimeMs: ctx.mtimeByPath.get(p) ?? 0,
     }));
-  const sortedAuto = sortFilesForDir(autoSiblings, dirRule);
+  const sortedAuto = sortFilesForDir(autoSiblings, dirRule, {
+    smartRules: ctx.smartRules,
+  });
   const index = sortedAuto.findIndex((f) => f.logicalPath === filePath);
   return evaluateFileDisplay({
     inclusion,
@@ -125,7 +127,11 @@ function walkDir(
 
   const dirRule = ctx.dirRuleMap.get(dirPath) ?? null;
 
-  const subdirs = sortDirPaths(directChildDirs(dirPath, ctx.allDirs), dirRule);
+  const subdirs = sortDirPaths(
+    directChildDirs(dirPath, ctx.allDirs),
+    dirRule,
+    { smartRules: ctx.smartRules, dirMtimeByPath: ctx.dirMtimeByPath }
+  );
   for (const sub of subdirs) {
     walkDir(scope, ctx, sub, rows, displayByPath);
   }
@@ -136,7 +142,8 @@ function walkDir(
       logicalPath: p,
       mtimeMs: ctx.mtimeByPath.get(p) ?? 0,
     })),
-    dirRule
+    dirRule,
+    { smartRules: ctx.smartRules }
   ).map((f) => f.logicalPath);
 
   for (const filePath of sortedFiles) {

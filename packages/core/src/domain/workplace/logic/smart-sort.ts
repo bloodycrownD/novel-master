@@ -241,17 +241,20 @@ export interface CompiledSmartSortRule {
  */
 export type SmartSortKeyCache = Map<string, number[] | null>;
 
+/** Which rule claimed the basename and the ordinals it yielded (preview / diagnostics). */
+export interface SmartSortKeyDetail {
+  readonly ruleId: string;
+  readonly nums: readonly number[];
+}
+
 /**
- * Extracts the ordinal tuple from a basename by trying `rules` in priority
- * order (D6): the first rule whose regex matches AND whose capture groups all
- * parse as numbers wins; any unparsable / unmatched group skips that rule and
- * falls through to the next one. Returns `null` when no rule yields an
- * ordinal (the basename then orders via the natural fallback).
+ * Same priority walk as {@link extractSortKey} but also reports which rule
+ * claimed the basename (used by the smart-sort-rule preview API, Step 7).
  */
-export function extractSortKey(
+export function extractSortKeyDetail(
   basename: string,
   rules: readonly CompiledSmartSortRule[],
-): number[] | null {
+): SmartSortKeyDetail | null {
   for (const rule of rules) {
     // A `g`-flagged regex keeps lastIndex across execs; always match from 0.
     rule.regex.lastIndex = 0;
@@ -276,10 +279,24 @@ export function extractSortKey(
       nums.push(value);
     }
     if (parsed) {
-      return nums;
+      return { ruleId: rule.ruleId, nums };
     }
   }
   return null;
+}
+
+/**
+ * Extracts the ordinal tuple from a basename by trying `rules` in priority
+ * order (D6): the first rule whose regex matches AND whose capture groups all
+ * parse as numbers wins; any unparsable / unmatched group skips that rule and
+ * falls through to the next one. Returns `null` when no rule yields an
+ * ordinal (the basename then orders via the natural fallback).
+ */
+export function extractSortKey(
+  basename: string,
+  rules: readonly CompiledSmartSortRule[],
+): number[] | null {
+  return extractSortKeyDetail(basename, rules)?.nums ?? null;
 }
 
 /**
