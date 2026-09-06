@@ -72,22 +72,13 @@ describe("chat CLI smoke", () => {
 
       const pref = runCli([
         "preferences",
-        "set",
-        "session-fs.versionCheck",
-        "false",
+        "get",
+        "chat.llmStream",
         "--db",
         dbPath,
       ]);
       assert.equal(pref.status, 0, pref.stderr);
-      const got = runCli([
-        "preferences",
-        "get",
-        "session-fs.versionCheck",
-        "--db",
-        dbPath,
-      ]);
-      assert.equal(got.status, 0, got.stderr);
-      assert.equal(got.stdout.trim(), "false");
+      assert.equal(pref.stdout.trim(), "true");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

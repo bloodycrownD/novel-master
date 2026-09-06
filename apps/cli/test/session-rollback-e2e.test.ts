@@ -56,15 +56,6 @@ function seedProjectSession(dbPath: string): void {
   assert.equal(project.status, 0, project.stderr);
   const session = runNm(["session", "create", "--db", dbPath]);
   assert.equal(session.status, 0, session.stderr);
-  const pref = runNm([
-    "preferences",
-    "set",
-    "session-fs.versionCheck",
-    "false",
-    "--db",
-    dbPath,
-  ]);
-  assert.equal(pref.status, 0, pref.stderr);
 }
 
 describe("session rollback CLI e2e", () => {
