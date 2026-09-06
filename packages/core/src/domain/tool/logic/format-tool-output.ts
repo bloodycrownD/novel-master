@@ -165,6 +165,72 @@ function formatFsLsOutput(rec: Record<string, unknown>): string {
 }
 
 /**
+ * Detects search tool output（正常 results 形态 / 超预算落盘 savedPath 形态）。
+ *
+ * 正常形态：`engine` 字符串 + `results` 数组（空结果集也是正常形态；
+ * 非空时首元素须具备 title/url/snippet 三字段）；落盘形态（overflow-sink
+ * Step 6 接线后出现）：`savedPath` + `message` + `engine`。未配置提示
+ * 是纯字符串输出，不经过本守卫（formatToolOutputForLlm 对 string 直通）。
+ */
+export function isSearchOutput(rec: Record<string, unknown>): boolean {
+  if (typeof rec.engine !== "string") {
+    return false;
+  }
+  // 落盘形态：正文已存 /tmp/，回 {savedPath, message}。
+  if (
+    typeof rec.savedPath === "string" &&
+    typeof rec.message === "string"
+  ) {
+    return true;
+  }
+  if (!Array.isArray(rec.results)) {
+    return false;
+  }
+  if (rec.results.length === 0) {
+    return true;
+  }
+  const first = rec.results[0];
+  if (first == null || typeof first !== "object") {
+    return false;
+  }
+  const item = first as Record<string, unknown>;
+  return (
+    typeof item.title === "string" &&
+    typeof item.url === "string" &&
+    typeof item.snippet === "string"
+  );
+}
+
+/**
+ * Formats search output：引擎名 + 条数抬头，tavily 原生回答（如有）紧随，
+ * 其后为「- 标题 — 链接 — 摘要」紧凑列表；落盘形态显示「已落盘路径」
+ * （不落 JSON fallback）。
+ */
+export function formatSearchOutput(rec: Record<string, unknown>): string {
+  if (typeof rec.savedPath === "string") {
+    const message =
+      typeof rec.message === "string" && rec.message.length > 0
+        ? `\n${rec.message}`
+        : "";
+    return `已落盘 ${rec.savedPath}${message}`;
+  }
+  const engine = rec.engine as string;
+  const results = rec.results as Array<{
+    readonly title: string;
+    readonly url: string;
+    readonly snippet: string;
+  }>;
+  const parts: string[] = [`search ${engine} · ${results.length} 条结果`];
+  if (typeof rec.answer === "string" && rec.answer.length > 0) {
+    parts.push("", rec.answer);
+  }
+  for (const item of results) {
+    parts.push(`- ${item.title} — ${item.url} — ${item.snippet}`);
+  }
+  return parts.join("\n");
+}
+
+/**
  * Detects curl tool output.
  *
  * 守卫要求 url + finalUrl + status + body + truncated 同时类型匹配；
@@ -288,6 +354,10 @@ export function formatToolOutputForLlm(out: unknown): string {
 
     if (isGlobOutput(rec)) {
       return formatGlobOutput(rec);
+    }
+
+    if (isSearchOutput(rec)) {
+      return formatSearchOutput(rec);
     }
 
     if (isCurlOutput(rec)) {
