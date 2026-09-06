@@ -82,14 +82,6 @@ function formatByCode(
   switch (code) {
     case "NOT_FOUND":
       return `[NOT_FOUND] Path not found: ${logicalPath}`;
-    case "CONFLICT": {
-      const e = vfsError.expectedVersion;
-      const a = vfsError.actualVersion;
-      if (e != null && a != null) {
-        return `[CONFLICT] Version conflict for ${logicalPath}: expected ${e}, actual ${a}`;
-      }
-      return `[CONFLICT] ${stripKnownPhysicalPrefixes(vfsError.message)}`;
-    }
     case "IS_DIRECTORY":
       return `[IS_DIRECTORY] Path is a directory: ${logicalPath}`;
     case "INVALID_PATH":

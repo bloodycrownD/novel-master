@@ -1,5 +1,5 @@
 /**
- * T-SC1/SC2/SC3：writeWithRevision 同文短路与乐观锁。
+ * T-SC1/SC2/SC3：writeWithRevision 同文短路与 last-write-wins 行为。
  */
 
 import assert from "node:assert/strict";
@@ -62,9 +62,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
     assert.equal(first.version, 1);
     const revBefore = await countRevisions(conn, GLOBAL_SCOPE, path);
 
-    const second = await vfs.write(GLOBAL_SCOPE, path, "same-body", {
-      expectedVersion: 1,
-    });
+    const second = await vfs.write(GLOBAL_SCOPE, path, "same-body");
     assert.equal(second.version, 1);
     assert.equal(await countRevisions(conn, GLOBAL_SCOPE, path), revBefore);
 
@@ -79,7 +77,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
     const path = `/sc2-${testIsolationSuffix()}.md`;
 
     await vfs.write(GLOBAL_SCOPE, path, "alpha");
-    const next = await vfs.write(GLOBAL_SCOPE, path, "beta", { expectedVersion: 1 });
+    const next = await vfs.write(GLOBAL_SCOPE, path, "beta");
     assert.equal(next.version, 2);
     assert.equal(await countRevisions(conn, GLOBAL_SCOPE, path), 2);
 
@@ -107,7 +105,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
     assert.equal((await vfs.read(GLOBAL_SCOPE, path)).content, "beta");
   });
 
-  it("T-SC3: 版本比对已移除——过期 expectedVersion 不再拒绝，last-write-wins", async () => {
+  it("T-SC3: 版本比对已移除——后写直接覆盖为最新版（last-write-wins）", async () => {
     const { conn } = getNovelMasterTestContext();
     const vfs = createVfsService(conn);
     const path = `/sc3-${testIsolationSuffix()}.md`;
@@ -116,7 +114,7 @@ describe("writeWithRevision same-content shortcircuit", () => {
     await vfs.write(GLOBAL_SCOPE, path, "newer");
     const revBefore = await countRevisions(conn, GLOBAL_SCOPE, path);
 
-    // 带过期 expectedVersion（旧调用方兼容）：不报 CONFLICT，直接覆盖
+    // last-write-wins：不做版本比对，后写内容直接覆盖为最新版
     const result = await vfs.write(GLOBAL_SCOPE, path, "live");
     assert.ok(result.version > 2, "覆盖后版本应递增");
 

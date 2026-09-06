@@ -233,8 +233,9 @@ export function createVfsTools(): readonly Tool<
     }),
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
-      // 版本校验对 LLM 无意义（read 后再 write 纯增加往返）：write 固定
-      // last-write-wins。编辑器透明锁走各自 UI 保存链路，不经本工具。
+      // write 固定 last-write-wins：不带版本校验，写入内容直接成为最新
+      // 版本（read 后再 write 校验版本对 LLM 无意义，纯增加往返）。各端
+      // 编辑器保存链路同样不做版本比对，保存即覆盖。
       // 入口统一规范化：相对路径补 / 后规范化，避免「写入宽容、file_cache 校验严格」
       // 两套口径不一致导致写成功却报 INVALID_PATH。
       const logicalPath = resolveLogicalPath(input.path);

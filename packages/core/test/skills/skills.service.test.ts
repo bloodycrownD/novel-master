@@ -427,10 +427,9 @@ describe("SkillService（T-SK5）", () => {
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`P-ACR-${suffix}`);
 
-    // global 域目录已存在（bootstrap 种入）：编辑放行。writeSkillFile 的
-    // 版本策略：带 expectedVersion 才校验（UI 编辑器透明锁），缺省
-    // last-write-wins。这里用辅助文件覆盖放行路径，带 expectedVersion 的
-    // 正向覆盖见下一条用例
+    // global 域目录已存在（bootstrap 种入）：编辑放行。writeSkillFile
+    // 无版本校验，固定 last-write-wins：写入内容直接覆盖现有文件。
+    // 这里用辅助文件覆盖放行路径
     await skills.writeSkillFile(
       "global",
       "agent-config",

@@ -329,22 +329,20 @@ describe("formatToolErrorForLlm", () => {
     assert.ok(!content.includes("/sessions/"));
   });
 
-  it("T-ERR-02: CONFLICT includes category and versions", () => {
-    const cause = new VfsError(
-      "CONFLICT",
-      `Version conflict for ${physicalPath}: expected 1, actual 2`,
-      {
-        path: physicalPath,
-        expectedVersion: 1,
-        actualVersion: 2,
-      },
-    );
+  it("T-ERR-02: REPLACE_NOT_FOUND includes category and LCS diagnostics", () => {
+    const cause = vfsReplaceNotFound(physicalPath, {
+      oldStringLength: 12,
+      longestCommonSubstring: "same",
+      lcsLength: 4,
+      lcsOccurrences: 2,
+    });
     const content = formatToolErrorForLlm(
-      new ToolError("FAILED", "Tool failed: write", { cause }),
+      new ToolError("FAILED", "Tool failed: edit", { cause }),
       { vfsScope: sessionScope },
     );
-    assert.ok(content.includes("[CONFLICT]"));
-    assert.ok(content.includes("expected 1, actual 2"));
+    assert.ok(content.includes("[REPLACE_NOT_FOUND]"));
+    assert.ok(content.includes("length=4"));
+    assert.ok(content.includes("2 times"));
   });
 
   it("T-ERR-03: NOT_FOUND category", () => {

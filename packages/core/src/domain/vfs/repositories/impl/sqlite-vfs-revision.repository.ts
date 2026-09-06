@@ -363,7 +363,7 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       throw new VfsError(
         "NOT_FOUND",
         `Revision not found: entry ${entryId}@${version}`,
-        { details: { entryId, version }, expectedVersion: version }
+        { details: { entryId, version } }
       );
     }
   }
@@ -403,10 +403,9 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
         const first = missing[0]!;
         throw new VfsError(
           "NOT_FOUND",
-          `Revision not found: entry ${first.entryId}@${first.version} (共 ${missing.length} 条缺失)`,
+          `Revision not found: entry ${first.entryId}@${first.version} （共 ${missing.length} 条缺失）`,
           {
             details: { missing },
-            expectedVersion: first.version,
           }
         );
       }

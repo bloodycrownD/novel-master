@@ -1,5 +1,5 @@
 /**
- * VFS domain errors: typed codes for path, version, and replace failures.
+ * VFS domain errors: typed codes for path and replace failures.
  *
  * @module errors/vfs-errors
  */
@@ -23,7 +23,6 @@ export type VfsReplaceNotFoundDetails = {
 /** Discriminant codes for {@link VfsError}. */
 export type VfsErrorCode =
   | "NOT_FOUND"
-  | "CONFLICT"
   | "REPLACE_NOT_FOUND"
   | "DIRECTORY_NOT_EMPTY"
   | "INVALID_PATH"
@@ -38,8 +37,6 @@ export type VfsErrorCode =
 export class VfsError extends Error {
   readonly code: VfsErrorCode;
   readonly path?: string;
-  readonly expectedVersion?: number;
-  readonly actualVersion?: number;
   readonly details?: unknown;
 
   constructor(
@@ -47,8 +44,6 @@ export class VfsError extends Error {
     message: string,
     options?: {
       path?: string;
-      expectedVersion?: number;
-      actualVersion?: number;
       details?: unknown;
     }
   ) {
@@ -56,8 +51,6 @@ export class VfsError extends Error {
     this.name = "VfsError";
     this.code = code;
     this.path = options?.path;
-    this.expectedVersion = options?.expectedVersion;
-    this.actualVersion = options?.actualVersion;
     this.details = options?.details;
   }
 }
