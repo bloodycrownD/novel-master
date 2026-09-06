@@ -48,7 +48,7 @@ description: agent 定义配置指南：AgentDefinition 全字段说明（含 wo
   - primary：仅用于主会话，不能被 task 工具调用；
   - subagent：仅能被 task 作为子代理调用（装配时会被强制摘除 task 工具，防递归）；
   - all：主会话与子代理调用都可以。
-- prompts（必填，对象）：提示词布局，见下节三区详解。
+- prompts（可选，对象）：提示词布局，见下节三区详解。可整个省略（默认空布局：无 system、无 persist / dynamic 块）；只填 name 即可创建最简 agent。
 - model（可选，string）：固定模型指针。陷阱：值是 savedModelId（保存模型的 UUID），不是模型名——填模型名会在保存时校验失败。不知道该填什么就整个字段省略，会话沿用当前模型。
 - runtime（可选，对象）：
   - maxSteps：单回合最大工具步数；
@@ -60,13 +60,13 @@ description: agent 定义配置指南：AgentDefinition 全字段说明（含 wo
 prompts 承载 agent 的全部提示词配置：
 
 - system（可选，string，单段）：系统提示词，映射 API 的 system 字段。整个 agent 只有一段 system，不要拆多段。
-- persist（必填，数组）：持久区文本块，按顺序组成开场对话（user / assistant 剧本）。块形态：
+- persist（可选，数组，缺省空数组）：持久区文本块，按顺序组成开场对话（user / assistant 剧本）。块形态：
 
       { "name": "块名", "type": "text", "role": "user", "content": "内容" }
 
   陷阱：persist 只收 type 为 "text" 的块。旧编辑器的过渡态 worktree 块（type 为 "worktree"）读入时会被剥成文本，但 definition 写出时必须 omit——不要带 worktree 块。
 - persistEnabled（可选，boolean，缺省 false）：持久区开关；false 时 persist 数组保留但不参与组装。
-- dynamic（必填，数组）：动态区文本块，形态同 persist 但允许 lifecycle 字段（"always" / "once"，缺省 always——once 表示只在首次组装注入）。需要按上下文动态注入的内容放这里。
+- dynamic（可选，数组，缺省空数组）：动态区文本块，形态同 persist 但允许 lifecycle 字段（"always" / "once"，缺省 always——once 表示只在首次组装注入）。需要按上下文动态注入的内容放这里。
 - dynamicEnabled（可选，boolean，缺省 false）：动态区开关。
 - workplace（可选，string）：常驻工作区的助手确认语。陷阱：这是非空字符串，不是布尔——旧格式的 true 会被兼容读成「【done】」，但写出必须是字符串（开 = 非空字符串；关 = 整个字段省略）。开启后 agent 会话带常驻工作区，助手看到工作区内容后回一句确认语。
 - customAttach（可选，string）：自定义附加信息，运行时以纯文本注入；开 = trim 后非空，关 = 省略。

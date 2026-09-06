@@ -248,7 +248,7 @@ export const agentTool: Tool<
 当前可管理 agent 名单（装配期快照，回合内变更不即时反映）：
 ${formatAgentEntries(agents)}
 
-action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位，name 优先）/ create 新建（definition 必填，agentId 自动生成）/ update 整体覆盖更新（定位同 get + definition 必填）。
+action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位，name 优先）/ create 新建（definition 必填且顶层含 name，agentId 自动生成）/ update 整体覆盖更新（定位同 get + definition 必填）。
 
 配置字段详情与完整示例请先 skill load agent-config。
 
@@ -265,7 +265,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
       .min(1)
       .optional()
       .describe(
-        "agent 名称（get/update 定位用，优先于 agentId；可命中内置 general）"
+        "agent 名称（get/update 定位用，优先于 agentId；可命中内置 general。create/update 的名称写在 definition.name，此字段不替代）"
       ),
     agentId: z
       .string()
@@ -279,7 +279,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
       .passthrough()
       .optional()
       .describe(
-        "create/update 必填：完整定义体对象，语义校验由服务层完成，字段详情先 skill load agent-config"
+        "create/update 必填：完整定义体对象，顶层必含 name（唯一必填字段）；prompts 可省略（默认空布局），prompts.persist / prompts.dynamic 为块数组，也可省略（默认空数组，结构对齐 get 的输出）；字段详情先 skill load agent-config"
       ),
   }),
   outputSchema: z.discriminatedUnion("action", [
