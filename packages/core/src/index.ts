@@ -181,6 +181,35 @@ export type {
   VfsToolContext,
   ToolResourceQuota,
 } from "./domain/tool/builtin/builtin-tool-context.js";
+/**
+ * `search` 工具与搜索引擎配置（SKSP ref + KKV `nm-search` 模块）。
+ *
+ * desktop / mobile runtime 用 `createSearchConfigStore` 工厂包
+ * `kkv + secretStore` 装配到 `AgentTurnRuntimePort.searchConfig`。
+ */
+export type {
+  EngineId,
+  KeyEngineId,
+  SearchResponse,
+  SearchResult,
+  SearchRecency,
+  SearchToolOptions,
+  SearchOversizeOutput,
+  ResolvedEngineConfig,
+} from "./domain/tool/builtin/search/types.js";
+export type {
+  SearchConfigPublic,
+  SearchConfigStore,
+  SearchConfigDeps,
+  SearchEngineStatus,
+} from "./domain/tool/builtin/search/search-config.js";
+export {
+  SEARCH_KKV_MODULE,
+  searchApiKeyRef,
+  createSearchConfigStore,
+  readSearchConfig,
+  resolveEngine,
+} from "./domain/tool/builtin/search/search-config.js";
 
 /**
  * 基础序列化能力：供跨端配置读写共用。

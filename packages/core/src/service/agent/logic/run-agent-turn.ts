@@ -32,10 +32,12 @@ import type {
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type {
   BuiltinToolAgentsContext,
+  BuiltinToolSearchContext,
   BuiltinToolSkillsContext,
 } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { SKILL_TOOL_NAME } from "@/domain/tool/builtin/skill-tool.js";
 import { AGENT_TOOL_NAME } from "@/domain/tool/builtin/agent-tool.js";
+import type { SearchConfigStore } from "@/domain/tool/builtin/search/search-config.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -148,6 +150,15 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
     PersistentPreferences,
     "getThinkingContextEnabled"
   >;
+  /**
+   * 搜索配置存储（search 工具用）：desktop / mobile runtime 用 core 导出
+   * 的 `createSearchConfigStore(kkv + secretStore)` 工厂装配。
+   *
+   * 可选声明照 preferences Pick 先例——不强制旧测试 mock 补字段；未注入
+   * 时（CLI 无 kkv）search 工具 run 返回可读错误，恒不可用（known
+   * limitation，后续迭代 CLI 接入 kkv 后补一行装配即可启用）。
+   */
+  readonly searchConfig?: SearchConfigStore;
 }
 
 export class AgentTurnError extends Error {
@@ -178,6 +189,21 @@ export async function assembleSkillsToolContext(
   const effective = await service.effectiveSkills(projectId);
   // referencedNames：seen 共享（方向 A）的可变集合，runner 每步 prepare 后回填
   return { service, projectId, effective, referencedNames: new Set<string>() };
+}
+
+/**
+ * 装配 `search` 工具闭包（主 / 子两个装配点共用）：绑定 runtime 的
+ * SearchConfigStore；引擎解析与凭证明文读取全部延迟到工具 run 内，
+ * 装配期零 IO（与 skills 的装配期预算模式不同，search 的 description
+ * 是静态文案）。
+ */
+export function assembleSearchToolContext(
+  store: SearchConfigStore
+): BuiltinToolSearchContext {
+  return {
+    loadEngineConfig: (engineId) => store.loadEngineConfig(engineId),
+    resolveActiveEngine: (inputEngine) => store.resolveEngine(inputEngine),
+  };
 }
 
 /**
@@ -519,6 +545,11 @@ export async function runAgentTurn(
     ...(skillsCtx != null ? { skills: skillsCtx } : {}),
     // agent 管理工具读取：装配期同步快照（description lambda / list 动作用）。
     ...(agentsCtx != null ? { agents: agentsCtx } : {}),
+    // search 工具读取：闭包绑定 runtime.searchConfig（CLI / 旧 mock 未注入时不装配，
+    // 工具 run 返回可读错误；引擎解析延迟到 run 内，装配期零 IO）。
+    ...(runtime.searchConfig != null
+      ? { search: assembleSearchToolContext(runtime.searchConfig) }
+      : {}),
     // task 工具读取：depth=0，捕获主 agent run 的 savedModelId/workspaceModelId/signal。
     subagent: {
       agentRegistry: runtime.agentRegistry,
@@ -754,6 +785,10 @@ async function runChildAgent(args: {
       ...(skillsCtx != null ? { skills: skillsCtx } : {}),
       // agent 管理工具：mode==="all" 的子 agent 且 depth<2 时才可能注入（D6 摘除后不注入）。
       ...(childAgentsCtx != null ? { agents: childAgentsCtx } : {}),
+      // search：子代理同主代理注入（引擎配置全局共享，解析链与凭据读取在 run 内）。
+      ...(runtime.searchConfig != null
+        ? { search: assembleSearchToolContext(runtime.searchConfig) }
+        : {}),
       // 子 agent 也有 subagent 闭包：递归 depth=childDepth，孙 agent 装配的 registry 已 deny task。
       subagent: {
         agentRegistry: runtime.agentRegistry,
