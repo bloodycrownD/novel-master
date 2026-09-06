@@ -145,7 +145,7 @@ export async function readSearchConfig(
  * 解析本次调用实际使用的引擎（解析链：`inputEngine` → `defaultEngine`
  * → `ENGINE_IDS` 顺序第一个 `configured` 引擎；候选未配置则顺位回落，
  * 全无 → null）。key 引擎命中时现读明文；searxng 命中时规范化 baseUrl
- * （存库值非法的防御路径视同未配置，顺位继续）。
+ * （存库值非法的防御路径视同未配置，终止解析链，不静默改写候选）。
  */
 export async function resolveEngine(
   deps: SearchConfigDeps,

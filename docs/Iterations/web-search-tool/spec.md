@@ -121,6 +121,7 @@ apps/desktop/renderer/features/settings/SearchEnginesView.tsx
 - **行为变更面**：curl 预算收紧 + read 截断简化都是已发布行为的变更（CHANGELOG 记档）；回滚即 revert 对应 commit，无数据迁移（落盘文件是普通 VFS 文件，无清理义务——随会话生命周期）。
 - **引擎适配质量**：字段映射来自参考实现行级核对，但真实 API 可能漂移——T-D1/T-M1 用户走查覆盖；单引擎故障只影响该引擎（未配置/报错提示可读）。
 - **用户中断不取消搜索**：`BuiltinToolContext` 无 signal 透传（现状架构如此），搜索请求仅受超时 abort——写入本节作为 known limitation，不本期解决。
+- **落盘失败降级路径（实现补全 spec 未覆盖面）**：`vfs.write` 失败时 curl 降级回字节截断（正文最大可到 10MB，必须守住预算）、search 降级回完整输出（maxResults≤20 天然封顶）；两分支不对称是有意设计，代码注释已留痕。read 末行截断不给 nextOffset（被截行是文件末行时无内容可续，防 offset 超界）属跳过语义的自然边界。
 - **`AgentDefinitionEditorForm.tsx` 为未挂载组件**：照旧同步文案（一行成本）；若未来删除不牵连本迭代。
 - **KkvService 获取方式**：mobile/desktop 的 store 照 cloud-sync-config.store 同构获取；若实现时发现 runtime 未暴露所需入口，在装配点注入处补薄工厂（不动公共端口）。
 - **CLI known limitation**：CLI 端无 kkv，`searchConfig` 不装配，search 工具恒返回「未配置」提示（非错误、不崩溃）；后续迭代 CLI 接入 kkv 后补一行装配即可启用。
