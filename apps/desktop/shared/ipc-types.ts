@@ -861,7 +861,9 @@ export type UsageStatsRangeDto = {
 /**
  * Token 用量统计：筛选条件（model 三态——undefined 全部 / null「其他」桶 / 字符串指定模型）。
  * range 可选：缺省语义按 kind 分级——summary/models/modelBreakdown/requests 不限时间
- * （全历史），daily 必填（handler 层校验格式与 fromDay ≤ toDay，日桶序列需要界）。
+ * （全历史），daily 必填。range 存在时 handler 先行校验格式（含 02-30 溢出）与
+ * fromDay ≤ toDay（validateRangeDto）；daily 缺 range 由 core 抛 chatInvalidArgument
+ * （日桶序列需要界）。
  */
 export type UsageStatsFilterDto = {
   readonly range?: UsageStatsRangeDto;

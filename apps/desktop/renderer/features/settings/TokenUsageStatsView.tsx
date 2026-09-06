@@ -66,7 +66,21 @@ function dayKeyOffset(offsetDays: number): string {
 function parseLocalDate(s: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (m == null) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const parsed = new Date(y, mo - 1, d);
+  // 日历溢出回读校验（与 handler validateRangeDto 同款防线）：02-30 会被
+  // new Date 静默滚动成 03-02，回读不一致按非法处理——走行内 range-error
+  // 报错定位，而不是绕到全局 loadError。
+  if (
+    parsed.getFullYear() !== y ||
+    parsed.getMonth() !== mo - 1 ||
+    parsed.getDate() !== d
+  ) {
+    return null;
+  }
+  return parsed;
 }
 
 /** Date → `<input type="date">` 接受的本地 `YYYY-MM-DD` 值。 */
@@ -314,25 +328,31 @@ function PieChart({
   return (
     <div className="token-stats-pie-view">
       <div className="token-stats-pie">
-        {arcs.map((a) => {
-          const shareText = a.share == null ? "—" : `${Math.round(a.share * 100)}%`;
-          return (
-            <button
-              key={a.key}
-              type="button"
-              className={`token-stats-pie__slice${selectedKey === a.key ? " is-selected" : ""}`}
-              data-slice={a.key}
-              aria-label={`${a.label} · 用量 ${formatTokenCount(a.value)} · ${a.calls} 次 · 占比 ${shareText}`}
-              onClick={() => onSelect(a.key)}
-            >
-              <svg viewBox="-1.08 -1.08 2.16 2.16" aria-hidden="true">
-                {a.value > 0 ? (
+        {/*
+         * 0 值行跳过扇区 button（S-1 可达性）：扇区精确命中依赖 path（button 整体
+         * 不吃指针），0 值行若保留 button 会键盘可聚焦、鼠标却永远点不中（两种
+         * 输入模态不等价），且 Tab 会聚焦到不可见扇区——0 值行仅保留图例入口
+         * （图例本就全量渲染，键盘/鼠标一致）。
+         */}
+        {arcs
+          .filter((a) => a.value > 0)
+          .map((a) => {
+            const shareText = a.share == null ? "—" : `${Math.round(a.share * 100)}%`;
+            return (
+              <button
+                key={a.key}
+                type="button"
+                className={`token-stats-pie__slice${selectedKey === a.key ? " is-selected" : ""}`}
+                data-slice={a.key}
+                aria-label={`${a.label} · 用量 ${formatTokenCount(a.value)} · ${a.calls} 次 · 占比 ${shareText}`}
+                onClick={() => onSelect(a.key)}
+              >
+                <svg viewBox="-1.08 -1.08 2.16 2.16" aria-hidden="true">
                   <path d={pieSlicePath(a.startAngle, a.endAngle)} style={{ fill: a.color }} />
-                ) : null}
-              </svg>
-            </button>
-          );
-        })}
+                </svg>
+              </button>
+            );
+          })}
       </div>
       <div className="token-stats-pie-view__legend">
         {slices.map((s) => (
@@ -455,7 +475,10 @@ export function TokenUsageStatsView() {
     setModelRows(rowsRes.data as UsageStatsModelRowDto[]);
     // P1-1：「今天」的自动补选必须写在这个成功分支里——独立 effect 的补选会被
     // 此处对 selectedDay 的重置抹掉（后到的回调覆盖先行的 effect）。
-    setSelectedDay(autoSelectToday ? toLocalDayKey(Date.now()) : null);
+    // 补选 key 取本轮查询窗口的 toDay 而非重取 Date.now()：查询发起于昨日深夜、
+    // 回包落在今日零点后时，Date.now() 会选出不在本轮 daily 数据里的天（跨午夜
+    // 错位）；today 路径 filter.range 恒存在，?? null 仅作类型兜底。
+    setSelectedDay(autoSelectToday ? (f.range?.toDay ?? null) : null);
     setHourlyBuckets(null);
     // 数据已换，饼图选中行失效；流水脏标记由监听完整 filter 的独立 effect
     // 置位（需求①勘误后时间/模型变化均覆盖，见 requestsFilter 定义处）。
