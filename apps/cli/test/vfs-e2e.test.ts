@@ -159,20 +159,21 @@ describe("vfs CLI e2e", () => {
     }
   });
 
-  it("write with wrong version exits non-zero", async () => {
+  it("repeated write without version succeeds（版本比对已移除）", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runCli(["vfs", "--db", dbPath, "write", "/v.txt"], { input: "one" });
-      runCli(["vfs", "--db", dbPath, "write", "/v.txt", "--version", "1"], {
+      const first = runCli(["vfs", "--db", dbPath, "write", "/v.txt"], {
+        input: "one",
+      });
+      assert.equal(first.status, 0, first.stderr);
+      const second = runCli(["vfs", "--db", dbPath, "write", "/v.txt"], {
         input: "two",
       });
-      const bad = runCli(
-        ["vfs", "--db", dbPath, "write", "/v.txt", "--version", "1"],
-        { input: "three" },
-      );
-      assert.equal(bad.status, 2);
-      assert.match(bad.stderr, /conflict|Version/i);
+      assert.equal(second.status, 0, second.stderr);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/v.txt"]);
+      assert.equal(read.status, 0, read.stderr);
+      assert.match(read.stdout, /two/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

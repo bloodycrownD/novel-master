@@ -95,19 +95,6 @@ export function vfsNotFound(path: string): VfsError {
   return new VfsError("NOT_FOUND", `Path not found: ${path}`, { path });
 }
 
-/** Optimistic version mismatch on write. */
-export function vfsConflict(
-  path: string,
-  expectedVersion: number,
-  actualVersion: number
-): VfsError {
-  return new VfsError(
-    "CONFLICT",
-    `Version conflict for ${path}: expected ${expectedVersion}, actual ${actualVersion}`,
-    { path, expectedVersion, actualVersion }
-  );
-}
-
 /** Replace oldString not found in content. */
 export function vfsReplaceNotFound(
   path: string,

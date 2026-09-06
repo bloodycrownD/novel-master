@@ -26,7 +26,6 @@ export {
   buildUserVfsRenameOp,
   buildUserVfsSaveOp,
 } from "../service/vfs/build-user-vfs-turn-op.js";
-export type { UserVfsSaveVersionOptions } from "../service/vfs/build-user-vfs-turn-op.js";
 export { buildVfsZip } from "../domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "../domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipError } from "../errors/vfs-zip-errors.js";
@@ -56,7 +55,6 @@ export {
 export type {
   VfsService,
   VfsReadResult,
-  WriteOptions,
   VfsGrepMatch,
 } from "../domain/vfs/ports/vfs-service.port.js";
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";

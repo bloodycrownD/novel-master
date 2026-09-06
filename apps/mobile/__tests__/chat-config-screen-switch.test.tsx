@@ -1,6 +1,6 @@
 /**
  * ChatConfigScreen 偏好开关持久化失败回滚（cr-fix-spec b2/B-3）：
- * 四个开关（流式输出 / 思考提示词 / 会话版本校验 / 富文本消息）写入 reject 时
+ * 三个开关（流式输出 / 思考提示词 / 富文本消息）写入 reject 时
  * toast「保存失败」并把开关回滚到原值（实现选了「乐观更新 + 失败回滚」）。
  *
  * 照 fetch-models-sheet.test.tsx 的 TestRenderer 直测风格；
@@ -82,22 +82,12 @@ jest.mock('@/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
-jest.mock('@novel-master/core/config-forms/shared', () => ({
-  SESSION_FS_LABELS: {
-    title: '会话版本校验',
-    enabledHint: '开启提示',
-    disabledHint: '关闭提示',
-  },
-}));
-
 const mockShowToast = jest.fn();
 
 const mockGetLlmStreamEnabled = jest.fn();
 const mockSetLlmStreamEnabled = jest.fn();
 const mockGetThinkingContextEnabled = jest.fn();
 const mockSetThinkingContextEnabled = jest.fn();
-const mockGetSessionFsVersionCheck = jest.fn();
-const mockSetSessionFsVersionCheck = jest.fn();
 const mockGetConditions = jest.fn();
 
 const mockRuntime = {
@@ -106,8 +96,6 @@ const mockRuntime = {
     setLlmStreamEnabled: mockSetLlmStreamEnabled,
     getThinkingContextEnabled: mockGetThinkingContextEnabled,
     setThinkingContextEnabled: mockSetThinkingContextEnabled,
-    getSessionFsVersionCheck: mockGetSessionFsVersionCheck,
-    setSessionFsVersionCheck: mockSetSessionFsVersionCheck,
   },
   compactionConditions: {getConditions: mockGetConditions},
 };
@@ -205,8 +193,6 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
     mockSetLlmStreamEnabled.mockReset().mockResolvedValue(undefined);
     mockGetThinkingContextEnabled.mockReset().mockResolvedValue(false);
     mockSetThinkingContextEnabled.mockReset().mockResolvedValue(undefined);
-    mockGetSessionFsVersionCheck.mockReset().mockResolvedValue(false);
-    mockSetSessionFsVersionCheck.mockReset().mockResolvedValue(undefined);
     mockGetConditions.mockReset().mockResolvedValue({
       schemaVersion: 4,
       enabled: false,
@@ -237,15 +223,6 @@ describe('ChatConfigScreen 开关持久化失败回滚', () => {
 
     await toggleSwitchAsync(renderer.root, '思考提示词');
     expect(json(renderer)).toContain('思考提示词:关');
-    expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
-  });
-
-  it('B-3: 会话版本校验写入失败回滚并 toast', async () => {
-    mockSetSessionFsVersionCheck.mockRejectedValueOnce(new Error('盘炸了'));
-    const {renderer} = await renderScreen();
-
-    await toggleSwitchAsync(renderer.root, '会话版本校验');
-    expect(json(renderer)).toContain('会话版本校验:关');
     expect(mockShowToast).toHaveBeenCalledWith('保存失败：盘炸了');
   });
 

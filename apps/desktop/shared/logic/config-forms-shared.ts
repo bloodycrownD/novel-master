@@ -6,5 +6,4 @@
 export {
   API_KEY_STATUS_LABELS,
   REGEX_UI_LABELS,
-  SESSION_FS_LABELS,
 } from "@novel-master/core/config-forms/shared";

@@ -10,7 +10,6 @@ import type { Tool } from "../model/tool.js";
 import type {
   VfsGrepMatch,
   VfsReadResult,
-  WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { BuiltinToolContext } from "./builtin-tool-context.js";
 import {
@@ -217,7 +216,7 @@ export function createVfsTools(): readonly Tool<
   };
 
   const write: Tool<
-    { path: string; content: string; options?: WriteOptions },
+    { path: string; content: string },
     { version: number },
     BuiltinToolContext
   > = {
@@ -231,16 +230,11 @@ export function createVfsTools(): readonly Tool<
     inputSchema: z.object({
       path: z.string().min(1).describe("目标文件路径；不存在则创建"),
       content: z.string().describe("写入后的完整文件内容（UTF-8 文本）"),
-      options: z
-        .object({
-          expectedVersion: z.number().int().optional(),
-          versionCheck: z.boolean().optional(),
-        })
-        .optional(),
     }),
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
-      const versionCheck = input.options?.versionCheck ?? false;
+      // 版本校验对 LLM 无意义（read 后再 write 纯增加往返）：write 固定
+      // last-write-wins。编辑器透明锁走各自 UI 保存链路，不经本工具。
       // 入口统一规范化：相对路径补 / 后规范化，避免「写入宽容、file_cache 校验严格」
       // 两套口径不一致导致写成功却报 INVALID_PATH。
       const logicalPath = resolveLogicalPath(input.path);
@@ -249,12 +243,7 @@ export function createVfsTools(): readonly Tool<
       const isNewFile =
         ctx.workplace != null &&
         (await probeFileAbsentForWrite(ctx, logicalPath));
-      const result = await ctx.vfs.write(logicalPath, input.content, {
-        versionCheck,
-        ...(input.options?.expectedVersion != null
-          ? { expectedVersion: input.options.expectedVersion }
-          : {}),
-      });
+      const result = await ctx.vfs.write(logicalPath, input.content);
       // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
       await upsertFileCacheAfterWrite(ctx, logicalPath, input.content);
       // 仅新建：为各层祖先目录补默认目录规则（文件本身不是目录，只补父链）

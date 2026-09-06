@@ -121,7 +121,6 @@ export { createPersistentPreferences } from "./service/persistent-preferences/cr
 export type { PersistentPreferences } from "./service/persistent-preferences/persistent-preferences.port.js";
 export {
   PREFERENCES_MODULE,
-  PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
   PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,

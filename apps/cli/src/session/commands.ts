@@ -21,7 +21,8 @@ import { runSessionTemplate } from "./template.js";
 import { runSessionWorkplace } from "./workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-/** Session VFS subcommands except `write` (version check comes from preferences). */
+/** Session VFS subcommands except `write`（write 无版本参数）。
+ */
 const SESSION_VFS_COMMANDS = {
   list: runList,
   mkdir: runMkdir,
@@ -36,7 +37,6 @@ type SessionDeps = Pick<
   NovelMasterRuntime,
   | "conn"
   | "state"
-  | "preferences"
   | "sessions"
   | "sessionFs"
   | "sessionVfs"
@@ -184,8 +184,8 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
   const subArgs = args.slice(idx + 1);
 
   if (group === "write") {
-    const versionCheck = await deps.preferences.getSessionFsVersionCheck();
-    await runWrite(vfs, subArgs, { defaultNoVersionCheck: !versionCheck });
+    // 版本比对已从 VFS 底层移除：last-write-wins。
+    await runWrite(vfs, subArgs);
     return;
   }
 

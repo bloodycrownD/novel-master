@@ -184,10 +184,6 @@ export function FileEditorScreen() {
           vfs,
           path,
           content,
-          {
-            expectedVersion: version,
-            versionCheck: version != null,
-          },
           savedContent,
         );
         setSavedContent(content);
@@ -199,14 +195,7 @@ export function FileEditorScreen() {
         return;
       }
 
-      if (version == null) {
-        await vfs.write(path, content, {versionCheck: false});
-      } else {
-        await vfs.write(path, content, {
-          expectedVersion: version,
-          versionCheck: true,
-        });
-      }
+      await vfs.write(path, content);
       setSavedContent(content);
       const refreshed = await vfs.read(path);
       setVersion(refreshed.version);

@@ -107,8 +107,6 @@ export const {
   ipcPromptAgentMeta,
   ipcCompactionManual,
   ipcUsageStatsQuery,
-  ipcPreferencesGetSessionFsVersionCheck,
-  ipcPreferencesSetSessionFsVersionCheck,
   ipcPreferencesGetLlmStream,
   ipcPreferencesSetLlmStream,
   ipcPreferencesGetThinkingContext,

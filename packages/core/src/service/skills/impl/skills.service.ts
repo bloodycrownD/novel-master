@@ -301,12 +301,8 @@ export class SkillsService implements SkillService {
       await this.assertSkillNameNotReservedForCreate(domain, name, projectId);
     }
     // write 对不存在的文件会自动补父目录——新建技能即向新目录写 SKILL.md。
-    // 已存在文件（编辑）须带 expectedVersion 乐观锁，否则 VFS 拒绝（CONFLICT）。
-    return vfs.write(`${SKILLS_ROOT}/${name}/${rel}`, content, {
-      ...(options?.expectedVersion != null
-        ? { expectedVersion: options.expectedVersion }
-        : {}),
-    });
+    // 版本比对已从 VFS 底层移除：last-write-wins。
+    return vfs.write(`${SKILLS_ROOT}/${name}/${rel}`, content);
   }
 
   async editSkillFile(

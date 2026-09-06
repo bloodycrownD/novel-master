@@ -17,12 +17,6 @@ import type {
   UserVfsTurnToolSpec,
 } from "@/service/chat/user-vfs-turn.port.js";
 
-/** 保存操作可选版本校验（与 session-fs.versionCheck 对齐）。 */
-export interface UserVfsSaveVersionOptions {
-  readonly expectedVersion?: number;
-  readonly versionCheck?: boolean;
-}
-
 let toolIdSeq = 0;
 
 function allocToolIds(count: number, prefix: string): string[] {
@@ -92,7 +86,6 @@ export function buildUserVfsSaveOp(
   saved: string,
   path: string,
   fileContentAtSave: string,
-  versionOptions?: UserVfsSaveVersionOptions,
   mappingOptions?: UserVfsSaveMappingOptions
 ): UserVfsTurnOp | null {
   const mapped = mapUserSaveToToolUses(
@@ -118,17 +111,6 @@ export function buildUserVfsSaveOp(
       path: mapped.path,
       content: mapped.content,
     };
-    if (
-      versionOptions?.versionCheck === true ||
-      versionOptions?.expectedVersion != null
-    ) {
-      writeInput.options = {
-        versionCheck: versionOptions.versionCheck ?? true,
-        ...(versionOptions.expectedVersion != null
-          ? { expectedVersion: versionOptions.expectedVersion }
-          : {}),
-      };
-    }
     return toOp(actionXml, [{ id, name: "write", input: writeInput }]);
   }
 

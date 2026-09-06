@@ -22,7 +22,6 @@ import type {
   VfsListEntry,
   VfsReadResult,
   VfsService,
-  WriteOptions,
 } from "../vfs.port.js";
 
 /**
@@ -63,12 +62,11 @@ export class ScopedVfsService implements VfsService {
 
   async write(
     path: string,
-    content: string,
-    options?: WriteOptions
+    content: string
   ): Promise<{ version: number }> {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
-    return this.inner.write(this.scopeKeyStr, logical, content, options);
+    return this.inner.write(this.scopeKeyStr, logical, content);
   }
 
   async replace(

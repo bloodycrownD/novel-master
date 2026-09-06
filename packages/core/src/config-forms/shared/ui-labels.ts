@@ -4,13 +4,6 @@ export const API_KEY_STATUS_LABELS = {
   notSet: "未连接",
 } as const;
 
-/** 工作区「文件版本校验」开关文案。 */
-export const SESSION_FS_LABELS = {
-  title: "文件版本校验",
-  enabledHint: "已开启版本校验",
-  disabledHint: "已关闭版本校验",
-} as const;
-
 /** 正则规则编辑器深度与通道文案。 */
 export const REGEX_UI_LABELS = {
   startDepth: "开始深度",

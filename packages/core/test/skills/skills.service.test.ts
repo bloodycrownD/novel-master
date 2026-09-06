@@ -49,7 +49,7 @@ describe("SkillService（T-SK5）", () => {
     assert.deepEqual(item.files, ["SKILL.md"]);
   });
 
-  it("write 对已存在文件：带 expectedVersion 正向覆盖，不带撞 CONFLICT", async () => {
+  it("write 对已存在文件：缺省 last-write-wins，版本比对已从底层移除", async () => {
     const ctx = getNovelMasterTestContext();
     const skills = createSkillsService(ctx.conn);
     const name = `ovw-${testIsolationSuffix()}`;
@@ -57,25 +57,26 @@ describe("SkillService（T-SK5）", () => {
     await skills.writeSkillFile("global", name, undefined, VALID_SKILL_MD);
     const read = await skills.readSkillFile("global", name);
 
-    // 不带版本：VFS 乐观锁拒绝（vfs write 对已存在文件要求 expectedVersion）
-    await assert.rejects(
-      () => skills.writeSkillFile("global", name, undefined, "# 重写"),
-      (err: unknown) =>
-        String((err as Error).message).includes("expectedVersion required"),
-    );
-
-    // 带 read 返回的版本：整文件覆盖成功且版本递增
-    const rewritten = await skills.writeSkillFile(
+    // 不带版本（skill 工具的 LLM 路径）：直接覆盖成功，不再要求先 read 拿版本
+    const blind = await skills.writeSkillFile(
       "global",
       name,
       undefined,
-      "# 重写",
-      undefined,
-      { expectedVersion: read.version },
+      "# 盲写",
     );
-    assert.ok(rewritten.version > read.version, "覆盖后版本应递增");
-    const after = await skills.readSkillFile("global", name);
-    assert.equal(after.content, "# 重写");
+    assert.ok(blind.version > read.version, "盲写覆盖后版本应递增");
+
+    // 多轮覆盖：每轮版本递增，无 CONFLICT
+    const again = await skills.writeSkillFile(
+      "global",
+      name,
+      undefined,
+      "# 再写",
+    );
+    assert.ok(again.version > blind.version, "二次覆盖版本应递增");
+
+    const fresh = await skills.readSkillFile("global", name);
+    assert.equal(fresh.content, "# 再写");
   });
 
   it("listSkills：front matter 坏 / 缺 SKILL.md 的技能标无效", async () => {
@@ -426,10 +427,10 @@ describe("SkillService（T-SK5）", () => {
     const suffix = testIsolationSuffix();
     const project = await ctx.projects.create(`P-ACR-${suffix}`);
 
-    // global 域目录已存在（bootstrap 种入）：编辑放行。writeSkillFile 已支持
-    // expectedVersion 透传（CR MF-8 相关修复），整文件覆盖需带 read 返回的
-    // 版本；不带则撞 VFS 乐观锁 CONFLICT。这里用辅助文件覆盖放行路径，
-    // 带 expectedVersion 的正向覆盖见下一条用例
+    // global 域目录已存在（bootstrap 种入）：编辑放行。writeSkillFile 的
+    // 版本策略：带 expectedVersion 才校验（UI 编辑器透明锁），缺省
+    // last-write-wins。这里用辅助文件覆盖放行路径，带 expectedVersion 的
+    // 正向覆盖见下一条用例
     await skills.writeSkillFile(
       "global",
       "agent-config",

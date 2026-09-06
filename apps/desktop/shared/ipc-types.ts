@@ -111,10 +111,6 @@ export const IPC_CHANNELS = {
 
   COMPACTION_MANUAL: 'nm:compaction/manual',
 
-  PREFERENCES_GET_SESSION_FS_VERSION_CHECK:
-    'nm:preferences/getSessionFsVersionCheck',
-  PREFERENCES_SET_SESSION_FS_VERSION_CHECK:
-    'nm:preferences/setSessionFsVersionCheck',
   PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
   PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
   PREFERENCES_GET_THINKING_CONTEXT: 'nm:preferences/getThinkingContext',
@@ -436,8 +432,6 @@ export type VfsReadRequest = VfsScopeRequest & {
 export type VfsWriteRequest = VfsScopeRequest & {
   readonly path: string;
   readonly content: string;
-  readonly expectedVersion?: number;
-  readonly versionCheck?: boolean;
   /** 编辑器上次读盘快照，仅用于漂移诊断日志，不作 baseline。 */
   readonly lastKnownContent?: string | null;
 };
@@ -1360,8 +1354,6 @@ export type SkillsWriteRequest = {
   readonly path?: string;
   readonly content: string;
   readonly projectId?: string;
-  /** 编辑已存在文件时传 read 返回的版本（VFS 乐观锁）；新建文件不传。 */
-  readonly version?: number;
 };
 
 /** 局部修改（同 edit 工具的 normalize-for-match 语义）；须显式域。 */

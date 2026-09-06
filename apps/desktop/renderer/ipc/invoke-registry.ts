@@ -408,14 +408,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       UsageStatsQueryRequest,
       IpcResult<UsageStatsQueryResponse>
     >(invoke, IPC_CHANNELS.USAGE_STATS_QUERY),
-    ipcPreferencesGetSessionFsVersionCheck: noArg<IpcResult<boolean>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_GET_SESSION_FS_VERSION_CHECK,
-    ),
-    ipcPreferencesSetSessionFsVersionCheck: withBool<IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
-    ),
     ipcPreferencesGetLlmStream: noArg<IpcResult<boolean>>(
       invoke,
       IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,

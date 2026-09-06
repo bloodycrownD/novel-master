@@ -15,7 +15,6 @@ import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
   VfsListOptions,
-  VfsWriteRepoOptions,
 } from "../model/vfs-options.js";
 
 /**
@@ -83,15 +82,13 @@ export interface VfsEntryRepository {
    *
    * @param nextVersion - 新 head 版本号，由 service 层按
    *   `max(head_version, MAX(vfs_revision.version)) + 1` 语义分配，
-   *   避免 head 回拨后撞上历史占号；乐观锁判定（versionCheck 分支
-   *   的 expectedVersion 比对）不受此参数影响。
+   *   避免 head 回拨后撞上历史占号。写入为 last-write-wins，不做版本比对。
    */
   update(
     scopeKey: string,
     path: string,
     content: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }>;
 
   /**
@@ -103,8 +100,7 @@ export interface VfsEntryRepository {
     scopeKey: string,
     path: string,
     contentHash: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }>;
 
   /**

@@ -6,33 +6,23 @@ import { describe, it } from "node:test";
 import { runNm } from "./helpers.js";
 
 describe("preferences CLI e2e", () => {
-  it("C1: set/get/list session-fs.versionCheck", async () => {
+  it("C1: session-fs.versionCheck 已退役：set/get/reset 均拒绝", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-"));
     const dbPath = join(dir, "novel.db");
     try {
-      const set = runNm([
-        "preferences",
-        "set",
-        "session-fs.versionCheck",
-        "false",
-        "--db",
-        dbPath,
-      ]);
-      assert.equal(set.status, 0, set.stderr);
-
-      const get = runNm([
-        "preferences",
-        "get",
-        "session-fs.versionCheck",
-        "--db",
-        dbPath,
-      ]);
-      assert.equal(get.status, 0, get.stderr);
-      assert.equal(get.stdout.trim(), "false");
-
-      const list = runNm(["preferences", "list", "--db", dbPath]);
-      assert.equal(list.status, 0, list.stderr);
-      assert.match(list.stdout, /session-fs\.versionCheck=false/);
+      for (const args of [
+        ["set", "session-fs.versionCheck", "false"],
+        ["get", "session-fs.versionCheck"],
+        ["reset", "session-fs.versionCheck"],
+      ] as const) {
+        const res = runNm([
+          "preferences",
+          ...args,
+          "--db",
+          dbPath,
+        ]);
+        assert.notEqual(res.status, 0, args.join(" "));
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -59,14 +49,14 @@ describe("preferences CLI e2e", () => {
     }
   });
 
-  it("preferences reset restores session-fs.versionCheck default", async () => {
+  it("preferences reset restores chat.llmStream default", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-"));
     const dbPath = join(dir, "novel.db");
     try {
       runNm([
         "preferences",
         "set",
-        "session-fs.versionCheck",
+        "chat.llmStream",
         "false",
         "--db",
         dbPath,
@@ -74,14 +64,14 @@ describe("preferences CLI e2e", () => {
       runNm([
         "preferences",
         "reset",
-        "session-fs.versionCheck",
+        "chat.llmStream",
         "--db",
         dbPath,
       ]);
       const get = runNm([
         "preferences",
         "get",
-        "session-fs.versionCheck",
+        "chat.llmStream",
         "--db",
         dbPath,
       ]);
@@ -111,12 +101,35 @@ describe("preferences CLI e2e", () => {
     }
   });
 
-  it("C5: versionCheck false allows session vfs write without version", async () => {
+  it("C5: session vfs write 对已存在文件缺省免版本校验（last-write-wins）", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-"));
     const dbPath = join(dir, "novel.db");
+    /** 新库首次命令的 stdout 可能混入 [nm-boot] migration 日志，取末行作 id。 */
+    const lastLine = (out: string): string =>
+      out.trim().split("\n").filter(Boolean).pop() ?? "";
     try {
-      runNm(["project", "create", "--name", "P", "--db", dbPath]);
-      runNm(["session", "create", "--db", dbPath]);
+      const project = runNm([
+        "project",
+        "create",
+        "--name",
+        "P",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(project.status, 0, project.stderr);
+      const projectId = lastLine(project.stdout);
+
+      const session = runNm([
+        "session",
+        "create",
+        "--title",
+        "main",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(session.status, 0, session.stderr);
 
       const first = runNm(
         ["session", "vfs", "write", "/notes/a.md", "--db", dbPath],
@@ -124,15 +137,7 @@ describe("preferences CLI e2e", () => {
       );
       assert.equal(first.status, 0, first.stderr);
 
-      runNm([
-        "preferences",
-        "set",
-        "session-fs.versionCheck",
-        "false",
-        "--db",
-        dbPath,
-      ]);
-
+      // 不再依赖任何偏好：覆盖已存在文件直接成功
       const second = runNm(
         ["session", "vfs", "write", "/notes/a.md", "--db", dbPath],
         { input: "v2" },
