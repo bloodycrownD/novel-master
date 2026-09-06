@@ -67,3 +67,9 @@ user:
 
 assistant:
 用户按 §771 五条编号作答：#1/#2 授权主代理定夺——readStdin 空管道防护保留（CLI `nm vfs write` stdin 管道空输入原会静默清空已存在文件，防护堵数据丢失；移动端无 stdin 不涉及）、退役旗标不加显式报错（旧脚本目标仍是写入，静默忽略为零成本优雅降级）；#3 CHANGELOG 分段授权——挪变更段并与设置项条目合并+补空管道句，并入 MF-6；#4 清理=KKV 死键（已转 MF-9）；#5 desktop 脏检查补偿按建议不做（豁免）。全部决定写入 fix-spec：deviation 转 fixed、豁免两条入「已豁免」、Open questions 清零，状态 fix-spec-ready 已确认。等用户开工指令（skill 规定用户确认前不改代码，本轮只动 spec）。
+
+user:
+（code-dev-loop skill 加载，确认按 fix-spec 开工）
+
+assistant:
+dev-ready 达成。编排：wave-0 三 impl 子代理并行（core-agent MF-3/8、core-vfs MF-5/7/9、apps MF-1/2/4）+ MF-6 主代理 trivial；verify 主代理执行（trivial）——core 1813 绿、mobile 1092 绿、desktop typecheck 0 错；verify 抓到 MF-5 两处漏网（core format-vfs-error-for-user.test 与 mobile format-error.test 的 CONFLICT 用例，spec 文件清单漏列）主代理修正；CLI chat-smoke/session-rollback/preferences-C5 三个 e2e 修通两个既有根因：fresh DB registry 空导致 session create 失败（测试补 agent import 种子 bundle，resolveWorkspaceAgentForNewSession 的 listAgentIds()[0] 回落即通）+ migration 日志污染 stdout（id 取末行）——其余 28 个 CLI 失败属同类既有债（失败签名与基线一致，非本批引入）。cr-func readonly 子代理判定 func-ready yes（九条 MF 闭合、无新 must-fix、verify 附加修复不构成 spec deviation），三条 suggestion（种子挪 try 防临时目录泄漏/错别字/JSDoc）主代理 trivial 闭合。教训：CLI e2e 全绿的前置是 fresh DB 种 agent + stdout 末行解析，两个坑修了三个文件还剩同类债在其余套件。
