@@ -49,9 +49,6 @@ import {
 /** 工具注册名（catalog / policy / 卡片解析同名字符串）。 */
 export const AGENT_TOOL_NAME = "agent";
 
-/** create / update 成功后的提示语（spec B 风险项：降低「改了没生效」误解）。 */
-const AGENT_SAVED_MESSAGE = "定义已保存，将在下一次会话生效";
-
 /** `agent` 工具输入（扁平定位字段；action 决定哪些字段必填，run 内校验）。 */
 export interface AgentToolInput {
   readonly action: "list" | "get" | "create" | "update";
@@ -86,12 +83,11 @@ export interface AgentToolGetOutput {
   readonly definition: AgentDefinition;
 }
 
-/** create / update 输出（定位 + 保存提示，供摘要与 meta 透传）。 */
+/** create / update 输出（保存回执；供摘要与 meta 透传，LLM 渲染为 ok）。 */
 export interface AgentToolWriteOutput {
   readonly action: "create" | "update";
   readonly name: string;
   readonly agentId: string;
-  readonly message: string;
 }
 
 export type AgentToolOutput =
@@ -252,7 +248,7 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
 
 配置字段详情与完整示例请先 skill load agent-config。
 
-注意：无删除动作（删除走用户界面 agent 管理）；定义保存后下一次会话生效。`;
+注意：无删除动作（删除走用户界面 agent 管理）；定义保存后立即可用。`;
   },
   inputSchema: z.object({
     action: z
@@ -307,13 +303,11 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
       action: z.literal("create"),
       name: z.string(),
       agentId: z.string(),
-      message: z.string(),
     }),
     z.object({
       action: z.literal("update"),
       name: z.string(),
       agentId: z.string(),
-      message: z.string(),
     }),
   ]),
   async run(input, ctx): Promise<AgentToolOutput> {
@@ -393,7 +387,6 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
           action: "create",
           name: readDefinitionName(definition),
           agentId,
-          message: AGENT_SAVED_MESSAGE,
         };
       }
       case "update": {
@@ -448,7 +441,6 @@ action 一览：list 列清单 / get 查完整定义（name 或 agentId 定位�
           action: "update",
           name: readDefinitionName(definition),
           agentId,
-          message: AGENT_SAVED_MESSAGE,
         };
       }
     }

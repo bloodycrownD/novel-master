@@ -42,6 +42,111 @@ describe("formatToolOutputForLlm", () => {
     assert.equal(formatToolOutputForLlm({ ok: true }), "ok");
   });
 
+  it("MUT-01: skill write 变更回执渲染 ok（不再 JSON 展开）", () => {
+    assert.equal(
+      formatToolOutputForLlm({
+        action: "write",
+        domain: "project",
+        name: "demo",
+        path: "SKILL.md",
+        version: 2,
+      }),
+      "ok",
+    );
+  });
+
+  it("MUT-01: skill edit 变更回执（含 replacements）渲染 ok", () => {
+    assert.equal(
+      formatToolOutputForLlm({
+        action: "edit",
+        domain: "global",
+        name: "demo",
+        path: "SKILL.md",
+        version: 3,
+        replacements: 2,
+      }),
+      "ok",
+    );
+  });
+
+  it("MUT-01: agent create/update 保存回执渲染 ok", () => {
+    assert.equal(
+      formatToolOutputForLlm({
+        action: "create",
+        name: "translator",
+        agentId: "agent-abc123",
+      }),
+      "ok",
+    );
+    assert.equal(
+      formatToolOutputForLlm({
+        action: "update",
+        name: "translator",
+        agentId: "agent-abc123",
+      }),
+      "ok",
+    );
+  });
+
+  it("MUT-02: 带 content 的输出不撞变更回执守卫（load 走正文格式）", () => {
+    const out = formatToolOutputForLlm({
+      action: "write",
+      domain: "project",
+      name: "demo",
+      path: "SKILL.md",
+      version: 1,
+      content: "# 正文",
+    }) as string;
+    assert.ok(!out.startsWith("ok"));
+    assert.ok(out.includes("# 正文"));
+  });
+
+  it("LOAD-01: skill load 正文带行号、附属文件清单作尾注", () => {
+    const out = formatToolOutputForLlm({
+      action: "load",
+      domain: "project",
+      name: "demo",
+      path: "SKILL.md",
+      content: "# 技能标题\n\n第一段。",
+      version: 1,
+      files: ["references/x.md", "assets/tpl.txt"],
+      truncated: false,
+    }) as string;
+    assert.match(out, /1\|# 技能标题/);
+    assert.match(out, /3\|第一段。/);
+    assert.ok(out.includes("附属文件（相对技能目录）：references/x.md、assets/tpl.txt"));
+    assert.ok(!out.startsWith("{") || !out.includes("\\n"));
+  });
+
+  it("LOAD-02: skill load 截断时提示续读走 skill read", () => {
+    const out = formatToolOutputForLlm({
+      action: "load",
+      domain: "project",
+      name: "demo",
+      path: "SKILL.md",
+      content: "line1\nline2",
+      version: 1,
+      files: [],
+      truncated: true,
+    }) as string;
+    assert.ok(out.includes("续读请用 skill read 的 offset/limit"));
+  });
+
+  it("LOAD-03: alreadyReferenced 短提示直接返回文本，不加行号", () => {
+    const out = formatToolOutputForLlm({
+      action: "load",
+      domain: "project",
+      name: "demo",
+      path: "SKILL.md",
+      content: "本请求提示词已注入该技能全文，无需重复加载。",
+      version: 1,
+      files: [],
+      truncated: false,
+      alreadyReferenced: true,
+    }) as string;
+    assert.equal(out, "本请求提示词已注入该技能全文，无需重复加载。");
+  });
+
   it("FMT-READ-03: formats truncated read with line numbers and nextOffset hint", () => {
     const out = formatToolOutputForLlm({
       path: "/a.md",

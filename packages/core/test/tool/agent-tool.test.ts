@@ -300,14 +300,13 @@ describe("agent 管理工具", () => {
   });
 
   // T-AG3：create/update 经 upsert 校验——未注册工具名被拒、错误信息含原因。
-  it("T-AG3：create 生成 agent- 前缀新 id 并经 upsert 落盘，输出含生效提示", async () => {
+  it("T-AG3：create 生成 agent- 前缀新 id 并经 upsert 落盘", async () => {
     const registry = fakeAgentRegistry();
     const runner = makeRunner();
     const out = await runner.call<{
       action: "create";
       name: string;
       agentId: string;
-      message: string;
     }>(
       "agent",
       { action: "create", definition: { name: "gamma", mode: "subagent" } },
@@ -317,7 +316,6 @@ describe("agent 管理工具", () => {
     assert.equal(out.action, "create");
     assert.equal(out.name, "gamma");
     assert.ok(out.agentId.startsWith("agent-"));
-    assert.match(out.message, /下一次会话生效/);
     const upsert = registry.calls.find((c) => c.method === "upsert");
     assert.ok(upsert);
     assert.equal(upsert.args[0], out.agentId);
