@@ -24,20 +24,18 @@ describe("formatVfsErrorForUser", () => {
     );
   });
 
-  it("CONFLICT 返回中文版本冲突提示", () => {
-    const err = new VfsError("CONFLICT", "Version conflict", {
+  it("NOT_FOUND 返回中文不存在提示（CONFLICT 已随版本校验下线）", () => {
+    const err = new VfsError("NOT_FOUND", "Path not found: /note.md", {
       path: "/projects/proj-1/sessions/sess-1/note.md",
-      expectedVersion: 1,
-      actualVersion: 2,
     });
     assert.equal(
       formatVfsErrorForUser(err, sessionScope),
-      "文件版本冲突，请刷新后重试。",
+      "文件不存在或已被删除。",
     );
   });
 
   it("unwraps VfsError cause from ToolError", () => {
-    const cause = new VfsError("CONFLICT", "Version conflict", {
+    const cause = new VfsError("REPLACE_NOT_FOUND", "Replace string not found in /note.md", {
       path: "/note.md",
     });
     const err = new ToolError("FAILED", "Tool failed: write", {
@@ -46,7 +44,7 @@ describe("formatVfsErrorForUser", () => {
     });
     assert.equal(
       formatVfsErrorForUser(err, sessionScope),
-      "文件版本冲突，请刷新后重试。",
+      "文件内容已变更，无法应用本次修改。请刷新文件后重新编辑。",
     );
   });
 
