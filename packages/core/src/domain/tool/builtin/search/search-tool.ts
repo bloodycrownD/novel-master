@@ -10,10 +10,9 @@
  * - 网络入口经 `ctx.fetchFn` 可选注入（缺省 globalThis.fetch，照 curl）；
  *   适配器错误统一 `toolFailed("search", cause)` 包装。
  * - 输出预算保险丝：结果序列化超过 `TOOL_OUTPUT_MAX_BYTES`（50KB）时
- *   正式行为是全文落盘会话工作区 `/tmp/` 并返回 `{savedPath, message}`
- *   （overflow-sink 公共机制，Step 5/6 接线）；本节点留 TODO 桩——判定
- *   逻辑就位、落盘调用未接，超预算照常回流完整结果（正常搜索结果约
- *   15KB 封顶，此路径实践不可达）。
+ *   全文落盘会话工作区 `/tmp/` 并返回 `{savedPath, message}`
+ *   （overflow-sink 公共机制，curl 同机制）；落盘失败回落完整结果
+ *   （正常搜索结果约 15KB 封顶，超预算与落盘失败双罕见）。
  * - 不在任何 registry 摘除分支内，主/子/孙 agent 全深度可用（照 curl）。
  *
  * @module domain/tool/builtin/search/search-tool
@@ -25,6 +24,7 @@ import { toolFailed } from "@/errors/tool-errors.js";
 import { TOOL_OUTPUT_MAX_BYTES } from "@/domain/tool/logic/tool-output-limits.js";
 import type { Tool } from "../../model/tool.js";
 import type { BuiltinToolContext } from "../builtin-tool-context.js";
+import { sinkOversizedOutput } from "../overflow-sink.js";
 import {
   DEFAULT_MAX_RESULTS,
   ENGINE_IDS,
@@ -145,18 +145,29 @@ export const searchTool: Tool<
         ctx.fetchFn ?? globalThis.fetch
       );
 
-      // —— 超 50KB 落盘保险丝（overflow-sink）——
-      // 判定逻辑就位：序列化字节数超过 TOOL_OUTPUT_MAX_BYTES（50KB）时，
-      // 正式实现（Step 5/6）会把全文写入会话工作区 /tmp/ 并改为返回
-      // {savedPath, message}。本节点留桩：落盘调用未接线，照常回流完整
-      // 结果（正常搜索结果约 15KB 封顶，此路径实践不可达）。
+      // —— 超 50KB 落盘保险丝（overflow-sink，curl 同机制）——
+      // 序列化后按 UTF-8 字节计预算，超预算时全文落盘会话工作区 /tmp/
+      // （子代理经装配链落父会话工作区），改回 {engine, savedPath,
+      // message}；落盘失败（如 vfs 不可用）回落完整结果，不因落盘
+      // 故障丢搜索所得。
       const serialized = JSON.stringify(response);
       if (
         new TextEncoder().encode(serialized).byteLength > TOOL_OUTPUT_MAX_BYTES
       ) {
-        // TODO(web-search-tool Step 5/6): 接线 sinkOversizedOutput(ctx, {
-        //   tool: "search", content: serialized, contentType: "json" })
-        //   → 返回 { engine, savedPath, message }（SearchOversizeOutput）。
+        try {
+          const sink = await sinkOversizedOutput(ctx, {
+            tool: SEARCH_TOOL_NAME,
+            content: serialized,
+            contentType: "application/json",
+          });
+          return {
+            engine: response.engine,
+            savedPath: sink.savedPath,
+            message: sink.message,
+          };
+        } catch (error) {
+          console.debug("[search] 超预算落盘失败，回落完整输出:", error);
+        }
       }
       return response;
     } catch (e) {

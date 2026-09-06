@@ -49,6 +49,11 @@ export function formatReadOutput(rec: Record<string, unknown>): string {
 
   if (rec.truncated === true) {
     const hints: string[] = ["Output truncated."];
+    if (rec.lastLineTruncated === true) {
+      hints.push(
+        "Last line was cut at the 50KB byte budget; its tail is not resumable (continue from the next line)."
+      );
+    }
     if (typeof rec.totalLines === "number") {
       hints.push(`Total lines: ${rec.totalLines}.`);
     }
@@ -250,8 +255,9 @@ export function isCurlOutput(rec: Record<string, unknown>): boolean {
 /**
  * Formats curl output as `curl <METHOD> <url> → <finalUrl>` + status header + body.
  *
- * method 从输出回显（缺省 GET）；截断标注行由工具本体附在 body 末尾
- * （不计入字节预算），这里不重复追加。
+ * method 从输出回显（缺省 GET）；超预算落盘形态（savedPath）空行后显示
+ * 已落盘路径与说明（body 为空串占位）；降级截断的标注行由工具本体附
+ * 在 body 末尾（不计入字节预算），这里不重复追加。
  */
 export function formatCurlOutput(rec: Record<string, unknown>): string {
   const url = rec.url as string;
@@ -270,6 +276,13 @@ export function formatCurlOutput(rec: Record<string, unknown>): string {
     contentType.length > 0
       ? `Status: ${rec.status} · ${contentType}`
       : `Status: ${rec.status}`;
+  if (typeof rec.savedPath === "string") {
+    const message =
+      typeof rec.message === "string" && rec.message.length > 0
+        ? `\n${rec.message}`
+        : "";
+    return `${requestLine}\n${statusLine}\n\n已落盘 ${rec.savedPath}${message}`;
+  }
   return `${requestLine}\n${statusLine}\n\n${rec.body}`;
 }
 

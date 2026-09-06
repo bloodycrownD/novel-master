@@ -19,7 +19,7 @@ import {
 } from "../logic/fs-command.js";
 import {
   capMatchList,
-  capUtf8Bytes,
+  capUtf8BytesFill,
   sliceLinesFromOffset,
   TOOL_OUTPUT_MAX_LINES,
   TOOL_OUTPUT_MAX_MATCHES,
@@ -87,6 +87,8 @@ export type ReadToolOutput = {
   readonly totalLines: number;
   readonly returnedLines: number;
   readonly truncated: boolean;
+  /** 末行被截到 50KB 字节预算点（该行不完整，尾部不可续读）。 */
+  readonly lastLineTruncated?: boolean;
   readonly nextOffset?: number;
 };
 
@@ -124,8 +126,9 @@ export function createVfsTools(): readonly Tool<
 
 用法：
 - 首次读取：提供 path；默认从第 1 行起返回一段内容
-- 大文件续读：若返回 truncated=true，用 nextOffset 作为下次 offset 继续读
+- 大文件续读：若返回 truncated=true，用 nextOffset 作为下次 offset 继续读；末行被截到字节预算点时（lastLineTruncated=true），被截行的尾部不可续读，续读从下一行开始
 - 指定范围：offset 为起始行号（从 1 起），limit 为最多返回行数
+- 输出预算：单次最多约 50KB（UTF-8 字节），预算内尽量填满；单行超长时末行截到预算点
 
 与 write 区别：write 整文件覆盖；与 edit 区别：edit 做局部替换。需要先看清文件再改时，优先 read。`,
     inputSchema: z.object({
@@ -153,6 +156,7 @@ export function createVfsTools(): readonly Tool<
       totalLines: z.number().int(),
       returnedLines: z.number().int(),
       truncated: z.boolean(),
+      lastLineTruncated: z.boolean().optional(),
       nextOffset: z.number().int().optional(),
     }),
     async run(input, ctx) {
@@ -182,20 +186,29 @@ export function createVfsTools(): readonly Tool<
         offset,
         limit
       );
-      const truncatedLines = slice.map((line) => truncateLine(line).line);
-      const byteCapped = capUtf8Bytes(truncatedLines);
+      // 50KB 单一预算（不再按 2000 字符截行）：预算内尽量填满，单行超长
+      // 时末行截到预算点（不切半个字符）。行号分页保留（sliceLinesFromOffset）。
+      const byteCapped = capUtf8BytesFill(slice);
       const content = byteCapped.lines.join("\n");
       const returnedLines = byteCapped.lines.length;
-      const truncated =
-        byteCapped.truncated ||
-        returnedLines < slice.length ||
-        (lineNextOffset != null && returnedLines >= limit);
+      // 字节预算截断（末行部分保留/整行丢弃）或行数帽（limit 截断且文件
+      // 还有剩余行）任一命中即 truncated。
+      const truncated = byteCapped.truncated || lineNextOffset != null;
 
       let nextOffset: number | undefined;
       if (truncated) {
-        if (byteCapped.truncated && returnedLines > 0) {
-          nextOffset = offset + returnedLines;
-        } else if (lineNextOffset != null) {
+        if (byteCapped.truncated) {
+          // 末行被截到预算点：该行不完整，重读同一行会因预算不变再次
+          // 截断（死循环）——nextOffset 跳过该行从下一行续读，被截行
+          // 尾部不可续读（lastLineTruncated 提示注明）。若该行因剩余
+          // 预算为 0 被整行丢弃，则 nextOffset 恰指向该行，下一轮预算
+          // 重置后整行重读。被截行是文件末行时跳过后无剩余内容，不给
+          // nextOffset（避免续读 offset 超界报错），truncated 已说明。
+          const candidate = offset + returnedLines;
+          if (candidate <= totalLines) {
+            nextOffset = candidate;
+          }
+        } else {
           nextOffset = lineNextOffset;
         }
       }
@@ -210,6 +223,7 @@ export function createVfsTools(): readonly Tool<
         totalLines,
         returnedLines,
         truncated,
+        ...(byteCapped.lastLinePartial ? { lastLineTruncated: true } : {}),
         ...(nextOffset != null ? { nextOffset } : {}),
       };
     },
@@ -528,8 +542,11 @@ export function createVfsTools(): readonly Tool<
 /**
  * 整文件 write 成功后写入 session `file_cache` 的 `full:{path}`。
  * 无 `sessionKkv` 时跳过（运行时未注入）。
+ *
+ * 导出供 overflow-sink 复用（超预算落盘后同样 upsert，同会话后续
+ * read 命中免重读盘）。
  */
-async function upsertFileCacheAfterWrite(
+export async function upsertFileCacheAfterWrite(
   ctx: BuiltinToolContext,
   // 入参已是规范化的逻辑路径（write 入口 resolveLogicalPath 处理过），无需再次规范化。
   logicalPath: string,
@@ -592,8 +609,10 @@ async function probeFileAbsentForWrite(
  * 目录规则是辅助展示配置：任何失败只吞掉，不让 write / mkdir 失败，
  * 但 catch 里留一行 debug trace（失败路径 + 错误信息）便于排查。
  * 无 `workplace` 注入时跳过（旧测试 ctx / 未装配运行时）。
+ *
+ * 导出供 overflow-sink 复用（超预算落盘到 `/tmp` 后补默认目录规则）。
  */
-async function ensureDirRulesForNewPath(
+export async function ensureDirRulesForNewPath(
   ctx: BuiltinToolContext,
   dirLogicalPath: string
 ): Promise<void> {
