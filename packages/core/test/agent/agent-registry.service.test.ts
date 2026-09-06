@@ -72,6 +72,74 @@ describe("AgentRegistryService", () => {
     assert.deepEqual(loaded.prompts.dynamic, []);
   });
 
+  // 非对象形状不兑底：字符串 / 数组 / 数字都是脏输入，交 validateAgentDefinition
+  // 报 INVALID_SCHEMA，禁止静默洗白成畸形对象后落盘空布局。
+  it("prompts 为字符串时 upsert 拒绝且不落盘（不兑底）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const id = `agent-bad-str-${testIsolationSuffix()}`;
+    await assert.rejects(
+      () =>
+        registry.upsert(id, {
+          name: "坏形状-字符串",
+          prompts: "你是翻译",
+        } as unknown as AgentDefinition),
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.code === "INVALID_SCHEMA" &&
+        /definition\.prompts/.test(e.message),
+    );
+    await assert.rejects(
+      () => registry.get(id),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+    );
+  });
+
+  it("prompts 为数组时 upsert 拒绝且不落盘（不兑底）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const id = `agent-bad-arr-${testIsolationSuffix()}`;
+    await assert.rejects(
+      () =>
+        registry.upsert(id, {
+          name: "坏形状-数组",
+          prompts: [{ persist: [], dynamic: [] }],
+        } as unknown as AgentDefinition),
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.code === "INVALID_SCHEMA" &&
+        /definition\.prompts/.test(e.message),
+    );
+    await assert.rejects(
+      () => registry.get(id),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+    );
+  });
+
+  it("prompts 为数字时 upsert 拒绝且不落盘（不兑底）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const id = `agent-bad-num-${testIsolationSuffix()}`;
+    await assert.rejects(
+      () =>
+        registry.upsert(id, {
+          name: "坏形状-数字",
+          prompts: 42,
+        } as unknown as AgentDefinition),
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.code === "INVALID_SCHEMA" &&
+        /definition\.prompts/.test(e.message),
+    );
+    await assert.rejects(
+      () => registry.get(id),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
+    );
+  });
+
   it("AG4: delete removes existing agent", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);

@@ -25,13 +25,23 @@ export interface DefaultAgentRegistryServiceDeps {
 /**
  * prompts 缺省补空布局：除 name 外所有字段均有默认值，prompts 一族
  *（含 persist / dynamic 数组）缺省时补 `[]`，让 `{name}` 成为最小合法
- * create（与内置 general 的空 persist/dynamic 同构）。非对象形状不在此
- * 兜底，交 validateAgentDefinition 报错。
+ * create（与内置 general 的空 persist/dynamic 同构）。非对象形状
+ *（字符串 / 数字 / 数组、显式 null）不兑底——原样返回 def，直接交
+ * validateAgentDefinition 报 INVALID_SCHEMA，禁止静默洗白后落盘空布局。
  */
 function withDefaultPromptLayouts(def: AgentDefinition): AgentDefinition {
   const prompts = def.prompts as AgentPromptLayout | undefined;
-  if (prompts == null) {
+  // 仅 undefined（真缺省）补空布局；null 与非对象形状（字符串 / 数字 /
+  // 数组）都是显式脏输入，原样透传给校验层拒绝，不在此兜底。
+  if (prompts === undefined) {
     return { ...def, prompts: { persist: [], dynamic: [] } };
+  }
+  if (
+    prompts === null ||
+    typeof prompts !== "object" ||
+    Array.isArray(prompts)
+  ) {
+    return def;
   }
   const persist = prompts.persist as AgentPromptLayout["persist"] | undefined;
   const dynamic = prompts.dynamic as AgentPromptLayout["dynamic"] | undefined;
