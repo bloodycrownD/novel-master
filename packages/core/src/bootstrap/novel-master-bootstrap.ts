@@ -7,7 +7,7 @@
  * 稳态冷启动：若 `PRAGMA user_version` ≥ {@link SCHEMA_BOOT_VERSION}，跳过 DDL 与
  * 列对齐，仅跑 pending migration 与 builtin seed，避免 RN 上数十次桥接往返。
  *
- * 最低支持版本：v1.4.27。低于此版本的极旧库需先升级到 v1.4.27，再升级到本版本——
+ * 最低支持版本：v1.4.28。低于此版本的极旧库需先升级到 v1.4.28，再升级到本版本——
  * {@link assertMinimumBaseline} 会在 migration runner 之前做 fail-fast 检查，
  * 防止跨大版本升级走样。
  *
@@ -107,6 +107,8 @@ async function writeSchemaBootVersion(
  *
  * 前三条（vfs-entry-id-redesign-v1、session-agent-config-v2、
  * project-agent-config-cleanup-v1）为第二轮退役：所有 ≥v1.4.27 的库都已应用过。
+ * 第三轮退役（本次）：orphan-revision-gc-v1、table-constraints-v1b——所有
+ * ≥v1.4.28 的库都已应用过，最低支持版本随之升至 v1.4.28。
  */
 export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "saved-model-identity-v1",
@@ -118,11 +120,13 @@ export const BASELINE_MIGRATION_IDS: readonly string[] = [
   "vfs-entry-id-redesign-v1",
   "session-agent-config-v2",
   "project-agent-config-cleanup-v1",
+  "orphan-revision-gc-v1",
+  "table-constraints-v1b",
 ];
 
-/** 老库升级失败提示，指引用户先升到 v1.4.27。 */
+/** 老库升级失败提示，指引用户先升到 v1.4.28。 */
 export const BASELINE_TOO_OLD_MESSAGE =
-  "检测到当前数据库低于本版本最低支持版本（v1.4.27）。请先升级到 v1.4.27，再升级到本版本。";
+  "检测到当前数据库低于本版本最低支持版本（v1.4.28）。请先升级到 v1.4.28，再升级到本版本。";
 
 /** `llm_saved_model` 无 `id` 列 → 常见老库尚未走 saved-model-identity-v1。 */
 async function hasLegacySavedModelShape(tx: TdbcConnection): Promise<boolean> {
@@ -206,7 +210,22 @@ async function hasLegacyChatProjectShape(tx: TdbcConnection): Promise<boolean> {
   return Number(rows[0]?.cnt ?? 0) > 0;
 }
 
-/** 任一 legacy 形态命中即视为未升级到 v1.4.27。 */
+/**
+ * `vfs_revision` 存在但未切 WITHOUT ROWID（table-constraints-v1b 的独有形态变化，
+ * canonical DDL 之外没有别处会改它）→ 未走 table-constraints-v1b（< v1.4.28）。
+ * 判据与原迁移自身的探测一致；查询异常/空结果的保守方向是 false（新装路径不触发）。
+ */
+async function hasLegacyVfsRevisionShape(tx: TdbcConnection): Promise<boolean> {
+  const rows = await tx.query<{ sql: string | null }>(
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'vfs_revision'`
+  );
+  if (rows.length === 0 || rows[0]?.sql == null) {
+    return false;
+  }
+  return !/WITHOUT\s+ROWID/i.test(String(rows[0]?.sql ?? ""));
+}
+
+/** 任一 legacy 形态命中即视为未升级到 v1.4.28。 */
 async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
   if (await hasLegacySavedModelShape(tx)) {
     return true;
@@ -218,6 +237,9 @@ async function detectLegacyShape(tx: TdbcConnection): Promise<boolean> {
     return true;
   }
   if (await hasLegacyChatSessionShape(tx)) {
+    return true;
+  }
+  if (await hasLegacyVfsRevisionShape(tx)) {
     return true;
   }
   return hasLegacyChatProjectShape(tx);
