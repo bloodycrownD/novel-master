@@ -4,7 +4,7 @@
 - repo: novel-master；base_sha: ecadd487；head_sha: b0037065（feat/regex-removal）
 - prd/spec: docs/Iterations/feature-optimizations-2026-09/features/regex-removal/{prd,spec}.md
 - review_round: 1 / dag_version: 1（diff 模式单轮）
-- 状态：fix-spec-ready
+- 状态：已执行（2026-09-06，见提交）
 
 ## Must-fix
 
@@ -20,10 +20,10 @@
 - fixed（说明性）：spec 测试清单建议补记 `packages/core/test/domain/regex/regex-rule-update-depth.test.ts` 为必要连带删除（import 已删模块，不删必编译红）；下次修订 spec 顺手补一句，不阻塞
 
 ## Open questions / 待拍板
-- `visibleFloorByMessageId`（`packages/core/src/public/chat.ts:306`）成孤儿导出：唯一生产消费方（mobile regex-apply-channel）已删，现仅剩自身单测与 `public-chat-allowlist` 快照引用。拍板是否连带删除（需同步删快照条目与单测）；保留无害。
+- 无
 
 ## 已豁免（用户确认不修）
-- 无
+- `visibleFloorByMessageId` 孤儿导出：用户拍板保留（后续正则相关功能可能复用）
 
 ## 合并后 QA（manual_user）
 - T-RX8：真机从 v1.5.12 存量库升级后启动正常、聊天原文直出、双端设置无正则入口

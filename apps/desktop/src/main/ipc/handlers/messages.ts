@@ -35,7 +35,6 @@ import { formatIpcError } from '../format-ipc-error.js';
 import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
 import { notifyComposerStatusAfterFloorOrCompaction, notifyComposerStatusAfterSessionKkvCleared } from '../../services/notify-composer-status-after-kkv-clear.js';
 
-
 function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
   switch (block.type) {
     case 'text':

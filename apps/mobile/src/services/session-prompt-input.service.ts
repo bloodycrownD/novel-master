@@ -19,7 +19,6 @@ import {
 import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 
-
 export interface SessionPromptScope {
   readonly projectId: string;
   readonly sessionId: string;
