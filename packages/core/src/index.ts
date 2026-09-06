@@ -186,7 +186,14 @@ export type {
  *
  * desktop / mobile runtime 用 `createSearchConfigStore` 工厂包
  * `kkv + secretStore` 装配到 `AgentTurnRuntimePort.searchConfig`。
+ *
+ * `ENGINE_IDS` / `KEY_ENGINE_IDS` 是引擎清单单一真源（ui/C-1）：双端
+ * 配置页的清单/顺序一律从这两个常量派生，不再各自手工副本。
  */
+export {
+  ENGINE_IDS,
+  KEY_ENGINE_IDS,
+} from "./domain/tool/builtin/search/types.js";
 export type {
   EngineId,
   KeyEngineId,
