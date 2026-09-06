@@ -143,6 +143,7 @@ import {
   handleSessionsListByProject,
   handleSessionsProjectComposerStatus,
   handleSessionsPullTemplate,
+  handleSessionsPushTemplate,
   handleSessionsRename,
   handleSessionsSetAgentBinding,
   handleSessionsSetComposerDraft,
@@ -225,6 +226,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SESSIONS_RENAME, handleSessionsRename);
   bindReq(IPC_CHANNELS.SESSIONS_DELETE, handleSessionsDelete);
   bindReq(IPC_CHANNELS.SESSIONS_PULL_TEMPLATE, handleSessionsPullTemplate);
+  bindReq(IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE, handleSessionsPushTemplate);
   bindReq(IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT, handleSessionsGetComposerDraft);
   bindReq(IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT, handleSessionsSetComposerDraft);
   bindReq(
