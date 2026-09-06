@@ -267,4 +267,48 @@ describe("SqliteVfsEntryRepository", () => {
       assert.equal("content" in row, false);
     }
   });
+
+  it("findContentSizeByPath：blob 行返回压缩字节，目录/不存在返回 null", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const root = isolatedRoot();
+    const filePath = `${root}/size-probe.txt`;
+    await repo.insert(GLOBAL_SCOPE, filePath, "探测正文");
+
+    // 新写入路径正文存 content store：返回压缩侧字节数
+    const blobSize = await repo.findContentSizeByPath(GLOBAL_SCOPE, filePath);
+    assert.ok(blobSize != null);
+    assert.equal(blobSize.kind, "blobCompressedBytes");
+    assert.ok(blobSize.size > 0);
+
+    // 目录行 → null
+    const dirPath = `${root}/size-dir`;
+    await repo.insertDirectory(GLOBAL_SCOPE, dirPath);
+    assert.equal(await repo.findContentSizeByPath(GLOBAL_SCOPE, dirPath), null);
+
+    // 不存在路径 → null
+    assert.equal(
+      await repo.findContentSizeByPath(GLOBAL_SCOPE, `${root}/no-such.txt`),
+      null
+    );
+  });
+
+  it("findContentSizeByPath：遗留内联行返回字符数（length(content)，不拉正文）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const root = isolatedRoot();
+    const legacyPath = `${root}/legacy-inline.txt`;
+    await repo.insert(GLOBAL_SCOPE, legacyPath, "placeholder");
+    // 裸 SQL 造遗留内联行：正文内联、无 content_hash（迁移窗口形态）
+    await ctx.conn.execute(
+      `UPDATE vfs_entry SET content = '遗留内联正文', content_hash = NULL
+       WHERE scope_key = ? AND path = ?`,
+      [GLOBAL_SCOPE, legacyPath]
+    );
+
+    const size = await repo.findContentSizeByPath(GLOBAL_SCOPE, legacyPath);
+    assert.ok(size != null);
+    assert.equal(size.kind, "inlineChars");
+    assert.equal(size.size, "遗留内联正文".length);
+  });
 });

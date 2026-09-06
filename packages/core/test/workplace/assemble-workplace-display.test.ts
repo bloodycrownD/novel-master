@@ -356,4 +356,66 @@ describe("assembleWorkplaceDisplay", () => {
       null,
     );
   });
+
+  // huge-card-import-crash：误导入巨型角色卡的存量用户重启后，workplace
+  // 前缀组装不得整读毒数据（原生 OOM 崩溃循环），超大文件降级为占位符
+  it("超大文件降级：display 含占位、不含正文、不写 file_cache，正常文件不受影响", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-oversize-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/毒卡/巨型设定.md", "poison-body");
+    await vfs.write("/正常.md", "hello-world");
+    const wt = createWorkplaceService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    await wt.setFileRule({ logicalPath: "/毒卡/巨型设定.md", inclusionMode: "show" });
+    await wt.setFileRule({ logicalPath: "/正常.md", inclusionMode: "show" });
+
+    // 伪造毒数据：把该文件 content blob 的 byte_len 改成超闸门大小
+    // （真实毒卡是压缩后仍巨大的 blob，这里直改长度列避免真的写入 MB 级正文）
+    await ctx.conn.execute(
+      `UPDATE vfs_content_blob SET byte_len = ?
+       WHERE content_hash = (
+         SELECT content_hash FROM vfs_entry
+         WHERE scope_key LIKE ? AND path = ?
+       )`,
+      [9 * 1024 * 1024, `%${session.id}%`, "/毒卡/巨型设定.md"],
+    );
+
+    const out = await assembleWorkplaceDisplay(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      {
+        sessionKkv: sk,
+        workplace: wt,
+        vfs,
+        layout: layoutWithWorkplace(),
+      },
+    );
+
+    // 超大文件：占位符进 display，正文不进，file_cache 不写
+    assert.match(out.workplaceDisplay, /（文件过大，已跳过，约 \d+ 字符）/);
+    assert.equal(out.workplaceDisplay.includes("poison-body"), false);
+    assert.equal(
+      await sk.get(
+        session.id,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        fileCacheKey("full", "/毒卡/巨型设定.md"),
+      ),
+      null,
+    );
+    // 正常文件不受降级影响：正文照常进 display 并写 cache
+    assert.equal(out.workplaceDisplay.includes("hello-world"), true);
+    assert.notEqual(
+      await sk.get(
+        session.id,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        fileCacheKey("full", "/正常.md"),
+      ),
+      null,
+    );
+  });
 });
