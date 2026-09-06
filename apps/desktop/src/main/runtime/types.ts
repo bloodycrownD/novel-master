@@ -48,6 +48,7 @@ import type {
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SessionKkvService } from "@novel-master/core/session-kkv";
 import type { SkillService } from "@novel-master/core/skills";
+import type { SearchConfigStore } from "@novel-master/core";
 
 /** Open connection with domain services (main-process singleton host). */
 export interface DesktopNovelMasterRuntime {
@@ -96,4 +97,9 @@ export interface DesktopNovelMasterRuntime {
   readonly streamRegistry: AgentStreamRegistry;
   readonly tokenCounters: TokenCounterRegistry;
   readonly userVfsTurn: UserVfsTurnService;
+  /**
+   * 搜索引擎配置（search 工具用）：core 工厂包 kkv + secretStore，
+   * run-agent-turn 经结构化兼容读取本字段装配 search 闭包。
+   */
+  readonly searchConfig: SearchConfigStore;
 }

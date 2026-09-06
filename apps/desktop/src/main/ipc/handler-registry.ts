@@ -44,6 +44,13 @@ import {
   handleCloudSyncTestConnection,
 } from './handlers/cloud-sync.js';
 import {
+  handleSearchClearEngineKey,
+  handleSearchGetConfig,
+  handleSearchSaveEngineKey,
+  handleSearchSetDefaultEngine,
+  handleSearchSetSearxngBaseUrl,
+} from './handlers/search.js';
+import {
   handleAppCheckForUpdates,
   handleAppGetInfo,
   handleAppOpenExternal,
@@ -419,6 +426,15 @@ export function registerHandlersFromRegistry(): void {
   );
   bindNoArg(IPC_CHANNELS.CLOUD_SYNC_PULL, handleCloudSyncPull);
   bindReq(IPC_CHANNELS.CLOUD_SYNC_PUSH, handleCloudSyncPush);
+
+  bindNoArg(IPC_CHANNELS.SEARCH_GET_CONFIG, handleSearchGetConfig);
+  bindReq(IPC_CHANNELS.SEARCH_SAVE_ENGINE_KEY, handleSearchSaveEngineKey);
+  bindReq(IPC_CHANNELS.SEARCH_CLEAR_ENGINE_KEY, handleSearchClearEngineKey);
+  bindReq(
+    IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL,
+    handleSearchSetSearxngBaseUrl,
+  );
+  bindReq(IPC_CHANNELS.SEARCH_SET_DEFAULT_ENGINE, handleSearchSetDefaultEngine);
 
   bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
   bindEventReq(

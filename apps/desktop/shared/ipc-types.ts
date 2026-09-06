@@ -178,6 +178,12 @@ export const IPC_CHANNELS = {
   CLOUD_SYNC_PULL: 'nm:cloud-sync/pull',
   CLOUD_SYNC_PUSH: 'nm:cloud-sync/push',
 
+  SEARCH_GET_CONFIG: 'nm:search/getConfig',
+  SEARCH_SAVE_ENGINE_KEY: 'nm:search/saveEngineKey',
+  SEARCH_CLEAR_ENGINE_KEY: 'nm:search/clearEngineKey',
+  SEARCH_SET_SEARXNG_BASE_URL: 'nm:search/setSearxngBaseUrl',
+  SEARCH_SET_DEFAULT_ENGINE: 'nm:search/setDefaultEngine',
+
   SHELL_MENU_POPUP: 'nm:shell/menuPopup',
   SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
   SHELL_OPEN_EXTERNAL: 'nm:shell/openExternal',
@@ -1456,6 +1462,35 @@ export type CloudSyncPushRequest = {
 
 export type CloudSyncPushResult = {
   readonly rev: number;
+};
+
+/** 单引擎配置状态（不含 key 明文，只有 configured 布尔）。 */
+export type SearchEngineStatusDto = {
+  readonly configured: boolean;
+};
+
+/** 搜索引擎配置（DTO 不含 key 明文；engines 键为 EngineId 字符串）。 */
+export type SearchConfigDto = {
+  readonly defaultEngine: string | null;
+  readonly searxngBaseUrl: string;
+  readonly engines: Readonly<Record<string, SearchEngineStatusDto>>;
+};
+
+export type SearchSaveEngineKeyRequest = {
+  readonly engineId: string;
+  readonly apiKey: string;
+};
+
+export type SearchClearEngineKeyRequest = {
+  readonly engineId: string;
+};
+
+export type SearchSetSearxngBaseUrlRequest = {
+  readonly baseUrl: string;
+};
+
+export type SearchSetDefaultEngineRequest = {
+  readonly engineId: string | null;
 };
 
 export type ShellMenuId = 'file' | 'edit' | 'view' | 'window' | 'help';

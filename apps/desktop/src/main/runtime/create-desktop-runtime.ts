@@ -29,6 +29,7 @@ import {
 import {
   createPersistentPreferences,
   createPersistentState,
+  createSearchConfigStore,
 } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 import { createRegexConfigService } from "@novel-master/core/regex";
@@ -85,6 +86,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     db: dbStore,
     env: envStore,
   });
+  // search 工具配置：KKV `nm-search` 模块 + SKSP key ref（与 mobile 同构，core 工厂统一逻辑）
+  const searchConfig = createSearchConfigStore({ kkv, secretStore });
 
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({
@@ -153,5 +156,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     modelRequests: providerBundle.modelRequests,
     regexConfig,
     userVfsTurn,
+    searchConfig,
   };
 }
