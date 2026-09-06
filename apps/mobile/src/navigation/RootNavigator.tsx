@@ -31,6 +31,8 @@ import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
 import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
 import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
+import {SmartSortRulesScreen} from '../screens/stack/SmartSortRulesScreen';
+import {SmartSortRuleEditorScreen} from '../screens/stack/SmartSortRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
 import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
@@ -150,6 +152,14 @@ const RegexRuleEditorStackScreen = withStackLayout(
   'RegexRuleEditor',
   RegexRuleEditorScreen,
 );
+const SmartSortRulesStackScreen = withStackLayout(
+  'SmartSortRules',
+  SmartSortRulesScreen,
+);
+const SmartSortRuleEditorStackScreen = withStackLayout(
+  'SmartSortRuleEditor',
+  SmartSortRuleEditorScreen,
+);
 const FileEditorStackScreen = withStackLayout('FileEditor', FileEditorScreen);
 const SessionDetailStackScreen = withStackLayout(
   'SessionDetail',
@@ -249,6 +259,14 @@ export function RootNavigator() {
             <Stack.Screen
               name="RegexRuleEditor"
               component={RegexRuleEditorStackScreen}
+            />
+            <Stack.Screen
+              name="SmartSortRules"
+              component={SmartSortRulesStackScreen}
+            />
+            <Stack.Screen
+              name="SmartSortRuleEditor"
+              component={SmartSortRuleEditorStackScreen}
             />
             <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
             <Stack.Screen

@@ -47,6 +47,7 @@ const CONFIG_MENU: Array<{
   {icon: '💾', label: '存储配置', route: 'StorageConfig'},
   {icon: '📊', label: '数据统计', route: 'TokenUsageStats'},
   {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
+  {icon: '🔢', label: '智能排序', route: 'SmartSortRules'},
 ];
 
 export function ProfileTabScreen() {

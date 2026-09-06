@@ -29,6 +29,9 @@ export type RootStackParamList = {
   RegexGroups: undefined;
   RegexRules: {groupId?: string} | undefined;
   RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
+  /** 智能排序规则列表（spec smart-filename-sort Step 13）。 */
+  SmartSortRules: undefined;
+  SmartSortRuleEditor: {ruleId?: string} | undefined;
   FileEditor: {
     path: string;
     /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */
