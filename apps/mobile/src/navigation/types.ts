@@ -25,6 +25,8 @@ export type RootStackParamList = {
   };
   ChatConfig: undefined;
   CloudSyncConfig: undefined;
+  /** AI 搜索引擎配置：四引擎 key/baseUrl + 默认引擎（无参数）。 */
+  SearchEngines: undefined;
   GlobalTemplate: undefined;
   RegexGroups: undefined;
   RegexRules: {groupId?: string} | undefined;
