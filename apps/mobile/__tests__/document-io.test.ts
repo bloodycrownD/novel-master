@@ -12,6 +12,7 @@ const mockExists = jest.fn();
 const mockReadFile = jest.fn();
 const mockWriteFile = jest.fn();
 const mockUnlink = jest.fn();
+const mockStat = jest.fn();
 
 jest.mock('@react-native-documents/picker', () => ({
   errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
@@ -33,6 +34,7 @@ jest.mock('react-native-blob-util', () => ({
     readFile: (...args: unknown[]) => mockReadFile(...args),
     writeFile: (...args: unknown[]) => mockWriteFile(...args),
     unlink: (...args: unknown[]) => mockUnlink(...args),
+    stat: (...args: unknown[]) => mockStat(...args),
   },
 }));
 
@@ -54,6 +56,7 @@ describe('document-io', () => {
     mockReadFile.mockReset();
     mockWriteFile.mockReset();
     mockUnlink.mockReset().mockResolvedValue(undefined);
+    mockStat.mockReset().mockResolvedValue({path: '/cache/a.png', size: 1024});
     mockWriteFile.mockResolvedValue(undefined);
     mockSaveDocuments.mockResolvedValue([
       {uri: 'content://saved', error: null},
@@ -222,6 +225,57 @@ describe('document-io', () => {
           buildMissingError: fsPath => new Error(`missing: ${fsPath}`),
         }),
       ).rejects.toThrow('missing: /cache/a.zip');
+    });
+
+    it('maxBytes 预检：stat 超限抛 buildTooLargeError 且不读字节', async () => {
+      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.png'}]);
+      mockKeepLocalCopy.mockResolvedValue([
+        {status: 'success', localUri: 'file:///cache/a.png'},
+      ]);
+      mockStat.mockResolvedValue({path: '/cache/a.png', size: 50 * 1024 * 1024});
+
+      await expect(
+        pickAndReadBytes({
+          mimeTypes: ['image/png'],
+          maxBytes: 48 * 1024 * 1024,
+          buildTooLargeError: size =>
+            new Error(`角色卡文件过大：${size} 字节，已拒绝导入`),
+        }),
+      ).rejects.toThrow('角色卡文件过大：52428800 字节，已拒绝导入');
+      expect(mockStat).toHaveBeenCalledWith('/cache/a.png');
+      expect(mockExists).not.toHaveBeenCalled();
+      expect(mockReadFile).not.toHaveBeenCalled();
+    });
+
+    it('maxBytes 预检：stat 失败容错放行，继续原读取流程', async () => {
+      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.png'}]);
+      mockKeepLocalCopy.mockResolvedValue([
+        {status: 'success', localUri: 'file:///cache/a.png'},
+      ]);
+      mockStat.mockRejectedValue(new Error('stat failed'));
+      mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+
+      const bytes = await pickAndReadBytes({
+        mimeTypes: ['image/png'],
+        maxBytes: 48 * 1024 * 1024,
+        buildTooLargeError: size => new Error(`too large: ${size}`),
+      });
+
+      expect(bytes).toEqual(new Uint8Array([0x68, 0x69]));
+      expect(mockReadFile).toHaveBeenCalledWith('/cache/a.png', 'base64');
+    });
+
+    it('未传 maxBytes 时不做 stat 预检，行为不变', async () => {
+      mockPick.mockResolvedValue([{uri: 'content://x', name: 'a.zip'}]);
+      mockKeepLocalCopy.mockResolvedValue([
+        {status: 'success', localUri: 'file:///cache/a.zip'},
+      ]);
+      mockReadFile.mockResolvedValue(globalThis.btoa('hi'));
+
+      await pickAndReadBytes({mimeTypes: ['application/zip']});
+
+      expect(mockStat).not.toHaveBeenCalled();
+      expect(mockReadFile).toHaveBeenCalledWith('/cache/a.zip', 'base64');
     });
 
     it('pickAndReadText 以 utf8 读出文本', async () => {
