@@ -239,14 +239,13 @@ export interface CompiledSmartSortRule {
  * {@link extractSortKey} before sorting (D5), so each name matches the rule
  * list exactly once instead of once per comparison.
  */
-export type SmartSortKeyCache = Map<string, number[] | null>;
+export type SmartSortKeyCache = Map<string, readonly number[] | null>;
 
 /** Which rule claimed the basename and the ordinals it yielded (preview / diagnostics). */
 export interface SmartSortKeyDetail {
   readonly ruleId: string;
   readonly nums: readonly number[];
 }
-
 /**
  * Same priority walk as {@link extractSortKey} but also reports which rule
  * claimed the basename (used by the smart-sort-rule preview API, Step 7).
@@ -295,7 +294,7 @@ export function extractSortKeyDetail(
 export function extractSortKey(
   basename: string,
   rules: readonly CompiledSmartSortRule[],
-): number[] | null {
+): readonly number[] | null {
   return extractSortKeyDetail(basename, rules)?.nums ?? null;
 }
 
