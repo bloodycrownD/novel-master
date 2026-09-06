@@ -21,14 +21,10 @@ export type {EngineId, KeyEngineId, SearchConfigPublic, SearchConfigStore};
 
 /**
  * 需要 API key 的引擎（searxng 走自托管 baseUrl，无 key）。
- * core 未从公共面导出 `KEY_ENGINE_IDS` 常量，此处为 UI 展示用副本，
- * 新增引擎时与 core 侧同步维护。
+ * 清单真源是 core 的 `KEY_ENGINE_IDS`（ui/C-1 收敛），此处仅重导出
+ * 供 UI 使用，不再维护本地副本。
  */
-export const SEARCH_KEY_ENGINE_IDS: readonly KeyEngineId[] = [
-  'bocha',
-  'tavily',
-  'brave',
-];
+export {KEY_ENGINE_IDS} from '@novel-master/core';
 
 /** 取 runtime 装配好的搜索配置存储（读写入口统一收口到本模块）。 */
 export function getSearchConfigStore(

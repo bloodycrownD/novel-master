@@ -10,10 +10,7 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import type {EngineId, KeyEngineId} from '@novel-master/core';
 import {ApiKeyStatusTag} from '@/components/provider/ApiKeyStatusTag';
-import {
-  FormChipGroup,
-  type ChipOption,
-} from '@/components/form/FormChipGroup';
+import {FormChipGroup, type ChipOption} from '@/components/form/FormChipGroup';
 import {FormField} from '@/components/form/FormField';
 import {FormSectionCard} from '@/components/form/FormSectionCard';
 import {FormTextInput} from '@/components/form/FormTextInput';
@@ -26,7 +23,7 @@ import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
 import {
   getSearchConfigStore,
-  SEARCH_KEY_ENGINE_IDS,
+  KEY_ENGINE_IDS,
 } from '@/services/search-config.store';
 
 /** 引擎显示名（卡片标题 / chip 共用）。 */
@@ -82,9 +79,8 @@ export function SearchEnginesScreen() {
     {bocha: '', tavily: '', brave: ''},
   );
   const [searxngBaseUrl, setSearxngBaseUrl] = useState('');
-  const [defaultEngine, setDefaultEngine] = useState<DefaultEngineChoice>(
-    DEFAULT_ENGINE_AUTO,
-  );
+  const [defaultEngine, setDefaultEngine] =
+    useState<DefaultEngineChoice>(DEFAULT_ENGINE_AUTO);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,7 +123,7 @@ export function SearchEnginesScreen() {
     try {
       const store = getSearchConfigStore(runtime);
       // key 引擎留空 = 不改（密钥不回显，无 diff 可比）。
-      for (const engineId of SEARCH_KEY_ENGINE_IDS) {
+      for (const engineId of KEY_ENGINE_IDS) {
         const draft = apiKeyDrafts[engineId].trim();
         if (draft.length > 0) {
           await store.saveEngineKey(engineId, draft);
@@ -142,6 +138,9 @@ export function SearchEnginesScreen() {
       await load();
     } catch (error) {
       showToast(toastMessage('保存失败', error));
+      // 保存可能部分生效（如 key 已提交而 baseUrl 写入失败），回读
+      // 让状态标签立即反映已生效部分，与 desktop 93f534ea 口径对齐。
+      await load();
     } finally {
       setSaving(false);
     }
@@ -176,9 +175,7 @@ export function SearchEnginesScreen() {
   const engineChoiceOptions: Array<ChipOption<DefaultEngineChoice>> = [
     {value: DEFAULT_ENGINE_AUTO, label: '自动'},
     ...(Object.keys(ENGINE_LABELS) as EngineId[])
-      .filter(
-        engineId => configured[engineId] || defaultEngine === engineId,
-      )
+      .filter(engineId => configured[engineId] || defaultEngine === engineId)
       .map(engineId => ({
         value: engineId as DefaultEngineChoice,
         label: ENGINE_LABELS[engineId],
@@ -201,7 +198,7 @@ export function SearchEnginesScreen() {
         />
       }
     >
-      {SEARCH_KEY_ENGINE_IDS.map(engineId => (
+      {KEY_ENGINE_IDS.map(engineId => (
         <FormSectionCard
           key={engineId}
           tokens={tokens}
@@ -218,7 +215,9 @@ export function SearchEnginesScreen() {
             label="API Key"
             tokens={tokens}
             hint={
-              configured[engineId] ? '已保存；留空则保留原密钥' : '保存时写入本机密钥库'
+              configured[engineId]
+                ? '已保存；留空则保留原密钥'
+                : '保存时写入本机密钥库'
             }
           >
             <FormTextInput
@@ -235,9 +234,7 @@ export function SearchEnginesScreen() {
             <SecondaryButton
               tokens={tokens}
               fullWidth
-              label={
-                clearingEngine === engineId ? '清除中…' : '清除已存密钥'
-              }
+              label={clearingEngine === engineId ? '清除中…' : '清除已存密钥'}
               onPress={() => {
                 handleClearKey(engineId).catch(() => undefined);
               }}
