@@ -176,9 +176,9 @@ jest.mock('../src/storage/chat-rich-text-pref', () => ({
   readChatRichTextEnabled: jest.fn(async () => false),
 }));
 
-jest.mock('../src/services/regex-apply-channel', () => ({
-  loadSessionMessagesTailForDisplay: (...args: any[]) => mockLoadTail(...args),
-  loadSessionMessagesPageForDisplay: (...args: any[]) => mockLoadPage(...args),
+jest.mock('../src/services/session-messages-loader', () => ({
+  loadSessionMessagesTail: (...args: any[]) => mockLoadTail(...args),
+  loadSessionMessagesPage: (...args: any[]) => mockLoadPage(...args),
 }));
 
 jest.mock('../src/services/stream-apply-buffer', () => ({
