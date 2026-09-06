@@ -48,6 +48,7 @@ import type {
   RangeKind,
 } from './token-usage/format';
 import {
+  REQUESTS_PAGE_SIZE,
   isCustomRangeValid,
   resolveRangeDays,
   toLocalDayKey,
@@ -173,7 +174,6 @@ export function TokenUsageStatsScreen() {
   );
 
   // 流水页分页加载：页签激活且数据标脏时拉第一页；翻页/点页码按页号取整页替换。
-  const PAGE_SIZE = 10;
   const loadRequests = useCallback(
     async (page: number) => {
       const seq = ++reqSeqRef.current;
@@ -182,8 +182,8 @@ export function TokenUsageStatsScreen() {
         // 流水跟随时间（需求①勘误后）：查询用含 range 的完整 filter——
         // 与汇总/图表同窗口，模型/服务商筛选叠加。
         const result = await runtime.usageStats.listRequestUsage(filter, {
-          offset: page * PAGE_SIZE,
-          limit: PAGE_SIZE,
+          offset: page * REQUESTS_PAGE_SIZE,
+          limit: REQUESTS_PAGE_SIZE,
         });
         if (seq !== reqSeqRef.current) {
           return;
@@ -268,7 +268,8 @@ export function TokenUsageStatsScreen() {
     }, [reloadModels]),
   );
 
-  // 选中天后加载 24 小时桶（只应用模型筛选，时间由天本身界定）。
+  // 选中天后加载 24 小时桶（应用模型+服务商组合筛选，时间由天本身界定，
+  // range 不参与——完整 filter 直接传入，小时窗口由天划定）。
   useEffect(() => {
     if (selectedDay == null) {
       setHourlyBuckets(null);
@@ -335,7 +336,8 @@ export function TokenUsageStatsScreen() {
       ? '近 30 天'
       : '近 7 天';
 
-  // 空态区分（mobile/A-1）：库全空（listModels 为空且已落地一轮查询）显示
+  // 空态区分（mobile/A-1）：库全空（配置侧无任何服务商×模型组合且已
+  // 落地一轮查询）显示
   // 冷启动引导，拦全部页签（流水同样无数据可翻）；范围内无数据提示
   // 「该区间无数据」，同样拦全部页签——流水随时间窗口（需求①勘误后），
   // 窗口空（库非空）时与其他页签统一显示区间空态。summary 非空条件避免

@@ -29,6 +29,9 @@ export const MODEL_OTHER_KEY = '__other__';
 /** 汇总卡空态文案：统计自本版本才开始积累，统一显示横杠（简洁，不占版面）。 */
 export const SUMMARY_EMPTY_TEXT = '—';
 
+/** 流水页请求级分页页大小（主屏与 RequestsTab 共用，单一来源防两端分页窗口漂移）。 */
+export const REQUESTS_PAGE_SIZE = 10;
+
 export function toLocalDayKey(ms: number): string {
   const d = new Date(ms);
   const month = String(d.getMonth() + 1).padStart(2, '0');

@@ -55,10 +55,6 @@ export const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 4,
   },
-  tileWide: {
-    flexBasis: '100%',
-    marginTop: 10,
-  },
   tileThird: {
     flexBasis: '31%',
   },
@@ -99,10 +95,6 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 5,
-  },
-  reqPagerLabel: {
-    fontSize: 12,
-    fontVariant: ['tabular-nums'],
   },
   reqPageNum: {
     minWidth: 30,

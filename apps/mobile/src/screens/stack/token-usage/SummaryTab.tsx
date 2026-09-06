@@ -17,7 +17,7 @@ import {
 } from './format';
 import {styles} from './styles';
 
-/** 汇总页签指标小卡；宽卡（wide）独占一行，三列卡（third）一行放三个（命中率/速率/首字延迟）。 */
+/** 汇总页签指标小卡：half 两列一行（默认），third 三列一行（命中率/速率/首字延迟）。 */
 function SummaryTile({
   label,
   value,
@@ -30,7 +30,7 @@ function SummaryTile({
   value: string;
   tokens: ThemeTokens;
   tone?: 'default' | 'success';
-  layout?: 'half' | 'wide' | 'third';
+  layout?: 'half' | 'third';
   testID?: string;
 }) {
   return (
@@ -38,7 +38,6 @@ function SummaryTile({
       testID={testID}
       style={[
         styles.tile,
-        layout === 'wide' && styles.tileWide,
         layout === 'third' && styles.tileThird,
         {backgroundColor: tokens.surface},
       ]}
