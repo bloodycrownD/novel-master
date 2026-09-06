@@ -12,6 +12,26 @@ import {
   truncateLine,
 } from "../../src/domain/tool/logic/tool-output-limits.js";
 
+/** 逐 code unit 检查字符串不含孤立代理（高代理必须跟低代理、低代理不得单现）。 */
+function assertNoLoneSurrogate(s: string): void {
+  for (let i = 0; i < s.length; i++) {
+    const unit = s.charCodeAt(i);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+      assert.ok(
+        next >= 0xdc00 && next <= 0xdfff,
+        `孤立高代理 @${i}（其后应跟低代理）`
+      );
+      i += 1;
+    } else {
+      assert.ok(
+        !(unit >= 0xdc00 && unit <= 0xdfff),
+        `孤立低代理 @${i}`
+      );
+    }
+  }
+}
+
 describe("tool-output-limits", () => {
   it("T1: sliceLinesFromOffset returns 2000 lines by default", () => {
     const lines = Array.from({ length: 2500 }, (_, i) => `line-${i + 1}`);
@@ -56,6 +76,38 @@ describe("tool-output-limits", () => {
     assert.equal(sliceUtf8BytePrefix("你好呀", 7), "你好");
     // 代理对（emoji 4B/字符）：不切半个代理对（预算 6 只装 1 个 emoji）。
     assert.equal(sliceUtf8BytePrefix("\u{1F600}\u{1F601}", 6), "\u{1F600}");
+  });
+
+  it("T-B2: 块边界（8192）恰劈在代理对中间时字节不失真、返回值无孤立代理", () => {
+    // 8191 个 'a' + emoji：旧切块在 8192 处把 emoji 劈成孤儿高代理
+    // （U+FFFD 3B 虚高计数 + 块尾返回值携带孤立代理）。预算 8191+4=8195
+    // 恰好装下 'a'×8191 + 完整 emoji。
+    const emoji = "\u{1F600}";
+    const text = "a".repeat(8191) + emoji + "b".repeat(100);
+    const out = sliceUtf8BytePrefix(text, 8191 + 4);
+    assert.equal(out, "a".repeat(8191) + emoji);
+    assert.equal(new TextEncoder().encode(out).byteLength, 8191 + 4);
+
+    // 跨块右移 1 后无重叠不遗漏：预算 +1 装下跨块边界的第一个 'b'。
+    const out2 = sliceUtf8BytePrefix(text, 8191 + 4 + 1);
+    assert.equal(out2, "a".repeat(8191) + emoji + "b");
+
+    // 预算装不下 emoji（4B）时：止步于 'a'×8191，不携带半个代理。
+    const out3 = sliceUtf8BytePrefix(text, 8191 + 3);
+    assert.equal(out3, "a".repeat(8191));
+
+    // 三个返回值均无孤立代理（JSON round-trip 不变），且字节 ≤ 预算。
+    for (const [sliced, budget] of [
+      [out, 8191 + 4],
+      [out2, 8191 + 4 + 1],
+      [out3, 8191 + 3],
+    ] as const) {
+      assertNoLoneSurrogate(sliced);
+      assert.ok(
+        new TextEncoder().encode(sliced).byteLength <= budget,
+        `字节应 ≤ 预算 ${budget}`
+      );
+    }
   });
 
   it("T-R1 前置: capUtf8BytesFill 预算内全收（与 capUtf8Bytes 一致），无截断标记", () => {

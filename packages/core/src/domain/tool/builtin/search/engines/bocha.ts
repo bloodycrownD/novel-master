@@ -20,6 +20,7 @@ import {
   matchesDomainFilters,
   normalizeMaxResults,
   parseDomainFilters,
+  redactSecret,
   type ResolvedEngineConfig,
   type SearchResponse,
   type SearchToolOptions,
@@ -60,7 +61,10 @@ function firstString(...values: unknown[]): string | null {
 }
 
 /** 解析 bocha 响应信封：业务码校验 + webPages.value 抽取与字段容错。 */
-function parseBochaResults(raw: unknown): {
+function parseBochaResults(
+  raw: unknown,
+  apiKey: string
+): {
   readonly results: { readonly title: string; readonly url: string; readonly snippet: string }[];
 } {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -68,10 +72,12 @@ function parseBochaResults(raw: unknown): {
   }
   const envelope = raw as Record<string, unknown>;
   if (envelope.code !== undefined && Number(envelope.code) !== 200) {
+    // 业务码错误文案与 HTTP 分支同口径脱敏（T-C2）：个别错误响应会
+    // 回显鉴权凭证，msg/message 先经 redactSecret 再拼进错误消息。
+    const detail =
+      firstString(envelope.msg, envelope.message) ?? "unknown error";
     throw new Error(
-      `Bocha API error ${String(envelope.code)}: ${
-        firstString(envelope.msg, envelope.message) ?? "unknown error"
-      }`
+      `Bocha API error ${String(envelope.code)}: ${redactSecret(detail, apiKey)}`
     );
   }
   const data = envelope.data;
@@ -172,7 +178,7 @@ export async function searchWithBocha(
       );
     }
 
-    const { results } = parseBochaResults(raw);
+    const { results } = parseBochaResults(raw, apiKey);
     return {
       engine: "bocha",
       results: results

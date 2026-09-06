@@ -158,6 +158,23 @@ describe("search 引擎适配器：bocha（T-A1）", () => {
     );
   });
 
+  it("T-C2 业务码分支：msg 回显 key 明文时先脱敏再拼进错误文案", async () => {
+    const fetchFn = makeFetch([
+      jsonOk({ code: 4001, msg: `invalid token ${BOCHA_KEY} rejected` }),
+    ]);
+    await assert.rejects(
+      searchWithBocha(bochaResolved(), "q", {}, fetchFn),
+      (err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        assert.match(message, /Bocha API error 4001/);
+        // key 明文绝不进错误链；被替换为 *** 占位。
+        assert.equal(message.includes(BOCHA_KEY), false);
+        assert.ok(message.includes("***"));
+        return true;
+      }
+    );
+  });
+
   it("domainFilter 客户端兜底过滤（include 命中 + exclude 排除）后截断", async () => {
     const fetchFn = makeFetch([
       jsonOk({

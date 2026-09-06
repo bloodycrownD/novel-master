@@ -83,18 +83,34 @@ export function capUtf8Bytes(
  * Slices a UTF-8 byte prefix of `text` without splitting a character.
  *
  * 代理对成对推进（不切半个字符）；块式增量编码避免全量字符串一次性
- * 编码。预算 ≤ 0 时返回空串。
+ * 编码，块尾落在代理对中间时边界右移 1（代理对不跨块，孤儿 surrogate
+ * 会虚高字节计数且可能进返回值）。预算 ≤ 0 时返回空串。
  */
 export function sliceUtf8BytePrefix(text: string, maxBytes: number): string {
   if (maxBytes <= 0) return "";
   const encoder = new TextEncoder();
   const CHUNK = 8192;
   let used = 0;
-  for (let i = 0; i < text.length; i += CHUNK) {
-    const chunk = text.slice(i, Math.min(i + CHUNK, text.length));
+  // 块起点用变量传递（而非固定步进推算）：块尾恰为高代理项时边界
+  // 右移 1，保证不重叠不遗漏。
+  for (let start = 0; start < text.length; ) {
+    let end = Math.min(start + CHUNK, text.length);
+    // 块尾是代理对前半（high surrogate）且后面还有字符：边界右移 1，
+    // 把代理对留在同一块内——孤儿 surrogate 会被编码为 U+FFFD（3B），
+    // 既虚高 chunkBytes 又可能让块尾返回值携带孤立代理。
+    const tailUnit = text.charCodeAt(end - 1);
+    if (
+      end < text.length &&
+      tailUnit >= 0xd800 &&
+      tailUnit <= 0xdbff
+    ) {
+      end += 1;
+    }
+    const chunk = text.slice(start, end);
     const chunkBytes = encoder.encode(chunk).byteLength;
     if (used + chunkBytes <= maxBytes) {
       used += chunkBytes;
+      start = end;
       continue;
     }
     // 该块超预算：块内逐码位（代理对成对）推进，找到恰好装满预算的切点。
@@ -105,12 +121,12 @@ export function sliceUtf8BytePrefix(text: string, maxBytes: number): string {
         String.fromCodePoint(codePoint)
       ).byteLength;
       if (used + charBytes > maxBytes) {
-        return text.slice(0, i + j);
+        return text.slice(0, start + j);
       }
       used += charBytes;
       j += charLength;
     }
-    return text.slice(0, i + chunk.length);
+    return text.slice(0, end);
   }
   return text;
 }
