@@ -32,6 +32,7 @@ import {
 } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 import { createRegexConfigService } from "@novel-master/core/regex";
+import { createSmartSortRuleService } from "@novel-master/core/smart-sort-rule";
 import {
   createMessageCheckpointService,
 } from "@novel-master/core/message-checkpoint";
@@ -74,6 +75,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
   const regexConfig = createRegexConfigService(conn, state);
+  const smartSortRule = createSmartSortRuleService(conn);
 
   const skspName = getPlatformSkspName();
   const dbStore = resolveSkspDriver(skspName).createStore(conn);
@@ -152,6 +154,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     providerRepo: providerBundle.providerRepo,
     modelRequests: providerBundle.modelRequests,
     regexConfig,
+    smartSortRule,
     userVfsTurn,
   };
 }

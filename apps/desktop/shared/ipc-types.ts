@@ -155,6 +155,23 @@ export const IPC_CHANNELS = {
   REGEX_LIST_PICKER: 'nm:regex/listPicker',
   REGEX_SET_CURRENT: 'nm:regex/setCurrent',
 
+  SMART_SORT_RULE_LIST: 'nm:sort-rule/list',
+  SMART_SORT_RULE_CREATE: 'nm:sort-rule/create',
+  SMART_SORT_RULE_UPDATE: 'nm:sort-rule/update',
+  SMART_SORT_RULE_DELETE: 'nm:sort-rule/delete',
+  SMART_SORT_RULE_DELETE_BATCH: 'nm:sort-rule/deleteBatch',
+  SMART_SORT_RULE_SET_ENABLED: 'nm:sort-rule/setEnabled',
+  SMART_SORT_RULE_SET_ENABLED_BATCH: 'nm:sort-rule/setEnabledBatch',
+  SMART_SORT_RULE_MOVE: 'nm:sort-rule/move',
+  SMART_SORT_RULE_REORDER: 'nm:sort-rule/reorder',
+  SMART_SORT_RULE_IMPORT_RULES: 'nm:sort-rule/importRules',
+  SMART_SORT_RULE_EXPORT_RULES: 'nm:sort-rule/exportRules',
+  SMART_SORT_RULE_RESET_DEFAULTS: 'nm:sort-rule/resetDefaults',
+  SMART_SORT_RULE_PREVIEW: 'nm:sort-rule/preview',
+  /** YAML 导入导出走 main 进程系统对话框（替换式导入，D10）。 */
+  SMART_SORT_RULE_YAML_EXPORT: 'nm:sort-rule/yamlExport',
+  SMART_SORT_RULE_YAML_IMPORT: 'nm:sort-rule/yamlImport',
+
   SKILLS_LIST: 'nm:skills/list',
   SKILLS_EFFECTIVE: 'nm:skills/effective',
   SKILLS_READ: 'nm:skills/read',
@@ -587,7 +604,7 @@ export type PhysicalReadRequest = {
 export type WorkplaceSetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
   readonly ruleEnabled?: boolean;
-  readonly sortField?: 'name' | 'created' | 'updated';
+  readonly sortField?: 'name' | 'created' | 'updated' | 'smart';
   readonly sortOrder?: 'asc' | 'desc';
   readonly headCount?: number;
   readonly tailCount?: number;
@@ -1276,6 +1293,115 @@ export type RegexListPickerResponse = {
 export type RegexSetCurrentRequest = {
   readonly groupId: string | null;
 };
+
+/**
+ * 智能排序规则（与 core `SmartSortRule` 同构的 IPC DTO；renderer 不直接依赖 core）。
+ */
+export type SmartSortRuleDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+  readonly example: string | null;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
+};
+
+export type SmartSortRuleCreateRequest = {
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags?: string;
+  readonly example?: string | null;
+  readonly enabled?: boolean;
+};
+
+export type SmartSortRuleUpdateRequest = {
+  readonly ruleId: string;
+  readonly patch: {
+    readonly name?: string;
+    readonly pattern?: string;
+    readonly flags?: string;
+    readonly example?: string | null;
+    readonly enabled?: boolean;
+  };
+};
+
+export type SmartSortRuleIdRequest = {
+  readonly ruleId: string;
+};
+
+export type SmartSortRuleSetEnabledRequest = {
+  readonly ruleId: string;
+  readonly enabled: boolean;
+};
+
+export type SmartSortRuleSetEnabledBatchRequest = {
+  readonly ruleIds: readonly string[];
+  readonly enabled: boolean;
+};
+
+export type SmartSortRuleDeleteBatchRequest = {
+  readonly ruleIds: readonly string[];
+};
+
+export type SmartSortRuleMoveRequest = {
+  readonly ruleId: string;
+  readonly to: 'top' | 'bottom' | 'up' | 'down' | { readonly index: number };
+};
+
+export type SmartSortRuleReorderRequest = {
+  readonly orderedIds: readonly string[];
+};
+
+/** bundle 文档单条规则（与 core `SmartSortRuleBundleRule` 同构，D10）。 */
+export type SmartSortRuleBundleRuleDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+  readonly example?: string | null;
+  readonly enabled: boolean;
+  readonly sortOrder: number;
+};
+
+/** bundle 文档（替换式导入导出，D10）。 */
+export type SmartSortRuleBundleDto = {
+  readonly schemaVersion: number;
+  readonly rules: readonly SmartSortRuleBundleRuleDto[];
+};
+
+export type SmartSortRuleImportRulesRequest = {
+  readonly bundle: SmartSortRuleBundleDto;
+};
+
+/** 编辑器测试预览的草稿规则（未保存形态，参与优先级列表）。 */
+export type SmartSortRulePreviewDraftDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+};
+
+export type SmartSortRulePreviewRequest = {
+  readonly names: readonly string[];
+  readonly draftRules?: readonly SmartSortRulePreviewDraftDto[];
+};
+
+export type SmartSortRulePreviewLineDto = {
+  readonly name: string;
+  readonly matchedRuleId: string | null;
+  readonly nums: readonly number[] | null;
+};
+
+export type SmartSortRulePreviewResultDto = {
+  readonly lines: readonly SmartSortRulePreviewLineDto[];
+  readonly sortedNames: readonly string[];
+};
+
+export type SmartSortRuleYamlExportResult = 'saved' | 'cancelled';
+export type SmartSortRuleYamlImportResult = 'imported' | 'cancelled';
 
 /** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */
 export type SkillDomainDto = 'global' | 'project';

@@ -91,6 +91,23 @@ import {
   handleRegexUpdateRule,
 } from './handlers/regex.js';
 import {
+  handleSmartSortRuleCreate,
+  handleSmartSortRuleDelete,
+  handleSmartSortRuleDeleteBatch,
+  handleSmartSortRuleExportRules,
+  handleSmartSortRuleImportRules,
+  handleSmartSortRuleList,
+  handleSmartSortRuleMove,
+  handleSmartSortRulePreview,
+  handleSmartSortRuleReorder,
+  handleSmartSortRuleResetDefaults,
+  handleSmartSortRuleSetEnabled,
+  handleSmartSortRuleSetEnabledBatch,
+  handleSmartSortRuleUpdate,
+  handleSmartSortRuleYamlExport,
+  handleSmartSortRuleYamlImport,
+} from './handlers/smart-sort-rule.js';
+import {
   handleSkillsAssertCreateName,
   handleSkillsDelete,
   handleSkillsEdit,
@@ -384,6 +401,28 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.REGEX_DELETE_RULE, handleRegexDeleteRule);
   bindNoArg(IPC_CHANNELS.REGEX_LIST_PICKER, handleRegexListPicker);
   bindReq(IPC_CHANNELS.REGEX_SET_CURRENT, handleRegexSetCurrent);
+
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_LIST, handleSmartSortRuleList);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_CREATE, handleSmartSortRuleCreate);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_UPDATE, handleSmartSortRuleUpdate);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE, handleSmartSortRuleDelete);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_DELETE_BATCH, handleSmartSortRuleDeleteBatch);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED, handleSmartSortRuleSetEnabled);
+  bindReq(
+    IPC_CHANNELS.SMART_SORT_RULE_SET_ENABLED_BATCH,
+    handleSmartSortRuleSetEnabledBatch,
+  );
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_MOVE, handleSmartSortRuleMove);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_REORDER, handleSmartSortRuleReorder);
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_EXPORT_RULES, handleSmartSortRuleExportRules);
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_IMPORT_RULES, handleSmartSortRuleImportRules);
+  bindNoArg(
+    IPC_CHANNELS.SMART_SORT_RULE_RESET_DEFAULTS,
+    handleSmartSortRuleResetDefaults,
+  );
+  bindReq(IPC_CHANNELS.SMART_SORT_RULE_PREVIEW, handleSmartSortRulePreview);
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_EXPORT, handleSmartSortRuleYamlExport);
+  bindNoArg(IPC_CHANNELS.SMART_SORT_RULE_YAML_IMPORT, handleSmartSortRuleYamlImport);
 
   bindReq(IPC_CHANNELS.SKILLS_LIST, handleSkillsList);
   bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);
