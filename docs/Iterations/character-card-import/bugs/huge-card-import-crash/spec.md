@@ -60,3 +60,13 @@ core `npm test`（node:test + tsx）1841 例全绿；mobile `NODE_ENV=test npx j
 - 风险一：blob 压缩闸按 4× 折算偏保守，极低压缩比但总量合法的文件可能被占位（用户感知为该文件不出现在上下文）。接受：占位只影响上下文组装，文件本体与编辑器不受影响，且方向是「应用存活优先」。
 - 风险二：阈值误伤超大合法卡。输入 48MB / 单文件 8MB 覆盖已知重度世界书卡（5–10MB）量级，留有余量。
 - 回滚：三个提交相互独立可单独 revert（86522528 导入闸 / 342e7bbd mobile 预检 / d89efde1 读取侧降级）；revert 读取侧降级即恢复原读取行为，无数据迁移、无 schema 变更，回滚零残留。
+
+## 追记：第二根因与最终修复（2026-09-07 深夜复现轮）
+
+元凶卡片实测并非巨型（11.5MB PNG / 2.5MB 内容 / 556 文件 / 单文件 ≤33KB），四道闸门全部放行；模拟器复现不出崩溃（x86 快，平方成本仅 ~0.3s）。真机（荣耀）复现出真实形态：导入成功，首次进入会话工作区时 `evaluateWorkplaceRuleView` 占死 JS 线程（103% CPU、分钟级、浪潮式重跑），列表永远「加载中…」，强制退出致缓存未落盘、重启重跑——即受害者「打不开」的全部机制；低端机叠加内存压力即升级为 LMK 杀进程（真崩溃）。
+
+根因：规则引擎旧实现对**每个文件**重排其全部兄弟（`computeDisplay` 每文件全量扫 fileSet + `sortFilesForDir` 兄弟重排 + `findIndex`），单目录 540 文件 = 540 次 O(N·logN) 智能文件名排序（collator 单次比较微秒级），总复杂度 O(N²·logN)。
+
+最终修复（d040dc3f）：`workplace-rule-engine.ts` 重构为一次遍历按父目录分组、每目录仅排序两次（auto 名单 / 全量名单）、名次与序列落 Map 供 O(1) 查询；行为与旧实现完全一致。桌面毒库 harness 287.9ms→17.8ms；真机 556 文件 reload 由永不返回→0.4s。回归测试 `workplace-rule-engine-large-dir.test.ts`（600 文件大目录截取语义 + 性能哨兵）。
+
+诊断方法留档：release 构建 console.log 探针（ReactNativeJS tag 出 logcat）+ adb top -H 采 JS 线程 CPU；注意 metro 缓存会吞 workspace dist 变更，重打包前清 node_modules/.cache/metro 并 --rerun-tasks bundle 任务。
