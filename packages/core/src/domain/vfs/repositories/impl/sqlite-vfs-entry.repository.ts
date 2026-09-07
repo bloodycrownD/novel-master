@@ -212,15 +212,17 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     path: string
   ): Promise<VfsContentSize | null> {
     const normalized = normalizePath(path);
-    // 只取长度不解正文：内联行 length(content) 为字符数（NULL 行不拉正文）
+    // 只取长度不解正文：内联行 length(content) 为字符数（NULL 行不拉正文）；
+    // mtime 随行带回供占位块渲染真实时间（CR-1：避免 1970 假时间戳入提示词）
     const rows = await queryTemplate<{
       inline_chars: number | null;
       content_hash: string | null;
       entry_kind: string;
+      mtime_ms: number;
     }>(
       this.conn,
       this.parser,
-      `SELECT length(content) AS inline_chars, content_hash, entry_kind
+      `SELECT length(content) AS inline_chars, content_hash, entry_kind, mtime_ms
        FROM vfs_entry
        WHERE scope_key = #{scopeKey} AND path = #{path}`,
       { scopeKey, path: normalized }
@@ -246,11 +248,19 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       if (blobRows.length === 0) {
         return null;
       }
-      return { kind: "blobCompressedBytes", size: Number(blobRows[0]!.byte_len) };
+      return {
+        kind: "blobCompressedBytes",
+        size: Number(blobRows[0]!.byte_len),
+        mtimeMs: Number(row.mtime_ms),
+      };
     }
     const inlineChars = row.inline_chars;
     if (inlineChars != null) {
-      return { kind: "inlineChars", size: Number(inlineChars) };
+      return {
+        kind: "inlineChars",
+        size: Number(inlineChars),
+        mtimeMs: Number(row.mtime_ms),
+      };
     }
     return null;
   }

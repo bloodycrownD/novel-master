@@ -54,8 +54,9 @@ export async function loadOrFillFileCache(
     const placeholder = await probeOversizePlaceholder(deps.vfs, deps.path);
     if (placeholder != null) {
       // 超大文件降级：不读全文、不写 file_cache（避免把占位符粘进缓存）；
-      // 每次组装重新轻量探测，代价只是一条长度 SQL
-      return { body: placeholder, mtimeMs: 0 };
+      // 每次组装重新轻量探测，代价只是一条长度 SQL；mtime 用探测带回的
+      // 真实值，避免占位块渲染出 1970 假时间戳随提示词送给模型
+      return placeholder;
     }
   }
 
@@ -80,7 +81,7 @@ export async function loadOrFillFileCache(
 async function probeOversizePlaceholder(
   vfs: VfsService,
   path: string
-): Promise<string | null> {
+): Promise<FileCachePayload | null> {
   let size;
   try {
     size = await vfs.findContentSize(path);
@@ -93,13 +94,19 @@ async function probeOversizePlaceholder(
   }
   if (size.kind === "inlineChars") {
     if (size.size > CHARACTER_CARD_MAX_SINGLE_FILE_BYTES) {
-      return `（文件过大，已跳过，约 ${size.size} 字符）`;
+      return {
+        body: `（文件过大，已跳过，约 ${size.size} 字符）`,
+        mtimeMs: size.mtimeMs,
+      };
     }
     return null;
   }
   if (size.size > CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES) {
     // 压缩侧长度按 4× 折算为明文字符数的估计值（标注「约」）
-    return `（文件过大，已跳过，约 ${size.size * 4} 字符）`;
+    return {
+      body: `（文件过大，已跳过，约 ${size.size * 4} 字符）`,
+      mtimeMs: size.mtimeMs,
+    };
   }
   return null;
 }

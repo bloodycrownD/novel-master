@@ -396,8 +396,18 @@ describe("assembleWorkplaceDisplay", () => {
       },
     );
 
-    // 超大文件：占位符进 display，正文不进，file_cache 不写
+    // 超大文件：占位符进 display，正文不进，file_cache 不写；占位块时间属性
+    // 必须是行真实 mtime 而非 1970（CR-1：mtimeMs=0 会被渲染成 1970-01-01 假时间戳）
     assert.match(out.workplaceDisplay, /（文件过大，已跳过，约 \d+ 字符）/);
+    const placeholderBlock = out.workplaceDisplay.match(
+      /<file path="\/毒卡\/巨型设定\.md" createdAt="([^"]*)" updatedAt="[^"]*"/,
+    );
+    assert.ok(placeholderBlock, "占位块带 file 头属性");
+    assert.equal(
+      placeholderBlock[1]!.startsWith("1970"),
+      false,
+      `占位块时间应为真实 mtime，实际：${placeholderBlock[1]}`,
+    );
     assert.equal(out.workplaceDisplay.includes("poison-body"), false);
     assert.equal(
       await sk.get(

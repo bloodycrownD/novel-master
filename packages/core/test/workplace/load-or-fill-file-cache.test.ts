@@ -22,8 +22,8 @@ import {
 /** 只实现 read / findContentSize 的探测专用 fake；read 调用即记数。 */
 function fakeVfs(options: {
   readonly contentSize:
-    | { kind: "inlineChars"; size: number }
-    | { kind: "blobCompressedBytes"; size: number }
+    | { kind: "inlineChars"; size: number; mtimeMs: number }
+    | { kind: "blobCompressedBytes"; size: number; mtimeMs: number }
     | null
     | "throw";
   readonly content?: string;
@@ -60,14 +60,19 @@ describe("loadOrFillFileCache 读取侧降级", () => {
   it("内联行字符数超限：返回占位、不 read 全文、不写 file_cache", async () => {
     const sessionKkv = createMemorySessionKkv();
     const vfs = fakeVfs({
-      contentSize: { kind: "inlineChars", size: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES + 1 },
+      contentSize: {
+        kind: "inlineChars",
+        size: CHARACTER_CARD_MAX_SINGLE_FILE_BYTES + 1,
+        mtimeMs: 1751718000000,
+      },
     });
 
     const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
 
     assert.match(result.body, /^（文件过大，已跳过，约 \d+ 字符）$/);
     assert.equal(result.body.includes(`${CHARACTER_CARD_MAX_SINGLE_FILE_BYTES + 1}`), true);
-    assert.equal(result.mtimeMs, 0);
+    // 占位块携带真实 mtime（CR-1：渲染层会用它生成时间属性，不得是 0/1970）
+    assert.equal(result.mtimeMs, 1751718000000);
     assert.equal(vfs.readCalls(), 0, "不得触发 vfs.read 全文");
     assert.equal(
       await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md")),
@@ -82,12 +87,14 @@ describe("loadOrFillFileCache 读取侧降级", () => {
       contentSize: {
         kind: "blobCompressedBytes",
         size: CHARACTER_CARD_BLOB_COMPRESSED_GATE_BYTES + 1,
+        mtimeMs: 1751718000000,
       },
     });
 
     const result = await loadOrFillFileCache({ ...BASE, sessionKkv, vfs });
 
     assert.match(result.body, /^（文件过大，已跳过，约 \d+ 字符）$/);
+    assert.equal(result.mtimeMs, 1751718000000, "blob 占位同样携带真实 mtime");
     assert.equal(vfs.readCalls(), 0);
     assert.equal(
       await sessionKkv.get("s1", SESSION_KKV_DOMAIN_FILE_CACHE, fileCacheKey("full", "/note.md")),
