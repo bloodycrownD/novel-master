@@ -183,6 +183,18 @@ export interface VfsEntryRepository {
   ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
 
   /**
+   * 计算 scope 下全部 vfs_entry 行的有序聚合签名（workplace 读时校验缓存用）。
+   *
+   * SQL：`count(*) + group_concat(path:head_version:mtime_ms, char(31))`，
+   * 子查询按 path 排序使拼接顺序确定；不过滤 `entry_kind`（mkdir 空目录
+   * 也必须改变签名）。单行返回、单次过桥；两串相等 ⟺ 行集合逐行相等。
+   *
+   * @remarks 相比三元组指纹（count/max mtime/max version），本签名对
+   *   rename / 回滚 / 树拷贝等保留 mtime 的写路径均敏感。
+   */
+  computeEntrySignature(scopeKey: string): Promise<string>;
+
+  /**
    * Lists live file heads under a scope + logical path prefix
    * (for checkpoint capture / GC)。
    */

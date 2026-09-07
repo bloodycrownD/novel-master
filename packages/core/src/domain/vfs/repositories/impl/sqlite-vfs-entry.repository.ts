@@ -572,6 +572,23 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }));
   }
 
+  async computeEntrySignature(scopeKey: string): Promise<string> {
+    const rows = await queryTemplate<{ entry_count: number; sig: string | null }>(
+      this.conn,
+      this.parser,
+      `SELECT count(*) AS entry_count, group_concat(s, char(31)) AS sig
+       FROM (SELECT path || ':' || head_version || ':' || mtime_ms AS s
+             FROM vfs_entry
+             WHERE scope_key = #{scopeKey}
+             ORDER BY path)`,
+      { scopeKey }
+    );
+    const row = rows[0];
+    // 空结果集时 group_concat 返回 NULL；两列拼成单串（count 天然隔离
+    // 拼接歧义：不同行数的集合必不同串）
+    return `${Number(row?.entry_count ?? 0)}|${row?.sig ?? ""}`;
+  }
+
   async listFileHeadsUnderPrefix(
     scopeKey: string,
     pathPrefix: string

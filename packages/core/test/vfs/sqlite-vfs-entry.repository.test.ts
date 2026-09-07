@@ -311,4 +311,51 @@ describe("SqliteVfsEntryRepository", () => {
     assert.equal(size.kind, "inlineChars");
     assert.equal(size.size, "遗留内联正文".length);
   });
+
+  it("computeEntrySignature：增/删/改/rename/mkdir 空目录五种写各自改变签名；同数据重复查询稳定", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const root = isolatedRoot();
+    const file = `${root}/sig.txt`;
+
+    const s0 = await repo.computeEntrySignature(GLOBAL_SCOPE);
+
+    // 增
+    await repo.insert(GLOBAL_SCOPE, file, "v1");
+    const s1 = await repo.computeEntrySignature(GLOBAL_SCOPE);
+    assert.notEqual(s1, s0, "insert 改变签名");
+    assert.equal(
+      await repo.computeEntrySignature(GLOBAL_SCOPE),
+      s1,
+      "同数据重复查询签名稳定（group_concat 顺序确定性）"
+    );
+
+    // 改（head_version 参与拼接，断言不依赖 mtime 毫秒粒度）
+    await repo.update(GLOBAL_SCOPE, file, "v2", 2);
+    const s2 = await repo.computeEntrySignature(GLOBAL_SCOPE);
+    assert.notEqual(s2, s1, "update 改变签名");
+
+    // rename（只改 path，count/version 集合语义不变——path 敏感签名的核心反例）
+    const renamed = `${root}/sig-renamed.txt`;
+    await ctx.conn.transaction((tx) =>
+      repo.renamePathInScope(tx, GLOBAL_SCOPE, file, renamed)
+    );
+    const s3 = await repo.computeEntrySignature(GLOBAL_SCOPE);
+    assert.notEqual(s3, s2, "rename 改变签名");
+
+    // mkdir 空目录（签名不过滤 entry_kind）
+    await repo.insertDirectory(GLOBAL_SCOPE, `${root}/empty-dir`);
+    const s4 = await repo.computeEntrySignature(GLOBAL_SCOPE);
+    assert.notEqual(s4, s3, "mkdir 空目录改变签名");
+
+    // 删（递归删掉 rename 后的文件行，目录行保留）
+    await repo.delete(GLOBAL_SCOPE, renamed, { recursive: true });
+    const s5 = await repo.computeEntrySignature(GLOBAL_SCOPE);
+    assert.notEqual(s5, s4, "delete 改变签名");
+    assert.equal(
+      await repo.computeEntrySignature(GLOBAL_SCOPE),
+      s5,
+      "末态重复查询稳定"
+    );
+  });
 });
