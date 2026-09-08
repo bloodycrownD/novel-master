@@ -5525,6 +5525,14 @@ html[data-theme="dark"] .chat-batch-bar {
   box-sizing: border-box;
 }
 
+/* D-11：补全局蓝色聚焦范式，四个共用弹窗（TextPrompt/NewSkill/AddModel/DirectoryRule）统一受益 */
+.text-prompt-modal__input:focus,
+.text-prompt-modal__textarea:focus {
+  outline: none;
+  border-color: var(--primary-ring);
+  box-shadow: 0 0 0 3px var(--primary-glow);
+}
+
 .text-prompt-modal__textarea {
   min-height: 120px;
   resize: vertical;
