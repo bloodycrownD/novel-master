@@ -1918,6 +1918,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
   const [rules, setRules] = useState<SmartSortRuleDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ruleMenu, setRuleMenu] = useState<{
     ruleId: string;
@@ -1938,7 +1939,14 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     setLoading(true);
     try {
       const res = await ipcSmartSortRuleList();
-      if (res.ok) setRules([...res.data]);
+      if (!res.ok) {
+        // 加载失败不可伪装成「暂无规则」（desktop/B-1），与 RegexRulesView 错误惯例对齐。
+        toastSettingsError(res.error.message);
+        setLoadFailed(true);
+        return;
+      }
+      setLoadFailed(false);
+      setRules([...res.data]);
     } finally {
       setLoading(false);
     }
@@ -2102,9 +2110,12 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
     }
   };
 
-  /** HTML5 拖拽（spec D9）：源行插入到目标行之前，整表 reorder。 */
-  const handleDrop = async (targetRuleId: string) => {
-    const sourceId = dragRuleId;
+  /**
+   * HTML5 拖拽（spec D9）：源行插入到目标行之前，整表 reorder。
+   * 源 id 优先读 dataTransfer（与 WorkspaceTree 惯例一致），state 闭包兜底。
+   */
+  const handleDrop = async (e: React.DragEvent, targetRuleId: string) => {
+    const sourceId = e.dataTransfer.getData("text/plain") || dragRuleId;
     setDragRuleId(null);
     setDragOverRuleId(null);
     if (!sourceId || sourceId === targetRuleId) {
@@ -2219,7 +2230,11 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
         </p>
         {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
         {!loading && rules.length === 0 ? (
-          <SettingsListEmpty>暂无规则，点击上方按钮创建。</SettingsListEmpty>
+          <SettingsListEmpty>
+            {loadFailed
+              ? "加载失败，请重试。"
+              : "暂无规则，点击上方按钮创建。"}
+          </SettingsListEmpty>
         ) : null}
         {rules.map((rule) => (
           <div
@@ -2247,7 +2262,7 @@ export function SmartSortRulesView({ nav }: { nav: Nav }) {
             }}
             onDrop={(e) => {
               e.preventDefault();
-              void handleDrop(rule.ruleId);
+              void handleDrop(e, rule.ruleId);
             }}
             onDragEnd={() => {
               setDragRuleId(null);
@@ -2459,7 +2474,11 @@ function composePreviewDraftRules(
 }
 
 export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
-  const ruleId = nav.navState.editingSmartSortRuleId;
+  // ruleId 经本地 state 镜像 navState：规则缺失回退新建时 setRuleId(undefined)
+  // 才能让本组件感知（直接改 navState 不触发渲染，desktop/B-2）。
+  const [ruleId, setRuleId] = useState<string | undefined>(
+    nav.navState.editingSmartSortRuleId,
+  );
   const [draft, setDraft] = useState<SmartSortRuleDraft>(
     DEFAULT_SMART_SORT_DRAFT,
   );
@@ -2486,10 +2505,19 @@ export function SmartSortRuleEditorView({ nav }: { nav: Nav }) {
             example: rule.example ?? "",
             enabled: rule.enabled,
           });
+        } else {
+          // 规则已被删除：提示并回退新建语义（save 走 create、预览草稿置顶），
+          // 避免界面显示「新规则」而 save 仍按 update 必败（desktop/B-2）。
+          toastSettingsError("规则不存在或已被删除");
+          // navState 字段为 readonly，断言写入以同步 overlay 标题基线，不新增 TS2540 实例。
+          (
+            nav.navState as { editingSmartSortRuleId?: string }
+          ).editingSmartSortRuleId = undefined;
+          setRuleId(undefined);
         }
       }
     });
-  }, [ruleId]);
+  }, [ruleId, nav]);
 
   const regexError = localSmartSortRegexError(draft);
 
