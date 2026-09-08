@@ -997,6 +997,7 @@ export function ProviderFormView({
   const [displayName, setDisplayName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [headersJson, setHeadersJson] = useState("");
+  const [bodyParamsJson, setBodyParamsJson] = useState("");
   const [isBuiltin, setIsBuiltin] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState("not set");
 
@@ -1014,11 +1015,26 @@ export function ProviderFormView({
           ? JSON.stringify(res.data.headers, null, 2)
           : "",
       );
+      setBodyParamsJson(
+        Object.keys(res.data.bodyParams ?? {}).length
+          ? JSON.stringify(res.data.bodyParams, null, 2)
+          : "",
+      );
     });
   }, [mode, providerId]);
 
   const submit = async () => {
     try {
+      // 自定义参数：必须是 JSON 对象（值任意 JSON）；解析失败拖 toast 阻止保存
+      const parseBodyParams = (raw: string): Record<string, unknown> | undefined => {
+        const trimmed = raw.trim();
+        if (!trimmed) return undefined;
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("自定义参数必须是 JSON 对象");
+        }
+        return parsed as Record<string, unknown>;
+      };
       if (mode === "create") {
         const name = displayName.trim();
         if (!name) {
@@ -1031,6 +1047,7 @@ export function ProviderFormView({
           displayName: name,
           apiKey: apiKey.trim(),
           headers: headersJson.trim() ? JSON.parse(headersJson) : undefined,
+          bodyParams: parseBodyParams(bodyParamsJson),
         });
         if (!res.ok) {
           toastSettingsError(res.error.message);
@@ -1049,6 +1066,8 @@ export function ProviderFormView({
         patch.displayName = name;
         if (apiKey.trim()) patch.apiKey = apiKey.trim();
         if (headersJson.trim()) patch.headers = JSON.parse(headersJson);
+        // 空文本保存 = 显式清空自定义参数（区别于 headers 的「空文本不修改」）
+        patch.bodyParams = parseBodyParams(bodyParamsJson) ?? {};
         if (!isBuiltin) patch.protocol = protocol;
         const res = await ipcProvidersEdit({ providerId, ...patch });
         if (res.ok) {
@@ -1110,6 +1129,17 @@ export function ProviderFormView({
             onKeyDown={(e) => {
               handleMultilineSubmitKeyDown(e, () => void submit());
             }}
+          />
+        </SettingsField>
+        <SettingsField label="自定义参数（JSON 对象，原样合并进请求体顶层，可覆盖标准字段）">
+          <textarea
+            rows={4}
+            value={bodyParamsJson}
+            onChange={(e) => setBodyParamsJson(e.target.value)}
+            onKeyDown={(e) => {
+              handleMultilineSubmitKeyDown(e, () => void submit());
+            }}
+            placeholder='{"tool_stream": true}，清空并保存即移除全部自定义参数'
           />
         </SettingsField>
       </SettingsFormSection>
