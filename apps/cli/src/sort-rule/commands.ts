@@ -28,15 +28,19 @@ function formatFromPath(path: string): "yaml" | "json" {
   return ext === ".json" ? "json" : "yaml";
 }
 
-/** --to 取值：top/bottom/up/down 或绝对位次数字。 */
+/** --to 取值：top/bottom/up/down 或绝对位次数字 N（1 基，与 list 的 order 列同口径）。 */
 function parseMoveTarget(value: string): SmartSortRuleMoveTarget {
   if (value === "top" || value === "bottom" || value === "up" || value === "down") {
     return value;
   }
-  if (/^\d+$/.test(value)) {
-    return { index: Number.parseInt(value, 10) };
+  // N 为 1 基位次（与 list 输出的 order 列一致）：仅接受 >= 1，0 及前导零形态
+  // 直接报 invalid，不静默交给 core clamp（0 会被 clamp 到首位、口径对不上）。
+  if (/^[1-9]\d*$/.test(value)) {
+    return { index: Number.parseInt(value, 10) - 1 };
   }
-  throw new Error(`invalid --to: ${value} (expected top|bottom|up|down|<index>)`);
+  throw new Error(
+    `invalid --to: ${value} (expected top|bottom|up|down|<N>，N 为 1 基位次)`,
+  );
 }
 
 export async function runSortRule(
@@ -52,8 +56,9 @@ export async function runSortRule(
       const rules = await svc.listRules();
       for (const r of rules) {
         const en = r.enabled ? 1 : 0;
+        // 列序按 spec Step 9 钉死：order⇥id⇥enabled⇥flags⇥name⇥pattern。
         console.log(
-          `${r.sortOrder}\t${r.ruleId}\t${en}\t${r.name}\t${r.pattern}\t${r.flags}`,
+          `${r.sortOrder}\t${r.ruleId}\t${en}\t${r.flags}\t${r.name}\t${r.pattern}`,
         );
       }
       return;
@@ -122,7 +127,7 @@ export async function runSortRule(
       const to = flagString(flags, "to");
       if (!ruleId || !to) {
         throw new Error(
-          "Usage: nm sort-rule move --id <ruleId> --to top|bottom|up|down|<index>",
+          "Usage: nm sort-rule move --id <ruleId> --to top|bottom|up|down|<N>（N 为 1 基位次）",
         );
       }
       const rules = await svc.moveRule(ruleId, parseMoveTarget(to));

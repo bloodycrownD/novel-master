@@ -37,6 +37,16 @@ describe("sort-rule CLI e2e", () => {
           "builtin-numeric",
         ],
       );
+      // 列序按 spec Step 9 钉死：order⇥id⇥enabled⇥flags⇥name⇥pattern。
+      // 用 builtin-en-chapter（flags='i'）钉死 flags 在第 4 列、name/pattern 随后。
+      const enChapter = rows.find((c) => c[1] === "builtin-en-chapter")!;
+      assert.equal(enChapter[0], "3");
+      assert.equal(enChapter[2], "1");
+      assert.equal(enChapter[3], "i");
+      assert.equal(enChapter[4], "英文章节");
+      assert.match(enChapter[5]!, /^\(\?:chapter/);
+      // 其余内置规则 flags 为空：空 flags 列不吞分隔 tab。
+      assert.equal(rows.find((c) => c[1] === "builtin-numeric")![3], "");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -77,6 +87,59 @@ describe("sort-rule CLI e2e", () => {
         "第十章.txt",
       ]);
       assert.equal(lines[lines.length - 1], "# asc");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("move --to N 为 1 基位次：--to 1 落第一位，--to 0 报错非零退出", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-sort-rule-move-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      // builtin-en-chapter 原在第 3 位；--to 1 应把它落到第一位（与 list 的 order 列口径一致）。
+      const moved = runNm([
+        "sort-rule",
+        "move",
+        "--id",
+        "builtin-en-chapter",
+        "--to",
+        "1",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(moved.status, 0, moved.stderr);
+      const outRows = moved.stdout
+        .split("\n")
+        .filter((line) => line && !line.startsWith("[nm-boot]"))
+        .map((line) => line.split("\t"));
+      assert.equal(outRows.length, 4);
+      assert.equal(outRows[0]![0], "1");
+      assert.equal(outRows[0]![1], "builtin-en-chapter");
+      // move 后整表 sort_order 连续 1..4，原首位 volume-chapter 顺延第二。
+      assert.deepEqual(
+        outRows.map((c) => c[1]),
+        [
+          "builtin-en-chapter",
+          "builtin-zh-volume-chapter",
+          "builtin-zh-chapter",
+          "builtin-numeric",
+        ],
+      );
+
+      // --to 0 是 1 基口径下的非法位次：报 invalid 而非静默被 core clamp 到首位。
+      const zero = runNm([
+        "sort-rule",
+        "move",
+        "--id",
+        "builtin-numeric",
+        "--to",
+        "0",
+        "--db",
+        dbPath,
+      ]);
+      assert.notEqual(zero.status, 0);
+      assert.match(zero.stderr, /invalid --to/);
+      assert.match(zero.stderr, /1 基位次/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
