@@ -1069,6 +1069,8 @@ export type ProviderDetailDto = {
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
   readonly headers: Record<string, string>;
+  /** 自定义参数：原样合并进请求体顶层，值任意 JSON。 */
+  readonly bodyParams: Record<string, unknown>;
   readonly apiKeyStatus: 'set' | 'not set';
 };
 
@@ -1079,6 +1081,7 @@ export type ProviderCreateRequest = {
   readonly displayName: string;
   readonly apiKey: string;
   readonly headers?: Record<string, string>;
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderEditRequest = {
@@ -1089,6 +1092,8 @@ export type ProviderEditRequest = {
   readonly displayName?: string;
   readonly apiKey?: string;
   readonly headers?: Record<string, string>;
+  /** 显式空对象 {} 可清空（不传=保留原值）。 */
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderIdRequest = {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bootstrapNovelMaster, open } from "@novel-master/core";
+import { bootstrapNovelMaster, open, SCHEMA_BOOT_VERSION } from "@novel-master/core";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -70,7 +70,7 @@ async function readUserVersion(conn: TdbcConnection): Promise<number> {
 
 /** T-RX1：正则系统移除后 schema 幂等清理三场景。 */
 describe("regex 表幂等清理（T-RX1）", () => {
-  it("v10 存量库（含表与数据）boot 后两表消失且 user_version=11", async () => {
+  it("v10 存量库（含表与数据）boot 后两表消失且 user_version 推进到当前版本", async () => {
     registerBetterSqlite3Driver();
     const conn = await open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
@@ -81,12 +81,12 @@ describe("regex 表幂等清理（T-RX1）", () => {
     await bootstrapNovelMaster(conn);
 
     assert.deepEqual(await listRegexTables(conn), [], "正则两表应被 DROP");
-    assert.equal(await readUserVersion(conn), 11, "版本应推进到 11");
+    assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION, "版本应推进到 SCHEMA_BOOT_VERSION");
 
     await conn.close();
   });
 
-  it("全新库 boot 后无正则表且 user_version=11", async () => {
+  it("全新库 boot 后无正则表且 user_version 推进到当前版本", async () => {
     registerBetterSqlite3Driver();
     const conn = await open("tdbc:sqlite:file::memory:", {
       driver: BETTER_SQLITE3_DRIVER_NAME,
@@ -96,7 +96,7 @@ describe("regex 表幂等清理（T-RX1）", () => {
     await bootstrapNovelMaster(conn);
 
     assert.deepEqual(await listRegexTables(conn), []);
-    assert.equal(await readUserVersion(conn), 11);
+    assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
 
     await conn.close();
   });
@@ -108,7 +108,7 @@ describe("regex 表幂等清理（T-RX1）", () => {
       filename: ":memory:",
     });
     await bootstrapNovelMaster(conn);
-    assert.equal(await readUserVersion(conn), 11);
+    assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
 
     // 模拟整库恢复旧备份：user_version 回退到 10 且正则两表重现（旧库文件里的数据）。
     await seedLegacyRegexTables(conn);
@@ -117,7 +117,7 @@ describe("regex 表幂等清理（T-RX1）", () => {
     await bootstrapNovelMaster(conn);
 
     assert.deepEqual(await listRegexTables(conn), [], "再次 boot 应再次清理");
-    assert.equal(await readUserVersion(conn), 11);
+    assert.equal(await readUserVersion(conn), SCHEMA_BOOT_VERSION);
 
     await conn.close();
   });

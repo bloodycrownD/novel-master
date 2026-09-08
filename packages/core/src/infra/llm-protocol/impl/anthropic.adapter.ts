@@ -149,6 +149,8 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       if (s.max_tokens != null) body.max_tokens = s.max_tokens;
     }
     applyAnthropicThinkingToBody(body, req.thinking);
+    // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 sampling / thinking）。
+    Object.assign(body, req.extraBody);
     return body;
   }
 

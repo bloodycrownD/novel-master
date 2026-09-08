@@ -67,8 +67,12 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 执行 DROP；全新库建表语句已不存在；恢复旧备份（user_version 回退）
  * 同样走慢路径再次清理。KKV currentRegexGroupId 残留键随方法删除后
  * 无人读写，无害保留。
+ * v12：llm_provider 新增 body_params_json 列（服务商「自定义参数」，
+ * 原样合并进请求体顶层）。老库（v11）靠本轮 bump 走慢路径由 ALIGN
+ * 补列；DEFAULT '{}' 无存量回填。seed 内置行的 INSERT 显式列清单，
+ * 新列走 DEFAULT。
  */
-export const SCHEMA_BOOT_VERSION = 11;
+export const SCHEMA_BOOT_VERSION = 12;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
