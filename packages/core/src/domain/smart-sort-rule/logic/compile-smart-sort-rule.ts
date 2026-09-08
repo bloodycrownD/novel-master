@@ -5,6 +5,7 @@
  */
 
 import { SmartSortRuleError } from "@/errors/smart-sort-rule-errors.js";
+import { assertFlagsValid } from "@/domain/smart-sort-rule/model/smart-sort-rule.schema.js";
 import type { CompiledSmartSortRule } from "@/domain/workplace/logic/smart-sort.js";
 import type { SmartSortRule } from "../model/smart-sort-rule.js";
 
@@ -36,7 +37,8 @@ function countCaptureGroups(pattern: string, flags: string): number | null {
 
 /**
  * Validates a rule draft before persist/compile:
- * name 必填、flags 合法（gimsuy 子集、不重复）、正则可编译、pattern 含 ≥1 捕获组（D6）。
+ * name 必填、flags 合法（gimsuy 子集、不重复，复用 schema 层单源实现 C-1）、
+ * 正则可编译、pattern 含 ≥1 捕获组（D6）。
  *
  * @throws {SmartSortRuleError} INVALID_ARGUMENT（name/flags/捕获组）或
  *   INVALID_PATTERN（正则不可编译）
@@ -49,17 +51,7 @@ export function validateSmartSortRuleDraft(
   if (fields.name == null || fields.name.length === 0) {
     throw new SmartSortRuleError("INVALID_ARGUMENT", "Rule name is required", opts);
   }
-  const flagChars = new Set(fields.flags);
-  if (
-    fields.flags.length !== flagChars.size ||
-    ![...fields.flags].every((ch) => "gimsuy".includes(ch))
-  ) {
-    throw new SmartSortRuleError(
-      "INVALID_ARGUMENT",
-      `Invalid flags '${fields.flags}': only g/i/m/s/u/y, no repeats`,
-      opts
-    );
-  }
+  assertFlagsValid(fields.flags, opts);
   let compiled: RegExp;
   try {
     compiled = new RegExp(fields.pattern, fields.flags);

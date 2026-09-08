@@ -18,12 +18,23 @@ const flagsSchema = z
     message: "flags must not repeat characters",
   });
 
-function assertFlagsValid(flags: string): void {
+/**
+ * flags 合法性单源校验（C-1：schema 层与 logic 层共用，勿另写平行实现）。
+ *
+ * @param flags - 待检 flags 字符串
+ * @param detail - 错误 detail（如 { ruleId }），缺省不携带
+ * @throws {SmartSortRuleError} INVALID_ARGUMENT（非 gimsuy 字符或重复）
+ */
+export function assertFlagsValid(
+  flags: string,
+  detail?: { ruleId?: string }
+): void {
   const checked = flagsSchema.safeParse(flags);
   if (!checked.success) {
     throw new SmartSortRuleError(
       "INVALID_ARGUMENT",
-      `Invalid flags '${flags}': ${checked.error.issues[0]?.message ?? "invalid"}`
+      `Invalid flags '${flags}': ${checked.error.issues[0]?.message ?? "invalid"}`,
+      detail
     );
   }
 }
