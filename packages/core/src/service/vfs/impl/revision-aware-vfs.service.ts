@@ -39,6 +39,7 @@ import type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
+  VfsContentSize,
 } from "../internal-vfs.port.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 
@@ -67,6 +68,13 @@ export class RevisionAwareVfsService implements InternalVfsService {
 
   read(scopeKey: string, path: string): Promise<VfsReadResult> {
     return this.inner.read(scopeKey, path);
+  }
+
+  findContentSize(
+    scopeKey: string,
+    path: string
+  ): Promise<VfsContentSize | null> {
+    return this.inner.findContentSize(scopeKey, path);
   }
 
   async write(

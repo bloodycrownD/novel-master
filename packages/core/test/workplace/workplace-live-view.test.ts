@@ -46,9 +46,11 @@ function createSpyingWorkplaceService(
     listFileHeadsUnderPrefix: (...args) =>
       baseRepo.listFileHeadsUnderPrefix(...args),
     scanContents: (...args) => baseRepo.scanContents(...args),
+    computeEntrySignature: (...args) => baseRepo.computeEntrySignature(...args),
   };
 
   const wt = new DefaultWorkplaceService({
+    conn,
     scope: { kind: "project", projectId },
     vfs,
     workplace: new SqliteWorkplaceRepository(conn),
@@ -138,6 +140,7 @@ describe("worktree materializeLiveView", () => {
     await svfs.delete("/55", { recursive: true });
 
     const wt = new DefaultWorkplaceService({
+      conn: ctx.conn,
       scope: { kind: "session", projectId: project.id, sessionId: session.id },
       vfs: new SqliteVfsEntryRepository(ctx.conn),
       workplace: new SqliteWorkplaceRepository(ctx.conn),
@@ -168,6 +171,7 @@ describe("worktree materializeLiveView", () => {
     await svfs.write("/其他/d.md", "d", { versionCheck: false });
 
     const wt = new DefaultWorkplaceService({
+      conn: ctx.conn,
       scope: { kind: "session", projectId: project.id, sessionId: session.id },
       vfs: new SqliteVfsEntryRepository(ctx.conn),
       workplace: new SqliteWorkplaceRepository(ctx.conn),
@@ -270,6 +274,7 @@ describe("worktree materializeLiveView", () => {
     };
 
     const wt = new DefaultWorkplaceService({
+      conn: ctx.conn,
       scope: { kind: "session", projectId: project.id, sessionId: session.id },
       vfs: new SqliteVfsEntryRepository(ctx.conn),
       workplace: new SqliteWorkplaceRepository(failingConn),
