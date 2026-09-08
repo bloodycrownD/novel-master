@@ -1,5 +1,5 @@
 // bootstrap：重建测试库（项目/Agent/Provider/模型/会话/消息/工作区文件）
-import { launchApp, shutdown, startMock, shot, sendMessage, goToProjects } from "./lib.mjs";
+import { launchApp, shutdown, startMock, shot, sendMessage, goToProjects, openWorkspaceContextMenu, closeOverlays } from "./lib.mjs";
 
 const errors = [];
 const mock = await startMock();
@@ -84,14 +84,10 @@ try {
   // picker 列表选第二个（第一个是「清除会话覆盖」）
   await page.locator(".picker-modal__panel li:visible").nth(1).click();
   await sleep(800);
-  for (let i = 0; i < 5; i++) {
-    const any = await page.evaluate(() => !!document.querySelector(".session-detail-drawer__backdrop, .picker-modal__backdrop"));
-    if (!any) break;
-    await page.keyboard.press("Escape").catch(() => {});
-    await sleep(350);
-  }
-  const bd = await page.evaluate(() => !!document.querySelector(".session-detail-drawer__backdrop, .picker-modal__backdrop"));
-  if (bd) { await page.locator(".session-detail-drawer__backdrop, .picker-modal__backdrop").first().click({ force: true }).catch(() => {}); await sleep(500); }
+  // 收尾统一走 closeOverlays：旧版 Escape 循环 + backdrop force click 在「抽屉+picker 叠开」时
+  // 关不干净（force click 落点被顶层 picker-modal__panel 接住，抽屉残留盖住树区，后续右键菜单弹不出）
+  await closeOverlays(page);
+  await sleep(400);
   await shot(page, "B4", "model-bound");
 
   // 6. 发几条消息（造数据 + 确认链路）
@@ -102,7 +98,7 @@ try {
   await shot(page, "B5", "messages-sent");
 
   // 7. 工作区建文件（供引用/批注/树操作）
-  await page.mouse.click(640, 300, { button: "right" });
+  await openWorkspaceContextMenu(page);
   await sleep(600);
   await page.locator('[data-workspace-action="create-file"]').first().click();
   await sleep(600);

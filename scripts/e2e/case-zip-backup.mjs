@@ -1,6 +1,6 @@
 // R7-1: ZIP 导出/导入 + 备份导出/导入（patch 原生对话框）
 import fs from "node:fs";
-import { launchApp, shutdown, shot, goToProjects } from "./lib.mjs";
+import { launchApp, shutdown, shot, goToProjects, openWorkspaceContextMenu } from "./lib.mjs";
 
 const errors = [];
 const { app, page, vite } = await launchApp({ errors });
@@ -42,7 +42,7 @@ try {
   console.log("ZIP_EXPORTED", zipOk, "size:", zipSize);
 
   // ===== 2. 导入 ZIP（树空白右键；工作区有文件时覆盖确认）=====
-  await page.mouse.click(640, 300, { button: "right" });
+  await openWorkspaceContextMenu(page);
   await sleep(600);
   await page.locator('[data-workspace-action="import-zip"]').first().click();
   await sleep(1000);

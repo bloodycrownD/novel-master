@@ -79,7 +79,46 @@ export async function launchApp({ errors = null } = {}) {
     page.on("pageerror", (err) => errors.push(String(err).slice(0, 200)));
     page.on("console", (m) => { if (m.type() === "error" && !m.text().includes("Electron Security Warning") && !m.text().includes("Insecure Content")) errors.push(("c:" + m.text()).slice(0, 200)); });
   }
+  // 版本弹窗兜底：autoCheck 在 bootstrap ready 2s 后弹「版本检查」结果遮罩
+  // （snooze 写库 24h，清库即失效——每轮 bootstrap 后首跑必弹），不点掉会挡全屏操作 30s 超时；
+  // 窗口 15s ≥ 最坏路径（ready 2s + GitHub fetch 超时 10s）——实测 fetch 慢时弹窗在短窗口后才弹出漏网挡点击
+  await dismissUpdatePrompt(page, 15000);
   return { app, page, vite };
+}
+
+// 版本弹窗兜底：有界轮询等待「版本检查」结果遮罩出现（最坏路径 bootstrap ready 2s + GitHub
+// fetch 超时 10s，launchApp 传 15s 覆盖；限定标题「版本检查」避免误伤同结构的其它 overlay 弹窗）；
+// 出现则优先点「今日不再提醒」（写库 snooze 24h，同库后续脚本不再弹），无则退回「关闭」。
+// 检测到并处理返回 true，窗口耗尽返回 false
+export async function dismissUpdatePrompt(page, timeoutMs = 8000) {
+  const overlay = page.locator('.text-prompt-overlay .update-modal:has-text("版本检查")');
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeoutMs) {
+    if (await overlay.count()) {
+      const snooze = overlay.locator("button").filter({ hasText: "今日不再提醒" }).first();
+      if (await snooze.count()) {
+        await snooze.click().catch(() => {});
+      } else {
+        await overlay.locator("button").filter({ hasText: "关闭" }).first().click().catch(() => {});
+      }
+      await overlay.waitFor({ state: "hidden", timeout: 3000 }).catch(() => {});
+      return true;
+    }
+    await page.waitForTimeout(300);
+  }
+  return false;
+}
+
+// 工作区右键上下文菜单：取 .workspace-trees boundingBox 中心右键（替代固定 640,300——窗口
+// 尺寸/布局变化下固定坐标会点空），等待 #workspace-context-menu 出现后返回其 locator
+export async function openWorkspaceContextMenu(page) {
+  const trees = page.locator(".workspace-trees").first();
+  const box = await trees.boundingBox();
+  if (!box) throw new Error("workspace-trees 不可见，无法右键打开工作区菜单");
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
+  const menu = page.locator("#workspace-context-menu");
+  await menu.waitFor({ state: "visible", timeout: 5000 });
+  return menu;
 }
 
 export async function shutdown(app, vite = null, mock = null) {

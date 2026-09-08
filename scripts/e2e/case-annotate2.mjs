@@ -1,5 +1,5 @@
 // 补验：批注划词→添加→发送落库→重开文件看下划线投影
-import { launchApp, shutdown, startMock, shot, goToProjects, sendMessage } from "./lib.mjs";
+import { launchApp, shutdown, startMock, shot, goToProjects, sendMessage, openWorkspaceContextMenu } from "./lib.mjs";
 
 const errors = [];
 const mock = await startMock();
@@ -19,7 +19,7 @@ try {
   }
 
   // 1. 建文件写正文
-  await page.mouse.click(640, 300, { button: "right" });
+  await openWorkspaceContextMenu(page);
   await sleep(700);
   await page.locator('[data-workspace-action="create-file"]').first().click();
   await sleep(700);
