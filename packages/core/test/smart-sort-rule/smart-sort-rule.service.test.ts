@@ -211,6 +211,27 @@ describe("T-SR2: resetDefaults 与 seed 幂等", () => {
     );
   });
 
+  it("resetDefaults 后用户置顶规则回落到 builtin 默认序之后（B-2，不按 rule_id 决胜交错）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const svc = createSmartSortRuleService(ctx.conn);
+    const mine = await svc.createRule({ name: "mine", pattern: "(\\d+)" });
+    // 用户规则置顶：sort_order=1，与重灌 builtin 的种子 sortOrder 1..4 撞号
+    await svc.moveRule(mine.ruleId, "top");
+
+    await svc.resetDefaults();
+
+    const rules = await svc.listRules();
+    assert.deepEqual(
+      rules.map((r) => r.ruleId),
+      [...BUILTIN_IDS, mine.ruleId],
+      "builtin 恒在前 4 位（默认序），用户规则紧随其后"
+    );
+    assert.ok(
+      sortOrdersAreConsecutiveFromOne(rules),
+      "重灌后 sort_order 连续 1..N"
+    );
+  });
+
   it("seed 幂等不覆盖存量行（禁用内置后重跑 seed 保持禁用，D3）", async () => {
     const ctx = getNovelMasterTestContext();
     const svc = createSmartSortRuleService(ctx.conn);

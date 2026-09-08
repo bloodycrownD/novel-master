@@ -246,6 +246,12 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
 
   async resetDefaults(): Promise<void> {
     const rules = await this.deps.rules.listOrdered();
+    // 删除 builtin 前先按当前列表序快照用户规则的相对顺序（B-2）：重灌的种子
+    // sortOrder 1..4 会与用户规则的存量 sort_order 撞号，若事后用 listOrdered()
+    // 兑底重排，撞号会按 rule_id 隐式决胜，把用户规则交错到 builtin 中间。
+    const userIds = rules
+      .filter((rule) => !isBuiltinSmartSortRuleId(rule.ruleId))
+      .map((rule) => rule.ruleId);
     for (const rule of rules) {
       if (isBuiltinSmartSortRuleId(rule.ruleId)) {
         await this.deps.rules.delete(rule.ruleId);
@@ -265,9 +271,13 @@ export class DefaultSmartSortRuleService implements SmartSortRuleService {
         updatedAtMs: now,
       });
     }
-    // 重灌后整表重编号，保持列表顺序、恢复 sort_order 连续 1..N（D2）
-    const finalRules = await this.deps.rules.listOrdered();
-    await this.renumber(finalRules.map((r) => r.ruleId));
+    // 显式重编号（D2）：builtin 按种子序恒在前、用户规则按删除前相对序紧随
+    // 其后，恢复 sort_order 连续 1..N；不走 listOrdered() 兑底（见上方撞号说明）。
+    const finalOrder = [
+      ...this.deps.builtinSeed.map((row) => row.ruleId),
+      ...userIds,
+    ];
+    await this.renumber(finalOrder);
   }
 
   async previewSort(
