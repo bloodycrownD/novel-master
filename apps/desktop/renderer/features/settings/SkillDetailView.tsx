@@ -126,14 +126,32 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
       void loadFile(selected);
       setMode("read");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 选中文件变化时重载
-  }, [selected, missing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 选中文件或技能变化时重载：
+    // 同页覆写 viewingSkillRef（导航守卫确认后切技能）时 selected 可能已是 SKILL.md
+    // 而不触发重跑，上一技能的脏内容会挂到新技能名下（保存即写错目标），
+    // 故 deps 必须含技能三元组，强制随新技能重载。
+  }, [selected, missing, ref?.domain, ref?.projectId, ref?.name]);
 
   const isDirty = content !== savedContent;
 
-  /** dirty 时先弹确认再执行动作。 */
+  // dirty 上报（通用通道 nav.dirtyViews）：isDirty 变化持续同步；挂载首跑即写入
+  // 当前值，清掉异常卸载残留的脏标记（自愈）；卸载时清标记（守卫确认导航切走后
+  // 不留死 view，下次进入由首跑重新写入）。SettingsOverlay 的导航守卫读同一集合。
+  useEffect(() => {
+    if (isDirty) {
+      nav.dirtyViews.add("skillDetail");
+    } else {
+      nav.dirtyViews.delete("skillDetail");
+    }
+    return () => {
+      nav.dirtyViews.delete("skillDetail");
+    };
+  }, [isDirty, nav]);
+
+  /** dirty 时先弹确认再执行动作（isDirty 单独判定：编辑后切「查看」模式 content
+   * 不清、dirty 仍在，同样须拦截——mode 条件会漏掉这条路径）。 */
   const guarded = (action: () => void) => {
-    if (isDirty && mode === "edit") {
+    if (isDirty) {
       setLeaveConfirm(() => action);
       return;
     }
