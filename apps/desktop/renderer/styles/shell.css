@@ -7269,6 +7269,33 @@ pre:hover > .code-copy-btn,
   gap: 8px;
 }
 
+/* 头部左侧组：返回钮 + 整理动作，避免 space-between 把返回钮单独撒到一边 */
+.session-skill-panel__head-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 返回钮：形态对齐 .chat-history-search__back（28px 方形透明图标钮，hover 浮起） */
+.session-skill-panel__back {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background var(--transition-speed) ease, color var(--transition-speed) ease;
+}
+
+.session-skill-panel__back:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .session-skill-panel__summary {
   font-size: 12px;
   color: var(--text-secondary);
