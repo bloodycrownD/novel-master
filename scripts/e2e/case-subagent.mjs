@@ -1,7 +1,7 @@
 // R7-3: 子会话（mock 回 task tool_calls → 子会话创建 → task 卡片 → 子会话面板）
 import { spawn } from "node:child_process";
 import http from "node:http";
-import { launchApp, shutdown, shot, goToProjects, sendMessage } from "./lib.mjs";
+import { launchApp, shutdown, shot, goToProjects, sendMessage, closeOverlays } from "./lib.mjs";
 
 const errors = [];
 // mock：第一轮回 tool_calls（task 工具），tool 结果轮回 stop
@@ -21,7 +21,7 @@ const mock = http.createServer((req, res) => {
       // 第一轮：回 task 工具调用
       res.write(sse(cb({ role: "assistant", content: "" })));
       res.write(sse(cb({
-        tool_calls: [{ id: "call_1", type: "function", function: { name: "task", arguments: JSON.stringify({ description: "回归子任务", prompt: "执行回归子任务并简短回复。" }) } }],
+        tool_calls: [{ id: "call_1", type: "function", function: { name: "task", arguments: JSON.stringify({ description: "回归子任务", prompt: "执行回归子任务并简短回复。", subagentName: "回归子Agent" }) } }],
       })));
       res.write(sse({ ...cb({}), choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] }));
       res.write("data: [DONE]\n\n");
@@ -53,6 +53,25 @@ try {
     await sleep(1100);
   }
 
+  // 0. 建子 Agent（mode=仅子智能体）
+  await page.click('button[aria-label="打开设置"]');
+  await sleep(700);
+  await page.locator('[data-settings-nav="agentsSettings"]').click();
+  await sleep(700);
+  await page.locator("#chat-rail button:visible, .settings-view button").filter({ hasText: "新建 Agent" }).first().click({ force: true });
+  await sleep(1000);
+  await page.locator('.settings-view .settings-field:has-text("名称") input').first().fill("回归子Agent");
+  const scopeOpt = page.locator('.settings-view .settings-field:has-text("作用域") label:visible, .settings-view .settings-field:has-text("作用域") button:visible, .settings-view .settings-field:has-text("作用域") [role=radio]:visible').filter({ hasText: "仅子智能体" }).first();
+  if (await scopeOpt.count()) { await scopeOpt.click(); await sleep(400); }
+  else { console.log("SCOPE_OPT_NOT_FOUND——将试默认作用域"); }
+  await page.locator(".settings-view button").filter({ hasText: "保存" }).first().click({ force: true });
+  await sleep(1600);
+  const savedToast = await page.evaluate(() => document.querySelector(".shell-toast.is-visible")?.textContent ?? null);
+  console.log("SUBAGENT_SAVED", JSON.stringify(savedToast));
+  await page.click('button[aria-label="关闭设置"]').catch(() => page.keyboard.press("Escape"));
+  await sleep(800);
+  await closeOverlays(page);
+
   await sendMessage(page, "触发子任务：请用 task 工具创建一个子任务。");
   await sleep(3000); // 等子会话 run 完成
   await shot(page, "640", "subagent-run-done");
@@ -64,9 +83,12 @@ try {
   console.log("SUB_STATE", JSON.stringify(st).slice(0, 350));
 
   // 找 task 工具卡片（点击进子会话）
-  const taskCard = page.locator("[class*=tool]").filter({ hasText: /task|回归子任务|子任务/ }).first();
+  const taskCard = page.locator('[aria-label^="查看子智能体会话"]').last();
+  console.log("taskCard count:", await page.locator('[aria-label^="查看子智能体会话"]').count());
   if (await taskCard.count()) {
-    await taskCard.click().catch(() => {});
+    await taskCard.click({ force: true }).catch(async () => {
+      await page.evaluate(() => document.querySelectorAll('[aria-label^="查看子智能体会话"]')[0]?.click());
+    });
     await sleep(1500);
     await shot(page, "641", "subagent-panel");
     const subPanel = await page.evaluate(() => ({

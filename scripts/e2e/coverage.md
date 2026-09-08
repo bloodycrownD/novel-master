@@ -16,7 +16,7 @@
 ## B. 预览 / 编辑 / 批注
 - 预览/编辑切换、保存（Ctrl+S/按钮/脏状态）：✅
 - Markdown 预览 + mermaid：✅（svg 真渲染）
-- 批注：划词→浮动条→添加→chip→发送：✅ 闭环；下划线投影/详情：◻️（两轮未复现投影，疑需特定时机，下轮专项）
+- 批注：划词→浮动条→添加→chip→发送：❌ D-15（可编辑 composer fill 文本后发送丢批注附件；disabled 空文本路径附件正常）；下划线投影/详情：◻️ 被 D-15 掩蔽待修复后重验
 - 多文件 tab：◻️ 弱（R5 断言空+截图丢失，下轮重拍）
 - Frontmatter 批注/跨行/草稿回显：◻️
 - 保存失败错误展示：◻️（需构造失败场景）
@@ -31,7 +31,7 @@
 ## D. 消息操作
 - 编辑/复制/置位/分叉/回滚：✅（rewind 确认文案+截断 8→4；undo_send 反投影）
 - 隐藏消息样式（压缩/置位）：✅
-- 工具卡片/task 子会话：🔧 待 keyring 解锁后补跑（case-subagent.mjs 已备好，发消息需 API key）
+- 工具卡片：✅ 成功态（含「点击查看·子智能体会话」）+失败态（Invalid input 报错展示）；task 子会话真实创建 ✓（mock tool_calls+子 Agent）；子会话面板跳转：◻️（卡片点击未跳转，低优先）
 - 聊天/提示词双页签：✅；生成中速率条：✅（StreamMetricsBar 值出现在状态栏）
 - 回滚 rewind/降级/回填三态：◻️（undo_send 外的确认变体未逐个触发）
 
@@ -63,7 +63,11 @@
 - 自动更新检查：◻️（同 G 待确认项）
 - 空状态引导：✅
 
-## 环境备忘（2026-09-07/08）
+## 环境备忘（2026-09-08 更新）
+- keyring 已解锁（用户 pkill -f gnome-keyring-daemon + --daemonize --login --components=secrets 常驻方案）：SKSP/发消息链路恢复
+- 解锁后补跑完成：bootstrap 带 key 版（消息链路活）、case-subagent（task 工具成功）、case-annotate2（发现 D-15）
+
+## 旧备忘（2026-09-07/08 事故）
 - 机器重启清空 /tmp：资产已迁 worktree（scripts/e2e/），playwright-core 装在 scripts/e2e/node_modules
 - 重启后 login keyring 锁定：SKSP 存取 API Key 失败 → 聊天链路（发消息）不可用；无桌面交互无法解锁/建无密码 collection（D-Bus 挂起）。解锁后需重跑：bootstrap（补 API key 版）+ case-subagent + 批注下划线投影
 - lib.mjs 已内置 DISPLAY=:0 兜底（重启后 shell 无 DISPLAY 会 SIGSEGV）

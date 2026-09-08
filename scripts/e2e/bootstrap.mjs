@@ -46,7 +46,7 @@ try {
   await sleep(1000);
   await page.locator('.settings-view .settings-field:has-text("Base URL") input').first().fill("http://127.0.0.1:18099/v1");
   await page.locator('.settings-view .settings-field:has-text("服务商名称") input').first().fill("回归Provider");
-  // 重启后 login keyring 锁定，SKSP 不可用——API Key 留空（可选字段），mock 不校验 key
+  await page.locator('.settings-view input[type="password"]').first().fill("sk-regression-fake");
   await page.locator(".settings-view button").filter({ hasText: "创建" }).first().click();
   await sleep(1600);
   const provState = await page.evaluate(() => ({
