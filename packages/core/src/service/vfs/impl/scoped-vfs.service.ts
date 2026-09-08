@@ -23,6 +23,7 @@ import type {
   VfsReadResult,
   VfsService,
 } from "../vfs.port.js";
+import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 
 /**
  * Wraps an inner {@link InternalVfsService} operating on scopeKey + logical paths.
@@ -58,6 +59,12 @@ export class ScopedVfsService implements VfsService {
     const logical = resolveLogicalPath(path);
     assertLogicalPathAllowed(this.scope, logical);
     return this.inner.read(this.scopeKeyStr, logical);
+  }
+
+  async findContentSize(path: string): Promise<VfsContentSize | null> {
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    return this.inner.findContentSize(this.scopeKeyStr, logical);
   }
 
   async write(

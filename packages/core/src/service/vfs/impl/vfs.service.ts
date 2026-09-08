@@ -14,6 +14,7 @@ import {
   parentDir,
 } from "@/domain/vfs/logic/parent-dir.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 import { computeReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
 import {
   vfsAlreadyExists,
@@ -96,6 +97,13 @@ export class DefaultVfsService implements InternalVfsService {
       version: entry.version,
       mtimeMs: entry.mtimeMs,
     };
+  }
+
+  async findContentSize(
+    scopeKey: string,
+    path: string
+  ): Promise<VfsContentSize | null> {
+    return this.repo.findContentSizeByPath(scopeKey, path);
   }
 
   async write(
