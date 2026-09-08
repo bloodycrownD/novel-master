@@ -40,7 +40,6 @@ import {
   type SecretStore,
   type TokenCounterRegistry,
 } from "@novel-master/core/provider";
-import { createRegexConfigService, type RegexConfigService } from "@novel-master/core/regex";
 import { createMessageCheckpointService, type MessageCheckpointService } from "@novel-master/core/message-checkpoint";
 import {
   createSessionFsService,
@@ -153,7 +152,6 @@ export interface NovelMasterRuntime {
   readonly userVfsTurn: UserVfsTurnService;
   /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
   readonly sessionKkv: SessionKkvService;
-  readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
   /** 按 sessionId 索引 in-flight run 的流句柄，供订阅 / 取消订阅。 */
   readonly streamRegistry: AgentStreamRegistry;
@@ -179,7 +177,6 @@ export async function createNovelMasterRuntime(
   await bootstrapNovelMaster(conn);
 
   const state = createPersistentState(conn);
-  const regexConfig = createRegexConfigService(conn, state);
   const preferences = createPersistentPreferences(conn);
   const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
@@ -260,6 +257,5 @@ export async function createNovelMasterRuntime(
     savedModelRepo: providerBundle.savedModelRepo,
     providerRepo: providerBundle.providerRepo,
     userVfsTurn,
-    regexConfig,
   };
 }

@@ -48,6 +48,18 @@ function expectEmptyDisplayNameError(error: unknown, providerId: string): boolea
   );
 }
 
+/** 直接写脏 body_params_json 列，验证读降级。 */
+async function updateBodyParamsRaw(
+  conn: ReturnType<typeof getNovelMasterTestContext>["conn"],
+  id: string,
+  raw: string,
+): Promise<void> {
+  await conn.execute(
+    `UPDATE llm_provider SET body_params_json = ? WHERE id = ?`,
+    [raw, id],
+  );
+}
+
 describe("SqliteProviderRepository", () => {
   it("C-1：空 display_name 行 findById 抛 INVALID_ARGUMENT，不得回退 UUID", async () => {
     const ctx = getNovelMasterTestContext();
@@ -89,5 +101,57 @@ describe("SqliteProviderRepository", () => {
         return true;
       },
     );
+  });
+
+  it("B-1：bodyParams round-trip 保留任意 JSON 值（boolean/number/嵌套对象）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteProviderRepository(ctx.conn);
+    const now = Date.now();
+    const providerId = "dddddddd-bbbb-4ccc-dddd-eeeeeeeeeeee";
+    const bodyParams = {
+      tool_stream: true,
+      top_k: 5,
+      nested: { deep: { list: [1, "a", null] } },
+      label: "文本",
+    };
+
+    await repo.insert({
+      id: providerId,
+      builtinKey: null,
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      displayName: "round-trip",
+      secretRef: null,
+      headers: {},
+      bodyParams,
+      isBuiltin: false,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+    const read = await repo.findById(providerId);
+    assert.ok(read);
+    assert.deepEqual(read!.bodyParams, bodyParams);
+
+    // update 清空语义：显式空对象写回后读出 {}
+    await repo.update({ ...read!, bodyParams: {} });
+    const cleared = await repo.findById(providerId);
+    assert.ok(cleared);
+    assert.deepEqual(cleared!.bodyParams, {});
+  });
+
+  it("B-2：脏 body_params_json（数组根/非 JSON）降级空对象不抛错", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteProviderRepository(ctx.conn);
+    const dirtyId = "eeeeeeee-bbbb-4ccc-dddd-eeeeeeeeeeee";
+    await insertProviderRow(ctx.conn, dirtyId, "dirty");
+    await updateBodyParamsRaw(ctx.conn, dirtyId, "[1,2]");
+    const arrRoot = await repo.findById(dirtyId);
+    assert.ok(arrRoot);
+    assert.deepEqual(arrRoot!.bodyParams, {});
+
+    await updateBodyParamsRaw(ctx.conn, dirtyId, "not-json");
+    const badJson = await repo.findById(dirtyId);
+    assert.ok(badJson);
+    assert.deepEqual(badJson!.bodyParams, {});
   });
 });

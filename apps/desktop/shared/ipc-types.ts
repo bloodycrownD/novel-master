@@ -80,6 +80,7 @@ export const IPC_CHANNELS = {
   WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
+  SESSIONS_PUSH_TEMPLATE: 'nm:sessions/pushTemplate',
 
   MESSAGES_LIST: 'nm:messages/list',
   MESSAGES_APPEND: 'nm:messages/append',
@@ -140,20 +141,6 @@ export const IPC_CHANNELS = {
 
   AGENT_YAML_EXPORT: 'nm:agentYaml/export',
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
-
-
-  REGEX_LIST_GROUPS: 'nm:regex/listGroups',
-  REGEX_GET_GROUP: 'nm:regex/getGroup',
-  REGEX_CREATE_GROUP: 'nm:regex/createGroup',
-  REGEX_UPDATE_GROUP: 'nm:regex/updateGroup',
-  REGEX_DELETE_GROUP: 'nm:regex/deleteGroup',
-  REGEX_LIST_RULES: 'nm:regex/listRules',
-  REGEX_GET_RULE: 'nm:regex/getRule',
-  REGEX_CREATE_RULE: 'nm:regex/createRule',
-  REGEX_UPDATE_RULE: 'nm:regex/updateRule',
-  REGEX_DELETE_RULE: 'nm:regex/deleteRule',
-  REGEX_LIST_PICKER: 'nm:regex/listPicker',
-  REGEX_SET_CURRENT: 'nm:regex/setCurrent',
 
   SKILLS_LIST: 'nm:skills/list',
   SKILLS_EFFECTIVE: 'nm:skills/effective',
@@ -623,6 +610,11 @@ export type SessionPullTemplateRequest = {
   readonly sessionId: string;
 };
 
+/** 推送：用当前聊天工作区整树覆盖项目工作区（模板母本）。 */
+export type SessionPushTemplateRequest = {
+  readonly sessionId: string;
+};
+
 export type MessagesListRequest = {
   readonly sessionId: string;
 };
@@ -1077,6 +1069,8 @@ export type ProviderDetailDto = {
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
   readonly headers: Record<string, string>;
+  /** 自定义参数：原样合并进请求体顶层，值任意 JSON。 */
+  readonly bodyParams: Record<string, unknown>;
   readonly apiKeyStatus: 'set' | 'not set';
 };
 
@@ -1087,6 +1081,7 @@ export type ProviderCreateRequest = {
   readonly displayName: string;
   readonly apiKey: string;
   readonly headers?: Record<string, string>;
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderEditRequest = {
@@ -1097,6 +1092,8 @@ export type ProviderEditRequest = {
   readonly displayName?: string;
   readonly apiKey?: string;
   readonly headers?: Record<string, string>;
+  /** 显式空对象 {} 可清空（不传=保留原值）。 */
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderIdRequest = {
@@ -1215,66 +1212,6 @@ export type AgentYamlExportRequest = {
 
 export type AgentYamlImportRequest = {
   readonly agentId: string;
-};
-
-export type RegexGroupDto = {
-  readonly groupId: string;
-  readonly displayName: string | null;
-  readonly ruleCount: number;
-};
-
-export type RegexGroupIdRequest = {
-  readonly groupId: string;
-};
-
-export type RegexCreateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string;
-};
-
-export type RegexUpdateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string | null;
-};
-
-export type RegexRuleDto = {
-  readonly ruleId: string;
-  readonly name: string;
-  readonly pattern: string;
-  readonly flags: string;
-  readonly enabled: boolean;
-  readonly llmReplace: string | null;
-  readonly displayReplace: string | null;
-  readonly startDepth: number | null;
-  readonly endDepth: number | null;
-  readonly scopeUser: boolean;
-  readonly scopeAssistant: boolean;
-};
-
-export type RegexRuleIdRequest = RegexGroupIdRequest & {
-  readonly ruleId: string;
-};
-
-export type RegexCreateRuleRequest = RegexGroupIdRequest & {
-  readonly rule: Omit<RegexRuleDto, 'ruleId'> & { readonly ruleId?: string };
-};
-
-export type RegexUpdateRuleRequest = RegexRuleIdRequest & {
-  readonly patch: Partial<Omit<RegexRuleDto, 'ruleId'>>;
-};
-
-export type RegexPickerRowDto = {
-  readonly groupId: string;
-  readonly label: string;
-};
-
-export type RegexListPickerResponse = {
-  readonly rows: readonly RegexPickerRowDto[];
-  readonly currentId: string | undefined;
-};
-
-export type RegexSetCurrentRequest = {
-  readonly groupId: string | null;
 };
 
 /** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */

@@ -27,7 +27,6 @@ import { WORKPLACE_SCHEMA_STATEMENTS } from "./workplace/workplace-schema.js";
 import { SKILLS_SCHEMA_STATEMENTS } from "./skills/skills-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
-import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { seedBuiltinSkills } from "./skills/seed-builtin-skills.js";
@@ -63,8 +62,17 @@ import { IntegrityRepairRegistry } from "@/service/integrity-repair.js";
  * 快照 savedModel.providerId）。老库（v9）靠本轮 bump 走慢路径由 ALIGN
  * 补列；无存量回填（历史行 NULL 归「其他」桶）。曾再犯 v9 同款遗漏，
  * 真机实测 no such column: provider_id。
+ * v11：移除正则系统——statements 删去 regex_group/regex_rule 建表并加入
+ * DROP TABLE IF EXISTS 幂等清理两表。老库（v10）靠本轮 bump 走慢路径
+ * 执行 DROP；全新库建表语句已不存在；恢复旧备份（user_version 回退）
+ * 同样走慢路径再次清理。KKV currentRegexGroupId 残留键随方法删除后
+ * 无人读写，无害保留。
+ * v12：llm_provider 新增 body_params_json 列（服务商「自定义参数」，
+ * 原样合并进请求体顶层）。老库（v11）靠本轮 bump 走慢路径由 ALIGN
+ * 补列；DEFAULT '{}' 无存量回填。seed 内置行的 INSERT 显式列清单，
+ * 新列走 DEFAULT。
  */
-export const SCHEMA_BOOT_VERSION = 10;
+export const SCHEMA_BOOT_VERSION = 12;
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -80,8 +88,11 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...SKILLS_SCHEMA_STATEMENTS,
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
-  ...REGEX_SCHEMA_STATEMENTS,
   ...AGENT_SCHEMA_STATEMENTS,
+  // v11：正则系统移除，幂等清理两表（idx_regex_rule_group_sort 随表消亡）；
+  // 先子表后父表，避免未来开启 FK 约束时 DROP 顺序问题。
+  "DROP TABLE IF EXISTS regex_rule;",
+  "DROP TABLE IF EXISTS regex_group;",
 ];
 
 async function readSchemaBootVersion(tx: TdbcConnection): Promise<number> {

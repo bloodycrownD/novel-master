@@ -58,6 +58,7 @@ import {
   type SessionListByProjectRequest,
   type SessionProjectComposerStatusRequest,
   type SessionPullTemplateRequest,
+  type SessionPushTemplateRequest,
   type SessionRenameRequest,
   type SessionAgentConfigDto,
   type SessionSetAgentBindingRequest,
@@ -304,6 +305,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       SessionPullTemplateRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SESSIONS_PULL_TEMPLATE),
+    ipcSessionsPushTemplate: withReq<
+      SessionPushTemplateRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE),
     ipcMessagesList: withReq<MessagesListRequest, IpcResult<ChatMessageDto[]>>(
       invoke,
       IPC_CHANNELS.MESSAGES_LIST,
@@ -503,44 +508,6 @@ export function createInvokeClient(invoke: InvokeFn) {
       IPC_CHANNELS.AGENT_YAML_IMPORT,
     ),
 
-    ipcRegexListGroups: noArg(invoke, IPC_CHANNELS.REGEX_LIST_GROUPS),
-    ipcRegexCreateGroup: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_CREATE_GROUP,
-    ),
-    ipcRegexUpdateGroup: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_UPDATE_GROUP,
-    ),
-    ipcRegexDeleteGroup: withReq<{ groupId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_DELETE_GROUP,
-    ),
-    ipcRegexListRules: withReq<{ groupId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_LIST_RULES,
-    ),
-    ipcRegexGetRule: withReq<{ groupId: string; ruleId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_GET_RULE,
-    ),
-    ipcRegexCreateRule: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_CREATE_RULE,
-    ),
-    ipcRegexUpdateRule: withReq<unknown, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_UPDATE_RULE,
-    ),
-    ipcRegexDeleteRule: withReq<{ groupId: string; ruleId: string }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_DELETE_RULE,
-    ),
-    ipcRegexListPicker: noArg(invoke, IPC_CHANNELS.REGEX_LIST_PICKER),
-    ipcRegexSetCurrent: withReq<{ groupId: string | null }, unknown>(
-      invoke,
-      IPC_CHANNELS.REGEX_SET_CURRENT,
-    ),
     ipcSkillsList: withReq<
       SkillsListRequest,
       IpcResult<SkillListItemDto[]>

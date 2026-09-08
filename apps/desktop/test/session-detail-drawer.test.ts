@@ -133,7 +133,7 @@ describe("SessionDetailDrawer 聊天记录查询入口 (T-DR1)", () => {
     assert.match(src, /<ChatHistorySearchPanel/);
   });
 
-  it("源码：ChatHistorySearchPanel 调用 ipcMessagesSearch（不套 regex-apply）", () => {
+  it("源码：ChatHistorySearchPanel 调用 ipcMessagesSearch（不套正则替换）", () => {
     const panelSrc = readFileSync(
       join(rendererRoot, "features", "chat", "ChatHistorySearchPanel.tsx"),
       "utf8",

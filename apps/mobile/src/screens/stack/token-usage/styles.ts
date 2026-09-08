@@ -60,6 +60,9 @@ export const styles = StyleSheet.create({
   },
   tileThirdRow: {
     marginTop: 10,
+    // 与下方「分服务商×模型汇总」小标题的上方间距对称（4+4=8，
+    // 与标题下方 marginBottom 8 一致，修上下不对称观感）。
+    marginBottom: 4,
   },
   chartCard: {
     borderRadius: 12,
@@ -122,15 +125,31 @@ export const styles = StyleSheet.create({
   /* 饼图（components/charts/PieChart）：扇区居中，详情行/图例在其下方 */
   pieWrap: {
     alignItems: 'center',
-    marginVertical: 8,
+    // 顶部间距由上方小标题的 marginBottom 8 提供（不叠加，保持上下对称）；
+    // 底部 8 与下一区块隔开。
+    marginTop: 0,
+    marginBottom: 8,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 12,
   },
-  pieDetailRow: {
-    marginTop: 4,
+  pieMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    alignSelf: 'stretch',
   },
-  pieDetailText: {
+  pieSideDetail: {
+    flex: 1,
+    gap: 2,
+  },
+  pieSideDetailLabel: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  pieSideDetailLine: {
     fontSize: 12,
     lineHeight: 18,
   },
@@ -152,6 +171,12 @@ export const styles = StyleSheet.create({
   },
   pieLegendLabel: {
     flexShrink: 1,
+    fontSize: 13,
+  },
+  /* 图例常驻百分比列：固定最小宽右对齐，长 label 截断也顶不掉它 */
+  pieLegendPercent: {
+    minWidth: 40,
+    textAlign: 'right',
     fontSize: 13,
   },
   dayDetail: {
