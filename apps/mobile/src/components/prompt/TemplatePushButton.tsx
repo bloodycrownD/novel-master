@@ -25,8 +25,10 @@ type Props = {
   iconOnly?: boolean;
 };
 
+/** 确认弹窗正文：一句话讲清覆盖事实与不可撤销即可，不展开项目工作区
+ * 的作用说明（2026-09-08 真机反馈：描述过多）。 */
 function confirmMessage(): string {
-  return '将用当前聊天工作区覆盖项目工作区。项目工作区是该项目所有会话的模板母本，之后新建的会话与其它会话的「从上级同步」都会拿到覆盖后的内容。';
+  return '将用当前聊天工作区覆盖项目工作区，覆盖后无法撤销。';
 }
 
 export function TemplatePushButton({

@@ -228,12 +228,14 @@ export function SyncPullIcon({color, size = 22}: IconProps) {
   );
 }
 
-/** Push current worktree up to parent scope（拉取图标的向上镜像）. */
+/** Push current worktree up to parent scope（拉取图标的向上镜像）。
+ * 箭体足迹与 SyncPullIcon 完全同尺寸（y∈[3,15]，尾端距基线 6 格），
+ * 避免镜像后视觉长度不一（2026-09-08 真机反馈）。 */
 export function SyncPushIcon({color, size = 22}: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M12 21V9M8 13l4-4 4 4M5 21h14"
+        d="M12 15V3M8 7l4-4 4 4M5 21h14"
         stroke={color}
         strokeWidth={2}
         strokeLinecap="round"

@@ -1,6 +1,6 @@
 /**
  * workspace-push spec T-WP8（mobile）——TemplatePushButton 确认流：
- * - 点击弹确认：标题/文案明示覆盖模板母本，推送按钮 destructive；
+ * - 点击弹确认：标题/一句话覆盖事实与不可撤销，推送按钮 destructive；
  * - 取消不调用 pushTemplate；
  * - 确认调用 runtime.sessions.pushTemplate 且出「推送完成」 toast + onPushed。
  */
@@ -78,7 +78,7 @@ describe('TemplatePushButton 确认流（T-WP8）', () => {
     jest.clearAllMocks();
   });
 
-  it('点击弹确认：文案明示覆盖模板母本，推送按钮 destructive', async () => {
+  it('点击弹确认：文案一句话讲清覆盖事实与不可撤销，推送按钮 destructive', async () => {
     const renderer = await mountButton();
     await act(async () => {
       renderer.root
@@ -90,7 +90,9 @@ describe('TemplatePushButton 确认流（T-WP8）', () => {
     const [title, message] = alertSpy.mock.calls[0]!;
     expect(title).toBe('推送到项目工作区');
     expect(String(message)).toContain('将用当前聊天工作区覆盖项目工作区');
-    expect(String(message)).toContain('模板母本');
+    // 2026-09-08 真机反馈：不展开项目工作区作用说明，保留不可撤销提示。
+    expect(String(message)).toContain('无法撤销');
+    expect(String(message)).not.toContain('模板母本');
     const buttons = alertButtons();
     expect(buttons.map(b => b.text)).toEqual(['取消', '推送']);
     expect(buttons[1]!.style).toBe('destructive');
