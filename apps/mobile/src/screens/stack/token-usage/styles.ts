@@ -127,10 +127,23 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 12,
   },
-  pieDetailRow: {
-    marginTop: 4,
+  pieMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    alignSelf: 'stretch',
   },
-  pieDetailText: {
+  pieSideDetail: {
+    flex: 1,
+    gap: 2,
+  },
+  pieSideDetailLabel: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  pieSideDetailLine: {
     fontSize: 12,
     lineHeight: 18,
   },

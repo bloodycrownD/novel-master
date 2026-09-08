@@ -139,47 +139,71 @@ export function PieChart({
   return (
     <View testID={testID}>
       <View style={[styles.pieWrap, {backgroundColor: tokens.surface}]}>
-        <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-          {sectors.map(({datum, start, end, sweep}, index) => {
-            const color = palette[index % palette.length];
-            const selectedSector = datum.key === selectedKey;
-            // 扇区百分比标注（≥30% 才标，口径与图例同轨）：满圆退化场景
-            // 放圆心，其余放弧心角 0.62 半径处；白色文字在色板八色上均可读。
-            const slicePercent =
-              totalTokens > 0
-                ? Math.round((datum.totalTokens / totalTokens) * 100)
-                : 0;
-            const showSliceLabel =
-              sweep > 0 && slicePercent >= SLICE_LABEL_MIN_SHARE * 100;
-            const labelPos = labelPoint((start + end) / 2);
-            const sliceLabel = showSliceLabel ? (
-              <G key={`${datum.key}-label`}>
-                <SvgText
-                  testID={`pie-slice-label-${datum.key}`}
-                  x={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.x}
-                  y={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.y}
-                  fontSize={15}
-                  fontWeight="600"
-                  fill="#FFFFFF"
-                  textAnchor="middle"
-                  alignmentBaseline="central">
-                  {slicePercent}%
-                </SvgText>
-              </G>
-            ) : null;
-            if (sweep <= 0) {
-              return null; // 零值行无扇区（角度退化），图例仍可点选查看
-            }
-            // 满圆（唯一非零行）用 Circle 表达；扇形 path 在 360° 时起止点
-            // 重合会退化成一条线。
-            if (sweep >= Math.PI * 2 - 1e-9) {
+        {/* 饼图主体 + 右侧竖排详情栏（用户拍板 2026-09-08：点选后详情
+            不再横排在图下方，而是纵向逐行与饼图并放，常见图表排版）。
+            未选中时详情栏不占位，饼图居中。 */}
+        <View
+          style={[
+            styles.pieMainRow,
+            selected == null ? {justifyContent: 'center'} : null,
+          ]}>
+          <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+            {sectors.map(({datum, start, end, sweep}, index) => {
+              const color = palette[index % palette.length];
+              const selectedSector = datum.key === selectedKey;
+              // 扇区百分比标注（≥30% 才标，口径与图例同轨）：满圆退化场景
+              // 放圆心，其余放弧心角 0.62 半径处；白色文字在色板八色上均可读。
+              const slicePercent =
+                totalTokens > 0
+                  ? Math.round((datum.totalTokens / totalTokens) * 100)
+                  : 0;
+              const showSliceLabel =
+                sweep > 0 && slicePercent >= SLICE_LABEL_MIN_SHARE * 100;
+              const labelPos = labelPoint((start + end) / 2);
+              const sliceLabel = showSliceLabel ? (
+                <G key={`${datum.key}-label`}>
+                  <SvgText
+                    testID={`pie-slice-label-${datum.key}`}
+                    x={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.x}
+                    y={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.y}
+                    fontSize={15}
+                    fontWeight="600"
+                    fill="#FFFFFF"
+                    textAnchor="middle"
+                    alignmentBaseline="central">
+                    {slicePercent}%
+                  </SvgText>
+                </G>
+              ) : null;
+              if (sweep <= 0) {
+                return null; // 零值行无扇区（角度退化），图例仍可点选查看
+              }
+              // 满圆（唯一非零行）用 Circle 表达；扇形 path 在 360° 时起止点
+              // 重合会退化成一条线。
+              if (sweep >= Math.PI * 2 - 1e-9) {
+                return (
+                  <G key={datum.key}>
+                    <Circle
+                      testID={`pie-sector-${datum.key}`}
+                      cx={CENTER}
+                      cy={CENTER}
+                      r={RADIUS}
+                      fill={color}
+                      stroke={selectedSector ? tokens.text : 'none'}
+                      strokeWidth={selectedSector ? 3 : 0}
+                      onPress={() =>
+                        setSelectedKey(selectedSector ? null : datum.key)
+                      }
+                    />
+                    {sliceLabel}
+                  </G>
+                );
+              }
               return (
                 <G key={datum.key}>
-                  <Circle
+                  <Path
                     testID={`pie-sector-${datum.key}`}
-                    cx={CENTER}
-                    cy={CENTER}
-                    r={RADIUS}
+                    d={sectorPath(start, end)}
                     fill={color}
                     stroke={selectedSector ? tokens.text : 'none'}
                     strokeWidth={selectedSector ? 3 : 0}
@@ -190,36 +214,36 @@ export function PieChart({
                   {sliceLabel}
                 </G>
               );
-            }
-            return (
-              <G key={datum.key}>
-                <Path
-                  testID={`pie-sector-${datum.key}`}
-                  d={sectorPath(start, end)}
-                  fill={color}
-                  stroke={selectedSector ? tokens.text : 'none'}
-                  strokeWidth={selectedSector ? 3 : 0}
-                  onPress={() =>
-                    setSelectedKey(selectedSector ? null : datum.key)
-                  }
-                />
-                {sliceLabel}
-              </G>
-            );
-          })}
-        </Svg>
-        {/* 点选详情行：图正下方固定展示（非浮层，规避手势冲突）。 */}
-        {selected != null ? (
-          <View testID="pie-detail" style={styles.pieDetailRow}>
-            <Text style={[styles.pieDetailText, {color: tokens.textSecondary}]}>
-              {selected.label} · 用量 {formatTokenCount(selected.totalTokens)} ·
-              调用 {selected.calls} 次 · 占比{' '}
-              {selectedShare == null
-                ? '—'
-                : `${Math.round(selectedShare * 100)}%`}
-            </Text>
-          </View>
-        ) : null}
+            })}
+          </Svg>
+          {selected != null ? (
+            <View testID="pie-detail" style={styles.pieSideDetail}>
+              <Text
+                style={[
+                  styles.pieSideDetailLabel,
+                  {color: tokens.primary},
+                ]}
+                numberOfLines={2}>
+                {selected.label}
+              </Text>
+              <Text
+                style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>
+                用量 {formatTokenCount(selected.totalTokens)}
+              </Text>
+              <Text
+                style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>
+                调用 {selected.calls} 次
+              </Text>
+              <Text
+                style={[styles.pieSideDetailLine, {color: tokens.textSecondary}]}>
+                占比{' '}
+                {selectedShare == null
+                  ? '—'
+                  : `${Math.round(selectedShare * 100)}%`}
+              </Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.pieLegend}>
           {data.map((datum, index) => {
             const color = palette[index % palette.length];
