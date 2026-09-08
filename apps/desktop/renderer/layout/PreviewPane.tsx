@@ -136,7 +136,6 @@ export function PreviewPane() {
     if (!previewFile) {
       setContent("");
       setSavedContent("");
-      setVersion(undefined);
       setFileMissing(false);
       return;
     }
@@ -394,7 +393,11 @@ export function PreviewPane() {
       <section id="preview-pane" aria-label="文件预览">
         {!previewFile ? (
           <div className="preview-body" id="preview-body">
-            <p className="preview-empty">在工作区选择文件以预览</p>
+            <p className="preview-empty">
+              {mode === "edit"
+                ? "在工作区选择文件以编辑"
+                : "在工作区选择文件以预览"}
+            </p>
           </div>
         ) : showMissing ? (
           <div className="preview-body" id="preview-body">
@@ -409,9 +412,13 @@ export function PreviewPane() {
         ) : mode === "read" ? (
           <div className="preview-body" id="preview-body">
             {isMarkdown ? (
-              <div className="preview-markdown" ref={mdRootRef}>
-                <MermaidMarkdown content={content} />
-              </div>
+              content ? (
+                <div className="preview-markdown" ref={mdRootRef}>
+                  <MermaidMarkdown content={content} />
+                </div>
+              ) : (
+                <p className="preview-empty">（空文件）</p>
+              )
             ) : (
               <pre className="preview-text">{content || "（空文件）"}</pre>
             )}
