@@ -154,6 +154,9 @@ jest.mock('react-native-svg', () => {
     default: passthrough,
     Path: passthrough,
     Circle: passthrough,
+    G: passthrough,
+    // 扇区百分比标注用的 svg Text（组件内以 Text as SvgText 引入）。
+    Text: passthrough,
   };
 });
 
@@ -800,6 +803,17 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
     ).toContain('24%');
+    // 扇区内百分比标注（用户拍板 2026-09-08：≥30% 才标）：仅 gpt-4o 38%
+    // 达标在弧心标注；未记录 24% 及其余小扇区均不标。
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-slice-label-p1::gpt-4o')!),
+    ).toContain('38%');
+    expect(
+      findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__'),
+    ).toBeUndefined();
+    expect(
+      findByTestId(renderer.root, 'pie-slice-label-p1::__unlogged__'),
+    ).toBeUndefined();
     // 新增两行的扇区与兜底 label：p1·modelName=null →「{服务商} · 其他模型」；
     // ghost 不在 providers mock 中 →「未知服务商 · x」。若 UI 去掉兜底
     // 分支（直接取 providerLabels[id] 得 undefined），此处断言即红。

@@ -16,7 +16,7 @@
  */
 import React, {useMemo, useState} from 'react';
 import {Pressable, Text, View} from 'react-native';
-import Svg, {Circle, Path} from 'react-native-svg';
+import Svg, {Circle, G, Path, Text as SvgText} from 'react-native-svg';
 import {formatTokenCount} from '@novel-master/core/common';
 import type {ThemeTokens} from '@/theme/tokens';
 import {styles} from '@/screens/stack/token-usage/styles';
@@ -60,11 +60,27 @@ const SIZE = 200;
 const CENTER = SIZE / 2;
 const RADIUS = 80;
 
+/** 扇区内百分比标注的最小占比（用户拍板 2026-09-08）：仅 ≥30% 的扇区
+ * 在弧心位置标注百分比，小扇区不标避免拥挤；口径与图例行一致
+ * （分母为传入的窗口 totalTokens）。 */
+const SLICE_LABEL_MIN_SHARE = 0.3;
+
+/** 扇区标注位置：弧心角方向、约 0.62 半径处（视觉居中且远离圆心与弧缘）。 */
+const LABEL_RADIUS = RADIUS * 0.62;
+
 /** 角度（弧度，从 12 点方向顺时针）→ 扇区路径端点坐标。 */
 function arcPoint(angle: number): {x: number; y: number} {
   return {
     x: CENTER + RADIUS * Math.sin(angle),
     y: CENTER - RADIUS * Math.cos(angle),
+  };
+}
+
+/** 角度（弧度）→ 扇区标注文字坐标（弧心角 × 0.62 半径）。 */
+function labelPoint(angle: number): {x: number; y: number} {
+  return {
+    x: CENTER + LABEL_RADIUS * Math.sin(angle),
+    y: CENTER - LABEL_RADIUS * Math.cos(angle),
   };
 }
 
@@ -127,6 +143,30 @@ export function PieChart({
           {sectors.map(({datum, start, end, sweep}, index) => {
             const color = palette[index % palette.length];
             const selectedSector = datum.key === selectedKey;
+            // 扇区百分比标注（≥30% 才标，口径与图例同轨）：满圆退化场景
+            // 放圆心，其余放弧心角 0.62 半径处；白色文字在色板八色上均可读。
+            const slicePercent =
+              totalTokens > 0
+                ? Math.round((datum.totalTokens / totalTokens) * 100)
+                : 0;
+            const showSliceLabel =
+              sweep > 0 && slicePercent >= SLICE_LABEL_MIN_SHARE * 100;
+            const labelPos = labelPoint((start + end) / 2);
+            const sliceLabel = showSliceLabel ? (
+              <G key={`${datum.key}-label`}>
+                <SvgText
+                  testID={`pie-slice-label-${datum.key}`}
+                  x={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.x}
+                  y={sweep >= Math.PI * 2 - 1e-9 ? CENTER : labelPos.y}
+                  fontSize={15}
+                  fontWeight="600"
+                  fill="#FFFFFF"
+                  textAnchor="middle"
+                  alignmentBaseline="central">
+                  {slicePercent}%
+                </SvgText>
+              </G>
+            ) : null;
             if (sweep <= 0) {
               return null; // 零值行无扇区（角度退化），图例仍可点选查看
             }
@@ -134,12 +174,28 @@ export function PieChart({
             // 重合会退化成一条线。
             if (sweep >= Math.PI * 2 - 1e-9) {
               return (
-                <Circle
-                  key={datum.key}
+                <G key={datum.key}>
+                  <Circle
+                    testID={`pie-sector-${datum.key}`}
+                    cx={CENTER}
+                    cy={CENTER}
+                    r={RADIUS}
+                    fill={color}
+                    stroke={selectedSector ? tokens.text : 'none'}
+                    strokeWidth={selectedSector ? 3 : 0}
+                    onPress={() =>
+                      setSelectedKey(selectedSector ? null : datum.key)
+                    }
+                  />
+                  {sliceLabel}
+                </G>
+              );
+            }
+            return (
+              <G key={datum.key}>
+                <Path
                   testID={`pie-sector-${datum.key}`}
-                  cx={CENTER}
-                  cy={CENTER}
-                  r={RADIUS}
+                  d={sectorPath(start, end)}
                   fill={color}
                   stroke={selectedSector ? tokens.text : 'none'}
                   strokeWidth={selectedSector ? 3 : 0}
@@ -147,20 +203,8 @@ export function PieChart({
                     setSelectedKey(selectedSector ? null : datum.key)
                   }
                 />
-              );
-            }
-            return (
-              <Path
-                key={datum.key}
-                testID={`pie-sector-${datum.key}`}
-                d={sectorPath(start, end)}
-                fill={color}
-                stroke={selectedSector ? tokens.text : 'none'}
-                strokeWidth={selectedSector ? 3 : 0}
-                onPress={() =>
-                  setSelectedKey(selectedSector ? null : datum.key)
-                }
-              />
+                {sliceLabel}
+              </G>
             );
           })}
         </Svg>
