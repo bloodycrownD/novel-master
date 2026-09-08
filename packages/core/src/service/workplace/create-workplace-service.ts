@@ -29,7 +29,7 @@ export function createWorkplaceService(
     vfs: new SqliteVfsEntryRepository(conn),
     workplace: new SqliteWorkplaceRepository(conn),
     // 懒加载 smart 规则 provider（Step 6）：仅在存在启用且 sortField='smart'
-    // 的目录规则时才被调用；三端 runtime 均经本工厂构造，零逐端接线。
+    // 的目录规则时才被调用（查表 + 编译）；三端 runtime 均经本工厂构造，零逐端接线。
     smartRules: async () => {
       const rules = new SqliteSmartSortRuleRepository(conn);
       const compiled = [];
@@ -40,5 +40,7 @@ export function createWorkplaceService(
       }
       return compiled;
     },
+    // 原始行 provider（L1 签名采样，core/B-3）：仅查表不编译，复用同一 repo。
+    smartRuleRows: () => new SqliteSmartSortRuleRepository(conn).listOrdered(),
   });
 }

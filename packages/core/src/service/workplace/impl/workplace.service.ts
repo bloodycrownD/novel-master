@@ -38,7 +38,10 @@ import type {
   WorkplacePersistBlock,
   WorkplaceService,
 } from "../workplace.port.js";
-import type { SmartRulesProvider } from "../workplace.port.js";
+import type {
+  SmartRuleRowsProvider,
+  SmartRulesProvider,
+} from "../workplace.port.js";
 import {
   ensureWorkplaceViewEntry,
   getCachedWorkplaceView,
@@ -56,6 +59,8 @@ export interface WorkplaceServiceDeps {
   readonly workplace: WorkplaceRepository;
   /** 懒加载智能规则 provider；缺省时 smart 排序退化为自然排序（D4）。 */
   readonly smartRules?: SmartRulesProvider;
+  /** 智能规则原始行 provider（L1 签名采样，core/B-3）；缺省时该来源不参与失效。 */
+  readonly smartRuleRows?: SmartRuleRowsProvider;
 }
 
 /**
@@ -262,7 +267,9 @@ export class DefaultWorkplaceService implements WorkplaceService {
 
   /**
    * 采样读时校验值：vfs 聚合签名（1 条 SQL）+ 规则表全量重读按 logicalPath
-   * 排序后的确定性 JSON 序列化（规则表无版本列且存在同数改写，不做聚合指纹）。
+   * 排序后的确定性 JSON 序列化（规则表无版本列且存在同数改写，不做聚合指纹）
+   * + smart_sort_rule 全量按 sort_order 排序后的确定性序列化（原始行不编译，
+   * core/B-3：增删改/启停/调序智能规则部合反映到签名，改规则后排序即时刷新）。
    */
   private async sampleSignatures(): Promise<WorkplaceViewSigs> {
     const scopeKey = workplaceScopeKey(this.scope);
@@ -276,7 +283,17 @@ export class DefaultWorkplaceService implements WorkplaceService {
     ) => (a.logicalPath < b.logicalPath ? -1 : a.logicalPath > b.logicalPath ? 1 : 0);
     dirRules.sort(byLogicalPath);
     fileRules.sort(byLogicalPath);
-    return { vfs, rules: JSON.stringify([dirRules, fileRules]) };
+    // 无条件采样（表小成本可忽略，管理页改规则低频，过度失效可接受）；
+    // listOrdered 已按 sort_order 排序，行对象由 repo 字面量构造，序列化确定。
+    const smartRuleRows =
+      this.deps.smartRuleRows != null
+        ? await this.deps.smartRuleRows()
+        : [];
+    return {
+      vfs,
+      rules: JSON.stringify([dirRules, fileRules]),
+      smartRules: JSON.stringify(smartRuleRows),
+    };
   }
 
   /** Loads path/mtime/rules context without scanning file content. */
