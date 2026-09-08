@@ -334,10 +334,14 @@ export class DefaultWorkplaceService implements WorkplaceService {
     )) {
       dirMtimeByPath.set(row.path, row.mtimeMs);
     }
-    // 懒加载（Step 6）：仅当存在启用且 sortField='smart' 的目录规则时才查表编译
+    // 懒加载（Step 6）：仅当存在 sortField='smart' 的目录规则时才查表编译。
+    // 与排序消费端（sortFilesForDir / sortDirPaths）共用同一基线口径——只看
+    // sortField、不看 ruleEnabled：disabled 目录规则的排序配置仍生效（与
+    // created/updated 的 disabled-仍生效基线对齐），单条规则是否启用由编译
+    // 结果决定（disabled 规则不参与编译），不在加载侧预过滤。
     const smartRules =
       this.deps.smartRules != null &&
-      [...dirRuleMap.values()].some((r) => r.ruleEnabled && r.sortField === "smart")
+      [...dirRuleMap.values()].some((r) => r.sortField === "smart")
         ? await this.deps.smartRules()
         : undefined;
     return {
