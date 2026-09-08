@@ -197,6 +197,7 @@ export class DefaultModelRequestService implements ModelRequestService {
           vendorModelId,
           userContent,
           extraHeaders: provider.headers,
+          extraBody: provider.bodyParams,
           history: options?.history,
           toolUseLookupMessages: options?.toolUseLookupMessages,
           system: options?.system,
