@@ -57,6 +57,7 @@ import {
   DRAG_LONG_PRESS_MS,
   DRAG_ROW_GAP,
   computeInsertIndex,
+  fallbackRowCenter,
   reorderRows,
   type DragRowLayout,
 } from './smart-sort-drag';
@@ -189,15 +190,14 @@ export function SmartSortRulesScreen() {
       if (from < 0) {
         return;
       }
+      const layouts = rows.map(r => rowLayoutsRef.current.get(r.ruleId));
       const layout = rowLayoutsRef.current.get(ruleId);
+      // 实测布局缺失（虚拟化极端场景）时，兑底中心与 computeInsertIndex 内部的
+      // 兑底边界共用同一 avgRowStep 步长（smart-sort-drag 单源，不再硬编码 96）。
       const center = layout
         ? layout.y + (layout.height - DRAG_ROW_GAP) / 2 + dy
-        : from * 96 + 48 + dy;
-      const t = computeInsertIndex(
-        center,
-        rows.map(r => rowLayoutsRef.current.get(r.ruleId)),
-        rows.length,
-      );
+        : fallbackRowCenter(from, dy, layouts);
+      const t = computeInsertIndex(center, layouts, rows.length);
       setDragInsert(prev => (prev === t ? prev : t));
       dragInsertRef.current = t;
     },

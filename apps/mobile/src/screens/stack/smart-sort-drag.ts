@@ -113,13 +113,38 @@ function computeBoundaries(
     return boundaries;
   }
   // 布局不全（虚拟化或初次布局未完成）：按已知行平均步长均分兜底。
-  const known = layouts.filter((l): l is DragRowLayout => l != null);
-  const step =
-    known.length > 0
-      ? known.reduce((sum, l) => sum + l.height, 0) / known.length
-      : 96;
+  const step = avgRowStep(layouts);
   for (let k = 0; k <= count; k++) {
     boundaries[k] = k * step;
   }
   return boundaries;
+}
+
+/** 布局全缺时的兜底行步长（px，行卡片含 gap 总高的典型值）。 */
+export const FALLBACK_ROW_STEP = 96;
+
+/**
+ * 已知行平均步长（含 gap 的总高度均值），无任何已知布局时退回 FALLBACK_ROW_STEP。
+ * computeBoundaries 的兜底均分与 fallbackRowCenter 共用此步长，保证边界与中心同源。
+ */
+function avgRowStep(layouts: ReadonlyArray<DragRowLayout | undefined>): number {
+  const known = layouts.filter((l): l is DragRowLayout => l != null);
+  return known.length > 0
+    ? known.reduce((sum, l) => sum + l.height, 0) / known.length
+    : FALLBACK_ROW_STEP;
+}
+
+/**
+ * 布局缺失行的兜底行中心：from 行原点 + 半步长 + 拖拽位移 dy。
+ *
+ * 步长与 computeBoundaries 的兜底均分同源（avgRowStep），行高或布局变化时
+ * 两边同步漂移；屏幕侧不再自带 96 硬编码副本。
+ */
+export function fallbackRowCenter(
+  from: number,
+  dy: number,
+  layouts: ReadonlyArray<DragRowLayout | undefined> = [],
+): number {
+  const step = avgRowStep(layouts);
+  return from * step + step / 2 + dy;
 }

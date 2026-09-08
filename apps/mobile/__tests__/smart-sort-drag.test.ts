@@ -4,7 +4,9 @@
  */
 import {
   DRAG_ROW_GAP,
+  FALLBACK_ROW_STEP,
   computeInsertIndex,
+  fallbackRowCenter,
   reorderRows,
 } from '../src/screens/stack/smart-sort-drag';
 
@@ -55,6 +57,38 @@ describe('computeInsertIndex', () => {
 
   test('空列表返回 0', () => {
     expect(computeInsertIndex(0, [], 0)).toBe(0);
+  });
+});
+
+describe('fallbackRowCenter', () => {
+  test('缺布局时兑底中心与兑底边界同源（共用 avgRowStep 步长）', () => {
+    const partial = [{y: 0, height: 96}, undefined, undefined];
+    // 已知行平均步长 = 96：computeInsertIndex 内部兑底边界 [0, 96, 192, 288]。
+    // from=2 行的兑底中心 = 2*96 + 48 = 240，恰为边界 192 与 288 的中点。
+    expect(fallbackRowCenter(2, 0, partial)).toBe(240);
+    // 中心喂回同源的 computeInsertIndex → 原位 t=2（等距取小，原位等价不提交）。
+    expect(
+      computeInsertIndex(fallbackRowCenter(2, 0, partial), partial, 3),
+    ).toBe(2);
+    // 拖拽位移过半步长后 → 换到末位 t=3（最近边界 288）。
+    expect(
+      computeInsertIndex(fallbackRowCenter(2, 49, partial), partial, 3),
+    ).toBe(3);
+  });
+
+  test('已知行不平均时步长取均值，中心与边界同步变化', () => {
+    const partial = [{y: 0, height: 120}, undefined, undefined];
+    // 平均步长 = 120：兑底边界 [0, 120, 240, 360]，from=1 中心 = 180。
+    expect(fallbackRowCenter(1, 0, partial)).toBe(180);
+    expect(
+      computeInsertIndex(fallbackRowCenter(1, 0, partial), partial, 3),
+    ).toBe(1);
+  });
+
+  test('完全无布局时退回 FALLBACK_ROW_STEP（屏幕侧旧硬编码 96 的单源化）', () => {
+    expect(FALLBACK_ROW_STEP).toBe(96);
+    expect(fallbackRowCenter(1, 0)).toBe(96 + 48);
+    expect(fallbackRowCenter(0, 10, [undefined, undefined])).toBe(58);
   });
 });
 
