@@ -431,6 +431,10 @@ function ProviderConfigTab({providerId}: {providerId: string}) {
           Object.keys(provider.headers).length > 0
             ? JSON.stringify(provider.headers)
             : '',
+        bodyParamsJson:
+          Object.keys(provider.bodyParams ?? {}).length > 0
+            ? JSON.stringify(provider.bodyParams)
+            : '',
         apiKey: '',
       });
     } catch (error) {
