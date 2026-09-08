@@ -97,6 +97,14 @@
 
 ---
 
+### core/B-3 [P0] L1 评估链缓存签名不含 smart_sort_rule 表——改智能规则后排序不刷新
+- 维度：B（正确性）+ C-orch
+- 文件：packages/core/src/service/workplace/impl/workplace-view-cache.ts、packages/core/src/service/workplace/impl/workplace.service.ts（签名采样处）
+- 问题：dev 新增的 L1 缓存（27be71c4）读时校验签名是二元组 `{vfs, rules}`（vfs 聚合签名 + workplace_dir_rule 表指纹），smart_sort_rule 表不在签名内。目录规则选 smart 后评估结果（含 smart 排序）被缓存，用户在管理页增删改/启停/调序智能规则后签名不变，缓存命中返回旧排序——功能上线即「改规则不生效」。
+- 改法：`WorkplaceViewSigs` 扩为三元组 `{vfs, rules, smartRules}`；service 侧签名采样处无条件追加 smart_sort_rule 表指纹（全量按 sort_order 排序后确定性 JSON 序列化，照 rules 指纹同款做法；表小成本可忽略，管理页改规则低频，过度失效可接受）；`getCachedWorkplaceView` 比对三元组。
+- 验收/测试：新用例——选 smart 排序评估一次（缓存发布）→ 改智能规则（如禁用某条）→ 再次评估结果与旧缓存不一致（签名 miss 重算）；非 smart 库行为不变。
+- 来源：merge-dev 适配评估（2026-09-08，用户确认开工）
+
 ## Spec deviations
 
 | 项 | 状态 | 处置 |
