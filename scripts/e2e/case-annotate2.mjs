@@ -73,9 +73,28 @@ try {
   // 4. chip 出现 → 发送（keyring 已解锁，链路应通）
   const chip = await page.evaluate(() => [...document.querySelectorAll("[class*=chip]")].filter((c) => c.offsetParent).map((c) => c.textContent?.slice(0, 30)).slice(0, 3));
   console.log("CHIP", JSON.stringify(chip));
-  await sendMessage(page, "批注落库验证消息");
+  const SENT_TEXT = "批注落库验证消息";
+  await sendMessage(page, SENT_TEXT);
   await sleep(1500);
   await shot(page, "653", "annotate2-sent");
+
+  // 4.5 发送后附件断言：带超时的重试式读取——先等「最近一条 user 消息」文本匹配本次发送内容
+  // （确认落库渲染的是本条而非发送前的旧消息），再验该消息的批注附件（MessageAttachmentGroupCard
+  // 的「消息附件」分组卡片）。超时不抛异常，只记录断言结果供 D-15 定性，后续下划线投影验证继续跑。
+  let attachAssert = { matched: false, hasAttach: false, detail: "no-attempt" };
+  for (let i = 0; i < 30 && !attachAssert.matched; i++) {
+    attachAssert = await page.evaluate((needle) => {
+      const msgs = [...document.querySelectorAll(".chat-message--user")].filter((m) => m.offsetParent);
+      const last = msgs[msgs.length - 1] ?? null;
+      if (!last) return { matched: false, hasAttach: false, detail: "no-user-msg" };
+      const text = last.querySelector(".chat-message__body")?.textContent ?? "";
+      if (!text.includes(needle)) return { matched: false, hasAttach: false, detail: "stale:" + text.slice(0, 40) };
+      const grp = last.querySelector(".chat-message__attach-group");
+      return { matched: true, hasAttach: !!grp, detail: grp?.querySelector("summary")?.textContent ?? "no-attach-group" };
+    }, SENT_TEXT);
+    if (!attachAssert.matched) await sleep(500);
+  }
+  console.log("ATTACH_ASSERT", JSON.stringify(attachAssert));
 
   // 5. 重开文件看下划线
   await node.click();

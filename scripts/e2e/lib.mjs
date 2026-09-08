@@ -5,12 +5,17 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
+import { fileURLToPath } from "node:url";
 import { _electron } from "playwright-core";
 
-const E2E_DIR = "/home/bloodycrown/Dev/novel-master/.worktree/desk-e2e-test/scripts/e2e";
-export const DESKTOP = "/home/bloodycrown/Dev/novel-master/.worktree/desk-e2e-test/apps/desktop";
+// 路径全部基于脚本自身位置动态解析（lib.mjs 位于 <worktree根>/scripts/e2e/），
+// 消除对旧 worktree 绝对路径的硬编码——e2e 资产拷到任意 worktree 都能直接跑
+const E2E_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(E2E_DIR, "..", "..");
+export const DESKTOP = path.join(ROOT, "apps/desktop");
 export const OUT = path.join(E2E_DIR, "out");
 export const DATA = path.join(E2E_DIR, "data");
+const ELECTRON_BIN = path.join(ROOT, "node_modules", "electron", "dist", "electron");
 export const MOCK_PORT = 18099;
 
 export async function startMock({ slow = false } = {}) {
@@ -65,7 +70,7 @@ export async function launchApp({ errors = null } = {}) {
   env.DISPLAY = env.DISPLAY || ":0";
   env.NOVEL_MASTER_DB = path.join(DATA, "novel.db");
   const app = await _electron.launch({
-    executablePath: "/home/bloodycrown/Dev/novel-master/.worktree/desk-e2e-test/node_modules/electron/dist/electron",
+    executablePath: ELECTRON_BIN,
     args: ["."], cwd: DESKTOP, env,
   });
   const page = await app.firstWindow();
@@ -80,7 +85,7 @@ export async function launchApp({ errors = null } = {}) {
 export async function shutdown(app, vite = null, mock = null) {
   try { await app.close(); } catch {}
   if (vite) { try { process.kill(-vite.pid, "SIGKILL"); } catch {} }
-  try { execSync('pkill -9 -f "desk-e2e-test/node_modules/.bin/vite"; pkill -9 -f "npm exec vite"', { stdio: "ignore" }); } catch {}
+  try { execSync(`pkill -9 -f "${ROOT}/node_modules/.bin/vite"; pkill -9 -f "npm exec vite"`, { stdio: "ignore" }); } catch {}
   if (mock) mock.close();
 }
 
@@ -125,7 +130,9 @@ export async function closeOverlays(page) {
   }
 }
 
-// 发消息并等 run 收敛（发送按钮恢复）
+// 发消息并等 run 收敛（发送按钮 label 先离开「发送」再回归）
+// 单发结构：disabled 分支只 force click 一次；enabled 分支只 fill+press 一次——
+// 旧版 disabled 分支 force click 后再补 fill+press 会连发两条，第二条天然不带批注（D-15 误报根因）
 export async function sendMessage(page, text) {
   const composer = page.locator('textarea[aria-label="消息输入"]');
   // 轮询等 composer 解禁（绑模型后 IPC 回写有延迟），最多 10s
@@ -135,14 +142,28 @@ export async function sendMessage(page, text) {
   }
   if (await composer.isDisabled().catch(() => true)) {
     await page.locator('button[aria-label="发送"]').first().click({ force: true });
-    await page.waitForTimeout(4000);
+  } else {
+    await composer.fill(text);
+    await composer.press("Control+Enter");
   }
-  await composer.fill(text);
-  await composer.press("Control+Enter");
-  const t0 = Date.now();
-  while (Date.now() - t0 < 15000) {
-    const lbl = await page.locator('button[aria-label="发送"], button[aria-label="停止"]').first().getAttribute("aria-label").catch(() => null);
-    if (lbl === "发送") break;
+  await waitRunSettled(page);
+}
+
+// 两段式有界等待 run 收敛：
+// ① 离开段 5s 上限——runAgent 首句 await ipcPromptAgentMeta（ChatComposer.tsx）先于 beginUiRun()，
+//    发送瞬间 label 仍为「发送」，若首查即判「已回归」会零等待假收敛，必须先观察到它离开；
+// ② 回归段 15s 上限——slow mock 分段流式（间隔 300ms×40 段）一轮续跑可达 ~12s，固定短等待会与后续步骤竞态
+export async function waitRunSettled(page) {
+  const label = () =>
+    page.locator('button[aria-label="发送"], button[aria-label="停止"]').first().getAttribute("aria-label").catch(() => null);
+  const tLeave = Date.now();
+  while (Date.now() - tLeave < 5000) {
+    if ((await label()) !== "发送") break;
+    await page.waitForTimeout(200);
+  }
+  const tBack = Date.now();
+  while (Date.now() - tBack < 15000) {
+    if ((await label()) === "发送") break;
     await page.waitForTimeout(300);
   }
 }
