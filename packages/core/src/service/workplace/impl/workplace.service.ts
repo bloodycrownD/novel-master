@@ -269,7 +269,7 @@ export class DefaultWorkplaceService implements WorkplaceService {
    * 采样读时校验值：vfs 聚合签名（1 条 SQL）+ 规则表全量重读按 logicalPath
    * 排序后的确定性 JSON 序列化（规则表无版本列且存在同数改写，不做聚合指纹）
    * + smart_sort_rule 全量按 sort_order 排序后的确定性序列化（原始行不编译，
-   * core/B-3：增删改/启停/调序智能规则部合反映到签名，改规则后排序即时刷新）。
+   * core/B-3：增删改/启停/调序智能规则都会反映到签名，改规则后排序即时刷新）。
    */
   private async sampleSignatures(): Promise<WorkplaceViewSigs> {
     const scopeKey = workplaceScopeKey(this.scope);

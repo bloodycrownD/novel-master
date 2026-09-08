@@ -4,12 +4,12 @@
 
 - repo：novel-master（worktree `.worktree/smart-filename-sort`）
 - base_sha：b442d397
-- head_sha：ca1bba60
+- head_sha：4f84da40（执行完成态）
 - prd_path：docs/Iterations/smart-filename-sort/prd.md
 - spec_path：docs/Iterations/smart-filename-sort/spec.md
 - review_round：2
 - dag_version：3
-- 状态：fix-spec-ready
+- 状态：fix-spec-executed（11 条全部执行并经 cr-func-fix-review 复核 func-ready）
 
 ---
 
@@ -109,8 +109,8 @@
 
 | 项 | 状态 | 处置 |
 |----|------|------|
-| Step 6 懒加载条件加码（`ruleEnabled && sortField === "smart"` 超出 spec 口径） | open → 将 fixed | 随 core/B-1 闭合：条件去掉 ruleEnabled 后与 spec 口径对齐 |
-| CLI list 列序与 Step 9 不符 | open → 将 fixed | 随 mc/A-1 闭合：列序调回 spec 钉死顺序后对齐 |
+| Step 6 懒加载条件加码（`ruleEnabled && sortField === "smart"` 超出 spec 口径） | fixed | core/B-1 已执行：条件去掉 ruleEnabled，与 spec 口径对齐（T-WE3c 独享库验证） |
+| CLI list 列序与 Step 9 不符 | fixed | mc/A-1 已执行：列序调回 spec 钉死顺序（e2e 锁列） |
 
 ---
 
