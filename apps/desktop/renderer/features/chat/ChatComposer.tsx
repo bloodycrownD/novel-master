@@ -363,6 +363,16 @@ export function ChatComposer({
       // B4：禁止 started:true 清正文/projected；append 推送后再清（对齐 Mobile）
       // annotate：禁止在 started 清 store；reproject 时 ∪ store 保留至 append
       const annotateDrafts = listChatAnnotateDrafts(sessionId);
+      // 防御观测（D-15 定性遗留）：composer 批注 chip 在而 store 读空——正常流程不应发生
+      // （append 推送后才清 store），留痕供 e2e errors 收集定位（launchApp 只收 console.error）
+      if (
+        attachmentsRef.current.some((a) => a.action === "annotate") &&
+        annotateDrafts.length === 0
+      ) {
+        console.error(
+          `[annotate-guard] 发送时批注 chip 在而 store 读空 sessionId=${sessionId}`,
+        );
+      }
 
       const streamResult = await ipcPreferencesGetLlmStream();
       const stream = streamResult.ok ? streamResult.data : true;
