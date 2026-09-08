@@ -11,6 +11,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsEntry } from "../model/vfs-entry.js";
+import type { VfsContentSize } from "../model/vfs-content-size.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
@@ -45,6 +46,20 @@ export interface VfsEntryRepository {
     scopeKey: string,
     paths: ReadonlyArray<string>
   ): Promise<Map<string, string | null>>;
+
+  /**
+   * 按路径轻量探测文件 content 大小（不读正文，供读取侧降级闸门使用）。
+   *
+   * SQL 只取长度：内联行用 `length(content)`（字符数）；正文在 content store
+   * 的行查 `vfs_content_blob.byte_len`（压缩侧字节，明文下界）。
+   *
+   * @returns 目录行 / 路径不存在 / blob 缺失等无法探测的情形返回 `null`，
+   *   由调用方决定回退行为
+   */
+  findContentSizeByPath(
+    scopeKey: string,
+    path: string
+  ): Promise<VfsContentSize | null>;
 
   insert(
     scopeKey: string,
@@ -166,6 +181,18 @@ export interface VfsEntryRepository {
     scopeKey: string,
     pathPrefix: string
   ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>>;
+
+  /**
+   * 计算 scope 下全部 vfs_entry 行的有序聚合签名（workplace 读时校验缓存用）。
+   *
+   * SQL：`count(*) + group_concat(path:head_version:mtime_ms, char(31))`，
+   * 子查询按 path 排序使拼接顺序确定；不过滤 `entry_kind`（mkdir 空目录
+   * 也必须改变签名）。单行返回、单次过桥；两串相等 ⟺ 行集合逐行相等。
+   *
+   * @remarks 相比三元组指纹（count/max mtime/max version），本签名对
+   *   rename / 回滚 / 树拷贝等保留 mtime 的写路径均敏感。
+   */
+  computeEntrySignature(scopeKey: string): Promise<string>;
 
   /**
    * Lists live file heads under a scope + logical path prefix

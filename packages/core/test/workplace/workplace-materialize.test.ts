@@ -47,9 +47,11 @@ function createSpyingWorkplaceService(
       calls.scanContents += 1;
       return baseRepo.scanContents(...args);
     },
+    computeEntrySignature: (...args) => baseRepo.computeEntrySignature(...args),
   };
 
   const wt = new DefaultWorkplaceService({
+    conn,
     scope: { kind: "project", projectId },
     vfs,
     workplace: new SqliteWorkplaceRepository(conn),
@@ -86,13 +88,17 @@ describe("worktree materialize", () => {
     calls.scanContents = 0;
     calls.findByPath = 0;
     calls.listFileMetaUnderPrefix = 0;
+    // L1 memo（读时校验缓存）：写一个新文件强制签名失效，deprecated
+    // materialize 组合的 live + persist 并发评估经 conn 级 inFlight 去重，
+    // 合并为单次 metadata 加载（旧断言的“各一次”是实例级无共享时的行为）
+    await pvfs.write("/visible/d.md", "D");
     const materialized = await wt.materialize();
     assert.equal(calls.scanContents, 0);
     assert.ok(materialized.listRows.length >= 4);
     assert.equal(
       calls.listFileMetaUnderPrefix,
-      2,
-      "deprecated materialize 组合 live + persist 各一次 metadata",
+      1,
+      "deprecated materialize 组合 live + persist 经缓存 inFlight 去重合并为单次 metadata",
     );
   });
 
