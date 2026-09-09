@@ -103,6 +103,7 @@ import {
   type SkillsReadRequest,
   type SkillsReadResponse,
   type SkillsToggleRequest,
+  type SkillsUpdateInfoRequest,
   type SkillsWriteRequest,
 } from '@shared/ipc-types';
 
@@ -540,6 +541,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       SkillsAssertCreateNameRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SKILLS_ASSERT_CREATE_NAME),
+    ipcSkillsUpdateInfo: withReq<SkillsUpdateInfoRequest, IpcResult<void>>(
+      invoke,
+      IPC_CHANNELS.SKILLS_UPDATE_INFO,
+    ),
     ipcCompactionConditionsGet: noArg(
       invoke,
       IPC_CHANNELS.COMPACTION_CONDITIONS_GET,

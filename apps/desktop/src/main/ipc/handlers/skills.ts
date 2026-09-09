@@ -14,6 +14,7 @@ import type {
   SkillsReadRequest,
   SkillsReadResponse,
   SkillsToggleRequest,
+  SkillsUpdateInfoRequest,
   SkillsWriteRequest,
 } from "../../../../shared/ipc-types.js";
 import type {
@@ -188,6 +189,22 @@ export async function handleSkillsAssertCreateName(
         req.name,
         req.projectId,
       );
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/** 编辑技能信息（重命名 + 描述同一提交）：错误码与中文文案透传。 */
+export async function handleSkillsUpdateInfo(
+  req: SkillsUpdateInfoRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.skills().updateSkillInfo(toSkillLocation(req), {
+      ...(req.newName != null ? { newName: req.newName } : {}),
+      ...(req.description != null ? { description: req.description } : {}),
+    });
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

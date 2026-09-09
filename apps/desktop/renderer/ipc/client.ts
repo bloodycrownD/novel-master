@@ -142,6 +142,7 @@ export const {
   ipcSkillsToggle,
   ipcSkillsDelete,
   ipcSkillsAssertCreateName,
+  ipcSkillsUpdateInfo,
   ipcCompactionConditionsGet,
   ipcCompactionConditionsSet,
   ipcBackupExport,
