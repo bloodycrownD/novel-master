@@ -112,7 +112,7 @@ try {
   const cm = page.locator(".cm-content").first();
   if (await cm.count()) {
     await cm.click();
-    await page.keyboard.type("# 回归笔记\n\n这是回归测试写入的正文内容，供批注与引用测试使用。\n\n- 列表项一\n- 列表项二\n", { delay: 3 });
+    await page.keyboard.type("# 回归笔记\n\n这是回归测试写入的正文内容，供批注与引用测试使用。\n\n批注与引用测试第二段，纯段落避免 CodeMirror 列表续行残留空项。\n", { delay: 3 });
     await page.keyboard.press("Control+s");
     await sleep(900);
   }

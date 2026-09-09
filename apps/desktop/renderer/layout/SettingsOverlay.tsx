@@ -311,7 +311,7 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
       <ConfirmModal
         open={pendingNav != null}
         title="未保存的更改"
-        message="当前页面有未保存的更改，离开将丢弃。是否继续？"
+        message="有未保存的更改，离开将丢弃。是否继续？"
         danger
         onConfirm={() => {
           const action = pendingNav;

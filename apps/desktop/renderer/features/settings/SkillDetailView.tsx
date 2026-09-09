@@ -393,7 +393,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
       <ConfirmModal
         open={leaveConfirm != null}
         title="未保存的更改"
-        message="当前技能文件有未保存的更改，离开将丢弃。是否继续？"
+        message="有未保存的更改，离开将丢弃。是否继续？"
         danger
         onConfirm={() => {
           const action = leaveConfirm;
