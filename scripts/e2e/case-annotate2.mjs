@@ -22,21 +22,54 @@ try {
     await goToProjects(page);
     await page.locator("li:visible").filter({ hasText: "回归项目A" }).first().click();
     await sleep(700);
-    // 全量序列里项目下有多个会话（部分未绑模型），逐个尝试直到 composer 可用；
-    // 单会话库退化为原 first 行为
-    for (let i = 0; i < 5; i++) {
+    // 全量序列里上游 case（如 session-mgmt 的删除测试）可能删光绑模型的会话，
+    // 逐个尝试直到 composer 可用；全不可用时进第一个会话自己绑模型（自足，B4 同款）
+    let picked = false;
+    const rows0 = page.locator("#session-list li:visible");
+    const total = await rows0.count();
+    for (let i = 0; i < total; i++) {
       const rows = page.locator("#session-list li:visible");
       if (i >= (await rows.count())) break;
       await rows.nth(i).click();
       await sleep(1100);
       const c = page.locator('textarea[aria-label="消息输入"]');
-      if ((await c.count()) && !(await c.isDisabled().catch(() => true))) break;
+      const ok = (await c.count()) && !(await c.isDisabled().catch(() => true));
+      console.log("PICK_TRY", i, ok ? "OK" : "skip");
+      if (ok) { picked = true; break; }
       await page.locator('button[aria-label="返回"]:visible').first().click();
       await sleep(600);
+    }
+    if (!picked) {
+      console.log("NO_READY_SESSION——自足绑模型");
+      const rows = page.locator("#session-list li:visible");
+      if ((await rows.count()) === 0) throw new Error("no session to bind model");
+      await rows.first().click();
+      await sleep(1200);
+      await page.locator('[data-action="open-session-actions"]').first().click();
+      await sleep(900);
+      await page.locator('[aria-label^="切换大模型"]').first().click();
+      await sleep(800);
+      await page.locator(".picker-modal__panel li:visible").nth(1).click();
+      await sleep(800);
+      const { closeOverlays } = await import("./lib.mjs");
+      await closeOverlays(page);
+      await sleep(500);
+      const c = page.locator('textarea[aria-label="消息输入"]');
+      if (!(await c.count()) || (await c.isDisabled().catch(() => true))) throw new Error("bind model failed");
+      console.log("SELF_BOUND_OK");
     }
   }
 
   // 1. 建文件写正文
+  // 探针：当前会话/面板状态
+  const probe = await page.evaluate(() => ({
+    sessActive: document.querySelector(".session-active, .chat-header")?.textContent?.slice(0, 40) ?? null,
+    treePanel: document.querySelector(".workspace-trees")?.textContent?.slice(0, 40) ?? null,
+    mdRoot: !!document.querySelector(".preview-markdown"),
+    composer: !!document.querySelector('textarea[aria-label="消息输入"]'),
+  }));
+  console.log("SESSION_PROBE", JSON.stringify(probe));
+
   // 1. 建文件写正文（文件已存在则直接打开——重跑/全量序列下不重名冲突）
   const existing = page.locator(".tree-node").filter({ hasText: "批注验证.md" }).first();
   if (!(await existing.count())) {
