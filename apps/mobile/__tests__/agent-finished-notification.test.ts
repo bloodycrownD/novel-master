@@ -297,34 +297,26 @@ describe('agent-finished-notification', () => {
       (Platform as {OS: string}).OS = originalOS;
     });
 
-    it('stop 在途期间 start 仍生效：链收敛后该会话通知回到运行', async () => {
-      await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+    it('stop 在途期间 start 仍生效：链收敛后前台服务回到运行', async () => {
+      await startAgentKeepAliveService();
       expect(displayNotification).toHaveBeenCalledTimes(1);
 
-      // stop 真正进入在途（stopForegroundService 已发出、挂起未决）后再 start：
-      // 用「stopFg 已被调用」的 Promise 信号精确等待，不猜微任务时序。
+      // stop 真正进入在途（stopForegroundService 已发出、挂起未决）后再 start
       let resolveStop: () => void = () => undefined;
-      let signalStopFgCalled!: () => void;
-      const stopFgCalled = new Promise<void>(resolve => {
-        signalStopFgCalled = resolve;
-      });
       (notifee.stopForegroundService as jest.Mock).mockImplementationOnce(
-        () => {
-          signalStopFgCalled();
-          return new Promise<void>(resolve => {
+        () =>
+          new Promise<void>(resolve => {
             resolveStop = resolve;
-          });
-        },
+          }),
       );
-      const stopPromise = stopAgentKeepAliveService('s1');
-      await stopFgCalled;
-      const startPromise = startAgentKeepAliveService('s1', {
-        sessionTitle: 'S1',
-      });
+      const stopPromise = stopAgentKeepAliveService();
+      // 让一个微任务 tick 过去：链尾 reconcile 已开始执行、stop 在途
+      await Promise.resolve();
+      const startPromise = startAgentKeepAliveService();
       resolveStop();
       await Promise.all([stopPromise, startPromise]);
 
-      // stop 完成后链上补发该会话保活通知，服务回到运行
+      // stop 完成后链上按最新期望态（运行）补发保活通知，服务回到运行
       expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
       expect(displayNotification).toHaveBeenCalledTimes(2);
       expect(
@@ -332,30 +324,26 @@ describe('agent-finished-notification', () => {
       ).toBe(true);
     });
 
-    it('stopForegroundService reject 不卡链：后续 start 仍能发起', async () => {
-      await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+    it('stopForegroundService reject 后标记复位，后续 start 仍能发起', async () => {
+      await startAgentKeepAliveService();
       (notifee.stopForegroundService as jest.Mock).mockRejectedValueOnce(
         new Error('stop failed'),
       );
-      await expect(stopAgentKeepAliveService('s1')).rejects.toThrow(
-        'stop failed',
-      );
+      await expect(stopAgentKeepAliveService()).rejects.toThrow('stop failed');
 
-      // 链未被 reject 卡死：新 start 照常发出保活通知
-      await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+      // 标记已随 finally 复位：新 start 不被卡死，保活通知再次发出
+      await startAgentKeepAliveService();
       expect(displayNotification).toHaveBeenCalledTimes(2);
     });
 
-    it('stop 后紧接同会话 start：self-successor 护栏——通知原样保留、服务不停', async () => {
-      await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
-      const stopPromise = stopAgentKeepAliveService('s1');
-      const startPromise = startAgentKeepAliveService('s1', {
-        sessionTitle: 'S1',
-      });
+    it('stop 在途且期望又变回运行时，未执行的 stop 直接跳过（服务不停）', async () => {
+      await startAgentKeepAliveService();
+      // stop 尚未执行（排在链上），start 先把期望态改回运行
+      const stopPromise = stopAgentKeepAliveService();
+      const startPromise = startAgentKeepAliveService();
       await Promise.all([stopPromise, startPromise]);
 
-      // 链按序：stop 任务发现 successor 即 s1（已重登记）→ 原样保留
-      expect(notifee.cancelNotification).not.toHaveBeenCalled();
+      // 链上 reconcile 看到的期望态一直是运行：不 stop 也不重复 start
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();
       expect(displayNotification).toHaveBeenCalledTimes(1);
     });
@@ -387,7 +375,7 @@ describe('T-P5: 保活通知内容与多会话（Step 5 需求）', () => {
     expect(call.body).not.toContain('共 ');
   });
 
-  it('多会话并行：一个会话一条通知，各带自己的 data.sessionId', async () => {
+  it('同 id 重发刷新内容：标签变化时运行中通知更新', async () => {
     await startAgentKeepAliveService('s1', {
       projectName: 'P1',
       sessionTitle: 'S1',
@@ -396,56 +384,29 @@ describe('T-P5: 保活通知内容与多会话（Step 5 需求）', () => {
       projectName: 'P2',
       sessionTitle: 'S2',
     });
+    // 第二个会话加入：内容刷新为最新 + 总数
     expect(displayNotification).toHaveBeenCalledTimes(2);
-    const [first, second] = displayNotification.mock.calls.map(c => c[0]);
-    expect(first.id).toBe('nm-agent-keepalive-s1');
-    expect(first.data).toEqual({sessionId: 's1'});
-    expect(first.title).toBe('正在生成 · S1');
-    // startForeground 替换语义：同一时刻只有一条挂 asForegroundService（载体）
-    expect(first.android.asForegroundService).toBe(true);
-    expect(second.id).toBe('nm-agent-keepalive-s2');
-    expect(second.data).toEqual({sessionId: 's2'});
-    expect(second.title).toBe('正在生成 · S2');
-    expect(second.android.asForegroundService).toBe(false);
+    const refreshed = displayNotification.mock.calls[1][0];
+    expect(refreshed.title).toBe('正在生成 · S2');
+    expect(refreshed.body).toContain('共 2 个会话生成中');
     expect(notifee.stopForegroundService).not.toHaveBeenCalled();
   });
 
-  it('普通会话先收尾：只撤自己的通知条；载体最后收尾无剩余则停服务', async () => {
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'}); // 载体
-    await startAgentKeepAliveService('s2', {sessionTitle: 'S2'}); // 普通
-
-    // 普通会话 s2 先收尾：只撤 s2 的通知条，载体与服务不动
-    await stopAgentKeepAliveService('s2');
-    expect(notifee.cancelNotification).toHaveBeenCalledTimes(1);
-    expect(notifee.cancelNotification).toHaveBeenCalledWith(
-      'nm-agent-keepalive-s2',
-    );
-    expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+  it('多会话中单会话收尾：服务维持并刷新为剩余会话；最后一个收尾才停止', async () => {
+    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+    await startAgentKeepAliveService('s2', {sessionTitle: 'S2'});
     expect(displayNotification).toHaveBeenCalledTimes(2);
 
-    // 载体 s1 最后收尾：无剩余会话 → 停服务（服务停止即撤载体通知）
-    await stopAgentKeepAliveService('s1');
-    expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
-    expect(displayNotification).toHaveBeenCalledTimes(2);
-  });
-
-  it('载体会话先收尾：剩余会话通知升级 FGS（转交），服务不停', async () => {
-    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'}); // 载体
-    await startAgentKeepAliveService('s2', {sessionTitle: 'S2'}); // 普通
-
-    // 载体 s1 先收尾：s2 升级为载体（重发挂 FGS；替换语义自动撤 s1 旧条）
-    await stopAgentKeepAliveService('s1');
-    expect(displayNotification).toHaveBeenCalledTimes(3);
-    const promoted = displayNotification.mock.calls[2][0];
-    expect(promoted.id).toBe('nm-agent-keepalive-s2');
-    expect(promoted.android.asForegroundService).toBe(true);
-    expect(notifee.cancelNotification).not.toHaveBeenCalled();
-    expect(notifee.stopForegroundService).not.toHaveBeenCalled();
-
-    // 转交后 s2 成载体，最后收尾 → 停服务
     await stopAgentKeepAliveService('s2');
-    expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
+    // s1 仍在跑：服务不停，内容回到 S1（无总数行）
+    expect(notifee.stopForegroundService).not.toHaveBeenCalled();
     expect(displayNotification).toHaveBeenCalledTimes(3);
+    const afterOne = displayNotification.mock.calls[2][0];
+    expect(afterOne.title).toBe('正在生成 · S1');
+    expect(afterOne.body).not.toContain('共 ');
+
+    await stopAgentKeepAliveService('s1');
+    expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
   });
 
   it('保活未运行时的按会话收尾是安全 no-op（不真调 stop）', async () => {
