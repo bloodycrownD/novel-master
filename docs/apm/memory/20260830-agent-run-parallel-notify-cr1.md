@@ -122,3 +122,15 @@
 - Provider：开窗资格与探针 isRunRegistered 扩 registry.has ∥ manager.hasRun（封受理空窗回页误收尾）；sessionAgentRunning 新视图（transcript agentRunning/reload 语义随之会话化——别的会话 run 不再冻结本会话）。
 - 测试：T-P3a/b/c/d + mock 桩；9 套件 116 全绿、tsc 0 错、prettier/eslint 过（no-void 警告为分支存量）。提交 942a6a98。
 - 记忆改记 worktree 侧（随分支走，避免下次合并再撞同一文档冲突）。
+
+## Step 5 反馈落地（2026-09-09，worktree）
+
+user:
+真机测试反馈：1) 状态栏常驻通知希望能显示当前项目、当前会话名；2) 聊天配置里给通知栏（保活）加开关，默认关，对历史完全兼容。
+
+assistant:
+两条都落地（提交 602cb909，spec 附需求变更追记）：
+- 内容化：通知模块按 sessionId 维护标签集，标题「正在生成 · 会话名」/正文「项目 · 会话名」，多会话附「共 N 个」；单会话收尾摘标签原位刷新，最后收尾才停服务。标签版本号驱动内容刷新，无标签变更时保持旧起停竞态语义（旧用例零改动通过）。
+- 独立开关：偏好 agentKeepAlive 默认关（历史零感知：不开启则无前台服务无常驻通知），与完成通知开关（默认开）解耦；prefBridge 扩 isKeepAliveEnabled，未注入视为关；收尾摘标签与开关无关。
+- 测试 T-P5×5 / T-P8/T-P8b，T-P6 语义更新；5 套件 94 全绿。JS-only 改动，设备 force-restart 已重拉 bundle（0 error）。
+- 踩坑：测试 describe 挂在外层 describe 之外导致 beforeEach 复位没罩到（双 display 假失败）——新增 describe 要么进外层要么自带 clearAllMocks+reset。
