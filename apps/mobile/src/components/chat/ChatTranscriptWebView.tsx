@@ -103,6 +103,8 @@ export type ChatTranscriptWebViewProps = {
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
   readonly onOpenToolFile?: (path: string) => void;
+  /** 点击 markdown 链接（webview 发 linkClick 原始 href；识别与路由在宿主侧单源完成）。 */
+  readonly onLinkClick?: (href: string) => void;
   /** 点击 task 工具卡片跳转子会话只读浏览（webview web app 发 openSubagentSession）。 */
   readonly onOpenSubagentSession?: (sessionId: string) => void;
   /** 点击 skill 卡片跳技能详情（webview web app 发 openSkillDetail；project 域缺 projectId 时由调用方补齐）。 */
@@ -252,6 +254,7 @@ export const ChatTranscriptWebView = memo(
         onReady,
         onLoadOlder,
         onOpenToolFile,
+        onLinkClick,
         onOpenSubagentSession,
         onOpenSkillDetail,
         onOpenMessageMenu,
@@ -839,6 +842,10 @@ export const ChatTranscriptWebView = memo(
             onOpenToolFile?.(message.payload.path);
             return;
           }
+          if (message.type === 'linkClick') {
+            onLinkClick?.(message.payload.href);
+            return;
+          }
           if (message.type === 'openSubagentSession') {
             onOpenSubagentSession?.(message.payload.sessionId);
             return;
@@ -909,6 +916,7 @@ export const ChatTranscriptWebView = memo(
           onScrollSnapshot,
           onLoadOlder,
           onOpenToolFile,
+          onLinkClick,
           onOpenSubagentSession,
           onOpenSkillDetail,
           onOpenMessageMenu,

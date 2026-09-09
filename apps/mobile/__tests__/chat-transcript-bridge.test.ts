@@ -112,6 +112,20 @@ describe('chat-transcript-bridge', () => {
     );
   });
 
+  it('round-trips Web→RN linkClick envelope (T-L2)', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'linkClick' as const,
+      payload: {href: '%E7%AC%94%E8%AE%B0/a.md'},
+    };
+    const raw = encodeTranscriptToHost(message);
+    const parsed = decodeTranscriptToHost(raw);
+    expect(parsed).toEqual(message);
+    expect(parsed.type === 'linkClick' ? parsed.payload.href : '').toBe(
+      '%E7%AC%94%E8%AE%B0/a.md',
+    );
+  });
+
   it('round-trips Web→RN openMessageMenu envelope', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
