@@ -207,9 +207,10 @@ export function isSearchOutput(rec: Record<string, unknown>): boolean {
 }
 
 /**
- * Formats search output：引擎名 + 条数抬头，tavily 原生回答（如有）紧随，
- * 其后为「- 标题 — 链接 — 摘要」紧凑列表；落盘形态显示「已落盘路径」
- * （不落 JSON fallback）。
+ * Formats search output：引擎名 + 条数抬头，串行降级时下一行展示
+ * 尝试轨迹（attempts，如「bocha 失败(401) → tavily 成功」），tavily
+ * 原生回答（如有）紧随，其后为「- 标题 — 链接 — 摘要」紧凑列表；
+ * 落盘形态显示「已落盘路径」（不落 JSON fallback）
  */
 export function formatSearchOutput(rec: Record<string, unknown>): string {
   if (typeof rec.savedPath === "string") {
@@ -226,6 +227,9 @@ export function formatSearchOutput(rec: Record<string, unknown>): string {
     readonly snippet: string;
   }>;
   const parts: string[] = [`search ${engine} · ${results.length} 条结果`];
+  if (typeof rec.attempts === "string" && rec.attempts.length > 0) {
+    parts.push(`尝试轨迹: ${rec.attempts}`);
+  }
   if (typeof rec.answer === "string" && rec.answer.length > 0) {
     parts.push("", rec.answer);
   }

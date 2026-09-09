@@ -136,7 +136,7 @@ export interface BuiltinToolAgentsContext {
  * `search` 工具读取的搜索闭包；装配点（runAgentTurn / runChildAgent）
  * 从 `runtime.searchConfig`（SearchConfigStore 工厂装配）注入。
  *
- * 引擎解析与凭证明文读取全部发生在工具 run 内（resolveActiveEngine），
+ * 引擎链解析与凭证明文读取全部发生在工具 run 内（resolveEngineChain），
  * 装配期零 IO——与 skills（装配期预算）/ task（装配期名单快照）不同，
  * search 的 description 是静态文案，无需装配期取数。未注入时（CLI 无
  * kkv、旧测试 mock）search 的 run 抛 ToolError（FAILED），工具对 LLM
@@ -148,12 +148,13 @@ export interface BuiltinToolSearchContext {
     engineId: EngineId
   ) => Promise<SearchEngineStatus>;
   /**
-   * 解析本次调用实际使用的引擎（解析链 inputEngine → defaultEngine →
-   * 第一个 configured；全无返回 null，工具回落未配置提示）。
+   * 解析本次调用的串行引擎链（engineOrder 优先级序；显式 inputEngine
+   * 时从该引擎起截取；只含 configured 引擎；全无返回空数组，工具回落
+   * 未配置提示）。
    */
-  readonly resolveActiveEngine: (
+  readonly resolveEngineChain: (
     inputEngine?: EngineId
-  ) => Promise<ResolvedEngineConfig | null>;
+  ) => Promise<ResolvedEngineConfig[]>;
 }
 
 /**

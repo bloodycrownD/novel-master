@@ -23,8 +23,9 @@ export const SEARCH_NOT_CONFIGURED_MESSAGE =
   "未配置任何搜索引擎。请先完成配置后重试：桌面端「设置 → AI 搜索」、移动端「我的 → 配置 → AI 搜索」；可为 bocha / tavily / brave 填写 API key，或为自托管的 searxng 填写 baseUrl。";
 
 /**
- * 按解析结果分发到引擎适配器。适配器抛出的错误由调用方（search 工具
- * run）统一 `toolFailed("search", cause)` 包装。
+ * 按解析结果分发到引擎适配器（单引擎请求，串行降级循环在
+ * search 工具 run 内）。适配器抛出的错误由调用方逐引擎收集、
+ * 全链失败 / 预算耗尽时聚合为一条 `toolFailed("search", …)` 返回。
  */
 export function dispatchSearch(
   resolved: ResolvedEngineConfig,
