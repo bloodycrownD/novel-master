@@ -4,7 +4,8 @@
  * - 全局 tab「被项目副本覆盖」标签按「任意项目存在同名副本」判定（SPEC D5），
  *   说明文案注明该全局版仅对无副本的项目生效。
  * - 批量模式复用 ManageHeader + useBatchSelection；切换 tab 自动退出批量。
- * - ⋮ 菜单：编辑 / 删除（文案区分影响范围）。
+ * - ⋮ 菜单：编辑 / 编辑信息 / 导出 ZIP / 删除（删除文案区分影响范围；
+ *   编辑信息对 invalid 技能禁用：先修复 SKILL.md 再改信息）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
