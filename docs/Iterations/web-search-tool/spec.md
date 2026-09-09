@@ -68,7 +68,7 @@ apps/desktop/renderer/features/settings/SearchEnginesView.tsx
 | `src/main/ipc/handlers/search.ts`（新）+ `handler-registry.ts` | 绑定到 main runtime 的 search-config store |
 | `renderer/ipc/invoke-registry.ts` / `client.ts` | 薄封装 |
 | `renderer/features/settings/SearchEnginesView.tsx`（新，修订轮改两级） | **引擎列表页**：每行 = 引擎名（`ENGINE_IDS` 派生顺序）+ `ApiKeyStatusTag` + 行菜单（上移/下移，首/尾对应项禁用，照 ProvidersView 菜单形态）；点击行 push 详情；**`SearchEngineDetailView.tsx`（新）**：单引擎表单（key 引擎 = 密码框 + 留空不改 + 清除；searxng = baseUrl 表单，空串保存即清除；URL 校验含 userinfo 前置于提交前），无默认引擎控件 |
-| `renderer/features/settings/settings-nav.ts` + `layout/SettingsOverlay.tsx` | AI 组加 `searchEngines`（列表）与 `searchEngineDetail`（详情，navState 携 engineId）两级 ViewId（照 providers/providerDetail 先例）；文案「搜索配置」 |
+| `renderer/features/settings/settings-nav.ts` + `renderer/layout/SettingsOverlay.tsx` | AI 组加 `searchEngines`（列表）与 `searchEngineDetail`（详情，navState 携 engineId）两级 ViewId（照 providers/providerDetail 先例）；文案「搜索配置」 |
 | `renderer/features/settings/AgentEditorView.tsx` L769-770、`AgentDefinitionEditorForm.tsx` L620-621 | hint 文案 10→11、名单加 search（后者为未挂载组件，照旧同步） |
 
 **apps/mobile**

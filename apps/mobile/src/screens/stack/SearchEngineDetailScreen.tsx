@@ -145,7 +145,7 @@ export function SearchEngineDetailScreen() {
       await load();
     } catch (error) {
       showToast(toastMessage('保存失败', error));
-      // 回读让状态标签立即反映已生效部分（与 desktop 93f534ea 口径对齐）。
+      // 回读让状态标签立即反映已生效部分（保存链路失败后状态与真值对齐的兜底口径）。
       await load();
     } finally {
       setSaving(false);
