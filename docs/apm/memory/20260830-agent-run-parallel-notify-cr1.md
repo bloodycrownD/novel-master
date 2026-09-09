@@ -140,3 +140,9 @@ user:
 
 assistant:
 per-session 化落地（80343a13）：通知 id nm-agent-keepalive-<sessionId>、各带 data.sessionId 复用既有 PRESS→setCurrentSession 导航链（此前常驻通知无 data 是点不动的原因）；单会话收尾只 cancel 自己的通知条、最后一个收尾才 stopForegroundService；desired/version 状态机退场，显示/取消即状态；串行链保留；同标签重复登记经 displayed 映射抑制。开关文案改「常驻通知」。测试随模型重写，踩坑两个：①mockImplementationOnce 未消费不被 clearAllMocks 清除、跨用例泄漏卡死后续 stopFg——改用「调用即信号」Promise 精确等待；②notifee mock 缺 cancelNotification 补齐。6 套件 97 全绿，设备已重拉 bundle（旧 ERROR 为改到一半的陈旧日志，二次拉包零错）。
+
+user:
+第三轮反馈：并行请求只有一个状态栏通知，不对。
+
+assistant:
+根因（2b21d44a）：Android startForeground 是替换语义——N 条通知同挂 asForegroundService 时后发顶掉前发，只剩最后一条。改为 FGS 载体模型：同一时刻仅载体会话的通知挂 FGS 标记（首个受理者），其余普通 ongoing（视觉/点按一致）；载体收尾先向剩余会话转交（重发挂 FGS 顺带撤旧条）再收尾，无剩余才停服务；stop→立即 start 同会话竞态用「调用时摘意图标记+任务时重登记探测」原样保留。教训：测试场景要先想清楚收尾顺序——载体最后收尾时集合已空本就该停服务，转交用例必须让载体先走。
