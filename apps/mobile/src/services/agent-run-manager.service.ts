@@ -103,6 +103,16 @@ interface RunEntry {
   onSettled?: (status: AgentRunSettledStatus) => void;
 }
 
+/**
+ * 投影视图（Step 3）：UI 侧 activeRunId / 会话运行态的数据源。
+ * 只读快照——`runId` 为 null 表示已受理但 RUN_STARTED 未达（starting），
+ * UI 侧把 starting 与 running 同等对待为「有 run」（见 spec 融合规则）。
+ */
+export interface AgentRunEntryView {
+  readonly status: 'starting' | 'running';
+  readonly runId: string | null;
+}
+
 export interface AgentRunManagerParams {
   readonly runtime: AgentRunManagerRuntime;
   /** 测试注入用；默认走 services/agent-run.service 的包装。 */
@@ -123,6 +133,8 @@ export class AgentRunManager {
   private uiBridge: AgentRunUiBridge | undefined;
   private prefBridge: AgentRunPrefBridge | undefined;
   private scopeBridge: AgentRunScopeBridge | undefined;
+  /** 投影变更监听（Step 3）：entries 每次变更（set/迁移/删除）后同步通知。 */
+  private readonly entryListeners = new Set<() => void>();
   /** onForegroundEvent 点按监听的退订函数（dispose 时退订，防 retry 重建累积）。 */
   private offNotificationTap: (() => void) | undefined;
   private disposed = false;
@@ -153,10 +165,14 @@ export class AgentRunManager {
     // 通知点按：切 scope 到目标会话 + 导航 Chat tab。
     // onBackgroundEvent 为模块级一次注册（handler 引用替换），不随实例退订；
     // 这里只握 onForegroundEvent 的退订函数，dispose 时退订（MF-5）。
-    this.offNotificationTap = registerAgentNotificationTapHandling(sessionId => {
-      void this.scopeBridge?.setCurrentSession(sessionId).catch(() => undefined);
-      navigateToChatTabFromNotification();
-    });
+    this.offNotificationTap = registerAgentNotificationTapHandling(
+      sessionId => {
+        void this.scopeBridge
+          ?.setCurrentSession(sessionId)
+          .catch(() => undefined);
+        navigateToChatTabFromNotification();
+      },
+    );
   }
 
   /** Provider ready 后注入 UI toast 桥。 */
@@ -180,6 +196,37 @@ export class AgentRunManager {
   }
 
   /**
+   * 某 session 的 run 投影（Step 3）：无 run 为 null；starting 时 runId 为 null。
+   * UI 侧（useAgentRunLifecycle 的 activeRunId 采纳 / 会话运行态视图）以此为唯一
+   * 事实源，不自行推衡。事件同步总线保证 UI 侧同名事件回调执行时投影已更新
+   * （Manager 订阅先于 UI 建立）。
+   */
+  getEntry(sessionId: string): AgentRunEntryView | null {
+    const entry = this.entries.get(sessionId);
+    if (entry == null) {
+      return null;
+    }
+    return {status: entry.status, runId: entry.runId};
+  }
+
+  /**
+   * 订阅 entries 变更（受理/迁移/收尾均触发）——会话运行态视图的响应源。
+   * 返回退订函数；dispose 后不再通知。
+   */
+  subscribeEntries(listener: () => void): () => void {
+    this.entryListeners.add(listener);
+    return () => {
+      this.entryListeners.delete(listener);
+    };
+  }
+
+  private notifyEntriesChanged(): void {
+    for (const listener of [...this.entryListeners]) {
+      listener();
+    }
+  }
+
+  /**
    * 发起 run：per-session 门禁 + fire-and-forget。
    *
    * 门禁钉死「RunEntry 存在（starting/running）或 abortRegistry.has 为真即拒绝，
@@ -198,7 +245,10 @@ export class AgentRunManager {
     if (this.disposed) {
       return {ok: false, error: '运行时正在重建，请稍后重试'};
     }
-    if (this.entries.has(sessionId) || this.runtime.abortRegistry.has(sessionId)) {
+    if (
+      this.entries.has(sessionId) ||
+      this.runtime.abortRegistry.has(sessionId)
+    ) {
       return {ok: false, error: '该会话已有进行中的生成，请先等待完成或停止'};
     }
 
@@ -208,6 +258,7 @@ export class AgentRunManager {
       onSettled: options?.onSettled,
     };
     this.entries.set(sessionId, entry);
+    this.notifyEntriesChanged();
     incrementAgentActive();
     void startAgentKeepAliveService().catch(() => undefined);
     void this.maybeEnsureNotificationPermission();
@@ -251,6 +302,7 @@ export class AgentRunManager {
         // 无终态事件」的窗口（否则 entry/refcount 永久泄漏）；finishRun 的
         // entry+runId 所有权校验是另一道双保险。
         this.entries.delete(sessionId);
+        this.notifyEntriesChanged();
         decrementAgentActive();
         this.syncKeepAliveQuietly();
       });
@@ -283,6 +335,7 @@ export class AgentRunManager {
     }
     entry.status = 'running';
     entry.runId = payload.runId;
+    this.notifyEntriesChanged();
   }
 
   private onRunFinished(payload: AgentRunFinishedPayload): void {
@@ -307,6 +360,7 @@ export class AgentRunManager {
       return;
     }
     this.entries.delete(sessionId);
+    this.notifyEntriesChanged();
     decrementAgentActive();
     this.syncKeepAliveQuietly();
 
@@ -365,7 +419,10 @@ export class AgentRunManager {
   /** fire-and-forget 调 syncKeepAlive：吞错但留日志，防 unhandled rejection（MF-4）。 */
   private syncKeepAliveQuietly(): void {
     void this.syncKeepAlive().catch(err => {
-      console.error('[novel-master/agent-run-manager] syncKeepAlive failed', err);
+      console.error(
+        '[novel-master/agent-run-manager] syncKeepAlive failed',
+        err,
+      );
     });
   }
 
@@ -390,6 +447,8 @@ export class AgentRunManager {
       this.entries.delete(sessionId);
       decrementAgentActive();
     }
+    this.notifyEntriesChanged();
+    this.entryListeners.clear();
     void stopAgentKeepAliveService().catch(() => undefined);
   }
 }

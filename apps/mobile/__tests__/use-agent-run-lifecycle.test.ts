@@ -192,6 +192,70 @@ describe('useAgentRunLifecycle (slimmed)', () => {
     expect(lifecycle.acceptRunEvent('run-1')).toBe(false);
   });
 
+  it('T-P3a: reset 时采纳 Manager running 投影——activeRunId 立即恢复严格匹配', () => {
+    // 重进会话场景：Manager 已回填 runId（RUN_STARTED 已达），reset 直接采纳，
+    // 不等首事件反填、不依赖恢复窗口放宽。
+    let entry: {status: 'starting' | 'running'; runId: string | null} | null = {
+      status: 'running',
+      runId: 'run-live-1',
+    };
+    const lifecycle = mountLifecycle({
+      getManagerEntry: () => entry,
+      getResumeWindowEligible: () => false,
+    });
+    expect(lifecycle.activeRunId).toBe(null);
+    act(() => {
+      lifecycle.resetUiForSessionChange();
+    });
+    expect(lifecycle.activeRunId).toBe('run-live-1');
+    // 严格匹配恢复：同 runId 的 delta 被接纳、异 runId 被拒
+    expect(lifecycle.acceptRunEvent('run-live-1')).toBe(true);
+    expect(lifecycle.acceptRunEvent('run-other')).toBe(false);
+    // FINISHED 直接收尾（无需开窗）
+    act(() => {
+      lifecycle.onRunFinished({
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: 'run-live-1',
+        stopReason: 'end_turn',
+      });
+    });
+    expect(lifecycle.activeRunId).toBe(null);
+    entry = null;
+  });
+
+  it('T-P3b: starting 投影（runId 未知）不采纳——恢复窗口放宽接纳首事件', () => {
+    // 受理空窗场景：entry 处 starting（RUN_STARTED 未达），投影 runId 为 null，
+    // reset 不采纳；开窗资格由 Provider 侧扩为 registry ∥ Manager（本测试直接
+    // 模拟 eligible=true），首事件（RUN_STARTED 前的 delta / 迟到的 FINISHED）
+    // 经窗口放宽接纳并反填。
+    const lifecycle = mountLifecycle({
+      getManagerEntry: () => ({status: 'starting', runId: null}),
+      getResumeWindowEligible: () => true,
+      getUiRunning: () => true,
+    });
+    act(() => {
+      lifecycle.resetUiForSessionChange();
+    });
+    expect(lifecycle.activeRunId).toBe(null);
+    // 窗口放宽：非空 runId 接纳 + 反填（setState 后需 re-render 再读）
+    let accepted = false;
+    act(() => {
+      accepted = lifecycle.acceptRunEvent('run-late-1');
+    });
+    expect(accepted).toBe(true);
+    expect(lifecycle.activeRunId).toBe('run-late-1');
+  });
+
+  it('T-P3c: 无投影（未注入 getManagerEntry）时 reset 归零——旧口径不变', () => {
+    const lifecycle = mountLifecycle({getResumeWindowEligible: () => false});
+    act(() => {
+      lifecycle.resetUiForSessionChange();
+    });
+    expect(lifecycle.activeRunId).toBe(null);
+    expect(lifecycle.acceptRunEvent('run-any')).toBe(false);
+  });
+
   it('FINISHED 是窗口内第一条事件：accept 反填先于内部守卫，收尾正常', () => {
     const onRunUiDeactivate = jest.fn();
     const lifecycle = mountLifecycle({
@@ -226,7 +290,11 @@ describe('useAgentRunLifecycle (slimmed)', () => {
     });
     act(() => {
       lifecycle.resetUiForSessionChange();
-      lifecycle.onRunStarted({sessionId: 's1', projectId: 'p1', runId: 'run-live-1'});
+      lifecycle.onRunStarted({
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: 'run-live-1',
+      });
     });
     expect(lifecycle.activeRunId).toBe('run-live-1');
     // 窗已关：新 runId 被拒

@@ -34,7 +34,10 @@ import type {
 import {useToast} from '@/components/chrome/ToastHost';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useMobileScope} from '@/hooks/useMobileScope';
-import {useAgentRunLifecycle, RUN_LAUNCH_PROTECT_WINDOW_MS} from '@/hooks/useAgentRunLifecycle';
+import {
+  useAgentRunLifecycle,
+  RUN_LAUNCH_PROTECT_WINDOW_MS,
+} from '@/hooks/useAgentRunLifecycle';
 import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
@@ -74,7 +77,10 @@ export type ChatTabContextValue = {
   readonly setChatSubview: (subview: ChatSubview) => void;
   readonly agentMeta: ChatAgentMeta;
   readonly uiRunning: boolean;
+  /** 全局任意会话运行中（refcount 视图）。 */
   readonly agentActive: boolean;
+  /** 当前会话运行中（Manager per-session 投影视图，Step 3）。 */
+  readonly sessionAgentRunning: boolean;
   readonly activeRunId: string | null;
   readonly streamTailGenerating: boolean;
   readonly streamingText: string;
@@ -298,22 +304,39 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
   useEffect(() => subscribeMobileAgentActivity(setAgentActive), []);
 
+  // Step 3：当前会话运行中视图（Manager per-session 投影驱动，与全局
+  // agentActive refcount 视图并存——会话内 UI 消费 sessionRunning，
+  // 跨会话全局忙消费 agentActive）。
+  const manager = runtime.agentRunManager;
+  const [sessionAgentRunning, setSessionAgentRunning] = useState(
+    () => sessionId != null && manager.hasRun(sessionId),
+  );
+  useEffect(() => {
+    const sync = () =>
+      setSessionAgentRunning(sessionId != null && manager.hasRun(sessionId));
+    sync();
+    return manager.subscribeEntries(sync);
+  }, [manager, sessionId]);
+
   const lifecycle = useAgentRunLifecycle({
     onRunUiActivate: abort.markRunStarted,
     onRunUiDeactivate: abort.markRunEnded,
     getUiRunning: abort.getUiRunning,
-    // 恢复窗口资格：session 切换时 core abortRegistry 仍注册 in-flight run
-    // 则开窗，activeRunId==null 期间放宽事件接纳（详见 hook 注释）。
+    // 恢复窗口资格：registry 或 Manager 任一记录 in-flight run 即开窗
+    // （Manager 的 starting 期 registry 尚未 register、runId 未知，靠窗口
+    // 放宽首事件接纳；见 spec 融合规则）。
     getResumeWindowEligible: () =>
-      sessionId != null && runtime.abortRegistry.has(sessionId),
+      sessionId != null &&
+      (runtime.abortRegistry.has(sessionId) || manager.hasRun(sessionId)),
+    // Step 3 投影：重进会话时采纳 Manager 已回填的 runId。
+    getManagerEntry: () =>
+      sessionId != null ? manager.getEntry(sessionId) : null,
   });
 
   // 主会话流式 partial 重进恢复：webviewReady / 注入标记提升到常驻 Provider，
   // 与 WebView mount 绑定复位（chatSubview 离开 conversation / sessionKey 变化）。
   const sessionKey =
-    projectId != null && sessionId != null
-      ? `${projectId}:${sessionId}`
-      : '';
+    projectId != null && sessionId != null ? `${projectId}:${sessionId}` : '';
   const inject = useChatStreamResumeInject({
     chatSubview: scope.chatSubview,
     sessionKey,
@@ -362,7 +385,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   useRunResumeProbe({
     sessionId,
     isRunRegistered: () =>
-      sessionId != null && runtime.abortRegistry.has(sessionId),
+      sessionId != null &&
+      (runtime.abortRegistry.has(sessionId) || manager.hasRun(sessionId)),
     onRunActive: () => {
       abort.markRunStarted();
     },
@@ -373,7 +397,10 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       // 「run 已结束」收尾，uiRunning 翻 false 后迟到的真 RUN_STARTED 会被
       // stale 守卫拒收，本轮流式 UI 全丢。窗口内不收尾；过期后仍 !has
       // 才兑底。守卫落本闭包一处，同时覆盖前台探针与 30s 轮询两条触发路径。
-      if (Date.now() - lifecycle.getBeginUiRunAt() < RUN_LAUNCH_PROTECT_WINDOW_MS) {
+      if (
+        Date.now() - lifecycle.getBeginUiRunAt() <
+        RUN_LAUNCH_PROTECT_WINDOW_MS
+      ) {
         return;
       }
       abort.markRunEnded();
@@ -423,7 +450,9 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
     abort.abortUiRun(chatMessageCountRef.current);
   }, [abort]);
 
-  agentRunningRef.current = agentActive;
+  // Step 3：会话内 reload 语义随「当前会话运行中」视图（全局 agentActive 只作
+  // 跨会话全局忙视图，不再驱动本会话的 reload 分支）。
+  agentRunningRef.current = sessionAgentRunning;
 
   const closeMessageMenu = useCallback(() => {
     setMessageMenuTarget(undefined);
@@ -505,6 +534,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       agentMeta: scope.agentMeta,
       uiRunning: abort.uiRunning,
       agentActive,
+      sessionAgentRunning,
       activeRunId: lifecycle.activeRunId,
       streamTailGenerating: abort.uiRunning,
       streamingText: stream.streamingText,
@@ -579,6 +609,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       lifecycle,
       abort,
       agentActive,
+      sessionAgentRunning,
       stream,
       messages,
       handleMessagesChanged,

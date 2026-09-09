@@ -70,6 +70,12 @@ const mockRuntime: any = {
     unregister: jest.fn(),
     has: jest.fn(() => false),
   },
+  // Step 3：Manager 投影 mock——默认无 run；单例内可改 hasRun/getEntry 实现。
+  agentRunManager: {
+    hasRun: jest.fn(() => false),
+    getEntry: jest.fn(() => null),
+    subscribeEntries: jest.fn(() => jest.fn()),
+  },
   streamRegistry: {
     register: jest.fn(),
     reset: jest.fn(),
@@ -470,7 +476,8 @@ describe('ChatTabScreen integration', () => {
     // web 侧 ready：webReady=true 后子组件 messages effect 直发
     // sessionSnapshot（needsOpenSnapshot 路径），注入 effect 随后把
     // registry partial 经 pushStreamDelta（RAF 冲洗）注入。
-    const WebViewMock = require('react-native-webview').default as React.ComponentType<{
+    const WebViewMock = require('react-native-webview')
+      .default as React.ComponentType<{
       onMessage?: (event: {nativeEvent: {data: string}}) => void;
     }>;
     const webViews = root

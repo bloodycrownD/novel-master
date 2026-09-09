@@ -21,6 +21,7 @@ import {
   shouldIgnoreStaleRunStarted,
 } from '@novel-master/core/agent';
 import {useCallback, useRef, useState} from 'react';
+import type {AgentRunEntryView} from '@/services/agent-run-manager.service';
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
@@ -92,6 +93,13 @@ export type UseAgentRunLifecycleParams = {
    * 挂到既有探针/轮询节点，仅作收尾校准。
    */
   readonly getResumeWindowEligible?: () => boolean;
+  /**
+   * Manager 的 per-session run 投影（Step 3）：session 切换/重进时若该会话
+   * 有 running 中的 run（runId 已回填），直接采纳为 activeRunId——立即恢复
+   * 严格事件匹配，不等首事件反填。starting（runId 未知）不采纳，由恢复窗口
+   * 放宽接纳首事件。未注入时（子会话屏等无 Manager 场景）行为与旧版一致。
+   */
+  readonly getManagerEntry?: () => AgentRunEntryView | null;
 };
 
 export function useAgentRunLifecycle({
@@ -99,6 +107,7 @@ export function useAgentRunLifecycle({
   onRunUiDeactivate,
   getUiRunning,
   getResumeWindowEligible,
+  getManagerEntry,
 }: UseAgentRunLifecycleParams = {}): AgentRunLifecycle {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
@@ -116,6 +125,8 @@ export function useAgentRunLifecycle({
   getUiRunningRef.current = getUiRunning;
   const getResumeWindowEligibleRef = useRef(getResumeWindowEligible);
   getResumeWindowEligibleRef.current = getResumeWindowEligible;
+  const getManagerEntryRef = useRef(getManagerEntry);
+  getManagerEntryRef.current = getManagerEntry;
 
   // 恢复窗口：开启期间 activeRunId==null 时事件接纳放宽为任何非空 runId。
   // 无「窗口超时关闭」机制——activeRunId 反填后放宽条件自然失效，收尾残留
@@ -220,8 +231,13 @@ export function useAgentRunLifecycle({
   }, [syncActiveRunId]);
 
   const resetUiForSessionChange = useCallback(() => {
-    syncActiveRunId(null);
-    // session 切换：旧窗口随 reset 关闭；registry 仍注册 in-flight run 时开新窗。
+    // Step 3 投影采纳：Manager 记录该会话 running 中的 run（runId 已回填）
+    // 时直接采纳，立即恢复严格匹配；starting（runId 未知）不采纳，交给
+    // 恢复窗口放宽接纳首事件；无 run 则归零。
+    const entry = getManagerEntryRef.current?.() ?? null;
+    syncActiveRunId(entry?.runId ?? null);
+    // session 切换：旧窗口随 reset 关闭；registry/Manager 仍记录 in-flight run
+    // 时开新窗（starting 期 runId 未知、registry-only 的兼容场景均靠它放宽）。
     resumeWindowRef.current = getResumeWindowEligibleRef.current?.() ?? false;
   }, [syncActiveRunId]);
 

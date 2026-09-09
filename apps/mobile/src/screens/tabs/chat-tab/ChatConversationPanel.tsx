@@ -58,7 +58,7 @@ export function ChatConversationPanel({
     streamMetricsAccRef,
     streamMetricsLastRun,
     uiRunning,
-    agentActive,
+    sessionAgentRunning,
     useWebviewTranscript,
     transcriptWebRef,
     chatScrollKey,
@@ -198,7 +198,7 @@ export function ChatConversationPanel({
           sessionKey={chatScrollKey ?? 'no-session'}
           messages={chatMessages}
           hasMore={hasMoreMessages}
-          agentRunning={agentActive}
+          agentRunning={sessionAgentRunning}
           uiRunning={uiRunning}
           toolInvoking={uiRunning}
           flags={transcriptFlags}
@@ -224,7 +224,7 @@ export function ChatConversationPanel({
           streamingText={streamingText}
           streamingThinking={streamingThinking}
           toolInvoking={uiRunning}
-          agentRunning={agentActive}
+          agentRunning={sessionAgentRunning}
           chatRichTextEnabled={chatRichTextEnabled}
           richRenderEpoch={richRenderEpoch}
           initialScroll={cachedChatScroll ?? null}

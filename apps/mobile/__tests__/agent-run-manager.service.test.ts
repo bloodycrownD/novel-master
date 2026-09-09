@@ -98,6 +98,39 @@ describe('AgentRunManager', () => {
     setMobileAgentActive(false);
   });
 
+  it('T-P3d: getEntry 投影随生命周期迁移（starting→running→null），subscribeEntries 逐点通知', async () => {
+    const h = createHarness();
+    h.runAgentTurn.mockImplementation(
+      () => new Promise<undefined>(() => undefined),
+    );
+    const events: string[] = [];
+    const unsubscribe = h.manager.subscribeEntries(() => events.push('notify'));
+
+    // 受理 → starting（runId 未知）
+    const started = h.manager.startRun('s1', 'p', 'hi');
+    expect(started.ok).toBe(true);
+    expect(h.manager.getEntry('s1')).toEqual({status: 'starting', runId: null});
+    expect(h.manager.hasRun('s1')).toBe(true);
+    expect(events).toHaveLength(1);
+
+    // RUN_STARTED → running + runId 回填
+    publishStarted(h.eventBus, 's1', 'r1');
+    expect(h.manager.getEntry('s1')).toEqual({status: 'running', runId: 'r1'});
+    expect(events).toHaveLength(2);
+
+    // FINISHED → 投影清空
+    publishFinished(h.eventBus, 's1', 'r1');
+    expect(h.manager.getEntry('s1')).toBe(null);
+    expect(h.manager.hasRun('s1')).toBe(false);
+    expect(events).toHaveLength(3);
+
+    // 退订后不再通知
+    unsubscribe();
+    h.manager.startRun('s2', 'p', 'again');
+    expect(events).toHaveLength(3);
+    expect(h.manager.getEntry('s2')).toEqual({status: 'starting', runId: null});
+  });
+
   it('T-P1: session A run 进行中 startRun(B) 正常受理，事件与状态互不串扰', () => {
     const h = createHarness();
     const settledA = jest.fn();
@@ -294,7 +327,11 @@ describe('AgentRunManager', () => {
 
     expect(errorSpy).toHaveBeenCalledWith(
       '[novel-master/agent-run-manager] run failed (uiBridge not ready)',
-      expect.objectContaining({sessionId: 'a', runId: 'r1', error: 'model error'}),
+      expect.objectContaining({
+        sessionId: 'a',
+        runId: 'r1',
+        error: 'model error',
+      }),
     );
     errorSpy.mockRestore();
   });
