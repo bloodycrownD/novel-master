@@ -382,7 +382,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   // 聊天链接路由：探测经 ipcVfsRead（chat 域=core session 域、session 域=core
   // project 域，命名陷阱见 chat-link-route 头注）；执行 preview 时复用
   // openChatWorkspacePreview 的「选 tab + 确保可见」链路；外跳消费现成
-  // ipcAppOpenExternal（nm:shell/openExternal），失败静默兜底。
+  // ipcAppOpenExternal（nm:shell/openExternal），失败静默兜底。探测 miss
+  // 接 console.info 日志（MF-5：生产可观测，兑现 chat-link-route 头注承诺）。
   const openChatLink = useCallback(
     (href: string) => {
       const sessionContext =
@@ -394,6 +395,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
         sessionContext,
         projectContext,
         vfsRead: ipcVfsRead,
+        log: (message, detail) => console.info(message, detail),
       }).then((action) => {
         if (action.kind === "external") {
           void ipcAppOpenExternal(action.url).catch(() => undefined);
