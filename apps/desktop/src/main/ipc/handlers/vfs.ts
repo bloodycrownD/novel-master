@@ -271,7 +271,7 @@ export async function handleVfsZipExport(
     const result = await exportVfsZipWithDialog(
       rt,
       scope,
-      { directoryPath: req.directoryPath },
+      { directoryPath: req.directoryPath, fileName: req.fileName },
       focusedWindow(),
     );
     return { ok: true, data: result };

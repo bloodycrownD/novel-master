@@ -441,6 +441,8 @@ export type VfsZipRequest = VfsScopeRequest & {
   readonly confirmed?: boolean;
   /** 子树目标目录；缺省 ≡ `/`（整域） */
   readonly directoryPath?: string;
+  /** 保存框默认名覆盖（如技能导出 `{技能名}.zip`）；仅导出方向消费，导入忽略。 */
+  readonly fileName?: string;
 };
 
 export type VfsZipExportResult = 'saved' | 'cancelled';

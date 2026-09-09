@@ -14,24 +14,37 @@ import {exportBytesViaDocumentPicker, pickAndReadBytes} from './document-io';
 import {blobFs, bytesToBase64} from './rn-file-io';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
-function vfsZipExportFileName(scope: VfsScope, directoryPath: string): string {
-  const pathSuffix =
-    directoryPath === '/'
-      ? ''
-      : `-${directoryPath.replace(/^\//, '').replace(/\//g, '-')}`;
-  if (scope.kind === 'global') {
-    return `vfs-global${pathSuffix}.zip`;
+/**
+ * 从目标路径推导 ZIP 基名：子目录取末段、文件取文件名；根目录返回 null
+ * （由服务层解析项目名，见 resolveWorkspaceZipName）。
+ */
+export function zipBaseNameFromPath(targetPath: string): string | null {
+  const normalized = targetPath.replace(/\/+$/, '');
+  if (normalized === '' || normalized === '/') {
+    return null;
   }
-  if (scope.kind === 'global-meta') {
-    return `vfs-global-meta${pathSuffix}.zip`;
+  const lastSegment = normalized.slice(normalized.lastIndexOf('/') + 1);
+  return lastSegment === '' ? null : lastSegment;
+}
+
+/** 根目录导出的备用名：项目已删除或域无 projectId 时使用。 */
+const WORKSPACE_FALLBACK_ZIP_NAME = 'workspace.zip';
+
+/** 根目录导出时以项目名命名；解析失败回退备用名，不阻断导出。 */
+async function resolveWorkspaceZipName(
+  runtime: MobileNovelMasterRuntime,
+  scope: VfsScope,
+): Promise<string> {
+  const projectId = (scope as {projectId?: string}).projectId;
+  if (projectId == null) {
+    return WORKSPACE_FALLBACK_ZIP_NAME;
   }
-  if (scope.kind === 'project-meta') {
-    return `vfs-project-${scope.projectId}-meta${pathSuffix}.zip`;
+  try {
+    const project = await runtime.projects.get(projectId);
+    return `${project.name}.zip`;
+  } catch {
+    return WORKSPACE_FALLBACK_ZIP_NAME;
   }
-  if (scope.kind === 'project') {
-    return `vfs-project-${scope.projectId}${pathSuffix}.zip`;
-  }
-  return `vfs-session-${scope.sessionId}${pathSuffix}.zip`;
 }
 
 const EOCD_SIGNATURE = 0x06054b50;
@@ -76,10 +89,17 @@ function assertZipArchive(bytes: Uint8Array): void {
   }
 }
 
+/**
+ * 导出 VFS 子树为 ZIP：默认名 = 覆盖名（fileName） > 子目录末段 > 根目录项目名
+ * > 备用名；仅作保存框默认值，用户可改。
+ */
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options: {readonly directoryPath?: string} = {},
+  options: {
+    readonly directoryPath?: string;
+    readonly fileName?: string;
+  } = {},
 ): Promise<'saved' | 'cancelled'> {
   const directoryPath =
     options.directoryPath == null || options.directoryPath.trim() === ''
@@ -89,8 +109,15 @@ export async function exportVfsZip(
   const bytes = await zipSvc.export(scope, {directoryPath});
   assertZipArchive(bytes);
 
+  const base = zipBaseNameFromPath(directoryPath);
+  const zipName =
+    options.fileName ??
+    (base != null
+      ? `${base}.zip`
+      : await resolveWorkspaceZipName(runtime, scope));
+
   return exportBytesViaDocumentPicker({
-    fileName: vfsZipExportFileName(scope, directoryPath),
+    fileName: zipName,
     mimeType: 'application/zip',
     write: tmpPath =>
       blobFs().writeFile(tmpPath, bytesToBase64(bytes), 'base64'),
