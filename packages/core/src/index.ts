@@ -131,7 +131,6 @@ export {
   KEY_CURRENT_SESSION_ID,
   KEY_CURRENT_PROVIDER_ID,
   KEY_CURRENT_MODEL_ID,
-  KEY_CURRENT_REGEX_GROUP_ID,
   KEY_CURRENT_AGENT_ID,
 } from "./service/persistent-state/impl/workspace-state-keys.js";
 /**

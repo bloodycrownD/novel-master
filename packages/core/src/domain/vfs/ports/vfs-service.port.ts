@@ -11,8 +11,9 @@
 import type { VfsEntryKind } from "../model/vfs-entry.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import type { VfsGrepOptions } from "../logic/vfs-grep.js";
+import type { VfsContentSize } from "../model/vfs-content-size.js";
 
-export type { VfsEntryKind, VfsListEntry };
+export type { VfsEntryKind, VfsListEntry, VfsContentSize };
 
 /** Result of reading a single path. */
 export interface VfsReadResult {
@@ -48,6 +49,15 @@ export interface VfsService {
   mkdir(path: string): Promise<void>;
 
   read(path: string): Promise<VfsReadResult>;
+
+  /**
+   * 按路径轻量探测文件 content 大小（不解正文）。
+   *
+   * @remarks 供读取侧降级闸门使用：超大文件不进 `read` 全文读取，避免后动
+   * 历史毒数据（巨型角色卡导入产物）在组装/渲染链上触发原生 OOM。
+   * 目录行 / 路径不存在等无法探测的情形返回 `null`，由调用方回退。
+   */
+  findContentSize(path: string): Promise<VfsContentSize | null>;
 
   write(path: string, content: string): Promise<{ version: number }>;
 

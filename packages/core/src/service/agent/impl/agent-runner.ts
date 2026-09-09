@@ -11,10 +11,6 @@ import type {
   ToolUseBlock,
 } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import { depthByMessageId } from "@/domain/depth/logic/depth-from-tail.js";
-import { listVisibleForDepth } from "@/domain/depth/logic/depth-from-tail.js";
-import { applyRegexChannelToMessages } from "@/domain/regex/logic/apply-regex-rules.js";
-import { resolveActiveCompiledRules } from "@/domain/regex/logic/resolve-active-regex-rules.js";
 import {
   assertNoCrossRoundDoomLoop,
   assertNoDoomLoopInBlocks,
@@ -45,7 +41,6 @@ import {
   buildPromptLlmInputFromLayout,
   computeLlmExportZonesFromLayout,
 } from "../../prompt/render-prompt.js";
-import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { applyThinkingContextForLlm } from "../../prompt/apply-thinking-context-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
@@ -54,7 +49,6 @@ import type { SkillService } from "@/service/skills/skills.port.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -116,7 +110,6 @@ export interface DefaultAgentRunnerDeps {
   readonly messageTranscriptEffects?: MessageTranscriptEffectsService;
   /** 按 sessionId 累积 in-flight 流式 partial，供子会话首次进入查询。 */
   readonly streamRegistry?: AgentStreamRegistry;
-  readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
   /** 思考上下文偏好窄切片（每 run 一次快照；未注入时等同默认开）。 */
   readonly preferences?: Pick<
@@ -340,15 +333,6 @@ export class DefaultAgentRunner implements AgentRunner {
         let visible = await session.list();
         if (signal?.aborted) {
           await handleAbort("after_session_list");
-          break;
-        }
-        visible = await applyLlmRegexChannelToVisible(
-          this.deps,
-          options,
-          visible
-        );
-        if (signal?.aborted) {
-          await handleAbort("after_regex_channel");
           break;
         }
 
@@ -816,35 +800,6 @@ export class DefaultAgentRunner implements AgentRunner {
       rounds,
     };
   }
-}
-
-async function applyLlmRegexChannelToVisible(
-  deps: DefaultAgentRunnerDeps,
-  options: AgentRunOptions,
-  visible: readonly ChatMessage[]
-): Promise<ChatMessage[]> {
-  if (!options.activeRegexGroupId || deps.regexConfig == null) {
-    return [...visible];
-  }
-  if (deps.listAllSessionMessages != null) {
-    const all = await deps.listAllSessionMessages();
-    return applyRegexChannelForLlm(
-      deps.regexConfig,
-      options.activeRegexGroupId,
-      all,
-      visible
-    );
-  }
-  const rules = await resolveActiveCompiledRules(
-    deps.regexConfig,
-    options.activeRegexGroupId
-  );
-  if (rules.length === 0) {
-    return [...visible];
-  }
-  const visibleSorted = listVisibleForDepth(visible);
-  const depthMap = depthByMessageId(visibleSorted);
-  return applyRegexChannelToMessages(visible, rules, "llm", depthMap);
 }
 
 /**

@@ -12,9 +12,6 @@ export type SettingsViewId =
   | "providerDetail"
   | "providerCreate"
   | "modelSampling"
-  | "regexGroups"
-  | "regexRules"
-  | "regexRuleEditor"
   | "skillsManage"
   | "skillDetail";
 
@@ -33,10 +30,7 @@ export const SETTINGS_NAV = [
   },
   {
     label: "高级",
-    items: [
-      { id: "regexGroups" as const, label: "正则过滤", icon: "🛡️" },
-      { id: "skillsManage" as const, label: "技能管理", icon: "⚡" },
-    ],
+    items: [{ id: "skillsManage" as const, label: "技能管理", icon: "⚡" }],
   },
   {
     label: "数据",
@@ -59,7 +53,6 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   agentsSettings: "智能体配置",
   searchEngines: "AI 搜索",
   providers: "服务商配置",
-  regexGroups: "正则过滤",
   skillsManage: "技能管理",
 };
 
@@ -72,7 +65,6 @@ export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewI
   ) {
     return "providers";
   }
-  if (viewId === "regexRules" || viewId === "regexRuleEditor") return "regexGroups";
   if (viewId === "skillDetail") return "skillsManage";
   return viewId;
 }
@@ -95,8 +87,6 @@ export interface SettingsNavState {
   editingAgentDisplayName?: string;
   readonly editingProviderId?: string;
   readonly editingSavedModelId?: string;
-  readonly editingRegexGroupId?: string;
-  readonly editingRegexRuleId?: string;
   /** skillDetail 页定位的技能（域 + 项目 + 名称）。 */
   viewingSkillRef?: import("@shared/ipc-types").SkillRefDto;
 }

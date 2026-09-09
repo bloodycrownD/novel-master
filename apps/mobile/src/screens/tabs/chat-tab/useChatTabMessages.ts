@@ -15,9 +15,9 @@ import {
   setSessionViewCache,
 } from '@/services/chat-session-view-cache';
 import {
-  loadSessionMessagesPageForDisplay,
-  loadSessionMessagesTailForDisplay,
-} from '@/services/regex-apply-channel';
+  loadSessionMessagesPage,
+  loadSessionMessagesTail,
+} from '@/services/session-messages-loader';
 import {prependOlderMessages} from '@/services/message-paging';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import type {ChatSubview} from './useChatTabScope';
@@ -90,7 +90,7 @@ export function useChatTabMessages({
             return [...cached.messages];
           }
         }
-        const list = await loadSessionMessagesTailForDisplay(
+        const list = await loadSessionMessagesTail(
           runtime,
           sessionId,
           CHAT_PAGE_SIZE,
@@ -149,7 +149,7 @@ export function useChatTabMessages({
       if (beforeSeq == null) {
         return;
       }
-      const older = await loadSessionMessagesPageForDisplay(
+      const older = await loadSessionMessagesPage(
         runtime,
         sessionId,
         {

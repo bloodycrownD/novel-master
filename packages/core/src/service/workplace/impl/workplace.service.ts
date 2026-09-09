@@ -4,6 +4,7 @@
  * @module service/workplace/impl/workplace.service
  */
 
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import {
   assertLogicalPathAllowed,
   scopeKey as vfsScopeKey,
@@ -37,10 +38,19 @@ import type {
   WorkplacePersistBlock,
   WorkplaceService,
 } from "../workplace.port.js";
+import {
+  ensureWorkplaceViewEntry,
+  getCachedWorkplaceView,
+  publishWorkplaceView,
+  type WorkplaceViewCacheValue,
+  type WorkplaceViewSigs,
+} from "./workplace-view-cache.js";
 
 /** Dependencies for {@link DefaultWorkplaceService}. */
 export interface WorkplaceServiceDeps {
   readonly scope: WorkplaceScope;
+  /** conn 级 L1 memo 的 WeakMap key（见 workplace-view-cache.ts）。 */
+  readonly conn: TdbcConnection;
   readonly vfs: VfsEntryRepository;
   readonly workplace: WorkplaceRepository;
 }
@@ -50,9 +60,6 @@ export interface WorkplaceServiceDeps {
  */
 export class DefaultWorkplaceService implements WorkplaceService {
   readonly scope: WorkplaceScope;
-
-  /** 并发 materializeLiveView 合并为单次 metadata 加载。 */
-  private liveViewInFlight: Promise<WorkplaceLiveView> | null = null;
 
   constructor(private readonly deps: WorkplaceServiceDeps) {
     this.scope = deps.scope;
@@ -162,35 +169,27 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   async materializeLiveView(): Promise<WorkplaceLiveView> {
-    if (this.liveViewInFlight != null) {
-      return this.liveViewInFlight;
-    }
-    const inFlight = this.doMaterializeLiveView();
-    this.liveViewInFlight = inFlight;
-    try {
-      return await inFlight;
-    } finally {
-      if (this.liveViewInFlight === inFlight) {
-        this.liveViewInFlight = null;
-      }
-    }
+    // 并发去重由 conn 级缓存 entry.inFlight 承接（升级为跨实例，语义等价于
+    // 原实例级 liveViewInFlight 的合并行为）。
+    return this.doMaterializeLiveView();
   }
 
   async materializePersistBlock(): Promise<WorkplacePersistBlock> {
-    const ctx = await this.loadContextMetadata();
-    const view = evaluateWorkplaceRuleView(this.scope, ctx);
+    const value = await this.evaluateCachedView();
+    // 缓存命中时复用缓存 ctx 的 mtimeByPath：mtime 变化必然改变 vfs 签名
+    // 触发整条重算，读-改-写一致性不受损。
     const workplaceDisplay = await materializeBlockFromView(
-      view,
+      value.view,
       this.deps.vfs,
       this.scope,
-      ctx.mtimeByPath
+      value.ctx.mtimeByPath
     );
     return { workplaceDisplay };
   }
 
   async evaluateRuleView(): Promise<WorkplaceRuleView> {
-    const ctx = await this.loadContextMetadata();
-    return evaluateWorkplaceRuleView(this.scope, ctx);
+    const value = await this.evaluateCachedView();
+    return value.view;
   }
 
   async buildListRows(): Promise<WorkplaceListRow[]> {
@@ -207,6 +206,42 @@ export class DefaultWorkplaceService implements WorkplaceService {
   }
 
   private async doMaterializeLiveView(): Promise<WorkplaceLiveView> {
+    const value = await this.evaluateCachedView();
+    return { listRows: value.view.rows, filetreeDisplay: value.filetreeDisplay };
+  }
+
+  /**
+   * 读时校验的缓存化评估：采样签名 → 命中直接返回缓存 → 未命中经 entry.inFlight
+   * 并发去重计算（loadContextMetadata + evaluate + filetree render）→ 发布时
+   * 携带计算**前**采样的 sigs（计算期间有写时下一个读者自愈，脏结果最多存活一次）。
+   */
+  private async evaluateCachedView(): Promise<WorkplaceViewCacheValue> {
+    const conn = this.deps.conn;
+    const cacheKey = workplaceScopeKey(this.scope);
+    const sigs = await this.sampleSignatures();
+    const entry = ensureWorkplaceViewEntry(conn, cacheKey);
+    const cached = getCachedWorkplaceView(entry, sigs);
+    if (cached != null) {
+      return cached;
+    }
+    if (entry.inFlight != null) {
+      return entry.inFlight;
+    }
+    const computing = this.computeFullViewValue();
+    entry.inFlight = computing;
+    try {
+      const value = await computing;
+      publishWorkplaceView(conn, cacheKey, sigs, value);
+      return value;
+    } finally {
+      if (entry.inFlight === computing) {
+        entry.inFlight = undefined;
+      }
+    }
+  }
+
+  /** 完整评估三件套（ctx + view + filetree），供 inFlight 去重共享。 */
+  private async computeFullViewValue(): Promise<WorkplaceViewCacheValue> {
     const ctx = await this.loadContextMetadata();
     const view = evaluateWorkplaceRuleView(this.scope, ctx);
     const filetreeDisplay = renderWorkplaceFileTreeForMacro({
@@ -217,7 +252,26 @@ export class DefaultWorkplaceService implements WorkplaceService {
       mtimeByPath: ctx.mtimeByPath,
       displayByPath: view.displayByPath,
     });
-    return { listRows: view.rows, filetreeDisplay };
+    return { ctx, view, filetreeDisplay };
+  }
+
+  /**
+   * 采样读时校验值：vfs 聚合签名（1 条 SQL）+ 规则表全量重读按 logicalPath
+   * 排序后的确定性 JSON 序列化（规则表无版本列且存在同数改写，不做聚合指纹）。
+   */
+  private async sampleSignatures(): Promise<WorkplaceViewSigs> {
+    const scopeKey = workplaceScopeKey(this.scope);
+    const vfsKey = vfsScopeKey(this.scope);
+    const vfs = await this.deps.vfs.computeEntrySignature(vfsKey);
+    const dirRules = await this.deps.workplace.listDirRules(scopeKey);
+    const fileRules = await this.deps.workplace.listFileRules(scopeKey);
+    const byLogicalPath = (
+      a: { logicalPath: string },
+      b: { logicalPath: string }
+    ) => (a.logicalPath < b.logicalPath ? -1 : a.logicalPath > b.logicalPath ? 1 : 0);
+    dirRules.sort(byLogicalPath);
+    fileRules.sort(byLogicalPath);
+    return { vfs, rules: JSON.stringify([dirRules, fileRules]) };
   }
 
   /** Loads path/mtime/rules context without scanning file content. */

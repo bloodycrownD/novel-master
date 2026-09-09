@@ -60,7 +60,6 @@ import type { ModelRequestService } from "@/service/provider/model-request.port.
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
@@ -124,15 +123,12 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly savedModelRepo: SavedModelRepository;
   readonly providerRepo?: Pick<ProviderRepository, "findById">;
   readonly eventBus: SimpleEventBus;
-  readonly regexConfig: RegexConfigService;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
   /** 用户 VFS 写入端口：executeOp 由 VFS 写链路直接消费，本模块不再使用该成员。 */
   readonly userVfsTurn?: UserVfsTurnService;
   /** write 成功后 upsert `file_cache`；须由 runtime 注入。 */
   readonly sessionKkv: SessionKkvService;
-  readonly state: AgentRunRuntimePort["state"] & {
-    getCurrentRegexGroupId(): Promise<string | null | undefined>;
-  };
+  readonly state: AgentRunRuntimePort["state"];
   sessionVfs(projectId: string, sessionId: string): VfsService;
   workplace(scope: VfsScope): WorkplaceService;
   /**
@@ -508,7 +504,6 @@ export async function runAgentTurn(
     registry
   );
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
-  const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
   // 主 run 始终自建 internalController 作为注册目标——不管 caller 有没有传 signal。
   // caller signal（如果有）桥接到 internal：外部 abort 级联到 internal。
   // runner.run 拿 internal.signal；同时 internal.signal 作为 task 工具内子 agent run
@@ -634,7 +629,6 @@ export async function runAgentTurn(
       savedModelId,
       workspaceModelId,
       maxSteps,
-      activeRegexGroupId: activeRegexGroupId ?? undefined,
       stream,
       signal: internalController.signal,
       onStream: options?.onStream,
@@ -742,7 +736,7 @@ async function runChildAgent(args: {
 
   // 子 run controller 同样挂进 registry，让外部（子会话页停止按钮）
   // 能按 childSessionId 中断子 run。register 起就纳入 try/finally 包络，
-  // 覆盖中间 await（session.append / getCurrentRegexGroupId）抛错路径——
+  // 覆盖中间 await（session.append）抛错路径——
   // 否则一旦这些 await 抛错，finally 不会执行，registry 留下孤儿 controller。
   // finally 反注册带所有权比对，防误删新 run 的 controller / partial。形态对齐 runAgentTurn。
   // streamHandle 在 try 外声明（同 childController），保证 finally 能读到。
@@ -766,7 +760,6 @@ async function runChildAgent(args: {
     if (opts.prompt && opts.prompt.trim().length > 0) {
       await session.append("user", textBlocks(opts.prompt));
     }
-    const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
     const toolCtx: BuiltinToolContext = {
       vfs,
       projectId: parentProjectId,
@@ -871,7 +864,6 @@ async function runChildAgent(args: {
       savedModelId: opts.savedModelId,
       workspaceModelId: opts.workspaceModelId,
       maxSteps,
-      activeRegexGroupId: activeRegexGroupId ?? undefined,
       // run 期：persistMessages=true 落库供 UI 浏览；publishRunLifecycle=true 发事件供子会话浏览页实时刷新（主会话按 sessionId 过滤不会串）；stream=true 走流式供子会话浏览页实时输出。
       persistMessages: true,
       publishRunLifecycle: true,

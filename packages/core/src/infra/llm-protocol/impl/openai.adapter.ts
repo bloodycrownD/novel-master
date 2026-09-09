@@ -40,7 +40,6 @@ import {
   finishOpenAiSse,
 } from "../logic/openai-sse-parser.js";
 import { applyOpenAiThinkingToBody } from "../logic/apply-thinking-to-body.js";
-import { isGlmToolStreamModel } from "../logic/glm-tool-stream.js";
 
 function useTextOnlyShortcut(req: LlmChatRequest): boolean {
   if (req.thinking != null) {
@@ -141,14 +140,8 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       Object.assign(body, req.sampling.openai);
     }
     applyOpenAiThinkingToBody(body, req.thinking);
-    if (
-      stream &&
-      req.tools != null &&
-      req.tools.length > 0 &&
-      isGlmToolStreamModel(req.vendorModelId)
-    ) {
-      body.tool_stream = true;
-    }
+    // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 sampling / thinking）。
+    Object.assign(body, req.extraBody);
     return body;
   }
 
@@ -166,6 +159,8 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
     };
     applyOpenAiThinkingToBody(body, req.thinking);
+    // 与 buildBody 一致：自定义参数最后合并，覆盖同名标准字段。
+    Object.assign(body, req.extraBody);
 
     const raw = await fetchJson(this.fetchFn, url, {
       method: "POST",

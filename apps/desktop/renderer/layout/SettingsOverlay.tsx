@@ -16,9 +16,6 @@ import {
   ProviderDetailView,
   ProviderFormView,
   ProvidersView,
-  RegexGroupsView,
-  RegexRuleEditorView,
-  RegexRulesView,
 } from "../features/settings/SettingsViews";
 import { AboutView } from "../features/settings/AboutView";
 import { TokenUsageStatsView } from "../features/settings/TokenUsageStatsView";
@@ -47,8 +44,6 @@ function getSettingsMainTitle(
   if (viewId === "providerDetail") return "模型管理";
   if (viewId === "providerCreate") return "新建服务商";
   if (viewId === "modelSampling") return "采样配置";
-  if (viewId === "regexRules") return "正则规则";
-  if (viewId === "regexRuleEditor") return navState.editingRegexRuleId ? "编辑规则" : "新规则";
   if (viewId === "skillDetail") {
     return navState.viewingSkillRef != null
       ? `技能 · ${navState.viewingSkillRef.name}`
@@ -152,12 +147,6 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <ProviderDetailView nav={nav} />;
       case "modelSampling":
         return <ModelSamplingView nav={nav} />;
-      case "regexGroups":
-        return <RegexGroupsView nav={nav} />;
-      case "regexRules":
-        return <RegexRulesView nav={nav} />;
-      case "regexRuleEditor":
-        return <RegexRuleEditorView nav={nav} />;
       case "skillsManage":
         return <SkillsManageView nav={nav} />;
       case "skillDetail":

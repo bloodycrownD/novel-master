@@ -28,9 +28,6 @@ export type RootStackParamList = {
   /** AI 搜索引擎配置：四引擎 key/baseUrl + 默认引擎（无参数）。 */
   SearchEngines: undefined;
   GlobalTemplate: undefined;
-  RegexGroups: undefined;
-  RegexRules: {groupId?: string} | undefined;
-  RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
   FileEditor: {
     path: string;
     /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */

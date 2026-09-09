@@ -32,7 +32,6 @@ import {
   createSearchConfigStore,
 } from "@novel-master/core";
 import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
-import { createRegexConfigService } from "@novel-master/core/regex";
 import {
   createMessageCheckpointService,
 } from "@novel-master/core/message-checkpoint";
@@ -74,7 +73,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const preferences = createPersistentPreferences(conn);
   const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
-  const regexConfig = createRegexConfigService(conn, state);
 
   const skspName = getPlatformSkspName();
   const dbStore = resolveSkspDriver(skspName).createStore(conn);
@@ -154,7 +152,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     savedModelRepo: providerBundle.savedModelRepo,
     providerRepo: providerBundle.providerRepo,
     modelRequests: providerBundle.modelRequests,
-    regexConfig,
     userVfsTurn,
     searchConfig,
   };

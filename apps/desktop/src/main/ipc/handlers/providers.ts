@@ -53,6 +53,7 @@ export async function handleProvidersGet(
         baseUrl: provider.baseUrl,
         isBuiltin: provider.isBuiltin,
         headers: provider.headers,
+        bodyParams: provider.bodyParams,
         apiKeyStatus: listed?.apiKeyStatus ?? "not set",
       },
     };

@@ -29,9 +29,6 @@ import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
 import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
 import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
-import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
-import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
-import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
 import {SessionDetailScreen} from '../screens/stack/SessionDetailScreen';
 import {SubagentSessionScreen} from '../screens/stack/SubagentSessionScreen';
@@ -146,15 +143,6 @@ const GlobalTemplateStackScreen = withStackLayout(
   'GlobalTemplate',
   GlobalTemplateScreen,
 );
-const RegexGroupsStackScreen = withStackLayout(
-  'RegexGroups',
-  RegexGroupsScreen,
-);
-const RegexRulesStackScreen = withStackLayout('RegexRules', RegexRulesScreen);
-const RegexRuleEditorStackScreen = withStackLayout(
-  'RegexRuleEditor',
-  RegexRuleEditorScreen,
-);
 const FileEditorStackScreen = withStackLayout('FileEditor', FileEditorScreen);
 const SessionDetailStackScreen = withStackLayout(
   'SessionDetail',
@@ -249,15 +237,6 @@ export function RootNavigator() {
             <Stack.Screen
               name="GlobalTemplate"
               component={GlobalTemplateStackScreen}
-            />
-            <Stack.Screen
-              name="RegexGroups"
-              component={RegexGroupsStackScreen}
-            />
-            <Stack.Screen name="RegexRules" component={RegexRulesStackScreen} />
-            <Stack.Screen
-              name="RegexRuleEditor"
-              component={RegexRuleEditorStackScreen}
             />
             <Stack.Screen name="FileEditor" component={FileEditorStackScreen} />
             <Stack.Screen

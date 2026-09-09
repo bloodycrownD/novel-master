@@ -5,6 +5,7 @@
 import {
   CharacterCardError,
   createCharacterCardImportService,
+  CHARACTER_CARD_MAX_INPUT_BYTES,
   type CharacterCardImportOptions,
   type VfsScope,
 } from '@novel-master/core/vfs';
@@ -26,6 +27,14 @@ export async function importCharacterCard(
     mimeTypes: characterCardImportPickTypes(),
     fallbackLocalFileName: 'character-card.json',
     assertFileName: assertCharacterCardFileName,
+    // 读取前 stat 预检：巨型卡片不进整读/解析链，避免原生 OOM；
+    // 与 core 层 importFromBytes 的 bytes.length 闸门同阈值双保险。
+    maxBytes: CHARACTER_CARD_MAX_INPUT_BYTES,
+    buildTooLargeError: sizeBytes =>
+      new CharacterCardError(
+        'TOO_LARGE',
+        `角色卡文件过大：${sizeBytes} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`,
+      ),
     buildCopyError: copyError =>
       new CharacterCardError(
         'NOT_CHARACTER_CARD',

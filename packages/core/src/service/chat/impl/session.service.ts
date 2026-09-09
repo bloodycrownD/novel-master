@@ -230,6 +230,13 @@ export class DefaultSessionService implements SessionService {
     );
   }
 
+  async pushTemplate(sessionId: string): Promise<void> {
+    await this.get(sessionId);
+    await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePush(
+      sessionId
+    );
+  }
+
   async getComposerDraftJson(id: string): Promise<string | null> {
     await this.get(id);
     return this.deps.sessions.getComposerDraftJson(id);
