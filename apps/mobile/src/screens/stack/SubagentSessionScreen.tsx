@@ -17,7 +17,7 @@
  * 只读：无 composer；但 agent 运行中时显示停止按钮（调 abortRegistry.abort）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Linking, Pressable, StyleSheet, Text, View} from 'react-native';
 import {
   useNavigation,
   useRoute,
@@ -37,6 +37,7 @@ import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
+import {resolveChatLinkIntent} from '@/screens/tabs/chat-tab/chat-link-nav';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {RootStackParamList} from '../../navigation/types';
 import {useSessionAbort} from '@/screens/tabs/chat-tab/useSessionAbort';
@@ -281,6 +282,41 @@ export function SubagentSessionScreen() {
     [navigation, projectId, parentSessionId],
   );
 
+  // markdown 链接点击：识别与探测在 chat-link-nav 纯函数完成，这里只执行意图。
+  // 子会话共享父会话工作区，故 session 探测/打开均用 parentSessionId（与
+  // onOpenToolFile 同口径）；http(s) 外跳，失败静默兑底。
+  const onLinkClick = useCallback(
+    (href: string) => {
+      const sessionVfs = runtime.sessionVfs(projectId, parentSessionId);
+      const projectVfs = runtime.projectVfs(projectId);
+      void resolveChatLinkIntent(href, {sessionVfs, projectVfs}).then(
+        intent => {
+          if (intent.kind === 'external') {
+            void Linking.openURL(intent.url).catch(() => undefined);
+            return;
+          }
+          if (intent.kind === 'file') {
+            if (intent.scope === 'session') {
+              navigation.navigate('FileEditor', {
+                path: intent.path,
+                scopeKind: 'session',
+                projectId,
+                sessionId: parentSessionId,
+              });
+            } else {
+              navigation.navigate('FileEditor', {
+                path: intent.path,
+                scopeKind: 'project',
+                projectId,
+              });
+            }
+          }
+        },
+      );
+    },
+    [runtime, navigation, projectId, parentSessionId],
+  );
+
   const sessionKey = useMemo(
     () => `${projectId}:${sessionId}`,
     [projectId, sessionId],
@@ -327,6 +363,7 @@ export function SubagentSessionScreen() {
           defaultScrollToBottom={false}
           onReady={() => setWebviewReady(true)}
           onOpenToolFile={onOpenToolFile}
+          onLinkClick={onLinkClick}
           onOpenSubagentSession={onOpenSubagentSession}
         />
       )}
