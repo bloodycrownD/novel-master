@@ -144,3 +144,7 @@ date: 2026-08-30
 
 4. **一个会话一条通知 + 点按直达**：保活常驻通知从单条聚合改为 per-session（id `nm-agent-keepalive-<sessionId>`），各带 `data.sessionId`——点按任意一条直达对应会话（复用完成通知的点按链路，此前常驻通知无 data 故点按无反应）。单会话收尾仅撤该会话通知条（cancelNotification），最后一个收尾才 stopForegroundService；串行化链保留（MF-4 竞态语义），同标签重复登记抑制无谓重发。
 5. **开关文案**：label 简化为「常驻通知」，副标题一句话。
+
+### 追记补充（同日第三轮反馈）
+
+6. **并行只见一条通知的根因与载体模型**：Android 的 startForeground 是替换语义——同一前台服务上后发的 asForegroundService 通知会顶掉前一条，多条全挂 FGS 标记只能留下最后一条。修正为载体模型：同一时刻仅一条通知挂 asForegroundService（载体会话，首个受理者），其余会话为普通 ongoing 通知（视觉与点按行为一致）；载体会话收尾时把载体身份转交给剩余会话（先重发挂 FGS——替换语义顺带撤旧条，再收尾，避免 FGS 通知被单独撤引发服务停止）；无剩余才 stopForegroundService。stop→立即 start 同会话的竞态经「调用时摘意图标记 + 任务时重登记探测」原样保留通知。

@@ -59,6 +59,15 @@ const keepAliveLabels = new Map<string, AgentKeepAliveLabel>();
 /** 已按此标签内容显示过（同标签重复登记时抑制无谓重发）。 */
 const keepAliveDisplayed = new Map<string, AgentKeepAliveLabel>();
 
+/**
+ * 前台服务载体会话：Android 的 startForeground 是替换语义——同一条
+ * 服务上后发的 asForegroundService 通知会顶掉前一条，故同一时刻只有
+ * 一条通知能挂 asForegroundService（载体）；其余会话为普通 ongoing
+ * 通知。载体会话收尾时把载体身份转交给剩余会话（先转交后撤旧条，
+ * 避免 FGS 通知被撤引发服务停止）。
+ */
+let keepAliveCarrierSession: string | null = null;
+
 /** 起停串行化链：所有通知操作排队执行，消除在途竞态（MF-4）。 */
 let keepAliveChain: Promise<void> = Promise.resolve();
 
@@ -76,6 +85,7 @@ function keepAliveNotificationId(sessionId: string): string {
 export function resetKeepAliveStateForTests(): void {
   keepAliveLabels.clear();
   keepAliveDisplayed.clear();
+  keepAliveCarrierSession = null;
   keepAliveChain = Promise.resolve();
 }
 
@@ -105,29 +115,17 @@ export function startAgentKeepAliveService(
     if (labelEquals(keepAliveDisplayed.get(sessionId), label)) {
       return;
     }
-    const title =
-      label.sessionTitle != null
-        ? `正在生成 · ${label.sessionTitle}`
-        : '正在生成';
-    const scopeText = [label.projectName, label.sessionTitle]
-      .filter(Boolean)
-      .join(' · ');
-    const body =
-      (scopeText !== '' ? `${scopeText}\n` : '') +
-      '完成后自动结束；期间请勿强行关闭应用';
     await ensureChannels();
-    await notifee.displayNotification({
-      id: keepAliveNotificationId(sessionId),
-      title,
-      body,
-      data: {sessionId},
-      android: {
-        channelId: CHANNEL_AGENT_KEEPALIVE,
-        asForegroundService: true,
-        ongoing: true,
-        smallIcon: 'ic_launcher',
-      },
-    });
+    await notifee.displayNotification(
+      buildKeepAliveNotification(
+        sessionId,
+        label,
+        keepAliveCarrierSession == null,
+      ),
+    );
+    if (keepAliveCarrierSession == null) {
+      keepAliveCarrierSession = sessionId;
+    }
     keepAliveDisplayed.set(sessionId, label);
   });
 }
@@ -141,27 +139,94 @@ export function stopAgentKeepAliveService(sessionId?: string): Promise<void> {
     return Promise.resolve();
   }
   const targets = sessionId != null ? [sessionId] : [...keepAliveLabels.keys()];
-  let removedAny = false;
-  for (const t of targets) {
-    if (keepAliveLabels.delete(t)) {
-      keepAliveDisplayed.delete(t);
-      removedAny = true;
-    }
-  }
-  if (!removedAny) {
+  if (targets.every(t => !keepAliveLabels.has(t))) {
     // 从未登记（如保活开关关闭时的收尾调用）：安全 no-op
     return Promise.resolve();
   }
+  // 调用时即摘除意图标记：任务执行时若标签已回到集合（stop 后立即 start
+  // 重登记），说明该会话又活跃了——通知原样保留，本次 stop 整体跳过。
+  if (sessionId != null) {
+    keepAliveLabels.delete(sessionId);
+  }
   return enqueueKeepAlive(async () => {
-    for (const t of targets) {
-      await notifee
-        .cancelNotification(keepAliveNotificationId(t))
-        .catch(() => undefined);
-    }
-    if (keepAliveLabels.size === 0) {
+    if (sessionId == null) {
+      // dispose：全部撤下并停止服务
+      for (const t of targets) {
+        keepAliveLabels.delete(t);
+        keepAliveDisplayed.delete(t);
+      }
+      keepAliveCarrierSession = null;
       await notifee.stopForegroundService();
+      return;
     }
+    if (keepAliveLabels.has(sessionId)) {
+      // stop→start 竞态：重登记在先，通知与载体原样保留
+      return;
+    }
+    keepAliveDisplayed.delete(sessionId);
+    if (keepAliveCarrierSession === sessionId) {
+      // 载体会话收尾：先转交（再挂一条 FGS 通知，startForeground 替换语义
+      // 自动撤旧条），无剩余会话才停服务。
+      const successor = keepAliveLabels.keys().next().value ?? null;
+      if (successor != null) {
+        const successorLabel = keepAliveLabels.get(successor)!;
+        keepAliveCarrierSession = successor;
+        keepAliveDisplayed.delete(successor); // 载体形态变化，强制重发
+        await notifee.displayNotification(
+          buildKeepAliveNotification(successor, successorLabel, true),
+        );
+        keepAliveDisplayed.set(successor, successorLabel);
+        return;
+      }
+      keepAliveCarrierSession = null;
+      await notifee.stopForegroundService();
+      return;
+    }
+    // 普通会话收尾：仅撤自己的通知条
+    await notifee
+      .cancelNotification(keepAliveNotificationId(sessionId))
+      .catch(() => undefined);
   });
+}
+
+function buildKeepAliveNotification(
+  sessionId: string,
+  label: AgentKeepAliveLabel,
+  asForegroundService: boolean,
+): {
+  id: string;
+  title: string;
+  body: string;
+  data: {sessionId: string};
+  android: {
+    channelId: string;
+    asForegroundService: boolean;
+    ongoing: boolean;
+    smallIcon: string;
+  };
+} {
+  const title =
+    label.sessionTitle != null
+      ? `正在生成 · ${label.sessionTitle}`
+      : '正在生成';
+  const scopeText = [label.projectName, label.sessionTitle]
+    .filter(Boolean)
+    .join(' · ');
+  const body =
+    (scopeText !== '' ? `${scopeText}\n` : '') +
+    '完成后自动结束；期间请勿强行关闭应用';
+  return {
+    id: keepAliveNotificationId(sessionId),
+    title,
+    body,
+    data: {sessionId},
+    android: {
+      channelId: CHANNEL_AGENT_KEEPALIVE,
+      asForegroundService,
+      ongoing: true,
+      smallIcon: 'ic_launcher',
+    },
+  };
 }
 
 function labelEquals(
