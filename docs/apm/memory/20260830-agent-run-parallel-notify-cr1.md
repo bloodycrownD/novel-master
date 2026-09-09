@@ -107,3 +107,18 @@
 - useAgentRunLifecycle.ts 冲突为架构对决：main 的 refCountedRef 所有权守卫（1.5.9 修复）vs 分支的 refcount 整体上收 AgentRunManager（T-P7 静态断言锁死 lifecycle 不碰计数）。裁决取分支侧（Manager 方案是同一泄漏的更根本修复），并清除自动合并漏进来的孤儿（refCountedRef 声明、beginUiRun 置位）。main 的流式恢复机制（保护窗/恢复窗口/反填）完整保留——notify PRD 依赖它。
 - use-agent-run-lifecycle 的「refcount 平衡」断言按新语义对齐（计数断言移除，归 T-P7 Manager 套件覆盖）。
 - 验证：8 套件 105 测试全绿（含 T-P7、composer 两轮回归、webview 重挂回归）；merge commit 8991cd7，分支领先 main 14 提交、落后 0。
+
+## Step 3 落地（2026-09-05，worktree）
+
+### 请求
+
+主 worktree 停用（用户占用），在 .worktree/agent-run-parallel-and-notify 继续 notify 迭代；main 领先 152 提交（1.5.11→1.5.14、正则移除、body-params、workspace-push、图表重做），重新合入后实现 spec Step 3。
+
+### 实现
+
+- 重合 main：旧 worktree 已被并行会话清理，重建后合并，仅记忆文档一处冲突（照旧双保留），代码零冲突；npm install + core dist 重建 + 9 套件 102 绿后开工。
+- Manager 投影面：getEntry（starting runId=null）/subscribeEntries（5 变更点通知）。
+- lifecycle：getManagerEntry 注入；reset 采纳 running 投影 runId（重进即严格匹配）；starting 不采纳走恢复窗口；RUN_STARTED 直通路径保持 payload.runId 回填（事件序保证 Manager 先填、UI 后读，同值）。
+- Provider：开窗资格与探针 isRunRegistered 扩 registry.has ∥ manager.hasRun（封受理空窗回页误收尾）；sessionAgentRunning 新视图（transcript agentRunning/reload 语义随之会话化——别的会话 run 不再冻结本会话）。
+- 测试：T-P3a/b/c/d + mock 桩；9 套件 116 全绿、tsc 0 错、prettier/eslint 过（no-void 警告为分支存量）。提交 942a6a98。
+- 记忆改记 worktree 侧（随分支走，避免下次合并再撞同一文档冲突）。
