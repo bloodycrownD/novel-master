@@ -159,7 +159,7 @@ describe('handleMessagesSearch', () => {
     }
   });
 
-  it('T-DI5: 不套 regex-apply，结果 bodyText 是原始文本（断言不被正则改写）', async () => {
+  it('T-DI5: 结果 bodyText 是原始文本（断言不被正则改写）', async () => {
     const sessionId = await createSession('di5');
     // 原始文本带方括号标记：regex-apply 若介入可能改写，handler 应原样返回。
     const raw = '原始文本 [placeholder] 不应被改写';

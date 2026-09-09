@@ -115,9 +115,18 @@ export async function pickToLocalPath(
 export interface PickAndReadOptions extends PickLocalFileOptions {
   /** 拷入后的本地文件不存在时的错误构造（各业务域错误类型不同）。 */
   readonly buildMissingError?: (fsPath: string) => Error;
+  /** 读取前的体积预检上限（字节）；stat 超过该值时不读字节直接抛错。 */
+  readonly maxBytes?: number;
+  /** 体积超过 maxBytes 时的错误构造（与 buildMissingError 一样由业务域注入）。 */
+  readonly buildTooLargeError?: (sizeBytes: number) => Error;
 }
 
-/** 选一个文档并整包读为字节；用户取消返回 null。 */
+/** 选一个文档并整包读为字节；用户取消返回 null。
+ *
+ * 传入 `maxBytes` + `buildTooLargeError` 时，拿到本地拷贝路径后先 stat 预检
+ * 体积，超限不进读取（避免整读巨型文件触发原生 OOM）；stat 失败容错放行，
+ * 由 core 层的 bytes.length 闸门兜底。
+ */
 export async function pickAndReadBytes(
   options: PickAndReadOptions,
 ): Promise<Uint8Array | null> {
@@ -125,7 +134,32 @@ export async function pickAndReadBytes(
   if (picked == null) {
     return null;
   }
+  await assertLocalFileSizeWithin(picked.fsPath, options);
   return readLocalFileBytes(picked.fsPath, options.buildMissingError);
+}
+
+/** stat 预检：超过 maxBytes 抛业务错误；stat 失败（权限/时序等）放行走原流程。 */
+async function assertLocalFileSizeWithin(
+  fsPath: string,
+  options: PickAndReadOptions,
+): Promise<void> {
+  if (options.maxBytes == null || options.buildTooLargeError == null) {
+    return;
+  }
+  let stat: {size?: number} | null;
+  try {
+    // blobFs() 返回的即 fs 对象（与同文件既有用法一致）
+    stat = await blobFs().stat(fsPath);
+  } catch {
+    return;
+  }
+  if (
+    stat != null &&
+    typeof stat.size === 'number' &&
+    stat.size > options.maxBytes
+  ) {
+    throw options.buildTooLargeError(stat.size);
+  }
 }
 
 /** 选一个文档并以 UTF-8 文本读出；用户取消返回 null。 */

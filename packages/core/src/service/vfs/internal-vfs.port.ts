@@ -14,8 +14,8 @@ import type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
-  WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
+import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 
 /**
  * scopeKey + 纯逻辑路径 版本的 VFS service。
@@ -33,11 +33,16 @@ export interface InternalVfsService {
 
   read(scopeKey: string, path: string): Promise<VfsReadResult>;
 
+  /** 按路径轻量探测文件 content 大小（不解正文，供读取侧降级闸门使用）。 */
+  findContentSize(
+    scopeKey: string,
+    path: string
+  ): Promise<VfsContentSize | null>;
+
   write(
     scopeKey: string,
     path: string,
-    content: string,
-    options?: WriteOptions
+    content: string
   ): Promise<{ version: number }>;
 
   replace(
@@ -100,5 +105,5 @@ export type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
-  WriteOptions,
+  VfsContentSize,
 };

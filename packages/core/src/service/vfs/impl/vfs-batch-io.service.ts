@@ -98,9 +98,7 @@ async function writeOrUpdateFile(
     throw new Error(`cannot overwrite directory with file: ${logical}`);
   }
   // 无 revision 层：不写 vfs_revision 行，head + 1 不会撞唯一键，维持现状语义
-  await repo.update(sk, logical, content, existing.version + 1, {
-    versionCheck: false,
-  });
+  await repo.update(sk, logical, content, existing.version + 1);
 }
 
 function emptyReport(

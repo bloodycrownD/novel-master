@@ -7,6 +7,8 @@ export interface CreateProviderInput {
   /** trim 后非空，否则 INVALID_ARGUMENT。 */
   readonly displayName: string;
   readonly headers?: Readonly<Record<string, string>>;
+  /** 自定义参数：原样合并进请求体顶层；缺省 {}。 */
+  readonly bodyParams?: Readonly<Record<string, unknown>>;
   readonly apiKey?: string;
 }
 
@@ -16,6 +18,8 @@ export interface EditProviderPatch {
   /** 若出现则 trim 后必须非空（禁止写回 null / 空白）。 */
   readonly displayName?: string;
   readonly headers?: Readonly<Record<string, string>>;
+  /** 显式空对象 {} 可清空（区别于不传=保留原值）。 */
+  readonly bodyParams?: Readonly<Record<string, unknown>>;
   readonly apiKey?: string;
 }
 

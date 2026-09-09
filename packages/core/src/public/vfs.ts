@@ -14,6 +14,12 @@ export { parseCharacterCardToMdTree } from "../domain/character-card/logic/parse
 export { characterCardJsonToMdTree } from "../domain/character-card/logic/character-card-to-md-tree.js";
 export { CharacterCardError } from "../errors/character-card-errors.js";
 export type { CharacterCardErrorCode } from "../errors/character-card-errors.js";
+export {
+  CHARACTER_CARD_MAX_INPUT_BYTES,
+  CHARACTER_CARD_MAX_TOTAL_CONTENT_BYTES,
+  CHARACTER_CARD_MAX_SINGLE_FILE_BYTES,
+  CHARACTER_CARD_MAX_FILE_COUNT,
+} from "../domain/character-card/logic/character-card-limits.js";
 export type { MdTree } from "../domain/character-card/model/character-card.js";
 export type {
   CharacterCardImportService,
@@ -26,7 +32,6 @@ export {
   buildUserVfsRenameOp,
   buildUserVfsSaveOp,
 } from "../service/vfs/build-user-vfs-turn-op.js";
-export type { UserVfsSaveVersionOptions } from "../service/vfs/build-user-vfs-turn-op.js";
 export { buildVfsZip } from "../domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "../domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipError } from "../errors/vfs-zip-errors.js";
@@ -56,8 +61,8 @@ export {
 export type {
   VfsService,
   VfsReadResult,
-  WriteOptions,
   VfsGrepMatch,
+  VfsContentSize,
 } from "../domain/vfs/ports/vfs-service.port.js";
 export type { VfsScope } from "../domain/vfs/logic/vfs-path-mapper.js";
 export {

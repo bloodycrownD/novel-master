@@ -15,7 +15,6 @@ import {
   moveVfsPath,
   readUserVfsSaveBaseline,
   remapPathUnderDir,
-  type UserVfsSaveVersionOptions,
 } from '@novel-master/core/vfs';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {
@@ -29,7 +28,7 @@ export async function createVfsFile(
   path: string,
   content = '',
 ): Promise<void> {
-  await vfs.write(path, content, {versionCheck: false});
+  await vfs.write(path, content);
 }
 
 /** 会话 scope：新建文件经 userVfsTurn。 */
@@ -162,7 +161,6 @@ export async function sessionSaveVfsFile(
   vfs: VfsService,
   path: string,
   content: string,
-  versionOptions?: UserVfsSaveVersionOptions,
   lastKnownContent?: string | null,
 ): Promise<void> {
   const baseline = await readUserVfsSaveBaseline(vfs, path);
@@ -178,7 +176,6 @@ export async function sessionSaveVfsFile(
     content,
     path,
     content,
-    versionOptions,
   );
   if (op == null) {
     return;

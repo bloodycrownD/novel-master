@@ -61,7 +61,6 @@ function makeRuntime(overrides: {
     state: {
       getCurrentAgentId: async () => "a1",
       getCurrentModelId: async () => "openai/gpt",
-      getCurrentRegexGroupId: async () => undefined,
     },
     agentRegistry: {
       listAgentIds: async () => ["a1"],
@@ -84,7 +83,6 @@ function makeRuntime(overrides: {
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
-    regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator:

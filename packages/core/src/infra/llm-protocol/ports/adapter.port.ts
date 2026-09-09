@@ -58,6 +58,8 @@ export interface LlmChatRequest {
   readonly sampling?: ModelSamplingParams;
   /** 协议级思考参数；关闭或未传时 adapter 不写 wire 字段。 */
   readonly thinking?: ModelThinkingParams;
+  /** 自定义参数：请求体组装最后一步原样合并进顶层，覆盖同名字段（含标准字段）。 */
+  readonly extraBody?: Readonly<Record<string, unknown>>;
   /** Cancels network IO and stream reads when run is terminated. */
   readonly signal?: AbortSignal;
 }

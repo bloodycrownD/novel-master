@@ -62,7 +62,6 @@ export function FileEditorScreen() {
 
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
-  const [version, setVersion] = useState<number | undefined>();
   const [mtimeMs, setMtimeMs] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -143,7 +142,6 @@ export function FileEditorScreen() {
         }
         setContent(result.content);
         setSavedContent(result.content);
-        setVersion(result.version);
         setMtimeMs(result.mtimeMs);
       } catch (error) {
         if (!cancelled) {
@@ -184,32 +182,19 @@ export function FileEditorScreen() {
           vfs,
           path,
           content,
-          {
-            expectedVersion: version,
-            versionCheck: version != null,
-          },
           savedContent,
         );
         setSavedContent(content);
         const refreshed = await vfs.read(path);
-        setVersion(refreshed.version);
         setMtimeMs(refreshed.mtimeMs);
         onSessionVfsSaved?.();
         showToast('已保存');
         return;
       }
 
-      if (version == null) {
-        await vfs.write(path, content, {versionCheck: false});
-      } else {
-        await vfs.write(path, content, {
-          expectedVersion: version,
-          versionCheck: true,
-        });
-      }
+      await vfs.write(path, content);
       setSavedContent(content);
       const refreshed = await vfs.read(path);
-      setVersion(refreshed.version);
       setMtimeMs(refreshed.mtimeMs);
       showToast('已保存');
     } catch (error) {

@@ -55,6 +55,38 @@ describe("GeminiProtocolAdapter HTTP", () => {
     assert.equal(result.assistantText, "ok");
   });
 
+  it("EX-GEM: extraBody 原样合并进 body 顶层并覆盖 generationConfig", async () => {
+    const calls: Array<{ init: RequestInit }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ init: init ?? {} });
+      return new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: "ok" }] } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new GeminiProtocolAdapter(fetchFn as typeof fetch);
+    await adapter.chat({
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      apiKey: "gem-key",
+      vendorModelId: "gemini-2.0-flash",
+      userContent: "ping",
+      sampling: { protocol: "gemini", gemini: { temperature: 0.4 } },
+      extraBody: {
+        generationConfig: { temperature: 0.7, customKnob: 2 },
+      },
+    });
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as Record<
+      string,
+      unknown
+    >;
+    // extraBody 整体覆盖 sampling 写入的 generationConfig
+    assert.deepEqual(body.generationConfig, { temperature: 0.7, customKnob: 2 });
+  });
+
   it("T8: chat with tools includes functionDeclarations in body", async () => {
     const calls: Array<{ body: string }> = [];
     const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {

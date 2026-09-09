@@ -80,6 +80,7 @@ export const IPC_CHANNELS = {
   WORKPLACE_CAPTURE_SESSION_BLOCK: 'nm:workplace/captureSessionBlock',
 
   SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
+  SESSIONS_PUSH_TEMPLATE: 'nm:sessions/pushTemplate',
 
   MESSAGES_LIST: 'nm:messages/list',
   MESSAGES_APPEND: 'nm:messages/append',
@@ -111,10 +112,6 @@ export const IPC_CHANNELS = {
 
   COMPACTION_MANUAL: 'nm:compaction/manual',
 
-  PREFERENCES_GET_SESSION_FS_VERSION_CHECK:
-    'nm:preferences/getSessionFsVersionCheck',
-  PREFERENCES_SET_SESSION_FS_VERSION_CHECK:
-    'nm:preferences/setSessionFsVersionCheck',
   PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
   PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
   PREFERENCES_GET_THINKING_CONTEXT: 'nm:preferences/getThinkingContext',
@@ -144,20 +141,6 @@ export const IPC_CHANNELS = {
 
   AGENT_YAML_EXPORT: 'nm:agentYaml/export',
   AGENT_YAML_IMPORT: 'nm:agentYaml/import',
-
-
-  REGEX_LIST_GROUPS: 'nm:regex/listGroups',
-  REGEX_GET_GROUP: 'nm:regex/getGroup',
-  REGEX_CREATE_GROUP: 'nm:regex/createGroup',
-  REGEX_UPDATE_GROUP: 'nm:regex/updateGroup',
-  REGEX_DELETE_GROUP: 'nm:regex/deleteGroup',
-  REGEX_LIST_RULES: 'nm:regex/listRules',
-  REGEX_GET_RULE: 'nm:regex/getRule',
-  REGEX_CREATE_RULE: 'nm:regex/createRule',
-  REGEX_UPDATE_RULE: 'nm:regex/updateRule',
-  REGEX_DELETE_RULE: 'nm:regex/deleteRule',
-  REGEX_LIST_PICKER: 'nm:regex/listPicker',
-  REGEX_SET_CURRENT: 'nm:regex/setCurrent',
 
   SKILLS_LIST: 'nm:skills/list',
   SKILLS_EFFECTIVE: 'nm:skills/effective',
@@ -436,8 +419,6 @@ export type VfsReadRequest = VfsScopeRequest & {
 export type VfsWriteRequest = VfsScopeRequest & {
   readonly path: string;
   readonly content: string;
-  readonly expectedVersion?: number;
-  readonly versionCheck?: boolean;
   /** 编辑器上次读盘快照，仅用于漂移诊断日志，不作 baseline。 */
   readonly lastKnownContent?: string | null;
 };
@@ -626,6 +607,11 @@ export type SessionFsRollbackRequest = {
 };
 
 export type SessionPullTemplateRequest = {
+  readonly sessionId: string;
+};
+
+/** 推送：用当前聊天工作区整树覆盖项目工作区（模板母本）。 */
+export type SessionPushTemplateRequest = {
   readonly sessionId: string;
 };
 
@@ -852,23 +838,22 @@ export type PromptChatTokenStatsResponse = {
   readonly counterKind: string;
 };
 
-/** Token 用量统计：时间范围（结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
+/** Token 用量统计：时间范围（本地自然日闭区间 `YYYY-MM-DD`，双端含；结构等效 core 的 UsageStatsRange，独立定义以免 renderer 引 core）。 */
 export type UsageStatsRangeDto = {
-  readonly kind: 'last7' | 'last30' | 'custom';
-  readonly fromMs?: number;
-  readonly toMs?: number;
+  readonly fromDay: string;
+  readonly toDay: string;
 };
 
-/** Token 用量统计：筛选条件（model 三态——undefined 全部 / null「未记录」桶 / 字符串指定模型）。 */
+/**
+ * Token 用量统计：筛选条件（model 三态——undefined 全部 / null「其他」桶 / 字符串指定模型）。
+ * range 可选：缺省语义按 kind 分级——summary/models/modelBreakdown/requests 不限时间
+ * （全历史），daily 必填。range 存在时 handler 先行校验格式（含 02-30 溢出）与
+ * fromDay ≤ toDay（validateRangeDto）；daily 缺 range 由 core 抛 chatInvalidArgument
+ * （日桶序列需要界）。
+ */
 export type UsageStatsFilterDto = {
-  readonly range: UsageStatsRangeDto;
+  readonly range?: UsageStatsRangeDto;
   readonly model?: string | null;
-};
-
-/** 今日卡片子对象（本地时区当日 0 点起算，独立于 filter）。 */
-export type UsageStatsTodayDto = {
-  readonly totalTokens: number;
-  readonly calls: number;
 };
 
 /** 范围内汇总（命中率由展示层用 cacheReadTokens / billedInputTokens 计算）。 */
@@ -892,7 +877,6 @@ export type UsageStatsSummaryDto = {
    * NULL 且 duration > first 的行；无有效行为 null。
    */
   readonly avgTokensPerSecond: number | null;
-  readonly today: UsageStatsTodayDto;
 };
 
 /** 天 / 小时桶（bucketStartMs 为桶起点，本地时区边界）。 */
@@ -910,8 +894,13 @@ export type UsageStatsBucketDto = {
   readonly avgTokensPerSecond: number | null;
 };
 
-/** 分模型汇总行（modelName 为 null 表示「未记录」桶）。 */
+/**
+ * 分服务商×模型汇总行（core 的 provider×model 复合维度原样透出，不按 modelName 归并——
+ * 饼图以 provider×model 为展示维度；providerId 为写入时快照，null 表示未记录的历史行；
+ * modelName 为 null 表示该服务商下的「其他模型」桶）。
+ */
 export type UsageStatsModelRowDto = {
+  readonly providerId: string | null;
   readonly modelName: string | null;
   readonly calls: number;
   readonly promptTokens: number;
@@ -1080,6 +1069,8 @@ export type ProviderDetailDto = {
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
   readonly headers: Record<string, string>;
+  /** 自定义参数：原样合并进请求体顶层，值任意 JSON。 */
+  readonly bodyParams: Record<string, unknown>;
   readonly apiKeyStatus: 'set' | 'not set';
 };
 
@@ -1090,6 +1081,7 @@ export type ProviderCreateRequest = {
   readonly displayName: string;
   readonly apiKey: string;
   readonly headers?: Record<string, string>;
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderEditRequest = {
@@ -1100,6 +1092,8 @@ export type ProviderEditRequest = {
   readonly displayName?: string;
   readonly apiKey?: string;
   readonly headers?: Record<string, string>;
+  /** 显式空对象 {} 可清空（不传=保留原值）。 */
+  readonly bodyParams?: Record<string, unknown>;
 };
 
 export type ProviderIdRequest = {
@@ -1220,66 +1214,6 @@ export type AgentYamlImportRequest = {
   readonly agentId: string;
 };
 
-export type RegexGroupDto = {
-  readonly groupId: string;
-  readonly displayName: string | null;
-  readonly ruleCount: number;
-};
-
-export type RegexGroupIdRequest = {
-  readonly groupId: string;
-};
-
-export type RegexCreateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string;
-};
-
-export type RegexUpdateGroupRequest = {
-  readonly groupId: string;
-  readonly displayName?: string | null;
-};
-
-export type RegexRuleDto = {
-  readonly ruleId: string;
-  readonly name: string;
-  readonly pattern: string;
-  readonly flags: string;
-  readonly enabled: boolean;
-  readonly llmReplace: string | null;
-  readonly displayReplace: string | null;
-  readonly startDepth: number | null;
-  readonly endDepth: number | null;
-  readonly scopeUser: boolean;
-  readonly scopeAssistant: boolean;
-};
-
-export type RegexRuleIdRequest = RegexGroupIdRequest & {
-  readonly ruleId: string;
-};
-
-export type RegexCreateRuleRequest = RegexGroupIdRequest & {
-  readonly rule: Omit<RegexRuleDto, 'ruleId'> & { readonly ruleId?: string };
-};
-
-export type RegexUpdateRuleRequest = RegexRuleIdRequest & {
-  readonly patch: Partial<Omit<RegexRuleDto, 'ruleId'>>;
-};
-
-export type RegexPickerRowDto = {
-  readonly groupId: string;
-  readonly label: string;
-};
-
-export type RegexListPickerResponse = {
-  readonly rows: readonly RegexPickerRowDto[];
-  readonly currentId: string | undefined;
-};
-
-export type RegexSetCurrentRequest = {
-  readonly groupId: string | null;
-};
-
 /** 技能归属域（与 core `SkillDomain` 对齐；renderer 不直接依赖 core）。 */
 export type SkillDomainDto = 'global' | 'project';
 
@@ -1357,8 +1291,6 @@ export type SkillsWriteRequest = {
   readonly path?: string;
   readonly content: string;
   readonly projectId?: string;
-  /** 编辑已存在文件时传 read 返回的版本（VFS 乐观锁）；新建文件不传。 */
-  readonly version?: number;
 };
 
 /** 局部修改（同 edit 工具的 normalize-for-match 语义）；须显式域。 */

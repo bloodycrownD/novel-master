@@ -70,7 +70,6 @@ function makeRuntime(
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
       getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
-      getCurrentRegexGroupId: async () => undefined,
     },
     agentRegistry: registry,
     projects: ctx.projects,
@@ -81,7 +80,6 @@ function makeRuntime(
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
-    regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator: {} as AgentTurnRuntimePort["eventOrchestrator"],

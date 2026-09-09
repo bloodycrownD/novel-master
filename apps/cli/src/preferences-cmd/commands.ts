@@ -8,14 +8,12 @@ import type { PersistentPreferences } from "@novel-master/core";
 import {
   PREF_KEY_CHAT_LLM_STREAM,
   PREF_KEY_CHAT_THINKING_CONTEXT,
-  PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
 } from "@novel-master/core";
 import { PreferencesError } from "@novel-master/core";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 const KNOWN_KEYS = [
-  PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
   PREF_KEY_CHAT_THINKING_CONTEXT,
   PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
@@ -51,10 +49,6 @@ async function getValue(
   key: KnownKey,
 ): Promise<string> {
   switch (key) {
-    case PREF_KEY_SESSION_FS_VERSION_CHECK: {
-      const enabled = await preferences.getSessionFsVersionCheck();
-      return enabled ? "true" : "false";
-    }
     case PREF_KEY_CHAT_LLM_STREAM: {
       const enabled = await preferences.getLlmStreamEnabled();
       return enabled ? "true" : "false";
@@ -77,9 +71,6 @@ async function setValue(
 ): Promise<void> {
   try {
     switch (key) {
-      case PREF_KEY_SESSION_FS_VERSION_CHECK:
-        await preferences.setSessionFsVersionCheck(parseBooleanArg(raw, key));
-        return;
       case PREF_KEY_CHAT_LLM_STREAM:
         await preferences.setLlmStreamEnabled(parseBooleanArg(raw, key));
         return;
@@ -103,9 +94,6 @@ async function resetValue(
   key: KnownKey,
 ): Promise<void> {
   switch (key) {
-    case PREF_KEY_SESSION_FS_VERSION_CHECK:
-      await preferences.resetSessionFsVersionCheck();
-      return;
     case PREF_KEY_CHAT_LLM_STREAM:
       await preferences.resetLlmStreamEnabled();
       return;

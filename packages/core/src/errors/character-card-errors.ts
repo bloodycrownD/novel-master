@@ -10,7 +10,9 @@ export type CharacterCardErrorCode =
   | "UNSUPPORTED_SPEC"
   | "INVALID_PATH"
   | "NOT_CONFIRMED"
-  | "IMPORT_FAILED";
+  | "IMPORT_FAILED"
+  /** 输入或生成的 md 树超过体积/条目上限（防原生 OOM 闸门）。 */
+  | "TOO_LARGE";
 
 /**
  * 角色卡解析、路径校验与导入编排的统一错误。

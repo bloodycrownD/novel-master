@@ -60,7 +60,6 @@ const mockRuntime: any = {
   },
   state: {
     getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
-    getCurrentRegexGroupId: jest.fn(async () => undefined),
   },
   eventBus: new SimpleEventBus(),
   // 重进恢复相关 registry mock：默认无 in-flight run（has=false、get=undefined）。
@@ -147,9 +146,9 @@ jest.mock('../src/storage/chat-rich-text-pref', () => ({
   readChatRichTextEnabled: jest.fn(async () => false),
 }));
 
-jest.mock('../src/services/regex-apply-channel', () => ({
-  loadSessionMessagesTailForDisplay: jest.fn(async () => []),
-  loadSessionMessagesPageForDisplay: jest.fn(async () => []),
+jest.mock('../src/services/session-messages-loader', () => ({
+  loadSessionMessagesTail: jest.fn(async () => []),
+  loadSessionMessagesPage: jest.fn(async () => []),
 }));
 
 jest.mock('../src/services/stream-apply-buffer', () => ({

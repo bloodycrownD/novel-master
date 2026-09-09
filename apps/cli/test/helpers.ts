@@ -72,7 +72,6 @@ export interface CliState {
   readonly currentSessionId?: string;
   readonly currentProviderId?: string;
   readonly currentModelId?: string;
-  readonly currentRegexGroupId?: string;
 }
 
 export interface SavedModelListRow {
@@ -258,13 +257,11 @@ export async function readCliState(dbPath: string): Promise<CliState> {
     const currentSessionId = await state.getCurrentSessionId();
     const currentProviderId = await state.getCurrentProviderId();
     const currentModelId = await state.getCurrentModelId();
-    const currentRegexGroupId = await state.getCurrentRegexGroupId();
     return {
       currentProjectId: currentProjectId || undefined,
       currentSessionId: currentSessionId || undefined,
       currentProviderId: currentProviderId || undefined,
       currentModelId: currentModelId || undefined,
-      currentRegexGroupId: currentRegexGroupId || undefined,
     };
   } finally {
     await conn.close();

@@ -14,11 +14,48 @@ import {
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import { DEFAULT_SUBAGENT_DEFINITION } from "../default-subagent-definition.js";
 import type { AgentRegistryService } from "../agent-registry.port.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 export interface DefaultAgentRegistryServiceDeps {
   readonly repository: AgentDefinitionRepository;
   /** 注入时，删除当前 Agent 会清空工作区指针。 */
   readonly state?: PersistentState;
+}
+
+/**
+ * prompts 缺省补空布局：除 name 外所有字段均有默认值，prompts 一族
+ *（含 persist / dynamic 数组）缺省时补 `[]`，让 `{name}` 成为最小合法
+ * create（与内置 general 的空 persist/dynamic 同构）。非对象形状
+ *（字符串 / 数字 / 数组、显式 null）不兜底——原样返回 def，直接交
+ * validateAgentDefinition 报 INVALID_SCHEMA，禁止静默洗白后落盘空布局。
+ */
+function withDefaultPromptLayouts(def: AgentDefinition): AgentDefinition {
+  const prompts = def.prompts as AgentPromptLayout | undefined;
+  // 仅 undefined（真缺省）补空布局；null 与非对象形状（字符串 / 数字 /
+  // 数组）都是显式脏输入，原样透传给校验层拒绝，不在此兜底。
+  if (prompts === undefined) {
+    return { ...def, prompts: { persist: [], dynamic: [] } };
+  }
+  if (
+    prompts === null ||
+    typeof prompts !== "object" ||
+    Array.isArray(prompts)
+  ) {
+    return def;
+  }
+  const persist = prompts.persist as AgentPromptLayout["persist"] | undefined;
+  const dynamic = prompts.dynamic as AgentPromptLayout["dynamic"] | undefined;
+  if (persist == null || dynamic == null) {
+    return {
+      ...def,
+      prompts: {
+        ...prompts,
+        ...(persist == null ? { persist: [] } : {}),
+        ...(dynamic == null ? { dynamic: [] } : {}),
+      },
+    };
+  }
+  return def;
 }
 
 export class DefaultAgentRegistryService implements AgentRegistryService {
@@ -58,8 +95,9 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     def: AgentDefinition,
     options: ValidateAgentDefinitionOptions = {}
   ): Promise<void> {
-    await validateAgentDefinition(def, options);
-    const trimmedName = def.name.trim();
+    const defaulted = withDefaultPromptLayouts(def);
+    await validateAgentDefinition(defaulted, options);
+    const trimmedName = defaulted.name.trim();
     if (trimmedName.length === 0) {
       throw new AgentConfigError(
         "INVALID_SCHEMA",
@@ -75,7 +113,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     }
     await this.assertUniqueDisplayName(agentId, trimmedName);
 
-    const normalized: AgentDefinition = { ...def, name: trimmedName };
+    const normalized: AgentDefinition = { ...defaulted, name: trimmedName };
     await this.deps.repository.upsert(agentId, normalized);
   }
 

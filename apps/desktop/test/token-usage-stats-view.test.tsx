@@ -1,14 +1,24 @@
 /**
- * TokenUsageStatsView 渲染与交互（spec T-S6 的 view 部分 / Step 7）：
- * - 「汇总 / 明细」双页签：默认汇总（五指标卡 + 今日卡 + 分模型表）；切页签不重查、筛选共享；
- * - 汇总页签：分模型表（无命中率列，含「未记录」行、按用量降序）；明细页签：按天柱状图（data-day 序列）；
- * - 空态区分（库全空冷启动 vs 范围内无数据保留今日卡）；自定义区间 ≤366 天校验（超限行内提示且不再发查询）；
- * - kind / filter 参数随筛选（时间范围 × 模型三态）切换正确；点选某天 → hourly 钻取；
- * - 主查询竞态守卫（旧响应后到不覆盖新数据）；错误路径（{ok:false} 保留旧数据 / 格式异常）；
- * - custom toMs 跨 DST 边界（日历推进而非固定毫秒加法）。
+ * TokenUsageStatsView 渲染与交互（token-usage-stats-ui-refresh / Step 3，T-D1~T-D6）：
+ * - 「汇总 / 图表 / 流水」三页签：默认汇总（指标卡 + 服务商×模型饼图）；切页签不重查、筛选共享；
+ * - 汇总页签：饼图（扇区数 = 行数、provider 三态 label、点选扇区/图例出固定详情行、
+ *   占比分母 = summary.totalTokens）；图表页签：按天柱状图（data-day 序列），
+ *   「今天」模式直出按小时图（无按天图节点）；
+ * - 时间模型：自然日闭区间 {fromDay, toDay}（today/last7/last30/custom 映射 + 自定义
+ *   from > to 校验、无 366 上限——超长区间照常查询）；
+ * - 流水跟随时间（T-D3·勘误后）：时间或模型筛选变化都置脏重拉，filter 含 range 且 model 叠加；
+ * - 空态区分（库全空冷启动 vs 范围内无数据，探底走 {fromDay,toDay} 表达 365 天）；
+ *   窗口空（库非空）时三页签统一区间空态（流水页签同样拦截，不再放行全历史流水）；
+ *   库全空探底命中时三个页签统一整屏空态；
+ * - 今日卡全删（T-D5：非空与空态两分支均无 today 卡节点）；
+ * - 主查询竞态守卫（旧响应后到不覆盖新数据）；错误路径（{ok:false} 保留旧数据 / 格式异常）。
+ * - CR 修复轮补口（cr-fix-spec r1）：单行整圆拆双半圆弧（G-1）；日历溢出（02-30）
+ *   行内报错（B-1）；providers 延迟 resolve 的 label 翻转与选中保持（G-2）；
+ *   custom 非法期间旧流水保留（G-3）；0 值行跳过扇区 button 仅留图例入口（S-1）。
  *
  * 范式与 fetch-models-modal.test.tsx 一致：注册 react-alias-hook.mjs 统一 react 副本，
- * react-test-renderer 真渲组件，mock 拦在 window.novelMasterDesktop.invoke 按 channel + kind 路由。
+ * react-test-renderer 真渲组件，mock 拦在 window.novelMasterDesktop.invoke 按 channel + kind 路由
+ * （nm:usageStats/query 按 kind、nm:providers/list 返回 provider 列表）。
  */
 import assert from "node:assert/strict";
 import { register } from "node:module";
@@ -31,7 +41,7 @@ function localMidnight(offsetDays: number): number {
   return new Date(
     now.getFullYear(),
     now.getMonth(),
-    now.getDate() + offsetDays,
+    now.getDate() + offsetDays
   ).getTime();
 }
 
@@ -42,6 +52,23 @@ function toDayKey(ms: number): string {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
+/** 递归收集节点文本（react-test-renderer 节点带循环引用，不能 JSON 序列化）。 */
+function collectText(node: { children?: unknown }): string {
+  let out = "";
+  for (const child of (node.children as unknown[]) ?? []) {
+    if (typeof child === "string") {
+      out += child;
+    } else if (
+      child != null &&
+      typeof child === "object" &&
+      "children" in child
+    ) {
+      out += collectText(child as { children?: unknown });
+    }
+  }
+  return out;
+}
+
 /** 桶工厂（字段与 UsageStatsBucketDto 一致；timing 缺省为存量 null 形态）。 */
 function bucket(
   bucketStartMs: number,
@@ -50,7 +77,10 @@ function bucket(
   completionTokens: number,
   cacheReadTokens: number,
   billedInputTokens: number,
-  timing?: { avgFirstTokenMs?: number | null; avgTokensPerSecond?: number | null },
+  timing?: {
+    avgFirstTokenMs?: number | null;
+    avgTokensPerSecond?: number | null;
+  }
 ) {
   return {
     bucketStartMs,
@@ -75,7 +105,6 @@ const SUMMARY = {
   billedInputTokens: 2000,
   avgFirstTokenMs: 1200,
   avgTokensPerSecond: 45.5,
-  today: { totalTokens: 550, calls: 3 },
 };
 
 /** 3 个有量的天（today-6 / -5 / -2），中间夹杂无 cache 数据（billed=0）的桶。 */
@@ -92,12 +121,17 @@ const DAILY = [
 const HOURLY: ReturnType<typeof bucket>[] = Array.from({ length: 24 }, (_, h) =>
   h === 5
     ? bucket(localMidnight(-6) + 5 * 3_600_000, 2, 500, 300, 100, 500)
-    : bucket(localMidnight(-6) + h * 3_600_000, 0, 0, 0, 0, 0),
+    : bucket(localMidnight(-6) + h * 3_600_000, 0, 0, 0, 0, 0)
 );
 
-/** 故意乱序 + 含「未记录」（null）行——视图应按用量降序重排。 */
+/**
+ * 故意乱序 + 含 provider 三态（未记录 null / 已知 p1 / ——）——视图应按用量降序重排。
+ * 默认两行覆盖「服务商·模型」与「未记录服务商」（null-provider 合并行）；未知服务商形态由
+ * T-D2 用例覆写注入。
+ */
 const MODEL_ROWS = [
   {
+    providerId: null,
     modelName: null,
     calls: 2,
     promptTokens: 500,
@@ -107,6 +141,7 @@ const MODEL_ROWS = [
     billedInputTokens: 0,
   },
   {
+    providerId: "p1",
     modelName: "gpt-4o",
     calls: 10,
     promptTokens: 600,
@@ -119,9 +154,25 @@ const MODEL_ROWS = [
 
 const MODELS = ["claude-3-5-sonnet", "gpt-4o"];
 
+/** provider 列表（nm:providers/list 同源样例；p1 可解析、p-gone 不在其中）。 */
+const PROVIDERS = [
+  {
+    id: "p1",
+    displayName: "OpenAI 官方",
+    protocol: "openai",
+    baseUrl: "",
+    isBuiltin: false,
+    apiKeyStatus: "set",
+    savedCount: 1,
+  },
+];
+
 interface UsageQueryPayload {
   kind: string;
-  filter: { range: { kind: string }; model?: string | null };
+  filter: {
+    range?: { fromDay?: string; toDay?: string };
+    model?: string | null;
+  };
   dayLocalDate?: string;
   offset?: number;
   limit?: number;
@@ -135,6 +186,7 @@ interface MockData {
   modelRows?: unknown;
   models?: unknown;
   requests?: unknown;
+  providers?: unknown;
 }
 
 /** 流水样例：两行（有 timing / 存量 null），total=260 → 50/页 共 6 页。 */
@@ -166,12 +218,18 @@ const REQUEST_PAGE = {
   total: 260,
 };
 
-/** 拦在 ipc client 底层出口：按 nm:usageStats/query 的 payload.kind 路由回样例数据。 */
+/**
+ * 拦在 ipc client 底层出口：nm:usageStats/query 按 payload.kind 路由回样例数据，
+ * nm:providers/list 返回 provider 列表（服务商名解析数据源）。
+ */
 function makeInvoke(
   data: MockData,
-  requests: UsageQueryPayload[] = [],
+  requests: UsageQueryPayload[] = []
 ): (channel: string, payload: unknown) => Promise<unknown> {
   return (channel, payload) => {
+    if (channel === "nm:providers/list") {
+      return Promise.resolve({ ok: true, data: data.providers ?? PROVIDERS });
+    }
     if (channel !== "nm:usageStats/query") {
       return Promise.reject(new Error(`测试未预期的 IPC channel: ${channel}`));
     }
@@ -188,7 +246,10 @@ function makeInvoke(
       case "hourly":
         return Promise.resolve({ ok: true, data: data.hourly ?? HOURLY });
       case "modelBreakdown":
-        return Promise.resolve({ ok: true, data: data.modelRows ?? MODEL_ROWS });
+        return Promise.resolve({
+          ok: true,
+          data: data.modelRows ?? MODEL_ROWS,
+        });
       case "models":
         return Promise.resolve({ ok: true, data: data.models ?? MODELS });
       case "requests":
@@ -204,7 +265,7 @@ function makeInvoke(
 
 /** 挂全局 window.novelMasterDesktop，返回还原函数。 */
 function mockWindow(
-  invoke: (channel: string, payload: unknown) => Promise<unknown>,
+  invoke: (channel: string, payload: unknown) => Promise<unknown>
 ): () => void {
   const g = globalThis as unknown as {
     window?: unknown;
@@ -237,7 +298,7 @@ function metricText(root: ReactTestRendererRoot, metric: string): string {
   const value = node.findAll(
     (child) =>
       typeof child.props.className === "string" &&
-      child.props.className.startsWith("token-stats-card__value"),
+      child.props.className.startsWith("token-stats-card__value")
   )[0];
   return (value.children as unknown[]).map((c) => String(c)).join("");
 }
@@ -251,37 +312,51 @@ function chartCols(root: ReactTestRendererRoot, chart: string): string[] {
     .findAll(
       (node) =>
         typeof node.props.className === "string" &&
-        /^token-stats-chart__col( |$)/.test(node.props.className),
+        /^token-stats-chart__col( |$)/.test(node.props.className)
     )
     .map((node) => node.props["data-day"] as string);
 }
 
-function modelRowKeys(root: ReactTestRendererRoot): string[] {
+/** 饼图扇区 key 序列（data-slice 节点，按渲染顺序）。 */
+function sliceKeys(root: ReactTestRendererRoot): string[] {
   return root
-    .findAll(
-      (node) =>
-        typeof node.props.className === "string" &&
-        /^token-stats-models__row( |$)/.test(node.props.className),
-    )
-    .filter((node) => !node.props.className.includes("--head"))
-    .map((node) => node.props["data-model"] as string);
+    .findAll((node) => typeof node.props["data-slice"] === "string")
+    .map((node) => node.props["data-slice"] as string);
+}
+
+/** 饼图图例 key 序列（data-slice-key 节点）。 */
+function legendKeys(root: ReactTestRendererRoot): string[] {
+  return root
+    .findAll((node) => typeof node.props["data-slice-key"] === "string")
+    .map((node) => node.props["data-slice-key"] as string);
+}
+
+/** 图例文案（按 key 定位图例按钮）。 */
+function legendText(root: ReactTestRendererRoot, key: string): string {
+  return collectText(root.findByProps({ "data-slice-key": key }));
+}
+
+/** 详情行文案（点选扇区/图例后出现；无选中返回 null）。 */
+function sliceDetailText(root: ReactTestRendererRoot): string | null {
+  const node = root.findAll(
+    (n) => typeof n.props["data-slice-detail"] === "string"
+  )[0];
+  return node == null ? null : collectText(node);
 }
 
 /** 点击 SegmentedControl 按钮（按按钮文本定位）。 */
 async function clickSegmented(
   root: ReactTestRendererRoot,
-  label: string,
+  label: string
 ): Promise<void> {
   await act(async () => {
     const btn = root
       .findAll(
         (node) =>
           typeof node.props.className === "string" &&
-          /^segmented-control__btn( |$)/.test(node.props.className),
+          /^segmented-control__btn( |$)/.test(node.props.className)
       )
-      .find(
-        (node) => (node.children as unknown[]).some((c) => c === label),
-      );
+      .find((node) => (node.children as unknown[]).some((c) => c === label));
     assert.ok(btn != null, `未找到分段按钮：${label}`);
     btn.props.onClick();
   });
@@ -290,12 +365,14 @@ async function clickSegmented(
 /** 模型下拉选值（受控 select：onChange 只读 e.target.value）。 */
 async function selectModel(
   root: ReactTestRendererRoot,
-  value: string,
+  value: string
 ): Promise<void> {
   await act(async () => {
-    root.findByProps({ className: "token-stats-view__model-select" }).props.onChange({
-      target: { value },
-    });
+    root
+      .findByProps({ className: "token-stats-view__model-select" })
+      .props.onChange({
+        target: { value },
+      });
   });
 }
 
@@ -303,22 +380,28 @@ async function selectModel(
 async function setDate(
   root: ReactTestRendererRoot,
   ariaLabel: string,
-  value: string,
+  value: string
 ): Promise<void> {
   await act(async () => {
-    root.findByProps({ className: "token-stats-view__date", "aria-label": ariaLabel }).props.onChange(
-      { target: { value } },
-    );
+    root
+      .findByProps({
+        className: "token-stats-view__date",
+        "aria-label": ariaLabel,
+      })
+      .props.onChange({ target: { value } });
   });
 }
 
 /** 点击某根按天柱。 */
-async function clickDayCol(root: ReactTestRendererRoot, day: string): Promise<void> {
+async function clickDayCol(
+  root: ReactTestRendererRoot,
+  day: string
+): Promise<void> {
   await act(async () => {
     const btn = root.findAll(
       (node) =>
         typeof node.props.className === "string" &&
-        /^token-stats-chart__col( |$)/.test(node.props.className),
+        /^token-stats-chart__col( |$)/.test(node.props.className)
     );
     const col = btn.find((node) => node.props["data-day"] === day);
     assert.ok(col != null, `未找到按天柱：${day}`);
@@ -326,8 +409,30 @@ async function clickDayCol(root: ReactTestRendererRoot, day: string): Promise<vo
   });
 }
 
-describe("TokenUsageStatsView（T-S6 view 部分）", () => {
-  it("汇总页签：五指标卡 + 今日卡 + 分模型表（无命中率列）；明细页签：按天柱；页签共享筛选不重查", async () => {
+/** 点击饼图扇区（data-slice 按钮）。 */
+async function clickSlice(
+  root: ReactTestRendererRoot,
+  key: string
+): Promise<void> {
+  await act(async () => {
+    const node = root.findByProps({ "data-slice": key });
+    node.props.onClick();
+  });
+}
+
+/** 点击饼图图例（data-slice-key 按钮）。 */
+async function clickLegend(
+  root: ReactTestRendererRoot,
+  key: string
+): Promise<void> {
+  await act(async () => {
+    const node = root.findByProps({ "data-slice-key": key });
+    node.props.onClick();
+  });
+}
+
+describe("TokenUsageStatsView（Step 3 适配）", () => {
+  it("汇总页签：指标卡 + 饼图（点图例出详情行）；图表页签：按天柱；页签共享筛选不重查", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -335,54 +440,50 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       renderer = await mountView();
       const root = renderer.root;
 
-      // 默认落在「汇总」页签：五指标卡（总 3K / 输入 1K / 输出 2K / 调用 12 / 命中率 400÷2000=20%）
+      // 默认落在「汇总」页签：指标卡（总 3K / 输入 1K / 输出 2K / 调用 12 / 命中率 400÷2000=20%）
       assert.equal(metricText(root, "totalTokens"), "3K");
       assert.equal(metricText(root, "promptTokens"), "1K");
       assert.equal(metricText(root, "completionTokens"), "2K");
       assert.equal(metricText(root, "calls"), "12");
       assert.equal(metricText(root, "hitRate"), "20%");
 
-      // 今日卡（独立于筛选）
-      assert.equal(metricText(root, "todayTotalTokens"), "550");
-      assert.equal(metricText(root, "todayCalls"), "3");
-
       // 汇总页签不渲染明细图表
       assert.deepEqual(chartCols(root, "daily"), []);
 
-      // 分模型汇总（挂在汇总页签）：按用量降序（gpt-4o 1200 → 其他 800），null 行显示「其他」
-      assert.deepEqual(modelRowKeys(root), ["gpt-4o", "__unlogged__"]);
-      const unloggedRow = root.findAll(
-        (node) => node.props["data-model"] === "__unlogged__",
-      )[0]!;
-      assert.ok(
-        unloggedRow
-          .findAll((n) => n.props.className === "token-stats-models__name")
-          .some((n) => (n.children as unknown[]).includes("其他")),
-        "其他模型行（null）应展示「其他」名称",
+      // 饼图（挂在汇总页签）：按用量降序（p1/gpt-4o 1200 → 未记录 800）；
+      // 扇区与图例同源同序，key = providerId::modelName 组合
+      assert.deepEqual(sliceKeys(root), [
+        "p1::gpt-4o",
+        "__no_provider__::__other_model__",
+      ]);
+      assert.deepEqual(legendKeys(root), [
+        "p1::gpt-4o",
+        "__no_provider__::__other_model__",
+      ]);
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+      assert.equal(
+        legendText(root, "__no_provider__::__other_model__"),
+        "未记录服务商"
       );
 
-      // 表头无命中率列：模型 / 用量 / 占比 / 调用次数
-      const headRow = root.findAll(
-        (node) =>
-          typeof node.props.className === "string" &&
-          node.props.className.includes("token-stats-models__row--head"),
-      )[0]!;
-      const headTexts = (headRow.children as unknown[]).map((c) =>
-        String((c as { props: { children: unknown } }).props.children),
-      );
-      assert.deepEqual(headTexts, ["模型", "用量", "占比", "调用次数"]);
-
-      // 数据行单元格：名称 / 用量 / 占比 / 调用次数（不再有命中率出口）
-      const gptRow = root.findAll((node) => node.props["data-model"] === "gpt-4o")[0]!;
-      const cellTexts = (gptRow.children as unknown[]).map((c) =>
-        String((c as { props: { children: unknown } }).props.children),
-      );
-      assert.deepEqual(cellTexts, ["gpt-4o", "1.2K", "40%", "10"]);
+      // 点图例 → 图下固定详情行（服务商·模型 / 用量 / 次数 / 占比；分母 = summary.totalTokens）
+      await clickLegend(root, "p1::gpt-4o");
+      const detail = sliceDetailText(root);
+      assert.ok(detail != null, "点图例后应出现详情行");
+      assert.ok(detail.includes("OpenAI 官方 · gpt-4o"));
+      assert.ok(detail.includes("1.2K"), `详情行应含用量 1.2K：${detail}`);
+      assert.ok(detail.includes("10 次"));
+      assert.ok(detail.includes("40%"), `占比应为 1200/3000=40%：${detail}`);
+      // 再点同一图例取消选中
+      await clickLegend(root, "p1::gpt-4o");
+      assert.equal(sliceDetailText(root), null, "再点图例应取消详情行");
 
       // 模型下拉（共享筛选栏，两页签都在）：全部 / 库内模型 / 其他模型（DEV-1：UI 侧补「其他模型」选项，语义为 NULL + 非当前配置历史模型）
-      const select = root.findByProps({ className: "token-stats-view__model-select" });
+      const select = root.findByProps({
+        className: "token-stats-view__model-select",
+      });
       const optionValues = select.children.map(
-        (c: { props: { value: string } }) => c.props.value,
+        (c: { props: { value: string } }) => c.props.value
       );
       assert.deepEqual(optionValues, [
         "__all__",
@@ -395,23 +496,29 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
         select.children.some(
           (c: { props: { value: string; children: unknown } }) =>
             c.props.value === "__unlogged__" &&
-            (c.props.children as unknown[]).includes("其他模型"),
+            (c.props.children as unknown[]).includes("其他模型")
         ),
-        "哨兵选项文案应为「其他模型」",
+        "哨兵选项文案应为「其他模型」"
       );
 
-      // 切到「明细」：页签共享筛选与数据，不触发任何新查询；只剩按天柱，不含分模型表
+      // 切到「图表」：页签共享筛选与数据，不触发任何新查询；只剩按天柱，不含饼图
       requests.length = 0;
-      await clickSegmented(root, "明细");
+      await clickSegmented(root, "图表");
       assert.equal(requests.length, 0, "切换页签不应重新查询");
-      assert.deepEqual(chartCols(root, "daily"), DAILY.map((b) => toDayKey(b.bucketStartMs)));
-      assert.equal(modelRowKeys(root).length, 0, "明细页签不应渲染分模型表");
+      assert.deepEqual(
+        chartCols(root, "daily"),
+        DAILY.map((b) => toDayKey(b.bucketStartMs))
+      );
+      assert.equal(sliceKeys(root).length, 0, "图表页签不应渲染饼图");
 
-      // 切回「汇总」：卡片与分模型表仍在，明细图表隐藏（筛选与数据保持）
+      // 切回「汇总」：卡片与饼图仍在，明细图表隐藏（筛选与数据保持）
       await clickSegmented(root, "汇总");
       assert.equal(metricText(root, "totalTokens"), "3K");
       assert.deepEqual(chartCols(root, "daily"), []);
-      assert.deepEqual(modelRowKeys(root), ["gpt-4o", "__unlogged__"]);
+      assert.deepEqual(sliceKeys(root), [
+        "p1::gpt-4o",
+        "__no_provider__::__other_model__",
+      ]);
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -420,18 +527,18 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     }
   });
 
-  it("空态区分（库全空）：冷启动引导文案，不渲染图表与今日卡", async () => {
+  it("空态区分（库全空）：冷启动引导文案，不渲染图表；无今日卡（T-D5 空态分支）", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(
       makeInvoke(
         {
-          // 范围内空、今日空，探底（custom 宽范围 summary）也空 → 库全空
-          summary: { ...SUMMARY, calls: 0, totalTokens: 0, today: { totalTokens: 0, calls: 0 } },
+          // 范围内空、探底（365 天宽区间 summary）也空 → 库全空
+          summary: { ...SUMMARY, calls: 0, totalTokens: 0 },
           daily: [],
           modelRows: [],
         },
-        requests,
-      ),
+        requests
+      )
     );
     let renderer: ReactTestRenderer | undefined;
     try {
@@ -439,24 +546,48 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       const root = renderer.root;
 
       const empty = root.findByProps({ className: "settings-list__empty" });
-      const emptyText = (empty.children as unknown[]).map((c) => String(c)).join("");
+      const emptyText = (empty.children as unknown[])
+        .map((c) => String(c))
+        .join("");
       assert.ok(
         emptyText.includes("上线起开始积累"),
-        "库全空应展示冷启动引导文案",
+        "库全空应展示冷启动引导文案"
       );
       assert.deepEqual(chartCols(root, "daily"), []);
-      assert.equal(modelRowKeys(root).length, 0);
-      // 库全空时今日卡必为 0，不随冷启动文案渲染
+      assert.equal(sliceKeys(root).length, 0);
+      // 今日卡已删（T-D5）：空态分支不渲染任何 today 卡节点
       assert.equal(
-        root.findAll((node) => node.props["data-metric"] === "todayTotalTokens").length,
+        root.findAll((node) => node.props["data-metric"] === "todayTotalTokens")
+          .length,
         0,
-        "库全空不应渲染今日卡",
+        "空态不应渲染今日卡"
+      );
+      assert.equal(
+        root.findAll((node) => node.props["data-metric"] === "todayCalls")
+          .length,
+        0,
+        "空态不应渲染今日卡（调用次数）"
       );
 
-      // 空态对两个页签一致：切到「明细」仍展示空态，不渲染图表与分模型表
-      await clickSegmented(root, "明细");
+      // 空态对两个页签一致：切到「图表」仍展示空态，不渲染图表与饼图
+      await clickSegmented(root, "图表");
       assert.deepEqual(chartCols(root, "daily"), []);
-      assert.equal(modelRowKeys(root).length, 0);
+      assert.equal(sliceKeys(root).length, 0);
+      // 库全空行为不变：流水页签同样整屏空态（流水本身也无数据），不渲染流水行
+      await clickSegmented(root, "流水");
+      assert.ok(
+        collectText(
+          root.findByProps({ className: "settings-list__empty" })
+        ).includes("上线起开始积累"),
+        "库全空时流水页签仍应整屏冷启动空态"
+      );
+      assert.equal(
+        root.findAll(
+          (node) => node.props.className === "token-stats-requests__row"
+        ).length,
+        0,
+        "库全空时不应渲染流水行"
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -465,21 +596,22 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     }
   });
 
-  it("空态区分（范围内无数据）：「该区间无数据」文案 + 保留今日卡", async () => {
+  it("空态区分（范围内无数据）：「该区间无数据」文案；探底走 {fromDay,toDay} 表达 365 天（T-D6）；无今日卡", async () => {
     const requests: UsageQueryPayload[] = [];
+    const probeFromDay = toDayKey(localMidnight(-365));
     const restore = mockWindow(
       makeInvoke(
         {
-          // 用户查询（last7）范围内空但今日有量；探底（custom 宽范围）非空 → 库有数据
+          // 用户查询（last7）范围内空；探底（fromDay = 365 天前的宽区间）非空 → 库有数据
           summary: (req) =>
-            req.filter.range.kind === "custom"
+            req.filter.range?.fromDay === probeFromDay
               ? SUMMARY
-              : { ...SUMMARY, calls: 0, totalTokens: 0, today: { totalTokens: 120, calls: 2 } },
+              : { ...SUMMARY, calls: 0, totalTokens: 0 },
           daily: [],
           modelRows: [],
         },
-        requests,
-      ),
+        requests
+      )
     );
     let renderer: ReactTestRenderer | undefined;
     try {
@@ -487,16 +619,29 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       const root = renderer.root;
 
       const empty = root.findByProps({ className: "settings-list__empty" });
-      const emptyText = (empty.children as unknown[]).map((c) => String(c)).join("");
+      const emptyText = (empty.children as unknown[])
+        .map((c) => String(c))
+        .join("");
       assert.ok(
         emptyText.includes("当前筛选范围内暂无用量数据"),
-        "范围内无数据应提示该区间无数据",
+        "范围内无数据应提示该区间无数据"
       );
       assert.deepEqual(chartCols(root, "daily"), []);
-      assert.equal(modelRowKeys(root).length, 0);
-      // 今日卡独立于筛选，不随范围空态消失
-      assert.equal(metricText(root, "todayTotalTokens"), "120");
-      assert.equal(metricText(root, "todayCalls"), "2");
+      assert.equal(sliceKeys(root).length, 0);
+      // 今日卡已删：范围内无数据分支同样不渲染
+      assert.equal(
+        root.findAll((node) => node.props["data-metric"] === "todayTotalTokens")
+          .length,
+        0,
+        "范围内无数据分支不应渲染今日卡"
+      );
+
+      // T-D6：探底查询的 range 为 {fromDay: 365 天前, toDay: 今天} 的自然日闭区间
+      const probe = requests.find(
+        (r) => r.kind === "summary" && r.filter.range?.fromDay === probeFromDay
+      );
+      assert.ok(probe != null, "空态应懒发一次 365 天宽区间探底查询");
+      assert.equal(probe.filter.range?.toDay, toDayKey(localMidnight(0)));
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -505,7 +650,100 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     }
   });
 
-  it("kind / filter 参数随筛选切换正确（时间范围 × 模型三态）", async () => {
+  it("窗口空（库非空）：三页签统一区间空态；流水页签不渲染流水行（查询仍按当前窗口发出）", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const probeFromDay = toDayKey(localMidnight(-365));
+    const restore = mockWindow(
+      makeInvoke(
+        {
+          // 用户查询（last7）窗口空；探底（365 天宽区间）非空 → 库有数据
+          summary: (req) =>
+            req.filter.range?.fromDay === probeFromDay
+              ? SUMMARY
+              : { ...SUMMARY, calls: 0, totalTokens: 0 },
+          daily: [],
+          modelRows: [],
+        },
+        requests
+      )
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 默认汇总页签：区间空态文案，不渲染任何指标卡
+      assert.ok(
+        collectText(
+          root.findByProps({ className: "settings-list__empty" })
+        ).includes("当前筛选范围内暂无用量数据")
+      );
+      assert.equal(
+        root.findAll((node) => node.props["data-metric"] != null).length,
+        0,
+        "窗口空时汇总页签不应渲染指标卡"
+      );
+
+      // 图表页签：同样区间空态，不渲染按天图与饼图
+      await clickSegmented(root, "图表");
+      assert.ok(
+        collectText(
+          root.findByProps({ className: "settings-list__empty" })
+        ).includes("当前筛选范围内暂无用量数据")
+      );
+      assert.deepEqual(chartCols(root, "daily"), []);
+      assert.equal(sliceKeys(root).length, 0);
+
+      // 流水页签（需求①勘误后）：同样被区间空态拦截，不再放行全历史流水；
+      // 流水查询仍照常按当前窗口发出（filter 含 range，数据被空态盖住不渲染）
+      requests.length = 0;
+      await clickSegmented(root, "流水");
+      assert.ok(
+        collectText(
+          root.findByProps({ className: "settings-list__empty" })
+        ).includes("当前筛选范围内暂无用量数据"),
+        "窗口空时流水页签应显示区间空态"
+      );
+      const reqQueries = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqQueries.length, 1, "切流水页签应拉首页");
+      assert.equal(
+        reqQueries[0]!.filter.range?.fromDay,
+        toDayKey(localMidnight(-6)),
+        "流水查询应携带当前窗口 range（last7 默认）"
+      );
+      assert.equal(
+        reqQueries[0]!.filter.range?.toDay,
+        toDayKey(localMidnight(0))
+      );
+      assert.equal(reqQueries[0]!.offset, 0);
+      assert.equal(reqQueries[0]!.limit, 50);
+      assert.equal(
+        root.findAll(
+          (node) => node.props.className === "token-stats-requests__row"
+        ).length,
+        0,
+        "窗口空时流水页签不应渲染流水行"
+      );
+      assert.equal(
+        root.findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            node.props.className
+              .split(" ")
+              .includes("token-stats-requests__page-num")
+        ).length,
+        0,
+        "窗口空时不应渲染流水分页器"
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("kind / filter 参数随筛选切换正确（自然日区间 × 模型三态；T-D1 映射）", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -513,49 +751,104 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       renderer = await mountView();
       const root = renderer.root;
 
-      // 初始挂载：models + summary/daily/modelBreakdown（last7、model 全部）
+      // 初始挂载：models + summary/daily/modelBreakdown（last7 = {D-6, D}、model 全部）
       const kinds = requests.map((r) => r.kind).sort();
       assert.deepEqual(kinds, ["daily", "modelBreakdown", "models", "summary"]);
+      const last7From = toDayKey(localMidnight(-6));
+      const todayKey = toDayKey(localMidnight(0));
       assert.ok(
-        requests.every((r) => r.filter.range.kind === "last7" && r.filter.model === undefined),
+        requests
+          .filter((r) => r.kind !== "models")
+          .every(
+            (r) =>
+              r.filter.range?.fromDay === last7From &&
+              r.filter.range?.toDay === todayKey &&
+              r.filter.model === undefined
+          ),
+        "last7 应映射 {fromDay: D-6, toDay: D}"
+      );
+      // models 查询不传 dummy range（P2-4）
+      assert.equal(
+        requests.find((r) => r.kind === "models")?.filter.range,
+        undefined,
+        "models 查询不应携带 range"
       );
 
-      // 切到近 30 天：三连查询 range.kind=last30
+      // 切到「今天」：三连查询 range = {D, D}（T-D1）；同时 reload 成功回调自动补选
+      // 今天（P1-1）→ hourly 钻取立即自动拉取（不依赖页签激活）
+      requests.length = 0;
+      await clickSegmented(root, "今天");
+      assert.deepEqual(requests.map((r) => r.kind).sort(), [
+        "daily",
+        "hourly",
+        "modelBreakdown",
+        "summary",
+      ]);
+      assert.ok(
+        requests.every(
+          (r) =>
+            r.filter.range?.fromDay === todayKey &&
+            r.filter.range?.toDay === todayKey
+        ),
+        "today 应映射 {fromDay: D, toDay: D}"
+      );
+
+      // 切到近 30 天：三连查询 range = {D-29, D}（T-D1，30 桶口径）。
+      // 注：从「今天」切走时，hourly effect 在 reload 清空 selectedDay 前会以旧
+      // 选中天补发一次 hourly（过渡请求，随后被清空），断言时过滤掉。
       requests.length = 0;
       await clickSegmented(root, "近 30 天");
       assert.deepEqual(
-        requests.map((r) => r.kind).sort(),
-        ["daily", "modelBreakdown", "summary"],
+        requests
+          .map((r) => r.kind)
+          .filter((k) => k !== "hourly")
+          .sort(),
+        ["daily", "modelBreakdown", "summary"]
       );
-      assert.ok(requests.every((r) => r.filter.range.kind === "last30"));
+      assert.ok(
+        requests.every(
+          (r) =>
+            r.filter.range?.fromDay === toDayKey(localMidnight(-29)) &&
+            r.filter.range?.toDay === todayKey
+        ),
+        "last30 应映射 {fromDay: D-29, toDay: D}"
+      );
 
-      // 模型三态：指定模型 → 字符串；未记录 → null；全部 → undefined
+      // 模型三态：指定模型 → 字符串；其他 → null；全部 → undefined
       requests.length = 0;
       await selectModel(root, "gpt-4o");
       assert.ok(
         requests.length > 0 &&
-          requests.every((r) => r.filter.model === "gpt-4o"),
+          requests.every((r) => r.filter.model === "gpt-4o")
       );
 
       requests.length = 0;
       await selectModel(root, "__unlogged__");
-      assert.ok(requests.length > 0 && requests.every((r) => r.filter.model === null));
+      assert.ok(
+        requests.length > 0 && requests.every((r) => r.filter.model === null)
+      );
 
       requests.length = 0;
       await selectModel(root, "__all__");
-      assert.ok(requests.length > 0 && requests.every((r) => r.filter.model === undefined));
+      assert.ok(
+        requests.length > 0 &&
+          requests.every((r) => r.filter.model === undefined)
+      );
 
-      // 页签共享筛选：切「明细」不重查；在明细页签下改时间范围仍触发三连查询
-      // （当前已是近 30 天，切回近 7 天验证）
+      // 页签共享筛选：切「图表」不重查；在图表页签下改时间范围仍触发三连查询
       requests.length = 0;
-      await clickSegmented(root, "明细");
+      await clickSegmented(root, "图表");
       assert.equal(requests.length, 0, "切换页签不应重新查询");
       await clickSegmented(root, "近 7 天");
-      assert.deepEqual(
-        requests.map((r) => r.kind).sort(),
-        ["daily", "modelBreakdown", "summary"],
+      assert.deepEqual(requests.map((r) => r.kind).sort(), [
+        "daily",
+        "modelBreakdown",
+        "summary",
+      ]);
+      assert.ok(
+        requests.every((r) => r.filter.range?.fromDay === last7From),
+        "切回近 7 天应重新按 {D-6, D} 查询"
       );
-      assert.ok(requests.every((r) => r.filter.range.kind === "last7"));
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -564,7 +857,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     }
   });
 
-  it("自定义区间：预填最近 7 天发起 custom 查询；超 366 天行内提示且不再查询", async () => {
+  it("自定义区间：预填最近 7 天直传日期串；超长区间不再报错；02-30 溢出与 from > to 行内提示且不再查询、旧流水保留（T-D1 + B-1/G-3）", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -572,22 +865,123 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       renderer = await mountView();
       const root = renderer.root;
 
-      // 切到自定义：预填 today-6 ~ today，from=起始日 0 点、to=结束日次日 0 点
+      // 切到自定义：预填 today-6 ~ today，range 为日期字符串直传（无毫秒换算）
       requests.length = 0;
       await clickSegmented(root, "自定义");
-      const custom = requests.filter((r) => r.filter.range.kind === "custom");
+      const custom = requests.filter((r) => r.filter.range?.fromDay != null);
       assert.equal(custom.length, 3);
-      const first = custom[0]!.filter.range as { fromMs?: number; toMs?: number };
-      assert.equal(first.fromMs, localMidnight(-6));
-      assert.equal(first.toMs, localMidnight(1));
+      assert.deepEqual(custom[0]!.filter.range, {
+        fromDay: toDayKey(localMidnight(-6)),
+        toDay: toDayKey(localMidnight(0)),
+      });
 
-      // 起始日拉到 2020-01-01：超 366 天 → 行内提示、无新查询
+      // 起始日拉到 2020-01-01：超长区间（数年）不再报错、照常发查询（366 上限已删）
       requests.length = 0;
       await setDate(root, "开始日期", "2020-01-01");
-      const err = root.findByProps({ className: "token-stats-view__range-error" });
-      const errText = (err.children as unknown[]).map((c) => String(c)).join("");
-      assert.equal(errText, "自定义区间最长 366 天");
+      assert.equal(
+        root.findAll(
+          (node) => node.props.className === "token-stats-view__range-error"
+        ).length,
+        0,
+        "超长区间不应再报 366 天错误"
+      );
+      assert.ok(
+        requests.some((r) => r.filter.range?.fromDay === "2020-01-01"),
+        "超长区间应照常发起查询"
+      );
+
+      // G-3 前置：先切到流水页签加载出旧流水行——「非法区间保留旧数据」要有旧数据可保
+      await clickSegmented(root, "流水");
+      const reqRowsOf = (): string[] =>
+        root
+          .findAll(
+            (node) =>
+              typeof node.props.className === "string" &&
+              node.props.className === "token-stats-requests__row"
+          )
+          .map((node) => collectText(node));
+      assert.equal(
+        requests.filter((r) => r.kind === "requests").length,
+        1,
+        "切流水页签应拉首页"
+      );
+      assert.ok(
+        reqRowsOf().length >= 2,
+        `流水行应已加载：${reqRowsOf().length}`
+      );
+      assert.ok(
+        reqRowsOf().some((t) => t.includes("gpt-4o")),
+        "流水行内容应已渲染"
+      );
+
+      // 02-30 日历溢出（B-1）：parseLocalDate 回读校验拦截 → 行内 range-error
+      // 报错（不再绕到全局 loadError）；期间旧流水行保留、不发查询
+      requests.length = 0;
+      await setDate(root, "结束日期", "2025-02-30");
+      const overflowErr = root.findByProps({
+        className: "token-stats-view__range-error",
+      });
+      const overflowText = (overflowErr.children as unknown[])
+        .map((c) => String(c))
+        .join("");
+      assert.equal(overflowText, "请选择起止日期");
+      assert.equal(
+        root.findAll(
+          (node) => node.props.className === "token-stats-view__error"
+        ).length,
+        0,
+        "日历溢出应走行内错误而非全局 loadError"
+      );
+      assert.equal(requests.length, 0, "非法日期不应发起查询");
+      assert.ok(reqRowsOf().length >= 2, "非法日期期间旧流水行应保留（G-3）");
+
+      // from > to：行内提示且不再发查询；旧流水行仍在（G-3）
+      requests.length = 0;
+      await setDate(root, "结束日期", "2019-12-31");
+      const err = root.findByProps({
+        className: "token-stats-view__range-error",
+      });
+      const errText = (err.children as unknown[])
+        .map((c) => String(c))
+        .join("");
+      assert.equal(errText, "开始日期不能晚于结束日期");
       assert.equal(requests.length, 0, "区间非法时不应发起查询");
+      assert.ok(
+        reqRowsOf().length >= 2,
+        "from > to 非法期间旧流水行应保留（G-3）"
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("custom 日期字符串原样透传（含跨 DST 边界日期）", async () => {
+    // 自然日区间模型下 fromDay/toDay 为字符串直传，不再有 toMs 次日 0 点换算
+    // （原 DST 用例考的日历推进在时间模型重构后不再存在于桌面端）。
+    const requests: UsageQueryPayload[] = [];
+    const restore = mockWindow(makeInvoke({}, requests));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      await clickSegmented(root, "自定义");
+      await setDate(root, "开始日期", "2024-03-08");
+      await setDate(root, "结束日期", "2024-03-10");
+      // 改起止日各触发一轮查询（结束日落下后区间定型），取最后一轮断言字符串直传
+      const custom = requests.filter(
+        (r) =>
+          r.filter.range?.fromDay === "2024-03-08" &&
+          r.filter.range?.toDay === "2024-03-10"
+      );
+      assert.ok(custom.length >= 1, "区间定型后应发起查询");
+      assert.deepEqual(custom.at(-1)!.filter.range, {
+        fromDay: "2024-03-08",
+        toDay: "2024-03-10",
+      });
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -604,8 +998,8 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       renderer = await mountView();
       const root = renderer.root;
 
-      // 按天图在「明细」页签：先切过去再点选
-      await clickSegmented(root, "明细");
+      // 按天图在「图表」页签：先切过去再点选
+      await clickSegmented(root, "图表");
       const dayKey = toDayKey(DAILY[0]!.bucketStartMs);
       requests.length = 0;
       await clickDayCol(root, dayKey);
@@ -614,33 +1008,43 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       const hourly = requests.filter((r) => r.kind === "hourly");
       assert.equal(hourly.length, 1);
       assert.equal(hourly[0]!.dayLocalDate, dayKey);
-      assert.equal(hourly[0]!.filter.range.kind, "last7");
+      assert.equal(
+        hourly[0]!.filter.range?.fromDay,
+        toDayKey(localMidnight(-6))
+      );
 
       // 24 小时柱 + 当天汇总行（标题含选中日期；汇总行保留命中率出口：400÷1000=40%）
       assert.equal(chartCols(root, "hourly").length, 24);
       // hourly 柱为纯展示（role="img" 的 div）：不可聚焦 button；按天柱仍可交互（desktop/J-1）
-      const hourlyContainer = root.findAll((node) => node.props["data-chart"] === "hourly")[0]!;
+      const hourlyContainer = root.findAll(
+        (node) => node.props["data-chart"] === "hourly"
+      )[0]!;
       assert.equal(
         hourlyContainer.findAll((node) => node.type === "button").length,
         0,
-        "hourly 柱不应渲染为可聚焦 button",
+        "hourly 柱不应渲染为可聚焦 button"
       );
       assert.equal(
         hourlyContainer.findAll((node) => node.props.role === "img").length,
         24,
-        "hourly 柱应为 role=img 的纯展示节点",
+        "hourly 柱应为 role=img 的纯展示节点"
       );
-      const dailyContainer = root.findAll((node) => node.props["data-chart"] === "daily")[0]!;
+      const dailyContainer = root.findAll(
+        (node) => node.props["data-chart"] === "daily"
+      )[0]!;
       assert.equal(
         dailyContainer.findAll((node) => node.type === "button").length,
         DAILY.length,
-        "按天柱应保持可交互 button",
+        "按天柱应保持可交互 button"
       );
       const detail = root.findByProps({ "data-day-detail": dayKey });
       const detailSummary = detail.children
-        .filter((c: { props?: { className?: string } }) => c.props?.className === "token-stats-view__day-detail-summary")
+        .filter(
+          (c: { props?: { className?: string } }) =>
+            c.props?.className === "token-stats-view__day-detail-summary"
+        )
         .map((c: { props: { children: unknown[] } }) =>
-          (c.props.children as unknown[]).map((x) => String(x)).join(""),
+          (c.props.children as unknown[]).map((x) => String(x)).join("")
         )
         .join("");
       assert.ok(detailSummary.includes("40%"), "当天汇总行应保留命中率");
@@ -649,7 +1053,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       await clickDayCol(root, dayKey);
       assert.equal(
         root.findAll((node) => node.props["data-day-detail"] === dayKey).length,
-        0,
+        0
       );
     } finally {
       await act(async () => {
@@ -671,6 +1075,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     const DAILY_B = [bucket(localMidnight(-2), 1, 10, 5, 0, 10)];
     const ROWS_B = [
       {
+        providerId: "p2",
         modelName: "claude-3-5-sonnet",
         calls: 9,
         promptTokens: 5000,
@@ -685,15 +1090,23 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     // 第一轮（last7）三连挂起，手动释放；其余（models / last30）立即返回
     const pending: Array<(v: { ok: true; data: unknown }) => void> = [];
     const restore = mockWindow((channel, payload) => {
+      if (channel === "nm:providers/list") {
+        return Promise.resolve({ ok: true, data: PROVIDERS });
+      }
       if (channel !== "nm:usageStats/query") {
-        return Promise.reject(new Error(`测试未预期的 IPC channel: ${channel}`));
+        return Promise.reject(
+          new Error(`测试未预期的 IPC channel: ${channel}`)
+        );
       }
       const req = payload as UsageQueryPayload;
       requests.push(req);
       if (req.kind === "models" || req.kind === "hourly") {
-        return Promise.resolve({ ok: true, data: req.kind === "models" ? MODELS : HOURLY });
+        return Promise.resolve({
+          ok: true,
+          data: req.kind === "models" ? MODELS : HOURLY,
+        });
       }
-      if (req.filter.range.kind === "last30") {
+      if (req.filter.range?.fromDay === toDayKey(localMidnight(-29))) {
         return Promise.resolve({ ok: true, data: dataOf(req.kind) });
       }
       return new Promise((resolve) => {
@@ -708,7 +1121,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       // 快速切筛选：第一轮（last7）仍挂起，第二轮（last30）先落地
       await clickSegmented(root, "近 30 天");
       assert.equal(metricText(root, "totalTokens"), "9K", "第二轮数据应先落地");
-      assert.deepEqual(modelRowKeys(root), ["claude-3-5-sonnet"]);
+      assert.deepEqual(sliceKeys(root), ["p2::claude-3-5-sonnet"]);
 
       // 旧响应后到：第一轮（last7，3K / gpt-4o）随后 resolve，应被整体丢弃。
       // 按请求顺序回填正确旧数据（summary / daily / modelBreakdown），
@@ -719,9 +1132,17 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
           resolve({ ok: true, data: staleData[i] });
         });
       });
-      assert.equal(metricText(root, "totalTokens"), "9K", "旧响应不应覆盖新数据");
+      assert.equal(
+        metricText(root, "totalTokens"),
+        "9K",
+        "旧响应不应覆盖新数据"
+      );
       assert.equal(metricText(root, "promptTokens"), "5K");
-      assert.deepEqual(modelRowKeys(root), ["claude-3-5-sonnet"], "分模型表不应被旧响应覆盖");
+      assert.deepEqual(
+        sliceKeys(root),
+        ["p2::claude-3-5-sonnet"],
+        "饼图不应被旧响应覆盖"
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -735,6 +1156,9 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
     const base = makeInvoke({}, requests);
     let failAll = false;
     const restore = mockWindow((channel, payload) => {
+      if (channel === "nm:providers/list") {
+        return Promise.resolve({ ok: true, data: PROVIDERS });
+      }
       const req = payload as UsageQueryPayload;
       if (failAll && req.kind !== "models") {
         return Promise.resolve({
@@ -755,11 +1179,17 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       requests.length = 0;
       await clickSegmented(root, "近 30 天");
       const err = root.findByProps({ className: "token-stats-view__error" });
-      const errText = (err.children as unknown[]).map((c) => String(c)).join("");
+      const errText = (err.children as unknown[])
+        .map((c) => String(c))
+        .join("");
       assert.equal(errText, "数据库暂时不可用");
       assert.equal(metricText(root, "totalTokens"), "3K", "旧 summary 应保留");
       assert.equal(metricText(root, "calls"), "12");
-      assert.deepEqual(modelRowKeys(root), ["gpt-4o", "__unlogged__"], "旧分模型表应保留");
+      assert.deepEqual(
+        sliceKeys(root),
+        ["p1::gpt-4o", "__no_provider__::__other_model__"],
+        "旧饼图数据应保留"
+      );
     } finally {
       await act(async () => {
         renderer?.unmount();
@@ -771,7 +1201,7 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
   it("格式异常：summary 返回非对象 → 格式异常文案（desktop/G-1②）", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(
-      makeInvoke({ summary: "not-an-object" }, requests),
+      makeInvoke({ summary: "not-an-object" }, requests)
     );
     let renderer: ReactTestRenderer | undefined;
     try {
@@ -779,53 +1209,17 @@ describe("TokenUsageStatsView（T-S6 view 部分）", () => {
       const root = renderer.root;
 
       const err = root.findByProps({ className: "token-stats-view__error" });
-      const errText = (err.children as unknown[]).map((c) => String(c)).join("");
+      const errText = (err.children as unknown[])
+        .map((c) => String(c))
+        .join("");
       assert.equal(errText, "统计数据返回格式异常");
       assert.deepEqual(chartCols(root, "daily"), []);
-      assert.equal(modelRowKeys(root).length, 0);
+      assert.equal(sliceKeys(root).length, 0);
     } finally {
       await act(async () => {
         renderer?.unmount();
       });
       restore();
-    }
-  });
-
-  it("custom toMs 跨 DST 切换日：toMs 恰为次日本地 0 点（cross/B-2）", async (t) => {
-    // 环境时区不可控时切到纽约时区再断言；若 TZ 环境变量不生效则跳过（纯逻辑上
-    // new Date(y, m, d+1) 的日历推进天然正确，固定毫秒加法在 23 小时日会晚 1 小时）。
-    const prevTz = process.env.TZ;
-    process.env.TZ = "America/New_York";
-    const dstActive =
-      new Date(2024, 2, 11).getTime() - new Date(2024, 2, 10).getTime() !== 86_400_000;
-    if (!dstActive) {
-      process.env.TZ = prevTz;
-      t.skip("当前环境 TZ 不可控，跳过 DST 边界断言");
-      return;
-    }
-    const requests: UsageQueryPayload[] = [];
-    const restore = mockWindow(makeInvoke({}, requests));
-    let renderer: ReactTestRenderer | undefined;
-    try {
-      renderer = await mountView();
-      const root = renderer.root;
-
-      // 自定义区间跨 2024-03-10（纽约春季拨快，当天只有 23 小时）：
-      // 结束日次日 0 点应为 2024-03-11 00:00 EDT（固定 +86400000 会晚 1 小时）
-      await clickSegmented(root, "自定义");
-      await setDate(root, "开始日期", "2024-03-08");
-      await setDate(root, "结束日期", "2024-03-10");
-      const custom = requests.filter((r) => r.filter.range.kind === "custom");
-      const last = custom[custom.length - 1]!;
-      const range = last.filter.range as { fromMs?: number; toMs?: number };
-      assert.equal(range.fromMs, new Date(2024, 2, 8).getTime());
-      assert.equal(range.toMs, new Date(2024, 2, 11).getTime());
-    } finally {
-      await act(async () => {
-        renderer?.unmount();
-      });
-      restore();
-      process.env.TZ = prevTz;
     }
   });
 });
@@ -837,21 +1231,21 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     try {
       renderer = await mountView();
       const root = renderer.root;
-      await clickSegmented(root, "明细");
+      await clickSegmented(root, "图表");
 
       const container = root.findAll(
-        (node) => node.props["data-chart"] === "daily",
+        (node) => node.props["data-chart"] === "daily"
       )[0]!;
 
       // 图例行：输入 / 输出两项与色块类名
       const legend = container.findAll(
         (node) =>
           typeof node.props.className === "string" &&
-          node.props.className === "token-stats-chart__legend",
+          node.props.className === "token-stats-chart__legend"
       )[0]!;
       const legendText = legend.children
         .map((c: { props: { children: unknown[] } }) =>
-          (c.props.children as unknown[]).map(String).join(""),
+          (c.props.children as unknown[]).map(String).join("")
         )
         .join("");
       assert.ok(legendText.includes("输入"));
@@ -860,15 +1254,19 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
         legend.findAll(
           (node) =>
             typeof node.props.className === "string" &&
-            node.props.className.includes("token-stats-chart__legend-dot--input"),
-        ).length === 1,
+            node.props.className.includes(
+              "token-stats-chart__legend-dot--input"
+            )
+        ).length === 1
       );
       assert.ok(
         legend.findAll(
           (node) =>
             typeof node.props.className === "string" &&
-            node.props.className.includes("token-stats-chart__legend-dot--output"),
-        ).length === 1,
+            node.props.className.includes(
+              "token-stats-chart__legend-dot--output"
+            )
+        ).length === 1
       );
 
       // 3 条网格刻度线（max / mid / zero）与 max 数值标注（1_000_000 → 1M）
@@ -878,16 +1276,16 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
             (node) =>
               typeof node.props.className === "string" &&
               node.props.className.includes(
-                `token-stats-chart__grid-line${mod}`,
-              ),
+                `token-stats-chart__grid-line${mod}`
+              )
           ).length === 1,
-          `应有 ${mod} 网格线`,
+          `应有 ${mod} 网格线`
         );
       }
       const maxLabel = container.findAll(
         (node) =>
           typeof node.props.className === "string" &&
-          node.props.className.includes("token-stats-chart__grid-label--max"),
+          node.props.className.includes("token-stats-chart__grid-label--max")
       )[0]!;
       assert.equal((maxLabel.children as unknown[]).map(String).join(""), "1M");
 
@@ -895,7 +1293,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       const cols = container.findAll(
         (node) =>
           typeof node.props.className === "string" &&
-          /^token-stats-chart__col( |$)/.test(node.props.className),
+          /^token-stats-chart__col( |$)/.test(node.props.className)
       );
       assert.equal(cols.length, DAILY.length);
       for (const col of cols) {
@@ -915,32 +1313,35 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     try {
       renderer = await mountView();
       const root = renderer.root;
-      await clickSegmented(root, "明细");
+      await clickSegmented(root, "图表");
 
       const dayKey = toDayKey(DAILY[0]!.bucketStartMs);
       const col = root
         .findAll(
           (node) =>
             typeof node.props.className === "string" &&
-            /^token-stats-chart__col( |$)/.test(node.props.className),
+            /^token-stats-chart__col( |$)/.test(node.props.className)
         )
         .find((node) => node.props["data-day"] === dayKey)!;
 
       // 初始无卡片
       assert.equal(
         root.findAll((node) => node.props["data-tooltip"] != null).length,
-        0,
+        0
       );
 
       await act(async () => {
         col.props.onMouseEnter();
       });
       const tooltip = root.findAll(
-        (node) => node.props["data-tooltip"] != null,
+        (node) => node.props["data-tooltip"] != null
       )[0]!;
       assert.equal(tooltip.props["data-tooltip"], dayKey);
       const text = (tooltip.children as unknown[]).map(String).join("");
-      assert.ok(text.includes(`输入 ${"1.2K"}`), "卡片文案应为 bucketTooltip 口径");
+      assert.ok(
+        text.includes(`输入 ${"1.2K"}`),
+        "卡片文案应为 bucketTooltip 口径"
+      );
       assert.ok(text.includes("输出 800"));
       assert.ok(text.includes("调用 3 次"));
 
@@ -953,7 +1354,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       assert.equal(
         root.findAll((node) => node.props["data-tooltip"] != null).length,
         0,
-        "离开柱子后卡片应消失",
+        "离开柱子后卡片应消失"
       );
     } finally {
       await act(async () => {
@@ -975,12 +1376,10 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       const ttftCard = root.findByProps({ "data-metric": "avgFirstTokenMs" });
       assert.ok(
         ttftCard
-          .findAll(
-            (node) => node.props.className === "token-stats-card__hint",
-          )
+          .findAll((node) => node.props.className === "token-stats-card__hint")
           .some((n) =>
-            (n.children as unknown[]).map(String).join("").includes("非流式"),
-          ),
+            (n.children as unknown[]).map(String).join("").includes("非流式")
+          )
       );
     } finally {
       await act(async () => {
@@ -998,7 +1397,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
           avgFirstTokenMs: null,
           avgTokensPerSecond: null,
         },
-      }),
+      })
     );
     let renderer: ReactTestRenderer | undefined;
     try {
@@ -1020,7 +1419,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     try {
       renderer = await mountView();
       const root = renderer.root;
-      await clickSegmented(root, "明细");
+      await clickSegmented(root, "图表");
 
       // 有值形态：DAILY[0] avgTokensPerSecond=25、avgFirstTokenMs=900
       const dayWithValues = toDayKey(DAILY[0]!.bucketStartMs);
@@ -1029,10 +1428,10 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       let summaryText = detail.children
         .filter(
           (c: { props?: { className?: string } }) =>
-            c.props?.className === "token-stats-view__day-detail-summary",
+            c.props?.className === "token-stats-view__day-detail-summary"
         )
         .map((c: { props: { children: unknown[] } }) =>
-          (c.props.children as unknown[]).map(String).join(""),
+          (c.props.children as unknown[]).map(String).join("")
         )
         .join("");
       assert.ok(summaryText.includes("25.0 tok/s"), "当日平均速率");
@@ -1045,10 +1444,10 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       summaryText = detail.children
         .filter(
           (c: { props?: { className?: string } }) =>
-            c.props?.className === "token-stats-view__day-detail-summary",
+            c.props?.className === "token-stats-view__day-detail-summary"
         )
         .map((c: { props: { children: unknown[] } }) =>
-          (c.props.children as unknown[]).map(String).join(""),
+          (c.props.children as unknown[]).map(String).join("")
         )
         .join("");
       assert.ok(summaryText.includes("平均速率 —"));
@@ -1061,7 +1460,7 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
     }
   });
 
-  it("流水页签：页码条常驻，点页码按页号取整页（首字延迟/总时间列渲染）", async () => {
+  it("流水页签：页码条常驻，点页码按页号取整页（首字延迟/总时间列渲染；filter 含当前窗口 range）", async () => {
     const requests: UsageQueryPayload[] = [];
     const restore = mockWindow(makeInvoke({}, requests));
     let renderer: ReactTestRenderer | undefined;
@@ -1072,42 +1471,36 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
       assert.equal(requests.at(-1)?.kind, "requests");
       assert.equal(requests.at(-1)?.offset, 0);
       assert.equal(requests.at(-1)?.limit, 50);
+      // 流水跟随时间（需求①勘误后）：requests 查询携带当前窗口 range（默认 last7）
+      assert.equal(
+        requests.at(-1)?.filter.range?.fromDay,
+        toDayKey(localMidnight(-6)),
+        "流水查询应携带当前窗口 range"
+      );
+      assert.equal(
+        requests.at(-1)?.filter.range?.toDay,
+        toDayKey(localMidnight(0))
+      );
 
       // 6 页全展示（≤7 不收窄）：页码 1-6 按钮可见，当前页 1 高亮
       const pageBtn = (label: string) =>
         root.findAll(
           (node) =>
             typeof node.props.className === "string" &&
-            node.props.className.split(" ").includes(
-              "token-stats-requests__page-num",
-            ) &&
-            (node.children as unknown[]).some((c) => c === label),
+            node.props.className
+              .split(" ")
+              .includes("token-stats-requests__page-num") &&
+            (node.children as unknown[]).some((c) => c === label)
         )[0];
       for (const n of ["1", "2", "3", "4", "5", "6"]) {
         assert.ok(pageBtn(n) != null, `页码按钮 ${n} 应存在`);
       }
       // 空值列显示横杠（存量 null 行的缓存读/首字/总时间）。
-      // react-test-renderer 节点带循环引用，不能 JSON 序列化，递归收集文本。
-      const collectText = (node: { children?: unknown }): string => {
-        let out = "";
-        for (const child of (node.children as unknown[]) ?? []) {
-          if (typeof child === "string") {
-            out += child;
-          } else if (
-            child != null &&
-            typeof child === "object" &&
-            "children" in child
-          ) {
-            out += collectText(child as { children?: unknown });
-          }
-        }
-        return out;
-      };
       const rowsText = root
         .findAll(
           (node) =>
             typeof node.props.className === "string" &&
-            node.props.className === "token-stats-requests__row",
+            node.props.className === "token-stats-requests__row"
         )
         .map((node) => collectText(node))
         .join("|");
@@ -1118,6 +1511,552 @@ describe("TokenUsageStatsView 图表样式与新指标（T-DT1~4）", () => {
         pageBtn("5")!.props.onClick();
       });
       assert.equal(requests.at(-1)?.offset, 200);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+});
+
+describe("TokenUsageStatsView 新增行为（T-D1~T-D6）", () => {
+  it("T-D1：RangeKind 映射 today/last7/last30/custom → {fromDay,toDay} 正确传参；custom 超长区间不报错", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const restore = mockWindow(makeInvoke({}, requests));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      const todayKey = toDayKey(localMidnight(0));
+
+      const summaryRange = ():
+        | { fromDay?: string; toDay?: string }
+        | undefined => requests.find((r) => r.kind === "summary")?.filter.range;
+
+      // 初始 last7（mount 即查）：{D-6, D}
+      assert.deepEqual(summaryRange(), {
+        fromDay: toDayKey(localMidnight(-6)),
+        toDay: todayKey,
+      });
+
+      // 今天：{D, D}
+      requests.length = 0;
+      await clickSegmented(root, "今天");
+      assert.deepEqual(summaryRange(), { fromDay: todayKey, toDay: todayKey });
+
+      // 近 30 天：{D-29, D}
+      requests.length = 0;
+      await clickSegmented(root, "近 30 天");
+      assert.deepEqual(summaryRange(), {
+        fromDay: toDayKey(localMidnight(-29)),
+        toDay: todayKey,
+      });
+
+      // 自定义预填：{D-6, D}（日期字符串直传）
+      requests.length = 0;
+      await clickSegmented(root, "自定义");
+      assert.deepEqual(summaryRange(), {
+        fromDay: toDayKey(localMidnight(-6)),
+        toDay: todayKey,
+      });
+
+      // 超长区间（数年）：不报错、照常查询
+      requests.length = 0;
+      await setDate(root, "开始日期", "2018-01-01");
+      assert.equal(
+        root.findAll(
+          (node) => node.props.className === "token-stats-view__range-error"
+        ).length,
+        0,
+        "超长区间不应报错（366 上限已删）"
+      );
+      assert.equal(summaryRange()?.fromDay, "2018-01-01");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("T-D2：饼图切片数 = 行数、label 三态 + 未知服务商兜底、点扇区/图例出详情行、占比分母 = summary.totalTokens", async () => {
+    const requests: UsageQueryPayload[] = [];
+    // 四行覆盖四种形态：已知服务商·模型 / 未记录服务商（null 合并行，label 不拼模型） / 未知服务商·模型 / 已知服务商·其他模型
+    const rows = [
+      {
+        providerId: "p1",
+        modelName: "gpt-4o",
+        calls: 10,
+        promptTokens: 600,
+        completionTokens: 600,
+        totalTokens: 1200,
+        cacheReadTokens: 300,
+        billedInputTokens: 600,
+      },
+      {
+        providerId: null,
+        modelName: null,
+        calls: 2,
+        promptTokens: 500,
+        completionTokens: 300,
+        totalTokens: 800,
+        cacheReadTokens: 0,
+        billedInputTokens: 0,
+      },
+      {
+        providerId: "p-gone",
+        modelName: "glm-4.6",
+        calls: 3,
+        promptTokens: 300,
+        completionTokens: 200,
+        totalTokens: 500,
+        cacheReadTokens: 0,
+        billedInputTokens: 0,
+      },
+      {
+        providerId: "p2",
+        modelName: null,
+        calls: 4,
+        promptTokens: 200,
+        completionTokens: 200,
+        totalTokens: 400,
+        cacheReadTokens: 0,
+        billedInputTokens: 0,
+      },
+    ];
+    const providers = [
+      ...PROVIDERS,
+      {
+        id: "p2",
+        displayName: "智谱中转",
+        protocol: "openai",
+        baseUrl: "",
+        isBuiltin: false,
+        apiKeyStatus: "set",
+        savedCount: 1,
+      },
+    ];
+    const restore = mockWindow(
+      makeInvoke({ modelRows: rows, providers }, requests)
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 切片数 = 行数（不折叠；按用量降序）
+      assert.deepEqual(sliceKeys(root), [
+        "p1::gpt-4o",
+        "__no_provider__::__other_model__",
+        "p-gone::glm-4.6",
+        "p2::__other_model__",
+      ]);
+      // label 三态 + 未知服务商兜底；null-provider 合并行 label 固定「未记录服务商」，不拼模型后缀
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+      assert.equal(
+        legendText(root, "__no_provider__::__other_model__"),
+        "未记录服务商"
+      );
+      assert.equal(legendText(root, "p-gone::glm-4.6"), "未知服务商 · glm-4.6");
+      assert.equal(
+        legendText(root, "p2::__other_model__"),
+        "智谱中转 · 其他模型"
+      );
+
+      // 扇区为 button 包装（P2-6 键盘可达）且带 aria-label
+      const slice = root.findByProps({ "data-slice": "p1::gpt-4o" });
+      assert.equal(slice.type, "button");
+      assert.ok(
+        String(slice.props["aria-label"]).includes("OpenAI 官方 · gpt-4o")
+      );
+
+      // 点扇区 → 详情行（用量 / 次数 / 占比，分母 = summary.totalTokens = 3000）
+      await clickSlice(root, "p1::gpt-4o");
+      let detail = sliceDetailText(root);
+      assert.ok(
+        detail != null && detail.includes("1.2K"),
+        `详情行应含用量：${detail}`
+      );
+      assert.ok(detail != null && detail.includes("10 次"));
+      assert.ok(
+        detail != null && detail.includes("40%"),
+        `占比 1200/3000=40%：${detail}`
+      );
+
+      // 点图例 → 切换到另一行（未知服务商形态）
+      await clickLegend(root, "p-gone::glm-4.6");
+      detail = sliceDetailText(root);
+      assert.ok(detail != null && detail.includes("未知服务商 · glm-4.6"));
+      assert.ok(
+        detail != null && detail.includes("17%"),
+        `占比 500/3000≈17%：${detail}`
+      );
+
+      // 再点同一图例 → 取消选中
+      await clickLegend(root, "p-gone::glm-4.6");
+      assert.equal(sliceDetailText(root), null);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("G-1：单行 modelRows（占比 100%）——整圆拆双半圆弧，path d 含两个 A 弧段", async () => {
+    // 仅一行 modelRows 时该行独占整圆（几何分母 = 扇区值合计），pieSlicePath 走
+    // ≥2π 特殊分支：单条 A 弧起点终点重合画不出整圆，拆成两个半圆弧绘制。
+    const row = {
+      providerId: "p1",
+      modelName: "gpt-4o",
+      calls: 10,
+      promptTokens: 600,
+      completionTokens: 600,
+      totalTokens: 1200,
+      cacheReadTokens: 300,
+      billedInputTokens: 600,
+    };
+    const restore = mockWindow(
+      makeInvoke({
+        summary: {
+          ...SUMMARY,
+          calls: 10,
+          promptTokens: 600,
+          completionTokens: 600,
+          totalTokens: 1200,
+          cacheReadTokens: 300,
+          cacheCreationTokens: 0,
+          billedInputTokens: 600,
+        },
+        modelRows: [row],
+      })
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 扇区 button 渲染（data-slice 存在），内层 path 为整圆双半圆弧形态
+      const slice = root.findByProps({ "data-slice": "p1::gpt-4o" });
+      const paths = slice.findAll((node) => node.type === "path");
+      assert.equal(paths.length, 1, "扇区内应有一个 path");
+      const d = String(paths[0]!.props.d);
+      assert.equal(
+        (d.match(/A /g) ?? []).length,
+        2,
+        `整圆应拆两个半圆弧：${d}`
+      );
+
+      // 占比 100%（分母 = summary.totalTokens = 该行用量，单行即整圆份额）
+      assert.ok(
+        String(slice.props["aria-label"]).includes("占比 100%"),
+        `aria-label 应含占比 100%：${String(slice.props["aria-label"])}`
+      );
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("S-1：0 值行跳过扇区 button（键盘不可聚焦），图例入口仍渲染且可点选出详情行", async () => {
+    // 扇区精确命中依赖 path（button 不吃指针）：0 值行若保留 button 会键盘可聚焦、
+    // 鼠标却永远点不中；跳过后图例成为 0 值行的唯一入口（键盘/鼠标一致）。
+    const rows = [
+      {
+        providerId: "p1",
+        modelName: "gpt-4o",
+        calls: 10,
+        promptTokens: 600,
+        completionTokens: 600,
+        totalTokens: 1200,
+        cacheReadTokens: 300,
+        billedInputTokens: 600,
+      },
+      {
+        providerId: "p2",
+        modelName: "glm-4.6",
+        calls: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        cacheReadTokens: 0,
+        billedInputTokens: 0,
+      },
+    ];
+    const restore = mockWindow(
+      makeInvoke({
+        summary: {
+          ...SUMMARY,
+          calls: 10,
+          promptTokens: 600,
+          completionTokens: 600,
+          totalTokens: 1200,
+        },
+        modelRows: rows,
+      })
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 0 值行无扇区 button（无 data-slice 节点，Tab 不可聚焦、回车不可选中）
+      assert.deepEqual(
+        sliceKeys(root),
+        ["p1::gpt-4o"],
+        "0 值行不应渲染扇区 button"
+      );
+      // 图例全量渲染：0 值行入口保留
+      assert.deepEqual(legendKeys(root), ["p1::gpt-4o", "p2::glm-4.6"]);
+
+      // 图例点选 0 值行仍出详情行（唯一入口可用；p2 不在 providers mock → 未知服务商）
+      await clickLegend(root, "p2::glm-4.6");
+      const detail = sliceDetailText(root);
+      assert.ok(
+        detail != null && detail.includes("未知服务商 · glm-4.6"),
+        `0 值行图例点选应出详情行：${detail}`
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("G-2：providers 延迟 resolve——label「未知服务商」→配置名翻转，选中态不丢", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const base = makeInvoke({}, requests);
+    let resolveProviders:
+      | ((value: { ok: true; data: unknown }) => void)
+      | undefined;
+    const restore = mockWindow((channel, payload) => {
+      if (channel === "nm:providers/list") {
+        // 挂起 providers/list：模拟慢返回（首帧解析不到 provider 名）
+        return new Promise((resolve) => {
+          resolveProviders = resolve;
+        });
+      }
+      return base(channel, payload);
+    });
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 首帧 providers 未到：p1 解析不到 → label 兜底「未知服务商」
+      assert.equal(legendText(root, "p1::gpt-4o"), "未知服务商 · gpt-4o");
+
+      // 挂起期间点选该扇区：详情行以兜底名出现
+      await clickSlice(root, "p1::gpt-4o");
+      let detail = sliceDetailText(root);
+      assert.ok(detail != null && detail.includes("未知服务商 · gpt-4o"));
+
+      // providers 列表到达：label 翻转为配置显示名
+      await act(async () => {
+        resolveProviders?.({ ok: true, data: PROVIDERS });
+      });
+      assert.equal(legendText(root, "p1::gpt-4o"), "OpenAI 官方 · gpt-4o");
+
+      // 翻转后选中态不丢：详情行仍在且同步翻转为新 label；扇区/图例保持 is-selected
+      detail = sliceDetailText(root);
+      assert.ok(detail != null && detail.includes("OpenAI 官方 · gpt-4o"));
+      const sliceBtn = root.findByProps({ "data-slice": "p1::gpt-4o" });
+      assert.ok(
+        String(sliceBtn.props.className).includes("is-selected"),
+        "扇区选中态不应丢失"
+      );
+      const legendBtn = root.findByProps({ "data-slice-key": "p1::gpt-4o" });
+      assert.ok(
+        String(legendBtn.props.className).includes("is-selected"),
+        "图例选中态不应丢失"
+      );
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("T-D3：流水跟随时间（勘误后）——时间筛选变化触发 requests 重查且 filter 含 range；模型筛选变化触发且叠加 model", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const restore = mockWindow(makeInvoke({}, requests));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      const todayKey = toDayKey(localMidnight(0));
+
+      // 先激活流水页签拉首页（filter 含 last7 窗口 range）
+      await clickSegmented(root, "流水");
+      assert.equal(requests.filter((r) => r.kind === "requests").length, 1);
+
+      // 时间筛选变化（停在流水页）：立即重查且 filter.range 跟随新窗口映射
+      requests.length = 0;
+      await clickSegmented(root, "近 30 天");
+      let reqs = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqs.length, 1, "切近 30 天应立即重拉流水首页");
+      assert.equal(
+        reqs[0]!.filter.range?.fromDay,
+        toDayKey(localMidnight(-29))
+      );
+      assert.equal(reqs[0]!.filter.range?.toDay, todayKey);
+      assert.equal(reqs[0]!.offset, 0);
+
+      requests.length = 0;
+      await clickSegmented(root, "今天");
+      reqs = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqs.length, 1, "切今天应立即重拉流水首页");
+      assert.deepEqual(reqs[0]!.filter.range, {
+        fromDay: todayKey,
+        toDay: todayKey,
+      });
+
+      // 模型筛选变化（停在流水页）：重查且 model 叠加在当前窗口 range 上
+      requests.length = 0;
+      await selectModel(root, "gpt-4o");
+      reqs = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqs.length, 1, "模型变化应重拉流水首页");
+      assert.deepEqual(reqs[0]!.filter.range, {
+        fromDay: todayKey,
+        toDay: todayKey,
+      });
+      assert.equal(reqs[0]!.filter.model, "gpt-4o");
+
+      // 切回「全部模型」同样重拉（model 回到 undefined，range 仍在）
+      requests.length = 0;
+      await selectModel(root, "__all__");
+      reqs = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqs.length, 1);
+      assert.equal(reqs[0]!.filter.model, undefined);
+      assert.deepEqual(reqs[0]!.filter.range, {
+        fromDay: todayKey,
+        toDay: todayKey,
+      });
+
+      // 不在流水页时改时间：仅置脏不重查；切回流水页补拉一次（脏标记生效）
+      requests.length = 0;
+      await clickSegmented(root, "汇总");
+      await clickSegmented(root, "近 7 天");
+      assert.equal(
+        requests.filter((r) => r.kind === "requests").length,
+        0,
+        "不在流水页时改筛选不应重拉流水"
+      );
+      await clickSegmented(root, "流水");
+      const reqsAfter = requests.filter((r) => r.kind === "requests");
+      assert.equal(reqsAfter.length, 1, "切回流水页应补拉首页");
+      assert.equal(
+        reqsAfter[0]!.filter.range?.fromDay,
+        toDayKey(localMidnight(-6))
+      );
+      assert.equal(reqsAfter[0]!.filter.range?.toDay, todayKey);
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("T-D4：今天 tab——图表页仅渲染按小时图（无 daily 图节点）；当天汇总行反映今日数据；hourly 自动拉取", async () => {
+    const requests: UsageQueryPayload[] = [];
+    const todayKey = toDayKey(localMidnight(0));
+    const restore = mockWindow(
+      makeInvoke(
+        {
+          // 今天单桶：输入 700 / 输出 300 / 调用 4 / 命中率 200÷800=25%
+          daily: [bucket(localMidnight(0), 4, 700, 300, 200, 800)],
+        },
+        requests
+      )
+    );
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+
+      // 切「今天」：三连 {D, D} + selectedDay 自动补选今天（P1-1）→ hourly 自动拉取
+      requests.length = 0;
+      await clickSegmented(root, "今天");
+      assert.ok(
+        requests
+          .filter((r) => r.kind === "daily")
+          .every(
+            (r) =>
+              r.filter.range?.fromDay === todayKey &&
+              r.filter.range?.toDay === todayKey
+          )
+      );
+      const hourly = requests.filter((r) => r.kind === "hourly");
+      assert.equal(hourly.length, 1, "切今天应自动拉取当天 hourly");
+      assert.equal(hourly[0]!.dayLocalDate, todayKey);
+
+      // 切「图表」页签：today 模式直出按小时图——不出现按天图节点
+      await clickSegmented(root, "图表");
+      assert.equal(
+        root.findAll((node) => node.props["data-chart"] === "daily").length,
+        0,
+        "today 模式不应渲染按天图"
+      );
+      assert.equal(
+        chartCols(root, "hourly").length,
+        24,
+        "today 模式应直出 24 小时图"
+      );
+
+      // 当天汇总行：取 dailyBuckets 唯一桶，反映今日数据（含命中率出口）
+      const detail = root.findByProps({ "data-day-detail": todayKey });
+      const detailText = collectText(detail);
+      assert.ok(detailText.includes("700"), "当天汇总行应含今日输入");
+      assert.ok(detailText.includes("300"), "当天汇总行应含今日输出");
+      assert.ok(detailText.includes("4 次"), "当天汇总行应含今日调用");
+      assert.ok(detailText.includes("25%"), "当天汇总行应含今日命中率");
+    } finally {
+      await act(async () => {
+        renderer?.unmount();
+      });
+      restore();
+    }
+  });
+
+  it("T-D5：今日卡全删——非空与空态两分支均无今日卡节点；页签文案「图表」", async () => {
+    // 非空分支（默认汇总页签）
+    const restore = mockWindow(makeInvoke({}));
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      renderer = await mountView();
+      const root = renderer.root;
+      assert.equal(metricText(root, "totalTokens"), "3K");
+      assert.equal(
+        root.findAll((node) => node.props["data-metric"] === "todayTotalTokens")
+          .length,
+        0,
+        "非空分支不应渲染今日卡"
+      );
+      assert.equal(
+        root.findAll((node) => node.props["data-metric"] === "todayCalls")
+          .length,
+        0,
+        "非空分支不应渲染今日卡（调用次数）"
+      );
+
+      // 页签文案：汇总 / 图表 / 流水（「明细」已更名）
+      const allLabels = root
+        .findAll(
+          (node) =>
+            typeof node.props.className === "string" &&
+            /^segmented-control__btn( |$)/.test(node.props.className)
+        )
+        .map((node) => (node.children as unknown[]).map(String).join(""));
+      assert.ok(allLabels.includes("图表"), "页签应含「图表」");
+      assert.ok(!allLabels.includes("明细"), "「明细」页签应已更名");
+      assert.ok(allLabels.includes("汇总") && allLabels.includes("流水"));
     } finally {
       await act(async () => {
         renderer?.unmount();

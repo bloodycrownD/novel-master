@@ -46,7 +46,6 @@ const CONFIG_MENU: Array<{
   {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
   {icon: '💾', label: '存储配置', route: 'StorageConfig'},
   {icon: '📊', label: '数据统计', route: 'TokenUsageStats'},
-  {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
 ];
 
 export function ProfileTabScreen() {

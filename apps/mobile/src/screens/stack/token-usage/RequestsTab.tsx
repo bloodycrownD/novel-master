@@ -9,9 +9,8 @@ import {
 } from '@novel-master/core/common';
 import {ListSectionTitle} from '../../../components/ui/ListSectionTitle';
 import type {ThemeTokens} from '../../../theme/tokens';
+import {REQUESTS_PAGE_SIZE} from './format';
 import {styles} from './styles';
-
-const PAGE_SIZE = 10;
 
 /**
  * 流水页签（screens/C-4 拆分自主文件）：请求级分页列表（时间倒序，
@@ -85,7 +84,7 @@ export function RequestsTab({
           </Pressable>
           {pageWindowItems(
             reqPage + 1,
-            Math.max(1, Math.ceil(reqTotal / PAGE_SIZE)),
+            Math.max(1, Math.ceil(reqTotal / REQUESTS_PAGE_SIZE)),
           ).map((item, index) =>
             item === '…' ? (
               <Text
@@ -128,7 +127,9 @@ export function RequestsTab({
           <Pressable
             testID="req-next-page"
             style={[styles.reqPagerBtn, {borderColor: tokens.borderLight}]}
-            disabled={reqLoading || (reqPage + 1) * PAGE_SIZE >= reqTotal}
+            disabled={
+              reqLoading || (reqPage + 1) * REQUESTS_PAGE_SIZE >= reqTotal
+            }
             onPress={() => onLoadRequests(reqPage + 1).catch(() => undefined)}
           >
             <Text style={{color: tokens.primary}}>下一页</Text>

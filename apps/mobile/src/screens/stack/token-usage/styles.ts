@@ -55,15 +55,14 @@ export const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 4,
   },
-  tileWide: {
-    flexBasis: '100%',
-    marginTop: 10,
-  },
   tileThird: {
     flexBasis: '31%',
   },
   tileThirdRow: {
     marginTop: 10,
+    // 与下方「分服务商×模型汇总」小标题的上方间距对称（4+4=8，
+    // 与标题下方 marginBottom 8 一致，修上下不对称观感）。
+    marginBottom: 4,
   },
   chartCard: {
     borderRadius: 12,
@@ -100,10 +99,6 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  reqPagerLabel: {
-    fontSize: 12,
-    fontVariant: ['tabular-nums'],
-  },
   reqPageNum: {
     minWidth: 30,
     minHeight: 28,
@@ -127,16 +122,62 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  todayCard: {
-    gap: 8,
+  /* 饼图（components/charts/PieChart）：扇区居中，详情行/图例在其下方 */
+  pieWrap: {
+    alignItems: 'center',
+    // 顶部间距由上方小标题的 marginBottom 8 提供（不叠加，保持上下对称）；
+    // 底部 8 与下一区块隔开。
+    marginTop: 0,
+    marginBottom: 8,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
   },
-  todayRow: {
+  pieMainRow: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'center',
+    gap: 16,
+    alignSelf: 'stretch',
   },
-  todayMetric: {
+  pieSideDetail: {
     flex: 1,
+    gap: 2,
+  },
+  pieSideDetailLabel: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  pieSideDetailLine: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  pieLegend: {
+    marginTop: 8,
     gap: 4,
+    alignSelf: 'stretch',
+  },
+  pieLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  pieLegendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+  },
+  pieLegendLabel: {
+    flexShrink: 1,
+    fontSize: 13,
+  },
+  /* 图例常驻百分比列：固定最小宽右对齐，长 label 截断也顶不掉它 */
+  pieLegendPercent: {
+    minWidth: 40,
+    textAlign: 'right',
+    fontSize: 13,
   },
   dayDetail: {
     marginTop: 16,
@@ -156,22 +197,6 @@ export const styles = StyleSheet.create({
   inspectText: {
     fontSize: 12,
     lineHeight: 18,
-  },
-  modelRow: {
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 6,
-    marginBottom: 8,
-  },
-  modelRowHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  modelRowDetail: {
-    fontSize: 13,
   },
   backdrop: {
     flex: 1,

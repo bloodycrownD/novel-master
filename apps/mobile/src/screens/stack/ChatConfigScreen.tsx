@@ -1,5 +1,5 @@
 /**
- * 聊天相关偏好：流式输出、思考提示词、版本校验、富文本消息，以及压缩配置。
+ * 聊天相关偏好：流式输出、思考提示词、富文本消息，以及压缩配置。
  */
 import React, {useCallback, useState} from 'react';
 import {
@@ -24,7 +24,6 @@ import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
 } from '../../storage/chat-rich-text-pref';
-import {SESSION_FS_LABELS} from '@novel-master/core/config-forms/shared';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
@@ -43,7 +42,6 @@ export function ChatConfigScreen() {
   const {appUi} = useNovelMaster();
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [thinkingContextEnabled, setThinkingContextEnabled] = useState(true);
-  const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [
     agentFinishedNotificationEnabled,
@@ -64,12 +62,6 @@ export function ChatConfigScreen() {
   const refreshThinkingContextPref = useCallback(async () => {
     setThinkingContextEnabled(
       await runtime.preferences.getThinkingContextEnabled(),
-    );
-  }, [runtime]);
-
-  const refreshSessionFsVersionCheckPref = useCallback(async () => {
-    setSessionFsVersionCheck(
-      await runtime.preferences.getSessionFsVersionCheck(),
     );
   }, [runtime]);
 
@@ -105,14 +97,12 @@ export function ChatConfigScreen() {
     useCallback(() => {
       refreshStreamPref().catch(() => undefined);
       refreshThinkingContextPref().catch(() => undefined);
-      refreshSessionFsVersionCheckPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
       refreshAgentFinishedNotificationPref().catch(() => undefined);
       refreshCompaction().catch(() => undefined);
     }, [
       refreshStreamPref,
       refreshThinkingContextPref,
-      refreshSessionFsVersionCheckPref,
       refreshChatRichTextPref,
       refreshAgentFinishedNotificationPref,
       refreshCompaction,
@@ -208,24 +198,6 @@ export function ChatConfigScreen() {
           void persistSwitchWithRollback(
             () => runtime.preferences.setThinkingContextEnabled(enabled),
             () => setThinkingContextEnabled(!enabled),
-          );
-        }}
-      />
-      <ProfileSwitchItem
-        icon="🛡️"
-        label={SESSION_FS_LABELS.title}
-        subtitle={
-          sessionFsVersionCheck
-            ? SESSION_FS_LABELS.enabledHint
-            : SESSION_FS_LABELS.disabledHint
-        }
-        value={sessionFsVersionCheck}
-        tokens={tokens}
-        onValueChange={enabled => {
-          setSessionFsVersionCheck(enabled);
-          void persistSwitchWithRollback(
-            () => runtime.preferences.setSessionFsVersionCheck(enabled),
-            () => setSessionFsVersionCheck(!enabled),
           );
         }}
       />

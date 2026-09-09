@@ -103,8 +103,56 @@ const sampleTools = [
   },
 ] as const;
 
-describe("OpenAiProtocolAdapter buildBody tool_stream", () => {
-  it("T3: GLM + stream + tools 请求体含 tool_stream: true", async () => {
+describe("OpenAiProtocolAdapter extraBody 合并", () => {
+  it("EX-1: extraBody 存在时原样合并进 body 顶层（含非标准字段）", async () => {
+    postSseMock.mock.resetCalls();
+
+    const adapter = new OpenAiProtocolAdapter(async () => {
+      throw new Error("fetch must not be called when postSse is mocked");
+    });
+
+    await adapter.chat({
+      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      apiKey: "sk-test",
+      vendorModelId: "glm-5.2",
+      userContent: "hi",
+      stream: true,
+      tools: [...sampleTools],
+      extraBody: { tool_stream: true, enable_thinking: false, custom_top_k: 5 },
+    });
+
+    assert.equal(postSseMock.mock.calls.length, 1);
+    const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    // 用户显式配置的 tool_stream 原样进入请求体（智谱官方直连的自定义参数场景）
+    assert.equal(body.tool_stream, true);
+    assert.equal(body.enable_thinking, false);
+    assert.equal(body.custom_top_k, 5);
+  });
+
+  it("EX-2: extraBody 与 sampling temperature 冲突时 extraBody 覆盖", async () => {
+    postSseMock.mock.resetCalls();
+
+    const adapter = new OpenAiProtocolAdapter(async () => {
+      throw new Error("fetch must not be called when postSse is mocked");
+    });
+
+    await adapter.chat({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "hi",
+      stream: true,
+      sampling: { protocol: "openai", openai: { temperature: 0.5 } },
+      extraBody: { temperature: 0.9 },
+    });
+
+    const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as { temperature?: number };
+    assert.equal(body.temperature, 0.9);
+  });
+
+  it("EX-3: 不传 extraBody 时 body 无多余字段（tool_stream 硬注入已移除）", async () => {
     postSseMock.mock.resetCalls();
 
     const adapter = new OpenAiProtocolAdapter(async () => {
@@ -120,31 +168,11 @@ describe("OpenAiProtocolAdapter buildBody tool_stream", () => {
       tools: [...sampleTools],
     });
 
-    assert.equal(postSseMock.mock.calls.length, 1);
     const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
-    const body = JSON.parse(String(init.body)) as { tool_stream?: boolean };
-    assert.equal(body.tool_stream, true);
-  });
-
-  it("T4: GPT + stream + tools 请求体不含 tool_stream", async () => {
-    postSseMock.mock.resetCalls();
-
-    const adapter = new OpenAiProtocolAdapter(async () => {
-      throw new Error("fetch must not be called when postSse is mocked");
-    });
-
-    await adapter.chat({
-      baseUrl: "https://api.example.com/v1",
-      apiKey: "sk-test",
-      vendorModelId: "gpt-4o",
-      userContent: "hi",
-      stream: true,
-      tools: [...sampleTools],
-    });
-
-    assert.equal(postSseMock.mock.calls.length, 1);
-    const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
-    const body = JSON.parse(String(init.body)) as { tool_stream?: boolean };
-    assert.equal(body.tool_stream, undefined);
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    assert.equal("tool_stream" in body, false);
+    // 基础字段仍齐全
+    assert.equal(body.model, "glm-5.2");
+    assert.ok(Array.isArray(body.tools));
   });
 });

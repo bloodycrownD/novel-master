@@ -34,3 +34,9 @@ user:
 
 assistant:
 盘点 .woktree 三个工作树：stream-resume、import-dir-rule 分支均已合入 main（注意 `git branch --merged | grep -v main` 会把含 "main" 字样的分支名误滤掉，stream-resume 差点误判）；parallel-notify 分支有 13 笔未合入提交（notifee 通知 + AgentRunManager 一整套），git cherry 全 +，main 无 AgentRunManager/notifee 任何痕迹——删工作树不删分支，提交仍留在 feat/agent-run-parallel-and-notify 上。import-dir-rule 树里一份未提交的记忆追加（记录已合入的 CR fix 闭合，MF-1~4）先打补丁收编进主工作区再删树。三个树全 remove，.woktree 目录一并消失，分支全部保留未动。
+
+user:
+（发版后续）v1.5.11 Release 成功了吗？worktree 是不是没用了，清理一下。
+
+assistant:
+两件事闭环：① v1.5.11 发版成功——用户在代理修好后自行推送 tag+main（凭据在其终端侧可用），Release 七产物齐挂（5 APK + macOS DMG + Windows setup）。② worktree 清理：仅剩 .worktree/agent-run-parallel-and-notify（工作区干净，最后活动 9/5 21:25 merge main 进分支），feat/agent-run-parallel-and-notify 仍挂 13 笔未合入提交（notifee 通知 + AgentRunManager），延续 9/3「删树不删枝」口径：worktree 与空目录 .worktree/ 已删，分支保留待用户拍板。另注：清理期间 main 被并行会话两次推进（9e3d7234→b1d2c49a），本操作未触碰 main。

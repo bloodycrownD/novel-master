@@ -255,8 +255,7 @@ export async function copyVfsTree(
           toScope.scopeKey,
           f.targetPath,
           f.contentHash!,
-          nextVersion,
-          { versionCheck: false }
+          nextVersion
         );
       }
     } else {
@@ -292,8 +291,7 @@ export async function copyVfsTree(
             toScope.scopeKey,
             f.targetPath,
             f.contentHash!,
-            nextVersion,
-            { versionCheck: false }
+            nextVersion
           );
         }
       }
@@ -327,10 +325,7 @@ export async function copyVfsTree(
           toScope.scopeKey,
           f.targetPath,
           content,
-          nextVersion,
-          {
-            versionCheck: false,
-          }
+          nextVersion
         );
       }
     }

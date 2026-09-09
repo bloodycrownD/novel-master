@@ -16,7 +16,6 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import {
-  vfsConflict,
   vfsDirectoryNotEmpty,
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
@@ -27,11 +26,11 @@ import {
   resolveEntryPlainContent,
 } from "../../content-store/logic/resolve-stored-content.js";
 import type { VfsEntry, VfsEntryKind } from "../../model/vfs-entry.js";
+import type { VfsContentSize } from "../../model/vfs-content-size.js";
 import type { VfsListEntry } from "../../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
   VfsListOptions,
-  VfsWriteRepoOptions,
 } from "../../model/vfs-options.js";
 import type { VfsEntryRepository } from "../vfs-entry.port.js";
 import { normalizePath } from "./normalize-path.js";
@@ -208,6 +207,64 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return result;
   }
 
+  async findContentSizeByPath(
+    scopeKey: string,
+    path: string
+  ): Promise<VfsContentSize | null> {
+    const normalized = normalizePath(path);
+    // 只取长度不解正文：内联行 length(content) 为字符数（NULL 行不拉正文）；
+    // mtime 随行带回供占位块渲染真实时间（CR-1：避免 1970 假时间戳入提示词）
+    const rows = await queryTemplate<{
+      inline_chars: number | null;
+      content_hash: string | null;
+      entry_kind: string;
+      mtime_ms: number;
+    }>(
+      this.conn,
+      this.parser,
+      `SELECT length(content) AS inline_chars, content_hash, entry_kind, mtime_ms
+       FROM vfs_entry
+       WHERE scope_key = #{scopeKey} AND path = #{path}`,
+      { scopeKey, path: normalized }
+    );
+    if (rows.length === 0) {
+      return null;
+    }
+    const row = rows[0]!;
+    if (row.entry_kind === "directory") {
+      return null;
+    }
+    // 与 resolveActiveFilePlainContent 的解正文顺序对齐：content_hash 优先，
+    // 遗留明文兜底，保证探测到的大小与真实读取路径周源一致
+    const contentHash = nullableText(row.content_hash);
+    if (contentHash != null && contentHash.length > 0) {
+      const blobRows = await queryTemplate<{ byte_len: number }>(
+        this.conn,
+        this.parser,
+        `SELECT byte_len FROM vfs_content_blob
+         WHERE content_hash = #{contentHash}`,
+        { contentHash }
+      );
+      if (blobRows.length === 0) {
+        return null;
+      }
+      return {
+        kind: "blobCompressedBytes",
+        size: Number(blobRows[0]!.byte_len),
+        mtimeMs: Number(row.mtime_ms),
+      };
+    }
+    const inlineChars = row.inline_chars;
+    if (inlineChars != null) {
+      return {
+        kind: "inlineChars",
+        size: Number(inlineChars),
+        mtimeMs: Number(row.mtime_ms),
+      };
+    }
+    return null;
+  }
+
   async insert(
     scopeKey: string,
     path: string,
@@ -269,16 +326,14 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     content: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }> {
     const contentHash = await this.contentStore.put(content);
     return this.applyContentHashUpdate(
       scopeKey,
       path,
       contentHash,
-      nextVersion,
-      options
+      nextVersion
     );
   }
 
@@ -286,15 +341,13 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     contentHash: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }> {
     return this.applyContentHashUpdate(
       scopeKey,
       path,
       contentHash,
-      nextVersion,
-      options
+      nextVersion
     );
   }
 
@@ -302,65 +355,24 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     scopeKey: string,
     path: string,
     contentHash: string,
-    nextVersion: number,
-    options: VfsWriteRepoOptions
+    nextVersion: number
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
 
-    if (options.versionCheck) {
-      const expectedVersion = options.expectedVersion!;
-      const result = await executeTemplate(
-        this.conn,
-        this.parser,
-        `UPDATE vfs_entry
-         SET content = NULL,
-             content_hash = #{contentHash},
-             head_version = #{nextVersion},
-             mtime_ms = #{mtimeMs}
-         WHERE scope_key = #{scopeKey} AND path = #{path}
-           AND head_version = #{expectedVersion} AND entry_kind = 'file'`,
-        {
-          scopeKey,
-          contentHash,
-          nextVersion,
-          mtimeMs,
-          path: normalized,
-          expectedVersion,
-        }
-      );
-      if (result.changes === 0) {
-        const rows = await queryTemplate<{ head_version: number }>(
-          this.conn,
-          this.parser,
-          `SELECT head_version FROM vfs_entry
-           WHERE scope_key = #{scopeKey} AND path = #{path}`,
-          { scopeKey, path: normalized }
-        );
-        if (rows.length === 0) {
-          throw vfsNotFound(normalized);
-        }
-        throw vfsConflict(
-          normalized,
-          expectedVersion,
-          Number(rows[0]!.head_version)
-        );
-      }
-    } else {
-      const result = await executeTemplate(
-        this.conn,
-        this.parser,
-        `UPDATE vfs_entry
-         SET content = NULL,
-             content_hash = #{contentHash},
-             head_version = #{nextVersion},
-             mtime_ms = #{mtimeMs}
-         WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'`,
-        { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized }
-      );
-      if (result.changes === 0) {
-        throw vfsNotFound(normalized);
-      }
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE vfs_entry
+       SET content = NULL,
+           content_hash = #{contentHash},
+           head_version = #{nextVersion},
+           mtime_ms = #{mtimeMs}
+       WHERE scope_key = #{scopeKey} AND path = #{path} AND entry_kind = 'file'`,
+      { scopeKey, contentHash, nextVersion, mtimeMs, path: normalized }
+    );
+    if (result.changes === 0) {
+      throw vfsNotFound(normalized);
     }
 
     const rows = await queryTemplate<{ head_version: number }>(
@@ -568,6 +580,23 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       path: String(row.path),
       mtimeMs: Number(row.mtime_ms),
     }));
+  }
+
+  async computeEntrySignature(scopeKey: string): Promise<string> {
+    const rows = await queryTemplate<{ entry_count: number; sig: string | null }>(
+      this.conn,
+      this.parser,
+      `SELECT count(*) AS entry_count, group_concat(s, char(31)) AS sig
+       FROM (SELECT path || ':' || head_version || ':' || mtime_ms AS s
+             FROM vfs_entry
+             WHERE scope_key = #{scopeKey}
+             ORDER BY path)`,
+      { scopeKey }
+    );
+    const row = rows[0];
+    // 空结果集时 group_concat 返回 NULL；两列拼成单串（count 天然隔离
+    // 拼接歧义：不同行数的集合必不同串）
+    return `${Number(row?.entry_count ?? 0)}|${row?.sig ?? ""}`;
   }
 
   async listFileHeadsUnderPrefix(

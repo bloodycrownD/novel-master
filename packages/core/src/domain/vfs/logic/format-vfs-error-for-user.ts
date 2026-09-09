@@ -43,8 +43,6 @@ function formatVfsErrorCodeMessage(
   switch (vfsError.code) {
     case "REPLACE_NOT_FOUND":
       return "文件内容已变更，无法应用本次修改。请刷新文件后重新编辑。";
-    case "CONFLICT":
-      return "文件版本冲突，请刷新后重试。";
     case "NOT_FOUND":
       return "文件不存在或已被删除。";
     default: {

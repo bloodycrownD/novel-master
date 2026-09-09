@@ -97,6 +97,35 @@ describe("AnthropicProtocolAdapter HTTP", () => {
     }
   });
 
+  it("EX-ANT: extraBody 原样合并进 body 顶层并覆盖同名标准字段", async () => {
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const fetchFn = mock.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init: init ?? {} });
+      return new Response(
+        JSON.stringify({ content: [{ type: "text", text: "ok" }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new AnthropicProtocolAdapter(fetchFn as typeof fetch);
+    await adapter.chat({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "key",
+      vendorModelId: "claude-3-5-sonnet",
+      userContent: "hello",
+      sampling: { protocol: "anthropic", anthropic: { temperature: 0.3 } },
+      extraBody: { temperature: 0.8, custom_field: { nested: true } },
+    });
+
+    const body = JSON.parse(String(calls[0]!.init.body)) as Record<
+      string,
+      unknown
+    >;
+    // 用户显式配置覆盖 sampling 的 temperature，自定义字段原样进顶层
+    assert.equal(body.temperature, 0.8);
+    assert.deepEqual(body.custom_field, { nested: true });
+  });
+
   it("P-ANT-01: stream tool_use emits tool-use at content_block_stop", async () => {
     const sse = [
       "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"read\"}}",

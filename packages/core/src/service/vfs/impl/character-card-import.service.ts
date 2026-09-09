@@ -12,6 +12,8 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import type { MdTree } from "@/domain/character-card/model/character-card.js";
 import { parseCharacterCardToMdTree } from "@/domain/character-card/logic/parse-character-card-to-md-tree.js";
 import { validateMdTreeForImport } from "@/domain/character-card/logic/validate-md-tree-paths.js";
+import { validateMdTreeLimits } from "@/domain/character-card/logic/validate-md-tree-limits.js";
+import { CHARACTER_CARD_MAX_INPUT_BYTES } from "@/domain/character-card/logic/character-card-limits.js";
 import type {
   CharacterCardImportOptions,
   CharacterCardImportService,
@@ -130,6 +132,8 @@ export class DefaultCharacterCardImportService
 
     // Phase A：路径校验 — 任何 delete 之前；禁止 ZIP basename / validateVfsZipEntries
     const files = validateMdTreeForImport(scope, tree, directoryPath);
+    // 体积/条目闸门 — 事务之前，超限零写库（防巨型卡片落库后形成重启崩溃循环）
+    validateMdTreeLimits(files);
     const sk = scopeKey(scope);
 
     try {
@@ -204,6 +208,14 @@ export class DefaultCharacterCardImportService
       throw characterCardError(
         "NOT_CONFIRMED",
         "import requires explicit confirmation (CLI --yes or confirm dialog)"
+      );
+    }
+    // 输入闸门 — 解析之前拦截：巨型输入在解码链上会产生多份全尺寸拷贝
+    // （base64 → latin1 → JSON），这里用纯长度比对直接拒绝，不进解析。
+    if (bytes.length > CHARACTER_CARD_MAX_INPUT_BYTES) {
+      throw characterCardError(
+        "TOO_LARGE",
+        `角色卡文件过大：${bytes.length} 字节，超过输入上限 ${CHARACTER_CARD_MAX_INPUT_BYTES} 字节（约 48MB），已拒绝导入`
       );
     }
     const tree = parseCharacterCardToMdTree(bytes);

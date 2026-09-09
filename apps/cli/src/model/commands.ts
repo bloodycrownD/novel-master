@@ -11,9 +11,7 @@ import {
   ProviderError,
   savedModelDisplayName,
 } from "@novel-master/core/provider";
-import { depthByMessageId, listVisibleForDepth } from "@novel-master/core/compaction";
 
-import { applyRegexChannelToMessages, resolveActiveCompiledRules } from "@novel-master/core/regex";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveModelId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -87,21 +85,7 @@ export async function runModel(
       if (sessionId != null) {
         await rt.messages.append(sessionId, "user", textBlocks(content));
         const all = await rt.messages.listBySession(sessionId);
-        let history = all.filter((m) => !m.hidden);
-        const activeGroupId = await rt.state.getCurrentRegexGroupId();
-        const rules = await resolveActiveCompiledRules(
-          rt.regexConfig,
-          activeGroupId,
-        );
-        if (rules.length > 0) {
-          const depthMap = depthByMessageId(listVisibleForDepth(all));
-          history = applyRegexChannelToMessages(
-            history,
-            rules,
-            "llm",
-            depthMap,
-          );
-        }
+        const history = all.filter((m) => !m.hidden);
         const result = await rt.modelRequests.request(modelId, content, {
           history,
         });

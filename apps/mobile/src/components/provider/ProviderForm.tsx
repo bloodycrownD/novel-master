@@ -23,6 +23,7 @@ export type ProviderFormValues = {
   baseUrl: string;
   apiKey: string;
   headersJson: string;
+  bodyParamsJson: string;
 };
 
 export const EMPTY_PROVIDER_FORM: ProviderFormValues = {
@@ -31,6 +32,7 @@ export const EMPTY_PROVIDER_FORM: ProviderFormValues = {
   baseUrl: '',
   apiKey: '',
   headersJson: '',
+  bodyParamsJson: '',
 };
 
 type Props = {
@@ -63,6 +65,24 @@ function parseHeadersJson(raw: string): Record<string, string> | undefined {
   return out;
 }
 
+/**
+ * 自定义参数：必须是 JSON 对象，值任意 JSON（boolean/number/嵌套对象均可）。
+ * 空文本返回显式空对象（保存即可清空，区别于 headers 的「空文本不修改」）。
+ */
+export function parseBodyParamsJson(
+  raw: string,
+): Record<string, unknown> {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('自定义参数必须是 JSON 对象');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 export function providerFormToCreateInput(values: ProviderFormValues) {
   const displayName = values.displayName.trim();
   const baseUrl = values.baseUrl.trim();
@@ -79,6 +99,7 @@ export function providerFormToCreateInput(values: ProviderFormValues) {
     displayName,
     apiKey,
     headers: parseHeadersJson(values.headersJson),
+    bodyParams: parseBodyParamsJson(values.bodyParamsJson),
   };
 }
 
@@ -89,6 +110,7 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
     displayName?: string;
     apiKey?: string;
     headers?: Record<string, string>;
+    bodyParams?: Record<string, unknown>;
   } = {};
   const displayName = values.displayName.trim();
   if (displayName) {
@@ -106,6 +128,9 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
   if (headers) {
     patch.headers = headers;
   }
+  // 自定义参数始终显式提交：空文本 → {}（清空），非空 → 解析对象；
+  // 非法输入由 parseBodyParamsJson 抛中文错误阻断保存。
+  patch.bodyParams = parseBodyParamsJson(values.bodyParamsJson);
   if (Object.keys(patch).length === 0) {
     throw new Error('请至少修改一项');
   }
@@ -244,6 +269,21 @@ export function ProviderForm({
             autoCorrect={false}
             multiline
             placeholder='{"X-Custom":"value"}'
+          />
+        </FormField>
+        <FormField
+          label="自定义参数"
+          tokens={tokens}
+          hint="JSON 对象，原样合并进请求体顶层（可覆盖标准字段）；清空保存即移除"
+        >
+          <FormTextInput
+            tokens={tokens}
+            value={values.bodyParamsJson}
+            onChangeText={text => patch({bodyParamsJson: text})}
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            placeholder='{"tool_stream": true}'
           />
         </FormField>
       </FormSectionCard>

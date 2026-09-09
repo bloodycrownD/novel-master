@@ -13,6 +13,7 @@ export const PROVIDER_SCHEMA_STATEMENTS: readonly string[] = [
   display_name TEXT NOT NULL,
   secret_ref TEXT,
   headers_json TEXT NOT NULL DEFAULT '{}',
+  body_params_json TEXT NOT NULL DEFAULT '{}',
   is_builtin INTEGER NOT NULL DEFAULT 0 CHECK (is_builtin IN (0, 1)),
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL

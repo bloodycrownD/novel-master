@@ -28,7 +28,6 @@ import {
   createProviderServices,
   createDefaultTokenCounterRegistry,
 } from '@novel-master/core/provider';
-import {createRegexConfigService} from '@novel-master/core/regex';
 import {createMessageCheckpointService} from '@novel-master/core/message-checkpoint';
 import {createSessionFsService} from '@novel-master/core/session-fs';
 import {
@@ -65,7 +64,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     await preferences.getUserVfsUnifiedToolTurn();
   refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
 
-  const regexConfig = createRegexConfigService(conn, state);
   const agentRegistry = createAgentRegistryService(conn, state);
   const abortRegistry = createAgentAbortRegistry();
   const streamRegistry = createAgentStreamRegistry();
@@ -156,7 +154,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileRuntimeCor
     savedModelRepo: providerBundle.savedModelRepo,
     providerRepo: providerBundle.providerRepo,
     modelRequests: providerBundle.modelRequests,
-    regexConfig,
     userVfsTurn,
   };
 }

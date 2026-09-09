@@ -19,7 +19,6 @@ import {
   serializePromptLlmInput,
 } from "@novel-master/core/provider";
 
-import { applyRegexChannelForLlm } from "@novel-master/core/regex";
 import { assembleWorkplaceDisplay } from "@novel-master/core/workplace";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
@@ -68,7 +67,6 @@ export async function runPrompt(
     | "sessionKkv"
     | "sessionVfs"
     | "state"
-    | "regexConfig"
     | "tokenCounters"
     | "providerModels"
     | "savedModels"
@@ -95,13 +93,7 @@ export async function runPrompt(
   const layout = loadAgentPromptLayoutFromYaml(source);
   const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
   const allMessages = await rt.messages.listBySession(sessionId);
-  const activeGroupId = await rt.state.getCurrentRegexGroupId();
-  const messages = await applyRegexChannelForLlm(
-    rt.regexConfig,
-    activeGroupId,
-    allMessages,
-    allMessages.filter((m) => !m.hidden),
-  );
+  const messages = allMessages.filter((m) => !m.hidden);
   const wtScope = { kind: "session" as const, projectId, sessionId };
   const vfs = rt.sessionVfs(projectId, sessionId);
   const { workplaceDisplay } = await assembleWorkplaceDisplay(wtScope, {

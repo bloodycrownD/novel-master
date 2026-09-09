@@ -54,10 +54,8 @@ import {
 } from './handlers/shell.js';
 import {
   handlePreferencesGetLlmStream,
-  handlePreferencesGetSessionFsVersionCheck,
   handlePreferencesGetThinkingContext,
   handlePreferencesSetLlmStream,
-  handlePreferencesSetSessionFsVersionCheck,
   handlePreferencesSetThinkingContext,
 } from './handlers/preferences.js';
 import {
@@ -78,20 +76,6 @@ import {
   handleProvidersGet,
   handleProvidersList,
 } from './handlers/providers.js';
-import {
-  handleRegexCreateGroup,
-  handleRegexCreateRule,
-  handleRegexDeleteGroup,
-  handleRegexDeleteRule,
-  handleRegexGetGroup,
-  handleRegexGetRule,
-  handleRegexListGroups,
-  handleRegexListPicker,
-  handleRegexListRules,
-  handleRegexSetCurrent,
-  handleRegexUpdateGroup,
-  handleRegexUpdateRule,
-} from './handlers/regex.js';
 import {
   handleSkillsAssertCreateName,
   handleSkillsDelete,
@@ -145,6 +129,7 @@ import {
   handleSessionsListByProject,
   handleSessionsProjectComposerStatus,
   handleSessionsPullTemplate,
+  handleSessionsPushTemplate,
   handleSessionsRename,
   handleSessionsSetAgentBinding,
   handleSessionsSetComposerDraft,
@@ -227,6 +212,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SESSIONS_RENAME, handleSessionsRename);
   bindReq(IPC_CHANNELS.SESSIONS_DELETE, handleSessionsDelete);
   bindReq(IPC_CHANNELS.SESSIONS_PULL_TEMPLATE, handleSessionsPullTemplate);
+  bindReq(IPC_CHANNELS.SESSIONS_PUSH_TEMPLATE, handleSessionsPushTemplate);
   bindReq(IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT, handleSessionsGetComposerDraft);
   bindReq(IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT, handleSessionsSetComposerDraft);
   bindReq(
@@ -312,14 +298,6 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.COMPACTION_MANUAL, handleCompactionManual);
 
   bindNoArg(
-    IPC_CHANNELS.PREFERENCES_GET_SESSION_FS_VERSION_CHECK,
-    handlePreferencesGetSessionFsVersionCheck,
-  );
-  bindBool(
-    IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
-    handlePreferencesSetSessionFsVersionCheck,
-  );
-  bindNoArg(
     IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,
     handlePreferencesGetLlmStream,
   );
@@ -380,20 +358,6 @@ export function registerHandlersFromRegistry(): void {
   );
   bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, handleAgentYamlExport);
   bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
-
-
-  bindNoArg(IPC_CHANNELS.REGEX_LIST_GROUPS, handleRegexListGroups);
-  bindReq(IPC_CHANNELS.REGEX_GET_GROUP, handleRegexGetGroup);
-  bindReq(IPC_CHANNELS.REGEX_CREATE_GROUP, handleRegexCreateGroup);
-  bindReq(IPC_CHANNELS.REGEX_UPDATE_GROUP, handleRegexUpdateGroup);
-  bindReq(IPC_CHANNELS.REGEX_DELETE_GROUP, handleRegexDeleteGroup);
-  bindReq(IPC_CHANNELS.REGEX_LIST_RULES, handleRegexListRules);
-  bindReq(IPC_CHANNELS.REGEX_GET_RULE, handleRegexGetRule);
-  bindReq(IPC_CHANNELS.REGEX_CREATE_RULE, handleRegexCreateRule);
-  bindReq(IPC_CHANNELS.REGEX_UPDATE_RULE, handleRegexUpdateRule);
-  bindReq(IPC_CHANNELS.REGEX_DELETE_RULE, handleRegexDeleteRule);
-  bindNoArg(IPC_CHANNELS.REGEX_LIST_PICKER, handleRegexListPicker);
-  bindReq(IPC_CHANNELS.REGEX_SET_CURRENT, handleRegexSetCurrent);
 
   bindReq(IPC_CHANNELS.SKILLS_LIST, handleSkillsList);
   bindReq(IPC_CHANNELS.SKILLS_EFFECTIVE, handleSkillsEffective);

@@ -34,6 +34,19 @@ function parseHeaders(json: string): Record<string, string> {
   }
 }
 
+/** 自定义参数根必须是 JSON 对象；根非法（非对象/解析失败）降级 {}，不抛错。 */
+function parseBodyParams(json: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
 function rowToProvider(row: Row): LlmProvider {
   const displayRaw = row.display_name;
   if (displayRaw == null || String(displayRaw).trim() === "") {
@@ -51,6 +64,7 @@ function rowToProvider(row: Row): LlmProvider {
     displayName: String(displayRaw),
     secretRef: row.secret_ref != null ? String(row.secret_ref) : null,
     headers: parseHeaders(String(row.headers_json ?? "{}")),
+    bodyParams: parseBodyParams(String(row.body_params_json ?? "{}")),
     isBuiltin: Number(row.is_builtin) === 1,
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
@@ -68,7 +82,7 @@ export class SqliteProviderRepository implements ProviderRepository {
       this.conn,
       this.parser,
       `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
-              headers_json, is_builtin, created_at_ms, updated_at_ms
+              headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider ORDER BY id`,
       {}
     );
@@ -80,7 +94,7 @@ export class SqliteProviderRepository implements ProviderRepository {
       this.conn,
       this.parser,
       `SELECT id, builtin_key, protocol, base_url, display_name, secret_ref,
-              headers_json, is_builtin, created_at_ms, updated_at_ms
+              headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider WHERE id = #{id}`,
       { id }
     );
@@ -96,10 +110,10 @@ export class SqliteProviderRepository implements ProviderRepository {
       this.parser,
       `INSERT INTO llm_provider (
         id, builtin_key, protocol, base_url, display_name, secret_ref,
-        headers_json, is_builtin, created_at_ms, updated_at_ms
+        headers_json, body_params_json, is_builtin, created_at_ms, updated_at_ms
       ) VALUES (
         #{id}, #{builtinKey}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef},
-        #{headersJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs}
+        #{headersJson}, #{bodyParamsJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
         id: provider.id,
@@ -109,6 +123,7 @@ export class SqliteProviderRepository implements ProviderRepository {
         displayName: provider.displayName,
         secretRef: provider.secretRef,
         headersJson: JSON.stringify(provider.headers),
+        bodyParamsJson: JSON.stringify(provider.bodyParams),
         isBuiltin: provider.isBuiltin ? 1 : 0,
         createdAtMs: provider.createdAtMs,
         updatedAtMs: provider.updatedAtMs,
@@ -126,6 +141,7 @@ export class SqliteProviderRepository implements ProviderRepository {
         display_name = #{displayName},
         secret_ref = #{secretRef},
         headers_json = #{headersJson},
+        body_params_json = #{bodyParamsJson},
         updated_at_ms = #{updatedAtMs}
        WHERE id = #{id}`,
       {
@@ -135,6 +151,7 @@ export class SqliteProviderRepository implements ProviderRepository {
         displayName: provider.displayName,
         secretRef: provider.secretRef,
         headersJson: JSON.stringify(provider.headers),
+        bodyParamsJson: JSON.stringify(provider.bodyParams),
         updatedAtMs: provider.updatedAtMs,
       }
     );

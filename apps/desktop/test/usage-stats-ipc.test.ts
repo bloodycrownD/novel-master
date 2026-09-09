@@ -1,9 +1,11 @@
 /**
  * Usage stats IPC handler（spec T-S6 的 handler 部分）：
  * - 五种 kind 各自转发到 rt.usageStats 对应方法（filter / dayLocalDate 参数透传）；
- * - core 返回体 → shared DTO 显式映射（含 today 子对象透传、modelName null 透传）；
- * - modelBreakdown 按 modelName 聚合回每模型单行（core 已是 provider×model 复合维度，
- *   同名模型多服务商多行在 DTO 侧逐列相加归并）；
+ * - core 返回体 → shared DTO 显式映射（新指标 null 保真透传、modelName null 透传）；
+ * - modelBreakdown 的 provider×model 复合行原样透传（不按 modelName 归并——饼图以
+ *   复合维度展示，同名模型多服务商保持多行）；
+ * - range 区间校验（格式 / 02-30 溢出 / fromDay ≤ toDay）在 IPC 边界先行拒绝；
+ * - filter 无 range 时透传为无 range 的 core filter（summary/requests 等全历史语义）；
  * - service 抛错时经 formatIpcError 包成 IpcResult error 形态。
  *
  * runtime mock 走 module hook：先把 desktop-runtime-singleton 重定向到
@@ -32,7 +34,6 @@ const SUMMARY = {
   billedInputTokens: 2000,
   avgFirstTokenMs: 850.5,
   avgTokensPerSecond: 42.25,
-  today: { totalTokens: 550, calls: 3 },
 };
 
 const BUCKETS = [
@@ -63,6 +64,7 @@ const BUCKETS = [
 
 const MODEL_ROWS = [
   {
+    providerId: null,
     modelName: null,
     calls: 5,
     promptTokens: 500,
@@ -72,6 +74,7 @@ const MODEL_ROWS = [
     billedInputTokens: 500,
   },
   {
+    providerId: "p1",
     modelName: "gpt-4o",
     calls: 7,
     promptTokens: 500,
@@ -173,14 +176,16 @@ function installStubRuntime(
   return calls;
 }
 
-const LAST7_FILTER: UsageStatsFilterDto = { range: { kind: "last7" } };
+const RANGE_FILTER: UsageStatsFilterDto = {
+  range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
+};
 
-describe("usage stats IPC handler（T-S6）", () => {
-  it("kind=summary 转发 getSummary，DTO 含 today 子对象透传", async () => {
+describe("usage stats IPC handler（T-S6 + Step 2 适配）", () => {
+  it("kind=summary 转发 getSummary，区间 DTO 逐字段映射（summary 无 today 子对象）", async () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "summary",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
     });
     assert.equal(res.ok, true);
     if (!res.ok) {
@@ -196,10 +201,33 @@ describe("usage stats IPC handler（T-S6）", () => {
       billedInputTokens: 2000,
       avgFirstTokenMs: 850.5,
       avgTokensPerSecond: 42.25,
-      today: { totalTokens: 550, calls: 3 },
     });
     assert.deepEqual(calls, [
-      { method: "getSummary", args: [{ range: { kind: "last7" } }] },
+      {
+        method: "getSummary",
+        args: [
+          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
+        ],
+      },
+    ]);
+  });
+
+  it("filter 无 range 时透传为无 range 的 core filter（model 三态保留）", async () => {
+    const calls = installStubRuntime();
+    const res = await handleUsageStatsQuery({
+      kind: "requests",
+      filter: { model: null },
+    });
+    assert.equal(res.ok, true);
+    if (!res.ok) {
+      return;
+    }
+    assert.deepEqual(res.data, REQUEST_PAGE);
+    assert.deepEqual(calls, [
+      {
+        method: "listRequestUsage",
+        args: [{ model: null }, { offset: 0, limit: 50 }],
+      },
     ]);
   });
 
@@ -207,7 +235,7 @@ describe("usage stats IPC handler（T-S6）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "daily",
-      filter: { range: { kind: "last30" }, model: null },
+      filter: { range: { fromDay: "2026-08-01", toDay: "2026-08-30" }, model: null },
     });
     assert.equal(res.ok, true);
     if (!res.ok) {
@@ -217,7 +245,9 @@ describe("usage stats IPC handler（T-S6）", () => {
     assert.deepEqual(calls, [
       {
         method: "getDailyBuckets",
-        args: [{ range: { kind: "last30" }, model: null }],
+        args: [
+          { range: { fromDay: "2026-08-01", toDay: "2026-08-30" }, model: null },
+        ],
       },
     ]);
   });
@@ -226,14 +256,17 @@ describe("usage stats IPC handler（T-S6）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "hourly",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
       dayLocalDate: "2026-08-23",
     });
     assert.equal(res.ok, true);
     assert.deepEqual(calls, [
       {
         method: "getHourlyBuckets",
-        args: ["2026-08-23", { range: { kind: "last7" } }],
+        args: [
+          "2026-08-23",
+          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
+        ],
       },
     ]);
   });
@@ -242,23 +275,23 @@ describe("usage stats IPC handler（T-S6）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "hourly",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
     });
     assert.equal(res.ok, true);
     assert.deepEqual(calls, [
       {
         method: "getHourlyBuckets",
-        args: ["", { range: { kind: "last7" } }],
+        args: ["", { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } }],
       },
     ]);
   });
 
-  it("kind=modelBreakdown 转发 getModelBreakdown，modelName null 透传 + custom 区间参数", async () => {
+  it("kind=modelBreakdown 转发 getModelBreakdown，providerId/modelName null 透传", async () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "modelBreakdown",
       filter: {
-        range: { kind: "custom", fromMs: 1, toMs: 2 },
+        range: { fromDay: "2026-08-24", toDay: "2026-08-25" },
         model: "gpt-4o",
       },
     });
@@ -272,7 +305,7 @@ describe("usage stats IPC handler（T-S6）", () => {
         method: "getModelBreakdown",
         args: [
           {
-            range: { kind: "custom", fromMs: 1, toMs: 2 },
+            range: { fromDay: "2026-08-24", toDay: "2026-08-25" },
             model: "gpt-4o",
           },
         ],
@@ -280,11 +313,10 @@ describe("usage stats IPC handler（T-S6）", () => {
     ]);
   });
 
-  it("kind=modelBreakdown 同名模型多服务商聚合为单行（CR-1：复合维度 → 模型粒度）", async () => {
-    // core 已按 (providerId, modelName) 复合分组，同名模型多服务商各返回一行；
-    // DTO 侧须聚合成每模型单行且各用量列为两行之和，
-    // 否则 renderer 用 modelName 作 React key 会重复、列表出现同名多行。
-    const calls = installStubRuntime(undefined, [
+  it("kind=modelBreakdown 同名模型多服务商保持多行原样透出（饼图复合维度）", async () => {
+    // core 按 (providerId, modelName) 复合分组，同名模型多服务商各返回一行；
+    // DTO 侧原样透传（不再按 modelName 归并），renderer 饼图按复合维度展示。
+    const rows = [
       {
         providerId: "p1",
         modelName: "gpt-4o",
@@ -305,28 +337,24 @@ describe("usage stats IPC handler（T-S6）", () => {
         cacheReadTokens: 60,
         billedInputTokens: 480,
       },
-    ]);
+    ];
+    const calls = installStubRuntime(undefined, rows);
     const res = await handleUsageStatsQuery({
       kind: "modelBreakdown",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
     });
     assert.equal(res.ok, true);
     if (!res.ok) {
       return;
     }
-    assert.deepEqual(res.data, [
-      {
-        modelName: "gpt-4o",
-        calls: 7,
-        promptTokens: 600,
-        completionTokens: 1100,
-        totalTokens: 1700,
-        cacheReadTokens: 100,
-        billedInputTokens: 600,
-      },
-    ]);
+    assert.deepEqual(res.data, rows);
     assert.deepEqual(calls, [
-      { method: "getModelBreakdown", args: [{ range: { kind: "last7" } }] },
+      {
+        method: "getModelBreakdown",
+        args: [
+          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
+        ],
+      },
     ]);
   });
 
@@ -334,12 +362,9 @@ describe("usage stats IPC handler（T-S6）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "models",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
     });
     assert.equal(res.ok, true);
-    if (!res.ok) {
-      return;
-    }
     assert.deepEqual(res.data, ["gpt-4o", "claude-3-5-sonnet"]);
     assert.deepEqual(calls, [{ method: "listModels", args: [] }]);
   });
@@ -348,7 +373,7 @@ describe("usage stats IPC handler（T-S6）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "requests",
-      filter: { range: { kind: "last7" }, model: "gpt-4o" },
+      filter: { range: { fromDay: "2026-08-24", toDay: "2026-08-30" }, model: "gpt-4o" },
       offset: 50,
       limit: 100,
     });
@@ -361,7 +386,10 @@ describe("usage stats IPC handler（T-S6）", () => {
       {
         method: "listRequestUsage",
         args: [
-          { range: { kind: "last7" }, model: "gpt-4o" },
+          {
+            range: { fromDay: "2026-08-24", toDay: "2026-08-30" },
+            model: "gpt-4o",
+          },
           { offset: 50, limit: 100 },
         ],
       },
@@ -372,13 +400,16 @@ describe("usage stats IPC handler（T-S6）", () => {
     const calls = installStubRuntime();
     const res = await handleUsageStatsQuery({
       kind: "requests",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
     });
     assert.equal(res.ok, true);
     assert.deepEqual(calls, [
       {
         method: "listRequestUsage",
-        args: [{ range: { kind: "last7" } }, { offset: 0, limit: 50 }],
+        args: [
+          { range: { fromDay: "2026-08-24", toDay: "2026-08-30" } },
+          { offset: 0, limit: 50 },
+        ],
       },
     ]);
   });
@@ -387,7 +418,7 @@ describe("usage stats IPC handler（T-S6）", () => {
     const calls = installStubRuntime();
     const summaryRes = await handleUsageStatsQuery({
       kind: "summary",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
     });
     assert.equal(summaryRes.ok, true);
     if (!summaryRes.ok) {
@@ -395,17 +426,21 @@ describe("usage stats IPC handler（T-S6）", () => {
     }
     const summary = summaryRes.data;
     assert.equal(
-      typeof summary === "object" && summary != null && "today" in summary,
+      typeof summary === "object" && summary != null && "avgFirstTokenMs" in summary,
       true
     );
-    if (typeof summary === "object" && summary != null && "today" in summary) {
+    if (
+      typeof summary === "object" &&
+      summary != null &&
+      "avgFirstTokenMs" in summary
+    ) {
       assert.equal(summary.avgFirstTokenMs, 850.5);
       assert.equal(summary.avgTokensPerSecond, 42.25);
     }
 
     const dailyRes = await handleUsageStatsQuery({
       kind: "daily",
-      filter: LAST7_FILTER,
+      filter: RANGE_FILTER,
     });
     assert.equal(dailyRes.ok, true);
     if (!dailyRes.ok) {
@@ -422,23 +457,55 @@ describe("usage stats IPC handler（T-S6）", () => {
     assert.equal(calls.length, 2);
   });
 
+  it("区间校验：fromDay > toDay 在 IPC 边界拒绝，不触达 service", async () => {
+    const calls = installStubRuntime();
+    const res = await handleUsageStatsQuery({
+      kind: "summary",
+      filter: { range: { fromDay: "2026-08-31", toDay: "2026-08-24" } },
+    });
+    assert.equal(res.ok, false);
+    if (res.ok) {
+      return;
+    }
+    assert.equal(res.error.code, "ERROR");
+    assert.ok(res.error.message.includes("fromDay 不能晚于 toDay"));
+    assert.equal(calls.length, 0, "校验失败不应转发 service");
+  });
+
+  it("区间校验：非法格式与溢出日历日（02-30）在 IPC 边界拒绝", async () => {
+    const calls = installStubRuntime();
+    const badCases: Array<{ range: { fromDay: string; toDay: string }; hint: string }> = [
+      { range: { fromDay: "2026/08/24", toDay: "2026-08-30" }, hint: "格式" },
+      { range: { fromDay: "2026-02-30", toDay: "2026-03-01" }, hint: "合法日期" },
+      { range: { fromDay: "2026-08-24", toDay: "2026-13-01" }, hint: "合法日期" },
+    ];
+    for (const { range, hint } of badCases) {
+      const res = await handleUsageStatsQuery({ kind: "summary", filter: { range } });
+      assert.equal(res.ok, false, `区间 ${JSON.stringify(range)} 应被拒绝`);
+      if (!res.ok) {
+        assert.ok(res.error.message.includes(hint));
+      }
+    }
+    assert.equal(calls.length, 0, "校验失败不应转发 service");
+  });
+
   it("service 抛 ChatError 时返回 IpcResult error 形态（code/message 透传）", async () => {
     // 构造带 domain code 的 ChatError 形状（core 主入口未导出该类，
     // formatIpcError 按 name ∈ TYPED_ERROR_NAMES + code 字段识别）
-    const chatError = Object.assign(new Error("自定义区间缺少 fromMs/toMs"), {
+    const chatError = Object.assign(new Error("自然日区间不合法"), {
       name: "ChatError",
       code: "INVALID_ARGUMENT",
     });
     const calls = installStubRuntime(chatError);
     const res = await handleUsageStatsQuery({
       kind: "summary",
-      filter: { range: { kind: "custom" } },
+      filter: RANGE_FILTER,
     });
     assert.deepEqual(res, {
       ok: false,
       error: {
         code: "INVALID_ARGUMENT",
-        message: "自定义区间缺少 fromMs/toMs",
+        message: "自然日区间不合法",
       },
     });
     assert.equal(calls.length, 1);

@@ -18,7 +18,6 @@ import type {
 import { createCompactionConditionsStore } from "@novel-master/core/compaction";
 import { buildPromptAssemblyFromLayout } from "@novel-master/core/prompt";
 import { createProviderServices } from "@novel-master/core/provider";
-import { createRegexConfigService } from "@novel-master/core/regex";
 import { createSessionFsService } from "@novel-master/core/session-fs";
 import { createScopedVfsService } from "@novel-master/core/vfs";
 import { createWorkplaceService } from "@novel-master/core/workplace";
@@ -60,7 +59,6 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(mainEntry.createCompactionConditionsStore, undefined);
     assert.equal(mainEntry.buildPromptAssemblyFromLayout, undefined);
     assert.equal(mainEntry.createProviderServices, undefined);
-    assert.equal(mainEntry.createRegexConfigService, undefined);
     assert.equal(mainEntry.createSessionFsService, undefined);
     assert.equal(mainEntry.createScopedVfsService, undefined);
     assert.equal(mainEntry.createWorkplaceService, undefined);
@@ -82,7 +80,6 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(typeof createCompactionConditionsStore, "function");
     assert.equal(typeof buildPromptAssemblyFromLayout, "function");
     assert.equal(typeof createProviderServices, "function");
-    assert.equal(typeof createRegexConfigService, "function");
     assert.equal(typeof createSessionFsService, "function");
     assert.equal(typeof createScopedVfsService, "function");
     assert.equal(typeof createWorkplaceService, "function");

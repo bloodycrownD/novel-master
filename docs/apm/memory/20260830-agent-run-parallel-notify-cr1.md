@@ -93,3 +93,17 @@
 
 - 静态源码断言（readFileSync + 正则）要区分「调用/导入」与「注释提及」，否则误伤既有注释。
 - Manager 双路径收尾的去重判断统一用「entry 是否仍是本次 + runId 是否已回填」两个信号，覆盖受理空窗、事件先到、throw 先到三种时序。
+
+## 续作启动（2026-09-05，主会话）
+
+### 请求
+
+新建 worktree（沿用 `.worktree/agent-run-parallel-and-notify`，原 worktree 一直在未清理），把 main 合入 feat/agent-run-parallel-and-notify，准备继续做该迭代。
+
+### 合并与裁决
+
+- worktree 里发现一场合到一半的 merge（MERGE_HEAD=main 顶端），95 文件已暂存、剩 2 处冲突。
+- docs/apm/memory 同名文件冲突：main 侧「第 3 轮 impl」vs 分支侧「cr-func 修复」，按时间序两段全保留。
+- useAgentRunLifecycle.ts 冲突为架构对决：main 的 refCountedRef 所有权守卫（1.5.9 修复）vs 分支的 refcount 整体上收 AgentRunManager（T-P7 静态断言锁死 lifecycle 不碰计数）。裁决取分支侧（Manager 方案是同一泄漏的更根本修复），并清除自动合并漏进来的孤儿（refCountedRef 声明、beginUiRun 置位）。main 的流式恢复机制（保护窗/恢复窗口/反填）完整保留——notify PRD 依赖它。
+- use-agent-run-lifecycle 的「refcount 平衡」断言按新语义对齐（计数断言移除，归 T-P7 Manager 套件覆盖）。
+- 验证：8 套件 105 测试全绿（含 T-P7、composer 两轮回归、webview 重挂回归）；merge commit 8991cd7，分支领先 main 14 提交、落后 0。

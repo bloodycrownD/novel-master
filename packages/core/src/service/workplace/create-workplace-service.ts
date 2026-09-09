@@ -22,6 +22,7 @@ export function createWorkplaceService(
   scope: WorkplaceScope
 ): WorkplaceService {
   return new DefaultWorkplaceService({
+    conn,
     scope,
     vfs: new SqliteVfsEntryRepository(conn),
     workplace: new SqliteWorkplaceRepository(conn),

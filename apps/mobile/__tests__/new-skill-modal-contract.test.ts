@@ -1,14 +1,12 @@
 /**
- * NewSkillModal（mobile）源码契约——ZIP 导入分支的两道修复：
+ * NewSkillModal（mobile）源码契约——ZIP 导入分支的修复：
  * - CR D-1：zip 落盘前过保留名新建门（assertSkillNameNotReservedForCreate）。
- * - CR MF-8：重写 SKILL.md 前先 readSkillFile 拿 version，writeSkillFile
- *   传 {expectedVersion}（对齐 desktop edadb49，否则必撞 VFS CONFLICT）。
  *
  * 整屏组件依赖太重（runtime/keyboard/modal），按本仓惯例钉源码契约。
  *
  * 源码契约测豁免（tests/G-3）：NewSkillModal 依赖 runtime Context、键盘避让与
  * 弹层体系，TestRenderer 行为化需 mock 整条链；本文件锁的是 zip 落盘前的
- * 保留名校验顺序与乐观锁版本透传，属于调用时序契约，源码断言保留。
+ * 保留名校验顺序与重写分支的直写形态，属于调用时序契约，源码断言保留。
  */
 import {describe, expect, it} from '@jest/globals';
 import {readFileSync} from 'node:fs';
@@ -19,7 +17,7 @@ const src = readFileSync(
   'utf8',
 );
 
-describe('NewSkillModal ZIP 导入源码契约（CR D-1 / MF-8）', () => {
+describe('NewSkillModal ZIP 导入源码契约（CR D-1）', () => {
   it('D-1：zipSvc.import 之前过保留名新建门，拒绝时不落盘', () => {
     const assertIdx = src.indexOf('assertSkillNameNotReservedForCreate(');
     const importIdx = src.indexOf('zipSvc.import(');
@@ -31,17 +29,15 @@ describe('NewSkillModal ZIP 导入源码契约（CR D-1 / MF-8）', () => {
     expect(src).toMatch(/assertSkillNameNotReservedForCreate\(\s*domain,/);
   });
 
-  it('MF-8：重写分支先 readSkillFile 拿版本，writeSkillFile 传 expectedVersion', () => {
-    // 重写分支（表单值与 zip 元数据不一致时触发）：read 在 write 之前
+  it('重写分支存在 writeSkillFile 直写，无 readSkillFile / expectedVersion 残留', () => {
+    // 重写分支（表单值与 zip 元数据不一致时触发）：分支内走 writeSkillFile
     const branchIdx = src.indexOf('imported.preview.name !== name');
     expect(branchIdx).toBeGreaterThanOrEqual(0);
     const segment = src.slice(branchIdx);
-    const readIdx = segment.indexOf('readSkillFile(');
-    const writeIdx = segment.indexOf('writeSkillFile(');
-    expect(readIdx).toBeGreaterThanOrEqual(0);
-    expect(writeIdx).toBeGreaterThanOrEqual(0);
-    expect(readIdx).toBeLessThan(writeIdx);
-    // 版本从 read 结果取并透传（VFS 乐观锁）
-    expect(src).toContain('{expectedVersion: read.version}');
+    expect(segment.indexOf('writeSkillFile(')).toBeGreaterThanOrEqual(0);
+    // 文件写入版本校验已整体下线（last-write-wins）：全文不得再出现
+    // readSkillFile / expectedVersion 残留。
+    expect(src).not.toContain('readSkillFile(');
+    expect(src).not.toContain('expectedVersion');
   });
 });

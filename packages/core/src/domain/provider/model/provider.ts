@@ -16,6 +16,8 @@ export interface LlmProvider {
   readonly displayName: string;
   readonly secretRef: string | null;
   readonly headers: Readonly<Record<string, string>>;
+  /** 自定义参数：原样合并进请求体顶层（值任意 JSON，不限字符串）。 */
+  readonly bodyParams: Readonly<Record<string, unknown>>;
   readonly isBuiltin: boolean;
   readonly createdAtMs: number;
   readonly updatedAtMs: number;

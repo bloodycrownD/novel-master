@@ -224,7 +224,6 @@ function makeRuntime(
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
       getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
-      getCurrentRegexGroupId: async () => undefined,
       getSubagentNames: async () => [],
     },
     agentRegistry: registry,
@@ -260,9 +259,6 @@ function makeRuntime(
       }),
     },
     eventBus: ctx.sessionKkv as unknown as never,
-    regexConfig: {
-      getActiveRegexConfig: async () => null,
-    } as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator:

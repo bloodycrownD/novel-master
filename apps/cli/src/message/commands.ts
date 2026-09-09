@@ -9,7 +9,6 @@ import { assertMessageContent, formatMessageForCli, parseMessageContent, textBlo
 import { type ChatMessage } from "@novel-master/core/chat";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
-import { applyActiveRegexChannel } from "../regex/apply-channel.js";
 import { seqRangeFromFloors } from "./floor.js";
 
 const BATCH_RANGE_USAGE =
@@ -104,7 +103,7 @@ async function resolveAppendContent(
 }
 
 export async function runMessage(
-  rt: Pick<NovelMasterRuntime, "messages" | "scope" | "state" | "regexConfig">,
+  rt: Pick<NovelMasterRuntime, "messages" | "scope" | "state">,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
@@ -114,16 +113,8 @@ export async function runMessage(
   switch (subcommand) {
     case "list": {
       const all = await rt.messages.listBySession(sessionId);
-      const activeGroupId = await rt.state.getCurrentRegexGroupId();
       const visible = all.filter((m) => !m.hidden);
-      const displayVisible = await applyActiveRegexChannel(
-        rt.regexConfig,
-        activeGroupId,
-        all,
-        visible,
-        "display",
-      );
-      const displayById = new Map(displayVisible.map((m) => [m.id, m]));
+      const displayById = new Map(visible.map((m) => [m.id, m]));
       const showSeq = flags.get("show-seq") === true;
       let floor = 0;
       for (const m of all) {

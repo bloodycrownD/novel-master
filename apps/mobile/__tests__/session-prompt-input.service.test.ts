@@ -7,8 +7,7 @@
  * 注入了 extra-info 块，就能守住「UI 预览与发给模型的提示词在 extra-info 段上一致」。
  *
  * 这里用最小 runtime stub 走真实 buildSessionPromptInput：workplace layout 不开 →
- * assembleWorkplaceDisplay 短路；user 消息无附件 → prepare 内不触 vfs/sessionKkv；
- * regexConfig 无 active group → applyActiveRegexChannel 原样返回。
+ * assembleWorkplaceDisplay 短路；user 消息无附件 → prepare 内不触 vfs/sessionKkv。
  */
 import {describe, expect, it, jest} from '@jest/globals';
 import {textBlocks} from '@novel-master/core/chat';
@@ -16,20 +15,6 @@ import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/conf
 
 import {buildSessionPromptInput} from '@/services/session-prompt-input.service';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-
-// regex-apply-channel 依赖的 @novel-master/core/regex 在 mobile jest 配置里没有映射，
-// 且本用例只关心 customAttach 在 prepare 路径的 parity，不需要真实 regex 逻辑，
-// 直接 mock 成原样透传可见消息即可。
-jest.mock('@/services/regex-apply-channel', () => ({
-  applyActiveRegexChannel: jest.fn(
-    async (
-      _config: unknown,
-      _groupId: unknown,
-      _all: unknown,
-      visible: readonly never[],
-    ) => [...visible],
-  ),
-}));
 
 /** 从消息 content（{ blocks: [...] }）里拼出纯文本，供断言关键字。 */
 function bodyText(content: unknown): string {
@@ -65,10 +50,7 @@ function makeStubRuntime(): MobileNovelMasterRuntime {
         },
       ]),
     },
-    state: {
-      getCurrentRegexGroupId: jest.fn(async () => undefined),
-    },
-    regexConfig: {},
+    state: {},
     workplace: jest.fn(() => ({})),
     sessionVfs: jest.fn(() => ({})),
     // skillAttach hydrate 用的技能服务工厂；本用例消息无 skillAttach 附件，

@@ -97,6 +97,8 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       body.generationConfig = { ...req.sampling.gemini };
     }
     applyGeminiThinkingToBody(body, req.thinking);
+    // 自定义参数最后合并：用户显式配置覆盖一切同名 wire 字段（含 generationConfig）。
+    Object.assign(body, req.extraBody);
     return body;
   }
 

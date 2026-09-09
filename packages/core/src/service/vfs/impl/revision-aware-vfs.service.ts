@@ -28,7 +28,6 @@ import {
 import { SqliteVfsContentStore } from "@/domain/vfs/content-store/impl/sqlite-vfs-content-store.js";
 import {
   VfsError,
-  vfsConflict,
   vfsInvalidPath,
   vfsIsDirectory,
   vfsNotFound,
@@ -40,7 +39,7 @@ import type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
-  WriteOptions,
+  VfsContentSize,
 } from "../internal-vfs.port.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 
@@ -71,11 +70,17 @@ export class RevisionAwareVfsService implements InternalVfsService {
     return this.inner.read(scopeKey, path);
   }
 
+  findContentSize(
+    scopeKey: string,
+    path: string
+  ): Promise<VfsContentSize | null> {
+    return this.inner.findContentSize(scopeKey, path);
+  }
+
   async write(
     scopeKey: string,
     path: string,
-    content: string,
-    options?: WriteOptions
+    content: string
   ): Promise<{ version: number }> {
     return runInTransactionOrConn(this.conn, async (tx) => {
       const entryRepo = new SqliteVfsEntryRepository(tx);
@@ -85,8 +90,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
         revisionRepo,
         scopeKey,
         path,
-        content,
-        options
+        content
       );
     });
   }
@@ -107,10 +111,7 @@ export class RevisionAwareVfsService implements InternalVfsService {
       options
     );
 
-    const result = await this.write(scopeKey, path, nextContent, {
-      expectedVersion: current.version,
-      versionCheck: true,
-    });
+    const result = await this.write(scopeKey, path, nextContent);
     return { version: result.version, replacements };
   }
 
@@ -315,8 +316,7 @@ async function writeWithRevision(
   revisionRepo: VfsRevisionRepository,
   scopeKey: string,
   path: string,
-  content: string,
-  options?: WriteOptions
+  content: string
 ): Promise<{ version: number }> {
   const normalized = normalizePath(path);
   const existing = await entryRepo.findByPath(scopeKey, normalized);
@@ -356,24 +356,6 @@ async function writeWithRevision(
     return { version };
   }
 
-  const versionCheck = options?.versionCheck !== false;
-  if (versionCheck && options?.expectedVersion == null) {
-    throw new VfsError(
-      "CONFLICT",
-      `expectedVersion required when updating ${normalized}`,
-      { path: normalized }
-    );
-  }
-
-  // 乐观锁优先：过期仍 CONFLICT，同文短路不得绕过
-  if (
-    versionCheck &&
-    options?.expectedVersion != null &&
-    options.expectedVersion !== existing.version
-  ) {
-    throw vfsConflict(normalized, options.expectedVersion, existing.version);
-  }
-
   // 同文短路：相对 live 明文全等 → 不 bump、不 append
   if (existing.content === content) {
     return { version: existing.version };
@@ -389,11 +371,7 @@ async function writeWithRevision(
     scopeKey,
     normalized,
     content,
-    nextVersion,
-    {
-      expectedVersion: options?.expectedVersion,
-      versionCheck,
-    }
+    nextVersion
   );
   version = updated.version;
   await revisionRepo.append({

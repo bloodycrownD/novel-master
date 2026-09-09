@@ -33,7 +33,7 @@ export async function copyVfsPath(
 
   try {
     const existing = await vfs.read(from);
-    await vfs.write(to, existing.content, { versionCheck: false });
+    await vfs.write(to, existing.content);
     return;
   } catch (error) {
     if (!(error instanceof VfsError)) {
@@ -76,8 +76,7 @@ export async function copyVfsPath(
     const content = await vfs.read(file.path);
     await vfs.write(
       remapPathUnderDir(file.path, oldDir, newDir),
-      content.content,
-      { versionCheck: false }
+      content.content
     );
   }
 }

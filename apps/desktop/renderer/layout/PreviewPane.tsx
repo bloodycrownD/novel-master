@@ -80,7 +80,6 @@ export function PreviewPane() {
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
-  const [version, setVersion] = useState<number | undefined>();
   const [loading, setLoading] = useState(false);
   const [fileMissing, setFileMissing] = useState(false);
   const [annotateDrafts, setAnnotateDrafts] = useState<readonly AnnotateDraft[]>(
@@ -162,7 +161,6 @@ export function PreviewPane() {
       if (result.ok) {
         setContent(result.data.content);
         setSavedContent(result.data.content);
-        setVersion(result.data.version);
         setFileMissing(false);
       } else if (result.error.code === "NOT_FOUND") {
         setFileMissing(true);
@@ -341,8 +339,6 @@ export function PreviewPane() {
         ),
         path: previewFile.path,
         content,
-        expectedVersion: version,
-        versionCheck: version != null,
         lastKnownContent: savedContent,
       });
       if (result.ok) {

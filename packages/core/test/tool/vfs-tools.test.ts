@@ -298,7 +298,7 @@ describe("Builtin file tools V2 (integration)", () => {
     assert.equal(read.content, "v2");
   });
 
-  it("vfs.write respects versionCheck and expectedVersion options", async () => {
+  it("vfs.write 不再暴露版本参数：传入 options 被忽略，重复写 last-write-wins", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -310,30 +310,25 @@ describe("Builtin file tools V2 (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call("write", { path: "/t.txt", content: "v1" }, baseCtx);
+    // 旧调用方（或 LLM 顺手）多传的 options 字段被 schema 剥离，不报错、不启校验。
     const second = await runner.call<{ version: number }>(
       "write",
       {
         path: "/t.txt",
         content: "v2",
         options: { expectedVersion: 1, versionCheck: true },
-      },
+      } as never,
       baseCtx,
     );
     assert.equal(second.version, 2);
 
-    await assert.rejects(
-      () =>
-        runner.call(
-          "write",
-          {
-            path: "/t.txt",
-            content: "stale",
-            options: { expectedVersion: 1, versionCheck: true },
-          },
-          baseCtx,
-        ),
-      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
+    const third = await runner.call<{ version: number }>(
+      "write",
+      { path: "/t.txt", content: "stale" },
+      baseCtx,
     );
+    assert.equal(third.version, 3);
+    assert.equal((await vfs.read("/t.txt")).content, "stale");
   });
 
   it("fs ls/glob/grep flow", async () => {

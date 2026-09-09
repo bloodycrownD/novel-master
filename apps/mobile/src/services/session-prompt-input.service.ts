@@ -18,7 +18,6 @@ import {
 } from '@novel-master/core/prompt';
 import {assembleWorkplaceDisplay} from '@novel-master/core/workplace';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import {applyActiveRegexChannel} from './regex-apply-channel';
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -52,14 +51,6 @@ export async function buildSessionPromptInput(
 
   const allMessages = await runtime.messages.listBySession(scope.sessionId);
   const visible = allMessages.filter(m => !m.hidden);
-  const activeGroupId = await runtime.state.getCurrentRegexGroupId();
-  const regexMessages = await applyActiveRegexChannel(
-    runtime.regexConfig,
-    activeGroupId,
-    allMessages,
-    visible,
-    'llm',
-  );
   const wtScope = {
     kind: 'session' as const,
     projectId: scope.projectId,
@@ -77,7 +68,7 @@ export async function buildSessionPromptInput(
       layout: resolved.prompts,
     },
   );
-  const messages = await prepareUserMessagesForPrompt(regexMessages, {
+  const messages = await prepareUserMessagesForPrompt(visible, {
     sessionId: scope.sessionId,
     sessionKkv: runtime.sessionKkv,
     vfs,

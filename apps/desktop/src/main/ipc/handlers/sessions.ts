@@ -13,6 +13,7 @@ import type {
   SessionListByProjectRequest,
   SessionProjectComposerStatusRequest,
   SessionPullTemplateRequest,
+  SessionPushTemplateRequest,
   SessionRenameRequest,
   SessionSetAgentBindingRequest,
   SessionSetComposerDraftRequest,
@@ -20,6 +21,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { notifyWorkspaceMutatedToRenderer } from "../forward-workspace-mutated.js";
 import { projectComposerStatusForSession } from "../../services/project-composer-status.service.js";
 
 function toDto(session: {
@@ -94,6 +96,32 @@ export async function handleSessionsPullTemplate(
   try {
     const rt = await getDesktopRuntime();
     await rt.sessions.pullTemplate(req.sessionId);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/**
+ * 推送到项目工作区：用当前聊天工作区（文件 + workplace 规则）整树覆盖
+ * project 模板（该项目所有会话的模板母本）。
+ *
+ * 成功后 notify 项目工作区面板刷新——注意 IPC 面板语义里 `'session'`
+ * 面板就是项目工作区（core project 域），`'chat'` 才是会话域；推送覆盖
+ * 的是前者，故 payload 用 `{workspaceScope: 'session', projectId}`。
+ * projectId 经会话查询取得（不改 Request 形状）；失败不 notify。
+ */
+export async function handleSessionsPushTemplate(
+  req: SessionPushTemplateRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.sessions.pushTemplate(req.sessionId);
+    const session = await rt.sessions.get(req.sessionId);
+    notifyWorkspaceMutatedToRenderer({
+      workspaceScope: "session",
+      projectId: session.projectId,
+    });
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

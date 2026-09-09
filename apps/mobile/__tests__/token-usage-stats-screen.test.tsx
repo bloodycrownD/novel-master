@@ -2,9 +2,10 @@
  * 数据统计页（TokenUsageStatsScreen）mobile UI 测试（T-S7）。
  *
  * - 入口：ProfileTabScreen CONFIG_MENU「数据统计」项 navigate TokenUsageStats；
- * - 「汇总 / 明细」双页签：筛选栏置顶共享（切页签不重查、筛选状态跨页签
- *   保留）；汇总页签五指标卡 + 今日卡（命中率无数据显示「暂无数据」）
- *   + 分模型列表（聚合数据归汇总）；明细页签只留柱状图 / 小时钻取；
+ * - 「汇总 / 图表 / 流水」三页签：筛选栏置顶共享（切页签不重查、筛选状态
+ *   跨页签保留）；汇总页签五指标卡 + 服务商×模型饼图（今日卡已删）；
+ *   图表页签柱状图 / 小时钻取（今天模式直出小时图）；流水随时间窗口
+ *   （需求①勘误后，模型/服务商叠加）；
  * - 筛选切换重查：时间范围 / 模型筛选切换后 stub 的 usageStats 方法收到新
  *   filter 参数；CR-2 方案 A：两类归并选项传参与选项覆盖 parity（每个
  *   (providerId, modelName) 组合至少被一个筛选项命中）；
@@ -12,9 +13,13 @@
  * - 空态文案；
  * - 刷新单通道（mobile/B-2）：挂载与筛选切换各只触发一轮三连查询；
  * - 主查询竞态（cross/B-1）：旧响应后到不覆盖新数据；
- * - 空态区分（mobile/A-1）：库全空冷启动引导 vs 范围内无数据保留今日卡；
+ * - 空态区分（mobile/A-1）：库全空冷启动引导（拦全部页签）vs 范围内
+ *   无数据（拦全部页签，流水随时间窗口，需求①勘误后）；
+ *   饼图占比分母用窗口 summary.totalTokens 且人为错开行总和（P1-3 锁口径）；
  * - 加载失败（mobile/C-orch-2）：常驻错误条 + 不渲染 0 兜底卡片；
- * - MonthRangePickerSheet 组件级选值回调 + 自定义区间正常路径与 366 天上限。
+ * - MonthRangePickerSheet 组件级选值回调 + 自定义区间正常路径（无上限）。
+ * - T-M1..T-M7：今天映射/近 7·30 天恰 7·30 桶/今日卡全删/饼图渲染与点选/
+ *   流水跟随时间/自定义无上限/PieChart 组件级交互。
  *
  * 照 session-detail-screen.test.tsx 范式：mock useRuntime 返回固定引用 runtime
  * （新对象字面量会导致 effect 无限重跑）；AppModal 只在 visible 时渲染 children。
@@ -27,7 +32,6 @@ const mockGetSummary = jest.fn();
 const mockGetDailyBuckets = jest.fn();
 const mockGetHourlyBuckets = jest.fn();
 const mockGetModelBreakdown = jest.fn();
-const mockListModels = jest.fn();
 const mockProvidersList = jest.fn();
 const mockListByProvider = jest.fn();
 const mockListRequestUsage = jest.fn();
@@ -38,7 +42,6 @@ const mockRuntime = {
     getDailyBuckets: mockGetDailyBuckets,
     getHourlyBuckets: mockGetHourlyBuckets,
     getModelBreakdown: mockGetModelBreakdown,
-    listModels: mockListModels,
     listRequestUsage: mockListRequestUsage,
   },
   providers: {
@@ -140,6 +143,23 @@ jest.mock('@/components/agent/AgentPickerModal', () => {
   };
 });
 
+// react-native-svg 在 Jest 环境下依赖原生视图管理器，渲染会抛错；
+// mock 成转发 props（testID/onPress）的普通 View，保饼图扇区可查可点。
+jest.mock('react-native-svg', () => {
+  const mockReact = require('react');
+  const passthrough = (props: Record<string, unknown>) =>
+    mockReact.createElement('View', props);
+  return {
+    __esModule: true,
+    default: passthrough,
+    Path: passthrough,
+    Circle: passthrough,
+    G: passthrough,
+    // 扇区百分比标注用的 svg Text（组件内以 Text as SvgText 引入）。
+    Text: passthrough,
+  };
+});
+
 jest.mock('@/components/provider/ModelPickerModal', () => {
   const mockReact = require('react');
   return {
@@ -153,8 +173,13 @@ jest.mock('@/services/agent-display-label', () => ({
 }));
 
 import {TokenUsageStatsScreen} from '@/screens/stack/TokenUsageStatsScreen';
-import {isCustomRangeValid} from '@/screens/stack/token-usage/format';
+import {
+  isCustomRangeValid,
+  localDayKeyOffset,
+  toLocalDayKey,
+} from '@/screens/stack/token-usage/format';
 import {MonthRangePickerSheet} from '@/components/ui/MonthRangePickerSheet';
+import {PieChart} from '@/components/charts/PieChart';
 import {ProfileTabScreen} from '@/screens/tabs/ProfileTabScreen';
 
 const MS_PER_DAY = 86_400_000;
@@ -173,7 +198,6 @@ const SAMPLE_SUMMARY = {
   billedInputTokens: 1000,
   avgFirstTokenMs: 1200,
   avgTokensPerSecond: 45.5,
-  today: {totalTokens: 500, calls: 2},
 };
 
 // 三天样例：总用量递减（900+100 / 400+100 / 50+0），柱高随之递减；
@@ -262,6 +286,14 @@ const SAMPLE_REQUEST_ROWS = [
     durationMs: null,
   },
 ];
+
+/** 当天（运行时）与 N 天前偏移的本地日 key：与实现同用日历加法。 */
+function todayKey(): string {
+  return toLocalDayKey(Date.now());
+}
+function dayKeyOffset(offsetDays: number): string {
+  return localDayKeyOffset(new Date(), offsetDays);
+}
 
 function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
@@ -355,7 +387,6 @@ beforeEach(() => {
     })),
   );
   mockGetModelBreakdown.mockReset().mockResolvedValue(SAMPLE_MODEL_ROWS);
-  mockListModels.mockReset().mockResolvedValue(['gpt-4o']);
   mockProvidersList
     .mockReset()
     .mockResolvedValue([{id: 'p1', displayName: '智谱'}]);
@@ -388,10 +419,11 @@ describe('T-S7 ProfileTabScreen 数据统计入口', () => {
 });
 
 describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
-  it('初始加载以 last7 查询，切近 30 天后以 last30 重查', async () => {
+  it('初始加载以 last7 查询，切近 30 天后以 last30 重查（T-M2：近 7/30 天恰 7/30 桶）', async () => {
     const renderer = await renderScreen();
+    // last7 = {D-6, D}（含今天共 7 桶，修正旧版 8 桶偏差）。
     expect(mockGetDailyBuckets).toHaveBeenCalledWith({
-      range: {kind: 'last7'},
+      range: {fromDay: dayKeyOffset(-6), toDay: todayKey()},
       model: undefined,
       providerId: undefined,
     });
@@ -399,8 +431,9 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       findByTestId(renderer.root, 'range-last30')!.props.onPress();
       await flushPromises();
     });
+    // last30 = {D-29, D}（含今天共 30 桶）。
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
-      range: {kind: 'last30'},
+      range: {fromDay: dayKeyOffset(-29), toDay: todayKey()},
       model: undefined,
       providerId: undefined,
     });
@@ -412,7 +445,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
     });
     // 选项生成：配置组合「智谱 · gpt-4o」+ 服务商归并「智谱 · 其他模型」+
-    // 全局归并「未记录服务商（历史）」（provider_id IS NULL，模型在不在
+    // 全局归并「未记录服务商」（provider_id IS NULL，模型在不在
     // 配置集均归此）。
     expect(findByTestId(renderer.root, 'model-option-p1::gpt-4o')).toBeTruthy();
     expect(
@@ -427,11 +460,11 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
-      range: {kind: 'last7'},
+      range: {fromDay: dayKeyOffset(-6), toDay: todayKey()},
       model: 'gpt-4o',
       providerId: 'p1',
     });
-    // 未记录服务商（历史）：model: undefined（不筛模型）+ providerId: null
+    // 未记录服务商：model: undefined（不筛模型）+ providerId: null
     // （provider_id IS NULL）——覆盖「未记录 × 已配置模型」存量行。
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
@@ -441,13 +474,13 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
-      range: {kind: 'last7'},
+      range: {fromDay: dayKeyOffset(-6), toDay: todayKey()},
       model: undefined,
       providerId: null,
     });
     expect(
       nodeText(findByTestId(renderer.root, 'model-filter-entry')!),
-    ).toContain('未记录服务商（历史）');
+    ).toContain('未记录服务商');
     // {服务商} · 其他模型：model: null + providerId: P——覆盖「P × 未配置模型」存量行。
     await act(async () => {
       findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
@@ -460,7 +493,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetSummary).toHaveBeenLastCalledWith({
-      range: {kind: 'last7'},
+      range: {fromDay: dayKeyOffset(-6), toDay: todayKey()},
       model: null,
       providerId: 'p1',
     });
@@ -515,22 +548,12 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       {
         providerId: null,
         modelName: null,
-        calls: 2,
-        promptTokens: 500,
+        calls: 3,
+        promptTokens: 540,
         completionTokens: 100,
-        totalTokens: 600,
+        totalTokens: 640,
         cacheReadTokens: 0,
-        billedInputTokens: 500,
-      },
-      {
-        providerId: null,
-        modelName: 'gpt-4o',
-        calls: 1,
-        promptTokens: 40,
-        completionTokens: 0,
-        totalTokens: 40,
-        cacheReadTokens: 0,
-        billedInputTokens: 40,
+        billedInputTokens: 540,
       },
     ];
     mockGetModelBreakdown.mockImplementation(async () => parityRows);
@@ -628,7 +651,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
-      range: {kind: 'last30'},
+      range: {fromDay: dayKeyOffset(-29), toDay: todayKey()},
       model: undefined,
       providerId: undefined,
     });
@@ -640,7 +663,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(JSON.stringify(renderer.toJSON())).toContain('近 30 天');
   });
 
-  it('汇总页签：五指标卡与今日卡，命中率 80%', async () => {
+  it('汇总页签：五指标卡，命中率 80%（T-M3：今日卡已删）', async () => {
     const renderer = await renderScreen(); // 默认汇总页签
     expect(findByTestId(renderer.root, 'summary-metric-total')).toBeTruthy();
     expect(findByTestId(renderer.root, 'summary-metric-input')).toBeTruthy();
@@ -656,10 +679,8 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(
       nodeText(findByTestId(renderer.root, 'summary-metric-hitRate')!),
     ).toContain('80%');
-    // 今日卡独立于筛选：today 子对象数值。
-    const today = nodeText(findByTestId(renderer.root, 'today-card')!);
-    expect(today).toContain('500');
-    expect(today).toContain('2');
+    // 今日卡全删（summary 无 today 子对象，页签不再渲染）。
+    expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
   });
 
   it('汇总页签：命中率无 cache 数据时显示「—」而非 0%', async () => {
@@ -684,7 +705,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       await flushPromises();
     });
     expect(mockGetHourlyBuckets).toHaveBeenCalledWith('2026-08-21', {
-      range: {kind: 'last7'},
+      range: {fromDay: dayKeyOffset(-6), toDay: todayKey()},
       model: undefined,
     });
     expect(findByTestId(renderer.root, 'hourly-chart')).toBeTruthy();
@@ -708,25 +729,136 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(json).toContain('83%');
   });
 
-  it('汇总页签分模型列表：其他行按用量降序在前，不提供命中率列', async () => {
-    const renderer = await renderScreen(); // 默认汇总页签，无需切页签
-    const json = JSON.stringify(renderer.toJSON());
-    // 降序：gpt-4o（950）在其他（600）前。
-    const gptIndex = json.indexOf('gpt-4o');
-    const otherIndex = json.indexOf('其他');
-    expect(gptIndex).toBeGreaterThanOrEqual(0);
-    expect(gptIndex).toBeLessThan(otherIndex);
-    // 分模型列表提供模型名/用量/占比/调用次数。
-    expect(json).toContain('占比');
-    expect(json).toContain('用量');
-    expect(json).toContain('调用');
+  it('重复点选同一天 toggle 取消选中，小时图随之消失（与桌面端一致，mobile/C-orch-1）', async () => {
+    const renderer = await renderScreen();
+    await switchToDetailTab(renderer);
+    await act(async () => {
+      findByTestId(renderer.root, 'bar-col-2026-08-21')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'hourly-chart')).toBeTruthy();
+    // 再点同一天：取消选中（此前只能靠切页签/换筛选重置，与桌面分叉）。
+    await act(async () => {
+      findByTestId(renderer.root, 'bar-col-2026-08-21')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'hourly-chart')).toBeUndefined();
+    // 取消选中不发新查询（小时桶加载仅首次点选那一次）。
+    expect(mockGetHourlyBuckets).toHaveBeenCalledTimes(1);
   });
 
-  it('明细页签不含分模型列表，未选天时无命中率出口', async () => {
+  it('汇总页签饼图：扇区数=行数不折叠，点选出详情行，占比分母=窗口 totalTokens（T-M4）', async () => {
+    // 分母鉴别（P1-3 锁口径）：窗口 summary.totalTokens 人为错开饼图行总和
+    // （2500 vs 600+950=1550）——占比必须按窗口总分母算（950/2500=38%、
+    // 600/2500=24%）；若实现回退为行总和作分母（61%/39%），断言即失败。
+    mockGetSummary.mockResolvedValue({
+      ...SAMPLE_SUMMARY,
+      totalTokens: 2500,
+    });
+    // 兜底 label 覆盖（mobile/G-1）：在全局两行之外局部补两行——p1·
+    // modelName=null 走「其他模型」归并行；ghost 不在 providers mock 中，
+    // 名称解析不到走「未知服务商」兜底。局部覆盖不动全局 SAMPLE_MODEL_ROWS，
+    // 避免影响依赖「两行恰两扇区」的其他用例；新增行用量小值不影响既有
+    // 排序/占比断言（分母仍为窗口 2500）。
+    mockGetModelBreakdown.mockResolvedValue([
+      ...SAMPLE_MODEL_ROWS,
+      {
+        providerId: 'p1',
+        modelName: null,
+        calls: 1,
+        promptTokens: 50,
+        completionTokens: 10,
+        totalTokens: 60,
+        cacheReadTokens: 0,
+        billedInputTokens: 50,
+      },
+      {
+        providerId: 'ghost',
+        modelName: 'x',
+        calls: 1,
+        promptTokens: 30,
+        completionTokens: 10,
+        totalTokens: 40,
+        cacheReadTokens: 0,
+        billedInputTokens: 30,
+      },
+    ]);
+    const renderer = await renderScreen(); // 默认汇总页签
+    // 四行（未记录 600 / gpt-4o 950 / 其他模型 60 / 未知服务商 40）→ 恰四
+    // 扇区，按用量降序 gpt-4o 在前，不折叠不归并。
+    expect(findByTestId(renderer.root, 'pie-sector-p1::gpt-4o')).toBeTruthy();
+    expect(
+      findByTestId(renderer.root, 'pie-sector-__np__::__unlogged__'),
+    ).toBeTruthy();
+    const legendText = nodeText(
+      findByTestId(renderer.root, 'pie-legend-p1::gpt-4o')!,
+    );
+    expect(legendText).toContain('智谱 · gpt-4o');
+    // 图例行常驻百分比（T-MC4）：与详情行同分母（窗口 2500），
+    // gpt-4o 950/2500=38%，未记录 600/2500=24%。
+    expect(legendText).toContain('38%');
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
+    ).toContain('未记录服务商');
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-legend-__np__::__unlogged__')!),
+    ).toContain('24%');
+    // 扇区内百分比标注（用户拍板 2026-09-08：≥30% 才标）：仅 gpt-4o 38%
+    // 达标在弧心标注；未记录 24% 及其余小扇区均不标。
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-slice-label-p1::gpt-4o')!),
+    ).toContain('38%');
+    expect(
+      findByTestId(renderer.root, 'pie-slice-label-__np__::__unlogged__'),
+    ).toBeUndefined();
+    expect(
+      findByTestId(renderer.root, 'pie-slice-label-p1::__unlogged__'),
+    ).toBeUndefined();
+    // 新增两行的扇区与兜底 label：p1·modelName=null →「{服务商} · 其他模型」；
+    // ghost 不在 providers mock 中 →「未知服务商 · x」。若 UI 去掉兜底
+    // 分支（直接取 providerLabels[id] 得 undefined），此处断言即红。
+    expect(
+      findByTestId(renderer.root, 'pie-sector-p1::__unlogged__'),
+    ).toBeTruthy();
+    expect(findByTestId(renderer.root, 'pie-sector-ghost::x')).toBeTruthy();
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-legend-p1::__unlogged__')!),
+    ).toContain('智谱 · 其他模型');
+    expect(
+      nodeText(findByTestId(renderer.root, 'pie-legend-ghost::x')!),
+    ).toContain('未知服务商 · x');
+    // 未选时无详情行。
+    expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
+    // 点选扇区：详情行 = 服务商·模型 / 用量 / 次数 / 占比（950/2500=38%，
+    // 分母为窗口 summary.totalTokens 而非行总和）。
+    await act(async () => {
+      findByTestId(renderer.root, 'pie-sector-p1::gpt-4o')!.props.onPress();
+      await flushPromises();
+    });
+    const detail = nodeText(findByTestId(renderer.root, 'pie-detail')!);
+    expect(detail).toContain('智谱 · gpt-4o');
+    expect(detail).toContain('950');
+    expect(detail).toContain('调用 4 次');
+    expect(detail).toContain('38%');
+    // 点图例切换选中：600/2500=24%。
+    await act(async () => {
+      findByTestId(
+        renderer.root,
+        'pie-legend-__np__::__unlogged__',
+      )!.props.onPress();
+      await flushPromises();
+    });
+    const detail2 = nodeText(findByTestId(renderer.root, 'pie-detail')!);
+    expect(detail2).toContain('未记录服务商');
+    expect(detail2).toContain('600');
+    expect(detail2).toContain('24%');
+  });
+
+  it('图表页签不含饼图，未选天时无命中率出口', async () => {
     const renderer = await renderScreen();
     await switchToDetailTab(renderer);
     const json = JSON.stringify(renderer.toJSON());
-    expect(json).not.toContain('分模型汇总');
+    expect(json).not.toContain('分服务商×模型汇总');
     expect(json).not.toContain('占比');
     expect(json).not.toContain('命中率');
   });
@@ -825,7 +957,6 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       cacheReadTokens: 0,
       cacheCreationTokens: 0,
       billedInputTokens: 0,
-      today: {totalTokens: 0, calls: 0},
     });
     mockGetDailyBuckets.mockResolvedValue([]);
     mockGetModelBreakdown.mockResolvedValue([]);
@@ -834,12 +965,19 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     const json = JSON.stringify(renderer.toJSON());
     expect(json).toContain('自记录功能上线起开始积累');
     expect(json).not.toContain('该区间无数据');
-    // 库全空时今日也必然无数据，不渲染今日卡。
+    // 今日卡全删：库全空空态也不渲染（T-M3）。
     expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
+    // 库全空优先级不变（回归锁）：冷启动引导拦全部页签，切流水页签
+    // 也不放行——流水同样无数据可翻。
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'empty-cold-start')).toBeTruthy();
   });
 
-  it('空态区分：范围内无数据提示该区间，今日卡仍渲染（mobile/A-1）', async () => {
-    // 库非空（配置侧有服务商×模型）但当前范围空：区间提示 + 保留今日卡。
+  it('空态区分：范围内无数据提示该区间，不再保留今日卡（mobile/A-1 / T-M3）', async () => {
+    // 库非空（配置侧有服务商×模型）但当前范围空：区间提示；今日卡已删。
     mockGetSummary.mockResolvedValue({
       calls: 0,
       promptTokens: 0,
@@ -848,19 +986,50 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       cacheReadTokens: 0,
       cacheCreationTokens: 0,
       billedInputTokens: 0,
-      today: {totalTokens: 500, calls: 2},
     });
     mockGetDailyBuckets.mockResolvedValue([]);
     mockGetModelBreakdown.mockResolvedValue([]);
     const renderer = await renderScreen();
+    // 汇总页签（默认）：空态文案在场、无指标卡（不渲染 0 兜底卡片）。
     expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'summary-metric-total')).toBeUndefined();
     const json = JSON.stringify(renderer.toJSON());
     expect(json).toContain('该区间无数据');
     expect(json).not.toContain('自记录功能上线起开始积累');
-    // 今日卡独立于筛选：范围空态下仍渲染且数值来自 today 子对象。
-    const today = nodeText(findByTestId(renderer.root, 'today-card')!);
-    expect(today).toContain('500');
-    expect(today).toContain('2');
+    expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
+    // 图表页签同样被范围空态拦：空态文案在场、无柱状图。
+    await switchToDetailTab(renderer);
+    expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'daily-chart')).toBeUndefined();
+  });
+
+  it('窗口空 + 流水页签：与其他页签统一显示区间空态，不渲染流水行（需求①勘误）', async () => {
+    // 窗口空（今天还没用量）但库有历史：流水随时间窗口（勘误后不再解绑），
+    // 切到流水页签与其他页签统一被「该区间无数据」拦住——不渲染流水行
+    // 与页码条（拉取照发但 filter 含 range，数据层与展示层口径一致）。
+    mockGetSummary.mockResolvedValue({
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      billedInputTokens: 0,
+    });
+    mockGetDailyBuckets.mockResolvedValue([]);
+    mockGetModelBreakdown.mockResolvedValue([]);
+    const renderer = await renderScreen();
+    // 默认汇总页签被范围空态拦住作为前置。
+    expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
+      await flushPromises();
+    });
+    // 空态仍在场拦住流水：无流水行、无页码条。
+    expect(findByTestId(renderer.root, 'empty-range')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'empty-cold-start')).toBeUndefined();
+    expect(findByTestId(renderer.root, 'req-page-1')).toBeUndefined();
+    expect(nodeText(renderer.root)).not.toContain('首字延迟 900 ms');
   });
 
   it('首查失败渲染常驻错误条而非 0 值卡片，成功后清除（mobile/C-orch-2）', async () => {
@@ -871,7 +1040,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(errorBar).toBeTruthy();
     expect(nodeText(errorBar!)).toContain('db locked');
     expect(mockShowToast).toHaveBeenCalledTimes(1);
-    // 无旧数据时不渲染 0 兑底卡片（误导性的「一排 0」）。
+    // 无旧数据时不渲染 0 兜底卡片（误导性的「一排 0」）。
     expect(findByTestId(renderer.root, 'summary-metric-total')).toBeUndefined();
     expect(findByTestId(renderer.root, 'today-card')).toBeUndefined();
     // 切范围重查成功（mock 回落 resolvedValue）→ 错误条清除、数据恢复。
@@ -883,7 +1052,7 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
     expect(findByTestId(renderer.root, 'summary-metric-total')).toBeTruthy();
   });
 
-  it('自定义区间：sheet 选起止日后以 custom range 重查', async () => {
+  it('自定义区间：sheet 选起止日后以 custom range 重查（跨度不设上限）', async () => {
     const renderer = await renderScreen();
     await act(async () => {
       findByTestId(renderer.root, 'range-custom')!.props.onPress();
@@ -902,21 +1071,21 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       findByTestId(renderer.root, 'month-range-confirm')!.props.onPress();
       await flushPromises();
     });
+    // 自定义区间由 sheet 结果产日期字符串（本地日 key），不再有毫秒换算。
     expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
       range: {
-        kind: 'custom',
-        fromMs: dayMs(year, month, 3),
-        toMs: dayMs(year, month, 10) + MS_PER_DAY,
+        fromDay: toLocalDayKey(dayMs(year, month, 3)),
+        toDay: toLocalDayKey(dayMs(year, month, 10)),
       },
       model: undefined,
     });
   });
 
-  it('自定义区间结束日跨 DST 边界：toMs 为次日本地 0 点日历加法（cross/B-2）', async () => {
+  it('自定义区间结束日跨 DST 边界：日期字符串按挂钟日产出（cross/B-2 / T-M6）', async () => {
     // 照 desktop test 的做法：运行时切纽约时区再断言；TZ 不可控则跳过
-    // （new Date(y, m, d + 1) 的日历推进天然正确，固定 +86400000 在
-    // 23 小时日会晚 1 小时）。jest 没有 node:test 的 t.skip，这里以
-    // 探测失败即返回兼底，避免假失败。
+    // （toLocalDayKey 直接读本地年月日，跨 DST 天然正确；用例锢定
+    // 日期字符串口径不回退到毫秒换算）。jest 没有 node:test 的
+    // t.skip，这里以探测失败即返回兼底，避免假失败。
     const prevTz = process.env.TZ;
     process.env.TZ = 'America/New_York';
     // 2026 年纽约春季拨快在 03-08（3 月第二个周日）：当天本地只有 23 小时。
@@ -956,17 +1125,58 @@ describe('T-S7 TokenUsageStatsScreen 筛选与渲染', () => {
       });
       expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
         range: {
-          kind: 'custom',
-          fromMs: dayMs(2026, 2, 7),
-          // 03-08 本地只有 23 小时：固定 +86400000 会得到 03-09 01:00，
-          // 日历加法 new Date(2026, 2, 9) 恰为 03-09 本地 0 点。
-          toMs: dayMs(2026, 2, 9),
+          // 结束日 03-08 为 23 小时日：日期字符串仍按挂钟日 03-07/03-08
+          // 产出（回退到毫秒换算的回归在这里会被抓到）。
+          fromDay: '2026-03-07',
+          toDay: '2026-03-08',
         },
         model: undefined,
       });
     } finally {
       process.env.TZ = prevTz;
     }
+  });
+
+  it('「今天」筛选：range 传当天闭区间，自动选今天，图表页签直出小时图（T-M1）', async () => {
+    const today = todayKey();
+    const [y, m, d] = today.split('-').map(Number);
+    // today 的日桶：core 稠密补零保证唯一桶（此处给非零形态供汇总行）。
+    mockGetDailyBuckets.mockResolvedValue([
+      {
+        bucketStartMs: dayMs(y, m - 1, d),
+        calls: 3,
+        promptTokens: 300,
+        completionTokens: 60,
+        cacheReadTokens: 100,
+        cacheCreationTokens: 0,
+        billedInputTokens: 200,
+        avgFirstTokenMs: 800,
+        avgTokensPerSecond: 30,
+      },
+    ]);
+    const renderer = await renderScreen();
+    await act(async () => {
+      findByTestId(renderer.root, 'range-today')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockGetDailyBuckets).toHaveBeenLastCalledWith({
+      range: {fromDay: today, toDay: today},
+      model: undefined,
+      providerId: undefined,
+    });
+    // 自动补选今天（P1-1：写进 reload 成功回调而非独立 effect）→ 小时桶加载。
+    expect(mockGetHourlyBuckets).toHaveBeenCalledWith(today, {
+      range: {fromDay: today, toDay: today},
+      model: undefined,
+    });
+    // 图表页签：隐藏按天图，直出当天汇总行 + 24 小时图。
+    await switchToDetailTab(renderer);
+    expect(findByTestId(renderer.root, 'daily-chart')).toBeUndefined();
+    expect(findByTestId(renderer.root, 'hourly-chart')).toBeTruthy();
+    const json = JSON.stringify(renderer.toJSON());
+    expect(json).not.toContain('按天用量');
+    expect(json).toContain('按小时分布');
+    expect(json).toContain(today);
   });
 });
 
@@ -1055,15 +1265,139 @@ describe('T-S7 MonthRangePickerSheet 组件级', () => {
   });
 });
 
-describe('T-S7 自定义区间上限校验', () => {
-  it('366 天（含首尾）合法，367 天与倒序非法', () => {
+describe('T-M7 PieChart 组件级', () => {
+  const CHART_TOKENS = {
+    background: '#fff',
+    bgSecondary: '#eee',
+    surface: '#f8f8f8',
+    surfaceElevated: '#fff',
+    text: '#111',
+    textSecondary: '#666',
+    textTertiary: '#999',
+    border: '#ccc',
+    borderLight: '#e0e0e0',
+    primary: '#007aff',
+    selection: '#007aff55',
+    success: '#34c759',
+    warning: '#f80',
+    danger: '#f00',
+  };
+
+  const PIE_ROWS = [
+    {key: 'a', label: 'A · m1', totalTokens: 700, calls: 7},
+    {key: 'b', label: 'B · m2', totalTokens: 250, calls: 2},
+    {key: 'c', label: '未记录服务商', totalTokens: 50, calls: 1},
+  ];
+
+  async function renderPie() {
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        // 分母错开行总和（2500 vs 700+250+50=1000）：占比按传入的窗口
+        // 总分母算，锁死调用方分母口径（与 T-M4 同理，P1-3）。
+        <PieChart data={PIE_ROWS} totalTokens={2500} tokens={CHART_TOKENS} />,
+      );
+      await flushPromises();
+    });
+    return renderer!;
+  }
+
+  it('三行渲染三扇区；点扇区出详情行，点图例切换选中，再点同项取消', async () => {
+    const renderer = await renderPie();
+    expect(findByTestId(renderer.root, 'pie-sector-a')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'pie-sector-b')).toBeTruthy();
+    expect(findByTestId(renderer.root, 'pie-sector-c')).toBeTruthy();
+    // 小扇区（50/1000）也能从图例命中（c 行）。
+    expect(findByTestId(renderer.root, 'pie-legend-c')).toBeTruthy();
+    // 未选中：无详情行。
+    expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
+    // 点扇区 a：700/2500 = 28%（分母为传入的 totalTokens，非行总和 1000）。
+    await act(async () => {
+      findByTestId(renderer.root, 'pie-sector-a')!.props.onPress();
+      await flushPromises();
+    });
+    let detail = nodeText(findByTestId(renderer.root, 'pie-detail')!);
+    expect(detail).toContain('A · m1');
+    expect(detail).toContain('700');
+    expect(detail).toContain('调用 7 次');
+    expect(detail).toContain('28%');
+    // 点图例 c 切换选中：50/2500 = 2%。
+    await act(async () => {
+      findByTestId(renderer.root, 'pie-legend-c')!.props.onPress();
+      await flushPromises();
+    });
+    detail = nodeText(findByTestId(renderer.root, 'pie-detail')!);
+    expect(detail).toContain('未记录服务商');
+    expect(detail).toContain('2%');
+    // 再点同一图例：取消选中，详情行消失。
+    await act(async () => {
+      findByTestId(renderer.root, 'pie-legend-c')!.props.onPress();
+      await flushPromises();
+    });
+    expect(findByTestId(renderer.root, 'pie-detail')).toBeUndefined();
+  });
+
+  it('图例行常驻百分比：正常分母三行按窗口 totalTokens 计算（T-MC4）', async () => {
+    const renderer = await renderPie();
+    // 700/2500=28%、250/2500=10%、50/2500=2%：分母为传入的窗口
+    // totalTokens（2500），非行总和（1000）。图例行文本直接含百分比，
+    // 无需点选交互。
+    expect(nodeText(findByTestId(renderer.root, 'pie-legend-a')!)).toContain(
+      '28%',
+    );
+    expect(nodeText(findByTestId(renderer.root, 'pie-legend-b')!)).toContain(
+      '10%',
+    );
+    expect(nodeText(findByTestId(renderer.root, 'pie-legend-c')!)).toContain(
+      '2%',
+    );
+  });
+
+  it('图例百分比 0 分母：显示 0% 不崩（T-MC4 除零安全）', async () => {
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <PieChart data={PIE_ROWS} totalTokens={0} tokens={CHART_TOKENS} />,
+      );
+      await flushPromises();
+    });
+    for (const key of ['a', 'b', 'c']) {
+      expect(
+        nodeText(findByTestId(renderer!.root, `pie-legend-${key}`)!),
+      ).toContain('0%');
+    }
+  });
+
+  it('唯一非零行满圆扇区与零值行：不渲染退化扇区，图例仍在（T-M7 兜底形态）', async () => {
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <PieChart
+          data={[
+            {key: 'only', label: 'X · m', totalTokens: 400, calls: 4},
+            {key: 'zero', label: 'Y · m', totalTokens: 0, calls: 0},
+          ]}
+          totalTokens={400}
+          tokens={CHART_TOKENS}
+        />,
+      );
+      await flushPromises();
+    });
+    // 满圆行渲染扇区（Circle 满圆路径），零值行角度退化不渲染扇区。
+    expect(findByTestId(renderer!.root, 'pie-sector-only')).toBeTruthy();
+    expect(findByTestId(renderer!.root, 'pie-sector-zero')).toBeUndefined();
+    expect(findByTestId(renderer!.root, 'pie-legend-zero')).toBeTruthy();
+  });
+});
+
+describe('T-M6 自定义区间校验（无上限）', () => {
+  it('366 天、十年均合法，仅倒序非法', () => {
     const from = new Date(2026, 0, 1);
-    expect(isCustomRangeValid(from, new Date(2026, 11, 31))).toBe(true); // 365 天
     expect(isCustomRangeValid(from, new Date(2027, 0, 1))).toBe(true); // 366 天
-    expect(isCustomRangeValid(from, new Date(2027, 0, 2))).toBe(false); // 367 天
+    expect(isCustomRangeValid(from, new Date(2036, 0, 1))).toBe(true); // 十年
     expect(
       isCustomRangeValid(new Date(2026, 0, 10), new Date(2026, 0, 1)),
-    ).toBe(false);
+    ).toBe(false); // from > to
   });
 });
 
@@ -1203,6 +1537,48 @@ describe('T-S7 请求流水页签（分页）', () => {
     expect(mockListRequestUsage.mock.calls[3]![1]).toEqual({
       offset: 40,
       limit: 10,
+    });
+  });
+
+  it('流水跟随时间：改时间重拉且 filter 含 range；改组合筛选重拉且叠加 model/providerId（T-M5）', async () => {
+    const renderer = await renderScreen();
+    await act(async () => {
+      findByTestId(renderer.root, 'stats-tab-requests')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(1);
+    // 首拉 filter 含 range（last7 窗口，与汇总/图表同窗口）。
+    expect(mockListRequestUsage.mock.calls[0]![0]).toEqual({
+      range: {fromDay: dayKeyOffset(-6), toDay: todayKey()},
+      model: undefined,
+      providerId: undefined,
+    });
+    // 切时间（last30）：脏标记不豁免时间维度（P1-2 勘误后），停在流水页
+    // 立即重拉，filter 换成 last30 窗口。
+    await act(async () => {
+      findByTestId(renderer.root, 'range-last30')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockGetDailyBuckets).toHaveBeenCalledTimes(2);
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(2);
+    expect(mockListRequestUsage.mock.calls[1]![0]).toEqual({
+      range: {fromDay: dayKeyOffset(-29), toDay: todayKey()},
+      model: undefined,
+      providerId: undefined,
+    });
+    // 切组合筛选（未记录服务商，CR-2 三态之一）：重拉且叠加 model/providerId。
+    await act(async () => {
+      findByTestId(renderer.root, 'model-filter-entry')!.props.onPress();
+    });
+    await act(async () => {
+      findByTestId(renderer.root, 'model-option-__unlogged__')!.props.onPress();
+      await flushPromises();
+    });
+    expect(mockListRequestUsage).toHaveBeenCalledTimes(3);
+    expect(mockListRequestUsage.mock.calls[2]![0]).toEqual({
+      range: {fromDay: dayKeyOffset(-29), toDay: todayKey()},
+      model: undefined,
+      providerId: null,
     });
   });
 

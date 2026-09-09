@@ -323,6 +323,10 @@ export function ChatConversationPanel({
                   scope: {kind: 'session', sessionId},
                   onPulled: bumpWorktreeUiToken,
                 }}
+                pushToParent={{
+                  scope: {kind: 'session', sessionId},
+                  onPushed: bumpWorktreeUiToken,
+                }}
                 onOpenFile={path => onOpenFileEditor(path, 'session')}
                 onDirectoryChange={emitWorkspaceBackState}
               />

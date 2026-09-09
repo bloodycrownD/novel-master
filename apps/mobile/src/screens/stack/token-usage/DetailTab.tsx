@@ -15,10 +15,14 @@ import {
 import {styles} from './styles';
 
 /**
- * 明细页签（screens/C-4 拆分自主文件）：按天用量 StackedBars（纯用量
+ * 图表页签（screens/C-4 拆分自主文件）：按天用量 StackedBars（纯用量
  * 堆叠，无命中率图表模式），点选某天 → 24 小时分布 + 该天汇总行（汇总
  * 行保留命中率）；长按检视的详情以图下方固定行呈现而非浮层，规避长按
  * 与横向滚动的手势冲突。
+ *
+ * today 模式（时间筛选 = 今天）：隐藏按天图区块，直出当天汇总行 +
+ * 24 小时图——主屏在 reload 成功回调里已补选 selectedDay=今天（P1-1），
+ * 本组件只按标志跳过 daily 图，汇总行/小时图逻辑与非 today 模式复用。
  */
 export function DetailTab({
   dailyBuckets,
@@ -28,6 +32,7 @@ export function DetailTab({
   onSelectDay,
   onSetInspectedKey,
   tokens,
+  todayMode = false,
 }: {
   dailyBuckets: UsageStatsBucket[];
   hourlyBuckets: UsageStatsBucket[] | null;
@@ -37,6 +42,8 @@ export function DetailTab({
   onSelectDay: (day: string | null) => void;
   onSetInspectedKey: (key: string | null) => void;
   tokens: ThemeTokens;
+  /** 今天模式：隐藏按天图，直出当天汇总行 + 24 小时图（唯一日桶）。 */
+  todayMode?: boolean;
 }) {
   const dailyData = useMemo(() => {
     return dailyBuckets.map(b => ({
@@ -76,28 +83,34 @@ export function DetailTab({
 
   return (
     <>
-      <ListSectionTitle title="按天用量" tokens={tokens} />
-      <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
-        <StackedBars
-          testID="daily-chart"
-          data={dailyData}
-          selectedKey={selectedDay ?? undefined}
-          onSelect={onSelectDay}
-          onLongPress={onSetInspectedKey}
-          tokens={tokens}
-          formatLabel={key => key.slice(8)}
-        />
-      </View>
-      {dailyInspected != null ? (
-        <View testID="bar-inspect" style={styles.inspectRow}>
-          <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
-            {dailyInspected.key.slice(8)} 日 · 输入{' '}
-            {formatTokenCount(dailyInspected.primary)} · 输出{' '}
-            {formatTokenCount(dailyInspected.secondary ?? 0)} · 调用{' '}
-            {dailyInspected.calls ?? 0} 次
-          </Text>
-        </View>
-      ) : null}
+      {/* today 模式不渲染按天图区块：选中天恒为今天（主屏补选），
+          daily 检视与点选自然不可达。 */}
+      {todayMode ? null : (
+        <>
+          <ListSectionTitle title="按天用量" tokens={tokens} />
+          <View style={[styles.chartCard, {backgroundColor: tokens.surface}]}>
+            <StackedBars
+              testID="daily-chart"
+              data={dailyData}
+              selectedKey={selectedDay ?? undefined}
+              onSelect={onSelectDay}
+              onLongPress={onSetInspectedKey}
+              tokens={tokens}
+              formatLabel={key => key.slice(8)}
+            />
+          </View>
+          {dailyInspected != null ? (
+            <View testID="bar-inspect" style={styles.inspectRow}>
+              <Text style={[styles.inspectText, {color: tokens.textSecondary}]}>
+                {dailyInspected.key.slice(8)} 日 · 输入{' '}
+                {formatTokenCount(dailyInspected.primary)} · 输出{' '}
+                {formatTokenCount(dailyInspected.secondary ?? 0)} · 调用{' '}
+                {dailyInspected.calls ?? 0} 次
+              </Text>
+            </View>
+          ) : null}
+        </>
+      )}
       {selectedDay != null && selectedDayBucket != null ? (
         <View style={styles.dayDetail}>
           <Text style={[styles.dayDetailTitle, {color: tokens.text}]}>

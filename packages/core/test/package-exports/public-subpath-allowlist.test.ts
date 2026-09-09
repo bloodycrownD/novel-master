@@ -11,7 +11,6 @@ const SUBPATHS = [
   "message-checkpoint",
   "prompt",
   "provider",
-  "regex",
   "session-fs",
   "vfs",
   "workplace",

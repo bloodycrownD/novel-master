@@ -26,9 +26,6 @@ export type RootStackParamList = {
   ChatConfig: undefined;
   CloudSyncConfig: undefined;
   GlobalTemplate: undefined;
-  RegexGroups: undefined;
-  RegexRules: {groupId?: string} | undefined;
-  RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
   FileEditor: {
     path: string;
     /** physical = 全局文件浏览器的只读物理路径（保存禁用，仅预览）。 */

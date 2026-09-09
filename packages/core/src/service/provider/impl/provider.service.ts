@@ -81,6 +81,7 @@ export class DefaultProviderService implements ProviderService {
       displayName,
       secretRef,
       headers: input.headers ?? {},
+      bodyParams: input.bodyParams ?? {},
       isBuiltin: false,
       createdAtMs: now,
       updatedAtMs: now,
@@ -159,6 +160,7 @@ export class DefaultProviderService implements ProviderService {
         : provider.baseUrl,
       displayName,
       headers: patch.headers ?? provider.headers,
+      bodyParams: patch.bodyParams ?? provider.bodyParams,
       secretRef,
       updatedAtMs: Date.now(),
     };

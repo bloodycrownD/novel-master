@@ -6,8 +6,7 @@
  * hidden 角标 + dimmed 区分，不再叠加 hiddenFilter）。
  *
  * 查询支持关键词（大小写不敏感，由 core 统一处理）、seq 编号区间
- * （fromSeq/toSeq 闭区间，可只填一端）与 beforeSeq 翻页。搜索基于原始文本，
- * 不套 regex-apply。
+ * （fromSeq/toSeq 闭区间，可只填一端）与 beforeSeq 翻页。搜索基于原始文本。
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ChatMessageDto } from '@shared/ipc-types';

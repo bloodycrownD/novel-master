@@ -14,9 +14,9 @@ import {
   parentDir,
 } from "@/domain/vfs/logic/parent-dir.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import type { VfsContentSize } from "@/domain/vfs/model/vfs-content-size.js";
 import { computeReplaceResult } from "@/domain/vfs/logic/compute-replace-result.js";
 import {
-  VfsError,
   vfsAlreadyExists,
   vfsInvalidPath,
   vfsIsDirectory,
@@ -31,7 +31,6 @@ import type {
   VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
-  WriteOptions,
 } from "../internal-vfs.port.js";
 import type { InternalVfsService } from "../internal-vfs.port.js";
 import { grepContents } from "@/domain/vfs/logic/vfs-grep.js";
@@ -100,11 +99,17 @@ export class DefaultVfsService implements InternalVfsService {
     };
   }
 
+  async findContentSize(
+    scopeKey: string,
+    path: string
+  ): Promise<VfsContentSize | null> {
+    return this.repo.findContentSizeByPath(scopeKey, path);
+  }
+
   async write(
     scopeKey: string,
     path: string,
-    content: string,
-    options?: WriteOptions
+    content: string
   ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const existing = await this.repo.findByPath(scopeKey, normalized);
@@ -115,24 +120,11 @@ export class DefaultVfsService implements InternalVfsService {
       await ensureParentDirectories(this.repo, scopeKey, normalized);
       return this.repo.insert(scopeKey, normalized, content);
     }
-
-    const versionCheck = options?.versionCheck !== false;
-    if (versionCheck && options?.expectedVersion == null) {
-      throw new VfsError(
-        "CONFLICT",
-        `expectedVersion required when updating ${normalized}`,
-        { path: normalized }
-      );
-    }
     return this.repo.update(
       scopeKey,
       normalized,
       content,
-      existing.version + 1,
-      {
-        expectedVersion: options?.expectedVersion,
-        versionCheck,
-      }
+      existing.version + 1
     );
   }
 
@@ -156,11 +148,7 @@ export class DefaultVfsService implements InternalVfsService {
       scopeKey,
       path,
       nextContent,
-      current.version + 1,
-      {
-        expectedVersion: current.version,
-        versionCheck: true,
-      }
+      current.version + 1
     );
     return { version: result.version, replacements };
   }

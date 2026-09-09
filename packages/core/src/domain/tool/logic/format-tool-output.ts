@@ -207,6 +207,64 @@ export function formatCurlOutput(rec: Record<string, unknown>): string {
   return `${requestLine}\n${statusLine}\n\n${rec.body}`;
 }
 
+/** Detects skill load tool output (content + files manifest). */
+export function isSkillLoadOutput(rec: Record<string, unknown>): boolean {
+  return (
+    rec.action === "load" &&
+    typeof rec.content === "string" &&
+    typeof rec.version === "number"
+  );
+}
+
+/**
+ * Formats skill load as line-numbered content (read 同款) + 附属文件清单。
+ *
+ * alreadyReferenced 短提示（本请求已注入过全文）直接返回提示文本，
+ * 不加行号；截断时提示续读走 skill read 的 offset/limit。
+ */
+export function formatSkillLoadOutput(rec: Record<string, unknown>): string {
+  if (rec.alreadyReferenced === true) {
+    return rec.content as string;
+  }
+  let out = formatReadOutput(rec);
+  if (rec.truncated === true) {
+    out += "\n续读请用 skill read 的 offset/limit。";
+  }
+  const files = Array.isArray(rec.files)
+    ? rec.files.filter((f) => typeof f === "string")
+    : [];
+  if (files.length > 0) {
+    out += `\n\n附属文件（相对技能目录）：${files.join("、")}`;
+  }
+  return out;
+}
+
+/**
+ * Detects mutation-ack outputs（skill write/edit、agent create/update）。
+ *
+ * 这些动作的返回是保存回执（echo + version/agentId），对模型无后续决策
+ * 价值：写入成功即 ok，与 vfs write/edit、fs 变更类的快速通道对齐。
+ * 带 content 的输出（load/read 类）不会被误命中。
+ */
+function isMutationAckOutput(rec: Record<string, unknown>): boolean {
+  if (typeof rec.action !== "string") {
+    return false;
+  }
+  if (rec.action === "write" || rec.action === "edit") {
+    return (
+      typeof rec.version === "number" && typeof rec.content !== "string"
+    );
+  }
+  if (rec.action === "create" || rec.action === "update") {
+    return (
+      typeof rec.name === "string" &&
+      typeof rec.agentId === "string" &&
+      typeof rec.content !== "string"
+    );
+  }
+  return false;
+}
+
 /** Compact tool success text for the model (e.g. write → `ok`). */
 export function formatToolOutputForLlm(out: unknown): string {
   if (typeof out === "string") {
@@ -234,6 +292,14 @@ export function formatToolOutputForLlm(out: unknown): string {
 
     if (isCurlOutput(rec)) {
       return formatCurlOutput(rec);
+    }
+
+    if (isSkillLoadOutput(rec)) {
+      return formatSkillLoadOutput(rec);
+    }
+
+    if (isMutationAckOutput(rec)) {
+      return "ok";
     }
 
     if (keys.length === 1 && typeof rec.version === "number") {

@@ -125,6 +125,12 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
       await tx.execute("UPDATE vfs_entry SET head_version = version");
     },
   },
+  {
+    table: "llm_provider",
+    column: "body_params_json",
+    addColumnSql:
+      "ALTER TABLE llm_provider ADD COLUMN body_params_json TEXT NOT NULL DEFAULT '{}'",
+  },
   // vfs_content_blob.ref_count：双保险。entry-id migration 的 Step 5b 已先补列，
   // 此条目防「旧库跳过 migration 直进 align」的边角场景（理论上不会发生，但成本低）。
   {

@@ -27,39 +27,21 @@ describe("DefaultVfsService (integration)", () => {
     const vfs = createVfsService(conn);
     await vfs.write(GLOBAL, "/v.txt", "one");
     const first = await vfs.read(GLOBAL, "/v.txt");
-    const updated = await vfs.write(GLOBAL, "/v.txt", "two", {
-      expectedVersion: first.version,
-    });
-    assert.equal(updated.version, 2);
+    const updated = await vfs.write(GLOBAL, "/v.txt", "two");
+    assert.equal(updated.version, first.version + 1);
   });
 
-  it("rejects stale expected version", async () => {
+  it("stale expected version：版本比对已移除，不拒绝且覆盖成功", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;
     const vfs = createVfsService(conn);
     await vfs.write(GLOBAL, "/stale.txt", "one");
-    await vfs.write(GLOBAL, "/stale.txt", "two", { expectedVersion: 1 });
-    await assert.rejects(
-      () => vfs.write(GLOBAL, "/stale.txt", "three", { expectedVersion: 1 }),
-      (e: unknown) => {
-        assert.ok(isVfsError(e, "CONFLICT"));
-        return true;
-      },
-    );
+    await vfs.write(GLOBAL, "/stale.txt", "two");
+    const updated = await vfs.write(GLOBAL, "/stale.txt", "three");
+    assert.equal(updated.version, 3);
     const read = await vfs.read(GLOBAL, "/stale.txt");
-    assert.equal(read.content, "two");
-    assert.equal(read.version, 2);
-  });
-
-  it("writes with versionCheck disabled", async () => {
-    const ctx = getNovelMasterTestContext();
-    const conn = ctx.conn;
-    const vfs = createVfsService(conn);
-    await vfs.write(GLOBAL, "/free.txt", "one");
-    const updated = await vfs.write(GLOBAL, "/free.txt", "two", {
-      versionCheck: false,
-    });
-    assert.equal(updated.version, 2);
+    assert.equal(read.content, "three");
+    assert.equal(read.version, 3);
   });
 
   it("replaces first occurrence and all occurrences", async () => {

@@ -7,7 +7,6 @@ function baseRuntime(overrides: Partial<any> = {}) {
     state: {
       getCurrentAgentId: async () => 'a1',
       getCurrentModelId: async () => 'openai/gpt',
-      getCurrentRegexGroupId: async () => undefined,
     },
     projects: {
       getAgentConfig: async () => ({
@@ -42,7 +41,6 @@ function baseRuntime(overrides: Partial<any> = {}) {
     },
     sessionVfs: () => ({}),
     sessionFs: {},
-    regexConfig: {},
     eventBus: {
       publish: jest.fn(),
       subscribe: () => ({unsubscribe: () => undefined}),

@@ -20,9 +20,9 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   default: {setString: jest.fn()},
 }));
 
-jest.mock('@/services/regex-apply-channel', () => ({
-  loadSessionMessagesPageForDisplay: jest.fn(),
-  loadSessionMessagesTailForDisplay: jest.fn(),
+jest.mock('@/services/session-messages-loader', () => ({
+  loadSessionMessagesPage: jest.fn(),
+  loadSessionMessagesTail: jest.fn(),
 }));
 
 jest.mock('@/services/project-composer-status.service', () => ({

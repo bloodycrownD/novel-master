@@ -3,22 +3,27 @@
  *
  * screens/C-4 拆分：本文件保留全部状态与数据链路（筛选、刷新、分页、
  * 钻取），展示层拆到 `token-usage/` 目录——
- * - `StatsFilterBar`：时间范围 + 模型筛选（含两个弹层）；
- * - `SummaryTab`（含 SummaryTile/TodayCard）：五指标卡 + 今日卡 + 分模型列表；
- * - `DetailTab`：按天 StackedBars + 24 小时钻取；
- * - `RequestsTab`：请求流水分页列表；
- * - `format.ts`：纯函数（hitRate/formatHitRate/isCustomRangeValid 等）。
+ * - `StatsFilterBar`：时间范围（今天/近 7 天/近 30 天/自定义）+ 模型
+ *   筛选（含两个弹层）；
+ * - `SummaryTab`（含 SummaryTile）：五指标卡 + 服务商×模型饼图；
+ * - `DetailTab`：按天 StackedBars + 24 小时钻取（今天模式直出小时图）；
+ * - `RequestsTab`：请求流水分页列表（与汇总/图表同窗口，模型/服务商
+ *   筛选叠加，需求①勘误后）；
+ * - `format.ts`：纯函数（hitRate/formatHitRate/resolveRangeDays 等）。
  *
- * - 「汇总 / 明细 / 流水」三页签（SegmentedControl）；筛选栏置顶，页签
+ * - 「汇总 / 图表 / 流水」三页签（SegmentedControl）；筛选栏置顶，页签
  *   共享——切换页签不触发重查，筛选状态跨页签保留；
  * - 模型筛选（CR-2 方案 A）：配置组合选项之外，「{服务商} · 其他模型」与
- *   「未记录服务商（历史）」（provider_id IS NULL，模型在不在配置集均归此）
+ *   「未记录服务商」（provider_id IS NULL 的合并行，模型在不在配置集均归此）
  *   两类归并选项由 UI 侧补上，保证存量历史行都有选项可筛；
  * - 刷新单通道（useFocusEffect 依赖 reload，mobile/B-2）：主查询带请求
  *   序号守卫（cross/B-1），旧响应后到整体丢弃；失败落 loadError 常驻
- *   错误条且不渲染 0 兜底卡片（mobile/C-orch-2）；空态区分库全空
- *   （冷启动引导）与范围内无数据（提示 + 保留今日卡，mobile/A-1）；
- * - 流水页 dirty 标记随筛选变化置位，页签激活时拉取首页；失败也清脏
+ *   错误条且不渲染 0 兑底卡片（mobile/C-orch-2）；空态区分库全空
+ *   （冷启动引导，拦全部页签）与范围内无数据（提示，mobile/A-1——范围
+ *   空态拦全部页签：流水随时间窗口，需求①勘误后）；
+ * - 流水跟随时间（需求①勘误后）：流水查询用含 range 的完整 filter
+ *   （模型/服务商筛选叠加），时间或组合筛选变化均置流水脏标记并重拉
+ *   （P1-2 勘误后不再豁免时间维度）；页签激活时拉取首页；失败也清脏
  *   标记避免无限重试（MF-1）。
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
@@ -42,10 +47,14 @@ import type {
   ProviderModelOption,
   RangeKind,
 } from './token-usage/format';
-import {isCustomRangeValid} from './token-usage/format';
+import {
+  REQUESTS_PAGE_SIZE,
+  isCustomRangeValid,
+  resolveRangeDays,
+} from './token-usage/format';
 import {styles} from './token-usage/styles';
 import {StatsFilterBar} from './token-usage/StatsFilterBar';
-import {SummaryTab, TodayCard} from './token-usage/SummaryTab';
+import {SummaryTab} from './token-usage/SummaryTab';
 import {DetailTab} from './token-usage/DetailTab';
 import {RequestsTab} from './token-usage/RequestsTab';
 
@@ -75,7 +84,8 @@ export function TokenUsageStatsScreen() {
   const [summary, setSummary] = useState<UsageStatsSummary | null>(null);
   const [dailyBuckets, setDailyBuckets] = useState<UsageStatsBucket[]>([]);
   const [modelRows, setModelRows] = useState<UsageStatsModelRow[]>([]);
-  // 请求流水（分页）：dirty 标记随筛选变化置位，流水页激活时拉取第一页
+  // 请求流水（分页）：dirty 标记随完整筛选（时间+组合）变化置位，流水页
+  // 激活时拉取第一页
   const [reqRows, setReqRows] = useState<UsageStatsRequestRow[]>([]);
   const [reqTotal, setReqTotal] = useState(0);
   const [reqPage, setReqPage] = useState(0);
@@ -104,27 +114,13 @@ export function TokenUsageStatsScreen() {
   const comboModel = comboFilter === undefined ? undefined : comboFilter.model;
   const comboProviderId =
     comboFilter === undefined ? undefined : comboFilter.providerId;
+  // 主查询 filter：时间区间由 RangeKind 在应用层算出自然日闭区间
+  // （resolveRangeDays：today={D,D}、last7={D-6,D}、last30={D-29,D}、
+  // custom 由 MonthRangePickerSheet 结果产日期字符串），日偏移均为
+  // 日历加法（DST 安全）。
   const filter = useMemo<UsageStatsFilter>(() => {
-    // 自定义区间：from 为所选日 0 点，to 取结束日次日 0 点（含结束日全天，
-    // 与 last7/last30 的「覆盖到本地明日 0 点」口径一致）。
-    if (rangeKind === 'custom' && customFrom && customTo) {
-      return {
-        range: {
-          kind: 'custom',
-          fromMs: customFrom.getTime(),
-          // 日历加法取次日 0 点：固定毫秒加法在 DST 切换日会差 1 小时。
-          toMs: new Date(
-            customTo.getFullYear(),
-            customTo.getMonth(),
-            customTo.getDate() + 1,
-          ).getTime(),
-        },
-        model: comboModel,
-        providerId: comboProviderId,
-      };
-    }
     return {
-      range: {kind: rangeKind},
+      range: resolveRangeDays(rangeKind, customFrom, customTo),
       model: comboModel,
       providerId: comboProviderId,
     };
@@ -147,11 +143,17 @@ export function TokenUsageStatsScreen() {
       setSummary(nextSummary);
       setDailyBuckets(nextBuckets);
       setModelRows(nextRows);
-      setSelectedDay(null);
+      // today 模式补选今天（P1-1）：补选必须写进本成功分支而非独立
+      // effect——这里是重置 selectedDay 的唯一时机，独立 effect 的补选
+      // 会被后到的成功回调抹掉（双端同构）；其余范围重置 null。补选 key
+      // 取本轮 filter 窗口终点而非回包时重新取日期（desktop/B-2·X-1：
+      // 查询发起于昨日深夜、回包落在今日零点后时，重新取时会选中不在
+      // 本轮 daily 数据里的天，与查询窗口错位；today 路径 range 恒存在）。
+      setSelectedDay(
+        rangeKind === 'today' ? filter.range?.toDay ?? null : null,
+      );
       setHourlyBuckets(null);
       setLoadError(null);
-      // 流水页数据随筛选变化标脏，切回/停留在流水页时重拉第一页
-      reqDirtyRef.current = true;
     } catch (err) {
       if (seq !== reloadSeqRef.current) {
         return; // 过期请求的报错不覆盖新一轮状态。
@@ -164,7 +166,7 @@ export function TokenUsageStatsScreen() {
         setLoading(false);
       }
     }
-  }, [runtime, filter, showToast]);
+  }, [runtime, filter, rangeKind, showToast]);
 
   // 刷新单通道（mobile/B-2）：只挂 useFocusEffect（依赖 reload），不再并挂
   // useEffect——挂载由首焦覆盖，筛选变化由 reload 引用刷新驱动，避免双通道
@@ -176,15 +178,16 @@ export function TokenUsageStatsScreen() {
   );
 
   // 流水页分页加载：页签激活且数据标脏时拉第一页；翻页/点页码按页号取整页替换。
-  const PAGE_SIZE = 10;
   const loadRequests = useCallback(
     async (page: number) => {
       const seq = ++reqSeqRef.current;
       setReqLoading(true);
       try {
+        // 流水跟随时间（需求①勘误后）：查询用含 range 的完整 filter——
+        // 与汇总/图表同窗口，模型/服务商筛选叠加。
         const result = await runtime.usageStats.listRequestUsage(filter, {
-          offset: page * PAGE_SIZE,
-          limit: PAGE_SIZE,
+          offset: page * REQUESTS_PAGE_SIZE,
+          limit: REQUESTS_PAGE_SIZE,
         });
         if (seq !== reqSeqRef.current) {
           return;
@@ -209,6 +212,15 @@ export function TokenUsageStatsScreen() {
     [runtime, filter, showToast],
   );
 
+  // 流水脏标记（P1-2·勘误后）：随完整 filter 变化置位——时间或模型/服务
+  // 商组合筛选任一变化都置脏（首挂载一次与 useRef(true) 初始值同效），
+  // 不再豁免时间维度。置位后若正停在流水页，由下方流水 effect 响应
+  // loadRequests（依赖含 range 的 filter）引用变化重拉首页；在其他页签
+  // 则等切回流水页时拉取。
+  useEffect(() => {
+    reqDirtyRef.current = true;
+  }, [filter]);
+
   useEffect(() => {
     if (pageTab === 'requests' && reqDirtyRef.current && !reqLoading) {
       loadRequests(0).catch(() => undefined);
@@ -216,7 +228,7 @@ export function TokenUsageStatsScreen() {
   }, [pageTab, reqLoading, loadRequests]);
 
   // 服务商×模型选项：配置侧生成（providers.list + 逐服务商 savedModelRepo
-  // .listByProvider）；「{服务商} · 其他模型」与「未记录服务商（历史）」两类
+  // .listByProvider）；「{服务商} · 其他模型」与「未记录服务商」两类
   // 归并选项由 UI 侧补上（语义见 ProviderModelFilterValue，覆盖存量行）。
   const reloadModels = useCallback(async () => {
     try {
@@ -260,7 +272,8 @@ export function TokenUsageStatsScreen() {
     }, [reloadModels]),
   );
 
-  // 选中天后加载 24 小时桶（只应用模型筛选，时间由天本身界定）。
+  // 选中天后加载 24 小时桶（应用模型+服务商组合筛选，时间由天本身界定，
+  // range 不参与——完整 filter 直接传入，小时窗口由天划定）。
   useEffect(() => {
     if (selectedDay == null) {
       setHourlyBuckets(null);
@@ -294,8 +307,10 @@ export function TokenUsageStatsScreen() {
   };
 
   const onRangeConfirm = (from: Date, to: Date) => {
+    // 跨度不设上限（PRD 明确不与查询成本耦合）；仅保 from ≤ to 兑底护栏
+    //（sheet 点选自动排序，正常路径恒满足）。
     if (!isCustomRangeValid(from, to)) {
-      showToast('自定义区间最长 366 天');
+      showToast('自定义区间起始日不能晚于结束日');
       return;
     }
     setCustomFrom(from);
@@ -309,7 +324,7 @@ export function TokenUsageStatsScreen() {
     comboFilter === undefined
       ? '全部模型'
       : comboFilter.providerId === null
-      ? '未记录服务商（历史）'
+      ? '未记录服务商'
       : comboFilter.model === null
       ? `${providerLabelOf(comboFilter.providerId)} · 其他模型`
       : `${providerLabelOf(comboFilter.providerId)} · ${comboFilter.model}`;
@@ -319,13 +334,18 @@ export function TokenUsageStatsScreen() {
       ? `${customFrom.getMonth() + 1}/${customFrom.getDate()} — ${
           customTo.getMonth() + 1
         }/${customTo.getDate()}`
+      : rangeKind === 'today'
+      ? '今天'
       : rangeKind === 'last30'
       ? '近 30 天'
       : '近 7 天';
 
-  // 空态区分（mobile/A-1）：库全空（listModels 为空且已落地一轮查询）显示
-  // 冷启动引导；范围内无数据提示「该区间无数据」并保留今日卡。summary 非空
-  // 条件避免首查在途时闪现空态。
+  // 空态区分（mobile/A-1）：库全空（配置侧无任何服务商×模型组合且已
+  // 落地一轮查询）显示
+  // 冷启动引导，拦全部页签（流水同样无数据可翻）；范围内无数据提示
+  // 「该区间无数据」，同样拦全部页签——流水随时间窗口（需求①勘误后），
+  // 窗口空（库非空）时与其他页签统一显示区间空态。summary 非空条件避免
+  // 首查在途时闪现空态。
   const libraryEmpty = combos.length === 0 && summary != null;
   const rangeEmpty =
     summary != null && summary.calls === 0 && summary.totalTokens === 0;
@@ -362,7 +382,7 @@ export function TokenUsageStatsScreen() {
           },
           {
             value: 'detail' as PageTab,
-            label: '明细',
+            label: '图表',
             testID: 'stats-tab-detail',
           },
           {
@@ -394,13 +414,21 @@ export function TokenUsageStatsScreen() {
           </Text>
         </View>
       ) : rangeEmpty ? (
+        // 范围空态覆盖全部页签（需求①勘误后）：流水同样随时间窗口，
+        // 窗口空（库非空）时与其他页签统一显示区间空态。
         <View style={styles.empty} testID="empty-range">
           <Text style={[styles.emptyText, {color: tokens.textSecondary}]}>
             该区间无数据
           </Text>
-          {/* 今日卡独立于筛选：范围空态下保留渲染。 */}
-          <TodayCard summary={summary} tokens={tokens} />
         </View>
+      ) : pageTab === 'summary' ? (
+        <SummaryTab
+          summary={summary}
+          modelRows={modelRows}
+          providerLabels={providerLabels}
+          rangeLabel={rangeLabel}
+          tokens={tokens}
+        />
       ) : pageTab === 'requests' ? (
         <RequestsTab
           reqRows={reqRows}
@@ -411,23 +439,19 @@ export function TokenUsageStatsScreen() {
           onLoadRequests={loadRequests}
           tokens={tokens}
         />
-      ) : pageTab === 'summary' ? (
-        <SummaryTab
-          summary={summary}
-          modelRows={modelRows}
-          providerLabels={providerLabels}
-          rangeLabel={rangeLabel}
-          tokens={tokens}
-        />
       ) : (
         <DetailTab
           dailyBuckets={dailyBuckets}
           hourlyBuckets={hourlyBuckets}
           selectedDay={selectedDay}
           inspectedKey={inspectedKey}
-          onSelectDay={setSelectedDay}
+          // 重复点选同一天 toggle 取消选中（与桌面端一致，mobile/C-orch-1）。
+          onSelectDay={key =>
+            setSelectedDay(prev => (prev === key ? null : key))
+          }
           onSetInspectedKey={setInspectedKey}
           tokens={tokens}
+          todayMode={rangeKind === 'today'}
         />
       )}
     </ScrollView>

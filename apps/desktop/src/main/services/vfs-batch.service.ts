@@ -148,7 +148,6 @@ function createSessionBatchWriter(
         content,
         logicalPath,
         content,
-        { versionCheck: false },
       );
       if (op != null) {
         await executeSessionUserVfsOp(runtime, sessionId, op);
