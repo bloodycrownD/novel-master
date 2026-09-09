@@ -10,22 +10,44 @@ try {
   await page.waitForLoadState("domcontentloaded");
   await sleep(3500);
   const composer = page.locator('textarea[aria-label="消息输入"]');
-  if (!(await composer.count())) {
+  // app 启动会自动恢复上次会话（可能是前序脚本留下的未绑模型会话，发送失败不落库）：
+  // 无 composer 或 composer 被禁（未绑模型）都需重选会话
+  const needPick = !(await composer.count()) || (await composer.isDisabled().catch(() => true));
+  if (needPick) {
+    if (await composer.count()) {
+      // 已恢复某会话：先退出到会话列表
+      const bk = page.locator('button[aria-label="返回"]:visible').first();
+      if (await bk.count()) { await bk.click(); await sleep(800); }
+    }
     await goToProjects(page);
     await page.locator("li:visible").filter({ hasText: "回归项目A" }).first().click();
     await sleep(700);
-    await page.locator("#session-list li:visible").first().click();
-    await sleep(1100);
+    // 全量序列里项目下有多个会话（部分未绑模型），逐个尝试直到 composer 可用；
+    // 单会话库退化为原 first 行为
+    for (let i = 0; i < 5; i++) {
+      const rows = page.locator("#session-list li:visible");
+      if (i >= (await rows.count())) break;
+      await rows.nth(i).click();
+      await sleep(1100);
+      const c = page.locator('textarea[aria-label="消息输入"]');
+      if ((await c.count()) && !(await c.isDisabled().catch(() => true))) break;
+      await page.locator('button[aria-label="返回"]:visible').first().click();
+      await sleep(600);
+    }
   }
 
   // 1. 建文件写正文
-  await openWorkspaceContextMenu(page);
-  await sleep(700);
-  await page.locator('[data-workspace-action="create-file"]').first().click();
-  await sleep(700);
-  await page.locator("input:visible").first().fill("批注验证.md");
-  await page.locator("button:visible").filter({ hasText: /^确定$|^创建$/ }).first().click();
-  await sleep(1000);
+  // 1. 建文件写正文（文件已存在则直接打开——重跑/全量序列下不重名冲突）
+  const existing = page.locator(".tree-node").filter({ hasText: "批注验证.md" }).first();
+  if (!(await existing.count())) {
+    await openWorkspaceContextMenu(page);
+    await sleep(700);
+    await page.locator('[data-workspace-action="create-file"]').first().click();
+    await sleep(700);
+    await page.locator("input:visible").first().fill("批注验证.md");
+    await page.locator("button:visible").filter({ hasText: /^确定$|^创建$/ }).first().click();
+    await sleep(1000);
+  }
   const node = page.locator(".tree-node").filter({ hasText: "批注验证.md" }).first();
   if (!(await node.count())) throw new Error("file not created");
   await node.click();
@@ -34,6 +56,8 @@ try {
   await sleep(900);
   const cm = page.locator(".cm-content").first();
   await cm.click();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Delete");
   await page.keyboard.type("批注投影验证正文，这句话将被划词添加批注。", { delay: 3 });
   await page.keyboard.press("Control+s");
   await sleep(1000);
