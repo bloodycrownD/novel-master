@@ -40,6 +40,7 @@ import type {MobileNovelMasterRuntime} from './types';
 import {AgentRunManager} from '@/services/agent-run-manager.service';
 import {showAppToast} from '@/services/app-toast';
 import {readAgentFinishedNotificationEnabled} from '@/storage/agent-finished-notification-pref';
+import {readAgentKeepAliveEnabled} from '@/storage/agent-keepalive-pref';
 import {tokensForMode} from '../theme/tokens';
 
 export type RuntimeStatus = 'loading' | 'ready' | 'error';
@@ -160,6 +161,13 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
           return Promise.resolve(true);
         }
         return readAgentFinishedNotificationEnabled(appUiNow);
+      },
+      isKeepAliveEnabled: () => {
+        const appUiNow = appUiRef.current;
+        if (appUiNow == null) {
+          return Promise.resolve(false);
+        }
+        return readAgentKeepAliveEnabled(appUiNow);
       },
     });
     manager.setScopeBridge({

@@ -40,14 +40,20 @@ function createHarness() {
       title: `会话-${sessionId}`,
     })),
   };
+  const projects = {
+    get: jest.fn(async (projectId: string) => ({
+      id: projectId,
+      name: `项目-${projectId}`,
+    })),
+  };
   const runAgentTurn = jest.fn(
     async (_runtime: unknown, _scope: unknown, _content: string) => undefined,
   );
   const manager = new AgentRunManager({
-    runtime: {eventBus, abortRegistry, sessions} as never,
+    runtime: {eventBus, abortRegistry, sessions, projects} as never,
     runAgentTurn: runAgentTurn as never,
   });
-  return {eventBus, abortRegistry, sessions, runAgentTurn, manager};
+  return {eventBus, abortRegistry, sessions, projects, runAgentTurn, manager};
 }
 
 function publishStarted(
@@ -398,11 +404,14 @@ describe('AgentRunManager', () => {
       (Platform as {OS: string}).OS = originalOS;
     });
 
-    it('T-P6: 偏好关闭时完成通知不发，前台保活起停照常', async () => {
+    it('T-P6: 完成通知关闭但保活开启时：完成通知不发，前台保活起停照常', async () => {
       const h = createHarness();
       // run 本体挂起（事件由测试驱动）——避免 mock 立即 resolve 触发 finally 早退
       h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
-      h.manager.setPrefBridge({isEnabled: async () => false});
+      h.manager.setPrefBridge({
+        isEnabled: async () => false,
+        isKeepAliveEnabled: async () => true,
+      });
 
       h.manager.startRun('a', 'p', 'hi');
       // 保活服务已随受理启动（asForegroundService 通知）
@@ -422,6 +431,41 @@ describe('AgentRunManager', () => {
       // 完成通知未发（偏好关闭），但保活服务正常停止
       expect(notifee.displayNotification).not.toHaveBeenCalled();
       expect(notifee.stopForegroundService).toHaveBeenCalled();
+    });
+
+    it('T-P8: 保活默认关（历史兼容）：不注入 isKeepAliveEnabled 时受理不起常驻通知', async () => {
+      const h = createHarness();
+      h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+      // 旧桥形状（无 isKeepAliveEnabled）——默认视为关
+      h.manager.setPrefBridge({isEnabled: async () => true} as never);
+
+      h.manager.startRun('a', 'p', 'hi');
+      await flushAsync();
+      expect(notifee.displayNotification).not.toHaveBeenCalled();
+
+      publishStarted(h.eventBus, 'a', 'r1');
+      publishFinished(h.eventBus, 'a', 'r1');
+      await flushAsync();
+      // 收尾也不触发任何保活起停
+      expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+    });
+
+    it('T-P8b: 保活开启时受理即起常驻通知，状态栏带项目 · 会话名', async () => {
+      const h = createHarness();
+      h.runAgentTurn.mockImplementation(() => new Promise(() => undefined));
+      h.manager.setPrefBridge({
+        isEnabled: async () => true,
+        isKeepAliveEnabled: async () => true,
+      });
+
+      h.manager.startRun('a', 'p', 'hi');
+      await flushAsync();
+      expect(notifee.displayNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: '正在生成 · 会话-a',
+          body: expect.stringContaining('项目-p · 会话-a'),
+        }),
+      );
     });
 
     it('偏好开启 + app 在后台时 FINISHED 发完成通知（含会话名）', async () => {

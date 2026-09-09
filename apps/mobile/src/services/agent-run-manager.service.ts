@@ -50,7 +50,7 @@ export type AgentRunSettledStatus = 'finished' | 'failed';
 /** Manager 实际依赖的 runtime 子集（测试可传 mock）。 */
 export type AgentRunManagerRuntime = Pick<
   MobileNovelMasterRuntime,
-  'eventBus' | 'abortRegistry' | 'sessions'
+  'eventBus' | 'abortRegistry' | 'sessions' | 'projects'
 >;
 
 /** fire-and-forget 的 runAgentTurn 形状（测试可注入 mock）。 */
@@ -86,9 +86,11 @@ export interface AgentRunUiBridge {
   onError(message: string): void;
 }
 
-/** 「生成结束通知」开关读取桥（appUi 通道）。 */
+/** 通知偏好读取桥（appUi 通道）：isEnabled = 生成结束通知（默认开）。 */
 export interface AgentRunPrefBridge {
   isEnabled(): Promise<boolean>;
+  /** 后台保活开关（默认关——历史行为完全兼容，开启后才起常驻通知/前台服务）。 */
+  isKeepAliveEnabled(): Promise<boolean>;
 }
 
 /** scope 同步桥：通知点按后切换会话（React 外）。 */
@@ -260,7 +262,7 @@ export class AgentRunManager {
     this.entries.set(sessionId, entry);
     this.notifyEntriesChanged();
     incrementAgentActive();
-    void startAgentKeepAliveService().catch(() => undefined);
+    this.startKeepAliveQuietly(sessionId, projectId);
     void this.maybeEnsureNotificationPermission();
 
     void this.runAgentTurnFn(this.runtime, {projectId, sessionId}, content, {
@@ -304,7 +306,7 @@ export class AgentRunManager {
         this.entries.delete(sessionId);
         this.notifyEntriesChanged();
         decrementAgentActive();
-        this.syncKeepAliveQuietly();
+        this.stopKeepAliveQuietly(sessionId);
       });
 
     return {ok: true};
@@ -362,7 +364,7 @@ export class AgentRunManager {
     this.entries.delete(sessionId);
     this.notifyEntriesChanged();
     decrementAgentActive();
-    this.syncKeepAliveQuietly();
+    this.stopKeepAliveQuietly(sessionId);
 
     if (status === 'failed') {
       // 失败反馈也收口在所有权校验之后：无主 FAILED 不弹 toast（MF-1）；
@@ -407,20 +409,54 @@ export class AgentRunManager {
     await notifyAgentRunFinished({sessionId, sessionTitle, status});
   }
 
-  /** 有活跃 run 才保活，全空闲即停止（起停与 run 生命周期严格绑定）。 */
-  private async syncKeepAlive(): Promise<void> {
-    if (this.entries.size > 0) {
-      await startAgentKeepAliveService();
-    } else {
-      await stopAgentKeepAliveService();
+  /**
+   * 受理后按需启动保活：开关（默认关）开启才起常驻通知，并带上
+   * 项目 · 会话名标签（取不到名字时仍启动，仅内容缺省）。
+   */
+  private async startKeepAliveFor(
+    sessionId: string,
+    projectId: string,
+  ): Promise<void> {
+    const enabled = (await this.prefBridge?.isKeepAliveEnabled()) ?? false;
+    if (!enabled) {
+      return;
     }
+    let sessionTitle: string | undefined;
+    let projectName: string | undefined;
+    try {
+      sessionTitle =
+        (await this.runtime.sessions.get(sessionId))?.title ?? undefined;
+    } catch {
+      // 名字取不到不阻塞保活
+    }
+    try {
+      projectName =
+        (await this.runtime.projects.get(projectId))?.name ?? undefined;
+    } catch {
+      // 同上
+    }
+    await startAgentKeepAliveService(sessionId, {projectName, sessionTitle});
   }
 
-  /** fire-and-forget 调 syncKeepAlive：吞错但留日志，防 unhandled rejection（MF-4）。 */
-  private syncKeepAliveQuietly(): void {
-    void this.syncKeepAlive().catch(err => {
+  /** 单会话收尾：摘标签；仍有多会话在跑时由通知模块维持运行并刷新内容。 */
+  private stopKeepAliveFor(sessionId: string): Promise<void> {
+    return stopAgentKeepAliveService(sessionId);
+  }
+
+  /** fire-and-forget 包装：吞错但留日志，防 unhandled rejection（MF-4）。 */
+  private startKeepAliveQuietly(sessionId: string, projectId: string): void {
+    void this.startKeepAliveFor(sessionId, projectId).catch(err => {
       console.error(
-        '[novel-master/agent-run-manager] syncKeepAlive failed',
+        '[novel-master/agent-run-manager] startKeepAlive failed',
+        err,
+      );
+    });
+  }
+
+  private stopKeepAliveQuietly(sessionId: string): void {
+    void this.stopKeepAliveFor(sessionId).catch(err => {
+      console.error(
+        '[novel-master/agent-run-manager] stopKeepAlive failed',
         err,
       );
     });

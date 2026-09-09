@@ -4,7 +4,11 @@
  */
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import {AppState, Platform} from 'react-native';
-import notifee, {displayNotification, createChannel, EventType} from '@notifee/react-native';
+import notifee, {
+  displayNotification,
+  createChannel,
+  EventType,
+} from '@notifee/react-native';
 import {
   notifyAgentRunFinished,
   resetFailedNotifyMergeStateForTests,
@@ -27,9 +31,10 @@ function setAppState(state: string): void {
  * onBackgroundEvent 的模块级注册发生在 import 时，beforeEach 的
  * clearAllMocks 会清掉调用记录，必须在顶层立即捕获 observer。
  */
-const backgroundObserver: (
-  event: {type: number; detail?: {notification?: {data?: Record<string, unknown>}}},
-) => Promise<void> = (notifee.onBackgroundEvent as jest.Mock).mock.calls[0][0];
+const backgroundObserver: (event: {
+  type: number;
+  detail?: {notification?: {data?: Record<string, unknown>}};
+}) => Promise<void> = (notifee.onBackgroundEvent as jest.Mock).mock.calls[0][0];
 
 const backgroundAppStateListener = (
   AppState.addEventListener as jest.Mock
@@ -342,5 +347,78 @@ describe('agent-finished-notification', () => {
       expect(notifee.stopForegroundService).not.toHaveBeenCalled();
       expect(displayNotification).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('T-P5: 保活通知内容与多会话（Step 5 需求）', () => {
+  const originalOS = Platform.OS;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetKeepAliveStateForTests();
+    (Platform as {OS: string}).OS = 'android';
+  });
+
+  afterEach(() => {
+    (Platform as {OS: string}).OS = originalOS;
+  });
+
+  it('带标签启动：标题/正文含会话名与项目名', async () => {
+    await startAgentKeepAliveService('s1', {
+      projectName: '长篇项目',
+      sessionTitle: '第三章续写',
+    });
+    expect(displayNotification).toHaveBeenCalledTimes(1);
+    const call = displayNotification.mock.calls[0][0];
+    expect(call.title).toBe('正在生成 · 第三章续写');
+    expect(call.body).toContain('长篇项目 · 第三章续写');
+    expect(call.body).not.toContain('共 ');
+  });
+
+  it('同 id 重发刷新内容：标签变化时运行中通知更新', async () => {
+    await startAgentKeepAliveService('s1', {
+      projectName: 'P1',
+      sessionTitle: 'S1',
+    });
+    await startAgentKeepAliveService('s2', {
+      projectName: 'P2',
+      sessionTitle: 'S2',
+    });
+    // 第二个会话加入：内容刷新为最新 + 总数
+    expect(displayNotification).toHaveBeenCalledTimes(2);
+    const refreshed = displayNotification.mock.calls[1][0];
+    expect(refreshed.title).toBe('正在生成 · S2');
+    expect(refreshed.body).toContain('共 2 个会话生成中');
+    expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+  });
+
+  it('多会话中单会话收尾：服务维持并刷新为剩余会话；最后一个收尾才停止', async () => {
+    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+    await startAgentKeepAliveService('s2', {sessionTitle: 'S2'});
+    expect(displayNotification).toHaveBeenCalledTimes(2);
+
+    await stopAgentKeepAliveService('s2');
+    // s1 仍在跑：服务不停，内容回到 S1（无总数行）
+    expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+    expect(displayNotification).toHaveBeenCalledTimes(3);
+    const afterOne = displayNotification.mock.calls[2][0];
+    expect(afterOne.title).toBe('正在生成 · S1');
+    expect(afterOne.body).not.toContain('共 ');
+
+    await stopAgentKeepAliveService('s1');
+    expect(notifee.stopForegroundService).toHaveBeenCalledTimes(1);
+  });
+
+  it('保活未运行时的按会话收尾是安全 no-op（不真调 stop）', async () => {
+    // 对应「保活开关关闭」路径的收尾调用
+    await stopAgentKeepAliveService('s-any');
+    expect(notifee.stopForegroundService).not.toHaveBeenCalled();
+    expect(displayNotification).not.toHaveBeenCalled();
+  });
+
+  it('同标签重复登记不刷新（无谓重发抑制）', async () => {
+    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+    await startAgentKeepAliveService('s1', {sessionTitle: 'S1'});
+    expect(displayNotification).toHaveBeenCalledTimes(1);
   });
 });

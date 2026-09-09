@@ -21,6 +21,10 @@ import {
   writeAgentFinishedNotificationEnabled,
 } from '../../storage/agent-finished-notification-pref';
 import {
+  readAgentKeepAliveEnabled,
+  writeAgentKeepAliveEnabled,
+} from '../../storage/agent-keepalive-pref';
+import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
 } from '../../storage/chat-rich-text-pref';
@@ -47,6 +51,7 @@ export function ChatConfigScreen() {
     agentFinishedNotificationEnabled,
     setAgentFinishedNotificationEnabled,
   ] = useState(true);
+  const [agentKeepAliveEnabled, setAgentKeepAliveEnabled] = useState(false);
 
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState('0.8');
@@ -79,6 +84,7 @@ export function ChatConfigScreen() {
     setAgentFinishedNotificationEnabled(
       await readAgentFinishedNotificationEnabled(appUi),
     );
+    setAgentKeepAliveEnabled(await readAgentKeepAliveEnabled(appUi));
   }, [appUi]);
 
   const refreshCompaction = useCallback(async () => {
@@ -238,6 +244,27 @@ export function ChatConfigScreen() {
             void persistSwitchWithRollback(
               () => writeAgentFinishedNotificationEnabled(appUi, enabled),
               () => setAgentFinishedNotificationEnabled(!enabled),
+            );
+          }
+        }}
+      />
+
+      <ProfileSwitchItem
+        icon="🛡️"
+        label="后台保活（生成中常驻通知）"
+        subtitle={
+          agentKeepAliveEnabled
+            ? '生成期间状态栏常驻「正在生成 · 项目 · 会话」，退后台/锁屏继续生成'
+            : '生成中不常驻通知栏，退后台的请求可能被系统中断（升级前行为）'
+        }
+        value={agentKeepAliveEnabled}
+        tokens={tokens}
+        onValueChange={enabled => {
+          setAgentKeepAliveEnabled(enabled);
+          if (appUi) {
+            void persistSwitchWithRollback(
+              () => writeAgentKeepAliveEnabled(appUi, enabled),
+              () => setAgentKeepAliveEnabled(!enabled),
             );
           }
         }}

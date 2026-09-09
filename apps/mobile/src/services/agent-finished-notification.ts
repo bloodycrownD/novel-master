@@ -58,13 +58,29 @@ let keepAliveRunning = false;
 /** 期望运行态：链上每次 reconcile 都按最新期望值对齐实际状态。 */
 let keepAliveDesired = false;
 
+/** per-session 保活标签（Step 5 需求：状态栏展示项目/会话名）。 */
+const keepAliveLabels = new Map<string, AgentKeepAliveLabel>();
+
+/** 标签变更版本：驱动运行中通知的内容刷新（无标签变更时保持旧语义不动）。 */
+let keepAliveLabelsVersion = 0;
+let keepAliveDisplayedVersion = -1;
+
 /** 起停串行化链：所有 start/stop 决策排队执行，消除在途竞态。 */
 let keepAliveChain: Promise<void> = Promise.resolve();
+
+/** 保活通知的内容标签：项目名 + 会话名（取不到时对应字段缺省）。 */
+export interface AgentKeepAliveLabel {
+  readonly projectName?: string;
+  readonly sessionTitle?: string;
+}
 
 /** 仅测试用：复位保活模块级状态。 */
 export function resetKeepAliveStateForTests(): void {
   keepAliveRunning = false;
   keepAliveDesired = false;
+  keepAliveLabels.clear();
+  keepAliveLabelsVersion = 0;
+  keepAliveDisplayedVersion = -1;
   keepAliveChain = Promise.resolve();
 }
 
@@ -86,17 +102,31 @@ function enqueueKeepAliveSync(desired: boolean): Promise<void> {
   return task;
 }
 
-/** 按最新期望态对齐实际运行态（只在链尾执行，天然串行）。 */
+/**
+ * 按最新期望态对齐实际运行态（只在链尾执行，天然串行）。
+ *
+ * 运行中且标签未变时 no-op（保持既有起停语义）；标签变化（会话加入/收尾）
+ * 时同 id 重发通知 = 原位刷新内容（项目 · 会话名随最新 run 更新）。
+ */
 async function reconcileKeepAlive(): Promise<void> {
-  if (keepAliveDesired === keepAliveRunning) {
+  if (
+    keepAliveDesired === keepAliveRunning &&
+    keepAliveDisplayedVersion === keepAliveLabelsVersion
+  ) {
+    return;
+  }
+  if (!keepAliveDesired && !keepAliveRunning) {
+    // 从未运行过（如保活开关关着的收尾调用）：对齐版本即可，不必真调 stop。
+    keepAliveDisplayedVersion = keepAliveLabelsVersion;
     return;
   }
   if (keepAliveDesired) {
+    const {title, body} = buildKeepAliveContent();
     await ensureChannels();
     await notifee.displayNotification({
       id: KEEPALIVE_NOTIFICATION_ID,
-      title: '正在生成',
-      body: '生成进行中，完成后自动结束；期间请勿强行关闭应用。',
+      title,
+      body,
       android: {
         channelId: CHANNEL_AGENT_KEEPALIVE,
         asForegroundService: true,
@@ -105,6 +135,7 @@ async function reconcileKeepAlive(): Promise<void> {
       },
     });
     keepAliveRunning = true;
+    keepAliveDisplayedVersion = keepAliveLabelsVersion;
     return;
   }
   try {
@@ -112,6 +143,7 @@ async function reconcileKeepAlive(): Promise<void> {
   } finally {
     // stop 抛错也要复位标记，否则永久卡 true、之后所有 start 都 no-op。
     keepAliveRunning = false;
+    keepAliveDisplayedVersion = -1;
   }
 }
 
@@ -227,22 +259,95 @@ export async function notifyAgentRunFinished(input: {
 /**
  * 启动前台保活服务（dataSync 类型，常驻「正在生成」通知）。
  *
- * 仅 Android；已在运行时幂等 no-op。JS 侧须已 registerForegroundService，
- * 否则原生侧找不到 runner——本模块顶层已注册常驻 runner（服务随 stop 调用结束）。
+ * 携带 sessionId 时同时登记/刷新该会话的内容标签（状态栏展示项目 · 会话名，
+ * 并行多 run 时显示最近一个 + 总数）。仅 Android；无标签调用保持旧语义。
  */
-export function startAgentKeepAliveService(): Promise<void> {
+export function startAgentKeepAliveService(
+  sessionId?: string,
+  label?: AgentKeepAliveLabel,
+): Promise<void> {
   if (Platform.OS !== 'android') {
     return Promise.resolve();
+  }
+  if (sessionId != null) {
+    const changed = !labelEquals(keepAliveLabels.get(sessionId), label);
+    if (label != null) {
+      keepAliveLabels.set(sessionId, label);
+    } else {
+      keepAliveLabels.delete(sessionId);
+    }
+    if (changed) {
+      keepAliveLabelsVersion += 1;
+    }
   }
   return enqueueKeepAliveSync(true);
 }
 
-/** 停止前台保活服务（全部 run 结束 / Manager dispose 时调用）。 */
-export function stopAgentKeepAliveService(): Promise<void> {
+/**
+ * 停止前台保活服务。
+ *
+ * 带 sessionId（单会话 run 收尾）：仅摘除该会话标签——仍有其它会话在跑时
+ * 服务继续、通知内容刷新为剩余会话；最后一个标签摘除时服务停止。
+ * 不带 sessionId（全部 run 结束 / Manager dispose）：清空全部标签并停止。
+ */
+export function stopAgentKeepAliveService(sessionId?: string): Promise<void> {
   if (Platform.OS !== 'android') {
     return Promise.resolve();
   }
+  if (sessionId != null) {
+    if (keepAliveLabels.delete(sessionId)) {
+      keepAliveLabelsVersion += 1;
+    }
+    if (keepAliveLabels.size > 0) {
+      // 其它会话仍在跑：刷新内容、维持运行
+      return enqueueKeepAliveSync(true);
+    }
+    return enqueueKeepAliveSync(false);
+  }
+  if (keepAliveLabels.size > 0) {
+    keepAliveLabels.clear();
+    keepAliveLabelsVersion += 1;
+  }
   return enqueueKeepAliveSync(false);
+}
+
+function labelEquals(
+  a: AgentKeepAliveLabel | undefined,
+  b: AgentKeepAliveLabel | undefined,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  return a.projectName === b.projectName && a.sessionTitle === b.sessionTitle;
+}
+
+/** 组装保活通知内容：最近登记的会话标签 +（多会话时）总数。 */
+function buildKeepAliveContent(): {
+  title: string;
+  body: string;
+} {
+  const labels = [...keepAliveLabels.values()];
+  const latest = labels[labels.length - 1];
+  const scopeText =
+    latest == null
+      ? ''
+      : [latest.projectName, latest.sessionTitle].filter(Boolean).join(' · ');
+  const title =
+    latest?.sessionTitle != null
+      ? `正在生成 · ${latest.sessionTitle}`
+      : '正在生成';
+  const lines: string[] = [];
+  if (scopeText !== '') {
+    lines.push(scopeText);
+  }
+  if (labels.length > 1) {
+    lines.push(`共 ${labels.length} 个会话生成中`);
+  }
+  lines.push('完成后自动结束；期间请勿强行关闭应用');
+  return {title, body: lines.join('\n')};
 }
 
 /**

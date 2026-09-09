@@ -13,6 +13,8 @@ export const APP_UI_KEY_CHAT_RICH_TEXT = 'chatRichText';
 /** `true` | `false` — run 结束时发送本地通知（默认开；关闭仅不发通知，生成与保活不变）。 */
 export const APP_UI_KEY_AGENT_FINISHED_NOTIFICATION =
   'agentFinishedNotification';
+/** `true` | `false` — 生成中后台保活（前台服务 + 常驻通知，默认关——历史完全兼容）。 */
+export const APP_UI_KEY_AGENT_KEEP_ALIVE = 'agentKeepAlive';
 /** `legacy-rn` | `webview` — transcript rendering engine (default `webview`). */
 export const APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE = 'chatTranscriptEngine';
 /** `rn` | `webview` — VFS markdown preview engine (default `webview`). */
