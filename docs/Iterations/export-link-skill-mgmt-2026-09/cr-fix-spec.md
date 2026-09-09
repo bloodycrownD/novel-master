@@ -1,4 +1,4 @@
-# CR Fix Spec: 导出命名·文件链接跳转·技能管理优化（CR round 1）
+# CR Fix Spec: 导出命名·文件链接跳转·技能管理优化（CR round 2，已确认执行）
 
 ## 元信息
 
@@ -9,7 +9,7 @@
 - spec_path：docs/Iterations/export-link-skill-mgmt-2026-09/features/{export-naming,chat-link-file-nav,skill-rename-description}/spec.md
 - review_round：2
 - dag_version：3
-- 状态：draft
+- 状态：confirmed（用户已确认按本 fix-spec 执行，2026-09-10）
 
 > 行号勘误说明：条目文件行号以 head_sha 实际代码为准；round 1 评审原单与 round 2 复核各修正过一批（round 2 勘误：MF-1 的 66/69→61/64、MF-2 的 126-131/133-138→124-129/130-135、MF-4 main.ts 的 129,135→126,131、MF-6/MF-8 问题栏描述口径修正，均以实际值为准）。
 
@@ -188,22 +188,30 @@
 - 验收：desktop 弹窗既有测试不回归；源码断言含 catch 分支（可并入 T-S5 桌面侧断言）。
 - 来源：review round 2（review-full 新发现 N-2）
 
+### MF-12 [P2] desktop 搜索结果面板接入链接跳转（与正文行为一致，用户拍板）
+
+- 维度：A/C-orch（行为一致性）
+- 文件：`apps/desktop/renderer/features/chat/ChatHistorySearchPanel.tsx:271`（消费 MessageList 处）
+- 问题：搜索结果面板复用 MessageList 渲染富文本，但未传 `onLinkClick`——路径链接点击 no-op，与正文行为不一致。
+- 改法：接线 `openChatLink`（route params 已带 projectId+sessionId，与 ConversationPanel 同源；复用 ShellNavProvider 的 openChatLink 或等价传递链）。
+- 验收：搜索面板内路径链接可应用内打开；desktop 既有搜索相关测试不回归；补一条源码/静态接线断言。
+- 来源：待拍板第 1 项，用户拍板「desktop 要一致」
+
 ## Spec deviations
 
 - none（两轮评审均未认定 spec 偏离；open questions 中第 1 项若拍板「不补」则无偏离，若拍板「补」则以本 fix-spec 增补承载）
 
 ## Open questions / 待拍板
 
-1. **desktop 搜索结果面板链接接线**：ChatHistorySearchPanel 消费 MessageList 处未接 `onLinkClick`——路径链接点击 no-op。现状相对基线无劣化（原也无处可跳），但不满足「正文文件链接 100% 应用内打开」口径的自然延伸。接线可行（route params 齐全，复用 openChatLink 即可）。是否补接线请拍板。
-2. **invalid 技能仅改描述的 core 层静默 no-op**：`updateSkillInfo` 对 invalid 技能（front matter 不可解析）仅改描述时静默返回成功但不落盘。UI 已禁入口把住主路径（invalid 技能编辑按钮禁用），core 层无显式错误码。是否加显式错误码请拍板。
-3. **href 带 `?query` 的归一化**：`resolveChatLinkTarget` 将带 query 的 href 归一化为整串路径探测，必 miss、安全 no-op（Typora 亦不处理 query）。是否剥 query 再探测请拍板。
-4. **export scope 三条备注**：a) desktop 文件分支纯函数测试空档可低成本补；b) desktop 导出无 busy 防重入，与库内既有惯例一致、有惯例支撑；c) 技能名含路径分隔符属既有契约（core 校验拒绝），非本 diff 引入。
-5. **desktop buildNewSkillDoc 裸标量漂移**：desktop 侧 `buildNewSkillDoc` 未走 yamlScalar 转义，属 BASE 既有问题、不在本 diff 范围（mobile 侧本 diff 已含 yamlScalar，见 MF-9 仅调整其可见性）。
-6. **事务外存在性检查的极窄 TOCTOU 窗口**：并发删除下错误码退化为包装文案，事务回滚无损。倾向接受，请确认。
+（round 2 已全部处置，见「已豁免」与 MF-12）
 
 ## 已豁免（用户确认不修）
 
-- 暂无。
+- **invalid 技能仅改描述 core 层静默 no-op**：维持现状不加显式错误码（用户确认；UI 已禁入口把住主路径，用户无此场景）。
+- **href 带 `?query` 不剥离**：参考 Typora 不处理，带 query 归一化为整串路径探测必 miss、安全 no-op（用户确认）。
+- **export 三条备注**：接受现状（a. desktop 文件分支测试空档不补；b. desktop 导出无 busy 防重入有惯例支撑；c. 技能名含路径分隔符属既有契约）。
+- **desktop buildNewSkillDoc 裸标量漂移**：BASE 既有问题不在本 diff，不顺带收敛。
+- **事务外存在性检查 TOCTOU 窄口**：接受现状（回滚无损，仅极窄窗口提示不友好）。
 
 ## 合并后 QA（manual_user）
 
