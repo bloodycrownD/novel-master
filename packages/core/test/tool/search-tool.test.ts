@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
@@ -122,7 +122,7 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
       makeCtx({
         search: {
           loadEngineConfig: async () => ({ configured: false }),
-          resolveActiveEngine: async () => null,
+          resolveEngineChain: async () => [],
         },
       })
     );
@@ -181,7 +181,7 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal(calls[0], "https://api.bochaai.com/v1/web-search");
   });
 
-  it("T-S2（e2e）：input.engine > defaultEngine > 第一个 configured，经真实 dispatch 命中对应端点", async () => {
+  it("T-S2（e2e）：input.engine 钉死起步 > engineOrder 第一个 configured，经真实 dispatch 命中对应端点", async () => {
     const { kkv, secretStore } = fakeStores();
     const store = createSearchConfigStore({ kkv, secretStore });
     await store.saveEngineKey("bocha", "sk-bocha");
@@ -202,17 +202,19 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
-    // ① input.engine=bocha 显式命中（即使 defaultEngine 未设）。
+    // ① input.engine=tavily 显式钉死链首（即使默认序 bocha 在前且已配置）。
     let out = await runner.call(
       SEARCH_TOOL_NAME,
-      { query: "q", engine: "bocha" },
+      { query: "q", engine: "tavily" },
       makeCtx({ search, fetchFn })
     );
-    assert.equal((out as { engine: string }).engine, "bocha");
-    assert.equal(urls[0], "https://api.bochaai.com/v1/web-search");
+    assert.equal((out as { engine: string }).engine, "tavily");
+    assert.equal(urls[0], "https://api.tavily.com/search");
+    // 显式链首首发成功：省略 attempts 字段。
+    assert.equal("attempts" in out, false);
 
-    // ② 无 input → defaultEngine=tavily 命中。
-    await store.setDefaultEngine("tavily");
+    // ② 无 input：engineOrder 重排后第一个 configured（tavily）命中。
+    await store.setEngineOrder(["tavily", "bocha", "brave", "searxng"]);
     out = await runner.call(
       SEARCH_TOOL_NAME,
       { query: "q" },
@@ -222,8 +224,8 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal(urls[1], "https://api.tavily.com/search");
     assert.equal((out as { answer?: string }).answer, "a");
 
-    // ③ 清除 defaultEngine → 第一个 configured（bocha）。
-    await store.setDefaultEngine(null);
+    // ③ 恢复默认序 → 第一个 configured（bocha）命中。
+    await store.setEngineOrder(["bocha", "tavily", "brave", "searxng"]);
     out = await runner.call(
       SEARCH_TOOL_NAME,
       { query: "q" },
@@ -232,14 +234,15 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal((out as { engine: string }).engine, "bocha");
     assert.equal(urls[2], "https://api.bochaai.com/v1/web-search");
 
-    // ④ input 指向未配置引擎（searxng）→ 顺位回落 bocha，输出回填实际引擎。
+    // ④ input 指向未配置引擎（brave）：从 brave 起截取链 [brave, searxng]
+    // 均未配置 → 未配置提示（不全局回落 bocha/tavily）。
     out = await runner.call(
       SEARCH_TOOL_NAME,
-      { query: "q", engine: "searxng" },
+      { query: "q", engine: "brave" },
       makeCtx({ search, fetchFn })
     );
-    assert.equal((out as { engine: string }).engine, "bocha");
-    assert.equal(urls[3], "https://api.bochaai.com/v1/web-search");
+    assert.equal(out, SEARCH_NOT_CONFIGURED_MESSAGE);
+    assert.equal(urls.length, 3);
   });
 
   it("T-S2（searxng-only）：仅配 baseUrl 也能解析命中，请求落自托管实例", async () => {
@@ -426,6 +429,198 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
         return true;
       }
     );
+  });
+});
+
+describe("search 工具：串行链执行（T-S3，修订轮）", () => {
+  it("①链首 401 → 降级到下一 configured 引擎成功，输出含 attempts 轨迹，formatter 展示轨迹行", async () => {
+    const { kkv, secretStore } = fakeStores();
+    await secretStore.set("search/bocha/apiKey", "sk-bocha");
+    await secretStore.set("search/tavily/apiKey", "sk-tavily");
+
+    const urls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      const target = String(url);
+      urls.push(target);
+      if (target === "https://api.bochaai.com/v1/web-search") {
+        return new Response("unauthorized", { status: 401 });
+      }
+      return new Response(
+        JSON.stringify({
+          answer: "a",
+          results: [{ title: "t", url: "https://t.example.com", content: "c" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    }) as typeof globalThis.fetch;
+
+    const runner = makeRunner();
+    const out = await runner.call(
+      SEARCH_TOOL_NAME,
+      { query: "q" },
+      makeCtx({
+        search: assembleSearchToolContext(
+          createSearchConfigStore({ kkv, secretStore })
+        ),
+        fetchFn,
+      })
+    );
+    const rec = out as {
+      engine: string;
+      attempts?: string;
+      results: unknown[];
+    };
+    assert.equal(rec.engine, "tavily");
+    assert.equal(rec.attempts, "bocha 失败(401) → tavily 成功");
+    assert.equal(rec.results.length, 1);
+    assert.deepEqual(urls, [
+      "https://api.bochaai.com/v1/web-search",
+      "https://api.tavily.com/search",
+    ]);
+    // formatter：引擎抬头下一行展示尝试轨迹。
+    const lines = formatToolOutputForLlm(rec).split("\n");
+    assert.equal(lines[0], "search tavily · 1 条结果");
+    assert.equal(lines[1], "尝试轨迹: bocha 失败(401) → tavily 成功");
+  });
+
+  it("②全链失败：聚合错误每引擎一行摘要、无 key 明文", async () => {
+    const { kkv, secretStore } = fakeStores();
+    await secretStore.set("search/bocha/apiKey", "sk-bocha-secret");
+    await secretStore.set("search/tavily/apiKey", "sk-tavily-secret");
+
+    const fetchFn = (async (url: string | URL | Request) => {
+      // 两个引擎的 401/500 响应体均回显 key 明文，验证聚合错误脱敏。
+      const target = String(url);
+      if (target === "https://api.bochaai.com/v1/web-search") {
+        return new Response("bad key sk-bocha-secret", { status: 401 });
+      }
+      return new Response("server error sk-tavily-secret", { status: 500 });
+    }) as typeof globalThis.fetch;
+
+    const runner = makeRunner();
+    await assert.rejects(
+      runner.call(
+        SEARCH_TOOL_NAME,
+        { query: "q" },
+        makeCtx({
+          search: assembleSearchToolContext(
+            createSearchConfigStore({ kkv, secretStore })
+          ),
+          fetchFn,
+        })
+      ),
+      (err: unknown) => {
+        assert.ok(err instanceof ToolError);
+        assert.equal(err.code, "FAILED");
+        const detail = (err.cause as Error).message;
+        // 每引擎一行：引擎名前缀 + 各自状态码。
+        assert.match(detail, /^串行搜索链全部尝试失败：/);
+        assert.match(detail, /bocha: .*401/);
+        assert.match(detail, /tavily: .*500/);
+        // 无 key 明文（响应体回显已被脱敏）。
+        assert.equal(detail.includes("sk-bocha-secret"), false);
+        assert.equal(detail.includes("sk-tavily-secret"), false);
+        return true;
+      }
+    );
+  });
+
+  it("③显式 engine 且失败：不降级直接报错（链中后续引擎零请求）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    await secretStore.set("search/bocha/apiKey", "sk-bocha");
+    await secretStore.set("search/tavily/apiKey", "sk-tavily");
+
+    const urls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      urls.push(String(url));
+      return new Response("unauthorized", { status: 401 });
+    }) as typeof globalThis.fetch;
+
+    const runner = makeRunner();
+    await assert.rejects(
+      runner.call(
+        SEARCH_TOOL_NAME,
+        { query: "q", engine: "bocha" },
+        makeCtx({
+          search: assembleSearchToolContext(
+            createSearchConfigStore({ kkv, secretStore })
+          ),
+          fetchFn,
+        })
+      ),
+      (err: unknown) => {
+        assert.ok(err instanceof ToolError);
+        assert.equal(err.code, "FAILED");
+        const detail = (err.cause as Error).message;
+        // 只含 bocha 一行，无 tavily 摘要（钉死语义，不降级）。
+        assert.match(detail, /bocha: .*401/);
+        assert.equal(detail.includes("tavily:"), false);
+        return true;
+      }
+    );
+    // tavily 端点零请求。
+    assert.deepEqual(urls, ["https://api.bochaai.com/v1/web-search"]);
+  });
+
+  it("④链总预算 120s 耗尽：两引擎各挂起超时后剩余引擎不再尝试，带已收集错误返回（mock timers）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    await secretStore.set("search/bocha/apiKey", "sk-bocha");
+    await secretStore.set("search/tavily/apiKey", "sk-tavily");
+    await secretStore.set("search/brave/apiKey", "sk-brave");
+
+    // 挂起 fetch：仅响应 abort（适配器超时定时器触发）后 reject。
+    const urls: string[] = [];
+    const hangingFetch = ((url: string | URL | Request, init?: RequestInit) => {
+      urls.push(String(url));
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new Error("This operation was aborted"));
+        });
+      });
+    }) as typeof globalThis.fetch;
+
+    mock.timers.enable({ apis: ["setTimeout", "Date"] });
+    try {
+      const runner = makeRunner();
+      const callPromise = runner.call(
+        SEARCH_TOOL_NAME,
+        { query: "q" },
+        makeCtx({
+          search: assembleSearchToolContext(
+            createSearchConfigStore({ kkv, secretStore })
+          ),
+          fetchFn: hangingFetch,
+        })
+      );
+      // 链首 bocha 挂起（fetch + 超时定时器已注册）。
+      await new Promise((resolve) => setImmediate(resolve));
+      // bocha 60s 超时 → 降级 tavily（此时虚拟时钟 60s，预算尚余）。
+      await mock.timers.tick(60_000);
+      await new Promise((resolve) => setImmediate(resolve));
+      // tavily 60s 超时 → 虚拟时钟 120s，brave 尝试前预算耗尽被拦下。
+      await mock.timers.tick(60_000);
+      const err = (await callPromise.then(
+        () => null,
+        (e: unknown) => e
+      )) as ToolError;
+
+      assert.ok(err instanceof ToolError);
+      assert.equal(err.code, "FAILED");
+      const detail = (err.cause as Error).message;
+      // 已收集的 bocha / tavily 超时摘要各一行 + 预算耗尽说明。
+      assert.match(detail, /bocha: .*timed out after 60000ms/);
+      assert.match(detail, /tavily: .*timed out after 60000ms/);
+      assert.match(detail, /链总预算 120s 已耗尽/);
+      assert.match(detail, /剩余 1 个引擎未尝试/);
+      // brave 零请求（预算拦在尝试前）。
+      assert.equal(
+        urls.some((u) => u.includes("brave")),
+        false,
+        `brave 不应被请求: ${urls.join(", ")}`
+      );
+    } finally {
+      mock.timers.reset();
+    }
   });
 });
 

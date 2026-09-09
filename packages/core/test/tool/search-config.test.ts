@@ -6,9 +6,9 @@ import {
   createSearchConfigStore,
   normalizeSearxngBaseUrl,
   readSearchConfig,
-  resolveEngine,
+  resolveEngineChain,
   searchApiKeyRef,
-  KEY_DEFAULT_ENGINE,
+  KEY_ENGINE_ORDER,
   KEY_SEARXNG_BASE_URL,
   type SearchConfigDeps,
 } from "../../src/domain/tool/builtin/search/search-config.js";
@@ -90,7 +90,7 @@ describe("search-config：ref / kkv-key 常量", () => {
     assert.equal(searchApiKeyRef("tavily"), "search/tavily/apiKey");
     assert.equal(searchApiKeyRef("brave"), "search/brave/apiKey");
     assert.equal(SEARCH_KKV_MODULE, "nm-search");
-    assert.equal(KEY_DEFAULT_ENGINE, "defaultEngine");
+    assert.equal(KEY_ENGINE_ORDER, "engineOrder");
     assert.equal(KEY_SEARXNG_BASE_URL, "searxngBaseUrl");
   });
 });
@@ -114,9 +114,9 @@ describe("search-config：searxng baseUrl 规范化", () => {
 });
 
 describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
-  it("全空状态：四引擎 configured 均 false、defaultEngine null、baseUrl 空串", async () => {
+  it("全空状态：四引擎 configured 均 false、engineOrder 为默认序、baseUrl 空串", async () => {
     const config = await readSearchConfig(makeDeps());
-    assert.equal(config.defaultEngine, null);
+    assert.deepEqual(config.engineOrder, ["bocha", "tavily", "brave", "searxng"]);
     assert.equal(config.searxngBaseUrl, "");
     assert.deepEqual(config.engines, {
       bocha: { configured: false },
@@ -160,7 +160,7 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
     }
   });
 
-  it("setSearxngBaseUrl 空串清除；非法值抛错；setDefaultEngine 读取与清除", async () => {
+  it("setSearxngBaseUrl 空串清除；非法值抛错；setEngineOrder 存取与非法排列抛错", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
 
@@ -171,11 +171,31 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
     await store.setSearxngBaseUrl("");
     assert.equal((await readSearchConfig(deps)).engines.searxng.configured, false);
 
-    await store.setDefaultEngine("tavily");
-    assert.equal((await readSearchConfig(deps)).defaultEngine, "tavily");
-    await store.setDefaultEngine(null);
-    assert.equal((await readSearchConfig(deps)).defaultEngine, null);
-    await assert.rejects(store.setDefaultEngine("google" as never), /未知搜索引擎/);
+    // setEngineOrder：合法排列写入 + 读回；缺项 / 重复 / 含非法 id 抛错。
+    await store.setEngineOrder(["searxng", "tavily", "brave", "bocha"]);
+    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
+      "searxng",
+      "tavily",
+      "brave",
+      "bocha",
+    ]);
+    await assert.rejects(
+      store.setEngineOrder(["bocha", "tavily", "brave"]),
+      /合法排列/
+    );
+    await assert.rejects(
+      store.setEngineOrder(["bocha", "bocha", "tavily", "brave", "searxng"]),
+      /合法排列/
+    );
+    await assert.rejects(
+      store.setEngineOrder([
+        "bocha",
+        "tavily",
+        "brave",
+        "google" as never,
+      ]),
+      /合法排列/
+    );
   });
 
   it("saveEngineKey 空串拒绝", async () => {
@@ -184,35 +204,71 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
   });
 });
 
-describe("search-config：resolveEngine 解析链（T-S2 存储层）", () => {
-  it("inputEngine > defaultEngine > 第一个 configured 引擎；全无返回 null", async () => {
+describe("search-config：engineOrder 存量损坏容错（T-C1）", () => {
+  it("非 JSON / 非数组：整体回落 ENGINE_IDS 默认序", async () => {
+    const deps = makeDeps();
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, "not-json");
+    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
+      "bocha",
+      "tavily",
+      "brave",
+      "searxng",
+    ]);
+
+    await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, '"tavily"');
+    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
+      "bocha",
+      "tavily",
+      "brave",
+      "searxng",
+    ]);
+  });
+
+  it("含非法项 / 重复 / 缺项：合法前缀去重保留 + 缺项按默认序补齐", async () => {
+    const deps = makeDeps();
+    await deps.kkv.set(
+      SEARCH_KKV_MODULE,
+      KEY_ENGINE_ORDER,
+      '["tavily","tavily","google","searxng"]'
+    );
+    // tavily/searxng 合法保留（重复去重），google 剔除，bocha/brave 缺项补齐。
+    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
+      "tavily",
+      "searxng",
+      "bocha",
+      "brave",
+    ]);
+  });
+});
+
+describe("search-config：resolveEngineChain 解析链（T-S2 存储层）", () => {
+  it("engineOrder 顺序返回全部 configured；显式 inputEngine 从该引擎起截取；全无返回空数组", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
     await store.saveEngineKey("bocha", "sk-bocha");
     await store.saveEngineKey("tavily", "sk-tavily");
-    await store.setDefaultEngine("tavily");
 
-    // ① input.engine 显式命中（已配置）。
-    assert.deepEqual(await resolveEngine(deps, "bocha"), {
-      engine: "bocha",
-      apiKey: "sk-bocha",
-    });
-    // ② 无 input：defaultEngine 偏好命中。
-    assert.deepEqual(await resolveEngine(deps), {
-      engine: "tavily",
-      apiKey: "sk-tavily",
-    });
-    // ③ input 指向未配置引擎：顺位回落（不报错，输出回填实际 engine + 凭证）。
-    assert.deepEqual(await resolveEngine(deps, "brave"), {
-      engine: "tavily",
-      apiKey: "sk-tavily",
-    });
-    // ④ 清除 defaultEngine：回落 ENGINE_IDS 顺序第一个 configured（bocha）。
-    await store.setDefaultEngine(null);
-    assert.deepEqual(await resolveEngine(deps), {
-      engine: "bocha",
-      apiKey: "sk-bocha",
-    });
+    // ① 无 input：默认序全量 configured 链。
+    assert.deepEqual(await resolveEngineChain(deps), [
+      { engine: "bocha", apiKey: "sk-bocha" },
+      { engine: "tavily", apiKey: "sk-tavily" },
+    ]);
+
+    // ② engineOrder 重排后链随序：tavily 领先。
+    await store.setEngineOrder(["tavily", "bocha", "brave", "searxng"]);
+    assert.deepEqual(await resolveEngineChain(deps), [
+      { engine: "tavily", apiKey: "sk-tavily" },
+      { engine: "bocha", apiKey: "sk-bocha" },
+    ]);
+
+    // ③ 显式 bocha：从 bocha 起截取（tavily 位于其前，不再入链）。
+    assert.deepEqual(await resolveEngineChain(deps, "bocha"), [
+      { engine: "bocha", apiKey: "sk-bocha" },
+    ]);
+
+    // ④ 显式 brave（未配置）：截取链 [brave, searxng] 内顺位回落，
+    // 全未配置 → 空数组（不全局回落 tavily/bocha）。
+    assert.deepEqual(await resolveEngineChain(deps, "brave"), []);
   });
 
   it("searxng-only：仅配 baseUrl（无任何 key）也能被解析链命中，key 引擎零读取", async () => {
@@ -220,16 +276,15 @@ describe("search-config：resolveEngine 解析链（T-S2 存储层）", () => {
     const store = createSearchConfigStore(deps);
     await store.setSearxngBaseUrl("http://192.168.1.5:8080/");
 
-    const resolved = await resolveEngine(deps);
-    assert.deepEqual(resolved, {
-      engine: "searxng",
-      baseUrl: "http://192.168.1.5:8080",
-    });
+    const chain = await resolveEngineChain(deps);
+    assert.deepEqual(chain, [
+      { engine: "searxng", baseUrl: "http://192.168.1.5:8080" },
+    ]);
     // searxng 命中不读任何 key 明文（get 日志为空）。
     assert.equal(deps.secretStore.getCalls.length, 0);
   });
 
-  it("全无引擎配置返回 null", async () => {
-    assert.equal(await resolveEngine(makeDeps()), null);
+  it("全无引擎配置返回空数组", async () => {
+    assert.deepEqual(await resolveEngineChain(makeDeps()), []);
   });
 });
