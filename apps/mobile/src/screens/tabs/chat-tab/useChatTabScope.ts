@@ -433,7 +433,7 @@ export function useChatTabScope({
 
   // 聊天 markdown 链接点击（webview 上抛 linkClick）：只做意图执行。
   // 识别与探测在 chat-link-nav 纯函数内完成（session 先、project 后，仅文件命中）；
-  // http(s) 外跳系统浏览器，外跳失败静默兑底（与原导航守卫语义一致）；
+  // http(s) 外跳系统浏览器，外跳失败静默兜底（与原导航守卫语义一致）；
   // session 打开需 projectId+sessionId 齐全，缺参由 openFileEditor 内部降级 no-op。
   const openChatLink = useCallback(
     (href: string) => {

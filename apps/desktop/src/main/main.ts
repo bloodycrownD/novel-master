@@ -119,7 +119,7 @@ function createMainWindow(): BrowserWindow {
 
   // 链接导航拦截（chat-link-file-nav）：renderer 内链接点击已在组件层拦截
   // 路由（MermaidMarkdown onLinkClick），但 PreviewPane 等未接链路的 <a>
-  // 默认导航仍会整窗跳走——主进程统一兑底：一切页内导航一律拒绝，
+  // 默认导航仍会整窗跳走——主进程统一兜底：一切页内导航一律拒绝，
   // http(s) 转交系统浏览器，其余（file:// 等）直接否决；新开窗口同理 deny。
   window.webContents.on("will-navigate", (event, url) => {
     event.preventDefault();

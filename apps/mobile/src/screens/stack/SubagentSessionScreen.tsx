@@ -284,7 +284,7 @@ export function SubagentSessionScreen() {
 
   // markdown 链接点击：识别与探测在 chat-link-nav 纯函数完成，这里只执行意图。
   // 子会话共享父会话工作区，故 session 探测/打开均用 parentSessionId（与
-  // onOpenToolFile 同口径）；http(s) 外跳，失败静默兑底。
+  // onOpenToolFile 同口径）；http(s) 外跳，失败静默兜底。
   const onLinkClick = useCallback(
     (href: string) => {
       const sessionVfs = runtime.sessionVfs(projectId, parentSessionId);
