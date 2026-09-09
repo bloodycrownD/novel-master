@@ -74,10 +74,13 @@ export function SkillInfoEditModal({
 
   const builtin =
     target.domain === 'global' && BUILTIN_SKILL_NAMES.has(target.name);
-  const nameChanged = !builtin && name !== target.name;
-  const descChanged = description !== (currentDescription ?? '');
+  // 判定与提交值统一先 trim（对齐 desktop：首尾空白不算变更、不带空白落盘）
+  const trimmedName = name.trim();
+  const trimmedDesc = description.trim();
+  const nameChanged = !builtin && trimmedName !== target.name;
+  const descChanged = trimmedDesc !== (currentDescription ?? '');
   const nameIssue =
-    nameChanged && name.length > 0 ? validateSkillName(name) : null;
+    nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
   const canSubmit =
     (nameChanged || descChanged) &&
     nameIssue == null &&
@@ -100,11 +103,11 @@ export function SkillInfoEditModal({
             : {}),
         },
         {
-          ...(nameChanged ? {newName: name} : {}),
-          ...(descChanged ? {description} : {}),
+          ...(nameChanged ? {newName: trimmedName} : {}),
+          ...(descChanged ? {description: trimmedDesc} : {}),
         },
       );
-      onSaved(nameChanged ? name : target.name);
+      onSaved(nameChanged ? trimmedName : target.name);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

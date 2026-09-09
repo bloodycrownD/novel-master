@@ -24,12 +24,23 @@ const newSkillSrc = readSrc('components', 'skills', 'NewSkillModal.tsx');
 describe('SkillInfoEditModal 源码契约（T-S5）', () => {
   it('提交走 runtime skills updateSkillInfo，只提交变更字段', () => {
     expect(modalSrc).toMatch(/skills\(\)\.updateSkillInfo\(/);
-    // 变更检测：仅字段真的变了才进提交参数
+    // 变更检测：仅字段真的变了才进提交参数；判定与提交值统一先 trim
+    // （对齐 desktop：首尾空白不算变更、不带空白落盘，MF-8）
+    expect(modalSrc).toMatch(/const trimmedName = name\.trim\(\)/);
+    expect(modalSrc).toMatch(/const trimmedDesc = description\.trim\(\)/);
     expect(modalSrc).toMatch(/nameChanged/);
     expect(modalSrc).toMatch(/descChanged/);
-    expect(modalSrc).toMatch(/\.\.\.\(nameChanged \? \{newName: name\} : \{\}\)/);
     expect(modalSrc).toMatch(
-      /\.\.\.\(descChanged \? \{description\} : \{\}\)/,
+      /nameChanged = !builtin && trimmedName !== target\.name/,
+    );
+    expect(modalSrc).toMatch(
+      /descChanged = trimmedDesc !== \(currentDescription \?\? ''\)/,
+    );
+    expect(modalSrc).toMatch(
+      /\.\.\.\(nameChanged \? \{newName: trimmedName\} : \{\}\)/,
+    );
+    expect(modalSrc).toMatch(
+      /\.\.\.\(descChanged \? \{description: trimmedDesc\} : \{\}\)/,
     );
   });
 
@@ -43,7 +54,7 @@ describe('SkillInfoEditModal 源码契约（T-S5）', () => {
 
   it('保存成功回传最新技能名（调用方据此刷新导航状态）', () => {
     expect(modalSrc).toMatch(
-      /onSaved\(nameChanged \? name : target\.name\)/,
+      /onSaved\(nameChanged \? trimmedName : target\.name\)/,
     );
   });
 });
