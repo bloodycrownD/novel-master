@@ -108,7 +108,7 @@ import {
   type SearchSaveEngineKeyRequest,
   type SearchClearEngineKeyRequest,
   type SearchSetSearxngBaseUrlRequest,
-  type SearchSetDefaultEngineRequest,
+  type SearchSetEngineOrderRequest,
 } from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
@@ -600,10 +600,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       SearchSetSearxngBaseUrlRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL),
-    ipcSearchSetDefaultEngine: withReq<
-      SearchSetDefaultEngineRequest,
+    ipcSearchSetEngineOrder: withReq<
+      SearchSetEngineOrderRequest,
       IpcResult<void>
-    >(invoke, IPC_CHANNELS.SEARCH_SET_DEFAULT_ENGINE),
+    >(invoke, IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER),
     ipcShellMenuPopup: withReq<
       {
         menuId: 'file' | 'edit' | 'view' | 'window' | 'help';

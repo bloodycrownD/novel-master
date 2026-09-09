@@ -47,7 +47,7 @@ import {
   handleSearchClearEngineKey,
   handleSearchGetConfig,
   handleSearchSaveEngineKey,
-  handleSearchSetDefaultEngine,
+  handleSearchSetEngineOrder,
   handleSearchSetSearxngBaseUrl,
 } from './handlers/search.js';
 import {
@@ -408,7 +408,10 @@ export function registerHandlersFromRegistry(): void {
     IPC_CHANNELS.SEARCH_SET_SEARXNG_BASE_URL,
     handleSearchSetSearxngBaseUrl,
   );
-  bindReq(IPC_CHANNELS.SEARCH_SET_DEFAULT_ENGINE, handleSearchSetDefaultEngine);
+  bindReq(
+    IPC_CHANNELS.SEARCH_SET_ENGINE_ORDER,
+    handleSearchSetEngineOrder,
+  );
 
   bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
   bindEventReq(

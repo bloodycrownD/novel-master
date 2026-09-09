@@ -157,7 +157,7 @@ export const {
   ipcSearchSaveEngineKey,
   ipcSearchClearEngineKey,
   ipcSearchSetSearxngBaseUrl,
-  ipcSearchSetDefaultEngine,
+  ipcSearchSetEngineOrder,
   ipcShellMenuPopup,
   ipcShellSetTitleBarTheme,
   ipcAppOpenExternal,

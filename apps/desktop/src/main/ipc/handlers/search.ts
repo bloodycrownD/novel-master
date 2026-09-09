@@ -3,9 +3,10 @@
  *
  * 凭证口径：key 明文只经 SKSP set，任何返回值不含明文——getConfig
  * 只回 configured 状态（与 core SearchConfigPublic 结构同构）。
- * engineId 合法性：setDefaultEngine 在 core 内有运行时校验兜底；
- * saveEngineKey/clearEngineKey 传入脏 id 只会读写孤儿 SKSP ref
- * （resolve 链不认，无实际危害），调用方（本仓 renderer）只传四引擎 id。
+ * engineId 合法性：saveEngineKey/clearEngineKey 传入脏 id 只会读写
+ * 孤儿 SKSP ref（resolve 链不认，无实际危害）；setEngineOrder 在
+ * core 内有「四引擎合法排列」运行时校验兜底，调用方（本仓 renderer）
+ * 只传 engineOrder 派生的合法排列。
  */
 import type { EngineId, KeyEngineId } from "@novel-master/core";
 import type {
@@ -13,7 +14,7 @@ import type {
   SearchClearEngineKeyRequest,
   SearchConfigDto,
   SearchSaveEngineKeyRequest,
-  SearchSetDefaultEngineRequest,
+  SearchSetEngineOrderRequest,
   SearchSetSearxngBaseUrlRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
@@ -25,7 +26,8 @@ export async function handleSearchGetConfig(): Promise<
   try {
     const rt = await getDesktopRuntime();
     const config = await rt.searchConfig.readConfig();
-    // core 的 Record<EngineId, …> 结构化兼容 DTO 的 Record<string, …>
+    // core 的 Record<EngineId, …> / readonly EngineId[] 结构化兼容
+    // DTO 的 Record<string, …> / readonly string[]
     return { ok: true, data: config };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -72,15 +74,13 @@ export async function handleSearchSetSearxngBaseUrl(
   }
 }
 
-export async function handleSearchSetDefaultEngine(
-  req: SearchSetDefaultEngineRequest,
+export async function handleSearchSetEngineOrder(
+  req: SearchSetEngineOrderRequest,
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    // null = 清除（回落到「第一个已配置引擎」解析）
-    await rt.searchConfig.setDefaultEngine(
-      req.engineId as EngineId | null,
-    );
+    // 合法排列校验在 core setEngineOrder 内（非法抛错经 IpcResult 回传）
+    await rt.searchConfig.setEngineOrder(req.engineOrder as readonly EngineId[]);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

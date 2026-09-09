@@ -169,7 +169,7 @@ export const IPC_CHANNELS = {
   SEARCH_SAVE_ENGINE_KEY: 'nm:search/saveEngineKey',
   SEARCH_CLEAR_ENGINE_KEY: 'nm:search/clearEngineKey',
   SEARCH_SET_SEARXNG_BASE_URL: 'nm:search/setSearxngBaseUrl',
-  SEARCH_SET_DEFAULT_ENGINE: 'nm:search/setDefaultEngine',
+  SEARCH_SET_ENGINE_ORDER: 'nm:search/setEngineOrder',
 
   SHELL_MENU_POPUP: 'nm:shell/menuPopup',
   SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
@@ -1406,9 +1406,9 @@ export type SearchEngineStatusDto = {
   readonly configured: boolean;
 };
 
-/** 搜索引擎配置（DTO 不含 key 明文；engines 键为 EngineId 字符串）。 */
+/** 搜索引擎配置（DTO 不含 key 明文；engines 键为 EngineId 字符串；engineOrder 即串行降级链优先级）。 */
 export type SearchConfigDto = {
-  readonly defaultEngine: string | null;
+  readonly engineOrder: readonly string[];
   readonly searxngBaseUrl: string;
   readonly engines: Readonly<Record<string, SearchEngineStatusDto>>;
 };
@@ -1426,8 +1426,9 @@ export type SearchSetSearxngBaseUrlRequest = {
   readonly baseUrl: string;
 };
 
-export type SearchSetDefaultEngineRequest = {
-  readonly engineId: string | null;
+/** 引擎优先级顺序（须为四引擎的合法排列；core 内校验非法抛错）。 */
+export type SearchSetEngineOrderRequest = {
+  readonly engineOrder: readonly string[];
 };
 
 export type ShellMenuId = 'file' | 'edit' | 'view' | 'window' | 'help';
