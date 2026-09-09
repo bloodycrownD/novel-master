@@ -7,11 +7,11 @@
 - head_sha：26f4d8b7
 - prd_path：docs/Iterations/export-link-skill-mgmt-2026-09/prd.md（总纲）+ features/{export-naming,chat-link-file-nav,skill-rename-description}/prd.md
 - spec_path：docs/Iterations/export-link-skill-mgmt-2026-09/features/{export-naming,chat-link-file-nav,skill-rename-description}/spec.md
-- review_round：1
-- dag_version：2
+- review_round：2
+- dag_version：3
 - 状态：draft
 
-> 行号勘误说明：以下条目文件行号均已按 head_sha 实际代码逐一核对；评审原单个别行号与实际有出入（skill/C-3 的 yamlScalar、chatlink/C-1 的两处 HTTPS_PATTERN、skill/C-1 的 desktop 校验行、chatlink/C-2 的 ShellNavProvider 路径），本文以实际行号为准，条目内注明。
+> 行号勘误说明：条目文件行号以 head_sha 实际代码为准；round 1 评审原单与 round 2 复核各修正过一批（round 2 勘误：MF-1 的 66/69→61/64、MF-2 的 126-131/133-138→124-129/130-135、MF-4 main.ts 的 129,135→126,131、MF-6/MF-8 问题栏描述口径修正，均以实际值为准）。
 
 ## Must-fix（按 P0 → P1 → P2）
 
@@ -20,9 +20,9 @@
 ### MF-1 [P1] skill/B-1 String.replace 字符串替换的 $ 序列展开会静默损坏 front matter
 
 - 维度：B（正确性缺陷）
-- 文件：`packages/core/src/domain/skills/logic/with-skill-front-matter-values.ts:66,69`
-  - 第 66 行：`fm.replace(re, fmLine(key, value))`——replacement 为字符串形式
-  - 第 69 行：`source.replace(match[0], `---\n${fm}\n---\n`)`——replacement 为模板字符串
+- 文件：`packages/core/src/domain/skills/logic/with-skill-front-matter-values.ts:61,64`
+  - 第 61 行：`fm.replace(re, fmLine(key, value))`——replacement 为字符串形式
+  - 第 64 行：`source.replace(match[0], `---\n${fm}\n---\n`)`——replacement 为模板字符串
 - 问题：
   `String.prototype.replace` 的 replacement 参数为字符串时，`$$`、`$&`、`$'`、`` $` `` 会被特殊展开，而非按字面写入。两个具体损坏路径：
   1. **键行替换**：既有键（如 `description`）的替换值经 `fmLine(key, value)` 生成字符串后传入 `fm.replace`——描述里含 `$$` 会被折叠成单个 `$`，含 `$&` 会在替换位注入整个匹配行（原键值行），落盘即损坏。
@@ -30,8 +30,8 @@
   该问题沿袭自回收前的双端私有实现（本次 diff 将其回收进 core 时原样带入），非本次引入，但回收为单源后正是一并修正的时机。
 - 改法：
   两处 replacement 改为**函数形式**（函数形式不做 $ 序列展开）：
-  1. 第 66 行改为 `fm.replace(re, () => fmLine(key, value))`
-  2. 第 69 行改为 `source.replace(match[0], () => `---\n${fm}\n---\n`)`
+  1. 第 61 行改为 `fm.replace(re, () => fmLine(key, value))`
+  2. 第 64 行改为 `source.replace(match[0], () => `---\n${fm}\n---\n`)`
   同时 T-S1 单测（`withSkillFrontMatterValues` 的 core node:test 用例）补两组边界：
   - `description` 含 `$$` / `$&` / `$'` 的值，改写后读回与提交值逐字一致（不折叠、不注入、不展开）；
   - 保留的原键值行（非本次改写目标）含 `$'` / `` $` `` 序列时，正文不展开进 front matter。
@@ -43,7 +43,7 @@
 ### MF-2 [P2] chatlink/B-1 will-navigate 无条件拦截阻断 dev 模式 vite full-reload
 
 - 维度：B（正确性缺陷，仅 dev）
-- 文件：`apps/desktop/src/main/main.ts:126-131`（will-navigate 拦截器；相邻 133-138 为 setWindowOpenHandler，行为正确不动）
+- 文件：`apps/desktop/src/main/main.ts:124-129`（will-navigate 拦截器；相邻 130-135 为 setWindowOpenHandler，行为正确不动）
 - 问题：
   `location.reload()` 同样会触发 `will-navigate` 事件。当前拦截器对一切页内导航无条件 `event.preventDefault()`，导致 dev 模式下 vite 触发的 full-reload（如依赖变更、HMR 失败回退）被拦死，页面停留在旧状态不刷新。生产行为正确（生产无 vite reload，reload 场景本就该拦）。
 - 改法：
@@ -85,7 +85,7 @@
 - 文件（三处重复，行号为实际核对值）：
   - `apps/mobile/src/screens/tabs/chat-tab/chat-link-nav.ts:30`（`const HTTPS_PATTERN = /^https?:\/\//i`，44 行消费）
   - `apps/desktop/renderer/features/chat/chat-link-route.ts:37`（同正则本地定义，66 行消费）
-  - `apps/desktop/src/main/main.ts:129,135`（`will-navigate` 与 `setWindowOpenHandler` 各一处 `/^https?:\/\//i.test(url)` 内联）
+  - `apps/desktop/src/main/main.ts:126,131`（`will-navigate` 与 `setWindowOpenHandler` 各一处 `/^https?:\/\//i.test(url)` 内联）
 - 问题：
   同一 http(s) 判定知识在 mobile RN、desktop renderer、desktop main 三个入口各持一份正则，口径漂移风险（如未来允许 ws:// 时三处要同步改）。
 - 改法：
@@ -118,9 +118,9 @@
 - 维度：G（测试覆盖缺口）
 - 文件：`apps/mobile/__tests__/rows-click-anchor.test.ts`（新增用例，不改既有结构）
 - 问题：
-  `onRowsClick` 对 `<a>` 无 href / 空 href 的分支（不拦截、不上抛、放行默认行为）无任何用例覆盖，回归风险裸奔。
+  `onRowsClick` 对 `<a>` 空 href（`''`）分支（不拦截、不上抛、放行默认行为）无用例覆盖（「无 href（`getAttribute` 返 null）」已有用例覆盖于 rows-click-anchor.test.ts:132，仅空字符串分支裸奔），回归风险。
 - 改法：
-  补用例：fake 元素 `tagName: 'a'`、`getAttribute('href')` 返回 `''`（空字符串），点击后断言——`preventDefault` 未被调用、`postMessage` 未被触发（不上抛 RN）。
+  补用例：fake 元素 `tagName: 'a'`、`getAttribute('href')` 返回 `''`（空字符串），点击后断言——`preventDefault` 未被调用、`postMessage` 未被触发（不上抛 RN）。与 132 行既有无 href 用例并列。
 - 验收：
   - `NODE_ENV=test npx jest`（apps/mobile）全绿，含新用例。
 - 来源：review round 1
@@ -148,7 +148,7 @@
 - 文件：`apps/mobile/src/components/skills/SkillInfoEditModal.tsx:83-84`（`nameIssue` / 变更判定消费原值）、`103-110`（提交 `newName: name`、`description` 均原值）
   - 对照 desktop：`apps/desktop/renderer/features/skills/SkillInfoEditModal.tsx:55-58`（判定用 `trimmedName` / `trimmedDesc`）、`78-79`（提交 trimmed 值）
 - 问题：
-  desktop 判定与提交均先 `trim()`，mobile 两处均用原值——输入首尾空白时：mobile 会把带空白的名字/描述原样落盘（desktop 落盘 trimmed），双端同一输入读回不一致；且 mobile 的「无实际变更」判定（`nameChanged`）会被首尾空白欺骗，误判为有变更提交。
+  desktop 判定与提交均先 `trim()`，mobile 两处均用原值——输入首尾空白时：mobile 会把带空白的描述原样落盘（desktop 落盘 trimmed），双端同一输入读回不一致；且 mobile 的「无实际变更」判定（`nameChanged`/`descChanged`）会被首尾空白欺骗，误判为有变更提交。（注：名字不会被带空白落盘——`validateSkillName` 对含空白名返回 reason 拦住提交；实际落盘面仅描述与变更判定。）
 - 改法：
   mobile `nameChanged` / `descChanged` 判定与提交值统一先 `trim()`（对齐 desktop：`const trimmedName = name.trim(); const trimmedDesc = description.trim();` 判定与提交均消费 trimmed 值）。
 - 验收：
@@ -168,9 +168,29 @@
   - mobile typecheck（官方 typecheck 脚本）与既有 jest 全绿。
 - 来源：review round 1
 
+### MF-10 [P2] 双端技能管理页头注释未随菜单扩展更新（注释漂移）
+
+- 维度：C（注释与实现不一致）
+- 文件：
+  - `apps/desktop/renderer/features/settings/SkillsManageView.tsx:7`（头注仍写「⋮ 菜单：编辑 / 删除」）
+  - `apps/mobile/src/screens/stack/SkillsSettingsScreen.tsx:7`（头注仍写「行 ⋮ 菜单：导出 ZIP / 删除」）
+- 问题：本迭代把行菜单扩为 desktop 四项（编辑/编辑信息/导出 ZIP/删除）、mobile 三项（编辑信息/导出 ZIP/删除），两处头注停在旧清单，读者按注释理解会漏新入口。
+- 改法：头注更新为实际清单，并在「编辑信息」处保留一句 invalid 禁用口径。
+- 验收：grep 头注与 menuItems 实际项一致；无需新测试。
+- 来源：review round 2（review-full 新发现 N-1）
+
+### MF-11 [P2] desktop SkillInfoEditModal 提交无 catch，与 mobile 错误处理不对称
+
+- 维度：B（错误处理边界；与 MF-7/MF-8 同族的双端口径分叉）
+- 文件：`apps/desktop/renderer/features/skills/SkillInfoEditModal.tsx:74-107`（`handleConfirm` 为 `try { … } finally { setSaving(false) }`，无 catch）
+- 问题：handler 侧有 try/catch 包成 `{ok:false}`，正常路径不 reject；但 IPC 极端失败（bridge 断连等）时 promise reject 变 unhandled rejection（用户无提示）；mobile 同名弹窗（:105-107）有 `catch → setError`。
+- 改法：`finally` 前补 `catch (err) { setError(err instanceof Error ? err.message : String(err)); return; }`（对齐 mobile；catch 内不调 onClose）。
+- 验收：desktop 弹窗既有测试不回归；源码断言含 catch 分支（可并入 T-S5 桌面侧断言）。
+- 来源：review round 2（review-full 新发现 N-2）
+
 ## Spec deviations
 
-- none（round 1 未认定 spec 偏离；open questions 中第 1 项若拍板「不补」则无偏离，若拍板「补」则以本 fix-spec 或 spec 增补承载）
+- none（两轮评审均未认定 spec 偏离；open questions 中第 1 项若拍板「不补」则无偏离，若拍板「补」则以本 fix-spec 增补承载）
 
 ## Open questions / 待拍板
 
@@ -195,4 +215,4 @@
 
 ## K 节建议（下游执行时闭合）
 
-- 待后续轮次评审补充；round 1 无已认定项。
+- 无收尾项：round 2 全维核查——CHANGELOG Unreleased 三 feature 条目完整（新增 3 + 变更 1 + 修复 1）且口径符合「用户实际见过的行为」；diff 内新增代码零调试残留（console.log/TODO/FIXME/debugger 全扫无命中）；worktree 工作区干净、无残留处置项。
