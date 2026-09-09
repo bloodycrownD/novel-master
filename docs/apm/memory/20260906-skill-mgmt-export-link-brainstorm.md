@@ -1,5 +1,5 @@
 ---
-date: 2026-09-06 22:55
+date: 2026-09-09 01:20
 title: skill 编辑/导出命名/markdown 文件链接/技能改名四点优化头脑风暴与立项
 keywords: skill 工具, edit action, 导出, 命名, nmbackup, 技能 ZIP, markdown 链接, 工作区跳转, 技能重命名, 改描述, renamePrefix, PRD
 abstract: 四个优化点的头脑风暴答疑与立项：①skill 工具自带 edit 局部替换（与 vfs edit 同一 replace 内核），用户看到的 content 是 write 的参数——不改；②导出功能全量盘点 6 类，立项改固定命名（数据库备份 nmbackup.db、技能 {技能名}.zip）+ desktop 补技能导出入口；③markdown 文件链接点击现状 mobile 外跳浏览器/desktop 整窗导航走，立项复用文件卡片链路跳工作区预览，识别规则待真机 DB 样本定稿；④双端技能管理无改名/改描述，立项 renamePrefix 目录迁移+front matter 重写。迭代 docs/Iterations/export-link-skill-mgmt-2026-09/ 总纲+三 feature PRD 已落盘待确认。
@@ -58,3 +58,15 @@ user:
 
 assistant:
 spec-check-loop 共 2 轮审查 + 第 3 轮主代理等效认定收敛 execute-ready。轮 1（双 scope 并行：A=总纲+export-naming+skill-rename、B=chat-link）：B 直接 Go（P1×1 措辞+P2×6）；A No-Go——P0 校验链「内置源门」缺「仅 newName 时」限定（字面实施会把 builtin 仅改描述也拒掉）+P1×3（IPC 漏列 renderer/ipc/client.ts 第五处、skillBuiltin 文案是删除向需新码 SKILL_BUILTIN_RENAME、单文件导出验收未闭环）+P2×4。全部 must-fix 均为审查员给精确证据的一句话级修复，按 trivial 豁免由主代理直接 doc-fix（20 处/5 文件，含连带同步）。轮 2（单审查员验证）：上轮全部真实闭合，但抓到轮 1 修复引入的假闭合 P1——「流式与正文共用 MessageBody」锚错（流式尾巴在 MessageList :224-227 直接渲染 MermaidMarkdown，不经 MessageBody）+P2×2（zipBaseNameFromPath 文件分支枚举与 T-E3 用例缺位、IPC_CHANNELS key 惯例）。再 trivial 修复 8 处 + grep 验证零残留，主代理等效认定 Go（轮 2 审查员预批「修完即 execute-ready」）。终态：P0=0、P1 全闭合、七份文档就绪。教训：doc-fix 措辞若引入新事实断言（如「共用组件」）必须回代码核对锚点，否则假闭合。待用户确认 execute-ready 后可进 code-dev-loop。
+
+user:
+（迭代 DAG 派遣）按 docs/Iterations/export-link-skill-mgmt-2026-09/features/export-naming/spec.md 落地 Step 1~8（Step 8 真机 manual_user 不做）：备份固定名 nmbackup.db、VFS ZIP 目录名/项目名命名 + fileName 覆盖参数、desktop 技能管理页「导出 ZIP」入口、测试 T-E1~E6、CHANGELOG Unreleased。约束：NODE_ENV 按端、mobile 官方 typecheck、只 add 显式路径、中文 commit。
+
+assistant:
+（impl-export-naming 节点，主代理手工实现）全部完成，4 笔提交于 export-link-skill-mgmt 分支：
+①eeaa3db5 备份命名：双端 backupFileName() 返回 'nmbackup.db'（mobile 的 BACKUP_EXT 保留——import-bytes 临时路径还在用；desktop 的删了）；desktop exportDatabaseBackup 两处 showSaveDialog filters 改 ["db","nmbackup"]（Windows 默认名扩展与 filter 不匹配会自动追加产出 nmbackup.db.nmbackup）。
+②b72501ed VFS ZIP 命名：双端新增纯函数 zipBaseNameFromPath（尾斜杠归一后取末段：子目录→末段、文件→basename、根/空→null）；根目录由 resolveWorkspaceZipName 查 runtime.projects.get(projectId) 取项目名，无 projectId（global/global-meta 域）或抛错回退 'workspace.zip' 不阻断导出；exportVfsZip / exportVfsZipWithDialog options 加 fileName?（覆盖优先级最高）；desktop VfsZipRequest 加 fileName?、handleVfsZipExport 透传（import 侧共用类型不消费零破坏）；旧 vfsZipExportFileName 五分支（含 global 死分支）删除。
+③83799c29 技能导出：mobile runSkillZipExport 附 fileName {skill.name}.zip；desktop SkillsManageView 行菜单加「导出 ZIP」（编辑后删除前）复用 ipcVfsZipExport：workspaceScope 按域映射 global-meta/project-meta + projectId + directoryPath /meta/skills/{name} + fileName，成功 toast「已导出「{name}.zip」」失败提示错误。
+④cfb77dc7 CHANGELOG Unreleased（新增：桌面技能导出入口；变更：导出默认名固定化与目录名/项目名命名、桌面备份筛选支持 .db）。
+测试：T-E1 mobile db-backup 断言改 nmbackup.db；T-E3 mobile vfs-zip 改写（根+项目名/覆盖优先/子目录末段/解析失败与无 projectId 回退 workspace.zip/纯函数五口径含文件与尾斜杠/子目录不触 projects.get）；T-E2 desktop 新增 db-backup-export-dialog.test.ts；T-E4 新增 vfs-zip-export-name.test.ts（setupDesktopDbTestEnv 真库 + handleProjectsCreate 真项目 + electron-stub dialog 同引用改写，断言 defaultPath 透传与 mobile 同规则）；T-E5 新增 skills-manage-export-menu.test.ts 源码断言（含菜单顺序 indexOf 锁定）；T-E6 agent-yaml 5 用例不回归；既有 workspace-zip-menu + skill-zip-import 12 用例同验不回归。验证全绿：mobile jest 27 用例（NODE_ENV=test）、desktop node:test 19 用例（NODE_ENV=development npm test——electron stub 依赖 run-tests.mjs 注入的 --import 钩子，裸跑 npx tsx 会报 electron 无 named export 'dialog'）、mobile 官方 typecheck 三段过、desktop typecheck 过。
+环境坑（非回归）：worktree 缺 @novel-master/sksp-mac/sksp-windows/sksp-linux 的 dist，desktop 任何 import desktop-db-test-env 或 getDesktopRuntime 的测试首跑即 ERR_MODULE_NOT_FOUND，逐个 npm run build -w 补齐后恢复——现有 skills-handlers.test.ts 基线同挂可对照。
