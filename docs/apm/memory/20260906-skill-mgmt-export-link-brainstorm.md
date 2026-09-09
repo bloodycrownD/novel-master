@@ -1,5 +1,5 @@
 ---
-date: 2026-09-09 01:20
+date: 2026-09-09 23:55
 title: skill 编辑/导出命名/markdown 文件链接/技能改名四点优化头脑风暴与立项
 keywords: skill 工具, edit action, 导出, 命名, nmbackup, 技能 ZIP, markdown 链接, 工作区跳转, 技能重命名, 改描述, renamePrefix, PRD
 abstract: 四个优化点的头脑风暴答疑与立项：①skill 工具自带 edit 局部替换（与 vfs edit 同一 replace 内核），用户看到的 content 是 write 的参数——不改；②导出功能全量盘点 6 类，立项改固定命名（数据库备份 nmbackup.db、技能 {技能名}.zip）+ desktop 补技能导出入口；③markdown 文件链接点击现状 mobile 外跳浏览器/desktop 整窗导航走，立项复用文件卡片链路跳工作区预览，识别规则待真机 DB 样本定稿；④双端技能管理无改名/改描述，立项 renamePrefix 目录迁移+front matter 重写。迭代 docs/Iterations/export-link-skill-mgmt-2026-09/ 总纲+三 feature PRD 已落盘待确认。
@@ -70,3 +70,15 @@ assistant:
 ④cfb77dc7 CHANGELOG Unreleased（新增：桌面技能导出入口；变更：导出默认名固定化与目录名/项目名命名、桌面备份筛选支持 .db）。
 测试：T-E1 mobile db-backup 断言改 nmbackup.db；T-E3 mobile vfs-zip 改写（根+项目名/覆盖优先/子目录末段/解析失败与无 projectId 回退 workspace.zip/纯函数五口径含文件与尾斜杠/子目录不触 projects.get）；T-E2 desktop 新增 db-backup-export-dialog.test.ts；T-E4 新增 vfs-zip-export-name.test.ts（setupDesktopDbTestEnv 真库 + handleProjectsCreate 真项目 + electron-stub dialog 同引用改写，断言 defaultPath 透传与 mobile 同规则）；T-E5 新增 skills-manage-export-menu.test.ts 源码断言（含菜单顺序 indexOf 锁定）；T-E6 agent-yaml 5 用例不回归；既有 workspace-zip-menu + skill-zip-import 12 用例同验不回归。验证全绿：mobile jest 27 用例（NODE_ENV=test）、desktop node:test 19 用例（NODE_ENV=development npm test——electron stub 依赖 run-tests.mjs 注入的 --import 钩子，裸跑 npx tsx 会报 electron 无 named export 'dialog'）、mobile 官方 typecheck 三段过、desktop typecheck 过。
 环境坑（非回归）：worktree 缺 @novel-master/sksp-mac/sksp-windows/sksp-linux 的 dist，desktop 任何 import desktop-db-test-env 或 getDesktopRuntime 的测试首跑即 ERR_MODULE_NOT_FOUND，逐个 npm run build -w 补齐后恢复——现有 skills-handlers.test.ts 基线同挂可对照。
+
+user:
+（迭代 DAG 派遣）按 docs/Iterations/export-link-skill-mgmt-2026-09/features/chat-link-file-nav/spec.md 落地 Step 1~7（Step 8 真机 manual_user 不做）：core 识别纯函数、mobile webview 拦截+bridge 信封、mobile RN 路由接线（子会话 parentSessionId）、desktop 渲染层 onLinkClick+路由函数+ShellNavProvider、desktop main.ts 导航拦截、测试 T-L1~L6、CHANGELOG。约束：NODE_ENV 按端、mobile 官方 typecheck、只 add 显式路径、中文 commit、不动 export-naming/skill-rename 的文件。
+
+assistant:
+（impl-chat-link 节点，主代理手工实现）全部完成，5 笔提交于 export-link-skill-mgmt 分支：
+①1d970a8f core：新增 domain/chat/logic/resolve-chat-link-target.ts 纯函数（decode try/catch→scheme 正则 i 标志→协议相对 //拒→剥 # 锚点→resolveLogicalPath 归一化，非法返 null）+ public/chat barrel 导出 + T-L1 十五用例（真机六形态+HTTP 大写+C:/ 盘符+非法 %ZZ+..越根），dist 已重建。
+②47371c64 mobile webview：rows-click 在 data-action 未命中后加 <a> 分支——纯锚点 # 开头放行默认滚动，其余 preventDefault + post linkClick {原始 href}（getAttribute 取值防绝对化）；ChatTranscriptBridge 加 linkClick 信封；ChatTranscriptWebView handleMessage 分支 + onLinkClick prop；T-L2 round-trip、T-L3 fake-DOM 行为测试（RN jest 无 jsdom 也无 jest-environment-jsdom 包，但 onRowsClick 只消费 closest/getAttribute/preventDefault 三接口，最小 fake 元素直测真实函数）、T-L4 sanitize 中文 href 保留。
+③18b89e67 mobile RN：新文件 chat-link-nav.ts resolveChatLinkIntent（识别→list(parent) 单层探测仅 kind=file 命中→意图；NOT_FOUND 抛错按未命中；session 先 project 后）；useChatTabScope.openChatLink 只做意图执行（http(s) Linking 失败静默兜底、file openFileEditor 缺参降级）；ChatConversationPanel 仅 webview 路接线；SubagentSessionScreen 同款（session 探测/打开均 parentSessionId）。T-L5 十四用例。关键发现：jest 的 @novel-master/core/chat 子路径映射直连 dist/public/chat.js 真文件（jest.config.js moduleNameMapper），不经 core-shim——spec 担心的 shim 补导出只有裸 barrel import 才需要，实际无需补。
+④f3060e1a desktop：MermaidMarkdown 加可选 onLinkClick（a 覆盖带 data-chat-link 标记——onClick 不序列化进 renderToStaticMarkup，静态测试靠属性断言接线；未传 prop 渲染不变，PreviewPane 不接）；MessageList 正文（MessageBody+CollapsibleMessageBody 两分支）与流式尾巴（:224-227 直渲染处）透传；ConversationPanel 注入；chat-link-route.ts 纯函数（ipcVfsRead 探测 chat 域=core session 域后 session 域=core project 域，一切非 ok 按未命中留日志；http(s) 消费现成 ipcAppOpenExternal）；ShellNavProvider openChatLink 执行接线（preview 复用 openChatWorkspacePreview / selectPreviewFile("session")）；main.ts createMainWindow 挂 will-navigate（preventDefault+http(s) shell.openExternal）+ setWindowOpenHandler（deny+openExternal）。T-L6 路由直测七用例+源码契约。
+⑤eed70f41 CHANGELOG Unreleased：新增「聊天消息里的文件链接可直接打开」（双端）+修复「桌面端点击消息内链接不再把整个窗口带走」。
+验证全绿：core node:test 15、mobile jest 72（NODE_ENV=test，五套件含既有 chat-transcript-webview 回归）、desktop node:test 22（NODE_ENV=development，含 mermaid 既有 21 不回归）+ desktop 官方 typecheck 过 + mobile 官方 typecheck 三段过 + webview-dist 已重建（gitignore 产物，本地验证用）。基线既有非回归：tsconfig.renderer.json 裸跑 tsc 有 5 个错误（code-block/ToastHost/Tooltip，stash 对照确认与本次无关）；worktree eslint project-service 对测试文件报错是环境问题。
