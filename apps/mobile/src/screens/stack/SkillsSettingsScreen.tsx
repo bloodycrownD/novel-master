@@ -32,6 +32,10 @@ import {
   type SheetMenuItem,
 } from '@/components/sheet/BottomSheetMenu';
 import {NewSkillModal} from '@/components/skills/NewSkillModal';
+import {
+  SkillInfoEditModal,
+  type SkillInfoTarget,
+} from '@/components/skills/SkillInfoEditModal';
 import {PrimaryButton, SecondaryButton} from '@/components/ui/Buttons';
 import {exportVfsZip} from '@/services/vfs-zip.service';
 import {SegmentedControl} from '@/components/ui/SegmentedControl';
@@ -87,6 +91,12 @@ export function SkillsSettingsScreen() {
   const [menuTarget, setMenuTarget] = useState<MenuTarget>(undefined);
   const [createOpen, setCreateOpen] = useState(false);
   const [zipBusy, setZipBusy] = useState(false);
+  const [infoEdit, setInfoEdit] = useState<SkillInfoTarget | undefined>(
+    undefined,
+  );
+  const [infoEditDescription, setInfoEditDescription] = useState<
+    string | null
+  >(null);
 
   // loading/reload + 聚焦重载走共用 hook；本屏要同时维护三份列表，
   // fetcher 返回打包后的 payload；加载失败 toast（保持原语义，rows 不动）。
@@ -231,6 +241,13 @@ export function SkillsSettingsScreen() {
       return [];
     }
     const items: SheetMenuItem[] = [
+      {
+        label: '编辑信息',
+        action: 'edit-info',
+        // invalid（front matter 不可解析）时置灰：改名链路会跳过
+        // front matter 重写，先修复 SKILL.md 再改信息
+        disabled: !menuTarget.item.valid,
+      },
       {label: '导出 ZIP', action: 'export-zip'},
       {label: '删除', action: 'delete', danger: true},
     ];
@@ -244,6 +261,16 @@ export function SkillsSettingsScreen() {
       return;
     }
     switch (action) {
+      case 'edit-info':
+        setInfoEditDescription(target.item.description);
+        setInfoEdit({
+          domain: target.domain,
+          name: target.name,
+          ...(target.domain === 'project' && target.projectId != null
+            ? {projectId: target.projectId}
+            : {}),
+        });
+        break;
       case 'export-zip':
         runSkillZipExport(target).catch(() => undefined);
         break;
@@ -442,6 +469,16 @@ export function SkillsSettingsScreen() {
             name: target.name,
             ...(target.projectId != null ? {projectId: target.projectId} : {}),
           });
+        }}
+      />
+      <SkillInfoEditModal
+        visible={infoEdit != null}
+        target={infoEdit ?? {domain: 'global', name: ''}}
+        currentDescription={infoEditDescription}
+        onClose={() => setInfoEdit(undefined)}
+        onSaved={() => {
+          showToast('已保存技能信息');
+          reload().catch(() => undefined);
         }}
       />
     </View>

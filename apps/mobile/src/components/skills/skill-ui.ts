@@ -6,6 +6,10 @@
 
 import type {SkillDomain} from '@novel-master/core/skills';
 
+// front matter 重写（重命名/描述编辑与 ZIP 导入回写共用）已回收为
+// core 单源，经此处再导出供 mobile 各组件消费。
+export {withSkillFrontMatterValues} from '@novel-master/core/skills';
+
 /** 域徽标三态：全局 / 项目 / 项目 · 覆盖全局。 */
 export function skillDomainBadgeLabel(
   domain: SkillDomain,
