@@ -5,6 +5,8 @@ export type ContextMenuItem = {
   readonly label: string;
   readonly action: string;
   readonly danger?: boolean;
+  /** 禁用项（不可点；悬停提示由 title 提供）。 */
+  readonly disabled?: boolean;
 };
 
 type ContextMenuProps = {
@@ -64,9 +66,12 @@ export function ContextMenu({
           type="button"
           role="menuitem"
           className={item.danger ? "is-danger" : undefined}
+          disabled={item.disabled === true}
           onClick={() => {
             onClose();
-            onSelect(item.action);
+            if (item.disabled !== true) {
+              onSelect(item.action);
+            }
           }}
         >
           {item.label}

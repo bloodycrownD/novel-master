@@ -32,6 +32,7 @@ import {
   SettingsPanel,
 } from "./settings-ui";
 import { NewSkillModal } from "@/features/skills/NewSkillModal";
+import { SkillInfoEditModal } from "@/features/skills/SkillInfoEditModal";
 import {
   parseSkillKey,
   skillDomainLabel,
@@ -59,6 +60,13 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     label: string;
     x: number;
     y: number;
+    valid: boolean;
+    description: string | null;
+  } | null>(null);
+  const [infoEdit, setInfoEdit] = useState<{
+    ref: SkillRefDto;
+    name: string;
+    description: string | null;
   } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     refs: SkillRefDto[];
@@ -129,6 +137,13 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     }
     const items: ContextMenuItem[] = [
       { label: "编辑", action: "edit" },
+      {
+        label: "编辑信息",
+        action: "edit-info",
+        // invalid（front matter 不可解析）时禁用：改名链路会跳过 front
+        // matter 重写，先修复 SKILL.md 再改信息
+        disabled: !menu.valid,
+      },
       { label: "导出 ZIP", action: "export-zip" },
       { label: "删除", action: "delete", danger: true },
     ];
@@ -143,6 +158,14 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     }
     if (action === "edit") {
       openDetail(current.ref);
+      return;
+    }
+    if (action === "edit-info") {
+      setInfoEdit({
+        ref: current.ref,
+        name: current.label,
+        description: current.description,
+      });
       return;
     }
     if (action === "export-zip") {
@@ -228,6 +251,8 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
             label: row.name,
             x: Math.max(8, rect.left),
             y: Math.max(8, rect.bottom + 4),
+            valid: row.valid,
+            description: row.description,
           });
         }}
       />
@@ -353,6 +378,22 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
         onClose={() => setCreateOpen(false)}
         onCreated={(ref) => {
           void reload().then(() => openDetail(ref));
+        }}
+      />
+
+      <SkillInfoEditModal
+        open={infoEdit != null}
+        skillRef={infoEdit?.ref ?? { domain: "global", name: "" }}
+        currentName={infoEdit?.name ?? ""}
+        currentDescription={infoEdit?.description ?? null}
+        onClose={() => setInfoEdit(null)}
+        onSaved={(ref) => {
+          // 详情栈顶若正在看同一技能，同步 viewingSkillRef 防「技能消失踢回」
+          if (nav.navState.viewingSkillRef?.name === infoEdit?.ref.name) {
+            nav.navState.viewingSkillRef = ref;
+          }
+          showToast("已保存技能信息");
+          void reload();
         }}
       />
     </SettingsPanel>

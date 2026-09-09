@@ -15,6 +15,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { TextPromptModal } from "@/components/ui/TextPromptModal";
 import { showToast } from "@/components/ui/show-toast";
+import { SkillInfoEditModal } from "@/features/skills/SkillInfoEditModal";
 import type { SettingsNavHandle } from "./settings-nav";
 import { SettingsPanel } from "./settings-ui";
 
@@ -36,6 +37,10 @@ const SKILL_ENTRY_FILE = "SKILL.md";
 export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
   const ref = nav.navState.viewingSkillRef;
   const [files, setFiles] = useState<string[]>([]);
+  const [meta, setMeta] = useState<{
+    description: string | null;
+    valid: boolean;
+  } | null>(null);
   const [projectName, setProjectName] = useState<string | undefined>();
   const [selected, setSelected] = useState<string>(SKILL_ENTRY_FILE);
   const [mode, setMode] = useState<"read" | "edit">("read");
@@ -49,6 +54,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
     null,
   );
   const [leaveConfirm, setLeaveConfirm] = useState<null | (() => void)>(null);
+  const [infoEditOpen, setInfoEditOpen] = useState(false);
 
   const domain = ref?.domain ?? "global";
   const listRequest =
@@ -72,6 +78,7 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
       return;
     }
     setFiles(sortSkillFiles(entry.files));
+    setMeta({ description: entry.description, valid: entry.valid });
   }, [ref, listRequest]);
 
   const loadFile = useCallback(
@@ -255,6 +262,17 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
             ? `项目域 · ${projectName ?? ref.projectId ?? ""}`
             : "全局域 · 所有项目生效"}
         </span>
+        <Button
+          disabled={meta != null && !meta.valid}
+          title={
+            meta != null && !meta.valid
+              ? "SKILL.md 无效，请先修复后再编辑信息"
+              : undefined
+          }
+          onClick={() => setInfoEditOpen(true)}
+        >
+          编辑信息
+        </Button>
       </div>
       <div className="skill-detail__body">
         <aside className="skill-detail__files">
@@ -383,6 +401,19 @@ export function SkillDetailView({ nav }: { nav: SettingsNavHandle }) {
           action?.();
         }}
         onCancel={() => setLeaveConfirm(null)}
+      />
+
+      <SkillInfoEditModal
+        open={infoEditOpen}
+        skillRef={ref}
+        currentName={ref.name}
+        currentDescription={meta?.description ?? null}
+        onClose={() => setInfoEditOpen(false)}
+        onSaved={(newRef) => {
+          // 同步栈内定位：改名后 ref?.name 变化触发重载（含头部与清单）
+          nav.navState.viewingSkillRef = newRef;
+          showToast("已保存技能信息");
+        }}
       />
     </SettingsPanel>
   );
