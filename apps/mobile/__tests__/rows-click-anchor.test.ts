@@ -139,6 +139,18 @@ describe('rows-click <a> 拦截分支 (T-L3)', () => {
     expect(postedEnvelopes()).toEqual([]);
   });
 
+  it('空 href（href=""）的 <a>：不拦不上抛，放行默认行为（MF-6）', () => {
+    // getAttribute 返回空字符串：与无 href 同为「无目标可路由」，
+    // 不得拦截默认行为、也不得上抛 RN（与无 href 用例并列钉住分支）
+    const anchor = makeEl('a', {href: ''});
+    const event = makeEvent(anchor);
+    onRowsClick(event);
+    expect(
+      (event as unknown as {preventDefault: jest.Mock}).preventDefault,
+    ).not.toHaveBeenCalled();
+    expect(postedEnvelopes()).toEqual([]);
+  });
+
   it('非链接非 data-action 的普通点击：无动作', () => {
     const plain = makeEl('div');
     const event = makeEvent(plain);
