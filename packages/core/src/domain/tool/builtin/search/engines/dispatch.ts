@@ -20,7 +20,7 @@ import { searchWithSearxng } from "./searxng.js";
  * 未配置任何搜索引擎时的提示（工具成功输出，含双端配置入口指引）。
  */
 export const SEARCH_NOT_CONFIGURED_MESSAGE =
-  "未配置任何搜索引擎。请先完成配置后重试：桌面端「设置 → AI 搜索」、移动端「我的 → 配置 → AI 搜索」；可为 bocha / tavily / brave 填写 API key，或为自托管的 searxng 填写 baseUrl。";
+  "未配置任何搜索引擎。请先完成配置后重试：桌面端「设置 → AI → 搜索配置」、移动端「我的 → 配置 → 搜索配置」；可为 bocha / tavily / brave 填写 API key，或为自托管的 searxng 填写 baseUrl。";
 
 /**
  * 按解析结果分发到引擎适配器（单引擎请求，串行降级循环在

@@ -130,7 +130,7 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     const message = out as string;
     assert.equal(message, SEARCH_NOT_CONFIGURED_MESSAGE);
     assert.match(message, /未配置任何搜索引擎/);
-    assert.match(message, /AI 搜索/);
+    assert.match(message, /搜索配置/);
     assert.match(message, /bocha/);
     assert.match(message, /searxng/);
   });
@@ -706,8 +706,8 @@ describe("search 工具：formatter 与 summary（Step 4 配套）", () => {
 
 describe("dispatch：引擎分发与未配置文案", () => {
   it("SEARCH_NOT_CONFIGURED_MESSAGE 含双端入口与四引擎说明", () => {
-    assert.match(SEARCH_NOT_CONFIGURED_MESSAGE, /设置 → AI 搜索/);
-    assert.match(SEARCH_NOT_CONFIGURED_MESSAGE, /我的 → 配置 → AI 搜索/);
+    assert.match(SEARCH_NOT_CONFIGURED_MESSAGE, /设置 → AI → 搜索配置/);
+    assert.match(SEARCH_NOT_CONFIGURED_MESSAGE, /我的 → 配置 → 搜索配置/);
   });
 
   it("dispatchSearch 按引擎路由（bocha 例：端点命中）", async () => {
