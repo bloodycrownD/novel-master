@@ -412,6 +412,12 @@ function extractChildCode(children: ReactNode): {
 
 export interface MermaidMarkdownProps {
   content: string;
+  /**
+   * markdown 链接点击回调（chat-link-file-nav）：传了则覆盖 <a> 渲染，
+   * 点击 preventDefault 后把原始 href 上抛（识别与路由在调用方单源完成）。
+   * 未传时组件渲染行为不变（PreviewPane 等消费点不接）。
+   */
+  onLinkClick?: (href: string) => void;
 }
 
 /**
@@ -445,15 +451,18 @@ const rehypePlugins: PluggableList = [
   ],
 ];
 
-export function MermaidMarkdown({ content }: MermaidMarkdownProps) {
+export function MermaidMarkdown({
+  content,
+  onLinkClick,
+}: MermaidMarkdownProps) {
   const theme = useMermaidTheme();
   const scan = useMemo(() => scanMermaidFences(content), [content]);
   // 本轮渲染已遇到的 mermaid 块序号：流式未闭合时只让最后一个块走占位
   const mermaidIndexRef = useRef(0);
   mermaidIndexRef.current = 0;
 
-  const components = useMemo<Components>(
-    () => ({
+  const components = useMemo<Components>(() => {
+    const next: Components = {
       pre({ children }) {
         const { className, source } = extractChildCode(children);
         // mermaid 特判放宽为 includes：className 含多个类时严格相等会失配（双保险兜底）
@@ -466,9 +475,28 @@ export function MermaidMarkdown({ content }: MermaidMarkdownProps) {
         }
         return renderCodeBlock(children);
       },
-    }),
-    [theme, scan],
-  );
+    };
+    if (onLinkClick != null) {
+      // 链接一律拦截上抛（纯锚点也拦：路由侧识别为 none 后 no-op，
+      // 避免点击锚点触发 Electron hash 导航）。data-chat-link 标记供
+      // 静态渲染测试断言回调接线生效（onClick 不序列化进 markup）。
+      next.a = ({ href, children }) => (
+        <a
+          href={href ?? undefined}
+          data-chat-link=""
+          onClick={(event) => {
+            event.preventDefault();
+            if (typeof href === "string") {
+              onLinkClick(href);
+            }
+          }}
+        >
+          {children}
+        </a>
+      );
+    }
+    return next;
+  }, [theme, scan, onLinkClick]);
 
   return (
     <Markdown

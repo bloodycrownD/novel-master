@@ -1,7 +1,7 @@
 /**
  * Electron main process: window lifecycle, Vite renderer load, IPC, runtime teardown.
  */
-import { app, BrowserWindow, nativeImage } from "electron";
+import { app, BrowserWindow, nativeImage, shell } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeDesktopConnection } from "./runtime/connection.js";
@@ -116,6 +116,23 @@ function createMainWindow(): BrowserWindow {
   setComposerAttachmentsSuggestForwardTarget(resolvePushWebContents);
   setUserMessageAppendedForwardTarget(resolvePushWebContents);
   setAgentActivityForwardTarget(resolvePushWebContents);
+
+  // 链接导航拦截（chat-link-file-nav）：renderer 内链接点击已在组件层拦截
+  // 路由（MermaidMarkdown onLinkClick），但 PreviewPane 等未接链路的 <a>
+  // 默认导航仍会整窗跳走——主进程统一兑底：一切页内导航一律拒绝，
+  // http(s) 转交系统浏览器，其余（file:// 等）直接否决；新开窗口同理 deny。
+  window.webContents.on("will-navigate", (event, url) => {
+    event.preventDefault();
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url).catch(() => undefined);
+    }
+  });
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url).catch(() => undefined);
+    }
+    return { action: "deny" };
+  });
 
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);
