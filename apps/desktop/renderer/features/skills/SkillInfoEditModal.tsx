@@ -2,17 +2,19 @@
  * 编辑技能信息弹窗（重命名 + 描述编辑同一提交）。
  *
  * - 提交走 ipcSkillsUpdateInfo（core 单事务：目录迁移 + front matter 同步
- *   + 负清单迁移）；仅提交真正变更的字段。
+ *   + 负清单迁移）；仅提交真正变更的字段（判定与提交值均先 trim）。
+ * - 技能名校验消费 core validateSkillName（与 mobile 同口径，含保留名
+ *   SKILL.md 与空白全口径），输入期以 reason 作内联提示。
  * - global 域内置技能名称框只读（core 侧 BUILTIN_SKILL_RENAME 双保险）；
  *   仅改描述对内置技能放行。
  * - invalid 技能入口由调用方禁用（core 侧跳过 front matter 重写双保险），
  *   本组件不处理 invalid 态。
  */
 import { useEffect, useState } from "react";
-import { BUILTIN_SKILL_NAMES } from "@shared/logic/skills";
+import { BUILTIN_SKILL_NAMES, validateSkillName } from "@shared/logic/skills";
 import type { SkillRefDto } from "@shared/ipc-types";
 import { ipcSkillsUpdateInfo } from "@/ipc/client";
-import { isValidSkillNameInput, toSkillRef } from "./skill-ui";
+import { toSkillRef } from "./skill-ui";
 
 type SkillInfoEditModalProps = {
   open: boolean;
@@ -56,14 +58,14 @@ export function SkillInfoEditModal({
   const trimmedDesc = description.trim();
   const nameChanged = !builtin && trimmedName !== currentName;
   const descChanged = trimmedDesc !== (currentDescription ?? "");
-  const canSubmit = !saving && (nameChanged || descChanged);
+  // 与 mobile 同口径：输入期即出 core 校验 reason（含保留名 SKILL.md）
+  const nameIssue =
+    nameChanged && name.length > 0 ? validateSkillName(trimmedName) : null;
+  const canSubmit =
+    !saving && (nameChanged || descChanged) && nameIssue == null && name.length > 0;
 
   const handleConfirm = async () => {
     if (!canSubmit) {
-      return;
-    }
-    if (nameChanged && !isValidSkillNameInput(trimmedName)) {
-      setError("技能名不能包含空格或斜杠，且不能以「.」开头。");
       return;
     }
     setSaving(true);
@@ -88,6 +90,10 @@ export function SkillInfoEditModal({
           : skillRef,
       );
       onClose();
+    } catch (err) {
+      // 对齐 mobile：IPC 极端失败（如 bridge 断连）以页面错误提示，不静默
+      setError(err instanceof Error ? err.message : String(err));
+      return;
     } finally {
       setSaving(false);
     }
@@ -116,6 +122,9 @@ export function SkillInfoEditModal({
           readOnly={builtin}
           autoFocus
         />
+        {nameIssue ? (
+          <p className="new-skill-modal__error">{nameIssue}</p>
+        ) : null}
         <p className="text-prompt-modal__label">描述（进入技能索引）</p>
         <textarea
           className="text-prompt-modal__input new-skill-modal__desc"

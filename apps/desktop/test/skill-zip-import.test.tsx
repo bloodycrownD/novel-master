@@ -308,6 +308,46 @@ describe("SkillInfoEditModal（T-S5：编辑信息弹窗）", () => {
     assert.match(detailSrc, /SkillInfoEditModal/);
     assert.match(detailSrc, /viewingSkillRef = newRef/);
   });
+
+  it("源码契约：校验消费 core validateSkillName，输入期出 reason 内联提示（MF-7）", () => {
+    const modalSrc = readFileSync(
+      fileURLToPath(
+        new URL("../renderer/features/skills/SkillInfoEditModal.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+    // 消费链：@shared/logic/skills 再导出 core 单源，与 mobile 同口径
+    assert.match(
+      modalSrc,
+      /import \{ BUILTIN_SKILL_NAMES, validateSkillName \} from "@shared\/logic\/skills"/,
+    );
+    // 输入期即出 reason（含保留名 SKILL.md / 空白全口径），点保存前拦截
+    assert.match(
+      modalSrc,
+      /nameChanged && name\.length > 0 \? validateSkillName\(trimmedName\) : null/,
+    );
+    assert.match(modalSrc, /\{nameIssue\}/);
+    // 本地布尔正则口径已退场：不再消费 isValidSkillNameInput
+    assert.doesNotMatch(modalSrc, /isValidSkillNameInput/);
+  });
+
+  it("源码契约：提交链路有 catch 兑底（MF-11，对齐 mobile）", () => {
+    const modalSrc = readFileSync(
+      fileURLToPath(
+        new URL("../renderer/features/skills/SkillInfoEditModal.tsx", import.meta.url),
+      ),
+      "utf8",
+    );
+    // IPC 极端失败（如 bridge 断连）时 setError 提示，不静默 unhandled rejection
+    assert.match(
+      modalSrc,
+      /\} catch \(err\) \{[\s\S]*?setError\(err instanceof Error \? err\.message : String\(err\)\);[\s\S]*?return;[\s\S]*?\} finally \{/,
+    );
+    // catch 块内不调 onClose（失败不停窗，用户可重试）
+    const catchBody = modalSrc.match(/\} catch \(err\) \{([\s\S]*?)\} finally \{/);
+    assert.ok(catchBody != null, "应有 catch → finally 结构");
+    assert.ok(!catchBody[1]!.includes("onClose"), "catch 内不应调 onClose");
+  });
 });
 
 describe("NewSkillModal version 残留清理（T-S6）", () => {
