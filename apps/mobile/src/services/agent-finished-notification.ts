@@ -203,6 +203,7 @@ function buildKeepAliveNotification(
     asForegroundService: boolean;
     ongoing: boolean;
     smallIcon: string;
+    pressAction: {id: string};
   };
 } {
   const title =
@@ -225,6 +226,11 @@ function buildKeepAliveNotification(
       asForegroundService,
       ongoing: true,
       smallIcon: 'ic_launcher',
+      // 无 pressAction 时 notifee 不派发点按事件（退化为系统默认打开应用），
+      // 跳转链路依赖它——与完成通知同型。
+      pressAction: {
+        id: 'default',
+      },
     },
   };
 }
