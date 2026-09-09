@@ -60,11 +60,22 @@ novel-master 的 AI 聊天目前内置 10 个工具（task/read/write/edit/fs/gl
 - 未配置任何引擎时调用返回明确的「未配置」提示（含配置入口指引），不报错崩溃
 - 参考实现 `.reference/pi-web-access` 的 bocha.ts / tavily.ts / brave.ts / searxng.ts 可直接借鉴
 
-### R2 搜索引擎手动配置
+#### R1.1 引擎优先级与串行请求链（修订轮新增，取代「默认引擎」概念）
 
-- 桌面：设置页 AI 组新增「AI 搜索」入口；移动：「我的 → 配置」新增同名入口
-- 配置内容：选择启用引擎；bocha/tavily/brave 填 API key；searxng 填 baseUrl
-- 存储：key 经 SKSP 加密存储（ref 命名空间如 `search/{engineId}/apiKey`）；引擎选择与 baseUrl 存偏好（KKV）；不新增数据库表、不动 llm_provider 表
+- 引擎优先级 = 用户可调的引擎顺序（存 KKV 偏好，缺省取内置默认序；新增引擎不在存量顺序中时按默认序补到队尾）；不设独立「默认引擎」状态，列表第一位即默认
+- 解析链：`input.engine` 显式指定时钉死该引擎（未配置→顺位回落至顺序中第一个已配置引擎；请求失败不静默换引擎，报错让模型自行决策）；未指定时按顺序取第一个已配置引擎
+- 运行时串行降级：选定的引擎请求失败（认证失效/超时/限流/网络错误等任何错误类型）→ 按顺序尝试下一个已配置引擎，直到成功或全链失败
+- 全链失败时返回聚合错误：每个失败引擎一行摘要（引擎名 + 错误摘要），不泄漏 key 明文
+- 串行链总预算 120s（各引擎自身超时照旧；总预算耗尽即带已收集的错误返回，防最坏 3 分钟挂死对话）
+- 成功输出附尝试轨迹（如「bocha 失败(401) → tavily 成功」一行），便于调试与观察
+
+### R2 搜索配置（修订轮：改名 + 两级结构 + 排序优先级）
+
+- 入口与标题改名：「AI 搜索」→「搜索配置」（双端：桌面设置 AI 组、移动「我的 → 配置」）
+- 两级结构（参考服务商配置模式，双端同构）：
+  - **引擎列表页**：每行 = 引擎名 + 配置状态（已配置/未配置，口径：key 引擎 = 有 key；searxng = 有 baseUrl）；列表显示顺序即串行链优先级；行上「更多菜单」提供**上移/下移**（首位引擎「上移」置灰、末位「下移」置灰；移动端底部弹菜单、桌面端同形态菜单）
+  - **引擎详情页**：点击行进入该引擎独立配置表单——bocha/tavily/brave 为 API key 表单（密码框、留空不改、清除入口），searxng 为 baseUrl 表单（空串保存即清除）；不再有默认引擎选择器（优先级由列表顺序表达）
+- 存储：key 经 SKSP（ref `search/{engineId}/apiKey`）；引擎顺序与 baseUrl 存偏好（KKV nm-search：engineOrder、searxngBaseUrl；原 defaultEngine 键移除——功能未发布无存量数据）；不新增数据库表
 
 ### R3 curl 输出预算调整与超预算落盘
 
@@ -96,12 +107,20 @@ novel-master 的 AI 聊天目前内置 10 个工具（task/read/write/edit/fs/gl
 - Given 用户已配置 bocha key，When 在对话中让 AI 检索，Then 模型调用 search 返回结果列表（title/url/snippet），回答引用来源
 - Given 用户配置 searxng baseUrl（自托管实例），When 调用 search，Then 经该实例返回结果，全程无 key
 - Given 用户未配置任何引擎，When 调用 search，Then 返回未配置提示与配置指引，无异常
-- Given 某引擎 key 无效，When 以该引擎调用，Then 返回可读的错误信息（不泄漏 key 明文）
+- Given 某引擎 key 无效，When 未显式指定引擎且存在后续已配置引擎，Then 串行降级至下一引擎（见串行请求链节）；Given 显式以该引擎调用，Then 返回可读的错误信息（不泄漏 key 明文）
 
-### 配置界面
+### 配置界面（修订轮）
 
-- Given 桌面端，When 打开设置 → AI 组，Then 可见「AI 搜索」入口，可完成引擎选择与 key/baseUrl 填写保存
-- Given 移动端，When 打开「我的 → 配置」，Then 同上，双端配置互通（同一存储）
+- Given 双端任一端，When 打开搜索配置入口（桌面「设置 → AI → 搜索配置」/ 移动「我的 → 配置 → 搜索配置」），Then 见引擎列表页（行 = 名称 + 状态），点击行进入该引擎详情页可完成 key/baseUrl 填写保存，双端配置互通（同一存储）
+- Given 列表页，When 打开某行更多菜单点「上移」，Then 该引擎上移一位且串行链优先级同步；首位引擎的「上移」不可用、末位的「下移」不可用
+- Given 详情页，When 保存，Then 无默认引擎控件（优先级仅由列表顺序表达）
+
+### 串行请求链（修订轮）
+
+- Given 已配置 bocha（key 失效 401）与 tavily（正常），顺序 bocha→tavily，When 调用 search，Then 返回 tavily 结果且输出含尝试轨迹（bocha 失败 → tavily 成功）
+- Given 仅 bocha 已配置但 key 失效，When 调用 search，Then 返回聚合错误（含 bocha 失败摘要），不静默空结果
+- Given 显式指定 engine=bocha 且失败，When 调用，Then 直接报错不换引擎（模型可自行决策重试）
+- Given 多个引擎均挂起，When 链耗时达 120s 总预算，Then 带已收集的错误返回，不继续等待
 
 ### curl 落盘与预算
 
