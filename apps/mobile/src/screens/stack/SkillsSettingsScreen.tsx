@@ -214,6 +214,7 @@ export function SkillsSettingsScreen() {
     try {
       const result = await exportVfsZip(runtime, zipScopeFor(skill), {
         directoryPath: `/meta/skills/${skill.name}`,
+        fileName: `${skill.name}.zip`,
       });
       if (result === 'saved') {
         showToast('ZIP 已保存到所选位置');

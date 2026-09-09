@@ -16,6 +16,7 @@ import {
   ipcProjectsList,
   ipcSkillsDelete,
   ipcSkillsList,
+  ipcVfsZipExport,
 } from "@/ipc/client";
 import { ManageHeader } from "@/components/batch/ManageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -128,6 +129,7 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     }
     const items: ContextMenuItem[] = [
       { label: "编辑", action: "edit" },
+      { label: "导出 ZIP", action: "export-zip" },
       { label: "删除", action: "delete", danger: true },
     ];
     return items;
@@ -141,6 +143,25 @@ export function SkillsManageView({ nav }: { nav: SettingsNavHandle }) {
     }
     if (action === "edit") {
       openDetail(current.ref);
+      return;
+    }
+    if (action === "export-zip") {
+      void (async () => {
+        const res = await ipcVfsZipExport({
+          workspaceScope:
+            current.ref.domain === "global" ? "global-meta" : "project-meta",
+          ...(current.ref.domain === "project"
+            ? { projectId: current.ref.projectId }
+            : {}),
+          directoryPath: `/meta/skills/${current.ref.name}`,
+          fileName: `${current.ref.name}.zip`,
+        });
+        if (res.ok && res.data === "saved") {
+          showToast(`已导出「${current.ref.name}.zip」`);
+        } else if (!res.ok) {
+          showToast(res.error.message);
+        }
+      })();
       return;
     }
     if (action === "delete") {
