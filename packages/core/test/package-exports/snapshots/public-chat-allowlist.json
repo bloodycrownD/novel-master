@@ -84,6 +84,7 @@
   "hasValidAnnotateSoftRange",
   "isComposerDraftAttachment",
   "isComposerStatusAttachment",
+  "isHttpUrl",
   "isMessageAnnotatePath",
   "isPlainUserText",
   "isPlainUserUndoSendEligible",

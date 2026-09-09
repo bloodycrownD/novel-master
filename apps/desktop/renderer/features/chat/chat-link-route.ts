@@ -15,7 +15,7 @@
  * @module renderer/features/chat/chat-link-route
  */
 
-import { resolveChatLinkTarget } from "@novel-master/core/chat";
+import { isHttpUrl, resolveChatLinkTarget } from "@novel-master/core/chat";
 import type {
   IpcResult,
   VfsReadRequest,
@@ -32,9 +32,6 @@ export type ChatLinkAction =
   | { kind: "preview"; workspaceScope: "chat" | "session"; path: string }
   | { kind: "external"; url: string }
   | { kind: "none" };
-
-/** http(s) 外跳判定（消费现成 ipcAppOpenExternal，勿另开 helper）。 */
-const HTTPS_PATTERN = /^https?:\/\//i;
 
 /** 会话上下文：chat 域（core session 域）探测必需 projectId+sessionId。 */
 export type ChatLinkSessionContext = {
@@ -63,7 +60,7 @@ export async function resolveChatLinkAction(
 ): Promise<ChatLinkAction> {
   const log = deps.log ?? (() => undefined);
   const trimmed = href.trim();
-  if (HTTPS_PATTERN.test(trimmed)) {
+  if (isHttpUrl(trimmed)) {
     return { kind: "external", url: trimmed };
   }
   const target = resolveChatLinkTarget(trimmed);

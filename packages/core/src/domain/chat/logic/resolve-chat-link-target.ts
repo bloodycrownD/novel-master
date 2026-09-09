@@ -22,6 +22,19 @@ import { resolveLogicalPath } from "../../vfs/logic/vfs-path-mapper.js";
 /** scheme 起始形态：字母开头 + 字母/数字/`+`/`.`/`-` + `:`（大小写不敏感）。 */
 const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
 
+/** http(s) 外跳判定单源（mobile RN / desktop renderer / desktop main 三端共用）。 */
+const HTTPS_PATTERN = /^https?:\/\//i;
+
+/**
+ * 判定 href 是否为 http(s) 外部链接（大小写不敏感）。
+ *
+ * 三端（链接路由、导航拦截、新窗口拦截）统一消费本判定，
+ * 避免各入口自持正则导致口径漂移。
+ */
+export function isHttpUrl(href: string): boolean {
+  return HTTPS_PATTERN.test(href);
+}
+
 /**
  * 识别聊天链接 href 是否指向工作区文件。
  *

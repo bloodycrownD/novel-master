@@ -12,7 +12,7 @@
  * @module screens/tabs/chat-tab/chat-link-nav
  */
 
-import {resolveChatLinkTarget} from '@novel-master/core/chat';
+import {isHttpUrl, resolveChatLinkTarget} from '@novel-master/core/chat';
 import type {VfsListEntry} from '@novel-master/core/vfs';
 
 /** 探测所需的最小 VFS 面（VfsService.list 的结构子集，测试可直传 stub）。 */
@@ -26,9 +26,6 @@ export type ChatLinkOpenIntent =
   | {kind: 'external'; url: string}
   | {kind: 'none'};
 
-/** http(s) 外跳判定（承接原 webview 导航守卫的主路径职责）。 */
-const HTTPS_PATTERN = /^https?:\/\//i;
-
 /**
  * 解析链接点击意图。
  *
@@ -41,7 +38,7 @@ export async function resolveChatLinkIntent(
   deps: {sessionVfs: ChatLinkProbeVfs | null; projectVfs: ChatLinkProbeVfs | null},
 ): Promise<ChatLinkOpenIntent> {
   const trimmed = href.trim();
-  if (HTTPS_PATTERN.test(trimmed)) {
+  if (isHttpUrl(trimmed)) {
     return {kind: 'external', url: trimmed};
   }
   // mailto 及其它 scheme、非法序列、纯锚点等均为 null → 维持现状无动作

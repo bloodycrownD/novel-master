@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveChatLinkTarget } from "../../src/domain/chat/logic/resolve-chat-link-target.js";
+import { isHttpUrl, resolveChatLinkTarget } from "../../src/domain/chat/logic/resolve-chat-link-target.js";
 
 describe("resolveChatLinkTarget (T-L1)", () => {
   it("真机形态①：相对路径 → 补前导 / 归一化", () => {
@@ -77,5 +77,21 @@ describe("resolveChatLinkTarget (T-L1)", () => {
   it("相对段 `.`/`..` 归一化；`..` 越根 → null", () => {
     assert.equal(resolveChatLinkTarget("./notes/../b.md"), "/b.md");
     assert.equal(resolveChatLinkTarget("../../escape.md"), null);
+  });
+});
+
+describe("isHttpUrl（MF-4 三端单源）", () => {
+  it("http/https（含大写）→ true；其余形态 → false", () => {
+    assert.equal(isHttpUrl("http://a.com/x"), true);
+    assert.equal(isHttpUrl("https://a.com"), true);
+    assert.equal(isHttpUrl("HTTP://A.com"), true);
+    assert.equal(isHttpUrl("HTTPS://Example.com"), true);
+    // 非 http(s)：工作区路径、锚点、mailto、盘符、协议相对、空串均非外跳
+    assert.equal(isHttpUrl("/notes/a.md"), false);
+    assert.equal(isHttpUrl("#foo"), false);
+    assert.equal(isHttpUrl("mailto:a@b.com"), false);
+    assert.equal(isHttpUrl("C:/x"), false);
+    assert.equal(isHttpUrl("//host/p"), false);
+    assert.equal(isHttpUrl(""), false);
   });
 });
