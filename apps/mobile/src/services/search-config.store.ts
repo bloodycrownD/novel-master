@@ -39,3 +39,14 @@ export async function readSearchEngineConfig(
 ): Promise<SearchConfigPublic> {
   return getSearchConfigStore(runtime).readConfig();
 }
+
+/**
+ * 保存引擎优先级顺序（便捷入口；语义同 store.setEngineOrder）。
+ * order 须为四引擎的合法排列，非法由 core 校验抛错。
+ */
+export async function setSearchEngineOrder(
+  runtime: MobileNovelMasterRuntime,
+  order: readonly EngineId[],
+): Promise<void> {
+  return getSearchConfigStore(runtime).setEngineOrder(order);
+}
