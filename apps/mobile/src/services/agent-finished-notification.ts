@@ -53,19 +53,13 @@ let pendingTapNavigation = false;
  * retry 重建 runtime 会换 Manager 实例，但 notifee 的前台服务是进程级的，
  * 标记必须放模块级才能避免「新实例重复起服务」。
  */
-let keepAliveRunning = false;
-
-/** 期望运行态：链上每次 reconcile 都按最新期望值对齐实际状态。 */
-let keepAliveDesired = false;
-
-/** per-session 保活标签（Step 5 需求：状态栏展示项目/会话名）。 */
+/** per-session 保活标签（Step 5 需求：一个会话一条常驻通知，点按直达对应会话）。 */
 const keepAliveLabels = new Map<string, AgentKeepAliveLabel>();
 
-/** 标签变更版本：驱动运行中通知的内容刷新（无标签变更时保持旧语义不动）。 */
-let keepAliveLabelsVersion = 0;
-let keepAliveDisplayedVersion = -1;
+/** 已按此标签内容显示过（同标签重复登记时抑制无谓重发）。 */
+const keepAliveDisplayed = new Map<string, AgentKeepAliveLabel>();
 
-/** 起停串行化链：所有 start/stop 决策排队执行，消除在途竞态。 */
+/** 起停串行化链：所有通知操作排队执行，消除在途竞态（MF-4）。 */
 let keepAliveChain: Promise<void> = Promise.resolve();
 
 /** 保活通知的内容标签：项目名 + 会话名（取不到时对应字段缺省）。 */
@@ -74,59 +68,59 @@ export interface AgentKeepAliveLabel {
   readonly sessionTitle?: string;
 }
 
+function keepAliveNotificationId(sessionId: string): string {
+  return `${KEEPALIVE_NOTIFICATION_ID}-${sessionId}`;
+}
+
 /** 仅测试用：复位保活模块级状态。 */
 export function resetKeepAliveStateForTests(): void {
-  keepAliveRunning = false;
-  keepAliveDesired = false;
   keepAliveLabels.clear();
-  keepAliveLabelsVersion = 0;
-  keepAliveDisplayedVersion = -1;
+  keepAliveDisplayed.clear();
   keepAliveChain = Promise.resolve();
 }
 
-/**
- * 把一次起/停决策排到链尾，并立即更新期望态。
- *
- * 期望态在入队时写入（而非执行时），所以「stop 在途期间来了 start」
- * 会让链上尚未执行的 stop 直接跳过、或 stop 完成后补一次 start，
- * 两种时序最终都收敛到运行——新 run 不会裸奔。
- */
-function enqueueKeepAliveSync(desired: boolean): Promise<void> {
-  keepAliveDesired = desired;
-  const task = keepAliveChain.then(() => reconcileKeepAlive());
+function enqueueKeepAlive(task: () => Promise<void>): Promise<void> {
+  const run = keepAliveChain.then(task);
   // 链本身吞错（否则任一 reject 会卡死后续排队），调用侧自行 catch。
-  keepAliveChain = task.then(
+  keepAliveChain = run.then(
     () => undefined,
     () => undefined,
   );
-  return task;
+  return run;
 }
 
 /**
- * 按最新期望态对齐实际运行态（只在链尾执行，天然串行）。
- *
- * 运行中且标签未变时 no-op（保持既有起停语义）；标签变化（会话加入/收尾）
- * 时同 id 重发通知 = 原位刷新内容（项目 · 会话名随最新 run 更新）。
+ * 启动（登记）某会话的常驻通知：一个会话一条，内容随标签、
+ * data.sessionId 供点按直达。标签内容未变时抑制无谓重发。
  */
-async function reconcileKeepAlive(): Promise<void> {
-  if (
-    keepAliveDesired === keepAliveRunning &&
-    keepAliveDisplayedVersion === keepAliveLabelsVersion
-  ) {
-    return;
+export function startAgentKeepAliveService(
+  sessionId: string,
+  label: AgentKeepAliveLabel,
+): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return Promise.resolve();
   }
-  if (!keepAliveDesired && !keepAliveRunning) {
-    // 从未运行过（如保活开关关着的收尾调用）：对齐版本即可，不必真调 stop。
-    keepAliveDisplayedVersion = keepAliveLabelsVersion;
-    return;
-  }
-  if (keepAliveDesired) {
-    const {title, body} = buildKeepAliveContent();
+  keepAliveLabels.set(sessionId, label);
+  return enqueueKeepAlive(async () => {
+    if (labelEquals(keepAliveDisplayed.get(sessionId), label)) {
+      return;
+    }
+    const title =
+      label.sessionTitle != null
+        ? `正在生成 · ${label.sessionTitle}`
+        : '正在生成';
+    const scopeText = [label.projectName, label.sessionTitle]
+      .filter(Boolean)
+      .join(' · ');
+    const body =
+      (scopeText !== '' ? `${scopeText}\n` : '') +
+      '完成后自动结束；期间请勿强行关闭应用';
     await ensureChannels();
     await notifee.displayNotification({
-      id: KEEPALIVE_NOTIFICATION_ID,
+      id: keepAliveNotificationId(sessionId),
       title,
       body,
+      data: {sessionId},
       android: {
         channelId: CHANNEL_AGENT_KEEPALIVE,
         asForegroundService: true,
@@ -134,17 +128,53 @@ async function reconcileKeepAlive(): Promise<void> {
         smallIcon: 'ic_launcher',
       },
     });
-    keepAliveRunning = true;
-    keepAliveDisplayedVersion = keepAliveLabelsVersion;
-    return;
+    keepAliveDisplayed.set(sessionId, label);
+  });
+}
+
+/**
+ * 停止某会话的常驻通知：摘标签并撤该会话的通知条；最后一个会话收尾时
+ * 一并停止前台服务。不带 sessionId（dispose）：全部撤下并停止服务。
+ */
+export function stopAgentKeepAliveService(sessionId?: string): Promise<void> {
+  if (Platform.OS !== 'android') {
+    return Promise.resolve();
   }
-  try {
-    await notifee.stopForegroundService();
-  } finally {
-    // stop 抛错也要复位标记，否则永久卡 true、之后所有 start 都 no-op。
-    keepAliveRunning = false;
-    keepAliveDisplayedVersion = -1;
+  const targets = sessionId != null ? [sessionId] : [...keepAliveLabels.keys()];
+  let removedAny = false;
+  for (const t of targets) {
+    if (keepAliveLabels.delete(t)) {
+      keepAliveDisplayed.delete(t);
+      removedAny = true;
+    }
   }
+  if (!removedAny) {
+    // 从未登记（如保活开关关闭时的收尾调用）：安全 no-op
+    return Promise.resolve();
+  }
+  return enqueueKeepAlive(async () => {
+    for (const t of targets) {
+      await notifee
+        .cancelNotification(keepAliveNotificationId(t))
+        .catch(() => undefined);
+    }
+    if (keepAliveLabels.size === 0) {
+      await notifee.stopForegroundService();
+    }
+  });
+}
+
+function labelEquals(
+  a: AgentKeepAliveLabel | undefined,
+  b: AgentKeepAliveLabel | undefined,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a == null || b == null) {
+    return false;
+  }
+  return a.projectName === b.projectName && a.sessionTitle === b.sessionTitle;
 }
 
 async function ensureChannels(): Promise<void> {
@@ -254,100 +284,6 @@ export async function notifyAgentRunFinished(input: {
       },
     },
   });
-}
-
-/**
- * 启动前台保活服务（dataSync 类型，常驻「正在生成」通知）。
- *
- * 携带 sessionId 时同时登记/刷新该会话的内容标签（状态栏展示项目 · 会话名，
- * 并行多 run 时显示最近一个 + 总数）。仅 Android；无标签调用保持旧语义。
- */
-export function startAgentKeepAliveService(
-  sessionId?: string,
-  label?: AgentKeepAliveLabel,
-): Promise<void> {
-  if (Platform.OS !== 'android') {
-    return Promise.resolve();
-  }
-  if (sessionId != null) {
-    const changed = !labelEquals(keepAliveLabels.get(sessionId), label);
-    if (label != null) {
-      keepAliveLabels.set(sessionId, label);
-    } else {
-      keepAliveLabels.delete(sessionId);
-    }
-    if (changed) {
-      keepAliveLabelsVersion += 1;
-    }
-  }
-  return enqueueKeepAliveSync(true);
-}
-
-/**
- * 停止前台保活服务。
- *
- * 带 sessionId（单会话 run 收尾）：仅摘除该会话标签——仍有其它会话在跑时
- * 服务继续、通知内容刷新为剩余会话；最后一个标签摘除时服务停止。
- * 不带 sessionId（全部 run 结束 / Manager dispose）：清空全部标签并停止。
- */
-export function stopAgentKeepAliveService(sessionId?: string): Promise<void> {
-  if (Platform.OS !== 'android') {
-    return Promise.resolve();
-  }
-  if (sessionId != null) {
-    if (keepAliveLabels.delete(sessionId)) {
-      keepAliveLabelsVersion += 1;
-    }
-    if (keepAliveLabels.size > 0) {
-      // 其它会话仍在跑：刷新内容、维持运行
-      return enqueueKeepAliveSync(true);
-    }
-    return enqueueKeepAliveSync(false);
-  }
-  if (keepAliveLabels.size > 0) {
-    keepAliveLabels.clear();
-    keepAliveLabelsVersion += 1;
-  }
-  return enqueueKeepAliveSync(false);
-}
-
-function labelEquals(
-  a: AgentKeepAliveLabel | undefined,
-  b: AgentKeepAliveLabel | undefined,
-): boolean {
-  if (a === b) {
-    return true;
-  }
-  if (a == null || b == null) {
-    return false;
-  }
-  return a.projectName === b.projectName && a.sessionTitle === b.sessionTitle;
-}
-
-/** 组装保活通知内容：最近登记的会话标签 +（多会话时）总数。 */
-function buildKeepAliveContent(): {
-  title: string;
-  body: string;
-} {
-  const labels = [...keepAliveLabels.values()];
-  const latest = labels[labels.length - 1];
-  const scopeText =
-    latest == null
-      ? ''
-      : [latest.projectName, latest.sessionTitle].filter(Boolean).join(' · ');
-  const title =
-    latest?.sessionTitle != null
-      ? `正在生成 · ${latest.sessionTitle}`
-      : '正在生成';
-  const lines: string[] = [];
-  if (scopeText !== '') {
-    lines.push(scopeText);
-  }
-  if (labels.length > 1) {
-    lines.push(`共 ${labels.length} 个会话生成中`);
-  }
-  lines.push('完成后自动结束；期间请勿强行关闭应用');
-  return {title, body: lines.join('\n')};
 }
 
 /**

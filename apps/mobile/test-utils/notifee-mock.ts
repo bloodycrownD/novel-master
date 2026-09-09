@@ -33,6 +33,7 @@ export const requestPermission = jest.fn(async () => ({
   authorizationStatus: AuthorizationStatus.AUTHORIZED,
 }));
 export const stopForegroundService = jest.fn(async () => undefined);
+export const cancelNotification = jest.fn(async () => undefined);
 export const registerForegroundService = jest.fn();
 /** onForegroundEvent 返回的退订函数（单独暴露以便断言注册/退订净值）。 */
 export const onForegroundEventUnsubscribe = jest.fn(() => undefined);
@@ -45,6 +46,7 @@ const notifeeMock = {
   createChannel,
   requestPermission,
   stopForegroundService,
+  cancelNotification,
   registerForegroundService,
   onForegroundEvent,
   onBackgroundEvent,

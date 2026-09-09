@@ -139,3 +139,8 @@ date: 2026-08-30
    - Manager 的 prefBridge 扩 `isKeepAliveEnabled()`；未注入/读取失败视为关。
    - 收尾路径与开关无关地摘标签（开关中途切换由下一次起停对齐）。
 3. 测试：T-P5（通知模块内容/多会话/安全 no-op）、T-P8/T-P8b（Manager 默认关兼容 + 带标签启动）；T-P6 语义更新为「完成通知关 + 保活开」。
+
+### 追记补充（同日第二轮反馈）
+
+4. **一个会话一条通知 + 点按直达**：保活常驻通知从单条聚合改为 per-session（id `nm-agent-keepalive-<sessionId>`），各带 `data.sessionId`——点按任意一条直达对应会话（复用完成通知的点按链路，此前常驻通知无 data 故点按无反应）。单会话收尾仅撤该会话通知条（cancelNotification），最后一个收尾才 stopForegroundService；串行化链保留（MF-4 竞态语义），同标签重复登记抑制无谓重发。
+5. **开关文案**：label 简化为「常驻通知」，副标题一句话。

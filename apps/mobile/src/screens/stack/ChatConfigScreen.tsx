@@ -251,11 +251,11 @@ export function ChatConfigScreen() {
 
       <ProfileSwitchItem
         icon="🛡️"
-        label="后台保活（生成中常驻通知）"
+        label="常驻通知"
         subtitle={
           agentKeepAliveEnabled
-            ? '生成期间状态栏常驻「正在生成 · 项目 · 会话」，退后台/锁屏继续生成'
-            : '生成中不常驻通知栏，退后台的请求可能被系统中断（升级前行为）'
+            ? '生成期间每个会话一条常驻通知，点按直达对应会话'
+            : '关闭时生成中不显示常驻通知（升级前行为）'
         }
         value={agentKeepAliveEnabled}
         tokens={tokens}
