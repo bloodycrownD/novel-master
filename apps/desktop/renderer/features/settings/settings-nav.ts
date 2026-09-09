@@ -7,6 +7,7 @@ export type SettingsViewId =
   | "tokenUsageStats"
   | "agentsSettings"
   | "searchEngines"
+  | "searchEngineDetail"
   | "agentEditor"
   | "providers"
   | "providerDetail"
@@ -24,7 +25,7 @@ export const SETTINGS_NAV = [
     label: "AI",
     items: [
       { id: "agentsSettings" as const, label: "智能体配置", icon: "🧠" },
-      { id: "searchEngines" as const, label: "AI 搜索", icon: "🔍" },
+      { id: "searchEngines" as const, label: "搜索配置", icon: "🔍" },
       { id: "providers" as const, label: "服务商配置", icon: "🔌" },
     ],
   },
@@ -51,13 +52,14 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   dataManagement: "备份与恢复",
   tokenUsageStats: "数据统计",
   agentsSettings: "智能体配置",
-  searchEngines: "AI 搜索",
+  searchEngines: "搜索配置",
   providers: "服务商配置",
   skillsManage: "技能管理",
 };
 
 export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewId {
   if (viewId === "agentEditor") return "agentsSettings";
+  if (viewId === "searchEngineDetail") return "searchEngines";
   if (
     viewId === "providerDetail" ||
     viewId === "modelSampling" ||
@@ -86,6 +88,8 @@ export interface SettingsNavState {
   /** Agent 编辑页顶栏展示用名称（非 agentId） */
   editingAgentDisplayName?: string;
   readonly editingProviderId?: string;
+  /** 搜索引擎详情页定位的引擎（EngineId 字符串）。 */
+  editingEngineId?: string;
   readonly editingSavedModelId?: string;
   /** skillDetail 页定位的技能（域 + 项目 + 名称）。 */
   viewingSkillRef?: import("@shared/ipc-types").SkillRefDto;

@@ -5247,6 +5247,15 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--danger);
 }
 
+.context-menu button:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+.context-menu button:disabled:hover {
+  background: transparent;
+}
+
 .text-prompt-overlay {
   position: fixed;
   inset: 0;
