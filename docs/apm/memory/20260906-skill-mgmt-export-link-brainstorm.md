@@ -1,0 +1,60 @@
+---
+date: 2026-09-06 22:55
+title: skill 编辑/导出命名/markdown 文件链接/技能改名四点优化头脑风暴与立项
+keywords: skill 工具, edit action, 导出, 命名, nmbackup, 技能 ZIP, markdown 链接, 工作区跳转, 技能重命名, 改描述, renamePrefix, PRD
+abstract: 四个优化点的头脑风暴答疑与立项：①skill 工具自带 edit 局部替换（与 vfs edit 同一 replace 内核），用户看到的 content 是 write 的参数——不改；②导出功能全量盘点 6 类，立项改固定命名（数据库备份 nmbackup.db、技能 {技能名}.zip）+ desktop 补技能导出入口；③markdown 文件链接点击现状 mobile 外跳浏览器/desktop 整窗导航走，立项复用文件卡片链路跳工作区预览，识别规则待真机 DB 样本定稿；④双端技能管理无改名/改描述，立项 renamePrefix 目录迁移+front matter 重写。迭代 docs/Iterations/export-link-skill-mgmt-2026-09/ 总纲+三 feature PRD 已落盘待确认。
+---
+
+user:
+几个优化点：1. skill edit 工具好像不支持 replace 的效果，也只是全量写入？2. skill/agent/数据库等导出命名很糟糕，应该用固定名称（技能名、agent 名、数据库名.nmbackup 等），另外想知道还有哪些导出功能？3. markdown 渲染后的蓝色引用链接如果是文件地址，希望点击后跳转到聊天工作区对应文件，现在是跳浏览器。4. skill 管理页面不支持重命名和更改描述，很糟糕。
+
+assistant:
+（brain-storm，4 个只读子代理并行探索）结论：①前提不成立——skill 工具（packages/core/src/domain/tool/builtin/skill-tool.ts）自初版就有 edit action（action 枚举 "load"|"read"|"write"|"edit"|"list"），edit 走 service.editSkillFile → vfs.replace → computeReplaceResult，与 vfs edit 工具同一套 normalize-for-match 匹配内核（含 replaceAll）；write 才是整文件覆盖，与普通 write 工具语义一致。误判来源候选：模型实际只调了 write（提示/行为问题）、edit 报 REPLACE_NOT_FOUND 后回退、domain 缺省陷阱（edit 缺省 project，改 global 技能须显式 domain:"global"）、agent policy deny 了 skill 工具。②导出功能 6 类：数据库备份 novel-master-backup-{毫秒时间戳}.nmbackup（双端 backupFileName()，mobile :33-35/desktop :37-39）；技能 ZIP 仅 mobile 有导出入口（desktop 只有导入），复用 vfsZipExportFileName 通道产出 vfs-global-meta-meta-skills-{名}.zip（meta 出现两次、无 skill 字样、项目技能还带 projectId UUID——最糟）；Agent YAML {agentId}.agent.yaml 已是语义名（agentId 即 agent 名，无需动）；VFS ZIP vfs-{scope}-{UUID}-{路径拼接}.zip；desktop 批量拖拽导出保留 VFS 原名；云同步快照 snapshots/rev-{N}.nmbackup 是内部版本语义勿动。不存在：角色卡导出（仅导入）、会话/聊天记录导出。改造落点：技能导出需给 vfs-zip.service 加 fileName 覆盖参数（现在调用方无法传名）；导入侧不校验文件名无兼容风险；desktop 技能导出入口是否补齐待拍板。③现状：mobile 聊天 markdown 经 markdown-it+sanitize 注入 webview，<a> 无 preventDefault，RN 侧 shouldStartLoadWithRequest（ChatTranscriptWebView.tsx:1228-1240）对 http(s) 显式 Linking.openURL——跳浏览器的直接原因；desktop MermaidMarkdown components 只覆盖 pre 未覆盖 a，main.ts 无 will-navigate/setWindowOpenHandler，点外链整窗导航走（比 mobile 更糟）。可复用链路：mobile 文件卡片 open-tool-file → openSessionFilePreview → FileEditor（openFileEditor 已支持 project scope，但 openSessionFilePreview 硬编码 session）；desktop ToolCallCard → openChatWorkspacePreview → PreviewPane。改造形态：webview rows-click 加 closest('a') 分支+preventDefault+bridge 上抛 href，宿主侧识别「VFS 文件 → 打开预览，否则维持外跳」，识别/路由放宿主侧（webview 无会话上下文）；desktop 用 MermaidMarkdown 加可选 onLinkClick prop（该组件聊天与文件预览共用，避免耦合）。关键缺口：agent 输出的文件链接实际形态（/逻辑路径.md？相对路径？）未实证，决定识别规则写法，需真实样本。④现状坐实：mobile SkillsSettingsScreen ⋮菜单仅导出/删除，NewSkillModal 明示「技能名（即目录名，创建后不可改）」；desktop ⋮菜单仅编辑/删除，详情页只能裸改 SKILL.md 全文（改坏 front matter 技能即 invalid）。技能名=VFS meta 域目录名（/meta/skills/{name}），description 唯一存于 SKILL.md front matter。改描述：双端 withFrontMatterValues 现成+writeSkillFile 现成，纯 UI 工作。改名：VFS renamePath/renamePrefix 原语现成（单事务 UPDATE path、entry_id 不变、revision 历史自动跟随），SkillsService.renameSkill 四步=校验门（validateSkillName+assertSkillNameNotReservedForCreate+域内查重）→ renamePrefix → 重写 front matter name → 迁移负清单行（skill_disabled_rule 按 skill_name 键控，rename 不迁移会留孤儿）；内置技能（agent-config）禁改名；历史 $旧名 引用靠既有自愈机制降级为提示行（不写 seen，之后建同名可重新附全文）；勿走新建+删除路线（丢 revision 关联、deleteSkill 清负清单语义对不上）。遗留疑点：desktop NewSkillModal L199 传 version 参数但 SkillsWriteRequest 无此字段+注释仍提乐观锁（已移除的残留，待澄清）。open question 待用户拍板：数据库备份固定名的覆盖冲突取舍、desktop 技能导出入口是否补齐、真实文件链接样本。
+
+user:
+那 1 就不改了，主要我看 edit 的入参是 content，不是 oldString newString……不知道是不是看错了。2 改成固定名吧，比如最简单的 nmbackup.db。3 你可以拉取手机上的 db 数据测试。desktop 也加吧。还有疑问吗？能进入 prd 阶段吗？
+
+assistant:
+点①疑点核实：skill-tool 的 zod schema 里 content 描述明确是「write 动作的整文件内容」，edit 的参数是 oldString/newString/replaceAll（222-224 行）——用户看到的 content 应是 write 动作的参数（或会话转录里模型实际调了 write），也可能看的是 UI 技能编辑器（那是全文编辑，另一回事）；工具本体不改。点②兼容核实：desktop 导入过滤器本就同时收 nmbackup/db 扩展名、mobile 导入按 SQLite 魔数校验与文件名无关——固定名 nmbackup.db 不破坏导入闭环。点③手机未连接（adb devices 空、mdns 无广播），待用户插线或开无线调试后拉库分析真实链接形态，不阻塞 PRD。立项：docs/Iterations/export-link-skill-mgmt-2026-09/（总纲 prd.md + features/export-naming + features/chat-link-file-nav + features/skill-rename-description 三份 feature PRD），探索沿用本会话四份 brainstorm 报告未重复派遣。待确认项：VFS 通用 ZIP 命名（UUID 泄漏）本轮不含是否后续单独立项。
+
+user:
+（adb 连不上两轮追问后）重新连接了。
+
+assistant:
+手机重连成功（华为 EBG-AN00）。真机库拉取分析（com.novelmaster 的 files/default/novel_master_vfs，36MB，debug 构建 run-as 直拉）：chat_message 表 1153 条 assistant 消息——markdown 语法链接零条、裸 URL 仅一例（curl 工具测试对话的 httpbin 链接，thinking/text/tool_result 各几处 http 均源于此），user 消息零 URL，formatter 层（format-tool-output.ts）也不产出 markdown 链接，web-search 工具在未并入 dev 的 worktree 分支上。结论：真实产出中「文件地址链接」不存在，现在见的蓝链只有 linkify 出来的网页 URL；feature 实为定义约定（无 scheme 的路径形态链接→应用内打开），PRD 风险项已按此更新（构造样例自测，不依赖存量）。桌面库不在本机（未找到 ~/.config 下 novel_master_vfs）。中间发现：库无 WAL 伴文件、databases/ 目录是空的（库在 files/default/）、手机 USB 上午曾连过（11:54 APK 构建）下午掉线后重插恢复。可选增强（未经用户同意不入 PRD）：提示词层引导 agent 用路径链接引用工作区文件，让该能力真正被用起来。
+
+user:
+ok，重新拉取吧（用户已去会话里诱导 agent 产出链接样本）。
+
+assistant:
+重拉库拿到真实样本：用户的角色 agent（安奈）被要求「用 markdown 格式表达文件位置」后自发产出六种写法（相对/绝对路径、锚点 path#标题、反引号裸路径、wiki 风格 [[..]]、指向不存在文件的链路）；目标文件（测试/子代理测试报告.md、角色描述.md、开场/开场001.md、世界书/NTR线.md）全部实存于 session scope 4b9eab55。本地用同款 markdown-it+sanitize 管线验证渲染：前四种（含幽灵文件）渲染为可点 <a> 且中文 href 被 URL 编码（宿主侧须 decodeURIComponent），裸路径为 code 不可点，wiki 双端均不产链接。点击路由实证（ChatTranscriptWebView 导航守卫 sec/D-1）：mobile 相对路径落在包目录前缀内被放行→WebView 导到不存在 asset 出错误页；绝对路径 file:///开头被拒→点击无反应；http(s) 外跳浏览器（用户原先观察到的跳浏览器）；desktop 无拦截整窗导航。PRD 风险项已更新为真实样本版，新增三个待拍板：锚点 v1 是否只按 path 打开不滚动定位、wiki 风格是否加预处理支持、是否提示词层引导 agent 用受支持写法（用户 agent 在样本里自己问「哪种是正版写法」——引导需求真实存在）。
+
+user:
+只支持 markdown 的锚点链接就行，其他先不考虑支持，其他路径渲染为普通文本。
+
+assistant:
+对齐「锚点链接」词义（一轮澄清）：用户确认 B 方案——Typora 式标准行为，markdown 语法链接全三形态（相对/绝对/锚点）均可点，wiki 风格与裸路径维持纯文本；锚点 v1 只按 path 打开不滚动定位；提示词引导本轮不做。chat-link-file-nav PRD 已按此定稿重写（包含范围/不包含范围/核心需求第 5 条/验收标准同步，错误页改为无动作）；上一个真机实测轮次也已入库：引导 agent（安奈）产出六种写法样本、文件实存核对、本地同款 markdown-it+sanitize 管线验证、URL 编码发现、导航守卫逐形态路由实证。
+
+user:
+agent 的导出呢？agent 名称.zip 被你丢了？VFS 通用 ZIP 导出这次也优化下吧，改成 目录名.zip，顶级目录是/，所以它的导出名是 项目名.zip，这个是会话工作区和项目工作区通用。
+
+assistant:
+两点处理：①agent 导出没丢——现状已是 {agent名}.agent.yaml（AgentDefinition 主键即人类可读名非 UUID），此前归在「已达标不动」；按用户点名改为纳入包含范围做验收锁定（不改名，防回归防口径含糊）。②VFS 通用 ZIP 按用户规则入本轮：导出命名改为 {目录名}.zip，根/导出用项目名（会话/项目工作区通用，session 经 projectId 解析项目名）；自己补的默认口径：全局工作区根→全局工作区.zip、单文件→{文件名}.zip（用户只明确了目录/项目规则，PRD 风险项标了随确认）。export-naming 与总纲 PRD 已重写（背景/目标/包含范围/核心需求/验收/风险全部同步）。至此四份 PRD 齐备：总纲 + export-naming（含 VFS zip）+ chat-link-file-nav（B 方案定稿）+ skill-rename-description，待用户最终确认进 spec。
+
+user:
+全局工作区？全局工作区现在已经移除了吧？你的记忆是不是没更新？
+
+assistant:
+用户勘误成立：全局工作区 UI 已移除——desktop nav-workspace.ts:16 注释「原 global 面板不再展示」；mobile GlobalTemplateScreen 已改「文件浏览器」（physicalVfs 跨域拼接只读视图，readOnly 下行菜单置空无导出入口）。错误源自人家自己补默认口径时用了子代理报告里 global 分支的线索（代码层 VfsScope global kind 仍在，但 GUI 无入口）。已修：export-naming 与总纲 PRD 全局工作区引用全部删除，VFS 导出规则只剩子目录/根（项目名）/单文件三口径，global 分支标注死代码待 spec 定去留；项目记忆写入 ARCHITECTURE 条目（#54）防后续会话再犯。
+
+user:
+（spec-generate skill 触发）
+
+assistant:
+spec 阶段完成：3 个实现级只读子代理并行探索（log 20260906-231624-508/520/528）后落盘三份 spec（与 prd.md 同目录）：export-naming/spec.md、chat-link-file-nav/spec.md、skill-rename-description/spec.md。关键 spec 拍板：①单文件导出双端无 UI 入口（desktop workspace-zip-menu.test 反向锁定），降为函数级口径不加 UI；Windows 下 Electron filter 追加扩展风险用双扩展 filters 规避；项目名由服务层查 runtime.projects.get（双端 runtime 都挂 projects）；desktop 技能导出复用既有 ipcVfsZipExport 仅加 fileName 参数无需新通道。②链接拦截策略=webview 对全部 <a> preventDefault+上抛 href、识别路由全在宿主侧（iOS 时序+webview 不依赖 core）；识别函数 core 单源 resolveChatLinkTarget（decode try/catch、scheme 检测、协议相对拒绝、剥锚点、resolveLogicalPath）；探测用 list(parent) 比对 basename；desktop chat/session 命名陷阱（chat=core session 域）；mailto 维持 no-op。③技能改名用 updateSkillInfo(location,{newName?,description?}) 单事务合一（弹窗一并提交无半迁移，校验链：合法名→内置源门→目标保留名门→事务内域内查重 SKILL_ALREADY_EXISTS→renamePrefix→front matter 同步→负清单 renameByName 镜像 deleteSkill 口径）；front matter 重写收敛 core 单源回收双端两份复制；invalid 技能改名跳过 front matter 重写且 UI 禁「编辑信息」入口；desktop NewSkillModal version 残留清理独立 Step；已知边界：global/project 同名并存+禁用+改 global 名时负清单行孤儿（低频接受）。测试 T-E1~7/T-L1~7/T-S1~7 含真机 manual_user 项。待用户确认 spec 后可进 code-dev-loop。
+
+user:
+（spec-check-loop skill 触发）
+
+assistant:
+spec-check-loop 共 2 轮审查 + 第 3 轮主代理等效认定收敛 execute-ready。轮 1（双 scope 并行：A=总纲+export-naming+skill-rename、B=chat-link）：B 直接 Go（P1×1 措辞+P2×6）；A No-Go——P0 校验链「内置源门」缺「仅 newName 时」限定（字面实施会把 builtin 仅改描述也拒掉）+P1×3（IPC 漏列 renderer/ipc/client.ts 第五处、skillBuiltin 文案是删除向需新码 SKILL_BUILTIN_RENAME、单文件导出验收未闭环）+P2×4。全部 must-fix 均为审查员给精确证据的一句话级修复，按 trivial 豁免由主代理直接 doc-fix（20 处/5 文件，含连带同步）。轮 2（单审查员验证）：上轮全部真实闭合，但抓到轮 1 修复引入的假闭合 P1——「流式与正文共用 MessageBody」锚错（流式尾巴在 MessageList :224-227 直接渲染 MermaidMarkdown，不经 MessageBody）+P2×2（zipBaseNameFromPath 文件分支枚举与 T-E3 用例缺位、IPC_CHANNELS key 惯例）。再 trivial 修复 8 处 + grep 验证零残留，主代理等效认定 Go（轮 2 审查员预批「修完即 execute-ready」）。终态：P0=0、P1 全闭合、七份文档就绪。教训：doc-fix 措辞若引入新事实断言（如「共用组件」）必须回代码核对锚点，否则假闭合。待用户确认 execute-ready 后可进 code-dev-loop。
