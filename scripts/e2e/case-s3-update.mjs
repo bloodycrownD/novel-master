@@ -1,5 +1,5 @@
 // R7-2: 云同步 S3 表单/测试连接错误态 + 检查更新 + 菜单栏 + 三栏拖拽
-import { launchApp, shutdown, shot } from "./lib.mjs";
+import { launchApp, shutdown, shot, dismissUpdatePrompt } from "./lib.mjs";
 
 const errors = [];
 const { app, page, vite } = await launchApp({ errors });
@@ -77,6 +77,12 @@ try {
   }
 
   // ===== 3. 三栏宽度拖拽 =====
+  // 第 2 段「检查更新」的弹窗可能还开着（运行中弹出，lib 的启动兜底不覆盖）：
+  // ①「版本检查」结果弹窗（snooze/关闭）②「发现新版本」升级确认弹窗（稍后）。
+  // 不先清掉会挡住「关闭设置」→ 设置页残留 → splitter 不可见 boundingBox 返回 null
+  await dismissUpdatePrompt(page, 3000).catch(() => {});
+  const later = page.locator(".update-modal button").filter({ hasText: "稍后" }).first();
+  if (await later.count()) { await later.click().catch(() => {}); await sleep(600); }
   await page.click('button[aria-label="关闭设置"]').catch(() => page.keyboard.press("Escape"));
   await sleep(800);
   const splitter = page.locator('[data-splitter]').first();

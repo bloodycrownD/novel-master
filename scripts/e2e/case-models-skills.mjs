@@ -38,23 +38,24 @@ try {
     await shot(page, "611", "models-batch-deleted");
   }
 
-  // 手动添加一个模型（供后续绑定用）
+  // 手动添加一个模型（供后续绑定用）——AddModelModal 为 text-prompt-modal 结构；
+  // 旧 .confirm-modal 定位随组件重构已漂移：点不到确认钮会残留弹窗，挡住 B 段侧导航
   await page.locator(".settings-view button").filter({ hasText: "添加" }).first().click();
   await sleep(700);
-  const mi = page.locator(".confirm-modal input:visible, .settings-view input:visible").first();
+  const mi = page.locator(".text-prompt-modal input:visible").first();
   if (await mi.count()) {
     await mi.fill("glm-regression-test");
-    const addOk = page.locator(".confirm-modal button").filter({ hasText: /^添加$/ }).first();
+    const addOk = page.locator(".text-prompt-modal button").filter({ hasText: /^添加$/ }).first();
     if (await addOk.count()) { await addOk.click(); await sleep(900); }
   }
   console.log("MODEL_READDED", (await page.locator(".settings-view li").filter({ hasText: "glm-regression-test" }).count()) >= 0);
 
   // ===== B. 技能管理：行菜单删除「回归技能」 + 域切换 =====
-  // 清场：关掉可能残留的弹窗
+  // 清场：关掉可能残留的弹窗（confirm-modal 与 text-prompt-modal 两类）
   for (let i = 0; i < 4; i++) {
-    const anyModal = await page.evaluate(() => !!document.querySelector(".confirm-modal"));
+    const anyModal = await page.evaluate(() => !!document.querySelector(".confirm-modal, .text-prompt-modal"));
     if (!anyModal) break;
-    const cb = page.locator(".confirm-modal button").filter({ hasText: "取消" }).first();
+    const cb = page.locator(".confirm-modal button, .text-prompt-modal button").filter({ hasText: "取消" }).first();
     if (await cb.count()) { await cb.click().catch(() => {}); await sleep(500); }
     else { await page.keyboard.press("Escape").catch(() => {}); await sleep(400); }
   }
@@ -88,9 +89,9 @@ try {
 
   // ===== C. Agent YAML 导出/导入补验（D-13）=====
   for (let i = 0; i < 4; i++) {
-    const anyModal = await page.evaluate(() => !!document.querySelector(".confirm-modal"));
+    const anyModal = await page.evaluate(() => !!document.querySelector(".confirm-modal, .text-prompt-modal"));
     if (!anyModal) break;
-    const cb = page.locator(".confirm-modal button").filter({ hasText: "取消" }).first();
+    const cb = page.locator(".confirm-modal button, .text-prompt-modal button").filter({ hasText: "取消" }).first();
     if (await cb.count()) { await cb.click().catch(() => {}); await sleep(500); }
     else { await page.keyboard.press("Escape").catch(() => {}); await sleep(400); }
   }

@@ -107,6 +107,11 @@ try {
   await page.locator("button:visible").filter({ hasText: /确定|创建/ }).first().click();
   await sleep(1000);
   await sleep(800);
+  // 创建成功会自动进入新项目（ChatRail handleNamePromptConfirm → openProject），
+  // 同名被拒则停留原地——两种情况都先清残留弹窗再回项目列表找行删除
+  await page.keyboard.press("Escape").catch(() => {});
+  await sleep(400);
+  await goToProjects(page);
   const projList = await page.evaluate(() => [...document.querySelectorAll("li")].filter((l) => l.offsetParent).map((l) => l.textContent?.slice(0, 24)).slice(0, 6));
   console.log("PROJ_LIST", JSON.stringify(projList));
   const pRow = page.locator("li:visible").filter({ hasText: "牺牲项目X" }).first();
