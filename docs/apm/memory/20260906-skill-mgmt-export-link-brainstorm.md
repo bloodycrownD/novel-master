@@ -1,5 +1,5 @@
 ---
-date: 2026-09-09 23:55
+date: 2026-09-10 00:14
 title: skill 编辑/导出命名/markdown 文件链接/技能改名四点优化头脑风暴与立项
 keywords: skill 工具, edit action, 导出, 命名, nmbackup, 技能 ZIP, markdown 链接, 工作区跳转, 技能重命名, 改描述, renamePrefix, PRD
 abstract: 四个优化点的头脑风暴答疑与立项：①skill 工具自带 edit 局部替换（与 vfs edit 同一 replace 内核），用户看到的 content 是 write 的参数——不改；②导出功能全量盘点 6 类，立项改固定命名（数据库备份 nmbackup.db、技能 {技能名}.zip）+ desktop 补技能导出入口；③markdown 文件链接点击现状 mobile 外跳浏览器/desktop 整窗导航走，立项复用文件卡片链路跳工作区预览，识别规则待真机 DB 样本定稿；④双端技能管理无改名/改描述，立项 renamePrefix 目录迁移+front matter 重写。迭代 docs/Iterations/export-link-skill-mgmt-2026-09/ 总纲+三 feature PRD 已落盘待确认。
@@ -94,3 +94,15 @@ cr下吧（code-review-loop）。
 
 assistant:
 code-review-loop 两轮收敛 fix-spec-ready：round 1 三 scope 并行评审（export 零发现直接 scope-ready；chatlink 5×P2；skill 1×P1+3×P2）→ spec-fix 子代理落盘 cr-fix-spec.md（9 条 MF，ed8df975，含 5 处行号勘误）→ round 2 review-full 全维终审：核心结论「代码扎实、spec 符合度高、spec_deviations=none」，新发现 2×P2（N-1 双端技能管理页头注释漂移、N-2 desktop SkillInfoEditModal 无 catch 与 mobile 不对称）+ 5 处 fix-spec 文档修订（3 行号勘误未尽 + 2 问题栏口径不准），并预批「一轮 spec-fix 后即 ready」。主代理 trivial 直接修订（MF-10/11 新增 + 勘误，763583a1）。最重磅发现是 skill/B-1（MF-1，P1）：String.replace 字符串 replacement 的 $ 序列展开（$$/$&/$'/ $`）会静默损坏 front matter——沿袭自回收前双端旧实现，改函数形式 replacement 修复。待用户拍板 6 项（desktop 搜索面板接线、invalid 描述静默 no-op、query 剥离、export 三备注、buildNewSkillDoc 裸标量、TOCTOU 窄口）。K 节零收尾项（CHANGELOG 完整、无调试残留、工作区干净）。
+
+user:
+（迭代 DAG 派遣）cr-fix 执行 MF-1~12 后，verify-cr-fix 节点独立全量回归验证：core/mobile/desktop 三端指定套件、双端官方 typecheck、MF-4 grep 全仓分布、8 笔提交（5f73410c/95b53378/67273b8b/6791e041/b354926e/fb512e51/49aeefe8/0497b45a）越界抽查。
+
+assistant:
+（verify-cr-fix 节点，全部独立复跑）结论 ready，零失败零越界：①core 指定面（skills+resolve-chat-link-target+package-exports）97 pass/0 fail，MF-1 的 $$/$&/$'/$` 边界用例在跑；②mobile NODE_ENV=test 七套件 63 用例全绿（含 MF-6 空 href、MF-8 trim 契约）；③desktop NODE_ENV=development npm test 七文件 44 pass/0 fail（含 MF-3 全字段断言、MF-5/7/11 源码契约、MF-12 接线断言）；④双端官方 typecheck 绿。⑤MF-4 grep：/^https\?:\/\//字面全仓精确命中 6 处——core resolve-chat-link-target.ts:26 唯一收编定义；MF-4 点名三处重复（mobile chat-link-nav、desktop chat-link-route、desktop main.ts 两内联）已全消。清单外 4 处判定口径存量与 fix worker 报告吻合：app-info.ts:106（handleAppOpenExternal IPC URL 校验）+ mobile 三 webview shouldStartLoadWithRequest 外跳判定（ChatTranscriptWebView:1241/RichDocumentWebView:349/CodeEditorWebView:159）；另有 1 处非判定口径：cloud-sync-driver-s3 create-s3-object-storage.ts:63 的 .replace 剥协议前缀（无 i 标志、剥離语义）。⑥8 笔提交文件面逐笔核对与 MF 条目一一对应无越界：fb512e51 动 skill-zip-import.test.tsx 是 T-S5 describe 块内补 MF-7/11 源码契约断言（fix-spec 预准）；0497b45a 头注与实际 menuItems 逐项一致（desktop 四项/mobile 三项含 invalid 禁用口径）；MF-7 仅 SkillInfoEditModal 切 validateSkillName、isValidSkillNameInput 消费方未动。工作区干净。遗留 manual_user T-E7/T-L7/T-S7 真机验收不变。
+
+user:
+都修了，desktop要一致，invalid 技能是什么？参考Typora不处理就行。
+
+assistant:
+fix-spec 执行完成：用户拍板（12 条全修含新增 MF-12 搜索面板接线、invalid 静默 no-op 维持现状豁免、query 参考 Typora 不处理豁免；invalid 技能=SKILL.md front matter 解析失败的数据状态，用户技能都正常创建故从未见过，UI 已禁其编辑入口）。fix 两节点并行 8 笔提交（fix-link-core：MF-1/2/3/4/5/6/12；fix-skills-ui：MF-7/8/9/10/11）后 verify+cr-func 并行双绿：core 97+mobile 63+desktop 44 全绿、双端 typecheck 过、12/12 MF 闭合矩阵真断言、零越界（T-CF7 stub 配套合理）。存量清单外 4 处同语义 http 正则（app-info:106/ChatTranscriptWebView:1241/RichDocumentWebView:349/CodeEditorWebView:159，基线已有非本 diff）留待后续拍板是否收敛 isHttpUrl；s3 driver 的 replace 剥前缀是另一语义不列。dev-ready 二次达成（分支 34 笔提交），待真机 manual_user（T-E7/L7/S7）与合并决策。cr-func 两处观察记录：DEV_SERVER_URL 前缀匹配理论可被同前缀长域名绕（仅 dev 可忽略）；搜索面板链接路由依赖「抽屉只在活跃会话打开」隐含约束（未来支持非活跃会话查看时需显式传 sessionContext）。
