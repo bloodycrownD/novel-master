@@ -67,4 +67,27 @@ describe("withSkillFrontMatterValues（T-S1）", () => {
     const source = "---\nname: old\n---\n\n正文。\n";
     assert.equal(withSkillFrontMatterValues(source, {}), source);
   });
+
+  // —— MF-1：String.replace 字符串 replacement 的 $ 序列展开防护 ——
+  it("提交值含 $$ / $& / $' ：改写后读回与提交值逐字一致（不折叠/不注入/不展开）", () => {
+    const source = "---\nname: old\ndescription: 旧\n---\n\n正文。\n";
+    // $$ 字符串形式会折叠成单个 $；$& 会注入整个匹配行；$' 会展开为匹配后缀
+    const tricky = "价格 $$ 与 $& 与 $' 三序列";
+    const out = withSkillFrontMatterValues(source, { description: tricky });
+    assert.equal(
+      out,
+      `---\nname: old\ndescription: ${JSON.stringify(tricky)}\n---\n\n正文。\n`,
+    );
+  });
+
+  it("保留的原键值行含 $' / $` ：正文不展开进 front matter、序列不被吞", () => {
+    // 仅改写 description，name 行原样保留进 replacement；字符串形式下
+    // 保留行里的 $' 会把匹配块之后的正文吸入 front matter、$` 会被展开吞掉
+    const source = "---\nname: \"keep $' and $` here\"\ndescription: 旧\n---\n\n正文不被吸入。\n";
+    const out = withSkillFrontMatterValues(source, { description: "新描述" });
+    assert.equal(
+      out,
+      "---\nname: \"keep $' and $` here\"\ndescription: \"新描述\"\n---\n\n正文不被吸入。\n",
+    );
+  });
 });

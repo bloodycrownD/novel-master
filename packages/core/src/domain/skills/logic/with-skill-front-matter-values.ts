@@ -57,9 +57,12 @@ export function withSkillFrontMatterValues(
   let fm = match[1]!;
   for (const [key, value] of entries) {
     const re = new RegExp(`^${key}:.*$`, "m");
+    // replacement 必须用函数形式：字符串形式会展开 $$ / $& / $' / $` 等
+    // $ 序列（描述值或保留的原键值行含这些序列时会静默损坏 front matter）
     fm = re.test(fm)
-      ? fm.replace(re, fmLine(key, value))
+      ? fm.replace(re, () => fmLine(key, value))
       : `${fm}\n${fmLine(key, value)}`;
   }
-  return source.replace(match[0], `---\n${fm}\n---\n`);
+  // 同上：replacement 里嵌着保留下来的原键值行，函数形式不做 $ 序列展开
+  return source.replace(match[0], () => `---\n${fm}\n---\n`);
 }
