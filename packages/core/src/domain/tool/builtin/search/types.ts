@@ -11,7 +11,7 @@
  *   引擎侧按各自能力选择服务端过滤（tavily 参数 / brave 与 searxng 的
  *   `site:` 查询词）或客户端兜底过滤（`matchesDomainFilters`）。
  * - 适配器不持有任何配置读取逻辑：凭据经 `ResolvedEngineConfig` 参数注入
- *   （明文 key 只在 resolveEngine 内现读、不驻留），HTTP 超时统一
+ *   （明文 key 只在 resolveEngineChain 内现读、不驻留），HTTP 超时统一
  *   `AbortController + setTimeout`（RN/Hermes 兼容，不用 AbortSignal.timeout/any），
  *   无 SSRF 拦截层（照 curl 工具拍板：简单搞）。
  *
@@ -57,6 +57,15 @@ export interface SearchOversizeOutput {
   readonly message: string;
 }
 
+/**
+ * 工具层串行链成功输出：`SearchResponse` 叠加尝试轨迹 `attempts`
+ * （如「bocha 失败(401) → tavily 成功」；链首首发成功时省略该字段，
+ * 零降级无轨迹可记）。适配器层不感知该字段。
+ */
+export type SearchChainOutput = SearchResponse & {
+  readonly attempts?: string;
+};
+
 /** 时间范围过滤（各引擎映射为自家 freshness/time_range 参数）。 */
 export type SearchRecency = "day" | "week" | "month" | "year";
 
@@ -73,7 +82,7 @@ export interface SearchToolOptions {
 }
 
 /**
- * 引擎解析结果：凭据随参数注入适配器（明文 key 只在 resolveEngine 内
+ * 引擎解析结果：凭据随参数注入适配器（明文 key 只在 resolveEngineChain 内
  * 经 secretStore 现读，不落在任何缓存 / 日志 / KKV）。
  */
 export interface ResolvedEngineConfig {

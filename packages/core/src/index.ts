@@ -214,7 +214,7 @@ export {
   searchApiKeyRef,
   createSearchConfigStore,
   readSearchConfig,
-  resolveEngine,
+  resolveEngineChain,
 } from "./domain/tool/builtin/search/search-config.js";
 
 /**

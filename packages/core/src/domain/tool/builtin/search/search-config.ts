@@ -1,13 +1,14 @@
 /**
  * 搜索引擎配置存储（core 纯逻辑，入参 SecretStore + KkvService）：
  * key 明文经 SKSP 存储于 `search/{engineId}/apiKey` ref，引擎元数据
- * （默认引擎、searxng baseUrl）存 KKV 模块 `nm-search`——形态照云同步
- * 先例（`cloud-sync/s3-secret-key` ref + `nm-cloud-sync` 模块）。
+ * （引擎优先级顺序 engineOrder、searxng baseUrl）存 KKV 模块
+ * `nm-search`——形态照云同步先例（`cloud-sync/s3-secret-key` ref +
+ * `nm-cloud-sync` 模块）。
  *
  * 凭证安全口径：对外类型只用 `configured: boolean`（不暴露 keySet /
- * key 明文）；明文 key 仅在 {@link resolveEngine} 内经 `secretStore.get`
- * 现读并随 `ResolvedEngineConfig` 注入适配器，不落 KKV / 日志 / 任何
- * 返回值。
+ * key 明文）；明文 key 仅在 {@link resolveEngineChain} 内经
+ * `secretStore.get` 现读并随 `ResolvedEngineConfig` 注入适配器，不落
+ * KKV / 日志 / 任何返回值。
  *
  * @module domain/tool/builtin/search/search-config
  */
@@ -27,8 +28,8 @@ import {
 /** KKV 模块名（照 nm-cloud-sync 命名先例）。 */
 export const SEARCH_KKV_MODULE = "nm-search";
 
-/** KKV 键：默认引擎（EngineId 字符串）。 */
-export const KEY_DEFAULT_ENGINE = "defaultEngine";
+/** KKV 键：引擎优先级顺序（EngineId JSON 数组，顺序即串行降级链）。 */
+export const KEY_ENGINE_ORDER = "engineOrder";
 
 /** KKV 键：searxng 实例 baseUrl。 */
 export const KEY_SEARXNG_BASE_URL = "searxngBaseUrl";
@@ -46,8 +47,8 @@ export type { SearchEngineStatus } from "./types.js";
 
 /** 对外公开的搜索配置（DTO 不含 key 明文，双端 UI / IPC 直接消费）。 */
 export interface SearchConfigPublic {
-  /** 默认引擎（未设置或存量值非法时为 null）。 */
-  readonly defaultEngine: EngineId | null;
+  /** 引擎优先级顺序（串行链优先级；容错归一后恒为 ENGINE_IDS 的全排列）。 */
+  readonly engineOrder: readonly EngineId[];
   /** searxng 实例 baseUrl（规范化后；未配置为空串）。 */
   readonly searxngBaseUrl: string;
   /** 四引擎的配置状态（searxng 的 configured = baseUrl 非空，不查 secretStore）。 */
@@ -107,11 +108,36 @@ async function kkvDelete(kkv: KkvService, key: string): Promise<void> {
   }
 }
 
-/** 存量 defaultEngine 值合法性归一：非引擎 id（含空串/undefined）→ null。 */
-function normalizeDefaultEngine(raw: string | undefined): EngineId | null {
-  return raw != null && (ENGINE_IDS as readonly string[]).includes(raw)
-    ? (raw as EngineId)
-    : null;
+/**
+ * engineOrder 存量值容错归一：非 JSON / 非数组 / 含非法项 / 有重复时，
+ * 合法前缀保留、缺项按 `ENGINE_IDS` 默认序补齐去重——归一结果恒为
+ * ENGINE_IDS 的全排列（UI 排序菜单与串行链都拿得到稳定顺序，损坏值
+ * 不致解析链断裂）。
+ */
+function normalizeEngineOrder(raw: string | undefined): EngineId[] {
+  const order: EngineId[] = [];
+  if (raw != null) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (
+            typeof item === "string" &&
+            (ENGINE_IDS as readonly string[]).includes(item) &&
+            !order.includes(item as EngineId)
+          ) {
+            order.push(item as EngineId);
+          }
+        }
+      }
+    } catch {
+      // 非 JSON / 损坏值：丢弃存量值，走默认序补齐。
+    }
+  }
+  for (const engineId of ENGINE_IDS) {
+    if (!order.includes(engineId)) order.push(engineId);
+  }
+  return order;
 }
 
 /**
@@ -121,8 +147,8 @@ function normalizeDefaultEngine(raw: string | undefined): EngineId | null {
 export async function readSearchConfig(
   deps: SearchConfigDeps
 ): Promise<SearchConfigPublic> {
-  const [defaultEngineRaw, baseUrlRaw, ...keySet] = await Promise.all([
-    kkvGet(deps.kkv, KEY_DEFAULT_ENGINE),
+  const [engineOrderRaw, baseUrlRaw, ...keySet] = await Promise.all([
+    kkvGet(deps.kkv, KEY_ENGINE_ORDER),
     kkvGet(deps.kkv, KEY_SEARXNG_BASE_URL),
     ...KEY_ENGINE_IDS.map((engineId) =>
       deps.secretStore.has(searchApiKeyRef(engineId))
@@ -130,7 +156,7 @@ export async function readSearchConfig(
   ]);
   const searxngBaseUrl = baseUrlRaw ?? "";
   return {
-    defaultEngine: normalizeDefaultEngine(defaultEngineRaw),
+    engineOrder: normalizeEngineOrder(engineOrderRaw),
     searxngBaseUrl,
     engines: {
       bocha: { configured: keySet[0] === true },
@@ -142,46 +168,39 @@ export async function readSearchConfig(
 }
 
 /**
- * 解析本次调用实际使用的引擎（解析链：`inputEngine` → `defaultEngine`
- * → `ENGINE_IDS` 顺序第一个 `configured` 引擎；候选未配置则顺位回落，
- * 全无 → null）。key 引擎命中时现读明文；searxng 命中时规范化 baseUrl
- * （存库值非法的防御路径视同未配置，终止解析链，不静默改写候选）。
+ * 解析串行引擎链：按 `engineOrder` 顺序返回全部已配置引擎的候选数组
+ * （优先级即降级链）；显式 `inputEngine` 时从该引擎起截取（位于其前
+ * 的引擎不参与，未配置则顺位回落到截取链中下一个 configured）。候选
+ * 凭据随项注入（key 引擎现读明文；`has` 之后被并发清除的竞态兜底：
+ * get 不到明文视作未配置跳过；searxng 存库 baseUrl 损坏同样跳过），
+ * 全无 → 空数组（工具回落未配置提示）。
  */
-export async function resolveEngine(
+export async function resolveEngineChain(
   deps: SearchConfigDeps,
   inputEngine?: EngineId
-): Promise<ResolvedEngineConfig | null> {
+): Promise<ResolvedEngineConfig[]> {
   const config = await readSearchConfig(deps);
-  const candidates: EngineId[] = [];
-  if (inputEngine != null) candidates.push(inputEngine);
-  if (
-    config.defaultEngine != null &&
-    !candidates.includes(config.defaultEngine)
-  ) {
-    candidates.push(config.defaultEngine);
+  let order: readonly EngineId[] = config.engineOrder;
+  if (inputEngine != null) {
+    const index = order.indexOf(inputEngine);
+    // 归一后 engineOrder 必含全部引擎，index < 0 仅在入参绕过 zod 校验时出现；
+    // 防御性只保留该引擎（不静默丢弃显式指定，交给 configured 过滤判定）。
+    order = index >= 0 ? order.slice(index) : [inputEngine];
   }
-  for (const engineId of ENGINE_IDS) {
-    if (
-      config.engines[engineId].configured &&
-      !candidates.includes(engineId)
-    ) {
-      candidates.push(engineId);
+  const chain: ResolvedEngineConfig[] = [];
+  for (const engineId of order) {
+    if (!config.engines[engineId].configured) continue;
+    if (engineId === "searxng") {
+      const baseUrl = normalizeSearxngBaseUrl(config.searxngBaseUrl);
+      if (baseUrl == null) continue;
+      chain.push({ engine: "searxng", baseUrl });
+      continue;
     }
+    const apiKey = await deps.secretStore.get(searchApiKeyRef(engineId));
+    if (apiKey == null || apiKey.length === 0) continue;
+    chain.push({ engine: engineId, apiKey });
   }
-  const pick = candidates.find(
-    (engineId) => config.engines[engineId].configured
-  );
-  if (pick == null) return null;
-
-  if (pick === "searxng") {
-    const baseUrl = normalizeSearxngBaseUrl(config.searxngBaseUrl);
-    if (baseUrl == null) return null;
-    return { engine: "searxng", baseUrl };
-  }
-  // has 之后被并发清除的竞态兜底：get 不到明文同样终止解析链（不静默改写为其他引擎）。
-  const apiKey = await deps.secretStore.get(searchApiKeyRef(pick));
-  if (apiKey == null || apiKey.length === 0) return null;
-  return { engine: pick, apiKey };
+  return chain;
 }
 
 /**
@@ -194,8 +213,10 @@ export interface SearchConfigStore {
   readConfig(): Promise<SearchConfigPublic>;
   /** 读取单引擎配置状态。 */
   loadEngineConfig(engineId: EngineId): Promise<SearchEngineStatus>;
-  /** 解析引擎（链语义同 {@link resolveEngine}）。 */
-  resolveEngine(inputEngine?: EngineId): Promise<ResolvedEngineConfig | null>;
+  /** 解析串行引擎链（链语义同 {@link resolveEngineChain}）。 */
+  resolveEngineChain(
+    inputEngine?: EngineId
+  ): Promise<ResolvedEngineConfig[]>;
   /** 保存引擎 API key（明文只经 SKSP set；空串拒绝）。 */
   saveEngineKey(engineId: KeyEngineId, apiKey: string): Promise<void>;
   /** 清除引擎 API key。 */
@@ -204,8 +225,8 @@ export interface SearchConfigStore {
    * 保存 searxng baseUrl：空串 = 清除；非空则规范化（非法抛错）。
    */
   setSearxngBaseUrl(baseUrl: string): Promise<void>;
-  /** 设置默认引擎；null = 清除。 */
-  setDefaultEngine(engineId: EngineId | null): Promise<void>;
+  /** 保存引擎优先级顺序（须为 ENGINE_IDS 的合法排列，非法抛错）。 */
+  setEngineOrder(order: readonly EngineId[]): Promise<void>;
 }
 
 /**
@@ -224,8 +245,8 @@ export function createSearchConfigStore(
       const config = await readSearchConfig(deps);
       return config.engines[engineId];
     },
-    resolveEngine(inputEngine) {
-      return resolveEngine(deps, inputEngine);
+    resolveEngineChain(inputEngine) {
+      return resolveEngineChain(deps, inputEngine);
     },
     async saveEngineKey(engineId, apiKey) {
       const trimmed = apiKey.trim();
@@ -251,15 +272,29 @@ export function createSearchConfigStore(
       }
       await kkv.set(SEARCH_KKV_MODULE, KEY_SEARXNG_BASE_URL, normalized);
     },
-    async setDefaultEngine(engineId) {
-      if (engineId == null) {
-        await kkvDelete(kkv, KEY_DEFAULT_ENGINE);
-        return;
+    async setEngineOrder(order) {
+      const seen = new Set<string>();
+      for (const item of order) {
+        if (
+          !(ENGINE_IDS as readonly string[]).includes(item) ||
+          seen.has(item)
+        ) {
+          throw new Error(
+            `engineOrder 必须是四引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
+          );
+        }
+        seen.add(item);
       }
-      if (!(ENGINE_IDS as readonly string[]).includes(engineId)) {
-        throw new Error(`未知搜索引擎: ${engineId}`);
+      if (seen.size !== ENGINE_IDS.length) {
+        throw new Error(
+          `engineOrder 必须是四引擎的合法排列（不重复、不缺项），收到: ${JSON.stringify(order)}`
+        );
       }
-      await kkv.set(SEARCH_KKV_MODULE, KEY_DEFAULT_ENGINE, engineId);
+      await kkv.set(
+        SEARCH_KKV_MODULE,
+        KEY_ENGINE_ORDER,
+        JSON.stringify(order)
+      );
     },
   };
 }
