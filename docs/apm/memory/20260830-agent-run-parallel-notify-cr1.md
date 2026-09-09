@@ -134,3 +134,9 @@ assistant:
 - 独立开关：偏好 agentKeepAlive 默认关（历史零感知：不开启则无前台服务无常驻通知），与完成通知开关（默认开）解耦；prefBridge 扩 isKeepAliveEnabled，未注入视为关；收尾摘标签与开关无关。
 - 测试 T-P5×5 / T-P8/T-P8b，T-P6 语义更新；5 套件 94 全绿。JS-only 改动，设备 force-restart 已重拉 bundle（0 error）。
 - 踩坑：测试 describe 挂在外层 describe 之外导致 beforeEach 复位没罩到（双 display 假失败）——新增 describe 要么进外层要么自带 clearAllMocks+reset。
+
+user:
+第二轮反馈：能一个会话一个通知吗？这样点按才能跳到对应会话；生成中的通知现在点不了跳转；开关 title 太长改「常驻通知」、描述简化。
+
+assistant:
+per-session 化落地（80343a13）：通知 id nm-agent-keepalive-<sessionId>、各带 data.sessionId 复用既有 PRESS→setCurrentSession 导航链（此前常驻通知无 data 是点不动的原因）；单会话收尾只 cancel 自己的通知条、最后一个收尾才 stopForegroundService；desired/version 状态机退场，显示/取消即状态；串行链保留；同标签重复登记经 displayed 映射抑制。开关文案改「常驻通知」。测试随模型重写，踩坑两个：①mockImplementationOnce 未消费不被 clearAllMocks 清除、跨用例泄漏卡死后续 stopFg——改用「调用即信号」Promise 精确等待；②notifee mock 缺 cancelNotification 补齐。6 套件 97 全绿，设备已重拉 bundle（旧 ERROR 为改到一半的陈旧日志，二次拉包零错）。
