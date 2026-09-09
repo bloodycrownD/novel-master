@@ -88,3 +88,9 @@ user:
 
 assistant:
 dev DAG 四波全部收敛 dev-ready：wave-0 [impl-export-naming（4 笔功能+1 记忆）、impl-chat-link（5 笔功能+1 记忆）] 并行——export 与 chat-link 文件不相交；wave-1 [impl-skill-rename（5 笔功能+1 changelog）]——与 export 共享 ipc-types/SkillsManageView/SkillsSettingsScreen 三文件故串行；wave-2 三路 verify 并行全 ready（快照修复 e0cc452a 由主代理 trivial 落盘：chat-link 加 public/chat 导出未更快照）；wave-3 三路 cr-func 并行全部 func-ready: yes、零 must-fix。spec_deviations 三处均接受：desktop 单源再导出在 shared/logic/skills.ts（语义等价）、事务内直接 createScopedVfsService(tx)（工厂闭包持旧 conn 会与外层事务 mutex 互等死锁，安全修正）、driver 事务包装需解包 cause 还原 SkillError 错误码（双 driver 核实）。core-shim 未补是正确判断（子路径直连 dist 不经 shim）。分支 export-link-skill-mgmt 自 main 5234817f，HEAD cfd17a21 共 20 笔（含 docs 基线与错字修正 cfd17a21——sed 误伤存量文件已 checkout 还原收窄回本迭代三文件）。全量验证：core 2327、mobile 相关 27+72+11、desktop 相关 23+22+23，双端 typecheck 绿。遗留 manual_user：T-E7/T-L7/T-S7 真机双端验收（导出默认名目检、六形态链接点击、技能改名/描述/负清单保留/$引用自愈）。教训：仓库存量「兑底」错字遍布 20+ 文件，批量 sed 会越界，必须限定本迭代文件。
+
+user:
+cr下吧（code-review-loop）。
+
+assistant:
+code-review-loop 两轮收敛 fix-spec-ready：round 1 三 scope 并行评审（export 零发现直接 scope-ready；chatlink 5×P2；skill 1×P1+3×P2）→ spec-fix 子代理落盘 cr-fix-spec.md（9 条 MF，ed8df975，含 5 处行号勘误）→ round 2 review-full 全维终审：核心结论「代码扎实、spec 符合度高、spec_deviations=none」，新发现 2×P2（N-1 双端技能管理页头注释漂移、N-2 desktop SkillInfoEditModal 无 catch 与 mobile 不对称）+ 5 处 fix-spec 文档修订（3 行号勘误未尽 + 2 问题栏口径不准），并预批「一轮 spec-fix 后即 ready」。主代理 trivial 直接修订（MF-10/11 新增 + 勘误，763583a1）。最重磅发现是 skill/B-1（MF-1，P1）：String.replace 字符串 replacement 的 $ 序列展开（$$/$&/$'/ $`）会静默损坏 front matter——沿袭自回收前双端旧实现，改函数形式 replacement 修复。待用户拍板 6 项（desktop 搜索面板接线、invalid 描述静默 no-op、query 剥离、export 三备注、buildNewSkillDoc 裸标量、TOCTOU 窄口）。K 节零收尾项（CHANGELOG 完整、无调试残留、工作区干净）。
