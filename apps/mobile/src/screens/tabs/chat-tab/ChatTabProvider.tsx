@@ -17,7 +17,9 @@ import {type ChatMessage} from '@novel-master/core/chat';
 import type {VfsService} from '@novel-master/core/vfs';
 import type {WorkplaceService} from '@novel-master/core/workplace';
 import {
+  EVENT_AGENT_RUN_FINISHED,
   EVENT_SUBAGENT_CHILD_SESSION_CREATED,
+  type AgentRunFinishedPayload,
   type SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
@@ -216,39 +218,62 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   }, [scope.chatSubview, sessionId, refreshChatMeta]);
 
   // 订阅子会话创建事件：task 工具执行中（createChildSession）即发出，
-  // 用 title → childSessionId 维护映射，让 pending 卡片也能点击进入子会话浏览。
-  // 切换会话时清空，避免上一个会话的映射串到新会话。
+  // 按 title → childSessionId 维护映射，让 pending 卡片也能点击进入子会话浏览。
+  //
+  // 按父会话持久（并行修复）：旧实现绑定当前会话且切换即清空——并行时切走
+  // 再切回，映射已空而创建事件不会重发，任务卡灰到 run 结束（tool_result
+  // 的 meta.subagentSessionId 落库才恢复可点）。改为：事件无差别按
+  // parentSessionId 归账（与展示绑定解耦）；该父会话 FINISHED 时清理其条目
+  // （此时 result meta 已接管可点性，且避免同 title 的陈旧条目串到下一 run）。
   useEffect(() => {
-    if (sessionId == null) {
-      setPendingSubagentSessions(new Map());
-      return undefined;
-    }
-    const sid = sessionId;
-    setPendingSubagentSessions(new Map());
     const sub = runtime.eventBus.subscribe(
       EVENT_SUBAGENT_CHILD_SESSION_CREATED,
       (payload: SubagentChildSessionCreatedPayload) => {
-        if (payload.parentSessionId !== sid) {
-          return;
-        }
-        setPendingSubagentSessions(prev => {
+        setSubagentChildSessionsByParent(prev => {
           const next = new Map(prev);
-          next.set(payload.title, payload.childSessionId);
+          const forParent = new Map(
+            next.get(payload.parentSessionId) ?? [],
+          );
+          forParent.set(payload.title, payload.childSessionId);
+          next.set(payload.parentSessionId, forParent);
           return next;
         });
       },
     );
-    return () => sub.unsubscribe();
-  }, [runtime.eventBus, sessionId]);
+    const subFinished = runtime.eventBus.subscribe(
+      EVENT_AGENT_RUN_FINISHED,
+      (payload: AgentRunFinishedPayload) => {
+        setSubagentChildSessionsByParent(prev => {
+          if (!prev.has(payload.sessionId)) {
+            return prev;
+          }
+          const next = new Map(prev);
+          next.delete(payload.sessionId);
+          return next;
+        });
+      },
+    );
+    return () => {
+      sub.unsubscribe();
+      subFinished.unsubscribe();
+    };
+  }, [runtime.eventBus]);
 
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
   const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
-  const [pendingSubagentSessions, setPendingSubagentSessions] = useState<
-    Map<string, string>
-  >(() => new Map());
+  const [subagentChildSessionsByParent, setSubagentChildSessionsByParent] =
+    useState<Map<string, Map<string, string>>>(() => new Map());
+  const EMPTY_PENDING_SUBAGENT_SESSIONS = useMemo(() => new Map(), []);
+  // 当前会话的 pending 子会话映射：切会话只换视图，不动数据。
+  const pendingSubagentSessions = useMemo(
+    () =>
+      subagentChildSessionsByParent.get(sessionId ?? '') ??
+      EMPTY_PENDING_SUBAGENT_SESSIONS,
+    [subagentChildSessionsByParent, sessionId, EMPTY_PENDING_SUBAGENT_SESSIONS],
+  );
   const [chatStreamBatchEnabled, setChatStreamBatchEnabled] = useState(true);
   const [messageMenuTarget, setMessageMenuTarget] = useState<
     ChatMessage | undefined
