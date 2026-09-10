@@ -132,6 +132,13 @@ async function reconcileKeepAlive(): Promise<void> {
         asForegroundService: true,
         ongoing: true,
         smallIcon: 'ic_launcher',
+        // 无 pressAction 时 notifee 不设 contentIntent——Android 点按无任何
+        // 反应（连拉起应用都不会）。带 default pressAction：点按拉起应用
+        // （launcher），PRESS 事件因无 data.sessionId 走既有 no-op 分支，
+        // 不做会话跳转。
+        pressAction: {
+          id: 'default',
+        },
       },
     });
     keepAliveRunning = true;

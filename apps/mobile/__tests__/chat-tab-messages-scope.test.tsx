@@ -119,6 +119,14 @@ describe('T-X: 消息视图会话作用域守卫（串会话竞态）', () => {
         .getSessionViewCache(sessionViewCacheKey('proj-1', 'sess-B'))
         ?.messages.some(m => m.sessionId === 'sess-A'),
     ).toBeFalsy();
+
+    // 丢弃路径仍要刷新属主会话（A）的视图缓存——否则 A 的最终消息
+    // 永远进不了缓存，重进 A 水合旧列表 = 消息丢失（重启才恢复）。
+    const cacheA =
+      require('../src/services/chat-session-view-cache').getSessionViewCache(
+        sessionViewCacheKey('proj-1', 'sess-A'),
+      );
+    expect(cacheA?.messages).toEqual(messagesOfA);
   });
 
   it('loadOlderMessages 在途期间切换会话：分页结果被丢弃', async () => {

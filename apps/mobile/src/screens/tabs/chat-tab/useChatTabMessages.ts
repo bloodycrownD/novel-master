@@ -102,10 +102,6 @@ export function useChatTabMessages({
           sessionId,
           CHAT_PAGE_SIZE,
         );
-        if (sessionIdRef.current !== scopeSid) {
-          // 在途期间已切走：丢弃，避免旧会话行落进新会话状态
-          return [];
-        }
         let hasMore = false;
         const oldestSeq = list[0]?.seq;
         if (oldestSeq != null) {
@@ -115,10 +111,15 @@ export function useChatTabMessages({
           });
           hasMore = older.length > 0;
         }
-        if (
-          sessionIdRef.current !== scopeSid ||
-          scopeKey !== sessionViewCacheKey(projectId, sessionId)
-        ) {
+        if (sessionIdRef.current !== scopeSid) {
+          // 在途期间已切走：不灌屏（串会话守卫），但缓存必须刷新——
+          // 否则该会话（典型：后台收尾触发的 FINISH reload）的最终消息
+          // 永远进不了视图缓存，重进时水合旧列表 = 消息丢失（重启才
+          // 恢复，因缓存纯内存）。缓存按 scopeKey 写，落回属主会话。
+          setSessionViewCache(scopeKey, {
+            messages: list,
+            hasMoreMessages: hasMore,
+          });
           return [];
         }
         setChatMessages(list);
