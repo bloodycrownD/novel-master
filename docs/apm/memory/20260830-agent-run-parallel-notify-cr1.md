@@ -158,3 +158,9 @@ user:
 
 assistant:
 按拍板回滚（5a3f5657）：通知模块/测试/mock 恢复至 602cb909 聚合版——单条常驻通知、内容随最近会话+总数、开关默认关、文案保留「常驻通知」；点按直达仅完成通知保留。44 测试全绿推真机。spec 追记 #7 记录决策：华为 EMUI 对 FGS 通知点按处置与 AOSP 预期不符（加 pressAction 后仍消失），per-session 放弃。流式丢失探针（4 文件+[pstream] 前缀，未提交）保留在工作区待用户复现。
+
+user:
+第六轮反馈：确认重复消息没了；但出现消息丢失（并行两会话，一个消息丢失，重启后渲染回来）；状态栏生成中点击无反应，可不跳会话但必须跳应用。
+
+assistant:
+消息丢失根因（37eddafe）：3cf66a8e 的串会话守卫把后台会话收尾的 force reload 整体丢弃，连视图缓存刷新一起丢——该会话缓存停在完成前旧列表，重进水合旧缓存=消息丢失；缓存纯内存故重启恢复。修复=守卫只挡 setChatMessages，缓存按发起时 scopeKey 照常写回属主。状态栏点按：聚合版常驻通知无 pressAction，notifee 不设 contentIntent，Android 点按完全无反应；补 default pressAction=点按拉起应用，PRESS 无 sessionId 走既有 no-op（不跳会话，用户拍板）。测试：T-X 扩属主缓存断言、通知 pressAction 用例，6 套件 86 绿。排查经验沉淀：RN 侧探针（[pstream] 前缀 6 文件）全量验证绑定/webview/快照层正确后才锁死消息层；受控 promise mock 要单次武装式（按序号会被切换重渲染的新初次加载顶掉句柄）。
