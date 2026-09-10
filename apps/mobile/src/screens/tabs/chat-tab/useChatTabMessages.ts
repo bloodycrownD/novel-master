@@ -51,6 +51,11 @@ export function useChatTabMessages({
 
   const canResumeWithoutInput = composerSendState.canResumeWithoutInput;
 
+  // 会话作用域真源：异步 reload/分页在途期间发生会话切换时，据此丢弃过期结果
+  // （否则旧会话的行会灌进新会话的屏幕——串会话竞态，T-X 系列回归守护）。
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+
   const persistSessionViewCache = useCallback(
     (messages: readonly ChatMessage[], hasMore: boolean) => {
       if (projectId == null || sessionId == null) {
@@ -90,11 +95,17 @@ export function useChatTabMessages({
             return [...cached.messages];
           }
         }
+        const scopeSid = sessionId;
+        const scopeKey = cacheKey;
         const list = await loadSessionMessagesTail(
           runtime,
           sessionId,
           CHAT_PAGE_SIZE,
         );
+        if (sessionIdRef.current !== scopeSid) {
+          // 在途期间已切走：丢弃，避免旧会话行落进新会话状态
+          return [];
+        }
         let hasMore = false;
         const oldestSeq = list[0]?.seq;
         if (oldestSeq != null) {
@@ -103,6 +114,12 @@ export function useChatTabMessages({
             beforeSeq: oldestSeq,
           });
           hasMore = older.length > 0;
+        }
+        if (
+          sessionIdRef.current !== scopeSid ||
+          scopeKey !== sessionViewCacheKey(projectId, sessionId)
+        ) {
+          return [];
         }
         setChatMessages(list);
         setHasMoreMessages(hasMore);
@@ -149,14 +166,15 @@ export function useChatTabMessages({
       if (beforeSeq == null) {
         return;
       }
-      const older = await loadSessionMessagesPage(
-        runtime,
-        sessionId,
-        {
-          limit: CHAT_PAGE_SIZE,
-          beforeSeq,
-        },
-      );
+      const scopeSid = sessionId;
+      const older = await loadSessionMessagesPage(runtime, sessionId, {
+        limit: CHAT_PAGE_SIZE,
+        beforeSeq,
+      });
+      if (sessionIdRef.current !== scopeSid) {
+        // 在途期间已切走：丢弃分页结果
+        return;
+      }
       if (older.length === 0) {
         setHasMoreMessages(false);
         return;
