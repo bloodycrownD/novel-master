@@ -164,3 +164,9 @@ user:
 
 assistant:
 消息丢失根因（37eddafe）：3cf66a8e 的串会话守卫把后台会话收尾的 force reload 整体丢弃，连视图缓存刷新一起丢——该会话缓存停在完成前旧列表，重进水合旧缓存=消息丢失；缓存纯内存故重启恢复。修复=守卫只挡 setChatMessages，缓存按发起时 scopeKey 照常写回属主。状态栏点按：聚合版常驻通知无 pressAction，notifee 不设 contentIntent，Android 点按完全无反应；补 default pressAction=点按拉起应用，PRESS 无 sessionId 走既有 no-op（不跳会话，用户拍板）。测试：T-X 扩属主缓存断言、通知 pressAction 用例，6 套件 86 绿。排查经验沉淀：RN 侧探针（[pstream] 前缀 6 文件）全量验证绑定/webview/快照层正确后才锁死消息层；受控 promise mock 要单次武装式（按序号会被切换重渲染的新初次加载顶掉句柄）。
+
+user:
+第七轮反馈：这轮生成结束后渲染正常；推测之前的"假渲染"是生成接近尾声未结束时进入，堆积内容按渲染节奏补完——是否如此？
+
+assistant:
+核实结论：非 bug。代码里无打字机限速（RN rAF 批帧 + webview 每帧整段替换，均无人为限速），用户看到的"已完成还在流式"实为 run 未真正结束、尾部 token 按真实速度续渲；等待真结束后进入渲染正常，日志增量流匀速吻合。后台挂机→回前台的排队/脏重挂机器正常无异常。本轮排查探针（[pstream] 前缀，5 文件 + debug 模块）已全部拆除，工作区零残留，7 套件 99 测试全绿，设备已重拉干净 bundle。迭代收尾：Step 3 投影 + 通知聚合模型 + 串会话/消息丢失双守卫 + pressAction，累计提交 942a6a98..e8dbffcd。
