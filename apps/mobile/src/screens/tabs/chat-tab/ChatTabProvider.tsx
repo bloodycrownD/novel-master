@@ -27,10 +27,6 @@ import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
 import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
-import type {
-  AgentStreamMetricsSnapshot,
-  StreamMetricsAccRef,
-} from '@/hooks/useAgentStreamMetrics';
 import {useToast} from '@/components/chrome/ToastHost';
 import {useRuntime} from '@/hooks/useRuntime';
 import {useMobileScope} from '@/hooks/useMobileScope';
@@ -39,6 +35,7 @@ import {
   RUN_LAUNCH_PROTECT_WINDOW_MS,
 } from '@/hooks/useAgentRunLifecycle';
 import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
+import {pstreamLog} from '@/debug/parallel-stream-debug';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
@@ -85,8 +82,6 @@ export type ChatTabContextValue = {
   readonly streamTailGenerating: boolean;
   readonly streamingText: string;
   readonly streamingThinking: string;
-  readonly streamMetricsLastRun: AgentStreamMetricsSnapshot | null;
-  readonly streamMetricsAccRef: StreamMetricsAccRef;
   readonly onStreamReset: () => void;
   readonly chatMessages: ChatMessage[];
   readonly hasMoreMessages: boolean;
@@ -348,6 +343,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   });
 
   useEffect(() => {
+    pstreamLog('reset', {sid: sessionId ?? 'null'});
     abort.resetForSessionChange();
     lifecycle.resetUiForSessionChange();
     // 声明顺序约束：本 reset effect 不得移到下方 useRunResumeProbe 接线
@@ -388,7 +384,9 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       sessionId != null &&
       (runtime.abortRegistry.has(sessionId) || manager.hasRun(sessionId)),
     onRunActive: () => {
+      pstreamLog('probe-active', {sid: sessionId ?? 'null'});
       abort.markRunStarted();
+      pstreamLog('markRunStarted', {sid: sessionId ?? 'null'});
     },
     onRunEnded: () => {
       // 发起保护窗（MF-4）：beginUiRun 先把 uiRunning 置 true，core 侧
@@ -539,8 +537,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       streamTailGenerating: abort.uiRunning,
       streamingText: stream.streamingText,
       streamingThinking: stream.streamingThinking,
-      streamMetricsLastRun: stream.streamMetricsLastRun,
-      streamMetricsAccRef: stream.streamMetricsAccRef,
       onStreamReset: stream.handleStreamReset,
       chatMessages: messages.chatMessages,
       hasMoreMessages: messages.hasMoreMessages,

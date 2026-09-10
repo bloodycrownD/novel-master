@@ -10,7 +10,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {Linking, StyleSheet, View} from 'react-native';
+import {Linking, StyleSheet, View, AppState} from 'react-native';
+import {pstreamLog} from '@/debug/parallel-stream-debug';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
 // import type 会被擦除，不影响运行时打包。
@@ -495,6 +496,12 @@ export const ChatTranscriptWebView = memo(
             buildTranscriptRows(messages, undefined, transcriptListOptions),
             richText,
           );
+          pstreamLog('snapshot-send', {
+            sessionKey,
+            rowCount: rows.length,
+            lastRow: JSON.stringify(rows[rows.length - 1]).slice(0, 80),
+            intent: scrollIntent,
+          });
           postToWeb({
             v: 1,
             type: 'sessionSnapshot',
@@ -890,10 +897,15 @@ export const ChatTranscriptWebView = memo(
           }
           // WebView 恢复可见：若隐藏期间有改画推送（旧帧风险），强制重挂重绘。
           if (message.type === 'visibility') {
+            pstreamLog('wv-visibility-report', {
+              hidden: message.payload.hidden,
+              dirty: statePushSinceResumeRef.current,
+            });
             if (!message.payload.hidden) {
               const dirty = statePushSinceResumeRef.current > 0;
               statePushSinceResumeRef.current = 0;
               if (dirty) {
+                pstreamLog('wv-dirty-remount', {});
                 prevStreamTextRef.current = '';
                 prevStreamThinkingRef.current = '';
                 forceSnapshotOnReadyRef.current = true;
@@ -1019,6 +1031,9 @@ export const ChatTranscriptWebView = memo(
       // 重发 snapshot 让 pending task 卡片立即获得 subagentSessionId 可点击。
       // 注意经 ref 调用：不能把 sendSessionSnapshot 放进依赖（闭包身份不稳定，
       // 会退化成每次重渲染都发全量快照）。
+      // 必须 force：子会话创建时父 run 必然 uiRunning 且常 streamActive，
+      // 普通 snapshot 会走 defer（挂起到流结束）——子代理长任务期间任务卡
+      // 永远进不了基线，表现为「调用 subagent 时消息不显示，终止后才渲染」。
       useEffect(() => {
         if (!webReady) {
           return;
@@ -1029,7 +1044,7 @@ export const ChatTranscriptWebView = memo(
         sendSessionSnapshotRef.current(
           'preserve',
           undefined,
-          forceAfterRepaint,
+          forceAfterRepaint || (pendingSubagentSessions?.size ?? 0) > 0,
         );
       }, [webReady, pendingSubagentSessions]);
 

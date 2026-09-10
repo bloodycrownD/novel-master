@@ -339,6 +339,70 @@ describe('ChatTranscriptWebView', () => {
     expect(messageTypesSince(baseline)).toContain('sessionSnapshot');
   });
 
+  it('T-SUB-CARD: pendingSubagentSessions 变化时快照 force 直发——子代理长任务期间任务卡可见', async () => {
+    // 场景：父 run 流式中（uiRunning+streamActive）task 工具创建子会话 →
+    // pendingSubagentSessions 变化需重发 snapshot 让任务卡立即进基线。
+    // 旧实现走普通 snapshot 的 defer 路径（uiRunning+streamActive 时挂起到
+    // 流结束）——子代理跑几分钟，任务卡/step 行一直进不了界面，表现为
+    // 「调用 subagent 时消息不显示，终止后才渲染」。修复后 force 直发。
+    const messages = [sampleMessage('m1', 1), sampleMessage('m2', 2)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText=""
+          streamingThinking=""
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // 流式推送置 streamActive（此后普通 snapshot 会被 defer 吞掉）
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText="思"
+          streamingThinking=""
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    await flushAnimationFrame();
+    const baseline = mockWebViewPostMessages.length;
+
+    // 子会话创建：pendingSubagentSessions 从空到非空
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText="思"
+          streamingThinking=""
+          agentRunning
+          uiRunning
+          pendingSubagentSessions={new Map([['child-1', 'c1']])}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // force 直发：不等流式结束，快照必须已到达（含 defer 定时器也无需 flush）
+    expect(messageTypesSince(baseline)).toContain('sessionSnapshot');
+  });
+
   it('richText 开启时 text streamDelta 应包含 RN html（与 spec 契约一致）', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;

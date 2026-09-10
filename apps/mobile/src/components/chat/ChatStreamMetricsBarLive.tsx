@@ -3,25 +3,22 @@
  */
 import React, {useEffect, useState} from 'react';
 import {
-  type AgentStreamMetricsSnapshot,
   type AgentStreamMetricsView,
   toAgentStreamMetricsView,
-  snapshotMetricsAcc,
-  type StreamMetricsAccRef,
 } from '@/hooks/useAgentStreamMetrics';
+import {
+  getLastRunMetrics,
+  getLiveMetrics,
+} from '@/services/stream-metrics-store';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
 
 type Props = {
   readonly agentRunning: boolean;
-  readonly accRef: StreamMetricsAccRef;
-  readonly lastRun: AgentStreamMetricsSnapshot | null;
+  /** 指标归属会话：切会话只换数据源，不重置（见 stream-metrics-store）。 */
+  readonly sessionId: string | undefined;
 };
 
-export function ChatStreamMetricsBarLive({
-  agentRunning,
-  accRef,
-  lastRun,
-}: Props) {
+export function ChatStreamMetricsBarLive({agentRunning, sessionId}: Props) {
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -35,14 +32,22 @@ export function ChatStreamMetricsBarLive({
   }, [agentRunning]);
 
   let metrics: AgentStreamMetricsView | null = null;
-  if (agentRunning && accRef.current.startedAtMs > 0) {
-    const elapsedMs = Math.max(0, Date.now() - accRef.current.startedAtMs);
-    metrics = toAgentStreamMetricsView(
-      true,
-      snapshotMetricsAcc(accRef.current, elapsedMs),
-    );
-  } else if (lastRun != null) {
-    metrics = toAgentStreamMetricsView(false, lastRun);
+  if (agentRunning && sessionId != null) {
+    const live = getLiveMetrics(sessionId);
+    if (live.startedAtMs > 0) {
+      const elapsedMs = Math.max(0, Date.now() - live.startedAtMs);
+      metrics = toAgentStreamMetricsView(true, {
+        elapsedMs,
+        textChars: live.textChars,
+        thinkingChars: live.thinkingChars,
+      });
+    }
+  }
+  if (metrics == null && sessionId != null) {
+    const lastRun = getLastRunMetrics(sessionId);
+    if (lastRun != null) {
+      metrics = toAgentStreamMetricsView(false, lastRun);
+    }
   }
 
   if (metrics == null) {

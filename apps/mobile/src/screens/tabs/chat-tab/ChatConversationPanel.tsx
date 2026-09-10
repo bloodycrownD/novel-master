@@ -55,8 +55,6 @@ export function ChatConversationPanel({
     projectId,
     sessionId,
     agentMeta,
-    streamMetricsAccRef,
-    streamMetricsLastRun,
     uiRunning,
     sessionAgentRunning,
     useWebviewTranscript,
@@ -183,9 +181,8 @@ export function ChatConversationPanel({
           onPressModel={openModelPicker}
         />
         <ChatStreamMetricsBarLive
-          agentRunning={uiRunning}
-          accRef={streamMetricsAccRef}
-          lastRun={streamMetricsLastRun}
+          agentRunning={sessionAgentRunning}
+          sessionId={sessionId}
         />
       </>
     ) : null;

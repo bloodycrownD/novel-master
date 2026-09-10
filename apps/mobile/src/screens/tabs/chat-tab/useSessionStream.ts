@@ -14,6 +14,7 @@
  * decrementAgentActive，改为通知 lifecycle（onRunFinished/onRunFailed）。
  */
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {pstreamLog, pstreamDeltaThrottle} from '@/debug/parallel-stream-debug';
 import type {RefObject} from 'react';
 import {
   EVENT_AGENT_RUN_FAILED,
@@ -39,7 +40,12 @@ import {
   type FlushMessagesChanged,
   type FlushStreamEndContext,
 } from '@/components/chat/flush-run-ui';
-import {useStreamMetricsAcc} from '@/hooks/useAgentStreamMetrics';
+import {
+  finishRun as finishMetricsRun,
+  noteRunStarted,
+  noteTextDelta,
+  noteThinkingDelta,
+} from '@/services/stream-metrics-store';
 import {useRuntime} from '@/hooks/useRuntime';
 import type {StreamWireChunk} from '@/services/stream-wire-queue';
 
@@ -85,8 +91,6 @@ export type UseSessionStreamResult = {
    * 路由 webview（pushStreamBatch / pushStreamDelta）vs streamingText 回退。
    */
   applySegments(segments: readonly StreamWireChunk[]): void;
-  streamMetricsAccRef: ReturnType<typeof useStreamMetricsAcc>['accRef'];
-  streamMetricsLastRun: ReturnType<typeof useStreamMetricsAcc>['lastRun'];
 };
 
 export function useSessionStream({
@@ -114,12 +118,8 @@ export function useSessionStream({
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
 
-  const {
-    accRef: streamMetricsAccRef,
-    lastRun: streamMetricsLastRun,
-    noteTextDelta: noteMetricsTextDelta,
-    noteThinkingDelta: noteMetricsThinkingDelta,
-  } = useStreamMetricsAcc(uiRunning);
+  // 流式指标改按会话归属（stream-metrics-store）：切会话不重置、新 run 才重置、
+  // 增量按事件 sessionId 归账（不依赖当前绑定）。旧单例累加器已移除。
 
   const useWebviewRef = useRef(useWebviewTranscript);
   useWebviewRef.current = useWebviewTranscript;
@@ -157,9 +157,6 @@ export function useSessionStream({
     getAbortRetainPending,
     clearAbortRetainPending,
   };
-
-  const metricsRef = useRef({noteMetricsTextDelta, noteMetricsThinkingDelta});
-  metricsRef.current = {noteMetricsTextDelta, noteMetricsThinkingDelta};
 
   const batchIngestRef = useRef(batchIngest);
   batchIngestRef.current = batchIngest;
@@ -206,19 +203,21 @@ export function useSessionStream({
     }
   }, []);
 
-  const handleIngressText = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    metricsRef.current.noteMetricsTextDelta(delta);
-    batchIngestRef.current({kind: 'text', delta});
-  }, []);
+  const handleIngressText = useCallback(
+    (delta: string) => {
+      if (delta.length === 0) {
+        return;
+      }
+      pstreamDeltaThrottle(sessionId ?? 'null', 'text', delta.length);
+      batchIngestRef.current({kind: 'text', delta});
+    },
+    [sessionId],
+  );
 
   const handleIngressThinking = useCallback((delta: string) => {
     if (delta.length === 0) {
       return;
     }
-    metricsRef.current.noteMetricsThinkingDelta(delta);
     batchIngestRef.current({kind: 'thinking', delta});
   }, []);
 
@@ -305,6 +304,8 @@ export function useSessionStream({
     const subStarted = bus.subscribe(
       EVENT_AGENT_RUN_STARTED,
       (payload: AgentRunStartedPayload) => {
+        // 指标归账与展示绑定解耦：任何会话的新 run 都重置其指标。
+        noteRunStarted(payload.sessionId, payload.runId);
         if (payload.sessionId !== sid) {
           return;
         }
@@ -315,6 +316,7 @@ export function useSessionStream({
     const subText = bus.subscribe(
       EVENT_AGENT_STREAM_TEXT_DELTA,
       (payload: AgentStreamTextDeltaPayload) => {
+        noteTextDelta(payload.sessionId, payload.runId, payload.text.length);
         if (payload.sessionId !== sid) {
           return;
         }
@@ -330,6 +332,11 @@ export function useSessionStream({
     const subThinking = bus.subscribe(
       EVENT_AGENT_STREAM_THINKING_DELTA,
       (payload: AgentStreamThinkingDeltaPayload) => {
+        noteThinkingDelta(
+          payload.sessionId,
+          payload.runId,
+          payload.text.length,
+        );
         if (payload.sessionId !== sid) {
           return;
         }
@@ -410,12 +417,14 @@ export function useSessionStream({
     const subFinished = bus.subscribe(
       EVENT_AGENT_RUN_FINISHED,
       (payload: AgentRunFinishedPayload) => {
+        finishMetricsRun(payload.sessionId, payload.runId);
         if (payload.sessionId !== sid) {
           return;
         }
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
+        pstreamLog('finished-arrive', {sid: sid.slice(0, 8)});
         // run 结束前先 flush，保证缓冲 delta 先于 flushRunUi 的 reload/clear 到达。
         batchFlushRef.current();
         // refcount 归属 lifecycle 单元——这里只通知 lifecycle，不直接 decrement。
@@ -503,7 +512,5 @@ export function useSessionStream({
     handleStreamReset,
     resetStreamingDisplay,
     applySegments,
-    streamMetricsAccRef,
-    streamMetricsLastRun,
   };
 }
