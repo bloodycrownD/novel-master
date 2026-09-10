@@ -176,3 +176,9 @@ user:
 
 assistant:
 按 prd-generate 流程：四路 readonly scout 并行探索（provider 链缝隙 S1-S12 清单/会话键控基建盘点含三份平行记录与收尾多头/core 事件全集与表结构含 SCHEMA_BOOT_VERSION=12/视图消费端含子会话双装配与注入三拷贝），PRD 落盘 docs/Iterations/session-stream-unit-2026-09/prd.md（待用户审，含七条核心需求、GWT 验收清单——本迭代全部并发 bug 转为验收用例、五条待确认项带默认值）。映射修复已提交 da864517（pendingSubagentSessions 按父会话持久）。
+
+user:
+确认走 spec-generate 流程产出会话流式单元技术方案。
+
+assistant:
+三路 readonly scout（React 集成面：Manager 装配/dispose/三桥/订阅模式先例/composer 契约/装配点去向；持久化机制：tdbc 事务铁律/session-kkv 语义雷区/bootstrap 快慢路径/写通节流先例/水合时机；测试基建：四层矩阵/T-P7 静态守卫硬编码脆点/改写-新增-不动清单/旧 Step5-7 验收接管）。spec 落盘 docs/Iterations/session-stream-unit-2026-09/spec.md 待用户审：单元管理器模板沿用 Manager 契约、core 新表走 BOOT_VERSION 13、250ms 写通+step 边界刷+>1MB 降频、interrupted 水合终态、宽限 5min+LRU8、8 Step（T-U1~U11）。
