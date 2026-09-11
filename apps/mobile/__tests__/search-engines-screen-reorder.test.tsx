@@ -207,37 +207,55 @@ describe('SearchEnginesScreen 列表屏（修订轮两级）', () => {
     mockSetStackOverride.mockReset();
     mockSetEngineOrder.mockReset().mockResolvedValue(undefined);
     mockReadConfig.mockReset().mockImplementation(async () => ({
-      engineOrder: ['bocha', 'tavily', 'brave', 'searxng'],
+      engineOrder: ['bocha', 'tavily', 'brave', 'searxng', 'duckduckgo'],
       searxngBaseUrl: '',
       engines: {
         bocha: {configured: false},
         tavily: {configured: true},
         brave: {configured: false},
         searxng: {configured: false},
+        duckduckgo: {configured: true},
       },
     }));
   });
 
-  it('按 engineOrder 顺序渲染四引擎行 + configured 状态标签', async () => {
+  it('按 engineOrder 顺序渲染五引擎行 + configured/内置状态标签', async () => {
     mockReadConfig.mockImplementation(async () => ({
-      engineOrder: ['tavily', 'searxng', 'bocha', 'brave'],
+      engineOrder: ['tavily', 'searxng', 'bocha', 'brave', 'duckduckgo'],
       searxngBaseUrl: '',
       engines: {
         bocha: {configured: false},
         tavily: {configured: true},
         brave: {configured: false},
         searxng: {configured: false},
+        duckduckgo: {configured: true},
       },
     }));
     const {renderer} = await renderScreen();
     const text = treeText(renderer.root);
 
-    // 顺序断言：tavily 在 bocha 前、searxng 在 brave 前。
+    // 顺序断言：tavily 在 bocha 前、searxng 在 brave 前、duckduckgo 队尾。
     expect(text.indexOf('Tavily')).toBeLessThan(text.indexOf('Bocha'));
     expect(text.indexOf('SearXNG')).toBeLessThan(text.indexOf('Brave'));
-    // 状态标签跟随 configured。
+    expect(text.indexOf('Brave')).toBeLessThan(text.indexOf('DuckDuckGo'));
+    // 状态标签跟随 configured（四引擎 set/not set 二态）。
     expect(text).toContain('tag:set');
     expect(text).toContain('tag:not set');
+    // duckduckgo 行不走 ApiKeyStatusTag，用「内置」徽标（无 tag: 前缀）。
+    expect(text).toContain('内置');
+  });
+
+  it('duckduckgo 行照常可点详情，携带 engineId', async () => {
+    const {renderer} = await renderScreen();
+    const row = renderer.root.findAll(
+      node => node.props.title === 'DuckDuckGo',
+    )[0];
+    await act(async () => {
+      row.props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('SearchEngineDetail', {
+      engineId: 'duckduckgo',
+    });
   });
 
   it('点击行 navigate 详情页（携带 engineId）', async () => {
@@ -273,6 +291,7 @@ describe('SearchEnginesScreen 列表屏（修订轮两级）', () => {
       'bocha',
       'brave',
       'searxng',
+      'duckduckgo',
     ]);
     // 上移后重读刷新（初始挂载一次 + 排序后一次）。
     expect(mockReadConfig.mock.calls.length).toBe(readsBefore + 1);
@@ -286,9 +305,10 @@ describe('SearchEnginesScreen 列表屏（修订轮两级）', () => {
     expect(menuItemDisabled(renderer.root, 'up')).toBe(true);
     expect(menuItemDisabled(renderer.root, 'down')).toBe(false);
 
-    // 末位 searxng：下移禁用。
-    await openMenu(renderer.root, 'SearXNG');
+    // 末位 duckduckgo：下移禁用。
+    await openMenu(renderer.root, 'DuckDuckGo');
     expect(menuItemDisabled(renderer.root, 'down')).toBe(true);
+    expect(menuItemDisabled(renderer.root, 'up')).toBe(false);
 
     // brave(下标2) 下移 → 与 searxng 交换。
     await openMenu(renderer.root, 'Brave');
@@ -305,6 +325,7 @@ describe('SearchEnginesScreen 列表屏（修订轮两级）', () => {
       'tavily',
       'searxng',
       'brave',
+      'duckduckgo',
     ]);
   });
 

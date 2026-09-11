@@ -9,7 +9,7 @@
  * desktop 93f534ea 口径对齐）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, StyleSheet, View} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import {
   useFocusEffect,
   useNavigation,
@@ -35,7 +35,7 @@ import {
   getSearchConfigStore,
   readSearchEngineConfig,
 } from '@/services/search-config.store';
-import {ENGINE_HINTS, ENGINE_LABELS} from './SearchEnginesScreen';
+import {ENGINE_HINTS, ENGINE_LABELS, BuiltinTag} from './SearchEnginesScreen';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'SearchEngineDetail'>;
@@ -70,6 +70,8 @@ export function SearchEngineDetailScreen() {
   const engineId = route.params?.engineId;
   const knownEngine = isKnownEngineId(engineId);
   const isSearxng = knownEngine && engineId === 'searxng';
+  /** 内置兑底引擎：无凭据可配，详情页为只读说明（无表单无保存）。 */
+  const isDuckduckgo = knownEngine && engineId === 'duckduckgo';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,7 +94,8 @@ export function SearchEngineDetailScreen() {
   );
 
   const load = useCallback(async () => {
-    if (!knownEngine) {
+    if (!knownEngine || isDuckduckgo) {
+      // 只读说明卡不依赖库内数据（configured 恒 true），免读库。
       return;
     }
     setLoading(true);
@@ -106,7 +109,7 @@ export function SearchEngineDetailScreen() {
     } finally {
       setLoading(false);
     }
-  }, [knownEngine, engineId, runtime, showToast]);
+  }, [knownEngine, isDuckduckgo, engineId, runtime, showToast]);
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -121,7 +124,7 @@ export function SearchEngineDetailScreen() {
   }, [knownEngine, navigation, showToast]);
 
   const handleSave = async () => {
-    if (!knownEngine || saving || clearing) {
+    if (!knownEngine || isDuckduckgo || saving || clearing) {
       return;
     }
     const store = getSearchConfigStore(runtime);
@@ -153,7 +156,7 @@ export function SearchEngineDetailScreen() {
   };
 
   const handleClearKey = async () => {
-    if (!knownEngine || isSearxng || saving || clearing) {
+    if (!knownEngine || isSearxng || isDuckduckgo || saving || clearing) {
       return;
     }
     setClearing(true);
@@ -171,6 +174,23 @@ export function SearchEngineDetailScreen() {
   if (!knownEngine) {
     return (
       <View style={[styles.centered, {backgroundColor: tokens.background}]} />
+    );
+  }
+
+  // 内置兑底引擎：只读说明卡，无输入框、无保存 footer、无清除。
+  if (isDuckduckgo) {
+    return (
+      <ScreenFormLayout tokens={tokens}>
+        <FormSectionCard
+          tokens={tokens}
+          title={ENGINE_LABELS[engineId]}
+          hint={ENGINE_HINTS[engineId]}
+          rightAction={<BuiltinTag tokens={tokens} />}>
+          <Text style={[styles.builtinDesc, {color: tokens.textSecondary}]}>
+            内置兑底引擎，无需 API Key，开箱即用；未配置其它引擎时搜索自动使用它，可上移调整优先级。
+          </Text>
+        </FormSectionCard>
+      </ScreenFormLayout>
     );
   }
 
@@ -264,4 +284,5 @@ export function SearchEngineDetailScreen() {
 
 const styles = StyleSheet.create({
   centered: {flex: 1, alignItems: 'center', justifyContent: 'center'},
+  builtinDesc: {fontSize: 14, lineHeight: 21},
 });

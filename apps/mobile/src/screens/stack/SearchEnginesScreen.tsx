@@ -32,6 +32,7 @@ import {useHeaderContext} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {listScreenStyles} from '../shared/list-screen-styles';
 import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
 import {useToast} from '@/components/chrome/ToastHost';
 import {toastMessage} from '@/errors/toast-message';
 import {
@@ -47,6 +48,7 @@ export const ENGINE_LABELS: Record<EngineId, string> = {
   tavily: 'Tavily',
   brave: 'Brave',
   searxng: 'SearXNG',
+  duckduckgo: 'DuckDuckGo',
 };
 
 /** 行副标题短语（计费/部署口径）；详情页表单卡片 hint 用独立短文案。 */
@@ -55,7 +57,18 @@ export const ENGINE_HINTS: Record<EngineId, string> = {
   tavily: '按量计费 · 国际',
   brave: '按量计费 · 国际',
   searxng: '自托管 · 免费',
+  duckduckgo: '内置 · 免费兑底',
 };
+
+/** 内置引擎徽标：duckduckgo 无 set/not set 二态（恒可用），用主题色
+ * 胶囊标「内置」，尺寸/形状与 ApiKeyStatusTag 协调、仅换主题色。 */
+export function BuiltinTag({tokens}: {tokens: ThemeTokens}) {
+  return (
+    <View style={[styles.builtinTag, {backgroundColor: `${tokens.primary}1A`}]}>
+      <Text style={[styles.builtinTagText, {color: tokens.primary}]}>内置</Text>
+    </View>
+  );
+}
 
 /** 帮助弹窗一段说明：小标题 + 一句话。 */
 function HelpSection({
@@ -195,10 +208,14 @@ export function SearchEnginesScreen() {
               title={ENGINE_LABELS[item.engineId]}
               subtitle={ENGINE_HINTS[item.engineId]}
               trailingMeta={
-                <ApiKeyStatusTag
-                  status={item.configured ? 'set' : 'not set'}
-                  tokens={tokens}
-                />
+                item.engineId === 'duckduckgo' ? (
+                  <BuiltinTag tokens={tokens} />
+                ) : (
+                  <ApiKeyStatusTag
+                    status={item.configured ? 'set' : 'not set'}
+                    tokens={tokens}
+                  />
+                )
               }
               onMenuPress={() => setMenuEngineId(item.engineId)}
             />
@@ -242,7 +259,7 @@ export function SearchEnginesScreen() {
         <HelpSection
           tokens={tokens}
           title="引擎优先级"
-          body="列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。"
+          body="列表顺序即搜索时尝试引擎的顺序，第一位为默认引擎；行菜单可上移/下移调整。未配置任何引擎时由内置 DuckDuckGo 免费兑底（无需密钥）。"
         />
         <HelpSection
           tokens={tokens}
@@ -287,5 +304,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
     paddingVertical: 10,
     alignItems: 'center',
+  },
+  builtinTag: {
+    alignSelf: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  builtinTagText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
