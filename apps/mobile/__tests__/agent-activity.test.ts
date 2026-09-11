@@ -13,7 +13,7 @@ import {
   EVENT_AGENT_RUN_STARTED,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import {AgentRunManager} from '@/services/agent-run-manager.service';
+import {SessionStreamUnitManager} from '@/services/session-stream-unit-manager.service';
 
 describe('agent-activity', () => {
   afterEach(() => {
@@ -112,8 +112,9 @@ describe('agent-activity', () => {
     });
   });
 
-  // T-P7 守卫的前置：refcount 的增减放完全由 AgentRunManager 独占，
-  // 生命周期（受理/事件收尾/finally 早退）任一环节都不得满发或双发。
+  // T-P7 守卫的前置：refcount 的增减放完全由 SessionStreamUnitManager 独占
+  // （原 AgentRunManager 的契约原样吸收），生命周期（受理/事件收尾/finally
+  // 早退）任一环节都不得漏发或双发。
   describe('T-P7 守卫：refcount 单一归属（Manager 是唯一触发方）', () => {
     function createManagerHarness() {
       const eventBus = new SimpleEventBus();
@@ -129,13 +130,20 @@ describe('agent-activity', () => {
           title: `会话-${sessionId}`,
         })),
       };
+      const projects = {
+        get: jest.fn(async (projectId: string) => ({
+          id: projectId,
+          name: `项目-${projectId}`,
+        })),
+      };
       const runAgentTurn = jest.fn(
         async () => new Promise<void>(() => undefined), // 挂起，终态由测试驱动事件模拟
       );
-      const manager = new AgentRunManager({
-        runtime: {eventBus, abortRegistry, sessions} as never,
+      const manager = new SessionStreamUnitManager({
+        runtime: {eventBus, abortRegistry, sessions, projects} as never,
         runAgentTurn: runAgentTurn as never,
       });
+      manager.markHydrated();
       return {eventBus, runAgentTurn, manager};
     }
 
@@ -204,7 +212,8 @@ describe('agent-activity', () => {
 
         await flushAsync();
         expect(isMobileAgentActive()).toBe(false);
-        expect(h.manager.hasRun('a')).toBe(false);
+        // finally 兜底直接销毁单元出表（snapshot 归 null）
+        expect(h.manager.snapshot('a')).toBe(null);
       } finally {
         h.manager.dispose();
       }
@@ -249,18 +258,22 @@ describe('agent-activity', () => {
       }
     });
 
-    it('lifecycle 路径不再碰 refcount（静态约束：UI hook 源码不含计数 API）', () => {
-      // 单一归属的可执行锁定：渲染层 hook 不得引入 increment/decrement/
-      // setMobileAgentActive——计数只能由 Manager 的受理/事件/finally 三条路径改动。
+    it('渲染层/单元不碰 refcount（静态约束：源码不含计数 API）', () => {
+      // 单一归属的可执行锁定：屏幕组合层与消息 hook、单元本体都不得引入
+      // increment/decrement/setMobileAgentActive——计数只能由 Manager 的
+      // 受理/事件/finally 三条路径改动（Step 7 起旧 hook 已删，清单换成
+      // 现存的等价消费面）。
       const lifecycleSources = [
-        join(__dirname, '../src/hooks/useAgentRunLifecycle.ts'),
-        join(__dirname, '../src/screens/tabs/chat-tab/useSessionStream.ts'),
+        join(__dirname, '../src/screens/tabs/chat-tab/ChatTabProvider.tsx'),
+        join(__dirname, '../src/screens/tabs/chat-tab/useChatTabMessages.ts'),
+        join(__dirname, '../src/services/session-stream-unit.ts'),
       ];
       for (const sourcePath of lifecycleSources) {
         const source = readFileSync(sourcePath, 'utf8');
-        // 匹配「调用或导入」形状（带括号 / import 语句）；注释里提及 API 名不算碰计数
+        // 匹配「调用或具名导入」形状；只读视图（isMobileAgentActive /
+        // subscribeMobileAgentActivity）与注释里的提及不算碰计数。
         expect(source).not.toMatch(
-          /\b(?:incrementAgentActive|decrementAgentActive|setMobileAgentActive)\s*\(|from ['"]@\/runtime\/agent-activity/,
+          /\b(?:incrementAgentActive|decrementAgentActive|setMobileAgentActive)\s*\(|import\s*\{[^}]*\b(?:incrementAgentActive|decrementAgentActive|setMobileAgentActive)\b/,
         );
       }
     });
