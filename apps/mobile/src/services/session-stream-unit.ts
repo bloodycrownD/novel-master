@@ -25,12 +25,32 @@
  *   终态摘除（manager 反查路由）、父收尾清空（蓝本 subagentChildSessions
  *   ByParent 语义，防陈旧条目串到下一 run）。
  *
+ * Step 4 填实的消息管线（蓝本 = useChatTabMessages 的纯数据部分）：
+ * - tail 加载：非 force 先读视图缓存（命中即采纳，不回源）、miss/force 走
+ *   DB tail + hasMore 探针；加载完成无条件写视图缓存——无 webview attach
+ *   的后台会话照常刷缓存（PRD「后台会话不蒸发」的消息面：收尾会话重进即
+ *   最新）；
+ * - 分页：以当前消息首行 seq 为锚向上翻页，prepend 后同步写缓存；
+ * - step 级 reload：STEP_COMMITTED 冲刷 partial 后 force 回源拿落库行；
+ *   settle（FINISHED/FAILED）同样 force reload——蓝本 flushRunUi 语义；
+ * - force 快照驱动：pendingChildren 变化时向全句柄广播 force-snapshot
+ *   控制消息（蓝本 ChatTranscriptWebView 的 pendingSubagentSessions
+ *   force 直发触发平移到单元侧，屏幕 Step 6 接线消费）。
+ *   作用域守卫（蓝本 sessionIdRef）结构性消失：结果只可能落回自己家。
+ *
  * @module services/session-stream-unit
  */
+import type {ChatMessage} from '@novel-master/core/chat';
 import type {StreamWireChunk, StreamWireKind} from './stream-wire-queue';
 import {appendWireChunk, coalesceWireQueue} from './stream-wire-queue';
 import {createStreamApplyBuffer} from './stream-apply-buffer';
 import type {StreamApplyBuffer} from './stream-apply-buffer';
+import {
+  getSessionViewCache,
+  sessionViewCacheKey,
+  setSessionViewCache,
+} from './chat-session-view-cache';
+import {prependOlderMessages} from './message-paging';
 
 /** settled(finished|failed) 后的默认宽限销毁时长（毫秒）；测试可经构造参数覆盖。 */
 export const SESSION_STREAM_SETTLED_GRACE_PERIOD_MS = 30_000;
@@ -40,6 +60,9 @@ export const SESSION_STREAM_INGRESS_COALESCE_MS = 32;
 
 /** apply 缓冲的节流间隔（毫秒）：合并段按此节拍下发（对齐蓝本渲染节奏）。 */
 export const SESSION_STREAM_APPLY_INTERVAL_MS = 64;
+
+/** 消息管线分页大小（对齐蓝本 useChatTabMessages 的 CHAT_PAGE_SIZE）。 */
+export const SESSION_STREAM_MESSAGES_PAGE_SIZE = 40;
 
 /** 单元的活跃态：idle=已建未受理，starting=已受理未回填 runId，running=run 进行中。 */
 export type SessionStreamUnitActiveStatus = 'idle' | 'starting' | 'running';
@@ -85,10 +108,15 @@ export type SessionStreamUnitStreamPayload =
     };
 
 /**
- * 控制类消息（onControlMessage 的线上形状；Step 4 消息管线 / Step 6 接线
- * 消费，本节点只立形状）。reset-stream 对应 webview 的 resetStream。
+ * 控制类消息（onControlMessage 的线上形状；Step 6 屏幕接线消费）：
+ * - reset-stream：对应 webview 的 resetStream；
+ * - force-snapshot：要求句柄侧立即直发全量快照（绕过 defer/streamActive
+ *   拦截）——subagent 长任务期间消息可见的驱动面，蓝本是 webview 组件内
+ *   pendingSubagentSessions 变化时的 force 直发。
  */
-export type SessionStreamUnitControlMessage = {readonly type: 'reset-stream'};
+export type SessionStreamUnitControlMessage =
+  | {readonly type: 'reset-stream'}
+  | {readonly type: 'force-snapshot'};
 
 /**
  * webview 句柄（多句柄注册表的成员）。
@@ -114,6 +142,23 @@ export interface SessionStreamUnitMetrics {
   readonly thinkingChars: number;
 }
 
+/**
+ * 消息仓库窄口（单元消息管线回源 DB 用）。
+ *
+ * 单元本体不持有 runtime——由 manager 构造时从 runtime.messages 透传
+ * （结构上就是 core MessageService 的子集）。
+ */
+export interface SessionStreamMessageStore {
+  listBySessionTail(
+    sessionId: string,
+    options: {limit: number},
+  ): Promise<readonly ChatMessage[]>;
+  listBySessionPage(
+    sessionId: string,
+    options: {limit: number; beforeSeq?: number},
+  ): Promise<readonly ChatMessage[]>;
+}
+
 /** 单元只读投影：snapshot(sessionId) 的返回形状，屏幕订阅的唯一消费面。 */
 export interface SessionStreamUnitView {
   readonly sessionId: string;
@@ -136,12 +181,23 @@ export interface SessionStreamUnitView {
   readonly injected: boolean;
   /** 子会话链接：run 进行中创建、尚未终态的 child session id（插入序）。 */
   readonly pendingChildren: readonly string[];
+  /**
+   * 消息面（Step 4 消息管线）：本会话当前持有的消息行（tail 加载/分页/
+   * step 级 reload 的结果）。无消息仓库且缓存未命中时为空数组。
+   */
+  readonly messages: readonly ChatMessage[];
+  /** 是否还有更早的消息可翻页（tail 探针/分页结果推导）。 */
+  readonly hasMoreMessages: boolean;
+  /** 分页加载是否在途（防重入）。 */
+  readonly loadingMoreMessages: boolean;
 }
 
 /** 单元构造参数。 */
 export interface SessionStreamUnitOptions {
   readonly sessionId: string;
   readonly projectId: string;
+  /** 消息仓库窄口（消息管线回源 DB 用；由 manager 从 runtime.messages 透传）。 */
+  readonly messageStore?: SessionStreamMessageStore;
   /** run 终态回调（由 manager 的事件收尾路径触发，吞错）。 */
   readonly onSettled?: (status: SessionStreamRunSettledStatus) => void;
   /** settled(finished|failed) 的宽限销毁时长；缺省用模块默认值。 */
@@ -185,7 +241,17 @@ export class SessionStreamUnit {
   /** 64ms apply 缓冲（蓝本 useSessionBatch 的纯数据部分，单元自持）。 */
   private readonly applyBuffer: StreamApplyBuffer;
 
+  /** 消息面状态（Step 4：tail/分页/step 级 reload 的落点）。 */
+  private messagesValue: readonly ChatMessage[] = [];
+  private hasMoreMessagesValue = false;
+  private loadingMoreMessagesValue = false;
+  /** force tail reload 在途去重（蓝本 reloadInFlightRef：force 合流不重发）。 */
+  private tailReloadInFlight: Promise<readonly ChatMessage[]> | null = null;
+
   private readonly webviewHandles: SessionStreamWebviewHandle[] = [];
+  private readonly messageStore?:
+    | SessionStreamMessageStore
+    | undefined;
   private readonly onSettled?:
     | ((status: SessionStreamRunSettledStatus) => void)
     | undefined;
@@ -198,6 +264,7 @@ export class SessionStreamUnit {
   constructor(options: SessionStreamUnitOptions) {
     this.sessionId = options.sessionId;
     this.projectId = options.projectId;
+    this.messageStore = options.messageStore;
     this.onSettled = options.onSettled;
     this.onGraceExpired = options.onGraceExpired;
     this.onProjectionChanged = options.onProjectionChanged;
@@ -248,6 +315,11 @@ export class SessionStreamUnit {
       return false;
     }
     this.flushStreamBuffers();
+    // 收尾消息面：force 回源拿最终落库行并刷视图缓存（蓝本 FINISHED 的
+    // flushRunUi reload 语义）。无 webview attach 的后台会话照常执行——
+    // 缓存刷新不依赖屏幕在场（「后台会话不蒸发」）。异步吞错（DB 失败不
+    // 阻碍收尾状态机）。
+    this.kickTailReloadQuietly();
     this.status = status;
     this.settledAtMsValue = Date.now();
     this.elapsedMsValue =
@@ -337,6 +409,9 @@ export class SessionStreamUnit {
       partialThinking: this.partialThinkingValue,
       injected: this.injectedValue,
       pendingChildren: [...this.pendingChildrenValue],
+      messages: [...this.messagesValue],
+      hasMoreMessages: this.hasMoreMessagesValue,
+      loadingMoreMessages: this.loadingMoreMessagesValue,
     };
   }
 
@@ -376,6 +451,10 @@ export class SessionStreamUnit {
     this.partialTextValue = '';
     this.partialThinkingValue = '';
     this.injectedValue = false;
+    // step 落库行进消息面：partial 清零后 force 回源 reload（蓝本
+    // flushAgentStepUi 的 reload 方向；webview 侧的 streamCommit 是 Step 6
+    // 接线，这里只管数据面）。异步吞错。
+    this.kickTailReloadQuietly();
     return true;
   }
 
@@ -414,6 +493,12 @@ export class SessionStreamUnit {
       ];
       changed = true;
     }
+    if (changed) {
+      // pending 集合变化 = 蓝本 pendingSubagentSessions 变化：任务卡要立即
+      // 进基线，广播 force 快照让可见句柄直发全量（subagent 长任务期间
+      // 消息可见）。
+      this.requestForceSnapshot();
+    }
     return changed;
   }
 
@@ -445,11 +530,17 @@ export class SessionStreamUnit {
     this.pendingChildrenValue = this.pendingChildrenValue.filter(
       id => id !== childSessionId,
     );
+    // 摘除也是 pending 集合变化：落库 result meta 接管任务卡，同样广播
+    // force 快照刷新基线。
+    this.requestForceSnapshot();
     return true;
   }
 
   /** 清空全部子会话链接（父 run 收尾时由 settle 内部调用）。 */
   private clearPendingChildren(): void {
+    if (this.pendingChildrenValue.length > 0) {
+      this.requestForceSnapshot();
+    }
     this.pendingChildIdsByTitle.clear();
     this.pendingChildrenValue = [];
   }
@@ -517,6 +608,160 @@ export class SessionStreamUnit {
   /** 当前句柄数（诊断/测试用）。 */
   getWebviewCount(): number {
     return this.webviewHandles.length;
+  }
+
+  /**
+   * 请求全量快照直发（force-snapshot 控制消息广播到全句柄）。
+   *
+   * Step 6 屏幕接线的消费面：subagent 屏/主屏句柄把它接到 webview 的
+   * force snapshot 直发。pendingChildren 变化时单元内部也会自动触发。
+   */
+  requestForceSnapshot(): void {
+    this.broadcastControlMessage({type: 'force-snapshot'});
+  }
+
+  /**
+   * tail 加载（蓝本 reloadMessages 的方法本体）：
+   * - 非 force：先读视图缓存（会话切换水合语义——命中即采纳、不回源 DB），
+   *   miss 才回源；force：无条件回源 DB 拿最新落库行；
+   * - 回源结果（含 hasMore 探针）无条件写视图缓存——后台会话（无 attach）
+   *   收尾后重进即最新；
+   * - force 在途去重：并发的 force 合流到同一 promise（蓝本 reloadInFlightRef）。
+   *
+   * 蓝本的 sessionIdRef 作用域守卫在这里结构性消失：单元 per-session，
+   * 结果只会落回自己家的状态与缓存键。
+   */
+  async loadTailMessages(options?: {
+    readonly force?: boolean;
+  }): Promise<readonly ChatMessage[]> {
+    const force = options?.force ?? false;
+    if (force && this.tailReloadInFlight != null) {
+      return this.tailReloadInFlight;
+    }
+    const task = this.performTailReload(force);
+    if (!force) {
+      return task;
+    }
+    this.tailReloadInFlight = task;
+    try {
+      return await task;
+    } finally {
+      if (this.tailReloadInFlight === task) {
+        this.tailReloadInFlight = null;
+      }
+    }
+  }
+
+  /** 分页加载更早消息（蓝本 loadOlderMessages）：以当前首行 seq 为锚向上翻页。 */
+  async loadOlderMessages(): Promise<void> {
+    if (
+      this.destroyed ||
+      this.loadingMoreMessagesValue ||
+      this.messagesValue.length === 0
+    ) {
+      return;
+    }
+    const beforeSeq = this.messagesValue[0]?.seq;
+    if (beforeSeq == null) {
+      return;
+    }
+    if (this.messageStore == null) {
+      return;
+    }
+    this.loadingMoreMessagesValue = true;
+    this.onProjectionChanged?.();
+    try {
+      const older = await this.messageStore.listBySessionPage(
+        this.sessionId,
+        {limit: SESSION_STREAM_MESSAGES_PAGE_SIZE, beforeSeq},
+      );
+      if (this.destroyed) {
+        return;
+      }
+      if (older.length === 0) {
+        // 没有更早的了：只收 hasMore，不动消息与缓存（蓝本同路径）。
+        this.hasMoreMessagesValue = false;
+        this.onProjectionChanged?.();
+        return;
+      }
+      const hasMore = older.length === SESSION_STREAM_MESSAGES_PAGE_SIZE;
+      const next = prependOlderMessages(this.messagesValue, older);
+      setSessionViewCache(sessionViewCacheKey(this.projectId, this.sessionId), {
+        messages: next,
+        hasMoreMessages: hasMore,
+      });
+      this.messagesValue = next;
+      this.hasMoreMessagesValue = hasMore;
+      this.onProjectionChanged?.();
+    } finally {
+      this.loadingMoreMessagesValue = false;
+      this.onProjectionChanged?.();
+    }
+  }
+
+  /** step/settle 边界的 fire-and-forget force reload（错误吞掉不阻塞状态机）。 */
+  private kickTailReloadQuietly(): void {
+    void this.loadTailMessages({force: true}).catch(err => {
+      console.error(
+        '[novel-master/session-stream-unit] tail reload failed',
+        err,
+      );
+    });
+  }
+
+  /**
+   * tail reload 本体：缓存命中采纳（非 force）→ DB tail + hasMore 探针 →
+   * 无条件写缓存 → 采纳进消息面。
+   *
+   * 缓存写在状态采纳之前：单元若在中途被销毁/替换（宽限到期、LRU 淘汰、
+   * 新 run 替换吸收），缓存仍刷新到位——重进会话水合的就是最终行。同会话
+   * 新 run 的后续 reload 会覆盖写，旧单元晚到的写入是幂等 tail 读、无害。
+   */
+  private async performTailReload(
+    force: boolean,
+  ): Promise<readonly ChatMessage[]> {
+    const cacheKey = sessionViewCacheKey(this.projectId, this.sessionId);
+    if (!force) {
+      const cached = getSessionViewCache(cacheKey);
+      if (cached != null) {
+        this.applyMessages(cached.messages, cached.hasMoreMessages);
+        return [...cached.messages];
+      }
+    }
+    if (this.messageStore == null) {
+      // 未装配消息仓库（防御降级，正常装配不会走到）：保持现状返回。
+      return [...this.messagesValue];
+    }
+    const list = await this.messageStore.listBySessionTail(this.sessionId, {
+      limit: SESSION_STREAM_MESSAGES_PAGE_SIZE,
+    });
+    let hasMore = false;
+    const oldestSeq = list[0]?.seq;
+    if (oldestSeq != null) {
+      const older = await this.messageStore.listBySessionPage(this.sessionId, {
+        limit: 1,
+        beforeSeq: oldestSeq,
+      });
+      hasMore = older.length > 0;
+    }
+    // 无条件刷新视图缓存（含无 attach 的后台收尾场景——消息丢失回归的
+    // 守卫点）；键是本会话自己的，天然不串会话。
+    setSessionViewCache(cacheKey, {messages: list, hasMoreMessages: hasMore});
+    this.applyMessages(list, hasMore);
+    return [...list];
+  }
+
+  /** 采纳消息面并触发投影通知（销毁后跳过状态更新——缓存已照常写）。 */
+  private applyMessages(
+    messages: readonly ChatMessage[],
+    hasMore: boolean,
+  ): void {
+    if (this.destroyed) {
+      return;
+    }
+    this.messagesValue = [...messages];
+    this.hasMoreMessagesValue = hasMore;
+    this.onProjectionChanged?.();
   }
 
   /** delta 统一入口：守卫 → 指标归账 → 入队 → 调度 32ms 合并。 */

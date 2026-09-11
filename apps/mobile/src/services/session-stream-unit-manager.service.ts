@@ -36,6 +36,11 @@
  * 字段），通知节拍对齐单元 apply（64ms）；child-created 与 pendingChildren
  * 链接语义同批填实。runtime 装配接线在 Step 6。
  *
+ * Step 4 新增：消息管线消费面路由——loadSessionTailMessages（tail 加载，
+ * 含缓存命中/回源语义）/loadOlderSessionMessages（分页）/requestForceSnapshot
+ * （force 快照直发驱动）；runtime.messages 以窄口透传进单元（Step 4 起
+ * Pick 扩展 messages 字段，构造处原样传入即可）。
+ *
  * @module services/session-stream-unit-manager
  */
 import {
@@ -57,6 +62,7 @@ import type {
   SubagentChildSessionCreatedPayload,
 } from '@novel-master/core/events';
 import type {SendAnnotateDraft} from '@novel-master/core/chat';
+import type {ChatMessage} from '@novel-master/core/chat';
 import type {EventSubscription} from '@novel-master/core/events';
 import {
   decrementAgentActive,
@@ -85,10 +91,10 @@ import type {
 /** settled 单元并存的 LRU 上限（含宽限中的与水合常驻的；活跃单元不占槽）。 */
 export const SESSION_STREAM_MAX_SETTLED_UNITS = 8;
 
-/** Manager 实际依赖的 runtime 子集（测试可传 mock）。 */
+/** Manager 实际依赖的 runtime 子集（测试可传 mock）。messages 为 Step 4 消息管线所需。 */
 export type SessionStreamManagerRuntime = Pick<
   MobileNovelMasterRuntime,
-  'eventBus' | 'abortRegistry' | 'sessions' | 'projects'
+  'eventBus' | 'abortRegistry' | 'sessions' | 'projects' | 'messages'
 >;
 
 /** fire-and-forget 的 runAgentTurn 形状（测试可注入 mock）。 */
@@ -336,6 +342,35 @@ export class SessionStreamUnitManager {
   }
 
   /**
+   * tail 加载（Step 6 屏幕接线的消费面）：路由进该会话单元的消息管线。
+   * 非 force = 会话切换水合语义（缓存命中不回源）；force = 无条件回源 DB。
+   * 无单元返回 null（非运行态会话走瘦身后的 useChatTabMessages 路径）。
+   */
+  async loadSessionTailMessages(
+    sessionId: string,
+    options?: {readonly force?: boolean},
+  ): Promise<readonly ChatMessage[] | null> {
+    const unit = this.units.get(sessionId);
+    if (unit == null) {
+      return null;
+    }
+    return unit.loadTailMessages(options);
+  }
+
+  /** 分页加载更早消息（无单元 no-op）。 */
+  loadOlderSessionMessages(sessionId: string): Promise<void> {
+    return this.units.get(sessionId)?.loadOlderMessages() ?? Promise.resolve();
+  }
+
+  /**
+   * 请求该会话单元向全句柄广播 force 快照（subagent 长任务期间消息可见
+   * 的屏幕驱动入口；无单元 no-op）。
+   */
+  requestForceSnapshot(sessionId: string): void {
+    this.units.get(sessionId)?.requestForceSnapshot();
+  }
+
+  /**
    * 发起 run：per-session 门禁 + fire-and-forget。
    *
    * 门禁钉死「该会话存在 starting|running 单元或 abortRegistry.has 为真即
@@ -372,6 +407,7 @@ export class SessionStreamUnitManager {
     const unit = new SessionStreamUnit({
       sessionId,
       projectId,
+      messageStore: this.runtime.messages,
       onSettled: options?.onSettled,
       settledGraceMs: this.settledGraceMs,
       onGraceExpired: expired => this.handleGraceExpired(sessionId, expired),
@@ -463,6 +499,7 @@ export class SessionStreamUnitManager {
     const unit = new SessionStreamUnit({
       sessionId,
       projectId,
+      messageStore: this.runtime.messages,
       settledGraceMs: this.settledGraceMs,
       onProjectionChanged: () => this.notifyChanged(),
     });
