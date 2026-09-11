@@ -34,6 +34,7 @@ import {
   runDeferredBlobGc,
 } from "@/service/session-fs/create-session-fs-service.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import { createSessionRunStateService } from "@/service/session-run-state/create-session-run-state-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import { resolveWorkspaceAgentForNewSession } from "@/service/agent/logic/agent-run-shared.js";
 import type { SessionService } from "../session.port.js";
@@ -193,7 +194,7 @@ export class DefaultSessionService implements SessionService {
   }
 
   /**
-   * 递归删除 session 及其全部子 session（messages/fs/kkv/vfs 全清）。
+   * 递归删除 session 及其全部子 session（messages/fs/kkv/run_state/vfs 全清）。
    *
    * 必须在事务内调：先 `listByParentSession` 取直接子，递归调本函数删子，
    * 再删自己。子 session delete 时 `deleteVfsPrefix(session:{pid}:{childId})`
@@ -212,6 +213,9 @@ export class DefaultSessionService implements SessionService {
     await r.messages.deleteBySession(session.id);
     await deleteSessionFsData(tx, session.id, session.projectId);
     await createSessionKkvService(tx).clearSession(session.id);
+    // 同事务清 run_state 行：留着孤儿 starting/running 行会在重启水合时
+    // 生成幽灵 interrupted 单元（递归子会话在本函数逐层清理时一并覆盖）。
+    await createSessionRunStateService(tx).deleteBySession(session.id);
     await deleteVfsPrefix(
       r.vfs,
       `session:${session.projectId}:${session.id}`,
