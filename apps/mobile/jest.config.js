@@ -117,6 +117,10 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/session-kkv.js',
     ),
+    '^@novel-master/core/session-run-state$': path.join(
+      repoRoot,
+      'packages/core/dist/public/session-run-state.js',
+    ),
     '^@novel-master/core/tdbc$': path.join(
       repoRoot,
       'packages/core/dist/infra/tdbc/index.js',
