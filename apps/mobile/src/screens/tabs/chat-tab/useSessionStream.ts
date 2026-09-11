@@ -14,7 +14,6 @@
  * decrementAgentActive，改为通知 lifecycle（onRunFinished/onRunFailed）。
  */
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {pstreamLog, pstreamDeltaThrottle} from '@/debug/parallel-stream-debug';
 import type {RefObject} from 'react';
 import {
   EVENT_AGENT_RUN_FAILED,
@@ -208,7 +207,6 @@ export function useSessionStream({
       if (delta.length === 0) {
         return;
       }
-      pstreamDeltaThrottle(sessionId ?? 'null', 'text', delta.length);
       batchIngestRef.current({kind: 'text', delta});
     },
     [sessionId],
@@ -424,7 +422,6 @@ export function useSessionStream({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
-        pstreamLog('finished-arrive', {sid: sid.slice(0, 8)});
         // run 结束前先 flush，保证缓冲 delta 先于 flushRunUi 的 reload/clear 到达。
         batchFlushRef.current();
         // refcount 归属 lifecycle 单元——这里只通知 lifecycle，不直接 decrement。

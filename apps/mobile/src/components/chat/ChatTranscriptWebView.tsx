@@ -11,7 +11,6 @@ import React, {
   useState,
 } from 'react';
 import {Linking, StyleSheet, View, AppState} from 'react-native';
-import {pstreamLog} from '@/debug/parallel-stream-debug';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 // 根入口 index.d.ts 未 re-export 此类型，只能从 lib/WebViewTypes 深导入；
 // import type 会被擦除，不影响运行时打包。
@@ -496,12 +495,6 @@ export const ChatTranscriptWebView = memo(
             buildTranscriptRows(messages, undefined, transcriptListOptions),
             richText,
           );
-          pstreamLog('snapshot-send', {
-            sessionKey,
-            rowCount: rows.length,
-            lastRow: JSON.stringify(rows[rows.length - 1]).slice(0, 80),
-            intent: scrollIntent,
-          });
           postToWeb({
             v: 1,
             type: 'sessionSnapshot',
@@ -897,15 +890,10 @@ export const ChatTranscriptWebView = memo(
           }
           // WebView 恢复可见：若隐藏期间有改画推送（旧帧风险），强制重挂重绘。
           if (message.type === 'visibility') {
-            pstreamLog('wv-visibility-report', {
-              hidden: message.payload.hidden,
-              dirty: statePushSinceResumeRef.current,
-            });
             if (!message.payload.hidden) {
               const dirty = statePushSinceResumeRef.current > 0;
               statePushSinceResumeRef.current = 0;
               if (dirty) {
-                pstreamLog('wv-dirty-remount', {});
                 prevStreamTextRef.current = '';
                 prevStreamThinkingRef.current = '';
                 forceSnapshotOnReadyRef.current = true;

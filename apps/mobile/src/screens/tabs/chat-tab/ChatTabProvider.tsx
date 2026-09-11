@@ -37,7 +37,6 @@ import {
   RUN_LAUNCH_PROTECT_WINDOW_MS,
 } from '@/hooks/useAgentRunLifecycle';
 import {useRunResumeProbe} from '@/hooks/use-run-resume-probe';
-import {pstreamLog} from '@/debug/parallel-stream-debug';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useNovelMaster} from '@/runtime/novel-master-context';
 import {
@@ -368,7 +367,6 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   });
 
   useEffect(() => {
-    pstreamLog('reset', {sid: sessionId ?? 'null'});
     abort.resetForSessionChange();
     lifecycle.resetUiForSessionChange();
     // 声明顺序约束：本 reset effect 不得移到下方 useRunResumeProbe 接线
@@ -409,9 +407,7 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       sessionId != null &&
       (runtime.abortRegistry.has(sessionId) || manager.hasRun(sessionId)),
     onRunActive: () => {
-      pstreamLog('probe-active', {sid: sessionId ?? 'null'});
       abort.markRunStarted();
-      pstreamLog('markRunStarted', {sid: sessionId ?? 'null'});
     },
     onRunEnded: () => {
       // 发起保护窗（MF-4）：beginUiRun 先把 uiRunning 置 true，core 侧
