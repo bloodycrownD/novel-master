@@ -16,7 +16,7 @@
 ## B. 预览 / 编辑 / 批注
 - 预览/编辑切换、保存（Ctrl+S/按钮/脏状态）：✅
 - Markdown 预览 + mermaid：✅（svg 真渲染）
-- 批注：划词→浮动条→添加→chip→发送：❌ D-15（可编辑 composer fill 文本后发送丢批注附件；disabled 空文本路径附件正常）；下划线投影/详情：◻️ 被 D-15 掩蔽待修复后重验
+- 批注：划词→浮动条→添加→chip→发送：✅（D-15 已排除：脚本双发误报，见 PRD 定性）；下划线投影/详情：✅ 草稿态投影正常；重开不恢复系双端一致设计（2026-09-09 结案）
 - 多文件 tab：◻️ 弱（R5 断言空+截图丢失，下轮重拍）
 - Frontmatter 批注/跨行/草稿回显：◻️
 - 保存失败错误展示：◻️（需构造失败场景）
@@ -62,6 +62,10 @@
 - 应用菜单：🔧 原生 globalMenu（Linux 无 DOM 渲染），待手动
 - 自动更新检查：◻️（同 G 待确认项）
 - 空状态引导：✅
+
+## 序列编排约定
+- 全量序列：`rm -rf data/*` 清本地产物库 → 先跑 bootstrap.mjs（重建库+建项目/会话+绑模型）→ 依次跑全部 case
+- 单跑：依赖本机已 bootstrap 过的 data/ 库；data/ 已 ignore，novel.db 产物不再提交入库（含 wal/shm 伴生文件）
 
 ## 环境备忘（2026-09-08 更新）
 - keyring 已解锁（用户 pkill -f gnome-keyring-daemon + --daemonize --login --components=secrets 常驻方案）：SKSP/发消息链路恢复
