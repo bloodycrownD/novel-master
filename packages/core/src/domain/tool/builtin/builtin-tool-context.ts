@@ -18,7 +18,6 @@ import type { WorkplaceService } from "@/service/workplace/workplace.port.js";
 import type {
   EngineId,
   ResolvedEngineConfig,
-  SearchEngineStatus,
 } from "@/domain/tool/builtin/search/types.js";
 
 /** `runChildAgent` 透传给子 agent run 的解析后模型信息。 */
@@ -143,10 +142,6 @@ export interface BuiltinToolAgentsContext {
  * 仍可见。
  */
 export interface BuiltinToolSearchContext {
-  /** 读取单引擎配置状态（configured；不含 key 明文）。 */
-  readonly loadEngineConfig: (
-    engineId: EngineId
-  ) => Promise<SearchEngineStatus>;
   /**
    * 解析本次调用的串行引擎链（engineOrder 优先级序；显式 inputEngine
    * 时从该引擎起截取；只含 configured 引擎；全无返回空数组，工具回落

@@ -197,7 +197,6 @@ export function assembleSearchToolContext(
   store: SearchConfigStore
 ): BuiltinToolSearchContext {
   return {
-    loadEngineConfig: (engineId) => store.loadEngineConfig(engineId),
     resolveEngineChain: (inputEngine) =>
       store.resolveEngineChain(inputEngine),
   };

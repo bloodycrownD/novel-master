@@ -160,7 +160,6 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
       { query: "q" },
       makeCtx({
         search: {
-          loadEngineConfig: async () => ({ configured: false }),
           resolveEngineChain: async () => [],
         },
       })

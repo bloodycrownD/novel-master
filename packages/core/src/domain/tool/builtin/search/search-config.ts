@@ -221,8 +221,6 @@ export async function resolveEngineChain(
 export interface SearchConfigStore {
   /** 读取对外配置（不含 key 明文）。 */
   readConfig(): Promise<SearchConfigPublic>;
-  /** 读取单引擎配置状态。 */
-  loadEngineConfig(engineId: EngineId): Promise<SearchEngineStatus>;
   /** 解析串行引擎链（链语义同 {@link resolveEngineChain}）。 */
   resolveEngineChain(
     inputEngine?: EngineId
@@ -250,10 +248,6 @@ export function createSearchConfigStore(
   return {
     async readConfig() {
       return readSearchConfig(deps);
-    },
-    async loadEngineConfig(engineId) {
-      const config = await readSearchConfig(deps);
-      return config.engines[engineId];
     },
     resolveEngineChain(inputEngine) {
       return resolveEngineChain(deps, inputEngine);

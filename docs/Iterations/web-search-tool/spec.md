@@ -51,7 +51,7 @@ apps/desktop/renderer/features/settings/SearchEnginesView.tsx
 | `domain/tool/builtin/curl-tool.ts` | `CURL_MAX_BODY_BYTES` 引用改 `TOOL_OUTPUT_MAX_BYTES`（50KB）；超预算路径改走 overflow-sink；输出加 `savedPath?` 字段；description 同步 |
 | `domain/tool/builtin/vfs-tools.ts`（read 部分） | 截断改 50KB 单一预算（见 R5 步骤） |
 | `domain/tool/logic/tool-output-limits.ts` | 新增 `capUtf8BytesFill`（预算内尽量填满、末行允许截到预算点、返回 truncated 标记）；**不改动**既有函数（fs ls 等仍在用） |
-| `domain/tool/builtin/builtin-tool-context.ts` | 加 `search?: BuiltinToolSearchContext`（`loadEngineConfig(engineId)`、`resolveActiveEngine(inputEngine?)`） |
+| `domain/tool/builtin/builtin-tool-context.ts` | 加 `search?: BuiltinToolSearchContext`（`resolveEngineChain(inputEngine?)`） |
 | `domain/tool/builtin/register-builtin-tools.ts` | 注册 searchTool；头注释 10→11 |
 | `service/agent/logic/run-agent-turn.ts` | `AgentTurnRuntimePort` 加 `searchConfig?: SearchConfigStore`（可选声明——旧测试 mock 零改动；装配见 Step 3：desktop/mobile runtime 各补一行、CLI 无 kkv 不装配，search 返回可读错误）；主/子两装配点（L505/L739）注入 `search` 闭包，vfs/workplace/sessionKkv 复用装配点既有实例（子代理天然落父工作区） |
 | `domain/tool/logic/format-tool-output.ts` | `isSearchOutput`/`formatSearchOutput` + 分派链插在 `isCurlOutput` 前；curl formatter 加 savedPath 分支 |
