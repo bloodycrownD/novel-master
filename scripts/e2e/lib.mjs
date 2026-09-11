@@ -216,6 +216,23 @@ export async function waitRunSettled(page) {
 // 全不可用时进第一个会话自行绑定模型（B4 同款抽屉流程：session-actions 抽屉→切换大模型→picker 选第二项）。
 // 调用方需先导航至目标项目的会话列表页——全量序列里上游 case（如 session-mgmt 删除断言）可能删光绑模型的会话
 export async function pickUsableSession(page) {
+  // 前置：已停妥可用会话（composer 在且可用）则直接返回（续库单跑/全量序列恢复路径）
+  {
+    const c0 = page.locator('textarea[aria-label="消息输入"]');
+    if ((await c0.count()) && !(await c0.isDisabled().catch(() => true))) {
+      console.log("PICK_SKIP", "current session usable");
+      return;
+    }
+    // composer 不可用且处于会话内：先返回到会话列表
+    if (await c0.count()) {
+      const bk = page.locator('button[aria-label="返回"]:visible').first();
+      if (await bk.count()) { await bk.click(); await page.waitForTimeout(800); }
+    }
+  }
+  // 回到回归项目A 的会话列表（可能在项目列表/项目内任意状态）
+  await goToProjects(page);
+  await page.locator("li:visible").filter({ hasText: "回归项目A" }).first().click();
+  await page.waitForTimeout(700);
   const rows0 = page.locator("#session-list li:visible");
   const total = await rows0.count();
   for (let i = 0; i < total; i++) {

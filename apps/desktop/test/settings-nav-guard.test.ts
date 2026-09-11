@@ -205,17 +205,17 @@ test("边界: dirtyViews 含多个 view 标记时只看 currentViewId", () => {
   // 守卫只对当前挂载 view 的标记负责
   assert.equal(
     shouldGuardSettingsNav({
-      currentViewId: "regexRuleEditor",
-      dirtyViews: dirtyOf("agentEditor", "skillDetail", "regexRuleEditor"),
-      nextViewId: "regexGroups",
+      currentViewId: "modelSampling",
+      dirtyViews: dirtyOf("agentEditor", "skillDetail", "modelSampling"),
+      nextViewId: "providerDetail",
     }),
     true,
   );
   assert.equal(
     shouldGuardSettingsNav({
-      currentViewId: "regexGroups",
+      currentViewId: "providerDetail",
       dirtyViews: dirtyOf("agentEditor", "skillDetail"),
-      nextViewId: "regexRules",
+      nextViewId: "agentEditor",
     }),
     false,
   );
