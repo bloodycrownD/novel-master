@@ -125,7 +125,7 @@ describe("search 引擎适配器：duckduckgo（T-A6，内置免费兜底）", (
     ]);
   });
 
-  it("maxResults 客户端截断（HTML 端点无条数参数，照 searxng 模式）：0→默认 5、99→20、2→截 2", async () => {
+  it("maxResults 客户端截断（HTML 端点无条数参数，照 searxng 模式）：0→默认 5、2→截 2", async () => {
     const blocks = Array.from(
       { length: 6 },
       (_, i) => `
