@@ -444,8 +444,6 @@ export class SessionStreamUnitManager {
     if (!unit.settle(status)) {
       return;
     }
-    // settled 单元留在注册表进宽限期（投影呈现终态，宽限到期/LRU 淘汰销毁）。
-    unit.settle(status);
     this.evictSettledOverflow();
     this.notifyChanged();
     decrementAgentActive();
