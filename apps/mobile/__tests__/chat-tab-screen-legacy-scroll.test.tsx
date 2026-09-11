@@ -26,6 +26,11 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
 // refreshChatMeta 每次 setAgentMeta 新对象组成无限重渲染循环，act 永不结束。
 let mockFocusInvoked = false;
 jest.mock('@react-navigation/native', () => ({
+  createNavigationContainerRef: () => ({
+    current: null,
+    isReady: () => false,
+    navigate: jest.fn(),
+  }),
   useFocusEffect: (cb: () => void) => {
     if (!mockFocusInvoked) {
       mockFocusInvoked = true;
@@ -57,6 +62,8 @@ const mockRuntime: any = {
   messages: {
     listBySession: jest.fn(async () => []),
     listBySessionPage: jest.fn(async () => []),
+    // 单元消息管线的窄口（Step 6 harness：真 manager 装配需要）。
+    listBySessionTail: jest.fn(async () => []),
   },
   state: {
     getCurrentModelId: jest.fn(async () => 'openai/gpt-4o-mini'),
@@ -232,15 +239,30 @@ jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
 }));
 
 import {ChatTabScreen} from '../src/screens/tabs/ChatTabScreen';
+import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
+
+// Step 6 平移：harness 直接消费真实 manager（挂 mockRuntime，
+// 与 Provider bootstrap 装配同形）。
+let mockHarnessManager: SessionStreamUnitManager | undefined;
 
 describe('ChatTabScreen legacy scroll cache', () => {
   beforeEach(() => {
     clearAllScrollSnapshots();
     mockEmitTelemetry.mockClear();
+    mockFocusInvoked = false;
+    mockHarnessManager?.dispose();
+    mockRuntime.eventBus = new SimpleEventBus();
+    mockHarnessManager = new SessionStreamUnitManager({
+      runtime: mockRuntime,
+    });
+    mockHarnessManager.markHydrated();
+    mockRuntime.sessionStreamUnitManager = mockHarnessManager;
   });
 
   afterEach(() => {
     clearAllScrollSnapshots();
+    mockHarnessManager?.dispose();
+    mockHarnessManager = undefined;
   });
 
   it('emits legacy_cache_discarded when v1 snapshot is read under webview engine', async () => {

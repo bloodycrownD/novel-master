@@ -113,9 +113,7 @@ import {
   formatAtPathMentionMarkup,
   mentionValueToPlain,
 } from '../src/components/chat/composer-at-path-mention';
-import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
-import {useSessionAbort} from '../src/screens/tabs/chat-tab/useSessionAbort';
-import {AgentRunManager} from '../src/services/agent-run-manager.service';
+import {SessionStreamUnitManager} from '../src/services/session-stream-unit-manager.service';
 import {
   isMobileAgentActive,
   setMobileAgentActive,
@@ -135,7 +133,7 @@ import {
 /** 当前 Harness 的 eventBus（测试里 publish run 生命周期事件用）。 */
 let harnessEventBus: SimpleEventBus | undefined;
 /** 当前 Harness 的 Manager。 */
-let harnessManager: AgentRunManager | undefined;
+let harnessManager: SessionStreamUnitManager | undefined;
 
 function Harness(props: {
   canResumeWithoutInput: boolean;
@@ -143,30 +141,20 @@ function Harness(props: {
   draftRestoreToken?: number;
   onMessagesChanged?: () => void | Promise<void>;
 }) {
-  // 与 ChatTabProvider 等价的 abort + lifecycle 装配（composer 是 dumb component）。
-  const onStreamResetRef = React.useRef<() => void>(() => undefined);
+  // Step 6 平移：真 SessionStreamUnitManager 装配（与 Provider bootstrap 同
+  // 形状）+ mock runtime（eventBus / abortRegistry / sessions），
+  // runAgentTurn 注入 mock。composer 是 dumb component——running 从 manager
+  // 投影派生（与 ChatConversationPanel 同语义：status 为 starting|running）。
   const abortRegistry = React.useRef({
     register: () => undefined,
     abort: () => undefined,
     unregister: () => undefined,
     has: () => false,
   });
-  const abort = useSessionAbort({
-    sessionId: 's',
-    abortRegistry: abortRegistry.current as never,
-    onStreamResetRef,
-  });
-  const lifecycle = useAgentRunLifecycle({
-    onRunUiActivate: abort.markRunStarted,
-    onRunUiDeactivate: abort.markRunEnded,
-    getUiRunning: abort.getUiRunning,
-  });
-  // AgentRunManager 装配（与 Provider bootstrap 同形状）：真 Manager + mock
-  // runtime（eventBus / abortRegistry / sessions），runAgentTurn 注入 mock。
   const eventBus = React.useRef(new SimpleEventBus()).current;
-  const manager = React.useRef<AgentRunManager>();
-  if (manager.current == null) {
-    manager.current = new AgentRunManager({
+  const managerRef = React.useRef<SessionStreamUnitManager>();
+  if (managerRef.current == null) {
+    managerRef.current = new SessionStreamUnitManager({
       runtime: {
         eventBus,
         abortRegistry: abortRegistry.current,
@@ -174,9 +162,25 @@ function Harness(props: {
       } as never,
       runAgentTurn: mockRunAgentTurn as never,
     });
+    // harness 无持久层：显式放行水合（snapshot 可读）。
+    managerRef.current.markHydrated();
   }
+  const manager = managerRef.current;
+  const [running, setRunning] = React.useState(
+    () =>
+      manager.snapshot('s')?.status === 'starting' ||
+      manager.snapshot('s')?.status === 'running',
+  );
+  React.useEffect(() => {
+    const sync = () => {
+      const status = manager.snapshot('s')?.status;
+      setRunning(status === 'starting' || status === 'running');
+    };
+    sync();
+    return manager.subscribe(sync);
+  }, [manager]);
   harnessEventBus = eventBus;
-  harnessManager = manager.current;
+  harnessManager = manager;
   Object.assign(mockRuntime, {
     eventBus,
     preferences: {
@@ -190,18 +194,14 @@ function Harness(props: {
       get: async () => ({projectId: 'p'}),
     },
     workplace: () => ({}),
-    agentRunManager: manager.current,
+    sessionStreamUnitManager: manager,
   });
   return (
     <ThemeProvider>
       <ChatComposer
         scope={{projectId: 'p', sessionId: 's'}}
         hasModel={true}
-        running={abort.uiRunning}
-        beginUiRun={lifecycle.beginUiRun}
-        endUiRunOnError={lifecycle.endUiRunOnError}
-        abortUiRun={abort.abortUiRun}
-        onStreamReset={() => undefined}
+        running={running}
         onMessagesChanged={props.onMessagesChanged ?? (() => undefined)}
         onNeedModel={() => undefined}
         canResumeWithoutInput={props.canResumeWithoutInput}
@@ -251,6 +251,7 @@ describe('ChatComposer integration', () => {
     clearChatComposerDraft('s');
     resetChatAnnotateDraftStoreForTests();
     harnessEventBus = undefined;
+    harnessManager?.dispose();
     harnessManager = undefined;
   });
   it('running-state “终止” action aborts current run', async () => {
