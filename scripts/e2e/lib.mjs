@@ -139,8 +139,6 @@ export async function shutdown(app, vite = null, mock = null) {
   if (mock) mock.close();
 }
 
-export const sleep = (page, ms) => page.waitForTimeout(ms);
-
 export async function shot(page, id, name, ms = 900) {
   await page.waitForTimeout(ms);
   await page.screenshot({ path: path.join(OUT, `${id}-${name}.png`) });
@@ -156,15 +154,6 @@ export async function goToProjects(page) {
   }
   const vis2 = await page.evaluate(() => [...document.querySelectorAll(".chat-nav-view")].filter((v) => !v.hidden).map((v) => v.getAttribute("data-nav-view")));
   return vis2.includes("projects");
-}
-
-export async function enterProject(page, name) {
-  await goToProjects(page);
-  const proj = page.locator("li:visible").filter({ hasText: name }).first();
-  if (!(await proj.count())) return false;
-  await proj.click();
-  await page.waitForTimeout(1000);
-  return true;
 }
 
 export async function closeOverlays(page) {
@@ -221,4 +210,60 @@ export async function waitRunSettled(page) {
     await page.waitForTimeout(300);
   }
   if (!back) console.warn(`waitRunSettled: 回归段超时（15s 未见 label 回归「发送」，最终 label=${await label()}）——run 未收敛`);
+}
+
+// 会话自足选择：在会话列表页逐个尝试会话直至 composer 可用（未绑模型/禁用态的 composer 不可用）；
+// 全不可用时进第一个会话自行绑定模型（B4 同款抽屉流程：session-actions 抽屉→切换大模型→picker 选第二项）。
+// 调用方需先导航至目标项目的会话列表页——全量序列里上游 case（如 session-mgmt 删除断言）可能删光绑模型的会话
+export async function pickUsableSession(page) {
+  const rows0 = page.locator("#session-list li:visible");
+  const total = await rows0.count();
+  for (let i = 0; i < total; i++) {
+    const rows = page.locator("#session-list li:visible");
+    if (i >= (await rows.count())) break;
+    await rows.nth(i).click();
+    await page.waitForTimeout(1100);
+    const c = page.locator('textarea[aria-label="消息输入"]');
+    const ok = (await c.count()) && !(await c.isDisabled().catch(() => true));
+    console.log("PICK_TRY", i, ok ? "OK" : "skip");
+    if (ok) return;
+    await page.locator('button[aria-label="返回"]:visible').first().click();
+    await page.waitForTimeout(600);
+  }
+  console.log("NO_READY_SESSION——自足绑模型");
+  const rows = page.locator("#session-list li:visible");
+  if ((await rows.count()) === 0) throw new Error("no session to bind model");
+  await rows.first().click();
+  await page.waitForTimeout(1200);
+  await page.locator('[data-action="open-session-actions"]').first().click();
+  await page.waitForTimeout(900);
+  await page.locator('[aria-label^="切换大模型"]').first().click();
+  await page.waitForTimeout(800);
+  await page.locator(".picker-modal__panel li:visible").nth(1).click();
+  await page.waitForTimeout(800);
+  await closeOverlays(page);
+  await page.waitForTimeout(500);
+  const c = page.locator('textarea[aria-label="消息输入"]');
+  if (!(await c.count()) || (await c.isDisabled().catch(() => true))) throw new Error("bind model failed");
+  console.log("SELF_BOUND_OK");
+}
+
+// 附件断言：带超时的重试式探测（≤30 次×500ms）——先等「最近一条 user 消息」文本匹配 needle
+// （确认落库渲染的是本条而非发送前的旧消息），再验该消息的批注附件分组卡片（MessageAttachmentGroupCard）。
+// 超时不抛异常，返回 {matched, hasAttach, detail} 由调用方收口断言/记录
+export async function assertLastUserAttach(page, needle) {
+  let assert = { matched: false, hasAttach: false, detail: "no-attempt" };
+  for (let i = 0; i < 30 && !assert.matched; i++) {
+    assert = await page.evaluate((needle) => {
+      const msgs = [...document.querySelectorAll(".chat-message--user")].filter((m) => m.offsetParent);
+      const last = msgs[msgs.length - 1] ?? null;
+      if (!last) return { matched: false, hasAttach: false, detail: "no-user-msg" };
+      const text = last.querySelector(".chat-message__body")?.textContent ?? "";
+      if (!text.includes(needle)) return { matched: false, hasAttach: false, detail: "stale:" + text.slice(0, 40) };
+      const grp = last.querySelector(".chat-message__attach-group");
+      return { matched: true, hasAttach: !!grp, detail: grp?.querySelector("summary")?.textContent ?? "no-attach-group" };
+    }, needle);
+    if (!assert.matched) await page.waitForTimeout(500);
+  }
+  return assert;
 }
