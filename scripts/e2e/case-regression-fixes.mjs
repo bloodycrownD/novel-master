@@ -5,8 +5,8 @@
 // 自建 nav-guard-A/B 两个——命名刻意避开「回归技能」子串，不干扰后续
 // case-models-skills 的「回归技能」行删除断言（hasText 子串匹配会误伤）。
 import {
-  launchApp, shutdown, startMock, shot, goToProjects, sendMessage,
-  openWorkspaceContextMenu, closeOverlays,
+  launchApp, shutdown, startMock, shot, sendMessage,
+  openWorkspaceContextMenu, closeOverlays, pickUsableSession, assertLastUserAttach,
 } from "./lib.mjs";
 
 const errors = [];
@@ -49,17 +49,9 @@ const step = async (id, fn) => {
   try { await fn(); } catch (e) { record(id, false, `EXCEPTION ${String(e).slice(0, 200)}`); }
 };
 
-// 进入回归项目A 的既有会话（bootstrap 产物；续库时可能已在会话内）
-async function ensureSession() {
-  const composer = page.locator('textarea[aria-label="消息输入"]');
-  if (!(await composer.count())) {
-    await goToProjects(page);
-    await page.locator("li:visible").filter({ hasText: "回归项目A" }).first().click();
-    await sleep(900);
-    await page.locator("#session-list li:visible").first().click();
-    await sleep(1200);
-  }
-}
+// 进入可用会话：公共函数逐个尝试直至 composer 可用，未绑模型的会话自足绑定
+// （C-3② 收敛——旧 ensureSession 只查会话存在，首个会话未绑模型时会静默空发）；
+// 全不可用由公共函数抛出
 
 // 当前可见视图是否 sessions 列表
 const navViews = () => page.evaluate(() =>
@@ -82,7 +74,7 @@ const drawerState = () => page.evaluate(() => ({
 try {
   await page.waitForLoadState("domcontentloaded");
   await sleep(3500);
-  await ensureSession();
+  await pickUsableSession(page);
 
   // ===== Phase 1：工作区弹窗聚焦描边（T-S2）+ 空文件占位（T-P2）+ 空态文案（T-P3）=====
   console.log("PHASE", "preview-and-modal");
@@ -192,20 +184,9 @@ try {
       await sendMessage(page, "T-A2投影复核消息");
       await sleep(1500);
       await shot(page, "705", "ta2-sent");
-      // 附件落库断言（重试式，先确认最近一条 user 消息匹配本次发送内容）
-      let attach = { matched: false, hasAttach: false, detail: "no-attempt" };
-      for (let i = 0; i < 30 && !attach.matched; i++) {
-        attach = await page.evaluate((needle) => {
-          const msgs = [...document.querySelectorAll(".chat-message--user")].filter((m) => m.offsetParent);
-          const last = msgs[msgs.length - 1] ?? null;
-          if (!last) return { matched: false, hasAttach: false, detail: "no-user-msg" };
-          const text = last.querySelector(".chat-message__body")?.textContent ?? "";
-          if (!text.includes(needle)) return { matched: false, hasAttach: false, detail: "stale:" + text.slice(0, 40) };
-          const grp = last.querySelector(".chat-message__attach-group");
-          return { matched: true, hasAttach: !!grp, detail: grp?.querySelector("summary")?.textContent ?? "no-attach-group" };
-        }, "T-A2投影复核消息");
-        if (!attach.matched) await sleep(500);
-      }
+      // 附件落库断言（公共函数重试式探测，C-3② 收敛）：先等最近一条 user 消息
+      // 匹配本次发送内容，再验批注附件分组；T-A1 守门收口见下
+      const attach = await assertLastUserAttach(page, "T-A2投影复核消息");
       console.log("TA2_ATTACH", JSON.stringify(attach));
 
       // 重开文件：切到另一文件再切回（触发 loadFile + annotator 重建）

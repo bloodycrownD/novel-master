@@ -1,5 +1,8 @@
 // 补验：批注划词→添加→发送落库→重开文件看下划线投影
-import { launchApp, shutdown, startMock, shot, goToProjects, sendMessage, openWorkspaceContextMenu } from "./lib.mjs";
+import {
+  launchApp, shutdown, startMock, shot, sendMessage, openWorkspaceContextMenu,
+  pickUsableSession, assertLastUserAttach,
+} from "./lib.mjs";
 
 const errors = [];
 const mock = await startMock();
@@ -9,56 +12,9 @@ const sleep = (ms) => page.waitForTimeout(ms);
 try {
   await page.waitForLoadState("domcontentloaded");
   await sleep(3500);
-  const composer = page.locator('textarea[aria-label="消息输入"]');
   // app 启动会自动恢复上次会话（可能是前序脚本留下的未绑模型会话，发送失败不落库）：
-  // 无 composer 或 composer 被禁（未绑模型）都需重选会话
-  const needPick = !(await composer.count()) || (await composer.isDisabled().catch(() => true));
-  if (needPick) {
-    if (await composer.count()) {
-      // 已恢复某会话：先退出到会话列表
-      const bk = page.locator('button[aria-label="返回"]:visible').first();
-      if (await bk.count()) { await bk.click(); await sleep(800); }
-    }
-    await goToProjects(page);
-    await page.locator("li:visible").filter({ hasText: "回归项目A" }).first().click();
-    await sleep(700);
-    // 全量序列里上游 case（如 session-mgmt 的删除测试）可能删光绑模型的会话，
-    // 逐个尝试直到 composer 可用；全不可用时进第一个会话自己绑模型（自足，B4 同款）
-    let picked = false;
-    const rows0 = page.locator("#session-list li:visible");
-    const total = await rows0.count();
-    for (let i = 0; i < total; i++) {
-      const rows = page.locator("#session-list li:visible");
-      if (i >= (await rows.count())) break;
-      await rows.nth(i).click();
-      await sleep(1100);
-      const c = page.locator('textarea[aria-label="消息输入"]');
-      const ok = (await c.count()) && !(await c.isDisabled().catch(() => true));
-      console.log("PICK_TRY", i, ok ? "OK" : "skip");
-      if (ok) { picked = true; break; }
-      await page.locator('button[aria-label="返回"]:visible').first().click();
-      await sleep(600);
-    }
-    if (!picked) {
-      console.log("NO_READY_SESSION——自足绑模型");
-      const rows = page.locator("#session-list li:visible");
-      if ((await rows.count()) === 0) throw new Error("no session to bind model");
-      await rows.first().click();
-      await sleep(1200);
-      await page.locator('[data-action="open-session-actions"]').first().click();
-      await sleep(900);
-      await page.locator('[aria-label^="切换大模型"]').first().click();
-      await sleep(800);
-      await page.locator(".picker-modal__panel li:visible").nth(1).click();
-      await sleep(800);
-      const { closeOverlays } = await import("./lib.mjs");
-      await closeOverlays(page);
-      await sleep(500);
-      const c = page.locator('textarea[aria-label="消息输入"]');
-      if (!(await c.count()) || (await c.isDisabled().catch(() => true))) throw new Error("bind model failed");
-      console.log("SELF_BOUND_OK");
-    }
-  }
+  // 逐个尝试会话直至可用（未绑模型时自足绑定），停妥后无返回；全不可用由公共函数抛出（C-3② 收敛）
+  await pickUsableSession(page);
 
   // 1. 建文件写正文
   // 探针：当前会话/面板状态
@@ -135,22 +91,11 @@ try {
   await sleep(1500);
   await shot(page, "653", "annotate2-sent");
 
-  // 4.5 发送后附件断言：带超时的重试式读取——先等「最近一条 user 消息」文本匹配本次发送内容
-  // （确认落库渲染的是本条而非发送前的旧消息），再验该消息的批注附件（MessageAttachmentGroupCard
-  // 的「消息附件」分组卡片）。超时不抛异常，只记录断言结果供 D-15 定性，后续下划线投影验证继续跑。
-  let attachAssert = { matched: false, hasAttach: false, detail: "no-attempt" };
-  for (let i = 0; i < 30 && !attachAssert.matched; i++) {
-    attachAssert = await page.evaluate((needle) => {
-      const msgs = [...document.querySelectorAll(".chat-message--user")].filter((m) => m.offsetParent);
-      const last = msgs[msgs.length - 1] ?? null;
-      if (!last) return { matched: false, hasAttach: false, detail: "no-user-msg" };
-      const text = last.querySelector(".chat-message__body")?.textContent ?? "";
-      if (!text.includes(needle)) return { matched: false, hasAttach: false, detail: "stale:" + text.slice(0, 40) };
-      const grp = last.querySelector(".chat-message__attach-group");
-      return { matched: true, hasAttach: !!grp, detail: grp?.querySelector("summary")?.textContent ?? "no-attach-group" };
-    }, SENT_TEXT);
-    if (!attachAssert.matched) await sleep(500);
-  }
+  // 4.5 发送后附件断言（公共函数，C-3② 收敛）：重试式读取最近一条 user 消息，先等文本匹配
+  // 本次发送内容（确认落库渲染的是本条而非旧消息），再验批注附件（MessageAttachmentGroupCard
+  // 的「消息附件」分组卡片）。超时不抛异常，只记录断言结果供 D-15 定性，后续下划线投影验证继续跑
+  // （本脚本保持观察式不强制，守门断言在 case-regression-fixes 的 T-A1）。
+  const attachAssert = await assertLastUserAttach(page, SENT_TEXT);
   console.log("ATTACH_ASSERT", JSON.stringify(attachAssert));
 
   // 5. 重开文件看下划线
