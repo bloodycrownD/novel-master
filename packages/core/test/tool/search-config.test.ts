@@ -129,7 +129,7 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
       tavily: { configured: false },
       brave: { configured: false },
       searxng: { configured: false },
-      // duckduckgo 内置兑底：无存储依赖，恒 configured。
+      // duckduckgo 内置兜底：无存储依赖，恒 configured。
       duckduckgo: { configured: true },
     });
   });
@@ -305,20 +305,20 @@ describe("search-config：resolveEngineChain 解析链（T-S2 存储层）", () 
     ]);
 
     // ③ 显式 bocha：从 bocha 起截取（tavily 位于其前，不再入链），
-    // 后续 configured（DDG 兑底）照常入链。
+    // 后续 configured（DDG 兜底）照常入链。
     assert.deepEqual(await resolveEngineChain(deps, "bocha"), [
       { engine: "bocha", apiKey: "sk-bocha" },
       { engine: "duckduckgo" },
     ]);
 
     // ④ 显式 brave（未配置）：截取链 [brave, searxng, duckduckgo] 内
-    // 顺位回落到 DDG 兑底（不全局回落 tavily/bocha）。
+    // 顺位回落到 DDG 兜底（不全局回落 tavily/bocha）。
     assert.deepEqual(await resolveEngineChain(deps, "brave"), [
       { engine: "duckduckgo" },
     ]);
   });
 
-  it("searxng-only：仅配 baseUrl（无任何 key）首发命中，DDG 队尾兑底，key 引擎零读取", async () => {
+  it("searxng-only：仅配 baseUrl（无任何 key）首发命中，DDG 队尾兜底，key 引擎零读取", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
     await store.setSearxngBaseUrl("http://192.168.1.5:8080/");
@@ -332,7 +332,7 @@ describe("search-config：resolveEngineChain 解析链（T-S2 存储层）", () 
     assert.equal(deps.secretStore.getCalls.length, 0);
   });
 
-  it("全无 key/baseUrl：链恒含 duckduckgo 兑底（PRD R1.2，链常规非空）", async () => {
+  it("全无 key/baseUrl：链恒含 duckduckgo 兜底（PRD R1.2，链常规非空）", async () => {
     assert.deepEqual(await resolveEngineChain(makeDeps()), [
       { engine: "duckduckgo" },
     ]);

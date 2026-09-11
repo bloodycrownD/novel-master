@@ -49,7 +49,7 @@ export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
     name: "search",
     label: "search",
     description:
-      "联网搜索（bocha/tavily/brave/searxng 四引擎，需在设置中配置），返回标题/链接/摘要结果列表",
+      "联网搜索（bocha/tavily/brave/searxng/duckduckgo 五引擎；未配置时使用内置 DuckDuckGo 免费搜索，无需配置），返回标题/链接/摘要结果列表",
   },
 ] as const;
 

@@ -7,7 +7,7 @@
  * include_raw_content:false, time_range?, include_domains?, exclude_domains?}`；
  * 域名过滤走服务端参数（include_domains/exclude_domains），不做客户端兜底。
  * 响应：`results[]{title,url,content}`（content 折叠空白为 snippet）、
- * 原生 `answer` 透传（非字符串或缺省时省略）——四引擎中仅 tavily 有 answer。
+ * 原生 `answer` 透传（非字符串或缺省时省略）——五引擎中仅 tavily 有 answer。
  *
  * @module domain/tool/builtin/search/engines/tavily
  */

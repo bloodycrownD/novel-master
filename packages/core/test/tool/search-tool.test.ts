@@ -104,7 +104,7 @@ function bochaResponse(): Response {
   );
 }
 
-/** DDG HTML 成功响应（e2e 兑底链断言用，单可解析块）。 */
+/** DDG HTML 成功响应（e2e 兜底链断言用，单可解析块）。 */
 function ddgHtmlResponse(): Response {
   return new Response(
     `<div class="result results_links web-result">
@@ -148,7 +148,7 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal(rec.engine, "duckduckgo");
     assert.ok(
       urls[0]!.startsWith("https://html.duckduckgo.com/html/"),
-      `DDG 兑底请求应发出: ${urls[0]}`
+      `DDG 兜底请求应发出: ${urls[0]}`
     );
     assert.equal(urls.length, 1);
   });
@@ -291,7 +291,7 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal(urls[2], "https://api.bochaai.com/v1/web-search");
 
     // ④ input 指向未配置引擎（brave）：从 brave 起截取链
-    // [brave, searxng, duckduckgo] 顺位回落 DDG 兑底（不全局回落
+    // [brave, searxng, duckduckgo] 顺位回落 DDG 兜底（不全局回落
     // bocha/tavily）。
     out = await runner.call(
       SEARCH_TOOL_NAME,
@@ -541,7 +541,7 @@ describe("search 工具：串行链执行（T-S3，修订轮）", () => {
     assert.equal(lines[1], "尝试轨迹: bocha 失败(401) → tavily 成功");
   });
 
-  it("②全链失败（含 DDG 兑底也失败）：聚合错误每引擎一行摘要、无 key 明文", async () => {
+  it("②全链失败（含 DDG 兜底也失败）：聚合错误每引擎一行摘要、无 key 明文", async () => {
     const { kkv, secretStore } = fakeStores();
     await secretStore.set("search/bocha/apiKey", "sk-bocha-secret");
     await secretStore.set("search/tavily/apiKey", "sk-tavily-secret");
@@ -573,7 +573,7 @@ describe("search 工具：串行链执行（T-S3，修订轮）", () => {
         assert.ok(err instanceof ToolError);
         assert.equal(err.code, "FAILED");
         const detail = (err.cause as Error).message;
-        // 每引擎一行：引擎名前缀 + 各自状态码（链尾 DDG 兑底也失败时同样一行）。
+        // 每引擎一行：引擎名前缀 + 各自状态码（链尾 DDG 兜底也失败时同样一行）。
         assert.match(detail, /^串行搜索链全部尝试失败：/);
         assert.match(detail, /bocha: .*401/);
         assert.match(detail, /tavily: .*500/);
@@ -672,7 +672,7 @@ describe("search 工具：串行链执行（T-S3，修订轮）", () => {
       assert.match(detail, /bocha: .*timed out after 60000ms/);
       assert.match(detail, /tavily: .*timed out after 60000ms/);
       assert.match(detail, /链总预算 120s 已耗尽/);
-      // 链尾 brave 与 duckduckgo 兑底均未尝试。
+      // 链尾 brave 与 duckduckgo 兜底均未尝试。
       assert.match(detail, /剩余 2 个引擎未尝试/);
       // brave / DDG 零请求（预算拦在尝试前）。
       assert.equal(

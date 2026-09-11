@@ -2,7 +2,7 @@
  * `search` 工具实现：经已配置的搜索引擎（bocha / tavily / brave /
  * searxng / duckduckgo）检索网页，回流统一形状的结果列表（title /
  * url / snippet），让 agent 具备联网检索能力（写作考据、事实核验、
- * 资料收集）；未配置付费引擎时由内置 DuckDuckGo 免费搜索兑底（PRD
+ * 资料收集）；未配置付费引擎时由内置 DuckDuckGo 免费搜索兜底（PRD
  * R1.2，搜索开箱即用）。
  *
  * 设计口径（SPEC web-search-tool Step 4，修订轮串行链）：
@@ -193,7 +193,7 @@ export const searchTool: Tool<
 
     // 引擎链解析：engineOrder 优先级序（显式 input.engine 时从该引擎起
     // 截取，未配置顺位回落截取链中下一个 configured）；链常规非空
-    //（duckduckgo 恒 configured 队尾兑底），空链仅防御路径可达 →
+    //（duckduckgo 恒 configured 队尾兜底），空链仅防御路径可达 →
     // 未配置提示（成功输出，含双端配置入口指引，非错误）。
     const chain = await search.resolveEngineChain(input.engine);
     if (chain.length === 0) {

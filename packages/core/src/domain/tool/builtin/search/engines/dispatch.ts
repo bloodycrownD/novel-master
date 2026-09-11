@@ -1,6 +1,6 @@
 /**
  * 引擎分发：按 `ResolvedEngineConfig.engine` 路由到对应适配器，
- * 并集中持有「未配置」提示文案（search 工具 run 在解析链返回 null 时
+ * 并集中持有「未配置」提示文案（search 工具 run 在解析链返回空数组时
  * 以该文案作为成功输出回流，非错误）。
  *
  * @module domain/tool/builtin/search/engines/dispatch

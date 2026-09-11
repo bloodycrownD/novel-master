@@ -164,7 +164,7 @@ export async function readSearchConfig(
       tavily: { configured: keySet[1] === true },
       brave: { configured: keySet[2] === true },
       searxng: { configured: searxngBaseUrl.trim().length > 0 },
-      // duckduckgo 内置免费兑底：无 key 无 baseUrl，恒 configured（无存储依赖）。
+      // duckduckgo 内置免费兜底：无 key 无 baseUrl，恒 configured（无存储依赖）。
       duckduckgo: { configured: true },
     },
   };
@@ -172,7 +172,7 @@ export async function readSearchConfig(
 
 /**
  * 解析串行引擎链：按 `engineOrder` 顺序返回全部已配置引擎的候选数组
- * （优先级即降级链；duckduckgo 恒 configured 队尾兑底，链常规非空）；
+ * （优先级即降级链；duckduckgo 恒 configured 队尾兜底，链常规非空）；
  * 显式 `inputEngine` 时从该引擎起截取（位于其前
  * 的引擎不参与，未配置则顺位回落到截取链中下一个 configured）。候选
  * 凭据随项注入（key 引擎现读明文；`has` 之后被并发清除的竞态兜底：
@@ -200,7 +200,7 @@ export async function resolveEngineChain(
       chain.push({ engine: "searxng", baseUrl });
       continue;
     }
-    // duckduckgo 内置兑底：无凭据依赖，直接入链（PRD R1.2：未配置任何
+    // duckduckgo 内置兜底：无凭据依赖，直接入链（PRD R1.2：未配置任何
     // key/baseUrl 时链 = [duckduckgo]，搜索开箱即用）。
     if (engineId === "duckduckgo") {
       chain.push({ engine: "duckduckgo" });
