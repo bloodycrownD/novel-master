@@ -1,21 +1,37 @@
-# code-dev-loop 编排状态——dev-tool-fixes-20260906（fix-spec 执行）
-dag_version: 3
-spec_path: docs/Iterations/dev-tool-fixes-20260906/cr-fix-spec.md
-branch: dev
-base_sha: c7ae693
-wave_plan: [[impl-core-agent, impl-core-vfs, impl-apps], [verify-core, verify-apps], [fix-verify-strays], [cr-func-full]]
-node_status:
-  mf6-changelog: { status: done, executor: main }
-  impl-core-agent: { status: done, executor: subagent }
-  impl-core-vfs: { status: done, executor: subagent }
-  impl-apps: { status: done, executor: subagent }
-  verify-core: { status: done, executor: main, result: "1813 pass / 0 fail" }
-  verify-apps: { status: done, executor: main, result: "mobile 1092 pass；desktop typecheck 0 错；chat-smoke/session-rollback/preferences-e2e 绿" }
-  fix-verify-strays: { status: done, executor: main, note: "MF-5 漏网两处（core format-vfs-error-for-user.test + mobile format-error.test）改 NOT_FOUND/REPLACE_NOT_FOUND；CLI 三 e2e 补 agent 种子与末行解析" }
-  cr-func-full: { status: done, func_ready: yes, executor: subagent }
-  crfunc-polish: { status: done, executor: main, note: "G-1 种子挪 try；C-1 错别字；K-1 JSDoc" }
+# code-dev-loop 编排状态——session-stream-unit-2026-09（dev DAG）
+dag_version: 1
+spec_path: docs/Iterations/session-stream-unit-2026-09/spec.md
+prd_path: docs/Iterations/session-stream-unit-2026-09/prd.md
+branch: feat/agent-run-parallel-and-notify
+base_sha: f227e804
+spec_summary: 会话流式单元真并发重构——SessionStreamUnitManager（React 树外）+ per-session Unit 吸收 AgentRunManager/六 hook 运行态/metrics store/pending 映射；core 新表 session_run_state（SCHEMA_BOOT_VERSION 12→13）写通+水合；屏幕改纯订阅；旧链路直接拆除（九删一瘦三不动一微调）；Step 8 真机 manual_user 不入 DAG。
+contracts:
+  - manager.startRun(sessionId, projectId, content, options) 门禁=units.has(starting|running)||abortRegistry.has；interrupted 被替换吸收
+  - session_run_state(session_id PK, project_id, run_id, status(starting|running|settled), started_at_ms, text_chars, thinking_chars, partial_text, partial_thinking, pending_children_json, updated_at_ms)；settled 行 partial 清空 metrics 保留；UPSERT 免事务
+  - settled 投影 = manager 级常驻 map，独立于单元 LRU/宽限销毁
+  - webview attach 注册表：最后 attach 的可见句柄收流式、控制消息全句柄广播；中断渲染首选轻量合成提交
+  - dispose 时序：manager.dispose 先 flush 后 dispose（失败吞错）；interrupted 替换先 flush+dispose 再建新
+wave_plan:
+  - [impl-s1-core-runstate, impl-s2-unit-core]
+  - [verify-s1-core, verify-s2-unit]
+  - [crfunc-s1-s2]
+  - [impl-s3-unit-pipeline]
+  - [impl-s4-unit-messages]
+  - [impl-s5-persist-hydrate]
+  - [verify-s345]
+  - [crfunc-s3-s5]
+  - [impl-s6-screen-subscribe]
+  - [verify-s6]
+  - [crfunc-s6]
+  - [impl-s7-teardown]
+  - [verify-s7-full]
+  - [crfunc-final]
+node_status: {}
 open_must_fix: []
 spec_deviations: []
-dev_ready: yes
-head_sha: HEAD
-spec_deviations: []
+notes:
+  - s3/s4/s5 串行因同文件 session-stream-unit.ts（skill 同文件禁并行）
+  - 装配点替换（novel-master-context/types/create-mobile-runtime）归 Step 6 屏幕接线波次
+  - Step 8 真机验收 manual_user，不入 DAG（dev-ready 后交用户）
+  - 运行约束：mobile jest 须 NODE_ENV=test；typecheck 用官方脚本；core schema 改后 npm run build -w @novel-master/core；worktree dist 已就绪（notify 迭代已建）
+  - 9/10 pstream 调试探针（3 hook 改动 + apps/mobile/src/debug/）已 stash（可恢复）
