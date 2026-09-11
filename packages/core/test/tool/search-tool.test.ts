@@ -104,6 +104,17 @@ function bochaResponse(): Response {
   );
 }
 
+/** DDG HTML 成功响应（e2e 兑底链断言用，单可解析块）。 */
+function ddgHtmlResponse(): Response {
+  return new Response(
+    `<div class="result results_links web-result">
+  <a rel="nofollow" class="result__a" href="https://ddg.example.com/page">DDG 标题</a>
+  <a class="result__snippet">DDG 摘要</a>
+</div>`,
+    { status: 200, headers: { "content-type": "text/html" } }
+  );
+}
+
 describe("search 工具：注册与策略", () => {
   it("registry 含 search（共 11 个内置工具），不在任何摘除分支内", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -114,7 +125,35 @@ describe("search 工具：注册与策略", () => {
 });
 
 describe("search 工具：run 行为（T-S1 / T-S2）", () => {
-  it("T-S1：未配置任何引擎时返回含配置入口指引的提示，不抛错", async () => {
+  it("T-S1（第三轮语义）：无 key 无 baseUrl → 链 = [duckduckgo]，DDG 请求真实发出（搜索开箱即用）", async () => {
+    const { kkv, secretStore } = fakeStores();
+    const urls: string[] = [];
+    const fetchFn = (async (url: string | URL | Request) => {
+      urls.push(String(url));
+      return ddgHtmlResponse();
+    }) as typeof globalThis.fetch;
+
+    const runner = makeRunner();
+    const out = await runner.call(
+      SEARCH_TOOL_NAME,
+      { query: "q" },
+      makeCtx({
+        search: assembleSearchToolContext(
+          createSearchConfigStore({ kkv, secretStore })
+        ),
+        fetchFn,
+      })
+    );
+    const rec = out as { engine: string; results: unknown[] };
+    assert.equal(rec.engine, "duckduckgo");
+    assert.ok(
+      urls[0]!.startsWith("https://html.duckduckgo.com/html/"),
+      `DDG 兑底请求应发出: ${urls[0]}`
+    );
+    assert.equal(urls.length, 1);
+  });
+
+  it("T-S1（防御路径，常规不可达）：链空时返回含配置入口指引的提示，不抛错（DDG 恒 configured 使链非空）", async () => {
     const runner = makeRunner();
     const out = await runner.call(
       SEARCH_TOOL_NAME,
@@ -190,15 +229,21 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
 
     const urls: string[] = [];
     const fetchFn = (async (url: string | URL | Request) => {
-      urls.push(String(url));
-      const payload =
-        String(url) === "https://api.tavily.com/search"
-          ? { answer: "a", results: [{ title: "t", url: "https://t.example.com", content: "c" }] }
-          : { code: 200, data: { webPages: { value: [] } } };
-      return new Response(JSON.stringify(payload), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      const target = String(url);
+      urls.push(target);
+      if (target === "https://api.tavily.com/search") {
+        return new Response(
+          JSON.stringify({ answer: "a", results: [{ title: "t", url: "https://t.example.com", content: "c" }] }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (target.startsWith("https://html.duckduckgo.com/html/")) {
+        return ddgHtmlResponse();
+      }
+      return new Response(
+        JSON.stringify({ code: 200, data: { webPages: { value: [] } } }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
     }) as typeof globalThis.fetch;
 
     const runner = makeRunner();
@@ -214,7 +259,13 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal("attempts" in out, false);
 
     // ② 无 input：engineOrder 重排后第一个 configured（tavily）命中。
-    await store.setEngineOrder(["tavily", "bocha", "brave", "searxng"]);
+    await store.setEngineOrder([
+      "tavily",
+      "bocha",
+      "brave",
+      "searxng",
+      "duckduckgo",
+    ]);
     out = await runner.call(
       SEARCH_TOOL_NAME,
       { query: "q" },
@@ -225,7 +276,13 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal((out as { answer?: string }).answer, "a");
 
     // ③ 恢复默认序 → 第一个 configured（bocha）命中。
-    await store.setEngineOrder(["bocha", "tavily", "brave", "searxng"]);
+    await store.setEngineOrder([
+      "bocha",
+      "tavily",
+      "brave",
+      "searxng",
+      "duckduckgo",
+    ]);
     out = await runner.call(
       SEARCH_TOOL_NAME,
       { query: "q" },
@@ -234,15 +291,17 @@ describe("search 工具：run 行为（T-S1 / T-S2）", () => {
     assert.equal((out as { engine: string }).engine, "bocha");
     assert.equal(urls[2], "https://api.bochaai.com/v1/web-search");
 
-    // ④ input 指向未配置引擎（brave）：从 brave 起截取链 [brave, searxng]
-    // 均未配置 → 未配置提示（不全局回落 bocha/tavily）。
+    // ④ input 指向未配置引擎（brave）：从 brave 起截取链
+    // [brave, searxng, duckduckgo] 顺位回落 DDG 兑底（不全局回落
+    // bocha/tavily）。
     out = await runner.call(
       SEARCH_TOOL_NAME,
       { query: "q", engine: "brave" },
       makeCtx({ search, fetchFn })
     );
-    assert.equal(out, SEARCH_NOT_CONFIGURED_MESSAGE);
-    assert.equal(urls.length, 3);
+    assert.equal((out as { engine: string }).engine, "duckduckgo");
+    assert.ok(urls[3]!.startsWith("https://html.duckduckgo.com/html/"));
+    assert.equal(urls.length, 4);
   });
 
   it("T-S2（searxng-only）：仅配 baseUrl 也能解析命中，请求落自托管实例", async () => {
@@ -483,16 +542,18 @@ describe("search 工具：串行链执行（T-S3，修订轮）", () => {
     assert.equal(lines[1], "尝试轨迹: bocha 失败(401) → tavily 成功");
   });
 
-  it("②全链失败：聚合错误每引擎一行摘要、无 key 明文", async () => {
+  it("②全链失败（含 DDG 兑底也失败）：聚合错误每引擎一行摘要、无 key 明文", async () => {
     const { kkv, secretStore } = fakeStores();
     await secretStore.set("search/bocha/apiKey", "sk-bocha-secret");
     await secretStore.set("search/tavily/apiKey", "sk-tavily-secret");
 
     const fetchFn = (async (url: string | URL | Request) => {
-      // 两个引擎的 401/500 响应体均回显 key 明文，验证聚合错误脱敏。
       const target = String(url);
       if (target === "https://api.bochaai.com/v1/web-search") {
         return new Response("bad key sk-bocha-secret", { status: 401 });
+      }
+      if (target.startsWith("https://html.duckduckgo.com/html/")) {
+        return new Response("anomaly detected", { status: 403 });
       }
       return new Response("server error sk-tavily-secret", { status: 500 });
     }) as typeof globalThis.fetch;
@@ -513,10 +574,11 @@ describe("search 工具：串行链执行（T-S3，修订轮）", () => {
         assert.ok(err instanceof ToolError);
         assert.equal(err.code, "FAILED");
         const detail = (err.cause as Error).message;
-        // 每引擎一行：引擎名前缀 + 各自状态码。
+        // 每引擎一行：引擎名前缀 + 各自状态码（链尾 DDG 兑底也失败时同样一行）。
         assert.match(detail, /^串行搜索链全部尝试失败：/);
         assert.match(detail, /bocha: .*401/);
         assert.match(detail, /tavily: .*500/);
+        assert.match(detail, /duckduckgo: .*403/);
         // 无 key 明文（响应体回显已被脱敏）。
         assert.equal(detail.includes("sk-bocha-secret"), false);
         assert.equal(detail.includes("sk-tavily-secret"), false);
@@ -611,12 +673,15 @@ describe("search 工具：串行链执行（T-S3，修订轮）", () => {
       assert.match(detail, /bocha: .*timed out after 60000ms/);
       assert.match(detail, /tavily: .*timed out after 60000ms/);
       assert.match(detail, /链总预算 120s 已耗尽/);
-      assert.match(detail, /剩余 1 个引擎未尝试/);
-      // brave 零请求（预算拦在尝试前）。
+      // 链尾 brave 与 duckduckgo 兑底均未尝试。
+      assert.match(detail, /剩余 2 个引擎未尝试/);
+      // brave / DDG 零请求（预算拦在尝试前）。
       assert.equal(
-        urls.some((u) => u.includes("brave")),
+        urls.some(
+          (u) => u.includes("brave") || u.includes("duckduckgo")
+        ),
         false,
-        `brave 不应被请求: ${urls.join(", ")}`
+        `brave/DDG 不应被请求: ${urls.join(", ")}`
       );
     } finally {
       mock.timers.reset();

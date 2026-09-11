@@ -114,15 +114,23 @@ describe("search-config：searxng baseUrl 规范化", () => {
 });
 
 describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
-  it("全空状态：四引擎 configured 均 false、engineOrder 为默认序、baseUrl 空串", async () => {
+  it("全空状态：key 引擎 configured 均 false、duckduckgo 恒 true、engineOrder 为默认序（DDG 队尾）、baseUrl 空串", async () => {
     const config = await readSearchConfig(makeDeps());
-    assert.deepEqual(config.engineOrder, ["bocha", "tavily", "brave", "searxng"]);
+    assert.deepEqual(config.engineOrder, [
+      "bocha",
+      "tavily",
+      "brave",
+      "searxng",
+      "duckduckgo",
+    ]);
     assert.equal(config.searxngBaseUrl, "");
     assert.deepEqual(config.engines, {
       bocha: { configured: false },
       tavily: { configured: false },
       brave: { configured: false },
       searxng: { configured: false },
+      // duckduckgo 内置兑底：无存储依赖，恒 configured。
+      duckduckgo: { configured: true },
     });
   });
 
@@ -172,12 +180,19 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
     assert.equal((await readSearchConfig(deps)).engines.searxng.configured, false);
 
     // setEngineOrder：合法排列写入 + 读回；缺项 / 重复 / 含非法 id 抛错。
-    await store.setEngineOrder(["searxng", "tavily", "brave", "bocha"]);
+    await store.setEngineOrder([
+      "searxng",
+      "tavily",
+      "brave",
+      "bocha",
+      "duckduckgo",
+    ]);
     assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
       "searxng",
       "tavily",
       "brave",
       "bocha",
+      "duckduckgo",
     ]);
     await assert.rejects(
       store.setEngineOrder(["bocha", "tavily", "brave"]),
@@ -205,7 +220,7 @@ describe("search-config：readSearchConfig / 保存与清除（T-C1）", () => {
 });
 
 describe("search-config：engineOrder 存量损坏容错（T-C1）", () => {
-  it("非 JSON / 非数组：整体回落 ENGINE_IDS 默认序", async () => {
+  it("非 JSON / 非数组：整体回落 ENGINE_IDS 默认序（含 duckduckgo 队尾）", async () => {
     const deps = makeDeps();
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, "not-json");
     assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
@@ -213,6 +228,7 @@ describe("search-config：engineOrder 存量损坏容错（T-C1）", () => {
       "tavily",
       "brave",
       "searxng",
+      "duckduckgo",
     ]);
 
     await deps.kkv.set(SEARCH_KKV_MODULE, KEY_ENGINE_ORDER, '"tavily"');
@@ -221,6 +237,7 @@ describe("search-config：engineOrder 存量损坏容错（T-C1）", () => {
       "tavily",
       "brave",
       "searxng",
+      "duckduckgo",
     ]);
   });
 
@@ -231,47 +248,77 @@ describe("search-config：engineOrder 存量损坏容错（T-C1）", () => {
       KEY_ENGINE_ORDER,
       '["tavily","tavily","google","searxng"]'
     );
-    // tavily/searxng 合法保留（重复去重），google 剔除，bocha/brave 缺项补齐。
+    // tavily/searxng 合法保留（重复去重），google 剔除，bocha/brave/duckduckgo 缺项补齐。
     assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
       "tavily",
       "searxng",
       "bocha",
       "brave",
+      "duckduckgo",
+    ]);
+  });
+
+  it("存量四引擎 order（第三轮修订前落库）：归一后 duckduckgo 自然补尾", async () => {
+    const deps = makeDeps();
+    await deps.kkv.set(
+      SEARCH_KKV_MODULE,
+      KEY_ENGINE_ORDER,
+      '["tavily","bocha","brave","searxng"]'
+    );
+    // 存量值缺 DDG 时按 ENGINE_IDS 默认序补尾，不丢弃用户既有排序。
+    assert.deepEqual((await readSearchConfig(deps)).engineOrder, [
+      "tavily",
+      "bocha",
+      "brave",
+      "searxng",
+      "duckduckgo",
     ]);
   });
 });
 
 describe("search-config：resolveEngineChain 解析链（T-S2 存储层）", () => {
-  it("engineOrder 顺序返回全部 configured；显式 inputEngine 从该引擎起截取；全无返回空数组", async () => {
+  it("engineOrder 顺序返回全部 configured（DDG 恒在链尾）；显式 inputEngine 从该引擎起截取", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
     await store.saveEngineKey("bocha", "sk-bocha");
     await store.saveEngineKey("tavily", "sk-tavily");
 
-    // ① 无 input：默认序全量 configured 链。
+    // ① 无 input：默认序全量 configured 链（duckduckgo 无凭据直接入链）。
     assert.deepEqual(await resolveEngineChain(deps), [
       { engine: "bocha", apiKey: "sk-bocha" },
       { engine: "tavily", apiKey: "sk-tavily" },
+      { engine: "duckduckgo" },
     ]);
 
-    // ② engineOrder 重排后链随序：tavily 领先。
-    await store.setEngineOrder(["tavily", "bocha", "brave", "searxng"]);
+    // ② engineOrder 重排后链随序：tavily 领先，DDG 仍队尾。
+    await store.setEngineOrder([
+      "tavily",
+      "bocha",
+      "brave",
+      "searxng",
+      "duckduckgo",
+    ]);
     assert.deepEqual(await resolveEngineChain(deps), [
       { engine: "tavily", apiKey: "sk-tavily" },
       { engine: "bocha", apiKey: "sk-bocha" },
+      { engine: "duckduckgo" },
     ]);
 
-    // ③ 显式 bocha：从 bocha 起截取（tavily 位于其前，不再入链）。
+    // ③ 显式 bocha：从 bocha 起截取（tavily 位于其前，不再入链），
+    // 后续 configured（DDG 兑底）照常入链。
     assert.deepEqual(await resolveEngineChain(deps, "bocha"), [
       { engine: "bocha", apiKey: "sk-bocha" },
+      { engine: "duckduckgo" },
     ]);
 
-    // ④ 显式 brave（未配置）：截取链 [brave, searxng] 内顺位回落，
-    // 全未配置 → 空数组（不全局回落 tavily/bocha）。
-    assert.deepEqual(await resolveEngineChain(deps, "brave"), []);
+    // ④ 显式 brave（未配置）：截取链 [brave, searxng, duckduckgo] 内
+    // 顺位回落到 DDG 兑底（不全局回落 tavily/bocha）。
+    assert.deepEqual(await resolveEngineChain(deps, "brave"), [
+      { engine: "duckduckgo" },
+    ]);
   });
 
-  it("searxng-only：仅配 baseUrl（无任何 key）也能被解析链命中，key 引擎零读取", async () => {
+  it("searxng-only：仅配 baseUrl（无任何 key）首发命中，DDG 队尾兑底，key 引擎零读取", async () => {
     const deps = makeDeps();
     const store = createSearchConfigStore(deps);
     await store.setSearxngBaseUrl("http://192.168.1.5:8080/");
@@ -279,12 +326,15 @@ describe("search-config：resolveEngineChain 解析链（T-S2 存储层）", () 
     const chain = await resolveEngineChain(deps);
     assert.deepEqual(chain, [
       { engine: "searxng", baseUrl: "http://192.168.1.5:8080" },
+      { engine: "duckduckgo" },
     ]);
-    // searxng 命中不读任何 key 明文（get 日志为空）。
+    // searxng / duckduckgo 入链均不读任何 key 明文（get 日志为空）。
     assert.equal(deps.secretStore.getCalls.length, 0);
   });
 
-  it("全无引擎配置返回空数组", async () => {
-    assert.deepEqual(await resolveEngineChain(makeDeps()), []);
+  it("全无 key/baseUrl：链恒含 duckduckgo 兑底（PRD R1.2，链常规非空）", async () => {
+    assert.deepEqual(await resolveEngineChain(makeDeps()), [
+      { engine: "duckduckgo" },
+    ]);
   });
 });
