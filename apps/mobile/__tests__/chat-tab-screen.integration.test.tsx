@@ -3,6 +3,7 @@ import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {SimpleEventBus} from '@novel-master/core/events';
 import {
+  EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
 } from '@novel-master/core/events';
@@ -575,5 +576,78 @@ describe('ChatTabScreen integration', () => {
     });
     expect(stopSpy).toHaveBeenCalledWith('s1');
     stopSpy.mockRestore();
+  });
+
+  it('settled 单元宽限销毁后消息面不回退（最终 assistant 回复仍在，消息数不减）', async () => {
+    // cr-func MF-1：run 收尾 → 30s 宽限到期单元销毁 → unitView 变 null →
+    // 双源回退 useChatTabMessages。run 期间 hook 刷新被 manager 分支接管、
+    // state 停留在 run 前旧快照——迁移沿补偿须以视图缓存恢复消息面。
+    const finalUserMessage = {
+      id: 'm-final-user',
+      seq: 3,
+      role: 'user',
+      content: {blocks: [{type: 'text', text: 'hi'}]},
+    };
+    const finalAssistantMessage = {
+      id: 'm-final-assistant',
+      seq: 4,
+      role: 'assistant',
+      content: {blocks: [{type: 'text', text: '最终回复'}]},
+    };
+
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<ChatTabScreen />);
+    });
+    await enterConversation(tree!);
+
+    // 无单元基线：hook 路径加载旧 tail（[mockTailMessage]）并写视图缓存。
+    expect(mockLatestMessageListProps.messages).toEqual([mockTailMessage]);
+
+    // 发起 run 并回填 runId：hasUnit=true，消息面切到单元投影。
+    await act(async () => {
+      mockHarnessManager!.startRun('s1', 'p1', 'hi');
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: 'r1',
+      });
+    });
+
+    // run 收尾：DB tail 变为「本轮用户消息 + assistant 最终回复」，settle 的
+    // force reload 把最终行写进单元消息面与视图缓存（无条件写）。
+    mockRuntime.messages.listBySessionTail.mockImplementation(async () => [
+      finalUserMessage,
+      finalAssistantMessage,
+    ]);
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: 'r1',
+        stopReason: 'end_turn',
+      } as never);
+      for (let i = 0; i < 5; i += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(mockLatestMessageListProps.messages).toEqual([
+      finalUserMessage,
+      finalAssistantMessage,
+    ]);
+
+    // 推进 30s 宽限：单元销毁出表、unitView 变 null。若无迁移沿补偿，双源
+    // 回退会把 hook 的 run 前旧快照（[mockTailMessage]）顶回屏幕。
+    await act(async () => {
+      jest.advanceTimersByTime(30_000);
+      for (let i = 0; i < 5; i += 1) {
+        await Promise.resolve();
+      }
+    });
+    expect(mockHarnessManager!.snapshot('s1')).toBe(null);
+    expect(mockLatestMessageListProps.messages).toEqual([
+      finalUserMessage,
+      finalAssistantMessage,
+    ]);
   });
 });

@@ -269,6 +269,29 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
       .catch(() => undefined);
   }, [manager, sessionId, hasUnit]);
 
+  // ===== 单元消失迁移沿的消息面补偿 =====
+  // settled 单元宽限到期销毁（或 LRU 淘汰）时 unitView 变 null、双源回退到
+  // useChatTabMessages——但 run 期间该 hook 的刷新入口被 manager 分支接管，
+  // 其 state 停留在 run 前的旧快照，直接回退会把本轮最终消息从屏幕冲掉
+  // （用户停留同一会话超宽限即触发）。单元收尾的 force reload 已把最终 tail
+  // 无条件写进视图缓存，故只在 hasUnit true→false 且会话未变的迁移沿上让
+  // hook 路径非 force 重载一次（缓存命中即采纳、miss 回源 DB）恢复消息面；
+  // 会话切换沿由 hook 自身的 sessionId effect 兜底，不在此重复触发。
+  const reloadMessages = messages.reloadMessages;
+  const unitPresenceRef = useRef({hasUnit, sessionId});
+  useEffect(() => {
+    const prev = unitPresenceRef.current;
+    unitPresenceRef.current = {hasUnit, sessionId};
+    if (
+      prev.sessionId === sessionId &&
+      prev.hasUnit &&
+      !hasUnit &&
+      sessionId != null
+    ) {
+      void reloadMessages().catch(() => undefined);
+    }
+  }, [hasUnit, sessionId, reloadMessages]);
+
   // ===== webview 句柄 attach/detach =====
   // webview ready 世代：每次 onReady 递增（重挂/切会话后 webview 是空基线，
   // 句柄必须在 ready 之后挂进单元——注入与流式推送才有落点）。epoch 为 0
@@ -315,6 +338,8 @@ export function ChatTabProvider({children}: {children: ReactNode}) {
   // 当前会话有单元（含宽限中的 settled / 水合的 interrupted）：投影是
   // 唯一显示源；无单元（非运行态会话）：useChatTabMessages 的数据管线
   // 兜底（Step 6 保留其 tail 初载，运行态刷新路径已由单元接管）。
+  // 单元消失的迁移沿由上方「消息面补偿」effect 重载 hook 路径，防旧
+  // 快照回退顶掉本轮最终消息。
   const chatMessages = useMemo(
     () => (unitView != null ? unitView.messages : messages.chatMessages),
     [unitView, messages.chatMessages],
