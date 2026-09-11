@@ -1,8 +1,8 @@
 ---
-date: 2026-09-12 11:20
-title: session-stream-unit-2026-09 spec 审查循环两轮达 Go + P2 收敛
-keywords: spec-check-loop, session-stream-unit, 真并发, session_run_state, execute-ready, P2 收敛
-abstract: 对 session-stream-unit-2026-09（会话流式单元真并发重构）的 spec 跑了 spec-check-loop 三轮：第 1 轮 No-Go（1 P0 + 3 P1）修复、第 2 轮 Go 后按用户拍板补收敛 7 条 P2、第 3 轮复审 Go + 主代理 trivial 直改 3 条措辞级残留——文档达 execute-ready，待用户最终确认开工。
+date: 2026-09-12 16:30
+title: session-stream-unit-2026-09 spec 三轮审查收敛 + dev DAG 全程跑通达 dev-ready
+keywords: spec-check-loop, session-stream-unit, 真并发, session_run_state, execute-ready, code-dev-loop, dev-ready
+abstract: session-stream-unit-2026-09（会话流式单元真并发重构）spec 三轮审查至 execute-ready 后进入 code-dev-loop：Step1-7 全部落地（27 个实现 commit），五段 cr-func 全 func-ready（s6 一轮 No-Go 抓到宽限销毁消息回退真回归后修复），mobile 189 套件/1185、desktop 116/116、core 1854 全绿，dev-ready；Step 8 真机验收归用户。
 ---
 
 user:
@@ -31,4 +31,12 @@ user:
 进入开发吧（code-dev-loop），是在 worktree 内部开发吧？不会影响主 worktree？
 
 assistant:
-确认在 .worktree/agent-run-parallel-and-notify（分支 feat/agent-run-parallel-and-notify）内开发，独立检出不影响主 worktree。开工前清理：9/10 的 pstream 调试探针（use-run-resume-probe/useAgentStreamMetrics/useSessionAbort 三处插桩 + apps/mobile/src/debug/）已 git stash 保存可恢复；两个审查子代理越权写的记忆文件（review-r1/spec-review）保留作历史记录。docs 基线提交后进入 code-dev-loop：初始 DAG dag_version=1，wave-0 = impl-s1（core session_run_state 全链 + 删除联动 + BOOT_VERSION 13）∥ impl-s2（SessionStreamUnitManager/Unit 状态机吸收 AgentRunManager，旧文件不动）并行；s3→s4→s5 因同文件 session-stream-unit.ts 串行；s6 屏幕接线（含 novel-master-context 装配点替换）；s7 拆除旧链路 + 全套件回归；四段 cr-func（s1-s2 / s3-s5 / s6 / final）。Step 8 真机验收为 manual_user 不入 DAG。
+确认在 .worktree/agent-run-parallel-and-notify（分支 feat/agent-run-parallel-and-notify）内开发，独立检出不影响主 worktree。开工前清理：9/10 的 pstream 调试探针已 stash 保存（use-run-resume-probe/useAgentStreamMetrics/useSessionAbort 三处未提交插桩 + apps/mobile/src/debug/）；另发现混入 5960fc9a 的三处**已提交**插桩（ChatTranscriptWebView/ChatTabProvider/useSessionStream）摘除于 a85aee37，恢复 typecheck 基线。docs 基线提交 4d5c7960 后进入 code-dev-loop。
+
+进展（dag_version 1，s1-s5 波次全部 done + 两段 cr-func 均 func-ready）：Step1 core session_run_state 全链（4 commit，BOOT_VERSION 13、删除联动同事务）；Step2 Manager/Unit 状态机吸收 AgentRunManager（3 commit，27 测试，发现模板差异：settle 进宽限期后 finally 兜底须判终态防双减）；Step3 事件管线/32-64ms 缓冲/单一注入/指标字段化/pendingChildren（4 commit，27 测试）；Step4 消息管线 tail/分页/step reload/后台收尾刷缓存/force 快照（2 commit，7 测试）；Step5 写通 coalescer 250ms+1MB 降频/水合 interrupted/settled 投影/forgetSession（4 commit，19 mobile + 4 core 守护测试）。verify 全部主代理独立复跑：mobile 80/80、core 10/10、双侧 typecheck 绿。实现注记：starting 行 runId 空串占位（消费方禁用 runId===null 判 starting）、水合 fail-open。下一步 wave-8 impl-s6 屏幕接线（最大波次：装配点替换 + ChatTabProvider 瘦身订阅化 + SubagentSessionScreen 删双装配 + 停止入口 + 中断现场渲染）。
+
+user:
+（dev DAG 跑完）最终结果如何？
+
+assistant:
+dev-ready 达成：Step1-7 全部落地共 27 个实现 commit（core session_run_state 全链 + BOOT_VERSION 13 / Manager+Unit 状态机吸收 AgentRunManager / 事件管线 32-64ms 缓冲单一注入指标 / 消息管线 / 写通 coalescer+水合+settled 投影 / 屏幕订阅化装配替换 / 拆除九文件+探针落位+消息面收口+静态守卫）。五段 cr-func：s1-s2、s3-s5 均 yes；s6 一轮 No-Go 抓到真回归 MF-1（settled 单元 30s 宽限销毁后消息面回落旧 state，停留同会话超 30s 用户可见消息消失）+ MF-2（中断会话重启后指标条不显示，PRD「指标恢复」欠达），fix 后复审 yes；终检 yes。最终验证：mobile 189 套件/1185 全绿 + typecheck、desktop 116/116（需先构建 desktop 产物与 sksp 三平台 dist——本 worktree 曾缺失）、core 1854/0。实现注记与编排全程见 docs/.iteration-state.yaml 的 dev-ready Bundle-full。pstream 调试插桩在开发期间两次不明复活（stash 被恢复），已再次 stash 保存（stash@{0}），来源未查明。剩余：Step 8 真机验收（T-U11 PRD GWT 全清单）归用户 manual_user；并入 dev 分支待用户指示。
