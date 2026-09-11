@@ -6,6 +6,9 @@ const mock = await startMock();
 const { app, page, vite } = await launchApp({ errors });
 const sleep = (ms) => page.waitForTimeout(ms);
 
+// bootstrap 的 state 校验提到末尾集中做（B-3②）：try 内只采集，末尾硬校验
+let state = null;
+
 try {
   await page.waitForLoadState("domcontentloaded");
   await sleep(3500);
@@ -118,7 +121,7 @@ try {
   }
   await shot(page, "B6", "workspace-file-ready");
 
-  const state = await page.evaluate(() => ({
+  state = await page.evaluate(() => ({
     msgs: document.querySelectorAll(".chat-message").length,
     composerOk: (() => { const c = document.querySelector('textarea[aria-label="消息输入"]'); return c && !c.disabled; })(),
   }));
@@ -128,5 +131,10 @@ try {
   console.log("SCRIPT_ERROR", String(e).slice(0, 500));
   try { await page.screenshot({ path: "/tmp/nm-desktop-e2e-out-err.png" }); } catch {}
 }
+// 末尾硬校验（B-3②）：消息至少 2 条且 composer 可用，缺一即非零退出，串联序列（&& 编排）
+// 自动断链；中途 SCRIPT_ERROR 时 state 为 null 同样判失败（库未就绪不得以 0 退出绿携传递）
+const bootOk = !!state && state.msgs >= 2 && state.composerOk === true;
+console.log("BOOTSTRAP_OK", bootOk);
+if (!bootOk) process.exitCode = 1;
 await shutdown(app, vite, mock);
 console.log("BOOTSTRAP_DONE errors:", errors.length, JSON.stringify(errors.slice(0, 3)));
