@@ -1426,7 +1426,7 @@ export type SearchSetSearxngBaseUrlRequest = {
   readonly baseUrl: string;
 };
 
-/** 引擎优先级顺序（须为四引擎的合法排列；core 内校验非法抛错）。 */
+/** 引擎优先级顺序（须为全部引擎（ENGINE_IDS）的合法排列；core 内校验非法抛错）。 */
 export type SearchSetEngineOrderRequest = {
   readonly engineOrder: readonly string[];
 };

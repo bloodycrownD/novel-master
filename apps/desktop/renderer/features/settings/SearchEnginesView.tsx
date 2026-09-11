@@ -20,6 +20,7 @@ import {
   SettingsListItem,
   SettingsListSection,
   SettingsPanel,
+  SettingsStatus,
 } from "./settings-ui";
 
 /** 帮助弹窗三段口径（与 mobile 同构改造保持一致，双端文案勿漂移）。 */
@@ -50,7 +51,7 @@ function SearchHelpModal({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h3 id="search-help-title" className="text-prompt-modal__title">
-          搜索配置说明
+          使用说明
         </h3>
         {HELP_SECTIONS.map((section) => (
           <p key={section.title} className="settings-hint">
@@ -128,7 +129,7 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
     if (action === "down") void moveEngine(target.engineId, 1);
   };
 
-  // 行序 = engineOrder（core 读取时已容错归一为四引擎全排列）
+  // 行序 = engineOrder（core 读取时已容错归一为全部引擎（ENGINE_IDS）全排列）
   const order: readonly EngineId[] = config?.engineOrder ?? [...ENGINE_IDS];
 
   return (
@@ -139,7 +140,7 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
             <button
               type="button"
               className="icon-btn"
-              aria-label="搜索配置说明"
+              aria-label="使用说明"
               onClick={() => setHelpOpen(true)}
             >
               ?
@@ -184,7 +185,7 @@ export function SearchEnginesView({ nav }: { nav: SettingsNavHandle }) {
           );
         })}
       </SettingsListSection>
-      {error ? <p className="settings-error">{error}</p> : null}
+      <SettingsStatus error={error} />
       <ContextMenu
         open={menu != null}
         x={menu?.x ?? 0}

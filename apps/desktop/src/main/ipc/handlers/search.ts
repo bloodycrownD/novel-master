@@ -5,7 +5,7 @@
  * 只回 configured 状态（与 core SearchConfigPublic 结构同构）。
  * engineId 合法性：saveEngineKey/clearEngineKey 传入脏 id 只会读写
  * 孤儿 SKSP ref（resolve 链不认，无实际危害）；setEngineOrder 在
- * core 内有「四引擎合法排列」运行时校验兜底，调用方（本仓 renderer）
+ * core 内有「全部引擎（ENGINE_IDS）合法排列」运行时校验兜底，调用方（本仓 renderer）
  * 只传 engineOrder 派生的合法排列。
  */
 import type { EngineId, KeyEngineId } from "@novel-master/core";

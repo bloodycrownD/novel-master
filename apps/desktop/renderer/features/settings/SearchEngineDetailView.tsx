@@ -123,6 +123,9 @@ export function SearchEngineDetailView({ nav }: { nav: SettingsNavHandle }) {
       } else {
         setError(res.error.message);
       }
+    } catch (e) {
+      // IPC reject（异常路径）与 save 同范式：finally 前接住，不冒泡成 unhandled rejection
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setClearing(false); // 异常也不残留互斥态
     }
