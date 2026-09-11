@@ -66,7 +66,7 @@ afterEach(() => {
   mock.timers.reset();
 });
 
-describe("search 引擎适配器：超时（四引擎共用 engineTimeoutError，单点覆盖 bocha）", () => {
+describe("search 引擎适配器：超时（全部引擎适配器共用 engineTimeoutError，单点覆盖 bocha）", () => {
   it("T-G1: 请求挂起到超时 → aborted 分支产出可读「timed out after」文案", async () => {
     mock.timers.enable({ apis: ["setTimeout"] });
     // fetchFn 永不 resolve：监听适配器传入的 signal，abort 时 reject

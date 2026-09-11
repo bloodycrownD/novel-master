@@ -9,7 +9,7 @@
 - spec_path：`docs/Iterations/web-search-tool/spec.md`
 - review_round：2
 - dag_version：2
-- 状态：fix-spec-ready（round2 终态）（第二轮追加：round2 评审 10 条 must-fix 已写入待执行；第一轮 10 条已执行完毕，Closure 移至文末历史小节）
+- 状态：已执行完毕（round2，全部闭合）（第二轮追加：round2 评审 10 条 must-fix 已写入待执行；第一轮 10 条已执行完毕，Closure 移至文末历史小节）
 
 ---
 
@@ -386,7 +386,7 @@
 | fix_spec_path | docs/Iterations/web-search-tool/cr-fix-spec.md |
 | dag_version / review_round | 2 / 2（上轮编排口径，照抄留痕） |
 | P0 / P1 / P2（已写入 fix-spec） | 第一轮：0/2/8（已执行闭合）+ 第二轮：0/1/9（core2/G-1 撤销后；含 full/K-1） |
-| 第二轮待执行 | 10 条（core2/C-1、C-2、C-3 与 ui2/C-3 合并执行、ui2/B-1、B-2、C-orch-1、C-1、C-2、full/K-1 + PRD/spec 文档同步） |
+| 第二轮待执行 | 0（10 条已全部执行闭合：5d3d2295/e8625b9a/b464a923/1925b04a + f8 收口；cr-func-fix2 func-ready） |
 | 未写入的开放 must-fix | 0 |
 | spec_deviations | none（CLI deviation 已按方案 a 收窄，用户确认） |
 | C-orch | ✅（双端 DRY 收敛已入 ui/C-1） |
